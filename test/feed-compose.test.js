@@ -292,9 +292,11 @@ test("Live side cards: one-line titles; Manage card header is title · chip · t
   assert.match(room, /\.rm \.people \.ic > \* \{ display: inline-grid; place-items: center; width: 26px; height: 26px;/);
   const mod = fs.readFileSync(path.join(repo, "public", "js", "room-mod.js"), "utf8");
   assert.match(mod, /var hr = el\('span', 'pm-hr'\); h\.appendChild\(hr\);/);
-  assert.match(mod, /hr\.appendChild\(tog\);/);
+  assert.match(mod, /h\.appendChild\(tog\);/);
   const css = fs.readFileSync(path.join(repo, "public", "css", "room-mod.css"), "utf8");
-  assert.match(css, /\.pm \.pm-hr \{ display: inline-flex; align-items: center; gap: 5px; flex: none; margin-left: auto; flex-wrap: nowrap; \}/);
+  // title + toggle on row 1, the role chips (any number) left-aligned on row 2
+  assert.match(css, /\.pm h2 \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(css, /\.pm \.pm-hr \{ grid-column: 1 \/ -1; grid-row: 2;/);
 });
 
 test("story viewer: the footer button says what it opens", () => {

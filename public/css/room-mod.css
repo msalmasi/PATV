@@ -3,10 +3,14 @@
 .pm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .pm { border-color: #5a4a1a !important; background: linear-gradient(180deg, #17140b 0%, #111 120px) !important; }
 /* 1.99ec: one header row - title · role chip · Open toggle; chip + toggle wrap together (.pm-hr), never one per line */
-.pm h2 { align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 6px 6px; letter-spacing: .04em; }
-.pm .pm-ht { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
-.pm .pm-hr { display: inline-flex; align-items: center; gap: 5px; flex: none; margin-left: auto; flex-wrap: nowrap; }
-.pm-badges { display: inline-flex; flex-wrap: nowrap; gap: 4px; }
+/* title + Open/Close toggle on the first row, the role chips (any number) left-aligned on their own row below -
+   two or more chips used to wrap as a right-aligned block under the title */
+.pm h2 { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; letter-spacing: .04em; }
+.pm .pm-ht { grid-column: 1; grid-row: 1; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pm h2 > .pm-tog { grid-column: 2; grid-row: 1; }
+.pm .pm-hr { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pm .pm-hr:has(.pm-badges:empty) { display: none; }
+.pm-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .pm-badge { font-family: Ubuntu, sans-serif; font-size: 11px; letter-spacing: 0; text-transform: none; padding: 1px 8px; border-radius: 999px;
             border: 1px solid #333; background: #1a1a1a; color: #bbb; white-space: nowrap; }
 .pm-badge.role { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }

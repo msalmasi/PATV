@@ -121,7 +121,7 @@
       try { isOpen = localStorage.getItem('patvModOpen') === '1'; } catch (e) { isOpen = false; }
       tog = el('button', 'pm-tog'); tog.type = 'button'; tog.setAttribute('aria-controls', 'pmBody' + slug);
       body.id = 'pmBody' + slug;
-      hr.appendChild(tog);
+      h.appendChild(tog);   // title + toggle share the first row; the role chips get their own row below (room-mod.css)
       sumLine = el('p', 'pm-sum');
       tog.addEventListener('click', function () {
         isOpen = !isOpen;
