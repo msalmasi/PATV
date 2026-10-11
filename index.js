@@ -47,6 +47,10 @@ const guard = require("./middleware/authGuard");
 const { moveUserRows } = require("./accountMerge");
 const providerMerge = require("./providermerge");      // 1.99fy: Twitch / Discord account merges (security)
 const plexSso = require("./plexsso");                // 1.99jr: Sign in with Plex
+const ssoLinks = require("./ssolinks");              // 1.99lb: the shared SSO flow (Telegram, Google) + last-method guard
+const ssoConf = require("./ssoconf");                // 1.99lb: Sign-in methods switches (/admin/users#signin)
+const telegramSso = require("./telegramsso");        // 1.99lb: Sign in with Telegram (Login Widget)
+const googleSso = require("./googlesso");            // 1.99lb: Sign in with Google (OIDC + PKCE)
 const oauthLink = require("./oauthlink");              // 1.99gb: link rewards, provider email capture, Twitch headers
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
@@ -350,6 +354,8 @@ function authView(req, extra) {
     form,
     next: guard.safeNext(req.query.next) || guard.refererNext(req) || "",
     plexSso: plexSso.enabled(),          // 1.99jr: the "Plex" button (auth-oauth partial)
+    tgSso: telegramSso.button(),         // 1.99lb: the "Telegram" button ({botId} or null)
+    googleSso: googleSso.enabled(),      // 1.99lb: the "Google" button
   }, extra || {});
 }
 
@@ -362,10 +368,19 @@ app.get("/login", addUser, (req, res) => {
   if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}`);
   // 1.99jr: back from Sign in with Plex with an unlinked Plex account ("I already have an account") - signing in links it
   const pp = plexSso.pendingFor(req);
-  res.render("login", authView(req, pp ? { plexPending: { username: pp.username }, next: guard.safeNext(req.query.next) || pp.next || "" } : null));
+  // 1.99lb: the same after Sign in with Telegram / Google (ssolinks.js)
+  const sp = pp ? null : ssoLinks.pendingFor(req);
+  const spView = sp ? { ssoPending: { provider: sp.provider, label: (ssoLinks.PROVIDERS[sp.provider] || {}).label || sp.provider,
+                                      who: sp.handle ? "@" + sp.handle : (sp.name || sp.email || "") }, next: guard.safeNext(req.query.next) || sp.next || "" } : null;
+  res.render("login", authView(req, pp ? { plexPending: { username: pp.username }, next: guard.safeNext(req.query.next) || pp.next || "" } : spView));
 });
 // 1.99jr: 📼 Sign in with Plex (plexsso.js) - /auth/plex, /auth/plex/callback, /auth/plex/new, /auth/plex/create
 plexSso.register(app, { addUser, authView });
+// 1.99lb: ✈️ Sign in with Telegram + G Sign in with Google, through the shared flow (ssolinks.js: /auth/sso/new|create|cancel)
+ssoLinks.register(app, { addUser, authView });
+telegramSso.register(app, { addUser });
+googleSso.register(app, { addUser });
+ssoConf.register(app, { addUser });
 
 // ── OAuth (Twitch / Discord) sign-in ──
 // `state` ties the callback to the browser that started it: without it, someone could send you a
@@ -1101,6 +1116,7 @@ app.post("/reset-password/:token", async (req, res) => {
       "UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE userId = ? AND resetPasswordToken = ? AND resetPasswordExpires > ?",
       [hashedPassword, rows[0].userId, hash, Date.now()]);
     if (!r.changes) return expired();
+    await require("./ssolinks").markPassword(rows[0].userId, true);   // 1.99lb: last-method guard
     console.log(`[auth] password reset for ${rows[0].username}`);
     clearLogin(res);
     req.flash("success", "Password changed. Sign in with your new password.");
@@ -2143,7 +2159,10 @@ app.get(
           try { plex = await require("./plexmembers").mine(user.userId); plexLink = !!require("./mediaconf").get().plex_selflink; } catch (e) { console.error("edit profile plex:", e.message); }
           // 1.99kn: Connections -> Telegram (telegram.js)
           let telegram = null;
-          try { const tl = await require("./telegram").linkOf(user.userId); telegram = { linked: !!tl, handle: tl && tl.handle ? tl.handle : null }; } catch (e) { console.error("edit profile telegram:", e.message); }
+          try { const tl = await require("./telegram").linkOf(user.userId); telegram = { linked: !!tl, handle: tl && tl.handle ? tl.handle : null, signin: telegramSso.enabled() }; } catch (e) { console.error("edit profile telegram:", e.message); }
+          // 1.99lb: Connections -> Google (googlesso.js; ssolinks sso_links)
+          let google = null;
+          try { const gl = await ssoLinks.linkOf("google", user.userId); google = { on: googleSso.enabled(), linked: !!gl, email: gl ? gl.email || gl.name || "" : "" }; } catch (e) { console.error("edit profile google:", e.message); }
           // 1.99ks: Connections → 🪙 Crypto wallets (cryptopay.js: linked by signature only)
           let cryptoW = null;
           try { const CP = require("./cryptopay"); await CP.init(); const ws = await CP.wallets(user.userId); if (CP.enabled() || ws.length) cryptoW = { on: CP.enabled(), wallets: ws }; } catch (e) { console.error("edit profile crypto:", e.message); }
@@ -2166,7 +2185,7 @@ app.get(
             privPanels: profileLayout.PRIV,
             errors: errorMessages,
             success: successMessages,
-            plex, plexLink, telegram, cryptoW,
+            plex, plexLink, telegram, google, cryptoW,
             plexPin: /^\d{1,15}$/.test(String(req.query.plex || "")) ? String(req.query.plex) : null,
           });
         } else {

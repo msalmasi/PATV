@@ -464,13 +464,29 @@
         <div class="conn-cf"><span class="status" id="plexStatus" role="status" aria-live="polite"></span>
           <span class="hint"><%- t('settings.connections.plex_hint', { link: '<a href="/subscriptions#plex">' + t('subs.title') + '</a>' }) %> <a href="/plex">📼 <%- t('nav.plex') %> ›</a></span></div>
       </div>
+      <%# 1.99lb: Google (googlesso.js - OpenID Connect; a proven link by Google's account id, never by email). Shown when it's set up or linked. %>
+      <% const gg_ = locals.google || { on: false, linked: false, email: '' }; if (gg_.on || gg_.linked) { %>
+      <div class="conn-row" id="googleDiv">
+        <span class="conn-ico" style="background:#fff">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        </span>
+        <span class="conn-name">Google<b><% if (gg_.linked) { %><span style="color:#8ab4f8"><%= gg_.email || t('settings.connections.google_linked_short') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
+        <% if (gg_.linked) { %>
+          <button type="button" class="btn" data-google-unlink><%- t('settings.connections.google_unlink') %></button>
+        <% } else { %>
+          <form action="/auth/google/link" method="POST" style="margin:0"><button type="submit" class="btn" style="background:#fff;border-color:#dadce0;color:#1f1f1f"><%- t('settings.connections.google_link') %></button></form>
+        <% } %>
+        <div class="conn-cf"><span class="status" id="googleStatus" role="status" aria-live="polite"></span>
+          <span class="hint"><%- t('settings.connections.google_hint') %></span></div>
+      </div>
+      <% } %>
       <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
       <% const tg_ = locals.telegram || { linked: false, handle: null }; %>
       <div class="conn-row" id="telegramDiv">
         <span class="conn-ico" style="background:#229ed9;color:#fff">✈️</span>
         <span class="conn-name">Telegram<b><% if (tg_.linked) { %><span style="color:#7cc8f0"><%= tg_.handle ? '@' + tg_.handle : t('settings.connections.tg_linked') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
         <a class="btn" href="/settings/telegram" style="background:#229ed9;border-color:#229ed9;color:#fff"><%- tg_.linked ? t('settings.connections.tg_manage') : t('settings.connections.tg_link') %></a>
-        <div class="conn-cf"><span class="hint"><%- t('settings.connections.tg_hint') %></span></div>
+        <div class="conn-cf"><span class="hint"><%- t('settings.connections.tg_hint') %><% if (tg_.signin) { %> <%- t('settings.connections.tg_signin_hint') %><% } %></span></div>
       </div>
       <%# 1.99ks: 🪙 Crypto wallets (cryptopay.js) - linked ONLY by signing a message in the wallet; several allowed %>
       <% const cw_ = locals.cryptoW; if (cw_) { %>
@@ -719,6 +735,26 @@
   })();
 </script>
 <script src="/public/js/plex-link.js?v=1" defer></script>
+<% if (locals.google && google.linked) { %><script>
+  // 1.99lb: Connections -> Google unlink (googlesso.js; refused when it's the last way to sign in)
+  (function () {
+    var b = document.querySelector('[data-google-unlink]'), st = document.getElementById('googleStatus');
+    if (!b) return;
+    var _t = typeof __t === 'function' ? __t : function (k, d) { return d; };
+    b.addEventListener('click', function () {
+      if (!window.confirm(_t('js.settings.google.unlink_q', "Unlink Google? You won't be able to sign in with it any more."))) return;
+      b.disabled = true;
+      fetch('/api/sso/google/unlink', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (d) {
+          if (d && d.ok) { window.location.reload(); return; }
+          b.disabled = false;
+          st.textContent = (d && d.code === 'E_LAST_METHOD') ? _t('js.settings.sso.last_method', "That's the only way you can sign in. Set a password first (below), then unlink it.") : ((d && d.error) || _t('js.settings.telegram.error', 'Something went wrong.'));
+        })
+        .catch(function () { b.disabled = false; st.textContent = _t('js.settings.telegram.error', 'Something went wrong.'); });
+    });
+  })();
+</script><% } %>
 <% if (locals.cryptoW) { %><script src="/public/js/crypto-link.js?v=1" defer></script><% } %>
 </body>
 </html>

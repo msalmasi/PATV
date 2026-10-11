@@ -132,6 +132,8 @@ const RULES = {
   // 1.99kn: telegram.js - the survivor keeps its own Telegram link if it has one (one link per account, tg_id unique)
   "telegram_links.user_id": M({ key: [] }), "telegram_prefs.user_id": M({ key: ["kind"] }),
   "telegram_codes.user_id": M(), "telegram_outbox.user_id": M({ key: ["ref"] }),
+  // 1.99lb: ssolinks.js - Sign in with Google links follow the account; the survivor keeps its own if it has one
+  "sso_links.user_id": M({ key: ["provider"] }), "sso_links.subject": { deny: "the provider's account id, not a userId" },
   "welcome_bonus.userId": { special: "welcome bonus states are combined (mergeWelcome)" },
   "welcome_keys.userId": M({ key: ["k"], merge: { created: "MIN" } }),
   "welcome_activity.userId": M({ key: ["day"] }),

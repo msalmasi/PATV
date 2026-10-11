@@ -253,6 +253,7 @@ async function createSsoAccount(req, res, { username, email, emailVerified, prov
     throw e;
   }
   registerLimit.hit(ip);
+  await require("./ssolinks").markPassword(userId, false);   // 1.99lb: a random password - the last-method guard counts it as none
   console.log(`[auth] new account ${username} (${userId}) via ${provider}`);
   const termsMod = require("./terms");
   if (termsMod.enforced()) await termsMod.accept(userId).catch((e) => console.error("[auth] terms accept:", e.message));
@@ -304,6 +305,8 @@ async function loginUser(req, res) {
     // 1.99jr: "I already have an account" after a Plex sign-in that wasn't linked yet - link it now (plexsso.js; only
     // when this form asked for it, and only the Plex account THIS browser just signed in to)
     if (body.link_plex === "1") await require("./plexsso").linkPendingTo(req, user).catch((e) => console.error("[auth] plex link after sign-in:", e.message));
+    // 1.99lb: the same for Sign in with Telegram / Google (ssolinks.js) - only the provider this form names
+    if (body.link_sso && /^[a-z]{2,16}$/.test(String(body.link_sso))) await require("./ssolinks").linkPendingTo(req, user, String(body.link_sso)).catch((e) => console.error("[auth] sso link after sign-in:", e.message));
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
     console.error("[auth] login error:", err && err.message);
@@ -396,6 +399,7 @@ async function updatePassword(req, res) {
   }
   const hashedPassword = await bcrypt.hash(password, 12);
   await runQuery('UPDATE users SET password = ? WHERE userId = ?', [hashedPassword, userId]);
+  await require('./ssolinks').markPassword(userId, true);   // 1.99lb: a password the member chose (last-method guard)
   // Sign out and back in with the new password. (This used to redirect to GET /logout, which
   // doesn't exist - logout is POST-only - so changing your password ended on a 404.)
   clearLogin(res);

@@ -20,9 +20,13 @@
     <% if (locals.plexPending) { %><%# 1.99jr: "I already have an account" after Sign in with Plex (plexsso.js) %>
     <div class="au-alert ok" role="status">📼 <%- t('auth.plex.link_on_signin', { plex: plexPending.username || 'Plex' }) %></div>
     <% } %>
+    <% if (locals.ssoPending) { %><%# 1.99lb: "I already have an account" after Sign in with Telegram / Google (ssolinks.js) %>
+    <div class="au-alert ok" role="status"><%- t('auth.sso.link_on_signin', { provider: ssoPending.label, who: ssoPending.who || ssoPending.label }) %></div>
+    <% } %>
     <form action="/login" method="POST" data-au-form>
       <input type="hidden" name="next" value="<%= next %>">
       <% if (locals.plexPending) { %><input type="hidden" name="link_plex" value="1"><% } %>
+      <% if (locals.ssoPending) { %><input type="hidden" name="link_sso" value="<%= ssoPending.provider %>"><% } %>
       <div class="au-field">
         <label for="username"><%- t('auth.login.username_label') %></label>
         <input type="text" id="username" name="username" value="<%= F.username || '' %>" required

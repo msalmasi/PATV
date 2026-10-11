@@ -663,6 +663,7 @@ async function unlinkSelf(user, plexId) {
   const r = await row(plexId);
   if (!r || r.user_id !== user.userId) throw new Refuse(404, "Not linked to you.");
   if (r.link_source === "admin") throw new Refuse(403, "An admin linked this one - ask them to change it.");
+  await require("./ssolinks").guardUnlink(user.userId, "plex");    // 1.99lb: never the last way to sign in
   await runQuery("UPDATE plex_members SET user_id = NULL, link_source = NULL, link_lock = 1, linked_at = ?, linked_by = ?, revoke = NULL WHERE plex_id = ?", [clock(), user.username, r.plex_id]);
   await log(r.plex_id, user.userId, "unlink", user.username, "unlinked by the member");
   await reload();

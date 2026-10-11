@@ -189,26 +189,46 @@ async function link({ code, tg_id, handle } = {}) {
   if (row.expires < t) throw new Refuse(410, "That code has expired - make a new one on publicaccess.tv.", "E_CODE_EXPIRED");
   const used = await runQuery("UPDATE telegram_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL", [t, row.code_hash]);
   if (!used || !used.changes) throw new Refuse(404, "That code doesn't work - make a new one on publicaccess.tv.", "E_CODE_INVALID");
-  const acc = await account(row.user_id);
+  return saveLink(await account(row.user_id), id, handle, "start_code");
+}
+
+// The one way a link is written: the bridge's /start code (above) and Sign in with Telegram (telegramsso.js, proof
+// 'login_widget' - Telegram's signed Login Widget data). Same checks, same row, same security notice.
+async function saveLink(acc, id, handle, proof) {
+  const t = NOW();
+  if (!acc) throw new Refuse(404, "No such account.");
   const tier = await tierOf(acc);
   if (tier === "none") throw new Refuse(403, "Telegram isn't available for this account.", "E_BANNED");
   const other = await linkByTg(id);
   if (other && other.user_id !== acc.userId) throw new Refuse(409, "This Telegram account is linked to another PATV account - unlink it there first.", "E_TG_TAKEN");
   const h = cleanHandle(handle);
-  await runQuery(`INSERT INTO telegram_links (user_id, tg_id, handle, link_source, proof, linked_at, paused) VALUES (?, ?, ?, 'self', 'start_code', ?, 0)
-                  ON CONFLICT(user_id) DO UPDATE SET tg_id = excluded.tg_id, handle = excluded.handle, link_source = 'self', proof = 'start_code',
-                  linked_at = excluded.linked_at, paused = 0`, [acc.userId, id, h, t]);
+  await runQuery(`INSERT INTO telegram_links (user_id, tg_id, handle, link_source, proof, linked_at, paused) VALUES (?, ?, ?, 'self', ?, ?, 0)
+                  ON CONFLICT(user_id) DO UPDATE SET tg_id = excluded.tg_id, handle = excluded.handle, link_source = 'self', proof = excluded.proof,
+                  linked_at = excluded.linked_at, paused = 0`, [acc.userId, id, h, proof, t]);
   // a security notice for every link (the inbox, not Telegram: "not you? unlink it")
   try {
     await require("./inbox").addSafe(acc.userId, { kind: "system", title: tFor(langOf(acc.userId))("tg.notice.linked_title"),
       body: tFor(langOf(acc.userId))("tg.notice.linked_body", { handle: h ? "@" + h : "#" + id.slice(-4) }), link: "/settings/telegram", ref: `tglink:${id}:${t}` });
   } catch (e) { /* logged there */ }
-  console.log(`[telegram] linked ${acc.username} (tier ${tier})`);
+  console.log(`[telegram] linked ${acc.username} (tier ${tier}, ${proof})`);
   return { username: acc.username, lang: langOf(acc.userId), tier };
 }
 
-async function unlink(userId) {
+/** Sign in with Telegram (telegramsso.js): link a Telegram id the Login Widget proved. A different Telegram already on the
+ *  account is refused (unlink that first) - a sign-in never swaps one silently. */
+async function linkProven(userId, { tg_id, handle } = {}) {
   await init();
+  const id = tgId(tg_id);
+  if (!id) throw new Refuse(400, "bad telegram id", "E_BAD");
+  const mine = await linkOf(userId);
+  if (mine && mine.tg_id !== id) throw new Refuse(409, "This PATV account already has another Telegram account linked - unlink it first.", "E_HAS_OTHER");
+  return saveLink(await account(userId), id, handle, "login_widget");
+}
+
+async function unlink(userId, { force = false } = {}) {
+  await init();
+  // 1.99lb: Telegram can be a sign-in method (telegramsso.js) - never unlink the last way into an account
+  if (!force && (await linkOf(userId))) await require("./ssolinks").guardUnlink(userId, "telegram");
   const r = await runQuery("DELETE FROM telegram_links WHERE user_id = ?", [userId]);
   await runQuery("DELETE FROM telegram_outbox WHERE user_id = ? AND sent_at IS NULL", [userId]);
   return !!(r && r.changes);
@@ -489,6 +509,6 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { init, register, makeCode, link, unlink, unlinkTg, whois, tierOf, prefs, setPrefs, wants, queue, onNotice, onDm, claim, ack,
+module.exports = { init, register, makeCode, link, linkProven, unlink, unlinkTg, whois, tierOf, prefs, setPrefs, wants, queue, onNotice, onDm, claim, ack,
                    strings, state, linkOf, linkByTg, botUsername, setMeta, newCode, Refuse, DEFAULT_ON, HOUR_MAX, DM_GAP_MS, DM_GRACE_MS,
                    CODE_TTL_MS, _setClock };

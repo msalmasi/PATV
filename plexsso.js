@@ -154,6 +154,7 @@ function register(app, { addUser, authView } = {}) {
         console.log(`[plexsso] ${u.username} signed in with Plex`);
         return res.redirect(home(u, st.next));
       }
+      delete req.session.ssoPending;                                 // 1.99lb: one pending sign-in at a time (ssolinks.js)
       req.session.plexPending = { ...who, at: clock(), next: st.next || "" };
       return res.redirect("/auth/plex/new");
     } catch (e) {
