@@ -4,6 +4,9 @@
   views/help.ejs - Pepe's command help (1.99fq, help.js). The data is Pepe's (camfrog-bot help/catalog.json, published
   by Pepe with live prices). Cards: id="cmd-<id>" (deep links; /help#cmd-<any command or alias> is resolved by
   help-page.js). The "ask" box ranks locally first (helpsearch.js), then asks Pepe (signed in) via POST /api/help/ask.
+  1.99lv design pass: Pepe hero with the filter (#flt) as the main search right under it, category chips, then the
+  ask box; cards show syntax, who can use it, price, aliases. help-page.js relies on: .hlp article.card,
+  .hlp section.cat, .toc a[data-cat], #flt #role #fltN #noneMsg #askForm #askQ #askOut #askHits #askPepe, [data-copy], .cp.
 %>
 <%
   const ROLE_LABEL = { mod: t('help.role.mod'), owner: t('help.role.owner'), admin: t('help.role.admin') };
@@ -11,104 +14,172 @@
   const asOf = M.at ? new Date(M.at).toISOString().slice(0, 10) : null;
 %>
 <style>
-  .hlp { max-width: 1080px; width: 100%; min-width: 0; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
+  .hlp { --g: #4caf50; --g2: #81c784; --gold: #ffd700; max-width: 1120px; width: 100%; min-width: 0; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
   .hlp *, .hlp *::before, .hlp *::after { box-sizing: border-box; }
-  .hlp h1 { text-align: center; margin: 6px 0 4px; }
-  .hlp .sub { text-align: center; color: #9a9; margin: 0 auto 20px; max-width: 66ch; line-height: 1.55; }
-  .hlp a { color: #81c784; text-decoration: none; }
+  .hlp a { color: var(--g2); text-decoration: none; }
   .hlp a:hover { color: #a5d6a7; }
+  .hlp a:focus-visible, .hlp button:focus-visible, .hlp select:focus-visible, .hlp summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   .hlp code { background: #1c1c1c; border: 1px solid #262626; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; color: #e8f5e9; white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, 'Courier New', monospace; }
 
+  /* hero */
+  .hlp .hero { position: relative; overflow: hidden; border: 1px solid #23402a; border-bottom: 0; border-radius: 18px 18px 0 0; padding: 26px 24px 22px;
+               background: radial-gradient(70% 140% at 0% 0%, #13361c 0%, rgba(17,17,17,0) 62%), radial-gradient(60% 120% at 100% 0%, #2a2208 0%, rgba(17,17,17,0) 60%), #111;
+               display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 22px; align-items: center; }
+  .hlp .hero .pepe-art { width: 120px; height: 120px; image-rendering: pixelated; filter: drop-shadow(0 8px 18px rgba(76,175,80,.35)); }
+  .hlp .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: var(--g); line-height: 1.7; }
+  .hlp h1 { font-size: clamp(28px, 4.6vw, 44px); line-height: 1.08; margin: 8px 0 10px; color: #fff; }
+  .hlp h1 em { font-style: normal; background: linear-gradient(90deg, #9be3a6, #4caf50 45%, #ffd700); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hlp .sub { color: #c9d1c9; margin: 0; max-width: 66ch; line-height: 1.6; font-size: 15.5px; }
+  .hlp .stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .hlp .stats span { font-size: 12.5px; color: #bbb; background: rgba(0,0,0,.35); border: 1px solid #2c2c2c; border-radius: 999px; padding: 3px 10px; }
+  .hlp .stats b { color: #fff; }
+
+  /* the search bar, attached under the hero (sticky on desktop) */
+  .hlp .bar { background: #0f140f; border: 1px solid #23402a; border-radius: 0 0 18px 18px; padding: 14px 16px 14px; margin-bottom: 18px; display: grid; gap: 12px; }
+  @media (min-width: 900px) { .hlp .bar { position: sticky; top: 8px; z-index: 5; box-shadow: 0 10px 22px rgba(0,0,0,.6); } }
+  .hlp .bar .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hlp .bar .q { position: relative; flex: 1 1 260px; min-width: 0; }
+  .hlp .bar .q::before { content: '🔍'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 15px; opacity: .8; pointer-events: none; }
+  .hlp .bar input[type=search] { width: 100%; background: #070907; border: 2px solid #2b4a30; border-radius: 12px; color: #fff; padding: 12px 12px 12px 40px; font: 16px Ubuntu, sans-serif; }
+  .hlp .bar input[type=search]:focus { outline: none; border-color: var(--g); box-shadow: 0 0 0 3px rgba(76,175,80,.2); }
+  .hlp .bar select { background: #070907; border: 1px solid #333; border-radius: 10px; color: #ddd; padding: 11px 10px; font: 14px Ubuntu, sans-serif; max-width: 100%; }
+  .hlp .bar .n { color: #9a9; font-size: 13px; white-space: nowrap; }
+  .hlp .toc { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .hlp .toc a { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border: 1px solid #2a2a2a; border-radius: 999px; font-size: 13px; background: #161616; color: #ddd; white-space: nowrap; }
+  .hlp .toc a small { color: #777; font-size: 11.5px; }
+  .hlp .toc a:hover { border-color: var(--g); color: #fff; }
+  .hlp .toc a.dim { opacity: .4; }
+
   /* the ask box */
-  .hlp .ask { background: #111; border: 1px solid #2e4d2f; border-radius: 12px; padding: 16px; margin: 0 0 18px; }
-  .hlp .ask h2 { margin: 0 0 4px; color: #ffd700; font-size: 20px; }
+  .hlp .ask { background: #111; border: 1px solid #2a2a2a; border-left: 3px solid var(--gold); border-radius: 12px; padding: 14px 16px; margin: 0 0 28px; }
+  .hlp .ask h2 { margin: 0 0 2px; color: var(--gold); font-size: 17px; }
   .hlp .ask p.hint { margin: 0 0 10px; color: #9a9; font-size: 14px; }
   .hlp .ask form { display: flex; gap: 8px; }
-  .hlp .ask input { flex: 1 1 auto; min-width: 0; background: #0c0c0c; border: 1px solid #333; border-radius: 8px; color: #eee; padding: 10px 12px; font: 15px Ubuntu, sans-serif; }
-  .hlp .ask input:focus { outline: none; border-color: #4caf50; }
-  .hlp .ask button { flex: 0 0 auto; background: #12301a; border: 1px solid #3c7a46; color: #d7f5dc; border-radius: 8px; padding: 0 16px; font: bold 14px Ubuntu, sans-serif; cursor: pointer; }
-  .hlp .ask button:hover, .hlp .ask button:focus-visible { border-color: #4caf50; }
+  .hlp .ask input { flex: 1 1 auto; min-width: 0; background: #0c0c0c; border: 1px solid #333; border-radius: 10px; color: #eee; padding: 10px 12px; font: 15px Ubuntu, sans-serif; }
+  .hlp .ask input:focus { outline: none; border-color: var(--gold); }
+  .hlp .ask button[type=submit] { flex: 0 0 auto; background: linear-gradient(90deg, #ffd700, #ffb300); border: 1px solid #ffd700; color: #2a1a00; border-radius: 10px; padding: 0 18px; font: bold 14px Ubuntu, sans-serif; cursor: pointer; }
   .hlp .ask .eg { margin: 8px 0 0; font-size: 13px; color: #888; }
-  .hlp .ask .eg button { background: none; border: 0; padding: 0; color: #81c784; font: inherit; cursor: pointer; text-decoration: underline dotted; }
+  .hlp .ask .eg button { background: none; border: 0; padding: 0; color: var(--g2); font: inherit; cursor: pointer; text-decoration: underline dotted; }
   .hlp .ans { margin-top: 12px; display: grid; gap: 8px; }
   .hlp .ans[hidden] { display: none; }
-  .hlp .pepe { border: 1px solid #4caf50; background: #13200f; border-radius: 10px; padding: 10px 12px; color: #cfe8cf; font-size: 14.5px; line-height: 1.55; }
-  .hlp .pepe .who { font-weight: bold; color: #81c784; margin-right: 4px; }
+  .hlp .pepe { border: 1px solid var(--g); background: #13200f; border-radius: 10px; padding: 10px 12px; color: #cfe8cf; font-size: 14.5px; line-height: 1.55; }
+  .hlp .pepe .who { font-weight: bold; color: var(--g2); margin-right: 4px; }
   .hlp .pepe.wait { border-color: #2a2a2a; background: #141414; color: #999; }
   .hlp .pepe.note { border-color: #2a2a2a; background: #141414; color: #aaa; }
   .hlp .hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .hlp .hits a { display: block; background: #161616; border: 1px solid #262626; border-radius: 8px; padding: 8px 10px; color: #ddd; }
-  .hlp .hits a:hover, .hlp .hits a:focus-visible { border-color: #4caf50; }
+  .hlp .hits a:hover, .hlp .hits a:focus-visible { border-color: var(--g); }
   .hlp .hits code { color: #a5d6a7; }
   .hlp .hits small { display: block; color: #999; margin-top: 2px; font-size: 13px; }
 
-  /* filter + contents */
-  .hlp .bar { background: #111; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; margin-bottom: 22px; display: grid; gap: 10px; }
-  @media (min-width: 900px) { .hlp .bar { position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.55); } }
-  .hlp .bar .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .hlp .bar input[type=search] { flex: 1 1 220px; min-width: 0; background: #0c0c0c; border: 1px solid #333; border-radius: 8px; color: #eee; padding: 8px 10px; font: 14px Ubuntu, sans-serif; }
-  .hlp .bar input[type=search]:focus { outline: none; border-color: #4caf50; }
-  .hlp .bar select { background: #0c0c0c; border: 1px solid #333; border-radius: 8px; color: #ddd; padding: 7px 8px; font: 14px Ubuntu, sans-serif; max-width: 100%; }
-  .hlp .bar .n { color: #888; font-size: 13px; white-space: nowrap; }
-  .hlp .toc { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .hlp .toc a { display: inline-block; padding: 4px 10px; border: 1px solid #2a2a2a; border-radius: 14px; font-size: 13px; background: #161616; }
-  .hlp .toc a:hover { border-color: #4caf50; }
-  .hlp .toc a.dim { opacity: .4; }
-
-  /* sections + cards */
-  .hlp section.cat { margin: 0 0 34px; scroll-margin-top: 150px; }
+  /* sections */
+  .hlp section.cat { margin: 0 0 36px; scroll-margin-top: 150px; }
   .hlp section.cat[hidden] { display: none; }
-  .hlp .kicker { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #4caf50; letter-spacing: .5px; margin-bottom: 6px; }
-  .hlp h2.ch { color: #ffd700; margin: 0 0 4px; font-size: 22px; }
-  .hlp .lead { color: #bbb; margin: 0 0 12px; line-height: 1.55; }
+  .hlp .ch-head { display: flex; align-items: center; gap: 12px; margin: 0 0 4px; }
+  .hlp .ch-ic { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: #13200f; border: 1px solid #2b4a30; }
+  .hlp h2.ch { color: #fff; margin: 0; font-size: 22px; line-height: 1.2; }
+  .hlp .kicker { font-family: 'Press Start 2P', monospace; font-size: 8.5px; color: var(--g); letter-spacing: .08em; margin-top: 5px; line-height: 1.6; }
+  .hlp .lead { color: #aaa; margin: 6px 0 14px; line-height: 1.55; max-width: 80ch; }
+
+  /* cards */
   .hlp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
-  .hlp .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; min-width: 0; scroll-margin-top: 150px; display: flex; flex-direction: column; gap: 7px; }
-  .hlp .card:hover { border-color: #2e4d2f; }
+  .hlp .card { --rc: #2e4d2f; background: #111; border: 1px solid #232323; border-top: 3px solid var(--rc); border-radius: 12px; padding: 12px 14px; min-width: 0; scroll-margin-top: 150px; display: flex; flex-direction: column; gap: 8px; }
+  .hlp .card.r-mod { --rc: #2f6ea8; } .hlp .card.r-owner { --rc: #8a5fc4; } .hlp .card.r-admin { --rc: #c0504d; }
+  .hlp .card:hover { border-color: #2e4d2f; border-top-color: var(--rc); }
   .hlp .card[hidden] { display: none; }
-  .hlp .card.hl { border-color: #ffd700; box-shadow: 0 0 0 2px rgba(255,215,0,.25); }
+  .hlp .card.hl { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(255,215,0,.25); }
   .hlp .syn { display: flex; align-items: flex-start; gap: 6px; }
-  .hlp .syn code { flex: 1 1 auto; min-width: 0; font-size: 14px; color: #a5d6a7; background: #0c0c0c; border-color: #233; padding: 4px 7px; font-weight: bold; }
-  .hlp .cp { flex: 0 0 auto; background: #1a1a1a; border: 1px solid #333; color: #bbb; border-radius: 6px; padding: 3px 7px; font: 12px Ubuntu, sans-serif; cursor: pointer; }
-  .hlp .cp:hover, .hlp .cp:focus-visible { border-color: #4caf50; color: #fff; }
-  .hlp .cp.ok { border-color: #4caf50; color: #9be3a6; }
+  .hlp .syn code { flex: 1 1 auto; min-width: 0; font-size: 13.5px; color: #a5d6a7; background: #0a0d0a; border-color: #1f2e22; padding: 5px 8px; font-weight: bold; border-radius: 7px; }
+  .hlp .syn:first-child code { font-size: 15px; color: #c8f2cf; }
+  .hlp .cp { flex: 0 0 auto; background: #181818; border: 1px solid #333; color: #bbb; border-radius: 7px; padding: 4px 8px; font: 12px Ubuntu, sans-serif; cursor: pointer; }
+  .hlp .cp:hover, .hlp .cp:focus-visible { border-color: var(--g); color: #fff; }
+  .hlp .cp.ok { border-color: var(--g); color: #9be3a6; }
   .hlp .bdg { display: flex; flex-wrap: wrap; gap: 5px; }
-  .hlp .b { display: inline-block; font-size: 11.5px; border-radius: 8px; padding: 1px 7px; border: 1px solid #333; color: #bbb; background: #161616; white-space: nowrap; }
-  .hlp .b.cost { color: #ffd700; border-color: #5a4a10; background: #1a1708; }
+  .hlp .b { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 2px 8px; border: 1px solid #333; color: #bbb; background: #161616; white-space: nowrap; }
+  .hlp .b.cost { color: var(--gold); border-color: #5a4a10; background: #1a1708; font-weight: bold; }
+  .hlp .b.everyone { color: #9be3a6; border-color: #24402a; background: #0f1a11; }
   .hlp .b.mod { color: #8ec9ff; border-color: #1e3a5a; background: #0e1a28; }
   .hlp .b.owner { color: #e2c4ff; border-color: #4b3a6a; background: #1b1426; }
   .hlp .b.admin { color: #ff8a80; border-color: #5a1e1e; background: #241010; }
   .hlp .b.gate { color: #c9b98a; border-color: #3a3420; }
   .hlp .b.web { color: #9be3a6; border-color: #24402a; }
-  .hlp .card p.s { margin: 0; color: #ccc; font-size: 14px; line-height: 1.55; }
-  .hlp .al { font-size: 12.5px; color: #888; }
+  .hlp .card p.s { margin: 0; color: #d0d0d0; font-size: 14px; line-height: 1.55; }
+  .hlp .al { font-size: 12.5px; color: #8a8a8a; }
   .hlp .ex { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12.5px; color: #888; }
   .hlp .ex button { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; max-width: 100%; }
   .hlp .ex button code { display: inline-block; font-size: 12.5px; color: #cfe8cf; }
-  .hlp .ex button:hover code, .hlp .ex button:focus-visible code { border-color: #4caf50; }
+  .hlp .ex button:hover code, .hlp .ex button:focus-visible code { border-color: var(--g); }
   .hlp .webeq { font-size: 13px; }
   .hlp details { font-size: 13.5px; color: #bbb; line-height: 1.6; }
-  .hlp details summary { cursor: pointer; color: #81c784; font-size: 13px; list-style: none; }
+  .hlp details summary { cursor: pointer; color: var(--g2); font-size: 13px; list-style: none; }
   .hlp details summary::-webkit-details-marker { display: none; }
   .hlp details summary::before { content: '▸ '; }
   .hlp details[open] summary::before { content: '▾ '; }
   .hlp details .d { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #2a2a2a; }
-  .hlp .ft { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
-  .hlp .lnk { font-size: 12px; color: #555; }
-  .hlp .lnk:hover { color: #81c784; }
+  .hlp .ft { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; border-top: 1px solid #1c1c1c; }
+  .hlp .lnk { font-size: 13px; color: #555; padding: 2px 6px; }
+  .hlp .lnk:hover { color: var(--g2); }
   .hlp .none { text-align: center; color: #888; padding: 24px 0; }
   .hlp .top { font-size: 12px; color: #666; text-align: right; margin-top: 8px; }
   .hlp .top a { color: #666; }
   .hlp .foot { color: #777; font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
   .hlp .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (min-width: 900px) { .hlp section.cat, .hlp .card { scroll-margin-top: 190px; } }
+  @media (prefers-reduced-motion: no-preference) {
+    .hlp .hero .pepe-art { animation: hlp-bob 3.2s ease-in-out infinite; }
+    @keyframes hlp-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  }
+  @media (max-width: 700px) {
+    .hlp .hero { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 20px 16px 16px; }
+    .hlp .hero .pepe-art { width: 64px; height: 64px; position: absolute; right: 12px; top: 12px; }
+    .hlp .eyebrow { padding-right: 70px; }
+    .hlp .toc { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+  }
   @media (max-width: 520px) {
+    .hlp { padding-top: 12px; }
+    .hlp .bar { padding: 12px; }
+    .hlp .bar select { flex: 1 1 auto; }
     .hlp .ask form { flex-direction: column; }
-    .hlp .ask button { padding: 10px; }
+    .hlp .ask button[type=submit] { padding: 10px; }
     .hlp h2.ch { font-size: 19px; }
+    .hlp .sub { font-size: 15px; }
   }
 </style>
 <div class="hlp" id="top">
-  <h1>🐸 <%- t('help.heading') %></h1>
-  <p class="sub"><%- t('help.intro', { verify: '<a href="#cmd-verify">' + t('help.intro_verify') + '</a>', balance: '<a href="#cmd-balance">!balance</a>', economy: '<a href="/economy">' + t('help.intro_economy') + '</a>' }) %></p>
+  <header class="hero">
+    <img class="pepe-art" src="/public/img/pepe.png" alt="" width="120" height="120">
+    <div>
+      <div class="eyebrow"><%- t('help.hero.eyebrow') %></div>
+      <h1><em><%- t('help.heading') %></em></h1>
+      <p class="sub"><%- t('help.intro', { verify: '<a href="#cmd-verify">' + t('help.intro_verify') + '</a>', balance: '<a href="#cmd-balance">!balance</a>', economy: '<a href="/economy">' + t('help.intro_economy') + '</a>' }) %></p>
+      <div class="stats">
+        <span><%- t('help.hero.commands', { count: M.count, n: '<b>' + M.count + '</b>' }) %></span>
+        <span><%- t('help.hero.cats', { count: M.cats.length, n: '<b>' + M.cats.length + '</b>' }) %></span>
+        <% if (M.version) { %><span>🐸 Pepe <b><%= M.version %></b></span><% } %>
+      </div>
+    </div>
+  </header>
+
+  <nav class="bar" aria-label="<%- t('help.bar.aria') %>">
+    <div class="row">
+      <div class="q">
+        <label class="sr" for="flt"><%- t('help.bar.filter_label') %></label>
+        <input id="flt" type="search" placeholder="<%- t('help.bar.filter_ph', { n: M.count }) %>" autocomplete="off">
+      </div>
+      <label class="sr" for="role"><%- t('help.bar.role_label') %></label>
+      <select id="role">
+        <option value=""><%- t('help.bar.all_roles') %></option>
+        <option value="everyone"><%- t('help.bar.everyone') %></option>
+        <option value="mod"><%- t('help.role.mod') %></option>
+        <option value="owner"><%- t('help.role.owner') %></option>
+        <option value="admin"><%- t('help.role.admin') %></option>
+      </select>
+      <span class="n" id="fltN" aria-live="polite"></span>
+    </div>
+    <ul class="toc">
+      <% M.cats.forEach((c) => { %><li><a href="#cat-<%= c.id %>" data-cat="<%= c.id %>"><span aria-hidden="true"><%= c.icon %></span> <%= c.label %> <small><%= c.entries.length %></small></a></li><% }) %>
+    </ul>
+  </nav>
 
   <section class="ask" aria-labelledby="askT">
     <h2 id="askT">🤔 <%- t('help.ask.heading') %></h2>
@@ -128,38 +199,21 @@
     </div>
   </section>
 
-  <nav class="bar" aria-label="<%- t('help.bar.aria') %>">
-    <div class="row">
-      <label class="sr" for="flt"><%- t('help.bar.filter_label') %></label>
-      <input id="flt" type="search" placeholder="<%- t('help.bar.filter_ph', { n: M.count }) %>" autocomplete="off">
-      <label class="sr" for="role"><%- t('help.bar.role_label') %></label>
-      <select id="role">
-        <option value=""><%- t('help.bar.all_roles') %></option>
-        <option value="everyone"><%- t('help.bar.everyone') %></option>
-        <option value="mod"><%- t('help.role.mod') %></option>
-        <option value="owner"><%- t('help.role.owner') %></option>
-        <option value="admin"><%- t('help.role.admin') %></option>
-      </select>
-      <span class="n" id="fltN" aria-live="polite"></span>
-    </div>
-    <ul class="toc">
-      <% M.cats.forEach((c) => { %><li><a href="#cat-<%= c.id %>" data-cat="<%= c.id %>"><%= c.icon %> <%= c.label %></a></li><% }) %>
-    </ul>
-  </nav>
-
   <% M.cats.forEach((c) => { %>
   <section class="cat" id="cat-<%= c.id %>" aria-labelledby="h-<%= c.id %>">
-    <div class="kicker"><%- t('help.cat.count', { count: c.entries.length }) %></div>
-    <h2 class="ch" id="h-<%= c.id %>"><%= c.icon %> <%= c.label %></h2>
+    <div class="ch-head">
+      <span class="ch-ic" aria-hidden="true"><%= c.icon %></span>
+      <div><h2 class="ch" id="h-<%= c.id %>"><%= c.label %></h2><div class="kicker"><%- t('help.cat.count', { count: c.entries.length }) %></div></div>
+    </div>
     <% if (c.blurb) { %><p class="lead"><%= c.blurb %></p><% } %>
     <div class="grid">
       <% c.entries.forEach((e) => { const more = e.details && e.details.trim() !== e.summary.trim(); %>
-      <article class="card" id="cmd-<%= e.id %>" data-role="<%= e.role %>" data-cmds="<%= [].concat(e.commands, e.aliases || []).join(' ') %>">
+      <article class="card r-<%= e.role %>" id="cmd-<%= e.id %>" data-role="<%= e.role %>" data-cmds="<%= [].concat(e.commands, e.aliases || []).join(' ') %>">
         <% e.syntax.forEach((s) => { %>
         <div class="syn"><code><%= s %></code><button type="button" class="cp" data-copy="<%= copyText(s) %>" aria-label="<%- t('help.card.copy_aria', { cmd: copyText(s).trim() }) %>"><%- t('help.card.copy') %></button></div>
         <% }) %>
         <div class="bdg">
-          <% if (e.role !== 'everyone') { %><span class="b <%= e.role %>"><%- ROLE_LABEL[e.role] || t.esc(e.role) %></span><% } %>
+          <span class="b <%= e.role %>" title="<%- t('help.bar.role_label') %>"><%- e.role === 'everyone' ? t('help.role.everyone') : (ROLE_LABEL[e.role] || t.esc(e.role)) %></span>
           <% if (e.cost) { %><span class="b cost"><%= fmt(e.cost) %> PAT</span><% } %>
           <% if (e.gates && e.gates.length) { %><span class="b gate" title="<%- t('help.card.gate_title', { gates: e.gates.map((g) => M.gates[g] || g).join(', ') }) %>"><%- t('help.card.gate') %></span><% } %>
           <% if (e.webchat) { %><span class="b web" title="<%- t('help.card.web_title') %>"><%- t('help.card.web') %></span><% } %>

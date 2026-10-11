@@ -1,59 +1,132 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'Grand Theft Frogger', user: user}) %>
+<%#
+  views/gtf.ejs - Grand Theft Frogger overview (gtf.js). 1.99lv design pass: hero + your-character card, the four
+  parts as cards, a numbered "start here" list. The turf map changes every season, so nothing here names districts.
+%>
+<%
+  const ext = (u) => /^https:/.test(u) ? ' rel="noopener"' : '';
+  const PARTS = [
+    { key: 'heists', icon: '🥷', accent: 'gold', links: [[links.heistHelp, t('gtf.heists.l_how')], [links.heistBoard, t('gtf.heists.l_board')]] },
+    { key: 'turf', icon: '🗺️', accent: 'green', links: [[links.turfGuide, t('gtf.turf.l_guide')], [links.turfHelp, t('gtf.turf.l_cmds')], [links.turfMap, t('gtf.turf.l_map')],
+        ['https://pepe.publicaccess.tv/seasons/season-2-london.html', t('gtf.turf.l_archive')]] },
+    { key: 'gangs', icon: '🎩', accent: 'violet', links: [[links.gangs, t('gtf.gangs.l_board')], [links.turfHelp, t('gtf.gangs.l_cmds')]] },
+    { key: 'bounties', icon: '🎯', accent: 'red', links: [['/bounties', t('gtf.bounties.l_board')]] },
+  ];
+  const STEPS = [['!sheet', t('gtf.step.sheet')], ['!heist', t('gtf.step.heist')], ['!gang', t('gtf.step.gang')], ['!turf', t('gtf.step.turf')], ['!bounty', t('gtf.step.bounty')]];
+%>
 <style>
-  .pl { max-width: 960px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
-  .pl h1 { text-align: center; margin-bottom: 4px; }
-  .pl .sub { text-align: center; color: #9a9; margin: 0 auto 26px; max-width: 62ch; line-height: 1.55; }
-  .pl .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
-  .pl .part { background: #111; border: 1px solid #222; border-radius: 10px; padding: 16px 18px; min-width: 0; }
-  .pl .part h2 { margin: 0 0 6px; font-size: 18px; }
-  .pl .part p { color: #bbb; font-size: 14px; line-height: 1.55; margin: 0 0 12px; }
-  .pl .part a { display: block; color: #81c784; text-decoration: none; padding: 3px 0; font-size: 14px; }
-  .pl .part a:hover { color: #a5d6a7; }
-  .pl .you { margin: 22px 0; padding: 14px 18px; border: 1px solid #4caf50; border-radius: 10px; background: #13200f; }
-  .pl .you a { color: #ffd700; }
-  .pl code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  .pl .flow { color: #9a9; font-size: 14px; text-align: center; margin-top: 26px; line-height: 1.7; }
+  .gtf { --gold: #ffcf40; --green: #6fdc7b; --violet: #b98cff; --red: #ff6b6b; --mut: #a7ada7;
+         max-width: 1100px; width: 100%; margin: 0 auto; padding: 18px 16px 56px; box-sizing: border-box; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 18px; overflow-wrap: anywhere; }
+  .gtf *, .gtf *::before, .gtf *::after { box-sizing: border-box; }
+  .gtf a { color: #81c784; text-decoration: none; }
+  .gtf a:hover { text-decoration: underline; }
+  .gtf a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .gtf code { background: #0d0d0d; border: 1px solid #2a2a2a; padding: 1px 6px; border-radius: 5px; color: #e8f5e9; font-family: Consolas, 'Courier New', monospace; font-size: .95em; }
+
+  /* hero */
+  .gtf .hero { position: relative; overflow: hidden; border: 1px solid #2c2c2c; border-radius: 18px; padding: 24px;
+               background: radial-gradient(90% 130% at 0% 0%, #2b0d0d 0%, rgba(17,17,17,0) 60%), radial-gradient(80% 120% at 100% 100%, #0e2a14 0%, rgba(17,17,17,0) 60%), #111;
+               display: grid; gap: 20px; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: center; }
+  .gtf .hero::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 10px; pointer-events: none; opacity: .55;
+                      background: repeating-linear-gradient(-45deg, #ffcf40 0 12px, #111 12px 24px); }
+  .gtf .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: var(--gold); line-height: 1.7; }
+  .gtf h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.05; margin: 10px 0 12px; }
+  .gtf h1 em { font-style: normal; background: linear-gradient(90deg, #ffcf40, #ff6b6b 45%, #6fdc7b 90%); background-size: 200% 100%;
+               -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .gtf .lead { color: #d3d3c9; font-size: 16px; line-height: 1.6; margin: 0; max-width: 60ch; }
+  .gtf .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
+  .gtf .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid #2f2f2f; background: #1a1a1a; color: #e6e6e6; font: bold 14px Ubuntu, sans-serif; }
+  .gtf .btn:hover { text-decoration: none; border-color: #555; }
+  .gtf .btn.gold { background: linear-gradient(90deg, #ffcf40, #ff8a3d); color: #2a1600; border-color: #ffcf40; }
+
+  /* your character */
+  .gtf .me { position: relative; z-index: 1; background: rgba(10,10,10,.75); border: 1px solid #333; border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
+  .gtf .me.has { border-color: #5a4a10; box-shadow: 0 0 0 1px rgba(255,207,64,.12), 0 10px 30px rgba(0,0,0,.4); }
+  .gtf .me h2 { margin: 0; font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .1em; color: #aaa; line-height: 1.7; }
+  .gtf .me .big { display: flex; align-items: center; gap: 12px; }
+  .gtf .me .av { flex: none; width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center; font-size: 28px; background: #1d1a0c; border: 1px solid #5a4a10; }
+  .gtf .me .cls { font-size: 20px; font-weight: bold; color: #fff; }
+  .gtf .me p { margin: 0; color: var(--mut); font-size: 14px; line-height: 1.55; }
+  .gtf .me .btn { justify-self: start; }
+
+  /* the four parts */
+  .gtf .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; }
+  .gtf .part { --ac: var(--gold); background: #121212; border: 1px solid #262626; border-top: 3px solid var(--ac); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .gtf .part.green { --ac: var(--green); } .gtf .part.violet { --ac: var(--violet); } .gtf .part.red { --ac: var(--red); }
+  .gtf .part h2 { margin: 0; font-size: 19px; display: flex; align-items: center; gap: 10px; color: #fff; }
+  .gtf .part .ic { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; background: #1a1a1a; border: 1px solid #333; }
+  .gtf .part p { margin: 0; color: #bdbdbd; font-size: 14px; line-height: 1.55; }
+  .gtf .part ul { list-style: none; margin: auto 0 0; padding: 10px 0 0; border-top: 1px solid #222; display: grid; gap: 2px; }
+  .gtf .part li a { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; margin: 0 -8px; border-radius: 8px; color: #ddd; font-size: 14px; }
+  .gtf .part li a::after { content: '›'; color: var(--ac); font-weight: bold; }
+  .gtf .part li a:hover { background: #1b1b1b; text-decoration: none; color: #fff; }
+  .gtf .part li:first-child a { color: var(--ac); font-weight: bold; }
+
+  /* start here */
+  .gtf .start { background: #121212; border: 1px solid #262626; border-radius: 14px; padding: 18px; }
+  .gtf .start h2 { margin: 0 0 12px; font-family: 'Press Start 2P', monospace; font-size: 11px; letter-spacing: .1em; color: var(--gold); line-height: 1.6; }
+  .gtf .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; counter-reset: s; }
+  .gtf .steps li { counter-increment: s; display: grid; grid-template-columns: 26px 1fr; gap: 4px 10px; align-items: start; background: #0e0e0e; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; }
+  .gtf .steps li::before { content: counter(s); grid-row: span 2; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+                           font: 10px 'Press Start 2P', monospace; color: #2a1600; background: var(--gold); }
+  .gtf .steps code { justify-self: start; color: #ffe08a; font-weight: bold; }
+  .gtf .steps span { color: #bbb; font-size: 13.5px; line-height: 1.45; }
+  .gtf .foot { margin: 12px 0 0; color: #888; font-size: 13px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .gtf h1 em { animation: gtf-shine 8s ease-in-out infinite alternate; }
+    @keyframes gtf-shine { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+  }
+  @media (max-width: 760px) { .gtf .hero { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 520px) { .gtf .hero, .gtf .start { padding: 18px 16px 16px; } .gtf .lead { font-size: 15px; } }
 </style>
-<div class="pl">
-  <h1>🔫 Grand Theft Frogger</h1>
-  <p class="sub">The crime side of PATV. Roll a character, pull heists to get rich, put bounties on rivals, join a
-    gang and fight for turf. A new map every season. It all runs in the Camfrog rooms with Pepe, and it all pays in PAT.</p>
+<div class="gtf">
+  <section class="hero" aria-labelledby="gtfH">
+    <div>
+      <div class="eyebrow"><%- t('gtf.eyebrow') %></div>
+      <h1 id="gtfH"><span aria-hidden="true">🔫 </span><em>Grand Theft Frogger</em></h1>
+      <p class="lead"><%- t('gtf.lede') %></p>
+      <div class="row">
+        <a class="btn gold" href="<%= links.heistHelp %>">🥷 <%- t('gtf.cta.how') %></a>
+        <a class="btn" href="/bounties">🎯 <%- t('gtf.bounties.l_board') %></a>
+        <a class="btn" href="<%= links.turfMap %>"<%- ext(links.turfMap) %>>🗺️ <%- t('gtf.turf.l_map') %></a>
+      </div>
+    </div>
+    <aside class="me<%= sheet ? ' has' : '' %>" aria-labelledby="gtfMe">
+      <h2 id="gtfMe"><%- t('gtf.me.heading') %></h2>
+      <% if (sheet) { %>
+        <div class="big"><span class="av" aria-hidden="true">🐸</span><span class="cls"><%= sheet.cls || '' %><% if (!sheet.cls) { %><%- t('gtf.me.rolled') %><% } %></span></div>
+        <a class="btn gold" href="<%= sheet.url %>"<%- ext(sheet.url) %>>📜 <%- t('gtf.me.open') %></a>
+      <% } else if (user) { %>
+        <p><%- t('gtf.me.none', { cmd: '<code>!sheet</code>' }) %></p>
+        <p><%- t('gtf.me.link_hint') %></p>
+      <% } else { %>
+        <p><%- t('gtf.me.anon', { cmd: '<code>!sheet</code>' }) %></p>
+        <a class="btn" href="/login?next=/gtf"><%- t('gtf.me.signin') %></a>
+      <% } %>
+    </aside>
+  </section>
 
-  <% if (sheet) { %>
-    <div class="you">Your character: <a href="<%= sheet.url %>">open your heist sheet</a><%= sheet.cls ? ' · ' + sheet.cls : '' %></div>
-  <% } else if (user) { %>
-    <div class="you">No sheet linked yet. Type <code>!sheet</code> in a Camfrog room with Pepe to roll one (link your Camfrog name on your profile so it shows up here).</div>
-  <% } %>
-
-  <div class="grid">
-    <div class="part">
-      <h2>🥷 Heists</h2>
-      <p>Your character sheet (six stats, a class, gear) decides every roll. Crew up, survive the rounds to bank loot, bail or go for the vault door. Store, casino, convoy and the Federal Reserve.</p>
-      <a href="<%= links.heistHelp %>">How heists work ›</a>
-      <a href="<%= links.heistBoard %>">Heist leaderboard ›</a>
-    </div>
-    <div class="part">
-      <h2>🗺️ Turf Wars</h2>
-      <p>Every district on this season's map runs a business that earns its owner PAT. Claim open turf, raid rivals, fortify what you hold, and climb the season score. The map changes each season.</p>
-      <a href="<%= links.turfGuide %>">The Turf Wars guide ›</a>
-      <a href="<%= links.turfHelp %>">Turf commands ›</a>
-      <a href="<%= links.turfMap %>">Live turf map ›</a>
-      <a href="https://pepe.publicaccess.tv/seasons/season-2-london.html">Season 2 archive: London ›</a>
-    </div>
-    <div class="part">
-      <h2>🎩 Gangs</h2>
-      <p>Gangs share a treasury, wages and heat. A gang takes turf together, defends it together, and splits what it earns. Too much heat brings the police.</p>
-      <a href="<%= links.gangs %>">Gang leaderboard ›</a>
-      <a href="<%= links.turfHelp %>">Gang commands ›</a>
-    </div>
-    <div class="part">
-      <h2>🎯 Bounties</h2>
-      <p>Put PAT on a job: anyone can chip in, hunters claim it, and the poster pays whoever pulled it off. The pot sits in escrow until then.</p>
-      <a href="/bounties">The bounty board ›</a>
-    </div>
+  <div class="parts">
+    <% PARTS.forEach((p) => { %>
+    <section class="part <%= p.accent %>" aria-labelledby="gtf-<%= p.key %>">
+      <h2 id="gtf-<%= p.key %>"><span class="ic" aria-hidden="true"><%= p.icon %></span><%- t('gtf.' + p.key + '.title') %></h2>
+      <p><%- t('gtf.' + p.key + '.body') %></p>
+      <ul>
+        <% p.links.forEach(([href, label]) => { %><li><a href="<%= href %>"<%- ext(href) %>><%- label %></a></li><% }) %>
+      </ul>
+    </section>
+    <% }) %>
   </div>
 
-  <p class="flow">Start: <code>!sheet</code> to roll a character · <code>!heist</code> to pull a job · <code>!gang</code> to start or join a gang · <code>!turf</code> to see the map · <code>!bounty</code> to post a job · <code>!gtf</code> for these links in chat</p>
+  <section class="start" aria-labelledby="gtfStart">
+    <h2 id="gtfStart"><%- t('gtf.start.heading') %></h2>
+    <ol class="steps">
+      <% STEPS.forEach(([cmd, txt]) => { %><li><code><%= cmd %></code><span><%- txt %></span></li><% }) %>
+    </ol>
+    <p class="foot"><%- t('gtf.start.foot', { cmd: '<code>!gtf</code>' }) %></p>
+  </section>
 </div>
 </body>
 </html>

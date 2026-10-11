@@ -1,52 +1,255 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: t('ach.title'), user: user}) %>
-    <link rel="stylesheet" href="/public/css/leaderboard.css">
+<%#
+  views/achievements.ejs - the achievements page (index.js /achievements). 1.99lv design pass: arcade marquee hero with
+  your progress (overall, per rarity, XP/PAT earned), a filter bar (group chips, unlocked/locked, rarity, search -
+  plain client-side show/hide, the page works without JS), badge cards in a 2-up phone grid. Data is unchanged:
+  achievements (site badges + catalog), holders {id: n}, owned (Set or null), viewing, own.
+%>
+<%
+  const TIERS = ['common', 'uncommon', 'rare', 'legendary'];
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  const siteIds = achievements.filter(a => a.site).map(a => a.id);
+  const GROUPS = [['patv', t.esc("PATV"), siteIds], ['start', t('ach.group.start'), ["cf_linked","cf_telegram_","cf_google_","cf_cmd_1","cf_level_"]], ['chat', t('ach.group.chat'), ["cf_chat_","cf_streak_"]], ['mic', t('ach.group.mic'), ["cf_mic_","cf_top_mic"]], ['commands', t('ach.group.commands'), ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ['room', t('ach.group.room'), ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ['heists', t('ach.group.heists'), ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ['wheel', t('ach.group.wheel'), ["cf_spin","cf_wheel"]], ['casino', t('ach.group.casino'), ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ['games', t('ach.group.games'), ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ['bounties', t('ach.group.bounties'), ["cf_bounty"]], ['plex', t('ach.group.plex'), ["cf_plex_"]], ['else', t('ach.group.else'), ["cf_"]]];
+  const used = new Set();
+  const sections = GROUPS.map(([slug, title, prefixes]) => {
+    const items = achievements.filter(a => !used.has(a.id) && prefixes.some(p => a.id === p || a.id.startsWith(p)));
+    items.forEach(a => used.add(a.id));
+    return { slug, title, items, got: owned ? items.filter(a => owned.has(a.id)).length : 0 };
+  }).filter(s => s.items.length);
+  const has = (a) => !!(owned && owned.has(a.id));
+  const total = achievements.length, gotN = owned ? achievements.filter(has).length : 0;
+  const pct = total ? Math.round(gotN * 100 / total) : 0;
+  const tierN = Object.fromEntries(TIERS.map(k => [k, { all: achievements.filter(a => (a.tier || 'common') === k).length, got: achievements.filter(a => (a.tier || 'common') === k && has(a)).length }]));
+  const earnedXp = owned ? achievements.filter(has).reduce((s, a) => s + (a.xp || 0), 0) : 0;
+  const earnedPat = owned ? achievements.filter(has).reduce((s, a) => s + (a.pat || 0), 0) : 0;
+  const theirs = typeof viewing !== 'undefined' && viewing && !own;
+%>
 <style>
-  .ach-wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 48px; }
-  .ach-wrap h1 { text-align: center; }
-  .ach-lede { text-align: center; color: #9a9; font-family: Ubuntu, sans-serif; max-width: 640px; margin: 0 auto 24px; line-height: 1.5; }
-  .ach-stats { text-align: center; font-family: 'Press Start 2P', monospace; font-size: 11px; color: #ffd700; margin-bottom: 24px; }
-  .ach-group { font-family: 'Press Start 2P', monospace; font-size: 12px; color: #81c784; margin: 28px 0 12px; }
-  .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
-  .ach { background: #111; border: 2px solid #222; border-radius: 10px; padding: 14px; display: flex; gap: 12px; align-items: center; }
-  .ach img { width: 64px; height: 64px; image-rendering: pixelated; flex: none; }
-  .ach .nm { font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.5; color: #fff; }
-  .ach .ds { font-family: Ubuntu, sans-serif; font-size: 13px; color: #aaa; margin: 4px 0; }
-  .ach .rw { font-family: Ubuntu, sans-serif; font-size: 12px; color: #ffd700; }
-  .ach .hd { font-family: Ubuntu, sans-serif; font-size: 11px; color: #777; }
-  .ach.locked img { filter: grayscale(1) brightness(.45); }
-  .ach.got { border-color: #4caf50; box-shadow: 0 0 12px rgba(76, 175, 80, .35); }
-  .ach.legendary .nm { color: #ffd700; }
-  .ach.rare .nm { color: #b388ff; }
+  .acx { --neon: #39ff88; --gold: #ffd740; --pink: #ff4fd8; --cyan: #3de8ff; --t-common: #9aa4ad; --t-uncommon: #5fd17a; --t-rare: #b388ff; --t-legendary: #ffd740;
+         max-width: 1180px; width: 100%; margin: 0 auto; padding: 18px 16px 56px; box-sizing: border-box; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 18px; overflow-wrap: anywhere; }
+  .acx *, .acx *::before, .acx *::after { box-sizing: border-box; }
+  .acx a { color: var(--neon); }
+  .acx .px { font-family: 'Press Start 2P', monospace; }
+  .acx button:focus-visible, .acx input:focus-visible, .acx a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* marquee hero */
+  .acx .hero { position: relative; overflow: hidden; border: 2px solid #1e3a2a; border-radius: 16px; padding: 26px 22px 22px;
+               background: radial-gradient(70% 120% at 50% -10%, #102a1c 0%, rgba(8,8,8,0) 70%), #080808;
+               box-shadow: inset 0 0 0 4px #0b0b0b, inset 0 0 0 6px #173022, 0 0 30px rgba(57,255,136,.08);
+               display: grid; gap: 22px; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: center; }
+  .acx .hero::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+                       background: repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px); }
+  .acx .hero > * { position: relative; }
+  .acx .eyebrow { font-size: 9px; letter-spacing: .14em; color: var(--cyan); line-height: 1.8; }
+  .acx h1 { font-family: 'Press Start 2P', monospace; font-size: clamp(20px, 4.4vw, 38px); line-height: 1.25; margin: 12px 0 14px; color: var(--gold);
+            text-shadow: 0 0 6px rgba(255,215,64,.75), 0 0 22px rgba(255,170,0,.45), 3px 3px 0 #5a2d00; letter-spacing: .02em; }
+  .acx .lede { color: #bfc7bf; font-size: 15px; line-height: 1.6; margin: 0; max-width: 62ch; }
+
+  /* score panel */
+  .acx .score { background: #0d0d0d; border: 2px solid #232323; border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+  .acx .score .who { font-size: 9px; color: #9a9; line-height: 1.8; letter-spacing: .08em; }
+  .acx .score .big { font-size: clamp(22px, 3.4vw, 30px); color: #fff; line-height: 1.2; }
+  .acx .score .big small { font-size: .5em; color: #888; }
+  .acx .bar { height: 16px; border: 2px solid #2e2e2e; border-radius: 4px; background: #050505; padding: 2px; }
+  .acx .bar i { display: block; height: 100%; width: var(--p); border-radius: 1px;
+                background: repeating-linear-gradient(90deg, var(--neon) 0 8px, #1fbf62 8px 10px); box-shadow: 0 0 10px rgba(57,255,136,.55); }
+  .acx .tiers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .acx .tiers div { background: #111; border: 1px solid #242424; border-top: 3px solid var(--tc); border-radius: 8px; padding: 7px 6px; text-align: center; min-width: 0; }
+  .acx .tiers b { display: block; font: 11px 'Press Start 2P', monospace; color: #fff; line-height: 1.5; }
+  .acx .tiers span { font-size: 11px; color: var(--tc); text-transform: capitalize; }
+  .acx .earned { display: flex; flex-wrap: wrap; gap: 6px; }
+  .acx .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: bold; padding: 3px 8px; border-radius: 999px; border: 1px solid #333; background: #151515; color: #ddd; white-space: nowrap; }
+  .acx .chip.xp { color: var(--cyan); border-color: #1b4650; background: #08181b; }
+  .acx .chip.pat { color: var(--gold); border-color: #5a4a10; background: #1a1708; }
+  .acx .signin { font-size: 14px; color: #aaa; margin: 0; }
+
+  /* filter bar */
+  .acx .fb { background: #0d0d0d; border: 2px solid #1f1f1f; border-radius: 12px; padding: 10px; display: grid; gap: 10px; }
+  @media (min-width: 900px) { .acx .fb { position: sticky; top: 8px; z-index: 5; box-shadow: 0 8px 22px rgba(0,0,0,.6); } }
+  .acx .fb .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .acx .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+  @media (min-width: 900px) { .acx .chips { flex-wrap: wrap; overflow: visible; } }
+  .acx .chips button, .acx .seg button { flex: none; background: #151515; border: 1px solid #2c2c2c; color: #ccc; border-radius: 999px; padding: 6px 11px; font: 13px Ubuntu, sans-serif; cursor: pointer; white-space: nowrap; }
+  .acx .chips button small { color: #777; margin-left: 4px; }
+  .acx .chips button[aria-pressed=true], .acx .seg button[aria-pressed=true] { background: #0f2a1a; border-color: var(--neon); color: #fff; box-shadow: 0 0 8px rgba(57,255,136,.25); }
+  .acx .chips button[aria-pressed=true] small { color: #9be3b4; }
+  .acx .seg { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .acx .seg button[data-tier] { border-color: color-mix(in srgb, var(--tc) 45%, #2c2c2c); color: var(--tc); }
+  .acx .seg button[data-tier][aria-pressed=true] { background: color-mix(in srgb, var(--tc) 18%, #111); border-color: var(--tc); color: #fff; }
+  .acx .fb input[type=search] { flex: 1 1 200px; min-width: 0; background: #070707; border: 1px solid #333; border-radius: 8px; color: #eee; padding: 8px 10px; font: 14px Ubuntu, sans-serif; }
+  .acx .fb .n { color: #888; font-size: 13px; white-space: nowrap; margin-left: auto; }
+  .acx .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* groups */
+  .acx .grp[hidden] { display: none; }
+  .acx .gh { display: flex; align-items: center; gap: 12px; margin: 10px 0 12px; }
+  .acx .gh h2 { margin: 0; font: 12px/1.6 'Press Start 2P', monospace; color: var(--neon); text-shadow: 0 0 8px rgba(57,255,136,.45); }
+  .acx .gh .line { flex: 1; height: 2px; background: repeating-linear-gradient(90deg, #1f3a2a 0 6px, transparent 6px 10px); }
+  .acx .gh .gp { font: 9px 'Press Start 2P', monospace; color: #9a9; white-space: nowrap; }
+  .acx .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+
+  /* cards */
+  .acx .ach { --tc: var(--t-common); position: relative; background: #0f0f0f; border: 2px solid #222; border-radius: 12px; padding: 14px 12px 12px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; min-width: 0; }
+  .acx .ach[hidden] { display: none; }
+  .acx .uncommon { --tc: var(--t-uncommon); } .acx .rare { --tc: var(--t-rare); } .acx .legendary { --tc: var(--t-legendary); }
+  .acx .tiers .common { --tc: var(--t-common); }
+  .acx .seg .common { --tc: var(--t-common); }
+  .acx .frame { width: 84px; height: 84px; border-radius: 10px; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--tc) 16%, #111) 0%, #0a0a0a 70%);
+                border: 2px solid color-mix(in srgb, var(--tc) 55%, #222); }
+  .acx .frame img { width: 68px; height: 68px; image-rendering: pixelated; }
+  .acx .tier { font: 7px 'Press Start 2P', monospace; letter-spacing: .1em; color: var(--tc); text-transform: uppercase; line-height: 1.6; }
+  .acx .nm { font: 10px/1.55 'Press Start 2P', monospace; color: #fff; }
+  .acx .ds { font-size: 13px; color: #aaa; line-height: 1.45; margin: 0; }
+  .acx .rw { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: auto; padding-top: 4px; }
+  .acx .rw .chip { font-size: 11px; padding: 2px 7px; }
+  .acx .hd { font-size: 11px; color: #777; }
+  .acx .st { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: bold; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+  .acx .got { border-color: var(--neon); box-shadow: 0 0 0 1px rgba(57,255,136,.25), 0 0 16px rgba(57,255,136,.18); background: linear-gradient(180deg, #0e1f15 0%, #0f0f0f 45%); }
+  .acx .got .st { background: var(--neon); color: #002a12; }
+  .acx .locked .frame img { filter: grayscale(1) brightness(.4); }
+  .acx .locked .nm { color: #9a9a9a; }
+  .acx .locked .st { background: #1c1c1c; color: #888; border: 1px solid #333; }
+  .acx .legendary.got { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(255,215,64,.3), 0 0 18px rgba(255,200,0,.25); background: linear-gradient(180deg, #221c06 0%, #0f0f0f 45%); }
+  .acx .legendary.got .st { background: var(--gold); color: #2a1a00; }
+  .acx .none { text-align: center; color: #888; padding: 26px 0; }
+  .acx .none button { background: none; border: 0; color: var(--neon); font: inherit; text-decoration: underline; cursor: pointer; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .acx h1 { animation: acx-flicker 6s steps(1) infinite; }
+    @keyframes acx-flicker { 0%, 93%, 96%, 100% { opacity: 1; } 94% { opacity: .55; } 95% { opacity: .9; } }
+    .acx .ach { transition: transform .15s ease, box-shadow .15s ease; }
+    .acx .ach:hover { transform: translateY(-2px); }
+  }
+  @media (max-width: 820px) { .acx .hero { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 520px) {
+    .acx .hero { padding: 20px 14px 16px; }
+    .acx .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .acx .ach { padding: 12px 8px 10px; }
+    .acx .frame { width: 68px; height: 68px; } .acx .frame img { width: 56px; height: 56px; }
+    .acx .nm { font-size: 8.5px; }
+    .acx .ds { font-size: 12px; }
+    .acx .rw .chip { font-size: 10px; padding: 1px 5px; }
+    .acx .hd { font-size: 10.5px; }
+    .acx .st { top: 6px; right: 6px; }
+    .acx .tiers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .acx .tiers div { display: flex; justify-content: space-between; align-items: center; gap: 6px; text-align: left; padding: 6px 8px; }
+    .acx .tiers b { order: 2; font-size: 10px; }
+  }
 </style>
-<div class="ach-wrap">
-  <h1><%- t('ach.heading') %></h1>
-  <p class="ach-lede"><%- t('ach.lede') %></p>
-  <% if (owned) { %>
-    <div class="ach-stats"><%- (typeof viewing !== 'undefined' && viewing && !own) ? t('ach.they_have', { name: viewing, n: owned.size, total: achievements.length }) : t('ach.you_have', { n: owned.size, total: achievements.length }) %></div>
-  <% } %>
-  <% const siteIds = achievements.filter(a => a.site).map(a => a.id);
-     const groups = [[t.esc("PATV"), siteIds], [t('ach.group.start'), ["cf_linked","cf_telegram_","cf_google_","cf_cmd_1","cf_level_"]], [t('ach.group.chat'), ["cf_chat_","cf_streak_"]], [t('ach.group.mic'), ["cf_mic_","cf_top_mic"]], [t('ach.group.commands'), ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], [t('ach.group.room'), ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], [t('ach.group.heists'), ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], [t('ach.group.wheel'), ["cf_spin","cf_wheel"]], [t('ach.group.casino'), ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], [t('ach.group.games'), ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], [t('ach.group.bounties'), ["cf_bounty"]], [t('ach.group.plex'), ["cf_plex_"]], [t('ach.group.else'), ["cf_"]]];
-     const used = new Set(); %>
-  <% groups.forEach(([title, prefixes]) => {
-       const items = achievements.filter(a => !used.has(a.id) && prefixes.some(p => a.id === p || a.id.startsWith(p)));
-       items.forEach(a => used.add(a.id));
-       if (!items.length) return; %>
-    <div class="ach-group"><%- title %></div>
-    <div class="ach-grid">
-      <% items.forEach(a => { const got = owned && owned.has(a.id); %>
-        <div class="ach <%= a.tier %> <%= owned ? (got ? 'got' : 'locked') : '' %>">
-          <img src="<%= a.icon %>" alt="">
-          <div>
-            <div class="nm"><%= a.name %></div>
-            <div class="ds"><%= a.desc %></div>
-            <div class="rw"><%= [a.xp ? '+' + a.xp.toLocaleString() + ' XP' : '', a.pat ? '+' + a.pat.toLocaleString() + ' PAT' : ''].filter(Boolean).join(' · ') %></div>
-            <div class="hd"><%- t('ach.holders', { count: holders[a.id] || 0, n: (holders[a.id] || 0).toLocaleString() }) %></div>
-          </div>
-        </div>
+<div class="acx">
+  <section class="hero" aria-labelledby="acxH">
+    <div>
+      <div class="eyebrow px"><%- t('ach.eyebrow', { n: fmt(total) }) %></div>
+      <h1 id="acxH"><%- t('ach.heading') %></h1>
+      <p class="lede"><%- t('ach.lede') %></p>
+    </div>
+    <div class="score">
+      <% if (owned) { %>
+        <div class="who px"><%- theirs ? t('ach.score.theirs', { name: viewing }) : t('ach.score.yours') %></div>
+        <div class="big px"><%= gotN %> <small>/ <%= total %></small></div>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="<%= total %>" aria-valuenow="<%= gotN %>"
+             aria-label="<%- theirs ? t('ach.they_have', { name: viewing, n: gotN, total }) : t('ach.you_have', { n: gotN, total }) %>"><i style="--p: <%= pct %>%"></i></div>
+      <% } else { %>
+        <div class="who px"><%- t('ach.score.catalog') %></div>
+        <div class="big px"><%= total %></div>
+      <% } %>
+      <div class="tiers">
+        <% TIERS.forEach((k) => { %><div class="<%= k %>"><b><%= owned ? tierN[k].got + '/' + tierN[k].all : tierN[k].all %></b><span><%- t('ach.tier.' + k) %></span></div><% }) %>
+      </div>
+      <% if (owned) { %>
+        <div class="earned"><span class="chip xp"><%- t('ach.earned_xp', { n: fmt(earnedXp) }) %></span><span class="chip pat"><%- t('ach.earned_pat', { n: fmt(earnedPat) }) %></span></div>
+      <% } else { %>
+        <p class="signin"><%- t('ach.signin', { link: '<a href="/login?next=/achievements">' + t('ach.signin_link') + '</a>' }) %></p>
+      <% } %>
+    </div>
+  </section>
+
+  <div class="fb" role="search" aria-label="<%- t('ach.filter.aria') %>" id="acxBar" hidden>
+    <div class="chips" role="group" aria-label="<%- t('ach.filter.group') %>">
+      <button type="button" data-group="" aria-pressed="true"><%- t('ach.filter.all') %><small><%= owned ? gotN + '/' + total : total %></small></button>
+      <% sections.forEach((s) => { %><button type="button" data-group="<%= s.slug %>" aria-pressed="false"><%- s.title %><small><%= owned ? s.got + '/' + s.items.length : s.items.length %></small></button><% }) %>
+    </div>
+    <div class="row">
+      <% if (owned) { %>
+      <div class="seg" role="group" aria-label="<%- t('ach.filter.status') %>">
+        <button type="button" data-state="" aria-pressed="true"><%- t('ach.filter.all') %></button>
+        <button type="button" data-state="got" aria-pressed="false">✓ <%- t('ach.state.unlocked') %></button>
+        <button type="button" data-state="locked" aria-pressed="false">🔒 <%- t('ach.state.locked') %></button>
+      </div>
+      <% } %>
+      <div class="seg" role="group" aria-label="<%- t('ach.filter.rarity') %>">
+        <% TIERS.forEach((k) => { %><button type="button" class="<%= k %>" data-tier="<%= k %>" aria-pressed="false"><%- t('ach.tier.' + k) %></button><% }) %>
+      </div>
+      <label class="sr" for="acxQ"><%- t('ach.filter.search_label') %></label>
+      <input id="acxQ" type="search" placeholder="<%- t('ach.filter.search_ph') %>" autocomplete="off">
+      <span class="n" id="acxN" aria-live="polite" data-tpl="<%- t('ach.filter.shown') %>"></span>
+    </div>
+  </div>
+
+  <% sections.forEach((s) => { %>
+  <section class="grp" data-group="<%= s.slug %>" aria-labelledby="g-<%= s.slug %>">
+    <div class="gh"><h2 id="g-<%= s.slug %>"><%- s.title %></h2><span class="line" aria-hidden="true"></span><span class="gp"><%= owned ? s.got + ' / ' + s.items.length : s.items.length %></span></div>
+    <div class="grid">
+      <% s.items.forEach(a => { const got = has(a); const tier = a.tier || 'common'; %>
+        <article class="ach <%= tier %> <%= owned ? (got ? 'got' : 'locked') : '' %>" data-tier="<%= tier %>" data-state="<%= owned ? (got ? 'got' : 'locked') : '' %>">
+          <% if (owned) { %><span class="st" title="<%- got ? t('ach.state.unlocked') : t('ach.state.locked') %>"><span aria-hidden="true"><%= got ? '✓' : '🔒' %></span><span class="sr"><%- got ? t('ach.state.unlocked') : t('ach.state.locked') %></span></span><% } %>
+          <div class="frame"><img src="<%= a.icon %>" alt="" loading="lazy" width="68" height="68"></div>
+          <div class="tier"><%- t('ach.tier.' + tier) %></div>
+          <h3 class="nm" style="margin:0"><%= a.name %></h3>
+          <p class="ds"><%= a.desc %></p>
+          <div class="rw"><% if (a.xp) { %><span class="chip xp">+<%= fmt(a.xp) %> XP</span><% } %><% if (a.pat) { %><span class="chip pat">+<%= fmt(a.pat) %> PAT</span><% } %></div>
+          <div class="hd"><%- t('ach.holders', { count: holders[a.id] || 0, n: (holders[a.id] || 0).toLocaleString() }) %></div>
+        </article>
       <% }) %>
     </div>
+  </section>
   <% }) %>
+  <p class="none" id="acxNone" hidden><%- t('ach.filter.none') %> <button type="button" id="acxReset"><%- t('ach.filter.reset') %></button></p>
 </div>
+<script>
+(function () {
+  var bar = document.getElementById('acxBar');
+  if (!bar) return;
+  bar.hidden = false;
+  var cards = [].slice.call(document.querySelectorAll('.acx .ach'));
+  var groups = [].slice.call(document.querySelectorAll('.acx .grp'));
+  var q = document.getElementById('acxQ'), n = document.getElementById('acxN'), none = document.getElementById('acxNone');
+  var hay = cards.map(function (c) { return c.textContent.toLowerCase(); });
+  var f = { group: '', state: '', tier: '' };
+  function press(sel, attr, val) {
+    [].forEach.call(bar.querySelectorAll(sel), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute(attr) === val)); });
+  }
+  function apply() {
+    var words = q.value.toLowerCase().trim().split(/\s+/).filter(Boolean), shown = 0;
+    cards.forEach(function (c, i) {
+      var g = c.closest('.grp').getAttribute('data-group');
+      var ok = (!f.group || g === f.group) && (!f.state || c.getAttribute('data-state') === f.state) &&
+               (!f.tier || c.getAttribute('data-tier') === f.tier) && words.every(function (w) { return hay[i].indexOf(w) >= 0; });
+      c.hidden = !ok;
+      if (ok) shown++;
+    });
+    groups.forEach(function (s) { s.hidden = !s.querySelector('.ach:not([hidden])'); });
+    var any = f.group || f.state || f.tier || words.length;
+    n.textContent = any ? n.getAttribute('data-tpl').replace('{n}', shown).replace('{total}', cards.length) : '';
+    none.hidden = shown > 0;
+  }
+  bar.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-group')) { f.group = b.getAttribute('data-group'); press('[data-group]', 'data-group', f.group); }
+    else if (b.hasAttribute('data-state')) { f.state = b.getAttribute('data-state'); press('[data-state]', 'data-state', f.state); }
+    else if (b.hasAttribute('data-tier')) { var v = b.getAttribute('data-tier'); f.tier = f.tier === v ? '' : v; press('[data-tier]', 'data-tier', f.tier); }
+    apply();
+  });
+  var tm = null;
+  q.addEventListener('input', function () { clearTimeout(tm); tm = setTimeout(apply, 60); });
+  document.getElementById('acxReset').addEventListener('click', function () {
+    f = { group: '', state: '', tier: '' }; q.value = '';
+    press('[data-group]', 'data-group', ''); press('[data-state]', 'data-state', ''); press('[data-tier]', 'data-tier', '');
+    apply();
+  });
+})();
+</script>
 </body>
 </html>
