@@ -185,6 +185,26 @@ test("shop history: heist-gear debits per linked Camfrog login", async () => {
   assert.equal(rows.length, 2, "unlinked accounts are left out");
 });
 
+test("store history: store-score credits grouped into hits (2-minute windows), best haul, a bank buy-in the same day", async () => {
+  await runQuery(`CREATE TABLE IF NOT EXISTS bonus_winners (bonusId TEXT PRIMARY KEY, type TEXT NOT NULL, userId TEXT NOT NULL,
+                  transactionId TEXT NOT NULL, amount INTEGER NOT NULL, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  let n = 0;
+  for (const [uid, type, amt, ts] of [
+    ["u1", "store-score", 1200, "2026-10-01 10:00:05"], ["u1", "store-score", 1500, "2026-10-01 10:00:09"],   // hit 1: 2,700
+    ["u1", "store-score", 800, "2026-10-02 18:30:00"],                                                         // hit 2 (another day)
+    ["u1", "heist-vault", 50000, "2026-10-02 19:00:00"],                                                       // not the store
+    ["u2", "store-score", 300, "2026-10-03 09:00:00"], ["u2", "store-score", 400, "2026-10-03 09:05:00"],      // two hits (5 min apart)
+    ["u3", "store-score", 999, "2026-10-03 09:00:00"],                                                         // unlinked
+  ]) await runQuery("INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount, timestamp) VALUES (?, ?, ?, ?, ?, ?)", ["b" + (++n), type, uid, "tx" + n, amt, ts]);
+  await runQuery("INSERT INTO transactions (transactionId, userId, type, points, timestamp) VALUES ('tb1', 'u1', 'heist-buyin', -20000, '2026-10-02 20:00:00')");
+  await runQuery("INSERT INTO transactions (transactionId, userId, type, points, timestamp) VALUES ('tb2', 'u2', 'heist-buyin', -5000, '2026-10-03 08:00:00')");
+  const rows = (await post("/api/gtf/bot/store-history", { password: "bot" })).body.rows;
+  const by = Object.fromEntries(rows.map((r) => [r.login, r]));
+  assert.deepEqual(by.ann_cf, { login: "ann_cf", hits: 2, best: 2700, bank_day: true });
+  assert.deepEqual(by.bob, { login: "bob", hits: 2, best: 400, bank_day: false }, "a casino buy-in isn't a bank day");
+  assert.equal(rows.length, 2);
+});
+
 test("the minimap board: cleaned, stored, stale after 5 min; /gtf renders it", async () => {
   GTF._resetBoard();
   assert.equal((await get("/api/gtf/board")).body.board, null);
@@ -245,4 +265,15 @@ test("catalog: 13 heist-shop achievements with art, en.json strings, rewards in 
   const view = fs.readFileSync(path.join(repo, "views", "achievements.ejs"), "utf8");
   assert.match(view, /\['shop', t\('ach\.group\.shop'\), \["cf_shop_","cf_kit_"\]\]/);
   for (const k of Object.keys(en).filter((k) => k.startsWith("gtf.mm."))) assert.ok(en[k], k);
+  const store = cat.filter((a) => /^cf_store_/.test(a.id));
+  assert.equal(store.length, 9, "9 store-heist achievements");
+  for (const a of store) {
+    assert.equal(a.side, "bot", a.id);
+    assert.ok(fs.existsSync(path.join(repo, "public", "img", "badges", "ach", a.id + ".png")), "badge art " + a.id);
+    assert.equal(en["ach.n." + a.id], esc(a.name));
+    assert.equal(en["ach.d." + a.id], esc(a.desc));
+    const [xlo, plo, xhi, phi] = TIER[a.tier];
+    assert.ok(a.xp >= xlo && a.xp <= xhi && a.pat >= plo && a.pat <= phi, `${a.id} reward in its tier's band`);
+  }
+  assert.match(view, /"cf_reroll","cf_store_"\]\]/, "listed with the heists");
 });

@@ -338,6 +338,39 @@ async function shopHistory() {
   return rows.map((r) => ({ login: r.login, buys: Number(r.buys) || 0, spent: Number(r.spent) || 0 }));
 }
 
+/**
+ * 1.99oo: store-heist history per Camfrog login (Pepe's quiet backfill of the store-heist achievements). A store getaway
+ * pays its robbers 'store-score' credits (bonus_winners: the held loot, then the till share) within seconds of each
+ * other, so credits less than 2 minutes apart are one hit; `best` = the biggest hit; `bank_day` = a hit on a day the
+ * player paid a 20,000 bank buy-in.
+ */
+async function storeHistory() {
+  const credits = await getQuery(`SELECT LOWER(u.camfrogUsername) AS login, b.amount AS amount, b.timestamp AS ts
+                                  FROM bonus_winners b JOIN users u ON u.userId = b.userId
+                                  WHERE b.type = 'store-score' AND b.amount > 0 AND u.camfrogUsername IS NOT NULL AND u.camfrogUsername != ''
+                                  ORDER BY LOWER(u.camfrogUsername), b.timestamp`);
+  const bank = await getQuery(`SELECT DISTINCT LOWER(u.camfrogUsername) AS login, date(t.timestamp) AS d
+                               FROM transactions t JOIN users u ON u.userId = t.userId
+                               WHERE t.type = 'heist-buyin' AND t.points = -20000 AND u.camfrogUsername IS NOT NULL`);
+  const bankDays = new Set(bank.map((r) => r.login + "|" + r.d));
+  const out = new Map();
+  let cur = null;
+  for (const c of credits) {
+    const t = Date.parse(String(c.ts).replace(" ", "T") + "Z");
+    const row = out.get(c.login) || { login: c.login, hits: 0, best: 0, bank_day: false };
+    out.set(c.login, row);
+    if (!cur || cur.login !== c.login || !(t - cur.last < 120e3)) {
+      cur = { login: c.login, last: t, sum: 0 };
+      row.hits++;
+      if (bankDays.has(c.login + "|" + String(c.ts).slice(0, 10))) row.bank_day = true;
+    }
+    cur.last = t;
+    cur.sum += Number(c.amount) || 0;
+    row.best = Math.max(row.best, cur.sum);
+  }
+  return [...out.values()];
+}
+
 // ── routes ──
 function register(app, { isBotToken, addUser }) {
   init().catch((e) => console.error("[gtf] init:", e.message));
@@ -358,6 +391,7 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/gtf/bot/state", bot((b) => stateSince(b.since_rev, b.limit)));
   app.post("/api/gtf/bot/release", bot((b) => release(b)));
   app.post("/api/gtf/bot/shop-history", bot(async () => ({ ok: true, rows: await shopHistory() })));
+  app.post("/api/gtf/bot/store-history", bot(async () => ({ ok: true, rows: await storeHistory() })));
   // admins: switch the backend on/off (it gates the import; after it, Pepe's `!gtf backend off` is the way back)
   app.post("/api/admin/gtf-backend", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
@@ -371,4 +405,4 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { init, register, enabled, live, status, importFromPepe, put, stateSince, release, exportObject, totalsOf, topInts, sheetOf, record,
-                   shopHistory, setMeta, meta, Refuse };
+                   shopHistory, storeHistory, setMeta, meta, Refuse };
