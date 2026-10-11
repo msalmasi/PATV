@@ -24,7 +24,7 @@
   /* featured */
   .st .st-feat { display: grid; gap: 12px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); margin: 18px 0 6px; }
   .st .st-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); background: #121212; border: 1px solid #5a4210; border-radius: 16px; overflow: hidden; min-width: 0; }
-  .st .st-top .st-img { aspect-ratio: auto; height: 100%; min-height: 220px; border-radius: 0; }
+  .st .st-top .st-img { aspect-ratio: 4 / 3; align-self: center; border-radius: 0; }   /* the whole picture, never cropped (its corner tag) */
   .st .st-top .st-tb { padding: 16px; display: grid; gap: 8px; align-content: center; min-width: 0; }
   .st .st-top h3 { margin: 0; font-size: 21px; line-height: 1.2; }
   .st .st-top h3 a { color: #fff; text-decoration: none; }
@@ -128,7 +128,6 @@
     .st .st-wallet { min-width: 0; }
     .st .st-feat { grid-template-columns: minmax(0, 1fr); }
     .st .st-top { grid-template-columns: minmax(0, 1fr); }
-    .st .st-top .st-img { min-height: 0; aspect-ratio: 4 / 3; height: auto; }
     .st .st-side { grid-template-rows: none; }
     .st .st-detail { grid-template-columns: minmax(0, 1fr); }
   }
