@@ -4,7 +4,7 @@
     with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there.
     1.99cz: groups (the ✎ "New conversation" dialog, the members dialog), pictures (the 🖼 tray, the lightbox) and post cards. %>
 <%- include('layout', { title: title, user: user, inboxUnread: typeof inboxUnread !== 'undefined' ? inboxUnread : 0, dmUnread: dmUnread }) %>
-<link rel="stylesheet" href="/public/css/messages.css?v=6">
+<link rel="stylesheet" href="/public/css/messages.css?v=7">
 <% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
 <main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
   <aside class="dm-side" aria-label="<%- t('msg.conversations') %>">
@@ -40,10 +40,7 @@
       <div class="big" aria-hidden="true">💬</div>
       <p><%- t('msg.none') %></p>
     </div>
-    <header class="dm-ch" id="dmHead" hidden>
-    <link rel="icon" href="/favicon.ico" sizes="48x48">
-    <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
-    <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
+    <div class="dm-ch" id="dmHead" hidden>
       <button type="button" class="dm-back" id="dmBack" aria-label="<%- t('msg.back') %>"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
       <span class="av av-l" id="dmHeadAv" aria-hidden="true"></span>
       <div class="dm-who"><a class="dm-name" id="dmHeadName" href="#"></a><span class="dm-handle" id="dmHeadHandle"></span></div>
@@ -61,7 +58,7 @@
           <button type="button" role="menuitem" class="danger" data-dm="block" id="dmMBlock" data-for="dm"><%- t('msg.menu.block') %></button>
         </div>
       </details>
-    </header>
+    </div>
     <div class="dm-scroll" id="dmScroll" hidden>
       <div class="dm-older" id="dmOlder" hidden><%- t('msg.loading_older') %></div>
       <div class="dm-start" id="dmStart" hidden></div>
@@ -84,12 +81,12 @@
 
     <%# the 🔔 Notices pane (inbox.js): filled by public/js/messages.js from boot.notices and /api/inbox/notices %>
     <section class="dm-nt" id="dmNt" aria-labelledby="dmNtT"<%- _ntOn ? '' : ' hidden' %>>
-      <header class="dm-ch">
+      <div class="dm-ch">
         <button type="button" class="dm-back" id="dmNtBack" aria-label="<%- t('msg.back') %>"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
         <span class="av av-l av-bell" aria-hidden="true">🔔</span>
         <div class="dm-who"><h2 class="dm-name" id="dmNtT"><%- t('msg.notices') %></h2><span class="dm-handle" id="dmNtSub"><%- t('msg.notices.sub') %></span></div>
         <button type="button" class="dm-btn" id="dmNtAll"<%- _ntN ? '' : ' disabled' %>>✓ <%- t('msg.notices.mark_all') %></button>
-      </header>
+      </div>
       <nav class="dm-chips" id="dmNtChips" aria-label="<%- t('msg.notices.filter_aria') %>"></nav>
       <div class="dm-nt-msg" id="dmNtMsg" role="status" hidden></div>
       <div class="dm-nt-scroll" id="dmNtScroll">

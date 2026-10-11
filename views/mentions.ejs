@@ -2,38 +2,48 @@
 <%# /settings/mentions — 📣 room mention alerts (1.99ii, mentions.js). Locals: user, title, boot {prefs, words, names, linked, rooms, wordsMax}.
     Everything user-entered goes back in with textContent / .value; the JSON boot is < -escaped. %>
 <%- include('layout', { title: title, user: user }) %>
-<%- include('partials/legal-css') %>
 <style>
-  .mn .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
-  .mn .card h2 { border: 0; padding: 0; margin: 0 0 6px; font-size: 18px; }
-  .mn .mut { color: #9a9a9a; font-size: 13.5px; }
-  .mn label.ck { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: 15px; }
-  .mn .names { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0 26px; }
-  .mn .chip { padding: 2px 10px; border-radius: 999px; background: #1b1b1b; border: 1px solid #333; font-size: 13px; color: #ddd; }
-  .mn .words { display: grid; gap: 8px; margin: 8px 0; }
-  .mn .w { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 200px) auto; gap: 8px; align-items: center; }
-  .mn input[type=text], .mn select, .mn input[type=time] { width: 100%; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid #333; background: #0d0d0d; color: #eee; font: inherit; font-size: 15px; }
-  .mn button { padding: 8px 14px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 14px; cursor: pointer; }
-  .mn button.pri { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
-  .mn button.x { padding: 6px 10px; }
-  .mn .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
-  .mn .q { display: grid; grid-template-columns: auto minmax(0, 140px) auto minmax(0, 140px); gap: 8px; align-items: center; margin: 6px 0 0 26px; }
-  .mn .msg { min-height: 1.4em; font-size: 14px; }
-  .mn .msg.bad { color: #ff9e9e; } .mn .msg.ok { color: #a5d6a7; }
-  .mn .muted-on { color: #f1e2a6; }
-  @media (max-width: 560px) { .mn .w { grid-template-columns: minmax(0, 1fr) auto; } .mn .w select { grid-column: 1 / -1; grid-row: 2; } .mn .q { grid-template-columns: auto minmax(0, 1fr); margin-left: 0; } }
+  /* 1.99qd: a settings page on the design system - .ds-page.mid, .ds-head, .ds-card.lg, one .ds-h2 per card (docs/design-system.md, "Area notes: feed, pads and social").
+     The fields and buttons keep their (class-less) markup because the page script builds the word rows; they read the ds tokens here. */
+  .mn .card { display: grid; gap: var(--ds-sp-2h); }
+  .mn .mut, .mn .muted { margin: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .mn label.ck, .mn label.fl-notify { display: flex; gap: var(--ds-sp-2h); align-items: flex-start; min-height: 32px; margin: 0; font-size: var(--ds-fs-body); color: var(--ds-text); cursor: pointer; }
+  .mn label.ck input, .mn label.fl-notify input { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--ds-ac); }
+  .mn .names { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 0 28px; margin-inline: 28px 0; }
+  .mn .chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--ds-r-pill); background: #1b1b1b; border: 1px solid var(--ds-line-strong); font-size: var(--ds-fs-meta); color: #ddd; }
+  .mn .words { display: grid; gap: var(--ds-sp-2); }
+  .mn .w { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 200px) auto; gap: var(--ds-sp-2); align-items: center; }
+  .mn input[type=text], .mn select, .mn input[type=time] { width: 100%; min-width: 0; min-height: 40px; margin: 0; padding: 8px 12px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong);
+    background: var(--ds-sunken); color: #eee; font: 15px/1.3 var(--ds-font); box-sizing: border-box; }
+  .mn input[type=text]:focus, .mn select:focus, .mn input[type=time]:focus { outline: none; border-color: var(--ds-ac); box-shadow: 0 0 0 3px var(--ds-ac-bg); }
+  .mn button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; margin: 0; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill);
+    border: 1px solid var(--ds-line-strong); background: transparent; color: var(--ds-text); font: 700 13.5px/1.1 var(--ds-font); cursor: pointer; justify-self: start; }
+  .mn button:hover { border-color: var(--ds-ac); }
+  .mn button:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .mn button.pri { min-height: var(--ds-tap); padding: 0 var(--ds-sp-5); background: var(--ds-ac); border-color: transparent; color: var(--ds-on-ac); font-size: 15px; }
+  .mn button.pri:hover { filter: brightness(1.1); }
+  .mn button.x { width: 36px; padding: 0; }
+  .mn .row { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; }
+  .mn .q { display: grid; grid-template-columns: auto minmax(0, 140px) auto minmax(0, 140px); gap: var(--ds-sp-2); align-items: center; margin-inline-start: 28px; }
+  .mn .q label { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .mn .msg { min-height: 1.4em; font-size: var(--ds-fs-sm); }
+  .mn .msg.bad { color: var(--ds-danger); } .mn .msg.ok { color: var(--ds-ok); }
+  .mn .muted-on { color: var(--ds-warn); }
+  @media (max-width: 760px) { .mn input[type=text], .mn select, .mn input[type=time] { font-size: 16px; } }
+  @media (pointer: coarse) { .mn button { min-height: 40px; } }
+  @media (max-width: 560px) { .mn .w { grid-template-columns: minmax(0, 1fr) auto; } .mn .w select { grid-column: 1 / -1; grid-row: 2; } .mn .q { grid-template-columns: auto minmax(0, 1fr); margin-inline-start: 0; } }
 </style>
-<main class="lg mn">
-  <header class="hero">
-    <div class="eyebrow">📣 <%- t('settings.mentions.eyebrow') %></div>
-    <h1><%- t('settings.mentions.h1') %></h1>
-    <p class="lead"><%- t('settings.mentions.lead') %></p>
-    <p class="note"><%- t('settings.mentions.note', { n: boot.hourMax }) %></p>
-  </header>
+<main class="ds-page mid mn">
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">📣</span> <%- t('settings.mentions.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('settings.mentions.h1') %></h1>
+    <p class="ds-lead"><%- t('settings.mentions.lead') %></p>
+    <p class="ds-sub"><%- t('settings.mentions.note', { n: boot.hourMax }) %></p>
+  </div>
 
-  <form id="mnForm" autocomplete="off">
-    <section class="card" aria-labelledby="mnOnH">
-      <h2 id="mnOnH"><%- t('settings.mentions.alerts') %></h2>
+  <form id="mnForm" class="ds-stack lg" autocomplete="off">
+    <section class="ds-card lg card" aria-labelledby="mnOnH">
+      <h2 id="mnOnH" class="ds-h2"><%- t('settings.mentions.alerts') %></h2>
       <label class="ck"><input type="checkbox" id="mnOn"> <span><%- t('settings.mentions.on') %></span></label>
       <label class="ck"><input type="checkbox" id="mnNames"> <span><%- t('settings.mentions.names') %></span></label>
       <div class="names" id="mnNameList" aria-label="<%- t('settings.mentions.names_aria') %>"></div>
@@ -41,27 +51,27 @@
     </section>
 
     <%# 1.99kk: @mentions in feed posts and comments (feedmentions.js) - on by default, same mute / quiet hours %>
-    <section class="card" aria-labelledby="mnFH">
-      <h2 id="mnFH"><%- t('settings.mentions.feed_h') %></h2>
+    <section class="ds-card lg card" aria-labelledby="mnFH">
+      <h2 id="mnFH" class="ds-h2"><%- t('settings.mentions.feed_h') %></h2>
       <label class="ck"><input type="checkbox" id="mnFeed"> <span><%- t('settings.mentions.feed') %></span></label>
       <p class="mut"><%- t('settings.mentions.feed_note') %></p>
     </section>
 
-    <section class="card" aria-labelledby="mnWH">
-      <h2 id="mnWH"><%- t('settings.mentions.words_h') %></h2>
+    <section class="ds-card lg card" aria-labelledby="mnWH">
+      <h2 id="mnWH" class="ds-h2"><%- t('settings.mentions.words_h') %></h2>
       <p class="mut"><%- t('settings.mentions.words_note', { q: '"', max: '<span id="mnMax"></span>' }) %></p>
       <div class="words" id="mnWords"></div>
       <button type="button" id="mnAdd">+ <%- t('settings.mentions.add') %></button>
     </section>
 
-    <section class="card" aria-labelledby="mnQH">
-      <h2 id="mnQH"><%- t('settings.mentions.quiet_h') %></h2>
+    <section class="ds-card lg card" aria-labelledby="mnQH">
+      <h2 id="mnQH" class="ds-h2"><%- t('settings.mentions.quiet_h') %></h2>
       <label class="ck"><input type="checkbox" id="mnQuiet"> <span><%- t('settings.mentions.quiet') %></span></label>
       <div class="q" id="mnQ">
         <label for="mnFrom"><%- t('settings.mentions.from') %></label><input type="time" id="mnFrom" value="23:00">
         <label for="mnTo"><%- t('settings.mentions.to') %></label><input type="time" id="mnTo" value="08:00">
       </div>
-      <p class="mut" style="margin:6px 0 0 26px"><%- t('settings.mentions.tz') %> <b id="mnTz"></b></p>
+      <p class="mut" style="margin-inline-start:28px"><%- t('settings.mentions.tz') %> <b id="mnTz"></b></p>
       <div class="row" role="group" aria-label="<%- t('settings.mentions.mute') %>">
         <span id="mnMuteTxt" class="mut"></span>
         <button type="button" data-mute="60"><%- t('settings.mentions.mute_1h') %></button>
@@ -79,11 +89,11 @@
   </form>
   <%# 1.99kp: 🎥 go-live alerts (golive.js) - saved on change by public/js/follow.js, outside the mentions form %>
   <% const GL_ = typeof golive !== 'undefined' && golive ? golive : { alerts: true, pm: false }; %>
-  <section class="card" aria-labelledby="mnGlH" id="golive">
-    <h2 id="mnGlH">🎥 <%- t('settings.golive.title') %></h2>
+  <section class="ds-card lg card" aria-labelledby="mnGlH" id="golive">
+    <h2 id="mnGlH" class="ds-h2"><span class="ds-ic" aria-hidden="true">🎥</span> <%- t('settings.golive.title') %></h2>
     <p class="muted"><%- t('settings.golive.what', { link: '<a href="/feed/following">' + t('feed.following') + '</a>' }) %></p>
-    <label class="fl-notify"><input type="checkbox" data-golive-pref="alerts"<%= GL_.alerts ? ' checked' : '' %>> <%- t('feed.fl.golive') %></label>
-    <label class="fl-notify"><input type="checkbox" data-golive-pref="pm"<%= GL_.pm ? ' checked' : '' %>> 🐸 <%- t('feed.fl.golive_pm') %></label>
+    <label class="fl-notify"><input type="checkbox" data-golive-pref="alerts"<%= GL_.alerts ? ' checked' : '' %>> <span><%- t('feed.fl.golive') %></span></label>
+    <label class="fl-notify"><input type="checkbox" data-golive-pref="pm"<%= GL_.pm ? ' checked' : '' %>> <span><span class="ds-ic" aria-hidden="true">🐸</span> <%- t('feed.fl.golive_pm') %></span></label>
   </section>
 </main>
 <script src="/public/js/follow.js?v=2" defer></script>

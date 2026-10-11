@@ -966,3 +966,77 @@ Added by 1.99pz.
 - Card heads are `.ds-pixel-h`. Board rows are whole-card links (radius 16, a 1px lift, the violet border and `--ds-e-2` on hover, the gold outline on focus).
 - `.btn` is the ds pill button: 44px (`.small` 36, 40 on touch), transparent with a #333 line, `.gold` = the PAT action, `.red` = the danger fill. Fields are the ds control (44px, radius 10, sunken) and reset the legacy input rule. Field labels (`label.l`) moved from 8.5px Press Start to the ds label style.
 - Messages (`.msg.ok` / `.msg.bad`) and the banner use the ok / danger / gold note tokens.
+
+---
+
+## Area notes: feed, pads and social
+
+Added by the G3 polish pass (1.99qb to 1.99qd): the feed, a post, Create post, automod notices, the Pads list, a pad page, pad settings, Create a pad, the locked-pad card, quotes, pad analytics, Hop, Saved, a story capture, search, messages and mention alerts. They all keep the PATV green accent. The feed's own stylesheets (feed.css, stories.css, quotes.css, search.css, messages.css, pad-settings.css, pad-access.css, hop.css) keep their class names, because the page scripts build and query them; they read the ds tokens instead of hex values.
+
+### Wrappers
+
+| Page | Wrapper |
+|---|---|
+| /feed, /feed/following | `main.ds-page.wide.flow.fd` (block flow: the pad bar, story strip, composer and list keep their own rhythm; the post column stays 760) |
+| a post | `main.ds-page.mid.flow.fd.fd-detail` |
+| /submit, /pads/new | `main.ds-page.read` |
+| /p (Pads) | `main.ds-page.wide.cg`, page gap 16 |
+| a pad page | `main.ds-page.rm`, width `--ds-w-wide`, page gap 16 |
+| pad settings | `main.ds-page.wide.flow.ps` (the sidebar shell) |
+| pad analytics | `main.ds-page.wide.ra` |
+| the locked-pad card | `main.ds-page.narrow.flow.pa-lock`, 40px top padding |
+| quotes, search, a story capture, mention alerts, automod notice | `.ds-page.mid` |
+| Hop's fallback page | `.ds-page.read` |
+| /messages | unchanged: the full-height app screen (`body.dm-page`, full-bleed under 760). It is a tool, not a page, so it has no `.ds-page`. |
+
+A legacy wrapper (`.fd`, `.cg`, `.rm`, `.ra`, `.ps`, `.pa-lock`) that sits next to `.ds-page` must not set its own `max-width` or `padding`. It uses `--ds-w-*` and `padding: var(--ds-sp-4) var(--ds-gutter) var(--ds-sp-14)`, so the 16/20/24 gutter applies (the feed used to drop to 10px on phones, and the Pads list to 12).
+
+### Headings
+
+- **Feed and tool pages** (feed, post, submit, Create a pad, search, quotes, Saved, settings): `.ds-head` with `.ds-h1`. The feed adds an `.ds-eyebrow.ac` ("Feed") above its h1. The section headings are `.ds-h2` (Comments, search's People / Pads / Posts, mention alert cards).
+- **Pad pages** (Pads list, a pad page, pad analytics): the pixel heading (12px gold Press Start) on every card, because the pad pages are the arcade-flavoured part of the site. On a pad page under 520px it drops to 10px, because a pad slug in a pixel heading ("P/PLANT-BASED-CHATTING FEED") wraps badly at 12.
+- Pad settings: the section titles are `.ds-h2`-sized (20px/700 white) and the card titles `.ds-h3` white (they were gold 16px).
+
+### Translated labels with a leading emoji
+
+Many locale strings start with their icon ("📡 Pads", "🎥 Go live"). Don't strip the emoji from the strings (every language would need a new key). Wrap it at render time:
+
+```js
+const IC_ = (s) => String(s).replace(/^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic}️?)*)\s*/u,
+  '<span class="ds-ic" aria-hidden="true">$1</span>');
+```
+
+The space after the emoji is dropped, so the host needs a flex `gap` (buttons, chips and `.ds-h1` in a flex row have one). Tests that assert the old markup match `<span class="ds-ic" aria-hidden="true">🎥<\/span>Go live`.
+
+### The feed
+
+- **Post cards (`.fp`)**: `--ds-surface`, `--ds-line`, radius 16. The feed's `--fp-*` variables now point at tokens: `--fp-dim` is `--ds-text-muted` and `--fp-dim2` is `--ds-text-faint` (the old #6f736f failed AA).
+- **Action bar, sort bar, Hop button**: 36px pills (40 on touch). The vote buttons grow to 36px on touch.
+- **Pad bar chips (`.cb-chip`)**: the `.ds-tab` look (36px, #151515, 13px/500); the current pad is the accent tint. Their 🌐 / ⭐ icons sit in `.ds-ic`.
+- **Menus** (⋯ on a post, the time menu, the pad picker): the `.ds-pop` look (surface-3, menu line, radius 12, `--ds-e-3`, z 60) with 40px items and an inset gold ring on keyboard focus.
+- **`.btn-s` / `.btn-g`** (comment, save, the composer): 36px pills, 13.5px/700, dark ink on green. The composer and the comment box use the ds field look (sunken, radius 10, accent halo, 16px under 760).
+- **Empty states and the pager**: `p.empty` / `p.login` add `.ds-empty`; Newer / Older are `.ds-btn.ghost.sm`.
+- **Focus.** The legacy cyan ring (#4AFFEF) is gone from feed.css, pad-settings.css, quotes.css, room-bridge.css and room-mod.css: every control uses the gold ring.
+
+### A pad page and the Pads list
+
+- Hero radius 18, cards radius 16 with 16 padding, the pad tabs 40px pills with the accent tint when selected.
+- **Header icon buttons** (⚙, ⋯) are 40px; the ⋯ menu is the `.ds-pop` look.
+- **The live user list**: the 26px camera / PM buttons grow to 36px on touch screens (`pointer: coarse`), so a row stays one line on desktop and tappable on phones.
+- **Pads list cards** are one link each (no nested links, a test checks it). They are nested in a section card, so they use radius 12 and `--ds-sunken`. The Go live / Create a pad pair are both 44px pills (the old pair mixed a pill and a square).
+
+### Settings and tool cards
+
+- Pad settings keeps its legacy markup (stage.css `.sb` + feed.css `.fa-card`); pad-settings.css restyles fields to the `.ds-in` spec and buttons to 36px pills (`.btn.primary` gets dark ink). Its 18+ checkbox is a `.ds-check` row.
+- Mention alerts and Create a pad use `.ds-card.lg` sections; Create a pad's fields are real `.ds-field` / `.ds-in`; mention alerts keeps its class-less fields (its script builds the word rows) and styles them to the same spec in page CSS.
+- **Choice rows** (Create a pad's "Who can see it", the locked-pad request): 44px bordered rows on `--ds-sunken`, radius 10; the checked one gets the accent border + tint; `:focus-within` shows the focus ring.
+
+### Tables
+
+Pad analytics' Regulars and Games tables sit in an `overflow-x: auto` box (`.ra-tbl`). Column heads are 11px/700 uppercase muted, numbers end-aligned and `nowrap`.
+
+### Gotchas found here
+
+- `<header>` inside a page picks up styles.css's site-bar look (see the profile notes). Pad settings, messages and mention alerts used `<header>`; they are `<div>` now.
+- Some views had a stray `<link rel="icon">` block pasted inside the page body (pad settings, messages). It is removed; the layout's head has the real one.
+- Phone fields: the DM composer, the DM search, pad settings, mention alerts and the locked-pad note all go to 16px under 760px.
