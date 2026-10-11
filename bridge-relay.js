@@ -225,6 +225,11 @@ function applyAcks(acks) {
     if (j.kind === "cmd") {
       j.result.replies = replies;
       cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
+      // 1.99pg: a Manage-panel room-role change goes in the pad's event log (settings hub audit list) with Pepe's answer
+      if (typeof j.gui === "string" && j.gui.startsWith("role_")) {
+        const detail = `${j.text} (as ${j.camfrog || "?"}) -> ${a.ok ? "done" : "refused"}: ${replies[0] || j.result.msg || ""}`;
+        try { require("./rooms").event(j.roomId, "pad-role", j.username || null, detail); } catch (e) { /* no registry */ }
+      }
     }
     if (j.kind === "modinfo") j.result.info = require("./padmod").cleanInfo(a.info);
     j.data = null;

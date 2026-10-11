@@ -39,7 +39,21 @@
     djunban:       { label: 'DJ unban', icon: '🎧', cmd: '!djunban', group: 'pat' },
     strike:        { label: 'Strikes', icon: '📋', cmd: '!strike', group: 'strikes' },
     strike_appeal: { label: 'Appeal last strike', icon: '⚖️', cmd: '!strike appeal', confirm: 'Take {u}\'s last strike off and lift any time-out / red-list cooldown?', group: 'strikes' },
+    // 1.99pg: Camfrog room roles (the room's oplist; Pepe carries them out) - Pepe owners / admins only, every one confirmed
+    role_admin:    { label: 'Make room admin', icon: '⭐', cmd: '!admin', confirm: 'Make {u} a room admin? Pepe adds them to the room\'s oplist as admin.', group: 'role' },
+    role_mod:      { label: 'Make moderator', icon: '🛡️', cmd: '!mod', confirm: 'Make {u} a room moderator?', group: 'role' },
+    role_friend:   { label: 'Make friend', icon: '🤝', cmd: '!friend', confirm: 'Set {u} to friend? Any admin / moderator role they have is taken off.', group: 'role' },
+    role_unrole:   { label: 'Remove role', icon: '➖', cmd: '!unrole', confirm: 'Take {u}\'s room role off (back to a regular user)?', group: 'role' },
   };
+  // 1.99pg: role actions - only with caps.admin (Pepe owner/admin), on anyone including yourself; never on a Pepe owner
+  // unless you are one (caps.owners lists them for non-owner admins). padmod.js and Pepe re-check both.
+  var ROLE_A = { role_admin: 1, role_mod: 1, role_friend: 1, role_unrole: 1 };
+  function roleOk(caps, u, a) {
+    if (!ROLE_A[a]) return true;
+    if (!caps || !caps.admin) return false;
+    var l = String((u && u.login) || '').toLowerCase();
+    return isMe(caps, u) || !(Array.isArray(caps.owners) && caps.owners.indexOf(l) >= 0);
+  }
   // 1.99os: actions on YOURSELF (your own row in the list) - allowed, with the confirm step phrased for you.
   // Lifting one of your own penalties (unban / unpunish / unblock / casino unban / DJ unban / strike appeal) is for
   // Pepe admins only (caps.admin): a staff mod can't undo their own mute or strike. The server and Pepe check it too.
@@ -54,10 +68,14 @@
     casinoban: 'Ban yourself from the casino (web, chat and Discord)?',
     djban: 'Suspend your own music commands in this room?',
     strike_appeal: 'Take your own last strike off and lift any time-out / red-list cooldown?',
+    role_admin: 'Make yourself a room admin?',
+    role_mod: 'Set your own room role to moderator? If you\'re a room admin now, that steps you down.',
+    role_friend: 'Step yourself down to friend? Your admin / moderator role in the room is taken off.',
+    role_unrole: 'Take your own room role off? You\'ll be a regular user in the room.',
   };
   function isMe(caps, u) { return !!(caps && caps.login && u && u.login && String(u.login).toLowerCase() === String(caps.login).toLowerCase()); }
   function selfOk(caps, a) { return !SELF_LIFT[a] || !!(caps && caps.admin); }
-  var GROUPS = [['room', 'Room'], ['voice', 'Voice & mic'], ['pat', 'PAT & games'], ['strikes', 'Automod strikes']];
+  var GROUPS = [['room', 'Room'], ['role', 'Room role'], ['voice', 'Voice & mic'], ['pat', 'PAT & games'], ['strikes', 'Automod strikes']];
   var HOURS = [[1, '1 hour'], [6, '6 hours'], [12, '12 hours'], [24, '24 hours'], [72, '3 days'], [168, '1 week'], [720, '30 days']];
   var FINES = [1000, 10000, 25000, 100000];
   var ROLE_TXT = { owner: 'Pepe owner', admin: 'Pepe admin', staff: 'Pepe staff', trusted: 'trusted', redlist: 'red list', everyone: 'regular' };
@@ -106,6 +124,7 @@
         if (!Object.prototype.hasOwnProperty.call(A, a) || A[a].group !== g[0]) return;
         if (x.inRoom && a === 'unban') return;
         if (me && !selfOk(caps, a)) return;
+        if (!roleOk(caps, u, a)) return;
         var it = { kind: 'act', id: a, group: g[0], label: A[a].icon + ' ' + A[a].label + (A[a].confirm ? '…' : ''), danger: !!A[a].confirm, disabled: caps.on === false };
         if (me) it.self = true;
         out.push(it);
@@ -328,7 +347,7 @@
       if (!caps.on) main.appendChild(el('p', 'pm-note warn', '🛑 Web moderation is off in this room.'));
       if (caps.blocked) main.appendChild(el('p', 'pm-note warn', '⚠️ Pepe won\'t take commands from you right now: ' + caps.blocked));
       GROUPS.forEach(function (g) {
-        var acts = caps.actions.filter(function (a) { return A[a] && A[a].group === g[0] && (!isMe(caps, u) || selfOk(caps, a)); });
+        var acts = caps.actions.filter(function (a) { return A[a] && A[a].group === g[0] && (!isMe(caps, u) || selfOk(caps, a)) && roleOk(caps, u, a); });
         if (!acts.length) return;
         var sec = el('div', 'pm-grp');
         sec.appendChild(el('div', 'pm-k', g[1]));

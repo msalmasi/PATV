@@ -35,7 +35,23 @@ const ACTIONS = {
   topic: "!topic", kick: "!kick", ban: "!ban", unban: "!unban", punish: "!punish", unpunish: "!unpunish",
   blockmic: "!blockmic", unblockmic: "!unblockmic", timeout: "!timeout", strike: "!strike", strike_appeal: "!strike",
   fine: "!fine", casinoban: "!casinoban", casinounban: "!casinounban", djban: "!djban", djunban: "!djunban",
+  // 1.99pg: Camfrog room roles (Pepe's !friend / !mod / !admin / !unrole = the room's oplist)
+  role_friend: "!friend", role_mod: "!mod", role_admin: "!admin", role_unrole: "!unrole",
 };
+// 1.99pg: role actions are Pepe owner/admin only (caps.admin; a staff/trusted grant never unlocks them), on anyone
+// including yourself; a Pepe admin can't change a Pepe OWNER's role (caps.owners lists them for non-owner admins).
+// Pepe re-checks both. Every outcome lands in the pad's event log (room_events "pad-role", bridge-relay applyAcks).
+const ROLE_ACTIONS = new Set(["role_friend", "role_mod", "role_admin", "role_unrole"]);
+/** null = OK, else why this role change is refused. */
+function roleRefusal(action, target, caps, selfLogin) {
+  if (!ROLE_ACTIONS.has(action)) return null;
+  if (!(caps && caps.admin)) return "Room roles are for Pepe admins.";
+  const t = String(target || "").toLowerCase();
+  if (t && t !== String(selfLogin || "").toLowerCase() && Array.isArray(caps.owners) && caps.owners.includes(t)) {
+    return "Only a Pepe owner can change a Pepe owner's room role.";
+  }
+  return null;
+}
 // 1.99os: actions on YOURSELF are allowed (the page asks "Kick yourself?" first); lifting your OWN penalty is for
 // Pepe admins only (caps.admin), so a staff mod can't undo their own mute / DJ ban / strike. Pepe re-checks it.
 const SELF_LIFT = new Set(["unban", "unpunish", "unblockmic", "casinounban", "djunban", "strike_appeal"]);
@@ -111,7 +127,8 @@ function buildModLine(action, target, args) {
 const ROLE_RE = /^[a-z]{1,12}$/;
 function cleanCaps(c) {
   if (!c || typeof c !== "object" || Array.isArray(c)) return null;
-  const actions = (Array.isArray(c.actions) ? c.actions : []).filter((a) => a !== "topic" && Object.prototype.hasOwnProperty.call(ACTIONS, a));
+  const actions = (Array.isArray(c.actions) ? c.actions : []).filter((a) => a !== "topic" && Object.prototype.hasOwnProperty.call(ACTIONS, a)
+    && (!ROLE_ACTIONS.has(a) || c.admin === true));                    // 1.99pg: role actions only next to admin
   if (!actions.length) return null;
   const out = { actions: [...new Set(actions)], on: c.on !== false, roles: (Array.isArray(c.roles) ? c.roles : []).filter((r) => typeof r === "string" && ROLE_RE.test(r)).slice(0, 4) };
   if (c.topic_price != null && Number.isFinite(Number(c.topic_price))) out.topicPrice = Math.max(0, Math.min(1e9, Math.floor(Number(c.topic_price))));
@@ -123,6 +140,7 @@ function cleanCaps(c) {
     if (typeof s.chatty === "boolean") out.settings.chatty = s.chatty;
     if (typeof s.greeter === "boolean") out.settings.greeter = s.greeter;
     if (typeof s.chattydepth === "string" && SETTINGS.chattydepth[s.chattydepth]) out.settings.chattydepth = s.chattydepth;
+    if (Array.isArray(c.owners)) out.owners = c.owners.slice(0, 30).map((x) => cleanLogin(x).toLowerCase()).filter(Boolean);
   }
   return out;
 }
@@ -241,6 +259,8 @@ function register(app, { addUser, bySlug, isLive }) {
       const why = selfRefusal(action, caps);
       if (why) return bad(res, 403, why);
     }
+    const roleWhy = roleRefusal(action, cleanLogin(b.target), caps, u.camfrogUsername);
+    if (roleWhy) return bad(res, 403, roleWhy);
     const lim = relay.limited("cmd|" + u.userId, relay.CMD_GAP, relay.CMD_BURST, relay.CMD_WINDOW)
       || (action !== "topic" ? relay.limited("mod|" + u.userId, MOD_GAP, MOD_BURST, MOD_WINDOW) : null);
     if (lim) return bad(res, 429, lim);
@@ -313,5 +333,5 @@ function register(app, { addUser, bySlug, isLive }) {
   });
 }
 
-module.exports = { register, selfRefusal, SELF_LIFT, buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
+module.exports = { register, selfRefusal, SELF_LIFT, roleRefusal, ROLE_ACTIONS,buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
   ACTIONS, SETTINGS, TOPIC_MAX, REASON_MAX, _viewers: viewers, _linkCache: linkCache, _pwFails: pwFails };

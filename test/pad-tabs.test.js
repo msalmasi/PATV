@@ -177,7 +177,7 @@ test("page: tab bar, panels hidden (not removed), the Live tab's latest-posts ca
   assert.doesNotMatch(livePanel, /id="joinH"/, "Join the Camfrog room moved to About");
   const about = html.slice(html.indexOf('id="padPanel-about"'));
   assert.match(about, /Join the Camfrog room/); assert.match(about, /Plant Based Chatting/); assert.match(about, /👑 pb/);
-  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=8/); assert.match(html, /room-mod\.css\?v=7/); assert.match(html, /pad-tip\.js\?v=1/);
+  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=9/); assert.match(html, /room-mod\.css\?v=7/); assert.match(html, /pad-tip\.js\?v=1/);
   assert.match(html, /collapsible: true/, "the Manage card collapses on the pad page");
   assert.match(html, /PATVPadTabs\.init\(\{"slug":"plant_based_chatting","platform":"camfrog","active":true/);
 });
@@ -271,6 +271,22 @@ test("menuItems: nothing without caps; exactly Pepe's listed actions; never on y
   for (const a of ["kick", "ban", "punish", "blockmic", "timeout", "fine", "casinoban", "djban", "strike_appeal"]) {
     assert.match(String(RM0._modSelfQ(a)), /yourself|your own/, a + ": the confirm question is about you");
   }
+  // 1.99pg: room roles - a "Room role" group for Pepe owners/admins only, each one confirmed, on yourself too;
+  // never on a Pepe owner's row unless you're one
+  const ROLES = ["role_admin", "role_mod", "role_friend", "role_unrole"];
+  const roleIds = (c, u) => RM._modMenuItems(c, u, { inRoom: true }).filter((x) => x.kind === "act" && x.id.startsWith("role_"));
+  const padmin = { actions: Object.keys(pm.ACTIONS).filter((a) => a !== "topic"), on: true, login: "bossadmin", admin: true, owners: ["theowner"] };
+  assert.deepEqual(roleIds(padmin, { login: "bob" }).map((x) => x.id).sort(), ROLES.slice().sort(), "a Pepe admin: the four (in Pepe's order)");
+  assert.ok(roleIds(padmin, { login: "bob" }).every((x) => x.danger && x.group === "role"), "every role change asks first");
+  assert.deepEqual(roleIds(padmin, { login: "BossAdmin" }).map((x) => x.id).sort(), ROLES.slice().sort(), "on yourself too");
+  assert.ok(roleIds(padmin, { login: "BossAdmin" }).every((x) => x.self), "...flagged as yourself (the confirm says so)");
+  assert.deepEqual(roleIds(padmin, { login: "TheOwner" }), [], "not on a Pepe owner's row");
+  assert.deepEqual(roleIds(Object.assign({}, padmin, { owners: undefined, login: "theowner" }), { login: "otherowner" }).length, 4, "an owner (no owners list): everyone");
+  const staffAll = { actions: ROLES.concat(["djban"]), on: true, login: "stevie" };
+  assert.deepEqual(roleIds(staffAll, { login: "bob" }), [], "no caps.admin: no role actions even if listed");
+  for (const a of ROLES) assert.match(String(RM0._modSelfQ(a)), /yourself|your own/, a + ": self confirm");
+  assert.deepEqual(RM._modMenuItems(padmin, { login: "bob" }, {}).filter((x) => x.kind === "act").map((x) => x.group).filter((g, i, s) => s.indexOf(g) === i),
+    ["room", "role", "voice", "pat", "strikes"], "group order: Room, Room role, Voice, PAT, strikes");
   const all = { actions: Object.keys(pm.ACTIONS), on: true, login: "boss" };
   const acts = RM._modMenuItems(all, { login: "bob" }, { inRoom: true }).filter((x) => x.kind === "act").map((x) => x.id);
   assert.ok(!acts.includes("unban"), "unban is pointless for someone in the room");

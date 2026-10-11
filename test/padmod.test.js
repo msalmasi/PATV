@@ -176,6 +176,44 @@ test("1.99os: actions on yourself are allowed; lifting your own penalty is Pepe-
   for (const a of ["kick", "ban", "punish", "blockmic", "timeout", "fine", "casinoban", "djban", "strike"]) assert.equal(pm.selfRefusal(a, {}), null, a);
 });
 
+test("1.99pg: room roles - Pepe owners/admins only, not on a Pepe owner, self allowed; the outcome lands in the pad's event log", async () => {
+  const { runQuery: rq, getQuery: gq } = require(path.join(repo, "dbUtils"));
+  await rq("CREATE TABLE IF NOT EXISTS room_events (room_id TEXT, ts INTEGER, what TEXT, actor TEXT, detail TEXT)");
+  const staffRoles = Object.assign({}, STAFF_CAPS, { actions: STAFF_CAPS.actions.concat(["role_mod", "role_friend"]) });
+  await snapshot({ bossadmin: Object.assign({}, ADMIN_CAPS, { owners: ["theowner", "bad name!"] }), stevie: staffRoles });
+  const v = await live("uA");
+  assert.ok(["role_friend", "role_mod", "role_admin", "role_unrole"].every((a) => v.mod.actions.includes(a)), "admin caps carry the role actions");
+  assert.deepEqual(v.mod.owners, ["theowner"], "owners list kept (malformed dropped)");
+  assert.ok(!(await live("uS")).mod.actions.some((a) => a.startsWith("role_")), "a staff viewer's role actions are dropped (no caps.admin)");
+  let r = await act("uA", { action: "role_mod", target: "bob" });
+  assert.equal(r.status, 200); assert.equal(r.d.line, "!mod bob");
+  r = await act("uA", { action: "role_friend", target: "BossAdmin" });
+  assert.equal(r.status, 200, "self-demotion: allowed"); assert.equal(r.d.line, "!friend BossAdmin");
+  r = await act("uA", { action: "role_unrole", target: "TheOwner" });
+  assert.equal(r.status, 403); assert.match(r.d.error, /Pepe owner/);
+  r = await act("uS", { action: "role_mod", target: "bob" });
+  assert.equal(r.status, 403, "staff: refused");
+  r = await act("uA", { action: "role_admin", target: "bob -all" });
+  assert.equal(r.status, 400, "a checked login only");
+  const js = jobsNow();
+  assert.deepEqual(js.map((j) => [j.text, j.gui]).sort(), [["!friend BossAdmin", "role_friend"], ["!mod bob", "role_mod"]]);
+  assert.equal(pm.roleRefusal("role_mod", "x", { admin: false }), "Room roles are for Pepe admins.");
+  assert.equal(pm.roleRefusal("role_mod", "theowner", { admin: true, owners: ["theowner"] }, "theowner"), null, "an owner on their own row");
+  assert.equal(pm.roleRefusal("kick", "x", {}), null, "not a role action: not this check");
+  // Pepe answers -> one pad-role row per outcome, in the pad's audit (room_events, "pad-*")
+  const mk = js.find((j) => j.gui === "role_mod"), fr = js.find((j) => j.gui === "role_friend");
+  await snapshot({ bossadmin: ADMIN_CAPS, stevie: STAFF_CAPS }, { acks: [
+    { id: mk.id, ok: true, msg: "ok", replies: ["@bossadmin 🛡️ bob is now a moderator."] },
+    { id: fr.id, ok: false, msg: "only an owner can change a Pepe owner's room role" }] });
+  await new Promise((res) => setTimeout(res, 100));
+  const ev = await gq("SELECT what, actor, detail FROM room_events WHERE room_id = ? AND what = 'pad-role' ORDER BY rowid", [ROOM]);
+  assert.equal(ev.length, 2, JSON.stringify(ev));
+  assert.equal(ev[0].actor, "boss");
+  assert.match(ev[0].detail, /^!mod bob \(as BossAdmin\) -> done: @bossadmin 🛡️ bob is now a moderator\.$/);
+  assert.match(ev[1].detail, /^!friend BossAdmin \(as BossAdmin\) -> refused: only an owner/);
+  await snapshot({ bossadmin: ADMIN_CAPS, stevie: STAFF_CAPS, "bad name!": ADMIN_CAPS, ghost: { actions: ["nuke"] } });
+});
+
 test("a mod's click becomes the exact command job; raw text in the body is ignored", async () => {
   let r = await act("uA", { action: "kick", target: "bob", args: { reason: "slurs in chat -all" }, text: "!update now", line: "!redlist add x" });
   assert.equal(r.status, 200);
