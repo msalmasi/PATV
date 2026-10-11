@@ -829,6 +829,20 @@ Added by the 1.99pp polish pass (markets, a market, wagers and pools, polls, bou
 - **Long explainer pages (economy):** `.ds-page.flow`, because a sticky contents bar can't stick inside a grid cell. Space top-level blocks with `> * + * { margin-block-start: var(--ds-sp-6) }` and `--ds-sp-12` before a new part. The contents bar is a `ul.ds-tabs` of `.ds-tab` links: it scrolls sideways on phones and, at ≥ 900, wraps and sticks at `top: var(--ds-sp-2)` with blur and `--ds-e-3`. Sections get `scroll-margin-top: 90px`. Each section is a `.ds-eyebrow.ac` kicker, then a `.ds-h2` with a `.ds-ic` emoji, then a lead. Diagram panels are sunken figures (radius 16); tiles inside a card are sunken, radius 12, with a 3px `border-block-start` in their own colour (`--c`). A chart or gauge forces `direction: ltr`.
 - **Known gap:** economy's large explainer SVGs scale to fit at 375, so their text renders around 8px; they need a phone-specific drawing.
 
+### Tips, cosmetics, subscriptions, premium, support, sponsor (1.99pu)
+
+- **Wrappers:** tip `.ds-page.narrow` (gap 16), cosmetics `.ds-page.flow`, subscriptions and sponsor `.ds-page.mid` (they no longer include `partials/legal-css`), premium `.ds-page.wide`, support `.ds-page`.
+- **Accents:** premium violet (`--ds-acc-premium`, ink #12002a), support pink (`--ds-acc-support`, ink #2a0010). On a page that mixes products, scope an area accent to that product's card, not the page: subscriptions sets the Plex orange on `#plex` only, so the other cards and links keep the site green.
+- **Quick amounts in a fixed row (§6.7):** when quick amounts fill a row (1k 5k 10k 50k 100k), lay `.ds-quick` out as `repeat(n, minmax(0, 1fr))` at 40px. The pressed one (`aria-pressed="true"`) is filled with the accent and `--ds-on-ac` ink. Amounts over the balance use `--ds-text-disabled` text and a `--ds-line` border; don't fade them with opacity.
+- **Balance box next to a spend form:** `--ds-gold-bg` / `--ds-gold-line` well, radius 12, the label as `.ds-label`, the number in `--ds-gold-text`.
+- **Collectible card (a `.ds-card.top` variant):** set `--rc: var(--ds-r-<rarity>)` on the card for a 3px `border-block-start` (or `border-inline-start` on list rows) and an uppercase pill tag (10.5px/700, `--rc` text and border). The item preview sits in a sunken well at radius 12. Buy is `.ds-btn.gold.sm`; gift and list are ghost `.sm`; cancel a listing is `danger`.
+- **Area hero (§6.4):** support keeps `.ds-hero` for radius, padding and type and only overrides `background` / `border-color` on a page-scoped selector. Decorative floating art (the frog) is `position: absolute; inset-inline-end`, fades to about 30% opacity under 600px, and animates only inside `(prefers-reduced-motion: no-preference)`.
+- **Selectable tiles** (amount tiers, payment methods, sponsor's text/image choice): 1px `--ds-line-strong` border; selected adds the accent border plus `box-shadow: inset 0 0 0 1px <accent>` (a 2px look with no layout shift; never a 2px border). Focus shows on the tile through `:focus-within` with the gold outline.
+- **Copyable addresses** (crypto wallets, contracts): `display: block` mono at 13px on #000, `word-break: break-all`, `user-select: all`, `text-align: start`, followed by a `.ds-btn.sm.quiet` Copy button. On phones the QR code, the address and the button stack and centre.
+- **Empty live regions:** a `role="status"` message line that sits directly in a `.ds-page` grid adds a full 24px gap even when empty. Hide it with `.msg:empty { display: none }`; it still announces when script fills it.
+- **`<header>` trap:** never use a bare `<header>` for a page's `.ds-head` (styles.css paints every `header` as the site bar); use a `div.ds-head`. A heading that leads with an emoji is a flex row (`align-items: center; gap: 10px`) with the emoji in `.ds-ic`.
+- **Known gaps:** some locale strings carry their emoji inside the string (`subs.plex_h` "📼 Plex", `premium.stk.heading`), so those icons can't be boxed without a string change. test/pad-cosmetics asserts the bare `🛋️ Pad` filter label, so that one emoji stays unboxed.
+
 ---
 
 ## Area notes: home, info, legal and admin

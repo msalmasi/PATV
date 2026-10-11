@@ -2,40 +2,43 @@
 <%# /subscriptions — 1.99jp (subscriptions.js): every auto-renewing thing this account pays for (store subscriptions,
     📺 Prime Time / 🎟️ Season Pass renewals) + 📼 Plex membership (plexmembers.js: linked account, access, self-link). %>
 <%- include('layout', { title: title, user: user }) %>
-<%- include('partials/legal-css') %>
 <style>
-  .sx .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
-  .sx .card h2 { border: 0; padding: 0; margin: 0 0 8px; font-size: 18px; }
-  .sx .mut { color: #9a9a9a; font-size: 13.5px; }
-  .sx .it { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid #1e1e1e; }
-  .sx .it:first-of-type { border-top: 0; }
+  /* 1.99pu polish: ds-page + ds-hero/ds-card/ds-btn. Accent: Plex orange on the Plex card only (the rest keeps the site green); PAT spends are .ds-btn.gold. */
+  .sx #plex { --ds-ac: var(--ds-acc-plex); --ds-ac-2: #ffc46b; --ds-ac-bg: rgba(255, 167, 38, .12); --ds-ac-line: #6b4a14; --ds-on-ac: #1a1000; }
+  .sx .ds-hero .note { margin: var(--ds-sp-2) 0 0; }
+  .sx .ds-card p { margin: 0; }
+  .sx .mut { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: var(--ds-lh-meta); }
+  .sx .it { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3h); align-items: center; justify-content: space-between; min-height: var(--ds-tap);
+            padding: var(--ds-sp-2h) 0; border-block-start: 1px solid var(--ds-line-soft); }
+  .sx .ds-h4 + .it, .sx .ds-h2 + .it { border-block-start: 0; }
   .sx .it .w { min-width: 0; flex: 1 1 260px; }
-  .sx .it b { color: #fff; }
-  .sx .st { font-size: 14px; color: #cfcfcf; }
-  .sx .st.ok { color: #a5d6a7; } .sx .st.warn { color: #ffd479; } .sx .st.off { color: #9a9a9a; }
-  .sx .acts { display: flex; flex-wrap: wrap; gap: 6px; }
-  .sx button, .sx a.bt { padding: 7px 13px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; }
-  .sx button.pri, .sx a.bt.pri { background: #e5a00d; border-color: #e5a00d; color: #1a1200; font-weight: bold; }
-  .sx button.dan { border-color: #5a2a2a; color: #ffb4b4; }
-  .sx .msg { min-height: 1.4em; font-size: 14px; margin-top: 8px; }
-  .sx .msg.bad { color: #ff9e9e; } .sx .msg.ok { color: #a5d6a7; }
-  .sx .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; background: linear-gradient(90deg, #cc7b19, #e5a00d); color: #1a1200; font-size: 13px; font-weight: bold; }
+  .sx .it b { color: var(--ds-text-strong); }
+  .sx .st { font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+  .sx .st.ok { color: var(--ds-ok); } .sx .st.warn { color: var(--ds-warn); } .sx .st.off { color: var(--ds-text-muted); }
+  .sx .acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+  .sx .ds-h4 { margin-block-start: var(--ds-sp-2); }
+  .sx .msg { min-height: 1.4em; margin: 0; font-size: var(--ds-fs-sm); }
+  .sx .msg.bad { color: var(--ds-danger); } .sx .msg.ok { color: var(--ds-ok); }
+  .sx .msg:empty { display: none; }
+  .sx .chip { display: inline-flex; align-items: center; padding: 1px 10px; border-radius: var(--ds-r-pill); background: linear-gradient(90deg, #cc7b19, #e5a00d); color: var(--ds-on-ac);
+              font-size: var(--ds-fs-meta); font-weight: 700; vertical-align: 1px; }
+  @media (max-width: 520px) { .sx .acts { width: 100%; } }
 </style>
 <%
   const fmt = (n) => t.num(Math.round(Number(n) || 0));
   const d = (ms) => ms ? t.date(Number(ms), { dateStyle: 'medium' }) : '';
   const S = data;
 %>
-<main class="lg sx">
-  <header class="hero">
-    <div class="eyebrow">🔁 <%- t('subs.eyebrow') %></div>
+<main class="ds-page mid sx">
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('subs.eyebrow') %></span>
     <h1><%- t('subs.h1') %></h1>
-    <p class="lead"><%- t('subs.lead') %></p>
-    <p class="note"><%- t('subs.note_grace', { n: S.grace_days }) %> · <%- t('subs.balance', { bal: fmt(balance) }) %> · <a href="/shop/orders"><%- t('subs.orders_link') %></a></p>
+    <p class="ds-lead"><%- t('subs.lead') %></p>
+    <div class="ds-note warn note"><div><%- t('subs.note_grace', { n: S.grace_days }) %> · <%- t('subs.balance', { bal: fmt(balance) }) %> · <a href="/shop/orders"><%- t('subs.orders_link') %></a></div></div>
   </header>
 
-  <section class="card" aria-labelledby="sxPlexH" id="plex">
-    <h2 id="sxPlexH"><%- t('subs.plex_h') %></h2>
+  <section class="ds-card lg" aria-labelledby="sxPlexH" id="plex">
+    <h2 class="ds-h2" id="sxPlexH"><%- t('subs.plex_h') %></h2>
     <% const live = plex && plex.member; const rows = (plex && plex.rows) || []; %>
     <% if (live) { %>
       <p class="st ok"><span class="chip">📼 Plex</span> <%- t('subs.plex_member', { plex: live.username || '?' }) %>
@@ -53,25 +56,25 @@
     <% if (rows.length) { %>
       <% rows.forEach((r) => { %>
       <div class="it"><div class="w"><b><%= r.username || r.plex_id %></b> <span class="mut">· <%- r.active ? t('subs.plex_row_active') : r.pending ? t('subs.plex_row_pending') : r.on_server ? t('subs.plex_row_ended') : t('subs.plex_row_off') %></span></div>
-        <% if (r.link_source !== 'admin') { %><div class="acts"><button type="button" class="dan" data-unlink="<%= r.plex_id %>"><%- t('subs.plex_unlink') %></button></div><% } %></div>
+        <% if (r.link_source !== 'admin') { %><div class="acts"><button type="button" class="ds-btn sm danger dan" data-unlink="<%= r.plex_id %>"><%- t('subs.plex_unlink') %></button></div><% } %></div>
       <% }) %>
     <% } %>
     <% if (selflink) { %>
-      <div class="acts" style="margin-top:8px"><button type="button" id="sxLink"<%= pin ? ' data-pin="' + pin + '"' : '' %>><%- t('subs.plex_link') %></button></div>
-      <p class="mut" style="margin:6px 0 0"><%- t('subs.plex_link_note') %></p>
+      <div class="acts"><button type="button" class="ds-btn sm" id="sxLink"<%= pin ? ' data-pin="' + pin + '"' : '' %>><%- t('subs.plex_link') %></button></div>
+      <p class="mut"><%- t('subs.plex_link_note') %></p>
     <% } %>
     <% if (invites.length) { %>
-      <h3 style="margin:14px 0 4px;font-size:16px"><%- t('subs.plex_get_h') %></h3>
+      <h3 class="ds-h4"><%- t('subs.plex_get_h') %></h3>
       <% invites.forEach((x) => { %>
       <div class="it"><div class="w"><b><%= x.title %></b> <span class="mut">· <%= fmt(x.price) %> PAT</span></div>
-        <div class="acts"><a class="bt" href="/shop/item/<%= encodeURIComponent(x.prize_id) %>"><%- t('subs.view') %></a>
-          <% if (x.sub && S.enabled) { %><button type="button" class="pri" data-start="<%= x.prize_id %>" data-title="<%= x.title %>" data-price="<%= x.price %>" data-days="<%= x.days %>"><%- t('subs.subscribe', { price: fmt(x.price), days: x.days }) %></button><% } %></div></div>
+        <div class="acts"><a class="ds-btn sm ghost bt" href="/shop/item/<%= encodeURIComponent(x.prize_id) %>"><%- t('subs.view') %></a>
+          <% if (x.sub && S.enabled) { %><button type="button" class="ds-btn sm gold pri" data-start="<%= x.prize_id %>" data-title="<%= x.title %>" data-price="<%= x.price %>" data-days="<%= x.days %>"><%- t('subs.subscribe', { price: fmt(x.price), days: x.days }) %></button><% } %></div></div>
       <% }) %>
     <% } %>
   </section>
 
-  <section class="card" aria-labelledby="sxShopH">
-    <h2 id="sxShopH"><%- t('subs.shop_h') %></h2>
+  <section class="ds-card lg" aria-labelledby="sxShopH">
+    <h2 class="ds-h2" id="sxShopH"><%- t('subs.shop_h') %></h2>
     <% if (!S.subs.length) { %><p class="mut"><%- t('subs.none') %></p><% } %>
     <% S.subs.forEach((s) => { %>
       <div class="it"><div class="w"><b><%= s.title %></b> <span class="mut">· <%- t('subs.every', { price: fmt(s.price), days: s.days }) %></span>
@@ -80,33 +83,33 @@
           : s.status === 'grace' ? t('subs.grace', { date: d(s.grace_until) })
           : s.status === 'lapsed' ? t('subs.lapsed', { date: d(s.ended_at) }) : t('subs.ended', { date: d(s.ended_at) }) %></div></div>
         <div class="acts">
-          <% if (s.status === 'grace') { %><button type="button" class="pri" data-pay="<%= s.id %>"><%- t('subs.pay') %></button><% } %>
-          <% if (s.status === 'active' && s.cancel_at_end) { %><button type="button" data-resume="<%= s.id %>"><%- t('subs.resume') %></button><% } %>
-          <% if ((s.status === 'active' && !s.cancel_at_end) || s.status === 'grace') { %><button type="button" class="dan" data-cancel="<%= s.id %>" data-title="<%= s.title %>" data-date="<%= d(s.status === 'grace' ? Date.now() : s.paid_through) %>"><%- t('subs.cancel') %></button><% } %>
+          <% if (s.status === 'grace') { %><button type="button" class="ds-btn sm gold pri" data-pay="<%= s.id %>"><%- t('subs.pay') %></button><% } %>
+          <% if (s.status === 'active' && s.cancel_at_end) { %><button type="button" class="ds-btn sm ghost" data-resume="<%= s.id %>"><%- t('subs.resume') %></button><% } %>
+          <% if ((s.status === 'active' && !s.cancel_at_end) || s.status === 'grace') { %><button type="button" class="ds-btn sm danger dan" data-cancel="<%= s.id %>" data-title="<%= s.title %>" data-date="<%= d(s.status === 'grace' ? Date.now() : s.paid_through) %>"><%- t('subs.cancel') %></button><% } %>
         </div></div>
     <% }) %>
     <% const other = S.offers.filter((o) => !invites.some((x) => x.prize_id === o.prize_id)); %>
     <% if (other.length && S.enabled) { %>
-      <h3 style="margin:14px 0 4px;font-size:16px"><%- t('subs.offers_h') %></h3>
+      <h3 class="ds-h4"><%- t('subs.offers_h') %></h3>
       <% other.forEach((o) => { %>
       <div class="it"><div class="w"><b><%= o.title %></b></div>
-        <div class="acts"><button type="button" class="pri" data-start="<%= o.prize_id %>" data-title="<%= o.title %>" data-price="<%= o.price %>" data-days="<%= o.days %>"><%- t('subs.subscribe', { price: fmt(o.price), days: o.days }) %></button></div></div>
+        <div class="acts"><button type="button" class="ds-btn sm gold pri" data-start="<%= o.prize_id %>" data-title="<%= o.title %>" data-price="<%= o.price %>" data-days="<%= o.days %>"><%- t('subs.subscribe', { price: fmt(o.price), days: o.days }) %></button></div></div>
       <% }) %>
     <% } %>
   </section>
 
-  <section class="card" aria-labelledby="sxPremH">
-    <h2 id="sxPremH"><%- t('subs.prem_h') %></h2>
+  <section class="ds-card lg" aria-labelledby="sxPremH">
+    <h2 class="ds-h2" id="sxPremH"><%- t('subs.prem_h') %></h2>
     <% if (!S.premium.length) { %><p class="mut"><%- t('subs.prem_none', { link: '<a href="/premium">' + t('subs.prem_link') + '</a>' }) %></p><% } %>
     <% S.premium.forEach((p) => { %>
       <div class="it"><div class="w"><b><%= p.label %></b> <span class="mut">· <%- t('subs.every', { price: fmt(p.price), days: p.days }) %></span>
         <div class="st <%= p.comped || p.renewing ? 'ok' : 'off' %>"><%- p.comped ? (p.comp_until ? t('premium.status.comped_until', { date: d(p.comp_until) }) : t('subs.prem_comped')) : p.renewing ? t('subs.renews', { date: d(p.paid_through) }) : t('subs.prem_ends', { date: d(p.paid_through) }) %></div></div>
         <% if (!p.comped) { %><div class="acts">
-          <% if (p.renewing) { %><button type="button" class="dan" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="0"><%- t('subs.prem_off') %></button>
-          <% } else if (p.status === 'active' || p.status === 'grace') { %><button type="button" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="1"><%- t('subs.prem_on') %></button><% } %>
+          <% if (p.renewing) { %><button type="button" class="ds-btn sm danger dan" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="0"><%- t('subs.prem_off') %></button>
+          <% } else if (p.status === 'active' || p.status === 'grace') { %><button type="button" class="ds-btn sm ghost" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="1"><%- t('subs.prem_on') %></button><% } %>
         </div><% } %></div>
     <% }) %>
-    <% if (S.premium.length) { %><p class="mut" style="margin:8px 0 0"><a href="/premium"><%- t('subs.prem_link') %></a></p><% } %>
+    <% if (S.premium.length) { %><p class="mut"><a href="/premium"><%- t('subs.prem_link') %></a></p><% } %>
   </section>
   <p class="msg" id="sxMsg" role="status" aria-live="polite"></p>
 </main>

@@ -27,177 +27,153 @@
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
-  .tp { width: 100%; max-width: 640px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; box-sizing: border-box; }
-  .tp *, .tp *::before, .tp *::after { box-sizing: border-box; }
-  .tp a { color: #81c784; text-decoration: none; }
-  .tp a:hover { color: #a5d6a7; }
-  .tp .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; }
-  .tp h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
-  .tp .muted { color: #888; font-size: 13px; }
-  .tp .crumb { font-size: 13px; color: #888; }
+  /* tip: a money page - green area accent (links, chips), gold for PAT. Section headings: .ds-pixel-h (one style). */
+  .tp { gap: var(--ds-sp-4); }
+  .tp .card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); min-width: 0; }
+  .tp h2.ds-pixel-h { margin: 0 0 var(--ds-sp-4); overflow-wrap: anywhere; }
+  .tp .muted { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .tp .ds-back { justify-self: start; display: inline-flex; align-items: center; min-height: 36px; font-size: var(--ds-fs-sm); }
+  .tp .mut-opt { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ds-text-faint); }
 
   /* recipient */
-  .tp .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 18px; align-items: center;
-              background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); }
-  .tp .av { width: 104px; height: 104px; border-radius: 14px; border: 1px solid #2a2a2a; display: grid; place-items: center; overflow: hidden;
+  .tp .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ds-sp-4) var(--ds-sp-5); align-items: center; border-radius: var(--ds-r-2xl);
+              background: radial-gradient(90% 140% at 100% 0%, var(--ds-ac-bg), transparent 60%), radial-gradient(70% 120% at 0% 100%, rgba(255, 215, 64, .07), transparent 60%), #111; }
+  .tp .hero .cx-banner { margin: calc(-1 * var(--ds-sp-5)) calc(-1 * var(--ds-sp-5)) 0; border-radius: 17px 17px 0 0; }
+  .tp .av { width: 104px; height: 104px; border-radius: var(--ds-r-xl); border: 1px solid var(--ds-line-strong); display: grid; place-items: center; overflow: hidden;
             background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 16px 16px; }
   .tp .av svg { display: block; width: 96px; height: 96px; image-rendering: pixelated; shape-rendering: crispEdges; }
   .tp .av img { width: 100%; height: 100%; object-fit: cover; }
-  .tp .who { min-width: 0; }
-  .tp .kicker { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9a9; }
-  .tp .who h1 { margin: 2px 0 0; font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; }
-  .tp .handle { color: #9a9; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
-  .tp .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .tp .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; }
-  .tp .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
-  .tp .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
-  .tp .showcase { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 2; margin-top: -8px; min-width: 0; }
-  .tp .pin { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border: 1px solid #3a3a1c; border-radius: 10px; padding: 3px 9px 3px 3px; font-size: 12px; color: #e8e2b0; max-width: 100%; }
+  .tp .who { min-width: 0; display: grid; gap: 2px; }
+  .tp .kicker { font: 700 var(--ds-fs-chip)/1.4 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); }
+  .tp .who h1 { margin: 0; font: 700 var(--ds-fs-h1)/var(--ds-lh-h1) var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .tp .handle { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; color: var(--ds-text-muted); font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }
+  .tp .handle a { color: inherit; }
+  .tp .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: var(--ds-sp-2); }
+  .tp .chips .ds-tag { font-size: var(--ds-fs-xs); padding: 2px 10px; }
+  .tp .chips .ds-tag.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
+  .tp .chips .ds-tag.staff { border-color: var(--ds-info-line); background: var(--ds-info-bg); color: var(--ds-info); }
+  .tp .showcase { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 2; margin-block-start: calc(-1 * var(--ds-sp-2)); min-width: 0; }
+  .tp .pin { display: inline-flex; align-items: center; gap: 6px; background: var(--ds-glass); border: 1px solid var(--ds-gold-line); border-radius: var(--ds-r-md); padding: 3px 9px 3px 3px; font-size: var(--ds-fs-xs); color: var(--ds-gold-text); max-width: 100%; }
   .tp .pin img { width: 24px; height: 24px; object-fit: contain; image-rendering: pixelated; flex: none; }
   .tp .pin span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* buttons */
-  .tp .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-radius: 8px; border: 1px solid #2b2b2b;
-             background: #181818; color: #ddd !important; font-size: 15px; cursor: pointer; font-family: inherit; min-height: 44px; }
-  .tp .btn:hover { border-color: #4caf50; }
-  .tp .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
-  .tp .btn.primary:hover { background: #43a047; }
-  .tp .btn[disabled] { opacity: .5; cursor: not-allowed; }
-  .tp .btn:focus-visible, .tp .amt-chip:focus-visible, .tp input:focus-visible { outline: 2px solid #c6e94f; outline-offset: 2px; }
-  .tp .row { display: flex; flex-wrap: wrap; gap: 8px; }
-  .tp .row .btn { flex: 1 1 160px; }
+  /* buttons (.ds-btn) */
+  .tp .row { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2h); }
+  .tp .row .ds-btn { flex: 1 1 160px; }
 
   /* send */
-  .tp .bal { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 14px;
-             padding: 10px 14px; background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; }
-  .tp .bal .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
-  .tp .bal .v { font-size: 20px; font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; }
-  .tp label.lbl { display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #aaa; margin: 0 0 6px; }
+  .tp .bal { display: flex; justify-content: space-between; align-items: center; gap: var(--ds-sp-2) var(--ds-sp-3); flex-wrap: wrap; margin-block-end: var(--ds-sp-4);
+             padding: var(--ds-sp-2h) var(--ds-sp-3h); background: var(--ds-gold-bg); border: 1px solid var(--ds-gold-line); border-radius: var(--ds-r-md); }
+  .tp .bal .k { font: 700 var(--ds-fs-chip)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); }
+  .tp .bal .v { font-size: 20px; font-weight: 700; color: var(--ds-gold-text); font-variant-numeric: tabular-nums; }
+  .tp .ds-label { display: block; margin: 0 0 6px; }
   .tp .amt-wrap { position: relative; }
-  .tp .amt-wrap input { width: 100%; font: inherit; font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; color: #fff; background: #0b0b0b;
-                        border: 1px solid #2b2b2b; border-radius: 10px; padding: 12px 64px 12px 14px; min-height: 54px; }
-  .tp .amt-wrap .unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #ffd700; font-weight: bold; font-size: 14px; pointer-events: none; }
-  .tp input[aria-invalid="true"] { border-color: #e57373; }
-  .tp .amt-chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-  .tp .amt-chip { font: inherit; font-size: 14px; font-weight: bold; color: #cfe8d0; background: #0f1a10; border: 1px solid #2c3a2d; border-radius: 999px; padding: 8px 0; min-height: 40px; cursor: pointer; }
-  .tp .amt-chip:hover { border-color: #4caf50; }
-  .tp .amt-chip[aria-pressed="true"] { background: #4caf50; border-color: #4caf50; color: #fff; }
-  .tp .amt-chip[disabled] { opacity: .35; cursor: not-allowed; }
-  .tp .hint { min-height: 20px; font-size: 13px; color: #9a9; margin-top: 8px; font-variant-numeric: tabular-nums; }
-  .tp .hint.err { color: #ef9a9a; }
+  .tp .amt-wrap .ds-in.ds-in { font-size: 24px; font-weight: 700; color: var(--ds-text-strong); padding-block: 10px; padding-inline: 14px 64px; min-height: 56px; }
+  .tp .amt-wrap .unit { position: absolute; inset-inline-end: 14px; top: 50%; transform: translateY(-50%); color: var(--ds-gold); font-weight: 700; font-size: var(--ds-fs-sm); pointer-events: none; }
+  .tp .amt-chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--ds-sp-2); margin-block-start: var(--ds-sp-2h); }
+  .tp .amt-chip { justify-content: center; min-height: 40px; padding: 0 4px; font-size: var(--ds-fs-sm); transition: border-color var(--ds-dur-1), background-color var(--ds-dur-1); }
+  .tp .amt-chip:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .tp .amt-chip[aria-pressed="true"] { background: var(--ds-ac); border-color: var(--ds-ac); color: var(--ds-on-ac); }
+  .tp .amt-chip[disabled] { color: var(--ds-text-disabled); border-color: var(--ds-line); cursor: not-allowed; }
+  .tp .hint { min-height: 20px; font-size: var(--ds-fs-meta); color: var(--ds-text-muted); margin-block-start: var(--ds-sp-2); font-variant-numeric: tabular-nums; }
+  .tp .hint.err { color: var(--ds-danger); }
   .tp #tp-c-err:empty, .tp #tp-share-msg:empty { display: none; }
-  .tp .note-wrap { margin-top: 14px; }
-  .tp .note-wrap input { width: 100%; font: inherit; font-size: 15px; color: #eee; background: #0b0b0b; border: 1px solid #2b2b2b; border-radius: 10px; padding: 11px 14px; min-height: 44px; }
-  .tp .note-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #777; margin-top: 4px; }
-  .tp .send-row { margin-top: 16px; }
+  .tp .note-wrap { margin-block-start: var(--ds-sp-4); }
+  .tp .note-meta { display: flex; justify-content: space-between; gap: var(--ds-sp-2); font-size: var(--ds-fs-xs); color: var(--ds-text-faint); margin-block-start: 6px; }
+  .tp .send-row { margin-block-start: var(--ds-sp-5); }
 
   /* confirm */
-  .tp .sum { display: grid; gap: 0; background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; margin-bottom: 14px; }
-  .tp .sum > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 14px; border-top: 1px solid #1a1a1a; font-variant-numeric: tabular-nums; }
-  .tp .sum > div:first-child { border-top: 0; }
-  .tp .sum .k { color: #999; font-size: 14px; flex: none; }
-  .tp .sum .v { text-align: right; min-width: 0; overflow-wrap: anywhere; }
-  .tp .sum .big { font-size: 26px; font-weight: bold; color: #ffd700; }
-  .tp .sum .neg { color: #ef9a9a; }
-  .tp .sum .note { font-style: italic; color: #d8d3b0; }
-  .tp .warn { font-size: 13px; color: #e8cf7a; background: #1d1a10; border: 1px solid #5a4a1c; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; }
+  .tp .sum { display: grid; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); margin-block-end: var(--ds-sp-4); }
+  .tp .sum > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ds-sp-3); padding: var(--ds-sp-2h) var(--ds-sp-3h); border-block-start: 1px solid var(--ds-line-soft); font-variant-numeric: tabular-nums; }
+  .tp .sum > div:first-child { border-block-start: 0; }
+  .tp .sum .k { color: var(--ds-text-muted); font-size: var(--ds-fs-sm); flex: none; }
+  .tp .sum .v { text-align: end; min-width: 0; overflow-wrap: anywhere; }
+  .tp .sum .big { font-size: var(--ds-fs-num-lg); font-weight: 700; color: var(--ds-gold-text); }
+  .tp .sum .note { font-style: italic; color: var(--ds-text-2); }
+  .tp .ds-note.warn { margin-block-end: var(--ds-sp-4); }
+  .tp .fine { margin: 0 0 var(--ds-sp-3); }
 
   /* success */
   .tp .done { text-align: center; position: relative; overflow: hidden; }
-  .tp .done .big-check { width: 72px; height: 72px; margin: 6px auto 10px; border-radius: 50%; display: grid; place-items: center; font-size: 36px;
-                         background: radial-gradient(circle at 35% 30%, #81c784, #2e7d32); box-shadow: 0 0 0 8px rgba(76,175,80,.15); }
+  .tp .done .big-check { width: 72px; height: 72px; margin: 6px auto 12px; border-radius: 50%; display: grid; place-items: center; font-size: 36px; color: var(--ds-on-ac);
+                         background: radial-gradient(circle at 35% 30%, var(--ds-ok), #2e7d32); box-shadow: 0 0 0 8px var(--ds-green-bg); }
   .tp .done h3:focus, .tp h2:focus { outline: none; }
-  .tp .done h3 { margin: 0; font-size: 22px; overflow-wrap: anywhere; }
-  .tp .done .amt { color: #ffd700; }
-  .tp .done p { margin: 8px 0 16px; }
+  .tp .done h3 { margin: 0; font: 700 22px/1.3 var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .tp .done .amt, .tp .done .gold { color: var(--ds-gold-text); }
+  .tp .done p { margin: var(--ds-sp-2) 0 var(--ds-sp-4); }
   .tp .burst { position: absolute; inset: 0; pointer-events: none; }
   .tp .burst i { position: absolute; left: 50%; top: 52px; width: 9px; height: 9px; border-radius: 2px; opacity: 0; }
   @media (prefers-reduced-motion: no-preference) {
     .tp .done.go .big-check { animation: tp-pop .45s cubic-bezier(.2, 1.6, .4, 1) both; }
     .tp .done.go .burst i { animation: tp-fly 1.1s ease-out forwards; animation-delay: var(--d, 0s); }
   }
+  @media (prefers-reduced-motion: reduce) { .tp .amt-chip { transition: none; } }
   @keyframes tp-pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   @keyframes tp-fly { 0% { opacity: 1; transform: translate(-50%, 0) rotate(0); }
                       100% { opacity: 0; transform: translate(calc(-50% + var(--x)), var(--y)) rotate(var(--r)); } }
 
-  /* history */
-  .tp .totals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-  .tp .tot { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 12px; min-width: 0; }
-  .tp .tot .k { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #888; }
-  .tp .tot .v { font-size: 18px; font-weight: bold; font-variant-numeric: tabular-nums; margin-top: 2px; overflow-wrap: anywhere; }
-  .tp ul.tips { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .tp ul.tips li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; background: #0d0d0d;
-                   border: 1px solid #1f1f1f; border-radius: 8px; padding: 8px 12px; font-size: 14px; }
-  .tp ul.tips .ic { font-size: 18px; text-align: center; }
+  /* history + jar tiles */
+  .tp .totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-sp-2); margin-block-end: var(--ds-sp-3); }
+  .tp .tot { background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-3); min-width: 0; }
+  .tp .tot .k { font: 700 var(--ds-fs-chip)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); }
+  .tp .tot .v { font-size: var(--ds-fs-num); font-weight: 700; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; margin-block-start: 2px; overflow-wrap: anywhere; }
+  .tp .tot .v.up { color: var(--ds-ok); } .tp .tot .v.down { color: var(--ds-danger-solid); }
+  .tp ul.tips, .tp ul.jar, .tp ol.top { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .tp ul.tips li, .tp ul.jar li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px var(--ds-sp-2h); align-items: center; min-height: 44px;
+                   background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2) var(--ds-sp-3); font-size: var(--ds-fs-sm); }
+  .tp ul.tips .ic { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 18px; line-height: 1; }
   .tp ul.tips .what { min-width: 0; overflow-wrap: anywhere; }
-  .tp ul.tips .when { color: #777; font-size: 12px; }
-  .tp ul.tips .pts { font-weight: bold; font-variant-numeric: tabular-nums; text-align: right; }
-  .tp ul.tips .pts.out { color: #ef9a9a; }
-  .tp ul.tips .pts.in { color: #81c784; }
-  .tp ul.tips .tnote { grid-column: 2 / -1; font-size: 13px; font-style: italic; color: #b9b9a0; overflow-wrap: anywhere; }
-  .tp ul.tips li.fresh { border-color: #2f5d31; background: #0f1a10; }
+  .tp .when { color: var(--ds-text-faint); font-size: var(--ds-fs-xs); }
+  .tp .pts { font-weight: 700; font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; }
+  .tp .pts.out { color: var(--ds-danger-solid); }
+  .tp .pts.in { color: var(--ds-ok); }
+  .tp .tnote { grid-column: 2 / -1; font-size: var(--ds-fs-meta); font-style: italic; color: var(--ds-text-2); overflow-wrap: anywhere; }
+  .tp li.fresh { border-color: var(--ds-ok-line); background: var(--ds-ok-bg); }
 
   /* owner's tip jar */
-  .tp .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .tp .stats .tot.hl { grid-column: 1 / -1; background: radial-gradient(120% 160% at 0% 0%, #2a2410 0%, #0d0d0d 60%); border-color: #3a3a1c; }
-  .tp .stats .tot.hl .v { font-size: 28px; color: #ffd700; }
-  .tp .stats .sub { font-size: 12px; color: #888; margin-top: 2px; }
-  .tp .newpill { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #4caf50; color: #fff; font-family: Ubuntu, sans-serif; font-size: 11px; font-weight: bold; letter-spacing: .04em; vertical-align: middle; }
-  .tp ol.top { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .tp ol.top li { display: grid; grid-template-columns: 22px 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px 12px; }
-  .tp ol.top .rk { font-weight: bold; color: #888; text-align: center; font-variant-numeric: tabular-nums; }
-  .tp ol.top li:nth-child(1) .rk { color: #ffd700; }
+  .tp .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-sp-2); }
+  .tp .stats .tot.hl { grid-column: 1 / -1; background: radial-gradient(120% 160% at 0% 0%, #2a2208 0%, var(--ds-sunken) 60%); border-color: var(--ds-gold-line); padding: var(--ds-sp-3) var(--ds-sp-3h); }
+  .tp .stats .tot.hl .v { font-size: var(--ds-fs-num-lg); color: var(--ds-gold-text); }
+  .tp .stats .sub { font-size: var(--ds-fs-xs); color: var(--ds-text-muted); margin-block-start: 2px; }
+  .tp .newpill { display: inline-block; margin-inline-start: var(--ds-sp-2); padding: 1px 8px; border-radius: var(--ds-r-pill); background: var(--ds-ac); color: var(--ds-on-ac); font: 700 var(--ds-fs-chip)/1.6 var(--ds-font); letter-spacing: .04em; vertical-align: middle; }
+  .tp ol.top li { display: grid; grid-template-columns: 22px 40px minmax(0, 1fr) auto; gap: var(--ds-sp-2h); align-items: center; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2) var(--ds-sp-3); }
+  .tp ol.top .rk { font-weight: 700; color: var(--ds-text-muted); text-align: center; font-variant-numeric: tabular-nums; }
+  .tp ol.top li:nth-child(1) .rk { color: var(--ds-gold); }
   .tp ol.top li:nth-child(2) .rk { color: #cfd8dc; }
   .tp ol.top li:nth-child(3) .rk { color: #d7a26b; }
-  .tp .mini { width: 40px; height: 40px; border-radius: 8px; overflow: hidden; border: 1px solid #2a2a2a; display: grid; place-items: center; background: #101010; flex: none; }
+  .tp .mini { width: 40px; height: 40px; border-radius: var(--ds-r-sm); overflow: hidden; border: 1px solid var(--ds-line-strong); display: grid; place-items: center; background: #101010; flex: none; }
   .tp .mini svg { width: 38px; height: 38px; image-rendering: pixelated; shape-rendering: crispEdges; display: block; }
   .tp .mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .tp .mini.sm { width: 28px; height: 28px; border-radius: 6px; }
-  .tp ol.top .nm, .tp ul.jar .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
-  .tp ol.top .nm a, .tp ul.jar .nm a { color: #e6e6e6; }
-  .tp ol.top .meta { font-size: 12px; color: #888; font-weight: normal; }
-  .tp ol.top .amt, .tp ul.jar .pts { font-weight: bold; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-  .tp ol.top .amt { color: #ffd700; }
-  .tp .tabs { display: flex; gap: 6px; margin: 0 0 12px; border-bottom: 1px solid #222; }
-  .tp .tab { font: inherit; font-size: 14px; background: none; border: 0; border-bottom: 2px solid transparent; color: #999; padding: 8px 6px 10px; min-height: 44px; cursor: pointer; margin-bottom: -1px; }
-  .tp .tab[aria-selected="true"] { color: #ffd700; border-bottom-color: #ffd700; font-weight: bold; }
-  .tp .tab:focus-visible { outline: 2px solid #c6e94f; outline-offset: 2px; }
-  .tp .tab .n { color: #777; font-weight: normal; font-size: 12px; }
-  .tp ul.jar { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .tp ul.jar li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 8px; padding: 8px 12px; font-size: 14px; }
-  .tp ul.jar li.fresh { border-color: #2f5d31; background: #0f1a10; }
+  .tp .mini.sm { width: 28px; height: 28px; border-radius: var(--ds-r-xs); }
+  .tp ol.top .nm, .tp ul.jar .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .tp ol.top .nm a, .tp ul.jar .nm a { color: var(--ds-text); }
+  .tp ol.top .meta { font-size: var(--ds-fs-xs); color: var(--ds-text-muted); font-weight: 400; }
+  .tp .nm .muted { font-weight: 400; }
+  .tp ol.top .amt { font-weight: 700; font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; color: var(--ds-gold-text); }
+  .tp .ds-tabs { margin-block-end: var(--ds-sp-3); }
   .tp ul.jar .line { min-width: 0; display: flex; align-items: baseline; gap: 6px; }
-  .tp ul.jar .when { color: #777; font-size: 12px; white-space: nowrap; }
-  .tp ul.jar .pts.in { color: #81c784; }
-  .tp ul.jar .pts.out { color: #ef9a9a; }
-  .tp ul.jar .tnote { grid-column: 2 / -1; font-size: 13px; font-style: italic; color: #b9b9a0; overflow-wrap: anywhere; }
-  .tp .more { margin-top: 10px; width: 100%; }
-  .tp .empty { text-align: center; padding: 18px 8px 6px; }
-  .tp .empty .big { font-size: 40px; line-height: 1; }
-  .tp .empty p { margin: 10px 0 14px; }
+  .tp ul.jar .when { white-space: nowrap; }
+  .tp .more { margin-block-start: var(--ds-sp-3); width: 100%; }
+  .tp .ds-empty { padding: var(--ds-sp-6) var(--ds-sp-4); }
+  .tp .ds-empty p { margin: 0; }
 
-  .tp [hidden] { display: none !important; }
-  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-
-  @media (max-width: 480px) {
-    .tp { padding: 12px 12px 48px; gap: 12px; }
-    .tp .card { padding: 16px 14px; }
-    .tp .hero { grid-template-columns: 76px minmax(0, 1fr); gap: 12px 14px; }
-    .tp .av { width: 76px; height: 76px; border-radius: 12px; }
+  @media (max-width: 520px) {
+    .tp .card { padding: var(--ds-sp-4); }
+    .tp .hero { grid-template-columns: 76px minmax(0, 1fr); gap: var(--ds-sp-3) var(--ds-sp-3h); }
+    .tp .hero .cx-banner { margin: calc(-1 * var(--ds-sp-4)) calc(-1 * var(--ds-sp-4)) 0; }
+    .tp .av { width: 76px; height: 76px; border-radius: var(--ds-r-lg); }
     .tp .av svg { width: 70px; height: 70px; }
-    .tp .who h1 { font-size: 22px; }
-    .tp .handle { font-size: 13px; }
-    .tp .chips { margin-top: 8px; }
-    .tp .showcase { grid-column: 1 / -1; margin-top: 0; }
-    .tp .cx-banner { margin: -16px -14px 0; }
-    .tp .amt-chips { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
-    .tp .amt-chip { font-size: 13px; }
+    .tp .showcase { grid-column: 1 / -1; margin-block-start: 0; }
+    .tp .amt-chips { gap: 6px; }
+    .tp .amt-chip { font-size: var(--ds-fs-meta); }
     .tp .sum .big { font-size: 22px; }
+    .tp .stats .tot.hl .v { font-size: 24px; }
+    .tp .note-wrap .ds-in.ds-in { font-size: 16px; }
   }
 </style>
 
-<main class="tp">
-  <div class="crumb"><a href="<%= profileHref %>"><%- t('tip.back_profile', { name: name }) %></a></div>
+<main class="ds-page narrow tp">
+  <a class="ds-back" href="<%= profileHref %>"><%- t('tip.back_profile', { name: name }) %></a>
 
   <section class="card hero cx-host" aria-labelledby="tp-name">
     <% if (cxBanner) { %><div class="cx-banner" style="<%= cxBanner.css %>" aria-hidden="true"></div><% } %>
@@ -207,11 +183,11 @@
     <div class="who">
       <div class="kicker"><%- isSelf ? t('tip.your_jar') : t('tip.jar') %></div>
       <h1 id="tp-name"><% if (cxName && cxName.css) { %><span class="cx-name" style="<%= cxName.css %>"><%= name %></span><% } else { %><%= name %><% } %></h1>
-      <div class="handle"><a href="<%= profileHref %>" style="color:inherit">@<%= usernameProfile %></a><% if (camfrog) { %> · 🐸 <%= camfrog %><% } %></div>
+      <div class="handle"><a href="<%= profileHref %>">@<%= usernameProfile %></a><% if (camfrog) { %><span aria-hidden="true">·</span><span><span class="ds-ic" aria-hidden="true">🐸</span> <%= camfrog %></span><% } %></div>
       <div class="chips">
-        <span class="chip"><%- t('tip.level', { n: level }) %></span>
-        <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
-        <% if (badgeCount) { %><span class="chip"><%- t('tip.badges', { count: badgeCount }) %></span><% } %>
+        <span class="ds-tag ac"><%- t('tip.level', { n: level }) %></span>
+        <% if (role && role !== 'pleb') { %><span class="ds-tag <%= role %>"><%= classh %></span><% } %>
+        <% if (badgeCount) { %><span class="ds-tag ac"><%- t('tip.badges', { count: badgeCount }) %></span><% } %>
       </div>
     </div>
     <% if (showcase.length) { %>
@@ -224,31 +200,31 @@
 
   <% if (!signedIn) { %>
     <section class="card">
-      <h2><%- t('tip.send_h') %></h2>
-      <p class="muted" style="margin-top:0"><%- t('tip.signin_send', { name: name }) %></p>
-      <div class="row"><a class="btn primary" href="/login"><%- t('tip.signin_tip') %></a><a class="btn" href="<%= profileHref %>"><%- t('tip.view_profile') %></a></div>
+      <h2 class="ds-pixel-h"><%- t('tip.send_h') %></h2>
+      <p class="muted fine"><%- t('tip.signin_send', { name: name }) %></p>
+      <div class="row"><a class="ds-btn" href="/login"><%- t('tip.signin_tip') %></a><a class="ds-btn ghost" href="<%= profileHref %>"><%- t('tip.view_profile') %></a></div>
     </section>
   <% } else if (isSelf) { const T = (J && J.totals) || {}; %>
     <section class="card" aria-labelledby="tj-title">
-      <h2 id="tj-title"><%- t('tip.your_jar_h') %><% if (J && J.newCount) { %><span class="newpill"><%- t('tip.n_new', { n: J.newCount }) %></span><% } %></h2>
+      <h2 class="ds-pixel-h" id="tj-title"><%- t('tip.your_jar_h') %><% if (J && J.newCount) { %><span class="newpill"><%- t('tip.n_new', { n: J.newCount }) %></span><% } %></h2>
       <div class="stats">
         <div class="tot hl"><div class="k"><%- t('tip.recv_all') %></div><div class="v"><%= fmt(T.recv) %> PAT</div>
           <div class="sub"><%- t('tip.n_tips', { count: Number(T.recvCount) || 0, n: fmt(T.recvCount) }) %> <%- t('tip.from_people', { count: Number(T.tippers) || 0, n: fmt(T.tippers) }) %></div></div>
-        <div class="tot"><div class="k"><%- t('tip.last7') %></div><div class="v" style="color:#81c784"><%= fmt(T.week) %></div></div>
-        <div class="tot"><div class="k"><%- t('tip.last30') %></div><div class="v" style="color:#81c784"><%= fmt(T.month) %></div></div>
+        <div class="tot"><div class="k"><%- t('tip.last7') %></div><div class="v up"><%= fmt(T.week) %></div></div>
+        <div class="tot"><div class="k"><%- t('tip.last30') %></div><div class="v up"><%= fmt(T.month) %></div></div>
         <div class="tot"><div class="k"><%- t('tip.tippers') %></div><div class="v"><%= fmt(T.tippers) %></div></div>
-        <div class="tot"><div class="k"><%- t('tip.you_sent') %></div><div class="v" style="color:#ef9a9a"><%= fmt(T.sent) %></div></div>
+        <div class="tot"><div class="k"><%- t('tip.you_sent') %></div><div class="v down"><%= fmt(T.sent) %></div></div>
       </div>
-      <div class="row" style="margin-top:14px">
-        <button class="btn primary" type="button" id="tp-share" data-url="<%= tipHref %>"><%- t('tip.copy_link') %></button>
-        <a class="btn" href="/history"><%- t('tip.history') %></a>
+      <div class="row send-row">
+        <button class="ds-btn" type="button" id="tp-share" data-url="<%= tipHref %>"><%- t('tip.copy_link') %></button>
+        <a class="ds-btn ghost" href="/history"><%- t('tip.history') %></a>
       </div>
       <p class="hint" id="tp-share-msg" role="status" aria-live="polite"></p>
     </section>
 
     <% if (J && J.top && J.top.length) { %>
     <section class="card" aria-labelledby="tj-top-title">
-      <h2 id="tj-top-title"><%- t('tip.top') %></h2>
+      <h2 class="ds-pixel-h" id="tj-top-title"><%- t('tip.top') %></h2>
       <ol class="top">
         <% J.top.forEach((u, i) => { %>
           <li>
@@ -264,9 +240,9 @@
 
     <section class="card" aria-labelledby="tj-list-title">
       <h2 id="tj-list-title" class="sr-only"><%- t('tip.tips') %></h2>
-      <div class="tabs" role="tablist" aria-label="<%- t('tip.tips') %>">
-        <button class="tab" type="button" role="tab" id="tj-tab-received" aria-controls="tj-panel-received" aria-selected="true"><%- t('tip.received') %> <span class="n">(<%= fmt(T.recvCount) %>)</span></button>
-        <button class="tab" type="button" role="tab" id="tj-tab-sent" aria-controls="tj-panel-sent" aria-selected="false" tabindex="-1"><%- t('tip.sent') %> <span class="n">(<%= fmt(T.sentCount) %>)</span></button>
+      <div class="ds-tabs" role="tablist" aria-label="<%- t('tip.tips') %>">
+        <button class="ds-tab tab" type="button" role="tab" id="tj-tab-received" aria-controls="tj-panel-received" aria-selected="true"><%- t('tip.received') %> <span class="ds-count"><%= fmt(T.recvCount) %></span></button>
+        <button class="ds-tab tab" type="button" role="tab" id="tj-tab-sent" aria-controls="tj-panel-sent" aria-selected="false" tabindex="-1"><%- t('tip.sent') %> <span class="ds-count"><%= fmt(T.sentCount) %></span></button>
       </div>
       <% [['received', J ? J.received : null], ['sent', J ? J.sent : null]].forEach(([kind, pg]) => { const items = (pg && pg.items) || []; const out = kind === 'sent'; %>
         <div role="tabpanel" id="tj-panel-<%= kind %>" aria-labelledby="tj-tab-<%= kind %>"<%= out ? ' hidden' : '' %>>
@@ -275,21 +251,21 @@
               <% items.forEach((tp) => { %>
                 <li<%- !out && isFresh(tp) ? ' class="fresh"' : '' %>>
                   <span class="mini sm" aria-hidden="true"><img src="<%= tp.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"></span>
-                  <span class="line"><span class="nm"><% if (out) { %><span class="muted" style="font-weight:normal"><%- t('tip.to') %> </span><% } %><% if (tp.username) { %><a href="<%= profOf(tp) %>"><%- nameOf(tp) %></a><% } else { %><%- t('tip.someone') %><% } %></span><span class="when" data-ts="<%= iso(tp.timestamp) %>"><%= String(tp.timestamp || '').slice(0, 10) %></span></span>
+                  <span class="line"><span class="nm"><% if (out) { %><span class="muted to"><%- t('tip.to') %> </span><% } %><% if (tp.username) { %><a href="<%= profOf(tp) %>"><%- nameOf(tp) %></a><% } else { %><%- t('tip.someone') %><% } %></span><span class="when" data-ts="<%= iso(tp.timestamp) %>"><%= String(tp.timestamp || '').slice(0, 10) %></span></span>
                   <span class="pts <%= out ? 'out' : 'in' %>"><%= out ? '−' : '+' %><%= fmt(Math.abs(tp.points)) %></span>
                   <% if (tp.note) { %><span class="tnote">&ldquo;<%= tp.note %>&rdquo;</span><% } %>
                 </li>
               <% }) %>
             </ul>
-            <% if (pg.more) { %><button class="btn more" type="button" data-more="<%= kind %>" data-offset="<%= items.length %>"><%- t('tip.load_more') %></button><% } %>
+            <% if (pg.more) { %><button class="ds-btn quiet more" type="button" data-more="<%= kind %>" data-offset="<%= items.length %>"><%- t('tip.load_more') %></button><% } %>
             <p class="hint err" data-more-err="<%= kind %>" role="alert" hidden></p>
           <% } else if (!out) { %>
-            <div class="empty">
-              <div class="big" aria-hidden="true">🫙</div>
+            <div class="ds-empty">
+              <span class="ds-ic" aria-hidden="true">🫙</span>
               <p class="muted"><%- t('tip.no_tips') %></p>
             </div>
           <% } else { %>
-            <div class="empty"><p class="muted"><%- t('tip.none_sent') %></p></div>
+            <div class="ds-empty"><p class="muted"><%- t('tip.none_sent') %></p></div>
           <% } %>
         </div>
       <% }) %>
@@ -298,46 +274,46 @@
     <section class="card" id="tp-card" aria-labelledby="tp-step-title">
       <!-- step 1: amount + note -->
       <form id="tp-form" novalidate>
-        <h2 id="tp-step-title"><%- t('tip.send_h') %></h2>
+        <h2 class="ds-pixel-h" id="tp-step-title"><%- t('tip.send_h') %></h2>
         <div class="bal"><span class="k"><%- t('tip.your_balance') %></span><span class="v"><span id="tp-bal"><%= fmt(balance) %></span> PAT</span></div>
 
-        <label class="lbl" for="tp-amt"><%- t('tip.amount') %></label>
+        <label class="ds-label" for="tp-amt"><%- t('tip.amount') %></label>
         <div class="amt-wrap">
-          <input id="tp-amt" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+          <input id="tp-amt" class="ds-in num" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
                  placeholder="<%- t('tip.amount_ph') %>" aria-describedby="tp-hint" required>
           <span class="unit" aria-hidden="true">PAT</span>
         </div>
         <div class="amt-chips" role="group" aria-label="<%- t('tip.quick') %>">
           <% CHIPS.forEach(([v, l]) => { %>
-            <button type="button" class="amt-chip" data-v="<%= v %>" aria-pressed="false"<%= v > balance ? ' disabled' : '' %> aria-label="<%= fmt(v) %> PAT"><%= l %></button>
+            <button type="button" class="ds-quick amt-chip" data-v="<%= v %>" aria-pressed="false"<%= v > balance ? ' disabled' : '' %> aria-label="<%= fmt(v) %> PAT"><%= l %></button>
           <% }) %>
         </div>
         <div class="hint" id="tp-hint" aria-live="polite"><%- t('tip.hint') %></div>
 
         <div class="note-wrap">
-          <label class="lbl" for="tp-note"><%- t('tip.message') %> <span style="text-transform:none;letter-spacing:0;color:#777"><%- t('tip.optional') %></span></label>
-          <input id="tp-note" name="note" type="text" maxlength="<%= noteMax %>" autocomplete="off" placeholder="<%- t('tip.note_ph') %>" aria-describedby="tp-note-meta">
+          <label class="ds-label" for="tp-note"><%- t('tip.message') %> <span class="mut-opt"><%- t('tip.optional') %></span></label>
+          <input id="tp-note" class="ds-in" name="note" type="text" maxlength="<%= noteMax %>" autocomplete="off" placeholder="<%- t('tip.note_ph') %>" aria-describedby="tp-note-meta">
           <div class="note-meta" id="tp-note-meta"><span><%- t('tip.sees', { name: name }) %></span><span><span id="tp-note-n">0</span>/<%= noteMax %></span></div>
         </div>
 
-        <div class="row send-row"><button class="btn primary" type="submit" id="tp-review"><%- t('tip.review') %></button></div>
+        <div class="row send-row"><button class="ds-btn gold" type="submit" id="tp-review"><%- t('tip.review') %></button></div>
       </form>
 
       <!-- step 2: confirm -->
       <div id="tp-confirm" hidden>
-        <h2 tabindex="-1" id="tp-confirm-title"><%- t('tip.confirm_h') %></h2>
+        <h2 class="ds-pixel-h" tabindex="-1" id="tp-confirm-title"><%- t('tip.confirm_h') %></h2>
         <div class="sum">
           <div><span class="k"><%- t('tip.to_k') %></span><span class="v"><b><%= name %></b> <span class="muted">@<%= usernameProfile %></span></span></div>
           <div><span class="k"><%- t('tip.amount') %></span><span class="v big" id="tp-c-amt"></span></div>
           <div id="tp-c-note-row"><span class="k"><%- t('tip.message') %></span><span class="v note" id="tp-c-note"></span></div>
           <div><span class="k"><%- t('tip.your_balance') %></span><span class="v"><span id="tp-c-before"></span> → <b id="tp-c-after"></b></span></div>
         </div>
-        <div class="warn" id="tp-c-warn" hidden></div>
-        <p class="muted" style="margin-top:0"><%- t('tip.fine', { name: name }) %></p>
+        <div class="ds-note warn" id="tp-c-warn" hidden></div>
+        <p class="muted fine"><%- t('tip.fine', { name: name }) %></p>
         <div class="hint err" id="tp-c-err" role="alert"></div>
         <div class="row">
-          <button class="btn primary" type="button" id="tp-send"><%- t('tip.send_tip') %></button>
-          <button class="btn" type="button" id="tp-back"><%- t('tip.back') %></button>
+          <button class="ds-btn gold" type="button" id="tp-send"><%- t('tip.send_tip') %></button>
+          <button class="ds-btn ghost" type="button" id="tp-back"><%- t('tip.back') %></button>
         </div>
       </div>
 
@@ -346,19 +322,19 @@
         <div class="burst" aria-hidden="true" id="tp-burst"></div>
         <div class="big-check" aria-hidden="true">✓</div>
         <h3 tabindex="-1" id="tp-done-title"><%- t('tip.done_h', { amt: '<span class="amt" id="tp-d-amt"></span>', name: name }) %></h3>
-        <p class="muted"><%- t('tip.bal_now', { bal: '<b id="tp-d-bal" style="color:#ffd700"></b>' }) %></p>
+        <p class="muted"><%- t('tip.bal_now', { bal: '<b id="tp-d-bal" class="gold"></b>' }) %></p>
         <div class="row">
-          <button class="btn primary" type="button" id="tp-again"><%- t('tip.again') %></button>
-          <a class="btn" href="<%= profileHref %>"><%- t('tip.back_to_profile') %></a>
+          <button class="ds-btn" type="button" id="tp-again"><%- t('tip.again') %></button>
+          <a class="ds-btn ghost" href="<%= profileHref %>"><%- t('tip.back_to_profile') %></a>
         </div>
       </div>
     </section>
 
     <section class="card" aria-labelledby="tp-hist-title">
-      <h2 id="tp-hist-title"><%- t('tip.you_and', { name: name }) %></h2>
+      <h2 class="ds-pixel-h" id="tp-hist-title"><%- t('tip.you_and', { name: name }) %></h2>
       <div class="totals">
-        <div class="tot"><div class="k"><%- t('tip.you_tipped_k') %></div><div class="v" style="color:#ef9a9a"><span id="tp-sent-tot"><%= fmt(sentTotal) %></span> PAT</div></div>
-        <div class="tot"><div class="k"><%- t('tip.they_tipped_k') %></div><div class="v" style="color:#81c784"><%= fmt(recvTotal) %> PAT</div></div>
+        <div class="tot"><div class="k"><%- t('tip.you_tipped_k') %></div><div class="v down"><span id="tp-sent-tot"><%= fmt(sentTotal) %></span> PAT</div></div>
+        <div class="tot"><div class="k"><%- t('tip.they_tipped_k') %></div><div class="v up"><%= fmt(recvTotal) %> PAT</div></div>
       </div>
       <ul class="tips" id="tp-list"<%= recent.length ? '' : ' hidden' %>>
         <% recent.forEach((tp) => { const out = tp.type === 'tip sent'; %>

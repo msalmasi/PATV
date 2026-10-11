@@ -31,14 +31,14 @@
     if (!it) return;
     const st = it.season ? (it.seasonState || seasonStateOf(it, now)) : null; %>
     <div class="cxp-chips">
-      <span class="cxp-chip cxp-chip-type <%= kindGroup(it.kind) === 'GTF avatar' ? 'gtf' : 'prof' %>" title="<%= whereText(it.kind) %>"><%= kindEmoji(it.kind) %> <%= typeText(it.kind) %></span>
+      <span class="cxp-chip cxp-chip-type <%= kindGroup(it.kind) === 'GTF avatar' ? 'gtf' : 'prof' %>" title="<%= whereText(it.kind) %>"><span class="ds-ic" aria-hidden="true"><%= kindEmoji(it.kind) %></span><%= typeText(it.kind) %></span>
       <% if (it.season) { const lastDay = dayMs(it.season.to) - 86400000; %>
         <span class="cxp-chip cxp-chip-season <%= st %>" title="<%= it.season.label %> set">
-          <%= seasonEmoji(it.season.label) %> <%= it.season.label %> ·
+          <span class="ds-ic" aria-hidden="true"><%= seasonEmoji(it.season.label) %></span><%= it.season.label %> ·
           <%= st === 'active' ? 'available until ' + fmtDay(lastDay) : st === 'upcoming' ? 'arrives ' + fmtDay(dayMs(it.season.from)) : 'season ended' %>
         </span>
       <% } %>
-      <% itemTags(it).forEach((t) => { %><span class="cxp-chip cxp-chip-tag tag-<%= t %>"><%= tags[t].emoji %> <%= tags[t].label %></span><% }) %>
+      <% itemTags(it).forEach((t) => { %><span class="cxp-chip cxp-chip-tag tag-<%= t %>"><span class="ds-ic" aria-hidden="true"><%= tags[t].emoji %></span><%= tags[t].label %></span><% }) %>
     </div>
 <% };
   const fAttrs = (it) => `data-kind="${it.kind}" data-group="${kindGroup(it.kind)}" data-tags="${itemTags(it).join(' ')}"`;
@@ -93,19 +93,19 @@
       <% if (me) { %>
         <form method="POST" action="/cosmetics/act" class="cxp-row">
           <input type="hidden" name="op" value="buy"><input type="hidden" name="item" value="<%= it.id %>"><input type="hidden" name="tab" value="shop">
-          <button class="cxp-btn primary" type="submit">Buy</button>
+          <button class="ds-btn gold sm" type="submit">Buy</button>
         </form>
-        <details class="cxp-more"><summary>🎁 Gift a new one</summary>
+        <details class="cxp-more"><summary><span class="ds-ic" aria-hidden="true">🎁</span>Gift a new one</summary>
           <form method="POST" action="/cosmetics/act" class="cxp-row">
             <input type="hidden" name="op" value="gift"><input type="hidden" name="item" value="<%= it.id %>"><input type="hidden" name="tab" value="shop">
-            <input name="to" placeholder="Camfrog name or username" required maxlength="60" aria-label="Gift to">
+            <input class="ds-in" name="to" placeholder="Camfrog name or username" required maxlength="60" aria-label="Gift to">
             <label class="cxp-anon"><input type="checkbox" name="anon" value="1"> <%- t('gifts.anon.box_short') %></label>
-            <button class="cxp-btn" type="submit">Gift</button>
+            <button class="ds-btn ghost sm" type="submit">Gift</button>
           </form>
         </details>
       <% } else { %><div class="cxp-muted"><a href="/login">Sign in</a> to buy.</div><% } %>
     <% } else if (it.perk === 'season_pass') { %>
-      <div class="cxp-muted">🎟️ Comes with the <a href="/premium">Season Pass</a></div>
+      <div class="cxp-muted"><span class="ds-ic" aria-hidden="true">🎟️</span> Comes with the <a href="/premium">Season Pass</a></div>
     <% } else if (it.perk === 'plex') { %>
       <div class="cxp-muted"><%- t('cos.plex_perk', { link: '<a href="/subscriptions">' + t('cos.plex_perk_link') + '</a>' }) %></div>
     <% } else if (it.seasonState === 'upcoming') { %>
@@ -113,11 +113,11 @@
     <% } else if (it.seasonState === 'over') { %>
       <div class="cxp-muted">Season over — find one on the <a href="/cosmetics?tab=market#tabs">market</a>.</div>
     <% } else if (it.unlock && it.unlock.level) { %>
-      <div class="cxp-muted">🔓 Free at level <%= it.unlock.level %><%= me && me.level >= it.unlock.level ? ' — yours!' : '' %></div>
+      <div class="cxp-muted"><span class="ds-ic" aria-hidden="true">🔓</span> Free at level <%= it.unlock.level %><%= me && me.level >= it.unlock.level ? ' — yours!' : '' %></div>
     <% } else if (it.unlock && it.unlock.achievement) { %>
-      <div class="cxp-muted">🔓 Free with the achievement</div>
+      <div class="cxp-muted"><span class="ds-ic" aria-hidden="true">🔓</span> Free with the achievement</div>
     <% } else { %>
-      <div class="cxp-muted">🎲 <%= (it.drop_events || []).includes('bounty') ? 'Drops from completed bounties' : 'Drops from heists, the arena, bingo and bounties' %> — or buy one on the market.</div>
+      <div class="cxp-muted"><span class="ds-ic" aria-hidden="true">🎲</span> <%= (it.drop_events || []).includes('bounty') ? 'Drops from completed bounties' : 'Drops from heists, the arena, bingo and bounties' %> — or buy one on the market.</div>
     <% } %>
   </div>
 <% }; %>
@@ -125,149 +125,190 @@
   const filterBar = () => { %>
     <div class="cxp-filter" data-filter>
       <div class="cxp-frow"><span class="cxp-flabel">Type</span>
-        <button type="button" class="on" data-ftype="">All</button>
-        <button type="button" data-ftype="group:Profile">👤 Profile</button>
-        <button type="button" data-ftype="group:GTF avatar">🐸 GTF avatar</button>
-        <% if (typeof padCat !== 'undefined' && padCat.length) { %><button type="button" data-ftype="group:Pad">🛋️ Pad</button><% } %>
-        <select data-fkind aria-label="Filter by slot">
+        <button type="button" class="ds-tab on" data-ftype="">All</button>
+        <button type="button" class="ds-tab" data-ftype="group:Profile">👤 Profile</button>
+        <button type="button" class="ds-tab" data-ftype="group:GTF avatar">🐸 GTF avatar</button>
+        <% if (typeof padCat !== 'undefined' && padCat.length) { %><button type="button" class="ds-tab" data-ftype="group:Pad">🛋️ Pad</button><% } %>
+        <select class="ds-select" data-fkind aria-label="Filter by slot">
           <option value="">Any slot</option>
           <% Object.keys(kinds).forEach((k) => { %><option value="<%= k %>"><%= kindEmoji(k) %> <%= typeText(k) %></option><% }) %>
         </select>
       </div>
       <div class="cxp-frow"><span class="cxp-flabel">Style</span>
-        <button type="button" class="on" data-ftag="">All</button>
-        <% Object.keys(tags).forEach((t) => { %><button type="button" data-ftag="<%= t %>"><%= tags[t].emoji %> <%= tags[t].label %></button><% }) %>
+        <button type="button" class="ds-tab on" data-ftag="">All</button>
+        <% Object.keys(tags).forEach((t) => { %><button type="button" class="ds-tab" data-ftag="<%= t %>"><%= tags[t].emoji %> <%= tags[t].label %></button><% }) %>
         <label class="cxp-fhide"><input type="checkbox" data-fhidekink> Hide kink items</label>
       </div>
     </div>
 <% }; %>
 <style>
-  .cxp { max-width: 1040px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
-  .cxp *, .cxp *::before, .cxp *::after { box-sizing: border-box; }
-  .cxp a { color: #81c784; text-decoration: none; }
-  .cxp a:hover { color: #a5d6a7; }
-  .cxp h1 { text-align: center; margin: 6px 0 4px; }
-  .cxp .sub { text-align: center; color: #9a9; margin: 0 auto 18px; max-width: 66ch; line-height: 1.5; }
-  .cxp h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; letter-spacing: .06em; margin: 26px 0 10px; line-height: 1.6; }
-  .cxp .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; scroll-margin-top: 80px; }
-  .cxp .tabs a { padding: 8px 14px; border: 1px solid #2a2a2a; border-radius: 999px; background: #161616; font-size: 14px; color: #ccc; }
-  .cxp .tabs a.on { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
-  .cxp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 12px; }
-  .cxp-card { background: #111; border: 1px solid #222; border-top: 3px solid var(--rc); border-radius: 10px; padding: 12px; display: grid; gap: 7px; align-content: start; min-width: 0; }
-  .cxp-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .cxp-title b { color: #fff; font-size: 15px; }
-  .cxp-rar { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--rc); border: 1px solid var(--rc); border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
-  .cxp-desc { font-size: 13px; color: #aaa; line-height: 1.4; }
-  .cxp-src { font-size: 11px; color: #777; }
-  .cxp-price { font-size: 18px; font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; }
-  .cxp-muted { color: #888; font-size: 13px; }
-  .cxp-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; align-items: center; }
-  .cxp-anon { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #bbb; min-height: 32px; }
-  .cxp-row input { flex: 1 1 120px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 9px; font-family: inherit; }
-  .cxp-btn { background: #181818; color: #ddd; border: 1px solid #2f2f2f; border-radius: 6px; padding: 7px 12px; cursor: pointer; font-family: inherit; font-size: 13px; }
-  .cxp-btn:hover { border-color: #4caf50; }
-  .cxp-btn.primary { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
-  .cxp-btn.warn { border-color: #6d3a3a; color: #e57373; }
-  .cxp-more summary { cursor: pointer; font-size: 13px; color: #9a9; }
-  .cxp-more[open] summary { margin-bottom: 6px; }
-  .cxp-prev { min-height: 86px; display: grid; place-items: center; background: #0b0b0b; border: 1px solid #1c1c1c; border-radius: 10px; padding: 8px; }
-  .cxp-prev-name { font-size: 20px; font-weight: bold; text-align: center; }
-  .cxp-av { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d; }
-  .cxp-mini { height: 86px; background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); border: 1px solid #222; border-radius: 10px; overflow: hidden; }
-  .cxp-mini .cx-banner { position: absolute; top: 0; left: 0; right: 0; height: 34px; margin: 0; border-radius: 10px 10px 0 0; }
-  .cxp-mini-body { display: flex; align-items: center; gap: 10px; padding: 26px 12px 0; }
-  .cxp-mini-av { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #4caf50; background: #0d0d0d; }
-  .cxp-mini-name { font-size: 15px; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .cxp-gtfwrap { position: relative; display: inline-block; }
-  .cxp-gtf { display: inline-grid; place-items: center; background: #151515; border-radius: 8px; font-size: 34px; }
-  .cxp-layer-emoji { position: absolute; right: -10px; bottom: -6px; font-size: 20px; }
-  .cxp .season { background: linear-gradient(135deg, #1d1230, #111 60%); border: 1px solid #3a2a55; border-radius: 12px; padding: 14px; margin: 14px 0; }
-  .cxp .season.winter { background: linear-gradient(135deg, #0f2233, #111 60%); border-color: #26475f; }
-  .cxp .season-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; align-items: baseline; margin-bottom: 10px; }
-  .cxp .season-head b { font-size: 17px; color: #fff; }
-  .cxp .cd { color: #ffd700; font-variant-numeric: tabular-nums; }
-  .cxp .howstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 8px; margin: 10px 0 4px; }
-  .cxp .howstrip div { background: #111; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #bbb; }
-  .cxp .howstrip b { display: block; color: #fff; margin-bottom: 2px; }
-  .cxp .sortbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: #888; margin-bottom: 10px; }
-  .cxp .sortbar a { padding: 4px 10px; border: 1px solid #2a2a2a; border-radius: 999px; background: #161616; }
-  .cxp .sortbar a.on { border-color: #4caf50; color: #fff; }
-  .cxp .inv { display: grid; gap: 10px; }
-  .cxp .copy { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; background: #111; border: 1px solid #222; border-left: 3px solid var(--rc); border-radius: 10px; padding: 10px; align-items: start; }
-  .cxp .copy .cxp-prev { min-height: 70px; padding: 4px; }
-  .cxp .copy .cxp-mini { height: 70px; }
-  .cxp .copy .cxp-mini-body { padding-top: 18px; }
-  .cxp .copy-meta { display: grid; gap: 6px; min-width: 0; }
-  .cxp .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 8px; border: 1px solid #333; color: #ccc; margin-left: 4px; }
-  .cxp .tag.eq { border-color: #4caf50; color: #81c784; }
-  .cxp .tag.ls { border-color: #e0a030; color: #e0a030; }
-  .cxp .look { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #111; border: 1px solid #222; border-radius: 12px; padding: 12px; }
-  .cxp .badgepick { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr)); gap: 8px; }
-  .cxp .badgepick label { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px; text-align: center; display: grid; gap: 4px; justify-items: center; cursor: pointer; font-size: 12px; }
-  .cxp .badgepick label:has(input:checked) { border-color: #ffd700; background: #1a1708; }
-  .cxp .badgepick img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
-  .cxp .notice { background: #2a1f0d; border: 1px solid #e0a030; border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
-  .cxp .how p, .cxp .how li { line-height: 1.6; color: #bbb; }
-  .cxp .season.pride { background: linear-gradient(135deg, rgba(228, 3, 3, .16), rgba(255, 237, 0, .08) 30%, rgba(0, 77, 255, .1) 60%, #111 85%); border-color: #5a3a6a; }
-  .cxp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .cxp-chip { font-size: 11px; line-height: 1.5; padding: 1px 7px; border-radius: 8px; border: 1px solid #333; color: #ccc; background: #161616; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-  .cxp-chip-type.prof { border-color: #2f5b7a; color: #8fcaf0; background: #0f1a22; }
-  .cxp-chip-type.gtf { border-color: #2f6b34; color: #9ad69e; background: #0f1a10; }
-  .cxp-chip-type.pad { border-color: #6a4a1a; color: #ffd27f; background: #1d150a; }
+  /* /cosmetics: catalogue + locker. Block flow (.ds-page.flow); section headings are .ds-h2 (one style). Rarity = --rc (from the catalog). */
+  .cxp .ds-head { margin-block-end: var(--ds-sp-5); }
+  .cxp .ds-head .ds-h1 { display: flex; align-items: center; gap: var(--ds-sp-2h); }
+  .cxp .ds-head .ds-sub { max-width: 70ch; font-size: var(--ds-fs-body); color: var(--ds-text-2); }
+  .cxp h2.ds-h2 { margin: var(--ds-sp-7) 0 var(--ds-sp-3); scroll-margin-top: 80px; }
+  .cxp-h2where { font: 400 var(--ds-fs-meta)/1.4 var(--ds-font); color: var(--ds-text-muted); }
+  .cxp .tabs { margin-block: var(--ds-sp-4) var(--ds-sp-3); scroll-margin-top: 80px; }
+  .cxp .tabs .ds-tab { font-size: var(--ds-fs-sm); }
+  .cxp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--ds-sp-3); }
+
+  /* item card */
+  .cxp-card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-block-start: 3px solid var(--rc); border-radius: var(--ds-r-xl); padding: var(--ds-sp-3);
+              display: grid; gap: var(--ds-sp-2); align-content: start; min-width: 0; }
+  .cxp-title { display: flex; justify-content: space-between; align-items: center; gap: var(--ds-sp-2); min-width: 0; }
+  .cxp-title b { color: var(--ds-text-strong); font-size: var(--ds-fs-h4); line-height: 1.3; min-width: 0; }
+  .cxp-rar { flex: none; font: 700 10.5px/1.6 var(--ds-font); text-transform: uppercase; letter-spacing: var(--ds-ls-chip); color: var(--rc); border: 1px solid var(--rc); border-radius: var(--ds-r-pill); padding: 0 8px; white-space: nowrap; }
+  .cxp-desc { font-size: var(--ds-fs-meta); color: var(--ds-text-2); line-height: 1.45; }
+  .cxp-src { font-size: var(--ds-fs-xs); color: var(--ds-text-faint); }
+  .cxp-price { font-size: var(--ds-fs-num); font-weight: 700; color: var(--ds-gold-text); font-variant-numeric: tabular-nums; }
+  .cxp-muted { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.5; }
+  .cxp-row { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); margin: 0; align-items: center; }
+  .cxp-row .ds-in.ds-in { flex: 1 1 140px; width: auto; min-height: 40px; font-size: var(--ds-fs-sm); }
+  .cxp-row .ds-btn { flex: none; }
+  .cxp-anon { display: inline-flex; align-items: center; gap: 6px; font-size: var(--ds-fs-meta); color: var(--ds-text-2); min-height: 36px; cursor: pointer; }
+  .cxp-anon input { width: 18px; height: 18px; margin: 0; accent-color: var(--ds-ac); }
+  .cxp-more summary { display: flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; font-size: var(--ds-fs-meta); color: var(--ds-text-2); border-radius: var(--ds-r-xs); }
+  .cxp-more summary:hover { color: var(--ds-text-strong); }
+  .cxp-more[open] summary { margin-block-end: 6px; }
+
+  /* item chips: what it is + where it shows, its season, style tags */
+  .cxp-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+  .cxp-chip { display: inline-flex; align-items: center; gap: 4px; font: 500 11px/1.6 var(--ds-font); padding: 1px 8px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); color: #ccc; background: #161616; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .cxp-chip .ds-ic { font-size: 11px; width: 13px; height: 13px; }
+  .cxp-chip-type.prof { border-color: var(--ds-info-line); color: var(--ds-info); background: #0f1a22; }
+  .cxp-chip-type.gtf { border-color: var(--ds-green-line); color: var(--ds-ok); background: #0f1a10; }
+  .cxp-chip-type.pad { border-color: var(--ds-warn-line); color: var(--ds-warn); background: #1d150a; }
   .cxp-pad .pc-pv { width: 100%; }
-  .cxp-chip-season { border-color: #6a4a1a; color: #ffcc80; background: #1d150a; }
+  .cxp-chip-season { border-color: var(--ds-warn-line); color: #ffcc80; background: #1d150a; white-space: normal; text-overflow: clip; border-radius: var(--ds-r-md); }
   .cxp-chip-season.upcoming { border-color: #4a4a6a; color: #c5cae9; background: #12121d; }
-  .cxp-chip-season.over { border-color: #444; color: #999; background: #151515; }
-  .cxp-chip-tag { color: #ddd; }
+  .cxp-chip-season.over { border-color: #444; color: var(--ds-text-muted); background: #151515; }
+  .cxp-chip-tag { color: var(--ds-text); }
   .cxp-chip-tag.tag-pride { border-color: #7a4a8a; }
   .cxp-chip-tag.tag-camp { border-color: #8a3a6a; }
   .cxp-chip-tag.tag-cute { border-color: #8a5a72; }
   .cxp-chip-tag.tag-kink { border-color: #5a2a2a; }
-  .cxp-h2where { font-family: Ubuntu, sans-serif; font-size: 12px; color: #888; letter-spacing: 0; text-transform: none; margin-left: 6px; }
-  .cxp-filter { display: grid; gap: 6px; background: #111; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; margin: 12px 0 4px; }
-  .cxp-frow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
-  .cxp-flabel { color: #888; min-width: 38px; }
-  .cxp-filter button, .cxp-filter select { background: #161616; color: #ccc; border: 1px solid #2a2a2a; border-radius: 999px; padding: 4px 10px; font-family: inherit; font-size: 13px; cursor: pointer; }
-  .cxp-filter select { border-radius: 8px; max-width: 100%; }
-  .cxp-filter button.on { border-color: #4caf50; color: #fff; background: #1b2e1c; }
-  .cxp-fhide { color: #aaa; display: inline-flex; gap: 5px; align-items: center; margin-left: auto; cursor: pointer; }
+
+  /* previews (the cosmetic itself is styled by partials/cosmetics-css) */
+  .cxp-prev { min-height: 86px; display: grid; place-items: center; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-lg); padding: var(--ds-sp-2); }
+  .cxp-prev-name { font-size: 20px; font-weight: 700; text-align: center; }
+  .cxp-av { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 3px solid var(--ds-green); background: var(--ds-sunken); }
+  .cxp-mini { height: 86px; background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); overflow: hidden; }
+  .cxp-mini .cx-banner { position: absolute; top: 0; inset-inline: 0; height: 34px; margin: 0; border-radius: 11px 11px 0 0; }
+  .cxp-mini-body { display: flex; align-items: center; gap: var(--ds-sp-2h); padding: 26px var(--ds-sp-3) 0; min-width: 0; }
+  .cxp-mini-av { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--ds-green); background: var(--ds-sunken); }
+  .cxp-mini-name { font-size: var(--ds-fs-h4); color: var(--ds-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .cxp-gtfwrap { position: relative; display: inline-block; }
+  .cxp-gtf { display: inline-grid; place-items: center; background: #151515; border-radius: var(--ds-r-sm); font-size: 34px; }
+  .cxp-layer-emoji { position: absolute; inset-inline-end: -10px; bottom: -6px; font-size: 20px; line-height: 1; }
+
+  /* seasonal sets */
+  .cxp .season { background: linear-gradient(135deg, #1d1230, var(--ds-surface) 60%); border: 1px solid #3a2a55; border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); margin: var(--ds-sp-4) 0; }
+  .cxp .season.winter { background: linear-gradient(135deg, #0f2233, var(--ds-surface) 60%); border-color: #26475f; }
+  .cxp .season.pride { background: linear-gradient(135deg, rgba(228, 3, 3, .16), rgba(255, 237, 0, .08) 30%, rgba(0, 77, 255, .1) 60%, var(--ds-surface) 85%); border-color: #5a3a6a; }
+  .cxp .season-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px var(--ds-sp-3h); align-items: center; margin-block-end: var(--ds-sp-3); }
+  .cxp .season-head b { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: var(--ds-fs-h3); color: var(--ds-text-strong); }
+  .cxp .season-head b .cxp-muted { font-weight: 400; }
+  .cxp .cd { color: var(--ds-gold-text); font-variant-numeric: tabular-nums; }
+
+  /* how-you-get-items strip */
+  .cxp .howstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--ds-sp-2); margin: 0 0 var(--ds-sp-3); }
+  .cxp .howstrip div { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); padding: var(--ds-sp-3); font-size: var(--ds-fs-meta); line-height: 1.45; color: var(--ds-text-muted); min-width: 0; }
+  .cxp .howstrip b { display: flex; align-items: center; gap: 6px; color: var(--ds-text-strong); font-size: var(--ds-fs-sm); margin-block-end: 4px; }
+
+  /* filters (shop + market) */
+  .cxp-filter { display: grid; gap: var(--ds-sp-2); background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-3); margin: var(--ds-sp-3) 0 var(--ds-sp-2); }
+  .cxp-frow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: var(--ds-fs-meta); }
+  .cxp-flabel { font: 700 var(--ds-fs-chip)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); min-width: 44px; }
+  .cxp-filter .ds-tab { margin: 0; }
+  .cxp-filter .ds-select.ds-select { width: auto; max-width: 100%; min-height: 36px; padding-block: 6px; font-size: var(--ds-fs-meta); border-radius: var(--ds-r-pill); }
+  .cxp-fhide { color: var(--ds-text-2); display: inline-flex; gap: 6px; align-items: center; margin-inline-start: auto; min-height: 36px; cursor: pointer; }
+  .cxp-fhide input { width: 18px; height: 18px; margin: 0; accent-color: var(--ds-ac); }
   [data-fhid] { display: none !important; }
-  .cxp code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  @media (max-width: 480px) {
+  .cxp .cxp-fempty { margin-block-start: var(--ds-sp-4); }
+
+  /* market */
+  .cxp .sortbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: var(--ds-sp-3) 0; }
+  .cxp .sortbar .cxp-flabel { min-width: 0; margin-inline-end: 4px; }
+
+  /* my items */
+  .cxp .inv { display: grid; gap: var(--ds-sp-2h); }
+  .cxp .copy { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--ds-sp-3); background: var(--ds-surface); border: 1px solid var(--ds-line); border-inline-start: 3px solid var(--rc); border-radius: var(--ds-r-xl); padding: var(--ds-sp-3); align-items: start; }
+  .cxp .copy .cxp-prev { min-height: 70px; padding: 4px; }
+  .cxp .copy .cxp-mini { height: 70px; }
+  .cxp .copy .cxp-mini-body { padding-block-start: 18px; }
+  .cxp .copy-meta { display: grid; gap: 6px; min-width: 0; }
+  .cxp .copy-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .cxp .copy-name > b { color: var(--ds-text-strong); font-size: var(--ds-fs-h4); }
+  .cxp .tag { display: inline-flex; align-items: center; font: 700 11px/1.6 var(--ds-font); padding: 0 8px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); color: #ccc; white-space: nowrap; }
+  .cxp .tag.rar { color: var(--rc); border-color: var(--rc); text-transform: uppercase; letter-spacing: var(--ds-ls-chip); font-size: 10.5px; }
+  .cxp .tag.eq { border-color: var(--ds-ok-line); color: var(--ds-ok); background: var(--ds-ok-bg); }
+  .cxp .tag.ls { border-color: var(--ds-warn-line); color: var(--ds-warn); background: var(--ds-warn-bg); }
+  .cxp .look { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-4); align-items: center; background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); }
+  .cxp .look .cxp-muted { margin-block-end: var(--ds-sp-2); }
+  .cxp .stk-packs { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2h); }
+  .cxp .stk-pack { display: grid; gap: 6px; max-width: 280px; padding: var(--ds-sp-3); background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); }
+  .cxp .stk-pack b { color: var(--ds-text); }
+  .cxp .stk-pack span { display: flex; gap: 4px; flex-wrap: wrap; }
+  .cxp .stk-pack img { image-rendering: pixelated; }
+  .cxp .stk-foot { margin-block-start: var(--ds-sp-2); }
+
+  /* showcase picker */
+  .cxp .badgepick { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr)); gap: var(--ds-sp-2); margin-block: var(--ds-sp-3); }
+  .cxp .badgepick label { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); padding: var(--ds-sp-2h) var(--ds-sp-2); text-align: center; display: grid; gap: 6px; justify-items: center; cursor: pointer; font-size: var(--ds-fs-xs); color: var(--ds-text-2); }
+  .cxp .badgepick label:hover { border-color: var(--ds-line-strong); }
+  .cxp .badgepick label:has(input:checked) { border-color: var(--ds-gold); background: var(--ds-gold-bg); color: var(--ds-text-strong); }
+  .cxp .badgepick label:focus-within { box-shadow: var(--ds-focus-ring); }
+  .cxp .badgepick input { width: 18px; height: 18px; margin: 0; accent-color: var(--ds-gold); }
+  .cxp .badgepick img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+
+  .cxp .ds-note { margin: var(--ds-sp-3) 0; }
+  .cxp .ds-empty { margin-block: var(--ds-sp-4); }
+  .cxp .ds-empty p { margin: 0; color: var(--ds-text-muted); }
+  .cxp .how { max-width: 76ch; }
+  .cxp .how p, .cxp .how li { line-height: 1.6; color: var(--ds-text-2); }
+  .cxp .how li + li { margin-block-start: var(--ds-sp-2); }
+  .cxp .how ul { padding-inline-start: 1.2em; }
+  @media (max-width: 520px) {
     .cxp .copy { grid-template-columns: 1fr; }
     .cxp .look { grid-template-columns: 1fr; justify-items: center; }
+    .cxp .look > div { width: 100%; }
+    .cxp-fhide { margin-inline-start: 0; }
+    .cxp-row .ds-in.ds-in { font-size: 16px; flex-basis: 100%; }
+    .cxp .season { padding: var(--ds-sp-3); }
   }
 </style>
-<div class="cxp">
-  <h1>🎨 Cosmetics</h1>
-  <p class="sub">Look the part. Name colors, profile banners, borders, effects and avatar decorations for your PATV profile, plus gear for your Grand Theft Frogger pixel avatar. Every item is a real copy you own — equip it, gift it, or sell it to another player.</p>
+<main class="ds-page flow cxp">
+  <div class="ds-head">
+    <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">🎨</span> Cosmetics</h1>
+    <p class="ds-sub">Look the part. Name colors, profile banners, borders, effects and avatar decorations for your PATV profile, plus gear for your Grand Theft Frogger pixel avatar. Every item is a real copy you own — equip it, gift it, or sell it to another player.</p>
+  </div>
 
   <%- include('partials/actions', { acts, msg }) %>
   <% if (me && !me.camfrog) { %>
-    <div class="notice">Buying and gifting new items runs through Pepe as your Camfrog name — <a href="/u/<%= me.username %>/edit">link your Camfrog name</a> first. Equipping, listing and gifting items you already own work without it.</div>
+    <div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⚠️</span><div>Buying and gifting new items runs through Pepe as your Camfrog name — <a href="/u/<%= me.username %>/edit">link your Camfrog name</a> first. Equipping, listing and gifting items you already own work without it.</div></div>
   <% } %>
 
-  <nav class="tabs" id="tabs">
-    <a href="/cosmetics?tab=shop#tabs" class="<%= tab === 'shop' ? 'on' : '' %>">🛍️ Shop</a>
-    <a href="/cosmetics?tab=market#tabs" class="<%= tab === 'market' ? 'on' : '' %>">🏪 Market<%= listings.length ? ' (' + listings.length + ')' : '' %></a>
-    <a href="/cosmetics?tab=mine#tabs" class="<%= tab === 'mine' ? 'on' : '' %>">🎒 My items<%= inv ? ' (' + inv.count + ')' : '' %></a>
-    <a href="/cosmetics?tab=showcase#tabs" class="<%= tab === 'showcase' ? 'on' : '' %>">🏅 Showcase</a>
-    <a href="/cosmetics?tab=how#tabs" class="<%= tab === 'how' ? 'on' : '' %>">❓ How it works</a>
+  <nav class="ds-tabs tabs" id="tabs" aria-label="Cosmetics sections">
+    <a href="/cosmetics?tab=shop#tabs" class="ds-tab<%= tab === 'shop' ? ' on' : '' %>"<%- tab === 'shop' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🛍️</span> Shop</a>
+    <a href="/cosmetics?tab=market#tabs" class="ds-tab<%= tab === 'market' ? ' on' : '' %>"<%- tab === 'market' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🏪</span> Market<% if (listings.length) { %> <span class="ds-count"><%= listings.length %></span><% } %></a>
+    <a href="/cosmetics?tab=mine#tabs" class="ds-tab<%= tab === 'mine' ? ' on' : '' %>"<%- tab === 'mine' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🎒</span> My items<% if (inv) { %> <span class="ds-count"><%= inv.count %></span><% } %></a>
+    <a href="/cosmetics?tab=showcase#tabs" class="ds-tab<%= tab === 'showcase' ? ' on' : '' %>"<%- tab === 'showcase' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🏅</span> Showcase</a>
+    <a href="/cosmetics?tab=how#tabs" class="ds-tab<%= tab === 'how' ? ' on' : '' %>"<%- tab === 'how' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">❓</span> How it works</a>
   </nav>
 
   <% if (tab === 'shop') { %>
     <div class="howstrip">
-      <div><b>🛍️ Shop</b>Buy with PAT — Pepe charges you.</div>
-      <div><b>🎲 Drops</b>Heists, the arena, bingo and completed bounties can drop GTF gear.</div>
-      <div><b>🏅 Unlocks</b>Achievements and levels 10 / 25 / 50 give free items.</div>
-      <div><b>🏪 Trade</b>Sell or buy copies on the market (<%= fee %>% fee).</div>
+      <div><b><span class="ds-ic" aria-hidden="true">🛍️</span>Shop</b>Buy with PAT — Pepe charges you.</div>
+      <div><b><span class="ds-ic" aria-hidden="true">🎲</span>Drops</b>Heists, the arena, bingo and completed bounties can drop GTF gear.</div>
+      <div><b><span class="ds-ic" aria-hidden="true">🏅</span>Unlocks</b>Achievements and levels 10 / 25 / 50 give free items.</div>
+      <div><b><span class="ds-ic" aria-hidden="true">🏪</span>Trade</b>Sell or buy copies on the market (<%= fee %>% fee).</div>
     </div>
     <% filterBar() %>
 
     <% seasons.forEach((s) => { %>
       <section class="season <%= /winter/i.test(s.label) ? 'winter' : /pride/i.test(s.label) ? 'pride' : '' %> cxp-fsec">
         <div class="season-head">
-          <b><%= seasonEmoji(s.label) %> <%= s.label %> <span class="cxp-muted" style="font-size:13px;font-weight:normal">· seasonal set</span></b>
+          <b><span class="ds-ic" aria-hidden="true"><%= seasonEmoji(s.label) %></span><%= s.label %> <span class="cxp-muted">· seasonal set</span></b>
           <% if (s.state === 'active') { %>
             <span class="cxp-muted">Limited — leaves the shop in <span class="cd cx-cd" data-to="<%= s.to %>"><%= left(s.to) %></span></span>
           <% } else { %>
@@ -282,7 +323,7 @@
 
     <% Object.keys(byKind).forEach((k) => { const list = byKind[k].filter((it) => !it.season || it.seasonState === 'over'); if (!list.length) return; %>
       <section class="cxp-fsec">
-        <h2 id="k-<%= k %>"><%= kindEmoji(k) %> <%= kindLabel(k) %> <span class="cxp-h2where"><%= kindGroup(k) === 'GTF avatar' ? 'on your GTF pixel avatar' : 'on your profile' %></span></h2>
+        <h2 class="ds-h2" id="k-<%= k %>"><span class="ds-ic lg" aria-hidden="true"><%= kindEmoji(k) %></span><%= kindLabel(k) %> <span class="cxp-h2where"><%= kindGroup(k) === 'GTF avatar' ? 'on your GTF pixel avatar' : 'on your profile' %></span></h2>
         <div class="grid">
           <% list.forEach((it) => { itemCard(it); }) %>
         </div>
@@ -293,7 +334,7 @@
          const PSLOT = { pad_frame: ['🖼️', 'Banner frame'], pad_glow: ['✨', 'Name glow'], pad_badge: ['🏷️', 'Pad badge'], pad_avatar: ['🎞️', 'Animated avatar'] }; %>
       <link rel="stylesheet" href="/public/css/padfx.css?v=2">
       <section class="cxp-fsec cxp-pad">
-        <h2 id="k-pad">🛋️ Pad cosmetics <span class="cxp-h2where">on a pad — its header, its /p card and Top Pads</span></h2>
+        <h2 class="ds-h2" id="k-pad"><span class="ds-ic lg" aria-hidden="true">🛋️</span>Pad cosmetics <span class="cxp-h2where">on a pad — its header, its /p card and Top Pads</span></h2>
         <p class="cxp-muted">These belong to a <b>pad</b>, not to you. A pad's owner buys them from <b>⚙ Pad settings → General → ✨ Cosmetics</b> (100% to Fort Knox); anyone can <b>🎁 gift</b> one from a pad's page (half to Fort Knox, half to that pad's room vault). The owner can equip or decline a gift — no refunds.</p>
         <div class="grid">
           <% padCat.forEach((it) => { const st = it.style || {}; const sl = PSLOT[it.kind] || ['🛋️', it.kind]; %>
@@ -303,7 +344,7 @@
                   <b class="pc-pv-n<%= it.kind === 'pad_glow' ? ' pfx-g pfx-g-' + st.fx : '' %>">Your pad</b>
                   <% if (it.kind === 'pad_badge') { %><span class="pfx-bs"><span class="pfx-b"><% if (st.icon) { %><span aria-hidden="true"><%= st.icon %></span><% } %><%= st.text %></span></span><% } %></div></div></div>
               <div class="cxp-title"><b><%= it.name %></b><span class="cxp-rar"><%= it.rarity %></span></div>
-              <div class="cxp-chips"><span class="cxp-chip cxp-chip-type pad"><%= sl[0] %> Pad · <%= sl[1] %></span><% if (it.animated) { %><span class="cxp-chip">animated</span><% } %><% if (it.season) { %><span class="cxp-chip cxp-chip-season"><%= it.season.label %></span><% } %></div>
+              <div class="cxp-chips"><span class="cxp-chip cxp-chip-type pad"><span class="ds-ic" aria-hidden="true"><%= sl[0] %></span>Pad · <%= sl[1] %></span><% if (it.animated) { %><span class="cxp-chip">animated</span><% } %><% if (it.season) { %><span class="cxp-chip cxp-chip-season"><%= it.season.label %></span><% } %></div>
               <div class="cxp-desc"><%= it.desc %></div>
               <div class="cxp-price"><%= fmt(it.price) %> PAT</div>
               <div class="cxp-muted">Buy it for your pad in ⚙ Pad settings, or 🎁 gift it from any pad's page (⋯ menu or About).</div>
@@ -312,18 +353,18 @@
         </div>
       </section>
     <% } %>
-    <p class="cxp-muted cxp-fempty" hidden style="text-align:center">Nothing matches those filters.</p>
+    <div class="ds-empty cxp-fempty" hidden><span class="ds-ic" aria-hidden="true">🔍</span><p>Nothing matches those filters.</p></div>
   <% } %>
 
   <% if (tab === 'market') { %>
     <p class="cxp-muted">Copies other players are selling. Pepe takes the PAT from you, pays the seller (minus a <%= fee %>% market fee), and moves the item to your inventory. Sell your own from <a href="/cosmetics?tab=mine#tabs">My items</a>.</p>
-    <div class="sortbar">Sort:
-      <a href="/cosmetics?tab=market&sort=newest#tabs" class="<%= sort === 'newest' ? 'on' : '' %>">Newest</a>
-      <a href="/cosmetics?tab=market&sort=price#tabs" class="<%= sort === 'price' ? 'on' : '' %>">Price ↑</a>
-      <a href="/cosmetics?tab=market&sort=price_desc#tabs" class="<%= sort === 'price_desc' ? 'on' : '' %>">Price ↓</a>
+    <div class="sortbar"><span class="cxp-flabel">Sort</span>
+      <a href="/cosmetics?tab=market&sort=newest#tabs" class="ds-tab<%= sort === 'newest' ? ' on' : '' %>"<%- sort === 'newest' ? ' aria-current="true"' : '' %>>Newest</a>
+      <a href="/cosmetics?tab=market&sort=price#tabs" class="ds-tab<%= sort === 'price' ? ' on' : '' %>"<%- sort === 'price' ? ' aria-current="true"' : '' %>>Price ↑</a>
+      <a href="/cosmetics?tab=market&sort=price_desc#tabs" class="ds-tab<%= sort === 'price_desc' ? ' on' : '' %>"<%- sort === 'price_desc' ? ' aria-current="true"' : '' %>>Price ↓</a>
     </div>
     <% if (!listings.length) { %>
-      <p class="cxp-muted" style="text-align:center">Nothing for sale yet. Be the first — list something from My items.</p>
+      <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🏪</span><p>Nothing for sale yet. Be the first — list something from <a href="/cosmetics?tab=mine#tabs">My items</a>.</p></div>
     <% } else { %>
       <% filterBar() %>
       <div class="grid cxp-fsec">
@@ -339,53 +380,53 @@
             <% } else if (mine) { %>
               <form method="POST" action="/cosmetics/cancel" class="cxp-row">
                 <input type="hidden" name="listing_id" value="<%= l.id %>"><input type="hidden" name="tab" value="market">
-                <button class="cxp-btn warn" type="submit">Cancel my listing</button>
+                <button class="ds-btn danger sm" type="submit">Cancel my listing</button>
               </form>
             <% } else { %>
               <form method="POST" action="/cosmetics/act" class="cxp-row">
                 <input type="hidden" name="op" value="buylisting"><input type="hidden" name="listing" value="<%= l.id %>"><input type="hidden" name="tab" value="market">
-                <button class="cxp-btn primary" type="submit">Buy for <%= fmt(l.price) %></button>
+                <button class="ds-btn gold sm" type="submit">Buy for <%= fmt(l.price) %></button>
               </form>
             <% } %>
           </div>
         <% }) %>
       </div>
-      <p class="cxp-muted cxp-fempty" hidden style="text-align:center">Nothing matches those filters.</p>
+      <div class="ds-empty cxp-fempty" hidden><span class="ds-ic" aria-hidden="true">🔍</span><p>Nothing matches those filters.</p></div>
     <% } %>
   <% } %>
 
   <% if (tab === 'mine') { %>
     <% if (!me) { %>
-      <p class="cxp-muted" style="text-align:center"><a href="/login">Sign in</a> to see your items.</p>
+      <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🎒</span><p><a href="/login">Sign in</a> to see your items.</p></div>
     <% } else { %>
       <div class="look">
         <div>
-          <div class="cxp-muted" style="margin-bottom:6px">Your look right now · <a href="/u/<%= me.username %>">see your profile</a></div>
+          <div class="cxp-muted">Your look right now · <a href="/u/<%= me.username %>">see your profile</a></div>
           <% mini({ banner: equippedR.profile_banner, border: equippedR.profile_border, effect: equippedR.profile_effect, deco: equippedR.avatar_decoration, name: equippedR.name_color }) %>
         </div>
         <% { const L = {}; GTF_KINDS.forEach((k) => { if (equippedR[k]) L[equippedR[k].opt] = equippedR[k].layer; }); gtfBox(L, 96); } %>
       </div>
       <%# 1.99iw: sticker packs (stickers.js) live in the inventory too %>
       <% if (typeof stickerPacks !== 'undefined' && stickerPacks) { const own_ = stickerPacks.packs.filter((p) => p.owned); const stkL_ = (k, d) => (t.has(k) ? t(k) : t.esc(d)); %>
-        <h2>🧸 Sticker packs</h2>
-        <% if (own_.length) { %><div style="display:flex;flex-wrap:wrap;gap:10px"><% own_.forEach((p) => { %>
-          <div class="cxp-muted" style="border:1px solid #2a2a2a;border-radius:10px;padding:8px;display:grid;gap:6px;max-width:260px"><b style="color:#eee"><%= p.emoji %> <%- stkL_('stk.pack.' + p.id + '.name', p.name) %></b>
-            <span style="display:flex;gap:4px;flex-wrap:wrap"><% p.stickers.forEach((s) => { const sn_ = stkL_('stk.s.' + p.id + '.' + s.id, s.name); %><img src="<%= s.url %>" alt="<%- sn_ %>" title="<%- sn_ %>" width="40" height="40" style="image-rendering:pixelated" loading="lazy"><% }) %></span></div>
-        <% }) %></div><p class="cxp-muted">Use them with the 🧸 button in messages and posts. <a href="/premium#stickers">More packs</a></p>
+        <h2 class="ds-h2"><span class="ds-ic lg" aria-hidden="true">🧸</span>Sticker packs</h2>
+        <% if (own_.length) { %><div class="stk-packs"><% own_.forEach((p) => { %>
+          <div class="cxp-muted stk-pack"><b><%= p.emoji %> <%- stkL_('stk.pack.' + p.id + '.name', p.name) %></b>
+            <span><% p.stickers.forEach((s) => { const sn_ = stkL_('stk.s.' + p.id + '.' + s.id, s.name); %><img src="<%= s.url %>" alt="<%- sn_ %>" title="<%- sn_ %>" width="40" height="40" loading="lazy"><% }) %></span></div>
+        <% }) %></div><p class="cxp-muted stk-foot">Use them with the 🧸 button in messages and posts. <a href="/premium#stickers">More packs</a></p>
         <% } else { %><p class="cxp-muted">None yet - <a href="/premium#stickers">get a sticker pack</a><%= stickerPacks.allowance && stickerPacks.allowance.left ? ' (your 🎟️ Season Pass has a free one)' : '' %>.</p><% } %>
       <% } %>
       <% if (!inv.count) { %>
-        <p class="cxp-muted" style="text-align:center;margin-top:18px">No items yet. Grab something from the <a href="/cosmetics?tab=shop#tabs">shop</a>, run a heist for a drop, or level up.</p>
+        <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🎒</span><p>No items yet. Grab something from the <a href="/cosmetics?tab=shop#tabs">shop</a>, run a heist for a drop, or level up.</p></div>
       <% } %>
       <% Object.keys(kinds).forEach((k) => { const list = inv.groups[k]; if (!list || !list.length) return; %>
-        <h2><%= kindEmoji(k) %> <%= kindLabel(k) %></h2>
+        <h2 class="ds-h2"><span class="ds-ic lg" aria-hidden="true"><%= kindEmoji(k) %></span><%= kindLabel(k) %></h2>
         <div class="inv">
           <% list.forEach((c) => { %>
             <div class="copy" style="--rc: <%= RC(c.rarity) %>">
               <div><% preview(c.r) %></div>
               <div class="copy-meta">
-                <div><b style="color:#fff"><%= c.name %></b>
-                  <span class="tag" style="color:<%= RC(c.rarity) %>;border-color:<%= RC(c.rarity) %>"><%= c.rarity %></span>
+                <div class="copy-name"><b><%= c.name %></b>
+                  <span class="tag rar"><%= c.rarity %></span>
                   <% if (c.equipped) { %><span class="tag eq">equipped</span><% } %>
                   <% if (c.listing_id) { %><span class="tag ls">listed #<%= c.listing_id %> · <%= fmt(c.listing_price) %> PAT</span><% } %>
                 </div>
@@ -394,27 +435,27 @@
                 <% if (c.listing_id) { %>
                   <form method="POST" action="/cosmetics/cancel" class="cxp-row">
                     <input type="hidden" name="listing_id" value="<%= c.listing_id %>"><input type="hidden" name="tab" value="mine">
-                    <button class="cxp-btn warn" type="submit">Cancel listing</button>
+                    <button class="ds-btn danger sm" type="submit">Cancel listing</button>
                   </form>
                 <% } else { %>
                   <form method="POST" action="/cosmetics/equip" class="cxp-row">
                     <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="on" value="<%= c.equipped ? 0 : 1 %>"><input type="hidden" name="tab" value="mine">
-                    <button class="cxp-btn <%= c.equipped ? '' : 'primary' %>" type="submit"><%= c.equipped ? 'Unequip' : 'Equip' %></button>
+                    <button class="ds-btn sm<%= c.equipped ? ' ghost' : '' %>" type="submit"><%= c.equipped ? 'Unequip' : 'Equip' %></button>
                   </form>
-                  <details class="cxp-more"><summary>🏪 List for sale</summary>
+                  <details class="cxp-more"><summary><span class="ds-ic" aria-hidden="true">🏪</span>List for sale</summary>
                     <form method="POST" action="/cosmetics/list" class="cxp-row">
                       <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="tab" value="mine">
-                      <input name="price" inputmode="numeric" placeholder="Price in PAT (min <%= fmt(listMin) %>, e.g. 50k)" required aria-label="Price">
-                      <button class="cxp-btn" type="submit">List</button>
+                      <input class="ds-in" name="price" inputmode="numeric" placeholder="Price in PAT (min <%= fmt(listMin) %>, e.g. 50k)" required aria-label="Price">
+                      <button class="ds-btn ghost sm" type="submit">List</button>
                     </form>
-                    <div class="cxp-muted" style="font-size:12px;margin-top:4px">You get the price minus <%= fee %>% when it sells. Listing unequips it.</div>
+                    <div class="cxp-src" style="margin-top:6px">You get the price minus <%= fee %>% when it sells. Listing unequips it.</div>
                   </details>
-                  <details class="cxp-more"><summary>🎁 Gift this copy</summary>
+                  <details class="cxp-more"><summary><span class="ds-ic" aria-hidden="true">🎁</span>Gift this copy</summary>
                     <form method="POST" action="/cosmetics/gift" class="cxp-row">
                       <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="tab" value="mine">
-                      <input name="to" placeholder="PATV username or Camfrog name" required maxlength="60" aria-label="Gift to">
+                      <input class="ds-in" name="to" placeholder="PATV username or Camfrog name" required maxlength="60" aria-label="Gift to">
                       <label class="cxp-anon"><input type="checkbox" name="anon" value="1"> <%- t('gifts.anon.box_short') %></label>
-                      <button class="cxp-btn" type="submit">Gift</button>
+                      <button class="ds-btn ghost sm" type="submit">Gift</button>
                     </form>
                   </details>
                 <% } %>
@@ -428,9 +469,9 @@
 
   <% if (tab === 'showcase') { %>
     <% if (!me) { %>
-      <p class="cxp-muted" style="text-align:center"><a href="/login">Sign in</a> to pick your showcase.</p>
+      <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🏅</span><p><a href="/login">Sign in</a> to pick your showcase.</p></div>
     <% } else if (!badges.length) { %>
-      <p class="cxp-muted" style="text-align:center">You don't have any badges yet. <a href="/achievements">How to earn them</a></p>
+      <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🏅</span><p>You don't have any badges yet. <a href="/achievements">How to earn them</a></p></div>
     <% } else { %>
       <p class="cxp-muted">Pin up to <%= showcaseMax %> badges to the top of your profile.</p>
       <form method="POST" action="/cosmetics/showcase" id="showcase">
@@ -443,7 +484,7 @@
             </label>
           <% }) %>
         </div>
-        <p><button class="cxp-btn primary" type="submit">Save showcase</button></p>
+        <div class="ds-actions"><button class="ds-btn" type="submit">Save showcase</button></div>
       </form>
       <script>
         (function () {
@@ -459,7 +500,7 @@
 
   <% if (tab === 'how') { %>
     <section class="how">
-      <h2>Getting items</h2>
+      <h2 class="ds-h2">Getting items</h2>
       <ul>
         <li><b>Shop</b> — pick an item and hit Buy. Pepe charges the PAT as you, so you need a linked Camfrog name. Prices by rarity:
           <% Object.keys(rarities).forEach((r, i) => { %><%= i ? ' · ' : '' %><span style="color:<%= RC(r) %>"><%= r %> <%= fmt(rarities[r].price) %></span><% }) %>.</li>
@@ -469,13 +510,13 @@
         <li><b>Gifts</b> — buy a new item for a friend from the shop, or give away a copy you own.</li>
         <li><b>Labels</b> — every card says what it is and where it shows: <b>Profile</b> items (name color, border, banner, effect, avatar decoration) dress up your PATV profile; <b>GTF avatar</b> items (hat, mask, outfit, prop, background, frame) are worn by your Grand Theft Frogger pixel avatar. Seasonal items are labelled with their set and when they leave the shop. Style tags (Pride, Drag &amp; camp, Cute, Kink) let you filter the shop — tick <i>Hide kink items</i> if you'd rather not see those. Pride flags are always in the shop; the Pride set is June only.</li>
       </ul>
-      <h2>Trading</h2>
+      <h2 class="ds-h2">Trading</h2>
       <p>Every item you own is a copy that can change hands. List a copy on the <a href="/cosmetics?tab=market#tabs">market</a> at your price (at least <%= fmt(listMin) %> PAT); it's unequipped and locked while it's listed, and you can cancel any time. When someone buys it Pepe moves the PAT — the seller gets the price minus a <%= fee %>% market fee.</p>
-      <h2>Wearing them</h2>
+      <h2 class="ds-h2">Wearing them</h2>
       <p>One item per slot. Account cosmetics show on your <% if (me) { %><a href="/u/<%= me.username %>">profile</a><% } else { %>profile<% } %> (name colors also show on the rankings); GTF gear shows on your pixel avatar in heists. In a Camfrog room, <code>!equip</code> works too.</p>
     </section>
   <% } %>
-</div>
+</main>
 <script>
   (function () {
     // countdowns

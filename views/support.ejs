@@ -19,200 +19,196 @@
   const cardMax = Number(D.max) || 1000;
 %>
 <style>
-  .sp { --pink: #ff6a9b; --gold: #ffcf40; --ink: #e9e6ee; --mut: #a7a3ad; --card: #121214; --line: #27252b; --ok: #7ee2a0;
-        max-width: 1080px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 16px 16px 64px; font-family: Ubuntu, sans-serif; color: var(--ink); display: grid; gap: 22px; overflow-wrap: anywhere; }
-  .sp *, .sp *::before, .sp *::after { box-sizing: border-box; }
-  .sp a { color: #9be7b0; }
-  .sp h2 { margin: 0 0 12px; font-size: 20px; color: #fff; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .sp h2 .n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--gold)); color: #2a0b16; font-size: 14px; font-weight: 800; flex: none; }
-  .sp .mut { color: var(--mut); font-size: 13.5px; line-height: 1.55; margin: 0; }
-  .sp .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; min-width: 0; }
-  .sp .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; border-radius: 12px; border: 1px solid #333; background: #1c1b20; color: #eee; font: bold 15px Ubuntu, sans-serif; cursor: pointer; text-decoration: none; min-height: 44px; }
-  .sp .btn:hover { border-color: #555; text-decoration: none; }
-  .sp .btn:focus-visible, .sp .tier:focus-within, .sp .tab:focus-visible, .sp .seg label:focus-within, .sp summary:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
-  .sp .btn.big { background: linear-gradient(90deg, var(--pink), #ff8a5c 55%, var(--gold)); color: #2a0b16; border: 0; font-size: 17px; padding: 14px 22px; box-shadow: 0 8px 28px rgba(255, 106, 155, .28); }
-  .sp .btn.ghost { background: transparent; }
-  .sp .btn:disabled { opacity: .55; cursor: default; }
-  .sp .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .sp .tag { font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 999px; background: #2a2412; color: #f1e2a6; border: 1px solid #5a4a20; }
-  .sp .tag.ok { background: #173a25; color: #c9f5d6; border-color: #2f7a4a; }
-  .sp .preview { background: #2a2412; border: 1px solid #8a7420; color: #f1e2a6; border-radius: 12px; padding: 10px 14px; margin: 0; font-size: 14px; }
-  /* hero */
-  .sp .hero { position: relative; overflow: hidden; border-radius: 24px; border: 1px solid #3a2330; padding: clamp(22px, 5vw, 44px);
-              background: radial-gradient(120% 120% at 0% 0%, #3a1426 0%, rgba(18,18,20,0) 55%), radial-gradient(90% 120% at 100% 100%, #2f2508 0%, rgba(18,18,20,0) 60%), #121214; }
-  .sp .hero .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .14em; line-height: 1.6; color: var(--gold); margin: 0; }
-  .sp .hero h1 { font-size: clamp(30px, 6vw, 52px); line-height: 1.05; margin: 12px 0 12px; color: #fff; max-width: 16ch; }
+  /* 1.99pu polish: ds-page + ds tokens. Area accent = support pink (#ff6a9b, ink #2a0010); the hero keeps its pink/gold area recipe. */
+  .sp { --ds-ac: var(--ds-acc-support); --ds-ac-2: #ff9fbf; --ds-ac-bg: rgba(255, 106, 155, .12); --ds-ac-line: #6b2a42; --ds-on-ac: #2a0010;
+        --pink: var(--ds-acc-support); --gold: var(--ds-gold); --ink: var(--ds-text); --mut: var(--ds-text-muted); --card: var(--ds-surface); --line: var(--ds-line); --ok: var(--ds-ok); --well: var(--ds-sunken); }
+  .sp a:not([class]) { color: var(--ds-ac-2); }
+  .sp h2.ds-h2 { margin-block-end: var(--ds-sp-3); }
+  .sp h2 .n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--gold)); color: var(--ds-on-ac); font-size: 14px; font-weight: 700; flex: none; }
+  .sp .mut { color: var(--mut); font-size: var(--ds-fs-meta); line-height: 1.55; margin: 0; }
+  .sp .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); min-width: 0; }
+  .sp .ds-btn.big { background: linear-gradient(90deg, var(--pink), #ff8a5c 55%, var(--gold)); --b-fg: var(--ds-on-ac); box-shadow: 0 8px 28px rgba(255, 106, 155, .22); }
+  .sp .tier:focus-within, .sp .tab:focus-visible, .sp .seg label:focus-within, .sp summary:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+  .sp .row { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2h); align-items: center; }
+  .sp .tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--ds-r-pill); background: var(--ds-gold-bg); color: var(--ds-warn-ink); border: 1px solid var(--ds-warn-line); }
+  .sp .tag.ok { background: var(--ds-ok-bg); color: var(--ds-ok-ink); border-color: var(--ds-ok-line); }
+  /* hero (area recipe: pink top-start, gold bottom-end) */
+  .sp .hero.ds-hero { border-color: #3a2330; background: radial-gradient(120% 120% at 0% 0%, #3a1426 0%, rgba(18,18,20,0) 55%), radial-gradient(90% 120% at 100% 100%, #2f2508 0%, rgba(18,18,20,0) 60%), #111; }
+  .sp .hero h1 { max-width: 16ch; }
   .sp .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--pink), #ff8a5c 50%, var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .sp .hero .lead { font-size: 17px; line-height: 1.6; color: #ddd6e2; margin: 0; max-width: 60ch; }
-  .sp .deal { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 18px 0 20px; padding: 12px 16px; border-radius: 16px; background: rgba(0,0,0,.35); border: 1px solid #3d3340; font-size: 16px; }
+  .sp .hero .ds-ctas { margin-block-start: 0; }
+  .sp .deal { display: inline-flex; flex-wrap: wrap; align-items: center; justify-self: start; gap: 6px 14px; margin: var(--ds-sp-3) 0; padding: var(--ds-sp-3) var(--ds-sp-4); border-radius: var(--ds-r-xl); background: var(--ds-glass); border: 1px solid #3d3340; font-size: var(--ds-fs-lead); }
   .sp .deal b { color: var(--gold); font-size: 20px; }
-  .sp .deal .plus { color: var(--ok); font-weight: bold; }
-  .sp .hero .mini { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 16px 0 0; padding: 0; list-style: none; color: #cfc8d4; font-size: 13.5px; }
-  .sp .frog { position: absolute; right: clamp(10px, 4vw, 40px); top: clamp(14px, 4vw, 34px); font-size: clamp(54px, 11vw, 120px); line-height: 1; filter: drop-shadow(0 8px 20px rgba(255,106,155,.35)); animation: sp-bob 4s ease-in-out infinite; pointer-events: none; }
+  .sp .deal .plus { color: var(--ok); font-weight: 700; }
+  .sp .hero .mini { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: var(--ds-sp-2) 0 0; padding: 0; list-style: none; color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
+  .sp .frog { position: absolute; inset-inline-end: clamp(10px, 4vw, 40px); top: clamp(14px, 4vw, 34px); font-size: clamp(54px, 11vw, 120px); line-height: 1; filter: drop-shadow(0 8px 20px rgba(255,106,155,.35)); pointer-events: none; font-family: var(--ds-font-emoji); }
+  @media (prefers-reduced-motion: no-preference) { .sp .frog { animation: sp-bob 4s ease-in-out infinite; } }
   @keyframes sp-bob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-8px) rotate(4deg); } }
   @media (max-width: 600px) { .sp .frog { opacity: .3; } }
-  .sp .meter { margin-top: 18px; max-width: 520px; }
-  .sp .meter .bar { height: 12px; border-radius: 999px; background: #2a2730; overflow: hidden; }
-  .sp .meter .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--pink), var(--gold)); border-radius: 999px; }
-  .sp .meter p { margin: 6px 0 0; font-size: 13.5px; color: #cfc8d4; }
-  .sp .raised { margin: 10px 0 0; font-size: 14px; color: #cfc8d4; }
+  .sp .meter { margin-block-start: var(--ds-sp-3); max-width: 520px; }
+  .sp .meter .bar { height: 12px; border-radius: var(--ds-r-pill); background: #2a2730; overflow: hidden; }
+  .sp .meter .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--pink), var(--gold)); border-radius: var(--ds-r-pill); }
+  .sp .meter p { margin: 6px 0 0; font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
+  .sp .raised { margin: 0; font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
   /* amount */
-  .sp .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 12px; }
-  .sp .tier { position: relative; display: grid; gap: 4px; align-content: start; padding: 16px; border-radius: 16px; border: 2px solid var(--line); background: #17161a; cursor: pointer; transition: border-color .15s, transform .15s, background .15s; min-width: 0; }
-  .sp .tier:hover { border-color: #4a3a46; transform: translateY(-2px); }
+  .sp .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr)); gap: var(--ds-sp-3); }
+  .sp .tier { position: relative; display: grid; gap: 4px; align-content: start; padding: var(--ds-sp-4); border-radius: var(--ds-r-xl); border: 1px solid var(--ds-line-strong); background: var(--well); cursor: pointer; transition: border-color .15s, transform .15s, background .15s; min-width: 0; }
+  .sp .tier:hover { border-color: #4a3a46; transform: translateY(-1px); }
   .sp .tier > input { position: absolute; opacity: 0; pointer-events: none; }
-  .sp .tier.on { border-color: var(--pink); background: linear-gradient(180deg, #2a1420 0%, #17161a 70%); }
-  .sp .tier .em { font-size: 26px; line-height: 1; }
-  .sp .tier .nm { font-size: 13px; color: var(--mut); font-weight: bold; letter-spacing: .03em; }
-  .sp .tier .usd { font-size: 28px; font-weight: 800; color: #fff; }
-  .sp .tier .pat { font-size: 14px; color: var(--gold); font-weight: bold; }
-  .sp .tier .bon { font-size: 12.5px; color: var(--ok); }
-  .sp .tier .pop { position: absolute; top: -10px; right: 12px; font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 999px; background: var(--pink); color: #2a0b16; }
-  .sp .tier .cust { display: flex; align-items: center; gap: 4px; font-size: 24px; font-weight: 800; color: #fff; min-width: 0; }
-  .sp .tier .cust input { width: 100%; min-width: 0; font: 800 22px Ubuntu, sans-serif; color: #fff; background: #0d0d10; border: 1px solid #3a3640; border-radius: 10px; padding: 4px 8px; }
-  .sp .sum { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: #0f0e12; border: 1px dashed #3a3640; font-size: 15px; line-height: 1.6; }
-  .sp .sum b { color: var(--gold); } .sp .sum .plus { color: var(--ok); font-weight: bold; }
+  .sp .tier.on { border-color: var(--pink); box-shadow: inset 0 0 0 1px var(--pink); background: linear-gradient(180deg, #2a1420 0%, var(--well) 70%); }
+  .sp .tier .em { font-size: 26px; line-height: 1; font-family: var(--ds-font-emoji); }
+  .sp .tier .nm { font-size: var(--ds-fs-meta); color: var(--mut); font-weight: 700; letter-spacing: .03em; }
+  .sp .tier .usd { font-size: 28px; font-weight: 700; line-height: 1.15; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
+  .sp .tier .pat { font-size: var(--ds-fs-sm); color: var(--ds-gold-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sp .tier .bon { font-size: var(--ds-fs-xs); color: var(--ok); }
+  .sp .tier .pop { position: absolute; top: -10px; inset-inline-end: 12px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--ds-r-pill); background: var(--pink); color: var(--ds-on-ac); }
+  .sp .tier .cust { display: flex; align-items: center; gap: 4px; font-size: 24px; font-weight: 700; color: var(--ds-text-strong); min-width: 0; }
+  .sp .tier .cust input { width: 100%; min-width: 0; margin: 0; font: 700 22px var(--ds-font); color: var(--ds-text-strong); background: var(--ds-bg); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-md); padding: 4px 8px; min-height: 40px; }
+  .sp .tier .cust input:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px var(--ds-ac-bg); }
+  .sp .sum { margin: var(--ds-sp-3h) 0 0; padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); background: var(--well); border: 1px dashed var(--ds-line-strong); font-size: var(--ds-fs-body); line-height: 1.6; }
+  .sp .sum b { color: var(--ds-gold-text); } .sp .sum .plus { color: var(--ok); font-weight: 700; }
   /* tabs */
-  .sp .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
-  .sp .tab { flex: 1 1 200px; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: #17161a; color: #ddd; font: bold 15px Ubuntu, sans-serif; cursor: pointer; text-align: left; min-height: 56px; }
-  .sp .tab small { display: block; font-weight: normal; color: var(--mut); font-size: 12.5px; }
-  .sp .tab[aria-selected="true"] { border-color: var(--gold); background: linear-gradient(180deg, #2a2412 0%, #17161a 80%); color: #fff; }
-  .sp .tab .ic { font-size: 22px; }
+  .sp .tabs { display: flex; gap: var(--ds-sp-2); flex-wrap: wrap; margin: 0 0 var(--ds-sp-4); }
+  .sp .tab { flex: 1 1 200px; display: flex; align-items: center; gap: var(--ds-sp-2h); padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); border: 1px solid var(--ds-line-strong); background: var(--well); color: var(--ds-text); font: 700 15px var(--ds-font); cursor: pointer; text-align: start; min-height: 56px; margin: 0; }
+  .sp .tab small { display: block; font-weight: 400; color: var(--mut); font-size: var(--ds-fs-xs); }
+  .sp .tab[aria-selected="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); background: linear-gradient(180deg, #2a2412 0%, var(--well) 80%); color: var(--ds-text-strong); }
   .sp [role="tabpanel"][hidden], .sp .dest[hidden], .sp .contract[hidden] { display: none; }
-  .sp .sp-pane { display: grid; gap: 14px; min-width: 0; }
-  .sp .secure { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; color: #cfc8d4; line-height: 1.5; margin: 0; }
-  .sp .msg { font-size: 14px; min-height: 1.2em; margin: 0; }
-  .sp .msg.ok { color: var(--ok); } .sp .msg.err { color: #ff9a9a; }
+  .sp .sp-pane { display: grid; gap: var(--ds-sp-3h); min-width: 0; }
+  .sp .secure { display: flex; gap: var(--ds-sp-2); align-items: flex-start; font-size: var(--ds-fs-meta); color: var(--ds-text-2); line-height: 1.5; margin: 0; }
+  .sp .msg, .sp .status { font-size: var(--ds-fs-sm); min-height: 1.2em; margin: 0; }
+  .sp .msg.ok, .sp .status.ok { color: var(--ok); } .sp .msg.err, .sp .status.err { color: var(--ds-danger); }
   /* crypto steps */
-  .sp ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: st; }
-  .sp ol.steps > li { position: relative; padding: 16px 16px 16px 58px; border-radius: 16px; background: #17161a; border: 1px solid var(--line); min-width: 0; }
-  .sp ol.steps > li::before { counter-increment: st; content: counter(st); position: absolute; left: 16px; top: 15px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #2a2730; color: #fff; font-weight: 800; }
-  .sp ol.steps > li.done::before { content: "✓"; background: #1d5a33; color: #c9f5d6; }
-  @media (max-width: 480px) { .sp ol.steps > li { padding: 56px 14px 14px; } .sp ol.steps > li::before { left: 14px; top: 14px; } .sp .card { padding: 16px; } }
-  .sp ol.steps h3 { margin: 2px 0 6px; font-size: 17px; color: #fff; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .sp ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-3h); counter-reset: st; }
+  .sp ol.steps > li { position: relative; padding: var(--ds-sp-4); padding-inline-start: 58px; border-radius: var(--ds-r-xl); background: var(--well); border: 1px solid var(--ds-line-soft); min-width: 0; }
+  .sp ol.steps > li::before { counter-increment: st; content: counter(st); position: absolute; inset-inline-start: 16px; top: 15px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #2a2730; color: var(--ds-text-strong); font-weight: 700; }
+  .sp ol.steps > li.done::before { content: "\2713"; background: #1d5a33; color: var(--ds-ok-ink); }
+  @media (max-width: 480px) { .sp ol.steps > li { padding: 56px 14px 14px; } .sp ol.steps > li::before { inset-inline-start: 14px; top: 14px; } .sp .card { padding: var(--ds-sp-4); } }
+  .sp ol.steps h3 { margin: 2px 0 6px; font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); display: flex; gap: var(--ds-sp-2); align-items: center; flex-wrap: wrap; }
   .sp .seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
-  .sp .seg label { position: relative; padding: 8px 14px; border-radius: 999px; border: 1px solid #3a3640; background: #0f0e12; cursor: pointer; font-size: 14px; font-weight: bold; min-height: 40px; display: inline-flex; align-items: center; }
+  .sp .seg label { position: relative; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); background: var(--ds-bg); cursor: pointer; font-size: var(--ds-fs-sm); font-weight: 700; min-height: 40px; display: inline-flex; align-items: center; }
   .sp .seg input { position: absolute; opacity: 0; pointer-events: none; }
-  .sp .seg label.on { border-color: var(--gold); background: #2a2412; color: #fff; }
-  .sp .seg label.na { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
-  .sp .pick { display: grid; gap: 10px; }
+  .sp .seg label.on { border-color: var(--gold); background: #2a2412; color: var(--ds-text-strong); }
+  .sp .seg label.na { opacity: .45; cursor: not-allowed; text-decoration: line-through; }
+  .sp .pick { display: grid; gap: var(--ds-sp-2h); }
   .sp .pick > div { display: grid; gap: 4px; }
-  .sp .pick .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--mut); }
-  .sp .dest { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; align-items: center; margin-top: 14px; }
-  @media (max-width: 560px) { .sp .dest { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; } }
-  .sp .qr { width: 180px; max-width: 100%; background: #fff; border-radius: 12px; padding: 8px; line-height: 0; }
+  .sp .pick .lbl { font: 700 var(--ds-fs-label)/1.3 var(--ds-font); text-transform: uppercase; letter-spacing: var(--ds-ls-label); color: var(--mut); }
+  .sp .dest { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--ds-sp-4); align-items: center; margin-block-start: var(--ds-sp-3h); }
+  .sp .dest > .addrbox { min-width: 0; width: 100%; }
+  @media (max-width: 560px) { .sp .dest { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; } .sp .dest .row { justify-content: center; } }
+  .sp .qr { width: 180px; max-width: 100%; background: #fff; border-radius: var(--ds-r-lg); padding: 8px; line-height: 0; }
   .sp .qr svg { width: 100%; height: auto; display: block; }
-  .sp .dest .send { font-size: 18px; color: #fff; margin: 0 0 8px; }
-  .sp .dest .send b { color: var(--gold); }
-  .sp code.addr { display: block; width: 100%; font-size: 13px; background: #000; border: 1px solid #333; border-radius: 10px; padding: 10px 12px; color: #f0f0f0; word-break: break-all; user-select: all; text-align: left; }
-  .sp .contract { font-size: 12.5px; color: var(--mut); margin: 8px 0 0; text-align: left; }
-  .sp .contract code { color: #cfc8d4; word-break: break-all; }
-  .sp .warn { background: #1c1a12; border: 1px solid #4a4220; color: #ecdfae; border-radius: 12px; padding: 12px 14px; font-size: 13.5px; line-height: 1.55; margin: 14px 0 0; }
-  .sp .warn ul { margin: 6px 0 0; padding-left: 18px; }
-  .sp .famhint { margin: 12px 0 0; font-size: 13.5px; color: #ffcf80; }
+  .sp .dest .send { font-size: 18px; color: var(--ds-text-strong); margin: 0 0 var(--ds-sp-2); }
+  .sp .dest .send b { color: var(--ds-gold-text); }
+  .sp code.addr { display: block; width: 100%; font: 13px/1.5 var(--ds-font-mono); background: #000; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-3); color: #f0f0f0; word-break: break-all; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; text-align: start; }
+  .sp .contract { font-size: var(--ds-fs-xs); color: var(--mut); margin: var(--ds-sp-2) 0 0; text-align: start; }
+  .sp .contract code { color: var(--ds-text-2); word-break: break-all; }
+  .sp .warn:not(.ds-note) { display: block; background: var(--ds-gold-bg); border: 1px solid var(--ds-warn-line); color: var(--ds-warn-ink); border-radius: var(--ds-r-lg); padding: var(--ds-sp-3) var(--ds-sp-3h); font-size: var(--ds-fs-meta); line-height: 1.55; margin: var(--ds-sp-3h) 0 0; }
+  .sp .warn:not(.ds-note) > b { color: var(--ds-text-strong); }
+  .sp .warn:not(.ds-note) ul { margin: 6px 0 0; padding-inline-start: 18px; }
+  .sp .famhint { margin: var(--ds-sp-3) 0 0; font-size: var(--ds-fs-meta); color: var(--ds-warn); }
   .sp .famhint:empty { display: none; }
-  .sp ul.wallets { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
-  .sp ul.wallets li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; background: #0f0e12; border: 1px solid #2a2730; border-radius: 10px; padding: 8px 10px; font-size: 14px; min-width: 0; }
+  .sp ul.wallets { list-style: none; padding: 0; margin: var(--ds-sp-2) 0; display: grid; gap: 6px; }
+  .sp ul.wallets li { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; justify-content: space-between; background: var(--ds-bg); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); padding: var(--ds-sp-2) var(--ds-sp-2h); font-size: var(--ds-fs-sm); min-width: 0; }
   .sp ul.wallets li > span { min-width: 0; }
-  .sp ul.wallets code { font-size: 12.5px; word-break: break-all; }
-  .sp .btn.sm { min-height: 38px; padding: 6px 12px; font-size: 13.5px; }
+  .sp ul.wallets code { font-size: var(--ds-fs-xs); word-break: break-all; }
   /* payments */
-  .sp ol.pays { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
-  .sp ol.pays li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: #0f0e12; border: 1px solid #2a2730; }
-  .sp ol.pays .amt { font-weight: bold; color: #fff; }
-  .sp ol.pays .meta { font-size: 12.5px; color: var(--mut); }
-  .sp ol.pays .pp { text-align: right; font-weight: bold; color: var(--gold); white-space: nowrap; }
-  .sp ol.pays .st { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13.5px; }
+  .sp ol.pays { list-style: none; margin: var(--ds-sp-2h) 0 0; padding: 0; display: grid; gap: var(--ds-sp-2); }
+  .sp ol.pays li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); background: var(--ds-bg); border: 1px solid var(--ds-line); }
+  .sp ol.pays .amt { font-weight: 700; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
+  .sp ol.pays .meta { font-size: var(--ds-fs-xs); color: var(--mut); }
+  .sp ol.pays .pp { text-align: end; font-weight: 700; color: var(--ds-gold-text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sp ol.pays .st { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2); font-size: var(--ds-fs-meta); }
   .sp .dots { display: inline-flex; gap: 4px; }
   .sp .dots i { width: 22px; height: 6px; border-radius: 3px; background: #2f2c35; }
   .sp .dots i.on { background: var(--gold); }
   .sp .st.ok .dots i.on { background: var(--ok); }
-  .sp .st.ok .lab { color: var(--ok); } .sp .st.live .lab { color: #ffd479; } .sp .st.wait .lab { color: #ffb74d; } .sp .st.off .lab { color: #9a9a9a; }
-  .sp .st.live .dots i.on.last { animation: sp-pulse 1.4s ease-in-out infinite; }
+  .sp .st.ok .lab { color: var(--ok); } .sp .st.live .lab { color: var(--ds-warn); } .sp .st.wait .lab { color: #ffb74d; } .sp .st.off .lab { color: var(--ds-text-muted); }
+  @media (prefers-reduced-motion: no-preference) { .sp .st.live .dots i.on.last { animation: sp-pulse 1.4s ease-in-out infinite; } }
   @keyframes sp-pulse { 50% { opacity: .35; } }
   /* trust */
-  .sp .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-  .sp .tile { background: #17161a; border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 6px; align-content: start; }
-  .sp .tile .ic { font-size: 26px; line-height: 1; }
+  .sp .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--ds-sp-3); }
+  .sp .tile { background: var(--card); border: 1px solid var(--line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .sp .tile > .ic { font-size: 26px; line-height: 1; font-family: var(--ds-font-emoji); }
   /* 1.99mv: 💚 Supporter perks */
-  .sp .perk-mine { background: #13210f; border: 1px solid #2e5a25; border-radius: 12px; padding: 10px 14px; color: #cfe8c6; margin: 0 0 12px; }
-  .sp .perk-fl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; margin-top: 4px; }
-  .sp .perk-fl .ufl { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--fl); color: var(--fli); font-size: 12.5px; font-weight: bold; white-space: nowrap; }
-  .sp .perk-fl small { color: #aaa; }
-  .sp .perk-cx { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+  #perks > .mut { margin-block-end: var(--ds-sp-3); }
+  .sp .perk-mine { background: var(--ds-ok-bg); border: 1px solid var(--ds-ok-line); border-radius: var(--ds-r-lg); padding: var(--ds-sp-2h) var(--ds-sp-3h); color: var(--ds-ok-ink); margin: 0 0 var(--ds-sp-3); }
+  .sp .perk-fl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; margin-block-start: 4px; }
+  .sp .perk-fl .ufl { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--ds-r-pill); background: var(--fl); color: var(--fli); font-size: var(--ds-fs-xs); font-weight: 700; white-space: nowrap; }
+  .sp .perk-fl small { color: var(--ds-text-muted); }
+  .sp .perk-cx { display: flex; align-items: center; gap: var(--ds-sp-3h); flex-wrap: wrap; margin-block-start: 4px; }
   .sp .perk-halo { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-  .sp .perk-halo > span { width: 46px; height: 46px; border-radius: 50%; background: #17161a; display: grid; place-items: center; font-size: 22px; }
+  .sp .perk-halo > span { width: 46px; height: 46px; border-radius: 50%; background: var(--well); display: grid; place-items: center; font-size: 22px; }
   .sp .perk-halo.spin { animation: perkspin 8s linear infinite; }
   .sp .perk-halo.spin > span { animation: perkspin 8s linear infinite reverse; }
   @keyframes perkspin { to { transform: rotate(360deg); } }
   @keyframes cx-shift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
-  @media (prefers-reduced-motion: reduce) { .sp .perk-halo.spin, .sp .perk-halo.spin > span, .sp .perk-name { animation: none !important; } }
   .sp .perk-name { font-size: 20px; overflow-wrap: anywhere; }
-  .sp .perk-bd { display: flex; gap: 10px; margin-top: 4px; }
+  .sp .perk-bd { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2h); margin-block-start: 4px; }
   .sp .perk-bd img { image-rendering: pixelated; }
-  .sp .tile b { color: #fff; font-size: 15.5px; }
-  .sp .tile p { margin: 0; font-size: 13.5px; color: #cfc8d4; line-height: 1.55; }
+  .sp .tile b { color: var(--ds-text-strong); font-size: 15.5px; }
+  .sp .tile p { margin: 0; font-size: var(--ds-fs-meta); color: var(--ds-text-2); line-height: 1.55; }
   /* supporters */
-  .sp ul.sups { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-  .sp ul.sups li { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 12px; border-radius: 999px; background: #1d1a20; border: 1px solid #332c36; font-size: 13.5px; }
-  .sp ul.sups li b { color: #fff; }
-  .sp ul.sups li .ago { color: var(--mut); font-size: 12px; }
-  .sp .chk { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-top: 14px; cursor: pointer; }
-  .sp .chk input { width: 18px; height: 18px; accent-color: var(--pink); flex: none; }
+  .sp ul.sups { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+  .sp ul.sups li { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 12px; border-radius: var(--ds-r-pill); background: var(--well); border: 1px solid var(--ds-line-strong); font-size: var(--ds-fs-meta); }
+  .sp ul.sups li b { color: var(--ds-text-strong); }
+  .sp ul.sups li .ago { color: var(--mut); font-size: var(--ds-fs-xs); }
+  .sp .chk { margin-block-start: var(--ds-sp-3h); }
+  .sp .chk input { accent-color: var(--pink); }
   /* faq */
-  .sp details { border-bottom: 1px solid var(--line); }
-  .sp details:last-of-type { border-bottom: 0; }
-  .sp summary { cursor: pointer; padding: 14px 4px; font-weight: bold; font-size: 15.5px; color: #fff; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+  .sp details { border-block-end: 1px solid var(--line); }
+  .sp details:last-of-type { border-block-end: 0; }
+  .sp summary { cursor: pointer; min-height: var(--ds-tap); padding: var(--ds-sp-3) 4px; font-weight: 700; font-size: 15.5px; color: var(--ds-text-strong); list-style: none; display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); }
   .sp summary::-webkit-details-marker { display: none; }
   .sp summary::after { content: "+"; color: var(--gold); font-size: 20px; line-height: 1; transition: transform .2s; flex: none; }
   .sp details[open] summary::after { transform: rotate(45deg); }
-  .sp details p { margin: 0 4px 14px; color: #cfc8d4; line-height: 1.6; font-size: 14.5px; }
-  .sp .endcta { text-align: center; }
-  .sp .endcta .lead { margin: 0 auto 16px; }
+  .sp details p { margin: 0 4px var(--ds-sp-3h); color: var(--ds-text-2); line-height: 1.6; font-size: var(--ds-fs-sm); }
+  .sp .endcta { justify-items: center; text-align: center; }
+  .sp .endcta .ds-lead { margin: 0 auto; }
   /* thank-you */
-  .sp .thanks { text-align: center; border-radius: 24px; padding: 28px 20px; border: 1px solid #2f5a3e; background: radial-gradient(100% 140% at 50% 0%, #163322 0%, #121214 70%); }
-  .sp .thanks .big { font-size: 56px; line-height: 1; }
-  .sp .thanks h2 { justify-content: center; font-size: 26px; margin: 10px 0 6px; }
-  .sp .thanks p { margin: 0 auto 8px; max-width: 52ch; color: #d6efe0; font-size: 16px; line-height: 1.55; }
-  .sp .thanks p b { color: var(--gold); }
-  .sp .cancel { text-align: center; color: #cfc8d4; margin: 0; padding: 12px; border-radius: 12px; background: #17161a; border: 1px solid var(--line); }
-  .sp-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50; width: max-content; max-width: calc(100% - 32px); background: #163322; color: #e7fbe9; border: 1px solid #2f7a4a; border-radius: 14px; padding: 12px 16px; font: bold 15px Ubuntu, sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  .sp .thanks { display: grid; gap: var(--ds-sp-2); justify-items: center; text-align: center; border-radius: var(--ds-r-2xl); padding: var(--ds-sp-7) var(--ds-sp-5); border: 1px solid var(--ds-ok-line); background: radial-gradient(100% 140% at 50% 0%, #163322 0%, var(--card) 70%); }
+  .sp .thanks .big { font-size: 56px; line-height: 1; font-family: var(--ds-font-emoji); }
+  .sp .thanks h2 { justify-content: center; font-size: 26px; margin: 0; }
+  .sp .thanks p { margin: 0 auto; max-width: 52ch; color: var(--ds-ok-ink); font-size: var(--ds-fs-lead); line-height: 1.55; }
+  .sp .thanks p b { color: var(--ds-gold-text); }
+  .sp .cancel { text-align: center; color: var(--ds-text-2); margin: 0; padding: var(--ds-sp-3); border-radius: var(--ds-r-lg); background: var(--card); border: 1px solid var(--line); }
+  .sp-toast { position: fixed; inset-inline-start: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: var(--ds-z-toast); width: max-content; max-width: calc(100% - 32px); background: #163322; color: #e7fbe9; border: 1px solid var(--ds-ok-line); border-radius: var(--ds-r-lg); padding: var(--ds-sp-3) var(--ds-sp-4); font: 700 15px var(--ds-font); box-shadow: var(--ds-e-3); }
+  [dir="rtl"] .sp-toast { transform: translateX(50%); }
   .sp-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
-  @media (prefers-reduced-motion: reduce) { .sp .frog, .sp .st.live .dots i.on.last { animation: none; } .sp .tier, .sp summary::after { transition: none; } .sp .tier:hover { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .sp *, .sp *::before, .sp *::after { animation: none !important; transition: none !important; } .sp .tier:hover { transform: none; } }
 </style>
-<main class="sp" id="support" data-rate="<%= R %>" data-bonus="<%= BP %>" data-min="<%= min %>" data-max="<%= max %>" data-cardmax="<%= cardMax %>">
-  <% if (preview) { %><p class="preview"><%- t('support.preview') %></p><% } %>
+<main class="ds-page sp" id="support" data-rate="<%= R %>" data-bonus="<%= BP %>" data-min="<%= min %>" data-max="<%= max %>" data-cardmax="<%= cardMax %>">
+  <% if (preview) { %><div class="ds-note warn preview"><span class="ds-ic" aria-hidden="true">👁️</span><div><%- t('support.preview') %></div></div><% } %>
 
   <% if (D.result === 'success') { %>
   <section class="thanks" id="thanks" role="status" data-celebrate>
     <div class="big" aria-hidden="true">🎉</div>
-    <h2><%- t('support.thanks_title') %></h2>
+    <h2 class="ds-h2"><%- t('support.thanks_title') %></h2>
     <% if (locals.thanks && thanks.pat) { %>
       <p><%- t('support.thanks_credited', { pat: '<b>' + num(thanks.pat) + '</b>' }) %></p>
     <% } else { %>
       <p><%- t('donate.thanks') %></p>
     <% } %>
     <p><%- t('support.thanks_pot', { bonus: BP }) %></p>
-    <div class="row" style="justify-content:center;margin-top:12px"><a class="btn" href="/wallet">👛 <%- t('support.thanks_wallet') %></a></div>
+    <div class="row" style="justify-content:center;margin-block-start:var(--ds-sp-2)"><a class="ds-btn quiet" href="/wallet"><span class="ds-ic" aria-hidden="true">👛</span> <%- t('support.thanks_wallet') %></a></div>
   </section>
   <% } else if (D.result === 'cancel') { %>
   <p class="cancel" role="status"><%- t('donate.cancelled') %></p>
   <% } %>
 
-  <section class="hero" aria-labelledby="spT">
+  <section class="ds-hero hero" aria-labelledby="spT">
     <div class="frog" aria-hidden="true">🐸</div>
-    <p class="eyebrow"><%- t('support.hero_eyebrow') %></p>
+    <p class="ds-eyebrow" style="margin:0"><%- t('support.hero_eyebrow') %></p>
     <h1 id="spT"><%- t('support.hero_title') %></h1>
-    <p class="lead"><%- t('support.hero_lead') %></p>
+    <p class="ds-lead"><%- t('support.hero_lead') %></p>
     <p class="deal"><span><%- t('support.hero_deal', { rate: '<b>' + num(R) + '</b>' }) %></span><span class="plus"><%- t('support.hero_deal_pot', { bonus: BP }) %></span></p>
-    <div class="row">
-      <a class="btn big" href="#give">💖 <%- t('support.hero_cta') %></a>
-      <a class="btn ghost" href="#where"><%- t('support.hero_cta2') %></a>
+    <div class="ds-ctas">
+      <a class="ds-btn lg big" href="#give"><span class="ds-ic" aria-hidden="true">💖</span> <%- t('support.hero_cta') %></a>
+      <a class="ds-btn lg ghost" href="#where"><%- t('support.hero_cta2') %></a>
     </div>
     <ul class="mini">
-      <li>🔒 <%- t('support.mini_keys') %></li>
-      <li>📬 <%- t('support.mini_receipt') %></li>
-      <li>🪙 <%- t('support.mini_pot') %></li>
+      <li><span class="ds-ic" aria-hidden="true">🔒</span> <%- t('support.mini_keys') %></li>
+      <li><span class="ds-ic" aria-hidden="true">📬</span> <%- t('support.mini_receipt') %></li>
+      <li><span class="ds-ic" aria-hidden="true">🪙</span> <%- t('support.mini_pot') %></li>
     </ul>
     <% if (SP.goal) { %>
     <div class="meter" id="spGoal">
@@ -220,11 +216,11 @@
       <p><b><%- t('support.goal_label') %>:</b> <%- t('support.goal_text', { usd: num(SP.goal.usd), goal: num(SP.goal.goal), pct: SP.goal.pct }) %></p>
     </div>
     <% } %>
-    <% if (SP.total) { %><p class="raised" id="spTotal">💖 <%- t('support.total_text', { usd: num(SP.total.usd), count: SP.total.supporters }) %></p><% } %>
+    <% if (SP.total) { %><p class="raised" id="spTotal"><span class="ds-ic" aria-hidden="true">💖</span> <%- t('support.total_text', { usd: num(SP.total.usd), count: SP.total.supporters }) %></p><% } %>
   </section>
 
   <section class="card" id="give" aria-labelledby="amtT">
-    <h2 id="amtT"><span class="n" aria-hidden="true">1</span><%- t('support.amt_title') %></h2>
+    <h2 class="ds-h2" id="amtT"><span class="n" aria-hidden="true">1</span><%- t('support.amt_title') %></h2>
     <div class="tiers" role="radiogroup" aria-labelledby="amtT">
       <% TIERS.forEach(([usd, em, k, pop]) => { %>
       <label class="tier<%= pop ? ' on' : '' %>">
@@ -250,11 +246,11 @@
   </section>
 
   <section class="card" id="pay" aria-labelledby="payT">
-    <h2 id="payT"><span class="n" aria-hidden="true">2</span><%- t('support.pay_title') %></h2>
+    <h2 class="ds-h2" id="payT"><span class="n" aria-hidden="true">2</span><%- t('support.pay_title') %></h2>
     <% if (cardOn && cryptoShown) { %>
     <div class="tabs" role="tablist" aria-labelledby="payT">
-      <button type="button" class="tab" role="tab" id="tab-card" aria-controls="pane-card" aria-selected="<%= tab0 === 'card' %>" tabindex="<%= tab0 === 'card' ? 0 : -1 %>" data-tab="card"><span class="ic" aria-hidden="true">💳</span><span><%- t('support.tab_card') %><small><%- t('support.tab_card_d') %></small></span></button>
-      <button type="button" class="tab" role="tab" id="tab-crypto" aria-controls="pane-crypto" aria-selected="<%= tab0 === 'crypto' %>" tabindex="<%= tab0 === 'crypto' ? 0 : -1 %>" data-tab="crypto"><span class="ic" aria-hidden="true">🪙</span><span><%- t('support.tab_crypto') %><small><%- t('support.tab_crypto_d') %></small></span></button>
+      <button type="button" class="tab" role="tab" id="tab-card" aria-controls="pane-card" aria-selected="<%= tab0 === 'card' %>" tabindex="<%= tab0 === 'card' ? 0 : -1 %>" data-tab="card"><span class="ds-ic lg" aria-hidden="true">💳</span><span><%- t('support.tab_card') %><small><%- t('support.tab_card_d') %></small></span></button>
+      <button type="button" class="tab" role="tab" id="tab-crypto" aria-controls="pane-crypto" aria-selected="<%= tab0 === 'crypto' %>" tabindex="<%= tab0 === 'crypto' ? 0 : -1 %>" data-tab="crypto"><span class="ds-ic lg" aria-hidden="true">🪙</span><span><%- t('support.tab_crypto') %><small><%- t('support.tab_crypto_d') %></small></span></button>
     </div>
     <% } %>
 
@@ -263,15 +259,15 @@
       <p class="mut"><%- t('support.card_lede') %></p>
       <% if (me) { %>
       <div class="row">
-        <button type="button" class="btn big" id="donateGo" data-back="/support">💳 <span id="donateGoTxt"><%- t('support.card_button', { usd: 10 }) %></span></button>
+        <button type="button" class="ds-btn lg big" id="donateGo" data-back="/support"><span class="ds-ic" aria-hidden="true">💳</span> <span id="donateGoTxt"><%- t('support.card_button', { usd: 10 }) %></span></button>
         <% if (ST.test) { %><span class="tag"><%- t('premium.test_mode') %></span><% } %>
       </div>
       <% } else { %>
-      <div class="row"><a class="btn big" href="/login?next=%2Fsupport%23pay">🔑 <%- t('support.card_signin') %></a></div>
+      <div class="row"><a class="ds-btn lg big" href="/login?next=%2Fsupport%23pay"><span class="ds-ic" aria-hidden="true">🔑</span> <%- t('support.card_signin') %></a></div>
       <% } %>
       <p class="msg" id="donateMsg" role="status" aria-live="polite"></p>
-      <p class="secure">🔒 <span><%- t('support.card_secure') %></span></p>
-      <p class="secure">🚫 <span><%- t('donate.no_cashout') %></span></p>
+      <p class="secure"><span class="ds-ic" aria-hidden="true">🔒</span><span><%- t('support.card_secure') %></span></p>
+      <p class="secure"><span class="ds-ic" aria-hidden="true">🚫</span><span><%- t('donate.no_cashout') %></span></p>
     </div>
     <% } %>
 
@@ -288,13 +284,13 @@
             <% if (wallets.length) { %>
             <ul class="wallets">
               <% wallets.forEach((w) => { %><li><span><%= w.family === 'evm' ? 'Ethereum / Base' : 'Solana' %> · <code><%= w.address %></code></span>
-                <button type="button" class="btn sm" data-crypto-unlink="<%= w.id %>"><%- t('support.unlink') %></button></li><% }) %>
+                <button type="button" class="ds-btn sm ghost" data-crypto-unlink="<%= w.id %>"><%- t('support.unlink') %></button></li><% }) %>
             </ul>
             <% } %>
             <% if (cryptoOn) { %>
-            <div class="row" style="margin-top:10px">
-              <button type="button" class="btn sm" data-crypto-link="evm">🦊 <%- t('support.link_evm') %></button>
-              <button type="button" class="btn sm" data-crypto-link="sol">👻 <%- t('support.link_sol') %></button>
+            <div class="row" style="margin-block-start:var(--ds-sp-2h)">
+              <button type="button" class="ds-btn sm quiet" data-crypto-link="evm"><span class="ds-ic" aria-hidden="true">🦊</span> <%- t('support.link_evm') %></button>
+              <button type="button" class="ds-btn sm quiet" data-crypto-link="sol"><span class="ds-ic" aria-hidden="true">👻</span> <%- t('support.link_sol') %></button>
             </div>
             <% } %>
             <p class="msg status" data-crypto-msg role="status" aria-live="polite"></p>
@@ -315,17 +311,17 @@
           <% chains.forEach((c, i) => { %>
           <div class="dest" data-chain="<%= c.chain %>"<%= i ? ' hidden' : '' %>>
             <% if (c.qr) { %><div class="qr" role="img" aria-label="<%- t('support.qr_label', { chain: c.name }) %>"><%- c.qr %></div><% } %>
-            <div style="min-width:0;width:100%">
+            <div class="addrbox">
               <p class="send"><%- t('support.send_line', { amount: '<b data-send-amt>10</b>', token: '<b data-send-tok>USDC</b>', chain: c.name }) %></p>
               <code class="addr"><%= c.address %></code>
-              <div class="row" style="margin-top:8px"><button type="button" class="btn sm" data-copy="<%= c.address %>">📋 <%- t('support.copy') %></button></div>
+              <div class="row" style="margin-block-start:var(--ds-sp-2)"><button type="button" class="ds-btn sm quiet" data-copy="<%= c.address %>"><span class="ds-ic" aria-hidden="true">📋</span> <%- t('support.copy') %></button></div>
               <% c.tokens.forEach((tk, j) => { %><p class="contract" data-token="<%= tk.symbol %>"<%= j ? ' hidden' : '' %>><%- t('support.contract_line', { token: tk.symbol, chain: c.name }) %> <code><%= tk.address %></code></p><% }) %>
             </div>
           </div>
           <% }) %>
           <p class="famhint" id="spFamHint" role="status"></p>
           <div class="warn">
-            <b>⚠️ <%- t('support.warn_title') %></b>
+            <b><span class="ds-ic" aria-hidden="true">⚠️</span> <%- t('support.warn_title') %></b>
             <ul>
               <li><%- t('support.warn_tokens') %></li>
               <li><%- t('support.limits', { min: min, max: num(max) }) %></li>
@@ -340,7 +336,7 @@
           <p class="mut"><%- t('support.step_wait') %></p>
           <% if (me) { %>
           <div id="payBox">
-            <% if (!payments.length) { %><p class="mut" style="margin-top:8px"><%- t('support.no_payments') %></p><% } else { %>
+            <% if (!payments.length) { %><p class="mut" style="margin-block-start:var(--ds-sp-2)"><%- t('support.no_payments') %></p><% } else { %>
             <ol class="pays" id="cryptoPayments">
               <% payments.forEach((p) => { const sg = STAGE[p.status] || 0, tn = tone(p.status); %><li data-id="<%= p.id %>" data-status="<%= p.status %>" data-pat="<%= p.pat || '' %>">
                 <span><span class="amt"><%= (Number(p.usd_cents) / 100).toFixed(2) %> <%= p.token %></span>
@@ -359,58 +355,58 @@
   </section>
 
   <section id="where" aria-labelledby="whereT">
-    <h2 id="whereT">🧾 <%- t('support.where_title') %></h2>
+    <h2 class="ds-h2" id="whereT"><span class="ds-ic" aria-hidden="true">🧾</span> <%- t('support.where_title') %></h2>
     <div class="grid3">
-      <div class="tile"><span class="ic" aria-hidden="true">🖥️</span><b><%- t('support.where_servers') %></b><p><%- t('support.where_servers_d') %></p></div>
-      <div class="tile"><span class="ic" aria-hidden="true">🌐</span><b><%- t('support.where_hosting') %></b><p><%- t('support.where_hosting_d') %></p></div>
-      <div class="tile"><span class="ic" aria-hidden="true">🪙</span><b><%- t('support.where_pot') %></b><p><%- t('support.where_pot_d', { bonus: BP }) %></p></div>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🖥️</span><b><%- t('support.where_servers') %></b><p><%- t('support.where_servers_d') %></p></div>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🌐</span><b><%- t('support.where_hosting') %></b><p><%- t('support.where_hosting_d') %></p></div>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🪙</span><b><%- t('support.where_pot') %></b><p><%- t('support.where_pot_d', { bonus: BP }) %></p></div>
     </div>
   </section>
 
   <% if (typeof perks !== 'undefined' && perks) { const PK = perks; %>
   <%# 1.99mv: 💚 Supporter perks (supporter.js) - automatic on any confirmed donation, card or crypto %>
   <section id="perks" aria-labelledby="perksT">
-    <h2 id="perksT">💚 <%- t('supporter.perks_title') %></h2>
+    <h2 class="ds-h2" id="perksT"><span class="ds-ic" aria-hidden="true">💚</span> <%- t('supporter.perks_title') %></h2>
     <p class="mut"><%- t('supporter.perks_lede') %></p>
     <% if (PK.mine) { %><p class="perk-mine"><%- t('supporter.perks_yours', { tier: PK.mine.emoji + ' ' + t('supporter.tier.' + PK.mine.tier) }) %></p><% } %>
     <div class="grid3">
-      <div class="tile"><span class="ic" aria-hidden="true">🏷️</span><b><%- t('supporter.perk_flair') %></b><p><%- t('supporter.perk_flair_d') %></p>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🏷️</span><b><%- t('supporter.perk_flair') %></b><p><%- t('supporter.perk_flair_d') %></p>
         <div class="perk-fl"><% PK.tiers.forEach((x) => { %><span class="ufl" style="--fl:<%= x.color %>;--fli:#111"><span class="ufl-e" aria-hidden="true"><%= x.emoji %></span><%- t('supporter.chip') %></span><small><%- x.min ? t('supporter.tier_from', { tier: t('supporter.tier.' + x.id), usd: x.min }) : t('supporter.tier_any', { tier: t('supporter.tier.' + x.id) }) %></small><% }) %></div></div>
-      <div class="tile"><span class="ic" aria-hidden="true">✨</span><b><%- t('supporter.perk_cosmetics') %></b><p><%- t('supporter.perk_cosmetics_d') %></p>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">✨</span><b><%- t('supporter.perk_cosmetics') %></b><p><%- t('supporter.perk_cosmetics_d') %></p>
         <div class="perk-cx"><% if (PK.halo) { %><span class="perk-halo<%= PK.halo.spin ? ' spin' : '' %>" style="<%= PK.halo.conic %>" aria-hidden="true"><span><%= PK.halo.emoji %></span></span><% } %><% if (PK.name) { %><b class="perk-name" style="<%= PK.name.css %>"><%= locals.user || t('supporter.chip') %></b><% } %></div></div>
-      <div class="tile"><span class="ic" aria-hidden="true">🏅</span><b><%- t('supporter.perk_badges') %></b><p><%- t('supporter.perk_badges_d') %></p>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🏅</span><b><%- t('supporter.perk_badges') %></b><p><%- t('supporter.perk_badges_d') %></p>
         <div class="perk-bd"><% PK.badges.forEach((a) => { %><img src="<%= a.icon %>" alt="<%- t('ach.n.' + a.id) %>" title="<%- t('ach.n.' + a.id) %>" width="56" height="56" loading="lazy"><% }) %></div></div>
     </div>
   </section>
   <% } %>
 
   <section aria-labelledby="trustT">
-    <h2 id="trustT">🛡️ <%- t('support.trust_title') %></h2>
+    <h2 class="ds-h2" id="trustT"><span class="ds-ic" aria-hidden="true">🛡️</span> <%- t('support.trust_title') %></h2>
     <div class="grid3">
-      <div class="tile"><span class="ic" aria-hidden="true">🔒</span><b><%- t('support.trust_keys') %></b><p><%- t('support.trust_keys_d') %></p></div>
-      <% if (cardOn) { %><div class="tile"><span class="ic" aria-hidden="true">💳</span><b><%- t('support.trust_stripe') %></b><p><%- t('support.trust_stripe_d') %></p></div><% } %>
-      <div class="tile"><span class="ic" aria-hidden="true">📬</span><b><%- t('support.trust_receipt') %></b><p><%- t('support.trust_receipt_d') %></p></div>
-      <div class="tile"><span class="ic" aria-hidden="true">🚫</span><b><%- t('support.trust_cashout') %></b><p><%- t('support.trust_cashout_d') %></p></div>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🔒</span><b><%- t('support.trust_keys') %></b><p><%- t('support.trust_keys_d') %></p></div>
+      <% if (cardOn) { %><div class="tile"><span class="ds-ic lg" aria-hidden="true">💳</span><b><%- t('support.trust_stripe') %></b><p><%- t('support.trust_stripe_d') %></p></div><% } %>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">📬</span><b><%- t('support.trust_receipt') %></b><p><%- t('support.trust_receipt_d') %></p></div>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🚫</span><b><%- t('support.trust_cashout') %></b><p><%- t('support.trust_cashout_d') %></p></div>
     </div>
   </section>
 
   <% if (SP.recent) { %>
   <section class="card" id="supporters" aria-labelledby="supT">
-    <h2 id="supT">💖 <%- t('support.recent_title') %></h2>
+    <h2 class="ds-h2" id="supT"><span class="ds-ic" aria-hidden="true">💖</span> <%- t('support.recent_title') %></h2>
     <% if (!SP.recent.length) { %><p class="mut"><%- t('support.recent_none') %></p><% } else { %>
     <ul class="sups">
       <% SP.recent.forEach((r) => { %><li><b><% if (r.name) { %><%= r.name %><% } else { %><%- t('support.recent_someone') %><% } %></b><span><%- t('support.tier.' + r.tier) %></span><% if (r.at) { %><time class="ago" data-ago="<%= r.at %>" datetime="<%= new Date(r.at).toISOString() %>"><%= new Date(r.at).toISOString().slice(0, 10) %></time><% } %></li><% }) %>
     </ul>
     <% } %>
     <% if (me) { %>
-    <label class="chk"><input type="checkbox" id="spShowName"<%= locals.showName ? ' checked' : '' %>> <%- t('support.recent_optin') %></label>
+    <label class="ds-check chk"><input type="checkbox" id="spShowName"<%= locals.showName ? ' checked' : '' %>> <%- t('support.recent_optin') %></label>
     <p class="msg" id="spShowMsg" role="status" aria-live="polite"></p>
     <% } %>
   </section>
   <% } %>
 
   <section class="card" id="faq" aria-labelledby="faqT">
-    <h2 id="faqT">❓ <%- t('support.faq_title') %></h2>
+    <h2 class="ds-h2" id="faqT"><span class="ds-ic" aria-hidden="true">❓</span> <%- t('support.faq_title') %></h2>
     <details><summary><%- t('support.faq_get_q') %></summary><p><%- t('support.faq_get_a', { rate: num(R) }) %></p></details>
     <details><summary><%- t('support.faq_pot_q') %></summary><p><%- t('support.faq_pot_a', { bonus: BP }) %></p></details>
     <details><summary><%- t('support.faq_cash_q') %></summary><p><%- t('support.faq_cash_a') %></p></details>
@@ -423,9 +419,9 @@
     <details><summary><%- t('support.faq_receipt_q') %></summary><p><%- t('support.faq_receipt_a') %></p></details>
   </section>
 
-  <section class="hero endcta" aria-labelledby="endT">
-    <p class="lead" id="endT"><%- t('support.end_line') %></p>
-    <a class="btn big" href="#give">💖 <%- t('support.hero_cta') %></a>
+  <section class="ds-hero hero endcta" aria-labelledby="endT">
+    <p class="ds-lead" id="endT"><%- t('support.end_line') %></p>
+    <a class="ds-btn lg big" href="#give"><span class="ds-ic" aria-hidden="true">💖</span> <%- t('support.hero_cta') %></a>
   </section>
 </main>
 <script src="/public/js/crypto-link.js?v=2" defer></script>
