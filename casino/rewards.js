@@ -211,7 +211,7 @@ async function holdemHand(T, hand, won, contrib) {
   }
 }
 
-/** 1.99pk: everyone else folded after a royal-flush river: the one player still in the hand gets 👑 Royal Treatment
+/** 1.99pl: everyone else folded after a royal-flush river: the one player still in the hand gets 👑 Royal Treatment
  *  (the same key as the showdown path, so a hand is never counted twice). */
 async function holdemBoardRoyal(T, hand, uids, board) {
   try {
