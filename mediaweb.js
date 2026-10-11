@@ -70,7 +70,13 @@ function register(app, { addUser, noTimers } = {}) {
   });
   app.get("/api/media/admin/checks", ...J(async () => ({ ok: true, keys: conf.keys(), checks: await checks() })));
   app.post("/api/media/admin/settings", ...J(async (req) => {
+    const before = conf.get();
     const r = await conf.set(req.body || {}, req.user.username);
+    // 1.99lj: every changed setting in the admin audit log (from -> to; these are prices / switches, never keys)
+    if (r.changed.length) {
+      const detail = Object.fromEntries(r.changed.map((k) => [k, { from: before[k], to: r.settings[k] }]));
+      await require("./adminaudit").record(req.user, "media_settings", null, detail).catch((e) => console.error("[media] audit:", conf.errLine(e)));
+    }
     require("./mainstage").setLibraryIdle(r.settings.library_pause_max_min);
     return { ok: true, settings: r.settings, changed: r.changed, on: { library: conf.on.library(), requests: conf.on.requests(), invites: conf.on.invites() } };
   }));
