@@ -56,8 +56,8 @@
   .bn.k-lotto .bn-a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 18px; padding: 16px 18px; }
   .bn-balls { display: flex; gap: 4px; align-items: flex-end; height: 46px; padding-top: 14px; }
   .bn-ball { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: bold 11px/1 Ubuntu, sans-serif; color: #222; background: radial-gradient(circle at 35% 30%, #fff, #e8e8e8 45%, #b8b8b8); box-shadow: 0 2px 4px rgba(0,0,0,.4); animation: bnBounce 1.8s ease-in-out infinite; }
-  .bn-ball:nth-child(2) { animation-delay: .2s; } .bn-ball:nth-child(3) { animation-delay: .4s; }
-  .bn-ball.pb { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); animation-delay: .6s; }
+  .bn-ball:nth-child(2) { animation-delay: .2s; } .bn-ball:nth-child(3) { animation-delay: .4s; } .bn-ball:nth-child(4) { animation-delay: .6s; }
+  .bn-ball.pb { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); animation-delay: .8s; }
   .bn-kick { font: bold 12px/1.4 Ubuntu, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #e1c7ff; }
   .bn-jp { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; font: 900 34px/1.05 Ubuntu, sans-serif; color: #ffe082; text-shadow: 0 0 18px rgba(255,215,64,.35); font-variant-numeric: tabular-nums; }
   .bn-jp small { font-size: 15px; font-weight: bold; color: #ffecb3; letter-spacing: .05em; }
@@ -90,7 +90,7 @@
     <% if (B_.kind === 'image' && B_.image) { %>
       <img src="<%= B_.image %>" alt="<%= B_.alt || '' %>" width="1200" height="200" loading="lazy" decoding="async">
     <% } else if (lotto_) { %>
-      <span class="bn-balls" aria-hidden="true"><span class="bn-ball">7</span><span class="bn-ball">19</span><span class="bn-ball">23</span><span class="bn-ball pb">P</span></span>
+      <span class="bn-balls" aria-hidden="true"><span class="bn-ball">7</span><span class="bn-ball">19</span><span class="bn-ball">23</span><span class="bn-ball">28</span><span class="bn-ball pb">P</span></span>
       <span class="bn-tx">
         <span class="bn-kick"><%- t('banner.lotto.kicker') %></span>
         <span class="bn-jp"><span data-bn-count="<%= V_.jackpot_n %>"><%= fmt_(V_.jackpot_n) %></span><small>PAT</small></span>
