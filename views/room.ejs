@@ -494,7 +494,7 @@
         <p class="bx-what"><%- t('pad.boost.what', { name: room.name }) %><% if (!siteOnly_) { %> <%- t('pad.boost.in_room', { cmd: '<code>!boost 5000</code>' }) %><% } %></p>
         <div class="bx-row">
           <span class="bx-presets" role="group" aria-label="<%- t('pad.boost.amount') %>"><button type="button" data-amt="1000">1,000</button><button type="button" data-amt="5000">5,000</button><button type="button" data-amt="25000">25,000</button></span>
-          <label class="bx-amt"><span class="sr"><%- t('pad.boost.sr') %></span><input type="number" name="amount" min="<%= BO_ ? BO_.min : 100 %>" max="<%= BO_ ? BO_.max : 1000000 %>" step="1" value="5000" inputmode="numeric"> <small>PAT</small></label>
+          <label class="bx-amt"><span class="sr"><%- t('pad.boost.sr') %></span><input type="text" name="amount" data-min="<%= BO_ ? BO_.min : 100 %>" data-max="<%= BO_ ? BO_.max : 1000000 %>" value="5000" inputmode="numeric" autocomplete="off" spellcheck="false" size="9" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*"> <small>PAT</small></label>
           <button type="submit" class="sact primary"><%- t('pad.boost.btn') %></button>
         </div>
         <p class="bx-msg" id="rmBoostMsg" role="status" aria-live="polite"></p>
@@ -529,7 +529,7 @@
       </ul>
     <% } %>
   </section>
-  <% if (canBoost_ && signedIn_) { %><script src="/public/js/pad-boost.js?v=1" defer></script><% } %>
+  <% if (canBoost_ && signedIn_) { %><script src="/public/js/patamount.js?v=1" defer></script><script src="/public/js/pad-boost.js?v=2" defer></script><% } %>
   <script>
   (function () {
     'use strict';

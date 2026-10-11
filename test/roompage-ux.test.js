@@ -107,7 +107,7 @@ test("room page: the Stage card (player + Snap / Clip) then its own Go live card
   assert.match(card, /<div class="stage-acts">\s*<a class="sact primary" href="\/stage\?room=plant_based_chatting">🎥 Go live here<\/a>\s*<a class="sact" href="\/stage\?room=plant_based_chatting#whenSet">📅 Book a slot<\/a>\s*<button type="button" class="sact boost" id="rmBoostBtn"[^>]*>🚀 Boost this pad<\/button>/);
   assert.doesNotMatch(pub, /rmFeatBtn|Get featured|feature=1/, "1.99ee: no paid featuring anywhere on the pad page");
   assert.match(pub, /id="rmBoostTxt" hidden>/, "no boosts yet: the boost line is hidden");
-  assert.match(pub, /pad-boost\.js\?v=1/);
+  assert.match(pub, /patamount\.js\?v=1" defer><\/script><script src="\/public\/js\/pad-boost\.js\?v=2/);   // 1.99nk
   assert.match(card, /Times in your local time/);
   assert.doesNotMatch(pub, /class="card rs"/, "no separate Schedule card");
   assert.doesNotMatch(pub, /\/p\/plant_based_chatting\/settings/, "1.99dc: no settings link for the public");

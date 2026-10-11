@@ -6,6 +6,7 @@
 // losing pool minus the fee, pro rata to their stake.
 const { runQuery, getQuery } = require("./dbUtils");
 const actions = require("./actions");
+const PATAmount = require("./public/js/patamount");     // 1.99nk: "1,000,000" / "5k" (Pepe's rules)
 
 // Pepe as judge (1.90): keep just the display fields of his ruling
 function cleanPrice(p) {
@@ -291,7 +292,7 @@ function register(app, { isBotToken, addUser }) {
       if (m.status !== "open" || m.closes * 1000 < Date.now()) return back("Betting on this market is closed.");
       const option = String((req.body || {}).option || "");
       if (!(m.options || []).includes(option)) return back("Pick one of the options.");
-      const amount = Math.floor(Number(String((req.body || {}).amount || "").replace(/[, ]/g, "")) || 0);
+      const amount = PATAmount.parse((req.body || {}).amount) || 0;
       if (amount < MIN_BET) return back(`The minimum bet is ${MIN_BET.toLocaleString()} PAT.`);
       const u = (await getQuery("SELECT username, camfrogUsername, points_balance, casino_banned FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!u) return back("Couldn't find your account.");

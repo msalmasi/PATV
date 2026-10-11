@@ -230,7 +230,8 @@ async function boost(user, roomId, opts = {}) {
   const R = await rooms.get(roomId);
   if (!R) throw new Refuse(404, "No such pad.");
   if (R.platform !== "camfrog") throw new Refuse(400, "Only Camfrog pads can be on the front page, so only they can be boosted.");
-  const amount = Math.floor(Number(opts.amount));
+  // 1.99nk: a typed amount ("1,000,000" / "50k") reads the same as in chat (public/js/patamount.js)
+  const amount = typeof opts.amount === "string" ? require("./public/js/patamount").parse(opts.amount) : Math.floor(Number(opts.amount));
   if (!Number.isFinite(amount) || amount < C.min || amount > C.max) {
     throw new Refuse(400, `Boost between ${C.min.toLocaleString("en-US")} and ${C.max.toLocaleString("en-US")} PAT.`);
   }
@@ -258,9 +259,21 @@ async function boost(user, roomId, opts = {}) {
   if (!out.dup) {
     telemetry(out.row, opts.login || out.username, via);
     try { await rooms.event(R.id, "boost", out.username, `${amount} PAT (${via}); Fort Knox ${out.row.fortknox}, room vault ${out.row.room_vault}`); } catch (e) { /* audit only */ }
+    // 1.99nk: 🚀 said in the pad's Camfrog room by Pepe (coalesced per room on his side). A chat !boost is announced by
+    // Pepe from its own reply (padLink below), so only web boosts queue a relay job.
+    if (via === "web") {
+      try { await require("./bridge").boostAnnounce({ roomId: R.id, userId: user.userId, amount, pad: R.title, link: padLink(R) }); } catch (e) { /* never undoes a boost */ }
+    }
   }
   const r = out.row;
   return { dup: out.dup, amount: r.amount, fortknox: r.fortknox, room_vault: r.room_vault, owner_self: !!r.owner_self, room: { id: R.id, slug: R.slug, title: R.title } };
+}
+
+// 1.99nk: the pad page's absolute link for Pepe's boost line ("publicaccess.tv/p/<slug>")
+const SITE = () => String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL ||
+  (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
+function padLink(R) {
+  try { return SITE() + require("./pads").padHref(R); } catch (e) { return ""; }
 }
 
 // ── reads ──
@@ -441,8 +454,9 @@ function register(app, { addUser, isBotToken }) {
       const r = await boost({ userId: u.userId, username: u.username }, R.id, { amount: b.amount, ref: b.ref, via: "chat", login });
       clearCache();
       const st = await status(R.id);
+      // 1.99nk: pad + link -> Pepe's shared, coalesced boost line in the room (pepe_rooms._boost_note)
       res.json({ ok: true, dup: r.dup, message: `🚀 ${R.title} boosted with ${r.amount.toLocaleString("en-US")} PAT · ${st.last_hour.toLocaleString("en-US")} PAT in the last hour`,
-                 amount: r.amount, last_hour: st.last_hour });
+                 amount: r.amount, last_hour: st.last_hour, pad: R.title, link: padLink(R) });
     } catch (e) {
       if (e && e.refuse) return res.json({ ok: false, message: e.message.replace(/\.$/, "") });
       console.error("[boost] bot:", e);
@@ -487,6 +501,6 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, config, setConfig, split, activePat, routeInTx, telemetry, tx, KIND_FLOW, ROOM_FLOWS, boost, recent, activeMap, status, escrow, register, clearCache, Refuse, DEFAULTS,
-  fkMigrationSummary, fkMigrationMark, rvMigrationSummary, rvMigrationMark, vaultEligible,
+  fkMigrationSummary, fkMigrationMark, rvMigrationSummary, rvMigrationMark, vaultEligible, padLink,
   _setClock: (fn) => { clock = fn || (() => Date.now()); clearCache(); },
 };

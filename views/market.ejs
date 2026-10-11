@@ -254,7 +254,7 @@
                 </div>
               </fieldset>
               <label class="lg" for="buy-amt" style="margin:0;font-size:12px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:#b9b9b9"><%- t('market.buy_amt') %></label>
-              <input id="buy-amt" type="number" name="amount" min="<%= minBet %>" step="100" inputmode="numeric" placeholder="<%- t('market.buy_ph', { n: fmt(minBet) }) %>" required>
+              <input id="buy-amt" type="text" name="amount" inputmode="numeric" autocomplete="off" spellcheck="false" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*" placeholder="<%- t('market.buy_ph', { n: fmt(minBet) }) %>" required>
               <div class="bx-chips">
                 <% [1000, 5000, 10000, 50000].filter((v) => v >= minBet).forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>"><%= v >= 1000 ? v / 1000 + 'k' : v %></button><% }) %>
                 <% if (bal !== null && bal >= minBet) { %><button type="button" class="bx-qa" data-amt="max" data-max="<%= bal %>"><%- t('market.buy_max') %></button><% } %>
@@ -263,12 +263,15 @@
               <button class="go" type="submit"><%- t('market.buy_btn') %></button>
               <% if (bal !== null) { %><p class="bal"><%- t('bx.you_have', { n: fmt(bal) }) %></p><% } %>
             </form>
+            <script src="/public/js/patamount.js?v=1"></script>
             <script>
               (() => {
                 const b = <%- JSON.stringify(m.b) %>, q = <%- JSON.stringify(m.q).replace(/</g, '\\u003c') %>, fee = 0.02;
                 const f = document.getElementById('buy'), out = document.getElementById('est');
+                // 1.99nk: "1,000,000" / "5k" too (public/js/patamount.js, the same rules as the server and Pepe)
+                const amt = (v) => (window.PATVAmount ? window.PATVAmount.parse(v) : Number(v));
                 const upd = () => {
-                  const opt = (f.querySelector('input[name=option]:checked') || {}).value, spend = Number(f.amount.value) || 0;
+                  const opt = (f.querySelector('input[name=option]:checked') || {}).value, spend = amt(f.amount.value) || 0;
                   if (!opt || spend <= 0) return;
                   const vals = Object.values(q).map((v) => v / b), mx = Math.max(...vals);
                   const S = vals.reduce((a, v) => a + Math.exp(v - mx), 0), Ei = Math.exp(q[opt] / b - mx);
@@ -418,7 +421,7 @@
                   <label><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <span class="tn"><%= o.name %></span><span class="tp"><%= o.mult ? o.mult.toFixed(2) + 'x' : '—' %></span></label>
                 <% }) %>
               </div>
-              <input type="number" name="amount" min="<%= minBet %>" step="100" inputmode="numeric" placeholder="<%- t('market.pool.ph', { n: fmt(minBet) }) %>" required>
+              <input type="text" name="amount" inputmode="numeric" autocomplete="off" spellcheck="false" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*" placeholder="<%- t('market.pool.ph', { n: fmt(minBet) }) %>" required>
               <div class="bx-chips">
                 <% [1000, 5000, 10000].filter((v) => v >= minBet).forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>"><%= v / 1000 + 'k' %></button><% }) %>
               </div>

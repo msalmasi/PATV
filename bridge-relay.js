@@ -180,8 +180,8 @@ function takeJobs(liveRoomIds) {
     // 1.99ez: a cam clip is offered once too - a re-offer must never start a second recording of the same cam
     // 1.99fp: a mic clip preview too (once is enough - the browser asks again)
     // 1.99il: a tip announcement too (a re-offer could say it twice)
-    // 1.99kp: a stream-start announcement too (golive.js); 1.99lr: a 📼 queue's "now playing" too
-    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
+    // 1.99kp: a stream-start announcement too (golive.js); 1.99lr: a 📼 queue's "now playing" too; 1.99nk: a boost too
+    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.kind !== "boostnote" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
     j.state = "claimed"; j.claimed = now; j.tries++;
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
@@ -199,6 +199,8 @@ function takeJobs(liveRoomIds) {
     // 1.99il: 💸 a tip made from this pad's page - Pepe says it in the room (target = the recipient's login)
     if (j.kind === "tipnote") { base.target = j.target; base.amount = j.amount; if (j.display) base.display = j.display; }
     if (j.kind === "golive" || j.kind === "nowplaying") { base.streamer = j.streamer; base.pad = j.pad; base.what = j.what || ""; base.link = j.link || ""; }   // 1.99kp / 1.99lr
+    // 1.99nk: 🚀 a website boost of this pad (bridge.boostAnnounce) - Pepe coalesces them per room
+    if (j.kind === "boostnote") { base.amount = j.amount; base.pad = j.pad; base.link = j.link || ""; if (j.display) base.display = j.display; }
     out.push(base);
     if (out.length >= 10) break;
   }
@@ -233,7 +235,7 @@ function applyAcks(acks) {
 function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
-    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.kind === "tipnote" || j.kind === "golive" || j.kind === "nowplaying" || j.gui || j.setting) continue;   // panel jobs: padmod.js
+    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.kind === "tipnote" || j.kind === "golive" || j.kind === "nowplaying" || j.kind === "boostnote" || j.gui || j.setting) continue;   // panel jobs: padmod.js
     const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
     if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
     out.push(o);

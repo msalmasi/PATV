@@ -92,11 +92,9 @@ async function bumpRev() {
 // one money transaction at a time on the shared connection (mainstage's chain, like boosts / stage settles)
 const tx = (fn) => require("./mainstage")._tx(fn);
 
+// 1.99nk: the shared PAT-amount parser (public/js/patamount.js = Pepe's pepe_amount rules): 1,000,000 / 5k / 1.5m / 1b
 function parseAmount(raw) {
-  const t = String(raw == null ? "" : raw).trim().toLowerCase().replace(/[,_ ]/g, "");
-  const m = /^(\d+(?:\.\d+)?)([km]?)$/.exec(t);
-  if (!m) return null;
-  const v = Math.floor(Number(m[1]) * (m[2] === "k" ? 1e3 : m[2] === "m" ? 1e6 : 1));
+  const v = require("./public/js/patamount").parse(raw);
   return Number.isFinite(v) ? v : null;
 }
 

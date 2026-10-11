@@ -460,7 +460,10 @@ async function restore(userId, via = "manual") {
   return tx(async () => {
     const u = (await getQuery("SELECT archived_at FROM users WHERE userId = ?", [userId]))[0];
     if (!u || u.archived_at == null) return null;
-    const a = (await getQuery("SELECT reclaimed FROM account_archive WHERE userId = ? AND restored_at IS NULL AND purged_at IS NULL", [userId]))[0];
+    const a = (await getQuery("SELECT reclaimed, tier FROM account_archive WHERE userId = ? AND restored_at IS NULL AND purged_at IS NULL", [userId]))[0];
+    // 1.99nk: a Camfrog ROOM BOT's account (tools/bot-account-cleanup.js, tier BOT) stays archived - a lookup or a sign-in
+    // never revives it; only an explicit restore(userId, "unbot") does
+    if (a && a.tier === "BOT" && via !== "unbot") return null;
     const amt = a ? Math.max(0, Math.floor(Number(a.reclaimed) || 0)) : 0;
     const r = await runQuery("UPDATE users SET archived_at = NULL, points_balance = points_balance + ? WHERE userId = ? AND archived_at IS NOT NULL", [amt, userId]);
     if (!r.changes) return null;

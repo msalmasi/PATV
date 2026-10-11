@@ -633,6 +633,46 @@ async function liveAnnounce(roomId, { streamer, pad, what, link, camfrog, userId
   return true;
 }
 
+// ── 1.99nk: 🚀 a pad boost made on the website (boosts.js), said by Pepe in the pad's Camfrog room - relay job "boostnote"
+// (camfrog-bot pepe_relay._relay_boostnote -> pepe_rooms._boost_note). Pepe COALESCES per room: the first boost after a
+// quiet 60 s is said at once, the boosts inside the window are summed into one line when it ends; chat !boost goes
+// through the same announcer. Only for a live (bridged) room. A booster on Pepe's hidden list (!incognito / !bridge hide)
+// is announced as "someone" (no login sent); Pepe re-checks the login he gets. This side only bounds the job count.
+const BOOST_ANN_ROOM_MAX = 20;          // jobs per room a minute (Pepe sums them anyway)
+const boostAnnHits = new Map();         // roomId -> [ms]
+/** -> {queued: true} | {queued: false, why}. Never throws (a boost is never undone by its announcement). */
+async function boostAnnounce({ roomId, userId, amount, pad, link } = {}) {
+  try {
+    await load();
+    const R = rooms.get(String(roomId || ""));
+    if (!R || !isLive(R)) return { queued: false, why: "room offline" };
+    const n = Math.floor(Number(amount));
+    if (!(n > 0)) return { queued: false, why: "amount" };
+    const padName = str(pad, 60);
+    if (!padName) return { queued: false, why: "pad" };
+    const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [String(userId || "")]))[0];
+    if (!u) return { queued: false, why: "booster" };
+    const now = Date.now();
+    const hits = (boostAnnHits.get(R.id) || []).filter((t) => now - t < 60 * 1000);
+    if (hits.length >= BOOST_ANN_ROOM_MAX) return { queued: false, why: "rate" };
+    hits.push(now);
+    boostAnnHits.set(R.id, hits);
+    if (boostAnnHits.size > 5000) boostAnnHits.clear();
+    const cf = u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : "";
+    const hidden = !!(cf && require("./quotes").isHidden(cf));
+    let display = "";
+    if (hidden) display = "someone";
+    else { try { display = await relay.webName(u); } catch (e) { display = ""; } }
+    relay.newJob({ kind: "boostnote", roomId: R.id, userId: u.userId, username: u.username,
+                   camfrog: !hidden && LOGIN_RE.test(cf) ? cf : "", display: display || str(u.username, 40),
+                   amount: n, pad: padName, link: str(link, 200) });
+    return { queued: true };
+  } catch (e) {
+    console.error("[bridge] boost announce:", e.message);
+    return { queued: false, why: "error" };
+  }
+}
+
 async function liveView(R, after, userId, login, username = null) {
   const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
   const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
@@ -961,4 +1001,4 @@ function padTabsFor(o) {
 }
 
 module.exports = { reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
-  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };
+  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; } };

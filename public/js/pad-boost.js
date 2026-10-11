@@ -40,7 +40,8 @@
   box.addEventListener('submit', function (e) {
     e.preventDefault();
     if (busy) return;
-    var amt = Math.floor(Number(input.value));
+    // 1.99nk: 1,000,000 / 50k / 1.5m too (public/js/patamount.js - the same rules as Pepe's !boost)
+    var amt = window.PATVAmount ? window.PATVAmount.parse(input.value) : Math.floor(Number(input.value));
     if (!(amt > 0)) { say(_t('js.pad.boost.pick', 'Pick an amount.'), true); return; }
     ref = ref || newRef();
     busy = true; submit.disabled = true; say(_t('js.pad.boost.boosting', 'Boosting…'));

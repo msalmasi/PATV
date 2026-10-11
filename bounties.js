@@ -136,7 +136,7 @@ function register(app, { isBotToken, addUser }) {
       const myClaim = (b.claims || []).find((c) => me.some((k) => same(k, c.nick)));
       if (kind === "add") {
         if (b.deadline * 1000 < Date.now()) return back("That bounty has expired.");
-        amount = Math.floor(Number(String(body.amount || "").replace(/[, ]/g, "")) || 0);
+        amount = require("./public/js/patamount").parse(body.amount) || 0;    // 1.99nk: "1,000,000" / "5k" (Pepe's rules)
         if (amount < ADD_MIN) return back(`Chip in at least ${ADD_MIN.toLocaleString()} PAT.`);
         if (Number(u.points_balance) < amount) return back(`You only have ${Number(u.points_balance).toLocaleString()} PAT.`);
         ok = `Sent to Pepe: adding ${amount.toLocaleString()} PAT to the pot.`;

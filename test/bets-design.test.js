@@ -120,7 +120,8 @@ test("market page: board + trade panel with the same buy / sell posts, quick amo
   assert.match(h, /class="mk-main two"/);
   assert.match(h, /<form class="bet side-card" method="post" action="\/markets\/1\/bet" id="buy">/);
   assert.match(h, /<input type="radio" name="option" value="Yes" checked>/);
-  assert.match(h, /name="amount" min="500"/);
+  assert.match(h, /id="buy-amt" type="text" name="amount" inputmode="numeric"/);   // 1.99nk: "1,000,000" / "5k" too
+  assert.match(h, /min 500|500/);
   assert.match(h, /data-amt="5000"/);
   assert.match(h, /data-amt="max" data-max="250000"/);
   assert.match(h, /__t\('js\.market\.est'/);

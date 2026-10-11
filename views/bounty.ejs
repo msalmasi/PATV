@@ -101,7 +101,7 @@
         <div class="forms">
           <form method="post" action="/bounties/<%= b.id %>/add">
             <b>💰 <%- t('bounty.add_h') %></b>
-            <input type="number" name="amount" min="<%= addMin %>" step="100" inputmode="numeric" placeholder="<%- t('bounty.add_ph', { n: fmt(addMin) }) %>" aria-label="PAT" required>
+            <input type="text" name="amount" inputmode="numeric" autocomplete="off" spellcheck="false" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*" placeholder="<%- t('bounty.add_ph', { n: fmt(addMin) }) %>" aria-label="PAT" required>
             <div class="bx-chips"><% [1000, 5000, 10000].forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>"><%= v / 1000 %>k</button><% }) %></div>
             <div class="row"><button type="submit"><%- t('bounty.add_btn') %></button></div>
             <% if (bal !== null) { %><span class="info"><%- t('bx.you_have', { n: fmt(bal) }) %></span><% } %>
