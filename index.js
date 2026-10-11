@@ -1211,6 +1211,7 @@ require("./feedmentions").register(app, { addUser });  // 1.99kk: @mentions + #h
 require("./banner").register(app, { addUser });        // 1.99kk: the homepage banner slot - paid PAT bookings (off until priced), house promos, /sponsor, /admin/banner
 require("./telegram").register(app, { isBotToken, addUser });   // 1.99kn: Telegram link + alerts + access tiers (/settings/telegram); the bot runs in Pepe
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
+require("./casino/routes").register(app, { isBotToken, addUser });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md)
 require("./userstats").register(app, { isBotToken });
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation
 require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)

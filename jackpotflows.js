@@ -11,6 +11,7 @@
 //                                    slice), or a refund when the spin FAILED
 //   spinId "bj:..." / NULL           the website's blackjack table (wager in, payout out). Untagged NULL rows
 //                                    are older blackjack rows - or, out only, a funded reward (below)
+//   spinId "cbj:<table>:r<n>"        1.99lj: the casino backend's blackjack tables (lost stakes in, winners' profit out)
 //   spinId "fund:<flow>"             a reward the PAT Routing table sends to the House (funding.takeFunds)
 //   spinId "shop-order:<id>"         official store boosts (shop.js)
 //   spinId "admin:..."               an admin's manual adjustment (/api/g/wheel/jackpot)
@@ -64,6 +65,7 @@ function classify(r, staked) {
   }
   if (sid === null) return { kind: "site", dir, name: amt > 0 ? "web blackjack" : "web blackjack / rewards" };
   if (sid.startsWith("bj:")) return { kind: "site", dir, name: "web blackjack" };
+  if (sid.startsWith("cbj:")) return { kind: "site", dir, name: "casino tables" };   // 1.99lj: the casino backend (casino/money.js)
   if (sid.startsWith("fund:")) return { kind: "site", dir, name: "funded: " + (sid.slice(5).split(":")[0] || "reward") };
   if (sid.startsWith("shop-order:")) return { kind: "site", dir, name: "store boosts" };
   if (sid.startsWith("admin:")) return { kind: "site", dir, name: "admin (website)" };

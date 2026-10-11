@@ -1,0 +1,65 @@
+<%- include('layout', { title: title, user: user}) %>
+<style>
+  .cf { max-width: 860px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; }
+  .cf h1 { text-align: center; }
+  .cf .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+  .cf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; font-size: 13px; word-break: break-all; }
+  .cf .ok { color: #81c784; } .cf .bad { color: #ff9a9a; }
+  .cf .info { color: #999; font-size: 13px; line-height: 1.6; }
+  .cf .shoe { font-family: monospace; font-size: 12px; color: #bbb; line-height: 1.6; }
+</style>
+<main class="cf" id="cf" data-table="<%= tableId %>" data-round="<%= round %>">
+  <h1>Provably fair: round <%= round %></h1>
+  <div class="card" id="cf-rec">Loading…</div>
+  <div class="card">
+    <p><b>Your browser's check</b> (WebCrypto, nothing from the site's own verifier): <span id="cf-mine">…</span></p>
+    <p class="info">How it works: before anyone bets, the table publishes <code>sha256(server_seed)</code>. The shoe is 6 fresh decks
+      (2s–As in ♠♥♦♣ order) shuffled by Fisher–Yates, each swap index drawn from <code>HMAC-SHA256(server_seed, "client_seed:round:counter")</code>
+      read as big-endian 32-bit words with rejection sampling. After the round the seed is revealed, so anyone can rebuild the shoe and
+      check the cards dealt were its first cards.</p>
+  </div>
+  <p><a href="/casino/blackjack/t/<%= tableId %>">← back to the table</a></p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var root = document.getElementById("cf");
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var enc = new TextEncoder();
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join(""); }
+  async function shoe(seed, client, round, decks) {
+    var ranks = "23456789TJQKA", suits = "shdc", s = [];
+    for (var d = 0; d < decks; d++) for (var i = 0; i < 4; i++) for (var j = 0; j < 13; j++) s.push(ranks[j] + suits[i]);
+    var key = await crypto.subtle.importKey("raw", enc.encode(seed), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    var counter = 0, words = [], pos = 8;
+    async function next() {
+      if (pos >= 8) {
+        var dig = new DataView(await crypto.subtle.sign("HMAC", key, enc.encode(client + ":" + round + ":" + counter++)));
+        words = []; for (var k = 0; k < 8; k++) words.push(dig.getUint32(4 * k, false));
+        pos = 0;
+      }
+      return words[pos++];
+    }
+    for (var n = s.length - 1; n > 0; n--) {
+      var lim = Math.floor(4294967296 / (n + 1)) * (n + 1), x;
+      do { x = await next(); } while (x >= lim);
+      var r = x % (n + 1), t = s[n]; s[n] = s[r]; s[r] = t;
+    }
+    return s;
+  }
+  fetch("/api/casino/fair/" + root.dataset.table + "/" + root.dataset.round).then(function (r) { return r.json(); }).then(async function (j) {
+    var box = document.getElementById("cf-rec");
+    if (!j.ok) { box.textContent = j.error || "No such round."; document.getElementById("cf-mine").textContent = "-"; return; }
+    box.innerHTML = "<p>Commitment: <code>" + esc(j.commitment) + "</code></p><p>Client seed: <code>" + esc(j.client_seed) + "</code></p>" +
+      (j.server_seed ? "<p>Server seed: <code>" + esc(j.server_seed) + "</code></p><p>Site check: <b class=\"" + (j.verified ? "ok\">verified" : "bad\">MISMATCH") + "</b></p>" +
+        "<p class=\"shoe\">First cards of the shoe: " + esc((j.shoe || []).slice(0, 30).join(" ")) + "</p>"
+       : "<p class=\"info\">The seed is revealed when the round is over.</p>");
+    var mine = document.getElementById("cf-mine");
+    if (!j.server_seed) { mine.textContent = "waiting for the reveal"; return; }
+    var h = hex(await crypto.subtle.digest("SHA-256", enc.encode(j.server_seed)));
+    var s = await shoe(j.server_seed, j.client_seed, j.round, j.num_decks || 6);
+    var ok = h === j.commitment && (!j.shoe || s.join(",") === j.shoe.join(","));
+    mine.innerHTML = ok ? "<b class=\"ok\">the seed matches the commitment and rebuilds the same shoe</b>" : "<b class=\"bad\">mismatch</b>";
+  }).catch(function () { document.getElementById("cf-rec").textContent = "Couldn't load the round."; });
+})();
+</script>
