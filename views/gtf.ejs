@@ -16,120 +16,117 @@
   const STEPS = [['!sheet', t('gtf.step.sheet')], ['!heist', t('gtf.step.heist')], ['!gang', t('gtf.step.gang')], ['!turf', t('gtf.step.turf')], ['!bounty', t('gtf.step.bounty')]];
 %>
 <style>
-  .gtf { --gold: #ffcf40; --green: #6fdc7b; --violet: #b98cff; --red: #ff6b6b; --mut: #a7ada7;
-         max-width: 1100px; width: 100%; margin: 0 auto; padding: 18px 16px 56px; box-sizing: border-box; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 18px; overflow-wrap: anywhere; }
-  .gtf *, .gtf *::before, .gtf *::after { box-sizing: border-box; }
-  .gtf a { color: #81c784; text-decoration: none; }
-  .gtf a:hover { text-decoration: underline; }
-  .gtf a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-  .gtf code { background: #0d0d0d; border: 1px solid #2a2a2a; padding: 1px 6px; border-radius: 5px; color: #e8f5e9; font-family: Consolas, 'Courier New', monospace; font-size: .95em; }
+  /* 1.99ps polish: on the design system (docs/design-system.md, "Area notes: games"). An arcade page: section headings are .ds-pixel-h
+     (one style), the four part cards use the card-title size. Every colour is a ds token or a GTF part colour. */
+  .gtf { --ds-ac: var(--ds-acc-gtf); --ds-ac-2: var(--ds-acc-gtf); --ds-ac-bg: rgba(255,207,64,.12); --ds-ac-line: var(--ds-gold-line); --ds-on-ac: var(--ds-on-gold);
+         --gold: var(--ds-acc-gtf); --green: var(--ds-acc-gtf-2); --violet: var(--ds-acc-gtf-violet); --red: var(--ds-acc-gtf-red); --mut: var(--ds-text-muted); }
+  .gtf a:not([class]) { color: var(--ds-green-2); }
+  .gtf code { background: var(--ds-sunken); border: 1px solid #2a2a2a; padding: 1px 6px; border-radius: var(--ds-r-xs); color: #e8f5e9; font-family: var(--ds-font-mono); font-size: .92em; }
 
-  /* hero */
-  .gtf .hero { position: relative; overflow: hidden; border: 1px solid #2c2c2c; border-radius: 18px; padding: 24px;
+  /* hero (area hero: red/green glow + hazard stripe) */
+  .gtf .hero { position: relative; overflow: hidden; border: 1px solid var(--ds-line); border-radius: var(--ds-r-2xl); padding: var(--ds-sp-8) var(--ds-sp-8) var(--ds-sp-7);
                background: radial-gradient(90% 130% at 0% 0%, #2b0d0d 0%, rgba(17,17,17,0) 60%), radial-gradient(80% 120% at 100% 100%, #0e2a14 0%, rgba(17,17,17,0) 60%), #111;
-               display: grid; gap: 20px; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: center; }
-  .gtf .hero::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 10px; pointer-events: none; opacity: .55;
-                      background: repeating-linear-gradient(-45deg, #ffcf40 0 12px, #111 12px 24px); }
-  .gtf .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: var(--gold); line-height: 1.7; }
-  .gtf h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.05; margin: 10px 0 12px; }
-  .gtf h1 em { font-style: normal; background: linear-gradient(90deg, #ffcf40, #ff6b6b 45%, #6fdc7b 90%); background-size: 200% 100%;
-               -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .gtf .lead { color: #d3d3c9; font-size: 16px; line-height: 1.6; margin: 0; max-width: 60ch; }
-  .gtf .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
-  .gtf .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid #2f2f2f; background: #1a1a1a; color: #e6e6e6; font: bold 14px Ubuntu, sans-serif; }
-  .gtf .btn:hover { text-decoration: none; border-color: #555; }
-  .gtf .btn.gold { background: linear-gradient(90deg, #ffcf40, #ff8a3d); color: #2a1600; border-color: #ffcf40; }
+               display: grid; gap: var(--ds-sp-5); grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: center; }
+  .gtf .hero::after { content: ""; position: absolute; inset-inline: 0; top: 0; height: 10px; pointer-events: none; opacity: .55;
+                      background: repeating-linear-gradient(-45deg, var(--gold) 0 12px, #111 12px 24px); }
+  .gtf .hero-main { display: grid; gap: var(--ds-sp-2); min-width: 0; }
+  .gtf .hero h1 { margin: var(--ds-sp-1) 0; }
+  .gtf .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--gold), var(--red) 45%, var(--green) 90%); background-size: 200% 100%;
+                     -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .gtf .hero h1 .ds-ic { font-size: .8em; margin-inline-end: .3em; vertical-align: -.05em; }
 
   /* your character */
-  .gtf .me { position: relative; z-index: 1; background: rgba(10,10,10,.75); border: 1px solid #333; border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
-  .gtf .me.has { border-color: #5a4a10; box-shadow: 0 0 0 1px rgba(255,207,64,.12), 0 10px 30px rgba(0,0,0,.4); }
-  .gtf .me h2 { margin: 0; font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .1em; color: #aaa; line-height: 1.7; }
-  .gtf .me .big { display: flex; align-items: center; gap: 12px; }
-  .gtf .me .av { flex: none; width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center; font-size: 28px; background: #1d1a0c; border: 1px solid #5a4a10; }
-  .gtf .me .cls { font-size: 20px; font-weight: bold; color: #fff; }
-  .gtf .me p { margin: 0; color: var(--mut); font-size: 14px; line-height: 1.55; }
-  .gtf .me .btn { justify-self: start; }
+  .gtf .me { position: relative; z-index: var(--ds-z-raised); background: rgba(10,10,10,.75); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); display: grid; gap: var(--ds-sp-2h); }
+  .gtf .me.has { border-color: var(--ds-gold-line); box-shadow: 0 0 0 1px rgba(255,207,64,.12), 0 10px 30px rgba(0,0,0,.4); }
+  .gtf .me h2 { margin: 0; }
+  .gtf .me .big { display: flex; align-items: center; gap: var(--ds-sp-3); }
+  .gtf .me .av { flex: none; width: 52px; height: 52px; border-radius: var(--ds-r-lg); display: grid; place-items: center; font: 28px/1 var(--ds-font-emoji); background: #1d1a0c; border: 1px solid var(--ds-gold-line); }
+  .gtf .me .cls { font-size: var(--ds-fs-h2); font-weight: 700; color: var(--ds-text-strong); }
+  .gtf .me p { margin: 0; color: var(--mut); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .gtf .me .ds-btn { justify-self: start; }
 
   /* the four parts */
-  .gtf .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; }
-  .gtf .part { --ac: var(--gold); background: #121212; border: 1px solid #262626; border-top: 3px solid var(--ac); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .gtf .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--ds-sp-3); }
+  .gtf .part { --ac: var(--gold); background: var(--ds-surface); border: 1px solid var(--ds-line); border-top: 3px solid var(--ac); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4);
+               display: flex; flex-direction: column; gap: var(--ds-sp-2h); min-width: 0; }
   .gtf .part.green { --ac: var(--green); } .gtf .part.violet { --ac: var(--violet); } .gtf .part.red { --ac: var(--red); }
-  .gtf .part h2 { margin: 0; font-size: 19px; display: flex; align-items: center; gap: 10px; color: #fff; }
-  .gtf .part .ic { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; background: #1a1a1a; border: 1px solid #333; }
-  .gtf .part p { margin: 0; color: #bdbdbd; font-size: 14px; line-height: 1.55; }
-  .gtf .part ul { list-style: none; margin: auto 0 0; padding: 10px 0 0; border-top: 1px solid #222; display: grid; gap: 2px; }
-  .gtf .part li a { display: flex; justify-content: space-between; gap: 8px; padding: 7px 8px; margin: 0 -8px; border-radius: 8px; color: #ddd; font-size: 14px; }
-  .gtf .part li a::after { content: '›'; color: var(--ac); font-weight: bold; }
-  .gtf .part li a:hover { background: #1b1b1b; text-decoration: none; color: #fff; }
-  .gtf .part li:first-child a { color: var(--ac); font-weight: bold; }
+  .gtf .part h2 { margin: 0; font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); display: flex; align-items: center; gap: var(--ds-sp-2h); color: var(--ds-text-strong); }
+  .gtf .part .ic { flex: none; width: 40px; height: 40px; border-radius: var(--ds-r-md); display: grid; place-items: center; font: 22px/1 var(--ds-font-emoji); background: #1a1a1a; border: 1px solid var(--ds-line-strong); }
+  .gtf .part p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .gtf .part ul { list-style: none; margin: auto 0 0; padding: var(--ds-sp-2) 0 0; border-top: 1px solid var(--ds-line-soft); display: grid; gap: 2px; }
+  .gtf .part li a { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); min-height: 40px; padding: var(--ds-sp-1h) var(--ds-sp-2); margin: 0 calc(-1 * var(--ds-sp-2));
+                    border-radius: var(--ds-r-sm); color: #ddd; font-size: var(--ds-fs-sm); text-decoration: none; }
+  .gtf .part li a::after { content: "›"; color: var(--ac); font-weight: 700; }
+  [dir="rtl"] .gtf .part li a::after { content: "‹"; }
+  .gtf .part li a:hover { background: #1b1b1b; color: #fff; }
+  .gtf .part li:first-child a { color: var(--ac); font-weight: 700; }
 
   /* start here */
-  .gtf .start { background: #121212; border: 1px solid #262626; border-radius: 14px; padding: 18px; }
-  .gtf .start h2 { margin: 0 0 12px; font-family: 'Press Start 2P', monospace; font-size: 11px; letter-spacing: .1em; color: var(--gold); line-height: 1.6; }
-  .gtf .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; counter-reset: s; }
-  .gtf .steps li { counter-increment: s; display: grid; grid-template-columns: 26px 1fr; gap: 4px 10px; align-items: start; background: #0e0e0e; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; }
+  .gtf .start { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); display: grid; gap: var(--ds-sp-3); }
+  .gtf .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--ds-sp-2h); counter-reset: s; }
+  .gtf .steps li { counter-increment: s; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: var(--ds-sp-1) var(--ds-sp-2h); align-items: start; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-3); }
   .gtf .steps li::before { content: counter(s); grid-row: span 2; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-                           font: 10px 'Press Start 2P', monospace; color: #2a1600; background: var(--gold); }
-  .gtf .steps code { justify-self: start; color: #ffe08a; font-weight: bold; }
-  .gtf .steps span { color: #bbb; font-size: 13.5px; line-height: 1.45; }
-  .gtf .foot { margin: 12px 0 0; color: #888; font-size: 13px; }
+                           font: 10px var(--ds-font-pixel); color: var(--ds-on-gold); background: var(--gold); }
+  .gtf .steps code { justify-self: start; color: var(--ds-gold-text); font-weight: 700; }
+  .gtf .steps span { color: var(--ds-text-2); font-size: 13.5px; line-height: 1.45; }
+  .gtf .foot { margin: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
 
   /* 1.99nq: the heist minimap */
-  .gtf .mm { background: #0f0f10; border: 1px solid #262626; border-radius: 16px; padding: 16px; display: grid; gap: 14px; position: relative; overflow: hidden; }
-  .gtf .mm-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .gtf .mm-head h2 { margin: 0; font-family: 'Press Start 2P', monospace; font-size: 12px; letter-spacing: .1em; color: var(--gold); line-height: 1.6; }
+  .gtf .mm { background: #0f0f10; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); display: grid; gap: var(--ds-sp-3h); position: relative; overflow: hidden; }
+  .gtf .mm-head { display: flex; align-items: center; gap: var(--ds-sp-3); flex-wrap: wrap; }
+  .gtf .mm-head h2 { display: flex; align-items: center; gap: var(--ds-sp-2); }
   .gtf .mm-head p { margin: 0; color: var(--mut); font-size: 13.5px; line-height: 1.5; flex: 1 1 240px; }
-  .gtf .mm-upd { text-transform: uppercase; font: 9px 'Press Start 2P', monospace; color: #7f8a7f; letter-spacing: .06em; line-height: 1.6; }
+  .gtf .mm-upd { text-transform: uppercase; font: 9px/1.6 var(--ds-font-pixel); color: #8e978e; letter-spacing: .06em; }
   .gtf .mm-upd.stale { color: #ff9f6b; }
   .gtf .radar { flex: none; width: 54px; height: 54px; border-radius: 50%; position: relative; border: 2px solid #1f5130; overflow: hidden;
                 background: radial-gradient(circle, rgba(111,220,123,.18) 0 1px, transparent 1.5px) 0 0 / 9px 9px, radial-gradient(circle at 50% 50%, #0c2414, #050b07 70%);
-                box-shadow: inset 0 0 0 9px rgba(5,11,7,.0), inset 0 0 0 1px #2c7a45, 0 0 14px rgba(111,220,123,.18); }
-  .gtf .radar::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, rgba(111,220,123,.55), rgba(111,220,123,0) 70deg, transparent 360deg); }
-  .gtf .radar::after { content: ''; position: absolute; inset: 25%; border-radius: 50%; border: 1px solid rgba(111,220,123,.35); }
+                box-shadow: inset 0 0 0 1px #2c7a45, 0 0 14px rgba(111,220,123,.18); }
+  .gtf .radar::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, rgba(111,220,123,.55), rgba(111,220,123,0) 70deg, transparent 360deg); }
+  .gtf .radar::after { content: ""; position: absolute; inset: 25%; border-radius: 50%; border: 1px solid rgba(111,220,123,.35); }
   .gtf .radar i { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: var(--green); box-shadow: 0 0 6px currentColor; color: var(--green); z-index: 1; }
   .gtf .radar i.cool { background: #ffb340; color: #ffb340; } .gtf .radar i.hot { background: #ff4d4d; color: #ff4d4d; } .gtf .radar i.shut { background: #666; color: #666; box-shadow: none; }
 
-  .gtf .mm-live { display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; border: 2px solid #ff4d4d;
+  .gtf .mm-live { display: none; align-items: center; gap: var(--ds-sp-3); flex-wrap: wrap; padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-lg); border: 1px solid #ff4d4d; box-shadow: inset 0 0 0 1px #ff4d4d;
                   background: repeating-linear-gradient(-45deg, rgba(255,77,77,.12) 0 10px, rgba(0,0,0,0) 10px 20px), #1a0b0b; }
   .gtf .mm-live.on { display: flex; }
-  .gtf .mm-live .siren { flex: none; font: 10px 'Press Start 2P', monospace; color: #fff; background: #c62828; padding: 6px 8px; border-radius: 6px; letter-spacing: .08em; }
-  .gtf .mm-live .txt { flex: 1 1 220px; color: #ffd9d9; font-size: 14px; line-height: 1.5; }
+  .gtf .mm-live .siren { flex: none; display: inline-flex; align-items: center; gap: 6px; font: 10px/1.4 var(--ds-font-pixel); color: #fff; background: var(--ds-live); padding: 6px 8px; border-radius: var(--ds-r-xs); letter-spacing: .08em; }
+  .gtf .mm-live .txt { flex: 1 1 220px; color: var(--ds-danger-ink); font-size: var(--ds-fs-sm); line-height: 1.5; }
   .gtf .mm-live .pips { display: flex; gap: 3px; flex-wrap: wrap; }
   .gtf .mm-live .pips b { width: 10px; height: 10px; background: #3a1d1d; border: 1px solid #6b2b2b; }
   .gtf .mm-live .pips b.done { background: #ff4d4d; border-color: #ff8080; }
-  .gtf .mm-live .pips b.now { background: #ffcf40; border-color: #fff1b8; }
+  .gtf .mm-live .pips b.now { background: var(--gold); border-color: #fff1b8; }
 
-  .gtf .city { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; padding: 13px; border-radius: 12px;
+  .gtf .city { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; padding: 13px; border-radius: var(--ds-r-lg);
                background: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 8px 8px, linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 8px 8px, #19191c;
                border: 1px solid #2a2a2e; }
-  .gtf .city::before, .gtf .city::after { content: ''; position: absolute; pointer-events: none; }
-  .gtf .city::before { left: 0; right: 0; top: calc(50% - 1px); height: 3px; background: repeating-linear-gradient(90deg, #d9b23a 0 12px, transparent 12px 24px); opacity: .7; }
-  .gtf .city::after { top: 0; bottom: 0; left: calc(50% - 1px); width: 3px; background: repeating-linear-gradient(180deg, #d9b23a 0 12px, transparent 12px 24px); opacity: .7; }
-  .gtf .lot { --st: var(--green); position: relative; z-index: 1; background: #121214; border: 2px solid #2d2d33; border-radius: 10px; padding: 12px; display: grid; gap: 10px; min-width: 0;
+  .gtf .city::before, .gtf .city::after { content: ""; position: absolute; pointer-events: none; }
+  .gtf .city::before { inset-inline: 0; top: calc(50% - 1px); height: 3px; background: repeating-linear-gradient(90deg, #d9b23a 0 12px, transparent 12px 24px); opacity: .7; }
+  .gtf .city::after { top: 0; bottom: 0; inset-inline-start: calc(50% - 1px); width: 3px; background: repeating-linear-gradient(180deg, #d9b23a 0 12px, transparent 12px 24px); opacity: .7; }
+  .gtf .lot { --st: var(--green); position: relative; z-index: 1; background: #121214; border: 2px solid #2d2d33; border-radius: var(--ds-r-md); padding: var(--ds-sp-3); display: grid; gap: var(--ds-sp-2h); min-width: 0;
               box-shadow: 0 0 0 4px #232327; }
-  .gtf .lot.cool { --st: #ffb340; } .gtf .lot.hot { --st: #ff4d4d; border-color: #6b2b2b; } .gtf .lot.shut { --st: #777; }
-  .gtf .lot-top { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: center; }
-  .gtf .sprite { width: 72px; height: 72px; border-radius: 8px; background: #0b0b0d; border: 1px solid #2a2a2a; display: grid; place-items: center; position: relative; }
+  .gtf .lot.cool { --st: #ffb340; } .gtf .lot.hot { --st: #ff4d4d; border-color: #6b2b2b; } .gtf .lot.shut { --st: #8e8e8e; }
+  .gtf .lot-top { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--ds-sp-3); align-items: center; }
+  .gtf .sprite { width: 72px; height: 72px; border-radius: var(--ds-r-sm); background: #0b0b0d; border: 1px solid #2a2a2a; display: grid; place-items: center; position: relative; }
   .gtf .sprite svg { width: 64px; height: 64px; image-rendering: pixelated; }
-  .gtf .sprite .lamp { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; background: var(--st); box-shadow: 0 0 8px var(--st); }
-  .gtf .lot h3 { margin: 0 0 6px; font-size: 16px; color: #fff; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-  .gtf .chip { display: inline-block; font: 8.5px 'Press Start 2P', monospace; letter-spacing: .06em; line-height: 1.5; padding: 4px 6px; border-radius: 4px;
-               color: #0b0b0b; background: var(--st); }
-  .gtf .cd { font: 15px 'Press Start 2P', monospace; color: #fff; letter-spacing: .04em; margin-top: 6px; line-height: 1.4; }
-  .gtf .cd small { display: block; font: 12px Ubuntu, sans-serif; color: var(--mut); letter-spacing: 0; margin-bottom: 2px; }
-  .gtf .lot dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; font-size: 13.5px; align-items: center; }
-  .gtf .lot dt { color: #8d948d; font-family: 'Press Start 2P', monospace; font-size: 8px; letter-spacing: .06em; text-transform: uppercase; }
-  .gtf .lot dd { margin: 0; color: #e6e6e6; min-width: 0; }
+  .gtf .sprite .lamp { position: absolute; top: 4px; inset-inline-end: 4px; width: 8px; height: 8px; background: var(--st); box-shadow: 0 0 8px var(--st); }
+  .gtf .lot h3 { margin: 0 0 var(--ds-sp-1h); font: 700 16px/1.3 var(--ds-font); color: var(--ds-text-strong); display: flex; gap: var(--ds-sp-1h); align-items: center; flex-wrap: wrap; }
+  .gtf .lot h3 > span[aria-hidden] { font-family: var(--ds-font-emoji); line-height: 1; }
+  .gtf .chip { display: inline-block; font: 9px/1.5 var(--ds-font-pixel); letter-spacing: .06em; padding: 4px 6px; border-radius: var(--ds-r-xs); color: #0b0b0b; background: var(--st); }
+  .gtf .cd { font: 15px/1.4 var(--ds-font-pixel); color: var(--ds-text-strong); letter-spacing: .04em; margin-top: var(--ds-sp-1h); font-variant-numeric: tabular-nums; }
+  .gtf .cd small { display: block; font: 12px var(--ds-font); color: var(--mut); letter-spacing: 0; margin-bottom: 2px; }
+  .gtf .lot dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ds-sp-1h) var(--ds-sp-2h); font-size: 13.5px; align-items: center; }
+  .gtf .lot dt { color: #8e978e; font: 9px/1.5 var(--ds-font-pixel); letter-spacing: .06em; text-transform: uppercase; }
+  .gtf .lot dd { margin: 0; color: var(--ds-text); min-width: 0; font-variant-numeric: tabular-nums; }
   .gtf .lot dd .sub { color: var(--mut); font-size: 12.5px; }
   .gtf .bar { display: flex; gap: 2px; margin-top: 3px; }
   .gtf .bar b { flex: 1; height: 7px; background: #26262b; }
   .gtf .bar b.on { background: #ff7a3d; } .gtf .bar.vault b.on { background: var(--gold); }
-  .gtf .lot .go { justify-self: start; }
-  .gtf .lot .go code { color: #ffe08a; }
-  .gtf .mm-empty { color: var(--mut); font-size: 14px; margin: 0; }
+  .gtf .lot .go { justify-self: start; font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
+  .gtf .lot .go code { color: var(--ds-gold-text); }
+  .gtf .mm-empty { color: var(--mut); font-size: var(--ds-fs-sm); margin: 0; }
 
   @media (prefers-reduced-motion: no-preference) {
-    .gtf h1 em { animation: gtf-shine 8s ease-in-out infinite alternate; }
+    .gtf .hero h1 em { animation: gtf-shine 8s ease-in-out infinite alternate; }
     @keyframes gtf-shine { from { background-position: 0% 0; } to { background-position: 100% 0; } }
     .gtf .radar::before { animation: gtf-sweep 3s linear infinite; }
     @keyframes gtf-sweep { to { transform: rotate(360deg); } }
@@ -140,35 +137,35 @@
   @media (max-width: 700px) {
     .gtf .city { grid-template-columns: minmax(0, 1fr); gap: 22px; }
     .gtf .city::before { display: none; }
-    .gtf .city::after { left: 22px; }
+    .gtf .city::after { inset-inline-start: 22px; }
   }
-  @media (max-width: 380px) { .gtf .lot-top { grid-template-columns: 56px minmax(0, 1fr); } .gtf .sprite { width: 56px; height: 56px; } .gtf .sprite svg { width: 48px; height: 48px; } }
   @media (max-width: 760px) { .gtf .hero { grid-template-columns: minmax(0, 1fr); } }
-  @media (max-width: 520px) { .gtf .hero, .gtf .start { padding: 18px 16px 16px; } .gtf .lead { font-size: 15px; } }
+  @media (max-width: 520px) { .gtf .hero { padding: var(--ds-sp-6) var(--ds-sp-5) var(--ds-sp-5); } .gtf .start { padding: var(--ds-sp-4); } }
+  @media (max-width: 420px) { .gtf .lot-top { grid-template-columns: 56px minmax(0, 1fr); } .gtf .sprite { width: 56px; height: 56px; } .gtf .sprite svg { width: 48px; height: 48px; } }
 </style>
-<div class="gtf">
+<main class="ds-page wide gtf">
   <section class="hero" aria-labelledby="gtfH">
-    <div>
-      <div class="eyebrow"><%- t('gtf.eyebrow') %></div>
-      <h1 id="gtfH"><span aria-hidden="true">🔫 </span><em>Grand Theft Frogger</em></h1>
-      <p class="lead"><%- t('gtf.lede') %></p>
-      <div class="row">
-        <a class="btn gold" href="<%= links.heistHelp %>">🥷 <%- t('gtf.cta.how') %></a>
-        <a class="btn" href="/bounties">🎯 <%- t('gtf.bounties.l_board') %></a>
-        <a class="btn" href="<%= links.turfMap %>"<%- ext(links.turfMap) %>>🗺️ <%- t('gtf.turf.l_map') %></a>
+    <div class="hero-main">
+      <span class="ds-eyebrow"><%- t('gtf.eyebrow') %></span>
+      <h1 id="gtfH" class="ds-display"><span class="ds-ic" aria-hidden="true">🔫</span><em>Grand Theft Frogger</em></h1>
+      <p class="ds-lead"><%- t('gtf.lede') %></p>
+      <div class="ds-ctas">
+        <a class="ds-btn gold" href="<%= links.heistHelp %>"><span class="ds-ic" aria-hidden="true">🥷</span><%- t('gtf.cta.how') %></a>
+        <a class="ds-btn ghost" href="/bounties"><span class="ds-ic" aria-hidden="true">🎯</span><%- t('gtf.bounties.l_board') %></a>
+        <a class="ds-btn ghost" href="<%= links.turfMap %>"<%- ext(links.turfMap) %>><span class="ds-ic" aria-hidden="true">🗺️</span><%- t('gtf.turf.l_map') %></a>
       </div>
     </div>
     <aside class="me<%= sheet ? ' has' : '' %>" aria-labelledby="gtfMe">
-      <h2 id="gtfMe"><%- t('gtf.me.heading') %></h2>
+      <h2 id="gtfMe" class="ds-label"><%- t('gtf.me.heading') %></h2>
       <% if (sheet) { %>
         <div class="big"><span class="av" aria-hidden="true">🐸</span><span class="cls"><%= sheet.cls || '' %><% if (!sheet.cls) { %><%- t('gtf.me.rolled') %><% } %></span></div>
-        <a class="btn gold" href="<%= sheet.url %>"<%- ext(sheet.url) %>>📜 <%- t('gtf.me.open') %></a>
+        <a class="ds-btn gold sm" href="<%= sheet.url %>"<%- ext(sheet.url) %>><span class="ds-ic" aria-hidden="true">📜</span><%- t('gtf.me.open') %></a>
       <% } else if (user) { %>
         <p><%- t('gtf.me.none', { cmd: '<code>!sheet</code>' }) %></p>
         <p><%- t('gtf.me.link_hint') %></p>
       <% } else { %>
         <p><%- t('gtf.me.anon', { cmd: '<code>!sheet</code>' }) %></p>
-        <a class="btn" href="/login?next=/gtf"><%- t('gtf.me.signin') %></a>
+        <a class="ds-btn ghost sm" href="/login?next=/gtf"><%- t('gtf.me.signin') %></a>
       <% } %>
     </aside>
   </section>
@@ -187,12 +184,12 @@
     <div class="mm-head">
       <div class="radar" id="mmRadar" role="img" aria-label="<%- MM['radar'] %>"></div>
       <div>
-        <h2 id="gtfMapH">🗺️ <%- MM['heading'] %></h2>
+        <h2 id="gtfMapH" class="ds-pixel-h"><span class="ds-ic" aria-hidden="true">🗺️</span><%- MM['heading'] %></h2>
         <div class="mm-upd" id="mmUpd" aria-live="polite"></div>
       </div>
       <p><%- MM['sub'] %></p>
     </div>
-    <div class="mm-live" id="mmLive" role="status"><span class="siren">🚨 <%- MM['live'] %></span><span class="txt" id="mmLiveTxt"></span><span class="pips" id="mmPips" aria-hidden="true"></span></div>
+    <div class="mm-live" id="mmLive" role="status"><span class="siren"><span class="ds-ic" aria-hidden="true">🚨</span><%- MM['live'] %></span><span class="txt" id="mmLiveTxt"></span><span class="pips" id="mmPips" aria-hidden="true"></span></div>
     <div class="city" id="mmCity"><p class="mm-empty"><%- MM['none'] %></p></div>
   </section>
   <script>
@@ -340,12 +337,12 @@
   </div>
 
   <section class="start" aria-labelledby="gtfStart">
-    <h2 id="gtfStart"><%- t('gtf.start.heading') %></h2>
+    <h2 id="gtfStart" class="ds-pixel-h"><%- t('gtf.start.heading') %></h2>
     <ol class="steps">
       <% STEPS.forEach(([cmd, txt]) => { %><li><code><%= cmd %></code><span><%- txt %></span></li><% }) %>
     </ol>
     <p class="foot"><%- t('gtf.start.foot', { cmd: '<code>!gtf</code>' }) %></p>
   </section>
-</div>
+</main>
 </body>
 </html>

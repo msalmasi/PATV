@@ -847,3 +847,56 @@ Added by the G6 polish pass (1.99pq onwards): the homepage, /about, /info, /help
 ### Standalone pages (friendo)
 
 A page without layout.ejs still loads `ds.css` (for the tokens), sets the viewport meta and `theme-color`, and paints `body` with `--ds-bg`. Its own CSS sizes everything relative to a `min(800px, 100%)` box, and its motion is off under `prefers-reduced-motion`.
+
+---
+
+## Area notes: games (lotto, GTF, achievements, rankings, wheel)
+
+Added by the 1.99ps polish pass (G2). Game pages keep their own illustration (balls, felt, minimap, marquee) but sit on `.ds-page` and read the tokens for everything else.
+
+### Arcade and area pages: the shared rules
+
+- **Wrapper:** `main.ds-page` (`.wide` for GTF and achievements), plus the page's own class that re-points the accent once: `--ds-ac`, `--ds-ac-2`, `--ds-ac-bg`, `--ds-ac-line` and `--ds-on-ac`. Private colour variables (`--gold`, `--lav`, `--neon`…) are kept only as aliases of tokens or of illustration colours, so the existing selectors don't change.
+- **Section heading style per page:** lotto uses the Ubuntu 20px `.ds-h2` size with the lotto's gold-ball dot (`.pb-h`). GTF, achievements, rankings and the wheel use `.ds-pixel-h` (achievements tints it neon with a glow; the wheel's boards keep their own 12px gold pixel h2). Card titles inside a grid (GTF's four parts, Pepeball's "Pick your numbers") are card-title size (17px), not section headings.
+- **Area hero:** an area may keep its own hero background (lotto purple, GTF red/green with the hazard stripe, achievements' scanline marquee). It still uses the ds radius (18), the hero padding (32 at ≥ 700, 24/20 on phones), `.ds-eyebrow`, the display h1 and `.ds-lead`.
+- **Pixel h1 exception:** none. Achievements' h1 moved from Press Start to the display style (gold, with its glow), and the rankings h1 moved to the compact hero. The **one** exception is the gold wheel's neon "JACKPOT" sign, which is the cabinet marquee art rather than a page title, and is left as it is.
+- **Pixel text floor:** Press Start is never below 9px. Badge tiers, minimap labels and chips, and wheel table heads moved from 7/8/8.5px up to 9px.
+- **Game buttons:** a game's big gold CTA (`.pb-btn`) is the ds gold button (`--ds-gold-grad`, `--ds-on-gold` ink) at 48px with the gold focus ring. Small game pills (`.pb-chip`, the achievements filters) are 36px (40px on touch, ≥ 40 when they are the main control) and take `--ds-focus-ring`. Lotto number balls are buttons with the 2px gold outline.
+- **Legacy input reset:** a game's own number field (Pepeball's ticket count) is written as `input[type="number"]` in the page CSS, so it beats the global styles.css rule, and it resets `margin`, `width`, `color` and `border`.
+- **Tables:** game tables keep their skin (lotto purple heads, wheel prize table), but sit in a scroll box with radius 16, 11.5px uppercase heads, `text-align: start/end` and tabular numbers.
+- **Motion:** every looping effect (floating balls, shimmer, radar sweep, bulbs, flicker, blink) is either gated behind `(prefers-reduced-motion: no-preference)` or killed in a `reduce` block. Blinks stay at or below 3 Hz.
+- **`::backdrop`** doesn't inherit custom properties in older engines, so a `<dialog>` backdrop writes `var(--ds-scrim, rgba(0,0,0,.62))` with the fallback.
+
+### Pepeball (/lotto, /lotto/fair/:draw)
+
+- `main.ds-page.pbx` with the lotto accent (`--ds-acc-lotto` / `--ds-acc-lotto-2`, white ink on the purple fill). Illustration colours stay local: the purple field `--pu0..2`, lavender text `--lav`/`--lav2`/`--mut`, and the ball gradients.
+- Purple cards (`.pb-card`) are radius 16 and padding 16 on every width. Inner wells (tray, tickets, tiers, top winners) are radius 12 or 10.
+- Notes and totals use the gold note tokens (`--ds-gold-bg`, `--ds-gold-line`, `--ds-warn-ink`). Errors use `--ds-danger`.
+- The fairness page is a detail page: `.ds-page.mid`, `.ds-back`, a `.ds-head` (eyebrow "Pepeball" in the lotto accent, `.ds-h1`), then `.ds-card`s. The script fills `#lf-rec` (now `aria-live`).
+- Test hooks to keep: `.pb-jpn[data-count]`, `.pb-tier.jp`, `form.pb-card.pb-pick#pb-pick`, `.pb-n` buttons, `.pb-qp`, `.pb-b` ball markup, `.pb-tk.won/.lost`, `.pb-b.lg[style=--i]`.
+
+### Grand Theft Frogger (/gtf)
+
+- `main.ds-page.wide.gtf`, accent `--ds-acc-gtf` with the part colours (`--ds-acc-gtf-2`, `-violet`, `-red`) as each part card's 3px top rule.
+- Hero CTAs are `.ds-btn.gold` (how heists work) and `.ds-btn.ghost` (bounty board, turf map). The "your character" panel inside the hero uses a `.ds-label` heading and `.ds-btn.sm`.
+- Part-card link rows are 40px tall with a `›` chevron that flips in RTL.
+- The heist minimap keeps its city grid, sprites and LED colours. It is drawn by the page script, so its classes (`.lot`, `.chip`, `.cd`, `.bar`, `#mmCity`, `#mmRadar`, `#mmLive`, `#mmPips`, `[data-ready]`) are hooks.
+
+### Achievements (/achievements)
+
+- The arcade look stays: scanline marquee hero with an inset ring, neon pixel group heads with a dashed rule, pixel badge names, rarity-coloured frames. Borders are 1px; the badge frame keeps its 2px rarity ring as illustration.
+- Rarity colours are the `--ds-r-*` tokens. The XP chip stays cyan and the PAT chip is gold-text on a gold line.
+- The filter bar is a sunken panel (radius 12), sticky from 1000px. The search field is `.ds-in`. "No matches" is a `.ds-empty` with a `.ds-btn.ghost.sm` reset. The ✓ / 🔒 in the state filter are `.ds-ic`.
+- On phones the rarity tiles wrap the label and the count instead of breaking the word.
+
+### Rankings (/rankings)
+
+- `main.ds-page.lb` with a gold accent. The header is `.ds-hero.compact.gold` (h1 at page-title size), with the supply / burned / jackpot tiles as glass tiles (min 44px, gold-text values, focus ring).
+- The board switcher is `.ds-tabs` > `.ds-tab` with `role="tab"` / `aria-selected`. The `.lb-tab` class stays, because the script finds the tabs by it. The selected tab is the gold accent tint, not white on green.
+- Rows are at least 44px tall. The "You" tag is dark ink on green. Panel headings are `.ds-pixel-h`.
+
+### Gold wheel (/u/:u/wheel)
+
+- `main.ds-page.flow.aw` (block flow; the cabinet manages its own spacing). `arcade-wheel.css` keeps its VT323 + Press Start cabinet, and is also used by the home page's compact coin-op (`.aw.aw-hm`), so it is shared.
+- Its gold is `--ds-gold`, its muted text is `--ds-text-muted`, zero-prize rows use `--ds-text-faint` (#6f6f7d failed AA), focus is the gold 2px ring, and the tool buttons are 44px.
+- Breakpoints collapsed onto the ds set: 1000 (the stage stacks), 600, 420.

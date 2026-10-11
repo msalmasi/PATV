@@ -1,25 +1,30 @@
 <%- include('layout', { title: title, user: user}) %>
 <style>
-  .lf { max-width: 860px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; }
-  .lf h1 { text-align: center; }
-  .lf .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
-  .lf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; font-size: 13px; word-break: break-all; }
-  .lf .ok { color: #81c784; } .lf .bad { color: #ff9a9a; }
-  .lf .info { color: #999; font-size: 13px; line-height: 1.6; }
+  /* 1.99ps polish: a ds detail page (docs/design-system.md, "Area notes: games") in the lotto accent. Ids lf / lf-rec / lf-mine are the script's hooks. */
+  .lf { --ds-ac: var(--ds-acc-lotto); --ds-ac-2: var(--ds-acc-lotto-2); --ds-ac-bg: rgba(106,74,156,.18); --ds-ac-line: var(--ds-acc-lotto); }
+  .lf .ds-card p { margin: 0; }
+  .lf code { overflow-wrap: anywhere; word-break: break-all; }
+  .lf .ok { color: var(--ds-ok); font-weight: 700; } .lf .bad { color: var(--ds-danger); font-weight: 700; }
+  .lf .lf-links { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h) var(--ds-sp-4); align-items: center; font-size: var(--ds-fs-sm); }
+  .lf .lf-links a { display: inline-flex; align-items: center; min-height: 36px; }
 </style>
-<main class="lf" id="lf" data-draw="<%= draw %>">
-  <h1>Pepeball draw #<%= draw %>: provably fair</h1>
-  <div class="card" id="lf-rec">Loading…</div>
-  <div class="card">
+<main class="ds-page mid lf" id="lf" data-draw="<%= draw %>">
+  <a class="ds-back" href="/lotto">← back to Pepeball</a>
+  <header class="ds-head">
+    <span class="ds-eyebrow ac">Pepeball</span>
+    <h1 class="ds-h1">Pepeball draw #<%= draw %>: provably fair</h1>
+  </header>
+  <div class="ds-card" id="lf-rec" aria-live="polite">Loading…</div>
+  <div class="ds-card">
     <p><b>Your browser's check</b> (WebCrypto, not the site's own verifier): <span id="lf-mine">…</span></p>
-    <p class="info">How it works: when a draw's sales open, the site publishes <code>sha256(server_seed)</code>. When sales close it publishes
+    <p class="ds-meta">How it works: when a draw's sales open, the site publishes <code>sha256(server_seed)</code>. When sales close it publishes
       every ticket (number list, no owners) and <code>tickets_digest</code> = sha256 of the lines <code>id:w1,w2,w3,w4:pb</code> - so the
       result depends on every ticket bought, and nobody (the site included) knows it while tickets can still be bought. The numbers come from
       <code>HMAC-SHA256(server_seed, "tickets_digest:draw:counter")</code> read as big-endian 32-bit words (rejection sampling):
       a partial Fisher-Yates over 1-30 picks the four numbers, then the Pepe Ball is 1 + the next draw below 10. After the draw the seed is
       revealed, so anyone can check all three steps.</p>
   </div>
-  <p><a href="/lotto">← back to Pepeball</a> · <a href="/api/lotto/fair/<%= draw %>">raw record (JSON, with the ticket list)</a></p>
+  <p class="lf-links"><a href="/api/lotto/fair/<%= draw %>">raw record (JSON, with the ticket list)</a></p>
 </main>
 <script>
 (function () {

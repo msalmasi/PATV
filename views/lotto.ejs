@@ -8,18 +8,18 @@
     ul() exactly as before - incognito/anonymised names stay plain), past draws, and how it works. SVG/CSS only;
     every animation is off under prefers-reduced-motion. %>
 <style>
-  .pbx { --pu0: #1b0b30; --pu1: #2a0f4a; --pu2: #3d1460; --pub: #6a4a9c; --gold: #ffd740; --gold2: #ffc400; --goldt: #ffe082;
-         --lav: #e1c7ff; --lav2: #d9c8f0; --mut: #b9a6d6; --grn: #3fa34d;
-         max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 0 16px 56px;
-         font-family: Ubuntu, sans-serif; color: #eee; overflow-wrap: anywhere; }
-  .pbx *, .pbx *::before, .pbx *::after { box-sizing: border-box; }
+  /* 1.99ps polish: on the design system (docs/design-system.md, "Area notes: games"). .ds-page gives the width, gutter and the 24px
+     section rhythm; everything below reads ds tokens. The purple field + gold balls are the area's illustration colours. */
+  .pbx { --ds-ac: var(--ds-acc-lotto); --ds-ac-2: var(--ds-acc-lotto-2); --ds-ac-bg: rgba(106,74,156,.18); --ds-ac-line: var(--ds-acc-lotto); --ds-on-ac: #fff;
+         --pu0: #1b0b30; --pu1: var(--ds-lotto-bg); --pu2: #3d1460; --pub: var(--ds-acc-lotto); --gold: var(--ds-gold); --goldt: var(--ds-gold-text);
+         --lav: var(--ds-acc-lotto-2); --lav2: #d9c8f0; --mut: #b9a6d6; --well: rgba(12,4,24,.5); --pline: rgba(106,74,156,.6); }
   .pbx a { color: var(--goldt); }
-  .pbx [hidden] { display: none !important; }
   .pb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .pbx section { min-width: 0; }
 
   /* balls */
   .pb-balls { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; vertical-align: middle; }
-  .pb-b { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font: bold 13px/1 Ubuntu, sans-serif;
+  .pb-b { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font: 700 13px/1 var(--ds-font);
           color: #222; background: radial-gradient(circle at 35% 30%, #fff, #ececec 45%, #b8b8b8); box-shadow: 0 2px 4px rgba(0,0,0,.45); font-variant-numeric: tabular-nums; }
   .pb-b.pb { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); text-shadow: 0 1px 1px rgba(0,0,0,.4); }
   .pb-b.sm { width: 24px; height: 24px; font-size: 11px; }
@@ -27,170 +27,180 @@
   .pb-b.dim { opacity: .38; }
   .pb-b.hit { box-shadow: 0 0 0 3px var(--gold), 0 0 14px rgba(255,215,64,.8); }
 
-  /* hero */
-  .pb-hero { position: relative; overflow: hidden; margin: 14px 0 0; padding: 30px 22px 26px; border-radius: 20px; border: 1px solid var(--pub); text-align: center;
+  /* hero (an area hero: ds radius / padding / type, the lotto purple background) */
+  .pb-hero { position: relative; overflow: hidden; padding: var(--ds-sp-8) var(--ds-sp-6) var(--ds-sp-7); border-radius: var(--ds-r-2xl); border: 1px solid var(--pub); text-align: center;
              background: radial-gradient(80% 120% at 100% 0%, rgba(255,215,64,.20), transparent 55%), radial-gradient(70% 90% at 0% 100%, rgba(63,163,77,.18), transparent 60%),
                          linear-gradient(135deg, var(--pu1), var(--pu2) 45%, var(--pu0)); box-shadow: 0 10px 40px rgba(42,15,74,.55); }
-  .pb-hero > *:not(.pb-float) { position: relative; z-index: 1; }
+  .pb-hero > *:not(.pb-float) { position: relative; z-index: var(--ds-z-raised); }
   .pb-float { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
-  .pb-float .pb-b { position: absolute; left: var(--x); top: var(--y); width: var(--s); height: var(--s); font-size: calc(var(--s) * .4); opacity: .45;
+  .pb-float .pb-b { position: absolute; inset-inline-start: var(--x); top: var(--y); width: var(--s); height: var(--s); font-size: calc(var(--s) * .4); opacity: .45;
                     animation: pbFloat var(--d) ease-in-out infinite alternate; animation-delay: var(--dl); }
-  .pb-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0; }
+  .pb-brand { display: flex; align-items: center; justify-content: center; gap: var(--ds-sp-3); margin: 0; }
   .pb-logo { flex: none; width: 60px; height: 60px; animation: pbSpin 9s linear infinite; filter: drop-shadow(0 4px 10px rgba(0,0,0,.45)); }
-  .pb-word { margin: 0; font: 900 clamp(40px, 11vw, 74px)/1 Ubuntu, sans-serif; letter-spacing: .01em; text-transform: uppercase;
+  .pb-word { margin: 0; font: 700 clamp(40px, 11vw, 74px)/1 var(--ds-font); letter-spacing: .01em; text-transform: uppercase;
              background: linear-gradient(180deg, #fff6cf 0%, var(--gold) 55%, #ff9f00 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
              filter: drop-shadow(0 3px 0 #5a1f8a) drop-shadow(0 8px 18px rgba(0,0,0,.45)); }
-  .pb-tag { max-width: 620px; margin: 10px auto 0; color: var(--lav2); font-size: 15px; line-height: 1.5; }
-  .pb-kick { margin-top: 22px; font: bold 13px/1.4 Ubuntu, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--lav); }
-  .pb-jp { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 0 10px; margin-top: 4px; font: 900 clamp(40px, 12vw, 84px)/1.05 Ubuntu, sans-serif; font-variant-numeric: tabular-nums; }
+  .pb-tag { max-width: 620px; margin: var(--ds-sp-2h) auto 0; color: var(--lav2); font-size: var(--ds-fs-lead); line-height: var(--ds-lh-lead); }
+  .pb-kick { margin-top: var(--ds-sp-6); font: var(--ds-fs-eyebrow)/var(--ds-lh-eyebrow) var(--ds-font-pixel); letter-spacing: var(--ds-ls-eyebrow); text-transform: uppercase; color: var(--lav); }
+  .pb-jp { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 0 var(--ds-sp-2h); margin-top: var(--ds-sp-1); font: 700 clamp(40px, 12vw, 84px)/1.05 var(--ds-font); font-variant-numeric: tabular-nums; }
   .pb-jpn { background: linear-gradient(100deg, var(--gold) 0%, var(--goldt) 35%, #fffbe6 50%, var(--goldt) 65%, var(--gold) 100%); background-size: 250% 100%; background-position: 100% 0;
             -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(255,215,64,.45)); animation: pbShimmer 3.2s linear infinite; }
-  .pb-jp small { font-size: clamp(16px, 4vw, 24px); font-weight: bold; color: #ffecb3; letter-spacing: .06em; }
-  .pb-jpnote { margin: 6px auto 0; max-width: 560px; color: var(--mut); font-size: 13px; line-height: 1.5; }
-  .pb-cdl { margin-top: 20px; color: var(--lav); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
-  .pb-cd { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
-  .pb-t { min-width: 66px; padding: 9px 6px 7px; border-radius: 12px; background: rgba(12,4,24,.55); border: 1px solid var(--pub); }
-  .pb-t b { display: block; font: 900 28px/1 Ubuntu, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+  .pb-jp small { font-size: clamp(16px, 4vw, 24px); font-weight: 700; color: #ffecb3; letter-spacing: .06em; }
+  .pb-jpnote { margin: var(--ds-sp-1h) auto 0; max-width: 560px; color: var(--mut); font-size: var(--ds-fs-meta); line-height: var(--ds-lh-meta); }
+  .pb-cdl { margin-top: var(--ds-sp-5); color: var(--lav); font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: .1em; text-transform: uppercase; }
+  .pb-cd { display: flex; justify-content: center; gap: var(--ds-sp-2); margin-top: var(--ds-sp-2); }
+  .pb-t { min-width: 66px; padding: 9px 6px 7px; border-radius: var(--ds-r-lg); background: rgba(12,4,24,.55); border: 1px solid var(--pub); }
+  .pb-t b { display: block; font: 700 28px/1 var(--ds-font); color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
   .pb-t small { display: block; margin-top: 3px; color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-  .pb-when { margin: 10px 0 0; color: var(--lav2); font-size: 13px; }
-  .pb-when time { color: #fff; }
-  .pb-state { display: inline-block; margin: 16px auto 0; padding: 9px 16px; border-radius: 999px; font-weight: bold; font-size: 15px; }
-  .pb-state.closed { background: rgba(229,115,115,.14); border: 1px solid #a54a4a; color: #ffb3b3; }
+  .pb-when { margin: var(--ds-sp-2h) 0 0; color: var(--lav2); font-size: var(--ds-fs-meta); }
+  .pb-when time { color: var(--ds-text-strong); }
+  .pb-state { display: inline-flex; align-items: center; min-height: 40px; margin: var(--ds-sp-4) auto 0; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill); font-weight: 700; font-size: 15px; }
+  .pb-state.closed { background: var(--ds-danger-bg); border: 1px solid var(--ds-danger-line); color: var(--ds-danger); }
   .pb-state.drawing { background: rgba(255,215,64,.14); border: 1px solid #9c7a12; color: var(--goldt); animation: pbPulse 1.4s ease-in-out infinite; }
-  .pb-stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-  .pb-stat { padding: 7px 14px; border-radius: 999px; background: rgba(12,4,24,.45); border: 1px solid rgba(106,74,156,.7); color: var(--lav2); font-size: 13px; }
-  .pb-stat b { color: #fff; font-size: 15px; font-variant-numeric: tabular-nums; margin-right: 4px; }
-  .pb-ctas { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
-  .pb-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 12px 26px;
-            border: 0; border-radius: 999px; font: bold 17px/1 Ubuntu, sans-serif; color: var(--pu1) !important; text-decoration: none; cursor: pointer;
-            background: linear-gradient(180deg, #ffe57f, var(--gold2)); box-shadow: 0 4px 18px rgba(255,196,0,.45); transition: transform .12s, filter .12s; }
+  .pb-stats { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--ds-sp-2); margin-top: var(--ds-sp-5); }
+  .pb-stat { display: inline-flex; align-items: baseline; gap: 6px; padding: 7px 13px; border-radius: var(--ds-r-pill); background: rgba(12,4,24,.45); border: 1px solid rgba(106,74,156,.7); color: var(--lav2); font-size: var(--ds-fs-meta); line-height: 1.3; }
+  .pb-stat b { color: var(--ds-text-strong); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pb-ctas { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--ds-sp-2h); margin-top: var(--ds-sp-6); }
+  /* gold PAT button: the ds gold button (90deg gradient, dark ink) at the lotto's 48px hero size, with the shine sweep */
+  .pb-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-2); min-height: 48px; margin: 0; padding: 0 var(--ds-sp-6);
+            border: 0; border-radius: var(--ds-r-pill); font: 700 16px/1.1 var(--ds-font); color: var(--ds-on-gold) !important; text-decoration: none !important; cursor: pointer;
+            background: var(--ds-gold-grad); box-shadow: 0 4px 18px rgba(255,196,0,.35); transition: transform var(--ds-dur-1), filter var(--ds-dur-1); }
   .pb-btn::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.6) 50%, transparent 70%); transform: translateX(-120%); animation: pbShine 4.5s ease-in-out 1s infinite; }
-  .pb-btn:hover, .pb-btn:focus-visible { filter: brightness(1.08); transform: translateY(-1px); }
-  .pb-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
-  .pb-btn[disabled] { filter: grayscale(.6) brightness(.8); cursor: default; transform: none; }
-  .pb-btn.ghost { background: rgba(12,4,24,.4); color: var(--goldt) !important; border: 2px solid var(--gold); box-shadow: none; }
+  .pb-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+  .pb-btn:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .pb-btn[disabled] { filter: grayscale(.6) brightness(.7); cursor: not-allowed; transform: none; }
+  .pb-btn.ghost { background: rgba(12,4,24,.4); color: var(--goldt) !important; border: 1px solid var(--gold); box-shadow: none; }
   .pb-btn.ghost::after { display: none; }
   .pb-btn.wide { width: 100%; }
 
-  /* sections */
-  .pb-h { display: flex; align-items: center; gap: 10px; margin: 34px 0 12px; font: 900 22px/1.2 Ubuntu, sans-serif; color: #fff; }
-  .pb-h::before { content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, var(--gold) 55%, #b88600); box-shadow: 0 0 10px rgba(255,215,64,.6); }
-  .pb-card { background: linear-gradient(180deg, rgba(61,20,96,.38), rgba(27,11,48,.55)); border: 1px solid rgba(106,74,156,.75); border-radius: 16px; padding: 16px; min-width: 0; }
-  .pb-card h3 { margin: 0 0 4px; font-size: 18px; color: #fff; }
-  .pb-p { margin: 0; color: var(--lav2); font-size: 14px; line-height: 1.55; }
-  .pb-fine { margin: 8px 0 0; color: var(--mut); font-size: 12.5px; line-height: 1.5; }
-  .pb-note { padding: 12px 14px; border-radius: 12px; background: rgba(255,215,64,.08); border: 1px solid #6b5a20; color: #f3e6c0; line-height: 1.5; }
-  .pb-note code, .pbx code { background: rgba(12,4,24,.6); color: var(--goldt); padding: 1px 6px; border-radius: 5px; }
-  .pb-bal { margin: 0 0 10px; color: var(--lav2); }
+  /* sections: one heading style (ds-h2 size + a gold-ball dot, the lotto's .dot) */
+  .pb-h { display: flex; align-items: center; gap: var(--ds-sp-2h); margin: 0 0 var(--ds-sp-3); font: 700 var(--ds-fs-h2)/var(--ds-lh-h2) var(--ds-font); color: var(--ds-text-strong); }
+  .pb-h::before { content: ""; flex: none; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, var(--gold) 55%, #b88600); box-shadow: 0 0 10px rgba(255,215,64,.6); }
+  .pb-card { background: linear-gradient(180deg, rgba(61,20,96,.38), rgba(27,11,48,.55)); border: 1px solid rgba(106,74,156,.75); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); min-width: 0; }
+  .pb-card h3 { margin: 0 0 var(--ds-sp-1); font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); display: flex; align-items: center; gap: var(--ds-sp-2); }
+  .pb-p { margin: 0; color: var(--lav2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .pb-fine { margin: var(--ds-sp-2) 0 0; color: var(--mut); font-size: var(--ds-fs-xs); line-height: var(--ds-lh-xs); }
+  .pb-note { margin: 0; padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); background: var(--ds-gold-bg); border: 1px solid var(--ds-gold-line); color: var(--ds-warn-ink); line-height: 1.5; font-size: var(--ds-fs-sm); }
+  .pb-note code, .pbx code { background: rgba(12,4,24,.6); color: var(--goldt); padding: 1px 6px; border-radius: var(--ds-r-xs); }
+  .pb-bal { margin: 0 0 var(--ds-sp-2h); color: var(--lav2); }
   .pb-bal b { color: var(--goldt); font-variant-numeric: tabular-nums; }
 
   /* the picker */
-  .pb-buy { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-  .pb-tray { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 10px; padding: 10px 12px; border-radius: 14px; background: rgba(12,4,24,.5); border: 1px dashed var(--pub); }
+  .pb-buy { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: var(--ds-sp-3); align-items: start; }
+  .pb-tray { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2); margin: var(--ds-sp-3) 0 var(--ds-sp-2h); padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-lg); background: var(--well); border: 1px dashed var(--pub); }
   .pb-slot { width: 40px; height: 40px; font-size: 16px; }
   .pb-slot.empty { background: rgba(255,255,255,.06); color: var(--mut); box-shadow: inset 0 0 0 2px rgba(225,199,255,.35); }
   .pb-slot.pb.empty { box-shadow: inset 0 0 0 2px rgba(63,163,77,.7); }
-  .pb-plus { color: var(--mut); font-weight: bold; }
-  .pbx fieldset { border: 0; margin: 10px 0 0; padding: 0; min-width: 0; }
-  .pbx legend { padding: 0; margin-bottom: 6px; color: var(--lav); font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; }
-  .pb-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
-  .pb-n { aspect-ratio: 1; width: 100%; max-width: 46px; justify-self: center; padding: 0; border-radius: 50%; border: 1px solid rgba(225,199,255,.35); cursor: pointer;
-          background: rgba(255,255,255,.07); color: #fff; font: bold 14px/1 Ubuntu, sans-serif; font-variant-numeric: tabular-nums; transition: transform .12s, background .12s; }
+  .pb-plus { color: var(--mut); font-weight: 700; }
+  .pbx fieldset { border: 0; margin: var(--ds-sp-2h) 0 0; padding: 0; min-width: 0; }
+  .pbx legend { padding: 0; margin-bottom: var(--ds-sp-1h); color: var(--lav); font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; }
+  .pb-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: var(--ds-sp-1h); }
+  .pb-n { aspect-ratio: 1; width: 100%; min-width: 0; max-width: 46px; justify-self: center; margin: 0; padding: 0; border-radius: 50%; border: 1px solid rgba(225,199,255,.35); cursor: pointer;
+          background: rgba(255,255,255,.07); color: var(--ds-text-strong); font: 700 14px/1 var(--ds-font); font-variant-numeric: tabular-nums; transition: transform var(--ds-dur-1), background var(--ds-dur-1); }
   .pb-n:hover { background: rgba(255,255,255,.16); transform: translateY(-2px); }
-  .pb-n:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .pb-n:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
   .pb-n[aria-pressed="true"] { border-color: transparent; color: #222; background: radial-gradient(circle at 35% 30%, #fff, #ececec 45%, #b8b8b8); box-shadow: 0 0 0 3px var(--gold), 0 3px 8px rgba(0,0,0,.4); animation: pbPop .25s ease-out; }
   .pb-gb .pb-n { border-color: rgba(63,163,77,.6); }
   .pb-gb .pb-n[aria-pressed="true"] { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); }
   .pb-n.full { opacity: .45; }
-  .pb-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-  .pb-chip { min-height: 38px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--pub); background: rgba(12,4,24,.5); color: var(--lav); font: bold 14px/1 Ubuntu, sans-serif; cursor: pointer; }
-  .pb-chip:hover, .pb-chip:focus-visible { border-color: var(--gold); color: #fff; }
-  .pb-chip[aria-pressed="true"] { background: var(--gold); color: var(--pu1); border-color: var(--gold); }
-  .pb-err { margin: 0 0 10px; color: #ffb3b3; font-size: 14px; }
-  .pb-shuffle { display: flex; justify-content: center; gap: 6px; margin: 14px 0; padding: 14px 8px; border-radius: 14px; background: rgba(12,4,24,.5); }
+  .pb-row { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); margin: var(--ds-sp-3) 0; }
+  .pb-chip { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; margin: 0; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill); border: 1px solid var(--pub); background: var(--well);
+             color: var(--lav) !important; font: 700 14px/1 var(--ds-font); font-variant-numeric: tabular-nums; text-decoration: none !important; cursor: pointer; }
+  .pb-chip:hover { border-color: var(--gold); color: #fff !important; }
+  .pb-chip:focus-visible { outline: none; border-color: var(--gold); box-shadow: var(--ds-focus-ring); }
+  .pb-chip[aria-pressed="true"] { background: var(--gold); color: var(--ds-on-gold) !important; border-color: var(--gold); }
+  .pb-err { margin: 0 0 var(--ds-sp-2h); color: var(--ds-danger); font-size: var(--ds-fs-sm); }
+  .pb-shuffle { display: flex; justify-content: center; gap: var(--ds-sp-1h); margin: var(--ds-sp-3h) 0; padding: var(--ds-sp-3h) var(--ds-sp-2); border-radius: var(--ds-r-lg); background: var(--well); }
   .pb-shuffle .pb-b { width: 38px; height: 38px; font-size: 15px; }
   .pb-shuffle.go .pb-b { animation: pbJiggle .18s ease-in-out infinite alternate; }
   .pb-shuffle.go .pb-b:nth-child(2n) { animation-direction: alternate-reverse; }
-  .pbx label.pb-lbl { display: block; margin-bottom: 6px; color: var(--lav); font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; }
-  .pb-step { display: flex; align-items: center; gap: 6px; }
-  .pb-step button { flex: none; width: 46px; height: 46px; padding: 0; border-radius: 12px; border: 1px solid var(--pub); background: rgba(12,4,24,.55); color: #fff; font: bold 22px/1 Ubuntu, sans-serif; cursor: pointer; }
-  .pb-step button:hover, .pb-step button:focus-visible { border-color: var(--gold); }
-  .pb-step input { flex: 1; min-width: 0; height: 46px; text-align: center; border-radius: 12px; border: 1px solid var(--pub); background: rgba(12,4,24,.55); color: #fff; font: 900 22px/1 Ubuntu, sans-serif; font-variant-numeric: tabular-nums; }
-  .pb-total { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,215,64,.08); border: 1px solid #6b5a20; color: #f3e6c0; text-align: center; font-variant-numeric: tabular-nums; }
+  .pbx label.pb-lbl { display: block; margin-bottom: var(--ds-sp-1h); color: var(--lav); font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; }
+  .pb-step { display: flex; align-items: center; gap: var(--ds-sp-1h); }
+  .pb-step button { flex: none; width: 46px; height: 46px; margin: 0; padding: 0; border-radius: var(--ds-r-md); border: 1px solid var(--pub); background: rgba(12,4,24,.55); color: #fff; font: 700 22px/1 var(--ds-font); cursor: pointer; }
+  .pb-step button:hover { border-color: var(--gold); }
+  .pb-step button:focus-visible { outline: none; border-color: var(--gold); box-shadow: var(--ds-focus-ring); }
+  /* the legacy global input[type=number] (black text, margins, #ddd border) is reset here */
+  .pb-step input[type="number"] { flex: 1; width: auto; min-width: 0; height: 46px; margin: 0; padding: 0 var(--ds-sp-2); text-align: center; border-radius: var(--ds-r-md); border: 1px solid var(--pub); background: rgba(12,4,24,.55); color: #fff;
+                                  font: 700 22px/1 var(--ds-font); font-variant-numeric: tabular-nums; }
+  .pb-step input[type="number"]:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,207,64,.2); }
+  .pb-total { margin: var(--ds-sp-3) 0; padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-lg); background: var(--ds-gold-bg); border: 1px solid var(--ds-gold-line); color: var(--ds-warn-ink); text-align: center; font-variant-numeric: tabular-nums; }
   .pb-total b { color: var(--goldt); font-size: 18px; }
-  .pb-warn { margin: -4px 0 10px; color: #ffb3b3; font-size: 13px; text-align: center; }
+  .pb-warn { margin: calc(-1 * var(--ds-sp-1)) 0 var(--ds-sp-2h); color: var(--ds-danger); font-size: var(--ds-fs-meta); text-align: center; }
 
   /* tickets */
-  .pb-tix { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; max-height: 420px; overflow-y: auto; padding: 2px; }
-  .pb-tk { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(12,4,24,.5);
-           border: 1px solid rgba(106,74,156,.55); border-left: 4px solid var(--gold); }
+  .pb-tix { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: var(--ds-sp-2); max-height: 420px; overflow-y: auto; padding: 2px; }
+  .pb-tk { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); padding: var(--ds-sp-2) var(--ds-sp-2h); border-radius: var(--ds-r-lg); background: var(--well);
+           border: 1px solid rgba(106,74,156,.55); border-inline-start: 4px solid var(--gold); }
   .pb-tk.won { background: linear-gradient(90deg, rgba(255,215,64,.16), rgba(12,4,24,.5)); border-color: #9c7a12; }
-  .pb-tk.lost { border-left-color: rgba(106,74,156,.55); }
-  .pb-tag2 { flex: none; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; color: var(--pu1); background: var(--gold); white-space: nowrap; }
-  .pb-count { margin: 0 0 10px; color: var(--lav2); }
+  .pb-tk.lost { border-inline-start-color: rgba(106,74,156,.55); }
+  .pb-tag2 { flex: none; padding: 3px 8px; border-radius: var(--ds-r-pill); font-size: 11px; font-weight: 700; color: var(--ds-on-gold); background: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pb-count { margin: 0 0 var(--ds-sp-2h); color: var(--lav2); }
   .pb-count b { color: #fff; }
-  .pb-won { margin: 0 0 12px; padding: 12px 14px; border-radius: 12px; font-weight: bold; font-size: 16px; color: var(--pu1); background: linear-gradient(90deg, #ffe57f, var(--gold2)); }
+  .pb-won { margin: 0 0 var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); font-weight: 700; font-size: 16px; color: var(--ds-on-gold); background: var(--ds-gold-grad); }
 
   /* prizes */
-  .pb-tiers { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .pb-tier { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; padding: 12px 14px; border-radius: 14px;
+  .pb-tiers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-2); }
+  .pb-tier { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--ds-sp-1) var(--ds-sp-3h); padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg);
              background: rgba(12,4,24,.45); border: 1px solid rgba(106,74,156,.55); }
   .pb-tier .pb-balls { gap: 3px; }
-  .pb-tl { color: #fff; font-weight: bold; font-size: 14px; }
-  .pb-to { display: block; color: var(--mut); font-size: 12px; font-weight: normal; margin-top: 2px; }
-  .pb-ta { text-align: right; font: 900 18px/1.1 Ubuntu, sans-serif; color: var(--goldt); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pb-ta small { font-size: 11px; color: var(--mut); font-weight: bold; margin-left: 3px; }
-  .pb-tier.jp { position: relative; padding: 18px 16px; border: 2px solid var(--gold); background: radial-gradient(120% 160% at 0% 0%, rgba(255,215,64,.22), transparent 60%), linear-gradient(120deg, var(--pu1), var(--pu2));
+  .pb-tl { color: #fff; font-weight: 700; font-size: var(--ds-fs-sm); }
+  .pb-to { display: block; color: var(--mut); font-size: var(--ds-fs-xs); font-weight: 400; margin-top: 2px; }
+  .pb-ta { text-align: end; font: 700 18px/1.1 var(--ds-font); color: var(--goldt); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pb-ta small { font-size: 11px; color: var(--mut); font-weight: 700; margin-inline-start: 3px; }
+  .pb-tier.jp { position: relative; padding: var(--ds-sp-4); border: 1px solid var(--gold); box-shadow: inset 0 0 0 1px var(--gold);
+                background: radial-gradient(120% 160% at 0% 0%, rgba(255,215,64,.22), transparent 60%), linear-gradient(120deg, var(--pu1), var(--pu2));
                 animation: pbGlow 2.6s ease-in-out infinite; }
-  .pb-tier.jp .pb-ta { font-size: 26px; }
-  .pb-jptag { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--gold); color: var(--pu1); font-size: 11px; letter-spacing: .08em; vertical-align: 2px; }
+  .pb-tier.jp .pb-ta { font-size: var(--ds-fs-num-lg); }
+  .pb-jptag { display: inline-block; margin-inline-start: 6px; padding: 2px 8px; border-radius: var(--ds-r-pill); background: var(--gold); color: var(--ds-on-gold); font-size: 11px; letter-spacing: .08em; vertical-align: 1px; }
   .pb-x { width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1.5px rgba(225,199,255,.35); flex: none; }
   .pb-x.on { background: radial-gradient(circle at 35% 30%, #fff, #ececec 45%, #b8b8b8); box-shadow: 0 1px 2px rgba(0,0,0,.5); }
   .pb-x.pbo { box-shadow: inset 0 0 0 1.5px rgba(63,163,77,.7); }
   .pb-x.pbo.on { background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); }
-  .pb-anyodds { margin: 10px 0 0; color: var(--mut); font-size: 13px; }
+  .pb-anyodds { margin: var(--ds-sp-2h) 0 0; color: var(--mut); font-size: var(--ds-fs-meta); }
 
   /* last draw */
   .pb-res { text-align: center; }
-  .pb-meta { color: var(--lav2); font-size: 14px; }
-  .pb-big { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  .pb-meta { color: var(--lav2); font-size: var(--ds-fs-sm); }
+  .pb-big { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--ds-sp-2h); margin: var(--ds-sp-4) 0; }
   .pb-anim .pb-big .pb-b { animation: pbDrop .7s cubic-bezier(.2,1.4,.4,1) backwards; animation-delay: calc(var(--i) * .45s); animation-play-state: paused; }
   .pb-anim.go .pb-big .pb-b { animation-play-state: running; }
-  .pb-rstats { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
-  .pb-jpline { margin: 14px 0 0; font-weight: bold; color: var(--goldt); }
-  .pb-top { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; text-align: left; counter-reset: pbr; }
-  .pb-top li { counter-increment: pbr; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(12,4,24,.45); font-size: 14px; min-width: 0; }
-  .pb-top li::before { content: counter(pbr); flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,.1); color: var(--lav); font-size: 11px; font-weight: bold; }
-  .pb-top li:nth-child(1)::before { background: var(--gold); color: var(--pu1); }
+  .pb-rstats { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--ds-sp-2); }
+  .pb-jpline { display: flex; align-items: center; justify-content: center; gap: var(--ds-sp-1h); margin: var(--ds-sp-3h) 0 0; font-weight: 700; color: var(--goldt); }
+  .pb-top { list-style: none; margin: var(--ds-sp-3h) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: var(--ds-sp-1h); text-align: start; counter-reset: pbr; }
+  .pb-top li { counter-increment: pbr; display: flex; align-items: center; gap: var(--ds-sp-2); min-height: 40px; padding: var(--ds-sp-1h) var(--ds-sp-2h); border-radius: var(--ds-r-md); background: rgba(12,4,24,.45); font-size: var(--ds-fs-sm); min-width: 0; }
+  .pb-top li::before { content: counter(pbr); flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,.1); color: var(--lav); font-size: 11px; font-weight: 700; }
+  .pb-top li:nth-child(1)::before { background: var(--gold); color: var(--ds-on-gold); }
   .pb-top li:nth-child(2)::before { background: #cfd8dc; color: #222; }
   .pb-top li:nth-child(3)::before { background: #d7a26a; color: #222; }
   .pb-top .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pb-top b { color: var(--goldt); font-variant-numeric: tabular-nums; }
-  .pbx .pb-subh { margin: 20px 0 8px; color: var(--lav); font-size: 12px; font-weight: bold; letter-spacing: .1em; text-transform: uppercase; }
+  .pbx .pb-subh { margin: var(--ds-sp-5) 0 var(--ds-sp-2); color: var(--lav); font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: .1em; text-transform: uppercase; }
 
-  /* past draws */
-  .pb-hist { overflow-x: auto; border-radius: 14px; border: 1px solid rgba(106,74,156,.55); max-height: 520px; overflow-y: auto; }
-  .pb-hist table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .pb-hist th, .pb-hist td { padding: 9px 12px; border-bottom: 1px solid rgba(106,74,156,.3); text-align: left; white-space: nowrap; }
-  .pb-hist th { position: sticky; top: 0; background: var(--pu1); color: var(--lav); font-weight: bold; font-size: 12px; }
-  .pb-hist td.r, .pb-hist th.r { text-align: right; }
+  /* past draws: a ds table scroll box in lotto colours */
+  .pb-hist { overflow: auto; border-radius: var(--ds-r-xl); border: 1px solid rgba(106,74,156,.55); max-height: 520px; -webkit-overflow-scrolling: touch; }
+  .pb-hist table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+  .pb-hist th, .pb-hist td { padding: var(--ds-sp-2h) var(--ds-sp-3); border-bottom: 1px solid rgba(106,74,156,.3); text-align: start; white-space: nowrap; vertical-align: middle; }
+  .pb-hist th { position: sticky; top: 0; z-index: var(--ds-z-raised); background: var(--pu1); color: var(--lav); font-weight: 700; font-size: 11.5px; letter-spacing: var(--ds-ls-label); text-transform: uppercase; }
+  .pb-hist td.r, .pb-hist th.r { text-align: end; }
   .pb-hist .pb-balls { flex-wrap: nowrap; }
   .pb-hist tr:nth-child(even) td { background: rgba(12,4,24,.35); }
+  .pb-hist td .ds-ic { margin-inline-end: 4px; }
 
   /* how it works */
-  .pb-how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-  .pb-how .pb-card { position: relative; padding-top: 44px; }
-  .pb-how .pb-step-n { position: absolute; top: 12px; left: 16px; width: 26px; height: 26px; }
-  .pb-split { display: flex; height: 40px; margin: 12px 0 8px; border-radius: 999px; overflow: hidden; border: 1px solid var(--pub); font-weight: bold; }
+  .pb-how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-sp-3); }
+  .pb-how .pb-card { position: relative; padding-top: 48px; }
+  .pb-how .pb-step-n { position: absolute; top: var(--ds-sp-3); inset-inline-start: var(--ds-sp-4); width: 26px; height: 26px; }
+  .pb-split { display: flex; height: 40px; margin: var(--ds-sp-3) 0 var(--ds-sp-2); border-radius: var(--ds-r-pill); overflow: hidden; border: 1px solid var(--pub); font-weight: 700; }
   .pb-split span { display: grid; place-items: center; font-size: 15px; }
-  .pb-split .pot { background: linear-gradient(180deg, #ffe57f, var(--gold2)); color: var(--pu1); }
+  .pb-split .pot { background: var(--ds-gold-grad); color: var(--ds-on-gold); }
   .pb-split .house { background: linear-gradient(180deg, #6a4a9c, #4a2a7c); color: #fff; }
-  .pb-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--lav2); font-size: 14px; }
-  .pb-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
-  .pb-foot { margin-top: 28px; text-align: center; color: var(--mut); font-size: 13px; line-height: 1.8; }
+  .pb-legend { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h) var(--ds-sp-5); color: var(--lav2); font-size: var(--ds-fs-sm); }
+  .pb-legend span { display: inline-flex; align-items: center; gap: var(--ds-sp-1h); }
+  .pb-legend i { flex: none; display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+  .pb-foot { margin: 0; text-align: center; color: var(--mut); font-size: var(--ds-fs-meta); line-height: 1.8; }
 
   /* the purchase burst */
-  .pb-burst { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 9999; pointer-events: none; }
+  .pb-burst { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: var(--ds-z-toast); pointer-events: none; }
   .pb-burst span { position: absolute; left: 0; top: 0; }
 
   @keyframes pbFloat { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(10px, -22px) rotate(25deg); } }
@@ -198,7 +208,7 @@
   @keyframes pbShimmer { to { background-position: -150% 0; } }
   @keyframes pbShine { 0%, 70% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
   @keyframes pbPulse { 50% { box-shadow: 0 0 0 6px rgba(255,215,64,.12); } }
-  @keyframes pbGlow { 0%, 100% { box-shadow: 0 0 12px rgba(255,215,64,.25); } 50% { box-shadow: 0 0 28px rgba(255,215,64,.6); } }
+  @keyframes pbGlow { 0%, 100% { box-shadow: inset 0 0 0 1px var(--gold), 0 0 12px rgba(255,215,64,.25); } 50% { box-shadow: inset 0 0 0 1px var(--gold), 0 0 28px rgba(255,215,64,.6); } }
   @keyframes pbPop { 0% { transform: scale(.7); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
   @keyframes pbJiggle { from { transform: translateY(0) rotate(-8deg); } to { transform: translateY(-6px) rotate(8deg); } }
   @keyframes pbDrop { 0% { transform: translateY(-80px) scale(.4); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
@@ -210,21 +220,19 @@
   @media (max-width: 760px) {
     .pb-buy, .pb-how { grid-template-columns: minmax(0, 1fr); }
   }
-  @media (max-width: 560px) {
-    .pb-hero { padding: 24px 14px 20px; border-radius: 16px; }
+  @media (max-width: 520px) {
+    .pb-hero { padding: var(--ds-sp-6) var(--ds-sp-4) var(--ds-sp-5); }
     .pb-logo { width: 44px; height: 44px; }
     .pb-float .pb-b { opacity: .28; }
     .pb-t { min-width: 0; flex: 1; padding: 8px 2px 6px; }
     .pb-t b { font-size: 24px; }
     .pb-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
     .pb-gb { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .pb-card { padding: 14px 12px; }
     .pb-tier { grid-template-columns: minmax(0, 1fr) auto; }
     .pb-tier .pb-balls { grid-column: 1 / -1; }
     .pb-b.lg { width: 46px; height: 46px; font-size: 19px; }
-    .pb-big { gap: 6px; }
+    .pb-big { gap: var(--ds-sp-1h); }
     .pb-ctas .pb-btn { flex: 1 1 100%; }
-    .pb-h { font-size: 19px; }
   }
 </style>
 <%
@@ -244,7 +252,7 @@
   const FLOAT = [[7, '4%', '12%', 34, 5.5, 0, 0], [19, '88%', '8%', 40, 6.5, .6, 0], [3, '10%', '70%', 28, 7, 1.2, 1], [23, '92%', '62%', 30, 5, .3, 0],
                  [11, '2%', '42%', 22, 6, 1.8, 0], [28, '95%', '34%', 24, 7.5, .9, 0], [5, '5%', '93%', 26, 6.8, 1.5, 1], [14, '93%', '90%', 20, 5.8, 2.1, 0]];
 %>
-<div class="pbx">
+<main class="ds-page pbx">
 <% if (!L) { %>
   <section class="pb-hero">
     <div class="pb-brand"><h1 class="pb-word"><%- t('lotto.title') %></h1></div>
@@ -293,7 +301,7 @@
     <div class="pb-state drawing" data-s="drawing"<%= state === 'drawing' ? '' : ' hidden' %>><%- t('lotto.state_drawing') %></div>
     <p class="pb-sr" id="pb-live" aria-live="polite"></p>
     <% if (locals.backend && locals.commitment) { %>
-      <p class="pb-when pb-fair">🔒 Provably fair: this draw's numbers are sealed by <a href="/lotto/fair/<%= L.draw %>">commitment <code><%= String(commitment).slice(0, 12) %>…</code></a><% if (latest) { %> · <a href="/lotto/fair/<%= latest.draw %>">verify draw #<%= latest.draw %></a><% } %></p>
+      <p class="pb-when pb-fair"><span class="ds-ic" aria-hidden="true">🔒</span> Provably fair: this draw's numbers are sealed by <a href="/lotto/fair/<%= L.draw %>">commitment <code><%= String(commitment).slice(0, 12) %>…</code></a><% if (latest) { %> · <a href="/lotto/fair/<%= latest.draw %>">verify draw #<%= latest.draw %></a><% } %></p>
     <% } %>
 
     <div class="pb-stats">
@@ -302,7 +310,7 @@
       <span class="pb-stat"><b><%= fmt(L.price) %></b><%- t('lotto.price') %></span>
     </div>
     <div class="pb-ctas">
-      <a class="pb-btn" href="#pb-buy">🎟️ <%- t('lotto.cta_buy') %></a>
+      <a class="pb-btn" href="#pb-buy"><span class="ds-ic" aria-hidden="true">🎟️</span> <%- t('lotto.cta_buy') %></a>
       <% if (linked) { %><a class="pb-btn ghost" href="#pb-mine"><%- t('lotto.cta_mine') %></a><% } %>
     </div>
   </section>
@@ -403,7 +411,7 @@
       <% } %>
       <% if (last && latest) { %>
         <h3 class="pb-subh"><%- t('lotto.last_h', { n: last.draw }) %></h3>
-        <div class="pb-card" style="margin-top:8px">
+        <div class="pb-card">
           <% if (last.won > 0) { %><p class="pb-won"><%- t('lotto.last_won', { n: fmt(last.won), d: last.draw }) %></p>
           <% } else { %><p class="pb-count"><%- t('lotto.last_nowin', { d: last.draw }) %></p><% } %>
           <% if (last.tickets.length) { %>
@@ -474,7 +482,7 @@
               <td class="r"><%= fmt(h.tickets) %></td>
               <td class="r"><%= fmt(h.winners) %></td>
               <td class="r"><%= fmt(h.paid) %></td>
-              <td><%- h.jackpot_winners && h.jackpot_winners.length ? '🏆 ' + h.jackpot_winners.map((n) => ul(n)).join(', ') + ' (' + fmt(h.jackpot_paid) + ')' : '🔁 ' + t('lotto.hist_rolled') + ' (' + fmt(h.jackpot) + ')' %></td>
+              <td><%- h.jackpot_winners && h.jackpot_winners.length ? '<span class="ds-ic" aria-hidden="true">🏆</span>' + h.jackpot_winners.map((n) => ul(n)).join(', ') + ' (' + fmt(h.jackpot_paid) + ')' : '<span class="ds-ic" aria-hidden="true">🔁</span>' + t('lotto.hist_rolled') + ' (' + fmt(h.jackpot) + ')' %></td>
             </tr>
           <% }) %>
           </tbody>
@@ -490,12 +498,12 @@
       <div class="pb-card"><span class="pb-b pb-step-n">2</span><h3><%- t('lotto.how_2_h') %></h3><p class="pb-p"><%- t('lotto.how_2', { when: tzT(L.next_at, 'full'), m: Math.round(L.close_secs / 60) }) %></p></div>
       <div class="pb-card"><span class="pb-b pb pb-step-n">3</span><h3><%- t('lotto.how_3_h') %></h3><p class="pb-p"><%- t('lotto.how_3') %></p></div>
     </div>
-    <div class="pb-card" style="margin-top:12px">
+    <div class="pb-card" style="margin-top:var(--ds-sp-3)">
       <h3><%- t('lotto.money_h') %></h3>
       <div class="pb-split" aria-hidden="true"><span class="pot" style="flex:<%= POT_PCT %>"><%= POT_PCT %>%</span><span class="house" style="flex:<%= 100 - POT_PCT %>"><%= 100 - POT_PCT %>%</span></div>
       <div class="pb-legend">
-        <span><i style="background:#ffd740"></i><%- t('lotto.money_pot', { pct: POT_PCT }) %></span>
-        <span><i style="background:#6a4a9c"></i><%- t('lotto.money_house', { pct: 100 - POT_PCT }) %></span>
+        <span><i style="background:var(--ds-gold)"></i><%- t('lotto.money_pot', { pct: POT_PCT }) %></span>
+        <span><i style="background:var(--ds-acc-lotto)"></i><%- t('lotto.money_house', { pct: 100 - POT_PCT }) %></span>
       </div>
       <p class="pb-fine"><%- t('lotto.money_note') %></p>
     </div>
@@ -504,7 +512,7 @@
 
   <p class="pb-foot"><%- t('lotto.chat', { a: '<code>!lotto quick 5</code>', b: '<code>!lotto 3 9 14 27 pb 6</code>' }) %><br>
     <%- t('lotto.economy', { link: '<a href="/economy#casino">' + t('lotto.economy_link') + '</a>' }) %></p>
-</div>
+</main>
 <script>
 (function () {
   'use strict';
