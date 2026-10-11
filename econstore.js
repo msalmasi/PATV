@@ -5,7 +5,7 @@
 //
 //   econ_docs         name PK (econ_layers | econ_monetary | econ_treasury | econ_launchpad | econ_rooms | vault_marks |
 //                     route_keys | stake_drained), doc (JSON), rev, updated. Pepe pushes every change (ordered, rev-checked:
-//                     an older rev never overwrites a newer one) and loads them from here at start while his pools are on
+//                     an older rev never overwrites a newer one); his own copy stays the truth until Phase 4 (he reads one back only if he lost it) while his pools are on
 //                     the site. A local-only Pepe keeps them in turf_data.json, as before.
 //   fed_journal       id PK ("mint:<key>", "grant:<key>", "loan:<id>"), kind, amount, pool, policy, reason, actor, state, ts,
 //                     data - one row per Fed mint / grant / loan, derived from econ_layers on every push (the v2 genesis and

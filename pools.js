@@ -539,6 +539,10 @@ async function settleClaims() {
   if (settling) return settling;
   settling = (async () => {
     if (!(await live())) return { settled: 0 };
+    // the first 2 minutes after an import belong to the cutover's own verification (Pepe compares the site's pools with
+    // what left him, under his closed gate) - no site-side moves in that window
+    const imp = await meta("imported");
+    if (imp && !imp.rolled_back && now() - Number(imp.at || 0) < 120000) return { settled: 0, waiting: true };
     const funding = require("./funding");
     await funding.init();
     const rows = await getQuery(`SELECT claimId, flow, amount FROM reserve_claims WHERE settled = 0 AND COALESCE(queued,0) = 0

@@ -34,6 +34,87 @@ The only ways back to local are an admin **rollback** (while the site answers) o
   - the `[TREASURY] scheduled epoch` and `[MONETARY] scheduled` lines are in `C:\PATV\pepe-console.log`.
 - The best windows are mid-week, 12:00–22:00 UTC, away from the Sunday 21:00 ET lotto draw.
 
+## S. Scheduled run: the exact sequence (first prod run planned 2026-10-12, from 06:30 UTC)
+
+Each step has a **pass** condition. Stop at the first failed one; nothing after it runs.
+- A failure **before S6** leaves everything as it was: local, nothing imported, or an import the site rolled back itself.
+- A failure **in S6** is rolled back automatically (see below).
+- A failure **in S7** is rolled back by S8.
+
+The commands are for the VPS (`ssh patv-vps`) and the prod VM (`ssh pepe-prod`, PowerShell).
+
+**S0. Gate.** Everything below must be true:
+1. The lotto cutover of 02:30 UTC is finished and verified (`docs/lotto-cutover-runbook.md` §4).
+2. The 04:00 UTC weekly settlement and monetary day ran on the old path:
+   ```
+   Select-String C:\PATV\pepe-console.log -Pattern 'scheduled epoch W2026-10-12|MONETARY\] scheduled D2026-10-12'
+   ```
+   Both lines must be present.
+3. The 06:00 UTC read-only epoch check is clean.
+4. Prod runs the shas listed in the agent report:
+   - `curl -s https://publicaccess.tv/healthz` is ok;
+   - `Get-Content C:\PATV\camfrog-bot\VERSION` is ≥ 1.99nz.
+5. It is not within 04:00 ± 20 min UTC.
+
+**S1. Backups** (§2). Pass: both files exist and are non-empty.
+
+**S2. Dry run.**
+```
+Set-Content -Encoding UTF8 C:\PATV\pools-cutover.request.json '{"action":"dryrun"}'
+```
+Wait about 30 s, then read `C:\PATV\pools-cutover.result.json`.
+- **Pass:** `"ok": true` and `problems` is `[]`.
+- Record `result.sum` and `result.per_pool`.
+- The lotto pot must **not** be in `per_pool`. After the lotto cutover it lives in the lotto service.
+
+**S3. Supply before.** Run `curl -s https://publicaccess.tv/api/stats/supply | jq '{total, updated}'` and record it.
+
+**S4. Site switch ON (prod write).**
+```
+sqlite3 /home/PATV/myapp.db "INSERT INTO pools_meta (key,value) VALUES ('enabled','true') ON CONFLICT(key) DO UPDATE SET value='true'"
+```
+**Pass:** `sqlite3 /home/PATV/myapp.db "SELECT value FROM pools_meta WHERE key='enabled'"` is `true`. Nothing moves yet.
+
+**S5. Dry run again.** Same as S2. **Pass:** `ok: true`. Pepe now also checks that the site answers, its switch is on, and it doesn't own pools yet.
+
+**S6. Cutover.**
+```
+Set-Content -Encoding UTF8 C:\PATV\pools-cutover.request.json '{"action":"cutover","actor":"scheduled","key":"pc-20261012"}'
+```
+Wait until `C:\PATV\pools-cutover.result.json` appears; allow up to 3 minutes. Everything in §5 runs, then Pepe **verifies under his closed gate**: the site's pools must equal exactly what left him, and the site does no claim settling for 2 minutes after an import. On a mismatch he **rolls back automatically** (`auto-rb-pc-20261012`). The result then has:
+- `ok: false`;
+- `verified: false`;
+- `error: "post-flip verification failed - rolled back automatically"`.
+
+**Pass:** `ok: true`, `result.match: true`, `result.verified: true`, `result.site.supply_before == result.site.supply_after`, and `result.sum` = S2's sum.
+- `result.delta` lists anything that moved locally between the export and the flip. Usually `[]`.
+- **Not ok and no automatic rollback:** follow §5's "if it fails" notes in §7. In short:
+  - if the site never imported, nothing changed;
+  - if it did, run the rollback (S8).
+
+**S7. Verify (read-only), within 10 minutes.**
+1. Run:
+   ```
+   sqlite3 /home/PATV/myapp.db "SELECT key, balance FROM pools WHERE balance != 0 ORDER BY key"
+   ```
+   It must equal S2's `per_pool` (non-zero) plus `result.delta`, minus or plus any claims settled since (the `pool_moves` rows with kind `settle` / `move` after the import).
+2. Run:
+   ```
+   sqlite3 /home/PATV/myapp.db "SELECT COALESCE(SUM(net),0) FROM pool_moves WHERE ts > (SELECT json_extract(value,'$.at') FROM pools_meta WHERE key='imported') AND kind != 'import'"
+   ```
+   It must equal (sum now) − (S2 sum + delta).
+3. Pepe: `{"action":"status"}` in the request file shows:
+   - `on: true`;
+   - `outbox: []`;
+   - `uncertain: []`;
+   - no `conflict`;
+   - `local` all 0.
+4. Supply: `/api/stats/supply` `total` = S3's total ± the wallet activity since. No step may change it by itself.
+
+**S8. Rollback** (any failed S7 check, or the user's call): `{"action":"rollback","actor":"scheduled","key":"pr-20261012"}`. **Pass:** `ok: true` and `result.sum` equals the site's pool sum just before. Then:
+- the site's `pools` all 0 and `live` false;
+- Pepe `status` shows `on: false` and `local` holding the same sum.
+
 ## 1. Preconditions
 
 1. Code on prod: site ≥ 1.99ns, bot ≥ 1.99ns. Deploy the site first, then the bot.

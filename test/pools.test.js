@@ -199,6 +199,9 @@ test("the site settles plain Reserve / Fort Knox claims itself (keyed claim:<id>
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES ('c3', 'incentives:welcome', 'u1', 'w', 100)");
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES ('c4', 'levelup', 'u1', 'levelup', 999999999999)");
   await P.move({ key: "claim:c1", legs: [["reserve", -25000]], kind: "settle" });     // Pepe got there first: a dup, settled once
+  assert.equal((await P.settleClaims()).waiting, true, "no site-side settling in the 2 minutes after an import (the cutover verifies)");
+  const imp = JSON.parse((await getQuery("SELECT value FROM pools_meta WHERE key = 'imported'"))[0].value);
+  await P._setMeta("imported", Object.assign(imp, { at: imp.at - 130000 }));
   const s = await P.settleClaims();
   assert.equal(s.settled, 2);
   assert.equal(await P.balance("reserve"), r0 - 25000);
