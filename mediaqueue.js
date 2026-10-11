@@ -341,7 +341,7 @@ async function endQueue(q, reason, { notice = null, by = "system", stageReason =
     try { await I().call("POST", `/streams/${encodeURIComponent(stageName(q.room_id))}/stop`, {}); } catch (e) { /* best effort */ }
   }
   await stage.end(q.slot_id, stageReason || (reason === "finished" ? "library_done" : "library_stopped"), by).catch(() => {});
-  await runQuery("UPDATE media_queues SET state = 'ended', ended_at = ?, end_reason = ?, notice = ?, updated = ? WHERE id = ? AND state = 'active'",
+  await runQuery("UPDATE media_queues SET state = 'ended', ended_at = ?, end_reason = ?, notice = ?, updated = ? WHERE id = ? AND state IN ('active','starting')",
                  [NOW(), String(reason || "ended").slice(0, 120), notice, NOW(), q.id]);
   q.state = "ended";
   L()._keys.delete(q.room_id);
@@ -423,6 +423,7 @@ function onWatch(s0, slot, m, live) {
     const s = await I().session(s0.room_id);
     if (!s || s.play_id !== s0.play_id) return false;                 // a control moved it on meanwhile
     const q = await load(s.queue_id);
+    if (q && q.state === "starting") return false;                     // its first title is being started right now
     if (!q || q.state !== "active") {                                  // its queue is gone: just the title
       await stopEncoder(s.room_id);
       await finishTitle(q || { id: s.queue_id, slot_id: s.slot_id, paid_hours: 0, played_sec: 0 }, s, "stopped");
@@ -499,6 +500,13 @@ function restartCurrent(s, pos) {
 /** Active queues with no title on (waiting for an encoder, or the site stopped between two titles). */
 async function watchIdle() {
   await L().init();
+  // a start that never finished (the process died half-way): close it so the pad is free again
+  for (const r of await getQuery("SELECT id, room_id FROM media_queues WHERE state = 'starting' AND updated < ?", [NOW() - 2 * 60000])) {
+    await withLock(r.room_id, async () => {
+      const q = await load(r.id);
+      if (q && q.state === "starting") await endQueue(q, "didn't finish starting", { stageReason: "library_failed" });
+    }).catch((e) => console.error("[mediaqueue] stale start:", conf.errLine(e)));
+  }
   const qs = await getQuery(`SELECT id, room_id FROM media_queues q WHERE state = 'active'
                              AND NOT EXISTS (SELECT 1 FROM media_sessions s WHERE s.room_id = q.room_id)`);
   let n = 0;
@@ -546,13 +554,15 @@ async function start(user, b = {}) {
     L()._keys.set(R.id, opened.key);
     const t = NOW();
     const ins = await runQuery(`INSERT INTO media_queues (room_id, user_id, username, access, state, items, pos, prefs, scope, per_hour, paid_hours, played_sec,
-                                  slot_id, created, updated, last_announce) VALUES (?, ?, ?, ?, 'active', ?, 0, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+                                  slot_id, created, updated, last_announce) VALUES (?, ?, ?, ?, 'starting', ?, 0, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
                                [R.id, user.userId, user.username, A.how, JSON.stringify(built.items), JSON.stringify(prefs), built.scope, pv.per_hour,
                                 opened.slot.id, t, t, t]);
     const q = await load(ins.id);
     let r;
     try {
       r = await startTitle(q, 0, { offset: built.offset, item: first, tracks: { audio: o.audio, sub: o.sub } });
+      // 'starting' until now: a watcher (this process or another one on the same DB) leaves a queue alone while it starts
+      await runQuery("UPDATE media_queues SET state = 'active', updated = ? WHERE id = ? AND state = 'starting'", [NOW(), q.id]);
     } catch (e) {
       // the first title didn't start: nothing stays open, any charge already came back (startTitle)
       await stage.end(opened.slot.id, "library_failed", user.username).catch(() => {});

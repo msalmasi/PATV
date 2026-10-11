@@ -442,7 +442,7 @@ async function play(user, b = {}) {
  */
 async function preflight(user, A, R, { carry = false } = {}) {
   if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.");
-  if ((await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state = 'active'", [R.id])).length) {
+  if ((await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state IN ('active','starting')", [R.id])).length) {
     throw new Refuse(409, "This pad is already playing a queue from the library - stop it first.");
   }
   if (isLibAdmin(user) || carry) return;
@@ -460,7 +460,7 @@ async function preflight(user, A, R, { carry = false } = {}) {
 async function busyOf(live) {
   const names = new Set(live.filter((x) => x.state === "playing").map((x) => x.stage));
   const qs = await safeQuery(`SELECT q.room_id, s.state FROM media_queues q LEFT JOIN media_sessions s ON s.room_id = q.room_id
-                              WHERE q.state = 'active'`, []);
+                              WHERE q.state IN ('active','starting')`, []);
   for (const q of qs) if (q.state !== "paused") names.add(stageName(q.room_id));
   return names.size;
 }

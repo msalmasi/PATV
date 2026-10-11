@@ -359,6 +359,23 @@ test("restart recovery: media-control lost the stream -> the same title again wh
   await L.stop(admin, ROOM);
 });
 
+test("a queue that's still starting is left alone by the watcher; a start that never finished is closed after 2 min", async () => {
+  const r = await Q.start(admin, { room: ROOM, key: "912", scope: "season_rest" });
+  assert.equal((await queueRow(r.queue_id)).state, "active");
+  // another process (a script on the same DB) mid-start: state 'starting' with its first title's session already in
+  await runQuery("UPDATE media_queues SET state = 'starting', updated = ? WHERE id = ?", [Date.now(), r.queue_id]);
+  mstreams._streams.clear();                                                    // even with the stream "lost"
+  const before = procs.length;
+  await L.watch();
+  assert.equal(procs.length, before, "nothing restarted, nothing stopped");
+  assert.equal((await queueRow(r.queue_id)).state, "starting");
+  await assert.rejects(Q.start(admin, { room: ROOM, key: "911" }), (e) => e.status === 409, "the pad is taken while it starts");
+  await runQuery("UPDATE media_queues SET updated = ? WHERE id = ?", [Date.now() - 3 * 60000, r.queue_id]);
+  await L.watch();
+  assert.equal((await queueRow(r.queue_id)).state, "ended");
+  assert.equal((await slotOf(r.slot.id)).status, "ended");
+});
+
 test("the slot ending (Cut, a long pause) ends the queue; the settings switch queues off", async () => {
   const r = await Q.start(admin, { room: ROOM, key: "900" });
   await S.end(r.slot.id, "cut", "someone");
