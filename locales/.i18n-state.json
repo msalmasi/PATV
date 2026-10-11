@@ -5935,7 +5935,9 @@
     "ach.group.kit": "775ab9609a80",
     "ach.group.cards": "24a48486cb2b",
     "ach.group.style": "367947c74f46",
-    "ach.group.social": "32c8a184273f"
+    "ach.group.social": "32c8a184273f",
+    "ach.n.cf_holdem_boardroyal": "5f183bf36968",
+    "ach.d.cf_holdem_boardroyal": "44b243f4e956"
   },
   "lag": {},
   "reviewed": {}

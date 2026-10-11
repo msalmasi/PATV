@@ -6187,5 +6187,7 @@
   "ach.group.kit": "🧰 Araçlar kullanımda",
   "ach.group.cards": "🃏 Kart masaları",
   "ach.group.style": "🎨 Görünüm &amp; ses",
-  "ach.group.social": "💬 Akış &amp; arkadaşlar"
+  "ach.group.social": "💬 Akış &amp; arkadaşlar",
+  "ach.n.cf_holdem_boardroyal": "Kraliyet Muamelesi",
+  "ach.d.cf_holdem_boardroyal": "Masanın kendisi royal flush gelirken hâlâ bir hold'em elindeydik."
 }

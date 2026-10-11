@@ -6104,5 +6104,7 @@
   "ach.group.kit": "🧰 实战道具",
   "ach.group.cards": "🃏 牌桌",
   "ach.group.style": "🎨 外观与音效",
-  "ach.group.social": "💬 动态与好友"
+  "ach.group.social": "💬 动态与好友",
+  "ach.n.cf_holdem_boardroyal": "皇家待遇",
+  "ach.d.cf_holdem_boardroyal": "还在打德州扑克的时候，公共牌竟然直接开出了皇家同花顺。"
 }

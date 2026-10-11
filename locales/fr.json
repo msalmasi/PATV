@@ -6225,5 +6225,7 @@
   "ach.group.kit": "🧰 Kit en action",
   "ach.group.cards": "🃏 Tables de cartes",
   "ach.group.style": "🎨 Look &amp; son",
-  "ach.group.social": "💬 Fil &amp; amis"
+  "ach.group.social": "💬 Fil &amp; amis",
+  "ach.n.cf_holdem_boardroyal": "Traitement royal",
+  "ach.d.cf_holdem_boardroyal": "On était encore en plein coup de hold'em quand le board lui-même a fait une quinte flush royale."
 }

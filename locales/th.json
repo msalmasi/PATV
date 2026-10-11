@@ -6105,5 +6105,7 @@
   "ach.group.kit": "🧰 อุปกรณ์ที่ใช้งาน",
   "ach.group.cards": "🃏 โต๊ะไพ่",
   "ach.group.style": "🎨 ลุคและเสียง",
-  "ach.group.social": "💬 ฟีดและเพื่อน ๆ"
+  "ach.group.social": "💬 ฟีดและเพื่อน ๆ",
+  "ach.n.cf_holdem_boardroyal": "การรับรองแบบราชวงศ์",
+  "ach.d.cf_holdem_boardroyal": "เรายังอยู่ในมือโฮลด์เอ็ม เมื่อไพ่บนโต๊ะกลายเป็นรอยัลฟลัชเสียเอง"
 }

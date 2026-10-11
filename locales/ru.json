@@ -6353,5 +6353,7 @@
   "ach.group.kit": "🧰 Снаряжение в деле",
   "ach.group.cards": "🃏 Карточные столы",
   "ach.group.style": "🎨 Стиль и звук",
-  "ach.group.social": "💬 Лента и друзья"
+  "ach.group.social": "💬 Лента и друзья",
+  "ach.n.cf_holdem_boardroyal": "Королевский приём",
+  "ach.d.cf_holdem_boardroyal": "Мы всё ещё в раздаче холдема, когда на столе выпал роял-флеш."
 }

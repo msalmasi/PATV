@@ -6187,5 +6187,7 @@
   "ach.group.kit": "🧰 किट का इस्तेमाल",
   "ach.group.cards": "🃏 कार्ड टेबल",
   "ach.group.style": "🎨 लुक &amp; साउंड",
-  "ach.group.social": "💬 फ़ीड &amp; दोस्त"
+  "ach.group.social": "💬 फ़ीड &amp; दोस्त",
+  "ach.n.cf_holdem_boardroyal": "रॉयल ट्रीटमेंट",
+  "ach.d.cf_holdem_boardroyal": "बोर्ड पर ही रॉयल फ़्लश बन जाने के समय भी हम अभी hold'em हैंड में ही थे।"
 }

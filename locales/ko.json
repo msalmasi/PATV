@@ -6104,5 +6104,7 @@
   "ach.group.kit": "🧰 장비 활용",
   "ach.group.cards": "🃏 카드 테이블",
   "ach.group.style": "🎨 외관 &amp; 사운드",
-  "ach.group.social": "💬 피드 &amp; 친구"
+  "ach.group.social": "💬 피드 &amp; 친구",
+  "ach.n.cf_holdem_boardroyal": "로열 대접",
+  "ach.d.cf_holdem_boardroyal": "보드 자체에 로열 플러시가 떴을 때도 아직 홀덤 한 판을 하고 있었어요."
 }

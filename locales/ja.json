@@ -6104,5 +6104,7 @@
   "ach.group.kit": "🧰 キットを活用",
   "ach.group.cards": "🃏 カードテーブル",
   "ach.group.style": "🎨 見た目と音",
-  "ach.group.social": "💬 フィード &amp; 友達"
+  "ach.group.social": "💬 フィード &amp; 友達",
+  "ach.n.cf_holdem_boardroyal": "ロイヤル待遇",
+  "ach.d.cf_holdem_boardroyal": "ホールデムの勝負の最中に、ボード自体がロイヤルフラッシュになりました。"
 }

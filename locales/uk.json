@@ -6353,5 +6353,7 @@
   "ach.group.kit": "🧰 Спорядження в дії",
   "ach.group.cards": "🃏 Карткові столи",
   "ach.group.style": "🎨 Вигляд і звук",
-  "ach.group.social": "💬 Стрічка й друзі"
+  "ach.group.social": "💬 Стрічка й друзі",
+  "ach.n.cf_holdem_boardroyal": "Королівська роздача",
+  "ach.d.cf_holdem_boardroyal": "Ми ще були в роздачі hold'em, коли на столі випав роял-флеш."
 }

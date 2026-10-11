@@ -6225,5 +6225,7 @@
   "ach.group.kit": "🧰 Equipo en acción",
   "ach.group.cards": "🃏 Mesas de cartas",
   "ach.group.style": "🎨 Aspecto y sonido",
-  "ach.group.social": "💬 Feed y amigos"
+  "ach.group.social": "💬 Feed y amigos",
+  "ach.n.cf_holdem_boardroyal": "Trato Real",
+  "ach.d.cf_holdem_boardroyal": "Seguíamos en una mano de hold'em cuando el tablero mismo salió una escalera real."
 }
