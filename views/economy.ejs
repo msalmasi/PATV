@@ -203,7 +203,7 @@
   .eco .fig figcaption { margin-block-start: var(--ds-sp-2); text-align: center; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.45; }
   @media (max-width: 520px) { .eco .card { padding: var(--ds-sp-3h); } .eco .fig { padding-inline: var(--ds-sp-2); } }
 
-  /* 1.99pw: phone versions of the explainer diagrams. The wide SVGs (.fig-desk) scale to ~8px text at 375, so under
+  /* 1.99px: phone versions of the explainer diagrams. The wide SVGs (.fig-desk) scale to ~8px text at 375, so under
      600px they hide and .fm shows the same content as an HTML stack (or a phone-sized SVG) at readable sizes. */
   .eco .fm { display: none; }
   @media (max-width: 600px) { .eco .fig .fig-desk { display: none; } .eco .fig .fm { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-2); } }
@@ -1007,7 +1007,7 @@
         <line x1="294" y1="808" x2="104" y2="808" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
         <text x="196" y="825" font-size="13.5" fill="#ccc" text-anchor="middle">withdraw</text>
       </svg>
-      <%# 1.99pw: the phone version of the flow diagram above - the same pools, flows and notes, stacked %>
+      <%# 1.99px: the phone version of the flow diagram above - the same pools, flows and notes, stacked %>
       <div class="fm">
         <ul class="fm-legend">
           <li style="--c: var(--ds-warn-fill)"><i></i>→ into a pool</li>
@@ -1144,7 +1144,7 @@
         <text x="395" y="412" font-size="13" fill="#ccc" text-anchor="middle">at most its seed;</text>
         <text x="395" y="430" font-size="13" fill="#ccc" text-anchor="middle">Fed flash for seeds</text>
       </svg>
-      <%# 1.99pw: the phone version of the vault table above - one card per vault %>
+      <%# 1.99px: the phone version of the vault table above - one card per vault %>
       <div class="fm">
         <% [
           { n: 'Bank', c: 'var(--ds-info)', f: 'Reserve loans to players', e: 'loan interest + late penalties', r: 'defaults (a loan 30 days late)', sn: 'its own profit, then a Fed loan covers a default' },
@@ -1183,7 +1183,7 @@
         <circle cx="455" cy="130" r="5" fill="#ffd700"/>
         <text x="466" y="106" font-size="12.5" fill="#ffd700" text-anchor="end">you unstake: shares × price</text>
       </svg>
-      <%# 1.99pw: the phone version of the share-price sketch above - the same curve, redrawn 320 wide %>
+      <%# 1.99px: the phone version of the share-price sketch above - the same curve, redrawn 320 wide %>
       <div class="fm">
         <p class="fm-lead"><b>Earnings compound in the price.</b> Nothing piles up or gets paid out separately.</p>
         <svg class="fm-svg" viewBox="0 0 320 214" aria-hidden="true">
@@ -1261,7 +1261,7 @@
         <path d="M40,502 H16 V36 H154" fill="none" stroke="#81c784" stroke-width="2.5" marker-end="url(#fb-g)"/>
         <text transform="translate(33,280) rotate(-90)" font-size="12.5" fill="#81c784" text-anchor="middle">back to your stash</text>
       </svg>
-      <%# 1.99pw: the phone version of the stake flow above - the same steps, top to bottom %>
+      <%# 1.99px: the phone version of the stake flow above - the same steps, top to bottom %>
       <div class="fm">
         <div class="fm-box hl" style="--c: var(--ds-text-2)"><b style="color: var(--ds-text-strong)">Your stash</b><span class="s">PAT you deposited</span></div>
         <span class="fm-step" style="--c: var(--ds-gold)">!stash stake</span>
