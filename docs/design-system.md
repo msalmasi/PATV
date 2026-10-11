@@ -750,3 +750,38 @@ Added by the G5 polish pass (shop, storefront, item, My orders, an order, seller
 - **Empty states** (`.st-empty`, `.sd-empty`) are the `.ds-empty` recipe (dashed #333, radius 16, 30px emoji, 15px title). The "no such seller / item / order" pages use the same box with an h1 at card-title size.
 - **Tables** (seller listings): `.sd-tbl` is the `.ds-tbl` box (surface, 16 radius, #151515 head, 11.5px uppercase th); row actions are 36px pills. Below 760 the table becomes a card list (`data-l` labels).
 - **Status text** written by the page JS (buy / redeem results) uses `var(--ds-ok)` and `var(--ds-danger-solid)`, and `scrollIntoView` is instant under reduced motion.
+
+---
+
+## Area notes: money and markets
+
+Added by the 1.99pp polish pass (markets, a market, wagers and pools, polls, bounties, a bounty; later passes add the wallet, staking, history, economy, tips, cosmetics and the support pages).
+
+### bets.css is a skin over ds.css
+
+- `public/css/bets.css` keeps its `bx-*` class names, because page JS (`public/js/bets.js`) and test/bets-design.test.js use them, but every value is a ds token. Each `bx-*` class renders exactly like its ds twin:
+
+| bets.css | ds.css twin |
+|---|---|
+| `.bx-hero`, `.bx-eyebrow`, `.bx-lead`, `.bx-ctas`, `.bx-stats` > `.bx-stat` | `.ds-hero`, `.ds-eyebrow.ac`, `.ds-lead`, `.ds-ctas`, `.ds-pills` > `.ds-pill-stat` |
+| `.bx-h` (+ `.bx-n`, `.bx-hr`) | `.ds-h2.dot` (+ `.ds-count`, `.ds-h-aside`) |
+| `.bx-card`, `.bx-ref`, `.bx-meta`, `.bx-big` | `.ds-card`, `.ds-ref`, `.ds-meta`, `.ds-pat.lg` |
+| `.bx-chip.c-*` | `.ds-chip.*` (the §6.2 vocabulary: c-open/live → ok, c-closed/waiting/settling/accepting → warn, c-settled/won/resolved → gold, c-void/expired/… → mute, c-disputed/late → danger, c-proposed/ai → info, c-offer → solid gold) |
+| `.bx-btn` (`.ghost`, `.gold`, `.amber`, `.danger`, `.blue`, `.sm`, `.wide`) | `.ds-btn` (`.ghost`, `.gold`, `.warn`, `.danger`, `.info`, `.sm`, `.wide`) |
+| `.bx-form`, `.bx-field`, `.bx-in`, `.bx-check`, `.bx-qa`, `.bx-row2` | `.ds-form`, `.ds-field`, `.ds-in`, `.ds-check`, `.ds-quick`, `.ds-form-row` |
+| `.bx-note`, `.bx-ok`, `.bx-empty` | `.ds-note.warn`, `.ds-note.ok`, `.ds-empty` |
+| `.bx-bar`, `.bx-tbl` | `.ds-bar`, `.ds-tbl` |
+
+- New bets-style pages should use the ds classes directly; the `bx-*` names exist for the six pages above.
+- **Wrapper:** `<main class="bx ds-page flow ‹area›">` (`mid` for polls and a bounty). `.ds-page` gives the width, gutter, type, link colour and gold focus ring; `flow` keeps the block layout, because these pages space their sections with the `.bx-h` margins (32 above, 12 below) rather than the page grid gap.
+- **Accent:** the page sets the ds names on its wrapper (`--ds-ac`, `--ds-ac-2`, `--ds-ac-bg`, `--ds-ac-line`, `--ds-on-ac`). `.bx` derives the old `--ac`, `--ac2`, `--acbg`, `--acink`, `--gold`, `--goldt`, `--card`, `--line`, `--mut` … from the tokens, so older page CSS that still reads them follows. Setting `--ac` alone no longer recolours the components.
+- **Buttons on the markets green now use dark ink** (`--ds-on-ac`, 6.8:1). They were white on #4caf50 (2.8:1), including the market page's own `form button[type=submit]`, which is now a `.ds-btn` twin. The Sell button in the position table is `danger` (it was a one-off #b85c38 orange).
+- The gold button is the 90° `--ds-gold-grad` (it was the 180° #ffe57f→#ffc400 variant, §12) and is the only button that lifts on hover.
+
+### Patterns settled here
+
+- **Icons in eyebrows and chips:** `.bx-eyebrow` is a flex row, so its leading `.ds-ic` (14px glyph in a 16px box) centres on the pixel text. A chip's icon is `.ds-ic` at 12/14. Emoji that are built inside an EJS expression (a table cell like "🏆 winner", an order status "✅ / ❌ / ⏳") are emitted as the `.ds-ic` span string inside `<%- %>`, never as a bare emoji in `<%= %>`.
+- **Detail-page stat tiles (market header):** three tiles in one row on desktop; at ≤ 420 they become two columns with the first (the volume, the longest number) spanning the row, and the numbers never wrap (`white-space: nowrap`). Never let `overflow-wrap: anywhere` split a number.
+- **Poll options on phones:** a vote row is a 2-column grid (text, then the tally and the vote pill). At ≤ 420 it stacks to one column with the tally under the text, so long options don't wrap one word per line.
+- **Option colours** (Yes green #4caf50, No red #e57373, then blue, gold, purple, cyan, orange, lime) are chart colours and stay hex; a settled winner's bar is `--ds-gold`, a voided option's bar `--ds-text-disabled`.
+- **Sticky side card** (the market's trade panel at ≥ 900): `top: calc(var(--ds-nav-h) + var(--ds-sp-3))`, never a hard-coded 76px.

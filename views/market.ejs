@@ -5,111 +5,121 @@
     settled (1.99dy; the re-settle banner stays), then the price board (odds bars + the price chart) next to the trade
     panel (outcome tiles, amount with quick picks, the live LMSR estimate, the judge's resolve form), the judgement and
     evidence (partials/aijudge), your position, your website orders and every trade. Same forms, routes and fields. %>
-<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<link rel="stylesheet" href="/public/css/bets.css?v=2">
 <script src="/public/js/bets.js?v=1" defer></script>
 <style>
-  .mk { --ac: #4caf50; --ac2: #81c784; --acbg: rgba(76, 175, 80, .14); max-width: 1080px; }   /* width 100% (bets.css) keeps the tables scrolling inside .tbl at 375 px */
-  .mk .ref { color: var(--ac2); font-family: ui-monospace, Menlo, Consolas, monospace; }
-  .mk h1 { margin: 10px 0 6px; font: 900 clamp(22px, 4.6vw, 32px)/1.2 Ubuntu, sans-serif; color: #fff; }
-  .mk h3 { display: flex; align-items: center; gap: 10px; margin: 30px 0 12px; font: 900 19px/1.25 Ubuntu, sans-serif; color: #fff; }
-  .mk h3::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 8px var(--ac); }
-  .mk .info { color: var(--mut); font-size: 13.5px; line-height: 1.65; }
-  .mk .mk-head { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: radial-gradient(90% 140% at 100% 0%, var(--acbg), transparent 60%), #111; }
+  /* 1.99pp: design-system tokens throughout; the wrapper is .ds-page (1040 + gutter) - the tables scroll inside .tbl at 375 px */
+  .mk { --ds-ac: var(--ds-acc-markets); --ds-ac-2: var(--ds-acc-markets-2); --ds-ac-bg: rgba(76, 175, 80, .14); --ds-ac-line: var(--ds-green-line); }
+  .mk .ref { color: var(--ds-ac-2); font-family: var(--ds-font-mono); }
+  .mk h1 { margin: var(--ds-sp-2h) 0 var(--ds-sp-1h); font: 700 var(--ds-fs-h1)/var(--ds-lh-h1) var(--ds-font); letter-spacing: -.005em; color: var(--ds-text-strong); text-wrap: balance; }
+  .mk h3 { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-2h); margin: var(--ds-sp-8) 0 var(--ds-sp-3); font: 700 var(--ds-fs-h2)/var(--ds-lh-h2) var(--ds-font); color: var(--ds-text-strong); }
+  .mk h3::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ac); box-shadow: var(--ds-glow); }
+  .mk .info { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.65; }
+  .mk .mk-head { padding: var(--ds-sp-5); border: 1px solid var(--ds-line); border-radius: var(--ds-r-2xl); background: radial-gradient(90% 140% at 100% 0%, var(--ds-ac-bg), transparent 60%), radial-gradient(70% 120% at 0% 100%, rgba(255, 215, 64, .05), transparent 60%), #111; }
+  @media (min-width: 700px) { .mk .mk-head { padding: var(--ds-sp-6); } }
   .mk .st { margin: 8px 0 0; }
-  .mk .st .bx-chip { text-transform: none; letter-spacing: 0; font-size: 13px; white-space: normal; }
-  .mk .mk-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
-  .mk .mk-stats > span { padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, .35); border: 1px solid #222; color: var(--mut); font-size: 12px; }
-  .mk .mk-stats b { display: block; color: #fff; font-size: 18px; font-variant-numeric: tabular-nums; }
-  .mk .mk-who { margin-top: 10px; }
+  .mk .st .bx-chip { text-transform: none; letter-spacing: 0; font-size: var(--ds-fs-meta); white-space: normal; }
+  .mk .mk-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-sp-2); margin-top: var(--ds-sp-3h); }
+  .mk .mk-stats > span { min-width: 0; padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-md); background: var(--ds-glass); border: 1px solid #2c2c2c; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+  .mk .mk-stats b { display: block; color: var(--ds-text-strong); font-size: var(--ds-fs-num); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: normal; white-space: nowrap; }
+  @media (max-width: 420px) { .mk .mk-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mk .mk-stats > span:first-child { grid-column: 1 / -1; } }
+  .mk .mk-who { margin-top: var(--ds-sp-2h); }
 
-  .mk .mk-main { display: grid; gap: 16px; margin-top: 16px; }
+  .mk .mk-main { display: grid; gap: var(--ds-sp-4); margin-top: var(--ds-sp-4); }
   .mk .mk-main.two { grid-template-columns: minmax(0, 1fr); }
-  @media (min-width: 900px) { .mk .mk-main.two { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); align-items: start; } .mk .mk-side { position: sticky; top: 76px; } }
-  .mk .board, .mk .side-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; min-width: 0; }
-  .mk .board-h { margin: 0 0 12px; font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); }
-  .mk .opts { display: grid; gap: 14px; margin: 0; }
+  @media (min-width: 900px) { .mk .mk-main.two { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); align-items: start; } .mk .mk-side { position: sticky; top: calc(var(--ds-nav-h) + var(--ds-sp-3)); } }
+  .mk .board, .mk .side-card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); min-width: 0; }
+  .mk .board-h { margin: 0 0 var(--ds-sp-3); font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); }
+  .mk .opts { display: grid; gap: var(--ds-sp-3h); margin: 0; }
   .mk .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "n v" "b b"; gap: 6px 10px; align-items: baseline; }
   .mk .opt > div:first-child { grid-area: n; min-width: 0; overflow-wrap: anywhere; font-size: 15px; }
   .mk .opt > .num { grid-area: v; }
   .mk .opt > .bar { grid-area: b; }
-  .mk .bar { height: 12px; background: #1f1f1f; border-radius: 999px; overflow: hidden; }
-  .mk .bar span { display: block; height: 100%; border-radius: inherit; background: #4caf50; transition: width .5s ease; }
-  .mk .opt.won .bar span { background: var(--gold); }
-  .mk .num { color: #bdbdbd; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; text-align: right; }
-  .mk .price { font-size: 22px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
-  .mk .opt.won .price { color: var(--goldt); }
-  .mk .chart { position: relative; margin-top: 16px; background: var(--card2); border: 1px solid #1e1e1e; border-radius: 12px; padding: 10px 10px 8px 38px; }
+  .mk .bar { height: 12px; background: #1f1f1f; border-radius: var(--ds-r-pill); overflow: hidden; }
+  .mk .bar span { display: block; height: 100%; border-radius: inherit; background: var(--ds-green); transition: width var(--ds-dur-3) ease; }
+  .mk .opt.won .bar span { background: var(--ds-gold); }
+  .mk .num { color: var(--ds-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: var(--ds-fs-meta); text-align: end; }
+  .mk .price { font-size: 22px; font-weight: 700; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
+  .mk .opt.won .price { color: var(--ds-gold-text); }
+  .mk .chart { position: relative; margin-top: var(--ds-sp-4); background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-lg); padding: var(--ds-sp-2h) var(--ds-sp-2h) var(--ds-sp-2) 38px; }
   .mk .chart svg { display: block; width: 100%; height: 190px; }
-  .mk .chart .yl { position: absolute; left: 8px; font-size: 10.5px; color: #777; transform: translateY(-50%); font-variant-numeric: tabular-nums; }
-  .mk .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: #ccc; margin-top: 8px; }
-  .mk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
-  .mk .legend .since { margin-left: auto; color: #888; }
+  .mk .chart .yl { position: absolute; left: 8px; font-size: 10.5px; color: var(--ds-text-faint); transform: translateY(-50%); font-variant-numeric: tabular-nums; }
+  .mk .legend { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h) var(--ds-sp-3h); font-size: var(--ds-fs-xs); color: var(--ds-text-2); margin-top: var(--ds-sp-2); }
+  .mk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-inline-end: 5px; vertical-align: -1px; }
+  .mk .legend .since { margin-inline-start: auto; color: var(--ds-text-muted); }
 
-  .mk .side-card { display: grid; gap: 12px; }
-  .mk .side-card + .side-card { margin-top: 12px; }
-  .mk .side-h { margin: 0; font-size: 17px; color: #fff; }
-  .mk .notice { padding: 12px 14px; border-radius: 12px; background: rgba(76, 175, 80, .1); border: 1px solid #2e6b31; color: #d6f0d6; }
-  .mk form.bet { display: grid; gap: 12px; margin: 0; }
-  .mk form.judge { border-color: #6b531e; background: linear-gradient(180deg, rgba(224, 160, 48, .08), var(--card) 50%); }
+  .mk .side-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-3); }
+  .mk .side-card + .side-card { margin-top: var(--ds-sp-3); }
+  .mk .side-h { margin: 0; font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); }
+  .mk .notice { padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); background: var(--ds-ok-bg); border: 1px solid var(--ds-ok-line); color: var(--ds-ok-ink); font-size: var(--ds-fs-sm); }
+  .mk form.bet { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-3); margin: 0; }
+  .mk form.judge { border-color: var(--ds-warn-line); background: linear-gradient(180deg, rgba(224, 160, 48, .08), var(--ds-surface) 50%); }
   .mk fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-  .mk legend.lg { padding: 0; margin-bottom: 8px; font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; color: #b9b9b9; }
-  .mk .opts-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: 8px; }
-  .mk .opts-pick label { position: relative; display: grid; gap: 2px; min-height: 52px; padding: 10px 12px 10px 38px; border-radius: 12px; border: 1px solid var(--line2); background: var(--card2); cursor: pointer; color: #e6e6e6; font-size: 14px; }
-  .mk .opts-pick label input { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; margin: 0; accent-color: var(--oc, var(--ac)); }
+  .mk legend.lg, .mk label.lg { display: block; padding: 0; margin-bottom: var(--ds-sp-2); font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: #b9b9b9; }
+  .mk .opts-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: var(--ds-sp-2); }
+  .mk .opts-pick label { position: relative; display: grid; gap: 2px; min-height: 52px; padding-block: var(--ds-sp-2h); padding-inline: 38px var(--ds-sp-3); border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); cursor: pointer; color: var(--ds-text); font-size: var(--ds-fs-sm); }
+  .mk .opts-pick label input { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; margin: 0; accent-color: var(--oc, var(--ac)); }
   .mk .opts-pick label:hover { border-color: #555; }
+  .mk .opts-pick label:focus-within { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
   .mk .opts-pick label:has(input:checked) { border-color: var(--oc, var(--ac)); box-shadow: 0 0 0 1px var(--oc, var(--ac)) inset; background: #151a15; }
-  .mk .opts-pick .tn { font-weight: bold; color: #fff; overflow-wrap: anywhere; }
-  .mk .opts-pick .tp { font-size: 12.5px; color: var(--mut); font-variant-numeric: tabular-nums; }
-  .mk form input[type=number], .mk form input[type=text] { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line2); background: var(--card2); color: #eee; font: 16px Ubuntu, sans-serif; }
-  .mk form input:focus { border-color: var(--ac); outline: none; box-shadow: 0 0 0 3px var(--acbg); }
-  .mk form button[type=submit] { min-height: 44px; padding: 10px 20px; border: 0; border-radius: 999px; background: var(--ac); color: #fff; font: bold 15px Ubuntu, sans-serif; cursor: pointer; }
+  .mk .opts-pick .tn { font-weight: 700; color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .mk .opts-pick .tp { font-size: var(--ds-fs-xs); color: var(--ds-text-muted); font-variant-numeric: tabular-nums; }
+  .mk form input[type=number], .mk form input[type=text] { width: 100%; min-width: 0; min-height: var(--ds-tap); margin: 0; padding: 10px 12px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); color: #eee; font: 400 16px/1.3 var(--ds-font); }
+  .mk form input:focus { border-color: var(--ds-ac); outline: none; box-shadow: 0 0 0 3px var(--ds-ac-bg); }
+  /* the submit buttons are .ds-btn twins - dark ink on the green (white on #4caf50 was 2.8:1) */
+  .mk form button[type=submit] { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-2); min-height: var(--ds-tap); margin: 0; padding: 0 var(--ds-sp-5); border: 0; border-radius: var(--ds-r-pill); background: var(--ds-ac); color: var(--ds-on-ac); font: 700 15px/1.1 var(--ds-font); cursor: pointer; transition: filter var(--ds-dur-1); }
   .mk form button[type=submit]:hover { filter: brightness(1.1); }
-  .mk form.judge button[type=submit] { background: var(--amber); color: #1a1200; }
+  .mk form button[type=submit]:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .mk form button[type=submit]:disabled { filter: grayscale(.6) brightness(.7); cursor: not-allowed; }
+  .mk form.judge button[type=submit] { background: var(--ds-warn-fill); color: #1a1200; }
   .mk form.bet .go { width: 100%; }
-  .mk .est { margin: 0; padding: 10px 12px; border-radius: 10px; background: rgba(76, 175, 80, .08); border: 1px solid #234d25; color: #cfe8cf; font-size: 13.5px; line-height: 1.5; }
-  .mk .bal { margin: 0; color: var(--mut); font-size: 13px; }
-  .mk .bal b { color: #fff; font-variant-numeric: tabular-nums; }
-  .mk .side-st { font-size: 14px; color: #ddd; line-height: 1.55; }
+  .mk .est { margin: 0; padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-md); background: var(--ds-ok-bg); border: 1px solid var(--ds-ok-line); color: var(--ds-ok-ink); font-size: var(--ds-fs-meta); line-height: 1.5; }
+  .mk .bal { margin: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .mk .bal b { color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
+  .mk .side-st { font-size: var(--ds-fs-sm); color: #ddd; line-height: 1.55; }
 
-  .mk .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+  .mk .tbl { overflow-x: auto; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: var(--ds-surface); -webkit-overflow-scrolling: touch; }
   .mk table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-  .mk th, .mk td { padding: 10px 12px; border-bottom: 1px solid #1d1d1d; text-align: left; white-space: nowrap; }
+  .mk th, .mk td { padding: 10px 12px; border-bottom: 1px solid var(--ds-line-soft); text-align: start; white-space: nowrap; }
+  .mk td { color: #ddd; }
   .mk tr:last-child td { border-bottom: 0; }
-  .mk th { color: var(--mut); font-weight: bold; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; background: #151515; }
-  .mk td.r, .mk th.r { text-align: right; }
-  .mk .up { color: #81c784; } .mk .down { color: #e57373; }
-  .mk form.inline { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin: 0; }
-  .mk form.inline input[type=text] { width: 76px; min-height: 36px; padding: 6px 8px; font-size: 14px; }
-  .mk form button.sell[type=submit] { min-height: 36px; padding: 6px 14px; background: #b85c38; font-size: 13.5px; }
+  .mk th { color: var(--ds-text-muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: var(--ds-ls-label); background: #151515; }
+  .mk td.r, .mk th.r { text-align: end; }
+  .mk .up { color: var(--ds-ok); } .mk .down { color: var(--ds-danger-solid); }
+  .mk form.inline { display: flex; gap: var(--ds-sp-1h); align-items: center; justify-content: flex-end; margin: 0; }
+  .mk form.inline input[type=text] { width: 76px; min-height: 36px; padding: 6px 8px; font-size: 16px; }
+  .mk form button.sell[type=submit] { min-height: 36px; padding: 0 var(--ds-sp-3h); background: var(--ds-danger-fill); color: var(--ds-danger-ink); border: 1px solid var(--ds-danger-line); font-size: 13.5px; }
+  @media (pointer: coarse) { .mk form button.sell[type=submit], .mk form.inline input[type=text] { min-height: 40px; } }
 
   /* 1.99dy: settled market - the result banner, the viewer's result card, the settlement in the trade history */
-  .mk .settled { border: 2px solid var(--oc, #888); background: radial-gradient(90% 140% at 100% 0%, color-mix(in srgb, var(--oc, #888) 16%, transparent), transparent 60%), #121212; border-radius: 18px; padding: 16px 18px; margin: 16px 0; overflow-wrap: anywhere; }
-  .mk .settled .s-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
-  .mk .settled .s-out { font-size: clamp(24px, 6vw, 32px); font-weight: 900; letter-spacing: .5px; color: var(--oc, #fff); line-height: 1.15; }
-  .mk .settled .s-out small { font-size: 14px; color: #aaa; font-weight: normal; letter-spacing: 0; }
-  .mk .settled .s-meta { color: #bbb; font-size: 13px; }
-  .mk .settled .s-rule { margin: 10px 0 0; font-size: 15px; color: #eee; }
-  .mk .settled .s-why { margin: 10px 0 0; padding: 10px 12px; background: #0d0d0d; border-left: 3px solid #3a4a7a; border-radius: 6px; font-size: 13.5px; color: #ccc; }
+  .mk .settled { border: 1px solid var(--oc, #888); box-shadow: inset 0 0 0 1px var(--oc, #888); background: radial-gradient(90% 140% at 100% 0%, color-mix(in srgb, var(--oc, #888) 16%, transparent), transparent 60%), var(--ds-surface); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4) var(--ds-sp-5); margin: var(--ds-sp-4) 0; overflow-wrap: anywhere; }
+  .mk .settled .s-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ds-sp-1) var(--ds-sp-3h); }
+  .mk .settled .s-out { font-size: clamp(24px, 6vw, 32px); font-weight: 700; letter-spacing: 0; color: var(--oc, #fff); line-height: 1.15; }
+  .mk .settled .s-out small { font-size: var(--ds-fs-sm); color: var(--ds-text-muted); font-weight: 400; letter-spacing: 0; }
+  .mk .settled .s-meta { color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
+  .mk .settled .s-rule { margin: var(--ds-sp-2h) 0 0; font-size: 15px; color: var(--ds-text); }
+  .mk .settled .s-why { margin: var(--ds-sp-2h) 0 0; padding: var(--ds-sp-2h) var(--ds-sp-3); background: var(--ds-sunken); border-inline-start: 3px solid var(--ds-info-line); border-radius: var(--ds-r-xs); font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
   .mk .settled .s-why a { white-space: nowrap; }
-  .mk .settled .s-rs { border-left-color: var(--amber); color: #eee; }
-  .mk .settled .s-rs-sub { color: #aaa; font-size: 12.5px; }
-  .mk .s-stats { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 12px; font-size: 13px; color: #999; }
-  .mk .s-stats b { display: block; font-size: 20px; color: #fff; font-variant-numeric: tabular-nums; }
-  .mk .myres { border-radius: 16px; padding: 14px 16px; margin: 16px 0; border: 1px solid #333; background: #111; }
-  .mk .myres.won { border-color: var(--gold); background: linear-gradient(90deg, rgba(255, 215, 64, .12), #111 70%); }
-  .mk .myres.lost { border-color: #7a3a3a; background: #1c1010; }
+  .mk .settled .s-rs { border-inline-start-color: var(--ds-warn-fill); color: var(--ds-text); }
+  .mk .settled .s-rs-sub { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+  .mk .s-stats { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-6); margin-top: var(--ds-sp-3); font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
+  .mk .s-stats b { display: block; font-size: 20px; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
+  .mk .myres { border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); margin: var(--ds-sp-4) 0; border: 1px solid var(--ds-line-strong); background: var(--ds-surface); }
+  .mk .myres.won { border-color: var(--ds-gold); background: linear-gradient(90deg, rgba(255, 215, 64, .12), var(--ds-surface) 70%); }
+  .mk .myres.lost { border-color: var(--ds-danger-line); background: linear-gradient(90deg, var(--ds-danger-bg), var(--ds-surface) 70%); }
   .mk .myres.refunded { border-color: #666; }
-  .mk .myres .m-head { font-size: 22px; font-weight: 900; }
-  .mk .myres .m-nums { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 8px; font-size: 13px; color: #999; }
-  .mk .myres .m-nums b { display: block; font-size: 20px; color: #fff; font-variant-numeric: tabular-nums; }
-  .mk .myres .m-nums b.up { color: #81c784; } .mk .myres .m-nums b.down { color: #e57373; }
-  .mk .myres .m-rows { margin-top: 8px; font-size: 13px; color: #bbb; }
-  .mk tr.settle-ev td { background: #1a1708; color: #ffe082; border-bottom: 1px solid #4a3f10; font-weight: bold; white-space: normal; }
+  .mk .myres .m-head { font-size: 22px; font-weight: 700; color: var(--ds-text-strong); }
+  .mk .myres .m-nums { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-6); margin-top: var(--ds-sp-2); font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
+  .mk .myres .m-nums b { display: block; font-size: 20px; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
+  .mk .myres .m-nums b.up { color: var(--ds-ok); } .mk .myres .m-nums b.down { color: var(--ds-danger-solid); }
+  .mk .myres .m-rows { margin-top: var(--ds-sp-2); font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
+  .mk tr.settle-ev td { background: #1a1708; color: var(--ds-gold-text); border-bottom: 1px solid #4a3f10; font-weight: 700; white-space: normal; }
   .mk tr.settle-ev.void td { background: #161616; color: #ccc; border-bottom-color: #333; }
   .mk tr.payout td { background: #121208; }
-  .mk tr.payout td.pay { color: #ffd700; white-space: nowrap; }
-  .mk tr.settle-ord td { background: #121208; color: #ffe082; }
+  .mk tr.payout td.pay { color: var(--ds-gold-text); white-space: nowrap; }
+  .mk tr.settle-ord td { background: #121208; color: var(--ds-gold-text); }
   .mk td.wrap { white-space: normal; min-width: 180px; }
+  @media (prefers-reduced-motion: reduce) { .mk .bar span, .mk form button[type=submit] { transition: none; } }
 </style>
 <%
   const COLORS = ['#4caf50', '#e57373', '#64b5f6', '#ffd54f', '#ba68c8', '#4dd0e1', '#ff8a65', '#aed581'];
@@ -133,7 +143,7 @@
   const scaled = () => S && S.ratio < 1 ? t('market.s.scaled', { pct: (S.ratio * 100).toFixed(0) }) : '';
   const sPaid = S ? (S.kind === 'void' ? t('market.tr.refunded', { count: S.winners, n: fmt(S.paid || 0) }) : t('market.tr.paid', { count: S.winners, n: fmt(S.paid || 0) })) : '';
   const pnl = (v) => (v >= 0 ? '+' : '−') + fmt(Math.abs(v));
-  const ordSt = (o, dflt) => o.status === 'placed' ? '✅ ' + E(o.message || dflt) : o.status === 'failed' ? '❌ ' + E(o.message || t('market.ord.failed')) : '⏳ ' + t('market.ord.wait');
+  const ordSt = (o, dflt) => o.status === 'placed' ? '<span class="ds-ic" aria-hidden="true">✅</span> ' + E(o.message || dflt) : o.status === 'failed' ? '<span class="ds-ic" aria-hidden="true">❌</span> ' + E(o.message || t('market.ord.failed')) : '<span class="ds-ic" aria-hidden="true">⏳</span> ' + t('market.ord.wait');
   const meta = (pool) => { %>
     <div class="mk-stats">
       <span><b><%= fmt(m.total) %></b><%- t(pool ? 'market.stat_pool' : 'market.stat_vol') %></span>
@@ -141,8 +151,8 @@
       <span><b><%= fmt(m.bettors) %></b><%- t(pool ? 'market.stat_bettors' : 'market.stat_holders', { count: m.bettors }) %></span>
     </div>
 <% }; %>
-<main class="bx mk">
-  <a class="bx-back" href="/markets">‹ <%- t('market.back') %></a>
+<main class="bx ds-page flow mk">
+  <a class="bx-back" href="/markets"><span class="arr" aria-hidden="true">‹</span> <%- t('market.back') %></a>
   <% if (!m) { %>
     <div class="bx-empty"><span class="ic" aria-hidden="true">🔮</span><h1><%- t('market.nf_title') %></h1><span class="info"><%- t('market.nf_sub') %></span>
       <a class="bx-btn sm" href="/markets"><%- t('market.back') %></a></div>
@@ -151,7 +161,7 @@
        const side = open || judgeOk; %>
     <header class="mk-head">
       <div class="bx-top">
-        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain">🤖 <%- t('markets.ai_tag') %></span><% } %>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
       </div>
       <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
       <%- include('partials/mk-times', { m, now }) %>
@@ -169,7 +179,7 @@
         </div>
         <p class="s-rule"><% if (S.kind === 'won') { %><%- t('market.s.rule_won', { result: S.result, others: others() }) %><% } else { %><%- S.reason ? t('market.s.reason', { reason: S.reason }) + ' ' : '' %><%- t('market.s.rule_void', { scaled: scaled() }) %><% } %></p>
         <% if (S.why) { %>
-          <p class="s-why">🤖 <%= S.why %> <a href="#judgement"><%- t('market.s.full') %></a></p>
+          <p class="s-why"><span class="ds-ic" aria-hidden="true">🤖</span> <%= S.why %> <a href="#judgement"><%- t('market.s.full') %></a></p>
         <% } %>
         <% if (S.resettle) { const RS = S.resettle; %>
           <p class="s-why s-rs" id="resettle"><%- t('market.rs.head', { to: RS.to, who: ul(RS.by), when: RS.at ? ' · ' + when(RS.at) : '', reason: RS.reason }) %>
@@ -203,15 +213,15 @@
         <div class="opts">
           <% m.options.forEach((o, i) => { %>
             <div class="opt <%= o.won ? 'won' : '' %> <%= m.settle ? 'final' : '' %>">
-              <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
+              <div><% if (o.won) { %><span class="ds-ic" aria-hidden="true">🏆</span> <% } %><b><%= o.name %></b></div>
               <% if (m.settle && m.settle.kind === 'won') { %>
-                <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%; background: <%= o.won ? '#ffd700' : oCol(o, i) %>"></span></div>
+                <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%; background: <%= o.won ? '#ffcf40' : oCol(o, i) %>"></span></div>
                 <div class="num"><span class="price"><%= o.won ? '100%' : '0%' %></span> · <%- o.won ? t('market.o.paid') : t('market.o.worth0') %></div>
               <% } else if (m.settle && m.settle.kind === 'void') { %>
                 <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: #555"></span></div>
                 <div class="num"><%- t('market.o.void') %></div>
               <% } else { %>
-                <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%; background: <%= o.won ? '#ffd700' : oCol(o, i) %>"></span></div>
+                <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%; background: <%= o.won ? '#ffcf40' : oCol(o, i) %>"></span></div>
                 <div class="num"><span class="price"><%= pc(o.price) %></span> · <%- t('market.o.per', { price: fp(o.price) }) %></div>
               <% } %>
             </div>
@@ -244,7 +254,7 @@
         <% if (open) { %>
           <% if (user) { %>
             <form class="bet side-card" method="post" action="/markets/<%= m.id %>/bet" id="buy">
-              <h2 class="side-h">💹 <%- t('market.buy_h') %></h2>
+              <h2 class="side-h"><span class="ds-ic" aria-hidden="true">💹</span> <%- t('market.buy_h') %></h2>
               <fieldset>
                 <legend class="lg"><%- t('market.buy_pick') %></legend>
                 <div class="opts-pick">
@@ -253,7 +263,7 @@
                   <% }) %>
                 </div>
               </fieldset>
-              <label class="lg" for="buy-amt" style="margin:0;font-size:12px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:#b9b9b9"><%- t('market.buy_amt') %></label>
+              <label class="lg" for="buy-amt" style="margin:0"><%- t('market.buy_amt') %></label>
               <input id="buy-amt" type="text" name="amount" inputmode="numeric" autocomplete="off" spellcheck="false" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*" placeholder="<%- t('market.buy_ph', { n: fmt(minBet) }) %>" required>
               <div class="bx-chips">
                 <% [1000, 5000, 10000, 50000].filter((v) => v >= minBet).forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>"><%= v >= 1000 ? v / 1000 + 'k' : v %></button><% }) %>
@@ -286,17 +296,17 @@
             </script>
           <% } else { %>
             <div class="side-card">
-              <h2 class="side-h">💹 <%- t('market.buy_h') %></h2>
+              <h2 class="side-h"><span class="ds-ic" aria-hidden="true">💹</span> <%- t('market.buy_h') %></h2>
               <p class="info" style="margin:0"><%- t('market.signin', { cmd: '!market ' + m.ref + ' ' + (m.options[0] ? m.options[0].name : 'yes') + ' 5k' }) %></p>
               <a class="bx-btn" href="/login"><%- t('bx.signin_btn') %></a>
             </div>
           <% } %>
         <% } else { %>
-          <div class="side-card"><p class="side-st" style="margin:0">⏳ <%- t('market.st.closed') %></p></div>
+          <div class="side-card"><p class="side-st" style="margin:0"><span class="ds-ic" aria-hidden="true">⏳</span> <%- t('market.st.closed') %></p></div>
         <% } %>
         <% if (judgeOk) { %>
           <form class="bet judge side-card" method="post" action="/markets/<%= m.id %>/resolve">
-            <b>⚖️ <%- t('market.j.h') %></b>
+            <b><span class="ds-ic" aria-hidden="true">⚖️</span> <%- t('market.j.h') %></b>
             <div class="opts-pick">
               <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <span class="tn"><%- t('market.j.won', { o: o.name }) %></span></label><% }) %>
               <label><input type="radio" name="outcome" value="void"> <span class="tn"><%- t('market.j.void') %></span></label>
@@ -356,7 +366,7 @@
         <% if (S && m.myResult) { const R = m.myResult; %>
           <tr class="settle-ord"><td><%- t('market.ord.settled') %></td><td><%= S.kind === 'void' ? t('market.tr.void') : S.result %></td>
               <td class="r"><%= fmt(R.payout) %> PAT</td>
-              <td class="wrap">⚖ <%- R.state === 'won' ? t('market.ord.paid', { n: fmt(R.payout) }) : R.state === 'lost' ? t('market.ord.lost') : t('market.ord.refunded', { n: (S.approx ? '≈ ' : '') + fmt(R.payout) }) %> · <%- t('market.ord.net', { v: pnl(R.pnl) }) %> · <%- sWhen %></td></tr>
+              <td class="wrap"><span class="ds-ic" aria-hidden="true">⚖</span> <%- R.state === 'won' ? t('market.ord.paid', { n: fmt(R.payout) }) : R.state === 'lost' ? t('market.ord.lost') : t('market.ord.refunded', { n: (S.approx ? '≈ ' : '') + fmt(R.payout) }) %> · <%- t('market.ord.net', { v: pnl(R.pnl) }) %> · <%- sWhen %></td></tr>
         <% } %>
         <% orders.forEach((o) => { const k = o.kind || 'buy'; %>
           <tr><td><%- k === 'buy' ? t('market.tr.buy') : k === 'sell' ? t('market.tr.sell') : k === 'resolve' ? t('market.ord.resolve') : E(k) %></td><td><%= k === 'resolve' ? o.outcome : o.option %></td>
@@ -377,19 +387,19 @@
               <td class="r"><%= p.shares == null ? '' : fmt(p.shares) %></td><td class="r pay"><%= S.approx ? '≈ ' : '' %><%= fmt(p.amount) %></td>
               <td class="r"><%= S.kind === 'void' ? '' : '1.000' %></td><td class="r"><%- when(S.at) %></td></tr>
         <% }) %>
-        <% if (S.payouts.length > 50) { %><tr class="payout"><td colspan="7" style="color:#888"><%- t('market.tr.more', { n: S.payouts.length - 50 }) %></td></tr><% } %>
+        <% if (S.payouts.length > 50) { %><tr class="payout"><td colspan="7" style="color: var(--ds-text-muted)"><%- t('market.tr.more', { n: S.payouts.length - 50 }) %></td></tr><% } %>
       <% } %>
       <% m.trades.slice(0, 100).forEach((tr) => { %>
         <tr><td><%- ul(tr.nick, { web: tr.web }) %></td><td class="<%= tr.side === 'buy' ? 'up' : 'down' %>"><%- tr.side === 'buy' ? t('market.tr.buy') : tr.side === 'sell' ? t('market.tr.sell') : E(tr.side) %></td><td><%= tr.option %></td>
             <td class="r"><%= fmt(tr.shares) %></td><td class="r"><%= fmt(tr.pat) %></td>
             <td class="r"><%= tr.shares ? fp(tr.pat / tr.shares) : '' %></td><td class="r"><%- when(tr.ts) %></td></tr>
       <% }) %>
-      <% if (!m.trades.length && !S) { %><tr><td colspan="7" style="color:#888"><%- t('market.tr.none') %></td></tr><% } %>
+      <% if (!m.trades.length && !S) { %><tr><td colspan="7" style="color: var(--ds-text-muted)"><%- t('market.tr.none') %></td></tr><% } %>
     </table></div>
   <% } else { const open = m.status === 'open'; const side = open || judgeOk; %>
     <header class="mk-head">
       <div class="bx-top"><span class="bx-chip c-plain"><%- m.model === 'pool' ? t('market.pool.kind') : t('market.pool.kind_old') %></span>
-        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain">🤖 <%- t('markets.ai_tag') %></span><% } %></div>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %></div>
       <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
       <%- include('partials/mk-times', { m, now }) %>
       <% const k = m.status === 'open' ? 'open' : m.status === 'settled' ? 'settled' : m.status === 'void' ? 'void' : 'closed'; %>
@@ -403,7 +413,7 @@
         <div class="opts">
           <% m.options.forEach((o) => { %>
             <div class="opt <%= o.won ? 'won' : '' %>">
-              <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
+              <div><% if (o.won) { %><span class="ds-ic" aria-hidden="true">🏆</span> <% } %><b><%= o.name %></b></div>
               <div class="bar"><span style="width: <%= o.share %>%"></span></div>
               <div class="num"><span class="price"><%= o.share %>%</span> · <%= fmt(o.pool) %> PAT<%- o.mult ? ' · ' + t('markets.o.pays', { x: o.mult.toFixed(2) }) : '' %></div>
             </div>
@@ -415,7 +425,7 @@
         <% if (open) { %>
           <% if (user) { %>
             <form class="bet side-card" method="post" action="/markets/<%= m.id %>/bet">
-              <h2 class="side-h">🎲 <%- t('market.pool.bet_h') %></h2>
+              <h2 class="side-h"><span class="ds-ic" aria-hidden="true">🎲</span> <%- t('market.pool.bet_h') %></h2>
               <div class="opts-pick">
                 <% m.options.forEach((o, i) => { %>
                   <label><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <span class="tn"><%= o.name %></span><span class="tp"><%= o.mult ? o.mult.toFixed(2) + 'x' : '—' %></span></label>
@@ -438,7 +448,7 @@
         <% } %>
         <% if (judgeOk) { %>
           <form class="bet judge side-card" method="post" action="/markets/<%= m.id %>/resolve">
-            <b>⚖️ <%- t('market.pool.j_h') %></b>
+            <b><span class="ds-ic" aria-hidden="true">⚖️</span> <%- t('market.pool.j_h') %></b>
             <div class="opts-pick">
               <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <span class="tn"><%- t('market.j.won', { o: o.name }) %></span></label><% }) %>
               <label><input type="radio" name="outcome" value="void"> <span class="tn"><%- t('market.pool.j_void') %></span></label>
@@ -473,7 +483,7 @@
         <tr><td><%- ul(b.nick, { web: b.web }) %></td><td><%= b.option %></td>
             <td class="r"><%= fmt(Number(b.amount)) %></td><td class="r"><%- when(b.ts) %></td></tr>
       <% }) %>
-      <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888"><%- t('market.pool.none') %></td></tr><% } %>
+      <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color: var(--ds-text-muted)"><%- t('market.pool.none') %></td></tr><% } %>
     </table></div>
   <% } %>
 </main>

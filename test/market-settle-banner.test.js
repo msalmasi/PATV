@@ -181,7 +181,7 @@ test("website orders: avg re-derived, a final settled line on top; stale 'lookin
   assert.match(ord, /\(avg 0\.00415\)/);
   assert.doesNotMatch(ord, /avg 0\.00\)/);
   assert.ok(ord.indexOf('class="settle-ord"') > 0 && ord.indexOf('class="settle-ord"') < ord.indexOf("bought"));
-  assert.match(ord, /⚖ lost — nothing paid · net −10,000/);
+  assert.match(ord, /⚖<\/span> lost — nothing paid · net −10,000/);
   const acts = between(h, "Your recent requests to Pepe", "Your website orders");
   assert.equal((acts.match(/!market ai M27/g) || []).length, 1);
   assert.doesNotMatch(acts, /looking into/);

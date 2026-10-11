@@ -128,7 +128,7 @@ test("someone holding both sides gets one won and one lost row", async () => {
 
 test("the bars show the result (No 100% with the trophy, Yes 0%) and the last trade once", async () => {
   const h = await page(null, "/markets/27");
-  assert.match(h, /🏆 <b>No<\/b><\/div>\s*<div class="bar"><span style="width: 100%/);
+  assert.match(h, /🏆<\/span> <b>No<\/b><\/div>\s*<div class="bar"><span style="width: 100%/);
   assert.match(h, /<b>Yes<\/b><\/div>\s*<div class="bar"><span style="width: 0%/);
   assert.match(h, /<span class="price">100%<\/span> · paid 1 PAT\/share/);
   assert.match(h, /<span class="price">0%<\/span> · worth 0/);

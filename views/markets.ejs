@@ -3,28 +3,30 @@
 <%# views/markets.ejs - 1.99ly design pass (bets.css): a hero with the live numbers, market cards with each outcome's
     odds bar (Yes green / No red, the leader lit), status chips, a live "closes in" countdown and the market's times in
     the viewer's zone; the create form unchanged underneath (same /act post, same fields). %>
-<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<link rel="stylesheet" href="/public/css/bets.css?v=2">
 <script src="/public/js/bets.js?v=1" defer></script>
 <style>
-  .mk { --ac: #4caf50; --ac2: #81c784; --acbg: rgba(76, 175, 80, .14); }
-  .mk .card { gap: 12px; }
-  .mk .card .bx-top .room { margin-left: auto; color: var(--mut); font-size: 12.5px; }
-  .mk .opts { display: grid; gap: 10px; }
-  .mk .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; align-items: baseline; font-size: 14px; }
-  .mk .opt .nm { color: #e8e8e8; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mk .opt.lead .nm { color: #fff; font-weight: bold; }
-  .mk .opt .bar { grid-column: 1 / -1; height: 8px; border-radius: 999px; background: #1f1f1f; overflow: hidden; }
-  .mk .opt .bar span { display: block; height: 100%; border-radius: inherit; background: var(--oc, #4caf50); }
-  .mk .opt.won .bar span { background: var(--gold); }
-  .mk .opt .num { color: #bdbdbd; font-size: 13px; white-space: nowrap; text-align: right; }
-  .mk .opt .num b { color: #fff; font-size: 16px; }
-  .mk .opt.won .num b { color: var(--goldt); }
-  .mk .foot { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid #1e1e1e; color: var(--mut); font-size: 13px; }
-  .mk .cd { color: #8fe08f; font-weight: bold; font-variant-numeric: tabular-nums; }
+  /* 1.99pp: design-system tokens (bets.css maps the bx-* classes onto ds.css); markets green accent */
+  .mk { --ds-ac: var(--ds-acc-markets); --ds-ac-2: var(--ds-acc-markets-2); --ds-ac-bg: rgba(76, 175, 80, .14); --ds-ac-line: var(--ds-green-line); }
+  .mk .card { gap: var(--ds-sp-3); }
+  .mk .card .bx-top .room { margin-inline-start: auto; min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+  .mk .opts { display: grid; gap: var(--ds-sp-2h); }
+  .mk .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px var(--ds-sp-2h); align-items: baseline; font-size: var(--ds-fs-sm); }
+  .mk .opt .nm { color: var(--ds-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mk .opt.lead .nm { color: var(--ds-text-strong); font-weight: 700; }
+  .mk .opt .bar { grid-column: 1 / -1; height: 8px; border-radius: var(--ds-r-pill); background: #1f1f1f; overflow: hidden; }
+  .mk .opt .bar span { display: block; height: 100%; border-radius: inherit; background: var(--oc, var(--ds-green)); }
+  .mk .opt.won .bar span { background: var(--ds-gold); }
+  .mk .opt .num { color: var(--ds-text-2); font-size: var(--ds-fs-meta); white-space: nowrap; text-align: end; font-variant-numeric: tabular-nums; }
+  .mk .opt .num b { color: var(--ds-text-strong); font-size: 16px; }
+  .mk .opt.won .num b { color: var(--ds-gold-text); }
+  .mk .foot { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1) var(--ds-sp-3h); align-items: center; justify-content: space-between; padding-block-start: var(--ds-sp-2h); border-top: 1px solid var(--ds-line-soft); color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .mk .cd { color: var(--ds-ok); font-weight: 700; font-variant-numeric: tabular-nums; }
   .mk .mk-times.compact { margin: 0; }
-  .mk .done .card { background: #101010; }
-  .mk form.newmk { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
-  @media (min-width: 900px) { .mk .bx-grid.live { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .mk .done .card { background: var(--ds-sunken); }
+  .mk form.newmk { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); }
+  @media (max-width: 520px) { .mk form.newmk { padding: var(--ds-sp-4); } }
+  @media (min-width: 1000px) { .mk .bx-grid.live { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 <%
   const COLORS = ['#4caf50', '#e57373', '#64b5f6', '#ffd54f', '#ba68c8', '#4dd0e1', '#ff8a65', '#aed581'];
@@ -42,20 +44,20 @@
       <div class="bx-top">
         <span class="bx-ref"><%= m.ref %></span>
         <span class="bx-chip c-<%= c[0] %>"><%- c[1] %></span>
-        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain">🤖 <%- t('markets.ai_tag') %></span><% } %>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
         <% if (m.room) { %><span class="room"><%= m.room %></span><% } %>
       </div>
       <p class="bx-q"><%= m.question %></p>
       <div class="opts">
         <% m.options.forEach((o, i) => { const isLead = lead != null && o.price === lead && m.options.length > 1; %>
           <div class="opt <%= o.won ? 'won' : '' %><%= isLead ? ' lead' : '' %>" style="--oc: <%= oColor(m, o, i) %>">
-            <span class="nm"><%= o.won ? '🏆 ' : '' %><%= o.name %></span>
+            <span class="nm"><% if (o.won) { %><span class="ds-ic" aria-hidden="true">🏆</span> <% } %><%= o.name %></span>
             <% if (m.shares && m.settle && m.settle.kind === 'won') { %>
               <span class="num"><%- o.won ? t('markets.o.won', { last: Math.round(o.last * 100) }) : t('markets.o.lost', { last: Math.round(o.last * 100) }) %></span>
               <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%"></span></div>
             <% } else if (m.shares && m.settle) { %>
               <span class="num"><%- t('markets.o.void', { last: Math.round(o.last * 100) }) %></span>
-              <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: #555"></span></div>
+              <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: var(--ds-text-disabled)"></span></div>
             <% } else if (m.shares) { %>
               <span class="num"><%- t('markets.o.price', { pct: Math.round(o.price * 100), price: o.price.toFixed(2) }) %></span>
               <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%"></span></div>
@@ -73,9 +75,9 @@
       </div>
     </a>
 <% }; %>
-<main class="bx mk">
+<main class="bx ds-page flow mk">
   <header class="bx-hero">
-    <div class="bx-eyebrow">🔮 <%- t('markets.eyebrow') %></div>
+    <div class="bx-eyebrow"><span class="ds-ic" aria-hidden="true">🔮</span><span><%- t('markets.eyebrow') %></span></div>
     <h1><%- t('markets.h1') %></h1>
     <p class="bx-lead"><%- t('markets.lead') %></p>
     <div class="bx-stats">
@@ -84,16 +86,16 @@
       <span class="bx-stat"><b><%= fmt(done.length) %></b><%- t('markets.stat_done') %></span>
     </div>
     <div class="bx-ctas">
-      <a class="bx-btn" href="#new">＋ <%- t('markets.cta_new') %></a>
+      <a class="bx-btn" href="#new"><span class="ds-ic" aria-hidden="true">＋</span><%- t('markets.cta_new') %></a>
       <a class="bx-btn ghost" href="/economy#markets"><%- t('markets.cta_how') %></a>
-      <a class="bx-btn ghost" href="/wagers">🤝 <%- t('markets.cta_wagers') %></a>
+      <a class="bx-btn ghost" href="/wagers"><span class="ds-ic" aria-hidden="true">🤝</span><%- t('markets.cta_wagers') %></a>
     </div>
   </header>
 
   <h2 class="bx-h"><%- t('markets.h_live') %> <span class="bx-n"><%= fmt(live.length) %></span></h2>
   <% if (!live.length) { %>
     <div class="bx-empty"><span class="ic" aria-hidden="true">🔮</span><b><%- t('markets.empty_live') %></b><span><%- t('markets.empty_live_sub') %></span>
-      <a class="bx-btn sm" href="#new">＋ <%- t('markets.cta_new') %></a></div>
+      <a class="bx-btn sm" href="#new"><span class="ds-ic" aria-hidden="true">＋</span><%- t('markets.cta_new') %></a></div>
   <% } %>
   <div class="bx-grid live"><% live.forEach((m) => card(m)) %></div>
 
@@ -118,7 +120,7 @@
         <label class="bx-field"><%- t('markets.f_judge') %> <input class="bx-in" type="text" name="a3" maxlength="40" placeholder="@someone" data-prefix="judge "></label>
         <label class="bx-field"><%- t('markets.f_closes') %> <select class="bx-in" name="a4"><option value="closes 1h"><%- t('bx.d.1h') %></option><option value="closes 1d" selected><%- t('bx.d.1d') %></option><option value="closes 2d"><%- t('bx.d.2d') %></option><option value="closes 7d"><%- t('bx.d.7d') %></option><option value="closes 30d"><%- t('bx.d.30d') %></option></select></label>
       </div>
-      <label class="bx-check"><input type="checkbox" data-ai> 🤖 <%- t('markets.f_ai') %></label>
+      <label class="bx-check"><input type="checkbox" data-ai> <span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.f_ai') %></label>
       <div class="bx-row"><button class="bx-btn" type="submit"><%- t('markets.f_submit') %></button></div>
       <p class="bx-fine"><%- t('markets.f_fine') %></p>
     </form>

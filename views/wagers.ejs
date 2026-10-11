@@ -3,47 +3,48 @@
 <%# views/wagers.ejs - 1.99ly design pass (bets.css): hero + how-it-works tiles, offers waiting for you first, wager cards
     (challenger VS opponent, the terms, the pot, a status chip, a live countdown with the time in the viewer's zone),
     pool cards with odds bars, the two start forms and the settled tables. Every form posts the same /act command. %>
-<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<link rel="stylesheet" href="/public/css/bets.css?v=2">
 <script src="/public/js/bets.js?v=1" defer></script>
 <style>
-  .wg { --ac: #e0a030; --ac2: #f2c46d; --acbg: rgba(224, 160, 48, .14); --acink: #1a1200; }
+  /* 1.99pp: the wagers & pools amber accent, set with the ds names (bets.css aliases --ac* to them) */
+  .wg { --ds-ac: var(--ds-acc-wagers); --ds-ac-2: var(--ds-acc-wagers-2); --ds-ac-bg: rgba(224, 160, 48, .14); --ds-ac-line: var(--ds-warn-line); --ds-on-ac: #1a1200; }
   .wg .explain { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; margin-top: 16px; }
-  .wg .explain > div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 14px 16px; border-radius: 14px; background: rgba(0, 0, 0, .3); border: 1px solid #2a2a2a; color: #c4c4c4; font-size: 14px; line-height: 1.55; }
+  .wg .explain > div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: var(--ds-sp-3h) var(--ds-sp-4); border-radius: var(--ds-r-xl); background: var(--ds-glass); border: 1px solid var(--ds-line); color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
   .wg .explain .ic { grid-row: span 2; font-size: 28px; line-height: 1; }
-  .wg .explain b { color: #fff; font-size: 15px; }
-  .wg .card.mine { border-color: #2e6b31; }
+  .wg .explain b { color: var(--ds-text-strong); font-size: 15px; }
+  .wg .card.mine { border-color: var(--ds-ok-line); }
   .wg .card.offer { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset, 0 8px 30px rgba(255, 215, 64, .12); background: linear-gradient(180deg, rgba(255, 215, 64, .07), var(--card) 45%); }
-  .wg .vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 10px; border-radius: 12px; background: var(--card2); border: 1px solid #1e1e1e; }
-  .wg .vs .p { min-width: 0; text-align: center; font-weight: bold; color: #fff; font-size: 15px; overflow-wrap: anywhere; }
-  .wg .vs .x { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ac); color: #1a1200; font: 900 12px/1 Ubuntu, sans-serif; }
+  .wg .vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 10px; border-radius: var(--ds-r-lg); background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); }
+  .wg .vs .p { min-width: 0; text-align: center; font-weight: 700; color: var(--ds-text-strong); font-size: 15px; overflow-wrap: anywhere; }
+  .wg .vs .x { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--ds-ac); color: var(--ds-on-ac); font: 700 12px/1 var(--ds-font); }
   .wg .vs .p.win { color: var(--goldt); }
-  .wg .terms { margin: 0; color: #e8e8e8; font-size: 15px; line-height: 1.45; font-style: italic; }
+  .wg .terms { margin: 0; color: var(--ds-text); font-size: 15px; line-height: 1.45; font-style: italic; }
   .wg .pot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; }
-  .wg .pot .bx-big small { font-size: 12px; }
-  .wg .pot .each { color: var(--mut); font-size: 13px; }
-  .wg .cd { color: var(--ac2); font-weight: bold; font-variant-numeric: tabular-nums; }
-  .wg .info { color: var(--mut); font-size: 13px; line-height: 1.6; }
-  .wg .info b { color: #ddd; }
-  .wg .ai { background: #0e1420; border: 1px solid #2a3a5a; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; display: grid; gap: 6px; color: #cfd8e8; }
-  .wg .ai .who { color: #90caf9; font-weight: bold; }
-  .wg .ai .call { color: #fff; }
-  .wg .ai .reason { color: #aab; font-style: italic; }
-  .wg .ai ul { margin: 0; padding-left: 18px; color: #aab; }
+  .wg .pot .bx-big small { font-size: var(--ds-fs-xs); }
+  .wg .pot .each { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .wg .cd { color: var(--ac2); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .wg .info { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.6; }
+  .wg .info b { color: var(--ds-text); }
+  .wg .ai { background: var(--ds-info-bg); border: 1px solid var(--ds-info-line); border-radius: var(--ds-r-lg); padding: var(--ds-sp-2h) var(--ds-sp-3); font-size: 13.5px; display: grid; gap: 6px; color: var(--ds-info-ink); }
+  .wg .ai .who { color: var(--ds-info); font-weight: 700; }
+  .wg .ai .call { color: var(--ds-text-strong); }
+  .wg .ai .reason { color: var(--ds-text-muted); font-style: italic; }
+  .wg .ai ul { margin: 0; padding-inline-start: 18px; color: var(--ds-text-muted); }
   .wg form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
   .wg form.inline .bx-in { flex: 1 1 140px; width: auto; }
   .wg .acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .wg .opts { display: grid; gap: 8px; }
-  .wg .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; font-size: 14px; }
-  .wg .opt .nm { color: #e6e6e6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .wg .opt .bar { grid-column: 1 / -1; height: 8px; border-radius: 999px; background: #1f1f1f; overflow: hidden; }
+  .wg .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; font-size: var(--ds-fs-sm); }
+  .wg .opt .nm { color: var(--ds-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wg .opt .bar { grid-column: 1 / -1; height: 8px; border-radius: var(--ds-r-pill); background: #1f1f1f; overflow: hidden; }
   .wg .opt .bar span { display: block; height: 100%; background: var(--ac); border-radius: inherit; }
   .wg .opt.won .bar span { background: var(--gold); }
-  .wg .opt .num { color: #bdbdbd; font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .wg .q { color: #fff; text-decoration: none; font-weight: bold; font-size: 16px; line-height: 1.35; }
+  .wg .opt .num { color: var(--ds-text-2); font-size: var(--ds-fs-meta); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .wg .q { color: var(--ds-text-strong); text-decoration: none; font-weight: 700; font-size: 16px; line-height: 1.35; }
   .wg .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; }
-  .wg .forms > form { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; align-content: start; }
-  .wg .bad { color: var(--red); font-size: 13px; }
-  .wg .tbl td.ref { color: var(--ac2); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .wg .forms > form { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); align-content: start; }
+  .wg .bad { color: var(--red); font-size: var(--ds-fs-meta); }
+  .wg .tbl td.ref { color: var(--ac2); font-family: var(--ds-font-mono); }
   .wg .tbl td.wrap { white-space: normal; min-width: 180px; }
   .wg .tbl td { white-space: nowrap; }
 </style>
@@ -63,10 +64,10 @@
   // The AI-judge box for a wager (cmd 'wager', ref W1) or pool (cmd 'pool', ref M1).
   const aiBox = (cmd, ref, x, inIt, live) => { const ai = x.ai || {}; const st = ai.state || null; %>
     <div class="ai">
-      <span class="who">🤖 <%- t('wagers.ai.who') %></span>
+      <span class="who"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('wagers.ai.who') %></span>
       <% if (st === 'thinking') { %><span><%- t('wagers.ai.thinking') %></span>
       <% } else if (st === 'unsure') { %><span><%- ai.reason ? t('wagers.ai.unsure_why') : t('wagers.ai.unsure') %></span><% if (ai.reason) { %><span class="reason"><%= ai.reason %></span><% } %>
-        <% if (ai.evidence) { %><span class="info">📈 <%= ai.evidence %></span><% } %>
+        <% if (ai.evidence) { %><span class="info"><span class="ds-ic" aria-hidden="true">📈</span> <%= ai.evidence %></span><% } %>
         <% if (ai.escalated) { %><span class="info"><%- t('wagers.ai.escalated') %></span>
         <% } else if (ai.next_try && ai.next_try > now) { %><span class="info"><%- t('wagers.ai.again', { when: tzT(ai.next_try, 'time'), left: cd(ai.next_try) }) %></span><% } %>
       <% } else if (st === 'proposed' || st === 'disputed') { %>
@@ -137,11 +138,11 @@
     <div class="card bx-card<%= m.inIt ? ' mine' : '' %>">
       <div class="bx-top"><span class="bx-ref"><%= m.ref %></span>
         <%- m.status === 'open' ? '<span class="bx-chip c-open">' + t('wagers.pool_open') + '</span>' : m.status === 'closed' ? '<span class="bx-chip c-closed">' + t('wagers.pool_closed') + '</span>' : '<span class="bx-chip">' + t.esc(m.status) + '</span>' %>
-        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain">🤖 AI</span><% } %></div>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> AI</span><% } %></div>
       <a class="q" href="/markets/<%= m.id %>"><%= m.question %></a>
       <div class="opts">
         <% m.options.forEach((o) => { %>
-          <div class="opt<%= o.won ? ' won' : '' %>"><span class="nm"><%= o.won ? '🏆 ' : '' %><%= o.name %></span>
+          <div class="opt<%= o.won ? ' won' : '' %>"><span class="nm"><% if (o.won) { %><span class="ds-ic" aria-hidden="true">🏆</span> <% } %><%= o.name %></span>
             <span class="num"><b><%= o.share %>%</b> · <%= o.mult ? o.mult.toFixed(2) + '×' : '—' %></span>
             <span class="bar"><span style="width:<%= o.share %>%"></span></span></div>
         <% }) %>
@@ -163,9 +164,9 @@
   const liveShown = live.filter((w) => !offers.includes(w));
   const potLive = liveShown.reduce((a, w) => a + (w.pot || 0), 0) + pools.reduce((a, m) => a + (m.total || 0), 0);
 %>
-<main class="bx wg">
+<main class="bx ds-page flow wg">
   <header class="bx-hero">
-    <div class="bx-eyebrow">🤝 <%- t('wagers.eyebrow') %></div>
+    <div class="bx-eyebrow"><span class="ds-ic" aria-hidden="true">🤝</span> <%- t('wagers.eyebrow') %></div>
     <h1><%- t('wagers.h1') %></h1>
     <p class="bx-lead"><%- t('wagers.lead') %></p>
     <div class="bx-stats">
@@ -174,8 +175,8 @@
       <span class="bx-stat"><b><%= fmt(potLive) %></b><%- t('wagers.stat_pot') %></span>
     </div>
     <div class="bx-ctas">
-      <a class="bx-btn" href="#start">⚔️ <%- t('wagers.cta_new') %></a>
-      <a class="bx-btn ghost" href="/markets">🔮 <%- t('wagers.cta_markets') %></a>
+      <a class="bx-btn" href="#start"><span class="ds-ic" aria-hidden="true">⚔️</span> <%- t('wagers.cta_new') %></a>
+      <a class="bx-btn ghost" href="/markets"><span class="ds-ic" aria-hidden="true">🔮</span> <%- t('wagers.cta_markets') %></a>
     </div>
     <div class="explain">
       <div><span class="ic" aria-hidden="true">⚔️</span><b><%- t('wagers.x_wager_h') %></b><span><%- t('wagers.x_wager', { fee: feePct }) %></span></div>
@@ -205,13 +206,13 @@
   <% if (canAct) { %>
     <div class="forms">
       <form class="bx-form" method="post" action="/act" id="wf"><%- hidden('wager') %>
-        <b>⚔️ <%- t('wagers.f_w_h') %></b>
+        <b><span class="ds-ic" aria-hidden="true">⚔️</span> <%- t('wagers.f_w_h') %></b>
         <label class="bx-field"><%- t('wagers.f_opp') %><input class="bx-in" type="text" name="a0" maxlength="60" placeholder="<%- t('wagers.f_opp_ph') %>" required></label>
         <label class="bx-field"><%- t('wagers.f_stake') %><input class="bx-in" type="text" name="a1" inputmode="numeric" autocomplete="off" spellcheck="false" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*" placeholder="<%- t('wagers.min_ph', { n: fmt(wagerMin) }) %>" required></label>
         <div class="bx-chips"><% [1000, 5000, 10000, 25000].filter((v) => v >= wagerMin).forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>" data-amt-field="a1"><%= v / 1000 %>k</button><% }) %></div>
         <label class="bx-field"><%- t('wagers.f_terms') %><input class="bx-in" type="text" name="a2" maxlength="200" placeholder="<%- t('wagers.f_terms_ph') %>" required></label>
         <label class="bx-field"><%- t('wagers.f_judge') %><input class="bx-in" type="text" id="wf-judge" maxlength="60" placeholder="<%- t('wagers.f_judge_ph') %>"></label>
-        <label class="bx-check"><input type="checkbox" id="wf-ai"> 🤖 <%- t('wagers.f_ai') %></label>
+        <label class="bx-check"><input type="checkbox" id="wf-ai"> <span class="ds-ic" aria-hidden="true">🤖</span> <%- t('wagers.f_ai') %></label>
         <input type="hidden" name="a3" id="wf-a3">
         <label class="bx-field"><%- t('wagers.f_by') %> <select class="bx-in" name="a4">
           <option value="by 1h"><%- t('bx.d.1h') %></option><option value="by 1d"><%- t('bx.d.1d') %></option><option value="by 2d" selected><%- t('bx.d.2d') %></option>
@@ -220,13 +221,13 @@
         <p class="bx-fine"><%- t('wagers.f_w_fine') %></p>
       </form>
       <form class="bx-form" method="post" action="/act" id="pf"><%- hidden('pool') %>
-        <b>🎲 <%- t('wagers.f_p_h') %></b>
+        <b><span class="ds-ic" aria-hidden="true">🎲</span> <%- t('wagers.f_p_h') %></b>
         <input type="hidden" name="a0" value="new">
         <label class="bx-field"><%- t('wagers.f_q') %><input class="bx-in" type="text" name="a1" maxlength="200" placeholder="<%- t('wagers.f_q_ph') %>" required></label>
         <label class="bx-field"><%- t('wagers.f_opts') %><input class="bx-in" type="text" id="pf-opts" maxlength="200" placeholder="<%- t('wagers.f_opts_ph') %>"></label>
         <input type="hidden" name="a2" id="pf-a2">
         <label class="bx-field"><%- t('wagers.f_judge') %><input class="bx-in" type="text" id="pf-judge" maxlength="60" placeholder="<%- t('wagers.f_judge_ph') %>"></label>
-        <label class="bx-check"><input type="checkbox" id="pf-ai"> 🤖 <%- t('wagers.f_ai') %></label>
+        <label class="bx-check"><input type="checkbox" id="pf-ai"> <span class="ds-ic" aria-hidden="true">🤖</span> <%- t('wagers.f_ai') %></label>
         <input type="hidden" name="a3" id="pf-a3">
         <label class="bx-field"><%- t('wagers.f_closes') %> <select class="bx-in" name="a4">
           <option value="closes 1h"><%- t('bx.d.1h') %></option><option value="closes 1d" selected><%- t('bx.d.1d') %></option><option value="closes 2d"><%- t('bx.d.2d') %></option>
@@ -265,7 +266,7 @@
       <tr><th><%- t('wagers.th_w') %></th><th><%- t('wagers.th_who') %></th><th><%- t('wagers.th_terms') %></th><th class="r"><%- t('wagers.th_pot') %></th><th><%- t('wagers.th_result') %></th><th><%- t('wagers.th_when') %></th></tr>
       <% doneW.forEach((w) => { %>
         <tr><td class="ref"><%= w.ref %></td><td><%- ul(w.creator) %> vs <%- ul(w.opponent) %></td><td class="wrap"><%= w.terms %></td><td class="r"><%= fmt(w.pot) %></td>
-          <td><%- w.status === 'won' ? '🏆 ' + ul(w.winner) : t('wagers.void_ref') %><%- w.settled_by ? ' (' + (w.ai_judge && w.settled_by === w.judge ? '🤖 ' : '') + ul(w.settled_by) + ')' : '' %></td><td><%- when(w.ended) %></td></tr>
+          <td><%- w.status === 'won' ? '<span class="ds-ic" aria-hidden="true">🏆</span> ' + ul(w.winner) : t('wagers.void_ref') %><%- w.settled_by ? ' (' + (w.ai_judge && w.settled_by === w.judge ? '<span class="ds-ic" aria-hidden="true">🤖</span> ' : '') + ul(w.settled_by) + ')' : '' %></td><td><%- when(w.ended) %></td></tr>
       <% }) %>
     </table></div>
   <% } %>
@@ -274,7 +275,7 @@
       <tr><th><%- t('wagers.th_p') %></th><th><%- t('wagers.th_q') %></th><th class="r"><%- t('wagers.th_pot') %></th><th><%- t('wagers.th_result') %></th><th><%- t('wagers.th_when') %></th></tr>
       <% doneP.forEach((m) => { %>
         <tr><td><a href="/markets/<%= m.id %>"><%= m.ref %></a></td><td class="wrap"><%= m.question %></td><td class="r"><%= fmt(m.total) %></td>
-          <td><%- m.status === 'settled' ? '🏆 ' + t.esc(m.result) : m.status === 'void' ? t('wagers.void_ref') : t.esc(m.status) %><%= m.settled_by ? ' (' + m.settled_by + ')' : '' %></td><td><%- when(m.ended) %></td></tr>
+          <td><%- m.status === 'settled' ? '<span class="ds-ic" aria-hidden="true">🏆</span> ' + t.esc(m.result) : m.status === 'void' ? t('wagers.void_ref') : t.esc(m.status) %><%= m.settled_by ? ' (' + m.settled_by + ')' : '' %></td><td><%- when(m.ended) %></td></tr>
       <% }) %>
     </table></div>
   <% } %>

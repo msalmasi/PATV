@@ -96,7 +96,7 @@ test("the page shows the spec, evidence links and Pepe's check, escaped", async 
   assert.match(html, /couldn’t confirm it from his logs/);
   assert.ok(!html.includes("/reject\"") && !html.includes("/dispute\""), "signed out: no reject/dispute forms");
   const board = await page(null, "/bounties");
-  assert.match(board, /🔎 Pepe verifies · 1 matching claim · 🔗 1 with evidence/);
+  assert.match(board, /🔎<\/span> Pepe verifies · 1 matching claim · <span class="ds-ic" aria-hidden="true">🔗<\/span> 1 with evidence/);
 });
 
 test("reject / dispute forms only for the people allowed", async () => {

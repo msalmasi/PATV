@@ -3,37 +3,41 @@
 <%# views/polls.ejs - 1.99ly design pass (bets.css): hero, the current poll as a big card where each option is one tappable
     row (option, count, %, tally bar; the whole row is the vote button - the same poll.vote post), the winner and your vote
     marked, the start form when nothing is running, past polls as compact cards. %>
-<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<link rel="stylesheet" href="/public/css/bets.css?v=2">
 <style>
-  .pl { --ac: #4fc3f7; --ac2: #8fd8fb; --acbg: rgba(79, 195, 247, .13); --acink: #04202c; max-width: 900px; }
-  .pl .card.live { border-color: #2a6f8f; box-shadow: 0 0 0 1px #2a6f8f inset; padding: 18px; }
-  .pl .q { margin: 0; font-weight: 900; color: #fff; font-size: clamp(19px, 4.4vw, 24px); line-height: 1.3; overflow-wrap: anywhere; }
-  .pl .past .q { font-size: 16px; font-weight: bold; }
-  .pl .info { color: var(--mut); font-size: 13px; line-height: 1.6; }
+  /* 1.99pp: the polls cyan accent with the ds names; .ds-page.mid (900) */
+  .pl { --ds-ac: var(--ds-acc-polls); --ds-ac-2: var(--ds-acc-polls-2); --ds-ac-bg: rgba(79, 195, 247, .13); --ds-ac-line: #1f5a73; --ds-on-ac: #04202c; }
+  .pl .card.live { border-color: var(--ds-ac-line); box-shadow: 0 0 0 1px var(--ds-ac-line) inset; padding: var(--ds-sp-5); }
+  @media (max-width: 520px) { .pl .card.live { padding: var(--ds-sp-4); } }
+  .pl .q { margin: 0; font-weight: 700; color: var(--ds-text-strong); font-size: clamp(19px, 4.4vw, 24px); line-height: 1.3; overflow-wrap: anywhere; }
+  .pl .past .q { font-size: 16px; font-weight: 700; }
+  .pl .info { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.6; }
   .pl .opts { display: grid; gap: 8px; margin: 6px 0 0; }
-  .pl .opt { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; width: 100%; padding: 12px 14px; border-radius: 12px;
-             border: 1px solid #262626; background: var(--card2); color: inherit; text-align: left; font: inherit; }
+  .pl .opt { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; width: 100%; padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg);
+             border: 1px solid var(--ds-line); background: var(--ds-sunken); color: inherit; text-align: start; font: inherit; }
   .pl .past .opt { padding: 8px 10px; }
-  .pl .opt .txt { color: #e6e6e6; overflow-wrap: anywhere; min-width: 0; font-size: 15px; }
-  .pl .opt .num { color: #cfcfcf; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13.5px; }
-  .pl .opt .num b { color: #fff; font-size: 16px; }
-  .pl .opt .bar { grid-column: 1 / -1; height: 8px; background: #1f1f1f; border-radius: 999px; overflow: hidden; }
+  .pl .opt .txt { color: var(--ds-text); overflow-wrap: anywhere; min-width: 0; font-size: 15px; }
+  .pl .opt .num { color: var(--ds-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13.5px; }
+  .pl .opt .num b { color: var(--ds-text-strong); font-size: 16px; }
+  .pl .opt .bar { grid-column: 1 / -1; height: 8px; background: #1f1f1f; border-radius: var(--ds-r-pill); overflow: hidden; }
   .pl .opt .bar span { display: block; height: 100%; background: var(--ac); border-radius: inherit; transition: width .5s ease; }
-  .pl .opt.mine { border-color: #2a6f8f; background: #0c171d; }
-  .pl .opt.mine .txt { color: var(--ac2); font-weight: bold; }
-  .pl .opt.won { border-color: #7a6418; background: linear-gradient(90deg, rgba(255, 215, 64, .1), var(--card2) 70%); }
-  .pl .opt.won .txt { color: var(--goldt); font-weight: bold; }
+  .pl .opt.mine { border-color: var(--ds-ac-line); background: #0c171d; }
+  .pl .opt.mine .txt { color: var(--ac2); font-weight: 700; }
+  .pl .opt.won { border-color: var(--ds-gold-line); background: linear-gradient(90deg, rgba(255, 215, 64, .1), var(--card2) 70%); }
+  .pl .opt.won .txt { color: var(--goldt); font-weight: 700; }
   .pl .opt.won .bar span { background: var(--gold); }
-  .pl .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid #2a6f8f; color: var(--ac2); margin-left: 6px; font-weight: bold; vertical-align: 1px; }
+  .pl .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-ac-line); color: var(--ac2); margin-inline-start: 6px; font-weight: 700; vertical-align: 1px; }
   .pl .opt.won .tag.w { border-color: var(--gold); color: var(--goldt); }
   .pl form.vote { margin: 0; }
   .pl .votebtn { cursor: pointer; transition: border-color .12s, background .12s; }
   .pl .votebtn:hover, .pl .votebtn:focus-visible { border-color: var(--ac); background: #0e1a20; }
+  .pl .votebtn:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
   .pl .votebtn:disabled { cursor: default; }
-  .pl .vlbl { display: inline-block; margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: var(--ac); color: var(--acink); font-size: 12px; font-weight: bold; }
-  .pl .opt.mine .vlbl { background: transparent; color: var(--ac2); border: 1px solid #2a6f8f; }
+  .pl .vlbl { display: inline-block; margin-inline-start: 8px; padding: 3px 10px; border-radius: var(--ds-r-pill); background: var(--ac); color: var(--acink); font-size: var(--ds-fs-xs); font-weight: 700; }
+  .pl .opt.mine .vlbl { background: transparent; color: var(--ac2); border: 1px solid var(--ds-ac-line); }
   .pl .endbtn { justify-self: start; }
   .pl .hint { margin-top: 12px; }
+  @media (max-width: 420px) { .pl .live .opt { grid-template-columns: minmax(0, 1fr); } .pl .live .opt .num { justify-self: start; } }
   .pl .past-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 12px; }
 </style>
 <%
@@ -59,9 +63,9 @@
       <% }) %>
     </div>
 <% }; %>
-<main class="bx pl">
+<main class="bx ds-page flow mid pl">
   <header class="bx-hero">
-    <div class="bx-eyebrow">🗳️ <%- t('polls.eyebrow') %></div>
+    <div class="bx-eyebrow"><span class="ds-ic" aria-hidden="true">🗳️</span> <%- t('polls.eyebrow') %></div>
     <h1><%- t('polls.h1') %></h1>
     <p class="bx-lead"><%- t('polls.lead') %></p>
     <div class="bx-stats">

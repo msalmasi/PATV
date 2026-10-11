@@ -3,23 +3,24 @@
 <%# views/bounties.ejs - 1.99ly design pass (bets.css): a "wanted board" - hero with the open pot total, bounty cards like
     posters (the reward big, the job, status chip, verification line, claims / backers, a live countdown with the end
     time in the viewer's zone), closed ones dimmed, and the post form (same /act !bounty command). %>
-<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<link rel="stylesheet" href="/public/css/bets.css?v=2">
 <script src="/public/js/bets.js?v=1" defer></script>
 <style>
-  .bt { --ac: #ffb300; --ac2: #ffd54f; --acbg: rgba(255, 179, 0, .13); --acink: #2a1600; }
+  /* 1.99pp: the bounty-board amber accent with the ds names */
+  .bt { --ds-ac: var(--ds-acc-bounties); --ds-ac-2: var(--ds-acc-bounties-2); --ds-ac-bg: rgba(255, 179, 0, .13); --ds-ac-line: #6b5a20; --ds-on-ac: var(--ds-on-gold); }
   .bt .card { position: relative; overflow: hidden; gap: 10px; border-top: 3px solid var(--ac); }
-  .bt .card::after { content: ""; position: absolute; right: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 179, 0, .12), transparent 70%); pointer-events: none; }
-  .bt .wanted { font: 900 11px/1 Ubuntu, sans-serif; letter-spacing: .2em; color: var(--ac2); text-transform: uppercase; }
-  .bt .pot { font: 900 30px/1.05 Ubuntu, sans-serif; color: var(--goldt); font-variant-numeric: tabular-nums; }
-  .bt .pot small { font-size: 14px; color: var(--mut); margin-left: 4px; }
-  .bt .task { font-weight: bold; color: #fff; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; margin: 0; }
-  .bt .info { color: var(--mut); font-size: 13px; line-height: 1.6; }
-  .bt .info b { color: #ddd; }
-  .bt .vline { font-size: 12.5px; color: #8fc3ff; overflow-wrap: anywhere; }
-  .bt .cd { color: var(--ac2); font-weight: bold; font-variant-numeric: tabular-nums; }
-  .bt .done .card { border-top-color: #444; background: #101010; }
-  .bt .done .card .pot { color: #cfcfcf; font-size: 24px; }
-  .bt form.newbt { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  .bt .card::after { content: ""; position: absolute; inset-inline-end: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 179, 0, .12), transparent 70%); pointer-events: none; }
+  .bt .wanted { font: 700 11px/1 var(--ds-font); letter-spacing: .2em; color: var(--ac2); text-transform: uppercase; }
+  .bt .pot { font: 700 30px/1.05 var(--ds-font); color: var(--goldt); font-variant-numeric: tabular-nums; }
+  .bt .pot small { font-size: var(--ds-fs-sm); color: var(--ds-text-muted); margin-inline-start: 4px; }
+  .bt .task { font-weight: 700; color: var(--ds-text-strong); font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; margin: 0; }
+  .bt .info { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.6; }
+  .bt .info b { color: var(--ds-text); }
+  .bt .vline { font-size: var(--ds-fs-xs); color: var(--ds-info); overflow-wrap: anywhere; }
+  .bt .cd { color: var(--ac2); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bt .done .card { border-top-color: var(--ds-line-strong); background: var(--ds-sunken); }
+  .bt .done .card .pot { color: var(--ds-text-2); font-size: 24px; }
+  .bt form.newbt { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); }
 </style>
 <%
   const fmt = (n) => t.num(Math.round(Number(n) || 0));
@@ -34,7 +35,7 @@
       <p class="task"><%= b.task %></p>
       <% const vchk = (b.claims || []).filter((c) => c.check && ['verified', 'creator', 'admin'].includes(c.check.state)).length;
          const vev = (b.claims || []).filter((c) => c.evidence && (c.evidence.links || []).length).length; %>
-      <% if (b.verify || vev || b.auto) { %><span class="vline"><%- [b.verify ? '🔎 ' + t('bounties.v_pepe') : '', b.auto ? t('bounties.v_auto') : (vchk ? t('bounties.v_match', { count: vchk }) : ''), vev ? '🔗 ' + t('bounties.v_ev', { count: vev }) : ''].filter(Boolean).join(' · ') %></span><% } %>
+      <% if (b.verify || vev || b.auto) { %><span class="vline"><%- [b.verify ? '<span class="ds-ic" aria-hidden="true">🔎</span> ' + t('bounties.v_pepe') : '', b.auto ? t('bounties.v_auto') : (vchk ? t('bounties.v_match', { count: vchk }) : ''), vev ? '<span class="ds-ic" aria-hidden="true">🔗</span> ' + t('bounties.v_ev', { count: vev }) : ''].filter(Boolean).join(' · ') %></span><% } %>
       <span class="info">
         <%- t('bounties.posted_by', { who: b.creator }) %><br>
         <% if (b.status === 'open') { %><%- t('bounties.claims', { count: b.claims.length }) %> · <%- t('bounties.backers', { count: b.backers.length }) %><% if (b.deadline > now) { %> · <%- t('bounties.ends_in', { left: '<span class="cd" data-until="' + Number(b.deadline) + '">' + left(b.deadline) + '</span>' }) %><% } %>
@@ -43,19 +44,19 @@
       </span>
     </a>
 <% }; %>
-<main class="bx bt">
+<main class="bx ds-page flow bt">
   <header class="bx-hero">
-    <div class="bx-eyebrow">🎯 <%- t('bounties.eyebrow') %></div>
+    <div class="bx-eyebrow"><span class="ds-ic" aria-hidden="true">🎯</span> <%- t('bounties.eyebrow') %></div>
     <h1><%- t('bounties.h1') %></h1>
     <p class="bx-lead"><%- t('bounties.lead') %></p>
     <div class="bx-stats">
       <span class="bx-stat"><b><%= fmt(live.length) %></b><%- t('bounties.stat_open', { count: live.length }) %></span>
       <span class="bx-stat"><b><%= fmt(potOpen) %></b><%- t('bounties.stat_pot') %></span>
     </div>
-    <div class="bx-ctas"><a class="bx-btn" href="#new">＋ <%- t('bounties.cta_new') %></a><a class="bx-btn ghost" href="/gtf"><%- t('bounties.cta_gtf') %></a></div>
+    <div class="bx-ctas"><a class="bx-btn" href="#new"><span class="ds-ic" aria-hidden="true">＋</span> <%- t('bounties.cta_new') %></a><a class="bx-btn ghost" href="/gtf"><%- t('bounties.cta_gtf') %></a></div>
   </header>
   <h2 class="bx-h"><%- t('bounties.h_open') %> <span class="bx-n"><%= live.length %></span></h2>
-  <% if (!live.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">🎯</span><b><%- t('bounties.empty_open') %></b><a class="bx-btn sm" href="#new">＋ <%- t('bounties.cta_new') %></a></div><% } %>
+  <% if (!live.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">🎯</span><b><%- t('bounties.empty_open') %></b><a class="bx-btn sm" href="#new"><span class="ds-ic" aria-hidden="true">＋</span> <%- t('bounties.cta_new') %></a></div><% } %>
   <div class="bx-grid"><% live.forEach((b) => card(b)) %></div>
   <h2 class="bx-h"><%- t('bounties.h_done') %></h2>
   <% if (!done.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">📜</span><b><%- t('bounties.empty_done') %></b></div><% } %>

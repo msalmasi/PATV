@@ -3,59 +3,61 @@
 <%# views/bounty.ejs - 1.99ly design pass (bets.css): one bounty as a poster - the reward big with its status chip and a live
     countdown (end time in the viewer's zone), who posted it, how it gets verified, then the actions as cards (chip in,
     claim with evidence, pay hunters, cancel), the claims with Pepe's check, and the pot. Same forms and routes. %>
-<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<link rel="stylesheet" href="/public/css/bets.css?v=2">
 <script src="/public/js/bets.js?v=1" defer></script>
 <style>
-  .bt { --ac: #ffb300; --ac2: #ffd54f; --acbg: rgba(255, 179, 0, .13); --acink: #2a1600; max-width: 900px; }
-  .bt .ref { color: var(--ac2); font-family: ui-monospace, Menlo, Consolas, monospace; }
-  .bt h1 { margin: 8px 0 4px; font: 900 clamp(22px, 4.6vw, 30px)/1.25 Ubuntu, sans-serif; color: #fff; overflow-wrap: anywhere; }
-  .bt h3 { display: flex; align-items: center; gap: 10px; margin: 30px 0 12px; font: 900 19px/1.25 Ubuntu, sans-serif; color: #fff; }
+  /* 1.99pp: the bounty-board amber accent with the ds names; .ds-page.mid (900) */
+  .bt { --ds-ac: var(--ds-acc-bounties); --ds-ac-2: var(--ds-acc-bounties-2); --ds-ac-bg: rgba(255, 179, 0, .13); --ds-ac-line: #6b5a20; --ds-on-ac: var(--ds-on-gold); }
+  .bt .ref { color: var(--ac2); font-family: var(--ds-font-mono); }
+  .bt h1 { margin: 8px 0 4px; font: 700 clamp(22px, 4.6vw, 30px)/1.25 var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .bt h3 { display: flex; align-items: center; gap: 10px; margin: 30px 0 12px; font: 700 19px/1.25 var(--ds-font); color: var(--ds-text-strong); }
   .bt h3::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 8px var(--ac); }
-  .bt .info { color: var(--mut); font-size: 13.5px; line-height: 1.65; }
+  .bt .info { color: var(--ds-text-muted); font-size: 13.5px; line-height: 1.65; }
   .bt .head { border-top: 3px solid var(--ac); }
-  .bt .pot { font: 900 clamp(34px, 9vw, 48px)/1.05 Ubuntu, sans-serif; color: var(--goldt); font-variant-numeric: tabular-nums; margin: 10px 0 2px; text-shadow: 0 0 18px rgba(255, 215, 64, .25); }
-  .bt .pot small { font-size: 16px; color: var(--mut); margin-left: 6px; }
-  .bt .cd { color: var(--ac2); font-weight: bold; font-variant-numeric: tabular-nums; }
-  .bt .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+  .bt .pot { font: 700 clamp(34px, 9vw, 48px)/1.05 var(--ds-font); color: var(--goldt); font-variant-numeric: tabular-nums; margin: 10px 0 2px; text-shadow: 0 0 18px rgba(255, 215, 64, .25); }
+  .bt .pot small { font-size: 16px; color: var(--ds-text-muted); margin-inline-start: 6px; }
+  .bt .cd { color: var(--ac2); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bt .tbl { overflow-x: auto; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: var(--ds-surface); }
   .bt table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-  .bt th, .bt td { padding: 10px 12px; border-bottom: 1px solid #1d1d1d; text-align: left; }
+  .bt th, .bt td { padding: var(--ds-sp-2h) var(--ds-sp-3); border-bottom: 1px solid var(--ds-line-soft); text-align: start; }
   .bt tr:last-child td { border-bottom: 0; }
-  .bt th { color: var(--mut); font-weight: bold; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; background: #151515; }
-  .bt td.r, .bt th.r { text-align: right; }
-  .bt .notice { padding: 12px 14px; border-radius: 12px; background: rgba(76, 175, 80, .1); border: 1px solid #2e6b31; color: #d6f0d6; }
+  .bt th { color: var(--ds-text-muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: var(--ds-ls-label); background: #151515; }
+  .bt td.r, .bt th.r { text-align: end; }
+  .bt .notice { padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); background: rgba(76, 175, 80, .1); border: 1px solid var(--ds-ok-line); color: var(--ds-ok-ink); }
   .bt .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin: 16px 0; }
-  .bt .forms form { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 10px; align-content: start; }
-  .bt .forms form > b { font-size: 16px; color: #fff; }
-  .bt form.owner { border-color: #6b531e; background: linear-gradient(180deg, rgba(224, 160, 48, .08), var(--card) 50%); }
+  .bt .forms form { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: 16px; display: grid; gap: 10px; align-content: start; }
+  .bt .forms form > b { font-size: 16px; color: var(--ds-text-strong); }
+  .bt form.owner { border-color: var(--ds-warn-line); background: linear-gradient(180deg, rgba(224, 160, 48, .08), var(--ds-surface) 50%); }
   .bt form .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .bt input[type=number], .bt input[type=text], .bt input[type=url] { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line2); background: var(--card2); color: #eee; font: 16px Ubuntu, sans-serif; }
+  .bt input[type=number], .bt input[type=text], .bt input[type=url] { width: 100%; min-width: 0; min-height: 44px; padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); color: var(--ds-text); font: 16px var(--ds-font); }
   .bt input:focus { border-color: var(--ac); outline: none; box-shadow: 0 0 0 3px var(--acbg); }
-  .bt button[type=submit] { min-height: 44px; padding: 10px 20px; border: 0; border-radius: 999px; background: var(--ac); color: var(--acink); font: bold 15px Ubuntu, sans-serif; cursor: pointer; justify-self: start; }
+  .bt button[type=submit] { min-height: 44px; padding: 10px 20px; border: 0; border-radius: var(--ds-r-pill); background: var(--ac); color: var(--acink); font: 700 15px var(--ds-font); cursor: pointer; justify-self: start; }
   .bt button[type=submit]:hover { filter: brightness(1.1); }
-  .bt button.danger[type=submit] { background: #5a2a2a; color: #f6c6c6; }
-  .bt label.pick { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line2); background: var(--card2); cursor: pointer; color: #ddd; }
+  .bt button[type=submit]:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .bt button.danger[type=submit] { background: var(--ds-danger-fill); color: var(--ds-danger-ink); }
+  .bt label.pick { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); cursor: pointer; color: var(--ds-text); }
   .bt label.pick input { width: 18px; height: 18px; accent-color: var(--ac); }
-  .bt .verify { background: #0f1620; border: 1px solid #2a4a6a; border-radius: 14px; padding: 12px 14px; margin: 12px 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
-  .bt .verify b { color: #8fc3ff; }
-  .bt .verify.manual { border-color: #333; background: #111; }
-  .bt .verify.manual b { color: #ccc; }
+  .bt .verify { background: var(--ds-info-bg); border: 1px solid var(--ds-info-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-3) var(--ds-sp-3h); margin: 12px 0; font-size: var(--ds-fs-sm); line-height: 1.55; overflow-wrap: anywhere; }
+  .bt .verify b { color: var(--ds-info); }
+  .bt .verify.manual { border-color: var(--ds-line-strong); background: var(--ds-surface); }
+  .bt .verify.manual b { color: var(--ds-text-2); }
   .bt .claims { display: grid; gap: 10px; }
-  .bt .claim { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 8px; min-width: 0; }
+  .bt .claim { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: 14px; display: grid; gap: 8px; min-width: 0; }
   .bt .claim.won { border-color: var(--gold); background: linear-gradient(90deg, rgba(255, 215, 64, .08), var(--card) 60%); }
   .bt .claim .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; justify-content: space-between; }
-  .bt .claim .who { font-weight: bold; color: #fff; overflow-wrap: anywhere; font-size: 15px; }
-  .bt .claim .note { color: #ddd; font-size: 14.5px; overflow-wrap: anywhere; }
+  .bt .claim .who { font-weight: 700; color: var(--ds-text-strong); overflow-wrap: anywhere; font-size: 15px; }
+  .bt .claim .note { color: var(--ds-text); font-size: 14.5px; overflow-wrap: anywhere; }
   .bt .ev { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-  .bt .ev a { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--card2); border: 1px solid var(--line2); border-radius: 999px; padding: 5px 12px; font-size: 13px; }
-  .bt .chk { border-left: 3px solid #555; padding: 8px 12px; background: var(--card2); border-radius: 0 10px 10px 0; font-size: 13px; color: #bbb; display: grid; gap: 3px; min-width: 0; }
-  .bt .chk .st { font-weight: bold; }
-  .bt .chk.verified { border-color: #4caf50; } .bt .chk.verified .st { color: #81c784; }
-  .bt .chk.creator { border-color: #e0a030; } .bt .chk.creator .st { color: #e0a030; }
-  .bt .chk.admin { border-color: #c06060; } .bt .chk.admin .st { color: #f2b8b8; }
-  .bt .chk.no_match .st { color: #aaa; }
-  .bt .chk .ln { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: #ddd; overflow-wrap: anywhere; }
-  .bt .flag { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid #5a2a2a; color: #f2b8b8; white-space: nowrap; }
-  .bt .flag.disp { border-color: #2a4a6a; color: #8fc3ff; }
+  .bt .ev a { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--ds-sunken); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-pill); padding: 5px 12px; font-size: var(--ds-fs-meta); }
+  .bt .chk { border-inline-start: 3px solid #555; padding: 8px 12px; background: var(--ds-sunken); border-start-start-radius: 0; border-end-start-radius: 0; border-start-end-radius: var(--ds-r-md); border-end-end-radius: var(--ds-r-md); font-size: var(--ds-fs-meta); color: var(--ds-text-2); display: grid; gap: 3px; min-width: 0; }
+  .bt .chk .st { font-weight: 700; }
+  .bt .chk.verified { border-color: var(--ds-green); } .bt .chk.verified .st { color: var(--ds-ok); }
+  .bt .chk.creator { border-color: var(--ds-warn-fill); } .bt .chk.creator .st { color: var(--ds-warn); }
+  .bt .chk.admin { border-color: var(--ds-danger-solid); } .bt .chk.admin .st { color: var(--ds-danger); }
+  .bt .chk.no_match .st { color: var(--ds-text-muted); }
+  .bt .chk .ln { font-family: var(--ds-font-mono); font-size: var(--ds-fs-xs); color: var(--ds-text); overflow-wrap: anywhere; }
+  .bt .flag { font-size: var(--ds-fs-xs); padding: 2px 8px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-danger-fill); color: var(--ds-danger); white-space: nowrap; }
+  .bt .flag.disp { border-color: var(--ds-info-line); color: var(--ds-info); }
   .bt form.mini { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
   .bt form.mini input[type=text] { flex: 1 1 180px; width: auto; min-height: 40px; }
   .bt form.mini button[type=submit] { min-height: 40px; padding: 8px 14px; font-size: 13.5px; }
@@ -68,7 +70,7 @@
   const left = (tt) => { const s = Math.max(0, Math.round(tt - now)); return s >= 86400 ? t('bx.dur.dh', { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600) }) : s >= 3600 ? t('bx.dur.hm', { h: Math.floor(s / 3600), m: Math.floor(s % 3600 / 60) }) : t('bx.dur.m', { m: Math.max(1, Math.floor(s / 60)) }); };
   const E = t.esc;
 %>
-<main class="bx bt">
+<main class="bx ds-page flow mid bt">
   <a class="bx-back" href="/bounties">‹ <%- t('bounty.back') %></a>
   <% if (!b) { %>
     <div class="bx-empty"><span class="ic" aria-hidden="true">🎯</span><h1><%- t('bounty.nf_title') %></h1><span class="info"><%- t('bounty.nf_sub') %></span>
@@ -77,7 +79,7 @@
        const chip = b.status === 'open' ? (open ? ['open', t('bounties.st.open')] : ['closed', t('bounties.st.expiring')]) : b.status === 'resolved' ? ['resolved', t('bounties.st.resolved')]
          : b.status === 'cancelled' ? ['cancelled', t('bounties.st.cancelled')] : b.status === 'expired' ? ['expired', t('bounties.st.expired')] : ['', E(b.status)]; %>
     <header class="bx-hero head">
-      <div class="bx-top"><span class="bx-chip c-<%= chip[0] %>"><%- chip[1] %></span><span class="bx-eyebrow" style="margin-left:auto">🎯 <%- t('bounties.wanted') %></span></div>
+      <div class="bx-top"><span class="bx-chip c-<%= chip[0] %>"><%- chip[1] %></span><span class="bx-eyebrow" style="margin-inline-start: auto"><span class="ds-ic" aria-hidden="true">🎯</span> <%- t('bounties.wanted') %></span></div>
       <h1><span class="ref"><%= b.ref %></span> <%= b.task %></h1>
       <div class="pot"><%= fmt(b.total) %><small>PAT</small></div>
       <div class="info">
@@ -89,10 +91,10 @@
       </div>
     </header>
     <% if (b.verify) { %>
-      <div class="verify">🔎 <b><%- t('bounty.v_h') %></b> <%= b.verify.text %>.
+      <div class="verify"><span class="ds-ic" aria-hidden="true">🔎</span> <b><%- t('bounty.v_h') %></b> <%= b.verify.text %>.
         <span class="info"><%- t('bounty.v_sub', { who: ul(b.creator) }) %></span></div>
     <% } else { %>
-      <div class="verify manual">✋ <b><%- t('bounty.m_h') %></b> <span class="info"><%- t('bounty.m_sub', { who: ul(b.creator) }) %></span></div>
+      <div class="verify manual"><span class="ds-ic" aria-hidden="true">✋</span> <b><%- t('bounty.m_h') %></b> <span class="info"><%- t('bounty.m_sub', { who: ul(b.creator) }) %></span></div>
     <% } %>
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
 
@@ -100,7 +102,7 @@
       <% if (user) { %>
         <div class="forms">
           <form method="post" action="/bounties/<%= b.id %>/add">
-            <b>💰 <%- t('bounty.add_h') %></b>
+            <b><span class="ds-ic" aria-hidden="true">💰</span> <%- t('bounty.add_h') %></b>
             <input type="text" name="amount" inputmode="numeric" autocomplete="off" spellcheck="false" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*" placeholder="<%- t('bounty.add_ph', { n: fmt(addMin) }) %>" aria-label="PAT" required>
             <div class="bx-chips"><% [1000, 5000, 10000].forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>"><%= v / 1000 %>k</button><% }) %></div>
             <div class="row"><button type="submit"><%- t('bounty.add_btn') %></button></div>
@@ -109,7 +111,7 @@
           </form>
           <% if (!b.mineCreator) { %>
             <form method="post" action="/bounties/<%= b.id %>/claim">
-              <b>🙋 <%- b.mineClaim ? t('bounty.claim_upd_h') : t('bounty.claim_h') %></b>
+              <b><span class="ds-ic" aria-hidden="true">🙋</span> <%- b.mineClaim ? t('bounty.claim_upd_h') : t('bounty.claim_h') %></b>
               <input type="text" name="note" maxlength="160" placeholder="<%- t('bounty.claim_note_ph', { who: b.creator }) %>" aria-label="<%- t('bounty.claim_note_ph', { who: b.creator }) %>" value="<%= b.mineClaim ? b.mineClaim.note : '' %>">
               <input type="url" name="evidence" maxlength="300" pattern="https?://.+" placeholder="<%- t('bounty.claim_ev_ph') %>" aria-label="<%- t('bounty.claim_ev_ph') %>">
               <button type="submit"><%- b.mineClaim ? t('bounty.claim_upd') : t('bounty.claim_btn') %></button>
@@ -118,7 +120,7 @@
           <% } %>
           <% if (b.mineCreator || isAdmin) { %>
             <form class="owner" method="post" action="/bounties/<%= b.id %>/resolve">
-              <b>✅ <%- b.mineCreator ? t('bounty.pay_h') : t('bounty.pay_h_admin') %></b>
+              <b><span class="ds-ic" aria-hidden="true">✅</span> <%- b.mineCreator ? t('bounty.pay_h') : t('bounty.pay_h_admin') %></b>
               <% if (b.claims.length) { %>
                 <% b.claims.forEach((c) => { %><label class="pick"><input type="checkbox" name="hunters" value="<%= c.nick %>"> <%= c.nick %></label><% }) %>
                 <button type="submit"><%- t('bounty.pay_btn') %></button>
@@ -128,7 +130,7 @@
               <% } %>
             </form>
             <form class="owner" method="post" action="/bounties/<%= b.id %>/cancel">
-              <b>✖ <%- b.mineCreator ? t('bounty.cancel_h') : t('bounty.cancel_h_admin') %></b>
+              <b><span class="ds-ic" aria-hidden="true">✖</span> <%- b.mineCreator ? t('bounty.cancel_h') : t('bounty.cancel_h_admin') %></b>
               <label class="pick"><input type="checkbox" required> <%- t('bounty.cancel_ok', { ref: b.ref }) %></label>
               <button class="danger" type="submit"><%- t('bounty.cancel_btn') %></button>
             </form>
@@ -146,7 +148,7 @@
         <% actions.forEach((a) => { %>
           <tr><td><%= a.kind %></td>
               <td><%= a.kind === 'add' ? fmt(Number(a.amount)) + ' PAT' : a.kind === 'claim' ? [a.note, a.evidence].filter(Boolean).join(' · ') : a.kind === 'dispute' ? (a.note || '') : (a.kind === 'resolve' || a.kind === 'reject') ? JSON.parse(a.hunters || '[]').join(', ') + (a.kind === 'reject' && a.note ? ': ' + a.note : '') : '' %></td>
-              <td><%- a.status === 'done' ? '✅ ' + E(a.message || t('market.ord.done')) : a.status === 'failed' ? '❌ ' + E(a.message || t('market.ord.failed')) : '⏳ ' + t('market.ord.wait') %></td></tr>
+              <td><%- a.status === 'done' ? '<span class="ds-ic" aria-hidden="true">✅</span> ' + E(a.message || t('market.ord.done')) : a.status === 'failed' ? '<span class="ds-ic" aria-hidden="true">❌</span> ' + E(a.message || t('market.ord.failed')) : '<span class="ds-ic" aria-hidden="true">⏳</span> ' + t('market.ord.wait') %></td></tr>
         <% }) %>
       </table></div>
       <% if (actions.some((a) => a.status === 'pending' || a.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
@@ -158,13 +160,13 @@
          b.claims.forEach((c) => { const won = (b.hunters || []).includes(c.nick); const ev = c.evidence || {}; const ck = c.check; const p = c.perms || {}; %>
         <div class="claim<%= won ? ' won' : '' %>">
           <div class="top">
-            <span class="who"><%= won ? '🏆 ' : '' %><%- ul(c.nick) %></span>
+            <span class="who"><% if (won) { %><span class="ds-ic" aria-hidden="true">🏆</span> <% } %><%- ul(c.nick) %></span>
             <span class="info"><%= when(c.ts) %>
               <% if (c.rejected) { %> <span class="flag"><%- c.rejected.by ? t('bounty.rejected_by', { who: c.rejected.by }) : t('bounty.rejected') %></span><% } %>
               <% if (c.disputed) { %> <span class="flag disp"><%- t('bounty.disputed') %></span><% } %></span>
           </div>
           <% if (c.note) { %><div class="note"><%= c.note %></div><% } %>
-          <% if ((ev.links || []).length) { %><div class="ev"><% ev.links.forEach((u) => { %><a href="<%= u %>" target="_blank" rel="nofollow noopener noreferrer ugc">🔗 <%= u.replace(/^https?:\/\//, '') %></a><% }) %></div><% } %>
+          <% if ((ev.links || []).length) { %><div class="ev"><% ev.links.forEach((u) => { %><a href="<%= u %>" target="_blank" rel="nofollow noopener noreferrer ugc"><span class="ds-ic" aria-hidden="true">🔗</span> <%= u.replace(/^https?:\/\//, '') %></a><% }) %></div><% } %>
           <% if (ck && ck.state !== 'manual') { %>
             <div class="chk <%= ck.state %>">
               <span class="st"><%- ST[ck.state] %><%- ck.how === 'semantic' ? ' ' + t('bounty.ck.semantic') : '' %></span>
