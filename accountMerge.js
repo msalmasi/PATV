@@ -230,6 +230,8 @@ const RULES = {
   // 1.99mt: 🎁 the gift log (gifts.js) - giver + recipient follow the account (the gifting achievements count it); anon is a flag
   "gift_log.giver_id": M(), "gift_log.recipient_id": M(), "gift_log.anon": { deny: FLAG }, "gift_log.target": { deny: "a pad (room) id, never a user" }, "shop_orders.gift_anon": { deny: FLAG },
   "premium_ledger.anon": { deny: FLAG }, "pad_cosmetic_items.anon": { deny: FLAG },
+  // 1.99pv: 💸 post tips (posttips.js) - the tipper + the author follow the account, like the tip's own ledger rows
+  "post_tips.sender_id": M(), "post_tips.recipient_id": M(),
   // 1.99la: 🔭 Scout / 🎟️ Curator (requestroles.js) + 🛠️ problem reports (mediaissues.js) follow the account
   "request_roles.user_id": M({ key: ["role"], merge: { status: { rank: ["active", "revoked"] } } }),
   "request_roles.granted_by": { deny: NAME }, "request_roles.revoked_by": { deny: NAME },

@@ -1,0 +1,18 @@
+/* posttips.css — 💸 post tips (1.99pv, posttips.js / public/js/post-tip.js). The sheet is the design system's
+   .ds-scrim.sheet > .ds-modal (a bottom sheet under 600px); this only adds the card tally and the quick-amount row. */
+.fp-tips { display: inline-flex; align-items: center; gap: 2px; min-width: 0; padding: 0 6px; color: var(--fp-dim2, #8a8a8a); font-size: 12.5px;
+           white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fp-tips b { color: var(--ds-gold-text, #e8c25a); font-weight: 700; margin-inline-start: 2px; }
+.fp-tipb[aria-expanded="true"] { background: var(--fp-hover); }
+@media (max-width: 600px) {
+  .fp-tips-n { display: none; }
+  .fp-tipb .lbl { display: none; }
+}
+
+.ptip-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.ptip-quick .ds-quick[aria-pressed="true"] { border-color: var(--ds-ac); color: #fff; background: var(--ds-ac-bg, #1d2a22); }
+.ptip-quick .ds-quick:disabled { opacity: .45; cursor: not-allowed; }
+.ptip .ds-hint.ptip-bad { color: var(--ds-danger); }
+.ptip-sum { margin: 0; font-size: 16px; font-weight: 700; color: #fff; }
+.ptip-q { font-style: italic; overflow-wrap: anywhere; }
+.ptip [hidden] { display: none !important; }

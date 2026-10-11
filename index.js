@@ -1881,72 +1881,9 @@ app.get("/api/tipjar", addUser, async (req, res) => {
   }
 });
 
-// Optional short message riding on a web tip, stored on both ledger rows (transactions.note) and
-// shown to the recipient on their history and on the tip page. Plain text, one line, capped.
-const TIP_NOTE_MAX = 80;
-const tipNoteReady = runQuery("ALTER TABLE transactions ADD COLUMN note TEXT").catch(() => {});
-function cleanTipNote(v) {
-  const s = String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
-    .replace(/\s+/g, " ").trim();
-  return s ? Array.from(s).slice(0, TIP_NOTE_MAX).join("") : null;
-}
-
-// Shared, overdraft-safe PAT transfer used by both tip endpoints.
-// The debit is a single atomic conditional UPDATE (check + deduct in one statement),
-// so concurrent tips can never overdraw a balance or mint PAT — this is what the old
-// read-then-check-then-update flow got wrong (a TOCTOU race that created PAT).
-// Returns { ok, status, msg }.
-async function transferPat(senderUsername, recipientUsername, rawAmount, note = null) {
-  const amount = Math.floor(Number(rawAmount));
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, status: 400, msg: "Invalid tip amount" };
-  }
-  if (!senderUsername || !recipientUsername) {
-    return { ok: false, status: 400, msg: "Missing sender or recipient" };
-  }
-  if (senderUsername === recipientUsername) {
-    return { ok: false, status: 400, msg: "Cannot tip oneself" };
-  }
-
-  const users = await getQuery(
-    "SELECT username, userId, points_balance FROM users WHERE username IN (?, ?)",
-    [senderUsername, recipientUsername]
-  );
-  const sender = users.find((u) => u.username === senderUsername);
-  const recipient = users.find((u) => u.username === recipientUsername);
-  if (!sender || !recipient) {
-    return { ok: false, status: 404, msg: "One or both users not found" };
-  }
-
-  // Atomic conditional debit: the balance check and the deduction are the SAME statement.
-  // If the balance is insufficient, no row changes and nothing is deducted.
-  // 1.99ga: through the ledger - each leg is logged only when its balance really moved, and a
-  // recipient that vanished in the meantime (merged / deleted) puts the sender's PAT back.
-  await tipNoteReady;
-  const debit = await ledger.post(sender.userId, -amount, "tip sent",
-                                  { requireCover: true, counterparty: recipient.userId, note, source: "tip" });
-  if (!debit.ok) {
-    return debit.code === ledger.E_INSUFFICIENT
-      ? { ok: false, status: 400, msg: "Insufficient balance" }
-      : { ok: false, status: 404, msg: "One or both users not found" };
-  }
-  const credit = await ledger.post(recipient.userId, amount, "tip received",
-                                   { counterparty: sender.userId, note, resolveMerged: true, source: "tip" });
-  if (!credit.ok) {
-    await ledger.reverse(debit, -amount);
-    return { ok: false, status: 404, msg: "One or both users not found" };
-  }
-
-  // the recipient's inbox (1.99au): who, how much, and the note if there was one
-  inbox.addSafe(recipient.userId, { kind: "tip", title: `${sender.username} tipped you PAT ${amount.toLocaleString("en-US")}`,
-                                    body: note ? `"${note}"` : "", link: "/history" });
-
-  achievements.checkWeb(sender.userId);            // tipped / tips-received achievements
-  achievements.checkWeb(recipient.userId);
-  const after = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [sender.userId]);
-  return { ok: true, status: 200, msg: "Tip sent successfully.", amount,
-           balance: after.length ? Math.floor(after[0].points_balance || 0) : null };
-}
+// 1.99pv: the tip money path (transferPat, the note rules) lives in tips.js, shared with 💸 post tips (posttips.js)
+const { transferPat, cleanTipNote, TIP_NOTE_MAX } = require("./tips");
+const tipNoteReady = require("./tips").noteReady();
 
 // Tip another user through a chatbot
 app.post("/u/:username/chattip", async (req, res) => {
@@ -2001,6 +1938,9 @@ app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
     res.status(500).send("Failed to process tip");
   }
 });
+
+// 1.99pv: 💸 tips on feed posts - the same tip path, tagged with the post (posttips.js)
+require("./posttips").register(app, { addUser, idemBegin });
 
 // The other person a bot-moved PAT row was with (duel opponent, loan lender/borrower, wager
 // opponent), sent by Pepe as a username or Camfrog name. Stored as their userId in

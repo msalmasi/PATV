@@ -645,6 +645,9 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   // 1.99iq: content tags (feedtags.js) - live ones, one query
   let TG = new Map();
   try { TG = await TAGS().tagsFor(ids); } catch (e) { TG = new Map(); }
+  // 1.99pv: 💸 post tips (posttips.js) - {n, total} per post, one grouped query
+  let TP = new Map();
+  if (!_inner) { try { TP = await require("./posttips").forPosts(ids); } catch (e) { TP = new Map(); } }
   // 1.99ir: pad flair (padflair.js) - in a pad's own feed (ctxRoom), and on a post's page for its home pad
   const FL = new Map();
   if (!_inner) {
@@ -724,6 +727,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       voice: VOI.get(r.id) || null,                              // 1.99fp: a mic clip's speakers (micclip.voicesFor)
       tags: TG.get(r.id) || [],                                  // 1.99iq: content tags (feedtags.js)
       flair: FL.get(r.id) || null,                               // 1.99ir: the author's flair in this pad (padflair.js)
+      tips: TP.get(r.id) || null,                                // 1.99pv: 💸 post tips {n, total} (posttips.js)
     };
     out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
     return out;
