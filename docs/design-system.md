@@ -730,6 +730,21 @@ Added by the 1.99pm polish pass (profile, Edit profile, sign-in pages, language,
 
 `.ds-page.narrow`, centred: a 64px `.ds-ic` frog, `.ds-h1`, a `.ds-lead` (max 46ch), then `.ds-actions` centred with one filled `.ds-btn` (Home) and `.ds-btn.ghost` for the rest. 48px top padding. This is the one place body text is centred (§3.2 allows it on a landing-style page under 3 lines).
 
+### Profile (/u/:name and its tabs) and Edit profile (/u/:name/edit)
+
+- **Profile:** `main.ds-page.pf` (default 1040 width), page gap 16. The summary card is a hero (radius 18, green glow at the start corner) holding identity, the stat strip and the actions. Edit profile is `main.ds-page.mid.pe` with the same hero as its live preview.
+- **One section-heading style on both pages: the pixel heading** (12px Press Start, gold, `.ds-pixel-h` values). The story strip's heading already uses it, so the profile's card headings (GTF, Badges, Analytics, Plex) and every Edit profile card heading follow it.
+- **Stat strip** (`.pf-strip > .ps`): cells on `--ds-sunken`, divided by 1px `--ds-line` gaps, radius 12. Label 11px/700 uppercase muted, value 18px/700 tabular (16 on phones), PAT in `--ds-gold-text`, the XP bar 6px `--ds-green` (the lime end of the old gradient is gone).
+- **Profile buttons** (`.pf .btn`, `.gtf-pop .btn`) are `.ds-btn.sm`-sized pills: 36px (40 on touch), 13.5px/700, a transparent fill with a `--ds-line-strong` border; `.primary` is the accent fill with dark ink. Icons go in `.ds-ic`. The unread tip counter on More is the `.ds-badge` look.
+- **Tabs** (`.pf-tab`, role=tab): `.ds-tab` pills, 40px, the current one is the accent tint. The old underline tabs are gone.
+- **Role chips** (Admin, Staff, Season Pass, Plex, GTF): 24px sentence-case pills, 12px/700, like `.ds-tag`.
+- **The ⋯ More menu** is a `.ds-pop` (surface-3, radius 12, `--ds-e-3`) with 40px `.ds-menu-item`-style rows. The GTF popover uses the `.ds-modal` surface, radius and shadow.
+- **Badges grid:** `minmax(min(100%, 104px), 1fr)`, forced to 3 columns at ≤ 520 so phones don't get a 2-column wall of tiles.
+- **Analytics tables** sit in an `overflow-x: auto` box (`.ua-tw`), so a long room name or action scrolls inside the card, never the page.
+- **Edit profile fields** follow the `.ds-in` spec in page CSS (44px, radius 10, sunken, accent halo, 16px under 760) because they keep their legacy markup. A button next to a field is 44px, so the field and its button line up. Toolbar buttons (top actions, hero, layout actions) are 36px. The password row's button is 44px and bottom-aligned with the two fields.
+- **Edit profile jump links** are `.ds-tab`-style pills (36px, 40 on touch).
+- **Connections rows:** a sunken well, radius 12, padding 12/14, a 36px brand tile, then the name, then the action. On phones the action goes full width under the name. Brand buttons are pills; Telegram uses #1a7bb0 for white ink (see the auth notes).
+
 ---
 
 ## Area notes: stage, media and shop

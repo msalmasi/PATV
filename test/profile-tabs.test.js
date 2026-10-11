@@ -168,7 +168,7 @@ test("owner view: Posts tab open with the composer on top; More menu holds the m
     assert.match(menu, re);
     assert.doesNotMatch(outside, re);
   }
-  assert.match(actions, /⋯ More <span class="tj-new"[^>]*>3<\/span>/, "new tips show on the More button");
+  assert.match(actions, /⋯<\/span> More <span class="tj-new"[^>]*>3<\/span>/, "new tips show on the More button");
   assert.doesNotMatch(outside, /data-follow-kind|pf-msg/, "no Follow / Message on your own profile");
   assert.match(html, /<a class="ps fw" href="\/feed\/following" title="Your follow lists"><span class="k">Followers<\/span>/, "the owner's count opens their lists");
   // stat strip; the old stat tiles, Level card and GTF card are gone
@@ -186,7 +186,7 @@ test("visitor view: Tip + More (achievements), the feed with sorts, no composer,
   assert.match(html, /Pixel frogs are back/);
   assert.match(html, /class="fd-sort|Sort alice|Sort Alice/);
   const actions = html.slice(html.indexOf('<div class="actions">'), html.indexOf("</details>", html.indexOf('<div class="actions">')));
-  assert.match(actions, /💸 Tip/);
+  assert.match(actions, /💸<\/span> Tip/);
   assert.match(actions, /Achievements/);
   assert.doesNotMatch(actions, /Edit profile|Wallet|Log out|Cosmetics|PAT history|tip jar/);
   assert.doesNotMatch(html, /New avatar…|Your recent requests/);
@@ -195,7 +195,7 @@ test("visitor view: Tip + More (achievements), the feed with sorts, no composer,
   const menu = actions.slice(actions.indexOf('class="pf-menu"'));
   assert.match(outside, /data-follow-kind="user" data-follow-id="alice"/);
   assert.match(outside, /class="btn pf-msg" href="\/messages\?to=alice"/);
-  assert.ok(outside.indexOf("data-follow-kind") < outside.indexOf("💸 Tip"), "Follow leads");
+  assert.ok(outside.indexOf("data-follow-kind") < outside.indexOf("💸</span> Tip"), "Follow leads");
   assert.match(menu, /role="menuitem" class="pf-report" data-safety="report-user" data-user="alice"/);
   assert.doesNotMatch(outside, /report-user/);
   const strip = html.slice(html.indexOf('class="pf-strip"'), html.indexOf('<div class="actions">'));
@@ -263,7 +263,7 @@ test("GTF popover: unconfigured says so with a Change look CTA; no avatar at all
   const pop = html.slice(html.indexOf('<div id="gtfPop"'));
   assert.match(pop, /data-gtf-state="unconfigured"/);
   assert.match(pop, /not wearing anything from the GTF wardrobe yet/);
-  assert.match(pop, /class="btn primary" href="\/cosmetics\?tab=mine#tabs">🎨 Change look/);
+  assert.match(pop, /class="btn primary" href="\/cosmetics\?tab=mine#tabs"><span class="ds-ic" aria-hidden="true">🎨<\/span> Change look/);
   assert.doesNotMatch(pop, /class="gp-items"/);
   const vis = await render("visitor", { items: [] });
   save("visitor-unconfigured", vis);

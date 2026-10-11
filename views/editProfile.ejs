@@ -45,56 +45,57 @@
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
-  .pe { max-width: 920px; margin: 0 auto; padding: 18px 16px 64px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; }
-  .pe a { color: #81c784; text-decoration: none; }
-  .pe a:hover { color: #a5d6a7; }
-  .pe .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; scroll-margin-top: 80px; }
-  .pe h1 { margin: 0; font-size: 26px; }
-  .pe h2 { margin: 0 0 4px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
-  .pe .lede { color: #888; font-size: 13px; margin: 0 0 14px; }
-  .pe .muted { color: #888; font-size: 13px; }
-  .pe code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  /* 1.99ps (polish G4): on the design system - .ds-page.mid + tokens, docs/design-system.md "Area notes: profile, account and auth" */
+  .pe { gap: var(--ds-sp-4); }
+  .pe .card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); min-width: 0; scroll-margin-top: calc(var(--ds-nav-h) + 16px); }
+  /* one section-heading style: the pixel heading (.ds-pixel-h), same as the profile */
+  .pe h2 { margin: 0 0 var(--ds-sp-1h); font: var(--ds-fs-pixel-h)/1.6 var(--ds-font-pixel); letter-spacing: var(--ds-ls-pixel-h); text-transform: uppercase; color: var(--ds-gold); }
+  .pe .lede { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); margin: 0 0 var(--ds-sp-4); }
+  .pe .muted { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
   .pe .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
   .pe .top-acts { display: flex; flex-wrap: wrap; gap: 8px; }
-  .pe .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
-             background: #181818; color: #ddd !important; font-size: 14px; cursor: pointer; font-family: inherit; line-height: 1.2; text-decoration: none; }
-  .pe .btn:hover { border-color: #4caf50; }
-  .pe .btn:focus-visible, .pe input:focus-visible, .pe .lay-grip:focus-visible, .pe .mv button:focus-visible { outline: 2px solid #81c784; outline-offset: 2px; }
-  .pe .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
-  .pe .btn.primary:hover { background: #43a047; }
+  /* buttons: pills. 44px next to a 44px field (forms, connections); 36px in toolbars (.top-acts, hero, layout actions). .primary = accent fill + dark ink */
+  .pe .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-1h); min-height: var(--ds-tap); margin: 0; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill);
+             border: 1px solid var(--ds-line-strong); background: transparent; color: var(--ds-text) !important; font: 700 14px/1.1 var(--ds-font); cursor: pointer;
+             text-decoration: none !important; white-space: nowrap; box-shadow: none; transition: border-color var(--ds-dur-1), filter var(--ds-dur-1); }
+  .pe .btn:hover { border-color: var(--ds-ac); background: rgba(255, 255, 255, .03); }
+  .pe .btn:focus-visible, .pe .lay-grip:focus-visible, .pe .mv button:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .pe .btn.primary { background: var(--ds-ac); border-color: transparent; color: var(--ds-on-ac) !important; }
+  .pe .btn.primary:hover { background: var(--ds-ac); filter: brightness(1.1); }
+  .pe .top-acts .btn, .pe .hero-foot .btn, .pe .lay-actions .btn { min-height: 36px; padding: 0 var(--ds-sp-3h); font-size: 13.5px; }
+  @media (pointer: coarse) { .pe .top-acts .btn, .pe .hero-foot .btn, .pe .lay-actions .btn { min-height: 40px; } }
   .pe .btn.ghost { background: transparent; }
   .pe .btn.twitch { background: #9146ff; border-color: #9146ff; color: #fff !important; }
   .pe .btn.discord { background: #5865f2; border-color: #5865f2; color: #fff !important; }
   .pe .btn svg { width: 18px; height: 18px; flex: none; }
-  .pe #twitchLoginButton, .pe #discordLoginButton { display: inline-flex; width: auto; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: bold; }
-  .pe #twitchLoginButton { background: #9146ff; border-color: #9146ff; color: #fff !important; }
-  .pe #twitchLoginButton:hover { background: #7c2ff7; }
-  .pe #discordLoginButton { background: #5865f2; border-color: #5865f2; color: #fff !important; }
-  .pe #discordLoginButton:hover { background: #4752e0; }
-  .pe .btn:disabled { opacity: .45; cursor: default; }
-  .pe .btn.primary:disabled:hover { background: #4caf50; }
+  .pe #twitchLoginButton, .pe #discordLoginButton { display: inline-flex; width: auto; min-height: var(--ds-tap); margin: 0; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill); font: 700 14px/1.1 var(--ds-font); }
+  .pe #twitchLoginButton { background: var(--ds-twitch); border-color: var(--ds-twitch); color: #fff !important; }
+  .pe #discordLoginButton { background: var(--ds-discord); border-color: var(--ds-discord); color: #fff !important; }
+  .pe #twitchLoginButton:hover, .pe #discordLoginButton:hover { filter: brightness(1.1); }
+  .pe .btn:disabled { filter: grayscale(.6) brightness(.7); cursor: not-allowed; }
+  .pe .btn.primary:disabled:hover { filter: grayscale(.6) brightness(.7); }
   .pe .jump { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pe .jump a { display: inline-flex; align-items: center; box-sizing: border-box; height: 30px; font-size: 13px; line-height: 1; padding: 0 12px;
-                border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; white-space: nowrap; }
-  .pe .jump a:hover { border-color: #4caf50; }
+  /* jump links: .ds-tab pills (36px, 40 on touch) */
+  .pe .jump a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill); border: 1px solid #2a2a2a;
+                background: #151515; color: var(--ds-text-2); font: 500 var(--ds-fs-meta)/1 var(--ds-font); white-space: nowrap; text-decoration: none; }
+  .pe .jump a:hover { border-color: var(--ds-ac); color: var(--ds-text-strong); text-decoration: none; }
+  @media (pointer: coarse) { .pe .jump a { min-height: 40px; } }
 
   /* messages */
-  .pe .msg { border-radius: 12px; padding: 12px 16px; font-size: 14px; border: 1px solid; }
-  .pe .msg.ok { border-color: #2e5e30; background: #0f1a10; color: #c8e6c9; }
-  .pe .msg.err { border-color: #6b2b2b; background: #1d0f0f; color: #ffcdd2; }
+  .pe .msg { overflow-wrap: anywhere; }
 
   /* hero preview (mirrors the profile hero) */
-  .pe .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 20px; align-items: center;
-              background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); }
-  .pe .avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d;
+  .pe .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ds-sp-4) var(--ds-sp-5); align-items: center; border-radius: var(--ds-r-2xl);
+              background: radial-gradient(90% 140% at 0% 0%, var(--ds-green-bg), transparent 60%), #111; }
+  .pe .avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: var(--ds-sunken);
                 box-shadow: 0 0 0 6px rgba(76, 175, 80, .12); }
-  .pe .who .nm { margin: 0; font-size: 26px; line-height: 1.15; font-weight: bold; overflow-wrap: anywhere; }
-  .pe .handle { color: #9a9; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
+  .pe .who .nm { margin: 0; font: 700 var(--ds-fs-h1)/var(--ds-lh-h1) var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .pe .handle { color: var(--ds-text-muted); font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
   /* 1.99jr: one pill style - same height / padding / line-height, centred in a flex row (the Preview pill used to pick up
      the privacy panel's .pv grid + padding and stretch the row, which pushed the other pills' text to the top) */
   .pe .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
   .pe .chip { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 24px; margin: 0;
-              padding: 0 10px; font-size: 12px; line-height: 1; white-space: nowrap; border-radius: 999px; border: 1px solid #2c3a2d;
+              padding: 0 10px; font-size: 12px; line-height: 1; white-space: nowrap; border-radius: var(--ds-r-pill); border: 1px solid #2c3a2d;
               background: #0f1a10; color: #b9d8bb; }
   .pe .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
   .pe .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
@@ -103,138 +104,143 @@
   .pe .hero-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 
   /* forms */
-  .pe .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 18px; }
+  .pe .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px 18px; }
   .pe form.field { margin: 0; display: grid; gap: 6px; align-content: start; }
-  .pe label.lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; }
+  .pe label.lbl { font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: #b9b9b9; }
   .pe .row { display: flex; gap: 8px; }
   .pe .row input { flex: 1; min-width: 0; }
-  .pe input[type="text"], .pe input[type="email"], .pe input[type="password"] {
-    width: 100%; margin: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #0b0b0b; color: #e6e6e6;
-    font-size: 15px; font-family: inherit; box-sizing: border-box; }
-  .pe input[type="text"]:focus, .pe input[type="email"]:focus, .pe input[type="password"]:focus { border-color: #4caf50; outline: none; }
-  .pe select { flex: 1; min-width: 0; width: 100%; margin: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #0b0b0b; color: #e6e6e6;
-    font-size: 15px; font-family: inherit; box-sizing: border-box; }
-  .pe select:focus { border-color: #4caf50; outline: none; }
-  .pe .hint { font-size: 12px; color: #777; }
+  /* fields: the .ds-in spec (44px, radius 10, sunken, #333 line, accent focus halo; 16px on phones) - styles.css's global input rules reset here */
+  .pe input[type="text"], .pe input[type="email"], .pe input[type="password"], .pe select {
+    width: 100%; min-width: 0; min-height: var(--ds-tap); margin: 0; padding: 10px 12px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken);
+    color: #eee; font: 400 15px/1.3 var(--ds-font); box-sizing: border-box; transition: border-color var(--ds-dur-1), box-shadow var(--ds-dur-1); }
+  .pe select { flex: 1; }
+  .pe input[type="text"]:hover, .pe input[type="email"]:hover, .pe input[type="password"]:hover, .pe select:hover { border-color: #444; }
+  .pe input[type="text"]:focus, .pe input[type="email"]:focus, .pe input[type="password"]:focus, .pe select:focus { border-color: var(--ds-ac); outline: none; box-shadow: 0 0 0 3px var(--ds-ac-bg); }
+  @media (max-width: 760px) { .pe input[type="text"], .pe input[type="email"], .pe input[type="password"], .pe select { font-size: 16px; } }
+  .pe .hint { font-size: 12px; color: var(--ds-text-faint); }
   .pe .status { font-size: 13px; min-height: 18px; }
   .pe .status.ok { color: #81c784; }
   .pe .status.err { color: #ef9a9a; }
 
   /* avatar */
   .pe .avup { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 18px; align-items: center; }
-  .pe .avup img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 2px solid #2b2b2b; background: #0d0d0d; }
+  .pe .avup img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 2px solid #2b2b2b; background: var(--ds-sunken); }
   .pe .file { position: relative; display: inline-flex; }
   .pe .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-  .pe .file:focus-within .btn { outline: 2px solid #81c784; outline-offset: 2px; }
+  .pe .file:focus-within .btn { box-shadow: var(--ds-focus-ring); }
 
   /* connections */
   .pe .conn { display: grid; gap: 10px; }
-  .pe .conn-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #0d0d0d;
-                  border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 12px; }
-  .pe .conn-ico { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; font-size: 18px; }
+  .pe .conn-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: var(--ds-sp-3); align-items: center; background: var(--ds-sunken);
+                  border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-lg); padding: var(--ds-sp-3) var(--ds-sp-3h); }
+  .pe .conn-ico { width: 36px; height: 36px; border-radius: var(--ds-r-md); display: grid; place-items: center; font-size: 18px; }
   .pe .conn-ico svg { width: 20px; height: 20px; }
   .pe .conn-name { font-size: 14px; }
   .pe .conn-name b { display: block; font-size: 15px; overflow-wrap: anywhere; }
-  .pe .conn-name .none { color: #777; font-weight: normal; }
+  .pe .conn-name .none { color: var(--ds-text-faint); font-weight: normal; }
   .pe .conn-cf { grid-column: 1 / -1; }
-  .pe .conn-name .px-st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: #aaa; }
-  .pe .btn.plex { background: #e5a00d; border-color: #e5a00d; color: #1a1200 !important; font-weight: bold; }
-  .pe .btn.plex:hover { background: #f0b429; }
+  .pe .conn-name .px-st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--ds-text-muted); }
+  .pe .btn.telegram { background: #1a7bb0; border-color: transparent; color: #fff !important; }   /* Telegram blue darkened for 4.7:1 white ink */
+  .pe .btn.telegram:hover { background: #1a7bb0; filter: brightness(1.1); }
+  .pe .btn.plex { background: var(--ds-plex); border-color: transparent; color: #1a1200 !important; }
+  .pe .btn.plex:hover { background: var(--ds-plex); filter: brightness(1.1); }
   /* 1.99lu: Link Google = Google's light sign-in button (white, #1f1f1f text 16:1, #747775 outline, the G). The old inline
      colour lost to .pe .btn's #ddd !important - pale grey on white */
-  .pe .btn.google { background: #fff; border-color: #747775; color: #1f1f1f !important; font-weight: bold; }
+  .pe .btn.google { background: #fff; border-color: #747775; color: #1f1f1f !important; font-weight: 700; }
   .pe .btn.google:hover { background: #f2f2f2; border-color: #747775; }
-  .pe .btn.google:focus-visible { outline-color: #8ab4f8; }
+
   /* 1.99lu: Password - the cells sit on the grid's bottom edge and the button is as tall as the inputs, so it lines up with
      them (it used to sit at the labels' height); the status message gets its own row */
   .pe .pw-form { align-items: end; }
-  .pe .pw-form input[type="password"], .pe .pw-act .btn { height: 38px; }
+  .pe .pw-form .field { display: grid; gap: var(--ds-sp-1h); }
+  .pe .pw-form input[type="password"], .pe .pw-act .btn { height: var(--ds-tap); }
   .pe .pw-act { display: flex; }
   .pe .pw-status { display: block; margin-top: 8px; }
   .pe .pw-status:empty { min-height: 0; margin: 0; }
 
   /* layout editor */
-  .pe .lay-fixed { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px dashed #2b2b2b; color: #888; font-size: 13px; margin-bottom: 8px; }
+  .pe .lay-fixed b { color: var(--ds-text-2); }
+  .pe .lay-fixed { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--ds-r-md); border: 1px dashed #2b2b2b; color: var(--ds-text-muted); font-size: 13px; margin-bottom: 8px; }
   .pe .lay { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .pe .lay-item { display: grid; grid-template-columns: 28px 30px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
-                  background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 12px; transition: border-color .15s, background .15s; }
+                  background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: 10px 12px; transition: border-color var(--ds-dur-2), background var(--ds-dur-2); }
   .pe .lay-item.off { background: #0b0b0b; border-style: dashed; }
   .pe .lay-item.off .lay-ico, .pe .lay-item.off .lay-txt { opacity: .5; }
-  .pe .lay-item.dragging { border-color: #4caf50; background: #102012; box-shadow: 0 8px 24px rgba(0,0,0,.5); position: relative; z-index: 2; }
-  .pe .lay-grip { width: 28px; height: 36px; border: 0; padding: 0; border-radius: 6px; background: transparent; color: #666; cursor: grab; touch-action: none;
+  .pe .lay-item.dragging { border-color: var(--ds-ac); background: #102012; box-shadow: 0 8px 24px rgba(0,0,0,.5); position: relative; z-index: 2; }
+  .pe .lay-grip { width: 28px; height: 36px; margin: 0; box-shadow: none; border: 0; padding: 0; border-radius: 6px; background: transparent; color: var(--ds-text-faint); cursor: grab; touch-action: none;
                   font-size: 18px; line-height: 1; display: grid; place-items: center; }
-  .pe .lay-grip:hover { color: #ccc; background: #181818; }
+  .pe .lay-grip:hover { color: var(--ds-text-2); background: #181818; }
   .pe .lay-item.dragging .lay-grip { cursor: grabbing; }
   .pe .lay-ico { font-size: 20px; text-align: center; }
-  .pe .lay-txt b { display: block; font-size: 15px; color: #e6e6e6; }
-  .pe .lay-txt small { display: block; color: #888; font-size: 12px; margin-top: 1px; }
+  .pe .lay-txt b { display: block; font-size: 15px; color: var(--ds-text); }
+  .pe .lay-txt small { display: block; color: var(--ds-text-muted); font-size: 12px; margin-top: 1px; }
   .pe .lay-subs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .pe .lay-subs label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #bbb; padding: 3px 9px 3px 6px; border-radius: 999px;
+  .pe .lay-subs label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ds-text-2); padding: 3px 9px 3px 6px; border-radius: var(--ds-r-pill);
                         border: 1px solid #2a2a2a; background: #141414; cursor: pointer; user-select: none; }
-  .pe .lay-subs label:has(input:not(:checked)) { color: #777; border-style: dashed; text-decoration: line-through; }
-  .pe .lay-subs input { margin: 0; accent-color: #4caf50; }
+  .pe .lay-subs label:has(input:not(:checked)) { color: var(--ds-text-faint); border-style: dashed; text-decoration: line-through; }
+  .pe .lay-subs input { margin: 0; accent-color: var(--ds-ac); }
   .pe .lay-item.off .lay-subs, .pe .lay-item.off .lay-priv { pointer-events: none; }
   .pe .lay-item.off .lay-priv { opacity: .5; }
   /* privacy panels: three-state segmented control */
-  .pe .lay-priv { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 2px; padding-top: 10px; border-top: 1px solid #1c1c1c; }
-  .pe .lay-priv-h { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; }
-  .pe .lay-priv-h span { text-transform: none; letter-spacing: 0; color: #777; }
+  .pe .lay-priv { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--ds-line-soft); }
+  .pe .lay-priv-h { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ds-text-muted); }
+  .pe .lay-priv-h span { text-transform: none; letter-spacing: 0; color: var(--ds-text-faint); }
   .pe .pv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 9px 10px;
-            border-radius: 9px; background: #111; border: 1px solid #1d1d1d; margin: 0; min-width: 0; }
+            border-radius: var(--ds-r-md); background: #111; border: 1px solid #1d1d1d; margin: 0; min-width: 0; }
   .pe .pv-txt { min-width: 0; }
-  .pe .pv-txt b { display: block; font-size: 14px; color: #e6e6e6; font-weight: 600; }
-  .pe .pv-txt small { display: block; font-size: 12px; color: #888; margin-top: 1px; }
-  .pe .seg { display: inline-grid; grid-template-columns: repeat(3, auto); border: 1px solid #2b2b2b; border-radius: 9px; overflow: hidden; background: #0b0b0b; }
-  .pe .seg label { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; font-size: 12.5px; color: #999;
-                   cursor: pointer; user-select: none; white-space: nowrap; border-left: 1px solid #2b2b2b; }
-  .pe .seg label:first-child { border-left: 0; }
+  .pe .pv-txt b { display: block; font-size: 14px; color: var(--ds-text); font-weight: 700; }
+  .pe .pv-txt small { display: block; font-size: 12px; color: var(--ds-text-muted); margin-top: 1px; }
+  .pe .seg { display: inline-grid; grid-template-columns: repeat(3, auto); border: 1px solid #2b2b2b; border-radius: var(--ds-r-md); overflow: hidden; background: #0b0b0b; }
+  .pe .seg label { position: relative; display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 11px; font-size: 12.5px; color: var(--ds-text-muted);
+                   cursor: pointer; user-select: none; white-space: nowrap; border-inline-start: 1px solid #2b2b2b; }
+  .pe .seg label:first-child { border-inline-start: 0; }
   .pe .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .pe .seg label:hover { color: #ddd; background: #151515; }
-  .pe .seg label:has(input:focus-visible) { outline: 2px solid #81c784; outline-offset: -2px; }
+  .pe .seg label:has(input:focus-visible) { outline: 2px solid var(--ds-focus); outline-offset: -2px; }
   .pe .seg label.s-public:has(input:checked) { background: #13301a; color: #b9f0c0; }
   .pe .seg label.s-private:has(input:checked) { background: #2b2210; color: #f0d58a; }
   .pe .seg label.s-hidden:has(input:checked) { background: #2a1414; color: #f0a8a8; }
   .pe .pv.is-private { border-color: #3a2f18; }
   .pe .pv.is-hidden { border-style: dashed; }
   .pe .pv.is-hidden .pv-txt { opacity: .6; }
-  .pe .sw { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: #aaa; user-select: none; white-space: nowrap; }
+  .pe .sw { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--ds-text-muted); user-select: none; white-space: nowrap; }
   .pe .sw input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  .pe .sw .tr { width: 38px; height: 22px; border-radius: 999px; background: #2a2a2a; position: relative; transition: background .15s; flex: none; }
+  .pe .sw .tr { width: 38px; height: 22px; border-radius: var(--ds-r-pill); background: #2a2a2a; position: relative; transition: background .15s; flex: none; }
   .pe .sw .tr::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #888; transition: transform .15s, background .15s; }
-  .pe .sw input:checked + .tr { background: #2e7d32; }
+  .pe .sw input:checked + .tr { background: var(--ds-ac); }
   .pe .sw input:checked + .tr::after { transform: translateX(16px); background: #fff; }
-  .pe .sw input:focus-visible + .tr { outline: 2px solid #81c784; outline-offset: 2px; }
+  .pe .sw input:focus-visible + .tr { box-shadow: var(--ds-focus-ring); }
   .pe .sw .st { min-width: 46px; }
   .pe .mv { display: inline-flex; gap: 4px; }
-  .pe .mv button { width: 32px; height: 32px; padding: 0; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: #ccc; cursor: pointer; font-size: 12px; }
-  .pe .mv button:hover:not(:disabled) { border-color: #4caf50; color: #fff; }
+  .pe .mv button { width: 36px; height: 36px; margin: 0; padding: 0; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-line-strong); background: #1c1c1f; color: var(--ds-text-2); cursor: pointer; font-size: 12px; box-shadow: none; }
+  .pe .mv button:hover:not(:disabled) { border-color: var(--ds-ac); color: #fff; }
   .pe .mv button:disabled { opacity: .3; cursor: default; }
   .pe .lay-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
   .pe .lay-actions .dirty { font-size: 13px; color: #e8cf7a; display: none; }
   .pe .lay-actions .dirty.on { display: inline; }
-  .pe .lay-note { font-size: 12px; color: #777; margin-top: 10px; }
+  .pe .lay-note { font-size: 12px; color: var(--ds-text-faint); margin-top: 10px; }
   .pe .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   /* verify box (kept from before) */
-  .verify-box { background: linear-gradient(135deg, #1a2f1a, #0f1f0f); border: 2px solid #4CAF50; border-radius: 14px; padding: 22px; box-shadow: 0 0 24px rgba(76,175,80,0.3); animation: pulse-border 2s ease-in-out infinite; }
+  .verify-box { background: linear-gradient(135deg, #1a2f1a, #0f1f0f); border: 1px solid var(--ds-green); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); box-shadow: 0 0 24px rgba(76,175,80,0.3); animation: pulse-border 2s ease-in-out infinite; }
   @keyframes pulse-border { 0%, 100% { box-shadow: 0 0 24px rgba(76,175,80,0.3); } 50% { box-shadow: 0 0 36px rgba(76,175,80,0.6); } }
-  .verify-header { font-size: 1.3rem; font-weight: 700; color: #FFD54F; margin-bottom: 12px; }
+  .verify-header { font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-gold); margin-bottom: var(--ds-sp-3); }
   .verify-msg { color: #b0b0b0; font-size: 0.95rem; margin-bottom: 16px; line-height: 1.4; }
   .verify-instructions { color: #ddd; font-size: 0.9rem; margin-bottom: 8px; }
   .verify-code-wrap { display: flex; align-items: center; gap: 12px; background: #0a0f0a; padding: 14px 18px; border-radius: 8px; border: 1px solid #2a4a2a; flex-wrap: wrap; }
-  .verify-cmd { font-family: 'Courier New', monospace; font-size: 1.2rem; color: #fff; flex: 1; }
-  .verify-code { color: #4CAF50; font-weight: 700; font-size: 1.4rem; letter-spacing: 2px; }
-  .verify-copy { background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
-  .verify-copy:hover { background: #45a049; }
-  .verify-expires { color: #888; font-size: 0.8rem; margin-top: 12px; text-align: right; }
+  .verify-cmd { font-family: var(--ds-font-mono); font-size: 1.2rem; color: #fff; flex: 1; }
+  .verify-code { color: var(--ds-green-2); font-weight: 700; font-size: 1.4rem; letter-spacing: 2px; }
+  .verify-copy { min-height: 36px; margin: 0; background: var(--ds-green); color: var(--ds-on-ac); border: none; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill); cursor: pointer; font: 700 13.5px/1 var(--ds-font); box-shadow: none; }
+  .verify-copy:hover { filter: brightness(1.1); }
+  .verify-copy:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .verify-expires { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); margin-top: var(--ds-sp-3); text-align: end; }
 
   @media (max-width: 600px) {
-    .pe { padding-top: 12px; }
-    .pe .card { padding: 16px 14px; }
+    .pe .card { padding: var(--ds-sp-4); }
     .pe .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     .pe .chips { justify-content: center; }
     .pe .hero-foot { justify-content: center; }
-    .pe .hero .cx-banner { margin: -16px -14px 0; }
+    .pe .hero .cx-banner { margin: -16px -16px 0; }
     .pe .lay-item { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px 10px; padding: 10px; }
     .pe .lay-item .lay-ico { display: none; }
     .pe .lay-item .lay-grip { grid-row: 1 / span 2; align-self: center; }
@@ -244,20 +250,20 @@
     .pe .lay-subs { margin-top: 6px; }
     .pe .pv { grid-template-columns: minmax(0, 1fr); }
     .pe .seg { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .pe .seg label { justify-content: center; padding: 8px 4px; white-space: normal; text-align: center; line-height: 1.2; font-size: 12px; }
+    .pe .seg label { justify-content: center; min-height: 40px; padding: 4px; white-space: normal; text-align: center; line-height: 1.2; font-size: 12px; }
     .pe .avup { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     .pe .conn-row { grid-template-columns: 36px minmax(0, 1fr); }
     .pe .conn-row > .btn, .pe .conn-row > form { grid-column: 1 / -1; }
     .pe .conn-row > .btn, .pe .conn-row > form.conn-act .btn { width: 100%; box-sizing: border-box; }
     .pe .pw-act .btn { width: 100%; }
   }
-  @media (prefers-reduced-motion: reduce) { .verify-box { animation: none; } .pe .lay-item, .pe .sw .tr, .pe .sw .tr::after { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .verify-box { animation: none; } .pe .lay-item, .pe .sw .tr, .pe .sw .tr::after, .pe .btn, .pe input, .pe select { transition: none; } }
 </style>
 
-<div class="pe">
+<main class="ds-page mid pe">
   <div class="top">
-    <h1><%- t('profile.edit_profile') %></h1>
-    <span class="top-acts"><a class="btn" href="/subscriptions">🔁 <%- t('subs.title') %></a> <a class="btn" href="/u/<%= username %>"><%- t('settings.view_profile') %></a></span>
+    <h1 class="ds-h1"><%- t('profile.edit_profile') %></h1>
+    <span class="top-acts"><a class="btn" href="/subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('subs.title') %></a> <a class="btn" href="/u/<%= username %>"><%- t('settings.view_profile') %></a></span>
   </div>
 
   <% if (verifyInfo) { %>
@@ -272,8 +278,8 @@
       <div class="verify-expires">⏱ <%- t('settings.verify.expires') %></div>
     </div>
   <% } else { %>
-    <% if (errStr) { %><div class="msg err" role="alert"><%= errStr %></div><% } %>
-    <% if (succStr) { %><div class="msg ok" role="status"><%= succStr %></div><% } %>
+    <% if (errStr) { %><div class="ds-note danger msg err" role="alert"><%= errStr %></div><% } %>
+    <% if (succStr) { %><div class="ds-note ok msg ok" role="status"><%= succStr %></div><% } %>
   <% } %>
 
   <!-- live preview of the profile hero -->
@@ -296,7 +302,7 @@
     </div>
     <div class="hero-foot">
       <span class="muted"><%- t('settings.cosmetics_note') %></span>
-      <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 <%- t('profile.menu.cosmetics') %></a>
+      <a class="btn" href="/cosmetics?tab=mine#tabs"><span class="ds-ic" aria-hidden="true">🎨</span> <%- t('profile.menu.cosmetics') %></a>
     </div>
     <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
   </section>
@@ -379,7 +385,7 @@
     <p class="lede"><%- t('settings.layout.lede') %></p>
     <p class="lede"> <%- t('settings.layout.lede2') %></p>
     <form id="layoutForm" action="/api/u/<%= username %>/update/layout" method="post">
-      <div class="lay-fixed">🔒 <span><b style="color:#ccc"><%- t('settings.layout.header') %></b> <%- t('settings.layout.header_desc') %></span></div>
+      <div class="lay-fixed"><span class="ds-ic" aria-hidden="true">🔒</span><span><b><%- t('settings.layout.header') %></b> <%- t('settings.layout.header_desc') %></span></div>
       <ol class="lay" id="layList" aria-describedby="layHelp">
         <% lay.order.forEach((id, i) => { const s = byId[id]; if (!s) return; const off = isHidden(id); %>
         <li class="lay-item<%= off ? ' off' : '' %>" data-id="<%= id %>" data-label="<%- lbl_(s) %>">
@@ -496,9 +502,9 @@
       <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
       <% const tg_ = locals.telegram || { linked: false, handle: null }; %>
       <div class="conn-row" id="telegramDiv">
-        <span class="conn-ico" style="background:#229ed9;color:#fff">✈️</span>
+        <span class="conn-ico" style="background:#1a7bb0;color:#fff">✈️</span>
         <span class="conn-name">Telegram<b><% if (tg_.linked) { %><span style="color:#7cc8f0"><%= tg_.handle ? '@' + tg_.handle : t('settings.connections.tg_linked') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
-        <a class="btn" href="/settings/telegram" style="background:#229ed9;border-color:#229ed9;color:#fff"><%- tg_.linked ? t('settings.connections.tg_manage') : t('settings.connections.tg_link') %></a>
+        <a class="btn telegram" href="/settings/telegram"><%- tg_.linked ? t('settings.connections.tg_manage') : t('settings.connections.tg_link') %></a>
         <div class="conn-cf"><span class="hint"><%- t('settings.connections.tg_hint') %><% if (tg_.signin) { %> <%- t('settings.connections.tg_signin_hint') %><% } %></span></div>
       </div>
       <%# 1.99ks: 🪙 Crypto wallets (cryptopay.js) - linked ONLY by signing a message in the wallet; several allowed %>
@@ -530,13 +536,13 @@
     <h2><%- t('settings.password') %></h2>
     <p class="lede"><%- t('settings.password.lede') %></p>
     <form class="grid2 pw-form" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
-      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="password"><%- t('settings.password.new') %></label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
-      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="confirm_password"><%- t('settings.password.confirm') %></label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div class="field"><label class="lbl" for="password"><%- t('settings.password.new') %></label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div class="field"><label class="lbl" for="confirm_password"><%- t('settings.password.confirm') %></label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
       <div class="pw-act"><button class="btn primary" type="submit"><%- t('settings.password.update') %></button></div>
     </form>
     <span class="status err pw-status" id="pwStatus" role="status" aria-live="polite"></span>
   </section>
-</div>
+</main>
 
 <script>
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };

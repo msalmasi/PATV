@@ -54,182 +54,184 @@
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
-  /* 1.99ef: one fixed-width column - width:100% (an auto-margined grid item in the body grid shrank to its content, so the
-     width jumped per tab / composer state: 491 / 556 / 920px); every panel fills it */
-  .pf { width: 100%; max-width: min(952px, 100vw); min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6;
-        display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .pf .pf-panel, .pf .pf-tabs, .pf .pf-bar, .pf > .card { width: 100%; box-sizing: border-box; }
+  /* 1.99ps (polish G4): on the design system - .ds-page + tokens, docs/design-system.md "Area notes: profile, account and auth".
+     1.99ef: one fixed-width column; every panel fills it */
+  .pf { gap: var(--ds-sp-4); }
+  .pf .pf-panel, .pf .pf-tabs, .pf .pf-bar, .pf > .card { width: 100%; }
   /* 1.99eg: a short tab (no scrollbar) vs a long one shifted the column by the scrollbar's width - reserve it */
   html:has(.pf[data-profile]) { scrollbar-gutter: stable; }
-  .pf a { color: #81c784; text-decoration: none; }
-  .pf a:hover { color: #a5d6a7; }
-  .pf .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; }
-  /* 1.99ef: summary card rhythm - 20px between groups (identity / stats / actions), 6-8px inside a group */
-  .pf .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px 28px; align-items: center; padding: 24px 28px;
-              background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); }
+  .pf .card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); min-width: 0; }
+  /* summary card rhythm - 20px between groups (identity / stats / actions), 6-8px inside a group */
+  .pf .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ds-sp-5) var(--ds-sp-7); align-items: center; padding: var(--ds-sp-6) var(--ds-sp-7);
+              border-radius: var(--ds-r-2xl); background: radial-gradient(90% 140% at 0% 0%, var(--ds-green-bg), transparent 60%), radial-gradient(70% 120% at 100% 100%, rgba(255, 215, 64, .05), transparent 60%), #111; }
   .pf .pf-face { position: relative; line-height: 0; justify-self: center; }
-  .pf .avatar { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d;
-                box-shadow: 0 0 0 6px rgba(76, 175, 80, .12); }
+  .pf .avatar { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; border: 3px solid var(--ds-green); background: var(--ds-sunken);
+                box-shadow: 0 0 0 6px var(--ds-green-bg); }
   /* the GTF portrait, badge-sized, overlapping the photo */
-  .pf .pf-gtfmini { position: absolute; right: -10px; bottom: -6px; z-index: 3; width: 46px; height: 46px; padding: 0; box-sizing: border-box; cursor: pointer;
-                    border-radius: 10px; border: 2px solid var(--rc, #3a3a3a); overflow: hidden; display: grid; place-items: center;
+  .pf .pf-gtfmini { position: absolute; inset-inline-end: -10px; bottom: -6px; z-index: 3; width: 46px; height: 46px; padding: 0; margin: 0; box-sizing: border-box; cursor: pointer;
+                    border-radius: var(--ds-r-md); border: 2px solid var(--rc, #3a3a3a); overflow: hidden; display: grid; place-items: center;
                     background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 8px 8px;
-                    box-shadow: 0 0 0 3px #111, 0 0 12px -2px var(--rc, transparent); transition: transform .12s; }
-  .pf .pf-gtfmini:hover, .pf .pf-gtfmini:focus-visible { transform: scale(1.08); outline: none; }
+                    box-shadow: 0 0 0 3px #111, 0 0 12px -2px var(--rc, transparent); transition: transform var(--ds-dur-1); }
+  .pf .pf-gtfmini:hover { transform: scale(1.08); }
+  .pf .pf-gtfmini:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
   .pf .pf-gtfmini svg { width: 42px; height: 42px; display: block; image-rendering: pixelated; }
   .pf .pf-gtfmini.empty { border-style: dashed; font-size: 22px; line-height: 1; }
-  .pf .who { display: grid; gap: 6px; align-content: center; min-width: 0; }
-  .pf .who h1 { margin: 0; font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
-  .pf .handle { color: #9a9; font-size: 14px; overflow-wrap: anywhere; }
-  .pf .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .pf .who { display: grid; gap: var(--ds-sp-1h); align-content: center; min-width: 0; }
+  .pf .who h1 { margin: 0; font: 700 var(--ds-fs-h1)/var(--ds-lh-h1) var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .pf .handle { color: var(--ds-text-muted); font-size: var(--ds-fs-sm); overflow-wrap: anywhere; }
+  .pf .chips { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h); margin-top: var(--ds-sp-1); }
   .pf .chips:empty { display: none; }
-  .pf .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; font-family: inherit; line-height: 1.4; }
+  /* role / tier pills: the sentence-case .ds-tag look, 24px */
+  .pf .chip { display: inline-flex; align-items: center; gap: var(--ds-sp-1); min-height: 24px; margin: 0; font: 700 var(--ds-fs-xs)/1.3 var(--ds-font); padding: 2px 10px; border-radius: var(--ds-r-pill);
+              border: 1px solid var(--ds-green-line); background: var(--ds-green-bg); color: var(--ds-ok-ink); box-shadow: none; text-decoration: none !important; }
   .pf .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
-  .pf .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
-  .pf button.chip.gtfc { cursor: pointer; border-color: var(--rc, #3a3a1c); background: #17150b; color: #ece2b0; }
-  .pf button.chip.gtfc:hover, .pf button.chip.gtfc:focus-visible { background: #221f10; outline: none; }
-  /* stat strip: PAT · Level + XP · Badges */
-  .pf .pf-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 1px; background: #222;
-                  border: 1px solid #222; border-radius: 12px; overflow: hidden; }
-  .pf .ps { flex: 1 1 auto; background: #0e0e0e; padding: 12px 18px; display: grid; gap: 2px; align-content: center; min-width: 0; color: inherit !important; position: relative; }
+  .pf .chip.staff { border-color: var(--ds-info-line); background: var(--ds-info-bg); color: var(--ds-info-ink); }
+  .pf button.chip.gtfc { cursor: pointer; border-color: var(--rc, var(--ds-gold-line)); background: var(--ds-gold-bg); color: var(--ds-warn-ink); }
+  .pf button.chip.gtfc:hover { filter: brightness(1.15); }
+  .pf .chip:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+  /* stat strip: PAT · Level + XP · Badges · Followers */
+  .pf .pf-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 1px; background: var(--ds-line);
+                  border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); overflow: hidden; }
+  .pf .ps { flex: 1 1 auto; background: var(--ds-sunken); padding: var(--ds-sp-3) var(--ds-sp-4); display: grid; gap: 2px; align-content: center; min-width: 0; color: inherit !important; position: relative; text-decoration: none !important; }
   .pf a.ps:hover { background: #141a14; }
-  .pf .ps .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
-  .pf .ps b { font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }   /* 1.99ei: a long PAT balance never breaks mid-number */
-  .pf .ps b.gold { color: #ffd700; }
-  .pf .ps.lv { flex: 3 1 240px; }   /* 1.99ei: the strip is a wrapping flex row (cells size to content) */
-  .pf .ps .lv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .pf .ps .lv-row small { color: #888; font-size: 11.5px; white-space: nowrap; }
-  .pf .xb { height: 5px; background: #1f1f1f; border-radius: 999px; overflow: hidden; margin-top: 3px; }
-  .pf .xb span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .pf .ps .k { font: 700 11px/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); }
+  .pf .ps b { font-size: 18px; font-weight: 700; color: var(--ds-text-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }   /* 1.99ei: a long PAT balance never breaks mid-number */
+  .pf .ps b.gold { color: var(--ds-gold-text); }
+  .pf .ps.lv { flex: 3 1 240px; }
+  .pf .ps .lv-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ds-sp-2); }
+  .pf .ps .lv-row small, .pf .ps.fw .fw-row small { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pf .xb { height: 6px; background: #1f1f1f; border-radius: var(--ds-r-pill); overflow: hidden; margin-top: var(--ds-sp-1); }
+  .pf .xb span { display: block; height: 100%; background: var(--ds-green); border-radius: var(--ds-r-pill); }
   .pf .ps.is-hidden > :not(.pf-hid) { opacity: .45; }
-  .pf .ps .pf-hid { top: 4px; right: 6px; font-size: 10px; padding: 2px 6px; }
-  /* actions: primary buttons + the "More" menu */
-  .pf .actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .pf .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
-             background: #181818; color: #ddd !important; font-size: 14px; cursor: pointer; font-family: inherit; line-height: 1.2; }
-  .pf .btn:hover { border-color: #4caf50; }
-  .pf .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
+  .pf .ps .pf-hid { top: 4px; inset-inline-end: 6px; font-size: 10px; padding: 2px 6px; }
+  .pf .ps.fw .fw-row { display: flex; align-items: baseline; gap: var(--ds-sp-2); flex-wrap: wrap; }
+  /* actions: the profile's buttons are .ds-btn.sm-sized pills (36px, 40 on touch); .primary = the filled accent with dark ink */
+  .pf .actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; }
+  .pf .btn, .gtf-pop .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-1h); min-height: 36px; margin: 0; padding: 0 var(--ds-sp-3h);
+             border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); background: transparent; color: var(--ds-text) !important;
+             font: 700 13.5px/1.1 var(--ds-font); cursor: pointer; text-decoration: none !important; white-space: nowrap; box-shadow: none;
+             transition: border-color var(--ds-dur-1), filter var(--ds-dur-1); }
+  .pf .btn:hover, .gtf-pop .btn:hover { border-color: var(--ds-ac); background: rgba(255, 255, 255, .03); }
+  .pf .btn:focus-visible, .gtf-pop .btn:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .pf .btn.primary, .gtf-pop .btn.primary { background: var(--ds-ac); border-color: transparent; color: var(--ds-on-ac) !important; }
+  .pf .btn.primary:hover, .gtf-pop .btn.primary:hover { filter: brightness(1.1); background: var(--ds-ac); }
   .pf .btn.ghost { background: transparent; }
-  .pf .actions .fw-btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: bold; line-height: 1.2; }
-  .pf .actions .pf-msg { border-color: #2f5a3a; }
-  .pf .pf-menu .pf-report:hover, .pf .pf-menu .pf-report:focus-visible { color: #ff8a80 !important; }
-  .pf .ps.fw .fw-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .pf .ps.fw .fw-row small { color: #888; font-size: 11.5px; white-space: nowrap; }
-  .pf .tj-new { padding: 1px 7px; border-radius: 999px; background: #4caf50; color: #fff; font-size: 11px; font-weight: bold; }
+  @media (pointer: coarse) { .pf .btn, .gtf-pop .btn { min-height: 40px; } }
+  .pf .actions .fw-btn { min-height: 36px; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill); font: 700 13.5px/1.1 var(--ds-font); }
+  .pf .actions .pf-msg { border-color: var(--ds-green-line); }
+  .pf .pf-menu .pf-report:hover, .pf .pf-menu .pf-report:focus-visible { color: var(--ds-danger) !important; }
+  .pf .tj-new { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--ds-badge); color: #fff; font: 700 11px/18px var(--ds-font); font-variant-numeric: tabular-nums; }
   .pf .pf-more { position: relative; }
-  /* 1.99jg: an open ⋯ More menu sits above the cards after it. padfx.css lifts a framed box's contents to
-     z-index 1, which makes the box holding the menu its own stacking context - so the next framed card (e.g. the
-     pixel stripe frame) painted over the open menu. Raise whatever holds the open menu above its siblings. */
+  /* 1.99jg: an open ⋯ More menu sits above the cards after it (padfx.css makes a framed box its own stacking context) */
   .pfx:has(.pf-more[open]), .pfx > :has(.pf-more[open]), .pf :has(> .pf-more[open]) { z-index: 50; }
   .pf .pf-more > summary { list-style: none; }
   .pf .pf-more > summary::-webkit-details-marker { display: none; }
-  .pf .pf-menu { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 210px; display: grid; padding: 6px; gap: 2px;
-                 background: #141414; border: 1px solid #2c2c2c; border-radius: 10px; box-shadow: 0 12px 28px rgba(0,0,0,.6); }
-  .pf .pf-menu a, .pf .pf-menu button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; color: #ddd !important;
-                 font: 14px Ubuntu, sans-serif; background: none; border: 0; text-align: left; cursor: pointer; width: 100%; white-space: nowrap; }
-  .pf .pf-menu a:hover, .pf .pf-menu button:hover, .pf .pf-menu a:focus-visible, .pf .pf-menu button:focus-visible { background: #1f2a1f; outline: none; }
-  .pf .pf-menu hr { border: 0; border-top: 1px solid #262626; margin: 4px 2px; }
+  .pf .pf-menu { position: absolute; z-index: var(--ds-z-pop); top: calc(100% + 6px); inset-inline-start: 0; min-width: 220px; display: grid; padding: 6px; gap: 2px;
+                 background: var(--ds-surface-3); border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-lg); box-shadow: var(--ds-e-3); }
+  .pf .pf-menu a, .pf .pf-menu button { display: flex; align-items: center; gap: var(--ds-sp-2h); min-height: 40px; margin: 0; padding: 0 var(--ds-sp-2h); border-radius: var(--ds-r-sm); color: var(--ds-text-2) !important;
+                 font: 400 var(--ds-fs-sm)/1.25 var(--ds-font); background: none; border: 0; text-align: start; cursor: pointer; width: 100%; white-space: nowrap; text-decoration: none !important; box-shadow: none; }
+  .pf .pf-menu a:hover, .pf .pf-menu button:hover, .pf .pf-menu a:focus-visible, .pf .pf-menu button:focus-visible { background: var(--ds-hover); color: var(--ds-text-strong) !important; outline: none; }
+  .pf .pf-menu hr { border: 0; border-top: 1px solid var(--ds-line-soft); margin: 4px 2px; }
   .pf .pf-menu form { margin: 0; }
-  .pf .muted { color: #888; font-size: 13px; }
-  .pf h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
-  .pf .gtf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px 16px; align-items: center; }
-  .pf .gtf-port { width: 72px; height: 72px; padding: 0; border-radius: 12px; border: 2px solid var(--rc, #2a2a2a); overflow: hidden; display: grid; place-items: center; cursor: pointer;
+  .pf .muted { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .pf .pf-story .ds-check.pf-story-set { margin-top: var(--ds-sp-3); color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
+  /* one section-heading style on the profile: the pixel heading (.ds-pixel-h) - the story strip uses it too */
+  .pf h2 { margin: 0 0 var(--ds-sp-3); font: var(--ds-fs-pixel-h)/1.6 var(--ds-font-pixel); letter-spacing: var(--ds-ls-pixel-h); text-transform: uppercase; color: var(--ds-gold); }
+  .pf .gtf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--ds-sp-3) var(--ds-sp-4); align-items: center; }
+  .pf .gtf-port { width: 72px; height: 72px; padding: 0; margin: 0; border-radius: var(--ds-r-lg); border: 2px solid var(--rc, #2a2a2a); overflow: hidden; display: grid; place-items: center; cursor: pointer;
                   background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 12px 12px; font-size: 30px; }
+  .pf .gtf-port:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
   .pf .gtf-port svg { width: 68px; height: 68px; display: block; image-rendering: pixelated; }
-  .pf .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
-  .pf .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
-  .pf .badge { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 8px; text-align: center; display: grid; gap: 6px; justify-items: center; }
+  .pf .gtf-sheet { font-size: 16px; margin-bottom: var(--ds-sp-2); }
+  .pf .links { display: flex; flex-wrap: wrap; gap: 0 var(--ds-sp-3h); font-size: var(--ds-fs-sm); }
+  .pf .links a { display: inline-flex; align-items: center; min-height: 32px; }
+  .pf .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 104px), 1fr)); gap: var(--ds-sp-2h); }
+  .pf .badge { background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-2); text-align: center; display: grid; gap: var(--ds-sp-1h); justify-items: center; align-content: start; }
   .pf .badge img { height: 48px; width: 48px; object-fit: contain; image-rendering: pixelated; }
-  .pf .badge span { font-size: 12px; line-height: 1.25; color: #ccc; overflow-wrap: anywhere; }
-  .pf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  .pf .showcase { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-  .pf .showcase .pin { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border: 1px solid #3a3a1c; border-radius: 10px; padding: 4px 10px 4px 4px; font-size: 12px; color: #e8e2b0; }
+  .pf .badge span { font-size: var(--ds-fs-xs); line-height: 1.25; color: var(--ds-text-2); overflow-wrap: anywhere; }
+  .pf .showcase { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); margin-top: var(--ds-sp-1); }
+  .pf .showcase .pin { display: inline-flex; align-items: center; gap: var(--ds-sp-1h); background: var(--ds-glass); border: 1px solid var(--ds-gold-line); border-radius: var(--ds-r-md); padding: 4px 10px 4px 4px; font-size: var(--ds-fs-xs); color: var(--ds-warn-ink); }
   .pf .showcase img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
-  /* tabs */
-  .pf .pf-tabs { display: flex; gap: 4px; border-bottom: 1px solid #262626; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin-bottom: -4px; }
+  /* tabs: .ds-tab pills (40px); the current tab is the accent tint */
+  .pf .pf-tabs { display: flex; gap: var(--ds-sp-1h); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding: 2px; margin: -2px; }
   .pf .pf-tabs::-webkit-scrollbar { display: none; }
-  .pf .pf-tab { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; color: #aaa !important; font-size: 15px; white-space: nowrap;
-                border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: 8px 8px 0 0; }
-  .pf .pf-tab:hover { color: #e6e6e6 !important; background: #141414; }
-  .pf .pf-tab[aria-selected="true"] { color: #e6ffe6 !important; border-bottom-color: #4caf50; font-weight: bold; }
-  .pf .pf-tab:focus-visible { outline: 2px solid #4caf50; outline-offset: -2px; }
+  .pf .pf-tab { flex: none; display: inline-flex; align-items: center; gap: var(--ds-sp-1h); min-height: 40px; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill);
+                border: 1px solid #2a2a2a; background: #151515; color: var(--ds-text-2) !important; font: 500 var(--ds-fs-sm)/1 var(--ds-font); white-space: nowrap; text-decoration: none !important;
+                transition: border-color var(--ds-dur-1), color var(--ds-dur-1); }
+  .pf .pf-tab:hover { border-color: var(--ds-ac); color: var(--ds-text-strong) !important; }
+  .pf .pf-tab[aria-selected="true"] { border-color: var(--ds-ac); background: var(--ds-ac-bg); color: var(--ds-text-strong) !important; font-weight: 700; }
+  .pf .pf-tab:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
   .pf .pf-tab.is-hidden { opacity: .6; }
   .pf .pf-tab .eye { font-size: 11px; }
-  .pf .pf-panel { display: grid; gap: 16px; min-width: 0; }
+  .pf .pf-panel { display: grid; gap: var(--ds-sp-4); min-width: 0; }
   .pf .pf-panel[hidden] { display: none; }
   .pf .pf-slot { position: relative; min-width: 0; display: grid; }
   .pf .pf-slot.is-hidden > :not(.pf-hid) { opacity: .45; filter: grayscale(.6); }
   .pf .pf-slot.is-hidden > .card { border-style: dashed; border-color: #3a3a3a; }
-  .pf .pf-hid { position: absolute; top: -9px; right: 14px; z-index: 5; font-size: 11px; line-height: 1; padding: 4px 9px; border-radius: 999px;
-                background: #1d1a10; border: 1px solid #5a4a1c; color: #e8cf7a; white-space: nowrap; pointer-events: none; }
-  .pf .pf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 10px 14px;
-                border-radius: 12px; border: 1px solid #3a3320; background: #15130b; color: #e8dfb8; font-size: 13px; }
-  .pf .pf-bar.preview { border-color: #2f6d8f; background: #0d1a22; color: #b9def2; }
-  .pf .pf-bar .btns { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pf .pf-bar .btn { padding: 5px 11px; font-size: 13px; }
-  .pf .pf-empty { color: #888; text-align: center; padding: 28px 12px; }
-  /* GTF popover (top layer: [popover] - light dismiss + Esc for free) */
+  .pf .pf-hid { position: absolute; top: -9px; inset-inline-end: 14px; z-index: 5; font-size: 11px; line-height: 1; padding: 4px 9px; border-radius: var(--ds-r-pill);
+                background: #1d1a10; border: 1px solid var(--ds-gold-line); color: var(--ds-warn-ink); white-space: nowrap; pointer-events: none; }
+  .pf .pf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ds-sp-2) var(--ds-sp-3h); padding: var(--ds-sp-2h) var(--ds-sp-3h);
+                border-radius: var(--ds-r-lg); border: 1px solid var(--ds-gold-line); background: var(--ds-gold-bg); color: var(--ds-warn-ink); font-size: var(--ds-fs-meta); }
+  .pf .pf-bar.preview { border-color: var(--ds-info-line); background: var(--ds-info-bg); color: var(--ds-info-ink); }
+  .pf .pf-bar .btns { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h); }
+  .pf .pf-empty { color: var(--ds-text-muted); text-align: center; padding: var(--ds-sp-7) var(--ds-sp-3); }
+  /* GTF popover (top layer: [popover] - light dismiss + Esc for free) - the .ds-modal look */
   .gtf-pop { width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 0; margin: auto;
-             background: #111; color: #e6e6e6; border: 1px solid #2c2c2c; border-radius: 16px; font-family: Ubuntu, sans-serif;
-             box-shadow: 0 24px 60px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.02); }
-  .gtf-pop::backdrop { background: rgba(0,0,0,.6); }
-  .gtf-pop a { color: #81c784; text-decoration: none; }
-  .gtf-pop .gp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #1f1f1f;
-                      background: radial-gradient(120% 200% at 0% 0%, #2a2410 0%, #111 60%); }
-  .gtf-pop .gp-head h2 { margin: 0; color: #ffd700; font: 11px 'Press Start 2P', monospace; letter-spacing: .1em; text-transform: uppercase; }
-  .gtf-pop .gp-x { background: none; border: 0; color: #aaa; font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
-  .gtf-pop .gp-x:hover, .gtf-pop .gp-x:focus-visible { color: #fff; background: #222; outline: none; }
-  .gtf-pop .gp-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 16px 18px; padding: 16px; align-items: start; }
-  .gtf-pop .gp-frame { width: 168px; height: 168px; box-sizing: border-box; border-radius: 14px; border: 2px solid var(--rc, #2a2a2a); display: grid; place-items: center; overflow: hidden;
+             background: var(--ds-surface-3); color: var(--ds-text); border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-2xl); font-family: var(--ds-font);
+             box-shadow: var(--ds-e-4); }
+  .gtf-pop::backdrop { background: var(--ds-scrim); }
+  .gtf-pop a { color: var(--ds-green-2); text-decoration: none; }
+  .gtf-pop .gp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2h); padding: var(--ds-sp-3) var(--ds-sp-4); border-bottom: 1px solid var(--ds-line-soft);
+                      background: radial-gradient(120% 200% at 0% 0%, #2a2410 0%, transparent 60%); }
+  .gtf-pop .gp-head h2 { margin: 0; color: var(--ds-gold); font: var(--ds-fs-pixel-h)/1.6 var(--ds-font-pixel); letter-spacing: var(--ds-ls-pixel-h); text-transform: uppercase; }
+  .gtf-pop .gp-x { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; margin: 0; padding: 0; background: none; border: 0; color: #aaa; font-size: 22px; line-height: 1; cursor: pointer; border-radius: var(--ds-r-sm); box-shadow: none; }
+  .gtf-pop .gp-x:hover { color: #fff; background: var(--ds-hover); }
+  .gtf-pop .gp-x:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .gtf-pop .gp-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--ds-sp-4) var(--ds-sp-5); padding: var(--ds-sp-4); align-items: start; }
+  .gtf-pop .gp-frame { width: 168px; height: 168px; box-sizing: border-box; border-radius: var(--ds-r-xl); border: 2px solid var(--rc, #2a2a2a); display: grid; place-items: center; overflow: hidden;
                        background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 21px 21px; box-shadow: 0 0 22px -6px var(--rc, transparent); }
   .gtf-pop .gp-frame svg { width: 160px; height: 160px; display: block; image-rendering: pixelated; }
   .gtf-pop .gp-frame.empty { border-style: dashed; font-size: 60px; opacity: .6; }
-  .gtf-pop .gp-who { font-size: 18px; font-weight: bold; overflow-wrap: anywhere; }
-  .gtf-pop .gp-role { display: inline-block; margin-top: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #3a3a1c; background: #17150b; color: #ece2b0; }
-  .gtf-pop .gp-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }
-  .gtf-pop .gp-items li { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; padding: 5px 9px;
-                          border-radius: 7px; background: linear-gradient(90deg, color-mix(in srgb, var(--rc) 16%, #0d0d0d), #0d0d0d 70%); border-left: 3px solid var(--rc); }
-  .gtf-pop .gp-slot { color: #888; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
-  .gtf-pop .gp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6e6e6; }
-  .gtf-pop .gp-rar { font-size: 10.5px; font-weight: bold; letter-spacing: .05em; text-transform: uppercase; color: var(--rc); }
-  .gtf-pop .gp-none { margin: 12px 0 0; padding: 10px 12px; border: 1px dashed #333; border-radius: 10px; color: #aaa; font-size: 13px; }
-  .gtf-pop .gp-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
-  .gtf-pop .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
-                  background: #181818; color: #ddd !important; font: 14px Ubuntu, sans-serif; cursor: pointer; }
-  .gtf-pop .btn:hover { border-color: #4caf50; }
-  .gtf-pop .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
+  .gtf-pop .gp-who { font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .gtf-pop .gp-role { display: inline-block; margin-top: var(--ds-sp-1h); font-size: var(--ds-fs-xs); padding: 3px 10px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-gold-line); background: var(--ds-gold-bg); color: var(--ds-warn-ink); }
+  .gtf-pop .gp-items { list-style: none; margin: var(--ds-sp-3) 0 0; padding: 0; display: grid; gap: var(--ds-sp-1); }
+  .gtf-pop .gp-items li { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: var(--ds-sp-2); align-items: center; font-size: var(--ds-fs-meta); padding: 5px 9px;
+                          border-radius: var(--ds-r-xs); background: linear-gradient(90deg, color-mix(in srgb, var(--rc) 16%, #0d0d0d), #0d0d0d 70%); border-inline-start: 3px solid var(--rc); }
+  .gtf-pop .gp-slot { color: var(--ds-text-muted); font-size: 10.5px; letter-spacing: var(--ds-ls-label); text-transform: uppercase; }
+  .gtf-pop .gp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-text); }
+  .gtf-pop .gp-rar { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--rc); }
+  .gtf-pop .gp-none { margin: var(--ds-sp-3) 0 0; padding: var(--ds-sp-2h) var(--ds-sp-3); border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-md); color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .gtf-pop .gp-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
   .gtf-pop .gp-regen { grid-column: 1 / -1; }
   .gtf-pop .gp-regen summary { display: inline-flex; cursor: pointer; list-style: none; }
   .gtf-pop .gp-regen summary::-webkit-details-marker { display: none; }
-  .gtf-pop .gp-regen p { margin: 8px 0; font-size: 13px; color: #aaa; }
+  .gtf-pop .gp-regen p { margin: var(--ds-sp-2) 0; font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
   .gtf-pop .gp-regen form { margin: 0; }
   .gtf-pop .gp-log { grid-column: 1 / -1; }
   .gtf-pop .gp-log .act-box { margin: 0; }
-  .gtf-pop code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  @media (max-width: 560px) {
-    .pf { padding-top: 12px; gap: 12px; }
-    .pf .card { padding: 16px 14px; }
-    .pf .hero { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; gap: 16px; padding: 20px 16px; }
-    .pf .who { justify-items: center; }
-    .pf .who { width: 100%; }
+  .gtf-pop code { font-family: var(--ds-font-mono); font-size: .9em; background: #1c1c1c; padding: 1px 5px; border-radius: var(--ds-r-xs); }
+  @media (prefers-reduced-motion: reduce) { .pf .pf-gtfmini, .pf .btn, .gtf-pop .btn, .pf .pf-tab { transition: none; } .pf .pf-gtfmini:hover { transform: none; } }
+  @media (max-width: 520px) {
+    .pf .card { padding: var(--ds-sp-4); }
+    .pf .hero { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; gap: var(--ds-sp-4); padding: var(--ds-sp-5) var(--ds-sp-4); }
+    .pf .who { justify-items: center; width: 100%; }
     .pf .chips, .pf .actions, .pf .showcase { justify-content: center; }
-    .pf .pf-strip { width: 100%; text-align: left; }
-    .pf .ps { padding: 10px 12px; }
+    .pf .pf-strip { width: 100%; text-align: start; }
+    .pf .ps { padding: var(--ds-sp-2h) var(--ds-sp-3); }
     .pf .ps.lv { flex-basis: 100%; order: 9; }
     .pf .ps b { font-size: 16px; }
-    .pf .pf-menu { left: auto; right: 0; }
-    .pf .actions { gap: 6px; }
-    .pf .actions .btn { padding: 7px 11px; font-size: 13.5px; }
-    .pf .pf-tab { padding: 10px 13px; font-size: 14px; }
+    .pf .pf-menu { inset-inline-start: auto; inset-inline-end: 0; }
+    .pf .pf-tab { padding: 0 var(--ds-sp-3h); }
     .pf .gtf { grid-template-columns: auto minmax(0, 1fr); }
     .pf .gtf > .btn { grid-column: 1 / -1; justify-self: start; }
+    .pf .badges { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .gtf-pop .gp-body { grid-template-columns: 1fr; justify-items: center; }
     .gtf-pop .gp-info { width: 100%; text-align: center; }
-    .gtf-pop .gp-items li { text-align: left; }
+    .gtf-pop .gp-items li { text-align: start; }
     .gtf-pop .gp-acts { justify-content: center; }
   }
 </style>
-<div class="pf" data-profile="<%= usernameProfile %>">
+<main class="ds-page pf" data-profile="<%= usernameProfile %>">
   <section class="card hero cx-host">
     <% if (cxBanner) { %><div class="cx-banner" style="<%= cxBanner.css %>" aria-hidden="true"></div><% } %>
     <% if (cxFx) { %><div class="cx-fx cx-fx-<%= cxFx.effect %>" aria-hidden="true"></div><% } %>
@@ -276,30 +278,30 @@
     </div>
     <div class="actions">
       <% if (isMe) { %>
-        <a class="btn primary" href="/u/<%= encodeURIComponent(username) %>/edit">✏️ <%- t('profile.edit_profile') %></a>
-        <a class="btn" href="/wallet">👛 <%- t('profile.wallet') %></a>
+        <a class="btn primary" href="/u/<%= encodeURIComponent(username) %>/edit"><span class="ds-ic" aria-hidden="true">✏️</span> <%- t('profile.edit_profile') %></a>
+        <a class="btn" href="/wallet"><span class="ds-ic" aria-hidden="true">👛</span> <%- t('profile.wallet') %></a>
       <% } else if (!previewing) { %>
         <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'actions' }) %><% } %>
-        <a class="btn<%= soc ? '' : ' primary' %>" href="/u/<%= enc %>/tip" title="<%- t('profile.tip_title', { name: displayname || usernameProfile }) %>">💸 <%- t('profile.tip') %></a>
+        <a class="btn<%= soc ? '' : ' primary' %>" href="/u/<%= enc %>/tip" title="<%- t('profile.tip_title', { name: displayname || usernameProfile }) %>"><span class="ds-ic" aria-hidden="true">💸</span> <%- t('profile.tip') %></a>
       <% } %>
       <details class="pf-more" data-pf-more>
-        <summary class="btn" aria-haspopup="menu">⋯ <%- t('profile.more') %><% if (tipNew > 0) { %> <span class="tj-new" title="<%- t('profile.new_tips_title') %>"><%= tipNew > 99 ? '99+' : tipNew %></span><% } %></summary>
+        <summary class="btn" aria-haspopup="menu"><span aria-hidden="true">⋯</span> <%- t('profile.more') %><% if (tipNew > 0) { %> <span class="tj-new" title="<%- t('profile.new_tips_title') %>"><%= tipNew > 99 ? '99+' : tipNew %></span><% } %></summary>
         <div class="pf-menu" role="menu">
           <% if (isMe) { %>
             <a role="menuitem" href="/u/<%= enc %>/tip">💰 <%- t('profile.menu.tip_jar') %><% if (tipNew > 0) { %> <span class="tj-new"><%- t('profile.menu.n_new', { n: tipNew > 99 ? '99+' : tipNew }) %></span><% } %></a>
-            <a role="menuitem" href="/history">📜 <%- t('profile.menu.pat_history') %></a>
-            <% if (soc) { %><a role="menuitem" href="/feed/following">⭐ <%- t('profile.menu.follow_lists') %></a><% } %>
+            <a role="menuitem" href="/history"><span class="ds-ic" aria-hidden="true">📜</span> <%- t('profile.menu.pat_history') %></a>
+            <% if (soc) { %><a role="menuitem" href="/feed/following"><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('profile.menu.follow_lists') %></a><% } %>
             <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 <%- t('profile.menu.achievements') %></a>
-            <a role="menuitem" href="/cosmetics?tab=mine#tabs">🎨 <%- t('profile.menu.cosmetics') %></a>
-            <a role="menuitem" href="/premium">🎟️ <%- t('profile.menu.season_pass') %></a>
-            <a role="menuitem" href="/subscriptions">🔁 <%- t('subs.title') %></a>
-            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 <%- t('profile.menu.gtf_wardrobe') %></button><% } %>
+            <a role="menuitem" href="/cosmetics?tab=mine#tabs"><span class="ds-ic" aria-hidden="true">🎨</span> <%- t('profile.menu.cosmetics') %></a>
+            <a role="menuitem" href="/premium"><span class="ds-ic" aria-hidden="true">🎟️</span> <%- t('profile.menu.season_pass') %></a>
+            <a role="menuitem" href="/subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('subs.title') %></a>
+            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open><span class="ds-ic" aria-hidden="true">🎮</span> <%- t('profile.menu.gtf_wardrobe') %></button><% } %>
             <hr>
-            <form action="/logout" method="POST"><button type="submit" role="menuitem">↪ <%- t('profile.menu.logout') %></button></form>
+            <form action="/logout" method="POST"><button type="submit" role="menuitem"><span class="ds-ic" aria-hidden="true">↪</span> <%- t('profile.menu.logout') %></button></form>
           <% } else { %>
             <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 <%- t('profile.menu.achievements') %></a>
             <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %><a role="menuitem" href="/history?user=<%= enc %>">📜 <%- t('profile.menu.pat_history') %></a><% } %>
-            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 <%- t('profile.gtf.avatar') %></button><% } %>
+            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open><span class="ds-ic" aria-hidden="true">🎮</span> <%- t('profile.gtf.avatar') %></button><% } %>
             <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'menu' }) %><% } %>
           <% } %>
           <% if (typeof viewerIsAdmin !== 'undefined' && viewerIsAdmin) { %><hr><a role="menuitem" href="/admin/comps?user=<%= enc %>">🎁 <%- t('profile.menu.comp') %></a><% } %>
@@ -316,7 +318,7 @@
     <section class="card pf-story" aria-label="<%- t('profile.story.aria') %>">
       <%- include('partials/story-strip', { story: { rooms: pst_.rooms, caps: [], room: null, signed: pst_.signed, compose: pst_.owner, pad: 'profile' }, heading: '📸 ' + t('profile.story.heading'), next: base }) %>
       <% if (pst_.owner && pst_.prefs) { %>
-        <label class="pf-story-set"><input type="checkbox" data-story-pref="capturesOfMe"<%= pst_.prefs.capturesOfMe ? ' checked' : '' %>> <%- t('profile.story.captures_pref') %></label>
+        <label class="ds-check pf-story-set"><input type="checkbox" data-story-pref="capturesOfMe"<%= pst_.prefs.capturesOfMe ? ' checked' : '' %>> <%- t('profile.story.captures_pref') %></label>
         <script>
           (function () {
             var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -366,9 +368,9 @@
       <% } else { %><span></span><% } %>
       <div>
         <% if (sheet) { %>
-          <div style="font-size:16px;margin-bottom:8px">🥷 <a href="<%= sheet.url %>"><%- t('profile.gtf.heist_sheet') %></a><%= sheet.cls ? ' · ' + sheet.cls : '' %><% if (showAv) { %> · <span class="muted"><%- configured ? t('profile.gtf.n_items', { count: avItems.length }) : t('profile.gtf.no_items') %></span><% } %></div>
+          <div class="gtf-sheet"><span class="ds-ic" aria-hidden="true">🥷</span> <a href="<%= sheet.url %>"><%- t('profile.gtf.heist_sheet') %></a><%= sheet.cls ? ' · ' + sheet.cls : '' %><% if (showAv) { %> · <span class="muted"><%- configured ? t('profile.gtf.n_items', { count: avItems.length }) : t('profile.gtf.no_items') %></span><% } %></div>
         <% } else { %>
-          <div class="muted" style="margin-bottom:8px"><%- t('profile.gtf.no_sheet') %></div>
+          <div class="muted gtf-sheet"><%- t('profile.gtf.no_sheet') %></div>
         <% } %>
         <% if (typeof gtf !== 'undefined' && gtf) { %>
           <div class="links">
@@ -420,7 +422,7 @@
   <% } else { %>
     <p class="pf-empty"><%- t('profile.nothing_else') %></p>
   <% } %>
-</div>
+</main>
 
 <% if (showAv) { %>
 <div id="gtfPop" class="gtf-pop" popover aria-label="<%- t('profile.gtf.pop_aria') %>" data-gtf-pop data-gtf-state="<%= configured ? 'configured' : 'unconfigured' %>">
@@ -443,12 +445,12 @@
       <% } %>
     </div>
     <div class="gp-acts">
-      <% if (isMe) { %><a class="btn<%= configured ? '' : ' primary' %>" href="/cosmetics?tab=mine#tabs">🎨 <%- t('profile.gtf.change_look') %></a><% } else { %><a class="btn" href="/cosmetics">🎨 <%- t('profile.gtf.gtf_wardrobe') %></a><% } %>
-      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>">🥷 <%- t('profile.gtf.heist_sheet') %></a><% } %>
+      <% if (isMe) { %><a class="btn<%= configured ? '' : ' primary' %>" href="/cosmetics?tab=mine#tabs"><span class="ds-ic" aria-hidden="true">🎨</span> <%- t('profile.gtf.change_look') %></a><% } else { %><a class="btn" href="/cosmetics"><span class="ds-ic" aria-hidden="true">🎨</span> <%- t('profile.gtf.gtf_wardrobe') %></a><% } %>
+      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>"><span class="ds-ic" aria-hidden="true">🥷</span> <%- t('profile.gtf.heist_sheet') %></a><% } %>
     </div>
     <% if (isMe && av.svg && cf) { %>
       <details class="gp-regen">
-        <summary class="btn">🎲 <%- t('profile.gtf.new_avatar') %></summary>
+        <summary class="btn"><span class="ds-ic" aria-hidden="true">🎲</span> <%- t('profile.gtf.new_avatar') %></summary>
         <p><%- t('profile.gtf.regen_info') %></p>
         <form method="post" action="/act">
           <input type="hidden" name="kind" value="cmd">
