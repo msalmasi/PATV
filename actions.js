@@ -108,6 +108,16 @@ function register(app, { isBotToken, addUser }) {
     } else {
       args = words;
     }
+    // 1.99mj: with the lotto backend on, a lotto form buys on the site directly - nothing is sent to Pepe
+    if (kind === "cmd" && args[0] === "lotto") {
+      try {
+        const msg = await require("./lotto/routes").buyFromForm(req.user.userId, args.slice(1), b.idem);
+        if (msg) return go(msg);
+      } catch (e) {
+        console.error("[act] lotto backend:", e.message);
+        return go("Something went wrong — nothing was bought.");
+      }
+    }
     const tag = clean(b.tag, 40) || back.split(/[/?]/)[1] || "home";
     const label = clean(b.label || (kind === "cmd" ? "!" + args.join(" ") : kind + " " + words.join(" ")), 200);
     try {

@@ -172,6 +172,11 @@ const RULES = {
   // 1.99mj: the site's casino achievement counters (web-only players) follow the account; the same metric adds up
   "casino_ach_counts.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MAX" } }),
   "casino_settings.actor": { deny: NAME },
+  // 1.99mj: the lotto backend (lotto/service.js) - tickets follow the account (the survivor holds them for the draw); the
+  // purchase journal is history keyed by its charge (a refund / prize follows a merge through ledger.post resolveMerged)
+  "lotto_tickets.userId": M(),
+  "lotto_purchases.userId": { keep: "the lotto's purchase journal (keyed by the charge's transaction id)" },
+  "lotto_settings.actor": { deny: NAME }, "lotto_draws.forced_by": { deny: NAME },
   "media.by_user_id": M(), "media.by_user": { deny: NAME }, "media.subject": { deny: NAME }, "media.subject_login": { deny: NAME },
   // follows
   "follows.follower": M({ key: ["target_kind", "target_id"], merge: { created_at: "MIN" } }),

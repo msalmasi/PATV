@@ -1,0 +1,65 @@
+<%- include('layout', { title: title, user: user}) %>
+<style>
+  .lf { max-width: 860px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; }
+  .lf h1 { text-align: center; }
+  .lf .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+  .lf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; font-size: 13px; word-break: break-all; }
+  .lf .ok { color: #81c784; } .lf .bad { color: #ff9a9a; }
+  .lf .info { color: #999; font-size: 13px; line-height: 1.6; }
+</style>
+<main class="lf" id="lf" data-draw="<%= draw %>">
+  <h1>Pepeball draw #<%= draw %>: provably fair</h1>
+  <div class="card" id="lf-rec">Loading…</div>
+  <div class="card">
+    <p><b>Your browser's check</b> (WebCrypto, not the site's own verifier): <span id="lf-mine">…</span></p>
+    <p class="info">How it works: when a draw's sales open, the site publishes <code>sha256(server_seed)</code>. When sales close it publishes
+      every ticket (number list, no owners) and <code>tickets_digest</code> = sha256 of the lines <code>id:w1,w2,w3,w4:pb</code> - so the
+      result depends on every ticket bought, and nobody (the site included) knows it while tickets can still be bought. The numbers come from
+      <code>HMAC-SHA256(server_seed, "tickets_digest:draw:counter")</code> read as big-endian 32-bit words (rejection sampling):
+      a partial Fisher-Yates over 1-30 picks the four numbers, then the Pepe Ball is 1 + the next draw below 10. After the draw the seed is
+      revealed, so anyone can check all three steps.</p>
+  </div>
+  <p><a href="/lotto">← back to Pepeball</a> · <a href="/api/lotto/fair/<%= draw %>">raw record (JSON, with the ticket list)</a></p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var root = document.getElementById("lf"), draw = +root.getAttribute("data-draw");
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var enc = new TextEncoder();
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join(""); }
+  async function numbers(seed, digest) {
+    var key = await crypto.subtle.importKey("raw", enc.encode(seed), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    var counter = 0, words = [], pos = 8;
+    async function next() {
+      if (pos >= 8) {
+        var dv = new DataView(await crypto.subtle.sign("HMAC", key, enc.encode(digest + ":" + draw + ":" + counter++)));
+        words = []; for (var k = 0; k < 8; k++) words.push(dv.getUint32(4 * k, false));
+        pos = 0;
+      }
+      return words[pos++];
+    }
+    async function below(n) { var limit = Math.floor(4294967296 / n) * n; for (;;) { var x = await next(); if (x < limit) return x % n; } }
+    var pool = []; for (var i = 1; i <= 30; i++) pool.push(i);
+    for (var j = 0; j < 4; j++) { var r = j + await below(30 - j); var t = pool[j]; pool[j] = pool[r]; pool[r] = t; }
+    return { white: pool.slice(0, 4).sort(function (a, b) { return a - b; }), pb: 1 + await below(10) };
+  }
+  fetch("/api/lotto/fair/" + draw).then(function (r) { return r.json(); }).then(async function (rec) {
+    var box = document.getElementById("lf-rec"), mine = document.getElementById("lf-mine");
+    if (!rec.ok) { box.textContent = rec.error || "No such draw."; mine.textContent = "-"; return; }
+    var n = (rec.tickets || []).length;
+    box.innerHTML = "<p>Commitment (published when sales opened): <code>" + esc(rec.commitment) + "</code></p>"
+      + "<p>Tickets digest (published when sales closed): " + (rec.tickets_digest ? "<code>" + esc(rec.tickets_digest) + "</code> over " + n.toLocaleString() + " ticket(s)" : "<i>sales still open</i>") + "</p>"
+      + "<p>Server seed: " + (rec.server_seed ? "<code>" + esc(rec.server_seed) + "</code>" : "<i>secret until the draw</i>") + "</p>"
+      + (rec.white ? "<p>Drawn: <b>" + rec.white.map(function (x) { return (x < 10 ? "0" : "") + x; }).join(" ") + "</b> + Pepe Ball <b>" + rec.pb + "</b></p>" : "");
+    if (!rec.server_seed) { mine.textContent = "the seed isn't revealed yet - come back after the draw."; return; }
+    var c = hex(await crypto.subtle.digest("SHA-256", enc.encode(rec.server_seed))) === rec.commitment;
+    var lines = (rec.tickets || []).map(function (t) { return t[0] + ":" + t[1].join(",") + ":" + t[2] + "\n"; }).join("");
+    var d = hex(await crypto.subtle.digest("SHA-256", enc.encode(lines))) === rec.tickets_digest;
+    var nums = await numbers(rec.server_seed, rec.tickets_digest);
+    var m = nums.pb === rec.pb && nums.white.join(",") === rec.white.join(",");
+    var mark = function (ok, what) { return '<span class="' + (ok ? "ok" : "bad") + '">' + (ok ? "✓ " : "✗ ") + what + "</span>"; };
+    mine.innerHTML = [mark(c, "the seed matches the commitment"), mark(d, "the ticket list matches the digest"), mark(m, "the numbers follow from them")].join(" · ");
+  }).catch(function () { document.getElementById("lf-rec").textContent = "Couldn't load the record."; });
+})();
+</script>

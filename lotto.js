@@ -4,6 +4,10 @@
 // here whenever it changes and we keep only the latest one. Buying tickets from the site goes
 // through the action queue (actions.js): the form posts to /act with cmd=lotto and Pepe runs it as
 // the user's linked Camfrog name, exactly like `!lotto quick 5` or `!lotto 3 9 14 27 pb 6` in chat.
+//
+// 1.99mj: with the lotto backend ON (lotto/service.js, docs/lotto-backend.md) the SITE owns the lotto: the service
+// writes lotto_state itself (storeSnapshot below) and Pepe's /api/lotto/sync is refused (409 {backend: true}, so a
+// Pepe still running his own lotto stops selling). The description above is true while lotto_backend is off.
 const { runQuery, getQuery } = require("./dbUtils");
 const actions = require("./actions");
 
@@ -106,6 +110,8 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
       await ready;
+      // 1.99mj: the backend owns the lotto - a Pepe still running his own must not overwrite it
+      if ((await require("./lotto/service").loadSettings()).lotto_backend) return res.status(409).json({ success: false, backend: true });
       const clean = cleanSnapshot(body);
       await keepLastTickets(clean);
       await runQuery(`INSERT INTO lotto_state (id, data, updated) VALUES (1, ?, ?)
@@ -128,7 +134,10 @@ function register(app, { isBotToken, addUser }) {
         me = (await getQuery("SELECT username, camfrogUsername, class, points_balance FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
         acts = await actions.recentFor(req.user.userId, "lotto");
       }
-      const mine = L && me && me.camfrogUsername ? L.players[String(me.camfrogUsername).toLowerCase()] || null : null;
+      const backend = !!(L && L.backend);
+      // 1.99mj: the backend keys a player without a Camfrog link as "@<username>"
+      const pkey = me ? (me.camfrogUsername ? String(me.camfrogUsername) : backend ? "@" + me.username : "").toLowerCase() : "";
+      const mine = L && pkey ? L.players[pkey] || null : null;
       // prize table: jackpot row first, then Pepe's list, each with its odds
       const prizes = L ? [{ w: WHITE_PICK, ball: true, amount: L.jackpot, jackpot: true, odds: oddsFor(WHITE_PICK, true) },
         ...L.prizes.filter((p) => !(p[0] === WHITE_PICK && p[1]))
@@ -140,8 +149,8 @@ function register(app, { isBotToken, addUser }) {
       const players = L ? Object.values(L.players || {}).filter((p) => p && p.count > 0).length : 0;
       const latest = L && L.history.length ? L.history[0] : null;
       let last = null;
-      if (latest && me && me.camfrogUsername) {
-        const login = String(me.camfrogUsername).toLowerCase();
+      if (latest && pkey) {
+        const login = pkey;
         const r = (await getQuery("SELECT count, tickets FROM lotto_last_tickets WHERE draw = ? AND name = ?", [latest.draw, login]))[0];
         let tickets = [];
         try { tickets = r ? JSON.parse(r.tickets) : []; } catch (e) { tickets = []; }
@@ -158,7 +167,7 @@ function register(app, { isBotToken, addUser }) {
                         image: res.locals.ogBase + "/og/lotto.png?v=" + Math.floor(Date.now() / 600000), url: res.locals.ogBase + "/lotto" };
       res.render("lotto", {
         user: req.user ? req.user.username : null, L, updated: row ? row.updated : null, me, mine, prizes, anyOdds,
-        players, last, now: Math.floor(Date.now() / 1000),
+        players, last, now: Math.floor(Date.now() / 1000), backend, commitment: L && L.commitment ? L.commitment : null,
         acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
         rules: { WHITE_MAX, WHITE_PICK, BALL_MAX },
       });
@@ -169,4 +178,13 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, oddsFor, cleanSnapshot, ticketPrize };
+/** 1.99mj: the lotto backend (lotto/service.js) writes the page's snapshot here - the same row Pepe's sync wrote. */
+async function storeSnapshot(snap) {
+  await ready;
+  const clean = Object.assign(cleanSnapshot(snap), { backend: true, commitment: snap.commitment ? String(snap.commitment).slice(0, 64) : null });
+  await keepLastTickets(clean);
+  await runQuery(`INSERT INTO lotto_state (id, data, updated) VALUES (1, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated = excluded.updated`, [JSON.stringify(clean), Date.now()]);
+}
+
+module.exports = { register, oddsFor, cleanSnapshot, ticketPrize, storeSnapshot };

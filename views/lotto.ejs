@@ -238,7 +238,8 @@
   const tierBalls = (w, b) => '<span class="pb-balls" aria-hidden="true">' + Array.from({ length: rules.WHITE_PICK }, (_, i) => '<span class="pb-x' + (i < w ? ' on' : '') + '"></span>').join('')
     + '<span class="pb-x pbo' + (b ? ' on' : '') + '"></span></span>';
   const now_ = locals.now || Math.floor(Date.now() / 1000);
-  const linked = !!(user && me && me.camfrogUsername);
+  // 1.99mj: with the lotto backend any signed-in account can play (no Camfrog link needed)
+  const linked = !!(user && me && (me.camfrogUsername || locals.backend));
   // decorative floating balls in the hero: [number, left, top, size, duration, delay, pepe ball?]
   const FLOAT = [[7, '4%', '12%', 34, 5.5, 0, 0], [19, '88%', '8%', 40, 6.5, .6, 0], [3, '10%', '70%', 28, 7, 1.2, 1], [23, '92%', '62%', 30, 5, .3, 0],
                  [11, '2%', '42%', 22, 6, 1.8, 0], [28, '95%', '34%', 24, 7.5, .9, 0], [5, '5%', '93%', 26, 6.8, 1.5, 1], [14, '93%', '90%', 20, 5.8, 2.1, 0]];
@@ -291,6 +292,9 @@
     <div class="pb-state closed" data-s="closed"<%= state === 'closed' ? '' : ' hidden' %>><%- t('lotto.state_closed') %></div>
     <div class="pb-state drawing" data-s="drawing"<%= state === 'drawing' ? '' : ' hidden' %>><%- t('lotto.state_drawing') %></div>
     <p class="pb-sr" id="pb-live" aria-live="polite"></p>
+    <% if (locals.backend && locals.commitment) { %>
+      <p class="pb-when pb-fair">🔒 Provably fair: this draw's numbers are sealed by <a href="/lotto/fair/<%= L.draw %>">commitment <code><%= String(commitment).slice(0, 12) %>…</code></a><% if (latest) { %> · <a href="/lotto/fair/<%= latest.draw %>">verify draw #<%= latest.draw %></a><% } %></p>
+    <% } %>
 
     <div class="pb-stats">
       <span class="pb-stat"><b><%= fmt(L.sold) %></b><%- t('lotto.sold') %></span>
