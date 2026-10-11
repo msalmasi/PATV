@@ -128,6 +128,31 @@ test("casino links follow the site flags: the old Pepe-table pages while dark, /
   assert.ok(both(p, "/casino/blackjack") && both(p, "/casino/holdem") && none(p, "/blackjack") && none(p, "/poker"), "both on");
 });
 
+test("1.99ol: the casino FRONT-END setting picks the links, independent of the engine flags (auto = follow them)", async () => {
+  // casino/service.js opens ./myapp.db when required: do it from a temp dir
+  const os = require("os");
+  const here = process.cwd();
+  process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), "navbar-front-")));
+  const svc = require(path.join(repo, "casino", "service"));
+  process.chdir(here);
+  const links = async (st) => {
+    const n = nav(await render({ user: "someuser", casinoOn: (g) => svc.frontOf(st, g) === "patv" }));
+    return [hrefs(pop(n, "nav-burger")), hrefs(pop(n, "nav-more"))];
+  };
+  const both = (pair, h) => pair.every((x) => x.includes(h));
+  const none = (pair, h) => pair.every((x) => !x.includes(h));
+  const on = { bj_enabled: true, hm_enabled: true };
+  // auto (the default): today's behaviour - engine on -> /casino/<game>
+  let p = await links(Object.assign({ bj_front: "auto", hm_front: "auto" }, on));
+  assert.ok(both(p, "/casino/blackjack") && both(p, "/casino/holdem") && none(p, "/blackjack") && none(p, "/poker"), "auto + engines on");
+  // Pepe's tables chosen while both engines are ON
+  p = await links(Object.assign({ bj_front: "pepe", hm_front: "pepe" }, on));
+  assert.ok(both(p, "/blackjack") && both(p, "/poker") && none(p, "/casino/blackjack") && none(p, "/casino/holdem"), "pepe + engines on");
+  // the PATV casino chosen while both engines are OFF; mixed per game
+  p = await links({ bj_enabled: false, hm_enabled: false, bj_front: "patv", hm_front: "auto" });
+  assert.ok(both(p, "/casino/blackjack") && both(p, "/poker") && none(p, "/blackjack") && none(p, "/casino/holdem"), "bj patv, hold'em auto (off)");
+});
+
 test("Polls sit under Play (interactive), not Info & links, in both More and ☰", async () => {
   const n = nav(await render({ user: "someuser", casinoOn: () => true }));
   for (const [cls, pre] of [["nav-more", "nm"], ["nav-burger", "nb"]]) {

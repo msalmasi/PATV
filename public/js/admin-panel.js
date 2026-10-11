@@ -319,4 +319,23 @@
     });
   }
   loadBadges();
+
+  // ── Games: the casino front end (1.99ol) - bj_front / hm_front through the casino settings API (JSON + X-Requested-With) ──
+  var cfForm = $("casinoFrontForm");
+  if (cfForm) {
+    cfForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var keys = ["bj_front", "hm_front"];
+      Promise.all(keys.map(function (k) {
+        return fetch("/api/casino/admin/settings", { method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+          body: JSON.stringify({ key: k, value: cfForm.elements[k].value }) }).then(function (r) { return r.json(); });
+      })).then(function (rs) {
+        var bad = rs.filter(function (j) { return !j || !j.ok; })[0];
+        if (bad) { say("casinoFrontStatus", false, (bad && bad.error) || cfForm.getAttribute("data-failed")); return; }
+        say("casinoFrontStatus", true, cfForm.getAttribute("data-saved"));
+        setTimeout(function () { location.reload(); }, 800);
+      }).catch(function () { say("casinoFrontStatus", false, cfForm.getAttribute("data-failed")); });
+    });
+  }
 })();

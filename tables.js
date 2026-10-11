@@ -345,6 +345,19 @@ function register(app, { isBotToken, addUser }) {
   const page = (focus) => async (req, res) => {
     const tableId = req.params && req.params.id && /^[0-9a-f]{6,16}$/.test(req.params.id) ? req.params.id : null;
     if (req.params && req.params.id && !tableId) return res.redirect("/tables");
+    // 1.99ol: the casino FRONT END (casino_settings bj_front / hm_front, /admin/games): a game set to the PATV casino sends
+    // /blackjack and /poker to /casino/<game> (and /tables too once both are), unless an admin adds ?preview=1.
+    // A table's own page (/casino/t/:id) always opens.
+    if (!tableId) {
+      try {
+        const csvc = require("./casino/service");
+        const st = await csvc.loadSettings();
+        const to = focus === "lobby" ? csvc.frontPath(st, "lobby") : csvc.frontOf(st, focus) === "patv" ? csvc.frontPath(st, focus) : null;
+        if (to && to.startsWith("/casino/") && !(req.query && req.query.preview && req.user && await csvc.isSiteAdmin(req.user.userId))) {
+          return res.redirect(to);
+        }
+      } catch (e) { console.error("[tables] front end:", e.message); }
+    }
     try {
       let me = null;
       if (req.user && req.user.userId) {

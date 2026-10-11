@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: isAdmin }) %>
 <div class="adm-head">
   <h1>Games</h1>
@@ -28,12 +29,36 @@
   </section>
 </div>
 
+<%# 1.99ol: the casino FRONT END per game (casino_settings bj_front / hm_front, casino/service.js frontOf) - which pages the
+    links and redirects use. Separate from the engine switches (bj_enabled / hm_enabled) and from rooms' !casino backend. %>
+<section class="adm-card" id="casino-front" aria-labelledby="casinoFrontT">
+  <h2 id="casinoFrontT"><%- t('casino.front.title') %> <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help"><%- t('casino.front.help', { patv: '<code>/casino/blackjack</code>, <code>/casino/holdem</code>', pepe: '<code>/blackjack</code>, <code>/poker</code>' }) %></p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!locals.casino) { %><p class="adm-help"><%- t('casino.front.failed') %></p><% } else { %>
+  <% const _cs = locals.casino;
+     const _eff = (g) => { const f = g === 'holdem' ? _cs.hm_front : _cs.bj_front; if (f === 'patv' || f === 'pepe') return f; return (g === 'holdem' ? _cs.hm_enabled : _cs.bj_enabled) ? 'patv' : 'pepe'; };
+     const _path = (g) => _eff(g) === 'patv' ? (g === 'holdem' ? '/casino/holdem' : '/casino/blackjack') : (g === 'holdem' ? '/poker' : '/blackjack'); %>
+  <form id="casinoFrontForm" class="adm-form" data-saved="<%= t('casino.front.saved') %>" data-failed="<%= t('casino.front.failed') %>">
+    <% [['bj', 'bj_front', 'bj_enabled', 'casino.front.bj'], ['holdem', 'hm_front', 'hm_enabled', 'casino.front.hm']].forEach(([g, key, eng, label]) => { %>
+    <label for="cf_<%= key %>"><%- t(label) %>
+      <select id="cf_<%= key %>" name="<%= key %>">
+        <% ['auto', 'patv', 'pepe'].forEach((v) => { %><option value="<%= v %>"<%= (_cs[key] || 'auto') === v ? ' selected' : '' %>><%- t('casino.front.' + v) %></option><% }) %>
+      </select>
+      <span class="adm-help" style="margin:0"><%- t('casino.front.now', { page: '<a href="' + _path(g) + '"><code>' + _path(g) + '</code></a>' }) %> · <%- t('casino.front.engine', { state: t(_cs[eng] ? 'casino.front.on' : 'casino.front.off') }) %></span>
+    </label>
+    <% }) %>
+    <div class="adm-actions"><button type="submit"><%- t('casino.front.save') %></button><span id="casinoFrontStatus" class="adm-msg" role="status"></span></div>
+  </form>
+  <p class="adm-help" style="margin-top:10px"><%- t('casino.front.preview', { a: '<a href="/casino/blackjack?preview=1"><code>/casino/blackjack?preview=1</code></a>', b: '<a href="/poker?preview=1"><code>/poker?preview=1</code></a>' }) %></p>
+  <% } %>
+</section>
+
 <section class="adm-card" id="casino" aria-labelledby="casinoT">
   <h2 id="casinoT">Casino bans</h2>
   <p class="adm-help">One flag blocks a member from all casino play (the web wheel and blackjack, the chat games, Discord). Pepe sets and lists it from his admin panel / chat; the site only enforces it.</p>
   <div class="adm-actions"><a class="adm-btn ghost" href="/casino">Casino lobby ›</a><a class="adm-btn ghost" href="/lotto">Lotto ›</a></div>
 </section>
-<script src="/public/js/admin-panel.js?v=3" defer></script>
+<script src="/public/js/admin-panel.js?v=4" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

@@ -4,7 +4,7 @@
 //   /admin              Overview: Pepe, Reserve, reports, loan requests, stage, stale cleanup, alerts
 //   /admin/users        roles + classes, XP, welcome bonus, stale-account cleanup
 //   /admin/economy      Reserve + today's flows, loans/credit, PAT grants, redemption codes, royalties, shop
-//   /admin/games        manual wheel spin, jackpot top-up, casino bans (where they live)
+//   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live)
 //   /admin/cosmetics    badges (create / list / delete), links to cosmetics + achievements
 //   /admin/bridge       the web command audit log (GET /api/bridge/cmdlog, admins only)
 //   /admin/pepe         the Pepe control panel (views/partials/pepe-control.ejs) + where his feed settings live
@@ -204,7 +204,8 @@ function register(app, { addUser }) {
              // 1.99jw: Pepe's monetary policy (flash switches, Fed loan room, House floor, donation rate, grant cap)
              monetary: isAdmin ? require("./funding").state.monetary : null };
   }));
-  app.get("/admin/games", addUser, gate, page("games", "Admin · Games"));
+  // 1.99ol: + the casino front-end switches (casino_settings bj_front / hm_front; saved through /api/casino/admin/settings)
+  app.get("/admin/games", addUser, gate, page("games", "Admin · Games", async () => ({ casino: await safe(() => require("./casino/service").loadSettings(true), null) })));
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));
   app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge"));
   app.get("/admin/pepe", addUser, gate, page("pepe", "Admin · Pepe"));

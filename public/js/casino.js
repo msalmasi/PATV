@@ -248,7 +248,7 @@
       }).join("");
       const notice = t.closed ? `<p class="hint">This table just closed — here's how its last ${bjMode ? "round" : "hand"} ended.</p>` :
         !TABLE && FOCUS !== "lobby" && ((FOCUS === "bj") !== bjMode)
-        ? `<p class="hint">A ${bjMode ? "Blackjack" : "Hold'em"} table is open, and tables run one at a time — this is it. <a href="${bjMode ? "/blackjack" : "/poker"}">Go to its page</a>.</p>` : "";
+        ? `<p class="hint">A ${bjMode ? "Blackjack" : "Hold'em"} table is open, and tables run one at a time — this is it. <a href="/casino/t/${encodeURIComponent(t.id)}">Go to its page</a>.</p>` : "";
       el.innerHTML = notice +
         `<div class="felt-wrap${bjMode ? " bjw" : ""}"><div class="felt" role="group" aria-label="${bjMode ? "Blackjack" : "Hold'em"} table in ${esc(t.room_name)}">` +
         `<div class="felt-c">${bjMode ? bjCenter(t) : holdemCenter(t)}</div>${onFelt}</div></div>` +

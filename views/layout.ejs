@@ -64,7 +64,7 @@
               const main = [T.watch, T.pads, T.wheel, T.feed, T.markets, T.wagers, T.gtf, T.rankings];
               // 1.99kz: "Support PATV" (/support) while a donation rail (card or stablecoins) is on - app.locals.supportOn (cryptoweb.js)
               const _supportOn = typeof supportOn === 'function' ? !!supportOn() : false;
-              // casino tables (casino/routes.js app.locals.casinoOn): bj_enabled / hm_enabled, cached - off on prod while dark
+              // casino front end per game (casino/routes.js app.locals.casinoOn): 1.99ol bj_front / hm_front on /admin/games, "auto" = the engine flag; cached
               const _casino = (g) => typeof casinoOn === 'function' ? !!casinoOn(g) : false;
               const _here = typeof ogPath !== 'undefined' && ogPath && ogPath !== '/language' ? ogPath : '';
               // 2026-10-11: More and ☰ share one grouped list - [id, heading, items, class]; falsy items are gated off.
@@ -84,7 +84,7 @@
                 ]],
                 ['play', t('nav.sec_play'), [T.wheel, T.markets, T.wagers, T.gtf,
                   ['/lotto', '🎟️', t('nav.lotto')],
-                  // D10: the casino tables once their site flag is on; while dark, the old Pepe-table pages (tables.js)
+                  // D10/1.99ol: the PATV casino (/casino/<game>) when that game's front end is it, else Pepe's tables (tables.js)
                   [_casino('bj') ? '/casino/blackjack' : '/blackjack', '🂡', t('nav.blackjack')],
                   [_casino('holdem') ? '/casino/holdem' : '/poker', '🃏', t('nav.poker')],
                   ['/bounties', '🎯', t('nav.bounties')],

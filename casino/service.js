@@ -36,7 +36,7 @@ const S = {
   tables: new Map(),           // id -> table (open, plus closed ones lingering for the page)
   rooms: new Map(),            // room id -> {id, name, ts}: rooms Pepe serves with the backend on (his poll heartbeat)
   waiters: new Set(),          // pending long-polls
-  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0 },
+  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto" },
   stream: { table: null, by: null, ts: 0, queue: [] },   // 1.99lv: the ONE table on Pepe's stream + the FIFO queue
   settingsAt: 0,
   tick: null,
@@ -90,7 +90,26 @@ function ensure() {
   return readyP;
 }
 
-// ── settings (casino_settings; tools/casino-settings.js) ──
+// ── settings (casino_settings; tools/casino-settings.js; /admin/games) ──
+const FRONTS = ["auto", "patv", "pepe"];
+// 1.99ol: which front end a game uses ("patv" | "pepe"); game = "bj" | "holdem". "auto" = the engine flag decides.
+function frontOf(st, game) {
+  const hm = game === "holdem";
+  const f = st ? (hm ? st.hm_front : st.bj_front) : "auto";
+  if (f === "patv" || f === "pepe") return f;
+  return st && (hm ? st.hm_enabled : st.bj_enabled) ? "patv" : "pepe";
+}
+// the page a game's links go to; "lobby" = Pepe's /tables unless BOTH games use the PATV casino (then /casino/blackjack)
+function frontPath(st, game) {
+  if (game === "lobby") return frontOf(st, "bj") === "patv" && frontOf(st, "holdem") === "patv" ? "/casino/blackjack" : "/tables";
+  const patv = frontOf(st, game) === "patv";
+  return game === "holdem" ? (patv ? "/casino/holdem" : "/poker") : (patv ? "/casino/blackjack" : "/blackjack");
+}
+async function isSiteAdmin(uid) {
+  if (!uid) return false;
+  const r = await getQuery("SELECT class FROM users WHERE userId = ?", [uid]).catch(() => []);
+  return !!(r[0] && r[0].class === "Admin");
+}
 async function loadSettings(force) {
   if (!force && clock() - S.settingsAt < 10000 && S.settings.bj_enabled !== null) return S.settings;
   await ensure();
@@ -103,14 +122,21 @@ async function loadSettings(force) {
     hm_enabled: kv.hm_enabled === undefined ? !!process.env.STAGING : kv.hm_enabled === "1",
     // 1.99lv (the user's D7): no site-wide limit by default (0); one table per room always
     max_tables: Number.isFinite(Number(kv.max_tables)) && Number(kv.max_tables) > 0 ? Math.trunc(Number(kv.max_tables)) : 0,
+    // 1.99ol: the FRONT END each game's links and pages use (navbar, homepage, redirects) - "auto" follows the engine flag
+    // above (the old behaviour), "patv" = /casino/<game>, "pepe" = Pepe's tables (/blackjack, /poker). Independent of the
+    // engine flags and of each Camfrog room's `!casino backend on|off`.
+    bj_front: FRONTS.includes(kv.bj_front) ? kv.bj_front : "auto",
+    hm_front: FRONTS.includes(kv.hm_front) ? kv.hm_front : "auto",
   };
   S.settingsAt = clock();
   return S.settings;
 }
 async function setSetting(key, value, actor) {
-  if (!["bj_enabled", "hm_enabled", "max_tables"].includes(key)) throw new Error("unknown setting");
+  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].includes(key)) throw new Error("unknown setting");
+  if (/_front$/.test(key) && !FRONTS.includes(String(value))) throw new Error("front end must be auto, patv or pepe");
   await ensure();
-  const v = key !== "max_tables" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
+  const v = /_front$/.test(key) ? String(value)
+          : key !== "max_tables" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
                                  : String(Math.max(0, Math.trunc(Number(value)) || 0));
   await runQuery(`INSERT INTO casino_settings (key, value, updated, actor) VALUES (?, ?, ?, ?)
                   ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated, actor = excluded.actor`,
@@ -1178,5 +1204,5 @@ const HM = require("./holdem").install({
 
 module.exports = {
   C, S, HM, boot, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
-  loadSettings, setSetting, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
+  loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
 };

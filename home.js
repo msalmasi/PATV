@@ -59,8 +59,26 @@ async function loadStats() {
   out.wagers = w ? w.n : 0;
   const tables = tablesState();
   out.tables = tables.map((t) => ({ id: t.id, game: t.game === "bj" ? "Blackjack" : "Hold'em", featured: !!t.featured, phase: t.phase || "",
-    room: t.room_name || t.room || "", seats: (t.seats || []).filter((x) => x && x.name).map((x) => String(x.name)) }));
-  out.featured = out.tables.find((t) => t.featured) || out.tables[0] || null;
+    room: t.room_name || t.room || "", seats: (t.seats || []).filter((x) => x && x.name).map((x) => String(x.name)),
+    href: "/casino/t/" + encodeURIComponent(t.id) }));
+  // 1.99ol: a game whose casino FRONT END is the PATV casino (/admin/games) also lists the site casino's open tables,
+  // linked to their /casino/<game>/t/<id> pages; the todo link goes to that front end's lobby
+  out.tablesHref = "/tables";
+  try {
+    const csvc = require("./casino/service");
+    const st = await csvc.loadSettings();
+    out.tablesHref = csvc.frontPath(st, "lobby");
+    for (const row of csvc.lobby()) {
+      if (csvc.frontOf(st, row.game === "holdem" ? "holdem" : "bj") !== "patv") continue;
+      const T = csvc.getTable(row.id);
+      const v = T ? csvc.publicView(T) : null;
+      out.tables.push({ id: row.id, game: row.game === "holdem" ? "Hold'em" : "Blackjack", featured: false, on_stream: !!row.on_stream,
+        phase: (v && v.phase) || row.phase || "", room: row.room_name || "",
+        seats: ((v && v.seats) || []).filter((x) => x && x.name).map((x) => String(x.name)),
+        href: (row.game === "holdem" ? "/casino/holdem/t/" : "/casino/blackjack/t/") + encodeURIComponent(row.id) });
+    }
+  } catch (e) { console.error("[home] casino tables:", e.message); }
+  out.featured = out.tables.find((t) => t.featured) || out.tables.find((t) => t.on_stream) || out.tables[0] || null;
   const u = await one(`SELECT COUNT(*) AS n FROM users WHERE ${stale.LIVE()}`);
   out.members = u ? u.n : 0;
   out.top = await many(`SELECT username, displayname, avatar, points_balance, level FROM users WHERE ${stale.LIVE()} ORDER BY points_balance DESC LIMIT 5`);

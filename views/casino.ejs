@@ -140,9 +140,11 @@
   <h1><%= focus === 'holdem' ? "🃏 Texas Hold'em" : focus === 'bj' ? '🂡 Blackjack' : '🎰 Casino tables' %></h1>
   <p class="sub">Pepe deals in Camfrog — play from chat or right here. Same table, same chips: PAT.</p>
   <nav class="tabs" aria-label="Casino pages">
-    <a href="/tables"<%- focus === 'lobby' ? ' aria-current="page"' : '' %>>Lobby</a>
-    <a href="/poker"<%- focus === 'holdem' ? ' aria-current="page"' : '' %>>Texas Hold'em</a>
-    <a href="/blackjack"<%- focus === 'bj' ? ' aria-current="page"' : '' %>>Blackjack</a>
+    <%# 1.99ol: the other tabs go where the casino front-end setting sends that game (casino/routes.js casinoPath) %>
+    <% const _cp = (g, own) => typeof casinoPath === 'function' ? casinoPath(g) : own; %>
+    <a href="<%= focus === 'lobby' ? '/tables' : _cp('lobby', '/tables') %>"<%- focus === 'lobby' ? ' aria-current="page"' : '' %>>Lobby</a>
+    <a href="<%= focus === 'holdem' ? '/poker' : _cp('holdem', '/poker') %>"<%- focus === 'holdem' ? ' aria-current="page"' : '' %>>Texas Hold'em</a>
+    <a href="<%= focus === 'bj' ? '/blackjack' : _cp('bj', '/blackjack') %>"<%- focus === 'bj' ? ' aria-current="page"' : '' %>>Blackjack</a>
   </nav>
 
   <% if (!user) { %>
@@ -226,4 +228,4 @@
     </div>
   </div>
 </div>
-<script src="/public/js/casino.js?v=5"></script>
+<script src="/public/js/casino.js?v=6"></script>

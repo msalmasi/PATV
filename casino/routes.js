@@ -13,7 +13,7 @@
 //   GET  /api/casino/t/:id/history          (D10) a table's last revealed rounds: the felt's public summary + proof link
 //   (D10) GET /api/casino/t/:id also adds each seat's `avatar` and `watching` (web spectators); the lobby adds me.balance /
 //   me.high_roller and each row's latest `proof`; app.locals.casinoOn(game) gates the navbar links on the site flags.
-//   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables (site Admin, or the bot token)
+//   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables / bj_front / hm_front (site Admin, or the bot token)
 // Pepe (bot token in the body):
 //   POST /api/casino/bot/poll               {after, wait, rooms}  events of tables in rooms (cursor) + their public state
 //                                            + `private` (room players' hole cards, by Camfrog name) + `stream`
@@ -105,13 +105,16 @@ function register(app, { isBotToken, addUser }) {
   const boot = () => svc.boot().catch((e) => console.error("[casino] boot:", e));
   setImmediate(boot);
 
-  // the navbar shows a game's link only while its site flag is on (layout.ejs: casinoOn('bj' | 'holdem')). A sync,
-  // cached read: loadSettings() refreshes S.settings at most every 10 s, in the background; unknown = off.
-  app.locals.casinoOn = (game) => {
+  // 1.99ol: the FRONT END per game (casino_settings bj_front / hm_front, set on /admin/games; "auto" = follow the engine
+  // flag, the pre-1.99ol behaviour). layout.ejs: casinoOn('bj' | 'holdem') = its links go to /casino/<game>;
+  // casinoPath(game | 'lobby') = the page the site's links use (home.ejs, casino.ejs). A sync, cached read:
+  // loadSettings() refreshes S.settings at most every 10 s, in the background; unknown = Pepe's tables.
+  const cachedSettings = () => {
     if (svc.S.hooks.now() - svc.S.settingsAt > 10000) svc.loadSettings().catch(() => {});
-    const st = svc.S.settings;
-    return !!(game === "holdem" ? st.hm_enabled : st.bj_enabled);
+    return svc.S.settings;
   };
+  app.locals.casinoOn = (game) => svc.frontOf(cachedSettings(), game) === "patv";
+  app.locals.casinoPath = (game) => svc.frontPath(cachedSettings(), game);
 
   // ── pages ──
   const page = (game) => async (req, res) => {
@@ -122,7 +125,11 @@ function register(app, { isBotToken, addUser }) {
     const st = await svc.loadSettings();
     const T = id ? svc.getTable(id) : null;
     if (T && T.game !== game) return res.redirect(svc.link(T).replace(/^https?:\/\/[^/]+/, ""));
-    if (!(game === "holdem" ? st.hm_enabled : st.bj_enabled) && !T) return res.redirect(game === "holdem" ? "/poker" : "/blackjack");
+    // 1.99ol: the lobby follows the front-end setting (a table's own page always opens); an admin can still open it
+    // with ?preview=1 to test it before switching
+    if (!T && svc.frontOf(st, game) !== "patv" && !(req.query && req.query.preview && req.user && await svc.isSiteAdmin(req.user.userId))) {
+      return res.redirect(svc.frontPath(st, game));
+    }
     const title = game === "holdem" ? "Texas Hold'em" : "Blackjack";
     res.locals.og = { title: `${title} with Pepe — publicaccess.tv`,
                       description: game === "holdem" ? "No-Limit Hold'em on the web with your PAT — no Camfrog needed, or play the same table from a Camfrog room."

@@ -45,7 +45,7 @@
     { href: '/markets', ic: '🔮', t: t('home.todo.markets'), s: S0.markets ? t('home.todo.markets_open', { n: S0.markets }) : null, hot: S0.markets > 0, fresh: me && me.camfrogUsername && !M.bets },
     { href: '/lotto', ic: '🎟️', t: t('home.todo.lotto'), s: S0.lotto ? t('home.todo.jackpot', { n: short(S0.lotto.jackpot) }) : null, hot: !!(S0.lotto && S0.lotto.open), fresh: me && me.camfrogUsername && !M.tickets },
     { href: wheelHref, ic: '🎡', t: t('home.todo.wheel'), s: S0.casinoPot ? t('home.todo.pot', { n: short(S0.casinoPot) }) : null },
-    { href: '/tables', ic: '🃏', t: t('home.todo.tables'), s: (S0.tables || []).length ? t('home.todo.tables_open', { games: S0.tables.map((x) => x.game).join(' + ') }) : null, hot: (S0.tables || []).length > 0 },
+    { href: S0.tablesHref || '/tables', ic: '🃏', t: t('home.todo.tables'), s: (S0.tables || []).length ? t('home.todo.tables_open', { games: S0.tables.map((x) => x.game).join(' + ') }) : null, hot: (S0.tables || []).length > 0 },
     { href: '/gtf', ic: '🔫', t: 'Grand Theft Frogger', s: null },
     { href: '/bounties', ic: '🎯', t: t('home.todo.bounties'), s: S0.bounties ? t('home.todo.bounties_open', { n: S0.bounties }) : null, hot: S0.bounties > 0 },
     { href: '/wagers', ic: '🤝', t: t('home.todo.wagers'), s: S0.wagers ? t('home.todo.wagers_live', { n: S0.wagers }) : null },
@@ -528,7 +528,7 @@
         <% } %>
       </div>
       <% if (feat) { %>
-        <a class="box" href="/casino/t/<%= encodeURIComponent(feat.id) %>">
+        <a class="box" href="<%= feat.href || '/casino/t/' + encodeURIComponent(feat.id) %>">
           <h3><%- t('home.feat.title') %></h3>
           <b><%= feat.game %></b><span class="muted"> · <%- t('home.feat.seated', { n: feat.seats.length }) %><%= feat.room ? ' · ' + feat.room : '' %></span>
           <div class="muted" style="margin-top:4px"><%- t('home.feat.watch') %></div>
@@ -566,7 +566,7 @@
       <div class="chips">
         <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>">🔗 <%- t('home.me.link_camfrog') %></a><% } %>
         <a class="chip <%= M.tickets ? '' : 'warm' %>" href="/lotto">🎟️ <%- M.tickets ? t('home.me.tickets', { count: M.tickets }) : t('home.me.no_tickets') %></a>
-        <% if (M.seat) { %><a class="chip mic" href="/casino/t/<%= encodeURIComponent(M.seat.id) %>">🃏 <%- t('home.me.seated_at', { game: M.seat.game }) %></a><% } %>
+        <% if (M.seat) { %><a class="chip mic" href="<%= M.seat.href || '/casino/t/' + encodeURIComponent(M.seat.id) %>">🃏 <%- t('home.me.seated_at', { game: M.seat.game }) %></a><% } %>
         <% if (M.bets) { %><a class="chip" href="/markets">🔮 <%- t('home.me.open_bets', { count: M.bets }) %></a><% } %>
         <a class="chip" href="/achievements">🏅 <%- t('home.me.badges', { n: M.badges }) %></a>
         <% if (M.pending) { %><span class="chip warm">⏳ <%- t('home.me.pending', { n: M.pending }) %></span><% } %>
@@ -623,7 +623,7 @@
       <% if (typeof hot !== 'undefined' && hot) { %><%- include('partials/home-hot', { hot, fx }) %><% } %>
       <section class="card now" aria-labelledby="nowH">
         <h2 id="nowH"><%- t('home.now.title') %></h2>
-        <% if (feat) { %><a class="it" href="/casino/t/<%= encodeURIComponent(feat.id) %>"><span>🃏</span><span class="q"><%- t('home.now.table', { game: feat.game }) %><%= feat.phase ? ' · ' + feat.phase : '' %></span><span class="v"><%- t('home.feat.seated', { n: feat.seats.length }) %></span></a><% } %>
+        <% if (feat) { %><a class="it" href="<%= feat.href || '/casino/t/' + encodeURIComponent(feat.id) %>"><span>🃏</span><span class="q"><%- t('home.now.table', { game: feat.game }) %><%= feat.phase ? ' · ' + feat.phase : '' %></span><span class="v"><%- t('home.feat.seated', { n: feat.seats.length }) %></span></a><% } %>
         <% if (S0.lotto) { %><a class="it" href="/lotto"><span>🎟️</span><span class="q"><%- S0.lotto.next_at ? t('home.now.lotto_in', { when: '<span data-until="' + Number(S0.lotto.next_at) + '">…</span>' }) : t('home.now.lotto_sunday') %></span><span class="v"><%= short(S0.lotto.jackpot) %></span></a><% } %>
         <% (S0.closing || []).forEach((m) => { %><a class="it" href="/markets/<%= encodeURIComponent(m.id) %>"><span>🔮</span><span class="q"><%= m.q %></span><span class="v" data-until="<%= Number(m.closes) %>">…</span></a><% }) %>
         <% (S0.topBounties || []).forEach((b) => { %><a class="it" href="/bounties/<%= encodeURIComponent(b.id) %>"><span>🎯</span><span class="q"><%= b.task %></span><span class="v"><%= short(b.pot) %></span></a><% }) %>
