@@ -266,7 +266,7 @@ test("catalog: 13 heist-shop achievements with art, en.json strings, rewards in 
   assert.match(view, /\['shop', t\('ach\.group\.shop'\), \["cf_shop_","cf_kit_"\]\]/);
   for (const k of Object.keys(en).filter((k) => k.startsWith("gtf.mm."))) assert.ok(en[k], k);
   const store = cat.filter((a) => /^cf_store_/.test(a.id));
-  assert.equal(store.length, 9, "9 store-heist achievements");
+  assert.equal(store.length, 11, "9 store-heist achievements + 2 store drops");
   for (const a of store) {
     assert.equal(a.side, "bot", a.id);
     assert.ok(fs.existsSync(path.join(repo, "public", "img", "badges", "ach", a.id + ".png")), "badge art " + a.id);
