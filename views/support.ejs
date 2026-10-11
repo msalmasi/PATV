@@ -1,0 +1,119 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /support — 1.99kq (cryptoweb.js): "Support PATV". Stablecoin donations (USDC / USDT on Ethereum, Base, Solana) that add PAT,
+    sent from a wallet the member linked by signing; plus the card donation (donate-card) while Stripe is on. %>
+<%- include('layout', { title: title, user: user }) %>
+<style>
+  .sp { max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; color: #dcdcdc; overflow-wrap: anywhere; }
+  .sp *, .sp *::before, .sp *::after { box-sizing: border-box; }
+  .sp a { color: #81c784; }
+  .sp h1 { text-align: center; margin: 18px 0 6px; color: #fff; }
+  .sp .lede { text-align: center; color: #bbb; margin: 0 auto 12px; max-width: 720px; line-height: 1.55; }
+  .sp .card { background: #111; border: 1px solid #232323; border-radius: 12px; padding: 14px 16px; margin: 14px 0 0; min-width: 0; }
+  .sp .card h2 { margin: 0 0 8px; font-size: 18px; color: #fff; }
+  .sp .mut { color: #9a9a9a; font-size: 13.5px; line-height: 1.55; }
+  .sp .warn { background: #1c1a12; border: 1px solid #4a4220; color: #e9dca8; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.55; margin: 10px 0 0; }
+  .sp .preview { background: #2a2412; border: 1px solid #8a7420; color: #f1e2a6; border-radius: 10px; padding: 8px 12px; margin: 12px 0 0; font-size: 13.5px; }
+  .sp ol.steps { margin: 6px 0 0; padding-left: 20px; line-height: 1.7; }
+  .sp .chains { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+  .sp .chain { background: #0d0d0d; border: 1px solid #262626; border-radius: 12px; padding: 12px; display: grid; gap: 8px; justify-items: center; text-align: center; min-width: 0; }
+  .sp .chain h3 { margin: 0; color: #fff; font-size: 16px; }
+  .sp .qr { width: 180px; max-width: 100%; background: #fff; border-radius: 8px; padding: 6px; line-height: 0; }
+  .sp .qr svg { width: 100%; height: auto; display: block; }
+  .sp code.addr { display: block; width: 100%; font-size: 12.5px; background: #000; border: 1px solid #333; border-radius: 6px; padding: 6px 8px; color: #e6e6e6; word-break: break-all; user-select: all; }
+  .sp .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid #3c6e47; color: #a5d6a7; display: inline-block; margin: 0 2px; }
+  .sp .btn { background: #333; color: #eee; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; font: inherit; font-size: 14px; }
+  .sp .btn.primary { background: #4caf50; color: #fff; font-weight: bold; }
+  .sp .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sp .status { font-size: 14px; } .sp .status.ok { color: #81c784; } .sp .status.err { color: #ef9a9a; }
+  .sp .rate b { color: #ffd700; }
+  .sp .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #262626; border-radius: 10px; margin-top: 8px; }
+  .sp table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 560px; }
+  .sp th, .sp td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #222; vertical-align: top; }
+  .sp th { background: #151515; color: #bbb; }
+  .sp .st-credited { color: #81c784; } .sp .st-pending, .sp .st-final { color: #ffd479; } .sp .st-held, .sp .st-unclaimed { color: #ffb74d; }
+  .sp .st-dust, .sp .st-rejected, .sp .st-dropped, .sp .st-ignored { color: #9a9a9a; }
+  .sp ul.wallets { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; }
+  .sp ul.wallets li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 6px 10px; }
+  .sp ul.wallets code { font-size: 12.5px; word-break: break-all; }
+</style>
+<main class="sp" id="support">
+  <h1>💖 <%- t('support.title') %></h1>
+  <p class="lede"><%- t('support.lede') %></p>
+  <% if (preview) { %><p class="preview"><%- t('support.preview') %></p><% } %>
+
+  <% if (cryptoOn || preview) { %>
+  <section class="card" aria-labelledby="howT">
+    <h2 id="howT">🪙 <%- t('support.crypto_title') %></h2>
+    <p class="rate"><%- t('support.rate', { rate: '<b>' + Number(rate).toLocaleString('en-US') + '</b>' }) %></p>
+    <ol class="steps">
+      <li><%- t('support.step_link') %></li>
+      <li><%- t('support.step_send') %></li>
+      <li><%- t('support.step_wait') %></li>
+    </ol>
+    <p class="mut"><%- t('support.limits', { min: min, max: Number(max).toLocaleString('en-US') }) %></p>
+    <div class="warn">
+      <p style="margin:0 0 6px"><b>⚠️ <%- t('support.warn_title') %></b></p>
+      <ul style="margin:0;padding-left:18px">
+        <li><%- t('support.warn_linked') %></li>
+        <li><%- t('support.warn_network') %></li>
+        <li><%- t('support.warn_exchange') %></li>
+        <li><%- t('donate.no_cashout') %></li>
+      </ul>
+    </div>
+    <div class="chains">
+      <% chains.forEach((c) => { %>
+      <div class="chain">
+        <h3><%= c.name %></h3>
+        <div><% c.tokens.forEach((tk) => { %><span class="chip" title="<%= tk.address %>"><%= tk.symbol %></span><% }) %></div>
+        <% if (c.qr) { %><div class="qr" role="img" aria-label="<%- t('support.qr_label', { chain: c.name }) %>"><%- c.qr %></div><% } %>
+        <code class="addr"><%= c.address %></code>
+        <button type="button" class="btn" data-copy="<%= c.address %>"><%- t('support.copy') %></button>
+      </div>
+      <% }) %>
+    </div>
+    <p class="mut" style="margin-top:10px"><%- t('support.contracts') %>
+      <% chains.forEach((c) => { c.tokens.forEach((tk) => { %><br><small><%= c.name %> <%= tk.symbol %>: <code><%= tk.address %></code></small><% }) }) %></p>
+  </section>
+
+  <section class="card" aria-labelledby="walT" data-crypto-box>
+    <h2 id="walT">👛 <%- t('support.wallets_title') %></h2>
+    <% if (!me) { %>
+      <p class="mut"><%- t('support.sign_in', { link: '<a href="/login?next=%2Fsupport">' + t('support.sign_in_link') + '</a>' }) %></p>
+    <% } else { %>
+      <p class="mut"><%- t('support.wallets_lede') %></p>
+      <% if (wallets.length) { %>
+      <ul class="wallets">
+        <% wallets.forEach((w) => { %><li><span><%= w.family === 'evm' ? 'Ethereum / Base' : 'Solana' %> · <code><%= w.address %></code></span>
+          <button type="button" class="btn" data-crypto-unlink="<%= w.id %>"><%- t('support.unlink') %></button></li><% }) %>
+      </ul>
+      <% } else { %><p class="mut"><%- t('support.no_wallets') %></p><% } %>
+      <% if (cryptoOn) { %>
+      <div class="row" style="margin-top:10px">
+        <button type="button" class="btn primary" data-crypto-link="evm">🦊 <%- t('support.link_evm') %></button>
+        <button type="button" class="btn primary" data-crypto-link="sol">👻 <%- t('support.link_sol') %></button>
+      </div>
+      <% } %>
+      <p class="status" data-crypto-msg role="status" aria-live="polite"></p>
+    <% } %>
+  </section>
+
+  <% if (me) { %>
+  <section class="card" aria-labelledby="payT">
+    <h2 id="payT">🧾 <%- t('support.payments_title') %></h2>
+    <% if (!payments.length) { %><p class="mut"><%- t('support.no_payments') %></p><% } else { %>
+    <div class="tw"><table id="cryptoPayments"><thead><tr><th><%- t('support.col_when') %></th><th><%- t('support.col_amount') %></th><th><%- t('support.col_network') %></th><th><%- t('support.col_status') %></th><th>PAT</th></tr></thead><tbody>
+      <% payments.forEach((p) => { %><tr data-status="<%= p.status %>">
+        <td><time data-ts="<%= p.seen %>"><%= new Date(Number(p.seen)).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time></td>
+        <td><%= (Number(p.usd_cents) / 100).toFixed(2) %> <%= p.token %></td>
+        <td><a href="<%= p.explorer %>" target="_blank" rel="noopener noreferrer"><%= p.chain_name %> ↗</a></td>
+        <td class="st-<%= p.status %>"><%- t('support.status.' + p.status) %></td>
+        <td><%= p.pat ? Number(p.pat).toLocaleString('en-US') : '—' %></td></tr><% }) %>
+    </tbody></table></div>
+    <% } %>
+  </section>
+  <% } %>
+  <% } %>
+
+  <%- include('partials/donate-card', { donate: donate }) %>
+</main>
+<script src="/public/js/crypto-link.js?v=1" defer></script>

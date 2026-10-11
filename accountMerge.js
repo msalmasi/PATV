@@ -189,6 +189,10 @@ const RULES = {
   "plex_members.user_id": M(), "plex_members.linked_by": { deny: NAME }, "plex_members.revoke_by": { deny: NAME },
   "plex_member_log.user_id": M(), "plex_member_log.actor": { deny: NAME },
   "shop_subs.user_id": M(),
+  // 1.99kq: crypto donations (cryptopay.js) - a linked wallet, its link requests + log, and its payments follow the account
+  "crypto_wallets.user_id": M(), "crypto_link_nonces.user_id": M(), "crypto_wallet_log.user_id": M(), "crypto_wallet_log.actor": { deny: NAME },
+  "crypto_payments.user_id": M(), "crypto_payments.decided_by": { deny: NAME },
+  "crypto_payments.src_addr": { deny: "a wallet address, not a userId" }, "crypto_payments.dst_addr": { deny: "a wallet address, not a userId" },
   "stage_events.actor": M(), "room_events.actor": M(),
   "stage_bans.userId": M({ key: [], name: "username" }), "stage_bans.by": M(),
   "stage_room_bans.userId": M({ key: ["room_id"], name: "username" }), "stage_room_bans.by": M(),

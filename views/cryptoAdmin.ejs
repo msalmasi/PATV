@@ -1,0 +1,98 @@
+<%- include('partials/admin-open', { title: 'Crypto donations', user: user, section: 'crypto', admIsAdmin: true }) %>
+<!-- views/cryptoAdmin.ejs — 1.99kq: stablecoin donations (cryptoweb.js / cryptopay.js). Receive-only: PATV holds no key. -->
+<link rel="stylesheet" href="/public/css/stage.css?v=6">
+<% const fmt = (n) => Number(n || 0).toLocaleString('en-US'); const when = (t) => t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : '—';
+   const short = (a) => a && a.length > 14 ? a.slice(0, 8) + '…' + a.slice(-6) : (a || ''); const usd = (c) => (Number(c || 0) / 100).toFixed(2); %>
+<main class="sb" id="cryptoAdm">
+  <div class="sb-head">
+    <h1>🪙 Crypto donations</h1>
+    <p class="lede">USDC / USDT sent to the receiving addresses from a wallet a member linked by signature mint PAT exactly like a card donation
+      (policy <code>donation</code>: <b><%= fmt(terms.rate) %></b> PAT per $1 to the donor + <b><%= terms.bonus_pct %>%</b> into the incentive budget).
+      Receive-only: nobody here holds a key and nothing is ever sent out. Public page: <a href="/support">/support</a>. Card donations: <%= stripe ? 'on' : 'off' %>.</p>
+  </div>
+
+  <section class="sb-card" id="settings" aria-labelledby="stT">
+    <h2 id="stT">Settings</h2>
+    <form id="cxSettings" class="grid2" style="display:grid;gap:8px">
+      <label class="chk"><input type="checkbox" name="crypto_donations_enabled" <%= S.crypto_donations_enabled ? 'checked' : '' %>> <b>Crypto donations ON</b> (page, wallet linking, the watcher)</label>
+      <label class="chk"><input type="checkbox" name="watch_when_off" <%= S.watch_when_off ? 'checked' : '' %>> Run the watcher while off (records and credits linked wallets; for testing)</label>
+      <label class="chk"><input type="checkbox" name="chain_eth" <%= S.chain_eth ? 'checked' : '' %>> Ethereum</label>
+      <label class="chk"><input type="checkbox" name="chain_base" <%= S.chain_base ? 'checked' : '' %>> Base</label>
+      <label class="chk"><input type="checkbox" name="chain_sol" <%= S.chain_sol ? 'checked' : '' %>> Solana</label>
+      <label>Ethereum receiving address <input type="text" name="addr_eth" value="<%= S.addr_eth %>" style="width:100%"></label>
+      <label>Base receiving address <input type="text" name="addr_base" value="<%= S.addr_base %>" style="width:100%"></label>
+      <label>Solana receiving address <input type="text" name="addr_sol" value="<%= S.addr_sol %>" style="width:100%"></label>
+      <label>Minimum (USD, under it = dust, not credited) <input type="number" name="min_usd" min="1" value="<%= S.min_usd %>"></label>
+      <label>Per-transfer maximum (USD, over it = held for approval) <input type="number" name="max_usd" min="1" value="<%= S.max_usd %>"></label>
+      <label>Poll every (seconds) <input type="number" name="poll_sec" min="20" value="<%= S.poll_sec %>"></label>
+      <label>First-scan lookback (blocks) <input type="number" name="start_lookback_blocks" min="0" value="<%= S.start_lookback_blocks %>"></label>
+      <label>Wallets per account <input type="number" name="link_max_wallets" min="1" value="<%= S.link_max_wallets %>"></label>
+      <label>Ethereum RPC (public, https) <input type="text" name="rpc_eth" value="<%= S.rpc_eth %>" style="width:100%"></label>
+      <label>Base RPC (public, https) <input type="text" name="rpc_base" value="<%= S.rpc_base %>" style="width:100%"></label>
+      <label>Solana RPC (public, https) <input type="text" name="rpc_sol" value="<%= S.rpc_sol %>" style="width:100%"></label>
+      <label class="chk"><input type="checkbox" name="verify_payments" <%= S.verify_payments ? 'checked' : '' %>> Re-check every final transfer on a second, independent RPC before it mints (recommended)</label>
+      <label>Ethereum verifier RPC <input type="text" name="verify_rpc_eth" value="<%= S.verify_rpc_eth %>" style="width:100%"></label>
+      <label>Base verifier RPC <input type="text" name="verify_rpc_base" value="<%= S.verify_rpc_base %>" style="width:100%"></label>
+      <label>Solana verifier RPC <input type="text" name="verify_rpc_sol" value="<%= S.verify_rpc_sol %>" style="width:100%"></label>
+      <p class="muted">A provider URL with a key (Alchemy / Infura / Helius) goes in the server's <code>.env</code> as <code>CRYPTO_RPC_ETH</code>, <code>CRYPTO_RPC_BASE</code>, <code>CRYPTO_RPC_SOL</code> (verifiers: <code>CRYPTO_VERIFY_RPC_ETH</code> / <code>_BASE</code> / <code>_SOL</code>) - it overrides these and is never shown. Use a different provider for the verifier than for the scanner.</p>
+      <div class="row"><button type="submit" class="btn primary">Save</button><span class="msg" id="cxSetMsg" role="status"></span></div>
+    </form>
+  </section>
+
+  <section class="sb-card" id="health" aria-labelledby="hT">
+    <h2 id="hT">Watcher</h2>
+    <div class="tblwrap"><table><thead><tr><th>Chain</th><th>On</th><th>RPC</th><th>Verifier</th><th>Scanned to</th><th>Final / head</th><th>Last OK</th><th>Last error</th></tr></thead><tbody>
+      <% health.forEach((h) => { %><tr><td><%= h.name %></td><td><%= h.on ? '✅' : '—' %></td><td><%= h.rpc.host %><%= h.rpc.from_env ? ' (env)' : '' %></td><td><%= h.verify ? h.verify.host + (h.verify.from_env ? ' (env)' : '') : 'off' %></td>
+        <td><%= h.last_block != null ? fmt(h.last_block) : '—' %></td><td><%= h.final_head != null ? fmt(h.final_head) : '—' %> / <%= h.head != null ? fmt(h.head) : '—' %></td>
+        <td><%= when(h.last_ok) %></td><td><%= h.last_error ? when(h.last_error_at) + ' — ' + h.last_error + ' (×' + h.errors + ')' : '—' %></td></tr><% }) %>
+    </tbody></table></div>
+    <p class="muted">Totals: <% totals.forEach((x) => { %><b><%= x.status %></b> <%= x.n %> ($<%= usd(x.cents) %><%= x.pat ? ', ' + fmt(x.pat) + ' PAT' : '' %>) · <% }) %><%= totals.length ? '' : 'nothing yet' %></p>
+    <div class="row"><button type="button" class="btn" id="cxPoll">Scan now</button><span class="msg" id="cxPollMsg" role="status"></span></div>
+  </section>
+
+  <% const table = (rows, id, actions) => { %>
+    <div class="tblwrap"><table><thead><tr><th>Seen</th><th>Status</th><th>Amount</th><th>Chain</th><th>From</th><th>Account</th><th>PAT</th><th>Tx</th><% if (actions) { %><th></th><% } %></tr></thead><tbody>
+      <% rows.forEach((p) => { %><tr>
+        <td><%= when(p.seen) %></td><td><%= p.status %><%= p.decided_by ? ' (' + p.decided_by + ')' : '' %><%= p.note ? ' — ' + p.note : '' %></td>
+        <td>$<%= usd(p.usd_cents) %> <%= p.token %></td><td><%= p.chain_name %></td><td title="<%= p.src_addr %>"><code><%= short(p.src_addr) %></code></td>
+        <td><%= p.username ? p.username : '—' %></td><td><%= p.pat ? fmt(p.pat) + (p.bonus ? ' +' + fmt(p.bonus) : '') : '—' %></td>
+        <td><a href="<%= p.explorer %>" target="_blank" rel="noopener noreferrer"><code><%= short(p.tx) %></code> ↗</a></td>
+        <% if (actions === 'held') { %><td><button type="button" class="btn primary" data-cx="approve" data-id="<%= p.id %>">Approve</button> <button type="button" class="btn" data-cx="reject" data-id="<%= p.id %>">Reject</button></td><% } %>
+        <% if (actions === 'suspect') { %><td><button type="button" class="btn" data-cx="reverify" data-id="<%= p.id %>">Re-verify</button></td><% } %>
+        <% if (actions === 'unclaimed') { %><td><button type="button" class="btn" data-cx="ignore" data-id="<%= p.id %>">Ignore</button></td><% } %>
+      </tr><% }) %>
+      <% if (!rows.length) { %><tr><td colspan="9" class="muted">None.</td></tr><% } %>
+    </tbody></table></div>
+  <% } %>
+
+  <section class="sb-card" id="held" aria-labelledby="heT">
+    <h2 id="heT">Held (over $<%= fmt(S.max_usd) %>)</h2>
+    <p class="muted">Approve = credit it now (mint as usual). Reject = no PAT; the coins stay at the receiving address - any refund is done by hand from the wallet that owns it, outside PATV.</p>
+    <% table(held, 'held', 'held') %>
+  </section>
+  <% if (suspect.length) { %>
+  <section class="sb-card" id="suspect" aria-labelledby="suT">
+    <h2 id="suT">⚠️ Suspect (the verifier RPC disagreed)</h2>
+    <p class="muted">The scanner reported these, but the independent verifier didn't show the same final transfer - nothing was credited. Check the explorer link; Re-verify asks the verifier again (and credits only if it now agrees).</p>
+    <% table(suspect, 'suspect', 'suspect') %>
+  </section>
+  <% } %>
+  <section class="sb-card" id="unclaimed" aria-labelledby="unT">
+    <h2 id="unT">Unclaimed (sender not linked)</h2>
+    <p class="muted">Credited automatically when someone links the sending wallet with a valid signature. Ignore = never credit it (e.g. our own transfer).</p>
+    <% table(unclaimed, 'unclaimed', 'unclaimed') %>
+  </section>
+  <section class="sb-card" id="payments" aria-labelledby="paT">
+    <h2 id="paT">All payments (latest 200)</h2>
+    <% table(payments, 'payments', null) %>
+  </section>
+  <section class="sb-card" id="dryrun" aria-labelledby="drT">
+    <h2 id="drT">Dry run (read-only)</h2>
+    <p class="muted">Reads the receiving addresses' recent finalized transfers and shows what the watcher would do. Writes nothing, mints nothing.</p>
+    <div class="row"><label>EVM blocks <input type="number" id="cxBlocks" value="5000" min="10" max="20000"></label><label>Solana signatures <input type="number" id="cxSigs" value="50" min="1" max="200"></label>
+      <button type="button" class="btn" id="cxDry">Run</button><span class="msg" id="cxDryMsg" role="status"></span></div>
+    <pre id="cxDryOut" style="white-space:pre-wrap;max-height:420px;overflow:auto"></pre>
+  </section>
+</main>
+<script src="/public/js/crypto-admin.js?v=1" defer></script>
+<%- include('partials/admin-close') %>

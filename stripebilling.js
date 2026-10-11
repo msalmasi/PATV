@@ -166,9 +166,12 @@ async function donate(user, { usd, back } = {}) {
 /** 1.99jw: what the Support PATV card (views/partials/donate-card.ejs) needs; enabled:false hides it. */
 function donateLocals(back, result) {
   const st = publicState();
-  if (!st.enabled) return { stripe: st };
+  // 1.99kq: crypto = the stablecoin donations (cryptopay.js) are on - the card links to /support, independent of Stripe
+  let crypto = false;
+  try { crypto = require("./cryptopay").enabled(); } catch (e) { crypto = false; }
+  if (!st.enabled) return { stripe: st, crypto, back };
   const terms = require("./funding").donationTerms();
-  return { stripe: st, back, result: result === "success" || result === "cancel" ? result : null, rate: terms.rate, bonus_pct: terms.bonus_pct, max: DONATE_MAX_USD };
+  return { stripe: st, crypto, back, result: result === "success" || result === "cancel" ? result : null, rate: terms.rate, bonus_pct: terms.bonus_pct, max: DONATE_MAX_USD };
 }
 
 /** Stripe's billing portal for the customer behind one of the viewer's card subscriptions. -> {url} */

@@ -5,6 +5,15 @@
   rate (PAT per $1), bonus_pct, back ('/shop'|'/wallet'), max}.
 -%>
 <% const D = locals.donate || null; %>
+<%# 1.99kq: D.crypto = stablecoin donations are on (cryptopay.js) - a pointer to /support, shown with or without Stripe
+    (not on /support itself: D.onSupport) %>
+<% if (D && D.crypto && !D.onSupport) { %>
+<section class="donate-card" id="donateCrypto" aria-labelledby="donateCT" style="background:#111;border:1px solid #6a3d6a;border-radius:10px;padding:14px 16px;margin:12px 0;display:grid;gap:8px;min-width:0">
+  <h2 id="donateCT" style="margin:0;font-size:18px;color:#fff">🪙 <%- t('support.card_title') %></h2>
+  <p style="margin:0;color:#bbb;font-size:14px"><%- t('support.card_blurb') %></p>
+  <p style="margin:0"><a class="btn" href="/support"><%- t('support.card_link') %></a></p>
+</section>
+<% } %>
 <% if (D && D.stripe && D.stripe.enabled) { %>
 <style>
   .donate-card { background: #111; border: 1px solid #6a3d6a; border-radius: 10px; padding: 14px 16px; margin: 12px 0; display: grid; gap: 8px; min-width: 0; }
