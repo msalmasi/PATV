@@ -8,37 +8,37 @@
   const nextQ = next ? '?next=' + encodeURIComponent(next) : '';
 %>
 <%- include('partials/auth-css') %>
-<main class="au">
-  <section class="au-card" aria-labelledby="au-title">
-    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="k">publicaccess.tv</span></div>
-    <h1 id="au-title"><%- t('auth.login.heading') %></h1>
-    <p class="sub"><%- t('auth.login.sub') %></p>
+<main class="ds-page narrow au">
+  <section class="ds-card lg au-card" aria-labelledby="au-title">
+    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="ds-eyebrow">publicaccess.tv</span></div>
+    <h1 id="au-title" class="ds-h1"><%- t('auth.login.heading') %></h1>
+    <p class="ds-sub"><%- t('auth.login.sub') %></p>
 
-    <% if (oks.length) { %><div class="au-alert ok" role="status"><%= oks.join(' ') %></div><% } %>
-    <% if (errs.length) { %><div class="au-alert err" role="alert" id="au-form-err"><%= errs.join(' ') %></div><% } %>
+    <% if (oks.length) { %><div class="ds-note ok au-alert" role="status"><%= oks.join(' ') %></div><% } %>
+    <% if (errs.length) { %><div class="ds-note danger au-alert" role="alert" id="au-form-err"><%= errs.join(' ') %></div><% } %>
 
     <% if (locals.plexPending) { %><%# 1.99jr: "I already have an account" after Sign in with Plex (plexsso.js) %>
-    <div class="au-alert ok" role="status">📼 <%- t('auth.plex.link_on_signin', { plex: plexPending.username || 'Plex' }) %></div>
+    <div class="ds-note ok au-alert" role="status"><span class="ds-ic" aria-hidden="true">📼</span><div><%- t('auth.plex.link_on_signin', { plex: plexPending.username || 'Plex' }) %></div></div>
     <% } %>
     <% if (locals.ssoPending) { %><%# 1.99lb: "I already have an account" after Sign in with Telegram / Google (ssolinks.js) %>
-    <div class="au-alert ok" role="status"><%- t('auth.sso.link_on_signin', { provider: ssoPending.label, who: ssoPending.who || ssoPending.label }) %></div>
+    <div class="ds-note ok au-alert" role="status"><%- t('auth.sso.link_on_signin', { provider: ssoPending.label, who: ssoPending.who || ssoPending.label }) %></div>
     <% } %>
     <form action="/login" method="POST" data-au-form>
       <input type="hidden" name="next" value="<%= next %>">
       <% if (locals.plexPending) { %><input type="hidden" name="link_plex" value="1"><% } %>
       <% if (locals.ssoPending) { %><input type="hidden" name="link_sso" value="<%= ssoPending.provider %>"><% } %>
-      <div class="au-field">
+      <div class="ds-field au-field">
         <label for="username"><%- t('auth.login.username_label') %></label>
-        <input type="text" id="username" name="username" value="<%= F.username || '' %>" required
+        <input class="ds-in" type="text" id="username" name="username" value="<%= F.username || '' %>" required
                autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="254"
                data-rule="required" data-required-msg="<%- t('auth.login.username_required') %>"
                aria-describedby="username-err<%= errs.length ? ' au-form-err' : '' %>"<% if (bad('username')) { %> aria-invalid="true"<% } %><% if (!F.username) { %> data-autofocus<% } %>>
         <div class="au-err" id="username-err" aria-live="polite"></div>
       </div>
-      <div class="au-field">
-        <div class="lblrow"><label for="password"><%- t('auth.password') %></label><a href="/forgot-password"><%- t('auth.login.forgot') %></a></div>
+      <div class="ds-field au-field">
+        <div class="lblrow"><label class="ds-label" for="password"><%- t('auth.password') %></label><a href="/forgot-password"><%- t('auth.login.forgot') %></a></div>
         <div class="au-pw">
-          <input type="password" id="password" name="password" required autocomplete="current-password"
+          <input class="ds-in" type="password" id="password" name="password" required autocomplete="current-password"
                  data-rule="required" data-required-msg="<%- t('auth.login.password_required') %>" data-caps="password-caps"
                  aria-describedby="password-err password-caps"<% if (bad('password')) { %> aria-invalid="true"<% } %><% if (F.username) { %> data-autofocus<% } %>>
           <button type="button" class="eye" aria-controls="password" aria-pressed="false" aria-label="<%- t('auth.show_password') %>"><%- t('auth.show') %></button>
@@ -46,7 +46,7 @@
         <div class="au-caps" id="password-caps" hidden><%- t('auth.caps_lock') %></div>
         <div class="au-err" id="password-err" aria-live="polite"></div>
       </div>
-      <button type="submit" class="au-btn" data-busy="<%- t('auth.login.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.login.submit') %></span></button>
+      <button type="submit" class="ds-btn lg wide au-btn" data-busy="<%- t('auth.login.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.login.submit') %></span></button>
     </form>
 
     <%- include('partials/auth-oauth', { next: next, verb: 'Sign in' }) %>

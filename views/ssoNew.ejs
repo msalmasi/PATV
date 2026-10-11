@@ -9,38 +9,37 @@
   const nextQ = next ? '?next=' + encodeURIComponent(next) : '';
 %>
 <%- include('partials/auth-css') %>
-<main class="au">
-  <section class="au-card" aria-labelledby="au-title">
-    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="k">publicaccess.tv</span></div>
-    <h1 id="au-title"><%- t('auth.sso.heading', { provider: sso.label }) %></h1>
-    <p class="sub"><%- t('auth.sso.sub', { provider: sso.label, who: sso.who }) %></p>
+<main class="ds-page narrow au">
+  <section class="ds-card lg au-card" aria-labelledby="au-title">
+    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="ds-eyebrow">publicaccess.tv</span></div>
+    <h1 id="au-title" class="ds-h1"><%- t('auth.sso.heading', { provider: sso.label }) %></h1>
+    <p class="ds-sub"><%- t('auth.sso.sub', { provider: sso.label, who: sso.who }) %></p>
 
-    <% if (oks.length) { %><div class="au-alert ok" role="status"><%= oks.join(' ') %></div><% } %>
-    <% if (errs.length) { %><div class="au-alert err" role="alert"><%= errs.join(' ') %></div><% } %>
+    <% if (oks.length) { %><div class="ds-note ok au-alert" role="status"><%= oks.join(' ') %></div><% } %>
+    <% if (errs.length) { %><div class="ds-note danger au-alert" role="alert"><%= errs.join(' ') %></div><% } %>
 
-    <h2 class="au-h2"><%- t('auth.plex.create_h') %></h2>
+    <h2 class="ds-h3 au-h2"><%- t('auth.plex.create_h') %></h2>
     <form action="/auth/sso/create" method="POST" data-au-form>
-      <div class="au-field">
+      <div class="ds-field au-field">
         <label for="username"><%- t('auth.username') %></label>
-        <input type="text" id="username" name="username" value="<%= F.username || suggest || '' %>" required
+        <input class="ds-in" type="text" id="username" name="username" value="<%= F.username || suggest || '' %>" required
                autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="24"
                data-rule="newuser" aria-describedby="username-hint username-err"<% if (F.field === 'username') { %> aria-invalid="true"<% } %> data-autofocus>
         <div class="au-hint" id="username-hint"><%- t('auth.register.username_hint') %></div>
         <div class="au-err" id="username-err" aria-live="polite"></div>
       </div>
-      <p class="au-hint" style="margin:8px 0 0"><%- sso.email ? (sso.verified ? t('auth.sso.email_verified', { provider: sso.label }) : t('auth.sso.email_unverified', { provider: sso.label })) : t('auth.plex.email_none') %></p>
+      <p class="au-hint"><%- sso.email ? (sso.verified ? t('auth.sso.email_verified', { provider: sso.label }) : t('auth.sso.email_unverified', { provider: sso.label })) : t('auth.plex.email_none') %></p>
       <% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %>
       <p class="au-terms"><%- t('auth.register.terms', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('auth.register.terms_link') + '</a>', privacy: '<a href="/privacy" target="_blank" rel="noopener">' + t('auth.register.privacy_link') + '</a>' }) %></p>
       <% } %>
-      <div style="height:14px"></div>
-      <button type="submit" class="au-btn" data-busy="<%- t('auth.register.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.sso.create_btn', { provider: sso.label }) %></span></button>
+      <button type="submit" class="ds-btn lg wide au-btn" data-busy="<%- t('auth.register.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.sso.create_btn', { provider: sso.label }) %></span></button>
     </form>
 
     <div class="au-or" role="separator"><%- t('auth.oauth.or') %></div>
-    <h2 class="au-h2"><%- t('auth.plex.have_h') %></h2>
-    <p class="sub"><%- t('auth.sso.have_sub', { provider: sso.label }) %></p>
-    <a class="au-btn ghost" href="/login<%= nextQ %>"><%- t('auth.plex.have_btn') %></a>
-    <form action="/auth/sso/cancel" method="POST" style="margin-top:10px;text-align:center">
+    <h2 class="ds-h3 au-h2"><%- t('auth.plex.have_h') %></h2>
+    <p class="ds-sub"><%- t('auth.sso.have_sub', { provider: sso.label }) %></p>
+    <a class="ds-btn lg wide ghost au-btn" href="/login<%= nextQ %>"><%- t('auth.plex.have_btn') %></a>
+    <form action="/auth/sso/cancel" method="POST" class="au-cancel">
       <button type="submit" class="au-linkbtn"><%- t('auth.plex.cancel') %></button>
     </form>
     <p class="au-oauth-note"><%- sso.readsEmail ? t('auth.sso.note_google') : t('auth.sso.note_telegram') %></p>

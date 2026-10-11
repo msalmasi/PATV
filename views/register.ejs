@@ -11,44 +11,44 @@
   const nextQ = next ? '?next=' + encodeURIComponent(next) : '';
 %>
 <%- include('partials/auth-css') %>
-<main class="au">
-  <section class="au-card" aria-labelledby="au-title">
-    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="k">publicaccess.tv</span></div>
-    <h1 id="au-title"><%- t('auth.register.heading') %></h1>
-    <p class="sub"><%- t('auth.register.sub') %></p>
+<main class="ds-page narrow au">
+  <section class="ds-card lg au-card" aria-labelledby="au-title">
+    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="ds-eyebrow">publicaccess.tv</span></div>
+    <h1 id="au-title" class="ds-h1"><%- t('auth.register.heading') %></h1>
+    <p class="ds-sub"><%- t('auth.register.sub') %></p>
     <ul class="au-perks" aria-label="<%- t('auth.register.perks_aria') %>">
-      <li>👛 <%- t('auth.register.perk_wallet') %></li>
-      <li>🎡 <%- t('auth.register.perk_wheel') %></li>
-      <li>🔮 <%- t('auth.register.perk_markets') %></li>
-      <li>🃏 <%- t('auth.register.perk_tables') %></li>
-      <li>🐸 <%- t('auth.register.perk_verify') %></li>
+      <li class="ds-tag ac"><span class="ds-ic" aria-hidden="true">👛</span><%- t('auth.register.perk_wallet') %></li>
+      <li class="ds-tag ac"><span class="ds-ic" aria-hidden="true">🎡</span><%- t('auth.register.perk_wheel') %></li>
+      <li class="ds-tag ac"><span class="ds-ic" aria-hidden="true">🔮</span><%- t('auth.register.perk_markets') %></li>
+      <li class="ds-tag ac"><span class="ds-ic" aria-hidden="true">🃏</span><%- t('auth.register.perk_tables') %></li>
+      <li class="ds-tag ac"><span class="ds-ic" aria-hidden="true">🐸</span><%- t('auth.register.perk_verify') %></li>
     </ul>
 
-    <% if (oks.length) { %><div class="au-alert ok" role="status"><%= oks.join(' ') %></div><% } %>
-    <% if (errs.length && !inline) { %><div class="au-alert err" role="alert"><%= errs.join(' ') %></div><% } %>
+    <% if (oks.length) { %><div class="ds-note ok au-alert" role="status"><%= oks.join(' ') %></div><% } %>
+    <% if (errs.length && !inline) { %><div class="ds-note danger au-alert" role="alert"><%= errs.join(' ') %></div><% } %>
 
     <form action="/register" method="POST" data-au-form>
       <input type="hidden" name="next" value="<%= next %>">
-      <div class="au-field">
+      <div class="ds-field au-field">
         <label for="username"><%- t('auth.username') %></label>
-        <input type="text" id="username" name="username" value="<%= F.username || '' %>" required
+        <input class="ds-in" type="text" id="username" name="username" value="<%= F.username || '' %>" required
                autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="24"
                data-rule="newuser" aria-describedby="username-hint username-err"<%- inv('username') %><% if (!F.username) { %> data-autofocus<% } %>>
         <div class="au-hint" id="username-hint"><%- t('auth.register.username_hint') %></div>
         <div class="au-err" id="username-err" aria-live="polite"><%= errFor('username') %></div>
       </div>
-      <div class="au-field">
+      <div class="ds-field au-field">
         <label for="email"><%- t('auth.email') %></label>
-        <input type="email" id="email" name="email" value="<%= F.email || '' %>" required
+        <input class="ds-in" type="email" id="email" name="email" value="<%= F.email || '' %>" required
                autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" inputmode="email"
                data-rule="email" aria-describedby="email-hint email-err"<%- inv('email') %>>
         <div class="au-hint" id="email-hint"><%- t('auth.register.email_hint') %></div>
         <div class="au-err" id="email-err" aria-live="polite"><%= errFor('email') %></div>
       </div>
-      <div class="au-field">
+      <div class="ds-field au-field">
         <label for="password"><%- t('auth.password') %></label>
         <div class="au-pw">
-          <input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"
+          <input class="ds-in" type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"
                  data-rule="newpass" data-caps="password-caps" data-meter="password-hint"
                  aria-describedby="password-hint password-caps password-err"<%- inv('password') %><% if (F.username) { %> data-autofocus<% } %>>
           <button type="button" class="eye" aria-controls="password" aria-pressed="false" aria-label="<%- t('auth.show_password') %>"><%- t('auth.show') %></button>
@@ -57,10 +57,10 @@
         <div class="au-caps" id="password-caps" hidden><%- t('auth.caps_lock') %></div>
         <div class="au-err" id="password-err" aria-live="polite"><%= errFor('password') %></div>
       </div>
-      <div class="au-field">
+      <div class="ds-field au-field">
         <label for="confirm_password"><%- t('auth.register.confirm_label') %></label>
         <div class="au-pw">
-          <input type="password" id="confirm_password" name="confirm_password" required maxlength="72" autocomplete="new-password"
+          <input class="ds-in" type="password" id="confirm_password" name="confirm_password" required maxlength="72" autocomplete="new-password"
                  data-rule="match" data-match="password" data-caps="password-caps" aria-describedby="confirm_password-err"<%- inv('confirm_password') %>>
           <button type="button" class="eye" aria-controls="confirm_password" aria-pressed="false" aria-label="<%- t('auth.show_password') %>"><%- t('auth.show') %></button>
         </div>
@@ -70,7 +70,7 @@
       <% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %>
       <p class="au-terms"><%- t('auth.register.terms', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('auth.register.terms_link') + '</a>', privacy:'<a href="/privacy" target="_blank" rel="noopener">' + t('auth.register.privacy_link') + '</a>' }) %></p>
       <% } %>
-      <button type="submit" class="au-btn" data-busy="<%- t('auth.register.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.register.submit') %></span></button>
+      <button type="submit" class="ds-btn lg wide au-btn" data-busy="<%- t('auth.register.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.register.submit') %></span></button>
     </form>
 
     <%- include('partials/auth-oauth', { next: next, verb: 'Sign up' }) %>
