@@ -325,6 +325,16 @@ the poll's `stream` field; Pepe draws only that table's board (blackjack or poke
   linked, both level 2+, 3 rolls per pair a day; organic daily cap), keyed per round so a re-run never counts twice. Pepe
   pushes the blackjack / hold'em rows and gates with the wheel's (`/api/cosmetics/drop-config` rates + params).
   Known edge: progress isn't merged when a web-only player later links Camfrog (Pepe's counters start at 0 for them).
+  **1.99mw: the site awards EVERY seat** (web or Camfrog, room table or web table) - achievements, drops, win XP and gang
+  rep - and Pepe awards nothing for a backend hand (the settle / win / awards events carry no Camfrog names any more; an
+  old Pepe therefore stops on his own). Achievement thresholds use Pepe's count so far as a base: the bot poll answers
+  `ach_want` (Camfrog names of seated players with no base or one older than an hour) and Pepe sends `ach_base`
+  (`casino_ach_base`, replaced each time); a base never awards by itself. Win XP = Pepe's _grant_xp rate (0.005) on the
+  net win (blackjack round profit; hold'em chips won - chips put in), once per round/hand + seat. Gang rep stays in Pepe
+  (gangs.json): the site queues one rep event per win for the seat's Camfrog name (or the account's linked one) in
+  `casino_rep_queue`, the bot poll hands out unacked ones as `rep`, Pepe applies each key once (_gang_add_rep, a
+  persisted done-list) and acks it in `rep_ack`. Hold'em PvP drop pairs are counted on the site only (`casino_pvp_rolls`),
+  not shared with Pepe's duel/brawl pair log. No backfill.
 - D5. Keep the JS engines for v2, with the shared Python test vectors.
 - D6. Client seeds later; a short fairness link in chat after each round, and on request (`!bj fair`, `!holdem fair`) - built.
 - D7. One table per room (either game), NO site-wide limit (`max_tables` 0 = none) - built.

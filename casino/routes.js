@@ -17,6 +17,8 @@
 // Pepe (bot token in the body):
 //   POST /api/casino/bot/poll               {after, wait, rooms}  events of tables in rooms (cursor) + their public state
 //                                            + `private` (room players' hole cards, by Camfrog name) + `stream`
+//                                            1.99mw: in {ach_base: [{camfrog, m}], rep_ack: [key]}, out {rep: [{key, camfrog, amount}],
+//                                            ach_want: [camfrog]} - the casino's gang rep for Pepe + his achievement counts (rewards.js)
 //   POST /api/casino/bot/act                {room|table, username, camfrog, name, game?, verb, args, idem, channel, admin}
 // Web POSTs are JSON with X-Requested-With: fetch (a cross-site form can't send them). Telegram never reaches here:
 // gambling stays off the Telegram bridge (channel "telegram" is refused).
@@ -24,6 +26,7 @@
 const path = require("path");
 const { getQuery } = require("../dbUtils");
 const svc = require("./service");
+const rewards = require("./rewards");
 
 const WEB_VERBS = new Set(["bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
                            "sit", "check", "call", "fold", "allin", "raise", "cards"]);
@@ -266,7 +269,13 @@ function register(app, { isBotToken, addUser }) {
     const wait = Math.max(0, Math.min(8, Number(b.wait) || 0)) * 1000;
     try {
       const st = await svc.loadSettings();
+      // 1.99mw (casino/rewards.js): Pepe's achievement counts asked for last time + the gang-rep events he applied
+      const tables = Array.from(svc.S.tables.values());
+      if (Array.isArray(b.ach_base) && b.ach_base.length) await rewards.setBases(b.ach_base, tables);
+      if (Array.isArray(b.rep_ack) && b.rep_ack.length) await rewards.repAck(b.rep_ack);
       const out = await svc.poll(b.after, wait);
+      out.rep = await rewards.repPending(50);
+      out.ach_want = await rewards.wantBases(Array.from(svc.S.tables.values()));
       res.set("Cache-Control", "no-store");
       res.json(Object.assign({ ok: true, enabled: st.bj_enabled, hm_enabled: st.hm_enabled }, out));
     } catch (e) {

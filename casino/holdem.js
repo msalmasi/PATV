@@ -204,6 +204,7 @@ function install(core) {
   async function render(T, events) {
     const e = T.eng;
     let blinds = [];
+    const won = {};                 // 1.99mw: chips each winner took in this step's hand (win XP / gang rep at hand_end)
     for (const ev of events) {
       const t = ev.t;
       if (t === "hand_start") {
@@ -233,10 +234,11 @@ function install(core) {
         T.last_round = { hand_no: e.hand_no, uncontested: true, board: e.board.slice(), shown: [], pot: ev.amount, rake: 0,
                          winners: [{ name: ev.name, amount: ev.amount, hand: "everyone folded", pot: "pot" }] };
         dumpWatch(T, ev.who);
-        // 1.99mj (D4): camfrog only for a seat Pepe counts; the site counts the rest (an uncontested pot never drops)
+        // 1.99mw: the site counts every seat (an uncontested pot never drops); the event names nobody for Pepe to award
         await rewards.holdemPot(T, e.hand_no, 0, ev.who, ev.amount, []);
+        won[ev.who] = (won[ev.who] || 0) + ev.amount;
         await emit(T, "win", `🏆 ${ev.name} wins ${fmt(ev.amount)} chips — everyone folded.`,
-                   { winners: [{ camfrog: rewards.pepeName(T, ev.who), amount: ev.amount }] });
+                   { winners: [{ amount: ev.amount }] });
       } else if (t === "showdown") {
         T.dl.turn = null; T.turn = null;
         T.sd = { board: ev.board.slice(), shown: ev.reveals.map((r) => ({ name: r.name, cards: r.cards.slice(), hand: r.hand, seat: uidHash(r.who) })),
@@ -249,20 +251,21 @@ function install(core) {
                          pot: ev.awards.reduce((s, a) => s + a.amount, 0) + ev.rake, rake: ev.rake,
                          winners: ev.awards.map((a) => ({ name: a.name, amount: a.amount, hand: a.hand, pot: a.pot })) };
         if (ev.rake > 0) T.rake_due = { key: `${handSpin(T, e.hand_no)}:rake`, n: e.hand_no, amount: ev.rake };
-        // for Pepe's achievements / drops: each winner and the Camfrog names they beat at this showdown
+        // each winner and who they beat at this showdown (the drop's PvP gate)
         const sdcf = T.sd ? T.sd.cf : [];
-        // 1.99mj (D4): each pot a seat Pepe doesn't count is counted (and may drop) here; the event names only Pepe's seats
+        // 1.99mw: every pot is counted (and may drop) here, for every seat; the event names nobody for Pepe to award
         const found = [];
         for (const [i, a] of ev.awards.entries()) {
           const d = await rewards.holdemPot(T, e.hand_no, i, a.who, a.amount, sdcf.filter((x) => x.uid !== a.who).map((x) => x.uid));
           if (d) found.push(d);
+          won[a.who] = (won[a.who] || 0) + a.amount;
         }
-        await emit(T, "awards", "", { rake: ev.rake,
-          winners: ev.awards.map((a) => ({ camfrog: rewards.pepeName(T, a.who), amount: a.amount,
-                                           against: sdcf.filter((x) => x.uid !== a.who && x.camfrog).map((x) => x.camfrog) })) });
+        await emit(T, "awards", "", { rake: ev.rake, winners: ev.awards.map((a) => ({ amount: a.amount })) });
         for (const d of found) await emit(T, "line", dropLine((T.players[d.uid] || {}).name || "someone", d.item));
         T.sd = null;
       } else if (t === "hand_end") {
+        // 1.99mw: win XP + gang rep on what each winner took home (chips won - chips put in), once per hand + seat
+        if (Object.keys(won).length) await rewards.holdemHand(T, e.hand_no, won, Object.assign({}, e.contrib));
         await save(T);
         await afterHand(T, ev);
       }

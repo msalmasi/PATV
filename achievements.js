@@ -161,7 +161,8 @@ async function checkWeb(userId) {
 
 // 1.99mj: the casino backend counts blackjack hands / naturals and hold'em pots for players Pepe can't count (no Camfrog name
 // on the seat, or a web-only table): the same "bot"-side achievements (cf_bj_*, cf_holdem_*), awarded once like any other,
-// with XP / PAT and an announcement in Pepe's feed. `value` is the site's running count for that user and metric.
+// with XP / PAT and an announcement in Pepe's feed. `value` is the site's running count for that user and metric (1.99mw: every
+// seat, web or Camfrog, plus Pepe's count so far as a base - casino/rewards.js).
 async function awardCount(userId, metric, value) {
   if (!userId || !metric) return [];
   await ready; await feedReady;
