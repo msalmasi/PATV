@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'PAT Economy Guide', user: user}) %>
 <style>
   .eco { max-width: 980px; width: 100%; min-width: 0; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
@@ -282,7 +283,7 @@
             <li>Incentive budget: <b><%= _f(_tr.balance) %> PAT</b></li>
             <% if (_tr.share !== null && _tr.share !== undefined) { %><li>From this week's settlement: <%= _f(_tr.share) %> PAT (about <%= _f(_tr.release_per_day) %> a day)</li><% } %>
             <% Object.keys(_tr.budgets || {}).forEach((g) => { %>
-              <li><%= ({ welcome: 'Welcome PAT', levelup: 'Level-ups', achievements: 'Achievements', misc: 'Connect bonuses, codes, platform rewards', royalties: 'Pad owner royalties', roomgames: 'Room games (raffle, top mic, pictionary, !beg)', turf: 'Turf income' })[g] || g %>:
+              <li><%= ({ welcome: 'Welcome PAT', levelup: 'Level-ups', achievements: 'Achievements', misc: 'Connect bonuses, codes, platform rewards', royalties: 'Pad owner royalties', activity: t('economy.group.activity'), roomgames: 'Room games (raffle, top mic, pictionary, !beg)', turf: 'Turf income' })[g] || g %>:
                 <%= _f((_tr.remaining || {})[g]) %> of <%= _f(_tr.budgets[g]) %> left</li>
             <% }) %>
           </ul>

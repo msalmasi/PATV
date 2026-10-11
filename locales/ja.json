@@ -3174,5 +3174,6 @@
   "settings.timezone.auto": "自動（ブラウザのタイムゾーン）",
   "js.settings.timezone.now": "現在: {time}（{zone}）",
   "js.settings.timezone.failed": "タイムゾーンを保存できませんでした。もう一度お試しください。",
-  "err.bad_timezone": "そのタイムゾーンは不明です。"
+  "err.bad_timezone": "そのタイムゾーンは不明です。",
+  "economy.group.activity": "アクティビティ報酬"
 }

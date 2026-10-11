@@ -3174,5 +3174,6 @@
   "settings.timezone.auto": "อัตโนมัติ (เขตเวลาของเบราว์เซอร์)",
   "js.settings.timezone.now": "ตอนนี้: {time} ({zone})",
   "js.settings.timezone.failed": "บันทึกเขตเวลาไม่สำเร็จ - ลองอีกครั้ง",
-  "err.bad_timezone": "เราไม่รู้จักเขตเวลานั้น"
+  "err.bad_timezone": "เราไม่รู้จักเขตเวลานั้น",
+  "economy.group.activity": "รางวัลกิจกรรม"
 }

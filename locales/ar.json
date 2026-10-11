@@ -3404,5 +3404,6 @@
   "settings.timezone.auto": "تلقائي (منطقة المتصفح)",
   "js.settings.timezone.now": "الآن: {time} ({zone})",
   "js.settings.timezone.failed": "تعذّر حفظ منطقتك الزمنية - حاول مرة أخرى.",
-  "err.bad_timezone": "لا نعرف هذه المنطقة الزمنية."
+  "err.bad_timezone": "لا نعرف هذه المنطقة الزمنية.",
+  "economy.group.activity": "مكافآت النشاط"
 }

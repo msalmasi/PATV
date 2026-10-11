@@ -3221,5 +3221,6 @@
   "settings.timezone.auto": "Automatico (fuso del browser)",
   "js.settings.timezone.now": "Ora: {time} ({zone})",
   "js.settings.timezone.failed": "Impossibile salvare il fuso orario: riprova.",
-  "err.bad_timezone": "Non conosciamo questo fuso orario."
+  "err.bad_timezone": "Non conosciamo questo fuso orario.",
+  "economy.group.activity": "Ricompense attività"
 }

@@ -3312,5 +3312,6 @@
   "settings.timezone.auto": "Автоматично (пояс браузера)",
   "js.settings.timezone.now": "Зараз: {time} ({zone})",
   "js.settings.timezone.failed": "Не вдалося зберегти часовий пояс — спробуйте ще раз.",
-  "err.bad_timezone": "Такий часовий пояс нам невідомий."
+  "err.bad_timezone": "Такий часовий пояс нам невідомий.",
+  "economy.group.activity": "Нагороди за активність"
 }

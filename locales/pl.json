@@ -3312,5 +3312,6 @@
   "settings.timezone.auto": "Automatyczna (strefa przeglądarki)",
   "js.settings.timezone.now": "Teraz: {time} ({zone})",
   "js.settings.timezone.failed": "Nie udało się zapisać strefy czasowej – spróbuj ponownie.",
-  "err.bad_timezone": "Nie znamy takiej strefy czasowej."
+  "err.bad_timezone": "Nie znamy takiej strefy czasowej.",
+  "economy.group.activity": "Nagrody za aktywność"
 }

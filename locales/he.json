@@ -3266,5 +3266,6 @@
   "settings.timezone.auto": "אוטומטי (אזור הזמן של הדפדפן)",
   "js.settings.timezone.now": "עכשיו: {time} ({zone})",
   "js.settings.timezone.failed": "לא הצלחנו לשמור את אזור הזמן - נסה שוב.",
-  "err.bad_timezone": "אזור הזמן הזה לא מוכר לנו."
+  "err.bad_timezone": "אזור הזמן הזה לא מוכר לנו.",
+  "economy.group.activity": "תגמולי פעילות"
 }

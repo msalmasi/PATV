@@ -3174,5 +3174,6 @@
   "settings.timezone.auto": "Tự động (múi giờ trình duyệt)",
   "js.settings.timezone.now": "Bây giờ: {time} ({zone})",
   "js.settings.timezone.failed": "Không lưu được múi giờ - hãy thử lại.",
-  "err.bad_timezone": "Chúng tôi không biết múi giờ đó."
+  "err.bad_timezone": "Chúng tôi không biết múi giờ đó.",
+  "economy.group.activity": "Phần thưởng hoạt động"
 }

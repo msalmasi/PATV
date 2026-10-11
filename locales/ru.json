@@ -3312,5 +3312,6 @@
   "settings.timezone.auto": "Автоматически (пояс браузера)",
   "js.settings.timezone.now": "Сейчас: {time} ({zone})",
   "js.settings.timezone.failed": "Не удалось сохранить часовой пояс — попробуйте ещё раз.",
-  "err.bad_timezone": "Такой часовой пояс нам неизвестен."
+  "err.bad_timezone": "Такой часовой пояс нам неизвестен.",
+  "economy.group.activity": "Награды за активность"
 }

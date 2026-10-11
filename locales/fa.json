@@ -3220,5 +3220,6 @@
   "settings.timezone.auto": "خودکار (منطقهٔ مرورگر)",
   "js.settings.timezone.now": "اکنون: {time} ({zone})",
   "js.settings.timezone.failed": "منطقهٔ زمانی ذخیره نشد - دوباره امتحان کنید.",
-  "err.bad_timezone": "این منطقهٔ زمانی را نمی‌شناسیم."
+  "err.bad_timezone": "این منطقهٔ زمانی را نمی‌شناسیم.",
+  "economy.group.activity": "پاداش‌های فعالیت"
 }

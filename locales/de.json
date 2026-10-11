@@ -3220,5 +3220,6 @@
   "settings.timezone.auto": "Automatisch (Browser-Zeitzone)",
   "js.settings.timezone.now": "Jetzt: {time} ({zone})",
   "js.settings.timezone.failed": "Deine Zeitzone konnte nicht gespeichert werden – versuch es noch mal.",
-  "err.bad_timezone": "Diese Zeitzone kennen wir nicht."
+  "err.bad_timezone": "Diese Zeitzone kennen wir nicht.",
+  "economy.group.activity": "Aktivitätsbelohnungen"
 }

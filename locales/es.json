@@ -3221,5 +3221,6 @@
   "settings.timezone.auto": "Automática (zona horaria del navegador)",
   "js.settings.timezone.now": "Ahora: {time} ({zone})",
   "js.settings.timezone.failed": "No se pudo guardar tu zona horaria; inténtalo de nuevo.",
-  "err.bad_timezone": "No conocemos esa zona horaria."
+  "err.bad_timezone": "No conocemos esa zona horaria.",
+  "economy.group.activity": "Recompensas por actividad"
 }

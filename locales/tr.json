@@ -3220,5 +3220,6 @@
   "settings.timezone.auto": "Otomatik (tarayıcı saat dilimi)",
   "js.settings.timezone.now": "Şu an: {time} ({zone})",
   "js.settings.timezone.failed": "Saat dilimin kaydedilemedi - tekrar dene.",
-  "err.bad_timezone": "Bu saat dilimini tanımıyoruz."
+  "err.bad_timezone": "Bu saat dilimini tanımıyoruz.",
+  "economy.group.activity": "Etkinlik ödülleri"
 }

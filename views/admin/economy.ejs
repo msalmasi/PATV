@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'economy', admIsAdmin: isAdmin }) %>
 <%
   const fmt = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -84,7 +85,7 @@
         <% const gs = Array.from(new Set(Object.keys((I.incentives && I.incentives.budgets) || {}).concat(Object.keys(I.groups || {})))); %>
         <% if (!gs.length) { %><tr><td colspan="6" class="empty">Nothing queued, and no budgets synced.</td></tr><% } %>
         <% gs.forEach((g) => { const q = (I.groups || {})[g] || { n: 0, t: 0, oldest: null }; const b = I.incentives || { remaining: {}, budgets: {} }; %>
-          <tr><td><code><%= g %></code></td><td class="num"><%= b.remaining[g] !== undefined ? fmt(b.remaining[g]) : '–' %></td>
+          <tr><td><code><%= g %></code><%= g === 'activity' ? ' ' + t('economy.group.activity') : '' %></td><td class="num"><%= b.remaining[g] !== undefined ? fmt(b.remaining[g]) : '–' %></td>
             <td class="num"><%= b.budgets[g] !== undefined ? fmt(b.budgets[g]) : '–' %></td><td class="num"><%= fmt(q.n) %></td>
             <td class="num"><%= fmt(q.t) %></td><td><%= q.oldest || '–' %></td></tr>
         <% }) %>

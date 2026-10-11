@@ -3174,5 +3174,6 @@
   "settings.timezone.auto": "Otomatis (zona waktu browser)",
   "js.settings.timezone.now": "Sekarang: {time} ({zone})",
   "js.settings.timezone.failed": "Zona waktumu gagal disimpan - coba lagi.",
-  "err.bad_timezone": "Kami tidak mengenal zona waktu itu."
+  "err.bad_timezone": "Kami tidak mengenal zona waktu itu.",
+  "economy.group.activity": "Hadiah aktivitas"
 }

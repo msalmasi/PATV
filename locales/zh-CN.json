@@ -3174,5 +3174,6 @@
   "settings.timezone.auto": "自动（浏览器时区）",
   "js.settings.timezone.now": "现在：{time}（{zone}）",
   "js.settings.timezone.failed": "无法保存你的时区，请重试。",
-  "err.bad_timezone": "我们不认识这个时区。"
+  "err.bad_timezone": "我们不认识这个时区。",
+  "economy.group.activity": "活跃奖励"
 }

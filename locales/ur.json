@@ -3220,5 +3220,6 @@
   "settings.timezone.auto": "خودکار (براؤزر کا ٹائم زون)",
   "js.settings.timezone.now": "ابھی: {time} ({zone})",
   "js.settings.timezone.failed": "آپ کا ٹائم زون محفوظ نہیں ہو سکا - دوبارہ کوشش کریں۔",
-  "err.bad_timezone": "ہم اس ٹائم زون کو نہیں جانتے۔"
+  "err.bad_timezone": "ہم اس ٹائم زون کو نہیں جانتے۔",
+  "economy.group.activity": "سرگرمی کے انعامات"
 }

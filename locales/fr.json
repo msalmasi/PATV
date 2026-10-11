@@ -3221,5 +3221,6 @@
   "settings.timezone.auto": "Automatique (fuseau du navigateur)",
   "js.settings.timezone.now": "Maintenant : {time} ({zone})",
   "js.settings.timezone.failed": "Impossible d’enregistrer ton fuseau horaire – réessaie.",
-  "err.bad_timezone": "Nous ne connaissons pas ce fuseau horaire."
+  "err.bad_timezone": "Nous ne connaissons pas ce fuseau horaire.",
+  "economy.group.activity": "Récompenses d'activité"
 }
