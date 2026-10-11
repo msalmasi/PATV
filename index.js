@@ -3031,12 +3031,12 @@ app.post("/api/badges/add", upload.none(), authenticateToken, addUser, async (re
 
   // Endpoint to start a blackjack hand and record the wager
 app.post("/api/blackjack/wager", async (req, res) => {
-    const { userId, wager, password } = req.body;
-  
-    // Authentication check
-    if (password !== process.env.BOT_TOKEN) {
-      return res.status(403).send("Access denied");
-    }
+    const { userId, wager } = req.body || {};
+
+    // 1.99mv: legacy Discord blackjack only - 410 unless LEGACY_DISCORD_BLACKJACK=1, then a real bot token (legacybj.js).
+    // (It compared with process.env.BOT_TOKEN, which isn't set: a request without a password got in.)
+    const gate = require("./legacybj").gate(req.body, isBotToken);
+    if (gate) return typeof gate.body === "string" ? res.status(gate.status).send(gate.body) : res.status(gate.status).json(gate.body);
   
     // Input validation
     if (!userId || !wager || wager <= 0) {
@@ -3091,12 +3091,12 @@ app.post("/api/blackjack/wager", async (req, res) => {
 
   // Endpoint to record blackjack results and payout
 app.post("/api/blackjack/result", async (req, res) => {
-    const { blackjackId, userId, payout, result, pvalue, spvalue, dvalue, password } = req.body;
-  
-    // Authentication check
-    if (password !== process.env.BOT_TOKEN) {
-      return res.status(403).send("Access denied");
-    }
+    const { blackjackId, userId, payout, result, pvalue, spvalue, dvalue } = req.body || {};
+
+    // 1.99mv: legacy Discord blackjack only - 410 unless LEGACY_DISCORD_BLACKJACK=1, then a real bot token (legacybj.js).
+    // (It compared with process.env.BOT_TOKEN, which isn't set: anyone could post any payout to any account.)
+    const gate = require("./legacybj").gate(req.body, isBotToken);
+    if (gate) return typeof gate.body === "string" ? res.status(gate.status).send(gate.body) : res.status(gate.status).json(gate.body);
   
     // Input validation
     if (!blackjackId || !userId || payout == null || !result || pvalue == null || dvalue == null) {
@@ -3105,7 +3105,16 @@ app.post("/api/blackjack/result", async (req, res) => {
   
     try {
       await runQuery("BEGIN TRANSACTION");
-  
+
+      // 1.99mv: only an OPEN hand of this user, once, with a payout the game can produce (legacybj.checkResult)
+      const hand = (await getQuery("SELECT userId, wager, payoutTransactionId FROM blackjack WHERE blackjackId = ?", [blackjackId]))[0];
+      const why = require("./legacybj").checkResult(hand, userId, payout);
+      if (why) {
+        await runQuery("ROLLBACK");
+        console.warn(`[blackjack] result refused (${why}) for hand ${String(blackjackId).slice(0, 40)}`);
+        return res.status(why === "no_hand" ? 404 : 409).json({ success: false, message: "Invalid hand", error: why });
+      }
+
       // Log the payout transaction
       const transactionId = uuidv4();
       // Add the payout to the user's balance - paid OUT of the casino jackpot (1.63); logged only
@@ -3120,10 +3129,11 @@ app.post("/api/blackjack/result", async (req, res) => {
       }
   
       // Update the blackjack row with the payout and result
-      await runQuery(
-        "UPDATE blackjack SET payout = ?, result = ?, payoutTransactionId = ?, pvalue = ?, spvalue = ?, dvalue = ? WHERE blackjackId = ?",
+      const settled = await runQuery(
+        "UPDATE blackjack SET payout = ?, result = ?, payoutTransactionId = ?, pvalue = ?, spvalue = ?, dvalue = ? WHERE blackjackId = ? AND payoutTransactionId IS NULL",
         [payout, result, transactionId, pvalue, spvalue, dvalue, blackjackId]
       );
+      if (!settled || settled.changes !== 1) throw new Error("blackjack hand already settled");   // rolls the payout back
   
       await runQuery("COMMIT");
       xp = Math.abs(payout) * 0.005;
