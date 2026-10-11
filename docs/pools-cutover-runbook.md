@@ -307,3 +307,14 @@ The cutover itself:
 **Cutover again** `pc-rehearsal-soak`: matched, supply 1,208,837,754 → 1,208,837,754. Staging was left ON for the soak.
 
 The only difference between the runs is a wording one. The epoch's own check said "pools moved by other activity meanwhile" on the backend run. It means the 30 s funding tick settled queued website grants from the prod copy while the epoch ran, which the local run happened to do before it. The amounts are identical.
+
+**The scheduled sequence (section S) was run on staging with the final code (bot 1.99oe, site 1.99oc+):**
+1. S8 rollback `pr-seq-0001`: 131,670,424 PAT exactly back on Pepe. Site pools 0, `live` false, supply unchanged (1,208,837,754).
+2. S2 dry run: ready, 12 pools, no problems.
+3. S6 cutover `pc-seq-0001`: refused, "the site didn't answer". The staging site was restarting for another agent's deploy at that moment. Nothing changed, which is a live check that the refusal path is safe. Since 1.99oi the pre-check retries for a few seconds.
+4. S6 cutover `pc-seq-0002`:
+   - `ok`, `match`, **`verified: true`** (the post-flip check);
+   - delta `[]`;
+   - supply 1,208,837,754 → 1,208,837,754.
+5. S7: site pools 131,670,424 in 12 pools, `live` true, no moves since the import. Pepe `on`, empty outbox, no lost answers, no conflict, local pools 0.
+
