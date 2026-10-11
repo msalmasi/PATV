@@ -190,6 +190,7 @@ test("purchase: 40% to the pot, 60% to the House, keyed; a replay never charges 
 
 test("a full draw: close (digest) -> draw (numbers from the seed) -> pay per tier; next draw opens Sunday; fairness verifies", async () => {
   await fresh({ pot: 5000000 });
+  for (const t of ["casino_ach_counts", "casino_reward_done"]) await runQuery(`DELETE FROM ${t}`).catch(() => {});   // 1.99nc counts below
   await svc.buy(ann, { picks: [[[1, 2, 3, 4], 5], [[1, 2, 3, 9], 5], [[20, 21, 22, 23], 5]] }, "lt:a");   // 3+PB, 0+PB, and a jackpot? no
   await svc.buy(bob, { picks: [[[1, 2, 3, 4], 6], [[1, 2, 10, 11], 6]] }, "lt:b");                       // 4 (no ball), 2
   await svc.buy(cat, { picks: [[[9, 10, 11, 12], 1]] }, "lt:c");                                           // nothing
@@ -216,6 +217,12 @@ test("a full draw: close (digest) -> draw (numbers from the seed) -> pay per tie
   assert.equal(nx.draw, 2);
   assert.equal(nx.next_at, Date.UTC(2026, 9, 19, 1) / 1000, "next Sunday 21:00 EDT");
   assert.ok(xp.some(([u]) => u === "u1"));
+  // 1.99nc: win achievements counted on the site for every winner; tickets only for buyers with no Camfrog link (Pepe counts those)
+  const cnt = async (u, m) => ((await getQuery("SELECT n FROM casino_ach_counts WHERE userId = ? AND metric = ?", [u, m]))[0] || {}).n || 0;
+  assert.deepEqual([await cnt("u1", "lotto_wins"), await cnt("u1", "lotto_jackpots"), await cnt("u2", "lotto_wins"), await cnt("u3", "lotto_wins")],
+                   [3, 1, 2, 0]);
+  assert.deepEqual([await cnt("u1", "lotto_tickets"), await cnt("u2", "lotto_tickets"), await cnt("u3", "lotto_tickets")], [0, 2, 0],
+                   "web-only Bob's 2 tickets; Ann and Cat are Camfrog-linked (Pepe counts theirs from the sale event)");
   // the reseed is due -> Pepe tops the pot up through his keyed endpoint, then acks
   const pl = await svc.poll(-1, 0);
   assert.deepEqual(pl.reseed, [{ draw: 1, want: 1000000 }]);

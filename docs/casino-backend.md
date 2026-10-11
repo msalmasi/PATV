@@ -335,6 +335,11 @@ the poll's `stream` field; Pepe draws only that table's board (blackjack or poke
   `casino_rep_queue`, the bot poll hands out unacked ones as `rep`, Pepe applies each key once (_gang_add_rep, a
   persisted done-list) and acks it in `rep_ack`. Hold'em PvP drop pairs are counted on the site only (`casino_pvp_rolls`),
   not shared with Pepe's duel/brawl pair log. No backfill.
+  **1.99nc:** the same counter (\`rewards.siteCount\`) awards the lotto and market win achievements by ACCOUNT: cf_lotto_win /
+  cf_lotto_jackpot for every paid lotto winner (lotto/service.js; Pepe 1.99nd stops bumping lotto_wins / lotto_jackpots),
+  lotto_tickets for buyers with no Camfrog link (Pepe still counts linked buyers from the sale event - disjoint), cf_market
+  on the market-win payout itself (/api/wager/payout, keyed by Pepe's idempotency key; Pepe stops counting market_wins by
+  name, which mis-resolved web-only names). All threshold-1 badges except cf_lotto_100; a badge is only ever given once.
 - D5. Keep the JS engines for v2, with the shared Python test vectors.
 - D6. Client seeds later; a short fairness link in chat after each round, and on request (`!bj fair`, `!holdem fair`) - built.
 - D7. One table per room (either game), NO site-wide limit (`max_tables` 0 = none) - built.

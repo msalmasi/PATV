@@ -174,6 +174,10 @@ const RULES = {
   // 1.99mj: the site's casino achievement counters (web-only players) follow the account; the same metric adds up
   "casino_ach_counts.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MAX" } }),
   "casino_settings.actor": { deny: NAME },
+  // 1.99mw/1.99nc: Pepe's achievement counts so far (a base per metric, replaced at his next report) follow the account and add
+  // up (two Camfrog names' counts); the gang-rep queue is a journal keyed by the win, delivered by Camfrog name (casino/rewards.js)
+  "casino_ach_base.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MIN" } }),
+  "casino_rep_queue.userId": { keep: "the casino's gang-rep journal (keyed by the win, delivered to Pepe by Camfrog name)" },
   // 1.99ml: the lotto backend (lotto/service.js) - tickets follow the account (the survivor holds them for the draw); the
   // purchase journal is history keyed by its charge (a refund / prize follows a merge through ledger.post resolveMerged)
   "lotto_tickets.userId": M(),

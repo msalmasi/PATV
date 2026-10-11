@@ -267,6 +267,18 @@ async function repAck(keys) {
   return n;
 }
 
+/** 1.99nc: a counted achievement metric outside the casino (lotto wins / tickets, market wins), once per key - the same
+ *  counter and award path as the casino's (casino_ach_counts -> achievements.awardCount -> Pepe's feed). */
+async function siteCount(key, uid, metric, n) {
+  try {
+    if (!uid || !metric || !(Number(n) > 0)) return null;
+    return await bump(key, uid, metric, Math.trunc(Number(n)));
+  } catch (e) {
+    console.error(`[achievements] ${metric}:`, e.message);
+    return null;
+  }
+}
+
 async function counts(uid) {
   await ensure();
   const out = {};
@@ -274,5 +286,5 @@ async function counts(uid) {
   return out;
 }
 
-module.exports = { blackjackRound, holdemPot, holdemHand, winReward, wantBases, setBases, repPending, repAck, counts, ensure, hooks,
+module.exports = { blackjackRound, holdemPot, holdemHand, winReward, wantBases, setBases, repPending, repAck, counts, ensure, hooks, siteCount,
                    XP_WIN_RATE, METRICS };

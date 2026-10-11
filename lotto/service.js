@@ -303,6 +303,11 @@ async function pay(D) {
       const up = S.hooks.updateLevel || require("../user.controller").updateLevel;
       if (xp > 0 && up) await up(x.uid, xp);
     } catch (e) { console.error("[lotto] xp:", e.message); }
+    // 1.99nc: the win achievements (cf_lotto_win / cf_lotto_jackpot) for EVERY winner, web-only too - Pepe no longer bumps
+    // lotto_wins / lotto_jackpots (an older Pepe still might: the badge is given once, so never twice)
+    const rw = require("../casino/rewards");
+    await rw.siteCount(`lotto:${D.draw}:${x.uid}:wins`, x.uid, "lotto_wins", x.wins);
+    if (x.jackpot > 0) await rw.siteCount(`lotto:${D.draw}:${x.uid}:jackpots`, x.uid, "lotto_jackpots", x.jackpot);
     try {
       await require("../inbox").addSafe(x.uid, { kind: "lotto", title: `Lotto draw #${D.draw}: you won PAT ${fmt(x.amount)}`,
         body: `🎟️ Your lotto ticket(s) won PAT ${fmt(x.amount)} in draw #${D.draw}! It's in your balance.`, link: "/lotto",
@@ -475,6 +480,9 @@ function buy(actor, { picks, quick }, key) {
     await runQuery("UPDATE lotto_purchases SET response = ? WHERE key = ?", [JSON.stringify(out), key]);
     await emit("sale", { draw: D.draw, count: list.length, sold, uid: u.userId, username: u.username, camfrog: u.camfrogUsername || null,
                          via: actor.via || "web" });
+    // 1.99nc: tickets bought by an account with no Camfrog link count here (cf_lotto_100); Pepe counts the linked ones from
+    // the sale event's camfrog name - no buyer is counted by both
+    if (!u.camfrogUsername) await require("../casino/rewards").siteCount(`lotto:sale:${key}`, u.userId, "lotto_tickets", list.length);
     const M = E.RULES.MILESTONE;
     if (Math.floor(sold / M) > Math.floor(before / M)) {
       await emit("milestone", { draw: D.draw, sold: Math.floor(sold / M) * M, jackpot: jackpotOf(potNow), next_at: D.next_at });

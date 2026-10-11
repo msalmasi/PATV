@@ -251,6 +251,22 @@ test("hold'em: a web-only winner's pots are counted (Pot Odds); showdown drops f
   assert.equal((await rewards.repPending()).length, 0, "web-only accounts: no Camfrog identity, no gang rep");
 });
 
+test("1.99nc: siteCount - market / lotto wins awarded by account (web-only too), once per key; the badge never twice", async () => {
+  await fresh();
+  await rewards.siteCount("mkt:pepe-payout:1:1", "u2", "market_wins", 1);
+  await rewards.siteCount("mkt:pepe-payout:1:1", "u2", "market_wins", 1);          // a retried payout: same key
+  await rewards.siteCount("mkt:pepe-payout:2:1", "u2", "market_wins", 1);          // a second win: counted, badge already held
+  assert.equal(await count("u2", "market_wins"), 2);
+  assert.deepEqual(await badges("u2"), ["cf_market"]);
+  assert.deepEqual(await feed("u2"), ["cf_market"], "announced once by Pepe's feed");
+  await rewards.siteCount("lotto:9:u2:wins", "u2", "lotto_wins", 2);
+  await rewards.siteCount("lotto:9:u2:jackpots", "u2", "lotto_jackpots", 1);
+  assert.deepEqual(await badges("u2"), ["cf_lotto_jackpot", "cf_lotto_win", "cf_market"]);
+  assert.equal(await rewards.siteCount("x", "u2", "market_wins", 0), null, "nothing to count");
+  const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  assert.ok(/market-win[\s\S]{0,400}siteCount\(`mkt:/.test(src), "the wager payout route awards cf_market");
+});
+
 test("drop config: Pepe can push the casino rows and gates (rates + params), clamped", async () => {
   await COS.setDropConfig({ blackjack: 0.05, holdem: 2 }, 3, { min_bj_bet: 1000, min_holdem_pot: 15000, min_level: 3, pair_rolls: 2 });
   const c = await COS.dropConfig();

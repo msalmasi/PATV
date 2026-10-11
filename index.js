@@ -2066,6 +2066,12 @@ app.post("/api/wager/payout", async (req, res) => {
     }
     idem.done(200, { ok: true });
     res.json({ ok: true });
+    // 1.99nc: cf_market for the account a market win is actually paid to (web-only too; Pepe no longer counts market_wins
+    // by name). Once per payout (Pepe's idempotency key); the badge itself is given once anyway.
+    if (/^market-win/.test(reason)) {
+      const key = String((req.body && req.body.idempotency_key) || paid.transactionId || "");
+      if (key) require("./casino/rewards").siteCount(`mkt:${key}`, paid.userId || users[0].userId, "market_wins", 1).catch(() => {});
+    }
   } catch (e) {
     idem.fail();
     console.error("wager payout error:", e);
