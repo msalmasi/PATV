@@ -37,10 +37,14 @@ const EXPORT = {
   pvp: { alice: { wins: 5, losses: 2, net: 30000 }, bob: { wins: 2, losses: 5, net: -30000 } },
   lore: [{ who: "alice", amount: 90000, date: "2026-10-01", job: "the PAT Casino" }],
 };
-const TOTALS = { sheets: 2, pvp: 2, lore: 1, loot: 120000, heists: 8, duel_wins: 7, duel_losses: 7 };
+const TOTALS = { sheets: "2", pvp: "2", lore: "1", loot: "120000", heists: "8", duel_wins: "7", duel_losses: "7" };
+// the wire shape: every record as Pepe's own JSON text (never re-serialized by JS - his numbers can pass 2^53)
+const map = (o, f) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, f(v)]));
+const T = (obj) => ({ v: 1, sheets: map(obj.sheets, (x) => JSON.stringify(x)), pvp: map(obj.pvp, (x) => JSON.stringify(x)), lore: JSON.stringify(obj.lore) });
 const pack = (obj, extra = {}) => {
-  const payload = JSON.stringify(obj);
-  return { payload, digest: crypto.createHash("sha256").update(payload, "utf8").digest("hex"), totals: G.totalsOf(obj), ...extra };
+  const t = T(obj);
+  const payload = JSON.stringify(t);
+  return { payload, digest: crypto.createHash("sha256").update(payload, "utf8").digest("hex"), totals: G.totalsOf(t), ...extra };
 };
 
 let base, server;
@@ -75,7 +79,7 @@ test("off by default on prod: no import, nothing live, writes refused", async ()
   const r = await post("/api/gtf/bot/import", { password: "bot", ...pack(EXPORT) });
   assert.equal(r.status, 409);
   assert.equal(r.body.code, "E_FEATURE_OFF");
-  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-early-1", records: [{ kind: "sheet", id: "x", data: {} }] })).body.code, "E_NOT_LIVE");
+  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-early-1", records: [{ kind: "sheet", id: "x", json: "{}" }] })).body.code, "E_NOT_LIVE");
   assert.equal((await post("/api/gtf/bot/status", { password: "nope" })).status, 403, "bot token only");
   const st = (await post("/api/gtf/bot/status", { password: "bot" })).body;
   assert.deepEqual([st.enabled, st.live], [false, false]);
@@ -85,8 +89,9 @@ test("the import: digest + totals checked, verified backup, idempotent, a differ
   process.env.STAGING = "1";
   assert.equal(await G.enabled(), true, "on by default on staging");
   assert.equal((await post("/api/gtf/bot/import", { password: "bot", ...pack(EXPORT, { digest: "0".repeat(64) }) })).status, 400);
-  assert.equal((await post("/api/gtf/bot/import", { password: "bot", ...pack(EXPORT, { totals: { ...TOTALS, loot: 1 } }) })).status, 400);
-  assert.equal((await post("/api/gtf/bot/import", { password: "bot", ...pack({ v: 1, sheets: [], pvp: {}, lore: [] }) })).status, 400, "shape checked");
+  assert.equal((await post("/api/gtf/bot/import", { password: "bot", ...pack(EXPORT, { totals: { ...TOTALS, loot: "1" } }) })).status, 400);
+  const bad = JSON.stringify({ v: 1, sheets: { a: { loot: 1 } }, pvp: {}, lore: [] });     // objects, not texts
+  assert.equal((await post("/api/gtf/bot/import", { password: "bot", payload: bad, digest: crypto.createHash("sha256").update(bad).digest("hex"), totals: TOTALS })).status, 400, "shape checked");
   const r = await post("/api/gtf/bot/import", { password: "bot", ...pack(EXPORT) });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body.totals, TOTALS);
@@ -106,8 +111,8 @@ test("the import: digest + totals checked, verified backup, idempotent, a differ
 test("Pepe's keyed batches: idempotent, revs, tombstones, bad records refused", async () => {
   const rev0 = (await G.status()).rev;
   const body = { password: "bot", key: "gs-batch-0001", records: [
-    { kind: "sheet", id: "alice", data: { ...EXPORT.sheets.alice, loot: 125000, avatar_seed: 999 } },
-    { kind: "pvp", id: "carl", data: { wins: 1, losses: 0, net: 500 } },
+    { kind: "sheet", id: "alice", json: JSON.stringify({ ...EXPORT.sheets.alice, loot: 125000, avatar_seed: 999 }) },
+    { kind: "pvp", id: "carl", json: JSON.stringify({ wins: 1, losses: 0, net: 500 }) },
   ] };
   const a = await post("/api/gtf/bot/put", body);
   assert.equal(a.status, 200, JSON.stringify(a.body));
@@ -117,13 +122,14 @@ test("Pepe's keyed batches: idempotent, revs, tombstones, bad records refused", 
   assert.equal((await G.status()).rev, rev0 + 2);
   assert.equal((await G.record("sheet", "alice")).loot, 125000);
   assert.equal((await getQuery("SELECT seed FROM cosmetic_avatar_seeds WHERE camfrog = 'alice'"))[0].seed, 999);
-  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-bad-0001", records: [{ kind: "gang", id: "x", data: {} }] })).status, 400, "only GTF kinds");
-  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-bad-0002", records: [{ kind: "lore", id: "x", data: [] }] })).status, 400);
+  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-bad-0001", records: [{ kind: "gang", id: "x", json: "{}" }] })).status, 400, "only GTF kinds");
+  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-bad-0002", records: [{ kind: "lore", id: "x", json: "[]" }] })).status, 400);
+  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-bad-0003", records: [{ kind: "sheet", id: "x", json: "[1]" }] })).status, 400, "a sheet is an object");
   assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "bad", records: [] })).status, 400, "key format");
-  await post("/api/gtf/bot/put", { password: "bot", key: "gs-tomb-0001", records: [{ kind: "pvp", id: "carl", data: null }] });
+  await post("/api/gtf/bot/put", { password: "bot", key: "gs-tomb-0001", records: [{ kind: "pvp", id: "carl", json: null }] });
   assert.equal(await G.record("pvp", "carl"), null, "a tombstone hides the record");
   const s = (await post("/api/gtf/bot/state", { password: "bot", since_rev: rev0 })).body;
-  assert.deepEqual(s.records.map((r) => [r.kind, r.id, r.data === null]), [["sheet", "alice", false], ["pvp", "carl", true]], "pull: changes after a rev, oldest first");
+  assert.deepEqual(s.records.map((r) => [r.kind, r.id, r.json === null]), [["sheet", "alice", false], ["pvp", "carl", true]], "pull: changes after a rev, oldest first");
   assert.equal(s.live, true);
 });
 
@@ -132,19 +138,37 @@ test("the way back: release freezes the site's copy and hands back the export; a
   assert.equal(r.status, 200);
   assert.equal(crypto.createHash("sha256").update(r.body.payload, "utf8").digest("hex"), r.body.digest, "digest of the payload");
   const obj = JSON.parse(r.body.payload);
-  assert.equal(obj.sheets.alice.loot, 125000);
+  assert.equal(JSON.parse(obj.sheets.alice).loot, 125000);
   assert.ok(!obj.pvp.carl, "tombstones aren't exported");
   assert.deepEqual(r.body.totals, G.totalsOf(obj));
   assert.equal(await G.live(), false, "released = not live");
-  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-after-0001", records: [{ kind: "pvp", id: "x", data: {} }] })).body.code, "E_NOT_LIVE");
+  assert.equal((await post("/api/gtf/bot/put", { password: "bot", key: "gs-after-0001", records: [{ kind: "pvp", id: "x", json: "{}" }] })).body.code, "E_NOT_LIVE");
   assert.equal(await G.sheetOf("alice"), null, "the website stops reading a released copy");
   const again = await post("/api/gtf/bot/release", { password: "bot" });
   assert.equal(again.body.digest, r.body.digest, "release is idempotent");
-  const fresh = { v: 1, sheets: { zed: { loot: 1, heists: 2 } }, pvp: {}, lore: [] };
+  const fresh = { sheets: { zed: { loot: 1, heists: 2 } }, pvp: {}, lore: [] };
   const imp = await post("/api/gtf/bot/import", { password: "bot", ...pack(fresh) });
   assert.equal(imp.status, 200, JSON.stringify(imp.body));
   assert.deepEqual(Object.keys((await G.exportObject()).sheets), ["zed"], "the archive was replaced (a backup was taken first)");
   assert.equal(await G.live(), true);
+});
+
+test("numbers past 2^53 survive exactly: stored as Pepe's text, totals in BigInt (staging's sandbox loot)", async () => {
+  // "the way back" test above left a fresh live import ("zed"); release it so a new import can run
+  await post("/api/gtf/bot/release", { password: "bot" });
+  const big = '{"heists":3,"loot":28862561789771469}';
+  const t = { v: 1, sheets: { big, small: '{"heists":1,"loot":1.75}' }, pvp: { p: '{"losses":9007199254740993,"wins":2}' }, lore: "[]" };
+  const payload = JSON.stringify(t);
+  const totals = G.totalsOf(t);
+  assert.deepEqual(totals, { sheets: "2", pvp: "1", lore: "0", loot: "28862561789771470", heists: "4", duel_wins: "2", duel_losses: "9007199254740993" });
+  const imp = await post("/api/gtf/bot/import", { password: "bot", payload, digest: crypto.createHash("sha256").update(payload, "utf8").digest("hex"), totals });
+  assert.equal(imp.status, 200, JSON.stringify(imp.body));
+  const st = (await post("/api/gtf/bot/state", { password: "bot", since_rev: 0 })).body;
+  assert.equal(st.records.find((r) => r.id === "big").json, big, "the exact text comes back");
+  const rel = (await post("/api/gtf/bot/release", { password: "bot" })).body;
+  assert.equal(JSON.parse(rel.payload).sheets.big, big);
+  assert.equal(rel.totals.duel_losses, "9007199254740993");
+  assert.deepEqual(G.topInts('{"a":{"loot":5},"loot":-7,"s":"\\"loot\\":9"}', ["loot"]), { loot: -7n }, "top level only, strings skipped");
 });
 
 test("admin switch: admins only, same-site fetch only", async () => {
