@@ -17,7 +17,7 @@
       </label>
       <label>Price (PAT) <input type="number" name="price" min="1" required value="<%= p.cost %>"></label>
       <label>Stock <input type="number" name="stock" min="0" required value="<%= p.quantity %>"></label>
-      <label>Image URL (https, optional) <input type="url" name="image_url" maxlength="500" value="<%= p.image_url || '' %>"></label>
+      <label>Image (https:// link or /public/img/… path, optional) <input type="text" name="image_url" maxlength="500" inputmode="url" autocomplete="off" pattern="https://\S+|/\S+" title="An https:// link or a site path such as /public/img/shop/ps5-pro.svg" value="<%= p.image_url || '' %>"></label>
       <label class="wide">Description <textarea name="description" maxlength="1000"><%= p.description || '' %></textarea></label>
       <% if (p.seller_id) { %><label class="wide">Ask the buyer for <input type="text" name="buyer_prompt" maxlength="120" value="<%= p.buyer_prompt || '' %>"></label><% } %>
     </div>

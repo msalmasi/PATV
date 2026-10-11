@@ -108,7 +108,7 @@
       <label>Category <select name="category"><% categories.forEach((c) => { %><option><%= c %></option><% }) %></select></label>
       <label>Price (PAT) <input type="number" name="price" min="1" required></label>
       <label>Stock <input type="number" name="stock" min="0" value="1" required></label>
-      <label>Image URL (https, optional) <input type="url" name="image_url" maxlength="500"></label>
+      <label>Image (https:// link or /public/img/… path, optional) <input type="text" name="image_url" maxlength="500" inputmode="url" autocomplete="off" pattern="https://\S+|/\S+" title="An https:// link or a site path such as /public/img/shop/ps5-pro.svg" placeholder="/public/img/shop/….svg or https://…"></label>
       <label class="wide">Description <textarea name="description" maxlength="1000"></textarea></label>
     </div>
     <p class="muted" style="margin:0">Official items are sold instantly: the PAT goes to the store owner's account and the order is completed at once (as the classic prize store always did).</p>

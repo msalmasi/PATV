@@ -98,6 +98,32 @@ test("listings may use one of the shop's own pictures; other local paths are sti
   assert.throws(() => shop.validateListing({ ...base, image_url: "javascript:alert(1)" }), /https/);
 });
 
+test("1.99nh: image field takes site picture paths (normalized to /public) and https links, nothing else", () => {
+  const base = { title: "A thing", category: shop.settings.categories[0], price: 10, stock: 1 };
+  const img = (u) => shop.validateListing({ ...base, image_url: u }).image_url;
+  // the path the shop art is really served at (express.static on /public), and the short forms people paste
+  assert.equal(img("/public/img/shop/ps5-pro.svg"), "/public/img/shop/ps5-pro.svg");
+  assert.equal(img("/img/shop/ps5-pro.svg"), "/public/img/shop/ps5-pro.svg");
+  assert.equal(img("public/img/shop/ps5-pro.svg"), "/public/img/shop/ps5-pro.svg");
+  assert.equal(img(" /public/img/banners/Big_Prize.PNG "), "/public/img/banners/Big_Prize.PNG");
+  assert.equal(img("https://cdn.example.com/a.png"), "https://cdn.example.com/a.png");
+  assert.equal(img(""), null);
+  for (const bad of ["javascript:alert(1)", "data:image/svg+xml,<svg/>", "http://example.com/a.png", "//evil.example/a.png",
+                     "/logout", "/public/img/../../index.js", "/public/./x.svg", "/public/img/x.svg?y=1", "/public/img/x.html",
+                     "/public\\img\\x.svg", "/public/img/a b.svg", "https://x.example/a\".png"]) {
+    assert.throws(() => img(bad), /https/, "refused: " + bad);
+  }
+  // the edit forms take the same thing in the browser (type=text + pattern; type=url blocked relative paths)
+  for (const v of ["shopAdmin.ejs", "shopEdit.ejs", "shopSeller.ejs"]) {
+    const src = fs.readFileSync(path.join(repo, "views", v), "utf8");
+    const tag = src.match(/<input[^>]*name="image_url"[^>]*>/)[0];
+    assert.match(tag, /type="text"/, v);
+    const re = new RegExp("^(?:" + tag.match(/pattern="([^"]*)"/)[1] + ")$", "v");
+    assert.ok(re.test("/public/img/shop/ps5-pro.svg") && re.test("https://x.example/a.png"), v + " accepts paths and https");
+    assert.ok(!re.test("javascript:alert(1)") && !re.test("http://x.example/a.png") && !re.test("data:x"), v + " refuses the rest");
+  }
+});
+
 // ── gifts ──
 test("a gift: the payer pays, the recipient gets the role + the order + a notice; gift_from is the payer", async () => {
   const payer = await mkUser(5000), to = await mkUser(0, { camfrog: "FrogFriend" });

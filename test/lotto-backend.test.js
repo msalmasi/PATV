@@ -426,3 +426,83 @@ test("HTTP: web purchase (JSON fetch only), the /act form path, Pepe's act / pol
   const fair = await fetch(base + "/api/lotto/fair/1").then((r) => r.json());
   assert.ok(fair.ok && fair.commitment && fair.server_seed === null, "the seed stays secret until the draw");
 });
+
+// ── 1.99nh: the same numbers twice ──
+test("same ticket twice: allowed, but the web asks first (confirm) and chat / the API say so; quick-pick repeats just sell", async () => {
+  await fresh();
+  const pick = [[[27, 3, 14, 9], 6]];
+  // first copy: no dups, no note
+  const a = await svc.buy(cat, { picks: pick }, key(), { confirmDup: true });
+  assert.equal(a.ok, true); assert.equal(a.note, undefined); assert.equal(a.dups, undefined);
+  // the web asks before charging: nothing charged, nothing recorded under the key, so the same key can confirm
+  const before = await bal("u3");
+  const k2 = key();
+  const ask = await svc.buy(cat, { picks: pick }, k2, { confirmDup: true });
+  assert.deepEqual([ask.ok, ask.code, ask.draw], [false, "dup", 1]);
+  assert.deepEqual(ask.dups, [{ w: [3, 9, 14, 27], pb: 6, held: 1 }]);
+  assert.equal(await bal("u3"), before, "nothing charged");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM lotto_purchases WHERE key = ?", [k2]))[0].n, 0);
+  const yes = await svc.buy(cat, { picks: pick }, k2, { confirmDup: true, confirm: true });
+  assert.equal(yes.ok, true); assert.equal(yes.mine, 2);
+  assert.match(yes.note, /already had this exact ticket — now you hold 2/);
+  assert.equal(await bal("u3"), before - yes.cost);
+  // other numbers, another draw's tickets or another player's same numbers are not repeats
+  const other = await svc.buy(cat, { picks: [[[3, 9, 14, 27], 7]] }, key(), { confirmDup: true });
+  assert.equal(other.ok, true); assert.equal(other.note, undefined);
+  const bobSame = await svc.buy(bob, { picks: pick }, key(), { confirmDup: true });
+  assert.equal(bobSame.ok, true); assert.equal(bobSame.note, undefined);
+
+  // chat (Pepe's act): still sold, the reply carries the note
+  const c1 = await post("/api/lotto/bot/act", { password: TOKEN, username: "ann", verb: "buy", picks: [[[1, 2, 3, 4], 5]], idem: "cf-dup-0001" });
+  assert.equal(c1.json.ok, true); assert.equal(c1.json.note, undefined);
+  const c2 = await post("/api/lotto/bot/act", { password: TOKEN, username: "ann", verb: "buy", picks: [[[4, 3, 2, 1], 5]], idem: "cf-dup-0002" });
+  assert.equal(c2.json.ok, true); assert.equal(c2.json.mine, 2);
+  assert.equal(c2.json.note, "heads up: you already had this exact ticket — now you hold 2");
+  assert.deepEqual(c2.json.dups, [{ w: [1, 2, 3, 4], pb: 5, held: 2 }]);
+  const c2r = await post("/api/lotto/bot/act", { password: TOKEN, username: "ann", verb: "buy", picks: [[[4, 3, 2, 1], 5]], idem: "cf-dup-0002" });
+  assert.ok(c2r.json.replay && c2r.json.note, "a replay answers the same, charged once");
+  assert.equal((await svc.myTickets("u1")).tickets.length, 2);
+
+  // the JSON API: 409 + the question, then the same idem with confirm buys it
+  const j1 = await post("/api/lotto/buy", { picks: pick, idem: "web-dup-0001" }, "u3");
+  assert.equal(j1.status, 409); assert.equal(j1.json.code, "dup");
+  assert.equal(j1.json.error, "You already have this exact ticket for draw #1 — buy it again?");
+  const j2 = await post("/api/lotto/buy", { picks: pick, idem: "web-dup-0001", confirm: true }, "u3");
+  assert.equal(j2.status, 200); assert.match(j2.json.note, /now you hold 3/);
+
+  // the /lotto form path (actions.js -> buyFromForm): an object asking, then a message with the note once confirmed
+  const f1 = await routes.buyFromForm("u3", ["3", "9", "14", "27", "pb", "6"], "form-dup-0001");
+  assert.deepEqual(f1, { msg: "You already have this exact ticket for draw #1 — buy it again?", confirm: { draw: 1, w: [3, 9, 14, 27], pb: 6 } });
+  const f2 = await routes.buyFromForm("u3", ["3", "9", "14", "27", "pb", "6"], "form-dup-0001", { confirm: true });
+  assert.match(f2, /1 ticket bought .* \(heads up: you already had this exact ticket — now you hold 4\)/);
+
+  // quick picks are never checked: a collision just sells (forced here)
+  const qp = E.quickPick;
+  E.quickPick = () => [[5, 6, 7, 8], 9];
+  try {
+    const q1 = await svc.buy(bob, { quick: 2 }, key(), { confirmDup: true });
+    const q2 = await svc.buy(bob, { quick: 2 }, key(), { confirmDup: true });
+    assert.equal(q1.ok && q2.ok, true); assert.equal(q2.note, undefined); assert.equal(q2.count, 2);
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM lotto_tickets WHERE userId = 'u2' AND w = '5,6,7,8' AND pb = 9"))[0].n, 4);
+  } finally { E.quickPick = qp; }
+});
+
+test("the /lotto page: ?dup=... shows the 'buy it again?' card (confirm=1), malformed params show nothing", async () => {
+  assert.deepEqual(LT.parseDupAsk({ dup: "27-3-14-9-6", dupdraw: "12" }), { draw: 12, w: [3, 9, 14, 27], pb: 6 });
+  for (const q of [{ dup: "3-9-14-27", dupdraw: "1" }, { dup: "3-3-14-27-6", dupdraw: "1" }, { dup: "3-9-14-31-6", dupdraw: "1" },
+                   { dup: "3-9-14-27-11", dupdraw: "1" }, { dup: "3-9-14-27-6" }, { dup: "3-9-14-27-6", dupdraw: "x" }, {}]) {
+    assert.equal(LT.parseDupAsk(q), null, JSON.stringify(q));
+  }
+  const ejs = require("ejs");
+  const L = { draw: 12, next_at: 4e9, close_secs: 3600, sales_open: true, price: 1000, jackpot: 5e6, sold: 3, prizes: [], players: {}, history: [] };
+  const render = (dupAsk) => ejs.renderFile(path.join(repo, "views", "lotto.ejs"), {
+    user: "cat", L, updated: null, me: { username: "cat", camfrogUsername: "CatCF", points_balance: 5000 }, mine: null, prizes: [], anyOdds: null,
+    players: 1, last: null, now: 1e9, backend: true, commitment: null, acts: [], msg: null, rules: { WHITE_MAX: 30, WHITE_PICK: 4, BALL_MAX: 10 },
+    dupAsk, ogBase: "http://test" }, { views: [path.join(repo, "views")] });
+  const html = await render({ draw: 12, w: [3, 9, 14, 27], pb: 6 });
+  const form = html.slice(html.indexOf('id="pb-dup"'), html.indexOf("</form>", html.indexOf('id="pb-dup"')));
+  assert.match(form, /You already have this exact ticket for draw #12 — buy it again\?/);
+  assert.match(form, /name="confirm" value="1"/);
+  for (const [i, v] of [[0, 3], [1, 9], [2, 14], [3, 27], [4, "pb"], [5, 6]]) assert.match(form, new RegExp(`name="a${i}" value="${v}"`));
+  assert.ok(!(await render(null)).includes('id="pb-dup"'));
+});

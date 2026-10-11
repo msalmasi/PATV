@@ -978,6 +978,18 @@ const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 const oneLine = (s, n) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
 const toInt = (v) => { const n = Math.floor(Number(String(v == null ? "" : v).replace(/[, _]/g, ""))); return isFinite(n) ? n : NaN; };
 
+// 1.99nh: a site-relative picture path -> the path it is served at, or null. Only image files under /public (express.static,
+// no side effects on GET); "/img/..." and "public/img/..." are normalized to "/public/img/...". Every path segment starts
+// with a letter, digit, _ or - (so no "." / ".." segments), and nothing but [A-Za-z0-9._-/] is allowed.
+const LOCAL_IMG_RE = /^\/public\/(?:[A-Za-z0-9_-][A-Za-z0-9._-]{0,80}\/){0,6}[A-Za-z0-9_-][A-Za-z0-9._-]{0,100}\.(?:svg|png|webp|jpe?g|gif|avif)$/i;
+function localImagePath(s) {
+  let p = String(s || "").trim();
+  if (!p || /^[a-z][a-z0-9+.-]*:/i.test(p) || p.startsWith("//")) return null;
+  if (/^public\//.test(p)) p = "/" + p;
+  else if (/^\/?img\//.test(p)) p = "/public/" + p.replace(/^\//, "");
+  return p.length <= 300 && LOCAL_IMG_RE.test(p) ? p : null;
+}
+
 function validateListing(b) {
   const title = oneLine(b.title, 80);
   const description = String(b.description || "").replace(/\r/g, "").trim().slice(0, 1000);
@@ -989,13 +1001,16 @@ function validateListing(b) {
   if (!category) throw new Refuse(400, "Pick a category.");
   if (!(price >= 1 && price <= PRICE_MAX)) throw new Refuse(400, `Price must be 1–${PRICE_MAX.toLocaleString()} PAT.`);
   if (!(stock >= 0 && stock <= STOCK_MAX)) throw new Refuse(400, `Stock must be 0–${STOCK_MAX.toLocaleString()}.`);
-  if (/^\/public\/img\/shop\/[a-z0-9-]{1,60}\.(svg|png|webp)$/.test(image_url)) {
-    // 1.99lz: one of the shop's own pictures (public/img/shop, tools/gen-shop-art.py) - kept as is
+  const local = localImagePath(image_url);
+  if (local) {
+    // 1.99lz: one of the shop's own pictures (public/img/shop, tools/gen-shop-art.py); 1.99nh: any picture the site serves
+    // from /public (static files only), with "/img/..." normalized to the "/public/img/..." it is really served at
+    image_url = local;
   } else if (image_url) {
     let u = null;
     try { u = new URL(image_url); } catch (e) { u = null; }
-    if (!u || u.protocol !== "https:" || image_url.length > 500 || /["'<>\s]/.test(image_url)) {
-      throw new Refuse(400, "The image must be an https:// link (or leave it empty).");
+    if (!u || u.protocol !== "https:" || image_url.length > 500 || /["'<>\s\\]/.test(image_url)) {
+      throw new Refuse(400, "The image must be an https:// link or a site picture path like /public/img/shop/ring.svg (or leave it empty).");
     }
     image_url = u.href;
   } else image_url = null;
@@ -1627,4 +1642,4 @@ module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeS
                    compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
                    maskAnonGift,                                          // 1.99mt: anonymous gifts
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise,
-                   browse, featured, validateListing, H /* 1.99lz: for the storefront tests */, attachArt /* 1.99mv */ };
+                   browse, featured, validateListing, localImagePath, H /* 1.99lz: for the storefront tests */, attachArt /* 1.99mv */ };

@@ -440,7 +440,31 @@ async function mineCount(draw, uid) {
  * Buy tickets. actor {uid, name, via}; picks = [[w[4], pb]] or null with quick = n. key = the idempotency key
  * (one charge per key, ever). -> {ok, code, bought, count, cost, mine, jackpot, draw, next_at, balance?}
  */
-function buy(actor, { picks, quick }, key) {
+// 1.99nh: the same numbers bought again are allowed (each is its own ticket), but the buyer is told. Hand picks only:
+// [{w, pb, held}] for each picked ticket the buyer already holds in draw `draw` (held = how many they hold now).
+async function heldDups(draw, uid, list) {
+  const rows = await getQuery("SELECT w, pb, COUNT(*) AS n FROM lotto_tickets WHERE draw = ? AND userId = ? GROUP BY w, pb", [draw, uid]);
+  const have = new Map(rows.map((r) => [`${r.w}|${r.pb}`, r.n]));
+  const seen = new Set(), out = [];
+  for (const [w, pb] of list) {
+    const k = `${w.join(",")}|${pb}`;
+    if (have.has(k) && !seen.has(k)) { seen.add(k); out.push({ w, pb, held: have.get(k) }); }
+  }
+  return out;
+}
+/** The short heads-up appended to a reply when a hand-picked ticket was already held ("" when none). */
+function dupNote(dups) {
+  if (!dups || !dups.length) return "";
+  if (dups.length === 1) return `heads up: you already had this exact ticket — now you hold ${dups[0].held}`;
+  return `heads up: you already had ${dups.length} of these exact tickets`;
+}
+
+/**
+ * opts (1.99nh): {confirmDup: true} refuses a hand pick the buyer already holds this draw ({ok: false, code: "dup", draw,
+ * dups}) - nothing charged, nothing recorded under the key - unless {confirm: true}. A sale that repeats held numbers
+ * carries dups [{w, pb, held}] (held = after this sale) and a short `note`. Quick picks are never checked.
+ */
+function buy(actor, { picks, quick }, key, opts = {}) {
   return locked(async () => {
     await ensure();
     const st = await loadSettings();
@@ -460,6 +484,9 @@ function buy(actor, { picks, quick }, key) {
       const n = Math.max(1, Math.min(Math.trunc(Number(quick) || 1), E.RULES.MAX_PER_BUY));
       list = Array.from({ length: n }, () => E.quickPick());
     }
+    const handPicked = !!(picks && picks.length);
+    const dups = handPicked ? await heldDups(D.draw, u.userId, list) : [];
+    if (dups.length && opts.confirmDup && !opts.confirm) return { ok: false, code: "dup", draw: D.draw, dups };
     const cost = list.length * st.price;
     const pot = Math.trunc(cost * st.pot_share);
     const name = String(actor.name || u.camfrogUsername || u.displayname || u.username).replace(/[\u0000-\u001f]/g, " ").slice(0, 40);
@@ -477,6 +504,12 @@ function buy(actor, { picks, quick }, key) {
     const potNow = await potBalance();
     const out = { ok: true, bought: list.length <= 5 ? list : [], count: list.length, cost, mine: await mineCount(D.draw, u.userId),
                   jackpot: jackpotOf(potNow), draw: D.draw, next_at: D.next_at };
+    if (dups.length) {
+      // held now = held before + the copies in this order
+      for (const d of dups) d.held += list.filter(([w, pb]) => pb === d.pb && w.join(",") === d.w.join(",")).length;
+      out.dups = dups;
+      out.note = dupNote(dups);
+    }
     await runQuery("UPDATE lotto_purchases SET response = ? WHERE key = ?", [JSON.stringify(out), key]);
     await emit("sale", { draw: D.draw, count: list.length, sold, uid: u.userId, username: u.username, camfrog: u.camfrogUsername || null,
                          via: actor.via || "web" });

@@ -64,6 +64,17 @@ function cleanSnapshot(b) {
   };
 }
 
+// 1.99nh: /lotto?dup=3-9-14-27-6&dupdraw=12 (actions.js, after a hand pick the buyer already holds) -> the "buy it
+// again?" card's ticket; anything malformed -> null (no card)
+function parseDupAsk(q) {
+  const n = String((q && q.dup) || "").split("-").map((x) => (/^\d{1,2}$/.test(x) ? Number(x) : NaN));
+  const draw = /^\d{1,7}$/.test(String((q && q.dupdraw) || "")) ? Number(q.dupdraw) : 0;
+  if (n.length !== WHITE_PICK + 1 || !draw) return null;
+  const w = n.slice(0, WHITE_PICK), pb = n[WHITE_PICK];
+  if (new Set(w).size !== WHITE_PICK || !w.every((x) => x >= 1 && x <= WHITE_MAX) || !(pb >= 1 && pb <= BALL_MAX)) return null;
+  return { draw, w: w.sort((a, b) => a - b), pb };
+}
+
 // n choose k
 function C(n, k) {
   if (k < 0 || k > n) return 0;
@@ -169,6 +180,7 @@ function register(app, { isBotToken, addUser }) {
         user: req.user ? req.user.username : null, L, updated: row ? row.updated : null, me, mine, prizes, anyOdds,
         players, last, now: Math.floor(Date.now() / 1000), backend, commitment: L && L.commitment ? L.commitment : null,
         acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
+        dupAsk: me ? parseDupAsk(req.query) : null,
         rules: { WHITE_MAX, WHITE_PICK, BALL_MAX },
       });
     } catch (e) {
@@ -187,4 +199,4 @@ async function storeSnapshot(snap) {
                   ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated = excluded.updated`, [JSON.stringify(clean), Date.now()]);
 }
 
-module.exports = { register, oddsFor, cleanSnapshot, ticketPrize, storeSnapshot };
+module.exports = { register, oddsFor, cleanSnapshot, ticketPrize, storeSnapshot, parseDupAsk };

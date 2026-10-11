@@ -24,7 +24,7 @@
       </label>
       <label><%- t('shop.sd.f.price') %> <input type="number" name="price" min="1" step="1" required value="<%= v.cost || '' %>" inputmode="numeric"></label>
       <label><%- t('shop.sd.f.stock') %> <input type="number" name="stock" min="0" step="1" required value="<%= v.quantity != null ? v.quantity : 1 %>" inputmode="numeric"></label>
-      <label><%- t('shop.sd.f.image') %> <input type="url" name="image_url" maxlength="500" value="<%= v.image_url || '' %>" placeholder="https://…"></label>
+      <label><%- t('shop.sd.f.image') %> <input type="text" name="image_url" maxlength="500" inputmode="url" autocomplete="off" pattern="https://\S+|/\S+" value="<%= v.image_url || '' %>" placeholder="https://…"></label>
       <label class="wide"><%- t('shop.sd.f.desc') %>
         <textarea name="description" maxlength="1000"><%= v.description || '' %></textarea></label>
       <label class="wide"><%- t('shop.sd.f.ask') %> <input type="text" name="buyer_prompt" maxlength="120" value="<%= v.buyer_prompt || '' %>" placeholder="<%- t('shop.sd.f.ask_ph') %>"></label>

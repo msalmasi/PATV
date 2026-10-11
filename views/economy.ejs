@@ -89,7 +89,7 @@
   .eco .chart .ttl { font-size: 13px; color: #ccc; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
   .eco .chart .ttl b { color: #fff; }
   .eco .chart .hit { fill: transparent; }
-  @media (max-width: 600px) { .eco .chart svg text { font-size: 19px; } }
+  @media (max-width: 600px) { .eco .chart svg text { font-size: 19px; } .eco .chart svg text.yl { font-size: 16px; } }
   .eco .chart .hit:hover { fill: rgba(255,255,255,.06); }
   .eco .key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #bbb; }
   .eco .key i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
@@ -379,15 +379,31 @@
     <section class="epanel" id="supply-history" aria-labelledby="shH" style="margin:0">
       <div class="k"><%- t('economy.sh.k') %></div>
       <h2 id="shH">📈 <%- t('economy.sh.h') %></h2>
-      <% if (H.length < 2) { %><p><%- t('economy.sh.none') %></p><% } else {
-           const W = 640, X0 = 60, X1 = W - 8, n = H.length, xs = (i) => X0 + (n === 1 ? 0 : i * (X1 - X0) / (n - 1)), bw = Math.max(1, (X1 - X0) / n - 2);
+      <% if (H.length < 1) { %><p><%- t('economy.sh.none') %></p><% } else {
+           // one slot per day: points and bars sit at the slot centres, always inside X0..X1, so 1-2 days of data no
+           // longer spill over the axis labels; axis labels get enough decimals to differ; burned is labelled below 0.
+           const W = 640, X0 = 80, X1 = W - 8, n = H.length, slot = (X1 - X0) / n, xs = (i) => X0 + slot * (i + 0.5);
+           const bw = Math.max(1, Math.min(slot * 0.7, 48));
            const line = (vals, y) => vals.map((v, i) => v == null ? null : (xs(i).toFixed(1) + ',' + y(v).toFixed(1))).filter(Boolean).join(' ');
            const ticks = (lo, hi, k) => { const out = []; for (let j = 0; j <= k; j++) out.push(lo + (hi - lo) * j / k); return out; };
+           const niceStep = (x) => { const p = Math.pow(10, Math.floor(Math.log10(x))), f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; };
+           // tick labels in one unit, with as many decimals as it takes for the ticks to read differently
+           const tickLbls = (vals) => {
+             const a = Math.max(...vals.map(Math.abs)), U = a >= 1e9 ? [1e9, 'B'] : a >= 1e6 ? [1e6, 'M'] : a >= 1e3 ? [1e3, 'k'] : [1, ''];
+             let out = [];
+             for (let d = 0; d <= 6; d++) { out = vals.map((v) => (v / U[0]).toFixed(d) + U[1]); if (new Set(out).size === out.length) break; }
+             return out;
+           };
            const lbl = (d) => d.slice(5);
-           const xl = [0, Math.floor((n - 1) / 2), n - 1];
-           // 1) total supply
-           const tv = H.map((h) => h.total), tmin = Math.min(...tv), tmax = Math.max(...tv), pad = Math.max(1, (tmax - tmin) * 0.15);
-           const tlo = Math.max(0, tmin - pad), thi = tmax + pad, ty = (v) => 150 - (v - tlo) / (thi - tlo || 1) * 130;
+           const xl = [...new Set([0, Math.floor((n - 1) / 2), n - 1])];
+           const xlx = (i) => n > 6 && i === 0 ? X0 : n > 6 && i === n - 1 ? X1 : xs(i);
+           const xla = (i) => n > 6 && i === 0 ? 'start' : n > 6 && i === n - 1 ? 'end' : 'middle';
+           // 1) total supply: nice ticks over a span of at least 0.1% of the supply, so nearly flat data stays readable
+           const tv = H.map((h) => h.total), tmin = Math.min(...tv), tmax = Math.max(...tv);
+           const tspan = Math.max(tmax - tmin, Math.abs(tmax) * 0.001, 10), tstep = niceStep(tspan * 1.3 / 3);
+           const tlo = Math.max(0, Math.floor((tmin - tspan * 0.15) / tstep) * tstep), thi = Math.ceil((tmax + tspan * 0.15) / tstep) * tstep;
+           const tticks = []; for (let j = 0; tlo + j * tstep <= thi + tstep / 2; j++) tticks.push(tlo + j * tstep);
+           const ttl = tickLbls(tticks), ty = (v) => 150 - (v - tlo) / (thi - tlo || 1) * 130;
            // 2) the Fed with its floor and ceiling
            const fv = H.map((h) => h.fed), fmaxv = Math.max(...fv.filter((v) => v != null), ...H.map((h) => h.ceiling || 0), 1);
            const fy = (v) => 150 - v / (fmaxv * 1.1) * 130;
@@ -397,41 +413,46 @@
         <div class="chart">
           <div class="ttl"><span><%- t('economy.sh.total') %></span><b class="num"><%= nf(tv[n - 1]) %></b></div>
           <svg viewBox="0 0 <%= W %> 172" role="img" aria-label="<%- t('economy.sh.total_aria', { from: nf(tv[0]), to: nf(tv[n - 1]), days: n }) %>">
-            <% ticks(tlo, thi, 3).forEach((v) => { %><line x1="<%= X0 %>" x2="<%= X1 %>" y1="<%= ty(v).toFixed(1) %>" y2="<%= ty(v).toFixed(1) %>" stroke="#262626"/><text x="<%= X0 - 6 %>" y="<%= (ty(v) + 4).toFixed(1) %>" text-anchor="end"><%= sh(v) %></text><% }) %>
-            <polyline points="<%= line(tv, ty) %>" fill="none" stroke="#e0a830" stroke-width="2" stroke-linejoin="round"/>
-            <% xl.forEach((i) => { %><text x="<%= xs(i).toFixed(1) %>" y="168" text-anchor="<%= i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' %>"><%= lbl(H[i].day) %></text><% }) %>
-            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (xs(i) - (X1 - X0) / n / 2).toFixed(1) %>" y="10" width="<%= ((X1 - X0) / n).toFixed(1) %>" height="142"><title><%= h.day %>: <%= nf(h.total) %> PAT</title></rect><% }) %>
+            <% tticks.forEach((v, j) => { %><line x1="<%= X0 %>" x2="<%= X1 %>" y1="<%= ty(v).toFixed(1) %>" y2="<%= ty(v).toFixed(1) %>" stroke="#262626"/><text class="yl" x="<%= X0 - 6 %>" y="<%= (ty(v) + 4).toFixed(1) %>" text-anchor="end"><%= ttl[j] %></text><% }) %>
+            <% if (n > 1) { %><polyline points="<%= line(tv, ty) %>" fill="none" stroke="#e0a830" stroke-width="2" stroke-linejoin="round"/><% } %>
+            <circle cx="<%= xs(n - 1).toFixed(1) %>" cy="<%= ty(tv[n - 1]).toFixed(1) %>" r="3" fill="#e0a830"/>
+            <% xl.forEach((i) => { %><text x="<%= xlx(i).toFixed(1) %>" y="168" text-anchor="<%= xla(i) %>"><%= lbl(H[i].day) %></text><% }) %>
+            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (X0 + slot * i).toFixed(1) %>" y="10" width="<%= slot.toFixed(1) %>" height="142"><title><%= h.day %>: <%= nf(h.total) %> PAT</title></rect><% }) %>
           </svg>
         </div>
         <div class="chart">
           <div class="ttl"><span><%- t('economy.sh.fed') %></span><b class="num"><%= fv[n - 1] == null ? '—' : nf(fv[n - 1]) %></b></div>
           <div class="key" aria-hidden="true"><span><i style="background:#3a8ad0"></i><%- t('economy.tile.fed') %></span><span><i class="dash"></i><%- t('economy.sh.band') %></span></div>
           <svg viewBox="0 0 <%= W %> 172" role="img" aria-label="<%- t('economy.sh.fed_aria', { to: fv[n - 1] == null ? '—' : nf(fv[n - 1]), days: n }) %>">
-            <% ticks(0, fmaxv * 1.1, 3).forEach((v) => { %><line x1="<%= X0 %>" x2="<%= X1 %>" y1="<%= fy(v).toFixed(1) %>" y2="<%= fy(v).toFixed(1) %>" stroke="#262626"/><text x="<%= X0 - 6 %>" y="<%= (fy(v) + 4).toFixed(1) %>" text-anchor="end"><%= sh(v) %></text><% }) %>
+            <% const fticks = ticks(0, fmaxv * 1.1, 3), ftl = tickLbls(fticks); fticks.forEach((v, j) => { %><line x1="<%= X0 %>" x2="<%= X1 %>" y1="<%= fy(v).toFixed(1) %>" y2="<%= fy(v).toFixed(1) %>" stroke="#262626"/><text class="yl" x="<%= X0 - 6 %>" y="<%= (fy(v) + 4).toFixed(1) %>" text-anchor="end"><%= j === 0 ? '0' : ftl[j] %></text><% }) %>
             <% const fl = line(H.map((h) => h.floor), fy), cl = line(H.map((h) => h.ceiling), fy); %>
             <% if (fl) { %><polyline points="<%= fl %>" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 4"/><% } %>
             <% if (cl) { %><polyline points="<%= cl %>" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 4"/><% } %>
-            <polyline points="<%= line(fv, fy) %>" fill="none" stroke="#3a8ad0" stroke-width="2" stroke-linejoin="round"/>
+            <% if (n > 1) { %><polyline points="<%= line(fv, fy) %>" fill="none" stroke="#3a8ad0" stroke-width="2" stroke-linejoin="round"/><% } %>
+            <% if (fv[n - 1] != null) { %><circle cx="<%= xs(n - 1).toFixed(1) %>" cy="<%= fy(fv[n - 1]).toFixed(1) %>" r="3" fill="#3a8ad0"/><% } %>
             <% const lastB = [...H].reverse().find((h) => h.ceiling != null); if (lastB) { %>
               <text x="<%= X1 %>" y="<%= (fy(lastB.ceiling) - 5).toFixed(1) %>" text-anchor="end"><%- t('economy.band.ceiling') %></text>
               <text x="<%= X1 %>" y="<%= (fy(lastB.floor) - 5).toFixed(1) %>" text-anchor="end"><%- t('economy.band.floor') %></text>
             <% } %>
-            <% xl.forEach((i) => { %><text x="<%= xs(i).toFixed(1) %>" y="168" text-anchor="<%= i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' %>"><%= lbl(H[i].day) %></text><% }) %>
-            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (xs(i) - (X1 - X0) / n / 2).toFixed(1) %>" y="10" width="<%= ((X1 - X0) / n).toFixed(1) %>" height="142"><title><%= h.day %>: <%= h.fed == null ? '—' : nf(h.fed) %> PAT<%= h.floor != null ? ' (' + sh(h.floor) + '–' + sh(h.ceiling) + ')' : '' %></title></rect><% }) %>
+            <% xl.forEach((i) => { %><text x="<%= xlx(i).toFixed(1) %>" y="168" text-anchor="<%= xla(i) %>"><%= lbl(H[i].day) %></text><% }) %>
+            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (X0 + slot * i).toFixed(1) %>" y="10" width="<%= slot.toFixed(1) %>" height="142"><title><%= h.day %>: <%= h.fed == null ? '—' : nf(h.fed) %> PAT<%= h.floor != null ? ' (' + sh(h.floor) + '–' + sh(h.ceiling) + ')' : '' %></title></rect><% }) %>
           </svg>
         </div>
         <div class="chart">
           <div class="ttl"><span><%- t('economy.sh.flows') %></span></div>
           <div class="key" aria-hidden="true"><span><i class="sq" style="background:#3a8ad0"></i><%- t('economy.sh.minted') %></span><span><i class="sq" style="background:#d65f36"></i><%- t('economy.sh.burned') %></span></div>
           <svg viewBox="0 0 <%= W %> 124" role="img" aria-label="<%- t('economy.sh.flows_aria', { m: nf(H.reduce((a, h) => a + h.minted, 0)), b: nf(H.reduce((a, h) => a + h.burned, 0)), days: n }) %>">
+            <defs><clipPath id="shFlowClip"><rect x="<%= X0 %>" y="4" width="<%= X1 - X0 %>" height="104"/></clipPath></defs>
             <line x1="<%= X0 %>" x2="<%= X1 %>" y1="56" y2="56" stroke="#444"/>
-            <text x="<%= X0 - 6 %>" y="14" text-anchor="end"><%= sh(mmax) %></text><text x="<%= X0 - 6 %>" y="60" text-anchor="end">0</text><text x="<%= X0 - 6 %>" y="106" text-anchor="end"><%= sh(mmax) %></text>
+            <text class="yl" x="<%= X0 - 6 %>" y="14" text-anchor="end"><%= sh(mmax) %></text><text class="yl" x="<%= X0 - 6 %>" y="60" text-anchor="end">0</text><text class="yl" x="<%= X0 - 6 %>" y="106" text-anchor="end">−<%= sh(mmax) %></text>
+            <g class="bars" clip-path="url(#shFlowClip)">
             <% H.forEach((h, i) => { const x = (xs(i) - bw / 2).toFixed(1); %>
               <% if (h.minted > 0) { const hh = Math.max(1.5, my(h.minted)); %><rect x="<%= x %>" y="<%= (55 - hh).toFixed(1) %>" width="<%= bw.toFixed(1) %>" height="<%= hh.toFixed(1) %>" rx="1.5" fill="#3a8ad0"/><% } %>
               <% if (h.burned > 0) { const hh = Math.max(1.5, my(h.burned)); %><rect x="<%= x %>" y="57" width="<%= bw.toFixed(1) %>" height="<%= hh.toFixed(1) %>" rx="1.5" fill="#d65f36"/><% } %>
             <% }) %>
-            <% xl.forEach((i) => { %><text x="<%= xs(i).toFixed(1) %>" y="120" text-anchor="<%= i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' %>"><%= lbl(H[i].day) %></text><% }) %>
-            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (xs(i) - (X1 - X0) / n / 2).toFixed(1) %>" y="4" width="<%= ((X1 - X0) / n).toFixed(1) %>" height="104"><title><%= h.day %>: <%- t('economy.sh.minted') %> <%= nf(h.minted) %><%= Object.keys(h.mints || {}).length ? ' (' + Object.entries(h.mints).filter((e) => e[1] > 0).map((e) => e[0] + ' ' + sh(e[1])).join(', ') + ')' : '' %> · <%- t('economy.sh.burned') %> <%= nf(h.burned) %></title></rect><% }) %>
+            </g>
+            <% xl.forEach((i) => { %><text x="<%= xlx(i).toFixed(1) %>" y="120" text-anchor="<%= xla(i) %>"><%= lbl(H[i].day) %></text><% }) %>
+            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (X0 + slot * i).toFixed(1) %>" y="4" width="<%= slot.toFixed(1) %>" height="104"><title><%= h.day %>: <%- t('economy.sh.minted') %> <%= nf(h.minted) %><%= Object.keys(h.mints || {}).length ? ' (' + Object.entries(h.mints).filter((e) => e[1] > 0).map((e) => e[0] + ' ' + sh(e[1])).join(', ') + ')' : '' %> · <%- t('economy.sh.burned') %> <%= nf(h.burned) %></title></rect><% }) %>
           </svg>
         </div>
         <details class="data">

@@ -112,8 +112,14 @@ function register(app, { isBotToken, addUser }) {
     // 1.99ml: with the lotto backend on, a lotto form buys on the site directly - nothing is sent to Pepe
     if (kind === "cmd" && args[0] === "lotto") {
       try {
-        const msg = await require("./lotto/routes").buyFromForm(req.user.userId, args.slice(1), b.idem);
-        if (msg) return go(msg);
+        const msg = await require("./lotto/routes").buyFromForm(req.user.userId, args.slice(1), b.idem, { confirm: String(b.confirm || "") === "1" });
+        // 1.99nh: a hand pick the buyer already holds this draw - nothing charged; the page asks "buy it again?"
+        if (msg && typeof msg === "object" && msg.confirm) {
+          const c = msg.confirm;
+          return res.redirect(back + (back.includes("?") ? "&" : "?") + "dup=" + encodeURIComponent([...c.w, c.pb].join("-"))
+                              + "&dupdraw=" + encodeURIComponent(String(c.draw)) + "#pb-dup");
+        }
+        if (msg) return go(typeof msg === "object" ? msg.msg : msg);
       } catch (e) {
         console.error("[act] lotto backend:", e.message);
         return go("Something went wrong — nothing was bought.");

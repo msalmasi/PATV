@@ -309,6 +309,24 @@
 
   <%- include('partials/actions', { acts, msg }) %>
 
+  <% const DA = locals.dupAsk; if (DA && user && linked && state === 'open') { %>
+  <%# 1.99nh: a hand pick the buyer already holds this draw - nothing was charged; buying it again needs confirm=1 %>
+  <form class="pb-card pb-dup" method="post" action="/act" id="pb-dup" role="alertdialog" aria-labelledby="pb-dup-h">
+    <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="lotto">
+    <% DA.w.forEach((n, i) => { %><input type="hidden" name="a<%= i %>" value="<%= n %>"><% }) %>
+    <input type="hidden" name="a<%= DA.w.length %>" value="pb"><input type="hidden" name="a<%= DA.w.length + 1 %>" value="<%= DA.pb %>">
+    <input type="hidden" name="confirm" value="1">
+    <input type="hidden" name="back" value="/lotto"><input type="hidden" name="tag" value="lotto">
+    <h3 id="pb-dup-h"><%- t('lotto.dup_q', { draw: DA.draw }) %></h3>
+    <p class="pb-p"><%- balls(DA.w, DA.pb) %></p>
+    <p class="pb-p"><%- t('lotto.dup_sub') %></p>
+    <div class="pb-row">
+      <button type="submit" class="pb-btn"><%- t('lotto.dup_yes', { n: fmt(L.price) }) %></button>
+      <a class="pb-chip" href="/lotto#pb-buy"><%- t('lotto.dup_no') %></a>
+    </div>
+  </form>
+  <% } %>
+
   <section id="pb-buy" aria-labelledby="pb-buy-h">
     <h2 class="pb-h" id="pb-buy-h"><%- t('lotto.buy_h') %></h2>
     <% if (!user) { %>

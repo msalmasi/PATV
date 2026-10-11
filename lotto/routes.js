@@ -2,13 +2,15 @@
 //
 // Web (a signed-in PATV account - no Camfrog link needed):
 //   GET  /api/lotto/state                 the draw, jackpot, schedule, commitment + your ticket count
-//   POST /api/lotto/buy                   {picks: [[[w1..w4], pb], ...]} | {quick: n}, idem   (JSON fetch)
+//   POST /api/lotto/buy                   {picks: [[[w1..w4], pb], ...]} | {quick: n}, idem, confirm   (JSON fetch)
+//                                         1.99nh: a hand pick already held this draw -> 409 {code: "dup", dups} unless confirm
 //   (the /lotto page's forms still post to /act - actions.js hands cmd=lotto straight to buyFromForm() while the backend is on)
 //   GET  /lotto/fair/:draw + /api/lotto/fair/:draw    the fairness proof of a draw (commitment, digest, tickets, seed)
 //   POST /api/lotto/admin/settings        {key, value}  lotto_backend / price / pot_share (site Admin, or the bot token)
 // Pepe (bot token in the body):
 //   POST /api/lotto/bot/poll              {after, wait}  events (sale / milestone / closing / closed / drawn / paid / open) + state
 //   POST /api/lotto/bot/act               {username, camfrog, name, verb, args, idem, admin, channel}
+//                                         1.99nh: a buy repeating a held ticket still sells; the result adds dups + note
 //   POST /api/lotto/bot/pot               {amount, ref, why}   + / - the jackpot pot, keyed (his "lotto" vault is this pot)
 //   POST /api/lotto/bot/state             the pot / jackpot / draw (his _vault_total("lotto"))
 //   POST /api/lotto/bot/reseeded          {draw, amount}   the reseed after a jackpot is done
@@ -31,7 +33,10 @@ const MSG = {
   bad_pick: "Pick 4 different numbers from 1-30 and a Pepe Ball from 1-10.",
   insufficient: "You don't have enough PAT for that.",
   charge_failed: "Couldn't take the PAT — nothing was bought.",
+  dup: "You already have this exact ticket for this draw — buy it again? Nothing was charged; confirm to buy it.",
 };
+// 1.99nh: the question when a hand pick repeats a ticket the buyer holds
+const dupAsk = (draw) => `You already have this exact ticket for draw #${draw} — buy it again?`;
 
 function parsePicks(b) {
   if (Array.isArray(b.picks) && b.picks.length) {
@@ -47,8 +52,12 @@ async function webActor(req) {
   return { uid: u.userId, name: u.camfrogUsername || u.displayname || u.username, via: "web", admin: u.class === "Admin" };
 }
 
-/** actions.js: a /lotto form post (kind=cmd, cmd=lotto, a0.. = the !lotto words) while the backend is on. -> message text */
-async function buyFromForm(userId, words, idem) {
+/**
+ * actions.js: a /lotto form post (kind=cmd, cmd=lotto, a0.. = the !lotto words) while the backend is on. -> message text,
+ * or (1.99nh) {msg, confirm: {draw, w, pb}} when a hand pick repeats a ticket the buyer already holds and the post had no
+ * confirm=1 - nothing is charged; the page asks and re-posts with confirm.
+ */
+async function buyFromForm(userId, words, idem, { confirm = false } = {}) {
   await svc.boot();
   const st = await svc.loadSettings();
   if (!st.lotto_backend) return null;                           // not ours: the action queue sends it to Pepe as before
@@ -63,10 +72,14 @@ async function buyFromForm(userId, words, idem) {
     order = { picks: [[nums.slice(0, 4), nums[4]]] };
   }
   const key = `lt:web-${u.userId}-${IDEM.test(String(idem || "")) ? idem : require("crypto").randomBytes(8).toString("hex")}`;
-  const out = await svc.buy({ uid: u.userId, name: u.camfrogUsername || u.displayname || u.username, via: "web" }, order, key);
+  const out = await svc.buy({ uid: u.userId, name: u.camfrogUsername || u.displayname || u.username, via: "web" }, order, key,
+                            { confirmDup: true, confirm: !!confirm });
+  if (!out.ok && out.code === "dup" && out.dups && out.dups.length) {
+    return { msg: dupAsk(out.draw), confirm: { draw: out.draw, w: out.dups[0].w, pb: out.dups[0].pb } };
+  }
   if (!out.ok) return MSG[out.code] || "Something went wrong — nothing was bought.";
   return `🎟️ ${out.count} ticket${out.count === 1 ? "" : "s"} bought (PAT ${out.cost.toLocaleString("en-US")}) — you hold ${out.mine} for draw #${out.draw}. Good luck!`
-    + (out.replay ? " (already done — not bought twice)" : "");
+    + (out.note ? ` (${out.note})` : "") + (out.replay ? " (already done — not bought twice)" : "");
 }
 
 function register(app, { isBotToken, addUser, updateLevel }) {
@@ -90,8 +103,11 @@ function register(app, { isBotToken, addUser, updateLevel }) {
     if (!svc.ipRateOk(actor.uid)) return res.status(429).json({ ok: false, error: "Slow down a little." });
     await svc.boot();
     const picks = parsePicks(b);
-    const out = await svc.buy(actor, picks ? { picks } : { quick: b.quick }, `lt:web-${actor.uid}-${idem}`);
-    res.status(out.ok ? 200 : 409).json(Object.assign({ error: out.ok ? null : MSG[out.code] || "Something went wrong." }, out));
+    // 1.99nh: hand picks the buyer already holds this draw need {confirm: true} (409 code "dup" + the question otherwise)
+    const out = await svc.buy(actor, picks ? { picks } : { quick: b.quick }, `lt:web-${actor.uid}-${idem}`,
+                              { confirmDup: true, confirm: b.confirm === true || b.confirm === 1 || b.confirm === "1" });
+    const error = out.ok ? null : out.code === "dup" ? dupAsk(out.draw) : MSG[out.code] || "Something went wrong.";
+    res.status(out.ok ? 200 : 409).json(Object.assign({ error }, out));
   });
 
   app.get("/api/lotto/fair/:draw", async (req, res) => {
@@ -151,10 +167,11 @@ function register(app, { isBotToken, addUser, updateLevel }) {
       const name = String(b.camfrog || b.name || u.camfrogUsername || u.username).replace(/[\u0000-\u001f]/g, " ").slice(0, 40);
       const order = verb === "quick" ? { quick: Math.trunc(Number((b.args || [])[0]) || 1) } : { picks: parsePicks({ picks: b.picks }) || [] };
       if (verb === "buy" && !order.picks.length) return { ok: false, code: "bad_pick" };
+      // 1.99nh: a repeat of a held ticket is still sold from chat; the reply carries `note` (+ dups) for Pepe to append
       return svc.buy({ uid: u.userId, name, via: "room" }, order, `lt:cf-${idem}`);
     }
     return { ok: false, code: "bad_verb" };
   }));
 }
 
-module.exports = { register, buyFromForm, MSG, _views: path.join(__dirname, "..", "views") };
+module.exports = { register, buyFromForm, MSG, dupAsk, _views: path.join(__dirname, "..", "views") };
