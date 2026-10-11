@@ -633,6 +633,40 @@ test("royalties (1.99gq): with Pepe's economy v2 layers on they are paid by the 
   T = Date.UTC(2026, 9, 6, 12, 0, 0) + 800 * 86400000;
 });
 
+test("1.99lw: a pad's own longest slot (owner setting, up to the site's 6 h cap) for every kind of slot; a priced pad holds for the longer slot", async () => {
+  await clear();
+  const C = S.config();
+  assert.ok(C.max_minutes <= 360, "the site default stays the default (this test's config)");
+  assert.equal(C.pad_max_minutes, 360, "owners may allow up to 6 h");
+  let R = await rooms.setStage(PLANT, { slot_max_min: 999 }, "pb", { maxSlots: 4, maxPrice: PRICE, maxMinutes: C.pad_max_minutes });
+  assert.equal(R.slot_max_min, 360, "clamped to the cap");
+  R = await rooms.setStage(PLANT, { slot_max_min: 2 }, "pb", { maxSlots: 4, maxPrice: PRICE, maxMinutes: C.pad_max_minutes });
+  assert.equal(R.slot_max_min, 5);
+  R = await rooms.setStage(PLANT, { slot_max_min: "" }, "pb", { maxSlots: 4, maxPrice: PRICE, maxMinutes: C.pad_max_minutes });
+  assert.equal(R.slot_max_min, null, "empty = the site default");
+  assert.deepEqual(await S.limitsFor(PLANT), { max: C.max_minutes, library_max: 360, min: C.min_minutes }, "📼 Plex runs its length (up to 6 h) on a pad without its own limit");
+  const u = await mkUser();
+  await assert.rejects(S.book(u, { room: PLANT, minutes: 240, mode: "embed", embed: "https://youtu.be/dQw4w9WgXcQ" }), (e) => e.status === 400 && e.message.includes(C.max_minutes + " minutes"));
+  R = await rooms.setStage(PLANT, { slot_max_min: 240, slot_price: PRICE }, "pb", { maxSlots: 4, maxPrice: PRICE, maxMinutes: C.pad_max_minutes });
+  assert.deepEqual(await S.limitsFor(PLANT), { max: 240, library_max: 240, min: C.min_minutes });
+  const b0 = await balance(u.userId);
+  const r = await S.book(u, { room: PLANT, minutes: 240, mode: "embed", embed: "https://youtu.be/dQw4w9WgXcQ" });
+  assert.equal(r.slot.max_minutes, 240);
+  assert.equal(b0 - await balance(u.userId), 240 * PRICE, "the hold covers the whole (longer) slot");
+  await S.end(r.slot.id, "test", "test");
+  assert.equal(await balance(u.userId), b0 - S.chargeFor(await S.getSlot(r.slot.id), (await S.getSlot(r.slot.id)).live_ms), "refunded what wasn't used");
+  await assert.rejects(S.book(u, { room: PLANT, minutes: 241, mode: "stream" }), (e) => e.status === 400);
+  await assert.rejects(S.joinQueue(u, { room: PLANT, minutes: 300, mode: "stream" }), (e) => e.status === 400);
+  // a booked 📼 slot: no slot fee even on a priced pad, no key until it starts, under the pad's limit
+  const lb = await S.book(u, { room: PLANT, minutes: 200, library: true, start_at: T + 3600000, title: "📼 A film" });
+  const row = await S.getSlot(lb.slot.id);
+  assert.deepEqual([row.source, row.status, row.held, row.price_per_min, row.key_hash], ["library", "scheduled", 0, 0, null]);
+  assert.equal(lb.key, null);
+  await assert.rejects(S.book(u, { room: PLANT, minutes: 30, library: true }), (e) => e.status === 400, "a 📼 booking is for later");
+  await S.end(lb.slot.id, "test", "test");
+  await rooms.setStage(PLANT, { slot_max_min: "", slot_price: 0 }, "pb", { maxSlots: 4, maxPrice: PRICE, maxMinutes: C.pad_max_minutes });
+});
+
 test("money is conserved across stages: balances + held + revenue = what everyone started with", async () => {
   const users = await getQuery("SELECT SUM(points_balance) AS b FROM users");
   const open = await getQuery("SELECT COALESCE(SUM(held),0) AS h FROM stage_slots WHERE settled = 0");

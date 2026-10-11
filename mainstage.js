@@ -71,7 +71,8 @@ const DEFAULTS = {
   enabled: true,
   price_per_min: 1000,     // the most a pad owner may charge per live minute for a slot (1.99ee: paid featuring is gone)
   min_minutes: 5,
-  max_minutes: 60,
+  max_minutes: 60,         // a slot's longest length where the pad's owner hasn't set one (1.99lw: pad settings)
+  pad_max_minutes: 360,    // 1.99lw: the most a pad's owner may allow (6 h); also a 📼 Plex slot's limit on a pad without its own
   max_concurrent: 6,       // user streams open at the same time, site-wide (server/bandwidth guard)
   max_slots_per_room: 4,   // the most slots an owner can give a room
   start_window_min: 10,    // must go live within this long of the slot opening, or it's refunded in full
@@ -303,7 +304,8 @@ function cleanConfig(c) {
     enabled: c.enabled === true || c.enabled === "true" || c.enabled === 1 || c.enabled === "1" || c.enabled === "on",
     price_per_min: int(c.price_per_min, 1, 10000000, DEFAULTS.price_per_min),
     min_minutes: int(c.min_minutes, 1, 600, DEFAULTS.min_minutes),
-    max_minutes: int(c.max_minutes, 1, 600, DEFAULTS.max_minutes),
+    max_minutes: int(c.max_minutes, 1, 360, DEFAULTS.max_minutes),
+    pad_max_minutes: int(c.pad_max_minutes, 5, 360, DEFAULTS.pad_max_minutes),
     max_concurrent: int(c.max_concurrent, 0, 32, DEFAULTS.max_concurrent),
     max_slots_per_room: int(c.max_slots_per_room, 1, 8, DEFAULTS.max_slots_per_room),
     start_window_min: int(c.start_window_min, 1, 120, DEFAULTS.start_window_min),
@@ -324,6 +326,7 @@ function cleanConfig(c) {
     pepe_feature: cleanPepeFeature(c.pepe_feature),
   };
   if (o.max_minutes < o.min_minutes) o.max_minutes = o.min_minutes;
+  if (o.pad_max_minutes < o.max_minutes) o.pad_max_minutes = o.max_minutes;
   return o;
 }
 /** 1.99fv: Pepe's stage source from an admin's input -> null (his own stream) or a clean {p,t,id}.
@@ -523,6 +526,25 @@ function overlapping(list, a, b, excludeId) {
   return list.filter((s) => s.id !== excludeId && startOf(s) < b && projEnd(s) > a);
 }
 
+// ── 1.99lw: how long a slot may be on a pad ──
+// the pad's own limit (owner: pad settings -> Stage, slot_max_min; empty = the site's max_minutes), never above
+// pad_max_minutes (6 h). Every kind of slot: OBS / browser / WHIP streams, video links and 📼 Plex.
+function maxMinutesFor(RS, C = CONFIG) {
+  const own = RS && Number(RS.slot_max_min) > 0 ? Number(RS.slot_max_min) : null;
+  return Math.max(C.min_minutes, Math.min(C.pad_max_minutes, own || C.max_minutes));
+}
+// a 📼 Plex slot is as long as its runtime: the pad's own limit when its owner set one, else pad_max_minutes (so a
+// film runs its length on a pad that never touched the setting)
+function libraryMaxFor(RS, C = CONFIG) {
+  const own = RS && Number(RS.slot_max_min) > 0 ? Number(RS.slot_max_min) : null;
+  return Math.min(C.pad_max_minutes, own || C.pad_max_minutes);
+}
+async function limitsFor(roomId) {
+  await init();
+  const RS = await rooms.stageSettings(String(roomId || rooms.HOUSE_ROOM));
+  return { max: maxMinutesFor(RS), library_max: libraryMaxFor(RS), min: CONFIG.min_minutes };
+}
+
 // ── book ──
 // opts: {room, minutes, mode: stream|embed, embed: url, title, start_at (ms; omitted / now = right now)}
 // (every booking is an ordinary slot; the owner can feature it for free - featuring is never bought)
@@ -536,11 +558,14 @@ async function book(user, opts = {}) {
   if (!R && roomId !== rooms.HOUSE_ROOM) throw new Refuse(404, "No such pad.");
   const RS = R || (await rooms.stageSettings(roomId));
   const minutes = Math.floor(Number(opts.minutes));
-  if (!Number.isFinite(minutes) || minutes < C.min_minutes || minutes > C.max_minutes) {
-    throw new Refuse(400, `Pick between ${C.min_minutes} and ${C.max_minutes} minutes.`);
+  // 1.99lw: the pad's own longest slot; a 📼 Plex booking is its runtime (the caller sized it) under the Plex limit
+  const library = !!opts.library;
+  const maxM = library ? libraryMaxFor(RS, C) : maxMinutesFor(RS, C);
+  if (!Number.isFinite(minutes) || minutes < (library ? 1 : C.min_minutes) || minutes > maxM) {
+    throw new Refuse(400, `Pick between ${C.min_minutes} and ${maxM} minutes.`);
   }
   if (await isBanned(user.userId, roomId)) throw new Refuse(403, "You can't book the stage.");
-  const mode = opts.mode === "embed" ? "embed" : "stream";
+  const mode = library ? "stream" : opts.mode === "embed" ? "embed" : "stream";
   let embed = null;
   if (mode === "embed") {
     try { embed = embeds.parse(opts.embed); } catch (e) { throw new Refuse(400, e.message); }
@@ -549,15 +574,17 @@ async function book(user, opts = {}) {
   const t = now();
   let startAt = Number(opts.start_at) || 0;
   const scheduled = startAt > t + 60 * 1000;
+  if (library && !scheduled) throw new Refuse(400, "Pick a start time (to play it now, use ▶ Play).");
   if (scheduled) {
     startAt = Math.floor(startAt / 60000) * 60000;
     if (C.schedule_days < 1 || startAt > t + C.schedule_days * 86400000) throw new Refuse(400, `Book up to ${C.schedule_days} days ahead.`);
   } else startAt = t;
-  const price = Math.min(C.price_per_min, RS.slot_price || 0);      // the owner's slot price; 0 = free (the default)
+  // the owner's slot price; 0 = free (the default). 1.99lw: a 📼 Plex slot has no slot fee (the title is paid as it plays)
+  const price = library ? 0 : Math.min(C.price_per_min, RS.slot_price || 0);
   const hold = minutes * price;
   const staffOrOwner = rooms.isStaff(user) || !!(RS.owner && RS.owner.userId === user.userId);
   const needsApproval = scheduled && !!RS.approval && !staffOrOwner;
-  const key = mode === "stream" ? newKey() : null;
+  const key = mode === "stream" && !library ? newKey() : null;      // a 📼 slot gets its key when it starts (mediaqueue.js)
   const id = uuidv4();
   const out = await tx(async () => {
     const mineOpen = await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN}`, [user.userId]);
@@ -593,12 +620,12 @@ async function book(user, opts = {}) {
     const stream = STREAM_PREFIX + crypto.randomBytes(8).toString("hex");
     const status = needsApproval ? "requested" : scheduled ? "scheduled" : (mode === "embed" ? "active" : "waiting");
     await runQuery(`INSERT INTO stage_slots (id, userId, username, displayname, status, created, max_minutes, price_per_min, held,
-                    key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, went_live, last_live)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, went_live, last_live, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, user.userId, u.username, u.displayname || u.username, status, t, minutes, price, hold, key ? sha(key) : null, stream,
                     "room_flow", roomId, "slot", 0, null, mode,
                     embed ? JSON.stringify(embed) : null, startAt, title,
-                    status === "active" ? t : null, status === "active" ? t : null]);
+                    status === "active" ? t : null, status === "active" ? t : null, library ? "library" : null]);
     return { id, status };
   });
   pubCache.clear();
@@ -671,6 +698,30 @@ async function libraryRetitle(slotId, title) {
   const r = await runQuery("UPDATE stage_slots SET title = ? WHERE id = ? AND source = 'library' AND settled = 0", [cleanTitle(title), String(slotId || "")]);
   if (r && r.changes) pubCache.clear();
   return !!(r && r.changes);
+}
+/**
+ * 1.99lw: a BOOKED 📼 Plex slot's start time came (mediaqueue.startScheduled): it opens like libraryOpen does - a key,
+ * 'waiting' until the encoder publishes - inside the same limits (one library stream per pad, the site's max_concurrent).
+ * -> the raw key, or throws Refuse.
+ */
+async function libraryActivate(slotId, { title, minutes } = {}) {
+  await init();
+  const s = await getSlot(slotId);
+  if (!s || s.source !== "library" || s.status !== "scheduled" || s.settled) throw new Refuse(409, "That booking isn't waiting to start.");
+  const key = newKey();
+  const m = Math.max(1, Math.min(24 * 60, Math.floor(Number(minutes)) || s.max_minutes));
+  await tx(async () => {
+    const open = await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [s.room_id]);
+    if (open.some((x) => x.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library.");
+    const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
+    if (all[0].n >= CONFIG.max_concurrent) throw new Refuse(409, "The site has the most streams open it allows right now.");
+    const r = await runQuery("UPDATE stage_slots SET status = 'waiting', key_hash = ?, max_minutes = ?, title = COALESCE(?, title), start_at = ? WHERE id = ? AND status = 'scheduled'",
+                             [sha(key), m, cleanTitle(title), now(), s.id]);
+    if (!r.changes) throw new Refuse(409, "That booking isn't waiting to start.");
+  });
+  pubCache.clear();
+  await event(s.id, "library", s.username, `📼 booked slot started (${m} min max)`, s.room_id);
+  return key;
 }
 /** 1.99lr: a fresh one-time key for an open library slot (the site restarted and forgot the raw key; the next title of a
  *  📼 queue publishes with it). The old key stops working for NEW publishes; one already on keeps its connection. */
@@ -854,7 +905,8 @@ async function joinQueue(user, opts = {}) {
   const R = await rooms.get(roomId);
   if (!R && roomId !== rooms.HOUSE_ROOM) throw new Refuse(404, "No such pad.");
   const minutes = Math.floor(Number(opts.minutes));
-  if (!Number.isFinite(minutes) || minutes < C.min_minutes || minutes > C.max_minutes) throw new Refuse(400, `Pick between ${C.min_minutes} and ${C.max_minutes} minutes.`);
+  const maxM = maxMinutesFor(R || (await rooms.stageSettings(roomId)), C);           // 1.99lw: the pad's own limit
+  if (!Number.isFinite(minutes) || minutes < C.min_minutes || minutes > maxM) throw new Refuse(400, `Pick between ${C.min_minutes} and ${maxM} minutes.`);
   if (await isBanned(user.userId, roomId)) throw new Refuse(403, "You can't book the stage.");
   const mode = opts.mode === "embed" ? "embed" : "stream";
   let embed = null;
@@ -930,6 +982,12 @@ async function tickFuture(t) {
         rooms.notify(s.userId, { kind: "stage", title: `Your stage request in ${RS.title} wasn't approved in time`,
           body: s.held ? "Your hold was refunded in full." : "", link: "/stage", ref: "stage-na:" + s.id }).catch(() => {});
       }
+      continue;
+    }
+    // 1.99lw: a booked 📼 Plex slot is started by mediaqueue.watchBookings (it gets its key then); one that nobody
+    // started (the media watcher down) ends after the start window like any slot that never went live
+    if (s.source === "library") {
+      if (t > start + (C.start_window_min + 5) * 60000) await end(s.id, "no_room", "system");
       continue;
     }
     // reminder ~15 min before
@@ -1552,6 +1610,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
                       image: res.locals.ogBase + "/og/page.png?t=Go%20live%20on%20PATV", url: res.locals.ogBase + "/stage" };
     res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: isStaff(req.user),
                               rooms: all.map((r) => ({ id: r.id, slug: r.slug, title: r.title, slot_count: r.slot_count, slot_price: r.slot_price, approval: r.approval, house: r.house,
+                                                       max_min: maxMinutesFor(r), library_max: libraryMaxFor(r),   // 1.99lw
                                                         owner: r.owner ? r.owner.display || r.owner.username : null })),
                               pick: pick ? pick.id : null, twitchUrl, plex });
   };
@@ -1713,7 +1772,7 @@ module.exports = {
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
-  libraryOpen, libraryExtend, libraryRetitle, libraryRekey, setLibraryIdle, idleMinFor,
+  libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,

@@ -113,6 +113,8 @@ function init() {
       if (!cols.has("adult")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0");
       // 1.99lm: the pad's own auto-feature switch (mainstage.js takeover): NULL = the site setting, 'off' | 'when_idle'
       if (!cols.has("takeover")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN takeover TEXT");
+      // 1.99lw: the pad's longest stage slot in minutes (mainstage.maxMinutesFor): NULL = the site's max_minutes
+      if (!cols.has("slot_max_min")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN slot_max_min INTEGER");
       // every slug a pad gave up: /p/<old>[/...] 301s to the pad's current address, and nobody else can take it
       await runQuery("CREATE TABLE IF NOT EXISTS pad_slug_aliases (slug TEXT PRIMARY KEY, room_id TEXT NOT NULL, created INTEGER, by TEXT)");
       await runQuery("CREATE INDEX IF NOT EXISTS pad_slug_aliases_room ON pad_slug_aliases (room_id)");
@@ -294,6 +296,7 @@ function view(r) {
     origin: r.origin || null, created_by: r.created_by || null, created: Number(r.created) || null, updated: Number(r.updated) || null,   // 1.99iz
     adult: !!r.adult,                                                  // 1.99kz: 18+ pad
     takeover: r.takeover === "off" || r.takeover === "when_idle" ? r.takeover : null,   // 1.99lm: null = the site's takeover_mode
+    slot_max_min: Number(r.slot_max_min) > 0 ? Number(r.slot_max_min) : null,           // 1.99lw: null = the site's max_minutes
   };
 }
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
@@ -422,7 +425,7 @@ async function setPage(roomId, patch, actor) {
   await loadCache();
   return get(roomId);
 }
-/** Owner stage settings: slot_count (1..cap), approval, slot_price (0..featured price). */
+/** Owner stage settings: slot_count (1..cap), approval, slot_price (0..featured price), 1.99lw slot_max_min (5..caps.maxMinutes; "" = the site default). */
 async function setStage(roomId, patch, actor, caps = {}) {
   await init();
   const r = await get(roomId);
@@ -439,9 +442,14 @@ async function setStage(roomId, patch, actor, caps = {}) {
     const v = String(patch.takeover == null ? "" : patch.takeover);
     takeover = v === "off" || v === "when_idle" ? v : null;
   }
-  await runQuery("UPDATE rooms_registry SET slot_count = ?, approval = ?, slot_price = ?, takeover = ?, updated = ? WHERE room_id = ?",
-                 [slots, approval ? 1 : 0, price, takeover, Date.now(), roomId]);
-  await event(roomId, "stage", actor, `slots=${slots} approval=${approval ? 1 : 0} price=${price} takeover=${takeover || "site"}`);
+  let maxMin = r.slot_max_min || null;
+  if (patch.slot_max_min !== undefined) {
+    const v = patch.slot_max_min;
+    maxMin = v == null || v === "" || Number(v) <= 0 ? null : int(v, 5, Math.max(5, Number(caps.maxMinutes) || 360), null);
+  }
+  await runQuery("UPDATE rooms_registry SET slot_count = ?, approval = ?, slot_price = ?, takeover = ?, slot_max_min = ?, updated = ? WHERE room_id = ?",
+                 [slots, approval ? 1 : 0, price, takeover, maxMin, Date.now(), roomId]);
+  await event(roomId, "stage", actor, `slots=${slots} approval=${approval ? 1 : 0} price=${price} takeover=${takeover || "site"} max=${maxMin || "site"}`);
   await loadCache();
   return get(roomId);
 }

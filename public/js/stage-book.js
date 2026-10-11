@@ -51,6 +51,12 @@
   }
   function formCalc() {
     var o = $('room').selectedOptions[0], sp = o ? Number(o.getAttribute('data-price')) || 0 : 0;
+    // 1.99lw: the pad's own longest slot
+    var mx = o ? Number(o.getAttribute('data-max')) || 0 : 0;
+    if (mx && String(mins.max) !== String(mx)) {
+      mins.max = minsR.max = mx;
+      if (Number(mins.value) > mx) { mins.value = minsR.value = mx; }
+    }
     $('slotPriceTxt').textContent = sp ? _t('js.stage.price_pad', '{n} PAT / live min in this pad', { n: fmt(sp) }) : _t('js.stage.free_pad', 'free in this pad');
     $('holdAmt').textContent = fmt((Number(mins.value) || 0) * price());
     var w = radio('when'), embed = radio('mode') === 'embed';

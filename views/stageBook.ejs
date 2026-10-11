@@ -199,7 +199,7 @@
       <form id="bookForm" class="book2" autocomplete="off">
         <label class="fld"><%- t('stage.pad') %>
           <select id="room" name="room">
-            <% (rooms || []).forEach((r) => { %><option value="<%= r.slug %>" data-id="<%= r.id %>" data-title="<%= r.title %>" data-price="<%= r.slot_price %>" data-slots="<%= r.slot_count %>" data-approval="<%= r.approval ? 1 : 0 %>"<%= sel && sel.id === r.id ? ' selected' : '' %>><%= r.title %><%- r.house ? ' ' + t('stage.house_pad') : r.owner ? ' — ' + t.esc(r.owner) : '' %></option><% }) %>
+            <% (rooms || []).forEach((r) => { %><option value="<%= r.slug %>" data-id="<%= r.id %>" data-title="<%= r.title %>" data-price="<%= r.slot_price %>" data-slots="<%= r.slot_count %>" data-max="<%= r.max_min || C.max_minutes %>" data-pxmax="<%= r.library_max || '' %>" data-approval="<%= r.approval ? 1 : 0 %>"<%= sel && sel.id === r.id ? ' selected' : '' %>><%= r.title %><%- r.house ? ' ' + t('stage.house_pad') : r.owner ? ' — ' + t.esc(r.owner) : '' %></option><% }) %>
           </select>
         </label>
         <p class="roominfo muted" id="roomInfo" aria-live="polite"></p>

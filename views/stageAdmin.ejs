@@ -80,7 +80,8 @@
         <option value="off" <%= C.takeover_mode === 'off' ? 'selected' : '' %>>Off</option></select></label>
       <label>Max slot price (PAT / live minute)<input type="number" name="price_per_min" min="1" value="<%= C.price_per_min %>"></label>
       <label>Min minutes<input type="number" name="min_minutes" min="1" value="<%= C.min_minutes %>"></label>
-      <label>Max minutes<input type="number" name="max_minutes" min="1" value="<%= C.max_minutes %>"></label>
+      <label>Max minutes <small>(a pad's default)</small><input type="number" name="max_minutes" min="1" max="360" value="<%= C.max_minutes %>"></label>
+      <label>Longest a pad owner may allow <small>(minutes, up to 360 = 6 h; also a 📼 Plex slot's limit)</small><input type="number" name="pad_max_minutes" min="5" max="360" value="<%= C.pad_max_minutes %>"></label>
       <label>User streams at once, site-wide<input type="number" name="max_concurrent" min="0" max="32" value="<%= C.max_concurrent %>"></label>
       <label>Most slots an owner can give a pad<input type="number" name="max_slots_per_room" min="1" max="8" value="<%= C.max_slots_per_room %>"></label>
       <label>Book ahead up to (days)<input type="number" name="schedule_days" min="0" max="60" value="<%= C.schedule_days %>"></label>

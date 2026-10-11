@@ -164,8 +164,8 @@ function withLock(key, fn) {
 }
 
 // ── building one from a request ──
-async function build(b, S) {
-  const maxItems = S.library_queue_max_items || 60, maxSec = (S.library_queue_max_hours || 12) * 3600;
+async function build(b, S, capSec = Infinity) {
+  const maxItems = S.library_queue_max_items || 60, maxSec = Math.min((S.library_queue_max_hours || 12) * 3600, capSec);
   const offset = Math.max(0, Math.floor(Number(b.offset) || 0));
   let items = [], scope = "list", first = null;
   if (Array.isArray(b.keys) && b.keys.length) {
@@ -202,17 +202,31 @@ function priceView(A, S, sec) {
   return { per_hour: per, estimate: estimate(per, sec), hours: per ? Math.max(1, Math.ceil(sec / 3600)) : 0, free: !per };
 }
 /** What a queue would hold and cost (nothing is opened or charged). */
+// 1.99lw: a pad's 📼 limit (mainstage.libraryMaxFor: the owner's longest slot, else 6 h) as seconds of content
+const BOOK_BUFFER_MIN = 5;              // a booked 📼 slot = its runtime + this
+async function padCapSec(room, forBooking) {
+  if (!room) return Infinity;
+  const R = await I().roomOf(room).catch(() => null);
+  if (!R) return Infinity;
+  const lim = await stage.limitsFor(R.id);
+  return Math.max(60, (lim.library_max - (forBooking ? BOOK_BUFFER_MIN : I().SLACK_MIN)) * 60);
+}
+const bookMinutes = (sec) => Math.ceil(sec / 60) + BOOK_BUFFER_MIN;
+/** What a queue would hold and cost (nothing is opened or charged). b.when = "later": sized for a booked slot. */
 async function preview(user, b = {}) {
   await L().init();
   const A = await I().mustAccess(user);
   const S = conf.get();
-  if (S.library_queue === false) throw refuse(403, "Queues are switched off right now.");
-  const q = await build(b, S);
+  const single = !Array.isArray(b.keys) && (!b.scope || b.scope === "episode");
+  if (S.library_queue === false && !(single && b.when === "later")) throw refuse(403, "Queues are switched off right now.");
+  const later = b.when === "later";
+  const q = await build(b, S, await padCapSec(b.room, later));
   const first = q.items[0];
   const firstHours = A.free ? 0 : hoursNeeded(0, first.duration, q.offset);
   const pv = priceView(A, S, q.total_sec);
   return { ok: true, items: q.items, total_sec: q.total_sec, truncated: q.truncated, scope: q.scope, ...pv,
-           first_charge: pv.per_hour * firstHours, max_items: S.library_queue_max_items, max_hours: S.library_queue_max_hours };
+           first_charge: pv.per_hour * firstHours, max_items: S.library_queue_max_items, max_hours: S.library_queue_max_hours,
+           slot_minutes: later ? bookMinutes(q.total_sec) : null };
 }
 
 // ── playing ──
@@ -500,6 +514,8 @@ function restartCurrent(s, pos) {
 /** Active queues with no title on (waiting for an encoder, or the site stopped between two titles). */
 async function watchIdle() {
   await L().init();
+  // 1.99lw: booked 📼 slots whose time came
+  await watchBookings().catch((e) => console.error("[mediaqueue] bookings:", conf.errLine(e)));
   // a start that never finished (the process died half-way): close it so the pad is free again
   for (const r of await getQuery("SELECT id, room_id FROM media_queues WHERE state = 'starting' AND updated < ?", [NOW() - 2 * 60000])) {
     await withLock(r.room_id, async () => {
@@ -532,11 +548,19 @@ async function start(user, b = {}) {
   if (S.library_queue === false) throw refuse(403, "Queues are switched off right now.");
   const R = await I().roomOf(b.room);
   if (!R) throw refuse(404, "No such pad.");
-  return withLock(R.id, async () => {
+  return withLock(R.id, () => launch(user, A, R, b, null));
+}
+/**
+ * (inside the pad's lock) Build, check, open the slot - or, for a booking, open ITS slot (mainstage.libraryActivate) -
+ * and start the first title. booked = {slot_id} for a booked slot's start: its estimate was confirmed when it was booked.
+ */
+async function launch(user, A, R, b, booked) {
+  const S = conf.get();
+  {
     await I().preflight(user, A, R);
-    const built = await build(b, S);
+    const built = await build(b, S, await padCapSec(R.id, !!booked));
     const pv = priceView(A, S, built.total_sec);
-    if (pv.estimate > 0) {
+    if (pv.estimate > 0 && !booked) {
       if (b.estimate == null || b.estimate === "") throw refuse(400, `This queue costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to start.`, { estimate: pv.estimate });
       if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate });
     }
@@ -549,8 +573,15 @@ async function start(user, b = {}) {
       sub: b.sub !== undefined && b.sub !== null && b.sub !== "" && (first.subs || []).some((x) => x.index === Number(b.sub) && x.burnable) ? Number(b.sub) : null,
     };
     const prefs = prefsFrom(first, o);
-    const opened = await stage.libraryOpen(user, { room: R.id, title: "📼 " + fmtTitle(first),
-                                                   minutes: Math.min(24 * 60, Math.ceil(built.total_sec / 60) + I().SLACK_MIN) });
+    let opened;
+    if (booked) {
+      const key = await stage.libraryActivate(booked.slot_id, { title: "📼 " + fmtTitle(first), minutes: Math.ceil(built.total_sec / 60) + I().SLACK_MIN });
+      const sl = await stage.getSlot(booked.slot_id);
+      opened = { key, slot: { id: sl.id, stream: sl.stream, hls: null } };
+    } else {
+      opened = await stage.libraryOpen(user, { room: R.id, title: "📼 " + fmtTitle(first),
+                                               minutes: Math.min(24 * 60, Math.ceil(built.total_sec / 60) + I().SLACK_MIN) });
+    }
     L()._keys.set(R.id, opened.key);
     const t = NOW();
     const ins = await runQuery(`INSERT INTO media_queues (room_id, user_id, username, access, state, items, pos, prefs, scope, per_hour, paid_hours, played_sec,
@@ -574,7 +605,99 @@ async function start(user, b = {}) {
                 (pv.per_hour ? `, est. ${pv.estimate} PAT` : ", free"));
     return { ok: true, queue_id: q.id, slot: { id: opened.slot.id, stream: opened.slot.stream, hls: opened.slot.hls }, title: r.title, price: r.price,
              items: built.items.length, total_sec: built.total_sec, truncated: built.truncated, estimate: pv.estimate, per_hour: pv.per_hour };
-  });
+  }
+}
+
+// ── 1.99lw: BOOKING a 📼 Plex slot for later (the Go-live page's "Later" in 📼 mode) ──
+// A booked slot is an ordinary scheduled stage slot (mainstage.book {library}: the schedule, clashes, approval, the
+// per-user limits), sized to the runtime: one title or the queue + BOOK_BUFFER_MIN, under the pad's 📼 limit and the
+// queue limits. No slot fee and nothing taken now: the play's own rules apply when it starts (free for Plex members /
+// admins / staff; others pay per started hour as it plays). At its start time the watcher (watchBookings) starts it like
+// ▶ Play would; can't (out of PAT, no Plex access any more, the daily cap, media-control down / every encoder busy
+// for the start window) = the slot ends unstarted + a notice (and any hold - none today - comes back with the slot).
+//   media_bookings   slot_id -> who, what (the request), state booked | started | failed | cancelled
+async function bookingsInit() {
+  await runQuery(`CREATE TABLE IF NOT EXISTS media_bookings (slot_id TEXT PRIMARY KEY, room_id TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT,
+    req TEXT NOT NULL, start_at INTEGER NOT NULL, minutes INTEGER, items INTEGER, estimate INTEGER, state TEXT NOT NULL, queue_id INTEGER, error TEXT,
+    created INTEGER NOT NULL, updated INTEGER NOT NULL)`);
+  await runQuery("CREATE INDEX IF NOT EXISTS media_bookings_state ON media_bookings (state, start_at)");
+}
+async function book(user, b = {}) {
+  await L().init();
+  await bookingsInit();
+  const A = await I().mustAccess(user);
+  const S = conf.get();
+  const R = await I().roomOf(b.room);
+  if (!R) throw refuse(404, "No such pad.");
+  const single = !Array.isArray(b.keys) && (!b.scope || b.scope === "episode");
+  if (S.library_queue === false && !single) throw refuse(403, "Queues are switched off right now.");
+  const built = await build(b, S, await padCapSec(R.id, true));
+  const pv = priceView(A, S, built.total_sec);
+  if (pv.estimate > 0) {
+    if (b.estimate == null || b.estimate === "") throw refuse(400, `This costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to book.`, { estimate: pv.estimate });
+    if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate });
+  }
+  const minutes = bookMinutes(built.total_sec);
+  const first = built.items[0];
+  const title = "📼 " + fmtTitle(first) + (built.items.length > 1 ? ` +${built.items.length - 1}` : "");
+  const r = await stage.book(user, { room: R.id, minutes, library: true, start_at: Number(b.start_at) || 0, title });
+  const req = { key: b.key || null, scope: b.scope || null, keys: Array.isArray(b.keys) ? b.keys.map(String).filter(validKey).slice(0, 200) : null,
+                offset: built.offset, quality: b.quality, audio: b.audio, sub: b.sub };
+  const t = NOW();
+  await runQuery(`INSERT INTO media_bookings (slot_id, room_id, user_id, username, req, start_at, minutes, items, estimate, state, created, updated)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'booked', ?, ?)`,
+                 [r.slot.id, R.id, user.userId, user.username, JSON.stringify(req), r.slot.start_at, minutes, built.items.length, pv.estimate, t, t]);
+  console.log(`[mediaqueue] ${user.username} booked 📼 ${built.items.length} title(s), ${minutes} min on ${R.id} for ${new Date(r.slot.start_at).toISOString()} (slot ${r.slot.id})`);
+  return { ok: true, slot: r.slot, minutes, items: built.items.length, total_sec: built.total_sec, truncated: built.truncated, estimate: pv.estimate,
+           status: r.slot.status, title };
+}
+async function bookingFailed(bk, why, slotEnd = true) {
+  await runQuery("UPDATE media_bookings SET state = 'failed', error = ?, updated = ? WHERE slot_id = ? AND state = 'booked'", [String(why).slice(0, 200), NOW(), bk.slot_id]);
+  if (slotEnd) await stage.end(bk.slot_id, "library_failed", "system").catch(() => {});
+  const pad = await padTitle(bk.room_id);
+  await require("./inbox").addSafe(bk.user_id, { kind: "media", title: `📼 Your booked Plex stream on ${pad} didn't start`,
+    body: String(why).slice(0, 200), link: "/stage", ref: "mlibbook-fail:" + bk.slot_id });
+  console.warn(`[mediaqueue] booking ${bk.slot_id} on ${bk.room_id} didn't start: ${why}`);
+}
+/** Booked 📼 slots whose time came: start them (called by watchIdle every tick). */
+async function watchBookings() {
+  await bookingsInit();
+  const rows = await getQuery("SELECT * FROM media_bookings WHERE state = 'booked' AND start_at <= ?", [NOW()]);
+  let n = 0;
+  for (const bk of rows) {
+    await withLock(bk.room_id, async () => {
+      const cur = (await getQuery("SELECT * FROM media_bookings WHERE slot_id = ? AND state = 'booked'", [bk.slot_id]))[0];
+      if (!cur) return;
+      const slot = await stage.getSlot(bk.slot_id);
+      if (!slot || slot.settled || slot.status === "ended") {
+        await runQuery("UPDATE media_bookings SET state = 'cancelled', updated = ? WHERE slot_id = ?", [NOW(), bk.slot_id]);
+        return;
+      }
+      if (slot.status === "requested") return;                          // waiting for the pad owner's OK (mainstage expires it)
+      if (slot.status !== "scheduled") return;
+      const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [bk.user_id]))[0];
+      if (!u) { await bookingFailed(bk, "The account is gone."); n++; return; }
+      const A = await L().access(u);
+      if (!A.ok) { await bookingFailed(bk, A.message || "Playing from Plex isn't open right now."); n++; return; }
+      const R = await I().roomOf(bk.room_id);
+      if (!R) { await bookingFailed(bk, "The pad is gone."); n++; return; }
+      const req = parse(bk.req, {});
+      try {
+        const r = await launch(u, A, R, { ...req, room: R.id }, { slot_id: bk.slot_id });
+        await runQuery("UPDATE media_bookings SET state = 'started', queue_id = ?, updated = ? WHERE slot_id = ?", [r.queue_id, NOW(), bk.slot_id]);
+        console.log(`[mediaqueue] booking ${bk.slot_id} started as queue #${r.queue_id}`);
+      } catch (e) {
+        const windowMs = (stage.config().start_window_min || 10) * 60000;
+        const transient = e && (e.status === 429 || e.status === 503 || e.status === 502 || e.busy);
+        const sl = await stage.getSlot(bk.slot_id).catch(() => null);
+        const stillBooked = sl && sl.status === "scheduled" && !sl.settled;
+        if (transient && stillBooked && NOW() - bk.start_at < windowMs) return;   // no free encoder / unreachable: try again next tick
+        await bookingFailed(bk, e && e.outOfPat ? "You're out of PAT - top up to keep watching." : (e && e.message) || "It couldn't start.");
+      }
+      n++;
+    }).catch((e) => console.error("[mediaqueue] booking:", conf.errLine(e)));
+  }
+  return n;
 }
 
 // ── controls ──
@@ -585,16 +708,17 @@ async function needQueue(user, room) {
   if (!R) throw refuse(404, "No such pad.");
   const q = await activeFor(R.id);
   if (!q) throw refuse(404, "There's no queue playing on this pad.");
-  if (!canControl(user, q)) throw refuse(403, "Only whoever started it (or an admin) can control it.");
+  if (!(await canControl(user, q))) throw refuse(403, I().CONTROL_DENIED);
   return { R, q };
 }
-const canControl = (user, q) => !!(user && user.userId && (I().isLibAdmin(user) || (q.user_id === user.userId && conf.on.library())));
+// 1.99lw: the starter, the library admins, the pad's owner (+ site staff) - medialib.mayControl
+const canControl = (user, q) => I().mayControl(user, q.room_id, q.user_id);
 
 async function step(user, room, dir) {
   const { R } = await needQueue(user, room);
   return withLock(R.id, async () => {
     const q = await activeFor(R.id);
-    if (!q || !canControl(user, q)) throw refuse(404, "There's no queue playing on this pad.");
+    if (!q || !(await canControl(user, q))) throw refuse(404, "There's no queue playing on this pad.");
     const to = q.pos + dir;
     if (to >= q.items.length) throw refuse(409, "That's the last title - ⏹ Stop ends the queue.");
     if (to < 0) throw refuse(409, "That's the first title.");
@@ -604,6 +728,7 @@ async function step(user, room, dir) {
       const pos = await stopEncoder(R.id);
       r = await advance(q, s, dir > 0 ? "skipped" : "back", { pos: pos != null ? pos : s.position, by: user.username, to });
     } else r = await goTo(q, to);
+    await I().logControl(user, R.id, dir > 0 ? "next" : "prev", q.items[to] ? fmtTitle(q.items[to]) : null, { queue_id: q.id });
     return { ok: true, ...r, pos: q.pos };
   });
 }
@@ -611,10 +736,11 @@ const next = (user, room) => step(user, room, 1);
 const prev = (user, room) => step(user, room, -1);
 
 async function stop(user, q0, reason = "stopped") {
-  if (!canControl(user, q0)) throw refuse(403, "Only whoever started it (or an admin) can control it.");
+  if (!(await canControl(user, q0))) throw refuse(403, I().CONTROL_DENIED);
   return withLock(q0.room_id, async () => {
     const q = await load(q0.id);
     if (q && q.state === "active") await endQueue(q, `${reason} by ${user.username}`, { by: user.username });
+    await I().logControl(user, q0.room_id, "stop", "the queue", { queue_id: q0.id });
     return { ok: true };
   });
 }
@@ -624,8 +750,10 @@ async function edit(user, room, b = {}) {
   const { R } = await needQueue(user, room);
   return withLock(R.id, async () => {
     const q = await activeFor(R.id);
-    if (!q || !canControl(user, q)) throw refuse(404, "There's no queue playing on this pad.");
+    if (!q || !(await canControl(user, q))) throw refuse(404, "There's no queue playing on this pad.");
     const S = conf.get();
+    const logIt = () => I().logControl(user, R.id, "queue_" + String(b.op || "").slice(0, 8),
+      b.op === "add" ? `${(b.keys || []).length} title(s)` : `#${Number(b.index) + 1}` + (b.op === "move" ? ` → #${Number(b.to) + 1}` : ""), { queue_id: q.id });
     const idx = Math.floor(Number(b.index)), to = Math.floor(Number(b.to));
     const later = (i) => Number.isInteger(i) && i > q.pos && i < q.items.length;
     if (b.op === "remove") {
@@ -651,9 +779,11 @@ async function edit(user, room, b = {}) {
       const slot = await stage.getSlot(q.slot_id);
       if (slot) await stage.libraryExtend(q.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + left) / 60) + I().SLACK_MIN).catch(() => {});
       await saveItems(q);
+      await logIt();
       return { ok: true, added, items: q.items.length };
     } else throw refuse(400, "Bad change.");
     await saveItems(q);
+    await logIt();
     return { ok: true, items: q.items.length };
   });
 }
@@ -695,18 +825,6 @@ async function views({ all = false, userId = null, recent = false } = {}) {
   for (const r of rows) { const q = await load(r.id); if (q) out.push(await view(q, { withBalance: !!userId })); }
   return out;
 }
-/** The pad page's Go-live card: what's on + up next, and whether this viewer may control it. */
-async function padView(user, room) {
-  await L().init();
-  const R = await I().roomOf(room);
-  if (!R || !(await stage.seesPad(user, R.id))) throw refuse(404, "No such pad.");
-  const q = await activeFor(R.id);
-  if (!q) return { ok: true, queue: null };
-  const v = await view(q);
-  const s = await I().session(R.id);
-  return { ok: true, room: R.id, queue: { ...v, next: v.next.slice(0, 8), est_left: undefined, next_charge: undefined, paid_hours: undefined, per_hour: undefined },
-           state: s ? s.state : "waiting", position: s ? s.position : null, duration: s ? s.duration : null, can_control: canControl(user, q) };
-}
 
 // ── routes (medialib.register adds them; J = signed in + same-site POST + JSON) ──
 function routes(app, { J, me, timers = true }) {
@@ -718,12 +836,18 @@ function routes(app, { J, me, timers = true }) {
     if (b.room && R && !(await stage.seesPad(req.user, R.id))) throw refuse(404, "No such pad.");
     return start(me(req), b);
   }));
+  // 1.99lw: book a 📼 slot for later (one title or a queue), sized to its runtime
+  app.post("/api/medialib/book", ...J(async (req) => {
+    const b = { ...(req.body || {}) };
+    const R = await I().roomOf(b.room);
+    if (b.room && R && !(await stage.seesPad(req.user, R.id))) throw refuse(404, "No such pad.");
+    return book(me(req), b);
+  }));
   app.post("/api/medialib/queue/next", ...J(async (req) => next(me(req), (req.body || {}).room)));
   app.post("/api/medialib/queue/prev", ...J(async (req) => prev(me(req), (req.body || {}).room)));
   app.post("/api/medialib/queue/edit", ...J(async (req) => edit(me(req), (req.body || {}).room, req.body || {})));
-  app.get("/api/medialib/queue/pad", ...J(async (req) => padView(me(req), String(req.query.room || ""))));
 }
 
-module.exports = { start, preview, next, prev, stop, edit, views, padView, onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
+module.exports = { start, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
                    buildQueue, capQueue, totalSec, estimate, hoursNeeded, pickTracks, prefsFrom, sortEps, slim, SCOPES, _setClock,
                    _fast: (on) => { fastOn = !!on; } };

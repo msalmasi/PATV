@@ -408,3 +408,95 @@ test("golive.nowPlaying: the pad's chat line (np) + Pepe's relay job 'nowplaying
     assert.equal(seen.length, 0);
   } finally { bridge.liveNotice = keep.n; bridge.liveAnnounce = keep.a; rooms.get = keep.g; }
 });
+
+// ── 1.99lw: the pad page's player (DJ controls), booking a 📼 slot for later, the pad's 📼 limit ──
+test("the player: everyone sees title + progress read-only; the starter, the pad's owner and admins control it; the log says who did what", async () => {
+  procs.length = 0;
+  const starter = await mkUser("pleb", 0);
+  await conf.set({ library_users: member.username + "," + starter.username }, "test");
+  await Q.start(starter, { room: ROOM, key: "911", scope: "season" });
+  await pub(keyOf(last()));
+  await playFor(120); await L.watch();
+  const anon = await L.player(null, ROOM);
+  assert.deepEqual([anon.on, anon.title, anon.can_control, anon.log.length], [true, "The Show — S1E1 Pilot", false, 0]);
+  assert.equal(anon.queue.count, 3);
+  assert.ok(anon.position >= 120 && anon.duration === DUR);
+  const viewer = await mkUser();
+  assert.equal((await L.player(viewer, ROOM)).can_control, false);
+  await assert.rejects(L.pause(viewer, ROOM), (e) => e.status === 403);
+  await assert.rejects(Q.next(viewer, ROOM), (e) => e.status === 403);
+  // the pad's owner (rooms.canManage) may
+  const rooms = require(path.join(repo, "rooms"));
+  const keep = rooms.canManage;
+  const padOwner = await mkUser();
+  rooms.canManage = async (u, roomId) => !!u && u.userId === padOwner.userId && roomId === ROOM;
+  try {
+    assert.equal((await L.player(padOwner, ROOM)).can_control, true);
+    await L.pause(padOwner, ROOM);
+    await L.seek(starter, ROOM, 300);
+    await Q.next(padOwner, ROOM);
+  } finally { rooms.canManage = keep; }
+  const v = await L.player(starter, ROOM);
+  assert.equal(v.can_control, true);
+  assert.deepEqual(v.log.slice(0, 3).map((l) => [l.username, l.action]), [[padOwner.username, "next"], [starter.username, "seek"], [padOwner.username, "pause"]]);
+  assert.match(v.log[1].detail, /→ 5:00/);
+  await L.stop(starter, ROOM);
+  assert.equal((await L.player(null, ROOM)).on, false);
+  await conf.set({ library_users: member.username }, "test");
+});
+
+test("booking a 📼 slot for later: sized to the runtime + 5 min, starts by itself at its time with the play's rules; can't pay = it doesn't start + a notice", async () => {
+  procs.length = 0;
+  const u = await mkUser("pleb", 1000000);
+  const at = Date.now() + 10 * 60000;
+  const pv = await Q.preview(u, { key: "912", scope: "season_rest", room: ROOM, when: "later" });
+  assert.equal(pv.slot_minutes, Math.ceil(2 * DUR / 60) + 5);
+  await assert.rejects(Q.book(u, { room: ROOM, key: "912", scope: "season_rest", start_at: at }), (e) => e.status === 400 && e.extra.estimate === 200000);
+  const r = await Q.book(u, { room: ROOM, key: "912", scope: "season_rest", start_at: at, estimate: 200000, audio: 1 });
+  assert.equal(r.minutes, 85);
+  let slot = await slotOf(r.slot.id);
+  assert.deepEqual([slot.status, slot.source, slot.max_minutes, slot.held], ["scheduled", "library", 85, 0]);
+  assert.equal(await bal(u), 1000000, "nothing taken when booking");
+  await L.watch();
+  assert.equal(procs.length, 0, "not before its time");
+  Q._setClock(() => Date.now() + 11 * 60000);
+  try { await L.watch(); } finally { Q._setClock(null); }
+  slot = await slotOf(r.slot.id);
+  assert.equal(slot.status, "waiting", "opened with a key");
+  assert.equal(procs.length, 1);
+  assert.match(argv(last()), /-map 0:1/, "the booked audio choice");
+  assert.equal((await pub(keyOf(last()))).status, 302);
+  assert.equal(await bal(u), 900000, "the first hour, as it plays");
+  const bk = (await getQuery("SELECT * FROM media_bookings WHERE slot_id = ?", [r.slot.id]))[0];
+  assert.equal(bk.state, "started");
+  assert.equal((await queueRow(bk.queue_id)).slot_id, r.slot.id, "the queue plays in the booked slot");
+  await L.stop(u, ROOM);
+  // a booking whose owner can't pay when it starts
+  const broke = await mkUser("pleb", 0);
+  const r2 = await Q.book(broke, { room: ROOM, key: "911", start_at: at, estimate: 100000 });
+  assert.equal(r2.minutes, 45);
+  Q._setClock(() => Date.now() + 11 * 60000);
+  try { await L.watch(); } finally { Q._setClock(null); }
+  const bk2 = (await getQuery("SELECT * FROM media_bookings WHERE slot_id = ?", [r2.slot.id]))[0];
+  assert.equal(bk2.state, "failed");
+  assert.match(bk2.error, /out of PAT/);
+  assert.equal((await slotOf(r2.slot.id)).status, "ended");
+  assert.equal(mstreams.list().filter((x) => x.state === "playing").length, 0);
+  // cancelled before its time (the user ended the booking)
+  const r3 = await Q.book(member, { room: ROOM, key: "911", start_at: at });
+  await S.end(r3.slot.id, "cancelled", member.username);
+  Q._setClock(() => Date.now() + 11 * 60000);
+  try { await L.watch(); } finally { Q._setClock(null); }
+  assert.equal((await getQuery("SELECT state FROM media_bookings WHERE slot_id = ?", [r3.slot.id]))[0].state, "cancelled");
+});
+
+test("the pad's 📼 limit: a pad whose owner set a longest slot caps queues (cut to fit) and refuses a longer single play", async () => {
+  const keep = S.limitsFor;
+  S.limitsFor = async () => ({ max: 60, library_max: 60, min: 5 });
+  try {
+    const pv = await Q.preview(admin, { key: "900", room: ROOM });
+    assert.equal(pv.items.length, 1, "40-min episodes: one fits in 60 min with the slack");
+    assert.equal(pv.truncated, true);
+    await assert.rejects(L.play(admin, { room: ROOM, key: "500" }), (e) => e.status === 400 && /at most 60 minutes/.test(e.message));
+  } finally { S.limitsFor = keep; }
+});

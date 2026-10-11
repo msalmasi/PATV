@@ -500,17 +500,27 @@
       </form>
       <% } %>
     </div>
-    <% if (signedIn_) { %>
-    <%# 1.99lr: a 📼 queue on this stage - what's on / next, and the starter's controls (pad-plexq.js, mediaqueue.js padView) %>
+    <%# 1.99lw: the 📼 player - what plays from Plex here, its progress + the queue for everyone; play / pause / seek /
+        next / the queue for whoever started it, the pad's owner and the admins (pad-plexq.js, medialib.player) %>
     <div class="plexq" id="rmPlexQ" data-room="<%= room.slug %>" hidden aria-live="polite"></div>
     <style>
-      .golive-card .plexq { margin: 10px 0 4px; padding: 10px 12px; border: 1px solid #1f3a20; background: rgba(76,175,80,.08); border-radius: 10px; display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+      .golive-card .plexq { margin: 10px 0 4px; padding: 10px 12px; border: 1px solid #1f3a20; background: rgba(76,175,80,.08); border-radius: 10px; display: grid; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
       .golive-card .plexq[hidden] { display: none; }
-      .golive-card .plexq .pq-ctl { display: flex; gap: 8px; flex-wrap: wrap; }
+      .golive-card .plexq .pq-ctl { display: flex; gap: 6px; flex-wrap: wrap; }
+      .golive-card .plexq .pq-ctl .sact { min-width: 44px; min-height: 40px; justify-content: center; }
+      .golive-card .plexq .pq-scrub { width: 100%; accent-color: var(--green, #4caf50); min-height: 28px; }
+      .golive-card .plexq .pq-bar { height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+      .golive-card .plexq .pq-bar span { display: block; height: 100%; background: var(--green, #4caf50); }
+      .golive-card .plexq .pq-times { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; font-size: 13px; }
       .golive-card .plexq .pq-msg { margin: 0; font-size: 13px; }
+      .golive-card .plexq ol, .golive-card .plexq ul { margin: 6px 0 0; padding-left: 22px; display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+      .golive-card .plexq ul { list-style: none; padding-left: 0; font-size: 13px; }
+      .golive-card .plexq li { display: flex; gap: 6px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+      .golive-card .plexq .pq-li { display: inline-flex; gap: 4px; }
+      .golive-card .plexq .pq-li .sact { min-width: 36px; min-height: 32px; padding: 0 8px; }
+      .golive-card .plexq summary { cursor: pointer; color: #bbb; }
     </style>
-    <script src="/public/js/pad-plexq.js?v=1" defer></script>
-    <% } %>
+    <script src="/public/js/pad-plexq.js?v=2" defer></script>
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="<%- t('pad.golive.coming_up') %>">

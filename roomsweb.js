@@ -185,7 +185,7 @@ function register(app, { addUser, isBotToken }) {
       if (verb === "slots") {
         const n = Math.floor(Number(arg));
         if (!Number.isFinite(n) || n < 1) return res.json({ ok: false, message: `say how many: 1-${stage.config().max_slots_per_room + primeSlots(R.id)}` });
-        const R2 = await rooms.setStage(R.id, { slot_count: n }, who, { maxSlots: stage.config().max_slots_per_room + primeSlots(R.id), maxPrice: stage.config().price_per_min });
+        const R2 = await rooms.setStage(R.id, { slot_count: n }, who, { maxSlots: stage.config().max_slots_per_room + primeSlots(R.id), maxPrice: stage.config().price_per_min, maxMinutes: stage.config().pad_max_minutes });
         return res.json({ ok: true, message: `${R.title} has ${R2.slot_count} stage slot${R2.slot_count === 1 ? "" : "s"} now` });
       }
       res.json({ ok: false, message: "usage: !stage · !stage cut [#n|name|all] · !stage feature <#n|name> · !stage unfeature · !stage slots <n>" });
@@ -218,7 +218,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       const R = await manageable(req, res); if (!R) return;
       const C = stage.config();
-      res.json({ ok: true, room: await rooms.setStage(R.id, req.body || {}, actor(req), { maxSlots: C.max_slots_per_room + primeSlots(R.id), maxPrice: C.price_per_min }) });
+      res.json({ ok: true, room: await rooms.setStage(R.id, req.body || {}, actor(req), { maxSlots: C.max_slots_per_room + primeSlots(R.id), maxPrice: C.price_per_min, maxMinutes: C.pad_max_minutes }) });
     } catch (e) { fail(res, e); }
   });
   app.get("/api/rooms/:slug/owner-state", addUser, needUser, async (req, res) => {

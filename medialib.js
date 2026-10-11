@@ -160,6 +160,10 @@ function init() {
         last_announce INTEGER, fails INTEGER NOT NULL DEFAULT 0, retry_since INTEGER, restarts INTEGER NOT NULL DEFAULT 0)`);
       await runQuery("CREATE INDEX IF NOT EXISTS media_queues_room ON media_queues (room_id, state)");
       await runQuery("CREATE INDEX IF NOT EXISTS media_queues_user ON media_queues (user_id, created)");
+      // 1.99lw: who pressed what on the 📼 controls (pause / seek / next / stop ...), shown in the panel to whoever may control it
+      await runQuery(`CREATE TABLE IF NOT EXISTS media_controls (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, room_id TEXT NOT NULL,
+        user_id TEXT, username TEXT, action TEXT NOT NULL, detail TEXT, play_id INTEGER, queue_id INTEGER)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS media_controls_room ON media_controls (room_id, ts)");
       stage.setLibraryIdle(conf.get().library_pause_max_min);
     })().catch((e) => { ready = null; throw e; });
   }
@@ -393,6 +397,12 @@ async function play(user, b = {}) {
     audio: b.audio !== undefined && b.audio !== null && b.audio !== "" && (it.audio || []).some((a) => a.index === Number(b.audio)) ? Number(b.audio) : null,
     sub: b.sub !== undefined && b.sub !== null && b.sub !== "" && (it.subs || []).some((s) => s.index === Number(b.sub) && s.burnable) ? Number(b.sub) : null,
   };
+  // 1.99lw: the pad's 📼 limit (its owner's longest slot, else 6 h - mainstage.libraryMaxFor)
+  if (!carry) {
+    const lim = await stage.limitsFor(R.id);
+    const left = Math.max(0, (it.duration || 0) - o.offset);
+    if (left > lim.library_max * 60) throw new Refuse(400, `Slots on this pad run at most ${lim.library_max} minutes - start further in, or pick something shorter.`, { max_minutes: lim.library_max });
+  }
   // the price: what the user saw and confirmed must be what we charge
   const q = carry || A.free ? { price: 0, hours: 0, per_hour: 0 } : priceFor(it.duration, o.offset, S);
   if (q.price > 0) {
@@ -473,6 +483,30 @@ async function needEncoder() {
   return live;
 }
 
+/**
+ * 1.99lw: who may work the 📼 controls (pause / seek / next / stop / the queue): whoever started it, the library admins,
+ * and the pad's owner (+ site staff - rooms.canManage). Pad mods have no site-side role (their powers are Camfrog's,
+ * checked by Pepe), so they aren't in. Everyone else who sees the pad gets the read-only player.
+ */
+async function mayControl(user, roomId, starterId) {
+  if (!user || !user.userId) return false;
+  if (isLibAdmin(user)) return true;
+  if (!conf.on.library()) return false;
+  if (starterId && starterId === user.userId) return true;
+  try { return !!(await rooms.canManage(user, roomId)); } catch (e) { return false; }
+}
+const CONTROL_DENIED = "Only whoever started it, the pad's owner or an admin can control it.";
+/** One line in the control log (never throws). */
+async function logControl(user, roomId, action, detail, { play_id = null, queue_id = null } = {}) {
+  try {
+    await runQuery("INSERT INTO media_controls (ts, room_id, user_id, username, action, detail, play_id, queue_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                   [Date.now(), String(roomId), user && user.userId || null, user && user.username || null, String(action).slice(0, 20),
+                    detail == null ? null : String(detail).slice(0, 160), play_id, queue_id]);
+  } catch (e) { /* the log never blocks a control */ }
+}
+const clock = (sec) => { sec = Math.max(0, Math.floor(Number(sec) || 0)); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+                         return (h ? h + ":" + String(m).padStart(2, "0") : String(m)) + ":" + String(s).padStart(2, "0"); };
+
 async function needSession(user, room) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
@@ -481,8 +515,7 @@ async function needSession(user, room) {
   const s = await session(R.id);
   if (!s) throw new Refuse(404, "Nothing from the library is playing on this pad.");
   const p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [s.play_id]))[0] || {};
-  if (!isLibAdmin(user) && p.user_id !== user.userId) throw new Refuse(403, "Only whoever started it (or an admin) can control it.");
-  if (!isLibAdmin(user) && !conf.on.library()) throw new Refuse(403, "Playing from Plex isn't open right now.");
+  if (!(await mayControl(user, R.id, p.user_id))) throw new Refuse(403, conf.on.library() || isLibAdmin(user) ? CONTROL_DENIED : "Playing from Plex isn't open right now.");
   return { R, s, p };
 }
 
@@ -497,6 +530,7 @@ async function stop(user, room, reason = "stopped") {
   catch (e) { console.warn("[medialib] stop: media-control:", conf.errLine(e)); }
   await stage.end(s.slot_id, "library_" + reason, user.username).catch(() => {});
   await dropSession(s, reason + " by " + user.username, pos);
+  await logControl(user, R.id, "stop", s.title, { play_id: s.play_id });
   return { ok: true };
 }
 
@@ -505,12 +539,15 @@ async function pause(user, room) {
   if (s.state !== "playing") throw new Refuse(409, "It isn't playing.");
   const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/pause`, {});
   await runQuery("UPDATE media_sessions SET state = 'paused', position = ?, updated = ? WHERE room_id = ?", [r.stream ? r.stream.position : s.position, Date.now(), R.id]);
+  await logControl(user, R.id, "pause", "at " + clock(r.stream ? r.stream.position : s.position), { play_id: s.play_id, queue_id: s.queue_id || null });
   return { ok: true, position: r.stream ? r.stream.position : null, resume_by: Date.now() + conf.get().library_pause_max_min * 60000 };
 }
 
 // resume (paused) or seek (any state): back on the same slot when it's still open, else on a fresh slot
 async function restart(user, room, offset, how) {
   const { R, s, p } = await needSession(user, room);
+  await logControl(user, R.id, offset == null ? "resume" : "seek", offset == null ? "at " + clock(s.position) : clock(s.position) + " → " + clock(offset),
+                   { play_id: s.play_id, queue_id: s.queue_id || null });
   const slot = await stage.getSlot(s.slot_id);
   const open = slot && !slot.settled && ["waiting", "active"].includes(slot.status);
   const name = encodeURIComponent(stageName(R.id));
@@ -605,6 +642,33 @@ async function mine(user, roomId) {
   return out;
 }
 
+/**
+ * 1.99lw: the 📼 player on a pad page (the DJ panel): what's on, where it is, the queue; the controls + the log for those
+ * who may use them (mayControl), read-only for everyone else who sees the pad (signed in or not).
+ */
+async function player(user, room) {
+  await init();
+  const R = await roomOf(room);
+  if (!R || !(await stage.seesPad(user && user.userId ? user : null, R.id))) throw new Refuse(404, "No such pad.");
+  const s = await session(R.id);
+  const Q = require("./mediaqueue");
+  const q = await Q.activeFor(R.id);
+  if (!s && !q) return { ok: true, on: false, room: R.id };
+  const p = s ? (await getQuery("SELECT user_id, username FROM media_plays WHERE id = ?", [s.play_id]))[0] || {} : {};
+  const starter = q ? q.user_id : p.user_id;
+  const can = await mayControl(user, R.id, starter);
+  const out = { ok: true, on: true, room: R.id, title: s ? s.title : null, state: s ? s.state : "waiting", position: s ? s.position || 0 : 0,
+                duration: s ? s.duration || null : null, at: Date.now(), by: q ? q.username : p.username || (s && s.by_user) || null,
+                can_control: can, queue: null, log: [] };
+  if (q) {
+    const v = await Q.viewOf(q);
+    out.queue = { id: v.id, pos: v.pos, count: v.count, now: v.now, next: v.next.slice(0, can ? 60 : 10), left_sec: v.left_sec };
+    if (!s && v.now) out.title = fmtTitle(v.now);
+  }
+  if (can) out.log = await getQuery("SELECT ts, username, action, detail FROM media_controls WHERE room_id = ? ORDER BY id DESC LIMIT 8", [R.id]);
+  return out;
+}
+
 // ── the watcher: keeps the slot and the stream together, and settles held charges ──
 async function watch(only = null) {
   await init();
@@ -696,11 +760,18 @@ function register(app, { addUser, noTimers } = {}) {
   app.post("/api/medialib/pause", ...J(async (req) => pause(me(req), (req.body || {}).room)));
   app.post("/api/medialib/resume", ...J(async (req) => resume(me(req), (req.body || {}).room)));
   app.post("/api/medialib/seek", ...J(async (req) => seek(me(req), (req.body || {}).room, (req.body || {}).offset)));
+  // 1.99lw: the pad page's 📼 player (read-only without the rights; no sign-in needed to watch it)
+  app.get("/api/medialib/player", addUser, async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); res.json(await player(req.user && req.user.userId ? me(req) : null, String(req.query.room || ""))); }
+    catch (e) { fail(res, e); }
+  });
   // 1.99lr: 📼 queues - a season / a series / a list back to back in one slot (mediaqueue.js)
   require("./mediaqueue").routes(app, { J, me, timers: !noTimers });
 }
 
 module.exports = { init, register, play, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday, freeToday,
                    // 1.99lr: for mediaqueue.js
-                   _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat },
+                   player, mayControl, logControl,
+                   _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat,
+                         mayControl, logControl, clock, CONTROL_DENIED },
                    stageName, call, signHeaders, fmtTitle, inviteItemLink, Refuse, _keys: keys };
