@@ -4801,8 +4801,8 @@
     "!casino backend off",
     "!casino backend status"
    ],
-   "summary": "Switch this room's blackjack to the publicaccess.tv casino backend, where web players can sit at the same table.",
-   "details": "Switch **this room's** blackjack between Pepe's own table and the **publicaccess.tv casino backend**. With the backend on, `!bj` and the blackjack verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players at /casino/blackjack can sit at it too; a web table's host can push it into the room. It refuses to switch while an old blackjack table is still open here. **status** says which one the room uses (anyone can ask).",
+   "summary": "Switch this room's blackjack and Hold'em to the publicaccess.tv casino backend, where web players can sit at the same table.",
+   "details": "Switch **this room's** blackjack and Hold'em between Pepe's own tables and the **publicaccess.tv casino backend**. With the backend on, `!bj` / `!holdem` and their verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!sit`, `!check`, `!call`, `!raise`, `!allin`, `!fold`, `!cards`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players can sit at it too (Pepe posts the table's link when it opens, and each round's shuffle proof when it ends; `!bj fair` / `!holdem fair` repeats it). Hold'em hole cards come by PM. A web table's host can push it into the room, and onto Pepe's stream (one table at a time: first come, then a queue). It refuses to switch while an old table is still open here. **status** says which one the room uses (anyone can ask).",
    "examples": [
     "!casino backend on",
     "!casino backend status"
@@ -6593,5 +6593,5 @@
   }
  ],
  "undocumented": [],
- "hash": "e881901acbaac30d"
+ "hash": "5dee55b1f647124e"
 }

@@ -1,7 +1,8 @@
 # Casino backend: blackjack and hold'em on the site
 
-Status: design approved for phase 1 (blackjack, staging only) on 2026-10-11. Hold'em is phase 2 and follows
-this design only after the user says so. Heists, web heists and heist word challenges are out of scope (pinned).
+Status (2026-10-11): phase 1 (blackjack) and phase 2 (Hold'em) are built and on STAGING; prod gets the code DARK
+(`bj_enabled` / `hm_enabled` off, every room's switch off) when the user promotes it. The user's decisions are in
+section 14. Heists, web heists and heist word challenges are out of scope (pinned).
 
 The user's brief: *"build a proper backend for the blackjack and hold em, so that the camfrog bot connects to the
 backend rather than the site connecting to the state held by the bot. That way people can play on the site without
@@ -250,7 +251,7 @@ built to carry a rich UI:
   per-user endpoint (or the per-user part of the stream), never stored in an event that anyone else can read.
   Showdown reveals are public events.
 
-## 13. Pepe's stream: pushing a table to the OBS overlay (later phase; added 2026-10-11)
+## 13. Pepe's stream: pushing a table to the OBS overlay (added and built 2026-10-11)
 
 When a table is pushed to a room, the host (or an admin) can also ask for it on **Pepe's stream**: the OBS games
 overlay, `pepe-avatar.html?view=games` (the game-board channel of `avatar_server.py`; the face stays on
@@ -270,10 +271,51 @@ overlay, `pepe-avatar.html?view=games` (the game-board channel of `avatar_server
   table's public view, which the poll already returns (`tables`), as phase 1 does for one table.
 - **Prod only in practice:** only the prod VM runs OBS; on staging the slot logic is testable, the board isn't.
 
-Phase 1 already draws the blackjack board for a table pushed to one of Pepe's backend rooms when no old-engine
-game owns it; the explicit stream slot, the queue and the admin override come with this phase.
+Built 2026-10-11 with Hold'em: `casino_settings.stream_slot` {table, queue}, `POST /api/casino/t/:id/stream {on, override}`,
+the poll's `stream` field; Pepe draws only that table's board (blackjack or poker).
 
-## 14. Decisions for the user
+## 14. Hold'em (phase 2, built 2026-10-11)
+
+- **Engine** `casino/hmengine.js`: a port of `poker_engine.py` (evaluation, side pots, the betting machine, the 2%
+  showdown rake, error texts). 250 tables recorded from the Python engine replay identically (every event, stack and
+  error, 400 showdowns, 159 with side pots). The deck is one committed fair shuffle per hand (fair.js, 1 deck); the
+  PokerNow-style per-board reshuffle isn't needed when the whole deck is committed before the deal.
+- **Table session escrow** (`casino/holdem.js`): `!sit` charges the buy-in (PAT -> chips, keyed `chm:<t>:<uid>:buy:<n>`),
+  standing, busting, the idle close and closing the table pay the stack back (`...:out:<n>`). Both are journalled as an
+  intent first: an interrupted buy-in is refunded at restart, an interrupted cash-out is finished (paid once). Within
+  a hand only chips move. The rake goes to the House by key (`chm:<t>:h<n>:rake`).
+- **Private hole cards**: never in the public view, never in an event, never in a page's HTML. The web gets its own
+  cards in `me.cards`; Pepe's poll gets the room players' cards in a bot-only `private` part (by Camfrog name) and
+  PMs them once per hand; `!cards` answers privately. Showdown reveals are public.
+- **Rules / timers** = Pepe's !holdem: 60 s to act (time-out = check, or fold and sit out after the hand), 15 s
+  between hands, 300 s idle close, 9 seats, buy-in 20-200 BB, blinds up to 5,000/10,000, host handover. Changes:
+  a stand during a hand (also after folding) is queued until the hand ends (the old engine let a folded player leave
+  mid-hand, which could drop the button), and a top-up waits until the hand is over.
+- **High Rollers** (D8): open tables above the blind caps and buy in over the maximum.
+- **Anti-collusion basics**: dup-linked accounts or two accounts from one address can't sit at one table; a player who
+  folds to the same opponent 5+ times with 50+ BB put in is flagged on the table (`multi`, logged).
+- **Fairness**: the next hand's seed is committed when the table opens / the last hand ends; each hand's proof is
+  linked in chat when it ends (`/casino/fair/<table>/<hand>`), `!holdem fair` repeats it.
+- **Pepe**: `!holdem` and `!check !call !fold !raise !allin !sit !cards` in a backend room; `!bet !stand !leave` go to
+  the room's table, whichever game. Overlay: the poker board for the table on the stream.
+- Page `/casino/holdem` (functional; the design pass comes with D10).
+
+## 15. Decisions (the user, 2026-10-11)
+
+- D1. Prod: ship the code DARK (site flags off, every room off); the user promotes the batches.
+- D2. Hold'em follows this design (built: section 14).
+- D3. Keep the Discord blackjack for now; later move it onto this backend (one engine).
+- D4. Web-only players get achievements and drops on the website (not built yet: the site needs its own counters).
+- D5. Keep the JS engines for v2, with the shared Python test vectors.
+- D6. Client seeds later; a short fairness link in chat after each round, and on request (`!bj fair`, `!holdem fair`) - built.
+- D7. One table per room (either game), NO site-wide limit (`max_tables` 0 = none) - built.
+- D8. High Roller Hold'em: bigger tables (above the blind caps) and bigger buy-ins - built.
+- D9. Stream slot: first come, FIFO queue, admin override, 5-minute idle release - built (section 13).
+- D10. The frontend design pass comes after Hold'em lands, both tables together.
+- Added: a table opening in a room links its web page in Pepe's announcement (both games) - built.
+
+## 16. Decisions that were open (kept for the record)
+
 
 - D1. Prod rollout: turn the site flag on in prod and the per-room flag in which rooms, when.
 - D2. Hold'em (phase 2) on this design? Its extra parts: private hole cards per seat (served only to the owner, never

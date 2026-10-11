@@ -38,7 +38,7 @@
     $("cb-lobby").hidden = false;
     try {
       const j = await (await fetch("/api/casino/bj/lobby", { credentials: "same-origin" })).json();
-      const list = j.tables || [];
+      const list = (j.tables || []).filter((t) => t.game !== "holdem");
       $("cb-tables").innerHTML = list.length ? list.map((t) => `<div class="trow"><span><b>${esc(t.host)}'s table</b> · ${t.players}/${t.max_seats} seated · ` +
         `${fmt(t.min_bet)}–${fmt(t.max_bet)} PAT${t.room ? " · also in Camfrog room <b>" + esc(t.room_name) + "</b>" : " · web only"}</span>` +
         `<a href="/casino/blackjack/t/${esc(t.id)}">Sit down →</a></div>`).join("") : '<p class="info">No table is open. Open one and others can join you.</p>';
@@ -60,7 +60,8 @@
     const t = d.table, me = d.me;
     last = d;
     skew = Date.now() - d.now;
-    $("cb-where").textContent = (t.room ? "In Camfrog room " + (t.room_name || t.room) + " and on the web" : "Web table") + " · host " + t.host;
+    $("cb-where").textContent = (t.room ? "In Camfrog room " + (t.room_name || t.room) + " and on the web" : "Web table") + " · host " + t.host +
+      (t.on_stream ? " · 📺 on Pepe's stream" : t.stream_queue ? ` · stream queue #${t.stream_queue}` : "");
     $("cb-round").textContent = t.round_no ? "Round " + t.round_no : "";
     const dl = t.dealer;
     $("cb-dealer").innerHTML = (dl.cards || []).map(card).join("") + (dl.hidden ? back() : "");
@@ -125,6 +126,8 @@
     }
     $("cb-push").hidden = !rooms.length;
     $("cb-unpush").hidden = !t.room;
+    $("cb-stream").hidden = !t.room || t.on_stream;
+    $("cb-unstream").hidden = !(t.on_stream || t.stream_queue);
   }
 
   async function act(verb, amount) {
@@ -180,6 +183,9 @@
     status(j.reply || j.error || "", !j.ok);
     refresh();
   });
+  const side = async (url, body) => { const j = await post(url, body); status(j.reply || j.error || "", !j.ok); refresh(); };
+  $("cb-stream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: true, override: !!(last && last.me && last.me.admin && confirm("Admin: take the stream now (the current table goes next in line)? Cancel = join the queue.")) }));
+  $("cb-unstream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: false }));
   refresh();
   setInterval(refresh, 1000);
   setInterval(clocks, 250);

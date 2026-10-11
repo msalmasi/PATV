@@ -3,7 +3,8 @@
 // server's shell. Run in the site directory (it opens ./myapp.db). The running site picks a change up within 10 s.
 //   node tools/casino-settings.js                                   # print the settings + open tables
 //   node tools/casino-settings.js --actor=<who> bj_enabled=1        # blackjack on the site on (0 = off: no NEW tables)
-//   node tools/casino-settings.js --actor=<who> max_tables=4
+//   node tools/casino-settings.js --actor=<who> hm_enabled=1        # 1.99lv: Hold'em on the site (0 = off: no NEW tables)
+//   node tools/casino-settings.js --actor=<who> max_tables=0        # 0 = no site-wide limit (the default; one table per room always)
 "use strict";
 const path = require("path");
 const svc = require(path.join(__dirname, "..", "casino", "service"));
@@ -20,7 +21,8 @@ const { getQuery } = require(path.join(__dirname, "..", "dbUtils"));
   }
   const st = await svc.loadSettings(true);
   console.log(`bj_enabled = ${st.bj_enabled}${process.env.STAGING ? " (staging default: on)" : ""}`);
-  console.log(`max_tables = ${st.max_tables}`);
+  console.log(`hm_enabled = ${st.hm_enabled}`);
+  console.log(`max_tables = ${st.max_tables || "no limit"}`);
   const open = await getQuery("SELECT id, room, rev, updated FROM casino_tables WHERE status = 'open'");
   console.log(`open tables: ${open.length}` + open.map((t) => `\n  ${t.id} room=${t.room || "web"} rev=${t.rev} updated=${new Date(t.updated).toISOString()}`).join(""));
   process.exit(0);

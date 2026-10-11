@@ -24,7 +24,7 @@ const C = {
   MIN_BET: 100, MAX_BET: 10000, MAX_SEATS: 6, DECKS: 6,
   OPEN_SECS: 30, BET_SECS: 10, INS_SECS: 18, ACT_SECS: 30,
   MISS_LIMIT: 3, AFK_LIMIT: 3, COVER_MULT: 2,
-  MAX_TABLES: 4, LOG_KEEP: 40, EVENT_KEEP_MS: 48 * 3600 * 1000, ROOM_FRESH_MS: 90 * 1000,
+  LOG_KEEP: 40, EVENT_KEEP_MS: 48 * 3600 * 1000, ROOM_FRESH_MS: 90 * 1000,
   CLOSED_LINGER_MS: 30 * 1000, TICK_MS: 250,
 };
 const HIGH_ROLLER = "high roller";
@@ -35,7 +35,8 @@ const S = {
   tables: new Map(),           // id -> table (open, plus closed ones lingering for the page)
   rooms: new Map(),            // room id -> {id, name, ts}: rooms Pepe serves with the backend on (his poll heartbeat)
   waiters: new Set(),          // pending long-polls
-  settings: { bj_enabled: null, max_tables: C.MAX_TABLES },
+  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0 },
+  stream: { table: null, by: null, ts: 0, queue: [] },   // 1.99lv: the ONE table on Pepe's stream + the FIFO queue
   settingsAt: 0,
   tick: null,
   booted: null,
@@ -44,6 +45,14 @@ const S = {
   rate: new Map(),             // uid -> [timestamps]
 };
 const clock = () => S.hooks.now();
+
+// ── links (1.99lv: a table's announcement in a room links its web page; a finished round links its proof) ──
+function siteBase() {
+  return String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv"))
+    .replace(/\/+$/, "");
+}
+const link = (T) => `${siteBase()}/casino/${T.game === "holdem" ? "holdem" : "blackjack"}/t/${T.id}`;
+const fairLink = (T, n) => `${siteBase()}/casino/fair/${T.id}/${n}`;
 
 // ── the mutex ──
 let chain = Promise.resolve();
@@ -88,16 +97,19 @@ async function loadSettings(force) {
   S.settings = {
     // default: on for staging, off for prod
     bj_enabled: kv.bj_enabled === undefined ? !!process.env.STAGING : kv.bj_enabled === "1",
-    max_tables: Number.isFinite(Number(kv.max_tables)) && Number(kv.max_tables) > 0 ? Math.min(20, Number(kv.max_tables)) : C.MAX_TABLES,
+    // hold'em: the same default (staging on, prod off) - its own switch
+    hm_enabled: kv.hm_enabled === undefined ? !!process.env.STAGING : kv.hm_enabled === "1",
+    // 1.99lv (the user's D7): no site-wide limit by default (0); one table per room always
+    max_tables: Number.isFinite(Number(kv.max_tables)) && Number(kv.max_tables) > 0 ? Math.trunc(Number(kv.max_tables)) : 0,
   };
   S.settingsAt = clock();
   return S.settings;
 }
 async function setSetting(key, value, actor) {
-  if (!["bj_enabled", "max_tables"].includes(key)) throw new Error("unknown setting");
+  if (!["bj_enabled", "hm_enabled", "max_tables"].includes(key)) throw new Error("unknown setting");
   await ensure();
-  const v = key === "bj_enabled" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
-                                 : String(Math.max(1, Math.min(20, Math.trunc(Number(value)) || C.MAX_TABLES)));
+  const v = key !== "max_tables" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
+                                 : String(Math.max(0, Math.trunc(Number(value)) || 0));
   await runQuery(`INSERT INTO casino_settings (key, value, updated, actor) VALUES (?, ?, ?, ?)
                   ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated, actor = excluded.actor`,
                  [key, v, clock(), actor ? String(actor).slice(0, 60) : null]);
@@ -305,6 +317,7 @@ async function beginRound(T) {
     return false;
   }
   T.stakes = [];        // the stakes are in play now: settle pays them out
+  T.last_activity = clock();
   await runQuery("UPDATE casino_rounds SET dealt = ?, players = ? WHERE table_id = ? AND round_no = ?",
                  [clock(), JSON.stringify(T.eng.round_players.map((k) => ({ uid: k, name: (T.players[k] || {}).name, bet: T.eng.bets[k] }))),
                   T.id, n]);
@@ -412,7 +425,9 @@ async function settle(T) {
   };
   await runQuery("UPDATE casino_rounds SET server_seed = ?, shoe = ?, results = ?, revealed = ? WHERE table_id = ? AND round_no = ?",
                  [T.round.seed, JSON.stringify(T.eng.shoe), JSON.stringify(T.last_round), clock(), T.id, n]);
-  await emit(T, "reveal", "", { round_no: n, commitment: T.round.commitment, server_seed: T.round.seed, client_seed: T.client_seed });
+  await emit(T, "reveal", `🔐 Shuffle proof for round ${n}: ${fairLink(T, n)}`,
+             { round_no: n, commitment: T.round.commitment, server_seed: T.round.seed, client_seed: T.client_seed });
+  T.last_revealed = n;
   T.escrowed = {};
   T.stakes = [];        // this round's doubles / splits / insurance are paid out above - nothing is held any more
   T.round.settle = "done";
@@ -439,6 +454,7 @@ async function closeTable(T, reason) {
   T.turn = null;
   await emit(T, "closed", `🂠 Blackjack table closed${reason ? " — " + reason : ""}.`, { reason: reason || null });
   await save(T);
+  streamGone(T.id);
 }
 
 // ── deadlines ──
@@ -487,6 +503,14 @@ async function tickOnce() {
       if (T.closed_at && t - T.closed_at > C.CLOSED_LINGER_MS) S.tables.delete(T.id);
       continue;
     }
+    if (T.game === "holdem") {
+      if (!HM.due(T)) continue;
+      await locked(async () => {
+        if (T.status !== "open") return;
+        try { await HM.tick(T); } catch (e) { console.error(`[casino] ${T.id} hold'em deadline:`, e); }
+      });
+      continue;
+    }
     const due = (T.dl.bet && T.dl.bet <= t) ? "bet" : (T.dl.ins && T.dl.ins <= t) ? "ins" : (T.dl.turn && T.dl.turn <= t) ? "turn" : null;
     if (!due) continue;
     await locked(async () => {
@@ -500,12 +524,14 @@ async function tickOnce() {
       }
     });
   }
+  await locked(() => streamTick()).catch((e) => console.error("[casino] stream:", e));
   // housekeeping: old events
   if (Math.random() < 0.002) runQuery("DELETE FROM casino_events WHERE ts < ?", [clock() - C.EVENT_KEEP_MS]).catch(() => {});
 }
 
 // ── boot & recovery ──
 async function recover(T) {
+  if (T.game === "holdem") return HM.recover(T);
   // a stake caught between its intent and the table: refund it if it was charged (nobody loses a stake to a crash)
   if (T.intent) {
     const it = T.intent;
@@ -546,6 +572,7 @@ async function boot({ tick = true } = {}) {
   S.booted = (async () => {
     await ensure();
     await loadSettings(true);
+    await streamLoad();
     const rows = await getQuery("SELECT state FROM casino_tables WHERE status = 'open'");
     for (const r of rows) {
       let T;
@@ -571,6 +598,7 @@ function stop() {
   S.tick = null;
   S.booted = null;
   S.tables.clear();
+  S.stream = { table: null, by: null, ts: 0, queue: [] };
   wake();
 }
 
@@ -579,17 +607,24 @@ function stop() {
 // quiet: the room already sees it as a public line - Pepe doesn't @-reply it (the web shows it as a status)
 const R = (ok, reply, extra) => Object.assign({ ok, reply }, extra || {});
 
-async function cmdStart(actor, room) {
+async function cmdStart(actor, room, game, blinds) {
   const st = await loadSettings();
-  if (!st.bj_enabled) return R(false, "🂠 Blackjack on the site is switched off right now.");
+  if (game === "holdem" ? !st.hm_enabled : !st.bj_enabled) {
+    return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
+  }
   const open = Array.from(S.tables.values()).filter((t) => t.status === "open");
-  if (room && open.some((t) => t.room === room)) return R(false, "a blackjack table is already open — !bet to play.");
-  if (open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /casino/blackjack.`);
+  const here = room ? open.find((t) => t.room === room) : null;      // one table per room (either game)
+  if (here) {
+    return R(false, here.game === "holdem" ? "a Hold'em table is already open here — !sit to join, or !holdem status."
+                                           : "a blackjack table is already open — !bet to play.");
+  }
+  if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`);
+  if (game === "holdem") return HM.start(actor, room, blinds);
   const T = newTableObject(actor, room);
   S.tables.set(T.id, T);
   await save(T);
   await emit(T, "opened", `🂠 ${actor.name} opened a Blackjack table — Pepe deals! 6-deck shoe, blackjack pays 3:2, dealer hits soft 17. ` +
-             `Bets ${fmt(C.MIN_BET)}–${fmt(C.MAX_BET)} PAT.`, { client_seed: T.client_seed });
+             `Bets ${fmt(C.MIN_BET)}–${fmt(C.MAX_BET)} PAT. Play here or on the web: ${link(T)}`, { client_seed: T.client_seed, url: link(T) });
   await openRound(T, true);
   return R(true, "table open.", { table: T.id, quiet: true });
 }
@@ -792,6 +827,26 @@ async function run(actor, verb, args, opts) {
   const alias = { open: "start", new: "start", go: "deal", wager: "bet", auto: "autobet", rebet: "autobet", close: "end", stop: "end",
                   quit: "leave", insure: "insurance", stay: "stand", dd: "double", table: "status", info: "status", show: "status",
                   rules: "help", how: "help", "": "status" };
+  const game = opts.game === "holdem" ? "holdem" : opts.game === "bj" ? "bj" : null;
+  const T = opts.table ? S.tables.get(opts.table) : null;
+  const live = T && T.status === "open" ? T : null;
+  // a Hold'em table here (or "!holdem ..."): its own verbs - the shared ones (!bet !stand !leave) mean the Hold'em ones
+  if ((live && live.game === "holdem") || (!live && game === "holdem")) {
+    if (live && game === "bj") return R(false, "a Hold'em table is running here — !holdem status.");
+    if (["help", "rules", "how"].includes(verb)) return R(true, HM.HELP);
+    if (actor.uid && !rateOk(actor.uid)) return R(false, "slow down a little.");
+    if (["start", "open", "new", "sit", "buyin", "buy", "join"].includes(verb)) {
+      const u = await userRow(actor.uid);
+      if (u && u.casino_banned) return R(false, "🚫 you're banned from the casino.");
+    }
+    if (["start", "open", "new"].includes(verb)) return cmdStart(actor, opts.room || null, "holdem", args[0]);
+    if (!live) {
+      return R(false, ["status", "", "table", "info", "show"].includes(verb) ? "no Hold'em table open. Start one: !holdem start 25/50."
+                                                                             : "no table open — start one with !holdem start 25/50.");
+    }
+    return HM.run(live, actor, verb, args);
+  }
+  if (live && game === "holdem") return R(false, "a blackjack table is running here — !bj status.");
   verb = alias[verb] !== undefined ? alias[verb] : verb;
   if (verb === "help") return R(true, HELP);
   if (actor.uid && !rateOk(actor.uid)) return R(false, "slow down a little.");
@@ -799,8 +854,11 @@ async function run(actor, verb, args, opts) {
     const u = await userRow(actor.uid);
     if (u && u.casino_banned) return R(false, "🚫 you're banned from the casino.");
   }
-  if (verb === "start") return cmdStart(actor, opts.room || null);
-  const T = opts.table ? S.tables.get(opts.table) : null;
+  if (verb === "start") return cmdStart(actor, opts.room || null, "bj");
+  if (verb === "fair") {
+    return R(true, live && live.last_revealed ? `🔐 Shuffle proof for round ${live.last_revealed}: ${fairLink(live, live.last_revealed)}`
+                                              : "🔐 No round finished at this table yet — each round's proof is posted when it ends.");
+  }
   if (!T || T.status !== "open") {
     if (verb === "status") return R(false, "no blackjack table open. Start one: !blackjack start.");
     return R(false, "no blackjack table — start one with !blackjack start.");
@@ -812,9 +870,9 @@ async function run(actor, verb, args, opts) {
     case "hit": case "stand": case "double": case "split": return cmdAction(T, actor, verb);
     case "insurance": return cmdInsurance(T, actor);
     case "leave": return cmdLeave(T, actor);
-    case "status": return R(true, statusText(T));
+    case "status": return R(true, statusText(T) + ` | ${link(T)}`);
     case "end": return cmdEnd(T, actor);
-    default: return R(false, "unknown !blackjack option — try: start, bet, hit, stand, double, split, status.");
+    default: return R(false, "unknown !blackjack option — try: start, bet, hit, stand, double, split, status, fair.");
   }
 }
 
@@ -850,15 +908,19 @@ async function push(tableId, room, actor) {
     if (room) {
       const r = S.rooms.get(room);
       if (!r || clock() - r.ts > C.ROOM_FRESH_MS) return R(false, "Pepe isn't in that room with the casino on right now.");
-      if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.room === room && t.id !== T.id)) return R(false, "That room already has a blackjack table.");
+      if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.room === room && t.id !== T.id)) return R(false, "That room already has a casino table.");
       T.room = room;
-      await emit(T, "pushed", `🂠 A Blackjack table from publicaccess.tv is now playing in this room — hosted by ${T.host.name}. ` +
-                 `!bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}).`, { room_name: r.name });
+      const how = T.game === "holdem"
+        ? `a No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
+        : `a Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
+      await emit(T, "pushed", `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}`,
+                 { room_name: r.name, url: link(T) });
     } else {
       const was = T.room;
-      await emit(T, "unpushed", "🂠 This blackjack table went back to the website — play on at publicaccess.tv/casino/blackjack.");
-      T.room = null;
       if (!was) return R(true, "It was already web-only.");
+      await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`);
+      T.room = null;
+      streamGone(T.id);
     }
     await save(T);
     return R(true, room ? "Announced in the room." : "The table is web-only now.");
@@ -866,7 +928,7 @@ async function push(tableId, room, actor) {
 }
 
 // ── views ──
-function publicView(T) {
+function bjView(T) {
   const e = T.eng;
   const hidden = ["insurance", "player"].includes(e.phase);
   const dCards = e.dealer.slice();
@@ -900,37 +962,143 @@ function publicView(T) {
     client_seed: T.client_seed, commitment: T.round ? T.round.commitment : null, commit_round: T.round ? T.round.no : null,
     dealer, seats, turn, bet_deadline: T.dl.bet, ins_deadline: T.dl.ins,
     last_round: ["betting", "idle", "done"].includes(e.phase) || T.status === "closed" ? T.last_round : null,
-    log: T.log.slice(-20),
+    last_revealed: T.last_revealed || null, url: link(T), log: T.log.slice(-20),
   };
+}
+
+function publicView(T) {
+  const v = T.game === "holdem" ? HM.publicView(T) : bjView(T);
+  v.on_stream = S.stream.table === T.id;
+  const qi = S.stream.queue.indexOf(T.id);
+  v.stream_queue = qi >= 0 ? qi + 1 : null;
+  return v;
 }
 
 async function meView(T, uid) {
   if (!uid) return null;
   const u = await userRow(uid);
   if (!u) return null;
+  const base = { name: u.displayname || u.username, balance: Number(u.points_balance) || 0, banned: !!u.casino_banned, admin: u.class === "Admin" };
+  if (T && T.game === "holdem") return Object.assign(base, await HM.meView(T, uid, u));
   const e = T ? T.eng : null;
   const cur = e ? E.currentHand(e) : null;
-  return {
-    name: u.displayname || u.username, balance: Number(u.points_balance) || 0, banned: !!u.casino_banned, admin: u.class === "Admin",
+  return Object.assign(base, {
     high_roller: await isHighRoller(uid),
     seat: T && e.seats.includes(uid) ? uidHash(uid) : null,
     host: !!T && T.host.uid === uid,
     bet: e ? e.bets[uid] || 0 : 0, pending: T ? T.pending[uid] || 0 : 0, autobet: !!T && T.autobet.includes(uid),
     lastbet: T ? T.lastbet[uid] || 0 : 0, my_turn: !!cur && cur.key === uid,
     can_insure: !!e && e.phase === "insurance" && (e.bets[uid] || 0) > 0 && !(uid in e.insurance),
-  };
+  });
 }
 
 function lobby() {
   return Array.from(S.tables.values()).filter((t) => t.status === "open").map((T) => {
     const room = T.room ? S.rooms.get(T.room) : null;
-    return { id: T.id, host: T.host.name, phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
-             min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, room: T.room, room_name: room ? room.name : T.room, round_no: T.eng.round_no };
+    const base = { id: T.id, host: T.host.name, room: T.room, room_name: room ? room.name : T.room, url: link(T), on_stream: S.stream.table === T.id };
+    if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
+    return Object.assign(base, { game: "bj", phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
+                                 min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no });
   });
 }
 
 const getTable = (id) => S.tables.get(id) || null;
 const tableForRoom = (room) => Array.from(S.tables.values()).find((t) => t.status === "open" && t.room === room) || null;
+
+// ── Pepe's stream: ONE table on the OBS games overlay at a time (the user's D9) ──
+// First come takes the slot; a later request joins a FIFO queue (with its place); an admin can override (the bumped
+// table goes back to the HEAD of the queue). The slot is released when its table closes or goes back to web-only, or
+// after STREAM_IDLE_MS with no round dealt; the next queued table (still open and still in a room) then takes it.
+const STREAM_IDLE_MS = 5 * 60 * 1000;
+async function streamSave() {
+  await runQuery(`INSERT INTO casino_settings (key, value, updated, actor) VALUES ('stream_slot', ?, ?, 'casino')
+                  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`, [JSON.stringify(S.stream), clock()]);
+}
+async function streamLoad() {
+  try {
+    const r = await getQuery("SELECT value FROM casino_settings WHERE key = 'stream_slot'");
+    if (r[0]) {
+      const v = JSON.parse(r[0].value);
+      S.stream = { table: v.table || null, by: v.by || null, ts: Number(v.ts) || 0, queue: Array.isArray(v.queue) ? v.queue.slice(0, 50) : [] };
+    }
+  } catch (e) { /* a fresh database */ }
+}
+const streamable = (id) => { const T = S.tables.get(id); return !!T && T.status === "open" && !!T.room; };
+async function streamAdvance() {
+  while (S.stream.queue.length) {
+    const id = S.stream.queue.shift();
+    if (!streamable(id)) continue;
+    S.stream.table = id; S.stream.ts = clock(); S.stream.by = "queue";
+    const T = S.tables.get(id);
+    T.last_activity = Math.max(T.last_activity || 0, clock());
+    await emit(T, "stream", `📺 This ${T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
+    break;
+  }
+  await streamSave();
+}
+/** a table closed / went web-only: free its slot (and its place in the queue) */
+function streamGone(id) {
+  S.stream.queue = S.stream.queue.filter((x) => x !== id);
+  if (S.stream.table === id) {
+    S.stream.table = null;
+    streamAdvance().catch((e) => console.error("[casino] stream:", e));
+  } else {
+    streamSave().catch(() => {});
+  }
+}
+async function streamTick() {
+  const id = S.stream.table;
+  if (id) {
+    const T = S.tables.get(id);
+    if (!streamable(id)) { S.stream.table = null; await streamAdvance(); return; }
+    if (clock() - Math.max(T.last_activity || 0, S.stream.ts || 0) > STREAM_IDLE_MS) {
+      S.stream.table = null;
+      await emit(T, "stream", "📺 Off Pepe's stream — no round in 5 minutes.", { on: false });
+      await streamAdvance();
+    }
+  } else if (S.stream.queue.length) {
+    await streamAdvance();
+  }
+}
+/** on: ask for the stream (host or admin; admins may override), off: leave it / the queue */
+async function stream(tableId, on, actor, override) {
+  await boot();
+  return locked(async () => {
+    const T = S.tables.get(tableId);
+    if (!T || T.status !== "open") return R(false, "That table has closed.");
+    if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can put it on the stream.");
+    if (!on) {
+      const had = S.stream.table === T.id || S.stream.queue.includes(T.id);
+      if (S.stream.table === T.id) await emit(T, "stream", "📺 Off Pepe's stream.", { on: false });
+      streamGone(T.id);
+      return R(true, had ? "Off the stream." : "It wasn't on the stream.");
+    }
+    if (!T.room) return R(false, "Push the table to a Camfrog room first — the stream shows Pepe's rooms.");
+    if (S.stream.table === T.id) return R(true, "It's on the stream already.");
+    const cur = S.stream.table && streamable(S.stream.table) ? S.tables.get(S.stream.table) : null;
+    if (!cur) {
+      S.stream.queue = S.stream.queue.filter((x) => x !== T.id);
+      Object.assign(S.stream, { table: T.id, by: actor.name, ts: clock() });
+      T.last_activity = Math.max(T.last_activity || 0, clock());
+      await emit(T, "stream", `📺 This ${T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
+      await streamSave();
+      return R(true, "It's on Pepe's stream.");
+    }
+    if (override && actor.admin) {
+      S.stream.queue = [cur.id].concat(S.stream.queue.filter((x) => x !== T.id && x !== cur.id));
+      Object.assign(S.stream, { table: T.id, by: actor.name + " (admin)", ts: clock() });
+      T.last_activity = Math.max(T.last_activity || 0, clock());
+      await emit(cur, "stream", "📺 An admin moved Pepe's stream to another table — this one is next in line.", { on: false });
+      await emit(T, "stream", `📺 This ${T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
+      await streamSave();
+      return R(true, "It's on Pepe's stream (override).");
+    }
+    if (!S.stream.queue.includes(T.id)) S.stream.queue.push(T.id);
+    await streamSave();
+    const pos = S.stream.queue.indexOf(T.id) + 1;
+    return R(true, `Pepe's stream is showing ${cur.host.name}'s table — you're ${pos === 1 ? "next" : "number " + pos} in line.`, { queued: pos });
+  });
+}
 
 // ── Pepe's long-poll ──
 function noteRooms(rooms) {
@@ -948,14 +1116,23 @@ function freshRooms() {
     busy: !!tableForRoom(r.id) }));
 }
 
-/** Events after `after` for tables in a room (Pepe's), waiting up to waitMs for the first one. */
+function roomTables() {
+  const tables = {}, priv = {};
+  for (const T of S.tables.values()) {
+    if (!T.room) continue;
+    tables[T.id] = publicView(T);
+    if (T.game === "holdem") Object.assign(priv, HM.privateFor(T));
+  }
+  return { tables, private: priv };
+}
+
+/** Events after `after` for tables in a room (Pepe's), waiting up to waitMs for the first one. The `private` part
+ *  (hole cards of room players, by Camfrog name) only ever goes to Pepe (bot token), never into an event. */
 async function poll(after, waitMs) {
   await boot();
   // a client with no cursor yet (or one from another database - a staging refresh) starts from now: no replay
   if (Number(after) < 0 || Number(after) > S.lastSeq) {
-    const tables = {};
-    for (const T of S.tables.values()) if (T.room) tables[T.id] = publicView(T);
-    return { cursor: S.lastSeq, events: [], tables };
+    return Object.assign({ cursor: S.lastSeq, events: [], stream: S.stream.table }, roomTables());
   }
   after = Math.max(0, Math.trunc(Number(after) || 0));
   const read = () => getQuery("SELECT seq, table_id, room, ts, kind, data FROM casino_events WHERE seq > ? AND room IS NOT NULL ORDER BY seq LIMIT 200", [after]);
@@ -969,9 +1146,8 @@ async function poll(after, waitMs) {
     rows = await read();
   }
   const events = rows.map((r) => ({ seq: r.seq, table: r.table_id, room: r.room, ts: r.ts, kind: r.kind, data: JSON.parse(r.data) }));
-  const tables = {};
-  for (const T of S.tables.values()) if (T.room) tables[T.id] = publicView(T);
-  return { cursor: events.length ? events[events.length - 1].seq : Math.max(after, S.lastSeq), events, tables };
+  return Object.assign({ cursor: events.length ? events[events.length - 1].seq : Math.max(after, S.lastSeq), events, stream: S.stream.table },
+                       roomTables());
 }
 
 async function fairRecord(tableId, round) {
@@ -989,7 +1165,12 @@ async function fairRecord(tableId, round) {
   return rec;
 }
 
+// ── Hold'em (holdem.js) on the same core ──
+const HM = require("./holdem").install({
+  S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone,
+});
+
 module.exports = {
-  C, S, boot, stop, act, run, push, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
-  loadSettings, setSetting, fairRecord, tickOnce, ipHash, locked, ensure, HELP,
+  C, S, HM, boot, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  loadSettings, setSetting, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
 };

@@ -1,0 +1,125 @@
+<%- include('layout', { title: title, user: user}) %>
+<style>
+  .cb { max-width: 980px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; --cw: 40px; }
+  .cb [hidden] { display: none !important; }
+  .cb a { color: #81c784; }
+  .cb h1 { text-align: center; margin: 6px 0 4px; }
+  .cb .sub { text-align: center; color: #9a9; margin: 0 0 14px; font-size: 14px; }
+  .cb h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 26px 0 10px; line-height: 1.6; }
+  .cb .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; }
+  .cb .info { color: #999; font-size: 13px; line-height: 1.6; }
+  .cb .status { min-height: 22px; text-align: center; font-size: 14px; color: #cfe8cf; margin: 6px 0; }
+  .cb .status.bad { color: #ff9a9a; }
+  .felt { border-radius: 18px; padding: 16px; background: radial-gradient(ellipse at 50% 30%, #1f7a43 0%, #145c31 60%, #0d4023 100%);
+          box-shadow: inset 0 0 0 6px #4a2c16, inset 0 0 40px rgba(0,0,0,.5); }
+  .felt .top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; color: rgba(255,255,255,.75); font-size: 12px; }
+  .board { text-align: center; margin: 10px 0; min-height: calc(var(--cw) * 1.4); }
+  .pot { text-align: center; color: #ffd700; font-weight: bold; }
+  .cards { display: inline-flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+  .cd { position: relative; display: inline-flex; flex-direction: column; justify-content: center; align-items: center; width: var(--cw); height: calc(var(--cw) * 1.4);
+        border-radius: 6px; background: linear-gradient(160deg, #fff 0%, #f1f1f1 100%); color: #111; box-shadow: 0 2px 4px rgba(0,0,0,.5); font-weight: bold; line-height: 1; }
+  .cd .cr { position: absolute; top: 3px; left: 4px; font-size: calc(var(--cw) * .32); }
+  .cd .cs { font-size: calc(var(--cw) * .55); margin-top: calc(var(--cw) * .18); }
+  .cd.red { color: #c62828; }
+  .cd.back { background: repeating-linear-gradient(45deg, #b71c1c 0 4px, #d32f2f 4px 8px); border: 2px solid #fff; box-sizing: border-box; }
+  .msg { text-align: center; color: #fff; font-size: 15px; text-shadow: 0 1px 2px #000; min-height: 20px; margin: 6px 0; }
+  .seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .seat { background: rgba(12,12,12,.9); border: 1px solid #333; border-radius: 10px; padding: 8px; text-align: center; --cw: 28px; }
+  .seat.me { border-color: #4caf50; } .seat.turn { border-color: #ffd700; box-shadow: 0 0 0 2px #ffd700; } .seat.folded { opacity: .55; }
+  .seat.winner { background: #2a2208; border-color: #ffd700; }
+  .seat .nm { font-weight: bold; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seat .st { font-size: 12px; color: #ffd700; }
+  .tag { display: inline-block; font-size: 10px; line-height: 1; padding: 3px 5px; border-radius: 4px; background: #333; color: #ddd; text-transform: uppercase; margin: 2px 2px 0 0; }
+  .tag.gold { background: #ffd700; color: #111; } .tag.red { background: #c62828; color: #fff; } .tag.blue { background: #1565c0; color: #fff; } .tag.d { background: #fff; color: #111; }
+  .tbar { height: 4px; background: #333; border-radius: 2px; margin: 6px auto 0; overflow: hidden; max-width: 320px; }
+  .tbar i { display: block; height: 100%; background: #ffd700; width: 100%; transition: width .25s linear; }
+  .mine { text-align: center; margin-top: 10px; --cw: 48px; }
+  .ctl { background: #111; border: 1px solid #222; border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; margin-top: 12px; }
+  .ctl .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .cb button.b { min-height: 44px; min-width: 80px; padding: 0 14px; border-radius: 8px; border: 0; font: inherit; font-weight: bold; font-size: 15px; cursor: pointer; color: #fff; background: #3a3a3a; }
+  .cb button.b.go { background: #2e7d32; } .cb button.b.warn { background: #b26a00; } .cb button.b.stop { background: #8e2424; } .cb button.b.gold { background: #c9a400; color: #111; }
+  .cb button.b.mini { min-height: 34px; min-width: 0; padding: 0 10px; font-size: 13px; }
+  .cb button.b:disabled { opacity: .45; cursor: not-allowed; }
+  .cb button.b:focus-visible, .cb input:focus-visible, .cb select:focus-visible { outline: 3px solid #ffd700; outline-offset: 2px; }
+  .cb input[type=number], .cb input[type=text], .cb select { background: #0d0d0d; color: #eee; border: 1px solid #3a3a3a; border-radius: 8px; padding: 0 10px; min-height: 44px; font: inherit; font-size: 15px; box-sizing: border-box; max-width: 100%; }
+  .cb input[type=number] { width: 140px; } .cb input[type=text] { width: 120px; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+  .log { max-height: 280px; overflow-y: auto; font-size: 13px; display: grid; gap: 2px; }
+  .log div { padding: 4px 2px; border-bottom: 1px solid #1a1a1a; color: #ccc; }
+  .trow { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; align-items: center; background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .last { background: rgba(0,0,0,.45); border: 1px solid #ffd700; border-radius: 8px; padding: 6px 10px; color: #ffe57a; font-size: 13px; margin-top: 10px; --cw: 24px; }
+  .fair { font-size: 12px; color: #9a9; word-break: break-all; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: minmax(0, 1fr); } .cb { --cw: 34px; } }
+</style>
+<main class="cb" id="cb" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>">
+  <h1>🃏 Texas Hold'em</h1>
+  <p class="sub">No-Limit Hold'em with your PAT (chips = PAT). Play here — no Camfrog needed — or push the table to a Camfrog room where room players sit at the same table. Your hole cards are only ever shown to you.</p>
+  <div class="status" id="cb-status" role="status" aria-live="polite"></div>
+
+  <section id="cb-lobby" hidden>
+    <h2>Tables</h2>
+    <div id="cb-tables"></div>
+    <div class="ctl" id="cb-open-box">
+      <div class="row">
+        <label for="cb-blinds" class="info">Blinds</label>
+        <input type="text" id="cb-blinds" value="25/50" inputmode="numeric" aria-label="Blinds, small/big">
+        <button class="b go" id="cb-open" type="button">Open a table</button>
+      </div>
+      <p class="info" style="margin:0">Blinds up to 5,000/10,000; buy-ins 20–200 big blinds (High Rollers can go bigger). 2% rake on contested pots goes to the House.</p>
+    </div>
+  </section>
+
+  <section id="cb-table" hidden>
+    <p><a href="/casino/holdem">← all tables</a></p>
+    <div class="felt">
+      <div class="top"><span id="cb-where"></span><span id="cb-round"></span></div>
+      <div class="board"><div class="cards" id="cb-board"></div></div>
+      <div class="pot" id="cb-pot"></div>
+      <div class="msg" id="cb-msg"></div>
+      <div id="cb-clock"></div>
+      <div class="seats" id="cb-seats"></div>
+      <div class="mine" id="cb-mine-cards"></div>
+      <div id="cb-lastround"></div>
+    </div>
+
+    <div class="ctl" id="cb-ctl" hidden>
+      <div class="row" id="cb-sitrow">
+        <label for="cb-amt" class="info">Buy-in</label>
+        <input type="number" id="cb-amt" min="1" step="1" inputmode="numeric">
+        <button class="b go" id="cb-sit" type="button">Sit / top up</button>
+        <button class="b mini" id="cb-deal" type="button">Deal</button>
+      </div>
+      <div class="row" id="cb-playrow">
+        <button class="b" data-v="check" type="button">Check</button>
+        <button class="b go" data-v="call" type="button">Call</button>
+        <input type="number" id="cb-raise" min="1" step="1" inputmode="numeric" aria-label="Bet or raise to">
+        <button class="b gold" data-v="raise" type="button">Raise to</button>
+        <button class="b warn" data-v="allin" type="button">All-in</button>
+        <button class="b stop" data-v="fold" type="button">Fold</button>
+      </div>
+      <div class="row">
+        <span class="info" id="cb-mine"></span>
+        <button class="b mini stop" id="cb-leave" type="button">Stand up</button>
+        <button class="b mini stop" id="cb-end" type="button" hidden>Close table</button>
+      </div>
+      <div class="row" id="cb-pushrow" hidden>
+        <label for="cb-room" class="info">Play it in a Camfrog room too:</label>
+        <select id="cb-room"></select>
+        <button class="b mini" id="cb-push" type="button">Push to room</button>
+        <button class="b mini" id="cb-unpush" type="button">Web only</button>
+        <button class="b mini" id="cb-stream" type="button">Put on Pepe's stream</button>
+        <button class="b mini" id="cb-unstream" type="button">Off the stream</button>
+      </div>
+    </div>
+    <p class="info" id="cb-signin" hidden><a href="/login">Sign in</a> to sit down and play.</p>
+
+    <div class="grid2">
+      <div class="card"><h2 style="margin-top:0">Table log</h2><div class="log" id="cb-log"></div></div>
+      <div class="card"><h2 style="margin-top:0">Provably fair</h2>
+        <div class="fair" id="cb-fair"></div>
+        <p class="info">Each hand's deck is fixed before it's dealt: its commitment is the SHA-256 of a secret seed, revealed when the hand ends. <span id="cb-fairlink"></span></p>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/public/js/casinohm.js?v=1"></script>
