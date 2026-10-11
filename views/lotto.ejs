@@ -1,199 +1,647 @@
-<%- include('layout', { title: 'Pepe Lotto', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<% const tzT = locals.tzTime || new Function(include('../tz-core.js'))()('America/New_York', 'en').time; -%>
+<%- include('layout', { title: t('lotto.title'), user: user}) %>
+<%# views/lotto.ejs - 1.99lb: Pepeball, the weekly lotto (lotto.js). The banner's purple + gold lotto card grown into a
+    whole page: hero (counting-up jackpot with a shimmer, live countdown, draw state), a ball-grid picker + Quick Pick
+    (both post the same /act commands as before: `!lotto 3 9 14 27 pb 6` / `!lotto quick N`), your tickets (and the
+    last draw's with the matches lit), styled prize tiers, the last draw's balls revealed + top winners (names through
+    ul() exactly as before - incognito/anonymised names stay plain), past draws, and how it works. SVG/CSS only;
+    every animation is off under prefers-reduced-motion. %>
 <style>
-  .lt { max-width: 920px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
-  .lt a { color: #81c784; }
-  .lt h1 { text-align: center; margin-bottom: 4px; }
-  .lt .sub { text-align: center; color: #9a9; margin: 0 0 18px; }
-  .lt h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 28px 0 10px; line-height: 1.6; }
-  .lt .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; }
-  .lt .hero { text-align: center; display: grid; gap: 6px; }
-  .lt .hero .lbl { color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-  .lt .jackpot { font-size: clamp(30px, 9vw, 54px); font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; line-height: 1.1; overflow-wrap: anywhere; }
-  .lt .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
-  .lt .stat { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 8px; padding: 8px 10px; }
-  .lt .stat b { display: block; font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; }
-  .lt .stat span { color: #888; font-size: 12px; }
-  .lt .closed { color: #e57373; }
-  .lt .open { color: #81c784; }
-  .lt .info { color: #888; font-size: 13px; line-height: 1.6; }
-  .lt .balls { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; vertical-align: middle; }
-  .lt .ball { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%;
-              background: #eee; color: #111; font-weight: bold; font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
-  .lt .ball.pb { background: #4caf50; color: #fff; box-shadow: 0 0 0 2px #2e7d32 inset; }
-  .lt .ball.hit { background: #ffd700; color: #111; }
-  .lt .ball.sm { width: 22px; height: 22px; font-size: 11px; }
-  .lt .tickets { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 12px; max-height: 360px; overflow-y: auto; padding: 4px 0; }
-  .lt .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
-  .lt table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .lt th, .lt td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; white-space: nowrap; }
-  .lt th { color: #888; font-weight: normal; }
-  .lt td.r, .lt th.r { text-align: right; }
-  .lt tr.jp td { color: #ffd700; font-weight: bold; }
-  .lt form.buy { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; display: grid; gap: 10px; margin: 10px 0; }
-  .lt form.buy .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .lt form.buy input[type=number] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px; width: 64px; }
-  .lt form.buy input.pbin { border-color: #4caf50; }
-  .lt form.buy button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; }
-  .lt .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-  .lt .hint { background: #1a1608; border: 1px solid #5a4a10; border-radius: 8px; padding: 10px 12px; color: #ddd; }
-  .lt .winners { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
-  .lt .winners span b { color: #ffd700; }
-  .lt .empty { color: #888; text-align: center; }
-  .lt code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .pbx { --pu0: #1b0b30; --pu1: #2a0f4a; --pu2: #3d1460; --pub: #6a4a9c; --gold: #ffd740; --gold2: #ffc400; --goldt: #ffe082;
+         --lav: #e1c7ff; --lav2: #d9c8f0; --mut: #b9a6d6; --grn: #3fa34d;
+         max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 0 16px 56px;
+         font-family: Ubuntu, sans-serif; color: #eee; overflow-wrap: anywhere; }
+  .pbx *, .pbx *::before, .pbx *::after { box-sizing: border-box; }
+  .pbx a { color: var(--goldt); }
+  .pbx [hidden] { display: none !important; }
+  .pb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* balls */
+  .pb-balls { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; vertical-align: middle; }
+  .pb-b { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font: bold 13px/1 Ubuntu, sans-serif;
+          color: #222; background: radial-gradient(circle at 35% 30%, #fff, #ececec 45%, #b8b8b8); box-shadow: 0 2px 4px rgba(0,0,0,.45); font-variant-numeric: tabular-nums; }
+  .pb-b.pb { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); text-shadow: 0 1px 1px rgba(0,0,0,.4); }
+  .pb-b.sm { width: 24px; height: 24px; font-size: 11px; }
+  .pb-b.lg { width: 58px; height: 58px; font-size: 24px; box-shadow: 0 6px 14px rgba(0,0,0,.5), inset 0 -4px 8px rgba(0,0,0,.12); }
+  .pb-b.dim { opacity: .38; }
+  .pb-b.hit { box-shadow: 0 0 0 3px var(--gold), 0 0 14px rgba(255,215,64,.8); }
+
+  /* hero */
+  .pb-hero { position: relative; overflow: hidden; margin: 14px 0 0; padding: 30px 22px 26px; border-radius: 20px; border: 1px solid var(--pub); text-align: center;
+             background: radial-gradient(80% 120% at 100% 0%, rgba(255,215,64,.20), transparent 55%), radial-gradient(70% 90% at 0% 100%, rgba(63,163,77,.18), transparent 60%),
+                         linear-gradient(135deg, var(--pu1), var(--pu2) 45%, var(--pu0)); box-shadow: 0 10px 40px rgba(42,15,74,.55); }
+  .pb-hero > *:not(.pb-float) { position: relative; z-index: 1; }
+  .pb-float { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+  .pb-float .pb-b { position: absolute; left: var(--x); top: var(--y); width: var(--s); height: var(--s); font-size: calc(var(--s) * .4); opacity: .45;
+                    animation: pbFloat var(--d) ease-in-out infinite alternate; animation-delay: var(--dl); }
+  .pb-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0; }
+  .pb-logo { flex: none; width: 60px; height: 60px; animation: pbSpin 9s linear infinite; filter: drop-shadow(0 4px 10px rgba(0,0,0,.45)); }
+  .pb-word { margin: 0; font: 900 clamp(40px, 11vw, 74px)/1 Ubuntu, sans-serif; letter-spacing: .01em; text-transform: uppercase;
+             background: linear-gradient(180deg, #fff6cf 0%, var(--gold) 55%, #ff9f00 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+             filter: drop-shadow(0 3px 0 #5a1f8a) drop-shadow(0 8px 18px rgba(0,0,0,.45)); }
+  .pb-tag { max-width: 620px; margin: 10px auto 0; color: var(--lav2); font-size: 15px; line-height: 1.5; }
+  .pb-kick { margin-top: 22px; font: bold 13px/1.4 Ubuntu, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--lav); }
+  .pb-jp { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 0 10px; margin-top: 4px; font: 900 clamp(40px, 12vw, 84px)/1.05 Ubuntu, sans-serif; font-variant-numeric: tabular-nums; }
+  .pb-jpn { background: linear-gradient(100deg, var(--gold) 0%, var(--goldt) 35%, #fffbe6 50%, var(--goldt) 65%, var(--gold) 100%); background-size: 250% 100%; background-position: 100% 0;
+            -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(255,215,64,.45)); animation: pbShimmer 3.2s linear infinite; }
+  .pb-jp small { font-size: clamp(16px, 4vw, 24px); font-weight: bold; color: #ffecb3; letter-spacing: .06em; }
+  .pb-jpnote { margin: 6px auto 0; max-width: 560px; color: var(--mut); font-size: 13px; line-height: 1.5; }
+  .pb-cdl { margin-top: 20px; color: var(--lav); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  .pb-cd { display: flex; justify-content: center; gap: 8px; margin-top: 8px; }
+  .pb-t { min-width: 66px; padding: 9px 6px 7px; border-radius: 12px; background: rgba(12,4,24,.55); border: 1px solid var(--pub); }
+  .pb-t b { display: block; font: 900 28px/1 Ubuntu, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+  .pb-t small { display: block; margin-top: 3px; color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .pb-when { margin: 10px 0 0; color: var(--lav2); font-size: 13px; }
+  .pb-when time { color: #fff; }
+  .pb-state { display: inline-block; margin: 16px auto 0; padding: 9px 16px; border-radius: 999px; font-weight: bold; font-size: 15px; }
+  .pb-state.closed { background: rgba(229,115,115,.14); border: 1px solid #a54a4a; color: #ffb3b3; }
+  .pb-state.drawing { background: rgba(255,215,64,.14); border: 1px solid #9c7a12; color: var(--goldt); animation: pbPulse 1.4s ease-in-out infinite; }
+  .pb-stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .pb-stat { padding: 7px 14px; border-radius: 999px; background: rgba(12,4,24,.45); border: 1px solid rgba(106,74,156,.7); color: var(--lav2); font-size: 13px; }
+  .pb-stat b { color: #fff; font-size: 15px; font-variant-numeric: tabular-nums; margin-right: 4px; }
+  .pb-ctas { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .pb-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 12px 26px;
+            border: 0; border-radius: 999px; font: bold 17px/1 Ubuntu, sans-serif; color: var(--pu1) !important; text-decoration: none; cursor: pointer;
+            background: linear-gradient(180deg, #ffe57f, var(--gold2)); box-shadow: 0 4px 18px rgba(255,196,0,.45); transition: transform .12s, filter .12s; }
+  .pb-btn::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.6) 50%, transparent 70%); transform: translateX(-120%); animation: pbShine 4.5s ease-in-out 1s infinite; }
+  .pb-btn:hover, .pb-btn:focus-visible { filter: brightness(1.08); transform: translateY(-1px); }
+  .pb-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .pb-btn[disabled] { filter: grayscale(.6) brightness(.8); cursor: default; transform: none; }
+  .pb-btn.ghost { background: rgba(12,4,24,.4); color: var(--goldt) !important; border: 2px solid var(--gold); box-shadow: none; }
+  .pb-btn.ghost::after { display: none; }
+  .pb-btn.wide { width: 100%; }
+
+  /* sections */
+  .pb-h { display: flex; align-items: center; gap: 10px; margin: 34px 0 12px; font: 900 22px/1.2 Ubuntu, sans-serif; color: #fff; }
+  .pb-h::before { content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, var(--gold) 55%, #b88600); box-shadow: 0 0 10px rgba(255,215,64,.6); }
+  .pb-card { background: linear-gradient(180deg, rgba(61,20,96,.38), rgba(27,11,48,.55)); border: 1px solid rgba(106,74,156,.75); border-radius: 16px; padding: 16px; min-width: 0; }
+  .pb-card h3 { margin: 0 0 4px; font-size: 18px; color: #fff; }
+  .pb-p { margin: 0; color: var(--lav2); font-size: 14px; line-height: 1.55; }
+  .pb-fine { margin: 8px 0 0; color: var(--mut); font-size: 12.5px; line-height: 1.5; }
+  .pb-note { padding: 12px 14px; border-radius: 12px; background: rgba(255,215,64,.08); border: 1px solid #6b5a20; color: #f3e6c0; line-height: 1.5; }
+  .pb-note code, .pbx code { background: rgba(12,4,24,.6); color: var(--goldt); padding: 1px 6px; border-radius: 5px; }
+  .pb-bal { margin: 0 0 10px; color: var(--lav2); }
+  .pb-bal b { color: var(--goldt); font-variant-numeric: tabular-nums; }
+
+  /* the picker */
+  .pb-buy { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  .pb-tray { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 10px; padding: 10px 12px; border-radius: 14px; background: rgba(12,4,24,.5); border: 1px dashed var(--pub); }
+  .pb-slot { width: 40px; height: 40px; font-size: 16px; }
+  .pb-slot.empty { background: rgba(255,255,255,.06); color: var(--mut); box-shadow: inset 0 0 0 2px rgba(225,199,255,.35); }
+  .pb-slot.pb.empty { box-shadow: inset 0 0 0 2px rgba(63,163,77,.7); }
+  .pb-plus { color: var(--mut); font-weight: bold; }
+  .pbx fieldset { border: 0; margin: 10px 0 0; padding: 0; min-width: 0; }
+  .pbx legend { padding: 0; margin-bottom: 6px; color: var(--lav); font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; }
+  .pb-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+  .pb-n { aspect-ratio: 1; width: 100%; max-width: 46px; justify-self: center; padding: 0; border-radius: 50%; border: 1px solid rgba(225,199,255,.35); cursor: pointer;
+          background: rgba(255,255,255,.07); color: #fff; font: bold 14px/1 Ubuntu, sans-serif; font-variant-numeric: tabular-nums; transition: transform .12s, background .12s; }
+  .pb-n:hover { background: rgba(255,255,255,.16); transform: translateY(-2px); }
+  .pb-n:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .pb-n[aria-pressed="true"] { border-color: transparent; color: #222; background: radial-gradient(circle at 35% 30%, #fff, #ececec 45%, #b8b8b8); box-shadow: 0 0 0 3px var(--gold), 0 3px 8px rgba(0,0,0,.4); animation: pbPop .25s ease-out; }
+  .pb-gb .pb-n { border-color: rgba(63,163,77,.6); }
+  .pb-gb .pb-n[aria-pressed="true"] { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); }
+  .pb-n.full { opacity: .45; }
+  .pb-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .pb-chip { min-height: 38px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--pub); background: rgba(12,4,24,.5); color: var(--lav); font: bold 14px/1 Ubuntu, sans-serif; cursor: pointer; }
+  .pb-chip:hover, .pb-chip:focus-visible { border-color: var(--gold); color: #fff; }
+  .pb-chip[aria-pressed="true"] { background: var(--gold); color: var(--pu1); border-color: var(--gold); }
+  .pb-err { margin: 0 0 10px; color: #ffb3b3; font-size: 14px; }
+  .pb-shuffle { display: flex; justify-content: center; gap: 6px; margin: 14px 0; padding: 14px 8px; border-radius: 14px; background: rgba(12,4,24,.5); }
+  .pb-shuffle .pb-b { width: 38px; height: 38px; font-size: 15px; }
+  .pb-shuffle.go .pb-b { animation: pbJiggle .18s ease-in-out infinite alternate; }
+  .pb-shuffle.go .pb-b:nth-child(2n) { animation-direction: alternate-reverse; }
+  .pbx label.pb-lbl { display: block; margin-bottom: 6px; color: var(--lav); font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; }
+  .pb-step { display: flex; align-items: center; gap: 6px; }
+  .pb-step button { flex: none; width: 46px; height: 46px; padding: 0; border-radius: 12px; border: 1px solid var(--pub); background: rgba(12,4,24,.55); color: #fff; font: bold 22px/1 Ubuntu, sans-serif; cursor: pointer; }
+  .pb-step button:hover, .pb-step button:focus-visible { border-color: var(--gold); }
+  .pb-step input { flex: 1; min-width: 0; height: 46px; text-align: center; border-radius: 12px; border: 1px solid var(--pub); background: rgba(12,4,24,.55); color: #fff; font: 900 22px/1 Ubuntu, sans-serif; font-variant-numeric: tabular-nums; }
+  .pb-total { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(255,215,64,.08); border: 1px solid #6b5a20; color: #f3e6c0; text-align: center; font-variant-numeric: tabular-nums; }
+  .pb-total b { color: var(--goldt); font-size: 18px; }
+  .pb-warn { margin: -4px 0 10px; color: #ffb3b3; font-size: 13px; text-align: center; }
+
+  /* tickets */
+  .pb-tix { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; max-height: 420px; overflow-y: auto; padding: 2px; }
+  .pb-tk { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(12,4,24,.5);
+           border: 1px solid rgba(106,74,156,.55); border-left: 4px solid var(--gold); }
+  .pb-tk.won { background: linear-gradient(90deg, rgba(255,215,64,.16), rgba(12,4,24,.5)); border-color: #9c7a12; }
+  .pb-tk.lost { border-left-color: rgba(106,74,156,.55); }
+  .pb-tag2 { flex: none; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; color: var(--pu1); background: var(--gold); white-space: nowrap; }
+  .pb-count { margin: 0 0 10px; color: var(--lav2); }
+  .pb-count b { color: #fff; }
+  .pb-won { margin: 0 0 12px; padding: 12px 14px; border-radius: 12px; font-weight: bold; font-size: 16px; color: var(--pu1); background: linear-gradient(90deg, #ffe57f, var(--gold2)); }
+
+  /* prizes */
+  .pb-tiers { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .pb-tier { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; padding: 12px 14px; border-radius: 14px;
+             background: rgba(12,4,24,.45); border: 1px solid rgba(106,74,156,.55); }
+  .pb-tier .pb-balls { gap: 3px; }
+  .pb-tl { color: #fff; font-weight: bold; font-size: 14px; }
+  .pb-to { display: block; color: var(--mut); font-size: 12px; font-weight: normal; margin-top: 2px; }
+  .pb-ta { text-align: right; font: 900 18px/1.1 Ubuntu, sans-serif; color: var(--goldt); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pb-ta small { font-size: 11px; color: var(--mut); font-weight: bold; margin-left: 3px; }
+  .pb-tier.jp { position: relative; padding: 18px 16px; border: 2px solid var(--gold); background: radial-gradient(120% 160% at 0% 0%, rgba(255,215,64,.22), transparent 60%), linear-gradient(120deg, var(--pu1), var(--pu2));
+                animation: pbGlow 2.6s ease-in-out infinite; }
+  .pb-tier.jp .pb-ta { font-size: 26px; }
+  .pb-jptag { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--gold); color: var(--pu1); font-size: 11px; letter-spacing: .08em; vertical-align: 2px; }
+  .pb-x { width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1.5px rgba(225,199,255,.35); flex: none; }
+  .pb-x.on { background: radial-gradient(circle at 35% 30%, #fff, #ececec 45%, #b8b8b8); box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .pb-x.pbo { box-shadow: inset 0 0 0 1.5px rgba(63,163,77,.7); }
+  .pb-x.pbo.on { background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); }
+  .pb-anyodds { margin: 10px 0 0; color: var(--mut); font-size: 13px; }
+
+  /* last draw */
+  .pb-res { text-align: center; }
+  .pb-meta { color: var(--lav2); font-size: 14px; }
+  .pb-big { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  .pb-anim .pb-big .pb-b { animation: pbDrop .7s cubic-bezier(.2,1.4,.4,1) backwards; animation-delay: calc(var(--i) * .45s); animation-play-state: paused; }
+  .pb-anim.go .pb-big .pb-b { animation-play-state: running; }
+  .pb-rstats { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+  .pb-jpline { margin: 14px 0 0; font-weight: bold; color: var(--goldt); }
+  .pb-top { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; text-align: left; counter-reset: pbr; }
+  .pb-top li { counter-increment: pbr; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(12,4,24,.45); font-size: 14px; min-width: 0; }
+  .pb-top li::before { content: counter(pbr); flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,.1); color: var(--lav); font-size: 11px; font-weight: bold; }
+  .pb-top li:nth-child(1)::before { background: var(--gold); color: var(--pu1); }
+  .pb-top li:nth-child(2)::before { background: #cfd8dc; color: #222; }
+  .pb-top li:nth-child(3)::before { background: #d7a26a; color: #222; }
+  .pb-top .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pb-top b { color: var(--goldt); font-variant-numeric: tabular-nums; }
+  .pbx .pb-subh { margin: 20px 0 8px; color: var(--lav); font-size: 12px; font-weight: bold; letter-spacing: .1em; text-transform: uppercase; }
+
+  /* past draws */
+  .pb-hist { overflow-x: auto; border-radius: 14px; border: 1px solid rgba(106,74,156,.55); max-height: 520px; overflow-y: auto; }
+  .pb-hist table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .pb-hist th, .pb-hist td { padding: 9px 12px; border-bottom: 1px solid rgba(106,74,156,.3); text-align: left; white-space: nowrap; }
+  .pb-hist th { position: sticky; top: 0; background: var(--pu1); color: var(--lav); font-weight: bold; font-size: 12px; }
+  .pb-hist td.r, .pb-hist th.r { text-align: right; }
+  .pb-hist .pb-balls { flex-wrap: nowrap; }
+  .pb-hist tr:nth-child(even) td { background: rgba(12,4,24,.35); }
+
+  /* how it works */
+  .pb-how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .pb-how .pb-card { position: relative; padding-top: 44px; }
+  .pb-how .pb-step-n { position: absolute; top: 12px; left: 16px; width: 26px; height: 26px; }
+  .pb-split { display: flex; height: 40px; margin: 12px 0 8px; border-radius: 999px; overflow: hidden; border: 1px solid var(--pub); font-weight: bold; }
+  .pb-split span { display: grid; place-items: center; font-size: 15px; }
+  .pb-split .pot { background: linear-gradient(180deg, #ffe57f, var(--gold2)); color: var(--pu1); }
+  .pb-split .house { background: linear-gradient(180deg, #6a4a9c, #4a2a7c); color: #fff; }
+  .pb-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--lav2); font-size: 14px; }
+  .pb-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  .pb-foot { margin-top: 28px; text-align: center; color: var(--mut); font-size: 13px; line-height: 1.8; }
+
+  /* the purchase burst */
+  .pb-burst { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 9999; pointer-events: none; }
+  .pb-burst span { position: absolute; left: 0; top: 0; }
+
+  @keyframes pbFloat { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(10px, -22px) rotate(25deg); } }
+  @keyframes pbSpin { to { transform: rotate(360deg); } }
+  @keyframes pbShimmer { to { background-position: -150% 0; } }
+  @keyframes pbShine { 0%, 70% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+  @keyframes pbPulse { 50% { box-shadow: 0 0 0 6px rgba(255,215,64,.12); } }
+  @keyframes pbGlow { 0%, 100% { box-shadow: 0 0 12px rgba(255,215,64,.25); } 50% { box-shadow: 0 0 28px rgba(255,215,64,.6); } }
+  @keyframes pbPop { 0% { transform: scale(.7); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  @keyframes pbJiggle { from { transform: translateY(0) rotate(-8deg); } to { transform: translateY(-6px) rotate(8deg); } }
+  @keyframes pbDrop { 0% { transform: translateY(-80px) scale(.4); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pbx *, .pbx *::before, .pbx *::after { animation: none !important; transition: none !important; }
+    .pb-jpn { background-position: 50% 0; }
+  }
+
+  @media (max-width: 760px) {
+    .pb-buy, .pb-how { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .pb-hero { padding: 24px 14px 20px; border-radius: 16px; }
+    .pb-logo { width: 44px; height: 44px; }
+    .pb-float .pb-b { opacity: .28; }
+    .pb-t { min-width: 0; flex: 1; padding: 8px 2px 6px; }
+    .pb-t b { font-size: 24px; }
+    .pb-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .pb-gb { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .pb-card { padding: 14px 12px; }
+    .pb-tier { grid-template-columns: minmax(0, 1fr) auto; }
+    .pb-tier .pb-balls { grid-column: 1 / -1; }
+    .pb-b.lg { width: 46px; height: 46px; font-size: 19px; }
+    .pb-big { gap: 6px; }
+    .pb-ctas .pb-btn { flex: 1 1 100%; }
+    .pb-h { font-size: 19px; }
+  }
 </style>
 <%
-  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString();
-  const etDate = (ts, withTime) => ts ? new Date(ts * 1000).toLocaleString('en-US', Object.assign({ timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' },
-                                        withTime ? { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' } : {})) : '';
-  const balls = (w, pb, sm, drawn) => { %>
-    <span class="balls"><% (w || []).forEach((n) => { %><span class="ball<%= sm ? ' sm' : '' %><%= drawn && drawn.white.includes(n) ? ' hit' : '' %>"><%= n %></span><% }) %><span class="ball pb<%= sm ? ' sm' : '' %>" title="Pepe Ball"><%= pb %></span></span>
-<% }; %>
-<div class="lt">
-  <h1>Pepe Lotto</h1>
-  <p class="sub">Pick <%= rules.WHITE_PICK %> numbers from 1–<%= rules.WHITE_MAX %> plus a Pepe Ball from 1–<%= rules.BALL_MAX %>. Drawn every Sunday at 9 PM ET.</p>
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const POT_PCT = 40;                                       // pepe_lotto LOTTO_POT_SHARE (tickets -> the jackpot pot); the rest routes to the House
+  const ball = (n, cls) => '<span class="pb-b' + (cls && cls.trim() ? ' ' + cls.trim().replace(/\s+/g, ' ') : '') + '">' + (Math.floor(Number(n)) || 0) + '</span>';
+  // a ticket / a draw as balls; `drawn` lights the matches and dims the misses
+  const balls = (w, pb, sz, drawn) => '<span class="pb-balls">' + (w || []).map((n) => ball(n, (sz || '') + (drawn ? (drawn.white.includes(n) ? ' hit' : ' dim') : ''))).join('')
+    + ball(pb, 'pb ' + (sz || '') + (drawn ? (drawn.pb === pb ? ' hit' : ' dim') : '')) + '</span>';
+  const tierName = (w, b) => (b ? (w ? t('lotto.tier_ball', { tier: t('lotto.tier', { count: w }) }) : t('lotto.tier_ball_only')) : t('lotto.tier', { count: w }));
+  const tierBalls = (w, b) => '<span class="pb-balls" aria-hidden="true">' + Array.from({ length: rules.WHITE_PICK }, (_, i) => '<span class="pb-x' + (i < w ? ' on' : '') + '"></span>').join('')
+    + '<span class="pb-x pbo' + (b ? ' on' : '') + '"></span></span>';
+  const now_ = locals.now || Math.floor(Date.now() / 1000);
+  const linked = !!(user && me && me.camfrogUsername);
+  // decorative floating balls in the hero: [number, left, top, size, duration, delay, pepe ball?]
+  const FLOAT = [[7, '4%', '12%', 34, 5.5, 0, 0], [19, '88%', '8%', 40, 6.5, .6, 0], [3, '10%', '70%', 28, 7, 1.2, 1], [23, '92%', '62%', 30, 5, .3, 0],
+                 [11, '2%', '42%', 22, 6, 1.8, 0], [28, '95%', '34%', 24, 7.5, .9, 0], [5, '5%', '93%', 26, 6.8, 1.5, 1], [14, '93%', '90%', 20, 5.8, 2.1, 0]];
+%>
+<div class="pbx">
+<% if (!L) { %>
+  <section class="pb-hero">
+    <div class="pb-brand"><h1 class="pb-word"><%- t('lotto.title') %></h1></div>
+    <p class="pb-tag"><%- t('lotto.empty') %></p>
+  </section>
+<% } else {
+     const closeAt = L.next_at - L.close_secs;
+     const state = !L.next_at ? 'open' : now_ >= L.next_at ? 'drawing' : (!L.sales_open || now_ >= closeAt) ? 'closed' : 'open';
+     const latest = L.history[0] || null;
+     const left = Math.max(0, L.next_at - now_);
+     const cdv = { d: Math.floor(left / 86400), h: Math.floor(left % 86400 / 3600), m: Math.floor(left % 3600 / 60), s: left % 60 };
+%>
+  <section class="pb-hero" id="pb-hero" aria-labelledby="pb-title" data-at="<%= L.next_at %>" data-close="<%= closeAt %>" data-state="<%= state %>">
+    <div class="pb-float" aria-hidden="true">
+      <% FLOAT.forEach((f) => { %><span class="pb-b<%= f[6] ? ' pb' : '' %>" style="--x:<%= f[1] %>;--y:<%= f[2] %>;--s:<%= f[3] %>px;--d:<%= f[4] %>s;--dl:-<%= f[5] %>s"><%= f[0] %></span><% }) %>
+    </div>
+    <div class="pb-brand">
+      <svg class="pb-logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <defs><radialGradient id="pbLg" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#b6f5b6"/><stop offset=".5" stop-color="#3fa34d"/><stop offset="1" stop-color="#1d5c27"/></radialGradient></defs>
+        <circle cx="32" cy="32" r="29" fill="url(#pbLg)" stroke="#ffd740" stroke-width="3"/>
+        <circle cx="32" cy="32" r="15" fill="#fff"/>
+        <text x="32" y="38.5" text-anchor="middle" font-family="Ubuntu, sans-serif" font-weight="900" font-size="18" fill="#1d5c27">P</text>
+        <ellipse cx="22" cy="17" rx="7" ry="3.5" fill="#fff" opacity=".45" transform="rotate(-30 22 17)"/>
+      </svg>
+      <h1 class="pb-word" id="pb-title"><%- t('lotto.title') %></h1>
+    </div>
+    <p class="pb-tag"><%- t('lotto.tagline', { max: rules.WHITE_MAX, ball: rules.BALL_MAX }) %></p>
 
-  <% if (!L) { %>
-    <div class="card"><p class="empty">Pepe hasn't posted the lotto yet — check back after he's next online.</p></div>
-  <% } else {
-       const closeAt = L.next_at - L.close_secs;
-       const latest = L.history[0] || null;
-  %>
-    <div class="card hero">
-      <span class="lbl">Jackpot · draw #<%= L.draw %></span>
-      <span class="jackpot"><%= fmt(L.jackpot) %> PAT</span>
-      <span class="info">Match all <%= rules.WHITE_PICK %> + the Pepe Ball to win it. Split between jackpot winners; rolls over if nobody hits.</span>
-      <div class="stats">
-        <div class="stat"><b id="lt-cd" data-at="<%= L.next_at %>">—</b><span>until the draw · <%= etDate(L.next_at, true) %></span></div>
-        <div class="stat"><b><%= fmt(L.sold) %></b><span>tickets sold this draw</span></div>
-        <div class="stat"><b><%= fmt(L.price) %> PAT</b><span>per ticket</span></div>
-        <div class="stat">
-          <% if (L.sales_open) { %><b class="open" id="lt-close" data-at="<%= closeAt %>">open</b><span>sales close <%= etDate(closeAt, true) %></span>
-          <% } else { %><b class="closed">closed</b><span>sales reopen after the draw</span><% } %>
+    <div class="pb-kick"><%- t('lotto.draw_n', { n: L.draw }) %> · <%- t('lotto.jackpot') %></div>
+    <div class="pb-jp"><span class="pb-jpn" data-count="<%= L.jackpot %>"><%= fmt(L.jackpot) %></span><small>PAT</small></div>
+    <p class="pb-jpnote"><%- t('lotto.jackpot_note') %></p>
+
+    <% if (L.next_at) { %>
+      <div class="pb-open"<%= state === 'drawing' ? ' hidden' : '' %>>
+        <div class="pb-cdl" id="pb-cdl"><%- t('lotto.cd_label') %></div>
+        <div class="pb-cd" role="timer" aria-labelledby="pb-cdl">
+          <span class="pb-t"><b data-u="d"><%= cdv.d %></b><small><%- t('lotto.cd_d') %></small></span>
+          <span class="pb-t"><b data-u="h"><%= String(cdv.h).padStart(2, '0') %></b><small><%- t('lotto.cd_h') %></small></span>
+          <span class="pb-t"><b data-u="m"><%= String(cdv.m).padStart(2, '0') %></b><small><%- t('lotto.cd_m') %></small></span>
+          <span class="pb-t"><b data-u="s"><%= String(cdv.s).padStart(2, '0') %></b><small><%- t('lotto.cd_s') %></small></span>
         </div>
       </div>
+      <p class="pb-when"><%- t('lotto.draw_at', { when: tzT(L.next_at, 'full') }) %><% if (state === 'open') { %><span class="pb-closes"> · <%- t('lotto.sales_close', { when: tzT(closeAt, 'time') }) %></span><% } %></p>
+    <% } %>
+    <div class="pb-state closed" data-s="closed"<%= state === 'closed' ? '' : ' hidden' %>><%- t('lotto.state_closed') %></div>
+    <div class="pb-state drawing" data-s="drawing"<%= state === 'drawing' ? '' : ' hidden' %>><%- t('lotto.state_drawing') %></div>
+    <p class="pb-sr" id="pb-live" aria-live="polite"></p>
+
+    <div class="pb-stats">
+      <span class="pb-stat"><b><%= fmt(L.sold) %></b><%- t('lotto.sold') %></span>
+      <span class="pb-stat"><b><%= fmt(players) %></b><%- t('lotto.players') %></span>
+      <span class="pb-stat"><b><%= fmt(L.price) %></b><%- t('lotto.price') %></span>
     </div>
+    <div class="pb-ctas">
+      <a class="pb-btn" href="#pb-buy">🎟️ <%- t('lotto.cta_buy') %></a>
+      <% if (linked) { %><a class="pb-btn ghost" href="#pb-mine"><%- t('lotto.cta_mine') %></a><% } %>
+    </div>
+  </section>
 
-    <%- include('partials/actions', { acts, msg }) %>
+  <%- include('partials/actions', { acts, msg }) %>
 
-    <h2>YOUR TICKETS THIS DRAW</h2>
+  <section id="pb-buy" aria-labelledby="pb-buy-h">
+    <h2 class="pb-h" id="pb-buy-h"><%- t('lotto.buy_h') %></h2>
     <% if (!user) { %>
-      <p class="info"><a href="/login">Sign in</a> to see your tickets and buy from here.</p>
-    <% } else if (!me || !me.camfrogUsername) { %>
-      <p class="hint">Link your Camfrog name (<code>!verify</code>) to see your tickets and buy them from the site.</p>
-    <% } else if (!mine || !mine.count) { %>
-      <p class="info">No tickets yet for draw #<%= L.draw %>, <%= me.camfrogUsername %>.</p>
+      <p class="pb-note"><%- t('lotto.signin', { link: '<a href="/login">' + t('lotto.signin_link') + '</a>' }) %></p>
+    <% } else if (!linked) { %>
+      <p class="pb-note"><%- t('lotto.verify', { cmd: '<code>!verify</code>' }) %></p>
+    <% } else if (state !== 'open') { %>
+      <p class="pb-note"><%- t('lotto.closed_buy') %></p>
     <% } else { %>
-      <div class="card">
-        <p class="info" style="margin-top:0"><b style="color:#fff"><%= fmt(mine.count) %></b> ticket<%= mine.count === 1 ? '' : 's' %> for draw #<%= L.draw %><%= mine.count > mine.tickets.length ? ' (showing the first ' + mine.tickets.length + ')' : '' %></p>
-        <div class="tickets"><% mine.tickets.forEach((t) => { %><div><% balls(t[0], t[1], true) %></div><% }) %></div>
+      <p class="pb-bal"><%- t('lotto.balance', { n: '<b>' + fmt(me.points_balance) + '</b>' }) %></p>
+      <div class="pb-buy">
+        <form class="pb-card pb-pick" method="post" action="/act" id="pb-pick" novalidate>
+          <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="lotto">
+          <% for (let i = 0; i < rules.WHITE_PICK; i++) { %><input type="hidden" name="a<%= i %>" value=""><% } %>
+          <input type="hidden" name="a4" value="pb"><input type="hidden" name="a5" value="">
+          <input type="hidden" name="back" value="/lotto"><input type="hidden" name="tag" value="lotto">
+          <h3><%- t('lotto.pick_h') %></h3>
+          <p class="pb-p"><%- t('lotto.pick_sub') %></p>
+          <div class="pb-tray" aria-hidden="true">
+            <% for (let i = 0; i < rules.WHITE_PICK; i++) { %><span class="pb-b pb-slot empty" data-slot="<%= i %>">?</span><% } %>
+            <span class="pb-plus">+</span><span class="pb-b pb pb-slot empty" data-slot="pb">?</span>
+          </div>
+          <fieldset>
+            <legend><%- t('lotto.pick_whites') %></legend>
+            <div class="pb-grid pb-gw"><% for (let n = 1; n <= rules.WHITE_MAX; n++) { %><button type="button" class="pb-n" data-n="<%= n %>" aria-pressed="false"><%= n %></button><% } %></div>
+          </fieldset>
+          <fieldset>
+            <legend><%- t('lotto.pick_ball') %></legend>
+            <div class="pb-grid pb-gb"><% for (let n = 1; n <= rules.BALL_MAX; n++) { %><button type="button" class="pb-n" data-n="<%= n %>" aria-pressed="false"><%= n %></button><% } %></div>
+          </fieldset>
+          <div class="pb-row">
+            <button type="button" class="pb-chip" data-act="lucky"><%- t('lotto.pick_lucky') %></button>
+            <button type="button" class="pb-chip" data-act="clear"><%- t('lotto.pick_clear') %></button>
+          </div>
+          <p class="pb-err" id="pb-pick-err" role="alert" hidden><%- t('lotto.pick_need') %></p>
+          <button type="submit" class="pb-btn wide"><%- t('lotto.pick_buy', { n: fmt(L.price) }) %></button>
+          <p class="pb-fine"><%- t('lotto.pick_one') %></p>
+        </form>
+
+        <form class="pb-card pb-qp" method="post" action="/act" id="pb-qp" data-price="<%= L.price %>" data-bal="<%= Math.floor(Number(me.points_balance) || 0) %>">
+          <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="lotto">
+          <input type="hidden" name="a0" value="quick">
+          <input type="hidden" name="back" value="/lotto"><input type="hidden" name="tag" value="lotto">
+          <h3><%- t('lotto.qp_h') %></h3>
+          <p class="pb-p"><%- t('lotto.qp_sub') %></p>
+          <div class="pb-shuffle" aria-hidden="true"><%- ball(7) %><%- ball(12) %><%- ball(21) %><%- ball(29) %><%- ball(4, 'pb') %></div>
+          <label class="pb-lbl" for="pb-qty"><%- t('lotto.qp_qty') %></label>
+          <div class="pb-step">
+            <button type="button" data-d="-1" aria-label="<%- t('lotto.qp_less') %>">−</button>
+            <input id="pb-qty" type="number" name="a1" min="1" max="500" value="1" inputmode="numeric" required>
+            <button type="button" data-d="1" aria-label="<%- t('lotto.qp_more') %>">+</button>
+          </div>
+          <div class="pb-row">
+            <% [1, 5, 10, 25, 50].forEach((q) => { %><button type="button" class="pb-chip" data-q="<%= q %>" aria-pressed="<%= q === 1 ? 'true' : 'false' %>">×<%= q %></button><% }) %>
+          </div>
+          <p class="pb-total"><b id="pb-qn">1</b> × <%= fmt(L.price) %> PAT = <b id="pb-qc"><%= fmt(L.price) %></b> PAT</p>
+          <p class="pb-warn" id="pb-qwarn" hidden><%- t('lotto.over_balance') %></p>
+          <button type="submit" class="pb-btn wide"><%- t('lotto.qp_buy') %></button>
+        </form>
       </div>
     <% } %>
+  </section>
 
-    <% if (user && me && me.camfrogUsername) { %>
-      <% if (L.sales_open) { %>
-        <p class="info">Your balance: <b style="color:#ffd700"><%= fmt(me.points_balance) %> PAT</b> · tickets are <%= fmt(L.price) %> PAT each.</p>
-        <div class="forms">
-          <form class="buy" method="post" action="/act">
-            <b>Quick pick</b>
-            <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="lotto">
-            <input type="hidden" name="a0" value="quick">
-            <input type="hidden" name="back" value="/lotto"><input type="hidden" name="tag" value="lotto">
-            <div class="row">
-              <input type="number" name="a1" min="1" max="500" value="1" required aria-label="How many tickets">
-              <span class="info">ticket(s), random numbers</span>
-            </div>
-            <div class="row"><button type="submit">Buy quick picks</button></div>
-          </form>
-          <form class="buy" method="post" action="/act" id="lt-pick">
-            <b>Pick your own</b>
-            <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="lotto">
-            <input type="hidden" name="a4" value="pb">
-            <input type="hidden" name="back" value="/lotto"><input type="hidden" name="tag" value="lotto">
-            <div class="row">
-              <% for (let i = 0; i < rules.WHITE_PICK; i++) { %><input type="number" name="a<%= i %>" min="1" max="<%= rules.WHITE_MAX %>" required aria-label="Number <%= i + 1 %>"><% } %>
-            </div>
-            <div class="row">
-              <span class="info">Pepe Ball</span>
-              <input class="pbin" type="number" name="a5" min="1" max="<%= rules.BALL_MAX %>" required aria-label="Pepe Ball">
-            </div>
-            <p class="info" id="lt-pick-err" style="color:#e57373;margin:0;display:none">Pick <%= rules.WHITE_PICK %> different numbers.</p>
-            <div class="row"><button type="submit">Buy 1 ticket</button></div>
-          </form>
-        </div>
+  <% if (linked) { %>
+    <section id="pb-mine" aria-labelledby="pb-mine-h">
+      <h2 class="pb-h" id="pb-mine-h"><%- t('lotto.mine_h', { n: L.draw }) %></h2>
+      <% if (!mine || !mine.count) { %>
+        <p class="pb-p"><%- t('lotto.mine_none', { n: L.draw }) %></p>
       <% } else { %>
-        <p class="info">Sales are closed for this draw — they reopen once Pepe draws the numbers.</p>
-      <% } %>
-    <% } %>
-
-    <h2>PRIZES &amp; ODDS</h2>
-    <div class="tbl">
-      <table>
-        <tr><th>Match</th><th class="r">Prize</th><th class="r">Odds</th></tr>
-        <% prizes.forEach((p) => { %>
-          <tr class="<%= p.jackpot ? 'jp' : '' %>">
-            <td><%= p.w %> number<%= p.w === 1 ? '' : 's' %><%= p.ball ? ' + Pepe Ball' : '' %><%= p.jackpot ? ' — JACKPOT' : '' %></td>
-            <td class="r"><%= fmt(p.amount) %> PAT</td>
-            <td class="r"><%= p.odds ? '1 in ' + fmt(p.odds) : '—' %></td>
-          </tr>
-        <% }) %>
-      </table>
-    </div>
-    <% if (anyOdds) { %><p class="info">Odds of winning any prize: about 1 in <%= fmt(anyOdds) %> per ticket.</p><% } %>
-
-    <h2>PAST DRAWS</h2>
-    <% if (!L.history.length) { %>
-      <p class="empty">No draws yet — the first one is <%= etDate(L.next_at, true) %>.</p>
-    <% } else { %>
-      <% if (latest && latest.won && latest.won.length) { %>
-        <div class="card" style="margin-bottom:12px">
-          <p class="info" style="margin-top:0">Top winners of draw #<%= latest.draw %> (<% balls(latest.white, latest.pb, true) %>)</p>
-          <div class="winners">
-            <% latest.won.slice().sort((a, b) => b[1] - a[1]).slice(0, 12).forEach((w) => { %><span><%- ul(w[0]) %> <b><%= fmt(w[1]) %></b></span><% }) %>
-          </div>
+        <div class="pb-card">
+          <p class="pb-count"><%- t('lotto.mine_count', { count: mine.count, n: '<b>' + fmt(mine.count) + '</b>' }) %><% if (mine.count > mine.tickets.length) { %> <%- t('lotto.mine_more', { n: mine.tickets.length }) %><% } %></p>
+          <div class="pb-tix"><% mine.tickets.forEach((tk) => { %><div class="pb-tk"><%- balls(tk[0], tk[1]) %></div><% }) %></div>
         </div>
       <% } %>
-      <div class="tbl">
+      <% if (last && latest) { %>
+        <h3 class="pb-subh"><%- t('lotto.last_h', { n: last.draw }) %></h3>
+        <div class="pb-card" style="margin-top:8px">
+          <% if (last.won > 0) { %><p class="pb-won"><%- t('lotto.last_won', { n: fmt(last.won), d: last.draw }) %></p>
+          <% } else { %><p class="pb-count"><%- t('lotto.last_nowin', { d: last.draw }) %></p><% } %>
+          <% if (last.tickets.length) { %>
+            <div class="pb-tix"><% last.tickets.forEach((x) => { %>
+              <div class="pb-tk <%= x.prize ? 'won' : 'lost' %>"><%- balls(x.t[0], x.t[1], 'sm', latest) %><% if (x.prize) { %><span class="pb-tag2"><%- x.prize.jackpot ? t('lotto.jackpot_tag') : '+' + fmt(x.prize.amount) %></span><% } %></div>
+            <% }) %></div>
+          <% } %>
+        </div>
+      <% } %>
+    </section>
+  <% } %>
+
+  <% if (latest) { %>
+    <section class="pb-res" aria-labelledby="pb-res-h">
+      <h2 class="pb-h" id="pb-res-h"><%- t('lotto.results_h') %></h2>
+      <div class="pb-card" id="pb-drawn">
+        <div class="pb-meta"><%- t('lotto.results_meta', { n: latest.draw, when: tzT(latest.ts, 'date') }) %></div>
+        <div class="pb-big" role="img" aria-label="<%= latest.white.join(', ') %> + <%- t('lotto.pick_ball') %> <%= latest.pb %>">
+          <% latest.white.forEach((n, i) => { %><span class="pb-b lg" style="--i:<%= i %>"><%= n %></span><% }) %><span class="pb-b lg pb" style="--i:<%= latest.white.length %>"><%= latest.pb %></span>
+        </div>
+        <div class="pb-rstats">
+          <span class="pb-stat"><b><%= fmt(latest.tickets) %></b><%- t('lotto.results_tickets') %></span>
+          <span class="pb-stat"><b><%= fmt(latest.winners) %></b><%- t('lotto.results_winners') %></span>
+          <span class="pb-stat"><b><%= fmt(latest.paid) %></b><%- t('lotto.results_paid') %></span>
+        </div>
+        <p class="pb-jpline"><%- latest.jackpot_winners && latest.jackpot_winners.length
+             ? t('lotto.jp_won', { names: latest.jackpot_winners.map((n) => ul(n)).join(', '), n: fmt(latest.jackpot_paid) })
+             : t('lotto.jp_rolled', { n: fmt(latest.jackpot) }) %></p>
+        <% if (latest.won && latest.won.length) { %>
+          <h3 class="pb-subh"><%- t('lotto.top_winners') %></h3>
+          <ol class="pb-top">
+            <% latest.won.slice().sort((a, b) => b[1] - a[1]).slice(0, 12).forEach((w) => { %><li><span class="nm"><%- ul(w[0]) %></span><b><%= fmt(w[1]) %></b></li><% }) %>
+          </ol>
+        <% } %>
+      </div>
+    </section>
+  <% } %>
+
+  <section aria-labelledby="pb-prz-h">
+    <h2 class="pb-h" id="pb-prz-h"><%- t('lotto.prizes_h') %></h2>
+    <ul class="pb-tiers">
+      <% prizes.forEach((p) => { %>
+        <li class="pb-tier<%= p.jackpot ? ' jp' : '' %>">
+          <%- tierBalls(p.w, p.ball) %>
+          <span class="pb-tl"><%- tierName(p.w, p.ball) %><% if (p.jackpot) { %><span class="pb-jptag"><%- t('lotto.jackpot_tag') %></span><% } %>
+            <span class="pb-to"><%- p.odds ? t('lotto.odds', { n: fmt(p.odds) }) : '—' %></span></span>
+          <span class="pb-ta"><%= fmt(p.amount) %><small>PAT</small></span>
+        </li>
+      <% }) %>
+    </ul>
+    <% if (anyOdds) { %><p class="pb-anyodds"><%- t('lotto.any_odds', { n: fmt(anyOdds) }) %></p><% } %>
+  </section>
+
+  <section aria-labelledby="pb-hist-h">
+    <h2 class="pb-h" id="pb-hist-h"><%- t('lotto.history_h') %></h2>
+    <% if (!L.history.length) { %>
+      <p class="pb-p"><%- t('lotto.no_draws', { when: tzT(L.next_at, 'full') }) %></p>
+    <% } else { %>
+      <div class="pb-hist">
         <table>
-          <tr><th>Draw</th><th>Date</th><th>Numbers</th><th class="r">Tickets</th><th class="r">Winners</th><th class="r">PAT paid</th><th>Jackpot</th></tr>
+          <thead><tr><th>#</th><th><%- t('lotto.hist_date') %></th><th><%- t('lotto.hist_numbers') %></th><th class="r"><%- t('lotto.results_tickets') %></th><th class="r"><%- t('lotto.results_winners') %></th><th class="r"><%- t('lotto.results_paid') %></th><th><%- t('lotto.jackpot') %></th></tr></thead>
+          <tbody>
           <% L.history.forEach((h) => { %>
             <tr>
               <td>#<%= h.draw %></td>
-              <td><%= etDate(h.ts) %></td>
-              <td><% balls(h.white, h.pb, true) %></td>
+              <td><%- tzT(h.ts, 'date') %></td>
+              <td><%- balls(h.white, h.pb, 'sm') %></td>
               <td class="r"><%= fmt(h.tickets) %></td>
               <td class="r"><%= fmt(h.winners) %></td>
               <td class="r"><%= fmt(h.paid) %></td>
-              <td><%- h.jackpot_winners && h.jackpot_winners.length ? h.jackpot_winners.map((n) => ul(n)).join(', ') + ' (' + fmt(h.jackpot_paid) + ')' : 'rolled over (' + fmt(h.jackpot) + ')' %></td>
+              <td><%- h.jackpot_winners && h.jackpot_winners.length ? '🏆 ' + h.jackpot_winners.map((n) => ul(n)).join(', ') + ' (' + fmt(h.jackpot_paid) + ')' : '🔁 ' + t('lotto.hist_rolled') + ' (' + fmt(h.jackpot) + ')' %></td>
             </tr>
           <% }) %>
+          </tbody>
         </table>
       </div>
     <% } %>
-  <% } %>
+  </section>
 
-  <p class="info" style="text-align:center;margin-top:26px">In a Camfrog room: <code>!lotto quick 5</code> or <code>!lotto 3 9 14 27 pb 6</code> · where the PAT goes: <a href="/economy#casino">the PAT economy</a></p>
+  <section aria-labelledby="pb-how-h">
+    <h2 class="pb-h" id="pb-how-h"><%- t('lotto.how_h') %></h2>
+    <div class="pb-how">
+      <div class="pb-card"><span class="pb-b pb-step-n">1</span><h3><%- t('lotto.how_1_h') %></h3><p class="pb-p"><%- t('lotto.how_1', { max: rules.WHITE_MAX, ball: rules.BALL_MAX, n: fmt(L.price) }) %></p></div>
+      <div class="pb-card"><span class="pb-b pb-step-n">2</span><h3><%- t('lotto.how_2_h') %></h3><p class="pb-p"><%- t('lotto.how_2', { when: tzT(L.next_at, 'full'), m: Math.round(L.close_secs / 60) }) %></p></div>
+      <div class="pb-card"><span class="pb-b pb pb-step-n">3</span><h3><%- t('lotto.how_3_h') %></h3><p class="pb-p"><%- t('lotto.how_3') %></p></div>
+    </div>
+    <div class="pb-card" style="margin-top:12px">
+      <h3><%- t('lotto.money_h') %></h3>
+      <div class="pb-split" aria-hidden="true"><span class="pot" style="flex:<%= POT_PCT %>"><%= POT_PCT %>%</span><span class="house" style="flex:<%= 100 - POT_PCT %>"><%= 100 - POT_PCT %>%</span></div>
+      <div class="pb-legend">
+        <span><i style="background:#ffd740"></i><%- t('lotto.money_pot', { pct: POT_PCT }) %></span>
+        <span><i style="background:#6a4a9c"></i><%- t('lotto.money_house', { pct: 100 - POT_PCT }) %></span>
+      </div>
+      <p class="pb-fine"><%- t('lotto.money_note') %></p>
+    </div>
+  </section>
+<% } %>
+
+  <p class="pb-foot"><%- t('lotto.chat', { a: '<code>!lotto quick 5</code>', b: '<code>!lotto 3 9 14 27 pb 6</code>' }) %><br>
+    <%- t('lotto.economy', { link: '<a href="/economy#casino">' + t('lotto.economy_link') + '</a>' }) %></p>
 </div>
 <script>
 (function () {
-  function left(s) {
-    if (s <= 0) return 'now';
-    var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
-    return d ? d + 'd ' + h + 'h ' + m + 'm' : h ? h + 'h ' + m + 'm ' + x + 's' : m + 'm ' + x + 's';
+  'use strict';
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var fmt = function (n) { return Math.round(n).toLocaleString('en-US'); };
+  var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+
+  // jackpot: counts up once (from 60%), like the homepage card
+  var jp = $('.pb-jpn');
+  if (jp && !still && window.requestAnimationFrame) {
+    var to = Number(jp.getAttribute('data-count')) || 0, t0 = null;
+    jp.textContent = fmt(to * 0.6);
+    var step = function (ts) { if (t0 === null) t0 = ts; var k = Math.min(1, (ts - t0) / 1600); jp.textContent = fmt(to * (0.6 + 0.4 * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+    setTimeout(function () { jp.textContent = fmt(to); }, 2200);    // a hidden tab pauses rAF: land on the exact number anyway
   }
-  var cd = document.getElementById('lt-cd'), cl = document.getElementById('lt-close');
-  function tick() {
-    var now = Math.floor(Date.now() / 1000);
-    if (cd) { var s = +cd.dataset.at - now; cd.textContent = s > 0 ? left(s) : 'drawing…'; }
-    if (cl) { var c = +cl.dataset.at - now; if (c <= 0) { cl.textContent = 'closed'; cl.className = 'closed'; } else cl.textContent = 'open · ' + left(c); }
+
+  // countdown + the open / closed / drawing state (announced once when it changes, not every second)
+  var hero = $('#pb-hero');
+  if (hero && +hero.getAttribute('data-at')) {
+    var at = +hero.getAttribute('data-at'), closeAt = +hero.getAttribute('data-close'), cur = hero.getAttribute('data-state');
+    var U = {}; $$('[data-u]', hero).forEach(function (b) { U[b.getAttribute('data-u')] = b; });
+    var live = $('#pb-live');
+    var tick = function () {
+      var now = Math.floor(Date.now() / 1000), s = Math.max(0, at - now);
+      if (U.d) { U.d.textContent = Math.floor(s / 86400); U.h.textContent = pad(Math.floor(s % 86400 / 3600)); U.m.textContent = pad(Math.floor(s % 3600 / 60)); U.s.textContent = pad(s % 60); }
+      var st = now >= at ? 'drawing' : (now >= closeAt || cur === 'closed') ? 'closed' : 'open';
+      if (st !== cur) {
+        cur = st; hero.setAttribute('data-state', st);
+        $$('[data-s]', hero).forEach(function (el) { el.hidden = el.getAttribute('data-s') !== st; });
+        var o = $('.pb-open', hero); if (o) o.hidden = st === 'drawing';
+        var c = $('.pb-closes', hero); if (c) c.hidden = st !== 'open';
+        var m = $('[data-s="' + st + '"]', hero); if (live && m) live.textContent = m.textContent;
+        if (st !== 'open') $$('#pb-buy form button[type=submit]').forEach(function (b) { b.disabled = true; });
+      }
+      if (s > 0) setTimeout(tick, 1000 - (Date.now() % 1000));
+    };
+    tick();
   }
-  tick(); setInterval(tick, 1000);
-  var f = document.getElementById('lt-pick');
-  if (f) f.addEventListener('submit', function (e) {
-    var seen = {}, dup = false;
-    for (var i = 0; i < <%= rules.WHITE_PICK %>; i++) { var v = f.elements['a' + i].value; if (seen[v]) dup = true; seen[v] = 1; }
-    document.getElementById('lt-pick-err').style.display = dup ? '' : 'none';
-    if (dup) e.preventDefault();
-  });
+
+  // the purchase burst: balls + confetti from the button, then the form goes
+  function burst(el) {
+    if (still || !el.animate) return 0;
+    var r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    var box = document.createElement('div'); box.className = 'pb-burst'; box.setAttribute('aria-hidden', 'true');
+    var C = ['#ffd740', '#ffe082', '#e1c7ff', '#9b6bd6', '#ffffff', '#3fa34d'];
+    for (var i = 0; i < 34; i++) {
+      var p = document.createElement('span'), isBall = i % 3 === 0, sz = isBall ? 14 + Math.random() * 8 : 7 + Math.random() * 5;
+      p.style.width = sz + 'px'; p.style.height = (isBall ? sz : sz * 0.5) + 'px';
+      p.style.borderRadius = isBall ? '50%' : '2px';
+      p.style.background = isBall ? (i % 2 ? 'radial-gradient(circle at 35% 30%, #fff, #ddd 50%, #aaa)' : 'radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 55%, #1d5c27)') : C[i % C.length];
+      box.appendChild(p);
+      var a = Math.random() * Math.PI * 2, d = 70 + Math.random() * 150, dx = Math.cos(a) * d, dy = Math.sin(a) * d - 60;
+      p.animate([
+        { transform: 'translate(' + (x - sz / 2) + 'px,' + (y - sz / 2) + 'px) rotate(0deg)', opacity: 1 },
+        { transform: 'translate(' + (x + dx) + 'px,' + (y + dy) + 'px) rotate(' + (Math.random() * 540 - 270) + 'deg)', opacity: 1, offset: 0.6 },
+        { transform: 'translate(' + (x + dx * 1.15) + 'px,' + (y + dy + 140) + 'px) rotate(' + (Math.random() * 720) + 'deg)', opacity: 0 }
+      ], { duration: 900 + Math.random() * 500, easing: 'cubic-bezier(.2,.7,.4,1)', fill: 'forwards' });
+    }
+    document.body.appendChild(box);
+    setTimeout(function () { box.remove(); }, 1600);
+    return 750;
+  }
+  function sendWithBurst(f, e) {
+    if (f.__pbSent) { e.preventDefault(); return; }
+    var btn = $('button[type=submit]', f), wait = burst(btn || f);
+    if (!wait) return;                                  // reduced motion: post straight away
+    e.preventDefault();
+    f.__pbSent = true;
+    $$('button', f).forEach(function (b) { b.disabled = true; });
+    setTimeout(function () { HTMLFormElement.prototype.submit.call(f); }, wait);
+  }
+
+  // pick your own: 4 numbers + the Pepe Ball on the grid
+  var pf = $('#pb-pick');
+  if (pf) {
+    var MAXW = <%= rules.WHITE_PICK %>, picked = [], ballN = 0;
+    var gw = $$('.pb-gw .pb-n', pf), gb = $$('.pb-gb .pb-n', pf), err = $('#pb-pick-err');
+    var draw = function () {
+      var sorted = picked.slice().sort(function (a, b) { return a - b; });
+      gw.forEach(function (b) { var on = picked.indexOf(+b.getAttribute('data-n')) >= 0; b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.classList.toggle('full', !on && picked.length >= MAXW); });
+      gb.forEach(function (b) { b.setAttribute('aria-pressed', +b.getAttribute('data-n') === ballN ? 'true' : 'false'); });
+      for (var i = 0; i < MAXW; i++) {
+        var s = $('[data-slot="' + i + '"]', pf), v = sorted[i];
+        s.textContent = v || '?'; s.classList.toggle('empty', !v);
+        pf.elements['a' + i].value = v || '';
+      }
+      var ps = $('[data-slot="pb"]', pf); ps.textContent = ballN || '?'; ps.classList.toggle('empty', !ballN);
+      pf.elements.a5.value = ballN || '';
+      if (picked.length === MAXW && ballN) err.hidden = true;
+    };
+    gw.forEach(function (b) { b.addEventListener('click', function () {
+      var n = +b.getAttribute('data-n'), i = picked.indexOf(n);
+      if (i >= 0) picked.splice(i, 1); else if (picked.length < MAXW) picked.push(n);
+      draw();
+    }); });
+    gb.forEach(function (b) { b.addEventListener('click', function () { var n = +b.getAttribute('data-n'); ballN = ballN === n ? 0 : n; draw(); }); });
+    var rnd = function () {
+      var pool = []; for (var n = 1; n <= gw.length; n++) pool.push(n);
+      var out = []; while (out.length < MAXW) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      return out;
+    };
+    $('[data-act="lucky"]', pf).addEventListener('click', function () {
+      var k = still ? 0 : 9;
+      (function spin() {
+        picked = rnd(); ballN = 1 + Math.floor(Math.random() * gb.length); draw();
+        if (k-- > 0) setTimeout(spin, 70);
+      })();
+    });
+    $('[data-act="clear"]', pf).addEventListener('click', function () { picked = []; ballN = 0; draw(); });
+    pf.addEventListener('submit', function (e) {
+      if (picked.length !== MAXW || !ballN) { e.preventDefault(); err.hidden = false; return; }
+      sendWithBurst(pf, e);
+    });
+  }
+
+  // quick pick: quantity, total, a ball shuffle
+  var qf = $('#pb-qp');
+  if (qf) {
+    var qi = $('#pb-qty'), price = +qf.getAttribute('data-price') || 0, bal = +qf.getAttribute('data-bal') || 0;
+    var sh = $('.pb-shuffle', qf), sb = $$('.pb-b', sh), shT = null;
+    var shuffle = function () {
+      if (still) return;
+      sh.classList.add('go');
+      var k = 8;
+      clearTimeout(shT);
+      (function roll() {
+        sb.forEach(function (b, i) { b.textContent = 1 + Math.floor(Math.random() * (i === sb.length - 1 ? <%= rules.BALL_MAX %> : <%= rules.WHITE_MAX %>)); });
+        if (k-- > 0) shT = setTimeout(roll, 90); else sh.classList.remove('go');
+      })();
+    };
+    var upd = function (n) {
+      n = Math.max(1, Math.min(500, Math.floor(+n) || 1));
+      qi.value = n;
+      $('#pb-qn').textContent = fmt(n); $('#pb-qc').textContent = fmt(n * price);
+      $('#pb-qwarn').hidden = n * price <= bal;
+      $$('[data-q]', qf).forEach(function (b) { b.setAttribute('aria-pressed', +b.getAttribute('data-q') === n ? 'true' : 'false'); });
+      shuffle();
+    };
+    $$('[data-d]', qf).forEach(function (b) { b.addEventListener('click', function () { upd((+qi.value || 1) + +b.getAttribute('data-d')); }); });
+    $$('[data-q]', qf).forEach(function (b) { b.addEventListener('click', function () { upd(+b.getAttribute('data-q')); }); });
+    qi.addEventListener('change', function () { upd(qi.value); });
+    qi.addEventListener('input', function () { if (qi.value) { var n = Math.floor(+qi.value) || 1; $('#pb-qn').textContent = fmt(n); $('#pb-qc').textContent = fmt(n * price); $('#pb-qwarn').hidden = n * price <= bal; } });
+    qf.addEventListener('submit', function (e) { upd(qi.value); sendWithBurst(qf, e); });
+    if ('IntersectionObserver' in window) {
+      var qo = new IntersectionObserver(function (es) { if (es[0].isIntersecting) { qo.disconnect(); shuffle(); } }, { threshold: 0.6 });
+      qo.observe(sh);
+    }
+  }
+
+  // the last draw: balls drop in one by one when it scrolls into view
+  var dr = $('#pb-drawn');
+  if (dr && !still && 'IntersectionObserver' in window) {
+    dr.classList.add('pb-anim');
+    var io = new IntersectionObserver(function (es) { if (es[0].isIntersecting) { io.disconnect(); dr.classList.add('go'); } }, { threshold: 0.35 });
+    io.observe(dr);
+  }
 })();
 </script>
 </body>

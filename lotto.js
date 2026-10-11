@@ -8,7 +8,13 @@ const { runQuery, getQuery } = require("./dbUtils");
 const actions = require("./actions");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS lotto_state (
-  id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, updated INTEGER)`).catch(() => {});
+  id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, updated INTEGER)`)
+  // 1.99lb: Pepe clears the tickets the moment he draws, so the site keeps each player's tickets of the last
+  // draw (taken from the snapshot just before the draw number moved on) - "your tickets" can then show the
+  // matches. Only the last two draws are kept; a player only ever sees their own.
+  .then(() => runQuery(`CREATE TABLE IF NOT EXISTS lotto_last_tickets (
+    draw INTEGER NOT NULL, name TEXT NOT NULL, count INTEGER NOT NULL, tickets TEXT NOT NULL, PRIMARY KEY (draw, name))`))
+  .catch(() => {});
 
 const WHITE_MAX = 30, WHITE_PICK = 4, BALL_MAX = 10;
 const MAX_TICKETS_SHOWN = 300, MAX_PLAYERS = 2000, MAX_HISTORY = 60;
@@ -70,6 +76,29 @@ function oddsFor(w, ball) {
   return p > 0 ? Math.round(1 / p) : null;
 }
 
+/** 1.99lb: when a snapshot moves to a new draw, archive the previous snapshot's tickets per player. */
+async function keepLastTickets(clean) {
+  const row = (await getQuery("SELECT data FROM lotto_state WHERE id = 1"))[0];
+  if (!row) return;
+  let old;
+  try { old = JSON.parse(row.data); } catch (e) { return; }
+  if (!old || !old.draw || !(clean.draw > old.draw)) return;
+  for (const [name, p] of Object.entries(old.players || {})) {
+    if (!p || !p.tickets || !p.tickets.length) continue;
+    await runQuery(`INSERT OR REPLACE INTO lotto_last_tickets (draw, name, count, tickets) VALUES (?, ?, ?, ?)`,
+      [old.draw, name, int(p.count), JSON.stringify(p.tickets)]);
+  }
+  await runQuery("DELETE FROM lotto_last_tickets WHERE draw < ?", [old.draw - 1]);
+}
+
+/** Which prize a ticket won against a drawn result: { w, ball, amount } or null. */
+function ticketPrize(t, h, prizes) {
+  if (!h || !Array.isArray(t)) return null;
+  const w = (t[0] || []).filter((n) => h.white.includes(n)).length, ball = t[1] === h.pb;
+  const p = (prizes || []).find((x) => x.w === w && x.ball === ball);
+  return p ? { w, ball, amount: p.amount, jackpot: !!p.jackpot } : null;
+}
+
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   app.post("/api/lotto/sync", async (req, res) => {
@@ -78,6 +107,7 @@ function register(app, { isBotToken, addUser }) {
     try {
       await ready;
       const clean = cleanSnapshot(body);
+      await keepLastTickets(clean);
       await runQuery(`INSERT INTO lotto_state (id, data, updated) VALUES (1, ?, ?)
                       ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated = excluded.updated`,
         [JSON.stringify(clean), Date.now()]);
@@ -106,10 +136,29 @@ function register(app, { isBotToken, addUser }) {
           .sort((a, b) => b.amount - a.amount)] : [];
       // chance a ticket wins anything listed
       const anyOdds = prizes.length ? Math.round(1 / prizes.reduce((s, p) => s + (p.odds ? 1 / p.odds : 0), 0)) : null;
-      res.locals.og = { title: "Pepe Lotto — this week's jackpot", description: "Pick 4 of 1-30 + a Pepe Ball. Draws every Sunday 9pm ET. Buy tickets on PATV or with !lotto in a Camfrog room.",
+      // 1.99lb: the player count, and the viewer's own tickets + winnings from the last draw
+      const players = L ? Object.values(L.players || {}).filter((p) => p && p.count > 0).length : 0;
+      const latest = L && L.history.length ? L.history[0] : null;
+      let last = null;
+      if (latest && me && me.camfrogUsername) {
+        const login = String(me.camfrogUsername).toLowerCase();
+        const r = (await getQuery("SELECT count, tickets FROM lotto_last_tickets WHERE draw = ? AND name = ?", [latest.draw, login]))[0];
+        let tickets = [];
+        try { tickets = r ? JSON.parse(r.tickets) : []; } catch (e) { tickets = []; }
+        const rows = tickets.map((t) => ({ t, prize: ticketPrize(t, latest, prizes) }));
+        const rank = (x) => (x.prize ? (x.prize.jackpot ? 1e15 : x.prize.amount) : -1);
+        rows.sort((a, b) => rank(b) - rank(a));
+        // what Pepe paid them (his top-50 list), else the fixed prizes their tickets matched
+        const listed = (latest.won || []).filter((w) => String(w[0]).toLowerCase() === login);
+        const won = listed.length ? listed.reduce((s, w) => s + w[1], 0)
+          : rows.reduce((s, x) => s + (x.prize && !x.prize.jackpot ? x.prize.amount : 0), 0);
+        if (r || won) last = { draw: latest.draw, count: r ? r.count : 0, won, tickets: rows };
+      }
+      res.locals.og = { title: "Pepeball — this week's jackpot", description: "Pick 4 of 1-30 + a Pepe Ball. Draws every Sunday 9pm ET. Buy tickets on PATV or with !lotto in a Camfrog room.",
                         image: res.locals.ogBase + "/og/lotto.png?v=" + Math.floor(Date.now() / 600000), url: res.locals.ogBase + "/lotto" };
       res.render("lotto", {
         user: req.user ? req.user.username : null, L, updated: row ? row.updated : null, me, mine, prizes, anyOdds,
+        players, last, now: Math.floor(Date.now() / 1000),
         acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
         rules: { WHITE_MAX, WHITE_PICK, BALL_MAX },
       });
@@ -120,4 +169,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, oddsFor, cleanSnapshot };
+module.exports = { register, oddsFor, cleanSnapshot, ticketPrize };
