@@ -1,40 +1,66 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: o ? t('shop.order.title_n', { id: o.id }) : t('shop.order.title'), user: user }) %>
 <%- include('partials/shop-css') %>
-<div class="sh">
+<%- include('partials/shop-dash-css') %>
+<%
+  // 1.99mv design pass: one order - its picture, a status badge, the details, gift info, the actions and the timeline.
+  // Same facts, roles and actions as before (role: buyer / seller / gifter / admin; a gifter never sees what was delivered).
+  const stl = (s) => t.has('shop.status.' + s) ? t('shop.status.' + s) : H.status(s).label;
+  const SHELF_EMO = Object.fromEntries(H.shelves().map((s) => [s.id, s.emoji]));
+%>
+<main class="sh sd">
 <% if (!o) { %>
-  <h1><%- t('shop.order.not_found') %></h1>
-  <p class="sub"><%- t('shop.order.not_found_sub') %> <a href="/shop/orders"><%- t('shop.order.your_orders') %></a></p>
-<% } else { const st = H.status(o.status); const back = '/shop/orders/' + o.id; %>
-  <div class="links" style="margin:12px 0"><a href="<%= role === 'seller' ? '/shop/seller' : role === 'admin' ? '/shop/admin' : '/shop/orders' %>"><%- t('shop.order.back') %></a><% if (o.prize_id) { %><a href="/shop/item/<%= o.prize_id %>"><%- t('shop.order.item_page') %></a><% } %></div>
-  <h1 style="text-align:left;font-size:22px"><%- t('shop.order.title_n', { id: o.id }) %></h1>
-  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
-  <div class="box" style="display:grid;gap:10px">
-    <div class="top row" style="justify-content:space-between"><b style="color:#fff;font-size:17px"><%= o.title %></b><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
-    <div class="kv">
-      <span><%- t('shop.order.price') %></span><div class="price"><%= H.fmt(o.price) %> PAT</div>
-      <span><%- t('shop.order.buyer') %></span><div><%= o.buyer_name || '?' %></div>
-      <% if (o.comp_by) { %><span>🎁</span><div><%- t('gifts.order.comped') %><% if (role === 'admin') { %> <span class="muted">(<%= o.comp_by %>: <%= o.comp_reason || '-' %>)</span><% } %></div><% } %>
-      <% if (o.gift_from) { %><span><%- t('shop.order.gift') %></span><div><%- o.anon_view ? t('shop.order.gift_line_anon', { to: t.esc(o.buyer_name || '?') }) : t('shop.order.gift_line', { from: t.esc(o.gift_from_name || '?'), to: t.esc(o.buyer_name || '?') }) %><% if (Number(o.gift_anon) && !o.anon_view) { %> <span class="muted"><%- t('shop.order.gift_anon_tag') %></span><% } %><% if (o.gift_note) { %><div class="pre" style="margin-top:6px"><%= o.gift_note %></div><% } %></div><% } %>
-      <span><%- t('shop.order.seller') %></span><div><% if (o.official) { %><%- t('shop.order.official_store') %><% } else { %><%= o.seller_name || '?' %><% } %></div>
-      <span><%- t('shop.order.ordered') %></span><div><%- t('shop.order.when_via', { when: H.when(o.created), source: o.source || 'website' }) %></div>
-      <% if (!o.official && (role === 'seller' || role === 'admin')) { %>
-        <span><%- t('shop.order.fee') %></span><div><%= o.fee_pct %>%<%= o.seller_paid ? ` — ${H.fmt(o.fee)} PAT; seller got ${H.fmt(o.net)}` : ` — seller gets ${H.fmt(o.price - Math.floor(o.price * o.fee_pct / 100))} on fulfilment` %></div>
-      <% } %>
-      <% if (o.buyer_input) { %><span><%- t('shop.order.buyer_info') %></span><div class="code"><%= o.buyer_input %></div><% } %>
-      <% if (o.dispute_reason) { %><span><%- t('shop.order.dispute') %></span><div><%= o.dispute_reason %></div><% } %>
-      <% if (o.resolution) { %><span><%- t('shop.order.outcome') %></span><div><%= o.resolution %></div><% } %>
+  <div class="sd-empty">
+    <span class="big" aria-hidden="true">🔍</span>
+    <h1 style="margin:0;font-size:22px"><%- t('shop.order.not_found') %></h1>
+    <p><%- t('shop.order.not_found_sub') %></p>
+    <div class="sd-quick"><a class="qbtn gold" href="/shop/orders"><%- t('shop.order.your_orders') %></a><a class="qbtn" href="/shop">🛒 <%- t('shop.orders.browse') %></a></div>
+  </div>
+<% } else { const st = H.status(o.status); const back = '/shop/orders/' + o.id; const isOpen = ['paid', 'fulfilled', 'disputed'].includes(o.status); %>
+  <div class="links"><a href="<%= role === 'seller' ? '/shop/seller' : role === 'admin' ? '/shop/admin' : '/shop/orders' %>"><%- t('shop.order.back') %></a><% if (o.prize_id) { %><a href="/shop/item/<%= o.prize_id %>"><%- t('shop.order.item_page') %></a><% } %></div>
+  <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
+  <section class="sd-hero<%= o.gift_from ? ' pink' : '' %>" aria-labelledby="oH">
+    <div class="sd-detail">
+      <span class="sd-thumb" aria-hidden="true"><span class="ph"><%= o.comp_by || o.gift_from ? '🎁' : SHELF_EMO[o.shelf] || (o.official ? '🎁' : '🛍️') %></span><% if (o.art) { %><img src="<%= o.art %>" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><% } %></span>
+      <div style="display:grid;gap:10px;min-width:0">
+        <p class="sd-eyebrow"><%- t('shop.order.title_n', { id: o.id }) %></p>
+        <h1 id="oH" style="font-size:clamp(22px,3.6vw,30px)"><%= o.title %></h1>
+        <div class="sd-meta"><span class="sd-badge<%= isOpen ? ' live' : '' %>" style="--c:<%= st.color %>"><%= stl(o.status) %></span><span class="price" style="font-size:20px"><%= H.fmt(o.price) %> <small>PAT</small></span></div>
+        <div class="kv">
+          <span><%- t('shop.order.buyer') %></span><div><%= o.buyer_name || '?' %></div>
+          <% if (o.comp_by) { %><span>🎁</span><div><%- t('gifts.order.comped') %><% if (role === 'admin') { %> <span class="muted">(<%= o.comp_by %>: <%= o.comp_reason || '-' %>)</span><% } %></div><% } %>
+          <span><%- t('shop.order.seller') %></span><div><% if (o.official) { %><%- t('shop.order.official_store') %><% } else { %><a href="/shop/seller/<%= encodeURIComponent(o.seller_name || '') %>"><%= o.seller_name || '?' %></a><% } %></div>
+          <span><%- t('shop.order.ordered') %></span><div><%- t('shop.order.when_via', { when: H.when(o.created), source: o.source || 'website' }) %></div>
+          <% if (!o.official && (role === 'seller' || role === 'admin')) { %>
+            <span><%- t('shop.order.fee') %></span><div><%= o.fee_pct %>%<%= o.seller_paid ? ` — ${H.fmt(o.fee)} PAT; seller got ${H.fmt(o.net)}` : ` — seller gets ${H.fmt(o.price - Math.floor(o.price * o.fee_pct / 100))} on fulfilment` %></div>
+          <% } %>
+          <% if (o.buyer_input) { %><span><%- t('shop.order.buyer_info') %></span><div class="code"><%= o.buyer_input %></div><% } %>
+          <% if (o.dispute_reason) { %><span><%- t('shop.order.dispute') %></span><div><%= o.dispute_reason %></div><% } %>
+          <% if (o.resolution) { %><span><%- t('shop.order.outcome') %></span><div><%= o.resolution %></div><% } %>
+        </div>
+      </div>
     </div>
+  </section>
+
+  <% if (o.gift_from) { %>
+    <div class="sd-gift">
+      <span class="ic" aria-hidden="true"><%= o.anon_view ? '🕶' : '🎁' %></span>
+      <span><b><%- t('shop.order.gift') %>:</b> <%- o.anon_view ? t('shop.order.gift_line_anon', { to: t.esc(o.buyer_name || '?') }) : t('shop.order.gift_line', { from: t.esc(o.gift_from_name || '?'), to: t.esc(o.buyer_name || '?') }) %><% if (Number(o.gift_anon) && !o.anon_view) { %> <span class="anon"><%- t('shop.order.gift_anon_tag') %></span><% } %>
+        <% if (o.gift_note) { %><q><%= o.gift_note %></q><% } %></span>
+    </div>
+  <% } %>
+
+  <div class="sd-card">
     <% if (role === 'gifter') { %><p class="muted" style="margin:0"><%- t('shop.order.gift_private', { name: t.esc(o.buyer_name || '?') }) %></p><% } %>
     <% if (o.seller_note && role !== 'gifter' && (role !== 'buyer' || ['fulfilled', 'completed', 'disputed', 'refunded'].includes(o.status))) { %>
-      <div><span class="muted"><%- t('shop.order.seller_note') %></span><div class="pre code"><%= o.seller_note %></div></div>
+      <div class="sd-note"><span class="lbl"><%- t('shop.order.seller_note') %></span><div class="pre code"><%= o.seller_note %></div></div>
     <% } %>
     <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0"><%- t('shop.order.autocomplete', { date: H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) }) %></p><% } %>
-    <%- include('partials/shop-order-actions', { o, role, back, H, settings, staff: me && me.staff }) %>
+    <div class="sd-acts"><%- include('partials/shop-order-actions', { o, role, back, H, settings, staff: me && me.staff }) %></div>
+    <h2 style="margin-top:6px"><%- t('shop.order.timeline') %></h2>
+    <ul class="tl">
+      <% events.forEach((e) => { %><li style="--c:<%= H.status(e.status).color %>"><b><%= stl(e.status) %></b><% if (e.actor) { %> <%- t('shop.order.by', { name: e.actor }) %><% } %><% if (e.note) { %> — <%= e.note %><% } %><small><%= H.when(e.ts) %></small></li><% }) %>
+    </ul>
   </div>
-  <h2><%- t('shop.order.timeline') %></h2>
-  <ul class="tl">
-    <% events.forEach((e) => { %><li style="--c:<%= H.status(e.status).color %>"><b><%= H.status(e.status).label %></b><% if (e.actor) { %> <%- t('shop.order.by', { name: e.actor }) %><% } %><% if (e.note) { %> — <%= e.note %><% } %><small><%= H.when(e.ts) %></small></li><% }) %>
-  </ul>
 <% } %>
-</div>
+</main>

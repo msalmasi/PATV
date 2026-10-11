@@ -1,144 +1,245 @@
-<%- include('layout', { title: 'Seller dashboard', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('shop.sd.title'), user: user }) %>
 <%- include('partials/shop-css') %>
+<%- include('partials/shop-dash-css') %>
 <%
+  // 1.99mv design pass: the seller dashboard in the /shop + /wallet look - headline stats, orders waiting on you, a listings table
+  // with quick actions (a card list on phones), revenue + top items, a recent-orders feed. Every form, action and anchor
+  // (#todo #listings #edit #revenue #history #notify) is the same as before.
+  const stl = (s) => t.has('shop.status.' + s) ? t('shop.status.' + s) : H.status(s).label;
+  const lstl = (s) => t.has('shop.lstatus.' + s) ? t('shop.lstatus.' + s) : H.lstatus(s).label;
+  const active_ = listings.filter((l) => l.status === 'active');
+  const live_ = listings.filter((l) => l.status !== 'removed');
+  const bestMax = Math.max(1, ...rev.best.map((b) => Number(b.n) || 0));
+  const youGet = (o) => o.price - Math.floor(o.price * o.fee_pct / 100);
+  const thumb = (src, emoji) => '<span class="sd-thumb" aria-hidden="true"><span class="ph">' + emoji + '</span>' +
+    (src ? '<img src="' + t.esc(src) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : '') + '</span>';
   const form = (l) => { const v = l || {}; %>
     <div class="formgrid">
-      <label class="wide">Title <input type="text" name="title" maxlength="80" required value="<%= v.prize || '' %>" placeholder="e.g. $10 Steam gift card"></label>
-      <label>Category
+      <label class="wide"><%- t('shop.sd.f.title') %> <input type="text" name="title" maxlength="80" required value="<%= v.prize || '' %>" placeholder="<%- t('shop.sd.f.title_ph') %>"></label>
+      <label><%- t('shop.sd.f.category') %>
         <select name="category" required>
           <% categories.forEach((c) => { %><option value="<%= c %>" <%= v.category === c ? 'selected' : '' %>><%= c %></option><% }) %>
         </select>
       </label>
-      <label>Price (PAT) <input type="number" name="price" min="1" step="1" required value="<%= v.cost || '' %>" inputmode="numeric"></label>
-      <label>Stock <input type="number" name="stock" min="0" step="1" required value="<%= v.quantity != null ? v.quantity : 1 %>" inputmode="numeric"></label>
-      <label>Image URL (optional, https://) <input type="url" name="image_url" maxlength="500" value="<%= v.image_url || '' %>" placeholder="https://…"></label>
-      <label class="wide">Description (plain text, up to 1,000 characters)
+      <label><%- t('shop.sd.f.price') %> <input type="number" name="price" min="1" step="1" required value="<%= v.cost || '' %>" inputmode="numeric"></label>
+      <label><%- t('shop.sd.f.stock') %> <input type="number" name="stock" min="0" step="1" required value="<%= v.quantity != null ? v.quantity : 1 %>" inputmode="numeric"></label>
+      <label><%- t('shop.sd.f.image') %> <input type="url" name="image_url" maxlength="500" value="<%= v.image_url || '' %>" placeholder="https://…"></label>
+      <label class="wide"><%- t('shop.sd.f.desc') %>
         <textarea name="description" maxlength="1000"><%= v.description || '' %></textarea></label>
-      <label class="wide">Ask the buyer for (optional) <input type="text" name="buyer_prompt" maxlength="120" value="<%= v.buyer_prompt || '' %>" placeholder="e.g. your Steam ID"></label>
+      <label class="wide"><%- t('shop.sd.f.ask') %> <input type="text" name="buyer_prompt" maxlength="120" value="<%= v.buyer_prompt || '' %>" placeholder="<%- t('shop.sd.f.ask_ph') %>"></label>
     </div>
 <% }; %>
-<div class="sh">
-  <h1>Seller dashboard</h1>
-  <p class="sub">List things for PAT, fulfil orders, get paid. <a href="/shop/seller/<%= encodeURIComponent(me.username) %>">Your storefront ›</a></p>
-  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
-  <div class="tabs">
-    <a href="#todo">To fulfil (<%= todo.length %>)</a><a href="#listings">Listings</a><a href="#revenue">Revenue</a><a href="#history">Sales</a><a href="#notify">Notifications</a><a href="/shop/orders">My purchases</a>
-  </div>
+<main class="sh sd">
+  <section class="sd-hero" aria-labelledby="sdH">
+    <p class="sd-eyebrow"><%- t('shop.sd.eyebrow') %></p>
+    <h1 id="sdH"><%- t('shop.sd.title') %></h1>
+    <p class="sd-lead"><%- t('shop.sd.lead') %></p>
+    <div class="sd-minis">
+      <div class="sd-mini"><span><%- t('shop.sd.stat.revenue') %></span><b class="gold"><%= H.fmt(rev.all.net) %> <small>PAT</small></b><em><%- t('shop.sd.stat.revenue_sub', { n: H.fmt(rev.d30.net) }) %></em></div>
+      <div class="sd-mini"><span><%- t('shop.sd.stat.sales') %></span><b><%= H.fmt(sales) %></b><em><%- t('shop.sd.stat.sales_sub', { count: rev.d7.n, n: H.fmt(rev.d7.n) }) %></em></div>
+      <div class="sd-mini<%= todo.length ? ' hot' : '' %>"><span><%- t('shop.sd.stat.waiting') %></span><b class="<%= todo.length ? 'gold' : 'green' %>"><%= H.fmt(todo.length) %></b><em><%- todo.length ? t('shop.sd.stat.held', { n: H.fmt(rev.held.t) }) : t('shop.sd.stat.all_clear') %></em></div>
+      <div class="sd-mini"><span><%- t('shop.sd.stat.listings') %></span><b><%= H.fmt(active_.length) %></b><em><%- t('shop.sd.stat.listings_sub', { n: H.fmt(live_.length) }) %></em></div>
+    </div>
+    <nav class="sd-quick" aria-label="<%- t('shop.hero.your_links') %>">
+      <% if (canSell) { %><a class="qbtn gold" href="#new">＋ <%- t('shop.sd.new') %></a><% } %>
+      <a class="qbtn" href="/shop/seller/<%= encodeURIComponent(me.username) %>">🏪 <%- t('shop.sd.storefront') %></a>
+      <a class="qbtn" href="/shop/orders">🧾 <%- t('shop.sd.purchases') %></a>
+    </nav>
+  </section>
 
-  <div class="box muted" style="font-size:13px;line-height:1.55">
-    How it works: when someone buys, their PAT is held and you get a PM from Pepe and an email. Deliver the item, then press
-    <b>Mark fulfilled</b> (add the code or a note — only the buyer sees it). You're paid the price minus the
-    <b><%= settings.fee_pct %>%</b> shop fee right then. The buyer can confirm or dispute for <%= settings.auto_complete_days %> days.
-    <% if (settings.auto_cancel_days > 0) { %>Orders you don't fulfil within <%= settings.auto_cancel_days %> days are refunded automatically.<% } %>
-  </div>
+  <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
 
-  <h2 id="todo">Orders to fulfil</h2>
-  <% if (!todo.length) { %><p class="muted">Nothing waiting. 🎉</p><% } %>
-  <div class="list">
-    <% todo.forEach((o) => { const st = H.status(o.status); %>
-      <div class="item">
-        <div class="top"><b><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %></b><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
-        <div class="kv">
-          <span>Buyer</span><div><%= o.buyer_name %></div>
-          <span>Price</span><div class="price"><%= H.fmt(o.price) %> PAT <span class="muted">(you get <%= H.fmt(o.price - Math.floor(o.price * o.fee_pct / 100)) %>)</span></div>
-          <span>Ordered</span><div><%= H.when(o.created) %></div>
-          <% if (o.buyer_input) { %><span>They wrote</span><div class="code"><%= o.buyer_input %></div><% } %>
-          <% if (o.status === 'disputed') { %><span>Dispute</span><div><%= o.dispute_reason %></div><% } %>
-        </div>
-        <% if (o.status === 'paid') { %>
-          <form method="POST" action="/shop/orders/<%= o.id %>/fulfil" style="display:grid;gap:8px">
-            <input type="hidden" name="back" value="/shop/seller#todo">
-            <label>Note / code for the buyer <textarea name="note" maxlength="1000" placeholder="e.g. the gift card code, or how you delivered it" style="min-height:60px"></textarea></label>
-            <div class="row"><button type="submit">Mark fulfilled</button></div>
+  <nav class="sd-subnav" aria-label="<%- t('shop.sd.sections') %>">
+    <a href="#todo">📦 <%- t('shop.sd.nav.todo') %> <span class="n<%= todo.length ? ' hot' : '' %>"><%= todo.length %></span></a>
+    <a href="#listings">🏷️ <%- t('shop.sd.nav.listings') %> <span class="n"><%= live_.length %></span></a>
+    <a href="#revenue">📈 <%- t('shop.sd.nav.revenue') %></a>
+    <a href="#history">🧾 <%- t('shop.sd.nav.history') %></a>
+    <a href="#notify">🔔 <%- t('shop.sd.nav.notify') %></a>
+  </nav>
+
+  <section class="sd-sec" id="todo" aria-labelledby="todoH">
+    <div class="sd-sec-h"><h2 id="todoH"><%- t('shop.sd.todo.h') %></h2><span class="muted"><%- t('shop.sd.todo.sub', { fee: settings.fee_pct }) %></span></div>
+    <% if (!todo.length) { %>
+      <div class="sd-empty"><span class="big" aria-hidden="true">🎉</span><b><%- t('shop.sd.todo.none') %></b><p><%- t('shop.sd.todo.none_p') %></p></div>
+    <% } %>
+    <div class="sd-list">
+      <% todo.forEach((o) => { const st = H.status(o.status); %>
+        <article class="sd-order <%= o.status === 'disputed' ? 'bad' : 'open' %>" aria-labelledby="td<%= o.id %>">
+          <%- thumb(o.art, '🛍️') %>
+          <div class="sd-ob">
+            <div class="sd-oh">
+              <h3 id="td<%= o.id %>"><a href="/shop/orders/<%= o.id %>"><%= o.title %></a></h3>
+              <span class="sd-badge live" style="--c:<%= st.color %>"><%= stl(o.status) %></span>
+            </div>
+            <div class="sd-meta">
+              <span><%- t('shop.sd.todo.buyer', { name: '<b>' + t.esc(o.buyer_name || '?') + '</b>' }) %></span>
+              <span class="price"><%= H.fmt(o.price) %> <small>PAT</small></span>
+              <span><%- t('shop.sd.todo.you_get', { n: H.fmt(youGet(o)) }) %></span>
+              <span><%= H.when(o.created) %></span>
+              <a class="id" href="/shop/orders/<%= o.id %>">#<%= o.id %></a>
+            </div>
+            <% if (o.buyer_input) { %><div class="sd-note"><span class="lbl"><%- t('shop.sd.todo.they_wrote') %></span><div class="pre code"><%= o.buyer_input %></div></div><% } %>
+            <% if (o.status === 'disputed') { %><div class="warn"><b><%- t('shop.order.dispute') %>:</b> <%= o.dispute_reason %></div><% } %>
+            <% if (o.status === 'paid') { %>
+              <form method="POST" action="/shop/orders/<%= o.id %>/fulfil" style="display:grid;gap:8px">
+                <input type="hidden" name="back" value="/shop/seller#todo">
+                <label><%- t('shop.sd.todo.note') %> <textarea name="note" maxlength="1000" placeholder="<%- t('shop.sd.todo.note_ph') %>" style="min-height:60px"></textarea></label>
+                <div class="row"><button type="submit">✓ <%- t('shop.sd.todo.fulfil') %></button></div>
+              </form>
+              <details class="sd-more"><summary><%- t('shop.sd.todo.cant') %></summary>
+                <form method="POST" action="/shop/orders/<%= o.id %>/refund" class="row" data-q="<%- t('shop.sd.todo.refund_q', { n: H.fmt(o.price), name: o.buyer_name || '?' }) %>" onsubmit="return confirm(this.dataset.q)">
+                  <input type="hidden" name="back" value="/shop/seller#todo">
+                  <input type="text" name="reason" maxlength="300" placeholder="<%- t('shop.sd.todo.reason_ph') %>" style="flex:1 1 180px">
+                  <button class="bad" type="submit"><%- t('shop.sd.todo.refund') %></button>
+                </form>
+              </details>
+            <% } else { %><p class="muted" style="margin:0"><%- t('shop.sd.todo.reviewing') %></p><% } %>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="sd-sec" id="listings" aria-labelledby="lstH">
+    <div class="sd-sec-h"><h2 id="lstH"><%- t('shop.sd.listings.h') %></h2><% if (canSell) { %><a class="muted" href="#new">＋ <%- t('shop.sd.new') %></a><% } %></div>
+    <% if (!canSell) { %>
+      <p class="warn"><%- t('shop.sd.level', { need: settings.min_level, have: me.level || 0 }) %></p>
+    <% } else { %>
+      <% if (edit) { %>
+        <div class="sd-card gold" id="edit">
+          <h3 style="margin:0;color:#fff"><%- t('shop.sd.edit_h', { name: t.esc(edit.prize) }) %></h3>
+          <form method="POST" action="/shop/listing/<%= edit.prizeId %>" style="display:grid;gap:10px">
+            <% form(edit) %>
+            <% if (settings.require_approval && !me.staff) { %><p class="muted" style="margin:0"><%- t('shop.sd.edit_review') %></p><% } %>
+            <div class="row"><button type="submit"><%- t('shop.sd.save') %></button><a class="btn alt" href="/shop/seller#listings"><%- t('shop.sd.cancel') %></a></div>
           </form>
-          <details><summary>Can't deliver it? Refund</summary>
-            <form method="POST" action="/shop/orders/<%= o.id %>/refund" class="row" data-q="Refund <%= H.fmt(o.price) %> PAT to <%= o.buyer_name %>?" onsubmit="return confirm(this.dataset.q)">
-              <input type="hidden" name="back" value="/shop/seller#todo">
-              <input type="text" name="reason" maxlength="300" placeholder="Reason (optional)" style="flex:1 1 180px">
-              <button class="bad" type="submit">Refund buyer</button>
-            </form>
-          </details>
-        <% } else { %><p class="muted" style="margin:0">An admin is reviewing this dispute.</p><% } %>
+        </div>
+      <% } %>
+    <% } %>
+    <% if (listings.length) { %>
+      <div class="sd-tbl">
+        <table class="sd-t">
+          <thead><tr><th scope="col"><%- t('shop.sd.col.item') %></th><th scope="col"><%- t('shop.sd.col.status') %></th><th scope="col" class="r"><%- t('shop.sd.col.price') %></th>
+            <th scope="col" class="r"><%- t('shop.sd.col.stock') %></th><th scope="col" class="r"><%- t('shop.sd.col.sold') %></th><th scope="col" class="r"><span class="vh"><%- t('shop.sd.col.actions') %></span></th></tr></thead>
+          <tbody>
+            <% listings.forEach((l) => { const ls = H.lstatus(l.status); const q = Number(l.quantity) || 0; %>
+              <tr class="<%= l.status === 'removed' ? 'off' : '' %>">
+                <td class="full">
+                  <div class="itm">
+                    <%- thumb(H.img(l), '🛍️') %>
+                    <div><a href="/shop/item/<%= l.prizeId %>"><%= l.prize %></a><small><%= l.category || '—' %></small>
+                      <% if (l.review_note) { %><div class="review"><%- t('shop.sd.admin_note', { note: t.esc(l.review_note) }) %></div><% } %></div>
+                  </div>
+                </td>
+                <td class="full"><span class="sd-badge" style="--c:<%= ls.color %>"><%= lstl(l.status) %></span></td>
+                <td class="r" data-l="<%- t('shop.sd.col.price') %>"><span class="price"><%= H.fmt(l.cost) %></span></td>
+                <td class="r" data-l="<%- t('shop.sd.col.stock') %>"><span class="<%= q <= 0 ? 'nostock' : q <= 2 ? 'lowstock' : '' %>"><%= H.fmt(q) %></span></td>
+                <td class="r" data-l="<%- t('shop.sd.col.sold') %>"><%= H.fmt(l.sold || 0) %></td>
+                <td class="r full">
+                  <% if (l.status !== 'removed') { %>
+                    <div class="acts">
+                      <a class="btn alt" href="/shop/seller?edit=<%= l.prizeId %>#edit"><%- t('shop.sd.edit') %><span class="vh"> <%= l.prize %></span></a>
+                      <% if (l.status === 'active') { %>
+                        <form method="POST" action="/shop/listing/<%= l.prizeId %>/pause"><button class="alt" type="submit"><%- t('shop.sd.pause') %></button></form>
+                      <% } else if (l.status === 'paused') { %>
+                        <form method="POST" action="/shop/listing/<%= l.prizeId %>/activate"><button type="submit"><%- t('shop.sd.resume') %></button></form>
+                      <% } %>
+                      <form method="POST" action="/shop/listing/<%= l.prizeId %>/remove" data-q="<%- t('shop.sd.remove_q') %>" onsubmit="return confirm(this.dataset.q)"><button class="bad" type="submit"><%- t('shop.sd.remove') %></button></form>
+                    </div>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
       </div>
-    <% }) %>
-  </div>
-
-  <h2 id="listings">Your listings</h2>
-  <% if (!canSell) { %>
-    <p class="warn">You need to be level <%= settings.min_level %> to sell in the shop (you're level <%= me.level || 0 %>). Keep chatting, playing and streaming!</p>
-  <% } else { %>
-    <% if (edit) { %>
-      <div class="box" id="edit">
-        <h3 style="margin-top:0">Edit "<%= edit.prize %>"</h3>
-        <form method="POST" action="/shop/listing/<%= edit.prizeId %>" style="display:grid;gap:10px">
-          <% form(edit) %>
-          <% if (settings.require_approval && !me.staff) { %><p class="muted" style="margin:0">Changing the title, description, category, image or buyer question sends it back for review. Price and stock changes go live at once.</p><% } %>
-          <div class="row"><button type="submit">Save</button><a class="btn alt" href="/shop/seller#listings">Cancel</a></div>
+    <% } else if (canSell) { %>
+      <div class="sd-empty"><span class="big" aria-hidden="true">🏷️</span><b><%- t('shop.sd.listings.none') %></b><p><%- t('shop.sd.listings.none_p') %></p>
+        <div class="sd-quick"><a class="qbtn gold" href="#new">＋ <%- t('shop.sd.new') %></a></div></div>
+    <% } %>
+    <% if (canSell) { %>
+      <details class="sd-card" id="new" <%= listings.length ? '' : 'open' %>>
+        <summary>＋ <%- t('shop.sd.new') %></summary>
+        <form method="POST" action="/shop/listing" style="display:grid;gap:10px">
+          <% form(null) %>
+          <p class="muted" style="margin:0"><%- settings.require_approval && !me.staff ? t('shop.sd.new_review') + ' ' : '' %><%- t('shop.sd.new_rules', { fee: settings.fee_pct }) %></p>
+          <div class="row"><button type="submit" class="gold"><%- t('shop.sd.list_it') %></button></div>
         </form>
+      </details>
+    <% } %>
+  </section>
+
+  <section class="sd-sec" id="revenue" aria-labelledby="revH">
+    <div class="sd-sec-h"><h2 id="revH"><%- t('shop.sd.rev.h') %></h2></div>
+    <div class="sd-two">
+      <div class="sd-card">
+        <div class="sd-minis">
+          <% [['d7', 'shop.sd.rev.d7'], ['d30', 'shop.sd.rev.d30'], ['all', 'shop.sd.rev.all']].forEach(([k, key]) => { const r = rev[k]; %>
+            <div class="sd-mini"><span><%- t(key) %></span><b class="gold"><%= H.fmt(r.net) %></b>
+              <em><%- t('shop.sd.rev.net_n', { count: r.n, n: H.fmt(r.n) }) %></em>
+              <em><%- t('shop.sd.rev.gross_fees', { gross: H.fmt(r.gross), fees: H.fmt(r.fees) }) %></em></div>
+          <% }) %>
+          <div class="sd-mini<%= rev.held.n ? ' hot' : '' %>"><span><%- t('shop.sd.rev.waiting') %></span><b><%= H.fmt(rev.held.t) %></b><em><%- t('shop.sd.rev.unfulfilled', { count: rev.held.n, n: H.fmt(rev.held.n) }) %></em></div>
+        </div>
+      </div>
+      <div class="sd-card">
+        <h3 style="margin:0;color:#fff"><%- t('shop.sd.rev.top') %></h3>
+        <% if (rev.best.length) { %>
+          <ol class="sd-bars">
+            <% rev.best.forEach((b) => { %>
+              <li><%- thumb(b.art, '🛍️') %>
+                <div style="min-width:0"><div class="nm"><%= b.title %></div><div class="bar" aria-hidden="true"><i style="width:<%= Math.max(4, Math.round(100 * (Number(b.n) || 0) / bestMax)) %>%"></i></div></div>
+                <div class="am"><b><%= H.fmt(b.net) %></b><%- t('shop.sd.rev.n_sold', { n: H.fmt(b.n) }) %></div></li>
+            <% }) %>
+          </ol>
+        <% } else { %><p class="muted" style="margin:0"><%- t('shop.sd.rev.no_top') %></p><% } %>
+      </div>
+    </div>
+  </section>
+
+  <section class="sd-sec" id="history" aria-labelledby="hisH">
+    <div class="sd-sec-h"><h2 id="hisH"><%- t('shop.sd.his.h') %></h2></div>
+    <% if (!history.length) { %>
+      <div class="sd-empty"><span class="big" aria-hidden="true">🧾</span><b><%- t('shop.sd.his.none') %></b><p><%- t('shop.sd.his.none_p') %></p></div>
+    <% } else { %>
+      <div class="sd-card">
+        <ul class="sd-feed">
+          <% history.forEach((o) => { const st = H.status(o.status); %>
+            <li><%- thumb(o.art, '🛍️') %>
+              <div class="tx"><a href="/shop/orders/<%= o.id %>"><%= o.title %></a>
+                <small><%- t('shop.sd.his.to', { name: t.esc(o.buyer_name || '?') }) %> · <%= H.day(o.created) %> · #<%= o.id %><%- o.seller_paid ? ' · ' + t('shop.sd.his.got', { n: H.fmt(o.net), fee: H.fmt(o.fee) }) : '' %></small></div>
+              <div class="am"><b><%= H.fmt(o.price) %> PAT</b><span class="sd-badge" style="--c:<%= st.color %>"><%= stl(o.status) %></span></div></li>
+          <% }) %>
+        </ul>
       </div>
     <% } %>
-    <details class="box" <%= listings.length ? '' : 'open' %>>
-      <summary>＋ New listing</summary>
-      <form method="POST" action="/shop/listing" style="display:grid;gap:10px">
-        <% form(null) %>
-        <p class="muted" style="margin:0"><%= settings.require_approval && !me.staff ? 'New listings go live once an admin approves them. ' : '' %>Only sell things you own and can deliver. A <%= settings.fee_pct %>% fee is taken from each sale.</p>
-        <div class="row"><button type="submit">List it</button></div>
-      </form>
-    </details>
-  <% } %>
-  <div class="list">
-    <% listings.forEach((l) => { const ls = H.lstatus(l.status); %>
-      <div class="item">
-        <div class="top"><b><a href="/shop/item/<%= l.prizeId %>"><%= l.prize %></a></b><span class="pill" style="color:<%= ls.color %>"><%= ls.label %></span></div>
-        <div class="muted"><span class="price"><%= H.fmt(l.cost) %> PAT</span> · <%= H.fmt(l.quantity) %> in stock · <%= H.fmt(l.sold || 0) %> sold · <%= l.category || '—' %></div>
-        <% if (l.review_note) { %><div class="warn" style="margin:0">Admin note: <%= l.review_note %></div><% } %>
-        <% if (l.status !== 'removed') { %>
-          <div class="row">
-            <a class="btn alt" href="/shop/seller?edit=<%= l.prizeId %>#edit">Edit</a>
-            <% if (l.status === 'active') { %>
-              <form method="POST" action="/shop/listing/<%= l.prizeId %>/pause"><button class="alt" type="submit">Pause</button></form>
-            <% } else if (l.status === 'paused') { %>
-              <form method="POST" action="/shop/listing/<%= l.prizeId %>/activate"><button type="submit">Resume</button></form>
-            <% } %>
-            <form method="POST" action="/shop/listing/<%= l.prizeId %>/remove" onsubmit="return confirm('Remove this listing? Open orders still need fulfilling.')"><button class="bad" type="submit">Remove</button></form>
-          </div>
-        <% } %>
-      </div>
-    <% }) %>
-  </div>
-  <% if (!listings.length && canSell) { %><p class="muted">No listings yet.</p><% } %>
+  </section>
 
-  <h2 id="revenue">Revenue</h2>
-  <div class="stats">
-    <% [['d7', 'Last 7 days'], ['d30', 'Last 30 days'], ['all', 'All time']].forEach(([k, label]) => { const r = rev[k]; %>
-      <div class="stat"><span><%= label %></span><b class="price"><%= H.fmt(r.net) %></b>
-        <em>net · <%= H.fmt(r.n) %> sale<%= r.n === 1 ? '' : 's' %></em>
-        <em>gross <%= H.fmt(r.gross) %> · fees <%= H.fmt(r.fees) %></em></div>
-    <% }) %>
-    <div class="stat"><span>Waiting on you</span><b><%= H.fmt(rev.held.t) %></b><em><%= rev.held.n %> unfulfilled order<%= rev.held.n === 1 ? '' : 's' %></em></div>
-  </div>
-  <% if (rev.best.length) { %>
-    <h3>Best sellers</h3>
-    <div class="list">
-      <% rev.best.forEach((b) => { %><div class="item" style="padding:8px 12px"><div class="top"><span><%= b.title %></span><span class="muted"><%= b.n %> sold · <span class="price"><%= H.fmt(b.net) %></span> net</span></div></div><% }) %>
+  <section class="sd-sec" aria-labelledby="howH">
+    <div class="sd-sec-h"><h2 id="howH"><%- t('shop.sd.how.h') %></h2></div>
+    <div class="sd-how">
+      <div><span class="ico" aria-hidden="true">🏷️</span><b><%- t('shop.sd.how.1h') %></b><p><%- t('shop.sd.how.1p') %></p></div>
+      <div><span class="ico" aria-hidden="true">🔒</span><b><%- t('shop.sd.how.2h') %></b><p><%- t('shop.sd.how.2p') %></p></div>
+      <div><span class="ico" aria-hidden="true">📦</span><b><%- t('shop.sd.how.3h') %></b><p><%- t('shop.sd.how.3p', { fee: settings.fee_pct }) %></p></div>
+      <div><span class="ico" aria-hidden="true">✅</span><b><%- t('shop.sd.how.4h') %></b><p><%- t('shop.sd.how.4p', { days: settings.auto_complete_days }) %><% if (settings.auto_cancel_days > 0) { %> <%- t('shop.sd.how.4p_cancel', { days: settings.auto_cancel_days }) %><% } %></p></div>
     </div>
-  <% } %>
+  </section>
 
-  <h2 id="history">Sales history</h2>
-  <% if (!history.length) { %><p class="muted">No sales yet.</p><% } %>
-  <div class="list">
-    <% history.forEach((o) => { const st = H.status(o.status); %>
-      <div class="item" style="padding:9px 12px">
-        <div class="top"><span><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %> → <%= o.buyer_name %></span><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
-        <div class="muted"><%= H.day(o.created) %> · <%= H.fmt(o.price) %> PAT<%= o.seller_paid ? ` · you got ${H.fmt(o.net)} (fee ${H.fmt(o.fee)})` : '' %></div>
-      </div>
-    <% }) %>
-  </div>
-
-  <h2 id="notify">Notifications</h2>
-  <form class="box" method="POST" action="/shop/prefs" style="display:grid;gap:8px">
-    <label class="check"><input type="checkbox" name="email" value="1" <%= prefs.email_off ? '' : 'checked' %>> Email me about shop orders <%= me.email ? '(' + me.email + ')' : '— no email on your account' %></label>
-    <label class="check"><input type="checkbox" name="pm" value="1" <%= prefs.pm_off ? '' : 'checked' %>> Pepe PMs me in Camfrog <%= me.camfrogUsername ? '(' + me.camfrogUsername + ')' : '— link Camfrog in your profile' %></label>
-    <div><button type="submit">Save</button></div>
-  </form>
-</div>
+  <section class="sd-sec" id="notify" aria-labelledby="ntH">
+    <div class="sd-sec-h"><h2 id="ntH"><%- t('shop.sd.notify.h') %></h2></div>
+    <form class="sd-card" method="POST" action="/shop/prefs" style="display:grid;gap:8px">
+      <label class="check"><input type="checkbox" name="email" value="1" <%= prefs.email_off ? '' : 'checked' %>> <%- me.email ? t('shop.sd.notify.email', { addr: me.email }) : t('shop.sd.notify.email_none') %></label>
+      <label class="check"><input type="checkbox" name="pm" value="1" <%= prefs.pm_off ? '' : 'checked' %>> <%- me.camfrogUsername ? t('shop.sd.notify.pm', { name: me.camfrogUsername }) : t('shop.sd.notify.pm_none') %></label>
+      <div><button type="submit"><%- t('shop.sd.save') %></button></div>
+    </form>
+  </section>
+</main>
+<script>
+  // 1.99mv: "+ New listing" links open the (collapsed) form they point at
+  (function () {
+    function openNew() { var d = document.getElementById('new'); if (d && location.hash === '#new') { d.open = true; var i = d.querySelector('input[name=title]'); if (i) setTimeout(function () { i.focus(); }, 50); } }
+    window.addEventListener('hashchange', openNew); openNew();
+    document.querySelectorAll('a[href="#new"]').forEach(function (a) { a.addEventListener('click', function () { setTimeout(openNew, 0); }); });
+  })();
+</script>

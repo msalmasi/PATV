@@ -38,9 +38,30 @@
   .st .st-tag { font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .08em; color: #ffcf40; }
 
   /* shelves (chips) */
-  .st .st-chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 8px; margin: 14px -2px 0; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+  /* 1.99mv: the chips row - no native scrollbar (it was a fat white bar that clipped the last chip); edge fades + arrows
+     (desktop, only while it overflows), wheel / drag scrolling (st-chips-js in shop.ejs) */
+  .st .st-chipwrap { position: relative; margin: 14px 0 0; min-width: 0; }
+  .st .st-chips { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 4px 2px 6px; margin: 0; scrollbar-width: none; -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; scroll-padding-inline: 44px; --fl: 0px; --fr: 0px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); }
+  .st .st-chips::-webkit-scrollbar { display: none; height: 0; }
+  .st .st-chips::after { content: ""; flex: 0 0 2px; }             /* room after the last chip, so it never sits under the fade */
+  .st .st-chipwrap.fl .st-chips { --fl: 36px; }
+  .st .st-chipwrap.fr .st-chips { --fr: 36px; }
+  .st .st-chips.drag { cursor: grabbing; user-select: none; }
+  .st .st-chips.drag a { pointer-events: none; }
+  .st .st-chip-arr { position: absolute; top: 4px; width: 34px; height: 36px; padding: 0; border-radius: 999px; display: none; align-items: center; justify-content: center;
+    background: #1d1d1d; color: #ffcf40; border: 1px solid #3a3a3a; font-size: 16px; line-height: 1; z-index: 2; box-shadow: 0 2px 10px rgba(0,0,0,.6); cursor: pointer; }
+  .st .st-chip-arr:hover { border-color: #ffcf40; background: #262212; }
+  .st .st-chip-arr.l { left: 0; } .st .st-chip-arr.r { right: 0; }
+  @media (hover: hover) and (pointer: fine) {
+    .st .st-chipwrap.fl .st-chip-arr.l, .st .st-chipwrap.fr .st-chip-arr.r { display: inline-flex; }
+    .st .st-chipwrap.fl .st-chips { --fl: 56px; }
+    .st .st-chipwrap.fr .st-chips { --fr: 56px; }
+  }
   .st .st-chips a { flex: none; display: inline-flex; align-items: center; gap: 6px; background: #161616; border: 1px solid #2c2c2c; color: #ddd; border-radius: 999px;
-    padding: 7px 13px; font-size: 14px; text-decoration: none; white-space: nowrap; min-height: 36px; }
+    padding: 7px 13px; font-size: 14px; text-decoration: none; white-space: nowrap; min-height: 36px; -webkit-user-drag: none; }
   .st .st-chips a:hover { border-color: #555; }
   .st .st-chips a[aria-current="true"] { background: #ffcf40; border-color: #ffcf40; color: #241500; font-weight: bold; }
   .st .st-chips a .n { font-size: 12px; opacity: .7; font-variant-numeric: tabular-nums; }
@@ -124,6 +145,26 @@
   .st dialog.st-lb img { width: 100%; display: block; }
   .st dialog.st-lb form { position: absolute; right: 8px; top: 8px; }
 
+  /* 1.99mv: a seller's storefront - the hero (photo, name style, level, badges, stats) + best sellers */
+  .st .st-store { background: radial-gradient(120% 150% at 0% 0%, #10261a 0%, #121212 55%), #121212; }
+  .st .st-sh { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; min-width: 0; }
+  .st .st-sav { --h: 120; position: relative; width: 96px; height: 96px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; flex: none;
+    background: hsl(var(--h) 45% 26%); color: #fff; font: bold 38px Ubuntu, sans-serif; box-shadow: 0 0 0 3px #121212, 0 0 0 5px #ffcf40, 0 8px 24px rgba(0,0,0,.6); }
+  .st .st-sav img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .st .st-store h1 { margin: 0; font-size: clamp(24px, 4vw, 34px); }
+  .st .st-who { display: flex; flex-wrap: wrap; gap: 4px 12px; color: #aaa; font-size: 14px; align-items: center; }
+  .st .st-lvl { font-family: 'Press Start 2P', monospace; font-size: 9px; color: #241500; background: #ffcf40; border-radius: 6px; padding: 4px 6px; letter-spacing: .04em; }
+  .st .st-pins { display: flex; flex-wrap: wrap; gap: 6px; }
+  .st .st-pins .pin { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border: 1px solid #3a3a1c; border-radius: 10px; padding: 3px 9px 3px 3px; font-size: 12px; color: #e8e2b0; }
+  .st .st-pins img { width: 24px; height: 24px; object-fit: contain; image-rendering: pixelated; }
+  .st .st-sstats { grid-template-columns: 1fr 1fr; align-content: start; }
+  .st .st-sstats .bal { display: block; font-variant-numeric: tabular-nums; color: #ffcf40; }
+  .st .st-sstats .btn { grid-column: 1 / -1; text-align: center; }
+  .st .st-sbest { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); margin: 0 0 6px; }
+  .st .st-sbest .st-mini { grid-template-columns: 130px minmax(0, 1fr); }
+  .st .st-sbest .st-mini.top { border-color: #5a4210; }
+  .st .st-sbest .st-mini .ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; }
+
   @media (max-width: 760px) {
     .st .st-hero { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; }
     .st .st-wallet { min-width: 0; }
@@ -131,6 +172,9 @@
     .st .st-top { grid-template-columns: minmax(0, 1fr); }
     .st .st-side { grid-template-rows: none; }
     .st .st-detail { grid-template-columns: minmax(0, 1fr); }
+    .st .st-sh { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+    .st .st-who, .st .st-pins { justify-content: center; }
+    .st .st-store h1 { text-align: center; }
   }
   @media (max-width: 420px) {
     .st .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

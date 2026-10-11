@@ -1,43 +1,137 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: t('shop.my_orders'), user: user }) %>
 <%- include('partials/shop-css') %>
-<div class="sh">
-  <h1><%- t('shop.my_orders') %></h1>
-  <p class="sub"><%- t('shop.orders.sub') %> <a href="/shop"><%- t('shop.back') %></a> · <a href="/shop/seller"><%- t('shop.orders.seller_dashboard') %></a> · <a href="/subscriptions"><%- t('shop.orders.subs_link') %></a></p>
-  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
-  <div class="stats">
-    <div class="stat"><span><%- t('shop.orders.total_spent') %></span><b class="price"><%= H.fmt(spent.t) %></b><em><%- t('shop.orders.n_orders', { count: spent.n, n: H.fmt(spent.n) }) %></em></div>
-    <div class="stat"><span><%- t('shop.orders.open') %></span><b><%= H.fmt(open.n) %></b><em><%- t('shop.orders.in_progress', { n: H.fmt(open.t) }) %></em></div>
-    <div class="stat"><span><%- t('shop.orders.balance') %></span><b class="price"><%= H.fmt(me.points_balance) %></b><em>PAT</em></div>
-  </div>
+<%- include('partials/shop-dash-css') %>
+<%
+  // 1.99mv design pass: My orders in the /shop + /wallet look - a hero with the totals, view chips, one card per order with the item's
+  // picture, a status badge, a progress stepper (marketplace orders) or how it's delivered (official), gift info (🕶 anonymous ones
+  // masked by the route), the seller's note, the timeline and the same actions (partials/shop-order-actions) as before.
+  const view_ = locals.view || 'all';
+  const counts_ = locals.counts || null;
+  const stl = (s) => t.has('shop.status.' + s) ? t('shop.status.' + s) : H.status(s).label;
+  const SHELF_EMO = Object.fromEntries(H.shelves().map((s) => [s.id, s.emoji]));
+  const emo = (o) => o.comp_by ? '🎁' : SHELF_EMO[o.shelf] || (o.official ? '🎁' : '🛍️');
+%>
+<main class="sh sd">
+  <section class="sd-hero" aria-labelledby="ordH">
+    <p class="sd-eyebrow"><%- t('shop.orders.eyebrow') %></p>
+    <h1 id="ordH"><%- t('shop.my_orders') %></h1>
+    <p class="sd-lead"><%- t('shop.orders.lead') %></p>
+    <div class="sd-minis">
+      <div class="sd-mini"><span><%- t('shop.orders.total_spent') %></span><b class="gold"><%= H.fmt(spent.t) %> <small>PAT</small></b><em><%- t('shop.orders.n_orders', { count: spent.n, n: H.fmt(spent.n) }) %></em></div>
+      <div class="sd-mini<%= open.n ? ' hot' : '' %>"><span><%- t('shop.orders.open') %></span><b><%= H.fmt(open.n) %></b><em><%- t('shop.orders.in_progress', { n: H.fmt(open.t) }) %></em></div>
+      <% if (counts_) { %><div class="sd-mini"><span><%- t('shop.orders.gifts') %></span><b class="pink"><%= H.fmt(counts_.gifts_in) %> <small>/ <%= H.fmt(counts_.gifts_out) %></small></b><em><%- t('shop.orders.gifts_sub') %></em></div><% } %>
+      <div class="sd-mini"><span><%- t('shop.orders.balance') %></span><b class="gold"><%= H.fmt(me.points_balance) %> <small>PAT</small></b><em><a href="/wallet"><%- t('shop.orders.wallet') %></a></em></div>
+    </div>
+    <nav class="sd-quick" aria-label="<%- t('shop.hero.your_links') %>">
+      <a class="qbtn gold" href="/shop">🛒 <%- t('shop.orders.browse') %></a>
+      <a class="qbtn" href="/subscriptions"><%- t('shop.orders.subs_link') %></a>
+      <a class="qbtn" href="/shop/seller">🏪 <%- t('shop.orders.seller_dashboard') %></a>
+    </nav>
+  </section>
 
-  <h2><%- t('shop.orders.heading') %></h2>
-  <% if (!orders.length) { %><p class="muted"><%- t('shop.orders.none', { link: '<a href="/shop">' + t('shop.orders.look_around') + '</a>' }) %></p><% } %>
-  <div class="list">
-    <% orders.forEach((o) => { const st = H.status(o.status); const ev = events[o.id] || []; const sent_ = o.gift_from && o.gift_from === me.userId && o.buyer_id !== me.userId; %>
-      <div class="item">
-        <div class="top"><b><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %></b><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
-        <div class="muted"><span class="price"><%= H.fmt(o.price) %> PAT</span> · <%- o.official ? t('shop.item.patv_store') : t('shop.orders.from', { name: o.seller_name || '?' }) %> · <%= H.day(o.created) %></div>
-        <% if (o.comp_by) { %><div class="muted">🎁 <%- t('gifts.order.comped') %></div><% } %>
-        <% if (o.gift_from) { %><div class="muted">🎁 <%- sent_ ? t('shop.orders.gift_to', { name: t.esc(o.buyer_name || '?') }) + (Number(o.gift_anon) ? ' ' + t('shop.order.gift_anon_tag') : '') : o.anon_view ? t('shop.orders.gift_from_anon') : t('shop.orders.gift_from', { name: t.esc(o.gift_from_name || '?') }) %></div><% } %>
-        <% if (o.seller_note && !sent_ && (o.status === 'fulfilled' || o.status === 'completed' || o.status === 'disputed')) { %>
-          <div><span class="muted"><%- t('shop.orders.seller_note') %></span><div class="pre code"><%= o.seller_note %></div></div>
-        <% } %>
-        <% if (ev.length > 1 || !o.official) { %>
-          <ul class="tl">
-            <% ev.forEach((e) => { %><li style="--c:<%= H.status(e.status).color %>"><%= H.status(e.status).label %><% if (e.note) { %> — <%= e.note %><% } %><small><%= H.when(e.ts) %></small></li><% }) %>
-          </ul>
-        <% } %>
-        <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0"><%- t('shop.orders.autocomplete_you', { date: H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) }) %></p><% } %>
-        <%- include('partials/shop-order-actions', { o, role: sent_ ? 'gifter' : 'buyer', back: '/shop/orders', H, settings }) %>
-      </div>
-    <% }) %>
-  </div>
-  <% if (pages > 1) { %>
-    <nav class="pager">
-      <% if (page > 1) { %><a href="/shop/orders?page=<%= page - 1 %>"><%- t('shop.orders.newer') %></a><% } %>
-      <span class="cur"><%= page %> / <%= pages %></span>
-      <% if (page < pages) { %><a href="/shop/orders?page=<%= page + 1 %>"><%- t('shop.orders.older') %></a><% } %>
+  <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
+
+  <% if (counts_) { %>
+    <nav class="sd-subnav" aria-label="<%- t('shop.orders.views') %>">
+      <% [['all', '🧾'], ['open', '⏳'], ['gifts_in', '🎁'], ['gifts_out', '💝']].forEach(([v, ic]) => { %>
+        <a href="/shop/orders<%= v === 'all' ? '' : '?view=' + v %>" aria-current="<%= view_ === v ? 'true' : 'false' %>"><span aria-hidden="true"><%= ic %></span> <%- t('shop.orders.view.' + v) %> <span class="n<%= v === 'open' && counts_[v] ? ' hot' : '' %>"><%= H.fmt(counts_[v]) %></span></a>
+      <% }) %>
     </nav>
   <% } %>
-</div>
+
+  <section class="sd-sec" aria-labelledby="ordListH">
+    <h2 id="ordListH" class="vh"><%- t('shop.orders.heading') %></h2>
+    <% if (!orders.length) { const ev_ = { all: ['🛍️', 'shop.orders.empty.all'], open: ['✅', 'shop.orders.empty.open'], gifts_in: ['🎁', 'shop.orders.empty.gifts_in'], gifts_out: ['💝', 'shop.orders.empty.gifts_out'] }[view_] || ['🛍️', 'shop.orders.empty.all']; %>
+      <div class="sd-empty">
+        <span class="big" aria-hidden="true"><%= ev_[0] %></span>
+        <b><%- t(ev_[1] + '.h') %></b>
+        <p><%- t(ev_[1] + '.p') %></p>
+        <div class="sd-quick">
+          <a class="qbtn gold" href="/shop"><%- t(view_ === 'gifts_out' ? 'shop.orders.empty.cta_gift' : 'shop.orders.empty.cta') %></a>
+          <% if (view_ !== 'all') { %><a class="qbtn" href="/shop/orders"><%- t('shop.orders.empty.see_all') %></a><% } %>
+        </div>
+      </div>
+    <% } %>
+    <div class="sd-list">
+      <% orders.forEach((o) => {
+           const st = H.status(o.status); const ev = events[o.id] || [];
+           const sent_ = o.gift_from && o.gift_from === me.userId && o.buyer_id !== me.userId;
+           const isOpen = ['paid', 'fulfilled', 'disputed'].includes(o.status);
+           const isBad = ['cancelled', 'refunded', 'disputed'].includes(o.status);
+           const href = '/shop/orders/' + o.id;
+           const fulfilledOnce = !!o.fulfilled_at || ev.some((e) => e.status === 'fulfilled');
+      %>
+        <article class="sd-order<%= isOpen && !isBad ? ' open' : '' %><%= isBad ? ' bad' : '' %><%= (o.gift_from || o.comp_by) && !isBad ? ' gift' : '' %>" aria-labelledby="ord<%= o.id %>">
+          <a class="sd-thumb" href="<%= href %>" tabindex="-1" aria-hidden="true">
+            <span class="ph"><%= emo(o) %></span><% if (o.art) { %><img src="<%= o.art %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><% } %>
+            <% if (o.gift_from || o.comp_by) { %><span class="ribbon">🎁</span><% } %>
+          </a>
+          <div class="sd-ob">
+            <div class="sd-oh">
+              <h3 id="ord<%= o.id %>"><a href="<%= href %>"><%= o.title %></a></h3>
+              <span class="sd-badge<%= isOpen ? ' live' : '' %>" style="--c:<%= st.color %>"><%= stl(o.status) %></span>
+            </div>
+            <div class="sd-meta">
+              <span class="price"><%= H.fmt(o.price) %> <small>PAT</small></span>
+              <span><%- o.official ? t('shop.item.patv_store') : t('shop.orders.from_link', { name: '<a href="/shop/seller/' + t.esc(encodeURIComponent(o.seller_name || '')) + '">' + t.esc(o.seller_name || '?') + '</a>' }) %></span>
+              <span><%= H.day(o.created) %></span>
+              <a class="id" href="<%= href %>">#<%= o.id %></a>
+            </div>
+
+            <% if (o.comp_by) { %><div class="sd-gift"><span class="ic" aria-hidden="true">🎁</span><span><%- t('gifts.order.comped') %></span></div><% } %>
+            <% if (o.gift_from) { %>
+              <div class="sd-gift">
+                <span class="ic" aria-hidden="true"><%= o.anon_view ? '🕶' : sent_ ? '💝' : '🎁' %></span>
+                <span>
+                  <% if (sent_) { %><%- t('shop.orders.gift_to', { name: t.esc(o.buyer_name || '?') }) %><% if (Number(o.gift_anon)) { %> <span class="anon"><%- t('shop.order.gift_anon_tag') %></span><% } %>
+                  <% } else if (o.anon_view) { %><%- t('shop.orders.gift_from_anon') %>
+                  <% } else { %><%- t('shop.orders.gift_from', { name: t.esc(o.gift_from_name || '?') }) %><% } %>
+                  <% if (o.gift_note) { %><q><%= o.gift_note %></q><% } %>
+                </span>
+              </div>
+            <% } %>
+
+            <% if (!o.official) {
+                 // the marketplace progress: paid -> delivered -> completed (or where it stopped)
+                 const steps = [{ cls: 'done', l: t('shop.step.paid') }];
+                 if (o.status === 'paid') steps.push({ cls: 'cur', l: t('shop.step.delivering') }, { cls: '', l: t('shop.step.done') });
+                 else if (o.status === 'fulfilled') steps.push({ cls: 'done', l: t('shop.step.delivered') }, { cls: 'cur', l: t('shop.step.confirm') });
+                 else if (o.status === 'completed') steps.push({ cls: 'done', l: t('shop.step.delivered') }, { cls: 'done', l: t('shop.step.done') });
+                 else { if (fulfilledOnce) steps.push({ cls: 'done', l: t('shop.step.delivered') }); steps.push({ cls: o.status === 'disputed' ? 'bad' : 'grey', l: stl(o.status) }); }
+            %>
+              <ol class="sd-steps" aria-label="<%- t('shop.step.label') %>">
+                <% steps.forEach((s) => { %><li class="<%= s.cls %>"<%- s.cls === 'cur' ? ' aria-current="step"' : '' %>><%= s.l %></li><% }) %>
+              </ol>
+            <% } else if (!o.comp_by && o.status === 'completed' && o.delivery && o.delivery !== 'retired') { %>
+              <div class="sd-deliv"><span aria-hidden="true">✓</span><span><%- o.delivery === 'invite' ? t('shop.orders.deliv_invite') : o.delivery === 'staff' ? t('shop.item.by_team') : t('shop.item.instant') %></span></div>
+            <% } %>
+
+            <% if (o.seller_note && !sent_ && (o.status === 'fulfilled' || o.status === 'completed' || o.status === 'disputed')) { %>
+              <div class="sd-note"><span class="lbl"><%- t('shop.orders.seller_note') %></span><div class="pre code"><%= o.seller_note %></div></div>
+            <% } %>
+            <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0"><%- t('shop.orders.autocomplete_you', { date: H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) }) %></p><% } %>
+
+            <% if (ev.length > 1 || (!o.official && ev.length)) { %>
+              <details class="sd-more">
+                <summary><%- t('shop.orders.timeline_n', { count: ev.length, n: ev.length }) %></summary>
+                <ul class="tl">
+                  <% ev.forEach((e) => { %><li style="--c:<%= H.status(e.status).color %>"><%= stl(e.status) %><% if (e.note) { %> — <%= e.note %><% } %><small><%= H.when(e.ts) %></small></li><% }) %>
+                </ul>
+              </details>
+            <% } %>
+            <div class="sd-acts"><%- include('partials/shop-order-actions', { o, role: sent_ ? 'gifter' : 'buyer', back: '/shop/orders', H, settings }) %></div>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  </section>
+
+  <% if (pages > 1) { const vq = view_ !== 'all' ? '&view=' + view_ : ''; %>
+    <nav class="pager" aria-label="<%- t('shop.pages') %>">
+      <% if (page > 1) { %><a href="/shop/orders?page=<%= page - 1 %><%= vq %>"><%- t('shop.orders.newer') %></a><% } %>
+      <span class="cur"><%= page %> / <%= pages %></span>
+      <% if (page < pages) { %><a href="/shop/orders?page=<%= page + 1 %><%= vq %>"><%- t('shop.orders.older') %></a><% } %>
+    </nav>
+  <% } %>
+</main>

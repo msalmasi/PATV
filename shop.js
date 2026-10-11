@@ -1167,6 +1167,26 @@ async function eventsFor(ids) {
   return out;
 }
 
+/**
+ * 1.99mv: the item picture (and shelf / delivery) for each order - one prizes query for the page. o.art = the picture URL or
+ * null (a comp, an official service, a deleted listing -> the views draw an emoji), o.shelf, o.delivery (shopcatalog.js).
+ */
+async function attachArt(orders) {
+  const list = (orders || []).filter(Boolean);
+  const ids = [...new Set(list.map((o) => o.prize_id).filter(Boolean).map(String))];
+  const rows = ids.length ? await getQuery(`SELECT prizeId, image_url, seller_id FROM prizes WHERE prizeId IN (${ids.map(() => "?").join(",")})`, ids) : [];
+  const by = Object.fromEntries(rows.map((r) => [String(r.prizeId), r]));
+  const CAT = require("./shopcatalog");
+  for (const o of list) {
+    const p = by[String(o.prize_id)] || (o.prize_id ? { prizeId: o.prize_id, seller_id: o.seller_id || null } : null);
+    const info = p ? CAT.info(p) : null;
+    o.art = p ? H.img(p) : null;
+    o.shelf = info ? info.shelf : (o.official ? "more" : "market");
+    o.delivery = info ? info.delivery : (o.official ? "staff" : "seller");
+  }
+  return orders;
+}
+
 const ORDER_COLS = `o.*, b.username AS buyer_name, s.username AS seller_name`;
 const ORDER_JOIN = `FROM shop_orders o LEFT JOIN users b ON b.userId = o.buyer_id LEFT JOIN users s ON s.userId = o.seller_id`;
 
@@ -1179,7 +1199,7 @@ async function revenue(userId) {
   }
   const held = await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(price),0) AS t FROM shop_orders WHERE seller_id = ? AND status IN ('paid') ", [userId]);
   out.held = held[0];
-  out.best = await getQuery(`SELECT title, COUNT(*) AS n, SUM(net) AS net FROM shop_orders WHERE seller_id = ? AND seller_paid = 1
+  out.best = await getQuery(`SELECT prize_id, title, COUNT(*) AS n, SUM(net) AS net FROM shop_orders WHERE seller_id = ? AND seller_paid = 1
     AND status IN ('fulfilled','completed','disputed') GROUP BY prize_id, title ORDER BY n DESC, net DESC LIMIT 5`, [userId]);
   return out;
 }
@@ -1364,6 +1384,7 @@ function register(app, deps) {
       const todo = await getQuery(`SELECT ${ORDER_COLS} ${ORDER_JOIN} WHERE o.seller_id = ? AND o.status IN ('paid','disputed') ORDER BY o.id LIMIT 200`, [me.userId]);
       const history = await getQuery(`SELECT ${ORDER_COLS} ${ORDER_JOIN} WHERE o.seller_id = ? AND o.status NOT IN ('paid') ORDER BY o.id DESC LIMIT 50`, [me.userId]);
       const rev = await revenue(me.userId);
+      await attachArt([...todo, ...history, ...rev.best]);            // 1.99mv: pictures on the dashboard
       const prefs = await prefsFor(me.userId);
       const canSell = me.staff || (me.level || 0) >= settings.min_level;
       const edit = req.query.edit ? listings.find((l) => l.prizeId === req.query.edit) || null : null;
@@ -1384,7 +1405,19 @@ function register(app, deps) {
       if (!s) return res.status(404).render("shop", base(req, me, { items: [], total: 0, page: 1, pages: 1, sort: "newest", filters: {}, catCounts: {},
                                                                      store: { missing: String(req.params.username).slice(0, 60) } }));
       const data = await browse({ ...req.query, seller: s.username });
-      res.render("shop", base(req, me, { ...data, store: { ...s, sales: await sellerSales(s.userId) } }));
+      // 1.99mv: the storefront hero - their name style, level, showcase badges; "best sellers" on the plain first page
+      const extra = (await getQuery("SELECT level, class FROM users WHERE userId = ?", [s.userId]).catch(() => []))[0] || {};
+      let nameCss = "", badges = [];
+      try { nameCss = (await require("./userlook").nameStyles([s.username]))[s.username] || ""; } catch (e) { nameCss = ""; }
+      try { badges = (((await require("./cosmetics").profileData(s.username)) || {}).showcase || []).slice(0, 6); } catch (e) { badges = []; }
+      const f = data.filters || {};
+      const plain = !f.q && !f.cat && !f.min && !f.max && !f.instock && data.page === 1 && (!req.query.sort || req.query.sort === "newest");
+      const best = plain && data.total >= 4 ? await getQuery(`SELECT p.prizeId, p.prize, p.cost, p.quantity, p.seller_id, p.image_url, p.sold, p.category, u.username AS seller_name
+          FROM prizes p LEFT JOIN users u ON u.userId = p.seller_id WHERE p.seller_id = ? AND p.status = 'active'
+          ORDER BY (p.quantity > 0) DESC, COALESCE(p.sold, 0) DESC, COALESCE(p.created, 0) DESC LIMIT 3`, [s.userId]) : [];
+      const since = s.created_at ? (Number.isFinite(Number(s.created_at)) ? Number(s.created_at) : Date.parse(String(s.created_at).replace(" ", "T") + (/[zZ+]/.test(String(s.created_at)) ? "" : "Z"))) : null;
+      res.render("shop", base(req, me, { ...data, store: { ...s, ...extra, nameCss, badges, best, since: Number.isFinite(since) ? since : null,
+                                                           sales: await sellerSales(s.userId), mine: !!(me && me.userId === s.userId) } }));
     } catch (e) {
       console.error("[shop] storefront:", e);
       res.status(500).send("Couldn't load that shop.");
@@ -1421,16 +1454,28 @@ function register(app, deps) {
       if (!me) return res.redirect("/login");
       const page = Math.max(1, toInt(req.query.page) || 1);
       // 1.99lz: gifts they sent (gift_from) are on their list too; what they spent = what they paid for
-      const total = (await getQuery("SELECT COUNT(*) AS n FROM shop_orders WHERE buyer_id = ? OR gift_from = ?", [me.userId, me.userId]))[0].n;
+      // 1.99mv: view chips - all / open (still in progress) / gifts received / gifts sent
+      const VIEWS = {
+        all: ["(o.buyer_id = ? OR o.gift_from = ?)", 2],
+        open: ["o.buyer_id = ? AND o.status IN ('paid','fulfilled','disputed')", 1],
+        gifts_in: ["o.buyer_id = ? AND o.gift_from IS NOT NULL AND o.gift_from != o.buyer_id", 1],
+        gifts_out: ["o.gift_from = ? AND o.buyer_id != o.gift_from", 1],
+      };
+      const view = VIEWS[req.query.view] ? String(req.query.view) : "all";
+      const argsOf = (v) => Array(VIEWS[v][1]).fill(me.userId);
+      const counts = {};
+      for (const v of Object.keys(VIEWS)) counts[v] = (await getQuery(`SELECT COUNT(*) AS n FROM shop_orders o WHERE ${VIEWS[v][0]}`, argsOf(v)))[0].n;
+      const total = counts[view];
       const orders = await getQuery(`SELECT ${ORDER_COLS}, g.username AS gift_from_name ${ORDER_JOIN} LEFT JOIN users g ON g.userId = o.gift_from
-                                     WHERE o.buyer_id = ? OR o.gift_from = ? ORDER BY o.id DESC LIMIT 30 OFFSET ?`,
-                                    [me.userId, me.userId, (page - 1) * 30]);
+                                     WHERE ${VIEWS[view][0]} ORDER BY o.id DESC LIMIT 30 OFFSET ?`,
+                                    [...argsOf(view), (page - 1) * 30]);
       orders.forEach((o) => maskAnonGift(o, me));
+      await attachArt(orders);
       const events = await eventsFor(orders.map((o) => o.id));
       const spent = (await getQuery(`SELECT COALESCE(SUM(price),0) AS t, COUNT(*) AS n FROM shop_orders
         WHERE ((buyer_id = ? AND gift_from IS NULL) OR gift_from = ?) AND status NOT IN ('cancelled','refunded')`, [me.userId, me.userId]))[0];
       const open = (await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(price),0) AS t FROM shop_orders WHERE buyer_id = ? AND status IN ('paid','fulfilled','disputed')", [me.userId]))[0];
-      res.render("shopOrders", base(req, me, { orders, events, spent, open, page, pages: Math.max(1, Math.ceil(total / 30)) }));
+      res.render("shopOrders", base(req, me, { orders, events, spent, open, page, pages: Math.max(1, Math.ceil(total / 30)), view, counts }));
     } catch (e) {
       console.error("[shop] orders:", e);
       res.status(500).send("Couldn't load your orders.");
@@ -1451,6 +1496,7 @@ function register(app, deps) {
       // 1.99lz: "gifter" = paid for it as a gift: sees the order, not what was delivered on it (an invite link, a code)
       const role = o.buyer_id === me.userId ? "buyer" : o.seller_id === me.userId ? "seller" : (o.gift_from === me.userId && !me.staff) ? "gifter" : "admin";
       if (o.gift_from) o.gift_from_name = ((await getQuery("SELECT username FROM users WHERE userId = ?", [o.gift_from]))[0] || {}).username || null;
+      await attachArt([o]);                         // 1.99mv: its picture
       maskAnonGift(o, me);                          // 1.99mt: the recipient of an 🕶 anonymous gift never sees who sent it
       res.render("shopOrder", base(req, me, { o, events, role }));
     } catch (e) {
@@ -1581,4 +1627,4 @@ module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeS
                    compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
                    maskAnonGift,                                          // 1.99mt: anonymous gifts
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise,
-                   browse, featured, validateListing, H /* 1.99lz: for the storefront tests */ };
+                   browse, featured, validateListing, H /* 1.99lz: for the storefront tests */, attachArt /* 1.99mv */ };

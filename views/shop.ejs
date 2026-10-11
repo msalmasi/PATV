@@ -2,6 +2,7 @@
 <%- include('layout', { title: store && store.username ? t('shop.title_store', { name: store.username }) : t('shop.title'), user: user }) %>
 <%- include('partials/shop-css') %>
 <%- include('partials/shop-store-css') %>
+<% if (store && store.nameCss) { %><%- include('partials/cosmetics-css') %><% } %>
 <%
   // 1.99lz: the storefront redesign - hero + search, featured, shelf chips, cards with pictures and "can you afford it".
   const f = filters || {};
@@ -19,21 +20,52 @@
   <h1><%- t('shop.not_found') %></h1>
   <p class="sub"><%- t('shop.no_user', { name: '"' + t.esc(store.missing) + '"' }) %> <a href="/shop"><%- t('shop.back') %></a></p>
 <% } else { %>
-  <% if (store) { %>
+  <% if (store) { const SB = store.best || []; %>
+    <%# 1.99mv: the storefront hero - the seller's photo, name style, level, showcase badges, stats, search %>
     <div class="links" style="margin:0 0 10px"><a href="/shop"><%- t('shop.all_items') %></a></div>
-    <div class="box seller">
-      <img src="<%= H.av(store.avatar) %>" alt="" onerror="this.src='/public/img/avatar.png'">
-      <div style="min-width:0">
-        <h1 style="text-align:left;color:#fff;font-size:20px;margin:0"><%- t('shop.store_name', { name: store.displayname || store.username }) %></h1>
-        <div class="muted">@<%= store.username %> · <%- t('shop.n_sales', { count: store.sales, n: H.fmt(store.sales) }) %> · <%- t('shop.n_for_sale', { count: total, n: H.fmt(total) }) %>
-          · <a href="/u/<%= encodeURIComponent(store.username) %>"><%- t('shop.profile') %></a></div>
+    <section class="st-hero st-store" aria-labelledby="storeH">
+      <div class="st-sh">
+        <span class="st-sav" style="--h:<%= Array.from(String(store.username)).reduce((h, ch) => (h * 31 + ch.codePointAt(0)) >>> 0, 0) % 360 %>" aria-hidden="true"><%= (Array.from(String(store.displayname || store.username).replace(/^[^\p{L}\p{N}]+/u, ''))[0] || '?').toUpperCase() %><% if (H.av(store.avatar) !== '/public/img/avatar.png') { %><img src="<%= H.av(store.avatar) %>" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><% } %></span>
+        <div style="min-width:0;display:grid;gap:6px">
+          <p class="st-eyebrow"><%- t('shop.storefront.eyebrow') %></p>
+          <h1 id="storeH"><%- t('shop.storefront.title', { name: '<span class="cx-name"' + (store.nameCss ? ' style="' + t.esc(store.nameCss) + '"' : '') + '>' + t.esc(store.displayname || store.username) + '</span>' }) %></h1>
+          <div class="st-who">
+            <span>@<%= store.username %></span>
+            <% if (store.level) { %><span class="st-lvl"><%- t('shop.storefront.level', { n: H.fmt(store.level) }) %></span><% } %>
+            <% if (store.since) { %><span><%- t('shop.storefront.since', { date: H.day(store.since).slice(0, 7) }) %></span><% } %>
+            <a href="/u/<%= encodeURIComponent(store.username) %>"><%- t('shop.storefront.profile') %></a>
+          </div>
+          <% if (store.badges && store.badges.length) { %>
+            <div class="st-pins" aria-label="<%- t('shop.storefront.badges') %>">
+              <% store.badges.forEach((b) => { %><span class="pin" title="<%= b.description || '' %>"><img src="<%= b.icon %>" alt=""><%= b.name %></span><% }) %>
+            </div>
+          <% } %>
+        </div>
       </div>
-    </div>
-    <form class="st-search" method="GET" action="<%= path %>" role="search" style="margin:10px 0">
-      <label class="vh" for="shopQ"><%- t('shop.search') %></label>
-      <input id="shopQ" type="search" name="q" value="<%= f.q || '' %>" placeholder="<%- t('shop.search_store') %>" maxlength="80">
-      <button type="submit"><%- t('shop.search') %></button>
-    </form>
+      <div class="st-wallet st-sstats">
+        <div><span class="lbl"><%- t('shop.storefront.sales') %></span><b class="bal"><%= H.fmt(store.sales) %></b></div>
+        <div><span class="lbl"><%- t('shop.storefront.items') %></span><b class="bal"><%= H.fmt(total) %></b></div>
+        <% if (store.mine) { %><a class="btn gold" href="/shop/seller">🏪 <%- t('shop.storefront.manage') %></a><% } %>
+      </div>
+      <form class="st-search" method="GET" action="<%= path %>" role="search">
+        <label class="vh" for="shopQ"><%- t('shop.search') %></label>
+        <input id="shopQ" type="search" name="q" value="<%= f.q || '' %>" placeholder="<%- t('shop.search_store') %>" maxlength="80">
+        <button type="submit" class="gold"><%- t('shop.search') %></button>
+      </form>
+    </section>
+    <% if (SB.length) { %>
+      <h2 id="bestH"><%- t(SB.some((x) => Number(x.sold) > 0) ? 'shop.storefront.best' : 'shop.storefront.picks') %></h2>
+      <section class="st-sbest" aria-labelledby="bestH">
+        <% SB.forEach((it, i) => { const im = H.img(it); %>
+          <a class="st-mini<%= i === 0 ? ' top' : '' %>" href="/shop/item/<%= encodeURIComponent(it.prizeId) %>">
+            <span class="st-img"><% if (im) { %><img src="<%= im %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><span class="ph">🛍️</span><% } %></span>
+            <div><% if (i === 0 && Number(it.sold) > 0) { %><span class="st-tag"><%- t('shop.storefront.top') %></span><% } %><b><%= it.prize %></b><span class="st-price" style="font-size:15px"><%= H.fmt(it.cost) %> <small>PAT</small></span>
+              <% if (Number(it.sold) > 0) { %><span class="st-meta"><%- t('shop.n_sold', { n: H.fmt(it.sold) }) %></span><% } %></div>
+          </a>
+        <% }) %>
+      </section>
+      <h2 id="allH"><%- t('shop.storefront.all') %></h2>
+    <% } %>
   <% } else { %>
     <section class="st-hero" aria-labelledby="shopH">
       <div>
@@ -96,7 +128,9 @@
   <% } %>
 
   <% if (!store) { %>
-    <nav class="st-chips" aria-label="<%- t('shop.chips_label') %>">
+    <div class="st-chipwrap" id="stChipwrap">
+    <button type="button" class="st-chip-arr l" data-dir="-1" aria-label="<%- t('shop.chips_prev') %>" tabindex="-1">‹</button>
+    <nav class="st-chips" id="stChips" aria-label="<%- t('shop.chips_label') %>">
       <a href="/shop<%= H.qs({ q: f.q, sort: sort !== 'newest' ? sort : '' }, {}) %>" aria-current="<%= !f.shelf && !f.afford ? 'true' : 'false' %>"><%- t('shop.shelf.all') %> <span class="n"><%= allN %></span></a>
       <% H.shelves().forEach((s) => { if (!SC[s.id]) return; %>
         <a href="/shop<%= H.qs({ q: f.q, sort: sort !== 'newest' ? sort : '', afford: f.afford }, { shelf: s.id }) %>" aria-current="<%= f.shelf === s.id ? 'true' : 'false' %>"><span aria-hidden="true"><%= s.emoji %></span> <%- t('shop.shelf.' + s.id) %> <span class="n"><%= SC[s.id] %></span></a>
@@ -105,6 +139,8 @@
         <a class="afford" href="/shop<%= H.qs({ q: f.q, shelf: f.shelf, sort: sort !== 'newest' ? sort : '' }, { afford: f.afford ? '' : '1' }) %>" aria-current="<%= f.afford ? 'true' : 'false' %>">✓ <%- t('shop.chip.afford') %></a>
       <% } %>
     </nav>
+    <button type="button" class="st-chip-arr r" data-dir="1" aria-label="<%- t('shop.chips_next') %>" tabindex="-1">›</button>
+    </div>
   <% } %>
 
   <% if (!store && H.wantsRequests && H.wantsRequests(f.q)) { %>
@@ -193,6 +229,53 @@
 </div>
 
 <%- include('partials/shop-buy-js') %>
+<script>
+  // 1.99mv: the shelf chips row - fades + arrows only while it overflows, wheel scrolls it sideways, mouse drag scrolls it,
+  // the current chip is scrolled into view. Touch keeps the native swipe.
+  (function () {
+    var wrap = document.getElementById('stChipwrap'), row = document.getElementById('stChips');
+    if (!wrap || !row) return;
+    function edges() {
+      var max = row.scrollWidth - row.clientWidth;
+      wrap.classList.toggle('fl', row.scrollLeft > 2);
+      wrap.classList.toggle('fr', max > 2 && row.scrollLeft < max - 2);
+    }
+    var cur = row.querySelector('a[aria-current="true"]');
+    if (cur && cur.offsetLeft + cur.offsetWidth > row.clientWidth) row.scrollLeft = cur.offsetLeft - 48;
+    edges();
+    row.addEventListener('scroll', edges, { passive: true });
+    window.addEventListener('resize', edges);
+    wrap.querySelectorAll('.st-chip-arr').forEach(function (b) {
+      b.addEventListener('click', function () { row.scrollBy({ left: Number(b.dataset.dir) * Math.max(160, row.clientWidth * 0.7), behavior: 'smooth' }); });
+    });
+    row.addEventListener('wheel', function (e) {
+      if (row.scrollWidth <= row.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      var max = row.scrollWidth - row.clientWidth;
+      if ((e.deltaY < 0 && row.scrollLeft <= 0) || (e.deltaY > 0 && row.scrollLeft >= max)) return;   // at an end: let the page scroll
+      e.preventDefault();
+      row.scrollLeft += e.deltaY;
+    }, { passive: false });
+    var down = null, moved = false;
+    row.addEventListener('pointerdown', function (e) {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      down = { x: e.clientX, left: row.scrollLeft }; moved = false;
+    });
+    window.addEventListener('pointermove', function (e) {
+      if (!down) return;
+      var dx = e.clientX - down.x;
+      if (!moved && Math.abs(dx) < 6) return;
+      moved = true; row.classList.add('drag');
+      row.scrollLeft = down.left - dx;
+    });
+    window.addEventListener('pointerup', function () {
+      if (!down) return;
+      down = null;
+      setTimeout(function () { row.classList.remove('drag'); }, 0);
+    });
+    row.addEventListener('click', function (e) { if (moved) { e.preventDefault(); moved = false; } }, true);
+    row.addEventListener('dragstart', function (e) { e.preventDefault(); });
+  })();
+</script>
 <script>
   // Redemption codes: show what the server actually said (bad code, already used, expired).
   (function () {
