@@ -16,7 +16,7 @@ const LINKS = {
   heistBoard: "https://pepe.publicaccess.tv/heist",
 };
 
-// ── 1.99nk: the heist minimap (/gtf) - Pepe pushes the live state of every job's target (cooldown, vault, last hit,
+// ── 1.99nq: the heist minimap (/gtf) - Pepe pushes the live state of every job's target (cooldown, vault, last hit,
 // heat, the heist running now) to POST /api/gtf/bot/board about once a minute and on every change while a heist runs;
 // the page reads GET /api/gtf/board. Display only - nothing here decides anything. ──
 const boardReady = ready.then(() => runQuery(`CREATE TABLE IF NOT EXISTS gtf_board (id INTEGER PRIMARY KEY CHECK (id = 1),

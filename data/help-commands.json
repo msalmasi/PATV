@@ -3049,7 +3049,7 @@
     "!gang limits"
    ],
    "summary": "The treasury is a shared pot you draw from, not a payroll.",
-   "details": "The treasury is a **shared pot you draw from**, not a payroll. There's no daily wage any more — income stays banked and each member takes what they need up to **their rank's daily allowance**: owner unlimited, officer 250,000, member 100,000, recruit 25,000. Allowances are **per person**, so one officer emptying theirs no longer locks out the rest of the crew, and they reset on the daily tick.\n\n`!gang limits` shows the current allowances; the boss sets them with `!gang limits <owner|officer|member|recruit> <amount>` (0 = unlimited). Withdrawals pay a **5% laundering cut** to Canary Wharf on the way out.",
+   "details": "The treasury is a **shared pot you draw from**, not a payroll. There's no daily wage any more — income stays banked and each member takes what they need up to **their rank's daily allowance**: owner unlimited, officer 250,000, member 100,000, recruit 25,000. Allowances are **per person**, so one officer emptying theirs no longer locks out the rest of the crew, and they reset on the daily tick.\n\n`!gang limits` shows the current allowances; the boss sets them with `!gang limits <owner|officer|member|recruit> <amount>` (0 = unlimited). Withdrawals pay a **5% laundering cut** to Fort Knox (the vault bank heists rob) on the way out.",
    "examples": [
     "!gang limits <owner|officer|member|recruit> <amount>"
    ],
@@ -3094,7 +3094,7 @@
     "!claim"
    ],
    "summary": "Turf Score is the season standing, separate from gang rep.",
-   "details": "**Turf Score** is the season standing, separate from gang rep. It builds every day you hold a borough — outer 1, mid 2, centre 4 per day (×100) — so a season is won by holding ground over time, not by sweeping the map on the last day. Holding at the final whistle adds up to +25%. `!turf season` shows the table, the day, and the prize pot.\n\nIt's also the **invasion gate**: 500 to move on a mid borough, 2,000 for Mayfair. Earned this season, so an old gang doesn't start with the map unlocked.\n\n**Claiming is a crew event.** `!claim <borough>` musters for 45s — crewmates `!join` for 5,000 PAT each — then the whole crew rolls against whoever's already there. 8 rounds outer, 9 mid, 10 centre, 2 strikes each, and numbers genuinely tell (a crew bonus applies from 3 up). Geared success runs about **24% solo · 68% at three · 89% at five** on an outer borough, **39%** at five for a mid one and **17%** for Mayfair — so the crown needs a real gang. **The stake is only paid if you take it**: a failed run costs the buy-ins, never the deposit.\n\n**Season end** (30 days, or `!turf end`): the top score takes the pot — everything the streets banked, matched by the Reserve. Business banks go to the Federal Reserve to seed next season's heists, and **every stake is refunded** — holding turf is never a losing move. Ownership, banks and Turf Score reset; gang rep is permanent and carries over.",
+   "details": "**Turf Score** is the season standing, separate from gang rep. It builds every day you hold a borough — outer 1, mid 2, centre 4 per day (×100) — so a season is won by holding ground over time, not by sweeping the map on the last day. Holding at the final whistle adds up to +25%. `!turf season` shows the table, the day, and the prize pot.\n\nIt's also the **invasion gate**: 500 to move on a mid borough, 2,000 for Mayfair. Earned this season, so an old gang doesn't start with the map unlocked.\n\n**Claiming is a crew event.** `!claim <borough>` musters for 45s — crewmates `!join` for 5,000 PAT each — then the whole crew rolls against whoever's already there. 8 rounds outer, 9 mid, 10 centre, 2 strikes each, and numbers genuinely tell (a crew bonus applies from 3 up). Geared success runs about **24% solo · 68% at three · 89% at five** on an outer borough, **39%** at five for a mid one and **17%** for Mayfair — so the crown needs a real gang. **The stake is only paid if you take it**: a failed run costs the buy-ins, never the deposit.\n\n**Season end** (30 days, or `!turf end`): the top score takes the pot — everything the streets banked, matched from the incentive budget. If nobody scored, the pot rolls over into next season's. Business banks go to the Federal Reserve, convoy cargo still on its way goes to Fort Knox, and **every stake is refunded** — holding turf is never a losing move (a disbanded gang's stake goes to its members). Ownership, banks and Turf Score reset; gang rep is permanent and carries over. The war then moves to the next city: London's last season is season 4, after that it's Port Croak.",
    "examples": [
     "!claim <borough>",
     "!turf end"
@@ -3147,7 +3147,7 @@
     "!gang [subcommand]"
    ],
    "summary": "Form and run a gang.",
-   "details": "Form and run a gang. **!gang create [TAG] <name>** founds one (50,000 PAT) — the **[TAG]** is optional (auto-generated if you skip it) and can be changed anytime with **!gang tag <TAG>**. Recruit with **!gang invite @user** (they **!gang accept**). Also: **leave**, **kick @user**, **promote/demote @user**, **boss @user**, **deposit <amt>** (fund the treasury), **disband**, **info [name]**. Every member win earns the gang rep → levels → more member slots. Keep 5+ gangmates alive together in a heist for a synergy roll bonus (it fades if the gang gets whittled down).",
+   "details": "Form and run a gang. **!gang create [TAG] <name>** founds one (50,000 PAT) — the **[TAG]** is optional (auto-generated if you skip it) and can be changed anytime with **!gang tag <TAG>**. Recruit with **!gang invite @user** (they **!gang accept**). Also: **leave**, **kick @user**, **promote/demote @user**, **boss @user**, **deposit <amt>** (fund the treasury), **disband** (the gang's boroughs are freed and their stakes join the treasury split among the members), **info [name]**. Every member win earns the gang rep → levels → more member slots. Keep 5+ gangmates alive together in a heist for a synergy roll bonus (it fades if the gang gets whittled down).",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -6485,7 +6485,7 @@
     "!turf end"
    ],
    "summary": "Ends the turf war season immediately — normally it runs 30 days and settles itself.",
-   "details": "**Ends the turf war season immediately** — normally it runs 30 days and settles itself. Crowns the highest Turf Score, pays the prize (everything the streets banked into the season pot, matched with minted funds), sends all business banks to the Federal Reserve, and **refunds every stake** to whoever held the borough. Ownership, banks, forts, upgrades and Turf Score all reset; gang rep is permanent and carries over. Announced in every room. `!turf season` (anyone) shows the standings, the day and the pot without ending anything.",
+   "details": "**Ends the turf war season immediately** — normally it runs 30 days and settles itself. Crowns the highest Turf Score, pays the prize (everything the streets banked into the season pot, matched from the incentive budget; with no winner the pot rolls over), sends all business banks to the Federal Reserve and convoy cargo to Fort Knox, and **refunds every stake** to whoever held the borough (a disbanded gang's to its members). It waits for a running claim, raid or convoy job to finish first. Ownership, banks, forts, upgrades and Turf Score all reset; gang rep is permanent and carries over. Announced in every room. `!turf season` (anyone) shows the standings, the day and the pot without ending anything.",
    "examples": [
     "!turf season"
    ],
@@ -6666,5 +6666,5 @@
   }
  ],
  "undocumented": [],
- "hash": "34e311603df00cf0"
+ "hash": "4bfffeea5b91403d"
 }

@@ -1,4 +1,4 @@
-// gtfstore.js — 1.99nk: Grand Theft Frogger's persistent data on the site, behind a GTF backend switch; Pepe is a client.
+// gtfstore.js — 1.99nq: Grand Theft Frogger's persistent data on the site, behind a GTF backend switch; Pepe is a client.
 //
 // What lives here once the backend is live (Pepe keeps the heist and invasion ENGINES - he rolls the dice and decides
 // every outcome; this is where the results are kept):

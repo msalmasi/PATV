@@ -1,4 +1,4 @@
-# GTF backend: Grand Theft Frogger's records on the site (1.99nk)
+# GTF backend: Grand Theft Frogger's records on the site (1.99nq)
 
 Site `gtfstore.js` + bot `pepe_gtfstore.py`. Same model as the casino and the stashes: a switch on each side, a verified
 hand-over, Pepe as a client with a local mirror, and a way back. Modules stay redistributable: with the backend off (the

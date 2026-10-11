@@ -1,4 +1,4 @@
-// 1.99nk: Grand Theft Frogger's persistent data on the site (gtfstore.js) behind the GTF backend switch, the heist minimap
+// 1.99nq: Grand Theft Frogger's persistent data on the site (gtfstore.js) behind the GTF backend switch, the heist minimap
 // feed (gtf.js /api/gtf/bot/board + /api/gtf/board + the /gtf page), and the 🛒 heist-shop achievements' catalog.
 //   * the import: off unless enabled (staging default on), digest + totals checked, verified backup, idempotent, a
 //     different export refused while live, totals re-checked from the tables

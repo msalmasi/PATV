@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/gtf-backend.js — 1.99nk: the GTF backend switch (gtfstore.js) from the server's shell. Run in the site directory
+// tools/gtf-backend.js — 1.99nq: the GTF backend switch (gtfstore.js) from the server's shell. Run in the site directory
 // (it opens ./myapp.db). See docs/gtf-backend.md for the whole hand-over and the way back.
 //   node tools/gtf-backend.js                       # status: enabled / live / imported / released + record counts and totals
 //   node tools/gtf-backend.js --actor=<who> on      # allow Pepe to hand GTF's data over (he still needs `!gtf backend on`)
