@@ -1,6 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: fx.postLabel(p).slice(0, 80) + ' — ' + t('feed.post.title_suffix'), user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=18">
+<link rel="stylesheet" href="/public/css/feed.css?v=19">
 <%
   const signed = !!viewer;
   const cs = typeof csort !== 'undefined' ? csort : 'best';

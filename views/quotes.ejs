@@ -6,7 +6,7 @@
 %><%
   const href = (o) => { const x = Object.assign({ sort, t: top, p: 1 }, o); const q = []; if (x.sort !== 'top') q.push('sort=' + x.sort); if (x.sort === 'top' && x.t !== 'week') q.push('t=' + x.t); if (x.p > 1) q.push('p=' + x.p); return pad.href + '/quotes' + (q.length ? '?' + q.join('&') : ''); };
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=18">
+<link rel="stylesheet" href="/public/css/feed.css?v=19">
 <main class="ds-page mid qp">
   <div class="ds-head">
     <a class="ds-back" href="<%= pad.href %>">‹ p/<%= pad.slug %></a>

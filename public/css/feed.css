@@ -789,3 +789,17 @@ details.fp-ai-p, details.fp-ai-p > summary { background: transparent; border: 0;
 .cm-signin { border-radius: var(--ds-r-xl); }
 .fd-pager { gap: var(--ds-sp-2h); margin-top: var(--ds-sp-4); }
 .fd .ds-empty { margin: var(--ds-sp-4) 0; }
+/* 1.99qm: the post action bar never overflows its card at 375 - ⋯ always sits at the bar's end (with or without Crosspost / Tip,
+   locked creator posts hide Crosspost) and its menu opens end-aligned, inside the card; Crosspost is icon-only on phones;
+   the bar wraps rather than widen the page if translated labels run long */
+.fp-bar { flex-wrap: wrap; row-gap: 2px; }
+.fp-bar > .more { margin-inline-start: auto; }
+.fp-bar > .more > .menu { left: auto; right: auto; inset-inline-start: auto; inset-inline-end: 0; }
+@media (max-width: 600px) { .fp-bar .act[data-act="crosspost"] .lbl { display: none; } }
+/* on phones a comment's ⋯ menu opens from the start of its comment's bar (not from the ⋯ button), sized to the bar, so it never runs past the screen */
+@media (max-width: 600px) {
+  .cm-bar { position: relative; }
+  .cm-bar > .more { position: static; }
+  .cm-bar { width: 100%; }
+  .cm-bar > .more > .menu { left: auto; right: auto; inset-inline-start: 0; inset-inline-end: auto; min-width: min(236px, 100%); max-width: 100%; }
+}

@@ -1,7 +1,7 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <% const tag_ = typeof tag !== 'undefined' && tag ? tag : null; %>
 <%- include('layout', { title: (tag_ ? '#' + tag_ + ' — ' : '') + (mode === 'following' ? t('feed.title.following') : room ? 'p/' + room.slug + ' — ' + room.title + ' — ' + t('feed.title.feed') : t('feed.title.all')), user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=18">
+<link rel="stylesheet" href="/public/css/feed.css?v=19">
 <link rel="stylesheet" href="/public/css/stories.css?v=7">
 <%
   // 1.99ci: the feed is pad-based (Reddit's model). The bar on top picks WHICH pads you're reading: All
