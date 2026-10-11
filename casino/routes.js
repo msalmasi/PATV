@@ -168,7 +168,7 @@ function register(app, { isBotToken, addUser }) {
       return Object.assign(row, { proof: n ? `/casino/fair/${row.id}/${n}` : null, stream_queue: qi >= 0 ? qi + 1 : null });
     });
     res.json({ enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
-               stream: svc.S.stream.table, me });
+               stream: svc.S.stream.table, me, limits: svc.limits() });
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
 
@@ -207,7 +207,9 @@ function register(app, { isBotToken, addUser }) {
     const idem = String(b.idem || "");
     if (!IDEM.test(idem)) return res.status(400).json({ ok: false, error: "Bad request." });
     const game = b.game === "holdem" ? "holdem" : "bj";
-    const out = await svc.act(actor, "start", game === "holdem" && b.blinds ? [String(b.blinds).slice(0, 24)] : [], { room: null, game },
+    // 1.99ov: b.hr = a 💎 High Roller blackjack table (Hold'em: the ladder's blinds say it)
+    const args = game === "holdem" ? (b.blinds ? [String(b.blinds).slice(0, 24)] : []) : b.hr ? ["hr"] : [];
+    const out = await svc.act(actor, "start", args, { room: null, game },
                               `web-${actor.uid}-${idem}`);
     res.status(out.ok ? 200 : 409).json(out);
   });

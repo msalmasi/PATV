@@ -893,7 +893,7 @@
     "!buyvoice [voice]"
    ],
    "summary": "Buy unlimited use of a voice — one payment, yours forever, in every room.",
-   "details": "Buy **unlimited use** of a voice — one payment, yours forever, in every room. After that `!say <text> -v <voice>` costs you nothing extra. Some voices pay a **royalty** to the person they were cloned from; the rest of what you pay goes into the nightclub's takings (or the jackpot vault if turf war is off). (Alias: `!voicebuy`.)",
+   "details": "Buy **unlimited use** of a voice — one payment, yours forever, in every room. After that `!say <text> -v <voice>` costs you nothing extra. Some voices pay a **royalty** to the person they were cloned from; the rest of what you pay goes to the vault of the room you used it in (Fort Knox when there's no room). (Alias: `!voicebuy`.)",
    "examples": [
     "!say <text> -v <voice>",
     "!voicebuy"
@@ -1622,8 +1622,11 @@
     "!holdem start [sb]/[bb]"
    ],
    "summary": "Open a table at the given blinds, e.g.",
-   "details": "Open a table at the given blinds, e.g. **!holdem start 25/50** (up to 5000/10000). One table at a time; buy-ins range 20–200 big blinds.",
-   "examples": [],
+   "details": "Open a table at the given blinds, e.g. **!holdem start 25/50** (up to 5,000/10,000; `100k`/`2.5m` style amounts work too). One table at a time; buy-ins range 20–200 big blinds, for everyone.\n**💎 High Roller tables** (High Rollers only; anyone can watch): `!holdem start hr` or one of the ladder's blinds - **100K/200K, 250K/500K, 500K/1M, 1M/2M, 2.5M/5M, 5M/10M**. Only High Rollers can open or sit at them, and they get the High Roller chips on publicaccess.tv and the stream overlay.",
+   "examples": [
+    "!holdem start 100k/200k",
+    "!holdem start 25/50"
+   ],
    "keywords": [
     "poker",
     "texas holdem",
@@ -1785,10 +1788,11 @@
    ],
    "aliases": [],
    "syntax": [
-    "!blackjack start"
+    "!blackjack start",
+    "!blackjack start hr"
    ],
    "summary": "Open a blackjack table (aliases: !bj start).",
-   "details": "Open a blackjack table (aliases: **!bj start**). Anyone can start one; up to 6 players. Pepe posts the table's web page when it opens — you can play it from publicaccess.tv too.",
+   "details": "Open a blackjack table (aliases: **!bj start**). Anyone can start one; up to 6 players, bets 100–100,000 PAT. Pepe posts the table's web page when it opens — you can play it from publicaccess.tv too.\n**💎 !bj start hr** opens a **High Roller table**: bets 100,000–1,000,000 PAT, High Rollers only (anyone can watch), played with the High Roller chips.",
    "examples": [],
    "keywords": [
     "21",
@@ -1813,7 +1817,7 @@
     "!bet [amount]"
    ],
    "summary": "Place your bet for the round while betting is open, e.g.",
-   "details": "Place your bet for the round while betting is open, e.g. **!bet 500** (100–10,000 PAT). The first window is ~30s; after that it's only **~10s between hands** — or a player can **!bj deal** to start immediately. If a hand is already in progress, `!bet` reserves you a seat and joins you into the **next** round (charged when betting reopens).",
+   "details": "Place your bet for the round while betting is open, e.g. **!bet 500** (100–100,000 PAT; 100,000–1,000,000 at a 💎 High Roller table). The first window is ~30s; after that it's only **~10s between hands** — or a player can **!bj deal** to start immediately. If a hand is already in progress, `!bet` reserves you a seat and joins you into the **next** round (charged when betting reopens).",
    "examples": [
     "!bet"
    ],
@@ -2386,7 +2390,7 @@
     "!redeem [#|name]"
    ],
    "summary": "Buy a prize with PAT.",
-   "details": "Buy a prize with PAT. `!redeem 3` (the number from `!prizes`) or part of its name; Pepe tells you the price and what you have, then `!redeem yes` within 90 seconds buys it (`!redeem no` to back out). It's the same purchase as on the website — same stock, same balance — and PlantBaked gets in touch to deliver it. Not the same as `!shop`/`!buy`, which is the heist item shop.\n**Roles** (Scout, Curator, High Roller) are delivered on the spot — on Discord if you've linked it — and you can only own each once. **💎 High Roller** also lifts Pepe's casino limits: no maximum bet at blackjack, and Hold'em tables above the usual blind cap plus buy-ins over the table maximum.",
+   "details": "Buy a prize with PAT. `!redeem 3` (the number from `!prizes`) or part of its name; Pepe tells you the price and what you have, then `!redeem yes` within 90 seconds buys it (`!redeem no` to back out). It's the same purchase as on the website — same stock, same balance — and PlantBaked gets in touch to deliver it. Not the same as `!shop`/`!buy`, which is the heist item shop.\n**Roles** (Scout, Curator, High Roller) are delivered on the spot — on Discord if you've linked it — and you can only own each once. **💎 High Roller** opens Pepe's **High Roller tables**: blackjack at 100,000–1,000,000 a hand (`!bj start hr`) and Hold'em at 100K/200K up to 5M/10M blinds (`!holdem start 100k/200k`), with the High Roller chips. Everyone plays to the same table limits; High Roller tables are High Rollers only.",
    "examples": [
     "!redeem 3",
     "!redeem yes",
@@ -2715,7 +2719,7 @@
     "Where drops come from"
    ],
    "summary": "Some gear can't be bought: it drops when you win something, and Pepe announces it in the room.",
-   "details": "Some gear can't be bought: it **drops** when you win something, and Pepe announces it in the room. Rarer items drop less often. Chances per winner:\n\n• **Vault cracked** (casino / bank heist): 25% for each robber. **Arena champion**: 10%. **Bingo**: full card 10%, line 5%. **Paid-out bounty** (10,000+ pot): 15% each hunter, 5% the creator, with bounty-only gear.\n\n• **Everyday wins** (low on purpose, so a drop still means something): convoy taken 5% · duel or brawl won 3% (stake 10,000+) · vault door reached but it held 2% · lotto prize 2% (once per draw) · blackjack natural up to 2% (bet 2,500+; the full 2% at the 10,000 max bet) · hold'em showdown pot 1.5% (pot 20,000+) · clean store getaway 1% · **wheel spin 0.05%** (1 in 2,000).\n\n• **Jackpots**: hitting the lotto jackpot always drops a rare-or-better item; the wheel's jackpot slice has a 25% chance of one.\n\n• Everyday wins give at most **3 drops per 24 hours** per player. Duels and brawls only count against a real opponent (not yourself or your alt, both level 2+), and only the first 3 wins between the same two players each day can drop. Nothing drops until the win has actually been paid.",
+   "details": "Some gear can't be bought: it **drops** when you win something, and Pepe announces it in the room. Rarer items drop less often. Chances per winner:\n\n• **Vault cracked** (casino / bank heist): 25% for each robber. **Arena champion**: 10%. **Bingo**: full card 10%, line 5%. **Paid-out bounty** (10,000+ pot): 15% each hunter, 5% the creator, with bounty-only gear.\n\n• **Everyday wins** (low on purpose, so a drop still means something): convoy taken 5% · duel or brawl won 3% (stake 10,000+) · vault door reached but it held 2% · lotto prize 2% (once per draw) · blackjack natural up to 2% (bet 2,500+; the full 2% at a 10,000+ bet) · hold'em showdown pot 1.5% (pot 20,000+) · clean store getaway 1% · **wheel spin 0.05%** (1 in 2,000).\n\n• **Jackpots**: hitting the lotto jackpot always drops a rare-or-better item; the wheel's jackpot slice has a 25% chance of one.\n\n• Everyday wins give at most **3 drops per 24 hours** per player. Duels and brawls only count against a real opponent (not yourself or your alt, both level 2+), and only the first 3 wins between the same two players each day can drop. Nothing drops until the win has actually been paid.",
    "examples": [],
    "keywords": []
   },
@@ -3094,7 +3098,7 @@
     "!claim"
    ],
    "summary": "Turf Score is the season standing, separate from gang rep.",
-   "details": "**Turf Score** is the season standing, separate from gang rep. It builds every day you hold a borough — outer 1, mid 2, centre 4 per day (×100) — so a season is won by holding ground over time, not by sweeping the map on the last day. Holding at the final whistle adds up to +25%. `!turf season` shows the table, the day, and the prize pot.\n\nIt's also the **invasion gate**: 500 to move on a mid borough, 2,000 for Mayfair. Earned this season, so an old gang doesn't start with the map unlocked.\n\n**Claiming is a crew event.** `!claim <borough>` musters for 45s — crewmates `!join` for 5,000 PAT each — then the whole crew rolls against whoever's already there. 8 rounds outer, 9 mid, 10 centre, 2 strikes each, and numbers genuinely tell (a crew bonus applies from 3 up). Geared success runs about **24% solo · 68% at three · 89% at five** on an outer borough, **39%** at five for a mid one and **17%** for Mayfair — so the crown needs a real gang. **The stake is only paid if you take it**: a failed run costs the buy-ins, never the deposit.\n\n**Season end** (30 days, or `!turf end`): the top score takes the pot — everything the streets banked, matched from the incentive budget. If nobody scored, the pot rolls over into next season's. Business banks go to the Federal Reserve, convoy cargo still on its way goes to Fort Knox, and **every stake is refunded** — holding turf is never a losing move (a disbanded gang's stake goes to its members). Ownership, banks and Turf Score reset; gang rep is permanent and carries over. The war then moves to the next city: London's last season is season 4, after that it's Port Croak.",
+   "details": "**Turf Score** is the season standing, separate from gang rep. It builds every day you hold a borough — outer 1, mid 2, centre 4 per day (×100) — so a season is won by holding ground over time, not by sweeping the map on the last day. Holding at the final whistle adds up to +25%. `!turf season` shows the table, the day, and the prize pot.\n\nIt's also the **invasion gate**: 500 to move on a mid borough, 2,000 for Mayfair. Earned this season, so an old gang doesn't start with the map unlocked.\n\n**Claiming is a crew event.** `!claim <borough>` musters for 45s — crewmates `!join` for 5,000 PAT each — then the whole crew rolls against whoever's already there. 8 rounds outer, 9 mid, 10 centre, 2 strikes each, and numbers genuinely tell (a crew bonus applies from 3 up). Geared success runs about **24% solo · 68% at three · 89% at five** on an outer borough, **39%** at five for a mid one and **17%** for Mayfair — so the crown needs a real gang. **The stake is only paid if you take it**: a failed run costs the buy-ins, never the deposit.\n\n**Season end** (30 days, or `!turf end`): the top score takes the pot — everything the streets banked, matched from the incentive budget. If nobody scored, the pot rolls over into next season's. Business banks go to the Federal Reserve, convoy cargo still on its way goes to Fort Knox, and **every stake is refunded** — holding turf is never a losing move (a disbanded gang's stake goes to its members). Ownership, banks and Turf Score reset; gang rep is permanent and carries over. London's season 4 is the **last borough season**: after it the war moves to the rooms themselves (`!room`).",
    "examples": [
     "!claim <borough>",
     "!turf end"
@@ -3122,7 +3126,7 @@
     "!turf cargo"
    ],
    "summary": "Every business queues its takings as cargo instead of banking them on the spot.",
-   "details": "Every business queues its takings as **cargo** instead of banking them on the spot. Every so often an **armored convoy** leaves carrying the lot — announced in the room, naming the business and the haul — and for **15 minutes** it's on the road and takeable.\n\n**Rivals only:** `!heist convoy` intercepts it. You can't rob your own gang's money. The prize is the cargo itself — every round's loot comes out of it, and survivors split whatever's left; no vault, no door — and the owners never see a penny of what's taken.\n\n**Owners:** `!defend` to ride shotgun. Each guard raises every DC on that run, so a well-escorted convoy is a genuinely bad idea to hit.\n\nIf nobody takes it (or the crew gets pinched), what's left of the cargo banks as normal. `!turf cargo` shows what's on the road now, or what's building up if nothing has left yet. This is the valve that keeps PAT moving — what the room spends becomes what the room can steal.",
+   "details": "Every business queues its takings as **cargo** instead of banking them on the spot. Since 2026-10-11 the casino rake, the fight rake, songs, voices, shout-outs, `!say`, cosmetics and heist gear no longer feed the businesses: that share goes to the vault of the room the PAT was spent in, and the wheel cut and `!fortify` supplies go to Fort Knox, so for the rest of the season businesses earn mostly from tips. Every so often an **armored convoy** leaves carrying the lot — announced in the room, naming the business and the haul — and for **15 minutes** it's on the road and takeable.\n\n**Rivals only:** `!heist convoy` intercepts it. You can't rob your own gang's money. The prize is the cargo itself — every round's loot comes out of it, and survivors split whatever's left; no vault, no door — and the owners never see a penny of what's taken.\n\n**Owners:** `!defend` to ride shotgun. Each guard raises every DC on that run, so a well-escorted convoy is a genuinely bad idea to hit.\n\nIf nobody takes it (or the crew gets pinched), what's left of the cargo banks as normal. `!turf cargo` shows what's on the road now, or what's building up if nothing has left yet. This is the valve that keeps PAT moving — what the room spends becomes what the room can steal.",
    "examples": [],
    "keywords": [],
    "gates": [
@@ -3518,6 +3522,56 @@
     "game_turf_enabled"
    ],
    "webchat": true
+  },
+  {
+   "id": "room-wars",
+   "title": "!room [room]",
+   "category": "heists",
+   "role": "everyone",
+   "commands": [
+    "!room",
+    "!rooms",
+    "!pads"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!room",
+    "!room <room>",
+    "!room claim <room>",
+    "!room invade <room>",
+    "!room perks <room> <perk> <perk>",
+    "!room topup <room>",
+    "!room release <room> [cancel]"
+   ],
+   "summary": "Room turf wars: gangs control the pads themselves - bond a free room, raid a held one, pick its perks.",
+   "details": "After London's last season, turf wars move to the **rooms**. `!room` shows the map: every pad busy enough to fight over (30-day room-vault inflow of 10,000 PAT a day or more), its tier, its **bond** (20 days of its inflow, 500k to 20M) and who holds it. `!claim <room>` bonds a **free** room from your gang treasury (boss or officers). Holding a room costs **upkeep** every day (8% of its 7-day inflow, at least 3,000), paid **into the room's own vault**, and pays the gang its slice of the room (15% of a tenth of the vault, capped at a quarter of its inflow) - big slices travel on a **convoy** that anyone in the room can try to `!hijack`. `!invade <room>` raids a held room: your crew `!join`s (20k each, into the room's vault win or lose), the holders `!defend`; win and you post your own bond, the old holder loses 25% of theirs into the vault and gets 75% back. Rooms are locked 72 h after they change hands. Pick 2 perks (3 in the busiest rooms) with `!room perks`: autoshop, fightclub, gunstore, warehouse, bunker, dispensary. `!room release` gives 72 h notice and returns the whole bond. Miss upkeep twice and the room is neglected (easier to raid); let the bond fall behind its recomputed size for a week and it is exposed.",
+   "examples": [
+    "!room",
+    "!room drama",
+    "!claim Houseplants",
+    "!invade DRAMA_CENTRAL",
+    "!room perks drama gunstore warehouse"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "room-hijack",
+   "title": "!hijack",
+   "category": "heists",
+   "role": "everyone",
+   "commands": [
+    "!hijack"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!hijack"
+   ],
+   "summary": "Hit a room convoy carrying a gang's slice of the room - typed in that room, once a day.",
+   "details": "When a gang's daily slice of a room is 25,000 PAT or more it leaves on a **convoy** for 10 minutes, announced in the room. `!hijack` (in that room, not the receiving gang, one attempt a day, 5,000 buy-in) musters a crew that others `!join`; the gang can `!defend`. Win and the crew splits up to **20%** of the convoy and gets the buy-ins back; lose and the buy-ins go into the room's vault.",
+   "examples": [
+    "!hijack"
+   ],
+   "keywords": []
   },
   {
    "id": "join-2",
@@ -4254,7 +4308,7 @@
     "!dj on|off"
    ],
    "summary": "Put Pepe on the decks — he auto-DJs, generating an eclectic set on the fly: crowd-pleasers, deep cuts, every era and genre, no repeats.",
-   "details": "Put Pepe on the decks — he **auto-DJs**, generating an eclectic set on the fly: crowd-pleasers, deep cuts, every era and genre, no repeats. He **reads the room** — the songs you `!queue` become cues for what he lines up next. He'll even **drop a spoken DJ line over the intro** of some tracks (ducking the music under his voice) — toggle with **!dj talk on/off** (**per room** — add **-all** or **-global** to widen it; **!dj talk chance <0-100>** sets how often). The DJ only speaks up in rooms actually hearing the set — the ones with **!mic music on** — and holds the drop entirely if any of them has DJ talk switched off, since the mic carries one stream to all of them. **!dj next** cues one now, **!dj genre <g>** nudges the vibe, **!dj min <1-5>** sets how many picks stay queued ahead, **!dj status** shows what's going on. **!dj clear** resets the session for a fresh direction: the vibe, his cues and lined-up picks, and everything waiting in the queue (his picks and listeners' requests — paid requests are refunded; Spotify can't delete from its queue, so those tracks are skipped silently when they come up). The current song plays out and the DJ stays on, waiting for a new `!dj vibe` (up to 3 minutes) before he lines anything else up. **Anyone can steer him:** `!dj vibe <what you want>` (e.g. `!dj vibe 90s hip hop`) — or just say it: \"pepe play some chill stuff\". He leans the set that way for the next ~45 minutes. He also builds on what's actually in the queue right now, so his picks flow on from your requests instead of duplicating them. **Patter mode (one voice on the mic):** while he DJs a room with DJ talk on, everything he'd otherwise say on the mic by himself — welcome-backs for people who join, chatty mic-ups, conversation starters and shout-outs — goes into one short spoken link between songs (over the next intro, music ducked), built from what happened during the song; five people joining is one \"welcome in…\", not five clips. Questions to him still get a text reply right away. When nothing happened he may open a topic the room is into (or a light headline). Admins tune it with `!dj patter on|off · every <n> · words <n> · joins|starters|chatty on|off · budget <n>`. **Shout-outs:** `!dj shoutout <name> [message] [-d]` (or `!shoutout`) — the DJ names them in his next link; `-d` dedicates the next song. 2,500 PAT, held when you ask and only taken when he says it (refunded if he hasn't within 30 minutes; `!dj shoutout cancel` to undo) — it's split like other paid room commands: by default 20% to Soho's nightclub, 10% to the room's owner and the rest to the Federal Reserve. One every 15 minutes per person; keep it friendly — no links, and people who are incognito can't be named.",
+   "details": "Put Pepe on the decks — he **auto-DJs**, generating an eclectic set on the fly: crowd-pleasers, deep cuts, every era and genre, no repeats. He **reads the room** — the songs you `!queue` become cues for what he lines up next. He'll even **drop a spoken DJ line over the intro** of some tracks (ducking the music under his voice) — toggle with **!dj talk on/off** (**per room** — add **-all** or **-global** to widen it; **!dj talk chance <0-100>** sets how often). The DJ only speaks up in rooms actually hearing the set — the ones with **!mic music on** — and holds the drop entirely if any of them has DJ talk switched off, since the mic carries one stream to all of them. **!dj next** cues one now, **!dj genre <g>** nudges the vibe, **!dj min <1-5>** sets how many picks stay queued ahead, **!dj status** shows what's going on. **!dj clear** resets the session for a fresh direction: the vibe, his cues and lined-up picks, and everything waiting in the queue (his picks and listeners' requests — paid requests are refunded; Spotify can't delete from its queue, so those tracks are skipped silently when they come up). The current song plays out and the DJ stays on, waiting for a new `!dj vibe` (up to 3 minutes) before he lines anything else up. **Anyone can steer him:** `!dj vibe <what you want>` (e.g. `!dj vibe 90s hip hop`) — or just say it: \"pepe play some chill stuff\". He leans the set that way for the next ~45 minutes. He also builds on what's actually in the queue right now, so his picks flow on from your requests instead of duplicating them. **Patter mode (one voice on the mic):** while he DJs a room with DJ talk on, everything he'd otherwise say on the mic by himself — welcome-backs for people who join, chatty mic-ups, conversation starters and shout-outs — goes into one short spoken link between songs (over the next intro, music ducked), built from what happened during the song; five people joining is one \"welcome in…\", not five clips. Questions to him still get a text reply right away. When nothing happened he may open a topic the room is into (or a light headline). Admins tune it with `!dj patter on|off · every <n> · words <n> · joins|starters|chatty on|off · budget <n>`. **Shout-outs:** `!dj shoutout <name> [message] [-d]` (or `!shoutout`) — the DJ names them in his next link; `-d` dedicates the next song. 2,500 PAT, held when you ask and only taken when he says it (refunded if he hasn't within 30 minutes; `!dj shoutout cancel` to undo) — it's split like other paid room commands: by default 20% to the vault of the room it was played in, 10% to the room's owner and the rest to the Federal Reserve. One every 15 minutes per person; keep it friendly — no links, and people who are incognito can't be named.",
    "examples": [
     "!dj vibe",
     "!dj vibe <what you want>",
@@ -4881,6 +4935,31 @@
     "!gtf backend on"
    ],
    "keywords": []
+  },
+  {
+   "id": "gangbackend",
+   "title": "!gang backend status|export|cutover|rollback|detach",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!gang"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!gang backend status",
+    "!gang backend export",
+    "!gang backend cutover confirm",
+    "!gang backend rollback confirm",
+    "!gang backend detach confirm"
+   ],
+   "summary": "Move the gangs (members, ranks, allowances, upgrades, war records, treasuries and rep) to publicaccess.tv, or bring them back into Pepe.",
+   "details": "**export** is the dry run: what would move, with totals, and anything that blocks it (the pools must already live on the site; no withdrawal, disband payout or season close may still be paying; nothing running). **cutover confirm** pauses gang commands for a moment, sends every gang and member (each with their PATV account) with a checksum and totals, and switches only when the site confirms the same totals; from then on every gang change is a site transaction and the games (heists, raids, claims, the turf tick) stay in Pepe. **rollback confirm** is the way back while the site answers: every treasury comes back under one key and Pepe owns the gangs again. **detach confirm** is only for a site that is gone for good: Pepe's last copy becomes the truth. **status** says where the gangs live (anyone can ask).",
+   "examples": [
+    "!gang backend status",
+    "!gang backend export"
+   ],
+   "keywords": [],
+   "webchat": true
   },
   {
    "id": "automod",
@@ -6660,11 +6739,13 @@
     "Economy tuning — admin panel"
    ],
    "summary": "Every rake, tap and split in the game is editable in the Sink Rates card without touching code: the arena/fight and hold'em rake rates, the tip tap, the treasury-withdrawal laundering…",
-   "details": "Every rake, tap and split in the game is editable in the **Sink Rates** card without touching code: the arena/fight and hold'em rake rates, the tip tap, the treasury-withdrawal laundering cut, the **sink cap** (the single biggest lever on how much PAT reaches the heist vaults), bank payout and cap multipliers, the mint rate, the season-pot share, and how much incoming vault PAT goes to the Reserve (the rest goes to the casino jackpot). **PAT Routing** decides where the PAT goes for everything Pepe charges — commands, music, voices, heist gear, blackjack losses, rake, lotto, bingo, wager and market fees, fines, loan interest: up to three destinations per row (the casino jackpot, the Reserve, a turf business, or - for room-specific spending like commands, song requests, voices and shout-outs - the **room's owner**, 10% by default, paid weekly from the Reserve; a room with no owner leaves it in the Reserve) as a % of the price, and whatever isn't routed goes to the Federal Reserve — spending never burns PAT. **Economy v3 (live):** casino play and the wager fee go to the House, market and pool fees to the Market maker, loan interest to the Bank, fines and the bounty / shop fees to the Reserve, and spending in a room 50% Fort Knox / 50% the room's vault. The same table says which pool **pays** each reward — level-ups (25k every level + a milestone of 250k × level/5 every 5th level), the welcome PAT, connect bonuses, redeem codes, chat raffles, top mic of the hour, `!beg`, Pictionary, turf income and the season prize: under v3 they all come out of the **incentive budget** (each within its weekly allowance; the Fed tops the budget up every Monday), never straight from the Federal Reserve. Turf upkeep, upgrades and claim/invasion buy-ins go to the Reserve. The **Vault flows & shortfall** table (under Automint) shows every PAT in and out of each vault by day and source, the daily shortfall, and a suggested automint. Prices and rewards that used to be hardcoded — heist buy-ins, showdown, turf claim/invasion, lotto ticket, bingo card, wager/market/loan fees, `!beg`/mic/Pictionary rewards — are rows in the Sink Rates card. **Automint** tops up a vault on a schedule (a daily amount, minted hourly) while it's below a target you set — the gap the economy can't fill on its own. **Shop Items** prices everything buyable plus the bonuses items carry (Bottle Service XP, burner heat reduction), and **Voice Store** handles per-voice pricing and royalties.",
+   "details": "Every rake, tap and split in the game is editable in the **Sink Rates** card without touching code: the arena/fight and hold'em rake rates, the tip tap, the treasury-withdrawal laundering cut, the **sink cap** (the single biggest lever on how much PAT reaches the heist vaults), bank payout and cap multipliers, the mint rate, the season-pot share, and how much incoming vault PAT goes to the Reserve (the rest goes to the casino jackpot). **PAT Routing** decides where the PAT goes for everything Pepe charges — commands, music, voices, heist gear, blackjack losses, rake, lotto, bingo, wager and market fees, fines, loan interest: up to three destinations per row (the casino jackpot, the Reserve, Fort Knox, the vault of the room the PAT was spent in - turf businesses stopped taking a share on 2026-10-11 - or - for room-specific spending like commands, song requests, voices and shout-outs - the **room's owner**, 10% by default, paid weekly from the Reserve; a room with no owner leaves it in the Reserve) as a % of the price, and whatever isn't routed goes to the Federal Reserve — spending never burns PAT. **Economy v3 (live):** casino play and the wager fee go to the House, market and pool fees to the Market maker, loan interest to the Bank, fines and the bounty / shop fees to the Reserve, and spending in a room 50% Fort Knox / 50% the room's vault. The same table says which pool **pays** each reward — level-ups (25k every level + a milestone of 250k × level/5 every 5th level), the welcome PAT, connect bonuses, redeem codes, chat raffles, top mic of the hour, `!beg`, Pictionary, turf income and the season prize: under v3 they all come out of the **incentive budget** (each within its weekly allowance; the Fed tops the budget up every Monday), never straight from the Federal Reserve. Turf upkeep, upgrades and claim/invasion buy-ins go to the Reserve. The **Vault flows & shortfall** table (under Automint) shows every PAT in and out of each vault by day and source, the daily shortfall, and a suggested automint. Prices and rewards that used to be hardcoded — heist buy-ins, showdown, turf claim/invasion, lotto ticket, bingo card, wager/market/loan fees, `!beg`/mic/Pictionary rewards — are rows in the Sink Rates card. **Automint** tops up a vault on a schedule (a daily amount, minted hourly) while it's below a target you set — the gap the economy can't fill on its own. **Shop Items** prices everything buyable plus the bonuses items carry (Bottle Service XP, burner heat reduction), and **Voice Store** handles per-voice pricing and royalties.",
    "examples": [],
    "keywords": []
   }
  ],
- "undocumented": [],
- "hash": "4bfffeea5b91403d"
+ "undocumented": [
+  "!retention"
+ ],
+ "hash": "a447192c32233113"
 }

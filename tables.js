@@ -140,7 +140,7 @@ function cleanBj(t, botNow, recv) {
   const hidden = bool(d.hidden);
   return {
     id: str(t.id, 16), game: "bj", room: str(t.room, 64), room_name: str(t.room_name, 64), phase: str(t.phase, 16),
-    round_no: int(t.round_no), min_bet: int(t.min_bet), max_bet: int(t.max_bet), host: str(t.host),
+    round_no: int(t.round_no), min_bet: int(t.min_bet), max_bet: int(t.max_bet), high_stakes: bool(t.high_stakes), host: str(t.host),
     max_seats: int(t.max_seats, 0, 20), act_secs: int(t.act_secs, 0, 600), decks: int(t.decks, 0, 12),
     // while Pepe's hole card is down only the upcard is kept, whatever arrives
     dealer: { cards: cards(d.cards, hidden ? 1 : 12), down: hidden ? int(d.down, 0, 1) : 0, value: int(d.value), hidden,
@@ -197,8 +197,10 @@ function cleanSync(b) {
       log: arr(b.log, 40).map((l) => ({ ts: int(l.ts), game: l.game === "bj" ? "bj" : "holdem", text: str(l.text, 200) })),
       config: {
         holdem: { sb_cap: int(h.sb_cap), bb_cap: int(h.bb_cap), min_buy_bb: int(h.min_buy_bb), max_buy_bb: int(h.max_buy_bb),
-                  act_secs: int(h.act_secs), max_seats: int(h.max_seats), next_hand_secs: int(h.next_hand_secs) },
-        bj: { min_bet: int(j.min_bet), max_bet: int(j.max_bet), act_secs: int(j.act_secs), bet_secs: int(j.bet_secs),
+                  act_secs: int(h.act_secs), max_seats: int(h.max_seats), next_hand_secs: int(h.next_hand_secs),
+                  hr_ladder: arr(h.hr_ladder, 12).map((x) => [int(Array.isArray(x) ? x[0] : 0), int(Array.isArray(x) ? x[1] : 0)]) },
+        bj: { min_bet: int(j.min_bet), max_bet: int(j.max_bet), hr_min_bet: int(j.hr_min_bet), hr_max_bet: int(j.hr_max_bet),
+              act_secs: int(j.act_secs), bet_secs: int(j.bet_secs),
               open_secs: int(j.open_secs), max_seats: int(j.max_seats), ins_secs: int(j.ins_secs) },
       },
     },

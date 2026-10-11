@@ -140,7 +140,7 @@
       msg = `<div class="msg">${esc(t.turn.name)} to act · <b class="cnt" data-dl="${t.turn.deadline || ""}">…</b></div>`;
     }
     const pots = t.pots.length > 1 ? `<div class="pots">${t.pots.map((p, k) => `${k ? "side " + k : "main"} ${fmt(p.amount)}`).join(" · ")}</div>` : "";
-    return `<div class="ttl">Hold'em ${fmt(t.sb)}/${fmt(t.bb)}${t.high_stakes ? " · High Roller" : ""}${t.hand_no ? " · hand #" + t.hand_no : ""} · ${esc(t.phase)}</div>` +
+    return `<div class="ttl">Hold'em ${fmt(t.sb)}/${fmt(t.bb)}${t.high_stakes ? " · 💎 High Roller" : ""}${t.hand_no ? " · hand #" + t.hand_no : ""} · ${esc(t.phase)}</div>` +
       `<div class="board" aria-label="${l ? "Last hand's board" : "Board"}">${slots.join("")}</div>` +
       (t.pot ? `<div class="pot"><span class="chip"></span>Pot ${fmt(t.pot)}</div>` : "") + pots + msg;
   }
@@ -209,7 +209,7 @@
     } else if (t.phase === "dealer") {
       msg = '<div class="msg">Pepe plays his hand…</div>';
     }
-    return `<div class="ttl">Blackjack · round ${t.round_no} · ${t.decks}-deck · pays 3:2</div>` +
+    return `<div class="ttl">${t.high_stakes ? "💎 High Roller " : ""}Blackjack · round ${t.round_no} · ${t.decks}-deck · pays 3:2</div>` +
       `<div class="dealer${useLast ? " last" : ""}"><div class="cards" aria-label="${useLast ? "Pepe's cards last round" : "Pepe's cards"}">${dc || '<span class="slot"></span><span class="slot"></span>'}</div>` +
       (d.cards.length ? `<div class="msg">Pepe ${d.hidden ? "shows " : ""}${d.value}${d.bust ? " — BUST" : d.blackjack ? " — BLACKJACK" : ""}</div>` : "") + `</div>` + msg;
   }

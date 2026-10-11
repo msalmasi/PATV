@@ -7,6 +7,9 @@
 //   node tools/casino-settings.js --actor=<who> max_tables=0        # 0 = no site-wide limit (the default; one table per room always)
 //   node tools/casino-settings.js --actor=<who> bj_front=patv       # 1.99ol: the FRONT END the site links to: auto (follow the
 //                                                                   # engine flag) | patv (/casino/<game>) | pepe (/blackjack, /poker); also hm_front
+//   node tools/casino-settings.js --actor=<who> bj_max_bet=100000   # 1.99ov: blackjack limits - bj_min_bet / bj_max_bet (normal tables,
+//                                                                   # default 100 / 100,000) and bj_hr_min_bet / bj_hr_max_bet (💎 High
+//                                                                   # Roller tables, default 100,000 / 1,000,000); new tables only
 "use strict";
 const path = require("path");
 const svc = require(path.join(__dirname, "..", "casino", "service"));
@@ -27,6 +30,7 @@ const { getQuery } = require(path.join(__dirname, "..", "dbUtils"));
   console.log(`max_tables = ${st.max_tables || "no limit"}`);
   console.log(`bj_front = ${st.bj_front} -> ${svc.frontPath(st, "bj")}`);
   console.log(`hm_front = ${st.hm_front} -> ${svc.frontPath(st, "holdem")}`);
+  console.log(`blackjack bets: ${st.bj_min_bet}-${st.bj_max_bet}, High Roller tables ${st.bj_hr_min_bet}-${st.bj_hr_max_bet}`);
   const open = await getQuery("SELECT id, room, rev, updated FROM casino_tables WHERE status = 'open'");
   console.log(`open tables: ${open.length}` + open.map((t) => `\n  ${t.id} room=${t.room || "web"} rev=${t.rev} updated=${new Date(t.updated).toISOString()}`).join(""));
   process.exit(0);

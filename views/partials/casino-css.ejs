@@ -82,6 +82,35 @@
   .stack { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 4px; border-radius: 999px; background: rgba(0,0,0,.55);
            font: bold 12px/1 Ubuntu, sans-serif; color: var(--goldt); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .stack .chip { width: 16px; height: 16px; }
+  /* 1.99ov: 💎 High Roller chips (only High Rollers and High Roller tables see them): 100K onyx & gold, 500K solid gold, 1M platinum
+     with a diamond inlay, 5M black diamond with an iridescent edge. A sheen (::after) and, on 1M / 5M, a cut diamond (::before). */
+  .chip.hrc { position: relative; overflow: hidden; box-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 0 1px rgba(255,215,64,.75), 0 0 9px rgba(255,200,60,.45); }
+  .chip.hrc::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+                     background: linear-gradient(135deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 38%, rgba(255,255,255,0) 62%, rgba(255,255,255,.18) 100%); }
+  .chip.c100k { background: radial-gradient(circle, #151515 0 36%, #e8c45a 37% 41%, #0b0b0b 42% 56%, #e8c45a 57% 60%, transparent 61%),
+                            repeating-conic-gradient(#f5d77a 0 9deg, #0d0d0d 9deg 30deg); }
+  .chip.c500k { background: radial-gradient(circle, #ffe9a3 0 18%, #c9971c 19% 36%, #3a2600 37% 40%, #f4c542 41% 56%, #3a2600 57% 60%, transparent 61%),
+                            repeating-conic-gradient(#1a1100 0 8deg, #f6cf55 8deg 30deg); }
+  .chip.c1m { background: radial-gradient(circle, #f7fbff 0 30%, #9fb3c8 31% 35%, #e6edf5 36% 56%, #5d7590 57% 60%, transparent 61%),
+                          repeating-conic-gradient(#2b3a4d 0 8deg, #dfe8f2 8deg 22.5deg); }
+  .chip.c5m { background: radial-gradient(circle, #0a0a12 0 52%, transparent 53%),
+                          conic-gradient(from 0deg, #ff6ad5, #ffd36a, #6affc8, #6ac8ff, #c86aff, #ff6ad5);
+              box-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 0 1px #fff, 0 0 12px rgba(200,140,255,.75); }
+  .chip.c1m::before, .chip.c5m::before { content: ""; position: absolute; left: 50%; top: 50%; width: 36%; height: 36%; transform: translate(-50%, -50%);
+                                         clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%); z-index: 1;
+                                         background: linear-gradient(160deg, #ffffff 0%, #bfe9ff 35%, #6fb6ff 60%, #e9f7ff 100%); }
+  .chip.c5m::before { background: linear-gradient(160deg, #ffffff 0%, #ffd6f4 30%, #b98cff 60%, #e9f7ff 100%); }
+  /* a pile: a few chips of the amount stacked up (largest on top), 3px apart */
+  .pile { position: relative; display: inline-block; flex: none; width: 16px; height: calc(16px + (var(--n, 1) - 1) * 3px); }
+  .pile .chip { position: absolute; left: 0; bottom: calc(var(--i) * 3px); width: 16px; height: 16px; }
+  .pot .main .pile, .pot .main .pile .chip { width: 18px; }
+  .pot .main .pile .chip { height: 18px; }
+  .stack.hr, .pot .main.hr { background: linear-gradient(180deg, rgba(28,22,6,.92), rgba(0,0,0,.85)); color: #ffe9a3;
+                             box-shadow: 0 0 0 1px rgba(255,215,64,.6), 0 0 12px rgba(255,200,60,.3); }
+  /* a High Roller table: a deeper felt, a gold rail and a diamond watermark */
+  .felt.hr { --felt0: #04130c; --felt1: #0a2f1f; --felt2: #124a32; --rail0: #1a1203; --rail1: #6b4e0f; --rail2: #e8c45a; }
+  .felt.hr::before { content: "💎"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 120px; opacity: .05; pointer-events: none; z-index: -1; }
+  .tag.hr, .felt-meta .tag.hr { background: linear-gradient(180deg, #2a2208, #000); color: #ffe082; box-shadow: inset 0 0 0 1px rgba(255,215,64,.7); }
 
   /* ── countdown ring (SVG circle; JS sets the stroke offset from the server's deadline) ── */
   .ring { position: absolute; inset: -5px; width: calc(100% + 10px); height: calc(100% + 10px); transform: rotate(-90deg); pointer-events: none; }
@@ -199,6 +228,16 @@
   .lob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
   .tcard { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; min-width: 0; background: var(--panel); border: 1px solid var(--line); }
   .tcard.hm { border-color: rgba(120,160,255,.28); }
+  /* 1.99ov: the 💎 High Roller section of the lobby */
+  .tcard.hr { border-color: rgba(255,215,64,.55); background: linear-gradient(180deg, rgba(40,32,8,.6), rgba(6,10,8,.85)); box-shadow: 0 0 22px rgba(255,200,60,.12); }
+  .tcard.hr .tcard-h .ic { background: radial-gradient(circle at 35% 30%, #3a2e0a, #0b0903); border: 1px solid rgba(255,215,64,.6); }
+  .lob-h.hr { color: #ffe9a3; }
+  .lob-h.hr::before { width: 16px; height: 16px; border-radius: 3px; transform: rotate(45deg);
+                      background: linear-gradient(135deg, #fff, #bfe9ff 40%, #6fb6ff 70%, #e9f7ff); box-shadow: 0 0 10px rgba(150,210,255,.6); }
+  .hr-note { margin: -4px 0 12px; color: #e6d7a8; font-size: 14px; line-height: 1.5; }
+  .hr-chips { display: flex; gap: 6px; align-items: center; }
+  .hr-chips .chip { width: 26px; height: 26px; }
+  .tag.lock { background: rgba(0,0,0,.45); color: #ffe082; }
   .tcard-h { display: flex; align-items: center; gap: 10px; }
   .tcard-h .ic { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; font-size: 22px; background: radial-gradient(circle at 35% 30%, var(--felt2), var(--felt0)); }
   .tcard-h b { display: block; font-size: 16px; color: #fff; }

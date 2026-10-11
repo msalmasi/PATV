@@ -21,14 +21,22 @@ const money = require("./money");
 const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achievements / drops / win XP / gang rep (rewards.js)
 
 // ── the rules (Pepe's BJ_* constants) ──
+// 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
+// TABLES instead (T.high_stakes, 💎): bets HR_MIN_BET..HR_MAX_BET, only High Rollers open / sit / bet there, anyone watches.
+// The four limits are casino_settings (bj_min_bet / bj_max_bet / bj_hr_min_bet / bj_hr_max_bet, tools/casino-settings.js);
+// these are the defaults. A table keeps the limits it opened with. DROP_REF_BET: a natural's cosmetic-drop chance is
+// full at this bet (rewards.js scale) - kept at the old 10,000 max so raising the cap didn't make drops rarer.
 const C = {
-  MIN_BET: 100, MAX_BET: 10000, MAX_SEATS: 6, DECKS: 6,
+  MIN_BET: 100, MAX_BET: 100000, HR_MIN_BET: 100000, HR_MAX_BET: 1000000, DROP_REF_BET: 10000, MAX_SEATS: 6, DECKS: 6,
   OPEN_SECS: 30, BET_SECS: 10, INS_SECS: 18, ACT_SECS: 30,
   MISS_LIMIT: 3, AFK_LIMIT: 3, COVER_MULT: 2,
   LOG_KEEP: 40, EVENT_KEEP_MS: 48 * 3600 * 1000, ROOM_FRESH_MS: 90 * 1000,
   CLOSED_LINGER_MS: 30 * 1000, TICK_MS: 250,
 };
 const HIGH_ROLLER = "high roller";
+const HR_WORDS = ["hr", "high", "highroller", "high-roller", "vip", "💎"];
+const HR_ONLY_OPEN = "💎 High Roller tables are for High Rollers (the role is in the prize store — !prizes). Anyone can watch one.";
+const HR_ONLY_PLAY = "💎 this is a High Roller table: only High Rollers can play here (the role is in the prize store — !prizes). You can watch.";
 const fmt = (n) => Math.trunc(Number(n) || 0).toLocaleString("en-US");
 const now = () => Date.now();
 
@@ -36,7 +44,8 @@ const S = {
   tables: new Map(),           // id -> table (open, plus closed ones lingering for the page)
   rooms: new Map(),            // room id -> {id, name, ts}: rooms Pepe serves with the backend on (his poll heartbeat)
   waiters: new Set(),          // pending long-polls
-  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto" },
+  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto",
+              bj_min_bet: C.MIN_BET, bj_max_bet: C.MAX_BET, bj_hr_min_bet: C.HR_MIN_BET, bj_hr_max_bet: C.HR_MAX_BET },
   stream: { table: null, by: null, ts: 0, queue: [] },   // 1.99lv: the ONE table on Pepe's stream + the FIFO queue
   settingsAt: 0,
   tick: null,
@@ -128,14 +137,29 @@ async function loadSettings(force) {
     bj_front: FRONTS.includes(kv.bj_front) ? kv.bj_front : "auto",
     hm_front: FRONTS.includes(kv.hm_front) ? kv.hm_front : "auto",
   };
+  // 1.99ov: blackjack limits (normal tables, then High Roller tables) - a bad pair falls back to the defaults
+  const lim = (k, d) => (Number.isFinite(Number(kv[k])) && Number(kv[k]) >= 1 ? Math.trunc(Number(kv[k])) : d);
+  let [mn, mx, hmn, hmx] = [lim("bj_min_bet", C.MIN_BET), lim("bj_max_bet", C.MAX_BET), lim("bj_hr_min_bet", C.HR_MIN_BET), lim("bj_hr_max_bet", C.HR_MAX_BET)];
+  if (mn > mx) [mn, mx] = [C.MIN_BET, C.MAX_BET];
+  if (hmn > hmx) [hmn, hmx] = [C.HR_MIN_BET, C.HR_MAX_BET];
+  Object.assign(S.settings, { bj_min_bet: mn, bj_max_bet: mx, bj_hr_min_bet: hmn, bj_hr_max_bet: hmx });
   S.settingsAt = clock();
   return S.settings;
 }
+const LIMIT_KEYS = ["bj_min_bet", "bj_max_bet", "bj_hr_min_bet", "bj_hr_max_bet"];
 async function setSetting(key, value, actor) {
-  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].includes(key)) throw new Error("unknown setting");
+  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].concat(LIMIT_KEYS).includes(key)) throw new Error("unknown setting");
   if (/_front$/.test(key) && !FRONTS.includes(String(value))) throw new Error("front end must be auto, patv or pepe");
   await ensure();
+  if (LIMIT_KEYS.includes(key)) {
+    const n = Math.trunc(Number(String(value).replace(/,/g, "")));
+    if (!Number.isFinite(n) || n < 1 || n > 1e10) throw new Error("a bet limit must be a whole number of PAT");
+    const cur = await loadSettings(true);
+    const next = Object.assign({}, cur, { [key]: n });
+    if (next.bj_min_bet > next.bj_max_bet || next.bj_hr_min_bet > next.bj_hr_max_bet) throw new Error("the minimum must not be above the maximum");
+  }
   const v = /_front$/.test(key) ? String(value)
+          : LIMIT_KEYS.includes(key) ? String(Math.trunc(Number(String(value).replace(/,/g, ""))))
           : key !== "max_tables" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
                                  : String(Math.max(0, Math.trunc(Number(value)) || 0));
   await runQuery(`INSERT INTO casino_settings (key, value, updated, actor) VALUES (?, ?, ?, ?)
@@ -197,12 +221,18 @@ function rateOk(uid) {
 }
 
 // ── a new table ──
-function newTableObject(host, room) {
+/** a blackjack table's limits: [min, max] for a normal or a 💎 High Roller table (the current settings) */
+function bjLimits(high) {
+  const st = S.settings;
+  return high ? [st.bj_hr_min_bet || C.HR_MIN_BET, st.bj_hr_max_bet || C.HR_MAX_BET] : [st.bj_min_bet || C.MIN_BET, st.bj_max_bet || C.MAX_BET];
+}
+function newTableObject(host, room, high) {
   const id = crypto.randomBytes(5).toString("hex");
+  const [minBet, maxBet] = bjLimits(high);
   return {
     id, game: "bj", status: "open", room: room || null, host: { uid: host.uid, name: host.name }, created: clock(),
-    client_seed: fair.newClientSeed(), eng: E.newTable({ numDecks: C.DECKS, minBet: C.MIN_BET, maxBet: C.MAX_BET, hitSoft17: true }),
-    players: {}, escrowed: {}, autobet: [], lastbet: {}, pending: {}, missed: {}, afk: {}, hr: {},
+    client_seed: fair.newClientSeed(), eng: E.newTable({ numDecks: C.DECKS, minBet, maxBet, hitSoft17: true }), high_stakes: !!high,
+    players: {}, escrowed: {}, autobet: [], lastbet: {}, pending: {}, missed: {}, afk: {},
     empty_windows: 0, dl: { bet: null, ins: null, turn: null }, turn: null, turn_token: 0,
     round: null, intent: null, opno: 0, multi: [], log: [], last_round: null, rev: 0, closed_at: null,
   };
@@ -275,12 +305,11 @@ async function openRound(T, first) {
   // bets queued during the last round are charged now
   for (const [uid, amt0] of Object.entries(T.pending)) {
     const p = T.players[uid];
-    const hr = !!T.hr[uid];
-    const amt = hr ? amt0 : Math.min(amt0, T.eng.max_bet);
+    const amt = Math.min(amt0, T.eng.max_bet);
     if (!T.eng.seats.includes(uid) || amt < T.eng.min_bet || !p) continue;
     if (!(await cover(T, amt)).ok) continue;
     const r = await stake(T, uid, amt, "bet", "blackjack bet", () => {
-      E.placeBet(T.eng, uid, p.name, amt, hr);
+      E.placeBet(T.eng, uid, p.name, amt);
       T.lastbet[uid] = amt;
     });
     await emit(T, "line", r.ok ? `✅ ${p.name} is in for ${fmt(amt)}.` : `⚠️ ${p.name}'s queued bet didn't go through — ${r.msg}.`);
@@ -298,12 +327,11 @@ async function placeAutobets(T) {
   for (const uid of T.autobet.slice()) {
     if (!T.eng.seats.includes(uid)) { T.autobet = T.autobet.filter((k) => k !== uid); continue; }
     if (uid in T.eng.bets) continue;
-    const hr = !!T.hr[uid];
-    const amt = hr ? (T.lastbet[uid] || 0) : Math.min(T.lastbet[uid] || 0, T.eng.max_bet);
+    const amt = Math.min(T.lastbet[uid] || 0, T.eng.max_bet);
     const p = T.players[uid];
     if (!p || amt < T.eng.min_bet) continue;
     if (!(await cover(T, amt)).ok) continue;
-    const r = await stake(T, uid, amt, "bet", "blackjack autobet", () => E.placeBet(T.eng, uid, p.name, amt, hr));
+    const r = await stake(T, uid, amt, "bet", "blackjack autobet", () => E.placeBet(T.eng, uid, p.name, amt));
     if (!r.ok) {
       T.autobet = T.autobet.filter((k) => k !== uid);
       await emit(T, "line", `⚠️ ${p.name}'s autobet is off — ${r.msg}.`);
@@ -437,7 +465,7 @@ async function settle(T) {
     if (left < 0 && !fl.used) console.warn(`[casino] UNCOVERED ${T.id} r${n}: the House is at ${left} after paying ${profit} (no flash)`);
   }
   // 1.99mw: every seat's rewards (hands / naturals / natural drops / win XP / gang rep) on the site - keyed, so a re-run counts nothing twice
-  const drops = await rewards.blackjackRound(T, n, ev.results, T.eng.max_bet);
+  const drops = await rewards.blackjackRound(T, n, ev.results, C.DROP_REF_BET);
   if (S.hooks.crash === "settle") throw new Error("test crash mid-settle");          // tests only
   const net = lostTotal - profit;
   await emit(T, "settle", `🏁 Pepe ${d.value}${dtag} — ` + summ.join(" | "), {
@@ -652,11 +680,16 @@ async function cmdStart(actor, room, game, blinds) {
   }
   if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`);
   if (game === "holdem") return HM.start(actor, room, blinds);
-  const T = newTableObject(actor, room);
+  // 1.99ov: "!bj start hr" (or the web's High Roller button) opens a 💎 High Roller table - High Rollers only
+  const high = HR_WORDS.includes(String(blinds || "").toLowerCase());
+  if (blinds && !high) return R(false, "usage: !blackjack start  (or !blackjack start hr for a 💎 High Roller table)");
+  if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN);
+  const T = newTableObject(actor, room, high);
   S.tables.set(T.id, T);
   await save(T);
-  await emit(T, "opened", `🂠 ${actor.name} opened a Blackjack table — Pepe deals! 6-deck shoe, blackjack pays 3:2, dealer hits soft 17. ` +
-             `Bets ${fmt(C.MIN_BET)}–${fmt(C.MAX_BET)} PAT. Play here or on the web: ${link(T)}`, { client_seed: T.client_seed, url: link(T) });
+  await emit(T, "opened", `🂠 ${actor.name} opened a ${high ? "💎 High Roller " : ""}Blackjack table — Pepe deals! 6-deck shoe, blackjack pays 3:2, dealer hits soft 17. ` +
+             `Bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} PAT${high ? " (High Rollers only; anyone can watch)" : ""}. Play here or on the web: ${link(T)}`,
+             { client_seed: T.client_seed, url: link(T), high_stakes: high });
   await openRound(T, true);
   return R(true, "table open.", { table: T.id, quiet: true });
 }
@@ -694,10 +727,9 @@ async function cmdBet(T, actor, amount) {
   if (!Number.isFinite(amount) || amount <= 0) return R(false, `usage: !bet <amount>  (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`);
   const bad = await seatChecks(T, actor);
   if (bad) return R(false, bad);
-  const hr = await isHighRoller(actor.uid);
-  T.hr[actor.uid] = hr;
-  if (amount < T.eng.min_bet || (amount > T.eng.max_bet && !hr)) {
-    return R(false, `bet must be ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} (High Rollers have no cap — see !prizes).`);
+  if (T.high_stakes && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_PLAY);
+  if (amount < T.eng.min_bet || amount > T.eng.max_bet) {
+    return R(false, `bet must be ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}.`);
   }
   remember(T, actor);
   const p = T.players[actor.uid];
@@ -712,7 +744,7 @@ async function cmdBet(T, actor, amount) {
   const cv = await cover(T, amount);
   if (!cv.ok) return R(false, `🏦 the casino jackpot can't cover that bet right now — the most the table can take this round is ${fmt(cv.room)} PAT.`);
   const r = await stake(T, actor.uid, amount, "bet", "blackjack bet", () => {
-    E.placeBet(T.eng, actor.uid, p.name, amount, hr);
+    E.placeBet(T.eng, actor.uid, p.name, amount);
     T.lastbet[actor.uid] = amount;
     T.afk[actor.uid] = 0;
     T.missed[actor.uid] = 0;
@@ -734,13 +766,12 @@ async function cmdAutobet(T, actor, arg) {
   }
   const bad = await seatChecks(T, actor);
   if (bad) return R(false, bad);
-  const hr = await isHighRoller(actor.uid);
-  T.hr[actor.uid] = hr;
+  if (T.high_stakes && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_PLAY);
   let amount = null;
   if (arg && !["on", "yes"].includes(arg)) {
     amount = Math.trunc(Number(arg));
     if (!Number.isFinite(amount) || amount <= 0) return R(false, "usage: !autobet [amount|off]");
-    if (amount < T.eng.min_bet || (amount > T.eng.max_bet && !hr)) return R(false, `autobet amount must be ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} (High Rollers have no cap).`);
+    if (amount < T.eng.min_bet || amount > T.eng.max_bet) return R(false, `autobet amount must be ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}.`);
   }
   if (amount === null) {
     amount = T.lastbet[actor.uid];
@@ -834,7 +865,7 @@ async function cmdLeave(T, actor) {
 
 function statusText(T) {
   const seats = T.eng.seats.map((k) => T.eng.names[k] || (T.players[k] || {}).name || k);
-  let msg = `🂠 Blackjack ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} — ${T.eng.phase}. Players: ` + (seats.join(", ") || "none");
+  let msg = `🂠 ${T.high_stakes ? "💎 High Roller " : ""}Blackjack ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} — ${T.eng.phase}. Players: ` + (seats.join(", ") || "none");
   if (T.eng.phase === "betting") {
     const bets = Object.entries(T.eng.bets).map(([k, v]) => `${T.eng.names[k]} ${fmt(v)}`);
     msg += " | bets: " + (bets.join(", ") || "none yet");
@@ -886,7 +917,7 @@ async function run(actor, verb, args, opts) {
     const u = await userRow(actor.uid);
     if (u && u.casino_banned) return R(false, "🚫 you're banned from the casino.");
   }
-  if (verb === "start") return cmdStart(actor, opts.room || null, "bj");
+  if (verb === "start") return cmdStart(actor, opts.room || null, "bj", args[0]);
   if (verb === "fair") {
     return R(true, live && live.last_revealed ? `🔐 Shuffle proof for round ${live.last_revealed}: ${fairLink(live, live.last_revealed)}`
                                               : "🔐 No round finished at this table yet — each round's proof is posted when it ends.");
@@ -944,7 +975,7 @@ async function push(tableId, room, actor) {
       T.room = room;
       const how = T.game === "holdem"
         ? `a No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
-        : `a Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
+        : `a ${T.high_stakes ? "💎 High Roller " : ""}Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
       await emit(T, "pushed", `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}`,
                  { room_name: r.name, url: link(T) });
     } else {
@@ -990,7 +1021,7 @@ function bjView(T) {
   return {
     id: T.id, game: "bj", status: T.status, phase: T.status === "closed" ? "closed" : e.phase, rev: T.rev,
     room: T.room, room_name: room ? room.name : T.room, host: T.host.name, round_no: e.round_no,
-    min_bet: e.min_bet, max_bet: e.max_bet, max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
+    min_bet: e.min_bet, max_bet: e.max_bet, high_stakes: !!T.high_stakes, max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
     client_seed: T.client_seed, commitment: T.round ? T.round.commitment : null, commit_round: T.round ? T.round.no : null,
     dealer, seats, turn, bet_deadline: T.dl.bet, ins_deadline: T.dl.ins,
     last_round: ["betting", "idle", "done"].includes(e.phase) || T.status === "closed" ? T.last_round : null,
@@ -1030,7 +1061,7 @@ function lobby() {
     const base = { id: T.id, host: T.host.name, room: T.room, room_name: room ? room.name : T.room, url: link(T), on_stream: S.stream.table === T.id };
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
     return Object.assign(base, { game: "bj", phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
-                                 min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no });
+                                 min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no, high_stakes: !!T.high_stakes });
   });
 }
 
@@ -1202,7 +1233,14 @@ const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards, dropLine,
 });
 
+/** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
+function limits() {
+  const [mn, mx] = bjLimits(false), [hmn, hmx] = bjLimits(true);
+  return { bj: { min_bet: mn, max_bet: mx, hr_min_bet: hmn, hr_max_bet: hmx },
+           holdem: { sb_cap: HM.HC.SB_CAP, bb_cap: HM.HC.BB_CAP, hr_ladder: HM.HC.HR_LADDER.map(([sb, bb]) => [sb, bb]) } };
+}
+
 module.exports = {
-  C, S, HM, boot, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  C, S, HM, boot, limits, HR_WORDS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
 };

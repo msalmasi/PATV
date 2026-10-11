@@ -54,6 +54,9 @@
     const bySlot = new Array(SLOTS).fill(null);
     t.seats.forEach((s, i) => { bySlot[slotOf(i)] = s; });
     const n = Math.max(1, t.seats.length);
+    const hrv = !!(t.high_stakes || (me && me.high_roller));      // 1.99ov: 💎 chips for High Rollers and at High Roller tables
+    const hrLocked = !!t.high_stakes && !(me && me.high_roller);   // a High Roller table: everyone else watches
+    $("cz-felt").classList.toggle("hr", !!t.high_stakes);
     for (let k = 0; k < SLOTS; k++) {
       const s = bySlot[k], el = els.seats[k], bet = els.bets[k];
       const mine = !!(s && me && me.seat && s.seat === me.seat);
@@ -80,7 +83,7 @@
                `<span class="plate"><span class="nm">${esc(s.name)}</span><span class="sub">${fmt(s.stack)}</span></span>` +
                (tags ? `<span class="st">${tags}</span>` : "") + (s.hand ? `<span class="hand">${esc(handName(s.hand))}</span>` : "");
       } else {
-        const can = CZ.signed && me && !me.seat && open && t.seats.length < t.max_seats;
+        const can = CZ.signed && me && !me.seat && open && t.seats.length < t.max_seats && !hrLocked;
         html = can ? `<button type="button" class="sitbtn" data-sit="1"><span class="av" aria-hidden="true">+</span><span class="plate">${esc(T("sit", "Sit"))}</span></button>`
                    : `<span class="av" aria-hidden="true"></span><span class="plate">${esc(T("open_seat", "Open seat"))}</span>`;
       }
@@ -90,7 +93,7 @@
       const av = who.querySelector(".av");
       if (av) CZ.armClock(av, s && s.turn && t.turn ? t.turn.deadline : null, t.act_secs);
       // the bet in front of the seat (with its blind)
-      const bhtml = s && s.bet ? (s.blind ? `<span class="bl">${esc(s.blind)}</span>` : "") + CZ.stackHTML(s.bet) : "";
+      const bhtml = s && s.bet ? (s.blind ? `<span class="bl">${esc(s.blind)}</span>` : "") + CZ.stackHTML(s.bet, "", hrv) : "";
       bet.hidden = !bhtml;
       if (bet.dataset.v !== bhtml) { bet.dataset.v = bhtml; bet.innerHTML = bhtml; }
     }
@@ -126,7 +129,7 @@
           else parts.push(`<span class="tag">${esc(i === 0 ? T("main_n", "Main pot {n}", { n: fmt(p.amount) }) : T("side_n", "Side pot {i}: {n}", { i: ++side, n: fmt(p.amount) }))}</span>`);
         });
       }
-      pot = `<span class="main"><span class="chip ${CZ.chipCls(t.pot)}" aria-hidden="true"></span>${esc(T("pot_n", "Pot {n}", { n: fmt(t.pot) }))}</span>` +
+      pot = `<span class="main${hrv && t.pot >= 100000 ? " hr" : ""}">${CZ.pileHTML(t.pot, hrv)}${esc(T("pot_n", "Pot {n}", { n: fmt(t.pot) }))}</span>` +
             (parts.length ? `<span class="parts">${parts.join("")}</span>` : "");
     } else if (lr) {
       pot = `<div class="hm-res">` + lr.winners.map((w) => esc(T("wins_line", "{name} wins {n}", { name: w.name, n: fmt(w.amount) })) +
@@ -168,16 +171,17 @@
     $("cz-msg").innerHTML = esc(msg) + (sub ? `<small>${esc(sub)}</small>` : "");
     CZ.armClock($("cz-fclock"), dl, nom);
     const where = t.room ? `🐸 ${esc(T("in_room", "Camfrog room {room}", { room: t.room_name || t.room }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
-    const meta = [`👑 ${esc(t.host)}`, esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) })), where,
-                  t.hand_no ? esc(T("hand_n", "Hand #{n}", { n: t.hand_no })) : "", t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "",
+    const meta = [t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "", `👑 ${esc(t.host)}`, esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) })), where,
+                  t.hand_no ? esc(T("hand_n", "Hand #{n}", { n: t.hand_no })) : "",
                   esc(T("rake_pct", "{n}% rake at showdown", { n: t.rake_pct })),
                   t.on_stream ? `📺 ${esc(T("on_stream", "On Pepe's stream"))}` : t.stream_queue ? `📺 ${esc(T("stream_q", "stream queue #{n}", { n: t.stream_queue }))}` : ""]
-      .filter(Boolean).map((x) => `<span class="tag">${x}</span>`).join("");
+      .filter(Boolean).map((x, i) => `<span class="tag${i === 0 && t.high_stakes ? " hr" : ""}">${x}</span>`).join("");
     if ($("cz-meta").dataset.v !== meta) { $("cz-meta").dataset.v = meta; $("cz-meta").innerHTML = meta; }
 
     const wb = $("cz-watchbar");
     let wtxt = "";
     if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_hm", "You're watching. Hole cards stay hidden until a showdown."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
+    else if (open && me && !me.seat && hrLocked) wtxt = `💎 ${esc(T("watching_hr_hm", "A High Roller table: you're watching. Only High Rollers can sit here."))} <a href="/shop">${esc(T("hr_get", "Get the role"))}</a>`;
     else if (open && me && !me.seat) wtxt = `👁 ${esc(t.seats.length >= t.max_seats ? T("watching_full", "You're watching: the table is full.") : T("watching_sit", "You're watching. Take an open seat to play."))}`;
     wb.hidden = !wtxt;
     if (wb.dataset.v !== wtxt) { wb.dataset.v = wtxt; wb.innerHTML = wtxt; }
@@ -185,8 +189,27 @@
     dock(t, me, inHand);
     if (me && me.my_turn && !prevTurn) { CZ.announce(T("your_turn_sr_hm", "Your turn. {n} to call.", { n: fmt(t.turn ? t.turn.to_call : 0) })); raiseTouched = false; }
     prevTurn = !!(me && me.my_turn);
-    if (wantSit && me && open) { wantSit = false; if (!me.seat && t.seats.length < t.max_seats) openBuy("sit"); }
+    if (wantSit && me && open) { wantSit = false; if (!me.seat && t.seats.length < t.max_seats && !hrLocked) openBuy("sit"); }
     first = false;
+  }
+
+  // ── the chip rack (1.99ov): tap a chip to add it to your bet / raise. Regular chips from the big blind up; the 💎 ones
+  // (100K / 500K / 1M / 5M) only for High Rollers and at High Roller tables. At most six, the ones that fit your stack.
+  const RACK = [[25, ""], [100, ""], [500, "c500"], [1000, "c1k"], [5000, "c5k"], [25000, "c25k"]];
+  const RACK_HR = [[100000, "c100k hrc"], [500000, "c500k hrc"], [1000000, "c1m hrc"], [5000000, "c5m hrc"]];
+  function rackFor(t, me) {
+    const hr = !!(t.high_stakes || me.high_roller);
+    const { max } = raiseBounds(t);
+    let set = (t.high_stakes ? RACK_HR : RACK.concat(hr ? RACK_HR : [])).filter(([v]) => v >= t.bb && v <= max);
+    if (!set.length) set = (t.high_stakes ? RACK_HR : RACK).slice(0, 1);
+    set = set.slice(0, 6);
+    const box = $("cz-rack");
+    const sig = set.map((c) => c[0]).join();
+    if (box.dataset.v !== sig) {
+      box.dataset.v = sig;
+      box.innerHTML = set.map(([v, c]) => `<button type="button" class="rchip${/hrc/.test(c) ? " hr" : ""}" data-add="${v}" aria-label="${esc(T("chip_add", "Add {n}", { n: fmt(v) }))}">` +
+        `<span class="chip ${c}" aria-hidden="true"></span><span class="l">${esc(CZ.short(v))}</span></button>`).join("");
+    }
   }
 
   // ── raise sizing ──
@@ -238,6 +261,7 @@
         s.min = String(min); s.max = String(max); s.step = String(Math.max(1, Math.min(t.bb, Math.floor((max - min) / 50) || 1)));
         if (!raiseTouched || Number($("cz-raise").value) < min || Number($("cz-raise").value) > max) setRaise(min);
         else setRaise($("cz-raise").value);
+        rackFor(t, me);
       }
     }
     let wait = "";
@@ -246,13 +270,14 @@
     else if (me.seat && inHand && !myTurn) wait = me.in_hand ? (me.folded ? T("folded_note", "You folded. Next hand soon.") : t.turn ? T("waiting_for", "Waiting for {name}…", { name: t.turn.name }) : "")
                                                               : T("join_next", "You're in from the next hand.");
     else if (me.seat && !inHand) wait = T("stack_n", "Your stack: {n}", { n: fmt(me.stack) }) + " · " + T("balance_n", "Balance {n}", { n: fmt(me.balance) });
+    else if (!me.seat && t.high_stakes && !me.high_roller) wait = T("hr_watch_note", "💎 High Rollers only: watch the table above.");
     else if (!me.seat) wait = T("buy_note", "Buy in for {min}–{max} chips (chips = PAT).", { min: fmt(t.min_buy), max: fmt(t.max_buy) });
     $("cz-wait").hidden = !wait;
     $("cz-wait").textContent = wait;
     const full = t.seats.length >= t.max_seats;
-    $("cz-sit").hidden = !!me.seat || full || me.banned;
+    $("cz-sit").hidden = !!me.seat || full || me.banned || (!!t.high_stakes && !me.high_roller);
     $("cz-deal").hidden = !(me.seat && !inHand && t.seats.filter((s) => s.stack > 0).length >= 2);
-    $("cz-topup").hidden = !(me.seat && !inHand && (me.high_roller || me.stack + t.min_buy <= t.max_buy));
+    $("cz-topup").hidden = !(me.seat && !inHand && me.stack + t.min_buy <= t.max_buy);
     $("cz-leave").hidden = !me.seat || me.leaving;
   }
 
@@ -260,8 +285,7 @@
   function buyBounds() {
     const t = last.table, me = last.me;
     const min = t.min_buy;
-    let max = buyMode === "top" ? t.max_buy - (me.stack || 0) : t.max_buy;
-    if (me.high_roller) max = Math.max(max, me.balance);
+    const max = buyMode === "top" ? t.max_buy - (me.stack || 0) : t.max_buy;
     return { min, max: Math.max(min, max), bal: me.balance };
   }
   function setBuy(v) {
@@ -284,7 +308,7 @@
     if (!last || !last.me) return;
     buyMode = mode;
     $("cz-buy-h").textContent = mode === "top" ? T("top_up", "Top up") : T("buy_in", "Buy in");
-    $("cz-buyhr").hidden = !last.me.high_roller;
+    $("cz-buyhr").hidden = !last.table.high_stakes;
     const t = last.table;
     const bb100 = t.bb * 100;
     const { min, max } = buyBounds();
@@ -307,6 +331,13 @@
   }
   $("cz-slider").addEventListener("input", (e) => { raiseTouched = true; setRaise(e.target.value); });
   $("cz-raise").addEventListener("change", (e) => { raiseTouched = true; setRaise(e.target.value); });
+  $("cz-rack").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-add]");
+    if (!b || !last || !last.table.turn) return;
+    const cur = raiseTouched ? Number($("cz-raise").value) || 0 : last.table.turn.current_bet;
+    raiseTouched = true;
+    setRaise(cur + Number(b.dataset.add));
+  });
   $("cz-presets").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (b && last && last.table.turn) { raiseTouched = true; setRaise(preset(b.dataset.p)); } });
   $("cz-sit").addEventListener("click", () => openBuy("sit"));
   $("cz-topup").addEventListener("click", () => openBuy("top"));

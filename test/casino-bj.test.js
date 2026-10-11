@@ -357,8 +357,38 @@ test("anti-abuse: linked accounts can't share a table; one address = flagged; ca
   await fresh();
   await runQuery("INSERT INTO user_roles (userId, role) VALUES ('u2', 'High Roller')");
   const t3 = await openWith(bob);
-  assert.ok((await A(bob, "bet", ["50000"], { table: t3 })).ok, "High Roller: no table maximum");
-  assert.match((await A(ann, "bet", ["50000"], { table: t3 })).reply, /bet must be 100–10,000/);
+  assert.match((await A(bob, "bet", ["100001"], { table: t3 })).reply, /bet must be 100–100,000\.$/, "1.99ov: the role no longer lifts the maximum");
+  assert.ok((await A(ann, "bet", ["50000"], { table: t3 })).ok, "1.99ov: the table maximum is 100,000 (was 10,000)");
+  assert.ok((await A(bob, "bet", ["100000"], { table: t3 })).ok);
+});
+
+test("1.99ov: 💎 High Roller tables - High Rollers open, sit and bet (100,000-1,000,000); everyone else watches", async () => {
+  await fresh();
+  await setBal("u2", 3000000);
+  await runQuery("INSERT INTO user_roles (userId, role) VALUES ('u2', 'High Roller')");
+  assert.match((await A(ann, "start", ["hr"], { room: null })).reply, /High Roller tables are for High Rollers/);
+  assert.match((await A(ann, "start", ["huge"], { room: null })).reply, /usage/);
+  const r = await A(bob, "start", ["hr"], { room: null });
+  assert.ok(r.ok, r.reply);
+  const T = svc.getTable(r.table);
+  assert.equal(T.high_stakes, true);
+  assert.deepEqual([T.eng.min_bet, T.eng.max_bet], [100000, 1000000]);
+  assert.equal(svc.lobby().find((x) => x.id === r.table).high_stakes, true, "the lobby marks it");
+  assert.equal(svc.publicView(T).high_stakes, true);
+  assert.match((await A(ann, "bet", ["100000"], { table: r.table })).reply, /only High Rollers can play here/);
+  assert.match((await A(ann, "autobet", ["100000"], { table: r.table })).reply, /only High Rollers/);
+  assert.equal(await bal("u1"), 100000, "nothing charged");
+  assert.match((await A(bob, "bet", ["50000"], { table: r.table })).reply, /bet must be 100,000–1,000,000/);
+  assert.match((await A(bob, "bet", ["1000001"], { table: r.table })).reply, /bet must be 100,000–1,000,000/);
+  assert.ok((await A(bob, "bet", ["1000000"], { table: r.table })).ok);
+  assert.equal(await bal("u2"), 2000000);
+  // the limits are settings (new tables take them)
+  await svc.setSetting("bj_hr_max_bet", "2000000", "test");
+  await assert.rejects(svc.setSetting("bj_max_bet", "50", "test"), /minimum must not be above/);
+  const lim = svc.limits();
+  assert.deepEqual(lim.bj, { min_bet: 100, max_bet: 100000, hr_min_bet: 100000, hr_max_bet: 2000000 });
+  assert.deepEqual(lim.holdem.hr_ladder[0], [100000, 200000]);
+  await svc.setSetting("bj_hr_max_bet", "1000000", "test");
 });
 
 test("autobet and a bet queued during a round (charged when the next window opens)", async () => {

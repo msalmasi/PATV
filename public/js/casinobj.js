@@ -100,6 +100,8 @@
 
     // seats: left to right in play order; your own seat is outlined
     const els = slots();
+    const hrv = !!(t.high_stakes || (me && me.high_roller));      // 1.99ov: 💎 chips for High Rollers and at High Roller tables
+    $("cz-felt").classList.toggle("hr", !!t.high_stakes);
     const lrBy = new Map(((lr && lr.players) || []).map((p) => [p.name, p]));
     for (let i = 0; i < SEATS; i++) {
       const el = els[i], s = t.seats[i];
@@ -114,7 +116,7 @@
       drawHands(el, hands, { delay0, step });
       const bet = s ? (resultMode ? 0 : s.hands.reduce((a, h) => a + (h.bet || 0), 0) || s.bet) : 0;
       const spot = el.querySelector(".betspot");
-      const spotHTML = bet ? CZ.stackHTML(bet, T("bet_lbl", "Bet {n}", { n: fmt(bet) })) : s && s.pending ? `<span class="tag">${esc(T("next_n", "next {n}", { n: fmt(s.pending) }))}</span>` : "";
+      const spotHTML = bet ? CZ.stackHTML(bet, T("bet_lbl", "Bet {n}", { n: fmt(bet) }), hrv) : s && s.pending ? `<span class="tag">${esc(T("next_n", "next {n}", { n: fmt(s.pending) }))}</span>` : "";
       if (spot.dataset.v !== spotHTML) { spot.dataset.v = spotHTML; spot.innerHTML = spotHTML; }
       spot.classList.toggle("on", !!bet);
       const who = el.querySelector(".who");
@@ -173,9 +175,9 @@
     $("cz-msg").innerHTML = esc(msg) + (sub ? `<small>${esc(sub)}</small>` : "");
     CZ.armClock($("cz-fclock"), dlx, nom);
     const where = t.room ? `🐸 ${esc(T("in_room", "Camfrog room {room}", { room: t.room_name || t.room }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
-    const meta = [`👑 ${esc(t.host)}`, where, t.round_no ? esc(T("round_n", "Round {n}", { n: t.round_no })) : "", esc(T("decks_n", "{n} decks", { n: t.decks })),
+    const meta = [t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "", `👑 ${esc(t.host)}`, where, t.round_no ? esc(T("round_n", "Round {n}", { n: t.round_no })) : "", esc(T("decks_n", "{n} decks", { n: t.decks })),
                   t.on_stream ? `📺 ${esc(T("on_stream", "On Pepe's stream"))}` : t.stream_queue ? `📺 ${esc(T("stream_q", "stream queue #{n}", { n: t.stream_queue }))}` : ""]
-      .filter(Boolean).map((x) => `<span class="tag">${x}</span>`).join("");
+      .filter(Boolean).map((x, i) => `<span class="tag${i === 0 && t.high_stakes ? " hr" : ""}">${x}</span>`).join("");
     if ($("cz-meta").dataset.v !== meta) { $("cz-meta").dataset.v = meta; $("cz-meta").innerHTML = meta; }
 
     // spectators
@@ -183,6 +185,7 @@
     const seated = !!(me && (me.seat || me.pending));
     let wtxt = "";
     if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_signin", "You're watching."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
+    else if (open && me && !seated && t.high_stakes && !me.high_roller) wtxt = `💎 ${esc(T("watching_hr", "A High Roller table: you're watching. Only High Rollers can bet here."))} <a href="/shop">${esc(T("hr_get", "Get the role"))}</a>`;
     else if (open && me && !seated) wtxt = `👁 ${esc(t.seats.length >= SEATS ? T("watching_full", "You're watching: the table is full.") : T("watching_bet", "You're watching. Place a bet below to take a seat."))}`;
     wb.hidden = !wtxt;
     if (wb.dataset.v !== wtxt) { wb.dataset.v = wtxt; wb.innerHTML = wtxt; }
@@ -193,16 +196,28 @@
     first = false;
   }
 
+  // 1.99ov: the chips a bettor can add. Regular: 100 / 500 / 1K / 5K / 25K; the 💎 ones (100K / 500K / 1M / 5M) only for High
+  // Rollers (and a High Roller table is played with them alone). Only chips up to the table maximum.
+  const REG = [[100, ""], [500, "c500"], [1000, "c1k"], [5000, "c5k"], [25000, "c25k"]];
+  const HRC = [[100000, "c100k hrc"], [500000, "c500k hrc"], [1000000, "c1m hrc"], [5000000, "c5m hrc"]];
+  function chipRack(t, me) {
+    let set = t.high_stakes ? HRC : REG.concat(me.high_roller ? HRC : []);
+    set = set.filter(([v]) => v <= t.max_bet);
+    if (t.high_stakes && !set.length) set = HRC.slice(0, 1);
+    return set.slice(-6).concat([["max", "cmax"]]);
+  }
+
   function dock(t, me, betting) {
     const dk = $("cz-dock");
     const open = t.status === "open";
     dk.hidden = !CZ.signed || !open || !me;
     if (dk.hidden) return;
-    const maxAllowed = Math.max(0, me.high_roller ? me.balance : Math.min(t.max_bet, me.balance));
+    const maxAllowed = Math.max(0, Math.min(t.max_bet, me.balance));
+    const hrLocked = !!t.high_stakes && !me.high_roller;           // 1.99ov: a High Roller table - others watch
     const inRound = !betting && t.seats.some((s) => me.seat && s.seat === me.seat && s.hands.length);
     const myTurn = !!(me.my_turn && t.turn);
     const playing = myTurn || me.can_insure;
-    const showBet = !playing && !me.banned && ((betting && !(me.bet > 0)) || (!betting && !inRound && !me.pending)) && (me.seat || t.seats.length < SEATS);
+    const showBet = !playing && !me.banned && !hrLocked && ((betting && !(me.bet > 0)) || (!betting && !inRound && !me.pending)) && (me.seat || t.seats.length < SEATS);
     $("cz-playbox").hidden = !playing;
     $("cz-betbox").hidden = !showBet;
     for (const b of document.querySelectorAll("#cz-playbox [data-v]")) {
@@ -215,14 +230,17 @@
       if (stake > maxAllowed) stake = maxAllowed;
       $("cz-stake").textContent = fmt(stake);
       $("cz-stakelbl").textContent = betting ? T("your_bet", "Your bet") : T("next_bet", "Next round's bet");
-      $("cz-limits").textContent = (me.high_roller ? T("limits_hr", "Min {min} · no maximum (High Roller)", { min: fmt(t.min_bet) })
-                                                   : T("limits", "Min {min} · max {max}", { min: fmt(t.min_bet), max: fmt(t.max_bet) })) +
+      $("cz-limits").textContent = (t.high_stakes ? "💎 " : "") + T("limits", "Min {min} · max {max}", { min: fmt(t.min_bet), max: fmt(t.max_bet) }) +
                                    " · " + T("balance_n", "Balance {n}", { n: fmt(me.balance) });
+      // the chip rack: the table's own range; High Rollers also get the 💎 chips (100K, 500K, 1M, 5M) that fit under the maximum
       const chips = $("cz-chips");
-      if (!chips.children.length) {
-        chips.innerHTML = [[100, "100", ""], [500, "500", "c500"], [1000, "1K", "c1k"], [5000, "5K", "c5k"], ["max", T("max", "Max"), "cmax"]].map(([v, l, c]) =>
-          `<button type="button" class="chipbtn" data-add="${v}" aria-label="${esc(v === "max" ? T("chip_max", "Bet the most you can") : T("chip_add", "Add {n}", { n: fmt(v) }))}">` +
-          `<span class="chip ${c}" aria-hidden="true"></span><span class="l">${esc(l)}</span></button>`).join("");
+      const rack = chipRack(t, me);
+      const sig = rack.map((c) => c[0]).join();
+      if (chips.dataset.v !== sig) {
+        chips.dataset.v = sig;
+        chips.innerHTML = rack.map(([v, c]) =>
+          `<button type="button" class="chipbtn${/hrc/.test(c) ? " hr" : ""}" data-add="${v}" aria-label="${esc(v === "max" ? T("chip_max", "Bet the most you can") : T("chip_add", "Add {n}", { n: fmt(v) }))}">` +
+          `<span class="chip ${c}" aria-hidden="true"></span><span class="l">${esc(v === "max" ? T("max", "Max") : CZ.short(v))}</span></button>`).join("");
       }
       for (const b of chips.querySelectorAll("button")) b.disabled = b.dataset.add === "max" ? maxAllowed < t.min_bet : stake + Number(b.dataset.add) > maxAllowed;
       const bet = $("cz-bet");
@@ -240,6 +258,7 @@
     }
     let wait = "";
     if (me.banned) wait = T("banned", "You're banned from the casino.");
+    else if (hrLocked && !me.seat) wait = T("hr_watch_note", "💎 High Rollers only: watch the table above.");
     else if (!playing && !showBet) {
       if (betting && me.bet > 0) wait = T("in_for", "You're in for {n}. Pepe deals when the clock runs out.", { n: fmt(me.bet) });
       else if (me.pending) wait = T("in_next", "You're in next round for {n}.", { n: fmt(me.pending) });
@@ -258,7 +277,7 @@
     const b = e.target.closest("button[data-add]");
     if (!b || !last || !last.me) return;
     const t = last.table, me = last.me;
-    const maxAllowed = me.high_roller ? me.balance : Math.min(t.max_bet, me.balance);
+    const maxAllowed = Math.min(t.max_bet, me.balance);
     stake = b.dataset.add === "max" ? maxAllowed : Math.min(maxAllowed, stake + Number(b.dataset.add));
     render(last);
   });

@@ -101,6 +101,11 @@ test("lobby: the viewer's balance and High Roller flag; each row links its lates
   const row = j.tables.find((t) => t.game === "bj");
   assert.match(row.proof, /^\/casino\/fair\/[0-9a-f]{10}\/1$/);
   assert.equal((await get("/api/casino/lobby")).me, null, "signed out: no balance");
+  // 1.99ov: the limits the lobby shows (blackjack + the 💎 tables, the Hold'em High Roller ladder)
+  assert.equal(j.limits.bj.max_bet, 100000);
+  assert.equal(j.limits.bj.hr_max_bet, 1000000);
+  assert.equal(j.limits.holdem.hr_ladder.length, 6);
+  assert.deepEqual(j.limits.holdem.hr_ladder[5], [5000000, 10000000]);
 });
 
 test("casinoOn: the navbar switch follows the site flags (cached settings)", async () => {

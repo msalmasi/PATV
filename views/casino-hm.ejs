@@ -49,6 +49,14 @@
   .presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
   .presets button { min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,.35); color: var(--txt); font: bold 13px Ubuntu, sans-serif; cursor: pointer; }
   .presets button:hover { border-color: var(--gold); }
+  /* 1.99ov: the chip rack (tap a chip to add it to the raise); 💎 chips for High Rollers */
+  .rack { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .rchip { position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+           background: transparent; font: 900 11px/1 Ubuntu, sans-serif; color: #111; transition: transform .1s; }
+  .rchip .chip { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .rchip span.l { position: relative; z-index: 2; padding: 2px 4px; border-radius: 999px; background: rgba(255,255,255,.92); }
+  .rchip.hr span.l { background: rgba(0,0,0,.82); color: #ffe082; box-shadow: 0 0 0 1px rgba(255,215,64,.7); }
+  .rchip:hover { transform: translateY(-2px); }
   .buyamt { font: 900 30px/1 Ubuntu, sans-serif; color: var(--goldt); text-align: center; margin: 6px 0; font-variant-numeric: tabular-nums; }
   .back { display: inline-block; margin: 0 0 6px; font-size: 14px; }
   @media (max-width: 760px) {
@@ -118,6 +126,7 @@
             <button type="button" data-p="pot"><%- t('casino.p_pot') %></button>
             <button type="button" data-p="all"><%- t('casino.p_all') %></button>
           </div>
+          <div class="rack" id="cz-rack" role="group" aria-label="<%- t('casino.chips') %>"></div>
           <div class="raise-row">
             <input type="range" id="cz-slider" aria-label="<%- t('casino.raise_to') %>">
             <input type="number" id="cz-raise" inputmode="numeric" aria-label="<%- t('casino.raise_to') %>">
@@ -143,11 +152,11 @@
       <div class="presets" id="cz-buypresets" style="margin-top:8px"></div>
       <label class="lbl" for="cz-buyin"><%- t('casino.buy_amount') %></label>
       <input type="number" id="cz-buyin" inputmode="numeric">
-      <p class="fine" id="cz-buyhr" hidden><%- t('casino.buy_hr') %></p>
+      <p class="fine" id="cz-buyhr" hidden><%- t('casino.buy_hr_v2') %></p>
       <div class="rowb"><button type="button" class="cz-btn gold wide" id="cz-buygo"></button></div>
     </div>
   </dialog>
   <% } %>
 </main>
-<script src="/public/js/casino-ui.js?v=1"></script>
-<script src="/public/js/casinohm.js?v=4"></script>
+<script src="/public/js/casino-ui.js?v=2"></script>
+<script src="/public/js/casinohm.js?v=5"></script>

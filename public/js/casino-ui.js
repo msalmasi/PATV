@@ -121,8 +121,27 @@
     '<span class="pc-b"></span></span></span>').join("") + "</span>";
 
   // ── chips / avatars ──
-  const chipCls = (n) => (n >= 25000 ? "c25k" : n >= 5000 ? "c5k" : n >= 1000 ? "c1k" : n >= 500 ? "c500" : "");
-  const stackHTML = (n, label) => `<span class="stack"${label ? ` aria-label="${esc(label)}"` : ""}><span class="chip ${chipCls(n)}" aria-hidden="true"></span>${fmt(n)}</span>`;
+  // 1.99ov: the 💎 High Roller denominations (100K / 500K / 1M / 5M) are only drawn for High Rollers and at High Roller tables
+  // (hr = true); everyone else sees the regular chips (the 25K black chip on top).
+  const DENOMS = [[25000, "c25k"], [5000, "c5k"], [1000, "c1k"], [500, "c500"], [100, ""], [1, ""]];
+  const HR_DENOMS = [[5000000, "c5m hrc"], [1000000, "c1m hrc"], [500000, "c500k hrc"], [100000, "c100k hrc"]];
+  const denoms = (hr) => (hr ? HR_DENOMS.concat(DENOMS) : DENOMS);
+  const chipCls = (n, hr) => { for (const [v, c] of denoms(hr)) if (n >= v) return c; return ""; };
+  /** a few chips of n, stacked (biggest on top): the greedy breakdown in the denominations this viewer sees, at most 5 */
+  function pileHTML(n, hr) {
+    const out = [];
+    let left = Math.max(0, Math.trunc(Number(n) || 0));
+    for (const [v, c] of denoms(hr)) {
+      while (left >= v && out.length < 5) { out.push(c); left -= v; }
+      if (out.length >= 5) break;
+    }
+    if (!out.length) out.push("");
+    out.reverse();                                   // the smallest at the bottom, the biggest on top
+    return `<span class="pile" style="--n:${out.length}" aria-hidden="true">` + out.map((c, i) => `<span class="chip ${c}" style="--i:${i}"></span>`).join("") + "</span>";
+  }
+  const stackHTML = (n, label, hr) => `<span class="stack${hr && n >= 100000 ? " hr" : ""}"${label ? ` aria-label="${esc(label)}"` : ""}>${pileHTML(n, hr)}${fmt(n)}</span>`;
+  /** the chip labels: 500, 1K, 25K, 1M, 2.5M */
+  const short = (n) => (n >= 1e6 ? +(n / 1e6).toFixed(1) + "M" : n >= 1e3 ? +(n / 1e3).toFixed(1) + "K" : String(n));
   function avatarHTML(s, badge) {
     const init = esc((String(s.name || "?").trim()[0] || "?"));
     const img = s.avatar ? `<img src="${esc(s.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
@@ -292,9 +311,10 @@
   }
 
   // ── the LOBBY (both games; the page's own game first) ──
+  // 1.99ov: High Roller tables are a section of their own (💎): only High Rollers open / join them, everyone can watch. Their
+  // Hold'em blinds come from the ladder the server sends (limits.holdem.hr_ladder); normal tables stay at 5,000/10,000 or less.
   const BLINDS = ["10/20", "25/50", "50/100", "100/200", "250/500", "1000/2000", "5000/10000"];
-  const BLINDS_HR = ["10000/20000", "25000/50000"];
-  let lobbyTab = game, lobbyData = null, blinds = "25/50";
+  let lobbyTab = game, lobbyData = null, blinds = "25/50", hrBlinds = null;
   function phaseText(t) {
     if (t.game === "holdem") {
       if (t.phase === "between") return t.hand_no ? T("ph_between", "Between hands") : T("ph_waiting", "Waiting for players");
@@ -304,53 +324,80 @@
     return T("ph_round", "Round {n} in play", { n: t.round_no });
   }
   const streetName = (p) => ({ preflop: T("st_preflop", "Pre-flop"), flop: T("st_flop", "Flop"), turn: T("st_turn", "Turn"), river: T("st_river", "River") }[p] || p);
-  function tableCard(t) {
+  function tableCard(t, me) {
     const hm = t.game === "holdem";
+    const hr = !!t.high_stakes;
     const url = (hm ? "/casino/holdem/t/" : "/casino/blackjack/t/") + encodeURIComponent(t.id);
     const dots = Array.from({ length: t.max_seats }, (_, i) => `<i class="${i < t.players ? "on" : ""}"></i>`).join("");
     const stakes = hm ? T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) }) : T("limits_v", "Bets {min}–{max}", { min: fmt(t.min_bet), max: fmt(t.max_bet) });
     const where = t.room ? `<span class="tag blue">🐸 ${esc(t.room_name || t.room)}</span>` : `<span class="tag">🌐 ${esc(T("web_only", "Web only"))}</span>`;
     const full = t.players >= t.max_seats;
-    return `<article class="tcard${hm ? " hm" : ""}" aria-label="${esc(T("table_of", "{host}'s table", { host: t.host }))}">` +
-      `<div class="tcard-h"><span class="ic" aria-hidden="true">${hm ? "🃏" : "🂡"}</span><div><b>${esc(T("table_of", "{host}'s table", { host: t.host }))}</b>` +
+    const locked = hr && !(me && me.high_roller);              // a High Roller table: everyone else can only watch
+    const join = locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`
+      : `<a class="cz-btn gold sm" href="${url}${signed ? (hm ? "?sit=1" : "#bet") : ""}"${full ? ' aria-disabled="true"' : ""}>${esc(full ? T("full", "Full") : T("join", "Join"))}</a>`;
+    return `<article class="tcard${hm ? " hm" : ""}${hr ? " hr" : ""}" aria-label="${esc(T("table_of", "{host}'s table", { host: t.host }))}">` +
+      `<div class="tcard-h"><span class="ic" aria-hidden="true">${hr ? "💎" : hm ? "🃏" : "🂡"}</span><div><b>${esc(T("table_of", "{host}'s table", { host: t.host }))}</b>` +
       `<small>${esc(hm ? T("g_holdem", "No-Limit Hold'em") : T("g_bj", "Blackjack"))} · ${esc(phaseText(t))}</small></div></div>` +
       `<div class="seatdots" aria-label="${esc(T("seats_v", "{n} of {max} seats taken", { n: t.players, max: t.max_seats }))}">${dots}<span>${fmt(t.players)}/${fmt(t.max_seats)}</span></div>` +
-      `<div class="meta"><span class="tag gold">${esc(stakes)}</span>${t.high_stakes ? `<span class="tag">💎 ${esc(T("high_roller", "High Roller"))}</span>` : ""}${where}` +
+      `<div class="meta"><span class="tag gold">${esc(stakes)}</span>${hr ? `<span class="tag hr">💎 ${esc(T("high_roller", "High Roller"))}</span>` : ""}${where}` +
       `${t.on_stream ? `<span class="tag red">📺 ${esc(T("on_stream", "On Pepe's stream"))}</span>` : t.stream_queue ? `<span class="tag">📺 #${t.stream_queue}</span>` : ""}` +
       `${t.proof ? `<a class="tag green" href="${esc(t.proof)}">🔐 ${esc(T("fair_short", "Fair"))}</a>` : ""}</div>` +
-      `<div class="acts"><a class="cz-btn gold sm" href="${url}${signed ? (hm ? "?sit=1" : "#bet") : ""}"${full ? ' aria-disabled="true"' : ""}>${esc(full ? T("full", "Full") : T("join", "Join"))}</a>` +
-      `<a class="cz-btn ghost sm" href="${url}">👁 ${esc(T("watch", "Watch"))}</a></div></article>`;
+      `<div class="acts">${join}<a class="cz-btn ghost sm" href="${url}">👁 ${esc(T("watch", "Watch"))}</a></div></article>`;
   }
+  const blindsLabel = (sb, bb) => (sb >= 100000 ? `${short(sb)}/${short(bb)}` : `${fmt(sb)}/${fmt(bb)}`);
   function renderLobby() {
     const j = lobbyData;
     if (!j) return;
     const all = j.tables || [];
-    const list = all.filter((t) => lobbyTab === "all" || (lobbyTab === "holdem" ? t.game === "holdem" : t.game !== "holdem"));
+    const me = j.me || null;
+    const hr = !!(me && me.high_roller);
+    const lim = j.limits || { bj: { min_bet: 100, max_bet: 100000, hr_min_bet: 100000, hr_max_bet: 1000000 }, holdem: { hr_ladder: [] } };
+    const inTab = (t) => lobbyTab === "all" || (lobbyTab === "holdem" ? t.game === "holdem" : t.game !== "holdem");
+    const list = all.filter((t) => inTab(t) && !t.high_stakes);
+    const hrList = all.filter((t) => inTab(t) && t.high_stakes);
     for (const b of document.querySelectorAll(".lob-tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === lobbyTab));
-    $("cz-tables").innerHTML = list.length ? list.map(tableCard).join("")
+    $("cz-tables").innerHTML = list.length ? list.map((t) => tableCard(t, me)).join("")
       : `<div class="lob-empty">${esc(lobbyTab === "holdem" ? T("none_hm", "No Hold'em table is open. Open one and others can join you.")
                                  : lobbyTab === "bj" ? T("none_bj", "No blackjack table is open. Open one and others can join you.")
                                  : T("none_all", "No tables are open right now. Open one and others can join you."))}</div>`;
+    $("cz-hrtables").innerHTML = hrList.length ? hrList.map((t) => tableCard(t, me)).join("")
+      : `<div class="lob-empty">${esc(hr ? T("none_hr_mine", "No High Roller table is open. Open one below.") : T("none_hr", "No High Roller table is open right now."))}</div>`;
     $("cz-stat-tables").querySelector("b").textContent = fmt(all.length);
     $("cz-stat-players").querySelector("b").textContent = fmt(all.reduce((s, t) => s + (t.players || 0), 0));
     $("cz-stat-rooms").querySelector("b").textContent = fmt((j.rooms || []).length);
-    balance(j.me ? j.me.balance : null);
+    balance(me ? me.balance : null);
     // open a table: only signed in, only while that game's switch is on
     $("cz-open-bj").hidden = !j.enabled;
     $("cz-open-hm").hidden = !j.hm_enabled;
     $("cz-open-wrap").hidden = !j.enabled && !j.hm_enabled;
     for (const b of document.querySelectorAll(".cz-openbtn")) b.hidden = !signed;
     for (const b of document.querySelectorAll(".cz-signin")) b.hidden = signed;
-    const hr = !!(j.me && j.me.high_roller);
-    $("cz-bjmax").textContent = hr ? T("bj_limits_hr", "Bets 100 to no limit: you're a High Roller.") : T("bj_limits", "Bets 100–10,000 PAT. High Rollers have no maximum.");
+    $("cz-bjmax").textContent = T("bj_limits_n", "Bets {min}–{max} PAT.", { min: fmt(lim.bj.min_bet), max: fmt(lim.bj.max_bet) });
     const bl = $("cz-blinds");
-    const opts = BLINDS.concat(hr ? BLINDS_HR : []);
-    if (bl.dataset.v !== opts.join()) {
-      bl.dataset.v = opts.join();
-      bl.innerHTML = opts.map((b) => `<button type="button" data-b="${b}" aria-pressed="${b === blinds}">${b.split("/").map(fmt).join("/")}</button>`).join("");
+    if (bl.dataset.v !== BLINDS.join()) {
+      bl.dataset.v = BLINDS.join();
+      bl.innerHTML = BLINDS.map((b) => `<button type="button" data-b="${b}" aria-pressed="${b === blinds}">${b.split("/").map(fmt).join("/")}</button>`).join("");
     }
-    const [sb, bb] = blinds.split("/").map(Number);
-    $("cz-buyrange").textContent = T("buy_range", "Buy-in {min}–{max} chips (20–200 big blinds).", { min: fmt(bb * 20), max: fmt(bb * 200) }) + (sb > 5000 ? " 💎" : "");
+    const bb = Number(blinds.split("/")[1]);
+    $("cz-buyrange").textContent = T("buy_range", "Buy-in {min}–{max} chips (20–200 big blinds).", { min: fmt(bb * 20), max: fmt(bb * 200) });
+    // the 💎 card: High Rollers open tables from it; everyone else sees what it is and where the role comes from
+    $("cz-hr-can").hidden = !hr;
+    $("cz-hr-locked").hidden = hr;
+    $("cz-open-hrbj-go").hidden = !j.enabled;
+    $("cz-hrbj").hidden = !j.enabled;
+    $("cz-hrbj").textContent = T("hrbj_limits", "Blackjack: bets {min}–{max} PAT.", { min: fmt(lim.bj.hr_min_bet), max: fmt(lim.bj.hr_max_bet) });
+    const ladder = (lim.holdem.hr_ladder || []).map(([s, b]) => `${s}/${b}`);
+    if (!hrBlinds || !ladder.includes(hrBlinds)) hrBlinds = ladder[0] || null;
+    const hb = $("cz-hrblinds");
+    for (const id of ["cz-hrblinds-lbl", "cz-hrblinds", "cz-hrbuy", "cz-open-hrhm-go"]) $(id).hidden = !j.hm_enabled || !ladder.length;
+    if (hb.dataset.v !== ladder.join()) {
+      hb.dataset.v = ladder.join();
+      hb.innerHTML = ladder.map((b) => { const [s, g] = b.split("/").map(Number); return `<button type="button" data-b="${b}" aria-pressed="${b === hrBlinds}" aria-label="${esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(s), bb: fmt(g) }))}">${esc(blindsLabel(s, g))}</button>`; }).join("");
+    }
+    if (hrBlinds) {
+      const hbb = Number(hrBlinds.split("/")[1]);
+      $("cz-hrbuy").textContent = T("buy_range", "Buy-in {min}–{max} chips (20–200 big blinds).", { min: fmt(hbb * 20), max: fmt(hbb * 200) });
+    }
   }
   async function lobby() {
     try {
@@ -358,28 +405,38 @@
       renderLobby();
     } catch (e) { toast(T("lobby_fail", "Couldn't load the tables."), true); }
   }
-  async function openTable(g) {
-    const btn = g === "holdem" ? $("cz-open-hm-go") : $("cz-open-bj-go");
+  /** g: "bj" | "holdem"; high: a 💎 High Roller table */
+  async function openTable(g, high) {
+    const btn = high ? $(g === "holdem" ? "cz-open-hrhm-go" : "cz-open-hrbj-go") : $(g === "holdem" ? "cz-open-hm-go" : "cz-open-bj-go");
     btn.disabled = true;
-    const j = await post("/api/casino/open", { game: g === "holdem" ? "holdem" : "bj", blinds: g === "holdem" ? blinds : undefined, idem: idem() });
+    const body = { game: g === "holdem" ? "holdem" : "bj", idem: idem() };
+    if (g === "holdem") body.blinds = high ? hrBlinds : blinds;
+    else if (high) body.hr = true;
+    const j = await post("/api/casino/open", body);
     btn.disabled = false;
     if (j.ok && j.table) location.href = (g === "holdem" ? "/casino/holdem/t/" : "/casino/blackjack/t/") + j.table + (g === "holdem" ? "?sit=1" : "#bet");
     else toast(j.reply || j.error || T("open_fail", "Couldn't open a table."), true);
+  }
+  function pickBlinds(box, set) {
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-b]");
+      if (!b) return;
+      set(b.dataset.b);
+      for (const x of box.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+      renderLobby();
+    });
   }
   function startLobby() {
     $("cz-lobby").hidden = false;
     for (const b of document.querySelectorAll(".lob-tabs button")) {
       b.addEventListener("click", () => { lobbyTab = b.dataset.tab; renderLobby(); });
     }
-    $("cz-blinds").addEventListener("click", (e) => {
-      const b = e.target.closest("button[data-b]");
-      if (!b) return;
-      blinds = b.dataset.b;
-      for (const x of $("cz-blinds").querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
-      renderLobby();
-    });
+    pickBlinds($("cz-blinds"), (v) => { blinds = v; });
+    pickBlinds($("cz-hrblinds"), (v) => { hrBlinds = v; });
     $("cz-open-bj-go").addEventListener("click", () => openTable("bj"));
     $("cz-open-hm-go").addEventListener("click", () => openTable("holdem"));
+    $("cz-open-hrbj-go").addEventListener("click", () => openTable("bj", true));
+    $("cz-open-hrhm-go").addEventListener("click", () => openTable("holdem", true));
     lobby();
     let tm = setInterval(lobby, 4000);
     document.addEventListener("visibilitychange", () => { clearInterval(tm); tm = setInterval(lobby, document.hidden ? 15000 : 4000); if (!document.hidden) lobby(); });
@@ -441,7 +498,7 @@
     };
   }
 
-  window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, avatarHTML, ringSVG,
+  window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG,
                 armClock, totalFor, pop, net, openSheet, closeSheet, loadHistory, wireHost, startTable, startLobby, actor, streetName, game, tableId, signed,
                 skew: () => skew };
 })();

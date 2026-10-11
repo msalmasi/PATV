@@ -11,8 +11,10 @@
 //   * anti-collusion basics: dup-linked or same-address accounts can't sit at one table, and repeated folds to the
 //     same opponent are flagged (chip dumping).
 // Rules / timers / texts are Pepe's !holdem (frida-bot.py _poker_*): 60 s to act (time-out = check, or fold and sit
-// out), 15 s between hands, 300 s idle close, 9 seats, buy-in 20-200 big blinds, blinds capped at 5,000/10,000 -
-// a High Roller may open bigger tables and buy in over the maximum.
+// out), 15 s between hands, 300 s idle close, 9 seats, buy-in 20-200 big blinds, blinds capped at 5,000/10,000.
+// 1.99ov: High Rollers no longer buy in over a table's maximum. Instead, 💎 High Roller TABLES: blinds from the HR_LADDER
+// (100K/200K up to 5M/10M; nothing between the normal cap and the ladder) - only High Rollers open them or sit, anyone
+// watches.
 "use strict";
 const H = require("./hmengine");
 const fair = require("./fair");
@@ -21,7 +23,21 @@ const money = require("./money");
 const HC = {
   ACT_SECS: 60, NEXT_SECS: 15, IDLE_SECS: 300, MAX_SEATS: 9, MIN_BUY_BB: 20, MAX_BUY_BB: 200, SB_CAP: 5000, BB_CAP: 10000,
   RAKE: 0.02, DUMP_HANDS: 5, DUMP_BB: 50,
+  // 1.99ov: the 💎 High Roller table ladder [sb, bb] (Pepe's POKER_HR_LADDER is the same)
+  HR_LADDER: [[100000, 200000], [250000, 500000], [500000, 1000000], [1000000, 2000000], [2500000, 5000000], [5000000, 10000000]],
 };
+const HR_WORDS = ["hr", "high", "highroller", "high-roller", "vip", "💎"];
+const HR_ONLY_OPEN = "💎 High Roller tables are for High Rollers (the role is in the prize store — !prizes). Anyone can watch one.";
+const HR_ONLY_PLAY = "💎 this is a High Roller table: only High Rollers can sit here (the role is in the prize store — !prizes). You can watch.";
+/** "250", "100k", "2.5m", "1,000" -> a whole number (NaN when it isn't one) */
+function amt(x) {
+  const m = /^(\d+(?:\.\d+)?)([km])?$/i.exec(String(x).replace(/,/g, "").trim());
+  if (!m) return NaN;
+  const v = Number(m[1]) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1);
+  return Number.isInteger(v) ? v : NaN;
+}
+const short = (n) => (n >= 1e6 && n % 1e5 === 0 ? `${n / 1e6}M` : n >= 1e3 && n % 100 === 0 ? `${n / 1e3}K` : String(n));
+const ladderText = () => HC.HR_LADDER.map(([a, b]) => `${short(a)}/${short(b)}`).join(", ");
 
 function install(core) {
   const { S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, rewards, dropLine } = core;
@@ -50,17 +66,21 @@ function install(core) {
 
   async function start(actor, room, blinds) {
     let sb = 25, bb = 50;
-    if (blinds) {
-      const spec = String(blinds).replace(/[-\\]/g, "/");
-      const m = /^(\d{1,9})(?:\/(\d{1,9}))?$/.exec(spec);
-      if (!m) return R(false, "usage: !holdem start <sb>/<bb>  e.g. !holdem start 25/50");
-      if (m[2]) { sb = Number(m[1]); bb = Number(m[2]); } else { bb = Number(m[1]); sb = Math.max(1, Math.floor(bb / 2)); }
+    if (blinds && HR_WORDS.includes(String(blinds).toLowerCase())) [sb, bb] = HC.HR_LADDER[0];
+    else if (blinds) {
+      const parts = String(blinds).replace(/[-\\]/g, "/").split("/");
+      const a = amt(parts[0]), b = parts.length > 1 ? amt(parts[1]) : NaN;
+      if (parts.length > 2 || !Number.isFinite(a) || (parts.length > 1 && !Number.isFinite(b)) || a > 1e9 || b > 1e9) {
+        return R(false, "usage: !holdem start <sb>/<bb>  e.g. !holdem start 25/50 (💎 High Rollers: !holdem start 100k/200k)");
+      }
+      if (parts.length > 1) { sb = a; bb = b; } else { bb = a; sb = Math.max(1, Math.floor(bb / 2)); }
     }
     if (sb < 1 || bb < 2 || sb >= bb) return R(false, "blinds must be positive with small < big, e.g. 25/50.");
     const high = sb > HC.SB_CAP || bb > HC.BB_CAP;
-    if (high && !(await isHighRoller(actor.uid))) {
-      return R(false, `max blinds are ${fmt(HC.SB_CAP)}/${fmt(HC.BB_CAP)} (High Rollers can open bigger tables — see !prizes).`);
+    if (high && !HC.HR_LADDER.some(([s2, b2]) => s2 === sb && b2 === bb)) {
+      return R(false, `max blinds are ${fmt(HC.SB_CAP)}/${fmt(HC.BB_CAP)}. 💎 High Roller tables play ${ladderText()}.`);
     }
+    if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN);
     const T = newTable(actor, room, sb, bb, high);
     S.tables.set(T.id, T);
     await commitNext(T);
@@ -105,12 +125,9 @@ function install(core) {
     const e = T.eng;
     const seated = e.seats.includes(actor.uid);
     if (seated && e.hand_active && e.players.includes(actor.uid)) return R(false, "top up between hands — you're in this one.");
-    if (amount < T.min_buy) return R(false, `buy-in must be ${fmt(T.min_buy)}–${fmt(T.max_buy)} for these stakes.`);
-    const over = amount > T.max_buy || (seated && (e.chips[actor.uid] || 0) + amount > T.max_buy);
-    if (over && !(await isHighRoller(actor.uid))) {
-      return R(false, amount > T.max_buy ? `buy-in must be ${fmt(T.min_buy)}–${fmt(T.max_buy)} for these stakes (High Rollers can go over — see !prizes).`
-                                         : `that would put your stack over the ${fmt(T.max_buy)} max (High Rollers can go over).`);
-    }
+    if (T.high_stakes && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_PLAY);
+    if (amount < T.min_buy || amount > T.max_buy) return R(false, `buy-in must be ${fmt(T.min_buy)}–${fmt(T.max_buy)} for these stakes.`);
+    if (seated && (e.chips[actor.uid] || 0) + amount > T.max_buy) return R(false, `that would put your stack over the ${fmt(T.max_buy)} max.`);
     remember(T, actor);
     const key = opKey(T, actor.uid, "buy");
     T.intent = { kind: "buy", key, uid: actor.uid, amount, ts: clock() };
@@ -541,4 +558,4 @@ function install(core) {
            midRound: (T) => T.eng.hand_active };
 }
 
-module.exports = { install, HC };
+module.exports = { install, HC, amt };

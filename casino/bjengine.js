@@ -50,7 +50,7 @@ const SUIT_SYM = { s: "♠", h: "♥", d: "♦", c: "♣" };
 const cardStr = (c) => (c[0] === "T" ? "10" : c[0]) + SUIT_SYM[c[1]];
 const cardsStr = (cs) => cs.map(cardStr).join(" ");
 
-function newTable({ numDecks = 6, minBet = 100, maxBet = 10000, hitSoft17 = true } = {}) {
+function newTable({ numDecks = 6, minBet = 100, maxBet = 100000, hitSoft17 = true } = {}) {
   return {
     num_decks: numDecks, min_bet: minBet, max_bet: maxBet, hit_soft_17: !!hitSoft17,
     seats: [], names: {}, round_no: 0, phase: "idle", leaving: [],
@@ -95,11 +95,11 @@ function openBetting(t) {
   t.phase = "betting";
 }
 
-/** uncapped: no table maximum for this player (a High Roller) - the minimum still holds */
-function placeBet(t, key, name, amount, uncapped = false) {
+/** 1.99ov: the table's limits hold for everyone (the High Roller role no longer lifts the maximum - it opens 💎 tables) */
+function placeBet(t, key, name, amount) {
   if (!["betting", "idle"].includes(t.phase)) throw new BJError("betting is closed — wait for the next round.");
   amount = Math.trunc(Number(amount));
-  if (!(amount >= t.min_bet) || (amount > t.max_bet && !uncapped)) {
+  if (!(amount >= t.min_bet) || amount > t.max_bet) {
     throw new BJError(`bet must be ${t.min_bet.toLocaleString("en-US")}–${t.max_bet.toLocaleString("en-US")}.`);
   }
   sit(t, key, name);
