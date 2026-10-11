@@ -6,6 +6,7 @@
   const day = (ms) => ms ? new Date(ms).toISOString().slice(0, 10) : '';
   const V = S.viewer || {}, PASS = V.pass, PAD = S.pad, ST = S.stripe || { enabled: false };
   const STK = stickers || { packs: [], signed: false, allowance: null };
+  const stkL_ = (k, d) => (t.has(k) ? t(k) : t.esc(d));   // 1.99lf: pack / sticker names from en.json (stk.pack.* / stk.s.*), English from stickers.json
   const statusTxt = (s) => !s ? '' : s.status === 'comped' ? t('premium.status.comped') : s.status === 'active' ? t('premium.status.active', { date: day(s.paid_through) })
     : s.status === 'grace' ? t('premium.status.grace', { date: day(s.ends) }) : s.status === 'lapsed' ? t('premium.status.lapsed', { date: day(s.paid_through) }) : t('premium.status.inactive');
   const PT_PERKS = [
@@ -149,9 +150,9 @@
     <div class="packs">
       <% STK.packs.forEach((p) => { %>
         <div class="card pack">
-          <h3 style="margin:0;font-size:17px"><%= p.emoji %> <%= p.name %><% if (p.owned) { %> <span class="tag"><%- t('premium.stk.yours') %></span><% } %></h3>
-          <p class="mut" style="margin:0"><%= p.desc %></p>
-          <div class="sheet"><% p.stickers.forEach((s) => { %><img src="<%= s.url %>" alt="<%= s.name %>" title="<%= s.name %>" loading="lazy"><% }) %></div>
+          <h3 style="margin:0;font-size:17px"><%= p.emoji %> <%- stkL_('stk.pack.' + p.id + '.name', p.name) %><% if (p.owned) { %> <span class="tag"><%- t('premium.stk.yours') %></span><% } %></h3>
+          <p class="mut" style="margin:0"><%- stkL_('stk.pack.' + p.id + '.desc', p.desc) %></p>
+          <div class="sheet"><% p.stickers.forEach((s) => { const sn_ = stkL_('stk.s.' + p.id + '.' + s.id, s.name); %><img src="<%= s.url %>" alt="<%- sn_ %>" title="<%- sn_ %>" loading="lazy"><% }) %></div>
           <% if (STK.signed) { %><div class="row">
             <% if (!p.owned) { %>
               <% if (STK.allowance && STK.allowance.left) { %><button type="button" class="btn violet" data-stk="<%= p.id %>" data-free="1"><%- t('premium.stk.claim') %></button><% } %>

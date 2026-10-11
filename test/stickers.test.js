@@ -42,9 +42,14 @@ test.before(async () => {
 });
 test.after(() => F.sync({}));
 
-test("catalog: three starter packs of eight, every sticker has its SVG art; price from the setting (250k)", () => {
+test("catalog: six packs of eight (1.99lf added three), every sticker has its SVG art and English i18n keys; price from the setting (250k)", () => {
   const c = STK.catalog();
-  assert.deepEqual(c.map((p) => p.id), ["pixelpepe", "kawaiipond", "patvreacts"]);
+  assert.deepEqual(c.map((p) => p.id), ["pixelpepe", "kawaiipond", "patvreacts", "miclife", "highroller", "movienight"]);
+  const EN = require("../locales/en.json");
+  for (const p of c) {
+    assert.ok(EN["stk.pack." + p.id + ".name"] && EN["stk.pack." + p.id + ".desc"], "en.json names " + p.id);
+    for (const s of p.stickers) assert.ok(EN["stk.s." + p.id + "." + s.id], "en.json names " + p.id + "/" + s.id);
+  }
   for (const p of c) {
     assert.equal(p.stickers.length, 8);
     assert.equal(p.price, 250000);

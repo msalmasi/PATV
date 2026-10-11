@@ -15,6 +15,21 @@
       "stickers": [
         { "id": "gg", "name": "GG" }, { "id": "lol", "name": "LOL" }, { "id": "w", "name": "W" }, { "id": "l", "name": "L" },
         { "id": "pog", "name": "POG" }, { "id": "onair", "name": "On air" }, { "id": "pat", "name": "PAT coin" }, { "id": "ribbit", "name": "Ribbit!" }
+      ] },
+    { "id": "miclife", "name": "Mic Life", "emoji": "🎙️", "desc": "Room life in eight stickers: on mic, muted, cam on, AFK, BRB, me next, vibing in headphones and who's talking?",
+      "stickers": [
+        { "id": "onmic", "name": "On mic" }, { "id": "muted", "name": "Muted" }, { "id": "camon", "name": "Cam on" }, { "id": "afk", "name": "AFK" },
+        { "id": "brb", "name": "BRB" }, { "id": "handup", "name": "Me next!" }, { "id": "vibing", "name": "Vibing" }, { "id": "who", "name": "Who's talking?" }
+      ] },
+    { "id": "highroller", "name": "High Roller", "emoji": "🎰", "desc": "For the tables and the vault: jackpot, all in, blackjack, dice, cha-ching, heist mode, busted and a Pepeball.",
+      "stickers": [
+        { "id": "jackpot", "name": "Jackpot!" }, { "id": "allin", "name": "All in" }, { "id": "blackjack", "name": "Blackjack!" }, { "id": "dice", "name": "Roll the dice" },
+        { "id": "chaching", "name": "Cha-ching" }, { "id": "heist", "name": "Heist mode" }, { "id": "busted", "name": "Busted" }, { "id": "pepeball", "name": "Pepeball" }
+      ] },
+    { "id": "movienight", "name": "Movie Night", "emoji": "🍿", "desc": "Popcorn, 3D glasses, a VHS tape, an old CRT, action!, buffering, be kind rewind and no spoilers.",
+      "stickers": [
+        { "id": "popcorn", "name": "Popcorn time" }, { "id": "glasses3d", "name": "3D glasses" }, { "id": "vhs", "name": "VHS" }, { "id": "crt", "name": "Now showing" },
+        { "id": "action", "name": "Action!" }, { "id": "buffering", "name": "Buffering..." }, { "id": "rewind", "name": "Be kind, rewind" }, { "id": "nospoilers", "name": "No spoilers!" }
       ] }
   ]
 }
