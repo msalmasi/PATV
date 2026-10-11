@@ -259,6 +259,7 @@ app.get("/healthz", (req, res) => {
 require("./home").register(app, { addUser, xpForNextLevel });
 require("./terms").register(app, { addUser });   // 1.99cc: /terms, /privacy, POST /api/terms/accept
 require("./guidelines").register(app, { addUser });   // 1.99dc: /guidelines - Padiquette, the site-wide community guidelines
+require("./styleguide").register(app, { addUser });   // 1.99pj: /styleguide - the design system's living styleguide (public/css/ds.css, docs/design-system.md)
 
 // The admin area (adminweb.js, 1.99cu): /admin Overview + section pages in one shell; /admin/panel -> /admin.
 // Same gate as the old /admin/panel: Admin or Staff, else a flash + /login.

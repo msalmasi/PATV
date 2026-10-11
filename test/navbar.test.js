@@ -56,7 +56,7 @@ test("Post and Go live share one pill base: same height, padding, font, radius, 
     assert.ok(own, cls + " has its colour rule");
     assert.doesNotMatch(own[1], /padding|font|height|width|border-radius/, cls + " only sets colours");
   }
-  assert.match(src, /\.navbar a\.nav-golive \{ background: linear-gradient\(90deg, #e53935, #ff7043\)/, "Go live keeps its red gradient");
+  assert.match(src, /\.navbar a\.nav-golive \{ background: linear-gradient\(90deg, var\(--ds-live\), var\(--ds-live-2\)\)/, "Go live keeps its red gradient (1.99pj: ds tokens, white text >= 3.9:1)");
   assert.match(src, /\.navbar a\.nav-post \{ border-color: #3c7a46; background: #12301a;/, "Post keeps its green outline");
   assert.doesNotMatch(src, /\.nav-post \{ padding: 5px|\.nav-golive \{ padding: 6px/, "no old per-button paddings left");
   const n = nav(await render({ user: "someuser" }));

@@ -1,11 +1,11 @@
 body {
     display: grid;
     grid-template-rows: auto;
-    /* background-color: #282c34; */
-    background-color: #0F0F11;
+    /* 1.99pj: design-system tokens (public/css/ds.css, loaded first) - same values as before */
+    background-color: var(--ds-bg, #0F0F11);
     color: rgb(255, 255, 255);
     margin: 0;
-    font-family: ubuntu;
+    font-family: var(--ds-font, ubuntu);
   }
 
 /* The Modal (background) */
@@ -213,8 +213,8 @@ header {
     width: 40px; /* Set the size of the avatar */
     height: 40px;
     margin-left: 10px; /* Adds some space between the Sign In link and the avatar */
-    border-radius: 50%; // This makes the image round
-    object-fit: cover; // Ensures the image covers the area without stretching
+    border-radius: 50%; /* round */
+    object-fit: cover; /* 1.99pj: was dropped - a '//' "comment" made it part of an invalid declaration */
 }
 
 
@@ -345,8 +345,8 @@ margin-left: 20px;
     width: 40px; /* Set the size of the avatar */
     height: 40px;
     margin-left: 10px; /* Adds some space between the Sign In link and the avatar */
-    border-radius: 50%; // This makes the image round
-    object-fit: cover; // Ensures the image covers the area without stretching
+    border-radius: 50%;
+    object-fit: cover;
 }
 
 #profile-header {
@@ -658,11 +658,6 @@ height: 1.5rem;
     font-size: 1.2rem;
     font-weight: bold;
 }
-/* 
-.profile-container h1 {
-    color: #333;
-    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
-} */
 /* Thin dark scrollbars everywhere (feeds, lists, popovers) - the native light ones clash with the dark theme */
 * { scrollbar-width: thin; scrollbar-color: #2f4a33 transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }

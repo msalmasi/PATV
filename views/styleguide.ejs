@@ -1,0 +1,383 @@
+<%- include('layout', { title: title, user: user }) %>
+<%# 1.99pj: /styleguide (styleguide.js) - every token and ds-* component from public/css/ds.css, rendered live.
+    The spec is docs/design-system.md. Token values are read from the stylesheet in the browser (getComputedStyle),
+    so this page can't drift from ds.css. Developer reference: English only, unlisted, noindex. -%>
+<style>
+  .sg .sg-sec { display: grid; gap: var(--ds-sp-4); scroll-margin-top: 72px; }
+  .sg .sg-sec + .sg-sec { padding-block-start: var(--ds-sp-8); border-block-start: 1px solid var(--ds-line-soft); }
+  .sg .sg-sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); gap: var(--ds-sp-2h); }
+  .sg .sg-chip { display: grid; grid-template-rows: 56px auto; border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); overflow: hidden; background: var(--ds-surface); min-width: 0; }
+  .sg .sg-chip > i { display: block; border-block-end: 1px solid var(--ds-line); }
+  .sg .sg-chip > div { padding: 8px 10px; display: grid; gap: 2px; min-width: 0; }
+  .sg .sg-chip code { background: none; padding: 0; font-size: 11.5px; color: #ddd; overflow-wrap: anywhere; }
+  .sg .sg-chip small { color: var(--ds-text-muted); font: 11px/1.3 var(--ds-font-mono); overflow-wrap: anywhere; }
+  .sg .sg-type { display: grid; gap: 0; }
+  .sg .sg-type > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 14px 0; border-block-end: 1px solid var(--ds-line-soft); }
+  .sg .sg-type > div:last-child { border-block-end: 0; }
+  @media (min-width: 760px) { .sg .sg-type > div { grid-template-columns: 220px minmax(0, 1fr); align-items: baseline; gap: 20px; } }
+  .sg .sg-spec { color: var(--ds-text-muted); font: 11.5px/1.5 var(--ds-font-mono); }
+  .sg .sg-spec b { color: #ddd; font: 700 13px/1.4 var(--ds-font); display: block; }
+  .sg .sg-sp { display: grid; gap: 6px; }
+  .sg .sg-sp > div { display: grid; grid-template-columns: 110px 48px minmax(0, 1fr); align-items: center; gap: 10px; font: 12px var(--ds-font-mono); color: var(--ds-text-muted); }
+  .sg .sg-sp i { display: block; height: 12px; background: var(--ds-green); border-radius: 2px; }
+  .sg .sg-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); gap: var(--ds-sp-3); }
+  .sg .sg-box { height: 84px; display: grid; place-items: center; text-align: center; background: var(--ds-surface-2); border: 1px solid var(--ds-line-strong); color: var(--ds-text-muted); font: 11.5px/1.4 var(--ds-font-mono); padding: 6px; }
+  .sg .sg-demo { display: grid; gap: var(--ds-sp-3); padding: var(--ds-sp-4); border: 1px dashed #2a2a2a; border-radius: var(--ds-r-xl); background: #0c0c0e; min-width: 0; }
+  .sg .sg-demo > .sg-cap { color: var(--ds-text-muted); font: 11.5px/1.4 var(--ds-font-mono); }
+  .sg .sg-ics p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+  .sg .sg-base { background-image: linear-gradient(transparent calc(50% - .5px), rgba(255, 207, 64, .5) calc(50% - .5px), rgba(255, 207, 64, .5) calc(50% + .5px), transparent calc(50% + .5px)); }
+  .sg .sg-acc { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: var(--ds-sp-3); }
+  .sg .sg-bp td:first-child { font-family: var(--ds-font-mono); }
+</style>
+<main class="ds-page sg" id="top">
+  <section class="ds-hero">
+    <span class="ds-eyebrow">PATV · Design system · v1 (1.99pj)</span>
+    <h1>Styleguide</h1>
+    <p class="ds-lead">Every token and component in <code>public/css/ds.css</code>, rendered live. The rules for using them are in <code>docs/design-system.md</code>. Load order on every page: <code>ds.css</code> → <code>styles.css</code> → the page's own CSS.</p>
+    <div class="ds-ctas">
+      <button type="button" class="ds-btn" id="sgRtl"><span class="ds-ic" aria-hidden="true">↔️</span> Toggle RTL preview</button>
+      <a class="ds-btn ghost" href="#components">Jump to components</a>
+    </div>
+    <div class="ds-pills">
+      <span class="ds-pill-stat"><b>1</b> stylesheet</span>
+      <span class="ds-pill-stat"><b>15</b> type roles</span>
+      <span class="ds-pill-stat"><b>4px</b> grid</span>
+      <span class="ds-pill-stat"><b>44px</b> tap targets</span>
+    </div>
+  </section>
+
+  <nav class="ds-subnav" aria-label="Styleguide sections">
+    <div class="ds-tabs">
+      <a class="ds-tab" href="#colour">Colour</a><a class="ds-tab" href="#type">Type</a><a class="ds-tab" href="#space">Spacing</a>
+      <a class="ds-tab" href="#radii">Radii &amp; elevation</a><a class="ds-tab" href="#layout">Layout</a><a class="ds-tab" href="#icons">Icons</a>
+      <a class="ds-tab" href="#components">Buttons</a><a class="ds-tab" href="#chips">Chips &amp; tabs</a><a class="ds-tab" href="#cards">Cards</a>
+      <a class="ds-tab" href="#forms">Forms</a><a class="ds-tab" href="#tables">Tables</a><a class="ds-tab" href="#feedback">Feedback</a>
+      <a class="ds-tab" href="#overlays">Overlays</a><a class="ds-tab" href="#data">PAT &amp; data</a><a class="ds-tab" href="#accents">Accents</a>
+    </div>
+  </nav>
+
+  <!-- ───── colour ───── -->
+  <section class="sg-sec" id="colour">
+    <h2 class="ds-h2 dot">Colour</h2>
+    <p class="ds-sub">Values are read from ds.css. Text tokens all pass 4.5:1 on every surface; nothing quieter than <code>--ds-text-faint</code> is allowed for text.</p>
+    <% for (const [group, names] of Object.entries(TOKENS)) { %>
+      <h3 class="ds-label"><%= group %></h3>
+      <div class="sg-sw">
+        <% for (const n of names) { %><div class="sg-chip" data-token="<%= n %>"><i style="background: var(<%= n %>)"></i><div><code><%= n %></code><small class="sg-val">…</small></div></div><% } %>
+      </div>
+    <% } %>
+    <div class="sg-demo">
+      <span class="sg-cap">Text levels on --ds-surface</span>
+      <div class="ds-card">
+        <span style="color: var(--ds-text-strong)">--ds-text-strong · headings and numbers</span>
+        <span style="color: var(--ds-text)">--ds-text · body copy</span>
+        <span style="color: var(--ds-text-2)">--ds-text-2 · leads and secondary copy</span>
+        <span style="color: var(--ds-text-muted)">--ds-text-muted · meta, captions, labels</span>
+        <span style="color: var(--ds-text-faint)">--ds-text-faint · timestamps, footers (the floor)</span>
+        <span style="color: var(--ds-text-disabled)">--ds-text-disabled · disabled controls only</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── type ───── -->
+  <section class="sg-sec" id="type">
+    <h2 class="ds-h2 dot">Typography</h2>
+    <p class="ds-sub">Ubuntu 400 / 500 / 700 for everything; Press Start 2P only for eyebrows, pixel headings and arcade numerals (never body text, never under 9px). Sizes are the same on phones except the two clamp() headings.</p>
+    <div class="ds-card sg-type">
+      <% for (const [role, cls, tok, lh, wt, ls, sample] of TYPE) { %>
+        <div>
+          <div class="sg-spec"><b><%= role %></b>.<%= cls.split(' ')[0] %> · <span class="sg-tok" data-token="<%= tok %>"><%= tok %></span> / <%= lh %> · <%= wt %> · <%= ls %></div>
+          <div class="<%= cls %>"><%= sample %></div>
+        </div>
+      <% } %>
+      <div>
+        <div class="sg-spec"><b>Numbers</b>.ds-pat / tabular-nums</div>
+        <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:baseline">
+          <span class="ds-pat xl"><b>1,250,000</b><small>PAT</small></span>
+          <span class="ds-pat lg"><b>48,200</b><small>PAT</small></span>
+          <span class="ds-pat"><b>900</b><small>PAT</small></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───── spacing ───── -->
+  <section class="sg-sec" id="space">
+    <h2 class="ds-h2 dot">Spacing</h2>
+    <p class="ds-sub">A 4px grid. Card padding 16 (20 for .lg), gap inside a card 10, between cards 12, between page sections 24-32, page gutter 16 / 20 / 24.</p>
+    <div class="ds-card sg-sp">
+      <% for (const n of SPACE) { %><div><code><%= n %></code><span class="sg-val" data-token="<%= n %>">…</span><i style="width: var(<%= n %>)"></i></div><% } %>
+    </div>
+  </section>
+
+  <!-- ───── radii + elevation ───── -->
+  <section class="sg-sec" id="radii">
+    <h2 class="ds-h2 dot">Radii &amp; elevation</h2>
+    <div class="sg-boxes">
+      <% for (const n of RADII) { %><div class="sg-box" style="border-radius: var(<%= n %>)"><span><%= n %><br><span class="sg-val" data-token="<%= n %>">…</span></span></div><% } %>
+    </div>
+    <div class="sg-boxes">
+      <% for (const n of ELEV) { %><div class="sg-box" style="box-shadow: var(<%= n %>); border-radius: var(--ds-r-lg); background: var(--ds-surface-3)"><span><%= n %></span></div><% } %>
+      <div class="sg-box" style="border-radius: var(--ds-r-lg); box-shadow: var(--ds-focus-ring)"><span>--ds-focus-ring</span></div>
+    </div>
+  </section>
+
+  <!-- ───── layout ───── -->
+  <section class="sg-sec" id="layout">
+    <h2 class="ds-h2 dot">Layout</h2>
+    <div class="ds-tbl sg-bp"><table>
+      <thead><tr><th>Breakpoint</th><th>Name</th><th>What changes</th></tr></thead>
+      <tbody>
+        <tr><td>≤ 420px</td><td>xs phone</td><td>Navbar tightens (32px CTAs); stack every row</td></tr>
+        <tr><td>≤ 520px</td><td>phone</td><td>Card padding 16 (never less); hero 24/20</td></tr>
+        <tr><td>≤ 760px</td><td>tablet</td><td>☰ menu replaces the top-bar links; gutter 16 → 20 above</td></tr>
+        <tr><td>≥ 1000px</td><td>desktop</td><td>.ds-split: main + 320px rail</td></tr>
+        <tr><td>≥ 1100px</td><td>wide</td><td>Gutter 24; More menu in two columns</td></tr>
+        <tr><td>≥ 1280px</td><td>xl</td><td>The navbar search box</td></tr>
+      </tbody>
+    </table></div>
+    <div class="ds-tbl"><table>
+      <thead><tr><th>Container</th><th>Token</th><th class="r">Max width</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td>.ds-page.narrow</td><td>--ds-w-narrow</td><td class="r">560</td><td>Sign in, single forms</td></tr>
+        <tr><td>.ds-page.read</td><td>--ds-w-read</td><td class="r">760</td><td>Legal, guides</td></tr>
+        <tr><td>.ds-page.mid</td><td>--ds-w-mid</td><td class="r">900</td><td>One item: a poll, a bounty, an order</td></tr>
+        <tr><td>.ds-page</td><td>--ds-w-page</td><td class="r">1040</td><td>The default</td></tr>
+        <tr><td>.ds-page.wide</td><td>--ds-w-wide</td><td class="r">1200</td><td>Grids, feeds with a rail</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ───── icons ───── -->
+  <section class="sg-sec" id="icons">
+    <h2 class="ds-h2 dot">Icons &amp; emoji</h2>
+    <p class="ds-sub">Wrap every emoji / img / svg icon that sits next to text in <code>.ds-ic</code>: a square box centred on the text, so emoji never ride high. The gold line is the text's centre.</p>
+    <div class="sg-demo sg-ics">
+      <p class="sg-base"><span><span class="ds-ic" aria-hidden="true">🐸</span> inline 1.25em</span><span><span class="ds-ic xs" aria-hidden="true">🎯</span> xs 14</span><span><span class="ds-ic sm" aria-hidden="true">🎯</span> sm 16</span><span><span class="ds-ic md" aria-hidden="true">🎯</span> md 20</span><span><span class="ds-ic lg" aria-hidden="true">🎯</span> lg 24</span><span><span class="ds-ic xl" aria-hidden="true">🎯</span> xl 32</span><span><span class="ds-ic" aria-hidden="true"><img src="/public/img/pepe.png" alt=""></span> img</span></p>
+      <p><span class="ds-ic tile" aria-hidden="true">🏦</span><span class="ds-ic tile" aria-hidden="true">🎟️</span><span class="ds-ic tile" aria-hidden="true">🔮</span> <span class="ds-meta">.ds-ic.tile - list / activity icons (36px)</span></p>
+      <p><span class="ds-ic mono" aria-hidden="true">🔔</span> <span class="ds-meta">.ds-ic.mono - a quiet emoji (60% greyscale) that wakes on hover</span></p>
+    </div>
+  </section>
+
+  <!-- ───── buttons ───── -->
+  <section class="sg-sec" id="components">
+    <h2 class="ds-h2 dot">Buttons</h2>
+    <div class="sg-demo">
+      <span class="sg-cap">.ds-btn (44px, pill) + variants</span>
+      <div class="ds-actions">
+        <button class="ds-btn" type="button">Primary</button>
+        <button class="ds-btn gold" type="button"><span class="ds-ic" aria-hidden="true">🪙</span> Gold</button>
+        <button class="ds-btn ghost" type="button">Ghost</button>
+        <button class="ds-btn quiet" type="button">Quiet</button>
+        <button class="ds-btn danger" type="button">Danger</button>
+        <button class="ds-btn warn" type="button">Warn</button>
+        <button class="ds-btn info" type="button">Info</button>
+        <button class="ds-btn live" type="button"><span class="ds-ic" aria-hidden="true">🎥</span> Go live</button>
+        <button class="ds-btn link" type="button">Link button</button>
+      </div>
+      <span class="sg-cap">Sizes: .sm 36 · default 44 · .lg 52 · .icon · .square · disabled · busy</span>
+      <div class="ds-actions">
+        <button class="ds-btn sm" type="button">Small</button>
+        <button class="ds-btn" type="button">Default</button>
+        <button class="ds-btn lg" type="button">Large</button>
+        <button class="ds-btn icon ghost" type="button" aria-label="Settings"><span class="ds-ic" aria-hidden="true">⚙️</span></button>
+        <button class="ds-btn icon sm quiet" type="button" aria-label="More"><span aria-hidden="true">⋯</span></button>
+        <button class="ds-btn square quiet sm" type="button">Square</button>
+        <button class="ds-btn" type="button" disabled>Disabled</button>
+        <button class="ds-btn ghost" type="button" aria-busy="true">Working…</button>
+      </div>
+      <button class="ds-btn wide gold" type="button">.wide - full width (phones, sheets)</button>
+    </div>
+  </section>
+
+  <!-- ───── chips ───── -->
+  <section class="sg-sec" id="chips">
+    <h2 class="ds-h2 dot">Chips, tags, badges, tabs</h2>
+    <div class="sg-demo">
+      <span class="sg-cap">.ds-chip - status (dot + UPPERCASE)</span>
+      <div class="ds-row"><span class="ds-chip live">Live</span><span class="ds-chip ok">Open</span><span class="ds-chip warn">Closing</span><span class="ds-chip gold">Won</span><span class="ds-chip danger">Disputed</span><span class="ds-chip info">Proposed</span><span class="ds-chip mute">Expired</span><span class="ds-chip solid-live">On air</span><span class="ds-chip plain">Plain</span></div>
+      <span class="sg-cap">.ds-tag (sentence case) · .ds-ref · .ds-badge · .ds-kbd</span>
+      <div class="ds-row"><span class="ds-tag">Camfrog</span><span class="ds-tag ac">Season Pass</span><span class="ds-ref">M-1042</span><span class="ds-badge">3</span><span class="ds-badge">99+</span><span class="ds-kbd">Esc</span></div>
+      <span class="sg-cap">.ds-tabs &gt; .ds-tab (36px, 40px on touch) · .on / aria-current="page"</span>
+      <div class="ds-tabs"><a class="ds-tab" aria-current="page" href="#chips">All <span class="ds-count">128</span></a><a class="ds-tab" href="#chips">Open <span class="ds-count">12</span></a><a class="ds-tab" href="#chips">Settled</a><a class="ds-tab" href="#chips"><span class="ds-ic" aria-hidden="true">⭐</span> Mine</a><a class="ds-tab" href="#chips">Archived</a></div>
+      <span class="sg-cap">.ds-seg - segmented control</span>
+      <div><div class="ds-seg" role="group" aria-label="View"><button type="button" aria-pressed="true">List</button><button type="button" aria-pressed="false">Gallery</button><button type="button" aria-pressed="false">Map</button></div></div>
+    </div>
+  </section>
+
+  <!-- ───── cards / hero / stats ───── -->
+  <section class="sg-sec" id="cards">
+    <h2 class="ds-h2 dot">Cards, heroes, stats <span class="ds-count">6</span> <a class="ds-h-aside" href="#cards">See all →</a></h2>
+    <div class="ds-grid">
+      <div class="ds-card">
+        <div class="ds-card-h"><span class="ds-ref">M-1042</span><span class="ds-chip live">Live</span></div>
+        <h3 class="ds-h3">Will Pepe hit 10k viewers this week?</h3>
+        <div class="ds-meta">by <b>ffjoker</b> · closes in 2 d · 41 traders</div>
+        <div class="ds-bar"><span style="width: 64%"></span></div>
+        <div class="ds-card-f"><span class="ds-pat"><b>12,500</b><small>PAT</small></span><span class="ds-meta">in the pool</span></div>
+      </div>
+      <a class="ds-card" href="#cards">
+        <h3 class="ds-h3">a.ds-card - a whole-card link</h3>
+        <p class="ds-sub">Lifts 1px and takes the accent border on hover / focus.</p>
+      </a>
+      <div class="ds-card gold">
+        <h3 class="ds-h3">.ds-card.gold</h3>
+        <p class="ds-sub">Money cards: your balance, a prize, the jackpot.</p>
+      </div>
+      <div class="ds-card hl"><h3 class="ds-h3">.ds-card.hl</h3><p class="ds-sub">Selected / yours.</p></div>
+      <div class="ds-card top"><h3 class="ds-h3">.ds-card.top</h3><p class="ds-sub">3px accent rule on top - parts, sections, tiers.</p></div>
+      <div class="ds-card flat"><h4 class="ds-h4">.ds-card.flat</h4><p class="ds-fine">A well inside a card (12 radius, sunken).</p></div>
+    </div>
+    <div class="ds-hero compact">
+      <span class="ds-eyebrow">.ds-hero.compact</span>
+      <div class="ds-h1">Your orders</div>
+      <p class="ds-sub">A lighter header for sub-pages and detail pages.</p>
+    </div>
+    <div class="ds-head">
+      <span class="ds-eyebrow">.ds-head - no hero</span>
+      <div class="ds-h1">Notifications</div>
+      <p class="ds-sub">Eyebrow + H1 + sub on the page background; for tools, settings and admin.</p>
+    </div>
+    <div class="ds-stats">
+      <div class="ds-stat"><span>Balance</span><b class="gold">48,200</b></div>
+      <div class="ds-stat"><span>Staked</span><b>12,000</b></div>
+      <div class="ds-stat"><span>24 h</span><b class="up">+1,240</b></div>
+      <div class="ds-stat"><span>Fees</span><b class="down">−85</b><small>2% of winnings</small></div>
+    </div>
+    <div class="ds-card"><ul class="ds-list">
+      <li><span class="ds-ic tile" aria-hidden="true">🎟️</span><div class="grow"><div>Pepeball ticket</div><div class="ds-meta">Draw #212 · 2 min ago</div></div><span class="ds-pat down"><b>−50</b></span></li>
+      <li><span class="ds-ic tile" aria-hidden="true">🏆</span><div class="grow"><div>Market M-1038 paid out</div><div class="ds-meta">Yes won · 1 h ago</div></div><span class="ds-pat up"><b>+2,310</b></span></li>
+      <li><img class="ds-av sm" src="/public/img/coin.png" alt=""><div class="grow ds-truncate">A very long display name that truncates instead of widening the row on a 375px phone</div><button class="ds-btn sm ghost" type="button">Follow</button></li>
+    </ul></div>
+  </section>
+
+  <!-- ───── forms ───── -->
+  <section class="sg-sec" id="forms">
+    <h2 class="ds-h2 dot">Forms</h2>
+    <form class="ds-card lg ds-form" onsubmit="return false">
+      <div class="ds-form-row">
+        <label class="ds-field"><span class="ds-label">Stake</span>
+          <span class="ds-in-group"><input class="ds-in num" type="number" inputmode="numeric" value="500"><span class="ds-in-addon">PAT</span></span>
+          <span class="ds-hint">Min 10 · max 50,000</span></label>
+        <label class="ds-field"><span class="ds-label">Side</span>
+          <select class="ds-select"><option>Yes</option><option>No</option></select></label>
+      </div>
+      <label class="ds-field"><span class="ds-label">Question</span><input class="ds-in" type="text" placeholder="Will it happen by Friday?"></label>
+      <label class="ds-field"><span class="ds-label">Invalid</span><input class="ds-in" type="text" value="-5" aria-invalid="true"><span class="ds-err">Enter a positive number.</span></label>
+      <label class="ds-field"><span class="ds-label">Notes</span><textarea class="ds-textarea" placeholder="Anything the judge should know"></textarea></label>
+      <div class="ds-row"><button class="ds-quick" type="button">+100</button><button class="ds-quick" type="button">+1k</button><button class="ds-quick" type="button">+10k</button><button class="ds-quick" type="button">Max</button></div>
+      <label class="ds-check"><input type="checkbox" checked> Announce it in the room</label>
+      <label class="ds-row"><span class="ds-switch"><input type="checkbox" checked><span></span></span> Auto-renew</label>
+      <div class="ds-actions"><button class="ds-btn" type="submit">Place bet</button><button class="ds-btn ghost" type="reset">Cancel</button></div>
+    </form>
+  </section>
+
+  <!-- ───── tables ───── -->
+  <section class="sg-sec" id="tables">
+    <h2 class="ds-h2 dot">Tables</h2>
+    <div class="ds-tbl"><table>
+      <thead><tr><th>#</th><th>Player</th><th class="r">Won</th><th class="r">Bets</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><img class="ds-av xs" src="/public/img/coin.png" alt=""> sard0nicgrin</td><td class="r"><span class="ds-pat"><b>1,204,500</b></span></td><td class="r">312</td><td><span class="ds-chip ok">Active</span></td></tr>
+        <tr><td>2</td><td><img class="ds-av xs" src="/public/img/coin.png" alt=""> ffjoker</td><td class="r"><span class="ds-pat"><b>88,020</b></span></td><td class="r">97</td><td><span class="ds-chip mute">Away</span></td></tr>
+        <tr class="tot"><td></td><td>Total</td><td class="r">1,292,520</td><td class="r">409</td><td></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ───── feedback ───── -->
+  <section class="sg-sec" id="feedback">
+    <h2 class="ds-h2 dot">Notes, toasts, empty states, loading</h2>
+    <div class="ds-note"><span class="ds-ic" aria-hidden="true">💡</span><div><b>Note.</b> Neutral information.</div></div>
+    <div class="ds-note ok"><span class="ds-ic" aria-hidden="true">✅</span><div><b>Saved.</b> Your bet is in.</div></div>
+    <div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⚠️</span><div><b>Heads up.</b> The market closes in 10 minutes.</div></div>
+    <div class="ds-note danger"><span class="ds-ic" aria-hidden="true">⛔</span><div><b>Couldn't place the bet.</b> Not enough PAT.</div></div>
+    <div class="ds-note info"><span class="ds-ic" aria-hidden="true">ℹ️</span><div><b>New.</b> Markets settle automatically now.</div></div>
+    <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🔮</span><b>No open markets</b><span>Start one and the room can bet on it.</span><a class="ds-btn sm" href="#feedback">Create a market</a></div>
+    <div class="ds-row"><button class="ds-btn sm quiet" type="button" id="sgToast">Show a toast</button><span class="ds-skel" style="width: 160px; height: 14px"></span><span class="ds-skel" style="width: 90px; height: 14px"></span></div>
+  </section>
+
+  <!-- ───── overlays ───── -->
+  <section class="sg-sec" id="overlays">
+    <h2 class="ds-h2 dot">Popovers, modals, sheets</h2>
+    <div class="ds-row" style="position: relative">
+      <button class="ds-btn ghost sm" type="button" id="sgModal">Open modal</button>
+      <button class="ds-btn ghost sm" type="button" id="sgSheet">Open sheet (phones)</button>
+    </div>
+    <div class="ds-pop" style="position: static; max-width: 260px">
+      <a class="ds-menu-item" href="#overlays"><span class="ds-ic" aria-hidden="true">✏️</span> Edit</a>
+      <a class="ds-menu-item" href="#overlays"><span class="ds-ic" aria-hidden="true">🔗</span> Copy link</a>
+      <hr class="ds-divider">
+      <button class="ds-menu-item danger" type="button"><span class="ds-ic" aria-hidden="true">🗑️</span> Delete</button>
+    </div>
+  </section>
+
+  <!-- ───── data ───── -->
+  <section class="sg-sec" id="data">
+    <h2 class="ds-h2 dot">PAT, bars, avatars, pagination</h2>
+    <div class="sg-demo">
+      <span class="sg-cap">.ds-pat · .up / .down / .plain · .ds-delta</span>
+      <div class="ds-row"><span class="ds-pat"><b>12,500</b><small>PAT</small></span><span class="ds-pat up"><b>+2,310</b><small>PAT</small></span><span class="ds-pat down"><b>−50</b><small>PAT</small></span><span class="ds-pat plain"><b>900</b><small>PAT</small></span><span class="ds-delta up">▲ 4.2%</span><span class="ds-delta down">▼ 1.1%</span></div>
+      <span class="sg-cap">.ds-bar · .sm / .lg / .gold</span>
+      <div class="ds-bar sm"><span style="width: 30%"></span></div>
+      <div class="ds-bar"><span style="width: 64%"></span></div>
+      <div class="ds-bar lg gold"><span style="width: 82%"></span></div>
+      <span class="sg-cap">.ds-av · xs 24 / sm 32 / 40 / lg 64 / xl 96 · .ring · .px</span>
+      <div class="ds-row"><img class="ds-av xs" src="/public/img/coin.png" alt=""><img class="ds-av sm" src="/public/img/coin.png" alt=""><img class="ds-av" src="/public/img/coin.png" alt=""><img class="ds-av lg ring" src="/public/img/coin.png" alt=""><img class="ds-av xl px" src="/public/img/pepe.png" alt=""></div>
+      <span class="sg-cap">.ds-pager · .ds-back</span>
+      <nav class="ds-pager" aria-label="Pages"><a href="#data" aria-label="Previous">‹</a><a href="#data">1</a><span aria-current="page">2</span><a href="#data">3</a><span class="gap">…</span><a href="#data">14</a><a href="#data" aria-label="Next">›</a></nav>
+      <a class="ds-back" href="#top">← Back to top</a>
+    </div>
+  </section>
+
+  <!-- ───── accents ───── -->
+  <section class="sg-sec" id="accents">
+    <h2 class="ds-h2 dot">Area accents</h2>
+    <p class="ds-sub">A page sets <code>--ds-ac</code> / <code>--ds-ac-2</code> / <code>--ds-ac-bg</code> on its wrapper; every component follows. Gold stays gold - it means PAT.</p>
+    <div class="sg-acc">
+      <% for (const [n, a, a2] of [["Markets", "--ds-acc-markets", "--ds-acc-markets-2"], ["Wagers", "--ds-acc-wagers", "--ds-acc-wagers-2"], ["Polls", "--ds-acc-polls", "--ds-acc-polls-2"],
+                                   ["Bounties", "--ds-acc-bounties", "--ds-acc-bounties-2"], ["Support", "--ds-acc-support", "--ds-acc-support"], ["Premium", "--ds-acc-premium", "--ds-acc-premium"]]) { %>
+        <div class="ds-card" style="--ds-ac: var(<%= a %>); --ds-ac-2: var(<%= a2 %>); --ds-ac-bg: color-mix(in srgb, var(<%= a %>) 13%, transparent); --ds-ac-line: color-mix(in srgb, var(<%= a %>) 45%, #000)">
+          <span class="ds-eyebrow ac"><%= n %></span>
+          <div class="ds-tabs wrap"><span class="ds-tab on">Open</span><span class="ds-tab">Closed</span></div>
+          <div class="ds-bar"><span style="width: 58%"></span></div>
+          <div class="ds-actions"><button class="ds-btn sm" type="button" style="--b-fg: #0b0b0b">Action</button><a class="ds-btn sm ghost" href="#accents">Ghost</a></div>
+        </div>
+      <% } %>
+    </div>
+  </section>
+</main>
+
+<div class="ds-toasts" id="sgToasts" aria-live="polite"></div>
+<div class="ds-scrim" id="sgScrim" hidden>
+  <div class="ds-modal" role="dialog" aria-modal="true" aria-labelledby="sgMt">
+    <div class="ds-modal-h"><h2 id="sgMt">Confirm the bet</h2><button class="ds-close" type="button" aria-label="Close" data-close>×</button></div>
+    <p class="ds-sub">500 PAT on <b>Yes</b> in M-1042. Bets can't be cancelled once the market closes.</p>
+    <div class="ds-stats"><div class="ds-stat"><span>Price</span><b>0.64</b></div><div class="ds-stat"><span>Payout if right</span><b class="gold">781</b></div></div>
+    <div class="ds-modal-f"><button class="ds-btn ghost" type="button" data-close>Cancel</button><button class="ds-btn" type="button" data-close>Place bet</button></div>
+  </div>
+</div>
+<script>
+  (function () {
+    var cs = getComputedStyle(document.documentElement);
+    document.querySelectorAll('[data-token]').forEach(function (el) {
+      var v = cs.getPropertyValue(el.getAttribute('data-token')).trim();
+      var out = el.classList.contains('sg-val') || el.classList.contains('sg-tok') ? el : el.querySelector('.sg-val');
+      if (out && v) out.textContent = el.classList.contains('sg-tok') ? el.getAttribute('data-token') + ' (' + v + ')' : v;
+    });
+    var html = document.documentElement;
+    document.getElementById('sgRtl').addEventListener('click', function () { html.dir = html.dir === 'rtl' ? 'ltr' : 'rtl'; });
+    document.getElementById('sgToast').addEventListener('click', function () {
+      var t = document.createElement('div'); t.className = 'ds-toast ok'; t.innerHTML = '<span class="ds-ic" aria-hidden="true">✅</span>';
+      t.appendChild(document.createTextNode('Saved - your bet is in.')); document.getElementById('sgToasts').appendChild(t);
+      setTimeout(function () { t.remove(); }, 3200);
+    });
+    var scrim = document.getElementById('sgScrim'), last = null;
+    function open(sheet) { last = document.activeElement; scrim.classList.toggle('sheet', !!sheet); scrim.hidden = false; scrim.querySelector('[data-close]').focus(); }
+    function close() { scrim.hidden = true; if (last) last.focus(); }
+    document.getElementById('sgModal').addEventListener('click', function () { open(false); });
+    document.getElementById('sgSheet').addEventListener('click', function () { open(true); });
+    scrim.addEventListener('click', function (e) { if (e.target === scrim || e.target.hasAttribute('data-close')) close(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !scrim.hidden) close(); });
+  })();
+</script>

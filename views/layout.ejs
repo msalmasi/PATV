@@ -29,11 +29,16 @@
     <meta name="twitter:title" content="<%= _og.title %>">
     <meta name="twitter:description" content="<%= _og.description %>">
     <meta name="twitter:image" content="<%= _og.image %>">
-    <meta name="theme-color" content="#4caf50">
+    <meta name="theme-color" content="#18181b">
     <% } %>
-    <link rel="stylesheet" href="/public/css/styles.css?v=5">
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet">
+    <%# 1.99pj design system: ds.css (tokens + ds-* components, docs/design-system.md, /styleguide) loads first, then the old
+        global styles.css, then each page's own CSS. Ubuntu in its real 400/500/700 weights (the old css?family=Ubuntu link
+        loaded 400 only, so every bold on the site was a synthesized faux-bold) + Press Start 2P, one request. %>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Ubuntu:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/public/css/ds.css?v=1">
+    <link rel="stylesheet" href="/public/css/styles.css?v=6">
     <%# 1.99jo: page scripts translate with __t(key, englishDefault, vars), key = js.<area>.<name> - PATV_I18N holds the page language's
         "js.*" strings (nothing for English: the defaults are the English). Plain text: put it in textContent, or escape it. %>
     <% if (t.lang !== 'en') { %><script>window.PATV_I18N = <%- locals.i18nClient ? i18nClient(['js.'].concat(locals.i18nJs || [])) : '{"lang":"en","dir":"ltr","s":{}}' %>;</script><% } %>
@@ -160,68 +165,81 @@
             </div>
         </nav>
         <style>
-            /* Nav (2026-10): main icons + "More" on desktop, one ☰ menu on phones */
-            .navbar { gap: 12px; padding: 14px 20px; position: relative; z-index: 50; }
+            /* Nav (2026-10): main icons + "More" on desktop, one ☰ menu on phones.
+               1.99pj design system: colours, radii, shadows and type from ds.css tokens; logical properties (RTL);
+               every control is a >= 40px box with its glyph centred (.ic / .cta-ic are fixed squares); gold focus rings. */
+            header { background-color: var(--ds-surface-2); box-shadow: var(--ds-e-1); border-block-end: 1px solid #202024; }
+            .navbar { gap: 12px; padding: 12px 20px; min-height: 64px; box-sizing: border-box; position: relative; z-index: 50; font-family: var(--ds-font); }
             .navbar-left { display: flex; align-items: center; gap: 4px; min-width: 0; }
-            .navbar-right { display: flex; align-items: center; gap: 10px; margin-right: 0; }
+            .navbar-right { display: flex; align-items: center; gap: 8px; margin-right: 0; margin-inline-end: 0; }
             .navbar a { margin-right: 0; }
-            #logo { margin-right: 14px; white-space: nowrap; }
+            #logo { margin-inline-end: 14px; white-space: nowrap; color: var(--ds-brand); font: 700 20px/1 var(--ds-font); letter-spacing: -.01em; }
             .nav-main { display: flex; align-items: center; gap: 2px; }
-            .nav-link { display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: rgb(150,150,150); }
-            .nav-link:hover, .nav-link:focus-visible { background: #24242a; color: #fff; }
-            .nav-link.current { color: #fff; background: #1f2b22; box-shadow: inset 0 -2px 0 #3CC47C; }
-            .nav-link .ic { width: 20px; text-align: center; line-height: 1; }
+            .nav-link { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 9px; border-radius: var(--ds-r-sm);
+                        color: #9b9ba3; font-size: 15px; line-height: 1.25; transition: background-color var(--ds-dur-1), color var(--ds-dur-1); }
+            .nav-link:hover, .nav-link:focus-visible { background: var(--ds-hover); color: #fff; }
+            .nav-link.current { color: #fff; background: #1f2b22; box-shadow: inset 0 -2px 0 var(--ds-brand); }
+            .nav-link .ic { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; font-size: 17px; line-height: 1; text-align: center; }
+            .nav-link .ic img { display: block; width: 16px; height: 16px; object-fit: contain; }
             .nav-link[hidden] { display: none; }
+            .navbar :is(a, summary, button, input):focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
             .logo-short { display: none; }
             .nav-more, .nav-burger { position: relative; }
-            .nav-more > summary, .nav-burger > summary { list-style: none; cursor: pointer; color: rgb(170,170,170); padding: 6px 10px; border-radius: 6px; user-select: none; }
+            .nav-more > summary, .nav-burger > summary { list-style: none; cursor: pointer; color: #aaa; display: inline-flex; align-items: center; gap: 6px; min-height: 40px;
+                                                        box-sizing: border-box; padding: 0 10px; border-radius: var(--ds-r-sm); user-select: none; font-size: 15px; }
             .nav-more > summary::-webkit-details-marker, .nav-burger > summary::-webkit-details-marker { display: none; }
-            .nav-more > summary:hover, .nav-burger > summary:hover, details[open] > summary { background: #24242a; color: #fff; }
-            .nav-pop { position: absolute; top: calc(100% + 6px); min-width: 220px; background: #1d1d22; border: 1px solid #2c2c33;
-                       border-radius: 10px; padding: 6px; display: grid; gap: 2px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
-            .nav-more .nav-pop { left: 0; }
-            .nav-burger .nav-pop { right: 0; }
-            .nav-pop .nav-link { padding: 8px 10px; }
-            .nav-sep { height: 1px; background: #2c2c33; margin: 4px 2px; }
+            .nav-more > summary:hover, .nav-burger > summary:hover, details[open] > summary { background: var(--ds-hover); color: #fff; }
+            .nav-more > summary [aria-hidden] { font-size: 11px; transition: transform var(--ds-dur-2); }
+            .nav-more[open] > summary [aria-hidden] { transform: rotate(180deg); }
+            .nav-pop { position: absolute; top: calc(100% + 8px); min-width: 220px; background: var(--ds-surface-3); border: 1px solid var(--ds-line-menu);
+                       border-radius: var(--ds-r-lg); padding: 6px; display: grid; gap: 2px; box-shadow: var(--ds-e-3); }
+            .nav-more .nav-pop { inset-inline-start: 0; }
+            .nav-burger .nav-pop { inset-inline-end: 0; }
+            .nav-pop .nav-link { padding: 0 10px; color: #c4c4cc; font-size: 14px; }
+            .nav-sep { height: 1px; background: var(--ds-line-menu); margin: 4px 2px; }
             /* 2026-10-11: grouped menus - small-caps muted headings; More is two columns of sections when there's room */
             .nav-sec { break-inside: avoid; padding: 0 0 6px; }
             .nav-sec[hidden] { display: none; }
-            .nav-sec-h { padding: 8px 10px 4px; color: #7f7f8c; font: 600 11px/1.2 Ubuntu, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+            .nav-sec-h { padding: 10px 10px 4px; color: #9a9aa6; font: 700 11px/1.2 var(--ds-font); letter-spacing: .08em; text-transform: uppercase; }
             .nav-sec-items { display: grid; gap: 2px; }
             .nav-pop { grid-template-columns: minmax(0, 1fr); }   /* the search box's intrinsic width mustn't widen the menu past its scrollbar */
             .nav-more .nav-pop { width: 280px; max-width: calc(100vw - 24px); max-height: calc(100vh - 90px); overflow-y: auto; overscroll-behavior: contain; }
             @media (min-width: 1100px) { .nav-more .nav-pop { width: 520px; } .nav-more .nav-secs { columns: 2; column-gap: 8px; } }
             .nav-burger { display: none; }
-            .nav-burger > summary { font-size: 22px; line-height: 1; padding: 6px 10px; }
+            .nav-burger > summary { font-size: 22px; line-height: 1; padding: 6px 10px; justify-content: center; min-width: 40px; }
             /* 1.99ek: Post and Go live share one pill base - same height, padding, font, radius, icon box and
                min-width; only the colours differ (Post: green outline, Go live: red gradient). `.navbar a.nav-*` outranks
                styles.css's `.navbar a { font-size: 16px; margin-right: 20px }` */
             .navbar a.nav-post, .navbar a.nav-golive { display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;
                                 height: 34px; min-width: 104px; padding: 0 14px; margin-right: 0; border-radius: 999px; border: 1px solid transparent;
-                                font: bold 14px/1 Ubuntu, sans-serif; white-space: nowrap; }
-            .nav-post .cta-ic, .nav-golive .cta-ic { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 16px; line-height: 1; flex: none; }
-            .navbar a.nav-golive { background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; }
+                                font: bold 14px/1 Ubuntu, sans-serif; white-space: nowrap; transition: filter var(--ds-dur-1), border-color var(--ds-dur-1); }
+            .nav-post .cta-ic, .nav-golive .cta-ic { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 15px; line-height: 1; flex: none; }
+            .navbar a.nav-golive { background: linear-gradient(90deg, var(--ds-live), var(--ds-live-2)); color: #fff !important; }
             .navbar a.nav-golive:hover, .navbar a.nav-golive:focus-visible { filter: brightness(1.1); color: #fff !important; }
             /* 1.99ec: the secondary sibling of Go live */
             .navbar a.nav-post { border-color: #3c7a46; background: #12301a; color: #c8efcf !important; }
-            .navbar a.nav-post:hover, .navbar a.nav-post:focus-visible { border-color: #4caf50; color: #fff !important; }
+            .navbar a.nav-post:hover, .navbar a.nav-post:focus-visible { border-color: var(--ds-green); color: #fff !important; }
             /* 1.99ej: icon-only up to 500px (was 420 - signed in, 421-485px still overflowed with the labels); 1.99ek: equal squares */
             /* 1.99jo: translated labels can be longer than English - they ellipsize instead of widening the bar */
             .nav-post .nav-lbl, .nav-golive .nav-lbl, .nav-signin, .nav-more-lbl { display: inline-block; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
             .nav-pop .nav-lbl { overflow-wrap: anywhere; }
             @media (max-width: 500px) { .nav-golive .nav-lbl, .nav-post .nav-lbl { display: none; } .navbar a.nav-post, .navbar a.nav-golive { width: 34px; min-width: 0; padding: 0; } }
-            .nav-signin { color: #fff; padding: 6px 10px; border: 1px solid #3a3a42; border-radius: 6px; white-space: nowrap; }
-            .navbar .avatar img { margin-left: 0; }
+            .navbar a.nav-signin { display: inline-flex; align-items: center; height: 34px; box-sizing: border-box; color: #fff; padding: 0 14px; border: 1px solid #3a3a42;
+                                   border-radius: 999px; white-space: nowrap; font: 700 14px/1 var(--ds-font); }
+            .navbar a.nav-signin:hover, .navbar a.nav-signin:focus-visible { border-color: var(--ds-green); background: var(--ds-hover); }
+            .navbar .avatar { display: flex; }
+            .navbar .avatar a { display: flex; border-radius: 50%; }
+            .navbar .avatar img { margin-left: 0; display: block; object-fit: cover; box-shadow: 0 0 0 1px #2c2c33; }
             .nav-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
-                        border-radius: 8px; font-size: 19px; line-height: 1; color: #aaa; filter: grayscale(.6); }
-            .nav-bell:hover, .nav-bell:focus-visible { background: #24242a; filter: none; }
+                        border-radius: var(--ds-r-sm); font-size: 19px; line-height: 1; color: #aaa; filter: grayscale(.6); }
+            .nav-bell:hover, .nav-bell:focus-visible { background: var(--ds-hover); filter: none; }
             .nav-bell.has { filter: none; }
-            .nav-bell .nav-badge { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-                                   background: #e53935; color: #fff; font: bold 11px/18px Ubuntu, sans-serif; text-align: center; box-shadow: 0 0 0 2px #121212; }
+            .nav-bell .nav-badge { position: absolute; top: 2px; inset-inline-end: 0; min-width: 18px; height: 18px; box-sizing: border-box; padding: 0 5px; border-radius: 9px;
+                                   background: var(--ds-badge); color: #fff; font: bold 11px/18px Ubuntu, sans-serif; text-align: center; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--ds-surface-2); }
             @media (max-width: 760px) {
                 .nav-main, .nav-more { display: none; }
                 .nav-burger { display: block; }
-                .navbar { padding: 10px 12px; }
+                .navbar { padding: 10px 12px; min-height: 58px; }
                 #logo { display: inline !important; font-size: 18px; }
                 .logo-full { display: none; }
                 .logo-short { display: inline; }
@@ -229,7 +247,7 @@
                                       overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
                 /* two links a row per section on phones - half the scrolling; long labels wrap inside their cell */
                 .nav-burger .nav-sec-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-                .nav-burger .nav-pop .nav-link { padding: 8px; align-items: flex-start; line-height: 1.25; }
+                .nav-burger .nav-pop .nav-link { padding: 8px; min-height: 44px; align-items: center; line-height: 1.25; }
             }
             /* 1.99ej: 851-~915px (styles.css shows the logo again above 850) the full "publicaccess.tv" logo pushed a
                signed-in navbar past the viewport - the short PATV logo until there's room */
@@ -239,41 +257,51 @@
             @media (max-width: 420px) {
                 .navbar { padding: 10px 8px; gap: 6px; }
                 .navbar-right { gap: 3px; }
-                #logo { margin-right: 4px; }
+                #logo { margin-right: 4px; margin-inline-end: 4px; }
                 .navbar a.nav-post, .navbar a.nav-golive { width: 32px; height: 32px; }
                 .nav-bell { width: 34px; }
-                .nav-burger > summary { padding: 6px 7px; }
+                .nav-burger > summary { padding: 6px 7px; min-width: 36px; }
                 .navbar .avatar img { width: 36px; height: 36px; }
+                .navbar a.nav-signin { padding: 0 10px; }
             }
         </style>
         <style>
             /* 1.99is: search in the navbar (search.js). Hidden by default; the box from 1280px, the 🔍 button 1000-1279px;
                narrower it lives at the top of the ☰ menu (and of More) so the bar's fit rules above are untouched */
             .nav-search { display: none; position: relative; align-items: center; margin: 0; }
-            .nav-search input { width: 150px; height: 34px; box-sizing: border-box; padding: 0 12px 0 32px; border-radius: 999px; border: 1px solid #3a3a42;
-                                background: #18181c; color: #eee; font: 14px Ubuntu, sans-serif; transition: width .15s ease; }
-            .nav-search input:focus { outline: none; border-color: #4caf50; width: 210px; }
-            .nav-s-ic { position: absolute; left: 11px; font-size: 13px; line-height: 1; pointer-events: none; filter: grayscale(.7); }
-            .navbar a.nav-sbtn { display: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 8px; font-size: 18px; line-height: 1; filter: grayscale(.6); }
-            .navbar a.nav-sbtn:hover, .navbar a.nav-sbtn:focus-visible { background: #24242a; filter: none; }
+            .nav-search input { width: 150px; height: 34px; box-sizing: border-box; padding: 0; padding-inline: 32px 12px; border-radius: 999px; border: 1px solid #3a3a42;
+                                background: #141417; color: #eee; font: 14px var(--ds-font); transition: width .15s ease, border-color var(--ds-dur-1); }
+            .nav-search input::placeholder { color: #8e8e96; }
+            .nav-search input:hover { border-color: #4a4a54; }
+            .nav-search input:focus { outline: none; border-color: var(--ds-green); width: 210px; box-shadow: 0 0 0 3px var(--ds-green-bg); }
+            .nav-s-ic { position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%); display: inline-flex; font-size: 13px; line-height: 1; pointer-events: none; filter: grayscale(.7); }
+            .navbar a.nav-sbtn { display: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--ds-r-sm); font-size: 18px; line-height: 1; filter: grayscale(.6); }
+            .navbar a.nav-sbtn:hover, .navbar a.nav-sbtn:focus-visible { background: var(--ds-hover); filter: none; }
             @media (min-width: 1000px) and (max-width: 1279px) { .navbar a.nav-sbtn { display: inline-flex; } }
             @media (min-width: 1280px) { .nav-search { display: inline-flex; } }
-            @media (prefers-reduced-motion: reduce) { .nav-search input { transition: none; } }
+            @media (prefers-reduced-motion: reduce) { .nav-search input { transition: none; } .nav-more > summary [aria-hidden] { transition: none; } }
             .nav-psearch { display: flex; gap: 6px; padding: 4px 4px 2px; }
-            .nav-psearch input { flex: 1 1 auto; min-width: 0; height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid #3a3a42;
-                                 background: #121215; color: #eee; font: 16px Ubuntu, sans-serif; }
-            .nav-psearch input:focus { outline: none; border-color: #4caf50; }
-            .nav-psearch button { flex: none; width: 40px; height: 36px; border-radius: 8px; border: 1px solid #3a3a42; background: #24242a; cursor: pointer; font-size: 15px;
+            .nav-psearch input { flex: 1 1 auto; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 12px; border-radius: var(--ds-r-md); border: 1px solid #3a3a42;
+                                 background: #121215; color: #eee; font: 16px var(--ds-font); }
+            .nav-psearch input:focus { outline: none; border-color: var(--ds-green); box-shadow: 0 0 0 3px var(--ds-green-bg); }
+            .nav-psearch button { flex: none; width: 40px; height: 40px; border-radius: var(--ds-r-md); border: 1px solid #3a3a42; background: var(--ds-hover); cursor: pointer; font-size: 15px;
                                   padding: 0 !important; margin: 0; display: grid; place-items: center; line-height: 1; text-align: center; }   /* the menu's generic button padding pushed the 🔍 off-centre */
+            .nav-psearch button:hover { border-color: var(--ds-green); }
         </style>
         <style>
-            /* 1.99cc: the site footer (Terms / Privacy on every page). Built here, moved to the end of <body> below. */
-            .site-foot { margin: 40px 0 0; padding: 18px 16px 26px; border-top: 1px solid #222; color: #777; font: 13px/1.6 Ubuntu, sans-serif; text-align: center; }
-            .site-foot nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 4px; }
-            .site-foot a { color: #9a9a9a; text-decoration: none; }
-            .site-foot a:hover, .site-foot a:focus-visible { color: #fff; text-decoration: underline; }
-            .site-lang { margin-top: 8px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 12px; }
-            .site-lang select { background: #18181c; color: #ddd; border: 1px solid #3a3a42; border-radius: 6px; padding: 4px 6px; font: 13px Ubuntu, sans-serif; max-width: 220px; }
+            /* 1.99cc: the site footer (Terms / Privacy on every page). Built here, moved to the end of <body> below.
+               1.99pj: tokens; #777 text failed contrast (4.3:1) -> --ds-text-faint; links get a 32px-tall hit area */
+            .site-foot { margin: 48px 0 0; padding: 20px var(--ds-gutter) calc(28px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--ds-line);
+                         background: #0c0c0e; color: var(--ds-text-faint); font: 13px/1.6 var(--ds-font); text-align: center; }
+            .site-foot nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; max-width: 760px; margin: 0 auto 2px; }
+            .site-foot nav a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: var(--ds-r-xs); }
+            .site-foot a { color: #a3a3a3; text-decoration: none; }
+            .site-foot a:hover, .site-foot a:focus-visible { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+            .site-foot a:focus-visible, .site-lang select:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+            .site-foot > div { margin-top: 6px; }
+            .site-lang { margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 14px; }
+            .site-lang label { display: inline-flex; align-items: center; gap: 6px; }
+            .site-lang select { height: 36px; box-sizing: border-box; background: #18181c; color: #ddd; border: 1px solid #3a3a42; border-radius: var(--ds-r-sm); padding: 0 8px; font: 13px var(--ds-font); max-width: 220px; cursor: pointer; }
             .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
         </style>
         <template id="siteFootTpl">
@@ -324,6 +352,11 @@
                 document.addEventListener('click', function (e) {
                     document.querySelectorAll('.navbar details[open]').forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute('open'); });
                 });
+                // 1.99pj: Escape closes an open menu and puts focus back on its button
+                document.addEventListener('keydown', function (e) {
+                    if (e.key !== 'Escape') return;
+                    document.querySelectorAll('.navbar details[open]').forEach(function (d) { d.removeAttribute('open'); var s = d.querySelector('summary'); if (s && d.contains(document.activeElement)) s.focus(); });
+                });
             })();
         </script>
         <% if (typeof staleNotice !== 'undefined' && staleNotice) { %>
@@ -336,11 +369,14 @@
             <button type="button" aria-label="<%- t('common.dismiss') %>" onclick="this.parentNode.remove()">×</button>
         </div>
         <style>
-            .stale-banner { margin: 10px 20px 0; padding: 10px 40px 10px 14px; border-radius: 8px; background: #1f2b22; border: 1px solid #3CC47C;
-                            color: #ddd; font-size: 14px; line-height: 1.5; position: relative; }
-            .stale-banner a { color: #3CC47C; margin-left: 6px; }
-            .stale-banner button { position: absolute; top: 6px; right: 8px; background: none; border: 0; color: #aaa; font-size: 20px; cursor: pointer; }
-            @media (max-width: 600px) { .stale-banner { margin: 8px 16px 0; } }
+            .stale-banner { margin: 10px 20px; padding: 10px 14px; padding-inline-end: 44px; border-radius: var(--ds-r-lg); background: var(--ds-green-bg); border: 1px solid var(--ds-green-line);
+                            color: var(--ds-ok-ink); font: 14px/1.5 var(--ds-font); position: relative; }
+            .stale-banner strong { color: #fff; }
+            .stale-banner a { color: var(--ds-green-2); margin-inline-start: 6px; }
+            .stale-banner button { position: absolute; top: 4px; inset-inline-end: 4px; width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: var(--ds-r-sm);
+                                   background: none; border: 0; color: #aaa; font-size: 20px; line-height: 1; cursor: pointer; }
+            .stale-banner button:hover { background: var(--ds-hover); color: #fff; }
+            @media (max-width: 600px) { .stale-banner { margin: 8px 16px; } }
         </style>
         <% } %>
     </header>
