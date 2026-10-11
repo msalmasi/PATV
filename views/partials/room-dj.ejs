@@ -6,9 +6,9 @@
   .rdj { display: grid; gap: 12px; background: radial-gradient(120% 160% at 100% 0%, #1d1430 0%, #111 55%); }
   .rdj.hide { display: none !important; }
   .rdj h2 { align-items: center; color: #d9a7ff !important; }
-  .rdj h2 .pill { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12px; padding: 2px 9px; border-radius: 999px;
+  .rdj h2 .pill { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; font-size: 12px; padding: 2px 9px; border-radius: 999px;
                   border: 1px solid #4a3566; background: #1d1430; color: #e3c8ff; white-space: nowrap; }
-  .rdj h2 .pill.off { border-color: #333; background: #1a1a1a; color: #999; }
+  .rdj h2 .pill.off { border-color: var(--ds-line-strong); background: #1a1a1a; color: var(--ds-text-muted); }
   .rdj .top { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
   .rdj .now { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; align-items: center; min-width: 0; }
   .rdj .art { width: 84px; height: 84px; border-radius: 10px; background: #1b1b1b center / cover no-repeat; display: grid; place-items: center; font-size: 30px; border: 1px solid #2a2a2a; overflow: hidden; }
@@ -16,11 +16,11 @@
   .rdj .t { font-size: 17px; font-weight: bold; line-height: 1.3; overflow-wrap: anywhere; }
   .rdj .a { color: #bbb; font-size: 14px; overflow-wrap: anywhere; }
   .rdj .by { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-  .rdj .tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; background: #181818; color: #ccc; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .rdj .tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--ds-line-strong); background: #181818; color: #ccc; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .rdj .tag.user { border-color: #2f6b3a; background: #12301a; color: #bdf0c6; }
   .rdj .tag.dj { border-color: #5b3f80; background: #22173a; color: #e3c8ff; }
   .rdj .tag.gone { border-color: #6b3a2f; background: #301812; color: #f0c4bd; }
-  .rdj .bar { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 12px; color: #999; font-variant-numeric: tabular-nums; }
+  .rdj .bar { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 12px; color: var(--ds-text-muted); font-variant-numeric: tabular-nums; }
   .rdj .track { height: 6px; background: #262626; border-radius: 999px; overflow: hidden; }
   .rdj .fill { height: 100%; width: 0; background: linear-gradient(90deg, #8e5bd8, #c792ff); border-radius: 999px; }
   .rdj .paused .fill { background: #666; }
@@ -29,7 +29,7 @@
   .rdj .booth .v { overflow-wrap: anywhere; }
   .rdj .booth q { color: #e8dcf7; font-style: italic; }
   .rdj .ctrls { display: flex; flex-wrap: wrap; gap: 8px; }
-  .rdj button.b { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: #e6e6e6;
+  .rdj button.b { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: var(--ds-text);
                   font: inherit; font-size: 13px; cursor: pointer; min-height: 36px; }
   .rdj button.b:hover:not(:disabled), .rdj button.b:focus-visible { border-color: #8e5bd8; background: #1f1730; }
   .rdj button.b:disabled { opacity: .5; cursor: default; }
@@ -41,25 +41,25 @@
   .rdj ol.q { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 360px; overflow-y: auto; }
   .rdj ol.q li { display: grid; grid-template-columns: 22px 36px minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; font-size: 13.5px; }
   .rdj ol.q li:hover { background: #161616; }
-  .rdj ol.q .n { color: #777; text-align: right; font-variant-numeric: tabular-nums; }
+  .rdj ol.q .n { color: var(--ds-text-faint); text-align: right; font-variant-numeric: tabular-nums; }
   .rdj ol.q .art { width: 36px; height: 36px; border-radius: 6px; font-size: 15px; }
   .rdj ol.q .nm { min-width: 0; }
   .rdj ol.q .nm b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
-  .rdj ol.q .nm span { color: #999; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rdj ol.q li.removed b { text-decoration: line-through; color: #888; }
+  .rdj ol.q .nm span { color: var(--ds-text-muted); font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rdj ol.q li.removed b { text-decoration: line-through; color: var(--ds-text-muted); }
   .rdj form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 0; align-items: center; }
-  .rdj input[type=text] { margin: 0; box-sizing: border-box; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; min-width: 0; min-height: 36px; }
+  .rdj input[type=text] { margin: 0; box-sizing: border-box; background: #0d0d0d; color: #eee; border: 1px solid var(--ds-line-strong); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; min-width: 0; min-height: 36px; }
   .rdj input[type=text]:focus-visible { outline: 2px solid #8e5bd8; outline-offset: 1px; }
   .rdj .tools { display: grid; gap: 12px; min-width: 0; }
   .rdj .tool { display: grid; gap: 6px; }
-  .rdj .hint { color: #8a8a8a; font-size: 12px; margin: 0; }
+  .rdj .hint { color: var(--ds-text-muted); font-size: 12px; margin: 0; }
   .rdj .res { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   .rdj .res li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; background: #141414; font-size: 13.5px; }
   .rdj .res .art { width: 36px; height: 36px; border-radius: 6px; font-size: 15px; }
   .rdj .res .nm { min-width: 0; }
   .rdj .res .nm b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
-  .rdj .res .nm span { color: #999; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rdj .say { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #141414; border: 1px solid #262626; overflow-wrap: anywhere; }
+  .rdj .res .nm span { color: var(--ds-text-muted); font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rdj .say { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #141414; border: 1px solid var(--ds-line); overflow-wrap: anywhere; }
   .rdj .say:empty { display: none; }
   .rdj .say.ok { border-color: #2f6b3a; color: #c9f2d0; }
   .rdj .say.bad { border-color: #6b3a2f; color: #f0c4bd; }
@@ -78,7 +78,7 @@
   .rdj ul.sol q { color: #e8dcf7; font-style: italic; }
   /* 1.99bx: collapsed by default - one compact now-playing bar; the full booth opens with the toggle */
   .rdj h2 .hd { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  .rdj .tog { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12.5px; padding: 4px 11px; border-radius: 999px; border: 1px solid #4a3566;
+  .rdj .tog { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; font-size: 12.5px; padding: 4px 11px; border-radius: 999px; border: 1px solid #4a3566;
               background: #181022; color: #e3c8ff; cursor: pointer; min-height: 30px; white-space: nowrap; }
   .rdj .tog:hover, .rdj .tog:focus-visible { border-color: #c792ff; background: #24183a; outline: none; }
   .rdj.collapsed { gap: 8px; padding-top: 10px; padding-bottom: 10px; }

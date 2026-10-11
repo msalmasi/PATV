@@ -101,7 +101,7 @@ test("/p: no 'Boost a pad' button (boosting happens on the pad page); 1.99es: th
   const html = await renderPads([pad("Alpha", { trend: { rank: 1, front: true, score: 50, boost: 0 } })]);
   assert.doesNotMatch(html, /Boost a pad/i);
   assert.doesNotMatch(html, /href="#trending"/);
-  assert.match(html, /href="\/stage">🎥 Go live</);
+  assert.match(html, /href="\/stage"><span class="ds-ic" aria-hidden="true">🎥<\/span>Go live</);   // 1.99qc: the emoji in a .ds-ic box
   assert.match(html, /<b>Anyone can go live\.<\/b> Stream to a pad's stage from OBS or your browser, or put a YouTube \/ Twitch link on it\./);
   assert.doesNotMatch(html, /Fans can <b>🚀 boost<\/b> a pad|earned, never bought|Pick a pad and a slot/);
 });

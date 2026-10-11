@@ -3,37 +3,37 @@
 .rb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .rb-btn { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 6px 10px;
           font: inherit; font-size: 13px; cursor: pointer; line-height: 1.2; }
-.rb-btn:hover, .rb-btn:focus-visible { border-color: #4caf50; }
-.rb-btn:focus-visible, .rb-vol:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
+.rb-btn:hover, .rb-btn:focus-visible { border-color: var(--ds-green); }
+.rb-btn:focus-visible, .rb-vol:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
 .rb-btn[disabled] { opacity: .5; cursor: not-allowed; }
 
 .rb-audio { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; background: #0d0d0d; border: 1px solid #1f2a20;
-            border-radius: 10px; padding: 6px 8px; font-family: Ubuntu, sans-serif; color: #ccc; }
+            border-radius: 10px; padding: 6px 8px; font-family: var(--ds-font); color: #ccc; }
 .rb-audio.on { border-color: #2f6d3a; }
 .rb-audio.off { opacity: .6; }
-.rb-play { width: 34px; height: 30px; padding: 0; background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
-.rb-state { font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .06em; color: #8a8a8a; min-width: 0; flex: 1 1 90px; }
+.rb-play { width: 34px; height: 30px; padding: 0; background: var(--ds-green); border-color: var(--ds-green); color: var(--ds-on-ac); font-weight: bold; }
+.rb-state { font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .06em; color: var(--ds-text-muted); min-width: 0; flex: 1 1 90px; }
 .rb-state.live { color: #ff8a80; }
 .rb-state.live::before { content: "● "; }
 .rb-state.wait { color: #ffd54f; }
 /* 1.99il: which way the room audio comes in - ⚡ WebRTC (low latency) or the standard MP3 relay */
-.rb-mode { font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid #333; color: #9a9a9a; white-space: nowrap; }
-.rb-mode.rtc { color: #4AFFEF; border-color: #1f6f6a; }
+.rb-mode { font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--ds-line-strong); color: var(--ds-text-muted); white-space: nowrap; }
+.rb-mode.rtc { color: var(--ds-focus); border-color: #1f6f6a; }
 .rb-mode.hide { display: none; }
 .rb-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; width: 24px; }
-.rb-meter i { display: block; width: 3px; height: 2px; background: #4caf50; border-radius: 1px; transition: height .08s linear; }
+.rb-meter i { display: block; width: 3px; height: 2px; background: var(--ds-green); border-radius: 1px; transition: height .08s linear; }
 .rb-mute { padding: 4px 6px; }
-.rb-vol { width: 84px; accent-color: #4caf50; }
+.rb-vol { width: 84px; accent-color: var(--ds-green); }
 .rb-jump { font-size: 12px; padding: 4px 8px; color: #ffd54f; border-color: #6b5a20; }
 
 .rb-say { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.rb-say input { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; min-width: 0; }
-.rb-send { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+.rb-say input { background: #0d0d0d; color: #eee; border: 1px solid var(--ds-line-strong); border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; min-width: 0; }
+.rb-send { background: var(--ds-green); border-color: var(--ds-green); color: var(--ds-on-ac); font-weight: bold; }
 .rb-ptt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rb-talk { padding: 8px 14px; font-weight: bold; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.rb-talk[aria-pressed="true"] { background: #b71c1c; border-color: #e53935; color: #fff; }
-.rb-ptt-txt { color: #8a8a8a; font-size: 12.5px; min-width: 0; }
-.rb-mine { color: #8a8a8a; font-size: 12.5px; min-height: 1em; }
+.rb-talk[aria-pressed="true"] { background: #b71c1c; border-color: var(--ds-badge); color: #fff; }
+.rb-ptt-txt { color: var(--ds-text-muted); font-size: 12.5px; min-width: 0; }
+.rb-mine { color: var(--ds-text-muted); font-size: 12.5px; min-height: 1em; }
 
 /* commands from the relay (1.99): autocomplete + the user's own (private) command feed */
 .rb-say-in { position: relative; min-width: 0; }
@@ -54,10 +54,10 @@
 .rb-cmd.bad { border-color: #5a2a2a; }
 .rb-cmd-h { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: space-between; }
 .rb-cmd-t { font-family: ui-monospace, Consolas, monospace; color: #9be7a1; min-width: 0; }
-.rb-cmd-s { color: #8a8a8a; }
+.rb-cmd-s { color: var(--ds-text-muted); }
 .rb-cmd.bad .rb-cmd-s { color: #ff8a80; }
 .rb-cmd-r { color: #ddd; margin-top: 3px; }
 
 @media (prefers-reduced-motion: reduce) { .rb-meter { display: none; } .rb-meter i { transition: none; } }
-.rb-micsel { background: #0d0d0d; color: #ddd; border: 1px solid #333; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 12.5px; max-width: 100%; min-width: 0; flex: 0 1 220px; }
+.rb-micsel { background: #0d0d0d; color: #ddd; border: 1px solid var(--ds-line-strong); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 12.5px; max-width: 100%; min-width: 0; flex: 0 1 220px; }
 .rb-micsel.hide { display: none !important; }

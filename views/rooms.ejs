@@ -7,7 +7,9 @@
    /* 1.99ek: the shared 🚀 boost badge (boostmark.js) - "" when a pad isn't boosted */
    const BM = typeof boostMark === 'function' ? boostMark : () => '';
    const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js)
-   const PFX_ = typeof padFx === 'function' ? padFx : () => null;   // 1.99ew: premium pad cosmetics (padcosmetics.fx) %>
+   const PFX_ = typeof padFx === 'function' ? padFx : () => null;   // 1.99ew: premium pad cosmetics (padcosmetics.fx)
+   /* 1.99qc: a translated label's leading emoji goes in a .ds-ic box (docs/design-system.md §7) */
+   const IC_ = (s) => String(s).replace(/^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?)*)\s*/u, '<span class="ds-ic" aria-hidden="true">$1</span>'); %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=2">
 <!-- views/rooms.ejs — the Pads (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
@@ -22,33 +24,34 @@
   const pepeOn = !!(pepe && pepe.active);
 %>
 <style>
-  .cg { --card: #111; --line: #222; --px: 16px; --py: 14px; --cardgap: 14px;
-        max-width: 1180px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: var(--cardgap); box-sizing: border-box; width: 100%; }
+  .cg { --card: var(--ds-surface); --line: var(--ds-line); --px: var(--ds-sp-4); --py: var(--ds-sp-4); --cardgap: var(--ds-sp-4);
+        max-width: var(--ds-w-wide); margin: 0 auto; padding: var(--ds-sp-4) var(--ds-gutter) var(--ds-sp-14); font-family: var(--ds-font); color: var(--ds-text); display: grid; gap: var(--cardgap); box-sizing: border-box; width: 100%; }
   .cg *, .cg *::before, .cg *::after { box-sizing: border-box; }
-  .cg a { color: #81c784; text-decoration: none; }
+  .cg a { color: var(--ds-green-2); text-decoration: none; }
   .cg a:hover { color: #a5d6a7; }
-  .cg h1 { margin: 0; font-size: 26px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .cg .lead { color: #aab3aa; font-size: 14.5px; line-height: 1.55; margin: 4px 0 0; }
-  .cg .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: var(--py) var(--px); min-width: 0; }
-  .cg h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6;
+  .cg h1 { margin: 0; display: flex; align-items: center; gap: var(--ds-sp-2h); flex-wrap: wrap; }
+  .cg .lead { color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; margin: 6px 0 0; max-width: 72ch; }
+  .cg .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--ds-r-xl); padding: var(--py) var(--px); min-width: 0; }
+  .cg h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ds-gold); font-family: var(--ds-font-pixel); font-size: var(--ds-fs-pixel-h); line-height: 1.6; letter-spacing: var(--ds-ls-pixel-h);
            display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
-  .cg h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; color: #888; font-size: 12.5px; }
-  .cg .muted { color: #8a8a8a; font-size: 13px; }
-  .cg .cta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 18px; align-items: center; padding: var(--py) var(--px); border-radius: 14px;
+  .cg h2 small { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; color: var(--ds-text-muted); font-size: 12.5px; }
+  .cg .muted { color: var(--ds-text-muted); font-size: 13px; }
+  .cg .cta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 18px; align-items: center; padding: var(--ds-sp-5); border-radius: var(--ds-r-2xl);
              background: radial-gradient(120% 160% at 0% 0%, #3a1414 0%, #1a0f0f 45%, #111 80%); border: 1px solid #5a2a22; }
-  .cg .cta b.big { font-size: 18px; color: #fff; display: block; margin-bottom: 4px; }
+  .cg .cta b.big { font-size: var(--ds-fs-h3); color: #fff; display: flex; align-items: center; gap: var(--ds-sp-2); margin-bottom: 4px; }
   .cg .cta ol { margin: 6px 0 0; padding-left: 20px; color: #d9c9c3; font-size: 13.5px; line-height: 1.6; }
   .cg .cta .btns { display: flex; flex-direction: column; gap: 8px; }
-  .cg .golive-btn { display: inline-flex; justify-content: center; align-items: center; gap: 7px; padding: 10px 16px; border-radius: 999px; font-weight: bold; font-size: 14.5px; white-space: nowrap;
-                    background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; border: 0; }
-  .cg .pepe { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; background: #0f1a10; border: 1px solid #234d2a; border-radius: 14px; padding: 10px var(--px); font-size: 14px; }
+  .cg .golive-btn { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: var(--ds-tap); padding: 0 var(--ds-sp-5); border-radius: var(--ds-r-pill); font-weight: 700; font-size: 15px; white-space: nowrap;
+                    background: linear-gradient(90deg, var(--ds-live), var(--ds-live-2)); color: #fff !important; border: 0; }
+  .cg .cta .btn { min-height: var(--ds-tap); padding: 0 var(--ds-sp-5); border-radius: var(--ds-r-pill); font-size: 15px; justify-content: center; }
+  .cg .pepe { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; background: var(--ds-ok-bg); border: 1px solid var(--ds-ok-line); border-radius: var(--ds-r-lg); padding: 10px var(--px); font-size: 14px; }
   .cg .pepe b { color: #fff; }
   .cg .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
   .cg .pill.on { background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; }
-  .cg .pill.off { background: #1c1c1c; border: 1px solid #333; color: #999; }
+  .cg .pill.off { background: #1c1c1c; border: 1px solid var(--ds-line-strong); color: var(--ds-text-muted); }
   .cg .pill.adult18 { background: #1d0d11; border: 1px solid #6b2230; color: #ff8a9e; }   /* 1.99kz: 18+ pad */
   .cg .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: cgPulse 1.6s ease-in-out infinite; }
-  .cg .pill.off .dot { background: #666; animation: none; }
+  .cg .pill.off .dot { background: var(--ds-text-faint); animation: none; }
   /* 1.99eo: a pad's Camfrog room pill is about chat (💬 ROOM ACTIVE); LIVE / ON AIR / ON STAGE = video */
   .cg .pill.chat { background: #10240f; border: 1px solid #2f6d3a; color: #c9f2cf; }
   .cg .pill.chat .dot { display: none; }
@@ -57,7 +60,7 @@
   /* ── pad cards: 3 / 2 / 1 columns; each card is one link with four fixed rows ── */
   .cg .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .cg a.ch { display: grid; grid-template-rows: auto auto auto 1fr; grid-template-areas: "head" "meta" "desc" "foot"; row-gap: 8px;
-             background: #0d0d0d; border: 1px solid #242424; border-radius: 12px; padding: 12px 14px; min-width: 0; color: #e6e6e6 !important;
+             background: var(--ds-sunken); border: 1px solid #242424; border-radius: var(--ds-r-lg); padding: var(--ds-sp-3) var(--ds-sp-3h); min-width: 0; color: var(--ds-text) !important;
              transition: border-color .15s, background .15s, transform .15s; }
   /* equal heights + NOW/NEXT aligned across a grid row: each card spans 4 rows of the grid and adopts them */
   @supports (grid-template-rows: subgrid) {
@@ -67,9 +70,9 @@
   }
   .cg a.ch.live { border-color: #2f4a2f; }
   .cg a.ch.onair { border-color: #7a2222; box-shadow: 0 0 0 1px #3a1010 inset; }
-  .cg a.ch:hover, .cg a.ch:focus-visible { border-color: #4caf50; background: #131a13; }
+  .cg a.ch:hover, .cg a.ch:focus-visible { border-color: var(--ds-green); background: #131a13; }
   .cg a.ch.onair:hover, .cg a.ch.onair:focus-visible { border-color: #c64a4a; }
-  .cg a.ch:focus-visible { outline: 2px solid #c6e94f; outline-offset: 2px; }
+  .cg a.ch:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
   .cg a.ch:hover .t, .cg a.ch:focus-visible .t { text-decoration: underline; text-underline-offset: 3px; }
   .cg .ch-head { grid-area: head; display: grid; gap: 6px; min-width: 0; align-content: start; }
   .cg .ch-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -86,74 +89,75 @@
   .cg .ch-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
   /* 1.99ek: the 🚀 boost mark (boostmark.js) - active boost PAT, tooltip says how it fades */
   .cg .pill.ch-mark { background: #20140a; border: 1px solid #7a4a1f; color: #ffd9a8; letter-spacing: 0; cursor: help; }
-  .cg .ch-meta { grid-area: meta; font-size: 12.5px; color: #9aa59a; display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; min-width: 0; }
+  .cg .ch-meta { grid-area: meta; font-size: 12.5px; color: var(--ds-text-muted); display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; min-width: 0; }
   .cg .ch-meta .padref { color: #9ccc9f; font-weight: bold; }
   .cg .ch-meta .own { color: #e8d9a0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cg .ch-meta [title] { cursor: help; }
   .cg .ch-meta .pepe-here { font-size: 14px; line-height: 1; }
-  .cg .ch-desc { grid-area: desc; color: #8a8a8a; font-size: 13px; line-height: 1.45; min-height: calc(2 * 1.45em); overflow-wrap: anywhere;
+  .cg .ch-desc { grid-area: desc; color: var(--ds-text-muted); font-size: 13px; line-height: 1.45; min-height: calc(2 * 1.45em); overflow-wrap: anywhere;
                  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
   .cg .ch-foot { grid-area: foot; align-self: end; display: grid; gap: 4px; border-top: 1px solid #1e1e1e; padding-top: 8px; min-width: 0; }
   .cg .slotrow { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 13px; }
-  .cg .slotrow .k { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; padding-top: 3px; }
+  .cg .slotrow .k { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ds-text-muted); padding-top: 3px; }
   .cg .slotrow .k.now { color: #ffb4b4; }
   .cg .slotrow ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; min-width: 0; }
   .cg .slotrow li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cg .slotrow li .star { color: #ffd700; }
+  .cg .slotrow li .star { color: var(--ds-gold); }
   .cg .slotrow li .src { font-size: 11px; color: #9fb3c8; }
-  .cg .slotrow li time { color: #c6e94f; font-variant-numeric: tabular-nums; margin-right: 4px; }
+  .cg .slotrow li time { color: var(--ds-green-2); font-variant-numeric: tabular-nums; margin-right: 4px; }
 
-  .cg .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 13px; font-weight: bold; max-width: 100%; }
-  .cg .btn:hover, .cg .btn:focus-visible { border-color: #4caf50; }
+  .cg .btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill); border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 13px; font-weight: bold; max-width: 100%; }
+  .cg .btn:hover { border-color: var(--ds-green); }
+  .cg .btn:focus-visible, .cg .golive-btn:focus-visible, .cg .bst:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
   .cg .sched { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   /* 1.99ek: the time column sizes to its content (max-content) and never wraps - "Sun, Oct 11 01:15 PM" stays on one line */
   .cg .sched li { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px; align-items: baseline; background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; }
-  .cg .sched time { color: #c6e94f; font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+  .cg .sched time { color: var(--ds-green-2); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
   .cg .sched .w { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cg .owned { display: flex; gap: 8px; flex-wrap: wrap; }
-  .cg .empty { border: 1px dashed #333; border-radius: 12px; padding: 24px; text-align: center; color: #999; }
+  .cg .empty { border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-lg); padding: var(--ds-sp-6) var(--ds-sp-4); text-align: center; color: var(--ds-text-muted); }
   /* a schedule row opens its pad - a stretched link (a.rl::after covers the row); other links sit above it */
   .cg .sched li { position: relative; cursor: pointer; transition: border-color .15s, background .15s; }
   .cg .sched a.rl::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
   .cg .sched a:not(.rl), .cg .sched button { position: relative; z-index: 2; }
-  .cg .sched li:has(a.rl:focus-visible) { outline: 2px solid #c6e94f; outline-offset: 2px; }
+  .cg .sched li:has(a.rl:focus-visible) { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
   .cg .sched a.rl:focus-visible { outline: none; }
-  .cg .sched li:hover, .cg .sched li:focus-within { border-color: #4caf50; background: #131a13; }
+  .cg .sched li:hover, .cg .sched li:focus-within { border-color: var(--ds-green); background: #131a13; }
   @media (prefers-reduced-motion: no-preference) { .cg a.ch:hover { transform: translateY(-1px); } }
   @media (max-width: 1000px) { .cg .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 640px) {
-    .cg { padding: 12px 12px 44px; --cardgap: 12px; --px: 12px; --py: 12px; }
+    .cg { --cardgap: var(--ds-sp-3); }
     .cg .cta { grid-template-columns: minmax(0, 1fr); }
     .cg .cta .btns { flex-direction: row; flex-wrap: wrap; }
     .cg .grid { grid-template-columns: minmax(0, 1fr); }
     .cg .sched li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   }
-  @media (prefers-reduced-motion: reduce) { .cg .dot { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .cg .dot { animation: none; } .cg a.ch, .cg .sched li { transition: none; } }
   /* 1.99ee: Trending */
   .cg .tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
-  .cg .tr-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; border-radius: 12px; background: #111; border: 1px solid #222; min-width: 0; }
+  .cg .tr-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; border-radius: var(--ds-r-lg); background: var(--ds-sunken); border: 1px solid var(--ds-line); min-width: 0; }
   .cg .tr-list li.front { border-color: #2f6b3a; background: #0f1a11; }
   .cg .tr-list .t { font-weight: bold; color: #fff; min-width: 0; overflow-wrap: anywhere; flex: 1 1 8em; }
   .cg .tr-list .tags { display: flex; flex-wrap: wrap; gap: 4px; }
-  .cg .tr-list .tg { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; color: #bbb; background: #151515; white-space: nowrap; }
+  .cg .tr-list .tg { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--ds-line-strong); color: #bbb; background: #151515; white-space: nowrap; }
   .cg .tr-list .tg.on { border-color: #2f6b3a; color: #bdf0c6; background: #12301a; }
   .cg .tr-list .tg.boost { border-color: #7a4a1f; color: #ffd9a8; background: #20140a; font-weight: bold; cursor: help; }
-  .cg .tr-list .bst { font-size: 12.5px; font-weight: bold; color: #ffd9a8; border: 1px solid #7a4a1f; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .cg .tr-list .bst { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; font-size: 12.5px; font-weight: 700; color: #ffd9a8; border: 1px solid #7a4a1f; border-radius: 999px; padding: 0 12px; white-space: nowrap; }
   .cg .tr-list .bst:hover { border-color: #ff9a3c; color: #fff; }
 </style>
-<main class="cg">
-  <div>
-    <h1><%- t('rooms.h1') %></h1>
+<main class="ds-page wide cg">
+  <div class="ds-head">
+    <h1 class="ds-h1"><%- IC_(t('rooms.h1')) %></h1>
     <p class="lead"><%- t('rooms.lead') %><% if (!signedIn) { %> <%- t('rooms.lead_signin', { link: '<a href="/login">' + t('rooms.signin') + '</a>' }) %><% } %></p>
   </div>
 
   <section class="cta" aria-label="<%- t('rooms.go_live_aria') %>">
     <div>
-      <b class="big"><%- t('rooms.cta_h') %></b>
+      <b class="big"><%- IC_(t('rooms.cta_h')) %></b>
       <%# 1.99es: one line, like the homepage's card (the three steps are gone) %>
-      <span class="muted" style="font-size:14px;color:#d9c9c3"><%- t('rooms.cta_text') %></span>
+      <span class="muted" style="font-size:14px;color:var(--ds-text-2)"><%- t('rooms.cta_text') %></span>
     </div>
-    <div class="btns"><a class="golive-btn" href="/stage"><%- t('rooms.go_live') %></a><a class="btn" href="<%= signedIn ? '/pads/new' : '/login?next=%2Fpads%2Fnew' %>" style="text-align:center"><%- t('rooms.create') %></a></div>
+    <div class="btns"><a class="golive-btn" href="/stage"><%- IC_(t('rooms.go_live')) %></a><a class="btn" href="<%= signedIn ? '/pads/new' : '/login?next=%2Fpads%2Fnew' %>"><%- IC_(t('rooms.create')) %></a></div>
   </section>
 
   <div class="pepe" role="status">
@@ -165,7 +169,7 @@
   <% if (owned && owned.length) { %>
     <section class="card" aria-labelledby="ownH">
       <h2 id="ownH"><%- t('rooms.yours') %> <small><%- t('rooms.yours_sub') %></small></h2>
-      <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>/settings">⚙ <%= r.title %></a><% }) %></div>
+      <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>/settings"><span class="ds-ic" aria-hidden="true">⚙️</span><%= r.title %></a><% }) %></div>
     </section>
   <% } %>
 
@@ -181,7 +185,7 @@
           <%# 1.99es: the 🚀 badge sits by the name, not among the stat tags %>
           <span class="tn"><a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a><%- BM(r.boost_pat, 'tg boost') %></span>
           <span class="tags"><% if (r.trend.front) { %><span class="tg on"><%- t('rooms.on_front') %></span><% } else { %><span class="tg"><%- t('rooms.trending_n', { n: r.trend.rank - (trend_[0].trend.front ? 1 : 0) }) %></span><% } %><span class="tg">👥 <%= r.count %></span></span>
-          <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="<%- t('rooms.boost_aria', { title: r.title }) %>"><%- t('rooms.boost') %></a>
+          <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="<%- t('rooms.boost_aria', { title: r.title }) %>"><%- IC_(t('rooms.boost')) %></a>
         </li><% }) %>
       </ol>
     <% } %>

@@ -176,7 +176,7 @@ test("Pads: each card is one link to its pad (no buttons, no nested links); sche
              now: [{ username: "ann", display: "Ann", live: true, mode: "rtmp" }],
              next: [{ username: "pb", display: "pb", start_at: T + 3600000, minutes: 15, featured: true, title: null }] },
            { id: "quiet", slug: "quiet", title: "Quiet", live: false, bridged: false, count: 0, micCount: 0, slot_count: 2, house: true, now: [], next: [] }] });
-  assert.match(html, /<h1>📡 Pads<\/h1>/);
+  assert.match(html, /<h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">📡<\/span>Pads<\/h1>/);
   assert.match(html, /<a class="ch live onair" href="\/p\/plant_based_chatting">/);
   assert.match(html, /<a class="rl" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
   assert.match(html, /<span class="padref">p\/plant_based_chatting<\/span>/);
@@ -201,5 +201,5 @@ test("Pads: each card is one link to its pad (no buttons, no nested links); sche
   assert.match(html, /grid-template-rows: subgrid/);
   assert.match(html, /\.cg \.sched a\.rl::after \{ content: ""; position: absolute; inset: 0;/);
   // Go live stays on the "Your show" card
-  assert.match(html, /<a class="golive-btn" href="\/stage">🎥 Go live<\/a>/);
+  assert.match(html, /<a class="golive-btn" href="\/stage"><span class="ds-ic" aria-hidden="true">🎥<\/span>Go live<\/a>/);
 });

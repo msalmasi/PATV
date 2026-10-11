@@ -9,13 +9,13 @@
   panel by pad-settings.js.
 %>
 <link rel="stylesheet" href="/public/css/stage.css?v=9">
-<link rel="stylesheet" href="/public/css/feed.css?v=17">
-<link rel="stylesheet" href="/public/css/room-mod.css?v=7">
-<link rel="stylesheet" href="/public/css/pad-settings.css?v=2">
+<link rel="stylesheet" href="/public/css/feed.css?v=18">
+<link rel="stylesheet" href="/public/css/room-mod.css?v=8">
+<link rel="stylesheet" href="/public/css/pad-settings.css?v=3">
 <link rel="stylesheet" href="/public/css/padfx.css?v=2">
-<link rel="stylesheet" href="/public/css/pad-access.css?v=1">
-<link rel="stylesheet" href="/public/css/flair.css?v=1"><%# 1.99ir: the Flair tab (padflair.js) %>
-<link rel="stylesheet" href="/public/css/tags.css?v=2">
+<link rel="stylesheet" href="/public/css/pad-access.css?v=2">
+<link rel="stylesheet" href="/public/css/flair.css?v=2"><%# 1.99ir: the Flair tab (padflair.js) %>
+<link rel="stylesheet" href="/public/css/tags.css?v=3">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -40,30 +40,27 @@
   const amLocked = am.admin_lock && !isAdmin;
   const amState = (r) => r.state === 'reversed' ? 'reversed' : r.state === 'skipped' ? 'skipped' : r.action === 'none' ? 'clear' : r.action;
 %>
-<main class="sb fd fd-admin fd-rmod ps" id="rmg" data-slug="<%= slug %>" data-tab="<%= tab %>">
+<main class="ds-page wide flow sb fd fd-admin fd-rmod ps" id="rmg" data-slug="<%= slug %>" data-tab="<%= tab %>">
   <nav class="crumb ps-crumb" aria-label="Breadcrumb"><a href="/p">Pads</a> › <a href="<%= href %>">p/<%= slug %></a> › Settings</nav>
-  <header class="ps-head">
-    <link rel="icon" href="/favicon.ico" sizes="48x48">
-    <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
-    <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
-    <h1>⚙ Pad settings <span class="ps-pad"><%= room.title %></span></h1>
+  <div class="ps-head">
+    <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">⚙️</span> Pad settings <span class="ps-pad"><%= room.title %></span></h1>
     <p class="lede"><% if (room.house) { %>🐸 House pad — run by Pepe and the site admins.<% } else if (room.owner) { %>👑 Owned by <b><%= room.owner.display || room.owner.username %></b>.<% } else { %>No owner yet.<% } %>
       Everything you can change about <b>p/<%= slug %></b> is on this page.</p>
     <p class="ps-links"><a href="<%= href %>">← Pad page</a><a href="/stage?room=<%= encodeURIComponent(slug) %>">🎥 Go live here</a>
       <% if (analytics) { %><a href="<%= href %>/analytics">📊 Analytics</a><% } %>
       <a href="<%= G.PATH %>">📜 <%= G.NAME %></a></p>
     <% if (staff) { %><p class="ps-staff">🛠 Site staff: you see every pad's hub. Site-wide limits live in <a href="/feed/admin#pepe">Feed admin</a> (Pepe's global caps, the automod budget) and <a href="/pads/admin">Pads admin</a> (owners, the front page, royalties).</p><% } %>
-  </header>
+  </div>
 
   <div class="ps-wrap">
   <nav class="ps-nav" aria-label="Settings sections" role="tablist">
-    <% tabs.forEach((t) => { %><a class="ps-tab" role="tab" href="#<%= t[0] %>" data-tab="<%= t[0] %>" aria-controls="<%= t[0] %>" id="tab-<%= t[0] %>"><span aria-hidden="true"><%= t[1] %></span><span><%= t[2] %></span><% if (t[0] === 'moderation' && queue) { %><span class="ps-n" title="Waiting for you"><%= queue %></span><% } %><% if (t[0] === 'pepe') { %><span class="ps-dot <%= pepe.enabled === false ? 'off' : 'on' %>" title="Pepe on this pad's feed: <%= pepe.enabled === false ? 'off' : 'on' %>"></span><% } %></a><% }) %>
+    <% tabs.forEach((t) => { %><a class="ps-tab" role="tab" href="#<%= t[0] %>" data-tab="<%= t[0] %>" aria-controls="<%= t[0] %>" id="tab-<%= t[0] %>"><span class="ds-ic" aria-hidden="true"><%= t[1] %></span><span><%= t[2] %></span><% if (t[0] === 'moderation' && queue) { %><span class="ps-n" title="Waiting for you"><%= queue %></span><% } %><% if (t[0] === 'pepe') { %><span class="ps-dot <%= pepe.enabled === false ? 'off' : 'on' %>" title="Pepe on this pad's feed: <%= pepe.enabled === false ? 'off' : 'on' %>"></span><% } %></a><% }) %>
   </nav>
 
   <div class="ps-body">
   <%# ─────────────── General ─────────────── %>
   <section class="ps-sec" id="general" role="tabpanel" aria-labelledby="tab-general">
-    <h2 class="ps-h">🏷️ General</h2>
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">🏷️</span> General</h2>
     <p class="ps-what">How your pad looks to everyone: its name, its description, its avatar, banner and colour, and the badge that says what it's backed by.</p>
     <div class="sb-card ps-card">
       <h3>Pad page</h3>
@@ -72,7 +69,7 @@
         <label class="fld">Description<textarea name="description" maxlength="500" rows="3"><%= room.description %></textarea></label>
         <label class="fld">Banner link <small>optional: an https:// image link, used when no banner is uploaded below</small><input type="text" name="banner" maxlength="300" value="<%= room.banner %>" placeholder="https://…"></label>
         <%# 1.99kz: the 18+ flag (rooms.js adult) - an 18+ badge on the pad and its cards; Pepe treats the room as an adult room %>
-        <label class="fld chk" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="adult"<%= room.adult ? ' checked' : '' %>><span><b><%- t('pad.adult.setting') %></b><br><small><%- t('pad.adult.setting_help') %></small></span></label>
+        <label class="fld chk ds-check ps-adult"><input type="checkbox" name="adult"<%= room.adult ? ' checked' : '' %>><span><b><%- t('pad.adult.setting') %></b><br><small><%- t('pad.adult.setting_help') %></small></span></label>
         <div class="row"><button type="submit" class="btn primary">Save page</button><span class="msg" id="pageMsg" role="status"></span></div>
       </form>
       <div class="ps-kv"><span>Platform badge</span><span><%- padBadge(platform) %> <small class="muted"><%= camfrog ? 'Set by the Camfrog room behind this pad.' : platform === 'twitch' ? 'Backed by a Twitch channel.' : 'A pad made on the site - no Camfrog room behind it.' %> The badge follows the platform: <a href="#connections">connect or disconnect it</a>.</small></span></div>
@@ -159,7 +156,7 @@
 
   <%# ─────────────── Stage ─────────────── %>
   <section class="ps-sec" id="stage" role="tabpanel" aria-labelledby="tab-stage">
-    <h2 class="ps-h">📺 Stage</h2>
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">📺</span> Stage</h2>
     <p class="ps-what">Your pad's live stage: who's on it right now, bookings waiting for you, how many slots there are and what they cost, and who's banned from going live here.</p>
     <div class="sb-card ps-card">
       <h3>On the stage now</h3>
@@ -234,7 +231,7 @@
 
   <%# ─────────────── Feed ─────────────── %>
   <section class="ps-sec" id="feed" role="tabpanel" aria-labelledby="tab-feed">
-    <h2 class="ps-h">📝 Feed</h2>
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">📝</span> Feed</h2>
     <p class="ps-what">Who can post in your pad's feed, whether posts need your OK first, how many posts a person can make a day<%= camfrog ? ', and whether Pepe tells the Camfrog room about new posts' : '' %>.</p>
     <div class="fa-card ps-card" id="settings">
       <h3>Who can post</h3>
@@ -317,7 +314,7 @@
 
   <%# ─────────────── Rules ─────────────── %>
   <section class="ps-sec" id="rules" role="tabpanel" aria-labelledby="tab-rules">
-    <h2 class="ps-h">📜 Rules</h2>
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">📜</span> Rules</h2>
     <p class="ps-what">Your pad's own rules. They show in a "Rules" card on the pad page and next to the post box, and Pepe's automod enforces them. No rules = the pad follows <a href="<%= G.PATH %>"><%= G.NAME %></a>, the site-wide guidelines.</p>
     <div class="fa-card ps-card">
       <h3><%= rules && rules.rules.length ? 'Your rules (' + rules.rules.length + ')' : 'No rules yet - this pad follows ' + G.NAME %></h3>
@@ -347,7 +344,7 @@
 
   <%# ─────────────── Moderation ─────────────── %>
   <section class="ps-sec" id="moderation" role="tabpanel" aria-labelledby="tab-moderation">
-    <h2 class="ps-h">🛡️ Moderation</h2>
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">🛡️</span> Moderation</h2>
     <p class="ps-what">Everything waiting for you in this pad: posts to approve, reports, Pepe's automod calls, pinned posts, feed bans, and a log of who did what. Actions here only change this pad — a post that's also elsewhere stays there.</p>
     <div class="fa-card ps-card" id="queue">
       <h3>Waiting for approval <span class="n"><%= pending.length %></span></h3>
@@ -442,7 +439,7 @@
   <%# ─────────────── Camfrog room ─────────────── %>
   <% if (camfrog) { %>
   <section class="ps-sec" id="camfrog" role="tabpanel" aria-labelledby="tab-camfrog">
-    <h2 class="ps-h">📡 Camfrog room</h2>
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">📡</span> Camfrog room</h2>
     <p class="ps-what">The Camfrog room behind this pad. Moderate the people in it from here — Pepe runs each action as your linked Camfrog name, with the powers you have in the room — and choose what the website bridge lets visitors do.</p>
     <div class="sb-card ps-card">
       <h3>Manage the room</h3>
@@ -475,7 +472,7 @@
   <%# ─────────────── Flair & tags (1.99ir, padflair.js + feedtags.js; public/js/pad-flair.js draws it) ─────────────── %>
   <% if (typeof flair !== 'undefined' && flair) { %>
   <section class="ps-sec" id="flair" role="tabpanel" aria-labelledby="tab-flair">
-    <h2 class="ps-h">🎖️ Flair &amp; tags</h2>
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">🎖️</span> Flair &amp; tags</h2>
     <p class="ps-what">Flair is a little badge next to someone's name in this pad - on its feed, in comments on its posts, and in the live room chat on the pad page. You and the site admins create them and give them out; ones you mark "members can pick it" anyone can choose for themselves from the pad's Feed tab. Tags are the #topics people put on posts.</p>
     <div class="sb-card ps-card" id="flairMgr" data-slug="<%= slug %>" data-state="<%= JSON.stringify(flair) %>">
       <h3>Flairs <small class="mut" data-fl="count"></small></h3>

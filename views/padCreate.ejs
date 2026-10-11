@@ -1,65 +1,74 @@
 <%- include('layout', { title: 'Create a pad', user: user }) %>
 <%# 1.99iz: /pads/new - create a pad (padcreate.js). Locals: el (eligibility: ok, staff, reasons, fee, made, max, balance),
     levels [{key, icon, label, what}], def (the default level), min / max (address length). %>
-<link rel="stylesheet" href="/public/css/stage.css?v=9">
+<%# 1.99qc: ds-page.read + ds-head + ds-card / ds-field / ds-btn (docs/design-system.md, "Area notes: feed, pads and social"); stage.css no longer needed here %>
 <% const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US'); %>
 <style>
-  .pc-wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 56px; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
-  .pc-wrap .fld { display: grid; gap: 6px; margin: 0 0 12px; }
-  .pc-wrap input[type=text], .pc-wrap textarea { width: 100%; box-sizing: border-box; }
+  .pc-wrap .crumb { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .pc-wrap .crumb a { text-decoration: none; }
+  .pc-wrap .muted { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.5; }
+  .pc-wrap .msg { min-height: 18px; margin: 0; font-size: var(--ds-fs-sm); color: var(--ds-warn); }
+  .pc-wrap .ds-field .muted { font-size: var(--ds-fs-xs); font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .pc-wrap .ds-label small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ds-text-muted); }
   .pc-addr { display: flex; align-items: stretch; max-width: 100%; }
-  .pc-addr span { display: flex; align-items: center; padding: 0 8px; border: 1px solid #333; border-right: 0; border-radius: 8px 0 0 8px; color: #999; font-size: .9em; white-space: nowrap; }
-  .pc-addr input { flex: 1; min-width: 0; border-radius: 0 8px 8px 0 !important; }
-  .pc-vis { display: grid; gap: 8px; margin: 0 0 12px; border: 0; padding: 0; }
-  .pc-vis label { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start; padding: 10px 12px; border: 1px solid #2a2a2a; border-radius: 10px; cursor: pointer; }
-  .pc-vis label:has(input:checked) { border-color: #4caf50; background: #0f1a10; }
-  .pc-vis small { grid-column: 2; color: #9a9a9a; }
-  .pc-why { margin: 0; padding-left: 20px; color: #ffcc80; line-height: 1.6; }
-  .pc-ok { color: #a5d6a7; }
-  .pc-bad { color: #ef9a9a; }
-  .pc-steps { margin: 6px 0 0; padding-left: 20px; color: #bbb; line-height: 1.6; font-size: 14px; }
-  @media (max-width: 520px) { .pc-addr span { display: none; } .pc-addr input { border-radius: 8px !important; } }
+  .pc-addr > span { display: flex; align-items: center; padding: 0 10px; border: 1px solid var(--ds-line-strong); border-inline-end: 0; background: #171717;
+                    border-start-start-radius: var(--ds-r-md); border-end-start-radius: var(--ds-r-md); color: var(--ds-text-muted); font-size: var(--ds-fs-meta); white-space: nowrap; }
+  .pc-addr .ds-in { flex: 1; border-start-start-radius: 0; border-end-start-radius: 0; }
+  .pc-vis { display: grid; gap: var(--ds-sp-2); margin: 0; border: 0; padding: 0; min-width: 0; }
+  .pc-vis legend { padding: 0; margin-block-end: 6px; }
+  .pc-vis label { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start; min-height: var(--ds-tap); padding: 10px 12px; border: 1px solid var(--ds-line-strong);
+                  border-radius: var(--ds-r-md); background: var(--ds-sunken); cursor: pointer; }
+  .pc-vis label:has(input:checked) { border-color: var(--ds-ac); background: var(--ds-ac-bg); }
+  .pc-vis label:focus-within { box-shadow: var(--ds-focus-ring); }
+  .pc-vis input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--ds-ac); }
+  .pc-vis small { grid-column: 2; color: var(--ds-text-muted); }
+  .pc-why { margin: 0; padding-inline-start: 20px; color: var(--ds-warn); line-height: 1.6; }
+  .pc-ok { color: var(--ds-ok) !important; }
+  .pc-bad { color: var(--ds-danger) !important; }
+  .pc-steps { margin: 0; padding-inline-start: 20px; color: var(--ds-text-2); line-height: 1.6; font-size: var(--ds-fs-sm); }
+  @media (max-width: 520px) { .pc-addr > span { display: none; } .pc-addr .ds-in { border-radius: var(--ds-r-md); } }
 </style>
-<main class="sb pc-wrap" id="padCreate" data-min="<%= min %>" data-max="<%= max %>">
-  <nav class="crumb" aria-label="Breadcrumb"><a href="/p">Pads</a> › Create a pad</nav>
-  <div class="sb-head">
-    <h1>🧱 Create a pad</h1>
-    <p class="lede">A pad is your own corner of PATV: a feed, a stage anyone can stream to, and its own address, p/<i>name</i>. It starts as a <b>🌐 Site Pad</b> (everything on the website). You can connect it to your Camfrog room or Twitch channel later from its settings.</p>
+<main class="ds-page read pc-wrap" id="padCreate" data-min="<%= min %>" data-max="<%= max %>">
+  <div class="ds-head">
+    <div class="crumb"><a href="/p">Pads</a> › Create a pad</div>
+    <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">🧱</span> Create a pad</h1>
+    <p class="ds-lead">A pad is your own corner of PATV: a feed, a stage anyone can stream to, and its own address, p/<i>name</i>. It starts as a <b>🌐 Site Pad</b> (everything on the website). You can connect it to your Camfrog room or Twitch channel later from its settings.</p>
   </div>
 
   <% if (!el.ok) { %>
-    <section class="sb-card">
-      <h2>Not yet</h2>
+    <section class="ds-card lg">
+      <h2 class="ds-h2 dot">Not yet</h2>
       <ul class="pc-why"><% el.reasons.forEach((r) => { %><li><%= r %></li><% }) %></ul>
-      <p class="muted" style="margin-top:10px"><a href="/p">← Back to the pads</a></p>
+      <a class="ds-back" href="/p">← Back to the pads</a>
     </section>
   <% } else { %>
-    <section class="sb-card">
-      <form id="pcForm" autocomplete="off" novalidate>
-        <label class="fld">Name
-          <input type="text" name="title" id="pcTitle" maxlength="60" minlength="3" required placeholder="e.g. Night Owls"></label>
-        <label class="fld">Address
-          <span class="pc-addr"><span aria-hidden="true">publicaccess.tv/p/</span><input type="text" name="slug" id="pcSlug" minlength="<%= min %>" maxlength="<%= max %>" spellcheck="false" autocapitalize="off" aria-describedby="pcSlugMsg" placeholder="night-owls"></span>
+    <section class="ds-card lg">
+      <form id="pcForm" class="ds-form" autocomplete="off" novalidate>
+        <label class="ds-field"><span class="ds-label">Name</span>
+          <input class="ds-in" type="text" name="title" id="pcTitle" maxlength="60" minlength="3" required placeholder="e.g. Night Owls"></label>
+        <label class="ds-field"><span class="ds-label">Address</span>
+          <span class="pc-addr"><span aria-hidden="true">publicaccess.tv/p/</span><input class="ds-in" type="text" name="slug" id="pcSlug" minlength="<%= min %>" maxlength="<%= max %>" spellcheck="false" autocapitalize="off" aria-describedby="pcSlugMsg" placeholder="night-owls"></span>
           <small class="muted" id="pcSlugMsg" role="status" aria-live="polite"><%= min %>-<%= max %> characters: letters, digits and single hyphens. You can change it later (once a month).</small></label>
-        <label class="fld">Description <small class="muted">optional</small>
-          <textarea name="description" maxlength="500" rows="3" placeholder="What's this pad about?"></textarea></label>
-        <fieldset class="pc-vis"><legend>Who can see it</legend>
-          <% levels.forEach((l) => { %><label><input type="radio" name="visibility" value="<%= l.key %>"<%= l.key === def ? ' checked' : '' %>><span><%= l.icon %> <b><%= l.label %></b></span><small><%= l.what %></small></label><% }) %>
+        <label class="ds-field"><span class="ds-label">Description <small>optional</small></span>
+          <textarea class="ds-textarea" name="description" maxlength="500" rows="3" placeholder="What's this pad about?"></textarea></label>
+        <fieldset class="pc-vis"><legend class="ds-label">Who can see it</legend>
+          <% levels.forEach((l) => { %><label><input type="radio" name="visibility" value="<%= l.key %>"<%= l.key === def ? ' checked' : '' %>><span><span class="ds-ic" aria-hidden="true"><%= l.icon %></span> <b><%= l.label %></b></span><small><%= l.what %></small></label><% }) %>
         </fieldset>
-        <label class="fld">Banner link <small class="muted">optional: an https:// image link - or upload an avatar and banner in the pad's settings right after</small>
-          <input type="text" name="banner" maxlength="300" placeholder="https://…"></label>
+        <label class="ds-field"><span class="ds-label">Banner link <small>optional</small></span>
+          <input class="ds-in" type="text" name="banner" maxlength="300" placeholder="https://…">
+          <span class="ds-hint">An https:// image link - or upload an avatar and banner in the pad's settings right after.</span></label>
         <p class="muted">
-          <% if (el.staff) { %>🛠 Site staff: no limits, no fee.<% } else { %>
+          <% if (el.staff) { %><span class="ds-ic" aria-hidden="true">🛠️</span> Site staff: no limits, no fee.<% } else { %>
             You own <b><%= el.made %></b> of the <b><%= el.max %></b> pad<%= el.max === 1 ? '' : 's' %> a member can make.
             <% if (el.fee > 0) { %> Creating it costs <b><%= fmt(el.fee) %> PAT</b> (you have <%= fmt(el.balance) %>).<% } else { %> It's free.<% } %>
           <% } %>
           Pads follow <a href="/guidelines">Padiquette</a>.
         </p>
-        <div class="row"><button type="submit" class="btn primary" id="pcGo">Create pad<%= el.fee > 0 && !el.staff ? ' · ' + fmt(el.fee) + ' PAT' : '' %></button><span class="msg" id="pcMsg" role="status" aria-live="polite"></span></div>
+        <div class="ds-actions"><button type="submit" class="ds-btn" id="pcGo">Create pad<%= el.fee > 0 && !el.staff ? ' · ' + fmt(el.fee) + ' PAT' : '' %></button><span class="msg" id="pcMsg" role="status" aria-live="polite"></span></div>
       </form>
     </section>
-    <section class="sb-card">
-      <h2>After that</h2>
+    <section class="ds-card lg">
+      <h2 class="ds-h2 dot">After that</h2>
       <ol class="pc-steps">
         <li>Add an avatar, a banner and a colour (Settings → General → Look).</li>
         <li>Write your rules, pick who can post, invite people.</li>

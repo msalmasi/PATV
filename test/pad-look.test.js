@@ -283,7 +283,7 @@ test("pad page: the accent as custom properties on <main>, the uploaded banner i
     initial: null, padTabs: null, latest: [], dms: false, pepeHere: false, stage: { active: false }, roomStage: null, manage: false, schedule: null,
     analytics: false, feed: null, fx: require(path.join(repo, "feedweb")).fx, embeds: require(path.join(repo, "stageembed")), host: "publicaccess.tv",
   }).then((h) => h.replace(/\r\n/g, "\n"));
-  assert.match(html, /<main class="rm pad-acc" style="--pad-accent:#f06292;--pad-accent-ink:#0b0b0b;--pad-banner-y:30%">/);
+  assert.match(html, /<main class="ds-page rm pad-acc" style="--pad-accent:#f06292;--pad-accent-ink:#0b0b0b;--pad-banner-y:30%">/);
   assert.match(html, new RegExp(`<section class="hero has-bn"[^>]*>\\s*<div class="hero-bn" aria-hidden="true"><img src="${L.banner}"`));
   assert.doesNotMatch(html, /old\.png/, "the uploaded banner wins over the old link");
   assert.match(html, /<h1 id="rmTitle"><span class="pad-av rm-av has-img" aria-hidden="true"><img src="\/media\/pad\/[a-f0-9]{32}_a\.webp"/);

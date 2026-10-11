@@ -6,28 +6,30 @@
   moderation is counts only.
 %>
 <style>
-  .ra { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
+  .ra { max-width: var(--ds-w-wide); margin: 0 auto; padding: var(--ds-sp-4) var(--ds-gutter) var(--ds-sp-14); font-family: var(--ds-font); color: var(--ds-text); display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
   .ra *, .ra *::before, .ra *::after { box-sizing: border-box; }
-  .ra a { color: #81c784; text-decoration: none; }
+  .ra a { color: var(--ds-green-2); text-decoration: none; }
   .ra a:hover { color: #a5d6a7; }
-  .ra .crumb { font-size: 13px; color: #888; overflow-wrap: anywhere; }
-  .ra .hero { background: radial-gradient(120% 160% at 0% 0%, #17301a 0%, #111 55%); border: 1px solid #222; border-radius: 14px; padding: 16px 18px; display: grid; gap: 8px; min-width: 0; }
-  .ra .hero h1 { margin: 0; font-size: 26px; line-height: 1.2; overflow-wrap: anywhere; }
-  .ra .hero .sub { color: #aaa; font-size: 13px; line-height: 1.5; }
+  .ra .crumb { font-size: 13px; color: var(--ds-text-muted); overflow-wrap: anywhere; }
+  .ra .hero { background: radial-gradient(90% 140% at 100% 0%, var(--ds-ac-bg), transparent 60%), #111; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5) var(--ds-sp-6); display: grid; gap: 8px; min-width: 0; }
+  .ra .hero h1 { margin: 0; font: 700 var(--ds-fs-h1)/var(--ds-lh-h1) var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .ra .hero .sub { color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.5; }
   .ra .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
-  .ra .tab { font-size: 12px; padding: 4px 11px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb !important; white-space: nowrap; }
-  .ra .tab.on { background: #1f3a22; border-color: #4caf50; color: #e8f5e9 !important; }
-  .ra .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; min-width: 0; display: grid; gap: 12px; align-content: start; }
-  .ra h2 { margin: 0; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
-  .ra h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; color: #888; font-size: 12px; }
-  .ra .muted { color: #888; font-size: 12px; }
+  .ra .tab { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: var(--ds-fs-meta); padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill); border: 1px solid #2a2a2a; background: #151515; color: #ccc !important; white-space: nowrap; }
+  .ra .tab.on { background: var(--ds-ac-bg); border-color: var(--ds-ac); color: #fff !important; }
+  .ra a.tab:hover { border-color: var(--ds-ac); color: #fff !important; }
+  .ra a.tab:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .ra .card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); min-width: 0; display: grid; gap: 12px; align-content: start; }
+  .ra h2 { margin: 0; letter-spacing: .1em; text-transform: uppercase; color: var(--ds-gold); font-family: var(--ds-font-pixel); font-size: var(--ds-fs-pixel-h); letter-spacing: var(--ds-ls-pixel-h); line-height: 1.6; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+  .ra h2 small { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; color: var(--ds-text-muted); font-size: 12px; }
+  .ra .muted { color: var(--ds-text-muted); font-size: 12px; }
   .ra .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-  .ra .tile { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 11px 13px; min-width: 0; }
-  .ra .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
-  .ra .tile .v { font-size: 21px; font-weight: bold; margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+  .ra .tile { background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-3); min-width: 0; }
+  .ra .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ds-text-muted); }
+  .ra .tile .v { font-size: 21px; font-weight: 700; color: var(--ds-text-strong); margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
   .ra .tile .v.sm { font-size: 15px; }
-  .ra .tile .s { font-size: 12px; color: #888; margin-top: 2px; }
-  .ra .up { color: #81c784; } .ra .down { color: #ef9a9a; }
+  .ra .tile .s { font-size: 12px; color: var(--ds-text-muted); margin-top: 2px; }
+  .ra .up { color: var(--ds-ok); } .ra .down { color: var(--ds-danger-solid); }
   .ra .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
   .ra .blk { display: grid; gap: 8px; min-width: 0; }
   .ra .blk-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; font-size: 14px; }
@@ -40,30 +42,31 @@
   .ua-hit { fill: transparent; cursor: crosshair; }
   .ua-hit:hover { fill: rgba(255,255,255,.06); }
   .ua-yl { position: absolute; left: 0; top: 0; width: 34px; height: 132px; }
-  .ua-yl span { position: absolute; right: 0; transform: translateY(-50%); font-size: 11px; color: #777; font-variant-numeric: tabular-nums; }
+  .ua-yl span { position: absolute; right: 0; transform: translateY(-50%); font-size: 11px; color: var(--ds-text-faint); font-variant-numeric: tabular-nums; }
   .ua-xl { position: absolute; left: 40px; right: 0; bottom: 0; height: 16px; }
-  .ua-xl span { position: absolute; transform: translateX(-50%); font-size: 11px; color: #777; white-space: nowrap; }
+  .ua-xl span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--ds-text-faint); white-space: nowrap; }
   .ua-xl span.end { transform: translateX(-100%); }
   .ra-hrow { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; margin-bottom: 3px; }
-  .ra-hname { font-size: 11px; color: #999; }
+  .ra-hname { font-size: 11px; color: var(--ds-text-muted); }
   .ra-cells { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; }
   .ra-cell { height: 18px; border-radius: 3px; cursor: crosshair; }
   .ra-cell:hover { outline: 1px solid #ddd; outline-offset: -1px; }
-  .ra-hax { display: grid; grid-template-columns: 36px repeat(4, minmax(0, 1fr)); font-size: 11px; color: #777; }
+  .ra-hax { display: grid; grid-template-columns: 36px repeat(4, minmax(0, 1fr)); font-size: 11px; color: var(--ds-text-faint); }
   .ra .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #aaa; }
+  .ra .ra-tbl { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-inline: calc(-1 * var(--ds-sp-1)); padding-inline: var(--ds-sp-1); }
   .ra table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .ra th { text-align: left; color: #777; font-weight: normal; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px 6px 0; white-space: nowrap; }
+  .ra th { text-align: start; color: var(--ds-text-muted); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px 6px 0; white-space: nowrap; }
   .ra td { padding: 6px 8px 6px 0; border-top: 1px solid #1c1c1c; color: #ccc; vertical-align: top; font-variant-numeric: tabular-nums; }
-  .ra td.n { color: #777; width: 26px; }
-  .ra td.who { overflow-wrap: anywhere; color: #e6e6e6; }
-  .ra .num { text-align: right; }
+  .ra td.n { color: var(--ds-text-faint); width: 26px; }
+  .ra td.who { overflow-wrap: anywhere; color: var(--ds-text); }
+  .ra .num { text-align: end; white-space: nowrap; }
   .ra .privnote { font-size: 12px; color: #c9a36a; }
   .ra .bars { display: grid; gap: 7px; }
   .ra .brow { display: grid; grid-template-columns: minmax(80px, 150px) minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
-  .ra .brow .bn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6e6e6; }
+  .ra .brow .bn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-text); }
   .ra .brow .bb { height: 8px; background: #1a1a1a; border-radius: 999px; overflow: hidden; }
   .ra .brow .bb span { display: block; height: 100%; border-radius: 999px; }
-  .ra .brow .bv { color: #999; white-space: nowrap; font-size: 12px; }
+  .ra .brow .bv { color: var(--ds-text-muted); white-space: nowrap; font-size: 12px; }
   .ra .catbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; background: #111; }
   .ra .catbar span { display: block; height: 100%; min-width: 3px; }
   .ra .pills { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -76,26 +79,23 @@
      list items, 10px between chip rows */
   .ra .know { display: grid; gap: 22px; }
   .ra .know p { margin: 0; line-height: 1.6; color: #ddd; }
-  .ra .know p.ksub { margin: 0 0 8px; color: #9a9; line-height: 1.4; }   /* .know p's margin:0 used to win: labels sat on their lists */
+  .ra .know p.ksub { margin: 0 0 8px; color: var(--ds-text-muted); line-height: 1.4; }   /* .know p's margin:0 used to win: labels sat on their lists */
   .ra .know ul { margin: 0; padding-left: 18px; display: grid; gap: 8px; color: #ccc; font-size: 14px; line-height: 1.5; }
   .ra .know .two { gap: 22px 28px; }
   .ra .know .two > div { display: grid; align-content: start; min-width: 0; }
-  .ra .ksub { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; margin: 0 0 8px; line-height: 1.4; }
+  .ra .ksub { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ds-text-muted); margin: 0 0 8px; line-height: 1.4; }
   .ra .vibe { display: inline-block; font-size: 13px; padding: 4px 12px; border-radius: 999px; background: #1a1630; border: 1px solid #3a3260; color: #d1c4e9; }
   /* 1.99el: one grid for every row, so the date + time column ("Oct 7 · 8 AM") lines up and never wraps */
   .ra .hist { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; font-size: 13px; line-height: 1.5; }
   .ra .hist div { display: contents; color: #bbb; }
-  .ra .hist b { color: #888; font-weight: normal; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ra .hist b { color: var(--ds-text-muted); font-weight: normal; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .ra .hist span { color: #bbb; min-width: 0; overflow-wrap: anywhere; }
-  .ra .empty { color: #777; font-size: 13px; }
-  .ra .gate { background: #111; border: 1px dashed #333; border-radius: 14px; padding: 28px 18px; text-align: center; color: #bbb; line-height: 1.6; }
-  .ra .gate a { display: inline-block; margin-top: 10px; border: 1px solid #2e4d2b; border-radius: 8px; padding: 8px 16px; }
-  #ra-tip { position: fixed; z-index: 50; pointer-events: none; background: #1d1d1d; color: #eee; border: 1px solid #333; border-radius: 6px;
-            padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.5); display: none; font-family: Ubuntu, sans-serif; }
+  .ra .empty { color: var(--ds-text-faint); font-size: 13px; }
+  .ra .gate { display: grid; justify-items: center; gap: var(--ds-sp-2); background: transparent; border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-xl); padding: var(--ds-sp-6) var(--ds-sp-4); text-align: center; color: var(--ds-text-2); line-height: 1.6; }
+  #ra-tip { position: fixed; z-index: var(--ds-z-pop); pointer-events: none; background: var(--ds-surface-3); color: #eee; border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-xs);
+            padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.5); display: none; font-family: var(--ds-font); }
   @media (max-width: 760px) { .ra .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 560px) {
-    .ra { padding: 14px 16px 48px; }
-    .ra .hero h1 { font-size: 22px; }
     .ua-chart, .ua-yl { height: 110px; }
     .ra-cell { height: 14px; border-radius: 2px; }
     .ra-cells { gap: 1px; }
@@ -104,19 +104,19 @@
     .ra .hist { gap: 8px 10px; font-size: 12.5px; }
   }
 </style>
-<main class="ra" id="ra">
+<main class="ds-page wide ra" id="ra">
   <div class="crumb"><a href="/p">Pads</a> › <% if (room.bridged) { %><a href="/p/<%= encodeURIComponent(room.slug) %>"><%= room.name %></a><% } else { %><%= room.name %><% } %> › Analytics</div>
   <section class="hero">
-    <h1>📈 <%= room.name %></h1>
+    <h1><span class="ds-ic" aria-hidden="true">📈</span> <%= room.name %></h1>
     <div class="sub">What happens in this Camfrog room, from what Pepe sees sitting in it<% if (a && a.updated) { %> · updated <%= a.updated %><% } %><% if (a && a.tz) { %> · times in <%= a.tz %><% } %>.</div>
     <div class="tabs">
-      <% if (room.bridged) { %><a class="tab" href="/p/<%= encodeURIComponent(room.slug) %>">💬 Pad page</a><% } %>
-      <span class="tab on">📈 Pad analytics</span>
+      <% if (room.bridged) { %><a class="tab" href="/p/<%= encodeURIComponent(room.slug) %>"><span class="ds-ic" aria-hidden="true">💬</span>Pad page</a><% } %>
+      <span class="tab on" aria-current="page"><span class="ds-ic" aria-hidden="true">📈</span>Pad analytics</span>
     </div>
   </section>
 
 <% if (!a) { %>
-  <div class="gate">🔒 Pad analytics are for signed-in members, like the live Camfrog room chat.<br><a href="/login">Sign in</a></div>
+  <div class="gate"><span class="ds-ic xl" aria-hidden="true">🔒</span><span>Pad analytics are for signed-in members, like the live Camfrog room chat.</span><a class="ds-btn sm" href="/login">Sign in</a></div>
 <% } else { %>
   <section class="card" aria-label="Summary">
     <div class="tiles">
@@ -132,7 +132,7 @@
   </section>
 
   <section class="card" aria-labelledby="raKnow">
-    <h2 id="raKnow"><span>🧠 What people talk about</span><small><%= a.know.at ? "Pepe's notes from " + a.know.at : "no notes yet" %></small></h2>
+    <h2 id="raKnow"><span><span class="ds-ic" aria-hidden="true">🧠</span> What people talk about</span><small><%= a.know.at ? "Pepe's notes from " + a.know.at : "no notes yet" %></small></h2>
     <% if (!a.know.has) { %>
       <div class="empty">Pepe hasn't summarised this Camfrog room yet — he reads the room a few times a day once it's been chatty.</div>
     <% } else { %>
@@ -158,9 +158,9 @@
   </section>
 
   <section class="card" aria-labelledby="raAct">
-    <h2 id="raAct"><span>📊 Activity</span><small>last 90 days</small></h2>
+    <h2 id="raAct"><span><span class="ds-ic" aria-hidden="true">📊</span> Activity</span><small>last 90 days</small></h2>
     <div class="two">
-      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#4caf50"></span>Messages per day</b></div>
+      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:var(--ds-green)"></span>Messages per day</b></div>
         <% if (a.hasMsgs) { %><%- a.msgChart %><% } else { %><div class="empty">No chat recorded yet.</div><% } %></div>
       <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#ffb74d"></span>Mic time per day</b></div>
         <% if (a.hasMic) { %><%- a.micChart %><% } else { %><div class="empty">Nobody on the mic yet.</div><% } %></div>
@@ -171,9 +171,9 @@
   </section>
 
   <section class="card" aria-labelledby="raHeat">
-    <h2 id="raHeat"><span>🗓 When it's busy</span><small>hour of the week</small></h2>
+    <h2 id="raHeat"><span><span class="ds-ic" aria-hidden="true">🗓</span> When it's busy</span><small>hour of the week</small></h2>
     <div class="two">
-      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#4caf50"></span>Chat</b></div>
+      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:var(--ds-green)"></span>Chat</b></div>
         <div><%- a.heatChat %><div class="ra-hax" aria-hidden="true"><span></span><span>00</span><span>06</span><span>12</span><span>18</span></div></div></div>
       <% if (a.hasHeatMic) { %>
       <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#ffb74d"></span>Mic</b></div>
@@ -184,16 +184,16 @@
 
   <div class="two">
     <section class="card" aria-labelledby="raRegs">
-      <h2 id="raRegs"><span>👥 Regulars</span><small>by days here, chat and mic</small></h2>
+      <h2 id="raRegs"><span><span class="ds-ic" aria-hidden="true">👥</span> Regulars</span><small>by days here, chat and mic</small></h2>
       <% if (a.regulars.length) { %>
-      <table><thead><tr><th></th><th>Who</th><th class="num">Days 30d</th><th class="num">Msgs 30d</th><th class="num hide-sm">Mic 30d</th><th class="num hide-sm">Last seen</th></tr></thead><tbody>
+      <div class="ra-tbl"><table><thead><tr><th></th><th>Who</th><th class="num">Days 30d</th><th class="num">Msgs 30d</th><th class="num hide-sm">Mic 30d</th><th class="num hide-sm">Last seen</th></tr></thead><tbody>
         <% a.regulars.forEach((r) => { %><tr><td class="n"><%= r.rank %></td><td class="who"><% if (r.href) { %><a href="<%= r.href %>"><%= r.name %></a><% } else { %><%= r.name %><% } %></td><td class="num"><%= r.d30 %></td><td class="num"><%= r.m30 %></td><td class="num hide-sm"><%= r.mic30 %></td><td class="num hide-sm"><%= r.last %></td></tr><% }) %>
-      </tbody></table>
+      </tbody></table></div>
       <% } else { %><div class="empty">No regulars yet.</div><% } %>
       <% if (a.regularsHidden) { %><div class="privnote">🔒 +<%= a.regularsHidden %> regular<%= a.regularsHidden === 1 ? '' : 's' %> keep their activity private.</div><% } %>
     </section>
     <section class="card" aria-labelledby="raMic">
-      <h2 id="raMic"><span>🎙 Mic leaderboard</span><small>last 90 days</small></h2>
+      <h2 id="raMic"><span><span class="ds-ic" aria-hidden="true">🎙</span> Mic leaderboard</span><small>last 90 days</small></h2>
       <% if (a.mic.length) { %>
       <div class="bars"><% a.mic.forEach((m) => { %>
         <div class="brow"><span class="bn"><%= m.rank %>. <% if (m.href) { %><a href="<%= m.href %>"><%= m.name %></a><% } else { %><%= m.name %><% } %></span><span class="bb"><span style="width:<%= m.pct.toFixed(1) %>%;background:#ffb74d"></span></span><span class="bv"><%= m.dur %></span></div>
@@ -205,7 +205,7 @@
 
   <div class="two">
     <section class="card" aria-labelledby="raCmd">
-      <h2 id="raCmd"><span>⌨️ Commands here</span><small>since tracking began</small></h2>
+      <h2 id="raCmd"><span><span class="ds-ic" aria-hidden="true">⌨️</span> Commands here</span><small>since tracking began</small></h2>
       <% if (a.cmds.length) { %>
       <div class="catbar" role="img" aria-label="Commands by category"><% a.cats.forEach((c) => { %><span style="width:<%= c.pct.toFixed(1) %>%;background:<%= c.color %>" title="<%= c.label %>: <%= c.n %>"></span><% }) %></div>
       <div class="legend"><% a.cats.forEach((c) => { %><span><span class="dot" style="background:<%= c.color %>"></span><%= c.label %> <b><%= c.n %></b></span><% }) %></div>
@@ -215,11 +215,11 @@
       <% } else { %><div class="empty">No commands yet.</div><% } %>
     </section>
     <section class="card" aria-labelledby="raGames">
-      <h2 id="raGames"><span>🎲 Games &amp; moderation</span><small>30d · 90d</small></h2>
+      <h2 id="raGames"><span><span class="ds-ic" aria-hidden="true">🎲</span> Games &amp; moderation</span><small>30d · 90d</small></h2>
       <% if (a.games.length) { %>
-      <table><thead><tr><th>Game</th><th class="num">30 days</th><th class="num">90 days</th></tr></thead><tbody>
+      <div class="ra-tbl"><table><thead><tr><th>Game</th><th class="num">30 days</th><th class="num">90 days</th></tr></thead><tbody>
         <% a.games.forEach((g) => { %><tr><td><span class="dot" style="background:<%= g.color %>"></span><%= g.label %></td><td class="num"><%= g.d30 %></td><td class="num"><%= g.d90 %></td></tr><% }) %>
-      </tbody></table>
+      </tbody></table></div>
       <div class="muted">Game commands played in the Camfrog room (a hand, a spin, a heist move).</div>
       <% } else { %><div class="empty">No games played here yet.</div><% } %>
       <p class="ksub" style="margin-top:6px">Moderation · 90 days · <%= a.modTotal %></p>
