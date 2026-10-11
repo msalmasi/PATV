@@ -234,7 +234,8 @@
             .nav-psearch input { flex: 1 1 auto; min-width: 0; height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid #3a3a42;
                                  background: #121215; color: #eee; font: 16px Ubuntu, sans-serif; }
             .nav-psearch input:focus { outline: none; border-color: #4caf50; }
-            .nav-psearch button { flex: none; width: 40px; height: 36px; border-radius: 8px; border: 1px solid #3a3a42; background: #24242a; cursor: pointer; font-size: 15px; }
+            .nav-psearch button { flex: none; width: 40px; height: 36px; border-radius: 8px; border: 1px solid #3a3a42; background: #24242a; cursor: pointer; font-size: 15px;
+                                  padding: 0 !important; margin: 0; display: grid; place-items: center; line-height: 1; text-align: center; }   /* the menu's generic button padding pushed the 🔍 off-centre */
         </style>
         <style>
             /* 1.99cc: the site footer (Terms / Privacy on every page). Built here, moved to the end of <body> below. */
