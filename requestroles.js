@@ -155,7 +155,8 @@ async function seerrUsers({ fresh = false } = {}) {
   if (r.status !== 200 || !r.json) throw new Refuse(502, "Couldn't read the request server's users.");
   seerrUsersCache = { at: clock(), list: (r.json.results || []).map((u) => ({
     id: u.id, plexId: u.plexId == null ? null : String(u.plexId), email: String(u.email || "").toLowerCase(),
-    name: u.displayName || u.plexUsername || u.username || ("#" + u.id), permissions: Number(u.permissions) || 0 })) };
+    name: u.displayName || u.plexUsername || u.username || ("#" + u.id), permissions: Number(u.permissions) || 0,
+    movieQuotaLimit: u.movieQuotaLimit == null ? null : Number(u.movieQuotaLimit), tvQuotaLimit: u.tvQuotaLimit == null ? null : Number(u.tvQuotaLimit) })) };
   return seerrUsersCache.list;
 }
 const TRUSTED_PLEX = ["self", "admin", "wizarr", "overseerr", "email", "owner"];
@@ -422,8 +423,14 @@ async function audit() {
                                   [Object.keys(PRIZE_ROLE).find((k) => PRIZE_ROLE[k] === role)]);
     const owned = await getQuery("SELECT ur.userId, u.username, ur.source FROM user_roles ur LEFT JOIN users u ON u.userId = ur.userId WHERE LOWER(ur.role) = ?", [role]);
     const active = await getQuery("SELECT r.user_id AS userId, u.username, r.seerr_state, r.seerr_user FROM request_roles r LEFT JOIN users u ON u.userId = r.user_id WHERE r.role = ? AND r.status = 'active'", [role]);
-    const seerr = seerrList ? seerrList.filter((x) => (x.permissions & ROLES[role].bits) === ROLES[role].bits && !(x.permissions & P.ADMIN) && x.id !== 1)
-      .map((x) => ({ id: x.id, name: x.name })) : null;
+    // who already looks like a holder on Seerr: Scout = an explicit unlimited quota (every user has REQUEST by default);
+    // Curator = any of AUTO_APPROVE (+movie/TV) / MANAGE_REQUESTS (listed with what they have). Admins left out.
+    const CUR = P.MANAGE_REQUESTS | P.AUTO_APPROVE | P.AUTO_APPROVE_MOVIE | P.AUTO_APPROVE_TV;
+    const seerr = seerrList ? seerrList.filter((x) => x.id !== 1 && !(x.permissions & P.ADMIN) &&
+        (role === "scout" ? x.movieQuotaLimit === 0 && x.tvQuotaLimit === 0 : (x.permissions & CUR) !== 0))
+      .map((x) => ({ id: x.id, name: x.name, has: role === "scout" ? "unlimited quota"
+        : [["MANAGE_REQUESTS", P.MANAGE_REQUESTS], ["AUTO_APPROVE", P.AUTO_APPROVE], ["AUTO_APPROVE_MOVIE", P.AUTO_APPROVE_MOVIE], ["AUTO_APPROVE_TV", P.AUTO_APPROVE_TV]]
+          .filter(([, b]) => x.permissions & b).map(([k]) => k).join("+") })) : null;
     out[role] = { discord, discordError, orders, owned, active, seerr };
   }
   return out;

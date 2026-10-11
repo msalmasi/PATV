@@ -54,7 +54,7 @@
           "<li><b>PATV store orders</b>: " + names(a.orders, function (o) { return esc(o.username) + " ×" + o.n; }) + "</li>" +
           "<li><b>PATV store records (user_roles)</b>: " + names(a.owned, function (o) { return esc(o.username) + " (" + esc(o.source) + ")"; }) + "</li>" +
           "<li><b>Active here</b>: " + names(a.active, function (x) { return esc(x.username) + " [Seerr " + esc(x.seerr_state) + "]"; }) + "</li>" +
-          "<li><b>Seerr users with the bits</b>: " + (a.seerr ? names(a.seerr, function (s) { return esc(s.name) + " #" + s.id; }) : "<i>Seerr not reachable</i>") + "</li>" +
+          "<li><b>Seerr users that already look like holders</b>: " + (a.seerr ? names(a.seerr, function (s) { return esc(s.name) + " #" + s.id + (s.has ? " (" + esc(s.has) + ")" : ""); }) : "<i>Seerr not reachable</i>") + "</li>" +
           "<li><b>Mismatches</b> (Discord role without an order/activation, or the reverse): " + (mism.map(function (k) { return esc(k) + " [" + held[k] + "]"; }).join(", ") || "none") + "</li></ul>";
       }).join("") + '<p class="muted">D = Discord role, O = store order, A = active here. Nothing was changed; Discord roles are never removed by this page.</p>';
       b.disabled = false;
