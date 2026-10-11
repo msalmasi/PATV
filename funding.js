@@ -69,6 +69,8 @@ const state = {
   launchpad: null,
   // 1.99jw: Pepe's monetary policy (cleanMonetary), else null. Every sync sets it.
   monetary: null,
+  // 1.99ne: when the state above was restored from funding_state at start (0 = it came from a live sync)
+  restoredAt: 0,
 };
 const INC = "incentives:";
 const DONATION_RATE = 500000;          // 1.99jw: PAT per $1 while Pepe never synced a rate
@@ -92,7 +94,52 @@ let ready = runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
     // 1.99jw: free-form JSON for Pepe (a donation mint's {bonus, usd_cents, rate, bonus_pct, event}, a flash claim's ref)
     if (!cols.includes("meta")) await runQuery("ALTER TABLE reserve_claims ADD COLUMN meta TEXT");
     await runQuery("CREATE INDEX IF NOT EXISTS reserve_claims_queue ON reserve_claims (queued, created)");
+    // 1.99ne: the last sync survives a site restart (restored below while Pepe hasn't synced since the start)
+    await runQuery("CREATE TABLE IF NOT EXISTS funding_state (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER)");
+    await restore();
   }).catch((e) => console.error("[funding] table:", e));
+
+// ── 1.99ne: the synced state is persisted ──
+// Everything above lived only in memory, so a site restart (every deploy) while Pepe was down - or until his next
+// 30 s sync - ran the economy on the "never synced" defaults: fortknoxLive() / roomVaultsLive() false (boosts.routeInTx
+// booked the Fort Knox half as a plain Reserve claim and kept the room half in the site escrow), flash liquidity off,
+// the launchpad off, Reserve-routed grants refused. Now every sync is saved (funding_state 'last_sync') and a start
+// restores it until Pepe's next sync replaces it: exactly the state a site that never restarted would still hold
+// (nothing in it expires while Pepe is away either). state.syncedAt keeps the ORIGINAL sync time, so "Reserve not
+// synced for 30 min" alerts still fire; state.restoredAt says it came from the database.
+const PERSIST_KEYS = ["reserve", "syncedAt", "flows", "fortknox", "incentives", "room_vaults", "launchpad", "monetary"];
+let persistChain = Promise.resolve();
+function persist() {
+  const snap = {};
+  for (const k of PERSIST_KEYS) snap[k] = state[k];
+  const text = JSON.stringify(snap);
+  // in order: a slow write never lands after a newer one
+  persistChain = persistChain.then(() => ready).then(() => runQuery(`INSERT INTO funding_state (key, value, updated) VALUES ('last_sync', ?, ?)
+                                                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`,
+                                                   [text, Date.now()]))
+    .catch((e) => console.error("[funding] couldn't save the synced state:", e.message));
+  return persistChain;
+}
+async function restore() {
+  if (state.syncedAt) return false;                 // Pepe already synced since this start: his state wins
+  const row = (await getQuery("SELECT value, updated FROM funding_state WHERE key = 'last_sync'"))[0];
+  if (!row) return false;
+  let snap;
+  try { snap = JSON.parse(row.value); } catch (e) { console.error("[funding] saved state unreadable - not restored"); return false; }
+  if (!snap || typeof snap !== "object" || state.syncedAt) return false;
+  for (const k of PERSIST_KEYS) {
+    if (!(k in snap)) continue;
+    if (k === "flows") state.flows = snap.flows && typeof snap.flows === "object" ? { ...snap.flows } : {};
+    else if (k === "reserve") state.reserve = typeof snap.reserve === "number" && isFinite(snap.reserve) ? Math.floor(snap.reserve) : null;
+    else if (k === "syncedAt") state.syncedAt = Number(snap.syncedAt) || 0;
+    else state[k] = snap[k] === undefined ? null : snap[k];
+  }
+  state.restoredAt = Date.now();
+  console.log(`[funding] restored Pepe's last sync (${new Date(state.syncedAt || row.updated).toISOString()}): fortknox ${state.fortknox !== null ? "live" : "off"}, ` +
+              `room vaults ${state.room_vaults ? "live" : "off"}, flash.house ${state.monetary && state.monetary.flash ? state.monetary.flash.house : "-"}, ` +
+              `incentives ${state.incentives ? "live" : "off"}, ${Object.keys(state.flows).length} flows`);
+  return true;
+}
 
 // the budget is reported (routing / queue); treasuryOn = the E-2 Treasury itself is live (display)
 const treasuryLive = () => state.incentives !== null;
@@ -543,6 +590,8 @@ function sync(body) {
   state.room_vaults = rv && typeof rv === "object" && rv.on === true
     ? { on: true, cap: Number.isFinite(Number(rv.cap)) ? Math.max(0, Math.floor(Number(rv.cap))) : null } : null;
   state.syncedAt = Date.now();
+  state.restoredAt = 0;
+  persist();                                         // 1.99ne: survives a site restart (restore())
   if (state.incentives) drainQueue().catch((e) => console.error("[funding] drain:", e.message));
 }
 const fortknoxLive = () => state.fortknox !== null;
@@ -577,4 +626,6 @@ module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, s
                    houseBacked, wheelDraw, wheelReseed, reserveAvailable, takeReserveRef,
                    // 1.99jw
                    init: () => ready, cleanMonetary, takeIncentivesRef, houseFlashPlan, houseFlashCover, unsettledFlash, unsettledReserve,
-                   donationTerms, jackpotPot };
+                   donationTerms, jackpotPot,
+                   // 1.99ne
+                   persist, restore, _persisted: () => persistChain };

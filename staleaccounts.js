@@ -273,6 +273,11 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
       if (r.key === "stashes") siteBot.pvaults = { vaults: d.stashes || [] };
     }
   }
+  // 1.99ne: the stashes themselves once the site owns them (stashes.js) - the old snapshot froze at the switch-over
+  try {
+    const SS = require("./stashes");
+    if (await tableExists("stash_meta") && await SS.live()) siteBot.pvaults = { vaults: await SS.list() };
+  } catch (e) { /* keep the snapshot */ }
   for (const [t, k] of [["markets", "markets"], ["bounties", "bounties"], ["wagers", "wagers"]]) {
     if (await tableExists(t)) for (const r of await getQuery(`SELECT data, status FROM ${t}`)) {
       const d = safeJson(r.data, {}); if (d && typeof d === "object") { d.status = d.status || r.status; siteBot[k][k].push(d); }

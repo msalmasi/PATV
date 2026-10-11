@@ -19,6 +19,7 @@ const actionsReady = runQuery(`CREATE TABLE IF NOT EXISTS bounty_actions (
 // check of his logs; the creator (or an admin, for disputed ones) can reject a claim, the hunter can
 // dispute a rejection (or a claim the creator sat on for 12 h) to the admins.
 const evidenceCol = actionsReady.then(() => runQuery("ALTER TABLE bounty_actions ADD COLUMN evidence TEXT")).catch(() => {});
+const ttl = require("./actionttl");     // 1.99ne: queued actions expire
 const ADD_MIN = 100;
 const DISPUTE_AFTER_S = 12 * 3600;
 const CHECK_STATES = ["verified", "creator", "admin", "no_match", "manual"];
@@ -194,15 +195,23 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/bounties/actions/claim", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     await actionsReady; await evidenceCol;
+    // 1.99ne: overdue pending actions expire first (actionttl.js)
+    await ttl.sweepTable("bounty_actions").catch((e) => console.error("[bounties] ttl sweep:", e.message));
     const now = Date.now();
-    const rows = await getQuery(`SELECT * FROM bounty_actions WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
+    const found = await getQuery(`SELECT * FROM bounty_actions WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
-    for (const a of rows) await runQuery("UPDATE bounty_actions SET status = 'claimed', claimed = ?, updated = ? WHERE id = ?", [now, now, a.id]);
+    const rows = [];
+    for (const a of found) {
+      const r = await runQuery(`UPDATE bounty_actions SET status = 'claimed', claimed = ?, updated = ?
+                                WHERE id = ? AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))`, [now, now, a.id, now - RECLAIM_MS]);
+      if (r && r.changes === 1) rows.push(a);
+    }
     res.json({ actions: rows.map((a) => {
       let hunters = [];
       try { hunters = JSON.parse(a.hunters || "[]"); } catch (e) { hunters = []; }
       return { id: a.id, bounty_id: a.bounty_id, username: a.username, camfrog: a.camfrog, kind: a.kind,
-               amount: a.amount, note: a.note, hunters, evidence: a.evidence || null, site_admin: !!a.site_admin };
+               amount: a.amount, note: a.note, hunters, evidence: a.evidence || null, site_admin: !!a.site_admin,
+               created: a.created || null, expires_at: ttl.expiresAt("bounty_actions", a) };   // 1.99ne
     }) });
   });
 

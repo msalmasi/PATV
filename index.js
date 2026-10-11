@@ -1206,6 +1206,13 @@ require("./lotto/routes").register(app, { isBotToken, addUser, updateLevel });  
 require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
+// 1.99ne: a paid command's charge + its routing as one entry group (route intents Pepe applies and acks)
+const patroutes = require("./patroutes");
+patroutes.register(app, { isBotToken });
+// 1.99ne: stashes live on the site (Pepe is a client); the web + bot routes and the one-off import from Pepe
+require("./stashes").register(app, { isBotToken, addUser });
+// 1.99ne: website actions queued for Pepe expire (refund / mark / notify) - actionttl.js
+require("./actionttl").register(app, { addUser });
 require("./staking").register(app, { isBotToken, addUser });
 inbox.register(app, { isBotToken, addUser });
 require("./mentions").register(app, { addUser });      // 1.99ii: 📣 room mention alerts (/settings/mentions)
@@ -1420,6 +1427,20 @@ async function patSupply() {
       pools.push({ key: "vault:lotto", label: "🎟️ Lotto jackpot pot", amount: Math.max(0, Math.floor(await LS.potBalance())) });
     }
   } catch (e) { /* no lotto tables yet */ }
+  // 1.99ne: once the stashes live on the site (stashes.js) they are counted here, not from Pepe's (up to 5 min old) row
+  try {
+    const SS = require("./stashes");
+    if (await SS.live()) {
+      pools = pools.filter((p) => String(p.key || "") !== "stashes");
+      const t = await SS.total();
+      if (t.amount) pools.push({ key: "stashes", label: "🔐 Personal vaults", amount: Math.max(0, Math.floor(t.amount)) });
+    }
+  } catch (e) { /* no stash tables yet */ }
+  // 1.99ne: paid-command PAT already taken from wallets that Pepe hasn't routed into his pools yet (patroutes.js)
+  try {
+    const u = await require("./patroutes").unrouted();
+    if (u.amount > 0) pools.push({ key: "route_intents", label: "⏳ Charged, waiting for Pepe to route it", amount: Math.floor(u.amount) });
+  } catch (e) { /* no table yet */ }
   const rows = [{ key: "wallets", label: `👛 Player wallets (${Number(w[0].n).toLocaleString()} accounts)`, amount: Math.floor(Number(w[0].w) || 0) },
                 { key: "jackpot", label: "🎰 Casino jackpot", amount: Math.floor(Number(j[0].j) || 0) }, ...pools];
   // 1.99ee: the room-vault half of boosts and stage slot fees, held on the site for each pad until room vaults open (boosts.js)
@@ -2032,6 +2053,20 @@ app.post("/api/wager/charge", async (req, res) => {
     }
     // Atomic conditional debit: only succeeds if the balance covers it RIGHT NOW (1.99ga: ledger.post).
     const cp = await resolveCounterparty(req.body.counterparty);
+    // 1.99ne: a paid command's charge that Pepe routes into his pools carries `route` + an idempotency key: the
+    // debit and its route intent are written in ONE transaction under that key (patroutes.js), so a Pepe crash
+    // between charging and routing can't lose the routed PAT - the intent waits until he has applied it.
+    const route = patroutes.cleanRoute(req.body.route);
+    const rkey = route ? idemKey(req) : null;
+    if (route && patroutes.validKey(rkey)) {
+      const debit = await patroutes.charge({ key: rkey, userId, username, amount, reason, counterparty: cp, route });
+      if (!debit.ok) {
+        return debit.code === ledger.E_INSUFFICIENT
+          ? reply(402, { ok: false, error: "insufficient" })
+          : reply(404, { ok: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND });
+      }
+      return reply(200, { ok: true, route_key: rkey });
+    }
     const debit = await ledger.post(userId, -amount, reason, { requireCover: true, counterparty: cp, source: "wager/charge" });
     if (!debit.ok) {
       return debit.code === ledger.E_INSUFFICIENT
@@ -4428,7 +4463,12 @@ app.use(addUser, (req, res) => {
 });
 
 // 1.99cf: loopback only (nginx is the way in); BIND_HOST overrides. See listen.js.
-require("./listen").listen(app, port, "site", () => {
-  console.log(`Server running on ${require("./listen").bindHost()}:${port}`);
+// 1.99ne: not before funding.js has restored Pepe's last synced state (Fort Knox / room vaults / flash liquidity),
+// so the first boost after a restart can't be booked on the "never synced" defaults. A failure is logged and the
+// site starts anyway (at most 10 s later).
+Promise.race([funding.init(), new Promise((r) => setTimeout(r, 10000))]).catch(() => {}).then(() => {
+  require("./listen").listen(app, port, "site", () => {
+    console.log(`Server running on ${require("./listen").bindHost()}:${port}`);
+  });
 });
 

@@ -110,6 +110,8 @@ function register(app, { isBotToken, addUser }) {
     const body = req.body || {};
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
+      // 1.99ne: once the site owns the stashes (stashes.js), an old Pepe's snapshot must not overwrite the page's data
+      if (await require("./stashes").live().catch(() => false)) return res.json({ success: true, ignored: "the site owns stashes" });
       const snap = cleanStashes(body);
       await save("stashes", snap);
       res.json({ success: true, stored: snap.stashes.length });
@@ -161,7 +163,9 @@ function register(app, { isBotToken, addUser }) {
       const camfrog = u.camfrogUsername || null;
       const me = camfrog ? low(camfrog) : null;
       const isAdmin = u.class === "Admin";
-      const st = (await load("stashes")) || { stashes: [] };
+      // 1.99ne: the site's own stashes once they moved here (stashes.js), else Pepe's last snapshot
+      const SS = require("./stashes");
+      const st = (await SS.live().catch(() => false)) ? { stashes: await SS.list(), updated: Date.now() } : ((await load("stashes")) || { stashes: [] });
       const sk = await staking.latest(); // vault staking snapshot (staking.js)
       const ln = (await load("loans")) || { loans: [], requests: [], reserve: null };
       const open = (st.stashes || []).filter((s) => !s.closed);

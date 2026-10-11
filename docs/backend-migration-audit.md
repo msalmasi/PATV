@@ -128,6 +128,18 @@ building blocks to keep:
 These are the parts that are actually risky when Pepe is down, slow or restarting. They are the reason Phase 1 comes
 before the other games.
 
+**Fixed ahead of Phase 1 (site + bot 1.99ne, reliability only - amounts and destinations unchanged):**
+- 3.1: `funding.js` saves every sync (`funding_state`) and restores it at start; the site listens only after that.
+- 3.2: a paid command's charge carries its route; the site writes the debit and a route intent in one transaction
+  (`patroutes.js`), Pepe applies it journaled under that key and acks it once saved (`pepe_routekeys.py`); un-acked
+  intents are recovered exactly once. Covers `_charge_pat`, sponsor, sheet / avatar re-roll, heist gear and gang
+  creation (the song queue and per-use voices still route un-keyed).
+- 3.4: `_save_turf` serializes on the caller and writes on a background thread (`pepe_bgsave.TextSaver`), retried
+  until it lands, flushed on every exit path.
+- §2 C1 / Q3: queued web actions expire per kind (`actionttl.js`, admin-configurable); Pepe never starts one late.
+- 5.11 (stashes only): stashes live on the site (`stashes.js`), Pepe is a client; the one-off hand-over runs on
+  deploy (on by default on staging, an admin switch on prod).
+
 1. **A site restart while Pepe is down silently switches the economy back to legacy routing.**
    - Why: `funding.state` is in memory. Until Pepe's first sync after a site restart, `fortknox`, `incentives`,
      `room_vaults`, `monetary` and `launchpad` are all `null`.

@@ -31,6 +31,7 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (
   .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN hint TEXT").catch(() => {}))
   .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN incident TEXT").catch(() => {}));
 const weberrors = require("./weberrors");
+const ttl = require("./actionttl");     // 1.99ne: queued actions expire
 const RECLAIM_MS = 2 * 60 * 1000;
 const KINDS = new Set(["cmd", "poll.vote", "poll.create", "poll.end"]);
 const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar", "donate"]);
@@ -118,6 +119,17 @@ function register(app, { isBotToken, addUser }) {
         return go("Something went wrong — nothing was bought.");
       }
     }
+    // 1.99ne: with the stashes on the site, a stash form (create / deposit / withdraw / members / rename / close) runs
+    // here directly - with or without Pepe. Vault stake / unstake stay Pepe's (null -> queued below).
+    if (kind === "cmd" && args[0] === "stash") {
+      try {
+        const msg = await require("./stashes").fromForm(req.user.userId, args.slice(1), b.idem);
+        if (msg) return go(msg);
+      } catch (e) {
+        console.error("[act] stash backend:", e.message);
+        return go("Something went wrong — nothing was moved.");
+      }
+    }
     const tag = clean(b.tag, 40) || back.split(/[/?]/)[1] || "home";
     const label = clean(b.label || (kind === "cmd" ? "!" + args.join(" ") : kind + " " + words.join(" ")), 200);
     try {
@@ -134,16 +146,25 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/actions/claim", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     await ready;
+    // 1.99ne: overdue pending rows expire first (actionttl.js) - never handed out late
+    await ttl.sweepTable("pepe_actions").catch((e) => console.error("[actions] ttl sweep:", e.message));
     const now = Date.now();
-    const rows = await getQuery(`SELECT * FROM pepe_actions WHERE kind != 'table' AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))
+    const found = await getQuery(`SELECT * FROM pepe_actions WHERE kind != 'table' AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
-    for (const a of rows) await runQuery("UPDATE pepe_actions SET status = 'claimed', claimed = ?, updated = ? WHERE id = ?", [now, now, a.id]);
+    // conditional: a row the TTL sweep expired in between stays expired (and isn't handed out)
+    const rows = [];
+    for (const a of found) {
+      const r = await runQuery(`UPDATE pepe_actions SET status = 'claimed', claimed = ?, updated = ?
+                                WHERE id = ? AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))`, [now, now, a.id, now - RECLAIM_MS]);
+      if (r && r.changes === 1) rows.push(a);
+    }
     // tells Pepe to wake his table fast lane (tables.js) when no table is open yet, e.g. a web "start"
     const tp = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'table' AND status = 'pending'");
     res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
-      return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin, idem: a.idem || null };
+      return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin, idem: a.idem || null,
+               created: a.created || null, expires_at: ttl.expiresAt("pepe_actions", a) };   // 1.99ne: Pepe won't START it after this
     }) });
   });
 

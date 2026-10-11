@@ -51,6 +51,7 @@ const ordersReady = runQuery(`CREATE TABLE IF NOT EXISTS market_orders (
 for (const col of ["kind TEXT DEFAULT 'buy'", "shares TEXT", "outcome TEXT", "site_admin INTEGER DEFAULT 0"]) {
   ordersReady.then(() => runQuery(`ALTER TABLE market_orders ADD COLUMN ${col}`)).catch(() => {});
 }
+const ttl = require("./actionttl");     // 1.99ne: queued orders expire
 const MIN_BET = 500;
 const RECLAIM_MS = 2 * 60 * 1000;   // a claimed order with no answer after this is handed out again
 
@@ -359,13 +360,21 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/markets/orders/claim", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     await ordersReady;
+    // 1.99ne: overdue pending orders expire first (actionttl.js) - a bet is never placed at a price hours later
+    await ttl.sweepTable("market_orders").catch((e) => console.error("[markets] ttl sweep:", e.message));
     const now = Date.now();
-    const rows = await getQuery(`SELECT * FROM market_orders WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
+    const found = await getQuery(`SELECT * FROM market_orders WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
-    for (const o of rows) await runQuery("UPDATE market_orders SET status = 'claimed', claimed = ?, updated = ? WHERE id = ?", [now, now, o.id]);
+    const rows = [];
+    for (const o of found) {
+      const r = await runQuery(`UPDATE market_orders SET status = 'claimed', claimed = ?, updated = ?
+                                WHERE id = ? AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))`, [now, now, o.id, now - RECLAIM_MS]);
+      if (r && r.changes === 1) rows.push(o);
+    }
     res.json({ orders: rows.map((o) => ({ id: o.id, market_id: o.market_id, username: o.username, camfrog: o.camfrog,
                                           option: o.option, amount: o.amount, kind: o.kind || "buy", shares: o.shares,
-                                          outcome: o.outcome, site_admin: !!o.site_admin })) });
+                                          outcome: o.outcome, site_admin: !!o.site_admin,
+                                          created: o.created || null, expires_at: ttl.expiresAt("market_orders", o) })) });
   });
 
   app.post("/api/markets/orders/ack", async (req, res) => {

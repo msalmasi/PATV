@@ -182,6 +182,11 @@ const RULES = {
   // purchase journal is history keyed by its charge (a refund / prize follows a merge through ledger.post resolveMerged)
   "lotto_tickets.userId": M(),
   "lotto_purchases.userId": { keep: "the lotto's purchase journal (keyed by the charge's transaction id)" },
+  // 1.99ne: patroutes.js (a routed charge's intent follows its payer's account; payer = the Camfrog login), stashes.js
+  // (owned by a Camfrog login; a move's account follows the merge), actionttl.js (an admin's username)
+  "pat_route_intents.user_id": M(), "pat_route_intents.payer": { deny: NAME },
+  "stashes.owner": { deny: "a Camfrog login (the stash follows the login, not the PATV account)" }, "stash_moves.user_id": M(),
+  "action_ttl_config.actor": { deny: NAME },
   "lotto_settings.actor": { deny: NAME }, "lotto_draws.forced_by": { deny: NAME },
   "media.by_user_id": M(), "media.by_user": { deny: NAME }, "media.subject": { deny: NAME }, "media.subject_login": { deny: NAME },
   // follows
