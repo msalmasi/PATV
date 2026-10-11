@@ -7,7 +7,7 @@
   const V = S.viewer || {}, PASS = V.pass, PAD = S.pad, ST = S.stripe || { enabled: false };
   const STK = stickers || { packs: [], signed: false, allowance: null };
   const stkL_ = (k, d) => (t.has(k) ? t(k) : t.esc(d));   // 1.99lf: pack / sticker names from en.json (stk.pack.* / stk.s.*), English from stickers.json
-  const statusTxt = (s) => !s ? '' : s.status === 'comped' ? t('premium.status.comped') : s.status === 'active' ? t('premium.status.active', { date: day(s.paid_through) })
+  const statusTxt = (s) => !s ? '' : s.status === 'comped' ? (s.comp_until ? t('premium.status.comped_until', { date: day(s.comp_until) }) : t('premium.status.comped')) : s.status === 'active' ? t('premium.status.active', { date: day(s.paid_through) })
     : s.status === 'grace' ? t('premium.status.grace', { date: day(s.ends) }) : s.status === 'lapsed' ? t('premium.status.lapsed', { date: day(s.paid_through) }) : t('premium.status.inactive');
   const PT_PERKS = [
     ['📺', t('premium.pt.badge'), t('premium.pt.badge_d'), 'live'],

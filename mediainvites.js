@@ -158,6 +158,26 @@ async function onSale(sale) {
   return r.ok;
 }
 
+// 1.99ma: an admin COMP of Plex access for someone who isn't on our server yet (comps.js): the same one-time invite as a
+// purchase, on the comp's zero-price order (shop.compOrder) - delivered the same way (order note + 🔔 + Pepe's DM), the
+// same manual queue if Wizarr can't be reached, and the sync links their Plex account through the code.
+async function forComp({ orderId, userId, username, title, days }) {
+  await init();
+  const t = clock();
+  const ins = await runQuery(`INSERT OR IGNORE INTO media_invites (order_id, user_id, username, prize_id, title, days, status, created, updated)
+                              VALUES (?, ?, ?, NULL, ?, ?, 'pending', ?, ?)`, [orderId, userId, username, title, days, t, t]);
+  if (!ins || !ins.changes) return { ok: false, error: "already made" };
+  const row = (await getQuery("SELECT * FROM media_invites WHERE order_id = ?", [orderId]))[0];
+  const r = conf.keys().wizarr ? await attempt(row, "system") : { ok: false, error: "Wizarr isn't configured" };
+  if (!r.ok) {
+    if (!conf.keys().wizarr) await runQuery("UPDATE media_invites SET status = 'manual', error = ?, updated = ?, next_try = NULL WHERE id = ?", [r.error, clock(), row.id]);
+    await runQuery("UPDATE shop_orders SET seller_note = ? WHERE id = ? AND seller_note IS NULL",
+                   ["Your Plex invite is being prepared - it'll appear here and in your messages shortly.", orderId]);
+    console.warn(`[invites] comp order #${orderId} queued for manual fulfilment: ${r.error}`);
+  }
+  return r;
+}
+
 async function retryDue() {
   await init();
   if (!conf.on.invites()) return 0;
@@ -217,5 +237,5 @@ function register(app, { noTimers } = {}) {
   }
 }
 
-module.exports = { init, register, onSale, retryDue, adminRetry, adminSent, adminState, catalog, createInvite, Refuse,
+module.exports = { init, register, onSale, forComp, retryDue, adminRetry, adminSent, adminState, catalog, createInvite, Refuse,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };

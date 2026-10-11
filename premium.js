@@ -24,6 +24,9 @@
 //                charged weeks later by surprise) and the holder / pad owner gets an inbox notice.
 //   COMPED: a site admin's own account and pads have both tiers for free (comp_admins, re-checked by every daily
 //   run: an account that stops being an admin loses its automatic comps; comps made by hand stay).
+//   1.99ma: TIMED comps (comps.js, /admin/comps): comp_until = the date a comp ends (NULL = no end date). Free, no
+//   routing, never auto-renewed; the daily job ends them (comp-end ledger row + a notice), and until then every gate
+//   (hasPass / isPrime / userPerks / padPerks) sees an active tier. Paying during a timed comp starts after it.
 //
 // WHERE THE PAT GOES - a routing-table row per flow (premium_config routes, admin-editable like Pepe's PAT Routing
 // table; whatever a row doesn't route goes to the Federal Reserve, and nothing is ever burned):
@@ -148,6 +151,8 @@ function init() {
         status TEXT NOT NULL DEFAULT 'none', notified TEXT, started INTEGER NOT NULL, updated INTEGER NOT NULL)`);
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS premium_subs_target ON premium_subs (tier, target)");
       await runQuery("CREATE INDEX IF NOT EXISTS premium_subs_stripe ON premium_subs (stripe_sub)");
+      try { await runQuery("ALTER TABLE premium_subs ADD COLUMN comp_until INTEGER"); }      // 1.99ma: timed comps
+      catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
       await runQuery(`CREATE TABLE IF NOT EXISTS premium_ledger (
         id INTEGER PRIMARY KEY AUTOINCREMENT, ref TEXT NOT NULL, sub_id INTEGER NOT NULL, tier TEXT NOT NULL, target TEXT NOT NULL,
         kind TEXT NOT NULL, payer_id TEXT, payer_name TEXT, amount INTEGER NOT NULL DEFAULT 0, days REAL NOT NULL DEFAULT 0,
@@ -193,17 +198,19 @@ function maybeRefresh() {
   if (ready && now() - cacheAt > 60000) { cacheAt = now(); loadCache().catch((e) => console.error("[premium] cache:", e.message)); }
 }
 /** The date a subscription's perks end (Infinity = comped), grace included while a renewal is still possible. */
+const compUntil = (sub) => (sub && sub.comped ? Number(sub.comp_until) || 0 : 0);    // 1.99ma: 0 = no end date
 function endsAt(sub, t = now()) {
   if (!sub) return 0;
-  if (sub.comped) return Infinity;
+  if (sub.comped && !compUntil(sub)) return Infinity;
   const paid = Math.max(Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0);
   const renewing = !!(sub.renewer_id || sub.stripe_sub);
-  return renewing ? paid + CONFIG.grace_days * DAY : paid;
+  const base = renewing ? paid + CONFIG.grace_days * DAY : paid;
+  return sub.comped ? Math.max(compUntil(sub), base) : base;
 }
 /** 'comped' | 'active' | 'grace' | 'lapsed' | 'none' */
 function statusOf(sub, t = now()) {
   if (!sub) return "none";
-  if (sub.comped) return "comped";
+  if (sub.comped && (!compUntil(sub) || t < compUntil(sub))) return "comped";
   const paid = Math.max(Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0);
   if (t < paid) return "active";
   if (t < endsAt(sub, t)) return "grace";
@@ -340,6 +347,7 @@ async function buy(user, opts = {}) {
     if (!who) throw new Refuse(404, "No such account.");
     target = who.userId; label = `u/${who.username}`; ownerSelf = who.userId === user.userId;
     if (!ownerSelf) recipient = who.userId;
+    if (!ownerSelf) await require("./gifts").guard(user, who);    // 1.99ma: blocks + the gift rate limit, before any charge
   }
   let amount, days;
   if (opts.amount != null && opts.months == null) {
@@ -360,8 +368,8 @@ async function buy(user, opts = {}) {
     const had = (await getQuery("SELECT * FROM premium_ledger WHERE ref = ?", [ref]))[0];
     if (had) return { dup: true, row: had };
     const sub = await ensureSub(T.id, target, t);
-    if (sub.comped) throw new Refuse(409, `${label} already has ${T.name} for free.`);
-    const from = Math.max(t, Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0);
+    if (sub.comped && !compUntil(sub)) throw new Refuse(409, `${label} already has ${T.name} for free.`);
+    const from = Math.max(t, Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0, compUntil(sub));
     const to = Math.round(from + days * DAY);
     if (to - t > MAX_AHEAD_DAYS * DAY) throw new Refuse(409, `${label} is paid up far enough ahead already (at most ${MAX_AHEAD_DAYS} days).`);
     const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [user.userId]))[0];
@@ -389,7 +397,13 @@ async function buy(user, opts = {}) {
   }
   await audit(roomId, "premium-" + out.kind, out.username, `${T.id} ${label} ${amount} PAT ${days.toFixed(2)}d -> ${new Date(out.to).toISOString().slice(0, 10)}`);
   if (roomId) telemetry(ref, roomId, out.username, ownerSelf, amount, via, t);
-  if (recipient && recipient !== user.userId) {
+  if (recipient && recipient !== user.userId && T.kind === "user") {
+    // 1.99ma: the shared 🎁 gift notice (gifts.js), in the recipient's language
+    const G = require("./gifts");
+    const tr = G.tFor(recipient);
+    await G.notifyGift(recipient, { item: `${T.emoji} ${T.name}`, from: out.username, link: "/premium", ref: `prem-${out.subId}-${ref}`,
+      extra: tr("gifts.notice.premium_until", { date: new Date(out.to).toISOString().slice(0, 10) }) });
+  } else if (recipient && recipient !== user.userId) {
     await notify(recipient, T.kind === "pad" ? "room" : "cosmetics", `prem-${out.subId}-${ref}`,
       `${T.emoji} ${out.username} ${out.kind === "contribute" ? "chipped in" : "paid"} for ${T.name} on ${label}`,
       `${out.username} added ${days >= 1 ? Math.floor(days) + " day" + (Math.floor(days) === 1 ? "" : "s") : "time"} of ${T.name} - paid through ${new Date(out.to).toISOString().slice(0, 10)}.`,
@@ -435,29 +449,76 @@ async function setRenew(user, opts = {}) {
 }
 
 // ── comps ──
-/** Comp (on) or un-comp a tier for a target. by = who; auto = the admin auto-comp. */
-async function setComp(tier, target, on, by, note) {
+/**
+ * Comp (on) or un-comp a tier for a target. by = who; auto = the admin auto-comp.
+ * 1.99ma opts.until: a TIMED comp ending then (ms); omitted = no end date. A timed comp on a target with a timed comp
+ * moves its end (extend); a no-end comp over a timed one makes it no-end (opts.replace, the admin's explicit choice); a
+ * timed comp over a no-end one is refused (revoke it first). -> {changed, until}
+ */
+async function setComp(tier, target, on, by, note, opts = {}) {
   await init();
   if (!TIERS[tier]) throw new Refuse(400, "Unknown tier.");
   const t = now();
   const sub = await ensureSub(tier, target, t);
+  const until = opts.until ? Math.round(Number(opts.until)) : 0;
   if (on) {
-    if (sub.comped) return { changed: false };
-    await runQuery("UPDATE premium_subs SET comped = 1, comp_by = ?, comp_note = ?, status = 'comped', updated = ? WHERE id = ?",
-                   [String(by || "?").slice(0, 60), note ? String(note).slice(0, 200) : null, t, sub.id]);
-    await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_name, amount, days, created)
-                    VALUES (?, ?, ?, ?, 'comp', ?, 0, 0, ?)`, [`comp:${sub.id}:${t}`, sub.id, tier, target, String(by || "?").slice(0, 60), t]);
+    if (until && !(until > t)) throw new Refuse(400, "A comp has to end in the future.");
+    if (sub.comped && !compUntil(sub)) {
+      if (until) throw new Refuse(409, `That already has ${TIERS[tier].name} comped with no end date - revoke it first to make it timed.`);
+      return { changed: false, until: null };
+    }
+    const days = until ? Math.round((until - Math.max(t, compUntil(sub))) / DAY * 100) / 100 : 0;
+    await runQuery("UPDATE premium_subs SET comped = 1, comp_by = ?, comp_note = ?, comp_until = ?, status = 'comped', notified = NULL, updated = ? WHERE id = ?",
+                   [String(by || "?").slice(0, 60), note ? String(note).slice(0, 200) : null, until || null, t, sub.id]);
+    await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_name, amount, days, period_from, period_to, created)
+                    VALUES (?, ?, ?, ?, 'comp', ?, 0, ?, ?, ?, ?)`,
+                   [`comp:${sub.id}:${t}`, sub.id, tier, target, String(by || "?").slice(0, 60), Math.max(0, days), t, until || null, t]);
   } else {
     if (!sub.comped) return { changed: false };
-    await runQuery("UPDATE premium_subs SET comped = 0, comp_by = NULL, comp_note = NULL, status = 'none', updated = ? WHERE id = ?", [t, sub.id]);
+    await runQuery("UPDATE premium_subs SET comped = 0, comp_by = NULL, comp_note = NULL, comp_until = NULL, status = 'none', updated = ? WHERE id = ?", [t, sub.id]);
     await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_name, amount, days, created)
                     VALUES (?, ?, ?, ?, 'uncomp', ?, 0, 0, ?)`, [`uncomp:${sub.id}:${t}`, sub.id, tier, target, String(by || "?").slice(0, 60), t]);
   }
   await loadCache();
   await afterChange(tier, target);
-  return { changed: true };
+  return { changed: true, until: on ? until || null : null };
 }
 const AUTO = "auto:admin";
+function tFor(userId) {
+  try { const I = require("./i18n"); return I.tFor(I.getPref(userId) || "en"); } catch (e) {
+    let en = {};
+    try { en = require("./locales/en.json"); } catch (e2) { en = {}; }
+    return (k, v) => String(en[k] || k).replace(/\{!?(\w+)\}/g, (m, x) => (v && v[x] != null ? String(v[x]) : m));
+  }
+}
+/** 1.99ma: timed comps whose end passed -> back to whatever was paid (or lapsed), a ledger row + a notice. Idempotent. */
+async function expireComps(t = now()) {
+  await init();
+  let n = 0;
+  for (const s of await getQuery("SELECT * FROM premium_subs WHERE comped = 1 AND comp_until IS NOT NULL AND comp_until > 0 AND comp_until <= ?", [t])) {
+    const r = await runQuery(`UPDATE premium_subs SET comped = 0, comp_by = NULL, comp_note = NULL, comp_until = NULL, status = 'none', updated = ?
+                              WHERE id = ? AND comped = 1 AND comp_until = ?`, [t, s.id, s.comp_until]);
+    if (!r.changes) continue;
+    n++;
+    await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_name, amount, days, created)
+                    VALUES (?, ?, ?, ?, 'comp-end', 'job', 0, 0, ?)`, [`comp-end:${s.id}:${s.comp_until}`, s.id, s.tier, s.target, t]);
+    const T = TIERS[s.tier];
+    if (!T) continue;
+    let who = T.kind === "user" ? s.target : null, label = "";
+    if (T.kind === "pad") {
+      const R = await require("./rooms").get(s.target);
+      who = R && R.owner ? R.owner.userId : null; label = R ? ` (p/${R.slug || R.id})` : "";
+    }
+    if (who) {
+      const tr = tFor(who);
+      await notify(who, T.kind === "pad" ? "room" : "cosmetics", `prem-compend-${s.id}-${s.comp_until}`,
+        tr("comps.notice.premium_ended_title", { tier: `${T.emoji} ${T.name}${label}` }), tr("comps.notice.premium_ended_body", { tier: T.name }), "/premium");
+    }
+    await audit(T.kind === "pad" ? s.target : null, "premium-comp-end", "job", `${s.tier} ${s.target}`);
+  }
+  if (n) { await loadCache(); await afterChange("lapse", null); }
+  return n;
+}
 /** Site admins (users.class 'Admin'): their account gets a Season Pass, their pads Prime Time. Idempotent. */
 async function compAdmins() {
   await init();
@@ -574,17 +635,19 @@ async function tick({ force = false, t = now() } = {}) {
       await runQuery("INSERT INTO premium_jobs (day, started) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET started = excluded.started", [day, t]);
     }
     const comps = await compAdmins();
+    const compsEnded = await expireComps(t);
     const r = await renewDue(t);
-    const result = { day, comps, ...r };
+    const result = { day, comps, comps_ended: compsEnded, ...r };
     await runQuery("UPDATE premium_jobs SET finished = ?, result = ? WHERE day = ?", [now(), JSON.stringify(result), day]);
-    if (r.renewed || r.failed || r.lapsed || comps.added || comps.removed) console.log("[premium] daily:", JSON.stringify(result));
+    if (r.renewed || r.failed || r.lapsed || comps.added || comps.removed || compsEnded) console.log("[premium] daily:", JSON.stringify(result));
     return result;
   })().finally(() => { ticking = null; });
   return ticking;
 }
 function startJob() {
   // an hourly look; the job itself runs once per UTC day (and its every step is idempotent)
-  const run = () => tick().catch((e) => console.error("[premium] daily job:", e.message));
+  // 1.99ma: timed comps end within the hour (gates already stop at comp_until; this files the end + the notice)
+  const run = () => tick().then(() => expireComps()).catch((e) => console.error("[premium] daily job:", e.message));
   setTimeout(run, 60 * 1000).unref();
   setInterval(run, 3600 * 1000).unref();
 }
@@ -592,7 +655,7 @@ function startJob() {
 // ── reads for pages ──
 function subView(tier, sub, t = now()) {
   const st = statusOf(sub, t);
-  return { tier, status: st, active: st === "active" || st === "grace" || st === "comped", comped: !!(sub && sub.comped),
+  return { tier, status: st, active: st === "active" || st === "grace" || st === "comped", comped: st === "comped", comp_until: st === "comped" ? compUntil(sub) || null : null,
            paid_through: sub ? Math.max(Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0) : 0,
            ends: sub && !sub.comped ? endsAt(sub, t) : null, renewing: !!(sub && (sub.renewer_id || sub.stripe_sub)),
            stripe: !!(sub && sub.stripe_sub) };
@@ -705,7 +768,7 @@ function register(app, { addUser }) {
   });
   const staffOnly = (req) => { if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only."); };
   async function adminView() {
-    const subs = await getQuery("SELECT tier, target, comped, comp_by, paid_through, stripe_through, renewer_id IS NOT NULL AS renewing, status FROM premium_subs ORDER BY tier, target");
+    const subs = await getQuery("SELECT tier, target, comped, comp_by, comp_until, paid_through, stripe_through, renewer_id IS NOT NULL AS renewing, status FROM premium_subs ORDER BY tier, target");
     const totals = await getQuery("SELECT tier, kind, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount FROM premium_ledger GROUP BY tier, kind");
     const jobs = await getQuery("SELECT day, started, finished, result FROM premium_jobs ORDER BY day DESC LIMIT 7");
     return { config: config(), defaults: DEFAULTS, routes: routesView(), subs: subs.map((s) => ({ ...s, status: statusOf(s) })), totals, jobs };
@@ -734,7 +797,7 @@ function register(app, { addUser }) {
 }
 
 module.exports = {
-  init, register, buy, afterChange, setRenew, setComp, compAdmins, renewDue, tick, state, config, setConfig, loadCache,
+  init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
   isPrime, hasPass, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   padTarget, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

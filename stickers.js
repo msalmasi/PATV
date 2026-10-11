@@ -112,6 +112,8 @@ async function buy(user, opts = {}) {
     if (!to) throw new Refuse(404, "No such account.");
   }
   const gift = to.userId !== user.userId;
+  // 1.99ma: blocks + the gift rate limit (gifts.js), before anything is charged (a retried ref is answered as before)
+  if (gift && !(await getQuery("SELECT 1 FROM user_sticker_packs WHERE ref = ?", [ref]))[0]) await require("./gifts").guard(user, to);
   const useAllowance = !!opts.allowance;
   if (useAllowance && gift) throw new Refuse(400, "The Season Pass allowance is for your own packs.");
   if (!useAllowance && !P().config().sales) throw new Refuse(423, "Sticker packs aren't on sale right now.");
@@ -218,7 +220,20 @@ function register(app, { addUser }) {
   });
 }
 
+/** 1.99ma: an admin comp of a pack (comps.js): free, nothing routed. -> {pack, already} */
+async function grantComp(userId, packId, by) {
+  await init();
+  const pack = CAT.byId[String(packId || "")];
+  if (!pack) throw new Refuse(404, "No such sticker pack.");
+  if ((await getQuery("SELECT 1 FROM user_sticker_packs WHERE user_id = ? AND pack_id = ?", [userId, pack.id]))[0]) return { pack, already: true };
+  const t = now();
+  await runQuery(`INSERT INTO user_sticker_packs (user_id, pack_id, source, payer_id, price, ref, period, routing, created)
+                  VALUES (?, ?, 'comp', NULL, 0, ?, NULL, NULL, ?)`, [userId, pack.id, `comp:${String(by || "?").slice(0, 40)}:${userId}:${pack.id}:${t}`, t]);
+  return { pack, already: false };
+}
+
 module.exports = {
+  grantComp,
   init, register, buy, ownedPacks, owns, allowance, tokens, validate, inline, catalog, pageData, loadCatalog, periodKey, Refuse, TOKEN_RE,
   chat: { validate, inline, TOKEN_RE },          // the hook for native PATV chat (later)
   get CAT() { return CAT; },

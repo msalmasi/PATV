@@ -115,7 +115,9 @@ const ready = (async () => {
     status TEXT NOT NULL, actor TEXT, note TEXT)`);
   // 1.99lz: a GIFT (an official item bought for someone else): buyer_id is who it's for (the order, its effects and anything
   // delivered on it are theirs), gift_from is who paid (sees the order, never its delivered note / invite link).
-  for (const sql of ["ALTER TABLE shop_orders ADD COLUMN gift_from TEXT", "ALTER TABLE shop_orders ADD COLUMN gift_note TEXT"]) {
+  // 1.99ma: an admin COMP (comps.js / compPrize): comp_by = the admin, comp_reason = why; price 0, nothing routed
+  for (const sql of ["ALTER TABLE shop_orders ADD COLUMN gift_from TEXT", "ALTER TABLE shop_orders ADD COLUMN gift_note TEXT",
+                     "ALTER TABLE shop_orders ADD COLUMN comp_by TEXT", "ALTER TABLE shop_orders ADD COLUMN comp_reason TEXT"]) {
     try { await runQuery(sql); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
   }
   await runQuery("CREATE TABLE IF NOT EXISTS shop_settings (key TEXT PRIMARY KEY, value TEXT)");
@@ -367,14 +369,93 @@ async function giftRecipient(prize, payerId, giftTo) {
   try { to = await require("./cosmetics").resolveUser(name); } catch (e) { to = null; }
   if (!to) return { error: `There's no PATV account called "${name}" - check the name and try again. You have not been charged.`, status: 404 };
   if (to.userId === payerId) return { error: "That's you - use Buy to get it for yourself.", status: 400 };
+  // 1.99ma: the shared gift rules (gifts.js): blocks either way, the rate limits, and a one-time thing they already
+  // have (lifetime Plex; roles are checked in buyOfficial) - all before anything is charged
+  try {
+    const G = require("./gifts");
+    await G.guard({ userId: payerId }, to);
+    const pre = await G.precheck(prize, compPolicy(prize), to);
+    if (pre) return { error: `${pre} You have not been charged.`, status: 409 };
+  } catch (e) {
+    if (e && e.refuse) return { error: e.message, status: e.status || 400 };
+    throw e;
+  }
   return { to };
+}
+
+// ── 1.99ma: admin COMPS of official items (comps.js) ──
+/**
+ * Can an admin comp this official item, i.e. does PATV fulfil it itself? -> {kind, compable, giftable, why}
+ * role / spinboost / plex (Wizarr invites on) = yes; everything delivered by hand outside PATV (gift cards, consoles,
+ * Nitro, ...) = no - comping it would only promise something a person still has to send. giftable = shopcatalog's flag.
+ */
+function compPolicy(p) {
+  if (!p) return { kind: "gone", compable: false, giftable: false, why: "That item isn't in the shop any more." };
+  let giftable = false;
+  try { const c = require("./shopcatalog").info(p); giftable = !p.seller_id && !!(c && c.gift); } catch (e) { giftable = false; }
+  if (p.seller_id) return { kind: "listing", compable: false, giftable: false, why: "Marketplace listings are delivered by their seller." };
+  if (REQUEST_ITEMS.includes(p.prizeId)) return { kind: "retired", compable: false, giftable, why: "Request credits are retired - requests are made on /plex." };
+  let kind = null;
+  if (ROLE_PRIZES[p.prizeId]) kind = "role";
+  else if (isSpinboost(p)) kind = "spinboost";
+  else {
+    try {
+      const c = require("./mediaconf");
+      if ((c.get().invite_items || {})[p.prizeId]) kind = c.on.invites() ? "plex" : "plex_manual";
+    } catch (e) { kind = null; }
+  }
+  if (kind === "plex_manual") return { kind, compable: false, giftable, why: "Plex invites are made by hand while Wizarr invites are off - comp Plex access on /admin/comps instead." };
+  if (!kind) return { kind: "manual", compable: false, giftable, why: "Delivered by hand outside PATV - can't be fulfilled automatically." };
+  return { kind, compable: p.status !== "removed", giftable, why: null };
+}
+async function prizeRow(prizeId) {
+  return (await getQuery("SELECT * FROM prizes WHERE prizeId = ?", [String(prizeId || "")]))[0] || null;
+}
+/** An admin comps an official item: its normal fulfilment, price 0, nothing routed, no stock, admin_audit. admin = {userId, username}. */
+async function compPrize({ admin, to, prizeId, reason }) {
+  await ready;
+  const G = require("./gifts");
+  const why = String(reason || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 200);
+  if (why.length < 3) throw new Refuse(400, "Give a reason (it goes in the admin log).");
+  const p = await prizeRow(prizeId);
+  const pol = compPolicy(p);
+  if (!pol.compable) throw new Refuse(400, pol.why || "That item can't be comped.");
+  const rcp = await G.recipient(to);
+  const pre = await G.precheck(p, pol, rcp);
+  if (pre) throw new Refuse(409, pre);
+  const r = await buyOfficial(p, { userId: rcp.userId, username: rcp.username, source: "comp", comp: { by: admin.username, reason: why } });
+  if (!r.success) throw new Refuse(r.status || 400, r.message);
+  await require("./adminaudit").record(admin, "comp_item", rcp, { prize_id: p.prizeId, item: p.prize, kind: pol.kind, order_id: r.order_id }, why);
+  await G.notifyGift(rcp.userId, { item: p.prize, comp: true, link: `/shop/orders/${r.order_id}`, ref: `comp:${r.order_id}` });
+  return { ...r, to: rcp.username };
+}
+/** Every official item with its comp / gift policy (the /admin/comps list). */
+async function officialPolicies() {
+  await ready;
+  const rows = await getQuery("SELECT prizeId, prize, cost, quantity, status, seller_id FROM prizes WHERE seller_id IS NULL AND COALESCE(status, 'active') != 'removed' ORDER BY prize");
+  return rows.map((p) => ({ prizeId: p.prizeId, prize: p.prize, cost: p.cost, status: p.status, ...compPolicy(p) }));
+}
+/** A zero-price completed official order for a comp that isn't a store item (comps.js: Plex access) - its page carries the invite. */
+async function compOrder({ admin, to, title, reason, note }) {
+  await ready;
+  return tx(async () => {
+    const t = Date.now();
+    const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
+        seller_paid, status, source, created, completed_at, closed_at, updated, comp_by, comp_reason)
+      VALUES (NULL, ?, NULL, 1, ?, 0, 0, 0, 0, 1, 'completed', 'comp', ?, ?, ?, ?, ?, ?)`,
+      [to.userId, String(title).slice(0, 120), t, t, t, t, String(admin.username).slice(0, 60), String(reason || "").slice(0, 200)]);
+    await event(o.id, "completed", admin.username, note || `🎁 Comped by ${admin.username} — no charge`);
+    return { order_id: o.id };
+  });
 }
 
 // The official store: identical to the pre-marketplace purchase, plus a completed order row.
 // The spin boost is priced per buyer and paid to the House (see the header).
 // 1.99lz: gift = {payerId, payerName, note}: userId / username are the RECIPIENT (the item, its role, sale hooks and the
 // order are theirs) and the payer's balance pays. Without gift, payer = recipient as always.
-function buyOfficial(listed, { userId, username, source, expectedCost, gift = null }) {
+// 1.99ma: comp = {by, reason}: an admin COMP for userId - the same fulfilment, but nobody pays and nothing is routed (no
+// store-owner credit, no House rake), no stock is used, the order is price 0 and marked comp_by / comp_reason.
+function buyOfficial(listed, { userId, username, source, expectedCost, gift = null, comp = null }) {
   return serial(async () => {
     const prize = (await getQuery("SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?", [listed.prizeId]))[0];
     if (!prize) return { success: false, status: 404, message: "That item isn't in the shop any more." };
@@ -400,13 +481,14 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
                message: boost ? `${prize.prize} costs you ${prize.cost.toLocaleString()} PAT (you own ${owned}) — check it and try again. You have not been charged.`
                               : `The price of ${prize.prize} just changed to ${prize.cost.toLocaleString()} PAT — check it and try again. You have not been charged.` };
     }
-    if (prize.quantity <= 0) {
+    if (comp) prize.cost = 0;                      // 1.99ma: a comp is free
+    if (!comp && prize.quantity <= 0) {
       return { success: false, status: 400, message: `${prize.prize} is out of stock — check back later.` };
     }
     const balance = (gift ? users[0].payer_balance : users[0].points_balance) || 0;
     const role = ROLE_PRIZES[prize.prizeId] || null;
     if (role && (await userRoles(userId)).includes(role)) {
-      return { success: false, status: 409, message: gift ? `${username} already has the ${prize.prize.replace(/ role$/i, "")} role. You have not been charged.`
+      return { success: false, status: 409, message: gift || comp ? `${username} already has the ${prize.prize.replace(/ role$/i, "")} role.${gift ? " You have not been charged." : ""}`
                                                           : `You already have the ${prize.prize.replace(/ role$/i, "")} role.` };
     }
     if (balance < prize.cost) {
@@ -419,23 +501,25 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       };
     }
     // Proceeds: the House (casino jackpot) for the spin boost, else the store owner.
-    const owners = boost ? [] : await getQuery("SELECT userId, username FROM users WHERE username = ?", [STORE_OWNER_USERNAME]);
+    const owners = boost || comp ? [] : await getQuery("SELECT userId, username FROM users WHERE username = ?", [STORE_OWNER_USERNAME]);
     const owner = owners[0] || null;
-    if (!owner && !boost) {
+    if (!owner && !boost && !comp) {
       console.error(`STORE OWNER '${STORE_OWNER_USERNAME}' not found — sale proceeds go nowhere`);
     }
 
     let orderId = null;
     try {
       await runQuery("BEGIN TRANSACTION");
-      const paid = await runQuery(
-        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
-        [prize.cost, payerId, prize.cost]);
-      if (!paid.changes) throw new Error("balance changed mid-purchase");
-      const stock = await runQuery(
-        "UPDATE prizes SET quantity = quantity - 1, sold = COALESCE(sold, 0) + 1 WHERE prizeId = ? AND quantity > 0 AND status = 'active'",
-        [prize.prizeId]);
-      if (!stock.changes) throw new Error("sold out mid-purchase");
+      if (!comp) {
+        const paid = await runQuery(
+          "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
+          [prize.cost, payerId, prize.cost]);
+        if (!paid.changes) throw new Error("balance changed mid-purchase");
+        const stock = await runQuery(
+          "UPDATE prizes SET quantity = quantity - 1, sold = COALESCE(sold, 0) + 1 WHERE prizeId = ? AND quantity > 0 AND status = 'active'",
+          [prize.prizeId]);
+        if (!stock.changes) throw new Error("sold out mid-purchase");
+      }
       // Digital prize effect: the spin boost permanently raises this user's daily gold-spin
       // cap by 100 (stackable — buy it again for another +100/day, at +1M each time). Conditional
       // on the count it was priced from, so a concurrent purchase can't buy at the old price.
@@ -447,28 +531,32 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       }
       if (role) {
         await runQuery("INSERT OR IGNORE INTO user_roles (userId, role, source) VALUES (?, ?, ?)",
-                       [userId, role, `purchase:${source}`]);
+                       [userId, role, comp ? `comp:${comp.by}` : gift ? `gift:${payerName}` : `purchase:${source}`]);
         if (D.achievements) D.achievements.checkWeb(userId);               // e.g. High Roller
       }
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [uuidv4(), payerId, `purchase of ${prize.prize}${gift ? ` (gift for ${username})` : ""}`, -prize.cost]);
+      if (!comp) {
+        await runQuery(
+          "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+          [uuidv4(), payerId, `purchase of ${prize.prize}${gift ? ` (gift for ${username})` : ""}`, -prize.cost]);
+      }
       if (owner) {
         await require("./ledger").postOrThrow(owner.userId, prize.cost, `store sale: ${prize.prize} to ${username}${gift ? ` (gift from ${payerName})` : ""} (${source})`,
                                               { resolveMerged: true, source: "shop sale" });
       }
       const now = Date.now();
       const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
-          seller_paid, status, source, created, completed_at, closed_at, updated, gift_from, gift_note)
-        VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?, ?, ?)`,
-        [prize.prizeId, userId, prize.prize, prize.cost, prize.cost, source, now, now, now, now, gift ? payerId : null, gift ? gift.note : null]);
+          seller_paid, status, source, created, completed_at, closed_at, updated, gift_from, gift_note, comp_by, comp_reason)
+        VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [prize.prizeId, userId, prize.prize, prize.cost, prize.cost, source, now, now, now, now, gift ? payerId : null, gift ? gift.note : null,
+         comp ? String(comp.by).slice(0, 60) : null, comp ? String(comp.reason || "").slice(0, 200) : null]);
       orderId = o.id;
-      if (boost) {
+      if (boost && !comp) {
         // to the House, the same place gold-wheel wagers go: debit == credit, nothing minted or burned
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
                        [uuidv4(), `shop-order:${orderId}`, userId, prize.cost]);
       }
-      await event(orderId, "completed", payerName, boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
+      await event(orderId, "completed", comp ? comp.by : payerName, comp ? `🎁 Comped by ${comp.by}: ${comp.reason || "-"} — no charge, nothing routed`
+                                                         : boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
                                                          : gift ? `🎁 Gift from ${payerName} to ${username} — official store item`
                                                          : "Official store item — delivered instantly");
       await runQuery("COMMIT");
@@ -484,13 +572,13 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
     }
 
     // E-0 telemetry (econ.js), best effort after the commit: the spin boost is a House inflow.
-    if (boost) houseTelemetry(orderId, prize.cost, users[0].camfrogUsername || username, source);
-    runSaleHooks({ orderId, prizeId: prize.prizeId, title: prize.prize, price: prize.cost, userId, username, source });
+    if (boost && !comp) houseTelemetry(orderId, prize.cost, users[0].camfrogUsername || username, source);
+    runSaleHooks({ orderId, prizeId: prize.prizeId, title: prize.prize, price: prize.cost, userId, username, source, ...(comp ? { comp: true, compBy: comp.by } : {}) });
 
     // Notifications are not part of the purchase: an outage must never turn a completed, charged
     // purchase into a reported failure.
-    sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", "Purchase Notification",
-              gift ? `User ${payerName} bought ${prize.prize} for ${prize.cost} coins as a GIFT for ${username} (via ${source}) - deliver it to ${username}.`
+    sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", comp ? "Comp Notification" : "Purchase Notification",
+              comp ? `${comp.by} comped ${prize.prize} to ${username}: ${comp.reason || "-"}` : gift ?`User ${payerName} bought ${prize.prize} for ${prize.cost} coins as a GIFT for ${username} (via ${source}) - deliver it to ${username}.`
                    : `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`).catch(() => {});
     // 1.99lz: the recipient hears about their gift (inbox + email + Camfrog PM, their own notification settings)
     if (gift) {
@@ -517,10 +605,11 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
     const remaining = balance - prize.cost;
     return {
       success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost, ...(gift ? { gift_to: username } : {}),
-      balance: remaining, remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
+      balance: comp ? null : remaining, remaining_stock: comp ? Math.max(0, prize.quantity || 0) : Math.max(0, (prize.quantity || 1) - 1),
       owner: boost ? "House" : (owner ? owner.username : null), role, discord_role, order_id: orderId,
       ...(boost ? { owned: owned + 1, next_cost: spinboostPrice(owned + 1) } : {}),
-      message: (gift ? `🎁 Sent ${prize.prize} to ${username} for ${prize.cost.toLocaleString()} PAT. `
+      ...(comp ? { comp: true } : {}),
+      message: comp ? `Comped ${prize.prize} to ${username}. ` : (gift ? `🎁 Sent ${prize.prize} to ${username} for ${prize.cost.toLocaleString()} PAT. `
                      : `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. `) +
                `Balance: ${remaining.toLocaleString()} PAT.`,
     };
@@ -1455,6 +1544,7 @@ function register(app, deps) {
 }
 
 module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
-                   ready, ROLE_PRIZES, REQUEST_ITEMS, STORE_OWNER_USERNAME, notify,
+                   ready, ROLE_PRIZES, REQUEST_ITEMS, STORE_OWNER_USERNAME, notify, Refuse,
+                   compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise,
                    browse, featured, validateListing, H /* 1.99lz: for the storefront tests */ };

@@ -1193,6 +1193,7 @@ require("./plexhub").register(app, { addUser });   // 1.99kp: 📼 /plex - the P
 require("./requestroles").register(app, { addUser, discordBridge });   // 1.99la: 🔭 Scout / 🎟️ Curator store roles -> PATV + Seerr + Discord; /admin/media/roles
 require("./mediaissues").register(app, { addUser });   // 1.99la: 🛠️ report a problem with a Plex title (Seerr issues) + /plex/manage for curators
 require("./plexmembers").register(app, { addUser });   // 1.99jp: 📼 which PATV users are on our Plex server (hourly sync via mediactl), links, PATV-sold access + removal review
+require("./comps").register(app, { addUser });         // 1.99ma: 🎁 admin comps (Plex trial/lifetime, Prime Time / Season Pass timed, store items) - /admin/comps
 require("./subscriptions").register(app, { addUser }); // 1.99jp: 🔁 store subscriptions (Plex monthly) + /subscriptions (also Prime Time / Season Pass auto-renew)
 // 1.99cr: viewers snap / clip the stages (server-side from the HLS on disk) -> the pad's story
 require("./stagecap").register(app, { isBotToken, addUser });
@@ -1530,6 +1531,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser
         social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })
           .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
+        viewerIsAdmin: isAdmin && !preview,      // 1.99ma: the ⋯ menu's "🎁 Comp…" (admins: /admin/comps?user=)
         // 1.99ez: their story ring (own uploads + captures of them, userstories.js); the owner also gets "＋ Your story"
         // and the "Show captures of me in my story" switch
         profileStory: await profileStoryFor(user, preview ? null : req.user, isOwner && !preview).catch((e) => { console.error("profile story:", e.message); return null; }),

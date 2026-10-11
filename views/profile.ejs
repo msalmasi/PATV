@@ -299,6 +299,7 @@
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 <%- t('profile.gtf.avatar') %></button><% } %>
             <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'menu' }) %><% } %>
           <% } %>
+          <% if (typeof viewerIsAdmin !== 'undefined' && viewerIsAdmin) { %><hr><a role="menuitem" href="/admin/comps?user=<%= enc %>">🎁 <%- t('profile.menu.comp') %></a><% } %>
         </div>
       </details>
     </div>

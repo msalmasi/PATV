@@ -100,7 +100,7 @@
     <% if (!S.premium.length) { %><p class="mut"><%- t('subs.prem_none', { link: '<a href="/premium">' + t('subs.prem_link') + '</a>' }) %></p><% } %>
     <% S.premium.forEach((p) => { %>
       <div class="it"><div class="w"><b><%= p.label %></b> <span class="mut">· <%- t('subs.every', { price: fmt(p.price), days: p.days }) %></span>
-        <div class="st <%= p.comped || p.renewing ? 'ok' : 'off' %>"><%- p.comped ? t('subs.prem_comped') : p.renewing ? t('subs.renews', { date: d(p.paid_through) }) : t('subs.prem_ends', { date: d(p.paid_through) }) %></div></div>
+        <div class="st <%= p.comped || p.renewing ? 'ok' : 'off' %>"><%- p.comped ? (p.comp_until ? t('premium.status.comped_until', { date: d(p.comp_until) }) : t('subs.prem_comped')) : p.renewing ? t('subs.renews', { date: d(p.paid_through) }) : t('subs.prem_ends', { date: d(p.paid_through) }) %></div></div>
         <% if (!p.comped) { %><div class="acts">
           <% if (p.renewing) { %><button type="button" class="dan" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="0"><%- t('subs.prem_off') %></button>
           <% } else if (p.status === 'active' || p.status === 'grace') { %><button type="button" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="1"><%- t('subs.prem_on') %></button><% } %>

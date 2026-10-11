@@ -1,0 +1,88 @@
+<%- include('../partials/admin-open', { title, user, section: 'comps', admIsAdmin: isAdmin }) %>
+<%# views/admin/comps.ejs - 1.99ma: admin comps (comps.js). Data: C = comps.adminState(), pre = {user, pad, kind} from the query. %>
+<div class="adm-head">
+  <h1>🎁 Comps &amp; gifts</h1>
+  <p>Give a member something for free: Plex access (a trial or lifetime), 📺 Prime Time for a pad, 🎟️ Season Pass, or a PATV store item, cosmetic or sticker pack.
+    A comp costs nobody PAT and moves no money (no routing, no store-owner credit, no stock). The member gets a "🎁 You've been gifted …" notice in their language.
+    Every comp, extension and revoke needs a reason and goes in the admin log.</p>
+</div>
+
+<div class="adm-cols">
+  <section class="adm-card" id="plex" aria-labelledby="plexT">
+    <h2 id="plexT">📼 Comp Plex access</h2>
+    <p class="adm-help">Not on our Plex server yet: they get a one-time Wizarr invite on a free order (order page + 🔔 + Pepe's DM; the manual invite queue on <a href="/admin/media#invites">/admin/media</a> if Wizarr can't be reached).
+      Already on it: the time is added to what they have (access type <code>comp-trial</code> / <code>comp-lifetime</code>).
+      A trial that ends is listed for removal on <a href="/admin/media#plexMembers">Plex members</a> like ended monthly access - you click Remove (auto-revoke stays off).
+      Members get every member perk: free plays, the 📼 flair and cosmetics, the achievements.</p>
+    <form id="plexForm" class="adm-form" autocomplete="off">
+      <label>Member (PATV username)<input type="text" name="user" required maxlength="64" list="compPeople" value="<%= pre.user %>"></label>
+      <label>What<select name="kind"><option value="trial">Trial</option><option value="lifetime">Lifetime</option></select></label>
+      <label data-trial>Days<input type="number" name="days" min="1" max="3650" value="<%= C.settings.plex_trial_days %>"></label>
+      <label>Reason (admin log)<input type="text" name="reason" required minlength="3" maxlength="200"></label>
+      <div class="adm-actions"><button type="submit">🎁 Comp Plex access</button><span class="adm-msg" role="status" data-msg></span></div>
+    </form>
+    <details class="adm-adv"><summary>Default trial length</summary>
+      <div class="adm-adv-body"><form id="setForm" class="adm-form">
+        <label>Trial days (default)<input type="number" name="plex_trial_days" min="1" max="3650" value="<%= C.settings.plex_trial_days %>"></label>
+        <div class="adm-actions"><button type="submit">Save</button><span class="adm-msg" role="status" data-msg></span></div>
+      </form></div>
+    </details>
+  </section>
+
+  <section class="adm-card" id="premium" aria-labelledby="premT">
+    <h2 id="premT">📺 Prime Time / 🎟️ Season Pass</h2>
+    <p class="adm-help">Free, never routed, never auto-renewed, revocable. Shows as "Comped (until &lt;date&gt;)" or "(no end date)". A timed comp starts now - or after time they already paid for or were comped.
+      Everything gated on the tier honours it (Telegram bridge, the free sticker pack, perk cosmetics, pad perks).</p>
+    <form id="premForm" class="adm-form" autocomplete="off">
+      <label>Tier<select name="tier"><option value="season_pass">🎟️ Season Pass (a member)</option><option value="prime_time"<%= pre.pad ? ' selected' : '' %>>📺 Prime Time (a pad)</option></select></label>
+      <label data-for="season_pass">Member<input type="text" name="user" maxlength="64" list="compPeople" value="<%= pre.user %>"></label>
+      <label data-for="prime_time">Pad (slug or p/slug)<input type="text" name="pad" maxlength="80" value="<%= pre.pad %>"></label>
+      <label>Length<select name="mode"><option value="days">N days</option><option value="periods">N periods</option><option value="lifetime">No end date</option></select></label>
+      <label data-n>N<input type="number" name="n" min="1" max="3650" value="30"></label>
+      <label>Reason (admin log)<input type="text" name="reason" required minlength="3" maxlength="200"></label>
+      <div class="adm-actions"><button type="submit">🎁 Comp it</button><span class="adm-msg" role="status" data-msg></span></div>
+    </form>
+  </section>
+
+  <section class="adm-card" id="items" aria-labelledby="itemT">
+    <h2 id="itemT">🛍️ Comp a store item, cosmetic or sticker pack</h2>
+    <p class="adm-help">Runs the item's normal fulfilment as if they'd bought it - roles (with their Seerr permissions and Discord role), the spin boost, Plex items - at price 0 with an order marked "comped by you: reason".
+      Items fulfilled by hand outside PATV can't be comped here (see the list below for why).</p>
+    <form id="itemForm" class="adm-form" autocomplete="off">
+      <label>Member<input type="text" name="user" required maxlength="64" list="compPeople" value="<%= pre.user %>"></label>
+      <label>Kind<select name="kind"><option value="prize">Store item</option><option value="cosmetic">Cosmetic</option><option value="sticker">Sticker pack</option></select></label>
+      <label>Item<select name="id" data-items></select></label>
+      <label>Reason (admin log)<input type="text" name="reason" required minlength="3" maxlength="200"></label>
+      <div class="adm-actions"><button type="submit">🎁 Comp it</button><span class="adm-msg" role="status" data-msg></span></div>
+    </form>
+  </section>
+</div>
+
+<section class="adm-card" id="active" aria-labelledby="actT">
+  <h2 id="actT">Active comps</h2>
+  <p class="adm-help">Who has which comp and when it ends. Revoke ends it now (a Plex share is then listed for removal on /admin/media); Extend adds days from its end.</p>
+  <h3>📼 Plex</h3>
+  <div class="adm-tbl"><table aria-label="Plex comps"><thead><tr><th>Member</th><th>Comp</th><th>Ends</th><th>Delivery</th><th>By · reason</th><th></th></tr></thead><tbody id="plexRows"></tbody></table></div>
+  <h3>📺 / 🎟️ Premium</h3>
+  <div class="adm-tbl"><table aria-label="Premium comps"><thead><tr><th>Tier</th><th>For</th><th>Ends</th><th>By · note</th><th></th></tr></thead><tbody id="premRows"></tbody></table></div>
+  <span class="adm-msg" role="status" id="actMsg"></span>
+</section>
+
+<section class="adm-card" id="policy" aria-labelledby="polT">
+  <h2 id="polT">Store items: gifting &amp; comps</h2>
+  <p class="adm-help">Members 🎁 gift official items from the item page (they pay the normal price; the recipient gets the item, its order and a notice; blocks and rate limits apply). Which items can be gifted is shopcatalog.js's <code>gift</code> flag.
+    Comps only cover items PATV fulfils itself (roles, the spin boost, Plex items while Wizarr invites are on); hand-delivered items can't be comped.</p>
+  <div class="adm-tbl"><table aria-label="Gift policy"><thead><tr><th>Item</th><th>Kind</th><th>Gift</th><th>Comp</th><th>Why not</th></tr></thead><tbody id="polRows"></tbody></table></div>
+</section>
+
+<section class="adm-card" id="log" aria-labelledby="logT">
+  <h2 id="logT">Recent comps (admin log)</h2>
+  <div class="adm-tbl"><table aria-label="Recent comps"><thead><tr><th>When (UTC)</th><th>Admin</th><th>Action</th><th>Member</th><th>Detail</th><th>Reason</th></tr></thead><tbody id="logRows"></tbody></table></div>
+</section>
+
+<datalist id="compPeople"></datalist>
+<script id="compsData" type="application/json"><%- JSON.stringify(C).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/admin-comps.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

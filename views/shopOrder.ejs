@@ -14,6 +14,7 @@
     <div class="kv">
       <span><%- t('shop.order.price') %></span><div class="price"><%= H.fmt(o.price) %> PAT</div>
       <span><%- t('shop.order.buyer') %></span><div><%= o.buyer_name || '?' %></div>
+      <% if (o.comp_by) { %><span>🎁</span><div><%- t('gifts.order.comped') %><% if (role === 'admin') { %> <span class="muted">(<%= o.comp_by %>: <%= o.comp_reason || '-' %>)</span><% } %></div><% } %>
       <% if (o.gift_from) { %><span><%- t('shop.order.gift') %></span><div><%- t('shop.order.gift_line', { from: t.esc(o.gift_from_name || '?'), to: t.esc(o.buyer_name || '?') }) %><% if (o.gift_note) { %><div class="pre" style="margin-top:6px"><%= o.gift_note %></div><% } %></div><% } %>
       <span><%- t('shop.order.seller') %></span><div><% if (o.official) { %><%- t('shop.order.official_store') %><% } else { %><%= o.seller_name || '?' %><% } %></div>
       <span><%- t('shop.order.ordered') %></span><div><%- t('shop.order.when_via', { when: H.when(o.created), source: o.source || 'website' }) %></div>

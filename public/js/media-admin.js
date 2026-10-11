@@ -117,7 +117,8 @@
         "</td><td>" + esc(r.link_source || "") + (r.link_lock ? " 🔒" : "") + "</td><td>" + esc(accessTxt(r)) + "</td><td>" +
         '<button type="button" class="btn" data-pm-act="unlink">Unlink</button> ' +
         (r.access === "owner" && r.access_pinned ? '<span class="muted">📼 server owner</span>' :
-          r.access_pinned ? '<button type="button" class="btn" data-pm-act="auto">Unpin</button>' : '<button type="button" class="btn" data-pm-act="pre">Pin pre-existing</button>') + "</td></tr>";
+          r.access_pinned ? '<button type="button" class="btn" data-pm-act="auto">Unpin</button>' : '<button type="button" class="btn" data-pm-act="pre">Pin pre-existing</button>') +
+        (r.patv ? ' <a class="btn" href="/admin/comps?user=' + encodeURIComponent(r.patv) + '#plex">🎁 Comp</a>' : "") + "</td></tr>";
     }));
     h += "<h3>Unlinked (" + j.unlinked.length + ")</h3>" + table(["Plex user", "Suggested", "Link to PATV user", ""], j.unlinked.map(function (r) {
       return '<tr data-pm="' + esc(r.plex_id) + '"><td>' + esc(r.username || r.plex_id) + (r.title && r.title !== r.username ? ' <span class="muted">' + esc(r.title) + "</span>" : "") +

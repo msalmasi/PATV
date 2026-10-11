@@ -282,7 +282,7 @@ async function pageData(user) {
       if (st === "none") continue;
       let label = r.tier === "season_pass" ? "🎟️ Season Pass" : "📺 Prime Time", pad = null;
       if (r.tier === "prime_time") { const R = await rooms.get(r.target).catch(() => null); pad = R ? (R.slug || R.id) : r.target; label += " · p/" + pad; }
-      prem.push({ tier: r.tier, pad, label, status: st, comped: !!r.comped, renewing: r.renewer_id === user.userId, paid_through: Math.max(Number(r.paid_through) || 0, Number(r.stripe_through) || 0),
+      prem.push({ tier: r.tier, pad, label, status: st, comped: st === "comped", comp_until: st === "comped" ? P.compUntil(r) || null : null, renewing: r.renewer_id === user.userId, paid_through: Math.max(Number(r.paid_through) || 0, Number(r.stripe_through) || 0),
                   price: P.priceOf(r.tier), days: P.config().period_days });
     }
   } catch (e) { /* premium not wired */ }

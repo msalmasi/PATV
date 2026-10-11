@@ -841,6 +841,7 @@ function register(app, { isBotToken, addUser }) {
     const to = await resolveUser(cleanName(b.to));
     if (!to) return back("Couldn't find that user (use their PATV username or Camfrog name).");
     if (to.userId === me) return back("You already own it.");
+    try { await require("./gifts").guard({ userId: me }, to); } catch (e) { return back(e.message); }    // 1.99ma: blocks + gift rate limit
     const c = (await getQuery("SELECT item_id, locked FROM user_cosmetics WHERE id = ? AND user_id = ?", [invId, me]))[0];
     if (!c || !BY_ID[c.item_id]) return back("You don't own that item.");
     if (c.locked) return back("Cancel the listing before gifting it.");
@@ -888,6 +889,7 @@ function register(app, { isBotToken, addUser }) {
           if (!to) return back("Couldn't find who you're gifting to.");
           if (!to.camfrogUsername) return back(`${to.username} hasn't linked a Camfrog name, so Pepe can't deliver it.`);
           if (to.userId === me.userId) return back("That's you — use Buy instead.");
+          try { await require("./gifts").guard(me, to); } catch (e) { return back(e.message); }    // 1.99ma: blocks + gift rate limit
           args = ["cosmetic", "gift", it.id, "@" + to.camfrogUsername];
         }
       } else if (op === "buylisting") {

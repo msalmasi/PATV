@@ -195,6 +195,9 @@ const RULES = {
   // 1.99jp: 📼 Plex members (plexmembers.js) + 🔁 store subscriptions (subscriptions.js)
   "plex_members.user_id": M(), "plex_members.linked_by": { deny: NAME }, "plex_members.revoke_by": { deny: NAME },
   "plex_member_log.user_id": M(), "plex_member_log.actor": { deny: NAME },
+  // 1.99ma: 🎁 admin comps (comps.js) - the Plex comp rows; a comped order's admin is a name
+  "plex_comps.user_id": M(), "plex_comps.by_id": M(), "plex_comps.by_name": { deny: NAME }, "plex_comps.revoked_by": { deny: NAME },
+  "shop_orders.comp_by": { deny: NAME },
   // 1.99la: 🔭 Scout / 🎟️ Curator (requestroles.js) + 🛠️ problem reports (mediaissues.js) follow the account
   "request_roles.user_id": M({ key: ["role"], merge: { status: { rank: ["active", "revoked"] } } }),
   "request_roles.granted_by": { deny: NAME }, "request_roles.revoked_by": { deny: NAME },

@@ -421,6 +421,7 @@
             <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>"><%- t('pad.menu.analytics') %></a><% } %>
             <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>"><%- t('pad.menu.copy') %></button>
             <a role="menuitem" href="/premium?pad=<%= encodeURIComponent(room.slug) %>"><%- primeOn_ ? t('pad.menu.prime_on') : '📺 Prime Time' %></a>
+            <% if (feed_ && feed_.mod && feed_.mod.admin) { %><a role="menuitem" href="/admin/comps?pad=<%= encodeURIComponent(room.slug) %>#premium">🎁 <%- t('pad.menu.comp_prime') %></a><% } %>
             <% if (!isOwner_) { %><% if (giftSigned_) { %><button type="button" role="menuitem" data-pad-gift="<%= room.slug %>"><%- t('pad.menu.gift') %></button><% } else { %><a role="menuitem" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>"><%- t('pad.menu.gift') %></a><% } %><% } %>
           </div>
         </details>

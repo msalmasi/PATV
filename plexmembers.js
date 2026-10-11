@@ -17,6 +17,8 @@
 // ACCESS TYPE (what PATV sold them, from the store orders of mediaconf invite_items + subscriptions.js):
 //   lifetime | yearly | monthly | subscription   PATV-sold; `expires` = the end of the paid time (stacked orders add up;
 //                                                a subscription in its grace keeps it to the grace's end)
+//   comp-trial | comp-lifetime   1.99ma: an admin's comp (comps.js plex_comps) - a trial ends like monthly access (listed
+//                for admin-confirmed removal), a revoked comp ended at the revoke
 //   pre-existing   on the server before their first PATV purchase, or no PATV purchase at all, or not linked - NEVER revoked
 //   manual         re-shared by hand after their PATV time ended, or an admin said "keep" - NEVER revoked
 //   An admin can pin manual / pre-existing on any row.
@@ -40,7 +42,7 @@ const conf = require("./mediaconf");
 
 const DAY = 24 * 3600 * 1000;
 const SLACK = 2 * DAY;                  // invite times vs order times: this much either way still counts as "the same"
-const PATV_TYPES = ["lifetime", "yearly", "monthly", "subscription"];
+const PATV_TYPES = ["lifetime", "yearly", "monthly", "subscription", "comp-trial", "comp-lifetime"];   // 1.99ma: + admin comps (comps.js)
 const KEEP_TYPES = ["manual", "pre-existing"];
 const LINK_SOURCES = ["self", "admin", "wizarr", "overseerr", "email"];
 const OWNER = "owner";                  // 1.99jt: the server owner's row (never a share, never revoked)
@@ -105,8 +107,8 @@ async function patvAccess(userId, t = clock()) {
   const items = conf.get().invite_items || {};
   const ids = Object.keys(items);
   const out = { none: true, first: null, active: false, type: null, expires: null, last_end: null };
-  if (!userId || !ids.length) return out;
-  const orders = await safeQuery(`SELECT id, prize_id, created FROM shop_orders WHERE buyer_id = ? AND prize_id IN (${ids.map(() => "?").join(",")})
+  if (!userId) return out;
+  const orders = !ids.length ? [] : await safeQuery(`SELECT id, prize_id, created FROM shop_orders WHERE buyer_id = ? AND prize_id IN (${ids.map(() => "?").join(",")})
                                   AND status NOT IN ('cancelled','refunded') ORDER BY created, id`, [userId, ...ids]);
   let end = 0, lifetime = false, lastType = null;
   for (const o of orders) {
@@ -125,11 +127,26 @@ async function patvAccess(userId, t = clock()) {
     if (out.first == null || (sub.created && sub.created < out.first)) out.first = sub.created || out.first;
     if (sub.until) end = Math.max(end, sub.until);
   }
+  // 1.99ma: admin comps (comps.js plex_comps): a trial = days from its start, a lifetime comp = no end. A REVOKED comp
+  // still counts as PATV-given access that ENDED at the revoke (so its share is listed for removal, never "pre-existing").
+  const comps = await safeQuery("SELECT kind, starts, until, created, revoked_at FROM plex_comps WHERE user_id = ? ORDER BY created", [userId]);
+  let compEnd = 0, compLife = false;
+  for (const c of comps) {
+    out.none = false;
+    const created = Number(c.created) || 0;
+    if (out.first == null || created < out.first) out.first = created;
+    const stop = c.revoked_at ? Number(c.revoked_at) : 0;
+    if (c.kind === "lifetime") { if (!stop) compLife = true; else compEnd = Math.max(compEnd, stop); }
+    else compEnd = Math.max(compEnd, stop ? Math.min(stop, Number(c.until) || 0) : Number(c.until) || 0);
+  }
   if (lifetime) return { ...out, active: true, type: "lifetime", expires: null, last_end: null };
+  if (compLife) return { ...out, active: true, type: "comp-lifetime", expires: null, last_end: null };
+  const paidEnd = end;
+  end = Math.max(end, compEnd);
   out.last_end = end || null;
   out.expires = end || null;
   out.active = end > t;
-  out.type = sub && (sub.live || !lastType || sub.until >= end) ? "subscription" : lastType;
+  out.type = compEnd && compEnd > paidEnd ? "comp-trial" : sub && (sub.live || !lastType || sub.until >= paidEnd) ? "subscription" : lastType;
   return out;
 }
 
@@ -499,8 +516,11 @@ async function revoke(plexId, actor, { auto = false } = {}) {
   await runQuery("UPDATE plex_members SET revoke = 'revoked', revoke_at = ?, revoke_by = ?, revoke_error = NULL, on_server = 0 WHERE plex_id = ?", [clock(), actor, r.plex_id]);
   await log(r.plex_id, r.user_id, "removed", actor, `${auto ? "auto" : "admin"}: ${r.username || r.plex_id} (${c.access}, ended ${c.expires ? new Date(c.expires).toISOString().slice(0, 10) : "?"})`);
   if (r.user_id) {
-    require("./inbox").addSafe(r.user_id, { kind: "media", title: "📼 Your Plex access ended",
-      body: "The Plex access you bought on PATV ran out, so the library share was removed. Get it again any time in the store.", link: "/subscriptions",
+    let title = "📼 Your Plex access ended", body = "The Plex access you bought on PATV ran out, so the library share was removed. Get it again any time in the store.";
+    if (String(c.access).startsWith("comp-")) {     // 1.99ma: a comp (trial) ran out
+      try { const tr = require("./gifts").tFor(r.user_id); title = tr("comps.notice.plex_removed_title"); body = tr("comps.notice.plex_removed_body"); } catch (e) { /* English above */ }
+    }
+    require("./inbox").addSafe(r.user_id, { kind: "media", title, body, link: "/subscriptions",
       ref: `plex-removed:${r.plex_id}:${r.expires || 0}` }).catch(() => {});
   }
   await reload();
