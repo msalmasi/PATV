@@ -883,7 +883,7 @@ A page without layout.ejs still loads `ds.css` (for the tokens), sets the viewpo
 
 ## Area notes: games (lotto, GTF, achievements, rankings, wheel)
 
-Added by the 1.99ps polish pass (G2). Game pages keep their own illustration (balls, felt, minimap, marquee) but sit on `.ds-page` and read the tokens for everything else.
+Added by the 1.99pt polish pass (G2; its first commit went out labelled 1.99ps, which G4 took at the same time). Game pages keep their own illustration (balls, felt, minimap, marquee) but sit on `.ds-page` and read the tokens for everything else.
 
 ### Arcade and area pages: the shared rules
 

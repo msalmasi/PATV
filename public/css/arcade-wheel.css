@@ -1,6 +1,6 @@
 /* Gold wheel page (views/wheel.ejs) - arcade cabinet layout + coin-op slot.
    Scoped under .aw so it never touches the public/OBS wheel (publicwheel.ejs uses wheel.css).
-   1.99ps polish: reads the design-system tokens (docs/design-system.md, "Area notes: games") - gold is --ds-gold, greys are ds text
+   1.99pt polish: reads the design-system tokens (docs/design-system.md, "Area notes: games") - gold is --ds-gold, greys are ds text
    tokens, focus is the ds gold ring, logical properties, ds breakpoints. The home page's compact coin-op (.aw.aw-hm) reuses it. */
 
 .aw {
