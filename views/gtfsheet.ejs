@@ -1,0 +1,244 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: v && v.display ? v.display + ' · ' + t('gtf.sheet.title') : t('gtf.sheet.title'), user: user }) %>
+<%#
+  views/gtfsheet.ejs - 1.99rn: a heist character sheet (gtfsheet.js view): avatar with equipped GTF cosmetics, class, the six
+  stats with modifiers, heist record, heat, PvP, loadout (gear + items with art), rings. The owner can re-roll the sheet or
+  the avatar here (POST /api/gtf/sheet/reroll: confirm step with the price, a one-time key per click).
+%>
+<%- include('partials/gangs-css') %>
+<%
+  const fmt = (n) => { try { return BigInt(String(n || 0)).toLocaleString('en-US'); } catch (e) { return String(n); } };
+  const sg = (n) => (n >= 0 ? '+' : '') + n;
+  const STAT_NAME = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
+  const JOB = { store: '🏪', casino: '🎰', convoy: '🚚', bank: '🪙' };
+  const mmJson = (x) => JSON.stringify(x == null ? null : x).replace(/</g, '\\u003c');
+%>
+<style>
+  .gs .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ds-sp-6); align-items: center; }
+  .gs .portrait { width: 132px; height: 132px; border-radius: var(--ds-r-xl); background: #0b0b0d; border: 2px solid var(--ds-gold-line); display: grid; place-items: center; overflow: hidden;
+                  box-shadow: 0 0 0 4px rgba(255,207,64,.08), var(--ds-e-2); }
+  .gs .portrait svg { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+  .gs .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--ds-sp-2); }
+  .gs .chip.cls { background: var(--gold); color: var(--ds-on-gold); border-color: transparent; }
+  .gs .six { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-sp-2); }
+  .gs .st { background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-3); position: relative; }
+  .gs .st.best { border-color: var(--ds-gold-line); box-shadow: inset 0 0 0 1px rgba(255,207,64,.2); }
+  .gs .st .k { font: 10px/1.4 var(--ds-font-pixel); letter-spacing: .08em; color: #a0a8a0; }
+  .gs .st .v { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+  .gs .st .v b { font: 22px var(--ds-font-pixel); color: var(--ds-text-strong); }
+  .gs .st .v span { font: 700 15px var(--ds-font); color: var(--green); } .gs .st .v span.neg { color: var(--red); }
+  .gs .st .adv { position: absolute; top: 8px; inset-inline-end: 8px; font: 8px var(--ds-font-pixel); color: var(--ds-on-gold); background: var(--gold); padding: 3px 5px; border-radius: var(--ds-r-xs); }
+  .gs .st .bar i { background: linear-gradient(90deg, var(--green), var(--gold)); }
+  .gs .rec { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: var(--ds-sp-2); }
+  .gs .heat .bar i { background: linear-gradient(90deg, #ffb340, #ff4d4d); }
+  .gs .loot { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: var(--ds-sp-2); }
+  .gs .it { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; align-items: center; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft);
+            border-radius: var(--ds-r-md); padding: 8px; min-width: 0; }
+  .gs .it.gear { border-color: #4a3a6a; }
+  .gs .it .art { width: 48px; height: 48px; border-radius: var(--ds-r-sm); background: #0b0b0d; display: grid; place-items: center; font-size: 24px; overflow: hidden; }
+  .gs .it .art img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .gs .it b { display: block; color: var(--ds-text-strong); font-size: 13.5px; line-height: 1.25; overflow-wrap: anywhere; }
+  .gs .it small { color: var(--mut); font-size: 12px; }
+  .gs .it .n { font: 10px var(--ds-font-pixel); color: var(--gold); }
+  .gs .pvp { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-sp-2); }
+  .gs .pvp .w { color: var(--green); } .gs .pvp .l { color: var(--red); }
+  .gs .acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); margin-top: var(--ds-sp-3); }
+  .gs dialog { background: var(--ds-surface); color: var(--ds-text); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); max-width: min(92vw, 420px); }
+  .gs dialog::backdrop { background: rgba(0,0,0,.6); }
+  .gs dialog h3 { margin: 0 0 var(--ds-sp-2); font: 12px/1.5 var(--ds-font-pixel); color: var(--gold); letter-spacing: .06em; }
+  .gs dialog p { margin: 0 0 var(--ds-sp-3); color: var(--ds-text-2); line-height: 1.5; }
+  .gs .flash { animation: gs-flash 1.2s ease-out 1; }
+  @keyframes gs-flash { from { box-shadow: 0 0 0 4px rgba(255,207,64,.6); } to { box-shadow: 0 0 0 0 rgba(255,207,64,0); } }
+  @media (max-width: 600px) {
+    .gs .hero { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+    .gs .portrait { width: 104px; height: 104px; }
+    .gs .six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .gs .pvp { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { .gs .flash { animation: none; } }
+</style>
+<main class="ds-page wide gg gs" id="gsPage">
+  <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <%- t('gtf.sheet.crumb') %><% if (v && v.display) { %> › <%= v.display %><% } %></div>
+  <% if (v.private) { %>
+    <div class="card"><p class="note"><%- t('gtf.sheet.private', { name: v.display || v.login }) %></p></div>
+  <% } else if (v.missing) { %>
+    <div class="card"><p class="note"><%- t('gtf.sheet.missing', { name: v.display || v.login || '?', '!cmd': '<code>!sheet</code>' }) %></p></div>
+  <% } else { %>
+  <section class="hero" aria-labelledby="gsH">
+    <div class="portrait" id="gsAva" data-seed="<%= v.avatar.seed %>" data-layers="<%= JSON.stringify(v.avatar.layers || {}) %>" role="img" aria-label="<%- t('gtf.sheet.avatar_alt', { name: v.display }) %>"></div>
+    <div>
+      <div class="eyebrow"><%- t('gtf.sheet.eyebrow') %><% if (v.created) { %> · <%- t('gtf.sheet.since', { date: v.created }) %><% } %></div>
+      <h1 id="gsH"><%= v.display %></h1>
+      <div class="chips">
+        <span class="chip cls" id="gsCls">🥷 <%= v.cls %></span>
+        <% if (v.level) { %><span class="chip"><%- t('gtf.sheet.level', { n: v.level }) %></span><% } %>
+        <% if (v.username) { %><a class="chip" href="/u/<%= encodeURIComponent(v.username) %>"><%- t('gtf.sheet.profile') %></a><% } %>
+        <% if (v.record.done.length) { %><span class="chip" title="<%- t('gtf.sheet.done_t') %>"><%= v.record.done.map((j) => JOB[j] || j).join(' ') %></span><% } %>
+      </div>
+      <% if (v.mode === 'mirror') { %><p class="note"><%- t('gtf.sheet.mirror') %></p><% } %>
+      <% if (v.owner) { %>
+      <div class="acts">
+        <button class="btn gold" type="button" data-reroll="sheet" data-price="<%= v.prices.sheetregen %>">🎲 <%- t('gtf.sheet.reroll_sheet') %> · <%= Number(v.prices.sheetregen).toLocaleString('en-US') %> PAT</button>
+        <button class="btn" type="button" data-reroll="avatar" data-price="<%= v.prices.avatarregen %>">🎨 <%- t('gtf.sheet.reroll_avatar') %> · <%= Number(v.prices.avatarregen).toLocaleString('en-US') %> PAT</button>
+      </div>
+      <div class="msg" id="gsMsg" role="status" aria-live="polite"></div>
+      <% } %>
+    </div>
+  </section>
+
+  <div class="grid2">
+    <div style="display:grid;gap:16px;min-width:0">
+      <section class="card gold" aria-labelledby="gsStats">
+        <h2 id="gsStats" class="ds-pixel-h"><%- t('gtf.sheet.stats') %></h2>
+        <div class="six" id="gsSix">
+          <% v.stats.forEach((s) => { %>
+          <div class="st<%= s.best ? ' best' : '' %>" data-stat="<%= s.key %>">
+            <% if (s.best) { %><span class="adv" title="<%- t('gtf.sheet.adv_t', { cls: v.cls }) %>"><%- t('gtf.sheet.adv') %></span><% } %>
+            <div class="k"><%= STAT_NAME[s.key] %></div>
+            <div class="v"><b><%= s.score %></b><span class="<%= s.mod < 0 ? 'neg' : '' %>"><%= sg(s.mod) %></span></div>
+            <div class="bar" aria-hidden="true"><i style="width:<%= s.pct %>%"></i></div>
+          </div>
+          <% }) %>
+        </div>
+        <p class="note"><%- t('gtf.sheet.stats_note', { cls: v.cls }) %><% if (v.owner && v.avail) { %> <%- t('gtf.sheet.points', { n: v.avail, '!cmd': '<code>!allot &lt;stat&gt;</code>' }) %><% } %></p>
+      </section>
+
+      <section class="card violet" aria-labelledby="gsLoad">
+        <h2 id="gsLoad" class="ds-pixel-h"><%- t('gtf.sheet.loadout') %></h2>
+        <% if (!v.gear.length && !v.items.length) { %>
+          <p class="note"><%- t('gtf.sheet.empty', { '!cmd': '<code>!shop</code>' }) %></p>
+        <% } else { %>
+        <div class="loot">
+          <% v.gear.concat(v.items).forEach((it) => { %>
+          <div class="it<%= it.kind === 'gear' ? ' gear' : '' %>" title="<%= it.desc %>">
+            <span class="art" aria-hidden="true"><% if (it.art) { %><img src="<%= it.art %>" alt="" loading="lazy" width="48" height="48"><% } else { %><%= it.emoji %><% } %></span>
+            <span><b><%= it.name %></b><% if (it.kind === 'gear') { %><small><%- t('gtf.sheet.gear') %></small><% } else { %><span class="n">×<%= it.n %></span><% } %></span>
+          </div>
+          <% }) %>
+        </div>
+        <% } %>
+        <% if (v.rings.n) { %><p class="note">💍 <%- t('gtf.sheet.rings', { count: v.rings.n, list: Object.entries(v.rings.by).map(([s, n]) => (STAT_NAME[s] || s.toUpperCase()) + (n > 1 ? ' ×' + n : '')).join(', ') }) %></p><% } %>
+      </section>
+    </div>
+
+    <div class="side" style="display:grid;gap:16px;min-width:0">
+      <section class="card green" aria-labelledby="gsRec">
+        <h2 id="gsRec" class="ds-pixel-h"><%- t('gtf.sheet.record') %></h2>
+        <dl class="rec">
+          <div class="stat"><dt><%- t('gtf.sheet.heists') %></dt><dd><%= fmt(v.record.heists) %></dd></div>
+          <div class="stat"><dt><%- t('gtf.sheet.busts') %></dt><dd><%= fmt(v.record.busts) %></dd></div>
+          <div class="stat"><dt><%- t('gtf.sheet.cracks') %></dt><dd><%= fmt(v.record.cracks) %></dd></div>
+          <div class="stat"><dt><%- t('gtf.sheet.deepest') %></dt><dd><%= v.record.deepest ? 'R' + v.record.deepest : '–' %></dd></div>
+          <div class="stat" style="grid-column:1/-1"><dt><%- t('gtf.sheet.loot') %></dt><dd><%= fmt(v.record.loot) %> <small>PAT</small></dd></div>
+        </dl>
+        <div class="stat heat" style="margin-top:var(--ds-sp-2)"><dt><%- t('gtf.sheet.heat') %></dt><dd><%= v.heat %>/<%= v.heat_max %></dd>
+          <div class="bar" aria-hidden="true"><i style="width:<%= Math.round(100 * v.heat / Math.max(1, v.heat_max)) %>%"></i></div></div>
+      </section>
+
+      <section class="card" aria-labelledby="gsPvp">
+        <h2 id="gsPvp" class="ds-pixel-h"><%- t('gtf.sheet.pvp') %></h2>
+        <div class="pvp">
+          <div class="stat"><dt>🎲 <%- t('gtf.sheet.duels') %></dt><dd><span class="w"><%= v.pvp.duels.w %></span>-<span class="l"><%= v.pvp.duels.l %></span>
+            <small><%= (v.pvp.duels.net >= 0 ? '+' : '') + Number(v.pvp.duels.net).toLocaleString('en-US') %> PAT</small></dd></div>
+          <div class="stat"><dt>🥊 <%- t('gtf.sheet.brawls') %></dt><dd><span class="w"><%= v.pvp.brawls.w %></span>-<span class="l"><%= v.pvp.brawls.l %></span>
+            <small><%= (v.pvp.brawls.net >= 0 ? '+' : '') + Number(v.pvp.brawls.net).toLocaleString('en-US') %> PAT</small></dd></div>
+          <div class="stat"><dt>🏟️ <%- t('gtf.sheet.arena') %></dt><dd><%= v.pvp.arena %> <small><%- t('gtf.sheet.arena_wins') %></small></dd></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <% if (v.owner) { %>
+  <dialog id="gsConfirm" aria-labelledby="gsCH">
+    <h3 id="gsCH"></h3>
+    <p id="gsCP"></p>
+    <div class="acts"><button class="btn gold" type="button" id="gsGo"></button><button class="btn" type="button" id="gsNo"><%- t('gtf.sheet.cancel') %></button></div>
+  </dialog>
+  <% } %>
+  <script>
+  (function () {
+    var S = <%- mmJson({ sheet_h: t('gtf.sheet.confirm_sheet_h'), sheet_p: t('gtf.sheet.confirm_sheet_p'), avatar_h: t('gtf.sheet.confirm_avatar_h'),
+                        avatar_p: t('gtf.sheet.confirm_avatar_p'), go: t('gtf.sheet.confirm_go'), queued: t('gtf.sheet.queued'), done_sheet: t('gtf.sheet.done_sheet'),
+                        done_avatar: t('gtf.sheet.done_avatar'), fail: t('gtf.sheet.fail'), net: t('gtf.sheet.net') }) %>;
+    var login = <%- mmJson(v.login) %>;
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' }[c]; }); };
+    var fmtT = function (tpl, v) { return String(tpl).replace(/\{(!?)(\w+)\}/g, function (m, raw, k) { return v && v[k] != null ? (raw ? String(v[k]) : esc(v[k])) : m; }); };
+    function draw(seed, layers) {
+      var el = document.getElementById('gsAva');
+      if (!el || typeof window.pepeAvatarSVG !== 'function') return;
+      if (seed != null) el.setAttribute('data-seed', seed);
+      try { el.innerHTML = window.pepeAvatarSVG(+el.getAttribute('data-seed') || 7, 132, layers || JSON.parse(el.getAttribute('data-layers') || '{}')); } catch (e) { /* keep the tile */ }
+    }
+    var sc = document.createElement('script'); sc.src = '/public/js/avatar.js'; sc.onload = function () { draw(); }; document.head.appendChild(sc);
+    var dlg = document.getElementById('gsConfirm'); if (!dlg) return;
+    var msg = document.getElementById('gsMsg'), what = null, busy = false;
+    function show(ok, text) { msg.className = 'msg on ' + (ok ? 'ok' : 'bad'); msg.innerHTML = text; }
+    function idem() { var a = new Uint8Array(12); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+    // the new sheet, drawn in place
+    function apply(v, kind) {
+      if (!v || !v.stats) return;
+      document.getElementById('gsCls').textContent = '🥷 ' + v.cls;
+      v.stats.forEach(function (s) {
+        var el = document.querySelector('[data-stat="' + s.key + '"]'); if (!el) return;
+        el.querySelector('.v b').textContent = s.score;
+        var m = el.querySelector('.v span'); m.textContent = (s.mod >= 0 ? '+' : '') + s.mod; m.className = s.mod < 0 ? 'neg' : '';
+        el.querySelector('.bar i').style.width = s.pct + '%';
+        el.classList.toggle('best', !!s.best);
+        var a = el.querySelector('.adv'); if (a) a.style.display = s.best ? '' : 'none';
+      });
+      draw(v.avatar.seed, v.avatar.layers);
+      var tgt = kind === 'avatar' ? document.getElementById('gsAva') : document.getElementById('gsSix');
+      tgt.classList.remove('flash'); void tgt.offsetWidth; tgt.classList.add('flash');
+    }
+    function fetchView() { return fetch('/api/gtf/sheet/' + encodeURIComponent(login), { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }); }
+    function poll(id, kind, before, tries) {
+      // GTF data in Pepe: he runs the chat command; then his mirror push brings the new sheet
+      fetch('/api/gtf/sheet-action/' + id, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (a) {
+        if (a.status === 'done' || a.status === 'failed') {
+          var ok = a.status === 'done' && !/costs|insufficient|don't have/i.test(a.message || '');
+          show(ok, esc(a.message || (ok ? S['done_' + kind] : S.fail)));
+          if (!ok) { busy = false; return; }
+          var wait = function (n) { fetchView().then(function (v) {
+            var sig = JSON.stringify([v.avatar && v.avatar.seed, (v.stats || []).map(function (s) { return s.score; })]);
+            if (sig !== before || n <= 0) { apply(v, kind); busy = false; } else setTimeout(function () { wait(n - 1); }, 1500);
+          }).catch(function () { busy = false; }); };
+          wait(12);
+        } else if (tries > 0) setTimeout(function () { poll(id, kind, before, tries - 1); }, 2000);
+        else { show(false, S.fail); busy = false; }
+      }).catch(function () { setTimeout(function () { poll(id, kind, before, tries - 1); }, 3000); });
+    }
+    document.querySelectorAll('[data-reroll]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (busy) return;
+        what = b.getAttribute('data-reroll');
+        var price = Number(b.getAttribute('data-price')).toLocaleString('en-US');
+        document.getElementById('gsCH').textContent = S[what + '_h'];
+        document.getElementById('gsCP').innerHTML = fmtT(S[what + '_p'], { price: price });
+        document.getElementById('gsGo').textContent = fmtT(S.go, { price: price });
+        dlg.showModal();
+      });
+    });
+    document.getElementById('gsNo').addEventListener('click', function () { dlg.close(); });
+    document.getElementById('gsGo').addEventListener('click', function () {
+      dlg.close(); if (busy || !what) return; busy = true;
+      var kind = what, key = idem();
+      var before = JSON.stringify([+document.getElementById('gsAva').getAttribute('data-seed'),
+                                   Array.prototype.map.call(document.querySelectorAll('[data-stat] .v b'), function (x) { return +x.textContent; })]);
+      var send = function (n) {
+        return fetch('/api/gtf/sheet/reroll', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' },
+                                                 body: JSON.stringify({ what: kind, idem: key }) })
+          .then(function (r) { return r.json(); })
+          .catch(function () { if (n > 0) return send(n - 1); throw new Error('net'); });      // the SAME key: never charged twice
+      };
+      send(2).then(function (j) {
+        if (!j.ok) { show(false, esc(j.error || S.fail)); busy = false; return; }
+        if (j.mode === 'pepe') { show(true, S.queued); poll(j.queued, kind, before, 60); return; }
+        apply(j.view, kind); show(true, S['done_' + kind]); busy = false;
+      }).catch(function () { show(false, S.net); busy = false; });
+    });
+  })();
+  </script>
+  <% } %>
+</main>
+</body>
+</html>

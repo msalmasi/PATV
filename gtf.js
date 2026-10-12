@@ -62,11 +62,17 @@ async function boardView() {
   return { ok: true, board: c.board, at: c.at, stale: Date.now() - c.at > BOARD_STALE_MS, now: Date.now() };
 }
 
+/** 1.99rn: a player's heist sheet link - always the site's own page (/gtf/sheet/<login>, gtfsheet.js) now; the old Netlify
+ *  dossier (pepe.publicaccess.tv/sheet/...) is retired. The class comes from the sheet data (site records or Pepe's mirror),
+ *  else from the old registry row Pepe used to post. */
 async function sheetFor(camfrogName) {
   if (!camfrogName) return null;
+  const S = require("./gtfsheet");
+  const s = await S.hasSheet(camfrogName).catch(() => null);
+  if (s) return s;
   await ready;
-  const r = await getQuery("SELECT url, cls FROM heist_sheets WHERE camfrog = LOWER(?)", [String(camfrogName)]);
-  return r.length ? r[0] : null;
+  const r = await getQuery("SELECT cls FROM heist_sheets WHERE camfrog = LOWER(?)", [String(camfrogName)]);
+  return r.length ? { url: S.urlFor(camfrogName), cls: r[0].cls || "" } : null;
 }
 
 function register(app, { isBotToken, addUser }) {

@@ -23,7 +23,7 @@ const MIN = 60000;
 const TTL_DEFAULTS = Object.freeze({
   // /act chat commands (Pepe charges when he runs them)
   "cmd:market": 15, "cmd:pool": 30, "cmd:wager": 30, "cmd:bounty": 60, "cmd:stash": 30, "cmd:loan": 60,
-  "cmd:lotto": 15, "cmd:cosmetic": 30, "cmd:avatar": 60, "cmd:donate": 60,
+  "cmd:lotto": 15, "cmd:cosmetic": 30, "cmd:avatar": 60, "cmd:sheet": 60, "cmd:donate": 60,
   // other website actions
   "poll.vote": 30, "poll.create": 30, "poll.end": 30,
   "table": 2,                          // a seat move only makes sense at the table it was made for

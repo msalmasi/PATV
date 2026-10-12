@@ -192,7 +192,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/gtf/bot/sheet-mirror" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1221,6 +1221,8 @@ patroutes.register(app, { isBotToken });
 require("./stashes").register(app, { isBotToken, addUser });
 // 1.99nq: Grand Theft Frogger's persistent data (heist sheets, loadouts, avatars, pvp records) behind the GTF backend switch
 require("./gtfstore").register(app, { isBotToken, addUser });
+// 1.99rn: the heist sheet page (/gtf/sheet/:login) + web re-rolls + Pepe's sheet mirror / catalog
+require("./gtfsheet").register(app, { isBotToken, addUser });
 // 1.99ns Phase 1: every protocol pool on the site (pools.js) + the economy settings and journals (econstore.js)
 require("./pools").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
 // 1.99ou Phase 2: the escrow ledger (every escrowed stake) + the escrow game engines (wagers, ...) - docs/escrow-cutover-runbook.md

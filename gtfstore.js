@@ -52,6 +52,12 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS gtf_records_rev ON gtf_records (rev)");
       await runQuery("CREATE TABLE IF NOT EXISTS gtf_batches (key TEXT PRIMARY KEY, ts INTEGER NOT NULL, n INTEGER, result TEXT)");
       await runQuery("CREATE TABLE IF NOT EXISTS gtf_meta (key TEXT PRIMARY KEY, value TEXT)");
+      // 1.99rn: things the WEBSITE did to a sheet while the site owns GTF's data (a re-roll from /gtf/sheet): Pepe applies
+      // each to his mirror (so his own later changes to that sheet keep it) and acks it; until then his puts of that
+      // sheet are deferred, so they can't overwrite the site's result
+      await runQuery(`CREATE TABLE IF NOT EXISTS gtf_ops (key TEXT PRIMARY KEY, login TEXT NOT NULL, op TEXT NOT NULL,
+        fields TEXT, user_id TEXT, price INTEGER, created INTEGER NOT NULL, acked INTEGER)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS gtf_ops_open ON gtf_ops (acked, created)");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -244,7 +250,10 @@ async function put(body) {
       try { return Object.assign(JSON.parse(seen.result || "{}"), { dup: true }); } catch (e) { return { ok: true, dup: true }; }
     }
     let rev = (await meta("rev")) || 0;
+    const openOps = new Set((await getQuery("SELECT DISTINCT login FROM gtf_ops WHERE acked IS NULL")).map((o) => o.login));
+    const deferred = [];
     for (const r of recs) {
+      if (r.kind === "sheet" && openOps.has(r.id)) { deferred.push(r.id); continue; }   // Pepe hasn't applied the web's op yet
       rev++;
       if (r.json === null) {
         await runQuery(`INSERT INTO gtf_records (kind, id, data, rev, deleted, updated) VALUES (?, ?, NULL, ?, 1, ?)
@@ -258,7 +267,8 @@ async function put(body) {
       }
     }
     await setMeta("rev", rev);
-    const res = { ok: true, rev, n: recs.length };
+    const res = { ok: true, rev, n: recs.length - deferred.length };
+    if (deferred.length) res.deferred = deferred;
     await runQuery("INSERT INTO gtf_batches (key, ts, n, result) VALUES (?, ?, ?, ?)", [key, now(), recs.length, JSON.stringify(res)]);
     return res;
   });
@@ -371,6 +381,23 @@ async function storeHistory() {
   return [...out.values()];
 }
 
+// ── 1.99rn: the website's own changes (gtf_ops) ──
+async function openOps() {
+  await init();
+  const rows = await getQuery("SELECT key, login, op, fields, created FROM gtf_ops WHERE acked IS NULL ORDER BY created LIMIT 200");
+  return rows.map((r) => ({ key: r.key, login: r.login, op: r.op, fields: (() => { try { return JSON.parse(r.fields || "{}"); } catch (e) { return {}; } })(),
+                            created: r.created }));
+}
+async function ackOps(keys) {
+  await init();
+  let n = 0;
+  for (const k of (Array.isArray(keys) ? keys : []).slice(0, 500)) {
+    const r = await runQuery("UPDATE gtf_ops SET acked = ? WHERE key = ? AND acked IS NULL", [now(), String(k)]);
+    n += (r && r.changes) || 0;
+  }
+  return n;
+}
+
 // ── routes ──
 function register(app, { isBotToken, addUser }) {
   init().catch((e) => console.error("[gtf] init:", e.message));
@@ -391,6 +418,8 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/gtf/bot/state", bot((b) => stateSince(b.since_rev, b.limit)));
   app.post("/api/gtf/bot/release", bot((b) => release(b)));
   app.post("/api/gtf/bot/shop-history", bot(async () => ({ ok: true, rows: await shopHistory() })));
+  app.post("/api/gtf/bot/ops", bot(async () => ({ ok: true, ops: await openOps() })));
+  app.post("/api/gtf/bot/ops/ack", bot(async (b) => ({ ok: true, acked: await ackOps(b.keys) })));
   app.post("/api/gtf/bot/store-history", bot(async () => ({ ok: true, rows: await storeHistory() })));
   // admins: switch the backend on/off (it gates the import; after it, Pepe's `!gtf backend off` is the way back)
   app.post("/api/admin/gtf-backend", addUser, async (req, res) => {
@@ -405,4 +434,4 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { init, register, enabled, live, status, importFromPepe, put, stateSince, release, exportObject, totalsOf, topInts, sheetOf, record,
-                   shopHistory, storeHistory, setMeta, meta, Refuse };
+                   shopHistory, storeHistory, setMeta, meta, Refuse, tx, openOps, ackOps, syncAvatarSeeds };

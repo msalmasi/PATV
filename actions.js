@@ -34,7 +34,7 @@ const weberrors = require("./weberrors");
 const ttl = require("./actionttl");     // 1.99ne: queued actions expire
 const RECLAIM_MS = 2 * 60 * 1000;
 const KINDS = new Set(["cmd", "poll.vote", "poll.create", "poll.end"]);
-const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar", "donate"]);
+const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar", "sheet", "donate"]);   // 1.99rn: sheet = the web "Re-roll sheet" (regen only, Pepe refuses the rest)
 
 const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const clean = (s, n = 300) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
