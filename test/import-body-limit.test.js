@@ -1,0 +1,33 @@
+// 1.99sy: the cutover imports (pools / escrow / gangs) carry exports far bigger than the global 100 KB JSON limit -
+// the prod pools cutover of 2026-10-12 failed with "request entity too large". Each path is skipped by index.js's
+// global parser and parses its own body with a 32 MB limit.
+const test = require("node:test");
+const assert = require("node:assert");
+const fs = require("fs");
+const path = require("path");
+const root = path.join(__dirname, "..");
+const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
+
+for (const [file, route] of [["pools.js", "/api/pools/admin/import"], ["escrow/ledger.js", "/api/escrow/admin/import"],
+                             ["gangs.js", "/api/gangs/admin/import"]]) {
+  test(`${route} skips the global JSON parser and parses a big body itself`, () => {
+    assert.ok(read("index.js").includes(`req.path === "${route}"`), "index.js skip list has " + route);
+    const src = read(file);
+    const line = src.split("\n").find((l) => l.includes(`app.post("${route}"`));
+    assert.ok(line, "route registered in " + file);
+    assert.match(line, /express"\)\.json\(\{ limit: "32mb" \}\)/);
+  });
+}
+
+test("a 1 MB JSON body parses under the route's own limit", async () => {
+  const express = require("express");
+  const app = express();
+  app.post("/x", express.json({ limit: "32mb" }), (req, res) => res.json({ n: req.body.blob.length }));
+  const srv = app.listen(0);
+  const port = srv.address().port;
+  const blob = "a".repeat(1024 * 1024);
+  const r = await fetch(`http://127.0.0.1:${port}/x`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ blob }) });
+  srv.close();
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual((await r.json()).n, blob.length);
+});

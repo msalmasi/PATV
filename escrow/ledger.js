@@ -699,7 +699,8 @@ function register(app, { isBotToken, addUser, patSupply }) {
   app.post("/api/escrow/bot/settle", bot((b) => settle(b)));
   app.post("/api/escrow/bot/grant", bot((b) => grant(b)));
   app.post("/api/escrow/bot/status", bot(async (b) => ({ ok: true, results: await status(b.keys), holds: await holdsByIds(b.hids) })));
-  app.post("/api/escrow/admin/import", bot((b) => importFromPepe(b)));
+  // 1.99sy: the escrow export (escrow.json is ~1 MB on prod) is bigger than the global 100 KB JSON limit (index.js skips this path)
+  app.post("/api/escrow/admin/import", require("express").json({ limit: "32mb" }), bot((b) => importFromPepe(b)));
   app.post("/api/escrow/admin/export", bot(() => exportState()));
   app.post("/api/escrow/admin/rollback", bot((b) => rollbackToPepe({ key: b.key, actor: b.actor })));
 
