@@ -55,6 +55,7 @@
     .gs .six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .gs .pvp { grid-template-columns: minmax(0, 1fr); }
   }
+  @media (max-width: 1000px) { .gs .grid2 > .side { order: 0; } }   /* stats + loadout first on phones (the gang pages put .side first) */
   @media (prefers-reduced-motion: reduce) { .gs .flash { animation: none; } }
 </style>
 <main class="ds-page wide gg gs" id="gsPage">
