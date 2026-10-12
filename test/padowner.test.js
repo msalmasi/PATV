@@ -78,13 +78,18 @@ const post = (p, u, body) => fetch(base + p, { method: "POST", headers: H(u), bo
 const page = (p, u) => fetch(base + p, { headers: u ? { "x-test-user": u } : {}, redirect: "manual" }).then(async (r) => ({ status: r.status, text: await r.text() }));
 const actions = () => getQuery("SELECT * FROM pepe_actions ORDER BY id");
 
+const LANGS_FROM_PEPE = [["auto", "Auto (follow the chat)", ""], ["en", "English", "English"], ["es", "Spanish", "Español"],
+  ["zh-tw", "Chinese (Traditional)", "繁體中文"], ["<x>", "bad", ""]];
 const REPORT = { [PLANT]: { owner: { snap: true, clip: false, challenge: true, language: "es" }, bridge: { relay: true, mic: false, cams: true, audio: false, transcripts: true, cmds: true },
   features: { say: true, look: false, casino_backend: true, nonsense: "x" }, prices: { look: 10000, roast: 5000, "BAD KEY": 3 }, vibe: { type: "chill", locked: false }, pepe_here: true },
   "bad id <script>": { owner: {} } };
 
 test("Pepe's room_settings report is cleaned and stored with the owner-map sync", async () => {
-  const r = await post("/api/rooms/owners", null, { password: "bot-token", room_settings: REPORT });
+  // before Pepe sent his language list, the select offers auto + the room's current value only
+  assert.deepEqual(PO.languages().map((l) => l[0]), ["auto"]);
+  const r = await post("/api/rooms/owners", null, { password: "bot-token", room_settings: REPORT, room_languages: LANGS_FROM_PEPE });
   assert.equal(r.status, 200);
+  assert.deepEqual(PO.languages().map((l) => l[0]), ["auto", "en", "es", "zh-tw"], "1.99qv: Pepe's real list (junk dropped)");
   const s = await PO.settingsFor(PLANT);
   assert.deepEqual(s.owner, { snap: true, clip: false, challenge: true, language: "es" });
   assert.equal(s.features.nonsense, undefined);
@@ -92,7 +97,7 @@ test("Pepe's room_settings report is cleaned and stored with the owner-map sync"
   assert.equal(s.prices.look, 10000);
   assert.equal(s.stale, false);
   assert.equal(await PO.settingsFor("bad id <script>"), null);
-  assert.equal(PO.cleanOne({ owner: { language: "xx" } }).owner.language, "auto");
+  assert.equal(PO.cleanOne({ owner: { language: "<bad>" } }).owner.language, "auto");
 });
 
 test("the owner page: owner + staff only; every card renders", async () => {
@@ -102,7 +107,8 @@ test("the owner page: owner + staff only; every card renders", async () => {
                       'data-po-bridge="relay"', 'id="poTopup"', "!roomvault deposit", en["owner.can_h"].replace(/'/g, "&#39;")]) {
     assert.ok(r.text.includes(want), want);
   }
-  assert.ok(/<option value="es" selected>/.test(r.text), "the reported language is selected");
+  assert.ok(/<option value="es" selected>Spanish · Español<\/option>/.test(r.text), "the reported language is selected, Pepe's names");
+  assert.ok(!/value="fr"/.test(r.text), "only the languages Pepe sent");
   assert.ok(!/owner\.[a-z_]+\.?[a-z_-]*</.test(r.text.replace(/<script[\s\S]*?<\/script>/g, "")), "no raw i18n keys on the page");
   r = await page("/p/" + SLUG + "/owner", "staff");
   assert.equal(r.status, 200);

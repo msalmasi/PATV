@@ -6865,5 +6865,10 @@
   "owner.ao.6": "automod (!automod)",
   "owner.ao.7": "room bots",
   "owner.ao.8": "command prices (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Auto (follow the chat)",
+  "owner.cap.roomvibe.title": "Set your room's vibe",
+  "owner.cap.roomvibe.howto": "Pepe learns how your room talks and matches it. Set the type yourself (chill, fight, flirty...), how hard he roasts, add notes he should know, or lock the vibe so he stops relearning it. !roomvibe on its own shows it.",
+  "owner.cap.roominfo.title": "See what Pepe knows about your room",
+  "owner.cap.roominfo.howto": "Shows the topics, running jokes and regulars Pepe has picked up in your room. refresh relearns them, forget wipes them, and site on|off sends the room's analytics to your pad page."
 }

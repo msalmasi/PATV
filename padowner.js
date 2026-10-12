@@ -32,12 +32,23 @@ const rooms = require("./rooms");
 const OWNER_SETTINGS = Object.freeze({
   snap: ["on", "off"], clip: ["on", "off"], challenge: ["on", "off"],
 });
-// Pepe's room languages (camfrog-bot pepe_i18n.LANGS) - the select's choices; Pepe validates the value again.
-const LANGS = Object.freeze([["auto", "Auto (follow the chat)"], ["en", "English"], ["es", "Spanish"], ["pt", "Portuguese"], ["fr", "French"],
-  ["de", "German"], ["it", "Italian"], ["nl", "Dutch"], ["pl", "Polish"], ["tr", "Turkish"], ["ru", "Russian"], ["uk", "Ukrainian"],
-  ["ar", "Arabic"], ["fa", "Persian"], ["hi", "Hindi"], ["id", "Indonesian"], ["vi", "Vietnamese"], ["th", "Thai"], ["ja", "Japanese"],
-  ["ko", "Korean"], ["zh", "Chinese (Simplified)"], ["zh-tw", "Chinese (Traditional)"]]);
-const LANG_CODES = new Set(LANGS.map((l) => l[0]));
+// 1.99qv: Pepe's room languages come with his owner sync (`room_languages` = [[code, English name, native name]], camfrog-bot
+// pepe_roomowner._op_languages = pepe_i18n.LANGS) and are kept in room_pepe_meta - nothing hard-coded. Until Pepe has sent
+// them the select offers "auto" and the room's current value only (Pepe validates every value again anyway).
+const LANG_RE = /^(auto|[a-z]{2,3}(-[a-z]{2,4})?)$/;
+let LANGS = [["auto", "Auto (follow the chat)", ""]];
+let LANG_CODES = new Set(["auto"]);
+function setLanguages(list) {
+  const out = [];
+  for (const x of (Array.isArray(list) ? list : []).slice(0, 80)) {
+    if (!Array.isArray(x) || !LANG_RE.test(String(x[0] || ""))) continue;
+    out.push([String(x[0]), String(x[1] || x[0]).replace(/[<>"&]/g, "").slice(0, 40), String(x[2] || "").replace(/[<>"&]/g, "").slice(0, 40)]);
+  }
+  if (!out.length || out[0][0] !== "auto") out.unshift(["auto", "Auto (follow the chat)", ""]);
+  LANGS = out;
+  LANG_CODES = new Set(out.map((l) => l[0]));
+  return out;
+}
 const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const SETTINGS_STALE_MS = 10 * 60 * 1000;          // Pepe re-sends every 2 min; older = he's away
 // The website's owner controls (the generated list covers Pepe's side). `route` = METHOD path, checked by the tests.
@@ -60,6 +71,9 @@ let ready = null;
 function init() {
   if (!ready) {
     ready = runQuery("CREATE TABLE IF NOT EXISTS room_pepe_settings (room_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL)")
+      .then(() => runQuery("CREATE TABLE IF NOT EXISTS room_pepe_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL, updated INTEGER NOT NULL)"))
+      .then(() => getQuery("SELECT v FROM room_pepe_meta WHERE k = 'languages'"))
+      .then((rows) => { if (rows[0]) { try { setLanguages(JSON.parse(rows[0].v)); } catch (e) { /* keep the fallback */ } } })
       .catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -73,7 +87,7 @@ function cleanOne(s) {
   const sec = (x, keys) => { const out = {}; const v = x && typeof x === "object" ? x : {}; for (const k of keys) if (bool(v[k]) != null) out[k] = v[k]; return out; };
   const owner = sec(o.owner, ["snap", "clip", "challenge"]);
   const lang = o.owner && typeof o.owner.language === "string" ? o.owner.language.toLowerCase() : "auto";
-  owner.language = LANG_CODES.has(lang) ? lang : "auto";
+  owner.language = LANG_RE.test(lang) ? lang : "auto";
   const features = sec(o.features, ["say", "ask", "look", "roast", "camroast", "music", "music_queue", "music_play", "shop", "heist", "turf",
     "poker", "blackjack", "wheel", "trivia", "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "cam_flag", "greeter", "chatty",
     "casino_backend", "auto_dj"]);
@@ -85,9 +99,14 @@ function cleanOne(s) {
   return { owner, bridge: sec(o.bridge, ["relay", "mic", "cams", "audio", "transcripts", "cmds"]), features, prices, vibe, pepe_here: bool(o.pepe_here) };
 }
 /** POST /api/rooms/owners `room_settings` -> the table (the set Pepe sends replaces the rows it names). */
-async function storeSettings(raw) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return 0;
+async function storeSettings(raw, languages) {
   await init();
+  if (Array.isArray(languages) && languages.length) {
+    const list = setLanguages(languages);
+    await runQuery(`INSERT INTO room_pepe_meta (k, v, updated) VALUES ('languages', ?, ?)
+                    ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated = excluded.updated`, [JSON.stringify(list), Date.now()]);
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return 0;
   const t = Date.now();
   let n = 0;
   for (const [id, s] of Object.entries(raw).slice(0, 500)) {
@@ -137,7 +156,8 @@ async function pageData(R, viewer) {
     vault, roy, prime: prem && prem.pad ? prem.pad : null, primePrice: prem && prem.prices ? prem.prices.prime_time : null,
     primePerks: prem ? prem.perks : null, stage, requested: ownerStage ? ownerStage.requested.length : 0,
     pepe, live, linked: u.camfrogUsername || null, balance: Number(u.points_balance) || 0, recent,
-    caps: capabilities(), webCaps: WEB_CAPS, LANGS,
+    caps: capabilities(), webCaps: WEB_CAPS, LANGS: pepe && pepe.owner && !LANG_CODES.has(pepe.owner.language)
+      ? LANGS.concat([[pepe.owner.language, pepe.owner.language, ""]]) : LANGS,
   };
 }
 
@@ -185,6 +205,7 @@ function register(app, { addUser }) {
   app.post("/api/rooms/:slug/owner/setting", addUser, express.json({ limit: "2kb" }), jsonOnly, async (req, res) => {
     res.set("Cache-Control", "no-store");
     const R = await ownedPad(req, res); if (!R) return;
+    await init();                                        // Pepe's language list (room_pepe_meta)
     const b = req.body || {};
     const key = String(b.key || ""), value = String(b.value || "").toLowerCase();
     const ok = key === "language" ? LANG_CODES.has(value) : Object.prototype.hasOwnProperty.call(OWNER_SETTINGS, key) && OWNER_SETTINGS[key].includes(value);
@@ -235,5 +256,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { register, init, storeSettings, settingsFor, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS, LANGS,
+module.exports = { register, init, storeSettings, settingsFor, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS, languages: () => LANGS,
                    _reset: () => { CAPS = null; } };

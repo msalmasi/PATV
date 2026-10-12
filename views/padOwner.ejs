@@ -193,7 +193,7 @@
         <div class="po-set">
           <div><b>🌐 <%- t('owner.set_language') %></b><p class="ds-meta"><%- t('owner.set_language_why') %> <code>!language &lt;code|auto&gt;</code></p></div>
           <select class="ds-select" data-po-set="language" aria-label="<%- t('owner.set_language') %>" style="max-width: 220px">
-            <% LANGS.forEach(([c, n]) => { %><option value="<%= c %>" <%= pepe.owner.language === c ? 'selected' : '' %>><%= n %></option><% }) %>
+            <% LANGS.forEach(([c, n, nat]) => { %><option value="<%= c %>" <%= pepe.owner.language === c ? 'selected' : '' %>><%= c === 'auto' ? t('owner.lang_auto') : n + (nat && nat !== n ? ' · ' + nat : '') %></option><% }) %>
           </select>
         </div>
       </div>

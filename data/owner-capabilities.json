@@ -85,6 +85,49 @@
    ]
   },
   {
+   "id": "roomvibe",
+   "area": "room",
+   "title": "Set your room's vibe",
+   "commands": [
+    "!roomvibe"
+   ],
+   "syntax": [
+    "!roomvibe",
+    "!roomvibe type <type>|auto",
+    "!roomvibe roasts <mode>|auto",
+    "!roomvibe notes <text>|clear",
+    "!roomvibe lock|unlock|refresh"
+   ],
+   "setting": "room_vibe_type",
+   "howto": "Pepe learns how your room talks and matches it. Set the type yourself (chill, fight, flirty...), how hard he roasts, add notes he should know, or lock the vibe so he stops relearning it. !roomvibe on its own shows it.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomintel.py:_ri_can_view",
+    "pepe_roomvibe.py:handle_roomvibe"
+   ]
+  },
+  {
+   "id": "roominfo",
+   "area": "room",
+   "title": "See what Pepe knows about your room",
+   "commands": [
+    "!roominfo"
+   ],
+   "syntax": [
+    "!roominfo",
+    "!roominfo refresh",
+    "!roominfo forget",
+    "!roominfo site on|off"
+   ],
+   "setting": "room_analytics",
+   "howto": "Shows the topics, running jokes and regulars Pepe has picked up in your room. refresh relearns them, forget wipes them, and site on|off sends the room's analytics to your pad page.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomintel.py:_ri_can_view",
+    "pepe_roomintel.py:handle_roominfo"
+   ]
+  },
+  {
    "id": "challenge_switch",
    "area": "games",
    "title": "Switch mic challenges on or off",
