@@ -28,6 +28,8 @@
     <button type="button" class="vb vb-up" data-act="vote" data-dir="1" aria-pressed="<%= v_ === 1 ? 'true' : 'false' %>" aria-label="<%- t('feed.p.upvote') %>"><%- fx.icon('up') %></button>
     <span class="vs" title="<%- t('feed.updown', { up: p.ups, down: p.downs }) %>"><%= fx.num(p.score) %></span>
     <button type="button" class="vb vb-down" data-act="vote" data-dir="-1" aria-pressed="<%= v_ === -1 ? 'true' : 'false' %>" aria-label="<%- p.mine ? t('feed.p.no_downvote') : t('feed.p.downvote') %>"<%= p.mine ? ' disabled' : '' %>><%- fx.icon('down') %></button>
+    <%# 2026-10-12: 💸 boost upvote (engagement.js, public/js/post-boost.js) - an upvote that is also a tip; hidden until the script sees boosts are on %>
+    <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]' && !p.deleted && !p.hidden) { %><button type="button" class="vb vb-boost" data-act="boost" data-to="<%= p.author.username %>" data-name="<%= p.author.display %>" aria-haspopup="dialog" title="<%- t('feed.p.boost_title', { name: p.author.display }) %>" aria-label="<%- t('feed.p.boost_title', { name: p.author.display }) %>"><span aria-hidden="true">💸</span></button><% } %>
   </div>
   <div class="fp-main">
     <div class="fp-meta">
@@ -116,6 +118,7 @@
       <%# 1.99pv: 💸 post tips (posttips.js, public/js/post-tip.js) - Tip for signed-in viewers who can tip it; the tally for everyone %>
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]' && !p.deleted && !p.hidden) { %><button type="button" class="act fp-tipb" data-act="tip" data-to="<%= p.author.username %>" data-name="<%= p.author.display %>" aria-haspopup="dialog" title="<%- t('feed.p.tip_title', { name: p.author.display }) %>" aria-label="<%- t('feed.p.tip_title', { name: p.author.display }) %>"><span aria-hidden="true">💸</span><span class="lbl"><%- t('feed.p.tip') %></span></button><% } %>
       <% if (p.tips && p.tips.n) { %><span class="fp-tips" title="<%- t('feed.p.tips_title', { count: p.tips.n, n: p.tips.n.toLocaleString('en-US'), pat: Number(p.tips.total).toLocaleString('en-US') }) %>"><span class="fp-tips-i" aria-hidden="true">💸</span><span class="fp-tips-n"> <%- t('feed.p.tips_n', { count: p.tips.n, n: p.tips.n.toLocaleString('en-US') }) %> · </span><b><%= fx.num(p.tips.total) %></b> PAT</span><% } %>
+      <% if (p.boosts && p.boosts.n) { %><span class="fp-boosts" title="<%- t('feed.p.boosts_title', { count: p.boosts.n, n: p.boosts.n.toLocaleString('en-US'), pat: Number(p.boosts.total).toLocaleString('en-US') }) %>"><span aria-hidden="true">💸</span> <b><%= fx.num(p.boosts.total) %></b> <%- t('feed.p.boosted') %></span><% } %>
       <% if (signed) { %>
         <details class="more">
           <summary class="act" aria-label="<%- t('feed.more_aria') %>" title="<%- t('feed.more') %>"><%- fx.icon('more') %></summary>

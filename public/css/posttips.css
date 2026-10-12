@@ -17,3 +17,13 @@
 .ptip-sum { margin: 0; font-size: 16px; font-weight: 700; color: #fff; }
 .ptip-q { font-style: italic; overflow-wrap: anywhere; }
 .ptip [hidden] { display: none !important; }
+
+/* 2026-10-12: 💸 boost upvotes (engagement.js / public/js/post-boost.js) - the small 💸 under the vote arrows, shown only while
+   boosts are on (post-boost.js adds html.boost-on), and the card's "💸 X boosted" total */
+.vb-boost { display: none; font-size: 14px; line-height: 1; width: 32px; height: 26px; }
+html.boost-on .vb-boost { display: grid; }
+.vb-boost:hover, .vb-boost:focus-visible { background: var(--fp-hover, #232323); }
+.fp-boosts { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px; color: var(--fp-dim2, #8a8a8a); font-size: 12.5px; white-space: nowrap;
+             font-variant-numeric: tabular-nums; }
+.fp-boosts b { color: var(--ds-gold-text, #e8c25a); font-weight: 700; }
+html.boost-on .fp-vote .vb-up { -webkit-touch-callout: none; user-select: none; }

@@ -50,14 +50,15 @@ function ready() {
 }
 
 /** Tip totals for many posts at once: Map id -> {n, total} (posts with no tips are left out). */
-async function forPosts(ids, { kind = null } = {}) {
+async function forPosts(ids, { kind = null, notKind = null } = {}) {
   const list = [...new Set((ids || []).map(String))].filter(Boolean);
   const out = new Map();
   if (!list.length) return out;
   await ready();
+  // 2026-10-12: notKind - the card's 💸 tips tally leaves the boost upvotes out (they have their own "boosted" total)
   const rows = await getQuery(`SELECT post_id, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total FROM post_tips
-                               WHERE post_id IN (${list.map(() => "?").join(",")})${kind ? " AND kind = ?" : ""} GROUP BY post_id`,
-                              kind ? [...list, kind] : list);
+                               WHERE post_id IN (${list.map(() => "?").join(",")})${kind ? " AND kind = ?" : ""}${notKind ? " AND kind != ?" : ""} GROUP BY post_id`,
+                              [...list, ...(kind ? [kind] : []), ...(notKind ? [notKind] : [])]);
   for (const r of rows) out.set(r.post_id, { n: r.n, total: r.total });
   return out;
 }
@@ -115,7 +116,7 @@ async function tip({ sender, postId, amount, note, key = null, kind = "post", no
                    [post.id, r.senderId || sender.userId, r.recipientId || author.userId, r.amount, clean, String(kind || "post").slice(0, 24),
                     r.sentTx || null, r.recvTx || null, key, Date.now()]);
   } catch (e) { console.error("[posttips] tag:", e.message); }
-  return { ok: true, amount: r.amount, balance: r.balance, tips: await forPost(post.id) };
+  return { ok: true, amount: r.amount, balance: r.balance, tips: await forPost(post.id, { notKind: "boost" }) };
 }
 
 function register(app, { addUser, idemBegin }) {

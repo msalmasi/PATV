@@ -162,7 +162,10 @@ function activePat(rows, t, halfMin = 60) {
 /** E-3: can this pad have a room vault? A registered Camfrog pad (Pepe's Pad and PepeLab included, doc 6.4). */
 async function vaultEligible(roomId) {
   const rooms = require("./rooms");
-  if (rooms.platformOf(roomId) !== "camfrog") return false;
+  const p = rooms.platformOf(roomId);
+  // 2026-10-12: a profile pad (user:<id>) has a vault once Pepe's profile vaults are on (roomvaults.profileVaultsOn)
+  if (p === "profile") return require("./roomvaults").profileVaultsOn() && !!(await rooms.get(String(roomId || "")));
+  if (p !== "camfrog") return false;
   return !!(await rooms.get(String(roomId || "")));
 }
 

@@ -1594,6 +1594,15 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex)"], ad
         social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })
           .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
+        // 2026-10-12: 💰 the profile's vault once profile vaults are on (roomvaults.js; Pepe's econ_profile_vaults)
+        profileVault: await (async () => {
+          const RV = require("./roomvaults");
+          await RV.init();
+          if (!RV.profileVaultsOn()) return null;
+          const P = await require("./rooms").ensureProfile(user.userId);
+          if (!P) return null;
+          return { slug: P.slug, card: await RV.card(P.id, preview ? null : req.user, {}) };
+        })().catch((e) => { console.error("profile vault:", e.message); return null; }),
         viewerIsAdmin: isAdmin && !preview,      // 1.99ma: the ⋯ menu's "🎁 Comp…" (admins: /admin/comps?user=)
         // 1.99qp: ⭐ PATV Creators on the profile - the Creator chip + Subscribe (their creator page), the owner's dashboard /
         // "Become a creator" link; nothing while the feature is off
@@ -1955,6 +1964,7 @@ app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
 
 // 1.99pv: 💸 tips on feed posts - the same tip path, tagged with the post (posttips.js)
 require("./posttips").register(app, { addUser, idemBegin });
+require("./engagement").register(app, { addUser, idemBegin, isBotToken });   // 2026-10-12: posts count as activity (engagement) + 💸 boost upvotes
 
 // The other person a bot-moved PAT row was with (duel opponent, loan lender/borrower, wager
 // opponent), sent by Pepe as a username or Camfrog name. Stored as their userId in

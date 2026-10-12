@@ -340,6 +340,13 @@
     </section>
   <% } %>
 
+  <%# 2026-10-12: 💰 the profile's vault (profile vaults on: roomvaults.card on user:<id>) %>
+  <% if (typeof profileVault !== 'undefined' && profileVault) { %>
+    <%- include('partials/profile-vault-card', { rv: profileVault.card, slug: profileVault.slug, name: displayname || usernameProfile, uname: usernameProfile,
+                 signed: !!username, isMe: !!(username && username === usernameProfile) && !previewing, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %>
+    <script src="/public/js/pad-vault.js?v=2" defer></script>
+  <% } %>
+
   <% if (previewing) { %>
     <div class="pf-bar preview" role="status"><span>👁 <%- t('profile.bar.previewing') %></span>
       <span class="btns"><a class="btn" href="<%= tabHref(active === 'posts' ? '' : active) %>"><%- t('profile.bar.back') %></a><a class="btn" href="<%= base %>/edit#layout"><%- t('profile.bar.edit_layout') %></a></span></div>

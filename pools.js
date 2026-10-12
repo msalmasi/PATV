@@ -38,7 +38,8 @@ const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const KEY_RE = /^[A-Za-z0-9_.:@\-]{6,160}$/;
-const POOL_RE = /^(?:[a-z][a-z0-9_]{0,31}|room:[A-Za-z0-9_.\-]{1,80})$/;
+// 2026-10-12: + profile pad vaults (room:user:<userId>, pepe_padtopup's profile vaults)
+const POOL_RE = /^(?:[a-z][a-z0-9_]{0,31}|room:(?:user:)?[A-Za-z0-9_.\-]{1,80})$/;
 const NOT_POOLS = new Set(["jackpot", "casino", "house"]);        // the House is jackpot_rakes; "casino" was merged into it
 const MAX_LEGS = 24;
 const INBOX_KEEP_MS = 30 * 86400000;

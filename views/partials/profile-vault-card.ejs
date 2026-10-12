@@ -1,0 +1,98 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 2026-10-12 (the user): 💰 a PROFILE's vault (roomvaults.card on the profile pad user:<id>; Pepe's pepe_padtopup.py,
+    econ_profile_vaults). Shown on the profile once profile vaults are on. What fills it (others' spending on this profile -
+    PATV Creators' platform cut, boosts, donations - and the activity top-up pool, weighted by post engagement), how it pays
+    out (the owner from their posts' engagement, capped at 25% of what others spent here; the people who engaged with their
+    posts), the last week, recent donations and a public Donate form (public/js/pad-vault.js: the same keyed, confirmed
+    donation as a pad's vault - the ids rvDonate / rvAmt / rvAnon / rvDonateMsg are what that script binds to).
+    Locals: rv (the card), slug (the profile pad's slug), name (display name), uname (username), signed, isMe, num. %>
+<% const live_ = !!rv.live, rc_ = rv.recipe || {}, payLive_ = !!rc_.live;
+   const cap_ = rv.cap || 50000000, head_ = Math.max(0, cap_ - rv.balance);
+   const wk_ = rv.week, min_ = rv.deposit_min || 1000, vw_ = rv.viewer;
+   const when_ = (ts) => (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime'); %>
+<section class="card pv-card" id="vault" aria-labelledby="pvH" data-slug="<%= slug %>">
+  <h2 id="pvH"><span><%- t('profile.vault.h') %></span>
+    <span class="ds-chip <%= live_ ? 'ok' : 'mute' %>"><%- live_ ? t('pad.vault.filling') : t('pad.vault.not_open') %></span></h2>
+  <p class="pv-what"><%- isMe ? t('profile.vault.what_me') : t('profile.vault.what', { name: t.esc(name) }) %></p>
+
+  <div class="ds-stats">
+    <div class="ds-stat"><span><%- t('pad.vault.balance') %></span><b class="gold"><%= num(rv.balance) %></b><small><%- t('pad.vault.cap_of', { cap: num(cap_) }) %></small></div>
+    <div class="ds-stat"><span><%- t('profile.vault.inflow') %></span><b class="up">+<%= num(rv.inflow7) %></b><small><%- t('profile.vault.inflow_sub') %></small></div>
+    <div class="ds-stat"><span><%- t('profile.vault.topup') %></span><b>+<%= num(rv.topup7) %></b><small><%- t('profile.vault.topup_sub') %></small></div>
+    <div class="ds-stat"><span><%- t('pad.vault.deposits') %></span><b><%= num(rv.deposits7) %></b><small><%- t('pad.vault.deposits_sub') %></small></div>
+  </div>
+
+  <div class="pv-how">
+    <h3><%- t('pad.vault.how_h') %> <span class="ds-chip <%= payLive_ ? 'ok' : 'warn' %>"><%- payLive_ ? t('pad.vault.live') : t('pad.vault.soon') %></span></h3>
+    <ul class="pv-split">
+      <li><span class="ds-ic" aria-hidden="true">✍️</span><span><%- t('profile.vault.s_owner', { name: t.esc(name) }) %></span></li>
+      <li><span class="ds-ic" aria-hidden="true">💬</span><span><%- t('profile.vault.s_people') %></span></li>
+      <li><span class="ds-ic" aria-hidden="true">🎁</span><span><%- t('profile.vault.s_topup') %></span></li>
+    </ul>
+    <% if (payLive_ && wk_) { %>
+      <p class="ds-meta"><%- t('pad.vault.week', { paid: num(wk_.paid), stays: num(wk_.stays) }) %> · <%- t('profile.vault.week_split', { owner: num(wk_.owner), people: num(wk_.people) }) %></p>
+    <% } else if (!payLive_) { %>
+      <p class="ds-meta"><%- t('pad.vault.soon_note') %></p>
+    <% } %>
+  </div>
+
+  <% if (rv.donors && rv.donors.length) { %>
+  <div>
+    <h3><%- t('pad.vault.donors_h') %></h3>
+    <ul class="pv-hist">
+      <% rv.donors.slice(0, 5).forEach((d) => { %>
+        <li><span><b><% if (d.who && !d.anon) { %><%= d.who %><% } else { %><%- t('pad.vault.anon') %><% } %></b> <small class="ds-fine"><%- d.ts ? when_(d.ts) : '' %></small></span><span class="amt">+<%= num(d.amount) %></span></li>
+      <% }) %>
+    </ul>
+  </div>
+  <% } %>
+
+  <div class="pv-donate" id="vault-donate">
+    <h3><%- t('profile.vault.donate_h', { name: t.esc(name) }) %></h3>
+    <% if (!signed) { %>
+      <a class="ds-btn gold sm" href="/login?next=<%= encodeURIComponent('/u/' + uname + '#vault') %>"><span class="ds-ic" aria-hidden="true">🪙</span><%- t('pad.vault.donate_signin') %></a>
+    <% } else if (!live_) { %>
+      <p class="ds-note"><span class="ds-ic" aria-hidden="true">⏳</span><span><%- t('pad.vault.donate_closed') %></span></p>
+    <% } else if (isMe) { %>
+      <p class="ds-meta"><%- t('profile.vault.donate_self') %></p>
+    <% } else if (!head_) { %>
+      <p class="ds-note ok"><span class="ds-ic" aria-hidden="true">🎉</span><span><%- t('pad.vault.full') %></span></p>
+    <% } else { %>
+    <form class="ds-form" id="rvDonate" data-slug="<%= slug %>" autocomplete="off" novalidate>
+      <div class="ds-field">
+        <label class="ds-label" for="rvAmt"><%- t('pad.vault.amount') %></label>
+        <span class="ds-in-group"><input class="ds-in" id="rvAmt" name="amount" inputmode="numeric" placeholder="<%= num(min_ * 5) %>"
+               data-min="<%= min_ %>" data-room="<%= head_ %>" data-bal="<%= vw_ ? vw_.balance : 0 %>" aria-describedby="rvAmtHint"><span class="ds-in-addon">PAT</span></span>
+        <p class="ds-hint" id="rvAmtHint"><%- t('pad.vault.donate_hint', { bal: num(vw_ ? vw_.balance : 0), min: num(min_), room: num(head_) }) %></p>
+      </div>
+      <div class="ds-row pv-quick">
+        <% [1000, 5000, 25000].filter((q) => q >= min_ && q <= head_).forEach((q) => { %><button type="button" class="ds-quick" data-amt="<%= q %>"><%= num(q) %></button><% }) %>
+      </div>
+      <label class="ds-check"><input type="checkbox" name="anon" id="rvAnon"> <%- t('pad.vault.anon_label') %></label>
+      <div class="ds-actions"><button type="submit" class="ds-btn gold"><span class="ds-ic" aria-hidden="true">🪙</span><span class="lbl"><%- t('pad.vault.donate_go') %></span></button></div>
+      <p class="pv-msg rv-msg" id="rvDonateMsg" role="status" aria-live="polite"></p>
+    </form>
+    <% } %>
+  </div>
+</section>
+<style>
+  .pv-card { display: grid; gap: var(--ds-sp-3, 12px); }
+  .pv-card > h2 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .pv-card h3 { margin: 0 0 6px; font: 700 15px/1.35 var(--ds-font); color: var(--ds-text-strong); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .pv-card .pv-what { margin: 0; color: var(--ds-text-2); font-size: 13.5px; line-height: 1.55; }
+  .pv-card .pv-how { display: grid; gap: 8px; padding: var(--ds-sp-3, 12px); border-radius: var(--ds-r-md, 10px); background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); }
+  .pv-card .pv-how > p { margin: 0; }
+  .pv-card .pv-split { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .pv-card .pv-split li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 13.5px; line-height: 1.45; color: var(--ds-text); }
+  .pv-card .pv-hist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; color: var(--ds-text-2); }
+  .pv-card .pv-hist li { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--ds-line-soft); padding: 4px 0; min-width: 0; }
+  .pv-card .pv-hist li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .pv-card .pv-hist .amt { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ds-gold-text); font-weight: 700; }
+  .pv-card .pv-donate { display: grid; gap: 8px; border-top: 1px solid var(--ds-line-soft); padding-top: var(--ds-sp-3, 12px); }
+  .pv-card .pv-donate .ds-form { max-width: 460px; }
+  .pv-card .pv-donate .ds-in-group { display: flex; }
+  .pv-card .pv-quick { flex-wrap: wrap; gap: 6px; }
+  .pv-card .rv-msg { min-height: 1em; font-size: 13px; color: var(--ds-green-2); margin: 0; overflow-wrap: anywhere; }
+  .pv-card .rv-msg.err { color: var(--ds-danger); }
+  .pv-card .rv-msg.ask { color: var(--ds-gold-text); }
+</style>

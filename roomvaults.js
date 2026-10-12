@@ -24,6 +24,13 @@
 // the owner's presence and the room's active days, the cap; never names}, and the body `recipe` {on, topup, frozen, cfg}.
 // Stored in room_vault_state.recipe / room_vault_meta.recipe for the pad card and the owner panel's Owner share card.
 //
+// PROFILE VAULTS (2026-10-12, the user; Pepe's pepe_padtopup.py, flag econ_profile_vaults): a profile pad (user:<id>) has a
+// vault too once Pepe reports `profile_vaults` on the sync. It is filled by others' spending on that profile (PATV Creators'
+// platform cut for the creator's own profile - creators.js routeCutInTx - boosts and other profile-scoped room flows,
+// donations) and by the activity top-up pool, and pays out through the recipe (the owner's share from their posts'
+// engagement, capped at 25% of organic inflow, self-spend excluded; the participants' share to the people who engaged).
+// profileVaultsOn() is the cached switch (boosts.vaultEligible, creators.js, the profile page's card).
+//
 // "Inflow" is what the room's own activity routed in (Pepe's room flows + the website's room halves). Deposits and the
 // one-time escrow migration are shown on their own and NEVER count as inflow (doc 6.4).
 //
@@ -40,6 +47,9 @@ const RATE_EVERY_MS = 7 * 24 * 3600 * 1000;
 const DAY_MS = 24 * 3600 * 1000;
 let clock = () => Date.now();
 const now = () => clock();
+let PROFILE_ON = false;          // Pepe's last sync: profile pads have vaults (econ_profile_vaults)
+/** Profile pads (user:<id>) have vaults now (Pepe's switch, cached from his last sync). */
+const profileVaultsOn = () => PROFILE_ON === true;
 
 class Refuse extends Error {
   constructor(status, message) { super(message); this.status = status; this.refuse = true; }
@@ -58,6 +68,10 @@ function init() {
       const cols = (await getQuery("SELECT name FROM pragma_table_info('room_vault_state')")).map((c) => c.name);
       if (!cols.includes("recipe")) await runQuery("ALTER TABLE room_vault_state ADD COLUMN recipe TEXT");   // E-4
       if (!cols.includes("donors")) await runQuery("ALTER TABLE room_vault_state ADD COLUMN donors TEXT");   // 1.99sn
+      try {
+        const pv = (await getQuery("SELECT value FROM room_vault_meta WHERE key = 'profile_vaults'"))[0];
+        PROFILE_ON = !!pv && JSON.parse(pv.value) === true;
+      } catch (e) { PROFILE_ON = false; }
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -100,7 +114,7 @@ function cleanDonors(d) {
 
 // E-4: one payout day as Pepe reports it (numbers + short reasons only)
 const EP_NUM = ["B", "balance", "owner", "gang", "streamers", "people", "people_n", "streamers_n", "games_allow", "games_used_prev",
-                "paid", "stays", "cap", "i7", "owner_present", "active_days", "convoy", "topup"];
+                "paid", "stays", "cap", "i7", "owner_present", "active_days", "convoy", "topup", "topup_pool", "engagement"];
 function cleanRecipe(r) {
   if (!r || typeof r !== "object") return null;
   const epochs = (Array.isArray(r.epochs) ? r.epochs : []).slice(-7).filter((e) => e && DAY_RE.test(String(e.day || ""))).map((e) => {
@@ -121,7 +135,12 @@ function cleanRecipeMeta(m) {
   for (const [k, v] of Object.entries(m.cfg && typeof m.cfg === "object" ? m.cfg : {}).slice(0, 20)) {
     if (/^[a-z0-9_]{1,20}$/.test(k) && Number.isFinite(Number(v))) cfg[k] = Number(v);
   }
-  return { on: m.on === true, topup: m.topup === true, frozen: m.frozen === true, cfg };
+  // 2026-10-12: + the activity top-up pool (activity_pads: the "activity" budget funds the pad top-up; global activity
+  // rewards off) and its last day's numbers, and whether profile pads have vaults
+  const pool = m.pool && typeof m.pool === "object" ? { day: DAY_RE.test(String(m.pool.day || "")) ? m.pool.day : null, pool: Math.max(0, int(m.pool.pool)),
+    paid: Math.max(0, int(m.pool.paid)), pads: Math.max(0, int(m.pool.pads)) } : null;
+  return { on: m.on === true, topup: m.topup === true, frozen: m.frozen === true, cfg, activity_pads: m.activity_pads === true,
+           profile_vaults: m.profile_vaults === true, activity_rewards: m.activity_rewards === true, pool };
 }
 
 async function metaGet() {
@@ -156,7 +175,8 @@ async function sync(body) {
                       rc ? JSON.stringify(rc) : null, dn ? JSON.stringify(dn) : null]);
     }
     await metaSet({ on: b.on === true, cap: int(b.cap) || null, total: Math.max(0, int(b.total)), synced: t,
-                    deposit_min: int(b.deposit_min) || null, recipe: cleanRecipeMeta(b.recipe) });
+                    deposit_min: int(b.deposit_min) || null, recipe: cleanRecipeMeta(b.recipe), profile_vaults: b.profile_vaults === true });
+    PROFILE_ON = b.profile_vaults === true;
   });
   return { settings: await settingsMap() };
 }
@@ -207,14 +227,17 @@ async function card(roomId, user, opts = {}) {
     const u = (await getQuery("SELECT points_balance, camfrogUsername FROM users WHERE userId = ?", [user.userId]))[0] || {};
     viewer = { balance: Math.max(0, int(u.points_balance)), linked: !!u.camfrogUsername };
   }
+  const isProf = require("./rooms").isProfile(id);
   return {
-    live: meta.on === true, synced: meta.synced || null, cap: meta.cap || 50000000, deposit_min: meta.deposit_min || 1000,
+    profile: isProf,
+    live: meta.on === true && (!isProf || profileVaultsOn()), synced: meta.synced || null, cap: meta.cap || 50000000, deposit_min: meta.deposit_min || 1000,
     balance: st ? int(st.balance) : 0,
     inflow7: sum("in"), deposits7: sum("dep"), migrated7: sum("mig"), paid7: sum("out"), overflow7: sum("ovf"), launch7: sum("lp"),
     days: keys.map((k) => ({ day: k, in: int(days[k].in), dep: int(days[k].dep), mig: int(days[k].mig), out: int(days[k].out), top: int(days[k].top) })),
     topup7: sum("top"),
     // E-4: the payout recipe (Pepe's last 7 payout days) and whether it's live
-    recipe: { live: !!(meta.recipe && meta.recipe.on), topup: !!(meta.recipe && meta.recipe.topup), frozen: !!(meta.recipe && meta.recipe.frozen),
+    recipe: { live: !!(meta.recipe && meta.recipe.on), topup: !!(meta.recipe && (meta.recipe.topup || meta.recipe.activity_pads)), frozen: !!(meta.recipe && meta.recipe.frozen),
+              activity_pads: !!(meta.recipe && meta.recipe.activity_pads),
               cfg: (meta.recipe && meta.recipe.cfg) || {}, epochs: (recipe && recipe.epochs) || [], games: (recipe && recipe.games) || null },
     history: history.slice(0, 8),
     donors: (Array.isArray(donors) ? donors : []).slice(0, 8), split, week, viewer,
@@ -224,13 +247,20 @@ async function card(roomId, user, opts = {}) {
   };
 }
 
+/** A Camfrog pad always has a vault; a profile pad once Pepe's profile vaults are on. */
+function hasVault(roomId) {
+  const rooms = require("./rooms");
+  const p = rooms.platformOf(roomId);
+  return p === "camfrog" || (p === "profile" && profileVaultsOn());
+}
+
 /** The owner (or staff) sets the payout rate: 2-15%, whole or half percent, once per 7 days (staff: any time). */
 async function setRate(roomId, user, rate) {
   await init();
   const rooms = require("./rooms");
   const R = await rooms.get(String(roomId || ""));
   if (!R) throw new Refuse(404, "No such pad.");
-  if (rooms.platformOf(R.id) !== "camfrog") throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
+  if (!hasVault(R.id)) throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
   if (!(await rooms.canManage(user, R.id))) throw new Refuse(403, "Only the pad's owner can set its payout rate.");
   const r = Math.round(Number(rate) * 2) / 2;
   if (!Number.isFinite(r) || r < RATE.min || r > RATE.max) throw new Refuse(400, `Pick a rate between ${RATE.min}% and ${RATE.max}%.`);
@@ -262,7 +292,7 @@ async function donate(roomId, user, { amount, idem, anon } = {}) {
   const rooms = require("./rooms");
   const R = await rooms.get(String(roomId || ""));
   if (!R) throw new Refuse(404, "No such pad.");
-  if (rooms.platformOf(R.id) !== "camfrog") throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
+  if (!hasVault(R.id)) throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
   if (!IDEM_RE.test(String(idem || ""))) throw new Refuse(400, "Reload the page and try again.");
   const a = typeof amount === "number" ? amount : /^\s*\d+\s*$/.test(String(amount || "")) ? parseInt(amount, 10) : NaN;
   const c = await card(R.id, user, {});
@@ -325,6 +355,17 @@ function register(app, { addUser, isBotToken }) {
       res.json({ ok: true, vault: await card(R.id, req.user, { canManage: manage, staff: rooms.isStaff(req.user) }) });
     } catch (e) { fail(res, e); }
   });
+  // 2026-10-12: /admin/economy's 🎁 Activity -> pad vaults card (admin-activitypads.js) - Pepe's switches as he last synced them
+  app.get("/api/admin/econ/activity-pads", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ error: "Admins only." });
+    try {
+      const m = await metaGet();
+      const r = m.recipe || {};
+      res.json({ ok: true, synced: m.synced || null, vaults_on: m.on === true, recipe_on: r.on === true, activity_pads: r.activity_pads === true,
+                 activity_rewards: r.activity_rewards === true, profile_vaults: m.profile_vaults === true, pool: r.pool || null });
+    } catch (e) { fail(res, e); }
+  });
   app.post("/api/rooms/:slug/vault/donate", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -350,5 +391,6 @@ function register(app, { addUser, isBotToken }) {
   });
 }
 
-module.exports = { init, sync, settingsMap, card, setRate, donate, overview, register, RATE, Refuse, cleanRecipe,
+module.exports = {
+  profileVaultsOn, hasVault, _setProfileVaults: (v) => { PROFILE_ON = !!v; }, init, sync, settingsMap, card, setRate, donate, overview, register, RATE, Refuse, cleanRecipe,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };

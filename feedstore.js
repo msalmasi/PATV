@@ -648,7 +648,10 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   try { TG = await TAGS().tagsFor(ids); } catch (e) { TG = new Map(); }
   // 1.99pv: 💸 post tips (posttips.js) - {n, total} per post, one grouped query
   let TP = new Map();
-  if (!_inner) { try { TP = await require("./posttips").forPosts(ids); } catch (e) { TP = new Map(); } }
+  if (!_inner) { try { TP = await require("./posttips").forPosts(ids, { notKind: "boost" }); } catch (e) { TP = new Map(); } }
+  // 2026-10-12: 💸 boost upvotes (engagement.js) - {n, total} per post, shown as the post's boosted total
+  let BO = new Map();
+  if (!_inner) { try { BO = await require("./posttips").forPosts(ids, { kind: "boost" }); } catch (e) { BO = new Map(); } }
   // 1.99ir: pad flair (padflair.js) - in a pad's own feed (ctxRoom), and on a post's page for its home pad
   const FL = new Map();
   if (!_inner) {
@@ -729,6 +732,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       tags: TG.get(r.id) || [],                                  // 1.99iq: content tags (feedtags.js)
       flair: FL.get(r.id) || null,                               // 1.99ir: the author's flair in this pad (padflair.js)
       tips: TP.get(r.id) || null,                                // 1.99pv: 💸 post tips {n, total} (posttips.js)
+      boosts: BO.get(r.id) || null,                              // 2026-10-12: 💸 boost upvotes {n, total} (engagement.js)
     };
     out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
     return out;

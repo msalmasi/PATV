@@ -37,7 +37,8 @@
 //   RELEASE (hourly job): 7 days (hold_days) after the purchase, unless frozen by a dispute or the creator is paused /
 //   banned: settleInTx pays the creator's 80% to their wallet, keyed "crel:<ledger id>"; the 20% cut is booked in the same
 //   transaction as reserve claims Pepe credits: premium's routing row "creators" (default Fort Knox 50 / room vault 50 of
-//   the cut = FK 10 + vault 10 of the price); a profile, the creator's own pad or the fan's own pad: all Fort Knox; a
+//   the cut = FK 10 + vault 10 of the price); a profile, the creator's own pad or the fan's own pad: all Fort Knox (2026-10-12:
+//   with profile vaults on, the creator's OWN profile: the whole cut into that profile's vault); a
 //   third-party Camfrog pad: royalty_pct of the room share (D3: 5 of the 10) accrues to the pad owner (royalties.js) and
 //   sits in the Reserve until the weekly release. Released creator earnings are capped at release_cap_week per creator per
 //   week (Monday 00:00 UTC); the rest stays held, nothing is lost.
@@ -1042,6 +1043,18 @@ async function routeCutInTx(cut, { roomId, creatorId, fanId, ref, base }) {
   const rooms = require("./rooms");
   const routes = (P.config().routes || {}).creators || [["fortknox", 50], ["room", 50]];
   const parts = P.splitRoute(routes, cut);
+  // 2026-10-12 (the user): a creator's OWN PROFILE has a vault once profile vaults are on - the whole platform cut of a
+  // purchase made there goes into it (it pays out through the profile recipe) instead of Fort Knox. Never the fan's own
+  // profile, never the creator buying from themselves or their alt (the fan's dup_of / shared device -> Fort Knox).
+  if (roomId && rooms.isProfile(roomId) && roomId === rooms.profileId(creatorId) && fanId && fanId !== creatorId && funding.roomVaultsLive()
+      && (await require("./boosts").vaultEligible(roomId).catch(() => false))) {
+    const alt = (await require("./engagement").altPairs([fanId, creatorId]).catch(() => new Set())).has(fanId + "|" + creatorId);
+    if (!alt) {
+      await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
+                     [uuidv4(), `room:creators:${roomId}`, fanId, "creators cut: profile vault", -cut]);
+      return [{ flow: `room:creators:${roomId}`, dest: "room", amount: cut }];
+    }
+  }
   const R = roomId && !rooms.isProfile(roomId) ? rooms.getCached(roomId) : null;
   const ownerId = R && R.owner && R.owner_kind === "user" ? R.owner.userId : (R && R.owner ? R.owner.userId : null);
   const self = !R || !ownerId || ownerId === creatorId || ownerId === fanId;

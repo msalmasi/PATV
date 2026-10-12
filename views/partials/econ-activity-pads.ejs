@@ -1,0 +1,41 @@
+<%# 2026-10-12 (the user): incentives reward activity THROUGH pad vaults. Pepe's pepe_padtopup.py:
+    * activity -> pads (econ_activity_pads): the incentive group "activity" funds the pad TOP-UP POOL instead of the global
+      activity rewards (they stop in the same switch - nothing is paid twice). Each day the pool is shared among pads by the
+      anti-farm-checked activity each generated (the recipe's participants + streamers + post engagement), at most 1:1 of
+      that pad's own payout.
+    * profile vaults (econ_profile_vaults): profile pads (user:<id>) get vaults and payouts.
+    Both are !econ commands Pepe runs with his own checks, through the same password step-up as the Protocol pools card
+    (website action econ.cmd). public/js/admin-activitypads.js; status from GET /api/admin/econ/activity-pads. %>
+<section class="adm-card" id="activitypads" aria-labelledby="apT">
+  <h2 id="apT"><span class="ds-ic" aria-hidden="true">🎁</span> Activity → pad vaults <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">One switch: the incentive budget's <b>activity</b> group stops paying players directly and instead tops up pad vaults. Each day it is shared among pads by the activity they generated (chat and mic that passed the anti-AFK checks, verified watch-minutes, and engagement on their posts from real, aged accounts), at most 1:1 of what that pad paid out itself. Pads then pay their people through the recipe. Preview first: it is a dry run of yesterday.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="apAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">
+      <div class="ds-stats ap-stats" id="apStats">
+        <div class="ds-stat"><span>Activity → pads</span><b id="apState">…</b><small id="apStateSub">loading</small></div>
+        <div class="ds-stat"><span>Global activity rewards</span><b id="apGlobal">…</b><small>paid to players directly</small></div>
+        <div class="ds-stat"><span>Profile vaults</span><b id="apProfile">…</b><small>profile pads have vaults</small></div>
+        <div class="ds-stat"><span>Last top-up pool</span><b id="apPool">—</b><small id="apPoolSub">no day yet</small></div>
+      </div>
+      <div class="adm-actions ap-actions">
+        <button type="button" class="adm-btn ghost" id="apPreview">Preview (dry run)</button>
+        <button type="button" class="adm-btn" id="apToggle" disabled>Turn on</button>
+        <button type="button" class="adm-btn ghost" id="apProfToggle" disabled>Turn profile vaults on</button>
+      </div>
+      <div id="apConfirm" class="ap-confirm" hidden>
+        <p class="adm-help" id="apWhat"></p>
+        <label for="apPw" class="adm-help">Confirm with your account password</label>
+        <input type="password" id="apPw" maxlength="200" autocomplete="current-password">
+        <div class="adm-actions"><button type="button" id="apYes">Send it</button><button type="button" id="apNo" class="adm-btn ghost">Cancel</button></div>
+      </div>
+      <p class="adm-msg ap-out" id="apMsg" role="status" aria-live="polite"></p>
+    </div>
+    <style>
+      .ap-stats { margin: var(--ds-sp-2, 8px) 0; }
+      .ap-actions { flex-wrap: wrap; }
+      .ap-out { white-space: pre-wrap; overflow-wrap: anywhere; }
+      .ap-confirm input { width: 100%; max-width: 320px; }
+    </style>
+    <script src="/public/js/admin-activitypads.js?v=1" defer></script>
+  <% } %>
+</section>

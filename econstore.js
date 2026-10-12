@@ -223,7 +223,9 @@ async function adminView() {
 }
 
 // ── /admin/economy edits: website actions Pepe runs (econ.routes / econ.cmd) with a password step-up ──
-const ECON_CMDS = new Set(["get", "set", "mint", "fund", "grant", "fedloan", "flash", "fedseed", "monetary", "mints", "check", "status"]);
+// 2026-10-12: + activitypads / profilevaults (the 🎁 Activity -> pad vaults card)
+const ECON_CMDS = new Set(["get", "set", "mint", "fund", "grant", "fedloan", "flash", "fedseed", "monetary", "mints", "check", "status",
+                           "activitypads", "profilevaults"]);
 async function requestEdit(user, body, ip) {
   const ctl = require("./pepecontrol");
   const bcrypt = require("bcrypt");
@@ -246,7 +248,7 @@ async function requestEdit(user, body, ip) {
     label = `Routing ${flow} -> ${shares === null ? "default" : shares.map((s) => s[0] + " " + s[1] + "%").join(", ")}`;
   } else if (body.op === "cmd") {
     const words = String(body.text || "").trim().replace(/^!?econ\s+/i, "").split(/\s+/).filter(Boolean).slice(0, 40).map((w) => w.slice(0, 120));
-    if (!words.length || !ECON_CMDS.has(words[0].toLowerCase())) throw fail(400, "Only !econ get|set|mint|fund|fedloan|flash|fedseed|monetary|mints|check from here.");
+    if (!words.length || !ECON_CMDS.has(words[0].toLowerCase())) throw fail(400, "Only !econ get|set|mint|fund|fedloan|flash|fedseed|monetary|mints|check|activitypads|profilevaults from here.");
     kind = "econ.cmd";
     args = words;
     label = "!econ " + words.join(" ");
