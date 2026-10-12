@@ -8,7 +8,7 @@
     (website action econ.cmd). public/js/admin-activitypads.js; status from GET /api/admin/econ/activity-pads. %>
 <section class="adm-card" id="activitypads" aria-labelledby="apT">
   <h2 id="apT"><span class="ds-ic" aria-hidden="true">🎁</span> Activity → pad vaults <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">One switch: the incentive budget's <b>activity</b> group stops paying players directly and instead tops up pad vaults. Each day it is shared among pads by the activity they generated (chat and mic that passed the anti-AFK checks, verified watch-minutes, and engagement on their posts from real, aged accounts), at most 1:1 of what that pad paid out itself. Pads then pay their people through the recipe. Preview first: it is a dry run of yesterday.</p>
+  <p class="adm-help">One switch: the incentive budget's <b>activity</b> group stops paying players directly and instead tops up pad vaults. Each day it is shared among pads by the activity they generated (chat and mic that passed the anti-AFK checks, verified watch-minutes, and engagement on their posts from real, aged accounts), at most 1:1 of what that pad paid out itself. Pads then pay their people through the recipe. Preview first: it is a dry run of yesterday. This is the only pad top-up: the old "leftover" room reward top-up (<code>!econ recipe topup</code>) was retired on 2026-10-12.</p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="apAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">
       <div class="ds-stats ap-stats" id="apStats">

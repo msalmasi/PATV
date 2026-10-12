@@ -4697,7 +4697,7 @@
   "economy.map.f_heist": "Heist vault floors: Fort Knox and the Casino vault kept at 2M or more",
   "economy.map.f_launch": "Launch grants that seed new pads' vaults",
   "economy.map.f_activity": "Activity rewards for people who chat and get on the mic",
-  "economy.map.f_topup": "Pad top-ups that match what each pad vault pays out",
+  "economy.map.f_topup": "Activity top-ups: shared by each pad's real activity, never more than the pad pays out",
   "economy.map.f_scaled": "A weekly budget that grows with verified activity",
   "economy.map.to_tr": "flash liquidity, loans and grants when they run short",
   "economy.map.tr_h": "🎰 House · 🏦 Bank · 📈 Market maker",

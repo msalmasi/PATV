@@ -220,6 +220,7 @@ test("boost upvote: the voter's upvote + a post tip (kind boost, no cut), keyed;
   const r0 = await call("POST", "/api/feed/posts", a, { community: "patv:lounge", title: "boost me", body: "x" });
   assert.equal(r0.status, 200, JSON.stringify(r0.d));
   const id = r0.d.id;
+  assert.equal(E.config().boost_enabled, true, "boosts are ON by default, off staging too (prod)");
   E.setConfig({ boost_enabled: false });
   assert.equal((await call("POST", `/api/feed/posts/${id}/boost`, f, { amount: 100, idempotency_key: "k0" })).status, 404, "off: 404");
   assert.equal((await call("GET", "/api/feed/boost/config")).d.enabled, false);

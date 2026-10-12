@@ -22,7 +22,8 @@
 // BOOST UPVOTES (the user, 2026-10-12): an upvote that is also a small tip to the author - min boost_min (100) PAT,
 // quick amounts boost_quick. It is the existing post-tip money path (posttips.tip, kind "boost": no cut, keyed), and it is
 // also the booster's normal upvote. It counts EXTRA through boostWeight (diminishing, capped) - only from qualified
-// accounts, never the author or their alts (the same rules as above). Behind `boost_enabled` (on on staging, off on prod).
+// accounts, never the author or their alts (the same rules as above). `boost_enabled`: ON by default (prod included, the
+// user 2026-10-12); a saved engagement_cfg can still switch it off.
 //
 //   POST /api/g/recipe/engagement  (bot token) {day, start, end} -> {ok, day, cfg, pads: {pad id: {authors: {userId:
 //        score}, engagers: {userId: score}, posts, raw}}, stats: {...}, posts: [debug rows]}
@@ -37,7 +38,7 @@ const DEFAULTS = Object.freeze({
   vote_w: 1, comment_w: 2,
   post_cap: 6, author_cap: 12, engager_cap: 6,
   ring_days: 30, ring_min: 2, ring_floor: 0.1,
-  boost_enabled: null,           // null = on on staging (STAGING env), off on prod
+  boost_enabled: true,           // 2026-10-12 (the user): ON everywhere, prod included (null = staging only)
   boost_min: 100, boost_k: 1, boost_cap: 5, boost_quick: [100, 500, 1000],
 });
 let CFG = { ...DEFAULTS };
