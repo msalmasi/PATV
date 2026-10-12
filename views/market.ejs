@@ -162,9 +162,11 @@
     <header class="mk-head">
       <div class="bx-top">
         <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %>
       </div>
       <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
       <%- include('partials/mk-times', { m, now }) %>
+      <%- include('partials/mk-auto', { m }) %>
       <% if (!S) { const k = m.status === 'open' ? 'open' : m.status === 'settled' || m.status === 'resolved' ? 'settled' : m.status === 'void' ? 'void' : m.status === 'settling' ? 'settling' : 'closed'; %>
         <div class="st"><span class="bx-chip c-<%= k %>"><%- k === 'open' ? t('market.st.open') : k === 'settled' ? t('market.st.resolved', { result: m.result, by: byWho() }) : k === 'void' ? t('market.st.void') : k === 'settling' ? t('market.st.settling') : t('market.st.closed') %></span></div>
       <% } %>
@@ -399,9 +401,11 @@
   <% } else { const open = m.status === 'open'; const side = open || judgeOk; %>
     <header class="mk-head">
       <div class="bx-top"><span class="bx-chip c-plain"><%- m.model === 'pool' ? t('market.pool.kind') : t('market.pool.kind_old') %></span>
-        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %></div>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %></div>
       <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
       <%- include('partials/mk-times', { m, now }) %>
+      <%- include('partials/mk-auto', { m }) %>
       <% const k = m.status === 'open' ? 'open' : m.status === 'settled' ? 'settled' : m.status === 'void' ? 'void' : 'closed'; %>
       <div class="st"><span class="bx-chip c-<%= k %>"><%- k === 'open' ? t('market.pool.st_open') : k === 'settled' ? t('market.pool.st_settled', { result: m.result, by: byWho() }) : k === 'void' ? t('market.pool.st_void') : t('market.pool.st_closed') %></span></div>
       <% meta(true) %>

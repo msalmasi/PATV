@@ -368,6 +368,30 @@ test("the website: /act pool forms and /markets/:id bet + resolve run on the eng
   assert.equal(ev[ev.length - 1].data.who, "bob_cf");
 });
 
+test("1.99th: Pepe's auto pools carry `auto` (display table too) and skip the per-creator cap; nobody else can send one", async () => {
+  const auto = { v: 1, id: "a1", cat: "sports", tag: "NFL", resolver: "sports", criteria: "Settles on the official final score on ESPN's scoreboard.",
+                 source_url: "https://www.espn.com/nfl/game/_/gameId/401", source_name: "ESPN", starts: nowS() + 86400, resolve_at: nowS() + 86400 + 14400,
+                 spec: { league: "nfl", event_id: "401" } };
+  const refs = [];
+  for (let i = 0; i < 6; i++) {
+    const r = await act("create", PEPE, { question: `NFL: auto game number ${i} - who wins?`, options: ["Texans", "Jaguars"], ai_judge: true, pepe: "PepeBot",
+                                          secs: 3600, room: "Lab", lmsr_open: 9, auto: Object.assign({}, auto, { id: "a" + i }) });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert.equal(r.body.pool.auto.cat, "sports");
+    assert.equal(r.body.pool.auto.id, "a" + i);
+    refs.push(r.body.ref);
+  }
+  const row = await poolRow(Number(refs[0].slice(1)));
+  assert.equal(row.auto.source_url, auto.source_url);
+  assert.equal(row.auto.criteria, auto.criteria);
+  // Pepe's own chat pools still count (6 auto ones are open now)
+  assert.equal((await act("create", PEPE, { question: "A chat pool by Pepe?", ai_judge: true, pepe: "PepeBot", secs: 3600 })).body.code, "max_open");
+  // a person can't smuggle an auto record in
+  const r = await act("create", actor("dave_cf", "dave"), { question: "Sneaky auto pool?", judge: { login: "carol_cf" }, secs: 3600, auto });
+  assert.equal(r.body.ok, true, JSON.stringify(r.body));
+  assert.equal(r.body.pool.auto, undefined);
+});
+
 test("rollback: the records go back to Pepe (keyed), the stakes stay on the ledger", async () => {
   const c = await act("create", actor("ann_cf", "ann"), { question: "Stays open?", judge: { login: "carol_cf" }, secs: 3600 });
   await act("bet", actor("bob_cf", "bob"), { ref: c.body.ref, option: "no", amount: 1200 });

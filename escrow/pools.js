@@ -16,7 +16,7 @@
 //            Pepe takes each new LMSR market's id from here (keyed by his idem, so a retry gets the same id).
 // Record: Pepe's markets.json shape {id, question, options, creator, judge, room, status open|closed|settled|void, created,
 //         closes, bets: [{nick, option, amount, hold, ts, user, web, order}], model: "pool", ai_judge, ai, ai_hold, result,
-//         settled_by, void_reason, fee, ended, bet_seq}  (times in seconds; hold = the ledger hold id, user = the PATV username)
+//         settled_by, void_reason, fee, ended, bet_seq, auto}   (auto: 1.99th, Pepe's auto pools - markets.cleanAuto)  (times in seconds; hold = the ledger hold id, user = the PATV username)
 "use strict";
 const { runQuery, getQuery } = require("../dbUtils");
 const L = require("./ledger");
@@ -132,7 +132,7 @@ async function mirror(m) {
 }
 
 const FIELDS = ["id", "question", "options", "creator", "judge", "room", "status", "created", "closes", "model", "ai_judge", "ai", "ai_hold",
-                "result", "settled_by", "void_reason", "fee", "ended", "bet_seq", "via", "users"];
+                "result", "settled_by", "void_reason", "fee", "ended", "bet_seq", "via", "users", "auto"];
 const view = (m) => {
   const out = {};
   for (const k of FIELDS) if (m[k] !== undefined) out[k] = m[k];
@@ -181,13 +181,16 @@ async function create(actor, a, t) {
   if (twin) return fail("dup", `You already made that pool ${t.nowS - twin.created}s ago (${ref(twin)}) — not doubled.`, { ref: ref(twin), age: t.nowS - twin.created });
   // Pepe counts every live market a person created, pools and LMSR alike: his count of the LMSR ones (lmsr_open) or the display
   // table's (Pepe's LMSR snapshot - what a website create sees), whichever is higher
+  // 1.99th: Pepe's auto pools (pepe_automkt.py: his own weekly count, Pepe-judged) carry `auto` and skip the per-creator cap
+  const auto = actor.pepe && aiJudge ? require("../markets").cleanAuto(a.auto) : null;
   const open = mine.length + Math.max(0, Math.floor(Number(a.lmsr_open) || 0), await lmsrOpen(actor));
-  if (open >= MAX_OPEN) return fail("max_open", `You already have ${open} open markets.`, { open });
+  if (open >= MAX_OPEN && !auto) return fail("max_open", `You already have ${open} open markets.`, { open });
   await notePepe(actor);
   const id = await G().nextId(GAME);
   const m = { id, question, options, creator: me.login, judge, room: a.room || actor.room || null, status: "open", created: t.nowS, closes: t.nowS + secs,
               bets: [], model: "pool", users: me.user ? { creator: me.user } : {}, via: actor.via || "room" };
   if (aiJudge) m.ai_judge = true;
+  if (auto) m.auto = auto;
   await G().save(GAME, m);
   await emit("created", m, { by: me.login, via: actor.via, secs });
   return { ok: true, ref: ref(m), pool: view(m), secs };

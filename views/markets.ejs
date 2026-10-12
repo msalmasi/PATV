@@ -45,6 +45,7 @@
         <span class="bx-ref"><%= m.ref %></span>
         <span class="bx-chip c-<%= c[0] %>"><%- c[1] %></span>
         <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %>
         <% if (m.room) { %><span class="room"><%= m.room %></span><% } %>
       </div>
       <p class="bx-q"><%= m.question %></p>

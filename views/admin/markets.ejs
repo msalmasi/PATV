@@ -1,0 +1,81 @@
+<%- include('../partials/admin-open', { title, user, section: 'markets', admIsAdmin: isAdmin }) %>
+<%# views/admin/markets.ejs - 1.99th: Pepe's auto markets (automkt.js; camfrog-bot pepe_automkt.py). Data: A = automkt.adminState():
+    {state: Pepe's last status push, at, online, requests: the admins' recent requests, feed: the feed-post log}.
+    public/js/admin-automkt.js renders it and queues requests (Pepe picks them up within a minute). %>
+<div class="adm-head">
+  <h1><span class="ds-ic" aria-hidden="true">🤖</span> Auto markets</h1>
+  <p>Pepe opens a few prediction markets and betting pools a week about real-world events by himself: <b>sports</b> fixtures (who wins - a pool, from
+    ESPN's scoreboard), <b>prices</b> (crypto / stocks above a round level at a set time - a market seeded by the Market maker, from Coinbase / Yahoo
+    Finance) and <b>news</b> (yes/no questions the <code>automkt</code> model writes from BBC + NPR headlines). Every one has exact criteria, a source
+    link, a close <b>before the event starts</b> and a resolution time, and shows the 🤖 auto tag on <a href="/markets">/markets</a>.
+    Sports and prices settle from the same data source; news questions go to Pepe's AI judge with the criteria (dispute window as usual).
+    Postponed / cancelled / no data = void; anything unclear goes to the admins. Never about deaths, violence, elections, private people, adult or illegal topics.
+    These settings live in Pepe - changes here are sent to him and applied within a minute (also in his admin panel and with <code>!automkt</code>).</p>
+</div>
+
+<style>
+  .adm-fs { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0 var(--ds-sp-4); margin: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); }
+  .adm-fs legend { padding: 0 var(--ds-sp-1); font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); }
+  #amForm .adm-adv { grid-column: 1 / -1; }
+  #amLists { display: grid; gap: var(--ds-sp-2); }
+</style>
+
+<section class="adm-card" id="settings" aria-labelledby="setT">
+  <h2 id="setT">Settings <span class="adm-msg" id="amOnline"></span></h2>
+  <form id="amForm" class="adm-form" autocomplete="off">
+    <label class="adm-check"><input type="checkbox" name="enabled"> <b>On</b> (off by default)</label>
+    <label>Markets / pools a week<input type="number" name="per_week" min="0" max="50"></label>
+    <label>Review before going live<select name="review"><option value="news">News questions need an OK (default)</option><option value="all">Everything needs an OK</option><option value="none">Nothing (all go live)</option></select></label>
+    <fieldset class="adm-fs"><legend>Categories</legend>
+      <label class="adm-check"><input type="checkbox" name="cat_sports"> 🏟️ Sports</label>
+      <label class="adm-check"><input type="checkbox" name="cat_prices"> 📈 Prices</label>
+      <label class="adm-check"><input type="checkbox" name="cat_news"> 📰 News</label>
+    </fieldset>
+    <label class="adm-check"><input type="checkbox" name="announce"> Announce new ones in Pepe's rooms</label>
+    <label>…at most one line every (minutes)<input type="number" name="announce_gap_min" min="0" max="1440"></label>
+    <label class="adm-check"><input type="checkbox" name="feed_post"> Post them on the feed (at most one post every 6 h, 3 a day)</label>
+    <label>Weekly seed cap for auto markets (PAT, from the Market maker)<input type="number" name="seed_cap_week" min="0" step="10000"></label>
+    <details class="adm-adv"><summary>Leagues, assets, feeds</summary><div class="adm-adv-body" id="amLists"></div></details>
+    <div class="adm-actions"><button type="submit">Save</button><span class="adm-msg" role="status" data-msg></span></div>
+  </form>
+  <p class="adm-help" id="amWeek"></p>
+</section>
+
+<section class="adm-card" id="generate" aria-labelledby="genT">
+  <h2 id="genT">Generate now / preview the next batch</h2>
+  <p class="adm-help">Preview builds the next few without creating anything (it runs the news model, so it costs a little). Generate makes them right away
+    (news ones still wait for review unless review is "none").</p>
+  <div class="adm-actions">
+    <label>How many<input type="number" id="amN" min="1" max="10" value="1" style="width:5em"></label>
+    <button type="button" id="amGen">🤖 Generate now</button>
+    <button type="button" id="amPrev">👀 Preview the next batch</button>
+    <span class="adm-msg" role="status" id="amGenMsg"></span>
+  </div>
+  <div id="amPreview"></div>
+</section>
+
+<section class="adm-card" id="review" aria-labelledby="revT">
+  <h2 id="revT">Waiting for review</h2>
+  <div class="adm-tbl"><table aria-label="Waiting for review"><thead><tr><th>Id</th><th>Question &amp; criteria</th><th>Closes</th><th>Resolves</th><th></th></tr></thead><tbody id="amReview"></tbody></table></div>
+  <span class="adm-msg" role="status" id="amRevMsg"></span>
+</section>
+
+<section class="adm-card" id="list" aria-labelledby="listT">
+  <h2 id="listT">Auto-created markets</h2>
+  <div class="adm-tbl"><table aria-label="Auto-created markets"><thead><tr><th>Market</th><th>Kind</th><th>Question</th><th>Closes</th><th>Resolves</th><th>Resolution</th></tr></thead><tbody id="amItems"></tbody></table></div>
+</section>
+
+<section class="adm-card" id="log" aria-labelledby="logT">
+  <h2 id="logT">Requests, runs &amp; sources</h2>
+  <div class="adm-tbl"><table aria-label="Requests"><thead><tr><th>When (UTC)</th><th>Admin</th><th>Request</th><th>Result</th></tr></thead><tbody id="amReqs"></tbody></table></div>
+  <h3>Pepe's runs</h3>
+  <ul class="adm-help" id="amRuns"></ul>
+  <h3>Sources</h3>
+  <ul class="adm-help" id="amSources"></ul>
+</section>
+
+<script id="amData" type="application/json"><%- JSON.stringify(A).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/admin-automkt.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

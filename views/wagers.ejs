@@ -138,7 +138,8 @@
     <div class="card bx-card<%= m.inIt ? ' mine' : '' %>">
       <div class="bx-top"><span class="bx-ref"><%= m.ref %></span>
         <%- m.status === 'open' ? '<span class="bx-chip c-open">' + t('wagers.pool_open') + '</span>' : m.status === 'closed' ? '<span class="bx-chip c-closed">' + t('wagers.pool_closed') + '</span>' : '<span class="bx-chip">' + t.esc(m.status) + '</span>' %>
-        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> AI</span><% } %></div>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> AI</span><% } %>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %></div>
       <a class="q" href="/markets/<%= m.id %>"><%= m.question %></a>
       <div class="opts">
         <% m.options.forEach((o) => { %>

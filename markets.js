@@ -39,6 +39,22 @@ function cleanAi(ai) {
            disputes: (ai.disputes || []).slice(0, 30).map((d) => ({ nick: String(d.nick || "").slice(0, 60), why: String(d.why || "").slice(0, 160) })) };
 }
 
+// 1.99th: Pepe's auto markets (camfrog-bot pepe_automkt.py) - what he made it from and how it settles: the 🤖 auto tag,
+// the exact criteria, the source link, the resolution time. spec is what Pepe needs to settle it (ESPN event, price level).
+const AUTO_CATS = new Set(["sports", "prices", "news"]);
+const AUTO_RESOLVERS = new Set(["sports", "price", "ai"]);
+function cleanAuto(a) {
+  if (!a || typeof a !== "object" || !AUTO_CATS.has(String(a.cat))) return null;
+  const n = (v) => (Number.isFinite(Number(v)) ? Math.floor(Number(v)) : 0);
+  const url = String(a.source_url || "");
+  let spec = a.spec && typeof a.spec === "object" ? a.spec : {};
+  try { if (JSON.stringify(spec).length > 2000) spec = {}; spec = JSON.parse(JSON.stringify(spec)); } catch (e) { spec = {}; }
+  return { v: 1, id: String(a.id || "").slice(0, 16), cat: String(a.cat), tag: String(a.tag || "").slice(0, 40),
+           resolver: AUTO_RESOLVERS.has(String(a.resolver)) ? String(a.resolver) : "ai",
+           criteria: String(a.criteria || "").slice(0, 600), source_url: /^https:\/\/[^\s"'<>]{4,300}$/.test(url) ? url : null,
+           source_name: String(a.source_name || "").slice(0, 40), starts: n(a.starts), resolve_at: n(a.resolve_at), spec };
+}
+
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS markets (
   id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, closes INTEGER, updated INTEGER)`).catch(() => {});
 
@@ -241,6 +257,7 @@ function cleanMarket(m) {
     created: Number(m.created) || 0, closes: Number(m.closes) || 0, result: m.result || null,
     settled_by: m.settled_by || null, fee: Number(m.fee) || 0, ended: Number(m.ended) || null,
     ai_judge: !!m.ai_judge, ai: cleanAi(m.ai), ...(m.model === "pool" ? { model: "pool" } : {}),
+    ...(cleanAuto(m.auto) ? { auto: cleanAuto(m.auto) } : {}),
     // 1.99do: Pepe's payout stamp (a share market is paid once this is set) + why it was voided
     paid_out: m.paid_out && typeof m.paid_out === "object"
       ? { at: Number(m.paid_out.at) || 0, total: Math.floor(Number(m.paid_out.total) || 0), result: String(m.paid_out.result || "").slice(0, 200) } : null,
@@ -429,7 +446,7 @@ function register(app, { isBotToken, addUser }) {
   app.get("/markets", addUser, async (req, res) => {
     await ready;
     const rows = (await getQuery("SELECT data FROM markets ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)))
-      .filter((m) => m.shares);
+      .filter((m) => m.shares || m.auto);         // 1.99th: + Pepe's auto pools (sports winners), so every 🤖 auto one is listed here
     const live = rows.filter((m) => LIVE.has(m.status) && !m.settle).sort((a, b) => a.closes - b.closes);
     const done = rows.filter((m) => !LIVE.has(m.status) || m.settle).sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 40);
     let linked = false, acts = [];
@@ -472,4 +489,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs, cleanMarket, cleanAi };
+module.exports = { register, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs, cleanMarket, cleanAi, cleanAuto };

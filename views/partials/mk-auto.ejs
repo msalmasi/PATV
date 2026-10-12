@@ -1,0 +1,37 @@
+<%#
+  1.99th: an AUTO market's box (Pepe made it himself - camfrog-bot pepe_automkt.py; the record is markets.cleanAuto): the
+  category, how it settles (exact criteria + who settles it from what), the event / resolution times in the viewer's zone and
+  the source link. Pass { m }. Nothing renders for an ordinary market.
+%>
+<% const T_ = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+   const a_ = (locals.m || {}).auto || null;
+   const tzT_ = locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time;
+   if (a_) {
+     let host_ = '';
+     try { host_ = a_.source_url ? new URL(a_.source_url).hostname.replace(/^www\./, '') : ''; } catch (e) { host_ = ''; }
+     const cat_ = ['sports', 'prices', 'news'].includes(a_.cat) ? a_.cat : 'news';
+     const by_ = ['sports', 'price', 'ai'].includes(a_.resolver) ? a_.resolver : 'ai'; %>
+<style>
+  .mk-auto { display: grid; gap: var(--ds-sp-2); margin-block: var(--ds-sp-3); padding: var(--ds-sp-3h) var(--ds-sp-4); border: 1px solid var(--ds-info-line);
+             border-radius: var(--ds-r-lg, 12px); background: var(--ds-info-bg); color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
+  .mk-auto .mk-auto-h { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; color: var(--ds-text-strong); }
+  .mk-auto h4 { margin: 0; font-size: var(--ds-fs-label); color: var(--ds-text-muted); text-transform: uppercase; letter-spacing: var(--ds-ls-label); }
+  .mk-auto p { margin: 0; }
+  .mk-auto .crit { color: var(--ds-text); }
+  .mk-auto .meta { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1) var(--ds-sp-3); color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .mk-auto .meta a { color: var(--ds-info); overflow-wrap: anywhere; }
+</style>
+<aside class="mk-auto" aria-label="<%- T_('markets.auto.h') %>">
+  <div class="mk-auto-h"><span class="ds-ic" aria-hidden="true">🤖</span> <b><%- T_('markets.auto.h') %></b>
+    <span class="bx-chip c-ai c-plain"><%- T_('markets.auto.cat.' + cat_) %><%= a_.tag ? ' · ' + a_.tag : '' %></span></div>
+  <p><%- T_('markets.auto.note') %></p>
+  <h4><%- T_('markets.auto.criteria') %></h4>
+  <p class="crit"><%= a_.criteria %></p>
+  <p><%- T_('markets.auto.by.' + by_) %></p>
+  <div class="meta">
+    <% if (a_.starts && a_.cat !== 'news') { %><span><%- T_('markets.auto.starts', { when: tzT_(a_.starts, 'full') }) %></span><% } %>
+    <% if (a_.resolve_at) { %><span><%- T_('markets.auto.resolves', { when: tzT_(a_.resolve_at, 'full') }) %></span><% } %>
+    <% if (a_.source_url) { %><span><%- T_('markets.auto.source', { link: '<a href="' + T_.esc(a_.source_url) + '" target="_blank" rel="noopener nofollow">' + T_.esc(a_.source_name || host_) + '</a>' }) %></span><% } %>
+  </div>
+</aside>
+<% } %>

@@ -194,7 +194,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/pools/admin/import" || req.path === "/api/escrow/admin/import" || req.path === "/api/gangs/admin/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/gtf/bot/sheet-mirror" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/automkt/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/pools/admin/import" || req.path === "/api/escrow/admin/import" || req.path === "/api/gangs/admin/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/gtf/bot/sheet-mirror" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1191,6 +1191,7 @@ require("./hop").register(app, { addUser });   // 1.99eq: Hop - the full-screen 
 require("./feedgallery").register(app, { addUser });   // 1.99fn: the feeds' Gallery view (/api/feed/gallery) + the per-account List / Gallery choice (/api/feed/view)
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
+require("./automkt").register(app, { isBotToken, addUser });   // 1.99th: Pepe's auto markets - status/requests from Pepe, the feed post, /admin/markets
 const gtf = require("./gtf");
 gtf.register(app, { isBotToken, addUser });
 require("./bounties").register(app, { isBotToken, addUser });
