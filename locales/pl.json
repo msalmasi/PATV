@@ -5401,6 +5401,7 @@
   "shop.cat.item.golden": "Legendarna złota nagroda Shanksa. Jest tylko jedna.",
   "shop.cat.item.mystery": "Nagroda niespodzianka. Jest tylko jedna, a to, czym jest, pozostaje tajemnicą, dopóki ktoś jej nie kupi.",
   "shop.cat.item.probation": "Opłaca miesiąc okresu próbnego Wattza. Tak, serio.",
+  "shop.cat.item.pizza_for_blake": "Gorąca pizza, dostarczona pod drzwi Blake’a. On dostaje obiad, a ty zgarniasz całe uznanie.",
   "js.shop.gift_need_name": "Najpierw wpisz, dla kogo jest.",
   "js.shop.confirm_gift": "Wysłać {name} do {to} jako prezent za {cost} PAT?",
   "js.shop.confirm_gift_anon": "Wysłać {name} dla {to} anonimowo za {cost} PAT? Nie zobaczy, kto wysłał.",

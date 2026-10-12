@@ -5269,6 +5269,7 @@
   "shop.cat.item.golden": "Shanks’ legendärer goldener Preis. Es gibt nur einen.",
   "shop.cat.item.mystery": "Ein Mystery-Preis. Es gibt nur einen, und was er ist, bleibt geheim, bis jemand ihn kauft.",
   "shop.cat.item.probation": "Bezahlt einen Monat von Wattz’ Bewährung. Ja, wirklich.",
+  "shop.cat.item.pizza_for_blake": "Eine heiße Pizza, geliefert an Blakes Tür. Er bekommt das Abendessen, du bekommst die Anerkennung.",
   "js.shop.gift_need_name": "Gib zuerst ein, für wen es ist.",
   "js.shop.confirm_gift": "{name} als Geschenk für {cost} PAT an {to} senden?",
   "js.shop.confirm_gift_anon": "{name} anonym für {cost} PAT an {to} senden? Die Person sieht nicht, wer es geschickt hat.",

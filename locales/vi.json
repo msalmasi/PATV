@@ -5203,6 +5203,7 @@
   "shop.cat.item.golden": "Giải thưởng vàng huyền thoại của Shanks. Chỉ có một chiếc.",
   "shop.cat.item.mystery": "Một giải thưởng bí ẩn. Chỉ có một chiếc, và nó là gì sẽ được giữ bí mật cho đến khi có người mua.",
   "shop.cat.item.probation": "Trả tiền cho một tháng quản chế của Wattz. Đúng vậy, thật đấy.",
+  "shop.cat.item.pizza_for_blake": "Một chiếc pizza nóng hổi, giao tận cửa nhà Blake. Anh ấy có bữa tối, còn bạn được ghi công.",
   "js.shop.gift_need_name": "Nhập trước người nhận là ai.",
   "js.shop.confirm_gift": "Gửi {name} cho {to} làm quà với giá {cost} PAT?",
   "js.shop.confirm_gift_anon": "Gửi {name} cho {to} ẩn danh với giá {cost} PAT? Họ sẽ không thấy ai đã gửi.",

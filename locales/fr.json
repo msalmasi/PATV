@@ -5290,6 +5290,7 @@
   "shop.cat.item.golden": "Le trophée doré légendaire de Shanks. Il n'y en a qu'un.",
   "shop.cat.item.mystery": "Un lot mystère. Il n'y en a qu'un, et ce que c'est reste secret jusqu'à ce que quelqu'un l'achète.",
   "shop.cat.item.probation": "Paie un mois de probation de Wattz. Oui, vraiment.",
+  "shop.cat.item.pizza_for_blake": "Une pizza bien chaude, livrée à la porte de Blake. Lui mange, toi tu as le mérite.",
   "js.shop.gift_need_name": "Tape d'abord le destinataire.",
   "js.shop.confirm_gift": "Envoyer {name} à {to} en cadeau pour {cost} PAT ?",
   "js.shop.confirm_gift_anon": "Envoyer {name} à {to} anonymement pour {cost} PAT ? Le destinataire ne verra pas qui l'a envoyé.",

@@ -5290,6 +5290,7 @@
   "shop.cat.item.golden": "Il leggendario premio d’oro di Shanks. Ce n’è uno solo.",
   "shop.cat.item.mystery": "Un premio misterioso. Ce n’è uno solo, e cosa sia resta un segreto finché qualcuno non lo compra.",
   "shop.cat.item.probation": "Paga un mese di libertà vigilata di Wattz. Sì, davvero.",
+  "shop.cat.item.pizza_for_blake": "Una pizza calda, consegnata alla porta di Blake. Lui si mangia la cena, tu ti prendi il merito.",
   "js.shop.gift_need_name": "Scrivi prima per chi è.",
   "js.shop.confirm_gift": "Inviare {name} a {to} come regalo per {cost} PAT?",
   "js.shop.confirm_gift_anon": "Inviare {name} a {to} in forma anonima per {cost} PAT? Non vedranno chi l’ha inviato.",

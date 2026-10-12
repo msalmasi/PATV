@@ -5267,6 +5267,7 @@
   "shop.cat.item.golden": "جایزه طلایی افسانه‌ای Shanks. فقط یکیه.",
   "shop.cat.item.mystery": "یک جایزه مرموز. فقط یکیه و تا وقتی کسی نخردش، چیستش راز می‌مونه.",
   "shop.cat.item.probation": "یک ماه دوره آزمایشی Wattz رو پوشش می‌ده. آره، جدی.",
+  "shop.cat.item.pizza_for_blake": "یک پیتزای داغ، تحویل دم در خونه‌ی Blake. او شامش رو می‌خوره و اعتبارش هم مال توئه.",
   "js.shop.gift_need_name": "اول بنویس برای کیه.",
   "js.shop.confirm_gift": "{name} رو به {to} به‌عنوان هدیه برای {cost} PAT بفرستم؟",
   "js.shop.confirm_gift_anon": "{name} را به‌صورت ناشناس برای {to} با {cost} PAT بفرستی؟ آن‌ها نمی‌بینند چه کسی فرستاده.",

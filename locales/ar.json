@@ -5533,6 +5533,7 @@
   "shop.cat.item.golden": "الجائزة الذهبية الأسطورية لـ Shanks. هناك قطعة واحدة فقط.",
   "shop.cat.item.mystery": "جائزة غامضة. هناك قطعة واحدة فقط، وتبقى هويتها سراً حتى يشتريها أحد.",
   "shop.cat.item.probation": "يدفع تكلفة شهر من فترة مراقبة Wattz. نعم، فعلاً.",
+  "shop.cat.item.pizza_for_blake": "بيتزا ساخنة، تُوصَل إلى باب بلايك. يحصل هو على العشاء، وأنت تحصل على الفضل.",
   "js.shop.gift_need_name": "اكتب أولاً لمن الهدية.",
   "js.shop.confirm_gift": "هل ترسل {name} إلى {to} كهدية مقابل {cost} PAT؟",
   "js.shop.confirm_gift_anon": "إرسال {name} إلى {to} بشكل مجهول مقابل {cost} PAT؟ لن يرى من أرسلها.",

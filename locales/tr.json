@@ -5269,6 +5269,7 @@
   "shop.cat.item.golden": "Shanks’in efsanevi altın ödülü. Sadece bir tane var.",
   "shop.cat.item.mystery": "Gizemli bir ödül. Sadece bir tane var ve ne olduğu, biri satın alana kadar sır kalır.",
   "shop.cat.item.probation": "Wattz’ın bir aylık denetim süresini öder. Evet, gerçekten.",
+  "shop.cat.item.pizza_for_blake": "Sıcacık bir pizza, Blake’in kapısına teslim edildi. Akşam yemeği onun, övgü senin.",
   "js.shop.gift_need_name": "Önce kime olduğunu yaz.",
   "js.shop.confirm_gift": "{name} öğesini {cost} PAT karşılığında hediye olarak {to} kişisine gönderilsin mi?",
   "js.shop.confirm_gift_anon": "{cost} PAT karşılığında {name} öğesini {to} kişisine anonim olarak gönderelim mi? Kimin gönderdiğini görmeyecek.",

@@ -5335,6 +5335,7 @@
   "shop.cat.item.golden": "הפרס הזהוב האגדי של Shanks. יש רק אחד.",
   "shop.cat.item.mystery": "פרס מסתורי. יש רק אחד, ומה הוא נשאר בסוד עד שמישהו קונה אותו.",
   "shop.cat.item.probation": "משלם עבור חודש של המבחן של Wattz. כן, באמת.",
+  "shop.cat.item.pizza_for_blake": "פיצה חמה, נמסרת עד הדלת של בלייק. הוא מקבל ארוחת ערב, ואתם מקבלים את הקרדיט.",
   "js.shop.gift_need_name": "הקלידו קודם למי זה מיועד.",
   "js.shop.confirm_gift": "לשלוח את {name} אל ־{to} כמתנה בעבור {cost} PAT?",
   "js.shop.confirm_gift_anon": "לשלוח את {name} אל {to} תמורת {cost} PAT באופן אנונימי? הם לא יראו מי שלח.",

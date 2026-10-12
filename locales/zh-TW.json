@@ -5203,6 +5203,7 @@
   "shop.cat.item.golden": "Shanks 的傳說金色獎品。全世界只有一個。",
   "shop.cat.item.mystery": "神秘獎品。全世界只有一個，內容在被購買之前都是秘密。",
   "shop.cat.item.probation": "支付 Wattz 一個月的緩刑費用。沒錯，真的。",
+  "shop.cat.item.pizza_for_blake": "一份熱騰騰的披薩，送到 Blake 家門口。他有晚餐吃，你拿功勞。",
   "js.shop.gift_need_name": "先輸入要送給誰。",
   "js.shop.confirm_gift": "要以 {cost} PAT 把 {name} 當禮物送給 {to} 嗎？",
   "js.shop.confirm_gift_anon": "要匿名以 {cost} PAT 將 {name} 送給 {to} 嗎？對方不會看到是誰送的。",
