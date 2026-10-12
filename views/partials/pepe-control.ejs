@@ -168,6 +168,21 @@
     g.appendChild(kv('Camfrog', cf.pid ? 'running' + (cf.hung ? ' · NOT RESPONDING' : '') + (cf.started ? ' · up ' + dur(d.now / 1000 - cf.started) : '') : 'not running'));
     var rooms = (p.rooms || []);
     g.appendChild(kv('Rooms joined', rooms.length ? rooms.join(', ') : (p.live_ts ? 'none' : 'unknown')));
+    // 1.99sq: Pepe's recovery mode (camfrog-bot pepe_recovery.py) - back into his rooms after an internet outage
+    var rc = p.recovery;
+    if (rc && typeof rc === 'object') {
+      var nowS = d.now / 1000;
+      var PH = { ok: 'connected', suspect: 'in 0 rooms - checking', down: 'NETWORK DOWN - waiting for it', waiting: 'network back - settling',
+                 rejoining: 'rejoining his rooms', restarting: 'restarting Camfrog + Pepe', gave_up: 'STILL OUT - restart cap used, backing off' };
+      var ct = !rc.enabled ? 'recovery mode off' : (PH[rc.phase] || String(rc.phase || '?'));
+      if (rc.enabled && rc.phase !== 'ok' && rc.net) ct += ' · network ' + (rc.net.ok ? 'up' : rc.net.ok === false ? 'down' : '?');
+      if (rc.signed_in === false) ct += ' · Camfrog signed out';
+      if (rc.episode && rc.episode.start) ct += ' · out for ' + dur(nowS - rc.episode.start) + (rc.episode.cause ? ' (' + rc.episode.cause + ')' : '');
+      if (rc.restarts_hour) ct += ' · ' + rc.restarts_hour + '/' + (rc.max_restarts_hour || 3) + ' recovery restarts this hour';
+      var lr = rc.last_recovered;
+      if (lr && lr.at) ct += ' · last recovery ' + ago(lr.at * 1000) + ' after ' + dur(lr.after_s) + (lr.how ? ' (' + lr.how + ')' : '');
+      g.appendChild(kv('Connection', ct));
+    }
     var busy = (p.busy || []);
     g.appendChild(kv('Games running', busy.length ? busy.join(', ') : 'none'));
     var dtxt = dep.probation ? 'on probation until ' + when(dep.probation.until * 1000) : 'stable';

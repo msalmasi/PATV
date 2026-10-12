@@ -6610,6 +6610,26 @@
    "keywords": []
   },
   {
+   "id": "recovery",
+   "title": "!recovery [on|off]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!recovery"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!recovery",
+    "!recovery on|off"
+   ],
+   "summary": "Pepe's recovery mode: how he gets back into his rooms after an internet outage.",
+   "details": "Shows whether Pepe is connected, whether the network is up, which rooms he would rejoin and his last recovery. When he finds himself in no rooms he waits for the network, rejoins every room he was in, and restarts Camfrog if that doesn't work (a few times an hour at most). `on` / `off` switches it.",
+   "examples": [
+    "!recovery"
+   ],
+   "keywords": []
+  },
+  {
    "id": "test",
    "title": "!test",
    "category": "admin",
@@ -7029,5 +7049,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "66450f437aab5cc0"
+ "hash": "4b8aa18c17688566"
 }
