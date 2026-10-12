@@ -430,7 +430,7 @@ test("1.99tn: conversation starters + captions / alerts / DJ drops -> room.owner
     await runQuery("UPDATE pepe_actions SET status = 'done'");
     assert.deepEqual(JSON.parse((await actions()).pop().args), [PLANT, k, v]);
   }
-  for (const [k, v] of [["convo_quiet", "44"], ["convo_quiet", "999"], ["convo", "maybe"], ["tts", "on"], ["autotopic", "on"], ["promo", "on"], ["persona", "goth"]]) {
+  for (const [k, v] of [["convo_quiet", "44"], ["convo_quiet", "999"], ["convo", "maybe"], ["tts", "on"], ["autotopic", "maybe"], ["autotopic_every", "7"], ["stt_language", "klingon1"], ["promo", "on"], ["persona", "goth"]]) {
     const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: k, value: v });
     assert.equal(r.status, 400, k);
   }

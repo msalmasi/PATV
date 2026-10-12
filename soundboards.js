@@ -62,9 +62,8 @@ const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const LABEL_MAX = 32, TEXT_MAX = 120;
 // clip text guard (room boards): the same spirit as Pepe's imagine word list - no slurs, sexual content about real people,
 // minors, threats, doxxing or fake staff announcements. Pepe's LLM guard runs again before he renders it.
-const BAD_TEXT = [/\bn[i1]gg/i, /\bf[a@]gg?[o0]t/i, /\bk[i1]ke\b/i, /\bch[i1]nk\b/i, /\btr[a@]nn(y|ie)/i, /\bretard/i, /\brape/i, /\bchild\s*porn/i,
-  /\bcp\b/i, /\bloli\b/i, /\bkill\s+(your|ur)self\b/i, /\bkys\b/i, /\bi('?ll| will)\s+kill\b/i, /\bsend\s+(me\s+)?(your\s+)?(pat|points)\b/i,
-  /\b(staff|admin|mod)\s+(here|speaking)\b/i, /\b\d{3}[-. ]\d{3}[-. ]\d{4}\b/, /\b\d{1,5}\s+\w+\s+(street|st|avenue|ave|road|rd|lane|ln|drive|dr)\b/i];
+// 1.99up: the list lives in textguard.js (the owner panel's room topic uses it too)
+const BAD_TEXT = require("./textguard").BAD_TEXT;
 
 let clock = () => Date.now();
 const now = () => clock();

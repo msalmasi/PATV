@@ -35,6 +35,10 @@
 // a room_events row ("feed-automod"), and a feed_automod row the owner can REVERSE from the pad's settings hub
 // (undoes the hide / remove, closes Pepe's report, tells the author; logged "feed-automod-reverse").
 // Never judged: Pepe's own content, site staff, the pad's own owner.
+// 1.99up SAFETY FLOOR: while the automod is on in a pad, a SEVERE verdict (illegal content, doxxing, credible threats,
+// CSAM, NCII - the site rules' own severity) is at least hidden, whatever the pad's settings say (SEVERE_FLOOR, applied in
+// cleanScope so the settings show it, and in decide). Owners choose on/off and the strictness above the floor. The site's
+// own protections (image safety, reports, the TAKE IT DOWN process, the CSAM escalation) don't depend on this switch.
 // 1.99df: profile pads (rooms.js platform "profile") have no automod settings of their own and are OFF by default. One
 // global switch (automod:global "profiles", admins, /feed/admin) turns it on for every profile at once; they then use
 // the All scope's severity settings (scope '' in the log and the budget) and are judged against Padiquette. The
@@ -54,6 +58,7 @@ const SEVERITIES = Object.freeze(["none", "minor", "serious", "severe"]);
 const ACTIONS = Object.freeze(["none", "flag", "hide", "remove"]);
 const RANK = { none: 0, flag: 1, hide: 2, remove: 3 };
 const DEFAULTS = Object.freeze({ on: false, minor: "flag", serious: "flag", severe: "hide", admin_lock: false });
+const SEVERE_FLOOR = "hide";                // 1.99up: the least a severe verdict does (see the header)
 const GLOBAL_DEFAULTS = Object.freeze({ enabled: true, budget_usd: 0.25, per_day: 400, profiles: false });
 const REASON_MAX = 240;
 const APPEAL = "/terms#moderation";
@@ -88,6 +93,7 @@ function cleanScope(c) {
   if (c.on != null) o.on = bool(c.on);
   if (c.admin_lock != null) o.admin_lock = bool(c.admin_lock);
   for (const k of ["minor", "serious", "severe"]) o[k] = act(c[k], DEFAULTS[k]);
+  if (RANK[o.severe] < RANK[SEVERE_FLOOR]) o.severe = SEVERE_FLOOR;      // 1.99up: the safety floor
   if (Number(c.on_since) > 0) o.on_since = Math.floor(Number(c.on_since));
   return o;
 }
@@ -208,7 +214,8 @@ function decide(v, S, list) {
   if (R.id === "csam") {
     return { action: RANK[S.severe] >= RANK.hide ? S.severe : "hide", severity: "severe", rule: R.id, ruleTitle: R.title, report: "csam", escalate: true, why: "csam" };
   }
-  const allowed = act(S[severity], "none");
+  let allowed = act(S[severity], "none");
+  if (severity === "severe" && RANK[allowed] < RANK[SEVERE_FLOOR]) allowed = SEVERE_FLOOR;   // 1.99up: the safety floor
   const action = RANK[v.action] < RANK[allowed] ? v.action : allowed;
   return { action, severity, rule: R.id, ruleTitle: R.title, report: site ? site.report : "automod", escalate: false, why: "rule" };
 }
@@ -549,5 +556,5 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, register, settings, setScope, globalCaps, setGlobal, parseVerdict, decide, rulesFor, work, apply, reverse, list, adminList, noticeFor, usage,
-  cleanScope, cleanGlobal, DEFAULTS, GLOBAL_DEFAULTS, SEVERITIES, ACTIONS, WINDOW, BATCH, APPEAL, Refuse, _setClock,
+  cleanScope, cleanGlobal, DEFAULTS, GLOBAL_DEFAULTS, SEVERITIES, ACTIONS, WINDOW, BATCH, APPEAL, Refuse, _setClock, SEVERE_FLOOR, RANK,
 };

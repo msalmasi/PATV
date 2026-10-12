@@ -30,6 +30,9 @@
 //   enabled         1.99dc: "Pepe on this pad's feed" - the pad's master switch (default ON). Off = he neither answers
 //                   mentions nor takes part there, whatever respond / auto say (the automod is separate: feedautomod.js)
 //   admin_lock      an admin froze these settings: the room owner sees them but can't change them
+//   posts / comments  1.99up (the owner panel's "Pepe on your pad's page", padsite.js): his own posts / his auto comments
+//                   separately. Unset = follow `auto` (the old single switch, still what the settings tab edits).
+//   kinds           1.99up: which of his own post kinds may go here (KINDS); unset = all. A post of another kind is refused.
 // Global caps (feed_kv "pepe:global", admins only) override every scope: enabled (master switch), posts_per_day,
 // comments_per_day (all scopes together), llm_budget_usd (what Pepe reports spending on feed calls per 24 h),
 // reply_gap_secs, writes_per_min.
@@ -123,6 +126,9 @@ function cleanScope(c) {
   c = c || {};
   for (const k of Object.keys(SCOPE_LIMITS)) o[k] = clampInt(c[k], SCOPE_LIMITS[k], SCOPE_DEFAULTS[k]);
   for (const k of ["enabled", "auto", "admin_lock"]) if (c[k] != null) o[k] = bool(c[k]);
+  // 1.99up: own posts / auto comments / post kinds - only when set (unset = follow `auto` / all kinds)
+  for (const k of ["posts", "comments"]) if (c[k] != null) o[k] = bool(c[k]);
+  if (Array.isArray(c.kinds)) o.kinds = KINDS.filter((k) => c.kinds.includes(k));
   // 1.99cq: a stored vision value counts only once someone explicitly changed it (vision_set); old rows saved the
   // old OFF default on every save, so without the mark they follow today's default (ON)
   if (c.vision_set && c.vision != null) { o.vision = bool(c.vision); o.vision_set = true; }
@@ -141,6 +147,10 @@ function cleanGlobal(c) {
   if (c.enabled != null) o.enabled = bool(c.enabled);
   return o;
 }
+/** 1.99up: the effective split of `auto` - his own posts, his auto comments, the post kinds allowed. */
+const postsOn = (S) => !!(S && (S.posts != null ? S.posts : S.auto));
+const commentsOn = (S) => !!(S && (S.comments != null ? S.comments : S.auto));
+const kindsOf = (S) => (S && Array.isArray(S.kinds) ? S.kinds.slice() : KINDS.slice());
 /** 1.99cu: mentions are answered by default in every scope (All, house pads, owners' pads); owners can switch it off. */
 function respondDefault(scope) { void scope; return true; }
 async function readJson(key) {
@@ -247,6 +257,25 @@ async function setScope(user, scope, patch) {
   if (scope) await rooms.event(scope, "feed-pepe", user.username, JSON.stringify(next)).catch(() => {});
   return scopeSettings(scope);
 }
+/** 1.99up: back to the default for some fields of a pad's scope (the owner panel's "Reset to default"): the stored
+ *  values (and their explicit-change marks) go, so the scope follows the defaults again. Same rights as setScope. */
+async function resetScope(user, scope, fields) {
+  await init();
+  scope = String(scope || "");
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  const admin = isAdmin(user);
+  if (!scope) throw new Refuse(400, "Pick a pad.");
+  if (!(await rooms.get(scope))) throw new Refuse(404, "No such pad.");
+  if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this pad's owner can do that.");
+  const raw = (await readJson("pepe:scope:" + scope)) || {};
+  if (cleanScope(raw).admin_lock && !admin) throw new Refuse(403, "A site admin has locked Pepe's settings for this pad.");
+  const RESETTABLE = ["enabled", "respond", "auto", "posts", "comments", "kinds", "posts_per_day", "comments_per_day", "gap_min", "vision"];
+  for (const f of (fields || []).filter((x) => RESETTABLE.includes(x))) { delete raw[f]; delete raw[f + "_set"]; }
+  await store.kvSet("pepe:scope:" + scope, JSON.stringify(raw));
+  await log({ action: "settings", scope, by: user.username, note: ("reset " + (fields || []).join(",")).slice(0, 400) });
+  await rooms.event(scope, "feed-pepe", user.username, "reset " + (fields || []).join(",")).catch(() => {});
+  return scopeSettings(scope);
+}
 async function setGlobal(user, patch) {
   if (!isAdmin(user)) throw new Refuse(403, "Admins only.");
   await init();
@@ -319,11 +348,11 @@ function gate(what, why, S, G, U, { scope = "", depth = 0, cost = 0, t = NOW() }
   if (U.cost >= G.llm_budget_usd) return "today's feed LLM budget is spent";
   void cost;
   if (what === "post") {
-    if (why !== "auto" || !S.auto) return "auto posting is off here";
+    if (why !== "auto" || !postsOn(S)) return "auto posting is off here";
     if (U.posts >= G.posts_per_day) return "the global post cap for today is reached";
     if (su.posts >= S.posts_per_day) return "this scope's post limit for today is reached";
   } else {
-    if (why === "auto" ? !S.auto : !S.respond) return why === "auto" ? "auto comments are off here" : "mention replies are off here";
+    if (why === "auto" ? !commentsOn(S) : !S.respond) return why === "auto" ? "auto comments are off here" : "mention replies are off here";
     if (U.comments >= G.comments_per_day) return "the global comment cap for today is reached";
     if (su.comments >= S.comments_per_day) return "this scope's comment limit for today is reached";
     if (depth >= S.max_depth) return "the back-and-forth limit for this thread is reached";
@@ -605,9 +634,13 @@ async function scopesState(U) {
  *  "u/<name>'s profile", links to the profile and never takes auto activity (mentions only). */
 async function scopeEntry(id, U) {
   const S = { ...(await scopeSettings(id)) };
-  if (S.enabled === false) { S.respond = false; S.auto = false; }          // 1.99dc: the pad's "Pepe on this feed" switch
+  // 1.99up: the bot reads posts / comments / kinds (an older bot only reads auto = either of them)
+  S.posts = postsOn(S); S.comments = commentsOn(S); S.kinds = kindsOf(S);
+  if (S.enabled === false) { S.respond = false; S.posts = false; S.comments = false; }   // 1.99dc: the pad's "Pepe on this feed" switch
   const R = id ? rooms.getCached(id) : null;
-  if (R && R.profile) S.auto = false;
+  if (R && R.profile) { S.posts = false; S.comments = false; }
+  if (!S.posts) S.kinds = [];
+  S.auto = S.posts || S.comments;
   if (id && !S.respond && !S.auto) return null;
   const pads = require("./pads");
   return { ...S, title: id ? (R ? (R.profile ? `u/${R.profile.username}'s profile` : R.title) : id) : "All (site-wide)", slug: R ? R.slug : null, house: !!(R && R.house),
@@ -633,14 +666,16 @@ async function sync(body = {}) {
   for (const m of res.mentions) {
     if (m.scope && !scopes[m.scope]) { const e = await scopeEntry(m.scope, U); if (e) scopes[m.scope] = e; }
   }
-  const autoScopes = Object.keys(scopes).filter((k) => scopes[k].auto);
+  // 1.99up: auto comments only where they're on; recap snaps only where his own posts are
+  const autoScopes = Object.keys(scopes).filter((k) => scopes[k].comments);
+  const postScopesOn = Object.keys(scopes).filter((k) => scopes[k].posts);
   res.threads = await findThreads(autoScopes);
   // his last post of each kind per scope (a week back), so he spaces recaps / questions / news
   for (const r of await getQuery("SELECT scope, kind, MAX(at) AS at FROM pepe_feed_log WHERE action = 'post' AND at > ? GROUP BY scope, kind", [NOW() - 7 * DAY])) {
     (res.lastKinds[r.scope] = res.lastKinds[r.scope] || {})[r.kind || "other"] = r.at;
   }
   // the day's captures per auto room (stories.js: opted-out subjects are already null)
-  for (const id of autoScopes) {
+  for (const id of postScopesOn) {
     if (!id) continue;
     try {
       // 1.99ez: Pepe's recaps are about captures - members' own story uploads (source "user") stay out
@@ -724,6 +759,8 @@ async function post(b, req = null) {
   const S = await scopeSettings(scope);
   const no = gate("post", "auto", S, G, await usage(), { scope, cost: b.cost });
   if (no) await refuse(429, no);
+  // 1.99up: the pad's owner may keep some of his post kinds out ("other" only while every kind is allowed)
+  if (Array.isArray(S.kinds) && !S.kinds.includes(kind)) await refuse(403, "Pepe's posts of this kind are off here");
   if (writeRate(G)) await refuse(429, "too many writes this minute");
   const title = String(b.title || "").trim(), text = String(b.body || "").trim();
   if (!title && !text) await refuse(400, "Empty post.");
@@ -833,7 +870,7 @@ function register(app, { addUser, isBotToken }) {
 }
 
 module.exports = {
-  init, register, ensureAccount, scopeView, sync, comment, post, skip, setScope, setGlobal, scopeSettings, globalCaps, usage, gate, mentions, quietNow, localHour,
+  init, register, ensureAccount, scopeView, sync, comment, post, skip, setScope, resetScope, postsOn, commentsOn, kindsOf, setGlobal, scopeSettings, globalCaps, usage, gate, mentions, quietNow, localHour,
   isMuted, setMute, adminView, migrateVisionDefault, migrateRespondDefault, postView, conversation, otherComments, padOf, postScopes, findMentions, findThreads, cleanScope, cleanGlobal, respondDefault,
   SCOPE_DEFAULTS, GLOBAL_DEFAULTS, SCOPE_LIMITS, GLOBAL_LIMITS, KINDS, PEPE_ID, Refuse, _setClock, _writes: writeLog,
   _reset: () => { ACCOUNT = null; },

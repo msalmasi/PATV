@@ -24,6 +24,14 @@
 //                     checked here, by Pepe on the action and by Pepe at every line; a lost voice falls back to Pepe's
 //                     default), conversation starters (convo + convo_quiet) and the audit's room switches (captions,
 //                     alerts, dj_talk). The audit table: docs/pads-ownership-connections.md "Owner panel: Pepe's room settings".
+//                     1.99up: + the ROOM TOPIC (POST /api/rooms/:slug/owner/topic -> website action "room.topic": length,
+//                     textguard.js, never a pad verify code, TOPIC_MAX_HOUR an hour; Pepe re-checks all of it, keeps a pending
+//                     code that's in the topic, and pauses the room's auto-topic), the AUTO-TOPIC (autotopic on/off,
+//                     autotopic_every inside the admins' floor) and the room's SPEECH-TO-TEXT language (stt_language:
+//                     default / auto / a code - the transcriber's language hint for that room's mic clips; NOT the
+//                     "language" setting, which is the language Pepe chats in, 1.99jl).
+//   * 🌐 Pepe on your pad's page   1.99up, padsite.js: his posts / comments / feed moderation on the pad's site side, for
+//                     any pad (site-applied, inherit-with-reset, the safety floor) - POST /api/rooms/:slug/owner/site
 //   * ❓ What you can do with Pepe in your room   data/owner-capabilities.json, GENERATED from Pepe's code by camfrog-bot
 //                     tools/build_owner_caps.py (every owner check in the bot is listed or explicitly excluded), plus the
 //                     website's owner controls (WEB_CAPS below - each names its real route, test/padowner.test.js checks
@@ -41,15 +49,21 @@ const rooms = require("./rooms");
 const ONOFF = ["on", "off"];
 const OWNER_BOOL = Object.freeze(["snap", "clip", "challenge", "soundboard", "global_unblock", "greeter", "music", "music_requests",
   "trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino", "say", "voices", "mic_replies", "michog", "votes", "vibe_lock",
-  "convo", "captions", "alerts", "dj_talk"]);                       // 1.99tn: + conversation starters and the audit's room switches
+  "convo", "captions", "alerts", "dj_talk",                          // 1.99tn: + conversation starters and the audit's room switches
+  "autotopic"]);                                                    // 1.99up: the room's auto-topic
 // 1.99tn: conversation starters' quiet time (pepe_convo convo_quiet_min, 5-240 min) - the page's choices
 const CONVO_QUIET = Object.freeze([5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240]);
 const VOICE_RE = /^[\w .'\-()]{1,40}$/;
 const OWNER_SETTINGS = Object.freeze(Object.assign(Object.fromEntries(OWNER_BOOL.map((k) => [k, ONOFF])), {
   chatty: ["off", "low", "normal", "high"],
 }));
+// 1.99up: the auto-topic's interval choices (pepe_roomowner.AUTOTOPIC_EVERY - Pepe sends his own list in room_choices)
+const AUTOTOPIC_EVERY = Object.freeze([15, 20, 30, 45, 60, 90, 120, 180]);
+const TOPIC_MAX = 200, TOPIC_MIN = 2, TOPIC_MAX_HOUR = 6;
+const TOPIC_HITS = new Map();
 const OWNER_GROUPS = Object.freeze([
-  ["basics", "⚙️", ["snap", "clip", "challenge", "soundboard", "language"]],
+  ["topic", "🏷️", ["topic", "autotopic", "autotopic_every"]],      // 1.99up
+  ["basics", "⚙️", ["snap", "clip", "challenge", "soundboard", "language", "stt_language"]],
   ["pepe", "🐸", ["greeter", "greeter_note", "chatty", "convo", "convo_quiet", "music", "music_requests", "dj_talk", "say", "voices", "mic_replies"]],
   ["voice", "🗣️", ["room_voice", "captions", "alerts"]],              // 1.99tn
   ["games", "🎲", ["trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino"]],
@@ -59,16 +73,23 @@ const OWNER_GROUPS = Object.freeze([
 const OWNER_ICONS = Object.freeze({ snap: "📸", clip: "📹", challenge: "🎤", soundboard: "🔊", language: "🌐", greeter: "👋", greeter_note: "📝",
   chatty: "💬", music: "🎵", music_requests: "🎶", say: "🗣️", voices: "🎭", mic_replies: "🎙️", trivia: "❓", pictionary: "🎨", heist: "💰",
   wheel: "🎡", bingo: "🔢", pvp: "🥊", casino: "🃏", global_unblock: "🔓", michog: "🎤", strikes: "⚖️", votes: "🗳️", vibe: "🎭",
-  roasts: "🔥", vibe_lock: "🔒", room_voice: "🗣️", convo: "💡", convo_quiet: "⏳", captions: "💬", alerts: "📣", dj_talk: "📻" });
+  roasts: "🔥", vibe_lock: "🔒", room_voice: "🗣️", convo: "💡", convo_quiet: "⏳", captions: "💬", alerts: "📣", dj_talk: "📻",
+  topic: "🏷️", autotopic: "🤖", autotopic_every: "⏱️", stt_language: "📝" });
 // what the read-only list ("everything else") must not repeat: the owner's own switches, by report key
 const OWNER_COVERS = Object.freeze(new Set(["say", "music", "music_queue", "music_play", "heist", "poker", "blackjack", "wheel", "trivia",
   "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "greeter", "chatty"]));
 const NOTE_MAX = 160;
 const CHOICE_RE = /^[a-z_]{1,24}$/;
-let CHOICES = { vibe: ["auto"], roasts: ["auto"], chatty: OWNER_SETTINGS.chatty.slice() };
+const STT_RE = /^[a-z]{2,3}$/;
+let CHOICES = { vibe: ["auto"], roasts: ["auto"], chatty: OWNER_SETTINGS.chatty.slice(), autotopic_every: AUTOTOPIC_EVERY.slice(), stt: [] };
 function setChoices(c) {
   const list = (v) => (Array.isArray(v) ? v.filter((x) => CHOICE_RE.test(String(x))).slice(0, 30).map(String) : []);
   const out = { vibe: list(c && c.vibe), roasts: list(c && c.roasts), chatty: OWNER_SETTINGS.chatty.slice() };
+  // 1.99up: the auto-topic's intervals and the transcriber's languages, from Pepe's own lists
+  const ev = c && Array.isArray(c.autotopic_every) ? c.autotopic_every.filter((n) => Number.isInteger(n) && n >= 5 && n <= 180).slice(0, 20) : [];
+  out.autotopic_every = ev.length ? ev : AUTOTOPIC_EVERY.slice();
+  out.stt = c && Array.isArray(c.stt) ? c.stt.filter((x) => Array.isArray(x) && STT_RE.test(String(x[0])))
+    .slice(0, 120).map((x) => [String(x[0]), String(x[1] || x[0]).replace(/[<>"&]/g, "").slice(0, 40)]) : [];
   for (const k of ["vibe", "roasts"]) if (!out[k].length || out[k][0] !== "auto") out[k] = ["auto"].concat(out[k].filter((x) => x !== "auto"));
   CHOICES = out;
   return out;
@@ -92,6 +113,16 @@ function setLanguages(list) {
   return out;
 }
 const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
+// 1.99up: the owner's room topic - one line, no leading slash; length, textguard.js and never a pad verify code
+const cleanTopic = (v) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().replace(/^\/+/, "").trim();
+function topicProblem(text) {
+  const tg = require("./textguard");
+  if (text.length < TOPIC_MIN) return "That's too short for a topic.";
+  if (text.length > TOPIC_MAX) return `A topic is at most ${TOPIC_MAX} characters.`;
+  if (tg.hasPadCode(text)) return "Pad codes (PATV-...) can't go in the topic through Pepe - type the code into the room's topic yourself in Camfrog.";
+  if (tg.bad(text)) return "Pepe won't put that in the topic.";
+  return null;
+}
 const SETTINGS_STALE_MS = 10 * 60 * 1000;          // Pepe re-sends every 2 min; older = he's away
 // The website's owner controls (the generated list covers Pepe's side). `route` = METHOD path, checked by the tests.
 const WEB_CAPS = Object.freeze([
@@ -110,6 +141,8 @@ const WEB_CAPS = Object.freeze([
   { id: "web_soundboard", area: "room", route: "POST /api/rooms/:slug/soundboard/clips", where: "/p/{slug}/owner#soundboard" },   // 1.99rh: soundboards.js
   { id: "web_pepe_room", area: "room", route: "POST /api/rooms/:slug/owner/pepe-room", where: "/p/{slug}/owner#pepe" },         // 1.99ti
   { id: "web_room_mod", area: "room", route: "POST /api/rooms/:slug/mod", where: "/p/{slug}/owner#mod" },                       // 1.99ti
+  { id: "web_room_topic", area: "room", route: "POST /api/rooms/:slug/owner/topic", where: "/p/{slug}/owner#topic" },          // 1.99up
+  { id: "web_pad_site", area: "feed", route: "POST /api/rooms/:slug/owner/site", where: "/p/{slug}/owner#site" },              // 1.99up
 ]);
 // 1.99ti: Pepe in / out of the pad's Camfrog room (website action "room.ctl" from the owner; Pepe re-checks owner, Plus, his
 // 5-room cap, his home room and staging). One per CTL_GAP_MS per pad here too.
@@ -172,10 +205,25 @@ function cleanOne(s) {
   // 1.99tn: the pad's default voice ("default" = Pepe's) and the starters' quiet time, as Pepe reports them
   if (typeof ow.room_voice === "string" && (ow.room_voice === "default" || VOICE_RE.test(ow.room_voice))) owner.room_voice = ow.room_voice.toLowerCase();
   if (Number.isInteger(ow.convo_quiet) && ow.convo_quiet >= 5 && ow.convo_quiet <= 240) owner.convo_quiet = ow.convo_quiet;
+  // 1.99up: the auto-topic's interval ("default" = Pepe's global slider) and the room's STT language
+  if (ow.autotopic_every === "default" || (Number.isInteger(ow.autotopic_every) && ow.autotopic_every >= 5 && ow.autotopic_every <= 180)) owner.autotopic_every = ow.autotopic_every;
+  if (typeof ow.stt_language === "string" && (ow.stt_language === "default" || ow.stt_language === "auto" || STT_RE.test(ow.stt_language))) owner.stt_language = ow.stt_language;
   const ad = o.admin && typeof o.admin === "object" ? o.admin : {};
   const int = (v, d) => (Number.isInteger(v) && v >= 1 && v <= 10 ? v : d);
   const admin = { soundboard_master: ad.soundboard_master !== false, automod: ad.automod === true, chatty_llm: ad.chatty_llm !== false,
-    strike_min: int(ad.strike_min, 2), strike_max: int(ad.strike_max, 5), strike_default: int(ad.strike_default, 3) };
+    strike_min: int(ad.strike_min, 2), strike_max: int(ad.strike_max, 5), strike_default: int(ad.strike_default, 3),
+    // 1.99up: the auto-topic's master switch + the shortest interval an owner may pick
+    autotopic_master: ad.autotopic_master !== false,
+    autotopic_min: Number.isInteger(ad.autotopic_min) && ad.autotopic_min >= 5 && ad.autotopic_min <= 180 ? ad.autotopic_min : 30 };
+  // 1.99up: the room's topic as Pepe last saw it, the auto-topic's state, the transcriber's language
+  const tp = o.topic && typeof o.topic === "object" ? o.topic : null;
+  const ms = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : null);
+  const topic = tp ? { text: typeof tp.text === "string" ? tp.text.replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, TOPIC_MAX) : null,
+    paused_until: ms(tp.paused_until), auto: bool(tp.auto), auto_own: bool(tp.auto_own), running: bool(tp.running),
+    every_effective: Number.isInteger(tp.every_effective) ? Math.max(1, Math.min(600, tp.every_effective)) : null } : null;
+  const sv = o.stt && typeof o.stt === "object" ? o.stt : null;
+  const sttCode = (v) => (typeof v === "string" && (v === "auto" || STT_RE.test(v)) ? v : null);
+  const stt = sv ? { global: sttCode(sv.global), effective: sttCode(sv.effective), own: bool(sv.own) } : null;
   const features = sec(o.features, ["say", "ask", "look", "roast", "camroast", "music", "music_queue", "music_play", "shop", "heist", "turf",
     "poker", "blackjack", "wheel", "trivia", "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "cam_flag", "greeter", "chatty",
     "casino_backend", "auto_dj", "kickback", "modfines", "tts"]);
@@ -198,7 +246,7 @@ function cleanOne(s) {
     home: st.home === true, paused: st.paused === true, staging: st.staging === true,
   } : null;
   return { owner, bridge: sec(o.bridge, ["relay", "mic", "cams", "audio", "transcripts", "cmds"]), bridged: bool(o.bridged), admin, status,
-           features, prices, vibe, voice, pepe_here: bool(o.pepe_here) };
+           features, prices, vibe, voice, pepe_here: bool(o.pepe_here), topic, stt };
 }
 /** POST /api/rooms/owners `room_settings` -> the table (the set Pepe sends replaces the rows it names). */
 async function storeSettings(raw, languages, choices) {
@@ -287,6 +335,8 @@ async function pageData(R, viewer) {
       ? LANGS.concat([[pepe.owner.language, pepe.owner.language, ""]]) : LANGS,
     CHOICES, GROUPS: OWNER_GROUPS, ICONS: OWNER_ICONS, readonly: pepe ? readonlyList(pepe) : null, VOICES: voices || [], CONVO_QUIET,
     plus: camfrog ? await safe(() => require("./premium").isPrimePlus(R.id), false) : false,
+    site: await safe(() => require("./padsite").state(R.id)),          // 1.99up: Pepe on the pad's site side (any pad)
+    TOPIC_MAX,
   };
 }
 
@@ -305,6 +355,7 @@ function myPads(username) {
 function register(app, { addUser }) {
   const bad = (res, st, error) => res.status(st).json({ ok: false, error });
   if (app.locals) app.locals.myPads = myPads;          // 1.99ti: layout.ejs (You > My pads) + profile.ejs
+  require("./padsite").register(app, { addUser });      // 1.99up: Pepe on the pad's site side (padsite.js)
   const jsonOnly = (req, res, next) => (req.is("application/json") && req.get("X-Requested-With") === "fetch" ? next() : bad(res, 400, "Bad request."));
   async function ownedPad(req, res) {
     if (!req.user || !req.user.userId) { bad(res, 401, "Sign in first."); return null; }
@@ -369,6 +420,16 @@ function register(app, { addUser }) {
       }
       ok = true;
     } else if (key === "convo_quiet") ok = value === "default" || CONVO_QUIET.includes(Number(value));
+    else if (key === "autotopic_every") {
+      // 1.99up: one of Pepe's intervals, never under the admins' floor (Pepe re-checks against his own floor)
+      const cur = await settingsFor(R.id).catch(() => null);
+      const floor = (cur && cur.admin && cur.admin.autotopic_min) || 30;
+      ok = value === "default" || (CHOICES.autotopic_every.includes(Number(value)) && Number(value) >= floor);
+      if (!ok && /^\d{1,3}$/.test(value) && Number(value) < floor) return bad(res, 400, `Pepe's admins allow every ${floor} minutes at the most often.`);
+    } else if (key === "stt_language") {
+      // 1.99up: default (Pepe's global setting) / auto / one of the transcriber's languages Pepe sent (he re-checks)
+      ok = value === "default" || value === "auto" || CHOICES.stt.some((x) => x[0] === value) || (!CHOICES.stt.length && STT_RE.test(value));
+    }
     else ok = Object.prototype.hasOwnProperty.call(OWNER_SETTINGS, key) && OWNER_SETTINGS[key].includes(value);
     if (!ok) return bad(res, 400, "That isn't a setting you can change here.");
     // 1.99tn: a burst limit per account + pad (Pepe limits per room too); staff aren't limited
@@ -387,6 +448,33 @@ function register(app, { addUser }) {
       const id = await require("./actions").queue(req.user.userId, { kind: "room.owner", args: [R.id, key, value], tag: "owner",
         label: `${R.title}: ${key} ${value}` });
       await rooms.event(R.id, "pepe-setting", req.user.username || "?", `${key}=${key === "greeter_note" ? (value ? "(note)" : "(cleared)") : value} (sent to Pepe)`).catch(() => {});
+      res.json({ ok: true, id });
+    } catch (e) { queued(res, e); }
+  });
+
+  // 1.99up: the room's topic -> website action "room.topic" (Pepe re-checks the owner, the text, the limit; keeps a pending
+  // pad code that's in the topic; pauses the room's auto-topic). Checked here first so nothing junk is queued.
+  app.post("/api/rooms/:slug/owner/topic", addUser, express.json({ limit: "2kb" }), jsonOnly, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const R = await ownedPad(req, res); if (!R) return;
+    const text = cleanTopic((req.body || {}).text);
+    const why = topicProblem(text);
+    if (why) return bad(res, 400, why);
+    if (!rooms.isStaff(req.user)) {
+      const t = Date.now();
+      const hits = (TOPIC_HITS.get(R.id) || []).filter((x) => t - x < 3600e3);
+      if (hits.length >= TOPIC_MAX_HOUR) {
+        TOPIC_HITS.set(R.id, hits);
+        return bad(res, 429, `That's ${TOPIC_MAX_HOUR} topic changes this hour - try again in ${Math.ceil((3600e3 - (t - hits[0])) / 60000)} min.`);
+      }
+      hits.push(t);
+      TOPIC_HITS.set(R.id, hits);
+      if (TOPIC_HITS.size > 5000) TOPIC_HITS.clear();
+    }
+    try {
+      const id = await require("./actions").queue(req.user.userId, { kind: "room.topic", args: [R.id, text], tag: "owner",
+        label: `${R.title}: topic` });
+      await rooms.event(R.id, "pepe-topic", req.user.username || "?", `${text.slice(0, 160)} (sent to Pepe)`).catch(() => {});
       res.json({ ok: true, id });
     } catch (e) { queued(res, e); }
   });
@@ -453,6 +541,6 @@ function register(app, { addUser }) {
 }
 
 module.exports = { register, init, storeSettings, settingsFor, soundboardState, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS,
-                   padVoices, ownerVoicesForPepe, CONVO_QUIET,
+                   padVoices, ownerVoicesForPepe, CONVO_QUIET, AUTOTOPIC_EVERY, cleanTopic, topicProblem, TOPIC_MAX,
                    OWNER_GROUPS, OWNER_BOOL, cleanNote, readonlyList, myPads, languages: () => LANGS, choices: () => CHOICES,
-                   _reset: () => { CAPS = null; SET_HITS.clear(); } };
+                   _reset: () => { CAPS = null; SET_HITS.clear(); TOPIC_HITS.clear(); } };

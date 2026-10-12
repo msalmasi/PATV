@@ -273,6 +273,43 @@
       change('greeter_note', want, want, want);
     });
   });
+  // ── 1.99up: the room topic -> website action "room.topic"; "Waiting for Pepe…" until his report shows the new topic ──
+  var tForm = document.getElementById('poTopic');
+  if (tForm) {
+    var tIn = tForm.querySelector('input[name="topic"]');
+    var tBtn = tForm.querySelector('button[type="submit"]');
+    var tNow = document.getElementById('poTopicNow');
+    var tBusy = false;
+    var showTopic = function (p) {
+      if (tNow && p && p.topic && p.topic.text) tNow.textContent = _t('js.owner.topic_now', 'In the room now: {topic}', { topic: p.topic.text });
+    };
+    tForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (tBusy) return;
+      var want = String(tIn.value || '').replace(/\s+/g, ' ').trim();
+      if (want.length < 2) { status('topic', _t('js.owner.topic_short', 'Type a topic first.'), 'bad'); tIn.focus(); return; }
+      tBusy = true; tBtn.disabled = true; tIn.disabled = true;
+      status('topic', _t('js.owner.pending', 'Waiting for Pepe…'), 'wait');
+      api(base + '/owner/topic', { text: want }).then(function (d) {
+        if (!d || !d.ok) { tBusy = false; tBtn.disabled = false; tIn.disabled = false; return status('topic', (d && d.error) || _t('js.owner.not_sent', 'Not sent.'), 'bad'); }
+        watch(d.id, function (ok, m) {
+          tBusy = false; tBtn.disabled = false; tIn.disabled = false;
+          if (!ok) return status('topic', m || _t('js.owner.refused', 'Pepe refused it.'), ok === false ? 'bad' : 'wait');
+          tIn.value = '';
+          // confirm from his own report: the room's topic as he saw it come back from the room
+          var n = 0;
+          (function again() {
+            poll(function (p) {
+              var seen = p && p.topic && p.topic.text && p.topic.text.indexOf(want.slice(0, 60)) !== -1;
+              if (seen) { showTopic(p); applyState(p); return status('topic', _t('js.owner.confirmed', 'Pepe confirmed it.'), 'ok'); }
+              if (++n < 15) return setTimeout(again, 2000);
+              status('topic', (m ? m + ' - ' : '') + _t('js.owner.applied_wait', 'Pepe did it; this panel catches up with his next report.'), 'ok');
+            });
+          })();
+        });
+      }).catch(function () { tBusy = false; tBtn.disabled = false; tIn.disabled = false; status('topic', _t('js.owner.unreachable_set', 'Couldn\'t reach the site.'), 'bad'); });
+    });
+  }
   // the "everything else" disclosure remembers being open (per browser)
   var more = document.getElementById('poMore');
   if (more) {

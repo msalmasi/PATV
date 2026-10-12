@@ -103,6 +103,21 @@ async function setPadAnnounce(user, roomId, on) {
   return { announce: !!on };
 }
 
+/** 1.99up: the pad's announcement switch back to the default (on): the row goes. */
+async function resetPadAnnounce(user, roomId) {
+  await init();
+  const rooms = require("./rooms");
+  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this pad's owner (or a site admin) can change that.");
+  await runQuery("DELETE FROM golive_pad WHERE room_id = ?", [roomId]);
+  return { announce: true };
+}
+/** 1.99up: did the owner (or an admin) set the switch? (null = never: the default) */
+async function padAnnounceSet(roomId) {
+  await init();
+  const r = (await getQuery("SELECT announce FROM golive_pad WHERE room_id = ?", [String(roomId || "")]))[0];
+  return r ? !!r.announce : null;
+}
+
 // ── who hears about it ──
 /** Follower user ids for a start (see the header for every rule). */
 async function audience(roomId, streamerId) {
@@ -337,5 +352,5 @@ function register(app, { addUser, noTimers } = {}) {
   });
 }
 
-module.exports = { init, register, prefs, setPrefs, setFollow, padAnnounce, setPadAnnounce, audience, onLive, onSlot, slotLive, whatOf, nowPlaying,
+module.exports = { init, register, prefs, setPrefs, setFollow, padAnnounce, setPadAnnounce, resetPadAnnounce, padAnnounceSet, audience, onLive, onSlot, slotLive, whatOf, nowPlaying,
                    twitchTick, twitchNow, _twitchLive: twitchLive, _setClock, Refuse, RESTART_MS, PAD_GAP_MS };

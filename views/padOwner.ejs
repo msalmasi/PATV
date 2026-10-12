@@ -71,7 +71,11 @@
   .po .po-hist li:first-child { border-top: 0; }
   .po .po-quick { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h); }
   .po .ds-subnav .ds-tabs { gap: var(--ds-sp-1h); }
-  .po section[id] { scroll-margin-top: 72px; }
+  .po section[id], .po h3[id] { scroll-margin-top: 72px; }
+  /* 1.99up: the site card's post kinds */
+  .po .po-kinds { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h) var(--ds-sp-3); max-width: 420px; justify-content: flex-end; }
+  .po .po-kinds .ds-check { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: 13.5px; }
+  @media (max-width: 520px) { .po .po-set:has(.po-kinds) { flex-wrap: wrap; } .po .po-kinds { justify-content: flex-start; max-width: 100%; } }
 </style>
 <main class="ds-page po" id="po" <% if (!guide) { %>data-slug="<%= slug %>"<% } %>>
 <% if (guide) { %>
@@ -98,6 +102,7 @@
   <nav class="ds-subnav" aria-label="<%- t('owner.sections') %>"><div class="ds-tabs">
     <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
     <% if (camfrog) { %><a class="ds-tab" href="#mod">🛡️ <%- t('owner.nav_mod') %></a><% } %>
+    <% if (locals.site) { %><a class="ds-tab" href="#site">🌐 <%- t('owner.nav_site') %></a><% } %>
     <% if (camfrog) { %><a class="ds-tab" href="#vault">💰 <%- t('owner.nav_vault') %></a><% } %>
     <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
     <% if (camfrog) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
@@ -161,20 +166,53 @@
         notes.room_voice = vnotes.join(' ');
         if (adm.chatty_llm === false) notes.convo = t('owner.convo_llm_off');
         const quiet = (typeof CONVO_QUIET !== 'undefined' && CONVO_QUIET) || [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
+        // 1.99up: the room topic + auto-topic + the transcriber's language (pepe_roomowner: topic / stt in the report)
+        const tp = pepe.topic || {}, sttR = pepe.stt || {};
+        const atFloor = adm.autotopic_min || 30;
+        const atEvery = ((CHOICES && CHOICES.autotopic_every) || [15, 20, 30, 45, 60, 90, 120, 180]).filter((n) => n >= atFloor);
+        const sttList = (CHOICES && CHOICES.stt) || [];
+        const sttName = (c) => { const x = sttList.find((y) => y[0] === c); return x ? x[1] : String(c || ''); };
+        const atNotes = [];
+        if (adm.autotopic_master === false) atNotes.push(t('owner.autotopic_master_off'));
+        if (tp.paused_until) atNotes.push(t('owner.autotopic_paused', { when: dt(tp.paused_until) }));
+        if (tp.auto_own === false) atNotes.push(t('owner.default_note'));
+        notes.autotopic = atNotes.join(' ');
+        notes.autotopic_every = t('owner.autotopic_floor', { n: atFloor });
+        notes.stt_language = t('owner.stt_global', { lang: sttR.global === 'auto' || !sttR.global ? t('owner.stt_auto') : sttName(sttR.global) });
+        const TMAX = (typeof TOPIC_MAX !== 'undefined' && TOPIC_MAX) || 200;
       %>
       <% GROUPS.forEach(([g, gic, keys]) => { %>
-      <h3 class="ds-h4 po-gh"><%= gic %> <%- t('owner.grp_' + g) %></h3>
+      <h3 class="ds-h4 po-gh"<% if (g === 'topic') { %> id="topic"<% } %>><%= gic %> <%- t('owner.grp_' + g) %></h3>
       <p class="ds-meta"><%- t('owner.grp_' + g + '_why') %></p>
       <div class="po-sets">
-        <% keys.forEach((k) => { const v = ow[k], known = v !== undefined && v !== null; %>
-        <div class="po-set<%= k === 'greeter_note' ? ' po-set-note' : '' %>" data-po-row="<%= k %>">
+        <% keys.forEach((k) => { const v = ow[k], known = (v !== undefined && v !== null) || k === 'topic'; %>
+        <div class="po-set<%= k === 'greeter_note' || k === 'topic' ? ' po-set-note' : '' %>" data-po-row="<%= k %>">
           <div>
             <b><%= ICONS[k] || '' %> <%- lab(k) %></b>
             <p class="ds-meta"><%- why(k) %><% if (notes[k]) { %> <span class="po-admin"><%- notes[k] %></span><% } %></p>
+            <% if (k === 'topic') { %><p class="ds-fine" id="poTopicNow"><%- tp.text ? t('owner.topic_now', { topic: tp.text }) : t('owner.topic_unknown') %></p><% } %>
             <% if (!known && k !== 'greeter_note') { %><p class="ds-fine"><%- t('owner.unreported') %></p><% } %>
             <span class="po-st" data-po-st="<%= k %>" role="status" aria-live="polite"></span>
           </div>
-          <% if (k === 'language') { %>
+          <% if (k === 'topic') { %>
+          <form class="po-note" id="poTopic" novalidate>
+            <input class="ds-in" type="text" maxlength="<%= TMAX %>" name="topic" placeholder="<%- t('owner.topic_ph') %>" aria-label="<%- lab(k) %>" autocomplete="off">
+            <button type="submit" class="ds-btn sm ghost"><%- t('owner.topic_set') %></button>
+          </form>
+          <% } else if (k === 'autotopic_every') { %>
+          <select class="ds-select po-ctl" data-po-set="autotopic_every" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+            <option value="default" <%= v === 'default' ? 'selected' : '' %>><%- t('owner.every_default', { n: tp.every_effective || atFloor }) %></option>
+            <% atEvery.forEach((n) => { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.every_n', { n }) %></option><% }) %>
+            <% if (known && v !== 'default' && !atEvery.includes(v)) { %><option value="<%= v %>" selected><%- t('owner.every_n', { n: v }) %></option><% } %>
+          </select>
+          <% } else if (k === 'stt_language') { %>
+          <select class="ds-select po-ctl" data-po-set="stt_language" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+            <option value="default" <%= v === 'default' ? 'selected' : '' %>><%- t('owner.stt_default') %></option>
+            <option value="auto" <%= v === 'auto' ? 'selected' : '' %>><%- t('owner.stt_auto') %></option>
+            <% sttList.forEach(([c, n]) => { %><option value="<%= c %>" <%= v === c ? 'selected' : '' %>><%= n %></option><% }) %>
+            <% if (known && v !== 'default' && v !== 'auto' && !sttList.some((x) => x[0] === v)) { %><option value="<%= v %>" selected><%= v %></option><% } %>
+          </select>
+          <% } else if (k === 'language') { %>
           <select class="ds-select po-ctl" data-po-set="language" aria-label="<%- lab(k) %>">
             <% LANGS.forEach(([c, n, nat]) => { %><option value="<%= c %>" <%= ow.language === c ? 'selected' : '' %>><%= c === 'auto' ? t('owner.lang_auto') : n + (nat && nat !== n ? ' · ' + nat : '') %></option><% }) %>
           </select>
@@ -255,6 +293,64 @@
       <p class="ds-fine"><%- t('owner.mod_click') %></p>
     </div>
     <p class="ds-fine"><%- t('owner.mod_more') %></p>
+  </section>
+  <% } %>
+
+  <% if (locals.site) { %>
+  <%# 1.99up: Pepe on the pad's SITE side (padsite.js) - any pad. Site-applied: the values are the real effective ones, saved
+      at once; Pepe follows them from his next feed check. Each inherits the default until the owner overrides it. %>
+  <section class="ds-card lg po-site" id="site" aria-labelledby="poSiteH" data-slug="<%= slug %>">
+    <h2 class="ds-h2" id="poSiteH"><span class="dot"></span>🌐 <%- t('owner.site_h') %></h2>
+    <p class="po-why"><%- t('owner.site_why') %></p>
+    <%
+      const sv = site.values || {};
+      const onOff = (b) => (b ? t('owner.on') : t('owner.off'));
+      const defLabel = (k) => {
+        const d = sv[k] ? sv[k].def : null;
+        if (k === 'post_kinds') return t('owner.site_def', { v: t('owner.site_kinds_all') });
+        if (k === 'comment_rate') return t('owner.site_def', { v: t('owner.site_rate_' + d) });
+        if (k === 'automod_level') return t('owner.site_def', { v: t('owner.site_lvl_' + d) });
+        if (typeof d === 'boolean') return t('owner.site_def', { v: onOff(d) });
+        return t('owner.site_def', { v: t.esc(String(d)) });
+      };
+    %>
+    <% (site.groups || []).forEach(([g, gic, keys]) => { %>
+    <h3 class="ds-h4 po-gh"><%= gic %> <%- t('owner.site_grp_' + g) %></h3>
+    <div class="po-sets">
+      <% keys.forEach((k) => { const it = sv[k] || {}; const v = it.value; %>
+      <div class="po-set" data-ps-row="<%= k %>">
+        <div>
+          <b><%- t('owner.site_' + k) %></b>
+          <p class="ds-meta"><%- t('owner.site_' + k + '_why') %></p>
+          <p class="ds-fine"><span data-ps-def="<%= k %>" <%= it.own ? 'hidden' : '' %>><%- defLabel(k) %></span>
+            <button type="button" class="ds-btn sm ghost" data-ps-reset="<%= k %>" <%= it.own && !it.locked ? '' : 'hidden' %>><%- t('owner.site_reset', { v: '' }) %> <span class="ds-meta">(<%- defLabel(k) %>)</span></button>
+            <% if (it.locked) { %><span class="po-admin"><%- t('owner.site_locked') %></span><% } %></p>
+          <span class="po-st" data-ps-st="<%= k %>" role="status" aria-live="polite"></span>
+        </div>
+        <% if (k === 'post_kinds') { %>
+        <div class="po-kinds" role="group" aria-label="<%- t('owner.site_post_kinds') %>">
+          <% (site.kinds || []).forEach((kd) => { %><label class="ds-check"><input type="checkbox" data-ps-kind="<%= kd %>" <%= v === null || (Array.isArray(v) && v.includes(kd)) ? 'checked' : '' %> <%= it.locked ? 'disabled' : '' %>> <%- t('owner.site_kind_' + kd) %></label><% }) %>
+        </div>
+        <% } else if (k === 'posts_per_day') { %>
+        <select class="ds-select po-ctl" data-ps-set="posts_per_day" aria-label="<%- t('owner.site_posts_per_day') %>" <%= it.locked ? 'disabled' : '' %>>
+          <% (site.per_day || []).forEach((n) => { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.site_per_day_n', { n }) %></option><% }) %>
+          <% if (!(site.per_day || []).includes(v)) { %><option value="<%= v %>" selected><%- t('owner.site_per_day_n', { n: v }) %></option><% } %>
+        </select>
+        <% } else if (k === 'comment_rate' || k === 'automod_level') { const pre = k === 'comment_rate' ? 'rate' : 'lvl'; const opts = Object.keys(k === 'comment_rate' ? site.rates : site.levels); %>
+        <select class="ds-select po-ctl" data-ps-set="<%= k %>" aria-label="<%- t('owner.site_' + k) %>" <%= it.locked ? 'disabled' : '' %>>
+          <% opts.forEach((o) => { %><option value="<%= o %>" <%= v === o ? 'selected' : '' %>><%- t('owner.site_' + pre + '_' + o) %></option><% }) %>
+          <% if (v === 'custom') { %><option value="custom" selected disabled><%- t('owner.site_custom') %></option><% } %>
+        </select>
+        <% } else { %>
+        <label class="ds-switch" title="<%- t('owner.site_' + k) %>"><input type="checkbox" data-ps-set="<%= k %>" <%= v === true ? 'checked' : '' %> <%= it.locked ? 'disabled' : '' %> aria-label="<%- t('owner.site_' + k) %>"><span></span></label>
+        <% } %>
+      </div><% }) %>
+    </div>
+    <% }) %>
+    <h3 class="ds-h4 po-gh">🔒 <%- t('owner.site_floor_h') %></h3>
+    <p class="ds-meta"><%- t('owner.site_floor_why') %></p>
+    <ul class="po-ro"><% (site.floor || []).forEach((f) => { %><li><span><%- t('owner.site_floor_' + f) %></span><span class="ds-chip ok"><%- t('owner.site_always') %></span></li><% }) %></ul>
+    <p class="ds-fine"><%- t('owner.site_more', { href: href + '/settings?tab=pepe' }) %></p>
   </section>
   <% } %>
 
@@ -452,7 +548,8 @@
     <p class="ds-fine"><%- t('owner.generated') %></p>
   </section>
 </main>
-<% if (!guide) { %><script src="/public/js/pad-owner.js?v=3" defer></script><% } %>
+<% if (!guide) { %><script src="/public/js/pad-owner.js?v=4" defer></script><% } %>
+<% if (!guide && locals.site) { %><script src="/public/js/pad-owner-site.js?v=1" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><link rel="stylesheet" href="/public/css/room-mod.css?v=9"><script src="/public/js/room-mod.js?v=11" defer></script><script src="/public/js/pad-owner-mod.js?v=1" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><script src="/public/js/pad-sb-owner.js?v=1" defer></script><% } %>
 </body>

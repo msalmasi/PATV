@@ -181,14 +181,20 @@ instead. Starters need Pepe's chat model, which is Pepe-wide. When admins have i
 
 Classes:
 - **(a)** was already in the owner panel.
-- **(b)** added in 1.99tn.
+- **(b)** added in 1.99tn, or later where it says so (1.99up: the room topic, the auto-topic, the mic transcription
+  language - moved out of (c) with the reasons in the table).
 - **(c)** admins only, for the reason given.
+
+Connection-specific settings (the topic, the transcription language) are stored per Camfrog room id today, which is the
+pad's connection key (`pad_connections.external_id`). When another chat platform gets a bridge, its adapter implements the
+same owner keys for its own channel (a Twitch title, a Discord channel topic) under that connection; the panel's copy
+already says "your pad's chat room", not "Camfrog room".
 
 | Setting (bot key) | Class | Notes / reason |
 |---|---|---|
 | Cam snapshots `snap_enabled`, cam clips `clip_enabled`, mic challenges `challenge_enabled` | a | |
 | Soundboard `soundboard_enabled` | a | inside the admins' master switch |
-| Language `room_language` | a | |
+| Pepe's CHAT language `room_language` | a | the language he writes and answers in (1.99jl). Not the transcription language. |
 | Greetings `greeter_enabled` + `greeter_note` | a | |
 | Chatty level `chatty_enabled` / `chatty_frequency` | a | |
 | Music + DJ in the room `spotify_enabled`, song requests `music_queue_enabled` / `music_play_enabled` | a | |
@@ -205,10 +211,13 @@ Classes:
 | **Captions of Pepe's mic lines** `mic_caption_enabled` | **b** | room-only, free |
 | **Event alerts here** `alerts_enabled` | **b** | room-only (other rooms are unaffected) |
 | **The DJ's spoken drops here** `dj_talk_enabled` | **b** | room-only; the LLM cap per hour stays global |
+| **Room topic** (`!topic` / web action `room.topic`) | **b** (1.99up) | free for the owner in their own room, 6 an hour, text guard, never a pad code, a pending code kept. See "The room topic". |
+| **Auto-topic** `auto_topic_enabled` / `autotopic_frequency` | **b** (1.99up, was c) | the user's decision ("Pepe's behaviour in their room"). LLM spend stays bounded by the admins' master switch `autotopic_master` and floor `autotopic_owner_min`; pad codes are protected by `_topic_send` like any topic. |
+| **Mic transcription language** `stt_room_language` | **b** (1.99up, was c) | the transcriber is shared but the language is a per-request hint, so per room is safe. See "The mic transcription language". |
 | Pepe speaks at all `tts_enabled`, chatty mic chance `tts_chatty_chance`, starter mic chance `convo_mic_chance`, spoken alerts `alert_tts_enabled` / `alert_voice` | c | one shared VoiceBox and TTS queue for every room (GPU time) |
 | Persona / costume `persona_active`, `avatar_costume` | c | global: one Pepe, one avatar for every room |
 | Auto-DJ `auto_dj_enabled`, patter settings `dj_patter_*` | c | one Spotify and one DJ for every room; LLM spend |
-| Room topic setter `auto_topic_enabled` / `autotopic_frequency` | c | rewrites the Camfrog room's /topic (pad verification codes live there) and spends LLM per topic |
+| The auto-topic's master switch `autotopic_master` and the owners' shortest interval `autotopic_owner_min` | c | LLM spend (one call per topic) |
 | `!ask`, `!look`, roasts, cam roasts, `!imagine` overlay, research | c | LLM, vision and image spend (real money); roasts follow the room vibe |
 | Command prices `pat_costs`, heist shop `shop_enabled`, wheel cooldown `spin_cooldown_s` | c | economy |
 | Turf wars `game_turf_enabled` | c | economy, cross-room war map |
@@ -218,8 +227,111 @@ Classes:
 | Website commands through the bridge `bridge_cmds` | c | web users spending PAT in the room through the relay. The owner can switch the whole relay off. |
 | House ads `promo_enabled`, sponsors, banner bookings | c | one shared promo slot, revenue |
 | Mic mechanics: `mic_slot_limit`, jukebox mic hold `mic_music_enabled`, `mic_alerts_enabled`, room auto-switch, music pause | c | one mic and one audio pipeline. A wrong slot count makes Pepe grab or bump the mic. |
-| Spoken / transcribed language `tts_language`, `stt_*` | c | one transcriber for every room |
+| Spoken language `tts_language`; the transcriber's global rules `stt_language`, `stt_languages` (auto-detect allow-list), `stt_min_lang_prob`, `stt_user_languages` | c | one VoiceBox and one transcriber; per-person languages are Pepe admins' (a person, not a room). The room's own transcription language is the owner's (b). |
 | Auto stickers `sticker_auto_enabled` | c | fragile native send path, staged rollout |
 | Snapshot link lifetime `snap_expiry_hours` | c | storage on Pepe's shared disk |
 | Chat-log / recording retention | c | set by the pad's tier (Prime Time / Plus), not a switch |
 | Clip opt-ins (`!clipmic`, `!autoclip`) | n/a | per user, not per room |
+
+### The room topic (1.99up)
+
+The owner sets their connected room's topic from the panel (website action `room.topic` [room id, text]) or with
+`!topic <text>` in the room. For the owner in their own room it is free (everyone else's `!topic` costs its price, admins
+free). Both paths check the same things, on the site and again in Pepe (`pepe_roomowner._op_set_topic`):
+
+- 2 to 200 characters, one line, no leading slash;
+- the text guard (`textguard.js` on the site, `pepe_roomowner.TOPIC_BAD` in Pepe, the same list): slurs, sexual content
+  about minors, threats, PAT scams, fake staff announcements, phone numbers and street addresses;
+- at most 6 owner topic changes per room per hour (site per pad, Pepe per room; staff / Pepe admins exempt);
+- an audit row: `room_events` "pepe-topic" on the site, the mod log "pepe_owner_topic" in Pepe.
+
+**Pad verification codes.** A `PATV-XXXXXX` code in a room's topic is the room owner's proof that they run the room
+(`padconnect.js`): only the room's owner / operators can set a topic in Camfrog. If Pepe set a topic that carried a code,
+anyone could pay for `!topic PATV-XXXXXX` in a room they don't run and connect it to their own pad. So every topic Pepe
+sets goes through one function, `_topic_send`:
+
+- Text that looks like a code (`PATV` + any separators + 6 letters/digits, after NFKC and with invisible format characters
+  removed) is refused: the owner's topic, the paid `!topic` and the auto-topic (a generated topic like that is dropped).
+  This closed a real gap: before 1.99up the paid `!topic` put any text in the topic.
+- A **pending** code (one the site's owner sync lists in `pad_verify`) that is in the room's topic right now is kept:
+  Pepe appends it (` · PATV-XXXXXX`, inside the 200 characters), so changing the topic can't break a verification in
+  progress. A code that isn't pending is not copied.
+- The website path only ever sends to that room's own socket. When Pepe isn't in the room the action is refused (never
+  a fallback room) and doesn't count against the limit.
+
+**Auto-topic vs the owner's topic.** The owner's manual topic pauses the room's auto-topic for 6 hours
+(`autotopic_paused_until`); switching the auto-topic on again in the panel ends the pause at once. The panel shows the
+pause. A paid `!topic` from someone else only restarts the auto-topic's timer, as before.
+
+### The auto-topic (1.99up)
+
+The user's decision (2026-10-12): the auto-topic is Pepe's behaviour in the owner's room, so the owner controls it.
+
+- `autotopic` on/off = the room's `auto_topic_enabled` (the same key as `!autotopic on|off`). Until the owner sets it,
+  the room follows the global default (the panel says "Following Pepe's default").
+- `autotopic_every` = one of 15 / 20 / 30 / 45 / 60 / 90 / 120 / 180 minutes, or "default" (the global slider). Stored as
+  the room's `autotopic_frequency` on the admin slider's scale.
+- **Cost guard (admins):** `autotopic_master` (default on) stops the auto-topic in every room; `autotopic_owner_min`
+  (default 30 minutes) is the shortest interval in any room whose pad has a user owner, whatever the owner, the room or the
+  global slider says. Both are in the admin panel's Conversation starters & topic card. House rooms aren't floored.
+- Real state: Pepe's report carries `topic` = {text he last saw, paused_until, auto, running, every_effective} and
+  `admin.autotopic_master` / `admin.autotopic_min`.
+
+### The mic transcription language (1.99up)
+
+**What the existing "Language" picker is:** `room_language` (1.99jl) is the language Pepe **chats in** in that room - his
+replies, chatty lines, topics and starters. Its only effect on speech-to-text was a side one: a fixed non-English room
+language is added to the admins' auto-detect allow-list (`_rl_stt_hint`). It never set the transcription language. The
+panel now calls it "Pepe's chat language".
+
+The new `stt_language` setting is the room's own **transcription** language (`stt_room_language`): "default" (follow the
+global `stt_language`), "auto" (auto-detect each clip, with the admins' allow-list rules), or one fixed language from the
+transcriber's list (`transcriber.LANG_NAMES`). It is the language hint sent with that room's mic clips
+(`MicRecorder._language_for(username, room)`); a per-person forced language (`stt_user_languages`, admins) still wins.
+The per-room net_audio recorders get the hook too (`_na_sync_recorder`) - they never had 1.99jl's `room_language_hint`
+before, so that side effect now also works per room.
+
+Backends: the transcriber is shared, but `language` is a per-request form field.
+- Thor pepe-stt (live): `language=auto` -> Whisper large-v3 language ID, then English -> Parakeet, anything else -> Whisper;
+  an explicit code skips detection: `en` -> Parakeet, any other code -> Whisper in that language. Parakeet is English-only,
+  so it has no hint of its own; the routing is the fallback. The Thor app ignores the `languages=` allow-list (it uses its
+  own LID_STRICT rules).
+- CT 101 Whisper (standby): takes `language` directly (and the allow-list fields).
+- The local GPU fallback (faster-whisper): `language=` the same way.
+
+## 5. Pepe on your pad's page (1.99up)
+
+The owner panel's 🌐 card (`padsite.js`, any pad, not only connected ones) collects what Pepe does on the pad's SITE side.
+The site applies these itself (no Pepe round trip); each value shown is the effective one read back from the store that
+enforces it, and Pepe follows it from his next feed sync.
+
+| Group | Setting | Store | Default |
+|---|---|---|---|
+| | Pepe on this pad's feed | `pepefeed` scope `enabled` | on |
+| Posts | His own posts | `pepefeed` `posts` (unset = the old `auto`) | off |
+| | Which kinds (recaps, questions, music picks, news, snaps) | `pepefeed` `kinds` (unset = all) | all |
+| | Posts a day (1, 2, 3, 5, 10) | `pepefeed` `posts_per_day` | 1 |
+| | Go-live / now-playing announcements in the pad | `golive_pad.announce` | on |
+| Comments | Answer mentions | `pepefeed` `respond` | on |
+| | Comment on his own | `pepefeed` `comments` (unset = `auto`) | off |
+| | How chatty: low 4/day 60 min apart, normal 10 / 30, high 25 / 15 | `comments_per_day` + `gap_min` | normal |
+| Moderation | Pepe's feed moderation | `feedautomod` `on` | off |
+| | How strict: relaxed (none / flag / hide), standard (flag / flag / hide), strict (flag / hide / remove) for minor / serious / severe | `feedautomod` severities | standard |
+
+- **Inheritance.** Every setting follows the default until the owner changes it ("Default: on"); "Reset to default"
+  removes the stored value (`pepefeed.resetScope`, `golive.resetPadAnnounce`, the automod defaults). A setting counts as
+  changed when this card set it (`pad_site_overrides`) or when its stored value differs from the default (the pad settings'
+  Pepe tab writes the same stores and still works).
+- **Bot.** The sync's scope entry now carries `posts`, `comments` and `kinds` (and `auto` = either, for an older bot);
+  `pepe_feed.pf_gate` reads them and `_pf_kind_ok` skips a kind the pad doesn't allow before any model call. The site
+  refuses a post of a kind the pad keeps out (`pepefeed.post`).
+- **Limits and audit.** 20 changes a minute and 100 an hour per account and pad (staff exempt); every change and reset is a
+  `room_events` "pepe-site" row, on top of `pepe_feed_log` and "feed-automod-settings".
+- **A site admin's lock** (`admin_lock` on the Pepe or the automod settings) still holds: the card shows it and refuses.
+
+**The safety floor - not owner settings:** image safety on uploads (`imagesafety.js`), reports and the admins' review
+queue, the TAKE IT DOWN process (`takedown.js`), the CSAM escalation (always at least hidden, admins told, whatever the
+pad says), and - new in 1.99up - while Pepe's feed moderation is on, a **severe** verdict (illegal content, doxxing,
+credible threats, NCII) is at least hidden (`feedautomod.SEVERE_FLOOR`, applied when settings are read and in `decide`).
+Owners only choose Pepe's optional extras and how strict they are above that floor. Pepe's feed moderation itself stays
+opt-in per pad (default off), as before.

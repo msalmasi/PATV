@@ -330,6 +330,64 @@
    ]
   },
   {
+   "id": "room_topic",
+   "area": "room",
+   "title": "Set your room's topic",
+   "commands": [
+    "!topic"
+   ],
+   "syntax": [
+    "!topic <text>"
+   ],
+   "web": "/p/{slug}/owner#topic",
+   "howto": "In your own pad's chat room !topic is free for you (everyone else pays for it), or type the topic on your owner page. Up to 200 characters and 6 changes an hour; slurs, threats, phone numbers and addresses are refused, and so is anything that looks like a pad code (PATV-...): those go in the topic only by the room's owner typing it there. A pad code that's in the topic while a connection waits for it stays in the topic. Your topic pauses Pepe's auto-topic for 6 hours (switch the auto-topic on again to resume it sooner).",
+   "owner_only": true,
+   "code": [
+    "frida-bot.py:handle_pepe_topic",
+    "pepe_roomowner.py:_op_topic_from_chat"
+   ]
+  },
+  {
+   "id": "room_topic_web",
+   "area": "room",
+   "title": "Set your room's topic from the website",
+   "web": "/p/{slug}/owner#topic",
+   "web_action": "room.topic",
+   "howto": "The topic box on your owner page: Pepe sets it in your connected room with the same checks and limits as !topic, and the page shows the room's topic as Pepe last saw it.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_topic"
+   ]
+  },
+  {
+   "id": "room_autotopic",
+   "area": "room",
+   "title": "Let Pepe keep your room's topic fresh",
+   "web": "/p/{slug}/owner#topic",
+   "web_action": "room.owner",
+   "web_setting": "autotopic",
+   "setting": "auto_topic_enabled",
+   "howto": "The auto-topic: Pepe writes a new one-line topic about what your room is talking about. Switch it on or off and pick how often (every 15 minutes to every 3 hours) - never more often than Pepe's admins allow, and only while their master switch is on. Until you choose, your room follows Pepe's default.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
+   "id": "room_stt",
+   "area": "room",
+   "title": "Pick the language Pepe transcribes your room's mic in",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "web_setting": "stt_language",
+   "setting": "stt_room_language",
+   "howto": "Pepe transcribes mic-ups (for the pad's mic transcripts, captions and what he knows was said). By default your room follows Pepe's setting; pick auto (Pepe detects the language of every clip) or one fixed language for a room that speaks it. Someone with their own transcription language set by Pepe's admins keeps it. This is the transcription only - the language Pepe answers in is the Language setting.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
    "id": "bridge",
    "area": "room",
    "title": "Connect your room to its pad page",
@@ -467,8 +525,8 @@
   "!lookpublic, !ask and roasts",
   "the soundboard master switch and the strike range owners pick from",
   "Pepe's persona and costume (one Pepe for every room)",
-  "the room's /topic setter (!autotopic)",
+  "the auto-topic's master switch and the shortest auto-topic interval owners may pick",
   "house ads (!promo) and sponsors",
-  "Pepe's room language for speech-to-text and the mic slots"
+  "the mic slots and the transcriber's global rules (auto-detect allow-list, per-person languages)"
  ]
 }
