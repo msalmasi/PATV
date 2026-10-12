@@ -46,8 +46,8 @@ the site (Phase 1). After that, every game that moves next no longer has to "sen
 | 10 | LMSR markets + MM vault | bot `markets.json`, `pepe_amm.py` | no trading, no settlement | **moved** (built 1.99tv/tw, `capital/markets.js`; one capital cutover, `docs/capital-cutover-runbook.md`) | M | M | 3 |
 | 11 | Reserve (Fed) loans to players + Bank vault | bot `loans.json` + vault cash | no requests / collection | **moved** (built 1.99tv/tw, `capital/reserve.js`) | M | M | 3 |
 | 12 | Staking (capital vaults) + stashes | bot `vaults.json`, `pvaults.json` | no stake/unstake; epochs late | **moved** (stashes 1.99ne; the share book + cut-off built 1.99tv/tw, `capital/vaults.js`) | L | H | 3 |
-| 13 | Treasury epoch, monetary ticks, automint, burn, Casino-vault feed | bot ticks on the 30 s heartbeat | Monday epoch / 04:00 tick late | **move** (site scheduler) | M | H | 4 |
-| 14 | Room vaults (E-3) + launchpad | bot `room:<id>` pools, `econ_launchpad` | site misroutes after restart | **move** | M | M | 4 |
+| 13 | Treasury epoch, monetary ticks, automint, burn, Casino-vault feed | bot ticks on the 30 s heartbeat | Monday epoch / 04:00 tick late | **moved** (built 1.99ug/um/uo: `policy/*`, one site scheduler; treasury + monetary + burn; automint / wheel cut / Casino feed retired; `docs/policy-engines-cutover-runbook.md`; staging left in shadow) | M | H | 4 |
+| 14 | Room vaults (E-3) + launchpad | bot `room:<id>` pools, `econ_launchpad` | site misroutes after restart | pools moved (Phase 1); the E-4 recipe / activity → pads / launchpad payments **stay** for now (Camfrog observations; see Phase 4 status) | M | M | 4 |
 | 15 | AI market judge | bot `pepe_aijudge.py` | no proposals | **split** (site settles; bot gathers evidence) - **built 1.99to** (`oracle.js`, `docs/oracle-contract.md`) | M | M | 5 |
 | 16 | Achievements | bot counters, site awards | Camfrog counts pause (fine) | **split** - **built 1.99to** (`achprogress.js`, `docs/achievements-cutover-runbook.md`; staging ON) | M | L | 5 |
 | 17 | Economy telemetry, supply snapshot | bot pushes | stale charts | **split** - **built 1.99to** (`supply.js`; Pepe sends only his rows) | S | L | 5 |
@@ -643,6 +643,28 @@ rule as v2 §16 ("riskiest thing (money) first").
 - Ship them during a week with no Monday-epoch change, with a dry-run mode first. Both monetary and treasury already
   have dry runs.
 - **v2**: Fed / Treasury / `room_vault` contract transitions (L-4 Economy v3 notes).
+- **Built 1.99ug (site + bot), fixes 1.99um / 1.99un / 1.99uo; on staging 2026-10-12, left in SHADOW.** `policy/*` on the site: ONE
+  scheduler (a lease, done-keys per period, catch-up cap 1) for three engines with one switch each - **treasury** (the Monday
+  waterfall + the daily release), **monetary** (floor mint, issuance, the Monday guarantee, the ceiling release, the activity
+  rewards), **burn** (the accrual). Modes off / dry / shadow / live; live only through Pepe's handshake (`!econ engines cutover`),
+  rollback back to shadow, detach. The plans are ported expression for expression and held to the REAL Python by vectors
+  (`tools/gen_policy_vectors.py` → `test/policy-vectors.test.js`, 900 cases + 6,000 checked once: 0 differences); every leg uses
+  Pepe's own key. Rehearsed on staging with prod's econ docs: dry → shadow (engine and total diff 0 on every period) → cutover →
+  live runs equal to Python on the site's own inputs → rollback (Pepe's books hold every site period) → cutover again → back to
+  shadow for the 2026-10-19 Monday. Runbook: `docs/policy-engines-cutover-runbook.md`.
+- **Retired, not ported:** automint (dead under the layers), the wheel cut (gone since 1.99pk), the Casino-vault feed (a no-op under
+  the live treasury; v1 stays Pepe's), layers recovery (subsumed: one transaction per site run).
+- **Stays in Pepe for now (Phase 4b / v2):** the Fed's event operations (admin mint, `!econ fund`, `!econ fedloan`, flash, donation
+  mints - PAT already on the site's pools and share book; the journal stays his, so the mint caps have two writers until they move);
+  the E-4 recipe, activity → pads, profile vaults (Camfrog observations, convoys); the launchpad's grant payments; room-vault claim
+  settling; the incentive budget's week record (the routed payouts' pacing).
+- **Found on the way:** prod's `PayloadTooLargeError` is Pepe's econ docs push (`/api/econ/docs/put`, ~116 KB > the 100 KB global
+  parser) - every push since the pools cutover failed and the site kept the cutover's copy (`fed_journal`, `incentive_groups` stale).
+  Fixed in 1.99ug (the route's own body limit + the skip list); it must reach prod before any Phase 4 shadow.
+- **Open questions:** (P4-1) move the Fed's event operations to the site so the Fed has one writer (recommended next, before v2);
+  (P4-2) activity rewards to a login with no PATV account - keep Pepe's old behaviour (create the account) or not pay (the site
+  today: not paid, stays in the budget); (P4-3) the cutover date relative to Phase 3 on prod (recommended: two shadow Mondays,
+  2026-10-19 and 10-26, then Tuesday 10-27).
 
 ### Phase 5 — splits and leftovers
 - 5.14 achievement counters to the site, 5.15 AI judge as an oracle client, 5.16 telemetry, 5.17 drop config.
@@ -720,7 +742,7 @@ rule as v2 §16 ("riskiest thing (money) first").
 | `/api/markets/sync`, `/api/markets/orders/claim|ack` | `pepe_market.py` | Phases 2–3 |
 | `/api/wallet/loans`, `/api/wallet/stashes` (wallet.js) | `pepe_loan.py`, `pepe_pvault.py` | Phase 3 |
 | `/api/staking/sync` (staking.js) | `pepe_vaults.py` | Phase 3 |
-| `/api/g/burns/record` (burns.js), C1 `econ.burn` | `pepe_burn.py` | Phase 4 |
+| `/api/g/burns/record` (burns.js), C1 `econ.burn` | `pepe_burn.py` | Phase 4: the accrual burns on the site (`policy/apply.runBurn` writes `pat_burns` itself); manual burns stay Pepe's |
 | `/api/g/roomvaults/sync` (roomvaults.js), `/api/g/launchpad/*` | `pepe_roomvault.py`, `pepe_launchpad.py` | Phase 4 |
 | `/api/g/achievement` (index.js) | `pepe_achievements.py` | Phase 5: awards from `/api/achievements/bot/events` once the counters live on the site (backfills keep it) |
 | `/api/cosmetics/drop-config` | `pepe_cosmetics.py` | Phase 5: ignored once the site owns the table (`/drop-config/state` instead) |
