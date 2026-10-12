@@ -195,8 +195,10 @@
 
   <section class="ds-card lg" id="prime" aria-labelledby="poPrimeH">
     <h2 class="ds-h2" id="poPrimeH"><span class="dot"></span>📺 <%- t('owner.prime_h') %>
-      <span class="ds-chip <%= prime && prime.active ? 'gold' : 'mute' %>"><%- prime && prime.active ? t('owner.prime_on') : t('owner.prime_off') %></span></h2>
-    <p class="po-why"><%- t('owner.prime_why', { slots: primePerks ? primePerks.prime_extra_slots : 0, badges: primePerks ? primePerks.prime_extra_badges : 0 }) %></p>
+      <% const poOn_ = !!(prime && (prime.active || (prime.plus && prime.plus.active))); %><span class="ds-chip <%= poOn_ ? 'gold' : 'mute' %>"><%- poOn_ ? (prime.plus && prime.plus.active ? '💎 ' : '') + t('owner.prime_on') : t('owner.prime_off') %></span></h2>
+    <p class="po-why"><%- t('owner.prime_why2') %></p>
+    <%# 1.99tc: the pad's tier perks from the shared perk table (premiumperks.js) - was a hand-written sentence that drifted %>
+    <%- include('partials/pad-tier-perks', { padTier: prime && prime.plus && prime.plus.active ? 'prime_plus' : prime && prime.active ? 'prime_time' : null }) %>
     <% if (prime && prime.active) { %>
       <p class="ds-meta"><%- prime.comped ? t('owner.prime_comped') : (prime.renewing ? t('owner.prime_renews', { when: dd(prime.paid_through) }) : t('owner.prime_ends', { when: dd(prime.ends || prime.paid_through) })) %></p>
     <% } else if (primePrice) { %>

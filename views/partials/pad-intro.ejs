@@ -1,0 +1,20 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99tc: the pad page's tier intro (padfx.css). Locals: introTier (prime_time | prime_plus | null), introPad (the slug).
+    📺 Prime Time: the gold "PRIME TIME" sweep bar (1.99iv). 💎 Prime Time Plus: its own title card - a diamond, PRIME TIME
+    PLUS in ice-to-gold, a gold rule drawing out, a light sweep and a few sparkles, over a soft violet veil (~3.6 s, once
+    per page load, never catches clicks). Reduced motion: the bar is skipped; the card only fades in and out (no movement). %>
+<% if (locals.introTier === 'prime_plus') { %>
+<div class="pp-intro" aria-hidden="true">
+  <span class="pp-intro-veil"></span>
+  <span class="pp-intro-card">
+    <span class="pp-intro-spark s1">✦</span><span class="pp-intro-spark s2">✦</span><span class="pp-intro-spark s3">✧</span><span class="pp-intro-spark s4">✦</span>
+    <span class="pp-intro-gem">💎</span>
+    <span class="pp-intro-kick"><%- t('pad.intro.pp_kicker') %></span>
+    <span class="pp-intro-title"><span class="pt"><%- t('pad.intro.pp_title') %></span> <span class="pl"><%- t('pad.intro.pp_plus') %></span></span>
+    <span class="pp-intro-rule"></span>
+    <% if (locals.introPad) { %><span class="pp-intro-pad">p/<%= introPad %></span><% } %>
+  </span>
+</div>
+<% } else if (locals.introTier === 'prime_time') { %>
+<div class="pt-intro" aria-hidden="true"><%- t('pad.intro.pt') %></div>
+<% } %>

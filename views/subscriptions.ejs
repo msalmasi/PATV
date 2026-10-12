@@ -22,6 +22,9 @@
   .sx .msg:empty { display: none; }
   .sx .chip { display: inline-flex; align-items: center; padding: 1px 10px; border-radius: var(--ds-r-pill); background: linear-gradient(90deg, #cc7b19, #e5a00d); color: var(--ds-on-ac);
               font-size: var(--ds-fs-meta); font-weight: 700; vertical-align: 1px; }
+  .sx .sx-perks { margin: 0 0 var(--ds-sp-2); }
+  .sx .sx-perks summary { cursor: pointer; min-height: var(--ds-tap); display: flex; align-items: center; color: var(--ds-text-2); font-size: var(--ds-fs-sm); }
+  .sx .sx-perks[open] summary { margin-block-end: var(--ds-sp-2); }
   @media (max-width: 520px) { .sx .acts { width: 100%; } }
 </style>
 <%
@@ -109,6 +112,9 @@
           <% if (p.renewing) { %><button type="button" class="ds-btn sm danger dan" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="0"><%- t('subs.prem_off') %></button>
           <% } else if (p.status === 'active' || p.status === 'grace') { %><button type="button" class="ds-btn sm ghost" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="1"><%- t('subs.prem_on') %></button><% } %>
         </div><% } %></div>
+      <%# 1.99tc: what the tier gets - the same perk table as /premium (premiumperks.js) %>
+      <% if (['prime_time', 'prime_plus', 'season_pass'].includes(p.tier)) { %><details class="sx-perks"><summary><%- t('perks.included') %></summary>
+        <%- include('partials/tier-perks', { tier: p.tier, compact: true }) %></details><% } %>
     <% }) %>
     <% if (S.premium.length) { %><p class="mut"><a href="/premium"><%- t('subs.prem_link') %></a></p><% } %>
   </section>

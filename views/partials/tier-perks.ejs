@@ -1,0 +1,21 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99tc: ONE perk list for every page that shows what a tier gets (premiumperks.js is the table). Locals: tier
+    (prime_time | prime_plus | season_pass), compact (titles only), skip (perk ids to leave out), perkTable / perkText
+    (app.locals, premium.register). %>
+<% const TB_ = typeof perkTable === 'function' ? perkTable() : null;
+   const TX_ = typeof perkText === 'function' ? perkText : (tt, pair) => tt(pair[0], pair[1]);
+   const SKIP_ = locals.skip || [];
+   const LIST_ = ((TB_ && TB_[tier]) || []).filter((p) => !SKIP_.includes(p.id)); %>
+<style>
+  .tp-perks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-2h, 10px); min-width: 0; }
+  .tp-perks li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--ds-sp-2h, 10px); align-items: start; font-size: var(--ds-fs-sm, 14px); line-height: 1.45; }
+  .tp-perks li b { color: var(--ds-text-strong, #fff); }
+  .tp-perks li span.d { color: var(--ds-text-muted, #9a9a9a); display: block; font-size: var(--ds-fs-meta, 12.5px); }
+  .tp-perks li.soon b, .tp-perks li.soon > .ds-ic { opacity: .75; }
+  .tp-perks .soon-tag { margin-inline-start: 6px; }
+  .tp-perks.compact { gap: var(--ds-sp-1h, 6px); }
+  .tp-perks.compact li { font-size: var(--ds-fs-meta, 12.5px); }
+</style>
+<ul class="perks tp-perks<%= locals.compact ? ' compact' : '' %>" data-tier="<%= tier %>">
+  <% LIST_.forEach((p) => { %><li class="<%= p.live ? 'live' : 'soon' %>" data-perk="<%= p.id %>"><span class="ds-ic lg" aria-hidden="true"><%= p.icon %></span><span><b><%- TX_(t, p.title) %></b><% if (!p.live) { %><span class="ds-tag soon-tag"><%- t('premium.coming_soon') %></span><% } %><% if (!locals.compact) { %><span class="d"><%- TX_(t, p.desc) %></span><% } %></span></li><% }) %>
+</ul>

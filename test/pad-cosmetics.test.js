@@ -463,7 +463,7 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   }, extra);
   const page = async (u) => (await ejs.renderFile(path.join(repo, "views", "room.ejs"), roomLocals(u))).replace(/\r\n/g, "\n");
   let html = await page("fan");
-  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/padfx\.css\?v=3">/);
+  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/padfx\.css\?v=4">/);
   assert.match(html, /<section class="hero pfx pfx-f-pride is-anim" aria-labelledby="rmTitle"><span class="pfx-l" aria-hidden="true"><\/span>/);
   assert.match(html, /<span class="rm-nm pfx-g pfx-g-rainbow">Houseplants<\/span><span class="pfx-bs">/);
   assert.match(html, /role="menuitem" data-pad-gift="[^"]+">🎁 Gift a cosmetic<\/button>/, "⋯ menu for a non-owner");
@@ -483,7 +483,7 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   assert.match(rooms_, /<span class="t<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badges : '' %>/);
   const home = rd("views/home.ejs");
   assert.match(home, /<span class="nt<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>"><%= r\.name %><\/span><%- fx_ \? fx_\.badgesMini : '' %>/);
-  assert.match(home, /padfx\.css\?v=3/);
+  assert.match(home, /padfx\.css\?v=4/);
   // settings: the ✨ Cosmetics section inside the 🎨 Look card
   const ps = rd("views/padSettings.ejs");
   const look = ps.slice(ps.indexOf('<h3>🎨 Look</h3>'), ps.indexOf('id="royalties"'));

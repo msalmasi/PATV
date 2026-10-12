@@ -223,7 +223,40 @@ async function loadConfig() {
   const c = {};
   for (const r of await getQuery("SELECT key, value FROM premium_config")) { try { c[r.key] = JSON.parse(r.value); } catch (e) { /* skip */ } }
   CONFIG = cleanConfig(c);
+  if (c.pepe_retention) RETENTION = cleanRetention(c.pepe_retention);
   return CONFIG;
+}
+
+// ── 1.99tc: Pepe's retention windows (camfrog-bot pepe_retention.py is what enforces them) ──
+// Pepe reports his live windows with every owner sync (POST /api/rooms/owners `retention`); the perk lists
+// (premiumperks.js) read them from here so /premium never promises a window Pepe doesn't keep. null = no time limit.
+// Until the first report: his defaults (the user's numbers, 2026-10-11).
+const RETENTION_DEFAULTS = Object.freeze({ chat_days: 30, chat_prime: null, rec_days: 30, rec_prime: 365, pm_days: 30, pm_pass: null,
+                                           chat_plus: null, rec_plus: null });
+function cleanRetention(raw) {
+  const out = { ...RETENTION_DEFAULTS };
+  if (!raw || typeof raw !== "object") return out;
+  for (const k of Object.keys(RETENTION_DEFAULTS)) {
+    if (!(k in raw)) continue;
+    const v = raw[k];
+    if (v === null) out[k] = null;
+    else if (Number.isInteger(v) && v >= 1 && v <= 36500) out[k] = v;
+  }
+  return out;
+}
+let RETENTION = { ...RETENTION_DEFAULTS };
+const retention = () => ({ ...RETENTION });
+/** Pepe's report -> RETENTION (stored only when it changed). */
+async function noteRetention(raw) {
+  if (!raw || typeof raw !== "object") return false;
+  const next = cleanRetention(raw);
+  if (JSON.stringify(next) === JSON.stringify(RETENTION)) return false;
+  RETENTION = next;
+  try {
+    await init();
+    await runQuery("INSERT INTO premium_config (key, value) VALUES ('pepe_retention', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(next)]);
+  } catch (e) { console.error("[premium] retention:", e.message); }
+  return true;
 }
 async function setConfig(patch, actor) {
   await init();
@@ -1033,6 +1066,10 @@ function register(app, { addUser }) {
     app.locals.isPrimeTime = isPrime;
     app.locals.hasSeasonPass = hasPass;
     app.locals.premiumPadPerks = padPerks;
+    // 1.99tc: THE perk table (premiumperks.js) for views/partials/tier-perks.ejs - /premium, /subscriptions, pad settings, owner panel
+    const PK = require("./premiumperks");
+    app.locals.perkTable = () => PK.table();
+    app.locals.perkText = PK.text;
   }
   const guard = require("./middleware/authGuard");
   const fail = (res, e) => { const x = errBody(e); res.status(x.status).json(x.body); };
@@ -1115,6 +1152,7 @@ function register(app, { addUser }) {
 module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
   plusSpots, plusCapCheck, plusWaitlist, plusWaitlistNotify, plusLeaveNotices,
+  retention, noteRetention, cleanRetention, RETENTION_DEFAULTS,         // 1.99tc: Pepe's retention windows (the perk lists)
   isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

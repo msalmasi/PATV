@@ -9,42 +9,11 @@
   const stkL_ = (k, d) => (t.has(k) ? t(k) : t.esc(d));   // 1.99lf: pack / sticker names from en.json (stk.pack.* / stk.s.*), English from stickers.json
   const statusTxt = (s) => !s ? '' : s.status === 'comped' ? (s.comp_until ? t('premium.status.comped_until', { date: day(s.comp_until) }) : t('premium.status.comped')) : s.status === 'active' ? t('premium.status.active', { date: day(s.paid_through) })
     : s.status === 'grace' ? t('premium.status.grace', { date: day(s.ends) }) : s.status === 'lapsed' ? t('premium.status.lapsed', { date: day(s.paid_through) }) : t('premium.status.inactive');
-  const PT_PERKS = [
-    ['📺', t('premium.pt.badge'), t('premium.pt.badge_d'), 'live'],
-    ['🖼️', t('premium.pt.theme'), t('premium.pt.theme_d'), 'live'],
-    ['🎬', t('premium.pt.intro'), t('premium.pt.intro_d'), 'live'],
-    ['🏷️', t('premium.pt.badge_slots', { n: S.perks.prime_extra_badges }), t('premium.pt.badge_slots_d', { n: 3 + S.perks.prime_extra_badges }), 'live'],
-    ['🎤', t('premium.pt.stage_slots', { n: S.perks.prime_extra_slots }), t('premium.pt.stage_slots_d'), 'live'],
-    ['⚡', t('premium.pt.lowlat'), t('premium.pt.lowlat_d'), 'soon'],
-    ['⏱️', t('premium.pt.longer'), t('premium.pt.longer_d'), 'soon'],
-    ['🏦', t('premium.pt.vault'), t('premium.pt.vault_d'), 'soon'],
-    ['🧸', t('premium.pt.sticker'), t('premium.pt.sticker_d'), 'soon'],
-    ['📈', t('premium.pt.analytics'), t('premium.pt.analytics_d'), 'soon'],
-  ];
-  // 1.99qp: 💎 Prime Time Plus (premium.js prime_plus) - everything in Prime Time, plus these
-  const PP_PERKS = [
-    ['📺', t('premium.pp.all_pt'), t('premium.pp.all_pt_d'), 'live'],
-    ['🌉', t('premium.pp.room'), t('premium.pp.room_d'), 'live'],   // 1.99ra: the user's model (Plus = Pepe in your Camfrog room)
-    ['🗄️', t('premium.pp.retention'), t('premium.pp.retention_d'), 'live'],
-    ['🔊', t('premium.pp.soundboard', { n: S.perks.sb_slots_plus }), t('premium.pp.soundboard_d', { pt: S.perks.sb_slots_prime }), 'soon'],
-    ['💎', t('premium.pp.stickers'), t('premium.pp.stickers_d'), 'live'],
-    ['✨', t('premium.pp.cosmetics'), t('premium.pp.cosmetics_d'), 'live'],
-    ['🏷️', t('premium.pp.flair'), t('premium.pp.flair_d'), 'live'],
-  ];
+  // 1.99tc: the perk lists come from premiumperks.js (views/partials/tier-perks.ejs) - the same table as /subscriptions, pad settings, the owner panel
   const PLUS = PAD ? (PAD.plus || null) : null;
-  const SP_PERKS = [
-    ['🌈', t('premium.sp.name'), t('premium.sp.name_d'), 'live'],
-    ['💫', t('premium.sp.ring'), t('premium.sp.ring_d'), 'live'],
-    ['🏞️', t('premium.sp.banner'), t('premium.sp.banner_d'), 'live'],
-    ['🧸', t('premium.sp.stickers', { count: S.perks.sp_sticker_packs }), t('premium.sp.stickers_d'), 'live'],
-    ['📤', t('premium.sp.uploads', { n: S.perks.sp_upload_mult }), t('premium.sp.uploads_d'), 'live'],
-    ['🎟️', t('premium.sp.chip'), t('premium.sp.chip_d'), 'live'],
-    ['🎨', t('premium.sp.flair'), t('premium.sp.flair_d'), 'soon'],
-    ['🐸', t('premium.sp.priority'), t('premium.sp.priority_d'), 'soon'],
-  ];
   const routeRow = (r) => r.shares.map((x) => x.pct + '% ' + x.label).join(' · ') + (r.rest ? ' · ' + r.rest + '% 🏛️ Federal Reserve' : '');
 %>
-<link rel="stylesheet" href="/public/css/padfx.css?v=3">
+<link rel="stylesheet" href="/public/css/padfx.css?v=4">
 <style>
   /* 1.99pu polish: ds-page + ds-hero.gold / ds-card / ds-btn / ds-in / ds-tbl. Area accent = premium violet (ink #12002a). */
   .pm { --ds-ac: var(--ds-acc-premium); --ds-ac-2: #cdb2ff; --ds-ac-bg: rgba(179, 136, 255, .13); --ds-ac-line: #4a3577; --ds-on-ac: #12002a; }
@@ -100,9 +69,7 @@
     <section class="card tier pt" aria-labelledby="ptH">
       <h3 id="ptH"><span class="ds-ic" aria-hidden="true">📺</span> Prime Time <span class="ds-tag"><%- t('premium.pt.tag') %></span></h3>
       <div class="price"><%= fmt(S.prices.prime_time) %> PAT <small><%- t('premium.pt.per_period', { days: S.period_days, price: fmt(S.day_price.prime_time) }) %></small></div>
-      <ul class="perks">
-        <% PT_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span class="ds-ic lg" aria-hidden="true"><%= p[0] %></span><span><b><%- p[1] %></b><% if (p[3] === 'soon') { %><span class="ds-tag soon-tag"><%- t('premium.coming_soon') %></span><% } %><span class="d"><%- p[2] %></span></span></li><% }) %>
-      </ul>
+      <%- include('partials/tier-perks', { tier: 'prime_time' }) %>
       <% if (PAD) { %>
         <div class="stat" id="ptState">
           <div><b>p/<%= PAD.slug %></b><% if (PAD.title && PAD.title !== PAD.slug) { %> · <%= PAD.title %><% } %></div>
@@ -145,9 +112,7 @@
       <% const SPOTS = S.plus_spots || { used: 0, max: 5, left: 5, soldOut: false }; const fullForPad = SPOTS.soldOut && !(PLUS && PLUS.active); %>
       <p class="ds-row" id="ppSpots"><span class="ds-tag<%= SPOTS.soldOut ? '' : ' ac' %>"><%- t('premium.pp.spots', { used: SPOTS.used, max: SPOTS.max }) %></span><% if (SPOTS.soldOut) { %> <b><%- t('premium.pp.sold_out') %></b><% } %></p>
       <p class="mut"><%- t('premium.pp.why_cap', { max: SPOTS.max }) %></p>
-      <ul class="perks">
-        <% PP_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span class="ds-ic lg" aria-hidden="true"><%= p[0] %></span><span><b><%- p[1] %></b><% if (p[3] === 'soon') { %><span class="ds-tag soon-tag"><%- t('premium.coming_soon') %></span><% } %><span class="d"><%- p[2] %></span></span></li><% }) %>
-      </ul>
+      <%- include('partials/tier-perks', { tier: 'prime_plus' }) %>
       <% if (PAD && PLUS) { %>
         <div class="stat" id="ppState">
           <div><b>p/<%= PAD.slug %></b><% if (PAD.title && PAD.title !== PAD.slug) { %> · <%= PAD.title %><% } %></div>
@@ -178,9 +143,7 @@
     <section class="card tier sp" aria-labelledby="spH">
       <h3 id="spH"><span class="ds-ic" aria-hidden="true">🎟️</span> Season Pass <span class="ds-tag ac"><%- t('premium.sp.tag') %></span></h3>
       <div class="price"><%= fmt(S.prices.season_pass) %> PAT <small><%- t('premium.sp.per_period', { days: S.period_days }) %></small></div>
-      <ul class="perks">
-        <% SP_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span class="ds-ic lg" aria-hidden="true"><%= p[0] %></span><span><b><%- p[1] %></b><% if (p[3] === 'soon') { %><span class="ds-tag soon-tag"><%- t('premium.coming_soon') %></span><% } %><span class="d"><%- p[2] %></span></span></li><% }) %>
-      </ul>
+      <%- include('partials/tier-perks', { tier: 'season_pass' }) %>
       <% if (V.signed) { %>
         <div class="stat"><%- t('premium.sp.yours') %> <%- statusTxt(PASS) %><% if (PASS && PASS.renewing && PASS.status !== 'comped') { %> · <%- t('premium.renews') %><% } %><% if (PASS && PASS.active) { %> · <a href="/cosmetics?tab=mine#tabs"><%- t('premium.sp.equip') %></a><% } %></div>
         <% if (!PASS || PASS.status !== 'comped') { %>

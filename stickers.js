@@ -239,6 +239,10 @@ function catalog(t = now()) {
     perk: p.perk, season: p.season,
     stickers: p.stickers.map((s) => ({ id: s.id, name: s.name, url: s.url, token: `[sticker:${p.id}/${s.id}]` })) }));
 }
+/** 1.99tc: the perk packs of one perk (season_pass | prime_plus), in or out of season - for the perk lists (premiumperks.js). */
+function perkPacks(perk) {
+  return CAT.packs.filter((p) => !p.retired && p.perk === perk).map((p) => ({ id: p.id, name: p.name, emoji: p.emoji, season: p.season }));
+}
 async function pageData(user) {
   await init();
   const signed = !!(user && user.userId);
@@ -282,7 +286,7 @@ async function grantComp(userId, packId, by) {
 
 module.exports = {
   grantComp,
-  inSeason, perkHas, PERKS,
+  inSeason, perkHas, perkPacks, PERKS,
   init, register, buy, ownedPacks, owns, allowance, tokens, validate, inline, catalog, pageData, loadCatalog, periodKey, Refuse, TOKEN_RE,
   chat: { validate, inline, TOKEN_RE },          // the hook for native PATV chat (later)
   get CAT() { return CAT; },

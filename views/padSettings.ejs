@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/public/css/feed.css?v=19">
 <link rel="stylesheet" href="/public/css/room-mod.css?v=9">
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=3">
-<link rel="stylesheet" href="/public/css/padfx.css?v=3">
+<link rel="stylesheet" href="/public/css/padfx.css?v=4">
 <link rel="stylesheet" href="/public/css/pad-access.css?v=2">
 <link rel="stylesheet" href="/public/css/flair.css?v=2"><%# 1.99ir: the Flair tab (padflair.js) %>
 <link rel="stylesheet" href="/public/css/tags.css?v=3">
@@ -151,6 +151,13 @@
         <div style="display:grid;gap:4px"><span class="muted">Active days this period: <b><%= R.active_days %></b> / <%= R.active_days_needed %></span>
           <div class="meter2" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>"><span style="width:<%= pct.toFixed(0) %>%"></span></div></div>
       <% } %>
+    </div>
+    <%# 1.99tc: the pad's tier + its perks, from the shared perk table (premiumperks.js, partials/tier-perks.ejs) %>
+    <% const psTier_ = typeof premiumPadPerks === 'function' ? (premiumPadPerks(room.id).tier || null) : null; %>
+    <div class="sb-card ps-card" id="padtier">
+      <h3><%- psTier_ === 'prime_plus' ? '💎' : '📺' %> <%- t('perks.tier_h') %></h3>
+      <%- include('partials/pad-tier-perks', { padTier: psTier_ }) %>
+      <p><a class="btn" href="/premium?pad=<%= encodeURIComponent(slug) %>"><%- t('perks.tier_manage') %></a></p>
     </div>
   </section>
 

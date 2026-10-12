@@ -217,11 +217,15 @@ test("banner chat sponsor: off by default; on -> today's approved booking for Pe
   }
   r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
   assert.equal(r.d.on, true);
+  assert.equal(r.d.mic, true, "1.99tc: mic mode (default on) -> Pepe also reads it aloud where TTS is on");
   assert.equal(r.d.items.length, 1, "only today's approved booking");
   const it = r.d.items[0];
   assert.deepEqual([it.id, it.headline, it.line, it.link], ["aaaaaaaaaaaa", "Frog Fest", "Saturday", "https://publicaccess.tv/p/plant"]);
   assert.equal(it.until, BN.dayStart(BN.addDays(today, 2)), "runs until the end of its last booked day");
-  await BN.setConfig({ banner_chat_sponsor: false }, "test");
+  await BN.setConfig({ banner_chat_sponsor_mic: false }, "test");
+  r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
+  assert.deepEqual([r.d.on, r.d.mic, r.d.items.length], [true, false, 1], "mic mode off -> text only");
+  await BN.setConfig({ banner_chat_sponsor: false, banner_chat_sponsor_mic: true }, "test");
   r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
   assert.deepEqual(r.d.items, [], "switched off -> Pepe drops it");
 });

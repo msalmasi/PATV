@@ -34,7 +34,8 @@
 // GET /admin/banner; POST /api/banner/admin/{decide,takedown,config,promo,promo/delete}; POST /api/banner/chat-sponsors (Pepe, 1.99qr).
 //
 // CHAT SPONSOR (1.99qr, admin switch banner_chat_sponsor, default off): an approved booking's headline + link also runs in
-// Pepe's !sponsor rotation in the Camfrog rooms on its booked days - see chatSponsors() below.
+// Pepe's !sponsor rotation in the Camfrog rooms on its booked days - see chatSponsors() below. 1.99tc: banner_chat_sponsor_mic
+// (default ON) makes it a `-mic` sponsor: Pepe also speaks it on the mic, music ducked, in rooms whose TTS is on.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -58,6 +59,7 @@ const DEFAULTS = Object.freeze({
   max_bookings: 2,            // open bookings per member (pending + approved, not over)
   lead_days: 60,              // how far ahead a booking may start
   chat_sponsor: false,        // 1.99qr: approved bookings also run in Pepe's !sponsor rotation in the Camfrog rooms
+  chat_sponsor_mic: true,     // 1.99tc: ...and Pepe also SPEAKS the line on the mic (ducking the music) where the room has TTS on
 });
 const DEFAULT_PROMOS = Object.freeze([
   { id: "lotto", kind: "lotto", link: "/lotto", weight: 3, sort: 1 },
@@ -154,7 +156,8 @@ async function readConfig() {
 }
 // setting names (the admin page / API) -> config keys
 const SETTING_NAMES = Object.freeze({ banner_enabled: "enabled", banner_paid_enabled: "paid_enabled", banner_price_per_day: "price_per_day",
-  banner_max_days: "max_days", banner_max_bookings: "max_bookings", banner_lead_days: "lead_days", banner_chat_sponsor: "chat_sponsor" });
+  banner_max_days: "max_days", banner_max_bookings: "max_bookings", banner_lead_days: "lead_days", banner_chat_sponsor: "chat_sponsor",
+  banner_chat_sponsor_mic: "chat_sponsor_mic" });
 function cleanConfig(c, base = DEFAULTS) {
   const src = {};
   for (const [k, v] of Object.entries(c || {})) src[SETTING_NAMES[k] || k] = v;
@@ -168,6 +171,7 @@ function cleanConfig(c, base = DEFAULTS) {
     max_bookings: int(src.max_bookings, 1, 20, base.max_bookings),
     lead_days: int(src.lead_days, 2, 365, base.lead_days),
     chat_sponsor: on(src.chat_sponsor, base.chat_sponsor),
+    chat_sponsor_mic: on(src.chat_sponsor_mic, base.chat_sponsor_mic),
   };
 }
 function config() { return { ...CONFIG }; }
@@ -543,7 +547,7 @@ const siteBase = () => String(process.env.PUBLIC_BASE_URL || process.env.SITE_UR
 /** -> {on, items: [{id, headline, line, link (absolute or null), by, start, end, until (ms: the end of its last day)}]} */
 async function chatSponsors(t = NOW()) {
   await init();
-  if (!CONFIG.chat_sponsor) return { on: false, items: [] };
+  if (!CONFIG.chat_sponsor) return { on: false, mic: false, items: [] };
   const today = dayKey(t);
   const rows = await getQuery(`SELECT b.* FROM banner_days d JOIN banner_bookings b ON b.id = d.booking_id WHERE d.day = ? AND b.status = 'approved'`, [today]);
   const items = [];
@@ -554,7 +558,7 @@ async function chatSponsors(t = NOW()) {
     items.push({ id: r.id, headline, line: cleanLine(r.line, LINE_MAX) || null, link, by: r.username || null,
                  start: r.start_day, end: endDay(r), until: dayStart(addDays(endDay(r), 1)) });
   }
-  return { on: true, items };
+  return { on: true, mic: !!CONFIG.chat_sponsor_mic, items };      // 1.99tc: mic = Pepe also reads it aloud (rooms with TTS on)
 }
 
 // ── stats (aggregate counts only) ──

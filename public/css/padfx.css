@@ -169,8 +169,61 @@
   .pfx-f-primeplus > .pfx-l::before { animation: none !important; }
   .pfx-g-primeplus { animation: none !important; }
 }
+/* 1.99tc 💎 PRIME TIME PLUS intro (views/partials/pad-intro.ejs): a title card over a soft violet veil - the diamond pops,
+   PRIME TIME PLUS in ice-white-gold, a gold rule draws out, one light sweep, four sparkles; ~3.6 s once per page load.
+   Only opacity / transform / background-position animate. Never catches clicks. Reduced motion: an opacity-only fade. */
+.pp-intro { position: fixed; inset: 0; z-index: 60; pointer-events: none; display: grid; place-items: center; padding: 0 16px; }
+.pp-intro-veil { position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(40, 18, 74, .78) 0%, rgba(12, 6, 26, .55) 45%, rgba(0, 0, 0, 0) 80%);
+  animation: pp-veil 3.6s ease-out .15s 1 both; }
+.pp-intro-card { position: relative; display: grid; justify-items: center; gap: 8px; width: min(100%, 460px); box-sizing: border-box;
+  padding: 26px 28px 22px; border-radius: var(--ds-r-xl, 16px); overflow: hidden; opacity: 0; text-align: center;
+  background: linear-gradient(180deg, #170c2e 0%, #0b1622 100%) padding-box,
+              linear-gradient(120deg, #7fdbff, #b388ff 35%, #ffcf40 65%, #7fdbff) border-box;
+  border: 1.5px solid transparent;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .55), 0 0 42px rgba(155, 93, 229, .35), 0 0 0 1px rgba(255, 207, 64, .12) inset;
+  transform: translateY(10px) scale(.92); animation: pp-card 3.6s cubic-bezier(.2, .7, .2, 1) .15s 1 both; }
+.pp-intro-card::after { content: ""; position: absolute; inset: -20% auto -20% -60%; width: 45%; pointer-events: none;
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, .16) 45%, rgba(255, 236, 170, .28) 50%, transparent 60%);
+  transform: translateX(0) skewX(-12deg); animation: pp-sweep 3.6s ease-in-out .15s 1 both; }
+.pp-intro-gem { font: 34px/1 var(--ds-font-emoji, sans-serif); filter: drop-shadow(0 0 10px rgba(127, 219, 255, .7));
+  transform: scale(0) rotate(-35deg); animation: pp-gem 3.6s cubic-bezier(.3, 1.6, .5, 1) .15s 1 both; }
+.pp-intro-kick { font: 500 11px/1 var(--ds-font, sans-serif); letter-spacing: .32em; text-transform: uppercase; color: #cdb2ff; opacity: .9; }
+.pp-intro-title { font: 700 clamp(18px, 5.6vw, 30px)/1.15 var(--ds-font, sans-serif); letter-spacing: .14em; overflow-wrap: anywhere; }
+.pp-intro-title .pt { background: linear-gradient(100deg, #7fdbff 0%, #e6fbff 40%, #b388ff 100%); background-size: 220% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  animation: pp-shine 3.6s ease-in-out .15s 1 both; }
+.pp-intro-title .pl { background: var(--ds-gold-text-grad, linear-gradient(90deg, #ffe680, #ffcf40 45%, #ff8a3d));
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 8px rgba(255, 207, 64, .45)); }
+.pp-intro-rule { display: block; width: 72%; height: 1px; margin-top: 2px;
+  background: linear-gradient(90deg, transparent, #ffcf40 20%, #fff1b8 50%, #ffcf40 80%, transparent);
+  transform: scaleX(0); animation: pp-rule 3.6s cubic-bezier(.2, .7, .2, 1) .15s 1 both; }
+.pp-intro-pad { font: 500 12px/1.2 var(--ds-font-mono, monospace); color: #9fe3ff; opacity: .85; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-intro-spark { position: absolute; font: 12px/1 var(--ds-font, sans-serif); color: #fff1b8; opacity: 0; text-shadow: 0 0 6px rgba(255, 207, 64, .8);
+  animation: pp-twinkle 1.5s ease-in-out 1 both; }
+.pp-intro-spark.s1 { top: 14%; left: 12%; animation-delay: .7s; }
+.pp-intro-spark.s2 { top: 22%; right: 13%; font-size: 9px; animation-delay: 1.05s; color: #e6fbff; }
+.pp-intro-spark.s3 { bottom: 18%; left: 20%; font-size: 10px; animation-delay: 1.4s; color: #cdb2ff; }
+.pp-intro-spark.s4 { bottom: 24%; right: 18%; animation-delay: 1.75s; }
+@keyframes pp-veil { 0% { opacity: 0; } 14%, 76% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pp-card { 0% { opacity: 0; transform: translateY(10px) scale(.92); } 16% { opacity: 1; transform: translateY(0) scale(1); }
+  80% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-8px) scale(1.03); } }
+@keyframes pp-sweep { 0%, 22% { transform: translateX(0) skewX(-12deg); } 52%, 100% { transform: translateX(420%) skewX(-12deg); } }
+@keyframes pp-gem { 0%, 6% { transform: scale(0) rotate(-35deg); } 20% { transform: scale(1.15) rotate(6deg); } 28%, 100% { transform: scale(1) rotate(0); } }
+@keyframes pp-shine { 0%, 18% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
+@keyframes pp-rule { 0%, 18% { transform: scaleX(0); } 40%, 100% { transform: scaleX(1); } }
+@keyframes pp-twinkle { 0% { opacity: 0; transform: scale(.4) rotate(0); } 40% { opacity: 1; transform: scale(1.1) rotate(45deg); } 100% { opacity: 0; transform: scale(.6) rotate(90deg); } }
+@keyframes pp-fade { 0% { opacity: 0; } 14%, 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pp-intro-veil, .pp-intro-card { animation: pp-fade 3s linear .15s 1 both; transform: none; }
+  .pp-intro-card::after, .pp-intro-spark { display: none; }
+  .pp-intro-gem, .pp-intro-rule, .pp-intro-title .pt { animation: none; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pfx-f-primetime > .pfx-l::before { animation: none !important; }
   .pfx-g-primetime { animation: none !important; }
   .pt-intro { display: none; }
 }
+

@@ -1,0 +1,19 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99tc: a pad's tier and what it gets (owner panel + pad settings). Locals: padTier (prime_plus | prime_time | null).
+    The lists are the shared perk table (partials/tier-perks.ejs, premiumperks.js), titles only. %>
+<% const PTR_ = locals.padTier || null; %>
+<div class="ptp">
+  <% if (PTR_ === 'prime_plus') { %>
+    <p class="ptp-h"><%- t('perks.tier_pp') %></p>
+    <%- include('tier-perks', { tier: 'prime_plus', compact: true }) %>
+  <% } else { %>
+    <p class="ptp-h"><%- PTR_ === 'prime_time' ? t('perks.tier_pt') : t('perks.tier_none') %></p>
+    <%- include('tier-perks', { tier: 'prime_time', compact: true }) %>
+    <p class="ptp-h"><%- t('perks.plus_adds') %></p>
+    <%- include('tier-perks', { tier: 'prime_plus', compact: true, skip: ['all_pt'] }) %>
+  <% } %>
+</div>
+<style>
+  .ptp { display: grid; gap: var(--ds-sp-2, 8px); min-width: 0; }
+  .ptp .ptp-h { margin: var(--ds-sp-1h, 6px) 0 0; font-size: var(--ds-fs-sm, 14px); color: var(--ds-text-2, #cfcfcf); font-weight: 600; }
+</style>
