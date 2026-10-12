@@ -352,6 +352,26 @@ test("1.99ti: the pad owner's caps carry room roles, never on Pepe's admins / ow
   assert.ok(!PM.cleanCaps({ actions: ["kick", "role_mod"], on: true }).actions.includes("role_mod"), "no admin / room_roles -> no role actions");
 });
 
+test("1.99uf: a pad owner's time-out is room-scoped: capped hours, untimeout + the timed-out list with undo", () => {
+  const PM = require(path.join(repo, "padmod"));
+  const c = PM.cleanCaps({ actions: ["timeout", "untimeout", "kick"], on: true, roles: ["everyone", "owner"], room_roles: true, timeout_max_h: 24, timeout_scope: "room" });
+  assert.ok(c.actions.includes("untimeout") && c.timeoutMax === 24 && c.timeoutScope === "room", JSON.stringify(c));
+  assert.equal(PM.timeoutRefusal("timeout", { hours: 24 }, c), null);
+  assert.match(PM.timeoutRefusal("timeout", { hours: 72 }, c), /at most 24 hours/);
+  const admin = PM.cleanCaps({ actions: ["timeout"], on: true, admin: true, settings: {} });
+  assert.ok(!admin.timeoutScope && !admin.timeoutMax, "admins' time-outs stay global, no cap");
+  assert.equal(PM.timeoutRefusal("timeout", { hours: 720 }, admin), null);
+  assert.deepEqual(PM.buildModLine("untimeout", "Bob", {}), { line: "!untimeout Bob" });
+  assert.ok(PM.SELF_LIFT.has("untimeout"), "lifting your own time-out is for Pepe admins");
+  const info = PM.cleanInfo({ days: 30, list: [{ login: "bob", state: "timed out", ts: "2026-10-12T10:00:00", by: "padguy", until: "2026-10-12T15:00" },
+    { login: "eve", state: "nonsense", ts: "x" }] });
+  assert.equal(info.list.length, 1);
+  assert.equal(info.list[0].state, "timed out");
+  assert.equal(info.list[0].until, "2026-10-12T15:00");
+  const t = PM.cleanInfo({ target: "bob", role: "everyone", room_timeout_until: "2026-10-12T15:00", history: [] });
+  assert.equal(t.roomTimeoutUntil, "2026-10-12T15:00");
+});
+
 test("1.99ti: My pads - the owner's pads with their owner panel links", () => {
   const mine = PO.myPads("pb");
   assert.ok(mine.some((p) => p.href === "/p/" + encodeURIComponent(SLUG) + "/owner"), JSON.stringify(mine));

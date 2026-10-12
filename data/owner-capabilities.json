@@ -398,12 +398,14 @@
    "area": "room",
    "title": "Time someone out",
    "commands": [
-    "!timeout"
+    "!timeout",
+    "!untimeout"
    ],
    "syntax": [
-    "!timeout <user> [hours]"
+    "!timeout <user> [hours]",
+    "!untimeout <user>"
    ],
-   "howto": "In your room your !timeout works straight away (up to 24 hours) instead of starting a vote: Pepe takes them off the red list and mutes them.",
+   "howto": "In your room your !timeout works straight away (up to 24 hours) instead of starting a vote: Pepe mutes them in your pad's room only - not in other rooms, and their red list and roles aren't touched. It lifts itself when the time is up, survives a Pepe restart, and shows as timed out in Moderate your room's Banned & punished list with undo (or type !untimeout). A Pepe time-out from an admin stays as it is.",
    "owner_only": true,
    "code": [
     "frida-bot.py:handle_timeout",

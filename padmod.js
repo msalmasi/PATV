@@ -34,6 +34,7 @@ const relay = require("./bridge-relay");
 const ACTIONS = {
   topic: "!topic", kick: "!kick", ban: "!ban", unban: "!unban", punish: "!punish", unpunish: "!unpunish",
   blockmic: "!blockmic", unblockmic: "!unblockmic", timeout: "!timeout", strike: "!strike", strike_appeal: "!strike",
+  untimeout: "!untimeout",   // 1.99uf: lift a pad owner's time-out in this room (room-scoped)
   fine: "!fine", casinoban: "!casinoban", casinounban: "!casinounban", djban: "!djban", djunban: "!djunban",
   // 1.99pg: Camfrog room roles (Pepe's !friend / !mod / !admin / !unrole = the room's oplist)
   role_friend: "!friend", role_mod: "!mod", role_admin: "!admin", role_unrole: "!unrole",
@@ -58,7 +59,7 @@ function roleRefusal(action, target, caps, selfLogin) {
 }
 // 1.99os: actions on YOURSELF are allowed (the page asks "Kick yourself?" first); lifting your OWN penalty is for
 // Pepe admins only (caps.admin), so a staff mod can't undo their own mute / DJ ban / strike. Pepe re-checks it.
-const SELF_LIFT = new Set(["unban", "unpunish", "unblockmic", "casinounban", "djunban", "strike_appeal"]);
+const SELF_LIFT = new Set(["unban", "unpunish", "unblockmic", "casinounban", "djunban", "strike_appeal", "untimeout"]);
 /** null = OK, else why this action on yourself is refused. */
 function selfRefusal(action, caps) {
   return SELF_LIFT.has(action) && !(caps && caps.admin) ? "Only Pepe admins can lift their own penalties." : null;
@@ -102,6 +103,14 @@ function intIn(v, lo, hi) {
   return Number.isFinite(n) && Math.floor(n) === n && n >= lo && n <= hi ? n : null;
 }
 
+/** 1.99uf: null = OK, else why this time-out is refused - a pad owner (caps.timeoutMax) times out in their room for
+ *  at most that many hours. Pepe clamps it anyway; this keeps the panel honest about what it sends. */
+function timeoutRefusal(action, args, caps) {
+  if (action !== "timeout" || !caps || caps.admin || !caps.timeoutMax) return null;
+  const h = intIn((args || {}).hours, 1, TIMEOUT_MAX_H);
+  return h && h > caps.timeoutMax ? `In your room a time-out is at most ${caps.timeoutMax} hours.` : null;
+}
+
 /** {action, target, args} -> {line} (the exact command) or {error}. The only way a panel click becomes text. */
 function buildModLine(action, target, args) {
   const a = typeof action === "string" && Object.prototype.hasOwnProperty.call(ACTIONS, action) ? action : null;
@@ -140,6 +149,9 @@ function cleanCaps(c) {
   if (c.room_roles === true && c.admin !== true) {
     // 1.99ti: the pad's owner in their own room - room roles too, never on Pepe's admins / owners
     out.room_roles = true;
+    // 1.99uf: a pad owner's !timeout is THIS room only, at most timeout_max_h hours (Pepe clamps it too)
+    out.timeoutMax = intIn(c.timeout_max_h, 1, TIMEOUT_MAX_H) || 24;
+    out.timeoutScope = "room";
     out.protected = (Array.isArray(c.protected) ? c.protected : []).slice(0, 40).map((x) => cleanLogin(x).toLowerCase()).filter(Boolean);
   }
   if (c.admin === true) {
@@ -217,7 +229,8 @@ function cleanInfo(info) {
   const out = { days: intIn(info.days, 1, 365) || 30 };
   if (Array.isArray(info.list)) {
     out.list = info.list.slice(0, 100).map((r) => r && typeof r === "object" ? {
-      login: cleanLogin(r.login), state: ["banned", "punished", "mic-blocked"].includes(r.state) ? r.state : null, ts: ts(r.ts), by: relay.clean(r.by, 40),
+      login: cleanLogin(r.login), state: ["banned", "punished", "mic-blocked", "timed out"].includes(r.state) ? r.state : null, ts: ts(r.ts), by: relay.clean(r.by, 40),
+      until: r.until ? ts(r.until) : undefined,   // 1.99uf: a pad owner's time-out in this room ends then
     } : null).filter((r) => r && r.login && r.state);
   }
   if (info.target) {
@@ -226,6 +239,7 @@ function cleanInfo(info) {
     for (const k of ["redlist", "owner", "djbanned", "timeout"]) if (typeof info[k] === "boolean") out[k] = info[k];
     if (info.strikes != null) out.strikes = intIn(info.strikes, 0, 1000) || 0;
     if (info.muted_until) out.mutedUntil = ts(info.muted_until);
+    if (info.room_timeout_until) out.roomTimeoutUntil = ts(info.room_timeout_until);   // 1.99uf
     out.history = (Array.isArray(info.history) ? info.history : []).slice(0, 20).map((h) => h && typeof h === "object" ? {
       ts: ts(h.ts), type: TYPE_RE.test(String(h.type || "")) ? h.type : "event", actor: relay.clean(h.actor, 40), details: relay.cleanReply(h.details).slice(0, 160),
     } : null).filter(Boolean);
@@ -264,6 +278,8 @@ function register(app, { addUser, bySlug, isLive }) {
     if (!allowed) return bad(res, 403, "You can't do that in this room.");
     const built = buildModLine(action, b.target, b.args);
     if (built.error) return bad(res, 400, built.error);
+    const tmoWhy = timeoutRefusal(action, b.args, caps);
+    if (tmoWhy) return bad(res, 400, tmoWhy);
     if (action !== "topic" && cleanLogin(b.target).toLowerCase() === String(u.camfrogUsername).toLowerCase()) {
       const why = selfRefusal(action, caps);
       if (why) return bad(res, 403, why);
@@ -342,5 +358,5 @@ function register(app, { addUser, bySlug, isLive }) {
   });
 }
 
-module.exports = { register, selfRefusal, SELF_LIFT, roleRefusal, ROLE_ACTIONS,buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
+module.exports = { register, selfRefusal, SELF_LIFT, roleRefusal, ROLE_ACTIONS, timeoutRefusal, buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
   ACTIONS, SETTINGS, TOPIC_MAX, REASON_MAX, _viewers: viewers, _linkCache: linkCache, _pwFails: pwFails };

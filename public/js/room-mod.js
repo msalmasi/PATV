@@ -32,6 +32,8 @@
     blockmic:      { label: 'Block mic', icon: '🎤🚫', cmd: '!blockmic', confirm: 'Block {u}\'s mic?', group: 'voice' },
     unblockmic:    { label: 'Unblock mic', icon: '🎤', cmd: '!unblockmic', group: 'voice' },
     timeout:       { label: 'Time out', icon: '⏳', cmd: '!timeout', confirm: 'Time {u} out? Pepe pulls their red list and mutes them.', arg: 'hours', group: 'voice' },
+    // 1.99uf: a pad owner's time-out is in their own room only (caps.timeoutScope 'room'); this lifts it
+    untimeout:     { label: 'Lift time-out', icon: '⏱️', cmd: '!untimeout', group: 'voice' },
     fine:          { label: 'Fine', icon: '⚖️', cmd: '!fine', confirm: 'Fine {u}? The PAT goes to the Federal Reserve.', arg: 'amount', group: 'pat' },
     casinoban:     { label: 'Casino ban', icon: '🎰🚫', cmd: '!casinoban', confirm: 'Ban {u} from the casino (web, chat and Discord)?', group: 'pat' },
     casinounban:   { label: 'Casino unban', icon: '🎰', cmd: '!casinounban', group: 'pat' },
@@ -59,7 +61,7 @@
   // 1.99os: actions on YOURSELF (your own row in the list) - allowed, with the confirm step phrased for you.
   // Lifting one of your own penalties (unban / unpunish / unblock / casino unban / DJ unban / strike appeal) is for
   // Pepe admins only (caps.admin): a staff mod can't undo their own mute or strike. The server and Pepe check it too.
-  var SELF_LIFT = { unban: 1, unpunish: 1, unblockmic: 1, casinounban: 1, djunban: 1, strike_appeal: 1 };
+  var SELF_LIFT = { unban: 1, unpunish: 1, unblockmic: 1, casinounban: 1, djunban: 1, strike_appeal: 1, untimeout: 1 };
   var SELF_Q = {
     kick: 'Kick yourself out of the room? You can rejoin right away.',
     ban: 'Ban yourself from the room? You won\'t get back in until an admin unbans you.',
@@ -81,7 +83,15 @@
   var HOURS = [[1, '1 hour'], [6, '6 hours'], [12, '12 hours'], [24, '24 hours'], [72, '3 days'], [168, '1 week'], [720, '30 days']];
   var FINES = [1000, 10000, 25000, 100000];
   var ROLE_TXT = { owner: 'Pepe owner', admin: 'Pepe admin', staff: 'Pepe staff', trusted: 'trusted', redlist: 'red list', everyone: 'regular' };
-  var UN = { banned: ['unban', 'Unban'], punished: ['unpunish', 'Unpunish'], 'mic-blocked': ['unblockmic', 'Unblock mic'] };
+  var UN = { banned: ['unban', 'Unban'], punished: ['unpunish', 'Unpunish'], 'mic-blocked': ['unblockmic', 'Unblock mic'], 'timed out': ['untimeout', 'Lift time-out'] };
+  // 1.99uf: a pad owner's time-out (caps.timeoutScope 'room') mutes in their room only, at most caps.timeoutMax hours
+  var ROOM_TIMEOUT_Q = 'Time {u} out in this room? Pepe mutes them here only (not in other rooms, and their red list stays) until the time is up.';
+  var ROOM_TIMEOUT_SELF_Q = 'Time yourself out in this room? Pepe mutes you here only until the time is up.';
+  function roomScoped(caps, a) { return a === 'timeout' && !!(caps && !caps.admin && caps.timeoutScope === 'room'); }
+  function hoursFor(caps) {
+    var max = caps && !caps.admin && caps.timeoutMax ? caps.timeoutMax : 0;
+    return max ? HOURS.filter(function (x) { return x[0] <= max; }) : HOURS;
+  }
   var TOPIC_MAX = 200, REASON_MAX = 120;
 
   function preview(action, login, args) {
@@ -391,6 +401,7 @@
         if (i.strikes) bWrap.appendChild(badge(i.strikes + ' strike' + (i.strikes === 1 ? '' : 's'), 'warn'));
         if (i.timeout) bWrap.appendChild(badge('timed out', 'warn'));
         if (i.mutedUntil) bWrap.appendChild(badge('muted until ' + i.mutedUntil.replace('T', ' '), 'warn'));
+        if (i.roomTimeoutUntil) bWrap.appendChild(badge('timed out here until ' + i.roomTimeoutUntil.replace('T', ' '), 'warn'));
         if (i.djbanned) bWrap.appendChild(badge('DJ-banned', 'warn'));
         hist.removeChild(hl);
         var hs = i.history || [];
@@ -432,13 +443,15 @@
     function confirmForm(a, u, pfx, say, done, cancel) {
       var def = A[a], who = u.display || u.login, me = isMe(caps, u);
       var form = el('form', 'pm-cform'); form.setAttribute('autocomplete', 'off');
-      form.appendChild(el('p', 'pm-q', me ? (SELF_Q[a] || def.confirm.replace('{u}', 'yourself')) : def.confirm.replace('{u}', who)));
+      var q = roomScoped(caps, a) ? (me ? ROOM_TIMEOUT_SELF_Q : ROOM_TIMEOUT_Q.replace('{u}', who))
+        : me ? (SELF_Q[a] || def.confirm.replace('{u}', 'yourself')) : def.confirm.replace('{u}', who);
+      form.appendChild(el('p', 'pm-q', q));
       var args = {};
       var hoursSel = null, amtIn = null;
       if (def.arg === 'hours') {
         var lh = el('label', 'pm-lab', 'How long'); lh.htmlFor = pfx + 'Hours';
         hoursSel = el('select'); hoursSel.id = pfx + 'Hours';
-        HOURS.forEach(function (x) { var o = el('option', null, x[1]); o.value = String(x[0]); if (x[0] === 24) o.selected = true; hoursSel.appendChild(o); });
+        hoursFor(caps).forEach(function (x) { var o = el('option', null, x[1]); o.value = String(x[0]); if (x[0] === 24) o.selected = true; hoursSel.appendChild(o); });
         form.appendChild(lh); form.appendChild(hoursSel);
       }
       if (def.arg === 'amount') {
@@ -633,14 +646,15 @@
       info('').then(function (i) {
         note.textContent = 'Last state Pepe saw in this room over the past ' + (i.days || 30) + ' days (bans made while Pepe was away won\'t show).';
         var rows = i.list || [];
-        if (!rows.length) { D.body.appendChild(el('p', 'pm-note', 'Nobody is banned, punished or mic-blocked here as far as Pepe knows.')); D.body.appendChild(out); return; }
+        if (!rows.length) { D.body.appendChild(el('p', 'pm-note', 'Nobody is banned, punished, mic-blocked or timed out here as far as Pepe knows.')); D.body.appendChild(out); return; }
         var ul = el('ul', 'pm-blist');
         rows.forEach(function (r) {
           var li = el('li');
           var w = el('div', 'pm-bwho');
           w.appendChild(el('b', null, r.login));
           w.appendChild(badge(r.state, 'warn'));
-          w.appendChild(el('small', null, (r.ts || '').replace('T', ' ').slice(0, 16) + (r.by ? ' · by ' + r.by : '')));
+          w.appendChild(el('small', null, (r.ts || '').replace('T', ' ').slice(0, 16) + (r.by ? ' · by ' + r.by : '')
+            + (r.until ? ' · until ' + r.until.replace('T', ' ').slice(0, 16) : '')));
           li.appendChild(w);
           var un = UN[r.state];
           if (un && caps && caps.actions.indexOf(un[0]) >= 0 && (!isMe(caps, { login: r.login }) || selfOk(caps, un[0]))) {

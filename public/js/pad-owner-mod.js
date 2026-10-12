@@ -1,10 +1,11 @@
 // pad-owner-mod.js — the owner panel's "Moderate your room" card (1.99ti, views/padOwner.ejs #mod): the pad page's Manage
 // panel (room-mod.js, padmod.js) fed by the pad's live view (GET /api/rooms/:slug/live, the same feed the pad page polls -
 // polling it also tells Pepe this signed-in owner is watching, so his snapshot carries their caps). Pepe decides what the
-// owner may do in their own room (pepe_roomowner OWNER_MOD_CMDS: kick, ban / unban, punish, mic block, time out, fine and
+// owner may do in their own room (pepe_roomowner OWNER_MOD_CMDS: kick, ban / unban, punish, mic block, time out - 1.99uf: in
+// this room only, lifted with !untimeout -, fine and
 // the room roles - never on Pepe's admins / owners); every action has its confirm step and lands in the mod log.
 // The people list opens the Manage dialog for that person; the panel's "Banned list" shows who is banned / muted /
-// mic-blocked with undo. Strings: __t (js.owner.mod_*); user-visible text via textContent.
+// mic-blocked / timed out with undo. Strings: __t (js.owner.mod_*); user-visible text via textContent.
 (function () {
   'use strict';
   var card = document.getElementById('mod');

@@ -4744,7 +4744,25 @@
     "!timeout [user] [hours]"
    ],
    "summary": "Time a user out — pulls them off the mic/red list, de-mods and mutes them, then auto-lifts when the timer's up (default 24h).",
-   "details": "Time a user out — pulls them off the mic/red list, de-mods and mutes them, then auto-lifts when the timer's up (default 24h). Admins apply it instantly; anyone else **starts a community vote** (10 voters, 80% — same bar as !votemod). Pad owners time people out in their own pad's room directly (up to 24 hours, never Pepe's admins or owners); everyone else starts a vote.",
+   "details": "Time a user out — pulls them off the mic/red list, de-mods and mutes them, then auto-lifts when the timer's up (default 24h). Admins apply it instantly, in every room Pepe is in; anyone else **starts a community vote** (10 voters, 80% — same bar as !votemod). Pad owners time people out directly in their own pad's room only (up to 24 hours, never Pepe's admins or owners): Pepe mutes them in that room and nowhere else — no red list, no other rooms — and it auto-lifts on time (or with !untimeout).",
+   "examples": [],
+   "keywords": [],
+   "webchat": true
+  },
+  {
+   "id": "untimeout",
+   "title": "!untimeout [user]",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!untimeout"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!untimeout [user]"
+   ],
+   "summary": "Lift a pad owner's time-out in this room.",
+   "details": "Lift a pad owner's time-out in this room: Pepe unmutes them here. Only that room's time-out is lifted — a Pepe time-out from an admin or automod stays until it ends (admins lift those with !strike appeal). For the pad's owner and Pepe's admins.",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -7287,5 +7305,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "454222f941a06075"
+ "hash": "1d3cccc92118e8d4"
 }
