@@ -14,6 +14,12 @@ Everything about how PATV looks, sounds and works, in one place. The look-and-vo
 
 Pepe's character bible is brand.md §5.
 
+## Pads
+
+| Doc | What it covers |
+|---|---|
+| [pads-ownership-connections.md](pads-ownership-connections.md) | Who owns a pad (the creator or an admin's pick, never a connection), connections to Camfrog / Twitch / Discord / IRC, and how 💎 Prime Time Plus gates them (5 spots, Pepe joins / leaves) |
+
 ## Backends and runbooks
 
 | Doc | What it covers |

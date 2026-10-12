@@ -105,8 +105,9 @@ const DEFAULTS = Object.freeze({
   prime_price: 10000000,           // PAT per period (experimental)
   season_price: 2000000,
   plus_price: 50000000,            // 1.99qp: 💎 Prime Time Plus
-  plus_bridge_gate: false,         // 1.99qp/qv: Prime Time Plus decides Camfrog rooms (connect, Pepe in the room, the live view)
+  plus_bridge_gate: false,         // 1.99qp/qy: Prime Time Plus decides Camfrog rooms (connect, Pepe in the room, the live view)
   ptplus_max_rooms: 5,             // 1.99qy: Plus pads at once, site-wide (Pepe can be in 5 Camfrog rooms)
+  plus_gate_platforms: ["camfrog"],  // 1.99rd: connections that need Plus while the gate is on (camfrog | twitch | discord | irc)
   sb_slots_free: 0,                // 1.99qp: room soundboard slots per pad tier (the soundboard reads padPerks().soundboardSlots)
   sb_slots_prime: 8,
   sb_slots_plus: 24,
@@ -162,6 +163,9 @@ function cleanConfig(c) {
     plus_price: int(c.plus_price, 1000, 1e12, DEFAULTS.plus_price),
     plus_bridge_gate: on(c.plus_bridge_gate, DEFAULTS.plus_bridge_gate),
     ptplus_max_rooms: int(c.ptplus_max_rooms, 0, 50, DEFAULTS.ptplus_max_rooms),
+    plus_gate_platforms: Array.isArray(c.plus_gate_platforms)
+      ? [...new Set(c.plus_gate_platforms.map(String).filter((x) => ["camfrog", "twitch", "discord", "irc"].includes(x)))]
+      : DEFAULTS.plus_gate_platforms.slice(),
     sb_slots_free: int(c.sb_slots_free, 0, 200, DEFAULTS.sb_slots_free),
     sb_slots_prime: int(c.sb_slots_prime, 0, 200, DEFAULTS.sb_slots_prime),
     sb_slots_plus: int(c.sb_slots_plus, 0, 200, DEFAULTS.sb_slots_plus),

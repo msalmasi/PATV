@@ -1,8 +1,19 @@
-// padconnect.js — connect a pad to a platform (1.99ja): Camfrog (verified), Twitch (OAuth-linked channel), Discord (later).
+// padconnect.js — connect a pad to a platform (1.99ja): Camfrog (verified), Twitch (OAuth-linked channel), Discord / IRC (later).
+//
+// 1.99rd OWNERSHIP vs CONNECTIONS (the user's rule, docs/pads-ownership-connections.md): a pad's OWNER is whoever made it
+// (padcreate: rooms_registry.created_by -> owner_user_id) or whoever a site admin assigned (rooms.setOwner: Pads admin
+// owners) - rooms_registry owner_kind / owner_user_id, nothing else. A CONNECTION (pad_connections: platform +
+// external_id) only maps a pad to an outside room or channel so Pepe / the site know where its activity comes from; it
+// never makes anyone an owner and disconnecting never takes ownership away. Owner permissions (rooms.canManage), the room
+// vault's controls, owner royalties (royalties.js: accrue to / pay the registry owner) and the owner panel all follow the
+// registry. The Camfrog proof (topic / !verifypad) secures the MAPPING - nobody can point their pad at a room they don't
+// run and pull its activity in - and that's all it proves.
+// Which platforms need 💎 Prime Time Plus is config (premium_config plus_gate_platforms, default ["camfrog"]) while the
+// gate (plus_bridge_gate) is on; Camfrog also has the 5-spot cap (Pepe's 5 rooms).
 //
 // A pad made on the site is a SITE pad (patv:<x>). Its owner can connect it:
 //
-// CAMFROG — prove you run the room, then the pad becomes that room's pad.
+// CAMFROG — prove you run the room, then the pad is mapped to it (the pad takes the room's id: re-keyed, padrekey.js).
 //   1. The owner types the Camfrog room's name (Settings -> Address & platform) and gets a one-time code, PATV-XXXXXX
 //      (48 h). Optional: "I'd like Pepe in my room" (join_opt_in).
 //   2. Proof, either way:
@@ -36,9 +47,8 @@
 //     gets with every owner sync (plusRoomsForPepe), and he joins it and stays; a pending connect of a Plus pad is listed
 //     too, so he's in the room to see the code. When the pad's Plus runs out (after grace) it drops off the list and he
 //     leaves (the owner was told 3 days before, premium.plusLeaveNotices). Pepe enforces his own 5-room limit.
-//   * Ownership / vault / royalties: a VERIFIED connection is still the proof the room's owner runs it. Rooms connected
-//     before keep their pad, owner, vault and royalties - nothing is re-checked or taken away. Without Plus there are no
-//     new connects, so a non-Plus room can only get an owner from a site admin (Pads admin: owners), as house rooms do.
+//   * Ownership never comes from the connection (see the top): rooms connected before keep their pad, owner, vault and
+//     royalties - nothing is re-checked or taken away.
 //   Gate off: everything as before (connect free, join = opt-in + admin approval).
 //
 // TWITCH — the owner's PATV account must have Twitch linked through the existing OAuth sign-in (users.twitchId +
@@ -148,6 +158,11 @@ async function twitchOfUser(userId) {
 // ── 1.99qy: Prime Time Plus ──
 const P = () => require("./premium");
 const plusEnforced = () => { try { return !!P().config().plus_bridge_gate; } catch (e) { return false; } };
+/** 1.99rd: does connecting a pad to `platform` need Prime Time Plus right now? (the gate on + the platform in plus_gate_platforms) */
+function needsPlus(platform) {
+  if (!plusEnforced()) return false;
+  try { return (P().config().plus_gate_platforms || ["camfrog"]).includes(String(platform)); } catch (e) { return platform === "camfrog"; }
+}
 const hasPlus = (roomId) => { try { return !!P().isPrimePlus(roomId); } catch (e) { return false; } };
 function plusView(roomId) {
   let spots = { used: 0, max: 5, left: 5, soldOut: false };
@@ -224,7 +239,7 @@ async function requestCamfrog(user, R, { room, join } = {}) {
     throw new Refuse(400, R.platform === "camfrog" ? "This pad is already a Camfrog pad." : "Disconnect this pad from " + R.platform + " first.");
   }
   // 1.99qy: a Camfrog room comes with Prime Time Plus (it's what puts Pepe in the room)
-  if (plusEnforced() && !hasPlus(R.id)) {
+  if (needsPlus("camfrog") && !hasPlus(R.id)) {
     const sp = plusView(R.id).spots;
     throw new Refuse(403, `Connecting a Camfrog room comes with 💎 Prime Time Plus (${sp.left} of ${sp.max} spots left) - get it for this pad on /premium first.`);
   }
@@ -289,7 +304,7 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
       throw new Refuse(409, why);
     }
     if (await openSlots(R.id)) throw new Refuse(409, "This pad's stage has live or waiting slots - end them first, then try again.");
-    if (plusEnforced() && !hasPlus(R.id)) return { noPlus: true, c };     // 1.99qy: Plus ran out while the code was pending
+    if (needsPlus("camfrog") && !hasPlus(R.id)) return { noPlus: true, c };     // 1.99qy: Plus ran out while the code was pending
     const plusJoin = plusEnforced();
     const T = await rooms.get(target);
     const t = NOW();
@@ -317,7 +332,7 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
   await rooms.event(out.target, "pad-connected", actor || "?", `Camfrog room ${out.target}${out.T ? " (merged its unowned pad p/" + out.T.slug + ")" : ""} via ${method}; was ${out.R.id}`);
   console.log(`[padconnect] ${out.R.id} -> ${out.target} (${method}) moved ${JSON.stringify(out.moved)}`);
   await rooms.notify(P.owner.userId, { kind: "stage", title: `p/${P.slug} is now the pad of Camfrog room ${out.target}`, pm: true,
-    body: "Its room bridge, room vault and owner !stage commands are yours now.", link: "/p/" + encodeURIComponent(P.slug) + "/settings?tab=address" });
+    body: "The room is mapped to your pad now: its live view, its room vault and owner !stage commands come with it. You stay the pad's owner either way - disconnecting never changes that.", link: "/p/" + encodeURIComponent(P.slug) + "/settings?tab=address" });
   if (out.c.join_opt_in && !out.plusJoin) await tellAdmins(`Pepe join request: p/${P.slug}`, `${P.title} (Camfrog room ${out.target}) asks for Pepe to join.`);
   try { require("./achievements").poke(out.c.requested_by); } catch (e) { /* achievements never block */ }   // 1.99mt: 🌉 Bridge Builder
   return P;
@@ -455,6 +470,7 @@ async function connectTwitch(user, R) {
   if ((R.platform || rooms.platformOf(R.id)) !== "site") {
     throw new Refuse(400, R.platform === "twitch" ? "This pad is already a Twitch pad." : "Disconnect this pad from " + R.platform + " first.");
   }
+  if (needsPlus("twitch") && !hasPlus(R.id)) throw new Refuse(403, "Connecting Twitch comes with 💎 Prime Time Plus on this site - get it for this pad on /premium first.");   // 1.99rd: per-platform gate
   const own = await twitchOfUser(R.owner.userId);
   if (!own.twitchId) throw new Refuse(400, "Link Twitch to the owner's PATV account first (Sign in with Twitch).");
   const login = require("./twitchlogin").clean(own.twitchLogin);
@@ -616,6 +632,6 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   }
 }
 
-module.exports = { plusRoomsForPepe, plusView, plusEnforced, init, register, state, current, requestCamfrog, setJoin, finishCamfrog, verifyFromPepe, pendingForPepe, checkTopics, expire,
+module.exports = { plusRoomsForPepe, plusView, plusEnforced, needsPlus, init, register, state, current, requestCamfrog, setJoin, finishCamfrog, verifyFromPepe, pendingForPepe, checkTopics, expire,
                    disconnect, connectTwitch, twitchOf, twitchChatHook, queueList, adminOp, newCode, cleanCode, PLATFORMS, Refuse,
                    _setClock: (fn) => { NOW = fn || (() => Date.now()); } };

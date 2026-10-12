@@ -181,3 +181,30 @@ test("the views: the pad page card and the connect panel name the spots; /premiu
   assert.equal(EN["pad.plusroom.h"], "Connect your Camfrog room with Prime Time Plus ({left} of {max} spots left)");
   for (const k of ["premium.pp.spots", "premium.pp.sold_out", "premium.pp.waitlist_on", "premium.pp.notice.leave_body", "pad.conn.plus_in", "pad.conn.plus_out"]) assert.ok(EN[k], k);
 });
+
+test("1.99rd ownership vs connections: the owner is the registry's (creator / admin), never the connection; per-platform Plus gate", async () => {
+  // the per-platform list is config: default camfrog only; junk dropped
+  assert.deepEqual(PR.config().plus_gate_platforms, ["camfrog"]);
+  assert.deepEqual(PR.cleanConfig({ plus_gate_platforms: ["twitch", "nope", "twitch", "irc"] }).plus_gate_platforms, ["twitch", "irc"]);
+  await PR.setConfig({ plus_bridge_gate: true }, "test");
+  assert.equal(CN.needsPlus("camfrog"), true);
+  assert.equal(CN.needsPlus("twitch"), false, "Twitch isn't gated by default");
+  await PR.setConfig({ plus_gate_platforms: ["camfrog", "twitch"] }, "test");
+  assert.equal(CN.needsPlus("twitch"), true);
+  await runQuery("UPDATE users SET twitchId = 'tw-eve', twitchLogin = 'evelive' WHERE userId = ?", [U.eve.userId]);
+  PCR._resetRecent();
+  const T = await PCR.create(U.eve, { title: "Eve Twitch" });
+  await assert.rejects(CN.connectTwitch(U.eve, T), /Connecting Twitch comes with 💎 Prime Time Plus/);
+  await PR.setConfig({ plus_gate_platforms: ["camfrog"], plus_bridge_gate: false }, "test");
+  assert.equal(CN.needsPlus("camfrog"), false, "gate off: nothing needs Plus");
+  // the Eve Lounge pad (connected + disconnected above): its owner never changed
+  const P = await rooms.bySlug("eve-lounge");
+  assert.equal(P.owner.userId, U.eve.userId, "still eve's pad after connect + disconnect");
+  // an admin's assignment is ownership too, with no connection at all
+  await rooms.setOwner("Dan.Room", "eve", "admin test");
+  assert.equal((await rooms.get("Dan.Room")).owner.userId, U.eve.userId);
+  assert.equal(await rooms.canManage(U.eve, "Dan.Room"), true);
+  assert.equal((await CN.current("Dan.Room", "camfrog")), null, "no connection involved");
+  const doc = fs.readFileSync(path.join(repo, "docs", "pads-ownership-connections.md"), "utf8");
+  assert.match(doc, /A connection never makes anyone an owner/);
+});
