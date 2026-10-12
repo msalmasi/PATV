@@ -241,7 +241,7 @@ function register(app, { addUser }) {
     if (!Number.isFinite(amount) || Math.floor(amount) !== amount || amount < min) return bad(res, 400, `Top up at least ${min.toLocaleString("en-US")} PAT.`);
     if (amount > room) return bad(res, 400, room ? `The vault can take ${room.toLocaleString("en-US")} PAT more (cap ${cap.toLocaleString("en-US")}).` : "The vault is full.");
     if (amount > (Number(u.points_balance) || 0)) return bad(res, 400, "You don't have that many PAT.");
-    if (card && card.live === false) return bad(res, 409, "Room vaults aren't open yet.");
+    if (card && card.live === false) return bad(res, 409, "Pad vaults aren't open yet.");
     try {
       const id = await require("./actions").queue(req.user.userId, { kind: "roomvault.deposit", args: [R.id, String(amount)], tag: "owner",
         label: `${R.title}: top up ${amount.toLocaleString("en-US")} PAT`, idem });

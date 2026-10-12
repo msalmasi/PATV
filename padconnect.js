@@ -332,7 +332,7 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
   await rooms.event(out.target, "pad-connected", actor || "?", `Camfrog room ${out.target}${out.T ? " (merged its unowned pad p/" + out.T.slug + ")" : ""} via ${method}; was ${out.R.id}`);
   console.log(`[padconnect] ${out.R.id} -> ${out.target} (${method}) moved ${JSON.stringify(out.moved)}`);
   await rooms.notify(P.owner.userId, { kind: "stage", title: `p/${P.slug} is now the pad of Camfrog room ${out.target}`, pm: true,
-    body: "The room is mapped to your pad now: its live view, its room vault and owner !stage commands come with it. You stay the pad's owner either way - disconnecting never changes that.", link: "/p/" + encodeURIComponent(P.slug) + "/settings?tab=address" });
+    body: "The room is mapped to your pad now: its live view, its pad vault and owner !stage commands come with it. You stay the pad's owner either way - disconnecting never changes that.", link: "/p/" + encodeURIComponent(P.slug) + "/settings?tab=address" });
   if (out.c.join_opt_in && !out.plusJoin) await tellAdmins(`Pepe join request: p/${P.slug}`, `${P.title} (Camfrog room ${out.target}) asks for Pepe to join.`);
   try { require("./achievements").poke(out.c.requested_by); } catch (e) { /* achievements never block */ }   // 1.99mt: 🌉 Bridge Builder
   return P;

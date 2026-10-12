@@ -365,7 +365,7 @@ async function supplyRows(snapshotRows) {
   for (const r of await getQuery("SELECT key, label FROM pools")) labels[r.key] = r.label;
   for (const [k, v] of Object.entries(bals)) {
     if (!(v > 0)) continue;
-    if (k.startsWith("room:")) keep.push({ key: k.slice(0, 80), label: labels[k] || `🏠 Room vault: ${k.slice(5)}`, amount: v });
+    if (k.startsWith("room:")) keep.push({ key: k.slice(0, 80), label: labels[k] || `🏠 Pad vault: ${k.slice(5)}`, amount: v });
     else keep.push({ key: "vault:" + k, label: labels[k] || LABELS[k] || `🏦 ${k} vault`, amount: v });
   }
   const ib = await inboxOpen().catch(() => ({ amount: 0 }));

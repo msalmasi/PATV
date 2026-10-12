@@ -104,7 +104,7 @@ test("the owner page: owner + staff only; every card renders", async () => {
   let r = await page("/p/" + SLUG + "/owner", "owner");
   assert.equal(r.status, 200, r.text.slice(0, 400));
   for (const want of ['id="vault"', 'id="royalties"', 'id="prime"', 'id="stage"', 'id="pepe"', 'id="can"', 'data-po-set="snap"', 'data-po-set="language"',
-                      'data-po-bridge="relay"', 'id="poTopup"', "!roomvault deposit", en["owner.can_h"].replace(/'/g, "&#39;")]) {
+                      'data-po-bridge="relay"', 'id="poTopup"', "!padvault deposit", en["owner.can_h"].replace(/'/g, "&#39;")]) {
     assert.ok(r.text.includes(want), want);
   }
   assert.ok(/<option value="es" selected>Spanish · Español<\/option>/.test(r.text), "the reported language is selected, Pepe's names");

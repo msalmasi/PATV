@@ -527,7 +527,7 @@
       <li><a class="ds-tab" href="#pat-map"><span class="ds-ic sm" aria-hidden="true">🗺️</span><%- t('economy.toc.map') %></a></li>
       <li><a class="ds-tab" href="#flow"><span class="ds-ic sm" aria-hidden="true">🏛️</span>Where PAT goes</a></li>
       <li><a class="ds-tab" href="#protocol"><span class="ds-ic sm" aria-hidden="true">⚙️</span>How the protocol works</a></li>
-      <% if (typeof roomVaults !== 'undefined' && roomVaults) { %><li><a class="ds-tab" href="#roomvaults"><span class="ds-ic sm" aria-hidden="true">🏦</span>Room vaults</a></li><% } %>
+      <% if (typeof roomVaults !== 'undefined' && roomVaults) { %><li><a class="ds-tab" href="#roomvaults"><span class="ds-ic sm" aria-hidden="true">💰</span>Pad vaults</a></li><% } %>
       <li><a class="ds-tab" href="#incentives"><span class="ds-ic sm" aria-hidden="true">🎁</span>Incentive budget</a></li>
       <li><a class="ds-tab" href="#burned"><span class="ds-ic sm" aria-hidden="true">🔥</span>Burned</a></li>
       <li><a class="ds-tab" href="#casino"><span class="ds-ic sm" aria-hidden="true">🎰</span>Casino</a></li>
@@ -746,19 +746,19 @@
         <p>Every fee in the game has a row in one table that says where it goes. A fee goes to whoever put up the PAT for the activity:
           casino play and the wager fee to the House, market and pool fees to the Market maker, loan interest to the Bank.
           Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox
-          and that room's vault. The admins tune the splits.</p>
+          and that pad's vault. The admins tune the splits.</p>
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🚀</span> Boosts &amp; stage slots</h3>
         <p>The front page shows the liveliest pad: you can't buy it. Anyone can <b>boost</b> a pad with PAT to push it up
           the ranking (boosts fade by half every hour and only count while the pad is active). Stage slots are free unless
-          the pad's owner sets a price. Boosts and slot fees go <b>half to that pad's room vault</b> and <b>half to Fort
-          Knox</b>; each room vault pays the pad's owner, its streamers and its regulars a little every day through the
+          the pad's owner sets a price. Boosts and slot fees go <b>half to that pad's vault</b> and <b>half to Fort
+          Knox</b>; each pad vault pays the pad's owner, its streamers and its regulars a little every day through the
           <a href="#recipe">payout recipe</a>. An owner paying in their
           own pad sends it all to Fort Knox. Boost from the 🚀 button on a pad's page, or type <code>!boost 5000</code> in its
           Camfrog room.</p>
         <p><b>✨ Pad cosmetics</b> (frames, name glows, badges, an animated avatar) take the same route: a pad's owner buying for
-          their own pad sends 100% to Fort Knox; a gift from anyone else goes half to Fort Knox, half to that pad's room vault.</p>
+          their own pad sends 100% to Fort Knox; a gift from anyone else goes half to Fort Knox, half to that pad's vault.</p>
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🔒</span> Escrow</h3>
@@ -776,18 +776,19 @@
   <% if (_rv) { %>
   <section id="roomvaults">
     <div class="ds-eyebrow ac">REVENUE FOLLOWS THE ROOM</div>
-    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🏦</span> Room vaults</h2>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">💰</span> Pad vaults</h2>
     <% const _rc = _rv.recipe || {}; const _rcc = _rc.cfg || {}; const _p = (k, d) => Math.round(100 * (_rcc[k] != null ? Number(_rcc[k]) : d)); %>
-    <p class="lead">Every pad with a Camfrog room has its own vault: a pool of PAT (points, not money) that belongs to the
-      room. Half of what's spent in a room (paid commands, songs, voices, heist gear, boosts, stage slots, pad cosmetic gifts)
-      goes to that room's vault and half to Fort Knox<% if (!_rc.frozen) { %>; on commands in a pad with an owner, the
+    <p class="lead">Every pad with a Camfrog room has its own <b>pad vault</b>: a pool of PAT (points, not money) that belongs to the
+      pad. Half of what's spent in a pad (paid commands, songs, voices, heist gear, boosts, stage slots, pad cosmetic gifts)
+      goes to that pad's vault and half to Fort Knox<% if (!_rc.frozen) { %>; on commands in a pad with an owner, the
       owner's 10% royalty comes first until room payouts replace it<% } %>. Spending with no room goes all to Fort Knox, and
       so does the pad owner's (or the controlling gang's) spending in their own room. A vault holds at most
       <%= _rf(_rv.cap) %> PAT; anything above goes to Fort Knox. Anyone can add to a vault with
-      <code>!roomvault deposit &lt;amount&gt;</code> (deposits never count as the room's income).</p>
+      <code>!padvault deposit &lt;amount&gt;</code> or the <b>Donate</b> button on the pad's About tab (deposits and donations
+      never count as the pad's income).</p>
     <div class="grid">
       <div class="card wide">
-        <h3><span class="ds-ic" aria-hidden="true">📊</span> Room vaults now: <%= _rf(_rv.total) %> PAT</h3>
+        <h3><span class="ds-ic" aria-hidden="true">📊</span> Pad vaults now: <%= _rf(_rv.total) %> PAT</h3>
         <% if (_rv.rooms.length) { %>
         <ul>
           <% _rv.rooms.forEach((r) => { %>
@@ -796,7 +797,7 @@
           <% }) %>
         </ul>
         <% } else { %><p>Nothing in them yet.</p><% } %>
-        <div class="cmd"><code>!roomvault</code> · <code>!roomvault history</code> · <code>!roomvault all</code></div>
+        <div class="cmd"><code>!padvault</code> · <code>!padvault history</code> · <code>!padvault all</code></div>
       </div>
       <div class="card wide" id="recipe">
         <h3><span class="ds-ic" aria-hidden="true">💸</span> The payout recipe<% if (!_rc.on) { %> <span class="new">SOON</span><% } %></h3>
@@ -818,7 +819,7 @@
             and pictionary. When it's used up the games run for XP only.</li>
         </ul>
         <p>Payouts of <%= _rf(_rcc.convoy_min || 25000) %> PAT or more leave on a 10-minute convoy that people in the room can
-          try to hit (a hit takes at most 20%). <code>!roomvault recipe</code> shows the room's last payout day.</p>
+          try to hit (a hit takes at most 20%). <code>!padvault recipe</code> shows the pad's last payout day.</p>
       </div>
     </div>
     <div class="top"><a href="#top">↑ top</a></div>
@@ -876,9 +877,9 @@
               1/7 of the allowance a day). A prize over the allowance is skipped. Once room payouts are on, a room with a vault
               pays its games from its own vault's daily slice instead.</li>
             <li><b>Turf Wars:</b> the turf income and the season prize of the current season.</li>
-            <li><% if (!LP_ON) { %><span class="new">SOON</span> <% } %><b>Launch grants</b> that seed the room vaults of new pads, as they build a following.</li>
-            <li><span class="new">SOON</span> <b>Activity rewards</b> for people who chat and get on the mic, and <b>room
-              top-ups</b> that match what each room's vault pays out.</li>
+            <li><% if (!LP_ON) { %><span class="new">SOON</span> <% } %><b>Launch grants</b> that seed the vaults of new pads, as they build a following.</li>
+            <li><span class="new">SOON</span> <b>Activity rewards</b> for people who chat and get on the mic, and <b>pad
+              top-ups</b> that match what each pad vault pays out.</li>
           </ul>
         </div>
         <div class="card">
@@ -923,12 +924,12 @@
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">⚙️</span> How the PAT protocol works</h2>
     <p class="lead">The short version: <b>playing never burns PAT.</b> Every PAT that exists is sitting somewhere: in a wallet,
       in a stash, or in one of the pools (the Federal Reserve, the incentive budget, the House, the Lotto pot, the Bank, the
-      Market maker, the heist vaults, the room vaults, a gang's turf, or escrow while a game or bet is running). Playing
+      Market maker, the heist vaults, the pad vaults, a gang's turf, or escrow while a game or bet is running). Playing
       just moves it around. Here's how each pool deals with your wallet; <a href="#pat-map">the PAT map</a> shows the
       whole loop.</p>
 
     <figure class="fig">
-      <svg class="fig-desk" viewBox="0 0 480 860" role="img" aria-label="Diagram of where PAT flows between players' wallets and the pools: the Federal Reserve, the incentive budget, the Bank, the Market maker, the House, the Lotto pot, the heist vaults, the room vaults and your stashes">
+      <svg class="fig-desk" viewBox="0 0 480 860" role="img" aria-label="Diagram of where PAT flows between players' wallets and the pools: the Federal Reserve, the incentive budget, the Bank, the Market maker, the House, the Lotto pot, the heist vaults, the pad vaults and your stashes">
         <defs>
           <marker id="fa-out" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e0a030"/></marker>
           <marker id="fa-in" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#81c784"/></marker>
@@ -1015,7 +1016,7 @@
 
         <!-- Room vaults (y 680) -->
         <rect x="296" y="680" width="174" height="60" rx="10" fill="#161616" stroke="#c98500" stroke-width="2"/>
-        <text x="383" y="706" font-size="16" font-weight="bold" fill="#e0a030" text-anchor="middle">Room vaults</text>
+        <text x="383" y="706" font-size="16" font-weight="bold" fill="#e0a030" text-anchor="middle">Pad vaults</text>
         <text x="383" y="726" font-size="12.5" fill="#ccc" text-anchor="middle">one per room</text>
         <line x1="102" y1="704" x2="290" y2="704" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
         <text x="196" y="697" font-size="13.5" fill="#ccc" text-anchor="middle">half of each room spend</text>
@@ -1047,7 +1048,7 @@
           { n: 'House (casino)', s: 'the casino bankroll', c: 'var(--ds-danger-solid)', i: 'spins, lost bets, wager fee, 60% of each lotto ticket', o: 'wins & fixed prizes' },
           { n: 'Lotto pot', s: 'jackpot only, max 100M', c: 'var(--ds-warn-fill)', i: '40% of each lotto ticket', o: 'the lotto jackpot' },
           { n: 'Heist vaults', s: 'Fort Knox · Casino vault', c: '#f08a64', i: 'room spends, heist buy-ins', o: 'heist loot' },
-          { n: 'Room vaults', s: 'one per room', c: 'var(--ds-warn-fill)', i: 'half of each room spend', o: 'payouts (coming soon)', soon: true },
+          { n: 'Pad vaults', s: 'one per pad', c: 'var(--ds-warn-fill)', i: 'half of each room spend', o: 'payouts (coming soon)', soon: true },
           { n: 'Your stashes', s: 'stake into the vaults', c: 'var(--ds-text-2)', i: 'deposit', o: 'withdraw', dashed: true },
         ].forEach((r) => { %>
           <div class="fm-box<%= r.dashed ? ' dashed' : '' %>" style="--c: <%= r.c %>">
@@ -1327,7 +1328,7 @@
     <p class="lead">A fee goes to whoever put up the PAT for that activity. Market and pool fees go to the Market maker
       that seeds the markets, loan interest goes to the Bank that lent it, casino margins and the wager fee go to the House.
       Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox and
-      that room's vault, by the routing table. Stakers don't get paid for activity they don't fund.</p>
+      that pad's vault, by the routing table. Stakers don't get paid for activity they don't fund.</p>
 
     <h3 class="h3s"><span class="ds-ic" aria-hidden="true">🎟️</span> The Lotto pot</h3>
     <p class="lead">Each 1,000 PAT lotto ticket splits in two: <b>40%</b> builds the Lotto pot, a separate rolling jackpot that only
@@ -1672,7 +1673,7 @@
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🧾</span> Fees</h2>
     <p class="lead">Fees aren't burned, and they <a href="#protocol">follow risk</a>: a fee goes to the vault that put up the PAT for the
       activity (Bank, House or Market maker). Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending
-      in a room is split between Fort Knox and that room's vault. <span class="cfg">⚙ = set by the admins, can change.</span></p>
+      in a room is split between Fort Knox and that pad's vault. <span class="cfg">⚙ = set by the admins, can change.</span></p>
     <div class="ds-tbl">
       <table>
         <thead><tr><th>WHAT</th><th>FEE</th><th>NOTES</th></tr></thead>
@@ -1689,7 +1690,7 @@
           <tr><td>Bounty</td><td class="n">5% of payout</td><td>Refunds on cancel or expiry are free. To the Federal Reserve</td></tr>
           <tr><td>Fines</td><td class="n">set by staff</td><td>To the Federal Reserve</td></tr>
           <tr><td>Shop listings</td><td class="n">10% of the sale</td><td>The seller gets 90%; the fee goes to the Federal Reserve</td></tr>
-          <tr><td>Spending in a room</td><td class="n">the item's price</td><td>Half to Fort Knox, half to that room's vault (all to Fort Knox in your own pad or with no room)</td></tr>
+          <tr><td>Spending in a room</td><td class="n">the item's price</td><td>Half to Fort Knox, half to that pad's vault (all to Fort Knox in your own pad or with no room)</td></tr>
           <tr><td>Reserve loan</td><td class="n">Reserve rate</td><td>Interest and late penalties to the Bank that lent it</td></tr>
           <tr><td>Player loan</td><td class="n">10% of interest</td><td>To the Bank; principal never taxed</td></tr>
           <tr><td>Late loan</td><td class="n">+2% / day</td><td>On what's still owed, capped at +50% of the loan</td></tr>

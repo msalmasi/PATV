@@ -13,14 +13,14 @@ const render = (extra) => ejs.renderFile(view, Object.assign({ user: null, treas
 
 test("PAT map: paid room commands show the live split, launch grants follow the launchpad switch", async () => {
   const off = await render({ roomSplit: { owner: 10, fortknox: 45, room: 45 }, launchpadOn: false });
-  assert.match(off, /45% Fort Knox · 45% that room&#39;s vault · 10% the pad&#39;s owner|45% Fort Knox · 45% that room's vault · 10% the pad's owner/);
-  assert.match(off, /<li class="soon">Launch grants that seed new pads' room vaults<span class="pm-soon">/);
+  assert.match(off, /45% Fort Knox · 45% that pad&#39;s vault · 10% the pad&#39;s owner|45% Fort Knox · 45% that pad's vault · 10% the pad's owner/);
+  assert.match(off, /<li class="soon">Launch grants that seed new pads' vaults<span class="pm-soon">/);
   const on = await render({ roomSplit: { owner: 20, fortknox: 40, room: 40 }, launchpadOn: true });
-  assert.match(on, /40% Fort Knox · 40% that room's vault · 20% the pad's owner/);
-  assert.match(on, /<li>Launch grants that seed new pads' room vaults<\/li>/);
+  assert.match(on, /40% Fort Knox · 40% that pad's vault · 20% the pad's owner/);
+  assert.match(on, /<li>Launch grants that seed new pads' vaults<\/li>/);
   // rendered without them (older callers): the defaults, launch grants coming soon
   const bare = await render({});
-  assert.match(bare, /45% Fort Knox · 45% that room's vault · 10% the pad's owner/);
+  assert.match(bare, /45% Fort Knox · 45% that pad's vault · 10% the pad's owner/);
 });
 
 test("econpage.roomSplit: the most common non-zero room_owner share, the rest split Fort Knox / room vault", async () => {

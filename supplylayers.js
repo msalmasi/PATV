@@ -16,7 +16,7 @@ const LAYERS = [
   { key: "players", label: "👛 Players", blurb: "wallets and personal vaults" },
   { key: "fed", label: "🏛️ Federal Reserve (backstop)", blurb: "untouchable: the only minter, by written policy; it pays no rewards and nobody robs it" },
   { key: "treasury", label: "🏦 Protocol Treasury", blurb: "the House, the Bank and the Market maker" },
-  { key: "incentive", label: "🎁 Incentive layer", blurb: "the incentive budget and the vaults heists and rooms pay from (Fort Knox, the Casino vault, room vaults)" },
+  { key: "incentive", label: "🎁 Incentive layer", blurb: "the incentive budget and the vaults heists and rooms pay from (Fort Knox, the Casino vault, pad vaults)" },
   { key: "pots", label: "🎲 Pots, games and escrow", blurb: "the lotto pot, bingo, prediction markets, escrow, turf and gang treasuries" },
   { key: "burn", label: "🔥 Out of circulation", blurb: "the burn reserve, waiting to be burned" },
 ];

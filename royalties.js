@@ -392,7 +392,7 @@ async function cutover({ key, dry = true } = {}) {
     if (r.queued) queued += r.amount; else released += r.amount;
     out.push({ room_id: p.room_id, title: p.title, owner: p.owner, amount: r.amount, queued: r.queued });
     require("./rooms").notify(p.owner, { kind: "room", title: `+${r.amount.toLocaleString("en-US")} PAT: your last pad owner royalties for ${p.title}`,
-      body: "Royalties are replaced by the room vault's daily owner share: up to 15% of the room's daily payout budget when you were in the room on 3 of the last 7 days.",
+      body: "Royalties are replaced by the pad vault's daily owner share: up to 15% of the room's daily payout budget when you were in the room on 3 of the last 7 days.",
       link: "/messages/notices", ref: `roy-cutover:${p.room_id}`, pm: false }).catch(() => {});
   }
   const after = (await pendingPairs()).reduce((s, p) => s + p.pending, 0);

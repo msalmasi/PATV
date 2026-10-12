@@ -63,7 +63,7 @@
   </header>
   <% if (!mine && staff) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🛠️</span><div><%- t('owner.staff_view') %></div></div><% } %>
   <nav class="ds-subnav" aria-label="<%- t('owner.sections') %>"><div class="ds-tabs">
-    <% if (camfrog) { %><a class="ds-tab" href="#vault">🏦 <%- t('owner.nav_vault') %></a><% } %>
+    <% if (camfrog) { %><a class="ds-tab" href="#vault">💰 <%- t('owner.nav_vault') %></a><% } %>
     <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
     <% if (camfrog) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
     <a class="ds-tab" href="#prime">📺 <%- t('owner.nav_prime') %></a>
@@ -82,7 +82,7 @@
 
   <% if (camfrog) { %>
   <section class="ds-card lg" id="vault" aria-labelledby="poVaultH">
-    <h2 class="ds-h2" id="poVaultH"><span class="dot"></span>🏦 <%- t('owner.vault_h') %>
+    <h2 class="ds-h2" id="poVaultH"><span class="dot"></span>💰 <%- t('owner.vault_h') %>
       <% if (vault) { %><span class="ds-chip <%= vault.live ? 'ok' : 'warn' %>"><%- vault.live ? t('owner.vault_live') : t('owner.vault_paused') %></span><% } %></h2>
     <p class="po-why"><%- t('owner.vault_why', { cap: num(vault ? vault.cap : 50000000) }) %></p>
     <% if (vault) { %>
@@ -121,7 +121,7 @@
       <summary><%- t('owner.v_history') %></summary>
       <% if (!vault.history.length) { %><p class="ds-meta"><%- t('owner.v_none') %></p><% } else { %>
       <ul class="po-hist">
-        <% vault.history.forEach((h) => { %><li><span><%- t.has('pad.vault.k_' + h.kind) ? t('pad.vault.k_' + h.kind) : t.esc(h.kind) %><% if (h.flow) { %> · <span class="ds-meta"><%= h.flow %></span><% } %><br><small class="ds-fine"><%= h.ts ? dt(h.ts) : '' %></small></span><%- PAT(h.amount, h.amount < 0 ? 'down' : 'up') %></li><% }) %>
+        <% vault.history.forEach((h) => { %><li><span><%- t.has('pad.vault.k_' + h.kind) ? t('pad.vault.k_' + h.kind) : t.esc(h.kind) %><% if (h.flow && h.kind !== 'deposit') { %> · <span class="ds-meta"><%= h.flow %></span><% } %><% if (h.kind === 'deposit') { %> · <span class="ds-meta"><% if (h.anon || !h.who) { %><%- t('pad.vault.anon') %><% } else { %><%= h.who %><% } %></span><% } %><br><small class="ds-fine"><%= h.ts ? dt(h.ts) : '' %></small></span><%- PAT(h.amount, h.amount < 0 ? 'down' : 'up') %></li><% }) %>
       </ul><% } %>
       <% if (vault.days.length) { %>
       <div class="ds-tbl dense"><table><thead><tr><th><%- t('owner.v_day') %></th><th class="r"><%- t('owner.v_in') %></th><th class="r"><%- t('owner.v_dep') %></th><th class="r"><%- t('owner.v_out') %></th></tr></thead><tbody>

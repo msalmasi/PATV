@@ -328,19 +328,41 @@
   .rm .pl-tiers li.done { border-color: #00e5a8; color: #00e5a8; }
   .rm .pl-owner { border-top: 1px solid var(--ds-line-strong); padding-top: 8px; font-size: 13px; color: #ccc; }
   .rm .pl-owner ul { margin: 4px 0 0; padding-left: 18px; }
-  .rm .rv-card { display: grid; gap: 12px; }
-  .rm .rv-card > h2 { margin: 0; flex-wrap: wrap; align-items: baseline; }
-  .rm .rv-card .rv-what { margin: 0; color: #bbb; font-size: 13.5px; line-height: 1.55; }
+  /* 1.99sn: 💰 the pad vault card (partials/pad-vault-card.ejs) - ds stats / bar / chips / fields; page bits below */
+  .rm .rv-card { display: grid; gap: var(--ds-sp-3); }
+  .rm .rv-card > h2 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .rm .rv-card h3 { margin: 0 0 6px; font: 700 15px/1.35 var(--ds-font); color: var(--ds-text-strong); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .rm .rv-card .rv-what, .rm .rv-how > p { margin: 0; color: var(--ds-text-2); font-size: 13.5px; line-height: 1.55; }
+  .rm .rv-how { display: grid; gap: 8px; padding: var(--ds-sp-3); border-radius: var(--ds-r-md); background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); }
+  .rm .rv-how > h3 { margin: 0; }
+  .rm .rv-split { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .rm .rv-split li { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13.5px; line-height: 1.45; color: var(--ds-text); }
+  .rm .rv-split li i { display: block; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--ds-gold) 0 var(--w), #262626 var(--w) 100%); }
+  .rm .rv-split b { color: var(--ds-text-strong); }
+  .rm .rv-week { display: grid; gap: 8px; font-size: 13.5px; color: var(--ds-text-2); }
   .rm .rv-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; align-items: end; height: 54px; }
   .rm .rv-days .b { background: #1d3a24; border-radius: 3px 3px 0 0; min-height: 2px; }
   .rm .rv-days .b.dep { background: #2a3550; }
-  .rm .rv-hist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; color: #ccc; }
-  .rm .rv-hist li { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #1a1a1a; padding: 3px 0; }
-  .rm .rv-hist .amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .rm .rv-rate { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13.5px; color: #ccc; }
-  .rm .rv-rate input { width: 5.5em; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--ds-line-strong); background: #0d0d0d; color: #fff; font: inherit; }
-  .rm .rv-rate .rv-msg { min-height: 1em; font-size: 13px; color: var(--ds-green-2); flex-basis: 100%; margin: 0; }
-  .rm .rv-rate .rv-msg.err { color: #ff8a80; }
+  .rm .rv-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--ds-sp-3) var(--ds-sp-4); }
+  .rm .rv-hist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; color: var(--ds-text-2); }
+  .rm .rv-hist li { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--ds-line-soft); padding: 4px 0; min-width: 0; }
+  .rm .rv-hist li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .rm .rv-hist b { color: var(--ds-text-strong); font-weight: 700; }
+  .rm .rv-hist small { display: block; }
+  .rm .rv-hist .amt { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ds-gold-text); font-weight: 700; }
+  .rm .rv-donate { display: grid; gap: 8px; border-top: 1px solid var(--ds-line-soft); padding-top: var(--ds-sp-3); }
+  .rm .rv-donate > h3 { margin: 0; }
+  .rm .rv-donate > p { margin: 0; }
+  .rm .rv-donate .ds-form { max-width: 460px; }
+  .rm .rv-donate .ds-in-group { display: flex; }
+  .rm .rv-quick { flex-wrap: wrap; gap: 6px; }
+  .rm .rv-donate .ds-btn { justify-self: start; }
+  .rm .rv-msg { min-height: 1em; font-size: 13px; color: var(--ds-green-2); margin: 0; overflow-wrap: anywhere; }
+  .rm .rv-msg.err { color: var(--ds-danger); }
+  .rm .rv-msg.ask { color: var(--ds-gold-text); }
+  .rm .rv-rate { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13.5px; color: var(--ds-text-2); border-top: 1px solid var(--ds-line-soft); padding-top: var(--ds-sp-3); }
+  .rm .rv-rate input { width: 5.5em; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); color: #fff; font: inherit; margin: 0; }
+  .rm .rv-rate .rv-msg { flex-basis: 100%; }
   /* 1.99ec: the Live tab's side cards - the title stays on one line; its action (link / count) sits right of it,
      or drops below it as a whole on a narrow card, never splitting the title */
   .rm .side .card > h2 { flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
@@ -449,6 +471,7 @@
           <div class="hd-menu" role="menu">
             <% if (feed_ && feed_.rules) { %><a role="menuitem" href="?tab=about#rules" data-pad-tab="about" data-open="rules"><%- t('pad.menu.rules') %></a><% } %>
             <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>"><%- t('pad.menu.analytics') %></a><% } %>
+            <% if (typeof roomVault !== 'undefined' && roomVault) { %><a role="menuitem" href="?tab=about#vault" data-pad-tab="about" data-open="vault"><%- t('pad.vault.h') %></a><% } %>
             <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>"><%- t('pad.menu.copy') %></button>
             <a role="menuitem" href="/premium?pad=<%= encodeURIComponent(room.slug) %>"><%- primeOn_ ? t('pad.menu.prime_on') : '📺 Prime Time' %></a>
             <% if (feed_ && feed_.mod && feed_.mod.admin) { %><a role="menuitem" href="/admin/comps?pad=<%= encodeURIComponent(room.slug) %>#premium">🎁 <%- t('pad.menu.comp_prime') %></a><% } %>
@@ -1155,6 +1178,8 @@
         <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><dt><%- t('pad.owner_panel') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.owner_panel') %></a></dd><% } %>
       </dl>
     </section>
+    <%# 1.99sn: 💰 the pad vault, public, first card under About (partials/pad-vault-card.ejs; roomvaults.js) %>
+    <% if (typeof roomVault !== 'undefined' && roomVault) { %><%- include('partials/pad-vault-card', { rv: roomVault, room, slug: room.slug, signed: giftSigned_, siteOnly: siteOnly_, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %><% } %>
     <%# 1.99ew: 🎁 gift a premium cosmetic to this pad (padcosmetics.js, public/js/pad-cosmetics.js); the owner buys from ⚙ settings %>
     <section class="card ab-gift" id="gift" aria-labelledby="giftH">
       <h2 id="giftH"><span><%- t('pad.gift.h') %></span></h2>
@@ -1165,47 +1190,6 @@
         <% if (giftSigned_) { %><button type="button" class="ab-btn" data-pad-gift="<%= room.slug %>"><%- t('pad.menu.gift') %></button><% } else { %><a class="ab-btn" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>"><%- t('pad.gift.signin') %></a><% } %>
       <% } %>
     </section>
-    <%# economy v2 E-3: 🏦 the room vault (roomvaults.js; Pepe's pepe_roomvault.py). Accumulate only: balance, the last
-        7 days' inflow (the room's own activity) and deposits (never inflow), latest moves, and the owner's daily payout
-        rate - stored for the payout recipe that comes later. Camfrog pads only. %>
-    <% const RV_ = typeof roomVault !== 'undefined' && roomVault ? roomVault : null;
-       const rvf_ = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
-       const rvKind_ = { flow: t('pad.vault.k_flow'), site: t('pad.vault.k_site'), deposit: t('pad.vault.k_deposit'), migration: t('pad.vault.k_migration'), refund: t('pad.vault.k_refund'), challenge: t('pad.vault.k_challenge'), launch: t('pad.vault.k_launch'), match: t('pad.vault.k_match') }; %>
-    <% if (RV_ && (RV_.live || RV_.balance > 0)) { %>
-    <section class="card rv-card" id="vault" aria-labelledby="rvH">
-      <h2 id="rvH"><span><%- t('pad.vault.h') %></span><small><%- RV_.live ? t('pad.vault.filling') : t('pad.vault.paused') %></small></h2>
-      <p class="rv-what"><%- t('pad.vault.what', { name: room.name, cap: rvf_(RV_.cap) }) %><% if (!siteOnly_) { %> <%- t('pad.vault.in_room', { cmds: '<code>!roomvault</code> · <code>!roomvault deposit 5000</code>' }) %><% } %></p>
-      <div class="an-tiles">
-        <div class="an-t"><div class="k"><%- t('pad.vault.balance') %></div><div class="v"><%= rvf_(RV_.balance) %></div><div class="s">PAT</div></div>
-        <div class="an-t"><div class="k"><%- t('pad.vault.inflow') %></div><div class="v"><%= rvf_(RV_.inflow7) %></div><div class="s"><%- t('pad.vault.inflow_sub') %></div></div>
-        <div class="an-t"><div class="k"><%- t('pad.vault.deposits') %></div><div class="v"><%= rvf_(RV_.deposits7) %></div><div class="s"><%- t('pad.vault.deposits_sub') %></div></div>
-        <div class="an-t"><div class="k"><%- t('pad.vault.rate') %></div><div class="v"><%= RV_.rate %>%</div><div class="s"><%- t('pad.vault.rate_sub') %><%- RV_.rate_default ? ' ' + t('pad.vault.default') : '' %></div></div>
-      </div>
-      <% if (RV_.days && RV_.days.length) { const mx_ = Math.max(1, ...RV_.days.map((d) => Math.max(0, d.in) + Math.max(0, d.dep))); %>
-      <div class="rv-days" role="img" aria-label="<%- t('pad.vault.days_aria') %>">
-        <% RV_.days.forEach((d) => { const h_ = Math.round(100 * (Math.max(0, d.in) + Math.max(0, d.dep)) / mx_); %>
-          <div class="b<%= d.dep > d.in ? ' dep' : '' %>" style="height:<%= h_ %>%" title="<%- t('pad.vault.day_tip', { day: d.day, in: rvf_(d.in), dep: rvf_(d.dep) }) %>"></div>
-        <% }) %>
-      </div>
-      <% } %>
-      <% if (RV_.history && RV_.history.length) { %>
-      <ul class="rv-hist" aria-label="<%- t('pad.vault.moves') %>">
-        <% RV_.history.slice(0, 6).forEach((e) => { %>
-          <li><span><%- (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(e.ts, 'datetime') %> · <%= rvKind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %></span>
-              <span class="amt"><%= e.kind === 'challenge' ? '−' : (e.amount < 0 ? '−' : '+') %><%= rvf_(Math.abs(e.amount)) %><%- e.overflow ? ' ' + t('pad.vault.overflow', { n: rvf_(e.overflow) }) : '' %></span></li>
-        <% }) %>
-      </ul>
-      <% } %>
-      <% if (RV_.can_set_rate) { %>
-      <form class="rv-rate" id="rvRate" data-slug="<%= room.slug %>" autocomplete="off">
-        <label for="rvRateIn"><%- t('pad.vault.daily_rate') %></label>
-        <input id="rvRateIn" type="number" name="rate" min="<%= RV_.rate_bounds.min %>" max="<%= RV_.rate_bounds.max %>" step="0.5" value="<%= RV_.rate %>"<%= RV_.rate_locked_until ? ' disabled' : '' %>> %
-        <button type="submit" class="ab-btn"<%= RV_.rate_locked_until ? ' disabled' : '' %>><%- t('pad.vault.save') %></button>
-        <p class="rv-msg" id="rvRateMsg" role="status" aria-live="polite"><%- RV_.rate_locked_until ? t('pad.vault.locked', { date: new Date(RV_.rate_locked_until).toISOString().slice(0, 10) }) : t('pad.vault.bounds', { min: RV_.rate_bounds.min, max: RV_.rate_bounds.max }) %></p>
-      </form>
-      <% } %>
-    </section>
-    <% } %>
     <%# 1.99el: Analytics is its own card (was an "Analytics: Pad analytics ›" row above): the 30-day headline numbers
         from roomstats.preview (cached), for signed-in viewers only - visitors get the analytics page's sign-in prompt %>
     <% const anCard_ = typeof roomAnalyticsCard !== 'undefined' && roomAnalyticsCard ? roomAnalyticsCard : null;
@@ -1240,9 +1224,9 @@
     </section>
     <% } %>
   </section>
-  <script src="/public/js/pad-tabs.js?v=5"></script>
+  <script src="/public/js/pad-tabs.js?v=6"></script>
   <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=4" defer></script><% } %>
-  <% if (typeof roomVault !== 'undefined' && roomVault && roomVault.can_set_rate) { %><script src="/public/js/pad-vault.js?v=1" defer></script><% } %>
+  <% if (typeof roomVault !== 'undefined' && roomVault) { %><script src="/public/js/pad-vault.js?v=2" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>
   <script>
   // 1.99ef: the header's ⋯ menu - closes on an outside click / Esc / after a pick; "Copy link" copies the pad's address

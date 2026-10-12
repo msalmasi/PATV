@@ -48,7 +48,7 @@
     var m = /(?:^|[?&])tab=([^&#]*)/.exec(s);
     if (m) { var q = ALIAS[decodeURIComponent(m[1]).toLowerCase()]; if (q) return q; }
     if (h && ALIAS[h]) return ALIAS[h];
-    if (/^rules/.test(h)) return 'about';
+    if (/^(?:rules|vault)/.test(h)) return 'about';      // 1.99sn: #vault = the About tab's 💰 Pad vault card
     if (/^(?:feed|post-)/.test(h)) return 'feed';
     if (FEED_Q.test(s)) return 'feed';
     return null;
@@ -240,7 +240,7 @@
 
     var requested = requestedTab(root.location.search, root.location.hash);
     show(pickTab({ tabs: tabs, platform: o.platform, active: o.active, requested: requested, stored: store(keyTab) }), {});
-    if (/^#rules$/i.test(root.location.hash)) { var r = doc.getElementById('rules'); if (r) { r.open = true; try { r.scrollIntoView({ block: 'start' }); } catch (x) { /* */ } } }
+    if (/^#(?:rules|vault(?:-donate)?)$/i.test(root.location.hash)) { var r = doc.getElementById(root.location.hash.slice(1)); if (r) { if (r.tagName === 'DETAILS') r.open = true; try { r.scrollIntoView({ block: 'start' }); } catch (x) { /* */ } } }
     return { show: show, current: function () { return current; } };
   }
 

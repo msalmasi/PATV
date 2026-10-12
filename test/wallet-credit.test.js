@@ -99,6 +99,10 @@ test("lend + donate forms queue the same chat commands", async () => {
   assert.match(h, /id="lend"><input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="loan">/);
   assert.match(h, /id="donate"><input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="donate">/);
   assert.match(h, /<option value="lotto">/);
+  // 1.99sn: 🎁 Give to a pool - Fort Knox is a destination too (= !donate fortknox), and each pool says what it is
+  assert.match(h, /<option value="fortknox">🪙 Fort Knox \(what bank heists rob\)<\/option>/);
+  assert.match(h, /Give to a pool/);
+  assert.match(h, /<b>Fort Knox<\/b>: the federal vault bank and store heists go after/);
 });
 
 test("a pending welcome bonus shows what's left to do", async () => {

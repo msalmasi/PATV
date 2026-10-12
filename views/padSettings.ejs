@@ -141,7 +141,7 @@
       <% if (!roy) { %>
         <p class="note"><%= room.house ? "House pads don't earn royalties — their share stays in the Federal Reserve." : 'Royalties go to a pad owner. This pad has none yet.' %></p>
       <% } else { const R = roy, pct = Math.min(100, R.active_days_needed ? (R.active_days / R.active_days_needed) * 100 : 100); const osh = (R.owner_shares || []).filter((x) => x.pct > 0); %>
-        <p class="muted">You earn <% if (osh.length) { %>a share of the PAT spent on Pepe's paid commands, song requests, voices and DJ shout-outs in this pad's Camfrog room<% } else { %>a share of what's spent in this pad<% } %> (your own spending doesn't count). Stage slot fees and 🚀 boosts go half to this pad's room vault instead, which pays owners, streamers and regulars once room vaults open. Paid out every <%= R.config.period_days %> days if the pad was active on at least <b><%= R.active_days_needed %></b> days. Max <%= fmt(R.config.cap_per_period) %> PAT per payout.</p>
+        <p class="muted">You earn <% if (osh.length) { %>a share of the PAT spent on Pepe's paid commands, song requests, voices and DJ shout-outs in this pad's Camfrog room<% } else { %>a share of what's spent in this pad<% } %> (your own spending doesn't count). Stage slot fees and 🚀 boosts go half to this pad's pad vault instead, which pays owners, streamers and regulars once pad vaults open. Paid out every <%= R.config.period_days %> days if the pad was active on at least <b><%= R.active_days_needed %></b> days. Max <%= fmt(R.config.cap_per_period) %> PAT per payout.</p>
         <div class="facts">
           <div class="fact"><span class="k">This period</span><span class="v"><%= fmt(R.this_period.total) %> <small>PAT</small></span></div>
           <div class="fact"><span class="k">Waiting</span><span class="v"><%= fmt(R.pending) %> <small>PAT</small></span></div>
@@ -212,7 +212,7 @@
         </select><small><%- t('pad.settings.takeover.hint') %></small></label>
         <div class="row"><button type="submit" class="btn primary">Save stage settings</button><span class="msg" id="stageMsg" role="status"></span></div>
       </form>
-      <p class="muted">Pepe's stream is always on every pad's stage. Slots are free unless you set a price; a slot fee goes half to this pad's room vault (held for it until room vaults open) and half to Fort Knox — your own bookings here go all to Fort Knox. Featuring can't be bought: you feature a slot for free, and the front page picks the liveliest pad (people can 🚀 boost a pad, split the same way). In chat, <code>!stage</code>, <code>!stage feature &lt;name&gt;</code>, <code>!stage cut</code> and <code>!stage slots &lt;n&gt;</code> work for you in this pad's Camfrog room.</p>
+      <p class="muted">Pepe's stream is always on every pad's stage. Slots are free unless you set a price; a slot fee goes half to this pad's vault (held for it until pad vaults open) and half to Fort Knox — your own bookings here go all to Fort Knox. Featuring can't be bought: you feature a slot for free, and the front page picks the liveliest pad (people can 🚀 boost a pad, split the same way). In chat, <code>!stage</code>, <code>!stage feature &lt;name&gt;</code>, <code>!stage cut</code> and <code>!stage slots &lt;n&gt;</code> work for you in this pad's Camfrog room.</p>
     </div>
     <div class="sb-card ps-card" id="stagebans">
       <h3>Banned from this pad's stage</h3>

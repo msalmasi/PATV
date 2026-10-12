@@ -10,6 +10,14 @@
 //   POST /api/rooms/:slug/vault/rate  {rate}  the pad's owner (or site staff): the daily payout rate, 2-15%,
 //                                     at most one change per 7 days (staff are not limited). STORED ONLY: Pepe's E-4
 //                                     recipe will use it; nothing pays out yet.
+//   POST /api/rooms/:slug/vault/donate {amount, idem, anon}  1.99sn: the pad page's public "Donate to this pad's vault" -
+//                                     ANY signed-in account (not just the owner): the same keyed website action as the
+//                                     owner panel's top-up ("roomvault.deposit" = Pepe's !padvault deposit: escrow hold ->
+//                                     settle, min, never past the cap). A donation is a DEPOSIT: never inflow, so it never
+//                                     raises the owner-share cap or a gang's bond. No Camfrog name linked = Pepe charges the
+//                                     PATV account itself. `anon` keeps the donor's name off the public list.
+//
+// "Pad vault" is the name users see (1.99sn); the code, tables and Pepe's pool keys keep "room vault" / room:<id>.
 //
 // E-4 (Pepe's pepe_recipe.py, flag econ_room_payouts): each room's sync row may carry `recipe` {epochs: the last 7 payout
 // days - budget B, what each slice paid (owner / gang / streamers / regulars), the room-games allowance, what stayed,
@@ -19,7 +27,8 @@
 // "Inflow" is what the room's own activity routed in (Pepe's room flows + the website's room halves). Deposits and the
 // one-time escrow migration are shown on their own and NEVER count as inflow (doc 6.4).
 //
-//   room_vault_state     room_id PK, balance, days (JSON, Pepe's last 8 days), history (JSON, latest moves), updated
+//   room_vault_state     room_id PK, balance, days (JSON, Pepe's last 8 days), history (JSON, latest moves), updated,
+//                        recipe (E-4), donors (1.99sn: JSON, the latest deposits - {ts, amount, who} or {ts, amount, anon})
 //   room_vault_meta      key/value: on, cap, total, synced (Pepe's last sync), deposit_min, rate bounds
 //   room_vault_settings  room_id PK, rate, changed_at (ms), changed_by (userId)
 //   room_vault_rate_log  room_id, rate, prev, by (userId), at - the audit trail of rate changes
@@ -48,6 +57,7 @@ function init() {
       await runQuery("CREATE TABLE IF NOT EXISTS room_vault_rate_log (room_id TEXT, rate REAL, prev REAL, by TEXT, at INTEGER)");
       const cols = (await getQuery("SELECT name FROM pragma_table_info('room_vault_state')")).map((c) => c.name);
       if (!cols.includes("recipe")) await runQuery("ALTER TABLE room_vault_state ADD COLUMN recipe TEXT");   // E-4
+      if (!cols.includes("donors")) await runQuery("ALTER TABLE room_vault_state ADD COLUMN donors TEXT");   // 1.99sn
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -65,12 +75,27 @@ function cleanDays(d) {
   return out;
 }
 const KINDS = ["flow", "site", "deposit", "migration", "refund", "challenge", "launch", "match", "recipe", "topup"];   // launch / match: the launchpad; recipe / topup: E-4
+// 1.99sn: a deposit's public face, as Pepe reports it - a display name, or anon (the login never leaves Pepe then)
+const cleanWho = (v) => String(v || "").replace(/[<>"&\u0000-\u001f]/g, "").trim().slice(0, 40);
+function donorOf(e) {
+  if (e && e.anon === true) return { anon: true };
+  const w = cleanWho(e && e.who);
+  return w ? { who: w } : {};
+}
 function cleanHistory(h) {
-  return (Array.isArray(h) ? h : []).slice(0, 12).map((e) => ({
-    ts: int(e && e.ts), kind: KINDS.includes(e && e.kind) ? e.kind : "flow",
-    flow: String((e && e.flow) || "").replace(/[^A-Za-z0-9 _:-]/g, "").slice(0, 32),
-    amount: int(e && e.amount), overflow: int(e && e.overflow),
-  }));
+  return (Array.isArray(h) ? h : []).slice(0, 12).map((e) => {
+    const o = {
+      ts: int(e && e.ts), kind: KINDS.includes(e && e.kind) ? e.kind : "flow",
+      flow: String((e && e.flow) || "").replace(/[^A-Za-z0-9 _:-]/g, "").slice(0, 32),
+      amount: int(e && e.amount), overflow: int(e && e.overflow),
+    };
+    return o.kind === "deposit" ? Object.assign(o, donorOf(e)) : o;
+  });
+}
+function cleanDonors(d) {
+  if (!Array.isArray(d)) return null;          // an older Pepe sends none: keep what we had
+  return d.slice(0, 8).map((e) => Object.assign({ ts: int(e && e.ts), amount: Math.max(0, int(e && e.amount)) }, donorOf(e)))
+    .filter((e) => e.amount > 0);
 }
 
 // E-4: one payout day as Pepe reports it (numbers + short reasons only)
@@ -123,11 +148,12 @@ async function sync(body) {
       const id = String((r && r.id) || "").slice(0, 120);
       if (!id) continue;
       const rc = cleanRecipe(r.recipe);
-      await runQuery(`INSERT INTO room_vault_state (room_id, balance, days, history, updated, recipe) VALUES (?, ?, ?, ?, ?, ?)
+      const dn = cleanDonors(r.donors);
+      await runQuery(`INSERT INTO room_vault_state (room_id, balance, days, history, updated, recipe, donors) VALUES (?, ?, ?, ?, ?, ?, ?)
                       ON CONFLICT(room_id) DO UPDATE SET balance = excluded.balance, days = excluded.days, history = excluded.history, updated = excluded.updated,
-                      recipe = COALESCE(excluded.recipe, room_vault_state.recipe)`,
+                      recipe = COALESCE(excluded.recipe, room_vault_state.recipe), donors = COALESCE(excluded.donors, room_vault_state.donors)`,
                      [id, Math.max(0, int(r.balance)), JSON.stringify(cleanDays(r.days)), JSON.stringify(cleanHistory(r.history)), t,
-                      rc ? JSON.stringify(rc) : null]);
+                      rc ? JSON.stringify(rc) : null, dn ? JSON.stringify(dn) : null]);
     }
     await metaSet({ on: b.on === true, cap: int(b.cap) || null, total: Math.max(0, int(b.total)), synced: t,
                     deposit_min: int(b.deposit_min) || null, recipe: cleanRecipeMeta(b.recipe) });
@@ -149,7 +175,7 @@ async function card(roomId, user, opts = {}) {
   await init();
   const id = String(roomId || "");
   const meta = await metaGet();
-  const st = (await getQuery("SELECT balance, days, history, updated, recipe FROM room_vault_state WHERE room_id = ?", [id]))[0] || null;
+  const st = (await getQuery("SELECT balance, days, history, updated, recipe, donors FROM room_vault_state WHERE room_id = ?", [id]))[0] || null;
   const set = (await getQuery("SELECT rate, changed_at, changed_by FROM room_vault_settings WHERE room_id = ?", [id]))[0] || null;
   let days = {};
   let history = [];
@@ -157,6 +183,8 @@ async function card(roomId, user, opts = {}) {
   try { history = st && st.history ? JSON.parse(st.history) : []; } catch (e) { history = []; }
   let recipe = null;
   try { recipe = st && st.recipe ? JSON.parse(st.recipe) : null; } catch (e) { recipe = null; }
+  let donors = [];
+  try { donors = st && st.donors ? JSON.parse(st.donors) : []; } catch (e) { donors = []; }
   const keys = Object.keys(days).sort().slice(-7);
   const sum = (f) => keys.reduce((s, k) => s + int((days[k] || {})[f]), 0);
   const t = now();
@@ -164,6 +192,21 @@ async function card(roomId, user, opts = {}) {
   const nextChange = changedAt ? changedAt + RATE_EVERY_MS : null;
   const canSet = !!opts.canManage;
   const staff = !!opts.staff;
+  const rmeta = meta.recipe || {};
+  const epochs = (recipe && recipe.epochs) || [];
+  // 1.99sn: the public card's "How it pays out" - the recipe's slices (Pepe's cfg, fractions; the E-4 defaults until synced)
+  const pct = (k, d) => { const v = Number((rmeta.cfg || {})[k]); return Math.round((Number.isFinite(v) && v > 0 && v <= 1 ? v : d) * 100); };
+  const split = { owner: pct("owner_pct", 0.15), gang: pct("gang_pct", 0.15), streamers: pct("streamer_pct", 0.25),
+                  people: pct("people_pct", 0.35), games: pct("games_pct", 0.10) };
+  const wsum = (f) => epochs.reduce((s, e) => s + int(e[f]), 0);
+  const week = epochs.length ? { days: epochs.length, paid: wsum("paid"), stays: wsum("stays"), owner: wsum("owner"), gang: wsum("gang"),
+                                 streamers: wsum("streamers"), people: wsum("people"), games: wsum("games_used_prev"),
+                                 last: epochs[epochs.length - 1] } : null;
+  let viewer = null;
+  if (user && user.userId) {
+    const u = (await getQuery("SELECT points_balance, camfrogUsername FROM users WHERE userId = ?", [user.userId]))[0] || {};
+    viewer = { balance: Math.max(0, int(u.points_balance)), linked: !!u.camfrogUsername };
+  }
   return {
     live: meta.on === true, synced: meta.synced || null, cap: meta.cap || 50000000, deposit_min: meta.deposit_min || 1000,
     balance: st ? int(st.balance) : 0,
@@ -174,6 +217,7 @@ async function card(roomId, user, opts = {}) {
     recipe: { live: !!(meta.recipe && meta.recipe.on), topup: !!(meta.recipe && meta.recipe.topup), frozen: !!(meta.recipe && meta.recipe.frozen),
               cfg: (meta.recipe && meta.recipe.cfg) || {}, epochs: (recipe && recipe.epochs) || [], games: (recipe && recipe.games) || null },
     history: history.slice(0, 8),
+    donors: (Array.isArray(donors) ? donors : []).slice(0, 8), split, week, viewer,
     rate: set ? Number(set.rate) : RATE.default, rate_default: !set, rate_changed: changedAt,
     rate_bounds: { min: RATE.min, max: RATE.max },
     can_set_rate: canSet, rate_locked_until: canSet && !staff && nextChange && nextChange > t ? nextChange : null,
@@ -186,7 +230,7 @@ async function setRate(roomId, user, rate) {
   const rooms = require("./rooms");
   const R = await rooms.get(String(roomId || ""));
   if (!R) throw new Refuse(404, "No such pad.");
-  if (rooms.platformOf(R.id) !== "camfrog") throw new Refuse(400, "Only pads with a Camfrog room have a room vault.");
+  if (rooms.platformOf(R.id) !== "camfrog") throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
   if (!(await rooms.canManage(user, R.id))) throw new Refuse(403, "Only the pad's owner can set its payout rate.");
   const r = Math.round(Number(rate) * 2) / 2;
   if (!Number.isFinite(r) || r < RATE.min || r > RATE.max) throw new Refuse(400, `Pick a rate between ${RATE.min}% and ${RATE.max}%.`);
@@ -207,6 +251,37 @@ async function setRate(roomId, user, rate) {
     try { await rooms.event(R.id, "vault-rate", user.username || "", `${cur ? cur.rate : RATE.default}% -> ${r}%`); } catch (e) { /* audit only */ }
     return { rate: r, changed: true };
   });
+}
+
+const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
+/** 1.99sn: anyone signed in donates to a pad's vault -> the keyed website action "roomvault.deposit" (Pepe's !padvault deposit).
+ *  Checks here are for a friendly answer; Pepe re-checks the minimum, the cap and the balance under his escrow. */
+async function donate(roomId, user, { amount, idem, anon } = {}) {
+  await init();
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  const rooms = require("./rooms");
+  const R = await rooms.get(String(roomId || ""));
+  if (!R) throw new Refuse(404, "No such pad.");
+  if (rooms.platformOf(R.id) !== "camfrog") throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
+  if (!IDEM_RE.test(String(idem || ""))) throw new Refuse(400, "Reload the page and try again.");
+  const a = typeof amount === "number" ? amount : /^\s*\d+\s*$/.test(String(amount || "")) ? parseInt(amount, 10) : NaN;
+  const c = await card(R.id, user, {});
+  if (!c.live) throw new Refuse(409, "Pad vaults aren't open yet.");
+  const min = c.deposit_min || 1000, head = Math.max(0, (c.cap || 50000000) - c.balance);
+  if (!Number.isFinite(a) || Math.floor(a) !== a || a < min) throw new Refuse(400, `Donate at least ${min.toLocaleString("en-US")} PAT.`);
+  if (a > head) throw new Refuse(400, head ? `The vault can take ${head.toLocaleString("en-US")} PAT more (cap ${c.cap.toLocaleString("en-US")}).` : "The vault is full.");
+  if (!c.viewer || a > c.viewer.balance) throw new Refuse(400, "You don't have that many PAT.");
+  let id;
+  try {
+    id = await require("./actions").queue(user.userId, { kind: "roomvault.deposit", args: [R.id, String(a)].concat(anon ? ["anon"] : []),
+      tag: "vault", label: `${R.title}: donate ${a.toLocaleString("en-US")} PAT to the pad vault${anon ? " (anonymously)" : ""}`, idem: String(idem) });
+  } catch (e) {
+    if (e && e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment.");
+    if (e && e.message === "duplicate") return { id: e.actionId || null, duplicate: true };
+    throw e;
+  }
+  console.log(`[roomvaults] donate room=${R.id} account=${user.username} amount=${a}${anon ? " anon" : ""} action=${id}`);
+  return { id };
 }
 
 /** The economy page: the total and the biggest vaults (only while live or once anything is in them). */
@@ -250,6 +325,17 @@ function register(app, { addUser, isBotToken }) {
       res.json({ ok: true, vault: await card(R.id, req.user, { canManage: manage, staff: rooms.isStaff(req.user) }) });
     } catch (e) { fail(res, e); }
   });
+  app.post("/api/rooms/:slug/vault/donate", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") throw new Refuse(400, "Bad request.");
+      if (!req.user || !req.user.userId) throw new Refuse(401, "Sign in first.");
+      const R = await resolve(req.params.slug);
+      if (!R) throw new Refuse(404, "No such pad.");
+      const b = req.body || {};
+      res.json({ ok: true, ...(await donate(R.id, req.user, { amount: b.amount, idem: b.idem, anon: b.anon === true })) });
+    } catch (e) { fail(res, e); }
+  });
   app.post("/api/rooms/:slug/vault/rate", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -264,5 +350,5 @@ function register(app, { addUser, isBotToken }) {
   });
 }
 
-module.exports = { init, sync, settingsMap, card, setRate, overview, register, RATE, Refuse, cleanRecipe,
+module.exports = { init, sync, settingsMap, card, setRate, donate, overview, register, RATE, Refuse, cleanRecipe,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };

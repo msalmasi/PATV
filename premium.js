@@ -1001,7 +1001,7 @@ async function state(viewer, padSlug) {
     pad_missing: padMiss,          // 1.99od: {query, suggestions, text} when ?pad= named no pad (was: silently nothing)
   };
 }
-const DEST_LABEL = { fortknox: "🪙 Fort Knox", reserve: "🏛️ Federal Reserve", room: "🏦 the pad's room vault" };
+const DEST_LABEL = { fortknox: "🪙 Fort Knox", reserve: "🏛️ Federal Reserve", room: "💰 the pad vault" };
 function routesView() {
   const out = {};
   for (const [flow, meta] of Object.entries(ROUTE_FLOWS)) {

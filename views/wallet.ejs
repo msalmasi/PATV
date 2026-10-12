@@ -245,9 +245,10 @@
         <% if (canAct) { %>
           <form class="card" method="post" action="/act" id="donate"><%- hidden('donate') %>
             <b class="name"><span class="ds-ic" aria-hidden="true">🎁</span> <%- t('wallet.donate.h') %></b>
-            <label><%- t('wallet.donate.into') %> <select name="a0"><option value="casino">💰 <%- t('wallet.donate.casino') %></option><option value="lotto">🎟️ <%- t('wallet.donate.lotto') %></option><option value="house">🎰 <%- t('wallet.donate.house') %></option></select></label>
+            <label><%- t('wallet.donate.into') %> <select name="a0"><option value="casino">💰 <%- t('wallet.donate.casino') %></option><option value="lotto">🎟️ <%- t('wallet.donate.lotto') %></option><option value="house">🎰 <%- t('wallet.donate.house') %></option><option value="fortknox">🪙 <%- t('wallet.donate.fortknox') %></option></select></label>
             <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.donate.amount_ph') %>" required aria-label="<%- t('wallet.amount') %>">
             <button type="submit"><%- t('wallet.donate.button') %></button>
+            <span class="info"><%- t('wallet.donate.what') %></span>
             <span class="info"><%- t('wallet.donate.info') %></span>
           </form>
         <% } %>

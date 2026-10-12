@@ -69,7 +69,7 @@
         armed = v;
         goLabel = goLabel || go.textContent;
         go.textContent = _t('js.owner.topup_yes', 'Yes, deposit {n} PAT', { n: fmt(v) });
-        say(msg, _t('js.owner.topup_confirm', 'Deposit {n} PAT into the room vault? Deposits can\'t be taken back out, and they never count as the room\'s income.', { n: fmt(v) }));
+        say(msg, _t('js.owner.topup_confirm', 'Deposit {n} PAT into the pad vault? Deposits can\'t be taken back out, and they never count as the pad\'s income.', { n: fmt(v) }));
         return;
       }
       armed = null; go.textContent = goLabel;

@@ -1,0 +1,126 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99sn: 💰 the PAD VAULT, public on every Camfrog pad's About tab (roomvaults.js card(); Pepe's pepe_roomvault.py - the code
+    keeps "room vault" / room:<id>, users see "pad vault"). What it holds and its cap, what fills it, HOW IT PAYS OUT (the
+    E-4 recipe's slices, "coming soon" while econ_room_payouts is off; the last 7 payout days once it is on), recent donations
+    (a name or "Anonymous"), the latest moves, a public "Donate to this pad's vault" form (public/js/pad-vault.js: a confirm
+    step, keyed, the cap respected - a donation is a deposit, never inflow) and, for the owner, the daily payout rate.
+    Locals: rv (the card), room, slug, signed (signed in), siteOnly, tzTime, num. %>
+<% const live_ = !!rv.live, rc_ = rv.recipe || {}, payLive_ = !!rc_.live;
+   const cap_ = rv.cap || 50000000, head_ = Math.max(0, cap_ - rv.balance), fill_ = Math.min(100, 100 * rv.balance / (cap_ || 1));
+   const kind_ = { flow: t('pad.vault.k_flow'), site: t('pad.vault.k_site'), deposit: t('pad.vault.k_deposit'), migration: t('pad.vault.k_migration'), refund: t('pad.vault.k_refund'),
+                   challenge: t('pad.vault.k_challenge'), launch: t('pad.vault.k_launch'), match: t('pad.vault.k_match'), recipe: t('pad.vault.k_recipe'), topup: t('pad.vault.k_topup') };
+   const when_ = (ts) => (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime');
+   const sp_ = rv.split || { owner: 15, gang: 15, streamers: 25, people: 35, games: 10 };
+   const wk_ = rv.week;
+   const min_ = rv.deposit_min || 1000;
+   const vw_ = rv.viewer; %>
+<section class="card rv-card" id="vault" aria-labelledby="rvH" data-slug="<%= slug %>">
+  <h2 id="rvH"><span><%- t('pad.vault.h') %></span>
+    <span class="ds-chip <%= live_ ? 'ok' : 'mute' %>"><%- live_ ? t('pad.vault.filling') : t('pad.vault.not_open') %></span></h2>
+  <p class="rv-what"><%- t('pad.vault.what', { name: room.name, cap: num(cap_) }) %><% if (!siteOnly) { %> <%- t('pad.vault.in_room', { cmds: '<code>!padvault</code> · <code>!padvault deposit 5000</code>' }) %><% } %></p>
+
+  <div class="ds-stats">
+    <div class="ds-stat"><span><%- t('pad.vault.balance') %></span><b class="gold" data-rv="balance"><%= num(rv.balance) %></b><small><%- t('pad.vault.cap_of', { cap: num(cap_) }) %></small></div>
+    <div class="ds-stat"><span><%- t('pad.vault.inflow') %></span><b class="up">+<%= num(rv.inflow7) %></b><small><%- t('pad.vault.inflow_sub') %></small></div>
+    <div class="ds-stat"><span><%- t('pad.vault.deposits') %></span><b><%= num(rv.deposits7) %></b><small><%- t('pad.vault.deposits_sub') %></small></div>
+    <div class="ds-stat"><span><%- t('pad.vault.rate') %></span><b><%= rv.rate %>%</b><small><%- t('pad.vault.rate_sub') %><%- rv.rate_default ? ' ' + t('pad.vault.default') : '' %></small></div>
+  </div>
+  <div class="ds-bar gold" role="img" aria-label="<%- t('pad.vault.fill_aria', { pct: Math.round(fill_) }) %>"><span style="width:<%= fill_.toFixed(1) %>%"></span></div>
+
+  <div class="rv-how">
+    <h3><%- t('pad.vault.how_h') %> <span class="ds-chip <%= payLive_ ? 'ok' : 'warn' %>"><%- payLive_ ? t('pad.vault.live') : t('pad.vault.soon') %></span></h3>
+    <p><%- t('pad.vault.how_intro', { rate: rv.rate }) %></p>
+    <ul class="rv-split">
+      <li><i style="--w:<%= sp_.owner %>%" aria-hidden="true"></i><span><%- t('pad.vault.s_owner', { pct: sp_.owner }) %></span></li>
+      <li><i style="--w:<%= sp_.gang %>%" aria-hidden="true"></i><span><%- t('pad.vault.s_gang', { pct: sp_.gang }) %></span></li>
+      <li><i style="--w:<%= sp_.streamers %>%" aria-hidden="true"></i><span><%- t('pad.vault.s_streamers', { pct: sp_.streamers }) %></span></li>
+      <li><i style="--w:<%= sp_.people %>%" aria-hidden="true"></i><span><%- t('pad.vault.s_people', { pct: sp_.people }) %></span></li>
+      <li><i style="--w:<%= sp_.games %>%" aria-hidden="true"></i><span><%- t('pad.vault.s_games', { pct: sp_.games }) %></span></li>
+    </ul>
+    <% if (!payLive_) { %>
+      <p class="ds-meta"><%- t('pad.vault.soon_note') %></p>
+    <% } else if (wk_) { %>
+      <div class="rv-week">
+        <b><%- t('pad.vault.week_h') %></b> <%- t('pad.vault.week', { paid: num(wk_.paid), stays: num(wk_.stays) }) %>
+        <div class="ds-stats">
+          <div class="ds-stat"><span><%- t('pad.vault.w_owner') %></span><b><%= num(wk_.owner) %></b></div>
+          <div class="ds-stat"><span><%- t('pad.vault.w_gang') %></span><b><%= num(wk_.gang) %></b></div>
+          <div class="ds-stat"><span><%- t('pad.vault.w_streamers') %></span><b><%= num(wk_.streamers) %></b></div>
+          <div class="ds-stat"><span><%- t('pad.vault.w_people') %></span><b><%= num(wk_.people) %></b></div>
+        </div>
+      </div>
+    <% } else { %>
+      <p class="ds-meta"><%- t('pad.vault.week_none') %></p>
+    <% } %>
+  </div>
+
+  <% if (rv.days && rv.days.length) { const mx_ = Math.max(1, ...rv.days.map((d) => Math.max(0, d.in) + Math.max(0, d.dep))); %>
+  <div class="rv-days" role="img" aria-label="<%- t('pad.vault.days_aria') %>">
+    <% rv.days.forEach((d) => { const h_ = Math.round(100 * (Math.max(0, d.in) + Math.max(0, d.dep)) / mx_); %>
+      <div class="b<%= d.dep > d.in ? ' dep' : '' %>" style="height:<%= h_ %>%" title="<%- t('pad.vault.day_tip', { day: d.day, in: num(d.in), dep: num(d.dep) }) %>"></div>
+    <% }) %>
+  </div>
+  <% } %>
+
+  <div class="rv-cols">
+    <div>
+      <h3><%- t('pad.vault.donors_h') %></h3>
+      <% if (rv.donors && rv.donors.length) { %>
+      <ul class="rv-hist" id="rvDonors">
+        <% rv.donors.slice(0, 6).forEach((d) => { %>
+          <li><span><b><% if (d.anon || !d.who) { %><%- t('pad.vault.anon') %><% } else { %><%= d.who %><% } %></b> <small class="ds-fine"><%- d.ts ? when_(d.ts) : '' %></small></span>
+              <span class="amt">+<%= num(d.amount) %></span></li>
+        <% }) %>
+      </ul>
+      <% } else { %><p class="ds-meta" id="rvDonors"><%- t('pad.vault.donors_none') %></p><% } %>
+    </div>
+    <% if (rv.history && rv.history.length) { %>
+    <div>
+      <h3><%- t('pad.vault.moves') %></h3>
+      <ul class="rv-hist">
+        <% rv.history.slice(0, 6).forEach((e) => { %>
+          <li><span><%= kind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %><% if (e.kind === 'deposit') { %> · <% if (e.anon || !e.who) { %><%- t('pad.vault.anon') %><% } else { %><%= e.who %><% } %><% } %>
+                <small class="ds-fine"><%- when_(e.ts) %></small></span>
+              <span class="amt"><%= e.kind === 'challenge' ? '−' : (e.amount < 0 ? '−' : '+') %><%= num(Math.abs(e.amount)) %><%- e.overflow ? ' ' + t('pad.vault.overflow', { n: num(e.overflow) }) : '' %></span></li>
+        <% }) %>
+      </ul>
+    </div>
+    <% } %>
+  </div>
+
+  <div class="rv-donate" id="vault-donate">
+    <h3><%- t('pad.vault.donate_h') %></h3>
+    <p class="ds-meta"><%- t('pad.vault.donate_why') %></p>
+    <% if (!signed) { %>
+      <a class="ds-btn gold sm" href="/login?next=<%= encodeURIComponent('/p/' + slug + '?tab=about#vault') %>"><span class="ds-ic" aria-hidden="true">🪙</span><%- t('pad.vault.donate_signin') %></a>
+    <% } else if (!live_) { %>
+      <p class="ds-note"><span class="ds-ic" aria-hidden="true">⏳</span><span><%- t('pad.vault.donate_closed') %></span></p>
+    <% } else if (!head_) { %>
+      <p class="ds-note ok"><span class="ds-ic" aria-hidden="true">🎉</span><span><%- t('pad.vault.full') %></span></p>
+    <% } else { %>
+    <form class="ds-form" id="rvDonate" data-slug="<%= slug %>" autocomplete="off" novalidate>
+      <div class="ds-field">
+        <label class="ds-label" for="rvAmt"><%- t('pad.vault.amount') %></label>
+        <span class="ds-in-group"><input class="ds-in" id="rvAmt" name="amount" inputmode="numeric" placeholder="<%= num(min_ * 5) %>"
+               data-min="<%= min_ %>" data-room="<%= head_ %>" data-bal="<%= vw_ ? vw_.balance : 0 %>" aria-describedby="rvAmtHint"><span class="ds-in-addon">PAT</span></span>
+        <p class="ds-hint" id="rvAmtHint"><%- t('pad.vault.donate_hint', { bal: num(vw_ ? vw_.balance : 0), min: num(min_), room: num(head_) }) %></p>
+      </div>
+      <div class="ds-row rv-quick">
+        <% [1000, 5000, 25000, 100000].filter((q) => q >= min_ && q <= head_).forEach((q) => { %><button type="button" class="ds-quick" data-amt="<%= q %>"><%= num(q) %></button><% }) %>
+      </div>
+      <label class="ds-check"><input type="checkbox" name="anon" id="rvAnon"> <%- t('pad.vault.anon_label') %></label>
+      <div class="ds-actions"><button type="submit" class="ds-btn gold"><span class="ds-ic" aria-hidden="true">🪙</span><span class="lbl"><%- t('pad.vault.donate_go') %></span></button></div>
+      <p class="rv-msg" id="rvDonateMsg" role="status" aria-live="polite"></p>
+    </form>
+    <% } %>
+  </div>
+
+  <% if (rv.can_set_rate) { %>
+  <form class="rv-rate" id="rvRate" data-slug="<%= slug %>" autocomplete="off">
+    <label for="rvRateIn"><%- t('pad.vault.daily_rate') %></label>
+    <input id="rvRateIn" type="number" name="rate" min="<%= rv.rate_bounds.min %>" max="<%= rv.rate_bounds.max %>" step="0.5" value="<%= rv.rate %>"<%= rv.rate_locked_until ? ' disabled' : '' %>> %
+    <button type="submit" class="ab-btn"<%= rv.rate_locked_until ? ' disabled' : '' %>><%- t('pad.vault.save') %></button>
+    <p class="rv-msg" id="rvRateMsg" role="status" aria-live="polite"><%- rv.rate_locked_until ? t('pad.vault.locked', { date: new Date(rv.rate_locked_until).toISOString().slice(0, 10) }) : t('pad.vault.bounds', { min: rv.rate_bounds.min, max: rv.rate_bounds.max }) %></p>
+  </form>
+  <% } %>
+</section>

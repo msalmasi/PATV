@@ -41,7 +41,7 @@
       box.appendChild(bar);
     }
     var r = d.rules || {};
-    box.appendChild(el('p', 'pl-meta', 'A new pad builds momentum toward a launch grant into its room vault: a regular is a real member (linked, ' +
+    box.appendChild(el('p', 'pl-meta', 'A new pad builds momentum toward a launch grant into its pad vault: a regular is a real member (linked, ' +
       (r.min_account_days || 0) + '+ days old, level ' + (r.min_level || 0) + '+) active here on ' + (r.regular_days || 2) +
       '+ different days in the last ' + d.launch.window_days + ' days - chat, mic or posts. The owner\'s own activity doesn\'t count. ' +
       'Last ' + d.launch.window_days + ' days: ' + fmt(d.metrics.chatters) + ' chatters, ' + fmt(d.metrics.mic_min) + ' mic minutes, ' +
@@ -52,7 +52,7 @@
       var label = (t.n === d.tiers.length ? '🚀 Launch' : 'Tier ' + t.n) + ': ' + t.regulars + ' regulars, ' + t.active_days + ' active days → PAT ' + fmt(t.grant);
       if (t.state === 'paid') label += ' ✓ paid';
       else if (t.state === 'review') label += ' · in review';
-      else if (t.state === 'approved') label += ' · approved' + (d.room_vaults ? '' : ' (waiting for room vaults)');
+      else if (t.state === 'approved') label += ' · approved' + (d.room_vaults ? '' : ' (waiting for pad vaults)');
       else if (t.state === 'rejected') label += ' · not approved';
       ul.appendChild(el('li', t.state === 'paid' ? 'done' : '', label));
     });
@@ -69,9 +69,9 @@
       var keys = Object.keys(ex);
       list.appendChild(el('li', null, keys.length ? 'Not counted: ' + keys.map(function (k) { return ex[k] + ' ' + (WHY[k] || k); }).join(' · ') : 'Everyone active here counted.'));
       var m = d.owner.match || {};
-      list.appendChild(el('li', null, 'Owner match: PAT ' + fmt(m.used) + ' of ' + fmt(m.cap) + ' (' + m.ratio_pct + '% of your own !roomvault deposits' +
+      list.appendChild(el('li', null, 'Owner match: PAT ' + fmt(m.used) + ' of ' + fmt(m.cap) + ' (' + m.ratio_pct + '% of your own !padvault deposits' +
         (m.open ? ', until ' + new Date(m.until).toISOString().slice(0, 10) : ', closed') + ')' + (m.camfrog ? '' : ' - deposits are made in the pad\'s Camfrog room') +
-        (m.needs_room_vaults ? ' - waiting for room vaults' : '') + '.'));
+        (m.needs_room_vaults ? ' - waiting for pad vaults' : '') + '.'));
       var w = d.owner.welcomes || {};
       list.appendChild(el('li', null, 'Newcomer welcomes paid here: ' + fmt(w.n) + ' of ' + fmt(w.cap) + ' (PAT ' + fmt(w.total) + ').'));
       list.appendChild(el('li', null, d.owner.review ? 'Each tier is reviewed by an admin before Pepe pays it.' : 'Tiers are paid without review.'));

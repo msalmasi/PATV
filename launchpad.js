@@ -382,7 +382,7 @@ async function recordGrads(pad, m, t = now()) {
     const last = Math.max(...made) === c.tiers.length;
     try {
       await require("./rooms").notify(pad.owner.userId, { kind: "system", title: last ? `🚀 p/${pad.slug} graduated from the launchpad!` : `🚀 p/${pad.slug} hit launch tier ${Math.max(...made)}`,
-        body: `${m.regulars} regulars over ${m.active_days} active days. ${c.review ? "An admin reviews it, then" : "Pepe"} pays the launch grant into your pad's room vault.`,
+        body: `${m.regulars} regulars over ${m.active_days} active days. ${c.review ? "An admin reviews it, then" : "Pepe"} pays the launch grant into your pad's vault.`,
         link: `/p/${encodeURIComponent(pad.slug)}`, ref: `lpgrad:${pad.id}:${Math.max(...made)}` });
     } catch (e) { /* a notice never blocks */ }
     console.log(`[launchpad] ${pad.id}: tier(s) ${made.join(", ")} reached (${m.regulars} regulars, ${m.active_days} active days)`);
@@ -611,7 +611,7 @@ async function markPaid(b) {
     try {
       const R = await require("./rooms").get(g.room_id);
       if (R && R.owner) await require("./rooms").notify(R.owner.userId, { kind: "system", title: `🚀 Launch grant paid: PAT ${int(b.amount).toLocaleString("en-US")}`,
-        body: `Tier ${tier} of the launchpad - it's in p/${R.slug}'s room vault now.`, link: `/p/${encodeURIComponent(R.slug)}?tab=about`, ref: `lppaid:${id}` });
+        body: `Tier ${tier} of the launchpad - it's in p/${R.slug}'s pad vault now.`, link: `/p/${encodeURIComponent(R.slug)}?tab=about`, ref: `lppaid:${id}` });
     } catch (e) { /* a notice never blocks */ }
   }
   mcache.delete(g.room_id);

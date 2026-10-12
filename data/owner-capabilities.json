@@ -163,7 +163,7 @@
    ],
    "web_setting": "challenge",
    "setting": "challenge_enabled",
-   "howto": "Mic challenges (sing, laugh, beatbox...) are judged by Pepe and paid from your room vault. Turn them off in your room with !challenge off, or on your owner page.",
+   "howto": "Mic challenges (sing, laugh, beatbox...) are judged by Pepe and paid from your pad vault. Turn them off in your room with !challenge off, or on your owner page.",
    "owner_only": true,
    "code": [
     "pepe_challenge.py:_chal_toggle",
@@ -212,13 +212,13 @@
    "area": "vault",
    "title": "Get your vault deposits matched (launch pads)",
    "commands": [
-    "!roomvault"
+    "!padvault"
    ],
    "syntax": [
-    "!roomvault deposit <amount>"
+    "!padvault deposit <amount>"
    ],
    "web": "/p/{slug}/owner#vault",
-   "howto": "While your pad is new (a launch pad), what you deposit into its room vault is matched from the launchpad budget up to its cap. Deposit with !roomvault deposit <amount> or the Top up form on your owner page.",
+   "howto": "While your pad is new (a launch pad), what you deposit into its pad vault is matched from the launchpad budget up to its cap. Deposit with !padvault deposit <amount> or the Top up form on your owner page.",
    "owner_only": true,
    "code": [
     "pepe_launchpad.py:_lp_after_deposit"
@@ -251,10 +251,10 @@
   {
    "id": "topup_web",
    "area": "vault",
-   "title": "Top up your room vault from the website",
+   "title": "Top up your pad vault from the website",
    "web": "/p/{slug}/owner#vault",
    "web_action": "roomvault.deposit",
-   "howto": "The Top up form on the owner page deposits PAT from your linked Camfrog name into the room vault (minimum 1,000). It's exactly !roomvault deposit: deposits never count as the room's income, and a double click is one deposit.",
+   "howto": "The Top up form on the owner page deposits PAT from your linked Camfrog name into the pad vault (minimum 1,000). It's exactly !padvault deposit: deposits never count as the pad's income, and a double click is one deposit.",
    "owner_only": false,
    "code": [
     "pepe_roomowner.py:_op_web_deposit",

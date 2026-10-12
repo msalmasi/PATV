@@ -1475,7 +1475,7 @@ async function patSupply() {
   // 1.99ee: the room-vault half of boosts and stage slot fees, held on the site for each pad until room vaults open (boosts.js)
   try {
     const rv = (await require("./boosts").escrow()).room_vault;
-    if (rv > 0) rows.push({ key: "room_vault_escrow", label: "🚀 Room vault escrow (boosts + slot fees, held for the pads)", amount: Math.floor(rv) });
+    if (rv > 0) rows.push({ key: "room_vault_escrow", label: "🚀 Pad vault escrow (boosts + slot fees, held for the pads)", amount: Math.floor(rv) });
   } catch (e) { /* no boosts table yet */ }
   rows.sort((a, b) => b.amount - a.amount);
   // economy v2 E-1: each row's layer (Federal Reserve / Protocol Treasury / incentive layer / ...) - labels only
