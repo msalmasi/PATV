@@ -352,10 +352,15 @@ async function donate(user, { usd, back } = {}) {
   const n = Number(usd);
   if (!Number.isInteger(n) || n < 1 || n > DONATE_MAX_USD) throw new P.Refuse(400, `Pick a whole number of dollars from 1 to ${DONATE_MAX_USD}.`);
   const page = back === "/shop" ? "/shop" : back === "/support" ? "/support" : "/wallet";   // 1.99mn: /support shows its own thank-you
+  // 1.99tq: a donation promo is decided by when the session was created (the quote the donor saw) - while one is live the
+  // session can be paid for 31 minutes only (Stripe's minimum is 30), so a promo quote can't be paid hours after the promo
+  let promo = null;
+  try { promo = await require("./donationpromo").live(user.userId, clock()); } catch (e) { promo = null; }
   const s = await api("/checkout/sessions", {
     mode: "payment", client_reference_id: user.userId,
     line_items: { 0: { quantity: 1, price_data: { currency: "usd", unit_amount: n * 100, product_data: { name: "Support PATV" } } } },
-    metadata: { kind: "donation", userId: user.userId },
+    metadata: promo ? { kind: "donation", userId: user.userId, promo: promo.id } : { kind: "donation", userId: user.userId },
+    ...(promo ? { expires_at: Math.floor(clock() / 1000) + SESSION_S } : {}),
     success_url: site() + page + "?donate=success",
     cancel_url: site() + page + "?donate=cancel",
   });
@@ -370,7 +375,9 @@ function donateLocals(back, result) {
   try { crypto = require("./cryptopay").enabled(); } catch (e) { crypto = false; }
   if (!st.enabled) return { stripe: st, crypto, back };
   const terms = require("./funding").donationTerms();
-  return { stripe: st, crypto, back, result: result === "success" || result === "cancel" ? result : null, rate: terms.rate, bonus_pct: terms.bonus_pct, max: DONATE_MAX_USD };
+  let promo = null;     // 1.99tq: a live donation promo (the card shows the boosted rate + the cap; /support has the allowance)
+  try { promo = require("./donationpromo").liveCached(); } catch (e) { promo = null; }
+  return { stripe: st, crypto, back, result: result === "success" || result === "cancel" ? result : null, rate: terms.rate, bonus_pct: terms.bonus_pct, max: DONATE_MAX_USD, promo };
 }
 
 /** Stripe's billing portal for the customer behind one of the viewer's card subscriptions. -> {url} */
@@ -420,6 +427,7 @@ async function handleEvent(ev) {
   let notice = null;
   let donation = null;
   let overCap = null, upgraded = null;         // 1.99th
+  await require("./donationpromo").init();     // 1.99tq: its tables before the transaction (never a memoized init inside one)
   const out = await tx(async () => {
     const ins = await runQuery("INSERT OR IGNORE INTO stripe_events (id, type, created, received) VALUES (?, ?, ?, ?)",
                                [ev.id, ev.type, Number(ev.created) || 0, t]);
@@ -436,15 +444,19 @@ async function handleEvent(ev) {
         if (!target) { outcome = "donation-no-user"; console.error(`[stripe] donation ${ev.id}: account ${dm.userId} not found - not credited`); }
         else if (cents <= 0) outcome = "donation-zero";
         else {
-          const terms = require("./funding").donationTerms();
-          const pat = Math.floor((cents * terms.rate) / 100);
-          const bonus = Math.floor((pat * terms.bonus_pct) / 100);
+          // 1.99tq: THE shared donation credit (donationpromo.creditTerms - the crypto rail calls the same): the normal rate, or
+          // a live donation promo's split (per-donor cap, budget). Paid when the Checkout Session was CREATED (the quote the donor saw).
+          const DP = require("./donationpromo");
           const id = "don-" + ev.id;
-          await ledger.postOrThrow(target, pat, "donation", { transactionId: id, source: "stripe donation" });
+          const paidAt = Number(obj.created) > 0 ? Number(obj.created) * 1000 : Number(ev.created) * 1000;
+          const terms = await DP.creditTerms({ ref: id, userId: target, cents, paidAt, via: "card" });
+          const pat = terms.pat, bonus = terms.bonus;
+          await ledger.postOrThrow(target, pat, "donation", { transactionId: id, source: "stripe donation", note: DP.noteOf(terms) });
           await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
-                         [id, target, pat, JSON.stringify({ bonus, usd_cents: cents, rate: terms.rate, bonus_pct: terms.bonus_pct, event: ev.id })]);
-          donation = { userId: target, pat, cents, ref: "donation-" + ev.id };
-          console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} -> ${pat} PAT for ${target} (+${bonus} to the incentive budget)`);
+                         [id, target, pat, JSON.stringify({ bonus, usd_cents: cents, rate: terms.rate, bonus_pct: terms.bonus_pct, event: ev.id, ...DP.metaOf(terms) })]);
+          donation = { userId: target, pat, cents, ref: "donation-" + ev.id, terms };
+          console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} -> ${pat} PAT for ${target} (+${bonus} to the incentive budget)` +
+                      (terms.promo ? ` - promo ${terms.promo.id}: ${terms.promo_pat} PAT for $${(terms.promo_cents / 100).toFixed(2)}` : ""));
           outcome = "donation-credited";
         }
       }
@@ -540,7 +552,8 @@ async function handleEvent(ev) {
       const t = i18n.tFor(i18n.getPref(donation.userId) || "en");
       await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/wallet",
         title: t("donate.notice_title"),
-        body: t("donate.notice_body", { usd: (donation.cents / 100).toFixed(2), pat: t.num ? t.num(donation.pat) : donation.pat.toLocaleString("en-US") }) });
+        body: t("donate.notice_body", { usd: (donation.cents / 100).toFixed(2), pat: t.num ? t.num(donation.pat) : donation.pat.toLocaleString("en-US") }) +
+              require("./donationpromo").receiptLine(t, donation.terms) });
     } catch (e) { /* notice only */ }
   }
   if (notice) {

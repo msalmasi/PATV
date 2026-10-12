@@ -27,6 +27,7 @@
 <section class="donate-card" id="donate" aria-labelledby="donateT" data-back="<%= D.back || '/wallet' %>">
   <h2 id="donateT">💖 <%- t('donate.title') %></h2>
   <p><%- t('donate.blurb', { rate: Number(D.rate || 0).toLocaleString('en-US') }) %></p>
+  <% if (D.promo) { %><p class="promo" style="color:#ffd54f"><%- t('donate.promo_line', { rate: Number(D.promo.rate).toLocaleString('en-US'), cap: Number(D.promo.cap_usd).toLocaleString('en-US') }) %><% if (D.promo.label) { %> · <%= D.promo.label %><% } %> <a href="/support#give"><%- t('donate.promo_more') %></a></p><% } %>
   <p><%- t('donate.no_cashout') %></p>
   <% if (D.result === 'success') { %><p class="msg ok" role="status"><%- t('donate.thanks') %></p><% } else if (D.result === 'cancel') { %><p class="msg" role="status"><%- t('donate.cancelled') %></p><% } %>
   <div class="row">

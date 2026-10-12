@@ -445,6 +445,7 @@ async function verifyAndSettle(id) {
  */
 async function settle(id, { force = false, actor = null } = {}) {
   await init();
+  await require("./donationpromo").init();     // 1.99tq: before the transaction (never a memoized init inside one)
   let notice = null;
   const status = await tx(async () => {
     const p = (await getQuery("SELECT * FROM crypto_payments WHERE id = ?", [id]))[0];
@@ -461,17 +462,20 @@ async function settle(id, { force = false, actor = null } = {}) {
       if (c === "held" && p.status !== "held") notice = { kind: "held", userId: owner, p };
       return c;
     }
-    const T = patFor(p.usd_cents);
-    if (T.pat <= 0) { await runQuery("UPDATE crypto_payments SET status = 'dust', user_id = ? WHERE id = ?", [owner, id]); return "dust"; }
     const cid = claimIdOf(id);
-    await ledger.postOrThrow(owner, T.pat, "donation-crypto", { transactionId: cid, source: "crypto donation" });
+    // 1.99tq: THE shared donation credit (donationpromo.creditTerms - the card rail calls the same): the normal rate, or a live
+    // donation promo's split. Paid = when the watcher first saw the transfer (a wallet linked later still gets its moment's terms).
+    const DP = require("./donationpromo");
+    if (Math.floor((Number(p.usd_cents) * terms().rate) / 100) <= 0) { await runQuery("UPDATE crypto_payments SET status = 'dust', user_id = ? WHERE id = ?", [owner, id]); return "dust"; }
+    const T = await DP.creditTerms({ ref: cid, userId: owner, cents: p.usd_cents, paidAt: Number(p.seen), via: "crypto" });
+    await ledger.postOrThrow(owner, T.pat, "donation-crypto", { transactionId: cid, source: "crypto donation", note: DP.noteOf(T) });
     await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
       [cid, owner, T.pat, JSON.stringify({ bonus: T.bonus, usd_cents: p.usd_cents, rate: T.rate, bonus_pct: T.bonus_pct, via: "crypto",
-                                           chain: p.chain, token: p.token, tx: p.tx, idx: p.idx })]);
+                                           chain: p.chain, token: p.token, tx: p.tx, idx: p.idx, ...DP.metaOf(T) })]);
     await runQuery(`UPDATE crypto_payments SET status = 'credited', user_id = ?, pat = ?, bonus = ?, claim_id = ?, credited_at = ?, decided_by = ?
                     WHERE id = ?`, [owner, T.pat, T.bonus, cid, clock(), actor, id]);
     console.log(`[crypto] donation ${id}: ${usd(p.usd_cents)} ${p.token} on ${CHAINS[p.chain].name} -> ${T.pat} PAT for ${owner} (+${T.bonus} to the incentive budget; mint claim ${cid})${actor ? " approved by " + actor : ""}`);
-    notice = { kind: "credited", userId: owner, p, pat: T.pat };
+    notice = { kind: "credited", userId: owner, p, pat: T.pat, terms: T };
     return "credited";
   });
   if (notice) await notify(notice);
@@ -488,7 +492,8 @@ async function notify(n) {
     const amount = usd(n.p.usd_cents);
     if (n.kind === "credited") {
       await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cdon-" + n.p.id.slice(0, 120), link: "/support",
-        title: t("donate.notice_title"), body: t("crypto.notice_body", { amount, token: n.p.token, chain: CHAINS[n.p.chain].name, pat: fmt(n.pat) }) });
+        title: t("donate.notice_title"), body: t("crypto.notice_body", { amount, token: n.p.token, chain: CHAINS[n.p.chain].name, pat: fmt(n.pat) }) +
+          require("./donationpromo").receiptLine(t, n.terms) });
     } else if (n.kind === "held") {
       await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cheld-" + n.p.id.slice(0, 120), link: "/support",
         title: t("donate.notice_title"), body: t("crypto.notice_held", { amount, token: n.p.token, max: fmt(S.max_usd) }) });

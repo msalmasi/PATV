@@ -77,6 +77,11 @@ const RULES = {
   "bonus_winners.userId": M(), "reserve_claims.userId": M(), "jackpot_rakes.userId": M(), "wheel_spins.userId": M(),
   "username_history.userId": M(),
   "login_changes.userId": { keep: "1.99tl loginrekey.js: the log of Camfrog login changes (Pepe's feed) names the account it happened to" },   // 1.99tc: usernames.js - the merged account's old names now mean the target
+  "donation_promo_credits.user_id": M(),   // 1.99tq: donationpromo.js - a donor's promo usage moves, so a merged account shares ONE per-donor cap
+  "donation_promos.created_by": { deny: "1.99tq: the admin's username who created the donation promo (audit label)" },
+  "donation_promos.updated_by": { deny: "1.99tq: the admin's username who last edited the donation promo (audit label)" },
+  "donation_promos.ended_by": { deny: "1.99tq: the admin's username who ended the donation promo (audit label)" },
+  "donation_promo_settings.actor": { deny: NAME },
   "bot_credit_log.userId": M(),     // 1.99jw: botcredits.js - the log of every bot credit / House move
   "blackjack.userId": M(), "poker_cashier.userId": M(), "poker_now_games.userId": M(), "user_redemptions.userId": M({ key: ["code"] }),
   "pat_burns.actor": M(), "pat_burns.actor_kind": { deny: FLAG },

@@ -7,8 +7,11 @@
 <%
   const num = (n) => (t.num ? t.num(Number(n) || 0) : Number(n || 0).toLocaleString('en-US'));
   const R = Number(rate) || 0, BP = Number(bonus_pct) || 0;
-  const patOf = (usd) => Math.floor((Math.round(usd * 100) * R) / 100);
-  const bonusOf = (usd) => Math.floor((patOf(usd) * BP) / 100);
+  // 1.99tq: quoteFor (cryptoweb.js) = donationpromo.split for THIS viewer (a live promo's allowance + budget); the old formula without one
+  const PR = locals.promo || null;
+  const Q = (usd) => (typeof locals.quoteFor === 'function' ? quoteFor(usd) : null);
+  const patOf = (usd) => { const q = Q(usd); return q ? q.pat : Math.floor((Math.round(usd * 100) * R) / 100); };
+  const bonusOf = (usd) => { const q = Q(usd); return q ? q.bonus : Math.floor((patOf(usd) * BP) / 100); };
   const D = donate || {}, ST = D.stripe || { enabled: false };
   const cardOn = !!ST.enabled, cryptoShown = !!(cryptoOn || preview);
   const tab0 = cardOn ? 'card' : 'crypto';
@@ -40,6 +43,16 @@
   .sp .deal { display: inline-flex; flex-wrap: wrap; align-items: center; justify-self: start; gap: 6px 14px; margin: var(--ds-sp-3) 0; padding: var(--ds-sp-3) var(--ds-sp-4); border-radius: var(--ds-r-xl); background: var(--ds-glass); border: 1px solid #3d3340; font-size: var(--ds-fs-lead); }
   .sp .deal b { color: var(--gold); font-size: 20px; }
   .sp .deal .plus { color: var(--ok); font-weight: 700; }
+  /* 1.99tq: the live donation promo callout (pink -> gold, the hero's own recipe) */
+  .sp .promo { display: grid; gap: 4px; justify-self: start; max-width: 640px; margin: 0 0 var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-4); border-radius: var(--ds-r-xl);
+               border: 1px solid var(--ds-ac-line); background: linear-gradient(110deg, rgba(255, 106, 155, .16), rgba(255, 196, 0, .10)); }
+  .sp .promo p { margin: 0; }
+  .sp .promo .pe { font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-ac-2); }
+  .sp .promo .pe .pl { text-transform: none; letter-spacing: 0; color: var(--ds-text-strong); }
+  .sp .promo .pd { font-size: var(--ds-fs-lead); color: var(--ds-text-strong); }
+  .sp .promo .pd b, .sp .promo .pa b { color: var(--gold); }
+  .sp .promo .pa, .sp .promo .pt { font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
+  .sp .promo .pt b { color: var(--ds-text-strong); font-variant-numeric: tabular-nums; }
   .sp .hero .mini { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: var(--ds-sp-2) 0 0; padding: 0; list-style: none; color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
   .sp .frog { position: absolute; inset-inline-end: clamp(10px, 4vw, 40px); top: clamp(14px, 4vw, 34px); font-size: clamp(54px, 11vw, 120px); line-height: 1; filter: drop-shadow(0 8px 20px rgba(255,106,155,.35)); pointer-events: none; font-family: var(--ds-font-emoji); }
   @media (prefers-reduced-motion: no-preference) { .sp .frog { animation: sp-bob 4s ease-in-out infinite; } }
@@ -176,7 +189,7 @@
   .sp-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
   @media (prefers-reduced-motion: reduce) { .sp *, .sp *::before, .sp *::after { animation: none !important; transition: none !important; } .sp .tier:hover { transform: none; } }
 </style>
-<main class="ds-page sp" id="support" data-rate="<%= R %>" data-bonus="<%= BP %>" data-min="<%= min %>" data-max="<%= max %>" data-cardmax="<%= cardMax %>">
+<main class="ds-page sp" id="support" data-rate="<%= R %>" data-bonus="<%= BP %>" data-min="<%= min %>" data-max="<%= max %>" data-cardmax="<%= cardMax %>"<% if (PR) { %> data-promo="<%= JSON.stringify({ rate: PR.rate, allowance_cents: PR.allowance_cents, budget_left_pat: PR.budget_left_pat == null ? null : PR.budget_left_pat, bonus_base: PR.bonus_base, ends: PR.ends }) %>"<% } %>>
   <% if (preview) { %><div class="ds-note warn preview"><span class="ds-ic" aria-hidden="true">👁️</span><div><%- t('support.preview') %></div></div><% } %>
 
   <% if (D.result === 'success') { %>
@@ -185,6 +198,7 @@
     <h2 class="ds-h2"><%- t('support.thanks_title') %></h2>
     <% if (locals.thanks && thanks.pat) { %>
       <p><%- t('support.thanks_credited', { pat: '<b>' + num(thanks.pat) + '</b>' }) %></p>
+      <% if (thanks.promo) { %><p><%- t('support.thanks_promo', { promo_pat: '<b>' + num(thanks.promo.pat) + '</b>', promo_usd: num(thanks.promo.usd), normal_pat: num(thanks.promo.normal_pat) }) %></p><% } %>
     <% } else { %>
       <p><%- t('donate.thanks') %></p>
     <% } %>
@@ -201,6 +215,16 @@
     <h1 id="spT"><%- t('support.hero_title') %></h1>
     <p class="ds-lead"><%- t('support.hero_lead') %></p>
     <p class="deal"><span><%- t('support.hero_deal', { rate: '<b>' + num(R) + '</b>' }) %></span><span class="plus"><%- t('support.hero_deal_pot', { bonus: BP }) %></span></p>
+    <% if (PR) { %>
+    <%# 1.99tq: a live donation promo - the boosted rate, the per-donor cap, the viewer's allowance, a countdown %>
+    <div class="promo" id="spPromo" role="note" aria-labelledby="spPromoT">
+      <p class="pe" id="spPromoT"><span class="ds-ic" aria-hidden="true">🎉</span> <%- t('support.promo_eyebrow') %><% if (PR.label) { %> · <span class="pl"><%= PR.label %></span><% } %></p>
+      <p class="pd"><%- t('support.promo_deal', { rate: '<b>' + num(PR.rate) + '</b>', cap: num(PR.cap_usd), mult: PR.mult, normal: num(PR.normal_rate) }) %></p>
+      <p class="pa"><% if (!PR.signed_in) { %><%- t('support.promo_signin', { cap: num(PR.cap_usd) }) %><% } else if (PR.allowance_cents > 0) { %><%- t('support.promo_left', { left: '<b>' + num(PR.allowance_cents / 100) + '</b>', cap: num(PR.cap_usd) }) %><% } else { %><%- t('support.promo_used', { cap: num(PR.cap_usd) }) %><% } %></p>
+      <% if (PR.budget_left_pat != null) { %><p class="pa"><%- t('support.promo_budget', { pct: PR.budget_pct_left }) %></p><% } %>
+      <p class="pt"><%- t('support.promo_ends') %> <b id="spPromoLeft" data-ends="<%= PR.ends %>">…</b><% if (typeof tzTime === 'function') { %> · <%- tzTime(PR.ends, 'full') %><% } %></p>
+    </div>
+    <% } %>
     <div class="ds-ctas">
       <a class="ds-btn lg big" href="#give"><span class="ds-ic" aria-hidden="true">💖</span> <%- t('support.hero_cta') %></a>
       <a class="ds-btn lg ghost" href="#where"><%- t('support.hero_cta2') %></a>
@@ -407,7 +431,7 @@
 
   <section class="card" id="faq" aria-labelledby="faqT">
     <h2 class="ds-h2" id="faqT"><span class="ds-ic" aria-hidden="true">❓</span> <%- t('support.faq_title') %></h2>
-    <details><summary><%- t('support.faq_get_q') %></summary><p><%- t('support.faq_get_a', { rate: num(R) }) %></p></details>
+    <details><summary><%- t('support.faq_get_q') %></summary><p><%- t('support.faq_get_a', { rate: num(R) }) %><% if (PR) { %> <%- t('support.faq_promo_a', { rate: num(PR.rate), cap: num(PR.cap_usd) }) %><% } %></p></details>
     <details><summary><%- t('support.faq_pot_q') %></summary><p><%- t('support.faq_pot_a', { bonus: BP }) %></p></details>
     <details><summary><%- t('support.faq_cash_q') %></summary><p><%- t('support.faq_cash_a') %></p></details>
     <% if (cryptoShown) { %>
@@ -425,4 +449,4 @@
   </section>
 </main>
 <script src="/public/js/crypto-link.js?v=2" defer></script>
-<script src="/public/js/support.js?v=1" defer></script>
+<script src="/public/js/support.js?v=2" defer></script>

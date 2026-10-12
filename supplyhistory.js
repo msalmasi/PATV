@@ -127,7 +127,11 @@ function register(app, { addUser }) {
       if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
       const me = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!me || me.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
-      res.json({ ok: true, rows: await history(req.query.days), monetary: state.monetary, pushedAt: state.at || null, sources: SOURCES });
+      // 1.99tq: the donation mints' promo part (the site's donation_promo_credits: PAT credited at a promo rate, and how much of
+      // that is above the normal rate) per UTC day of this month - Pepe's journal books the whole donation under "donation"
+      let donation_promo = {};
+      try { const d = new Date(); donation_promo = await require("./donationpromo").promoByDay(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)); } catch (e) { donation_promo = {}; }
+      res.json({ ok: true, rows: await history(req.query.days), monetary: state.monetary, pushedAt: state.at || null, sources: SOURCES, donation_promo });
     } catch (e) {
       console.error("[supplyhistory]", e.message);
       res.status(500).json({ ok: false, error: "failed" });

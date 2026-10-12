@@ -1174,6 +1174,7 @@ require("./creatorsweb").register(app, { addUser, isBotToken });   // 1.99pv: тн
 require("./takedown").register(app, { addUser });   // 1.99pv: TAKE IT DOWN - the 48-hour NCII removal process (/takedown, /admin/takedowns)
 require("./stripebilling").register(app, { addUser });
 require("./cryptoweb").register(app, { addUser });   // 1.99ks: stablecoin donations (USDC/USDT) -> PAT, /support + /admin/crypto
+require("./donationpromo").register(app, { addUser });   // 1.99tq: time-limited donation promos (boosted PAT per $1, per-donor cap, budget) - /admin/economy#donations
 require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
 require("./likeness").register(app, { addUser, isBotToken });   // 1.99qw: likeness royalties (subject cuts, held + released daily) + opt-outs (/settings/likeness)

@@ -86,7 +86,15 @@ function register(app, { addUser, noTimers } = {}) {
         if (me) showName = await SPG.showName(me.userId);
         if (me && donate && donate.result === "success") thanks = await SPG.latestCard(me.userId);
       } catch (e) { console.error("[support] page extras:", e.message); }
+      // 1.99tq: a live donation promo (+ the viewer's allowance) and what each amount credits THIS viewer (donationpromo.split -
+      // the same split the credit uses)
+      let promo = null;
+      try { promo = await require("./donationpromo").live(me ? me.userId : null); } catch (e) { console.error("[support] promo:", e.message); }
+      const DPs = require("./donationpromo").split;
+      const quoteFor = (usdAmt) => DPs({ cents: Math.round(Number(usdAmt) * 100), normalRate: T.rate, bonusPct: T.bonus_pct,
+        promo: promo ? { rate: promo.rate, capCents: promo.allowance_cents, budgetPat: promo.budget_left_pat == null ? null : promo.budget_left_pat, bonusBase: promo.bonus_base } : null });
       res.render("support", {
+        promo, quoteFor,
         user: me ? me.username : null, title: req.t ? req.t("support.title") : "Support PATV",
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
         wallets: me ? await CP.wallets(me.userId) : [], payments: me ? await CP.mine(me.userId) : [],

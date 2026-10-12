@@ -43,6 +43,59 @@
   <% } %>
 </section>
 
+<section class="adm-card" id="donations" aria-labelledby="donT">
+  <h2 id="donT"><span class="ds-ic" aria-hidden="true">💖</span> Donations: promos <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">The normal rate is Pepe's (<code>!econ set donation_rate</code> / <code>donation_bonus_pct</code>). A <b>promo</b> boosts it for a while: a promo rate (PAT per $1) or a multiplier, a per-donor cap in dollars (dollars above it earn the normal rate; a donation that straddles the cap is split), an optional budget (the most PAT credited at the promo rate across everyone; then the normal rate), and an end time (at most 7 days). Card and stablecoin donations both use it; a donation belongs to the promo live when it was <b>paid</b> (card: when the checkout opened). Once a promo has started, its rate, cap and start are locked (donations were priced with them) - you can still change the label, the end, the budget and the switch, or end it now. Promos can't overlap. Every change is audit-logged.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="dpAdm">
+      <div class="adm-kv" id="dpKv"><div><b>Status</b><span>loading…</span></div></div>
+      <h3>New promo</h3>
+      <form class="adm-form" id="dpForm" autocomplete="off">
+        <label for="dpLabel">Headline (optional)<input type="text" id="dpLabel" maxlength="120" placeholder="Today only: 1M PAT per $1, up to $100"></label>
+        <label for="dpMode">Boost<select id="dpMode"><option value="rate">a promo rate (PAT per $1)</option><option value="mult">a multiplier on the normal rate</option></select></label>
+        <label for="dpRate" id="dpRateL">Promo rate (PAT per $1)<input type="number" id="dpRate" min="1" step="1" placeholder="1000000"></label>
+        <label for="dpMult" id="dpMultL" style="display:none">Multiplier (×)<input type="number" id="dpMult" min="1.01" step="0.01" placeholder="2"></label>
+        <label for="dpCap">Per-donor cap ($ at the promo rate)<input type="number" id="dpCap" min="1" max="1000" step="1" value="100" required></label>
+        <label for="dpBudget">Budget (PAT at the promo rate, optional)<input type="number" id="dpBudget" min="1" step="1" placeholder="no budget"></label>
+        <label for="dpBonus">Incentive bonus % taken on<select id="dpBonus"></select></label>
+        <label for="dpStarts">Starts (your time)<input type="datetime-local" id="dpStarts"></label>
+        <label for="dpEnds">Ends (your time)<input type="datetime-local" id="dpEnds"></label>
+        <label><input type="checkbox" id="dpToday"> Today only (now until midnight, <span id="dpTz">economy time zone</span>)</label>
+        <label><input type="checkbox" id="dpEnabled" checked> Enabled</label>
+        <p class="adm-help" id="dpPreview" aria-live="polite" style="grid-column:1/-1"></p>
+        <div class="adm-actions"><button type="submit">Create promo</button></div>
+      </form>
+      <p class="adm-msg" id="dpMsg" role="status" aria-live="polite"></p>
+      <h3>Promos</h3>
+      <div class="adm-tbl"><table aria-label="Donation promos">
+        <thead><tr><th>Promo</th><th>Status</th><th>Window</th><th class="num">Rate</th><th class="num">Cap</th><th class="num">Donors</th><th class="num">$ at promo</th><th class="num">PAT at promo / budget</th><th></th></tr></thead>
+        <tbody id="dpRows"><tr><td colspan="9" class="empty">loading…</td></tr></tbody>
+      </table></div>
+      <form class="adm-form" id="dpEdit" autocomplete="off" style="display:none">
+        <p class="adm-help" style="grid-column:1/-1" id="dpEditWhat"></p>
+        <label for="dpELabel">Headline<input type="text" id="dpELabel" maxlength="120"></label>
+        <label for="dpEEnds">Ends (your time)<input type="datetime-local" id="dpEEnds"></label>
+        <label for="dpEBudget">Budget (PAT, empty = none)<input type="number" id="dpEBudget" min="1" step="1"></label>
+        <label><input type="checkbox" id="dpEEnabled"> Enabled</label>
+        <div class="adm-actions"><button type="submit">Save</button><button type="button" class="adm-btn ghost" id="dpECancel">Cancel</button></div>
+      </form>
+      <h3>Settings</h3>
+      <form class="adm-form" id="dpSet" autocomplete="off">
+        <label for="dpCeil">Ceiling (× the normal rate, 1-50)<input type="number" id="dpCeil" min="1" max="50" step="0.01"></label>
+        <label for="dpSBonus">Default bonus base<select id="dpSBonus"></select></label>
+        <label for="dpSTz">Time zone ("today only")<input type="text" id="dpSTz" maxlength="64"></label>
+        <div class="adm-actions"><button type="submit">Save settings</button></div>
+      </form>
+      <h3>Change log</h3>
+      <div class="adm-tbl"><table aria-label="Donation promo changes">
+        <thead><tr><th>When (UTC)</th><th>By</th><th>What</th></tr></thead>
+        <tbody id="dpLog"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
+      </table></div>
+    </div>
+    <script src="/public/js/admin-donpromo.js?v=1" defer></script>
+  <% } %>
+</section>
+
 <section class="adm-card" id="supply-history" aria-labelledby="shT">
   <h2 id="shT"><span class="ds-ic" aria-hidden="true">📈</span> Supply history <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">One row per UTC day, written on every supply snapshot Pepe posts: total supply, the Federal Reserve against its band, and each day's mints (Pepe's mint journal, by source) against the PAT burned that day. Month-to-date mints by source are compared with Pepe's caps.</p>
@@ -62,7 +115,7 @@
       .sh-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; margin-top: 4px; }
       .sh-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-inline-end: 4px; vertical-align: middle; }
     </style>
-    <script src="/public/js/admin-supply.js?v=1" defer></script>
+    <script src="/public/js/admin-supply.js?v=2" defer></script>
   <% } %>
 </section>
 

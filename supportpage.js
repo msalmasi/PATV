@@ -97,7 +97,10 @@ async function latestCard(userId, now = Date.now(), withinMs = 60 * 60 * 1000) {
   await require("./funding").init().catch(() => {});
   const r = (await getQuery(`SELECT amount, meta, created FROM reserve_claims WHERE flow = 'mint:donation' AND userId = ? AND claimId LIKE 'don-%'
       AND created >= ? ORDER BY created DESC LIMIT 1`, [String(userId), sqlTime(now - withinMs)]))[0];
-  return r ? { pat: Number(r.amount) || 0, usd: centsOf(r.meta) / 100 } : null;
+  if (!r) return null;
+  let promo = null;      // 1.99tq: the promo part of it (meta.promo / meta.normal - donationpromo.metaOf)
+  try { const m = JSON.parse(r.meta || "{}"); if (m.promo && m.promo.pat) promo = { pat: m.promo.pat, usd: m.promo.usd_cents / 100, rate: m.promo.rate, normal_pat: m.normal ? m.normal.pat : 0 }; } catch (e) { promo = null; }
+  return promo ? { pat: Number(r.amount) || 0, usd: centsOf(r.meta) / 100, promo } : { pat: Number(r.amount) || 0, usd: centsOf(r.meta) / 100 };
 }
 
 module.exports = { init, get, set, showName, setShowName, pageData, latestCard, tierOf, DEFAULTS };

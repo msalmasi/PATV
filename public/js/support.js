@@ -17,8 +17,22 @@
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body || {}) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok || !j.ok) throw new Error((j && j.error) || ('HTTP ' + r.status)); return j; }); });
   }
-  function patOf(usd) { return Math.floor((Math.round(usd * 100) * RATE) / 100); }
-  function bonusOf(usd) { return Math.floor((patOf(usd) * BONUS) / 100); }
+  // 1.99tq: a live donation promo (data-promo = {rate, allowance_cents, budget_left_pat, bonus_base, ends}) - the same split as
+  // the server's donationpromo.split(): the cents that fit the viewer's allowance (and the promo budget) at the promo rate, the
+  // rest at the normal rate; the bonus % on the normal portion / the normal-rate equivalent / everything (bonus_base).
+  var PROMO = null; try { PROMO = JSON.parse(root.getAttribute('data-promo') || 'null'); } catch (e) { PROMO = null; }
+  function q(usd) {
+    var cents = Math.max(0, Math.round(usd * 100)), pc = 0;
+    if (PROMO && PROMO.rate > RATE) {
+      var bud = PROMO.budget_left_pat == null ? Infinity : Math.floor(Math.max(0, PROMO.budget_left_pat) * 100 / PROMO.rate);
+      pc = Math.max(0, Math.min(cents, PROMO.allowance_cents, bud));
+    }
+    var nc = cents - pc, pp = pc ? Math.floor(pc * PROMO.rate / 100) : 0, np = Math.floor(nc * RATE / 100), base = PROMO ? PROMO.bonus_base : 'all';
+    var on = base === 'all' ? pp + np : base === 'equivalent' ? Math.floor(cents * RATE / 100) : np;
+    return { pat: pp + np, bonus: Math.floor(on * BONUS / 100), promo_cents: pc, promo_pat: pp, normal_cents: nc, normal_pat: np };
+  }
+  function patOf(usd) { return q(usd).pat; }
+  function bonusOf(usd) { return q(usd).bonus; }
 
   // ── amount ──
   var radios = root.querySelectorAll('input[name="spAmt"]'), custom = document.getElementById('spCustom');
@@ -41,6 +55,13 @@
     }
     if (sum) sum.textContent = ok ? _t('js.support.sum', 'You give ${usd} → you get {pat} PAT, and the community pot gets +{bonus} PAT.', { usd: fmt(usd), pat: fmt(patOf(usd)), bonus: fmt(bonusOf(usd)) })
       : _t('js.support.pick_amount', 'Enter an amount of at least ${min}.', { min: MIN });
+    if (sum && ok && PROMO) {
+      var Q = q(usd);
+      if (Q.promo_cents && Q.normal_cents) sum.textContent += ' ' + _t('js.support.sum_promo_split', 'That is {promo_pat} PAT at the promo rate for ${promo_usd} + {normal_pat} PAT at the normal rate for ${normal_usd}.',
+        { promo_pat: fmt(Q.promo_pat), promo_usd: fmt(Q.promo_cents / 100), normal_pat: fmt(Q.normal_pat), normal_usd: fmt(Q.normal_cents / 100) });
+      else if (Q.promo_cents) sum.textContent += ' ' + _t('js.support.sum_promo_all', 'All of it at the promo rate!');
+      else sum.textContent += ' ' + _t('js.support.sum_promo_none', 'Your promo allowance is used up, so this earns the normal rate.');
+    }
     if (sum && ok && usd > MAX) sum.textContent += ' ' + _t('js.support.crypto_held', 'Over ${max} a transfer is credited after a quick admin check.', { max: fmt(MAX) });
     if (goTxt) goTxt.textContent = _t('js.support.card_button', 'Donate ${usd} by card', { usd: ok ? fmt(usd) : '…' });
     if (goBtn) goBtn.disabled = !ok;
@@ -52,6 +73,19 @@
   if (custom) {
     custom.addEventListener('input', function () { var c = root.querySelector('input[name="spAmt"][value="custom"]'); if (c) c.checked = true; render(); });
     custom.addEventListener('focus', function () { var c = root.querySelector('input[name="spAmt"][value="custom"]'); if (c && !c.checked) { c.checked = true; render(); } });
+  }
+
+  // ── 1.99tq: the promo countdown ──
+  var pl = document.getElementById('spPromoLeft');
+  if (pl) {
+    var ends = Number(pl.getAttribute('data-ends')) || 0;
+    var tick = function () {
+      var s = Math.max(0, Math.floor((ends - Date.now()) / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+      pl.textContent = s <= 0 ? _t('js.support.promo_over', 'This promo just ended - reload for the current rate.')
+        : (d ? d + 'd ' : '') + (d || h ? h + 'h ' : '') + m + 'm ' + (d ? '' : x + 's');
+      if (s <= 0) { PROMO = null; render(); clearInterval(iv); }
+    };
+    var iv = setInterval(tick, 1000); tick();
   }
 
   // ── tabs ──

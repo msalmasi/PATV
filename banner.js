@@ -82,6 +82,10 @@ let supportTerms = () => {
   if (!on) return null;
   let T = { rate: 500000, bonus_pct: 20 };
   try { T = require("./funding").donationTerms(); } catch (e) { /* defaults */ }
+  // 1.99tq: a live donation promo shows its boosted rate + per-donor cap (the "support_promo" texts, views/partials/banner.ejs)
+  let P = null;
+  try { P = require("./donationpromo").liveCached(); } catch (e) { P = null; }
+  if (P) return { rate: fmt(P.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)), promo_on: true, promo_cap: fmt(P.cap_usd), promo_mult: String(P.mult) };
   return { rate: fmt(T.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)) };
 };
 const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");

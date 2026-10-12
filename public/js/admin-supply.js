@@ -143,6 +143,16 @@
         tr.appendChild(td);
       });
       tb.appendChild(tr);
+      // 1.99tq: the promo part of this month's donation mints (site donation promos), shown under "donation" - not a separate mint
+      if (k === 'donation' && d.donation_promo) {
+        var pp = 0, px = 0;
+        Object.keys(d.donation_promo).forEach(function (day) { pp += d.donation_promo[day].pat || 0; px += d.donation_promo[day].extra || 0; });
+        if (pp) {
+          var r2 = document.createElement('tr');
+          ['  of which at a promo rate (above the normal rate: ' + n(px) + ')', n(pp), ''].forEach(function (v, i) { var td = document.createElement('td'); if (i) td.className = 'num'; td.textContent = v; r2.appendChild(td); });
+          tb.appendChild(r2);
+        }
+      }
     });
   }).catch(function () { $('shStatus').textContent = 'Could not reach the server.'; });
 })();
