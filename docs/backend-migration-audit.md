@@ -48,10 +48,10 @@ the site (Phase 1). After that, every game that moves next no longer has to "sen
 | 12 | Staking (capital vaults) + stashes | bot `vaults.json`, `pvaults.json` | no stake/unstake; epochs late | **move** | L | H | 3 |
 | 13 | Treasury epoch, monetary ticks, automint, burn, Casino-vault feed | bot ticks on the 30 s heartbeat | Monday epoch / 04:00 tick late | **move** (site scheduler) | M | H | 4 |
 | 14 | Room vaults (E-3) + launchpad | bot `room:<id>` pools, `econ_launchpad` | site misroutes after restart | **move** | M | M | 4 |
-| 15 | AI market judge | bot `pepe_aijudge.py` | no proposals | **split** (site settles; bot gathers evidence) | M | M | 5 |
-| 16 | Achievements | bot counters, site awards | Camfrog counts pause (fine) | **split** later (store on site) | M | L | 5 |
-| 17 | Economy telemetry, supply snapshot | bot pushes | stale charts | **split** (falls out of 4) | S | L | 5 |
-| 18 | Cosmetic drops | bot drop table + `/api/cosmetics/drop-config` | Camfrog drops pause | keep in bot (event side); config to site | S | L | 5 |
+| 15 | AI market judge | bot `pepe_aijudge.py` | no proposals | **split** (site settles; bot gathers evidence) - **built 1.99to** (`oracle.js`, `docs/oracle-contract.md`) | M | M | 5 |
+| 16 | Achievements | bot counters, site awards | Camfrog counts pause (fine) | **split** - **built 1.99to** (`achprogress.js`, `docs/achievements-cutover-runbook.md`; staging ON) | M | L | 5 |
+| 17 | Economy telemetry, supply snapshot | bot pushes | stale charts | **split** - **built 1.99to** (`supply.js`; Pepe sends only his rows) | S | L | 5 |
+| 18 | Cosmetic drops | bot drop table + `/api/cosmetics/drop-config` | Camfrog drops pause | keep in bot (event side); config to site - **built 1.99to** | S | L | 5 |
 | 19 | Raffles, top mic, trivia, pictionary, bingo, PvP | bot | games stop (expected) | **keep** (Camfrog-native); payouts via site pools | - | - | stays |
 | 20 | Heists | bot `heist_data.json` | stop | **PINNED by the user: note only** | - | - | pinned |
 | 21 | Turf / gangs | bot `turf_data.json`, `gang_data.json` | stop | keep with heists (engine is shared) | - | - | pinned |
@@ -485,6 +485,10 @@ Each entry covers:
   n, key}` batched from the existing 30 s tick; thresholds evaluated on the site). The catalog, counters and awards
   then live in one place, and a bot JSON file goes away.
 - **Effort / risk**: M / L. **v2**: `pat-assets` (achievements, items).
+- **Built 1.99to (site + bot), staging ON, prod pending the user's go:** `achprogress.js` (counters per login, exact decimals,
+  keyed metric events, thresholds evaluated on the site for the metrics a bump touched, awards through `achievements.award` =
+  the achievements group) + bot `pepe_achstore.py` (mirror + diff + keyed outbox behind `!achievements backend`). Cutover,
+  rollback, detach and the staging rehearsal against a prod copy: `docs/achievements-cutover-runbook.md`.
 
 ### 5.15 AI market judge
 - **What**: `pepe_aijudge.py`.
@@ -499,6 +503,11 @@ Each entry covers:
   - The bot (or v2's agent runtime) is an oracle client that posts `{proposal, confidence, evidence}`.
   - The Camfrog evidence must stay where the logs are. Price questions settle from typed price data first (v2 §17.81).
 - **Effort / risk**: M / M. **v2**: `ai_oracle` resolver (L-4).
+- **Built 1.99to:** site `oracle.js` (proposals, disputes, the window, the settle by the item's owner through pluggable
+  resolvers: escrow pools / wagers on the site settle there, Pepe-owned items go "due" on a feed) + bot `pepe_aioracle.py`
+  behind `!aijudge backend on|off` (proposals keyed and queued; nothing finalised locally while on). Phase 3 plugs its LMSR
+  markets in with `oracle.registerResolver("market", ...)`. Contract: `docs/oracle-contract.md`. Q5 answered by it: the
+  settlement half moves now, the judge stays in Pepe until v2's agent runtime.
 
 ### 5.16 Economy telemetry and supply snapshot
 - **What**:
@@ -509,6 +518,14 @@ Each entry covers:
   - Charges and pool rows are produced on the site once 5.3 lands. Only the Pepe-only pools (gangs, turf, heist
     escrow) remain in the push.
 - **Effort / risk**: S / L.
+- **Built 1.99to:** `supply.js` (patSupply out of index.js): every pool the site owns is counted from its own table
+  (pools, room vaults, stashes, gangs, escrow holds, the lotto pot, route intents, pad-vault escrow) and a new site row
+  `casino:tables` counts PAT at the casino backend's tables (blackjack stakes in a round, hold'em stacks and pots - out of
+  the wallets, not in the House yet). Pepe's push shrinks to what he holds (turf stakes / tills / season pot / cargo, room
+  wars, journaled payouts, the markets until Phase 3, and anything still local on his side). Verified on a prod DB copy
+  2026-10-12: 1,104,246,235 with his old full snapshot = with the shrunk one = the live prod endpoint; no row moved.
+  Charges and participation stay bot feeds: participation is chat lines and mic minutes, and a charge's telemetry row
+  carries Camfrog attribution (command, room) - the PAT itself already moves through the site's keyed charge (Phase 1).
 
 ### 5.17 Cosmetic drops
 - **What**: Pepe owns the drop table. It pushes `/api/cosmetics/drop-config` (wheel rates) and grants organic drops
@@ -516,6 +533,12 @@ Each entry covers:
 - **Rec**: the drop **config** moves to the site (it already enforces the cap). Event-triggered drops stay where the
   events happen (bot for Camfrog games, site for the wheel and lotto once moved).
 - **Effort / risk**: S / L.
+- **Built 1.99to:** the whole table (every event's chance, the cap, the gates, the event-pool share) on the site
+  (`cosmetic_drop_config` + `cosmetic_drop_meta`), handed over once by `!cosmetics backend on confirm`, edited on
+  `/admin/cosmetics`, released back with `off`. **Rolling stays where the event happens** (the safer choice: a Camfrog game's
+  drop never waits on a network round trip or fails with the site, the grant + the daily cap were already the site's,
+  `grantCapped` in one statement): Pepe rolls his events with the site's numbers (read every 5 min, the last copy kept for an
+  outage); the site rolls the wheel and the casino backend's seats with the same table.
 
 ### 5.18 Camfrog-native live games: raffles, top mic, trivia, pictionary, bingo, PvP
 - **What**:
@@ -602,6 +625,13 @@ rule as v2 §16 ("riskiest thing (money) first").
 
 ### Phase 5 — splits and leftovers
 - 5.14 achievement counters to the site, 5.15 AI judge as an oracle client, 5.16 telemetry, 5.17 drop config.
+- **Built 1.99to (site + bot), on staging 2026-10-12.** Achievements cutover rehearsed against a fresh prod copy (match,
+  one live unlock exactly once, exact rollback, cut over again and left ON); the supply total verified unchanged on a prod
+  DB copy; the oracle settles a real escrow pool in the site's tests; the drop table hand-over / release in both test suites.
+  Prod: deploy site then bot (all switches default OFF on prod), then each switch with the user's go - see each runbook.
+- **What stays in Pepe from Phase 5 on:** the observing (every achievement hook, the quiet backfills, announcements), the
+  judge's research and evidence (web + Camfrog records + vision) and its retry / escalation schedule, rolling the drops of
+  Camfrog games, participation and charge telemetry.
 - **v2**: `pat-assets`, the `ai_oracle` resolver, `search` / analytics.
 
 ### Stays in the bot (v2: cf-connector + botkit modules, B-2 / B-6)
@@ -660,7 +690,7 @@ rule as v2 §16 ("riskiest thing (money) first").
 | `/api/lotto/sync` (lotto.js) | `pepe_lotto.py` | Phase 0 |
 | `/api/tables/sync`, `/api/tables/claim` (tables.js) | `pepe_tables.py` | Phase 0 (BJ done; hold'em phase 2) |
 | `/api/g/funding-sync`, `/api/g/reserve-claims[/settle]` (index.js → funding.js) | `_funding_tick` | Phase 1 |
-| `/api/stats/supply` (index.js) | `_supply_tick` | Phase 1 (shrinks) |
+| `/api/stats/supply` (index.js → supply.js) | `_supply_tick` | shrunk in 1.99to (only Pepe-held rows) |
 | `/api/econ/charges` (econ.js) | `pepe_econ.py` | Phase 1 (produced on site) |
 | `/api/polls/sync` + C1 `poll.*` | `pepe_webact.py` | Phase 1 |
 | `/act` `cmd=cosmetic`, `/cosmetics/act` | `pepe_cosmetics.py` | Phase 1 |
@@ -671,8 +701,8 @@ rule as v2 §16 ("riskiest thing (money) first").
 | `/api/staking/sync` (staking.js) | `pepe_vaults.py` | Phase 3 |
 | `/api/g/burns/record` (burns.js), C1 `econ.burn` | `pepe_burn.py` | Phase 4 |
 | `/api/g/roomvaults/sync` (roomvaults.js), `/api/g/launchpad/*` | `pepe_roomvault.py`, `pepe_launchpad.py` | Phase 4 |
-| `/api/g/achievement` (index.js) | `pepe_achievements.py` | Phase 5 (becomes "bump") |
-| `/api/cosmetics/drop-config` | `pepe_cosmetics.py` | Phase 5 |
+| `/api/g/achievement` (index.js) | `pepe_achievements.py` | Phase 5: awards from `/api/achievements/bot/events` once the counters live on the site (backfills keep it) |
+| `/api/cosmetics/drop-config` | `pepe_cosmetics.py` | Phase 5: ignored once the site owns the table (`/drop-config/state` instead) |
 | `/api/userstats/sync`, `/api/roomstats/sync`, `/api/econ/participation` | `pepe_userstats.py`, `pepe_roomintel.py`, `pepe_econ.py` | stay (Camfrog signals) |
 
 ## Appendix B — bot state files that hold PAT or PAT claims
@@ -688,4 +718,4 @@ rule as v2 §16 ("riskiest thing (money) first").
 | `vaults.json`, `pvaults.json` | staking shares, epochs, personal stashes | Phase 3 |
 | `holdem_escrow.json`, `blackjack_escrow.json` | old-engine table stakes | Phase 0 (retire) |
 | `gang_data.json`, `heist_data.json` | gang treasuries, heist sheets | pinned |
-| `achievements_progress.json` | counters (no PAT) | Phase 5 |
+| `achievements_progress.json` | counters (no PAT) | Phase 5 (1.99to: `ach_progress` / `ach_metrics`, moved marker after the cutover) |
