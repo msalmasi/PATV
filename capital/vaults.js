@@ -382,7 +382,24 @@ async function rebalance(d, p, c) {
   }
   return moves;
 }
-/** The daily cut-off (pepe_vaults._vault_epoch minus the Casino-vault feed, which stays Pepe's policy). In ONE transaction. */
+/** One step of the cut-off in its own savepoint: a throw rolls back its writes and restores the book in memory. -> ok */
+async function guarded(d, label, fn, errors) {
+  const snap = JSON.stringify(d);
+  try {
+    await C.tx(fn);
+    return true;
+  } catch (e) {
+    const back = JSON.parse(snap);
+    for (const k of Object.keys(d)) delete d[k];
+    Object.assign(d, back);
+    errors.push([label, String((e && e.message) || e).slice(0, 200)]);
+    console.error(`[capital] cut-off: ${label} failed (left for the next cut-off): ${(e && e.message) || e}`);
+    return false;
+  }
+}
+
+/** The daily cut-off (pepe_vaults._vault_epoch minus the Casino-vault feed, which stays Pepe's policy). In ONE transaction;
+ *  each top-up, dividend, queue item and rebalance move in its own savepoint (pepe_vaults ran them one by one too). */
 async function epoch(t) {
   const c = await C.cfg();
   const d = await load();
@@ -390,7 +407,7 @@ async function epoch(t) {
   let k = await ctx();
   let p = prices(d, k);
   const last = d.epochs.length ? d.epochs[d.epochs.length - 1] : null;
-  const notes = { skim: {}, topup: {}, dividends: [], queue: [], rebalance: [] };
+  const notes = { skim: {}, topup: {}, dividends: [], queue: [], rebalance: [], errors: [] };
   if (last && now - Number(last.ts) >= 43200) {
     const dtDays = Math.max(1e-3, (now - Number(last.ts)) / 86400);
     for (const v of VAULTS) {
@@ -409,25 +426,30 @@ async function epoch(t) {
       const floor = Number(c.floor_apr);
       if (Number(c.topup) && floor > 0 && !c.layers) {
         const needR = Math.pow(1 + floor, dtDays / 365) - 1;
-        if (r < needR) notes.topup[v] = await topup(d, v, needR - r, p[v], k, c, t);
+        if (r < needR) await guarded(d, `topup ${v}`, async () => { notes.topup[v] = await topup(d, v, needR - r, p[v], k, c, t); }, notes.errors);
       }
     }
     k = await ctx();
     p = prices(d, k);
   }
-  if (Number(c.dividend) && !c.tr_live && c.targets && (await C.cfgAge()) <= 7200) notes.dividends = await dividends(d, now, c);
+  if (Number(c.dividend) && !c.tr_live && c.targets && (await C.cfgAge()) <= 7200) {
+    await guarded(d, "dividends", async () => { notes.dividends = await dividends(d, now, c); }, notes.errors);
+  }
   k = await ctx();
   p = prices(d, k);
   const pend = Object.values(d.queue).filter((q) => q.state === "pending").sort((a, b) => Number(a.ts) - Number(b.ts));
-  for (const q of pend) {
-    await executeOne(d, q, p, k, c);
+  for (const q0 of pend) {
+    const id = q0.id;
+    const ok = await guarded(d, `queue ${id}`, async () => { await executeOne(d, d.queue[id], p, k, c); }, notes.errors);
+    const q = d.queue[id];
+    if (!ok) { q.error = notes.errors[notes.errors.length - 1][1]; q.error_at = now; notes.queue.push([id, "error"]); continue; }
     notes.queue.push([q.id, q.state]);
     if (q.state === "done") (notes.items = notes.items || []).push({ id: q.id, stash: q.stash, vault: q.vault, kind: q.kind, ts: q.ts, by: q.by,
                                                                      legs: q.legs || {}, refund: q.refund || 0 });
     k = await ctx();
     p = prices(d, k);
   }
-  notes.rebalance = await rebalance(d, p, c);
+  await guarded(d, "rebalance", async () => { notes.rebalance = await rebalance(d, p, c); }, notes.errors);
   k = await ctx();
   p = prices(d, k);
   const tg = autoTargets(d, c);

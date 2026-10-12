@@ -380,6 +380,28 @@ test("vaults: the queued stake runs at the cut-off at that day's price; an unsta
   assert.equal((await supply()).total, s0, "staking moves PAT between stashes and vault cash - never creates any");
 });
 
+test("vaults: one bad request never blocks the cut-off (its own savepoint, left for the next one)", async () => {
+  const d = await V.load();
+  d.v.bank.holders.s999 = 100.0;            // a holder whose stash is gone
+  d.v.bank.total = Number(d.v.bank.total) + 100.0;
+  d.seq += 1;
+  d.queue["q" + d.seq] = { id: "q" + d.seq, stash: "999", vault: "bank", kind: "withdraw", ts: C.nowS() - 10, state: "pending", shares: 100.0 };
+  const bad = "q" + d.seq;
+  d.next_epoch = C.nowS() - 1;
+  await V.store(d);
+  const st = await op("vaults", "stake", ANN, { stash: "1", vault: "mm", amount: 2000 }, "stake-00002");
+  assert.equal(st.body.ok, true, JSON.stringify(st.body));
+  const d0 = await V.load();
+  d0.next_epoch = C.nowS() - 1;
+  await V.store(d0);
+  await SVC.tick();
+  const d1 = await V.load();
+  assert.equal(d1.queue[st.body.item.id].state, "done", "the good request ran");
+  assert.equal(d1.queue[bad].state, "pending", "the bad one waits");
+  assert.ok(d1.queue[bad].error, "with its error noted");
+  assert.equal(d1.v.bank.holders.s999, 100.0, "its shares weren't burnt (the step rolled back)");
+});
+
 test("rollback: the pots go back to Pepe under one key, everything is handed back, the supply total doesn't move", async () => {
   const s0 = (await supply()).total;
   const potSum = Number((await getQuery("SELECT COALESCE(SUM(balance),0) AS t FROM pools WHERE key LIKE 'market:%'"))[0].t);
