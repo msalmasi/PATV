@@ -391,6 +391,7 @@ function register(app, { addUser }) {
       const u = await withUser(req, res);
       if (inside(u, R.id)) return next();
       if (/^\/settings\/?$/.test(sub)) return next();             // padsettings.js: owners + staff only anyway
+      if (/^\/owner\/?$/.test(sub)) return next();                // 1.99qr: padowner.js - owners + staff only anyway
       return lockedPage(req, res, R, u);
     } catch (e) { next(e); }
   });

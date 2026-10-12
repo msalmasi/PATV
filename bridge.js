@@ -390,6 +390,7 @@ async function ingest(body) {
     R.clipOn = typeof s.clip === "boolean" ? s.clip : null;   // 1.99fa: the room's !clip switch (null = an older Pepe)
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
     R.mod = require("./padmod").cleanModCaps(s.mod);   // 1.99co: Manage-panel caps per watching mod login ({} = none)
+    R.pepe = require("./padpepe").cleanMenu(s.pepe);   // 1.99qr: the 🐸 Pepe submenu - {look|camroast|roast: {on, price, why}}
     if (!R.audio) audioClose(R.id);
     RA.micSample(R.id, R.mic, now);
     R.updated = now;
@@ -700,7 +701,9 @@ async function liveView(R, after, userId, login, username = null) {
             audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
             clip: clipSwitch(R.id),       // 1.99fp: the room's !clip switch (true / false / null = unknown) - 🔊 Clip on 🎙 lines
-            cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null },
+            cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null,
+            // 1.99qr: the 🐸 Pepe submenu (padpepe.js) - only while web commands are on in the room
+            pepe: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length && R.pepe && Object.keys(R.pepe).length ? R.pepe : null },
     mine: userId ? relay.mineFor(userId, R.id) : [],
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
@@ -836,6 +839,7 @@ function register(app, { isBotToken, addUser }) {
   require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)
   require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
   require("./padmod").register(app, { addUser, bySlug, isLive: isLiveShown });     // 1.99co: the pad Manage panel
+  require("./padpepe").register(app, { addUser, bySlug, isLive: isLiveShown });    // 1.99qr: the 🐸 Pepe submenu (look / camroast / roast)
 
   // The stage of one room (?room=<slug>), else the homepage's front room: Pepe's stream state + that
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.

@@ -102,6 +102,7 @@ function register(app, { addUser, isBotToken }) {
   require("./boosts").register(app, { addUser, isBotToken });     // 1.99ee: 🚀 pad boosts (web + Pepe's !boost)
   require("./challengepay").register(app, { addUser, isBotToken });   // mic challenge prizes out of a pad's room-vault escrow
   require("./roomvaults").register(app, { addUser, isBotToken });
+  require("./padowner").register(app, { addUser });               // 1.99qr: the room owner's Pepe control panel (/p/<slug>/owner)
   require("./launchpad").register(app, { addUser, isBotToken });     // the pad launchpad: momentum, launch grants review, welcomes, boost credit     // economy v2 E-3: room vaults (Pepe's sync, the pad card, the owner's rate)
   const manageable = async (req, res) => {
     const R = await resolveRoom(req.params.slug);
@@ -124,6 +125,8 @@ function register(app, { addUser, isBotToken }) {
       try { padVerify = await require("./padconnect").pendingForPepe(); } catch (e) { console.error("[rooms] pad verify:", e.message); }
       // 1.99nr: prime_known - every room carries prime_time (Pepe's retention deletes nothing without this marker)
       // 1.99nw: season_pass - the Camfrog logins with a Season Pass (Pepe keeps their PM logs); pass_known says the list is real
+      // 1.99qr: each Camfrog pad's Pepe settings for its owner page (padowner.js)
+      if ((req.body || {}).room_settings) await require("./padowner").storeSettings(req.body.room_settings).catch((e) => console.error("[rooms] room settings:", e.message));
       let pass = null;
       try { pass = await require("./premium").passCamfrogs(); } catch (e) { console.error("[rooms] season pass list:", e.message); }
       res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });

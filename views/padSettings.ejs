@@ -10,7 +10,7 @@
 %>
 <link rel="stylesheet" href="/public/css/stage.css?v=9">
 <link rel="stylesheet" href="/public/css/feed.css?v=19">
-<link rel="stylesheet" href="/public/css/room-mod.css?v=8">
+<link rel="stylesheet" href="/public/css/room-mod.css?v=9">
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=3">
 <link rel="stylesheet" href="/public/css/padfx.css?v=3">
 <link rel="stylesheet" href="/public/css/pad-access.css?v=2">
@@ -46,7 +46,7 @@
     <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">⚙️</span> Pad settings <span class="ps-pad"><%= room.title %></span></h1>
     <p class="lede"><% if (room.house) { %>🐸 House pad — run by Pepe and the site admins.<% } else if (room.owner) { %>👑 Owned by <b><%= room.owner.display || room.owner.username %></b>.<% } else { %>No owner yet.<% } %>
       Everything you can change about <b>p/<%= slug %></b> is on this page.</p>
-    <p class="ps-links"><a href="<%= href %>">← Pad page</a><a href="/stage?room=<%= encodeURIComponent(slug) %>">🎥 Go live here</a>
+    <p class="ps-links"><a href="<%= href %>">← Pad page</a><% if (camfrog) { %><a href="<%= href %>/owner">👑 <%- t('pad.owner_panel') %></a><% } %><a href="/stage?room=<%= encodeURIComponent(slug) %>">🎥 Go live here</a>
       <% if (analytics) { %><a href="<%= href %>/analytics">📊 Analytics</a><% } %>
       <a href="<%= G.PATH %>">📜 <%= G.NAME %></a></p>
     <% if (staff) { %><p class="ps-staff">🛠 Site staff: you see every pad's hub. Site-wide limits live in <a href="/feed/admin#pepe">Feed admin</a> (Pepe's global caps, the automod budget) and <a href="/pads/admin">Pads admin</a> (owners, the front page, royalties).</p><% } %>
@@ -515,7 +515,7 @@
 <script src="/public/js/room-manage.js?v=2" defer></script>
 <script src="/public/js/feed-roommod.js?v=4" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
-<% if (camfrog) { %><script src="/public/js/room-mod.js?v=9" defer></script><% } %>
+<% if (camfrog) { %><script src="/public/js/room-mod.js?v=10" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>
 <script src="/public/js/pad-look.js?v=1" defer></script>
 <script src="/public/js/pad-access.js?v=1" defer></script>

@@ -1,0 +1,259 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# The room owner's Pepe control panel (1.99qr, padowner.js): /p/<slug>/owner - the room vault + Top up, royalties, Prime Time,
+    the stage, the room's Pepe settings, and "What you can do with Pepe in your room" (generated from Pepe's code). With
+    guide = true it is the public guide (/pads/owner-guide): only the capability list. Client: public/js/pad-owner.js. %>
+<%- include('layout', { title: guide ? t('owner.guide_title') : t('owner.title', { pad: room.title }), user: user }) %>
+<%
+  const num = (n) => (t.num ? t.num(Math.round(Number(n) || 0)) : Math.round(Number(n) || 0).toLocaleString('en-US'));
+  const dt = (ms) => (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(ms, 'datetime');
+  const dd = (ms) => (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(ms, 'date');
+  const PAT = (n, cls) => `<span class="ds-pat${cls ? ' ' + cls : ''}"><b>${num(n)}</b><small>PAT</small></span>`;
+  const href = slug ? '/p/' + encodeURIComponent(slug) : null;
+  const sub = (s) => String(s || '').replace('{slug}', encodeURIComponent(slug || 'your-pad'));
+  const capT = (c, f) => (t.has('owner.cap.' + c.id + '.' + f) ? t('owner.cap.' + c.id + '.' + f) : t.esc(c[f === 'title' ? 'title' : 'howto'] || ''));
+  const AREAS = [['room', '🐸'], ['stage', '📺'], ['vault', '🏦'], ['games', '🎤'], ['feed', '📝'], ['tier', '🚀']];
+  const capsList = (caps && caps.capabilities) || [];
+%>
+<style>
+  .po { --ds-ac: var(--ds-green); }
+  .po .po-grid { display: grid; gap: var(--ds-sp-3); grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1000px) { .po .po-grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  .po .po-why { margin: 0; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
+  .po .po-why b { color: var(--ds-text-strong); }
+  .po details.po-more > summary { cursor: pointer; color: var(--ds-ac-2); font-size: 13.5px; min-height: 32px; display: flex; align-items: center; }
+  .po .po-set { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); min-height: 52px; padding: var(--ds-sp-2) 0; border-top: 1px solid var(--ds-line-soft); }
+  .po .po-set:first-of-type { border-top: 0; }
+  .po .po-set > div { min-width: 0; }
+  .po .po-set .ds-meta { margin: 2px 0 0; }
+  .po .po-ro { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: var(--ds-sp-1h) var(--ds-sp-3); margin: 0; padding: 0; list-style: none; }
+  .po .po-ro li { display: flex; justify-content: space-between; gap: var(--ds-sp-2); font-size: 13.5px; color: var(--ds-text-2); border-bottom: 1px solid var(--ds-line-soft); padding: 6px 0; }
+  .po .po-cap { display: grid; gap: var(--ds-sp-1h); padding: var(--ds-sp-3) 0; border-top: 1px solid var(--ds-line-soft); }
+  .po .po-cap:first-of-type { border-top: 0; padding-top: 0; }
+  .po .po-cap code { font-family: var(--ds-font-mono); font-size: 12.5px; background: var(--ds-sunken); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xs); padding: 1px 6px; overflow-wrap: anywhere; }
+  .po .po-cmds { display: flex; flex-wrap: wrap; gap: 6px; }
+  .po .po-msg { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); overflow-wrap: anywhere; }
+  .po .po-msg.ok { color: var(--ds-ok); } .po .po-msg.bad { color: var(--ds-danger); }
+  .po .po-hist { margin: 0; padding: 0; list-style: none; }
+  .po .po-hist li { display: flex; justify-content: space-between; gap: var(--ds-sp-2); padding: 8px 0; border-top: 1px solid var(--ds-line-soft); font-size: 13.5px; color: var(--ds-text-2); }
+  .po .po-hist li:first-child { border-top: 0; }
+  .po .po-quick { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h); }
+  .po .ds-subnav .ds-tabs { gap: var(--ds-sp-1h); }
+  .po section[id] { scroll-margin-top: 72px; }
+</style>
+<main class="ds-page po" id="po" <% if (!guide) { %>data-slug="<%= slug %>"<% } %>>
+<% if (guide) { %>
+  <section class="ds-hero compact">
+    <p class="ds-eyebrow"><%- t('owner.guide_eyebrow') %></p>
+    <h1><%- t('owner.can_h') %></h1>
+    <p class="ds-lead"><%- t('owner.guide_lead') %></p>
+    <div class="ds-ctas"><a class="ds-btn" href="/pads/new"><%- t('owner.guide_cta') %></a></div>
+  </section>
+<% } else { %>
+  <a class="ds-back" href="<%= href %>">← <%- t('owner.back', { pad: room.title }) %></a>
+  <header class="ds-head">
+    <p class="ds-eyebrow"><%- t('owner.eyebrow') %></p>
+    <h1 class="ds-h1"><%= room.title %></h1>
+    <p class="ds-sub"><%- t('owner.lead') %></p>
+  </header>
+  <% if (!mine && staff) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🛠️</span><div><%- t('owner.staff_view') %></div></div><% } %>
+  <nav class="ds-subnav" aria-label="<%- t('owner.sections') %>"><div class="ds-tabs">
+    <% if (camfrog) { %><a class="ds-tab" href="#vault">🏦 <%- t('owner.nav_vault') %></a><% } %>
+    <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
+    <a class="ds-tab" href="#prime">📺 <%- t('owner.nav_prime') %></a>
+    <a class="ds-tab" href="#stage">🎬 <%- t('owner.nav_stage') %></a>
+    <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
+    <a class="ds-tab" href="#can">❓ <%- t('owner.nav_can') %></a>
+  </div></nav>
+
+  <div class="ds-stats" aria-label="<%- t('owner.summary') %>">
+    <% if (vault) { %><div class="ds-stat"><span><%- t('owner.s_vault') %></span><b class="gold"><%= num(vault.balance) %></b><small>PAT</small></div><% } %>
+    <div class="ds-stat"><span><%- t('owner.s_pending') %></span><b class="gold"><%= roy ? num(roy.pending) : '—' %></b><small><%- roy ? 'PAT' : t('owner.no_roy_short') %></small></div>
+    <div class="ds-stat"><span><%- t('owner.s_payout') %></span><b><%= roy ? dd(roy.next_release) : '—' %></b><small><%- t('owner.s_weekly') %></small></div>
+    <div class="ds-stat"><span><%- t('owner.s_prime') %></span><b><%- prime && prime.active ? t('owner.prime_on') : t('owner.prime_off') %></b><small><%- prime && prime.active && prime.ends ? t('owner.until', { when: dd(prime.ends) }) : (prime && prime.comped ? t('owner.comped') : '&nbsp;') %></small></div>
+  </div>
+
+  <% if (camfrog) { %>
+  <section class="ds-card lg" id="vault" aria-labelledby="poVaultH">
+    <h2 class="ds-h2" id="poVaultH"><span class="dot"></span>🏦 <%- t('owner.vault_h') %>
+      <% if (vault) { %><span class="ds-chip <%= vault.live ? 'ok' : 'warn' %>"><%- vault.live ? t('owner.vault_live') : t('owner.vault_paused') %></span><% } %></h2>
+    <p class="po-why"><%- t('owner.vault_why', { cap: num(vault ? vault.cap : 50000000) }) %></p>
+    <% if (vault) { %>
+    <div class="ds-stats">
+      <div class="ds-stat"><span><%- t('owner.v_balance') %></span><b class="gold" data-po="balance"><%= num(vault.balance) %></b><small><%- t('owner.v_of_cap', { cap: num(vault.cap) }) %></small></div>
+      <div class="ds-stat"><span><%- t('owner.v_inflow') %></span><b class="up">+<%= num(vault.inflow7) %></b><small><%- t('owner.v_7d') %></small></div>
+      <div class="ds-stat"><span><%- t('owner.v_deposits') %></span><b><%= num(vault.deposits7) %></b><small><%- t('owner.v_7d') %></small></div>
+      <div class="ds-stat"><span><%- t('owner.v_paid') %></span><b><%= num(vault.paid7) %></b><small><%- t('owner.v_7d') %></small></div>
+    </div>
+    <div class="ds-bar gold" role="img" aria-label="<%- t('owner.v_fill', { pct: Math.min(100, Math.round(100 * vault.balance / (vault.cap || 1))) }) %>"><span style="width:<%= Math.min(100, (100 * vault.balance / (vault.cap || 1))).toFixed(1) %>%"></span></div>
+
+    <form class="ds-form" id="poTopup" novalidate>
+      <h3 class="ds-h3"><%- t('owner.topup_h') %></h3>
+      <p class="po-why"><%- t('owner.topup_why', { min: num(vault.deposit_min) }) %></p>
+      <% if (!linked) { %>
+        <div class="ds-note warn"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('owner.topup_link') %></div></div>
+      <% } else { %>
+      <div class="ds-field">
+        <label class="ds-label" for="poAmt"><%- t('owner.topup_amount') %></label>
+        <div class="ds-in-group">
+          <input class="ds-in" id="poAmt" name="amount" inputmode="numeric" autocomplete="off" placeholder="<%= num(vault.deposit_min * 10) %>"
+                 data-min="<%= vault.deposit_min %>" data-room="<%= Math.max(0, vault.cap - vault.balance) %>" data-bal="<%= balance %>" aria-describedby="poAmtHint">
+          <span class="ds-in-addon">PAT</span>
+        </div>
+        <p class="ds-hint" id="poAmtHint"><%- t('owner.topup_hint', { bal: num(balance), login: linked, room: num(Math.max(0, vault.cap - vault.balance)) }) %></p>
+        <div class="po-quick">
+          <% [10000, 50000, 100000, 500000].filter((q) => q >= vault.deposit_min).forEach((q) => { %><button type="button" class="ds-quick" data-amt="<%= q %>"><%= num(q) %></button><% }) %>
+        </div>
+      </div>
+      <div class="ds-actions"><button type="submit" class="ds-btn gold" <%= vault.live ? '' : 'disabled' %>><span class="ds-ic" aria-hidden="true">🪙</span> <%- t('owner.topup_go') %></button></div>
+      <p class="po-msg" id="poTopMsg" role="status" aria-live="polite"><%- vault.live ? '' : t('owner.vault_not_live') %></p>
+      <% } %>
+    </form>
+
+    <details class="po-more">
+      <summary><%- t('owner.v_history') %></summary>
+      <% if (!vault.history.length) { %><p class="ds-meta"><%- t('owner.v_none') %></p><% } else { %>
+      <ul class="po-hist">
+        <% vault.history.forEach((h) => { %><li><span><%- t.has('pad.vault.k_' + h.kind) ? t('pad.vault.k_' + h.kind) : t.esc(h.kind) %><% if (h.flow) { %> · <span class="ds-meta"><%= h.flow %></span><% } %><br><small class="ds-fine"><%= h.ts ? dt(h.ts) : '' %></small></span><%- PAT(h.amount, h.amount < 0 ? 'down' : 'up') %></li><% }) %>
+      </ul><% } %>
+      <% if (vault.days.length) { %>
+      <div class="ds-tbl dense"><table><thead><tr><th><%- t('owner.v_day') %></th><th class="r"><%- t('owner.v_in') %></th><th class="r"><%- t('owner.v_dep') %></th><th class="r"><%- t('owner.v_out') %></th></tr></thead><tbody>
+        <% vault.days.slice().reverse().forEach((d) => { %><tr><td><%= d.day %></td><td class="r"><%= num(d.in) %></td><td class="r"><%= num(d.dep) %></td><td class="r"><%= num(d.out) %></td></tr><% }) %>
+      </tbody></table></div><% } %>
+      <p class="ds-fine"><%- t('owner.v_rate', { rate: vault.rate, href: href + '#vault' }) %></p>
+    </details>
+    <% } else { %><div class="ds-empty"><b><%- t('owner.v_unavailable') %></b></div><% } %>
+  </section>
+  <% } %>
+
+  <div class="po-grid two">
+  <section class="ds-card lg" id="royalties" aria-labelledby="poRoyH">
+    <h2 class="ds-h2" id="poRoyH"><span class="dot"></span>👑 <%- t('owner.roy_h') %></h2>
+    <% if (!roy) { %>
+      <p class="po-why"><%- t('owner.roy_none') %></p>
+    <% } else { %>
+    <p class="po-why"><%- t('owner.roy_why', { stage: roy.config ? roy.config.stage_pct : 20, days: roy.active_days_needed }) %></p>
+    <div class="ds-stats">
+      <div class="ds-stat"><span><%- t('owner.r_pending') %></span><b class="gold"><%= num(roy.pending) %></b><small>PAT</small></div>
+      <div class="ds-stat"><span><%- t('owner.r_period') %></span><b><%= num(roy.this_period.total) %></b><small><%- t('owner.r_period_s') %></small></div>
+      <div class="ds-stat"><span><%- t('owner.r_paid') %></span><b><%= num(roy.paid) %></b><small><%- t('owner.r_all_time') %></small></div>
+      <div class="ds-stat"><span><%- t('owner.r_days') %></span><b class="<%= roy.active_days >= roy.active_days_needed ? 'up' : '' %>"><%= roy.active_days %> / <%= roy.active_days_needed %></b><small><%- t('owner.r_days_s') %></small></div>
+    </div>
+    <p class="ds-meta"><%- t('owner.r_next', { when: dt(roy.next_release) }) %></p>
+    <% if (roy.active_days < roy.active_days_needed) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owner.r_need_days', { n: roy.active_days_needed - roy.active_days }) %></div></div><% } %>
+    <% const shares = (roy.owner_shares || []).filter((s) => s.pct > 0); if (shares.length) { %>
+    <details class="po-more"><summary><%- t('owner.r_shares') %></summary>
+      <ul class="po-ro"><% shares.forEach((s) => { %><li><span><%= s.label %></span><b><%= s.pct %>%</b></li><% }) %></ul>
+    </details><% } %>
+    <% } %>
+  </section>
+
+  <section class="ds-card lg" id="prime" aria-labelledby="poPrimeH">
+    <h2 class="ds-h2" id="poPrimeH"><span class="dot"></span>📺 <%- t('owner.prime_h') %>
+      <span class="ds-chip <%= prime && prime.active ? 'gold' : 'mute' %>"><%- prime && prime.active ? t('owner.prime_on') : t('owner.prime_off') %></span></h2>
+    <p class="po-why"><%- t('owner.prime_why', { slots: primePerks ? primePerks.prime_extra_slots : 0, badges: primePerks ? primePerks.prime_extra_badges : 0 }) %></p>
+    <% if (prime && prime.active) { %>
+      <p class="ds-meta"><%- prime.comped ? t('owner.prime_comped') : (prime.renewing ? t('owner.prime_renews', { when: dd(prime.paid_through) }) : t('owner.prime_ends', { when: dd(prime.ends || prime.paid_through) })) %></p>
+    <% } else if (primePrice) { %>
+      <p class="ds-meta"><%- t('owner.prime_price', { price: PAT(primePrice) }) %></p>
+    <% } %>
+    <div class="ds-actions"><a class="ds-btn <%= prime && prime.active ? 'ghost' : 'gold' %> sm" href="/premium?pad=<%= encodeURIComponent(slug) %>"><%- prime && prime.active ? t('owner.prime_manage') : t('owner.prime_get') %></a></div>
+  </section>
+  </div>
+
+  <section class="ds-card lg" id="stage" aria-labelledby="poStageH">
+    <h2 class="ds-h2" id="poStageH"><span class="dot"></span>🎬 <%- t('owner.stage_h') %></h2>
+    <p class="po-why"><%- t('owner.stage_why') %></p>
+    <% if (stage) { %>
+    <div class="ds-stats">
+      <div class="ds-stat"><span><%- t('owner.st_slots') %></span><b><%= stage.open %> / <%= stage.room.slot_count %></b><small><%- t('owner.st_in_use') %></small></div>
+      <div class="ds-stat"><span><%- t('owner.st_featured') %></span><b><%= stage.featured ? stage.featured.display : '—' %></b><small><%- stage.featured ? (stage.featured.live ? t('owner.st_live') : t('owner.st_waiting')) : t('owner.st_none') %></small></div>
+      <div class="ds-stat"><span><%- t('owner.st_next') %></span><b><%= stage.upcoming.length %></b><small><%- t('owner.st_booked') %></small></div>
+      <div class="ds-stat"><span><%- t('owner.st_requests') %></span><b class="<%= requested ? 'gold' : '' %>"><%= requested %></b><small><%- t('owner.st_to_approve') %></small></div>
+    </div>
+    <% if (stage.upcoming.length) { %><ul class="po-hist"><% stage.upcoming.slice(0, 3).forEach((u) => { %><li><span><%= u.display %><% if (u.title) { %> · <span class="ds-meta"><%= u.title %></span><% } %></span><span class="ds-meta"><%= u.start_at ? dt(u.start_at) : '' %></span></li><% }) %></ul><% } %>
+    <% } %>
+    <div class="ds-actions"><a class="ds-btn sm" href="<%= href %>/settings?tab=stage"><%- t('owner.stage_go') %></a></div>
+  </section>
+
+  <% if (camfrog) { %>
+  <section class="ds-card lg" id="pepe" aria-labelledby="poPepeH">
+    <h2 class="ds-h2" id="poPepeH"><span class="dot"></span>🐸 <%- t('owner.pepe_h') %></h2>
+    <p class="po-why"><%- t('owner.pepe_why') %></p>
+    <% if (!pepe) { %>
+      <div class="ds-empty"><span aria-hidden="true">🐸</span><b><%- t('owner.pepe_unknown') %></b><p><%- t('owner.pepe_unknown_help') %></p></div>
+    <% } else { %>
+      <% if (pepe.stale) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owner.pepe_stale', { when: dt(pepe.updated) }) %></div></div><% } %>
+      <h3 class="ds-h4"><%- t('owner.pepe_yours') %></h3>
+      <div class="po-sets" id="poSets">
+        <% [['snap', '📸'], ['clip', '📹'], ['challenge', '🎤']].forEach(([k, ic]) => { const on = !!pepe.owner[k]; %>
+        <div class="po-set">
+          <div><b><%= ic %> <%- t('owner.set_' + k) %></b><p class="ds-meta"><%- t('owner.set_' + k + '_why') %> <code>!<%= k === 'challenge' ? 'challenge' : k %> on|off</code></p></div>
+          <label class="ds-switch" title="<%- t('owner.set_' + k) %>"><input type="checkbox" data-po-set="<%= k %>" <%= on ? 'checked' : '' %> aria-label="<%- t('owner.set_' + k) %>"><span></span></label>
+        </div><% }) %>
+        <div class="po-set">
+          <div><b>🌐 <%- t('owner.set_language') %></b><p class="ds-meta"><%- t('owner.set_language_why') %> <code>!language &lt;code|auto&gt;</code></p></div>
+          <select class="ds-select" data-po-set="language" aria-label="<%- t('owner.set_language') %>" style="max-width: 220px">
+            <% LANGS.forEach(([c, n]) => { %><option value="<%= c %>" <%= pepe.owner.language === c ? 'selected' : '' %>><%= n %></option><% }) %>
+          </select>
+        </div>
+      </div>
+      <p class="po-msg" id="poSetMsg" role="status" aria-live="polite"></p>
+
+      <h3 class="ds-h4"><%- t('owner.bridge_h') %></h3>
+      <p class="ds-meta"><%- t('owner.bridge_why') %></p>
+      <div class="po-sets" id="poBridge">
+        <% [['relay', '💬'], ['mic', '🎙️'], ['cams', '📷'], ['audio', '🔊'], ['transcripts', '📝']].forEach(([k, ic]) => { %>
+        <div class="po-set">
+          <div><b><%= ic %> <%- t('owner.br_' + k) %></b><p class="ds-meta"><%- t('owner.br_' + k + '_why') %></p></div>
+          <label class="ds-switch"><input type="checkbox" data-po-bridge="<%= k %>" <%= pepe.bridge[k] ? 'checked' : '' %> aria-label="<%- t('owner.br_' + k) %>"><span></span></label>
+        </div><% }) %>
+      </div>
+      <p class="po-msg" id="poBrMsg" role="status" aria-live="polite"></p>
+
+      <details class="po-more">
+        <summary><%- t('owner.ro_h') %></summary>
+        <p class="ds-meta"><%- t('owner.ro_why') %></p>
+        <ul class="po-ro">
+          <% Object.entries(pepe.features || {}).forEach(([k, v]) => { %><li><span><%- t.has('owner.f_' + k) ? t('owner.f_' + k) : t.esc(k) %></span><span class="ds-chip <%= v ? 'ok' : 'mute' %>"><%- v ? t('owner.on') : t('owner.off') %></span></li><% }) %>
+        </ul>
+        <h4 class="ds-h4"><%- t('owner.prices_h') %></h4>
+        <ul class="po-ro">
+          <% Object.entries(pepe.prices || {}).forEach(([k, v]) => { %><li><span><%- t.has('owner.p_' + k) ? t('owner.p_' + k) : t.esc(k) %></span><%- PAT(v, 'plain') %></li><% }) %>
+        </ul>
+        <% if (pepe.vibe && pepe.vibe.type) { %><p class="ds-meta"><%- t('owner.vibe', { vibe: pepe.vibe.type }) %></p><% } %>
+      </details>
+    <% } %>
+  </section>
+  <% } %>
+<% } %>
+
+  <section class="ds-card lg" id="can" aria-labelledby="poCanH">
+    <h2 class="ds-h2" id="poCanH"><span class="dot"></span>❓ <%- t('owner.can_h') %></h2>
+    <p class="po-why"><%- t('owner.can_why') %></p>
+    <% AREAS.forEach(([area, ic]) => {
+         const pc = capsList.filter((c) => c.area === area), wc = (webCaps || []).filter((c) => c.area === area);
+         if (!pc.length && !wc.length) return; %>
+      <h3 class="ds-h3"><%= ic %> <%- t('owner.area_' + area) %></h3>
+      <% pc.forEach((c) => { %>
+      <div class="po-cap" id="cap-<%= c.id %>">
+        <b><%- capT(c, 'title') %></b>
+        <% if ((c.syntax || []).length) { %><div class="po-cmds"><% c.syntax.forEach((s) => { %><code><%= s %></code><% }) %></div><% } %>
+        <p class="po-why"><%- capT(c, 'howto') %></p>
+        <% if (c.web && slug) { %><a class="ds-meta" href="<%= sub(c.web) %>"><%- t('owner.on_web') %> →</a><% } %>
+      </div><% }) %>
+      <% wc.forEach((c) => { %>
+      <div class="po-cap" id="cap-<%= c.id %>">
+        <b>🌐 <%- t('owner.cap.' + c.id + '.title') %></b>
+        <p class="po-why"><%- t('owner.cap.' + c.id + '.howto') %></p>
+        <% if (slug) { %><a class="ds-meta" href="<%= sub(c.where) %>"><%- t('owner.open') %> →</a><% } %>
+      </div><% }) %>
+    <% }) %>
+    <h3 class="ds-h3">🔧 <%- t('owner.admin_only_h') %></h3>
+    <p class="po-why"><%- t('owner.admin_only_why') %></p>
+    <ul class="po-ro"><% ((caps && caps.admin_only) || []).forEach((a, i) => { %><li><span><%- t.has('owner.ao.' + i) ? t('owner.ao.' + i) : t.esc(a) %></span></li><% }) %></ul>
+    <p class="ds-fine"><%- t('owner.generated') %></p>
+  </section>
+</main>
+<% if (!guide) { %><script src="/public/js/pad-owner.js?v=1" defer></script><% } %>
+</body>
+</html>

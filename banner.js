@@ -31,7 +31,10 @@
 // Tables: banner_kv (config), banner_bookings, banner_days (day PK -> booking), banner_promos, banner_stats.
 // Routes: GET /sponsor; GET /api/banner/state; POST /api/banner/uploads (+ PUT chunk, POST finish); POST /api/banner/book;
 // POST /api/banner/bookings/:id/cancel; POST /api/banner/seen; GET /b/go/:kind/:id; GET /media/banner/:file;
-// GET /admin/banner; POST /api/banner/admin/{decide,takedown,config,promo,promo/delete}.
+// GET /admin/banner; POST /api/banner/admin/{decide,takedown,config,promo,promo/delete}; POST /api/banner/chat-sponsors (Pepe, 1.99qr).
+//
+// CHAT SPONSOR (1.99qr, admin switch banner_chat_sponsor, default off): an approved booking's headline + link also runs in
+// Pepe's !sponsor rotation in the Camfrog rooms on its booked days - see chatSponsors() below.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -54,6 +57,7 @@ const DEFAULTS = Object.freeze({
   max_days: 7,                // days per booking
   max_bookings: 2,            // open bookings per member (pending + approved, not over)
   lead_days: 60,              // how far ahead a booking may start
+  chat_sponsor: false,        // 1.99qr: approved bookings also run in Pepe's !sponsor rotation in the Camfrog rooms
 });
 const DEFAULT_PROMOS = Object.freeze([
   { id: "lotto", kind: "lotto", link: "/lotto", weight: 3, sort: 1 },
@@ -150,7 +154,7 @@ async function readConfig() {
 }
 // setting names (the admin page / API) -> config keys
 const SETTING_NAMES = Object.freeze({ banner_enabled: "enabled", banner_paid_enabled: "paid_enabled", banner_price_per_day: "price_per_day",
-  banner_max_days: "max_days", banner_max_bookings: "max_bookings", banner_lead_days: "lead_days" });
+  banner_max_days: "max_days", banner_max_bookings: "max_bookings", banner_lead_days: "lead_days", banner_chat_sponsor: "chat_sponsor" });
 function cleanConfig(c, base = DEFAULTS) {
   const src = {};
   for (const [k, v] of Object.entries(c || {})) src[SETTING_NAMES[k] || k] = v;
@@ -163,6 +167,7 @@ function cleanConfig(c, base = DEFAULTS) {
     max_days: int(src.max_days, 1, 31, base.max_days),
     max_bookings: int(src.max_bookings, 1, 20, base.max_bookings),
     lead_days: int(src.lead_days, 2, 365, base.lead_days),
+    chat_sponsor: on(src.chat_sponsor, base.chat_sponsor),
   };
 }
 function config() { return { ...CONFIG }; }
@@ -526,6 +531,32 @@ async function pick({ lotto = null, lang = "en", t = NOW() } = {}) {
            domain: linkDomain(p.link), by: null, vars, bookable: !!CONFIG.paid_enabled };
 }
 
+// ── 1.99qr: the booking in Pepe's chat !sponsor rotation ("enable for site banners", banner_chat_sponsor) ──
+// While the switch is on, the booking that owns TODAY (an approved one) is handed to Pepe, who runs its headline + link
+// as one of his !sponsor slots (camfrog-bot pepe_bannersponsor.py): the same 4 slots, the same hourly cadence and the
+// same ad-slot gap as a paid !sponsor, so the rooms never see more sponsor lines than before. Nothing is charged there:
+// the booking was paid for here (the hold, booked through the "banner" routing row on approval). Pepe keys the entry by
+// the booking id (one rotation entry per booking) and drops it once it isn't listed any more (switch off, taken down,
+// its last day over).
+const siteBase = () => String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL
+  || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
+/** -> {on, items: [{id, headline, line, link (absolute or null), by, start, end, until (ms: the end of its last day)}]} */
+async function chatSponsors(t = NOW()) {
+  await init();
+  if (!CONFIG.chat_sponsor) return { on: false, items: [] };
+  const today = dayKey(t);
+  const rows = await getQuery(`SELECT b.* FROM banner_days d JOIN banner_bookings b ON b.id = d.booking_id WHERE d.day = ? AND b.status = 'approved'`, [today]);
+  const items = [];
+  for (const r of rows) {
+    const headline = cleanLine(r.headline || r.alt, HEADLINE_MAX);
+    if (!headline) continue;                       // an image booking with no words has nothing to say in chat
+    const link = r.link ? (r.link[0] === "/" ? siteBase() + r.link : r.link) : null;
+    items.push({ id: r.id, headline, line: cleanLine(r.line, LINE_MAX) || null, link, by: r.username || null,
+                 start: r.start_day, end: endDay(r), until: dayStart(addDays(endDay(r), 1)) });
+  }
+  return { on: true, items };
+}
+
 // ── stats (aggregate counts only) ──
 const SEEN = new Map();     // `${kind}|${viewer}|${ad}` -> day (in memory only; dedupe)
 function viewerKey(req) {
@@ -623,7 +654,7 @@ async function deletePromo(admin, id) {
 }
 
 // ── routes ──
-function register(app, { addUser, noTimers = false }) {
+function register(app, { addUser, isBotToken = () => false, noTimers = false }) {
   init().catch(() => {});
   const express = require("express");
   const guard = require("./middleware/authGuard");
@@ -644,6 +675,12 @@ function register(app, { addUser, noTimers = false }) {
   };
   const paidOpen = (req, res, next) => (CONFIG.enabled && CONFIG.paid_enabled ? next() : res.status(423).json({ ok: false, error: "Banner bookings aren't open yet." }));
 
+  // 1.99qr: Pepe's read of the bookings for his !sponsor rotation (bot token; {on: false} while the switch is off)
+  app.post("/api/banner/chat-sponsors", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!isBotToken((req.body || {}).password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try { res.json({ ok: true, ...(await chatSponsors()) }); } catch (e) { fail(res, e); }
+  });
   app.get("/sponsor", addUser, async (req, res) => {
     try {
       const S = await state(req.user);
@@ -742,7 +779,7 @@ function register(app, { addUser, noTimers = false }) {
   }
 }
 
-module.exports = { init, register, config, setConfig, settingsView, cleanConfig, book, cancel, decide, takedown, expire, pick, promos, savePromo, deletePromo,
+module.exports = { init, register, chatSponsors, config, setConfig, settingsView, cleanConfig, book, cancel, decide, takedown, expire, pick, promos, savePromo, deletePromo,
                    state, adminData, calendar, mine, count, statsFor, storeImage, openUpload, chunkUpload, finishUpload, encode, cleanLink, dayKey, dayStart,
                    addDays, drawLabel, compact, setSafetyCheck, filePath, imageUrl, _setDir, Refuse, DEFAULTS, DEFAULT_PROMOS, PROMO_KINDS, BANNER_TZ, SETTING_NAMES,
                    _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _uploads: UP, _mine: MINE, _seen: SEEN };

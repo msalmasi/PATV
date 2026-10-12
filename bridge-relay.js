@@ -189,6 +189,7 @@ function takeJobs(liveRoomIds) {
     // 1.99co: a pad Manage-panel action (padmod.js) - the site-built line plus what Pepe re-checks / logs
     if (j.kind === "cmd" && j.gui) { base.gui = j.gui; if (j.reason) base.reason = j.reason; }
     if (j.kind === "cmd" && j.setting) base.setting = j.setting;
+    if (j.kind === "cmd" && j.pepe) base.pepe = j.pepe;   // 1.99qr: a 🐸 Pepe menu action (padpepe.js) - Pepe re-checks line + cam
     if (j.kind === "modinfo") base.target = j.target || "";
     if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
     // 1.99ea: the PATV display name for "🌐 <name> (web)" (Pepe falls back to the Camfrog display name, then the login)
@@ -240,7 +241,7 @@ function applyAcks(acks) {
 function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
-    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.kind === "tipnote" || j.kind === "golive" || j.kind === "nowplaying" || j.kind === "boostnote" || j.gui || j.setting) continue;   // panel jobs: padmod.js
+    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.kind === "tipnote" || j.kind === "golive" || j.kind === "nowplaying" || j.kind === "boostnote" || j.gui || j.setting || j.pepe) continue;   // panel jobs: padmod.js / padpepe.js
     const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
     if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
     out.push(o);

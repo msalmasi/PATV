@@ -159,3 +159,20 @@
   .pm-pop { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; width: 100vw; max-height: 80vh; border-radius: 14px 14px 0 0; padding: 10px 12px 16px; }
   .pm-pop-i { min-height: 42px; }
 }
+
+/* 1.99qr: the 🐸 Pepe submenu (pad-pepe.js) - the price + confirm step in the ⋯ popover and the cam preview's Pepe row */
+.pp-confirm { display: grid; gap: var(--ds-sp-2); padding: var(--ds-sp-2) var(--ds-sp-1); }
+.pp-confirm .pp-q { margin: 0; color: var(--ds-text); font-size: 14px; line-height: 1.45; }
+.pp-confirm .pp-cost { margin: 0; color: var(--ds-text-muted); font-size: 13px; line-height: 1.45; }
+.pp-confirm .pp-row { display: flex; gap: var(--ds-sp-2); justify-content: flex-end; flex-wrap: wrap; }
+.pp-out { font-size: 13px; color: var(--ds-text-muted); overflow-wrap: anywhere; min-height: 1em; }
+.pp-out.ok { color: var(--ds-ok); }
+.pp-out.bad { color: var(--ds-danger); }
+.pm-pepe-c:empty { display: none; }
+.pp-cam { display: grid; gap: var(--ds-sp-2); border-top: 1px solid var(--ds-line-soft); padding-top: var(--ds-sp-2); margin-top: var(--ds-sp-1); }
+.pp-cam-l { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ds-text-muted); }
+.pp-cam-a { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+.pp-cam-a[hidden] { display: none; }
+.rm .snap .pp-cam .ds-btn { background: transparent; color: var(--ds-text); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-pill); padding: 0 12px; font-size: 13px; }
+.rm .snap .pp-cam .ds-btn.gold { background: var(--ds-gold-grad); color: var(--ds-on-gold); border-color: transparent; }
+.rm .snap .pp-cam .ds-btn:disabled { opacity: .5; }

@@ -116,6 +116,10 @@
       if (u.tip.to && u.tip.href) out.push({ kind: 'tip', id: 'tip', group: 'who', label: '💸 Tip', to: u.tip.to, href: u.tip.href, title: 'Tip ' + u.tip.to + ' PAT' });
       else if (u.tip.off) out.push({ kind: 'off', id: 'tip', group: 'who', label: '💸 Tip', disabled: true, note: u.tip.off, title: "Can't tip: " + u.tip.off });
     }
+    // 1.99qr: 🐸 Pepe ▸ - the paid people-commands (pad-pepe.js / padpepe.js): signed-in viewers, while Pepe offers them here
+    if ((x.signed || mod) && x.pepe && P.pepe && !u.bot && P.pepe.items(x.pepe, u).length) {
+      out.push({ kind: 'pepe', id: 'pepe', group: 'pepe', label: '🐸 ' + (window.__t ? __t('js.pad.pepe.menu', 'Pepe') : 'Pepe') + ' ▸' });
+    }
     if (!mod) return out;
     var me = isMe(caps, u);
     var n = 0;
@@ -507,7 +511,7 @@
       extra = extra || {};
       if (pop && pop._login === u.login) { closeMenu(true); return; }      // the same ⋯ again: toggle shut
       closeMenu(false);
-      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed });
+      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed, pepe: room && room.pepe });
       if (!items.length) return;
       var who = u.display || u.login;
       var p = el('div', 'pm-pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Actions for ' + who);
@@ -556,6 +560,8 @@
             return;
           }
           if (it.kind === 'more') { closeMenu(false); open(u); return; }
+          // 1.99qr: 🐸 Pepe ▸ - the submenu replaces the list (← back); a pick shows its price + confirm in the popover
+          if (it.kind === 'pepe') { pepeSub(); return; }
           if (!A[it.id].confirm) {
             sayIn(out, 'Sending ' + preview(it.id, u.login, {}) + '…');
             run(it.id, u.login, {}, function (ok, r) { if (pop === p) sayIn(out, resultText(r), ok ? 'ok' : ok === false ? 'bad' : ''); }, b);
@@ -568,6 +574,31 @@
         });
         list.appendChild(b);
       });
+      function pepeSub() {
+        var menuNow = room && room.pepe;
+        list.classList.add('hide'); conf.classList.remove('hide'); conf.textContent = ''; sayIn(out, '');
+        var sub = el('div', 'pm-pop-l'); sub.setAttribute('role', 'menu');
+        sub.setAttribute('aria-label', (window.__t ? __t('js.pad.pepe.menu_for', 'Ask Pepe about {name}', { name: who }) : 'Ask Pepe about ' + who));
+        var back = el('button', 'pm-pop-i', '← ' + (window.__t ? __t('js.pad.pepe.back', 'Back') : 'Back')); back.type = 'button'; back.setAttribute('role', 'menuitem');
+        back.addEventListener('click', function (e) { e.preventDefault(); backToList(); });
+        sub.appendChild(back);
+        var stage = el('div', 'pm-pepe-c');
+        P.pepe.items(menuNow, u).forEach(function (pi) {
+          var b = el('button', 'pm-pop-i' + (pi.disabled ? ' off' : ''), pi.icon + ' ' + pi.label); b.type = 'button'; b.setAttribute('role', 'menuitem');
+          b.appendChild(el('small', 'pm-pop-why', ' · ' + P.pepe.priceText(pi.price) + (pi.note ? ' — ' + pi.note : '')));
+          if (pi.disabled) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
+          b.addEventListener('click', function (e) {
+            e.preventDefault();
+            sub.classList.add('hide');
+            P.pepe.confirm(stage, slug, pi.action, u, menuNow, { onCancel: function () { stage.textContent = ''; sub.classList.remove('hide'); place(p, anchor); back.focus(); } });
+            place(p, anchor);
+          });
+          sub.appendChild(b);
+        });
+        conf.appendChild(sub); conf.appendChild(stage);
+        place(p, anchor);
+        back.focus();
+      }
       p.appendChild(list); p.appendChild(conf); p.appendChild(out);
       document.body.appendChild(p);
       pop = p;

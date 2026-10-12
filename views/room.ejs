@@ -442,6 +442,7 @@
       <div class="hd-acts">
         <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: t('pad.hdr.follow') }) %>
           <span class="hd-fc" title="<%- t('pad.hdr.follow_tip') %>"><%- t('pad.hdr.followers', { count: fcount_, n: '<b data-follower-count-kind="room" data-follower-count-id="' + t.esc(feed_.room) + '">' + t.esc(fcount_.toLocaleString('en-US')) + '</b>' }) %></span></div><% } %>
+        <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><a class="ibtn po-link" href="/p/<%= encodeURIComponent(room.slug) %>/owner" title="<%- t('pad.owner_panel') %>" aria-label="<%- t('pad.owner_panel') %>">👑</a><% } %>
         <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%- psTitle_ %>" aria-label="<%- psTitle_ %>">⚙<% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
         <details class="hd-more" id="rmMore">
           <summary class="ibtn" aria-label="<%- t('pad.menu.aria') %>" title="<%- t('pad.menu.more') %>">⋯</summary>
@@ -645,8 +646,9 @@
   <link rel="stylesheet" href="/public/css/flair.css?v=2"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=2">
   <script src="/public/js/chat-clip.js?v=2"></script>
-  <link rel="stylesheet" href="/public/css/room-mod.css?v=8">
-  <script src="/public/js/room-mod.js?v=9"></script>
+  <link rel="stylesheet" href="/public/css/room-mod.css?v=9">
+  <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
+  <script src="/public/js/room-mod.js?v=10"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
@@ -899,6 +901,8 @@
       if (s.state === 'ok' && s.img && s.gen) snapGenRow(box, s);
       // 1.99ez: 🎬 Clip - Pepe records 10 / 20 / 30 s of this cam (camclip.js); a free preview, pay only to save it
       if (s.state === 'ok' && s.img && s.clip) snapClipRow(box, s);
+      // 1.99qr: 🐸 Pepe on this cam - 👀 Look / 🔥 Cam roast / 🎤 Roast with their prices, a confirm step, Pepe's answer
+      if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe);
     }
     var clipTimer = null;
     function snapClipRow(box, s) {
@@ -1097,7 +1101,9 @@
     function safe(name, fn) {
       try { fn(); } catch (e) { if (!applyErr[name]) { applyErr[name] = 1; console.error('[pad] ' + name + ' update failed:', e); } }
     }
+    var livePepe = null;      // 1.99qr: room.pepe - the 🐸 Pepe submenu's prices / switches (padpepe.js)
     function apply(d, first) {
+      livePepe = d && d.room && d.room.pepe ? d.room.pepe : null;
       safe('mod', function () { if (roomMod) roomMod.update(d); });          // before the people list: it adds the manage buttons
       safe('room', function () { renderRoom(d); });
       safe('compose', function () { renderCompose(d); });
@@ -1142,6 +1148,7 @@
         <% if (!siteOnly_) { %><dt><%- t('pad.about.cf_room') %></dt><dd><%= room.camfrogName || room.name %></dd><% } %>
         <% if (typeof twitch !== 'undefined' && twitch && twitch.login) { %><dt>Twitch</dt><dd><a href="https://twitch.tv/<%= twitch.login %>" rel="noopener" target="_blank">twitch.tv/<%= twitch.login %></a></dd><% } %>
         <% if (manage_) { %><dt><%- t('pad.about.settings') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings"><%- t('pad.about.settings_link') %></a></dd><% } %>
+        <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><dt><%- t('pad.owner_panel') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.owner_panel') %></a></dd><% } %>
       </dl>
     </section>
     <%# 1.99ew: 🎁 gift a premium cosmetic to this pad (padcosmetics.js, public/js/pad-cosmetics.js); the owner buys from ⚙ settings %>
