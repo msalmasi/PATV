@@ -75,7 +75,8 @@ const RULES = {
   // ledger
   "transactions.userId": M(), "transactions.counterparty": M(),
   "bonus_winners.userId": M(), "reserve_claims.userId": M(), "jackpot_rakes.userId": M(), "wheel_spins.userId": M(),
-  "username_history.userId": M(),   // 1.99tc: usernames.js - the merged account's old names now mean the target
+  "username_history.userId": M(),
+  "login_changes.userId": { keep: "1.99tl loginrekey.js: the log of Camfrog login changes (Pepe's feed) names the account it happened to" },   // 1.99tc: usernames.js - the merged account's old names now mean the target
   "bot_credit_log.userId": M(),     // 1.99jw: botcredits.js - the log of every bot credit / House move
   "blackjack.userId": M(), "poker_cashier.userId": M(), "poker_now_games.userId": M(), "user_redemptions.userId": M({ key: ["code"] }),
   "pat_burns.actor": M(), "pat_burns.actor_kind": { deny: FLAG },

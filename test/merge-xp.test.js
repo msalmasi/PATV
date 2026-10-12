@@ -177,12 +177,16 @@ test("1.99tc: the Hfddhh incident end to end - !verify of a NEW Camfrog name (au
     const r = await U.resolve(old, { strict: true });
     assert.equal(r.ok && r.user.userId, "h-me", `${old}: ${r.error}`);
   }
-  // Pepe's gang / stash / loan records keyed by the OLD Camfrog login
+  // 1.99tj (the user's rule): records follow the ACCOUNT. The old Camfrog login resolves to NOBODY (seen again it's a new,
+  // empty account); the change is recorded for Pepe, who re-keys his watermelon2 records to wutup2
   const l = await U.resolveLogin("watermelon2", { strict: true });
-  assert.equal(l.ok && l.user.userId, "h-me", l.error);
-  assert.equal(l.via, "history");
-  assert.equal((await U.resolveLogin("wutup2")).via, "current");
+  assert.equal(l.ok, false);
+  assert.equal(l.code, U.E_NOT_FOUND);
+  assert.equal((await U.resolveLogin("wutup2")).user.userId, "h-me");
   const rr = await U.resolveRecord({ userId: "u-gone-nowhere", username: "nobody-x", login: "watermelon2" });
-  assert.equal(rr.ok && rr.user.userId, "h-me");
-  assert.equal(rr.via, "login-history");
+  assert.equal(rr.ok, false);
+  const feed = await require(path.join(repo, "loginrekey")).since(0);
+  const ch = feed.changes.find((c) => c.userId === "h-me");
+  assert.ok(ch, JSON.stringify(feed));
+  assert.deepEqual([ch.old_key, ch.new_key, ch.via], ["watermelon2", "wutup2", "camfrog:relink"]);
 });

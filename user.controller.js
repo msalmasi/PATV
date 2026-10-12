@@ -542,6 +542,10 @@ async function _completeCamfrogLinkLocked(userId, camfrogUsername) {
     console.log(`[CF-RELINK] Unlinking camfrog "${cfLower}" from account ${other.username} (${other.userId})`);
     await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [other.userId]);
     await usernames.recordLogin(other.userId, cfLower, null, 'camfrog:taken');
+    // 1.99tj: the other account's records keyed by this login stay ITS records (re-keyed to u:<its id>) - loginrekey.js
+    await require('./loginrekey').changedSafe(other.userId, cfLower, null, 'camfrog:taken');
+    // 1.99tj: the other account's records keyed by this login stay ITS records (re-keyed to u:<its id>) - loginrekey.js
+    await require('./loginrekey').changedSafe(other.userId, cfLower, null, 'camfrog:taken');
     // the Camfrog achievements go with the Camfrog name (quietly: no second XP/PAT)
     const copied = await copyCamfrogBadges(other.userId, userId);
     if (copied) console.log(`[CF-RELINK] copied ${copied} Camfrog achievement(s) to ${userId}`);
@@ -593,10 +597,15 @@ async function _completeCamfrogLinkLocked(userId, camfrogUsername) {
     await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
     await afterMerge(userId, report);
 
+    // 1.99tj: this account's records keyed by its previous login move to the new one (loginrekey.js)
+    await require('./loginrekey').changedSafe(userId, before || null, cfLower, 'camfrog:relink');
+    // 1.99tj: this account's records keyed by its previous login move to the new one (loginrekey.js)
+    await require('./loginrekey').changedSafe(userId, before || null, cfLower, 'camfrog:relink');
     await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
     return { merged: true, addedBalance: auto.points_balance || 0, addedXp: mx.otherTotal, unlinkedFrom };
   } else {
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [cfLower, userId]);
+    await require('./loginrekey').changedSafe(userId, before || null, cfLower, 'camfrog:relink');   // 1.99tj
     await inbox.attachPendingSafe(userId, cfLower);
     return { merged: false, unlinkedFrom };
   }
@@ -615,6 +624,8 @@ async function updateCamfrogUsername(req, res) {
     const was = ((await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]))[0] || {}).camfrogUsername;
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [null, userId]);
     if (was) await require('./usernames').recordLogin(userId, was, null, 'camfrog:unlink');   // 1.99tc: login history
+    if (was) await require('./loginrekey').changedSafe(userId, was, null, 'camfrog:unlink');   // 1.99tj: records follow the account
+    if (was) await require('./loginrekey').changedSafe(userId, was, null, 'camfrog:unlink');   // 1.99tj: records follow the account
     req.flash('success', 'Camfrog username unlinked.');
     return res.redirect(`/u/${username}/edit`);
   }

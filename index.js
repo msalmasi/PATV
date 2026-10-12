@@ -2396,6 +2396,10 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
 
 // 1.99tc: POST /api/users/resolve - old (renamed / merged) usernames and merged-away userIds -> today's account (usernames.js)
 require("./usernames").register(app, { isBotToken });
+// 1.99tj: POST /api/users/login-changes - Camfrog login changes; Pepe re-keys his login-keyed records from them (loginrekey.js)
+require("./loginrekey").register(app, { isBotToken });
+// 1.99tj: POST /api/users/login-changes - Camfrog login changes; Pepe re-keys his login-keyed records from them (loginrekey.js)
+require("./loginrekey").register(app, { isBotToken });
 
 // This endpoint creates a new Camfrog user
 // Bot-only routes: the caller must present the bot token. An unset token

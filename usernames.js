@@ -20,13 +20,9 @@
 // Renames into a name another account used to have are refused (reservedFor), so history never becomes ambiguous by
 // a new rename.
 //
-// The same table keeps CAMFROG LOGIN history (kind 'camfrog'): Pepe keys gangs / stashes / loans / GTF by Camfrog login, and
-// a !verify of a different Camfrog name REPLACES the account's login (Hfddhh's watermelonfelon became wutupwattz on
-// 2026-10-12) - the old login then resolves to nobody. resolveLogin() is resolve() for logins; resolveRecord() uses it.
-//
-// The same table keeps CAMFROG LOGIN history (kind 'camfrog'): Pepe keys gangs / stashes / loans / GTF by Camfrog login, and
-// a !verify of a different Camfrog name REPLACES the account's login (Hfddhh's watermelonfelon became wutupwattz on
-// 2026-10-12) - the old login then resolves to nobody. resolveLogin() is resolve() for logins; resolveRecord() uses it.
+// The same table keeps CAMFROG LOGIN history (kind 'camfrog') as a record only. 1.99tj (the user's rule): an old login does
+// NOT resolve to the account - the login seen again is a new, empty account; the account's records were re-keyed to its
+// new login when it changed (loginrekey.js). resolveLogin() answers the account linked to a login NOW.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -134,7 +130,7 @@ const COLS = "userId, username, camfrogUsername";
  * -> {ok:true, user, via: "current" | "case" | "history", from?} | {ok:false, code, error, candidates?}
  */
 const resolve = (name, opts = {}) => resolveBy("username", name, opts);
-/** resolve() for a Camfrog login: the account linked to it now, else the one it used to be linked to (when only one). */
+/** resolve() for a Camfrog login: the account linked to it NOW (never an old link - 1.99tj). */
 const resolveLogin = (login, opts = {}) => resolveBy("camfrog", String(login == null ? "" : login).trim().replace(/^@+/, ""), opts);
 
 async function resolveBy(kind, name, opts = {}) {
@@ -154,7 +150,7 @@ async function resolveBy(kind, name, opts = {}) {
       if (cur.length > 1) return { ok: false, code: E_AMBIGUOUS, error: `the PATV username ${n} matches ${cur.length} accounts (letter case) - send the userId`, candidates: cur.map((u) => u.username) };
     }
   }
-  const past = await pastHolders(n, kind);
+  const past = kind === "camfrog" ? [] : await pastHolders(n, kind);   // 1.99tj: an old login is nobody's
   if (cur.length === 1) {
     const me = cur[0].__id;
     if (opts.strict) {
@@ -231,9 +227,9 @@ async function resolveRecord({ userId, username, login } = {}, opts = {}) {
     if (r.ok || r.code === E_AMBIGUOUS) return r;
   }
   if (login) {
-    // 1.99tc: an old Camfrog login (the account relinked to another one) resolves through the login history
+    // the account linked to that login now (1.99tj: never through the login history - an old login is a new account)
     const r = await resolveLogin(login, opts);
-    if (r.ok) return Object.assign(r, { via: r.via === "history" ? "login-history" : "login" });
+    if (r.ok) return Object.assign(r, { via: "login" });
     if (r.code === E_AMBIGUOUS) return r;
   }
   return { ok: false, code: E_NOT_FOUND, error: `no PATV account for ${username || userId || login || "?"}` };

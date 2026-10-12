@@ -748,7 +748,7 @@ function register(app, { isBotToken, addUser }) {
       listing: { id: l.id, inv_id: l.inv_id, price: l.price, status: l.status, created: l.created, updated: l.updated, buyer_id: l.buyer_id || null,
                  valid: l.status === "active" && l.owner_id === l.seller_id },
       item: BY_ID[l.item_id] || { id: l.item_id },
-      seller: { username: l.seller_username || null, camfrog: l.seller_camfrog || null },
+      seller: { username: l.seller_username || null, camfrog: l.seller_camfrog || null, userId: l.seller_id || null },   // 1.99tj: Pepe pays the sale by userId
       fee_pct: MARKET_FEE_PCT });
   }));
 

@@ -7,9 +7,9 @@
 //                                                           #   e.g. /root/stale-exec/*-live.txt); repeatable
 //   node tools/username-history.js --resolve=<name>[,<name>] # what a username resolves to now (and why)
 //   node tools/username-history.js --login=<login>[,<login>] # what a Camfrog login resolves to now (login history included)
-//   node tools/username-history.js --old-login=<login>=<userId> [--apply]   # an admin's record: this Camfrog login used to be
-//                                                           #   that account's (a relink the site kept no trace of); dry run without --apply
-//   node tools/username-history.js --old-name=<name>=<userId> [--apply]     # the same for an old PATV username
+//   node tools/username-history.js --old-name=<name>=<userId> [--apply]     # an admin's record: this PATV username used to be
+//                                                           #   that account's (dry run without --apply). A Camfrog relink the site
+//                                                           #   never saw: tools/login-rekey.js (1.99tj - records follow the account)
 //   node tools/username-history.js --user=<userId>          # one account's recorded names + Camfrog logins
 "use strict";
 const fs = require("fs");
@@ -28,7 +28,8 @@ const opt = (k) => process.argv.filter((a) => a.startsWith(`--${k}=`)).map((a) =
     }
     return;
   }
-  for (const [flag, kind] of [["old-login", "camfrog"], ["old-name", "username"]]) {
+  if (opt("old-login").length) throw new Error("--old-login is gone (1.99tj): an old Camfrog login no longer resolves - move its records with tools/login-rekey.js --relink=<login>=<userId>");
+  for (const [flag, kind] of [["old-name", "username"]]) {
     const pairs = opt(flag);
     if (!pairs.length) continue;
     for (const pr of pairs) {
