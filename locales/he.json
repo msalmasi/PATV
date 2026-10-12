@@ -2126,6 +2126,7 @@
   "js.premium.paid_through": "בוצע - שולם עד {date}.",
   "js.premium.upgraded": "שודרגתם ל־Prime Time Plus - שולם עד {date}.",
   "js.premium.confirm_chip": "לתרום {amount} PAT ל־Prime Time של p/{pad}? התשלומים סופיים.",
+  "js.premium.confirm_chip_plus": "לתרום {amount} PAT ל־Prime Time Plus של p/{pad}? התשלומים סופיים.",
   "js.premium.chip_thanks": "תודה - p/{pad} באוויר עוד קצת.",
   "js.premium.type_username": "הקלידו קודם שם משתמש.",
   "js.premium.confirm_gift": "לתת במתנה תקופת Season Pass ל־{user}? התשלומים סופיים.",

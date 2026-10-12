@@ -2091,6 +2091,7 @@
   "js.premium.paid_through": "ہو گیا - {date} تک ادا شدہ۔",
   "js.premium.upgraded": "Prime Time Plus میں اپ گریڈ ہو گیا - {date} تک ادا شدہ۔",
   "js.premium.confirm_chip": "p/{pad} کے Prime Time میں {amount} PAT کا حصہ ڈالیں؟ ادائیگیاں حتمی ہیں۔",
+  "js.premium.confirm_chip_plus": "p/{pad} کے Prime Time Plus میں {amount} PAT کا حصہ ڈالیں؟ ادائیگیاں حتمی ہیں۔",
   "js.premium.chip_thanks": "شکریہ - p/{pad} تھوڑی دیر اور آن ایئر رہے گا۔",
   "js.premium.type_username": "پہلے صارف نام لکھیں۔",
   "js.premium.confirm_gift": "{user} کو Season Pass کی ایک مدت تحفہ دیں؟ ادائیگیاں حتمی ہیں۔",

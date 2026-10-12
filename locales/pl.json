@@ -2161,6 +2161,7 @@
   "js.premium.paid_through": "Gotowe - opłacone do {date}.",
   "js.premium.upgraded": "Ulepszono do Prime Time Plus - opłacone do {date}.",
   "js.premium.confirm_chip": "Dorzucić {amount} PAT do Prime Time p/{pad}? Płatności są ostateczne.",
+  "js.premium.confirm_chip_plus": "Dorzucić {amount} PAT do Prime Time Plus p/{pad}? Płatności są ostateczne.",
   "js.premium.chip_thanks": "Dzięki - p/{pad} będzie na antenie trochę dłużej.",
   "js.premium.type_username": "Najpierw wpisz nazwę użytkownika.",
   "js.premium.confirm_gift": "Podarować okres Season Pass dla {user}? Płatności są ostateczne.",

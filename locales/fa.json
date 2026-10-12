@@ -2091,6 +2091,7 @@
   "js.premium.paid_through": "انجام شد - تا {date} پرداخت شده.",
   "js.premium.upgraded": "به Prime Time Plus ارتقا یافت - تا {date} پرداخت شده.",
   "js.premium.confirm_chip": "{amount} PAT به Prime Time پد p/{pad} سهم بدهی؟ پرداخت‌ها نهایی‌اند.",
+  "js.premium.confirm_chip_plus": "{amount} PAT به Prime Time Plus پد p/{pad} سهم بدهی؟ پرداخت‌ها نهایی‌اند.",
   "js.premium.chip_thanks": "ممنون - p/{pad} کمی بیشتر روی آنتن می‌ماند.",
   "js.premium.type_username": "اول یک نام کاربری بنویس.",
   "js.premium.confirm_gift": "یک دوره Season Pass به {user} هدیه بدهی؟ پرداخت‌ها نهایی‌اند.",

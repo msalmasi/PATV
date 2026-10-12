@@ -2056,6 +2056,7 @@
   "js.premium.paid_through": "完了 - {date}まで支払い済み。",
   "js.premium.upgraded": "Prime Time Plusにアップグレードしました - {date}まで支払い済み。",
   "js.premium.confirm_chip": "p/{pad} のPrime Timeに {amount} PAT 出資しますか？支払いは確定です。",
+  "js.premium.confirm_chip_plus": "p/{pad} のPrime Time Plusに {amount} PAT 出資しますか？支払いは確定です。",
   "js.premium.chip_thanks": "ありがとう - p/{pad} のオンエアが少し延びました。",
   "js.premium.type_username": "まずユーザー名を入力してください。",
   "js.premium.confirm_gift": "{user}にSeason Passを1期間贈りますか？支払いは確定です。",

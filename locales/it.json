@@ -2098,6 +2098,7 @@
   "js.premium.paid_through": "Fatto - pagato fino al {date}.",
   "js.premium.upgraded": "Passato a Prime Time Plus - pagato fino al {date}.",
   "js.premium.confirm_chip": "Contribuire con {amount} PAT al Prime Time di p/{pad}? I pagamenti sono definitivi.",
+  "js.premium.confirm_chip_plus": "Contribuire con {amount} PAT al Prime Time Plus di p/{pad}? I pagamenti sono definitivi.",
   "js.premium.chip_thanks": "Grazie - p/{pad} resta in onda un po' di più.",
   "js.premium.type_username": "Prima scrivi un nome utente.",
   "js.premium.confirm_gift": "Regalare un periodo di Season Pass a {user}? I pagamenti sono definitivi.",

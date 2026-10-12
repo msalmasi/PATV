@@ -2056,6 +2056,7 @@
   "js.premium.paid_through": "Selesai - sudah dibayar sampai {date}.",
   "js.premium.upgraded": "Ditingkatkan ke Prime Time Plus - sudah dibayar sampai {date}.",
   "js.premium.confirm_chip": "Patungan {amount} PAT ke Prime Time p/{pad}? Pembayaran bersifat final.",
+  "js.premium.confirm_chip_plus": "Patungan {amount} PAT ke Prime Time Plus p/{pad}? Pembayaran bersifat final.",
   "js.premium.chip_thanks": "Makasih - p/{pad} mengudara sedikit lebih lama.",
   "js.premium.type_username": "Ketik nama pengguna dulu.",
   "js.premium.confirm_gift": "Hadiahkan satu periode Season Pass ke {user}? Pembayaran bersifat final.",

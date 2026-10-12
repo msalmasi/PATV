@@ -2091,6 +2091,7 @@
   "js.premium.paid_through": "हो गया - {date} तक का भुगतान हो गया।",
   "js.premium.upgraded": "Prime Time Plus में अपग्रेड हो गया - {date} तक का भुगतान हो गया।",
   "js.premium.confirm_chip": "p/{pad} के Prime Time में {amount} PAT का योगदान दें? भुगतान अंतिम हैं।",
+  "js.premium.confirm_chip_plus": "p/{pad} के Prime Time Plus में {amount} PAT का योगदान दें? भुगतान अंतिम हैं।",
   "js.premium.chip_thanks": "धन्यवाद - p/{pad} थोड़ी देर और ऑन एयर रहेगा।",
   "js.premium.type_username": "पहले एक यूज़रनेम लिखें।",
   "js.premium.confirm_gift": "{user} को Season Pass की एक अवधि गिफ़्ट करें? भुगतान वापस नहीं होते।",

@@ -2056,6 +2056,7 @@
   "js.premium.paid_through": "Xong - đã trả đến {date}.",
   "js.premium.upgraded": "Đã nâng cấp lên Prime Time Plus - đã trả đến {date}.",
   "js.premium.confirm_chip": "Góp {amount} PAT cho Prime Time của p/{pad}? Thanh toán là cuối cùng.",
+  "js.premium.confirm_chip_plus": "Góp {amount} PAT cho Prime Time Plus của p/{pad}? Thanh toán là cuối cùng.",
   "js.premium.chip_thanks": "Cảm ơn - p/{pad} được lên sóng lâu hơn một chút.",
   "js.premium.type_username": "Nhập tên người dùng trước.",
   "js.premium.confirm_gift": "Tặng một kỳ Season Pass cho {user}? Thanh toán không hoàn lại.",

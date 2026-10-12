@@ -2056,6 +2056,7 @@
   "js.premium.paid_through": "완료 - {date}까지 결제됐어요.",
   "js.premium.upgraded": "Prime Time Plus로 업그레이드했어요 - {date}까지 결제됐어요.",
   "js.premium.confirm_chip": "p/{pad}의 Prime Time에 {amount} PAT를 보탤까요? 결제는 최종이에요.",
+  "js.premium.confirm_chip_plus": "p/{pad}의 Prime Time Plus에 {amount} PAT를 보탤까요? 결제는 최종이에요.",
   "js.premium.chip_thanks": "고마워요 - p/{pad}의 방송이 조금 더 이어져요.",
   "js.premium.type_username": "먼저 사용자 이름을 입력하세요.",
   "js.premium.confirm_gift": "{user}님에게 Season Pass 1기간을 선물할까요? 결제는 최종이에요.",

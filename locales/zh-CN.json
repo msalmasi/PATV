@@ -2056,6 +2056,7 @@
   "js.premium.paid_through": "完成——已付费至 {date}。",
   "js.premium.upgraded": "已升级到 Prime Time Plus——已付费至 {date}。",
   "js.premium.confirm_chip": "为 p/{pad} 的 Prime Time 凑 {amount} PAT？付款后不可退款。",
+  "js.premium.confirm_chip_plus": "为 p/{pad} 的 Prime Time Plus 凑 {amount} PAT？付款后不可退款。",
   "js.premium.chip_thanks": "谢谢——p/{pad} 能多播出一会儿了。",
   "js.premium.type_username": "请先输入用户名。",
   "js.premium.confirm_gift": "赠送一期 Season Pass 给 {user}？付款后不可退款。",

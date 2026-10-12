@@ -2231,6 +2231,7 @@
   "js.premium.paid_through": "تم - مدفوع حتى {date}.",
   "js.premium.upgraded": "تمت الترقية إلى Prime Time Plus - مدفوع حتى {date}.",
   "js.premium.confirm_chip": "المساهمة بـ {amount} PAT في Prime Time الخاص بـ p/{pad}؟ المدفوعات نهائية.",
+  "js.premium.confirm_chip_plus": "المساهمة بـ {amount} PAT في Prime Time Plus الخاص بـ p/{pad}؟ المدفوعات نهائية.",
   "js.premium.chip_thanks": "شكرًا - سيبقى p/{pad} على الهواء وقتًا أطول قليلًا.",
   "js.premium.type_username": "اكتب اسم مستخدم أولًا.",
   "js.premium.confirm_gift": "إهداء فترة Season Pass إلى {user}؟ المدفوعات نهائية.",

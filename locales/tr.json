@@ -2091,6 +2091,7 @@
   "js.premium.paid_through": "Tamam - {date} tarihine kadar ödendi.",
   "js.premium.upgraded": "Prime Time Plus'a yükseltildi - {date} tarihine kadar ödendi.",
   "js.premium.confirm_chip": "p/{pad} Prime Time'ına {amount} PAT katkı verilsin mi? Ödemeler kesindir.",
+  "js.premium.confirm_chip_plus": "p/{pad} Prime Time Plus'ına {amount} PAT katkı verilsin mi? Ödemeler kesindir.",
   "js.premium.chip_thanks": "Teşekkürler - p/{pad} biraz daha yayında.",
   "js.premium.type_username": "Önce bir kullanıcı adı yaz.",
   "js.premium.confirm_gift": "{user} kullanıcısına bir Season Pass dönemi hediye edilsin mi? Ödemeler kesindir.",

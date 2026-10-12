@@ -2091,6 +2091,7 @@
   "js.premium.paid_through": "Klaar - betaald tot {date}.",
   "js.premium.upgraded": "Geüpgraded naar Prime Time Plus - betaald tot {date}.",
   "js.premium.confirm_chip": "{amount} PAT bijdragen aan de Prime Time van p/{pad}? Betalingen zijn definitief.",
+  "js.premium.confirm_chip_plus": "{amount} PAT bijdragen aan de Prime Time Plus van p/{pad}? Betalingen zijn definitief.",
   "js.premium.chip_thanks": "Bedankt - p/{pad} blijft wat langer in de lucht.",
   "js.premium.type_username": "Typ eerst een gebruikersnaam.",
   "js.premium.confirm_gift": "Een Season Pass-periode cadeau doen aan {user}? Betalingen zijn definitief.",

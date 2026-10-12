@@ -2161,6 +2161,7 @@
   "js.premium.paid_through": "Готово — оплачено до {date}.",
   "js.premium.upgraded": "Оновлено до Prime Time Plus — оплачено до {date}.",
   "js.premium.confirm_chip": "Внести {amount} PAT у Prime Time p/{pad}? Платежі остаточні.",
+  "js.premium.confirm_chip_plus": "Внести {amount} PAT у Prime Time Plus p/{pad}? Платежі остаточні.",
   "js.premium.chip_thanks": "Дякуємо — p/{pad} буде в ефірі трохи довше.",
   "js.premium.type_username": "Спершу введи ім’я користувача.",
   "js.premium.confirm_gift": "Подарувати період Season Pass для {user}? Платежі остаточні.",

@@ -2057,6 +2057,7 @@
   "js.premium.paid_through": "เรียบร้อย - จ่ายถึง {date} แล้ว",
   "js.premium.upgraded": "อัปเกรดเป็น Prime Time Plus แล้ว - จ่ายถึง {date}",
   "js.premium.confirm_chip": "ร่วมสมทบ {amount} PAT ให้ Prime Time ของ p/{pad}? การจ่ายเงินถือเป็นที่สิ้นสุด",
+  "js.premium.confirm_chip_plus": "ร่วมสมทบ {amount} PAT ให้ Prime Time Plus ของ p/{pad}? การจ่ายเงินถือเป็นที่สิ้นสุด",
   "js.premium.chip_thanks": "ขอบคุณ - p/{pad} ได้ออกอากาศนานขึ้นอีกหน่อย",
   "js.premium.type_username": "พิมพ์ชื่อผู้ใช้ก่อน",
   "js.premium.confirm_gift": "ให้ Season Pass หนึ่งรอบแก่ {user}? การจ่ายเงินถือเป็นที่สิ้นสุด",
