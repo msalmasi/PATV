@@ -207,6 +207,9 @@ const RULES = {
   // (owned by a Camfrog login; a move's account follows the merge), actionttl.js (an admin's username)
   "pat_route_intents.user_id": M(), "pat_route_intents.payer": { deny: NAME },
   "stashes.owner": { deny: "a Camfrog login (the stash follows the login, not the PATV account)" }, "stash_moves.user_id": M(),
+  // 1.99rn: gtfsheet.js - a website re-roll's journal row (keyed by the click; the op itself applies to a Camfrog login, the
+  // charge is a ledger row that follows the merge)
+  "gtf_ops.user_id": { keep: "the website's GTF ops journal (who clicked a re-roll; keyed by the click, applied by Camfrog login)" },
   "action_ttl_config.actor": { deny: NAME },
   // 1.99ou: escrow/ledger.js - an escrowed stake follows its account (a refund / payout also resolves merged ids)
   "escrow_holds.user_id": M(),
