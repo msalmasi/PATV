@@ -251,6 +251,7 @@ async function runMonetary(did, nowS, guarantee, { actor = "schedule", via = "si
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
     const inputs = await G.monetary(nowS, did, guarantee);
     const plan = E.planMonetary(inputs);
+    const planned = JSON.parse(JSON.stringify(plan));       // the plan as planned (the legs below get their amounts fixed)
     if (plan.issuance.error && plan.issuance.mode === "pct") throw new Halt(plan.issuance.error, "E_SUPPLY");
     const month = E.monthOf(nowS);
     const capNote = async (source, wanted, room) => C.effect(`cap_hit:${source}-${month}`, { engine: "monetary", period: did, kind: "cap_hit",
@@ -278,7 +279,7 @@ async function runMonetary(did, nowS, guarantee, { actor = "schedule", via = "si
     const result = { floor_mint: plan.floor_mint, issuance: plan.issuance.amount, guarantee_paid: plan.guarantee_paid, excess: plan.excess,
                      ceiling_action: plan.ceiling_action, activity_paid: act ? act.paid : 0, activity_people: act ? Object.values(act.state).filter((s) => s === "paid").length : 0,
                      done_legs: doneLegs, skipped, notes, actor, via };
-    await C.putRun("monetary", did, { state: "done", boundary: E.dayStart(nowS), via, inputs, plan, result });
+    await C.putRun("monetary", did, { state: "done", boundary: E.dayStart(nowS), via, inputs, plan: planned, result });
     await require("../escrow/ledger").emitInTx("policy", "monetary_done", null, Object.assign({ did }, summary(result, ["floor_mint", "issuance", "guarantee_paid", "excess", "ceiling_action", "activity_paid", "activity_people"])));
     return { ok: true, plan, result };
   });
@@ -306,7 +307,8 @@ async function runBurn(period, nowS, { actor = "accrual", via = "site", inflight
                                                                                    actor, actor_kind: "auto" } });
       await require("../escrow/ledger").emitInTx("policy", "burned", null, { id, amount: amt });
     }
-    await C.putRun("burn", period, { state: "done", via, result: { amount: amt, id, balance_before: bal, inflight } });
+    // an empty slot isn't recorded (one row every 5 minutes for nothing); the next slot looks again
+    if (amt > 0) await C.putRun("burn", period, { state: "done", via, result: { amount: amt, id, balance_before: bal, inflight } });
     return { ok: true, amount: amt, id };
   });
 }
