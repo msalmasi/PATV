@@ -629,7 +629,8 @@ function register(app, { isBotToken, addUser, patSupply }) {
                                                flow: b.flow, type: b.type, counterparty: b.counterparty })));
   app.post("/api/pools/turf-inbox/pending", bot(async (b) => ({ ok: true, legs: await inboxPending({ olderMs: Number(b.older_s) >= 0 ? Number(b.older_s) * 1000 : 120000, limit: b.limit }) })));
   app.post("/api/pools/turf-inbox/ack", bot(async (b) => ({ ok: true, acked: await inboxAck(b.keys) })));
-  app.post("/api/pools/admin/import", bot((b) => importFromPepe(b)));
+  // 1.99sy: the cutover export (pools + journals) is far bigger than the global 100 KB JSON limit (index.js skips this path)
+  app.post("/api/pools/admin/import", require("express").json({ limit: "32mb" }), bot((b) => importFromPepe(b)));
   app.post("/api/pools/admin/export", bot(() => exportState()));
   app.post("/api/pools/admin/rollback", bot((b) => rollbackToPepe({ key: b.key, actor: b.actor })));
 

@@ -1350,7 +1350,8 @@ function register(app, { isBotToken, addUser, patSupply }) {
     await setMeta("cfg", b.cfg);
     return { ok: true };
   }));
-  app.post("/api/gangs/admin/import", bot((b) => importFromPepe(b)));
+  // 1.99sy: the gangs export can exceed the global 100 KB JSON limit (index.js skips this path)
+  app.post("/api/gangs/admin/import", require("express").json({ limit: "32mb" }), bot((b) => importFromPepe(b)));
   app.post("/api/gangs/admin/export", bot(() => exportState()));
   app.post("/api/gangs/admin/rollback", bot((b) => rollbackToPepe({ key: b.key, actor: b.actor })));
 
