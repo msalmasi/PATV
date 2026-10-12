@@ -62,6 +62,7 @@
     <a class="ds-tab" href="#prime">📺 <%- t('owner.nav_prime') %></a>
     <a class="ds-tab" href="#stage">🎬 <%- t('owner.nav_stage') %></a>
     <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
+    <% if (camfrog) { %><a class="ds-tab" href="#soundboard">🔊 <%- t('owner.nav_sb') %></a><% } %>
     <a class="ds-tab" href="#can">❓ <%- t('owner.nav_can') %></a>
   </div></nav>
 
@@ -227,6 +228,14 @@
   <% } %>
 <% } %>
 
+  <% if (!guide && locals.camfrog) { %>
+  <section class="ds-card lg" id="soundboard" aria-labelledby="poSbH">
+    <h2 class="ds-h2" id="poSbH"><span class="dot"></span>🔊 <%- t('owner.sb_h') %></h2>
+    <p class="po-why"><%- t('owner.sb_why', { store: '<a href="/soundboards">/soundboards</a>' }) %></p>
+    <div id="poSb" data-slug="<%= slug %>"><p class="ds-meta"><%- t('owner.sb_loading') %></p></div>
+  </section>
+  <% } %>
+
   <section class="ds-card lg" id="can" aria-labelledby="poCanH">
     <h2 class="ds-h2" id="poCanH"><span class="dot"></span>❓ <%- t('owner.can_h') %></h2>
     <p class="po-why"><%- t('owner.can_why') %></p>
@@ -255,5 +264,6 @@
   </section>
 </main>
 <% if (!guide) { %><script src="/public/js/pad-owner.js?v=1" defer></script><% } %>
+<% if (!guide && locals.camfrog) { %><script src="/public/js/pad-sb-owner.js?v=1" defer></script><% } %>
 </body>
 </html>

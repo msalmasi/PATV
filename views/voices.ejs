@@ -1,0 +1,98 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /voices and /voices/mine - 1.99rh (voicestore.js): the voice store (browse, ▶ preview, buy an unlock, what you own) and,
+    for a voice's owner, its controls (prices within the bands, your cut, listed / free text / soundboards, pause) + the
+    !clonemyvoice status (voiceclone.js). Client: public/js/voices.js %>
+<%- include('layout', { title: mine ? t('vs.mine_title') : t('vs.title'), user: user }) %>
+<style>
+  .vsx .vs-grid { display: grid; gap: var(--ds-sp-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+  .vsx .vs-card { display: grid; gap: var(--ds-sp-2); align-content: start; }
+  .vsx .vs-top { display: flex; align-items: center; gap: var(--ds-sp-2); }
+  .vsx .vs-play { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--ds-ac-bg); color: var(--ds-text-strong); cursor: pointer; flex: none; font-size: 15px; }
+  .vsx .vs-play:disabled { opacity: .4; cursor: default; }
+  .vsx .vs-play:focus-visible { box-shadow: var(--ds-focus-ring); outline: 0; }
+  .vsx .vs-name { font-weight: 700; color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .vsx .vs-prices { display: flex; flex-wrap: wrap; gap: 6px var(--ds-sp-3); font-size: 13.5px; color: var(--ds-text-2); }
+  .vsx .vs-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--ds-sp-3); }
+  .vsx .vs-msg { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); margin: 0; }
+  .vsx .vs-msg.ok { color: var(--ds-ok); } .vsx .vs-msg.bad { color: var(--ds-danger); }
+  .vsx .vs-set { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); min-height: 52px; border-top: 1px solid var(--ds-line-soft); padding: var(--ds-sp-2) 0; }
+  .vsx .vs-set:first-of-type { border-top: 0; }
+  .vsx .vs-set > div { min-width: 0; }
+  .vsx .vs-nums { display: grid; gap: var(--ds-sp-2); grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); }
+  .vsx [hidden] { display: none !important; }
+</style>
+<%
+  const num = (n) => (t.num ? t.num(Math.round(Number(n) || 0)) : Math.round(Number(n) || 0).toLocaleString('en-US'));
+  const kindChip = (v) => v.kind === 'clone' ? `<span class="ds-chip">${t('vs.kind_clone')}</span>` : `<span class="ds-chip ok">${t('vs.kind_stock')}</span>`;
+%>
+<main class="ds-page vsx" id="vsx">
+<% if (mine) { %>
+  <a class="ds-back" href="/voices">← <%- t('vs.back') %></a>
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🗣️</span> <%- t('vs.mine_eyebrow') %></span>
+    <h1><%- t('vs.mine_h1') %></h1>
+    <p class="ds-lead"><%- t('vs.mine_lead') %></p>
+  </header>
+  <% if (locals.lk) { %>
+  <div class="ds-stats"><div class="ds-stat"><span><%- t('lk.s_held') %></span><b class="gold"><%= num(lk.held) %></b><small>PAT</small></div>
+    <div class="ds-stat"><span><%- t('lk.s_paid') %></span><b class="up"><%= num(lk.paid) %></b><small>PAT</small></div></div>
+  <% } %>
+  <% if (locals.clone) { %><%- include('partials/voice-clone', { clone: clone, t: t }) %><% } %>
+  <% if (!mine.voices.length) { %>
+    <section class="ds-card"><p class="ds-empty"><%- t('vs.mine_none') %></p></section>
+  <% } %>
+  <% mine.voices.forEach((v) => { %>
+  <section class="ds-card lg" data-vs-voice="<%= v.id %>" aria-label="<%= v.display %>">
+    <h2 class="ds-h2"><span class="dot"></span><%= v.display %> <%- kindChip(v) %> <span class="ds-chip <%= v.status === 'active' ? 'ok' : 'warn' %>"><%- t('vs.status.' + v.status) %></span></h2>
+    <div class="vs-set"><div><b><%- t('vs.listed') %></b><p class="ds-meta"><%- t('vs.listed_tip') %></p></div>
+      <label class="ds-switch"><input type="checkbox" data-vs-flag="listed" <%= v.listed ? 'checked' : '' %> aria-label="<%- t('vs.listed') %>"><span></span></label></div>
+    <div class="vs-set"><div><b><%- t('vs.free_text') %></b><p class="ds-meta"><%- t('vs.free_text_tip') %></p></div>
+      <label class="ds-switch"><input type="checkbox" data-vs-flag="allow_free_text" <%= v.allow_free_text ? 'checked' : '' %> aria-label="<%- t('vs.free_text') %>"><span></span></label></div>
+    <div class="vs-set"><div><b><%- t('vs.soundboard') %></b><p class="ds-meta"><%- t('vs.soundboard_tip') %></p></div>
+      <label class="ds-switch"><input type="checkbox" data-vs-flag="allow_soundboard" <%= v.allow_soundboard ? 'checked' : '' %> aria-label="<%- t('vs.soundboard') %>"><span></span></label></div>
+    <form class="ds-form" data-vs-prices novalidate>
+      <div class="vs-nums">
+        <label class="ds-field"><span class="ds-label"><%- t('vs.price_use') %></span><input class="ds-in" type="number" name="price_use" min="0" max="<%= bands.use_max %>" step="1" value="<%= v.price_use %>"><small class="ds-hint"><%- t('vs.price_use_band', { max: num(bands.use_max) }) %></small></label>
+        <label class="ds-field"><span class="ds-label"><%- t('vs.price_unlock') %></span><input class="ds-in" type="number" name="price_unlock" min="0" max="<%= bands.unlock_max %>" step="1000" value="<%= v.price_unlock %>"><small class="ds-hint"><%- t('vs.price_unlock_band', { min: num(bands.unlock_min), max: num(bands.unlock_max) }) %></small></label>
+        <label class="ds-field"><span class="ds-label"><%- t('vs.royalty') %></span><input class="ds-in" type="number" name="royalty_pct" min="<%= bands.roy_min %>" max="<%= bands.roy_max %>" step="1" value="<%= Math.max(bands.roy_min, Math.min(bands.roy_max, v.royalty_pct || 30)) %>"><small class="ds-hint"><%- t('vs.royalty_band', { min: bands.roy_min, max: bands.roy_max }) %></small></label>
+      </div>
+      <div class="ds-actions"><button class="ds-btn" type="submit"><%- t('vs.save') %></button>
+        <% if (v.status === 'active') { %><button class="ds-btn ghost" type="button" data-vs-status="paused"><%- t('vs.pause') %></button><% } else if (v.status === 'paused') { %><button class="ds-btn ghost" type="button" data-vs-status="active"><%- t('vs.resume') %></button><% } %></div>
+    </form>
+    <p class="vs-msg" role="status" aria-live="polite"></p>
+  </section>
+  <% }) %>
+<% } else { %>
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🗣️</span> <%- t('vs.eyebrow') %></span>
+    <h1><%- t('vs.h1') %></h1>
+    <p class="ds-lead"><%- t('vs.lead') %></p>
+    <div class="ds-ctas"><a class="ds-btn ghost" href="/voices/mine"><%- t('vs.mine_link') %></a><a class="ds-btn ghost" href="/soundboards"><%- t('vs.sb_link') %></a></div>
+  </header>
+  <div class="vs-filters ds-seg" role="group" aria-label="<%- t('vs.filter') %>">
+    <button type="button" class="ds-btn sm" data-vs-filter="all" aria-pressed="true"><%- t('vs.f_all') %></button>
+    <button type="button" class="ds-btn sm ghost" data-vs-filter="stock" aria-pressed="false"><%- t('vs.f_stock') %></button>
+    <button type="button" class="ds-btn sm ghost" data-vs-filter="clone" aria-pressed="false"><%- t('vs.f_clone') %></button>
+    <button type="button" class="ds-btn sm ghost" data-vs-filter="free" aria-pressed="false"><%- t('vs.f_free') %></button>
+    <button type="button" class="ds-btn sm ghost" data-vs-filter="owned" aria-pressed="false"><%- t('vs.f_owned') %></button>
+  </div>
+  <p class="vs-msg" id="vsMsg" role="status" aria-live="polite"></p>
+  <% if (!d.voices.length) { %><section class="ds-card"><p class="ds-empty"><%- t('vs.none') %></p></section><% } %>
+  <div class="vs-grid">
+    <% d.voices.forEach((v) => { %>
+    <section class="ds-card vs-card" data-kind="<%= v.kind %>" data-free="<%= v.free ? 1 : 0 %>" data-owned="<%= v.owned ? 1 : 0 %>" aria-label="<%= v.display %>">
+      <div class="vs-top"><button type="button" class="vs-play" data-audio="<%= v.sample || '' %>" <%= v.sample ? '' : 'disabled' %> aria-label="<%- t('vs.preview') %>: <%= v.display %>">▶</button>
+        <div><div class="vs-name"><%= v.display %></div><div><%- kindChip(v) %><% if (v.owner) { %> <span class="ds-meta"><%- t('vs.by', { who: t.esc(v.owner) }) %></span><% } %></div></div></div>
+      <div class="vs-prices"><span><%- v.free ? t('vs.free_use') : t('vs.per_use', { pat: num(v.price_use) }) %></span>
+        <% if (v.price_unlock > 0) { %><span><%- t('vs.unlock', { pat: num(v.price_unlock) }) %></span><% } %></div>
+      <p class="ds-meta"><%- t('vs.use_it', { cmd: '<code>!say -v ' + t.esc(v.display) + ' …</code>' }) %></p>
+      <div><% if (v.owned) { %><span class="ds-chip ok"><%- v.mine ? t('vs.yours') : t('vs.owned') %></span><% } else if (v.price_unlock > 0) { %>
+        <% if (d.signed) { %><button type="button" class="ds-btn gold" data-vs-buy="<%= v.id %>"><%- t('vs.buy', { pat: num(v.price_unlock) }) %></button><% } else { %><a class="ds-btn ghost" href="/login?next=%2Fvoices"><%- t('sb.signin') %></a><% } %>
+      <% } %></div>
+    </section>
+    <% }) %>
+  </div>
+  <p class="ds-meta"><%- t('vs.clone_note', { cmd: '<code>!clonemyvoice</code>' }) %></p>
+<% } %>
+</main>
+<script src="/public/js/voices.js?v=1" defer></script>

@@ -14,7 +14,8 @@
 // ANTI-FARMING (applied when a cut is booked; what isn't paid stays in the hold - the platform keeps it):
 //   * never to the payer themselves, nor between linked accounts (welcome_bonus dup_of either way, account_merges)
 //   * the subject's account must be >= min_age_days old and level >= min_level (7 / 3)
-//   * per payer -> subject pair: at most pair_day_cap a UTC day (25,000) - the rest is forfeited
+//   * per payer -> subject pair: at most pair_day_cap a UTC day (25,000) - the rest is forfeited (one-off purchases - a voice
+//     unlock, a pack - are exempt: the catalogue bounds them)
 //   * per subject: at most subject_day_cap RELEASED a day (250,000) - the rest stays held for the next days
 //   * an opted-out subject earns nothing for that kind (Pepe refuses the command before charging anyway)
 //   * staff can FREEZE a subject (an alt finding): nothing is released while frozen; "clawback" forfeits what's held
@@ -50,6 +51,7 @@ const DEFAULTS = Object.freeze({
   pct: DEFAULT_PCT,
 });
 const DAY = 24 * 3600 * 1000;
+const PAIR_EXEMPT = new Set(["voice_unlock", "sb_pack"]);
 const TICK_MS = 10 * 60 * 1000;
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const REF_RE = /^[\w:.\-]{1,160}$/;
@@ -268,7 +270,8 @@ async function book(it) {
       continue;
     }
     let ok = mine;
-    if (CONFIG.pair_day_cap > 0 && payerId) ok = Math.max(0, Math.min(mine, CONFIG.pair_day_cap - (await pairToday(payerId, s.userId, day))));
+    // one-off purchases (a voice unlock, a pack) are bounded by the catalogue itself - the pair cap is for repeat farming
+    if (CONFIG.pair_day_cap > 0 && payerId && !PAIR_EXEMPT.has(cmd)) ok = Math.max(0, Math.min(mine, CONFIG.pair_day_cap - (await pairToday(payerId, s.userId, day))));
     if (ok > 0) {
       await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}`, amount: ok, status: "held", release_after: t + CONFIG.hold_hours * 3600 * 1000 }));
       held += ok;

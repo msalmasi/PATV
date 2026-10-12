@@ -871,7 +871,7 @@
     "!voices"
    ],
    "summary": "The voice store.",
-   "details": "The **voice store**. Lists every voice Pepe can speak in, which are free, which cost PAT per use, which you can buy outright, and which you already own. (Aliases: `!voiceshop`, `!voicestore`.)",
+   "details": "The **voice store**. Lists every voice Pepe can speak in, which are free, which cost PAT per use, which you can buy outright, and which you already own. (Aliases: `!voiceshop`, `!voicestore`.)\n\nThe voice store with previews of every voice: [/voices](/voices).",
    "examples": [
     "!voiceshop",
     "!voicestore"
@@ -893,7 +893,7 @@
     "!buyvoice [voice]"
    ],
    "summary": "Buy unlimited use of a voice — one payment, yours forever, in every room.",
-   "details": "Buy **unlimited use** of a voice — one payment, yours forever, in every room. After that `!say <text> -v <voice>` costs you nothing extra. Some voices pay a **royalty** to the person they were cloned from; the rest of what you pay goes to the vault of the room you used it in (Fort Knox when there's no room). (Alias: `!voicebuy`.)",
+   "details": "Buy **unlimited use** of a voice — one payment, yours forever, in every room. After that `!say <text> -v <voice>` costs you nothing extra. Some voices pay a **royalty** to the person they were cloned from; the rest of what you pay goes to the vault of the room you used it in (Fort Knox when there's no room). (Alias: `!voicebuy`.)\n\nThe voice store with previews of every voice: [/voices](/voices).",
    "examples": [
     "!say <text> -v <voice>",
     "!voicebuy"
@@ -6929,12 +6929,59 @@
    "web": {
     "label": "Your likeness settings and earnings",
     "url": "/settings/likeness"
-   }
+   },
+   "webchat": true
+  },
+  {
+   "id": "soundboard",
+   "title": "!sb [clip]",
+   "category": "music",
+   "role": "everyone",
+   "commands": [
+    "!sb",
+    "!soundboard"
+   ],
+   "aliases": [
+    "!soundboards"
+   ],
+   "syntax": [
+    "!sb",
+    "!sb <clip>",
+    "!sb room|global|season|packs",
+    "!sb on|off",
+    "!sb add <label> = <line> [-v <voice>] [-p <price>]",
+    "!sb addmic <label> @user",
+    "!sb remove <label>"
+   ],
+   "summary": "Make Pepe play a soundboard clip on the mic - a few PAT per play, free for clips you own.",
+   "details": "`!sb` lists what you can play in this room: the room's own board (Prime Time pads), the **global** board, this season's board and the **packs**. `!sb <clip>` plays one (the closest label wins). Per play: common **1,000**, rare **2,500**, epic **5,000** PAT, the season board 2,500 (unlimited with a Season Pass), a room clip whatever its owner set - and **free** for packs you own. Legendary clips are own-only.\n\nEveryone shares the limits, owners and Season Pass included: one sound per person every 45 s (6 per 10 min), the same clip once per room every 3 minutes, one sound per room every 12 s, at most 3 waiting. Season Pass clips jump the soundboard queue. A clip that can't start within a minute is refunded.\n\nPad owners and room mods: `!sb on|off` switches it in the room (`!say` isn't affected), `!sb add <label> = <line> -v <voice> -p <price>` adds a line Pepe says, `!sb addmic <label> @user` adds that person's last mic-up (unless they typed `!likeness soundboard off` - they earn 30% of every paid play), `!sb remove <label>`. Clips in a community (cloned) voice pay its owner 30%.\n\nBuy packs, the season board, All-Access and legendaries - and preview every clip - at [/soundboards](/soundboards), or tap 🔊 Soundboard on a pad's Live tab.",
+   "examples": [
+    "!sb",
+    "!sb airhorn",
+    "!sb packs",
+    "!sb add Welcome = Welcome to the pond! -p 500",
+    "!sb addmic Classic @moxier"
+   ],
+   "keywords": [
+    "soundboard",
+    "sound",
+    "clip",
+    "airhorn",
+    "pack",
+    "legendary",
+    "season pass"
+   ],
+   "web": {
+    "label": "The soundboard store",
+    "url": "/soundboards"
+   },
+   "webchat": true
   }
  ],
  "undocumented": [
   "!escrow",
+  "!plusrooms",
   "!retention"
  ],
- "hash": "254efea1c95aed53"
+ "hash": "4ef19c460fbfc4b6"
 }

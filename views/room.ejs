@@ -624,6 +624,7 @@
         <% } else { %>
           <div id="rmRelay"></div>
           <div id="rmPtt"></div>
+          <div id="rmSb" data-slug="<%= room.slug %>"></div><%# 1.99rh: the 🔊 Soundboard drawer (public/js/pad-soundboard.js) %>
         <% } %>
       </div>
     </section>
@@ -643,7 +644,7 @@
       </section>
     </aside>
   </div>
-  <link rel="stylesheet" href="/public/css/room-bridge.css?v=7">
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=8">
   <script src="/public/js/room-bridge.js?v=10"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=2"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=2">
@@ -652,6 +653,7 @@
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
   <script src="/public/js/room-mod.js?v=10"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
+  <script src="/public/js/pad-soundboard.js?v=1" defer></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {

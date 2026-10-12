@@ -1,0 +1,85 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /soundboards - 1.99rh (soundboards.js): the soundboard store - packs (preview each clip, buy), the season board, All-Access,
+    legendaries, and what you own. Playing happens in a Camfrog room (!sb <clip>) or a pad's 🔊 drawer. Client: public/js/soundboards.js %>
+<%- include('layout', { title: t('sb.title'), user: user }) %>
+<style>
+  .sbx .sb-grid { display: grid; gap: var(--ds-sp-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .sbx .sb-clips { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--ds-sp-2) 0 0; padding: 0; list-style: none; }
+  .sbx .sb-clip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px 4px 6px; border-radius: var(--ds-r-pill);
+                  border: 1px solid var(--ds-line); background: var(--ds-sunken); font-size: 13.5px; color: var(--ds-text-2); }
+  .sbx .sb-clip.rare { border-color: #3b6fd8; } .sbx .sb-clip.epic { border-color: #9b4bd8; } .sbx .sb-clip.legendary { border-color: #e5a00d; }
+  .sbx .sb-play { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--ds-ac-bg); color: var(--ds-text-strong); cursor: pointer; flex: none; }
+  .sbx .sb-play:disabled { opacity: .4; cursor: default; }
+  .sbx .sb-play:focus-visible { box-shadow: var(--ds-focus-ring); outline: 0; }
+  .sbx .sb-price { color: var(--ds-text-muted); font-size: 12px; }
+  .sbx .sb-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); margin-top: var(--ds-sp-3); }
+  .sbx .sb-msg { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); margin: 0; }
+  .sbx .sb-msg.ok { color: var(--ds-ok); } .sbx .sb-msg.bad { color: var(--ds-danger); }
+  .sbx .sb-how { margin: 0; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
+  .sbx .sb-how code { font-family: var(--ds-font-mono); font-size: 12.5px; background: var(--ds-sunken); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xs); padding: 1px 6px; }
+</style>
+<%
+  const num = (n) => (t.num ? t.num(Math.round(Number(n) || 0)) : Math.round(Number(n) || 0).toLocaleString('en-US'));
+  const PAT = (n) => `<span class="ds-pat"><b>${num(n)}</b><small>PAT</small></span>`;
+  const rar = (r) => t('sb.rarity.' + (r || 'common'));
+  const clipList = (clips) => clips.map((c) => `<li class="sb-clip ${c.rarity}"><button type="button" class="sb-play" data-audio="${c.audio || ''}" ${c.audio ? '' : 'disabled'} aria-label="${t('sb.preview')}: ${t.esc(c.label)}">▶</button><span>${t.esc(c.emoji || '')} ${t.esc(c.label)}</span><span class="sb-price">${c.free ? '∞' : num(c.price)}</span></li>`).join('');
+  const buyBtn = (item, price, owned, extra) => owned ? `<span class="ds-chip ok">${t('sb.owned')}</span>` :
+    (d.signed ? `<button type="button" class="ds-btn gold" data-sb-buy="${item}">${t('sb.buy', { pat: num(price) })}</button>${extra || ''}` : `<a class="ds-btn ghost" href="/login?next=%2Fsoundboards">${t('sb.signin')}</a>`);
+%>
+<main class="ds-page sbx" id="sbx">
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🔊</span> <%- t('sb.eyebrow') %></span>
+    <h1><%- t('sb.h1') %></h1>
+    <p class="ds-lead"><%- t('sb.lead') %></p>
+    <% if (!d.on) { %><div class="ds-note warn"><div><%- t('sb.off') %></div></div><% } %>
+  </header>
+
+  <section class="ds-card" aria-labelledby="sbHowH">
+    <h2 class="ds-h3" id="sbHowH"><%- t('sb.how_h') %></h2>
+    <p class="sb-how"><%- t('sb.how', { cmd: '<code>!sb</code>', play: '<code>!sb airhorn</code>', common: num(d.cfg.price_common), rare: num(d.cfg.price_rare), epic: num(d.cfg.price_epic) }) %></p>
+    <% if (d.allowance && d.allowance.per) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🎟️</span><div><%- t('sb.sp_allowance', { n: d.allowance.left }) %></div></div><% } %>
+    <p class="sb-msg" id="sbMsg" role="status" aria-live="polite"></p>
+  </section>
+
+  <% if (d.season) { %>
+  <section class="ds-card lg" aria-labelledby="sbSeasonH">
+    <h2 class="ds-h2" id="sbSeasonH"><span class="dot"></span><%= d.season.emoji %> <%= d.season.name %> <span class="ds-chip"><%- t('sb.season_chip') %></span></h2>
+    <p class="sb-how"><%- t('sb.season_why', { pat: num(d.cfg.price_season) }) %></p>
+    <ul class="sb-clips"><%- clipList(d.season.clips) %></ul>
+    <div class="sb-foot"><%- PAT(d.season.price) %><%- buyBtn(d.season.item, d.season.price, d.season.owned) %></div>
+  </section>
+  <% } %>
+
+  <h2 class="ds-h2"><span class="dot"></span>🎁 <%- t('sb.packs_h') %></h2>
+  <div class="sb-grid">
+    <% d.packs.forEach((p) => { %>
+    <section class="ds-card" aria-label="<%= p.name %>">
+      <h3 class="ds-h3"><%= p.emoji %> <%= p.name %> <% if (p.kind === 'voice') { %><span class="ds-chip"><%- t('sb.voice_pack') %></span><% } %></h3>
+      <p class="ds-meta"><%= p.desc %></p>
+      <ul class="sb-clips"><%- clipList(p.clips) %></ul>
+      <div class="sb-foot"><%- PAT(p.price) %><%- buyBtn(p.item, p.price, p.owned, d.allowance && d.allowance.left && p.kind === 'standard' ? ` <button type="button" class="ds-btn ghost" data-sb-buy="${p.item}" data-sb-free="1">${t('sb.use_free')}</button>` : '') %></div>
+    </section>
+    <% }) %>
+  </div>
+
+  <section class="ds-card lg" aria-labelledby="sbGlobalH">
+    <h2 class="ds-h2" id="sbGlobalH"><span class="dot"></span><%= d.global.emoji %> <%= d.global.name %></h2>
+    <p class="sb-how"><%- t('sb.global_why') %></p>
+    <ul class="sb-clips"><%- clipList(d.global.clips) %></ul>
+    <div class="sb-foot"><span><b><%- t('sb.all_access') %></b> · <%- PAT(d.all_access.price) %></span><%- buyBtn(d.all_access.item, d.all_access.price, d.all_access.owned) %></div>
+  </section>
+
+  <h2 class="ds-h2"><span class="dot"></span>🌟 <%- t('sb.legend_h') %></h2>
+  <div class="sb-grid">
+    <% d.legends.forEach((g) => { %>
+    <section class="ds-card" aria-label="<%= g.label %>">
+      <h3 class="ds-h3"><%= g.emoji %> <%= g.label %></h3>
+      <p class="ds-meta"><%= g.desc %><% if (g.supply) { %> · <%- t('sb.left', { n: Math.max(0, g.supply - g.sold), of: g.supply }) %><% } %></p>
+      <ul class="sb-clips"><li class="sb-clip legendary"><button type="button" class="sb-play" data-audio="<%= g.audio || '' %>" <%= g.audio ? '' : 'disabled' %> aria-label="<%- t('sb.preview') %>: <%= g.label %>">▶</button><span><%- t('sb.rarity.legendary') %><%- g.live ? ' · ' + t('sb.live_voice') : '' %></span></li></ul>
+      <div class="sb-foot"><%- PAT(g.price) %><%- (g.supply && g.sold >= g.supply && !g.owned) ? `<span class="ds-chip warn">${t('sb.sold_out')}</span>` : buyBtn(g.item, g.price, g.owned) %></div>
+    </section>
+    <% }) %>
+  </div>
+  <p class="ds-meta"><%- t('sb.report_note') %></p>
+</main>
+<script src="/public/js/soundboards.js?v=1" defer></script>

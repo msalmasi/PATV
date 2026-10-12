@@ -192,7 +192,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/premium/stripe/webhook" ? next() : express.json()(req, res, next)));
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1175,6 +1175,8 @@ require("./cryptoweb").register(app, { addUser });   // 1.99ks: stablecoin donat
 require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
 require("./likeness").register(app, { addUser, isBotToken });   // 1.99qw: likeness royalties (subject cuts, held + released daily) + opt-outs (/settings/likeness)
+require("./soundboards").register(app, { addUser, isBotToken });   // 1.99rh: 🔊 soundboards (packs, season board, legendaries, pad boards, the drawer, /soundboards)
+require("./voicestore").register(app, { addUser, isBotToken });   // 1.99rh: 🗣️ the voice store (/voices, /voices/mine) - Pepe is a client
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 require("./golive").register(app, { addUser });   // 1.99kp: 🎥 go-live alerts + stream-start announcements
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them

@@ -122,6 +122,12 @@ const RULES = {
   "likeness_ledger.subject_user_id": M(), "likeness_ledger.payer_user_id": M(),
   "likeness_ledger.subject_login": { deny: NAME }, "likeness_ledger.payer_login": { deny: NAME },
   "likeness_frozen.user_id": M({ key: [] }), "likeness_frozen.by": { deny: NAME },
+  // 1.99rh soundboards.js / voicestore.js: owned packs + clips (both own one: one row stays), reports, owned voices
+  "sb_owned.user_id": M({ key: ["item"] }), "sb_owned.payer_id": M(),
+  "sb_reports.user_id": M({ key: ["clip_id"] }),
+  "sb_clips.created_by": M(), "sb_clips.subject_login": { deny: NAME },
+  "voice_owned.user_id": M({ key: ["voice_id"] }),
+  "voices.owner_user_id": M(), "voices.owner_login": { deny: NAME },
   // shop / markets / bounties / Pepe
   "shop_orders.buyer_id": M(), "shop_orders.seller_id": M(), "shop_orders.buyer_input": { deny: TEXT },
   "shop_orders.gift_from": M() /* 1.99lz: who paid for a gift */, "shop_orders.gift_note": { deny: TEXT },

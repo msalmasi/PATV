@@ -65,6 +65,29 @@
    ]
   },
   {
+   "id": "soundboard",
+   "area": "room",
+   "title": "Run your room's soundboard",
+   "commands": [
+    "!sb"
+   ],
+   "syntax": [
+    "!sb on",
+    "!sb off",
+    "!sb add <label> = <line> [-v <voice>] [-p <price>]",
+    "!sb addmic <label> @user",
+    "!sb remove <label>"
+   ],
+   "web": "/p/{slug}/owner#soundboard",
+   "setting": "soundboard_enabled",
+   "howto": "Prime Time pads get a soundboard of their own (8 clips, Prime Time Plus 24): lines Pepe says in a voice you pick, or someone's mic clip (unless they opted out - they earn a cut of every paid play). You set each clip's price and your pad gets 20% of every paid play. !sb off switches it off in your room (!say isn't affected).",
+   "owner_only": true,
+   "code": [
+    "pepe_soundboard.py:_sb_can_edit",
+    "pepe_soundboard.py:handle_sb"
+   ]
+  },
+  {
    "id": "language",
    "area": "room",
    "title": "Pick Pepe's language in your room",

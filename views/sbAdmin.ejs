@@ -1,0 +1,38 @@
+<%- include('partials/admin-open', { title: 'Soundboards, voices & likeness', user: user, section: 'soundboards', admIsAdmin: true }) %>
+<!-- views/sbAdmin.ejs — 1.99rh: soundboards (soundboards.js), the voice store (voicestore.js), likeness royalties (likeness.js) and
+     voice clones (voiceclone.js). Everything is loaded and changed through their /api/.../admin routes (public/js/sb-admin.js). -->
+<style>
+  #sbAdm .sa-tbl { overflow-x: auto; }
+  #sbAdm table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  #sbAdm th, #sbAdm td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--ds-line-soft); vertical-align: top; }
+  #sbAdm td.r, #sbAdm th.r { text-align: right; }
+  #sbAdm .sa-acts { display: flex; flex-wrap: wrap; gap: 4px; }
+  #sbAdm .sa-msg { min-height: 1.2em; font-size: 13px; }
+  #sbAdm .sa-msg.bad { color: var(--ds-danger); } #sbAdm .sa-msg.ok { color: var(--ds-ok); }
+  #sbAdm .sa-cfg { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); }
+  #sbAdm .sa-cfg label { display: grid; gap: 2px; font-size: 12.5px; color: var(--ds-text-2); }
+  #sbAdm input[type=number], #sbAdm input[type=text] { width: 100%; min-height: 32px; }
+  #sbAdm section { margin-bottom: var(--ds-sp-4); }
+  #sbAdm section[id] { scroll-margin-top: 72px; }
+</style>
+<main id="sbAdm">
+  <h1><span class="ds-ic" aria-hidden="true">🔊</span> Soundboards, voices &amp; likeness</h1>
+  <p class="lede">Clips are rendered by Pepe (VoiceBox) and cached on both sides. A clip reported by <b><%= d.cfg.report_hide %></b> people is hidden until you
+    restore or remove it. Public pages: <a href="/soundboards">/soundboards</a>, <a href="/voices">/voices</a>, <a href="/settings/likeness">/settings/likeness</a>.</p>
+  <p class="sa-msg" id="saMsg" role="status" aria-live="polite"></p>
+  <section class="ds-card" id="reports"><h2 class="ds-h2">🚩 Reported clips</h2><div class="sa-tbl" data-sa="reports">Loading…</div></section>
+  <section class="ds-card" id="renders"><h2 class="ds-h2">🛠️ Renders waiting / failed</h2><div class="sa-tbl" data-sa="renders">Loading…</div>
+    <h3 class="ds-h3">Sales</h3><div class="sa-tbl" data-sa="sales"></div><h3 class="ds-h3">Plays (7 days)</h3><div class="sa-tbl" data-sa="plays"></div></section>
+  <section class="ds-card" id="voices"><h2 class="ds-h2">🗣️ Voices</h2>
+    <p class="ds-meta">Owner = a Camfrog login (blank: a stock voice). "Consent on file (manual)" marks a voice whose owner's consent is kept outside PATV
+      (D10: the voices cloned before !clonemyvoice). Prices: per use 0-10,000; unlock 0 or 100,000-1,000,000 for owners (staff may go higher).</p>
+    <div class="sa-tbl" data-sa="voices">Loading…</div></section>
+  <section class="ds-card" id="clones"><h2 class="ds-h2">🎙️ Voice clones (!clonemyvoice)</h2><div class="sa-tbl" data-sa="clones">Loading…</div></section>
+  <section class="ds-card" id="likeness"><h2 class="ds-h2">🪞 Likeness royalties</h2><div data-sa="likeness">Loading…</div></section>
+  <section class="ds-card" id="settings"><h2 class="ds-h2">⚙️ Settings</h2>
+    <h3 class="ds-h3">Soundboards</h3><form data-sa-cfg="sb" class="sa-cfg"></form>
+    <h3 class="ds-h3">Likeness</h3><form data-sa-cfg="lk" class="sa-cfg"></form>
+    <h3 class="ds-h3">Voice clones</h3><form data-sa-cfg="vc" class="sa-cfg"></form></section>
+</main>
+<script src="/public/js/sb-admin.js?v=1" defer></script>
+<%- include('partials/admin-close') %>

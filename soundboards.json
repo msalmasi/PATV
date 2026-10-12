@@ -1,0 +1,87 @@
+{
+  "_comment": "Soundboard catalogue (1.99rh, soundboards.js). Clips are TTS lines Pepe renders once (VoiceBox) and caches; 'voice' null = Pepe's default voice, 'random' = a random free stock voice picked at render time (re-rolled every play when 'live'). Rarity sets the per-use price (common 1,000 / rare 2,500 / epic 5,000) and the length cap (6 / 8 / 10 s; legendaries 12 s). Ids are permanent: never reuse or rename one (ownership and plays point at them). Packs: owners play their clips free (cooldowns still apply); anyone else pays per use. Legendaries are own-only. The season board is unlimited with a Season Pass and per-use (2,500) for everyone else.",
+  "global": {
+    "name": "Global board",
+    "emoji": "🌍",
+    "clips": [
+      { "id": "g-airhorn", "label": "Air horn", "emoji": "📯", "rarity": "common", "text": "Bwaaaaap! Bwaaap bwaaap!" },
+      { "id": "g-letsgo", "label": "Let's go", "emoji": "🚀", "rarity": "common", "text": "Let's goooooo!" },
+      { "id": "g-noway", "label": "No way", "emoji": "😲", "rarity": "common", "text": "No. Way. No way!" },
+      { "id": "g-sus", "label": "Sus", "emoji": "🤨", "rarity": "common", "text": "Hmm. That's kinda sus." },
+      { "id": "g-applause", "label": "Applause", "emoji": "👏", "rarity": "common", "text": "Clap clap clap clap. Bravo. Bravo." },
+      { "id": "g-bruh", "label": "Bruh", "emoji": "😐", "rarity": "common", "text": "Bruuuuh." },
+      { "id": "g-micdrop", "label": "Mic drop", "emoji": "🎤", "rarity": "rare", "text": "And that, ladies and gentlemen, is a mic drop." },
+      { "id": "g-touchgrass", "label": "Touch grass", "emoji": "🌱", "rarity": "rare", "text": "Somebody in here needs to go touch some grass." },
+      { "id": "g-ratio", "label": "Ratio", "emoji": "📉", "rarity": "rare", "text": "Ratio. Plus L. Plus you fell off." },
+      { "id": "g-dramatic", "label": "Dun dun dunnn", "emoji": "🎭", "rarity": "rare", "text": "Dun. Dun. Dunnnnnn." },
+      { "id": "g-breaking", "label": "Breaking news", "emoji": "📰", "rarity": "epic", "text": "Breaking news. Local frog is still the best thing in this chatroom. More at eleven." },
+      { "id": "g-legend", "label": "Living legend", "emoji": "🏆", "rarity": "epic", "text": "Everybody stand up. A living legend just touched the mic." }
+    ]
+  },
+  "packs": [
+    {
+      "id": "hype", "name": "Hype Pack", "emoji": "🔥", "desc": "Hype up whoever's on the mic.", "kind": "standard",
+      "clips": [
+        { "id": "hype-fire", "label": "Fire", "emoji": "🔥", "rarity": "common", "text": "That was fire. Straight fire." },
+        { "id": "hype-sheesh", "label": "Sheesh", "emoji": "🥶", "rarity": "common", "text": "Sheeeeeeesh." },
+        { "id": "hype-goat", "label": "The GOAT", "emoji": "🐐", "rarity": "common", "text": "The goat has spoken." },
+        { "id": "hype-encore", "label": "Encore", "emoji": "🎶", "rarity": "common", "text": "Encore! Encore! One more time!" },
+        { "id": "hype-crowd", "label": "Crowd goes wild", "emoji": "🙌", "rarity": "rare", "text": "And the crowd goes absolutely wild!" },
+        { "id": "hype-banger", "label": "Banger", "emoji": "💥", "rarity": "rare", "text": "Certified banger. Run it back." },
+        { "id": "hype-mvp", "label": "MVP", "emoji": "🏅", "rarity": "rare", "text": "M V P. M V P. M V P!" },
+        { "id": "hype-hall", "label": "Hall of fame", "emoji": "🏛️", "rarity": "epic", "text": "Put that one in the hall of fame. Frame it. Hang it on the wall." }
+      ]
+    },
+    {
+      "id": "drama", "name": "Drama Pack", "emoji": "🍿", "desc": "For when the room gets spicy.", "kind": "standard",
+      "clips": [
+        { "id": "drama-tea", "label": "Spill the tea", "emoji": "🫖", "rarity": "common", "text": "Ooh. Spill the tea." },
+        { "id": "drama-popcorn", "label": "Popcorn", "emoji": "🍿", "rarity": "common", "text": "Hold on, let me get my popcorn." },
+        { "id": "drama-oop", "label": "Oop", "emoji": "😬", "rarity": "common", "text": "Oop. Oh no. Oh no no no." },
+        { "id": "drama-receipts", "label": "Receipts", "emoji": "🧾", "rarity": "common", "text": "Somebody pull up the receipts." },
+        { "id": "drama-salty", "label": "Salty", "emoji": "🧂", "rarity": "rare", "text": "Why is it so salty in here all of a sudden?" },
+        { "id": "drama-clown", "label": "Clown", "emoji": "🤡", "rarity": "rare", "text": "Honk honk. The circus is in town." },
+        { "id": "drama-objection", "label": "Objection", "emoji": "⚖️", "rarity": "rare", "text": "Objection! Your honor, this is outrageous." },
+        { "id": "drama-plot", "label": "Plot twist", "emoji": "🌀", "rarity": "epic", "text": "Plot twist. Nobody saw that coming. Nobody." }
+      ]
+    },
+    {
+      "id": "classics", "name": "Pepe Classics", "emoji": "🐸", "desc": "Pepe's greatest hits, on demand.", "kind": "standard",
+      "clips": [
+        { "id": "cl-ribbit", "label": "Ribbit", "emoji": "🐸", "rarity": "common", "text": "Ribbit. Ribbit." },
+        { "id": "cl-feelsgood", "label": "Feels good", "emoji": "😌", "rarity": "common", "text": "Feels good, man." },
+        { "id": "cl-join", "label": "Join join join", "emoji": "🚨", "rarity": "common", "text": "Join. Join. Join. Join." },
+        { "id": "cl-vault", "label": "The vault", "emoji": "🏦", "rarity": "common", "text": "The vault is calling. Do you hear it?" },
+        { "id": "cl-pond", "label": "Back to the pond", "emoji": "💧", "rarity": "rare", "text": "Alright. Everybody back to the pond." },
+        { "id": "cl-heist", "label": "Heist time", "emoji": "💰", "rarity": "rare", "text": "Masks on. It's heist time." },
+        { "id": "cl-bet", "label": "Bet", "emoji": "🎲", "rarity": "rare", "text": "Bet. Put your points where your mouth is." },
+        { "id": "cl-sad", "label": "Sad frog", "emoji": "😢", "rarity": "epic", "text": "And on that day, a frog shed a single tear. The end." }
+      ]
+    }
+  ],
+  "seasons": [
+    {
+      "id": "2026-10", "name": "Spooky Season", "emoji": "🎃", "from": "2026-10-01", "to": "2026-11-01",
+      "clips": [
+        { "id": "s2610-boo", "label": "Boo", "emoji": "👻", "text": "Boo! Did I scare you?" },
+        { "id": "s2610-witch", "label": "Witch laugh", "emoji": "🧙", "text": "Hee hee hee hee hee!" },
+        { "id": "s2610-trick", "label": "Trick or treat", "emoji": "🍬", "text": "Trick or treat! Smell my feet!" },
+        { "id": "s2610-spooky", "label": "Spooky", "emoji": "🎃", "text": "Ooooooh. Spooky." },
+        { "id": "s2610-thunder", "label": "Thunder", "emoji": "⛈️", "text": "Krakaboom. It was a dark and stormy night." },
+        { "id": "s2610-zombie", "label": "Zombie", "emoji": "🧟", "text": "Braaaaains. Braaaaaaaains." },
+        { "id": "s2610-vampire", "label": "Vampire", "emoji": "🧛", "text": "I vant to suck your points." },
+        { "id": "s2610-ghost", "label": "Ghosted", "emoji": "💀", "text": "You just got ghosted." },
+        { "id": "s2610-candy", "label": "Candy", "emoji": "🍭", "text": "Give me all the candy. All of it." },
+        { "id": "s2610-cat", "label": "Black cat", "emoji": "🐈‍⬛", "text": "Meeeow. Bad luck, buddy." },
+        { "id": "s2610-scream", "label": "Scream", "emoji": "😱", "text": "Aaaaaaaaah!" },
+        { "id": "s2610-moon", "label": "Full moon", "emoji": "🌕", "text": "It's a full moon tonight. Awoooooo!" }
+      ]
+    }
+  ],
+  "legendaries": [
+    { "id": "lg-gawk", "label": "Gawk gawk gawk", "emoji": "🎰", "text": "Gawk gawk gawk gawk gawk!", "voice": "random", "live": true, "price": 20000000,
+      "desc": "A different voice every time you play it." },
+    { "id": "lg-founder", "label": "Founder", "emoji": "👑", "text": "Make way. A founder of the pond has entered the room.", "price": 10000000, "supply": 25, "numbered": true,
+      "desc": "One of 25, numbered." }
+  ]
+}

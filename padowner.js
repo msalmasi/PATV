@@ -65,6 +65,7 @@ const WEB_CAPS = Object.freeze([
   { id: "web_golive", area: "stage", route: "POST /api/rooms/:slug/golive", where: "/p/{slug}/settings?tab=stage" },
   { id: "web_prime", area: "tier", route: "GET /premium", where: "/premium?pad={slug}" },
   { id: "web_boost", area: "tier", route: "POST /api/rooms/:slug/boost", where: "/p/{slug}" },
+  { id: "web_soundboard", area: "room", route: "POST /api/rooms/:slug/soundboard/clips", where: "/p/{slug}/owner#soundboard" },   // 1.99rh: soundboards.js
 ]);
 
 let ready = null;
