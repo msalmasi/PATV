@@ -156,7 +156,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
     }
     const result = { boundary: plan.boundary, totals: plan.totals, release_per_day: plan.release_per_day, incentives_after: incAfter,
                      pools_before: before, pools_after: after, conserved: before === after, shares_redeemed: redeemed, done_legs: doneLegs, actor, via };
-    const rec = Object.assign({}, plan, { state: "done", actor, manual: false, done_legs: doneLegs, done: nowS, incentives_after: incAfter,
+    const rec = Object.assign(JSON.parse(JSON.stringify(plan)), { state: "done", actor, manual: false, done_legs: doneLegs, done: nowS, incentives_after: incAfter,
                                           pools_before: before, pools_after: after, conserved: before === after, via: "site" });
     for (const [v, sh] of Object.entries(redeemed)) if (rec.vaults[v]) rec.vaults[v].shares_redeemed = sh;
     await C.effect(`epoch_record:${eid}`, { engine: "treasury", period: eid, kind: "epoch_record", data: { eid, rec } });
