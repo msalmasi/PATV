@@ -355,15 +355,29 @@ async function donate(user, { usd, back } = {}) {
   // 1.99tq: a donation promo is decided by when the session was created (the quote the donor saw) - while one is live the
   // session can be paid for 31 minutes only (Stripe's minimum is 30), so a promo quote can't be paid hours after the promo
   let promo = null;
-  try { promo = await require("./donationpromo").live(user.userId, clock()); } catch (e) { promo = null; }
-  const s = await api("/checkout/sessions", {
-    mode: "payment", client_reference_id: user.userId,
-    line_items: { 0: { quantity: 1, price_data: { currency: "usd", unit_amount: n * 100, product_data: { name: "Support PATV" } } } },
-    metadata: promo ? { kind: "donation", userId: user.userId, promo: promo.id } : { kind: "donation", userId: user.userId },
-    ...(promo ? { expires_at: Math.floor(clock() / 1000) + SESSION_S } : {}),
-    success_url: site() + page + "?donate=success",
-    cancel_url: site() + page + "?donate=cancel",
-  });
+  const DP = require("./donationpromo");
+  try { promo = await DP.live(user.userId, clock()); } catch (e) { promo = null; }
+  // 1.99ts: the daily donation limit - today's credited + open checkouts + this one must fit, or no checkout opens (we never
+  // take money we won't credit). The amount is held while the session can be paid (31 minutes when a limit applies).
+  let hold;
+  try { hold = await DP.reserveCheckout(user.userId, n * 100, clock()); } catch (e) {
+    if (e && e.refuse) throw new P.Refuse(e.status || 409, e.message);
+    throw e;
+  }
+  const short = !!promo || hold.limited;
+  const expiresAt = Math.floor(clock() / 1000) + SESSION_S;
+  let s;
+  try {
+    s = await api("/checkout/sessions", {
+      mode: "payment", client_reference_id: user.userId,
+      line_items: { 0: { quantity: 1, price_data: { currency: "usd", unit_amount: n * 100, product_data: { name: "Support PATV" } } } },
+      metadata: promo ? { kind: "donation", userId: user.userId, promo: promo.id } : { kind: "donation", userId: user.userId },
+      ...(short ? { expires_at: expiresAt } : {}),
+      success_url: site() + page + "?donate=success",
+      cancel_url: site() + page + "?donate=cancel",
+    });
+  } catch (e) { await DP.releaseHold(hold.ref).catch(() => {}); throw e; }
+  await DP.attachSession(hold.ref, s.id, expiresAt * 1000 + 60000);
   return { url: s.url, id: s.id };
 }
 
@@ -450,6 +464,8 @@ async function handleEvent(ev) {
           const id = "don-" + ev.id;
           const paidAt = Number(obj.created) > 0 ? Number(obj.created) * 1000 : Number(ev.created) * 1000;
           const terms = await DP.creditTerms({ ref: id, userId: target, cents, paidAt, via: "card" });
+          // 1.99ts: counts toward the day's limit; a race past it (two checkouts at once) is still credited - the money is taken - and flagged
+          await DP.recordCredit({ ref: id, sessionId: obj.id || null, userId: target, via: "card", paidAt, cents });
           const pat = terms.pat, bonus = terms.bonus;
           await ledger.postOrThrow(target, pat, "donation", { transactionId: id, source: "stripe donation", note: DP.noteOf(terms) });
           await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
@@ -489,7 +505,9 @@ async function handleEvent(ev) {
     } else if (ev.type === "checkout.session.expired") {
       // 1.99th: an unpaid Plus checkout timed out (or was closed): its spot is free again
       const r = await runQuery("DELETE FROM premium_plus_holds WHERE id = ? OR session = ?", [String(dm.hold || ""), String(obj.id || "")]);
-      outcome = r.changes ? "hold-released" : "ignored";
+      // 1.99ts: an unpaid donation checkout gives its share of the daily limit back
+      const d = dm.kind === "donation" && obj.id ? await require("./donationpromo").expireSession(obj.id) : null;
+      outcome = r.changes || (d && d.changes) ? "hold-released" : "ignored";
     } else if (ev.type === "customer.subscription.updated" && ["active", "trialing", "past_due"].includes(obj.status) && !obj.pending_update &&
                priceId("prime_plus") && subPrices(obj).includes(priceId("prime_plus")) &&
                (await getQuery("SELECT 1 FROM premium_subs WHERE stripe_sub = ? AND tier = 'prime_time'", [obj.id]))[0]) {

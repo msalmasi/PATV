@@ -35,6 +35,7 @@
     <input type="number" id="donateUsd" min="1" max="<%= D.max || 1000 %>" step="1" value="5" inputmode="numeric">
     <button type="button" class="btn" id="donateGo">💳 <%- t('donate.button') %><%- D.stripe.test ? ' ' + t('premium.test_mode') : '' %></button>
   </div>
+  <p class="msg" id="donateDaily" hidden></p>
   <p class="msg" id="donateMsg" role="status" aria-live="polite"></p>
   <%# 1.99kz: the Support PATV page (/support) from the wallet and the store too, when the crypto pointer above isn't shown %>
   <% if (!D.onSupport && !D.crypto) { %><p><a href="/support"><%- t('support.more_ways') %></a></p><% } %>
@@ -44,6 +45,19 @@
   var _t = window.__t || function (k, d) { return d; };
   var box = document.getElementById('donate'), go = document.getElementById('donateGo'), msg = document.getElementById('donateMsg');
   if (!box || !go) return;
+  // 1.99ts: the viewer's daily donation limit (signed in + a limit set): "You can donate $X more today"
+  var dleft = null;
+  fetch('/api/donate/promo', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+    var d = j && j.daily, el = document.getElementById('donateDaily');
+    if (!d || !el) return;
+    dleft = Math.floor(d.left_cents / 100);
+    el.textContent = dleft >= 1 ? _t('js.donate.daily_left', 'You can donate ${left} more today (resets at midnight {tz} time).', { left: dleft, tz: String(d.tz).replace(/_/g, ' ') })
+      : _t('js.donate.daily_none', 'You have reached today’s donation limit - it resets at midnight {tz} time.', { tz: String(d.tz).replace(/_/g, ' ') });
+    el.hidden = false;
+    var inp = document.getElementById('donateUsd');
+    if (inp && dleft >= 1) { inp.max = String(Math.min(Number(inp.max) || dleft, dleft)); if (Number(inp.value) > dleft) inp.value = String(dleft); }
+    if (dleft < 1) go.disabled = true;
+  }).catch(function () {});
   go.addEventListener('click', function () {
     var v = String(document.getElementById('donateUsd').value || '').trim();
     var n = Number(v), max = Number(document.getElementById('donateUsd').max) || 1000;

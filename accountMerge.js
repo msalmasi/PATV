@@ -82,6 +82,11 @@ const RULES = {
   "donation_promos.updated_by": { deny: "1.99tq: the admin's username who last edited the donation promo (audit label)" },
   "donation_promos.ended_by": { deny: "1.99tq: the admin's username who ended the donation promo (audit label)" },
   "donation_promo_settings.actor": { deny: NAME },
+  // 1.99ts: the daily donation limit - a member's donations by day move (a merged account shares ONE daily limit); an override
+  // folds into the target's (the target's own override wins when both have one)
+  "donation_usd_log.user_id": M(),
+  "donation_limit_overrides.user_id": M({ key: [], merge: { limit_usd: "OLD_IF_NULL" } }),
+  "donation_limit_overrides.actor": { deny: NAME },
   "bot_credit_log.userId": M(),     // 1.99jw: botcredits.js - the log of every bot credit / House move
   "blackjack.userId": M(), "poker_cashier.userId": M(), "poker_now_games.userId": M(), "user_redemptions.userId": M({ key: ["code"] }),
   "pat_burns.actor": M(), "pat_burns.actor_kind": { deny: FLAG },

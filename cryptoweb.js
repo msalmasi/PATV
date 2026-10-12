@@ -95,6 +95,8 @@ function register(app, { addUser, noTimers } = {}) {
         promo: promo ? { rate: promo.rate, capCents: promo.allowance_cents, budgetPat: promo.budget_left_pat == null ? null : promo.budget_left_pat, bonusBase: promo.bonus_base } : null });
       res.render("support", {
         promo, quoteFor,
+        // 1.99ts: the viewer's daily donation limit (null = none / signed out)
+        daily: me ? await require("./donationpromo").daily(me.userId).catch(() => null) : null,
         user: me ? me.username : null, title: req.t ? req.t("support.title") : "Support PATV",
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
         wallets: me ? await CP.wallets(me.userId) : [], payments: me ? await CP.mine(me.userId) : [],

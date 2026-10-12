@@ -79,8 +79,20 @@
         <label><input type="checkbox" id="dpEEnabled"> Enabled</label>
         <div class="adm-actions"><button type="submit">Save</button><button type="button" class="adm-btn ghost" id="dpECancel">Cancel</button></div>
       </form>
+      <h3>Daily donation limit</h3>
+      <p class="adm-help">A member may donate at most this many dollars per day, card and crypto together; the day is midnight to midnight in the economy time zone (<b id="dlTz">America/New_York</b>), by when a donation was paid. 0 or blank = no limit. It is separate from a promo's per-donor cap (which only decides how much earns the promo rate) - both apply. Card: a checkout that would go over is refused (today's paid + open checkouts count), so we never take money we won't credit; a race that still goes over is credited and flagged below. Crypto: an over-limit transfer is <b>held</b> on <a href="/admin/crypto#held">/admin/crypto</a> - credit it or mark it refunded off-site. One member's override: <a href="/admin/users#donlimit">Users &amp; Accounts → Donation limit</a>.</p>
+      <div class="adm-kv" id="dlKv"><div><b>Status</b><span>loading…</span></div></div>
+      <div class="adm-tbl"><table aria-label="Donations credited over the daily limit">
+        <thead><tr><th>Paid (UTC)</th><th>Member</th><th>Via</th><th class="num">Amount</th><th class="num">Limit</th></tr></thead>
+        <tbody id="dlFlagged"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
+      </table></div>
+      <div class="adm-tbl"><table aria-label="Per-member daily limit overrides">
+        <thead><tr><th>Member</th><th class="num">Limit / day</th><th>Set by</th><th>Note</th></tr></thead>
+        <tbody id="dlOverrides"><tr><td colspan="4" class="empty">loading…</td></tr></tbody>
+      </table></div>
       <h3>Settings</h3>
       <form class="adm-form" id="dpSet" autocomplete="off">
+        <label for="dpDaily">Daily donation limit per member ($, 0 = none)<input type="number" id="dpDaily" min="0" max="1000000" step="1"></label>
         <label for="dpCeil">Ceiling (× the normal rate, 1-50)<input type="number" id="dpCeil" min="1" max="50" step="0.01"></label>
         <label for="dpSBonus">Default bonus base<select id="dpSBonus"></select></label>
         <label for="dpSTz">Time zone ("today only")<input type="text" id="dpSTz" maxlength="64"></label>
@@ -92,7 +104,7 @@
         <tbody id="dpLog"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
       </table></div>
     </div>
-    <script src="/public/js/admin-donpromo.js?v=1" defer></script>
+    <script src="/public/js/admin-donpromo.js?v=2" defer></script>
   <% } %>
 </section>
 

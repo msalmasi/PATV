@@ -88,7 +88,29 @@
       [new Date(r.at).toISOString().slice(0, 16).replace('T', ' '), r.admin || '', what].forEach(function (t) { var td = document.createElement('td'); td.textContent = t; tr.appendChild(td); });
       lg.appendChild(tr);
     });
+    renderLimit();
     if (!(view.log || []).length) { var tr2 = document.createElement('tr'), c2 = document.createElement('td'); c2.colSpan = 3; c2.className = 'empty'; c2.textContent = 'No changes yet.'; tr2.appendChild(c2); lg.appendChild(tr2); }
+  }
+  // 1.99ts: the daily donation limit
+  function cellRow(tb, vals, numFrom) {
+    var tr = document.createElement('tr');
+    vals.forEach(function (t, i) { var td = document.createElement('td'); td.textContent = t; if (numFrom != null && i >= numFrom && i < numFrom + 2) td.className = 'num'; tr.appendChild(td); });
+    tb.appendChild(tr);
+  }
+  function emptyRow(tb, n, text) { var tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = n; td.className = 'empty'; td.textContent = text; tr.appendChild(td); tb.appendChild(tr); }
+  function renderLimit() {
+    var L = view.limit || {};
+    $('dlTz').textContent = L.tz || view.settings.tz;
+    var k = $('dlKv'); k.textContent = '';
+    k.appendChild(kv('Default limit', L.default_usd ? '$' + fmt(L.default_usd) + ' per member per day' : 'none (0)'));
+    k.appendChild(kv('Credited over the limit', fmt(L.flagged_count) + ' donation' + (L.flagged_count === 1 ? '' : 's') + ' (card races / approved crypto holds)'));
+    k.appendChild(kv('Crypto held for the limit', fmt(L.crypto_held) + ' waiting on /admin/crypto'));
+    var f = $('dlFlagged'); f.textContent = '';
+    (L.flagged || []).forEach(function (r) { cellRow(f, [new Date(r.paid_at).toISOString().slice(0, 16).replace('T', ' '), r.username || r.user_id, r.via, usd(r.usd_cents), r.limit_cents ? usd(r.limit_cents) : '—'], 3); });
+    if (!(L.flagged || []).length) emptyRow(f, 5, 'Nothing over the limit.');
+    var o = $('dlOverrides'); o.textContent = '';
+    (L.overrides || []).forEach(function (r) { cellRow(o, [r.username || r.user_id, r.limit_usd ? '$' + fmt(r.limit_usd) : 'no limit', r.actor || '', r.note || ''], 1); });
+    if (!(L.overrides || []).length) emptyRow(o, 4, 'No overrides.');
   }
   function openEdit(p) {
     editing = p;
@@ -105,7 +127,7 @@
       var first = !view; view = j;
       if (first) {
         fillBonus($('dpBonus'), j.settings.bonus_base); fillBonus($('dpSBonus'), j.settings.bonus_base);
-        $('dpCeil').value = j.settings.ceiling_x; $('dpSTz').value = j.settings.tz;
+        $('dpCeil').value = j.settings.ceiling_x; $('dpSTz').value = j.settings.tz; $('dpDaily').value = j.settings.daily_limit_usd || 0;
         $('dpStarts').value = toLocalInput(j.now); $('dpEnds').value = toLocalInput(j.today_ends);
       }
       render(); preview();
@@ -133,7 +155,7 @@
   $('dpECancel').addEventListener('click', function () { $('dpEdit').style.display = 'none'; editing = null; });
   $('dpSet').addEventListener('submit', function (ev) {
     ev.preventDefault();
-    api('/api/admin/donpromo/settings', { ceiling_x: $('dpCeil').value, bonus_base: $('dpSBonus').value, tz: $('dpSTz').value })
+    api('/api/admin/donpromo/settings', { ceiling_x: $('dpCeil').value, bonus_base: $('dpSBonus').value, tz: $('dpSTz').value, daily_limit_usd: $('dpDaily').value === '' ? 0 : $('dpDaily').value })
       .then(function (j) { msg(Object.keys(j.changed).length ? 'Settings saved.' : 'Nothing changed.'); load(); }, function (e) { msg(e.message, true); });
   });
   modeUi();

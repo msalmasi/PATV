@@ -55,7 +55,7 @@
     var b = ev.target.closest && ev.target.closest('[data-cx]');
     if (!b) return;
     var action = b.getAttribute('data-cx');
-    var note = window.prompt(action === 'approve' ? 'Approve and credit this payment? Optional note:' : action === 'reject' ? 'Reject (no PAT)? Reason:' : action === 'reverify' ? 'Ask the verifier RPC again? Note:' : 'Ignore (never credit)? Reason:', '');
+    var note = window.prompt(action === 'approve' ? 'Approve and credit this payment? Optional note:' : action === 'reject' ? 'Reject (no PAT)? Reason:' : action === 'reverify' ? 'Ask the verifier RPC again? Note:' : action === 'refunded' ? 'Mark refunded off-site (no PAT; the donor is told)? Note (e.g. the refund tx):' : 'Ignore (never credit)? Reason:', '');
     if (note === null) return;
     b.disabled = true;
     post('/api/crypto/admin/decide', { id: b.getAttribute('data-id'), action: action, note: note })

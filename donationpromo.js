@@ -52,7 +52,8 @@ const BONUS_BASES = Object.freeze({
   equivalent: "on what the donation would have credited at the normal rate (the incentive budget gets the same as without a promo)",
   all: "on every PAT credited, promo portion included (the old formula: bonus = pat x %)",
 });
-const DEFAULTS = Object.freeze({ ceiling_x: 10, bonus_base: "normal", tz: "America/New_York" });
+const DEFAULTS = Object.freeze({ ceiling_x: 10, bonus_base: "normal", tz: "America/New_York",
+  daily_limit_usd: 0 });                     // 1.99ts: per-member daily donation limit in USD (0 = none); a per-member override wins
 const S = { ...DEFAULTS };
 
 let clock = () => Date.now();
@@ -71,6 +72,13 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS donation_promo_credits_user ON donation_promo_credits (promo_id, user_id)");
       await runQuery("CREATE INDEX IF NOT EXISTS donation_promo_credits_key ON donation_promo_credits (promo_id, donor_key)");
       await runQuery("CREATE TABLE IF NOT EXISTS donation_promo_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER, actor TEXT)");
+      // 1.99ts: the daily donation limit - every donation's USD by account and by when it was paid (card: also the OPEN
+      // checkouts, so two tabs can't double up), and per-member overrides
+      await runQuery(`CREATE TABLE IF NOT EXISTS donation_usd_log (ref TEXT PRIMARY KEY, user_id TEXT NOT NULL, via TEXT NOT NULL, paid_at INTEGER NOT NULL,
+        usd_cents INTEGER NOT NULL, status TEXT NOT NULL, expires INTEGER, session TEXT, over_limit INTEGER NOT NULL DEFAULT 0, limit_cents INTEGER, created INTEGER)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_usd_log_user ON donation_usd_log (user_id, paid_at)");
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_usd_log_session ON donation_usd_log (session)");
+      await runQuery("CREATE TABLE IF NOT EXISTS donation_limit_overrides (user_id TEXT PRIMARY KEY, limit_usd INTEGER NOT NULL, updated INTEGER, actor TEXT, note TEXT)");
       for (const r of await getQuery("SELECT key, value FROM donation_promo_settings")) {
         if (!Object.prototype.hasOwnProperty.call(DEFAULTS, r.key)) continue;
         try { S[r.key] = JSON.parse(r.value); } catch (e) { /* keep the default */ }
@@ -241,13 +249,15 @@ async function quote(userId, usd, now = clock()) {
   const cents = Math.round(Number(usd) * 100);
   if (!Number.isFinite(cents) || cents <= 0 || cents > MAX_CAP_USD * 100 * 10) throw refuse("Pick an amount in dollars.");
   const T = normalTerms();
+  const D = await daily(userId, now);      // 1.99ts: the daily limit (null = none)
+  const lim = D ? { left_cents: D.left_cents, over: cents > D.left_cents } : null;
   const p = await promoAt(now);
   const rate = p ? effectiveRate(p, T.rate) : 0;
-  if (!p || !rate) return { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
+  if (!p || !rate) return { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null, limit: lim };
   const u = await usage(p.id, identity(userId));
   const s = split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
                     promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } });
-  return { ...s, promo: { id: p.id, label: p.label || null } };
+  return { ...s, promo: { id: p.id, label: p.label || null }, limit: lim };
 }
 
 // ── time ──
@@ -266,10 +276,158 @@ function nextMidnight(ms, tz = S.tz) {
   t = g - offsetMs(t, tz);
   return t;
 }
+/** 1.99ts: the economy day (tz) around `ms`: {start, end} - midnight to midnight, New York by default. */
+function dayWindow(ms, tz = S.tz) {
+  const end = nextMidnight(ms, tz);
+  const o = wall(ms, tz);
+  const g = Date.UTC(+o.year, +o.month - 1, +o.day);
+  let t = g - offsetMs(g, tz);
+  t = g - offsetMs(t, tz);
+  return { start: t, end };
+}
 const validTz = (z) => { try { new Intl.DateTimeFormat("en-US", { timeZone: String(z) }); return true; } catch (e) { return false; } };
 
+// ── 1.99ts: the daily donation limit ──
+// A member may donate at most `limit` USD per economy day (S.tz, midnight to midnight; by when the donation was PAID - card:
+// the checkout's creation; crypto: first seen). The limit = their override (donation_limit_overrides; 0 = no limit for
+// them) or the default (daily_limit_usd; 0 = none). It caps the TOTAL USD; a promo's per-donor cap only decides how much of
+// it earns the promo rate - both apply. Used today = credited donations + OPEN card checkouts (not expired, not paid yet).
+//   card:   donate() reserves the amount before Stripe (reserveCheckout, refused over the limit - we never take money we
+//           won't credit); the webhook credits it ALWAYS (the money is taken) and flags a race that went over (over_limit).
+//   crypto: an over-limit transfer is HELD for review (cryptopay hold_reason "daily_limit"): an admin credits it (the terms
+//           of the moment it was seen, promo included) or marks it refunded off-site.
+async function limitFor(userId) {
+  if (!userId) return 0;
+  const o = (await getQuery("SELECT limit_usd FROM donation_limit_overrides WHERE user_id = ?", [String(userId)]))[0];
+  const usd = o ? Number(o.limit_usd) : Number(S.daily_limit_usd) || 0;
+  return usd > 0 ? Math.floor(usd * 100) : 0;
+}
+async function dayUsed(userId, at, now, exceptRefs = []) {
+  const W = dayWindow(at);
+  const ex = exceptRefs.filter(Boolean);
+  const r = (await getQuery(`SELECT COALESCE(SUM(usd_cents),0) AS c FROM donation_usd_log WHERE user_id = ? AND paid_at >= ? AND paid_at < ?
+      AND (status = 'credited' OR (status = 'open' AND expires > ?))${ex.length ? ` AND ref NOT IN (${ex.map(() => "?").join(",")})` : ""}`,
+    [String(userId), W.start, W.end, now, ...ex]))[0];
+  return { used: Number(r.c) || 0, window: W };
+}
+/** The member's limit today: null (no limit) or {limit_cents, used_cents, left_cents, resets_at, tz, override}. */
+async function daily(userId, now = clock()) {
+  await init();
+  if (!userId) return null;
+  const limit = await limitFor(userId);
+  if (!limit) return null;
+  const u = await dayUsed(userId, now, now);
+  const o = (await getQuery("SELECT 1 FROM donation_limit_overrides WHERE user_id = ?", [String(userId)]))[0];
+  return { limit_cents: limit, used_cents: u.used, left_cents: Math.max(0, limit - u.used), resets_at: u.window.end, tz: S.tz, override: !!o };
+}
+/** Would `cents` paid at `at` take the member over that day's limit? (crypto) -> {over, limit_cents, used_cents} */
+async function limitCheck(userId, cents, at, now = clock()) {
+  await init();
+  const limit = await limitFor(userId);
+  if (!limit) return { over: false, limit_cents: 0, used_cents: 0 };
+  const u = await dayUsed(userId, at, now);
+  return { over: u.used + Math.floor(cents) > limit, limit_cents: limit, used_cents: u.used };
+}
+const usdTxt = (c) => "$" + (c / 100).toFixed(c % 100 ? 2 : 0);
+const tzName = () => String(S.tz).replace(/_/g, " ");
+/** Card: hold `cents` of today's allowance BEFORE opening a checkout; refused over the limit. -> {ref, limited} */
+async function reserveCheckout(userId, cents, now = clock()) {
+  await init();
+  return tx(async () => {
+    const limit = await limitFor(userId);
+    if (!limit) return { ref: null, limited: false };
+    const u = await dayUsed(userId, now, now);
+    const left = Math.max(0, limit - u.used);
+    if (cents > left) {
+      const whole = Math.floor(left / 100);
+      throw refuse(whole >= 1
+        ? `Today's donation limit: you can donate ${usdTxt(whole * 100)} more today (the day resets at midnight ${tzName()} time).`
+        : `You have reached today's donation limit (${usdTxt(limit)}). It resets at midnight ${tzName()} time.`, 409);
+    }
+    const ref = "hold:" + crypto.randomBytes(8).toString("hex");
+    await runQuery("INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, status, expires, limit_cents, created) VALUES (?, ?, 'card', ?, ?, 'open', ?, ?, ?)",
+      [ref, String(userId), now, cents, now + 5 * 60000, limit, now]);
+    return { ref, limited: true };
+  });
+}
+/** Card: the checkout opened - its hold now lasts as long as the session can be paid. */
+async function attachSession(ref, sessionId, expiresMs) {
+  if (!ref) return;
+  await runQuery("UPDATE donation_usd_log SET session = ?, expires = ? WHERE ref = ? AND status = 'open'", [String(sessionId), expiresMs, ref]);
+}
+/** Card: the checkout couldn't open - the hold goes. */
+async function releaseHold(ref) { if (ref) await runQuery("UPDATE donation_usd_log SET status = 'released' WHERE ref = ? AND status = 'open'", [ref]); }
+/** Card: Stripe says the checkout expired unpaid - its hold goes (it would lapse at `expires` anyway). */
+async function expireSession(sessionId) {
+  return runQuery("UPDATE donation_usd_log SET status = 'expired' WHERE session = ? AND status = 'open'", [String(sessionId)]);
+}
+/**
+ * A credited donation counts toward its day (call it inside the credit's transaction; idempotent per ref). Card: its open
+ * hold (by session) becomes the credited row. Over the limit anyway (a race / an admin-approved hold) -> over_limit = 1.
+ * -> {over, limit_cents, used_cents}
+ */
+async function recordCredit({ ref, sessionId = null, userId, via, paidAt, cents, now = clock() }) {
+  const run = async () => {
+    const had = (await getQuery("SELECT * FROM donation_usd_log WHERE ref = ? AND status = 'credited'", [String(ref)]))[0];
+    if (had) return { over: !!had.over_limit, limit_cents: had.limit_cents || 0, used_cents: null };
+    const hold = sessionId ? (await getQuery("SELECT ref FROM donation_usd_log WHERE session = ?", [String(sessionId)]))[0] : null;
+    const limit = await limitFor(userId);
+    const u = await dayUsed(userId, paidAt, now, [hold && hold.ref, ref]);
+    const over = !!limit && u.used + cents > limit;
+    if (hold) {
+      await runQuery("UPDATE donation_usd_log SET ref = ?, status = 'credited', usd_cents = ?, paid_at = ?, user_id = ?, over_limit = ?, limit_cents = ? WHERE ref = ?",
+        [String(ref), cents, paidAt, String(userId), over ? 1 : 0, limit || null, hold.ref]);
+    } else {
+      await runQuery(`INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, status, session, over_limit, limit_cents, created)
+                      VALUES (?, ?, ?, ?, ?, 'credited', ?, ?, ?, ?)`, [String(ref), String(userId), via, paidAt, cents, sessionId, over ? 1 : 0, limit || null, now]);
+    }
+    if (over) console.warn(`[donlimit] ${via} donation ${ref} took ${userId} over the day's limit (${usdTxt(u.used)} + ${usdTxt(cents)} > ${usdTxt(limit)}) - credited, flagged`);
+    return { over, limit_cents: limit, used_cents: u.used };
+  };
+  return inTx() ? run() : tx(run);
+}
+/** Admin: one member's override. limit "" / null -> removed (the default applies); 0 -> no limit for them; N -> $N a day. */
+async function setOverride(admin, userId, limit, note) {
+  await init();
+  await auditReady();
+  if (!userId) throw refuse("No such member.", 404);
+  let v = null;
+  if (!(limit === null || limit === undefined || limit === "")) {
+    v = int(limit);
+    if (!Number.isFinite(v) || v < 0 || v > 1000000) throw refuse("The limit is a whole number of dollars (0 = no limit for this member), or empty for the default.");
+  }
+  await tx(async () => {
+    const before = (await getQuery("SELECT limit_usd FROM donation_limit_overrides WHERE user_id = ?", [String(userId)]))[0] || null;
+    if (v === null) await runQuery("DELETE FROM donation_limit_overrides WHERE user_id = ?", [String(userId)]);
+    else await runQuery(`INSERT INTO donation_limit_overrides (user_id, limit_usd, updated, actor, note) VALUES (?, ?, ?, ?, ?)
+                         ON CONFLICT(user_id) DO UPDATE SET limit_usd = excluded.limit_usd, updated = excluded.updated, actor = excluded.actor, note = excluded.note`,
+      [String(userId), v, clock(), admin.username || admin.userId, note ? String(note).slice(0, 200) : null]);
+    await require("./adminaudit").record({ userId: admin.userId, username: admin.username }, "donation_limit", { userId: String(userId), username: null },
+      { what: "override", before: before ? before.limit_usd : null, after: v }, note || null);
+  });
+  return { user_id: String(userId), limit_usd: v, default_usd: S.daily_limit_usd };
+}
+async function overrideOf(userId) {
+  await init();
+  return (await getQuery("SELECT * FROM donation_limit_overrides WHERE user_id = ?", [String(userId)]))[0] || null;
+}
+/** Admin card: the limit's state, the overrides, and the over-limit credits (races / approved holds). */
+async function limitState() {
+  await init();
+  const flagged = await getQuery(`SELECT l.ref, l.user_id, u.username, l.via, l.paid_at, l.usd_cents, l.limit_cents FROM donation_usd_log l
+      LEFT JOIN users u ON u.userId = l.user_id WHERE l.over_limit = 1 AND l.status = 'credited' ORDER BY l.paid_at DESC LIMIT 50`).catch(() => []);
+  const n = (await getQuery("SELECT COUNT(*) AS n FROM donation_usd_log WHERE over_limit = 1 AND status = 'credited'"))[0].n;
+  const overrides = await getQuery(`SELECT o.user_id, u.username, o.limit_usd, o.updated, o.actor, o.note FROM donation_limit_overrides o
+      LEFT JOIN users u ON u.userId = o.user_id ORDER BY o.updated DESC LIMIT 100`).catch(() => []);
+  let held = 0;
+  try { held = (await getQuery("SELECT COUNT(*) AS n FROM crypto_payments WHERE status = 'held' AND hold_reason = 'daily_limit'"))[0].n; } catch (e) { held = 0; }
+  let log = [];
+  try { log = await require("./adminaudit").recent("donation_limit", 20); } catch (e) { log = []; }
+  return { default_usd: S.daily_limit_usd, tz: S.tz, flagged, flagged_count: n, overrides, crypto_held: held, log };
+}
+
 // ── admin ──
-const int = (v) => { if (v === null || v === undefined || v === "" || typeof v === "boolean") return null; const n = Number(v); return Number.isFinite(n) ? Math.floor(n) : NaN; };
+const int =(v) => { if (v === null || v === undefined || v === "" || typeof v === "boolean") return null; const n = Number(v); return Number.isFinite(n) ? Math.floor(n) : NaN; };
 const cleanLabel = (s) => String(s == null ? "" : s).replace(/[\u0000-\u001f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
 const hasCredits = async (id) => !!(await getQuery("SELECT 1 FROM donation_promo_credits WHERE promo_id = ? LIMIT 1", [id]))[0];
 async function overlapping(starts, ends, exceptId) {
@@ -428,6 +586,7 @@ async function end(admin, id) {
   return row;
 }
 const SETTING_CLEAN = {
+  daily_limit_usd: (v) => { const n = Math.floor(Number(v)); if (!Number.isFinite(n) || n < 0 || n > 1000000) throw refuse("The daily limit is a whole number of dollars (0 = no limit)."); return n; },
   ceiling_x: (v) => { const n = Math.round(Number(v) * 100) / 100; if (!Number.isFinite(n) || n < 1 || n > HARD_CEILING_X) throw refuse(`The ceiling is 1 to ${HARD_CEILING_X} times the normal rate.`); return n; },
   bonus_base: (v) => { if (!BONUS_BASES[v]) throw refuse("Unknown bonus base."); return String(v); },
   tz: (v) => { if (!validTz(v)) throw refuse("Unknown time zone."); return String(v); },
@@ -480,7 +639,7 @@ async function adminState() {
   }
   let log = [];
   try { log = await require("./adminaudit").recent("donation_promo", 30); } catch (e) { log = []; }
-  return { now, settings: { ...S }, normal: T, limits: { hard_ceiling_x: HARD_CEILING_X, max_days: MAX_DAYS, max_cap_usd: MAX_CAP_USD },
+  return { now, settings: { ...S }, normal: T, limit: await limitState(), limits: { hard_ceiling_x: HARD_CEILING_X, max_days: MAX_DAYS, max_cap_usd: MAX_CAP_USD },
            bonus_bases: BONUS_BASES, today_ends: nextMidnight(now), promos, log };
 }
 /** 1.99tq: promo PAT per UTC day (the supply history's "of which promo" line). */
@@ -512,11 +671,23 @@ function register(app, { addUser, noTimers } = {}) {
   // public: the live promo (+ your allowance), and ?usd=N -> what that would credit you right now
   app.get("/api/donate/promo", ...json(async (req) => {
     const uid = req.user && req.user.userId ? req.user.userId : null;
-    const out = { promo: await live(uid) };
+    const out = { promo: await live(uid), daily: await daily(uid) };
     if (req.query.usd !== undefined) out.quote = await quote(uid, req.query.usd);
     return out;
   }));
   app.get("/api/admin/donpromo", ...json(async () => adminState(), { admin: true }));
+  // 1.99ts: one member's daily donation limit override (the admin Users & Accounts page)
+  const userByName = async (name) => (await getQuery("SELECT userId, username FROM users WHERE lower(username) = lower(?)", [String(name || "").trim()]))[0] || null;
+  app.get("/api/admin/donlimit/user", ...json(async (req) => {
+    const u = await userByName(req.query.username);
+    if (!u) throw refuse("No such member.", 404);
+    return { user: u, override: await overrideOf(u.userId), today: await daily(u.userId), default_usd: S.daily_limit_usd, tz: S.tz };
+  }, { admin: true }));
+  app.post("/api/admin/donlimit/user", ...json(async (req, b) => {
+    const u = await userByName(b.username);
+    if (!u) throw refuse("No such member.", 404);
+    return { ...(await setOverride(req.user, u.userId, b.limit_usd, b.note)), username: u.username, today: await daily(u.userId) };
+  }, { admin: true }));
   app.post("/api/admin/donpromo/create", ...json(async (req, b) => ({ promo: await create(req.user, b) }), { admin: true }));
   app.post("/api/admin/donpromo/settings", ...json(async (req, b) => setSettings(req.user, b), { admin: true }));
   app.post("/api/admin/donpromo/:id/edit", ...json(async (req, b) => ({ promo: await edit(req.user, req.params.id, b) }), { admin: true }));
@@ -525,7 +696,8 @@ function register(app, { addUser, noTimers } = {}) {
 
 module.exports = {
   init, register, creditTerms, metaOf, noteOf, receiptLine, split, effectiveRate, live, liveCached, quote, create, edit, end, setSettings, adminState,
-  promoByDay, nextMidnight, donorKeyOf, refresh, Refuse, BONUS_BASES, DEFAULTS, MAX_DAYS, HARD_CEILING_X, MAX_CAP_USD,
+  promoByDay, nextMidnight, dayWindow, daily, limitCheck, reserveCheckout, attachSession, releaseHold, expireSession, recordCredit,
+  setOverride, overrideOf, limitState, donorKeyOf, refresh, Refuse, BONUS_BASES, DEFAULTS, MAX_DAYS, HARD_CEILING_X, MAX_CAP_USD,
   settings: () => ({ ...S }),
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

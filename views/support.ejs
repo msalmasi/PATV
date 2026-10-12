@@ -266,6 +266,8 @@
         <span class="bon" id="spCustBon"></span>
       </label>
     </div>
+    <% const DL = locals.daily || null; %>
+    <% if (DL) { %><p class="mut" id="spDaily" data-left="<%= DL.left_cents %>"><span class="ds-ic" aria-hidden="true">📅</span> <% if (DL.left_cents >= 100) { %><%- t('support.daily_left', { left: '<b>' + num(Math.floor(DL.left_cents / 100)) + '</b>', limit: num(DL.limit_cents / 100), tz: DL.tz.replace(/_/g, ' ') }) %><% } else { %><%- t('support.daily_none', { limit: num(DL.limit_cents / 100), tz: DL.tz.replace(/_/g, ' ') }) %><% } %></p><% } %>
     <p class="sum" id="spSum" aria-live="polite"><%- t('support.sum', { usd: 10, pat: '<b>' + num(patOf(10)) + '</b>', bonus: '<span class="plus">' + num(bonusOf(10)) + '</span>' }) %></p>
   </section>
 
@@ -366,7 +368,7 @@
                 <span><span class="amt"><%= (Number(p.usd_cents) / 100).toFixed(2) %> <%= p.token %></span>
                   <span class="meta"> · <a href="<%= p.explorer %>" target="_blank" rel="noopener noreferrer"><%= p.chain_name %> ↗</a> · <time data-ts="<%= p.seen %>"><%= new Date(Number(p.seen)).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time></span></span>
                 <span class="pp"><%= p.pat ? num(p.pat) + ' PAT' : '' %></span>
-                <span class="st <%= tn %>"><% if (sg) { %><span class="dots" aria-hidden="true"><i class="on<%= sg === 1 ? ' last' : '' %>"></i><i class="<%= sg >= 2 ? 'on' : '' %><%= sg === 2 ? ' last' : '' %>"></i><i class="<%= sg >= 3 ? 'on' : '' %>"></i></span><% } %><span class="lab"><%- t('support.status.' + p.status) %></span></span>
+                <span class="st <%= tn %>"><% if (sg) { %><span class="dots" aria-hidden="true"><i class="on<%= sg === 1 ? ' last' : '' %>"></i><i class="<%= sg >= 2 ? 'on' : '' %><%= sg === 2 ? ' last' : '' %>"></i><i class="<%= sg >= 3 ? 'on' : '' %>"></i></span><% } %><span class="lab"><%- t('support.status.' + (p.status === 'held' && p.hold_reason === 'daily_limit' ? 'held_limit' : p.status)) %></span></span>
               </li><% }) %>
             </ol>
             <% } %>
@@ -449,4 +451,4 @@
   </section>
 </main>
 <script src="/public/js/crypto-link.js?v=2" defer></script>
-<script src="/public/js/support.js?v=2" defer></script>
+<script src="/public/js/support.js?v=3" defer></script>

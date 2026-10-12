@@ -147,6 +147,9 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS crypto_payments_status ON crypto_payments (status, seen)");
       await runQuery("CREATE INDEX IF NOT EXISTS crypto_payments_src ON crypto_payments (src_addr)");
       await runQuery("CREATE INDEX IF NOT EXISTS crypto_payments_user ON crypto_payments (user_id)");
+      // 1.99ts: why a payment is held: "max" (over max_usd) or "daily_limit" (over the member's daily donation limit)
+      const pc = (await getQuery("SELECT name FROM pragma_table_info('crypto_payments')")).map((r) => r.name);
+      if (!pc.includes("hold_reason")) await runQuery("ALTER TABLE crypto_payments ADD COLUMN hold_reason TEXT");
       // watcher state per chain (EVM: last finalized block fully scanned; Solana: per token account in crypto_sol_cursors)
       await runQuery(`CREATE TABLE IF NOT EXISTS crypto_cursors (chain TEXT PRIMARY KEY, last_block INTEGER, head INTEGER, final_head INTEGER,
         recv TEXT, last_ok INTEGER, last_error TEXT, last_error_at INTEGER, errors INTEGER DEFAULT 0, next_try INTEGER DEFAULT 0)`);
@@ -458,9 +461,20 @@ async function settle(id, { force = false, actor = null } = {}) {
     let c = classify(p.usd_cents, owner);
     if (force && c === "held") c = "credit";
     if (c !== "credit") {
-      await runQuery("UPDATE crypto_payments SET status = ?, user_id = ? WHERE id = ?", [c, owner || null, id]);
+      await runQuery("UPDATE crypto_payments SET status = ?, user_id = ?, hold_reason = ? WHERE id = ?", [c, owner || null, c === "held" ? "max" : null, id]);
       if (c === "held" && p.status !== "held") notice = { kind: "held", userId: owner, p };
       return c;
+    }
+    // 1.99ts: over the member's daily donation limit (the day it was SEEN) -> held for review, never silently refused: an admin
+    // credits it (at the terms of the moment it was seen) or marks it refunded off-site. An admin approval (force) skips this.
+    if (!force) {
+      const L = await require("./donationpromo").limitCheck(owner, p.usd_cents, Number(p.seen));
+      if (L.over) {
+        await runQuery("UPDATE crypto_payments SET status = 'held', user_id = ?, hold_reason = 'daily_limit' WHERE id = ?", [owner, id]);
+        notice = { kind: "held_limit", userId: owner, p, limit: L.limit_cents, used: L.used_cents };
+        console.log(`[crypto] ${id}: ${usd(p.usd_cents)} would take ${owner} over the daily donation limit ($${usd(L.used_cents)} of $${usd(L.limit_cents)} used) - held for review`);
+        return "held";
+      }
     }
     const cid = claimIdOf(id);
     // 1.99tq: THE shared donation credit (donationpromo.creditTerms - the card rail calls the same): the normal rate, or a live
@@ -468,6 +482,7 @@ async function settle(id, { force = false, actor = null } = {}) {
     const DP = require("./donationpromo");
     if (Math.floor((Number(p.usd_cents) * terms().rate) / 100) <= 0) { await runQuery("UPDATE crypto_payments SET status = 'dust', user_id = ? WHERE id = ?", [owner, id]); return "dust"; }
     const T = await DP.creditTerms({ ref: cid, userId: owner, cents: p.usd_cents, paidAt: Number(p.seen), via: "crypto" });
+    await DP.recordCredit({ ref: cid, userId: owner, via: "crypto", paidAt: Number(p.seen), cents: p.usd_cents });   // 1.99ts: the day's limit
     await ledger.postOrThrow(owner, T.pat, "donation-crypto", { transactionId: cid, source: "crypto donation", note: DP.noteOf(T) });
     await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
       [cid, owner, T.pat, JSON.stringify({ bonus: T.bonus, usd_cents: p.usd_cents, rate: T.rate, bonus_pct: T.bonus_pct, via: "crypto",
@@ -497,6 +512,13 @@ async function notify(n) {
     } else if (n.kind === "held") {
       await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cheld-" + n.p.id.slice(0, 120), link: "/support",
         title: t("donate.notice_title"), body: t("crypto.notice_held", { amount, token: n.p.token, max: fmt(S.max_usd) }) });
+    } else if (n.kind === "held_limit") {
+      // 1.99ts: over the member's daily donation limit - held for an admin, explained
+      await require("./inbox").addSafe(n.userId, { kind: "system", ref: "climit-" + n.p.id.slice(0, 120), link: "/support",
+        title: t("donate.notice_title"), body: t("crypto.notice_held_limit", { amount, token: n.p.token, limit: usd(n.limit), used: usd(n.used) }) });
+    } else if (n.kind === "refunded") {
+      await require("./inbox").addSafe(n.userId, { kind: "system", ref: "crefund-" + n.p.id.slice(0, 120), link: "/support",
+        title: t("donate.notice_title"), body: t("crypto.notice_refunded", { amount, token: n.p.token, chain: CHAINS[n.p.chain].name }) });
     }
   } catch (e) { /* notice only */ }
 }
@@ -528,6 +550,14 @@ async function decide(id, action, actor, note) {
     if (!r.changes) throw refuse(409, `It is ${p.status}, not ${from}.`);
     console.log(`[crypto] payment ${id} ${to} by ${actor}${why ? ": " + why : ""}`);
     return { status: to };
+  }
+  if (action === "refunded") {
+    // 1.99ts: a held payment the owner sent back from the receiving wallet, outside PATV - never credited; the donor is told
+    const r = await runQuery("UPDATE crypto_payments SET status = 'refunded', decided_by = ?, note = ? WHERE id = ? AND status = 'held'", [actor, why, id]);
+    if (!r.changes) throw refuse(409, `It is ${p.status}, not held.`);
+    console.log(`[crypto] payment ${id} marked refunded off-site by ${actor}${why ? ": " + why : ""}`);
+    if (p.user_id) await notify({ kind: "refunded", userId: p.user_id, p });
+    return { status: "refunded" };
   }
   if (action === "reverify") {
     const r = await runQuery("UPDATE crypto_payments SET status = 'verifying', decided_by = ?, note = ? WHERE id = ? AND status = 'suspect'", [actor, why, id]);

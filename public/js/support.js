@@ -65,6 +65,15 @@
     if (sum && ok && usd > MAX) sum.textContent += ' ' + _t('js.support.crypto_held', 'Over ${max} a transfer is credited after a quick admin check.', { max: fmt(MAX) });
     if (goTxt) goTxt.textContent = _t('js.support.card_button', 'Donate ${usd} by card', { usd: ok ? fmt(usd) : '…' });
     if (goBtn) goBtn.disabled = !ok;
+    // 1.99ts: the daily donation limit (the server refuses a checkout over it; crypto over it is held for review)
+    var dl = document.getElementById('spDaily');
+    if (dl && ok) {
+      var left = Number(dl.getAttribute('data-left')) || 0;
+      if (Math.round(usd * 100) > left) {
+        if (sum) sum.textContent += ' ' + _t('js.support.daily_over', 'That is more than you can donate today (${left}) - by card it won’t go through, and a bigger crypto transfer waits for an admin.', { left: fmt(Math.floor(left / 100)) });
+        if (goBtn) goBtn.disabled = true;
+      }
+    }
     Array.prototype.forEach.call(root.querySelectorAll('[data-send-amt]'), function (b) { b.textContent = ok ? String(usd) : '…'; });
   }
   Array.prototype.forEach.call(radios, function (r) {

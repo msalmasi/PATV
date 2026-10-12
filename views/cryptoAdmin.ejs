@@ -68,11 +68,11 @@
   <% const table = (rows, id, actions) => { %>
     <div class="tblwrap"><table><thead><tr><th>Seen</th><th>Status</th><th>Amount</th><th>Chain</th><th>From</th><th>Account</th><th>PAT</th><th>Tx</th><% if (actions) { %><th></th><% } %></tr></thead><tbody>
       <% rows.forEach((p) => { %><tr>
-        <td><%= when(p.seen) %></td><td><%= p.status %><%= p.decided_by ? ' (' + p.decided_by + ')' : '' %><%= p.note ? ' — ' + p.note : '' %></td>
+        <td><%= when(p.seen) %></td><td><%= p.status %><%= p.status === 'held' && p.hold_reason === 'daily_limit' ? ' (daily limit)' : p.status === 'held' && p.hold_reason === 'max' ? ' (over max)' : '' %><%= p.decided_by ? ' (' + p.decided_by + ')' : '' %><%= p.note ? ' — ' + p.note : '' %></td>
         <td>$<%= usd(p.usd_cents) %> <%= p.token %></td><td><%= p.chain_name %></td><td title="<%= p.src_addr %>"><code><%= short(p.src_addr) %></code></td>
         <td><%= p.username ? p.username : '—' %></td><td><%= p.pat ? fmt(p.pat) + (p.bonus ? ' +' + fmt(p.bonus) : '') : '—' %></td>
         <td><a href="<%= p.explorer %>" target="_blank" rel="noopener noreferrer"><code><%= short(p.tx) %></code> ↗</a></td>
-        <% if (actions === 'held') { %><td><button type="button" class="btn primary" data-cx="approve" data-id="<%= p.id %>">Approve</button> <button type="button" class="btn" data-cx="reject" data-id="<%= p.id %>">Reject</button></td><% } %>
+        <% if (actions === 'held') { %><td><button type="button" class="btn primary" data-cx="approve" data-id="<%= p.id %>">Approve</button> <button type="button" class="btn" data-cx="reject" data-id="<%= p.id %>">Reject</button> <button type="button" class="btn" data-cx="refunded" data-id="<%= p.id %>">Refunded off-site</button></td><% } %>
         <% if (actions === 'suspect') { %><td><button type="button" class="btn" data-cx="reverify" data-id="<%= p.id %>">Re-verify</button></td><% } %>
         <% if (actions === 'unclaimed') { %><td><button type="button" class="btn" data-cx="ignore" data-id="<%= p.id %>">Ignore</button></td><% } %>
       </tr><% }) %>
@@ -81,8 +81,8 @@
   <% } %>
 
   <section class="sb-card" id="held" aria-labelledby="heT">
-    <h2 id="heT">Held (over $<%= fmt(S.max_usd) %>)</h2>
-    <p class="muted">Approve = credit it now (mint as usual). Reject = no PAT; the coins stay at the receiving address - any refund is done by hand from the wallet that owns it, outside PATV.</p>
+    <h2 id="heT">Held (over $<%= fmt(S.max_usd) %>, or over the member's daily donation limit)</h2>
+    <p class="muted">Approve = credit it now (mint as usual, at the terms of the moment it was seen - a promo included; an approved over-limit one is flagged on /admin/economy#donations). Reject = no PAT; the coins stay at the receiving address. Refunded off-site = you sent the coins back from the wallet that owns it, outside PATV: no PAT, and the donor gets a notice. The daily limit: <a href="/admin/economy#donations">/admin/economy → Donations</a>.</p>
     <% table(held, 'held', 'held') %>
   </section>
   <% if (suspect.length) { %>
@@ -109,5 +109,5 @@
     <pre id="cxDryOut" style="white-space:pre-wrap;max-height:420px;overflow:auto"></pre>
   </section>
 </main>
-<script src="/public/js/crypto-admin.js?v=2" defer></script>
+<script src="/public/js/crypto-admin.js?v=3" defer></script>
 <%- include('partials/admin-close') %>

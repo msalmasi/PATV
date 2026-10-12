@@ -48,6 +48,18 @@
     </details>
   </section>
 
+  <section class="adm-card" id="donlimit" aria-labelledby="donlimitT">
+    <h2 id="donlimitT"><span class="ds-ic" aria-hidden="true">💖</span> Donation limit (one member) <span class="adm-pill admin">admins</span></h2>
+    <p class="adm-help">Raise or lower the daily donation limit for one member (dollars per day, card and crypto together; the day is midnight to midnight New York time). Empty = the default from <a href="/admin/economy#donations">Economy → Donations</a>; 0 = no limit for this member. Every change is written to the admin log.</p>
+    <form id="dlUserForm" class="adm-form" autocomplete="off">
+      <label for="dlUser">Username<input type="text" id="dlUser" required maxlength="64"></label>
+      <label for="dlUsd">Limit ($ per day; empty = default, 0 = none)<input type="number" id="dlUsd" min="0" step="1" inputmode="numeric"></label>
+      <label for="dlNote">Note (optional, for the log)<input type="text" id="dlNote" maxlength="200"></label>
+      <div class="adm-actions"><button type="button" id="dlLook" class="adm-btn ghost">Look up</button><button type="submit">Save</button><span id="dlMsg" class="adm-msg" role="status"></span></div>
+    </form>
+    <script src="/public/js/admin-donlimit.js?v=1" defer></script>
+  </section>
+
   <section class="adm-card" id="merges" aria-labelledby="mergesT">
     <h2 id="mergesT">Account merges</h2>
     <p class="adm-help">Merges happen on their own: linking a Camfrog name (<code>!verify</code>) folds Pepe's auto-made account into the real one, and a Twitch/Discord sign-in that belongs to another account offers the member a merge. Duplicate and alt merges by hand are a server script (dry run first), not a button here.</p>
