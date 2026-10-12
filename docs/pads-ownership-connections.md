@@ -128,3 +128,98 @@ Launch comps (`tools/ptplus-comps.js`) take spots:
 - Players__lounge and DRAMA_CENTRAL: 3 periods each.
 
 That makes 4 of 5 on prod.
+
+## 4. Owner panel: Pepe's room settings (1.99tn audit)
+
+The owner panel (`/p/<slug>/owner`, `padowner.js`) changes Pepe's settings for **that pad's Camfrog room only**. Each
+change is the website action `room.owner`. Pepe re-checks that the acting account owns that pad (or is a site admin),
+and writes to the same per-room storage as the chat commands and the admin panel's room scope. The site checks the
+values, limits each account to 20 changes a minute per pad (Pepe limits each room the same way), and logs every
+change to the pad's events (`room_events`, `pepe-setting`). The panel shows what Pepe actually has, from his owner
+sync (`room_settings`, every 2 minutes and right after a change), never a default.
+
+Owners never get anything that reaches other rooms, the economy, or real-money and LLM budgets. House pads (Pepe's
+own room, DRAMA_CENTRAL and the other house rooms) have no user owner, so their admin settings and locks, such as the
+DRAMA_CENTRAL vibe lock, stay with Pepe's admins.
+
+### The pad's default voice
+
+- **Choices.** The owner can pick any voice they own: one bought, gifted or comped (`voice_owned`), an unlock imported
+  under their linked Camfrog login (`voice_owned_logins`), or their own approved clone. The voice has to be active and
+  in VoiceBox. Someone else's clone only counts when its owner allows free text (D12). "Pepe's default" clears the
+  room voice. The list comes from `voicestore.roomVoices`.
+- **Three checks.**
+  1. The site refuses a voice that isn't on the PAD OWNER's list. A staff member acting on the pad still only gets the
+     owner's voices.
+  2. Pepe refuses it when the action runs (`pepe_roomowner._op_voice_ok`). He checks the owner sync's `owner_voices`
+     list, his voice-store cache and the voice's status.
+  3. Pepe checks again **at every spoken line** (`_room_voice`). The pick is stored as the room's `tts_profile` plus
+     `tts_profile_owner`.
+- **When the owner loses the voice.** This covers a refund, a revoked clone consent, a paused or taken-down voice, or
+  the pad changing hands. Pepe then speaks in his default voice in that room. The pick stays saved, so a paused voice
+  comes back by itself. The panel explains why.
+- **Precedence for a spoken line.** From strongest to weakest:
+  1. the speaker's own `-v` voice (`!say … -v X`);
+  2. the active persona's voice (Pepe-wide, set by admins);
+  3. the room's default voice (this setting, or one an admin set);
+  4. Pepe's global default.
+
+  Alerts with their own `alert_voice` keep it.
+- **Who pays.** Pepe's own lines in the room's voice (chatty, `!say` without `-v`, DJ patter, alerts) have no requester.
+  They charge nobody a per-use price and pay no per-use royalty, the same as an admin-set room voice always did. The
+  voice's owner was already paid their cut when the pad owner bought the unlock (the `voice_unlock` likeness cut). A
+  user's own `-v` keeps its per-use price and royalty.
+
+### Conversation starters
+
+`convo` (on/off) and `convo_quiet` (5 to 240 quiet minutes, or "default") are `pepe_convo`'s `convo_enabled` and
+`convo_quiet_min`, the same as `!convo on|off` and `!convo minutes <n>`. When a room goes quiet with at least two people
+around, Pepe posts one starter for that quiet spell. While the Auto-DJ plays there, the DJ's next link opens the topic
+instead. Starters need Pepe's chat model, which is Pepe-wide. When admins have it off, the panel says so.
+
+### The audit: every per-room Pepe setting
+
+Classes:
+- **(a)** was already in the owner panel.
+- **(b)** added in 1.99tn.
+- **(c)** admins only, for the reason given.
+
+| Setting (bot key) | Class | Notes / reason |
+|---|---|---|
+| Cam snapshots `snap_enabled`, cam clips `clip_enabled`, mic challenges `challenge_enabled` | a | |
+| Soundboard `soundboard_enabled` | a | inside the admins' master switch |
+| Language `room_language` | a | |
+| Greetings `greeter_enabled` + `greeter_note` | a | |
+| Chatty level `chatty_enabled` / `chatty_frequency` | a | |
+| Music + DJ in the room `spotify_enabled`, song requests `music_queue_enabled` / `music_play_enabled` | a | |
+| Games: trivia, pictionary, heist, wheel, bingo, duels / brawls / arena / showdown, casino tables (Hold'em + blackjack) | a | |
+| `!say`, `-v` voices, `-mic` replies | a | |
+| Global unblock, mic-hog policing, strike leeway (inside the admins' bounds), community votes | a | |
+| Room vibe / roasts / vibe lock `room_vibe_*` | a | house rooms keep their admin lock (DRAMA_CENTRAL) |
+| Bridge: relay, mic, cams, room audio, transcripts `bridge_*` | a | `/api/rooms/:slug/bridge` |
+| Pepe join / leave / rejoin `owner_paused` | a | 💎 Plus pads, never his home room, never on staging |
+| Room moderation + room roles (kick, ban, punish, mic block, timeout, fine, friend / mod / admin) | a | chat and the panel |
+| What Pepe knows about the room `room_analytics` | a | `!roominfo` in chat |
+| **Pad default voice** `tts_profile` + `tts_profile_owner` | **b** | owned voices only, see above |
+| **Conversation starters** `convo_enabled`, `convo_quiet_min` | **b** | |
+| **Captions of Pepe's mic lines** `mic_caption_enabled` | **b** | room-only, free |
+| **Event alerts here** `alerts_enabled` | **b** | room-only (other rooms are unaffected) |
+| **The DJ's spoken drops here** `dj_talk_enabled` | **b** | room-only; the LLM cap per hour stays global |
+| Pepe speaks at all `tts_enabled`, chatty mic chance `tts_chatty_chance`, starter mic chance `convo_mic_chance`, spoken alerts `alert_tts_enabled` / `alert_voice` | c | one shared VoiceBox and TTS queue for every room (GPU time) |
+| Persona / costume `persona_active`, `avatar_costume` | c | global: one Pepe, one avatar for every room |
+| Auto-DJ `auto_dj_enabled`, patter settings `dj_patter_*` | c | one Spotify and one DJ for every room; LLM spend |
+| Room topic setter `auto_topic_enabled` / `autotopic_frequency` | c | rewrites the Camfrog room's /topic (pad verification codes live there) and spends LLM per topic |
+| `!ask`, `!look`, roasts, cam roasts, `!imagine` overlay, research | c | LLM, vision and image spend (real money); roasts follow the room vibe |
+| Command prices `pat_costs`, heist shop `shop_enabled`, wheel cooldown `spin_cooldown_s` | c | economy |
+| Turf wars `game_turf_enabled` | c | economy, cross-room war map |
+| Casino backend `!casino backend` | c | economy (site-run tables) |
+| Automod rules + anti-abuse switch, `kickback_enabled`, `modfines_enabled` | c | safety and economy (fines go to the Fed) |
+| Room bots, red list, DJ bans, ignored users, kick / modfine exemptions | c | they bypass abuse and economy rules. The owner has direct mod commands instead. |
+| Website commands through the bridge `bridge_cmds` | c | web users spending PAT in the room through the relay. The owner can switch the whole relay off. |
+| House ads `promo_enabled`, sponsors, banner bookings | c | one shared promo slot, revenue |
+| Mic mechanics: `mic_slot_limit`, jukebox mic hold `mic_music_enabled`, `mic_alerts_enabled`, room auto-switch, music pause | c | one mic and one audio pipeline. A wrong slot count makes Pepe grab or bump the mic. |
+| Spoken / transcribed language `tts_language`, `stt_*` | c | one transcriber for every room |
+| Auto stickers `sticker_auto_enabled` | c | fragile native send path, staged rollout |
+| Snapshot link lifetime `snap_expiry_hours` | c | storage on Pepe's shared disk |
+| Chat-log / recording retention | c | set by the pad's tier (Prime Time / Plus), not a switch |
+| Clip opt-ins (`!clipmic`, `!autoclip`) | n/a | per user, not per room |

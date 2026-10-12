@@ -358,3 +358,94 @@ test("1.99ti: My pads - the owner's pads with their owner panel links", () => {
   assert.deepEqual(PO.myPads("nobody"), []);
   assert.deepEqual(PO.myPads(null), []);
 });
+
+// ── 1.99tn: the pad's default voice, conversation starters, the audit's room switches ──
+test("1.99tn: room voice = only the PAD OWNER's voices (bought, imported unlock, own clone) or Pepe's default; Pepe gets the list", async () => {
+  const VS = require(path.join(repo, "voicestore"));
+  await VS.init();
+  PO._reset();
+  await runQuery("DELETE FROM pepe_actions");
+  const t = Date.now();
+  for (const [id, kind, ownerId, status, aft] of [["moxier", "stock", null, "active", 1], ["other", "stock", null, "active", 1], ["napper", "stock", null, "paused", 1],
+                                                  ["ownclone", "clone", owner.userId, "active", 0], ["fanclone", "clone", fan.userId, "active", 0],
+                                                  ["freeclone", "clone", fan.userId, "active", 1], ["legacy", "stock", null, "active", 1], ["bossvoice", "stock", null, "active", 1]]) {
+    await runQuery(`INSERT INTO voices (id, display, kind, owner_user_id, status, allow_free_text, in_voicebox, created, updated) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+                   [id, id[0].toUpperCase() + id.slice(1), kind, ownerId, status, aft, t, t]);
+  }
+  let i = 0;
+  for (const [uid, vid] of [[owner.userId, "moxier"], [owner.userId, "napper"], [owner.userId, "fanclone"], [owner.userId, "freeclone"], [staff.userId, "bossvoice"]]) {
+    await runQuery("INSERT INTO voice_owned (user_id, voice_id, source, price, ref, created) VALUES (?, ?, 'buy', 1, ?, ?)", [uid, vid, "r" + (++i), t]);
+  }
+  await runQuery("INSERT INTO voice_owned_logins (login, voice_id, source, created) VALUES ('foamy1111', 'legacy', 'import', ?)", [t]);
+  const mine = (await VS.roomVoices([owner.userId]))[owner.userId].map((v) => v.id).sort();
+  assert.deepEqual(mine, ["freeclone", "legacy", "moxier", "ownclone"], "paused voices and someone else's no-free-text clone are out");
+  const sync = await post("/api/rooms/owners", null, { password: "bot-token" });
+  assert.deepEqual([...sync.d.owner_voices[PLANT]].sort(), mine, "the owner sync carries the list for Pepe's re-check");
+  for (const v of ["moxier", "ownclone", "legacy", "default"]) {
+    const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: "room_voice", value: v });
+    assert.equal(r.status, 200, v + " " + JSON.stringify(r.d));
+    await runQuery("UPDATE pepe_actions SET status = 'done'");
+    assert.deepEqual(JSON.parse((await actions()).pop().args), [PLANT, "room_voice", v]);
+  }
+  for (const v of ["other", "napper", "fanclone", "random", "bossvoice"]) {
+    const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: "room_voice", value: v });
+    assert.equal(r.status, 403, v);
+  }
+  let r = await post(`/api/rooms/${SLUG}/owner/setting`, "staff", { key: "room_voice", value: "bossvoice" });
+  assert.equal(r.status, 403, "staff acting on the pad still only get the OWNER's voices");
+  r = await post(`/api/rooms/${SLUG}/owner/setting`, "staff", { key: "room_voice", value: "moxier" });
+  assert.equal(r.status, 200);
+  r = await post(`/api/rooms/${SLUG}/owner/setting`, "fan", { key: "room_voice", value: "default" });
+  assert.equal(r.status, 403);
+  const ev = await getQuery("SELECT * FROM room_events WHERE room_id = ? AND what = 'pepe-setting' ORDER BY ts DESC, rowid DESC LIMIT 1", [PLANT]);
+  assert.deepEqual([ev[0].actor, ev[0].detail], ["boss", "room_voice=moxier (sent to Pepe)"], "audit-logged with who did it");
+});
+
+test("1.99tn: conversation starters + captions / alerts / DJ drops -> room.owner; the burst limit", async () => {
+  PO._reset();
+  await runQuery("DELETE FROM pepe_actions");
+  for (const [k, v] of [["convo", "on"], ["convo_quiet", "45"], ["convo_quiet", "default"], ["captions", "on"], ["alerts", "off"], ["dj_talk", "off"]]) {
+    const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: k, value: v });
+    assert.equal(r.status, 200, k + " " + JSON.stringify(r.d));
+    await runQuery("UPDATE pepe_actions SET status = 'done'");
+    assert.deepEqual(JSON.parse((await actions()).pop().args), [PLANT, k, v]);
+  }
+  for (const [k, v] of [["convo_quiet", "44"], ["convo_quiet", "999"], ["convo", "maybe"], ["tts", "on"], ["autotopic", "on"], ["promo", "on"], ["persona", "goth"]]) {
+    const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: k, value: v });
+    assert.equal(r.status, 400, k);
+  }
+  PO._reset();
+  let last = null;
+  for (let n = 0; n < 21; n++) {
+    last = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: "captions", value: n % 2 ? "on" : "off" });
+    await runQuery("UPDATE pepe_actions SET status = 'done'");
+    if (n < 20) assert.equal(last.status, 200, "change " + n);
+  }
+  assert.equal(last.status, 429, "the 21st change in a minute waits");
+  const s = await post(`/api/rooms/${SLUG}/owner/setting`, "staff", { key: "captions", value: "on" });
+  assert.equal(s.status, 200, "staff aren't limited");
+  PO._reset();
+});
+
+test("1.99tn: the report carries the voice + the starters; the page shows the owner's voices and explains a fallback", async () => {
+  const rep = JSON.parse(JSON.stringify(REPORT2));
+  Object.assign(rep[PLANT].owner, { room_voice: "moxier", convo: true, convo_quiet: 45, captions: false, alerts: true, dj_talk: true });
+  rep[PLANT].voice = { choice: "moxier", effective: "Pepe", default: "Pepe", by: "owner", usable: false, persona: null, tts: true };
+  rep[PLANT].admin.chatty_llm = false;
+  await post("/api/rooms/owners", null, { password: "bot-token", room_settings: rep });
+  const s = await PO.settingsFor(PLANT);
+  assert.deepEqual([s.owner.room_voice, s.owner.convo, s.owner.convo_quiet, s.owner.captions], ["moxier", true, 45, false]);
+  assert.deepEqual([s.voice.by, s.voice.usable, s.voice.effective], ["owner", false, "Pepe"]);
+  assert.equal(s.admin.chatty_llm, false);
+  const r = await page("/p/" + SLUG + "/owner", "owner");
+  assert.equal(r.status, 200);
+  const t = r.text;
+  assert.match(t, /data-po-set="room_voice"/);
+  assert.match(t, /<option value="moxier" selected>Moxier<\/option>/, "the real pick, from Pepe's report");
+  assert.match(t, /<option value="ownclone" >Ownclone · /, "their own clone is marked");
+  assert.ok(!t.includes('value="other"') && !t.includes('value="bossvoice"'), "no voices the owner doesn't own");
+  assert.match(t, /<option value="45" selected>/, "the quiet time");
+  assert.ok(t.includes(en["owner.voice_lost"].split("{name}")[0].replace(/'/g, "&#39;")) || t.includes(en["owner.voice_lost"].split("{name}")[0]), "explains the fallback");
+  assert.ok(t.includes(en["owner.convo_llm_off"].replace(/'/g, "&#39;")) || t.includes(en["owner.convo_llm_off"]), "explains the chat model is off");
+  for (const k of ["room_voice", "convo", "convo_quiet", "captions", "alerts", "dj_talk"]) assert.ok(t.includes(`data-po-row="${k}"`), k);
+});

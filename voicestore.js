@@ -192,6 +192,35 @@ async function owns(userId, id) {
   await init();
   return !!(userId && (await getQuery("SELECT 1 FROM voice_owned WHERE user_id = ? AND voice_id = ?", [userId, low(id)]))[0]);
 }
+/** 1.99tn: the voices each of these accounts may make their pad's DEFAULT voice (padowner "room_voice"; Pepe re-checks at
+ *  every line): active, in VoiceBox, and either their own (cloned) voice or one they own - bought / gifted / comped
+ *  (voice_owned) or an imported unlock under their linked Camfrog login (voice_owned_logins). Someone else's clone only
+ *  when its owner allows free text (D12: a room default makes it say Pepe's lines). -> {userId: [{id, display, kind, own}]} */
+async function roomVoices(userIds) {
+  await init();
+  const ids = [...new Set((userIds || []).filter(Boolean).map(String))].slice(0, 1000);
+  const out = {};
+  if (!ids.length) return out;
+  const ph = ids.map(() => "?").join(",");
+  const seen = new Set();
+  const usable = (v, mine) => v.status === "active" && !!v.in_voicebox && (mine || v.kind !== "clone" || !!v.allow_free_text);
+  const push = (uid, v, own) => {
+    const k = uid + "\u0000" + v.id;
+    if (seen.has(k)) return;
+    seen.add(k);
+    (out[uid] = out[uid] || []).push({ id: v.id, display: v.display, kind: v.kind, own });
+  };
+  for (const v of await getQuery(`SELECT * FROM voices WHERE owner_user_id IN (${ph})`, ids)) if (usable(v, true)) push(v.owner_user_id, v, true);
+  for (const r of await getQuery(`SELECT o.user_id AS uid, v.* FROM voice_owned o JOIN voices v ON v.id = o.voice_id WHERE o.user_id IN (${ph})`, ids)) {
+    if (usable(r, r.owner_user_id === r.uid)) push(r.uid, r, r.owner_user_id === r.uid);
+  }
+  for (const r of await getQuery(`SELECT u.userId AS uid, v.* FROM users u JOIN voice_owned_logins l ON l.login = lower(u.camfrogUsername)
+                                  JOIN voices v ON v.id = l.voice_id WHERE u.userId IN (${ph})`, ids)) {
+    if (usable(r, r.owner_user_id === r.uid)) push(r.uid, r, r.owner_user_id === r.uid);
+  }
+  for (const k of Object.keys(out)) out[k].sort((a, b) => String(a.display).localeCompare(String(b.display)));
+  return out;
+}
 
 // ── owners ──
 async function ownerSummary(userId) {
@@ -347,6 +376,6 @@ function register(app, { addUser, isBotToken }) {
 }
 
 module.exports = {
-  init, voice, all, ownerMap, pickable, importFromPepe, botState, buy, owns, ownerSummary, ownerUpdate, adminUpdate, applyPatch, register, sampleId, BANDS, Refuse,
+  init, voice, all, ownerMap, pickable, roomVoices, importFromPepe, botState, buy, owns, ownerSummary, ownerUpdate, adminUpdate, applyPatch, register, sampleId, BANDS, Refuse,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

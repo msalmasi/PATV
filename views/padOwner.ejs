@@ -150,6 +150,17 @@
           michog: adm.automod ? '' : t('owner.michog_admin_off'),
           strikes: t('owner.strikes_bounds', { min: adm.strike_min || 2, max: adm.strike_max || 5 }),
         };
+        // 1.99tn: the room voice - what Pepe actually speaks in here, and why it may differ from the pick
+        const pv = pepe.voice || {}, vlist = (typeof VOICES !== 'undefined' && VOICES) || [];
+        const vnotes = [];
+        if (pv.by === 'owner' && pv.usable === false) vnotes.push(t('owner.voice_lost', { name: t.esc(pv.default || 'Pepe') }));
+        if (pv.by === 'admin') vnotes.push(t('owner.voice_by_admin'));
+        if (pv.persona) vnotes.push(t('owner.voice_persona', { name: t.esc(pv.persona) }));
+        if (pv.tts === false) vnotes.push(t('owner.voice_tts_off'));
+        if (!vlist.length) vnotes.push(t('owner.voice_none', { href: '/voices' }));
+        notes.room_voice = vnotes.join(' ');
+        if (adm.chatty_llm === false) notes.convo = t('owner.convo_llm_off');
+        const quiet = (typeof CONVO_QUIET !== 'undefined' && CONVO_QUIET) || [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
       %>
       <% GROUPS.forEach(([g, gic, keys]) => { %>
       <h3 class="ds-h4 po-gh"><%= gic %> <%- t('owner.grp_' + g) %></h3>
@@ -175,6 +186,17 @@
           <select class="ds-select po-ctl" data-po-set="strikes" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
             <option value="default"><%- t('owner.strikes_default', { n: adm.strike_default || 3 }) %></option>
             <% for (let n = (adm.strike_min || 2); n <= (adm.strike_max || 5); n++) { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.strikes_n', { n }) %></option><% } %>
+          </select>
+          <% } else if (k === 'room_voice') { %>
+          <select class="ds-select po-ctl" data-po-set="room_voice" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+            <option value="default" <%= v === 'default' ? 'selected' : '' %>><%- t('owner.voice_default', { name: t.esc(pv.default || 'Pepe') }) %></option>
+            <% vlist.forEach((vv) => { %><option value="<%= vv.id %>" <%= v === vv.id ? 'selected' : '' %>><%= vv.display %><%- vv.own ? ' · ' + t('owner.voice_own') : '' %></option><% }) %>
+            <% if (known && v !== 'default' && !vlist.some((vv) => vv.id === v)) { %><option value="<%= v %>" selected disabled><%= v %> · <%- t('owner.voice_notyours') %></option><% } %>
+          </select>
+          <% } else if (k === 'convo_quiet') { %>
+          <select class="ds-select po-ctl" data-po-set="convo_quiet" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+            <% quiet.forEach((n) => { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.convo_min', { n }) %></option><% }) %>
+            <% if (known && !quiet.includes(v)) { %><option value="<%= v %>" selected><%- t('owner.convo_min', { n: v }) %></option><% } %>
           </select>
           <% } else if (k === 'greeter_note') { %>
           <form class="po-note" data-po-note novalidate>

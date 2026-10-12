@@ -276,6 +276,47 @@
    ]
   },
   {
+   "id": "room_voice",
+   "area": "room",
+   "title": "Pick Pepe's voice in your room",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "web_setting": "room_voice",
+   "setting": "tts_profile_owner",
+   "howto": "Choose the voice Pepe speaks in by default in your room: one of the voices you own (bought in the voice store, or your own approved clone) or Pepe's default. If you lose the voice (a refund, a revoked clone, a takedown) the room goes back to Pepe's default by itself. Someone's own -v voice on !say still wins, and Pepe's lines in your room's voice never cost anyone a per-use price.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
+   "id": "room_convo",
+   "area": "room",
+   "title": "Let Pepe start conversations when the room goes quiet",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "web_setting": "convo",
+   "setting": "convo_enabled",
+   "howto": "Conversation starters: when your room has been quiet for a while (5 to 240 minutes, you pick) with people still around, Pepe throws out a question or a topic - once per quiet spell. While the Auto-DJ plays here, the DJ opens the topic between songs instead.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
+   "id": "room_voice_extras",
+   "area": "room",
+   "title": "Captions, alerts and DJ drops in your room",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "setting": "mic_caption_enabled",
+   "howto": "Show a 🔊 caption of what Pepe says on the mic, let event alerts (heists, games and drops elsewhere) reach your room, and allow the DJ's short spoken drops between songs - each only in your room.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
    "id": "room_vibe_web",
    "area": "room",
    "title": "Pick your room's vibe on the website",
@@ -422,6 +463,10 @@
   "room bots",
   "command prices (pat_costs)",
   "!lookpublic, !ask and roasts",
-  "the soundboard master switch and the strike range owners pick from"
+  "the soundboard master switch and the strike range owners pick from",
+  "Pepe's persona and costume (one Pepe for every room)",
+  "the room's /topic setter (!autotopic)",
+  "house ads (!promo) and sponsors",
+  "Pepe's room language for speech-to-text and the mic slots"
  ]
 }

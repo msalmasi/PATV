@@ -142,7 +142,10 @@ function register(app, { addUser, isBotToken }) {
       } catch (e) { console.error("[rooms] vault rekeys:", e.message); }
       let plusRooms = null;
       try { plusRooms = await require("./padconnect").plusRoomsForPepe(); } catch (e) { console.error("[rooms] plus rooms:", e.message); }
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
+      // 1.99tn: the voices each pad's owner may make the room's default voice (Pepe re-checks an owner-picked voice with it)
+      let ownerVoices = null;
+      try { ownerVoices = await require("./padowner").ownerVoicesForPepe(); } catch (e) { console.error("[rooms] owner voices:", e.message); }
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify, ...(ownerVoices ? { owner_voices: ownerVoices } : {}) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {
