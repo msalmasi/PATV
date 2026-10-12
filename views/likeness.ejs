@@ -53,7 +53,7 @@
 
   <section class="ds-card lg" id="earnings" aria-labelledby="lkEarnH">
     <h2 class="ds-h2" id="lkEarnH"><span class="dot"></span><%- t('lk.earn_h') %></h2>
-    <p class="lk-why"><%- t('lk.earn_why', { hours: cfg.hold_hours || 24, cap: num(cfg.subject_day_cap || 0), age: cfg.min_age_days || 0, level: cfg.min_level || 0 }) %></p>
+    <p class="lk-why"><%- t('lk.earn_why2', { hours: cfg.hold_hours || 24, age: cfg.min_age_days || 0, level: cfg.min_level || 0 }) %></p>
     <% if (!st.recent.length) { %>
       <p class="ds-empty"><%- t('lk.earn_none') %></p>
     <% } else { %>

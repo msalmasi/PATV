@@ -97,12 +97,14 @@ test("booking: split between subjects; payer, alts, young / low-level accounts e
   assert.deepEqual(r, { held: 0, forfeit: 100 }, "no account -> stays with the platform");
 });
 
-test("the per-pair daily cap (25,000) forfeits the excess; opted-out subjects earn nothing", async () => {
+test("no daily caps (the payer funds the cut): a payer can use the same subject again and again; opted-out subjects earn nothing", async () => {
   let r = await L.book({ ref: "p1", key: "clip", subjects: ["carolcf"], payer: "bobcf", amount: 20000, ts: T });
   assert.equal(r.held, 20000);
   r = await L.book({ ref: "p2", key: "clip", subjects: ["carolcf"], payer: "bobcf", amount: 20000, ts: T });
-  assert.deepEqual(r, { held: 5000, forfeit: 15000 });
-  assert.deepEqual((await rows("p2")).map((x) => [x.amount, x.status, x.reason]), [[5000, "held", null], [15000, "forfeit", "daily pair cap"]]);
+  assert.deepEqual(r, { held: 20000, forfeit: 0 }, "the old 25,000 / day pair cap is gone");
+  assert.deepEqual((await rows("p2")).map((x) => [x.amount, x.status]), [[20000, "held"]]);
+  await L.setConfig({ pair_day_cap: 5, subject_day_cap: 5 }, "test");
+  assert.equal(L.config().pair_day_cap, undefined, "a saved cap setting is ignored");
   await L.setPrefs(U.shy.userId, { snaps: false });
   r = await L.book({ ref: "p3", key: "snap", subjects: ["shycf"], payer: "bobcf", amount: 1000, ts: T });
   assert.equal(r.forfeit, 1000);
@@ -119,14 +121,13 @@ test("voids: a refunded charge never releases, and a late copy can't book", asyn
   assert.equal(r.dup, true, "the void arrived first");
 });
 
-test("release: after the hold, at 00:00 UTC, per-subject daily cap, frozen subjects wait, notices", async () => {
+test("release: after the hold, at 00:00 UTC, no daily ceiling, frozen subjects wait, notices", async () => {
   let out = await L.releaseTick();
   assert.equal(out.length, 0, "nothing is due before the hold ends");
   T += DAY;                          // 15:00 next day - hold ended at 15:00, but the last midnight was before that
   out = await L.releaseTick();
   assert.equal(out.length, 0, "due only at the next 00:00 UTC");
   T += 10 * 3600 * 1000;             // 01:00 the day after
-  await L.setConfig({ subject_day_cap: 6000 }, "test");
   await L.freeze(U.carol.userId, true, "test", "alt check");
   out = await L.releaseTick();
   const bob = out.find((x) => x.user === U.bob.userId);
@@ -142,11 +143,12 @@ test("release: after the hold, at 00:00 UTC, per-subject daily cap, frozen subje
   await L.freeze(U.carol.userId, false, "test");
   out = await L.releaseTick();
   const carol = out.find((x) => x.user === U.carol.userId);
-  assert.equal(carol.outcome, "paid");
-  assert.ok(carol.amount <= 6000, "at most the per-subject daily cap");
+  assert.deepEqual([carol.outcome, carol.amount], ["paid", 5000], "the escrow rows in one go");
+  out = await L.releaseTick();
+  assert.deepEqual(out.find((x) => x.user === U.carol.userId), { user: U.carol.userId, outcome: "paid", amount: 40000 },
+                   "then the pre-1.99rv rows (from the Reserve) - 45,000 in a day, no 250k-style ceiling");
   const st = await L.status(U.carol.userId);
-  assert.ok(st.held > 0 && st.paid === carol.amount, "the rest stays held for the next day");
-  await L.setConfig({ subject_day_cap: 250000 }, "test");
+  assert.equal(st.held, 0, "nothing waits for another day");
 });
 
 test("release recovery: a crash between marking and paying is settled by the transaction it left (or retried)", async () => {

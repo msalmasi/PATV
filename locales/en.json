@@ -7215,5 +7215,6 @@
   "js.vc.need_consent": "Tick the consent box to go on.",
   "js.vc.working": "Working…",
   "js.vc.confirm_delete": "Delete your cloned voice? It stops working everywhere at once and is deleted from both voice servers. This can't be undone.",
-  "js.vc.deleted": "Deleted. It stops at once; the servers forget it within minutes."
+  "js.vc.deleted": "Deleted. It stops at once; the servers forget it within minutes.",
+  "lk.earn_why2": "Your cut comes out of what the payer spent: it's held for {hours} h, then paid at the next 00:00 UTC - no daily limit. It comes out of the platform's share, never the pad owner's. Accounts under {age} days or below level {level}, your own commands and your linked accounts don't earn; a cut that isn't paid goes back where it came from."
 }

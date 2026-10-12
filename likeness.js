@@ -21,9 +21,8 @@
 // ANTI-FARMING (applied when a cut is booked; what isn't paid goes back to where it came from):
 //   * never to the payer themselves, nor between linked accounts (welcome_bonus dup_of either way, account_merges)
 //   * the subject's account must be >= min_age_days old and level >= min_level (7 / 3)
-//   * per payer -> subject pair: at most pair_day_cap a UTC day (25,000) - the rest is forfeited (one-off purchases - a voice
-//     unlock, a pack - are exempt: the catalogue bounds them)
-//   * per subject: at most subject_day_cap RELEASED a day (250,000) - the rest stays held for the next days
+//   * NO daily caps (the user, 2026-10-11, 1.99rx: the cut is funded by the payer at purchase - the old 25,000 / day per
+//     payer -> subject pair cap and the 250,000 / day per-subject release ceiling are gone; a saved setting for them is ignored)
 //   * an opted-out subject earns nothing for that kind (Pepe refuses the command before charging anyway)
 //   * staff can FREEZE a subject (an alt finding): nothing is released while frozen; "clawback" forfeits what's held
 //
@@ -51,15 +50,12 @@ const KIND_OF = Object.freeze({ clipmic: "clips", quote: "clips", clip: "snaps",
 const DEFAULTS = Object.freeze({
   enabled: true,
   hold_hours: 24,
-  subject_day_cap: 250000,
-  pair_day_cap: 25000,
   min_age_days: 7,
   min_level: 3,
   quote_price: 250,            // a chat quote (quotes.js) - 40% of it to the people quoted
   pct: DEFAULT_PCT,
 });
 const DAY = 24 * 3600 * 1000;
-const PAIR_EXEMPT = new Set(["voice_unlock", "sb_pack"]);
 const TICK_MS = 10 * 60 * 1000;
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const REF_RE = /^[\w:.\-]{1,160}$/;
@@ -109,8 +105,6 @@ function cleanConfig(c) {
   return {
     enabled: x.enabled === undefined ? DEFAULTS.enabled : x.enabled !== false,
     hold_hours: num(x.hold_hours, 0, 24 * 14, DEFAULTS.hold_hours),
-    subject_day_cap: num(x.subject_day_cap, 0, 1e9, DEFAULTS.subject_day_cap),
-    pair_day_cap: num(x.pair_day_cap, 0, 1e9, DEFAULTS.pair_day_cap),
     min_age_days: num(x.min_age_days, 0, 365, DEFAULTS.min_age_days),
     min_level: num(x.min_level, 0, 1000, DEFAULTS.min_level),
     quote_price: num(x.quote_price, 0, 1e7, DEFAULTS.quote_price),
@@ -224,12 +218,6 @@ async function ineligible(subject, payerId, kind) {
   if (Number(subject.level || 0) < CONFIG.min_level) return `below level ${CONFIG.min_level}`;
   return null;
 }
-async function pairToday(payerId, subjectId, day) {
-  if (!payerId) return 0;
-  const r = await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM likeness_ledger WHERE payer_user_id = ? AND subject_user_id = ? AND day = ?
-                            AND status IN ('held','paying','paid')`, [payerId, subjectId, day]);
-  return Number((r[0] || {}).t) || 0;
-}
 async function insertRow(row) {
   const r = await runQuery(`INSERT OR IGNORE INTO likeness_ledger (ref, subject_user_id, subject_login, payer_user_id, payer_login, cmd, kind, flow, room_id,
                             base, amount, status, reason, created, release_after, day, src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -339,17 +327,8 @@ async function book(it) {
       forfeit += mine;
       continue;
     }
-    let ok = mine;
-    // one-off purchases (a voice unlock, a pack) are bounded by the catalogue itself - the pair cap is for repeat farming
-    if (CONFIG.pair_day_cap > 0 && payerId && !PAIR_EXEMPT.has(cmd)) ok = Math.max(0, Math.min(mine, CONFIG.pair_day_cap - (await pairToday(payerId, s.userId, day))));
-    if (ok > 0) {
-      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}`, amount: ok, status: "held", release_after: t + CONFIG.hold_hours * 3600 * 1000, src: part(ok) }));
-      held += ok;
-    }
-    if (mine - ok > 0) {
-      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}:cap`, amount: mine - ok, status: "forfeit", reason: "daily pair cap", src: part(mine - ok) }));
-      forfeit += mine - ok;
-    }
+    await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}`, amount: mine, status: "held", release_after: t + CONFIG.hold_hours * 3600 * 1000, src: part(mine) }));
+    held += mine;
   }
   return { held, forfeit };
 }
@@ -455,10 +434,6 @@ async function releaseTick() {
                                  AND release_after <= ?`, [cutoff]);
     for (const { u } of subs) {
       if (await frozen(u)) { out.push({ user: u, outcome: "frozen" }); continue; }
-      const paidToday = Number(((await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM likeness_ledger WHERE subject_user_id = ? AND status IN ('paid','paying')
-                                                AND released_at >= ?`, [u, cutoff]))[0] || {}).t) || 0;
-      let room = CONFIG.subject_day_cap > 0 ? CONFIG.subject_day_cap - paidToday : Infinity;
-      if (room <= 0) { out.push({ user: u, outcome: "capped" }); continue; }
       const all = await getQuery(`SELECT id, amount, src FROM likeness_ledger WHERE subject_user_id = ? AND status = 'held' AND release_after <= ? ORDER BY created, id`, [u, cutoff]);
       // one batch per kind: escrow rows (1.99rv) and pre-1.99rv rows held in the Reserve are paid from different places
       const legacy = all.length && all[0].src == null;
@@ -466,11 +441,10 @@ async function releaseTick() {
       const ids = [];
       let total = 0;
       for (const r of rows) {
-        if (total + r.amount > room) break;
         ids.push(r.id);
         total += r.amount;
       }
-      if (!ids.length || total <= 0) { out.push({ user: u, outcome: "capped" }); continue; }
+      if (!ids.length || total <= 0) continue;
       const batch = `lkr:${u}:${today}:${ids[0]}`;
       const mark = await runQuery(`UPDATE likeness_ledger SET status = 'paying', batch = ? WHERE id IN (${ids.map(() => "?").join(",")}) AND status = 'held'`, [batch, ...ids]);
       if (!mark || mark.changes !== ids.length) {
@@ -513,7 +487,7 @@ async function status(userId) {
            forfeit: (sums.forfeit || { amount: 0 }).amount, next_release: nextMidnight, recent, config: publicConfig() };
 }
 function publicConfig() {
-  return { enabled: CONFIG.enabled, hold_hours: CONFIG.hold_hours, subject_day_cap: CONFIG.subject_day_cap, pair_day_cap: CONFIG.pair_day_cap,
+  return { enabled: CONFIG.enabled, hold_hours: CONFIG.hold_hours,
            min_age_days: CONFIG.min_age_days, min_level: CONFIG.min_level, pct: CONFIG.pct, quote_price: CONFIG.quote_price };
 }
 async function adminSummary() {
