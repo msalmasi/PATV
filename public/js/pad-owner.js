@@ -2,9 +2,11 @@
 //   * Top up the vault: POST /api/rooms/:slug/vault/topup {amount, idem} - one idem per attempt (a double click or a retry of
 //     the same attempt is one deposit); then the action's status (GET /api/rooms/action/:id) until Pepe answered, then the
 //     vault's numbers (GET /api/rooms/:slug/owner/state).
-//   * The owner's Pepe settings (snap / clip / challenge / language): POST /api/rooms/:slug/owner/setting {key, value} - the
-//     control flips back until Pepe has done it.
-//   * Website-bridge switches: the existing POST /api/rooms/:slug/bridge {key, on}.
+//   * The owner's Pepe settings (1.99tf: every key of padowner.OWNER_SETTINGS + language / vibe / roasts / strikes / the greeting
+//     note): POST /api/rooms/:slug/owner/setting {key, value}; website-bridge switches: the existing POST /api/rooms/:slug/bridge
+//     {key, on}. A control keeps showing Pepe's value with "Waiting for Pepe…" until he answered AND a settings report newer
+//     than his answer arrived (GET /api/rooms/:slug/owner/state, Pepe re-syncs right after a change) - then it shows what
+//     that report says. The card's "Last synced" chip ticks, and the card re-reads Pepe's state every minute.
 // Server / Pepe text goes in via textContent.
 (function () {
   'use strict';
@@ -28,7 +30,7 @@
   function watch(id, cb, n) {
     n = n || 0;
     api('/api/rooms/action/' + encodeURIComponent(id)).then(function (a) {
-      if (a && a.ok && (a.status === 'done' || a.status === 'failed' || a.status === 'expired')) return cb(a.status === 'done', a.message || '');
+      if (a && a.ok && (a.status === 'done' || a.status === 'failed' || a.status === 'expired')) return cb(a.status === 'done', a.message || '', a.updated || null);
       if (n > 80) return cb(null, _t('js.owner.slow', 'Pepe hasn\'t answered yet - it will happen when he does.'));
       setTimeout(function () { watch(id, cb, n + 1); }, 1500);
     }).catch(function () { setTimeout(function () { watch(id, cb, n + 1); }, 3000); });
@@ -90,44 +92,140 @@
     });
   }
 
-  // ── the owner's Pepe settings ──
-  var setMsg = document.getElementById('poSetMsg');
-  Array.prototype.forEach.call(document.querySelectorAll('[data-po-set]'), function (c) {
-    var k = c.getAttribute('data-po-set');
-    var cur = c.type === 'checkbox' ? c.checked : c.value;
+  // ── 1.99tf: the 🐸 card - Pepe's REAL state, a change is "waiting for Pepe" until his own report confirms it ──
+  var card = document.getElementById('pepe');
+  var synced = card ? Number(card.getAttribute('data-synced')) || 0 : 0;
+  var chip = document.getElementById('poSync');
+  var pending = {};                                   // key -> true while a change waits for Pepe
+  function q(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+  function ctls(key) { return key.indexOf('br:') === 0 ? q('[data-po-bridge="' + key.slice(3) + '"]') : q('[data-po-set="' + key + '"]'); }
+  function valOf(c) { return c.type === 'checkbox' ? c.checked : c.value; }
+  function setVal(c, v) {
+    if (c.type === 'checkbox') c.checked = v === true;
+    else if (v !== undefined && v !== null) c.value = String(v);
+  }
+  function status(key, text, kind) {
+    q('[data-po-st="' + key + '"]').forEach(function (s) { s.textContent = text || ''; s.className = 'po-st' + (kind ? ' ' + kind : ''); });
+    q('[data-po-row="' + key + '"]').forEach(function (r) { r.classList.toggle('pending', kind === 'wait'); });
+  }
+  function ago(ms) {
+    var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 60) return _t('js.owner.synced_s', 'Last synced {n} s ago', { n: s });
+    if (s < 3600) return _t('js.owner.synced_m', 'Last synced {n} min ago', { n: Math.round(s / 60) });
+    return _t('js.owner.synced_h', 'Last synced {n} h ago', { n: Math.round(s / 3600) });
+  }
+  function paintSync() {
+    if (!chip || !synced) return;
+    chip.textContent = ago(synced);
+    var stale = Date.now() - synced > 10 * 60 * 1000;
+    chip.className = 'ds-chip ' + (stale ? 'warn' : 'ok');
+  }
+  /** Pepe's report -> every control that isn't waiting on a change (and isn't being typed in). */
+  function applyState(p) {
+    if (!p) return;
+    if (p.updated) synced = p.updated;
+    Object.keys(p.owner || {}).forEach(function (k) {
+      if (pending[k]) return;
+      ctls(k).forEach(function (c) {
+        if (c === document.activeElement && c.type === 'text') return;
+        setVal(c, p.owner[k]);
+        c.disabled = false;
+      });
+    });
+    Object.keys(p.bridge || {}).forEach(function (k) {
+      if (pending['br:' + k]) return;
+      ctls('br:' + k).forEach(function (c) { setVal(c, p.bridge[k]); });
+    });
+    paintSync();
+  }
+  function poll(cb) { api(base + '/owner/state').then(function (d) { cb(d && d.ok ? d.pepe : null); }).catch(function () { cb(null); }); }
+  /** After Pepe answered at `after` (ms): wait for a settings report newer than that, then show what it says. */
+  function confirm(key, want, after, msg) {
+    var n = 0;
+    (function again() {
+      poll(function (p) {
+        var fresh = p && p.updated && (!after || p.updated >= after);
+        if (!fresh && ++n < 15) return setTimeout(again, 2000);
+        delete pending[key];
+        ctls(key).forEach(function (c) { c.disabled = false; });
+        if (!fresh) {
+          ctls(key).forEach(function (c) { setVal(c, want); });
+          return status(key, (msg ? msg + ' - ' : '') + _t('js.owner.applied_wait', 'Pepe did it; this panel catches up with his next report.'), 'ok');
+        }
+        applyState(p);
+        var real = key.indexOf('br:') === 0 ? (p.bridge || {})[key.slice(3)] : (p.owner || {})[key];
+        var same = real === undefined || want === 'default' || String(real) === String(want);
+        status(key, same ? _t('js.owner.confirmed', 'Pepe confirmed it.') : _t('js.owner.differs', 'Pepe reports it\'s still {v} - try again, or ask a Pepe admin.', { v: String(real) }), same ? 'ok' : 'bad');
+      });
+    })();
+  }
+  /** One change: send it, keep the control showing the OLD value + "waiting for Pepe" until he confirms. */
+  function change(key, want, value, old) {
+    var bridge = key.indexOf('br:') === 0;
+    pending[key] = true;
+    ctls(key).forEach(function (c) { setVal(c, old); c.disabled = true; });
+    status(key, _t('js.owner.pending', 'Waiting for Pepe…'), 'wait');
+    var req = bridge ? api(base + '/bridge', { key: key.slice(3), on: want })
+      : api(base + '/owner/setting', { key: key, value: value });
+    req.then(function (d) {
+      if (!d || !d.ok) {
+        delete pending[key];
+        ctls(key).forEach(function (c) { c.disabled = false; });
+        return status(key, (d && d.error) || _t('js.owner.not_sent', 'Not sent.'), 'bad');
+      }
+      watch(d.id, function (ok, m, upd) {
+        if (ok === null) {                     // Pepe hasn't picked it up: keep waiting, but give the control back
+          delete pending[key];
+          ctls(key).forEach(function (c) { c.disabled = false; });
+          return status(key, m, 'wait');
+        }
+        if (!ok) {
+          delete pending[key];
+          ctls(key).forEach(function (c) { c.disabled = false; setVal(c, old); });
+          return status(key, m || _t('js.owner.refused', 'Pepe refused it.'), 'bad');
+        }
+        confirm(key, want, upd, m);
+      });
+    }).catch(function () {
+      delete pending[key];
+      ctls(key).forEach(function (c) { c.disabled = false; });
+      status(key, _t('js.owner.unreachable_set', 'Couldn\'t reach the site.'), 'bad');
+    });
+  }
+  // what each control last showed (Pepe's value), so a refused change flips back to it
+  var shown = {};
+  q('[data-po-set], [data-po-bridge]').forEach(function (c) {
+    var key = c.hasAttribute('data-po-bridge') ? 'br:' + c.getAttribute('data-po-bridge') : c.getAttribute('data-po-set');
+    shown[key] = valOf(c);
+    if (c.type === 'text') return;                                // the note saves with its button
     c.addEventListener('change', function () {
-      var want = c.type === 'checkbox' ? c.checked : c.value;
+      if (pending[key]) return;
+      var want = valOf(c), old = shown[key];
       var value = c.type === 'checkbox' ? (want ? 'on' : 'off') : want;
-      if (c.type === 'checkbox') c.checked = cur; else c.value = cur;   // only changes once Pepe has done it
-      c.disabled = true;
-      say(setMsg, _t('js.owner.set_sending', 'Asking Pepe…'));
-      api(base + '/owner/setting', { key: k, value: value }).then(function (d) {
-        if (!d || !d.ok) { c.disabled = false; return say(setMsg, (d && d.error) || _t('js.owner.not_sent', 'Not sent.'), 'bad'); }
-        watch(d.id, function (ok, m) {
-          c.disabled = false;
-          if (ok) { cur = want; if (c.type === 'checkbox') c.checked = want; else c.value = want; }
-          say(setMsg, m || (ok ? _t('js.owner.saved', 'Done.') : _t('js.owner.refused', 'Pepe refused it.')), ok ? 'ok' : ok === false ? 'bad' : '');
-        });
-      }).catch(function () { c.disabled = false; say(setMsg, _t('js.owner.unreachable_set', 'Couldn\'t reach the site.'), 'bad'); });
+      if (key.indexOf('br:') !== 0 && c.type !== 'checkbox' && /^\d+$/.test(String(want)) && key === 'strikes') want = Number(want);
+      shown[key] = valOf(c);
+      change(key, want, value, old);
     });
   });
-
-  // ── website-bridge switches (the existing owner endpoint) ──
-  var brMsg = document.getElementById('poBrMsg');
-  Array.prototype.forEach.call(document.querySelectorAll('[data-po-bridge]'), function (c) {
-    var k = c.getAttribute('data-po-bridge');
-    c.addEventListener('change', function () {
-      var want = c.checked;
-      c.checked = !want; c.disabled = true;
-      say(brMsg, _t('js.owner.set_sending', 'Asking Pepe…'));
-      api(base + '/bridge', { key: k, on: want }).then(function (d) {
-        if (!d || !d.ok) { c.disabled = false; return say(brMsg, (d && d.error) || _t('js.owner.not_sent', 'Not sent.'), 'bad'); }
-        watch(d.id, function (ok, m) {
-          c.disabled = false;
-          if (ok) c.checked = want;
-          say(brMsg, m || (ok ? _t('js.owner.saved', 'Done.') : _t('js.owner.refused', 'Pepe refused it.')), ok ? 'ok' : ok === false ? 'bad' : '');
-        });
-      }).catch(function () { c.disabled = false; say(brMsg, _t('js.owner.unreachable_set', 'Couldn\'t reach the site.'), 'bad'); });
+  q('[data-po-note]').forEach(function (f) {
+    var inp = f.querySelector('[data-po-set]');
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!inp || pending.greeter_note) return;
+      var want = String(inp.value || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+      change('greeter_note', want, want, want);
     });
   });
+  // the "everything else" disclosure remembers being open (per browser)
+  var more = document.getElementById('poMore');
+  if (more) {
+    try { if (localStorage.getItem('po.more') === '1') more.open = true; } catch (e) { /* storage off */ }
+    more.addEventListener('toggle', function () { try { localStorage.setItem('po.more', more.open ? '1' : '0'); } catch (e) { /* storage off */ } });
+  }
+  paintSync();
+  if (card && synced) {
+    setInterval(paintSync, 15000);
+    // keep the card truthful while it's open: Pepe re-reports every 2 minutes
+    setInterval(function () { if (!document.hidden) poll(applyState); }, 60000);
+  }
 })();

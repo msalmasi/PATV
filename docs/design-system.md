@@ -1053,6 +1053,12 @@ The space after the emoji is dropped, so the host needs a flex `gap` (buttons, c
 - Mention alerts and Create a pad use `.ds-card.lg` sections; Create a pad's fields are real `.ds-field` / `.ds-in`; mention alerts keeps its class-less fields (its script builds the word rows) and styles them to the same spec in page CSS.
 - **Choice rows** (Create a pad's "Who can see it", the locked-pad request): 44px bordered rows on `--ds-sunken`, radius 10; the checked one gets the accent border + tint; `:focus-within` shows the focus ring.
 
+### The owner panel (/p/<pad>/owner)
+
+- **The 🐸 Pepe card comes first** (under the section nav): grouped `.po-set` rows (label + why on the start side, a `.ds-switch` / `.ds-select` / note field on the end side), a `.ds-h4` heading + `.ds-meta` line per group. Every value is Pepe's last report; the `.ds-chip` beside the title says "Last synced …" (`ok`, `warn` once 10 minutes old). A row waiting for Pepe dims its control and shows a `.po-st.wait` line ("Waiting for Pepe…"), then `.ok` / `.bad`.
+- **Disclosure with a count** (`details.po-disc`): a full-width 44px `summary.ds-btn.ghost` on `--ds-sunken`, radius 10, the label with its count ("23 more settings") at the start and a CSS chevron at the end that turns down when open (mirrored in RTL, no transition under reduced motion). Use it for long read-only lists that would otherwise be an easy-to-miss text link.
+- **Phones (≤ 520):** rows with a select or a text field wrap the control onto its own full-width line; switch rows stay on one line.
+
 ### Tables
 
 Pad analytics' Regulars and Games tables sit in an `overflow-x: auto` box (`.ra-tbl`). Column heads are 11px/700 uppercase muted, numbers end-aligned and `nowrap`.

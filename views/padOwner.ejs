@@ -21,6 +21,30 @@
   .po .po-why { margin: 0; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
   .po .po-why b { color: var(--ds-text-strong); }
   .po details.po-more > summary { cursor: pointer; color: var(--ds-ac-2); font-size: 13.5px; min-height: 32px; display: flex; align-items: center; }
+  /* 1.99tf: the Pepe card - groups of rows, a per-row status, the "N more settings" disclosure */
+  .po .po-gh { margin: var(--ds-sp-4) 0 2px; }
+  .po .po-gh + .ds-meta { margin: 0 0 var(--ds-sp-1); }
+  .po .po-here { margin: 0; }
+  .po .po-ctl { max-width: 240px; flex: none; }
+  .po .po-admin { color: var(--ds-warn); }
+  .po .po-st { display: block; min-height: 0; font-size: 12.5px; color: var(--ds-text-muted); }
+  .po .po-st:empty { display: none; }
+  .po .po-st.wait { color: var(--ds-warn); } .po .po-st.ok { color: var(--ds-ok); } .po .po-st.bad { color: var(--ds-danger); }
+  .po .po-set.pending .ds-switch, .po .po-set.pending .po-ctl { opacity: .6; }
+  .po .po-note { display: flex; gap: var(--ds-sp-1h); flex: 1 1 280px; max-width: 420px; }
+  .po .po-note .ds-in { flex: 1; min-width: 0; }
+  .po .po-set-note { flex-wrap: wrap; }
+  .po details.po-disc { margin-top: var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-sunken); }
+  .po details.po-disc > summary { list-style: none; width: 100%; justify-content: space-between; border: 0; border-radius: var(--ds-r-md); min-height: var(--ds-tap); }
+  .po details.po-disc > summary::-webkit-details-marker { display: none; }
+  .po details.po-disc > summary::marker { content: ""; }
+  .po .po-chev { width: 9px; height: 9px; border-inline-end: 2px solid currentColor; border-block-end: 2px solid currentColor; transform: rotate(-45deg); transition: transform var(--ds-dur-2) var(--ds-ease); flex: none; margin-inline-end: 4px; }
+  [dir="rtl"] .po .po-chev { transform: rotate(135deg); }
+  .po details.po-disc[open] > summary .po-chev { transform: rotate(45deg); }
+  .po details.po-disc[open] > summary { border-end-start-radius: 0; border-end-end-radius: 0; border-block-end: 1px solid var(--ds-line); }
+  .po .po-disc-b { display: grid; gap: var(--ds-sp-2); padding: var(--ds-sp-3); }
+  @media (prefers-reduced-motion: reduce) { .po .po-chev { transition: none; } }
+  @media (max-width: 520px) { .po .po-set:has(.po-ctl), .po .po-set-note { flex-wrap: wrap; } .po .po-ctl { max-width: 100%; width: 100%; } .po .po-note { max-width: 100%; } }
   .po .po-set { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); min-height: 52px; padding: var(--ds-sp-2) 0; border-top: 1px solid var(--ds-line-soft); }
   .po .po-set:first-of-type { border-top: 0; }
   .po .po-set > div { min-width: 0; }
@@ -63,15 +87,106 @@
   </header>
   <% if (!mine && staff) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🛠️</span><div><%- t('owner.staff_view') %></div></div><% } %>
   <nav class="ds-subnav" aria-label="<%- t('owner.sections') %>"><div class="ds-tabs">
+    <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
     <% if (camfrog) { %><a class="ds-tab" href="#vault">💰 <%- t('owner.nav_vault') %></a><% } %>
     <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
     <% if (camfrog) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
     <a class="ds-tab" href="#prime">📺 <%- t('owner.nav_prime') %></a>
     <a class="ds-tab" href="#stage">🎬 <%- t('owner.nav_stage') %></a>
-    <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
     <% if (camfrog) { %><a class="ds-tab" href="#soundboard">🔊 <%- t('owner.nav_sb') %></a><% } %>
     <a class="ds-tab" href="#can">❓ <%- t('owner.nav_can') %></a>
   </div></nav>
+
+  <% if (camfrog) { %>
+  <%# 1.99tf: the 🐸 card leads the panel. Every value is Pepe's own last report (padowner.settingsFor), with when he sent it;
+      a change shows "waiting for Pepe" until a report newer than his answer confirms it (public/js/pad-owner.js). %>
+  <section class="ds-card lg po-pepe" id="pepe" aria-labelledby="poPepeH" <% if (pepe) { %>data-synced="<%= pepe.updated %>"<% } %>>
+    <h2 class="ds-h2" id="poPepeH"><span class="dot"></span>🐸 <%- t('owner.pepe_h') %>
+      <% if (pepe) { %><span class="ds-chip <%= pepe.stale ? 'warn' : 'ok' %>" id="poSync" title="<%= dt(pepe.updated) %>"><%- t('owner.synced', { when: dt(pepe.updated) }) %></span><% } %></h2>
+    <p class="po-why"><%- t('owner.pepe_why') %></p>
+    <% if (!pepe) { %>
+      <div class="ds-empty"><span aria-hidden="true">🐸</span><b><%- t('owner.pepe_unknown') %></b><p><%- t('owner.pepe_unknown_help') %></p></div>
+    <% } else { %>
+      <% if (pepe.stale) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owner.pepe_stale', { when: dt(pepe.updated) }) %></div></div><% } %>
+      <p class="ds-meta po-here"><%- pepe.pepe_here ? t('owner.here_yes') : t('owner.here_no') %></p>
+      <%
+        const ow = pepe.owner || {}, adm = pepe.admin || {};
+        const lab = (k) => t('owner.set_' + k), why = (k) => t('owner.set_' + k + '_why');
+        const choiceLabel = (k, v) => (k === 'chatty' ? t('owner.chatty_' + v) : t.has('owner.' + (k === 'vibe' ? 'vt_' : 'rm_') + v) ? t('owner.' + (k === 'vibe' ? 'vt_' : 'rm_') + v) : t.esc(v));
+        const notes = {
+          soundboard: adm.soundboard_master === false ? t('owner.sb_master_off') : '',
+          michog: adm.automod ? '' : t('owner.michog_admin_off'),
+          strikes: t('owner.strikes_bounds', { min: adm.strike_min || 2, max: adm.strike_max || 5 }),
+        };
+      %>
+      <% GROUPS.forEach(([g, gic, keys]) => { %>
+      <h3 class="ds-h4 po-gh"><%= gic %> <%- t('owner.grp_' + g) %></h3>
+      <p class="ds-meta"><%- t('owner.grp_' + g + '_why') %></p>
+      <div class="po-sets">
+        <% keys.forEach((k) => { const v = ow[k], known = v !== undefined && v !== null; %>
+        <div class="po-set<%= k === 'greeter_note' ? ' po-set-note' : '' %>" data-po-row="<%= k %>">
+          <div>
+            <b><%= ICONS[k] || '' %> <%- lab(k) %></b>
+            <p class="ds-meta"><%- why(k) %><% if (notes[k]) { %> <span class="po-admin"><%- notes[k] %></span><% } %></p>
+            <% if (!known && k !== 'greeter_note') { %><p class="ds-fine"><%- t('owner.unreported') %></p><% } %>
+            <span class="po-st" data-po-st="<%= k %>" role="status" aria-live="polite"></span>
+          </div>
+          <% if (k === 'language') { %>
+          <select class="ds-select po-ctl" data-po-set="language" aria-label="<%- lab(k) %>">
+            <% LANGS.forEach(([c, n, nat]) => { %><option value="<%= c %>" <%= ow.language === c ? 'selected' : '' %>><%= c === 'auto' ? t('owner.lang_auto') : n + (nat && nat !== n ? ' · ' + nat : '') %></option><% }) %>
+          </select>
+          <% } else if (k === 'chatty' || k === 'vibe' || k === 'roasts') { %>
+          <select class="ds-select po-ctl" data-po-set="<%= k %>" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+            <% (CHOICES[k] || []).forEach((c) => { %><option value="<%= c %>" <%= v === c ? 'selected' : '' %>><%- c === 'auto' ? t('owner.' + (k === 'vibe' ? 'vt_auto' : 'rm_auto')) : choiceLabel(k, c) %></option><% }) %>
+          </select>
+          <% } else if (k === 'strikes') { %>
+          <select class="ds-select po-ctl" data-po-set="strikes" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+            <option value="default"><%- t('owner.strikes_default', { n: adm.strike_default || 3 }) %></option>
+            <% for (let n = (adm.strike_min || 2); n <= (adm.strike_max || 5); n++) { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.strikes_n', { n }) %></option><% } %>
+          </select>
+          <% } else if (k === 'greeter_note') { %>
+          <form class="po-note" data-po-note novalidate>
+            <input class="ds-in" type="text" maxlength="160" data-po-set="greeter_note" value="<%= v || '' %>" placeholder="<%- t('owner.note_ph') %>" aria-label="<%- lab(k) %>" autocomplete="off">
+            <button type="submit" class="ds-btn sm ghost"><%- t('owner.note_save') %></button>
+          </form>
+          <% } else { %>
+          <label class="ds-switch" title="<%- lab(k) %>"><input type="checkbox" data-po-set="<%= k %>" <%= v === true ? 'checked' : '' %> <%= known ? '' : 'disabled' %> aria-label="<%- lab(k) %>"><span></span></label>
+          <% } %>
+        </div><% }) %>
+      </div>
+      <% }) %>
+
+      <h3 class="ds-h4 po-gh">🌉 <%- t('owner.bridge_h') %></h3>
+      <p class="ds-meta"><%- t('owner.bridge_why') %></p>
+      <% if (pepe.bridged === false) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🔌</span><div><%- t('owner.not_bridged') %></div></div><% } %>
+      <div class="po-sets" id="poBridge">
+        <% [['relay', '💬'], ['mic', '🎙️'], ['cams', '📷'], ['audio', '🔊'], ['transcripts', '📝']].forEach(([k, ic]) => { const v = (pepe.bridge || {})[k]; %>
+        <div class="po-set" data-po-row="br:<%= k %>">
+          <div><b><%= ic %> <%- t('owner.br_' + k) %></b><p class="ds-meta"><%- t('owner.br_' + k + '_why') %></p>
+            <span class="po-st" data-po-st="br:<%= k %>" role="status" aria-live="polite"></span></div>
+          <label class="ds-switch"><input type="checkbox" data-po-bridge="<%= k %>" <%= v === true ? 'checked' : '' %> aria-label="<%- t('owner.br_' + k) %>"><span></span></label>
+        </div><% }) %>
+      </div>
+
+      <% if (readonly) { %>
+      <details class="po-disc" id="poMore">
+        <summary class="ds-btn ghost po-disc-s"><span><span class="ds-ic" aria-hidden="true">🔧</span> <%- t('owner.ro_more', { n: readonly.count }) %></span><span class="po-chev" aria-hidden="true"></span></summary>
+        <div class="po-disc-b">
+          <p class="ds-meta"><b><%- t('owner.ro_h') %></b> · <%- t('owner.ro_why') %></p>
+          <ul class="po-ro">
+            <% readonly.features.forEach(([k, v]) => { %><li><span><%- t.has('owner.f_' + k) ? t('owner.f_' + k) : t.esc(k) %></span><span class="ds-chip <%= v ? 'ok' : 'mute' %>"><%- v ? t('owner.on') : t('owner.off') %></span></li><% }) %>
+          </ul>
+          <h4 class="ds-h4"><%- t('owner.prices_h') %></h4>
+          <ul class="po-ro">
+            <% readonly.prices.forEach(([k, v]) => { %><li><span><%- t.has('owner.p_' + k) ? t('owner.p_' + k) : t.esc(k) %></span><%- PAT(v, 'plain') %></li><% }) %>
+          </ul>
+          <% if (pepe.vibe && pepe.vibe.type) { %><p class="ds-meta"><%- t('owner.vibe', { vibe: t.has('owner.vt_' + pepe.vibe.type) ? t('owner.vt_' + pepe.vibe.type) : t.esc(pepe.vibe.type) }) %></p><% } %>
+        </div>
+      </details>
+      <% } %>
+    <% } %>
+  </section>
+  <% } %>
 
   <div class="ds-stats" aria-label="<%- t('owner.summary') %>">
     <% if (vault) { %><div class="ds-stat"><span><%- t('owner.s_vault') %></span><b class="gold"><%= num(vault.balance) %></b><small>PAT</small></div><% } %>
@@ -223,62 +338,19 @@
     <div class="ds-actions"><a class="ds-btn sm" href="<%= href %>/settings?tab=stage"><%- t('owner.stage_go') %></a></div>
   </section>
 
-  <% if (camfrog) { %>
-  <section class="ds-card lg" id="pepe" aria-labelledby="poPepeH">
-    <h2 class="ds-h2" id="poPepeH"><span class="dot"></span>🐸 <%- t('owner.pepe_h') %></h2>
-    <p class="po-why"><%- t('owner.pepe_why') %></p>
-    <% if (!pepe) { %>
-      <div class="ds-empty"><span aria-hidden="true">🐸</span><b><%- t('owner.pepe_unknown') %></b><p><%- t('owner.pepe_unknown_help') %></p></div>
-    <% } else { %>
-      <% if (pepe.stale) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owner.pepe_stale', { when: dt(pepe.updated) }) %></div></div><% } %>
-      <h3 class="ds-h4"><%- t('owner.pepe_yours') %></h3>
-      <div class="po-sets" id="poSets">
-        <% [['snap', '📸'], ['clip', '📹'], ['challenge', '🎤']].forEach(([k, ic]) => { const on = !!pepe.owner[k]; %>
-        <div class="po-set">
-          <div><b><%= ic %> <%- t('owner.set_' + k) %></b><p class="ds-meta"><%- t('owner.set_' + k + '_why') %> <code>!<%= k === 'challenge' ? 'challenge' : k %> on|off</code></p></div>
-          <label class="ds-switch" title="<%- t('owner.set_' + k) %>"><input type="checkbox" data-po-set="<%= k %>" <%= on ? 'checked' : '' %> aria-label="<%- t('owner.set_' + k) %>"><span></span></label>
-        </div><% }) %>
-        <div class="po-set">
-          <div><b>🌐 <%- t('owner.set_language') %></b><p class="ds-meta"><%- t('owner.set_language_why') %> <code>!language &lt;code|auto&gt;</code></p></div>
-          <select class="ds-select" data-po-set="language" aria-label="<%- t('owner.set_language') %>" style="max-width: 220px">
-            <% LANGS.forEach(([c, n, nat]) => { %><option value="<%= c %>" <%= pepe.owner.language === c ? 'selected' : '' %>><%= c === 'auto' ? t('owner.lang_auto') : n + (nat && nat !== n ? ' · ' + nat : '') %></option><% }) %>
-          </select>
-        </div>
-      </div>
-      <p class="po-msg" id="poSetMsg" role="status" aria-live="polite"></p>
-
-      <h3 class="ds-h4"><%- t('owner.bridge_h') %></h3>
-      <p class="ds-meta"><%- t('owner.bridge_why') %></p>
-      <div class="po-sets" id="poBridge">
-        <% [['relay', '💬'], ['mic', '🎙️'], ['cams', '📷'], ['audio', '🔊'], ['transcripts', '📝']].forEach(([k, ic]) => { %>
-        <div class="po-set">
-          <div><b><%= ic %> <%- t('owner.br_' + k) %></b><p class="ds-meta"><%- t('owner.br_' + k + '_why') %></p></div>
-          <label class="ds-switch"><input type="checkbox" data-po-bridge="<%= k %>" <%= pepe.bridge[k] ? 'checked' : '' %> aria-label="<%- t('owner.br_' + k) %>"><span></span></label>
-        </div><% }) %>
-      </div>
-      <p class="po-msg" id="poBrMsg" role="status" aria-live="polite"></p>
-
-      <details class="po-more">
-        <summary><%- t('owner.ro_h') %></summary>
-        <p class="ds-meta"><%- t('owner.ro_why') %></p>
-        <ul class="po-ro">
-          <% Object.entries(pepe.features || {}).forEach(([k, v]) => { %><li><span><%- t.has('owner.f_' + k) ? t('owner.f_' + k) : t.esc(k) %></span><span class="ds-chip <%= v ? 'ok' : 'mute' %>"><%- v ? t('owner.on') : t('owner.off') %></span></li><% }) %>
-        </ul>
-        <h4 class="ds-h4"><%- t('owner.prices_h') %></h4>
-        <ul class="po-ro">
-          <% Object.entries(pepe.prices || {}).forEach(([k, v]) => { %><li><span><%- t.has('owner.p_' + k) ? t('owner.p_' + k) : t.esc(k) %></span><%- PAT(v, 'plain') %></li><% }) %>
-        </ul>
-        <% if (pepe.vibe && pepe.vibe.type) { %><p class="ds-meta"><%- t('owner.vibe', { vibe: pepe.vibe.type }) %></p><% } %>
-      </details>
-    <% } %>
-  </section>
-  <% } %>
 <% } %>
 
   <% if (!guide && locals.camfrog) { %>
   <section class="ds-card lg" id="soundboard" aria-labelledby="poSbH">
     <h2 class="ds-h2" id="poSbH"><span class="dot"></span>🔊 <%- t('owner.sb_h') %></h2>
     <p class="po-why"><%- t('owner.sb_why', { store: '<a href="/soundboards">/soundboards</a>' }) %></p>
+    <% if (locals.pepe && pepe.owner && pepe.owner.soundboard !== undefined) { %>
+    <div class="po-sets"><div class="po-set" data-po-row="soundboard">
+      <div><b>🔊 <%- t('owner.set_soundboard') %></b><p class="ds-meta"><%- t('owner.set_soundboard_why') %><% if (pepe.admin && pepe.admin.soundboard_master === false) { %> <span class="po-admin"><%- t('owner.sb_master_off') %></span><% } %></p>
+        <span class="po-st" data-po-st="soundboard" role="status" aria-live="polite"></span></div>
+      <label class="ds-switch" title="<%- t('owner.set_soundboard') %>"><input type="checkbox" data-po-set="soundboard" <%= pepe.owner.soundboard === true ? 'checked' : '' %> aria-label="<%- t('owner.set_soundboard') %>"><span></span></label>
+    </div></div>
+    <% } %>
     <div id="poSb" data-slug="<%= slug %>"><p class="ds-meta"><%- t('owner.sb_loading') %></p></div>
   </section>
   <% } %>
@@ -310,7 +382,7 @@
     <p class="ds-fine"><%- t('owner.generated') %></p>
   </section>
 </main>
-<% if (!guide) { %><script src="/public/js/pad-owner.js?v=1" defer></script><% } %>
+<% if (!guide) { %><script src="/public/js/pad-owner.js?v=2" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><script src="/public/js/pad-sb-owner.js?v=1" defer></script><% } %>
 </body>
 </html>

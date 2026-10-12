@@ -129,7 +129,8 @@ test("owner settings -> one room.owner action; validated; owner only", async () 
   assert.deepEqual(JSON.parse(a.args), [PLANT, "snap", "off"]);
   r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: "language", value: "zh-tw" });
   assert.equal(r.status, 200);
-  for (const [k, v] of [["say", "off"], ["snap", "maybe"], ["language", "klingon"], ["dj", "on"]]) {
+  for (const [k, v] of [["turf", "off"], ["casino_backend", "on"], ["snap", "maybe"], ["language", "klingon"], ["dj", "on"], ["chatty", "max"],
+                        ["vibe", "spooky"], ["strikes", "x"]]) {
     r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: k, value: v });
     assert.equal(r.status, 400, k);
   }
@@ -194,7 +195,11 @@ test("every owner.* / js.owner.* / js.pad.pepe.* key the panel uses is in en.jso
   const keys = new Set();
   for (const m of view.matchAll(/t\('((?:owner)\.[a-z0-9_.-]+)'/g)) if (!/[._]$/.test(m[1])) keys.add(m[1]);
   for (const m of js.matchAll(/_t\('((?:js\.owner|js\.pad\.pepe)\.[a-z0-9_]+)'/g)) keys.add(m[1]);
-  for (const k of ["snap", "clip", "challenge", "language"]) { keys.add("owner.set_" + k); keys.add("owner.set_" + k + "_why"); }
+  for (const g of PO.OWNER_GROUPS) {
+    keys.add("owner.grp_" + g[0]); keys.add("owner.grp_" + g[0] + "_why");
+    for (const k of g[2]) { keys.add("owner.set_" + k); keys.add("owner.set_" + k + "_why"); }
+  }
+  for (const c of ["off", "low", "normal", "high"]) keys.add("owner.chatty_" + c);
   for (const k of ["relay", "mic", "cams", "audio", "transcripts"]) { keys.add("owner.br_" + k); keys.add("owner.br_" + k + "_why"); }
   for (const a of ["room", "stage", "vault", "games", "feed", "tier"]) keys.add("owner.area_" + a);
   assert.ok(keys.size > 80);
@@ -228,4 +233,83 @@ test("banner chat sponsor: off by default; on -> today's approved booking for Pe
   await BN.setConfig({ banner_chat_sponsor: false, banner_chat_sponsor_mic: true }, "test");
   r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
   assert.deepEqual(r.d.items, [], "switched off -> Pepe drops it");
+});
+
+// ── 1.99tf ──
+const REPORT2 = { [PLANT]: { owner: { snap: true, clip: true, challenge: true, language: "auto", soundboard: false, global_unblock: false, greeter: true,
+  greeter_note: "Say hi <b>", chatty: "low", music: false, music_requests: false, trivia: true, pictionary: true, heist: true, wheel: true, bingo: true,
+  pvp: true, casino: false, say: true, voices: true, mic_replies: true, michog: true, votes: true, strikes: 3, vibe: "chill", roasts: "auto",
+  vibe_lock: true, junk: true }, bridge: { relay: true, mic: true, cams: true, audio: true, transcripts: true, cmds: true }, bridged: true,
+  admin: { soundboard_master: true, automod: false, strike_min: 2, strike_max: 5, strike_default: 3 },
+  features: { say: true, look: true, turf: false, casino_backend: true, kickback: false }, prices: { look: 10000 }, vibe: { type: "chill", locked: true }, pepe_here: true } };
+
+test("1.99tf: the full owner report is kept as Pepe sent it (bridge read through his resolvers), choices ride along", async () => {
+  const r = await post("/api/rooms/owners", null, { password: "bot-token", room_settings: REPORT2, room_languages: LANGS_FROM_PEPE,
+    room_choices: { vibe: ["auto", "chill", "fight", "<x>"], roasts: ["auto", "welcome", "on_request", "avoid"] } });
+  assert.equal(r.status, 200);
+  const s = await PO.settingsFor(PLANT);
+  assert.equal(s.bridge.transcripts, true, "mic transcripts ON when Pepe says so");
+  assert.equal(s.owner.soundboard, false);
+  assert.equal(s.owner.chatty, "low");
+  assert.equal(s.owner.strikes, 3);
+  assert.equal(s.owner.greeter_note, "Say hi b", "markup cleaned (as Pepe cleans it)");
+  assert.equal(s.owner.junk, undefined);
+  assert.equal(s.admin.automod, false);
+  assert.deepEqual(PO.choices().vibe, ["auto", "chill", "fight"]);
+  const ro = PO.readonlyList(s);
+  assert.ok(!ro.features.some(([k]) => k === "say"), "the owner's own switches aren't repeated read-only");
+  assert.ok(ro.features.some(([k]) => k === "turf"));
+  assert.equal(ro.count, ro.features.length + 1 + 1);
+});
+
+test("1.99tf: the Pepe card leads the panel; real values; groups; the disclosure has a count", async () => {
+  const r = await page("/p/" + SLUG + "/owner", "owner");
+  assert.equal(r.status, 200, r.text.slice(0, 400));
+  const t = r.text;
+  assert.ok(t.indexOf('id="pepe"') > 0 && t.indexOf('id="pepe"') < t.indexOf('id="vault"') && t.indexOf('id="pepe"') < t.indexOf('id="stage"'), "Pepe card first");
+  assert.match(t, /data-po-bridge="transcripts" checked/, "transcripts shown ON");
+  assert.match(t, /data-po-set="soundboard" +aria-label/, "soundboard shown OFF");
+  assert.ok((t.match(/data-po-set="soundboard"/g) || []).length === 2, "the soundboard switch is in the Pepe card and the soundboard card");
+  assert.match(t, /<option value="low" selected>/);
+  assert.match(t, /<option value="chill" selected>/);
+  assert.match(t, /id="poSync"/);
+  assert.match(t, /data-synced="\d+"/);
+  assert.match(t, /class="po-disc" id="poMore"/);
+  assert.ok(t.includes(en["owner.ro_more"].replace("{n}", "")) || /\d+ more settings/.test(t), "N more settings");
+  assert.ok(t.includes(en["owner.michog_admin_off"]), "explains that anti-abuse is off");
+  for (const g of PO.OWNER_GROUPS) for (const k of g[2]) assert.ok(t.includes(`data-po-row="${k}"`), k);
+  assert.ok(!/owner\.[a-z_]+\.?[a-z_-]*</.test(t.replace(/<script[\s\S]*?<\/script>/g, "")), "no raw i18n keys on the page");
+});
+
+test("1.99tf: the new owner settings -> room.owner; values validated; strikes inside the admins' bounds", async () => {
+  await runQuery("DELETE FROM pepe_actions");
+  for (const [k, v, want] of [["soundboard", "off", "off"], ["chatty", "high", "high"], ["vibe", "fight", "fight"], ["casino", "on", "on"],
+                              ["strikes", "4", "4"], ["strikes", "default", "default"], ["greeter_note", "  Mention <i>karaoke</i>  ", "Mention i karaoke /i"],
+                              ["global_unblock", "on", "on"], ["votes", "off", "off"]]) {
+    const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: k, value: v });
+    assert.equal(r.status, 200, k + " " + JSON.stringify(r.d));
+    await runQuery("UPDATE pepe_actions SET status = 'done'");
+    const a = (await actions()).pop();
+    assert.deepEqual(JSON.parse(a.args), [PLANT, k, want], k);
+  }
+  const r = await post(`/api/rooms/${SLUG}/owner/setting`, "owner", { key: "strikes", value: "9" });
+  assert.equal(r.status, 400);
+  assert.match(r.d.error, /2 to 5/);
+});
+
+test("1.99tf: the action status says when Pepe answered; the soundboard drawer knows the room's switch", async () => {
+  const a = (await actions()).pop();
+  await runQuery("UPDATE pepe_actions SET status = 'done', updated = 1234567890123 WHERE id = ?", [a.id]);
+  const st = await fetch(`${base}/api/rooms/action/${a.id}`, { headers: { "x-test-user": "owner" } }).then((x) => x.json());
+  assert.equal(st.updated, 1234567890123);
+  assert.deepEqual(await PO.soundboardState(PLANT), { on: false, why: "room" });
+  const rep = JSON.parse(JSON.stringify(REPORT2));
+  rep[PLANT].owner.soundboard = true;
+  rep[PLANT].admin.soundboard_master = false;
+  await post("/api/rooms/owners", null, { password: "bot-token", room_settings: rep });
+  assert.deepEqual(await PO.soundboardState(PLANT), { on: false, why: "admins" });
+  rep[PLANT].admin.soundboard_master = true;
+  await post("/api/rooms/owners", null, { password: "bot-token", room_settings: rep });
+  assert.deepEqual(await PO.soundboardState(PLANT), { on: true, why: null });
+  assert.deepEqual(await PO.soundboardState("Nobody.Room"), { on: true, why: null }, "never reported: Pepe decides at play time");
 });

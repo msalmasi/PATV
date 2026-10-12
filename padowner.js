@@ -32,9 +32,39 @@ const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
 
-const OWNER_SETTINGS = Object.freeze({
-  snap: ["on", "off"], clip: ["on", "off"], challenge: ["on", "off"],
-});
+// 1.99tf: every room-scoped Pepe setting the OWNER may change (camfrog-bot pepe_roomowner.OWNER_SPECS - Pepe re-checks each).
+// The page groups them; each is read back from Pepe's own report, never assumed.
+const ONOFF = ["on", "off"];
+const OWNER_BOOL = Object.freeze(["snap", "clip", "challenge", "soundboard", "global_unblock", "greeter", "music", "music_requests",
+  "trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino", "say", "voices", "mic_replies", "michog", "votes", "vibe_lock"]);
+const OWNER_SETTINGS = Object.freeze(Object.assign(Object.fromEntries(OWNER_BOOL.map((k) => [k, ONOFF])), {
+  chatty: ["off", "low", "normal", "high"],
+}));
+const OWNER_GROUPS = Object.freeze([
+  ["basics", "⚙️", ["snap", "clip", "challenge", "soundboard", "language"]],
+  ["pepe", "🐸", ["greeter", "greeter_note", "chatty", "music", "music_requests", "say", "voices", "mic_replies"]],
+  ["games", "🎲", ["trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino"]],
+  ["mod", "🛡️", ["global_unblock", "michog", "strikes", "votes"]],
+  ["vibe", "🎭", ["vibe", "roasts", "vibe_lock"]],
+]);
+const OWNER_ICONS = Object.freeze({ snap: "📸", clip: "📹", challenge: "🎤", soundboard: "🔊", language: "🌐", greeter: "👋", greeter_note: "📝",
+  chatty: "💬", music: "🎵", music_requests: "🎶", say: "🗣️", voices: "🎭", mic_replies: "🎙️", trivia: "❓", pictionary: "🎨", heist: "💰",
+  wheel: "🎡", bingo: "🔢", pvp: "🥊", casino: "🃏", global_unblock: "🔓", michog: "🎤", strikes: "⚖️", votes: "🗳️", vibe: "🎭",
+  roasts: "🔥", vibe_lock: "🔒" });
+// what the read-only list ("everything else") must not repeat: the owner's own switches, by report key
+const OWNER_COVERS = Object.freeze(new Set(["say", "music", "music_queue", "music_play", "heist", "poker", "blackjack", "wheel", "trivia",
+  "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "greeter", "chatty"]));
+const NOTE_MAX = 160;
+const CHOICE_RE = /^[a-z_]{1,24}$/;
+let CHOICES = { vibe: ["auto"], roasts: ["auto"], chatty: OWNER_SETTINGS.chatty.slice() };
+function setChoices(c) {
+  const list = (v) => (Array.isArray(v) ? v.filter((x) => CHOICE_RE.test(String(x))).slice(0, 30).map(String) : []);
+  const out = { vibe: list(c && c.vibe), roasts: list(c && c.roasts), chatty: OWNER_SETTINGS.chatty.slice() };
+  for (const k of ["vibe", "roasts"]) if (!out[k].length || out[k][0] !== "auto") out[k] = ["auto"].concat(out[k].filter((x) => x !== "auto"));
+  CHOICES = out;
+  return out;
+}
+const cleanNote = (v) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f<>]+/g, " ").replace(/\s+/g, " ").trim().slice(0, NOTE_MAX);
 // 1.99qv: Pepe's room languages come with his owner sync (`room_languages` = [[code, English name, native name]], camfrog-bot
 // pepe_roomowner._op_languages = pepe_i18n.LANGS) and are kept in room_pepe_meta - nothing hard-coded. Until Pepe has sent
 // them the select offers "auto" and the room's current value only (Pepe validates every value again anyway).
@@ -76,8 +106,12 @@ function init() {
   if (!ready) {
     ready = runQuery("CREATE TABLE IF NOT EXISTS room_pepe_settings (room_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL)")
       .then(() => runQuery("CREATE TABLE IF NOT EXISTS room_pepe_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL, updated INTEGER NOT NULL)"))
-      .then(() => getQuery("SELECT v FROM room_pepe_meta WHERE k = 'languages'"))
-      .then((rows) => { if (rows[0]) { try { setLanguages(JSON.parse(rows[0].v)); } catch (e) { /* keep the fallback */ } } })
+      .then(() => getQuery("SELECT k, v FROM room_pepe_meta WHERE k IN ('languages', 'choices')"))
+      .then((rows) => {
+        for (const r of rows) {
+          try { if (r.k === "languages") setLanguages(JSON.parse(r.v)); else setChoices(JSON.parse(r.v)); } catch (e) { /* keep the fallback */ }
+        }
+      })
       .catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -89,22 +123,38 @@ const ID_RE = /^[A-Za-z0-9_.\- ]{1,120}$/;
 function cleanOne(s) {
   const o = s && typeof s === "object" ? s : {};
   const sec = (x, keys) => { const out = {}; const v = x && typeof x === "object" ? x : {}; for (const k of keys) if (bool(v[k]) != null) out[k] = v[k]; return out; };
-  const owner = sec(o.owner, ["snap", "clip", "challenge"]);
-  const lang = o.owner && typeof o.owner.language === "string" ? o.owner.language.toLowerCase() : "auto";
+  // 1.99tf: every owner setting Pepe reports (a key he doesn't report stays absent: the page says so, never guesses)
+  const ow = o.owner && typeof o.owner === "object" ? o.owner : {};
+  const owner = sec(ow, OWNER_BOOL);
+  const lang = typeof ow.language === "string" ? ow.language.toLowerCase() : "auto";
   owner.language = LANG_RE.test(lang) ? lang : "auto";
+  if (OWNER_SETTINGS.chatty.includes(ow.chatty)) owner.chatty = ow.chatty;
+  for (const k of ["vibe", "roasts"]) if (typeof ow[k] === "string" && CHOICE_RE.test(ow[k])) owner[k] = ow[k];
+  if (Number.isInteger(ow.strikes) && ow.strikes >= 1 && ow.strikes <= 10) owner.strikes = ow.strikes;
+  if (typeof ow.greeter_note === "string") owner.greeter_note = cleanNote(ow.greeter_note);
+  const ad = o.admin && typeof o.admin === "object" ? o.admin : {};
+  const int = (v, d) => (Number.isInteger(v) && v >= 1 && v <= 10 ? v : d);
+  const admin = { soundboard_master: ad.soundboard_master !== false, automod: ad.automod === true,
+    strike_min: int(ad.strike_min, 2), strike_max: int(ad.strike_max, 5), strike_default: int(ad.strike_default, 3) };
   const features = sec(o.features, ["say", "ask", "look", "roast", "camroast", "music", "music_queue", "music_play", "shop", "heist", "turf",
     "poker", "blackjack", "wheel", "trivia", "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "cam_flag", "greeter", "chatty",
-    "casino_backend", "auto_dj"]);
+    "casino_backend", "auto_dj", "kickback", "modfines"]);
   const prices = {};
   for (const [k, v] of Object.entries(o.prices && typeof o.prices === "object" ? o.prices : {}).slice(0, 30)) {
     if (/^[a-z]{1,20}$/.test(k) && Number.isFinite(Number(v))) prices[k] = Math.max(0, Math.min(1e12, Math.floor(Number(v))));
   }
   const vibe = o.vibe && typeof o.vibe === "object" ? { type: String(o.vibe.type || "").replace(/[^a-z_ -]/gi, "").slice(0, 24), locked: !!o.vibe.locked } : null;
-  return { owner, bridge: sec(o.bridge, ["relay", "mic", "cams", "audio", "transcripts", "cmds"]), features, prices, vibe, pepe_here: bool(o.pepe_here) };
+  return { owner, bridge: sec(o.bridge, ["relay", "mic", "cams", "audio", "transcripts", "cmds"]), bridged: bool(o.bridged), admin,
+           features, prices, vibe, pepe_here: bool(o.pepe_here) };
 }
 /** POST /api/rooms/owners `room_settings` -> the table (the set Pepe sends replaces the rows it names). */
-async function storeSettings(raw, languages) {
+async function storeSettings(raw, languages, choices) {
   await init();
+  if (choices && typeof choices === "object" && !Array.isArray(choices)) {
+    const c = setChoices(choices);
+    await runQuery(`INSERT INTO room_pepe_meta (k, v, updated) VALUES ('choices', ?, ?)
+                    ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated = excluded.updated`, [JSON.stringify(c), Date.now()]);
+  }
   if (Array.isArray(languages) && languages.length) {
     const list = setLanguages(languages);
     await runQuery(`INSERT INTO room_pepe_meta (k, v, updated) VALUES ('languages', ?, ?)
@@ -130,6 +180,16 @@ async function settingsFor(roomId) {
   return d ? Object.assign(d, { updated: r.updated, stale: Date.now() - r.updated > SETTINGS_STALE_MS }) : null;
 }
 
+/** 1.99tf: may the room's soundboard play right now? (the pad's 🔊 drawer) - Pepe's own report: the admins' master switch,
+ *  then the room's switch. Unknown (Pepe never reported this room) = on: Pepe refuses at play time anyway. */
+async function soundboardState(roomId) {
+  const s = await settingsFor(roomId).catch(() => null);
+  if (!s) return { on: true, why: null };
+  if (s.admin && s.admin.soundboard_master === false) return { on: false, why: "admins" };
+  if (s.owner && s.owner.soundboard === false) return { on: false, why: "room" };
+  return { on: true, why: null };
+}
+
 // ── the generated capability list ──
 let CAPS = null;
 function capabilities() {
@@ -137,6 +197,13 @@ function capabilities() {
     try { CAPS = JSON.parse(fs.readFileSync(path.join(__dirname, "data", "owner-capabilities.json"), "utf8")); } catch (e) { CAPS = { capabilities: [], admin_only: [] }; }
   }
   return CAPS;
+}
+
+/** "Everything else Pepe runs here": the switches Pepe admins keep (not the owner's) + the prices. */
+function readonlyList(pepe) {
+  const features = Object.entries(pepe.features || {}).filter(([k]) => !OWNER_COVERS.has(k));
+  const prices = Object.entries(pepe.prices || {});
+  return { features, prices, count: features.length + prices.length + (pepe.vibe && pepe.vibe.type ? 1 : 0) };
 }
 
 /** Everything the owner page shows. */
@@ -164,6 +231,7 @@ async function pageData(R, viewer) {
     pepe, live, linked: u.camfrogUsername || null, balance: Number(u.points_balance) || 0, recent,
     caps: capabilities(), webCaps: WEB_CAPS, LANGS: pepe && pepe.owner && !LANG_CODES.has(pepe.owner.language)
       ? LANGS.concat([[pepe.owner.language, pepe.owner.language, ""]]) : LANGS,
+    CHOICES, GROUPS: OWNER_GROUPS, ICONS: OWNER_ICONS, readonly: pepe ? readonlyList(pepe) : null,
   };
 }
 
@@ -213,13 +281,23 @@ function register(app, { addUser }) {
     const R = await ownedPad(req, res); if (!R) return;
     await init();                                        // Pepe's language list (room_pepe_meta)
     const b = req.body || {};
-    const key = String(b.key || ""), value = String(b.value || "").toLowerCase();
-    const ok = key === "language" ? LANG_CODES.has(value) : Object.prototype.hasOwnProperty.call(OWNER_SETTINGS, key) && OWNER_SETTINGS[key].includes(value);
+    const key = String(b.key || "");
+    let value = String(b.value == null ? "" : b.value).trim().toLowerCase();
+    let ok;
+    if (key === "language") ok = LANG_CODES.has(value);
+    else if (key === "vibe" || key === "roasts") ok = CHOICES[key].includes(value);
+    else if (key === "strikes") {
+      const cur = await settingsFor(R.id).catch(() => null);
+      const lo = (cur && cur.admin && cur.admin.strike_min) || 2, hi = (cur && cur.admin && cur.admin.strike_max) || 5;
+      ok = value === "default" || (/^\d{1,2}$/.test(value) && +value >= lo && +value <= hi);
+      if (!ok && /^\d{1,2}$/.test(value)) return bad(res, 400, `Pepe's admins allow ${lo} to ${hi} strikes.`);
+    } else if (key === "greeter_note") { value = cleanNote(b.value); ok = true; }
+    else ok = Object.prototype.hasOwnProperty.call(OWNER_SETTINGS, key) && OWNER_SETTINGS[key].includes(value);
     if (!ok) return bad(res, 400, "That isn't a setting you can change here.");
     try {
       const id = await require("./actions").queue(req.user.userId, { kind: "room.owner", args: [R.id, key, value], tag: "owner",
         label: `${R.title}: ${key} ${value}` });
-      await rooms.event(R.id, "pepe-setting", req.user.username || "?", `${key}=${value} (sent to Pepe)`).catch(() => {});
+      await rooms.event(R.id, "pepe-setting", req.user.username || "?", `${key}=${key === "greeter_note" ? (value ? "(note)" : "(cleared)") : value} (sent to Pepe)`).catch(() => {});
       res.json({ ok: true, id });
     } catch (e) { queued(res, e); }
   });
@@ -262,5 +340,6 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { register, init, storeSettings, settingsFor, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS, languages: () => LANGS,
+module.exports = { register, init, storeSettings, settingsFor, soundboardState, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS,
+                   OWNER_GROUPS, OWNER_BOOL, cleanNote, readonlyList, languages: () => LANGS, choices: () => CHOICES,
                    _reset: () => { CAPS = null; } };

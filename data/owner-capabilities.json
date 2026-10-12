@@ -80,7 +80,7 @@
    ],
    "web": "/p/{slug}/owner#soundboard",
    "setting": "soundboard_enabled",
-   "howto": "Prime Time pads get a soundboard of their own (8 clips, Prime Time Plus 24): lines Pepe says in a voice you pick, or someone's mic clip (unless they opted out - they earn a cut of every paid play). You set each clip's price and your pad gets 20% of every paid play. !sb off switches it off in your room (!say isn't affected).",
+   "howto": "Prime Time pads get a soundboard of their own (8 clips, Prime Time Plus 24): lines Pepe says in a voice you pick, or someone's mic clip (unless they opted out - they earn a cut of every paid play). You set each clip's price and your pad gets 20% of every paid play. !sb off (or the Soundboard switch on your owner page) switches plays off in your room - Pepe refuses them politely and charges nothing (!say isn't affected).",
    "owner_only": true,
    "code": [
     "pepe_soundboard.py:_sb_can_edit",
@@ -230,7 +230,59 @@
    "title": "Change your room's Pepe settings from the website",
    "web": "/p/{slug}/owner#pepe",
    "web_action": "room.owner",
-   "howto": "Your owner page flips snapshots, clips, mic challenges and Pepe's language for your room - the same settings as the chat commands above, so chat and the page always agree.",
+   "howto": "The 🐸 Pepe card at the top of your owner page shows what Pepe is really doing in your room right now (with when he last reported it) and changes it: snapshots, clips, mic challenges, the soundboard, Pepe's language and everything below. They're the same settings the chat commands and Pepe's admins use, so chat, the admin panel and the page always agree, and a switch shows 'waiting for Pepe' until he confirms it.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
+   "id": "room_features",
+   "area": "room",
+   "title": "Choose what Pepe does in your room",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "setting": "greeter_enabled",
+   "howto": "Switch Pepe's welcome-back greetings on or off (and leave him a note about what to mention), set how chatty he is (off, low, normal, high), allow music and the DJ, song requests, !say, picking a voice (-v) and spoken (-mic) replies in your room.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
+   "id": "room_games",
+   "area": "games",
+   "title": "Choose which games run in your room",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "setting": "game_trivia_enabled",
+   "howto": "Allow or stop trivia, pictionary, heists, the wheel, bingo, duels and brawls (with the arena and showdowns) and the casino tables (Hold'em and blackjack) in your room. Turf wars and the casino backend stay with Pepe's admins.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
+   "id": "room_moderation",
+   "area": "room",
+   "title": "Set how Pepe moderates your room",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "setting": "michog_enabled",
+   "howto": "Global unblock (Pepe undoes mic blocks other people make in your room; his own stay), mic-hog policing, how many strikes someone gets before Pepe acts (inside the range Pepe's admins allow, 2-5 by default) and whether people can start community votes (!votekick, !voteblock, !votemod, !timeout).",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
+   "id": "room_vibe_web",
+   "area": "room",
+   "title": "Pick your room's vibe on the website",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "setting": "room_vibe_roasts",
+   "howto": "The same as !roomvibe: the room type (chill, fight, music...), how Pepe treats roasts, and the lock that stops him relearning it.",
    "owner_only": true,
    "code": [
     "pepe_roomowner.py:_op_web_setting"
@@ -263,15 +315,14 @@
   }
  ],
  "admin_only": [
-  "!say / !speak on or off",
-  "music, the jukebox and !play",
-  "the Auto-DJ (!dj)",
-  "which games run (heist, turf, casino tables, wheel, trivia, duels...)",
+  "Pepe's voice on the mic (!speak, TTS)",
+  "the Auto-DJ (!dj) and Spotify itself",
+  "turf wars",
   "the casino backend for the room (!casino backend)",
-  "the greeter and chatty mode",
-  "automod (!automod)",
+  "automod rules (!automod) and the anti-abuse switch",
   "room bots",
   "command prices (pat_costs)",
-  "!lookpublic"
+  "!lookpublic, !ask and roasts",
+  "the soundboard master switch and the strike range owners pick from"
  ]
 }

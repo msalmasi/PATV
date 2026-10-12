@@ -36,6 +36,13 @@
   function paint() {
     tabs.textContent = ''; grid.textContent = '';
     if (!data || !data.on) { grid.appendChild(el('p', 'sbd-empty', _t('js.sbd.off', 'Soundboards are switched off right now.'))); return; }
+    // 1.99tf: switched off in this room (the pad owner) or everywhere (Pepe's admins) - say so instead of offering buttons
+    if (data.room_on === false) {
+      grid.appendChild(el('p', 'sbd-empty', data.room_why === 'admins'
+        ? _t('js.sbd.off_admins', 'The soundboard is taking a break everywhere right now (Pepe\'s admins switched it off).')
+        : _t('js.sbd.off_room', 'The soundboard is switched off in this room - the pad owner can switch it back on.')));
+      return;
+    }
     if (!data.tabs.length) { grid.appendChild(el('p', 'sbd-empty', _t('js.sbd.empty', 'No clips here yet.'))); return; }
     if (!tab || !data.tabs.some(function (x) { return x.key === tab; })) tab = data.tabs[0].key;
     data.tabs.forEach(function (x) {

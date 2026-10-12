@@ -405,7 +405,10 @@ async function roomBoard(user, roomId) {
   add("packs", "Packs", "🎁", mine);
   const legends = (await boardClips("legend")).filter((c) => items.has("legend:" + c.id));
   add("legend", "Legendary", "🌟", legends);
-  return { on: CONFIG.enabled, pass, tabs, owned: [...items] };
+  // 1.99tf: the room's own switch + Pepe admins' master switch (Pepe's report, padowner.soundboardState) - the drawer says why
+  let room = { on: true, why: null };
+  if (roomId) { try { room = await require("./padowner").soundboardState(roomId); } catch (e) { room = { on: true, why: null }; } }
+  return { on: CONFIG.enabled, room_on: room.on, room_why: room.why, pass, tabs, owned: [...items] };
 }
 
 // ── buying ──

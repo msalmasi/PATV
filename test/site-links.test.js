@@ -203,7 +203,7 @@ test("the owner's profile menu, /voices, /soundboards, the pad drawer and create
   const drawer = src("public", "js", "pad-soundboard.js");
   assert.match(drawer, /av\.href = '\/voices'/);
   assert.equal(EN["js.sbd.voices"], "Voices");
-  assert.match(src("views", "room.ejs"), /pad-soundboard\.js\?v=2/);
+  assert.match(src("views", "room.ejs"), /pad-soundboard\.js\?v=\d+/);
   assert.match(src("views", "padCreate.ejs"), /<a href="\/pads\/owner-guide">/);
 });
 

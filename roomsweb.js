@@ -127,7 +127,7 @@ function register(app, { addUser, isBotToken }) {
       // 1.99nr: prime_known - every room carries prime_time (Pepe's retention deletes nothing without this marker)
       // 1.99nw: season_pass - the Camfrog logins with a Season Pass (Pepe keeps their PM logs); pass_known says the list is real
       // 1.99qr: each Camfrog pad's Pepe settings for its owner page (padowner.js)
-      if ((req.body || {}).room_settings || (req.body || {}).room_languages) await require("./padowner").storeSettings(req.body.room_settings, req.body.room_languages).catch((e) => console.error("[rooms] room settings:", e.message));
+      if ((req.body || {}).room_settings || (req.body || {}).room_languages) await require("./padowner").storeSettings(req.body.room_settings, req.body.room_languages, req.body.room_choices).catch((e) => console.error("[rooms] room settings:", e.message));
       // 1.99tc: Pepe's live retention windows -> the perk lists on /premium (premiumperks.js)
       if ((req.body || {}).retention) await require("./premium").noteRetention(req.body.retention).catch((e) => console.error("[rooms] retention:", e.message));
       let pass = null;
@@ -281,9 +281,10 @@ function register(app, { addUser, isBotToken }) {
   });
   app.get("/api/rooms/action/:id", addUser, needUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const a = (await getQuery("SELECT status, message FROM pepe_actions WHERE id = ? AND user_id = ?", [parseInt(req.params.id, 10) || 0, req.user.userId]))[0];
+    const a = (await getQuery("SELECT status, message, updated FROM pepe_actions WHERE id = ? AND user_id = ?", [parseInt(req.params.id, 10) || 0, req.user.userId]))[0];
     if (!a) return res.status(404).json({ ok: false, error: "No such action." });
-    res.json({ ok: true, status: a.status, message: a.message || "" });
+    // 1.99tf: `updated` = when Pepe answered - the owner page waits for a settings report newer than that before it calls a switch confirmed
+    res.json({ ok: true, status: a.status, message: a.message || "", updated: Number(a.updated) || null });
   });
 
   // ── admin ──
