@@ -69,7 +69,7 @@ test("the cap: 3 spots (a comp counts); a 4th pad is sold out - buy, gift, chip-
   await PR.setComp("prime_plus", "Ann.Room", true, "test", "house-like comp");            // 1 (no end date)
   await PR.buy(U.bob, { tier: "prime_plus", pad: "Bob.Room", months: 1, ref: ref() });      // 2
   await PR.buy(U.eve, { tier: "prime_plus", pad: "Cat.Room", months: 1, ref: ref() });      // 3 (a gift)
-  assert.deepEqual(PR.plusSpots(), { used: 3, max: 3, left: 0, soldOut: true });
+  assert.deepEqual(PR.plusSpots(), { used: 3, held: 0, max: 3, left: 0, soldOut: true });
   const b0 = await bal(U.dan);
   for (const opts of [{ months: 1 }, { amount: 5000000 }]) {
     await assert.rejects(PR.buy(U.dan, { tier: "prime_plus", pad: "Dan.Room", ref: ref(), ...opts }), (e) => e.soldOut && /sold out/.test(e.message));

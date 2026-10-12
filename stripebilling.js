@@ -8,6 +8,7 @@
 //   STRIPE_WEBHOOK_SECRET       whsec_... (the endpoint's signing secret)
 //   STRIPE_PRICE_PRIME_TIME     price_... a recurring monthly Price for Prime Time
 //   STRIPE_PRICE_SEASON_PASS    price_... a recurring monthly Price for Season Pass
+//   STRIPE_PRICE_PRIME_PLUS     price_... a recurring monthly Price for Prime Time Plus (1.99th; $100/month)
 //
 // Flow: POST /api/premium/stripe/checkout {tier, pad?} -> a Checkout Session (mode "subscription", the tier + target +
 // user in the session's and the subscription's metadata) -> {url}; the browser goes to Stripe. Stripe then calls
@@ -19,6 +20,20 @@
 //                                   a premium_ledger row "stripe:<invoice id>" (no PAT moves - real money)
 //   invoice.payment_failed          an inbox notice (Stripe retries; the grace period covers it)
 //   customer.subscription.deleted   unlinks it (the paid period still runs to its end, then the usual lapse)
+//
+// 1.99th 💎 Prime Time Plus by card (the pad tier capped at ptplus_max_rooms pads):
+//   * checkout reserves a spot first (premium_plus_holds, inside the cap's transaction): sold out -> refused BEFORE Stripe.
+//     The hold lasts as long as the Checkout Session can be paid (expires_at = now + 31 min, Stripe's minimum is 30), is
+//     kept after checkout.session.completed until invoice.paid counts the pad, and checkout.session.expired drops it.
+//     A pad's earlier unpaid checkout is expired at Stripe before a new one opens (never two Plus subscriptions per pad).
+//   * invoice.paid for a NEW Plus pad while every spot is taken anyway (a race the holds missed) is HONOURED - a paying
+//     customer is never refused - logged "[stripe] PLUS OVER CAP" and every admin gets an inbox alert.
+//   * a card Prime Time upgrades in place (POST /api/premium/stripe/upgrade): the same subscription switches to the Plus
+//     price, proration_behavior always_invoice (the difference for the rest of the period is charged now) with
+//     payment_behavior pending_if_incomplete (nothing changes unless that payment succeeds); the mapping moves from the
+//     pad's Prime Time row to its Plus row right away, or on customer.subscription.updated when the payment was pending.
+//   Webhook events to send: checkout.session.completed, checkout.session.expired, invoice.paid, invoice.payment_failed,
+//   customer.subscription.updated, customer.subscription.deleted.
 // Entitlements are the same rows PAT pays for (premium.js): a pad / account is on while paid_through OR
 // stripe_through is ahead. POST /api/premium/stripe/portal opens Stripe's billing portal (cancel / change card).
 //
@@ -48,13 +63,20 @@ const isOn = (v) => ["1", "true", "on", "yes"].includes(String(v || "").toLowerC
 
 function enabled() { return isOn(env("STRIPE_ENABLED")) && !!env("STRIPE_SECRET_KEY") && !!env("STRIPE_WEBHOOK_SECRET"); }
 const testMode = () => env("STRIPE_SECRET_KEY").startsWith("sk_test_");
-const PRICE_ENV = Object.freeze({ prime_time: "STRIPE_PRICE_PRIME_TIME", season_pass: "STRIPE_PRICE_SEASON_PASS" });
+const PRICE_ENV = Object.freeze({ prime_time: "STRIPE_PRICE_PRIME_TIME", season_pass: "STRIPE_PRICE_SEASON_PASS",
+                                  prime_plus: "STRIPE_PRICE_PRIME_PLUS" });                       // 1.99th
 const priceId = (tier) => (PRICE_ENV[tier] ? env(PRICE_ENV[tier]) : "");
 /** What pages may know. Off: just {enabled:false} - nothing about money is shown. */
 function publicState() {
   if (!enabled()) return { enabled: false };
-  return { enabled: true, test: testMode(), tiers: { prime_time: !!priceId("prime_time"), season_pass: !!priceId("season_pass") } };
+  return { enabled: true, test: testMode(), tiers: { prime_time: !!priceId("prime_time"), season_pass: !!priceId("season_pass"), prime_plus: !!priceId("prime_plus") } };
 }
+// 1.99th: a card checkout for 💎 Prime Time Plus holds one of the ptplus_max_rooms spots (premium_plus_holds) for as long as
+// its Checkout Session can be paid: the session gets expires_at = now + SESSION_S (Stripe's minimum is 30 minutes), the hold
+// lives HOLD_MS (a little longer, for clock skew). Paid: kept until the first invoice counts the pad as Plus, then dropped.
+const SESSION_S = 31 * 60;
+const HOLD_MS = 33 * 60 * 1000;
+const PAID_HOLD_MS = 24 * 3600 * 1000;      // checkout.session.completed -> the spot stays held until invoice.paid lands
 
 let ready = null;
 function init() {
@@ -106,9 +128,10 @@ function form(obj, prefix, out = []) {
   }
   return out.join("&");
 }
-async function api(path, params) {
-  const r = await fetchImpl(API + path, { method: "POST", headers: { Authorization: "Bearer " + env("STRIPE_SECRET_KEY"),
-    "Content-Type": "application/x-www-form-urlencoded", "Stripe-Version": "2024-06-20" }, body: form(params) });
+async function api(path, params, method = "POST") {
+  const get = method === "GET";
+  const r = await fetchImpl(API + path, { method, headers: { Authorization: "Bearer " + env("STRIPE_SECRET_KEY"),
+    "Content-Type": "application/x-www-form-urlencoded", "Stripe-Version": "2024-06-20" }, body: get ? undefined : form(params || {}) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error((j.error && j.error.message) || "Stripe error"), { status: 502 });
   return j;
@@ -121,27 +144,166 @@ async function checkout(user, { tier, pad } = {}) {
   await init();
   if (!user || !user.userId) throw new P.Refuse(401, "Sign in first.");
   const T = P.TIERS[String(tier || "")];
-  if (!T) throw new P.Refuse(400, "Pick Prime Time or Season Pass.");
+  if (!T) throw new P.Refuse(400, "Pick Prime Time, Prime Time Plus or Season Pass.");
   const price = priceId(T.id);
   if (!price) throw new P.Refuse(423, `${T.name} can't be paid by card yet.`);
   let target = user.userId, back = "/premium";
   if (T.kind === "pad") {
     const R = await P.padOrRefuse(pad, user);
     if (!(await require("./rooms").canManage(user, R.id))) throw new P.Refuse(403, "Card subscriptions for a pad are for its owner.");
-    target = R.id; back = "/premium?pad=" + encodeURIComponent(R.slug || R.id);
+    target = R.id; back = "/premium?pad=" + encodeURIComponent(R.slug || R.id) + (T.id === "prime_plus" ? "#plus" : "");
   }
   const sub = await P.subRow(T.id, target);
   if (sub && sub.comped) throw new P.Refuse(409, `That already has ${T.name} for free.`);
   if (sub && sub.stripe_sub) throw new P.Refuse(409, `There's already a card subscription for that - manage it from /premium.`);
+  // 1.99th: Plus includes Prime Time - never two card subscriptions for one pad
+  if (T.id === "prime_time" && P.isPrimePlus(target)) throw new P.Refuse(409, "This pad has 💎 Prime Time Plus, which includes Prime Time.");
+  let hold = null;
+  if (T.id === "prime_plus") {
+    const pt = await P.subRow("prime_time", target);
+    if (pt && pt.stripe_sub) throw new P.Refuse(409, "This pad already pays for Prime Time by card - upgrade that subscription to Plus instead.");
+    hold = await reservePlus(target, user.userId);                // refuses "sold out" BEFORE anyone is sent to Stripe
+  }
   const meta = { tier: T.id, target, user_id: user.userId };
-  const s = await api("/checkout/sessions", {
-    mode: "subscription", client_reference_id: user.userId,
-    line_items: { 0: { price, quantity: 1 } },
-    metadata: meta, subscription_data: { metadata: meta },
-    success_url: site() + back + (back.includes("?") ? "&" : "?") + "stripe=success",
-    cancel_url: site() + back + (back.includes("?") ? "&" : "?") + "stripe=cancel",
-  });
+  if (hold) meta.hold = hold.id;
+  const q = back.includes("?") ? "&" : "?";
+  const ret = (r) => { const i = back.indexOf("#"); return i < 0 ? site() + back + q + "stripe=" + r : site() + back.slice(0, i) + q + "stripe=" + r + back.slice(i); };
+  let s;
+  try {
+    if (hold) await expireOld(hold.old);                         // the same pad's earlier, unpaid checkout: closed first
+    s = await api("/checkout/sessions", {
+      mode: "subscription", client_reference_id: user.userId,
+      line_items: { 0: { price, quantity: 1 } },
+      metadata: meta, subscription_data: { metadata: meta },
+      expires_at: hold ? Math.floor(clock() / 1000) + SESSION_S : undefined,
+      success_url: ret("success"),
+      cancel_url: ret("cancel"),
+    });
+  } catch (e) {
+    if (hold) await releaseHold(hold.id);
+    throw e;
+  }
+  if (hold) { await runQuery("UPDATE premium_plus_holds SET session = ? WHERE id = ?", [s.id || null, hold.id]); await P.loadCache(); }
   return { url: s.url, id: s.id };
+}
+
+// ── 1.99th: the Plus spot holds ──
+/** Inside one transaction: the cap check (sold out -> Refuse 409) + a hold on a spot for `target`. The same pad's earlier
+ *  holds are replaced (-> old: their Checkout Session ids, to expire at Stripe). -> {id, old} */
+async function reservePlus(target, userId, ms = HOLD_MS) {
+  const P = require("./premium");
+  const t = clock();
+  const out = await tx(async () => {
+    await runQuery("DELETE FROM premium_plus_holds WHERE expires <= ?", [t]);
+    await P.plusCapCheck(target, t);
+    const old = (await getQuery("SELECT session FROM premium_plus_holds WHERE target = ? AND session LIKE 'cs_%'", [target])).map((r) => r.session);
+    await runQuery("DELETE FROM premium_plus_holds WHERE target = ?", [target]);
+    const id = "hold_" + crypto.randomBytes(9).toString("hex");
+    await runQuery("INSERT INTO premium_plus_holds (id, target, user_id, created, expires) VALUES (?, ?, ?, ?, ?)", [id, target, userId || null, t, t + ms]);
+    return { id, old };
+  });
+  await P.loadCache();
+  return out;
+}
+async function releaseHold(id) {
+  try { await runQuery("DELETE FROM premium_plus_holds WHERE id = ?", [id]); await require("./premium").loadCache(); } catch (e) { console.error("[stripe] hold:", e.message); }
+}
+/** Close the earlier Checkout Sessions of a pad (so one pad can't end up with two paid Plus subscriptions). One that
+ *  can't be closed any more was probably just paid: refuse rather than open a second. */
+async function expireOld(ids) {
+  const P = require("./premium");
+  for (const id of ids || []) {
+    try { await api("/checkout/sessions/" + encodeURIComponent(id) + "/expire", {}); } catch (e) {
+      let st = null;
+      try { st = (await api("/checkout/sessions/" + encodeURIComponent(id), null, "GET")).status; } catch (x) { st = null; }
+      if (st === "expired") continue;                            // already closed: fine
+      throw new P.Refuse(409, "A card checkout for this pad is still going through - give it a few minutes, then reload /premium.");
+    }
+  }
+}
+
+/** 1.99th: upgrade the pad's card Prime Time subscription to 💎 Plus - the same Stripe subscription switches to the Plus
+ *  price with proration (the difference for the rest of this period is invoiced now; payment_behavior
+ *  pending_if_incomplete: nothing changes unless that payment goes through). Takes a Plus spot (sold out -> refused). */
+async function upgrade(user, { pad } = {}) {
+  const P = require("./premium");
+  await init();
+  if (!user || !user.userId) throw new P.Refuse(401, "Sign in first.");
+  const price = priceId("prime_plus");
+  if (!price) throw new P.Refuse(423, "Prime Time Plus can't be paid by card yet.");
+  const R = await P.padOrRefuse(pad, user);
+  if (!(await require("./rooms").canManage(user, R.id))) throw new P.Refuse(403, "Card subscriptions for a pad are for its owner.");
+  const pt = await P.subRow("prime_time", R.id);
+  if (!pt || !pt.stripe_sub || pt.stripe_user !== user.userId) throw new P.Refuse(404, "No card Prime Time subscription of yours on this pad.");
+  const pp = await P.subRow("prime_plus", R.id);
+  if (pp && pp.comped) throw new P.Refuse(409, "This pad already has Prime Time Plus for free.");
+  if (pp && pp.stripe_sub) throw new P.Refuse(409, "This pad already has a card Prime Time Plus subscription.");
+  const hold = await reservePlus(R.id, user.userId, PAID_HOLD_MS);
+  await runQuery("UPDATE premium_plus_holds SET session = ? WHERE id = ?", ["upd:" + pt.stripe_sub, hold.id]);
+  let s;
+  try {
+    const cur = await api("/subscriptions/" + encodeURIComponent(pt.stripe_sub), null, "GET");
+    const item = cur.items && Array.isArray(cur.items.data) && cur.items.data[0];
+    if (!item || !item.id) throw new P.Refuse(502, "Stripe didn't return the subscription's item - try again.");
+    s = await api("/subscriptions/" + encodeURIComponent(pt.stripe_sub), {
+      items: { 0: { id: item.id, price } }, proration_behavior: "always_invoice", payment_behavior: "pending_if_incomplete",
+    });
+  } catch (e) { await releaseHold(hold.id); throw e; }
+  if (s && s.pending_update) return { pending: true };          // waits on the proration payment: customer.subscription.updated finishes it
+  const r = await applyUpgrade(pt.stripe_sub, clock(), { userId: user.userId });
+  await tagPlus(pt.stripe_sub, R.id, user.userId);
+  return { pending: false, upgraded: !!r.moved };
+}
+/** Point the subscription's metadata at Plus (renewal invoices then name the right tier). Best effort. */
+async function tagPlus(sid, target, userId) {
+  try { await api("/subscriptions/" + encodeURIComponent(sid), { metadata: { tier: "prime_plus", target, user_id: userId || "" } }); } catch (e) { console.error("[stripe] upgrade metadata:", e.message); }
+}
+/** Move a card subscription's mapping from the pad's Prime Time row to its Plus row (idempotent; inside or outside a
+ *  transaction - `inTx` skips the wrapper). The Plus row is paid through the same date; Prime Time ends now (no lapse
+ *  notice). -> {moved, overCap, target} */
+async function applyUpgrade(sid, t, { inTx = false } = {}) {
+  const P = require("./premium");
+  const run = async () => {
+    const pt = (await getQuery("SELECT * FROM premium_subs WHERE stripe_sub = ? AND tier = 'prime_time'", [sid]))[0];
+    if (!pt) return { moved: false };
+    const pp = await P.ensureSub("prime_plus", pt.target, t);
+    const overCap = !(t < P.endsAt(pp, t)) && (await P.plusUsed(pt.target, t)).size >= P.config().ptplus_max_rooms;
+    const through = Math.max(Number(pp.stripe_through) || 0, Number(pt.stripe_through) || 0);
+    await runQuery("UPDATE premium_subs SET stripe_sub = ?, stripe_customer = ?, stripe_user = ?, stripe_through = ?, status = 'active', notified = NULL, updated = ? WHERE id = ?",
+                   [sid, pt.stripe_customer, pt.stripe_user, through, t, pp.id]);
+    const ptEnd = Math.min(Number(pt.stripe_through) || 0, t);
+    await runQuery("UPDATE premium_subs SET stripe_sub = NULL, stripe_through = ?, notified = ?, updated = ? WHERE id = ?",
+                   [ptEnd, "lapsed:" + Math.max(Number(pt.paid_through) || 0, ptEnd), t, pt.id]);
+    const left = Math.max(0, ((Number(pt.stripe_through) || 0) - t) / P.DAY);
+    await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, amount, days, period_from, period_to, via, created)
+                    VALUES (?, ?, 'prime_time', ?, 'upgrade-out', ?, 0, ?, ?, ?, 'stripe', ?)`, [`stripe-up:${sid}:${t}:out`, pt.id, pt.target, pt.stripe_user, -left, t, pt.stripe_through, t]);
+    await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, amount, days, period_from, period_to, via, created)
+                    VALUES (?, ?, 'prime_plus', ?, 'upgrade-in', ?, 0, ?, ?, ?, 'stripe', ?)`, [`stripe-up:${sid}:${t}:in`, pp.id, pt.target, pt.stripe_user, left, t, through, t]);
+    await runQuery("DELETE FROM premium_plus_holds WHERE target = ?", [pt.target]);
+    return { moved: true, overCap, target: pt.target };
+  };
+  const r = inTx ? await run() : await tx(run);
+  if (!inTx) {
+    await P.loadCache();
+    if (r.moved) { await P.afterChange("prime_plus", r.target); if (r.overCap) await overCapAlert(r.target, "upgrade " + sid); }
+  }
+  return r;
+}
+/** A paid Plus subscription landed while every spot was taken (a race the holds didn't cover): it's honoured - the
+ *  admins are told so they can sort the rooms out. */
+async function overCapAlert(target, what) {
+  const P = require("./premium");
+  const max = P.config().ptplus_max_rooms;
+  console.error(`[stripe] PLUS OVER CAP: ${what} made pad ${target} Prime Time Plus while all ${max} spots were taken - honoured (paid by card)`);
+  try {
+    let label = target;
+    try { const R = await require("./rooms").get(target); if (R) label = "p/" + (R.slug || R.id); } catch (e) { /* the id will do */ }
+    for (const a of await getQuery("SELECT userId FROM users WHERE class = 'Admin'")) {
+      await require("./inbox").addSafe(a.userId, { kind: "admin", ref: `plus-overcap:${target}:${what}`.slice(0, 120), link: "/premium?pad=" + encodeURIComponent(target) + "#plus",
+        title: `💎 Prime Time Plus is over its ${max}-pad cap`,
+        body: `${label} paid for Plus by card (${what}) after every spot was taken. It's honoured - Pepe can only be in ${max} Camfrog rooms, so free a spot (or raise ptplus_max_rooms if he can take one more).` });
+    }
+  } catch (e) { console.error("[stripe] over-cap alert:", e.message); }
 }
 const DONATE_MAX_USD = 1000;
 /** 1.99jw: a one-off "Support PATV" Checkout Session (mode payment). -> {url, id} */
@@ -199,6 +361,11 @@ function invoiceMeta(inv) {
   const line = inv.lines && Array.isArray(inv.lines.data) ? inv.lines.data.find((l) => l && l.metadata && l.metadata.tier) : null;
   return line ? line.metadata : {};
 }
+/** 1.99th: the Price ids on a subscription object */
+function subPrices(sub) {
+  const items = sub && sub.items && Array.isArray(sub.items.data) ? sub.items.data : [];
+  return items.map((i) => (i && i.price ? (typeof i.price === "string" ? i.price : i.price.id) : null)).filter(Boolean);
+}
 function invoicePeriodEnd(inv) {
   const lines = inv.lines && Array.isArray(inv.lines.data) ? inv.lines.data : [];
   let end = 0;
@@ -214,6 +381,7 @@ async function handleEvent(ev) {
   const obj = (ev.data && ev.data.object) || {};
   let notice = null;
   let donation = null;
+  let overCap = null, upgraded = null;         // 1.99th
   const out = await tx(async () => {
     const ins = await runQuery("INSERT OR IGNORE INTO stripe_events (id, type, created, received) VALUES (?, ?, ?, ?)",
                                [ev.id, ev.type, Number(ev.created) || 0, t]);
@@ -250,8 +418,20 @@ async function handleEvent(ev) {
                        [obj.subscription || null, obj.customer || null, m.user_id || obj.client_reference_id || null, t, sub.id]);
         await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, amount, days, via, created)
                         VALUES (?, ?, ?, ?, 'stripe_checkout', ?, 0, 0, 'stripe', ?)`, ["stripe:" + obj.id, sub.id, m.tier, String(m.target), m.user_id || null, t]);
+        // 1.99th: paid - the Plus spot stays held until the first invoice makes the pad count as Plus
+        if (m.hold) await runQuery("UPDATE premium_plus_holds SET expires = MAX(expires, ?), session = ? WHERE id = ?", [t + PAID_HOLD_MS, obj.id || null, String(m.hold)]);
         outcome = "linked";
       } else outcome = "no-metadata";
+    } else if (ev.type === "checkout.session.expired") {
+      // 1.99th: an unpaid Plus checkout timed out (or was closed): its spot is free again
+      const r = await runQuery("DELETE FROM premium_plus_holds WHERE id = ? OR session = ?", [String(dm.hold || ""), String(obj.id || "")]);
+      outcome = r.changes ? "hold-released" : "ignored";
+    } else if (ev.type === "customer.subscription.updated" && ["active", "trialing", "past_due"].includes(obj.status) && !obj.pending_update &&
+               priceId("prime_plus") && subPrices(obj).includes(priceId("prime_plus")) &&
+               (await getQuery("SELECT 1 FROM premium_subs WHERE stripe_sub = ? AND tier = 'prime_time'", [obj.id]))[0]) {
+      // 1.99th: a card Prime Time switched to the Plus price (our upgrade, once its proration payment went through)
+      const r = await applyUpgrade(obj.id, t, { inTx: true });
+      if (r.moved) { upgraded = r; outcome = r.overCap ? "upgraded-over-cap" : "upgraded"; }
     } else if (ev.type === "invoice.paid" || ev.type === "invoice.payment_succeeded") {
       const sid = invoiceSub(obj);
       const m = invoiceMeta(obj);
@@ -263,13 +443,18 @@ async function handleEvent(ev) {
       }
       const end = invoicePeriodEnd(obj);
       if (sub && end) {
+        // 1.99th: a NEW Plus pad while every spot is taken (a race): the customer paid, so it's honoured - and the admins hear
+        if (sub.tier === "prime_plus" && !(t < P.endsAt(sub, t)) && (await P.plusUsed(sub.target, t)).size >= P.config().ptplus_max_rooms) {
+          overCap = { target: sub.target, what: "invoice " + obj.id };
+        }
+        if (sub.tier === "prime_plus") await runQuery("DELETE FROM premium_plus_holds WHERE target = ?", [sub.target]);
         const through = Math.max(Number(sub.stripe_through) || 0, end);
         const had = await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, amount, days, period_from, period_to, routing, via, created)
                                     VALUES (?, ?, ?, ?, 'stripe', ?, 0, ?, ?, ?, ?, 'stripe', ?)`,
           ["stripe:" + obj.id, sub.id, sub.tier, sub.target, sub.stripe_user || m.user_id || null, Math.max(0, (end - Math.max(t, Number(sub.stripe_through) || 0)) / P.DAY),
            Number(sub.stripe_through) || null, through, JSON.stringify({ currency: obj.currency || null, amount_paid: obj.amount_paid || 0 }), t]);
         await runQuery("UPDATE premium_subs SET stripe_through = ?, status = 'active', notified = NULL, updated = ? WHERE id = ?", [through, t, sub.id]);
-        outcome = had.changes ? "extended" : "already";
+        outcome = had.changes ? (overCap ? "extended-over-cap" : "extended") : "already";
       } else outcome = sub ? "no-period" : "unknown-subscription";
     } else if (ev.type === "invoice.payment_failed") {
       const sid = invoiceSub(obj);
@@ -288,6 +473,12 @@ async function handleEvent(ev) {
     await P.loadCache();
     const m = (obj && obj.metadata) || invoiceMeta(obj || {});
     if (m && m.tier) await P.afterChange(m.tier, String(m.target || ""));
+    if (upgraded) {
+      await P.afterChange("prime_plus", upgraded.target);
+      if (upgraded.overCap) overCap = { target: upgraded.target, what: "upgrade " + obj.id };
+      await tagPlus(obj.id, upgraded.target, (obj.metadata && obj.metadata.user_id) || "");
+    }
+    if (overCap) await overCapAlert(overCap.target, overCap.what);
   }
   if (donation && !out.dup) {
     try { require("./supporter").onDonation(donation.userId).catch(() => {}); } catch (e) { /* never blocks */ }   // 1.99mv: 💚 Supporter perks + achievements
@@ -336,11 +527,13 @@ function register(app, { addUser }) {
   };
   app.post("/api/premium/stripe/checkout", off, addUser, json((u, b) => checkout(u, { tier: b.tier, pad: b.pad })));
   app.post("/api/premium/stripe/portal", off, addUser, json((u, b) => portal(u, { tier: b.tier, pad: b.pad })));
+  app.post("/api/premium/stripe/upgrade", off, addUser, json((u, b) => upgrade(u, { pad: b.pad })));                 // 1.99th
   app.post("/api/premium/stripe/donate", off, addUser, json((u, b) => donate(u, { usd: b.usd, back: b.back })));   // 1.99jw
 }
 
 module.exports = {
   init, register, enabled, testMode, publicState, priceId, verify, sign, handleEvent, checkout, portal, donate, donateLocals, form, DONATE_MAX_USD,
+  upgrade, applyUpgrade, reservePlus, SESSION_S, HOLD_MS,
   _setFetch: (fn) => { fetchImpl = fn || ((...a) => fetch(...a)); },
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

@@ -276,7 +276,9 @@ async function pageData(user) {
     const P = require("./premium");
     await P.init();
     const rooms = require("./rooms");
-    const rows = await getQuery("SELECT * FROM premium_subs WHERE renewer_id = ? OR (tier = 'season_pass' AND target = ?)", [user.userId, user.userId]);
+    // 1.99th: + the card subscriptions this account pays (stripe_user) - Prime Time / 💎 Plus / Season Pass by card
+    const rows = await getQuery("SELECT * FROM premium_subs WHERE renewer_id = ? OR (tier = 'season_pass' AND target = ?) OR (stripe_user = ? AND stripe_sub IS NOT NULL)",
+                                [user.userId, user.userId, user.userId]);
     for (const r of rows) {
       const st = P.statusOf(r, t);
       if (st === "none") continue;
@@ -285,7 +287,8 @@ async function pageData(user) {
       let label = `${TT.emoji} ${TT.name}`, pad = null;          // 1.99qp: 💎 Prime Time Plus too
       if (TT.kind === "pad") { const R = await rooms.get(r.target).catch(() => null); pad = R ? (R.slug || R.id) : r.target; label += " · p/" + pad; }
       prem.push({ tier: r.tier, pad, label, status: st, comped: st === "comped", comp_until: st === "comped" ? P.compUntil(r) || null : null, renewing: r.renewer_id === user.userId, paid_through: Math.max(Number(r.paid_through) || 0, Number(r.stripe_through) || 0),
-                  price: P.priceOf(r.tier), days: P.config().period_days });
+                  price: P.priceOf(r.tier), days: P.config().period_days,
+                  card: !!(r.stripe_sub && r.stripe_user === user.userId) });        // 1.99th: paid by card -> "Manage card" (Stripe's portal)
     }
   } catch (e) { /* premium not wired */ }
   // what can be subscribed to (the shop's subscribable items)

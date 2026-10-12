@@ -213,6 +213,9 @@ function init() {
       await runQuery("CREATE TABLE IF NOT EXISTS premium_plus_waitlist (user_id TEXT PRIMARY KEY, created INTEGER NOT NULL)");
       try { await runQuery("ALTER TABLE premium_subs ADD COLUMN leave_noticed INTEGER"); }
       catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+      // 1.99th: a Plus spot held for an open card checkout (stripebilling.js) - counted by the cap until it expires
+      await runQuery(`CREATE TABLE IF NOT EXISTS premium_plus_holds (id TEXT PRIMARY KEY, target TEXT NOT NULL, user_id TEXT, session TEXT,
+        created INTEGER NOT NULL, expires INTEGER NOT NULL)`);
       await loadConfig();
       await loadCache();
     })().catch((e) => { ready = null; throw e; });
@@ -274,10 +277,12 @@ async function audit(roomId, what, actor, detail) {
 
 // ── entitlements (a sync cache for views / other modules; every write reloads it) ──
 let CACHE = new Map();           // "tier:target" -> sub row
+let HOLDS = [];                  // 1.99th: [{target, expires}] Plus spots held for open card checkouts
 let cacheAt = 0;
 async function loadCache() {
   const m = new Map();
   for (const r of await getQuery("SELECT * FROM premium_subs")) m.set(r.tier + ":" + r.target, r);
+  HOLDS = await getQuery("SELECT target, expires FROM premium_plus_holds").catch(() => []);
   CACHE = m; cacheAt = now();
 }
 function maybeRefresh() {
@@ -321,21 +326,34 @@ function plusOwner(userId, t = now()) {
   return false;
 }
 // ── 1.99qy: the Plus cap ──
-/** Plus pads right now from the cache (pages): {used, max, left, soldOut} */
-function plusSpots(t = now()) {
+/** Plus pads right now from the cache (pages): {used, max, left, soldOut, held}. 1.99th: spots held for an open card
+ *  checkout count too (held), except one held for `forTarget` (the viewer's own pad). */
+function plusSpots(t = now(), forTarget = null) {
   maybeRefresh();
   let used = 0;
-  for (const [k, s] of CACHE) if (k.startsWith("prime_plus:") && t < endsAt(s, t)) used++;
+  const on = new Set();
+  for (const [k, s] of CACHE) if (k.startsWith("prime_plus:") && t < endsAt(s, t)) { used++; on.add(String(s.target)); }
+  const heldT = new Set();
+  for (const h of HOLDS) if (Number(h.expires) > t && !on.has(String(h.target)) && String(h.target) !== String(forTarget || "")) heldT.add(String(h.target));
   const max = CONFIG.ptplus_max_rooms;
-  return { used, max, left: Math.max(0, max - used), soldOut: used >= max };
+  const taken = used + heldT.size;
+  return { used, held: heldT.size, max, left: Math.max(0, max - taken), soldOut: taken >= max };
+}
+/** 1.99th: Plus pads paying / comped right now, `target` left out (inside a transaction: the database, not the cache). */
+async function plusUsed(target, t = now()) {
+  const on = new Set();
+  for (const s of await getQuery("SELECT * FROM premium_subs WHERE tier = 'prime_plus' AND target <> ?", [String(target || "")])) if (t < endsAt(s, t)) on.add(String(s.target));
+  return on;
 }
 /** Inside the caller's transaction: refuse NEW Plus time on `target` when every spot is taken (its own Plus renews). */
 async function plusCapCheck(target, t = now()) {
   const mine = await subRow("prime_plus", target);
   if (mine && t < endsAt(mine, t)) return;                          // already a Plus pad: extending never needs a spot
-  let used = 0;
-  for (const s of await getQuery("SELECT * FROM premium_subs WHERE tier = 'prime_plus' AND target <> ?", [target])) if (t < endsAt(s, t)) used++;
-  if (used >= CONFIG.ptplus_max_rooms) {
+  const on = await plusUsed(target, t);
+  // 1.99th: + the spots held for other pads' open card checkouts (stripebilling.js), so two buyers can't both take the last one
+  const held = new Set();
+  for (const h of await getQuery("SELECT target FROM premium_plus_holds WHERE expires > ? AND target <> ?", [t, String(target)])) if (!on.has(String(h.target))) held.add(String(h.target));
+  if (on.size + held.size >= CONFIG.ptplus_max_rooms) {
     const e = new Refuse(409, `💎 Prime Time Plus is sold out - all ${CONFIG.ptplus_max_rooms} spots are taken (Pepe can only be in ${CONFIG.ptplus_max_rooms} Camfrog rooms). Join the waitlist on /premium and we'll tell you when one frees up.`);
     e.soldOut = true;
     throw e;
@@ -1023,7 +1041,7 @@ async function state(viewer, padSlug) {
     sales: C.sales, period_days: C.period_days, grace_days: C.grace_days,
     prices: { prime_time: C.prime_price, prime_plus: C.plus_price, season_pass: C.season_price, sticker_pack: C.sticker_price },
     day_price: { prime_time: Math.ceil(C.prime_price / C.period_days), prime_plus: Math.ceil(C.plus_price / C.period_days) },
-    plus_spots: plusSpots(t),                        // 1.99qy: {used, max, left, soldOut}
+    plus_spots: plusSpots(t, pad ? pad.id : null),   // 1.99qy: {used, max, left, soldOut}; 1.99th: + held (open card checkouts)
     plus_waitlisted: signed ? !!(await getQuery("SELECT 1 FROM premium_plus_waitlist WHERE user_id = ?", [viewer.userId]))[0] : false,
     perks: { prime_extra_slots: C.prime_extra_slots, prime_extra_badges: C.prime_extra_badges, sp_upload_mult: C.sp_upload_mult, sp_sticker_packs: C.sp_sticker_packs,
              sb_slots_free: C.sb_slots_free, sb_slots_prime: C.sb_slots_prime, sb_slots_plus: C.sb_slots_plus, plus_bridge_gate: C.plus_bridge_gate },
@@ -1151,7 +1169,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
-  plusSpots, plusCapCheck, plusWaitlist, plusWaitlistNotify, plusLeaveNotices,
+  plusSpots, plusUsed, plusCapCheck, plusWaitlist, plusWaitlistNotify, plusLeaveNotices,
   retention, noteRetention, cleanRetention, RETENTION_DEFAULTS,         // 1.99tc: Pepe's retention windows (the perk lists)
   isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,

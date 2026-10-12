@@ -117,6 +117,8 @@ const RULES = {
   "premium_subs.renewer_id": M(), "premium_subs.stripe_user": M(), "premium_subs.comp_by": { deny: NAME },
   "premium_ledger.target": M(), "premium_ledger.payer_id": M(), "premium_ledger.payer_name": { deny: NAME },
   "premium_plus_waitlist.user_id": M({ key: [] }),
+  // 1.99th: a Plus spot held for an open card checkout - the payer moves with the account; target is a pad (room) id
+  "premium_plus_holds.user_id": M(), "premium_plus_holds.target": { deny: "a pad (room) id, not a userId" },
   "pad_vault_rekeys.from_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },
   "pad_vault_rekeys.to_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },          // 1.99qy: the 💎 Plus waitlist (one row per account)
   // 1.99iw stickers.js: packs owned (both own a pack: one row stays)

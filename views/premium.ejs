@@ -133,6 +133,12 @@
               <button type="button" class="ds-btn gold" data-chip="prime_plus"><span class="ds-ic" aria-hidden="true">🤝</span> <%- t('premium.chip_in') %></button></div>
             <div class="row"><label class="ds-check"><input type="checkbox" id="ppRenew"<%= PLUS.renewer_me ? ' checked' : '' %>> <%- t('premium.renew_label', { days: S.period_days }) %></label></div>
             <% if (!PAD.mine) { %><div class="row"><label class="ds-check"><input type="checkbox" id="ppAnon"> <%- t('gifts.anon.box_pad') %></label></div><% } %>
+            <%# 1.99th: 💎 Plus by card (STRIPE_PRICE_PRIME_PLUS set): a new card subscription, or the pad's card Prime Time upgraded in place %>
+            <% if (ST.enabled && ST.tiers && ST.tiers.prime_plus && PAD.mine) { %><div class="row card-pay">
+              <% if (PLUS.stripe) { %><button type="button" class="ds-btn ghost" data-portal="prime_plus"><%- t('premium.manage_card') %></button>
+              <% } else if (PAD.stripe) { %><button type="button" class="ds-btn quiet" data-card-upgrade="1"><span class="ds-ic" aria-hidden="true">💳</span> <%- t('premium.pp.card_upgrade') %><%- ST.test ? ' ' + t('premium.test_mode') : '' %></button>
+              <% } else { %><button type="button" class="ds-btn quiet" data-card="prime_plus"><span class="ds-ic" aria-hidden="true">💳</span> <%- t('premium.pay_card') %><%- ST.test ? ' ' + t('premium.test_mode') : '' %></button><% } %>
+            </div><% if (!PLUS.stripe && PAD.stripe) { %><p class="mut"><%- t('premium.pp.card_upgrade_note') %></p><% } %><% } %>
           <% } else { %><p><%- t('premium.pt.signin', { link: '<a href="/login?next=' + t.esc(encodeURIComponent('/premium?pad=' + PAD.slug)) + '">' + t('premium.sign_in') + '</a>' }) %></p><% } %>
         <% } %>
       <% } else { %>
@@ -271,6 +277,15 @@
       var onW = b.getAttribute('data-plus-wait') === '1';
       b.disabled = true;
       post('/api/premium/plus/waitlist', { on: onW }).then(function (j) { b.disabled = false; done(j, onW ? _t('js.premium.waitlist_on', 'You’re on the waitlist - we’ll tell you when a spot frees up.') : _t('js.premium.waitlist_off', 'You’re off the waitlist.')); });
+    } else if (b.hasAttribute('data-card-upgrade')) {             // 1.99th: card Prime Time -> 💎 Plus, same subscription, prorated
+      if (!confirm(_t('js.premium.q_card_upgrade', 'Upgrade this pad’s card subscription to Prime Time Plus? Stripe charges the difference for the rest of this month now, then the Plus price every month.'))) return;
+      b.disabled = true;
+      post('/api/premium/stripe/upgrade', { pad: pad || undefined }).then(function (j) {
+        b.disabled = false;
+        if (!j.ok) { say(j.error || _t('js.premium.didnt_work', 'That didn’t work.'), false); return; }
+        say(j.pending ? _t('js.premium.upgrade_pending', 'Stripe is confirming the payment - the pad turns Plus as soon as it goes through.') : _t('js.premium.card_upgraded', '💎 Upgraded - this pad has Prime Time Plus now.'), true);
+        if (!j.pending) setTimeout(function () { location.reload(); }, 1200);
+      });
     } else if (b.hasAttribute('data-card') || b.hasAttribute('data-portal')) {
       var card = b.hasAttribute('data-card');
       b.disabled = true;

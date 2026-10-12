@@ -37,6 +37,11 @@
       var on = b.getAttribute('data-on') === '1';
       if (!on && !confirm(_t('js.subs.q_prem_off', 'Stop auto-renew? It stays on until its paid date.'))) return;
       run(b, post('/api/subscriptions/premium', { tier: b.getAttribute('data-prem'), pad: b.getAttribute('data-pad') || undefined, on: on }));
+    } else if (b.hasAttribute('data-portal')) {                 // 1.99th: a card subscription -> Stripe's billing portal
+      b.disabled = true;
+      post('/api/premium/stripe/portal', { tier: b.getAttribute('data-portal'), pad: b.getAttribute('data-pad') || undefined })
+        .then(function (d) { if (d.url) location.href = d.url; else { b.disabled = false; say(_t('js.premium.no_card', 'Card payments aren’t available.'), 'bad'); } })
+        .catch(function (e) { b.disabled = false; say(e.message, 'bad'); });
     } else if ((id = b.getAttribute('data-unlink'))) {
       if (!confirm(_t('js.subs.q_unlink', 'Unlink this Plex account from your PATV account?'))) return;
       run(b, post('/api/plex/link/unlink', { plex_id: id }));

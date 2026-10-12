@@ -129,7 +129,7 @@ test("checkout: a subscription-mode Checkout Session with the tier / target / us
   // a fan can't open a card subscription for someone else's pad
   const r2 = await raw("POST", "/api/premium/stripe/checkout", { user: "fan", body: JSON.stringify({ tier: "prime_time", pad: PLANT }), headers: { "Content-Type": "application/json" } });
   assert.equal(r2.status, 403);
-  assert.deepEqual(SB.publicState(), { enabled: true, test: true, tiers: { prime_time: true, season_pass: true } });
+  assert.deepEqual(SB.publicState(), { enabled: true, test: true, tiers: { prime_time: true, season_pass: true, prime_plus: false } });
 });
 
 test("webhook: checkout.session.completed links, invoice.paid extends stripe_through (entitlement on), a replayed event changes nothing, deleted unlinks", async () => {

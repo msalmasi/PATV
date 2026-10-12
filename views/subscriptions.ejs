@@ -106,10 +106,12 @@
     <h2 class="ds-h2" id="sxPremH"><%- t('subs.prem_h') %></h2>
     <% if (!S.premium.length) { %><p class="mut"><%- t('subs.prem_none', { link: '<a href="/premium">' + t('subs.prem_link') + '</a>' }) %></p><% } %>
     <% S.premium.forEach((p) => { %>
-      <div class="it"><div class="w"><b><%= p.label %></b> <span class="mut">· <%- t('subs.every', { price: fmt(p.price), days: p.days }) %></span>
-        <div class="st <%= p.comped || p.renewing ? 'ok' : 'off' %>"><%- p.comped ? (p.comp_until ? t('premium.status.comped_until', { date: d(p.comp_until) }) : t('subs.prem_comped')) : p.renewing ? t('subs.renews', { date: d(p.paid_through) }) : t('subs.prem_ends', { date: d(p.paid_through) }) %></div></div>
+      <%# 1.99th: a card subscription (Stripe) renews by card - managed / cancelled in Stripe's portal, not with the PAT auto-renew switch %>
+      <div class="it"><div class="w"><b><%= p.label %></b> <span class="mut">· <%- p.card ? t('subs.card_monthly') : t('subs.every', { price: fmt(p.price), days: p.days }) %></span>
+        <div class="st <%= p.comped || p.renewing || p.card ? 'ok' : 'off' %>"><%- p.comped ? (p.comp_until ? t('premium.status.comped_until', { date: d(p.comp_until) }) : t('subs.prem_comped')) : p.card ? t('subs.card_renews', { date: d(p.paid_through) }) : p.renewing ? t('subs.renews', { date: d(p.paid_through) }) : t('subs.prem_ends', { date: d(p.paid_through) }) %></div></div>
         <% if (!p.comped) { %><div class="acts">
-          <% if (p.renewing) { %><button type="button" class="ds-btn sm danger dan" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="0"><%- t('subs.prem_off') %></button>
+          <% if (p.card) { %><button type="button" class="ds-btn sm ghost" data-portal="<%= p.tier %>" data-pad="<%= p.pad || '' %>"><%- t('premium.manage_card') %></button>
+          <% } else if (p.renewing) { %><button type="button" class="ds-btn sm danger dan" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="0"><%- t('subs.prem_off') %></button>
           <% } else if (p.status === 'active' || p.status === 'grace') { %><button type="button" class="ds-btn sm ghost" data-prem="<%= p.tier %>" data-pad="<%= p.pad || '' %>" data-on="1"><%- t('subs.prem_on') %></button><% } %>
         </div><% } %></div>
       <%# 1.99tc: what the tier gets - the same perk table as /premium (premiumperks.js) %>
@@ -120,6 +122,6 @@
   </section>
   <p class="msg" id="sxMsg" role="status" aria-live="polite"></p>
 </main>
-<script src="/public/js/subscriptions.js?v=1" defer></script>
+<script src="/public/js/subscriptions.js?v=2" defer></script>
 </body>
 </html>
