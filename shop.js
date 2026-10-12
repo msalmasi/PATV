@@ -1251,6 +1251,9 @@ const withMsg = (back, msg) => {
 function register(app, deps) {
   const { isBotToken, addUser, requireUser } = deps;
   D = { achievements: deps.achievements || null, discordBridge: deps.discordBridge || null, userRoles: deps.userRoles || null };
+  const SA = require("./storealerts");        // 1.99tp: per-item purchase alerts (official items)
+  SA.hook();
+  SA.init().catch((e) => console.error("[shop] store alerts:", e.message));
   const timer = setInterval(() => sweep().catch((e) => console.error("[shop] sweep:", e.message)), 10 * 60 * 1000);
   if (timer.unref) timer.unref();
   ready.then(() => setTimeout(() => sweep().catch(() => {}), 30 * 1000).unref());
@@ -1501,12 +1504,17 @@ function register(app, deps) {
       const me = await meOf(req);
       if (!me) return res.redirect("/login");
       const o = await getOrder(req.params.id);
-      if (!o || !(me.staff || o.buyer_id === me.userId || o.seller_id === me.userId || (o.gift_from && o.gift_from === me.userId))) {
+      // 1.99tp: a designated FULFILLER of an official item (storealerts.js, "include delivery details" on) may open its orders
+      const fulfiller = !!o && !!o.official && !me.staff && o.buyer_id !== me.userId && o.gift_from !== me.userId &&
+                        await SA.isFulfiller(o.prize_id, me.userId).catch(() => false);
+      if (!o || !(me.staff || fulfiller || o.buyer_id === me.userId || o.seller_id === me.userId || (o.gift_from && o.gift_from === me.userId))) {
         return res.status(404).render("shopOrder", base(req, me, { o: null, events: [], role: null }));
       }
       const events = (await eventsFor([o.id]))[o.id] || [];
       // 1.99lz: "gifter" = paid for it as a gift: sees the order, not what was delivered on it (an invite link, a code)
-      const role = o.buyer_id === me.userId ? "buyer" : o.seller_id === me.userId ? "seller" : (o.gift_from === me.userId && !me.staff) ? "gifter" : "admin";
+      // 1.99tp: "fulfiller" = sees the order + the buyer's details, never what was delivered on it, an anonymous giver or the admin notes
+      const role = o.buyer_id === me.userId ? "buyer" : o.seller_id === me.userId ? "seller" : (o.gift_from === me.userId && !me.staff) ? "gifter"
+                 : fulfiller ? "fulfiller" : "admin";
       if (o.gift_from) o.gift_from_name = ((await getQuery("SELECT username FROM users WHERE userId = ?", [o.gift_from]))[0] || {}).username || null;
       await attachArt([o]);                         // 1.99mv: its picture
       maskAnonGift(o, me);                          // 1.99mt: the recipient of an 🕶 anonymous gift never sees who sent it
@@ -1557,7 +1565,8 @@ function register(app, deps) {
         FROM shop_orders WHERE official = 0`))[0];
       let subsCfg = null;          // 1.99jp: subscriptions.js config (its own form below the settings)
       try { const SUB = require("./subscriptions"); await SUB.init(); subsCfg = SUB.config(); } catch (e) { subsCfg = null; }
-      res.render("shopAdmin", base(req, me, { review, disputes, orders, ost, page, opages: Math.max(1, Math.ceil(ototal / 50)), listings, lq, stats, subsCfg }));
+      const alerts = await SA.overview().catch(() => []);          // 1.99tp: who is alerted for which official item
+      res.render("shopAdmin", base(req, me, { review, disputes, orders, ost, page, opages: Math.max(1, Math.ceil(ototal / 50)), listings, lq, stats, subsCfg, alerts }));
     } catch (e) {
       console.error("[shop] admin:", e);
       res.status(500).send("Couldn't load the shop admin.");
@@ -1567,7 +1576,18 @@ function register(app, deps) {
   app.get("/shop/admin/edit/:id", addUser, staffPage(async (req, res, me) => {
     await ready;
     const p = await getListing(req.params.id);
-    res.status(p ? 200 : 404).render("shopEdit", base(req, me, { p }));
+    // 1.99tp: an official item's purchase-alert recipients (storealerts.js)
+    const alerts = p && !p.seller_id ? await SA.forItem(p.prizeId).catch(() => []) : null;
+    res.status(p ? 200 : 404).render("shopEdit", base(req, me, { p, alerts }));
+  }));
+
+  // 1.99tp: "Alert on purchase" - add / update / remove one recipient of an official item (staff; admin_audit)
+  app.post("/shop/admin/alerts/:id/:op", ...formPost("/shop/admin#alerts", async (req, me) => {
+    if (!me.staff) throw new Refuse(403, "Admins only.");
+    const op = String(req.params.op);
+    if (!["add", "update", "remove"].includes(op)) throw new Refuse(404, "Unknown action.");
+    const r = await SA.setRecipient({ userId: me.userId, username: me.username }, String(req.params.id), op, req.body || {});
+    return { message: r.message, back: `/shop/admin/edit/${encodeURIComponent(String(req.params.id))}#alerts` };
   }));
 
   app.post("/shop/admin/settings", ...formPost("/shop/admin#settings", async (req, me) => {

@@ -21,7 +21,7 @@
     <p class="ds-sub"><a href="/shop">Shop</a> · <a href="/admin/manage-prizes">Classic prize editor</a> · <a href="/admin">Admin</a></p>
   </div>
   <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
-  <div class="tabs"><a href="#review">Review (<%= review.length %>)</a><a href="#disputes">Disputes (<%= disputes.length %>)</a><a href="#orders">Orders</a><a href="#listings">Listings</a><a href="#official">Add official item</a><a href="#settings">Settings</a></div>
+  <div class="tabs"><a href="#review">Review (<%= review.length %>)</a><a href="#disputes">Disputes (<%= disputes.length %>)</a><a href="#orders">Orders</a><a href="#listings">Listings</a><a href="#alerts">Purchase alerts (<%= (typeof alerts !== 'undefined' && alerts ? alerts : []).length %>)</a><a href="#official">Add official item</a><a href="#settings">Settings</a></div>
   <div class="stats">
     <div class="stat"><span>Marketplace orders</span><b><%= H.fmt(stats.n) %></b></div>
     <div class="stat"><span>Fees to the Reserve</span><b class="price"><%= H.fmt(stats.fees) %></b></div>
@@ -116,6 +116,21 @@
       </div>
     <% }) %>
   </div>
+
+  <% if (typeof alerts !== 'undefined' && alerts) { %>
+  <%# 1.99tp: who is alerted when an official item is bought (set on each item's Edit page) %>
+  <h2 id="alerts"><span class="ds-ic" aria-hidden="true">🛎️</span> Purchase alerts</h2>
+  <p class="muted">Who hears when someone buys an official item. Set them on the item's <b>Edit</b> page (Alert on purchase). 📨 = inbox · ✈️ = Telegram · 🐸 = Camfrog PM · 📦 = fulfiller (sees the buyer's delivery details and can open the orders).</p>
+  <% if (!alerts.length) { %><p class="ds-empty">No purchase alerts set.</p><% } %>
+  <div class="list">
+    <% alerts.forEach((a) => { %>
+      <div class="item sm">
+        <div class="top"><span><a href="/shop/item/<%= a.prizeId %>"><%= a.prize %></a><% if (a.status !== 'active') { %> <span class="muted">(<%= H.lstatus(a.status).label %>)</span><% } %></span><a class="btn alt" href="/shop/admin/edit/<%= a.prizeId %>#alerts">Edit</a></div>
+        <div class="muted"><% a.recipients.forEach((r, i) => { %><%= i ? ' · ' : '' %><b><%= r.username %></b> 📨<%= r.tg ? '✈️' : '' %><%= r.pm ? '🐸' : '' %><%= r.details ? '📦' : '' %><% }) %></div>
+      </div>
+    <% }) %>
+  </div>
+  <% } %>
 
   <h2 id="official">Add an official item</h2>
   <form class="box" method="POST" action="/shop/listing" style="display:grid;gap:10px">

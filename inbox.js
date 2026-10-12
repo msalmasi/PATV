@@ -44,6 +44,7 @@ const KINDS = {
   feed:        { icon: "📝", label: "Feed posts & comments", link: "/feed" },
   follow:      { icon: "⭐", label: "New posts from people & pads you follow", link: "/feed/following" },
   golive:      { icon: "🎥", label: "Go-live alerts (people & pads you follow)", link: "/feed/following" },   // 1.99kp: golive.js
+  store_purchase: { icon: "🛎️", label: "Store purchase alerts (shop items an admin set you to watch)", link: "/shop" },   // 1.99tp: storealerts.js
   creator:     { icon: "⭐", label: "PATV Creators (subscriptions, unlocks, earnings)", link: "/creator" },   // 1.99pv: creators.js
   dm:          { icon: "💬", label: "Direct messages (a Camfrog alert from Pepe)", link: "/messages" },   // 1.99cp: messages.js; never filed here
   mention:     { icon: "📣", label: "Mentions (@you in posts and comments, your name or words in a Camfrog room)", link: "/settings/mentions" },   // 1.99ii: mentions.js; site-only; 1.99kk: + feed @mentions (feedmentions.js)
@@ -105,7 +106,8 @@ async function add(userId, n) {
     [userId, x.kind, x.title, x.body || null, x.link, x.created, x.ref]);
   const stored = !!(r && r.changes);
   // 1.99kn: the member's Telegram alert for this notice, if they linked Telegram and want this kind (telegram.js)
-  if (stored) { try { require("./telegram").onNotice(userId, x); } catch (e) { /* never fails the notice */ } }
+  // 1.99tp: telegram: false = the caller queues (or skips) the Telegram alert itself (storealerts.js: a per-recipient switch)
+  if (stored && n.telegram !== false) { try { require("./telegram").onNotice(userId, x); } catch (e) { /* never fails the notice */ } }
   if (stored && Math.random() < 0.05) {
     runQuery(`DELETE FROM inbox WHERE user_id = ? AND id NOT IN (SELECT id FROM inbox WHERE user_id = ? ORDER BY id DESC LIMIT ?)`,
       [userId, userId, KEEP_PER_USER]).catch(() => {});

@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'Edit item', user: user }) %>
 <%- include('partials/shop-css') %>
 <style>
@@ -40,5 +41,50 @@
     </div>
     <div><button type="submit">Save</button></div>
   </form>
+  <% if (!p.seller_id && typeof alerts !== 'undefined' && alerts) { const back = '/shop/admin/edit/' + p.prizeId + '#alerts'; %>
+  <%# 1.99tp: Alert on purchase (storealerts.js) - who hears when someone buys this item, and how %>
+  <section class="box sa-alerts" id="alerts" aria-labelledby="saH" style="display:grid;gap:12px">
+    <h2 id="saH" style="margin:0"><span class="ds-ic" aria-hidden="true">🛎️</span> <%- t('storealert.admin.h') %></h2>
+    <p class="muted" style="margin:0"><%- t('storealert.admin.what') %></p>
+    <p class="muted" style="margin:0"><b><%- t('storealert.admin.details_h') %></b> <%- t('storealert.admin.details_what') %></p>
+    <% if (!alerts.length) { %><p class="ds-empty"><%- t('storealert.admin.none') %></p><% } %>
+    <div class="list">
+      <% alerts.forEach((a) => { %>
+        <div class="item sm">
+          <div class="top"><span><b><% if (a.username) { %><a href="/u/<%= encodeURIComponent(a.username) %>"><%= a.username %></a><% } else { %>?<% } %></b><% if (a.camfrog) { %> <span class="muted">· <%= a.camfrog %></span><% } %><% if (a.admin) { %> <span class="pill"><%- t('storealert.admin.is_admin') %></span><% } %><% if (a.details) { %> <span class="pill" style="color:#ffd700"><%- t('storealert.admin.fulfiller') %></span><% } %></span>
+            <span class="muted"><%- t('storealert.admin.added', { name: t.esc(a.added_by_name || '?'), when: t.esc(H.day(a.updated)) }) %></span></div>
+          <div class="row">
+            <form method="POST" action="/shop/admin/alerts/<%= p.prizeId %>/update" class="row" style="flex:1 1 320px">
+              <input type="hidden" name="back" value="<%= back %>">
+              <input type="hidden" name="userId" value="<%= a.user_id %>">
+              <span class="muted"><%- t('storealert.admin.inbox_always') %></span>
+              <label class="check"><input type="checkbox" name="tg" value="1" <%= a.tg ? 'checked' : '' %>> <%- t('storealert.admin.tg') %></label>
+              <label class="check"><input type="checkbox" name="pm" value="1" <%= a.pm ? 'checked' : '' %>> <%- t('storealert.admin.pm') %></label>
+              <label class="check"><input type="checkbox" name="details" value="1" <%= a.details ? 'checked' : '' %>> <%- t('storealert.admin.details') %></label>
+              <button class="alt" type="submit"><%- t('storealert.admin.save') %></button>
+            </form>
+            <form method="POST" action="/shop/admin/alerts/<%= p.prizeId %>/remove" data-q="<%= t('storealert.admin.remove_q', { name: a.username || '?' }) %>" onsubmit="return confirm(this.dataset.q)">
+              <input type="hidden" name="back" value="<%= back %>">
+              <input type="hidden" name="userId" value="<%= a.user_id %>">
+              <button class="bad" type="submit"><%- t('storealert.admin.remove') %></button>
+            </form>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <form method="POST" action="/shop/admin/alerts/<%= p.prizeId %>/add" style="display:grid;gap:10px">
+      <input type="hidden" name="back" value="<%= back %>">
+      <div class="formgrid">
+        <label class="wide"><%- t('storealert.admin.who') %> <input type="text" name="who" list="saPeople" maxlength="64" required autocomplete="off" spellcheck="false" placeholder="<%= t('storealert.admin.who_ph') %>"></label>
+        <label class="check"><input type="checkbox" name="tg" value="1" checked> <%- t('storealert.admin.tg') %></label>
+        <label class="check"><input type="checkbox" name="pm" value="1"> <%- t('storealert.admin.pm') %></label>
+        <label class="check wide"><input type="checkbox" name="details" value="1"> <%- t('storealert.admin.details') %></label>
+      </div>
+      <datalist id="saPeople"></datalist>
+      <div><button type="submit"><%- t('storealert.admin.add') %></button></div>
+    </form>
+  </section>
+  <script src="/public/js/shop-alerts.js?v=1" defer></script>
+  <% } %>
 <% } %>
 </main>

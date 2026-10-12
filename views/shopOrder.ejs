@@ -17,7 +17,7 @@
     <div class="sd-quick"><a class="qbtn gold" href="/shop/orders"><%- t('shop.order.your_orders') %></a><a class="qbtn" href="/shop"><span class="ds-ic" aria-hidden="true">🛒</span><%- t('shop.orders.browse') %></a></div>
   </div>
 <% } else { const st = H.status(o.status); const back = '/shop/orders/' + o.id; const isOpen = ['paid', 'fulfilled', 'disputed'].includes(o.status); %>
-  <div class="ds-row between"><a class="ds-back" href="<%= role === 'seller' ? '/shop/seller' : role === 'admin' ? '/shop/admin' : '/shop/orders' %>"><%- t('shop.order.back') %></a><% if (o.prize_id) { %><a class="ds-back" href="/shop/item/<%= o.prize_id %>"><%- t('shop.order.item_page') %></a><% } %></div>
+  <div class="ds-row between"><a class="ds-back" href="<%= role === 'seller' ? '/shop/seller' : role === 'admin' ? '/shop/admin' : role === 'fulfiller' ? '/messages/notices' : '/shop/orders' %>"><%- t('shop.order.back') %></a><% if (o.prize_id) { %><a class="ds-back" href="/shop/item/<%= o.prize_id %>"><%- t('shop.order.item_page') %></a><% } %></div>
   <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
   <section class="sd-hero<%= o.gift_from ? ' pink' : '' %>" aria-labelledby="oH">
     <div class="sd-detail">
@@ -52,7 +52,8 @@
 
   <div class="sd-card">
     <% if (role === 'gifter') { %><p class="muted" style="margin:0"><%- t('shop.order.gift_private', { name: t.esc(o.buyer_name || '?') }) %></p><% } %>
-    <% if (o.seller_note && role !== 'gifter' && (role !== 'buyer' || ['fulfilled', 'completed', 'disputed', 'refunded'].includes(o.status))) { %>
+    <% if (role === 'fulfiller') { %><p class="muted" style="margin:0"><span class="ds-ic" aria-hidden="true">🛎️</span> <%- t('shop.order.fulfiller_note') %><% if (o.buyer_name) { %> <a href="/messages/new?to=<%= encodeURIComponent(o.buyer_name) %>"><%- t('shop.order.fulfiller_msg', { name: t.esc(o.buyer_name) }) %></a><% } %></p><% } %>
+    <% if (o.seller_note && role !== 'gifter' && role !== 'fulfiller' && (role !== 'buyer' || ['fulfilled', 'completed', 'disputed', 'refunded'].includes(o.status))) { %>
       <div class="sd-note"><span class="lbl"><%- t('shop.order.seller_note') %></span><div class="pre code"><%= o.seller_note %></div></div>
     <% } %>
     <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0"><%- t('shop.order.autocomplete', { date: H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) }) %></p><% } %>

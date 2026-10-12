@@ -20,7 +20,7 @@
 // ALERTS (telegram_prefs per inbox kind; telegram_outbox is the queue Pepe drains)
 //   * every 🔔 notice filed in the inbox (inbox.add calls onNotice): mentions, tips, shop, Pepe's economy notices
 //     (staking, loans, wagers, markets, bounties, lotto - the Monday / economy events), stage, follows / go-live,
-//     whatever new kind is added later - one switch per kind. Default ON: dm, mention, tip, follow, stage and any
+//     whatever new kind is added later - one switch per kind. Default ON: dm, mention, tip, follow, stage, store_purchase and any
 //     go-live kind; everything else is opt-in.
 //   * direct messages (messages.js send / pepeReply call onDm): one alert per conversation per DM_GAP_MS, sent
 //     DM_GRACE_MS later and dropped if it was read on the site meanwhile; quotes the message only when the member
@@ -69,7 +69,7 @@ const MAX_TRIES = 5;
 const KEEP_MS = 3 * 86400e3;
 const TEXT_MAX = 3500;               // Telegram's limit is 4096
 const TG_ID_RE = /^[1-9]\d{0,19}$/;
-const DEFAULT_ON = new Set(["dm", "mention", "tip", "follow", "stage"]);
+const DEFAULT_ON = new Set(["dm", "mention", "tip", "follow", "stage", "store_purchase"]);   // 1.99tp: store_purchase - an admin set them up for it
 const isLiveKind = (k) => /live/i.test(String(k || ""));    // go-live alerts (whatever the go-live feature names its kind)
 
 let NOW = () => Date.now();

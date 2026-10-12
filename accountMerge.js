@@ -143,6 +143,10 @@ const RULES = {
   "shop_orders.gift_from": M() /* 1.99lz: who paid for a gift */, "shop_orders.gift_note": { deny: TEXT },
   "shop_orders.seller_note": { deny: TEXT }, "shop_orders.seller_paid": { deny: FLAG }, "shop_orders.dispute_from": { deny: FLAG },
   "shop_order_events.actor": M(), "shop_prefs.user_id": M({ key: [] }),
+  // 1.99tp storealerts.js: per-item purchase alerts - one row per (item, person): both accounts on the same item fold into
+  // one that keeps any channel either had on; the sent log is one row per (order, person)
+  "store_alerts.user_id": M({ key: ["prize_id"], merge: { tg: "MAX", pm: "MAX", details: "MAX", created: "MIN" } }), "store_alerts.added_by": M(),
+  "store_alert_sent.user_id": M({ key: ["order_id"] }),
   "prizes.seller_id": M(), "prizes.buyer_prompt": { deny: TEXT },
   "market_orders.user_id": M({ name: "username" }), "market_orders.site_admin": { deny: FLAG },
   "bounty_actions.user_id": M({ name: "username" }), "bounty_actions.site_admin": { deny: FLAG },
