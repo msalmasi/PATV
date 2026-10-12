@@ -71,6 +71,7 @@ function classify(r, staked) {
   if (sid.startsWith("fund:")) return { kind: "site", dir, name: "funded: " + (sid.slice(5).split(":")[0] || "reward") };
   if (sid.startsWith("shop-order:")) return { kind: "site", dir, name: "store boosts" };
   if (sid.startsWith("admin:")) return { kind: "site", dir, name: "admin (website)" };
+  if (sid.startsWith("policy:")) return { kind: "site", dir, name: "treasury: " + (sid.slice(7).split(":")[0] || "policy") };   // Phase 4: policy/apply.js (the waterfall's House legs)
   if (sid.startsWith("bot:")) return { kind: "bot", dir };
   return { kind: "untagged", dir };
 }

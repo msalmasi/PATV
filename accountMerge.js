@@ -243,6 +243,9 @@ const RULES = {
   "automkt_requests.by": { deny: NAME },      // 1.99th: an admin's auto-markets request (automkt.js) - an audit name, kept as written
   "econ_cfg.by": { deny: NAME }, "econ_cfg_log.by": { deny: NAME }, "turf_inbox.payer": { deny: NAME },
   "lotto_settings.actor": { deny: NAME }, "lotto_draws.forced_by": { deny: NAME },
+  // Phase 4: policy/core.js - who switched an engine's mode (an admin's username, "pepe", a cutover key) and the scheduler
+  // process holding the lease (host:pid:nonce) - audit labels, kept as written
+  "policy_audit.by": { deny: NAME }, "policy_engines.by": { deny: NAME }, "policy_lease.holder": { deny: FLAG },
   "media.by_user_id": M(), "media.by_user": { deny: NAME }, "media.subject": { deny: NAME }, "media.subject_login": { deny: NAME },
   // follows
   "follows.follower": M({ key: ["target_kind", "target_id"], merge: { created_at: "MIN" } }),

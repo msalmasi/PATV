@@ -9,7 +9,9 @@ const root = path.join(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 
 for (const [file, route] of [["pools.js", "/api/pools/admin/import"], ["escrow/ledger.js", "/api/escrow/admin/import"],
-                             ["gangs.js", "/api/gangs/admin/import"], ["capital/service.js", "/api/capital/admin/import"]]) {
+                             ["gangs.js", "/api/gangs/admin/import"], ["capital/service.js", "/api/capital/admin/import"],
+                             // 2026-10-12: Pepe's econ docs push (the prod PayloadTooLargeError since the pools cutover)
+                             ["econstore.js", "/api/econ/docs/put"]]) {
   test(`${route} skips the global JSON parser and parses a big body itself`, () => {
     assert.ok(read("index.js").includes(`req.path === "${route}"`), "index.js skip list has " + route);
     const src = read(file);
@@ -31,3 +33,12 @@ test("a 1 MB JSON body parses under the route's own limit", async () => {
   assert.strictEqual(r.status, 200);
   assert.strictEqual((await r.json()).n, blob.length);
 });
+
+// Phase 4: the policy scheduler's bot routes that carry Pepe's inputs parse their own body too
+for (const route of ["/api/policy/bot/config", "/api/policy/bot/report", "/api/policy/admin/cutover"]) {
+  test(`${route} skips the global JSON parser and parses its own body`, () => {
+    assert.ok(read("index.js").includes(`req.path === "${route}"`), "index.js skip list has " + route);
+    const line = read("policy/scheduler.js").split("\n").find((l) => l.includes(`app.post("${route}"`));
+    assert.ok(line && /, big, /.test(line), "the route parses with its own limit");
+  });
+}

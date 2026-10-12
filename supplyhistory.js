@@ -4,7 +4,9 @@
 //   supply_history  day (YYYY-MM-DD, UTC, PRIMARY KEY), ts (ms, the last update), total, circulating,
 //                   layers (JSON {layerKey: amount}), fed (the Federal Reserve, vault:reserve), band (JSON - Pepe's Fed
 //                   band {fed, floor, ceiling, action}), mints (JSON {source: amount} - Pepe's mint journal for that day),
-//                   burns (PAT burned that UTC day, burns.js), mtd_inflation_pct (total vs the first row of the UTC month, %)
+//                   burns (PAT burned that UTC day, burns.js), mtd_inflation_pct (total vs the first row of the UTC month, %),
+//                   site_mints (Phase 4: JSON {source: amount} - the site scheduler's own Fed mints that day, policy_mints; merged
+//                   with `mints` when read: Pepe leaves the site's records out of his map, so nothing counts twice)
 // Pepe's supply body carries `monetary`: {band, mints: {"YYYY-MM-DD": {source: amount}} (last 7 days), mtd: {source:
 // {minted, cap}} (cap -1 = unlimited), month: "YYYY-MM"}. Today's mints come from mints[today]; the previous 7 days'
 // rows that exist get their mints patched from the same map (a mint journaled after midnight is still counted).
@@ -23,7 +25,14 @@ function init() {
   if (!readyP) {
     readyP = runQuery(`CREATE TABLE IF NOT EXISTS supply_history (
         day TEXT PRIMARY KEY, ts INTEGER, total INTEGER, circulating INTEGER, layers TEXT, fed INTEGER, band TEXT, mints TEXT,
-        burns INTEGER, mtd_inflation_pct REAL)`).catch((e) => { readyP = null; throw e; });
+        burns INTEGER, mtd_inflation_pct REAL)`)
+      // Phase 4: the Fed mints the site's policy scheduler made (policy_mints: the floor / issuance mints), per source - kept
+      // apart from Pepe's journal map (he leaves the site's records out of his), merged when read
+      .then(async () => {
+        const cols = (await getQuery("SELECT name FROM pragma_table_info('supply_history')")).map((r) => r.name);
+        if (!cols.includes("site_mints")) await runQuery("ALTER TABLE supply_history ADD COLUMN site_mints TEXT");
+      })
+      .catch((e) => { readyP = null; throw e; });
   }
   return readyP;
 }
@@ -97,6 +106,10 @@ async function record(supply, monetary) {
                     layers = excluded.layers, fed = COALESCE(excluded.fed, supply_history.fed), band = COALESCE(excluded.band, supply_history.band),
                     mints = COALESCE(excluded.mints, supply_history.mints), burns = excluded.burns, mtd_inflation_pct = excluded.mtd_inflation_pct`,
                  [day, t, total, circulating, JSON.stringify(layers), fed, band, mints, burns, mtd]);
+  // Phase 4: the site's own mints (today + the previous 7 days, as they stand now)
+  const sm = await siteMints(dayOf(start - 7 * DAY_MS));
+  await runQuery("UPDATE supply_history SET site_mints = ? WHERE day = ?", [JSON.stringify(sm[day] || {}), day]);
+  for (const [d, m] of Object.entries(sm)) if (d < day) await runQuery("UPDATE supply_history SET site_mints = ? WHERE day = ?", [JSON.stringify(m), d]);
   // a mint Pepe journaled for one of the previous 7 days (late, or after this site's last push that day)
   if (M) {
     for (const [d, m] of Object.entries(M.mints)) {
@@ -109,6 +122,27 @@ async function record(supply, monetary) {
 
 const parse = (s) => { try { return s ? JSON.parse(s) : null; } catch (e) { return null; } };
 
+/** Phase 4: {day: {source: PAT}} of the site's own Fed mints (policy_mints) from `fromDay` on. */
+async function siteMints(fromDay) {
+  let rows = [];
+  try { rows = await getQuery("SELECT rec FROM policy_mints WHERE ts >= ?", [Date.parse(fromDay + "T00:00:00Z") / 1000]); } catch (e) { return {}; }
+  const out = {};
+  for (const r of rows) {
+    const m = parse(r.rec);
+    if (!m || m.state !== "done") continue;
+    const d = dayOf(Math.round(Number(m.done || m.ts) * 1000));
+    const src = key(m.source || m.policy || "admin");
+    out[d] = out[d] || {};
+    out[d][src] = (out[d][src] || 0) + Math.max(0, Math.floor(Number(m.amount) || 0));
+  }
+  return out;
+}
+const mergeMints = (a, b) => {
+  const out = Object.assign({}, a || {});
+  for (const [k, v] of Object.entries(b || {})) out[k] = (out[k] || 0) + v;
+  return out;
+};
+
 /** The last `days` days of rows, oldest first. */
 async function history(days = 90) {
   await init();
@@ -116,7 +150,8 @@ async function history(days = 90) {
   const since = dayOf(now() - (n - 1) * DAY_MS);
   const rows = await getQuery("SELECT * FROM supply_history WHERE day >= ? ORDER BY day", [since]);
   return rows.map((r) => ({ day: r.day, ts: r.ts, total: r.total, circulating: r.circulating, layers: parse(r.layers) || {}, fed: r.fed,
-                            band: parse(r.band), mints: parse(r.mints) || {}, burns: r.burns || 0, mtd_inflation_pct: r.mtd_inflation_pct || 0 }));
+                            band: parse(r.band), mints: mergeMints(parse(r.mints) || {}, parse(r.site_mints) || {}), burns: r.burns || 0,
+                            mtd_inflation_pct: r.mtd_inflation_pct || 0 }));
 }
 
 function register(app, { addUser }) {

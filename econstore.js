@@ -267,7 +267,10 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     try { res.json(await fn(b)); } catch (e) { console.error("[econstore] bot:", e); res.status(500).json({ ok: false, error: "server_error" }); }
   };
-  app.post("/api/econ/docs/put", bot(async (b) => ({ ok: true, docs: await putDocs(b.docs) })));
+  // 2026-10-12: Pepe's econ docs (econ_rooms ~57 KB + econ_treasury ~38 KB + ...) passed index.js' global 100 KB JSON limit on
+  // prod - every push since the pools cutover answered 413 (PayloadTooLargeError) and the site kept the cutover's copy. The
+  // route parses its own body (8 docs x MAX_DOC) and index.js skips it.
+  app.post("/api/econ/docs/put", require("express").json({ limit: "32mb" }), bot(async (b) => ({ ok: true, docs: await putDocs(b.docs) })));
   app.post("/api/econ/docs/get", bot(async () => ({ ok: true, docs: await getDocs() })));
   app.post("/api/econ/settings/put", bot(async (b) => Object.assign({ ok: true }, await putSettings(b))));
   app.post("/api/econ/settings/get", bot(async () => Object.assign({ ok: true }, await getSettings())));

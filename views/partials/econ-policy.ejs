@@ -1,0 +1,34 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# Phase 4: the policy scheduler card (policy/scheduler.js). One row per engine: its mode (off / dry run / shadow / live),
+    the last run, the next run and the last shadow diff. Admins switch off / dry / shadow here (audit-logged); live is only
+    Pepe's cutover handshake (!econ engines cutover), the way back his rollback. public/js/admin-policy.js renders it from
+    GET /api/admin/policy. %>
+<section class="adm-card" id="policy" aria-labelledby="policyT">
+  <h2 id="policyT"><span class="ds-ic" aria-hidden="true">⏱️</span> <%= t('adm.policy.title') %> <span class="adm-pill admin"><%= t('adm.policy.admins') %></span></h2>
+  <p class="adm-help"><%- t('adm.policy.help') %></p>
+  <% if (!isAdmin) { %><p class="adm-help"><%= t('adm.policy.admins_only') %></p><% } else { %>
+    <div id="policyAdm">
+      <div class="adm-kv" id="policyKv"><div><b><%= t('adm.policy.status') %></b><span><%= t('adm.policy.loading') %></span></div></div>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.policy.engines') %>">
+        <thead><tr><th><%= t('adm.policy.col_engine') %></th><th><%= t('adm.policy.col_mode') %></th><th><%= t('adm.policy.col_last') %></th>
+          <th><%= t('adm.policy.col_next') %></th><th><%= t('adm.policy.col_diff') %></th></tr></thead>
+        <tbody id="policyRows"><tr><td colspan="5" class="empty"><%= t('adm.policy.loading') %></td></tr></tbody>
+      </table></div>
+      <form class="adm-form" id="policyForm" autocomplete="off">
+        <label for="policyEngine"><%= t('adm.policy.col_engine') %><select id="policyEngine"><option value="treasury">treasury</option><option value="monetary">monetary</option><option value="burn">burn</option></select></label>
+        <label for="policyMode"><%= t('adm.policy.col_mode') %><select id="policyMode"><option value="off">off</option><option value="dry">dry run</option><option value="shadow">shadow</option></select></label>
+        <label for="policyNote"><%= t('adm.policy.note') %><input type="text" id="policyNote" maxlength="200"></label>
+        <div class="adm-actions"><button type="submit"><%= t('adm.policy.set') %></button></div>
+      </form>
+      <details><summary><%= t('adm.policy.not_engines') %></summary><ul class="adm-help" id="policyRetired"></ul></details>
+      <details><summary><%= t('adm.policy.recent') %></summary>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.policy.recent') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.policy.col_engine') %></th>
+          <th><%= t('adm.policy.col_period') %></th><th><%= t('adm.policy.col_state') %></th><th><%= t('adm.policy.col_via') %></th></tr></thead><tbody id="policyRuns"></tbody></table></div>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.policy.audit') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.policy.col_engine') %></th>
+          <th><%= t('adm.policy.col_change') %></th><th><%= t('adm.policy.col_by') %></th><th><%= t('adm.policy.note') %></th></tr></thead><tbody id="policyAudit"></tbody></table></div>
+      </details>
+      <p class="adm-msg" id="policyMsg" role="status"></p>
+    </div>
+    <script src="/public/js/admin-policy.js?v=1" defer></script>
+  <% } %>
+</section>
