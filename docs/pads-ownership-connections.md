@@ -123,7 +123,7 @@ on it is told when a spot frees.
 
 Launch comps (`tools/ptplus-comps.js`) take spots:
 - Pepe's Pad: no end date.
-- Houseplants (`plant_based_chatting`): no end date (the user, 2026-10-11).
+- Houseplants (`plant_based_chatting`): 3 periods (the user, 2026-10-11).
 - PepeLab: where Pepe sits in it (staging).
 - Players__lounge and DRAMA_CENTRAL: 3 periods each.
 
