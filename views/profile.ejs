@@ -290,6 +290,7 @@
         <summary class="btn" aria-haspopup="menu"><span aria-hidden="true">⋯</span> <%- t('profile.more') %><% if (tipNew > 0) { %> <span class="tj-new" title="<%- t('profile.new_tips_title') %>"><%= tipNew > 99 ? '99+' : tipNew %></span><% } %></summary>
         <div class="pf-menu" role="menu">
           <% if (isMe) { %>
+            <% (typeof myPads === 'function' ? myPads(username) : []).forEach((p_) => { %><a role="menuitem" href="<%= p_.href %>">👑 <%- t('profile.menu.owner_panel', { pad: t.esc(p_.title) }) %></a><% }) %>
             <a role="menuitem" href="/u/<%= enc %>/tip">💰 <%- t('profile.menu.tip_jar') %><% if (tipNew > 0) { %> <span class="tj-new"><%- t('profile.menu.n_new', { n: tipNew > 99 ? '99+' : tipNew }) %></span><% } %></a>
             <a role="menuitem" href="/history"><span class="ds-ic" aria-hidden="true">📜</span> <%- t('profile.menu.pat_history') %></a>
             <% if (soc) { %><a role="menuitem" href="/feed/following"><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('profile.menu.follow_lists') %></a><% } %>

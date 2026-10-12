@@ -238,6 +238,8 @@
   .rm .ptab { appearance: none; flex: 1 1 0; min-width: max-content; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px;
               border-radius: 9px; border: 1px solid transparent; background: none; color: #aab3aa; font: inherit; font-size: 14.5px; font-weight: bold; cursor: pointer; white-space: nowrap; }
   .rm .ptab:hover { color: #fff; background: #161616; }
+  .rm a.ptab-owner { text-decoration: none; color: var(--ds-gold-text, #ffd54f); flex: 0 1 auto; }
+  .rm .po-cta { white-space: nowrap; }
   .rm .ptab[aria-selected="true"] { color: #fff; background: #12301a; border-color: #2f6b3a; }
   .rm .ptab .pdot { width: 8px; height: 8px; border-radius: 50%; background: #ff5252; animation: rmPulse 1.6s ease-in-out infinite; }
   /* 1.99ec: the Feed tab's unseen posts - a count pill + a dot in the tab's corner (pad-tabs.js) */
@@ -466,7 +468,8 @@
       <div class="hd-acts">
         <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: t('pad.hdr.follow') }) %>
           <span class="hd-fc" title="<%- t('pad.hdr.follow_tip') %>"><%- t('pad.hdr.followers', { count: fcount_, n: '<b data-follower-count-kind="room" data-follower-count-id="' + t.esc(feed_.room) + '">' + t.esc(fcount_.toLocaleString('en-US')) + '</b>' }) %></span></div><% } %>
-        <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><a class="ibtn po-link" href="/p/<%= encodeURIComponent(room.slug) %>/owner" title="<%- t('pad.owner_panel') %>" aria-label="<%- t('pad.owner_panel') %>">👑</a><% } %>
+        <%# 1.99ti: a labelled "👑 Manage your pad" for the owner (staff see "Owner panel") - it was a bare icon nobody found %>
+        <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><a class="ds-btn sm gold po-link po-cta" href="/p/<%= encodeURIComponent(room.slug) %>/owner" title="<%- t('pad.owner_panel') %>">👑 <%- isOwner_ ? t('pad.manage_pad') : t('pad.owner_panel') %></a><% } %>
         <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%- psTitle_ %>" aria-label="<%- psTitle_ %>">⚙<% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
         <details class="hd-more" id="rmMore">
           <summary class="ibtn" aria-label="<%- t('pad.menu.aria') %>" title="<%- t('pad.menu.more') %>">⋯</summary>
@@ -490,6 +493,8 @@
   <nav class="ptabs" id="padTabs" role="tablist" aria-label="<%- t('pad.tab.aria') %>">
     <% PT_.tabs.forEach((tb_) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= tb_ %>" data-tab="<%= tb_ %>" aria-controls="padPanel-<%= tb_ %>" aria-selected="<%= tabOn_(tb_) ? 'true' : 'false' %>" tabindex="<%= tabOn_(tb_) ? 0 : -1 %>">
       <% if (tb_ === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%- liveLabel_ %><% } else if (tb_ === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span><%- t('pad.tab.feed') %> <span class="pnew" id="padFeedNew" hidden></span><% } else { %><%- t('pad.tab.about') %><% } %></button><% }) %>
+    <%# 1.99ti: owners / managers get an "Owner" tab - a link to the owner panel (it's its own page, not a panel here) %>
+    <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><a class="ptab ptab-owner" href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.tab.owner') %></a><% } %>
   </nav>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <%# 1.99ja: a Twitch pad plays its channel (padconnect.js twitchOf; the player URL is built by stageembed.js from the checked login) %>
@@ -676,7 +681,7 @@
   <script src="/public/js/chat-clip.js?v=2"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=9">
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
-  <script src="/public/js/room-mod.js?v=10"></script>
+  <script src="/public/js/room-mod.js?v=11"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=3" defer></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>

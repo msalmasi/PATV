@@ -44,6 +44,15 @@
   .po details.po-disc[open] > summary { border-end-start-radius: 0; border-end-end-radius: 0; border-block-end: 1px solid var(--ds-line); }
   .po .po-disc-b { display: grid; gap: var(--ds-sp-2); padding: var(--ds-sp-3); }
   @media (prefers-reduced-motion: reduce) { .po .po-chev { transition: none; } }
+  .po .po-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-3);
+    border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); background: var(--ds-sunken); }
+  .po .po-status-l { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1h) var(--ds-sp-3); min-width: 0; }
+  .po .po-status-l .ds-meta { margin: 0; }
+  .po .po-ctl-btns { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h); }
+  .po .po-pepe .po-msg:empty { min-height: 0; margin: 0; }
+  .po .po-pepe .po-status + .ds-meta, .po .po-pepe .po-status + .po-msg { margin-top: var(--ds-sp-1h); }
+  .po .po-ppl { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .po .po-ppl .muted { color: var(--ds-text-muted); font-size: 13px; }
   @media (max-width: 520px) { .po .po-set:has(.po-ctl), .po .po-set-note { flex-wrap: wrap; } .po .po-ctl { max-width: 100%; width: 100%; } .po .po-note { max-width: 100%; } }
   .po .po-set { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); min-height: 52px; padding: var(--ds-sp-2) 0; border-top: 1px solid var(--ds-line-soft); }
   .po .po-set:first-of-type { border-top: 0; }
@@ -88,6 +97,7 @@
   <% if (!mine && staff) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🛠️</span><div><%- t('owner.staff_view') %></div></div><% } %>
   <nav class="ds-subnav" aria-label="<%- t('owner.sections') %>"><div class="ds-tabs">
     <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
+    <% if (camfrog) { %><a class="ds-tab" href="#mod">🛡️ <%- t('owner.nav_mod') %></a><% } %>
     <% if (camfrog) { %><a class="ds-tab" href="#vault">💰 <%- t('owner.nav_vault') %></a><% } %>
     <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
     <% if (camfrog) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
@@ -108,7 +118,29 @@
       <div class="ds-empty"><span aria-hidden="true">🐸</span><b><%- t('owner.pepe_unknown') %></b><p><%- t('owner.pepe_unknown_help') %></p></div>
     <% } else { %>
       <% if (pepe.stale) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owner.pepe_stale', { when: dt(pepe.updated) }) %></div></div><% } %>
-      <p class="ds-meta po-here"><%- pepe.pepe_here ? t('owner.here_yes') : t('owner.here_no') %></p>
+      <%
+        const ps = pepe.status || null;
+        const psState = ps ? ps.state : 'unknown';
+        const psChip = { in: 'ok', joining: 'info', recovering: 'warn', out: 'mute', paused: 'mute', unknown: 'mute' }[psState] || 'mute';
+      %>
+      <%# 1.99ti: Pepe in the pad's Camfrog room (pepe_roomowner._op_status) + join / leave / rejoin for Prime Time Plus pads %>
+      <div class="po-status" id="poStatus" data-state="<%= psState %>" data-home="<%= ps && ps.home ? 1 : 0 %>">
+        <div class="po-status-l">
+          <span class="ds-chip <%= psChip %>" id="poState"><%- t('owner.ps_' + psState) %></span>
+          <span class="ds-meta" id="poJoined"><% if (ps && ps.state === 'in' && ps.joined_at) { %><%- t('owner.ps_joined', { when: dt(ps.joined_at) }) %><% } %></span>
+          <span class="ds-meta" id="poRooms"><% if (ps) { %><%- t('owner.ps_rooms', { n: ps.rooms, max: ps.max }) %><% } %></span>
+        </div>
+        <% if (plus || staff) { %>
+        <div class="po-ctl-btns">
+          <button type="button" class="ds-btn sm" data-po-ctl="join" <%= psState === 'in' ? 'hidden' : '' %>>🐸 <%- t('owner.ps_join') %></button>
+          <button type="button" class="ds-btn sm ghost" data-po-ctl="rejoin" <%= psState !== 'in' || (ps && ps.home) ? 'hidden' : '' %>>🔄 <%- t('owner.ps_rejoin') %></button>
+          <button type="button" class="ds-btn sm ghost" data-po-ctl="leave" <%= psState !== 'in' || (ps && ps.home) ? 'hidden' : '' %>>👋 <%- t('owner.ps_leave') %></button>
+        </div>
+        <% } %>
+      </div>
+      <% if (!plus && !staff) { %><p class="ds-meta"><%- t('owner.ps_plus_only', { href: '/premium?pad=' + encodeURIComponent(slug) }) %></p><% } %>
+      <% if (ps && ps.paused) { %><p class="ds-meta"><%- t('owner.ps_paused_note') %></p><% } %>
+      <p class="po-msg" id="poCtlMsg" role="status" aria-live="polite"></p>
       <%
         const ow = pepe.owner || {}, adm = pepe.admin || {};
         const lab = (k) => t('owner.set_' + k), why = (k) => t('owner.set_' + k + '_why');
@@ -185,6 +217,22 @@
       </details>
       <% } %>
     <% } %>
+  </section>
+  <% } %>
+
+  <% if (camfrog) { %>
+  <%# 1.99ti: Camfrog user control in the owner's own room - the pad page's Manage panel (room-mod.js), fed by the live view %>
+  <section class="ds-card lg" id="mod" aria-labelledby="poModH" data-slug="<%= slug %>">
+    <h2 class="ds-h2" id="poModH"><span class="dot"></span>🛡️ <%- t('owner.mod_h') %></h2>
+    <p class="po-why"><%- t('owner.mod_why') %></p>
+    <p class="ds-meta" id="poModNote"><%- t('owner.mod_checking') %></p>
+    <section class="pm" id="poMod" hidden></section>
+    <div class="po-people" id="poPeopleBox" hidden>
+      <h3 class="ds-h4"><%- t('owner.mod_people') %> <small class="ds-meta" id="poPplN"></small></h3>
+      <ul class="po-ppl" id="poPeople"></ul>
+      <p class="ds-fine"><%- t('owner.mod_click') %></p>
+    </div>
+    <p class="ds-fine"><%- t('owner.mod_more') %></p>
   </section>
   <% } %>
 
@@ -382,7 +430,8 @@
     <p class="ds-fine"><%- t('owner.generated') %></p>
   </section>
 </main>
-<% if (!guide) { %><script src="/public/js/pad-owner.js?v=2" defer></script><% } %>
+<% if (!guide) { %><script src="/public/js/pad-owner.js?v=3" defer></script><% } %>
+<% if (!guide && locals.camfrog) { %><link rel="stylesheet" href="/public/css/room-mod.css?v=9"><script src="/public/js/room-mod.js?v=11" defer></script><script src="/public/js/pad-owner-mod.js?v=1" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><script src="/public/js/pad-sb-owner.js?v=1" defer></script><% } %>
 </body>
 </html>

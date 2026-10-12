@@ -99,7 +99,15 @@ const WEB_CAPS = Object.freeze([
   { id: "web_prime", area: "tier", route: "GET /premium", where: "/premium?pad={slug}" },
   { id: "web_boost", area: "tier", route: "POST /api/rooms/:slug/boost", where: "/p/{slug}" },
   { id: "web_soundboard", area: "room", route: "POST /api/rooms/:slug/soundboard/clips", where: "/p/{slug}/owner#soundboard" },   // 1.99rh: soundboards.js
+  { id: "web_pepe_room", area: "room", route: "POST /api/rooms/:slug/owner/pepe-room", where: "/p/{slug}/owner#pepe" },         // 1.99ti
+  { id: "web_room_mod", area: "room", route: "POST /api/rooms/:slug/mod", where: "/p/{slug}/owner#mod" },                       // 1.99ti
 ]);
+// 1.99ti: Pepe in / out of the pad's Camfrog room (website action "room.ctl" from the owner; Pepe re-checks owner, Plus, his
+// 5-room cap, his home room and staging). One per CTL_GAP_MS per pad here too.
+const CTL_VERBS = new Set(["join", "leave", "rejoin"]);
+const CTL_GAP_MS = 2 * 60 * 1000;
+const CTL_LAST = new Map();
+const STATES = new Set(["in", "joining", "recovering", "out", "paused"]);
 
 let ready = null;
 function init() {
@@ -144,7 +152,15 @@ function cleanOne(s) {
     if (/^[a-z]{1,20}$/.test(k) && Number.isFinite(Number(v))) prices[k] = Math.max(0, Math.min(1e12, Math.floor(Number(v))));
   }
   const vibe = o.vibe && typeof o.vibe === "object" ? { type: String(o.vibe.type || "").replace(/[^a-z_ -]/gi, "").slice(0, 24), locked: !!o.vibe.locked } : null;
-  return { owner, bridge: sec(o.bridge, ["relay", "mic", "cams", "audio", "transcripts", "cmds"]), bridged: bool(o.bridged), admin,
+  // 1.99ti: Pepe's own status for the room (pepe_roomowner._op_status)
+  const st = o.status && typeof o.status === "object" ? o.status : null;
+  const status = st && STATES.has(st.state) ? {
+    state: st.state, joined_at: Number.isFinite(Number(st.joined_at)) && Number(st.joined_at) > 0 ? Math.floor(Number(st.joined_at)) : null,
+    rooms: Math.max(0, Math.min(50, Math.floor(Number(st.rooms) || 0))), max: Math.max(1, Math.min(50, Math.floor(Number(st.max) || 5))),
+    phase: typeof st.phase === "string" && /^[a-z_]{1,16}$/.test(st.phase) ? st.phase : null,
+    home: st.home === true, paused: st.paused === true, staging: st.staging === true,
+  } : null;
+  return { owner, bridge: sec(o.bridge, ["relay", "mic", "cams", "audio", "transcripts", "cmds"]), bridged: bool(o.bridged), admin, status,
            features, prices, vibe, pepe_here: bool(o.pepe_here) };
 }
 /** POST /api/rooms/owners `room_settings` -> the table (the set Pepe sends replaces the rows it names). */
@@ -232,11 +248,25 @@ async function pageData(R, viewer) {
     caps: capabilities(), webCaps: WEB_CAPS, LANGS: pepe && pepe.owner && !LANG_CODES.has(pepe.owner.language)
       ? LANGS.concat([[pepe.owner.language, pepe.owner.language, ""]]) : LANGS,
     CHOICES, GROUPS: OWNER_GROUPS, ICONS: OWNER_ICONS, readonly: pepe ? readonlyList(pepe) : null,
+    plus: camfrog ? await safe(() => require("./premium").isPrimePlus(R.id), false) : false,
   };
+}
+
+/** 1.99ti: the pads this account owns, for the menu's "You" section and their profile: [{slug, title, href}] (cached, sync). */
+function myPads(username) {
+  const u = String(username || "").toLowerCase();
+  if (!u) return [];
+  try {
+    const web = require("./roomsweb");
+    return rooms.listCached().filter((R) => R && R.owner && String(R.owner.username || "").toLowerCase() === u && !R.profile)
+      .sort((a, b) => String(a.title).localeCompare(String(b.title))).slice(0, 8)
+      .map((R) => { const slug = web.linkSlug(R); return { slug, title: String(R.title || slug).slice(0, 40), href: "/p/" + encodeURIComponent(slug) + "/owner" }; });
+  } catch (e) { return []; }
 }
 
 function register(app, { addUser }) {
   const bad = (res, st, error) => res.status(st).json({ ok: false, error });
+  if (app.locals) app.locals.myPads = myPads;          // 1.99ti: layout.ejs (You > My pads) + profile.ejs
   const jsonOnly = (req, res, next) => (req.is("application/json") && req.get("X-Requested-With") === "fetch" ? next() : bad(res, 400, "Bad request."));
   async function ownedPad(req, res) {
     if (!req.user || !req.user.userId) { bad(res, 401, "Sign in first."); return null; }
@@ -302,6 +332,29 @@ function register(app, { addUser }) {
     } catch (e) { queued(res, e); }
   });
 
+  // 1.99ti: ask Pepe into / out of the pad's Camfrog room, or to rejoin it - 💎 Prime Time Plus pads (staff: any)
+  app.post("/api/rooms/:slug/owner/pepe-room", addUser, express.json({ limit: "2kb" }), jsonOnly, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const R = await ownedPad(req, res); if (!R) return;
+    const verb = String((req.body || {}).verb || "");
+    if (!CTL_VERBS.has(verb)) return bad(res, 400, "Join, leave or rejoin.");
+    const staff = rooms.isStaff(req.user);
+    if (!staff && !require("./premium").isPrimePlus(R.id)) {
+      return bad(res, 403, "Pepe sits in Camfrog rooms for 💎 Prime Time Plus pads - get Plus for this pad first.");
+    }
+    const last = CTL_LAST.get(R.id) || 0;
+    if (!staff && Date.now() - last < CTL_GAP_MS) {
+      return bad(res, 429, `One room action every 2 minutes - try again in ${Math.ceil((CTL_GAP_MS - (Date.now() - last)) / 1000)} s.`);
+    }
+    try {
+      const id = await require("./actions").queue(req.user.userId, { kind: "room.ctl", args: [verb, R.id], tag: "owner",
+        label: `${R.title}: Pepe ${verb}` });
+      CTL_LAST.set(R.id, Date.now());
+      await rooms.event(R.id, "pepe-room", req.user.username || "?", `${verb} (sent to Pepe)`).catch(() => {});
+      res.json({ ok: true, id });
+    } catch (e) { queued(res, e); }
+  });
+
   // Top up the room vault = !roomvault deposit <amount> as the linked Camfrog login, keyed by the form's one-time idem
   app.post("/api/rooms/:slug/vault/topup", addUser, express.json({ limit: "2kb" }), jsonOnly, async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -341,5 +394,5 @@ function register(app, { addUser }) {
 }
 
 module.exports = { register, init, storeSettings, settingsFor, soundboardState, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS,
-                   OWNER_GROUPS, OWNER_BOOL, cleanNote, readonlyList, languages: () => LANGS, choices: () => CHOICES,
+                   OWNER_GROUPS, OWNER_BOOL, cleanNote, readonlyList, myPads, languages: () => LANGS, choices: () => CHOICES,
                    _reset: () => { CAPS = null; } };

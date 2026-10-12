@@ -209,5 +209,8 @@ test("the owner's profile menu, /voices, /soundboards, the pad drawer and create
 
 test("the owner panel stays one click from the pad header for whoever can manage the pad", () => {
   const room = src("views", "room.ejs");
-  assert.match(room, /<% if \(manage_ && !siteOnly_ && \(room\.platform \|\| 'camfrog'\) === 'camfrog'\) \{ %><a class="ibtn po-link" href="\/p\/<%= encodeURIComponent\(room\.slug\) %>\/owner"/);
+  assert.match(room, /<% if \(manage_ && !siteOnly_ && \(room\.platform \|\| 'camfrog'\) === 'camfrog'\) \{ %><a class="ds-btn sm gold po-link po-cta" href="\/p\/<%= encodeURIComponent\(room\.slug\) %>\/owner"/);
+  // 1.99ti: a labelled button ("Manage your pad" for the owner) + an Owner tab in the pad's tab bar
+  assert.match(room, /isOwner_ \? t\('pad\.manage_pad'\) : t\('pad\.owner_panel'\)/);
+  assert.match(room, /<a class="ptab ptab-owner" href="\/p\/<%= encodeURIComponent\(room\.slug\) %>\/owner">/);
 });

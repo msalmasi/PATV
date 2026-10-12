@@ -301,6 +301,105 @@
    ]
   },
   {
+   "id": "room_mod",
+   "area": "room",
+   "title": "Moderate people in your room",
+   "commands": [
+    "!kick",
+    "!ban",
+    "!unban",
+    "!punish",
+    "!unpunish",
+    "!blockmic",
+    "!unblockmic"
+   ],
+   "syntax": [
+    "!kick <user>",
+    "!ban <user>",
+    "!unban <user>",
+    "!punish <user>",
+    "!blockmic <user>",
+    "!unblockmic <user>"
+   ],
+   "web": "/p/{slug}/owner#mod",
+   "howto": "In your own pad's room Pepe kicks, bans, punishes and mic-blocks for you (and lifts them). Type it in the room or use Moderate your room on the owner page - it lists who's in the room and who is banned or blocked, with undo. Pepe's admins and owners (and Pepe) are off limits.",
+   "owner_only": true,
+   "code": [
+    "frida-bot.py:handle_pepe_mod",
+    "pepe_roomowner.py:_op_room_mod"
+   ]
+  },
+  {
+   "id": "room_roles",
+   "area": "room",
+   "title": "Give people room roles",
+   "commands": [
+    "!friend",
+    "!mod",
+    "!admin",
+    "!unrole"
+   ],
+   "syntax": [
+    "!mod <user>",
+    "!admin <user>",
+    "!friend <user>",
+    "!unrole <user>"
+   ],
+   "howto": "Make someone a moderator, admin or friend of your room, or take their role off - Pepe changes the room's oplist for you. Your own room only, never Pepe's admins or owners; every change asks first on the website and goes in your pad's event log.",
+   "owner_only": true,
+   "code": [
+    "frida-bot.py:handle_pepe_mod",
+    "pepe_roomowner.py:_op_room_mod"
+   ]
+  },
+  {
+   "id": "room_timeout",
+   "area": "room",
+   "title": "Time someone out",
+   "commands": [
+    "!timeout"
+   ],
+   "syntax": [
+    "!timeout <user> [hours]"
+   ],
+   "howto": "In your room your !timeout works straight away (up to 24 hours) instead of starting a vote: Pepe takes them off the red list and mutes them.",
+   "owner_only": true,
+   "code": [
+    "frida-bot.py:handle_timeout",
+    "pepe_roomowner.py:_op_room_mod"
+   ]
+  },
+  {
+   "id": "room_fine",
+   "area": "room",
+   "title": "Fine someone",
+   "commands": [
+    "!fine"
+   ],
+   "syntax": [
+    "!fine <user> <amount> [reason]"
+   ],
+   "howto": "Fine someone in your room up to 100,000 PAT at a time; it goes into the Federal Reserve and Pepe says it in the room.",
+   "owner_only": true,
+   "code": [
+    "frida-bot.py:handle_fine",
+    "pepe_roomowner.py:_op_room_mod"
+   ]
+  },
+  {
+   "id": "room_ctl",
+   "area": "room",
+   "title": "Bring Pepe in, send him out, or rejoin",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.ctl",
+   "howto": "💎 Prime Time Plus pads: the owner page shows whether Pepe is in your room (or joining / recovering) and lets you ask him in, out or to rejoin - one action every 2 minutes. He stays out until you ask him back; he's in at most 5 rooms at a time and never leaves his own.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomctl.py:_rc_web",
+    "pepe_roomowner.py:_op_room_ctl"
+   ]
+  },
+  {
    "id": "topup_web",
    "area": "vault",
    "title": "Top up your pad vault from the website",

@@ -74,6 +74,8 @@
               // 1.99qp: ⭐ PATV Creators links (creators.navFor via app.locals.creatorNav) - hidden while the feature is off
               const _cr = typeof creatorNav === 'function' ? creatorNav(_in ? user : null) : { on: false, creator: false };
               const _here = typeof ogPath !== 'undefined' && ogPath && ogPath !== '/language' ? ogPath : '';
+              // 1.99ti: "My pads" - each pad this account owns, straight to its owner panel (padowner.myPads via app.locals)
+              const _myPads = _in && typeof myPads === 'function' ? myPads(user) : [];
               // 2026-10-11: More and ☰ share one grouped list - [id, heading, items, class]; falsy items are gated off.
               // More skips the top-bar items (they're already on the bar); ☰ shows everything. Staff last, hidden until /api/u/.../profile says Admin.
               const sections = [
@@ -87,6 +89,7 @@
                   ['/achievements', '🏅', t('nav.achievements')],
                   _in && ['/settings/telegram', '✈️', t('nav.telegram')],
                 ]],
+                _myPads.length && ['mypads', t('nav.sec_mypads'), _myPads.map((p) => [p.href, '👑', t.esc(p.title)])],
                 ['watch', t('nav.sec_watch'), [T.watch, T.pads, T.feed,
                   ['/plex', '📼', t('nav.plex')],   // 1.99kp: the Plex hub (plexhub.js)
                   _cr.on && ['/creators', '⭐', t('nav.creators')],   // 1.99qp: PATV Creators
@@ -123,7 +126,7 @@
                 + (l[3] === 'adminLink' ? ' hidden' : '') + (l[0].startsWith('http') ? ' rel="noopener"' : '')
                 + ' title="' + l[2] + '"><span class="ic">' + l[1] + '</span>'
                 + (labelled ? '<span class="nav-lbl">' + l[2] + '</span>' : '') + '</a>';
-              const groups = (pre, skipMain) => '<div class="nav-secs">' + sections.map((s) => {
+              const groups = (pre, skipMain) => '<div class="nav-secs">' + sections.filter(Boolean).map((s) => {
                 const its = s[2].filter((l) => l && !(skipMain && main.includes(l)));
                 return its.length ? '<div class="nav-sec' + (s[3] ? ' ' + s[3] : '') + '" role="group" aria-labelledby="' + pre + s[0] + '"'
                   + (s[3] === 'adminLink' ? ' hidden' : '') + '><div class="nav-sec-h" id="' + pre + s[0] + '">' + s[1] + '</div>'

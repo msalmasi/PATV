@@ -45,8 +45,12 @@ const ROLE_ACTIONS = new Set(["role_friend", "role_mod", "role_admin", "role_unr
 /** null = OK, else why this role change is refused. */
 function roleRefusal(action, target, caps, selfLogin) {
   if (!ROLE_ACTIONS.has(action)) return null;
-  if (!(caps && caps.admin)) return "Room roles are for Pepe admins.";
+  if (!(caps && (caps.admin || caps.room_roles))) return "Room roles are for Pepe admins and the pad's owner.";
   const t = String(target || "").toLowerCase();
+  // 1.99ti: the pad's owner, in their own room - never on Pepe's admins / owners (caps.protected lists them)
+  if (!caps.admin && t && t !== String(selfLogin || "").toLowerCase() && Array.isArray(caps.protected) && caps.protected.includes(t)) {
+    return "Pepe's admins and owners are off limits for pad owners.";
+  }
   if (t && t !== String(selfLogin || "").toLowerCase() && Array.isArray(caps.owners) && caps.owners.includes(t)) {
     return "Only a Pepe owner can change a Pepe owner's room role.";
   }
@@ -128,11 +132,16 @@ const ROLE_RE = /^[a-z]{1,12}$/;
 function cleanCaps(c) {
   if (!c || typeof c !== "object" || Array.isArray(c)) return null;
   const actions = (Array.isArray(c.actions) ? c.actions : []).filter((a) => a !== "topic" && Object.prototype.hasOwnProperty.call(ACTIONS, a)
-    && (!ROLE_ACTIONS.has(a) || c.admin === true));                    // 1.99pg: role actions only next to admin
+    && (!ROLE_ACTIONS.has(a) || c.admin === true || c.room_roles === true));   // 1.99pg: role actions next to admin (1.99ti: or the pad owner)
   if (!actions.length) return null;
   const out = { actions: [...new Set(actions)], on: c.on !== false, roles: (Array.isArray(c.roles) ? c.roles : []).filter((r) => typeof r === "string" && ROLE_RE.test(r)).slice(0, 4) };
   if (c.topic_price != null && Number.isFinite(Number(c.topic_price))) out.topicPrice = Math.max(0, Math.min(1e9, Math.floor(Number(c.topic_price))));
   if (c.blocked) out.blocked = relay.clean(c.blocked, 120);
+  if (c.room_roles === true && c.admin !== true) {
+    // 1.99ti: the pad's owner in their own room - room roles too, never on Pepe's admins / owners
+    out.room_roles = true;
+    out.protected = (Array.isArray(c.protected) ? c.protected : []).slice(0, 40).map((x) => cleanLogin(x).toLowerCase()).filter(Boolean);
+  }
   if (c.admin === true) {
     out.admin = true;
     const s = c.settings && typeof c.settings === "object" ? c.settings : {};

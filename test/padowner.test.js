@@ -313,3 +313,48 @@ test("1.99tf: the action status says when Pepe answered; the soundboard drawer k
   assert.deepEqual(await PO.soundboardState(PLANT), { on: true, why: null });
   assert.deepEqual(await PO.soundboardState("Nobody.Room"), { on: true, why: null }, "never reported: Pepe decides at play time");
 });
+
+// ── 1.99ti ──
+test("1.99ti: Pepe's status shows; join / leave / rejoin = room.ctl for Plus pads only, one per 2 minutes", async () => {
+  const rep = JSON.parse(JSON.stringify(REPORT2));
+  rep[PLANT].status = { state: "in", joined_at: 1790000000000, rooms: 3, max: 5, phase: "ok", home: false, paused: false, staging: false };
+  await post("/api/rooms/owners", null, { password: "bot-token", room_settings: rep });
+  const s = await PO.settingsFor(PLANT);
+  assert.deepEqual([s.status.state, s.status.rooms, s.status.max], ["in", 3, 5]);
+  assert.equal(PO.cleanOne({ status: { state: "hacked" } }).status, null, "unknown states dropped");
+  let r = await page("/p/" + SLUG + "/owner", "owner");
+  assert.match(r.text, /id="poStatus" data-state="in"/);
+  assert.match(r.text, /id="mod"/, "Moderate your room card");
+  assert.ok(r.text.includes(en["owner.ps_rooms"].replace("{n}", "3").replace("{max}", "5")));
+  await runQuery("DELETE FROM pepe_actions");
+  r = await post(`/api/rooms/${SLUG}/owner/pepe-room`, "owner", { verb: "leave" });
+  assert.equal(r.status, 403, "no Plus -> refused");
+  assert.match(r.d.error, /Prime Time Plus/);
+  r = await post(`/api/rooms/${SLUG}/owner/pepe-room`, "staff", { verb: "dance" });
+  assert.equal(r.status, 400);
+  r = await post(`/api/rooms/${SLUG}/owner/pepe-room`, "staff", { verb: "rejoin" });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  const a = (await actions()).pop();
+  assert.equal(a.kind, "room.ctl");
+  assert.deepEqual(JSON.parse(a.args), ["rejoin", PLANT]);
+  r = await post(`/api/rooms/${SLUG}/owner/pepe-room`, "fan", { verb: "join" });
+  assert.equal(r.status, 403, "not the owner");
+});
+
+test("1.99ti: the pad owner's caps carry room roles, never on Pepe's admins / owners", () => {
+  const PM = require(path.join(repo, "padmod"));
+  const c = PM.cleanCaps({ actions: ["kick", "role_mod", "role_admin"], on: true, roles: ["everyone", "owner"], room_roles: true, protected: ["BossAdmin", "TheOwner"] });
+  assert.ok(c.actions.includes("role_mod") && c.room_roles && !c.admin, JSON.stringify(c));
+  assert.deepEqual(c.protected, ["bossadmin", "theowner"]);
+  assert.equal(PM.roleRefusal("role_mod", "bob", c, "padguy"), null);
+  assert.match(PM.roleRefusal("role_mod", "bossadmin", c, "padguy"), /off limits/);
+  assert.match(PM.roleRefusal("role_mod", "bob", { actions: ["role_mod"] }, "x"), /pad's owner/);
+  assert.ok(!PM.cleanCaps({ actions: ["kick", "role_mod"], on: true }).actions.includes("role_mod"), "no admin / room_roles -> no role actions");
+});
+
+test("1.99ti: My pads - the owner's pads with their owner panel links", () => {
+  const mine = PO.myPads("pb");
+  assert.ok(mine.some((p) => p.href === "/p/" + encodeURIComponent(SLUG) + "/owner"), JSON.stringify(mine));
+  assert.deepEqual(PO.myPads("nobody"), []);
+  assert.deepEqual(PO.myPads(null), []);
+});

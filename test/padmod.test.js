@@ -197,7 +197,7 @@ test("1.99pg: room roles - Pepe owners/admins only, not on a Pepe owner, self al
   assert.equal(r.status, 400, "a checked login only");
   const js = jobsNow();
   assert.deepEqual(js.map((j) => [j.text, j.gui]).sort(), [["!friend BossAdmin", "role_friend"], ["!mod bob", "role_mod"]]);
-  assert.equal(pm.roleRefusal("role_mod", "x", { admin: false }), "Room roles are for Pepe admins.");
+  assert.equal(pm.roleRefusal("role_mod", "x", { admin: false }), "Room roles are for Pepe admins and the pad's owner.");
   assert.equal(pm.roleRefusal("role_mod", "theowner", { admin: true, owners: ["theowner"] }, "theowner"), null, "an owner on their own row");
   assert.equal(pm.roleRefusal("kick", "x", {}), null, "not a role action: not this check");
   // Pepe answers -> one pad-role row per outcome, in the pad's audit (room_events, "pad-*")

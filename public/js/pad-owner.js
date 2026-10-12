@@ -136,8 +136,65 @@
       if (pending['br:' + k]) return;
       ctls('br:' + k).forEach(function (c) { setVal(c, p.bridge[k]); });
     });
+    paintStatus(p.status);
     paintSync();
   }
+  // ── 1.99ti: Pepe in the room - status chip + join / leave / rejoin (Prime Time Plus pads) ──
+  var stBox = document.getElementById('poStatus');
+  var ST_TXT = {
+    in: function () { return _t('js.owner.ps_in', 'Pepe is in the room'); },
+    joining: function () { return _t('js.owner.ps_joining', 'Pepe is joining…'); },
+    recovering: function () { return _t('js.owner.ps_recovering', 'Pepe is reconnecting (recovery mode)'); },
+    out: function () { return _t('js.owner.ps_out', 'Pepe isn\'t in the room'); },
+    paused: function () { return _t('js.owner.ps_paused', 'Pepe stays out (you sent him away)'); },
+  };
+  var ST_CHIP = { in: 'ok', joining: 'info', recovering: 'warn', out: 'mute', paused: 'mute' };
+  function paintStatus(st) {
+    if (!stBox || !st || !ST_TXT[st.state]) return;
+    stBox.setAttribute('data-state', st.state);
+    var chipEl = document.getElementById('poState');
+    if (chipEl) { chipEl.textContent = ST_TXT[st.state](); chipEl.className = 'ds-chip ' + ST_CHIP[st.state]; }
+    var j = document.getElementById('poJoined');
+    if (j) j.textContent = st.state === 'in' && st.joined_at
+      ? _t('js.owner.ps_joined', 'joined {when}', { when: new Date(st.joined_at).toLocaleString(window.PATV_I18N && PATV_I18N.lang || undefined) }) : '';
+    var rm = document.getElementById('poRooms');
+    if (rm) rm.textContent = _t('js.owner.ps_rooms', 'in {n} of his {max} rooms', { n: st.rooms, max: st.max });
+    var home = stBox.getAttribute('data-home') === '1';
+    q('[data-po-ctl]').forEach(function (b) {
+      var v = b.getAttribute('data-po-ctl');
+      b.hidden = v === 'join' ? st.state === 'in' : (st.state !== 'in' || home);
+    });
+  }
+  var ctlMsg = document.getElementById('poCtlMsg');
+  var ctlArmed = null, ctlLabels = {};
+  q('[data-po-ctl]').forEach(function (b) {
+    var verb = b.getAttribute('data-po-ctl');
+    ctlLabels[verb] = b.textContent;
+    b.addEventListener('click', function () {
+      // the confirm step, in place: the first press asks, the second sends
+      if (ctlArmed !== verb) {
+        q('[data-po-ctl]').forEach(function (x) { x.textContent = ctlLabels[x.getAttribute('data-po-ctl')]; });
+        ctlArmed = verb;
+        b.textContent = _t('js.owner.ps_yes', 'Yes, {verb}', { verb: ctlLabels[verb].replace(/^\S+\s/, '') });
+        say(ctlMsg, verb === 'leave' ? _t('js.owner.ps_q_leave', 'Ask Pepe to leave your room? He stays out until you ask him back.')
+          : verb === 'rejoin' ? _t('js.owner.ps_q_rejoin', 'Ask Pepe to leave and come straight back in?')
+          : _t('js.owner.ps_q_join', 'Ask Pepe to join your room?'));
+        return;
+      }
+      ctlArmed = null; b.textContent = ctlLabels[verb];
+      q('[data-po-ctl]').forEach(function (x) { x.disabled = true; });
+      say(ctlMsg, _t('js.owner.pending', 'Waiting for Pepe…'), 'wait');
+      api(base + '/owner/pepe-room', { verb: verb }).then(function (d) {
+        if (!d || !d.ok) { q('[data-po-ctl]').forEach(function (x) { x.disabled = false; }); return say(ctlMsg, (d && d.error) || _t('js.owner.not_sent', 'Not sent.'), 'bad'); }
+        watch(d.id, function (ok, m) {
+          q('[data-po-ctl]').forEach(function (x) { x.disabled = false; });
+          say(ctlMsg, m || (ok ? _t('js.owner.saved', 'Done.') : _t('js.owner.refused', 'Pepe refused it.')), ok ? 'ok' : ok === false ? 'bad' : '');
+          // a join / leave takes a while: re-read his status a few times
+          [3000, 10000, 25000, 60000].forEach(function (ms) { setTimeout(function () { poll(applyState); }, ms); });
+        });
+      }).catch(function () { q('[data-po-ctl]').forEach(function (x) { x.disabled = false; }); say(ctlMsg, _t('js.owner.unreachable_set', 'Couldn\'t reach the site.'), 'bad'); });
+    });
+  });
   function poll(cb) { api(base + '/owner/state').then(function (d) { cb(d && d.ok ? d.pepe : null); }).catch(function () { cb(null); }); }
   /** After Pepe answered at `after` (ms): wait for a settings report newer than that, then show what it says. */
   function confirm(key, want, after, msg) {

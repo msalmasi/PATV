@@ -50,8 +50,10 @@
   var ROLE_A = { role_admin: 1, role_mod: 1, role_friend: 1, role_unrole: 1 };
   function roleOk(caps, u, a) {
     if (!ROLE_A[a]) return true;
-    if (!caps || !caps.admin) return false;
+    if (!caps || !(caps.admin || caps.room_roles)) return false;
     var l = String((u && u.login) || '').toLowerCase();
+    // 1.99ti: the pad's owner (caps.room_roles) - never on Pepe's admins / owners (caps.protected)
+    if (!caps.admin) return isMe(caps, u) || !(Array.isArray(caps.protected) && caps.protected.indexOf(l) >= 0);
     return isMe(caps, u) || !(Array.isArray(caps.owners) && caps.owners.indexOf(l) >= 0);
   }
   // 1.99os: actions on YOURSELF (your own row in the list) - allowed, with the confirm step phrased for you.
