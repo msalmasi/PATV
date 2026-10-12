@@ -103,6 +103,9 @@
                   ['/shop', '🏪', t('nav.shop')],
                   ['/premium', '💎', t('nav.premium')],
                   ['/cosmetics', '🎨', t('nav.cosmetics')],
+                  // 1.99ta: the soundboard + voice store pages (soundboards.js / voicestore.js, 1.99rh) were linked from nowhere
+                  ['/soundboards', '🔊', t('nav.soundboards')],
+                  ['/voices', '🗣️', t('nav.voices')],
                   _supportOn && ['/support', '💖', t('nav.support')],
                 ]],
                 ['info', t('nav.sec_info'), [T.rankings,
@@ -315,6 +318,8 @@
                     <a href="/privacy"><%- t('foot.privacy') %></a>
                     <a href="/guidelines"><%- t('foot.guidelines') %></a>
                     <a href="/terms#reporting"><%- t('foot.report') %></a>
+                    <%# 1.99ta: the TAKE IT DOWN form (takedown.js) - no account needed, so it sits with the policies %>
+                    <a href="/takedown"><%- t('foot.takedown') %></a>
                     <a href="/about"><%- t('nav.about') %></a>
                     <a href="/economy"><%- t('nav.economy') %></a>
                 </nav>

@@ -618,7 +618,7 @@ function sameSite(req) {
 /** Data the /cosmetics page renders. */
 async function pageData(req) {
   const now = Date.now();
-  const tab = ["shop", "market", "mine", "showcase", "how"].includes(String(req.query.tab)) ? String(req.query.tab) : "shop";
+  const tab = ["shop", "stickers", "market", "mine", "showcase", "how"].includes(String(req.query.tab)) ? String(req.query.tab) : "shop";
   const sort = ["price", "price_desc", "newest"].includes(String(req.query.sort)) ? String(req.query.sort) : "newest";
   const byKind = {};
   for (const k of KINDS) byKind[k] = [];
@@ -802,7 +802,10 @@ function register(app, { isBotToken, addUser }) {
     try {
       const d = await pageData(req);
       d.stickerPacks = null;                     // 1.99iw: the "Sticker packs" part of My items
-      if (d.tab === "mine" && d.me) { try { d.stickerPacks = await require("./stickers").pageData(req.user); } catch (e) { d.stickerPacks = null; } }
+      if ((d.tab === "mine" && d.me) || d.tab === "stickers") { try { d.stickerPacks = await require("./stickers").pageData(req.user); } catch (e) { d.stickerPacks = null; } }
+      // 1.99ta: the 🧸 Stickers tab - the packs for sale (stickers.js), with the default price and the Season Pass allowance size
+      d.stkCfg = null;
+      if (d.tab === "stickers") { try { const C = require("./premium").config(); d.stkCfg = { price: C.sticker_price, spPer: C.sp_sticker_packs, sales: !!C.sales }; } catch (e) { d.stkCfg = null; } }
       res.locals.og = require("./og").forPage(req, "PATV Cosmetics", "Name colors, profile banners, borders, effects and Grand Theft Frogger avatar gear. Buy, earn, trade.");
       res.render("cosmetics", d);
     } catch (e) {

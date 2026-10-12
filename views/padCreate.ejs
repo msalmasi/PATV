@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'Create a pad', user: user }) %>
 <%# 1.99iz: /pads/new - create a pad (padcreate.js). Locals: el (eligibility: ok, staff, reasons, fee, made, max, balance),
     levels [{key, icon, label, what}], def (the default level), min / max (address length). %>
@@ -73,6 +74,8 @@
         <li>Add an avatar, a banner and a colour (Settings → General → Look).</li>
         <li>Write your rules, pick who can post, invite people.</li>
         <li>Got a Camfrog room or a Twitch channel? Connect it under Settings → Address &amp; platform.</li>
+        <%# 1.99ta: the public owner guide (padowner.js /pads/owner-guide) was linked from nowhere %>
+        <li><%- t('pad.create.owner_guide', { link: '<a href="/pads/owner-guide">' + t('owner.guide_title') + '</a>' }) %></li>
       </ol>
     </section>
   <% } %>

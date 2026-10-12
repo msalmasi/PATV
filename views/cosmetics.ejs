@@ -152,6 +152,18 @@
   .cxp .tabs .ds-tab { font-size: var(--ds-fs-sm); }
   .cxp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--ds-sp-3); }
 
+  /* 1.99ta: 🧸 Stickers tab */
+  .cxp .cxs h2.ds-h2 { margin-block: var(--ds-sp-5) var(--ds-sp-2); }
+  .cxs > p, .cxs > .ds-note { margin: 0 0 var(--ds-sp-3); }
+  .cxs > .cxp-muted:last-child { margin-block-start: var(--ds-sp-4); }
+  .cxs-msg:empty { display: none; }
+  .cxs-sheet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .cxs-sheet img { width: 100%; height: auto; aspect-ratio: 1; image-rendering: pixelated; background: var(--ds-sunken); border-radius: var(--ds-r-sm); padding: 4px; box-sizing: border-box; }
+  .cxs-pack.owned { border-color: var(--ds-ac-line); }
+  a.cxs-perk { text-decoration: none; min-height: 28px; }
+  a.cxs-perk:hover, a.cxs-perk:focus-visible { border-color: var(--ds-ac-2); }
+  .cxs-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+
   /* item card */
   .cxp-card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-block-start: 3px solid var(--rc); border-radius: var(--ds-r-xl); padding: var(--ds-sp-3);
               display: grid; gap: var(--ds-sp-2); align-content: start; min-width: 0; }
@@ -290,6 +302,8 @@
 
   <nav class="ds-tabs tabs" id="tabs" aria-label="Cosmetics sections">
     <a href="/cosmetics?tab=shop#tabs" class="ds-tab<%= tab === 'shop' ? ' on' : '' %>"<%- tab === 'shop' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🛍️</span> Shop</a>
+    <%# 1.99ta: 🧸 sticker packs (stickers.js) for sale here too, not only on /premium %>
+    <a href="/cosmetics?tab=stickers#tabs" class="ds-tab<%= tab === 'stickers' ? ' on' : '' %>"<%- tab === 'stickers' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🧸</span> <%- t('cos.stk.tab') %></a>
     <a href="/cosmetics?tab=market#tabs" class="ds-tab<%= tab === 'market' ? ' on' : '' %>"<%- tab === 'market' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🏪</span> Market<% if (listings.length) { %> <span class="ds-count"><%= listings.length %></span><% } %></a>
     <a href="/cosmetics?tab=mine#tabs" class="ds-tab<%= tab === 'mine' ? ' on' : '' %>"<%- tab === 'mine' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🎒</span> My items<% if (inv) { %> <span class="ds-count"><%= inv.count %></span><% } %></a>
     <a href="/cosmetics?tab=showcase#tabs" class="ds-tab<%= tab === 'showcase' ? ' on' : '' %>"<%- tab === 'showcase' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🏅</span> Showcase</a>
@@ -356,6 +370,54 @@
     <div class="ds-empty cxp-fempty" hidden><span class="ds-ic" aria-hidden="true">🔍</span><p>Nothing matches those filters.</p></div>
   <% } %>
 
+  <% if (tab === 'stickers') { %>
+    <%# 1.99ta: the sticker packs (stickers.pageData) - previews, price, owned, buy / 🎟️ claim / 🎁 gift through POST /api/stickers/buy
+        (public/js/cos-stickers.js). Perk packs are never sold: they show which tier they come with. %>
+    <% const STK = (typeof stickerPacks !== 'undefined' && stickerPacks) || { packs: [], signed: false, allowance: null };
+       const SC = (typeof stkCfg !== 'undefined' && stkCfg) || { price: 0, spPer: 0, sales: true };
+       const stkL_ = (k, d) => (t.has(k) ? t(k) : t.esc(d)); %>
+    <section class="cxs" data-stk-shop aria-labelledby="cxsH">
+      <h2 class="ds-h2" id="cxsH"><span class="ds-ic lg" aria-hidden="true">🧸</span><%- t('cos.stk.heading') %></h2>
+      <p class="cxp-muted"><%- t('premium.stk.intro', { price: fmt(SC.price) }) %><% if (STK.allowance && STK.allowance.per) { %> · <%- t('premium.stk.left', { count: STK.allowance.left }) %><% } else if (SC.spPer) { %> · <%- t('premium.stk.sp_includes', { n: SC.spPer }) %><% } %>.</p>
+      <% if (!SC.sales) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏸️</span><div><%- t('cos.stk.off') %></div></div><% } %>
+      <% if (!STK.signed) { %><p class="cxp-muted"><%- t('cos.stk.signin', { link: '<a href="/login?next=' + encodeURIComponent('/cosmetics?tab=stickers') + '">' + t('cos.stk.signin_link') + '</a>' }) %></p><% } %>
+      <p class="ds-note cxs-msg" data-stk-msg role="status" aria-live="polite" hidden></p>
+      <% if (!STK.packs.length) { %>
+        <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🧸</span><p><%- t('cos.stk.none') %></p></div>
+      <% } else { %>
+      <div class="grid cxs-grid">
+        <% STK.packs.forEach((p) => { const pn_ = stkL_('stk.pack.' + p.id + '.name', p.name); %>
+        <div class="cxp-card cxs-pack<%= p.owned ? ' owned' : '' %>" style="--rc: <%= p.perk ? 'var(--ds-gold)' : 'var(--ds-ac)' %>" data-stk-pack="<%= p.id %>">
+          <div class="cxp-title"><b><span aria-hidden="true"><%= p.emoji %></span> <%- pn_ %></b><% if (p.owned) { %><span class="ds-tag ac"><%- t('premium.stk.yours') %></span><% } %></div>
+          <div class="cxs-sheet"><% p.stickers.forEach((st) => { const sn_ = stkL_('stk.s.' + p.id + '.' + st.id, st.name); %><img src="<%= st.url %>" alt="<%- sn_ %>" title="<%- sn_ %>" width="64" height="64" loading="lazy"><% }) %></div>
+          <div class="cxp-desc"><%- stkL_('stk.pack.' + p.id + '.desc', p.desc) %></div>
+          <div class="cxp-src"><%- t('cos.stk.count', { count: p.stickers.length }) %></div>
+          <% if (p.perk) { %>
+            <div class="cxp-row"><a class="ds-tag ac cxs-perk" href="/premium<%= p.perk === 'prime_plus' ? '#plus' : '' %>"><%- p.perk === 'prime_plus' ? t('premium.stk.perk_plus') : t('premium.stk.perk_sp') %></a><% if (p.season) { %><span class="ds-tag"><%- t('premium.stk.seasonal', { label: t.esc(p.season.label || '') }) %></span><% } %></div>
+          <% } else { %>
+            <div class="cxp-price"><%= fmt(p.price) %> PAT</div>
+            <% if (STK.signed) { %>
+              <% if (!p.owned) { %><div class="cxp-row">
+                <% if (STK.allowance && STK.allowance.left) { %><button type="button" class="ds-btn sm" data-stk="<%= p.id %>" data-free="1"><%- t('premium.stk.claim') %></button><% } %>
+                <button type="button" class="ds-btn gold sm" data-stk="<%= p.id %>" data-price="<%= p.price %>"<%= SC.sales ? '' : ' disabled' %>><%- t('cos.stk.buy') %></button>
+              </div><% } %>
+              <details class="cxp-more"><summary><span class="ds-ic" aria-hidden="true">🎁</span><%- t('cos.stk.gift_summary') %></summary>
+                <form class="cxp-row" data-stk-gift="<%= p.id %>" data-price="<%= p.price %>">
+                  <input class="ds-in" name="to" placeholder="<%- t('cos.stk.gift_to') %>" required maxlength="60" aria-label="<%- t('cos.stk.gift_to') %>" autocomplete="off">
+                  <label class="cxp-anon"><input type="checkbox" name="anon" value="1"> <%- t('gifts.anon.box_short') %></label>
+                  <button class="ds-btn ghost sm" type="submit"<%= SC.sales ? '' : ' disabled' %>><%- t('cos.stk.gift_btn') %></button>
+                </form>
+              </details>
+            <% } %>
+          <% } %>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+      <p class="cxp-muted"><%- t('cos.stk.foot', { link: '<a href="/premium#stickers">' + t('cos.stk.foot_link') + '</a>' }) %></p>
+    </section>
+  <% } %>
+
   <% if (tab === 'market') { %>
     <p class="cxp-muted">Copies other players are selling. Pepe takes the PAT from you, pays the seller (minus a <%= fee %>% market fee), and moves the item to your inventory. Sell your own from <a href="/cosmetics?tab=mine#tabs">My items</a>.</p>
     <div class="sortbar"><span class="cxp-flabel">Sort</span>
@@ -412,8 +474,8 @@
         <% if (own_.length) { %><div class="stk-packs"><% own_.forEach((p) => { %>
           <div class="cxp-muted stk-pack"><b><%= p.emoji %> <%- stkL_('stk.pack.' + p.id + '.name', p.name) %></b>
             <span><% p.stickers.forEach((s) => { const sn_ = stkL_('stk.s.' + p.id + '.' + s.id, s.name); %><img src="<%= s.url %>" alt="<%- sn_ %>" title="<%- sn_ %>" width="40" height="40" loading="lazy"><% }) %></span></div>
-        <% }) %></div><p class="cxp-muted stk-foot">Use them with the 🧸 button in messages and posts. <a href="/premium#stickers">More packs</a></p>
-        <% } else { %><p class="cxp-muted">None yet - <a href="/premium#stickers">get a sticker pack</a><%= stickerPacks.allowance && stickerPacks.allowance.left ? ' (your 🎟️ Season Pass has a free one)' : '' %>.</p><% } %>
+        <% }) %></div><p class="cxp-muted stk-foot">Use them with the 🧸 button in messages and posts. <a href="/cosmetics?tab=stickers#tabs">More packs</a></p>
+        <% } else { %><p class="cxp-muted">None yet - <a href="/cosmetics?tab=stickers#tabs">get a sticker pack</a><%= stickerPacks.allowance && stickerPacks.allowance.left ? ' (your 🎟️ Season Pass has a free one)' : '' %>.</p><% } %>
       <% } %>
       <% if (!inv.count) { %>
         <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🎒</span><p>No items yet. Grab something from the <a href="/cosmetics?tab=shop#tabs">shop</a>, run a heist for a drop, or level up.</p></div>
@@ -593,5 +655,6 @@
     document.head.appendChild(s);
   })();
 </script>
+<% if (tab === 'stickers') { %><script src="/public/js/cos-stickers.js?v=1" defer></script><% } %>
 </body>
 </html>

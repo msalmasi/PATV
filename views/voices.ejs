@@ -67,7 +67,7 @@
     <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🗣️</span> <%- t('vs.eyebrow') %></span>
     <h1><%- t('vs.h1') %></h1>
     <p class="ds-lead"><%- t('vs.lead') %></p>
-    <div class="ds-ctas"><a class="ds-btn ghost" href="/voices/mine"><%- t('vs.mine_link') %></a><a class="ds-btn ghost" href="/soundboards"><%- t('vs.sb_link') %></a></div>
+    <div class="ds-ctas"><% if (locals.cloneOn) { %><a class="ds-btn" href="/voices/clone"><span class="ds-ic" aria-hidden="true">🎙️</span> <%- t('vc.title') %></a><% } %><a class="ds-btn ghost" href="/voices/mine"><%- t('vs.mine_link') %></a><a class="ds-btn ghost" href="/soundboards"><%- t('vs.sb_link') %></a></div>
   </header>
   <div class="vs-filters" role="group" aria-label="<%- t('vs.filter') %>">
     <button type="button" class="ds-btn sm" data-vs-filter="all" aria-pressed="true"><%- t('vs.f_all') %></button>

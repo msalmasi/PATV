@@ -19,6 +19,9 @@
   var status = el('p', 'sbd-msg'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
   var foot = el('p', 'sbd-foot');
   var a = el('a', null, _t('js.sbd.store', 'Get packs')); a.href = '/soundboards'; foot.appendChild(a);
+  // 1.99ta: the voice store too (Pepe's voices for !say / soundboard lines) - it was linked from nowhere
+  foot.appendChild(document.createTextNode(' · '));
+  var av = el('a', null, _t('js.sbd.voices', 'Voices')); av.href = '/voices'; foot.appendChild(av);
   panel.appendChild(tabs); panel.appendChild(grid); panel.appendChild(status); panel.appendChild(foot);
   host.appendChild(toggle); host.appendChild(panel);
   function say(t, c) { status.textContent = t || ''; status.className = 'sbd-msg' + (c ? ' ' + c : ''); }

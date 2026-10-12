@@ -303,8 +303,10 @@ function register(app, { addUser, isBotToken }) {
                       free: !(v.price_use > 0) });
     }) };
   };
+  // 1.99ta: "Clone your voice" on the store page while !clonemyvoice is switched on (voiceclone.js)
+  const cloneOn = () => { try { return !!require("./voiceclone").config().enabled; } catch (e) { return false; } };
   app.get("/voices", addUser, async (req, res, next) => {
-    try { res.set("Cache-Control", "private, no-store"); res.render("voices", { user: req.user ? req.user.username : null, d: await pageData(req.user), mine: null }); } catch (e) { next(e); }
+    try { res.set("Cache-Control", "private, no-store"); res.render("voices", { user: req.user ? req.user.username : null, d: await pageData(req.user), mine: null, cloneOn: cloneOn() }); } catch (e) { next(e); }
   });
   app.get("/api/voices", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");

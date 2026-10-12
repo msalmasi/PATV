@@ -139,6 +139,7 @@
   .pe .conn-name b { display: block; font-size: 15px; overflow-wrap: anywhere; }
   .pe .conn-name .none { color: var(--ds-text-faint); font-weight: normal; }
   .pe .conn-cf { grid-column: 1 / -1; }
+  .pe .conn-name .pv-d { display: block; margin-top: 2px; color: var(--ds-text-muted); font-size: 13px; line-height: 1.4; }   /* 1.99ta: privacy & likeness rows */
   .pe .conn-name .px-st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--ds-text-muted); }
   .pe .btn.telegram { background: #1a7bb0; border-color: transparent; color: #fff !important; }   /* Telegram blue darkened for 4.7:1 white ink */
   .pe .btn.telegram:hover { background: #1a7bb0; filter: brightness(1.1); }
@@ -308,7 +309,7 @@
   </section>
 
   <nav class="jump" aria-label="<%- t('settings.sections_aria') %>">
-    <a href="#account"><%- t('settings.account') %></a><a href="#language"><%- t('settings.language') %></a><a href="#timezone"><%- t('settings.timezone') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a>
+    <a href="#account"><%- t('settings.account') %></a><a href="#language"><%- t('settings.language') %></a><a href="#timezone"><%- t('settings.timezone') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#privacy"><%- t('settings.privacy') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a>
   </nav>
 
   <section class="card" id="account">
@@ -433,6 +434,30 @@
       </div>
       <p class="lay-note"><%- t('settings.layout.note') %></p>
     </form>
+  </section>
+
+  <%# 1.99ta: privacy & likeness - the likeness opt-outs (likeness.js), your voice in the voice store (voicestore.js) and
+      !clonemyvoice (voiceclone.js); these pages had no way in from settings %>
+  <section class="card" id="privacy">
+    <h2><%- t('settings.privacy') %></h2>
+    <p class="lede"><%- t('settings.privacy.lede') %></p>
+    <div class="conn">
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#2a2440" aria-hidden="true">🪞</span>
+        <span class="conn-name"><b><%- t('settings.privacy.likeness') %></b><span class="pv-d"><%- t('settings.privacy.likeness_d') %></span></span>
+        <a class="btn" href="/settings/likeness"><%- t('settings.privacy.manage') %></a>
+      </div>
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#1d3346" aria-hidden="true">🗣️</span>
+        <span class="conn-name"><b><%- t('vs.mine_link') %></b><span class="pv-d"><%- t('settings.privacy.voice_d') %></span></span>
+        <a class="btn" href="/voices/mine"><%- t('settings.privacy.manage') %></a>
+      </div>
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#3a1f2a" aria-hidden="true">🎙️</span>
+        <span class="conn-name"><b><%- t('vc.title') %></b><span class="pv-d"><%- t('settings.privacy.clone_d') %></span></span>
+        <a class="btn" href="/voices/clone"><%- t('settings.privacy.clone_open') %></a>
+      </div>
+    </div>
   </section>
 
   <section class="card" id="connections">
