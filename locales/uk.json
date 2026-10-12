@@ -6974,6 +6974,12 @@
   "owner.rc_games": "Ігри",
   "owner.rc_paid": "Виплачено",
   "owner.rc_stayed": "Лишилось",
+  "owner.rc_people_count": {
+    "few": "{count} людини",
+    "many": "{count} людей",
+    "one": "{count} людина",
+    "other": "{count} людини"
+  },
   "owner.rc_topup": "+{n} покрито бюджетом стимулів",
   "owner.rc_games_left": "Ігри в кімнаті сьогодні: залишилося {left} з {allow} PAT на призи.",
   "owner.roy_old_h": "Старі роялті (закриті)",

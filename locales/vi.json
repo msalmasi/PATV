@@ -6695,6 +6695,9 @@
   "owner.rc_games": "Trò chơi",
   "owner.rc_paid": "Đã trả",
   "owner.rc_stayed": "Còn lại",
+  "owner.rc_people_count": {
+    "other": "{count} người"
+  },
   "owner.rc_topup": "+{n} được ngân sách khuyến khích bù vào",
   "owner.rc_games_left": "Trò chơi trong phòng hôm nay: còn lại {left} trên {allow} PAT để làm giải thưởng.",
   "owner.roy_old_h": "Phần bản quyền cũ (đã đóng)",

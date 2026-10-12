@@ -6784,6 +6784,10 @@
   "owner.rc_games": "بازی‌ها",
   "owner.rc_paid": "پرداخت‌شده",
   "owner.rc_stayed": "باقی‌مانده",
+  "owner.rc_people_count": {
+    "one": "{count} نفر",
+    "other": "{count} نفر"
+  },
   "owner.rc_topup": "+{n} از بودجه مشوق تطبیق داده شد",
   "owner.rc_games_left": "بازی‌های اتاق امروز: {left} از {allow} PAT برای جایزه باقی مونده.",
   "owner.roy_old_h": "رویالتی‌های قدیمی (بسته‌شده)",

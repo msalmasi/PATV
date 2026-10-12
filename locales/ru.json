@@ -6974,6 +6974,12 @@
   "owner.rc_games": "Игры",
   "owner.rc_paid": "Выплачено",
   "owner.rc_stayed": "Осталось",
+  "owner.rc_people_count": {
+    "one": "{count} человек",
+    "few": "{count} человека",
+    "many": "{count} человек",
+    "other": "{count} человека"
+  },
   "owner.rc_topup": "+{n} из бюджета поощрений",
   "owner.rc_games_left": "Игры комнаты сегодня: осталось {left} из {allow} PAT на призы.",
   "owner.roy_old_h": "Старые роялти (закрыты)",

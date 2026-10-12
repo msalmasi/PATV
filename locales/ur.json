@@ -6788,6 +6788,10 @@
   "owner.rc_games": "گیمز",
   "owner.rc_paid": "ادا شدہ",
   "owner.rc_stayed": "باقی رہا",
+  "owner.rc_people_count": {
+    "one": "{count} شخص",
+    "other": "{count} لوگ"
+  },
   "owner.rc_topup": "+{n} ترغیبی بجٹ سے ملا",
   "owner.rc_games_left": "آج روم گیمز: انعامات کے لیے {allow} میں سے {left} PAT باقی ہیں۔",
   "owner.roy_old_h": "پرانی رائلٹی (بند)",

@@ -6974,6 +6974,12 @@
   "owner.rc_games": "Gry",
   "owner.rc_paid": "Wypłacono",
   "owner.rc_stayed": "Zostało",
+  "owner.rc_people_count": {
+    "one": "{count} osoba",
+    "few": "{count} osoby",
+    "many": "{count} osób",
+    "other": "{count} osoby"
+  },
   "owner.rc_topup": "+{n} z budżetu zachęt",
   "owner.rc_games_left": "Gry w pokoju dzisiaj: zostało {left} z {allow} PAT na nagrody.",
   "owner.roy_old_h": "Stare tantiemy (zamknięte)",

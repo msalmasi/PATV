@@ -6788,6 +6788,10 @@
   "owner.rc_games": "गेम्स",
   "owner.rc_paid": "भुगतान",
   "owner.rc_stayed": "बचा",
+  "owner.rc_people_count": {
+    "one": "{count} व्यक्ति",
+    "other": "{count} लोग"
+  },
   "owner.rc_topup": "+{n} प्रोत्साहन बजट से मैच किया गया",
   "owner.rc_games_left": "आज रूम गेम्स: इनामों के लिए {allow} PAT में से {left} PAT बचे हैं।",
   "owner.roy_old_h": "पुरानी रॉयल्टी (बंद)",

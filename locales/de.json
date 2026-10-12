@@ -6788,6 +6788,10 @@
   "owner.rc_games": "Spiele",
   "owner.rc_paid": "Ausgezahlt",
   "owner.rc_stayed": "Geblieben",
+  "owner.rc_people_count": {
+    "one": "{count} Person",
+    "other": "{count} Personen"
+  },
   "owner.rc_topup": "+{n} durch das Anreizbudget gedeckt",
   "owner.rc_games_left": "Raumspiele heute: noch {left} von {allow} PAT für Preise übrig.",
   "owner.roy_old_h": "Alte Royalties (abgeschlossen)",

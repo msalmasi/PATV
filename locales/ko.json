@@ -6695,6 +6695,9 @@
   "owner.rc_games": "게임",
   "owner.rc_paid": "지급",
   "owner.rc_stayed": "남음",
+  "owner.rc_people_count": {
+    "other": "{count}명"
+  },
   "owner.rc_topup": "+{n} 인센티브 예산으로 매칭",
   "owner.rc_games_left": "오늘 방 게임: 상품으로 쓸 수 있는 PAT가 {allow} 중 {left} 남았어요.",
   "owner.roy_old_h": "지난 로열티 (종료됨)",

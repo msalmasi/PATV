@@ -7160,6 +7160,14 @@
   "owner.rc_games": "الألعاب",
   "owner.rc_paid": "المدفوع",
   "owner.rc_stayed": "المتبقي",
+  "owner.rc_people_count": {
+    "few": "{count} أشخاص",
+    "many": "{count} شخصًا",
+    "one": "{count} شخص",
+    "two": "{count} شخصان",
+    "zero": "{count} شخص",
+    "other": "{count} شخص"
+  },
   "owner.rc_topup": "+{n} من ميزانية الحوافز",
   "owner.rc_games_left": "ألعاب الغرفة اليوم: تبقّى {left} من أصل {allow} PAT للجوائز.",
   "owner.roy_old_h": "الإتاوات القديمة (مُغلقة)",
