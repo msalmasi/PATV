@@ -103,10 +103,21 @@ test("admin validation: rate ceiling, end required, <= 7 days, no past start, no
   const p = await DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, today: true, starts: now + 3 * H, ends: now + 4 * H, label: "x" });
   assert.equal(p.starts, now); assert.equal(p.ends, Date.UTC(2026, 9, 13, 4));
   await bad({ mode: "mult", mult: 2, cap_usd: 50, starts: now + H, ends: now + 2 * H }, /overlaps/);
-  const a = await getQuery("SELECT * FROM admin_audit WHERE action = 'donation_promo'");
-  assert.equal(a.length, 1, "the create is audit-logged");
+  // a promo started "now" at x.750 s starts at x.000: a card checkout opened in that same second (Stripe: whole seconds) is in
+  now += 750;
   await DP.end(ADMIN, p.id);
-  assert.equal((await getQuery("SELECT ends FROM donation_promos WHERE id = ?", [p.id]))[0].ends, now, "end now");
+  const p2 = await DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, ends: now + H });
+  assert.equal(p2.starts, now - 750);
+  await SB.handleEvent(card("evt_sec", "fay", 100, now));
+  assert.equal(await bal("fay"), 1000000, "the same-second checkout got the promo rate");
+  await runQuery("DELETE FROM donation_promo_credits WHERE promo_id = ?", [p2.id]);
+  await runQuery("UPDATE users SET points_balance = 0 WHERE userId = 'u-fay'");
+  now += 1000;
+  await DP.end(ADMIN, p2.id);
+  const p3 = { id: p.id };
+  const a = await getQuery("SELECT detail FROM admin_audit WHERE action = 'donation_promo' ORDER BY id");
+  assert.deepEqual(a.map((r) => JSON.parse(r.detail).what), ["create", "end", "create", "end"], "every change is audit-logged");
+  assert.equal((await getQuery("SELECT ends FROM donation_promos WHERE id = ?", [p3.id]))[0].ends, T0, "end now (whole seconds)");
   now = Math.ceil(now / 1000) * 1000 + 1000;   // Stripe times are whole seconds
 });
 

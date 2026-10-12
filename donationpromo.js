@@ -308,7 +308,8 @@ function windowOf(b, now) {
   if (b.today) { starts = now; ends = nextMidnight(now); }
   if (!Number.isFinite(starts)) throw refuse("Bad start time.");
   if (!Number.isFinite(ends)) throw refuse("An end time is required.");
-  return { starts, ends };
+  // whole seconds: Stripe's times are seconds, so a checkout opened in the same second a promo starts "now" is inside it
+  return { starts: Math.floor(starts / 1000) * 1000, ends };
 }
 function checkWindow(starts, ends, now, { isNew }) {
   if (isNew && starts < now - 5 * 60000) throw refuse("A promo can't start in the past.");
@@ -374,8 +375,8 @@ async function edit(admin, id, b = {}) {
       const P = pricing({ mode: b.mode ?? p.mode, rate: b.rate ?? p.rate, mult: b.mult ?? p.mult, cap_usd: b.cap_usd ?? p.cap_cents / 100,
                           bonus_base: b.bonus_base ?? p.bonus_base }, normalTerms().rate);
       Object.assign(next, P);
-      if (b.starts !== undefined && b.starts !== "") next.starts = int(b.starts);
-      if (b.today) { next.starts = now; next.ends = nextMidnight(now); }
+      if (b.starts !== undefined && b.starts !== "") next.starts = Math.floor(int(b.starts) / 1000) * 1000;
+      if (b.today) { next.starts = Math.floor(now / 1000) * 1000; next.ends = nextMidnight(now); }
     }
     if (b.ends !== undefined && b.ends !== "" && !b.today) next.ends = int(b.ends);
     if (b.label !== undefined) next.label = cleanLabel(b.label) || null;
@@ -416,7 +417,9 @@ async function end(admin, id) {
       await runQuery("UPDATE donation_promos SET cancelled = 1, ended_at = ?, ended_by = ?, updated = ? WHERE id = ?", [now, admin.username || admin.userId, now, p.id]);
       await audit(admin, "cancel", { id: p.id });
     } else {
-      await runQuery("UPDATE donation_promos SET ends = ?, ended_at = ?, ended_by = ?, updated = ? WHERE id = ?", [now, now, admin.username || admin.userId, now, p.id]);
+      // whole seconds, like the start: a promo started right after this one ends in the same second doesn't overlap it
+      const at = Math.max(p.starts, Math.floor(now / 1000) * 1000);
+      await runQuery("UPDATE donation_promos SET ends = ?, ended_at = ?, ended_by = ?, updated = ? WHERE id = ?", [at, now, admin.username || admin.userId, now, p.id]);
       await audit(admin, "end", { id: p.id, was_ends: p.ends });
     }
     return (await getQuery("SELECT * FROM donation_promos WHERE id = ?", [p.id]))[0];
