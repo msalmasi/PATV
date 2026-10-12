@@ -186,8 +186,40 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
   const S = require("./feedstore");
   if (!items || !items.length) throw new Refuse(400, "Pick the lines to quote.");
   const lines = await buildLines(items);
+  // 1.99qw (likeness royalties): a quote costs quote_price PAT (250; Pepe's own / site admins free); 40% of it goes to the
+  // people quoted (held 24 h, likeness.js), and anyone quoted who opted out of clips (!likeness clips off) refuses it
+  const L = require("./likeness");
+  await L.init();
+  const speakers = loginsOf(lines);
+  for (const lg of speakers) {
+    const su = await L.userByLogin(lg);
+    if (su && su.userId !== authorId && !(await L.allows(su.userId, "clips"))) {
+      throw new Refuse(403, `${lines.find((l) => l.login === lg).name} has opted out of being quoted - nothing was charged.`);
+    }
+  }
+  const author = viaPepe ? null : (await getQuery("SELECT userId, class, points_balance FROM users WHERE userId = ?", [authorId]))[0];
+  const price = !author || author.class === "Admin" ? 0 : Math.max(0, Number(L.config().quote_price) || 0);
+  if (price > 0 && Number(author.points_balance || 0) < price) {
+    throw new Refuse(402, `A quote costs ${price.toLocaleString("en-US")} PAT - you have ${Number(author.points_balance || 0).toLocaleString("en-US")}.`);
+  }
   const made = await S.create(authorId, { title: S.cleanLine(title, TITLE_MAX), body: bodyOf(lines), community: roomId, announce: [] },
                               viaPepe ? { roomGen: true } : {});
+  let charged = null;
+  if (price > 0) {
+    try {
+      charged = await require("./boosts").tx(async () => {
+        await require("./ledger").postOrThrow(authorId, -price, "💬 chat quote", { requireCover: true, transactionId: "quote:" + made.id });
+        const cut = await L.siteCut({ key: "quote", flow: "quotes", base: price, subjects: speakers.filter((s) => s), payerId: authorId, room: roomId,
+                                      ref: "quote-" + made.id });
+        const routing = await require("./premium").bookRoute("quotes", price - cut, { roomId, ownerSelf: false, payerId: authorId, label: "chat quote" });
+        return { price, cut, routing };
+      });
+    } catch (e) {
+      await runQuery("UPDATE feed_posts SET deleted_at = ?, deleted_by = 'system', delete_reason = 'quote not paid' WHERE id = ?", [NOW(), made.id]).catch(() => {});
+      if (e && (e.code === "E_INSUFFICIENT" || /INSUFFICIENT/.test(String(e.message)))) throw new Refuse(402, `A quote costs ${price.toLocaleString("en-US")} PAT - you don't have enough.`);
+      throw e;
+    }
+  }
   try {
     await runQuery(`INSERT INTO feed_quotes (post_id, room_id, source, lines, logins, removed, created_by, created) VALUES (?, ?, ?, ?, ?, '[]', ?, ?)`,
                    [made.id, roomId, source, JSON.stringify(lines), " " + loginsOf(lines).join(" ") + " ", authorId, NOW()]);
@@ -200,7 +232,7 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
     try { prof = await S.crosspostMany(authorId, made.id, { pads: ["profile"] }); } catch (e) { prof = { error: e.message }; }
   }
   console.log(`[quotes] ${made.id} in ${roomId} by ${authorId} (${source}): ${lines.length} lines, ${loginsOf(lines).length} speakers`);
-  return { post: { id: made.id, url: made.url }, lines: lines.length, profile: prof };
+  return { post: { id: made.id, url: made.url }, lines: lines.length, profile: prof, price: charged ? charged.price : 0, cut: charged ? charged.cut : 0 };
 }
 
 /** Blank `logins` out of a quote: their lines become "someone", their names inside the other lines too. -> changed? */

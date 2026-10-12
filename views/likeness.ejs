@@ -1,0 +1,85 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /settings/likeness - 1.99qw (likeness.js): your likeness opt-outs (what people may use you in), what you earned from being
+    the subject of a paid command (held 24 h, released daily) and - once you have one - your cloned voice. Client:
+    public/js/likeness.js. %>
+<%- include('layout', { title: t('lk.title'), user: user }) %>
+<style>
+  .lk .lk-set { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); min-height: 56px; padding: var(--ds-sp-2) 0;
+                border-top: 1px solid var(--ds-line-soft); }
+  .lk .lk-set:first-of-type { border-top: 0; }
+  .lk .lk-set > div { min-width: 0; }
+  .lk .lk-set b { color: var(--ds-text-strong); }
+  .lk .lk-why { margin: 0; color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
+  .lk .lk-msg { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); margin: var(--ds-sp-2) 0 0; }
+  .lk .lk-msg.ok { color: var(--ds-ok); } .lk .lk-msg.bad { color: var(--ds-danger); }
+  .lk .ds-tbl td, .lk .ds-tbl th { white-space: nowrap; }
+  .lk .ds-tbl td.w { white-space: normal; }
+  .lk .lk-pct { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 6px var(--ds-sp-3); margin: 0; padding: 0; list-style: none; }
+  .lk .lk-pct li { display: flex; justify-content: space-between; gap: var(--ds-sp-2); font-size: 13.5px; color: var(--ds-text-2); border-bottom: 1px solid var(--ds-line-soft); padding: 6px 0; }
+</style>
+<%
+  const num = (n) => (t.num ? t.num(Math.round(Number(n) || 0)) : Math.round(Number(n) || 0).toLocaleString('en-US'));
+  const when = (ms) => ms ? (t.date ? t.date(Number(ms), { dateStyle: 'medium', timeStyle: 'short' }) : new Date(Number(ms)).toISOString()) : '';
+  const PCT = [['clipmic', 'clips'], ['quote', 'clips'], ['snap', 'snaps'], ['clip', 'snaps'], ['imagine', 'cam'], ['look', 'cam'], ['camroast', 'cam'], ['roast', 'roast'], ['voice', null], ['voice_unlock', null], ['sb_mic', 'soundboard'], ['sb_voice', null], ['sb_pack', null]];
+  const cfg = st.config || {};
+%>
+<main class="ds-page mid lk" id="lk">
+  <a class="ds-back" href="/settings">← <%- t('lk.back') %></a>
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🪞</span> <%- t('lk.eyebrow') %></span>
+    <h1><%- t('lk.h1') %></h1>
+    <p class="ds-lead"><%- t('lk.lead') %></p>
+  </header>
+
+  <div class="ds-stats" aria-label="<%- t('lk.summary') %>">
+    <div class="ds-stat"><span><%- t('lk.s_held') %></span><b class="gold"><%= num(st.held) %></b><small>PAT</small></div>
+    <div class="ds-stat"><span><%- t('lk.s_paid') %></span><b class="up"><%= num(st.paid) %></b><small>PAT</small></div>
+    <div class="ds-stat"><span><%- t('lk.s_next') %></span><b><%= when(st.next_release) %></b><small><%- t('lk.s_daily') %></small></div>
+  </div>
+  <% if (st.frozen) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏸️</span><div><%- t('lk.frozen') %></div></div><% } %>
+
+  <section class="ds-card lg" id="optouts" aria-labelledby="lkOptH">
+    <h2 class="ds-h2" id="lkOptH"><span class="dot"></span><%- t('lk.opt_h') %></h2>
+    <p class="lk-why"><%- t('lk.opt_why') %></p>
+    <% kinds.forEach((k) => { %>
+    <div class="lk-set">
+      <div><b><%- t('lk.kind.' + k) %></b><p class="ds-meta"><%- t('lk.kind_tip.' + k) %></p></div>
+      <label class="ds-switch"><input type="checkbox" data-lk-kind="<%= k %>" <%= st.prefs[k] ? 'checked' : '' %> aria-label="<%- t('lk.kind.' + k) %>"><span></span></label>
+    </div>
+    <% }) %>
+    <p class="lk-msg" id="lkMsg" role="status" aria-live="polite"></p>
+    <p class="ds-meta"><%- t('lk.opt_chat') %></p>
+  </section>
+
+  <section class="ds-card lg" id="earnings" aria-labelledby="lkEarnH">
+    <h2 class="ds-h2" id="lkEarnH"><span class="dot"></span><%- t('lk.earn_h') %></h2>
+    <p class="lk-why"><%- t('lk.earn_why', { hours: cfg.hold_hours || 24, cap: num(cfg.subject_day_cap || 0), age: cfg.min_age_days || 0, level: cfg.min_level || 0 }) %></p>
+    <% if (!st.recent.length) { %>
+      <p class="ds-empty"><%- t('lk.earn_none') %></p>
+    <% } else { %>
+    <div class="ds-tbl"><table><thead><tr><th scope="col"><%- t('lk.col_when') %></th><th scope="col"><%- t('lk.col_what') %></th><th scope="col" class="r"><%- t('lk.col_amount') %></th><th scope="col"><%- t('lk.col_status') %></th></tr></thead><tbody>
+      <% st.recent.forEach((r) => { %>
+      <tr><td><%= when(r.created) %></td><td class="w">!<%= r.cmd %><%= r.room_id ? ' · ' + r.room_id : '' %></td><td class="r"><%= num(r.amount) %></td>
+        <td><%- r.status === 'held' ? t('lk.st_held', { when: when(r.release_after) }) : r.status === 'paid' ? t('lk.st_paid') : r.status === 'paying' ? t('lk.st_paying') : t('lk.st_forfeit', { why: t.esc(r.reason || '') }) %></td></tr>
+      <% }) %>
+    </tbody></table></div>
+    <% } %>
+    <details><summary class="ds-meta"><%- t('lk.rates_h') %></summary>
+      <ul class="lk-pct">
+        <% PCT.forEach(([k]) => { %><li><span><%- t('lk.rate.' + k) %></span><b><%= (cfg.pct || {})[k] %>%</b></li><% }) %>
+      </ul>
+    </details>
+  </section>
+
+  <section class="ds-card lg" id="voice" aria-labelledby="lkVoiceH">
+    <h2 class="ds-h2" id="lkVoiceH"><span class="dot"></span>🗣️ <%- t('lk.voice_h') %></h2>
+    <% if (locals.voice && voice.voices && voice.voices.length) { %>
+      <p class="lk-why"><%- t('lk.voice_have', { n: voice.voices.length }) %></p>
+      <div class="ds-ctas"><a class="ds-btn" href="/voices/mine"><%- t('lk.voice_manage') %></a></div>
+    <% } else { %>
+      <p class="lk-why"><%- t('lk.voice_none') %></p>
+      <div class="ds-ctas"><a class="ds-btn ghost" href="/voices"><%- t('lk.voice_store') %></a></div>
+    <% } %>
+  </section>
+</main>
+<script src="/public/js/likeness.js?v=1" defer></script>

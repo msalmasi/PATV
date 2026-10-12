@@ -78,6 +78,9 @@ test.before(async () => {
   U.carol = await mkUser("carol", { camfrog: "carolcf" });
   U.nolink = await mkUser("nolink");
   U.admin = await mkUser("boss", { class: "Admin", camfrog: "bossfrog" });
+  // 1.99qw: a quote costs quote_price PAT (likeness.js) - everyone can afford a few
+  await runQuery("UPDATE users SET points_balance = 100000");
+  await require(path.join(repo, "funding")).init().catch(() => {});
   await rooms.init();
   await store.init();
   await store.setConfig({ posts_per_hour: 1000, posts_per_day: 1000, post_gap_secs: 0, comment_gap_secs: 0 }, "test");

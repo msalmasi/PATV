@@ -555,7 +555,9 @@ async function settleClaims() {
     let n = 0;
     for (const c of rows) {
       const amt = Math.trunc(Number(c.amount) || 0);
-      const pool = String(c.flow).startsWith("fortknox:") ? "fortknox" : "reserve";
+      // 1.99qw: "lkhold:<flow>" = a website likeness cut -> the likeness hold (the pool that pays the "likeness" release)
+      const pool = String(c.flow).startsWith("fortknox:") ? "fortknox"
+        : String(c.flow).startsWith("lkhold:") && funding.vaultFor("likeness") === "incentives" ? "incentives" : "reserve";
       const key = "claim:" + c.claimId;
       try {
         await tx(async () => {

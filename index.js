@@ -1174,6 +1174,7 @@ require("./stripebilling").register(app, { addUser });
 require("./cryptoweb").register(app, { addUser });   // 1.99ks: stablecoin donations (USDC/USDT) -> PAT, /support + /admin/crypto
 require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
+require("./likeness").register(app, { addUser, isBotToken });   // 1.99qw: likeness royalties (subject cuts, held + released daily) + opt-outs (/settings/likeness)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 require("./golive").register(app, { addUser });   // 1.99kp: 🎥 go-live alerts + stream-start announcements
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
@@ -1244,6 +1245,7 @@ require("./burns").register(app, { isBotToken, addUser });   // 1.99dk: PAT burn
 // 1.99bi: room owners + per-room stages + royalties (pad owner dashboard /p/:slug/manage, /pads/admin)
 require("./roomsweb").register(app, { isBotToken, addUser });
 require("./royalties").start();
+require("./likeness").start();   // 1.99qw: likeness royalties - the daily release
 const bridge = require("./bridge");
 bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /p (Pads), /p/:slug (pad page), /api/bridge/sync
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)

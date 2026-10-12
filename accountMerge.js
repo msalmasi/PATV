@@ -116,6 +116,11 @@ const RULES = {
   "premium_ledger.target": M(), "premium_ledger.payer_id": M(), "premium_ledger.payer_name": { deny: NAME },
   // 1.99iw stickers.js: packs owned (both own a pack: one row stays)
   "user_sticker_packs.user_id": M({ key: ["pack_id"] }), "user_sticker_packs.payer_id": M(),
+  // 1.99qw likeness.js: opt-outs (both have a row: the more private setting wins), the cuts follow both sides, a freeze
+  "likeness_prefs.user_id": M({ key: [], merge: { clips: "MIN", snaps: "MIN", cam: "MIN", roast: "MIN", soundboard: "MIN" } }),
+  "likeness_ledger.subject_user_id": M(), "likeness_ledger.payer_user_id": M(),
+  "likeness_ledger.subject_login": { deny: NAME }, "likeness_ledger.payer_login": { deny: NAME },
+  "likeness_frozen.user_id": M({ key: [] }), "likeness_frozen.by": { deny: NAME },
   // shop / markets / bounties / Pepe
   "shop_orders.buyer_id": M(), "shop_orders.seller_id": M(), "shop_orders.buyer_input": { deny: TEXT },
   "shop_orders.gift_from": M() /* 1.99lz: who paid for a gift */, "shop_orders.gift_note": { deny: TEXT },

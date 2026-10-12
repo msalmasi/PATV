@@ -89,6 +89,10 @@ const ROUTE_FLOWS = Object.freeze({
   stickers: { label: "🧸 Sticker packs", room: false },
   banner: { label: "📣 Homepage banner ads", room: false },        // 1.99kk: banner.js (no room resolved -> Fort Knox)
   creators: { label: "⭐ PATV Creators - the 20% platform cut (at release)", room: true },   // 1.99pv: creators.js (room share minus the pad owner's royalty)
+  quotes: { label: "💬 Chat quotes (after the quoted people's likeness cut)", room: true },         // 1.99qw: quotes.js
+  soundboard_pack: { label: "🔊 Soundboard packs + the season board (after any voice owners' cut)", room: false },   // 1.99qw: soundboards.js
+  soundboard_legend: { label: "🔊 Legendary soundboard clips (after any voice owner's cut)", room: false },          // 1.99qw
+  voice_unlock: { label: "🗣️ Voice unlocks bought on the website (after the voice owner's cut)", room: false },     // 1.99qw: voicestore.js
 });
 const DEFAULTS = Object.freeze({
   sales: true,                     // PAT purchases on (off: buying is refused, renewals still run)
@@ -108,7 +112,8 @@ const DEFAULTS = Object.freeze({
   sp_sticker_packs: 1,             // Season Pass: free sticker packs per period
   sticker_price: 250000,           // PAT per sticker pack (stickers.js; a pack's own price wins)
   routes: { prime_time: [["fortknox", 50], ["room", 50]], prime_plus: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]],
-            creators: [["fortknox", 50], ["room", 50]] },
+            creators: [["fortknox", 50], ["room", 50]], quotes: [["fortknox", 50], ["room", 50]],
+            soundboard_pack: [["fortknox", 100]], soundboard_legend: [["fortknox", 100]], voice_unlock: [["fortknox", 100]] },
 });
 
 let clock = () => Date.now();
