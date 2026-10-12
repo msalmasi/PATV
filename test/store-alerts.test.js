@@ -294,3 +294,49 @@ test("an account merge carries the recipient rows (and folds them when both were
   assert.equal((await getQuery("SELECT user_id FROM store_alert_sent WHERE order_id = 999"))[0].user_id, "u-main");
   assert.ok(AM.classify("store_alerts", "user_id") && AM.classify("store_alerts", "added_by") && AM.classify("store_alert_sent", "user_id"));
 });
+
+// 1.99ue: the picker's own people search (/api/shop/admin/people) - long legacy usernames, Camfrog logins, staff only
+test("people search: a 46-character username and a Camfrog login are found (staff only); add works by either", async () => {
+  const LONG = "Whereismymoneyfortrainingurbotandsellingmydata";
+  assert.equal(LONG.length, 46);
+  await mkUser("u-long", LONG, { camfrog: "triconish", bal: 0 });
+  await runQuery("UPDATE users SET displayname = 'Train Money' WHERE userId = 'u-long'");
+  const people = async (q, as, hdr = { "X-Requested-With": "fetch" }) => {
+    const r = await fetch(base + "/api/shop/admin/people?q=" + encodeURIComponent(q), { headers: { ...(as ? { "x-test-user": as } : {}), ...hdr } });
+    return { status: r.status, j: await r.json() };
+  };
+  // the long name by its start (the @mention suggest dropped it: its username rule stops at 40)
+  const a = await people("Whereis", "u-boss");
+  assert.equal(a.status, 200);
+  assert.deepEqual(a.j.people.map((p) => p.username), [LONG]);
+  assert.deepEqual(a.j.people[0], { username: LONG, display: "Train Money", camfrog: "triconish" });
+  // ... by the middle (contains), and by the display name
+  assert.deepEqual((await people("sellingmy", "u-boss")).j.people.map((p) => p.username), [LONG]);
+  assert.deepEqual((await people("train mon", "u-boss")).j.people.map((p) => p.username), [LONG]);
+  // a Camfrog login: the exact login first, then the other prefix match
+  const t = await people("tricon", "u-boss");
+  assert.deepEqual(t.j.people.map((p) => [p.username, p.camfrog]), [["LongNameOfTricon", "tricon"], [LONG, "triconish"]]);
+  // LIKE wildcards are literal
+  assert.deepEqual((await people("%", "u-boss")).j.people, []);
+  // at most 10
+  for (let i = 0; i < 12; i++) await mkUser(`u-many${i}`, `manyperson${i}`, { bal: 0 });
+  assert.equal((await people("manyperson", "u-boss")).j.people.length, SA.PEOPLE_MAX);
+  // members, signed-out callers and a call without the fetch header are refused
+  assert.equal((await people("tricon", "u-buyer")).status, 403);
+  assert.equal((await people("tricon", null)).status, 401);
+  assert.equal((await people("tricon", "u-boss", {})).status, 403);
+  // archived accounts never show (and can't be added)
+  await runQuery("ALTER TABLE users ADD COLUMN archived_at INTEGER").catch(() => {});
+  await runQuery("UPDATE users SET archived_at = 1 WHERE userId = 'u-many0'");
+  assert.ok(!(await people("manyperson0", "u-boss")).j.people.some((p) => p.username === "manyperson0"));
+  const ar = await post(`/shop/admin/alerts/${OTHER}/add`, "u-boss", { who: "manyperson0" });
+  assert.match(ar.location, /no member called manyperson0/);
+  // the add route takes the long name exactly, case-insensitively, and a Camfrog login
+  const ad = await post(`/shop/admin/alerts/${OTHER}/add`, "u-boss", { who: LONG.toLowerCase(), tg: "1" });
+  assert.match(ad.location, new RegExp(LONG + " will be alerted"));
+  const ad2 = await post(`/shop/admin/alerts/${OTHER}/add`, "u-boss", { who: "TRICON" });
+  assert.match(ad2.location, /LongNameOfTricon will be alerted/);
+  assert.equal((await SA.resolveUser("triconish")).userId, "u-long");
+  const names = (await SA.forItem(OTHER)).map((r) => r.username);
+  assert.ok(names.includes(LONG) && names.includes("LongNameOfTricon"));
+});

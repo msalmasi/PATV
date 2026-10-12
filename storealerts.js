@@ -65,14 +65,50 @@ async function officialItem(prizeId) {
   return p;
 }
 
-/** A PATV username (or, if no account has that name, a linked Camfrog login) -> {userId, username, class} or a 404 Refuse. */
+/** users.archived_at exists? (stale-account archive; absent on an old DB / in tests) */
+async function liveSql(alias = "") {
+  const cols = new Set((await getQuery("PRAGMA table_info(users)")).map((c) => c.name));
+  return cols.has("archived_at") ? `${alias}archived_at IS NULL` : "1 = 1";
+}
+
+/**
+ * A PATV username (or, if no account has that name, a linked Camfrog login) -> {userId, username, class} or a 404 Refuse.
+ * 1.99ue: exact and case-insensitive, NO shape / length rule on the username (legacy names run past 40 characters), live
+ * accounts only. Several accounts on one Camfrog login: a real one beats a random "CF..." auto account, then the oldest.
+ */
 async function resolveUser(name) {
   const s = String(name || "").trim().replace(/^@/, "").replace(/^u\//i, "").slice(0, 64);
   if (!s) throw new Refuse(400, "Pick a member.");
-  const by = async (col) => (await getQuery(`SELECT userId, username, class FROM users WHERE LOWER(${col}) = LOWER(?) LIMIT 1`, [s]))[0];
+  const live = await liveSql();
+  const by = async (col) => (await getQuery(`SELECT userId, username, class FROM users WHERE ${live} AND username IS NOT NULL
+    AND LOWER(${col}) = LOWER(?) ORDER BY CASE WHEN username LIKE 'CF%' THEN 1 ELSE 0 END, rowid LIMIT 1`, [s]))[0];
   const u = (await by("username")) || (await by("camfrogUsername"));
   if (!u) throw new Refuse(404, `There's no member called ${s}.`);
   return u;
+}
+
+const PEOPLE_MAX = 10;
+const likeEsc = (x) => x.replace(/[!%_]/g, (c) => "!" + c);   // LIKE ... ESCAPE '!'
+/**
+ * 1.99ue: the "Alert on purchase" picker's people search (staff only - the route checks). Matches the PATV username, the
+ * display name AND the linked Camfrog login; prefix matches first, then contains. No shape / length filter on usernames
+ * (unlike @mention suggestions), live accounts only, at most 10. -> [{username, display, camfrog}]
+ */
+async function searchPeople(q) {
+  const s = String(q == null ? "" : q).trim().replace(/^@/, "").replace(/^u\//i, "").slice(0, 64).toLowerCase();
+  if (!s) return [];
+  const live = await liveSql();
+  const pre = likeEsc(s) + "%", any = "%" + likeEsc(s) + "%";
+  const rows = await getQuery(`SELECT username, displayname, camfrogUsername FROM users WHERE ${live} AND username IS NOT NULL
+    AND (LOWER(username) LIKE ? ESCAPE '!' OR LOWER(COALESCE(displayname, '')) LIKE ? ESCAPE '!' OR LOWER(COALESCE(camfrogUsername, '')) LIKE ? ESCAPE '!')
+    ORDER BY CASE WHEN LOWER(username) = ? OR LOWER(COALESCE(camfrogUsername, '')) = ? THEN 0
+                  WHEN LOWER(username) LIKE ? ESCAPE '!' OR LOWER(COALESCE(camfrogUsername, '')) LIKE ? ESCAPE '!' THEN 1
+                  WHEN LOWER(COALESCE(displayname, '')) LIKE ? ESCAPE '!' THEN 2 ELSE 3 END,
+             LENGTH(username), username LIMIT ?`,
+    [any, any, any, s, s, pre, pre, pre, PEOPLE_MAX]);
+  return rows.map((r) => ({ username: r.username,
+                            display: r.displayname && r.displayname !== r.username ? oneLine(r.displayname, 60) : null,
+                            camfrog: r.camfrogUsername ? oneLine(r.camfrogUsername, 64) : null }));
 }
 
 /** One item's recipients: [{user_id, username, camfrog, admin, tg, pm, details, added_by_name, updated}]. */
@@ -233,4 +269,4 @@ function hook() {
   require("./shop").onOfficialSale((sale) => (sale && sale.orderId ? alertOrder(sale.orderId) : 0));
 }
 
-module.exports = { init, hook, forItem, overview, isFulfiller, setRecipient, alertOrder, compose, resolveUser, Refuse, KIND, MAX_PER_ITEM };
+module.exports = { init, hook, forItem, overview, isFulfiller, setRecipient, alertOrder, compose, resolveUser, searchPeople, Refuse, KIND, MAX_PER_ITEM, PEOPLE_MAX };

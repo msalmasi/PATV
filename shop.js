@@ -1590,6 +1590,31 @@ function register(app, deps) {
     return { message: r.message, back: `/shop/admin/edit/${encodeURIComponent(String(req.params.id))}#alerts` };
   }));
 
+  // 1.99ue: the "Alert on purchase" picker's own people search (staff only, like the routes above): username, display name
+  // AND linked Camfrog login, prefix first then contains, no username shape / length rule (legacy usernames run past the
+  // 40-character @mention rule), live accounts, at most 10, rate-limited.
+  const peopleCalls = new Map();
+  app.get("/api/shop/admin/people", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!require("./middleware/authGuard").sameSite(req) || req.get("X-Requested-With") !== "fetch") {
+      return res.status(403).json({ ok: false, error: "Bad request." });
+    }
+    try {
+      const me = await meOf(req);
+      if (!me) return res.status(401).json({ ok: false, error: "Sign in first." });
+      if (!me.staff) return res.status(403).json({ ok: false, error: "Admins only." });
+      const t = Date.now();
+      const a = (peopleCalls.get(me.userId) || []).filter((x) => t - x < 60e3);
+      if (a.length >= 60) return res.status(429).json({ ok: false, error: "Slow down." });
+      a.push(t); peopleCalls.set(me.userId, a);
+      if (peopleCalls.size > 5000) peopleCalls.clear();
+      res.json({ ok: true, people: await SA.searchPeople(req.query.q) });
+    } catch (e) {
+      console.error("[shop] people:", e.message);
+      res.status(500).json({ ok: false, error: "Something went wrong." });
+    }
+  });
+
   app.post("/shop/admin/settings", ...formPost("/shop/admin#settings", async (req, me) => {
     if (!me.staff) throw new Refuse(403, "Admins only.");
     const b = req.body || {};
