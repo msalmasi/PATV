@@ -42,18 +42,33 @@
         <button type="button" class="cz-btn gold cz-openbtn" id="cz-open-hm-go"><%- t('casino.open_hm') %></button>
         <a class="cz-btn ghost cz-signin" href="/login"><%- t('casino.signin_open') %></a>
       </div>
-      <div class="tcard hr" id="cz-open-hr">
-        <div class="tcard-h"><span class="ic" aria-hidden="true">💎</span><div><b><%- t('casino.hr_open_h') %></b><small><%- t('casino.hr_open_sub') %></small></div></div>
-        <div class="hr-chips" aria-hidden="true"><span class="chip c100k hrc"></span><span class="chip c500k hrc"></span><span class="chip c1m hrc"></span><span class="chip c5m hrc"></span></div>
-        <div id="cz-hr-can" hidden>
-          <p id="cz-hrbj"></p>
-          <button type="button" class="cz-btn gold" id="cz-open-hrbj-go"><%- t('casino.open_hrbj') %></button>
-          <p id="cz-hrblinds-lbl"><%- t('casino.hr_blinds_pick') %></p>
-          <div class="blinds" id="cz-hrblinds" role="group" aria-label="<%- t('casino.blinds') %>"></div>
-          <p class="fine" id="cz-hrbuy"></p>
-          <button type="button" class="cz-btn gold" id="cz-open-hrhm-go"><%- t('casino.open_hrhm') %></button>
+      <%# 1.99sk: the 💎 card, redesigned - a full-width card: head (title + the 💎 chips teaser, shown to everyone), then
+          blackjack and Hold'em as two separate sub-sections (side by side from 720px): each with its label, its limits and
+          its button; the Hold'em blinds as a pill grid. The pickers / buttons are for High Rollers; everyone else gets the
+          limits + where the role comes from. %>
+      <div class="tcard hr hrcard" id="cz-open-hr">
+        <div class="hrcard-head">
+          <div class="tcard-h"><span class="ic" aria-hidden="true">💎</span><div><b><%- t('casino.hr_open_h') %></b><small><%- t('casino.hr_open_sub') %></small></div></div>
+          <div class="hr-chips" aria-hidden="true"><span class="chip c100k hrc"></span><span class="chip c500k hrc"></span><span class="chip c1m hrc"></span><span class="chip c5m hrc"></span></div>
         </div>
-        <p id="cz-hr-locked"><%- t('casino.hr_locked') %> <a href="/shop"><%- t('casino.hr_store') %></a></p>
+        <div class="hrcard-games">
+          <section class="hrgame" id="cz-hrsec-bj" aria-labelledby="cz-hrsec-bj-h">
+            <h3 class="hrgame-h" id="cz-hrsec-bj-h"><span class="ds-ic" aria-hidden="true">🂡</span><%- t('casino.bj_title') %></h3>
+            <p class="hrgame-lim" id="cz-hrbj"></p>
+            <div class="hrgame-act hr-only"><button type="button" class="cz-btn gold sm" id="cz-open-hrbj-go" aria-label="<%- t('casino.open_hrbj') %>"><%- t('casino.hr_open_go') %></button></div>
+          </section>
+          <section class="hrgame" id="cz-hrsec-hm" aria-labelledby="cz-hrsec-hm-h">
+            <h3 class="hrgame-h" id="cz-hrsec-hm-h"><span class="ds-ic" aria-hidden="true">🃏</span><%- t('casino.hm_title') %></h3>
+            <p class="hrgame-lim" id="cz-hrhm-lim"></p>
+            <div class="hr-only hrgame-pick">
+              <span class="ds-label" id="cz-hrblinds-lbl"><%- t('casino.blinds') %></span>
+              <div class="blinds hrgrid" id="cz-hrblinds" role="group" aria-labelledby="cz-hrblinds-lbl"></div>
+              <p class="fine" id="cz-hrbuy"></p>
+            </div>
+            <div class="hrgame-act hr-only"><button type="button" class="cz-btn gold sm" id="cz-open-hrhm-go" aria-label="<%- t('casino.open_hrhm') %>"><%- t('casino.hr_open_go') %></button></div>
+          </section>
+        </div>
+        <p class="hrcard-lock" id="cz-hr-locked"><%- t('casino.hr_locked') %> <a href="/shop"><%- t('casino.hr_store') %></a></p>
       </div>
     </div>
   </div>

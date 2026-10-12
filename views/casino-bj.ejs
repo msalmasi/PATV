@@ -48,6 +48,14 @@
   .chipbtn:hover { transform: translateY(-3px); }
   .chipbtn:active { transform: translateY(1px); }
   .chipbtn[disabled] { opacity: .35; cursor: not-allowed; transform: none; }
+  /* 1.99sk: the custom bet box under the chip rack (ds field: label, input group, hint / error) */
+  .custombet { display: grid; gap: var(--ds-sp-1h); max-width: 420px; margin: var(--ds-sp-3) auto 0; }
+  .custombet .ds-label { color: var(--mut); }
+  .custombet-row { display: flex; gap: var(--ds-sp-2); align-items: stretch; }
+  .custombet-row .ds-in-group { flex: 1 1 auto; min-width: 0; }
+  .custombet-row .ds-in { min-width: 0; font-variant-numeric: tabular-nums; }
+  .custombet-row .cz-btn { flex: none; min-height: 44px; }
+  .custombet .ds-hint, .custombet .ds-err { margin: 0; }
   .back { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; margin: 0 0 10px; font-size: var(--ds-fs-sm); text-decoration: none; }
   .back:hover { text-decoration: underline; }
   @media (max-width: 600px) {
@@ -91,6 +99,20 @@
         </div>
         <p class="dock-note" id="cz-limits"></p>
         <div class="dock-row chipbtns" id="cz-chips" role="group" aria-label="<%- t('casino.chips') %>"></div>
+        <%# 1.99sk: any bet, typed (1,000 / 25k / 1.5m - public/js/patamount.js), within the table's limits; the server checks again %>
+        <form class="custombet" id="cz-custom" novalidate>
+          <label class="ds-label" for="cz-custom-in"><%- t('casino.custom_bet') %></label>
+          <div class="custombet-row">
+            <div class="ds-in-group">
+              <input class="ds-in" id="cz-custom-in" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" maxlength="16"
+                     aria-describedby="cz-custom-hint cz-custom-err">
+              <span class="ds-in-addon">PAT</span>
+            </div>
+            <button type="submit" class="cz-btn gold" id="cz-custom-go"><%- t('casino.custom_bet_go') %></button>
+          </div>
+          <p class="ds-hint" id="cz-custom-hint"></p>
+          <p class="ds-err" id="cz-custom-err" role="alert" hidden></p>
+        </form>
         <div class="dock-row">
           <button type="button" class="cz-btn ghost" id="cz-rebet" hidden></button>
           <button type="button" class="cz-btn gold" id="cz-bet"></button>
@@ -120,5 +142,6 @@
   <%- include('partials/casino-sheets', { t }) %>
   <% } %>
 </main>
-<script src="/public/js/casino-ui.js?v=4"></script>
-<script src="/public/js/casinobj.js?v=6"></script>
+<script src="/public/js/casino-ui.js?v=5"></script>
+<script src="/public/js/patamount.js?v=1"></script>
+<script src="/public/js/casinobj.js?v=7"></script>

@@ -420,15 +420,21 @@
     const bb = Number(blinds.split("/")[1]);
     $("cz-buyrange").textContent = T("buy_range", "Buy-in {min}–{max} chips (20–200 big blinds).", { min: fmt(bb * 20), max: fmt(bb * 200) });
     // the 💎 card: High Rollers open tables from it; everyone else sees what it is and where the role comes from
-    $("cz-hr-can").hidden = !hr;
+    // 1.99sk: two sub-sections (blackjack / Hold'em), each with its limits for everyone; the pickers and buttons (.hr-only)
+    // for High Rollers; a game that's switched off drops its sub-section
+    for (const el of document.querySelectorAll("#cz-open-hr .hr-only")) el.hidden = !hr;
     $("cz-hr-locked").hidden = hr;
-    $("cz-open-hrbj-go").hidden = !j.enabled;
-    $("cz-hrbj").hidden = !j.enabled;
-    $("cz-hrbj").textContent = T("hrbj_limits", "Blackjack: bets {min}–{max} PAT.", { min: fmt(lim.bj.hr_min_bet), max: fmt(lim.bj.hr_max_bet) });
     const ladder = (lim.holdem.hr_ladder || []).map(([s, b]) => `${s}/${b}`);
+    $("cz-hrsec-bj").hidden = !j.enabled;
+    $("cz-hrsec-hm").hidden = !j.hm_enabled || !ladder.length;
+    $("cz-open-hr").classList.toggle("one", $("cz-hrsec-bj").hidden !== $("cz-hrsec-hm").hidden);
+    $("cz-hrbj").textContent = T("bj_limits_n", "Bets {min}–{max} PAT.", { min: fmt(lim.bj.hr_min_bet), max: fmt(lim.bj.hr_max_bet) });
+    if (ladder.length) {
+      const [l0, lN] = [lim.holdem.hr_ladder[0], lim.holdem.hr_ladder[lim.holdem.hr_ladder.length - 1]];
+      $("cz-hrhm-lim").textContent = T("hrhm_limits", "Blinds from {lo} up to {hi}.", { lo: blindsLabel(l0[0], l0[1]), hi: blindsLabel(lN[0], lN[1]) });
+    }
     if (!hrBlinds || !ladder.includes(hrBlinds)) hrBlinds = ladder[0] || null;
     const hb = $("cz-hrblinds");
-    for (const id of ["cz-hrblinds-lbl", "cz-hrblinds", "cz-hrbuy", "cz-open-hrhm-go"]) $(id).hidden = !j.hm_enabled || !ladder.length;
     if (hb.dataset.v !== ladder.join()) {
       hb.dataset.v = ladder.join();
       hb.innerHTML = ladder.map((b) => { const [s, g] = b.split("/").map(Number); return `<button type="button" data-b="${b}" aria-pressed="${b === hrBlinds}" aria-label="${esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(s), bb: fmt(g) }))}">${esc(blindsLabel(s, g))}</button>`; }).join("");

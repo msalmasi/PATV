@@ -360,6 +360,13 @@ test("anti-abuse: linked accounts can't share a table; one address = flagged; ca
   assert.match((await A(bob, "bet", ["100001"], { table: t3 })).reply, /bet must be 100–100,000\.$/, "1.99ov: the role no longer lifts the maximum");
   assert.ok((await A(ann, "bet", ["50000"], { table: t3 })).ok, "1.99ov: the table maximum is 100,000 (was 10,000)");
   assert.ok((await A(bob, "bet", ["100000"], { table: t3 })).ok);
+  // 1.99sk: a typed bet (the page's custom-bet box) - k / m / commas parse like Pepe's chat; the limits hold
+  await fresh();
+  const t4 = await openWith(ann);
+  assert.match((await A(ann, "bet", ["100.5k"], { table: t4 })).reply, /bet must be 100–100,000\.$/);
+  assert.match((await A(ann, "bet", ["1e5"], { table: t4 })).reply, /usage/, "not an amount");
+  assert.ok((await A(ann, "bet", ["2.5k"], { table: t4 })).ok);
+  assert.equal(svc.getTable(t4).eng.bets.u1, 2500);
 });
 
 test("1.99ov: 💎 High Roller tables - High Rollers open, sit and bet (100,000-1,000,000); everyone else watches", async () => {

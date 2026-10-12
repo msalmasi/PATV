@@ -338,6 +338,23 @@ test("1.99ox cross-room: one table in several Camfrog rooms - events to every ro
   assert.ok((await svc.push(tid, null, ann)).ok);
   assert.deepEqual(T.rooms, []);
   assert.equal(T.room, null);
+  // 1.99sk: no push spam - removing and re-adding a room inside 10 minutes re-attaches it silently
+  const s1 = svc.S.lastSeq;
+  const again = await svc.push(tid, "RB", ann, "add");
+  assert.ok(again.ok && /no new announcement/.test(again.reply), again.reply);
+  assert.deepEqual(T.rooms, ["RB"], "the room is attached (gameplay works) even without the announcement");
+  assert.ok((await svc.push(tid, "RB", ann, "remove")).ok);
+  assert.ok((await svc.push(tid, "RB", ann, "add")).ok);
+  const quietEvs = (await svc.poll(s1, 0)).events.filter((e) => e.table === tid && ["pushed", "unpushed"].includes(e.kind));
+  assert.equal(quietEvs.length, 0, `no pushed / left lines inside the window: ${quietEvs.map((e) => e.kind)}`);
+  // after the window it's announced again
+  for (const m of [T.push_ts, T.unpush_ts]) for (const k of Object.keys(m || {})) m[k] -= svc.PUSH_ANNOUNCE_MS;
+  assert.ok((await svc.push(tid, "RB", ann, "remove")).ok);
+  const back = await svc.push(tid, "RB", ann, "add");
+  assert.equal(back.reply, "Announced in the room.");
+  const s2evs = (await svc.poll(s1, 0)).events.filter((e) => e.table === tid);
+  assert.equal(s2evs.filter((e) => e.kind === "pushed").length, 1);
+  assert.equal(s2evs.filter((e) => e.kind === "unpushed").length, 1);
 });
 
 test("1.99pc adverts: one line (+ rate-limited reminders) in other rooms, never the gameplay; host only; a chat command", async () => {

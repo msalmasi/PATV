@@ -18,6 +18,7 @@ const { runQuery, getQuery } = require("../dbUtils");
 const E = require("./bjengine");
 const fair = require("./fair");
 const money = require("./money");
+const PATAmount = require("../public/js/patamount");   // 1.99sk: a typed bet - 1,000 / 25k / 1.5m (the page's custom-bet box, chat)
 const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achievements / drops / win XP / gang rep (rewards.js)
 
 // ── the rules (Pepe's BJ_* constants) ──
@@ -727,7 +728,7 @@ function remember(T, actor) {
 }
 
 async function cmdBet(T, actor, amount) {
-  amount = Math.trunc(Number(String(amount == null ? "" : amount).replace(/,/g, "")));
+  amount = PATAmount.parse(amount == null ? "" : amount);
   if (!Number.isFinite(amount) || amount <= 0) return R(false, `usage: !bet <amount>  (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`);
   const bad = await seatChecks(T, actor);
   if (bad) return R(false, bad);
@@ -773,7 +774,7 @@ async function cmdAutobet(T, actor, arg) {
   if (T.high_stakes && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_PLAY);
   let amount = null;
   if (arg && !["on", "yes"].includes(arg)) {
-    amount = Math.trunc(Number(arg));
+    amount = PATAmount.parse(arg);
     if (!Number.isFinite(amount) || amount <= 0) return R(false, "usage: !autobet [amount|off]");
     if (amount < T.eng.min_bet || amount > T.eng.max_bet) return R(false, `autobet amount must be ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}.`);
   }
@@ -990,6 +991,15 @@ function setRooms(T, list) {
 }
 const roomName = (id) => { const r = S.rooms.get(id); return r ? r.name : id; };
 const MAX_ROOMS = 6;
+// 1.99sk: a room hears a table's push (or its "left this room" notice) at most once per this long - remove / re-add can't spam
+const PUSH_ANNOUNCE_MS = 10 * 60 * 1000;
+/** true (and the clock restarts) when `room` may hear another `key` announcement from table T */
+function annDue(T, key, room) {
+  const m = T[key] && typeof T[key] === "object" ? T[key] : (T[key] = {});
+  if (clock() - (m[room] || 0) < PUSH_ANNOUNCE_MS) return false;
+  m[room] = clock();
+  return true;
+}
 
 /** Push a table to a Camfrog room. mode "add" (the default): attach one more room; "remove": detach that room;
  *  room = null: back to web-only (every room detached). Host or admin. */
@@ -1011,20 +1021,29 @@ async function push(tableId, room, actor, mode) {
         ? `a ${T.high_stakes ? "💎 High Roller " : ""}No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
         : `a ${T.high_stakes ? "💎 High Roller " : ""}Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
       const also = cur.length ? ` Also playing in ${cur.map(roomName).join(", ")}.` : "";
-      await emit(T, "pushed", `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}${also}`,
-                 { room_name: r.name, url: link(T), rooms: [room] });
-      if (cur.length) await emit(T, "line", `🐸 This table is now also playing in ${r.name} — players there sit at the same table.`, { rooms: cur });
+      // 1.99sk: rate-limited like adverts - one "pushed" announcement per room per table per PUSH_ANNOUNCE_MS (removing and
+      // re-adding a room attaches it again at once, silently); the "now also playing" line follows the same clock
+      const quiet = !annDue(T, "push_ts", room);
+      if (!quiet) {
+        await emit(T, "pushed", `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}${also}`,
+                   { room_name: r.name, url: link(T), rooms: [room] });
+        if (cur.length) await emit(T, "line", `🐸 This table is now also playing in ${r.name} — players there sit at the same table.`, { rooms: cur });
+      }
+      await save(T);
+      return R(true, quiet ? `Playing in ${r.name} again (it was announced there in the last 10 minutes, so no new announcement).`
+                           : "Announced in the room.", { rooms: roomsOf(T) });
     } else if (room) {
       if (!cur.includes(room)) return R(false, "It isn't playing in that room.");
-      await emit(T, "unpushed", `This table left this room — play on at ${link(T)}`, { rooms: [room] });
+      if (annDue(T, "unpush_ts", room)) await emit(T, "unpushed", `This table left this room — play on at ${link(T)}`, { rooms: [room] });   // 1.99sk: same clock
       setRooms(T, cur.filter((x) => x !== room));
     } else {
       if (!cur.length) return R(true, "It was already web-only.");
-      await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`, { rooms: cur });
+      const due = cur.filter((x) => annDue(T, "unpush_ts", x));
+      if (due.length) await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`, { rooms: due });
       setRooms(T, []);                       // 1.99pc: a web-only table keeps its place on Pepe's stream
     }
     await save(T);
-    return R(true, room && mode !== "remove" ? "Announced in the room." : T.room ? "Room removed." : "The table is web-only now.", { rooms: roomsOf(T) });
+    return R(true, T.room ? "Room removed." : "The table is web-only now.", { rooms: roomsOf(T) });
   });
 }
 
@@ -1361,6 +1380,6 @@ function limits() {
 }
 
 module.exports = {
-  C, S, HM, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  C, S, HM, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
 };

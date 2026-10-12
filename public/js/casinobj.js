@@ -248,6 +248,11 @@
       bet.textContent = betting ? T("bet_n", "Bet {n}", { n: fmt(stake) }) : T("bet_next_n", "Bet {n} next round", { n: fmt(stake) });
       bet.disabled = stake < t.min_bet || stake > maxAllowed;
       $("cz-clear").disabled = !stake;
+      // 1.99sk: the typed bet's hint follows the table (a 💎 table is 100K–1M) and the balance
+      $("cz-custom-hint").textContent = T("custom_hint", "Any amount from {min} to {max} — 2,500, 25k and 1.5m work too.",
+                                          { min: fmt(t.min_bet), max: fmt(maxAllowed >= t.min_bet ? maxAllowed : t.max_bet) });
+      $("cz-custom-in").placeholder = CZ.short(t.min_bet);
+      $("cz-custom-go").textContent = betting ? T("custom_bet_go", "Bet") : T("custom_bet_next", "Bet next round");
       const rb = $("cz-rebet");
       const lb = me.lastbet || 0;
       rb.hidden = !(lb >= t.min_bet && lb <= maxAllowed);
@@ -284,6 +289,35 @@
   });
   $("cz-clear").addEventListener("click", () => { stake = 0; if (last) render(last); });
   $("cz-bet").addEventListener("click", async () => { const j = await act("bet", stake); if (j && j.ok) stake = 0; });
+  // 1.99sk: a typed bet - parsed like Pepe's chat (public/js/patamount.js), checked against the table's limits and the balance
+  // here; the server checks the same limits again
+  function customBetError(raw, t, me) {
+    const P = window.PATVAmount;
+    const n = P ? P.parse(raw) : Math.trunc(Number(String(raw).replace(/,/g, "")));
+    if (!String(raw).trim()) return [null, T("custom_empty", "Type an amount first.")];
+    if (!Number.isFinite(n) || n <= 0) return [null, T("custom_bad", "That isn't an amount — try 2,500 or 25k.")];
+    if (n < t.min_bet || n > t.max_bet) return [null, T("custom_range", "Bets at this table are {min}–{max}.", { min: fmt(t.min_bet), max: fmt(t.max_bet) })];
+    if (n > me.balance) return [null, T("custom_balance", "That's more than your balance ({n}).", { n: fmt(me.balance) })];
+    return [n, null];
+  }
+  const customErr = (msg) => {
+    const e = $("cz-custom-err");
+    e.hidden = !msg;
+    e.textContent = msg || "";
+    $("cz-custom-in").setAttribute("aria-invalid", msg ? "true" : "false");
+  };
+  $("cz-custom-in").addEventListener("input", () => customErr(null));
+  $("cz-custom").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!last || !last.me) return;
+    const [n, err] = customBetError($("cz-custom-in").value, last.table, last.me);
+    if (err) { customErr(err); $("cz-custom-in").focus(); return; }
+    const go = $("cz-custom-go");
+    go.disabled = true;
+    const j = await act("bet", n);
+    go.disabled = false;
+    if (j && j.ok) { $("cz-custom-in").value = ""; stake = 0; customErr(null); }   // (a refusal is toasted by act())
+  });
   $("cz-rebet").addEventListener("click", () => last && act("bet", last.me.lastbet));
   $("cz-auto").addEventListener("click", () => last && act("autobet", last.me.autobet ? "off" : stake || last.me.lastbet || last.table.min_bet));
   $("cz-autooff").addEventListener("click", () => act("autobet", "off"));
