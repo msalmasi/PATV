@@ -1,0 +1,296 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('hm.title'), user: user }) %>
+<%#
+  views/heistmarket.ejs - 1.99tt: the 🥷 Heist market (heistmarket.js view): heist items for sale (buy), your sheet's tradable
+  items (sell / pawn), your listings (delist / claim), recent sale prices; admins get the market's config. Every action is a
+  same-site fetch with a one-time key per click (a retry never charges twice).
+%>
+<%- include('partials/gangs-css') %>
+<%
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  const mmJson = (x) => JSON.stringify(x == null ? null : x).replace(/</g, '\\u003c');
+  const ST = { escrowing: 'st_escrowing', active: 'st_active', sold: 'st_sold', returning: 'st_returning', claiming: 'st_claiming', held: 'st_held',
+               done: 'st_done', delisted: 'st_delisted', void: 'st_void', pawned: 'st_pawned' };
+  const art = (it) => it.art ? `<img src="${it.art}" alt="" loading="lazy" width="48" height="48">` : it.emoji;
+  const hist = v.history || {};
+%>
+<style>
+  .hm .loot { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: var(--ds-sp-2); }
+  .hm .it { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; align-items: start; background: var(--ds-sunken); border: 1px solid var(--ds-line-soft);
+            border-radius: var(--ds-r-md); padding: 10px; min-width: 0; }
+  .hm .it.rare { border-color: var(--ds-gold-line); box-shadow: inset 0 0 0 1px rgba(255,207,64,.15); }
+  .hm .it.gear { border-color: #4a3a6a; }
+  .hm .it .art { width: 48px; height: 48px; border-radius: var(--ds-r-sm); background: #0b0b0d; display: grid; place-items: center; font-size: 24px; overflow: hidden; }
+  .hm .it .art img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .hm .it b { display: block; color: var(--ds-text-strong); font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+  .hm .it small { display: block; color: var(--mut); font-size: 12px; line-height: 1.4; }
+  .hm .it .px { font: 700 16px var(--ds-font); color: var(--gold); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .hm .it .act { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .hm .n { font: 10px var(--ds-font-pixel); color: var(--gold); }
+  .hm .sorts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: var(--ds-sp-3); }
+  .hm .sorts a { font-size: 13px; padding: 6px 12px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); color: var(--ds-text); text-decoration: none; }
+  .hm .sorts a[aria-current] { background: var(--violet); color: #1b1030; border-color: transparent; }
+  .hm .stchip { font: 9px/1.3 var(--ds-font-pixel); letter-spacing: .04em; padding: 4px 6px; border-radius: var(--ds-r-xs); background: #222; color: #ccc; white-space: nowrap; }
+  .hm .stchip.active { background: var(--green); color: #0b1a0b; } .hm .stchip.held { background: var(--red); color: #fff; }
+  .hm .stchip.escrowing, .hm .stchip.returning, .hm .stchip.claiming, .hm .stchip.sold { background: var(--violet); color: #1b1030; }
+  .hm .mine li { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .hm .mine .art { width: 40px; height: 40px; border-radius: var(--ds-r-sm); background: #0b0b0d; display: grid; place-items: center; font-size: 20px; overflow: hidden; }
+  .hm .mine .art img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .hm form.sell { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; }
+  .hm form.sell .full { grid-column: 1 / -1; }
+  .hm form.sell .acts { justify-content: flex-start; }
+  .hm .quote { font-size: 13px; color: var(--ds-text-2); }
+  .hm dialog { background: var(--ds-surface); color: var(--ds-text); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); max-width: min(92vw, 420px); }
+  .hm dialog::backdrop { background: rgba(0,0,0,.6); }
+  .hm dialog h3 { margin: 0 0 var(--ds-sp-2); font: 12px/1.5 var(--ds-font-pixel); color: var(--gold); letter-spacing: .06em; }
+  .hm dialog p { margin: 0 0 var(--ds-sp-3); color: var(--ds-text-2); line-height: 1.5; }
+  .hm .adm form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 8px; align-items: end; }
+  .hm .adm .chk { display: flex; gap: 8px; align-items: center; min-height: var(--ds-tap); }
+  .hm .adm .chk input { width: auto; min-height: 0; }
+  @media (max-width: 600px) { .hm form.sell { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<main class="ds-page wide gg hm" id="hmPage">
+  <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <%- t('hm.crumb') %></div>
+  <section class="hero" aria-labelledby="hmH">
+    <div class="eyebrow"><%- t('hm.eyebrow') %></div>
+    <h1 id="hmH"><span class="ds-ic" aria-hidden="true">🥷</span><%- t('hm.h1') %></h1>
+    <p class="lead"><%- t('hm.lead', { fee: v.config.fee_pct }) %></p>
+    <div class="stats">
+      <div class="stat"><dt><%- t('hm.stat_listed') %></dt><dd><%= fmt(v.listings.length) %></dd></div>
+      <div class="stat"><dt><%- t('hm.stat_fee') %></dt><dd><%= v.config.fee_pct %>%<small><%- t('hm.stat_fee_to') %></small></dd></div>
+      <% if (v.config.pawn_on) { %><div class="stat"><dt><%- t('hm.stat_pawn') %></dt><dd><%= v.config.pawn_rate %>%<small><%- t('hm.stat_pawn_of') %></small></dd></div><% } %>
+    </div>
+  </section>
+
+  <div class="grid2">
+    <section class="card gold" aria-labelledby="hmSale">
+      <h2 id="hmSale" class="ds-pixel-h"><%- t('hm.for_sale') %></h2>
+      <nav class="sorts" aria-label="<%- t('hm.sort') %>">
+        <a href="?sort=newest"<%- sort === 'newest' ? ' aria-current="true"' : '' %>><%- t('hm.sort_new') %></a>
+        <a href="?sort=price"<%- sort === 'price' ? ' aria-current="true"' : '' %>><%- t('hm.sort_low') %></a>
+        <a href="?sort=price_desc"<%- sort === 'price_desc' ? ' aria-current="true"' : '' %>><%- t('hm.sort_high') %></a>
+      </nav>
+      <% if (!v.listings.length) { %>
+        <p class="note"><%- t('hm.none', { cmd: '<code>!sell &lt;item&gt; &lt;price&gt;</code>' }) %></p>
+      <% } else { %>
+      <div class="loot" id="hmList">
+        <% v.listings.forEach((l) => { const h = hist[l.item]; %>
+        <div class="it<%= l.rare ? ' rare' : '' %><%= l.gear ? ' gear' : '' %>" data-id="<%= l.id %>">
+          <span class="art" aria-hidden="true"><%- art(l) %></span>
+          <span>
+            <b><%= l.name %><% if (l.qty > 1) { %> <span class="n">×<%= l.qty %></span><% } %></b>
+            <small><%- t('hm.by', { name: l.seller }) %> · #<%= l.id %></small>
+            <div class="px"><%= fmt(l.price) %> PAT</div>
+            <% if (l.qty > 1) { %><small><%- t('hm.each', { price: fmt(l.unit) }) %></small><% } %>
+            <% if (h) { %><small><%- t('hm.last_sale', { price: fmt(h.last), avg: fmt(h.avg), count: h.n }) %></small><% } %>
+          </span>
+          <div class="act">
+            <% if (l.gear) { %><span class="chip"><%- t('hm.gear') %></span><% } else { %><span></span><% } %>
+            <% if (signedIn && v.login && l.seller_login !== v.login) { %>
+              <button class="btn gold small" type="button" data-buy="<%= l.id %>" data-price="<%= l.price %>" data-name="<%= l.name %><%= l.qty > 1 ? ' ×' + l.qty : '' %>"><%- t('hm.buy') %></button>
+            <% } else if (signedIn && v.login && l.seller_login === v.login) { %>
+              <button class="btn small" type="button" data-delist="<%= l.id %>"><%- t('hm.delist') %></button>
+            <% } %>
+            <% if (v.admin && l.seller_login !== v.login) { %><button class="btn red small" type="button" data-admdelist="<%= l.id %>"><%- t('hm.adm_delist') %></button><% } %>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+      <% if (!signedIn) { %><p class="note"><%- t('hm.signin', { link: '<a href="/login?next=/gtf/market">' + t('hm.signin_link') + '</a>' }) %></p>
+      <% } else if (!v.linked) { %><p class="note"><%- t('hm.link', { cmd: '<code>!verify</code>' }) %></p><% } %>
+      <div class="msg" id="hmMsg" role="status" aria-live="polite"></div>
+    </section>
+
+    <div class="side" style="display:grid;gap:16px;min-width:0">
+      <% if (signedIn && v.linked) { %>
+      <section class="card violet" aria-labelledby="hmSell">
+        <h2 id="hmSell" class="ds-pixel-h"><%- t('hm.sell') %></h2>
+        <% if (!v.sellable.length) { %>
+          <p class="note"><%- t('hm.nothing', { cmd: '<code>!gear</code>' }) %></p>
+        <% } else { %>
+        <form class="sell" id="hmSellF" novalidate>
+          <label class="l full" for="hmItem"><%- t('hm.item') %>
+            <select id="hmItem" name="item">
+              <% v.sellable.forEach((s) => { %><option value="<%= s.key %>" data-n="<%= s.n %>" data-gear="<%= s.gear ? 1 : 0 %>" data-pawn="<%= s.pawn %>" data-shop="<%= s.shop_price %>" data-last="<%= hist[s.key] ? hist[s.key].last : '' %>"><%= s.emoji %> <%= s.name %><%= s.gear ? '' : ' (' + s.n + ')' %></option><% }) %>
+            </select></label>
+          <label class="l" for="hmPrice"><%- t('hm.price') %><input id="hmPrice" name="price" inputmode="numeric" autocomplete="off" placeholder="25k" required></label>
+          <label class="l" for="hmQty"><%- t('hm.qty') %><input id="hmQty" name="qty" type="number" min="1" value="1"></label>
+          <p class="quote full" id="hmHint"></p>
+          <div class="acts full">
+            <button class="btn gold" type="submit"><%- t('hm.list_btn') %></button>
+            <% if (v.config.pawn_on) { %><button class="btn" type="button" id="hmPawn"><%- t('hm.pawn_btn') %></button><% } %>
+          </div>
+        </form>
+        <p class="note"><%- t('hm.sell_note', { fee: v.config.fee_pct }) %></p>
+        <% } %>
+      </section>
+
+      <section class="card" aria-labelledby="hmMine">
+        <h2 id="hmMine" class="ds-pixel-h"><%- t('hm.mine') %></h2>
+        <% if (!v.mine.length) { %><p class="note"><%- t('hm.mine_none') %></p><% } else { %>
+        <ul class="roster mine" id="hmMineL">
+          <% v.mine.forEach((m) => { %>
+          <li data-status="<%= m.status %>">
+            <span class="art" aria-hidden="true"><%- art(m) %></span>
+            <span class="who"><b><%= m.name %><%= m.qty > 1 ? ' ×' + m.qty : '' %></b>
+              <small>#<%= m.id %> · <%= m.kind === 'pawn' ? t('hm.pawned_for', { price: fmt(m.price) }) : fmt(m.price) + ' PAT' %><% if (m.status === 'sold' || m.status === 'done') { %> · <%- m.mine ? t('hm.you_got', { net: fmt(m.net), name: m.buyer || '?' }) : t('hm.you_bought') %><% } %><% if (m.status === 'held') { %> · <%- t('hm.held_' + (m.note === 'owned' ? 'owned' : m.note === 'full' ? 'full' : 'other')) %><% } %></small></span>
+            <span class="acts">
+              <span class="stchip <%= m.status %>"><%- t('hm.' + (ST[m.status] || 'st_done')) %></span>
+              <% if (m.mine && (m.status === 'active' || m.status === 'escrowing') && m.kind === 'sale') { %><button class="btn small" type="button" data-delist="<%= m.id %>"><%- t('hm.delist') %></button><% } %>
+              <% if (m.holder && m.status === 'held') { %><button class="btn gold small" type="button" data-claim="<%= m.id %>"><%- t('hm.claim') %></button><% } %>
+            </span>
+          </li>
+          <% }) %>
+        </ul>
+        <% } %>
+      </section>
+      <% } %>
+
+      <section class="card green" aria-labelledby="hmHist">
+        <h2 id="hmHist" class="ds-pixel-h"><%- t('hm.prices') %></h2>
+        <% const hk = Object.keys(hist); if (!hk.length) { %><p class="note"><%- t('hm.prices_none') %></p><% } else { %>
+        <ul class="hist">
+          <% hk.slice(0, 20).forEach((k) => { const it = v.items[k] || { emoji: '🎒', name: k }; const h = hist[k]; %>
+          <li><span><%= it.emoji %> <%= it.name %></span><span><b><%= fmt(h.last) %></b> <small class="when"><%- t('hm.avg', { avg: fmt(h.avg), count: h.n }) %></small></span></li>
+          <% }) %>
+        </ul>
+        <% } %>
+        <p class="note"><%- t('hm.chat', { sell: '<code>!sell</code>', buy: '<code>!buyitem</code>', list: '<code>!heistmarket</code>' }) %></p>
+      </section>
+    </div>
+  </div>
+
+  <% if (adm) { %>
+  <section class="card adm" aria-labelledby="hmAdm">
+    <h2 id="hmAdm" class="ds-pixel-h"><%- t('hm.adm_h') %></h2>
+    <p class="note"><%- t('hm.adm_stats', { n: fmt(adm.sales.n), volume: fmt(adm.sales.volume), fees: fmt(adm.sales.fees), ops: fmt(adm.open_ops) }) %>
+      <%- t('hm.adm_route', { shares: adm.fee_shares.length ? adm.fee_shares.map((s) => s[0] + ' ' + s[1] + '%').join(', ') : 'reserve 100%', link: '<a href="/admin/economy">/admin/economy</a>' }) %></p>
+    <form id="hmAdmF" novalidate>
+      <label class="l" for="aFee"><%- t('hm.adm_fee') %><input id="aFee" name="fee_pct" inputmode="decimal" value="<%= adm.config.fee_pct %>"></label>
+      <label class="l" for="aMin"><%- t('hm.adm_min') %><input id="aMin" name="min_price" inputmode="numeric" value="<%= adm.config.min_price %>"></label>
+      <label class="l" for="aMax"><%- t('hm.adm_max') %><input id="aMax" name="max_price" inputmode="numeric" value="<%= adm.config.max_price %>"></label>
+      <label class="l" for="aRate"><%- t('hm.adm_rate') %><input id="aRate" name="list_per_hour" inputmode="numeric" value="<%= adm.config.list_per_hour %>"></label>
+      <label class="l" for="aOpen"><%- t('hm.adm_open') %><input id="aOpen" name="open_max" inputmode="numeric" value="<%= adm.config.open_max %>"></label>
+      <label class="l" for="aAnn"><%- t('hm.adm_announce') %><input id="aAnn" name="announce_min" inputmode="numeric" value="<%= adm.config.announce_min %>"></label>
+      <label class="l" for="aUnt"><%- t('hm.adm_untradable') %><input id="aUnt" name="untradable" value="<%= adm.config.untradable.join(', ') %>" placeholder="mastermind, fence"></label>
+      <label class="chk" for="aPawn"><input id="aPawn" name="pawn_on" type="checkbox"<%= adm.config.pawn_on ? ' checked' : '' %>> <%- t('hm.adm_pawn_on') %></label>
+      <label class="l" for="aPRate"><%- t('hm.adm_pawn_rate') %><input id="aPRate" name="pawn_rate" inputmode="decimal" value="<%= adm.config.pawn_rate %>"></label>
+      <label class="l" for="aPSrc"><%- t('hm.adm_pawn_src') %><input id="aPSrc" name="pawn_source" value="<%= adm.config.pawn_source %>"></label>
+      <label class="l" for="aPVal"><%- t('hm.adm_pawn_values') %><input id="aPVal" name="pawn_values" value="<%= Object.entries(adm.config.pawn_values).map(([k, n]) => k + '=' + n).join(', ') %>" placeholder="kingpinring=250000"></label>
+      <div class="acts"><button class="btn gold" type="submit"><%- t('hm.adm_save') %></button></div>
+    </form>
+    <div class="msg" id="hmAdmMsg" role="status" aria-live="polite"></div>
+  </section>
+  <% } %>
+
+  <dialog id="hmConfirm" aria-labelledby="hmCH">
+    <h3 id="hmCH"></h3>
+    <p id="hmCP"></p>
+    <div class="acts"><button class="btn gold" type="button" id="hmGo"></button><button class="btn" type="button" id="hmNo"><%- t('hm.cancel') %></button></div>
+  </dialog>
+  <script>
+  (function () {
+    var S = <%- mmJson({ buy_h: t('hm.confirm_buy_h'), buy_p: t('hm.confirm_buy_p', { fee: v.config.fee_pct }), list_h: t('hm.confirm_list_h'), list_p: t('hm.confirm_list_p', { fee: v.config.fee_pct }),
+                        pawn_h: t('hm.confirm_pawn_h'), pawn_p: t('hm.confirm_pawn_p'), delist_h: t('hm.confirm_delist_h'), delist_p: t('hm.confirm_delist_p'),
+                        go: t('hm.confirm_go'), fail: t('hm.fail'), net: t('hm.net_err'), listed: t('hm.listed'), bought: t('hm.bought'), delisted: t('hm.delisted'),
+                        claimed: t('hm.claimed'), pawned: t('hm.pawning'), hint_shop: t('hm.hint_shop'), hint_last: t('hm.hint_last'), hint_pawn: t('hm.hint_pawn'),
+                        reason: t('hm.adm_reason'), saved: t('hm.adm_saved') }) %>;
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' }[c]; }); };
+    var fmtT = function (tpl, v) { return String(tpl).replace(/\{(!?)(\w+)\}/g, function (m, raw, k) { return v && v[k] != null ? (raw ? String(v[k]) : esc(v[k])) : m; }); };
+    var num = function (n) { return Number(n || 0).toLocaleString('en-US'); };
+    var msg = document.getElementById('hmMsg');
+    function show(el, ok, text) { if (!el) return; el.className = 'msg on ' + (ok ? 'ok' : 'bad'); el.innerHTML = text; }
+    function idem() { var a = new Uint8Array(12); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+    function post(url, body, n) {
+      return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json(); })
+        .catch(function () { if (n > 0) return post(url, body, n - 1); throw new Error('net'); });     // the SAME key: never twice
+    }
+    function done(text) { show(msg, true, text); setTimeout(function () { location.reload(); }, 1600); }
+    var dlg = document.getElementById('hmConfirm'), pending = null, busy = false;
+    function confirmIt(h, p, go, fn) {
+      document.getElementById('hmCH').textContent = h; document.getElementById('hmCP').innerHTML = p; document.getElementById('hmGo').textContent = go;
+      pending = fn; dlg.showModal();
+    }
+    document.getElementById('hmNo').addEventListener('click', function () { dlg.close(); pending = null; });
+    document.getElementById('hmGo').addEventListener('click', function () { dlg.close(); var f = pending; pending = null; if (f && !busy) { busy = true; f(); } });
+    function run(url, body, okText) {
+      post(url, body, 2).then(function (j) {
+        busy = false;
+        if (!j.ok) { show(msg, false, esc(j.error || S.fail)); return; }
+        done(okText);
+      }).catch(function () { busy = false; show(msg, false, S.net); });
+    }
+    document.querySelectorAll('[data-buy]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-buy'), price = num(b.getAttribute('data-price')), key = idem();
+        confirmIt(S.buy_h, fmtT(S.buy_p, { name: b.getAttribute('data-name'), price: price }), fmtT(S.go, { price: price }),
+                  function () { run('/api/gtf/market/buy', { id: id, idem: key }, S.bought); });
+      });
+    });
+    document.querySelectorAll('[data-delist]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-delist');
+        confirmIt(S.delist_h, S.delist_p, S.delist_h, function () { run('/api/gtf/market/delist', { id: id }, S.delisted); });
+      });
+    });
+    document.querySelectorAll('[data-admdelist]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-admdelist'), why = window.prompt(S.reason, '');
+        if (why == null) return;
+        busy = true; run('/api/admin/heist-market/delist', { id: id, reason: why }, S.delisted);
+      });
+    });
+    document.querySelectorAll('[data-claim]').forEach(function (b) {
+      b.addEventListener('click', function () { if (busy) return; busy = true; run('/api/gtf/market/claim', { id: +b.getAttribute('data-claim') }, S.claimed); });
+    });
+    var f = document.getElementById('hmSellF');
+    if (f) {
+      var sel = document.getElementById('hmItem'), qty = document.getElementById('hmQty'), price = document.getElementById('hmPrice'), hint = document.getElementById('hmHint');
+      var opt = function () { return sel.options[sel.selectedIndex]; };
+      function sync() {
+        var o = opt(), gear = o.getAttribute('data-gear') === '1', n = +o.getAttribute('data-n') || 1;
+        qty.max = String(n); qty.disabled = gear; if (gear || +qty.value > n) qty.value = gear ? 1 : Math.min(+qty.value || 1, n);
+        var bits = [];
+        if (+o.getAttribute('data-shop')) bits.push(fmtT(S.hint_shop, { price: num(o.getAttribute('data-shop')) }));
+        if (o.getAttribute('data-last')) bits.push(fmtT(S.hint_last, { price: num(o.getAttribute('data-last')) }));
+        var pw = +o.getAttribute('data-pawn');
+        if (pw && document.getElementById('hmPawn')) bits.push(fmtT(S.hint_pawn, { price: num(pw * (gear ? 1 : (+qty.value || 1))) }));
+        hint.innerHTML = bits.join(' · ');
+        var pb = document.getElementById('hmPawn'); if (pb) pb.disabled = !pw;
+      }
+      sel.addEventListener('change', sync); qty.addEventListener('input', sync); sync();
+      f.addEventListener('submit', function (e) {
+        e.preventDefault(); if (busy) return;
+        var o = opt(), key = idem(), body = { item: sel.value, qty: +qty.value || 1, price: price.value.trim(), idem: key };
+        if (!body.price) { price.focus(); return; }
+        confirmIt(S.list_h, fmtT(S.list_p, { name: o.textContent.trim(), price: body.price }), S.list_h, function () { run('/api/gtf/market/list', body, S.listed); });
+      });
+      var pb = document.getElementById('hmPawn');
+      if (pb) pb.addEventListener('click', function () {
+        if (busy) return;
+        var o = opt(), gear = o.getAttribute('data-gear') === '1', q = gear ? 1 : (+qty.value || 1), key = idem();
+        var pay = num((+o.getAttribute('data-pawn')) * q);
+        confirmIt(S.pawn_h, fmtT(S.pawn_p, { name: o.textContent.trim(), price: pay }), S.pawn_h, function () { run('/api/gtf/market/pawn', { item: sel.value, qty: q, idem: key }, S.pawned); });
+      });
+    }
+    // a listing on its way in or out: look again in a few seconds (Pepe moves the item between the sheet and the market)
+    var moving = document.querySelectorAll('[data-status="escrowing"],[data-status="sold"],[data-status="returning"],[data-status="claiming"]').length;
+    if (moving && !document.querySelector('dialog[open]')) setTimeout(function () { if (!busy && !document.querySelector('dialog[open]') && !document.activeElement.closest('form')) location.reload(); }, 6000);
+    var af = document.getElementById('hmAdmF');
+    if (af) af.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var g = function (n) { return af.elements[n]; }, cfg = {};
+      ['fee_pct', 'min_price', 'max_price', 'list_per_hour', 'open_max', 'announce_min', 'pawn_rate'].forEach(function (k) { cfg[k] = Number(String(g(k).value).replace(/[, _]/g, '')); });
+      cfg.pawn_on = g('pawn_on').checked; cfg.pawn_source = g('pawn_source').value.trim();
+      cfg.untradable = g('untradable').value.split(/[\s,]+/).filter(Boolean);
+      cfg.pawn_values = {}; g('pawn_values').value.split(/[,;]+/).forEach(function (p) { var m = p.split('='); if (m.length === 2 && m[0].trim()) cfg.pawn_values[m[0].trim()] = Number(m[1].replace(/[, _]/g, '')); });
+      post('/api/admin/heist-market', { config: cfg }, 1).then(function (j) { show(document.getElementById('hmAdmMsg'), !!j.ok, j.ok ? S.saved : esc(j.error || S.fail)); })
+        .catch(function () { show(document.getElementById('hmAdmMsg'), false, S.net); });
+    });
+  })();
+  </script>
+</main>
+</body>
+</html>

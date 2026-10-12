@@ -182,6 +182,11 @@ async function rekeySite(oldKey, newKey, changeId = null) {
     const r = await runQuery("UPDATE gtf_ops SET login = ? WHERE acked IS NULL AND lower(login) = ?", [nw, old]);
     if (r && r.changes) log.push({ table: "gtf_ops", action: `${r.changes} open op(s)`, from: old, to: nw });
   }
+  if (await hasTable("heist_market_ops")) {
+    // 1.99tt: the heist market's item moves Pepe hasn't applied yet go to the account's new sheet
+    const r = await runQuery("UPDATE heist_market_ops SET login = ? WHERE done_at IS NULL AND lower(login) = ?", [nw, old]);
+    if (r && r.changes) log.push({ table: "heist_market_ops", action: `${r.changes} open op(s)`, from: old, to: nw });
+  }
   if (await hasTable("gang_members")) {
     for (const r of await getQuery("SELECT * FROM gang_members WHERE lower(member_key) = ?", [old])) {
       const there = (await getQuery("SELECT gid FROM gang_members WHERE member_key = ?", [nw]))[0];

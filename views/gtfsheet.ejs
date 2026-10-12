@@ -118,6 +118,7 @@
           <% }) %>
         </div>
         <% } %>
+        <% if (v.owner && (v.gear.length || v.items.length)) { %><p class="note"><a href="/gtf/market">🥷 <%- t('gtf.sheet.sell_link') %> ›</a></p><% } %>
         <% if (v.rings.n) { %><p class="note">💍 <%- t('gtf.sheet.rings', { count: v.rings.n, list: Object.entries(v.rings.by).map(([s, n]) => (STAT_NAME[s] || s.toUpperCase()) + (n > 1 ? ' ×' + n : '')).join(', ') }) %></p><% } %>
       </section>
     </div>

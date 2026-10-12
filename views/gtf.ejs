@@ -7,7 +7,7 @@
 <%
   const ext = (u) => /^https:/.test(u) ? ' rel="noopener"' : '';
   const PARTS = [
-    { key: 'heists', icon: '🥷', accent: 'gold', links: [[links.heistHelp, t('gtf.heists.l_how')], [links.heistBoard, t('gtf.heists.l_board')]] },
+    { key: 'heists', icon: '🥷', accent: 'gold', links: [[links.heistHelp, t('gtf.heists.l_how')], [links.heistBoard, t('gtf.heists.l_board')], [links.heistMarket, t('gtf.heists.l_market')]] },
     { key: 'turf', icon: '🗺️', accent: 'green', links: [[links.turfGuide, t('gtf.turf.l_guide')], [links.turfHelp, t('gtf.turf.l_cmds')], [links.turfMap, t('gtf.turf.l_map')],
         ['https://pepe.publicaccess.tv/seasons/season-2-london.html', t('gtf.turf.l_archive')]] },
     { key: 'gangs', icon: '🎩', accent: 'violet', links: [[links.gangs, t('gtf.gangs.l_board')], [links.turfHelp, t('gtf.gangs.l_cmds')]] },

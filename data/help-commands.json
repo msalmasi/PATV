@@ -3427,6 +3427,121 @@
    "keywords": []
   },
   {
+   "id": "heistmarket",
+   "title": "!heistmarket · !market heist",
+   "category": "heists",
+   "role": "everyone",
+   "commands": [
+    "!heistmarket",
+    "!hmarket"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!heistmarket [item]",
+    "!heistmarket mine",
+    "!heistmarket claim <#>",
+    "!heistmarket prices <item>",
+    "!market heist [item]"
+   ],
+   "summary": "🥷 The heist market: heist items other players are selling for PAT, cheapest first.",
+   "details": "🥷 The **heist market**: heist items other players are selling for PAT, cheapest first (**!heistmarket ring** filters). **mine** shows your listings, **prices <item>** the last sale prices. If an item you bought (or took back) can't go into your loadout yet - you already own that gear, or you're at 10 of that item - it waits in the market: **claim <#>** once there's room. A 5% market fee goes to Fort Knox. Full market on the website.",
+   "examples": [
+    "!sell ring 250k",
+    "!buyitem 12"
+   ],
+   "keywords": [
+    "sell",
+    "trade",
+    "buy",
+    "ring",
+    "loot",
+    "market",
+    "items"
+   ],
+   "web": {
+    "label": "The heist market",
+    "url": "/gtf/market"
+   }
+  },
+  {
+   "id": "sell",
+   "title": "!sell <item> <price> [qty]",
+   "category": "heists",
+   "role": "everyone",
+   "commands": [
+    "!sell"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!sell <item> <price> [qty]"
+   ],
+   "summary": "List a heist item on the heist market for other players to buy.",
+   "details": "List a heist item from your loadout on the heist market, e.g. **!sell ring 250k** or **!sell lockpick 3k 3** (the price is for the whole lot). The item **leaves your loadout while it's listed** - it can't be used in a heist or the arena, and listed gear stops counting. When it sells you get the price minus the 5% market fee (to Fort Knox). Take it back any time with **!delist <#>**. Pepe's one-shot instant buys (Pardon, Burner Identity...) aren't items you hold, so they can't be sold. Up to 10 listings an hour.",
+   "examples": [
+    "!delist 7"
+   ],
+   "keywords": [
+    "sell",
+    "trade",
+    "market",
+    "ring"
+   ]
+  },
+  {
+   "id": "buyitem",
+   "title": "!buyitem <#>",
+   "category": "heists",
+   "role": "everyone",
+   "commands": [
+    "!buyitem"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!buyitem <#>"
+   ],
+   "summary": "Buy a heist item off the heist market by its listing number.",
+   "details": "Buy a heist item off the heist market by its listing number (**!heistmarket** shows them). You pay the price, the seller gets it minus the 5% fee, and the item lands in your loadout within a minute. Permanent gear is one per player - you can't buy gear you already own - and you can't buy your own (or your linked account's) listings.",
+   "examples": [],
+   "keywords": []
+  },
+  {
+   "id": "delist",
+   "title": "!delist <#>",
+   "category": "heists",
+   "role": "everyone",
+   "commands": [
+    "!delist"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!delist <#>"
+   ],
+   "summary": "Take your listing off the heist market; the item goes back into your loadout.",
+   "details": "Take your listing off the heist market; the item goes back into your loadout.",
+   "examples": [
+    "!heistmarket mine"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "pawn",
+   "title": "!pawn <item> [qty] [yes]",
+   "category": "heists",
+   "role": "everyone",
+   "commands": [
+    "!pawn"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!pawn <item> [qty]",
+    "!pawn <item> [qty] yes"
+   ],
+   "summary": "Sell a heist item back to the House for part of its shop price (when the pawn shop is open).",
+   "details": "Sell a heist item back to the House for part of its shop price - only while the pawn shop is open (an admin switch; it's closed by default). **!pawn lockpick 2** quotes the price, **!pawn lockpick 2 yes** sells. Items with no shop price (rare loot) aren't taken unless an admin set a value.",
+   "examples": [],
+   "keywords": []
+  },
+  {
    "id": "shop",
    "title": "!shop · !store",
    "category": "heists",
@@ -7145,5 +7260,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "e529364e518700b5"
+ "hash": "91884c01d3cf7efd"
 }

@@ -263,7 +263,7 @@ test("catalog: 13 heist-shop achievements with art, en.json strings, rewards in 
   }
   assert.ok(en["ach.group.shop"]);
   const view = fs.readFileSync(path.join(repo, "views", "achievements.ejs"), "utf8");
-  assert.match(view, /\['shop', t\('ach\.group\.shop'\), \["cf_shop_","cf_kit_"\]\]/);
+  assert.match(view, /\['shop', t\('ach\.group\.shop'\), \["cf_shop_","cf_kit_","cf_hm_"\]\]/);   // 1.99tt: + the heist market's
   for (const k of Object.keys(en).filter((k) => k.startsWith("gtf.mm."))) assert.ok(en[k], k);
   const store = cat.filter((a) => /^cf_store_/.test(a.id));
   assert.equal(store.length, 11, "9 store-heist achievements + 2 store drops");

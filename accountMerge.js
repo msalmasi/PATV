@@ -228,6 +228,10 @@ const RULES = {
   // 1.99rn: gtfsheet.js - a website re-roll's journal row (keyed by the click; the op itself applies to a Camfrog login, the
   // charge is a ledger row that follows the merge)
   "gtf_ops.user_id": { keep: "the website's GTF ops journal (who clicked a re-roll; keyed by the click, applied by Camfrog login)" },
+  // 1.99tt: the heist market (heistmarket.js) - listings follow the account (seller / buyer / whoever the item waits for)
+  "heist_market_listings.seller_id": M(), "heist_market_listings.buyer_id": M(), "heist_market_listings.holder_id": M(),
+  "heist_market_listings.seller_login": { deny: NAME }, "heist_market_listings.buyer_login": { deny: NAME },
+  "heist_market_ops.user_id": M(),
   "action_ttl_config.actor": { deny: NAME },
   // 1.99ou: escrow/ledger.js - an escrowed stake follows its account (a refund / payout also resolves merged ids)
   "escrow_holds.user_id": M(),

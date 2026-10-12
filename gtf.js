@@ -14,6 +14,7 @@ const LINKS = {
   turfMap: "https://pepe.publicaccess.tv/turf",
   gangs: "/gtf/gangs",                      // G1: the gang board lives on the site (Pepe's Netlify board retired)
   heistBoard: "https://pepe.publicaccess.tv/heist",
+  heistMarket: "/gtf/market",               // 1.99tt: players sell heist items (heistmarket.js)
 };
 
 // ── 1.99nq: the heist minimap (/gtf) - Pepe pushes the live state of every job's target (cooldown, vault, last hit,
