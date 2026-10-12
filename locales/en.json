@@ -1909,6 +1909,8 @@
   "premium.pp.all_pt_d": "The badge, theme, intro, extra badge and stage slots - all of it comes with Plus.",
   "premium.pp.bridge": "The Camfrog bridge",
   "premium.pp.bridge_d": "The pad's Camfrog room live on its page: chat, who's here, who's on the mic, room audio, and web chat, clips and snapshots where the room allows them.",
+  "premium.pp.room": "Your Camfrog room, with Pepe in it",
+  "premium.pp.room_d": "Connect the pad to its Camfrog room: Pepe joins and stays while Plus lasts, and the room shows live on the pad (chat, who's here, the mic, room audio, web chat, clips and snapshots where the room allows them). Without Plus, no connect and no Pepe.",
   "premium.pp.retention": "Logs and recordings kept for good",
   "premium.pp.retention_d": "Pepe keeps the room's chat logs and mic recordings with no time limit.",
   "premium.pp.soundboard": "A bigger soundboard: {n} slots",
