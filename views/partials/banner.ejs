@@ -7,7 +7,10 @@
     colour, an icon and a call-to-action chip. Motion is off under prefers-reduced-motion. A promo with an admin's own text
     keeps the plain card. Impressions: a beacon once the banner is at least half on screen for a second (aggregate counts only).
     1.99sw: cleanup - the label is an eyebrow above the headline (it touched the CTA as a corner tag), one centred row (max
-    960px), even vertical padding, "Your banner here" under the CTA; a picture booking keeps its label + credit in the row below. %>
+    960px), even vertical padding, "Your banner here" under the CTA; a picture booking keeps its label + credit in the row below.
+    1.99uk: re-layout - the content is left-aligned from the card's padding (no centred group), the CTA alone on the right and
+    vertically centred, and "Your banner here" moved into the label row ("FROM PATV · Your banner here") so nothing hangs
+    under the CTA. Same on a picture booking's row below the picture. %>
 <%
   const B_ = bn;
   const V_ = B_.vars || {};
@@ -26,31 +29,34 @@
 %>
 <style>
   /* G6 polish: ds tokens, radius 16 (a card), logical properties, 44px CTAs; the homepage grid gives the spacing (no own margin).
-     1.99sw layout: one centred row (.bn-in, max 960px) - [icon | eyebrow + headline + line | CTA over "Your banner here"] -
-     vertically centred with even padding. The "From PATV" / "Sponsored" label is an eyebrow above the headline, so it can
-     never touch the CTA. The link covers the whole card (a stretched ::after); "Your banner here" sits above it. Phones stack. */
+     1.99uk layout: one full-width row (.bn-in), left-aligned - [icon | eyebrow + headline + line | CTA] - vertically centred
+     (align-items: center) with even padding. The eyebrow is "From PATV" / "Sponsored" (+ kicker / credit) + " · Your banner
+     here", so the label never touches the CTA and nothing stacks under the CTA. The link (headline + line) covers the whole
+     card (a stretched ::after); "Your banner here" is its own link above it (z-index 2). Phones stack: content, then the CTA. */
   .bn { position: relative; display: block; margin: 0; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: linear-gradient(90deg, var(--ds-green-bg), var(--ds-surface) 60%); overflow: hidden; min-width: 0; }
   .bn.paid { background: var(--ds-surface); }
-  .bn-in { display: flex; align-items: center; gap: var(--ds-sp-3) var(--ds-sp-5); max-width: 960px; min-height: 76px; margin-inline: auto; padding: var(--ds-sp-4) var(--ds-sp-5); }
+  .bn-in { display: flex; align-items: center; justify-content: flex-start; gap: var(--ds-sp-3) var(--ds-sp-5); min-height: 76px; padding: var(--ds-sp-4) var(--ds-sp-5); }
   .bn-a { color: var(--ds-text); text-decoration: none; min-width: 0; }
   a.bn-a::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
   a.bn-a:focus-visible { outline: none; }
   a.bn-a:focus-visible::after { box-shadow: inset 0 0 0 2px var(--ds-focus); }
   a.bn-a:hover .bn-h, a.bn-a:focus-visible .bn-h { text-decoration: underline; text-underline-offset: 3px; }
-  .bn-tx { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
+  .bn-tx { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; text-align: start; }
+  .bn-body { display: flex; flex-direction: column; gap: 2px; }
   .bn-eb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-bottom: 4px; font-size: var(--ds-fs-xs); line-height: 1.4; color: var(--ds-text-muted); }
   .bn-lbl { flex: none; display: inline-block; padding: 0 8px; border-radius: var(--ds-r-pill); background: rgba(0,0,0,.4); border: 1px solid var(--acb, #3a3a3a); color: #c4c4c4; font: 700 10.5px/18px var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; white-space: nowrap; }
   .bn-h { font: 700 16px/1.35 var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
   .bn-l { font-size: var(--ds-fs-sm); line-height: 1.45; color: var(--ds-text-2); overflow-wrap: anywhere; }
-  .bn-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: var(--ds-sp-1h); }
   .bn-own { position: relative; z-index: 2; font-size: var(--ds-fs-xs); line-height: 1.4; color: var(--ds-text-muted); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
   .bn-own:hover, .bn-own:focus-visible { color: var(--ds-text); }
   .bn-own:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; border-radius: 4px; }
+  .bn-ownw { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }   /* the dot wraps with the link, never dangles */
+  .bn-sep { color: var(--ds-text-faint); }
 
   /* a picture booking: the picture is the card (nothing drawn over it); the label, the credit and "Your banner here" a row below */
   .bn.img .bn-a { display: block; }
   .bn.img img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; }
-  .bn-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; justify-content: space-between; padding: var(--ds-sp-2) var(--ds-sp-4); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+  .bn-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: var(--ds-sp-2) var(--ds-sp-4); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
   .bn-foot .bn-eb { margin: 0; }
 
   /* 1.99kz: house promos - accent colour (--ac / --ac2), icon bubble, call-to-action chip with a slow shine */
@@ -86,15 +92,14 @@
   @keyframes bnBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
   @media (prefers-reduced-motion: reduce) { .bn-cta::after, .bn-ball { animation: none; } }
 
-  /* phones: icon + text on one row, the CTA full width under them, "Your banner here" centred under the CTA */
+  /* phones: icon + text on one row, the CTA full width under them ("Your banner here" stays in the label row) */
   @media (max-width: 520px) {
     .bn-in { flex-wrap: wrap; gap: var(--ds-sp-3); padding: var(--ds-sp-3h) var(--ds-sp-3h) var(--ds-sp-3); }
     .bn-h { font-size: 15px; }
     .bn-ic { width: 40px; height: 40px; font-size: 21px; }
     .bn-tx { flex-basis: calc(100% - 52px); }
     .bn-in > .bn-tx:first-child { flex-basis: 100%; }
-    .bn-side { flex-basis: 100%; align-items: stretch; text-align: center; }
-    .bn-own { align-self: center; }
+    .bn-cta { flex-basis: 100%; }
     .bn.k-lotto .bn-balls { flex-basis: 100%; height: 28px; }
     .bn.k-lotto .bn-ball { width: 22px; height: 22px; font-size: 10px; }
     .bn.k-lotto .bn-tx { flex-basis: 100%; }
@@ -109,15 +114,15 @@
     : '<div class="bn-a ' + cls + '">';
   const aClose_ = B_.href ? '</a>' : '</div>';
   const credit_ = B_.paid && (B_.by || B_.domain);
-  const own_ = B_.bookable ? '<a class="bn-own" href="/sponsor">' + t('banner.your_ad') + '</a>' : '';
+  // "Your banner here" rides at the end of the label row, after a dot that wraps with it (never under the CTA)
+  const own_ = B_.bookable ? '<span class="bn-ownw"><span class="bn-sep" aria-hidden="true">·</span><a class="bn-own" href="/sponsor">' + t('banner.your_ad') + '</a></span>' : '';
   const cta_ = lotto_ ? t('banner.lotto.cta') : house_ ? t('banner.cta.' + B_.promo) : '';
 %>
 <aside class="bn<%= B_.paid ? ' paid' : '' %><%= B_.kind === 'image' ? ' img' : '' %><%= house_ ? ' hp k-' + B_.promo : '' %>" data-bn="<%= B_.ad %>" aria-label="<%- lab_ %>">
 <% if (B_.kind === 'image' && B_.image) { %>
   <%- aOpen_('bn-pic') %><img src="<%= B_.image %>" alt="<%= B_.alt || '' %>" width="1200" height="200" loading="lazy" decoding="async"><%- aClose_ %>
   <div class="bn-foot">
-    <span class="bn-eb"><span class="bn-lbl"><%- lab_ %></span><% if (credit_) { %><span><% if (B_.by) { %><%- t('banner.by', { name: '@' + B_.by }) %><% } %><% if (B_.by && B_.domain) { %> · <% } %><% if (B_.domain) { %><%= B_.domain %><% } %></span><% } %></span>
-    <%- own_ %>
+    <span class="bn-eb"><span class="bn-lbl"><%- lab_ %></span><% if (credit_) { %><span><% if (B_.by) { %><%- t('banner.by', { name: '@' + B_.by }) %><% } %><% if (B_.by && B_.domain) { %> · <% } %><% if (B_.domain) { %><%= B_.domain %><% } %></span><% } %><%- own_ %></span>
   </div>
 <% } else { %>
   <div class="bn-in">
@@ -126,12 +131,14 @@
     <% } else if (house_) { %>
       <span class="bn-ic" aria-hidden="true"><%= ICON_[B_.promo] %></span>
     <% } %>
-    <%- aOpen_('bn-tx') %>
+    <div class="bn-tx">
       <span class="bn-eb">
         <span class="bn-lbl"><%- lab_ %></span>
         <% if (lotto_) { %><span class="bn-kick"><%- t('banner.lotto.kicker') %></span><% } %>
         <% if (credit_) { %><span><% if (B_.by) { %><%- t('banner.by', { name: '@' + B_.by }) %><% } %><% if (B_.by && B_.domain) { %> · <% } %><% if (B_.domain) { %><%= B_.domain %><% } %></span><% } %>
+        <%- own_ %>
       </span>
+      <%- aOpen_('bn-body') %>
       <% if (lotto_) { %>
         <span class="bn-jp"><span data-bn-count="<%= V_.jackpot_n %>"><%= fmt_(V_.jackpot_n) %></span><small>PAT</small></span>
         <span class="bn-meta">
@@ -145,13 +152,9 @@
         <span class="bn-h"><% if (B_.headline) { %><%= B_.headline %><% } else { %><%- builtIn_('h') %><% } %></span>
         <% if (B_.line || (!B_.headline && B_.promo && B_.promo !== 'custom')) { %><span class="bn-l"><% if (B_.line) { %><%= B_.line %><% } else { %><%- builtIn_('l') %><% } %></span><% } %>
       <% } %>
-    <%- aClose_ %>
-    <% if (cta_ || own_) { %>
-      <span class="bn-side">
-        <% if (cta_) { %><span class="bn-cta" aria-hidden="true"><%- cta_ %></span><% } %>
-        <%- own_ %>
-      </span>
-    <% } %>
+      <%- aClose_ %>
+    </div>
+    <% if (cta_) { %><span class="bn-cta" aria-hidden="true"><%- cta_ %></span><% } %>
   </div>
 <% } %>
 </aside>
