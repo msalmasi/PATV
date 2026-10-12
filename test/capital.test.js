@@ -380,6 +380,39 @@ test("vaults: the queued stake runs at the cut-off at that day's price; an unsta
   assert.equal((await supply()).total, s0, "staking moves PAT between stashes and vault cash - never creates any");
 });
 
+test("Reserve: a Bank loan 30 days in default - v1 the Reserve insures the Bank; economy v2 the protocol's surplus covers it", async () => {
+  await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername, level) VALUES ('u7', 'dan', 'x', 0, 'dan_cf', 1)");
+  const mk = (id) => ({ id, lender: "🏛️ Federal Reserve", borrower: "dan_cf", principal: 30000, rate: 3, rate_basis: "week", term: 604800, owed: 30900,
+                        paid: 0, penalty: 0, status: "active", room: "PepeLab", created: C.nowS() - 40 * 86400, reserve: true, holds: {}, payments: [],
+                        funded_by: "bank", uids: { borrower: "u7" }, accepted: C.nowS() - 40 * 86400, due: C.nowS() - 31 * 86400, next_collect: 0 });
+  await C.save("loan", mk(90), C.nowS() - 31 * 86400);
+  await SVC.putConfig({ layers: false });
+  const res0 = await P.balance("reserve"), bank0 = await P.balance("bank");
+  await SVC.tick();
+  const l90 = await C.load("loan", 90);
+  assert.equal(l90.late, true, "collected (nothing there) and marked late");
+  assert.ok(l90.insured, "v1: insured");
+  assert.equal(l90.funded_by, "reserve", "v1: the Reserve owns the claim now");
+  assert.equal(await P.balance("reserve"), res0 - 30000);
+  assert.equal(await P.balance("bank"), bank0 + 30000);
+  // economy v2: the protocol's value above the Bank's target absorbs it (its shares burnt at today's price), the rest is a Fed
+  // loan Pepe opens (the event); the loan leaves the Bank's NAV, the Bank keeps the claim
+  await C.save("loan", mk(91), C.nowS() - 31 * 86400);
+  await SVC.putConfig({ layers: true, targets: { bank: 0, house: 20000000, mm: 1000000 }, fl_room: 10000000 });
+  const d0 = await V.load();
+  const prot0 = d0.v.bank.holders.protocol;
+  await SVC.tick();
+  const l91 = await C.load("loan", 91);
+  assert.ok(l91.insured && l91.insured_by === "v2", "v2: covered");
+  const d1 = await V.load();
+  const rec = d1.v2_defaults.L91;
+  assert.ok(rec && rec.cover > 0 && rec.cover + rec.fed_loan + rec.written_off === rec.unpaid, JSON.stringify(rec));
+  assert.ok(d1.v.bank.holders.protocol < prot0, "the protocol's shares paid for the cover");
+  const ev = await getQuery("SELECT kind, data FROM escrow_events WHERE game = 'capital' AND kind = 'bank_default' ORDER BY id DESC LIMIT 1");
+  assert.equal(ev.length, 1, "the bank_default event for Pepe's Fed loan");
+  await SVC.putConfig({ layers: false });
+});
+
 test("vaults: one bad request never blocks the cut-off (its own savepoint, left for the next one)", async () => {
   const d = await V.load();
   d.v.bank.holders.s999 = 100.0;            // a holder whose stash is gone

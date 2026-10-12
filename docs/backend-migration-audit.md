@@ -43,9 +43,9 @@ the site (Phase 1). After that, every game that moves next no longer has to "sen
 | 7 | Cosmetics purchases from web | queued to Pepe | web purchases stall | **move** | S after 4 | L | 1 |
 | 8 | Polls | bot `polls.json`, site mirror | web votes stall | **move** | S | L | 1 (parallel) |
 | 9 | Wagers, parimutuel pools, bounties, P2P loans, donations (escrow) | bot `escrow.json` + per-feature JSON | no web actions, deadlines frozen | **move** (one site escrow service) | L | M | 2 |
-| 10 | LMSR markets + MM vault | bot `markets.json`, `pepe_amm.py` | no trading, no settlement | **move** | M | M | 3 |
-| 11 | Reserve (Fed) loans to players + Bank vault | bot `loans.json` + vault cash | no requests / collection | **move** | M | M | 3 |
-| 12 | Staking (capital vaults) + stashes | bot `vaults.json`, `pvaults.json` | no stake/unstake; epochs late | **move** | L | H | 3 |
+| 10 | LMSR markets + MM vault | bot `markets.json`, `pepe_amm.py` | no trading, no settlement | **moved** (built 1.99tv/tw, `capital/markets.js`; one capital cutover, `docs/capital-cutover-runbook.md`) | M | M | 3 |
+| 11 | Reserve (Fed) loans to players + Bank vault | bot `loans.json` + vault cash | no requests / collection | **moved** (built 1.99tv/tw, `capital/reserve.js`) | M | M | 3 |
+| 12 | Staking (capital vaults) + stashes | bot `vaults.json`, `pvaults.json` | no stake/unstake; epochs late | **moved** (stashes 1.99ne; the share book + cut-off built 1.99tv/tw, `capital/vaults.js`) | L | H | 3 |
 | 13 | Treasury epoch, monetary ticks, automint, burn, Casino-vault feed | bot ticks on the 30 s heartbeat | Monday epoch / 04:00 tick late | **move** (site scheduler) | M | H | 4 |
 | 14 | Room vaults (E-3) + launchpad | bot `room:<id>` pools, `econ_launchpad` | site misroutes after restart | **move** | M | M | 4 |
 | 15 | AI market judge | bot `pepe_aijudge.py` | no proposals | **split** (site settles; bot gathers evidence) - **built 1.99to** (`oracle.js`, `docs/oracle-contract.md`) | M | M | 5 |
@@ -412,6 +412,12 @@ Each entry covers:
   transitions.
 - **Effort / risk**: M / M (price maths must match exactly). **v2**: `market` contract (§17.2, L-4 notes).
 
+- **Built 1.99tv / 1.99tw (site + bot), staging:** `capital/lmsr.js` (bit-for-bit replay of `pepe_amm` against
+  `test/fixtures/capital-lmsr-vectors.json.gz`; exp / log are fdlibm on both sides - `capital/fdmath.js` = `pepe_fdmath.py`),
+  `capital/markets.js` (create / buy / sell / settle / void / cancel / deadlines / re-settle / ai_put, the pot a
+  `market:<id>` pools row), Phase 5's oracle "market" resolver registered. The `/markets` forms trade on it directly; the
+  `market_orders` queue retires for LMSR markets. Cutover: `docs/capital-cutover-runbook.md` (one cutover with 5.10 / 5.11).
+
 ### 5.10 Reserve (Fed) loans to players and the Bank vault
 - **What**: `pepe_loan.py` LR requests and approvals with an instant limit by level and credit score (`pepe_credit.py`;
   site mirror `credit.js` via `/api/wallet/loans`). They are funded by the Bank vault (`bank` cash). Defaults are
@@ -420,6 +426,11 @@ Each entry covers:
 - **Rec**: move with 5.9 and 5.11. Bank NAV = cash + outstanding principal, so loans and the Bank's share accounting
   should land together. The credit score becomes a site read model over loan history (L-4 note).
 - **Effort / risk**: M / M.
+
+- **Built 1.99tv / 1.99tw:** `capital/reserve.js` - instant borrow within the limit, LR requests, approve / deny / grant
+  (a loan over the Bank's cash answers `need_flash`; Pepe lends the Bank the gap with the Fed - Phase 4 - and repeats the
+  same key), repay to the lender's pool, collection / penalties / late marks / Bank defaults on the site's tick, the credit
+  score as a site read model (Reserve + P2P loans + a per-account archive), the `/wallet` snapshot.
 
 ### 5.11 Staking (capital vaults) and personal stashes
 - **What**:
@@ -433,6 +444,10 @@ Each entry covers:
   PAT they parked in a stash.**
 - **Rec**: move after 5.9 and 5.10. Stashes are player funds and should become site sub-accounts first; that part is
   simple (S–M) and can go earlier. The share accounting and epochs come next.
+- **Built 1.99tv / 1.99tw:** `capital/vaults.js` - the share book (Pepe's `vaults.json` keys the site owns), stake /
+  unstake, the 04:00 UTC cut-off as one transaction with each step in a savepoint, protocol capital booked by key for the
+  policy engines that stay in Pepe (Phase 4), the `/staking` snapshot from the site's own book. The old `pepe_stake.py`
+  stakers pool is not migrated: the 1.92 launch already moved every stake into Auto (prod: `migrated_stakes`, the pool 0).
 - **Effort / risk**: L / **H** (share maths, history). **v2**: `vault` contracts + "every v1 pool shows up as a wallet"
   (L-7).
 
@@ -615,6 +630,12 @@ rule as v2 §16 ("riskiest thing (money) first").
   at the end of Phase 1 or in Phase 2).
 - These three have to land together or in that order, because Bank and MM NAV include outstanding loans and seeds.
 - **v2**: `market` contract, `vault` contracts, L-7 "every v1 pool shows up as a wallet".
+- **Built 1.99tv (site + bot) + 1.99tw, staging:** ONE switch and ONE cutover for all three (the NAV coupling: the Bank's
+  value includes the loans out, the Market maker's the markets it seeded) - `capital/*` on the site, `pepe_capitalstore.py`
+  in Pepe (thin client: one keyed call per verb on the cmdnet worker, announcements from answers / the event stream, the
+  three files become mirrors). The import compares the NAVs and prices to the bit and the supply total; exact rollback;
+  detach. Runbook + staging rehearsal: `docs/capital-cutover-runbook.md`. Phase 4 engines (Fed, flash, treasury waterfall,
+  Casino-vault feed) stay in Pepe and book protocol capital on the site's share book by key.
 
 ### Phase 4 — policy engines on a site scheduler
 - 5.12 treasury epoch, Fed band / Monday guarantee / issuance, burn accrual, Casino-vault feed, wheel cut.
