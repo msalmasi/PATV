@@ -12,7 +12,8 @@
 //   login_rekey_archive  a value a re-key couldn't merge (the new key already had one) - kept, never lost.
 //
 // The site re-keys its own tables in the SAME transaction as the change: stashes (owner / members), held escrow holds
-// (login), escrow game records (bounties / loans / wagers JSON), GTF records + mirror + open ops (with a rev bump so
+// (login), escrow game records (bounties / loans / wagers JSON), the capital cluster's records (markets / Reserve loans /
+// requests JSON, Phase 3), GTF records + mirror + open ops (with a rev bump so
 // Pepe's mirror follows), gang members / invites / boss, voice unlocks. PATV usernames inside records (user / username /
 // users / userId fields) are never touched - they name the account, which didn't change.
 "use strict";
@@ -127,6 +128,20 @@ async function rekeySite(oldKey, newKey, changeId = null) {
       await runQuery("UPDATE escrow_games SET data = ?, updated = ? WHERE game = ? AND id = ?", [x.text, Date.now(), r.game, r.id]);
       log.push({ table: "escrow_games", action: `${x.n} reference(s)`, key: `${r.game}:${r.id}` });
       for (const a of x.archived) await archive("escrow_games", `${r.game}:${r.id}${a.path}`, a.value);
+    }
+  }
+  if (await hasTable("capital_records")) {
+    // Phase 3: the LMSR markets (positions by login, creator, judge), Reserve loans (borrower login) and LR requests (nick).
+    // The accounts inside them (uids / users / uid) aren't touched - they name the account, which didn't change.
+    for (const r of await getQuery("SELECT kind, id, data FROM capital_records WHERE lower(data) LIKE ?", [`%${old}%`])) {
+      const x = rekeyJsonText(r.data, old, nw);
+      if (!x) continue;
+      await runQuery("UPDATE capital_records SET data = ?, updated = ? WHERE kind = ? AND id = ?", [x.text, Date.now(), r.kind, r.id]);
+      log.push({ table: "capital_records", action: `${x.n} reference(s)`, key: `${r.kind}:${r.id}` });
+      for (const a of x.archived) await archive("capital_records", `${r.kind}:${r.id}${a.path}`, a.value);
+    }
+    if ((await getQuery("SELECT 1 FROM capital_records WHERE lower(data) LIKE ? LIMIT 1", [`%${nw.toLowerCase()}%`])).length) {
+      await runQuery("INSERT INTO capital_meta (key, value) VALUES ('rev', '0') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1").catch(() => {});
     }
   }
   if (await hasTable("gtf_records")) {

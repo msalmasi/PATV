@@ -129,8 +129,13 @@ function register(app, { isBotToken, addUser }) {
       // his Federal Reserve loans (still his, Phase 3) come from his snapshot as before
       const G = require("./escrow/games");
       if (await G.gameLive("loans").catch(() => false)) body.loans = await require("./escrow/loans").mergeSnapshot(body.loans);
+      // Phase 3: with the capital cluster on the site (capital/reserve.js) the Federal Reserve loans, the requests, the limits and
+      // the credit history are the site's - Pepe's copies are his mirror: keep his P2P rows, then the site rewrites the rest
+      const capLive = await require("./capital/core").live().catch(() => false);
+      if (capLive) body.loans = (Array.isArray(body.loans) ? body.loans : []).filter((l) => l && !l.reserve);
       const snap = cleanLoans(body);
       await save("loans", snap);
+      if (capLive) await require("./capital/reserve").publish();
       res.json({ success: true, stored: snap.loans.length, requests: snap.requests.length });
     } catch (e) {
       console.error("[wallet] loans sync:", e);

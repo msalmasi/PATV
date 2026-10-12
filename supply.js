@@ -2,13 +2,14 @@
 //
 // Every PAT is in a wallet or a pool. Wallets, the casino jackpot (the House) and every pool the site now OWNS are counted
 // from the site's own tables; Pepe's snapshot (POST /api/stats/supply -> supply_snapshot) carries only the rows he still
-// really holds (turf stakes / tills / season pot / cargo, the room-wars bonds, journaled payouts on their way, the markets
-// until Phase 3, and the pools / stashes / gangs / escrow while they are still local on his side).
+// really holds (turf stakes / tills / season pot / cargo, the room-wars bonds, journaled payouts on their way, the market
+// pots until the Phase 3 cutover, and the pools / stashes / gangs / escrow while they are still local on his side).
 //
 // Site-owned rows (each replaces Pepe's row of the same key, which a stale snapshot can still carry for up to 5 minutes):
 //   vault:lotto       the lotto service's pot (lotto/service.js)          stashes        stashes.js
 //   vault:<pool>      pools.js (Phase 1) + room:<id> pad vaults            gangs          gangs.js treasuries (G1)
 //   escrow:holds      escrow/ledger.js (Phase 2)                           route_intents  patroutes.js (charged, not routed yet)
+//   markets           capital/service.js market pots (Phase 3)
 //   room_vault_escrow boosts.js (held for the pads)                        casino:tables  PAT at the casino backend's tables:
 //                                                                                          blackjack stakes in a round, hold'em stacks
 "use strict";
@@ -84,6 +85,8 @@ async function patSupply() {
   try { pools = await require("./gangs").supplyRows(pools); } catch (e) { /* no gang tables yet */ }
   // 1.99ou Phase 2: once the escrow lives on the site its held stakes are counted from escrow_holds, not Pepe's "escrow:holds" row
   try { pools = await require("./escrow/ledger").supplyRows(pools); } catch (e) { /* no escrow tables yet */ }
+  // Phase 3: once the capital cluster lives on the site the market pots are counted from the pools table, not Pepe's "markets" row
+  try { pools = await require("./capital/service").supplyRows(pools); } catch (e) { /* no capital tables yet */ }
   // 1.99ne: paid-command PAT already taken from wallets that Pepe hasn't routed into his pools yet (patroutes.js)
   try {
     const u = await require("./patroutes").unrouted();

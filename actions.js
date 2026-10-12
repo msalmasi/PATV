@@ -136,6 +136,18 @@ function register(app, { isBotToken, addUser }) {
         return go("Something went wrong — nothing was moved.");
       }
     }
+    // Phase 3: with the capital cluster on the site (capital/*), a vault stake / unstake and a Federal Reserve loan form run here
+    // directly - nothing is sent to Pepe (a P2P loan form falls through to the escrow game below)
+    if (kind === "cmd" && (args[0] === "stash" || args[0] === "loan")) {
+      try {
+        const msg = args[0] === "stash" ? await require("./capital/service").stashForm(req.user.userId, args.slice(1))
+          : (await require("./capital/core").live()) ? await require("./capital/reserve").fromForm(req.user.userId, args.slice(1)) : null;
+        if (msg) return go(msg);
+      } catch (e) {
+        console.error(`[act] capital ${args[0]}:`, e.message);
+        return go("Something went wrong — nothing changed.");
+      }
+    }
     // 1.99ou Phase 2: with an escrow game on the site (escrow/games.js), its form runs here directly - nothing is sent to Pepe
     if (kind === "cmd" && ["wager", "bounty", "pool", "loan"].includes(args[0])) {
       try {

@@ -1,7 +1,8 @@
 // markets.js — Pepe's prediction markets on PATV.
 //
-// The markets themselves (bets, escrow, settlement) still run in Pepe; he pushes a snapshot of
-// every market here whenever one changes (and on a heartbeat). This module stores those snapshots
+// The markets themselves (bets, escrow, settlement) ran in Pepe; he pushed a snapshot of every market here whenever one
+// changed (and on a heartbeat). Phase 2 moved the betting pools to escrow/pools.js, Phase 3 the LMSR share markets to
+// capital/markets.js - each engine writes its own rows here, so the pages read the same table either way. This module stores those snapshots
 // and renders /markets and /markets/:id. Parimutuel maths mirrors pepe_market.py: winners split the
 // losing pool minus the fee, pro rata to their stake.
 const { runQuery, getQuery } = require("./dbUtils");
@@ -282,6 +283,11 @@ function cleanMarket(m) {
   return clean;
 }
 
+/** Phase 3: the LMSR share markets run on the site (capital/markets.js live): their rows here are the engine's, not Pepe's. */
+async function capitalLive() {
+  try { return await require("./capital/core").live(); } catch (e) { return false; }
+}
+
 /** The parimutuel pools run on the site (escrow/pools.js live): their rows here are the engine's, not Pepe's. */
 async function poolsOnSite() {
   try { return await require("./escrow/games").gameLive("pools"); } catch (e) { return false; }
@@ -297,7 +303,10 @@ function register(app, { isBotToken, addUser }) {
     try {
       await ready;
       const poolsLive = await poolsOnSite();
+      // Phase 3: with the capital cluster on the site (capital/markets.js) the LMSR rows are the engine's - Pepe's are his mirror
+      const capLive = await capitalLive();
       for (const m of list) {
+        if (capLive && m && m.model === "lmsr") continue;
         // 1.99ou Phase 2: while the betting pools run on the site (escrow/pools.js) their rows are the site's - Pepe's
         // snapshot carries only his LMSR markets then, and a stale pool row from him never overwrites the engine's
         if (poolsLive && (!m || m.model !== "lmsr")) continue;
@@ -333,6 +342,11 @@ function register(app, { isBotToken, addUser }) {
       const rows = await getQuery("SELECT data FROM markets WHERE id = ?", [id]);
       if (!rows.length) return back("That market doesn't exist.");
       const m = JSON.parse(rows[0].data);
+      if (m.model === "lmsr" && (await capitalLive())) {
+        // Phase 3: the share markets run on the site (capital/markets.js) - the buy happens now, nothing is queued for Pepe
+        return back(await require("./capital/markets").webAct(req.user.userId, "bet", id,
+          { option: String((req.body || {}).option || ""), amount: PATAmount.parse((req.body || {}).amount) || 0, idem: (req.body || {}).idem }));
+      }
       if (m.model !== "lmsr") {
         // 1.99ou Phase 2: a pool bet with the pools on the site runs on the engine now (escrow/pools.js) - nothing is queued
         const msg = await require("./escrow/games").fromForm(req.user.userId, "pool", [`M${id}`, String((req.body || {}).option || ""),
@@ -366,6 +380,10 @@ function register(app, { isBotToken, addUser }) {
       const rows = await getQuery("SELECT data FROM markets WHERE id = ?", [id]);
       if (!rows.length) return back("That market doesn't exist.");
       const m = JSON.parse(rows[0].data);
+      if (m.model === "lmsr" && (await capitalLive())) {
+        // Phase 3: the share markets run on the site (capital/markets.js) - a sale / the judge's call happens now
+        return back(await require("./capital/markets").webAct(req.user.userId, fields.kind, id, fields));
+      }
       if (fields.kind === "resolve" && m.model !== "lmsr") {
         // 1.99ou Phase 2: the judge's call on a pool runs on the site engine when the pools live there (null = they don't)
         const msg = await require("./escrow/games").fromForm(req.user.userId, "pool", ["settle", `M${id}`, ...String(fields.outcome || "").split(" ")], null);

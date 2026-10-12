@@ -1,6 +1,7 @@
 // staking.js — the vault staking dashboard on PATV (/staking).
 //
-// Staking runs in Pepe. Stashes stake PAT into one of the protocol's vaults (Bank, House, Market
+// Staking runs in Pepe until the Phase 3 cutover (capital/vaults.js: then the site owns the book and writes this snapshot
+// itself). Stashes stake PAT into one of the protocol's vaults (Bank, House, Market
 // maker) or into Auto, which spreads itself over the three by target weights. Each vault is priced
 // per share; requests queue up and run at the next daily cut-off at that day's price. Pepe pushes a
 // full snapshot here every few minutes (POST /api/staking/sync); we keep only the latest one
@@ -194,6 +195,9 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
       await ready;
+      // Phase 3: while the capital cluster lives on the site (capital/vaults.js) the site writes this snapshot from its own book -
+      // a copy from Pepe (his mirror) is acknowledged and dropped
+      if (await require("./capital/core").live().catch(() => false)) return res.json({ success: true, ignored: "the vaults live on the site" });
       const snap = clean(body);
       const now = Date.now();
       await runQuery(`INSERT INTO staking_state (id, data, updated) VALUES (1, ?, ?)
@@ -266,4 +270,7 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, latest, clean, isMine, holdValue, positionFor, revenue, chart, VAULTS: ALL };
+/** Phase 3: the site's own vault book (capital/vaults.js) writes staking_state itself - it hands the cache the new copy. */
+function setCache(data, updated) { cache = { data, updated }; }
+
+module.exports = { register, latest, clean, isMine, holdValue, positionFor, revenue, chart, setCache, ready, VAULTS: ALL };

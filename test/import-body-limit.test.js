@@ -1,4 +1,4 @@
-// 1.99sy: the cutover imports (pools / escrow / gangs) carry exports far bigger than the global 100 KB JSON limit -
+// 1.99sy: the cutover imports (pools / escrow / gangs / the capital cluster) carry exports far bigger than the global 100 KB JSON limit -
 // the prod pools cutover of 2026-10-12 failed with "request entity too large". Each path is skipped by index.js's
 // global parser and parses its own body with a 32 MB limit.
 const test = require("node:test");
@@ -9,7 +9,7 @@ const root = path.join(__dirname, "..");
 const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 
 for (const [file, route] of [["pools.js", "/api/pools/admin/import"], ["escrow/ledger.js", "/api/escrow/admin/import"],
-                             ["gangs.js", "/api/gangs/admin/import"]]) {
+                             ["gangs.js", "/api/gangs/admin/import"], ["capital/service.js", "/api/capital/admin/import"]]) {
   test(`${route} skips the global JSON parser and parses a big body itself`, () => {
     assert.ok(read("index.js").includes(`req.path === "${route}"`), "index.js skip list has " + route);
     const src = read(file);
