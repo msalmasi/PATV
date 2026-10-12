@@ -215,6 +215,10 @@ async function rekeySite(oldKey, newKey, changeId = null) {
     }
     await runQuery("UPDATE gang_invites SET inviter_key = ? WHERE lower(inviter_key) = ?", [nw, old]);
   }
+  if (await hasTable("ach_progress")) {
+    // Phase 5: the achievement counters (achprogress.js) - merged like Pepe's own re-key (counters add, streaks keep the larger)
+    for (const l of await require("./achprogress").rekeyInTx(old, nw, archive)) log.push(l);
+  }
   if (await hasTable("voice_owned_logins")) {
     for (const r of await getQuery("SELECT voice_id FROM voice_owned_logins WHERE lower(login) = ?", [old])) {
       await runQuery("INSERT OR IGNORE INTO voice_owned_logins (login, voice_id, source, created) SELECT ?, voice_id, source, created FROM voice_owned_logins WHERE lower(login) = ? AND voice_id = ?", [nw, old, r.voice_id]);

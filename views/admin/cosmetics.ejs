@@ -28,7 +28,19 @@
   <p class="adm-help">Achievements come from <code>achievements.json</code> and cosmetics from <code>cosmetics.json</code>; a change is a deploy, not a setting.</p>
   <div class="adm-actions"><a class="adm-btn ghost" href="/achievements">Achievements ›</a><a class="adm-btn ghost" href="/cosmetics">Cosmetics shop ›</a></div>
 </section>
+<section class="adm-card" id="drops" aria-labelledby="dropsT">
+  <h2 id="dropsT">Cosmetic drop table <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">The chance of a cosmetic drop for each kind of win, the daily cap on everyday ("organic") drops and the gates. One table for every drop: Pepe's Camfrog games and the site's own (the wheel, the casino tables).</p>
+  <div id="cosDrops"><p class="adm-help">Loading…</p></div>
+</section>
+
+<section class="adm-card" id="achcounters" aria-labelledby="achcT">
+  <h2 id="achcT">Achievement counters</h2>
+  <p class="adm-help" id="achBackend">Loading…</p>
+  <p class="adm-help">Pepe counts what happens in Camfrog; once the counters live here, the site checks the thresholds and awards (docs/achievements-cutover-runbook.md).</p>
+</section>
 <script src="/public/js/admin-panel.js?v=4" defer></script>
+<script src="/public/js/admin-cosdrops.js?v=1" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

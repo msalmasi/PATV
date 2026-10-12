@@ -471,5 +471,13 @@ function list() {
   return catalog.map((a) => ({ ...a, icon: iconFor(a) }));
 }
 
+// Phase 5 (achprogress.js): the site evaluates Pepe's counters itself - award one achievement to the account behind a Pepe
+// record key (a Camfrog login, or "u:<userId>" for an account with none), with XP and PAT like his own award call.
+function awardLogin(login, badgeId, { silent = false } = {}) {
+  const k = String(login || "");
+  const who = k.startsWith("u:") ? { userId: k.slice(2) } : { camfrogUsername: k };
+  return award(who, badgeId, updateLevelFn, { silent });
+}
+
 module.exports = { award, awardCount, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS, googleBackfill, GOOGLE_METRICS,
-                   featureBackfill, featureMetrics, FEATURE_METRICS, mark, poke, webMetrics };
+                   featureBackfill, featureMetrics, FEATURE_METRICS, mark, poke, webMetrics, awardLogin };

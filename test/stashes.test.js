@@ -162,7 +162,8 @@ test("the website form does it without Pepe: create, deposit, withdraw, grant, r
 test("index.js / actions.js / wallet.js wiring", () => {
   const idx = fs.readFileSync(path.join(repo, "index.js"), "utf8");
   assert.match(idx, /require\("\.\/stashes"\)\.register\(app/);
-  assert.match(idx, /pools\.filter\(\(p\) => String\(p\.key \|\| ""\) !== "stashes"\)/, "supply counts the site's stashes");
+  // (the supply moved to supply.js in Phase 5)
+  assert.match(fs.readFileSync(path.join(repo, "supply.js"), "utf8"), /pools\.filter\(\(p\) => String\(p\.key \|\| ""\) !== "stashes"\)/, "supply counts the site's stashes");
   const act = fs.readFileSync(path.join(repo, "actions.js"), "utf8");
   assert.match(act, /args\[0\] === "stash"[\s\S]{0,200}fromForm/);
   const w = fs.readFileSync(path.join(repo, "wallet.js"), "utf8");

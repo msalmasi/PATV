@@ -86,13 +86,13 @@ test("public log: no user data", async () => {
 });
 
 test("supply: the burn reserve falls by exactly the burned amount; burned PAT is never a pool", async () => {
-  // patSupply's arithmetic (index.js): wallets + jackpot + Pepe's pools, any "burned*" pool dropped
+  // patSupply's arithmetic (supply.js since Phase 5; it was in index.js): wallets + jackpot + Pepe's pools, any "burned*" pool dropped
   const pools = (burnReserve) => [{ key: "vault:reserve", amount: 30_000_000 }, { key: "vault:burn", amount: burnReserve }, { key: "burned", amount: 999 }];
   const sum = (ps) => 2200 + 5_000_000 + ps.filter((p) => !/^burned/i.test(p.key)).reduce((s, p) => s + p.amount, 0);
   const before = sum(pools(400_000));
   const after = sum(pools(400_000 - 150_000));          // Pepe burned 150k out of the burn reserve
   assert.equal(before - after, 150_000);
-  const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  const src = fs.readFileSync(path.join(repo, "supply.js"), "utf8");
   assert.match(src, /pools = pools\.filter\(\(p\) => !\/\^burned\/i\.test/);
   assert.match(src, /circulating: total - outOfCirculation/);
 });

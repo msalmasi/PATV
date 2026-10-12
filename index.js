@@ -194,7 +194,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/automkt/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/pools/admin/import" || req.path === "/api/escrow/admin/import" || req.path === "/api/gangs/admin/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/gtf/bot/sheet-mirror" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/automkt/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/pools/admin/import" || req.path === "/api/escrow/admin/import" || req.path === "/api/gangs/admin/import" || req.path === "/api/achievements/admin/import" || req.path === "/api/achievements/bot/events" || req.path === "/api/gtf/bot/put" || req.path === "/api/gtf/bot/sheet-mirror" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1231,6 +1231,8 @@ require("./pools").register(app, { isBotToken, addUser, patSupply: (...a) => pat
 // 1.99ou Phase 2: the escrow ledger (every escrowed stake) + the escrow game engines (wagers, ...) - docs/escrow-cutover-runbook.md
 require("./escrow/ledger").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
 require("./escrow/games").register(app, { isBotToken, addUser });
+// Phase 5 (5.15): the AI judge proposes outcomes here; the site runs the dispute window and settles what it owns (oracle.js)
+require("./oracle").register(app, { isBotToken, addUser });
 require("./econstore").register(app, { isBotToken, addUser });
 // G1: the gang system on the site (gangs.js) - registry, ranks, treasuries (keyed pools rows), rep; /gtf/gangs pages
 require("./gangs").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
@@ -1335,6 +1337,8 @@ app.get("/api/achievements", async (req, res) => {
   res.json({ achievements: achievements.list() });
 });
 achievements.setUpdateLevel(updateLevel);
+// Phase 5 (5.14): the achievement counters on the site - Pepe posts metric events, the site evaluates and awards (achprogress.js)
+require("./achprogress").register(app, { isBotToken, addUser });
 app.get("/api/g/achievement-feed", async (req, res) => {
   if (!isBotToken(req.query.password)) return res.status(403).json({ error: "unauthorized" });
   try { res.json({ feed: await achievements.feed() }); } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1350,6 +1354,8 @@ app.post("/api/g/achievement", async (req, res) => {
   try {
     const r = await achievements.award({ userId: b.userId, camfrogUsername: b.camfrogUsername, username: b.username },
                                        String(b.badgeId || ""), updateLevel, { silent: !!b.silent });
+    // Phase 5: while the site owns the counters, an unlock Pepe gave this way (his quiet backfills) is kept in the record too
+    if (r.ok && b.camfrogUsername) await require("./achprogress").noteAward(b.camfrogUsername, String(b.badgeId || ""));
     res.status(r.ok ? 200 : 404).json(r);
   } catch (e) {
     console.error("[achievements] award:", e);
@@ -1407,21 +1413,12 @@ app.get("/rankings", addUser, async (req, res) => {
   }
 });
 
-// ── Total PAT supply ── every PAT is in a wallet or a pool. Wallets and the casino jackpot live
-// here; Pepe holds the rest (Federal Reserve, turf stakes/tills, gang treasuries, escrow...) and
-// posts a snapshot of them every few minutes.
-const supplyReady = runQuery(`CREATE TABLE IF NOT EXISTS supply_snapshot (
-  id INTEGER PRIMARY KEY CHECK (id = 1), pools TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).catch(() => {});
+// ── Total PAT supply ── every PAT is in a wallet or a pool (supply.js, Phase 5: the site counts every pool it owns from its
+// own tables; Pepe posts a snapshot of only the rows he still holds every few minutes).
 app.post("/api/stats/supply", async (req, res) => {
   if ((req.body || {}).password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false });
-  const pools = Array.isArray(req.body.pools) ? req.body.pools : [];
-  // economy v2 E-3: Pepe lists up to 40 room vaults (room:<room id>) on top of his ~20 pools -> room for 150 rows, longer keys
-  const clean = pools.slice(0, 150).map((p) => ({ key: String(p.key || "").slice(0, 80), label: String(p.label || "").slice(0, 80),
-                                                 amount: Math.max(0, Math.floor(Number(p.amount) || 0)) }));
   try {
-    await supplyReady;
-    await runQuery("INSERT INTO supply_snapshot (id, pools, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP) " +
-                   "ON CONFLICT(id) DO UPDATE SET pools = excluded.pools, updated_at = CURRENT_TIMESTAMP", [JSON.stringify(clean)]);
+    await require("./supply").putSnapshot(req.body.pools);
     // 1.99jw: today's row of the daily supply history (+ Pepe's mint journal / Fed band) - never fails the snapshot
     try {
       const SH = require("./supplyhistory");
@@ -1434,63 +1431,7 @@ app.post("/api/stats/supply", async (req, res) => {
   }
 });
 async function patSupply() {
-  await supplyReady;
-  // every wallet counts toward supply (an archived one keeps only sub-1 PAT dust); the label counts live accounts
-  const w = await getQuery(`SELECT COALESCE(SUM(points_balance), 0) AS w, SUM(CASE WHEN ${stale.LIVE()} THEN 1 ELSE 0 END) AS n FROM users`);
-  const j = await getQuery("SELECT COALESCE(SUM(amount), 0) AS j FROM jackpot_rakes");
-  const snap = await getQuery("SELECT pools, updated_at FROM supply_snapshot WHERE id = 1");
-  let pools = [];
-  try { pools = snap.length ? JSON.parse(snap[0].pools) : []; } catch (e) { pools = []; }
-  // 1.99dk: burned PAT is gone - it's never a pool, whatever a snapshot says
-  pools = pools.filter((p) => !/^burned/i.test(String(p.key || "")));
-  // 1.99ml: once the lotto backend holds the jackpot pot (lotto_pot), it is counted here and Pepe's old "vault:lotto"
-  // row (his local pot - 0 after the cutover, but a snapshot can be up to 5 minutes old) is not
-  try {
-    const LS = require("./lotto/service");
-    if (await LS.potHasRows()) {
-      pools = pools.filter((p) => String(p.key || "") !== "vault:lotto");
-      pools.push({ key: "vault:lotto", label: "🎟️ Lotto jackpot pot", amount: Math.max(0, Math.floor(await LS.potBalance())) });
-    }
-  } catch (e) { /* no lotto tables yet */ }
-  // 1.99ne: once the stashes live on the site (stashes.js) they are counted here, not from Pepe's (up to 5 min old) row
-  try {
-    const SS = require("./stashes");
-    if (await SS.live()) {
-      pools = pools.filter((p) => String(p.key || "") !== "stashes");
-      const t = await SS.total();
-      if (t.amount) pools.push({ key: "stashes", label: "🔐 Personal vaults", amount: Math.max(0, Math.floor(t.amount)) });
-    }
-  } catch (e) { /* no stash tables yet */ }
-  // 1.99ns Phase 1: once the pools live on the site (pools.js) they are counted from its table, not Pepe's (up to 5 min old)
-  // vault:<pool> / room:<id> rows; plus a routed charge's turf legs Pepe hasn't applied yet (turf_inbox)
-  try { pools = await require("./pools").supplyRows(pools); } catch (e) { /* no pools tables yet */ }
-  // G1: once the gangs live on the site their treasuries are counted from the table, not Pepe's "gangs" row
-  try { pools = await require("./gangs").supplyRows(pools); } catch (e) { /* no gang tables yet */ }
-  // 1.99ou Phase 2: once the escrow lives on the site its held stakes are counted from escrow_holds, not Pepe's "escrow:holds" row
-  try { pools = await require("./escrow/ledger").supplyRows(pools); } catch (e) { /* no escrow tables yet */ }
-  // 1.99ne: paid-command PAT already taken from wallets that Pepe hasn't routed into his pools yet (patroutes.js)
-  try {
-    const u = await require("./patroutes").unrouted();
-    if (u.amount > 0) pools.push({ key: "route_intents", label: "⏳ Charged, waiting for Pepe to route it", amount: Math.floor(u.amount) });
-  } catch (e) { /* no table yet */ }
-  const rows = [{ key: "wallets", label: `👛 Player wallets (${Number(w[0].n).toLocaleString()} accounts)`, amount: Math.floor(Number(w[0].w) || 0) },
-                { key: "jackpot", label: "🎰 Casino jackpot", amount: Math.floor(Number(j[0].j) || 0) }, ...pools];
-  // 1.99ee: the room-vault half of boosts and stage slot fees, held on the site for each pad until room vaults open (boosts.js)
-  try {
-    const rv = (await require("./boosts").escrow()).room_vault;
-    if (rv > 0) rows.push({ key: "room_vault_escrow", label: "🚀 Pad vault escrow (boosts + slot fees, held for the pads)", amount: Math.floor(rv) });
-  } catch (e) { /* no boosts table yet */ }
-  rows.sort((a, b) => b.amount - a.amount);
-  // economy v2 E-1: each row's layer (Federal Reserve / Protocol Treasury / incentive layer / ...) - labels only
-  const SL = require("./supplylayers");
-  for (const r of rows) r.layer = SL.layerOf(r.key);
-  const layers = SL.group(rows).map((g) => ({ key: g.key, label: g.label, blurb: g.blurb, amount: g.amount, rows: g.rows.map((r) => r.key) }));
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-  // the burn reserve still exists until it's burned, but it's out of circulation
-  const outOfCirculation = rows.filter((r) => r.key === "vault:burn").reduce((s, r) => s + r.amount, 0);
-  let burned = null;
-  try { burned = await require("./burns").burned(); } catch (e) { burned = null; }
-  return { total, circulating: total - outOfCirculation, outOfCirculation, burned, rows, layers, updated: snap.length ? snap[0].updated_at : null };
+  return require("./supply").patSupply();
 }
 app.get("/api/stats/supply", async (req, res) => {
   try { res.json(await patSupply()); } catch (e) { res.status(500).json({ error: "failed" }); }

@@ -176,6 +176,8 @@ const ready = (async () => {
     idem TEXT PRIMARY KEY, inv_id INTEGER, from_id TEXT, to_id TEXT, listing_id INTEGER, created INTEGER)`);
   await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
   await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_drop_config (key TEXT PRIMARY KEY, value REAL, updated INTEGER)");
+  // Phase 5 (5.17): who owns the drop table (enabled = Pepe may hand it over, live = the site's table is THE table) + its log
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_drop_meta (key TEXT PRIMARY KEY, value TEXT)");
 })().catch((e) => console.error("[cosmetics] tables:", e));
 
 // ── users ──
@@ -299,12 +301,19 @@ async function grant(userId, itemId, source, idem) {
 }
 
 // ── drops ──
-// Pepe owns the drop table (pepe_cosmetics.py) and rolls every game drop himself. The wheel is settled
-// here, so its two rows (and the daily cap) are pushed to us; these defaults match his until he does.
-const DROP_DEFAULTS = { wheel: 0.0005, wheel_jackpot: 0.25, cap: 3,
-  // 1.99mj: the casino backend's tables are settled here too (casino/rewards.js): web-only players' drops are rolled on the
-  // site with Pepe's rows and gates (pepe_cosmetics.py COSMETIC_DROP_CHANCE / COSDROP_*); he pushes them with the rest
-  blackjack: 0.02, holdem: 0.015, min_bj_bet: 2500, min_holdem_pot: 20000, min_level: 2, pair_rolls: 3 };
+// Before Phase 5 Pepe owned the drop table (pepe_cosmetics.py) and pushed us the rows the site rolls (the wheel, the casino
+// backend) with the cap and the casino gates. Phase 5 (5.17): the WHOLE table lives here once Pepe hands it over
+// (cosmetic_drop_meta.live, `!cosmetics backend on`): one table for every drop, edited on /admin/cosmetics. Pepe keeps rolling
+// the Camfrog events himself (they happen in his rooms) with these numbers; the site rolls its own (the wheel, the casino
+// backend's seats) - both through grantCapped's one daily cap. These defaults are Pepe's COSMETIC_DROP_DEFAULTS + gates.
+const DROP_RATES = { crack: 0.25, arena: 0.10, bingo: 0.10, bingo_line: 0.05, bounty: 0.15, bounty_post: 0.05, duel: 0.03, brawl: 0.03,
+  convoy: 0.05, door: 0.02, store: 0.01, lotto: 0.02, lotto_jackpot: 1.0, blackjack: 0.02, holdem: 0.015, wheel: 0.0005, wheel_jackpot: 0.25 };
+const DROP_PARAMS = { cap: [0, 50], min_stake: [0, 1e9], min_bj_bet: [0, 1e9], min_holdem_pot: [0, 1e9], min_level: [0, 100],
+  pair_rolls: [0, 50], event_pool_share: [0, 1] };
+const DROP_DEFAULTS = Object.assign({}, DROP_RATES, { cap: 3, min_stake: 10000, min_bj_bet: 2500, min_holdem_pot: 20000, min_level: 2,
+  pair_rolls: 3, event_pool_share: 0.5 });
+const DROP_ORGANIC = new Set(["duel", "brawl", "convoy", "door", "store", "lotto", "blackjack", "holdem", "wheel"]);
+const DROP_PUSHED = ["wheel", "wheel_jackpot", "blackjack", "holdem"];     // the rows an old (local-table) Pepe pushes
 const DROP_GROUPS = {
   heist: ["crack", "door", "store", "convoy"],
   fight: ["arena", "duel", "brawl"],
@@ -314,8 +323,8 @@ const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
 const DAY_MS = 24 * 3600 * 1000;
 let dropCfg = null, dropCfgAt = 0;
 
-async function dropConfig() {
-  if (dropCfg && Date.now() - dropCfgAt < 60000) return dropCfg;
+async function dropConfig(fresh) {
+  if (!fresh && dropCfg && Date.now() - dropCfgAt < 60000) return dropCfg;
   await ready;
   const cfg = { ...DROP_DEFAULTS };
   try {
@@ -327,8 +336,114 @@ async function dropConfig() {
   return cfg;
 }
 
+async function dropMeta(key) {
+  await ready;
+  const r = (await getQuery("SELECT value FROM cosmetic_drop_meta WHERE key = ?", [key]))[0];
+  if (!r) return null;
+  try { return JSON.parse(r.value); } catch (e) { return null; }
+}
+const setDropMeta = (key, v) => runQuery("INSERT INTO cosmetic_drop_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                                         [key, JSON.stringify(v === undefined ? null : v)]);
+/** May Pepe hand the drop table over? Default: on on staging (STAGING env), off on prod until an admin turns it on. */
+async function dropEnabled() {
+  const v = await dropMeta("enabled");
+  if (v === true || v === false) return v;
+  return !!process.env.STAGING;
+}
+/** The site's table is THE drop table (Pepe handed it over and didn't take it back). */
+async function dropLive() { return !!(await dropMeta("live")); }
+
+/** One value, clamped to its range. -> number or null (not a drop-table key / not a number). */
+function cleanDropValue(k, v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  if (k in DROP_RATES) return Math.max(0, Math.min(1, n));
+  if (k in DROP_PARAMS) {
+    const [lo, hi] = DROP_PARAMS[k];
+    const x = Math.max(lo, Math.min(hi, n));
+    return k === "event_pool_share" ? x : Math.floor(x);
+  }
+  return null;
+}
+async function writeDropValues(values, now) {
+  for (const [k, v] of Object.entries(values)) {
+    await runQuery(`INSERT INTO cosmetic_drop_config (key, value, updated) VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`, [k, v, now]);
+  }
+}
+async function dropLog(entry) {
+  const log = ((await dropMeta("log")) || []).slice(-49);
+  log.push(Object.assign({ at: Date.now() }, entry));
+  await setDropMeta("log", log);
+}
+
+/**
+ * Pepe hands his table over (POST /api/cosmetics/drop-config/import {key, config}). Once: a site that already owns its table
+ * keeps it and answers it (Pepe then uses the site's numbers). One transaction; the same key again answers the same.
+ */
+async function importDropConfig(key, config, actor) {
+  await ready;
+  key = String(key || "");
+  if (!/^[A-Za-z0-9_.:\-]{4,80}$/.test(key)) return { ok: false, status: 400, error: "bad key" };
+  if (await dropLive()) return { ok: true, already: true, config: await dropConfig(true) };
+  if (!(await dropEnabled())) return { ok: false, status: 409, code: "E_FEATURE_OFF", error: "the drop table switch is off on this site" };
+  const values = {};
+  for (const k of Object.keys(DROP_DEFAULTS)) {
+    const v = cleanDropValue(k, (config || {})[k]);
+    if (v === null) return { ok: false, status: 400, error: `the table has no valid ${k}` };
+    values[k] = v;
+  }
+  await require("./dbUtils").tx(async () => {
+    await writeDropValues(values, Date.now());
+    await setDropMeta("live", true);
+    await setDropMeta("imported", { key, at: Date.now(), actor: String(actor || "").slice(0, 40), config: values });
+    await dropLog({ by: String(actor || "pepe").slice(0, 40), what: "handed over by Pepe", key });
+  });
+  dropCfgAt = 0;
+  console.log(`[cosmetics] drop table handed over by Pepe (${key})`);
+  return { ok: true, config: await dropConfig(true) };
+}
+/** The way back (POST /api/cosmetics/drop-config/release {key}): the site's table goes back to Pepe's knobs. */
+async function releaseDropConfig(key, actor) {
+  await ready;
+  if (!(await dropLive())) return { ok: true, already: true, config: await dropConfig(true) };
+  const config = await dropConfig(true);
+  await require("./dbUtils").tx(async () => {
+    await setDropMeta("live", false);
+    await dropLog({ by: String(actor || "pepe").slice(0, 40), what: "released to Pepe", key: String(key || "").slice(0, 80) });
+  });
+  dropCfgAt = 0;
+  console.log(`[cosmetics] drop table released to Pepe (${key})`);
+  return { ok: true, config };
+}
+/** An admin's edit on /admin/cosmetics (only while the site owns the table). -> {ok, changed, config} */
+async function adminSetDrops(changes, actor) {
+  if (!(await dropLive())) return { ok: false, status: 409, error: "The drop table still lives on Pepe - edit it on his panel, or hand it over first (!cosmetics backend on confirm)." };
+  const cur = await dropConfig(true);
+  const values = {};
+  for (const [k, v] of Object.entries(changes || {})) {
+    if (!(k in DROP_DEFAULTS)) return { ok: false, status: 400, error: `unknown key ${String(k).slice(0, 40)}` };
+    const x = cleanDropValue(k, v);
+    if (x === null) return { ok: false, status: 400, error: `${k}: not a number` };
+    if (x !== cur[k]) values[k] = x;
+  }
+  if (!Object.keys(values).length) return { ok: true, changed: {}, config: cur };
+  await require("./dbUtils").tx(async () => {
+    await writeDropValues(values, Date.now());
+    await dropLog({ by: String(actor || "admin").slice(0, 40), what: "edited", changed: Object.fromEntries(Object.keys(values).map((k) => [k, [cur[k], values[k]]])) });
+  });
+  dropCfgAt = 0;
+  return { ok: true, changed: values, config: await dropConfig(true) };
+}
+async function dropAdminView() {
+  return { live: await dropLive(), enabled: await dropEnabled(), config: await dropConfig(true), defaults: DROP_DEFAULTS,
+           organic: [...DROP_ORGANIC], rates: Object.keys(DROP_RATES), params: Object.keys(DROP_PARAMS), log: ((await dropMeta("log")) || []).slice(-20).reverse() };
+}
+
 async function setDropConfig(rates, cap, params) {
   await ready;
+  // Phase 5: once the site owns the table, an (older) Pepe's push of his copy never overwrites it
+  if (await dropLive()) return { ignored: true };
   const now = Date.now();
   for (const k of ["wheel", "wheel_jackpot", "blackjack", "holdem"]) {
     const v = Number((rates || {})[k]);
@@ -358,7 +473,7 @@ async function setDropConfig(rates, cap, params) {
 
 /** Same pool rules as Pepe's _cos_pick: drop items only (never shop-only, achievement-only or
  *  seasonal), weighted; items with drop_events only from matching events (half of that event's drops). */
-function pickDrop(event, minRarity) {
+function pickDrop(event, minRarity, share = 0.5) {
   let pool = ITEMS.filter((it) => (it.source || []).includes("drop") && Number(it.drop_weight) > 0 && !it.season
     && !(it.tags || []).includes("kink"));
   if (minRarity && RARITY_ORDER.includes(minRarity)) {
@@ -370,7 +485,7 @@ function pickDrop(event, minRarity) {
   for (const [g, evs] of Object.entries(DROP_GROUPS)) if (evs.includes(ev)) tags.add(g);
   const general = pool.filter((it) => !(it.drop_events || []).length);
   const special = pool.filter((it) => (it.drop_events || []).some((t) => tags.has(t)));
-  pool = special.length && (!general.length || Math.random() < 0.5) ? special : general;
+  pool = special.length && (!general.length || Math.random() < share) ? special : general;
   if (!pool.length) return null;
   let r = Math.random() * pool.reduce((a, it) => a + Number(it.drop_weight), 0);
   for (const it of pool) { r -= Number(it.drop_weight); if (r < 0) return it; }
@@ -405,7 +520,7 @@ async function rollDrop(userId, event, key, opts = {}) {
     const scale = opts.scale === undefined ? 1 : Math.max(0, Math.min(1, Number(opts.scale) || 0));
     const chance = Math.max(0, Math.min(1, (Number(cfg[event]) || 0) * scale));
     if (!(chance > 0) || Math.random() >= chance) return null;
-    const it = pickDrop(event, opts.minRarity);
+    const it = pickDrop(event, opts.minRarity, Number.isFinite(Number(cfg.event_pool_share)) ? Number(cfg.event_pool_share) : 0.5);
     if (!it) return null;
     const r = opts.organic
       ? await grantCapped(userId, it.id, `drop:${event}`, `odrop-${event}-${key}`, cfg.cap)
@@ -682,6 +797,36 @@ function register(app, { isBotToken, addUser }) {
     }
   };
 
+  // ── Phase 5 (5.17): the drop table on /admin/cosmetics (admins; edits only while the site owns the table) ──
+  const admin = async (req, res) => {
+    const uid = req.user && req.user.userId;
+    if (!uid) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
+    const row = (await getQuery("SELECT class, username FROM users WHERE userId = ?", [uid]).catch(() => []))[0];
+    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
+    return row;
+  };
+  app.get("/api/admin/cosmetic-drops", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!(await admin(req, res))) return;
+    try { res.json(Object.assign({ ok: true }, await dropAdminView())); } catch (e) { console.error("[cosmetics] drops admin:", e); res.status(500).json({ ok: false, error: "server error" }); }
+  });
+  app.post("/api/admin/cosmetic-drops", addUser, async (req, res) => {
+    const me = await admin(req, res);
+    if (!me) return;
+    if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    try {
+      const b = req.body || {};
+      if (b.switch !== undefined) {
+        if (await dropLive()) return res.status(409).json({ ok: false, error: "The site owns the drop table - Pepe releases it (!cosmetics backend off confirm)." });
+        await setDropMeta("enabled", !!b.switch);
+        return res.json({ ok: true, enabled: await dropEnabled() });
+      }
+      const r = await adminSetDrops(b.values, me.username);
+      if (r.ok && Object.keys(r.changed).length) console.log(`[cosmetics] drop table edited by ${me.username}: ${JSON.stringify(r.changed)}`);
+      res.status(r.ok ? 200 : r.status || 400).json(r);
+    } catch (e) { console.error("[cosmetics] drops admin:", e); res.status(500).json({ ok: false, error: "server error" }); }
+  });
+
   // ── public ──
   app.get("/api/cosmetics/catalog", (req, res) => {
     const now = Date.now();
@@ -729,8 +874,20 @@ function register(app, { isBotToken, addUser }) {
   }));
 
   app.post("/api/cosmetics/drop-config", bot(async (b, res) => {
-    await setDropConfig(b.rates, b.cap, b.params);
-    res.json({ ok: true, config: await dropConfig() });   // (b.params: 1.99mj casino gates, see setDropConfig)
+    const r = await setDropConfig(b.rates, b.cap, b.params);
+    res.json({ ok: true, config: await dropConfig(), site_owned: !!(r && r.ignored) });   // (b.params: 1.99mj casino gates, see setDropConfig)
+  }));
+  // Phase 5 (5.17): the drop table on the site - Pepe's hand-over, his 5-minute read, the way back
+  app.post("/api/cosmetics/drop-config/state", bot(async (b, res) => {
+    res.json({ ok: true, live: await dropLive(), enabled: await dropEnabled(), config: await dropConfig(true) });
+  }));
+  app.post("/api/cosmetics/drop-config/import", bot(async (b, res) => {
+    const r = await importDropConfig(b.key, b.config, b.actor);
+    res.status(r.ok ? 200 : r.status || 400).json(r);
+  }));
+  app.post("/api/cosmetics/drop-config/release", bot(async (b, res) => {
+    const r = await releaseDropConfig(b.key, b.actor);
+    res.status(r.ok ? 200 : r.status || 400).json(r);
   }));
 
   app.post("/api/cosmetics/transfer", bot(async (b, res) => {
@@ -990,6 +1147,7 @@ async function grantPlexPerks(userId) {
 module.exports = {
   grantSeasonPerks, grantPlexPerks, isPerk, invalidateNames: () => invalidateNames(), PERK_IDS, PLEX_PERK_IDS, PERKS,
   register, locals, grantUnlocks, syncUnlocks, backfillLevelUnlocks, nameStyles, nameStyle, nameHtml, render, onSale, seasonState,
-  resolveUser, grant, grantCapped, rollDrop, pickDrop, dropConfig, setDropConfig, transfer, equip, inventory, equippedFor, profileData, pageData,
+  resolveUser, grant, grantCapped, rollDrop, pickDrop, dropConfig, setDropConfig, importDropConfig, releaseDropConfig, adminSetDrops,
+  dropAdminView, dropLive, dropEnabled, setDropMeta, DROP_DEFAULTS, transfer, equip, inventory, equippedFor, profileData, pageData,
   catalog: () => ITEMS, byId: (id) => BY_ID[id] || null, ready, MARKET_FEE_PCT, LIST_MIN,
 };

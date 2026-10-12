@@ -5037,6 +5037,79 @@
    "webchat": true
   },
   {
+   "id": "aijudgebackend",
+   "title": "!aijudge backend status|on|off",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!aijudge"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!aijudge backend status",
+    "!aijudge backend on confirm",
+    "!aijudge backend off confirm"
+   ],
+   "summary": "Make Pepe's AI judge propose its calls to publicaccess.tv, which runs the dispute window and settles, or let him decide locally again.",
+   "details": "With **on**, Pepe still looks into AI-judged markets, betting pools and wagers (web search plus his own Camfrog records) but only PROPOSES a result to the site, with his confidence, his reason and the evidence. The site keeps the proposal and the disputes, and when the dispute window ends without enough disputes it settles the items it runs itself; the ones that still live in Pepe are settled by him when the site says so. `!market dispute` / `!wager dispute` go to the site. If the site is down, his calls wait and nothing is settled. **off** brings the dispute window back to Pepe (calls already made settle on their own window). **status** says which way it runs (anyone can ask).",
+   "examples": [
+    "!aijudge backend status"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "cosdropbackend",
+   "title": "!cosmetics backend status|on|off",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!cosmetics"
+   ],
+   "aliases": [
+    "!cos"
+   ],
+   "syntax": [
+    "!cosmetics backend status",
+    "!cosmetics backend on confirm",
+    "!cosmetics backend off confirm"
+   ],
+   "summary": "Move the cosmetic drop table (every win's drop chance, the daily cap, the gates) to publicaccess.tv, or bring it back to Pepe's panel.",
+   "details": "**on confirm** hands Pepe's drop table to the site once; from then on it is edited on the site's admin page (Cosmetics) and Pepe reads it every 5 minutes, still rolling the drops for Camfrog games himself (the site rolls the wheel's and the casino tables' drops with the same numbers). If the site is down he keeps using the last copy. **off confirm** brings the site's numbers back as Pepe's drop knobs. **status** says where the table lives (anyone can ask).",
+   "examples": [
+    "!cosmetics backend status"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "achbackend",
+   "title": "!achievements backend status|export|on|off|detach",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!achievements"
+   ],
+   "aliases": [
+    "!achievement",
+    "!achs",
+    "!badges"
+   ],
+   "syntax": [
+    "!achievements backend status",
+    "!achievements backend export",
+    "!achievements backend on confirm",
+    "!achievements backend off confirm",
+    "!achievements backend detach confirm"
+   ],
+   "summary": "Move the Camfrog achievement counters to publicaccess.tv (the site then checks the thresholds and awards), or bring them back into Pepe.",
+   "details": "**export** is the dry run: how many people, unlocks and counters would move, with a checksum, and anything that blocks it. **on confirm** pauses awards for a moment, sends every counter with a checksum and totals, checks every person's copy on the site and switches only when they all match; from then on Pepe still counts what happens in the rooms and sends it to the site, which checks the thresholds and pays the badge, XP and points once (Pepe announces it in the room). **off confirm** is the way back while the site answers: everything waiting is sent first, then the counters come back exactly. **detach confirm** is only for a site that is gone for good: Pepe's last copy becomes the counters again. **status** says where the counters live (anyone can ask).",
+   "examples": [
+    "!achievements backend status",
+    "!achievements backend export"
+   ],
+   "keywords": [],
+   "webchat": true
+  },
+  {
    "id": "automod",
    "title": "!automod [action] [user]",
    "category": "moderation",
@@ -7072,5 +7145,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "40f12b9c2a062f55"
+ "hash": "e529364e518700b5"
 }
