@@ -136,18 +136,15 @@ async function backfill({ dryRun = true, camfrogNames = null } = {}) {
   const bySource = {};
   for (const c of changes) bySource[c.source] = (bySource[c.source] || 0) + 1;
   if (!dryRun && changes.length) {
-    await runQuery("BEGIN IMMEDIATE");
-    try {
+    // 1.99st: the site's shared transaction (dbUtils.tx) - a raw BEGIN on the shared connection could collide with
+    // another module's open transaction (and its bare ROLLBACK undo that one's writes)
+    await require("./dbUtils").tx(async () => {
       for (const c of changes) {
         // only if it hasn't changed since it was read (a user saving their own name meanwhile wins)
         await runQuery("UPDATE users SET displayname = ?, displayname_auto = 1 WHERE userId = ? AND displayname IS ?",
           [c.after, c.userId, c.before]);
       }
-      await runQuery("COMMIT");
-    } catch (e) {
-      await runQuery("ROLLBACK").catch(() => {});
-      throw e;
-    }
+    });
   }
   return { changes, bySource, unresolved };
 }

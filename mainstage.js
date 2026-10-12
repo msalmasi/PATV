@@ -436,32 +436,8 @@ async function event(slotId, what, actor, detail, roomId) {
   } catch (e) { console.error("[stage] event:", e.message); }
 }
 
-// ── transactions: one at a time on the shared connection, retried if another module's is open ──
-let _chain = Promise.resolve();
-function serial(fn) {
-  const run = _chain.then(() => fn(), () => fn());
-  _chain = run.catch(() => {});
-  return run;
-}
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-function tx(fn) {
-  return serial(async () => {
-    for (let i = 0; ; i++) {
-      try { await runQuery("BEGIN IMMEDIATE TRANSACTION"); break; } catch (e) {
-        if (i >= 40 || !/within a transaction|SQLITE_BUSY|locked/i.test(e.message)) throw e;
-        await sleep(50);
-      }
-    }
-    try {
-      const out = await fn();
-      await runQuery("COMMIT");
-      return out;
-    } catch (e) {
-      try { await runQuery("ROLLBACK"); } catch (_) { /* nothing open */ }
-      throw e;
-    }
-  });
-}
+// ── transactions: 1.99st - the site's one primitive (dbUtils.tx: one global chain, a savepoint when nested) ──
+const tx = (fn) => require("./dbUtils").tx(fn);
 
 // ── keys ──
 const sha = (s) => crypto.createHash("sha256").update(String(s)).digest("hex");

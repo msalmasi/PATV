@@ -86,8 +86,13 @@ async function meta(key) {
   if (!r) return null;
   try { return JSON.parse(r.value); } catch (e) { return null; }
 }
-const setMeta = (key, v) => runQuery(`INSERT INTO escrow_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-                                      [key, JSON.stringify(v)]);
+// 1.99st: waits for init() like meta() - it only worked without because init's statements used to slip into whatever
+// transaction was open on the shared connection; outside writes now wait for it (dbUtils write gate)
+const setMeta = async (key, v) => {
+  await init();
+  return runQuery(`INSERT INTO escrow_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+                  [key, JSON.stringify(v)]);
+};
 
 /** May Pepe hand the escrow (or one game: `game`) over? Default: on on staging (STAGING env), off on prod until an admin says so. */
 async function enabled(game) {

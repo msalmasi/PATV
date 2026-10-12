@@ -186,27 +186,16 @@ async function backfillHistory() {
 }
 
 // ── transactions ──
-// Purchases run one at a time. They share one SQLite connection, and a second BEGIN while the
-// first purchase's transaction is open fails ("cannot start a transaction within a transaction").
+// Official-store purchases run one at a time (serial: the price check reads before the transaction). 1.99st: the
+// transaction itself is the site's one primitive (dbUtils.tx) - this file's own BEGIN chain didn't serialize against
+// the other modules' transactions on the shared connection.
 let _chain = Promise.resolve();
 function serial(fn) {
   const run = _chain.then(() => fn(), () => fn());
   _chain = run.catch(() => {});
   return run;
 }
-function tx(fn) {
-  return serial(async () => {
-    await runQuery("BEGIN TRANSACTION");
-    try {
-      const out = await fn();
-      await runQuery("COMMIT");
-      return out;
-    } catch (e) {
-      try { await runQuery("ROLLBACK"); } catch (_) { /* nothing open */ }
-      throw e;
-    }
-  });
-}
+const tx = (fn) => require("./dbUtils").tx(fn);
 
 class Refuse extends Error {
   constructor(status, message) { super(message); this.status = status; this.refuse = true; }
@@ -520,9 +509,9 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
 
     let orderId = null;
     try {
-      // 1.99sr: the shared serialized transaction (mainstage tx), not a raw BEGIN whose failure's ROLLBACK could undo
-      // another request's open transaction
-      await require("./mainstage")._tx(async () => {
+      // 1.99sr: the shared serialized transaction (dbUtils.tx since 1.99st), not a raw BEGIN whose failure's ROLLBACK
+      // could undo another request's open transaction
+      await tx(async () => {
       if (!comp) {
         const paid = await runQuery(
           "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",

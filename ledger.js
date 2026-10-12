@@ -14,7 +14,8 @@
 //      between, or a concurrent spend took the cover), our own row is deleted again by its id - a
 //      compensating delete that can't touch anybody else's statements on the shared connection (a
 //      ROLLBACK TO a savepoint could).
-//   Both statements join the caller's transaction when there is one (BEGIN ... COMMIT around it).
+//   Both statements join the caller's transaction when there is one (dbUtils.tx around it); 1.99st: without one,
+//   post() opens its own (dbUtils.tx), so the pair is atomic and never lands in another request's transaction.
 //   Nothing is written when the account is missing: post() returns {ok:false, code:"E_TARGET_NOT_FOUND"}
 //   and logs it. With {resolveMerged:true} a merged-away id is first followed to the account it was
 //   merged into (account_merges, written by every merge - recordMerge()).
@@ -23,7 +24,7 @@
 // any INSERT INTO transactions whose userId has no users row (RAISE ABORT "E_TARGET_NOT_FOUND ...").
 "use strict";
 const { v4: uuidv4 } = require("uuid");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 
 const E_TARGET_NOT_FOUND = "E_TARGET_NOT_FOUND";
 const E_INSUFFICIENT = "E_INSUFFICIENT";
@@ -87,7 +88,15 @@ const userExists = async (id) => !!id && (await getQuery("SELECT 1 FROM users WH
 async function post(userId, points, type, opts = {}) {
   const amount = Math.trunc(Number(points));
   if (!Number.isFinite(amount)) return { ok: false, code: E_BAD_AMOUNT, userId };
-  await ensure();
+  await ensure();              // before any transaction: its one-time setup never waits on one
+  // 1.99st: the row and the balance move together - inside the caller's transaction, or in one of its own. Two
+  // autocommit statements could each land in ANOTHER request's open transaction on the shared connection, and if that
+  // rolled back, one half went with it (a balance change without its row, or the reverse).
+  if (inTx()) return postIn(userId, amount, type, opts);
+  return tx(() => postIn(userId, amount, type, opts));
+}
+
+async function postIn(userId, amount, type, opts) {
   let target = userId ? String(userId) : null;
   if (opts.resolveMerged && target && !(await userExists(target))) {
     const to = await resolveUserId(target);
@@ -137,8 +146,11 @@ async function post(userId, points, type, opts = {}) {
 /** Undo a successful post() of `points` (its row goes, the balance moves back). */
 async function reverse(res, points) {
   if (!res || !res.ok) return false;
-  await runQuery("DELETE FROM transactions WHERE transactionId = ?", [res.transactionId]);
-  await runQuery("UPDATE users SET points_balance = points_balance - ? WHERE userId = ?", [Math.trunc(Number(points)), res.userId]);
+  const undo = async () => {
+    await runQuery("DELETE FROM transactions WHERE transactionId = ?", [res.transactionId]);
+    await runQuery("UPDATE users SET points_balance = points_balance - ? WHERE userId = ?", [Math.trunc(Number(points)), res.userId]);
+  };
+  if (inTx()) await undo(); else await tx(undo);     // 1.99st: both halves together, as in post()
   return true;
 }
 

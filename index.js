@@ -3033,47 +3033,42 @@ app.post("/api/blackjack/wager", async (req, res) => {
     }
   
     try {
-      await runQuery("BEGIN TRANSACTION");
-  
-      // Check if the user has enough balance
-      const users = await getQuery("SELECT points_balance, casino_banned FROM users WHERE userId = ?", [userId]);
-      if (users.length === 0 || users[0].points_balance < wager) {
-        await runQuery("ROLLBACK");
-        return res.status(400).json({ success: false, message: "Insufficient balance" });
-      }
-      if (users[0].casino_banned) {
-        await runQuery("ROLLBACK");
-        return res.status(403).json({ success: false, message: "You are banned from the casino." });
-      }
+      // 1.99st: the site's shared transaction (dbUtils.tx) - no raw BEGIN / bare ROLLBACK on the shared connection
+      const out = await require("./dbUtils").tx(async () => {
+        // Check if the user has enough balance
+        const users = await getQuery("SELECT points_balance, casino_banned FROM users WHERE userId = ?", [userId]);
+        if (users.length === 0 || users[0].points_balance < wager) {
+          return { status: 400, body: { success: false, message: "Insufficient balance" } };
+        }
+        if (users[0].casino_banned) {
+          return { status: 403, body: { success: false, message: "You are banned from the casino." } };
+        }
 
-      // 1.63: the table is banked by the casino jackpot - refuse a wager it couldn't pay out
-      // (everything still in play x2), then the wager goes INTO the jackpot.
-      const potRow = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes");
-      // open hands = no payout transaction yet (payout defaults to 0, so "payout IS NULL" never counted them)
-      const open = await require("./legacybj").openStakes(getQuery);
-      if (((potRow[0] && potRow[0].t) || 0) < 2 * (open + Number(wager))) {
-        await runQuery("ROLLBACK");
-        return res.status(409).json({ success: false, message: "The casino jackpot can't cover that bet right now." });
-      }
-      // Deduct the wager from the user's balance
-      const transactionId = uuidv4();
-      // balance + ledger row together (1.99ga), for an account that exists
-      await ledger.postOrThrow(userId, -Number(wager), "blackjack wager", { transactionId, source: "blackjack" });
-      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-                     [uuidv4(), "bj:" + transactionId, userId, Number(wager)]);   // 1.99gx: tagged (jackpotflows.js)
-  
-      // Create a new blackjack row
-      const blackjackId = uuidv4();
-      await runQuery(
-        "INSERT INTO blackjack (blackjackId, userId, wager, wagerTransactionId) VALUES (?, ?, ?, ?)",
-        [blackjackId, userId, wager, transactionId]
-      );
-  
-      await runQuery("COMMIT");
-  
-      return res.json({ success: true, message: "Blackjack wager recorded", blackjackId });
+        // 1.63: the table is banked by the casino jackpot - refuse a wager it couldn't pay out
+        // (everything still in play x2), then the wager goes INTO the jackpot.
+        const potRow = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes");
+        // open hands = no payout transaction yet (payout defaults to 0, so "payout IS NULL" never counted them)
+        const open = await require("./legacybj").openStakes(getQuery);
+        if (((potRow[0] && potRow[0].t) || 0) < 2 * (open + Number(wager))) {
+          return { status: 409, body: { success: false, message: "The casino jackpot can't cover that bet right now." } };
+        }
+        // Deduct the wager from the user's balance
+        const transactionId = uuidv4();
+        // balance + ledger row together (1.99ga), for an account that exists
+        await ledger.postOrThrow(userId, -Number(wager), "blackjack wager", { transactionId, source: "blackjack" });
+        await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                       [uuidv4(), "bj:" + transactionId, userId, Number(wager)]);   // 1.99gx: tagged (jackpotflows.js)
+
+        // Create a new blackjack row
+        const blackjackId = uuidv4();
+        await runQuery(
+          "INSERT INTO blackjack (blackjackId, userId, wager, wagerTransactionId) VALUES (?, ?, ?, ?)",
+          [blackjackId, userId, wager, transactionId]
+        );
+        return { status: 200, body: { success: true, message: "Blackjack wager recorded", blackjackId } };
+      });
+      return res.status(out.status).json(out.body);
     } catch (error) {
-      await runQuery("ROLLBACK");
       console.error("Failed to record blackjack wager:", error);
       return res.status(500).json({ success: false, message: "Failed to record blackjack wager" });
     }
@@ -3094,43 +3089,42 @@ app.post("/api/blackjack/result", async (req, res) => {
     }
   
     try {
-      await runQuery("BEGIN TRANSACTION");
+      // 1.99st: the site's shared transaction (dbUtils.tx) - no raw BEGIN / bare ROLLBACK on the shared connection
+      const refused = await require("./dbUtils").tx(async () => {
+        // 1.99mv: only an OPEN hand of this user, once, with a payout the game can produce (legacybj.checkResult)
+        const hand = (await getQuery("SELECT userId, wager, payoutTransactionId FROM blackjack WHERE blackjackId = ?", [blackjackId]))[0];
+        const why = require("./legacybj").checkResult(hand, userId, payout);
+        if (why) return why;
 
-      // 1.99mv: only an OPEN hand of this user, once, with a payout the game can produce (legacybj.checkResult)
-      const hand = (await getQuery("SELECT userId, wager, payoutTransactionId FROM blackjack WHERE blackjackId = ?", [blackjackId]))[0];
-      const why = require("./legacybj").checkResult(hand, userId, payout);
-      if (why) {
-        await runQuery("ROLLBACK");
-        console.warn(`[blackjack] result refused (${why}) for hand ${String(blackjackId).slice(0, 40)}`);
-        return res.status(why === "no_hand" ? 404 : 409).json({ success: false, message: "Invalid hand", error: why });
-      }
+        // Log the payout transaction
+        const transactionId = uuidv4();
+        // Add the payout to the user's balance - paid OUT of the casino jackpot (1.63); logged only
+        // when the account exists (1.99ga - else the throw rolls the whole result back)
+        await ledger.postOrThrow(userId, Number(payout), "blackjack payout", { transactionId, source: "blackjack" });
+        if (Number(payout) > 0) {
+          // 1.99jw: House flash liquidity - a payout that takes the House below its hard floor books the gap as a
+          // flash:house:blackjack claim (the Fed lends it to the House) while Pepe allows it; otherwise as before
+          await funding.houseFlashCover("blackjack", Number(payout), userId, "blackjack payout", "bj:" + transactionId);
+          await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                         [uuidv4(), "bj:" + transactionId, userId, -Number(payout)]);   // 1.99gx: tagged (jackpotflows.js)
+        }
 
-      // Log the payout transaction
-      const transactionId = uuidv4();
-      // Add the payout to the user's balance - paid OUT of the casino jackpot (1.63); logged only
-      // when the account exists (1.99ga - else the catch rolls the whole result back)
-      await ledger.postOrThrow(userId, Number(payout), "blackjack payout", { transactionId, source: "blackjack" });
-      if (Number(payout) > 0) {
-        // 1.99jw: House flash liquidity - a payout that takes the House below its hard floor books the gap as a
-        // flash:house:blackjack claim (the Fed lends it to the House) while Pepe allows it; otherwise as before
-        await funding.houseFlashCover("blackjack", Number(payout), userId, "blackjack payout", "bj:" + transactionId);
-        await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-                       [uuidv4(), "bj:" + transactionId, userId, -Number(payout)]);   // 1.99gx: tagged (jackpotflows.js)
+        // Update the blackjack row with the payout and result
+        const settled = await runQuery(
+          "UPDATE blackjack SET payout = ?, result = ?, payoutTransactionId = ?, pvalue = ?, spvalue = ?, dvalue = ? WHERE blackjackId = ? AND payoutTransactionId IS NULL",
+          [payout, result, transactionId, pvalue, spvalue, dvalue, blackjackId]
+        );
+        if (!settled || settled.changes !== 1) throw new Error("blackjack hand already settled");   // rolls the payout back
+        return null;
+      });
+      if (refused) {
+        console.warn(`[blackjack] result refused (${refused}) for hand ${String(blackjackId).slice(0, 40)}`);
+        return res.status(refused === "no_hand" ? 404 : 409).json({ success: false, message: "Invalid hand", error: refused });
       }
-  
-      // Update the blackjack row with the payout and result
-      const settled = await runQuery(
-        "UPDATE blackjack SET payout = ?, result = ?, payoutTransactionId = ?, pvalue = ?, spvalue = ?, dvalue = ? WHERE blackjackId = ? AND payoutTransactionId IS NULL",
-        [payout, result, transactionId, pvalue, spvalue, dvalue, blackjackId]
-      );
-      if (!settled || settled.changes !== 1) throw new Error("blackjack hand already settled");   // rolls the payout back
-  
-      await runQuery("COMMIT");
       xp = Math.abs(payout) * 0.005;
       const levelUpInfo = await updateLevel(userId, xp);
       return res.json({ success: true, message: "Blackjack result recorded", payout, levelUpInfo });
     } catch (error) {
-      await runQuery("ROLLBACK");
       console.error("Failed to record blackjack result:", error);
       return res.status(500).json({ success: false, message: "Failed to record blackjack result" });
     }
@@ -3702,63 +3696,7 @@ const checkAndResolveStalledPublicSpins = () => {
   );
 };
 
-// Function to handle refund
-const refundUser = (userId, spinId) => {
-  console.log(`Refunding user ${userId} for spin ${spinId}`);
-  const transactionId = uuidv4();
-  const transactionType = "Refund";
-  const jackpotId = uuidv4();
-
-  // Start a transaction
-  db.serialize(() => {
-    db.run("BEGIN");
-
-    const updateTransaction = `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)`;
-    const updateBalance = `UPDATE users SET points_balance = points_balance + 5000 WHERE userId = ?`;
-    const updateJackpot = `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`;
-
-    db.run(
-      updateTransaction,
-      [transactionId, userId, transactionType, +5000],
-      function (err) {
-        if (err) {
-          console.error("Error inserting transaction:", err);
-          db.run("ROLLBACK");
-          return;
-        }
-
-        db.run(updateBalance, [userId], function (err) {
-          if (err) {
-            console.error("Error updating user balance:", err);
-            db.run("ROLLBACK");
-            return;
-          }
-
-          db.run(
-            updateJackpot,
-            [jackpotId, spinId, userId, -5000],
-            function (err) {
-              if (err) {
-                console.error("Error updating jackpot rakes:", err);
-                db.run("ROLLBACK");
-                return;
-              }
-
-              // If all operations are successful, commit the transaction
-              db.run("COMMIT", (err) => {
-                if (err) {
-                  console.error("Error committing transaction:", err);
-                  return;
-                }
-                console.log("Refund processed successfully for user", userId);
-              });
-            }
-          );
-        });
-      }
-    );
-  });
-};
+// 1.99st: refundUser() removed - dead code (never called) that ran a raw BEGIN/ROLLBACK on index.js's connection.
 
 // Set interval to run this cleanup function every minute
 // setInterval(checkAndResolvePendingSpins, 5000);

@@ -76,8 +76,9 @@ async function cleanup(u) {
   const now = Date.now();
   if (!(await require(path.join(appDir, "staleaccounts")).ensure())) throw new Error("couldn't set up account_archive");
   await ledger.ensure();
-  await runQuery("BEGIN IMMEDIATE");
-  try {
+  // 1.99st: one transaction through dbUtils.tx (the site's primitive): ledger.post inside it joins it instead of opening
+  // its own, and a throw anywhere rolls the whole cleanup back
+  await require(path.join(appDir, "dbUtils")).tx(async () => {
     // 1. queued grants -> dropped
     const q = (await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS pat FROM reserve_claims WHERE userId = ? AND queued = 1", [u.userId]))[0];
     await runQuery("UPDATE reserve_claims SET queued = 9 WHERE userId = ? AND queued = 1", [u.userId]);
@@ -100,7 +101,7 @@ async function cleanup(u) {
     }
     const xr = await runQuery("UPDATE users SET xp = 0, level = 0 WHERE userId = ? AND (COALESCE(xp, 0) != 0 OR COALESCE(level, 0) != 0)", [u.userId]);
     out.xp_reset = !!xr.changes;
-    // 5. marked as a bot (archived, tier BOT; the table / column come from staleaccounts.ensure() before BEGIN)
+    // 5. marked as a bot (archived, tier BOT; the table / column come from staleaccounts.ensure() before the transaction)
     const a =await runQuery("UPDATE users SET archived_at = ? WHERE userId = ? AND archived_at IS NULL", [now, u.userId]);
     const snap = JSON.stringify({ username: u.username, displayname: u.displayname, camfrog: u.camfrogUsername, xp: u.xp, level: u.level, created_at: u.created_at });
     const had = (await getQuery("SELECT tier FROM account_archive WHERE userId = ?", [u.userId]))[0];
@@ -113,11 +114,7 @@ async function cleanup(u) {
                      [u.userId, "botclean-" + LOGIN, REASON.slice(0, 300), now, snap]);
     }
     out.archived = !!a.changes || !had || had.tier !== "BOT";
-    await runQuery("COMMIT");
-  } catch (e) {
-    await runQuery("ROLLBACK").catch(() => {});
-    throw e;
-  }
+  });
   return out;
 }
 

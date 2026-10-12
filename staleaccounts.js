@@ -140,23 +140,9 @@ function ensure() {
   return readyP;
 }
 
-// One transaction at a time on the shared connection (same pattern as mainstage.js).
-let chain = Promise.resolve();
-const sleep = (n) => new Promise((r) => setTimeout(r, n));
-function tx(fn) {
-  const run = chain.then(async () => {
-    for (let i = 0; ; i++) {
-      try { await runQuery("BEGIN IMMEDIATE TRANSACTION"); break; } catch (e) {
-        if (i >= 60 || !/within a transaction|SQLITE_BUSY|locked/i.test(e.message)) throw e;
-        await sleep(50);
-      }
-    }
-    try { const out = await fn(); await runQuery("COMMIT"); return out; }
-    catch (e) { try { await runQuery("ROLLBACK"); } catch (_) { /* none open */ } throw e; }
-  });
-  chain = run.catch(() => {});
-  return run;
-}
+// 1.99st: the site's one transaction primitive (dbUtils.tx: one global chain, a savepoint when nested) - this file's
+// own chain didn't serialize against the other modules' transactions on the shared connection.
+const tx = (fn) => require("./dbUtils").tx(fn);
 
 function safeJson(s, dflt) { try { return typeof s === "string" ? JSON.parse(s) : (s || dflt); } catch (e) { return dflt; } }
 // every string inside an object, lowercased (logins / usernames of whoever is in it)

@@ -7,11 +7,11 @@
 //   * the code's use is taken only if one is left and it hasn't expired (UPDATE ... WHERE uses_remaining > 0) - 0 rows
 //     = used up
 // and only then does the vault pay (funding.takeFunds) and the ledger credit. A second concurrent redeem finds the
-// row / the count already taken and fails without paying. Redeems also run one at a time in this process (the site
-// shares one SQLite connection, so two BEGINs must never overlap).
+// row / the count already taken and fails without paying. Redeems also run one at a time in this process; the
+// transaction is the site's shared one (dbUtils.tx, 1.99st).
 "use strict";
 const { v4: uuidv4 } = require("uuid");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 const funding = require("./funding");
 const ledger = require("./ledger");
 
@@ -35,26 +35,23 @@ function redeemCode(userId, code) {
                                  AND uses_remaining > 0`, [code]);
     if (!live.length) return { status: 404, body: { success: false, message: "That code isn't valid, has expired, or has been fully used." } };
     const points = Number(live[0].points) || 0;
-    let began = false;
     try {
-      await runQuery("BEGIN IMMEDIATE TRANSACTION");
-      began = true;
-      // the claim: one redemption per user, one use off the code - both conditional, inside the transaction
-      const mine = await runQuery(`INSERT INTO user_redemptions (userId, code) SELECT ?, ?
-                                   WHERE NOT EXISTS (SELECT 1 FROM user_redemptions WHERE userId = ? AND code = ?)`, [userId, code, userId, code]);
-      if (!mine.changes) throw new Refusal(400, "You've already redeemed that code.");
-      const use = await runQuery(`UPDATE redemption_codes SET uses_remaining = uses_remaining - 1
-                                  WHERE code = ? AND uses_remaining > 0 AND (expiration_date IS NULL OR expiration_date > CURRENT_TIMESTAMP)`, [code]);
-      if (!use.changes) throw new Refusal(404, "That code isn't valid, has expired, or has been fully used.");
-      // 1.63: a code's PAT comes out of a vault ("redeem_codes" payout row), never minted.
-      if (!(await funding.takeFunds("redeem_codes", points, userId, `redemption (${live[0].code})`))) {
-        throw new Refusal(503, "The bank can't cover codes right now — try again later.");
-      }
-      await ledger.postOrThrow(userId, points, `redemption (${live[0].code})`, { transactionId: uuidv4(), source: "redeem" });
-      await runQuery("COMMIT");
-      began = false;
+      // 1.99st: the site's shared transaction (dbUtils.tx) - a Refusal thrown inside rolls back only this one
+      await tx(async () => {
+        // the claim: one redemption per user, one use off the code - both conditional, inside the transaction
+        const mine = await runQuery(`INSERT INTO user_redemptions (userId, code) SELECT ?, ?
+                                     WHERE NOT EXISTS (SELECT 1 FROM user_redemptions WHERE userId = ? AND code = ?)`, [userId, code, userId, code]);
+        if (!mine.changes) throw new Refusal(400, "You've already redeemed that code.");
+        const use = await runQuery(`UPDATE redemption_codes SET uses_remaining = uses_remaining - 1
+                                    WHERE code = ? AND uses_remaining > 0 AND (expiration_date IS NULL OR expiration_date > CURRENT_TIMESTAMP)`, [code]);
+        if (!use.changes) throw new Refusal(404, "That code isn't valid, has expired, or has been fully used.");
+        // 1.63: a code's PAT comes out of a vault ("redeem_codes" payout row), never minted.
+        if (!(await funding.takeFunds("redeem_codes", points, userId, `redemption (${live[0].code})`))) {
+          throw new Refusal(503, "The bank can't cover codes right now — try again later.");
+        }
+        await ledger.postOrThrow(userId, points, `redemption (${live[0].code})`, { transactionId: uuidv4(), source: "redeem" });
+      });
     } catch (e) {
-      if (began) { try { await runQuery("ROLLBACK"); } catch (e2) { /* nothing to roll back */ } }
       if (e instanceof Refusal) return { status: e.status, body: { success: false, message: e.message } };
       console.error("Failed to redeem code:", e);
       return { status: 500, body: { success: false, message: "Something went wrong redeeming that code — no PAT was added." } };
