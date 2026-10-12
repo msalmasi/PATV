@@ -1,0 +1,203 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# 1.99uj: /pads/owners - the pad owners guide (padguide.js): what a pad is for, how it earns PAT, Pepe as co-host, what
+    Pepe can do per goal (linked to each connected chat service's command guide) and the pad tiers. Every number comes
+    from padguide.facts() (F). The technical list is /pads/owner-guide ("Pad owner reference", padowner.js). %>
+<%- include('layout', { title: t('owners.title'), user: user, og: (typeof ogBase !== 'undefined' ? { title: t('owners.title'), description: t('owners.og'), image: ogBase + '/og/page.png?t=' + encodeURIComponent(t('owners.title')), url: ogBase + '/pads/owners' } : undefined) }) %>
+<%
+  const num = (n) => (t.num ? t.num(Math.round(Number(n) || 0)) : Math.round(Number(n) || 0).toLocaleString('en-US'));
+  const PAT = (n) => `<span class="ds-pat"><b>${num(n)}</b><small>PAT</small></span>`;
+  const mine_ = (locals.mine || []);
+  const manage_ = mine_.length ? mine_[0].href : null;
+%>
+<style>
+  .pg { --ds-ac: var(--ds-green); }
+  .pg h1 em { font-style: normal; color: var(--ds-green-2); }
+  .pg .pg-hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-4); align-items: center; }
+  .pg .pg-hero .pg-art { display: none; }
+  @media (min-width: 700px) {
+    .pg .pg-hero { grid-template-columns: minmax(0, 1fr) auto; }
+    .pg .pg-hero .pg-art { display: block; width: 144px; height: 144px; image-rendering: pixelated; filter: drop-shadow(0 8px 24px rgba(76, 175, 80, .25)); }
+  }
+  .pg .pg-hero-txt { display: grid; gap: var(--ds-sp-3); min-width: 0; }
+  .pg .pg-hero-txt > * { margin: 0; }
+  .pg section[id] { scroll-margin-top: 72px; }
+  .pg .pg-sec { display: grid; gap: var(--ds-sp-3); min-width: 0; }
+  .pg .pg-sec > .ds-h2, .pg .pg-sec > .ds-lead { margin: 0; }
+  .pg .pg-card { align-content: start; }
+  .pg .pg-card h3 { margin: 0; display: flex; align-items: center; gap: var(--ds-sp-2); font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); }
+  .pg .pg-card p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  /* earn: three numbered steps, then the extras */
+  .pg .pg-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); counter-reset: pgs; }
+  .pg .pg-steps li { counter-increment: pgs; position: relative; display: grid; gap: var(--ds-sp-1h); align-content: start; padding: var(--ds-sp-4); padding-block-start: calc(var(--ds-sp-4) + 34px);
+    border: 1px solid var(--ds-gold-line, #4d3f12); border-radius: var(--ds-r-xl); background: linear-gradient(180deg, #1b1606 0%, var(--ds-surface) 55%); min-width: 0; }
+  .pg .pg-steps li::before { content: counter(pgs); position: absolute; inset-block-start: var(--ds-sp-4); inset-inline-start: var(--ds-sp-4); width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; font: 700 14px/1 var(--ds-font); color: #1a1200; background: var(--ds-gold); }
+  .pg .pg-steps b { color: var(--ds-text-strong); font-size: var(--ds-fs-body); }
+  .pg .pg-steps p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .pg .pg-list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--ds-sp-2); }
+  .pg .pg-list li { position: relative; padding-inline-start: 22px; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .pg .pg-list li::before { content: ""; position: absolute; inset-inline-start: 4px; inset-block-start: .6em; width: 7px; height: 7px; border-radius: 50%; background: var(--ds-ac); }
+  .pg .pg-list.gold li::before { background: var(--ds-gold); }
+  .pg .pg-list b { color: var(--ds-text-strong); }
+  /* Pepe */
+  .pg .pg-crew { display: flex; gap: var(--ds-sp-2); align-items: flex-end; }
+  .pg .pg-crew img { width: 56px; height: 56px; image-rendering: pixelated; }
+  .pg .pg-never { margin: 0; }
+  /* goals */
+  .pg .pg-goal .ds-card-f { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h) var(--ds-sp-3); }
+  .pg .pg-goal .ds-card-f a { font-size: var(--ds-fs-meta); font-weight: 700; text-decoration: none; min-height: 32px; display: inline-flex; align-items: center; }
+  .pg .pg-svc { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ds-sp-2) var(--ds-sp-3); }
+  .pg .pg-svc > div:first-child { min-width: 0; flex: 1 1 260px; display: grid; gap: 4px; }
+  .pg .pg-svc b { color: var(--ds-text-strong); display: flex; align-items: center; gap: var(--ds-sp-2); flex-wrap: wrap; }
+  .pg .pg-svc p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.5; }
+  .pg .pg-svc .ds-actions { margin: 0; flex-wrap: wrap; }
+  /* tiers */
+  .pg .pg-tier.pt { border-color: var(--ds-gold-line, #4d3f12); background: linear-gradient(180deg, #1d1606 0%, var(--ds-surface) 40%); }
+  .pg .pg-tier.pp { border-color: #2f5f7a; background: linear-gradient(180deg, #0c1a26 0%, var(--ds-surface) 40%); }
+  .pg .pg-price { margin: 0; font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
+  .pg .pg-price .ds-pat b { font-size: var(--ds-fs-num-lg, 24px); }
+  .pg .pg-end { text-align: center; justify-items: center; }
+  .pg .pg-end .ds-ctas { justify-content: center; }
+  .pg .pg-mine { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ds-sp-1h); margin: 0; padding: 0; list-style: none; }
+  @media (prefers-reduced-motion: reduce) { .pg *, .pg *::before, .pg *::after { animation: none !important; transition: none !important; } }
+</style>
+<main class="ds-page pg" id="pg">
+  <section class="ds-hero pg-hero" aria-labelledby="pgH">
+    <div class="pg-hero-txt">
+      <p class="ds-eyebrow"><%- t('owners.eyebrow') %></p>
+      <h1 id="pgH"><%- t('owners.h1') %></h1>
+      <p class="ds-lead"><%- t('owners.lead') %></p>
+      <div class="ds-ctas">
+        <% if (manage_) { %><a class="ds-btn" href="<%= manage_ %>"><span class="ds-ic" aria-hidden="true">👑</span> <%- t('owners.cta_manage') %></a>
+        <% } else { %><a class="ds-btn" href="/pads/new"><span class="ds-ic" aria-hidden="true">🧱</span> <%- t('owners.cta_create') %></a><% } %>
+        <a class="ds-btn ghost" href="/pads/owner-guide"><%- t('owners.cta_ref') %></a>
+      </div>
+    </div>
+    <img class="pg-art" src="/public/img/pepe-looks/klook-host.png" alt="<%- t('owners.art_alt') %>" width="144" height="144">
+  </section>
+
+  <nav class="ds-subnav" aria-label="<%- t('owners.nav') %>"><div class="ds-tabs">
+    <a class="ds-tab" href="#what"><%- t('owners.nav_what') %></a>
+    <a class="ds-tab" href="#earn"><%- t('owners.nav_earn') %></a>
+    <a class="ds-tab" href="#pepe"><%- t('owners.nav_pepe') %></a>
+    <a class="ds-tab" href="#can"><%- t('owners.nav_can') %></a>
+    <a class="ds-tab" href="#tiers"><%- t('owners.nav_tiers') %></a>
+  </div></nav>
+
+  <section class="pg-sec" id="what" aria-labelledby="pgWhatH">
+    <h2 class="ds-h2" id="pgWhatH"><span class="dot"></span><%- t('owners.what_h') %></h2>
+    <p class="ds-lead"><%- t('owners.what_lead') %></p>
+    <div class="ds-grid">
+      <% [['page', '🏠', { n: F.rules }], ['feed', '📝', {}], ['stage', '📺', { n: F.stageMax }], ['vault', '🏦', {}], ['chat', '🌉', {}], ['panel', '👑', {}]].forEach(([k, ic, v]) => { %>
+      <article class="ds-card pg-card">
+        <h3><span class="ds-ic" aria-hidden="true"><%= ic %></span> <%- t('owners.what.' + k + '_t') %></h3>
+        <p><%- t('owners.what.' + k + '_d', v) %></p>
+      </article><% }) %>
+    </div>
+  </section>
+
+  <section class="pg-sec" id="earn" aria-labelledby="pgEarnH">
+    <h2 class="ds-h2" id="pgEarnH"><span class="dot"></span><%- t('owners.earn_h') %></h2>
+    <p class="ds-lead"><%- t('owners.earn_lead') %></p>
+    <% if (!F.vaultLive) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owners.earn.paused') %></div></div><% } %>
+    <ol class="pg-steps">
+      <li><b><%- t('owners.earn.s1_t') %></b><p><%- t('owners.earn.s1_d') %></p></li>
+      <li><b><%- t('owners.earn.s2_t') %></b><p><%- t('owners.earn.s2_d', { rate: F.rate.default, min: F.rate.min, max: F.rate.max, owner: F.owner, streamers: F.streamers, people: F.people, gang: F.gang, games: F.games }) %></p></li>
+      <li><b><%- t('owners.earn.s3_t') %></b><p><%- t('owners.earn.s3_d', { days: F.ownerDays, active: F.eligDays, cap: F.capPct }) %></p></li>
+    </ol>
+    <div class="ds-card lg pg-card">
+      <h3><span class="ds-ic" aria-hidden="true">🪙</span> <%- t('owners.earn.more_h') %></h3>
+      <ul class="pg-list gold">
+        <% if (F.activityPads) { %><li><%- t('owners.earn.activity') %></li><% } %>
+        <li><%- t('owners.earn.donate') %></li>
+        <li><%- t('owners.earn.sb') %></li>
+        <% if (F.launchpad) { %><li><%- t('owners.earn.launch') %></li><% } %>
+      </ul>
+      <p><%- t('owners.earn.fair') %></p>
+      <p class="ds-meta"><%- t('owners.earn.needs') %><% if (F.plusGate) { %> <%- t('owners.earn.needs_plus') %><% } %> <%- t('owners.earn.economy') %></p>
+    </div>
+  </section>
+
+  <section class="pg-sec" id="pepe" aria-labelledby="pgPepeH">
+    <h2 class="ds-h2" id="pgPepeH"><span class="dot"></span>🐸 <%- t('owners.pepe_h') %></h2>
+    <p class="ds-lead"><%- t('owners.pepe_lead') %></p>
+    <div class="ds-grid lg">
+      <article class="ds-card lg pg-card">
+        <div class="pg-crew" aria-hidden="true"><img src="/public/img/pepe-looks/klook-dealer.png" alt="" width="56" height="56" loading="lazy"><img src="/public/img/pepe-looks/mod-headset.png" alt="" width="56" height="56" loading="lazy"></div>
+        <h3><%- t('owners.pepe.eng_h') %></h3>
+        <ul class="pg-list"><% [1, 2, 3, 4, 5].forEach((i) => { %><li><%- t('owners.pepe.eng' + i) %></li><% }) %></ul>
+      </article>
+      <article class="ds-card lg pg-card">
+        <div class="pg-crew" aria-hidden="true"><img src="/public/img/pepe-looks/klook-professor.png" alt="" width="56" height="56" loading="lazy"></div>
+        <h3><%- t('owners.pepe.mod_h') %></h3>
+        <ul class="pg-list"><% [1, 2, 3, 4, 5].forEach((i) => { %><li><%- t('owners.pepe.mod' + i) %></li><% }) %></ul>
+      </article>
+    </div>
+    <div class="ds-note info pg-never"><span class="ds-ic" aria-hidden="true">🤝</span><div><%- t('owners.pepe.never') %></div></div>
+  </section>
+
+  <section class="pg-sec" id="can" aria-labelledby="pgCanH">
+    <h2 class="ds-h2" id="pgCanH"><span class="dot"></span><%- t('owners.can_h') %></h2>
+    <p class="ds-lead"><%- t('owners.can_lead') %></p>
+    <div class="ds-grid">
+      <% GOALS.forEach((g) => { %>
+      <article class="ds-card pg-card pg-goal" id="goal-<%= g.id %>">
+        <h3><span class="ds-ic" aria-hidden="true"><%= g.icon %></span> <%- t('owners.goal.' + g.id + '.t') %></h3>
+        <p><%- t('owners.goal.' + g.id + '.d') %></p>
+        <ul class="pg-list">
+          <% for (let i = 1; i <= g.items; i++) { if (g.id === 'vault' && i === 2 && !F.launchpad) continue; %><li><%- t('owners.goal.' + g.id + '.i' + i, { min: F.rate.min, max: F.rate.max }) %></li><% } %>
+        </ul>
+        <div class="ds-card-f">
+          <% SERVICES.forEach((s) => { %><a href="<%= s.help + ((s.cats || {})[g.id] || '') %>"><%- t('owners.goal.commands', { service: s.name }) %> ›</a><% }) %>
+          <a href="/pads/owner-guide#cap-<%= g.cap %>"><%- t('owners.goal.reference') %> ›</a>
+        </div>
+      </article><% }) %>
+    </div>
+    <div class="ds-card lg pg-card" aria-labelledby="pgSvcH">
+      <h3 id="pgSvcH"><span class="ds-ic" aria-hidden="true">🔌</span> <%- t('owners.svc_h') %></h3>
+      <p><%- t('owners.svc_lead') %></p>
+      <% SERVICES.forEach((s) => { %>
+      <div class="pg-svc" id="svc-<%= s.id %>">
+        <div><b><span class="ds-ic" aria-hidden="true"><%= s.icon %></span> <%= s.name %> <span class="ds-chip ok"><%- t('owners.svc.on') %></span></b><p><%- t('owners.svc.' + s.id + '_d') %></p></div>
+        <div class="ds-actions"><a class="ds-btn sm" href="<%= s.help %>"><%- t('owners.svc.commands') %></a><a class="ds-btn sm ghost" href="<%= s.reference %>"><%- t('owners.goal.reference') %></a></div>
+      </div><% }) %>
+    </div>
+  </section>
+
+  <section class="pg-sec" id="tiers" aria-labelledby="pgTierH">
+    <h2 class="ds-h2" id="pgTierH"><span class="dot"></span>📺 <%- t('owners.tiers_h') %></h2>
+    <p class="ds-lead"><%- t('owners.tiers_lead') %></p>
+    <div class="ds-grid lg">
+      <article class="ds-card lg pg-card pg-tier pt">
+        <h3><span class="ds-ic" aria-hidden="true">📺</span> Prime Time</h3>
+        <% if (F.primePrice) { %><p class="pg-price"><%- t('owners.per', { price: PAT(F.primePrice), days: F.days }) %></p><% } %>
+        <p><%- t('owners.pt_d') %></p>
+        <%- include('partials/tier-perks', { tier: 'prime_time', compact: true }) %>
+      </article>
+      <article class="ds-card lg pg-card pg-tier pp">
+        <h3><span class="ds-ic" aria-hidden="true">💎</span> Prime Time Plus <span class="ds-chip <%= F.spots.soldOut ? 'warn' : 'info' %>"><%- F.spots.soldOut ? t('owners.pp_full') : t('owners.pp_left', { left: F.spots.left, max: F.spots.max }) %></span></h3>
+        <% if (F.plusPrice) { %><p class="pg-price"><%- t('owners.per', { price: PAT(F.plusPrice), days: F.days }) %></p><% } %>
+        <% if (F.spots.soldOut) { %><p class="ds-meta"><%- t('owners.pp_soldout') %></p><% } %>
+        <p><%- t('owners.pp_d', { max: F.spots.max }) %></p>
+        <%- include('partials/tier-perks', { tier: 'prime_plus', compact: true, skip: ['all_pt'] }) %>
+      </article>
+    </div>
+    <div class="ds-actions"><a class="ds-btn ghost" href="/premium"><%- t('owners.tiers_cta') %> ›</a></div>
+  </section>
+
+  <section class="ds-card lg hl pg-sec pg-end" aria-labelledby="pgEndH">
+    <h2 class="ds-h2" id="pgEndH"><%- t('owners.end_h') %></h2>
+    <p class="ds-lead"><%- t('owners.end_lead') %></p>
+    <div class="ds-ctas">
+      <a class="ds-btn" href="/pads/new"><span class="ds-ic" aria-hidden="true">🧱</span> <%- t('owners.cta_create') %></a>
+      <% if (manage_) { %><a class="ds-btn ghost" href="<%= manage_ %>"><span class="ds-ic" aria-hidden="true">👑</span> <%- t('owners.cta_manage') %></a><% } %>
+    </div>
+    <% if (mine_.length) { %>
+    <p class="ds-meta"><%- t('owners.end_mine') %></p>
+    <ul class="pg-mine"><% mine_.forEach((p) => { %><li><a class="ds-tab" href="<%= p.href %>">👑 <%= p.title %></a></li><% }) %></ul>
+    <% } %>
+    <p class="ds-meta"><%- t('owners.ref_note', { link: '<a href="/pads/owner-guide">' + t('owners.ref_link') + '</a>' }) %></p>
+  </section>
+</main>
+</body>
+</html>

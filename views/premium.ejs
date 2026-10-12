@@ -63,6 +63,8 @@
     <h1><%- t('premium.h1') %></h1>
     <p class="ds-lead"><%- t('premium.lead3', { days: S.period_days }) %></p>
     <% if (!S.sales) { %><p class="ds-lead paused"><%- t('premium.paused') %></p><% } %>
+    <%# 1.99uj: the pad owners guide (padguide.js) %>
+    <p class="ds-meta"><%- t('premium.owners_note', { link: '<a href="/pads/owners">' + t('owners.link') + '</a>' }) %></p>
   </section>
 
   <div class="tiers">

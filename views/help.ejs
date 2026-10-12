@@ -163,6 +163,8 @@
       <div class="eyebrow"><%- t('help.hero.eyebrow') %></div>
       <h1><em><%- t('help.heading') %></em></h1>
       <p class="sub"><%- t('help.intro', { verify: '<a href="#cmd-verify">' + t('help.intro_verify') + '</a>', balance: '<a href="#cmd-balance">!balance</a>', economy: '<a href="/economy">' + t('help.intro_economy') + '</a>' }) %></p>
+      <%# 1.99uj: the pad owners guide (padguide.js /pads/owners) %>
+      <p class="sub"><%- t('help.owners_note', { link: '<a href="/pads/owners">' + t('owners.link') + '</a>' }) %></p>
       <div class="stats">
         <span><%- t('help.hero.commands', { count: M.count, n: '<b>' + M.count + '</b>' }) %></span>
         <span><%- t('help.hero.cats', { count: M.cats.length, n: '<b>' + M.cats.length + '</b>' }) %></span>
@@ -251,7 +253,7 @@
     <% if (M.version) { %>Pepe <%= M.version %><% if (asOf) { %> · <%- t('help.foot.updated', { date: asOf }) %><% } %> · <% } %>
     <%- t('help.foot.prices', { gate: '<span class="b gate">' + t('help.card.gate') + '</span>' }) %><br>
     <a href="https://pepe.publicaccess.tv/patchnotes" rel="noopener"><%- t('help.foot.patchnotes') %></a> · <a href="/economy"><%- t('help.foot.economy') %></a> ·
-    <a href="/gtf">Grand Theft Frogger</a> · <a href="https://pepe.publicaccess.tv/turfwars" rel="noopener"><%- t('help.foot.turfwars') %></a>
+    <a href="/pads/owners"><%- t('help.foot.owners') %></a> · <a href="/gtf">Grand Theft Frogger</a> · <a href="https://pepe.publicaccess.tv/turfwars" rel="noopener"><%- t('help.foot.turfwars') %></a>
   </p>
 </main>
 <script type="application/json" id="helpIdx"><%- JSON.stringify(M.index).replace(/</g, '\\u003c') %></script>
