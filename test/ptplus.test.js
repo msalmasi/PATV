@@ -206,3 +206,20 @@ test("PATV Creators links follow the feature switch (creators.navFor)", async ()
   const EN = require(path.join(repo, "locales", "en.json"));
   for (const k of ["nav.creators", "nav.creator_dash", "nav.become_creator", "cr.links.subscribe", "cr.links.creator_chip", "cr.links.browse", "pad.plus.h", "premium.pp.bridge", "premium.lead3"]) assert.ok(EN[k], k);
 });
+
+test("1.99qt: chip in to a pad's Plus (amount / price x 30 days, at least a day's worth, anonymous allowed); the card has the box", async () => {
+  const sub0 = await PR.subRow("prime_plus", PAD_A);
+  const day = Math.ceil(50000000 / 30);
+  await assert.rejects(PR.buy(U.fan, { tier: "prime_plus", pad: PAD_A, amount: day - 1, ref: ref() }), /at least/);
+  const r = await PR.buy(U.fan, { tier: "prime_plus", pad: PAD_A, amount: 5000000, ref: ref(), anon: true });
+  assert.deepEqual([r.kind, r.amount, r.days], ["contribute", 5000000, 3]);
+  assert.equal(r.paid_through, Math.max(Number(sub0.paid_through), t) + 3 * DAY);
+  const L = (await getQuery("SELECT kind, anon FROM premium_ledger WHERE tier = 'prime_plus' AND kind = 'contribute'"))[0];
+  assert.deepEqual([L.kind, L.anon], ["contribute", 1]);
+  const v = fs.readFileSync(path.join(repo, "views", "premium.ejs"), "utf8");
+  assert.match(v, /id="ppAmt" min="<%= S\.day_price\.prime_plus %>"/);
+  assert.match(v, /data-chip="prime_plus"/);
+  assert.match(v, /data-chip="prime_time"/);
+  assert.match(v, /document\.getElementById\(chipTier === 'prime_plus' \? 'ppAnon' : 'ptAnon'\)/);
+  assert.ok(require(path.join(repo, "locales", "en.json"))["js.premium.confirm_chip_plus"]);
+});

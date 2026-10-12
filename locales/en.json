@@ -2072,6 +2072,7 @@
   "js.premium.paid_through": "Done - paid through {date}.",
   "js.premium.upgraded": "Upgraded to Prime Time Plus - paid through {date}.",
   "js.premium.confirm_chip": "Chip in {amount} PAT to p/{pad}’s Prime Time? Payments are final.",
+  "js.premium.confirm_chip_plus": "Chip in {amount} PAT to p/{pad}’s Prime Time Plus? Payments are final.",
   "js.premium.chip_thanks": "Thanks - p/{pad} is on air a little longer.",
   "js.premium.type_username": "Type a username first.",
   "js.premium.confirm_gift": "Gift a Season Pass period to {user}? Payments are final.",
