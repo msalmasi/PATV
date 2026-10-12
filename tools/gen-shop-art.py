@@ -118,7 +118,7 @@ FONT = {
     "N": ["1001", "1101", "1011", "1001", "1001"], "O": ["010", "101", "101", "101", "010"], "P": ["110", "101", "110", "100", "100"],
     "R": ["110", "101", "110", "101", "101"], "S": ["011", "100", "010", "001", "110"], "T": ["111", "010", "010", "010", "010"],
     "U": ["101", "101", "101", "101", "111"], "V": ["101", "101", "101", "101", "010"], "X": ["101", "101", "010", "101", "101"],
-    "Y": ["101", "101", "010", "010", "010"], "W": ["10001", "10001", "10101", "10101", "01010"],
+    "Y": ["101", "101", "010", "010", "010"], "Z": ["111", "001", "010", "100", "111"], "W": ["10001", "10001", "10101", "10101", "01010"],
     "0": ["111", "101", "101", "101", "111"], "1": ["010", "110", "010", "010", "111"], "2": ["110", "001", "010", "100", "111"],
     "+": ["000", "010", "111", "010", "000"], "?": ["111", "001", "011", "000", "010"], "-": ["000", "000", "111", "000", "000"],
     " ": ["0", "0", "0", "0", "0"],
@@ -486,6 +486,46 @@ def a_probation():
     return g
 
 
+def a_pizza():
+    """Pizza for Blake: an open delivery box, the lid marked BLAKE in marker, a hot pepperoni pie, one slice wandering off."""
+    g = Grid()
+    BOX, BOXD, BOXL, BOXIN = "#c98f52", "#8a5a2b", "#e3b67f", "#e9d2a8"
+    CRUST, SAUCE, CHEESE, CUT = "#d98c3a", "#c1272d", "#ffd166", "#e8a93a"
+    # the lid, standing up behind, its inside showing; the order name scrawled on it, underlined
+    g.rect(9, 2, 38, 14, BOX)
+    g.rect(10, 3, 37, 13, BOXIN)
+    g.rect(10, 13, 37, 13, "#d4b886")
+    text(g, "BLAKE", 14, 5, RED)
+    g.line(14, 11, 32, 11, RED)
+    # the box's floor in perspective, with its front wall
+    g.poly([(9, 15), (39, 15), (43, 26), (5, 26)], BOXIN)
+    g.rect(5, 26, 42, 30, BOX)
+    g.rect(5, 26, 42, 26, BOXL)
+    g.rect(5, 30, 42, 30, BOXD)
+    # the pie: crust, sauce rim, cheese, cut into slices
+    g.ellipse(24, 20.5, 15.0, 5.6, CRUST)
+    g.ellipse(24, 20.5, 13.2, 4.4, SAUCE)
+    g.ellipse(24, 20.5, 12.4, 3.9, CHEESE)
+    g.line(12, 20, 36, 20, CUT)
+    g.line(17, 17, 31, 23, CUT)
+    g.line(31, 17, 17, 23, CUT)
+    # pepperoni, basil, a shine of melted cheese
+    for (x, y) in ((15, 18), (20, 22), (27, 18), (32, 22), (16, 22), (22, 18), (33, 18), (26, 22)):
+        g.rect(x, y, x + 1, y, "#a4161a")
+        g.set(x, y, "#e5383b")
+    g.pts([(19, 19), (29, 21), (13, 21), (35, 20)], FROG)
+    g.pts([(24, 19), (25, 19)], "#fff1c1")
+    # steam off the top
+    for x0 in (11, 35):
+        g.pts([(x0, 15), (x0 + 1, 14), (x0, 13), (x0 + 1, 12), (x0, 11)], "#f5f5f5")
+    # one slice already making a break for it over the front of the box
+    g.poly([(30, 33), (41, 27.5), (43, 33)], CHEESE)
+    g.line(41, 27, 43, 33, CRUST); g.line(42, 27, 44, 33, CRUST)
+    g.rect(37, 31, 38, 31, "#a4161a"); g.set(37, 31, "#e5383b")
+    g.set(40, 29, "#a4161a")
+    return g
+
+
 # key -> (title, shelf, sprite fn, tag)
 ITEMS = {
     "camfrog-pro-1m": ("Camfrog Pro, 1 month", "camfrog", lambda: member_card("pro", False), "1 MO"),
@@ -516,6 +556,7 @@ ITEMS = {
     "golden": ("Golden novelty", "fun", a_golden, None),
     "mystery": ("Mystery prize", "fun", a_mystery, None),
     "probation": ("Probation, paid", "fun", a_probation, None),
+    "pizza-for-blake": ("Pizza for Blake", "fun", a_pizza, None),
 }
 
 SPARKS = [(5, 5), (42, 7), (40, 30), (6, 24)]

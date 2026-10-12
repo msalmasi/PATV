@@ -54,6 +54,7 @@ const ITEMS = {
   "6ba29deb-fe99-43c5-82a9-8fa0a155bf2f": { key: "golden", shelf: "fun", delivery: "staff" },
   "532f7e83-5d6a-4e3f-b876-24019d66452f": { key: "mystery", shelf: "fun", delivery: "staff" },
   "e9c179b4-ee7c-4dcc-b087-dccca9df4725": { key: "probation", shelf: "fun", delivery: "staff" },
+  "769d3a54-0ac6-4dbe-873f-c325e77137ec": { key: "pizza-for-blake", shelf: "fun", delivery: "staff" },   // 1.99tm, tools/add-pizza-for-blake.js
 };
 
 // The hero + featured strip on /shop, in order; sold-out or inactive ones are skipped.
