@@ -1359,7 +1359,7 @@
     "!persona <name>|off"
    ],
    "summary": "Personality profiles.",
-   "details": "**Personality profiles.** Pepe stays Pepe (same memories, family and opinions) but talks in a different style: `dolly` (drag queen), the horror classics (`dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`), `pedro` (the Temu Pepe: dumber, Spanglish), `flirty` and `gothmommy` (Goth Mommy: deadpan, teasing, protective, calls herself mommy, speaks in the moxier voice). Personas follow costumes: put on a costume and he gets the matching personality (`!persona link off` unlinks them). `!persona voice off` keeps him in the room's normal voice whatever the persona. Editable in the admin panel, and website admins can change his costume, persona and voice from the Pepe control panel on publicaccess.tv.",
+   "details": "**Personality profiles.** Pepe stays Pepe (same memories, family and opinions) but talks in a different style: `dolly` (drag queen), the horror classics (`dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`), `pedro` (the Temu Pepe: dumber, Spanglish), `flirty` and `gothmommy` (Goth Mommy: deadpan, teasing, protective, calls herself mommy, speaks in the moxier voice), `reaper` (deadpan gallows humour), `skater` (chill skate-park slang) and `alien` (Zorp, a polite visitor studying the humans). Personas follow costumes: put on a costume and he gets the matching personality (`!persona link off` unlinks them). `!persona voice off` keeps him in the room's normal voice whatever the persona. Editable in the admin panel, and website admins can change his costume, persona and voice from the Pepe control panel on publicaccess.tv.",
    "examples": [
     "!persona link off",
     "!persona voice off"
@@ -1382,7 +1382,7 @@
     "!costume <name>|off"
    ],
    "summary": "Dress Pepe up on the overlay.",
-   "details": "**Dress Pepe up on the overlay.** `!costume dolly` puts Pepe in full drag: big teased blonde wig, lashes, rhinestone earrings and a sparkly pink bustier. It stays on (even through restarts) until `!costume off`, and it beats the game outfits and the DJ hat. **Horror classics:** `dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`. Plus `pedro` (the Temu Pepe), `flirty` and `gothmommy` (also `goth`: long black hair, winged liner, black lipstick, a studded choker with a silver moon, black lace and fishnet). `!costume` lists the whole wardrobe.",
+   "details": "**Dress Pepe up on the overlay.** `!costume dolly` puts Pepe in full drag: big teased blonde wig, lashes, rhinestone earrings and a sparkly pink bustier. It stays on (even through restarts) until `!costume off`, and it beats the game outfits and the DJ hat. **Horror classics:** `dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`. Plus `pedro` (the Temu Pepe), `flirty` and `gothmommy` (also `goth`: long black hair, winged liner, black lipstick, a studded choker with a silver moon, black lace and fishnet), `reaper` (also `grim`: a black hood, red eyes, a tattered cloak and a scythe), `skater` (also `skate`: a backwards cap, riding a skateboard) and `alien` (also `ufo`: huge black eyes, glowing antennae, a silver suit and a saucer). `!costume` lists the whole wardrobe.",
    "examples": [
     "!costume dolly",
     "!costume off",
@@ -6936,5 +6936,5 @@
   "!escrow",
   "!retention"
  ],
- "hash": "ba9a01552fa3deca"
+ "hash": "254efea1c95aed53"
 }

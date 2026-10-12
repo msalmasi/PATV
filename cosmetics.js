@@ -47,11 +47,11 @@ const GTF_OPT = { gtf_hat: "hat", gtf_mask: "mask", gtf_outfit: "outfit", gtf_pr
 const GTF_LAYERS = {
   gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate",
             "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat", "lotus"],
-  gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades"],
+  gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades", "alien"],
   gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier",
-               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape"],
+               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape", "reaper"],
   gtf_prop: ["cigar", "moneybag", "crowbar", "briefcase", "rose", "dice",
-             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar"],
+             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar", "scythe", "skateboard"],
   gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix",
            "progress", "intersex", "trans", "bi", "lesbian", "pan", "enby", "ace", "aro", "genderfluid",
            "lavalamp", "leopard", "redroom", "sakura", "clouds", "wanted", "lilypond"],
@@ -73,6 +73,7 @@ const LAYER_EMOJI = {
   glitter: "✨", rainbow: "🌈", chain: "⛓️", hearts: "💖",
   bountyhat: "🤠", sheriffstar: "⭐", wanted: "📜", rope: "🪢",
   lotus: "🪷", lilypond: "🌙", laurel: "🌿",
+  alien: "👽", reaper: "💀", scythe: "⚰️", skateboard: "🛹",
 };
 const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti"];
 const TAGS = CAT.tags || {};

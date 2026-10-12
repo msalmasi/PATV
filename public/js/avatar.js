@@ -10,7 +10,8 @@
  *                                      props/outfit). opts.hat replaces the seed's random hat.
  *   pepeAvatarLayers                 → {hat:[...], mask:[...], outfit:[...], prop:[...], bg:[...], frame:[...]}
  *
- * Layer order: bg, body (+ seed hat if no opts.hat), outfit, mask, hat, prop, frame.
+ * Layer order: bg, body (+ seed hat if no opts.hat), outfit, mask, hat, prop, frame. Prop painters get
+ * (A, P, f, L): L = the valid layer ids, so a prop can fit around them (the skateboard only draws legs without an outfit).
  */
 (function (global) {
   // mulberry32 — tiny deterministic PRNG
@@ -416,6 +417,27 @@
         P(4, bx + 1, g); P(4, bx + 2, l); P(4, bx + 3, l); P(5, bx + 2, l);
       }
       P(4, 5, '#C2185B');                               // bridge
+    },
+    // ── 1.99re: alien ──
+    alien(P, f, L) {                                    // green alien head: domed skull, big black almond eyes, antennae
+      const sk = '#9BE07A', sh = '#6DB352', hi = '#C4F2A6', ln = '#3F7A2E', k = '#07070C', gl = '#5C6F86', tip = '#E8FF6A';
+      const inHead = (y, x) => isBody(y, x) || (y === 1 && x >= 3 && x <= 7);
+      for (let y = 1; y <= 9; y++) for (let x = 0; x <= 10; x++) {
+        if (!inHead(y, x)) continue;
+        const edge = !inHead(y, x - 1) || !inHead(y, x + 1) || !inHead(y + 1, x);
+        P(y, x, edge ? sh : sk);
+      }
+      P(2, 3, hi); P(2, 4, hi); P(3, 2, hi); P(1, 4, hi);               // dome shine
+      P(9, 1, null); P(9, 9, null);                                     // narrower chin
+      P(8, 1, sh); P(8, 9, sh); P(9, 2, sh); P(9, 8, sh);
+      for (const [y, x] of [[4, 1], [4, 2], [4, 3], [5, 2], [5, 3], [5, 4], [6, 3], [6, 4],
+                            [4, 7], [4, 8], [4, 9], [5, 6], [5, 7], [5, 8], [6, 6], [6, 7]]) P(y, x, k);   // almond eyes, slanted
+      P(4, 2, gl); P(4, 8, gl);                                         // glints
+      P(7, 4, ln); P(7, 6, ln);                                         // nostril slits
+      for (let x = 4; x <= 6; x++) P(8, x, ln);                         // tiny mouth
+      P(0, 3, ln); P(-1, 2, ln); P(-2, 2, tip);                         // antennae
+      P(0, 7, ln); P(-1, 8, ln); P(-2, 8, tip);
+      if (!L || !L.outfit) { P(10, 3, sh); P(10, 7, sh); }             // green legs too (an outfit covers them)
     }
   };
 
@@ -524,6 +546,25 @@
       torso(P, (y, x) => (x <= 1 || x >= 9) ? band(y) : '#F5F5F5');
       P(10, 2, '#FFD23F'); P(10, 8, '#FFD23F');         // clasps
       for (const [y, x] of [[11, 4], [11, 6], [12, 4], [12, 5], [12, 6], [13, 5]]) P(y, x, '#E8336B');   // heart on the tee
+    },
+    // ── 1.99re: Halloween ──
+    reaper(P, f) {                                      // the Reaper's shroud: a pointed hood framing the face, tattered cloak
+      const c = '#24222E', d = '#0E0D14', h = '#3A3748', bone = '#E6E0CC';
+      P(-2, 5, d);                                                      // hood point
+      for (let x = 4; x <= 6; x++) P(-1, x, c);
+      for (let x = 3; x <= 7; x++) P(0, x, c);
+      for (let x = 2; x <= 8; x++) P(1, x, c);
+      P(-1, 4, h); P(0, 3, h); P(1, 2, h);                              // fold highlight
+      for (let x = 1; x <= 9; x++) P(2, x, x >= 3 && x <= 7 ? d : c);   // brim shadow over the brow
+      P(3, 0, c); P(3, 1, c); P(3, 9, c); P(3, 10, c);
+      P(3, 2, d); P(3, 8, d);
+      for (let y = 4; y <= 9; y++) { P(y, 0, y % 3 ? c : h); P(y, 10, c); }
+      P(4, 1, d); P(4, 9, d); P(5, -1, c); P(6, -1, c); P(7, 11, c); P(8, 11, c);
+      torso(P, (y, x) => (x === 3 || x === 7) && y >= 11 ? h : (x === 5 ? d : c));
+      for (const x of [0, -1, 11]) { P(10, x, c); P(11, x, c); P(12, x, c); }
+      for (const x of [1, 3, 6, 8, 10, -1]) P(13, x, null);             // tattered hem
+      P(13, 0, c); P(13, 11, d);
+      P(10, 5, bone); P(10, 4, '#9E9884'); P(10, 6, '#9E9884');         // bone clasp
     }
   };
 
@@ -664,6 +705,30 @@
       A(8, 13, t); A(11, 10, t); A(11, 16, t); A(16, 10, t); A(16, 16, t);   // ball tips
       A(12, 13, c);                                   // centre stud
       A(11, 12, t);                                   // shine
+    },
+    // ── 1.99re ──
+    scythe(A, P, f) {                                 // Halloween: the Reaper's scythe, blade curling over the head
+      const w = '#4E342E', wl = '#6D4C41', m = '#B8C2CE', e = '#EEF3F8', d = '#7D8794', g = '#9EFFB0';
+      for (let y = 1; y <= 16; y++) A(y, 15, y % 4 === 2 ? wl : w);   // snath (the long handle)
+      A(9, 14, w); A(9, 16, w);                       // grip peg
+      A(0, 15, d); A(1, 14, d);                       // tang
+      for (let x = 9; x <= 14; x++) A(1, x, m);       // blade
+      for (let x = 7; x <= 13; x++) A(0, x, x === 7 ? d : e);
+      A(2, 9, m); A(2, 10, m); A(2, 8, e); A(3, 8, e); A(1, 8, m);
+      A(1, 13, g); A(0, 10, '#FFFFFF');               // eerie glint
+      A(11, 14, f.body);                              // hand
+    },
+    skateboard(A, P, f, L) {                          // a deck to ride: feet on the grip tape, kicktails up
+      const grip = '#26262C', gs = '#3A3A44', deck = '#E4572E', dl = '#FF8A5B', dd = '#A63A1B', tr = '#A9B1BC', wh = '#F4E04D';
+      if (!L.outfit) { P(11, 3, f.body); P(11, 7, f.body); }   // legs reach down to the board (an outfit's torso already does)
+      for (let x = 2; x <= 14; x++) A(14, x, (x * 5) % 7 === 0 ? gs : grip);
+      A(13, 1, grip); A(13, 15, grip);                // kicktails
+      A(14, 1, deck); A(14, 15, deck);
+      for (let x = 2; x <= 14; x++) A(15, x, x % 3 === 0 ? dl : deck);
+      A(15, 2, dd); A(15, 14, dd);
+      A(16, 4, tr); A(16, 12, tr);                    // trucks + wheels
+      A(16, 3, wh); A(16, 5, wh); A(16, 11, wh); A(16, 13, wh);
+      A(11, 0, '#FFFFFF'); A(11, 1, '#D7DDE5'); A(13, 0, '#D7DDE5');   // speed lines
     }
   };
 
@@ -948,6 +1013,7 @@
     }
   };
 
+  const HEAD_MASKS = { alien: 1 }, HOODS = { reaper: 1 };   // these hide the seed's random hat
   const LAYERS = { hat: HATS, mask: MASKS, outfit: OUTFITS, prop: PROPS, bg: BGS, frame: FRAMES };
   const pepeAvatarLayers = {};
   for (const k in LAYERS) pepeAvatarLayers[k] = Object.keys(LAYERS[k]);
@@ -977,11 +1043,12 @@
     if (L.bg) BGS[L.bg](B);
     for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) if (f.G[y][x]) P(y, x, f.G[y][x]);
     if (L.outfit) OUTFITS[L.outfit](P, f);
-    if (L.mask) MASKS[L.mask](P, f);
-    // hat slot: a hat layer replaces the seed's own hat (whose shades variant also yields to a mask)
+    if (L.mask) MASKS[L.mask](P, f, L);
+    // hat slot: a hat layer replaces the seed's own hat (whose shades variant also yields to a mask;
+    // a full-head mask or a hooded outfit hides it altogether)
     if (L.hat) HATS[L.hat](P, f);
-    else if (!(L.mask && f.hatType === 7)) drawSeedHat(P, f.hatType, f.hatColor);
-    if (L.prop) PROPS[L.prop](A, P, f);
+    else if (!(L.mask && (f.hatType === 7 || HEAD_MASKS[L.mask])) && !HOODS[L.outfit]) drawSeedHat(P, f.hatType, f.hatColor);
+    if (L.prop) PROPS[L.prop](A, P, f, L);
     if (L.frame) FRAMES[L.frame](F, (y, x) => !!fg[y][x]);
 
     // emit, merging horizontal runs of one color
