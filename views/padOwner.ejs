@@ -121,7 +121,7 @@
       <summary><%- t('owner.v_history') %></summary>
       <% if (!vault.history.length) { %><p class="ds-meta"><%- t('owner.v_none') %></p><% } else { %>
       <ul class="po-hist">
-        <% vault.history.forEach((h) => { %><li><span><%- t.has('pad.vault.k_' + h.kind) ? t('pad.vault.k_' + h.kind) : t.esc(h.kind) %><% if (h.flow && h.kind !== 'deposit') { %> · <span class="ds-meta"><%= h.flow %></span><% } %><% if (h.kind === 'deposit') { %> · <span class="ds-meta"><% if (h.anon || !h.who) { %><%- t('pad.vault.anon') %><% } else { %><%= h.who %><% } %></span><% } %><br><small class="ds-fine"><%= h.ts ? dt(h.ts) : '' %></small></span><%- PAT(h.amount, h.amount < 0 ? 'down' : 'up') %></li><% }) %>
+        <% vault.history.forEach((h) => { %><li><span><%- t.has('pad.vault.k_' + h.kind) ? t('pad.vault.k_' + h.kind) : t.esc(h.kind) %><% if (h.flow && h.kind !== 'deposit') { %> · <span class="ds-meta"><%= h.flow %></span><% } %><% if (h.kind === 'deposit' && (h.anon || h.who)) { %> · <span class="ds-meta"><% if (h.anon) { %><%- t('pad.vault.anon') %><% } else { %><%= h.who %><% } %></span><% } %><br><small class="ds-fine"><%= h.ts ? dt(h.ts) : '' %></small></span><%- PAT(h.amount, h.amount < 0 ? 'down' : 'up') %></li><% }) %>
       </ul><% } %>
       <% if (vault.days.length) { %>
       <div class="ds-tbl dense"><table><thead><tr><th><%- t('owner.v_day') %></th><th class="r"><%- t('owner.v_in') %></th><th class="r"><%- t('owner.v_dep') %></th><th class="r"><%- t('owner.v_out') %></th></tr></thead><tbody>

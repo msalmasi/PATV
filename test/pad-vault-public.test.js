@@ -132,7 +132,7 @@ test("donate: any signed-in account, a keyed roomvault.deposit action, anon pass
 });
 
 test("the card renders: Pad vault, coming soon / the week, anonymous donors, sign in or the donate form", async () => {
-  await sync({ on: true, cap: 50000000, recipe: { on: false }, rooms: [{ id: PLANT, balance: 210000, days: {}, history: [],
+  await sync({ on: true, cap: 50000000, recipe: { on: false }, rooms: [{ id: PLANT, balance: 210000, days: {}, history: [{ ts: 1759990000, kind: "deposit", flow: "deposit", amount: 3000 }],
     donors: [{ ts: 1760000000, amount: 5000, who: "fanguy" }, { ts: 1760000001, amount: 2000, anon: true }] }] });
   let rv = await RV.card(PLANT, fan, {});
   let html = await render(rv, true);
@@ -145,6 +145,7 @@ test("the card renders: Pad vault, coming soon / the week, anonymous donors, sig
   assert.match(html, /Payouts start when the payout recipe goes live/);
   assert.match(html, /fanguy[\s\S]*Anonymous/, "donors: a name, then Anonymous");
   assert.match(html, /id="rvDonate"/);
+  assert.doesNotMatch(html, /deposit \/ donation · Anonymous/, "an older deposit with no name isn't called anonymous");
   assert.match(html, /data-min="1000" data-room="49790000" data-bal="1000000"/);
   assert.match(html, /id="rvAnon"/);
   assert.match(html, /never raises the owner&#39;s share|never raises the owner's share/);

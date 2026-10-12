@@ -68,7 +68,7 @@
       <% if (rv.donors && rv.donors.length) { %>
       <ul class="rv-hist" id="rvDonors">
         <% rv.donors.slice(0, 6).forEach((d) => { %>
-          <li><span><b><% if (d.anon || !d.who) { %><%- t('pad.vault.anon') %><% } else { %><%= d.who %><% } %></b> <small class="ds-fine"><%- d.ts ? when_(d.ts) : '' %></small></span>
+          <li><span><b><% if (d.who && !d.anon) { %><%= d.who %><% } else if (d.anon) { %><%- t('pad.vault.anon') %><% } else { %><%- t('pad.vault.k_deposit') %><% } %></b> <small class="ds-fine"><%- d.ts ? when_(d.ts) : '' %></small></span>
               <span class="amt">+<%= num(d.amount) %></span></li>
         <% }) %>
       </ul>
@@ -79,7 +79,7 @@
       <h3><%- t('pad.vault.moves') %></h3>
       <ul class="rv-hist">
         <% rv.history.slice(0, 6).forEach((e) => { %>
-          <li><span><%= kind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %><% if (e.kind === 'deposit') { %> · <% if (e.anon || !e.who) { %><%- t('pad.vault.anon') %><% } else { %><%= e.who %><% } %><% } %>
+          <li><span><%= kind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %><% if (e.kind === 'deposit' && (e.anon || e.who)) { %> · <% if (e.anon) { %><%- t('pad.vault.anon') %><% } else { %><%= e.who %><% } %><% } %>
                 <small class="ds-fine"><%- when_(e.ts) %></small></span>
               <span class="amt"><%= e.kind === 'challenge' ? '−' : (e.amount < 0 ? '−' : '+') %><%= num(Math.abs(e.amount)) %><%- e.overflow ? ' ' + t('pad.vault.overflow', { n: num(e.overflow) }) : '' %></span></li>
         <% }) %>
