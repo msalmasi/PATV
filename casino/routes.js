@@ -327,7 +327,9 @@ function register(app, { isBotToken, addUser }) {
     const actor = { uid: u.userId, name: String(b.name || u.displayname || u.username).replace(/[\u0000-\u001f]/g, " ").slice(0, 40),
                     username: u.username, camfrog: b.camfrog ? String(b.camfrog).slice(0, 40) : u.camfrogUsername || null, via: "room",
                     iph: null, admin: !!b.admin, room };
-    const args = Array.isArray(b.args) ? b.args.slice(0, 2).map((x) => String(x).slice(0, 24)) : [];
+    // 1.99se: an advert's room name can be long / have spaces ("!bj advertise Drama Central") - Pepe sends it as one arg
+    const argMax = ["advertise", "advert", "ad", "unadvertise", "unadvert"].includes(verb) ? 64 : 24;
+    const args = Array.isArray(b.args) ? b.args.slice(0, 2).map((x) => String(x).slice(0, argMax)) : [];
     const out = await svc.act(actor, verb, args, { room, table, game }, `cf-${idem}`);
     res.json(out);
   });

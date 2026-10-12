@@ -391,6 +391,14 @@ test("1.99pc adverts: one line (+ rate-limited reminders) in other rooms, never 
   const we = (await svc.poll(s2, 0)).events.filter((e) => e.table === web);
   assert.equal(we.length, 1);
   assert.equal(we[0].room, "RB");
+  // 1.99se: no spam - advertising again, or stop + advertise, inside the 10 minutes posts nothing new
+  const s3 = svc.S.lastSeq;
+  const again = await svc.advertise(web, "RB", ann, true);
+  assert.ok(again.ok && /recently/.test(again.reply), again.reply);
+  assert.ok((await svc.advertise(web, "RB", ann, false)).ok);
+  assert.ok((await svc.advertise(web, "RB", ann, true)).ok);
+  assert.deepEqual(svc.getTable(web).adverts, ["RB"]);
+  assert.equal((await svc.poll(s3, 0)).events.filter((e) => e.table === web && e.kind === "advert").length, 0);
 });
 
 test("Pepe's stream: first come, a FIFO queue, admin override, released when the table closes or goes idle", async () => {

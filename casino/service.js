@@ -1238,13 +1238,21 @@ async function advertiseIn(T, room, actor, on) {
   if (!on) {
     if (!cur.includes(r.id)) return R(false, "It isn't advertised there.");
     T.adverts = cur.filter((x) => x !== r.id);
-    if (T.advert_ts) delete T.advert_ts[r.id];
+    // 1.99se: the last post time stays - stop + advertise again can't re-post inside the 10 minutes (spam guard)
     await save(T);
     return R(true, `No more adverts in ${r.name}.`, { adverts: advertList(T) });
   }
   if (roomsOf(T).includes(r.id)) return R(false, "It's already playing in that room.");
   if (!cur.includes(r.id) && cur.length >= MAX_ADVERTS) return R(false, `A table can be advertised in up to ${MAX_ADVERTS} rooms.`);
   if (!cur.includes(r.id)) T.adverts = cur.concat([r.id]);
+  // 1.99se: rate-limited - Pepe posts the line in a room at most once per ADVERT_REPEAT_MS per table (asking again, or
+  // stop + advertise, inside that window only keeps the room on the list; the next round / hand reminds it when due)
+  const last = (T.advert_ts || {})[r.id] || 0;
+  if (clock() - last < ADVERT_REPEAT_MS) {
+    await save(T);
+    const mins = Math.max(1, Math.ceil((ADVERT_REPEAT_MS - (clock() - last)) / 60000));
+    return R(true, `Advertised in ${r.name} — Pepe posted it there recently; the next reminder is in about ${mins} min.`, { adverts: advertList(T) });
+  }
   T.advert_ts = Object.assign({}, T.advert_ts || {}, { [r.id]: clock() });
   await emit(T, "advert", advertText(T), { rooms: [r.id], url: link(T), game: T.game, high_stakes: !!T.high_stakes });
   await save(T);
