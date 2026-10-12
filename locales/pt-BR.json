@@ -7875,7 +7875,5 @@
   "hm.hint_pawn": "a casa de penhores paga {price}",
   "ach.n.cf_hm_sale_1": "Negócio Aberto",
   "ach.d.cf_hm_sale_1": "Vendeu um item de assalto para outro jogador no mercado de assaltos.",
-  "ach.n.cf_hm_ring": "Receptador",
-  "ach.d.cf_hm_ring": "Vendeu um Anel do Chefão no mercado de assaltos.",
   "gtf.sheet.sell_link": "Vender itens no mercado de assaltos"
 }

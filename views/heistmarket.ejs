@@ -106,13 +106,14 @@
       <% if (signedIn && v.linked) { %>
       <section class="card violet" aria-labelledby="hmSell">
         <h2 id="hmSell" class="ds-pixel-h"><%- t('hm.sell') %></h2>
-        <% if (!v.sellable.length) { %>
+        <% if (!v.sellable.some((x) => !x.soulbound)) { %>
           <p class="note"><%- t('hm.nothing', { cmd: '<code>!gear</code>' }) %></p>
+          <% if (v.sellable.length) { %><p class="note">🔒 <%- t('hm.soulbound_note') %></p><% } %>
         <% } else { %>
         <form class="sell" id="hmSellF" novalidate>
           <label class="l full" for="hmItem"><%- t('hm.item') %>
             <select id="hmItem" name="item">
-              <% v.sellable.forEach((s) => { %><option value="<%= s.key %>" data-n="<%= s.n %>" data-gear="<%= s.gear ? 1 : 0 %>" data-pawn="<%= s.pawn %>" data-shop="<%= s.shop_price %>" data-last="<%= hist[s.key] ? hist[s.key].last : '' %>"><%= s.emoji %> <%= s.name %><%= s.gear ? '' : ' (' + s.n + ')' %></option><% }) %>
+              <% v.sellable.forEach((s) => { if (s.soulbound) { %><option value="" disabled title="<%- t('hm.soulbound_t') %>">🔒 <%= s.emoji %> <%= s.name %> · <%- t('hm.soulbound') %></option><% return; } %><option value="<%= s.key %>" data-n="<%= s.n %>" data-gear="<%= s.gear ? 1 : 0 %>" data-pawn="<%= s.pawn %>" data-shop="<%= s.shop_price %>" data-last="<%= hist[s.key] ? hist[s.key].last : '' %>"><%= s.emoji %> <%= s.name %><%= s.gear ? '' : ' (' + s.n + ')' %></option><% }) %>
             </select></label>
           <label class="l" for="hmPrice"><%- t('hm.price') %><input id="hmPrice" name="price" inputmode="numeric" autocomplete="off" placeholder="25k" required></label>
           <label class="l" for="hmQty"><%- t('hm.qty') %><input id="hmQty" name="qty" type="number" min="1" value="1"></label>
@@ -123,6 +124,7 @@
           </div>
         </form>
         <p class="note"><%- t('hm.sell_note', { fee: v.config.fee_pct }) %></p>
+        <% if (v.sellable.some((x) => x.soulbound)) { %><p class="note">🔒 <%- t('hm.soulbound_note') %></p><% } %>
         <% } %>
       </section>
 

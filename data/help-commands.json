@@ -3444,7 +3444,7 @@
     "!market heist [item]"
    ],
    "summary": "🥷 The heist market: heist items other players are selling for PAT, cheapest first.",
-   "details": "🥷 The **heist market**: heist items other players are selling for PAT, cheapest first (**!heistmarket ring** filters). **mine** shows your listings, **prices <item>** the last sale prices. If an item you bought (or took back) can't go into your loadout yet - you already own that gear, or you're at 10 of that item - it waits in the market: **claim <#>** once there's room. A 5% market fee goes to Fort Knox. Full market on the website.",
+   "details": "🥷 The **heist market**: heist items other players are selling for PAT, cheapest first (**!heistmarket ring** filters). **mine** shows your listings, **prices <item>** the last sale prices. If an item you bought (or took back) can't go into your loadout yet - you already own that gear, or you're at 10 of that item - it waits in the market: **claim <#>** once there's room. A 5% market fee goes to Fort Knox. 🔒 Soulbound relics (Kingpin's Ring, Mastermind, The Fence) never go on the market. Full market on the website.",
    "examples": [
     "!sell ring 250k",
     "!buyitem 12"
@@ -3476,7 +3476,7 @@
     "!sell <item> <price> [qty]"
    ],
    "summary": "List a heist item on the heist market for other players to buy.",
-   "details": "List a heist item from your loadout on the heist market, e.g. **!sell ring 250k** or **!sell lockpick 3k 3** (the price is for the whole lot). The item **leaves your loadout while it's listed** - it can't be used in a heist or the arena, and listed gear stops counting. When it sells you get the price minus the 5% market fee (to Fort Knox). Take it back any time with **!delist <#>**. Pepe's one-shot instant buys (Pardon, Burner Identity...) aren't items you hold, so they can't be sold. Up to 10 listings an hour.",
+   "details": "List a heist item from your loadout on the heist market, e.g. **!sell ring 250k** or **!sell lockpick 3k 3** (the price is for the whole lot). The item **leaves your loadout while it's listed** - it can't be used in a heist or the arena, and listed gear stops counting. When it sells you get the price minus the 5% market fee (to Fort Knox). Take it back any time with **!delist <#>**. 🔒 **Soulbound** relics - the Kingpin's Ring, Mastermind and The Fence - stay with the player who found them and can never be sold, traded or pawned (Loaded Dice and Vault Blueprints can). Pepe's one-shot instant buys (Pardon, Burner Identity...) aren't items you hold, so they can't be sold. Up to 10 listings an hour.",
    "examples": [
     "!delist 7"
    ],
@@ -3537,7 +3537,7 @@
     "!pawn <item> [qty] yes"
    ],
    "summary": "Sell a heist item back to the House for part of its shop price (when the pawn shop is open).",
-   "details": "Sell a heist item back to the House for part of its shop price - only while the pawn shop is open (an admin switch; it's closed by default). **!pawn lockpick 2** quotes the price, **!pawn lockpick 2 yes** sells. Items with no shop price (rare loot) aren't taken unless an admin set a value.",
+   "details": "Sell a heist item back to the House for part of its shop price - only while the pawn shop is open (an admin switch; it's closed by default). **!pawn lockpick 2** quotes the price, **!pawn lockpick 2 yes** sells. Items with no shop price (rare loot) aren't taken unless an admin set a value. 🔒 Soulbound relics (Kingpin's Ring, Mastermind, The Fence) are never taken.",
    "examples": [],
    "keywords": []
   },
@@ -5084,8 +5084,8 @@
     "!backend all on",
     "!backend all off"
    ],
-   "summary": "See where every publicaccess.tv backend switch stands: the casino per room, the lotto, stashes, GTF records, pools, polls, gangs and the escrow.",
-   "details": "**status** (or `!backends`) lists every switch in one line: where each feature runs (Pepe or publicaccess.tv), anything frozen or in conflict, how many rooms play the casino on the site, and whether the site answers (anyone can ask). **all on|off** (admins) switches the per-room switches in every room Pepe is in, which today means the casino (the same as `!casino backend all on|off`). It never moves the one-way hand-overs: the lotto, stashes, GTF records, pools, polls, gangs and the escrow (ledger and games) each move with their own command (`!lotto backend …`, `!stash backend …`, `!gtf backend …`, `!econ pools backend …`, `!poll backend …`, `!gang backend …`, `!escrow backend …`), one at a time. Pepe's admin panel has the same view (Website & Feed → Backends).",
+   "summary": "See where every publicaccess.tv backend switch stands: the casino per room, the lotto, stashes, GTF records, pools, polls, gangs, the escrow and the capital cluster (markets, Reserve loans, vaults).",
+   "details": "**status** (or `!backends`) lists every switch in one line: where each feature runs (Pepe or publicaccess.tv), anything frozen or in conflict, how many rooms play the casino on the site, and whether the site answers (anyone can ask). **all on|off** (admins) switches the per-room switches in every room Pepe is in, which today means the casino (the same as `!casino backend all on|off`). It never moves the one-way hand-overs: the lotto, stashes, GTF records, pools, polls, gangs, the escrow (ledger and games) and the capital cluster (markets, Reserve loans, vaults) each move with their own command (`!lotto backend …`, `!stash backend …`, `!gtf backend …`, `!econ pools backend …`, `!poll backend …`, `!gang backend …`, `!escrow backend …`, `!capital backend …`), one at a time. Pepe's admin panel has the same view (Website & Feed → Backends).",
    "examples": [
     "!backends",
     "!backend all on"
@@ -5150,6 +5150,33 @@
    ],
    "keywords": [],
    "webchat": true
+  },
+  {
+   "id": "capitalbackend",
+   "title": "!capital backend status|export|cutover|rollback|detach",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!capital"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!capital backend status",
+    "!capital backend export",
+    "!capital backend cutover confirm",
+    "!capital backend rollback confirm",
+    "!capital backend detach confirm",
+    "!market backend …",
+    "!loan backend …",
+    "!staking backend …"
+   ],
+   "summary": "Move the share markets, the Federal Reserve's loans and the staking vaults to publicaccess.tv together, or bring them back into Pepe.",
+   "details": "The prediction markets (shares and their pots), the Federal Reserve's loans to players (requests, limits, collection, the credit history) and the staking vaults (the share book, the stake / unstake queue and the daily 04:00 UTC cut-off) move **together**: the Bank's value includes the loans still out and the Market maker's the markets it seeded, so the share prices are only right where all three live. **export** is the dry run: what would move, with totals and the vaults' values, and anything that blocks it (the pools and stashes must already live on the site; nothing may be settling, being funded or mid-move; not within 20 minutes of the 04:00 UTC cut-off). **cutover confirm** pauses these commands for a moment, sends everything with a checksum and totals, and switches only when the site confirms the same totals, the same vault values to the PAT and the same shares; from then on every trade, loan and stake is a site transaction (also from the website, without Pepe), and Pepe announces them. **rollback confirm** is the way back while the site answers. **detach confirm** is only for a site that is gone for good: Pepe's last copy becomes the truth. **status** says where they live (anyone can ask). `!market backend`, `!loan backend` and `!staking backend` are the same command.",
+   "examples": [
+    "!capital backend status",
+    "!capital backend export"
+   ],
+   "keywords": []
   },
   {
    "id": "aijudgebackend",
@@ -7260,5 +7287,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "91884c01d3cf7efd"
+ "hash": "454222f941a06075"
 }

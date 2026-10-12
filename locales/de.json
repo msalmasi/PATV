@@ -7819,7 +7819,5 @@
   "hm.hint_pawn": "das Pfandhaus zahlt {price}",
   "ach.n.cf_hm_sale_1": "Offen für Geschäfte",
   "ach.d.cf_hm_sale_1": "Einen Coup-Gegenstand auf dem Coup-Markt an einen anderen Spieler verkauft.",
-  "ach.n.cf_hm_ring": "Hehler",
-  "ach.d.cf_hm_ring": "Einen Kingpin-Ring auf dem Coup-Markt verkauft.",
   "gtf.sheet.sell_link": "Gegenstände auf dem Coup-Markt verkaufen"
 }

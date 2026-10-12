@@ -7875,7 +7875,5 @@
   "hm.hint_pawn": "il banco dei pegni paga {price}",
   "ach.n.cf_hm_sale_1": "Affari aperti",
   "ach.d.cf_hm_sale_1": "Hai venduto un oggetto per colpi a un altro giocatore nel mercato dei colpi.",
-  "ach.n.cf_hm_ring": "Ricettatore",
-  "ach.d.cf_hm_ring": "Hai venduto un Anello del Kingpin nel mercato dei colpi.",
   "gtf.sheet.sell_link": "Vendi oggetti nel mercato dei colpi"
 }

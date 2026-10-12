@@ -7718,7 +7718,5 @@
   "hm.hint_pawn": "質屋では{price}で買い取られます",
   "ach.n.cf_hm_sale_1": "商売開始",
   "ach.d.cf_hm_sale_1": "強盗マーケットで別のプレイヤーに強盗アイテムを販売しました。",
-  "ach.n.cf_hm_ring": "故買屋",
-  "ach.d.cf_hm_ring": "強盗マーケットでキングピンの指輪を販売しました。",
   "gtf.sheet.sell_link": "強盗マーケットでアイテムを販売"
 }

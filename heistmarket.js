@@ -82,10 +82,22 @@ function init() {
         qty INTEGER NOT NULL, announce TEXT, created INTEGER NOT NULL, done_at INTEGER, result TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS heist_market_ops_open ON heist_market_ops (done_at, created)");
       await runQuery("CREATE TABLE IF NOT EXISTS heist_market_meta (key TEXT PRIMARY KEY, value TEXT)");
+      // 1.99ua: op flags - "ret" (back to the item's own seller) / "admin" (a soulbound unwind) - Pepe refuses any other
+      // move of a soulbound item
+      const cols = (await getQuery("SELECT name FROM pragma_table_info('heist_market_ops')")).map((r) => r.name);
+      if (!cols.includes("flags")) await runQuery("ALTER TABLE heist_market_ops ADD COLUMN flags TEXT");
     })().catch((e) => { ready = null; throw e; });
+    if (!process.env.HM_NO_AUTO_SWEEP) ready.then(() => setTimeout(() => soulboundSweep().catch((e) => console.error("[heistmarket] soulbound sweep:", e.message)), 2000).unref())
+      .catch(() => {});
   }
   return ready;
 }
+
+// ── 1.99ua: SOULBOUND relics (the user's rule) - the Kingpin's Ring, Mastermind, The Fence and any item Pepe's catalog flags
+// soulbound can never be listed, sold, pawned or delivered to another player. A hard rule (gtfsheet.SOULBOUND + the
+// catalog flag): the admin's `untradable` list only ever takes items OFF the market, and pawn values for them are dropped.
+const isSoulbound = (key, it) => S().isSoulbound(key, it);
+const soulboundMsg = (name) => `🔒 ${name} is soulbound - it stays with the player who found it and can't be sold, traded or pawned.`;
 
 // ── config ──
 function cleanConfig(c) {
@@ -108,7 +120,7 @@ function cleanConfig(c) {
   if (out.min_price > out.max_price) out.min_price = out.max_price;
   for (const [k, v] of Object.entries(o.pawn_values && typeof o.pawn_values === "object" ? o.pawn_values : {}).slice(0, 100)) {
     const n = Math.floor(Number(v));
-    if (/^[a-z0-9_]{1,30}$/.test(k) && Number.isSafeInteger(n) && n > 0) out.pawn_values[k] = n;
+    if (/^[a-z0-9_]{1,30}$/.test(k) && Number.isSafeInteger(n) && n > 0 && !isSoulbound(k)) out.pawn_values[k] = n;
   }
   return out;
 }
@@ -218,10 +230,11 @@ function itemInfo(cat, cfg, key) {
   const it = cat.shop[key];
   if (!it) return null;
   const gear = it.kind === "gear";
-  const tradable = (gear || it.kind === "item") && !cfg.untradable.includes(key);
+  const soulbound = isSoulbound(key, it);
+  const tradable = !soulbound && (gear || it.kind === "item") && !cfg.untradable.includes(key);
   const shopPrice = it.buyable !== false && it.cost > 0 ? int(it.cost) : 0;
   const pawnValue = cfg.pawn_values[key] || shopPrice;
-  return { key, name: it.name || key, emoji: it.emoji || "🎒", kind: it.kind, gear, tradable, shop_price: shopPrice, pawn_value: pawnValue,
+  return { key, name: it.name || key, emoji: it.emoji || "🎒", kind: it.kind, gear, tradable, soulbound, shop_price: shopPrice, pawn_value: soulbound ? 0 : pawnValue,
            rare: RARE.has(key), desc: it.desc || "", art: S().artFor ? S().artFor(key) : null };
 }
 /** The item key for what someone typed: a key, or a name ("Kingpin's Ring"). */
@@ -324,24 +337,26 @@ async function sellableFor(userId, login, cat, cfg) {
   for (const r of await getQuery("SELECT item, qty FROM heist_market_listings WHERE seller_id = ? AND status = 'escrowing'", [userId])) pend[r.item] = (pend[r.item] || 0) + r.qty;
   for (const k of h.gear) {
     const i = itemInfo(cat, cfg, k);
+    if (i && i.soulbound) { out.push(Object.assign({}, i, { n: 1, pawn: 0 })); continue; }
     if (i && i.tradable && !pend[k]) out.push(Object.assign({}, i, { n: 1, pawn: cfg.pawn_on && i.pawn_value ? Math.floor(i.pawn_value * cfg.pawn_rate / 100) : 0 }));
   }
   for (const [k, n0] of Object.entries(h.items)) {
     const i = itemInfo(cat, cfg, k);
     const n = int(n0) - (pend[k] || 0);
+    if (i && i.soulbound) { if (int(n0) > 0) out.push(Object.assign({}, i, { n: int(n0), pawn: 0 })); continue; }
     if (i && i.tradable && n > 0) out.push(Object.assign({}, i, { n, pawn: cfg.pawn_on && i.pawn_value ? Math.floor(i.pawn_value * cfg.pawn_rate / 100) : 0 }));
   }
-  return out.sort((a, b) => (b.rare - a.rare) || (b.shop_price - a.shop_price) || a.name.localeCompare(b.name));
+  return out.sort((a, b) => (a.soulbound - b.soulbound) || (b.rare - a.rare) || (b.shop_price - a.shop_price) || a.name.localeCompare(b.name));
 }
 
 // ── the queue Pepe applies ──
-async function queueOp(listing, op, login, userId, announce) {
+async function queueOp(listing, op, login, userId, announce, flags) {
   const n = (await getQuery("SELECT deliveries FROM heist_market_listings WHERE id = ?", [listing.id]))[0];
   const seq = op === "escrow" ? 0 : (int(n && n.deliveries) + 1);
   const key = op === "escrow" ? `hm:esc:${listing.id}` : `hm:dlv:${listing.id}:${seq}`;
   if (op !== "escrow") await runQuery("UPDATE heist_market_listings SET deliveries = ? WHERE id = ?", [seq, listing.id]);
-  await runQuery(`INSERT INTO heist_market_ops (key, listing_id, op, login, user_id, item, qty, announce, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                 [key, listing.id, op, low(login), userId || null, listing.item, listing.qty, announce ? J(announce) : null, now()]);
+  await runQuery(`INSERT INTO heist_market_ops (key, listing_id, op, login, user_id, item, qty, announce, created, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 [key, listing.id, op, low(login), userId || null, listing.item, listing.qty, announce ? J(announce) : null, now(), flags || null]);
   return key;
 }
 /** The login a delivery goes to: the account's Camfrog login TODAY (records follow the account). */
@@ -354,16 +369,20 @@ async function sendBack(L, toId, toLogin, status, note) {
   const login = await loginOf(toId, toLogin);
   await runQuery("UPDATE heist_market_listings SET status = ?, holder_id = ?, holder_login = ?, note = ?, updated = ? WHERE id = ?",
                  [status, toId, login, note || null, now(), L.id]);
-  await queueOp(L, "deliver", login, toId, null);
+  await queueOp(L, "deliver", login, toId, null, toId === L.seller_id ? "ret" : null);
 }
 
 async function openOps(limit = 100) {
   await init();
-  const rows = await getQuery("SELECT * FROM heist_market_ops WHERE done_at IS NULL ORDER BY created, key LIMIT ?", [Math.max(1, Math.min(500, int(limit) || 100))]);
-  return rows.map((r) => ({ key: r.key, op: r.op, login: r.login, item: r.item, qty: r.qty, listing: r.listing_id, announce: parse(r.announce, null), created: r.created }));
+  const rows = await getQuery(`SELECT o.*, l.seller_id AS l_seller FROM heist_market_ops o LEFT JOIN heist_market_listings l ON l.id = o.listing_id
+                               WHERE o.done_at IS NULL ORDER BY o.created, o.key LIMIT ?`, [Math.max(1, Math.min(500, int(limit) || 100))]);
+  // ret = a delivery back to the item's own seller (the only move of a soulbound item Pepe makes, besides an admin unwind)
+  return rows.map((r) => ({ key: r.key, op: r.op, login: r.login, item: r.item, qty: r.qty, listing: r.listing_id, announce: parse(r.announce, null), created: r.created,
+                            ret: /\bret\b/.test(r.flags || "") || (r.op === "deliver" && !!r.user_id && r.user_id === r.l_seller),
+                            admin: /\badmin\b/.test(r.flags || "") }));
 }
 
-const RESULTS = new Set(["ok", "missing", "owned", "full", "no_sheet", "untradable"]);
+const RESULTS = new Set(["ok", "missing", "owned", "full", "no_sheet", "untradable", "soulbound"]);
 /**
  * Pepe applied (or refused) these ops: [{key, result}] -> the listings move on. Each op once (a repeated ack changes
  * nothing). -> {acked, results: {key: status}}
@@ -382,6 +401,16 @@ async function ack(list) {
       const L = await listingRow(op.listing_id);
       if (!L) return "gone";
       if (op.op === "escrow") {
+        if (L.status === "unwinding" && op.key === `hm:unw:${L.id}`) {
+          // a soulbound sale being undone: the buyer's copy is back out of their sheet -> money back, item to the seller
+          if (result !== "ok") {
+            await runQuery("UPDATE heist_market_listings SET status = 'done', note = ?, updated = ? WHERE id = ?", [`soulbound unwind: ${result}`, now(), L.id]);
+            return "done";
+          }
+          await refundSale(L);
+          await sendBack(L, L.seller_id, L.seller_login, "returning", "soulbound: sale undone");
+          return "returning";
+        }
         if (L.status !== "escrowing") return L.status;
         if (result !== "ok") {
           await runQuery("UPDATE heist_market_listings SET status = 'void', note = ?, updated = ? WHERE id = ?", [result, now(), L.id]);
@@ -398,6 +427,12 @@ async function ack(list) {
         const st = L.buyer_id && L.holder_id === L.buyer_id ? "done" : "delisted";
         await runQuery("UPDATE heist_market_listings SET status = ?, note = NULL, updated = ? WHERE id = ?", [st, now(), L.id]);
         return st;
+      }
+      if (result === "soulbound" && L.holder_id !== L.seller_id) {
+        // Pepe won't hand a soulbound item to anyone but its seller: the sale is undone and it goes back
+        await refundSale(L);
+        await sendBack(L, L.seller_id, L.seller_login, "returning", "soulbound: sale undone");
+        return "returning";
       }
       await runQuery("UPDATE heist_market_listings SET status = 'held', note = ?, updated = ? WHERE id = ?", [result, now(), L.id]);
       return "held";
@@ -441,6 +476,7 @@ async function list(userId, { item, qty, price, idem, via = "web" } = {}) {
   const k = itemKey(cat, item);
   const it = k && itemInfo(cat, cfg, k);
   if (!it) throw new Refuse(404, "That isn't a heist item.", "E_ITEM");
+  if (it.soulbound) throw new Refuse(409, soulboundMsg(it.name), "E_SOULBOUND");
   if (!it.tradable) throw new Refuse(409, `${it.name} can't be traded.`, "E_UNTRADABLE");
   const q = it.gear ? 1 : int(qty || 1);
   if (q < 1 || q > cat.item_cap) throw new Refuse(400, `Sell 1 to ${cat.item_cap} at a time.`, "E_QTY");
@@ -504,6 +540,7 @@ async function claim(userId, id) {
     if (L.holder_id !== userId) throw new Refuse(403, "That item isn't waiting for you.", "E_NOT_YOURS");
     if (L.status === "claiming") return { ok: true, already: true, status: "claiming" };
     if (L.status !== "held") throw new Refuse(409, "That item isn't waiting in the market.", "E_NOT_HELD");
+    if (userId !== L.seller_id && isSoulbound(L.item)) throw new Refuse(409, soulboundMsg(L.item), "E_SOULBOUND");
     await sendBack(L, userId, L.holder_login, "claiming", null);
     return { ok: true, status: "claiming" };
   });
@@ -521,6 +558,7 @@ async function buy(userId, { id, idem, via = "web" } = {}) {
   if (!L0 || L0.kind !== "sale") throw new Refuse(404, "No such listing.", "E_NOT_FOUND");
   if (L0.buyer_id === userId && ["sold", "done", "held", "claiming"].includes(L0.status)) return { ok: true, already: true, listing: shape(L0, cat, cfg) };
   if (L0.status !== "active") throw new Refuse(409, "That listing isn't for sale any more.", "E_NOT_ACTIVE");
+  if (isSoulbound(L0.item, cat.shop[L0.item])) throw new Refuse(409, soulboundMsg((cat.shop[L0.item] || {}).name || L0.item), "E_SOULBOUND");
   if (L0.seller_id === userId || low(L0.seller_login) === login) throw new Refuse(409, "That's your own listing.", "E_SELF");
   const alts = await require("./engagement").altPairs([userId, L0.seller_id]).catch(() => new Set());
   if (alts.has(userId + "|" + L0.seller_id)) throw new Refuse(409, "Sales between linked accounts aren't allowed.", "E_ALT");
@@ -565,15 +603,18 @@ async function buy(userId, { id, idem, via = "web" } = {}) {
   return { ok: true, already: !!res.already, listing: shape(res.L, cat, cfg), fee: res.L.fee, net: res.L.net, fee_legs: res.legs || parse(res.L.fee_legs, []) };
 }
 
-// 🏅 the seller's market achievements (cf_hm_sale_1 "First Sale", cf_hm_ring "Fence"): counts from the sales table, awarded
-// through achievements.awardCount like the casino backend's (metrics hm_sales / hm_ring_sales)
+// 🏅 the seller's market achievements (cf_hm_sale_1 "Open for Business", cf_hm_relic "Fence" - a rare relic that is NOT
+// soulbound: Loaded Dice / Vault Blueprints): counts from the sales table, awarded through achievements.awardCount like the
+// casino backend's (metrics hm_sales / hm_relic_sales)
 async function awardSeller(sellerId, item) {
   const A = require("./achievements");
   const n = (await getQuery("SELECT COUNT(*) AS n FROM heist_market_listings WHERE seller_id = ? AND kind = 'sale' AND sold_at IS NOT NULL", [sellerId]))[0].n;
   await A.awardCount(sellerId, "hm_sales", n);
-  if (item === "kingpinring") {
-    const r = (await getQuery("SELECT COUNT(*) AS n FROM heist_market_listings WHERE seller_id = ? AND kind = 'sale' AND item = 'kingpinring' AND sold_at IS NOT NULL", [sellerId]))[0].n;
-    await A.awardCount(sellerId, "hm_ring_sales", r);
+  if (RARE.has(item) && !isSoulbound(item)) {
+    const keys = [...RARE].filter((k) => !isSoulbound(k));
+    const r = (await getQuery(`SELECT COUNT(*) AS n FROM heist_market_listings WHERE seller_id = ? AND kind = 'sale' AND sold_at IS NOT NULL
+                               AND item IN (${keys.map(() => "?").join(",")})`, [sellerId, ...keys]))[0].n;
+    await A.awardCount(sellerId, "hm_relic_sales", r);
   }
 }
 
@@ -584,6 +625,7 @@ async function pawnQuote(item, qty) {
   const k = itemKey(cat, item);
   const it = k && itemInfo(cat, cfg, k);
   if (!it) throw new Refuse(404, "That isn't a heist item.", "E_ITEM");
+  if (it.soulbound) throw new Refuse(409, soulboundMsg(it.name), "E_SOULBOUND");
   if (!cfg.pawn_on) throw new Refuse(409, "The pawn shop is closed.", "E_PAWN_OFF");
   if (!it.tradable) throw new Refuse(409, `${it.name} can't be traded.`, "E_UNTRADABLE");
   if (!it.pawn_value) throw new Refuse(409, `The pawn shop doesn't take ${it.name} - it has no shop price.`, "E_NO_VALUE");
@@ -650,6 +692,77 @@ async function pawnPay(L) {
     await sendBack(L, L.seller_id, L.seller_login, "returning", e.code === "E_INSUFFICIENT" ? "the House couldn't cover it" : "pawn refused");
     return "returning";
   }
+}
+
+// ── 1.99ua: undoing a soulbound item's listing (the sweep) ──
+/** Inside a transaction: a sale's money back - the buyer gets the price, the seller gives the net back, the fee's legs
+ *  come back out of where they went. No PAT made or destroyed. */
+async function refundSale(L) {
+  if (!L.buyer_id || !L.sold_at || L.kind !== "sale") return;
+  const ledger = require("./ledger");
+  const r = await ledger.post(L.buyer_id, L.price, "heist-market-refund", { resolveMerged: true, source: "gtf/market:soulbound" });
+  if (!r.ok) throw new Refuse(409, "buyer account gone", "E_TARGET_NOT_FOUND");
+  if (L.net > 0) {
+    const s = await ledger.post(L.seller_id, -L.net, "heist-market-refund", { resolveMerged: true, source: "gtf/market:soulbound" });
+    if (!s.ok) throw new Refuse(409, "seller account gone", "E_TARGET_NOT_FOUND");
+  }
+  const legs = (parse(L.fee_legs, []) || []).filter((l) => Array.isArray(l) && Number(l[1]) > 0);
+  const P = require("./pools");
+  const pl = [];
+  for (let i = 0; i < legs.length; i++) {
+    const [dest, a] = legs[i];
+    if (dest === "jackpot") {
+      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [`hm:unfee:${L.id}-${i}`, `bot:route:${FLOW}`, L.buyer_id, -a]);
+    } else if (P.isPool(dest)) pl.push({ pool: dest, amount: -a });
+  }
+  if (pl.length) {
+    const mk = `hm:unfee:${L.id}`;
+    const a = await P._applyLegs(mk, pl, { kind: "move", flow: FLOW, why: "heist-market-refund", via: "site" });
+    await P._recordMove(mk, { kind: "move", flow: FLOW, why: "heist-market-refund", via: "site", legs: pl, net: a.net, ts: a.ts, result: { ok: true, key: mk } });
+    await P._bumpRev();
+  }
+}
+/** Every listing of a soulbound item comes off the market and the item goes back to its seller (idempotent; runs at
+ *  start). escrowing -> taken down as soon as Pepe has it; active / the seller's own held one -> returned; sold / held /
+ *  claiming for a buyer -> money back + returned; done (in the buyer's sheet) -> Pepe takes it back out (an admin escrow),
+ *  then money back + returned. */
+async function soulboundSweep() {
+  await init();
+  const rows = await getQuery(`SELECT * FROM heist_market_listings WHERE status IN ('escrowing', 'active', 'sold', 'held', 'claiming', 'done')
+                               AND kind = 'sale' ORDER BY id`);
+  const out = [];
+  for (const L0 of rows) {
+    if (!isSoulbound(L0.item)) continue;
+    if (L0.status === "done" && (!L0.buyer_id || L0.holder_id !== L0.buyer_id || /^soulbound/.test(L0.note || ""))) continue;
+    if (L0.status === "claiming" && L0.holder_id === L0.seller_id) continue;       // already on its way back to the seller
+    const r = await tx(async () => {
+      const L = await listingRow(L0.id);
+      if (L.status !== L0.status) return null;
+      if (L.status === "escrowing") {
+        await runQuery("UPDATE heist_market_listings SET cancel = 1, note = 'soulbound', updated = ? WHERE id = ?", [now(), L.id]);
+        return "cancel";
+      }
+      if (L.status === "active" || (L.status === "held" && L.holder_id === L.seller_id)) {
+        await sendBack(L, L.seller_id, L.seller_login, "returning", "soulbound");
+        return "returning";
+      }
+      if (L.status === "done") {
+        await runQuery("UPDATE heist_market_listings SET status = 'unwinding', note = 'soulbound: taking it back', updated = ? WHERE id = ?", [now(), L.id]);
+        await runQuery(`INSERT OR IGNORE INTO heist_market_ops (key, listing_id, op, login, user_id, item, qty, announce, created, flags)
+                        VALUES (?, ?, 'escrow', ?, ?, ?, ?, NULL, ?, 'admin')`,
+                       [`hm:unw:${L.id}`, L.id, await loginOf(L.buyer_id, L.buyer_login), L.buyer_id, L.item, L.qty, now()]);
+        return "unwinding";
+      }
+      // sold / held / claiming for the buyer: not in their sheet yet - money back, item to the seller
+      await runQuery("UPDATE heist_market_ops SET done_at = ?, result = 'soulbound' WHERE listing_id = ? AND done_at IS NULL", [now(), L.id]);
+      await refundSale(L);
+      await sendBack(L, L.seller_id, L.seller_login, "returning", "soulbound: sale undone");
+      return "refunded";
+    });
+    if (r) out.push({ id: L0.id, item: L0.item, was: L0.status, now: r });
+  }
+  if (out.length) console.log("[heistmarket] soulbound sweep:", JSON.stringify(out));
+  return out;
 }
 
 // ── Pepe's chat commands (!sell / !buyitem / !delist / !heistmarket / !pawn) as the account linked to a login ──
@@ -744,4 +857,4 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { init, register, config, setConfig, cleanConfig, feeShares, splitShares, bookFee, list, delist, claim, buy, pawn, pawnQuote, ack, openOps,
-                   history, view, adminView, botAct, holdings, catalog, itemInfo, itemKey, Refuse, DEFAULTS, FLOW, RARE };
+                   history, view, adminView, botAct, soulboundSweep, refundSale, isSoulbound, holdings, catalog, itemInfo, itemKey, Refuse, DEFAULTS, FLOW, RARE };

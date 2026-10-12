@@ -7819,7 +7819,5 @@
   "hm.hint_pawn": "het pandjeshuis betaalt {price}",
   "ach.n.cf_hm_sale_1": "Open voor zaken",
   "ach.d.cf_hm_sale_1": "Een overvalitem aan een andere speler verkocht op de overvalmarkt.",
-  "ach.n.cf_hm_ring": "Heler",
-  "ach.d.cf_hm_ring": "Een Kingpin's Ring verkocht op de overvalmarkt.",
   "gtf.sheet.sell_link": "Items verkopen op de overvalmarkt"
 }

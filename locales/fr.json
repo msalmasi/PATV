@@ -7875,7 +7875,5 @@
   "hm.hint_pawn": "le prêteur sur gages paie {price}",
   "ach.n.cf_hm_sale_1": "Ouvert pour affaires",
   "ach.d.cf_hm_sale_1": "A vendu un objet de braquage à un autre joueur sur le marché des braquages.",
-  "ach.n.cf_hm_ring": "Receleur",
-  "ach.d.cf_hm_ring": "A vendu un Anneau du Parrain sur le marché des braquages.",
   "gtf.sheet.sell_link": "Vendre des objets sur le marché des braquages"
 }

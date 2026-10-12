@@ -63,7 +63,7 @@
   <% if (v.private) { %>
     <div class="card"><p class="note"><%- t('gtf.sheet.private', { name: v.display || v.login }) %></p></div>
   <% } else if (v.missing) { %>
-    <div class="card"><p class="note"><%- t('gtf.sheet.missing', { name: v.display || v.login || '?', '!cmd': '<code>!sheet</code>' }) %></p></div>
+    <div class="card"><p class="note"><%- t('gtf.sheet.missing', { name: v.display || v.login || '?', cmd: '<code>!sheet</code>' }) %></p></div>
   <% } else { %>
   <section class="hero" aria-labelledby="gsH">
     <div class="portrait" id="gsAva" data-seed="<%= v.avatar.seed %>" data-layers="<%= JSON.stringify(v.avatar.layers || {}) %>" role="img" aria-label="<%- t('gtf.sheet.avatar_alt', { name: v.display }) %>"></div>
@@ -101,19 +101,19 @@
           </div>
           <% }) %>
         </div>
-        <p class="note"><%- t('gtf.sheet.stats_note', { cls: v.cls }) %><% if (v.owner && v.avail) { %> <%- t('gtf.sheet.points', { n: v.avail, '!cmd': '<code>!allot &lt;stat&gt;</code>' }) %><% } %></p>
+        <p class="note"><%- t('gtf.sheet.stats_note', { cls: v.cls }) %><% if (v.owner && v.avail) { %> <%- t('gtf.sheet.points', { n: v.avail, cmd: '<code>!allot &lt;stat&gt;</code>' }) %><% } %></p>
       </section>
 
       <section class="card violet" aria-labelledby="gsLoad">
         <h2 id="gsLoad" class="ds-pixel-h"><%- t('gtf.sheet.loadout') %></h2>
         <% if (!v.gear.length && !v.items.length) { %>
-          <p class="note"><%- t('gtf.sheet.empty', { '!cmd': '<code>!shop</code>' }) %></p>
+          <p class="note"><%- t('gtf.sheet.empty', { cmd: '<code>!shop</code>' }) %></p>
         <% } else { %>
         <div class="loot">
           <% v.gear.concat(v.items).forEach((it) => { %>
           <div class="it<%= it.kind === 'gear' ? ' gear' : '' %>" title="<%= it.desc %>">
             <span class="art" aria-hidden="true"><% if (it.art) { %><img src="<%= it.art %>" alt="" loading="lazy" width="48" height="48"><% } else { %><%= it.emoji %><% } %></span>
-            <span><b><%= it.name %></b><% if (it.kind === 'gear') { %><small><%- t('gtf.sheet.gear') %></small><% } else { %><span class="n">×<%= it.n %></span><% } %></span>
+            <span><b><%= it.name %></b><% if (it.kind === 'gear') { %><small><%- t('gtf.sheet.gear') %></small><% } else { %><span class="n">×<%= it.n %></span><% } %><% if (it.soulbound) { %><small title="<%- t('hm.soulbound_t') %>">🔒 <%- t('hm.soulbound') %></small><% } %></span>
           </div>
           <% }) %>
         </div>

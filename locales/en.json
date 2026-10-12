@@ -7776,7 +7776,10 @@
   "hm.hint_pawn": "the pawn shop pays {price}",
   "ach.n.cf_hm_sale_1": "Open for Business",
   "ach.d.cf_hm_sale_1": "Sold a heist item to another player on the heist market.",
-  "ach.n.cf_hm_ring": "Fence",
-  "ach.d.cf_hm_ring": "Sold a Kingpin's Ring on the heist market.",
-  "gtf.sheet.sell_link": "Sell items on the heist market"
+  "ach.n.cf_hm_relic": "Fence",
+  "ach.d.cf_hm_relic": "Sold a rare relic (Loaded Dice or Vault Blueprints) on the heist market.",
+  "gtf.sheet.sell_link": "Sell items on the heist market",
+  "hm.soulbound": "soulbound",
+  "hm.soulbound_t": "Soulbound: it stays with the player who found it. It can&#39;t be sold, traded or pawned.",
+  "hm.soulbound_note": "Soulbound relics (Kingpin&#39;s Ring, Mastermind, The Fence) stay with the player who found them: they can&#39;t be sold, traded or pawned."
 }

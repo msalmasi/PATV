@@ -7718,7 +7718,5 @@
   "hm.hint_pawn": "tiệm cầm đồ trả {price}",
   "ach.n.cf_hm_sale_1": "Mở cửa kinh doanh",
   "ach.d.cf_hm_sale_1": "Đã bán một vật phẩm cướp cho người chơi khác ở Chợ cướp.",
-  "ach.n.cf_hm_ring": "Kẻ tiêu thụ",
-  "ach.d.cf_hm_ring": "Đã bán Nhẫn của Trùm ở Chợ cướp.",
   "gtf.sheet.sell_link": "Bán vật phẩm ở Chợ cướp"
 }

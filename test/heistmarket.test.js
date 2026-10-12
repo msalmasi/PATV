@@ -23,6 +23,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "heistmarket-test-"));
 process.chdir(tmp);
 delete process.env.STAGING;
 process.env.SECRET_KEY = "test-secret";
+process.env.HM_NO_AUTO_SWEEP = "1";          // the tests run the soulbound sweep themselves
 // the achievements module is the site's (big, boots its own backfills): record what the market asks of it instead
 const awarded = [];
 require.cache[require.resolve(path.join(repo, "achievements"))] = {
@@ -41,6 +42,8 @@ const CAT = { shop: {
   lockpick: { name: "Lockpick", emoji: "🔓", kind: "item", cost: 1000, desc: "DEX rescue" },
   armor: { name: "Body Armor", emoji: "🦺", kind: "gear", cost: 15000, desc: "+2 CON" },
   kingpinring: { name: "Kingpin's Ring", emoji: "💍", kind: "item", cost: 0, buyable: false, desc: "+1 stat" },
+  loadeddice: { name: "Loaded Dice", emoji: "🎲", kind: "item", cost: 0, buyable: false, desc: "reroll a stat" },
+  mastermind: { name: "Mastermind", emoji: "🧠", kind: "gear", cost: 0, buyable: false, soulbound: true },
   fence: { name: "The Fence", emoji: "📈", kind: "gear", cost: 0, buyable: false },
   pardon: { name: "Presidential Pardon", emoji: "📜", kind: "instant", cost: 100000 },
 }, prices: { sheetregen: 50000, avatarregen: 20000 }, heat_max: 100, heat_decay: 40, levels_per_point: 10, item_cap: 10 };
@@ -63,6 +66,8 @@ async function pepe(sheets, override = {}) {
   for (const o of ops) {
     const sh = sheets[o.login] || (sheets[o.login] = { gear: [], items: {} });
     let r = override[o.key];
+    const sb = ["kingpinring", "mastermind", "fence"].includes(o.item);
+    if (!r && sb && !o.admin && (o.op === "escrow" || !o.ret)) r = "soulbound";
     if (!r) {
       const gear = CAT.shop[o.item].kind === "gear";
       if (o.op === "escrow") {
@@ -85,7 +90,7 @@ async function pepe(sheets, override = {}) {
   return { ops, ack: a.body };
 }
 
-const SHEETS = { ann_cf: { gear: ["armor", "fence"], items: { lockpick: 4, kingpinring: 2 } }, bob: { gear: [], items: { lockpick: 9 } },
+const SHEETS = { ann_cf: { gear: ["armor", "fence"], items: { lockpick: 4, kingpinring: 2, loadeddice: 2 } }, bob: { gear: [], items: { lockpick: 9 } },
                  cat: { gear: ["armor"], items: {} }, alt: { gear: [], items: {} } };
 
 test.before(async () => {
@@ -127,21 +132,21 @@ test.before(async () => {
 });
 test.after(() => server && server.close());
 
-let ring;
+let ring;          // the relic sold here: Loaded Dice (the Kingpin's Ring is soulbound since 1.99ua)
 test("list: the item leaves the sheet first (escrow op), then it's for sale; the same click twice is one listing", async () => {
-  const r = await web("u1", "/api/gtf/market/list", { item: "kingpinring", qty: 1, price: "250k", idem: "click-ring-1" });
+  const r = await web("u1", "/api/gtf/market/list", { item: "loadeddice", qty: 1, price: "250k", idem: "click-ring-1" });
   assert.equal(r.body.ok, true, JSON.stringify(r.body));
   ring = r.body.listing.id;
   assert.equal(r.body.listing.status, "escrowing");
   assert.equal(r.body.listing.price, 250000);
-  const again = await web("u1", "/api/gtf/market/list", { item: "kingpinring", qty: 1, price: "250k", idem: "click-ring-1" });
+  const again = await web("u1", "/api/gtf/market/list", { item: "loadeddice", qty: 1, price: "250k", idem: "click-ring-1" });
   assert.equal(again.body.already, true);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM heist_market_listings"))[0].n, 1);
   // not for sale (and not buyable) until Pepe has it
   assert.equal((await web("u2", "/api/gtf/market/buy", { id: ring, idem: "buy-early-1" })).body.code, "E_NOT_ACTIVE");
   const p = await pepe(SHEETS);
-  assert.deepEqual(p.ops.map((o) => [o.op, o.login, o.item, o.qty]), [["escrow", "ann_cf", "kingpinring", 1]]);
-  assert.equal(SHEETS.ann_cf.items.kingpinring, 1, "one ring left in the sheet - the listed one can't be used");
+  assert.deepEqual(p.ops.map((o) => [o.op, o.login, o.item, o.qty]), [["escrow", "ann_cf", "loadeddice", 1]]);
+  assert.equal(SHEETS.ann_cf.items.loadeddice, 1, "one die left in the sheet - the listed one can't be used");
   assert.equal((await L(ring)).status, "active");
   // an ack seen again changes nothing
   const twice = await bot("/api/gtf/bot/market/ack", { results: [{ key: p.ops[0].key, result: "missing" }] });
@@ -187,14 +192,14 @@ test("a sale is one transaction: buyer pays, seller gets price - 5%, the fee to 
   assert.equal((await web("u3", "/api/gtf/market/buy", { id: ring, idem: "buy-late-1" })).body.code, "E_NOT_ACTIVE");
   assert.equal((await L(ring)).status, "sold");
   const p = await pepe(SHEETS);
-  assert.deepEqual(p.ops.map((o) => [o.op, o.login, o.item]), [["deliver", "bob", "kingpinring"]]);
+  assert.deepEqual(p.ops.map((o) => [o.op, o.login, o.item]), [["deliver", "bob", "loadeddice"]]);
   assert.deepEqual(p.ops[0].announce && [p.ops[0].announce.name, p.ops[0].announce.price, p.ops[0].announce.seller, p.ops[0].announce.buyer],
-                   ["Kingpin's Ring", 250000, "ann_cf", "bob"], "a ring sale is announced");
-  assert.equal(SHEETS.bob.items.kingpinring, 1);
+                   ["Loaded Dice", 250000, "ann_cf", "bob"], "a relic sale is announced");
+  assert.equal(SHEETS.bob.items.loadeddice, 1);
   assert.equal((await L(ring)).status, "done");
-  assert.deepEqual(awarded.filter((a) => a[0] === "u1"), [["u1", "hm_sales", 1], ["u1", "hm_ring_sales", 1]], "First sale + Fence");
-  const h = await M.history("kingpinring");
-  assert.equal(h.kingpinring.last, 250000);
+  assert.deepEqual(awarded.filter((a) => a[0] === "u1"), [["u1", "hm_sales", 1], ["u1", "hm_relic_sales", 1]], "First sale + Fence");
+  const h = await M.history("loadeddice");
+  assert.equal(h.loadeddice.last, 250000);
 });
 
 test("one of each: a buyer who owns that gear is refused; a delivery Pepe refuses waits in the market (held) to be claimed", async () => {
@@ -283,9 +288,9 @@ test("admins: delist anyone's listing (the seller gets the item back); the confi
   assert.match((await L(a.body.listing.id)).note, /admin: price typo/);
   await pepe(SHEETS);
   assert.equal((await L(a.body.listing.id)).status, "delisted");
-  const c = await web("u9", "/api/admin/heist-market", { config: { fee_pct: 7.5, list_per_hour: 3, untradable: ["fence"] } });
+  const c = await web("u9", "/api/admin/heist-market", { config: { fee_pct: 7.5, list_per_hour: 3, untradable: ["loadeddice"] } });
   assert.equal(c.body.config.fee_pct, 7.5);
-  assert.equal((await web("u1", "/api/gtf/market/list", { item: "fence", price: 5, idem: "c-fence-1" })).body.code, "E_UNTRADABLE");
+  assert.equal((await web("u1", "/api/gtf/market/list", { item: "loadeddice", price: 5, idem: "c-fence-1" })).body.code, "E_UNTRADABLE");
   // the hourly rate limit (bob listed 3 times this hour already)
   assert.equal((await web("u2", "/api/gtf/market/list", { item: "lockpick", price: 5, idem: "c-bob-lp-9" })).body.code, "E_RATE");
   await M.setConfig({ fee_pct: 5, list_per_hour: 10, untradable: [] });
@@ -295,7 +300,7 @@ test("the pawn shop: OFF by default; on, the House (Casino vault) pays rate x sh
   assert.equal((await M.config()).pawn_on, false);
   assert.equal((await web("u2", "/api/gtf/market/pawn", { item: "lockpick", qty: 2, idem: "p-bob-0001" })).body.code, "E_PAWN_OFF");
   await M.setConfig({ pawn_on: true });
-  assert.equal((await web("u2", "/api/gtf/market/pawn", { item: "kingpinring", idem: "p-bob-0002" })).body.code, "E_NO_VALUE");
+  assert.equal((await web("u2", "/api/gtf/market/pawn", { item: "loadeddice", idem: "p-bob-0002" })).body.code, "E_NO_VALUE");
   const s0 = await supply(), h0 = await pool("heist"), b0 = await bal("u2"), n0 = SHEETS.bob.items.lockpick;
   const r = await web("u2", "/api/gtf/market/pawn", { item: "lockpick", qty: 2, idem: "p-bob-0003" });
   assert.equal(r.body.ok, true, JSON.stringify(r.body));
@@ -308,8 +313,9 @@ test("the pawn shop: OFF by default; on, the House (Casino vault) pays rate x sh
   assert.equal(SHEETS.bob.items.lockpick, n0 - 2);
   assert.equal(await supply(), s0, "the House paid: pool -> wallet");
   // the House can't cover it -> refused up front
-  await M.setConfig({ pawn_values: { kingpinring: 10000000 } });
-  assert.equal((await web("u2", "/api/gtf/market/pawn", { item: "kingpinring", idem: "p-bob-0004" })).body.code, "E_HOUSE_SHORT");
+  await M.setConfig({ pawn_values: { loadeddice: 10000000 } });
+  SHEETS.bob.items.loadeddice = (SHEETS.bob.items.loadeddice || 0);
+  assert.equal((await web("u2", "/api/gtf/market/pawn", { item: "loadeddice", idem: "p-bob-0004" })).body.code, "E_HOUSE_SHORT");
   await M.setConfig({ pawn_on: false, pawn_values: {} });
 });
 
@@ -348,11 +354,104 @@ test("the page renders for visitors, members and admins; web calls need a same-s
 test("the market achievements: catalog rows (bot side, counted by the site), badge art, en.json strings", () => {
   const cat = JSON.parse(fs.readFileSync(path.join(repo, "achievements.json"), "utf8")).achievements;
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
-  for (const [id, metric] of [["cf_hm_sale_1", "hm_sales"], ["cf_hm_ring", "hm_ring_sales"]]) {
+  for (const [id, metric] of [["cf_hm_sale_1", "hm_sales"], ["cf_hm_relic", "hm_relic_sales"]]) {
     const a = cat.find((x) => x.id === id);
     assert.ok(a, id);
     assert.deepEqual([a.metric, a.threshold, a.side], [metric, 1, "bot"]);
     assert.ok(fs.existsSync(path.join(repo, "public", "img", "badges", "ach", id + ".png")), id + " art");
     assert.equal(en["ach.n." + id], a.name);
   }
+});
+
+test("🔒 soulbound (1.99ua): the Kingpin's Ring / Mastermind / The Fence can never be listed, sold or pawned - no admin setting changes it", async () => {
+  for (const item of ["kingpinring", "fence", "mastermind"]) {
+    const r = await web("u1", "/api/gtf/market/list", { item, price: 5000, idem: "sb-" + item + "-1" });
+    assert.equal(r.body.code, "E_SOULBOUND", item);
+    assert.match(r.body.error, /soulbound/);
+  }
+  // chat: !sell goes through the site's act (Pepe also refuses it before asking - heistmarket_test.py)
+  assert.equal((await bot("/api/gtf/bot/market/act", { op: "list", login: "ann_cf", item: "kingpinring", price: "5k", key: "sb-chat-001" })).body.code, "E_SOULBOUND");
+  // pawn: open, with an admin value for the ring -> the value is dropped and the ring refused
+  await M.setConfig({ pawn_on: true, untradable: [], pawn_values: { kingpinring: 50000 } });
+  assert.deepEqual((await M.config()).pawn_values, {}, "a pawn value for a soulbound item is dropped");
+  assert.equal((await web("u1", "/api/gtf/market/pawn", { item: "kingpinring", idem: "sb-pawn-01" })).body.code, "E_SOULBOUND");
+  assert.equal((await bot("/api/gtf/bot/market/act", { op: "quote", login: "ann_cf", item: "ring" })).status, 404, "an unknown name is still unknown");
+  assert.equal((await bot("/api/gtf/bot/market/act", { op: "quote", login: "ann_cf", item: "kingpinring" })).body.code, "E_SOULBOUND");
+  // the admin can't make one tradable: there is no setting for it (untradable only takes items OFF the market)
+  const c = await web("u9", "/api/admin/heist-market", { config: { untradable: [], tradable: ["kingpinring"], soulbound: [] } });
+  assert.equal(c.body.ok, true);
+  assert.equal(c.body.config.tradable, undefined);
+  assert.equal((await web("u1", "/api/gtf/market/list", { item: "kingpinring", price: 5000, idem: "sb-ring-02" })).body.code, "E_SOULBOUND");
+  const info = M.itemInfo(await M.catalog(), await M.config(), "kingpinring");
+  assert.deepEqual([info.soulbound, info.tradable, info.pawn_value], [true, false, 0]);
+  assert.equal(M.itemInfo(await M.catalog(), await M.config(), "loadeddice").tradable, true, "Loaded Dice stay tradable");
+  await M.setConfig({ pawn_on: false, pawn_values: {} });
+  // the page and the sheet say so
+  cookieUser = "u1";
+  const html = await (await fetch(base + "/gtf/market")).text();
+  assert.match(html, /🔒 💍 Kingpin&#39;s Ring · soulbound/);
+  const sv = await S.view("ann_cf", "u1");
+  assert.equal(sv.items.find((i) => i.key === "kingpinring").soulbound, true);
+  assert.equal(sv.items.find((i) => i.key === "lockpick").soulbound, false);
+  assert.equal(sv.gear.find((i) => i.key === "fence").soulbound, true);
+  const page = await (await fetch(base + "/gtf/sheet/ann_cf")).text();
+  assert.match(page, /🔒 soulbound/);
+  assert.doesNotMatch(page, /\{!?cmd\}/, "the sheet's {cmd} placeholders are filled");
+});
+
+test("🔒 soulbound: listings from before the rule are undone - the item goes back to its seller, a sale's money comes back (supply unchanged)", async () => {
+  const t = Date.now();
+  const ins = async (status, sold) => (await runQuery(`INSERT INTO heist_market_listings (kind, item, qty, price, seller_id, seller_login, status, buyer_id, buyer_login, sold_at,
+       fee, net, fee_legs, holder_id, holder_login, deliveries, created, updated) VALUES ('sale', 'kingpinring', 1, 100000, 'u1', 'ann_cf', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [status, sold ? "u2" : null, sold ? "bob" : null, sold ? t : null, sold ? 5000 : null, sold ? 95000 : null, sold ? JSON.stringify([["fortknox", 5000]]) : null,
+     sold ? "u2" : "u1", sold ? "bob" : "ann_cf", sold ? 1 : 0, t, t])).id;
+  // the state three pre-rule listings of ann's rings would have left: one active, one sold (not delivered), one delivered to bob
+  await runQuery("UPDATE users SET points_balance = points_balance - 200000 WHERE userId = 'u2'");
+  await runQuery("UPDATE users SET points_balance = points_balance + 190000 WHERE userId = 'u1'");
+  await runQuery("UPDATE pools SET balance = balance + 10000 WHERE key = 'fortknox'");
+  SHEETS.ann_cf.items.kingpinring = 0;
+  SHEETS.bob.items.kingpinring = 1;
+  const active = await ins("active", false), sold = await ins("sold", true), done = await ins("done", true);
+  // the sold one's delivery, queued before the rule: Pepe refuses it (not a return) - the sweep closes it first
+  await runQuery("INSERT INTO heist_market_ops (key, listing_id, op, login, user_id, item, qty, created) VALUES (?, ?, 'deliver', 'bob', 'u2', 'kingpinring', 1, ?)", [`hm:dlv:${sold}:1`, sold, t]);
+  const s0 = await supply(), b0 = await bal("u2"), a0 = await bal("u1"), fk0 = await pool("fortknox");
+  const sw = await M.soulboundSweep();
+  assert.deepEqual(sw.map((x) => [x.id, x.now]), [[active, "returning"], [sold, "refunded"], [done, "unwinding"]]);
+  assert.equal(await bal("u2"), b0 + 100000, "the undelivered sale's buyer is refunded at once");
+  assert.equal(await bal("u1"), a0 - 95000);
+  assert.equal(await pool("fortknox"), fk0 - 5000);
+  assert.equal(await supply(), s0, "no PAT made or destroyed");
+  const p = await pepe(SHEETS);
+  const by = Object.fromEntries(p.ops.map((o) => [o.key, [o.op, o.login, o.ret, o.admin]]));
+  assert.equal(by[`hm:dlv:${sold}:1`], undefined, "the old delivery to the buyer is never sent");
+  assert.deepEqual(by[`hm:unw:${done}`], ["escrow", "bob", false, true], "the delivered one: an admin escrow back out of bob's sheet");
+  assert.deepEqual(by[`hm:dlv:${active}:1`], ["deliver", "ann_cf", true, false], "returns to the seller are flagged");
+  assert.equal(SHEETS.bob.items.kingpinring, 0, "taken back out of bob's sheet");
+  assert.equal(await bal("u2"), b0 + 200000, "...and bob's money back for it");
+  await pepe(SHEETS);
+  for (const id of [active, sold, done]) assert.equal((await L(id)).status, "delisted", "back with the seller: " + id);
+  assert.equal(SHEETS.ann_cf.items.kingpinring, 3, "ann has her 3 rings back");
+  assert.equal(await supply(), s0);
+  assert.deepEqual(await M.soulboundSweep(), [], "idempotent");
+});
+
+test("🔒 soulbound: a delivery Pepe refuses as soulbound (an old op racing the sweep) undoes that sale on the ack", async () => {
+  const t = Date.now();
+  const id = (await runQuery(`INSERT INTO heist_market_listings (kind, item, qty, price, seller_id, seller_login, status, buyer_id, buyer_login, sold_at, fee, net, fee_legs,
+       holder_id, holder_login, deliveries, created, updated) VALUES ('sale', 'fence', 1, 40000, 'u1', 'ann_cf', 'sold', 'u3', 'cat', ?, 2000, 38000, ?, 'u3', 'cat', 1, ?, ?)`,
+    [t, JSON.stringify([["fortknox", 2000]]), t, t])).id;
+  await runQuery("UPDATE users SET points_balance = points_balance - 40000 WHERE userId = 'u3'");
+  await runQuery("UPDATE users SET points_balance = points_balance + 38000 WHERE userId = 'u1'");
+  await runQuery("UPDATE pools SET balance = balance + 2000 WHERE key = 'fortknox'");
+  await runQuery("INSERT INTO heist_market_ops (key, listing_id, op, login, user_id, item, qty, created) VALUES (?, ?, 'deliver', 'cat', 'u3', 'fence', 1, ?)", [`hm:dlv:${id}:1`, id, t]);
+  const s0 = await supply(), c0 = await bal("u3");
+  SHEETS.ann_cf.gear = SHEETS.ann_cf.gear.filter((g) => g !== "fence");
+  const p = await pepe(SHEETS);
+  assert.equal(p.ack.results[`hm:dlv:${id}:1`], "returning");
+  assert.equal(await bal("u3"), c0 + 40000, "cat refunded");
+  assert.ok(!SHEETS.cat.gear.includes("fence"), "cat never got The Fence");
+  await pepe(SHEETS);
+  assert.equal((await L(id)).status, "delisted");
+  assert.ok(SHEETS.ann_cf.gear.includes("fence"), "back with ann");
+  assert.equal(await supply(), s0);
 });

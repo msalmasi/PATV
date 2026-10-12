@@ -7875,7 +7875,5 @@
   "hm.hint_pawn": "la casa de empeño paga {price}",
   "ach.n.cf_hm_sale_1": "Negocio abierto",
   "ach.d.cf_hm_sale_1": "Vendiste un objeto de atraco a otro jugador en el mercado de atracos.",
-  "ach.n.cf_hm_ring": "Receptador",
-  "ach.d.cf_hm_ring": "Vendiste un Anillo del Capo en el mercado de atracos.",
   "gtf.sheet.sell_link": "Vender objetos en el mercado de atracos"
 }

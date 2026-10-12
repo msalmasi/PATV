@@ -7718,7 +7718,5 @@
   "hm.hint_pawn": "當舖出價 {price}",
   "ach.n.cf_hm_sale_1": "生意開張",
   "ach.d.cf_hm_sale_1": "在搶案市場把搶案道具賣給其他玩家。",
-  "ach.n.cf_hm_ring": "銷贓者",
-  "ach.d.cf_hm_ring": "在搶案市場賣出一個 Kingpin's Ring。",
   "gtf.sheet.sell_link": "在搶案市場賣出道具"
 }

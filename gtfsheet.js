@@ -35,6 +35,11 @@ const BADGE_ART = {
   secondwind: "cf_use_secondwind", hollow_points: "cf_use_hollow", nitrous: "cf_use_nitrous", loadeddice: "cf_relic_dice",
   kingpinring: "cf_relic_ring",
 };
+// 1.99ua (the user's rule): SOULBOUND relics - they belong to the player who found them and can never be listed, sold,
+// pawned or delivered to anyone else (heistmarket.js). A HARD rule: this set (plus Pepe's catalog flag) - no admin setting
+// makes one tradable. Loaded Dice and Vault Blueprints stay tradable.
+const SOULBOUND = new Set(["kingpinring", "mastermind", "fence"]);
+const isSoulbound = (key, it) => SOULBOUND.has(String(key)) || !!(it && it.soulbound === true);
 const OWN_ART = new Set(["armor", "gun", "gloves", "knuckles", "blueprints", "mastermind", "fence"]);
 const artFor = (k) => (BADGE_ART[k] ? `/public/img/badges/ach/${BADGE_ART[k]}.png` : OWN_ART.has(k) ? `/public/img/gtf/items/${k}.png` : null);
 
@@ -102,7 +107,7 @@ async function putCatalog(b) {
     if (!/^[a-z0-9_]{1,30}$/.test(k) || !it) continue;
     shop[k] = { name: String(it.name || k).slice(0, 40), emoji: String(it.emoji || "").slice(0, 8), kind: String(it.kind || "item").slice(0, 10),
                 cost: Math.max(0, Math.floor(Number(it.cost) || 0)), desc: String(it.desc || "").slice(0, 300), buyable: it.buyable !== false,
-                game: String(it.game || "heist").slice(0, 10) };
+                game: String(it.game || "heist").slice(0, 10), soulbound: it.soulbound === true || SOULBOUND.has(k) };
   }
   const p = c.prices || {};
   const out = { shop, prices: { sheetregen: Math.max(0, Math.floor(Number(p.sheetregen) || DEFAULT_PRICES.sheetregen)),
@@ -173,7 +178,7 @@ async function view(login, viewer) {
   const itemOf = (key, n) => {
     const it = shop[key] || {};
     return { key, n, name: it.name || key, emoji: it.emoji || "🎒", desc: it.desc || "", kind: it.kind || "item", art: artFor(key),
-             cost: it.cost || 0, buyable: it.buyable !== false };
+             cost: it.cost || 0, buyable: it.buyable !== false, soulbound: isSoulbound(key, it) };
   };
   const gear = (sh.gear || []).map((g) => itemOf(String(g), 1));
   const items = Object.entries(sh.items || {}).filter(([, n]) => int(n) > 0).map(([key, n]) => itemOf(key, int(n)))
@@ -408,4 +413,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { init, register, view, reroll, putMirror, putCatalog, catalog, source, regenText, avatarText, setTopKeys, topSpans, urlFor, hasSheet, Refuse, STATS, artFor };
+module.exports = { SOULBOUND, isSoulbound, init, register, view, reroll, putMirror, putCatalog, catalog, source, regenText, avatarText, setTopKeys, topSpans, urlFor, hasSheet, Refuse, STATS, artFor };
