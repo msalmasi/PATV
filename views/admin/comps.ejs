@@ -30,13 +30,13 @@
   </section>
 
   <section class="adm-card" id="premium" aria-labelledby="premT">
-    <h2 id="premT"><span class="ds-ic" aria-hidden="true">📺</span> Prime Time / 🎟️ Season Pass</h2>
+    <h2 id="premT"><span class="ds-ic" aria-hidden="true">📺</span> Prime Time / 💎 Prime Time Plus / 🎟️ Season Pass</h2>
     <p class="adm-help">Free, never routed, never auto-renewed, revocable. Shows as "Comped (until &lt;date&gt;)" or "(no end date)". A timed comp starts now - or after time they already paid for or were comped.
       Everything gated on the tier honours it (Telegram bridge, the free sticker pack, perk cosmetics, pad perks).</p>
     <form id="premForm" class="adm-form" autocomplete="off">
-      <label>Tier<select name="tier"><option value="season_pass">🎟️ Season Pass (a member)</option><option value="prime_time"<%= pre.pad ? ' selected' : '' %>>📺 Prime Time (a pad)</option></select></label>
+      <label>Tier<select name="tier"><option value="season_pass">🎟️ Season Pass (a member)</option><option value="prime_time"<%= pre.pad ? ' selected' : '' %>>📺 Prime Time (a pad)</option><option value="prime_plus">💎 Prime Time Plus (a pad)</option></select></label>
       <label data-for="season_pass">Member<input type="text" name="user" maxlength="64" list="compPeople" value="<%= pre.user %>"></label>
-      <label data-for="prime_time">Pad (slug, p/slug, link, Camfrog room or title)<input type="text" name="pad" maxlength="300" value="<%= pre.pad %>"></label>
+      <label data-for="prime_time prime_plus">Pad (slug, p/slug, link, Camfrog room or title)<input type="text" name="pad" maxlength="300" value="<%= pre.pad %>"></label>
       <label>Length<select name="mode"><option value="days">N days</option><option value="periods">N periods</option><option value="lifetime">No end date</option></select></label>
       <label data-n>N<input type="number" name="n" min="1" max="3650" value="30"></label>
       <label>Reason (admin log)<input type="text" name="reason" required minlength="3" maxlength="200"></label>
@@ -89,7 +89,7 @@
 
 <datalist id="compPeople"></datalist>
 <script id="compsData" type="application/json"><%- JSON.stringify(C).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-comps.js?v=3" defer></script>
+<script src="/public/js/admin-comps.js?v=4" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

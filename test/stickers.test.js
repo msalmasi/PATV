@@ -42,9 +42,9 @@ test.before(async () => {
 });
 test.after(() => F.sync({}));
 
-test("catalog: six packs of eight (1.99lf added three), every sticker has its SVG art and English i18n keys; price from the setting (250k)", () => {
+test("catalog: eight packs of eight (1.99lf added three, 1.99qp two perk packs - Spooky Season in October), every sticker has its SVG art and English i18n keys; price from the setting (250k)", () => {
   const c = STK.catalog();
-  assert.deepEqual(c.map((p) => p.id), ["pixelpepe", "kawaiipond", "patvreacts", "miclife", "highroller", "movienight"]);
+  assert.deepEqual(c.map((p) => p.id), ["pixelpepe", "kawaiipond", "patvreacts", "miclife", "highroller", "movienight", "spooky", "primeplus"]);
   const EN = require("../locales/en.json");
   for (const p of c) {
     assert.ok(EN["stk.pack." + p.id + ".name"] && EN["stk.pack." + p.id + ".desc"], "en.json names " + p.id);
@@ -52,7 +52,7 @@ test("catalog: six packs of eight (1.99lf added three), every sticker has its SV
   }
   for (const p of c) {
     assert.equal(p.stickers.length, 8);
-    assert.equal(p.price, 250000);
+    assert.equal(p.price, p.perk ? null : 250000, "perk packs are never sold");
     for (const s of p.stickers) {
       const svg = fs.readFileSync(path.join(repo, s.url.replace(/^\//, "")), "utf8");
       assert.match(svg, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 \d+ 24" shape-rendering="crispEdges">/);
@@ -129,7 +129,7 @@ test("using them: only packs you own (validate), at most 12; rendering turns kno
 test("pageData: packs with owned flags + the allowance", async () => {
   const d = await STK.pageData(U.bob);
   assert.equal(d.signed, true);
-  assert.deepEqual(d.packs.filter((p) => p.owned).map((p) => p.id).sort(), ["patvreacts", "pixelpepe"]);
+  assert.deepEqual(d.packs.filter((p) => p.owned).map((p) => p.id).sort(), ["patvreacts", "pixelpepe", "spooky"], "1.99qp: a Season Pass in October has Spooky Season");
   assert.equal(d.allowance.per, 1);
   const anon = await STK.pageData(null);
   assert.equal(anon.signed, false);

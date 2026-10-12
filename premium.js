@@ -5,6 +5,22 @@
 // TIERS (prices are settings, premium_config; the first prices are an experiment)
 //   prime_time   a pad's tier          10,000,000 PAT / 30 days   target = the pad's room id
 //   season_pass  one account's tier    2,000,000 PAT / 30 days   target = the user's id
+//   prime_plus   a pad's tier         50,000,000 PAT / 30 days   target = the pad's room id (1.99qp: 💎 PRIME TIME PLUS)
+//
+// 1.99qp 💎 PRIME TIME PLUS = everything in Prime Time (isPrime() is true for a Plus pad) plus:
+//   * the CAMFROG BRIDGE: the pad's live Camfrog room on the website (chat, people, mic, room audio, the web relay /
+//     clips / snapshots). bridgeAllowed(roomId); enforced in bridge.js only while premium_config plus_bridge_gate is
+//     on (default OFF, so shipping it changes nothing - tools/ptplus-comps.js comps the bridged pads, checks no other
+//     bridged pad would lose it, then switches the gate on). House pads (Pepe's Pad, PepeLab, the Lounge) never gate.
+//   * unlimited retention for the pad's chat logs AND recordings (Pepe's pepe_retention reads prime_plus per room from
+//     /api/rooms/owners);
+//   * a bigger room soundboard: padPerks().soundboardSlots = sb_slots_plus (Prime Time sb_slots_prime, none sb_slots_free);
+//   * the 💎 Prime Time Plus sticker pack for the pad's owner (stickers.js perk), Plus pad cosmetics (padcosmetics.json
+//     perk prime_plus), the automatic Plus badge, the owner's 💎 Plus flair and twice the flair slots (padflair.js).
+//   UPGRADE from Prime Time: buying Plus for a pad with paid Prime Time time left converts that time - its remaining
+//   days x (prime_price / plus_price) are added to the Plus period, Prime Time's paid date moves to now and its renewer
+//   is dropped (no PAT moves; ledger rows kind 'upgrade-out' / 'upgrade-in'). Stripe-paid and comped Prime Time time
+//   are left alone. Buying plain Prime Time for a pad that has Plus is refused (Plus includes it).
 //
 // WHO PAYS
 //   * anyone signed in can BUY whole periods for a pad (its owner, a member, a fan) or for themselves / another
@@ -63,11 +79,13 @@ const REF_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const TIERS = Object.freeze({
   prime_time: Object.freeze({ id: "prime_time", kind: "pad", name: "Prime Time", emoji: "📺", priceKey: "prime_price", flow: "prime_time" }),
   season_pass: Object.freeze({ id: "season_pass", kind: "user", name: "Season Pass", emoji: "🎟️", priceKey: "season_price", flow: "season_pass" }),
+  prime_plus: Object.freeze({ id: "prime_plus", kind: "pad", name: "Prime Time Plus", emoji: "💎", priceKey: "plus_price", flow: "prime_plus" }),   // 1.99qp
 });
 const ROUTE_DESTS = Object.freeze(["fortknox", "reserve", "room"]);
 const ROUTE_FLOWS = Object.freeze({
   prime_time: { label: "📺 Prime Time (pad tier)", room: true },
   season_pass: { label: "🎟️ Season Pass (personal tier)", room: false },
+  prime_plus: { label: "💎 Prime Time Plus (pad tier)", room: true },        // 1.99qp: same split as Prime Time
   stickers: { label: "🧸 Sticker packs", room: false },
   banner: { label: "📣 Homepage banner ads", room: false },        // 1.99kk: banner.js (no room resolved -> Fort Knox)
   creators: { label: "⭐ PATV Creators - the 20% platform cut (at release)", room: true },   // 1.99pv: creators.js (room share minus the pad owner's royalty)
@@ -76,6 +94,11 @@ const DEFAULTS = Object.freeze({
   sales: true,                     // PAT purchases on (off: buying is refused, renewals still run)
   prime_price: 10000000,           // PAT per period (experimental)
   season_price: 2000000,
+  plus_price: 50000000,            // 1.99qp: 💎 Prime Time Plus
+  plus_bridge_gate: false,         // 1.99qp: the Camfrog bridge needs Plus (off = every bridged pad shows it, as before)
+  sb_slots_free: 0,                // 1.99qp: room soundboard slots per pad tier (the soundboard reads padPerks().soundboardSlots)
+  sb_slots_prime: 8,
+  sb_slots_plus: 24,
   period_days: 30,
   grace_days: 3,
   comp_admins: true,               // site admins' accounts + pads get both tiers free
@@ -84,7 +107,7 @@ const DEFAULTS = Object.freeze({
   sp_upload_mult: 2,               // Season Pass: feed upload size / daily / quota multiplier
   sp_sticker_packs: 1,             // Season Pass: free sticker packs per period
   sticker_price: 250000,           // PAT per sticker pack (stickers.js; a pack's own price wins)
-  routes: { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]],
+  routes: { prime_time: [["fortknox", 50], ["room", 50]], prime_plus: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]],
             creators: [["fortknox", 50], ["room", 50]] },
 });
 
@@ -124,6 +147,11 @@ function cleanConfig(c) {
     sales: on(c.sales, DEFAULTS.sales),
     prime_price: int(c.prime_price, 1000, 1e12, DEFAULTS.prime_price),
     season_price: int(c.season_price, 1000, 1e12, DEFAULTS.season_price),
+    plus_price: int(c.plus_price, 1000, 1e12, DEFAULTS.plus_price),
+    plus_bridge_gate: on(c.plus_bridge_gate, DEFAULTS.plus_bridge_gate),
+    sb_slots_free: int(c.sb_slots_free, 0, 200, DEFAULTS.sb_slots_free),
+    sb_slots_prime: int(c.sb_slots_prime, 0, 200, DEFAULTS.sb_slots_prime),
+    sb_slots_plus: int(c.sb_slots_plus, 0, 200, DEFAULTS.sb_slots_plus),
     period_days: int(c.period_days, 1, 365, DEFAULTS.period_days),
     grace_days: int(c.grace_days, 0, 30, DEFAULTS.grace_days),
     comp_admins: on(c.comp_admins, DEFAULTS.comp_admins),
@@ -199,7 +227,8 @@ async function loadCache() {
   CACHE = m; cacheAt = now();
 }
 function maybeRefresh() {
-  if (ready && now() - cacheAt > 60000) { cacheAt = now(); loadCache().catch((e) => console.error("[premium] cache:", e.message)); }
+  // 1.99qp: the config too, so a change from the shell (tools/ptplus-comps.js --gate on) reaches the site within a minute
+  if (ready && now() - cacheAt > 60000) { cacheAt = now(); loadCache().then(loadConfig).catch((e) => console.error("[premium] cache:", e.message)); }
 }
 /** The date a subscription's perks end (Infinity = comped), grace included while a renewal is still possible. */
 const compUntil = (sub) => (sub && sub.comped ? Number(sub.comp_until) || 0 : 0);    // 1.99ma: 0 = no end date
@@ -222,8 +251,27 @@ function statusOf(sub, t = now()) {
 }
 function subSync(tier, target) { maybeRefresh(); return CACHE.get(tier + ":" + String(target || "")) || null; }
 const activeSync = (tier, target, t = now()) => { const s = subSync(tier, target); return !!s && t < endsAt(s, t); };
-/** pad.primeTime: does this pad have Prime Time right now? (sync, cached) */
-const isPrime = (roomId, t) => activeSync("prime_time", roomId, t);
+/** 1.99qp: does this pad have 💎 Prime Time Plus right now? (sync, cached) */
+const isPrimePlus = (roomId, t) => activeSync("prime_plus", roomId, t);
+/** pad.primeTime: does this pad have Prime Time right now? (sync, cached) - 1.99qp: Prime Time Plus includes it */
+const isPrime = (roomId, t) => activeSync("prime_time", roomId, t) || isPrimePlus(roomId, t);
+/** 1.99qp: the pad's tier right now: "prime_plus" | "prime_time" | null */
+const padTier = (roomId, t) => (isPrimePlus(roomId, t) ? "prime_plus" : activeSync("prime_time", roomId, t) ? "prime_time" : null);
+/** 1.99qp: does this account own a pad with Prime Time Plus right now? (the Plus sticker pack) */
+function plusOwner(userId, t = now()) {
+  if (!userId) return false;
+  maybeRefresh();
+  let rooms;
+  try { rooms = require("./rooms").listCached(); } catch (e) { return false; }
+  for (const R of rooms || []) if (R.owner && R.owner.userId === userId && isPrimePlus(R.id, t)) return true;
+  return false;
+}
+/** 1.99qp: may this pad show its Camfrog room live on the site? Always while the gate is off; house pads always. */
+function bridgeAllowed(roomId, t) {
+  if (!CONFIG.plus_bridge_gate) return true;
+  try { const R = require("./rooms").getCached(roomId); if (R && R.house) return true; } catch (e) { /* no registry: decide by the tier */ }
+  return isPrimePlus(roomId, t);
+}
 /** Does this account have a Season Pass right now? (sync, cached) */
 const hasPass = (userId, t) => activeSync("season_pass", userId, t);
 /** 1.99nw: the Camfrog logins (lowercase) of every account with a Season Pass right now - Pepe keeps their PM logs
@@ -243,8 +291,12 @@ async function passCamfrogs(t = now()) {
 }
 /** The perks a pad / an account gets right now (other modules ask this, never the tables). */
 function padPerks(roomId) {
-  const on = isPrime(roomId);
-  return { primeTime: on, extraSlots: on ? CONFIG.prime_extra_slots : 0, extraBadges: on ? CONFIG.prime_extra_badges : 0, lowLatency: on };
+  const on = isPrime(roomId), plus = isPrimePlus(roomId);
+  return { primeTime: on, primePlus: plus, tier: plus ? "prime_plus" : on ? "prime_time" : null,
+           extraSlots: on ? CONFIG.prime_extra_slots : 0, extraBadges: on ? CONFIG.prime_extra_badges : 0, lowLatency: on,
+           // 1.99qp: 💎 Plus - the Camfrog bridge, unlimited chat-log / recording retention, the bigger soundboard
+           bridge: bridgeAllowed(roomId), retention: plus ? "unlimited" : on ? "prime" : "standard",
+           soundboardSlots: plus ? CONFIG.sb_slots_plus : on ? CONFIG.sb_slots_prime : CONFIG.sb_slots_free };
 }
 function userPerks(userId) {
   const on = hasPass(userId);
@@ -437,7 +489,7 @@ async function buy(user, opts = {}) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   const T = TIERS[String(opts.tier || "")];
-  if (!T) throw new Refuse(400, "Pick Prime Time or Season Pass.");
+  if (!T) throw new Refuse(400, "Pick Prime Time, Prime Time Plus or Season Pass.");
   if (!CONFIG.sales) throw new Refuse(423, `${T.name} isn't on sale right now.`);
   const rawRef = String(opts.ref || "");
   if (!REF_RE.test(rawRef)) throw new Refuse(400, "Bad request (ref).");
@@ -451,6 +503,8 @@ async function buy(user, opts = {}) {
     target = R.id; roomId = R.id; label = `p/${R.slug || R.id}`;
     ownerSelf = !!(R.owner && R.owner.userId === user.userId);
     if (R.owner && R.owner.userId) recipient = R.owner.userId;
+    // 1.99qp: Plus includes Prime Time - paying for both would be wasted PAT
+    if (T.id === "prime_time" && isPrimePlus(R.id)) throw new Refuse(409, `${label} has 💎 Prime Time Plus, which includes Prime Time - extend that instead.`);
   } else {
     const who = opts.user ? await userTarget(opts.user) : { userId: user.userId, username: user.username };
     if (!who) throw new Refuse(404, "No such account.");
@@ -478,8 +532,10 @@ async function buy(user, opts = {}) {
     if (had) return { dup: true, row: had };
     const sub = await ensureSub(T.id, target, t);
     if (sub.comped && !compUntil(sub)) throw new Refuse(409, `${label} already has ${T.name} for free.`);
+    // 1.99qp: Prime Time -> Plus upgrade: the pad's paid Prime Time time left becomes Plus time (price-weighted)
+    const up = T.id === "prime_plus" ? await upgradeCredit(target, t) : null;
     const from = Math.max(t, Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0, compUntil(sub));
-    const to = Math.round(from + days * DAY);
+    const to = Math.round(from + days * DAY + (up ? up.plusMs : 0));
     if (to - t > MAX_AHEAD_DAYS * DAY) throw new Refuse(409, `${label} is paid up far enough ahead already (at most ${MAX_AHEAD_DAYS} days).`);
     const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [user.userId]))[0];
     if (!u) throw new Refuse(404, "Couldn't find your account.");
@@ -497,7 +553,16 @@ async function buy(user, opts = {}) {
       ? user.userId : sub.renewer_id;
     await runQuery("UPDATE premium_subs SET paid_through = ?, renewer_id = ?, status = 'active', notified = NULL, updated = ? WHERE id = ?",
                    [to, renewer || null, t, sub.id]);
-    return { dup: false, username: u.username, kind, routing, to, from, subId: sub.id, anon };
+    if (up) {
+      await runQuery("UPDATE premium_subs SET paid_through = ?, renewer_id = NULL, status = 'lapsed', notified = ?, updated = ? WHERE id = ?",
+                     [t, "lapsed:" + t, t, up.sub.id]);     // notified = the lapse key: no "Prime Time ended" notice for an upgrade
+      const d = Math.round(up.leftMs / DAY * 100) / 100, dPlus = Math.round(up.plusMs / DAY * 100) / 100;
+      await runQuery(`INSERT INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, payer_name, amount, days, period_from, period_to, via, created)
+                      VALUES (?, ?, 'prime_time', ?, 'upgrade-out', ?, ?, 0, ?, ?, ?, ?, ?)`, [ref + ":up-out", up.sub.id, target, user.userId, u.username, -d, t, up.sub.paid_through, via, t]);
+      await runQuery(`INSERT INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, payer_name, amount, days, period_from, period_to, via, created)
+                      VALUES (?, ?, 'prime_plus', ?, 'upgrade-in', ?, ?, 0, ?, ?, ?, ?, ?)`, [ref + ":up-in", sub.id, target, user.userId, u.username, dPlus, t, to, via, t]);
+    }
+    return { dup: false, username: u.username, kind, routing, to, from, subId: sub.id, anon, upgrade: up ? { pt_days: up.leftMs / DAY, plus_days: up.plusMs / DAY } : null };
   });
   await loadCache();
   if (!out.dup) await afterChange(T.id, target);
@@ -526,7 +591,24 @@ async function buy(user, opts = {}) {
       `${who} added ${days >= 1 ? Math.floor(days) + " day" + (Math.floor(days) === 1 ? "" : "s") : "time"} of ${T.name} - paid through ${new Date(out.to).toISOString().slice(0, 10)}.`,
       T.kind === "pad" && R ? `/premium?pad=${encodeURIComponent(R.slug || R.id)}` : "/premium");
   }
-  return { dup: false, tier: T.id, target, amount, days, paid_through: out.to, routing: out.routing, gift: out.kind === "gift", kind: out.kind };
+  if (out.upgrade) await audit(roomId, "premium-upgrade", out.anon ? "anonymous" : out.username, `prime_time ${out.upgrade.pt_days.toFixed(2)}d -> prime_plus ${out.upgrade.plus_days.toFixed(2)}d`);
+  return { dup: false, tier: T.id, target, amount, days, paid_through: out.to, routing: out.routing, gift: out.kind === "gift", kind: out.kind, upgrade: out.upgrade || null };
+}
+/** 1.99qp: the Prime Time -> Plus conversion for a pad (inside buy's transaction): paid PAT time left only (not Stripe,
+ *  not a comp). -> {sub, leftMs, plusMs} | null */
+async function upgradeCredit(roomId, t = now()) {
+  const pt = await subRow("prime_time", roomId);
+  if (!pt) return null;
+  const paid = Number(pt.paid_through) || 0;
+  if (!(paid > t) || Number(pt.stripe_through) > t) return null;     // nothing left, or Stripe pays for it (cancel that first)
+  const leftMs = paid - t;
+  const plusMs = Math.floor(leftMs * CONFIG.prime_price / CONFIG.plus_price);
+  return plusMs > 0 ? { sub: pt, leftMs, plusMs } : null;
+}
+/** 1.99qp: what an upgrade would convert right now (the page's preview). -> {pt_days, plus_days} | null */
+async function upgradePreview(roomId, t = now()) {
+  const u = await upgradeCredit(roomId, t);
+  return u ? { pt_days: Math.round(u.leftMs / DAY * 10) / 10, plus_days: Math.round(u.plusMs / DAY * 10) / 10 } : null;
 }
 function telemetry(ref, roomId, login, ownerSelf, amount, via, t) {
   try {
@@ -543,7 +625,7 @@ async function setRenew(user, opts = {}) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   const T = TIERS[String(opts.tier || "")];
-  if (!T) throw new Refuse(400, "Pick Prime Time or Season Pass.");
+  if (!T) throw new Refuse(400, "Pick Prime Time, Prime Time Plus or Season Pass.");
   let target, owner = false, manage = false;
   if (T.kind === "pad") {
     const R = await padOrRefuse(opts.pad, user);
@@ -676,7 +758,7 @@ async function renewDue(t = now()) {
     if (!T) continue;
     const price = priceOf(T.id);
     const ref = `renew:${s.id}:${s.paid_through}`;
-    let label = s.tier === "prime_time" ? `p/${s.target}` : "your Season Pass";
+    let label = T.kind === "pad" ? `p/${s.target}` : "your Season Pass";
     let roomId = null, ownerSelf = true;
     if (T.kind === "pad") {
       const R = await require("./rooms").get(s.target);
@@ -807,14 +889,21 @@ async function state(viewer, padSlug) {
       pad = { id: R.id, slug: R.slug || R.id, title: R.title, owner: R.owner ? (R.owner.display || R.owner.username) : null, mine: owner,
               ...subView("prime_time", s, t), renewer_me: !!(s && signed && s.renewer_id === viewer.userId),
               contributors: s ? (await contributors(s.id)).map((c) => ({ name: c.name, anon: c.anon, amount: c.amount })) : [] };
+      // 1.99qp: 💎 Prime Time Plus on the same pad (+ what an upgrade would convert)
+      const sp = await subRow("prime_plus", R.id);
+      pad.plus = { ...subView("prime_plus", sp, t), renewer_me: !!(sp && signed && sp.renewer_id === viewer.userId),
+                   contributors: sp ? (await contributors(sp.id)).map((c) => ({ name: c.name, anon: c.anon, amount: c.amount })) : [],
+                   upgrade: await upgradePreview(R.id, t) };
+      pad.house = !!R.house;
     }
   }
   const C = CONFIG;
   return {
     sales: C.sales, period_days: C.period_days, grace_days: C.grace_days,
-    prices: { prime_time: C.prime_price, season_pass: C.season_price, sticker_pack: C.sticker_price },
-    day_price: { prime_time: Math.ceil(C.prime_price / C.period_days) },
-    perks: { prime_extra_slots: C.prime_extra_slots, prime_extra_badges: C.prime_extra_badges, sp_upload_mult: C.sp_upload_mult, sp_sticker_packs: C.sp_sticker_packs },
+    prices: { prime_time: C.prime_price, prime_plus: C.plus_price, season_pass: C.season_price, sticker_pack: C.sticker_price },
+    day_price: { prime_time: Math.ceil(C.prime_price / C.period_days), prime_plus: Math.ceil(C.plus_price / C.period_days) },
+    perks: { prime_extra_slots: C.prime_extra_slots, prime_extra_badges: C.prime_extra_badges, sp_upload_mult: C.sp_upload_mult, sp_sticker_packs: C.sp_sticker_packs,
+             sb_slots_free: C.sb_slots_free, sb_slots_prime: C.sb_slots_prime, sb_slots_plus: C.sb_slots_plus, plus_bridge_gate: C.plus_bridge_gate },
     routes: routesView(),
     stripe: (() => { try { return require("./stripebilling").publicState(); } catch (e) { return { enabled: false }; } })(),
     viewer: { signed, balance, pass, username: signed ? viewer.username : null },
@@ -888,14 +977,14 @@ function register(app, { addUser }) {
     try {
       const b = req.body || {};
       const r = await buy(req.user, { tier: b.tier, pad: b.pad, user: b.user, months: b.months, amount: b.amount, ref: b.ref, renew: b.renew === true, via: "web", anon: b.anon === true });
-      res.json({ ok: true, ...r, state: await state(req.user, b.tier === "prime_time" ? b.pad : null) });
+      res.json({ ok: true, ...r, state: await state(req.user, TIERS[b.tier] && TIERS[b.tier].kind === "pad" ? b.pad : null) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/premium/renew", addUser, write, async (req, res) => {
     try {
       const b = req.body || {};
       const r = await setRenew(req.user, { tier: b.tier, pad: b.pad, on: b.on });
-      res.json({ ok: true, ...r, state: await state(req.user, b.tier === "prime_time" ? b.pad : null) });
+      res.json({ ok: true, ...r, state: await state(req.user, TIERS[b.tier] && TIERS[b.tier].kind === "pad" ? b.pad : null) });
     } catch (e) { fail(res, e); }
   });
   const staffOnly = (req) => { if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only."); };
@@ -930,7 +1019,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
-  isPrime, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
+  isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

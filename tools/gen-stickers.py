@@ -524,12 +524,239 @@ def movie_pack():
     return out
 
 
+# ── 1.99qp: 🎃 Spooky Season (Season Pass, seasonal) + 💎 Prime Time Plus (the pad tier's own pack). No text, no brands. ──
+PUMPK, PUMPKD, PUMPKE = "#ff7b1c", "#c4520a", "#6b2a00"
+GLOW = "#ffe066"
+ZOMB, ZOMBD, ZOMBL = "#8fae7b", "#4b6343", "#b7cfa6"
+MOON, MOOND = "#fff1b8", "#e6c86e"
+GOLDD, GOLDL = "#b8860b", "#fff1a8"
+DIAM, DIAMD, DIAML = "#7fdbff", "#1b7fa6", "#e6fbff"
+PALE = "#4a4430"
+HAT, HATD = "#6a3fa0", "#3c1a5b"
+
+
+def pepe_head_c(g, body, edge, hi, limbs=None):
+    """pepe_head in other colours (the zombie)."""
+    g.ellipse(8.5, 7.5, 4.6, 3.8, body)
+    g.ellipse(16.0, 7.5, 4.6, 3.8, body)
+    g.ellipse(12.0, 14.0, 10.4, 7.2, body)
+    g.rect(3, 12, 20, 19, body)
+    if limbs:
+        limbs(g)
+    g.outline(body, edge)
+    g.pts([(6, 5), (7, 5), (14, 5), (15, 5), (4, 11)], hi)
+
+
+def spooky_pack():
+    out = {}
+
+    # Jack-o'-lantern with a curly stem
+    g = Grid()
+    g.ellipse(12.0, 14.5, 10.6, 8.2, PUMPK)
+    g.outline(PUMPK, PUMPKE)
+    for x in (8, 12, 16):
+        for y in range(8, 22):
+            if g.px[y][x] == PUMPK:
+                g.set(x, y, PUMPKD)
+    g.rect(11, 3, 13, 6, GD); g.pts([(14, 3), (15, 2), (16, 2)], G); g.pts([(10, 2), (9, 1)], GD)
+    for x0 in (6, 14):                                   # triangle eyes
+        g.rect(x0, 12, x0 + 3, 12, GLOW); g.rect(x0 + 1, 10, x0 + 2, 11, GLOW)
+    g.rect(6, 16, 17, 17, GLOW)                          # zigzag grin
+    g.pts([(8, 16), (11, 17), (14, 16), (16, 17)], PUMPKD)
+    g.pts([(6, 15), (17, 15)], GLOW)
+    out["pumpkin"] = ("Jack-o'-lantern", g)
+
+    # Boo! Pepe under a sheet
+    g = Grid()
+    g.ellipse(8.5, 7.5, 4.6, 3.8, W); g.ellipse(16.0, 7.5, 4.6, 3.8, W); g.ellipse(12.0, 14.0, 10.4, 7.2, W)
+    g.rect(2, 12, 21, 21, W)
+    for x in range(2, 22):                               # wavy hem
+        if (x // 3) % 2 == 1:
+            g.px[21][x] = None
+    g.outline(W, GREYL)
+    g.rect(7, 7, 8, 9, K); g.rect(15, 7, 16, 9, K)
+    g.rect(10, 13, 13, 16, K); g.rect(11, 14, 12, 15, RD)
+    g.pts([(0, 4), (1, 3), (22, 2), (23, 1)], GREYL)
+    out["ghost"] = ("Boo!", g)
+
+    # Witch Pepe: a pointy purple hat
+    g = Grid(); pepe_head(g); eyes_look(g, 1); mouth(g, "smile")
+    h = Grid()
+    h.rect(2, 4, 21, 5, HAT)
+    for y in range(0, 4):
+        h.rect(8 + y, y, 15 - y // 2, y, HAT)
+    h.pts([(16, 0), (17, 0), (18, 1)], HAT)
+    stamp(g, h, K)
+    g.rect(9, 3, 14, 3, GOLD); g.set(11, 3, HATD)
+    out["witch"] = ("Witch Pepe", g)
+
+    # Vampire Pepe: red eyes, fangs, a high collar
+    g = Grid(); pepe_head(g)
+    for x0 in (6, 14):
+        g.rect(x0, 7, x0 + 3, 8, W); g.rect(x0 + 1, 7, x0 + 2, 8, R)
+    g.pts([(6, 6), (7, 6), (16, 6), (17, 6)], K)
+    mouth(g, "flat"); g.pts([(8, 16), (15, 16), (8, 17), (15, 17)], W)
+    for i in range(6):
+        g.rect(0, 23 - i, 5 - i, 23 - i, K); g.rect(18 + i, 23 - i, 23, 23 - i, K)
+        if i < 4:
+            g.rect(1, 23 - i, max(1, 3 - i), 23 - i, RD); g.rect(min(22, 20 + i), 23 - i, 22, 23 - i, RD)
+    out["vampire"] = ("Vampire Pepe", g)
+
+    # A bat across the full moon
+    g = Grid()
+    g.ellipse(12.0, 11.5, 10.0, 10.0, MOON)
+    g.pts([(7, 6), (8, 6), (8, 7), (15, 17), (16, 17), (16, 16), (17, 5)], MOOND)
+    g.rect(11, 10, 12, 15, K); g.pts([(10, 9), (13, 9), (10, 10), (13, 10)], K)          # body + ears
+    for dx in range(1, 10):                                                              # scalloped wings
+        top = 12 - (dx + 1) // 2
+        bot = 13 - (2 if dx % 3 == 0 else 0) - (1 if dx > 6 else 0)
+        g.rect(11 - dx, top, 11 - dx, max(top, bot), K); g.rect(12 + dx, top, 12 + dx, max(top, bot), K)
+    g.pts([(11, 11), (12, 11)], GOLD)
+    out["moonbat"] = ("Night flight", g)
+
+    # Sweet tooth: Pepe and floating wrapped candies
+    g = Grid(); pepe_head(g); eyes_look(g, 0, -1); mouth(g, "grin")
+    for cx, cy, c in ((3, 21, R), (12, 21, PURPLE), (20, 21, ORANGE), (2, 2, CYAN), (21, 2, PINK)):
+        g.rect(cx - 1, cy - 1, cx + 1, cy + 1, c); g.set(cx, cy, W)
+        g.pts([(cx - 2, cy - 1), (cx - 2, cy + 1), (cx + 2, cy - 1), (cx + 2, cy + 1)], c)
+    out["candy"] = ("Sweet tooth", g)
+
+    # Zombie Pepe: grey-green, a stitched cheek, one blank eye
+    g = Grid(); pepe_head_c(g, ZOMB, ZOMBD, ZOMBL)
+    g.rect(6, 7, 9, 8, W); g.rect(7, 8, 8, 8, K); g.rect(6, 7, 9, 7, ZOMBD)
+    g.rect(14, 7, 17, 8, "#e9f0e1")
+    g.rect(6, 15, 16, 15, RD); g.pts([(7, 16), (10, 16), (13, 16)], RD)
+    g.rect(16, 11, 20, 11, K); g.pts([(17, 10), (19, 10), (17, 12), (19, 12)], K)
+    out["zombie"] = ("Zombie Pepe", g)
+
+    # A bubbling cauldron with Pepe's eyes peeking out of the brew
+    g = Grid()
+    e = Grid(); e.ellipse(8.5, 8.0, 2.6, 2.4, G); e.ellipse(15.5, 8.0, 2.6, 2.4, G); e.outline(G, GD)
+    for y in range(e.h):
+        for x in range(e.w):
+            if e.px[y][x]:
+                g.set(x, y, e.px[y][x])
+    g.rect(7, 7, 9, 8, W); g.rect(14, 7, 16, 8, W); g.pts([(8, 8), (15, 8)], K)
+    g.ellipse(12.0, 16.5, 10.0, 6.8, "#2b2b33"); g.rect(1, 10, 22, 11, "#2b2b33"); g.outline("#2b2b33", K)
+    g.rect(3, 10, 20, 11, "#5ddc5d"); g.pts([(4, 9), (5, 9), (11, 9), (12, 9), (19, 9), (20, 9)], "#5ddc5d")
+    g.pts([(5, 6), (12, 5), (19, 6), (11, 2), (20, 3)], "#9cf59c")
+    g.rect(5, 22, 7, 23, K); g.rect(16, 22, 18, 23, K)
+    out["cauldron"] = ("Bubble, bubble", g)
+    return out
+
+
+def plus_pack():
+    out = {}
+
+    # Crowned: Pepe in a gold crown
+    g = Grid(); pepe_head(g); eyes_normal(g); mouth(g, "smile")
+    c = Grid()
+    c.rect(6, 2, 17, 4, GOLD); c.pts([(6, 1), (9, 0), (9, 1), (12, 0), (12, 1), (14, 0), (14, 1), (17, 1)], GOLD)
+    stamp(g, c, GOLDD)
+    g.pts([(9, 3), (14, 3)], R); g.set(12, 3, BLUE); g.pts([(7, 2), (10, 2), (13, 2), (16, 2)], GOLDL)
+    out["crown"] = ("Crowned", g)
+
+    # In the spotlight: a light cone from the top
+    g = Grid()
+    for y in range(24):
+        half = 2 + y * 9 // 23
+        g.rect(12 - half, y, 11 + half, y, PALE)
+    g.rect(9, 0, 14, 1, GREYL); g.rect(10, 0, 13, 0, W)
+    h = Grid(); pepe_head(h); eyes_look(h, 0, -1); mouth(h, "o")
+    for y in range(24):
+        for x in range(24):
+            if h.px[y][x] and y >= 3 and y + 2 < 24:
+                g.set(x, y + 2, h.px[y][x])
+    g.pts([(2, 3), (21, 3), (1, 10), (22, 10)], GOLD)
+    out["spotlight"] = ("In the spotlight", g)
+
+    # Trophy
+    g = Grid()
+    t = Grid()
+    t.rect(6, 2, 17, 4, GOLD); t.ellipse(12.0, 6.0, 6.2, 6.2, GOLD)
+    t.rect(11, 12, 12, 15, GOLD); t.rect(8, 16, 15, 17, GOLD)
+    t.pts([(3, 4), (4, 4), (3, 5), (3, 6), (4, 7), (5, 8), (20, 4), (19, 4), (20, 5), (20, 6), (19, 7), (18, 8)], GOLD)
+    stamp(g, t, GOLDD)
+    frame_box(g, 6, 18, 17, 22, "#5d4037"); g.rect(9, 20, 14, 20, GOLD)
+    g.pts([(9, 4), (9, 5), (10, 3), (8, 6)], GOLDL)
+    g.pts([(12, 6), (11, 7), (12, 7), (13, 7), (12, 8)], W)
+    out["trophy"] = ("Champion", g)
+
+    # Diamond with sparkles
+    g = Grid()
+    g.rect(7, 5, 16, 5, DIAM)
+    for y in range(6, 9):
+        g.rect(6 - (y - 6), y, 17 + (y - 6), y, DIAM)
+    for y in range(9, 21):
+        k = (y - 9) * 8 // 11
+        g.rect(4 + k, y, 19 - k, y, DIAM)
+    g.outline(DIAM, DIAMD)
+    g.rect(4, 9, 19, 9, DIAMD)
+    for y in range(10, 21):
+        k = (y - 9) * 8 // 11
+        span = 19 - 4 - 2 * k
+        g.set(4 + k + span // 3, y, DIAMD); g.set(19 - k - span // 3, y, DIAMD)
+    g.pts([(8, 6), (9, 6), (7, 7), (8, 10), (8, 11), (9, 12)], DIAML)
+    sparkle(g, 21, 3, W); sparkle(g, 2, 18, DIAML); sparkle(g, 21, 18, GOLD)
+    out["diamond"] = ("Diamond", g)
+
+    # Studio camera with a red tally light
+    g = Grid()
+    frame_box(g, 2, 7, 15, 15, GREYD); g.rect(3, 8, 14, 8, GREY)
+    frame_box(g, 15, 8, 21, 14, "#22222a"); g.ellipse(18.5, 11.0, 1.8, 1.8, DIAM); g.set(18, 10, W)
+    g.rect(4, 4, 7, 6, R); g.set(5, 4, "#ff9b9d"); g.rect(4, 6, 7, 6, K)
+    g.rect(10, 4, 13, 6, GREY)
+    g.rect(8, 16, 9, 19, K)
+    g.pts([(8, 20), (7, 21), (6, 22), (5, 23), (9, 20), (10, 21), (11, 22), (12, 23), (8, 21), (8, 22), (8, 23)], K)
+    g.pts([(1, 2), (2, 1), (0, 1)], GOLD)
+    out["camera"] = ("Rolling", g)
+
+    # Red carpet: a runway in perspective between gold rope posts, a star at the end
+    g = Grid()
+    for y in range(8, 24):
+        half = 2 + (y - 8) * 8 // 15
+        g.rect(12 - half, y, 11 + half, y, R)
+        g.set(12 - half, y, RD); g.set(11 + half, y, RD)
+    for x, y in ((6, 10), (17, 10), (2, 16), (21, 16)):
+        g.rect(x, y, x, y + 5, GOLD); g.rect(x - 1, y - 1, x + 1, y - 1, GOLD); g.rect(x - 1, y + 6, x + 1, y + 6, GOLDD)
+    g.pts([(3, 14), (4, 13), (5, 12), (20, 14), (19, 13), (18, 12)], "#b0002a")
+    g.pts([(12, 1), (11, 2), (12, 2), (13, 2), (9, 3), (10, 3), (11, 3), (12, 3), (13, 3), (14, 3), (15, 3),
+           (11, 4), (12, 4), (13, 4), (10, 5), (11, 5), (13, 5), (14, 5)], GOLD)
+    out["redcarpet"] = ("Red carpet", g)
+
+    # Big time: dark shades and a gold chain
+    g = Grid(); pepe_head(g); mouth(g, "smile")
+    g.rect(4, 6, 19, 6, K); g.rect(5, 7, 10, 9, K); g.rect(13, 7, 18, 9, K); g.rect(11, 7, 12, 7, K)
+    g.pts([(6, 7), (7, 7), (14, 7), (15, 7)], "#5a6b8c")
+    for x in range(5, 19):
+        g.set(x, 20 + (1 if 8 <= x <= 15 else 0) + (1 if 10 <= x <= 13 else 0), GOLD if x % 2 else GOLDD)
+    g.rect(11, 22, 12, 23, GOLD); g.set(11, 22, GOLDL)
+    sparkle(g, 21, 3, W); sparkle(g, 2, 2, GOLD)
+    out["shades"] = ("Big time", g)
+
+    # Golden mic on a stand
+    g = Grid()
+    m = Grid(); m.ellipse(12.0, 5.0, 3.6, 4.2, GOLD); m.rect(11, 9, 12, 11, GOLD)
+    stamp(g, m, GOLDD)
+    g.pts([(11, 2), (13, 2), (10, 4), (12, 4), (14, 4), (11, 6), (13, 6)], GOLDD); g.set(10, 3, GOLDL)
+    g.rect(10, 12, 13, 12, K); g.rect(11, 13, 12, 20, GREY); g.rect(7, 21, 16, 22, GREYD)
+    g.pts([(6, 3), (5, 2), (4, 4), (18, 3), (19, 2), (20, 4)], GOLD)
+    sparkle(g, 3, 10, W); sparkle(g, 20, 10, W)
+    out["goldmic"] = ("Golden mic", g)
+    return out
+
+
 PACKS = {"pixelpepe": pixel_pack, "kawaiipond": kawaii_pack, "patvreacts": reacts_pack,
-         "miclife": mic_pack, "highroller": casino_pack, "movienight": movie_pack}
+         "miclife": mic_pack, "highroller": casino_pack, "movienight": movie_pack,
+         "spooky": spooky_pack, "primeplus": plus_pack}
 
 
 def main():
+    import sys
+    only = [a for a in sys.argv[1:] if a in PACKS]       # 1.99qp: python tools/gen-stickers.py spooky primeplus (just those)
     for pack, fn in PACKS.items():
+        if only and pack not in only:
+            continue
         d = os.path.join(ROOT, pack)
         os.makedirs(d, exist_ok=True)
         for sid, (title, grid) in fn().items():

@@ -304,7 +304,7 @@ async function adminState(t = clock()) {
   try { items = await require("./shop").officialPolicies(); } catch (e) { items = []; }
   let cosmetics = [], stickers = [];
   try { cosmetics = require("./cosmetics").catalog().filter((i) => !i.perk).map((i) => ({ id: i.id, name: i.name, kind: i.kind })); } catch (e) { cosmetics = []; }
-  try { stickers = require("./stickers").catalog().map((p) => ({ id: p.id, name: p.name })); } catch (e) { stickers = []; }
+  try { stickers = require("./stickers").catalog().filter((p) => !p.perk).map((p) => ({ id: p.id, name: p.name })); } catch (e) { stickers = []; }   // 1.99qp: no perk packs (they come with their tier)
   // 1.99mt: the gift log - every member gift with its REAL giver (anonymous ones marked) for abuse handling
   let gifts = [];
   try { gifts = await require("./gifts").adminLog(150); } catch (e) { gifts = []; }

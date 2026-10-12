@@ -89,7 +89,7 @@ test.after(() => { if (server) server.close(); F.sync({}); });
 test("config: the proposed prices and perks, routing rows with defaults; a bad row falls back, 'room' only on Prime Time", async () => {
   const C = PR.config();
   assert.deepEqual([C.prime_price, C.season_price, C.period_days, C.grace_days, C.sticker_price], [10000000, 2000000, 30, 3, 250000]);
-  assert.deepEqual(C.routes, { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]],
+  assert.deepEqual(C.routes, { prime_time: [["fortknox", 50], ["room", 50]], prime_plus: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]],
                                creators: [["fortknox", 50], ["room", 50]] });     // 1.99pv: PATV Creators' 20% cut
   const R = PR.cleanRoutes({ prime_time: [["burn", 100]], season_pass: [["room", 100]], stickers: [["reserve", 30], ["fortknox", 60]] });
   assert.deepEqual(R.prime_time, [["fortknox", 50], ["room", 50]], "no burn destination exists");
@@ -187,7 +187,7 @@ test("not enough PAT: refused (402), nothing written; comped pads / accounts can
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM premium_ledger"))[0].n, n0);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM transactions WHERE userId = ?", [poor.userId]))[0].n, 0);
   assert.equal((await claims(poor)).length, 0);
-  await assert.rejects(PR.buy(fan, { tier: "gold", ref: ref() }), /Prime Time or Season Pass/);
+  await assert.rejects(PR.buy(fan, { tier: "gold", ref: ref() }), /Prime Time, Prime Time Plus or Season Pass/);
   await assert.rejects(PR.buy(fan, { tier: "season_pass", ref: "x" }), /ref/);
   await assert.rejects(PR.buy(fan, { tier: "prime_time", pad: "nope-nope", ref: ref() }), /No pad called nope-nope/);
 });
@@ -263,7 +263,8 @@ test("admin comp: the site admin's account gets a Season Pass, their pads Prime 
 
 test("Prime Time perks on the pad: its items equip only while it's on, +2 badge slots, the automatic badge; stage slot bonus", async () => {
   // DRAMA is comped (admin's pad)
-  assert.deepEqual(PR.padPerks(DRAMA), { primeTime: true, extraSlots: 2, extraBadges: 2, lowLatency: true });
+  assert.deepEqual(PR.padPerks(DRAMA), { primeTime: true, primePlus: false, tier: "prime_time", extraSlots: 2, extraBadges: 2, lowLatency: true,
+                                         bridge: true, retention: "prime", soundboardSlots: 8 });
   await PC.equip(boss, DRAMA, "pt_frame", true);
   for (const b of ["pt_onair", "pt_premiere"]) await PC.equip(boss, DRAMA, b, true);
   const fx = PC.fx(DRAMA);

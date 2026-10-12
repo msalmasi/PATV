@@ -21,13 +21,16 @@
 // chip in every pad where they have no flair of the pad's own (the pad's flair always wins). It comes and goes with the
 // membership (no row is written); media setting plex_flair switches it off.
 //
+// 1.99qp 💎 PRIME TIME PLUS: a Plus pad may define MAX_FLAIRS_PLUS flairs (twice the normal), and its OWNER shows the
+// automatic "💎 Plus" flair in that pad (where they have no flair of the pad's own) - never stored, never assignable.
+//
 // Management: the pad settings hub's "🏷️ Flair" tab (views/padSettings.ejs, public/js/pad-flair.js). Members pick
 // theirs from the pad page's Feed tab ("Your flair here").
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
 
-const MAX_FLAIRS = 25, NAME_MAX = 24, EMOJI_MAX = 16, CACHE_MS = 60e3;
+const MAX_FLAIRS = 25, MAX_FLAIRS_PLUS = 50, NAME_MAX = 24, EMOJI_MAX = 16, CACHE_MS = 60e3;
 const DEFAULT_COLOR = "#66bb6a";
 let NOW = () => Date.now();
 
@@ -99,6 +102,20 @@ function plexByName(name) { try { return plexOn() && PM().memberByName(name) ? p
 // 1.99mv: the automatic 💚 Supporter flair (supporter.js: donated to PATV; 🥉 / 🥈 / 🥇 by lifetime total) - after the pad's
 // own flair, before the 📼 Plex one; never stored, never assignable
 const SUP = () => require("./supporter");
+// 1.99qp: 💎 Prime Time Plus - more flair slots, and the owner's automatic 💎 Plus flair in their Plus pad
+const plusPad = (roomId) => { try { return require("./premium").isPrimePlus(roomId); } catch (e) { return false; } };
+const maxFlairs = (roomId) => (plusPad(roomId) ? MAX_FLAIRS_PLUS : MAX_FLAIRS);
+let PLUS_FLAIR = null;
+function plusFlair() {
+  if (!PLUS_FLAIR) { const c = cleanColor("#7fdbff") || cleanColor(DEFAULT_COLOR); PLUS_FLAIR = { id: 0, name: "Plus", color: c.hex, ink: c.ink, emoji: "💎", self: false, auto: "plus" }; }
+  return PLUS_FLAIR;
+}
+/** The Plus pad's owner -> {id, name (lowercased username)} or null (not a Plus pad / no owner). */
+function plusHost(roomId) {
+  if (!plusPad(roomId)) return null;
+  try { const R = rooms.getCached(roomId); return R && R.owner && R.owner.userId ? { id: String(R.owner.userId), name: String(R.owner.username || "").toLowerCase() } : null; }
+  catch (e) { return null; }
+}
 function supById(userId) { try { return SUP().flair(SUP().supporterSync(userId)); } catch (e) { return null; } }
 function supByName(name) { try { return SUP().flair(SUP().supporterByName(name)); } catch (e) { return null; } }
 async function load(roomId) {
@@ -131,23 +148,29 @@ async function forUsers(roomId, userIds) {
   const out = new Map();
   if (!flairable(roomId)) return out;
   const L = await load(roomId);
-  for (const id of userIds || []) { const f = L.byUser.get(String(id)) || supById(id) || plexById(id); if (f) out.set(String(id), f); }
+  const host = plusHost(roomId);
+  for (const id of userIds || []) {
+    const f = L.byUser.get(String(id)) || (host && host.id === String(id) ? plusFlair() : null) || supById(id) || plexById(id);
+    if (f) out.set(String(id), f);
+  }
   return out;
 }
 /** The pad's flairs by lowercased PATV username (the live chat resolves people by their linked account's username). */
 async function byUsername(roomId) {
   if (!flairable(roomId)) return new Map();
   const m = (await load(roomId)).byName;
-  // the pad's own flair, else the automatic 💚 Supporter / 📼 Plex one (a Map-like: only get / has are used)
-  return { get: (name) => m.get(name) || supByName(name) || plexByName(name) || undefined,
-           has: (name) => m.has(name) || !!supByName(name) || !!plexByName(name), size: m.size };
+  // the pad's own flair, else the automatic 💎 Plus (the Plus pad's owner, 1.99qp) / 💚 Supporter / 📼 Plex one (a Map-like: only get / has are used)
+  const host = plusHost(roomId);
+  const plusOf = (name) => (host && host.name && String(name || "").toLowerCase() === host.name ? plusFlair() : null);
+  return { get: (name) => m.get(name) || plusOf(name) || supByName(name) || plexByName(name) || undefined,
+           has: (name) => m.has(name) || !!plusOf(name) || !!supByName(name) || !!plexByName(name), size: m.size };
 }
 async function of(roomId, userId) { return (await forUsers(roomId, [userId])).get(String(userId)) || null; }
 
 /** The chip (escaped; colour values are strict hex from cleanColor). */
 function html(f, { cls = "" } = {}) {
   if (!f || !f.name) return "";
-  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="${f.auto === "plex" ? "On our Plex server" : f.auto === "supporter" ? "Supports PATV with donations" : "Pad flair: " + esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}</span>`;
+  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="${f.auto === "plex" ? "On our Plex server" : f.auto === "supporter" ? "Supports PATV with donations" : f.auto === "plus" ? "Runs this 💎 Prime Time Plus pad" : "Pad flair: " + esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}</span>`;
 }
 /** What the live chat JSON carries (rendered with textContent on the page). */
 const plain = (f) => (f ? { name: f.name, color: f.color, ink: f.ink, emoji: f.emoji || "" } : null);
@@ -178,7 +201,7 @@ async function save(actor, roomId, input = {}) {
   if (have.some((f) => Number(f.id) !== id && String(f.name).toLowerCase() === name.toLowerCase())) throw new Refuse(409, `This pad already has a flair called "${name}".`);
   const t = NOW();
   if (id === null) {
-    if (have.length >= MAX_FLAIRS) throw new Refuse(400, `A pad can have up to ${MAX_FLAIRS} flairs.`);
+    if (have.length >= maxFlairs(roomId)) throw new Refuse(400, `A pad can have up to ${maxFlairs(roomId)} flairs.` + (plusPad(roomId) ? "" : ` 💎 Prime Time Plus pads get ${MAX_FLAIRS_PLUS}.`));
     await runQuery("INSERT INTO pad_flairs (room_id, name, color, emoji, self_assign, sort, created, created_by, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                    [roomId, name, color.hex, emoji || null, self, have.length, t, who(actor), t]);
     await audit(roomId, actor, `created flair "${name}"${self ? " (self-assignable)" : ""}`);
@@ -283,7 +306,7 @@ async function manageView(roomId) {
     .filter((p) => p.flair);
   const count = new Map();
   for (const p of people) count.set(p.flair.id, (count.get(p.flair.id) || 0) + 1);
-  return { flairs: flairs.map((f) => ({ ...f, n: count.get(f.id) || 0 })), people, max: MAX_FLAIRS, nameMax: NAME_MAX, palette: LOOK().PALETTE };
+  return { flairs: flairs.map((f) => ({ ...f, n: count.get(f.id) || 0 })), people, max: maxFlairs(roomId), nameMax: NAME_MAX, palette: LOOK().PALETTE };
 }
 
 // ── routes: /api/pads/<slug>/flair ... (the pad's own access rules apply: an Approved pad's flair is for its insiders) ──
@@ -343,4 +366,4 @@ function register(app, { addUser }) {
 }
 
 module.exports = { init, register, list, forUsers, byUsername, of, html, plain, dropAll, plexFlair, save, remove, assign, pick, mine, manageView, cleanName, cleanEmoji, cleanColor,
-                   Refuse, MAX_FLAIRS, NAME_MAX, _drop: drop, _clear: () => cache.clear(), _setClock: (fn) => { NOW = fn || (() => Date.now()); } };
+                   Refuse, MAX_FLAIRS, MAX_FLAIRS_PLUS, maxFlairs, plusFlair, NAME_MAX, _drop: drop, _clear: () => cache.clear(), _setClock: (fn) => { NOW = fn || (() => Date.now()); } };

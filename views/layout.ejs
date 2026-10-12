@@ -71,6 +71,8 @@
               const _supportOn = typeof supportOn === 'function' ? !!supportOn() : false;
               // casino front end per game (casino/routes.js app.locals.casinoOn): 1.99ol bj_front / hm_front on /admin/games, "auto" = the engine flag; cached
               const _casino = (g) => typeof casinoOn === 'function' ? !!casinoOn(g) : false;
+              // 1.99qp: ⭐ PATV Creators links (creators.navFor via app.locals.creatorNav) - hidden while the feature is off
+              const _cr = typeof creatorNav === 'function' ? creatorNav(_in ? user : null) : { on: false, creator: false };
               const _here = typeof ogPath !== 'undefined' && ogPath && ogPath !== '/language' ? ogPath : '';
               // 2026-10-11: More and ☰ share one grouped list - [id, heading, items, class]; falsy items are gated off.
               // More skips the top-bar items (they're already on the bar); ☰ shows everything. Staff last, hidden until /api/u/.../profile says Admin.
@@ -81,11 +83,13 @@
                   ['/staking', '🏦', t('nav.staking')],
                   ['/history', '📜', t('nav.history')],
                   _in && ['/subscriptions', '🔁', t('subs.title')],   // 1.99jr: signed in only
+                  _in && _cr.on && (_cr.creator ? ['/creator', '⭐', t('nav.creator_dash')] : ['/creators#apply', '🌟', t('nav.become_creator')]),
                   ['/achievements', '🏅', t('nav.achievements')],
                   _in && ['/settings/telegram', '✈️', t('nav.telegram')],
                 ]],
                 ['watch', t('nav.sec_watch'), [T.watch, T.pads, T.feed,
                   ['/plex', '📼', t('nav.plex')],   // 1.99kp: the Plex hub (plexhub.js)
+                  _cr.on && ['/creators', '⭐', t('nav.creators')],   // 1.99qp: PATV Creators
                 ]],
                 ['play', t('nav.sec_play'), [T.wheel, T.markets, T.wagers, T.gtf,
                   ['/lotto', '🎟️', t('nav.lotto')],

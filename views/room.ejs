@@ -408,7 +408,7 @@
    const giftSigned_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user);
    // 1.99iv: 📺 Prime Time (premium.js) - the intro sweep on open + the ⋯ menu entry
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
-<link rel="stylesheet" href="/public/css/padfx.css?v=2">
+<link rel="stylesheet" href="/public/css/padfx.css?v=3">
 <main class="ds-page rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
   <% if (primeOn_) { %><div class="pt-intro" aria-hidden="true">📺 PRIME TIME</div><% } %>
@@ -586,6 +586,15 @@
 <% } %>
 
 <% if (!bridged_ || siteOnly_) { %>
+  <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
+<% } else if (room.bridgeLocked) { %>
+  <%# 1.99qp: the live Camfrog room is a 💎 Prime Time Plus perk (premium.bridgeAllowed) %>
+  <section class="card tease" id="rmPlusLock">
+    <div class="big" aria-hidden="true">💎</div>
+    <h2 style="justify-content:center"><%- t('pad.plus.h') %></h2>
+    <p class="muted"><%- t('pad.plus.text') %></p>
+    <a class="btn" href="/premium?pad=<%= encodeURIComponent(room.slug) %>#plus"><%- t('pad.plus.cta') %></a>
+  </section>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else if (!liveOpen_) { %>
   <section class="card tease">
@@ -1221,7 +1230,7 @@
     <% } %>
   </section>
   <script src="/public/js/pad-tabs.js?v=5"></script>
-  <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=3" defer></script><% } %>
+  <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=4" defer></script><% } %>
   <% if (typeof roomVault !== 'undefined' && roomVault && roomVault.can_set_rate) { %><script src="/public/js/pad-vault.js?v=1" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>
   <script>

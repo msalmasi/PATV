@@ -21,6 +21,17 @@
     ['🧸', t('premium.pt.sticker'), t('premium.pt.sticker_d'), 'soon'],
     ['📈', t('premium.pt.analytics'), t('premium.pt.analytics_d'), 'soon'],
   ];
+  // 1.99qp: 💎 Prime Time Plus (premium.js prime_plus) - everything in Prime Time, plus these
+  const PP_PERKS = [
+    ['📺', t('premium.pp.all_pt'), t('premium.pp.all_pt_d'), 'live'],
+    ['🌉', t('premium.pp.bridge'), t('premium.pp.bridge_d'), 'live'],
+    ['🗄️', t('premium.pp.retention'), t('premium.pp.retention_d'), 'live'],
+    ['🔊', t('premium.pp.soundboard', { n: S.perks.sb_slots_plus }), t('premium.pp.soundboard_d', { pt: S.perks.sb_slots_prime }), 'soon'],
+    ['💎', t('premium.pp.stickers'), t('premium.pp.stickers_d'), 'live'],
+    ['✨', t('premium.pp.cosmetics'), t('premium.pp.cosmetics_d'), 'live'],
+    ['🏷️', t('premium.pp.flair'), t('premium.pp.flair_d'), 'live'],
+  ];
+  const PLUS = PAD ? (PAD.plus || null) : null;
   const SP_PERKS = [
     ['🌈', t('premium.sp.name'), t('premium.sp.name_d'), 'live'],
     ['💫', t('premium.sp.ring'), t('premium.sp.ring_d'), 'live'],
@@ -33,7 +44,7 @@
   ];
   const routeRow = (r) => r.shares.map((x) => x.pct + '% ' + x.label).join(' · ') + (r.rest ? ' · ' + r.rest + '% 🏛️ Federal Reserve' : '');
 %>
-<link rel="stylesheet" href="/public/css/padfx.css?v=2">
+<link rel="stylesheet" href="/public/css/padfx.css?v=3">
 <style>
   /* 1.99pu polish: ds-page + ds-hero.gold / ds-card / ds-btn / ds-in / ds-tbl. Area accent = premium violet (ink #12002a). */
   .pm { --ds-ac: var(--ds-acc-premium); --ds-ac-2: #cdb2ff; --ds-ac-bg: rgba(179, 136, 255, .13); --ds-ac-line: #4a3577; --ds-on-ac: #12002a; }
@@ -44,6 +55,8 @@
               align-content: start; min-width: 0; grid-template-columns: minmax(0, 1fr); }
   .pm .card p { margin: 0; }
   .pm .tier.pt { border-color: var(--ds-gold-line); background: linear-gradient(180deg, #1d1606 0%, var(--ds-surface) 40%); }
+  .pm .tier.pp { border-color: #2f5f7a; background: linear-gradient(180deg, #0c1a26 0%, var(--ds-surface) 40%); }
+  .pm .tier.pp .price { color: #9fe3ff; }
   .pm .tier.sp { border-color: var(--ds-ac-line); background: linear-gradient(180deg, #170f28 0%, var(--ds-surface) 40%); }
   .pm .tier h3 { margin: 0; font: 700 22px/1.25 var(--ds-font); color: var(--ds-text-strong); display: flex; align-items: center; gap: var(--ds-sp-2); flex-wrap: wrap; }
   .pm .price { font-size: var(--ds-fs-num-lg); font-weight: 700; line-height: 1.2; color: var(--ds-gold-text); font-variant-numeric: tabular-nums; }
@@ -79,7 +92,7 @@
   <section class="ds-hero gold">
     <span class="ds-eyebrow"><%- t('premium.eyebrow') %></span>
     <h1><%- t('premium.h1') %></h1>
-    <p class="ds-lead"><%- t('premium.lead', { days: S.period_days }) %></p>
+    <p class="ds-lead"><%- t('premium.lead3', { days: S.period_days }) %></p>
     <% if (!S.sales) { %><p class="ds-lead paused"><%- t('premium.paused') %></p><% } %>
   </section>
 
@@ -96,7 +109,7 @@
           <div><%- statusTxt(PAD) %><% if (PAD.renewing && PAD.status !== 'comped') { %> · <%- t('premium.renews') %><% } %></div>
           <% if (PAD.contributors && PAD.contributors.length) { %><div class="mut" style="margin-block-start:6px"><%- t('premium.backed_by') %></div><ul class="contrib"><% PAD.contributors.forEach((c) => { %><li><% if (c.anon) { %><%- t('premium.anon_backer') %><% } else { %><%= c.name %><% } %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
         </div>
-        <% if (PAD.status !== 'comped') { %>
+        <% if (PLUS && PLUS.active) { %><p class="mut"><%- t('premium.pp.includes_pt') %></p><% } else if (PAD.status !== 'comped') { %>
           <% if (V.signed) { %>
             <div class="row">
               <button type="button" class="ds-btn gold" data-buy="prime_time" data-months="1"><%- t(PAD.mine ? 'premium.get_1' : 'premium.gift_1', { price: fmt(S.prices.prime_time) }) %></button>
@@ -125,6 +138,34 @@
       <% } %>
     </section>
 
+    <section class="card tier pp" id="plus" aria-labelledby="ppH">
+      <h3 id="ppH"><span class="ds-ic" aria-hidden="true">💎</span> Prime Time Plus <span class="ds-tag"><%- t('premium.pp.tag') %></span></h3>
+      <div class="price"><%= fmt(S.prices.prime_plus) %> PAT <small><%- t('premium.pt.per_period', { days: S.period_days, price: fmt(S.day_price.prime_plus) }) %></small></div>
+      <ul class="perks">
+        <% PP_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span class="ds-ic lg" aria-hidden="true"><%= p[0] %></span><span><b><%- p[1] %></b><% if (p[3] === 'soon') { %><span class="ds-tag soon-tag"><%- t('premium.coming_soon') %></span><% } %><span class="d"><%- p[2] %></span></span></li><% }) %>
+      </ul>
+      <% if (PAD && PLUS) { %>
+        <div class="stat" id="ppState">
+          <div><b>p/<%= PAD.slug %></b><% if (PAD.title && PAD.title !== PAD.slug) { %> · <%= PAD.title %><% } %></div>
+          <div><%- statusTxt(PLUS) %><% if (PLUS.renewing && PLUS.status !== 'comped') { %> · <%- t('premium.renews') %><% } %></div>
+          <% if (PLUS.contributors && PLUS.contributors.length) { %><div class="mut" style="margin-block-start:6px"><%- t('premium.backed_by') %></div><ul class="contrib"><% PLUS.contributors.forEach((c) => { %><li><% if (c.anon) { %><%- t('premium.anon_backer') %><% } else { %><%= c.name %><% } %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
+        </div>
+        <% if (PLUS.status !== 'comped') { %>
+          <% if (V.signed) { %>
+            <% if (PLUS.upgrade) { %><p class="mut" id="ppUpgrade"><%- t('premium.pp.upgrade_note', { pt: PLUS.upgrade.pt_days, plus: PLUS.upgrade.plus_days }) %></p><% } %>
+            <div class="row">
+              <button type="button" class="ds-btn gold" data-buy="prime_plus" data-months="1"><%- t(PLUS.upgrade ? 'premium.pp.upgrade_1' : PAD.mine ? 'premium.get_1' : 'premium.gift_1', { price: fmt(S.prices.prime_plus) }) %></button>
+              <button type="button" class="ds-btn ghost" data-buy="prime_plus" data-months="3"><%- t('premium.periods_3', { price: fmt(S.prices.prime_plus * 3) }) %></button>
+            </div>
+            <div class="row"><label class="ds-check"><input type="checkbox" id="ppRenew"<%= PLUS.renewer_me ? ' checked' : '' %>> <%- t('premium.renew_label', { days: S.period_days }) %></label></div>
+            <% if (!PAD.mine) { %><div class="row"><label class="ds-check"><input type="checkbox" id="ppAnon"> <%- t('gifts.anon.box_pad') %></label></div><% } %>
+          <% } else { %><p><%- t('premium.pt.signin', { link: '<a href="/login?next=' + t.esc(encodeURIComponent('/premium?pad=' + PAD.slug)) + '">' + t('premium.sign_in') + '</a>' }) %></p><% } %>
+        <% } %>
+      <% } else { %>
+        <p class="mut"><%- t('premium.pp.pick') %></p>
+      <% } %>
+    </section>
+
     <section class="card tier sp" aria-labelledby="spH">
       <h3 id="spH"><span class="ds-ic" aria-hidden="true">🎟️</span> Season Pass <span class="ds-tag ac"><%- t('premium.sp.tag') %></span></h3>
       <div class="price"><%= fmt(S.prices.season_pass) %> PAT <small><%- t('premium.sp.per_period', { days: S.period_days }) %></small></div>
@@ -150,6 +191,7 @@
 
   <section class="card" id="stickers" aria-labelledby="stkH">
     <h2 class="ds-h2 dot" id="stkH"><%- t('premium.stk.heading') %></h2>
+    <%# 1.99qp: perk packs (stickers.json perk) are never sold - they come with a Season Pass / Prime Time Plus %>
     <p class="mut"><%- t('premium.stk.intro', { price: fmt(S.prices.sticker_pack) }) %><% if (STK.allowance && STK.allowance.per) { %> · <%- t('premium.stk.left', { count: STK.allowance.left }) %><% } else { %> · <%- t('premium.stk.sp_includes', { n: S.perks.sp_sticker_packs }) %><% } %>.</p>
     <% if (STK.signed) { %><p class="row"><label class="ds-check"><input type="checkbox" id="stkAnon"> <%- t('gifts.anon.box_stk') %></label></p><% } %>
     <div class="packs">
@@ -158,7 +200,8 @@
           <h3><span class="ds-ic" aria-hidden="true"><%= p.emoji %></span> <%- stkL_('stk.pack.' + p.id + '.name', p.name) %><% if (p.owned) { %> <span class="ds-tag ac"><%- t('premium.stk.yours') %></span><% } %></h3>
           <p class="mut"><%- stkL_('stk.pack.' + p.id + '.desc', p.desc) %></p>
           <div class="sheet"><% p.stickers.forEach((s) => { const sn_ = stkL_('stk.s.' + p.id + '.' + s.id, s.name); %><img src="<%= s.url %>" alt="<%- sn_ %>" title="<%- sn_ %>" loading="lazy"><% }) %></div>
-          <% if (STK.signed) { %><div class="row">
+          <% if (p.perk) { %><p class="row"><span class="ds-tag ac"><%- p.perk === 'prime_plus' ? t('premium.stk.perk_plus') : t('premium.stk.perk_sp') %></span><% if (p.season) { %> <span class="ds-tag"><%- t('premium.stk.seasonal', { label: t.esc(p.season.label || '') }) %></span><% } %></p>
+          <% } else if (STK.signed) { %><div class="row">
             <% if (!p.owned) { %>
               <% if (STK.allowance && STK.allowance.left) { %><button type="button" class="ds-btn sm" data-stk="<%= p.id %>" data-free="1"><%- t('premium.stk.claim') %></button><% } %>
               <button type="button" class="ds-btn sm gold" data-stk="<%= p.id %>"><%- t('premium.stk.buy', { price: fmt(p.price) }) %></button>
@@ -169,6 +212,15 @@
       <% }) %>
     </div>
   </section>
+
+  <% const crNav_ = typeof creatorNav === 'function' ? creatorNav(V.username) : { on: false }; if (crNav_.on) { %>
+  <%# 1.99qp: ⭐ PATV Creators - the other way to support someone on PATV %>
+  <section class="card" aria-labelledby="crH">
+    <h2 class="ds-h2 dot" id="crH">⭐ <%- t('cr.title') %></h2>
+    <p class="mut"><%- t('cr.links.premium_blurb') %></p>
+    <div class="row"><a class="ds-btn ghost" href="/creators"><%- t('cr.links.browse') %></a><% if (V.signed) { %><a class="ds-btn<%= crNav_.creator ? '' : ' ghost' %>" href="<%= crNav_.creator ? '/creator' : '/creators#apply' %>"><%- crNav_.creator ? t('nav.creator_dash') : t('nav.become_creator') %></a><% } %></div>
+  </section>
+  <% } %>
 
   <section class="card" aria-labelledby="rtH">
     <h2 class="ds-h2 dot" id="rtH"><%- t('premium.routes.heading') %></h2>
@@ -209,12 +261,12 @@
     var tier = b.getAttribute('data-buy') || b.getAttribute('data-gift');
     if (b.hasAttribute('data-buy')) {
       var months = Number(b.getAttribute('data-months')) || 1;
-      var renewEl = document.getElementById(tier === 'prime_time' ? 'ptRenew' : 'spRenew');
+      var renewEl = document.getElementById(tier === 'prime_time' ? 'ptRenew' : tier === 'prime_plus' ? 'ppRenew' : 'spRenew');
       if (!confirm(_t('js.premium.confirm_pay', months > 1 ? 'Pay {price} PAT for {count} periods? Payments are final.' : 'Pay {price} PAT for {count} period? Payments are final.', { price: b.textContent.split('·').pop().trim(), count: months }))) return;
       b.disabled = true;
-      var ptAnon = tier === 'prime_time' && document.getElementById('ptAnon');      // 1.99mt: 🕶 anonymous (someone else's pad only)
+      var ptAnon = (tier === 'prime_time' || tier === 'prime_plus') && document.getElementById(tier === 'prime_plus' ? 'ppAnon' : 'ptAnon');      // 1.99mt: 🕶 anonymous (someone else's pad only)
       post('/api/premium/buy', { tier: tier, pad: pad || undefined, months: months, ref: ref(), renew: !!(renewEl && renewEl.checked), anon: !!(ptAnon && ptAnon.checked) })
-        .then(function (j) { b.disabled = false; done(j, _t('js.premium.paid_through', 'Done - paid through {date}.', { date: j.paid_through ? new Date(j.paid_through).toISOString().slice(0, 10) : '' })); });
+        .then(function (j) { b.disabled = false; done(j, _t(j.upgrade ? 'js.premium.upgraded' : 'js.premium.paid_through', j.upgrade ? 'Upgraded to Prime Time Plus - paid through {date}.' : 'Done - paid through {date}.', { date: j.paid_through ? new Date(j.paid_through).toISOString().slice(0, 10) : '' })); });
     } else if (b.hasAttribute('data-chip')) {
       var amt = Math.floor(Number(document.getElementById('ptAmt').value));
       if (!confirm(_t('js.premium.confirm_chip', 'Chip in {amount} PAT to p/{pad}’s Prime Time? Payments are final.', { amount: fmt(amt), pad: pad }))) return;
@@ -249,8 +301,8 @@
   });
   root.addEventListener('change', function (e) {
     var t = e.target;
-    if (t.id !== 'ptRenew' && t.id !== 'spRenew') return;
-    var tier = t.id === 'ptRenew' ? 'prime_time' : 'season_pass';
+    if (t.id !== 'ptRenew' && t.id !== 'spRenew' && t.id !== 'ppRenew') return;
+    var tier = t.id === 'ptRenew' ? 'prime_time' : t.id === 'ppRenew' ? 'prime_plus' : 'season_pass';
     post('/api/premium/renew', { tier: tier, pad: pad || undefined, on: t.checked }).then(function (j) {
       if (j.ok) say(t.checked ? _t('js.premium.renew_on', '🔁 It renews from your balance now.') : _t('js.premium.renew_off', 'Renewal switched off.'), true);
       else { t.checked = !t.checked; say(j.error || _t('js.premium.didnt_work', 'That didn’t work.'), false); }

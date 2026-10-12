@@ -15,6 +15,8 @@ const { getQuery } = require("./dbUtils");
 function register(app, { addUser, isBotToken }) {
   CR.init().catch((e) => console.error("[creators] init:", e.message));
   CR.start();
+  // 1.99qp: the views' links to PATV Creators follow the feature switch (hidden while it's off)
+  if (app.locals) { app.locals.creatorNav = (username) => CR.navFor(username); app.locals.creatorBadge = (userId) => CR.isCreatorBadge(userId); }
   const guard = require("./middleware/authGuard");
   const T = (req, k, d) => (req.t ? req.t(k) : d);
   const fail = (res, e) => {

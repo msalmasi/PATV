@@ -19,6 +19,12 @@
 // NATIVE PATV CHAT (later): use the same hook - module.exports.chat = {validate, inline, TOKEN_RE}: validate the
 // sender's line before broadcasting it, run inline() on the escaped line when rendering.
 //
+// 1.99qp PERK PACKS (stickers.json "perk"): never sold, never comped - an account can use one while it has the perk:
+//   season_pass  a 🎟️ Season Pass right now (premium.hasPass);
+//   prime_plus   owns a pad with 💎 Prime Time Plus right now (premium.plusOwner).
+// A perk pack with a "season" window (MM-DD..MM-DD, UTC, every year: 🎃 Spooky Season, Oct 1 - Nov 7) is listed and
+// usable only inside it. Stickers already sent keep rendering (inline() never checks ownership).
+//
 // Routes: GET /api/stickers (catalog + mine + allowance), POST /api/stickers/buy {pack, ref, to?, allowance?}
 "use strict";
 const fs = require("fs");
@@ -47,12 +53,35 @@ function loadCatalog(file = path.join(__dirname, "stickers.json")) {
     }
     if (!stickers.length) continue;
     packs.push(Object.freeze({ id: p.id, name: String(p.name || p.id).slice(0, 40), emoji: String(p.emoji || "🧸").slice(0, 8),
-      desc: String(p.desc || "").slice(0, 200), price: Number(p.price) > 0 ? Math.floor(Number(p.price)) : null, retired: !!p.retired,
+      desc: String(p.desc || "").slice(0, 300), price: Number(p.price) > 0 ? Math.floor(Number(p.price)) : null, retired: !!p.retired,
+      perk: PERKS.includes(p.perk) ? p.perk : null, season: cleanSeason(p.season),
       stickers: Object.freeze(stickers), byId: Object.freeze(Object.fromEntries(stickers.map((s) => [s.id, s]))) }));
   }
   return { packs, byId: Object.fromEntries(packs.map((p) => [p.id, p])) };
 }
+const PERKS = Object.freeze(["season_pass", "prime_plus"]);
+const MMDD = /^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
+function cleanSeason(x) {
+  if (!x || !MMDD.test(String(x.from)) || !MMDD.test(String(x.to))) return null;
+  return Object.freeze({ from: String(x.from), to: String(x.to), label: String(x.label || "").slice(0, 40) });
+}
 let CAT = loadCatalog();
+/** Is a pack's season window open at t? (no window = always). A window may wrap the new year (from > to). */
+function inSeason(pack, t = now()) {
+  if (!pack || !pack.season) return true;
+  const md = new Date(t).toISOString().slice(5, 10);
+  const { from, to } = pack.season;
+  return from <= to ? md >= from && md < to : md >= from || md < to;
+}
+/** 1.99qp: does this account have a perk pack's perk right now (and is the pack in season)? */
+function perkHas(userId, pack, t = now()) {
+  if (!userId || !pack || !pack.perk || !inSeason(pack, t)) return false;
+  try {
+    if (pack.perk === "season_pass") return !!P().hasPass(userId, t);
+    if (pack.perk === "prime_plus") return !!P().plusOwner(userId, t);
+  } catch (e) { return false; }
+  return false;
+}
 const P = () => require("./premium");
 const priceOf = (pack) => pack.price || P().config().sticker_price;
 
@@ -80,7 +109,9 @@ function init() {
 async function ownedPacks(userId) {
   await init();
   if (!userId) return new Set();
-  return new Set((await getQuery("SELECT pack_id FROM user_sticker_packs WHERE user_id = ?", [userId])).map((r) => r.pack_id));
+  const out = new Set((await getQuery("SELECT pack_id FROM user_sticker_packs WHERE user_id = ?", [userId])).map((r) => r.pack_id));
+  for (const p of CAT.packs) if (p.perk && perkHas(userId, p)) out.add(p.id);      // 1.99qp: perk packs while the perk lasts
+  return out;
 }
 async function owns(userId, packId) { return (await ownedPacks(userId)).has(packId); }
 const periodKey = (t = now()) => new Date(t).toISOString().slice(0, 7);
@@ -103,6 +134,7 @@ async function buy(user, opts = {}) {
   const pack = CAT.byId[String(opts.pack || "")];
   if (!pack) throw new Refuse(404, "No such sticker pack.");
   if (pack.retired) throw new Refuse(410, "That pack isn't sold any more.");
+  if (pack.perk) throw new Refuse(403, perkText(pack));             // 1.99qp: perk packs come with the tier, never sold
   const rawRef = String(opts.ref || "");
   if (!REF_RE.test(rawRef)) throw new Refuse(400, "Bad request (ref).");
   const ref = `stk:${user.userId}:${rawRef}`;
@@ -157,6 +189,11 @@ async function buy(user, opts = {}) {
   return { dup: false, pack: pack.id, to: to.username, price, source: useAllowance ? "season_pass" : gift ? "gift" : "buy" };
 }
 
+function perkText(pack) {
+  return pack.perk === "prime_plus" ? `${pack.name} comes with 💎 Prime Time Plus - the owners of Prime Time Plus pads can use it.`
+    : `${pack.name} comes with a 🎟️ Season Pass${pack.season ? " (" + (pack.season.label || "seasonal") + " only)" : ""}.`;
+}
+
 // ── text ──
 /** The [sticker:...] tokens in a text that name a real sticker: [{pack, sticker}] */
 function tokens(text) {
@@ -177,6 +214,8 @@ async function validate(userId, text) {
   if (tk.length > MAX_PER_TEXT) throw new Refuse(400, `At most ${MAX_PER_TEXT} stickers at a time.`);
   const mine = await ownedPacks(userId);
   const missing = [...new Set(tk.map((x) => x.pack))].filter((p) => !mine.has(p));
+  const perk = missing.map((p) => CAT.byId[p]).find((p) => p.perk);
+  if (perk) throw new Refuse(403, perkText(perk));
   if (missing.length) throw new Refuse(403, `You don't have the ${missing.map((p) => CAT.byId[p].name).join(", ")} sticker pack${missing.length > 1 ? "s" : ""} - get it on /premium.`);
   return true;
 }
@@ -194,8 +233,10 @@ function inline(html) {
 }
 
 // ── reads ──
-function catalog() {
-  return CAT.packs.filter((p) => !p.retired).map((p) => ({ id: p.id, name: p.name, emoji: p.emoji, desc: p.desc, price: priceOf(p),
+function catalog(t = now()) {
+  // 1.99qp: a seasonal perk pack is listed only in its season
+  return CAT.packs.filter((p) => !p.retired && inSeason(p, t)).map((p) => ({ id: p.id, name: p.name, emoji: p.emoji, desc: p.desc, price: p.perk ? null : priceOf(p),
+    perk: p.perk, season: p.season,
     stickers: p.stickers.map((s) => ({ id: s.id, name: s.name, url: s.url, token: `[sticker:${p.id}/${s.id}]` })) }));
 }
 async function pageData(user) {
@@ -230,6 +271,7 @@ async function grantComp(userId, packId, by) {
   await init();
   const pack = CAT.byId[String(packId || "")];
   if (!pack) throw new Refuse(404, "No such sticker pack.");
+  if (pack.perk) throw new Refuse(400, perkText(pack) + " Comp the tier instead.");      // 1.99qp
   if ((await getQuery("SELECT 1 FROM user_sticker_packs WHERE user_id = ? AND pack_id = ?", [userId, pack.id]))[0]) return { pack, already: true };
   const t = now();
   await runQuery(`INSERT INTO user_sticker_packs (user_id, pack_id, source, payer_id, price, ref, period, routing, created)
@@ -240,6 +282,7 @@ async function grantComp(userId, packId, by) {
 
 module.exports = {
   grantComp,
+  inSeason, perkHas, PERKS,
   init, register, buy, ownedPacks, owns, allowance, tokens, validate, inline, catalog, pageData, loadCatalog, periodKey, Refuse, TOKEN_RE,
   chat: { validate, inline, TOKEN_RE },          // the hook for native PATV chat (later)
   get CAT() { return CAT; },

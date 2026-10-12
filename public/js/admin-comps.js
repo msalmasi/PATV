@@ -38,7 +38,7 @@
     var prem = (C.premium || []).filter(function (s) { return !s.ended; });
     mr.innerHTML = prem.length ? prem.map(function (s) {
       var data = " data-tier=\"" + esc(s.tier) + "\" data-target=\"" + esc(s.target) + "\"";
-      return "<tr><td>" + (s.tier === "prime_time" ? "📺 Prime Time" : "🎟️ Season Pass") + "</td><td>" + esc(s.label) + "</td>" +
+      return "<tr><td>" + ({ prime_time: "📺 Prime Time", prime_plus: "💎 Prime Time Plus" }[s.tier] || "🎟️ Season Pass") + "</td><td>" + esc(s.label) + "</td>" +
         "<td>" + (s.until ? esc(day(s.until)) : "no end date") + "</td><td>" + (s.auto ? "auto (site admin)" : esc(s.by) + (s.note ? " · " + esc(s.note) : "")) + "</td>" +
         "<td>" + (s.auto ? "" : (s.until ? "<button type=\"button\" data-mx" + data + ">Extend</button> " : "") + "<button type=\"button\" class=\"adm-btn danger\" data-mr" + data + ">Revoke</button>") + "</td></tr>";
     }).join("") : "<tr><td class=\"empty\" colspan=\"5\">No premium comps.</td></tr>";
@@ -119,7 +119,7 @@
   });
   bind("setForm", "/api/admin/comps/settings", "Saved.");
   bind("premForm", "/api/admin/comps/premium", function (j) { var r = j && j.result || {}; return "Comped " + (r.label || "") + (r.until ? " until " + day(r.until) : " with no end date") + "."; },
-    function (b) { if (b.tier === "prime_time") delete b.user; else delete b.pad; return b; });
+    function (b) { if (b.tier === "prime_time" || b.tier === "prime_plus") delete b.user; else delete b.pad; return b; });
   bind("itemForm", "/api/admin/comps/item", function (j) { var r = j && j.result || {}; return "Comped " + (r.prize || r.item || "it") + (r.to ? " to " + r.to : "") + "."; });
 
   var pf = document.getElementById("plexForm");
@@ -128,7 +128,7 @@
   var mf = document.getElementById("premForm");
   function premShape() {
     var tier = mf.elements.tier.value;
-    mf.querySelectorAll("[data-for]").forEach(function (l) { l.hidden = l.getAttribute("data-for") !== tier; });
+    mf.querySelectorAll("[data-for]").forEach(function (l) { l.hidden = l.getAttribute("data-for").split(" ").indexOf(tier) < 0; });   // 1.99qp: "prime_time prime_plus"
     mf.querySelector("[data-n]").hidden = mf.elements.mode.value === "lifetime";
   }
   if (mf) { mf.elements.tier.addEventListener("change", premShape); mf.elements.mode.addEventListener("change", premShape); premShape(); }

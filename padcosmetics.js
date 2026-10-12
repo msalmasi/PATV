@@ -33,6 +33,8 @@
 // 1.99iv PRIME TIME (premium.js): items with "perk": "prime_time" are never sold - a pad has them while it has 📺 Prime
 // Time (equip like any other; they stop rendering when it lapses and come back with it). A Prime Time pad also gets
 // the automatic "📺 Prime Time" badge (not counted) and premium padPerks().extraBadges more badge slots.
+// 1.99qp 💎 PRIME TIME PLUS: "perk": "prime_plus" items come with Plus only; a Plus pad also has every Prime Time perk item
+// and its automatic badge reads "💎 Prime Time Plus" instead.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -44,8 +46,8 @@ const REF_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const SLOT_KINDS = Object.freeze(["pad_frame", "pad_glow", "pad_badge", "pad_avatar"]);
 const MAX_BADGES = 3;
 const FX = Object.freeze({
-  pad_frame: ["neon", "pixel", "embers", "snow", "pride", "matrix", "primetime"],
-  pad_glow: ["soft", "rainbow", "gold", "primetime"],
+  pad_frame: ["neon", "pixel", "embers", "snow", "pride", "matrix", "primetime", "primeplus"],
+  pad_glow: ["soft", "rainbow", "gold", "primetime", "primeplus"],
   pad_avatar: ["anim"],
 });
 const ROUTING = Object.freeze({ owner: "100% Fort Knox", gift: "50% Fort Knox · 50% this pad's vault" });
@@ -74,7 +76,7 @@ function buildCatalog(raw, rarities) {
     const st = it.style || {};
     if (FX[it.kind] && !FX[it.kind].includes(st.fx)) { console.error(`[padcosmetics] ${it.id}: unknown fx ${st.fx}`); continue; }
     if (it.kind === "pad_badge" && !(typeof st.text === "string" && st.text.trim())) { console.error(`[padcosmetics] ${it.id}: a badge needs style.text`); continue; }
-    const perk = it.perk === "prime_time" ? "prime_time" : null;      // 1.99iv: comes with Prime Time, never sold
+    const perk = it.perk === "prime_time" || it.perk === "prime_plus" ? it.perk : null;   // 1.99iv / 1.99qp: comes with the tier, never sold
     const price = perk ? 0 : Number(it.price) > 0 ? Math.floor(Number(it.price)) : Math.floor(Number((R[it.rarity] || {}).price) || 0);
     if (!(price > 0) && !perk) { console.error(`[padcosmetics] ${it.id}: no price (rarity ${it.rarity})`); continue; }
     let season = null;
@@ -107,7 +109,8 @@ const onSale = (item, t = now()) => !!item && !item.perk && !item.retired && ite
 // 1.99iv: Prime Time (premium.js) - perk items + extra badge slots while the pad has it
 const isPrime = (roomId) => { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } };
 const maxBadges = (roomId) => { try { return MAX_BADGES + require("./premium").padPerks(roomId).extraBadges; } catch (e) { return MAX_BADGES; } };
-const perkOk = (item, roomId) => !item.perk || (item.perk === "prime_time" && isPrime(roomId));
+const isPlus = (roomId) => { try { return require("./premium").isPrimePlus(roomId); } catch (e) { return false; } };
+const perkOk = (item, roomId) => !item.perk || (item.perk === "prime_time" && isPrime(roomId)) || (item.perk === "prime_plus" && isPlus(roomId));
 
 // ── tables + config ──
 let ready = null;
@@ -293,7 +296,7 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 function badgeHtml(item, mini) {
   if (!item || item.kind !== "pad_badge") return "";
   const ic = item.style.icon ? `<span aria-hidden="true">${esc(item.style.icon)}</span>` : "";
-  const pt = item.id === "prime_time" ? " pfx-b-pt" : "";
+  const pt = item.id === "prime_time" ? " pfx-b-pt" : item.id === "prime_plus" ? " pfx-b-pp" : "";
   if (mini) return `<span class="pfx-b mini${pt}" title="${esc(item.style.text)}">${ic || esc(item.style.text.slice(0, 1))}<span class="pfx-sr">${esc(item.style.text)}</span></span>`;
   return `<span class="pfx-b${pt}">${ic}${esc(item.style.text)}</span>`;
 }
@@ -308,8 +311,9 @@ function fx(roomId) {
   const out = { cls: "", layer: "", glow: "", badges: "", badgesMini: "", any: false };
   let c;
   try { c = require("./padlook").cosmeticsOf(roomId); } catch (e) { return out; }
-  const prime = isPrime(roomId);
-  const live = (id) => { const it = id && CAT.byId[id]; return it && (!it.perk || prime) ? it : null; };   // perk items only while Prime Time
+  const prime = isPrime(roomId), plus = prime && isPlus(roomId);
+  // perk items only while the pad has their tier (1.99qp: Plus items only with Plus)
+  const live = (id) => { const it = id && CAT.byId[id]; return it && (!it.perk || (it.perk === "prime_plus" ? plus : prime)) ? it : null; };
   const fr = live(c.pad_frame), gl = live(c.pad_glow);
   if (fr && fr.kind === "pad_frame") {
     out.cls = `pfx pfx-f-${fr.style.fx}${fr.animated ? " is-anim" : ""}`;
@@ -317,7 +321,7 @@ function fx(roomId) {
   }
   if (gl && gl.kind === "pad_glow") out.glow = `pfx-g pfx-g-${gl.style.fx}`;
   const bs = c.pad_badge.map(live).filter((i) => i && i.kind === "pad_badge").slice(0, prime ? maxBadges(roomId) : MAX_BADGES);
-  if (prime) bs.unshift(PRIME_BADGE);
+  if (prime) bs.unshift(plus ? PLUS_BADGE : PRIME_BADGE);
   if (bs.length) {
     out.badges = `<span class="pfx-bs">${bs.map((b) => badgeHtml(b, false)).join("")}</span>`;
     out.badgesMini = `<span class="pfx-bs mini">${bs.map((b) => badgeHtml(b, true)).join("")}</span>`;
@@ -328,6 +332,7 @@ function fx(roomId) {
 
 // the automatic badge of a Prime Time pad (not an item: it isn't equipped, bought or counted)
 const PRIME_BADGE = Object.freeze({ id: "prime_time", kind: "pad_badge", name: "Prime Time", style: Object.freeze({ icon: "📺", text: "Prime Time" }) });
+const PLUS_BADGE = Object.freeze({ id: "prime_plus", kind: "pad_badge", name: "Prime Time Plus", style: Object.freeze({ icon: "💎", text: "Prime Time Plus" }) });   // 1.99qp
 
 /** The catalog for pages / the API (prices resolved, sale state). */
 function catalog(t = now()) {
@@ -344,14 +349,14 @@ async function state(R, viewer) {
   let balance = null;
   if (signed) { const b = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [viewer.userId]))[0]; balance = b ? b.points_balance : 0; }
   const items = await padItems(R.id);
-  const prime = isPrime(R.id);
+  const prime = isPrime(R.id), plus = prime && isPlus(R.id);
   const PL = require("./padlook");
   const L = PL.look(R.id);
   return {
     pay: PAY, catalog: catalog(), slots: Object.fromEntries(SLOT_KINDS.map((k) => [k, { ...(CAT.slots[k] || {}), max: k === "pad_badge" ? (prime ? maxBadges(R.id) : MAX_BADGES) : 1 }])),
     rarities: Object.fromEntries(Object.entries(CAT.rarities).map(([k, v]) => [k, { color: v && v.color }])),
-    has: [...new Set([...items.map((i) => i.item_id), ...(prime ? CAT.items.filter((i) => i.perk === "prime_time").map((i) => i.id) : [])])],
-    prime: { on: prime, link: `/premium?pad=${encodeURIComponent(R.slug || R.id)}` },
+    has: [...new Set([...items.map((i) => i.item_id), ...CAT.items.filter((i) => (i.perk === "prime_time" && prime) || (i.perk === "prime_plus" && plus)).map((i) => i.id)])],
+    prime: { on: prime, plus, link: `/premium?pad=${encodeURIComponent(R.slug || R.id)}` },
     // who gave what is for the people who run the pad
     items: manage ? items.map((i) => ({ id: i.id, item_id: i.item_id, kind: i.kind, state: i.state, from: i.owner_self || Number(i.anon) ? null : i.buyer_name, anon: !!Number(i.anon), created: i.created })) : [],
     equipped: PL.cosmeticsOf(R.id),

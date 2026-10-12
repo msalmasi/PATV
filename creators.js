@@ -227,12 +227,14 @@ async function setConfig(patch, actor) {
 
 // ── caches (decorate runs on every feed page: the creator set and the 18+ communities are in memory) ──
 const ACTIVE = new Map();       // user_id -> {status, rating}
+const BY_NAME = new Map();      // 1.99qp: lowercased username -> user_id (the nav's "Creator dashboard" link)
 const R18 = new Set();          // room ids that are 18+ (profiles of r18 creators + flagged pads)
 const ALLOW = new Set();        // pads whose owner lets other creators post locked posts
 async function loadCaches() {
-  ACTIVE.clear(); R18.clear(); ALLOW.clear();
-  for (const r of await getQuery("SELECT user_id, status, rating FROM creators")) {
+  ACTIVE.clear(); R18.clear(); ALLOW.clear(); BY_NAME.clear();
+  for (const r of await getQuery("SELECT c.user_id, c.status, c.rating, u.username FROM creators c LEFT JOIN users u ON u.userId = c.user_id")) {
     ACTIVE.set(r.user_id, { status: r.status, rating: r.rating });
+    if (r.username) BY_NAME.set(String(r.username).toLowerCase(), r.user_id);
     if (r.status === "active" && r.rating === "r18") R18.add("user:" + r.user_id);
   }
   for (const r of await getQuery("SELECT room_id, r18, allow_creators FROM creator_pads")) {
@@ -243,6 +245,13 @@ async function loadCaches() {
 const isActiveCreator = (userId) => { const c = ACTIVE.get(String(userId || "")); return !!(c && c.status === "active"); };
 const isCreatorBadge = (userId) => { const c = ACTIVE.get(String(userId || "")); return !!(c && (c.status === "active" || c.status === "paused")); };
 const isR18Room = (roomId) => !!roomId && R18.has(String(roomId));
+/** 1.99qp: the links to PATV Creators (nav menus, profiles, /subscriptions, /premium) - {on: the feature switch, creator:
+ *  this username has a creator account (active or paused) -> "Creator dashboard", else "Become a creator"}. Sync. */
+function navFor(username) {
+  const on = !!CONFIG.enabled;
+  const id = username ? BY_NAME.get(String(username).toLowerCase()) : null;
+  return { on, creator: on && !!id && isCreatorBadge(id) };
+}
 
 // ── helpers ──
 const tx = (fn) => require("./mainstage")._tx(fn);
@@ -1490,7 +1499,7 @@ function start() {
 module.exports = {
   NAME, EXPLICIT_TIER_ENABLED, RATINGS, ALL_RATINGS, CREATOR_TERMS_VERSION, AGE_VERSION, R18_ATTEST_KEYS, KIND_SUB, KIND_PPV, DEFAULTS, EXPLICIT_GATES, GATE_STATUS,
   init, config, setConfig, cleanConfig, eligibility, apply, savePlans, cleanPlans, setPadFlags, staffSet, creatorRow, plansOf, assertRating,
-  prepareLock, lockedMediaCheck, attachLock, makeTeaser, applyLocks, mediaGate, attested, attestAge, liveTiers, isActiveCreator, isCreatorBadge, isR18Room,
+  prepareLock, lockedMediaCheck, attachLock, makeTeaser, applyLocks, mediaGate, attested, attestAge, liveTiers, isActiveCreator, isCreatorBadge, isR18Room, navFor,
   offer, quote, subscribe, unlock, cancel, resume, setRenew, payNow, changeTier, renewOne, renewDue, releaseOne, releaseDue, routeCutInTx, weekStart,
   refundLedger, refundPost, onPostRemoved, takedownExplicit, dispute, resolveDispute, clawback, comp, removeSub, broadcast, linked,
   publicView, fanSubs, dashboard, ledgerCsv, composerInfo, adminView, readiness, setGate, botAct, start, loadCaches, lockSchema, Refuse,

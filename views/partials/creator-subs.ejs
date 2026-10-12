@@ -7,10 +7,14 @@
   const d = (ms) => ms ? t.date(Number(ms), { dateStyle: 'medium' }) : '';
   const live = cs.subs.filter((s) => s.status === 'active' || s.status === 'grace');
   const past = cs.subs.filter((s) => !(s.status === 'active' || s.status === 'grace')).slice(0, 10);
+  // 1.99qp: links to PATV Creators only while the feature is on (subscriptions someone already has always show)
+  const crNav_ = typeof creatorNav === 'function' ? creatorNav(typeof user !== 'undefined' ? user : null) : { on: false, creator: false };
 %>
+<% if (crNav_.on || live.length || past.length) { %>
 <section class="ds-card lg" aria-labelledby="sxCrH" id="creators" style="--ds-ac:#ff5fa2;--ds-ac-bg:rgba(255,95,162,.12);--ds-ac-line:#7a2c52;--ds-on-ac:#2a0016">
   <h2 class="ds-h2" id="sxCrH">⭐ <%- t('cr.subs.h') %></h2>
-  <% if (!live.length) { %><p class="mut"><%- t('cr.subs.none', { link: '<a href="/creators">' + t('cr.title') + '</a>' }) %></p><% } %>
+  <% if (!live.length && crNav_.on) { %><p class="mut"><%- t('cr.subs.none', { link: '<a href="/creators">' + t('cr.title') + '</a>' }) %></p><% } %>
+  <% if (crNav_.on) { %><p class="ds-row" style="margin:0 0 8px"><a class="ds-btn sm ghost" href="/creators"><%- t('cr.links.browse') %></a><% if (crNav_.creator) { %><a class="ds-btn sm" href="/creator"><%- t('nav.creator_dash') %></a><% } else { %><a class="ds-btn sm ghost" href="/creators#apply"><%- t('nav.become_creator') %></a><% } %></p><% } %>
   <% live.forEach((s) => { %>
     <div class="it"><div class="w"><b><a href="/creators/<%= encodeURIComponent(s.creator) %>"><%= s.creator %></a></b> <span class="mut">· <%= s.tierName %><%- s.comp ? ' · ' + t('cr.subs.comp') : ' · ' + t('subs.every', { price: fmt(s.price), days: 30 }) %></span>
       <div class="st <%= s.status === 'grace' ? 'warn' : s.cancel_at_end || !s.renew ? 'off' : 'ok' %>"><%- s.status === 'grace' ? t('cr.subs.grace', { date: d(s.grace_until) }) : (s.cancel_at_end || !s.renew) ? t('cr.subs.ends', { date: d(s.paid_through) }) : t('subs.renews', { date: d(s.paid_through) }) %><%- s.next_tier ? ' · ' + t('cr.subs.next_tier', { n: s.next_tier }) : '' %></div></div>
@@ -42,3 +46,4 @@
   <% } %>
 </section>
 <script src="/public/js/creators.js?v=1" defer></script>
+<% } %>

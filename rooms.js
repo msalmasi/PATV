@@ -302,6 +302,11 @@ function view(r) {
   };
 }
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
+/** 1.99qp: {prime_plus, soundboard_slots, bridge} for Pepe's owner sync (premium.padPerks) */
+function plusOf(roomId) {
+  try { const p = require("./premium").padPerks(roomId); return { prime_plus: !!p.primePlus, soundboard_slots: p.soundboardSlots, bridge: !!p.bridge }; }
+  catch (e) { return { prime_plus: false }; }
+}
 // the cache also refreshes itself once a minute (a row changed outside this process, e.g. a cleanup)
 let refreshing = null;
 function maybeRefresh() {
@@ -763,7 +768,8 @@ async function ownersForPepe() {
     slot_count: r.slot_count,
     description: String(r.description || "").slice(0, 300),   // 1.99ko: Pepe's room vibe learns from the pad's description
     adult: !!r.adult,                                         // 1.99kz: 18+ pad -> Pepe's room vibe "adult" (unless locked)
-    prime_time: !!primeOf(r.id) }));                          // 1.99nr: 📺 Prime Time -> Pepe's chat-log / recording retention
+    prime_time: !!primeOf(r.id),                              // 1.99nr: 📺 Prime Time -> Pepe's chat-log / recording retention
+    ...plusOf(r.id) }));                                      // 1.99qp: 💎 Prime Time Plus (unlimited retention) + soundboard slots
 }
 
 /** Notice to a user: the inbox always, and a Camfrog PM through Pepe when they allow it. */

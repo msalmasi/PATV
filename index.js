@@ -1587,6 +1587,10 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex)"], ad
           .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
         viewerIsAdmin: isAdmin && !preview,      // 1.99ma: the ⋯ menu's "🎁 Comp…" (admins: /admin/comps?user=)
+        // 1.99qp: ⭐ PATV Creators on the profile - the Creator chip + Subscribe (their creator page), the owner's dashboard /
+        // "Become a creator" link; nothing while the feature is off
+        creatorProfile: (() => { try { const CR = require("./creators"); const on = !!CR.config().enabled;
+          return { on, badge: on && CR.isCreatorBadge(user.userId), active: on && CR.isActiveCreator(user.userId) }; } catch (e) { return { on: false }; } })(),
         // 1.99ez: their story ring (own uploads + captures of them, userstories.js); the owner also gets "＋ Your story"
         // and the "Show captures of me in my story" switch
         profileStory: await profileStoryFor(user, preview ? null : req.user, isOwner && !preview).catch((e) => { console.error("profile story:", e.message); return null; }),

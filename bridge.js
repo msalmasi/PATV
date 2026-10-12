@@ -513,6 +513,12 @@ function withPatv(u, C, F = null) {
 }
 
 const isLive = (R) => Date.now() - R.updated < STALE_MS;
+// 1.99qp: 💎 the Camfrog bridge is a Prime Time Plus perk (premium.bridgeAllowed: always true while premium_config
+// plus_bridge_gate is off, and for house pads). Pepe's syncs are still taken in (room activity, the registry, royalties,
+// the homepage pick) - only what the WEBSITE shows of the room (live view, room audio, the web relay / clips / snapshots
+// / the Manage panel) waits for Plus.
+const bridgeOk = (id) => { try { return require("./premium").bridgeAllowed(id); } catch (e) { return true; } };
+const isLiveShown = (R) => isLive(R) && bridgeOk(R.id);
 const rtcHint = (R) => { try { return require("./roomrtc").hint(R); } catch (e) { return false; } };
 // 1.99bi: the room's PATV title (owner-editable, rooms.js) when it has one, else what Pepe calls it
 const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); return (r && r.title) || R.name; } catch (e) { return R.name; } };
@@ -708,7 +714,7 @@ async function liveView(R, after, userId, login, username = null) {
 async function liveFor(slug) {
   await load();
   const R = bySlug(slug);
-  return R ? liveView(R, 0) : null;
+  return R && bridgeOk(R.id) ? liveView(R, 0) : null;           // 1.99qp: not for a pad without the bridge perk
 }
 
 /** 1.99ja: recompute a live room's slug now (after its pad changed: connected / disconnected / renamed). */
@@ -780,7 +786,7 @@ function register(app, { isBotToken, addUser }) {
     const signed = !!(req.user && req.user.userId);
     if (R && !require("./padaccess").full(req.user, R.id)) return res.status(signed ? 403 : 401).json({ ok: false, fallback: "denied" });
     if (!R && !signed) return res.status(401).json({ ok: false, fallback: "denied" });
-    if (!R || !R.audio || !isLive(R)) return res.status(404).json({ ok: false, fallback: "no-audio" });
+    if (!R || !R.audio || !isLiveShown(R)) return res.status(404).json({ ok: false, fallback: "no-audio" });
     let ip = "?";
     try { ip = require("./middleware/authGuard").clientIp(req); } catch (e) { ip = (req.socket && req.socket.remoteAddress) || "?"; }
     const wait = rtcHit(signed ? "u:" + req.user.userId : "ip:" + ip);
@@ -797,7 +803,7 @@ function register(app, { isBotToken, addUser }) {
     // 1.99fu: the room's audio is members-tier (padaccess.full): signed in, or anyone on a Public pad, inside an Approved one
     if (R && !require("./padaccess").full(req.user, R.id)) return res.status(req.user && req.user.userId ? 403 : 401).send("Sign in to listen.");
     if (!R && (!req.user || !req.user.userId)) return res.status(401).send("Sign in to listen.");
-    if (!R || !R.audio || !isLive(R)) return res.status(404).send("This room's audio isn't on.");
+    if (!R || !R.audio || !isLiveShown(R)) return res.status(404).send("This room's audio isn't on.");
     const a = audioHub(R.id);
     if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
     res.status(200).set({ "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Accel-Buffering": "no", Connection: "keep-alive" });
@@ -816,6 +822,7 @@ function register(app, { isBotToken, addUser }) {
     const signed = !!(req.user && req.user.userId);
     if (!R) return signed ? res.status(404).json({ error: "No such room." }) : res.status(401).json({ error: "Sign in to watch the room." });
     if (!require("./padaccess").full(req.user, R.id)) return res.status(signed ? 403 : 401).json({ error: signed ? "This pad is for approved members." : "Sign in to watch the room." });
+    if (!bridgeOk(R.id)) return res.status(403).json({ error: "This pad's live Camfrog room comes with 💎 Prime Time Plus.", locked: "bridge" });   // 1.99qp
     const after = Math.max(0, Number(req.query.after) || 0);
     const pm = require("./padmod");
     const login = signed ? await pm.linkedLogin(req.user.userId) : null;
@@ -823,11 +830,12 @@ function register(app, { isBotToken, addUser }) {
     res.json(await liveView(R, after > cursor ? 0 : after, signed ? req.user.userId : null, login, signed ? req.user.username : null));
   });
 
-  relay.register(app, { isBotToken, addUser, bySlug, isLive });
-  require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive });   // 1.99ez: 🎬 cam clips from the snapshot popover
+  // 1.99qp: the web side of the bridge treats a pad without the bridge perk as not live (isLiveShown)
+  relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });
+  require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)
-  require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
-  require("./padmod").register(app, { addUser, bySlug, isLive });     // 1.99co: the pad Manage panel
+  require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
+  require("./padmod").register(app, { addUser, bySlug, isLive: isLiveShown });     // 1.99co: the pad Manage panel
 
   // The stage of one room (?room=<slug>), else the homepage's front room: Pepe's stream state + that
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.
@@ -927,7 +935,9 @@ function register(app, { isBotToken, addUser }) {
     const fq = { fsort: q.fsort || q.sort, ft: q.ft || q.t, fp: q.fp || q.p, view: q.view,      // 1.99fn: ?view=list|gallery (feedgallery.js)
                  tag: typeof q.tag === "string" ? q.tag : "" };              // 1.99iq: ?tag= (feedtags.js)
     // 1.99dx: the pad page's tabs (Live/Stage · Feed · About, public/js/pad-tabs.js) - which one opens first
-    const initial = liveOpen && !R.offline ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null) : null;
+    // 1.99qp: a Camfrog pad without the 💎 bridge perk shows an upsell where its live room would be
+    const bridgeLocked = !R.offline && !siteOnly && !bridgeOk(R.id);
+    const initial = liveOpen && !R.offline && !bridgeLocked ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null) : null;
     const roomStage = await require("./mainstage").roomStage(R.id, req.user);
     const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
     const here = pepeIn(R.id), st = stage();
@@ -946,7 +956,8 @@ function register(app, { isBotToken, addUser }) {
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)),
-              adult: !!(info && info.adult) },                     // 1.99kz: the 18+ badge
+              adult: !!(info && info.adult),                       // 1.99kz: the 18+ badge
+              bridgeLocked },                                       // 1.99qp: no 💎 bridge perk -> the upsell card
       initial, padTabs, latest, feedSeen,
       dms: reg.hasRoute(app, "/messages"),          // 1.99co: the Manage panel's "Message" (DMs, when that page exists)
       pepeHere: here, stage: st,
@@ -1003,5 +1014,5 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
 }
 
-module.exports = { reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; } };

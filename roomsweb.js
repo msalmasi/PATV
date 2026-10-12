@@ -126,7 +126,7 @@ function register(app, { addUser, isBotToken }) {
       // 1.99nw: season_pass - the Camfrog logins with a Season Pass (Pepe keeps their PM logs); pass_known says the list is real
       let pass = null;
       try { pass = await require("./premium").passCamfrogs(); } catch (e) { console.error("[rooms] season pass list:", e.message); }
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

@@ -252,6 +252,7 @@
       <div class="chips">
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
         <% if (pc && pc.seasonPass) { %><a class="chip" href="/premium" title="<%- t('profile.has_season_pass') %>" style="background:linear-gradient(90deg,#9b5de5,#ff6ad5);color:#fff;text-decoration:none">🎟️ Season Pass</a><% } %>
+        <% const crP_ = locals.creatorProfile || { on: false }; if (crP_.badge) { %><a class="chip" href="/creators/<%= encodeURIComponent(usernameProfile) %>" title="<%- t('cr.badge_title') %>" style="background:linear-gradient(90deg,#ff5fa2,#ffb36b);color:#2a0016;text-decoration:none">⭐ <%- t('cr.links.creator_chip') %></a><% } %>
         <% if (pc && pc.supporter) { %><a class="chip" href="/support" title="<%- t('supporter.chip_title') %>" style="background:<%= pc.supporter.color %>;color:#1a1200;text-decoration:none"><%= pc.supporter.emoji %> <%- t('supporter.chip') %></a><% } %>
         <% if (pc && pc.plex) { %><a class="chip" href="/subscriptions" title="<%- t('profile.plex_member') %>" style="background:linear-gradient(90deg,#cc7b19,#e5a00d);color:#1a1200;text-decoration:none"><%- t('profile.plex_chip') %></a><% } %>
         <% if (showAv) { %><button type="button" class="chip gtfc" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#3a3a1c' %>">🎮 <%- gtfLabel %></button><% } else if (sheet && sheet.cls) { %><span class="chip">🥷 <%= sheet.cls %></span><% } %>
@@ -282,6 +283,7 @@
         <a class="btn" href="/wallet"><span class="ds-ic" aria-hidden="true">👛</span> <%- t('profile.wallet') %></a>
       <% } else if (!previewing) { %>
         <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'actions' }) %><% } %>
+        <% if ((locals.creatorProfile || {}).active) { %><a class="btn primary" href="/creators/<%= enc %>"><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('cr.links.subscribe') %></a><% } %>
         <a class="btn<%= soc ? '' : ' primary' %>" href="/u/<%= enc %>/tip" title="<%- t('profile.tip_title', { name: displayname || usernameProfile }) %>"><span class="ds-ic" aria-hidden="true">💸</span> <%- t('profile.tip') %></a>
       <% } %>
       <details class="pf-more" data-pf-more>
@@ -295,6 +297,7 @@
             <a role="menuitem" href="/cosmetics?tab=mine#tabs"><span class="ds-ic" aria-hidden="true">🎨</span> <%- t('profile.menu.cosmetics') %></a>
             <a role="menuitem" href="/premium"><span class="ds-ic" aria-hidden="true">🎟️</span> <%- t('profile.menu.season_pass') %></a>
             <a role="menuitem" href="/subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('subs.title') %></a>
+            <% const crMe_ = locals.creatorProfile || { on: false }; if (crMe_.on) { %><a role="menuitem" href="<%= crMe_.badge ? '/creator' : '/creators#apply' %>"><span class="ds-ic" aria-hidden="true">⭐</span> <%- crMe_.badge ? t('nav.creator_dash') : t('nav.become_creator') %></a><% } %>
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open><span class="ds-ic" aria-hidden="true">🎮</span> <%- t('profile.menu.gtf_wardrobe') %></button><% } %>
             <hr>
             <form action="/logout" method="POST"><button type="submit" role="menuitem"><span class="ds-ic" aria-hidden="true">↪</span> <%- t('profile.menu.logout') %></button></form>
