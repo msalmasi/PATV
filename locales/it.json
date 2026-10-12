@@ -7294,5 +7294,6 @@
   "js.vc.need_consent": "Spunta la casella del consenso per continuare.",
   "js.vc.working": "Elaborazione…",
   "js.vc.confirm_delete": "Eliminare la tua voce clonata? Smette di funzionare ovunque subito e viene cancellata da entrambi i server vocali. Non si può annullare.",
-  "js.vc.deleted": "Eliminata. Smette subito di funzionare; i server la dimenticano entro pochi minuti."
+  "js.vc.deleted": "Eliminata. Smette subito di funzionare; i server la dimenticano entro pochi minuti.",
+  "lk.earn_why2": "La tua parte proviene da quanto ha speso chi ha pagato: viene trattenuta per {hours} h, poi pagata alle 00:00 UTC successive, senza limite giornaliero. Arriva dalla quota della piattaforma, mai da quella del proprietario del pad. Gli account con meno di {age} giorni o di livello inferiore a {level}, i tuoi comandi e gli account collegati non guadagnano; una parte non pagata torna da dove è arrivata."
 }

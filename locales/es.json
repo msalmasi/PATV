@@ -7294,5 +7294,6 @@
   "js.vc.need_consent": "Marca la casilla de consentimiento para continuar.",
   "js.vc.working": "Trabajando…",
   "js.vc.confirm_delete": "¿Borrar tu voz clonada? Deja de funcionar en todas partes a la vez y se elimina de ambos servidores de voz. No se puede deshacer.",
-  "js.vc.deleted": "Borrada. Deja de funcionar al instante; los servidores la olvidan en unos minutos."
+  "js.vc.deleted": "Borrada. Deja de funcionar al instante; los servidores la olvidan en unos minutos.",
+  "lk.earn_why2": "Tu parte sale de lo que gastó quien paga: se retiene durante {hours} h y luego se paga en la próxima 00:00 UTC, sin límite diario. Sale de la parte de la plataforma, nunca de la del dueño del pad. Las cuentas con menos de {age} días o por debajo del nivel {level}, tus propios comandos y tus cuentas vinculadas no generan ganancias; una parte que no se paga vuelve a su origen."
 }

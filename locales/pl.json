@@ -7432,5 +7432,6 @@
   "js.vc.need_consent": "Zaznacz pole zgody, aby kontynuować.",
   "js.vc.working": "Przetwarzanie…",
   "js.vc.confirm_delete": "Usunąć swój sklonowany głos? Przestanie działać wszędzie naraz i zostanie usunięty z obu serwerów głosowych. Tej operacji nie można cofnąć.",
-  "js.vc.deleted": "Usunięto. Przestaje działać od razu; serwery zapomną o nim w ciągu kilku minut."
+  "js.vc.deleted": "Usunięto. Przestaje działać od razu; serwery zapomną o nim w ciągu kilku minut.",
+  "lk.earn_why2": "Twoja część pochodzi z kwoty wydanej przez płacącego: jest wstrzymywana na {hours} h, a potem wypłacana przy następnej dacie 00:00 UTC - bez dziennego limitu. Pochodzi z udziału platformy, nigdy od właściciela pada. Konta młodsze niż {age} dni lub z poziomem poniżej {level}, twoje własne polecenia i powiązane konta nie zarabiają; część, która nie zostanie wypłacona, wraca tam, skąd pochodziła."
 }

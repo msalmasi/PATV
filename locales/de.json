@@ -7246,5 +7246,6 @@
   "js.vc.need_consent": "Hake das Einverständnis-Kästchen an, um weiterzumachen.",
   "js.vc.working": "Wird bearbeitet…",
   "js.vc.confirm_delete": "Deine geklonte Stimme löschen? Sie funktioniert überall gleichzeitig nicht mehr und wird auf beiden Stimmservern gelöscht. Das kann nicht rückgängig gemacht werden.",
-  "js.vc.deleted": "Gelöscht. Sie wird sofort abgeschaltet; die Server vergessen sie innerhalb weniger Minuten."
+  "js.vc.deleted": "Gelöscht. Sie wird sofort abgeschaltet; die Server vergessen sie innerhalb weniger Minuten.",
+  "lk.earn_why2": "Dein Anteil stammt aus dem, was der Zahlende ausgegeben hat: Er wird {hours} h einbehalten und dann am nächsten 00:00 UTC ausgezahlt - ohne tägliches Limit. Er kommt aus dem Anteil der Plattform, nie aus dem des Pad-Besitzers. Konten unter {age} Tagen oder unterhalb von Level {level}, deine eigenen Befehle und deine verknüpften Konten verdienen nichts; ein Anteil, der nicht ausgezahlt wird, geht dorthin zurück, woher er kam."
 }

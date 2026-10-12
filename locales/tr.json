@@ -7246,5 +7246,6 @@
   "js.vc.need_consent": "Devam etmek için onay kutusunu işaretle.",
   "js.vc.working": "Çalışıyor…",
   "js.vc.confirm_delete": "Klonlanmış sesin silinsin mi? Her yerde aynı anda çalışmayı durdurur ve her iki ses sunucusundan da silinir. Bu geri alınamaz.",
-  "js.vc.deleted": "Silindi. Hemen durur; sunucular birkaç dakika içinde unutur."
+  "js.vc.deleted": "Silindi. Hemen durur; sunucular birkaç dakika içinde unutur.",
+  "lk.earn_why2": "Senin payın, ödeyenin harcadığı tutardan çıkar: {hours} saat tutulur, sonra bir sonraki 00:00 UTC'de ödenir, günlük limit yok. Platformun payından çıkar, pad sahibinin payından asla. {age} günden yeni hesaplar ya da {level} seviyesinin altındakiler, kendi komutların ve bağlı hesapların kazanç sağlamaz; ödenmeyen pay geldiği yere geri döner."
 }

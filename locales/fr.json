@@ -7294,5 +7294,6 @@
   "js.vc.need_consent": "Coche la case de consentement pour continuer.",
   "js.vc.working": "En cours…",
   "js.vc.confirm_delete": "Supprimer ta voix clonée ? Elle cesse de fonctionner partout d'un coup et est supprimée des deux serveurs vocaux. Impossible d'annuler.",
-  "js.vc.deleted": "Supprimée. Elle s'arrête tout de suite ; les serveurs l'oublient en quelques minutes."
+  "js.vc.deleted": "Supprimée. Elle s'arrête tout de suite ; les serveurs l'oublient en quelques minutes.",
+  "lk.earn_why2": "Ta part provient de ce que le payeur a dépensé : elle est retenue pendant {hours} h, puis versée au prochain 00:00 UTC, sans plafond quotidien. Elle est prélevée sur la part de la plateforme, jamais sur celle du propriétaire du pad. Les comptes de moins de {age} jours ou de niveau inférieur à {level}, tes propres commandes et tes comptes liés ne gagnent rien ; une part non versée retourne là d'où elle vient."
 }

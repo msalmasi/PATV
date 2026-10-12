@@ -7155,5 +7155,6 @@
   "js.vc.need_consent": "Centang kotak persetujuan untuk lanjut.",
   "js.vc.working": "Sedang diproses…",
   "js.vc.confirm_delete": "Hapus suara kloningmu? Suara itu langsung berhenti berfungsi di mana-mana dan dihapus dari kedua server suara. Ini tidak bisa dibatalkan.",
-  "js.vc.deleted": "Terhapus. Langsung berhenti; server melupakannya dalam beberapa menit."
+  "js.vc.deleted": "Terhapus. Langsung berhenti; server melupakannya dalam beberapa menit.",
+  "lk.earn_why2": "Bagianmu diambil dari yang dibelanjakan pembayar: ditahan selama {hours} jam, lalu dibayarkan pada 00:00 UTC berikutnya - tanpa batas harian. Bagian ini diambil dari jatah platform, tidak pernah dari pemilik pad. Akun di bawah {age} hari atau di bawah level {level}, perintahmu sendiri, dan akun yang tertaut tidak mendapat bagian; bagian yang tidak dibayarkan dikembalikan ke asalnya."
 }

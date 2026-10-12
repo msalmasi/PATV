@@ -7246,5 +7246,6 @@
   "js.vc.need_consent": "Vink het toestemmingsvakje aan om door te gaan.",
   "js.vc.working": "Bezig…",
   "js.vc.confirm_delete": "Je gekloonde stem verwijderen? Hij stopt meteen overal en wordt van beide stemservers gehaald. Dit kan niet ongedaan worden gemaakt.",
-  "js.vc.deleted": "Verwijderd. Hij stopt meteen; de servers vergeten hem binnen enkele minuten."
+  "js.vc.deleted": "Verwijderd. Hij stopt meteen; de servers vergeten hem binnen enkele minuten.",
+  "lk.earn_why2": "Je aandeel komt uit wat de betaler heeft uitgegeven: het wordt {hours} h vastgehouden en daarna uitbetaald bij de eerstvolgende 00:00 UTC - geen dagelijkse limiet. Het komt uit het aandeel van het platform, nooit van de padeigenaar. Accounts jonger dan {age} dagen of met een level lager dan {level}, je eigen commando's en je gekoppelde accounts verdienen niets; een aandeel dat niet wordt uitbetaald, gaat terug naar waar het vandaan kwam."
 }

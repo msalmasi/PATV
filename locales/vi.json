@@ -6672,6 +6672,7 @@
   "owner.share_h": "Phần của chủ pad",
   "owner.share_live": "trả hằng ngày",
   "owner.share_soon": "bắt đầu cùng với chi trả trong phòng",
+  "owner.share_why": "Mỗi ngày, kho của phòng bạn chi trả tối đa {rate}% số dư thông qua <b>công thức chi trả</b>. Bạn nhận <b>phần chủ sở hữu</b> - {pct}% ngân sách của ngày hôm đó - khi bạn có mặt trong phòng Camfrog ít nhất {days} trong 7 ngày gần nhất và phòng hoạt động ít nhất {active} trong số đó (một giờ có từ 3 người trở lên tham gia). Mức này được giới hạn ở {cap}% thu nhập trung bình mỗi ngày của phòng trong 7 ngày gần nhất, nên nó tăng theo hoạt động thực tế: tiền gửi và chi tiêu của chính bạn không làm tăng nó. Các pad của hệ thống không bao giờ trả cho chủ sở hữu. PAT là điểm thưởng, không phải tiền.",
   "owner.share_house": "Đây là pad nhà (của Pepe): pad này không bao giờ trả phần của chủ pad. Ngân sách chi trả của pad được chia cho streamer, thành viên thường xuyên và các trò chơi trong phòng; phần nào không kiếm được sẽ nằm lại trong kho.",
   "owner.share_7d": "Phần của bạn",
   "owner.share_30d": "30 ngày qua",
@@ -7152,5 +7153,6 @@
   "js.vc.need_consent": "Tick vào ô đồng ý để tiếp tục.",
   "js.vc.working": "Đang xử lý…",
   "js.vc.confirm_delete": "Xóa giọng nhân bản của bạn? Nó sẽ ngừng hoạt động ở mọi nơi cùng lúc và bị xóa khỏi cả hai máy chủ giọng nói. Không thể hoàn tác.",
-  "js.vc.deleted": "Đã xóa. Nó ngừng hoạt động ngay; máy chủ sẽ quên nó trong vài phút."
+  "js.vc.deleted": "Đã xóa. Nó ngừng hoạt động ngay; máy chủ sẽ quên nó trong vài phút.",
+  "lk.earn_why2": "Phần của bạn được trích từ số tiền người trả đã chi: nó được giữ trong {hours} giờ, rồi được chi trả vào 00:00 UTC kế tiếp, không giới hạn mỗi ngày. Phần này được trích từ phần của nền tảng, không bao giờ từ chủ pad. Tài khoản dưới {age} ngày hoặc cấp dưới {level}, các lệnh của chính bạn và tài khoản liên kết không được nhận thưởng; phần chưa được chi trả sẽ được hoàn lại nơi nó xuất phát."
 }
