@@ -189,7 +189,7 @@ async function unsettledReserve() {
   // zero for the Fed - Pepe journals it and it never leaves the Reserve). Flash claims and house_adjust are the Reserve's.
   const r = await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims
                             WHERE settled = 0 AND COALESCE(queued,0) = 0 AND flow NOT LIKE 'incentives:%' AND flow NOT LIKE 'room:%'
-                              AND flow NOT LIKE 'mint:%'`);
+                              AND flow NOT LIKE 'mint:%' AND flow NOT LIKE 'lkhold:%' AND flow NOT LIKE 'lkpay:%'`);   // 1.99rv: the likeness escrow pool's
   return (r[0] && r[0].t) || 0;
 }
 

@@ -3,15 +3,22 @@
 // When a paid command USES SOMEONE - their cam (!snap, !clip, !look, !camroast, a cam reference in !imagine / !video), their
 // mic (!clipmic, the website's 🔊 Clip), their words (a chat quote), them as a roast target, or their cloned voice - that
 // person (the SUBJECT) earns a cut of the price. Pepe carves the cut out of the PLATFORM legs of his routing split (never
-// the pad owner's share; no PAT is created), deposits it in the likeness hold (his routing row likeness_hold: the Reserve,
-// the incentive budget with the economy layers on) and reports it here (POST /api/likeness/sync, bot token). Cuts the
-// SITE collects (a chat quote's 250 PAT, quotes.js) book their hold as an "lkhold:<flow>" deposit claim instead.
+// the pad owner's share; no PAT is created), deposits it in its own ESCROW POOL "likeness" and reports it here
+// (POST /api/likeness/sync, bot token) with `src` = the platform legs it came from ({reserve | fortknox | room:<id>: PAT}).
+// Cuts the SITE collects (a chat quote, a pack, a voice unlock) book an "lkhold:<flow>" deposit claim into the same pool.
 //
-// Here every cut is booked HELD, per subject (an !imagine with two cam references splits it), then RELEASED daily: rows
-// whose 24 h hold ended before the last 00:00 UTC are paid by the funding flow "likeness" (Pepe's website payout row -
-// the Reserve, or the incentive budget's "royalties" group with the layers on: queued when the week's budget is short).
+// 1.99rv (the user, 2026-10-11: "likeness payouts are paid from the purchases at purchase time, so why would they need to be
+// budgeted?"): the cut is FUNDED BY THE PAYMENT. Every cut is booked HELD per subject (an !imagine with two cam references
+// splits it), then RELEASED daily: rows whose 24 h hold ended before the last 00:00 UTC move from the escrow pool to the
+// subject's wallet (an "lkpay:release" claim Pepe / the site's pools settle out of the pool + the wallet credit, in one
+// transaction). No incentive budget, no Fed payout, layers on or off. A cut that is NOT paid - booked as forfeit (self / alt /
+// young / low level / opted out / the pair cap; returned once its 24 h window has passed, so a refund can still void it) or
+// clawed back by staff - goes BACK to the leg it was carved from
+// ("lkpay:return" out of the pool + that leg's own deposit claim: "lkret" -> the Reserve, "fortknox:lkret", "room:lkret:<id>"),
+// so the PAT supply never changes. A FROZEN subject's cut simply stays in escrow until staff unfreeze it (released) or claw
+// it back (returned). Rows booked before 1.99rv (src NULL: held in the Reserve) are paid from the Reserve ("likeness_legacy").
 //
-// ANTI-FARMING (applied when a cut is booked; what isn't paid stays in the hold - the platform keeps it):
+// ANTI-FARMING (applied when a cut is booked; what isn't paid goes back to where it came from):
 //   * never to the payer themselves, nor between linked accounts (welcome_bonus dup_of either way, account_merges)
 //   * the subject's account must be >= min_age_days old and level >= min_level (7 / 3)
 //   * per payer -> subject pair: at most pair_day_cap a UTC day (25,000) - the rest is forfeited (one-off purchases - a voice
@@ -27,7 +34,8 @@
 //
 //   likeness_prefs    user_id, clips, snaps, cam, roast, soundboard (1 = allowed), updated
 //   likeness_ledger   id, ref (unique), subject_user_id, subject_login, payer_user_id, payer_login, cmd, kind, flow, room_id,
-//                     base, amount, status held|paying|paid|forfeit|void, reason, batch, created, release_after, released_at, day
+//                     base, amount, status held|paying|paid|forfeit|void, reason, batch, created, release_after, released_at, day,
+//                     src (JSON {leg: PAT} - where the cut came from; NULL = a pre-1.99rv row held in the Reserve), returned_at
 //   likeness_frozen   user_id, by, reason, at
 //   likeness_config   key/value (admin: /admin/likeness)
 "use strict";
@@ -77,6 +85,9 @@ function init() {
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS likeness_ledger_ref ON likeness_ledger (ref)");
       await runQuery("CREATE INDEX IF NOT EXISTS likeness_ledger_subject ON likeness_ledger (subject_user_id, status)");
       await runQuery("CREATE INDEX IF NOT EXISTS likeness_ledger_pair ON likeness_ledger (payer_user_id, subject_user_id, day)");
+      const lcols = (await getQuery("SELECT name FROM pragma_table_info('likeness_ledger')")).map((c) => c.name);
+      if (!lcols.includes("src")) await runQuery("ALTER TABLE likeness_ledger ADD COLUMN src TEXT");               // 1.99rv
+      if (!lcols.includes("returned_at")) await runQuery("ALTER TABLE likeness_ledger ADD COLUMN returned_at INTEGER");
       await runQuery("CREATE TABLE IF NOT EXISTS likeness_frozen (user_id TEXT PRIMARY KEY, by TEXT, reason TEXT, at INTEGER)");
       await runQuery("CREATE TABLE IF NOT EXISTS likeness_config (key TEXT PRIMARY KEY, value TEXT)");
       await loadConfig();
@@ -221,11 +232,58 @@ async function pairToday(payerId, subjectId, day) {
 }
 async function insertRow(row) {
   const r = await runQuery(`INSERT OR IGNORE INTO likeness_ledger (ref, subject_user_id, subject_login, payer_user_id, payer_login, cmd, kind, flow, room_id,
-                            base, amount, status, reason, created, release_after, day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            base, amount, status, reason, created, release_after, day, src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                            [row.ref, row.subject_user_id || null, row.subject_login || null, row.payer_user_id || null, row.payer_login || null, row.cmd || null,
                             row.kind || null, row.flow || null, row.room_id || null, row.base || 0, row.amount, row.status, row.reason || null, row.created,
-                            row.release_after || null, row.day]);
+                            row.release_after || null, row.day, row.src ? JSON.stringify(row.src) : null]);
+  // a forfeit row goes back to its leg only after the hold window (returnForfeits) - a refund inside it voids the row and
+  // Pepe takes the cut back out of escrow himself, so it must still be there
   return !!(r && r.changes);
+}
+
+// ── 1.99rv: escrow moves ──
+const SRC_RE = /^(?:reserve|fortknox|room:[A-Za-z0-9_.\- ]{1,120})$/;
+/** {leg: PAT} from Pepe (or the site) -> a clean map summing to `amount` (anything odd -> the Reserve). */
+function cleanSrc(raw, amount) {
+  const out = {};
+  let tot = 0;
+  if (raw && typeof raw === "object") {
+    for (const [k, v] of Object.entries(raw)) {
+      const n = Math.floor(Number(v) || 0);
+      if (n > 0 && SRC_RE.test(k)) { out[k] = (out[k] || 0) + n; tot += n; }
+    }
+  }
+  if (tot !== amount) return { reserve: amount };
+  return out;
+}
+/** `part` of a cut whose legs are `src` (total `whole`), proportionally; the rounding goes to the biggest leg. */
+function splitSrc(src, whole, part) {
+  const keys = Object.keys(src);
+  if (!keys.length || whole <= 0) return { reserve: part };
+  const out = {};
+  let used = 0;
+  for (const k of keys) { const n = Math.floor((src[k] * part) / whole); if (n > 0) { out[k] = n; used += n; } }
+  const big = keys.sort((a, b) => src[b] - src[a])[0];
+  if (part - used > 0) out[big] = (out[big] || 0) + (part - used);
+  return out;
+}
+async function claim(flow, amount, type, userId) {
+  const { v4: uuidv4 } = require("uuid");
+  await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
+                 [uuidv4(), flow, userId || null, String(type).slice(0, 120), amount]);
+}
+/** A cut that won't be paid goes back where it came from: out of the escrow pool, into each leg. Once per ref. */
+async function returnToSource({ ref, amount, src, why }) {
+  const amt = Math.floor(Number(amount) || 0);
+  if (amt <= 0 || !src) return false;
+  const tag = `likeness return ${String(ref).slice(0, 80)}`;
+  if ((await getQuery("SELECT 1 FROM reserve_claims WHERE type = ? LIMIT 1", [tag])).length) return false;
+  await claim("lkpay:return", amt, tag);
+  for (const [leg, n] of Object.entries(src)) {
+    const flow = leg === "reserve" ? "lkret" : leg === "fortknox" ? "fortknox:lkret" : "room:lkret:" + leg.slice(5);
+    await claim(flow, -Math.floor(n), `${tag} -> ${leg}${why ? " (" + String(why).slice(0, 30) + ")" : ""}`);
+  }
+  return true;
 }
 
 /**
@@ -249,10 +307,22 @@ async function book(it) {
   const payerId = payer ? payer.userId : (it.payerId || null);
   const logins = [...new Set((Array.isArray(it.subjects) ? it.subjects : []).map(low).filter((l) => LOGIN_RE.test(l)))].slice(0, 8);
   const base = Math.max(amount, Math.floor(Number(it.base) || 0));
+  // 1.99rv: where the cut was carved from (Pepe's note / siteCut); a pre-1.99rv note has none (held in the Reserve)
+  const src = it.src === undefined ? null : cleanSrc(it.src, amount);
+  // each row takes its share of what's LEFT, so the rows' legs always add up to the cut's legs exactly
+  const left = src ? Object.assign({}, src) : null;
+  let leftAmt = amount;
+  const part = (n) => {
+    if (!left) return null;
+    const p = n >= leftAmt ? Object.assign({}, left) : splitSrc(left, leftAmt, n);
+    for (const k of Object.keys(p)) { left[k] -= p[k]; if (left[k] <= 0) delete left[k]; }
+    leftAmt -= n;
+    return p;
+  };
   let held = 0, forfeit = 0;
   const common = { payer_user_id: payerId, payer_login: payerLogin, cmd, kind, flow, room_id: room, base, created: t, day };
   if (!logins.length || !CONFIG.enabled) {
-    await insertRow(Object.assign({}, common, { ref: ref + ":0", amount, status: "forfeit", reason: CONFIG.enabled ? "no subject" : "likeness royalties off" }));
+    await insertRow(Object.assign({}, common, { ref: ref + ":0", amount, status: "forfeit", reason: CONFIG.enabled ? "no subject" : "likeness royalties off", src }));
     return { held: 0, forfeit: amount };
   }
   const share = Math.floor(amount / logins.length);
@@ -265,7 +335,7 @@ async function book(it) {
     const why = await ineligible(s, payerId, kind);
     const rowBase = Object.assign({}, common, { subject_user_id: s ? s.userId : null, subject_login: logins[i] });
     if (why) {
-      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}`, amount: mine, status: "forfeit", reason: why }));
+      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}`, amount: mine, status: "forfeit", reason: why, src: part(mine) }));
       forfeit += mine;
       continue;
     }
@@ -273,11 +343,11 @@ async function book(it) {
     // one-off purchases (a voice unlock, a pack) are bounded by the catalogue itself - the pair cap is for repeat farming
     if (CONFIG.pair_day_cap > 0 && payerId && !PAIR_EXEMPT.has(cmd)) ok = Math.max(0, Math.min(mine, CONFIG.pair_day_cap - (await pairToday(payerId, s.userId, day))));
     if (ok > 0) {
-      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}`, amount: ok, status: "held", release_after: t + CONFIG.hold_hours * 3600 * 1000 }));
+      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}`, amount: ok, status: "held", release_after: t + CONFIG.hold_hours * 3600 * 1000, src: part(ok) }));
       held += ok;
     }
     if (mine - ok > 0) {
-      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}:cap`, amount: mine - ok, status: "forfeit", reason: "daily pair cap" }));
+      await insertRow(Object.assign({}, rowBase, { ref: `${ref}:${i}:cap`, amount: mine - ok, status: "forfeit", reason: "daily pair cap", src: part(mine - ok) }));
       forfeit += mine - ok;
     }
   }
@@ -322,7 +392,9 @@ async function siteCut({ key, flow, base, subjects, payerId, room, ref }) {
   const { v4: uuidv4 } = require("uuid");
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
                  [uuidv4(), "lkhold:" + String(flow || key).replace(/[^\w-]/g, "").slice(0, 30), payerId || null, `likeness cut (held): ${key}`.slice(0, 120), -cut]);
-  await book({ ref, key, flow: flow || key, subjects: subs, payerId, room, base, amount: cut });
+  let fk = false;
+  try { fk = require("./funding").fortknoxLive(); } catch (e) { fk = false; }
+  await book({ ref, key, flow: flow || key, subjects: subs, payerId, room, base, amount: cut, src: { [fk ? "fortknox" : "reserve"]: cut } });
   return cut;
 }
 
@@ -342,6 +414,31 @@ async function recoverPaying() {
   }
 }
 const typeOf = (batch) => `🪞 likeness royalties (${batch})`;
+/** 1.99rv: pay a release out of the escrow pool (or, for pre-1.99rv rows, the Reserve) - the wallet credit and the claim that
+ *  drains the pool in ONE transaction; the transaction id is the batch, so a retry never pays twice. -> {ok} */
+async function payOut(userId, amount, type, batch, legacy) {
+  const ledger = require("./ledger");
+  const target = await ledger.resolveUserId(userId);
+  if (!target) return { ok: false };
+  return require("./boosts").tx(async () => {
+    const txId = "lk-" + require("crypto").createHash("sha256").update(batch).digest("hex").slice(0, 32);
+    if ((await getQuery("SELECT 1 FROM transactions WHERE transactionId = ?", [txId])).length) return { ok: true, dup: true };
+    await ledger.postOrThrow(target, amount, type, { transactionId: txId, resolveMerged: true, source: "likeness" });
+    await claim(legacy ? "likeness_legacy" : "lkpay:release", amount, type, target);
+    return { ok: true };
+  });
+}
+
+/** 1.99rv: forfeited cuts whose hold window has passed (no refund can void them any more) go back to their legs. */
+async function returnForfeits(t = now()) {
+  const rows = await getQuery(`SELECT id, ref, amount, src, reason FROM likeness_ledger WHERE status = 'forfeit' AND src IS NOT NULL AND returned_at IS NULL
+                               AND amount > 0 AND created <= ? LIMIT 500`, [t - CONFIG.hold_hours * 3600 * 1000]);
+  for (const r of rows) {
+    const done = await runQuery("UPDATE likeness_ledger SET returned_at = ? WHERE id = ? AND returned_at IS NULL", [t, r.id]);
+    if (done && done.changes === 1) await returnToSource({ ref: r.ref, amount: r.amount, src: JSON.parse(r.src), why: r.reason });
+  }
+  return rows.length;
+}
 
 let ticking = null;
 async function releaseTick() {
@@ -349,11 +446,11 @@ async function releaseTick() {
   ticking = (async () => {
     await init();
     if (!CONFIG.enabled) return [];
-    const funding = require("./funding");
     const t = now();
     const cutoff = midnight(t);                      // rows whose hold ended before the last 00:00 UTC
     const today = dayOf(t);
     const out = [];
+    await returnForfeits(t);
     const subs = await getQuery(`SELECT DISTINCT subject_user_id AS u FROM likeness_ledger WHERE status = 'held' AND subject_user_id IS NOT NULL
                                  AND release_after <= ?`, [cutoff]);
     for (const { u } of subs) {
@@ -362,7 +459,10 @@ async function releaseTick() {
                                                 AND released_at >= ?`, [u, cutoff]))[0] || {}).t) || 0;
       let room = CONFIG.subject_day_cap > 0 ? CONFIG.subject_day_cap - paidToday : Infinity;
       if (room <= 0) { out.push({ user: u, outcome: "capped" }); continue; }
-      const rows = await getQuery(`SELECT id, amount FROM likeness_ledger WHERE subject_user_id = ? AND status = 'held' AND release_after <= ? ORDER BY created, id`, [u, cutoff]);
+      const all = await getQuery(`SELECT id, amount, src FROM likeness_ledger WHERE subject_user_id = ? AND status = 'held' AND release_after <= ? ORDER BY created, id`, [u, cutoff]);
+      // one batch per kind: escrow rows (1.99rv) and pre-1.99rv rows held in the Reserve are paid from different places
+      const legacy = all.length && all[0].src == null;
+      const rows = all.filter((r) => (r.src == null) === legacy);
       const ids = [];
       let total = 0;
       for (const r of rows) {
@@ -371,15 +471,6 @@ async function releaseTick() {
         total += r.amount;
       }
       if (!ids.length || total <= 0) { out.push({ user: u, outcome: "capped" }); continue; }
-      if (funding.vaultFor("likeness") === "incentives") {
-        const can = await funding.fundable("likeness");
-        if (can < total && can >= 0) {
-          // the week's budget is short: release what fits now (queued otherwise by fundPayout), oldest first
-          let s = 0; const keep = [];
-          for (const id of ids) { const a = rows.find((r) => r.id === id).amount; if (s + a > can) break; keep.push(id); s += a; }
-          if (keep.length) { ids.length = 0; ids.push(...keep); total = s; }
-        }
-      }
       const batch = `lkr:${u}:${today}:${ids[0]}`;
       const mark = await runQuery(`UPDATE likeness_ledger SET status = 'paying', batch = ? WHERE id IN (${ids.map(() => "?").join(",")}) AND status = 'held'`, [batch, ...ids]);
       if (!mark || mark.changes !== ids.length) {
@@ -387,18 +478,17 @@ async function releaseTick() {
         continue;
       }
       let r;
-      try { r = await funding.fundPayoutEx(u, total, "likeness", typeOf(batch)); } catch (e) { r = { ok: false }; console.error("[likeness] release:", e.message); }
+      try { r = await payOut(u, total, typeOf(batch), batch, legacy); } catch (e) { r = { ok: false }; console.error("[likeness] release:", e.message); }
       if (!r || !r.ok) {
         await runQuery("UPDATE likeness_ledger SET status = 'held', batch = NULL WHERE batch = ? AND status = 'paying'", [batch]);
         out.push({ user: u, outcome: "unfunded", amount: total });
         continue;
       }
       await runQuery("UPDATE likeness_ledger SET status = 'paid', released_at = ? WHERE batch = ? AND status = 'paying'", [t, batch]);
-      out.push({ user: u, outcome: r.queued ? "queued" : "paid", amount: total });
+      out.push({ user: u, outcome: "paid", amount: total });
       try {
         await require("./inbox").addSafe(u, { kind: "system", title: `+${total.toLocaleString("en-US")} PAT likeness royalties`,
-          body: r.queued ? "Owed for the times people used your cam, mic, words or voice - it lands as soon as the weekly incentive budget has room."
-                         : "For the times people used your cam, mic, words or voice. See what earned it on /settings/likeness.",
+          body: "For the times people used your cam, mic, words or voice. See what earned it on /settings/likeness.",
           link: "/settings/likeness", ref: "lk-paid:" + batch });
       } catch (e) { /* a notice never blocks a payment */ }
     }
@@ -449,10 +539,17 @@ async function freeze(userId, on, by, reason) {
 /** Staff: forfeit everything still held for a subject (an alt finding). The PAT stays in the hold. -> amount */
 async function clawback(userId, by, reason) {
   await init();
-  const s = (await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM likeness_ledger WHERE subject_user_id = ? AND status = 'held'", [userId]))[0];
-  await runQuery("UPDATE likeness_ledger SET status = 'forfeit', reason = ? WHERE subject_user_id = ? AND status = 'held'",
-                 [`clawback by ${String(by || "staff").slice(0, 40)}: ${String(reason || "").slice(0, 120)}`, userId]);
-  return Number((s || {}).t) || 0;
+  // 1.99rv: every held row goes back to the leg it was carved from (pre-1.99rv rows: already in the Reserve)
+  const rows = await getQuery("SELECT id, ref, amount, src FROM likeness_ledger WHERE subject_user_id = ? AND status = 'held'", [userId]);
+  const why = `clawback by ${String(by || "staff").slice(0, 40)}: ${String(reason || "").slice(0, 120)}`;
+  let total = 0;
+  for (const r of rows) {
+    const done = await runQuery("UPDATE likeness_ledger SET status = 'forfeit', reason = ?, returned_at = ? WHERE id = ? AND status = 'held'", [why, now(), r.id]);
+    if (!done || done.changes !== 1) continue;
+    total += r.amount;
+    if (r.src) await returnToSource({ ref: r.ref, amount: r.amount, src: JSON.parse(r.src), why: "clawback" });
+  }
+  return total;
 }
 
 // ── routes ──
@@ -549,6 +646,6 @@ function start() {
 
 module.exports = {
   KINDS, DEFAULT_PCT, KIND_OF, DEFAULTS, init, config, setConfig, pctOf, prefsOf, setPrefs, allows, optoutMap, blockPairs, book, voidRef, syncBatch,
-  siteCut, releaseTick, status, adminSummary, freeze, clawback, register, start, userByLogin, linked, Refuse,
+  siteCut, releaseTick, status, returnToSource, returnForfeits, cleanSrc, splitSrc, adminSummary, freeze, clawback, register, start, userByLogin, linked, Refuse,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

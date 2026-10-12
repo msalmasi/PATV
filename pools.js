@@ -49,6 +49,7 @@ const LABELS = {
   incentives: "🎁 Incentive budget", heist: "🎰 Casino vault (what casino heists rob)", bank: "🏦 Bank vault (cash)",
   mm: "📈 Market-maker vault (free PAT)", lotto: "🎟️ Lotto jackpot pot", vaultfloat: "⏳ Staking requests waiting for the cut-off",
   burn: "🔥 Burn reserve (out of circulation, waiting to be burned)",
+  likeness: "🪞 Likeness cuts held for their subjects (24 h)",          // 1.99rv: likeness.js escrow
 };
 
 class Refuse extends Error {
@@ -555,9 +556,10 @@ async function settleClaims() {
     let n = 0;
     for (const c of rows) {
       const amt = Math.trunc(Number(c.amount) || 0);
-      // 1.99qw: "lkhold:<flow>" = a website likeness cut -> the likeness hold (the pool that pays the "likeness" release)
+      // 1.99qw / 1.99rv: "lkhold:<flow>" (a website likeness cut in) and "lkpay:*" (released to its subject / returned to its
+      // leg) move the "likeness" escrow pool - never the Reserve or the incentive budget
       const pool = String(c.flow).startsWith("fortknox:") ? "fortknox"
-        : String(c.flow).startsWith("lkhold:") && funding.vaultFor("likeness") === "incentives" ? "incentives" : "reserve";
+        : /^lk(hold|pay):/.test(String(c.flow)) ? "likeness" : "reserve";
       const key = "claim:" + c.claimId;
       try {
         await tx(async () => {

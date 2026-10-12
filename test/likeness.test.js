@@ -76,12 +76,15 @@ test.before(async () => {
 test.after(() => { server.close(); });
 
 test("booking: split between subjects; payer, alts, young / low-level accounts earn nothing", async () => {
-  let r = await L.book({ ref: "c1", key: "imagine", flow: "imagine", subjects: ["bobcf", "carolcf"], payer: "alicecf", base: 25000, amount: 10001, ts: T });
+  let r = await L.book({ ref: "c1", key: "imagine", flow: "imagine", subjects: ["bobcf", "carolcf"], payer: "alicecf", base: 25000, amount: 10001, ts: T,
+                         src: { fortknox: 6001, "room:R1": 4000 } });
   assert.deepEqual(r, { held: 10001, forfeit: 0 });
   const c1 = await rows("c1");
   assert.deepEqual(c1.map((x) => [x.subject_user_id, x.amount, x.status]), [[U.bob.userId, 5001, "held"], [U.carol.userId, 5000, "held"]]);
   assert.equal(c1[0].release_after, T + DAY);
   assert.equal(c1[0].kind, "cam");
+  assert.deepEqual(JSON.parse(c1[0].src), { fortknox: 3001, "room:R1": 2000 }, "each subject's row carries its share of the legs it came from");
+  assert.deepEqual(JSON.parse(c1[1].src), { fortknox: 3000, "room:R1": 2000 }, "the rows' legs add up to the cut's exactly");
   r = await L.book({ ref: "c1", key: "imagine", subjects: ["bobcf"], payer: "alicecf", amount: 500 });
   assert.equal(r.dup, true, "a re-sent ref books nothing");
   r = await L.book({ ref: "c2", key: "snap", subjects: ["bobcf"], payer: "bobaltcf", amount: 1000, ts: T });
@@ -133,8 +136,9 @@ test("release: after the hold, at 00:00 UTC, per-subject daily cap, frozen subje
   assert.equal(tx.length, 1);
   assert.equal(tx[0].points, 5001);
   assert.match(tx[0].type, /likeness royalties/);
-  const claims = await getQuery("SELECT flow, amount FROM reserve_claims WHERE userId = ? AND flow = 'likeness'", [U.bob.userId]);
-  assert.deepEqual(claims.map((c) => [c.flow, c.amount]), [["likeness", 5001]], "a Reserve claim Pepe settles");
+  const claims = await getQuery("SELECT flow, amount FROM reserve_claims WHERE userId = ? AND flow LIKE 'lkpay:%'", [U.bob.userId]);
+  assert.deepEqual(claims.map((c) => [c.flow, c.amount]), [["lkpay:release", 5001]], "paid out of the likeness escrow pool - no budget, no Fed");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow LIKE 'incentives:%'"))[0].n, 0, "nothing from the incentive budget");
   await L.freeze(U.carol.userId, false, "test");
   out = await L.releaseTick();
   const carol = out.find((x) => x.user === U.carol.userId);
@@ -203,4 +207,39 @@ test("site cut: an lkhold claim for the hold + the booking, inside the caller's 
   assert.deepEqual(c.map((x) => [x.flow, x.amount]), [["lkhold:quotes", -100]]);
   assert.deepEqual((await rows("quote-abc")).map((x) => [x.subject_login, x.amount]), [["bobcf", 50], ["carolcf", 50]]);
   assert.equal(await L.siteCut({ key: "quote", base: 250, subjects: [], payerId: U.alice.userId, ref: "quote-none" }), 0, "nobody quoted -> no cut");
+});
+
+test("1.99rv: forfeits go back to their leg after the hold window (a refund inside it voids them instead); clawbacks at once; supply unchanged", async () => {
+  const sumClaims = async (like) => Number(((await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE type LIKE ?", [like]))[0] || {}).t) || 0;
+  T += 3 * DAY;
+  await L.book({ ref: "f1", key: "snap", subjects: ["lowlvlcf"], payer: "alicecf", amount: 4000, ts: T, src: { fortknox: 3000, "room:R9": 1000 } });
+  await L.book({ ref: "f2", key: "snap", subjects: ["lowlvlcf"], payer: "alicecf", amount: 500, ts: T, src: { reserve: 500 } });
+  await L.voidRef("f2");                                                   // refunded inside the window: Pepe reverses it himself
+  await L.returnForfeits(T + 60000);
+  assert.equal(await sumClaims("likeness return f1%"), 0, "not before the hold window ends");
+  await L.returnForfeits(T + DAY + 1000);
+  const legs = await getQuery("SELECT flow, amount FROM reserve_claims WHERE type LIKE 'likeness return f1%' ORDER BY flow");
+  assert.deepEqual(legs.map((c) => [c.flow, c.amount]), [["fortknox:lkret", -3000], ["lkpay:return", 4000], ["room:lkret:R9", -1000]],
+                   "out of escrow, back into Fort Knox and the room vault it came from");
+  assert.equal(await sumClaims("likeness return f1%"), 0, "the moves net to zero - supply unchanged");
+  assert.equal(await sumClaims("likeness return f2%"), 0, "a voided (refunded) cut is never returned twice");
+  await L.returnForfeits(T + 2 * DAY);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE type LIKE 'likeness return f1%'"))[0].n, 3, "once only");
+  // clawback: every held row of the subject goes back at once (a freeze alone moves nothing)
+  await L.book({ ref: "k1", key: "clip", subjects: ["carolcf"], payer: "bobcf", amount: 2000, ts: T, src: { reserve: 2000 } });
+  await L.freeze(U.carol.userId, true, "test", "check");
+  assert.equal(await sumClaims("likeness return k1%"), 0, "frozen: still held in escrow");
+  const clawed = await L.clawback(U.carol.userId, "test", "alt");
+  assert.ok(clawed >= 2000);
+  const k = await getQuery("SELECT flow, amount FROM reserve_claims WHERE type LIKE 'likeness return k1%' ORDER BY flow");
+  assert.deepEqual(k.map((c) => [c.flow, c.amount]), [["lkpay:return", 2000], ["lkret", -2000]], "back to the Reserve it came from");
+  await L.freeze(U.carol.userId, false, "test");
+});
+
+test("1.99rv: a site-collected cut (quote / unlock / pack) is held in escrow from the Fort Knox leg", async () => {
+  const funding = require(path.join(repo, "funding"));
+  funding.sync({ reserve: 10000000, fortknox: 5000000, flows: {} });
+  await L.siteCut({ key: "quote", flow: "quotes", base: 250, subjects: ["bobcf"], payerId: U.alice.userId, room: "X", ref: "quote-fk1" });
+  const row = (await getQuery("SELECT src, amount FROM likeness_ledger WHERE ref LIKE 'quote-fk1%'"))[0];
+  assert.deepEqual([JSON.parse(row.src), row.amount], [{ fortknox: 100 }, 100]);
 });
