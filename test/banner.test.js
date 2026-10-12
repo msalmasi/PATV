@@ -307,6 +307,7 @@ test("the views: banner partial (Sponsored + escaped text / From PATV + translat
   assert.match(h, /alt="Green frog"/);
   assert.match(h, /rel="sponsored noopener noreferrer"/);
   assert.match(h, /by @ann/);
+  assert.match(h, /<div class="bn-foot">\s*<span class="bn-eb"><span class="bn-lbl">Sponsored<\/span><span>by @ann/, "a picture: label + credit under it, nothing drawn on it");
   t = Date.UTC(2026, 9, 21, 14);
   do { p = await BN.pick({ lotto: { jackpot: 20812345, next_at: Math.floor(Date.UTC(2026, 9, 26, 1) / 1000) } }); } while (p.promo !== "lotto");
   h = await render(p);
@@ -325,6 +326,14 @@ test("the views: banner partial (Sponsored + escaped text / From PATV + translat
   assert.match(h, /🎡<\/span>/);
   assert.match(h, />Spin the Wheel</, "headline without its emoji (the icon shows it)");
   assert.match(h, /Spin now/);
+  // 1.99sw layout: the label is an eyebrow inside the text column (never a corner tag over the CTA); the CTA and
+  // "Your banner here" share the side column, the link under the CTA; one stretched link covers the card
+  assert.match(h, /<span class="bn-eb">\s*<span class="bn-lbl">From PATV<\/span>/);
+  assert.match(h, /<a class="bn-a bn-tx" href="[^"]+">\s*<span class="bn-eb">/);
+  assert.match(h, /<span class="bn-side">\s*<span class="bn-cta" aria-hidden="true">Spin now →<\/span>\s*<a class="bn-own" href="\/sponsor">Your banner here<\/a>/);
+  assert.doesNotMatch(h, /bn-corner|class="bn-foot"/, "no corner tag, no separate footer on a text card");
+  assert.match(h, /\.bn-in \{[^}]*max-width: 960px;[^}]*margin-inline: auto;/, "the row is centred");
+  assert.match(h, /\.bn-in \{[^}]*align-items: center;/, "and vertically centred");
   // an admin's own text keeps the plain card
   h = await render({ ...p, headline: "Custom words", line: null });
   assert.doesNotMatch(h, /class="bn hp/);
@@ -332,6 +341,8 @@ test("the views: banner partial (Sponsored + escaped text / From PATV + translat
   assert.match(h, /Your banner here/, "paid booking is on in this test");
   h = await render({ ad: "b:aaaaaaaaaaaa", paid: true, kind: "text", headline: "<script>x</script>", line: null, href: null, by: "z", vars: {} });
   assert.ok(h.includes("&lt;script&gt;x&lt;/script&gt;"));
+  assert.match(h, /<div class="bn-a bn-tx">\s*<span class="bn-eb">\s*<span class="bn-lbl">Sponsored<\/span>\s*<span>by @z<\/span>/, "no link: a plain block, label + credit as the eyebrow");
+  assert.doesNotMatch(h, /class="bn-side"/, "nothing to put in the side column");
   assert.doesNotMatch(h, /<script>x/);
   let r = await call("GET", "/sponsor", U.bob);
   assert.equal(r.status, 200, r.text.slice(0, 300));

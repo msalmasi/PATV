@@ -5,7 +5,9 @@
     1.99kz: house promos have their own look - Pepeball gets a lotto card (the exact jackpot counting up, a live countdown
     to the draw + its time in the viewer's zone, tickets sold, a "Buy tickets" button, bouncing balls); the others an accent
     colour, an icon and a call-to-action chip. Motion is off under prefers-reduced-motion. A promo with an admin's own text
-    keeps the plain card. Impressions: a beacon once the banner is at least half on screen for a second (aggregate counts only). %>
+    keeps the plain card. Impressions: a beacon once the banner is at least half on screen for a second (aggregate counts only).
+    1.99sw: cleanup - the label is an eyebrow above the headline (it touched the CTA as a corner tag), one centred row (max
+    960px), even vertical padding, "Your banner here" under the CTA; a picture booking keeps its label + credit in the row below. %>
 <%
   const B_ = bn;
   const V_ = B_.vars || {};
@@ -23,29 +25,41 @@
   const when_ = lotto_ && V_.next_at ? (typeof tzTime === 'function' ? tzTime(V_.next_at, 'full') : t.esc(V_.draw || '')) : '';
 %>
 <style>
-  /* G6 polish: ds tokens, radius 16 (a card), logical properties, 44px CTAs; the homepage grid gives the spacing (no own margin) */
+  /* G6 polish: ds tokens, radius 16 (a card), logical properties, 44px CTAs; the homepage grid gives the spacing (no own margin).
+     1.99sw layout: one centred row (.bn-in, max 960px) - [icon | eyebrow + headline + line | CTA over "Your banner here"] -
+     vertically centred with even padding. The "From PATV" / "Sponsored" label is an eyebrow above the headline, so it can
+     never touch the CTA. The link covers the whole card (a stretched ::after); "Your banner here" sits above it. Phones stack. */
   .bn { position: relative; display: block; margin: 0; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: linear-gradient(90deg, var(--ds-green-bg), var(--ds-surface) 60%); overflow: hidden; min-width: 0; }
   .bn.paid { background: var(--ds-surface); }
-  .bn-a { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 64px; padding: var(--ds-sp-3) var(--ds-sp-4); color: var(--ds-text); text-decoration: none; min-width: 0; }
-  a.bn-a:hover .bn-h, a.bn-a:focus-visible .bn-h { text-decoration: underline; }
-  .bn-h { font: 700 16px/1.35 var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; padding-inline-end: 92px; }
-  .bn-l { font-size: var(--ds-fs-sm); color: var(--ds-text-2); overflow-wrap: anywhere; }
-  .bn.img .bn-a { padding: 0; min-height: 0; }
+  .bn-in { display: flex; align-items: center; gap: var(--ds-sp-3) var(--ds-sp-5); max-width: 960px; min-height: 76px; margin-inline: auto; padding: var(--ds-sp-4) var(--ds-sp-5); }
+  .bn-a { color: var(--ds-text); text-decoration: none; min-width: 0; }
+  a.bn-a::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+  a.bn-a:focus-visible { outline: none; }
+  a.bn-a:focus-visible::after { box-shadow: inset 0 0 0 2px var(--ds-focus); }
+  a.bn-a:hover .bn-h, a.bn-a:focus-visible .bn-h { text-decoration: underline; text-underline-offset: 3px; }
+  .bn-tx { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
+  .bn-eb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-bottom: 4px; font-size: var(--ds-fs-xs); line-height: 1.4; color: var(--ds-text-muted); }
+  .bn-lbl { flex: none; display: inline-block; padding: 0 8px; border-radius: var(--ds-r-pill); background: rgba(0,0,0,.4); border: 1px solid var(--acb, #3a3a3a); color: #c4c4c4; font: 700 10.5px/18px var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; white-space: nowrap; }
+  .bn-h { font: 700 16px/1.35 var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
+  .bn-l { font-size: var(--ds-fs-sm); line-height: 1.45; color: var(--ds-text-2); overflow-wrap: anywhere; }
+  .bn-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: var(--ds-sp-1h); }
+  .bn-own { position: relative; z-index: 2; font-size: var(--ds-fs-xs); line-height: 1.4; color: var(--ds-text-muted); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+  .bn-own:hover, .bn-own:focus-visible { color: var(--ds-text); }
+  .bn-own:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; border-radius: 4px; }
+
+  /* a picture booking: the picture is the card (nothing drawn over it); the label, the credit and "Your banner here" a row below */
+  .bn.img .bn-a { display: block; }
   .bn.img img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; }
-  .bn-lbl { position: absolute; top: 8px; inset-inline-end: 10px; z-index: 2; padding: 1px 8px; border-radius: var(--ds-r-pill); background: rgba(0,0,0,.65); border: 1px solid #3a3a3a; color: #bdbdbd; font: 700 11px/1.6 var(--ds-font); letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
-  .bn-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; padding: 4px var(--ds-sp-4) var(--ds-sp-2); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
-  .bn.img .bn-foot { padding-top: 6px; }
-  .bn-foot a { color: var(--ds-text-muted); text-decoration: underline; text-underline-offset: 3px; }
+  .bn-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; justify-content: space-between; padding: var(--ds-sp-2) var(--ds-sp-4); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+  .bn-foot .bn-eb { margin: 0; }
 
   /* 1.99kz: house promos - accent colour (--ac / --ac2), icon bubble, call-to-action chip with a slow shine */
   .bn.hp { --ac: #4caf50; --ac2: #1b3a1f; --acb: #3a5a3e; border-color: var(--acb); background: radial-gradient(120% 140% at 0% 0%, var(--ac2), var(--ds-surface) 62%); }
-  .bn.hp .bn-a { flex-direction: row; align-items: center; gap: var(--ds-sp-3h); padding: var(--ds-sp-6) var(--ds-sp-4) var(--ds-sp-4); }
-  .bn-ic { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: var(--ds-r-lg); font: 24px/1 var(--ds-font-emoji); background: rgba(0,0,0,.35); border: 1px solid var(--acb); }
-  .bn-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .bn.hp .bn-h { padding-inline-end: 0; }
-  .bn-cta { box-sizing: border-box; flex: none; position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 var(--ds-sp-5); border-radius: var(--ds-r-pill); font: 700 15px/1.1 var(--ds-font); color: #141414; background: var(--ac); white-space: nowrap; }
+  .bn-ic { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--ds-r-lg); font: 24px/1 var(--ds-font-emoji); background: rgba(0,0,0,.35); border: 1px solid var(--acb); }
+  .bn.hp .bn-lbl { color: var(--ac); }
+  .bn-cta { box-sizing: border-box; flex: none; position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 148px; padding: 0 var(--ds-sp-5); border-radius: var(--ds-r-pill); font: 700 15px/1.1 var(--ds-font); color: #141414; background: var(--ac); white-space: nowrap; }
   .bn-cta::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%); transform: translateX(-120%); animation: bnShine 4.5s ease-in-out 1.2s infinite; }
-  a.bn-a:hover .bn-cta, a.bn-a:focus-visible .bn-cta { filter: brightness(1.12); }
+  .bn:has(a.bn-a:hover) .bn-cta, .bn:has(a.bn-a:focus-visible) .bn-cta { filter: brightness(1.12); }
   .bn.k-season_pass { --ac: #ffd54f; --ac2: #3a3010; --acb: #6b5a20; }
   .bn.k-prime_time { --ac: #64b5f6; --ac2: #0f2638; --acb: #24527a; }
   .bn.k-plex { --ac: #ffa726; --ac2: #3a2408; --acb: #7a4f12; }
@@ -53,72 +67,93 @@
   .bn.k-support { --ac: #ff7c9c; --ac2: #3d0f1d; --acb: #7a2440; }
 
   /* Pepeball: the lotto card */
-  .bn.k-lotto { --ac: var(--ds-gold); border-color: var(--ds-acc-lotto); background: radial-gradient(90% 160% at 100% 0%, rgba(255,215,64,.18), transparent 55%), linear-gradient(120deg, var(--ds-lotto-bg), #3d1460 45%, #1b0b30); }
-  .bn.k-lotto .bn-a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 18px; padding: var(--ds-sp-4) var(--ds-sp-5); }
-  .bn-balls { display: flex; gap: 4px; align-items: flex-end; height: 46px; padding-top: 14px; }
+  .bn.k-lotto { --ac: var(--ds-gold); --acb: var(--ds-acc-lotto); border-color: var(--ds-acc-lotto); background: radial-gradient(90% 160% at 100% 0%, rgba(255,215,64,.18), transparent 55%), linear-gradient(120deg, var(--ds-lotto-bg), #3d1460 45%, #1b0b30); }
+  .bn.k-lotto .bn-in { gap: var(--ds-sp-3) var(--ds-sp-6); }
+  .bn-balls { flex: none; display: flex; gap: 4px; align-items: center; height: 48px; }
   .bn-ball { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 700 11px/1 var(--ds-font); color: #222; background: radial-gradient(circle at 35% 30%, #fff, #e8e8e8 45%, #b8b8b8); box-shadow: 0 2px 4px rgba(0,0,0,.4); animation: bnBounce 1.8s ease-in-out infinite; }
   .bn-ball:nth-child(2) { animation-delay: .2s; } .bn-ball:nth-child(3) { animation-delay: .4s; } .bn-ball:nth-child(4) { animation-delay: .6s; }
   .bn-ball.pb { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); animation-delay: .8s; }
   .bn-kick { font: 700 var(--ds-fs-label)/1.4 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-acc-lotto-2); }
   .bn-jp { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; font: 700 34px/1.05 var(--ds-font); color: var(--ds-gold-text); text-shadow: 0 0 18px rgba(255,215,64,.35); font-variant-numeric: tabular-nums; }
   .bn-jp small { font-size: 15px; font-weight: 700; color: #ffecb3; letter-spacing: .05em; }
-  .bn-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: #d9c8f0; }
+  .bn-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 2px; font-size: 13px; color: #d9c8f0; }
   .bn-meta b { color: #fff; font-variant-numeric: tabular-nums; }
   .bn-meta time { color: #d9c8f0; }
   .bn.k-lotto .bn-cta { min-height: 52px; padding: 0 var(--ds-sp-6); font-size: 16px; color: var(--ds-on-gold); background: var(--ds-gold-grad); box-shadow: 0 3px 14px rgba(255,196,0,.35); }
-  .bn.k-lotto .bn-lbl { background: rgba(20,6,36,.7); border-color: var(--ds-acc-lotto); color: var(--ds-acc-lotto-2); }
+  .bn.k-lotto .bn-lbl { background: rgba(20,6,36,.7); color: var(--ds-acc-lotto-2); }
 
   @keyframes bnShine { 0%, 70% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
-  @keyframes bnBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  @keyframes bnBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
   @media (prefers-reduced-motion: reduce) { .bn-cta::after, .bn-ball { animation: none; } }
 
+  /* phones: icon + text on one row, the CTA full width under them, "Your banner here" centred under the CTA */
   @media (max-width: 520px) {
-    .bn-h { font-size: 15px; padding-inline-end: 0; padding-top: 14px; } .bn-a { padding: var(--ds-sp-3); } .bn-foot { padding: 4px var(--ds-sp-3) var(--ds-sp-2); }
-    .bn.hp .bn-a { flex-wrap: wrap; gap: 10px 12px; padding: var(--ds-sp-8) var(--ds-sp-3) var(--ds-sp-3); }
-    .bn.hp .bn-h { padding-top: 0; }
+    .bn-in { flex-wrap: wrap; gap: var(--ds-sp-3); padding: var(--ds-sp-3h) var(--ds-sp-3h) var(--ds-sp-3); }
+    .bn-h { font-size: 15px; }
     .bn-ic { width: 40px; height: 40px; font-size: 21px; }
-    .bn.hp .bn-tx { flex-basis: calc(100% - 56px); }
-    .bn.hp .bn-cta { flex-basis: 100%; }
-    .bn.k-lotto .bn-a { grid-template-columns: minmax(0, 1fr); padding: 46px 14px 14px; }
-    .bn.k-lotto .bn-balls { position: absolute; top: 8px; inset-inline-start: 12px; height: 30px; padding-top: 8px; }
-    .bn.k-lotto .bn-ball { width: 20px; height: 20px; font-size: 10px; }
+    .bn-tx { flex-basis: calc(100% - 52px); }
+    .bn-in > .bn-tx:first-child { flex-basis: 100%; }
+    .bn-side { flex-basis: 100%; align-items: stretch; text-align: center; }
+    .bn-own { align-self: center; }
+    .bn.k-lotto .bn-balls { flex-basis: 100%; height: 28px; }
+    .bn.k-lotto .bn-ball { width: 22px; height: 22px; font-size: 10px; }
+    .bn.k-lotto .bn-tx { flex-basis: 100%; }
     .bn-jp { font-size: 30px; }
+    .bn-foot { padding: var(--ds-sp-2) var(--ds-sp-3); }
   }
 </style>
+<%
+  // the link: the eyebrow + text (the stretched ::after makes the whole card clickable); no link -> a plain block
+  const aOpen_ = (cls) => B_.href
+    ? '<a class="bn-a ' + cls + '" href="' + t.esc(B_.href) + '"' + (B_.external ? ' target="_blank" rel="' + (B_.paid ? 'sponsored ' : '') + 'noopener noreferrer"' : (B_.paid ? ' rel="sponsored"' : '')) + '>'
+    : '<div class="bn-a ' + cls + '">';
+  const aClose_ = B_.href ? '</a>' : '</div>';
+  const credit_ = B_.paid && (B_.by || B_.domain);
+  const own_ = B_.bookable ? '<a class="bn-own" href="/sponsor">' + t('banner.your_ad') + '</a>' : '';
+  const cta_ = lotto_ ? t('banner.lotto.cta') : house_ ? t('banner.cta.' + B_.promo) : '';
+%>
 <aside class="bn<%= B_.paid ? ' paid' : '' %><%= B_.kind === 'image' ? ' img' : '' %><%= house_ ? ' hp k-' + B_.promo : '' %>" data-bn="<%= B_.ad %>" aria-label="<%- lab_ %>">
-  <span class="bn-lbl"><%- lab_ %></span>
-  <% if (B_.href) { %><a class="bn-a" href="<%= B_.href %>"<% if (B_.external) { %> target="_blank" rel="<%= B_.paid ? 'sponsored ' : '' %>noopener noreferrer"<% } else if (B_.paid) { %> rel="sponsored"<% } %>><% } else { %><div class="bn-a"><% } %>
-    <% if (B_.kind === 'image' && B_.image) { %>
-      <img src="<%= B_.image %>" alt="<%= B_.alt || '' %>" width="1200" height="200" loading="lazy" decoding="async">
-    <% } else if (lotto_) { %>
+<% if (B_.kind === 'image' && B_.image) { %>
+  <%- aOpen_('bn-pic') %><img src="<%= B_.image %>" alt="<%= B_.alt || '' %>" width="1200" height="200" loading="lazy" decoding="async"><%- aClose_ %>
+  <div class="bn-foot">
+    <span class="bn-eb"><span class="bn-lbl"><%- lab_ %></span><% if (credit_) { %><span><% if (B_.by) { %><%- t('banner.by', { name: '@' + B_.by }) %><% } %><% if (B_.by && B_.domain) { %> · <% } %><% if (B_.domain) { %><%= B_.domain %><% } %></span><% } %></span>
+    <%- own_ %>
+  </div>
+<% } else { %>
+  <div class="bn-in">
+    <% if (lotto_) { %>
       <span class="bn-balls" aria-hidden="true"><span class="bn-ball">7</span><span class="bn-ball">19</span><span class="bn-ball">23</span><span class="bn-ball">28</span><span class="bn-ball pb">P</span></span>
-      <span class="bn-tx">
-        <span class="bn-kick"><%- t('banner.lotto.kicker') %></span>
+    <% } else if (house_) { %>
+      <span class="bn-ic" aria-hidden="true"><%= ICON_[B_.promo] %></span>
+    <% } %>
+    <%- aOpen_('bn-tx') %>
+      <span class="bn-eb">
+        <span class="bn-lbl"><%- lab_ %></span>
+        <% if (lotto_) { %><span class="bn-kick"><%- t('banner.lotto.kicker') %></span><% } %>
+        <% if (credit_) { %><span><% if (B_.by) { %><%- t('banner.by', { name: '@' + B_.by }) %><% } %><% if (B_.by && B_.domain) { %> · <% } %><% if (B_.domain) { %><%= B_.domain %><% } %></span><% } %>
+      </span>
+      <% if (lotto_) { %>
         <span class="bn-jp"><span data-bn-count="<%= V_.jackpot_n %>"><%= fmt_(V_.jackpot_n) %></span><small>PAT</small></span>
         <span class="bn-meta">
           <% if (V_.next_at) { %><span><%- V_.next_at > now_ ? t('banner.lotto.draw_in', { left: '<b data-bn-cd="' + Math.round(V_.next_at) + '">' + left_(V_.next_at - now_) + '</b>' }) : t('banner.lotto.drawing') %><% if (when_) { %> · <%- when_ %><% } %></span><% } %>
           <% if (V_.sold > 0) { %><span><%- t('banner.lotto.sold', { n: '<b>' + fmt_(V_.sold) + '</b>' }) %></span><% } %>
         </span>
-      </span>
-      <span class="bn-cta"><%- t('banner.lotto.cta') %></span>
-    <% } else if (house_) { %>
-      <span class="bn-ic" aria-hidden="true"><%= ICON_[B_.promo] %></span>
-      <span class="bn-tx">
+      <% } else if (house_) { %>
         <span class="bn-h"><%- bare_(builtIn_('h')) %></span>
         <span class="bn-l"><%- builtIn_('l') %></span>
+      <% } else { %>
+        <span class="bn-h"><% if (B_.headline) { %><%= B_.headline %><% } else { %><%- builtIn_('h') %><% } %></span>
+        <% if (B_.line || (!B_.headline && B_.promo && B_.promo !== 'custom')) { %><span class="bn-l"><% if (B_.line) { %><%= B_.line %><% } else { %><%- builtIn_('l') %><% } %></span><% } %>
+      <% } %>
+    <%- aClose_ %>
+    <% if (cta_ || own_) { %>
+      <span class="bn-side">
+        <% if (cta_) { %><span class="bn-cta" aria-hidden="true"><%- cta_ %></span><% } %>
+        <%- own_ %>
       </span>
-      <span class="bn-cta"><%- t('banner.cta.' + B_.promo) %></span>
-    <% } else { %>
-      <span class="bn-h"><% if (B_.headline) { %><%= B_.headline %><% } else { %><%- builtIn_('h') %><% } %></span>
-      <% if (B_.line || (!B_.headline && B_.promo && B_.promo !== 'custom')) { %><span class="bn-l"><% if (B_.line) { %><%= B_.line %><% } else { %><%- builtIn_('l') %><% } %></span><% } %>
     <% } %>
-  <% if (B_.href) { %></a><% } else { %></div><% } %>
-  <% if (B_.paid || B_.bookable) { %>
-    <div class="bn-foot">
-      <span><% if (B_.paid && B_.by) { %><%- t('banner.by', { name: '@' + B_.by }) %><% } %><% if (B_.paid && B_.domain) { %> · <%= B_.domain %><% } %></span>
-      <% if (B_.bookable) { %><a href="/sponsor"><%- t('banner.your_ad') %></a><% } %>
-    </div>
-  <% } %>
+  </div>
+<% } %>
 </aside>
 <script>
 (function () {
