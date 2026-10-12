@@ -53,7 +53,11 @@ const BONUS_BASES = Object.freeze({
   all: "on every PAT credited, promo portion included (the old formula: bonus = pat x %)",
 });
 const DEFAULTS = Object.freeze({ ceiling_x: 10, bonus_base: "normal", tz: "America/New_York",
-  daily_limit_usd: 0 });                     // 1.99ts: per-member daily donation limit in USD (0 = none); a per-member override wins
+  daily_limit_usd: 0,                        // 1.99ts: per-member daily donation limit in USD (0 = none); a per-member override wins
+  // 1.99uh: the GLOBAL daily cap on PAT minted by donations (base + promo + the incentive bonus), per economy day:
+  // global_mode "off" | "fixed" (global_pat PAT) | "pct" (global_pct % of the total supply frozen at the day's start);
+  // global_usd (optional, 0 = none) caps the day's donated dollars too - whichever is hit first applies
+  global_mode: "off", global_pat: 0, global_pct: 0, global_usd: 0 });
 const S = { ...DEFAULTS };
 
 let clock = () => Date.now();
@@ -79,6 +83,17 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS donation_usd_log_user ON donation_usd_log (user_id, paid_at)");
       await runQuery("CREATE INDEX IF NOT EXISTS donation_usd_log_session ON donation_usd_log (session)");
       await runQuery("CREATE TABLE IF NOT EXISTS donation_limit_overrides (user_id TEXT PRIMARY KEY, limit_usd INTEGER NOT NULL, updated INTEGER, actor TEXT, note TEXT)");
+      // 1.99uh: the global daily cap - each row's minted PAT (pat + bonus) + whether it went over the global cap; the supply
+      // frozen per economy day (the % mode's base)
+      const lc = (await getQuery("SELECT name FROM pragma_table_info('donation_usd_log')")).map((r) => r.name);
+      if (!lc.includes("pat")) await runQuery("ALTER TABLE donation_usd_log ADD COLUMN pat INTEGER");
+      if (!lc.includes("over_global")) await runQuery("ALTER TABLE donation_usd_log ADD COLUMN over_global INTEGER NOT NULL DEFAULT 0");
+      await runQuery("CREATE TABLE IF NOT EXISTS donation_global_day (day TEXT PRIMARY KEY, supply INTEGER, frozen_at INTEGER)");
+      // rows credited before 1.99uh: their minted PAT from the mint claim (amount + meta.bonus)
+      try {
+        await runQuery(`UPDATE donation_usd_log SET pat = (SELECT c.amount + COALESCE(json_extract(c.meta, '$.bonus'), 0) FROM reserve_claims c WHERE c.claimId = donation_usd_log.ref)
+                        WHERE pat IS NULL AND status = 'credited' AND EXISTS (SELECT 1 FROM reserve_claims c WHERE c.claimId = donation_usd_log.ref)`);
+      } catch (e) { /* no reserve_claims yet */ }
       for (const r of await getQuery("SELECT key, value FROM donation_promo_settings")) {
         if (!Object.prototype.hasOwnProperty.call(DEFAULTS, r.key)) continue;
         try { S[r.key] = JSON.parse(r.value); } catch (e) { /* keep the default */ }
@@ -100,7 +115,12 @@ async function refresh() {
   return CACHE;
 }
 let timer = null;
-function startTimer() { if (!timer) { timer = setInterval(() => refresh().catch(() => {}), 60000); if (timer.unref) timer.unref(); } }
+function startTimer() {
+  if (timer) return;
+  // 1.99uh: also freezes the day's supply within a minute of midnight (the % global cap's base)
+  timer = setInterval(() => { refresh().catch(() => {}); if (S.global_mode === "pct") ensureFrozen(clock()).catch(() => {}); }, 60000);
+  if (timer.unref) timer.unref();
+}
 
 // ── the arithmetic (pure) ──
 /** The promo's PAT per $1 against `normal` right now; 0 = not better than the normal rate (no promo portion). */
@@ -157,6 +177,24 @@ const fromRow = (r, promo) => ({ usd_cents: r.usd_cents, pat: r.promo_pat + r.no
   promo_cents: r.promo_cents, normal_cents: r.normal_cents, promo_pat: r.promo_pat, normal_pat: r.normal_pat, promo_rate: r.promo_rate,
   promo: { id: r.promo_id, label: promo ? promo.label : null }, replay: true });
 
+/** The split a donation would get (read-only): {s, p (the promo row or null), rate, id}. creditTerms() writes what this says. */
+async function computeTerms({ userId = null, donorKey = null, cents, paidAt }) {
+  const T = normalTerms();
+  const plain = { s: { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null }, p: null };
+  const at = Number(paidAt);
+  const id = identity(userId, donorKey);
+  if (!Number.isFinite(at) || !id) return plain;
+  const p = await promoAt(at);
+  if (!p) return plain;
+  const rate = effectiveRate(p, T.rate);
+  if (!rate) return plain;
+  const u = await usage(p.id, id);
+  const s = split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
+                    promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } });
+  return { s: { ...s, promo: { id: p.id, label: p.label || null } }, p, rate, id };
+}
+/** 1.99uh: what a donation would credit (PAT + the incentive bonus = what it mints), without writing anything. */
+async function previewTerms(args) { await init(); return (await computeTerms(args)).s; }
 /**
  * THE donation credit. Call it inside the transaction that credits the donor (it wraps itself in one otherwise).
  * {ref (the credit's id, e.g. the claim id), userId, donorKey?, cents, paidAt (ms), via ("card" | "crypto")}
@@ -168,17 +206,11 @@ async function creditTerms({ ref, userId = null, donorKey = null, cents, paidAt,
     const T = normalTerms();
     const old = ref ? (await getQuery("SELECT * FROM donation_promo_credits WHERE ref = ?", [String(ref)]))[0] : null;
     if (old) return fromRow(old, (await getQuery("SELECT label FROM donation_promos WHERE id = ?", [old.promo_id]))[0]);
-    const plain = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
+    if (!ref) return { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
+    const C = await computeTerms({ userId, donorKey, cents, paidAt });
+    if (!C.p) return C.s;
+    const { s, p, rate, id } = C;
     const at = Number(paidAt);
-    const id = identity(userId, donorKey);
-    if (!ref || !Number.isFinite(at) || !id) return plain;
-    const p = await promoAt(at);
-    if (!p) return plain;
-    const rate = effectiveRate(p, T.rate);
-    if (!rate) return plain;
-    const u = await usage(p.id, id);
-    const s = split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
-                      promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } });
     await runQuery(`INSERT INTO donation_promo_credits (ref, promo_id, user_id, donor_key, via, paid_at, credited, usd_cents, promo_cents, normal_cents,
                     promo_rate, normal_rate, promo_pat, normal_pat, bonus, bonus_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [String(ref), p.id, id.col === "user_id" ? id.v : null, id.col === "donor_key" ? id.v : null, via, at, clock(), s.usd_cents, s.promo_cents,
@@ -253,11 +285,21 @@ async function quote(userId, usd, now = clock()) {
   const lim = D ? { left_cents: D.left_cents, over: cents > D.left_cents } : null;
   const p = await promoAt(now);
   const rate = p ? effectiveRate(p, T.rate) : 0;
-  if (!p || !rate) return { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null, limit: lim };
-  const u = await usage(p.id, identity(userId));
-  const s = split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
-                    promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } });
-  return { ...s, promo: { id: p.id, label: p.label || null }, limit: lim };
+  let s;
+  if (!p || !rate) s = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
+  else {
+    const u = await usage(p.id, identity(userId));
+    s = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
+                     promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } }), promo: { id: p.id, label: p.label || null } };
+  }
+  // 1.99uh: the global pool - does this amount fit, and the most whole dollars that do (never the cap itself)
+  let global = { on: false };
+  if (globalOn()) {
+    await ensureFrozen(now);
+    const fits = (await globalCheck(cents, mintOf(s), now, now)).fits;
+    global = { on: true, fits, max_usd: fits ? null : await globalMaxUsd(userId, Math.ceil(cents / 100) - 1, now) };
+  }
+  return { ...s, limit: lim, global };
 }
 
 // ── time ──
@@ -330,23 +372,131 @@ async function limitCheck(userId, cents, at, now = clock()) {
 }
 const usdTxt = (c) => "$" + (c / 100).toFixed(c % 100 ? 2 : 0);
 const tzName = () => String(S.tz).replace(/_/g, " ");
-/** Card: hold `cents` of today's allowance BEFORE opening a checkout; refused over the limit. -> {ref, limited} */
-async function reserveCheckout(userId, cents, now = clock()) {
+// ── 1.99uh: the GLOBAL daily cap (all donors together, per economy day) ──
+// Caps the PAT donations MINT a day (the donor's PAT, base + promo, + the incentive bonus) - a fixed number, or a % of the
+// total supply FROZEN at the day's start (donation_global_day: the first look of the day - the minute timer, or the first
+// donation - stores it; it never drifts that day) - and optionally the day's donated dollars; whichever is hit first.
+// Used = credited + open card checkouts (their minted PAT as quoted when they opened). Card: refused / offered the amount
+// that fits BEFORE Stripe; a webhook race over it is credited (paid), flagged (over_global) and counted. Crypto: held for
+// review (hold_reason global_daily_limit), like the per-member limit.
+let supplyFn = async () => (await require("./supply").patSupply()).total;
+const dayKey = (ms) => { const o = wall(ms, S.tz); return `${o.year}-${o.month}-${o.day}`; };
+const tzLabel = () => (S.tz === "America/New_York" ? "New York" : tzName());
+const globalOn = () => (S.global_mode === "fixed" && S.global_pat > 0) || (S.global_mode === "pct" && S.global_pct > 0) || S.global_usd > 0;
+/** The supply frozen for the day of `at` (frozen now if it isn't yet). Call it OUTSIDE a transaction (it reads the whole supply). */
+async function ensureFrozen(at) {
   await init();
+  const day = dayKey(at);
+  const r = (await getQuery("SELECT supply FROM donation_global_day WHERE day = ?", [day]))[0];
+  if (r) return Number(r.supply);
+  let total = null;
+  try { total = Math.floor(Number(await supplyFn())); } catch (e) { console.error("[donglobal] couldn't read the supply:", e.message); return null; }
+  if (!Number.isFinite(total) || total <= 0) return null;
+  await runQuery("INSERT OR IGNORE INTO donation_global_day (day, supply, frozen_at) VALUES (?, ?, ?)", [day, total, clock()]);
+  return Number((await getQuery("SELECT supply FROM donation_global_day WHERE day = ?", [day]))[0].supply);
+}
+/** The day's caps: {pat: PAT or null, cents: USD cents or null, supply (frozen, % mode)} - null caps = none. */
+async function globalCaps(at) {
+  let pat = null, supply = null;
+  if (S.global_mode === "fixed" && S.global_pat > 0) pat = Math.floor(S.global_pat);
+  if (S.global_mode === "pct" && S.global_pct > 0) {
+    const r = (await getQuery("SELECT supply FROM donation_global_day WHERE day = ?", [dayKey(at)]))[0];
+    supply = r ? Number(r.supply) : null;
+    // not frozen yet (callers freeze it before their transaction; this is the fallback) - the % cap needs its base
+    if (supply == null && !inTx()) supply = await ensureFrozen(at);
+    if (supply != null) pat = Math.floor((supply * S.global_pct) / 100);
+  }
+  return { pat, cents: S.global_usd > 0 ? Math.floor(S.global_usd) * 100 : null, supply };
+}
+async function globalUsed(at, now, exceptRefs = []) {
+  const W = dayWindow(at);
+  const ex = exceptRefs.filter(Boolean);
+  const r = (await getQuery(`SELECT COALESCE(SUM(pat),0) AS p, COALESCE(SUM(usd_cents),0) AS c FROM donation_usd_log WHERE paid_at >= ? AND paid_at < ?
+      AND (status = 'credited' OR (status = 'open' AND expires > ?))${ex.length ? ` AND ref NOT IN (${ex.map(() => "?").join(",")})` : ""}`,
+    [W.start, W.end, now, ...ex]))[0];
+  return { pat: Number(r.p) || 0, cents: Number(r.c) || 0, window: W };
+}
+/** Does a donation (cents, minting `mint` PAT) fit the day's global caps? -> {on, fits, caps, used} */
+async function globalCheck(cents, mint, at, now = clock(), exceptRefs = []) {
+  if (!globalOn()) return { on: false, fits: true };
+  const caps = await globalCaps(at);
+  const used = await globalUsed(at, now, exceptRefs);
+  const fits = (caps.pat == null || used.pat + mint <= caps.pat) && (caps.cents == null || used.cents + cents <= caps.cents);
+  return { on: true, fits, caps, used };
+}
+const mintOf = (s) => (s ? s.pat + s.bonus : 0);
+/** The most whole dollars (<= maxUsd) the member can donate right now within the global caps (binary search: minting grows with dollars). */
+async function globalMaxUsd(userId, maxUsd, now) {
+  let lo = 0, hi = Math.max(0, Math.floor(maxUsd));
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const s = (await computeTerms({ userId, cents: mid * 100, paidAt: now })).s;
+    if ((await globalCheck(mid * 100, mintOf(s), now, now)).fits) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+/** Public: {on, full, pct_left, resets_at} - never the cap itself. With userId + usd: the whole dollars that fit (max_usd). */
+async function globalPublic(now = clock()) {
+  await init();
+  if (!globalOn()) return { on: false };
+  await ensureFrozen(now);
+  const caps = await globalCaps(now);
+  const used = await globalUsed(now, now);
+  const fr = [];
+  if (caps.pat != null) fr.push(caps.pat > 0 ? Math.max(0, 1 - used.pat / caps.pat) : 0);
+  if (caps.cents != null) fr.push(caps.cents > 0 ? Math.max(0, 1 - used.cents / caps.cents) : 0);
+  const left = fr.length ? Math.min(...fr) : 1;
+  // full = not even $1 at the normal rate fits
+  const one = split({ cents: 100, normalRate: normalTerms().rate, bonusPct: normalTerms().bonus_pct });
+  const full = !(await globalCheck(100, mintOf(one), now, now)).fits;
+  return { on: true, full, pct_left: Math.floor(left * 100), resets_at: dayWindow(now).end, tz: S.tz };
+}
+/** Admin: today's global numbers. */
+async function globalAdmin(now = clock()) {
+  await init();
+  if (!globalOn()) return { on: false, mode: S.global_mode };
+  await ensureFrozen(now);
+  const caps = await globalCaps(now);
+  const used = await globalUsed(now, now);
+  const n = (await getQuery("SELECT COUNT(*) AS n FROM donation_usd_log WHERE over_global = 1 AND status = 'credited'"))[0].n;
+  let held = 0;
+  try { held = (await getQuery("SELECT COUNT(*) AS n FROM crypto_payments WHERE status = 'held' AND hold_reason = 'global_daily_limit'"))[0].n; } catch (e) { held = 0; }
+  return { on: true, mode: S.global_mode, day: dayKey(now), supply: caps.supply, cap_pat: caps.pat, cap_cents: caps.cents, used_pat: used.pat, used_cents: used.cents,
+           left_pat: caps.pat == null ? null : Math.max(0, caps.pat - used.pat), left_cents: caps.cents == null ? null : Math.max(0, caps.cents - used.cents),
+           resets_at: used.window.end, flagged_count: n, crypto_held: held };
+}
+/** Before a transaction that may credit / reserve: tables ready + the day's supply frozen (the % mode). */
+async function prepare(at = clock()) { await init(); await auditReady(); if (S.global_mode === "pct" && S.global_pct > 0) await ensureFrozen(at); }
+
+/** Card: hold `cents` of today's allowances (the member's + the global pool) BEFORE opening a checkout; refused over either,
+ *  with the amount that fits. -> {ref, limited} */
+async function reserveCheckout(userId, cents, now = clock()) {
+  await prepare(now);
   return tx(async () => {
     const limit = await limitFor(userId);
-    if (!limit) return { ref: null, limited: false };
-    const u = await dayUsed(userId, now, now);
-    const left = Math.max(0, limit - u.used);
-    if (cents > left) {
-      const whole = Math.floor(left / 100);
-      throw refuse(whole >= 1
-        ? `Today's donation limit: you can donate ${usdTxt(whole * 100)} more today (the day resets at midnight ${tzName()} time).`
-        : `You have reached today's donation limit (${usdTxt(limit)}). It resets at midnight ${tzName()} time.`, 409);
+    const gOn = globalOn();
+    if (!limit && !gOn) return { ref: null, limited: false };
+    let userLeft = Infinity;
+    if (limit) {
+      const u = await dayUsed(userId, now, now);
+      userLeft = Math.max(0, limit - u.used);
+      if (cents > userLeft) {
+        const whole = Math.floor(userLeft / 100);
+        throw refuse(whole >= 1
+          ? `Today's donation limit: you can donate ${usdTxt(whole * 100)} more today (the day resets at midnight ${tzName()} time).`
+          : `You have reached today's donation limit (${usdTxt(limit)}). It resets at midnight ${tzName()} time.`, 409);
+      }
+    }
+    const s = (await computeTerms({ userId, cents, paidAt: now })).s;
+    if (gOn && !(await globalCheck(cents, mintOf(s), now, now)).fits) {
+      const max = await globalMaxUsd(userId, Math.min(Math.floor(cents / 100) - 1, Math.floor(userLeft / 100)), now);
+      throw Object.assign(refuse(max >= 1
+        ? `Today's donation pool only has room for ${usdTxt(max * 100)} more - you can donate up to ${usdTxt(max * 100)} now.`
+        : `Donations are full for today; they reopen at midnight ${tzLabel()} time.`, 409), { fits_usd: max });
     }
     const ref = "hold:" + crypto.randomBytes(8).toString("hex");
-    await runQuery("INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, status, expires, limit_cents, created) VALUES (?, ?, 'card', ?, ?, 'open', ?, ?, ?)",
-      [ref, String(userId), now, cents, now + 5 * 60000, limit, now]);
+    await runQuery("INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, pat, status, expires, limit_cents, created) VALUES (?, ?, 'card', ?, ?, ?, 'open', ?, ?, ?)",
+      [ref, String(userId), now, cents, mintOf(s), now + 5 * 60000, limit || null, now]);
     return { ref, limited: true };
   });
 }
@@ -366,23 +516,27 @@ async function expireSession(sessionId) {
  * hold (by session) becomes the credited row. Over the limit anyway (a race / an admin-approved hold) -> over_limit = 1.
  * -> {over, limit_cents, used_cents}
  */
-async function recordCredit({ ref, sessionId = null, userId, via, paidAt, cents, now = clock() }) {
+async function recordCredit({ ref, sessionId = null, userId, via, paidAt, cents, mint = null, now = clock() }) {
   const run = async () => {
     const had = (await getQuery("SELECT * FROM donation_usd_log WHERE ref = ? AND status = 'credited'", [String(ref)]))[0];
-    if (had) return { over: !!had.over_limit, limit_cents: had.limit_cents || 0, used_cents: null };
+    if (had) return { over: !!had.over_limit, over_global: !!had.over_global, limit_cents: had.limit_cents || 0, used_cents: null };
     const hold = sessionId ? (await getQuery("SELECT ref FROM donation_usd_log WHERE session = ?", [String(sessionId)]))[0] : null;
     const limit = await limitFor(userId);
     const u = await dayUsed(userId, paidAt, now, [hold && hold.ref, ref]);
     const over = !!limit && u.used + cents > limit;
+    // 1.99uh: the global pool - over it anyway (a race / an approved hold): credited, flagged, counted
+    const G = mint == null ? { fits: true } : await globalCheck(cents, mint, paidAt, now, [hold && hold.ref, ref]);
+    const overG = !G.fits;
     if (hold) {
-      await runQuery("UPDATE donation_usd_log SET ref = ?, status = 'credited', usd_cents = ?, paid_at = ?, user_id = ?, over_limit = ?, limit_cents = ? WHERE ref = ?",
-        [String(ref), cents, paidAt, String(userId), over ? 1 : 0, limit || null, hold.ref]);
+      await runQuery("UPDATE donation_usd_log SET ref = ?, status = 'credited', usd_cents = ?, pat = ?, paid_at = ?, user_id = ?, over_limit = ?, over_global = ?, limit_cents = ? WHERE ref = ?",
+        [String(ref), cents, mint, paidAt, String(userId), over ? 1 : 0, overG ? 1 : 0, limit || null, hold.ref]);
     } else {
-      await runQuery(`INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, status, session, over_limit, limit_cents, created)
-                      VALUES (?, ?, ?, ?, ?, 'credited', ?, ?, ?, ?)`, [String(ref), String(userId), via, paidAt, cents, sessionId, over ? 1 : 0, limit || null, now]);
+      await runQuery(`INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, pat, status, session, over_limit, over_global, limit_cents, created)
+                      VALUES (?, ?, ?, ?, ?, ?, 'credited', ?, ?, ?, ?, ?)`, [String(ref), String(userId), via, paidAt, cents, mint, sessionId, over ? 1 : 0, overG ? 1 : 0, limit || null, now]);
     }
     if (over) console.warn(`[donlimit] ${via} donation ${ref} took ${userId} over the day's limit (${usdTxt(u.used)} + ${usdTxt(cents)} > ${usdTxt(limit)}) - credited, flagged`);
-    return { over, limit_cents: limit, used_cents: u.used };
+    if (overG) console.warn(`[donglobal] ${via} donation ${ref} (${mint} PAT minted) went over today's global donation cap - credited (paid), flagged`);
+    return { over, over_global: overG, limit_cents: limit, used_cents: u.used };
   };
   return inTx() ? run() : tx(run);
 }
@@ -587,6 +741,11 @@ async function end(admin, id) {
 }
 const SETTING_CLEAN = {
   daily_limit_usd: (v) => { const n = Math.floor(Number(v)); if (!Number.isFinite(n) || n < 0 || n > 1000000) throw refuse("The daily limit is a whole number of dollars (0 = no limit)."); return n; },
+  // 1.99uh: the global daily donation cap
+  global_mode: (v) => { if (!["off", "fixed", "pct"].includes(String(v))) throw refuse("The global cap is off, a fixed PAT amount, or a % of supply."); return String(v); },
+  global_pat: (v) => { const n = Math.floor(Number(v)); if (!Number.isFinite(n) || n < 0 || n > 1e13) throw refuse("The global cap is a whole number of PAT (0 = none)."); return n; },
+  global_pct: (v) => { const n = Math.round(Number(v) * 10000) / 10000; if (!Number.isFinite(n) || n < 0 || n > 100) throw refuse("The global cap is 0 to 100 % of the supply."); return n; },
+  global_usd: (v) => { const n = Math.floor(Number(v)); if (!Number.isFinite(n) || n < 0 || n > 10000000) throw refuse("The global USD cap is a whole number of dollars (0 = none)."); return n; },
   ceiling_x: (v) => { const n = Math.round(Number(v) * 100) / 100; if (!Number.isFinite(n) || n < 1 || n > HARD_CEILING_X) throw refuse(`The ceiling is 1 to ${HARD_CEILING_X} times the normal rate.`); return n; },
   bonus_base: (v) => { if (!BONUS_BASES[v]) throw refuse("Unknown bonus base."); return String(v); },
   tz: (v) => { if (!validTz(v)) throw refuse("Unknown time zone."); return String(v); },
@@ -639,7 +798,7 @@ async function adminState() {
   }
   let log = [];
   try { log = await require("./adminaudit").recent("donation_promo", 30); } catch (e) { log = []; }
-  return { now, settings: { ...S }, normal: T, limit: await limitState(), limits: { hard_ceiling_x: HARD_CEILING_X, max_days: MAX_DAYS, max_cap_usd: MAX_CAP_USD },
+  return { now, settings: { ...S }, normal: T, limit: await limitState(), global: await globalAdmin(now), limits: { hard_ceiling_x: HARD_CEILING_X, max_days: MAX_DAYS, max_cap_usd: MAX_CAP_USD },
            bonus_bases: BONUS_BASES, today_ends: nextMidnight(now), promos, log };
 }
 /** 1.99tq: promo PAT per UTC day (the supply history's "of which promo" line). */
@@ -671,7 +830,7 @@ function register(app, { addUser, noTimers } = {}) {
   // public: the live promo (+ your allowance), and ?usd=N -> what that would credit you right now
   app.get("/api/donate/promo", ...json(async (req) => {
     const uid = req.user && req.user.userId ? req.user.userId : null;
-    const out = { promo: await live(uid), daily: await daily(uid) };
+    const out = { promo: await live(uid), daily: await daily(uid), global: await globalPublic() };
     if (req.query.usd !== undefined) out.quote = await quote(uid, req.query.usd);
     return out;
   }));
@@ -697,7 +856,10 @@ function register(app, { addUser, noTimers } = {}) {
 module.exports = {
   init, register, creditTerms, metaOf, noteOf, receiptLine, split, effectiveRate, live, liveCached, quote, create, edit, end, setSettings, adminState,
   promoByDay, nextMidnight, dayWindow, daily, limitCheck, reserveCheckout, attachSession, releaseHold, expireSession, recordCredit,
-  setOverride, overrideOf, limitState, donorKeyOf, refresh, Refuse, BONUS_BASES, DEFAULTS, MAX_DAYS, HARD_CEILING_X, MAX_CAP_USD,
+  setOverride, overrideOf, limitState, donorKeyOf,
+  // 1.99uh
+  previewTerms, ensureFrozen, globalCaps, globalCheck, globalPublic, globalAdmin, globalMaxUsd, prepare, dayKey, mintOf,
+  _setSupply: (fn) => { supplyFn = fn || (async () => (await require("./supply").patSupply()).total); }, refresh, Refuse, BONUS_BASES, DEFAULTS, MAX_DAYS, HARD_CEILING_X, MAX_CAP_USD,
   settings: () => ({ ...S }),
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

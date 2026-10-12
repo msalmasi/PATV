@@ -47,6 +47,11 @@
   .sp .promo { display: grid; gap: 4px; justify-self: start; max-width: 640px; margin: 0 0 var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-4); border-radius: var(--ds-r-xl);
                border: 1px solid var(--ds-ac-line); background: linear-gradient(110deg, rgba(255, 106, 155, .16), rgba(255, 196, 0, .10)); }
   .sp .promo p { margin: 0; }
+  /* 1.99uh: today's global donation pool */
+  .sp .pool { display: grid; gap: 6px; margin: 0 0 var(--ds-sp-3); max-width: 520px; }
+  .sp .pool p { margin: 0; }
+  .sp .pool .bar { height: 10px; border-radius: var(--ds-r-pill); background: #2a2730; overflow: hidden; }
+  .sp .pool .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--pink), var(--gold)); border-radius: var(--ds-r-pill); }
   .sp .promo .pe { font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-ac-2); }
   .sp .promo .pe .pl { text-transform: none; letter-spacing: 0; color: var(--ds-text-strong); }
   .sp .promo .pd { font-size: var(--ds-fs-lead); color: var(--ds-text-strong); }
@@ -266,7 +271,15 @@
         <span class="bon" id="spCustBon"></span>
       </label>
     </div>
-    <% const DL = locals.daily || null; %>
+    <% const DL = locals.daily || null; const GP = locals.globalPool || { on: false }; const gpTz = GP.tz === 'America/New_York' ? 'New York' : String(GP.tz || '').replace(/_/g, ' '); %>
+    <% if (GP.on) { %>
+    <%# 1.99uh: today's global donation pool - a bar, never the cap itself %>
+    <div class="pool" id="spPool" data-full="<%= GP.full ? 1 : 0 %>">
+      <% if (GP.full) { %><p class="ds-note warn" role="status"><span class="ds-ic" aria-hidden="true">⏳</span> <span><%- t('support.global_full', { tz: gpTz }) %></span></p>
+      <% } else { %><p class="mut"><%- t('support.global_pool', { pct: GP.pct_left }) %></p>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= GP.pct_left %>" aria-label="<%- t('support.global_pool_label') %>"><i style="width:<%= Math.max(2, GP.pct_left) %>%"></i></div><% } %>
+    </div>
+    <% } %>
     <% if (DL) { %><p class="mut" id="spDaily" data-left="<%= DL.left_cents %>"><span class="ds-ic" aria-hidden="true">📅</span> <% if (DL.left_cents >= 100) { %><%- t('support.daily_left', { left: '<b>' + num(Math.floor(DL.left_cents / 100)) + '</b>', limit: num(DL.limit_cents / 100), tz: DL.tz.replace(/_/g, ' ') }) %><% } else { %><%- t('support.daily_none', { limit: num(DL.limit_cents / 100), tz: DL.tz.replace(/_/g, ' ') }) %><% } %></p><% } %>
     <p class="sum" id="spSum" aria-live="polite"><%- t('support.sum', { usd: 10, pat: '<b>' + num(patOf(10)) + '</b>', bonus: '<span class="plus">' + num(bonusOf(10)) + '</span>' }) %></p>
   </section>
@@ -368,7 +381,7 @@
                 <span><span class="amt"><%= (Number(p.usd_cents) / 100).toFixed(2) %> <%= p.token %></span>
                   <span class="meta"> · <a href="<%= p.explorer %>" target="_blank" rel="noopener noreferrer"><%= p.chain_name %> ↗</a> · <time data-ts="<%= p.seen %>"><%= new Date(Number(p.seen)).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time></span></span>
                 <span class="pp"><%= p.pat ? num(p.pat) + ' PAT' : '' %></span>
-                <span class="st <%= tn %>"><% if (sg) { %><span class="dots" aria-hidden="true"><i class="on<%= sg === 1 ? ' last' : '' %>"></i><i class="<%= sg >= 2 ? 'on' : '' %><%= sg === 2 ? ' last' : '' %>"></i><i class="<%= sg >= 3 ? 'on' : '' %>"></i></span><% } %><span class="lab"><%- t('support.status.' + (p.status === 'held' && p.hold_reason === 'daily_limit' ? 'held_limit' : p.status)) %></span></span>
+                <span class="st <%= tn %>"><% if (sg) { %><span class="dots" aria-hidden="true"><i class="on<%= sg === 1 ? ' last' : '' %>"></i><i class="<%= sg >= 2 ? 'on' : '' %><%= sg === 2 ? ' last' : '' %>"></i><i class="<%= sg >= 3 ? 'on' : '' %>"></i></span><% } %><span class="lab"><%- t('support.status.' + (p.status === 'held' && p.hold_reason === 'daily_limit' ? 'held_limit' : p.status === 'held' && p.hold_reason === 'global_daily_limit' ? 'held_global' : p.status)) %></span></span>
               </li><% }) %>
             </ol>
             <% } %>
@@ -451,4 +464,4 @@
   </section>
 </main>
 <script src="/public/js/crypto-link.js?v=2" defer></script>
-<script src="/public/js/support.js?v=3" defer></script>
+<script src="/public/js/support.js?v=4" defer></script>

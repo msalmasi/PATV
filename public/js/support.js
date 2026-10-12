@@ -66,6 +66,8 @@
     if (goTxt) goTxt.textContent = _t('js.support.card_button', 'Donate ${usd} by card', { usd: ok ? fmt(usd) : '…' });
     if (goBtn) goBtn.disabled = !ok;
     // 1.99ts: the daily donation limit (the server refuses a checkout over it; crypto over it is held for review)
+    var pool = document.getElementById('spPool');
+    if (pool && pool.getAttribute('data-full') === '1' && goBtn) goBtn.disabled = true;   // 1.99uh: donations are full for today
     var dl = document.getElementById('spDaily');
     if (dl && ok) {
       var left = Number(dl.getAttribute('data-left')) || 0;

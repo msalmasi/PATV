@@ -68,7 +68,7 @@
   <% const table = (rows, id, actions) => { %>
     <div class="tblwrap"><table><thead><tr><th>Seen</th><th>Status</th><th>Amount</th><th>Chain</th><th>From</th><th>Account</th><th>PAT</th><th>Tx</th><% if (actions) { %><th></th><% } %></tr></thead><tbody>
       <% rows.forEach((p) => { %><tr>
-        <td><%= when(p.seen) %></td><td><%= p.status %><%= p.status === 'held' && p.hold_reason === 'daily_limit' ? ' (daily limit)' : p.status === 'held' && p.hold_reason === 'max' ? ' (over max)' : '' %><%= p.decided_by ? ' (' + p.decided_by + ')' : '' %><%= p.note ? ' — ' + p.note : '' %></td>
+        <td><%= when(p.seen) %></td><td><%= p.status %><%= p.status === 'held' && p.hold_reason === 'daily_limit' ? ' (daily limit)' : p.status === 'held' && p.hold_reason === 'global_daily_limit' ? ' (global daily cap)' : p.status === 'held' && p.hold_reason === 'max' ? ' (over max)' : '' %><%= p.decided_by ? ' (' + p.decided_by + ')' : '' %><%= p.note ? ' — ' + p.note : '' %></td>
         <td>$<%= usd(p.usd_cents) %> <%= p.token %></td><td><%= p.chain_name %></td><td title="<%= p.src_addr %>"><code><%= short(p.src_addr) %></code></td>
         <td><%= p.username ? p.username : '—' %></td><td><%= p.pat ? fmt(p.pat) + (p.bonus ? ' +' + fmt(p.bonus) : '') : '—' %></td>
         <td><a href="<%= p.explorer %>" target="_blank" rel="noopener noreferrer"><code><%= short(p.tx) %></code> ↗</a></td>
@@ -81,7 +81,7 @@
   <% } %>
 
   <section class="sb-card" id="held" aria-labelledby="heT">
-    <h2 id="heT">Held (over $<%= fmt(S.max_usd) %>, or over the member's daily donation limit)</h2>
+    <h2 id="heT">Held (over $<%= fmt(S.max_usd) %>, or over the member's daily limit / today's global donation cap)</h2>
     <p class="muted">Approve = credit it now (mint as usual, at the terms of the moment it was seen - a promo included; an approved over-limit one is flagged on /admin/economy#donations). Reject = no PAT; the coins stay at the receiving address. Refunded off-site = you sent the coins back from the wallet that owns it, outside PATV: no PAT, and the donor gets a notice. The daily limit: <a href="/admin/economy#donations">/admin/economy → Donations</a>.</p>
     <% table(held, 'held', 'held') %>
   </section>

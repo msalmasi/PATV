@@ -442,6 +442,12 @@ async function handleEvent(ev) {
   let donation = null;
   let overCap = null, upgraded = null;         // 1.99th
   await require("./donationpromo").init();     // 1.99tq: its tables before the transaction (never a memoized init inside one)
+  // 1.99uh: the donation day's supply frozen before the transaction (the global % cap reads the whole supply)
+  if (ev && ev.type === "checkout.session.completed") {
+    const o = (ev.data && ev.data.object) || {};
+    const at = Number(o.created) > 0 ? Number(o.created) * 1000 : Number(ev.created) * 1000;
+    await require("./donationpromo").prepare(at).catch((e) => console.error("[stripe] donation prepare:", e.message));
+  }
   const out = await tx(async () => {
     const ins = await runQuery("INSERT OR IGNORE INTO stripe_events (id, type, created, received) VALUES (?, ?, ?, ?)",
                                [ev.id, ev.type, Number(ev.created) || 0, t]);
@@ -465,7 +471,8 @@ async function handleEvent(ev) {
           const paidAt = Number(obj.created) > 0 ? Number(obj.created) * 1000 : Number(ev.created) * 1000;
           const terms = await DP.creditTerms({ ref: id, userId: target, cents, paidAt, via: "card" });
           // 1.99ts: counts toward the day's limit; a race past it (two checkouts at once) is still credited - the money is taken - and flagged
-          await DP.recordCredit({ ref: id, sessionId: obj.id || null, userId: target, via: "card", paidAt, cents });
+          // 1.99uh: + the PAT it mints (donor + incentive bonus) for the global daily cap - a race over it is credited and flagged too
+          await DP.recordCredit({ ref: id, sessionId: obj.id || null, userId: target, via: "card", paidAt, cents, mint: terms.pat + terms.bonus });
           const pat = terms.pat, bonus = terms.bonus;
           await ledger.postOrThrow(target, pat, "donation", { transactionId: id, source: "stripe donation", note: DP.noteOf(terms) });
           await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",

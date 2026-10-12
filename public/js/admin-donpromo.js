@@ -98,7 +98,18 @@
     tb.appendChild(tr);
   }
   function emptyRow(tb, n, text) { var tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = n; td.className = 'empty'; td.textContent = text; tr.appendChild(td); tb.appendChild(tr); }
+  // 1.99uh: the global daily donation cap
+  function renderGlobal() {
+    var G = view.global || {}, k = $('dgKv'); k.textContent = '';
+    if (!G.on) { k.appendChild(kv('Status', 'off')); return; }
+    k.appendChild(kv('Mode', G.mode === 'pct' ? view.settings.global_pct + '% of the supply frozen today (' + fmt(G.supply) + ' PAT)' : G.mode === 'fixed' ? 'fixed' : 'USD cap only'));
+    if (G.cap_pat != null) k.appendChild(kv('PAT minted today', fmt(G.used_pat) + ' of ' + fmt(G.cap_pat) + ' (' + fmt(G.left_pat) + ' left)'));
+    if (G.cap_cents != null) k.appendChild(kv('Dollars today', usd(G.used_cents) + ' of ' + usd(G.cap_cents) + ' (' + usd(G.left_cents) + ' left)'));
+    k.appendChild(kv('Day', G.day + ' (New York) - resets ' + when(G.resets_at)));
+    k.appendChild(kv('Over the cap', fmt(G.flagged_count) + ' credited anyway (races / approved holds) · ' + fmt(G.crypto_held) + ' crypto held'));
+  }
   function renderLimit() {
+    renderGlobal();
     var L = view.limit || {};
     $('dlTz').textContent = L.tz || view.settings.tz;
     var k = $('dlKv'); k.textContent = '';
@@ -128,6 +139,7 @@
       if (first) {
         fillBonus($('dpBonus'), j.settings.bonus_base); fillBonus($('dpSBonus'), j.settings.bonus_base);
         $('dpCeil').value = j.settings.ceiling_x; $('dpSTz').value = j.settings.tz; $('dpDaily').value = j.settings.daily_limit_usd || 0;
+        $('dgMode').value = j.settings.global_mode || 'off'; $('dgPat').value = j.settings.global_pat || 0; $('dgPct').value = j.settings.global_pct || 0; $('dgUsd').value = j.settings.global_usd || 0;
         $('dpStarts').value = toLocalInput(j.now); $('dpEnds').value = toLocalInput(j.today_ends);
       }
       render(); preview();
@@ -155,7 +167,8 @@
   $('dpECancel').addEventListener('click', function () { $('dpEdit').style.display = 'none'; editing = null; });
   $('dpSet').addEventListener('submit', function (ev) {
     ev.preventDefault();
-    api('/api/admin/donpromo/settings', { ceiling_x: $('dpCeil').value, bonus_base: $('dpSBonus').value, tz: $('dpSTz').value, daily_limit_usd: $('dpDaily').value === '' ? 0 : $('dpDaily').value })
+    api('/api/admin/donpromo/settings', { ceiling_x: $('dpCeil').value, bonus_base: $('dpSBonus').value, tz: $('dpSTz').value, daily_limit_usd: $('dpDaily').value === '' ? 0 : $('dpDaily').value,
+      global_mode: $('dgMode').value, global_pat: $('dgPat').value || 0, global_pct: $('dgPct').value || 0, global_usd: $('dgUsd').value || 0 })
       .then(function (j) { msg(Object.keys(j.changed).length ? 'Settings saved.' : 'Nothing changed.'); load(); }, function (e) { msg(e.message, true); });
   });
   modeUi();

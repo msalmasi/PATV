@@ -97,6 +97,8 @@ function register(app, { addUser, noTimers } = {}) {
         promo, quoteFor,
         // 1.99ts: the viewer's daily donation limit (null = none / signed out)
         daily: me ? await require("./donationpromo").daily(me.userId).catch(() => null) : null,
+        // 1.99uh: today's global donation pool ({on, full, pct_left, resets_at} - never the cap itself)
+        globalPool: await require("./donationpromo").globalPublic().catch(() => ({ on: false })),
         user: me ? me.username : null, title: req.t ? req.t("support.title") : "Support PATV",
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
         wallets: me ? await CP.wallets(me.userId) : [], payments: me ? await CP.mine(me.userId) : [],

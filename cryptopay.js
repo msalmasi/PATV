@@ -449,6 +449,10 @@ async function verifyAndSettle(id) {
 async function settle(id, { force = false, actor = null } = {}) {
   await init();
   await require("./donationpromo").init();     // 1.99tq: before the transaction (never a memoized init inside one)
+  {   // 1.99uh: the seen day's supply frozen before the transaction (the global % cap)
+    const pre = (await getQuery("SELECT seen FROM crypto_payments WHERE id = ?", [id]))[0];
+    if (pre) await require("./donationpromo").prepare(Number(pre.seen)).catch((e) => console.error("[crypto] donation prepare:", e.message));
+  }
   let notice = null;
   const status = await tx(async () => {
     const p = (await getQuery("SELECT * FROM crypto_payments WHERE id = ?", [id]))[0];
@@ -475,6 +479,16 @@ async function settle(id, { force = false, actor = null } = {}) {
         console.log(`[crypto] ${id}: ${usd(p.usd_cents)} would take ${owner} over the daily donation limit ($${usd(L.used_cents)} of $${usd(L.limit_cents)} used) - held for review`);
         return "held";
       }
+      // 1.99uh: over today's GLOBAL donation cap (all donors; the PAT it would mint at the seen-time terms) -> held the same way
+      const DPg = require("./donationpromo");
+      const pv = await DPg.previewTerms({ userId: owner, cents: p.usd_cents, paidAt: Number(p.seen) });
+      const G = await DPg.globalCheck(p.usd_cents, pv.pat + pv.bonus, Number(p.seen));
+      if (!G.fits) {
+        await runQuery("UPDATE crypto_payments SET status = 'held', user_id = ?, hold_reason = 'global_daily_limit' WHERE id = ?", [owner, id]);
+        notice = { kind: "held_global", userId: owner, p };
+        console.log(`[crypto] ${id}: ${usd(p.usd_cents)} would go over today's global donation cap - held for review`);
+        return "held";
+      }
     }
     const cid = claimIdOf(id);
     // 1.99tq: THE shared donation credit (donationpromo.creditTerms - the card rail calls the same): the normal rate, or a live
@@ -482,7 +496,7 @@ async function settle(id, { force = false, actor = null } = {}) {
     const DP = require("./donationpromo");
     if (Math.floor((Number(p.usd_cents) * terms().rate) / 100) <= 0) { await runQuery("UPDATE crypto_payments SET status = 'dust', user_id = ? WHERE id = ?", [owner, id]); return "dust"; }
     const T = await DP.creditTerms({ ref: cid, userId: owner, cents: p.usd_cents, paidAt: Number(p.seen), via: "crypto" });
-    await DP.recordCredit({ ref: cid, userId: owner, via: "crypto", paidAt: Number(p.seen), cents: p.usd_cents });   // 1.99ts: the day's limit
+    await DP.recordCredit({ ref: cid, userId: owner, via: "crypto", paidAt: Number(p.seen), cents: p.usd_cents, mint: T.pat + T.bonus });   // 1.99ts/ug: the day's limits
     await ledger.postOrThrow(owner, T.pat, "donation-crypto", { transactionId: cid, source: "crypto donation", note: DP.noteOf(T) });
     await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
       [cid, owner, T.pat, JSON.stringify({ bonus: T.bonus, usd_cents: p.usd_cents, rate: T.rate, bonus_pct: T.bonus_pct, via: "crypto",
@@ -516,6 +530,10 @@ async function notify(n) {
       // 1.99ts: over the member's daily donation limit - held for an admin, explained
       await require("./inbox").addSafe(n.userId, { kind: "system", ref: "climit-" + n.p.id.slice(0, 120), link: "/support",
         title: t("donate.notice_title"), body: t("crypto.notice_held_limit", { amount, token: n.p.token, limit: usd(n.limit), used: usd(n.used) }) });
+    } else if (n.kind === "held_global") {
+      // 1.99uh: over today's global donation cap - held for an admin, explained
+      await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cglobal-" + n.p.id.slice(0, 120), link: "/support",
+        title: t("donate.notice_title"), body: t("crypto.notice_held_global", { amount, token: n.p.token }) });
     } else if (n.kind === "refunded") {
       await require("./inbox").addSafe(n.userId, { kind: "system", ref: "crefund-" + n.p.id.slice(0, 120), link: "/support",
         title: t("donate.notice_title"), body: t("crypto.notice_refunded", { amount, token: n.p.token, chain: CHAINS[n.p.chain].name }) });

@@ -48,7 +48,11 @@
   // 1.99ts: the viewer's daily donation limit (signed in + a limit set): "You can donate $X more today"
   var dleft = null;
   fetch('/api/donate/promo', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-    var d = j && j.daily, el = document.getElementById('donateDaily');
+    var d = j && j.daily, el = document.getElementById('donateDaily'), g = j && j.global;
+    if (g && g.on && g.full && el) {   // 1.99uh: today's global donation pool is full
+      el.textContent = _t('js.donate.global_full', 'Donations are full for today; they reopen at midnight {tz} time.', { tz: g.tz === 'America/New_York' ? 'New York' : String(g.tz).replace(/_/g, ' ') });
+      el.hidden = false; go.disabled = true; return;
+    }
     if (!d || !el) return;
     dleft = Math.floor(d.left_cents / 100);
     el.textContent = dleft >= 1 ? _t('js.donate.daily_left', 'You can donate ${left} more today (resets at midnight {tz} time).', { left: dleft, tz: String(d.tz).replace(/_/g, ' ') })
