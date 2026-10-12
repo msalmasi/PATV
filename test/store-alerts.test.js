@@ -236,6 +236,10 @@ test("the privacy checkbox: details + the order page for the fulfiller only; oth
   assert.doesNotMatch(wn.body, /buyercf/);
   assert.equal(wn.link, `/shop/item/${CARDS}`);
   assert.match((await outbox("u-tricon"))[0].text, /Camfrog: buyercf/);
+  const tt = (await outbox("u-tricon"))[0].text, wt = (await outbox("u-watch"))[0].text;
+  assert.equal(tt.split("🛎️").length - 1, 1, "one bell in the Telegram text");
+  assert.equal(tt.split(`/shop/orders/${orderId}`).length - 1, 1, "the order link once");
+  assert.match(wt, new RegExp(`/shop/item/${CARDS}$`), "a plain recipient's Telegram ends with the item link");
   assert.doesNotMatch((await outbox("u-watch"))[0].text, /buyercf/);
   // the order page: the fulfiller opens it (details yes, what was delivered no); the plain recipient gets a 404
   const fp = await get(`/shop/orders/${orderId}`, "u-tricon");

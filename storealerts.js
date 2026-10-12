@@ -209,9 +209,9 @@ async function alertOrder(orderId) {
       const ref = `${KIND}:${o.id}`;
       await require("./inbox").add(r.user_id, { kind: KIND, title: m.title, body: m.body, link: m.link, ref, telegram: false });
       if (r.tg) {
-        const site = SITE();
+        const url = SITE() + m.link;                                              // once (the order line may carry it already)
         await require("./telegram").queue(r.user_id, { kind: KIND, ref: "n:" + ref,
-          text: [`🛎️ ${m.title}`, m.body, site + m.link].join("\n") });
+          text: [m.title, m.body, ...(m.body.includes(url) ? [] : [url])].join("\n") });
       }
       if (r.pm && r.camfrog && await require("./inbox").pmAllowed(r.user_id, KIND)) {
         // the shop's own path: Pepe PMs it where they are, or holds it until they show up (kind "shop" on the bot side)
