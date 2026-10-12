@@ -48,7 +48,7 @@
   .chipbtn:hover { transform: translateY(-3px); }
   .chipbtn:active { transform: translateY(1px); }
   .chipbtn[disabled] { opacity: .35; cursor: not-allowed; transform: none; }
-  /* 1.99sk: the custom bet box under the chip rack (ds field: label, input group, hint / error) */
+  /* 1.99sk/1.99sm: the custom bet box under the chip rack (ds field: label, input group, hint / error) */
   .custombet { display: grid; gap: var(--ds-sp-1h); max-width: 420px; margin: var(--ds-sp-3) auto 0; }
   .custombet .ds-label { color: var(--mut); }
   .custombet-row { display: flex; gap: var(--ds-sp-2); align-items: stretch; }
@@ -56,6 +56,7 @@
   .custombet-row .ds-in { min-width: 0; font-variant-numeric: tabular-nums; }
   .custombet-row .cz-btn { flex: none; min-height: 44px; }
   .custombet .ds-hint, .custombet .ds-err { margin: 0; }
+  .custombet .ds-err { color: var(--ds-danger); }
   .back { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; margin: 0 0 10px; font-size: var(--ds-fs-sm); text-decoration: none; }
   .back:hover { text-decoration: underline; }
   @media (max-width: 600px) {
@@ -100,7 +101,7 @@
         <p class="dock-note" id="cz-limits"></p>
         <div class="dock-row chipbtns" id="cz-chips" role="group" aria-label="<%- t('casino.chips') %>"></div>
         <%# 1.99sk: any bet, typed (1,000 / 25k / 1.5m - public/js/patamount.js), within the table's limits; the server checks again %>
-        <form class="custombet" id="cz-custom" novalidate>
+        <form class="custombet ds-field" id="cz-custom" novalidate>
           <label class="ds-label" for="cz-custom-in"><%- t('casino.custom_bet') %></label>
           <div class="custombet-row">
             <div class="ds-in-group">
