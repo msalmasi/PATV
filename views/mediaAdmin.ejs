@@ -112,7 +112,7 @@
     <h3>Link a PATV account to an Overseerr user</h3>
     <p class="muted">Without a link, a PATV account whose VERIFIED email matches an Overseerr user requests as that user; everyone else as the service user above.</p>
     <form id="linkForm" class="row" autocomplete="off">
-      <input type="text" name="username" placeholder="PATV username" required maxlength="40">
+      <input type="text" name="username" placeholder="PATV username" required maxlength="48">
       <input type="text" name="overseerr_user" placeholder="Overseerr user id (blank = unlink)" inputmode="numeric" maxlength="9">
       <button type="submit" class="btn">Save link</button><span class="msg" id="linkMsg" role="status"></span>
     </form>

@@ -131,13 +131,14 @@ function waitText(sec, req) {
 // ---------------------------------------------------------------------------------------------
 // Rules for new accounts / new passwords
 // ---------------------------------------------------------------------------------------------
-const USERNAME_RE = /^[A-Za-z0-9_.-]{3,24}$/;
+// 1.99ui: 3..usernamerules.USERNAME_MAX (48) characters - was 24; the same limit the site recognises in @mentions / u/ refs
+const { NEW_USERNAME_RE: USERNAME_RE } = require("../usernamerules");
 
 /** null when fine, else a message. */
 function checkUsername(u, req) {
   const s = String(u == null ? "" : u).trim();
   if (!s) return tr(req, "auth.err.choose_username", "Choose a username.");
-  if (!USERNAME_RE.test(s)) return tr(req, "auth.err.username_chars", "Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.");
+  if (!USERNAME_RE.test(s)) return tr(req, "auth.err.username_chars", "Usernames are 3-48 characters: letters, numbers, dot, dash or underscore.");
   if (/^[._-]|[._-]$/.test(s)) return tr(req, "auth.err.username_ends", "Usernames can't start or end with a dot, dash or underscore.");
   // "CF..." names are Pepe's automatic Camfrog accounts (see completeCamfrogLink): a real account
   // named like that could be mistaken for one and merged away.

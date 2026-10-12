@@ -1610,7 +1610,7 @@ app.post('/api/users/twitch/register', async (req, res) => {
       return res.status(403).json({ error: "unauthorized" });
     }
     const { email, twitchId, profileImage, twitchDisplayname, avatar } = req.body;
-    // 1.99gb: the bot's name goes through the register form's rules here too (charset, 3-24, no "CF" prefix,
+    // 1.99gb: the bot's name goes through the register form's rules here too (charset, 3-48 since 1.99ui, no "CF" prefix,
     // free in any letter case) - a raw Discord / Twitch name used to become the username as-is
     let username;
     try { username = await generateUniqueUsername(req.body.username || twitchDisplayname); }
@@ -1657,7 +1657,7 @@ app.post('/api/users/discord/register', async (req, res) => {
       return res.status(403).json({ error: "unauthorized" });
     }
     const { email, discordId, profileImage, discordUsername, avatar } = req.body;
-    // 1.99gb: the bot's name goes through the register form's rules here too (charset, 3-24, no "CF" prefix,
+    // 1.99gb: the bot's name goes through the register form's rules here too (charset, 3-48 since 1.99ui, no "CF" prefix,
     // free in any letter case) - a raw Discord / Twitch name used to become the username as-is
     let username;
     try { username = await generateUniqueUsername(req.body.username || discordUsername); }
@@ -2307,8 +2307,9 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
     return res.status(403).json({ ok: false, error: "unauthorized" });
   }
   const name = String(newUsername || "").trim();
-  if (!/^[A-Za-z0-9_.-]{3,24}$/.test(name)) {
-    return res.status(400).json({ ok: false, error: "usernames are 3-24 characters: letters, numbers, _ . -" });
+  // 1.99ui: 3..usernamerules.USERNAME_MAX (48) characters, was 24
+  if (!require("./usernamerules").NEW_USERNAME_RE.test(name)) {
+    return res.status(400).json({ ok: false, error: `usernames are 3-${require("./usernamerules").USERNAME_MAX} characters: letters, numbers, _ . -` });
   }
   try {
     const rows = await getQuery(
@@ -2395,6 +2396,11 @@ app.post('/api/users/camfrog/register', async (req, res) => {
     return res.status(403).json({ error: 'forbidden' });
   }
   const { username, email, password, camfrogUsername, avatar } = req.body;
+  // 1.99ui: the automatic "CF..." name is a username like any other - the charset and 3..USERNAME_MAX (48) characters
+  // (it had no check at all; Pepe sends "CF" + 8 characters)
+  if (typeof username !== "string" || !require("./usernamerules").NEW_USERNAME_RE.test(username)) {
+    return res.status(400).json({ error: `usernames are 3-${require("./usernamerules").USERNAME_MAX} characters: letters, numbers, _ . -` });
+  }
   // Pepe's Camfrog display name for them (markup stripped), else their Camfrog login - never the
   // random CF account name.
   const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(camfrogUsername, true) || username;

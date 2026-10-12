@@ -16,7 +16,8 @@
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
-const SCOPE_RE = /^(?:all|following|pad:[A-Za-z0-9][A-Za-z0-9._:~\-]{0,127}|profile:[A-Za-z0-9_.\-]{1,40})$/;
+// 1.99ui: profile:<username> up to usernamerules.USERNAME_MAX (48), was 40
+const SCOPE_RE = new RegExp("^(?:all|following|pad:[A-Za-z0-9][A-Za-z0-9._:~\\-]{0,127}|profile:" + require("./usernamerules").NAME_CHARS_SRC + ")$");
 const MAX_SCOPES = 20;
 let NOW = () => Date.now();
 

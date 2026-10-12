@@ -10,7 +10,7 @@
       newuser: function (v) {
         v = v.trim();
         if (!v) return _t('js.auth.choose_username', 'Choose a username.');
-        if (!/^[A-Za-z0-9_.-]{3,24}$/.test(v)) return _t('js.auth.username_chars', 'Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.');
+        if (!/^[A-Za-z0-9_.-]{3,48}$/.test(v)) return _t('js.auth.username_chars', 'Usernames are 3-48 characters: letters, numbers, dot, dash or underscore.');
         if (/^[._-]|[._-]$/.test(v)) return _t('js.auth.username_ends', "Usernames can't start or end with a dot, dash or underscore.");
         if (/^cf/i.test(v)) return _t('js.auth.username_cf', 'Usernames starting with “CF” are reserved for Camfrog accounts.');
         return '';

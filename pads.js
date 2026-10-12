@@ -151,8 +151,8 @@ function padRefs(html, known = padBySlugSync) {
 // PAD_REF_RE; a username is letters, digits, dot, dash, underscore and starts / ends with a letter or digit, so
 // escaping can't interfere. `known(name)` -> the account's exact username, or null (not linked). The default checks
 // a small in-memory username set (refreshed every few minutes); until it's loaded every well-formed name links (an
-// unknown one lands on the profile 404).
-const USER_REF_RE = /(^|[^A-Za-z0-9_/.\-])u\/([A-Za-z0-9](?:[A-Za-z0-9._-]{0,38}[A-Za-z0-9])?)(?![A-Za-z0-9_\-/])/g;
+// unknown one lands on the profile 404). 1.99ui: names up to usernamerules.USERNAME_MAX (48), was 40.
+const USER_REF_RE = new RegExp("(^|[^A-Za-z0-9_/.\\-])u\\/(" + require("./usernamerules").NAME_SRC + ")(?![A-Za-z0-9_\\-/])", "g");
 let NAMES = null, namesAt = 0, namesBusy = false;
 function refreshNames() {
   if (namesBusy) return;

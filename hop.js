@@ -28,6 +28,8 @@ const LOCATE_MAX = 200;           // ?post= is looked for in the first this-many
 const SORTS = new Set(store.SORTS);
 const TOPS = new Set(Object.keys(store.WINDOWS));
 const fileUrl = (f) => (f && fm.FILE_RE.test(f) ? "/media/f/" + f : null);
+// u/<username> - 1.99ui: up to usernamerules.USERNAME_MAX (48) characters, was 40
+const USER_SCOPE_RE = new RegExp("^u\\/(" + require("./usernamerules").NAME_CHARS_SRC + ")$");
 
 // ── scopes ──
 /** "all" | "following" | "p/<slug>" | "u/<username>" -> {kind, key, R?, user?, base, back, label} or null (unknown pad / user) */
@@ -44,7 +46,7 @@ async function resolveScope(raw) {
     const P = require("./pads");
     return { kind: "pad", key: "p/" + P.padSlug(R), R, base: P.padHref(R) + "/hop", back: P.padHref(R), label: "p/" + P.padSlug(R) };
   }
-  m = /^u\/([A-Za-z0-9._\-]{1,40})$/.exec(s);
+  m = USER_SCOPE_RE.exec(s);
   if (m) {
     const u = (await getQuery("SELECT userId, username FROM users WHERE lower(username) = lower(?) LIMIT 1", [m[1]]))[0];
     if (!u) return null;

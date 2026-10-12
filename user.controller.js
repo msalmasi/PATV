@@ -147,10 +147,11 @@ function generateValidationToken() {
 }
 
 // 1.99gb: a username from a Twitch / Discord name, by the register form's rules (authGuard.checkUsername:
-// [A-Za-z0-9._-], 3-24 characters, no dot / dash / underscore at either end, no reserved "CF" prefix).
+// [A-Za-z0-9._-], 3-48 characters, no dot / dash / underscore at either end, no reserved "CF" prefix).
 // Accents are dropped ("José" -> "Jose"), spaces become "_", anything else outside the set goes, a leading
 // "cf" / "CF" is stripped (Pepe's automatic Camfrog accounts are "CF..."). null when nothing usable is left.
-const USERNAME_MAX = 24;
+// 1.99ui: the limit is usernamerules.USERNAME_MAX (48), was 24.
+const { USERNAME_MAX } = require('./usernamerules');
 function normaliseUsername(raw) {
   let s = String(raw == null ? "" : raw).normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
   s = s.trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9._-]/g, "");
@@ -162,7 +163,7 @@ function normaliseUsername(raw) {
 }
 
 // A free username for an account made from a Twitch / Discord sign-in: the normalised name, then name1,
-// name2... (cut to fit 24 characters), else user#### - free in ANY letter case (the register form and
+// name2... (cut to fit USERNAME_MAX characters), else user#### - free in ANY letter case (the register form and
 // /api/users/username check case-insensitively too).
 async function generateUniqueUsername(baseUsername) {
   const taken = async (u) => (await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [u])).length > 0;
@@ -320,7 +321,7 @@ async function updateUsername(req, res) {
   const userId = req.user.userId;
   const editPage = `/u/${encodeURIComponent(req.user.username)}/edit`;
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
-  const problem = guard.checkUsername(username);
+  const problem = guard.checkUsername(username, req);   // 1.99ui: in the member's language
   if (problem) {
     req.flash('error', problem);
     return res.redirect(editPage);

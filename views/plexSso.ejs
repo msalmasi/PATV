@@ -23,7 +23,7 @@
       <div class="ds-field au-field">
         <label for="username"><%- t('auth.username') %></label>
         <input class="ds-in" type="text" id="username" name="username" value="<%= F.username || suggest || '' %>" required
-               autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="24"
+               autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="48"
                data-rule="newuser" aria-describedby="username-hint username-err"<% if (F.field === 'username') { %> aria-invalid="true"<% } %> data-autofocus>
         <div class="au-hint" id="username-hint"><%- t('auth.register.username_hint') %></div>
         <div class="au-err" id="username-err" aria-live="polite"></div>

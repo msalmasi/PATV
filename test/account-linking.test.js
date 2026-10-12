@@ -35,8 +35,8 @@ test("usernames from Twitch / Discord names follow the register form's rules", (
   const cases = [
     ["JohnDoe", "JohnDoe"], ["José María", "Jose_Maria"], ["cool guy 99", "cool_guy_99"], ["__x.y__", "x.y"],
     ["CFsomebody", "somebody"], ["cfcfabc", "abc"], ["cf", null], ["CF_", null], ["日本語", null], ["ab", null], ["", null], [null, null],
-    ["a".repeat(40), "a".repeat(24)], ["name/with?bad#chars", "namewithbadchars"], ["<@1234567890>", "1234567890"], ["[object Object]", "object_Object"],
-    ["dots...end.", "dots...end"], ["x_".repeat(20), "x_".repeat(11) + "x"],
+    ["a".repeat(60), "a".repeat(48)], ["name/with?bad#chars", "namewithbadchars"], ["<@1234567890>", "1234567890"], ["[object Object]", "object_Object"],
+    ["dots...end.", "dots...end"], ["x_".repeat(30), "x_".repeat(23) + "x"],
   ];
   for (const [raw, want] of cases) {
     const got = UC.normaliseUsername(raw);
@@ -45,16 +45,16 @@ test("usernames from Twitch / Discord names follow the register form's rules", (
   }
 });
 
-test("generateUniqueUsername: case-insensitive uniqueness, numbered within 24 chars, user#### fallback", async () => {
+test("generateUniqueUsername: case-insensitive uniqueness, numbered within 48 chars (1.99ui, was 24), user#### fallback", async () => {
   await setup;
   await user("n1", { username: "Catnip" });
   assert.equal(await UC.generateUniqueUsername("catnip"), "catnip1", "Catnip exists in another case");
   await user("n2", { username: "CATNIP1" });
   assert.equal(await UC.generateUniqueUsername("catnip"), "catnip2");
-  const long = "b".repeat(24);
+  const long = "b".repeat(48);
   await user("n3", { username: long });
   const u = await UC.generateUniqueUsername(long.toUpperCase());
-  assert.equal(u, "B".repeat(23) + "1"); assert.equal(guard.checkUsername(u), null);
+  assert.equal(u, "B".repeat(47) + "1"); assert.equal(guard.checkUsername(u), null);
   for (const raw of ["CF", "😀😀😀", "", undefined]) {
     const f = await UC.generateUniqueUsername(raw);
     assert.match(f, /^user\d{4,}$/, String(raw)); assert.equal(guard.checkUsername(f), null);

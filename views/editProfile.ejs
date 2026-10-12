@@ -322,7 +322,7 @@
       </form>
       <form class="field" id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
         <label class="lbl" for="username"><%- t('settings.account.username') %></label>
-        <div class="row"><input type="text" id="username" name="username" value="<%= username %>" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
+        <div class="row"><input type="text" id="username" name="username" value="<%= username %>" maxlength="48" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
         <span class="hint"><%- t('settings.account.username_hint') %></span>
       </form>
       <form class="field" id="emailForm" action="/api/u/<%= username %>/update/email" method="post">

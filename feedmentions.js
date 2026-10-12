@@ -38,8 +38,11 @@ const PAIR_HOUR = 5, AUTHOR_HOUR = 40, RECIPIENT_HOUR = 30;
 const SUGGEST_MAX = 8, SUGGEST_PER_MIN = 60;
 let NOW = () => Date.now();
 
-// a username: letters, digits, dot, dash, underscore; starts and ends with a letter / digit (pads.USER_REF_RE)
-const NAME = "[A-Za-z0-9](?:[A-Za-z0-9._-]{0,38}[A-Za-z0-9])?";
+// a username: letters, digits, dot, dash, underscore; starts and ends with a letter / digit (pads.USER_REF_RE).
+// 1.99ui: up to usernamerules.USERNAME_MAX (48) characters - it was 40, which hid long legacy names from @mentions.
+const UR = require("./usernamerules");
+const NAME = UR.NAME_SRC;
+const NAME_FULL_RE = new RegExp("^" + NAME + "$");
 const MENTION_RE = new RegExp("(^|[^A-Za-z0-9_.@/+\\-])@(" + NAME + ")(?![A-Za-z0-9_@\\-])", "g");
 const TAG_RE = /(^|[^\p{L}\p{N}_&#/\-])#([\p{L}\p{N}_](?:[\p{L}\p{N}_-]{0,38}[\p{L}\p{N}_])?)(?![\p{L}\p{N}_-])/gu;
 const HAS_LETTER = /\p{L}/u;
@@ -187,7 +190,7 @@ async function notify(opts = {}) {
 // ── autocomplete ──
 const likeEsc = (s) => s.replace(/[\\%_]/g, (c) => "\\" + c);
 async function suggest(q, viewer = null) {
-  const s = String(q == null ? "" : q).trim().replace(/^@/, "").slice(0, 40);
+  const s = String(q == null ? "" : q).trim().replace(/^@/, "").slice(0, UR.USERNAME_MAX);
   if (!s || !/^[\p{L}\p{N}._ -]+$/u.test(s)) return [];
   const cols = new Set((await getQuery("PRAGMA table_info(users)")).map((c) => c.name));
   const live = cols.has("archived_at") ? "archived_at IS NULL AND " : "";
@@ -197,7 +200,7 @@ async function suggest(q, viewer = null) {
                                ORDER BY CASE WHEN LOWER(username) LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, LENGTH(username), username LIMIT ?`,
                               [pre, pre, pre, SUGGEST_MAX + 1]);
   const me = viewer && viewer.username ? String(viewer.username).toLowerCase() : null;
-  return rows.filter((r) => new RegExp("^" + NAME + "$").test(r.username) && String(r.username).toLowerCase() !== me && String(r.username).toLowerCase() !== "pepe")
+  return rows.filter((r) => NAME_FULL_RE.test(r.username) && String(r.username).toLowerCase() !== me && String(r.username).toLowerCase() !== "pepe")
     .slice(0, SUGGEST_MAX)
     .map((r) => ({ username: r.username, display: r.displayname && r.displayname !== r.username ? snip(r.displayname, 40) : null }));
 }

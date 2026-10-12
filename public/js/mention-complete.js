@@ -8,6 +8,9 @@
   window.__mentionComplete = true;
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d) { return d; };
   var SEL = 'form textarea[name=body], textarea[data-mentions]';
+  // 1.99ui: usernamerules.USERNAME_MAX on the server (was 40) - test/username-limit.test.js keeps them equal
+  var USERNAME_MAX = 48;
+  var TOKEN_RE = new RegExp('(^|[^A-Za-z0-9_.@\\/+-])@([A-Za-z0-9][A-Za-z0-9._-]{0,' + (USERNAME_MAX - 1) + '})$');
   var pop = null, box = null, items = [], sel = -1, timer = null, seq = 0, lastQ = null;
 
   function ensurePop() {
@@ -36,8 +39,8 @@
   function token(ta) {
     var end = ta.selectionStart;
     if (end == null || end !== ta.selectionEnd) return null;
-    var before = ta.value.slice(Math.max(0, end - 41), end);
-    var m = /(^|[^A-Za-z0-9_.@\/+-])@([A-Za-z0-9][A-Za-z0-9._-]{0,39})$/.exec(before);
+    var before = ta.value.slice(Math.max(0, end - (USERNAME_MAX + 2)), end);
+    var m = TOKEN_RE.exec(before);
     return m ? { q: m[2], start: end - m[2].length - 1, end: end } : null;
   }
   function place(ta) {

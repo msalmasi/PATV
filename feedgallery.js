@@ -30,7 +30,9 @@ const hop = require("./hop");
 const PAGE = 24;                        // a multiple of 3: whole rows
 const TEXT_MAX = 999;
 const VIEWS = new Set(["list", "gallery"]);
-const SCOPE_RE = /^(?:all|following|p\/[A-Za-z0-9._:~\-]{1,64}|u\/[A-Za-z0-9._\-]{1,40}(?:\/profile)?)$/;
+const { NAME_CHARS_SRC } = require("./usernamerules");   // 1.99ui: usernames up to USERNAME_MAX (48), was 40
+const SCOPE_RE = new RegExp("^(?:all|following|p\\/[A-Za-z0-9._:~\\-]{1,64}|u\\/" + NAME_CHARS_SRC + "(?:\\/profile)?)$");
+const PROFILE_SCOPE_RE = new RegExp("^u\\/(" + NAME_CHARS_SRC + ")\\/profile$");
 const SORTS = new Set(store.SORTS);
 const TOPS = new Set(Object.keys(store.WINDOWS));
 let NOW = () => Date.now();
@@ -71,7 +73,7 @@ async function setView(userId, scope, view) {
 async function resolveScope(raw) {
   const s = cleanScope(raw || "all");
   if (!s) return null;
-  const m = /^u\/([A-Za-z0-9._\-]{1,40})\/profile$/.exec(s);
+  const m = PROFILE_SCOPE_RE.exec(s);
   if (m) {
     const S = await hop.resolveScope("u/" + m[1]);
     if (!S) return null;

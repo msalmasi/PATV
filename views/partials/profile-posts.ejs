@@ -61,7 +61,7 @@
           </ul>
         <% } %>
         <form class="pp-ban" data-pp-ban novalidate>
-          <input name="user" placeholder="<%- t('profile.posts.username') %>" aria-label="<%- t('profile.posts.username_aria') %>" autocomplete="off" maxlength="40">
+          <input name="user" placeholder="<%- t('profile.posts.username') %>" aria-label="<%- t('profile.posts.username_aria') %>" autocomplete="off" maxlength="48">
           <select name="days" aria-label="<%- t('profile.posts.how_long') %>"><option value="1"><%- t('profile.posts.d1') %></option><option value="7"><%- t('profile.posts.w1') %></option><option value="30"><%- t('profile.posts.d30') %></option><option value="0" selected><%- t('profile.posts.for_good') %></option></select>
           <button type="submit" class="btn-s"><%- t('profile.posts.block') %></button>
           <span class="fc-err" role="alert"></span>

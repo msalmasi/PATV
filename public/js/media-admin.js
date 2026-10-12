@@ -148,7 +148,7 @@
     }));
     h += "<h3>Unlinked (" + j.unlinked.length + ")</h3>" + table(["Plex user", "Suggested", "Link to PATV user", ""], j.unlinked.map(function (r) {
       return '<tr data-pm="' + esc(r.plex_id) + '"><td>' + esc(r.username || r.plex_id) + (r.title && r.title !== r.username ? ' <span class="muted">' + esc(r.title) + "</span>" : "") +
-        (r.pending ? ' <span class="muted">(invite pending)</span>' : "") + "</td><td>" + esc(r.suggest || "") + '</td><td><input type="text" data-pm-user maxlength="40" placeholder="PATV username" value="' + esc(r.suggest || "") + '"></td>' +
+        (r.pending ? ' <span class="muted">(invite pending)</span>' : "") + "</td><td>" + esc(r.suggest || "") + '</td><td><input type="text" data-pm-user maxlength="48" placeholder="PATV username" value="' + esc(r.suggest || "") + '"></td>' +
         '<td><button type="button" class="btn" data-pm-act="link">Link</button></td></tr>';
     }));
     h += "<h3>PATV buyers with no linked Plex account (" + j.buyers.length + ")</h3>" + table(["PATV", "Orders", "Last", "Their access"], j.buyers.map(function (b) {
