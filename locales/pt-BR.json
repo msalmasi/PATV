@@ -1935,6 +1935,8 @@
   "premium.pp.all_pt_d": "A medalha, o tema, a introdução, a medalha extra e os espaços de palco: tudo isso vem com o Plus.",
   "premium.pp.bridge": "A ponte do Camfrog",
   "premium.pp.bridge_d": "A sala do Camfrog do pad ao vivo na página dele: chat, quem está aqui, quem está no microfone, áudio da sala e chat web, clipes e capturas onde a sala permitir.",
+  "premium.pp.room": "Sua sala do Camfrog, com o Pepe nela",
+  "premium.pp.room_d": "Conecte o pad à sala dele no Camfrog: o Pepe entra e fica enquanto o Plus estiver ativo, e a sala aparece ao vivo no pad (chat, quem está aqui, o microfone, áudio da sala, chat web, clipes e capturas onde a sala permitir). Sem o Plus, não há conexão e não há Pepe.",
   "premium.pp.retention": "Logs e gravações guardados para sempre",
   "premium.pp.retention_d": "O Pepe guarda os logs de chat e as gravações do microfone da sala sem limite de tempo.",
   "premium.pp.soundboard": "Um soundboard maior: {n} espaços",

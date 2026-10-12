@@ -1896,6 +1896,8 @@
   "premium.pp.all_pt_d": "배지, 테마, 인트로, 추가 배지, 무대 슬롯. 이 모든 것이 Plus에 포함돼요.",
   "premium.pp.bridge": "Camfrog 연결",
   "premium.pp.bridge_d": "패드의 Camfrog 방을 페이지에서 라이브로 보여줘요: 채팅, 현재 접속자, 마이크 사용자, 방 오디오, 그리고 방이 허용하는 경우 웹 채팅, 클립, 스냅샷.",
+  "premium.pp.room": "Pepe가 함께하는 내 Camfrog 방",
+  "premium.pp.room_d": "패드를 Camfrog 방과 연결하세요. Pepe가 들어와서 Plus가 유효한 동안 함께 머물러요. 방은 패드에서 라이브로 보여요(채팅, 현재 접속자, 마이크, 방 오디오, 웹 채팅, 클립과 스냅샷은 방이 허용하는 경우에만). Plus가 없으면 연결도 Pepe도 없어요.",
   "premium.pp.retention": "영구 보관되는 로그와 녹화",
   "premium.pp.retention_d": "Pepe가 방의 채팅 로그와 마이크 녹음을 기간 제한 없이 보관해요.",
   "premium.pp.soundboard": "더 큰 사운드보드: 슬롯 {n}개",

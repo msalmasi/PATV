@@ -1992,6 +1992,8 @@
   "premium.pp.all_pt_d": "Odznaka, motyw, intro, dodatkowa odznaka i miejsca na scenie - wszystko to w pakiecie Plus.",
   "premium.pp.bridge": "Most Camfrog",
   "premium.pp.bridge_d": "Pokój Camfrog padu na żywo na jego stronie: czat, lista obecnych, kto mówi przez mikrofon, dźwięk pokoju oraz czat webowy, klipy i zrzuty, jeśli pokój na to pozwala.",
+  "premium.pp.room": "Twój pokój Camfrog, a w nim Pepe",
+  "premium.pp.room_d": "Podłącz pad do jego pokoju Camfrog: Pepe dołącza i zostaje, dopóki trwa Plus, a pokój wyświetla się na żywo na padzie (czat, lista obecnych, mikrofon, dźwięk pokoju, czat webowy, klipy i zrzuty, jeśli pokój na to pozwala). Bez Plus nie ma podłączenia ani Pepe.",
   "premium.pp.retention": "Logi i nagrania zachowywane na zawsze",
   "premium.pp.retention_d": "Pepe przechowuje czat pokoju i nagrania z mikrofonu bez limitu czasu.",
   "premium.pp.soundboard": "Większa tablica dźwięków: {n} miejsc",

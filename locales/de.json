@@ -1928,6 +1928,8 @@
   "premium.pp.all_pt_d": "Das Abzeichen, Theme, Intro, zusätzliche Abzeichen und Bühnenplätze - alles davon kommt mit Plus.",
   "premium.pp.bridge": "Die Camfrog-Brücke",
   "premium.pp.bridge_d": "Der Camfrog-Raum des Pads live auf seiner Seite: Chat, wer da ist, wer am Mikro ist, Raum-Audio und Web-Chat, Clips und Schnappschüsse, wo der Raum es erlaubt.",
+  "premium.pp.room": "Dein Camfrog-Raum, mit Pepe drin",
+  "premium.pp.room_d": "Verbinde das Pad mit seinem Camfrog-Raum: Pepe kommt rein und bleibt, solange Plus läuft, und der Raum wird live auf dem Pad angezeigt (Chat, wer da ist, das Mikro, Raum-Audio, Web-Chat, Clips und Schnappschüsse, wo der Raum es erlaubt). Ohne Plus gibt es keine Verbindung und kein Pepe.",
   "premium.pp.retention": "Logs und Aufnahmen für immer gespeichert",
   "premium.pp.retention_d": "Pepe speichert die Chat-Logs und Mikrofon-Aufnahmen des Raums ohne Zeitlimit.",
   "premium.pp.soundboard": "Ein größeres Soundboard: {n} Plätze",

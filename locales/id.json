@@ -1896,6 +1896,8 @@
   "premium.pp.all_pt_d": "Lencana, tema, intro, lencana tambahan, dan slot panggung. Semuanya sudah termasuk di Plus.",
   "premium.pp.bridge": "Jembatan Camfrog",
   "premium.pp.bridge_d": "Ruang Camfrog milik Pad tayang langsung di halamannya: obrolan, siapa yang hadir, siapa yang pegang mikrofon, audio ruangan, dan obrolan web, klip serta cuplikan di mana ruangan mengizinkannya.",
+  "premium.pp.room": "Ruangan Camfrog-mu, dengan Pepe di dalamnya",
+  "premium.pp.room_d": "Hubungkan Pad ke ruangan Camfrog-nya: Pepe bergabung dan tetap di sana selama Plus masih aktif, dan ruangan tayang langsung di Pad (obrolan, siapa yang hadir, mikrofon, audio ruangan, obrolan web, klip dan cuplikan di mana ruangan mengizinkannya). Tanpa Plus, tidak bisa terhubung dan tidak ada Pepe.",
   "premium.pp.retention": "Log dan rekaman disimpan selamanya",
   "premium.pp.retention_d": "Pepe menyimpan log obrolan dan rekaman mikrofon ruangan tanpa batas waktu.",
   "premium.pp.soundboard": "Papan suara lebih besar: {n} slot",

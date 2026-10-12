@@ -1935,6 +1935,8 @@
   "premium.pp.all_pt_d": "Badge, tema, intro, badge extra e slot del palco: tutto questo arriva con Plus.",
   "premium.pp.bridge": "Il ponte Camfrog",
   "premium.pp.bridge_d": "La stanza Camfrog del pad in diretta sulla sua pagina: chat, chi c'è, chi è al microfono, audio della stanza e chat web, clip e snapshot dove la stanza lo consente.",
+  "premium.pp.room": "La tua stanza Camfrog, con Pepe dentro",
+  "premium.pp.room_d": "Collega il pad alla sua stanza Camfrog: Pepe entra e resta finché dura Plus, e la stanza va in diretta sul pad (chat, chi c'è, il microfono, audio della stanza, chat web, clip e snapshot dove la stanza lo consente). Senza Plus, niente collegamento e niente Pepe.",
   "premium.pp.retention": "Log e registrazioni conservati per sempre",
   "premium.pp.retention_d": "Pepe conserva i log della chat e le registrazioni del microfono della stanza senza limiti di tempo.",
   "premium.pp.soundboard": "Una soundboard più grande: {n} slot",

@@ -1896,6 +1896,8 @@
   "premium.pp.all_pt_d": "バッジ、テーマ、イントロ、追加バッジ、ステージ枠。すべてに Plus が付いてきます。",
   "premium.pp.bridge": "Camfrog ブリッジ",
   "premium.pp.bridge_d": "パッドの Camfrog ルームをページでライブ表示します。チャット、参加者、マイクの話者、ルームの音声、そしてルームが許可している場合はウェブチャット、クリップ、スナップショットに対応します。",
+  "premium.pp.room": "Pepe 入りのあなたの Camfrog ルーム",
+  "premium.pp.room_d": "パッドを Camfrog ルームに接続します。Plus の期間中は Pepe が参加して留まり、ルームはパッドでライブ表示されます（チャット、参加者、マイク、ルームの音声、ウェブチャット、ルームが許可している場合はクリップとスナップショット）。Plus がない場合は接続も Pepe もできません。",
   "premium.pp.retention": "ログと録画を永久保存",
   "premium.pp.retention_d": "Pepe がルームのチャットログとマイク録音を期限なしで保存します。",
   "premium.pp.soundboard": "より大きなサウンドボード：{n} 枠",

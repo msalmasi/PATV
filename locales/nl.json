@@ -1928,6 +1928,8 @@
   "premium.pp.all_pt_d": "De badge, het thema, de intro, de extra badge en de podiumplekken: alles hiervan zit bij Plus.",
   "premium.pp.bridge": "De Camfrog-brug",
   "premium.pp.bridge_d": "De Camfrog-kamer van de pad live op de pagina: chat, wie er zijn, wie er op de microfoon zit, kamergeluid en webchat, clips en snapshots waar de kamer dat toestaat.",
+  "premium.pp.room": "Je Camfrog-kamer, met Pepe erin",
+  "premium.pp.room_d": "Koppel de pad aan zijn Camfrog-kamer: Pepe komt erbij en blijft zolang Plus loopt, en de kamer wordt live op de pad getoond (chat, wie er zijn, de microfoon, kamergeluid, webchat, clips en snapshots waar de kamer dat toestaat). Zonder Plus geen koppeling en geen Pepe.",
   "premium.pp.retention": "Logs en opnames voorgoed bewaard",
   "premium.pp.retention_d": "Pepe bewaart de chatlogs en microfoonopnames van de kamer zonder tijdslimiet.",
   "premium.pp.soundboard": "Een groter soundboard: {n} plekken",

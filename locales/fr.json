@@ -1935,6 +1935,8 @@
   "premium.pp.all_pt_d": "Le badge, le thème, l'intro, le badge supplémentaire et les emplacements de scène : tout est inclus avec Plus.",
   "premium.pp.bridge": "Le pont Camfrog",
   "premium.pp.bridge_d": "La salle Camfrog du pad en direct sur sa page : chat, présence, qui a le micro, audio de la salle, et chat web, clips et instantanés là où la salle les autorise.",
+  "premium.pp.room": "Ta salle Camfrog, avec Pepe dedans",
+  "premium.pp.room_d": "Connecte le pad à sa salle Camfrog : Pepe rejoint et reste tant que Plus est actif, et la salle s'affiche en direct sur le pad (chat, présence, micro, audio de la salle, chat web, clips et instantanés là où la salle les autorise). Sans Plus, pas de connexion et pas de Pepe.",
   "premium.pp.retention": "Journaux et enregistrements conservés pour toujours",
   "premium.pp.retention_d": "Pepe conserve les journaux de chat et les enregistrements micro de la salle sans limite de temps.",
   "premium.pp.soundboard": "Un soundboard plus grand : {n} emplacements",

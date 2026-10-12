@@ -1896,6 +1896,8 @@
   "premium.pp.all_pt_d": "徽章、主题、开场、额外徽章和舞台位，全部随 Plus 附带。",
   "premium.pp.bridge": "Camfrog 连接",
   "premium.pp.bridge_d": "小站的 Camfrog 房间直接在其页面上实时显示：聊天、在线人员、麦上成员、房间音频，以及在房间允许的情况下提供网页聊天、片段和截图。",
+  "premium.pp.room": "你的 Camfrog 房间，Pepe 也在里面",
+  "premium.pp.room_d": "将小站连接到其 Camfrog 房间：Plus 有效期内 Pepe 会加入并留在房间里，房间会在小站上实时显示（聊天、在线人员、麦上成员、房间音频、网页聊天，以及在房间允许的情况下提供片段和截图）。没有 Plus，就无法连接，也没有 Pepe。",
   "premium.pp.retention": "永久保存的日志和录像",
   "premium.pp.retention_d": "Pepe 会永久保存房间的聊天日志和麦克风录音，没有时间限制。",
   "premium.pp.soundboard": "更大的音效板：{n} 个位",

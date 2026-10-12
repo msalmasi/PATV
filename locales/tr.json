@@ -1928,6 +1928,8 @@
   "premium.pp.all_pt_d": "Rozet, tema, giriş, ekstra rozet ve sahne yuvaları. Hepsi Plus ile gelir.",
   "premium.pp.bridge": "Camfrog köprüsü",
   "premium.pp.bridge_d": "Pad'in Camfrog odası sayfasında canlı: sohbet, kimlerin orada olduğu, kimin mikrofonda olduğu, oda sesi ve oda izin verdiği yerlerde web sohbeti, klipler ve anlık görüntüler.",
+  "premium.pp.room": "Pepe'li Camfrog odan",
+  "premium.pp.room_d": "Pad'i Camfrog odasına bağla: Plus süresi boyunca Pepe katılır ve kalır, oda pad'de canlı görünür (sohbet, kimlerin orada olduğu, mikrofon, oda sesi, web sohbeti, klipler ve izin verdiği yerlerde anlık görüntüler). Plus olmadan bağlantı kurulamaz ve Pepe gelmez.",
   "premium.pp.retention": "Loglar ve kayıtlar kalıcı olarak saklanır",
   "premium.pp.retention_d": "Pepe, odanın sohbet loglarını ve mikrofon kayıtlarını süre sınırı olmadan tutar.",
   "premium.pp.soundboard": "Daha büyük ses paneli: {n} yuva",

@@ -1896,6 +1896,8 @@
   "premium.pp.all_pt_d": "Huy hiệu, chủ đề, phần giới thiệu, huy hiệu thêm và các ô sân khấu - tất cả đều đi kèm Plus.",
   "premium.pp.bridge": "Cầu nối Camfrog",
   "premium.pp.bridge_d": "Phòng Camfrog của pad được phát trực tiếp trên trang của pad: chat, danh sách người có mặt, ai đang dùng mic, âm thanh phòng, cùng chat web, clip và ảnh chụp ở những nơi phòng cho phép.",
+  "premium.pp.room": "Phòng Camfrog của bạn, có Pepe ở trong",
+  "premium.pp.room_d": "Kết nối pad với phòng Camfrog của pad: Pepe sẽ tham gia và ở lại trong suốt thời gian Plus còn hiệu lực, còn phòng sẽ được phát trực tiếp trên pad (chat, danh sách người có mặt, mic, âm thanh phòng, chat web, clip và ảnh chụp ở những nơi phòng cho phép). Không có Plus thì không thể kết nối và không có Pepe.",
   "premium.pp.retention": "Nhật ký và bản ghi được lưu vĩnh viễn",
   "premium.pp.retention_d": "Pepe giữ nhật ký chat và bản ghi mic của phòng mà không giới hạn thời gian.",
   "premium.pp.soundboard": "Bảng âm thanh lớn hơn: {n} ô",

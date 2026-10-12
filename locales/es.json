@@ -1935,6 +1935,8 @@
   "premium.pp.all_pt_d": "La insignia, el tema, la intro, la insignia extra y los espacios de escenario: todo viene con Plus.",
   "premium.pp.bridge": "El puente de Camfrog",
   "premium.pp.bridge_d": "La sala de Camfrog del pad en vivo en su página: chat, quién está, quién tiene el micro, audio de la sala y chat web, clips y capturas donde la sala lo permita.",
+  "premium.pp.room": "Tu sala de Camfrog, con Pepe dentro",
+  "premium.pp.room_d": "Conecta el pad a su sala de Camfrog: Pepe entra y se queda mientras dure Plus, y la sala se muestra en vivo en el pad (chat, quién está, el micro, audio de la sala, chat web, clips y capturas donde la sala lo permita). Sin Plus, no hay conexión ni Pepe.",
   "premium.pp.retention": "Registros y grabaciones guardados para siempre",
   "premium.pp.retention_d": "Pepe guarda los registros del chat y las grabaciones del micro de la sala sin límite de tiempo.",
   "premium.pp.soundboard": "Un soundboard más grande: {n} espacios",
