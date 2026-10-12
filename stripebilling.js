@@ -32,6 +32,11 @@
 //     price, proration_behavior always_invoice (the difference for the rest of the period is charged now) with
 //     payment_behavior pending_if_incomplete (nothing changes unless that payment succeeds); the mapping moves from the
 //     pad's Prime Time row to its Plus row right away, or on customer.subscription.updated when the payment was pending.
+// 1.99tk: never charge for time already paid. A card checkout on a row with PAT time (or a timed comp) left starts with
+//   subscription_data.trial_end = where that time ends (at least 48 h ahead - Stripe's minimum), so the first charge lands
+//   then; Plus also counts the pad's PAT Prime Time at the upgrade rate (convert_pt: that Prime Time ends once paid).
+//   The other way round, PAT buys / chip-ins are refused while a card subscription is linked (premium.buy) - cancel the
+//   card first (its paid time stays) and PAT adds on after it. A comp on a card-paid row defers / pauses the card (compCard).
 //   Webhook events to send: checkout.session.completed, checkout.session.expired, invoice.paid, invoice.payment_failed,
 //   customer.subscription.updated, customer.subscription.deleted.
 // Entitlements are the same rows PAT pays for (premium.js): a pad / account is on while paid_through OR
@@ -154,8 +159,15 @@ async function checkout(user, { tier, pad } = {}) {
     target = R.id; back = "/premium?pad=" + encodeURIComponent(R.slug || R.id) + (T.id === "prime_plus" ? "#plus" : "");
   }
   const sub = await P.subRow(T.id, target);
-  if (sub && sub.comped) throw new P.Refuse(409, `That already has ${T.name} for free.`);
+  const t = clock();
+  if (sub && sub.comped && !P.compUntil(sub)) throw new P.Refuse(409, `That already has ${T.name} for free.`);
   if (sub && sub.stripe_sub) throw new P.Refuse(409, `There's already a card subscription for that - manage it from /premium.`);
+  // 1.99tk: time already paid in PAT (or comped) is never charged again: the subscription starts with a trial that ends
+  // where that time ends, so the first card charge lands then. Plus also counts the pad's PAT Prime Time, converted at
+  // the upgrade rate (that Prime Time ends when the checkout is paid - convert_pt).
+  const own = P.coveredUntil(sub, t);
+  const covered = T.id === "prime_plus" ? await P.plusCardCover(target, t) : own;
+  const start = P.cardStart(covered, t);
   // 1.99th: Plus includes Prime Time - never two card subscriptions for one pad
   if (T.id === "prime_time" && P.isPrimePlus(target)) throw new P.Refuse(409, "This pad has 💎 Prime Time Plus, which includes Prime Time.");
   let hold = null;
@@ -166,6 +178,7 @@ async function checkout(user, { tier, pad } = {}) {
   }
   const meta = { tier: T.id, target, user_id: user.userId };
   if (hold) meta.hold = hold.id;
+  if (T.id === "prime_plus" && start && !own) meta.convert_pt = "1";
   const q = back.includes("?") ? "&" : "?";
   const ret = (r) => { const i = back.indexOf("#"); return i < 0 ? site() + back + q + "stripe=" + r : site() + back.slice(0, i) + q + "stripe=" + r + back.slice(i); };
   let s;
@@ -174,7 +187,7 @@ async function checkout(user, { tier, pad } = {}) {
     s = await api("/checkout/sessions", {
       mode: "subscription", client_reference_id: user.userId,
       line_items: { 0: { price, quantity: 1 } },
-      metadata: meta, subscription_data: { metadata: meta },
+      metadata: meta, subscription_data: { metadata: meta, trial_end: start ? Math.floor(start.first / 1000) : undefined },
       expires_at: hold ? Math.floor(clock() / 1000) + SESSION_S : undefined,
       success_url: ret("success"),
       cancel_url: ret("cancel"),
@@ -184,7 +197,32 @@ async function checkout(user, { tier, pad } = {}) {
     throw e;
   }
   if (hold) { await runQuery("UPDATE premium_plus_holds SET session = ? WHERE id = ?", [s.id || null, hold.id]); await P.loadCache(); }
-  return { url: s.url, id: s.id };
+  return { url: s.url, id: s.id, covered_until: start ? start.covered : null, first_charge: start ? start.first : null };
+}
+
+/** 1.99tk: a comp on a pad / account that also has a running card subscription - comped time counts as paid:
+ *  - a timed comp past the card's paid date: trial_end = the comp's end (no proration), so the next charge lands then;
+ *  - a comp with no end: collection paused (pause_collection void) while it lasts;
+ *  - the comp revoked: collection resumed, next charge at the card's paid date (at least 48 h ahead, Stripe's minimum).
+ *  sub = the row BEFORE the change. -> {ok, action} */
+async function compCard(sub, on, until) {
+  const P = require("./premium");
+  if (!enabled() || !sub || !sub.stripe_sub) return { ok: true, action: "none" };
+  const t = clock();
+  const sid = encodeURIComponent(sub.stripe_sub);
+  const paid = Number(sub.stripe_through) || 0;
+  if (on && until) {
+    if (!(until > paid)) return { ok: true, action: "none" };       // the card already covers past the comp
+    await api("/subscriptions/" + sid, { trial_end: Math.floor(Math.max(until, t + P.CARD_MIN_DEFER_MS) / 1000), proration_behavior: "none" });
+    return { ok: true, action: "deferred" };
+  }
+  if (on) { await api("/subscriptions/" + sid, { pause_collection: { behavior: "void" } }); return { ok: true, action: "paused" }; }
+  const next = Math.max(paid, t + P.CARD_MIN_DEFER_MS);
+  await api("/subscriptions/" + sid, { pause_collection: "", trial_end: Math.floor(next / 1000), proration_behavior: "none" });
+  // the comp's cover is gone: the card's time runs to its next charge (nothing charged twice, at most 2 days free)
+  await runQuery("UPDATE premium_subs SET stripe_through = MAX(stripe_through, ?), updated = ? WHERE id = ?", [next, t, sub.id]);
+  await P.loadCache();
+  return { ok: true, action: "resumed" };
 }
 
 // ── 1.99th: the Plus spot holds ──
@@ -420,6 +458,20 @@ async function handleEvent(ev) {
                         VALUES (?, ?, ?, ?, 'stripe_checkout', ?, 0, 0, 'stripe', ?)`, ["stripe:" + obj.id, sub.id, m.tier, String(m.target), m.user_id || null, t]);
         // 1.99th: paid - the Plus spot stays held until the first invoice makes the pad count as Plus
         if (m.hold) await runQuery("UPDATE premium_plus_holds SET expires = MAX(expires, ?), session = ? WHERE id = ?", [t + PAID_HOLD_MS, obj.id || null, String(m.hold)]);
+        // 1.99tk: the pad's PAT Prime Time became the Plus trial (cardStart) - it ends now, like a PAT upgrade (no lapse notice)
+        if (m.convert_pt === "1" && m.tier === "prime_plus") {
+          const up = await P.upgradeCredit(String(m.target), t);
+          if (up) {
+            await runQuery("UPDATE premium_subs SET paid_through = ?, renewer_id = NULL, notified = ?, updated = ? WHERE id = ?", [t, "lapsed:" + t, t, up.sub.id]);
+            await runQuery("UPDATE premium_subs SET stripe_through = MAX(stripe_through, ?), status = 'active', updated = ? WHERE id = ?", [t + up.plusMs, t, sub.id]);   // no gap before the trial invoice
+            await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, amount, days, period_from, period_to, via, created)
+                            VALUES (?, ?, 'prime_time', ?, 'upgrade-out', ?, 0, ?, ?, ?, 'stripe', ?)`,
+                           ["stripe-conv:" + obj.id + ":out", up.sub.id, String(m.target), m.user_id || null, -(up.leftMs / P.DAY), t, up.sub.paid_through, t]);
+            await runQuery(`INSERT OR IGNORE INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, amount, days, period_from, period_to, via, created)
+                            VALUES (?, ?, 'prime_plus', ?, 'upgrade-in', ?, 0, ?, ?, ?, 'stripe', ?)`,
+                           ["stripe-conv:" + obj.id + ":in", sub.id, String(m.target), m.user_id || null, up.plusMs / P.DAY, t, t + up.plusMs, t]);
+          }
+        }
         outcome = "linked";
       } else outcome = "no-metadata";
     } else if (ev.type === "checkout.session.expired") {
@@ -533,7 +585,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, enabled, testMode, publicState, priceId, verify, sign, handleEvent, checkout, portal, donate, donateLocals, form, DONATE_MAX_USD,
-  upgrade, applyUpgrade, reservePlus, SESSION_S, HOLD_MS,
+  upgrade, applyUpgrade, reservePlus, compCard, SESSION_S, HOLD_MS,
   _setFetch: (fn) => { fetchImpl = fn || ((...a) => fetch(...a)); },
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

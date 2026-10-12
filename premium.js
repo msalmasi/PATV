@@ -299,6 +299,23 @@ function endsAt(sub, t = now()) {
   const base = renewing ? paid + CONFIG.grace_days * DAY : paid;
   return sub.comped ? Math.max(compUntil(sub), base) : base;
 }
+// ── 1.99tk: card subscriptions start where the time already paid (PAT) or comped ends ──
+// Stripe's trial_end must be at least 48 hours ahead: shorter cover pushes the first charge to now + CARD_MIN_DEFER_MS
+// (up to two days free - never a charge for time already paid).
+const CARD_MIN_DEFER_MS = 49 * 3600 * 1000;
+/** The end of the time a subscription row already has WITHOUT the card: PAT paid_through, or a timed comp (Infinity for a
+ *  comp with no end). 0 = nothing ahead. */
+function coveredUntil(sub, t = now()) {
+  if (!sub) return 0;
+  if (sub.comped && !compUntil(sub)) return Infinity;
+  const c = Math.max(Number(sub.paid_through) || 0, compUntil(sub));
+  return c > t ? c : 0;
+}
+/** When a card subscription opened now would first charge: null = straight away; else {covered, first} (ms). */
+function cardStart(covered, t = now()) {
+  if (!(covered > t) || covered === Infinity) return null;
+  return { covered, first: Math.max(covered, t + CARD_MIN_DEFER_MS) };
+}
 /** 'comped' | 'active' | 'grace' | 'lapsed' | 'none' */
 function statusOf(sub, t = now()) {
   if (!sub) return "none";
@@ -666,6 +683,13 @@ async function buy(user, opts = {}) {
     if (T.id === "prime_plus") await plusCapCheck(target, t);          // 1.99qy: the 5-room cap, race-safe (BEGIN IMMEDIATE)
     const sub = await ensureSub(T.id, target, t);
     if (sub.comped && !compUntil(sub)) throw new Refuse(409, `${label} already has ${T.name} for free.`);
+    // 1.99tk: a card subscription pays for this - PAT on top would pay for the same days twice. Cancelling the card
+    // (Manage card subscription) keeps its paid time; PAT then adds time after it.
+    if (sub.stripe_sub) throw new Refuse(409, `${label}'s ${T.name} is paid by card - nothing to add in PAT while that runs. To switch to PAT, cancel the card subscription (Manage card subscription on /premium): its paid time stays, then PAT time adds on after it.`);
+    if (T.id === "prime_plus") {
+      const ptc = await subRow("prime_time", target);
+      if (ptc && ptc.stripe_sub) throw new Refuse(409, `${label} pays for Prime Time by card - upgrade that card subscription to Plus on /premium, or cancel it first.`);
+    }
     // 1.99qp: Prime Time -> Plus upgrade: the pad's paid Prime Time time left becomes Plus time (price-weighted)
     const up = T.id === "prime_plus" ? await upgradeCredit(target, t) : null;
     const from = Math.max(t, Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0, compUntil(sub));
@@ -738,6 +762,14 @@ async function upgradeCredit(roomId, t = now()) {
   const leftMs = paid - t;
   const plusMs = Math.floor(leftMs * CONFIG.prime_price / CONFIG.plus_price);
   return plusMs > 0 ? { sub: pt, leftMs, plusMs } : null;
+}
+/** 1.99tk: how long a pad's 💎 Plus is already covered without a card: its own PAT / comp time, or (none of that) its
+ *  paid PAT Prime Time converted at the upgrade rate (upgradeCredit; the card checkout ends that Prime Time when it's paid). */
+async function plusCardCover(roomId, t = now()) {
+  const own = coveredUntil(await subRow("prime_plus", roomId), t);
+  if (own) return own;
+  const up = await upgradeCredit(roomId, t);
+  return up ? t + up.plusMs : 0;
 }
 /** 1.99qp: what an upgrade would convert right now (the page's preview). -> {pt_days, plus_days} | null */
 async function upgradePreview(roomId, t = now()) {
@@ -814,7 +846,12 @@ async function setComp(tier, target, on, by, note, opts = {}) {
   }
   await loadCache();
   await afterChange(tier, target);
-  return { changed: true, until: on ? until || null : null };
+  // 1.99tk: comped time counts as paid - a running card subscription isn't charged until the comp ends
+  let card = null;
+  if (sub.stripe_sub) {
+    try { card = await require("./stripebilling").compCard(sub, on, on ? until || 0 : 0); } catch (e) { card = { ok: false, error: e.message }; console.error("[premium] comp card:", e.message); }
+  }
+  return { changed: true, until: on ? until || null : null, card };
 }
 const AUTO = "auto:admin";
 function tFor(userId) {
@@ -887,7 +924,7 @@ async function renewDue(t = now()) {
   const P = CONFIG.period_days;
   const subs = await getQuery("SELECT * FROM premium_subs WHERE comped = 0 AND renewer_id IS NOT NULL AND paid_through > 0 AND paid_through <= ?", [t]);
   for (const s of subs) {
-    if (Number(s.stripe_through) > t) continue;                       // Stripe is paying this one
+    if (s.stripe_sub || Number(s.stripe_through) > t) continue;       // Stripe is paying this one (1.99tk: while linked, never PAT too)
     if (t >= Number(s.paid_through) + CONFIG.grace_days * DAY) continue;   // past grace: the lapse below
     const T = TIERS[s.tier];
     if (!T) continue;
@@ -995,7 +1032,9 @@ function subView(tier, sub, t = now()) {
   return { tier, status: st, active: st === "active" || st === "grace" || st === "comped", comped: st === "comped", comp_until: st === "comped" ? compUntil(sub) || null : null,
            paid_through: sub ? Math.max(Number(sub.paid_through) || 0, Number(sub.stripe_through) || 0) : 0,
            ends: sub && !sub.comped ? endsAt(sub, t) : null, renewing: !!(sub && (sub.renewer_id || sub.stripe_sub)),
-           stripe: !!(sub && sub.stripe_sub) };
+           stripe: !!(sub && sub.stripe_sub),
+           // 1.99tk: a card subscription opened now: the PAT / comp time it waits for and its first charge (null = now)
+           card_start: sub && !sub.stripe_sub ? cardStart(coveredUntil(sub, t), t) : null };
 }
 // 1.99mt: anonymous payments are one "🕶 Someone" row per payer with no name (the page never gets who)
 async function contributors(subId, limit = 8) {
@@ -1033,6 +1072,8 @@ async function state(viewer, padSlug) {
       pad.plus = { ...subView("prime_plus", sp, t), renewer_me: !!(sp && signed && sp.renewer_id === viewer.userId),
                    contributors: sp ? (await contributors(sp.id)).map((c) => ({ name: c.name, anon: c.anon, amount: c.amount })) : [],
                    upgrade: await upgradePreview(R.id, t) };
+      // 1.99tk: a Plus card subscription also waits for the pad's PAT Prime Time, converted like a PAT upgrade
+      if (!(sp && sp.stripe_sub)) pad.plus.card_start = cardStart(await plusCardCover(R.id, t), t);
       pad.house = !!R.house;
     }
   }
@@ -1169,7 +1210,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
-  plusSpots, plusUsed, plusCapCheck, plusWaitlist, plusWaitlistNotify, plusLeaveNotices,
+  plusSpots, plusUsed, plusCapCheck, coveredUntil, cardStart, plusCardCover, CARD_MIN_DEFER_MS, plusWaitlist, plusWaitlistNotify, plusLeaveNotices,
   retention, noteRetention, cleanRetention, RETENTION_DEFAULTS,         // 1.99tc: Pepe's retention windows (the perk lists)
   isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
