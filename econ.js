@@ -16,6 +16,10 @@
 //                                        (welcome-bonus dedupe keys, dup_of) are excluded; viewers
 //                                        sharing a browser (or > 3 sharing a network) on the same
 //                                        stream are flagged as likely alts.
+//                                        E-4: every answer carries a one-time server NONCE that the next beat must echo;
+//                                        a beat without it (a replayed / scripted beat, a second tab) restarts the session
+//                                        with no credit. The recipe (recipe.js) pays only status 'ok' minutes minus muted
+//                                        ones, from gated viewers.
 //   GET  /api/admin/econ/telemetry (admins) the last 7 days per room: revenue by flow, watch-minutes,
 //                                        participants, and what the v2 50/50 split and the room-vault
 //                                        recipe WOULD have paid (dry run of the doc's formulas).
@@ -137,7 +141,8 @@ async function ingestParticipation(rows) {
 }
 
 // ── 3. watch heartbeats ──
-const sessions = new Map();                 // viewerId -> { sid, stream, t, pos }
+const sessions = new Map();                 // viewerId -> { sid, stream, t, pos, nonce }
+const newNonce = () => require("crypto").randomBytes(9).toString("base64url");
 let clock = () => Date.now();
 const beatHits = guard.limiter({ max: 8, windowMs: 60000 });
 const linkCache = new Map();                // `${viewer}|${streamer}` -> { at, status, reason }
@@ -215,6 +220,8 @@ function sessionStep(prev, beat, now) {
   if (prev && prev.sid !== beat.sid && now - prev.t < BEAT_MAX_MS) return { credit: 0, why: "another session" };
   const fresh = { sid: beat.sid, stream: beat.stream, t: now, pos: beat.pos };
   if (!prev || prev.sid !== beat.sid || prev.stream !== beat.stream) return { credit: 0, why: "started", next: fresh };
+  // E-4: the server's one-time nonce from the last answer must come back (a session that has one)
+  if (prev.nonce && beat.nonce !== prev.nonce) return { credit: 0, why: "nonce", next: fresh };
   const gap = now - prev.t;
   if (gap < BEAT_MIN_MS) return { credit: 0, why: "too soon" };
   if (gap > BEAT_MAX_MS) return { credit: 0, why: "gap", next: fresh };
@@ -255,10 +262,14 @@ async function beat(req, res) {
   const info = await streamInfo(str(b.stream, 40), str(b.room, 80));
   if (!info) return { code: 200, body: { ok: true, counted: false, why: "not a live stage stream" } };
   const now = clock();
-  const step = sessionStep(sessions.get(u), { sid, stream: info.stream, playing: b.playing === true, visible: b.visible === true, pos: num(b.pos, -1) }, now);
-  if (step.next === null) sessions.delete(u); else if (step.next) sessions.set(u, step.next);
+  const step = sessionStep(sessions.get(u), { sid, stream: info.stream, playing: b.playing === true, visible: b.visible === true,
+                                              pos: num(b.pos, -1), nonce: str(b.nonce, 24) }, now);
+  if (step.next === null) sessions.delete(u);
+  else if (step.next) sessions.set(u, Object.assign(step.next, { nonce: newNonce() }));
   if (sessions.size > 20000) sessions.clear();
-  if (!step.credit) return { code: 200, body: { ok: true, counted: false, why: step.why } };
+  const cur = sessions.get(u);
+  const nonce = cur && cur.sid === sid ? cur.nonce : undefined;
+  if (!step.credit) return { code: 200, body: { ok: true, counted: false, why: step.why, nonce } };
   await ready;
   const d = day(now);
   const rel = await relation(u, info.streamer_id);
@@ -276,7 +287,7 @@ async function beat(req, res) {
                   status = CASE WHEN status = 'self' OR excluded.status = 'self' THEN 'self' WHEN status = 'alt' OR excluded.status = 'alt' THEN 'alt' ELSE 'ok' END,
                   reason = COALESCE(reason, excluded.reason)`,
     [d, info.stream, info.room_id, info.streamer_id, u, step.credit, muted, status, reason, now]);
-  return { code: 200, body: { ok: true, counted: true, secs: step.credit, status } };
+  return { code: 200, body: { ok: true, counted: true, secs: step.credit, status, nonce } };
 }
 
 // ── dry run: the doc's formulas (ECONOMY-V2.md 5.1, 7.2, 7.3) ──

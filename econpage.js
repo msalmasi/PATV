@@ -68,6 +68,7 @@ async function live({ patSupply } = {}) {
 function roomSplit() {
   let owner = 10;
   try {
+    if (require("./royalties").frozen()) return { owner: 0, fortknox: 50, room: 50 };   // E-4: the share is room-vault income now
     const counts = new Map();
     for (const s of require("./royalties").ownerShares()) if (s.pct > 0) counts.set(s.pct, (counts.get(s.pct) || 0) + 1);
     if (counts.size) owner = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];

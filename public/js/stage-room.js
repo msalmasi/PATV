@@ -203,15 +203,20 @@
     var roomQ = (/[?&]room=([^&]+)/.exec(o.api || '') || [])[1] || '';
     try { roomQ = decodeURIComponent(roomQ); } catch (e) {}
     var beats = o.watch === false ? null : setInterval(watchBeat, 30000);
+    var nonce = '';                       // E-4: the server's one-time nonce, echoed by the next beat
     function watchBeat() {
       var sel = selection();
       if (!sel || sel.embed || !player.running()) return;
       var st = player.state ? player.state() : null;
       fetch('/api/econ/watch/beat', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stream: String(sel.stream), room: roomQ, sid: sid, visible: document.visibilityState === 'visible',
-                               playing: !!(st && st.playing), pos: st ? st.time : 0, muted: st ? st.muted : true }) })
-        .then(function (r) { if (r.status === 401 || r.status === 404) { clearInterval(beats); beats = null; } })
-        .catch(function () {});
+                               playing: !!(st && st.playing), pos: st ? st.time : 0, muted: st ? st.muted : true, nonce: nonce }) })
+        .then(function (r) {
+          if (r.status === 401 || r.status === 404) { clearInterval(beats); beats = null; return null; }
+          return r.ok ? r.json() : null;
+        })
+        .then(function (j) { nonce = j && typeof j.nonce === 'string' ? j.nonce : ''; })
+        .catch(function () { nonce = ''; });
     }
     window.addEventListener('load', function () {
       loaded = true;

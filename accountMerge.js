@@ -81,6 +81,7 @@ const RULES = {
   "econ_charges.payer": M(), "econ_charges.payer_kind": { deny: FLAG },
   "room_flow_ledger.payer_id": M(), "room_flow_ledger.payer_name": { deny: NAME }, "room_flow_ledger.owner_self": { deny: FLAG },
   "royalty_ledger.owner_user_id": M(),
+  "recipe_credits.userId": M(),                       // E-4: room payout credits (recipe.js)
   "royalty_runs.owner_user_id": M({ key: ["room_id", "period"], merge: { amount: "SUM" } }),
   "levelup_rewards.userId": M({ key: ["level"], merge: { paid: "MAX" } }),
   "levelup_milestones.userId": M({ key: ["level"], merge: { paid: "MAX", paid_at: "OLD_IF_NULL" } }),

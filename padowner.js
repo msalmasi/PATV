@@ -7,7 +7,10 @@
 //                     (camfrog-bot pepe_roomowner._op_web_deposit -> pepe_roomvault._rv_deposit: escrow hold -> settle,
 //                     min deposit, cap, journaled, never counted as inflow). KEYED: the form's one-time key (idem) makes a
 //                     double click one deposit (actions.js unique (user, idem) + Pepe's webactions.json journal).
-//   * 👑 Royalties    earned / pending / paid, this period, active days, the next payout date (royalties.status)
+//   * 👑 Owner share  E-4: what the owner earned from the room vault's payout recipe (recipe.earned), the eligibility (presence
+//                     and active days of the last payout day), the cap; the old royalties (royalties.status) folded underneath,
+//                     closed once the cutover froze them
+//   * 💸 Payout recipe the last 7 payout days: budget, what each slice paid, what stayed (roomvaults.card().recipe)
 //   * 📺 Prime Time   the pad tier's status, when it ends, renewing (premium.state)
 //   * 🎬 Stage        slots, featured stream, what's next, requests waiting (mainstage.roomStage / ownerState) - run on the
 //                     settings hub's Stage tab
@@ -144,6 +147,8 @@ async function pageData(R, viewer) {
   const safe = async (fn, d = null) => { try { return await fn(); } catch (e) { console.error("[padowner]", e.message); return d; } };
   const vault = camfrog ? await safe(() => require("./roomvaults").card(R.id, viewer, { canManage: true, staff: rooms.isStaff(viewer) })) : null;
   const roy = R.owner && R.owner.userId ? await safe(() => require("./royalties").status(R.id, R.owner.userId)) : null;
+  // E-4: what the owner earned from the payout recipe's owner share (recipe.js credits)
+  const share = R.owner && R.owner.userId ? await safe(() => require("./recipe").earned(R.id, R.owner.userId, "owner")) : null;
   const prem = await safe(() => require("./premium").state(viewer, slug));
   const stage = await safe(() => require("./mainstage").roomStage(R.id, viewer));
   const ownerStage = await safe(() => require("./mainstage").ownerState(R.id));
@@ -154,7 +159,7 @@ async function pageData(R, viewer) {
   const recent = await safe(() => require("./actions").recentFor(viewer.userId, "owner", 6), []);
   return {
     room: R, slug, camfrog, staff: rooms.isStaff(viewer), mine: !!(R.owner && R.owner.userId === viewer.userId),
-    vault, roy, prime: prem && prem.pad ? prem.pad : null, primePrice: prem && prem.prices ? prem.prices.prime_time : null,
+    vault, roy, share, prime: prem && prem.pad ? prem.pad : null, primePrice: prem && prem.prices ? prem.prices.prime_time : null,
     primePerks: prem ? prem.perks : null, stage, requested: ownerStage ? ownerStage.requested.length : 0,
     pepe, live, linked: u.camfrogUsername || null, balance: Number(u.points_balance) || 0, recent,
     caps: capabilities(), webCaps: WEB_CAPS, LANGS: pepe && pepe.owner && !LANG_CODES.has(pepe.owner.language)

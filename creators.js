@@ -1053,7 +1053,9 @@ async function routeCutInTx(cut, { roomId, creatorId, fanId, ref, base }) {
     else reserve += p.amount;
   }
   let royalty = 0;
-  if (room > 0 && R && !self && ownerId && CONFIG.royalty_pct > 0) royalty = Math.floor(room * CONFIG.royalty_pct / 100);
+  // E-4: after the royalty cutover the whole room half is room-vault income (the owner is paid by the recipe)
+  const royFrozen = (() => { try { return !!require("./royalties").frozen(); } catch (e) { return false; } })();
+  if (room > 0 && R && !self && ownerId && CONFIG.royalty_pct > 0 && !royFrozen) royalty = Math.floor(room * CONFIG.royalty_pct / 100);
   room -= royalty;
   if (!vaultOk) { fk += room; room = 0; }
   const fkFlow = funding.fortknoxLive() ? "fortknox:creators" : "creators";

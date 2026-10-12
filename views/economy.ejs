@@ -753,7 +753,8 @@
         <p>The front page shows the liveliest pad: you can't buy it. Anyone can <b>boost</b> a pad with PAT to push it up
           the ranking (boosts fade by half every hour and only count while the pad is active). Stage slots are free unless
           the pad's owner sets a price. Boosts and slot fees go <b>half to that pad's room vault</b> and <b>half to Fort
-          Knox</b>; room vaults start paying out to their pad's owner, streamers and regulars soon. An owner paying in their
+          Knox</b>; each room vault pays the pad's owner, its streamers and its regulars a little every day through the
+          <a href="#recipe">payout recipe</a>. An owner paying in their
           own pad sends it all to Fort Knox. Boost from the 🚀 button on a pad's page, or type <code>!boost 5000</code> in its
           Camfrog room.</p>
         <p><b>✨ Pad cosmetics</b> (frames, name glows, badges, an animated avatar) take the same route: a pad's owner buying for
@@ -776,14 +777,14 @@
   <section id="roomvaults">
     <div class="ds-eyebrow ac">REVENUE FOLLOWS THE ROOM</div>
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🏦</span> Room vaults</h2>
-    <p class="lead">Every pad with a Camfrog room has its own vault. Half of what's spent in a room (paid commands, songs,
-      voices, heist gear, boosts, stage slots, pad cosmetic gifts) goes to that room's vault and half to Fort Knox; on
-      commands in a pad with an owner, the owner's 10% royalty comes first. Spending with no room goes all to Fort Knox, and
+    <% const _rc = _rv.recipe || {}; const _rcc = _rc.cfg || {}; const _p = (k, d) => Math.round(100 * (_rcc[k] != null ? Number(_rcc[k]) : d)); %>
+    <p class="lead">Every pad with a Camfrog room has its own vault: a pool of PAT (points, not money) that belongs to the
+      room. Half of what's spent in a room (paid commands, songs, voices, heist gear, boosts, stage slots, pad cosmetic gifts)
+      goes to that room's vault and half to Fort Knox<% if (!_rc.frozen) { %>; on commands in a pad with an owner, the
+      owner's 10% royalty comes first until room payouts replace it<% } %>. Spending with no room goes all to Fort Knox, and
       so does the pad owner's (or the controlling gang's) spending in their own room. A vault holds at most
       <%= _rf(_rv.cap) %> PAT; anything above goes to Fort Knox. Anyone can add to a vault with
-      <code>!roomvault deposit &lt;amount&gt;</code> (deposits never count as the room's income).
-      <span class="cfg">The vaults are filling up. Soon each vault will pay out a little every day to the room's owner, its
-      streamers, its regulars and its room games, but only what the room really earned.</span></p>
+      <code>!roomvault deposit &lt;amount&gt;</code> (deposits never count as the room's income).</p>
     <div class="grid">
       <div class="card wide">
         <h3><span class="ds-ic" aria-hidden="true">📊</span> Room vaults now: <%= _rf(_rv.total) %> PAT</h3>
@@ -796,6 +797,28 @@
         </ul>
         <% } else { %><p>Nothing in them yet.</p><% } %>
         <div class="cmd"><code>!roomvault</code> · <code>!roomvault history</code> · <code>!roomvault all</code></div>
+      </div>
+      <div class="card wide" id="recipe">
+        <h3><span class="ds-ic" aria-hidden="true">💸</span> The payout recipe<% if (!_rc.on) { %> <span class="new">SOON</span><% } %></h3>
+        <p>Once a day each vault sets a budget: the owner's payout rate (2-15%, 10% by default) of its balance. The budget is
+          split into fixed slices, and <b>each slice pays only what the room really earned</b>; the rest stays in the vault
+          for a busier day:</p>
+        <ul>
+          <li><b>Owner <%= _p('owner_pct', 0.15) %>%</b>: the pad's owner, when they were in the room on 3 of the last 7 days
+            and the room was active on 3 of them. Capped at <%= _p('cap_i7', 0.25) %>% of the room's average daily income,
+            so deposits and the owner's own spending never raise it. House pads never pay an owner.</li>
+          <li><b>Gang <%= _p('gang_pct', 0.15) %>%</b>: the gang that controls the room, when it paid its upkeep (same cap).</li>
+          <li><b>Streamers <%= _p('streamer_pct', 0.25) %>%</b>: by verified watch-minutes on the pad's stage (signed-in
+            viewers, the page visible and playing, one session per account, up to 2 hours per viewer per streamer a day).
+            Full at 600 watch-minutes a day; one streamer gets at most 60% of the slice.</li>
+          <li><b>Regulars <%= _p('people_pct', 0.35) %>%</b>: people with 10+ real chat lines or 5+ minutes of speech on the
+            mic that day (repeats, commands and silent mics don't count) and a PATV account at least a week old. Full at 20
+            people; one person gets at most 10% of the slice.</li>
+          <li><b>Room games <%= _p('games_pct', 0.10) %>%</b>: the day's prize pool for the room's raffle, top mic of the hour
+            and pictionary. When it's used up the games run for XP only.</li>
+        </ul>
+        <p>Payouts of <%= _rf(_rcc.convoy_min || 25000) %> PAT or more leave on a 10-minute convoy that people in the room can
+          try to hit (a hit takes at most 20%). <code>!roomvault recipe</code> shows the room's last payout day.</p>
       </div>
     </div>
     <div class="top"><a href="#top">↑ top</a></div>
@@ -848,9 +871,10 @@
               have something to rob. Above their caps (<%= sh(V3.fk) %> and <%= sh(V3.cv) %>, 60% and 40% of the weekly
               budget) the extra flows back here.</li>
             <li><b>Rewards.</b> Welcome PAT, level-ups, achievements, connect bonuses, codes and platform rewards, and pad owner
-              royalties, each within its weekly allowance. Rewards over it wait in line.</li>
+              royalties until room payouts replace them, each within its weekly allowance. Rewards over it wait in line.</li>
             <li><b>Room games.</b> The chat raffle, top mic of the hour, pictionary and !beg, paced through the week (at most
-              1/7 of the allowance a day). A prize over the allowance is skipped.</li>
+              1/7 of the allowance a day). A prize over the allowance is skipped. Once room payouts are on, a room with a vault
+              pays its games from its own vault's daily slice instead.</li>
             <li><b>Turf Wars:</b> the turf income and the season prize of the current season.</li>
             <li><% if (!LP_ON) { %><span class="new">SOON</span> <% } %><b>Launch grants</b> that seed the room vaults of new pads, as they build a following.</li>
             <li><span class="new">SOON</span> <b>Activity rewards</b> for people who chat and get on the mic, and <b>room

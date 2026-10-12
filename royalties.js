@@ -33,6 +33,14 @@
 // don't resolve) accrue nothing - the share just stays in the Reserve, where it already is. Website
 // stage time is the one spend Pepe doesn't route: its share is stage_pct here. A refunded charge is
 // voided (Pepe sends {ref, void}); each spend accrues once (unique ref).
+//
+// E-4 CUTOVER (camfrog-bot pepe_recipe.py, ECONOMY-V2 11.3): Pepe's `!econ recipe cutover` calls cutover({key}) once.
+// Every pending royalty (accrued - released - forfeited, every period up to now) is released ONCE through the same
+// funding path as a weekly release (flow room_owner: the incentive budget pays, queued when it's short), each pad owner's
+// release in one transaction with a keyed ledger row (cutover:<key>:<room>:<owner>), and then the ledger is FROZEN
+// (royalty_config "frozen"): nothing accrues (accrue -> 0; PATV Creators keeps the whole room half for the room vault),
+// the weekly release stops, and the ledger stays as read-only history. Owners are paid by the room-vault recipe instead.
+// A re-run with the same key answers the stored result; a dry run lists what would be released.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -96,6 +104,7 @@ function init() {
 }
 
 let CONFIG = { ...DEFAULTS };
+let FROZEN = null;                       // E-4: {key, at, released, queued, pairs, pending_after} once the cutover ran
 function cleanConfig(c) {
   const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
   const int = (v, lo, hi, d) => Math.floor(num(v, lo, hi, d));
@@ -115,6 +124,8 @@ async function loadConfig() {
   const c = { ...DEFAULTS };
   for (const r of rows) { try { if (r.key in DEFAULTS) c[r.key] = JSON.parse(r.value); } catch (e) { /* skip */ } }
   CONFIG = cleanConfig(c);
+  const fz = rows.find((r) => r.key === "frozen");
+  if (fz) { try { FROZEN = JSON.parse(fz.value) || null; } catch (e) { FROZEN = null; } }
   const sh = rows.find((r) => r.key === "pepe_owner_shares");
   if (sh) { try { SHARES = JSON.parse(sh.value) || []; } catch (e) { SHARES = []; } }
   return CONFIG;
@@ -162,7 +173,7 @@ function share(source, base, C = CONFIG) {
  *  only reads the rooms cache and writes one row). Returns the amount accrued (0 = nothing). */
 async function accrue({ room_id, source, base, payer, ref, detail, at, category, amount: given }) {
   await init();
-  if (!CONFIG.enabled || !room_id || !ref) return 0;
+  if (!CONFIG.enabled || FROZEN || !room_id || !ref) return 0;        // E-4: frozen at the cutover - nothing accrues
   const R = require("./rooms").getCached(room_id);
   if (!R || !R.owner || R.owner_kind !== "user") return 0;            // house / unowned rooms: nothing
   if (payer && payer === R.owner.userId) return 0;                      // your own spending doesn't pay you
@@ -246,7 +257,7 @@ async function activeDays(roomId, p) {
 /** Process the period that just closed for every room/owner with something pending. */
 async function releaseTick() {
   await init();
-  if (!CONFIG.enabled) return [];
+  if (!CONFIG.enabled || FROZEN) return [];
   const funding = require("./funding");
   const rooms = require("./rooms");
   const t = now();
@@ -331,9 +342,66 @@ async function status(roomId, ownerId) {
     this_period: { stage: bySrc.stage, spend: bySrc.spend, total: bySrc.stage + bySrc.spend },
     pending: all.accrue - all.release - all.forfeit, paid: all.release, forfeited: all.forfeit, earned: all.accrue,
     active_days: await activeDays(roomId, P), active_days_needed: CONFIG.min_active_days,
-    next_release: periodStart(P + 1), recent, runs,
+    next_release: periodStart(P + 1), recent, runs, frozen: FROZEN ? { at: FROZEN.at, key: FROZEN.key } : null,
   };
 }
+
+/** Pending royalties per pad owner (every period up to now). */
+async function pendingPairs() {
+  const rows = await getQuery(`SELECT room_id, owner_user_id,
+      SUM(CASE WHEN kind='accrue' THEN amount ELSE 0 END) - SUM(CASE WHEN kind='release' THEN amount ELSE 0 END)
+      - SUM(CASE WHEN kind='forfeit' THEN amount ELSE 0 END) AS pending
+    FROM royalty_ledger WHERE kind IN ('accrue','release','forfeit') GROUP BY room_id, owner_user_id`);
+  const rooms = require("./rooms");
+  return rows.filter((r) => Number(r.pending) > 0).map((r) => {
+    const R = rooms.getCached(r.room_id);
+    return { room_id: r.room_id, owner: r.owner_user_id, title: (R && R.title) || r.room_id, pending: Number(r.pending) };
+  });
+}
+
+/** E-4: release every pending royalty once, then freeze the ledger. Keyed + idempotent (see the header). */
+async function cutover({ key, dry = true } = {}) {
+  await init();
+  key = String(key || "");
+  if (!/^[A-Za-z0-9_-]{6,40}$/.test(key)) return { ok: false, error: "bad key" };
+  if (FROZEN) {
+    if (FROZEN.key !== key) return { ok: false, error: `already frozen by cutover ${FROZEN.key}` };
+    return { ok: true, done: true, ...FROZEN };
+  }
+  const pairs = await pendingPairs();
+  const pending = pairs.reduce((s, p) => s + p.pending, 0);
+  if (dry) return { ok: true, dry: true, key, pending, pairs };
+  const funding = require("./funding");
+  const t = now();
+  const P = periodOf(t);
+  const out = [];
+  let released = 0, queued = 0;
+  for (const p of pairs) {
+    const ref = `cutover:${key}:${p.room_id}:${p.owner}`;
+    const r = await require("./boosts").tx(async () => {
+      const had = (await getQuery("SELECT amount, detail FROM royalty_ledger WHERE ref = ?", [ref]))[0];
+      if (had) return { amount: Number(had.amount), queued: /queued/.test(String(had.detail || "")), dup: true };
+      const pay = await funding.fundPayoutEx(p.owner, p.pending, "room_owner", `pad owner royalties (final): ${p.title}`);
+      if (!pay.ok) throw Object.assign(new Error(`couldn't fund ${p.pending} for ${p.room_id}`), { unfunded: true });
+      await runQuery(`INSERT INTO royalty_ledger (room_id, owner_user_id, kind, source, amount, period, ref, created, detail)
+                      VALUES (?, ?, 'release', 'cutover', ?, ?, ?, ?, ?)`,
+                     [p.room_id, p.owner, p.pending, P, ref, t, "economy v2 cutover: final release" + (pay.queued ? " (queued for the incentive budget)" : "")]);
+      return { amount: p.pending, queued: !!pay.queued };
+    }).catch((e) => ({ error: e.message }));
+    if (r.error) return { ok: false, error: r.error, released, queued, pairs: out };
+    if (r.queued) queued += r.amount; else released += r.amount;
+    out.push({ room_id: p.room_id, title: p.title, owner: p.owner, amount: r.amount, queued: r.queued });
+    require("./rooms").notify(p.owner, { kind: "room", title: `+${r.amount.toLocaleString("en-US")} PAT: your last pad owner royalties for ${p.title}`,
+      body: "Royalties are replaced by the room vault's daily owner share: up to 15% of the room's daily payout budget when you were in the room on 3 of the last 7 days.",
+      link: "/messages/notices", ref: `roy-cutover:${p.room_id}`, pm: false }).catch(() => {});
+  }
+  const after = (await pendingPairs()).reduce((s, p) => s + p.pending, 0);
+  FROZEN = { key, at: t, released, queued, pairs: out, pending_after: after };
+  await runQuery("INSERT INTO royalty_config (key, value) VALUES ('frozen', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify(FROZEN)]);
+  try { await require("./rooms").event(null, "royalty_cutover", "pepe", JSON.stringify({ key, released, queued, after })); } catch (e) { /* audit only */ }
+  return { ok: true, ...FROZEN };
+}
+const frozen = () => FROZEN;
 
 /** Admin overview: every room/owner with anything on the ledger. */
 async function overview() {
@@ -402,7 +470,7 @@ function start() {
 }
 
 module.exports = {
-  init, accrue, spendBatch, voidSpend, releaseTick, status, overview, summary, setConfig, config, share, periodOf, periodStart, activeDays, start,
+  init, accrue, spendBatch, voidSpend, releaseTick, cutover, frozen, pendingPairs, status, overview, summary, setConfig, config, share, periodOf, periodStart, activeDays, start,
   categoryOf, labelOf, FLOW_LABELS, setOwnerShares, ownerShares, DEFAULTS, EPOCH,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

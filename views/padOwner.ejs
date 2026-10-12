@@ -48,6 +48,12 @@
     <p class="ds-lead"><%- t('owner.guide_lead') %></p>
     <div class="ds-ctas"><a class="ds-btn" href="/pads/new"><%- t('owner.guide_cta') %></a></div>
   </section>
+  <section class="ds-card lg" id="earn" aria-labelledby="poEarnH">
+    <h2 class="ds-h2" id="poEarnH"><span class="dot"></span>👑 <%- t('owner.guide_earn_h') %></h2>
+    <p class="po-why"><%- t('owner.share_why', { rate: 10, pct: 15, days: 3, active: 3, cap: 25 }) %></p>
+    <p class="po-why"><%- t('owner.recipe_why', { owner: 15, gang: 15, streamers: 25, people: 35, games: 10, convoy: '25,000' }) %></p>
+    <p class="ds-meta"><%- t('owner.guide_earn_more') %></p>
+  </section>
 <% } else { %>
   <a class="ds-back" href="<%= href %>">← <%- t('owner.back', { pad: room.title }) %></a>
   <header class="ds-head">
@@ -59,6 +65,7 @@
   <nav class="ds-subnav" aria-label="<%- t('owner.sections') %>"><div class="ds-tabs">
     <% if (camfrog) { %><a class="ds-tab" href="#vault">🏦 <%- t('owner.nav_vault') %></a><% } %>
     <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
+    <% if (camfrog) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
     <a class="ds-tab" href="#prime">📺 <%- t('owner.nav_prime') %></a>
     <a class="ds-tab" href="#stage">🎬 <%- t('owner.nav_stage') %></a>
     <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
@@ -68,8 +75,8 @@
 
   <div class="ds-stats" aria-label="<%- t('owner.summary') %>">
     <% if (vault) { %><div class="ds-stat"><span><%- t('owner.s_vault') %></span><b class="gold"><%= num(vault.balance) %></b><small>PAT</small></div><% } %>
-    <div class="ds-stat"><span><%- t('owner.s_pending') %></span><b class="gold"><%= roy ? num(roy.pending) : '—' %></b><small><%- roy ? 'PAT' : t('owner.no_roy_short') %></small></div>
-    <div class="ds-stat"><span><%- t('owner.s_payout') %></span><b><%= roy ? dd(roy.next_release) : '—' %></b><small><%- t('owner.s_weekly') %></small></div>
+    <div class="ds-stat"><span><%- t('owner.s_pending') %></span><b class="gold"><%= share && room.owner_kind === 'user' ? num(share.d7) : '—' %></b><small><%- room.owner_kind === 'user' ? t('owner.v_7d') : t('owner.no_roy_short') %></small></div>
+    <div class="ds-stat"><span><%- t('owner.s_payout') %></span><b><%- vault && vault.recipe && vault.recipe.live ? t('owner.share_live') : '—' %></b><small><%- t('owner.s_weekly') %></small></div>
     <div class="ds-stat"><span><%- t('owner.s_prime') %></span><b><%- prime && prime.active ? t('owner.prime_on') : t('owner.prime_off') %></b><small><%- prime && prime.active && prime.ends ? t('owner.until', { when: dd(prime.ends) }) : (prime && prime.comped ? t('owner.comped') : '&nbsp;') %></small></div>
   </div>
 
@@ -128,25 +135,63 @@
 
   <div class="po-grid two">
   <section class="ds-card lg" id="royalties" aria-labelledby="poRoyH">
-    <h2 class="ds-h2" id="poRoyH"><span class="dot"></span>👑 <%- t('owner.roy_h') %></h2>
-    <% if (!roy) { %>
-      <p class="po-why"><%- t('owner.roy_none') %></p>
+    <%
+      const rc = vault && vault.recipe ? vault.recipe : null;
+      const rcCfg = (rc && rc.cfg) || {};
+      const pct = (k, d) => Math.round(100 * (rcCfg[k] != null ? Number(rcCfg[k]) : d));
+      const eps = rc ? rc.epochs.slice().reverse() : [];
+      const last = eps[0] || null;
+      const house = room.owner_kind !== 'user';
+    %>
+    <h2 class="ds-h2" id="poRoyH"><span class="dot"></span>👑 <%- t('owner.share_h') %>
+      <span class="ds-chip <%= rc && rc.live ? 'ok' : 'mute' %>"><%- rc && rc.live ? t('owner.share_live') : t('owner.share_soon') %></span></h2>
+    <% if (house) { %>
+      <p class="po-why"><%- t('owner.share_house') %></p>
     <% } else { %>
-    <p class="po-why"><%- t('owner.roy_why', { stage: roy.config ? roy.config.stage_pct : 20, days: roy.active_days_needed }) %></p>
-    <div class="ds-stats">
-      <div class="ds-stat"><span><%- t('owner.r_pending') %></span><b class="gold"><%= num(roy.pending) %></b><small>PAT</small></div>
-      <div class="ds-stat"><span><%- t('owner.r_period') %></span><b><%= num(roy.this_period.total) %></b><small><%- t('owner.r_period_s') %></small></div>
-      <div class="ds-stat"><span><%- t('owner.r_paid') %></span><b><%= num(roy.paid) %></b><small><%- t('owner.r_all_time') %></small></div>
-      <div class="ds-stat"><span><%- t('owner.r_days') %></span><b class="<%= roy.active_days >= roy.active_days_needed ? 'up' : '' %>"><%= roy.active_days %> / <%= roy.active_days_needed %></b><small><%- t('owner.r_days_s') %></small></div>
-    </div>
-    <p class="ds-meta"><%- t('owner.r_next', { when: dt(roy.next_release) }) %></p>
-    <% if (roy.active_days < roy.active_days_needed) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owner.r_need_days', { n: roy.active_days_needed - roy.active_days }) %></div></div><% } %>
-    <% const shares = (roy.owner_shares || []).filter((s) => s.pct > 0); if (shares.length) { %>
-    <details class="po-more"><summary><%- t('owner.r_shares') %></summary>
-      <ul class="po-ro"><% shares.forEach((s) => { %><li><span><%= s.label %></span><b><%= s.pct %>%</b></li><% }) %></ul>
-    </details><% } %>
+      <p class="po-why"><%- t('owner.share_why', { rate: vault ? vault.rate : 10, pct: pct('owner_pct', 0.15), days: rcCfg.owner_days || 3, active: rcCfg.elig_days || 3, cap: pct('cap_i7', 0.25) }) %></p>
+      <div class="ds-stats">
+        <div class="ds-stat"><span><%- t('owner.share_7d') %></span><b class="gold"><%= num(share ? share.d7 : 0) %></b><small><%- t('owner.v_7d') %></small></div>
+        <div class="ds-stat"><span><%- t('owner.share_30d') %></span><b><%= num(share ? share.d30 : 0) %></b><small>PAT</small></div>
+        <div class="ds-stat"><span><%- t('owner.share_present') %></span><b class="<%= last && last.owner_present >= (rcCfg.owner_days || 3) ? 'up' : '' %>"><%= last ? last.owner_present : '—' %> / 7</b><small><%- t('owner.share_need', { n: rcCfg.owner_days || 3 }) %></small></div>
+        <div class="ds-stat"><span><%- t('owner.share_active') %></span><b class="<%= last && last.active_days >= (rcCfg.elig_days || 3) ? 'up' : '' %>"><%= last ? last.active_days : '—' %> / 7</b><small><%- t('owner.share_need', { n: rcCfg.elig_days || 3 }) %></small></div>
+        <div class="ds-stat"><span><%- t('owner.share_cap') %></span><b><%= last ? num(last.cap) : '—' %></b><small><%- t('owner.share_cap_s', { pct: pct('cap_i7', 0.25), i7: last ? num(last.i7) : '—' }) %></small></div>
+      </div>
+      <% if (!last) { %><p class="ds-meta"><%- t('owner.share_none_yet') %></p>
+      <% } else if (!last.owner && last.why && last.why.owner) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owner.share_not', { day: last.day, why: t.esc(last.why.owner) }) %></div></div><% } %>
+    <% } %>
+    <% if (roy) { %>
+    <details class="po-more">
+      <summary><%- t('owner.roy_old_h') %></summary>
+      <% if (roy.frozen) { %><p class="ds-meta"><%- t('owner.roy_frozen', { paid: num(roy.paid) }) %></p>
+      <% } else { %>
+      <p class="ds-meta"><%- t('owner.roy_until') %></p>
+      <p class="po-why"><%- t('owner.roy_why', { stage: roy.config ? roy.config.stage_pct : 20, days: roy.active_days_needed }) %></p>
+      <div class="ds-stats">
+        <div class="ds-stat"><span><%- t('owner.r_pending') %></span><b class="gold"><%= num(roy.pending) %></b><small>PAT</small></div>
+        <div class="ds-stat"><span><%- t('owner.r_period') %></span><b><%= num(roy.this_period.total) %></b><small><%- t('owner.r_period_s') %></small></div>
+        <div class="ds-stat"><span><%- t('owner.r_paid') %></span><b><%= num(roy.paid) %></b><small><%- t('owner.r_all_time') %></small></div>
+        <div class="ds-stat"><span><%- t('owner.r_days') %></span><b class="<%= roy.active_days >= roy.active_days_needed ? 'up' : '' %>"><%= roy.active_days %> / <%= roy.active_days_needed %></b><small><%- t('owner.r_days_s') %></small></div>
+      </div>
+      <p class="ds-meta"><%- t('owner.r_next', { when: dt(roy.next_release) }) %></p>
+      <% const shares = (roy.owner_shares || []).filter((s) => s.pct > 0); if (shares.length) { %>
+      <ul class="po-ro"><% shares.forEach((s) => { %><li><span><%= s.label %></span><b><%= s.pct %>%</b></li><% }) %></ul><% } %>
+      <% } %>
+    </details>
     <% } %>
   </section>
+
+  <% if (camfrog && vault) { %>
+  <section class="ds-card lg" id="recipe" aria-labelledby="poRcH">
+    <h2 class="ds-h2" id="poRcH"><span class="dot"></span>💸 <%- t('owner.recipe_h') %></h2>
+    <p class="po-why"><%- t('owner.recipe_why', { owner: pct('owner_pct', 0.15), gang: pct('gang_pct', 0.15), streamers: pct('streamer_pct', 0.25), people: pct('people_pct', 0.35), games: pct('games_pct', 0.10), convoy: num(rcCfg.convoy_min || 25000) }) %></p>
+    <% if (!eps.length) { %><p class="ds-meta"><%- t('owner.share_none_yet') %></p><% } else { %>
+    <div class="ds-tbl dense"><table><thead><tr><th><%- t('owner.rc_day') %></th><th class="r"><%- t('owner.rc_budget') %></th><th class="r"><%- t('owner.rc_owner') %></th><th class="r"><%- t('owner.rc_gang') %></th><th class="r"><%- t('owner.rc_streamers') %></th><th class="r"><%- t('owner.rc_people') %></th><th class="r"><%- t('owner.rc_games') %></th><th class="r"><%- t('owner.rc_paid') %></th><th class="r"><%- t('owner.rc_stayed') %></th></tr></thead><tbody>
+      <% eps.forEach((e) => { %><tr><td><%= e.day %><br><small class="ds-fine"><%= e.rate %>% · <%= num(e.balance) %></small></td><td class="r"><%= num(e.B) %></td><td class="r"><%= num(e.owner) %></td><td class="r"><%= num(e.gang) %></td><td class="r"><%= num(e.streamers) %><% if (e.vwm) { %><br><small class="ds-fine"><%= e.vwm %> VWM</small><% } %></td><td class="r"><%= num(e.people) %><% if (e.people_n) { %><br><small class="ds-fine"><%- t('owner.rc_people_n', { n: e.people_n }) %></small><% } %></td><td class="r"><%= num(e.games_allow) %></td><td class="r"><b><%= num(e.paid) %></b><% if (e.topup) { %><br><small class="ds-fine"><%- t('owner.rc_topup', { n: num(e.topup) }) %></small><% } %></td><td class="r"><%= num(e.stays) %></td></tr><% }) %>
+    </tbody></table></div>
+    <% if (rc && rc.games && rc.games.allow) { %><p class="ds-fine"><%- t('owner.rc_games_left', { left: num(Math.max(0, rc.games.allow - rc.games.used)), allow: num(rc.games.allow) }) %></p><% } %>
+    <% } %>
+  </section>
+  <% } %>
 
   <section class="ds-card lg" id="prime" aria-labelledby="poPrimeH">
     <h2 class="ds-h2" id="poPrimeH"><span class="dot"></span>📺 <%- t('owner.prime_h') %>

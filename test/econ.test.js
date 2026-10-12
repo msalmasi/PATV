@@ -55,10 +55,15 @@ test.after(() => server && server.close());
 
 const post = (p, body, h = {}) => fetch(base + p, { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, h), body: JSON.stringify(body) });
 const DEV = (c) => c.repeat(32).slice(0, 32);
+// E-4: like the stage player, echo the server's one-time nonce from the last answer (unless the test sets one)
+const nonces = new Map();
 function beat(user, b, h = {}) {
-  return post("/api/econ/watch/beat", Object.assign({ stream: "7", room: "drama", sid: "sess-" + user, playing: true, visible: true, muted: false }, b),
+  const body = Object.assign({ stream: "7", room: "drama", sid: "sess-" + user, playing: true, visible: true, muted: false }, b);
+  const nk = user + "|" + body.sid;
+  if (!("nonce" in (b || {}))) body.nonce = nonces.get(nk) || "";
+  return post("/api/econ/watch/beat", body,
     Object.assign({ "x-test-user": user, "x-dev": DEV(user === "v1" ? "a" : user === "v2" ? "b" : user === "v3" ? "a" : "c"), "cf-connecting-ip": "10.0.0." + user.length }, h))
-    .then((r) => r.json().then((j) => Object.assign({ status: r.status }, j)));
+    .then((r) => r.json().then((j) => { nonces.set(nk, j.nonce || ""); return Object.assign({ status: r.status }, j); }));
 }
 
 // ── pure: the session rule ──
@@ -250,4 +255,14 @@ test("flag off: ingest and beats are accepted and dropped", async () => {
   assert.equal(j.off, true);
   assert.equal((await beat("v1", { pos: 999 })).why, "off");
   await econ.setConfig({ economy_e0: 1 });
+});
+
+test("watch: a beat must echo the server's one-time nonce (E-4) - a replayed or scripted beat restarts with no credit", () => {
+  const s = econ.sessionStep;
+  const b = (o) => Object.assign({ sid: "N", stream: "slot:9", playing: true, visible: true, pos: 0 }, o);
+  const armed = Object.assign(s(undefined, b({}), 0).next, { nonce: "abc123" });
+  let r = s(armed, b({ pos: 30, nonce: "wrong" }), 30000);
+  assert.equal(r.credit, 0); assert.equal(r.why, "nonce");
+  r = s(armed, b({ pos: 30, nonce: "abc123" }), 30000);
+  assert.equal(r.credit, 30);
 });

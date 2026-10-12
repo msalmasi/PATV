@@ -11,6 +11,11 @@
 //                                     at most one change per 7 days (staff are not limited). STORED ONLY: Pepe's E-4
 //                                     recipe will use it; nothing pays out yet.
 //
+// E-4 (Pepe's pepe_recipe.py, flag econ_room_payouts): each room's sync row may carry `recipe` {epochs: the last 7 payout
+// days - budget B, what each slice paid (owner / gang / streamers / regulars), the room-games allowance, what stayed,
+// the owner's presence and the room's active days, the cap; never names}, and the body `recipe` {on, topup, frozen, cfg}.
+// Stored in room_vault_state.recipe / room_vault_meta.recipe for the pad card and the owner panel's Owner share card.
+//
 // "Inflow" is what the room's own activity routed in (Pepe's room flows + the website's room halves). Deposits and the
 // one-time escrow migration are shown on their own and NEVER count as inflow (doc 6.4).
 //
@@ -41,6 +46,8 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS room_vault_settings (room_id TEXT PRIMARY KEY, rate REAL NOT NULL,
         changed_at INTEGER, changed_by TEXT)`);
       await runQuery("CREATE TABLE IF NOT EXISTS room_vault_rate_log (room_id TEXT, rate REAL, prev REAL, by TEXT, at INTEGER)");
+      const cols = (await getQuery("SELECT name FROM pragma_table_info('room_vault_state')")).map((c) => c.name);
+      if (!cols.includes("recipe")) await runQuery("ALTER TABLE room_vault_state ADD COLUMN recipe TEXT");   // E-4
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -52,17 +59,44 @@ function cleanDays(d) {
   const out = {};
   for (const [k, v] of Object.entries(d && typeof d === "object" ? d : {}).slice(0, 40)) {
     if (!DAY_RE.test(k) || !v || typeof v !== "object") continue;
-    out[k] = { in: int(v.in), dep: int(v.dep), mig: int(v.mig), out: int(v.out), ovf: int(v.ovf), lp: int(v.lp) };   // lp: launchpad grants + owner match
+    out[k] = { in: int(v.in), dep: int(v.dep), mig: int(v.mig), out: int(v.out), ovf: int(v.ovf), lp: int(v.lp),   // lp: launchpad grants + owner match
+               top: int(v.top) };                                                                                   // E-4: the room reward top-up
   }
   return out;
 }
-const KINDS = ["flow", "site", "deposit", "migration", "refund", "challenge", "launch", "match"];   // launch / match: the launchpad
+const KINDS = ["flow", "site", "deposit", "migration", "refund", "challenge", "launch", "match", "recipe", "topup"];   // launch / match: the launchpad; recipe / topup: E-4
 function cleanHistory(h) {
   return (Array.isArray(h) ? h : []).slice(0, 12).map((e) => ({
     ts: int(e && e.ts), kind: KINDS.includes(e && e.kind) ? e.kind : "flow",
     flow: String((e && e.flow) || "").replace(/[^A-Za-z0-9 _:-]/g, "").slice(0, 32),
     amount: int(e && e.amount), overflow: int(e && e.overflow),
   }));
+}
+
+// E-4: one payout day as Pepe reports it (numbers + short reasons only)
+const EP_NUM = ["B", "balance", "owner", "gang", "streamers", "people", "people_n", "streamers_n", "games_allow", "games_used_prev",
+                "paid", "stays", "cap", "i7", "owner_present", "active_days", "convoy", "topup"];
+function cleanRecipe(r) {
+  if (!r || typeof r !== "object") return null;
+  const epochs = (Array.isArray(r.epochs) ? r.epochs : []).slice(-7).filter((e) => e && DAY_RE.test(String(e.day || ""))).map((e) => {
+    const o = { day: e.day, rate: Math.round((Number(e.rate) || 0) * 100) / 100, house: !!e.house, vwm: Math.round((Number(e.vwm) || 0) * 10) / 10, why: {} };
+    for (const k of EP_NUM) o[k] = Math.max(0, int(e[k]));
+    for (const k of ["owner", "gang", "streamers", "people"]) {
+      if (e.why && typeof e.why[k] === "string") o.why[k] = e.why[k].replace(/[<>]/g, "").slice(0, 80);
+    }
+    return o;
+  });
+  const g = r.games && typeof r.games === "object" ? { day: DAY_RE.test(String(r.games.day || "")) ? r.games.day : null,
+                                                        allow: Math.max(0, int(r.games.allow)), used: Math.max(0, int(r.games.used)) } : null;
+  return { epochs, games: g };
+}
+function cleanRecipeMeta(m) {
+  if (!m || typeof m !== "object") return null;
+  const cfg = {};
+  for (const [k, v] of Object.entries(m.cfg && typeof m.cfg === "object" ? m.cfg : {}).slice(0, 20)) {
+    if (/^[a-z0-9_]{1,20}$/.test(k) && Number.isFinite(Number(v))) cfg[k] = Number(v);
+  }
+  return { on: m.on === true, topup: m.topup === true, frozen: m.frozen === true, cfg };
 }
 
 async function metaGet() {
@@ -88,12 +122,15 @@ async function sync(body) {
     for (const r of rooms) {
       const id = String((r && r.id) || "").slice(0, 120);
       if (!id) continue;
-      await runQuery(`INSERT INTO room_vault_state (room_id, balance, days, history, updated) VALUES (?, ?, ?, ?, ?)
-                      ON CONFLICT(room_id) DO UPDATE SET balance = excluded.balance, days = excluded.days, history = excluded.history, updated = excluded.updated`,
-                     [id, Math.max(0, int(r.balance)), JSON.stringify(cleanDays(r.days)), JSON.stringify(cleanHistory(r.history)), t]);
+      const rc = cleanRecipe(r.recipe);
+      await runQuery(`INSERT INTO room_vault_state (room_id, balance, days, history, updated, recipe) VALUES (?, ?, ?, ?, ?, ?)
+                      ON CONFLICT(room_id) DO UPDATE SET balance = excluded.balance, days = excluded.days, history = excluded.history, updated = excluded.updated,
+                      recipe = COALESCE(excluded.recipe, room_vault_state.recipe)`,
+                     [id, Math.max(0, int(r.balance)), JSON.stringify(cleanDays(r.days)), JSON.stringify(cleanHistory(r.history)), t,
+                      rc ? JSON.stringify(rc) : null]);
     }
     await metaSet({ on: b.on === true, cap: int(b.cap) || null, total: Math.max(0, int(b.total)), synced: t,
-                    deposit_min: int(b.deposit_min) || null });
+                    deposit_min: int(b.deposit_min) || null, recipe: cleanRecipeMeta(b.recipe) });
   });
   return { settings: await settingsMap() };
 }
@@ -112,12 +149,14 @@ async function card(roomId, user, opts = {}) {
   await init();
   const id = String(roomId || "");
   const meta = await metaGet();
-  const st = (await getQuery("SELECT balance, days, history, updated FROM room_vault_state WHERE room_id = ?", [id]))[0] || null;
+  const st = (await getQuery("SELECT balance, days, history, updated, recipe FROM room_vault_state WHERE room_id = ?", [id]))[0] || null;
   const set = (await getQuery("SELECT rate, changed_at, changed_by FROM room_vault_settings WHERE room_id = ?", [id]))[0] || null;
   let days = {};
   let history = [];
   try { days = st && st.days ? JSON.parse(st.days) : {}; } catch (e) { days = {}; }
   try { history = st && st.history ? JSON.parse(st.history) : []; } catch (e) { history = []; }
+  let recipe = null;
+  try { recipe = st && st.recipe ? JSON.parse(st.recipe) : null; } catch (e) { recipe = null; }
   const keys = Object.keys(days).sort().slice(-7);
   const sum = (f) => keys.reduce((s, k) => s + int((days[k] || {})[f]), 0);
   const t = now();
@@ -129,7 +168,11 @@ async function card(roomId, user, opts = {}) {
     live: meta.on === true, synced: meta.synced || null, cap: meta.cap || 50000000, deposit_min: meta.deposit_min || 1000,
     balance: st ? int(st.balance) : 0,
     inflow7: sum("in"), deposits7: sum("dep"), migrated7: sum("mig"), paid7: sum("out"), overflow7: sum("ovf"), launch7: sum("lp"),
-    days: keys.map((k) => ({ day: k, in: int(days[k].in), dep: int(days[k].dep), mig: int(days[k].mig), out: int(days[k].out) })),
+    days: keys.map((k) => ({ day: k, in: int(days[k].in), dep: int(days[k].dep), mig: int(days[k].mig), out: int(days[k].out), top: int(days[k].top) })),
+    topup7: sum("top"),
+    // E-4: the payout recipe (Pepe's last 7 payout days) and whether it's live
+    recipe: { live: !!(meta.recipe && meta.recipe.on), topup: !!(meta.recipe && meta.recipe.topup), frozen: !!(meta.recipe && meta.recipe.frozen),
+              cfg: (meta.recipe && meta.recipe.cfg) || {}, epochs: (recipe && recipe.epochs) || [], games: (recipe && recipe.games) || null },
     history: history.slice(0, 8),
     rate: set ? Number(set.rate) : RATE.default, rate_default: !set, rate_changed: changedAt,
     rate_bounds: { min: RATE.min, max: RATE.max },
@@ -181,7 +224,8 @@ async function overview(limit = 10) {
     out.push({ room_id: r.room_id, title: R ? R.title : r.room_id, slug: R ? R.slug : null, balance: int(r.balance),
                inflow7: keys.reduce((s, k) => s + int(days[k].in), 0) });
   }
-  return { live: meta.on === true, total: int(meta.total), cap: meta.cap || 50000000, rooms: out };
+  return { live: meta.on === true, total: int(meta.total), cap: meta.cap || 50000000, rooms: out,
+           recipe: meta.recipe || null };     // E-4: {on, topup, frozen, cfg} - the /economy page's payout recipe card
 }
 
 function register(app, { addUser, isBotToken }) {
@@ -220,5 +264,5 @@ function register(app, { addUser, isBotToken }) {
   });
 }
 
-module.exports = { init, sync, settingsMap, card, setRate, overview, register, RATE, Refuse,
+module.exports = { init, sync, settingsMap, card, setRate, overview, register, RATE, Refuse, cleanRecipe,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };
