@@ -161,7 +161,7 @@ async function fromForm(userId, kind, words) {
     return r.ok ? "🗳️ " + r.msg : r.msg;
   }
   if (kind === "poll.create") {
-    if (!me.camfrogUsername) return "Link your Camfrog name first (type !verify in a Camfrog room) - polls are started as it.";
+    if (!me.camfrogUsername) return "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) - polls are started as it.";
     const r = await act("create", { question: words[0], options: words.slice(1), creator: me.camfrogUsername }, "web");
     return r.ok ? "🗳️ Poll started." : r.msg;
   }

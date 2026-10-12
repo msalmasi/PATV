@@ -239,7 +239,7 @@ function eligibility(u) {
   if (deps.isStaff(u)) return null;
   if (u.camfrogUsername) return null;
   if ((Number(u.level) || 0) >= MIN_LEVEL) return null;
-  return `Snapping and clipping the stage needs a linked Camfrog name (type !verify in a Camfrog room with Pepe) or level ${MIN_LEVEL}.`;
+  return `Snapping and clipping the stage needs a linked chat account (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) or level ${MIN_LEVEL}.`;
 }
 // ── switches (1.99cw) ──
 // 1.99iu: names the pad's Camfrog room and the chat switch a room mod types there (bridge.snapOffText)

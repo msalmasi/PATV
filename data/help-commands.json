@@ -266,7 +266,7 @@
     "!patv set [name]"
    ],
    "summary": "Your publicaccess.tv username — the account your PAT lives in.",
-   "details": "Your **publicaccess.tv** username — the account your PAT lives in. `!patv` shows it with a link to your profile; `!patv set <name>` changes it (3–24 characters: letters, numbers, `_ . -`). After a change, log in on the site with the new name.",
+   "details": "Your **publicaccess.tv** username — the account your PAT lives in. `!patv` shows it with a link to your profile; `!patv set <name>` changes it (3–48 characters: letters, numbers, `_ . -`). After a change, log in on the site with the new name.",
    "examples": [
     "!patv set <name>"
    ],
@@ -288,7 +288,7 @@
     "!displayname reset"
    ],
    "summary": "Your publicaccess.tv display name — the name the site shows on your profile, the rankings, the wheel and the tables (your username stays the same).",
-   "details": "Your **publicaccess.tv display name** — the name the site shows on your profile, the rankings, the wheel and the tables (your username stays the same). `!displayname` shows it; `!displayname <name>` sets it (up to 32 characters, spaces and emoji welcome; markup is stripped). A name you set is yours: it no longer follows your Camfrog name. `!displayname reset` goes back to automatic (your Camfrog display name). One change an hour — the same rules as the Display name box on your profile page. Free. It doesn't change what Pepe calls you in chat — that's `!alias me <name>`.",
+   "details": "Your **publicaccess.tv display name** — the name the site shows on your profile, the rankings, the wheel and the tables (your username stays the same). `!displayname` shows it; `!displayname <name>` sets it (up to 32 characters, spaces and emoji welcome; markup is stripped). A name you set is yours: it no longer follows your linked chat name. `!displayname reset` goes back to automatic (your display name in chat). One change an hour — the same rules as the Display name box on your profile page. Free. It doesn't change what Pepe calls you in chat — that's `!alias me <name>`.",
    "examples": [
     "!displayname",
     "!displayname <name>",
@@ -410,7 +410,7 @@
     "link website"
    ],
    "web": {
-    "label": "Link your Camfrog name from your profile's edit page",
+    "label": "Link your chat account (Connections → Camfrog) from your profile's edit page",
     "url": "/editProfile"
    }
   },
@@ -426,8 +426,8 @@
    "syntax": [
     "!verifypad [PATV-code]"
    ],
-   "summary": "Prove this Camfrog room belongs to a PATV pad's owner, to connect the pad to the room.",
-   "details": "Connect your PATV pad to your Camfrog room: in the pad's settings (Address & platform) type the room's name and get a code like `PATV-AB23CD`. The fastest proof is putting that code in the room's **topic** (only the room's owner and operators can) - Pepe spots it within a couple of minutes, no admin needed. Or type `!verifypad PATV-AB23CD` in the room: a site admin then confirms it. Pepe has to be in the room for either. Once connected, the pad gets the room's live chat on the website, its pad vault and the owner's `!stage` commands. Pepe only joins your room if you ask for it in the pad's settings and a site admin approves.",
+   "summary": "Prove this chat room (a Camfrog room) belongs to a PATV pad's owner, to connect the pad to the room.",
+   "details": "Connect your PATV pad to its chat room (Camfrog today): in the pad's settings (Address & platform) type the room's name and get a code like `PATV-AB23CD`. The fastest proof is putting that code in the room's **topic** (only the room's owner and operators can) - Pepe spots it within a couple of minutes, no admin needed. Or type `!verifypad PATV-AB23CD` in the room: a site admin then confirms it. Pepe has to be in the room for either. Once connected, the pad gets the room's live chat on the website, its pad vault and the owner's `!stage` commands. Pepe only joins your room if you ask for it in the pad's settings and a site admin approves.",
    "examples": [
     "!verifypad PATV-AB23CD"
    ],
@@ -485,8 +485,8 @@
    "syntax": [
     "!achievements [@user]"
    ],
-   "summary": "Your Camfrog achievements (or someone else's): how many you have, the latest ones, the one you're closest to next with your progress, and a link to the full achievements page for that…",
-   "details": "Your Camfrog achievements (or someone else's): how many you have, the latest ones, the one you're closest to next with your progress, and a link to the full achievements page for that person. (Aliases: `!achs`, `!badges`.)",
+   "summary": "Your achievements (or someone else's): how many you have, the latest ones, the one you're closest to next with your progress, and a link to the full achievements page for that…",
+   "details": "Your achievements (or someone else's): how many you have, the latest ones, the one you're closest to next with your progress, and a link to the full achievements page for that person. (Aliases: `!achs`, `!badges`.)",
    "examples": [
     "!achs",
     "!badges"
@@ -552,7 +552,7 @@
     "Earning PAT"
    ],
    "summary": "Earn PAT by chatting in the room (enters you in automatic raffles), spinning the wheel, and winning trivia.",
-   "details": "Earn PAT by chatting in the room (enters you in automatic raffles), spinning the wheel, and winning trivia. Link your Camfrog username on [publicaccess.tv](https://publicaccess.tv) to redeem for prizes like Discord Nitro and Camfrog Pro.",
+   "details": "Earn PAT by chatting in the room (enters you in automatic raffles), spinning the wheel, and winning trivia. Link your chat account on [publicaccess.tv](https://publicaccess.tv) to redeem for prizes like Discord Nitro and Camfrog Pro.",
    "examples": [],
    "keywords": [
     "earn pat",
@@ -592,7 +592,7 @@
     "Telegram"
    ],
    "summary": "Pepe on Telegram: your alerts, and with a Season Pass his commands and a chat with him.",
-   "details": "Link Telegram at publicaccess.tv → Settings → Telegram (or Edit profile → Connections): you get a one-time code, open Pepe's bot and press Start. Linking is free and brings your alerts to Telegram - direct messages, room mentions, tips, follows / go-live and any other notice kind you switch on.\n\nWith a **Season Pass** you can also run Pepe's PAT commands there - `/balance`, `/tip`, `/stash`, `/history`, `/ask`, `/imagine`, `/chart`, `/web`, `/relay`, `/redeem`, cosmetics and more (`/help` in the bot lists them with prices) - as your linked Camfrog name, at the same prices as in a room. A Telegram spend has no room, so it goes to Fort Knox. Casino games, wagers, markets, loans, heists, moderation and anything that needs Pepe in a room aren't available. Anything that isn't a command is a chat with Pepe, priced like Message Pepe.\n\n`/account` shows your link, `/unlink` removes it.",
+   "details": "Link Telegram at publicaccess.tv → Settings → Telegram (or Edit profile → Connections): you get a one-time code, open Pepe's bot and press Start. Linking is free and brings your alerts to Telegram - direct messages, room mentions, tips, follows / go-live and any other notice kind you switch on.\n\nWith a **Season Pass** you can also run Pepe's PAT commands there - `/balance`, `/tip`, `/stash`, `/history`, `/ask`, `/imagine`, `/chart`, `/web`, `/relay`, `/redeem`, cosmetics and more (`/help` in the bot lists them with prices) - as your linked chat name, at the same prices as in chat. A Telegram spend has no room, so it goes to Fort Knox. Casino games, wagers, markets, loans, heists, moderation and anything that needs Pepe in a room aren't available. Anything that isn't a command is a chat with Pepe, priced like Message Pepe.\n\n`/account` shows your link, `/unlink` removes it.",
    "examples": [
     "/tip bob 500",
     "/ask what's the weather in London"
@@ -2387,8 +2387,8 @@
    "syntax": [
     "!prizes [page]"
    ],
-   "summary": "The publicaccess.tv prize store, from Camfrog — Plex invites, Discord Nitro, Camfrog Pro, gift cards and the rest — cheapest first, with your balance.",
-   "details": "The **publicaccess.tv prize store**, from Camfrog — Plex invites, Discord Nitro, Camfrog Pro, gift cards and the rest — cheapest first, with your balance. `!prizes 2` for the next page. Sold-out prizes stay on the list (marked **SOLD OUT**), so a prize's number doesn't change when something sells out — learn the # of the one you're saving for. The whole store is also at [publicaccess.tv/shop](https://publicaccess.tv/shop).",
+   "summary": "The publicaccess.tv prize store, from chat — Plex invites, Discord Nitro, Camfrog Pro, gift cards and the rest — cheapest first, with your balance.",
+   "details": "The **publicaccess.tv prize store**, from chat — Plex invites, Discord Nitro, Camfrog Pro, gift cards and the rest — cheapest first, with your balance. `!prizes 2` for the next page. Sold-out prizes stay on the list (marked **SOLD OUT**), so a prize's number doesn't change when something sells out — learn the # of the one you're saving for. The whole store is also at [publicaccess.tv/shop](https://publicaccess.tv/shop).",
    "examples": [
     "!prizes 2"
    ],
@@ -2564,7 +2564,7 @@
     "!redeem"
    ],
    "summary": "Learn how to redeem your PAT for real prizes.",
-   "details": "Learn how to redeem your PAT for real prizes. Sign up at [publicaccess.tv](https://publicaccess.tv), link your Camfrog username, and your balance syncs automatically.",
+   "details": "Learn how to redeem your PAT for real prizes. Sign up at [publicaccess.tv](https://publicaccess.tv), link your chat account, and your balance syncs automatically.",
    "examples": [],
    "keywords": [],
    "web": {
@@ -2694,7 +2694,7 @@
     "!padvault recipe"
    ],
    "summary": "This pad's vault: what the pad has earned, what it took in over the last 7 days, and deposits.",
-   "details": "Every pad with a Camfrog room has a **pad vault**. Paid commands, songs, voices, heist gear and other spending in the room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were in the room 3 of the last 7 days and the room was active 3 of them; capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. Payouts of 25,000 or more ride a 10-minute convoy (`!hijack`). `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
+   "details": "Every pad with a connected chat room has a **pad vault**. Paid commands, songs, voices, heist gear and other spending in the room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were in the room 3 of the last 7 days and the room was active 3 of them; capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. Payouts of 25,000 or more ride a 10-minute convoy (`!hijack`). `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
    "examples": [
     "!padvault",
     "!padvault deposit 5k",
@@ -2774,7 +2774,7 @@
     "!boost <amount>"
    ],
    "summary": "Boost this room's pad up PATV's front-page ranking with PAT.",
-   "details": "Type it in a Camfrog room and Pepe boosts that room's pad on publicaccess.tv with your PAT. Boosts fade by half every hour and only count while the pad is active. Half goes to the pad's vault and half to Fort Knox (an owner boosting their own pad sends it all to Fort Knox). Amounts take `k`/`m`.",
+   "details": "Type it in a pad's chat room and Pepe boosts that pad on publicaccess.tv with your PAT. Boosts fade by half every hour and only count while the pad is active. Half goes to the pad's vault and half to Fort Knox (an owner boosting their own pad sends it all to Fort Knox). Amounts take `k`/`m`.",
    "examples": [
     "!boost 5000",
     "!boost 50k"
@@ -5197,6 +5197,30 @@
    "keywords": []
   },
   {
+   "id": "policyengines",
+   "title": "!econ engines status|export|cutover|rollback|detach",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ engines status",
+    "!econ engines export <treasury|monetary|burn|all>",
+    "!econ engines cutover <treasury|monetary|burn|all> confirm",
+    "!econ engines rollback <treasury|monetary|burn|all> confirm",
+    "!econ engines detach <treasury|monetary|burn|all> confirm"
+   ],
+   "summary": "Hand the economy's clock-driven policy engines (the treasury's Monday waterfall and daily release, the monetary day, the burn accrual) to publicaccess.tv's scheduler, or bring them back into Pepe.",
+   "details": "Three engines, one switch each: **treasury** (the Monday 04:00 UTC surplus waterfall and the daily 04:00 release), **monetary** (the Fed band's floor mint and ceiling release, the Monday guarantee, issuance, the daily activity rewards) and **burn** (the burn reserve's accrual burn). Pepe runs an engine only while its switch is explicitly off; with it on he never runs it, even if the site is down (the site runs the period when it is back). Before a cutover the site runs the engine as a **dry run** (it records what would move) and then in **shadow** (it plans alongside Pepe every period and compares his plan with its own; admins set those on /admin/economy). **export** is the dry run of the hand-over: what Pepe would hand over (the periods he already ran, when his ticks were armed) and anything that blocks it (not within 20 minutes of 04:00 UTC, nothing mid-move here, the pools and the share book already on the site, the engine in shadow there). **cutover confirm** stops the engine here first, then the site takes it and runs every period from then on (one transaction per period, never twice); what it does is written into Pepe's own books as it happens (the epoch and day records, mints, Fed loan repayments, budget spends, burns) and Pepe still announces burns and tells admins about cap notices and failures. **rollback confirm** is the way back while the site answers (it goes back to shadow); **detach confirm** only when the site is gone for good (Pepe runs again from the next period boundary). **status** says where each engine runs (anyone can ask). Admin mints, Fed grants and loans, flash liquidity, the room payout recipe and the launchpad stay in Pepe.",
+   "examples": [
+    "!econ engines status",
+    "!econ engines export all"
+   ],
+   "keywords": []
+  },
+  {
    "id": "aijudgebackend",
    "title": "!aijudge backend status|on|off",
    "category": "moderation",
@@ -5211,7 +5235,7 @@
     "!aijudge backend off confirm"
    ],
    "summary": "Make Pepe's AI judge propose its calls to publicaccess.tv, which runs the dispute window and settles, or let him decide locally again.",
-   "details": "With **on**, Pepe still looks into AI-judged markets, betting pools and wagers (web search plus his own Camfrog records) but only PROPOSES a result to the site, with his confidence, his reason and the evidence. The site keeps the proposal and the disputes, and when the dispute window ends without enough disputes it settles the items it runs itself; the ones that still live in Pepe are settled by him when the site says so. `!market dispute` / `!wager dispute` go to the site. If the site is down, his calls wait and nothing is settled. **off** brings the dispute window back to Pepe (calls already made settle on their own window). **status** says which way it runs (anyone can ask).",
+   "details": "With **on**, Pepe still looks into AI-judged markets, betting pools and wagers (web search plus his own chat records) but only PROPOSES a result to the site, with his confidence, his reason and the evidence. The site keeps the proposal and the disputes, and when the dispute window ends without enough disputes it settles the items it runs itself; the ones that still live in Pepe are settled by him when the site says so. `!market dispute` / `!wager dispute` go to the site. If the site is down, his calls wait and nothing is settled. **off** brings the dispute window back to Pepe (calls already made settle on their own window). **status** says which way it runs (anyone can ask).",
    "examples": [
     "!aijudge backend status"
    ],
@@ -5234,7 +5258,7 @@
     "!cosmetics backend off confirm"
    ],
    "summary": "Move the cosmetic drop table (every win's drop chance, the daily cap, the gates) to publicaccess.tv, or bring it back to Pepe's panel.",
-   "details": "**on confirm** hands Pepe's drop table to the site once; from then on it is edited on the site's admin page (Cosmetics) and Pepe reads it every 5 minutes, still rolling the drops for Camfrog games himself (the site rolls the wheel's and the casino tables' drops with the same numbers). If the site is down he keeps using the last copy. **off confirm** brings the site's numbers back as Pepe's drop knobs. **status** says where the table lives (anyone can ask).",
+   "details": "**on confirm** hands Pepe's drop table to the site once; from then on it is edited on the site's admin page (Cosmetics) and Pepe reads it every 5 minutes, still rolling the drops for in-chat games himself (the site rolls the wheel's and the casino tables' drops with the same numbers). If the site is down he keeps using the last copy. **off confirm** brings the site's numbers back as Pepe's drop knobs. **status** says where the table lives (anyone can ask).",
    "examples": [
     "!cosmetics backend status"
    ],
@@ -5260,7 +5284,7 @@
     "!achievements backend off confirm",
     "!achievements backend detach confirm"
    ],
-   "summary": "Move the Camfrog achievement counters to publicaccess.tv (the site then checks the thresholds and awards), or bring them back into Pepe.",
+   "summary": "Move the chat achievement counters to publicaccess.tv (the site then checks the thresholds and awards), or bring them back into Pepe.",
    "details": "**export** is the dry run: how many people, unlocks and counters would move, with a checksum, and anything that blocks it. **on confirm** pauses awards for a moment, sends every counter with a checksum and totals, checks every person's copy on the site and switches only when they all match; from then on Pepe still counts what happens in the rooms and sends it to the site, which checks the thresholds and pays the badge, XP and points once (Pepe announces it in the room). **off confirm** is the way back while the site answers: everything waiting is sent first, then the counters come back exactly. **detach confirm** is only for a site that is gone for good: Pepe's last copy becomes the counters again. **status** says where the counters live (anyone can ask).",
    "examples": [
     "!achievements backend status",
@@ -5924,8 +5948,8 @@
    "syntax": [
     "How multiple rooms work"
    ],
-   "summary": "Pepe can sit in several Camfrog rooms at once, and each one is its own place.",
-   "details": "Pepe can sit in several Camfrog rooms at once, and each one is its own place.\n\n**People carry over, rooms don't.** What he knows about you follows you between rooms (and he'll say where he heard it — \"you mentioned that in the other room\"); a room's own lore, chat log and transcripts stay in that room.\n\n**Chat & transcripts are per room.** Anything that quotes history — `!ask`, `!roast`, `!chart`, chatty replies, DJ patter — only draws on the room you're in. So do `!log`, `!replay`, `!search`, `!mictop`, `!micstats` and `!modlog`. Add `-all` to any of those to search or total across every room instead.\n\n**Settings are per room.** Games, chatty, cams and the rest can be switched on in one room and off in another from the admin panel's room selector — only the AI model/API settings are shared.\n\n**Telegram** has its own scope: `/room <name>` focuses a chat on one room, `/room all` widens it. Keyword alerts always cover every room and say which one they came from.\n\n**Voice and cams live in one room at a time** — whichever `!audioroom` / `!activeroom` point at. Mic and cam commands are refused elsewhere with a note saying which room owns them.",
+   "summary": "Pepe can sit in several chat rooms at once, and each one is its own place.",
+   "details": "Pepe can sit in several chat rooms at once, and each one is its own place.\n\n**People carry over, rooms don't.** What he knows about you follows you between rooms (and he'll say where he heard it — \"you mentioned that in the other room\"); a room's own lore, chat log and transcripts stay in that room.\n\n**Chat & transcripts are per room.** Anything that quotes history — `!ask`, `!roast`, `!chart`, chatty replies, DJ patter — only draws on the room you're in. So do `!log`, `!replay`, `!search`, `!mictop`, `!micstats` and `!modlog`. Add `-all` to any of those to search or total across every room instead.\n\n**Settings are per room.** Games, chatty, cams and the rest can be switched on in one room and off in another from the admin panel's room selector — only the AI model/API settings are shared.\n\n**Telegram** has its own scope: `/room <name>` focuses a chat on one room, `/room all` widens it. Keyword alerts always cover every room and say which one they came from.\n\n**Voice and cams live in one room at a time** — whichever `!audioroom` / `!activeroom` point at. Mic and cam commands are refused elsewhere with a note saying which room owns them.",
    "examples": [],
    "keywords": []
   },
@@ -6772,10 +6796,10 @@
    ],
    "aliases": [],
    "syntax": [
-    "!message [PATV user or Camfrog name] [text]"
+    "!message [PATV user or chat name] [text]"
    ],
-   "summary": "Send someone a PATV direct message from Camfrog.",
-   "details": "Send someone a **PATV direct message** without leaving Camfrog. It goes out from your linked PATV account into their website messages, so their blocks and \"who can message me\" settings apply. Name them by Camfrog name or PATV username (`u/name` for the username). Works the same in a PM to Pepe. Your Camfrog name must be linked to PATV first: get a code on your PATV profile, then type `!verify CODE`.",
+   "summary": "Send someone a PATV direct message from chat.",
+   "details": "Send someone a **PATV direct message** without leaving chat. It goes out from your linked PATV account into their website messages, so their blocks and \"who can message me\" settings apply. Name them by chat name or PATV username (`u/name` for the username). Works the same in a PM to Pepe. Your chat name must be linked to PATV first: get a code on your PATV profile, then type `!verify CODE`.",
    "examples": [
     "!message bob are you coming to the heist?",
     "!message u/alice thanks for the tip!"
@@ -7305,5 +7329,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "1d3cccc92118e8d4"
+ "hash": "ad8a4dfa2b7446d0"
 }

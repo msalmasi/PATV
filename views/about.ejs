@@ -3,11 +3,11 @@
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const S0 = S || {};
   const games = [
-    ['/p' + (room ? '/' + encodeURIComponent(room.slug) : ''), '📡', 'Live pads', 'The Camfrog rooms Pepe sits in, live on the web for members: the chat, what\'s said on the mic (auto-transcribed), who\'s in the room and who\'s talking.', '#ef5350'],
+    ['/p' + (room ? '/' + encodeURIComponent(room.slug) : ''), '📡', 'Live pads', 'Pads with a connected chat room (Camfrog today), live on the web for members: the chat, what\'s said on the mic (auto-transcribed), who\'s in the room and who\'s talking.', '#ef5350'],
     ['/markets', '🔮', 'Markets', 'Prediction markets on whatever the room is arguing about. Buy shares in an outcome; prices move with every bet, and you can sell before it settles.', '#ba68c8'],
     ['/lotto', '🎟️', 'Lotto', 'Pick 4 numbers and a Pepe Ball. The jackpot rolls over until someone hits it; draws are Sunday night.', '#ffd54f'],
     [user ? '/u/' + encodeURIComponent(user) + '/wheel' : '/login', '🎡', 'The wheel', 'Spin the arcade wheel for PAT and XP — from your wheel page, or on the main stage where it spins live on stream.', '#4fc3f7'],
-    ['/tables', '🃏', 'Casino tables', 'Texas Hold\'em and Blackjack with Pepe dealing. Camfrog players and web players sit at the same table.', '#66bb6a'],
+    ['/tables', '🃏', 'Casino tables', 'Texas Hold\'em and Blackjack with Pepe dealing. Chat-room players and web players sit at the same table.', '#66bb6a'],
     ['/gtf', '🔫', 'Grand Theft Frogger', 'Heists with a crew, gangs, gear and a fight over the map. Crack the vault and split the take.', '#ff8a65'],
     ['/bounties', '🎯', 'Bounties', 'Post a challenge with a pot ("first to get Pepe to sing"), chip in on someone else\'s, or hunt one down and collect.', '#e57373'],
     ['/wagers', '🤝', 'Wagers', 'Head-to-head bets between members, with Pepe holding the PAT and an optional judge.', '#90a4ae'],
@@ -35,8 +35,8 @@
 <main class="ab ds-page">
   <section class="ds-hero">
     <span class="ds-eyebrow">PUBLIC ACCESS TELEVISION</span>
-    <h1>A TV station, a Camfrog crew and <em>a frog who runs the games.</em></h1>
-    <p class="ds-lead">PATV is a community: people hanging out on cam in Camfrog rooms, a live stream, events, and Pepe — the frog who deals the cards, runs the heists, DJs, remembers everyone and keeps the score. PAT is the points everyone plays with, in the rooms and here on the site, and the same account works in both.</p>
+    <h1>A TV station, a hub of pads and <em>a frog who runs the games.</em></h1>
+    <p class="ds-lead">PATV is a community hub: pads with their own feeds, stages and chat rooms, a live stream, events, and Pepe — PATV's host, the frog who deals the cards, runs the heists, DJs, remembers everyone and keeps the score. PAT is the points everyone plays with, in the chat rooms and here on the site, and the same account works in both.</p>
     <div class="ds-ctas">
       <% if (!user) { %><a class="ds-btn" href="/register">Join PATV</a><a class="ds-btn ghost" href="/login">Sign in</a><% } else { %><a class="ds-btn" href="/">Back to the homepage</a><% } %>
       <a class="ds-btn ghost" href="/help"><span class="ds-ic" aria-hidden="true">🐸</span>Pepe's commands</a>
@@ -46,7 +46,7 @@
   <section class="ds-stack" aria-labelledby="cmH">
     <h2 class="ds-h2 dot" id="cmH">The community</h2>
     <div class="comm ds-grid">
-      <div class="cm ds-card"><span class="ds-ic" aria-hidden="true">📹</span><b class="ds-h3">Camfrog rooms</b><p class="ds-sub">Where it all happens: Pepe's Pad and friends. Video, a shared mic, games in the chat. Members can watch the rooms live on <a href="/p">the web</a>.</p></div>
+      <div class="cm ds-card"><span class="ds-ic" aria-hidden="true">📹</span><b class="ds-h3">Pads</b><p class="ds-sub">Pepe's Pad and friends: each pad has a feed and a stage, and many connect a chat room (Camfrog today) with video, a shared mic and games in the chat. Members can watch them live on <a href="/p">the web</a>.</p></div>
       <div class="cm ds-card"><span class="ds-ic" aria-hidden="true">📺</span><b class="ds-h3">Live-streamed events</b><p class="ds-sub">Game nights, shows and specials go out live on the main stage and on <a href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch</a> — spin the stage wheel from the homepage while they're on.</p></div>
       <div class="cm ds-card"><span class="ds-ic" aria-hidden="true">🎬</span><b class="ds-h3">The Plex server</b><p class="ds-sub">A shared movie and TV library for members. Get access in the <a href="/shop">store</a>, and <a href="/requests">request a movie or show</a> we don't have yet.</p></div>
       <div class="cm ds-card"><span class="ds-ic" aria-hidden="true">💬</span><b class="ds-h3">Discord</b><p class="ds-sub">Announcements, clips and the conversation between rooms. <a href="https://discord.gg/publicaccess" rel="noopener">Join the server</a>.</p></div>
@@ -66,9 +66,9 @@
     <h2 class="ds-h2 dot" id="gsH">Getting started</h2>
     <ol class="steps">
       <li><a href="/register">Make an account</a> on publicaccess.tv.</li>
-      <li>In a Camfrog room with Pepe, type <code>!verify</code> to link your Camfrog name — your PAT, level and achievements then follow you between the rooms and the site.</li>
-      <li>Say <code>!help</code> to Pepe, or browse <a href="/help">everything he can do</a>.</li>
-      <li>Want to stay off the website's live room view? Type <code>!bridge hide</code> (or <code>!incognito on</code>) in the room.</li>
+      <li>Link your chat accounts under Edit profile → Connections (for Camfrog, type <code>!verify</code> in a room with Pepe) — your PAT, level and achievements then follow you between the chat rooms and the site.</li>
+      <li>Say <code>!help</code> to Pepe in chat, or browse <a href="/help">everything he can do</a>.</li>
+      <li>Want to stay off the website's live room view? Type <code>!bridge hide</code> (or <code>!incognito on</code>) in the chat room.</li>
     </ol>
     <p class="ds-meta" style="margin:0"><span class="ds-num"><%= fmt(S0.members) %></span> members and counting.</p>
   </section>

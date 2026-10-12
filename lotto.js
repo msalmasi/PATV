@@ -174,7 +174,7 @@ function register(app, { isBotToken, addUser }) {
           : rows.reduce((s, x) => s + (x.prize && !x.prize.jackpot ? x.prize.amount : 0), 0);
         if (r || won) last = { draw: latest.draw, count: r ? r.count : 0, won, tickets: rows };
       }
-      res.locals.og = { title: "Pepeball — this week's jackpot", description: "Pick 4 of 1-30 + a Pepe Ball. Draws every Sunday 9pm ET. Buy tickets on PATV or with !lotto in a Camfrog room.",
+      res.locals.og = { title: "Pepeball — this week's jackpot", description: "Pick 4 of 1-30 + a Pepe Ball. Draws every Sunday 9pm ET. Buy tickets on PATV or with !lotto in chat.",
                         image: res.locals.ogBase + "/og/lotto.png?v=" + Math.floor(Date.now() / 600000), url: res.locals.ogBase + "/lotto" };
       res.render("lotto", {
         user: req.user ? req.user.username : null, L, updated: row ? row.updated : null, me, mine, prizes, anyOdds,

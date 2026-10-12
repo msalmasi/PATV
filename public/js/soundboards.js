@@ -32,7 +32,7 @@
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (d) {
         if (!d || !d.ok) { b.disabled = false; say((d && d.error) || _t('js.sb.failed', 'That didn\'t work - try again.'), 'bad'); return; }
-        say(_t('js.sb.bought', 'Done - it\'s yours. Play it in a Camfrog room with !sb.'), 'ok');
+        say(_t('js.sb.bought', 'Done - it\'s yours. Play it in chat with !sb.'), 'ok');
         setTimeout(function () { location.reload(); }, 900);
       })
       .catch(function () { b.disabled = false; say(_t('js.sb.failed', 'That didn\'t work - try again.'), 'bad'); });

@@ -256,8 +256,8 @@
     $("cz-room").hidden = !rooms.length;
     $("cz-push").hidden = !rooms.length;
     $("cz-unpush").hidden = !attached.length;
-    $("cz-roomnow").textContent = attached.length > 1 ? T("rooms_now", "Playing in {n} Camfrog rooms and on the web.", { n: attached.length })
-                                : t.room ? T("room_now", "Now in Camfrog room {room} and on the web.", { room: t.room_name || t.room })
+    $("cz-roomnow").textContent = attached.length > 1 ? T("rooms_now", "Playing in {n} chat rooms and on the web.", { n: attached.length })
+                                : t.room ? T("room_now", "Now in chat room {room} and on the web.", { room: t.room_name || t.room })
                                 : T("room_web", "Web only right now.");
     let s;
     if (t.on_stream) s = T("stream_on", "📺 This table is on Pepe's stream.");

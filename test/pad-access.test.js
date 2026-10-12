@@ -273,7 +273,7 @@ for (const lv of LEVELS) {
       if (see) {
         assert.equal(r.status, 200, tag + " page");
         assert.ok(r.text.includes(P.title), tag + " title shown");
-        assert.equal(r.text.includes("Sign in to watch the Camfrog room live"), !fu, tag + " live teaser only when the live room is closed to this viewer");
+        assert.equal(r.text.includes("Sign in to watch the chat room live"), !fu, tag + " live teaser only when the live room is closed to this viewer");
         assert.equal(r.text.includes('id="rmFeed"'), fu, tag + " live chat panel");
         assert.equal(r.text.includes("TOPIC-" + lv), fu, tag + " topic");
         if (lv === "approved") assert.equal(r.r.headers.get("x-robots-tag"), "noindex");

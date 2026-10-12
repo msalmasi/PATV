@@ -11,7 +11,7 @@
   <div class="ds-head">
     <a class="ds-back" href="<%= pad.href %>">‹ p/<%= pad.slug %></a>
     <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">💬</span> Quotes from <%= pad.title %></h1>
-    <p class="ds-sub">Moments from the Camfrog room, clipped with ✂️ Clip chat on the pad's Live tab or <code>!quote</code> in the room. Vote for the best.</p>
+    <p class="ds-sub">Moments from the pads' chat rooms, clipped with ✂️ Clip chat on the pad's Live tab or <code>!quote</code> in the room. Vote for the best.</p>
   </div>
   <nav class="ds-tabs qp-tabs" aria-label="Sort quotes">
     <a href="<%= href({ sort: 'top', t: 'day' }) %>" class="ds-tab<%= sort === 'top' && top === 'day' ? ' on' : '' %>"<%- sort === 'top' && top === 'day' ? ' aria-current="page"' : '' %>>Top today</a>

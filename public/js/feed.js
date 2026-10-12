@@ -101,7 +101,7 @@
       api(vurl, { dir: dir }).then(function (d) {
         setState(d.vote);
         vs.textContent = fmtNum(d.score);
-        vs.title = _t('js.feed.updown', '{up} up · {down} down', { up: d.ups, down: d.downs }) + (d.counted === false ? ' · ' + _t('js.feed.downvote_later', 'your downvote counts once your account is level 2 or has a linked Camfrog name') : '');
+        vs.title = _t('js.feed.updown', '{up} up · {down} down', { up: d.ups, down: d.downs }) + (d.counted === false ? ' · ' + _t('js.feed.downvote_later', 'your downvote counts once your account is level 2 or has a linked chat account') : '');
       }).catch(function (e) { setState(cur); alert(e.message); }).then(function () { box.classList.remove('busy'); });
       return;
     }

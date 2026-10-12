@@ -152,7 +152,7 @@ test("the website form does it without Pepe: create, deposit, withdraw, grant, r
   assert.equal(await bal("u2"), 500);
   assert.match(await S.fromForm("u2", ["rename", "ann_cf/savings", "x"], "idem00007"), /don't have a stash/, "only the owner renames");
   assert.match(await S.fromForm("u1", ["rename", "savings", "rainy"], "idem00008"), /'savings' is now 'rainy'/);
-  assert.match(await S.fromForm("u4", ["create", "x"], "idem00009"), /Link your Camfrog name/);
+  assert.match(await S.fromForm("u4", ["create", "x"], "idem00009"), /Link a chat account/);
   const before = await bal("u1");
   assert.match(await S.fromForm("u1", ["close", "rainy"], "idem00010"), /closed - 1,000 PAT sent to your wallet/);
   assert.equal(await bal("u1"), before + 1000);

@@ -262,7 +262,7 @@ test("upload: unlinked low-level accounts can't upload media; a linked name or l
   const img = await sharp({ create: { width: 10, height: 10, channels: 3, background: "#468" } }).png().toBuffer();
   const r = await post("/api/feed/uploads", U.newbie, { kind: "image", size: img.length });
   assert.equal(r.status, 403);
-  assert.match(r.d.error, /linked Camfrog name/);
+  assert.match(r.d.error, /linked chat account/);
   assert.equal((await upload(U.lvl, "image", img)).state, "ready");
 });
 

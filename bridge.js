@@ -825,7 +825,7 @@ function register(app, { isBotToken, addUser }) {
     const signed = !!(req.user && req.user.userId);
     if (!R) return signed ? res.status(404).json({ error: "No such room." }) : res.status(401).json({ error: "Sign in to watch the room." });
     if (!require("./padaccess").full(req.user, R.id)) return res.status(signed ? 403 : 401).json({ error: signed ? "This pad is for approved members." : "Sign in to watch the room." });
-    if (!bridgeOk(R.id)) return res.status(403).json({ error: "This pad's live Camfrog room comes with 💎 Prime Time Plus.", locked: "bridge" });   // 1.99qp
+    if (!bridgeOk(R.id)) return res.status(403).json({ error: "This pad's live chat room comes with 💎 Prime Time Plus.", locked: "bridge" });   // 1.99qp
     const after = Math.max(0, Number(req.query.after) || 0);
     const pm = require("./padmod");
     const login = signed ? await pm.linkedLogin(req.user.userId) : null;
@@ -875,7 +875,7 @@ function register(app, { isBotToken, addUser }) {
     const signedIn = !!(req.user && req.user.userId);
     const reg = require("./rooms");
     const g = await require("./roomsweb").guideRows(signedIn, req.user);
-    res.locals.og = { title: "Pads — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its Camfrog room live on the web.",
+    res.locals.og = { title: "Pads — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its chat room live on the web.",
                       image: res.locals.ogBase + "/og/page.png?t=Pad%20Guide", url: res.locals.ogBase + "/p" };
     let owned = [];
     if (signedIn) { try { owned = await reg.ownedBy(req.user.userId); } catch (e) { owned = []; } }

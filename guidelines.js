@@ -38,7 +38,7 @@ const GOOD = Object.freeze([
 const LATITUDE = Object.freeze([
   { title: "Swearing and unfiltered language", text: "Curse all you like. Nobody's washing your mouth out with soap." },
   { title: "Dark and crude humour", text: "Edgy jokes, gallows humour and bad taste are part of the culture here." },
-  { title: "Roasting and trash talk", text: "Roasts, insults and banter between people who are in on it are fine - that's half of Camfrog." },
+  { title: "Roasting and trash talk", text: "Roasts, insults and banter between people who are in on it are fine - that's half of chat." },
   { title: "Hot takes and strong opinions", text: "Politics, religion, sports, music, that one movie: argue it out. Disagreeing loudly is not harassment." },
   { title: "Adult topics", text: "Sex, drugs, relationships, nightlife, frank talk - fine, as long as it's legal and anything explicit is tagged NSFW." },
 ]);

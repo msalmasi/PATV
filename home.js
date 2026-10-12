@@ -260,7 +260,7 @@ function register(app, { addUser, xpForNextLevel }) {
       const hot = await require("./feedweb").hotMini(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] hot:", e.message); return null; });
       // 1.99kk: the banner slot (banner.js) - a paid booking for today, else a house promo (Pepeball with its live jackpot, ...)
       const banner = await require("./banner").pick({ lotto: S.lotto, lang: res.locals.lang || "en" }).catch((e) => { console.error("[home] banner:", e.message); return null; });
-      res.locals.og = { title: "Public Access TV", description: "Live streams, Pepe the frog, Camfrog rooms live on the web, PAT games, markets and more.",
+      res.locals.og = { title: "Public Access TV", description: "Pads with live stages, feeds and chat rooms, Pepe the frog, PAT games, markets and more.",
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top, tops, boostMark: require("./boostmark").boostMark,
@@ -303,7 +303,7 @@ function register(app, { addUser, xpForNextLevel }) {
     const PA = require("./padaccess");
     await PA.init();
     const rooms = PA.visibleRows(req.user && req.user.userId ? req.user : null, await bridge.summary(false));    // 1.99fu
-    res.locals.og = { title: "About Public Access TV", description: "A community TV station, Camfrog rooms with Pepe the frog, live events, PAT games and more.",
+    res.locals.og = { title: "About Public Access TV", description: "A community TV station: pads with their own stages and chat rooms, Pepe the frog, live events, PAT games and more.",
                       image: res.locals.ogBase + "/og/page.png?t=About%20PATV", url: res.locals.ogBase + "/about" };
     res.render("about", { user: req.user ? req.user.username : null, S, room: rooms.find((r) => r.live) || rooms[0] || null });
   });

@@ -331,7 +331,7 @@ function register(app, { isBotToken, addUser }) {
     if (!u) return res.status(401).json({ ok: false, error: "Sign in to play." });
     const isAdmin = u.class === "Admin";
     const adminAct = String((req.body || {}).game) === "admin";
-    if (!adminAct && !u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first (type !verify in a Camfrog room) — you play as that name." });
+    if (!adminAct && !u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) — you play as that name." });
     if (!adminAct && u.casino_banned) return res.status(403).json({ ok: false, error: "You're banned from the casino." });
     const built = buildArgs(req.body || {}, isAdmin);
     if (built.error) return res.status(400).json({ ok: false, error: built.error });

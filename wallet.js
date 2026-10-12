@@ -151,7 +151,7 @@ function register(app, { isBotToken, addUser }) {
     if (!/^[A-Za-z0-9_.\-]{1,60}$/.test(name)) return res.status(400).json({ error: "who?" });
     try {
       const me = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (!me || !me.camfrogUsername) return res.status(403).json({ error: "link your Camfrog name first" });
+      if (!me || !me.camfrogUsername) return res.status(403).json({ error: "link a chat account first (Edit profile → Connections)" });
       const row = (await getQuery("SELECT camfrogUsername, level, created_at FROM users WHERE LOWER(camfrogUsername) = LOWER(?) LIMIT 1", [name]))[0];
       if (!row) return res.status(404).json({ error: `${name} has no PATV account yet` });
       const ln = (await load("loans")) || { reserve: null };

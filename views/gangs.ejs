@@ -11,7 +11,7 @@
     <div class="eyebrow">GRAND THEFT FROGGER · GANGS</div>
     <h1 id="ggH"><span class="ds-ic" aria-hidden="true">🎩</span>The gangs</h1>
     <p class="lead">Every crew in the city, ranked by rep. Rep comes from your members' wins - heists, raids, the casino, the lotto - and every
-      <%= fmt(view.cfg.rep_per_level) %> rep is a level: more members, better upgrades. Start one in a Camfrog room with <code>!gang create &lt;name&gt;</code>.</p>
+      <%= fmt(view.cfg.rep_per_level) %> rep is a level: more members, better upgrades. Start one in chat with <code>!gang create &lt;name&gt;</code>.</p>
     <% if (view.gangs.length) { %>
     <dl class="stats">
       <div class="stat"><dt>Gangs</dt><dd><%= fmt(view.gangs.length) %></dd></div>
@@ -24,7 +24,7 @@
   <% if (!view.mode) { %>
     <div class="banner">The gang board fills in as soon as Pepe reports in - every gang command works in chat (<code>!gang help</code>).</div>
   <% } else if (!view.gangs.length) { %>
-    <div class="card"><p class="note">No gangs yet - <code>!gang create &lt;name&gt;</code> in a Camfrog room to found the first one.</p></div>
+    <div class="card"><p class="note">No gangs yet - <code>!gang create &lt;name&gt;</code> in chat to found the first one.</p></div>
   <% } else { %>
   <div class="board" role="list">
     <% view.gangs.forEach((g, i) => { %>

@@ -178,7 +178,7 @@ test("the views: the pad page card and the connect panel name the spots; /premiu
   assert.match(prem, /t\('premium\.pp\.spots', \{ used: SPOTS\.used, max: SPOTS\.max \}\)/);
   assert.match(prem, /data-plus-wait=/);
   const EN = require(path.join(repo, "locales", "en.json"));
-  assert.equal(EN["pad.plusroom.h"], "Connect your Camfrog room with Prime Time Plus ({left} of {max} spots left)");
+  assert.equal(EN["pad.plusroom.h"], "Connect your chat room with Prime Time Plus ({left} of {max} spots left)");
   for (const k of ["premium.pp.spots", "premium.pp.sold_out", "premium.pp.waitlist_on", "premium.pp.notice.leave_body", "pad.conn.plus_in", "pad.conn.plus_out"]) assert.ok(EN[k], k);
 });
 

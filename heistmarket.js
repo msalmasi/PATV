@@ -459,7 +459,7 @@ function cleanPrice(v, cfg) {
 async function needLinked(userId) {
   const u = await userRow(userId);
   if (!u) throw new Refuse(401, "Sign in first.", "E_AUTH");
-  if (!u.camfrogUsername) throw new Refuse(409, "Link your Camfrog name first (type !verify in a Camfrog room) - heist items live on its sheet.", "E_NOT_LINKED");
+  if (!u.camfrogUsername) throw new Refuse(409, "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) - heist items live on its sheet.", "E_NOT_LINKED");
   return u;
 }
 

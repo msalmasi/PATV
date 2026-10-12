@@ -244,7 +244,7 @@ test("room page renders the panel; read-only without a linked name; escaped", as
   const ro = await render(false);
   assert.match(ro, /id="rdj"/);
   assert.doesNotMatch(ro, /id="rdjFind"/, "no request form when read-only");
-  assert.match(ro, /link your Camfrog name/);
+  assert.match(ro, /link your chat account/);
   const evil = await render(true, "a\"><script>x</script>");
   assert.doesNotMatch(evil, /data-slug="a"><script>/);
   const out = await ejs.renderFile(path.join(repo, "views", "room.ejs"), {

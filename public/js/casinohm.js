@@ -171,7 +171,7 @@
     $("cz-msg").innerHTML = esc(msg) + (sub ? `<small>${esc(sub)}</small>` : "");
     CZ.armClock($("cz-fclock"), dl, nom);
     const rs = t.rooms && t.rooms.length ? t.rooms.map((r) => r.name) : t.room ? [t.room_name || t.room] : [];       // 1.99ox: every room it plays in
-    const where = rs.length ? `🐸 ${esc(rs.length > 1 ? T("in_rooms", "Camfrog rooms {rooms}", { rooms: rs.join(", ") }) : T("in_room", "Camfrog room {room}", { room: rs[0] }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
+    const where = rs.length ? `🐸 ${esc(rs.length > 1 ? T("in_rooms", "Chat rooms {rooms}", { rooms: rs.join(", ") }) : T("in_room", "Chat room {room}", { room: rs[0] }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
     const meta = [t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "", `👑 ${esc(t.host)}`, esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) })), where,
                   t.hand_no ? esc(T("hand_n", "Hand #{n}", { n: t.hand_no })) : "",
                   esc(T("rake_pct", "{n}% rake at showdown", { n: t.rake_pct })),

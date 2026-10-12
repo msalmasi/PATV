@@ -297,7 +297,7 @@ async function reroll(userId, { what, idem }) {
   if (!IDEM_RE.test(String(idem || ""))) throw new Refuse(400, "Bad request (key).");
   const u = (await getQuery("SELECT userId, username, camfrogUsername FROM users WHERE userId = ?", [userId]))[0];
   if (!u) throw new Refuse(401, "Sign in first.");
-  if (!u.camfrogUsername) throw new Refuse(409, "Link your Camfrog name first (type !verify in a Camfrog room) - the sheet belongs to it.", "E_NOT_LINKED");
+  if (!u.camfrogUsername) throw new Refuse(409, "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) - the sheet belongs to it.", "E_NOT_LINKED");
   const login = low(u.camfrogUsername);
   const cat = await catalog();
   const flow = what === "sheet" ? "sheetregen" : "avatarregen";

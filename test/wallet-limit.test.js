@@ -128,9 +128,9 @@ test("lending paused shows the reason", async () => {
   await sync({ ...TERMS, limits: LIMITS });
 });
 
-test("unlinked: link your Camfrog name to borrow", async () => {
+test("unlinked: link a chat account to borrow", async () => {
   const h = await page("u3");
-  assert.match(h, /Link your Camfrog name<\/a> \(<code>!verify<\/code>\) to borrow/);
+  assert.match(h, /Link a chat account<\/a> \(for Camfrog, <code>!verify<\/code>\) to borrow/);
   assert.equal(borrowMax(h), null);
   assert.doesNotMatch(h, /instantly/);
 });

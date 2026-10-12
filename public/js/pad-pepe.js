@@ -60,7 +60,7 @@
     cost.appendChild(document.createTextNode(_t('js.pad.pepe.costs', 'Costs') + ' '));
     var pat = el('span', 'ds-pat'); pat.appendChild(el('b', null, fmt(m.price))); pat.appendChild(el('small', null, 'PAT'));
     cost.appendChild(m.price > 0 ? pat : el('b', null, _t('js.pad.pepe.free', 'free')));
-    cost.appendChild(document.createTextNode(' ' + _t('js.pad.pepe.costs_tail', 'from your balance, charged by Pepe as your Camfrog name (Pepe admins are free).')));
+    cost.appendChild(document.createTextNode(' ' + _t('js.pad.pepe.costs_tail', 'from your balance, charged by Pepe as your linked chat name (Pepe admins are free).')));
     box.appendChild(cost);
     var row = el('div', 'pp-row');
     var no = el('button', 'ds-btn sm ghost', _t('js.pad.pepe.cancel', 'Cancel')); no.type = 'button';

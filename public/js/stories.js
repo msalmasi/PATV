@@ -106,7 +106,7 @@
     var box = document.createElement('div');
     box.className = 'sv-ask'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', _t('js.feed.sv.ask_aria', 'Sign in to see stories'));
     box.innerHTML = '<div class="sv-ask-card"><div class="sv-ask-ic" aria-hidden="true">📸</div><h2>' + escH(_t('js.feed.sv.ask_h', 'Stories are for PATV members')) + '</h2>' +
-      '<p>' + escH(_t('js.feed.sv.ask_p', 'These are snaps and clips from the pads\' Camfrog rooms and stages, so you need to be signed in to watch them.')) + '</p>' +
+      '<p>' + escH(_t('js.feed.sv.ask_p', 'These are snaps and clips from the pads\' chat rooms and stages, so you need to be signed in to watch them.')) + '</p>' +
       '<div class="sv-ask-btns"><a class="sv-btn primary" href="#">' + escH(_t('js.feed.sv.sign_in', 'Sign in')) + '</a><a class="sv-btn" href="/register">' + escH(_t('js.feed.sv.join', 'Join PATV')) + '</a><button type="button" class="sv-btn ghost">' + escH(_t('js.feed.sv.not_now', 'Not now')) + '</button></div></div>';
     box.querySelector('a.primary').setAttribute('href', '/login?next=' + encodeURIComponent(next || (location.pathname + location.search)));
     var close = function () { box.remove(); document.removeEventListener('keydown', onKey); };
@@ -280,7 +280,7 @@
       if (it.kind === 'audio') {
         var card = el('div', 'sv-audio-card');
         card.appendChild(el('div', 'sv-audio-ic', '🔊'));
-        card.appendChild(el('div', 'sv-audio-t', _t('js.feed.sv.audio_from', 'Camfrog room audio from {pad}', { pad: R.title })));
+        card.appendChild(el('div', 'sv-audio-t', _t('js.feed.sv.audio_from', 'Chat room audio from {pad}', { pad: R.title })));
         var wave = el('div', 'sv-wave'); for (var w = 0; w < 24; w++) { var s = el('i'); s.style.animationDelay = (w * 53 % 700) + 'ms'; wave.appendChild(s); } card.appendChild(wave);
         V.stage.appendChild(card);
       }

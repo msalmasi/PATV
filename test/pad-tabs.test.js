@@ -232,7 +232,7 @@ test("people list: the name stays the profile link; ⋯ for mods and (1.99fu) ev
   // a signed-out visitor on a Public pad watches the room (liveOpen) without a ⋯
   const out = await renderRoom({ signedIn: false, user: null, linked: false, liveOpen: true, access: { level: "public" } });
   assert.match(out, /collapsible: true, signed: false/);
-  assert.match(out, /Sign in<\/a> and link your Camfrog name to join in\./, "the compose box asks a visitor to sign in");
+  assert.match(out, /Sign in<\/a> and link your chat account to join in\./, "the compose box asks a visitor to sign in");
   assert.match(out, /🌐 Public/);
   assert.doesNotMatch(await renderRoom({ signedIn: false, user: null, linked: false }), /id="rmFeed"/, "Members pad, signed out: still the sign-in teaser");
   assert.doesNotMatch(js, /roomMod\.open\(who\)/, "a click on the row no longer opens the dialog");

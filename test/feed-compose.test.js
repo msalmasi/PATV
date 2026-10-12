@@ -286,7 +286,7 @@ test("Live side cards: one-line titles; Manage card header is title · chip · t
   const page = await ejs.renderFile(path.join(repo, "views", "room.ejs"), {
     user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "", platform: "camfrog" },
     initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: {}, latest: [] });
-  assert.match(page, /<h2 id="pplH"><span class="ht">In the Camfrog room<\/span>/);
+  assert.match(page, /<h2 id="pplH"><span class="ht">In the chat room<\/span>/);
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
   assert.match(room, /\.rm \.side \.card > h2 > \.ht \{ white-space: nowrap;/);
   assert.match(room, /\.rm \.people \.ic > \* \{ display: inline-grid; place-items: center; width: 26px; height: 26px;/);

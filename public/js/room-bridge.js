@@ -412,7 +412,7 @@
         painted = true; available = on; offWhy = why;
         box.classList.toggle('hide', !on && !showOff);
         enable(on);
-        play.title = on ? '' : (d && d.room && d.room.live === false ? _t('js.pad.audio.title_offline', 'The Camfrog room isn\'t live right now') : _t('js.pad.audio.title_relay_off', 'The room\'s audio relay is off (an admin turns it on with !bridge audio on)'));
+        play.title = on ? '' : (d && d.room && d.room.live === false ? _t('js.pad.audio.title_offline', 'The pad\'s chat room isn\'t live right now') : _t('js.pad.audio.title_relay_off', 'The room\'s audio relay is off (an admin turns it on with !bridge audio on)'));
         if (!on) { if (was) stop(); setState('🔇 ' + why, ''); }
         else if (store('patvRoomAudio') === '1') setState(_t('js.pad.audio.resume_listening', '▶ to resume listening'), '');
         else setState(_t('js.pad.audio.room_audio', 'Room audio'), '');
@@ -427,7 +427,7 @@
   // here, for you only; public answers land in the room feed.
   function relay(host, slug) {
     var form = el('form', 'rb-say hide'); form.setAttribute('autocomplete', 'off');
-    var lab = el('label', 'rb-sr', _t('js.pad.relay.label', 'Message or !command to the Camfrog room')); lab.htmlFor = 'rbSay' + slug;
+    var lab = el('label', 'rb-sr', _t('js.pad.relay.label', 'Message or !command to the chat room')); lab.htmlFor = 'rbSay' + slug;
     var wrap = el('div', 'rb-say-in');
     var inp = el('input'); inp.id = 'rbSay' + slug; inp.type = 'text'; inp.maxLength = 300; inp.required = true;
     inp.placeholder = _t('js.pad.relay.placeholder', 'Say something — Pepe relays it as “🌐 you (web)”');
@@ -436,7 +436,7 @@
     inp.setAttribute('aria-controls', list.id);
     wrap.appendChild(inp); wrap.appendChild(list);
     var btn = el('button', 'rb-btn rb-send', _t('js.pad.relay.send', 'Send')); btn.type = 'submit';
-    var hint = el('div', 'rb-hint hide', _t('js.pad.relay.hint', 'Type !commands to see what you can run here as your Camfrog name.'));
+    var hint = el('div', 'rb-hint hide', _t('js.pad.relay.hint', 'Type !commands to see what you can run here as your linked chat name.'));
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
     var feed = el('ul', 'rb-cmdfeed'); feed.setAttribute('aria-live', 'polite'); feed.setAttribute('aria-label', _t('js.pad.relay.your_commands', 'Your commands'));
     form.appendChild(lab); form.appendChild(wrap); form.appendChild(btn);

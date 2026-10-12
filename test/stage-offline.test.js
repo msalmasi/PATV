@@ -152,7 +152,7 @@ test("labels: the pad page header pill and the /p guide use the same room wordin
     user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "", platform: "camfrog",
       description: "Plants and chat", owner: "pb", ownerUser: "pb", camfrogName: "Plant Based Chatting" },
     initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: {}, latest: [] });
-  assert.match(html, /id="rmLive" title="Is the Camfrog room active\? \(ON AIR on the stage = a video stream\)"/);
+  assert.match(html, /id="rmLive" title="Is the pad's chat room active\? \(ON AIR on the stage = a video stream\)"/);
   assert.match(html, /rmLiveTxt'\)\.textContent = r\.live \? _t\('js\.pad\.room_active', '💬 ROOM ACTIVE'\) : _t\('js\.pad\.room_offline', 'ROOM OFFLINE'\)/);
   assert.match(html, /live\.classList\.toggle\('chat', !!r\.live\)/);
   assert.match(html, /<span id="rmStPillTxt">OFF AIR<\/span>/, "the pad's stage pill is unchanged");

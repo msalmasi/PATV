@@ -132,7 +132,7 @@
     </div>
     <div class="tools" id="rdjTools">
       <% if (!linked) { %>
-        <p class="ro">🔗 You're watching read-only. To request songs and talk to the DJ, <b>link your Camfrog name</b>: type <code>!verify</code> in a Camfrog room with Pepe. Requests cost the same PAT as in the Camfrog room.</p>
+        <p class="ro">🔗 You're watching read-only. To request songs and talk to the DJ, <b>link your chat account</b> (Edit profile → Connections; for Camfrog, type <code>!verify</code> in a room with Pepe). Requests cost the same PAT as in the chat room.</p>
       <% } else { %>
         <div class="tool" id="rdjReqBox">
           <h3>Request a song</h3>
@@ -157,8 +157,8 @@
         <div class="tool hide" id="rdjSoBox">
           <h3>Shout-out from the DJ</h3>
           <form id="rdjSo" class="so" autocomplete="off">
-            <label class="sr" for="rdjSoTo">Who it's for (Camfrog name)</label>
-            <input type="text" id="rdjSoTo" maxlength="41" placeholder="Camfrog name">
+            <label class="sr" for="rdjSoTo">Who it's for (chat name)</label>
+            <input type="text" id="rdjSoTo" maxlength="41" placeholder="Chat name">
             <label class="sr" for="rdjSoMsg">Message (optional)</label>
             <input type="text" id="rdjSoMsg" maxlength="120" placeholder="Message (optional)">
             <label class="ded"><input type="checkbox" id="rdjSoDed"> dedicate the next song</label>

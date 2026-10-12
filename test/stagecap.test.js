@@ -128,7 +128,7 @@ test("permissions: signed out 401, unlinked level-1 403, a linked name or level 
   assert.equal((await snap(null, "pepe")).status, 401);
   const n = await snap(U.newbie, "pepe");
   assert.equal(n.status, 403);
-  assert.match(n.d.error, /linked Camfrog name/);
+  assert.match(n.d.error, /linked chat account/);
   assert.equal((await post("/api/stage/capture", { room: ROOM.slug, stream: "pepe", kind: "snap" }, U.linked, { "content-type": "application/json", "x-test-user": "u1" })).status, 403, "no X-Requested-With");
   assert.equal((await post("/api/stage/capture", { room: ROOM.slug, stream: "pepe", kind: "snap" }, U.linked, H(U.linked, { origin: "https://evil.example" }))).status, 403, "cross-site");
   const a = await snap(U.linked, "pepe");

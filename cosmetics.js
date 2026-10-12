@@ -1071,7 +1071,7 @@ function register(app, { isBotToken, addUser }) {
     try {
       const me = await resolveUser({ userId: req.user.userId });
       if (!me) return back("Couldn't find your account.");
-      if (!me.camfrogUsername) return back("Link your Camfrog name first — Pepe runs this as you.");
+      if (!me.camfrogUsername) return back("Link a chat account first (Edit profile → Connections) — Pepe runs this as you.");
       const op = String(b.op || "");
       let args;
       if (op === "buy" || op === "gift") {

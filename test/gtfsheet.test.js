@@ -135,7 +135,7 @@ test("re-roll with GTF data in Pepe: a website action for him (the same chat com
   assert.deepEqual([a.kind, JSON.parse(a.args), a.tag], ["cmd", ["sheet", "regen"], "gtf"]);
   assert.equal(await bal("u1"), 100000, "Pepe charges it, as in chat");
   await assert.rejects(S.reroll("u2x", { what: "sheet", idem: "web-click-0002" }), /Sign in/);
-  await assert.rejects(S.reroll("u9", { what: "sheet", idem: "web-click-0003" }), /Link your Camfrog/);
+  await assert.rejects(S.reroll("u9", { what: "sheet", idem: "web-click-0003" }), /Link a chat account/);
 });
 
 test("re-roll with GTF data on the site: one keyed transaction - debit + route intent + new sheet + op; never twice", async () => {

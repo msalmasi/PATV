@@ -148,7 +148,7 @@
 <main class="ds-page flow cz" id="cz" data-focus="<%= focus %>" data-signed="<%= user ? 1 : 0 %>" data-table="<%= tableId || '' %>">
   <div class="cz-head">
     <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true"><%= focus === 'holdem' ? '🃏' : focus === 'bj' ? '🂡' : '🎰' %></span><%= focus === 'holdem' ? "Texas Hold'em" : focus === 'bj' ? 'Blackjack' : 'Casino tables' %></h1>
-    <p class="ds-sub">Pepe deals in Camfrog — play from chat or right here. Same table, same chips: PAT.</p>
+    <p class="ds-sub">Pepe deals — play from a pad's chat room or right here. Same table, same chips: PAT.</p>
   </div>
   <nav class="ds-tabs wrap tabs" aria-label="Casino pages">
     <%# 1.99ol: the other tabs go where the casino front-end setting sends that game (casino/routes.js casinoPath) %>
@@ -159,9 +159,9 @@
   </nav>
 
   <% if (!user) { %>
-    <p class="hint">You're watching. <a href="/login">Sign in</a> and link your Camfrog name to take a seat.</p>
+    <p class="hint">You're watching. <a href="/login">Sign in</a> and link a chat account to take a seat.</p>
   <% } else if (!me || !me.camfrogUsername) { %>
-    <p class="hint">To play from here, link your Camfrog name: type <code>!verify</code> in a Camfrog room with Pepe. You play as that name — the same seat, balance and rules as in chat. Until then you can watch.</p>
+    <p class="hint">To play from here, link a chat account (Edit profile → Connections; for Camfrog, type <code>!verify</code> in a room with Pepe). You play as that name — the same seat, balance and rules as in chat. Until then you can watch.</p>
   <% } else if (me.casino_banned) { %>
     <p class="warn">You're banned from the casino, so you can watch but not play.</p>
   <% } else { %>
@@ -192,7 +192,7 @@
       const holdemCard = () => { %>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🃏</span>Texas Hold'em (No-Limit)</h3>
-        <p>In a Camfrog room with Pepe:</p>
+        <p>In a pad's chat room with Pepe:</p>
         <ul>
           <li><code>!holdem start 25/50</code> opens a table (small/big blind; up to 5,000/10,000). 💎 High Rollers open High Roller tables: <code>!holdem start 100k/200k</code>, then 250K/500K, 500K/1M, 1M/2M, 2.5M/5M or 5M/10M (High Rollers only; anyone can watch).</li>
           <li><code>!sit 2000</code> buys in: 20–200 big blinds. Chips are PAT, 1:1, held by Pepe while you're seated. <code>!sit</code> again tops you up.</li>
@@ -206,7 +206,7 @@
     <% }; const bjCard = () => { %>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🂡</span>Blackjack (Pepe is the dealer)</h3>
-        <p>In a Camfrog room with Pepe:</p>
+        <p>In a pad's chat room with Pepe:</p>
         <ul>
           <li><code>!blackjack start</code> (or <code>!bj start</code>) opens a table.</li>
           <li><code>!bet 500</code> each round: 100–100,000 PAT. 💎 <code>!bj start hr</code> opens a High Roller table: 100,000–1,000,000 a hand, High Rollers only. The first betting window is 30 s, then 10 s between rounds; <code>!bj deal</code> deals straight away. A bet placed mid-round is held for the next one.</li>
@@ -220,11 +220,11 @@
     <div class="card">
       <h3><span class="ds-ic" aria-hidden="true">🌐</span>Playing from this page</h3>
       <ul>
-        <li>Sign in and link your Camfrog name (<code>!verify</code> in a room). You play <i>as</i> that name: same seat, same PAT balance, same limits, fees and timers as typing the commands in chat.</li>
-        <li>Your moves go to Pepe and land in a second or two; the room sees them like any chat move, and Camfrog players' moves show up here.</li>
+        <li>Sign in and link a chat account (Edit profile → Connections; for Camfrog, <code>!verify</code> in a room). You play <i>as</i> that name: same seat, same PAT balance, same limits, fees and timers as typing the commands in chat.</li>
+        <li>Your moves go to Pepe and land in a second or two; the room sees them like any chat move, and chat players' moves show up here.</li>
         <li>Your hole cards are shown only to you, once you're signed in. Nobody else can fetch them — not other players, not spectators.</li>
         <li>Closing the tab doesn't stop the clock: the turn timer treats you exactly like an idle chat player.</li>
-        <li>Tables run in one Camfrog room at a time, and one at a time overall: Hold'em and Blackjack can't both be open, and neither can start while another Pepe game (a heist, trivia…) is running.</li>
+        <li>Tables run in one chat room at a time, and one at a time overall: Hold'em and Blackjack can't both be open, and neither can start while another Pepe game (a heist, trivia…) is running.</li>
       </ul>
     </div>
     <div class="card">

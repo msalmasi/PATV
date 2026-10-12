@@ -516,7 +516,7 @@
     <div class="ds-eyebrow ac"><%- t('economy.guide.k') %></div>
     <h2 class="ds-h2"><%- t('economy.guide.h') %></h2>
     <p class="ds-lead">Everything you can do with PAT: earn it, gamble it, bet it, lend it, stake it, or steal it.
-      Most of it runs through Pepe in the Camfrog rooms, and a lot of it works right here on the site too.</p>
+      Most of it runs through Pepe in the pads' chat rooms, and a lot of it works right here on the site too.</p>
   </div>
 
   <nav class="toc" aria-label="Contents">
@@ -550,7 +550,7 @@
     <div class="ds-eyebrow ac">THE BASICS</div>
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🪙</span> What PAT is</h2>
     <p class="lead">PAT (Public Access Token) is the points currency of PATV. It's one balance shared by the website, the
-      Camfrog rooms and Discord, so PAT you win from Pepe in a room is the same PAT you spend on the site.
+      pads' chat rooms and Discord, so PAT you win from Pepe in a room is the same PAT you spend on the site.
       It isn't crypto and it isn't real money, but you can spend it on real prizes in the <a href="/shop">shop</a>.</p>
     <div class="grid">
       <div class="card">
@@ -585,8 +585,8 @@
         <p>Your balance shows on your profile. <a href="/history">/history</a> lists every PAT transaction on your account
           (tips, wins, bets, bonuses), and <code>!history</code> shows your last five in chat.
           The <a href="/rankings">leaderboard</a> shows the top balances and the <b>total PAT supply</b>: every PAT that
-          exists, in wallets, vaults, escrow and stashes. Link your Camfrog name on your profile (then type
-          <code>!verify</code> with the code) so your room PAT and site PAT are one balance.</p>
+          exists, in wallets, vaults, escrow and stashes. Link your chat account in Edit profile → Connections (for Camfrog, type
+          <code>!verify</code> with the code) so your chat PAT and site PAT are one balance.</p>
       </div>
     </div>
     <div class="top"><a href="#top">↑ top</a></div>
@@ -756,7 +756,7 @@
           Knox</b>; each pad vault pays the pad's owner, its streamers and its regulars a little every day through the
           <a href="#recipe">payout recipe</a>. An owner paying in their
           own pad sends it all to Fort Knox. Boost from the 🚀 button on a pad's page, or type <code>!boost 5000</code> in its
-          Camfrog room.</p>
+          chat room.</p>
         <p><b>✨ Pad cosmetics</b> (frames, name glows, badges, an animated avatar) take the same route: a pad's owner buying for
           their own pad sends 100% to Fort Knox; a gift from anyone else goes half to Fort Knox, half to that pad's vault.</p>
       </div>
@@ -778,7 +778,7 @@
     <div class="ds-eyebrow ac">REVENUE FOLLOWS THE ROOM</div>
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">💰</span> Pad vaults</h2>
     <% const _rc = _rv.recipe || {}; const _rcc = _rc.cfg || {}; const _p = (k, d) => Math.round(100 * (_rcc[k] != null ? Number(_rcc[k]) : d)); %>
-    <p class="lead">Every pad with a Camfrog room has its own <b>pad vault</b>: a pool of PAT (points, not money) that belongs to the
+    <p class="lead">Every pad with a connected chat room has its own <b>pad vault</b>: a pool of PAT (points, not money) that belongs to the
       pad. Half of what's spent in a pad (paid commands, songs, voices, heist gear, boosts, stage slots, pad cosmetic gifts)
       goes to that pad's vault and half to Fort Knox<% if (!_rc.frozen) { %>; on commands in a pad with an owner, the
       owner's 10% royalty comes first until room payouts replace it<% } %>. Spending with no room goes all to Fort Knox, and
@@ -1357,7 +1357,7 @@
   <section id="casino">
     <div class="ds-eyebrow ac">GAMES OF CHANCE</div>
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🎰</span> The casino</h2>
-    <p class="lead">Pepe runs the tables in the Camfrog rooms and shows the action on stream. Each game runs in one room;
+    <p class="lead">Pepe runs the tables in the pads' chat rooms and shows the action on stream. Each game runs in one room;
       Pepe tells you where to head if you type a command somewhere else.</p>
     <div class="grid">
       <div class="card">
@@ -1647,11 +1647,11 @@
 
   <!-- 12. Website -->
   <section id="web">
-    <div class="ds-eyebrow ac">NO CAMFROG NEEDED</div>
+    <div class="ds-eyebrow ac">FROM ANY BROWSER</div>
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🌐</span> Doing it all from the website</h2>
     <div class="grid">
       <div class="card">
-        <p>Once your Camfrog name is linked to your PATV account (start the link on your profile, then type
+        <p>Once a chat account is linked to your PATV account (Edit profile → Connections; for Camfrog, type
           <code>!verify</code> with the code in a room), you can do most of this right here:</p>
         <ul>
           <li>create and trade <a href="/markets">markets</a>, join <a href="/wagers">pools and wagers</a></li>
