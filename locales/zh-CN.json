@@ -7718,5 +7718,10 @@
   "hm.hint_pawn": "典当行出价 {price}",
   "ach.n.cf_hm_sale_1": "生意开张",
   "ach.d.cf_hm_sale_1": "在抢劫市场上把一件抢劫物品卖给了其他玩家。",
-  "gtf.sheet.sell_link": "在抢劫市场上出售物品"
+  "ach.n.cf_hm_relic": "销赃人",
+  "ach.d.cf_hm_relic": "在劫案市场上卖出一件稀有遗物（灌铅骰子或金库图纸）。",
+  "gtf.sheet.sell_link": "在抢劫市场上出售物品",
+  "hm.soulbound": "灵魂绑定",
+  "hm.soulbound_t": "灵魂绑定：遗物留在发现它的玩家身上。无法出售、交易或典当。",
+  "hm.soulbound_note": "灵魂绑定遗物（教父之戒、幕后主谋、销赃人）留在发现它们的玩家身上：无法出售、交易或典当。"
 }

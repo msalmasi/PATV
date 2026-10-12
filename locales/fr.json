@@ -7875,5 +7875,10 @@
   "hm.hint_pawn": "le prêteur sur gages paie {price}",
   "ach.n.cf_hm_sale_1": "Ouvert pour affaires",
   "ach.d.cf_hm_sale_1": "A vendu un objet de braquage à un autre joueur sur le marché des braquages.",
-  "gtf.sheet.sell_link": "Vendre des objets sur le marché des braquages"
+  "ach.n.cf_hm_relic": "Receleur",
+  "ach.d.cf_hm_relic": "Tu as vendu une relique rare (Dés pipés ou Plans du coffre) sur le marché des braquages.",
+  "gtf.sheet.sell_link": "Vendre des objets sur le marché des braquages",
+  "hm.soulbound": "lié au joueur",
+  "hm.soulbound_t": "Lié au joueur : la relique reste avec le joueur qui l&#39;a trouvée. Elle ne peut pas être vendue, échangée ni mise en gage.",
+  "hm.soulbound_note": "Les reliques liées au joueur (Anneau du Parrain, Cerveau, Le Receleur) restent avec le joueur qui les a trouvées : elles ne peuvent pas être vendues, échangées ni mises en gage."
 }

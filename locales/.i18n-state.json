@@ -7513,9 +7513,12 @@
     "hm.hint_pawn": "a57f592dd21a",
     "ach.n.cf_hm_sale_1": "dd19bd4e7938",
     "ach.d.cf_hm_sale_1": "8dfbbb9da2d7",
-    "ach.n.cf_hm_ring": "4efd2e42fcbc",
-    "ach.d.cf_hm_ring": "0e5e285a4018",
-    "gtf.sheet.sell_link": "50104779e87d"
+    "ach.n.cf_hm_relic": "4efd2e42fcbc",
+    "ach.d.cf_hm_relic": "43484a07cf9a",
+    "gtf.sheet.sell_link": "50104779e87d",
+    "hm.soulbound": "f080cc32c636",
+    "hm.soulbound_t": "14a2addac067",
+    "hm.soulbound_note": "a8b4d071fca2"
   },
   "lag": {},
   "reviewed": {}

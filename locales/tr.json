@@ -7819,5 +7819,10 @@
   "hm.hint_pawn": "rehinci {price} öder",
   "ach.n.cf_hm_sale_1": "Ticarete Açık",
   "ach.d.cf_hm_sale_1": "Soygun pazarında başka bir oyuncuya soygun eşyası sattın.",
-  "gtf.sheet.sell_link": "Soygun pazarında eşya sat"
+  "ach.n.cf_hm_relic": "Paçavracı",
+  "ach.d.cf_hm_relic": "Soygun pazarında nadir bir eser (Hileli Zar veya Kasa Planları) sattın.",
+  "gtf.sheet.sell_link": "Soygun pazarında eşya sat",
+  "hm.soulbound": "ruha bağlı",
+  "hm.soulbound_t": "Ruha bağlı: bulan oyuncuda kalır. Satılamaz, takas edilemez veya rehine verilemez.",
+  "hm.soulbound_note": "Ruha bağlı eserler (Baron Yüzüğü, Planlayıcı, Paçavracı) bulan oyuncuda kalır: satılamaz, takas edilemez veya rehine verilemez."
 }

@@ -7875,5 +7875,10 @@
   "hm.hint_pawn": "il banco dei pegni paga {price}",
   "ach.n.cf_hm_sale_1": "Affari aperti",
   "ach.d.cf_hm_sale_1": "Hai venduto un oggetto per colpi a un altro giocatore nel mercato dei colpi.",
-  "gtf.sheet.sell_link": "Vendi oggetti nel mercato dei colpi"
+  "ach.n.cf_hm_relic": "Ricettatore",
+  "ach.d.cf_hm_relic": "Hai venduto una reliquia rara (Dadi Truccati o Progetti del Caveau) nel mercato dei colpi.",
+  "gtf.sheet.sell_link": "Vendi oggetti nel mercato dei colpi",
+  "hm.soulbound": "vincolato al giocatore",
+  "hm.soulbound_t": "Vincolato al giocatore: resta con chi l&#39;ha trovato. Non può essere venduto, scambiato o impegnato.",
+  "hm.soulbound_note": "Le reliquie vincolate (Anello del Boss, Mente Criminale, Il Ricettatore) restano con chi le ha trovate: non possono essere vendute, scambiate o impegnate."
 }

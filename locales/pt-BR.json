@@ -7875,5 +7875,10 @@
   "hm.hint_pawn": "a casa de penhores paga {price}",
   "ach.n.cf_hm_sale_1": "Negócio Aberto",
   "ach.d.cf_hm_sale_1": "Vendeu um item de assalto para outro jogador no mercado de assaltos.",
-  "gtf.sheet.sell_link": "Vender itens no mercado de assaltos"
+  "ach.n.cf_hm_relic": "Receptador",
+  "ach.d.cf_hm_relic": "Vendeu uma relíquia rara (Dados Viciados ou Plantas do Cofre) no mercado de assaltos.",
+  "gtf.sheet.sell_link": "Vender itens no mercado de assaltos",
+  "hm.soulbound": "vinculado",
+  "hm.soulbound_t": "Vinculado: fica com o jogador que o encontrou. Não pode ser vendido, trocado nem penhorado.",
+  "hm.soulbound_note": "Relíquias vinculadas (Anel do Chefão, Mente Mestra, O Receptador) ficam com o jogador que as encontrou: não podem ser vendidas, trocadas nem penhoradas."
 }

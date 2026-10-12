@@ -8021,5 +8021,10 @@
   "hm.hint_pawn": "lombard płaci {price}",
   "ach.n.cf_hm_sale_1": "Otwarte na interesy",
   "ach.d.cf_hm_sale_1": "Sprzedano przedmiot napadu innemu graczowi na rynku napadów.",
-  "gtf.sheet.sell_link": "Sprzedaj przedmioty na rynku napadów"
+  "ach.n.cf_hm_relic": "Paser",
+  "ach.d.cf_hm_relic": "Sprzedano rzadki relikt (Obciążone kości lub Plany skarbca) na rynku skoków.",
+  "gtf.sheet.sell_link": "Sprzedaj przedmioty na rynku napadów",
+  "hm.soulbound": "przypisany do gracza",
+  "hm.soulbound_t": "Przypisany do gracza: zostaje u gracza, który go znalazł. Nie można go sprzedać, wymienić ani oddać w zastaw.",
+  "hm.soulbound_note": "Relikty przypisane do gracza (Kingpin&#39;s Ring, Mastermind, Paser) zostają u graczy, którzy je znaleźli: nie można ich sprzedać, wymienić ani oddać w zastaw."
 }

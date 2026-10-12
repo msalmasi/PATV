@@ -7720,5 +7720,10 @@
   "hm.hint_pawn": "toko gadai membayar {price}",
   "ach.n.cf_hm_sale_1": "Buka Usaha",
   "ach.d.cf_hm_sale_1": "Menjual item perampokan ke pemain lain di pasar perampokan.",
-  "gtf.sheet.sell_link": "Jual item di pasar perampokan"
+  "ach.n.cf_hm_relic": "Penadah",
+  "ach.d.cf_hm_relic": "Menjual relik langka (Dadu Palsu atau Cetak Biru Brankas) di pasar perampokan.",
+  "gtf.sheet.sell_link": "Jual item di pasar perampokan",
+  "hm.soulbound": "terikat jiwa",
+  "hm.soulbound_t": "Terikat jiwa: tetap dimiliki pemain yang menemukannya. Tidak bisa dijual, ditukar, atau digadaikan.",
+  "hm.soulbound_note": "Relik terikat jiwa (Cincin Kingpin, Otak Pelaku, Penadah) tetap dimiliki pemain yang menemukannya: tidak bisa dijual, ditukar, atau digadaikan."
 }
