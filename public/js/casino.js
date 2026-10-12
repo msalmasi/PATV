@@ -317,7 +317,7 @@
     const rows = [];
     if (t.phase !== "between") rows.push(`<span class="lbl">${t.turn ? "Waiting for " + esc(t.turn.name) + "…" : "…"}</span>`);
     if (t.phase === "between" && t.can_deal) rows.push(btn("Deal now", { game: "holdem", verb: "deal" }, "go"));
-    rows.push(btn(seat.leaving ? "Leaving after this hand" : "Stand up (cash out)", { game: "holdem", verb: "stand" }, "ghost", seat.leaving ? " disabled" : ""));
+    rows.push(btn(seat.leaving ? "Leaving after this hand" : "Stand up (chips back to PAT)", { game: "holdem", verb: "stand" }, "ghost", seat.leaving ? " disabled" : ""));
     if (isHost && t.phase === "between") rows.push(btn("Close table", { game: "holdem", verb: "end" }, "stop"));
     const top = t.phase === "between" && t.seats[seat.seat].stack < t.max_buy
       ? `<div class="row"><label class="lbl" for="cz-top">Top up</label><input id="cz-top" type="number" inputmode="numeric" min="${t.min_buy}" max="${Math.max(t.min_buy, t.max_buy - t.seats[seat.seat].stack)}" step="${t.bb}" value="${t.min_buy}">` +

@@ -594,7 +594,7 @@
 
   <!-- 2. Flow (Economy v3, 2026-10-11: the PAT map + the pools) -->
   <section id="flow">
-    <div class="ds-eyebrow ac">MONEY FLOW</div>
+    <div class="ds-eyebrow ac">PAT FLOW</div>
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🏛️</span> Where PAT goes</h2>
     <p class="lead">When you pay for something (a spin, a ticket, a fee, a paid command) that PAT doesn't vanish.
       <b>Spending never burns PAT.</b> It moves into one of the pools below, and those pools pay it back out as prizes,
@@ -702,7 +702,7 @@
         <p>The central bank, in charge of monetary policy, and the only place new PAT is made: every mint follows a written
           rule and is on the public record. It keeps itself between a floor and a ceiling (<a href="#fed-band">the Fed
           band</a>): below the floor it mints back up, a little each day; above the ceiling the excess is burned. It never
-          pays a wallet. Its job is to keep the protocol funded: it tops the <a href="#incentives">incentive budget</a> up
+          pays a wallet. Its job is to keep the protocol stocked with PAT: it tops the <a href="#incentives">incentive budget</a> up
           every Monday, lends the House, the Bank and the Market maker the gap the moment one runs short (flash liquidity),
           and can grant PAT to a pool. It collects fines, the bounty fee and the shop fee, plus half of the protocol's weekly
           profit while it's below its ceiling. Nobody robs it: the bank heist cracks Fort Knox. <code>!reserve</code> shows
@@ -729,7 +729,7 @@
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🏦</span> The Bank &amp; 📈 Market maker</h3>
         <p>Two working vaults: the Bank lends PAT to players through Reserve loans and keeps the interest, and the Market
-          maker puts up the starting money for every prediction market and keeps its trading fees. Together with the House
+          maker puts up the starting PAT for every prediction market and keeps its trading fees. Together with the House
           they're the <a href="#protocol">capital vaults</a> you can stake in, and the Fed backs all three with flash
           liquidity.</p>
       </div>
@@ -743,7 +743,7 @@
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🧭</span> The routing table</h3>
-        <p>Every fee in the game has a row in one table that says where it goes. A fee goes to whoever funded the activity:
+        <p>Every fee in the game has a row in one table that says where it goes. A fee goes to whoever put up the PAT for the activity:
           casino play and the wager fee to the House, market and pool fees to the Market maker, loan interest to the Bank.
           Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox
           and that room's vault. The admins tune the splits.</p>
@@ -928,7 +928,7 @@
         <!-- Federal Reserve (y 50) -->
         <rect x="296" y="50" width="174" height="60" rx="10" fill="#0f1a24" stroke="#3a8ad0" stroke-width="2"/>
         <text x="383" y="76" font-size="16" font-weight="bold" fill="#64b5f6" text-anchor="middle">Federal Reserve</text>
-        <text x="383" y="96" font-size="12.5" fill="#ccc" text-anchor="middle">makes PAT, funds pools</text>
+        <text x="383" y="96" font-size="12.5" fill="#ccc" text-anchor="middle">makes PAT, fills pools</text>
         <line x1="102" y1="74" x2="290" y2="74" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
         <text x="196" y="67" font-size="13.5" fill="#ccc" text-anchor="middle">fines, bounty &amp; shop fees</text>
         <text x="196" y="96" font-size="12.5" fill="#999" text-anchor="middle" font-style="italic">never pays a wallet</text>
@@ -1016,7 +1016,7 @@
         </ul>
         <div class="fm-box hl" style="--c: var(--ds-text-2)"><b style="color: var(--ds-text-strong)">Players' wallets</b><span class="s">you and everyone: every flow below starts or ends here</span></div>
         <% [
-          { n: 'Federal Reserve', s: 'makes PAT, funds pools', c: 'var(--ds-info)', i: 'fines, bounty & shop fees', note: 'never pays a wallet', fed: 'weekly guarantee → the Incentive budget' },
+          { n: 'Federal Reserve', s: 'makes PAT, fills pools', c: 'var(--ds-info)', i: 'fines, bounty & shop fees', note: 'never pays a wallet', fed: 'weekly guarantee → the Incentive budget' },
           { n: 'Incentive budget', s: 'pays every reward', c: 'var(--ds-gold)', note: 'filled by profit + the Fed', o: 'rewards, level-ups, raffles' },
           { n: 'Bank', s: 'lends PAT', c: 'var(--ds-info)', i: 'loan interest + penalties', o: 'Reserve loans' },
           { n: 'Market maker', s: 'seeds every market', c: 'var(--ds-ok)', i: 'market & pool fees', o: 'pays winning shares' },
@@ -1035,7 +1035,7 @@
           </div>
         <% }) %>
       </div>
-      <figcaption>Where PAT flows: it moves between wallets and pools. The Fed makes new PAT and funds the pools but never pays a wallet; only its excess above the ceiling is burned.</figcaption>
+      <figcaption>Where PAT flows: it moves between wallets and pools. The Fed makes new PAT and fills the pools but never pays a wallet; only its excess above the ceiling is burned.</figcaption>
     </figure>
 
     <h3 class="h3s"><span class="ds-ic" aria-hidden="true">🏗️</span> Capital vaults: PAT that does a job</h3>
@@ -1044,7 +1044,7 @@
     <div class="grid">
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🏦</span> Bank</h3>
-        <p>Funds Reserve loans to players (<code>!loan reserve</code>). Earns their interest and late penalties, plus the
+        <p>Lends the PAT for Reserve loans to players (<code>!loan reserve</code>). Earns their interest and late penalties, plus the
           protocol's 10% cut of interest on loans between players.</p>
         <p><b>Risk:</b> borrowers who don't pay. A loan 30 days late is a default: the protocol's own profit in the Bank
           absorbs it first, and if that isn't enough the Federal Reserve lends the Bank the rest. The Bank keeps the claim on
@@ -1060,7 +1060,7 @@
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">📈</span> Market maker</h3>
-        <p>Puts up the starting money (the "seed") for every new prediction market, then takes that market's 2% trading fees
+        <p>Puts up the starting PAT (the "seed") for every new prediction market, then takes that market's 2% trading fees
           and whatever's left when it settles. The fee on betting pools goes to it too.</p>
         <p><b>Risk:</b> a market can lose at most its seed.</p>
         <p>Its value counts each open market at what it expects back when it settles (the pot minus the winning
@@ -1078,7 +1078,7 @@
       stakers' PAT, so everyone (the protocol included) earns and loses in proportion to what they put in.</div>
 
     <figure class="fig">
-      <svg class="fig-desk" viewBox="0 0 480 450" role="img" aria-label="Table comparing what each vault funds, earns, risks and its safety net">
+      <svg class="fig-desk" viewBox="0 0 480 450" role="img" aria-label="Table comparing what each vault backs, earns, risks and its safety net">
         <rect x="10" y="10" width="150" height="44" rx="8" fill="#0f1a24" stroke="#64b5f6" stroke-width="2"/>
         <rect x="165" y="10" width="150" height="44" rx="8" fill="#241212" stroke="#e57373" stroke-width="2"/>
         <rect x="320" y="10" width="150" height="44" rx="8" fill="#13200f" stroke="#4caf50" stroke-width="2"/>
@@ -1088,7 +1088,7 @@
 
         <!-- FUNDS (band 62) -->
         <rect x="10" y="62" width="460" height="22" rx="4" fill="#1c1c1c"/>
-        <text x="20" y="78" font-size="12" fill="#ffd700" letter-spacing="1">FUNDS</text>
+        <text x="20" y="78" font-size="12" fill="#ffd700" letter-spacing="1">BACKS</text>
         <rect x="10" y="86" width="150" height="66" rx="6" fill="#111" stroke="#222"/>
         <rect x="165" y="86" width="150" height="66" rx="6" fill="#111" stroke="#222"/>
         <rect x="320" y="86" width="150" height="66" rx="6" fill="#111" stroke="#222"/>
@@ -1153,11 +1153,11 @@
         ].forEach((v) => { %>
           <div class="fm-box" style="--c: <%= v.c %>">
             <b><%= v.n %></b>
-            <dl class="fm-dl"><dt>Funds</dt><dd><%= v.f %></dd><dt>Earns</dt><dd><%= v.e %></dd><dt>Risk</dt><dd><%= v.r %></dd><dt>Safety net</dt><dd><%= v.sn %></dd></dl>
+            <dl class="fm-dl"><dt>Backs</dt><dd><%= v.f %></dd><dt>Earns</dt><dd><%= v.e %></dd><dt>Risk</dt><dd><%= v.r %></dd><dt>Safety net</dt><dd><%= v.sn %></dd></dl>
           </div>
         <% }) %>
       </div>
-      <figcaption>Who takes the risk, who gets the fee: each vault funds one thing, earns from it, and carries its risk.</figcaption>
+      <figcaption>Who takes the risk, who gets the fee: each vault backs one thing, earns from it, and carries its risk.</figcaption>
     </figure>
 
     <h3 class="h3s"><span class="ds-ic" aria-hidden="true">📊</span> Shares: how a stake grows</h3>
@@ -1256,7 +1256,7 @@
         <rect x="40" y="468" width="440" height="68" rx="10" fill="#111" stroke="#ccc" stroke-width="2"/>
         <text x="260" y="491" font-size="15" font-weight="bold" fill="#fff" text-anchor="middle">!stash unstake</text>
         <text x="260" y="510" font-size="13" fill="#ccc" text-anchor="middle">queued to the next cut-off, sold at that day's price,</text>
-        <text x="260" y="527" font-size="13" fill="#ccc" text-anchor="middle">paid once the vault has free cash</text>
+        <text x="260" y="527" font-size="13" fill="#ccc" text-anchor="middle">paid once the vault has free PAT</text>
 
         <path d="M40,502 H16 V36 H154" fill="none" stroke="#81c784" stroke-width="2.5" marker-end="url(#fb-g)"/>
         <text transform="translate(33,280) rotate(-90)" font-size="12.5" fill="#81c784" text-anchor="middle">back to your stash</text>
@@ -1273,7 +1273,7 @@
         <div class="fm-box" style="--c: var(--ds-ok)"><b>MM shares</b><span class="s">earn market fees · seed new markets</span></div>
         <div class="fm-box hl" style="--c: var(--ds-ok)"><b>share price rises with revenue ▲</b></div>
         <span class="fm-step" style="--c: var(--ds-ok)"></span>
-        <div class="fm-box hl" style="--c: var(--ds-text-2)"><b style="color: var(--ds-text-strong)">!stash unstake</b><span class="s">queued to the next cut-off, sold at that day's price, paid once the vault has free cash</span></div>
+        <div class="fm-box hl" style="--c: var(--ds-text-2)"><b style="color: var(--ds-text-strong)">!stash unstake</b><span class="s">queued to the next cut-off, sold at that day's price, paid once the vault has free PAT</span></div>
         <span class="fm-step back" style="--c: var(--ds-ok)">back to your stash</span>
       </div>
       <figcaption>Your stake: stash → daily cut-off → vault shares → the price grows → unstake back to your stash.</figcaption>
@@ -1286,8 +1286,8 @@
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">💸</span> Getting your PAT out</h3>
-        <p>A withdrawal needs free cash in that vault: Bank money may be lent out, and the House always keeps a minimum float
-          to pay winners. If there isn't enough, your request waits in the queue and fills as cash frees up.</p>
+        <p>A withdrawal needs free PAT in that vault: the Bank's PAT may be lent out, and the House always keeps a minimum float
+          to pay winners. If there isn't enough, your request waits in the queue and fills as PAT frees up.</p>
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">📏</span> Limits</h3>
@@ -1300,7 +1300,7 @@
     </div>
 
     <h3 class="h3s"><span class="ds-ic" aria-hidden="true">⚖️</span> Fees follow risk</h3>
-    <p class="lead">A fee goes to whoever put up the money for that activity. Market and pool fees go to the Market maker
+    <p class="lead">A fee goes to whoever put up the PAT for that activity. Market and pool fees go to the Market maker
       that seeds the markets, loan interest goes to the Bank that lent it, casino margins and the wager fee go to the House.
       Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox and
       that room's vault, by the routing table. Stakers don't get paid for activity they don't fund.</p>
@@ -1354,7 +1354,7 @@
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🂠</span> Texas Hold'em</h3>
-        <p>No-limit cash game in chat. Chips are PAT 1:1: buy in to sit (20 to 200 big blinds), cash out any time.
+        <p>No-limit hold'em in chat. Chips are PAT 1:1: buy in to sit (20 to 200 big blinds), swap your chips back to PAT any time.
           Your hole cards come by private message. Up to 9 players. Can't run alongside a blackjack table.</p>
         <div class="cmd"><code>!holdem start 25/50</code> · <code>!sit 5000</code> · <code>!call</code> · <code>!raise 600</code> · <code>!stand</code></div>
         <div class="goes"><b>PAT goes:</b> pots go to the winners, minus a small rake (set by the admins) for the House.</div>
@@ -1507,7 +1507,7 @@
         <p>Put PAT up for someone to do something. Others can chip in to grow the pot. Hunters claim it ("I did it"),
           and the poster pays whoever pulled it off; several hunters split it evenly. You can't claim your own bounty.</p>
         <div class="cmd"><code>!bounty kick plantbaked 1000 by 2d</code> · <code>!bounty add BT3 500</code><br><code>!bounty claim BT3</code> · <code>!bounty resolve BT3 @hunter</code> · <code>!bounties</code></div>
-        <div class="goes"><b>PAT goes:</b> held in escrow; the hunters get the pot minus a 5% fee. Cancelled or expired (default 7 days)? Everyone who put money in is refunded.</div>
+        <div class="goes"><b>PAT goes:</b> held in escrow; the hunters get the pot minus a 5% fee. Cancelled or expired (default 7 days)? Everyone who chipped in PAT is refunded.</div>
       </div>
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">🌐</span> On the site</h3>
@@ -1537,7 +1537,7 @@
         <p>Borrow at the Reserve's rate, with the PAT lent out of the Bank vault. Within your limit it's approved instantly; your limit grows
           with your level and a clean repayment record. Want more? Ask the admins, who can also grant loans themselves.</p>
         <div class="cmd"><code>!loan reserve 50k 7d</code> · <code>!loan request 200k 14d why</code> (bigger amounts) · <code>!loan reserve</code> shows your limit</div>
-        <div class="goes"><b>PAT goes:</b> these loans are funded by the <a href="#protocol">Bank vault</a>, so principal, interest and
+        <div class="goes"><b>PAT goes:</b> these loans are lent out of the <a href="#protocol">Bank vault</a>, so principal, interest and
           late penalties go back to the Bank (and its stakers). Unpaid loans are collected automatically, and a late borrower is
           marked LATE and can't borrow again until they're square. A loan 30 days late is a default: the Bank's own profit covers
           it first, the Federal Reserve lends the Bank anything more, and the Bank keeps collecting from the borrower.</div>
@@ -1564,7 +1564,7 @@
           (the default, a mix of all three). You buy shares; as the vault earns, the share price rises and your earnings
           compound inside it. If the vault takes a loss, the price drops.</p>
         <p>Requests run once a day at the cut-off (around midnight ET) at that day's price, and unstaking pays out
-          once the vault has free cash. Your stake goes back into the same stash.</p>
+          once the vault has free PAT. Your stake goes back into the same stash.</p>
         <div class="cmd"><code>!stash stake &lt;stash&gt; &lt;amount|all&gt; [bank|house|mm|auto]</code><br>
           <code>!stash unstake &lt;stash&gt; &lt;amount|all&gt; [vault]</code> · <code>!stash yield</code> · <code>!vaults</code></div>
       </div>
@@ -1646,7 +1646,7 @@
   <section id="fees">
     <div class="ds-eyebrow ac">AT A GLANCE</div>
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🧾</span> Fees</h2>
-    <p class="lead">Fees aren't burned, and they <a href="#protocol">follow risk</a>: a fee goes to the vault that funded the
+    <p class="lead">Fees aren't burned, and they <a href="#protocol">follow risk</a>: a fee goes to the vault that put up the PAT for the
       activity (Bank, House or Market maker). Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending
       in a room is split between Fort Knox and that room's vault. <span class="cfg">⚙ = set by the admins, can change.</span></p>
     <div class="ds-tbl">

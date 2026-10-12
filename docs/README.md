@@ -12,8 +12,7 @@ Everything about how PATV looks, sounds and works, in one place. The look-and-vo
 | `../locales/README.md` | How site strings and translations work | `/translate` |
 | `../locales/glossary.json` | House words translators keep (PAT, pad, Fort Knox, Pepeball…) and per-language style | |
 
-Pepe's own source of truth (his soul, personas and room vibes) is in the private bot repo nested at `camfrog-bot/`
-(`SOUL.md`, `pepe_persona.py`, `pepe_roomvibe.py`). brand.md §5 is the public summary.
+Pepe's character bible is brand.md §5.
 
 ## Backends and runbooks
 

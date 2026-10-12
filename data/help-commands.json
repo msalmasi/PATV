@@ -1751,8 +1751,8 @@
    "syntax": [
     "!stand"
    ],
-   "summary": "Leave the table and cash your remaining chips back to PAT.",
-   "details": "Leave the table and cash your remaining chips back to PAT. In a live hand you're cashed out once it ends (or `!fold` to leave sooner).",
+   "summary": "Leave the table and swap your remaining chips back to PAT.",
+   "details": "Leave the table and swap your remaining chips back to PAT. In a live hand your chips go back to PAT once it ends (or `!fold` to leave sooner).",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -2305,7 +2305,7 @@
    "syntax": [
     "!reserve"
    ],
-   "summary": "The 🏛️ Federal Reserve — the central bank: the only place new PAT is made, and it only funds the protocol's pools.",
+   "summary": "The 🏛️ Federal Reserve — the central bank: the only place new PAT is made, and it only fills the protocol's pools.",
    "details": "The **🏛️ Federal Reserve** — the central bank and the only place new PAT is made. Anyone can check the balance. It keeps itself between a **floor (50M)** and a **ceiling (150M)**: below the floor a capped daily mint tops it back up, above the ceiling the excess is burned. Every Monday it tops the incentive budget up to the week's target (25M), it lends the House, the Bank and the Market maker the gap when a payout runs them short (flash liquidity), and it collects fines, the bounty fee and the shop fee plus half of the protocol's weekly profit while it's below its ceiling. Every mint is logged and the supply history is public on [publicaccess.tv/economy](https://publicaccess.tv/economy). **Economy v2/v3** (layers on): the Fed is the protocol's backstop - nobody robs it, it pays no rewards and never pays a wallet (`!reserve pay` is off), and it mints only by written policy. `!reserve mint <amount> <reason>` is the admin mint into the Fed (the same as `!econ mint`). It funds the protocol's pools two ways, admins only, dry run + confirm, logged: a **grant** (`!reserve fund <pool> <amount> <reason>` = `!econ fund`, not repayable) or a **loan** (`!econ fedloan <pool> <amount> <reason>`, repaid from that pool's surplus or overflow). The old automint (`!reserve auto` / `!reserve floor`) is off while the layers are on; the v3 floor and ceiling replace it.",
    "examples": [
     "!reserve mint <amount> <reason>",
@@ -2634,7 +2634,7 @@
     "!vaults"
    ],
    "summary": "Staking = owning a slice of a vault that does a job.",
-   "details": "**Staking = owning a slice of a vault that does a job.** 🏦 **Bank** funds Reserve loans and earns their interest (a default is covered by its own profit first, then a Fed loan). 🎰 **House** is the casino bankroll and earns the house edge (it also pays the big wins, so it's the most volatile). 📈 **Market maker** seeds prediction markets and earns their fees. 🤖 **Auto** (the default) spreads you across all three by the admins' rules and tilts toward whatever's paid best. Staking buys shares: revenue raises the share price, losses lower it, and earnings compound in the price. Requests run once a day at the cut-off, at that day's price; a withdrawal waits in line if the vault's cash is lent out. `!stash stake savings 50k` (Auto) · `!stash stake savings 50k bank` · `!stash unstake savings all bank` · `!vaults` for prices and APR. Live dashboard: [publicaccess.tv/staking](https://publicaccess.tv/staking) · how it all works: [publicaccess.tv/economy](https://publicaccess.tv/economy#protocol).",
+   "details": "**Staking = owning a slice of a vault that does a job.** 🏦 **Bank** lends the PAT for Reserve loans and earns their interest (a default is covered by its own profit first, then a Fed loan). 🎰 **House** is the casino bankroll and earns the house edge (it also pays the big wins, so it's the most volatile). 📈 **Market maker** seeds prediction markets and earns their fees. 🤖 **Auto** (the default) spreads you across all three by the admins' rules and tilts toward whatever's paid best. Staking buys shares: revenue raises the share price, losses lower it, and earnings compound in the price. Requests run once a day at the cut-off, at that day's price; a withdrawal waits in line if the vault's cash is lent out. `!stash stake savings 50k` (Auto) · `!stash stake savings 50k bank` · `!stash unstake savings all bank` · `!vaults` for prices and APR. Live dashboard: [publicaccess.tv/staking](https://publicaccess.tv/staking) · how it all works: [publicaccess.tv/economy](https://publicaccess.tv/economy#protocol).",
    "examples": [
     "!stash stake savings 50k",
     "!stash stake savings 50k bank",
@@ -3293,8 +3293,8 @@
    "syntax": [
     "!bail"
    ],
-   "summary": "During a heist, cash out between rounds to lock in your accrued loot and quit while you're ahead — only affects you.",
-   "details": "During a heist, cash out between rounds to lock in your accrued loot and quit while you're ahead — only affects you. Press your luck or play it safe: get pinched and your loot goes to the crew, and on casino/bank jobs a **failed vault door loses everything you're holding** — the window right before the door is your last chance to walk. 🏁 Ghost Plates add +20% when you bail.",
+   "summary": "During a heist, walk away between rounds to lock in your accrued loot and quit while you're ahead — only affects you.",
+   "details": "During a heist, walk away between rounds to lock in your accrued loot and quit while you're ahead — only affects you. Press your luck or play it safe: get pinched and your loot goes to the crew, and on casino/bank jobs a **failed vault door loses everything you're holding** — the window right before the door is your last chance to walk. 🏁 Ghost Plates add +20% when you bail.",
    "examples": [],
    "keywords": [],
    "webchat": true

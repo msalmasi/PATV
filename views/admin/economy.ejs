@@ -168,7 +168,7 @@
 <div class="adm-cols">
   <section class="adm-card" id="grants" aria-labelledby="grantsT">
     <h2 id="grantsT">PAT grant <span class="adm-pill admin">admins</span></h2>
-    <p class="adm-help">Paid from the incentive budget: adds PAT to an account's balance as a "Staff transfer" in their history (the old "Points panel"). Refused if the incentive budget can't cover it, isn't synced yet, or this week's staff-grant cap (a Pepe setting) would be passed - never queued, never minted. A negative amount takes PAT back into the incentive budget. The Reserve only funds the protocol, so it never pays a grant.</p>
+    <p class="adm-help">Paid from the incentive budget: adds PAT to an account's balance as a "Staff transfer" in their history (the old "Points panel"). Refused if the incentive budget can't cover it, isn't synced yet, or this week's staff-grant cap (a Pepe setting) would be passed - never queued, never minted. A negative amount takes PAT back into the incentive budget. The Reserve only fills the protocol's pools, so it never pays a grant.</p>
     <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <form id="pointsTransferForm" class="adm-form" action="/api/admin/transfer/username" method="POST">
       <label for="pointsUsername">Username<input type="text" id="pointsUsername" name="username" required autocomplete="off"></label>

@@ -5,10 +5,10 @@ const { findOrCreateDiscordUser } = require('../userUtils'); // Assuming this is
 module.exports = {
     data: new SlashCommandBuilder()
       .setName('cashout')
-      .setDescription('Cash out poker chips for PAT')
+      .setDescription('Swap poker chips back to PAT')
       .addIntegerOption(option => 
           option.setName('amount')
-          .setDescription('Amount of chips to cash out')
+          .setDescription('Amount of chips to swap back to PAT')
           .setRequired(true)),
   
     async execute(interaction) {
@@ -30,11 +30,11 @@ module.exports = {
           .send(`!prc ${interaction.user} ${amount}`);
   
         // Step 3: Inform the user
-        interaction.reply({ content: `${interaction.user} requested to cash-out ${amount} poker chips!`, ephemeral: true });
+        interaction.reply({ content: `${interaction.user} asked to swap ${amount} poker chips back to PAT!`, ephemeral: true });
   
       } catch (error) {
         console.error('Error during cashout:', error);
-        interaction.reply({ content: 'An error occurred during the cash-out process.', ephemeral: true });
+        interaction.reply({ content: 'Something went wrong swapping your chips back to PAT.', ephemeral: true });
       }
     }
   };

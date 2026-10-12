@@ -96,7 +96,7 @@ module.exports = {
         // Handle insufficient balance
         const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
         const balance = balanceResponse.data.balance;
-        await interaction.update({ content: `You have insufficient funds to buy ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost}). You have PAT ${balance}.`, components: [], ephemeral: true });
+        await interaction.update({ content: `You don't have enough PAT to buy ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost}). You have PAT ${balance}.`, components: [], ephemeral: true });
       } else if (error.response && error.response.data && error.response.data.message) {
         // The backend's own reason: out of stock, already have that role, short by N PAT, ...
         await interaction.update({ content: `Purchase failed: ${error.response.data.message}`, components: [], ephemeral: true });

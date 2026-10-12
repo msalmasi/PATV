@@ -37,8 +37,10 @@ test("brand.md has the six numbered sections the hub tabs split on, and links th
   const doc = rd("docs", "brand.md");
   const nums = md.sections(doc).map((s) => s.n).filter((n) => n);
   assert.deepEqual(nums, [1, 2, 3, 4, 5, 6]);
-  for (const s of ["design-system.md", "no cash value", "Family terms", "DM privacy", "Be funny first", "Naming an achievement", "Writing a Pepe line"]) assert.ok(doc.includes(s), s);
+  for (const s of ["design-system.md", "no cash value", "PAT is points, never money", "How he reacts", "Be funny first", "Naming an achievement", "Writing a Pepe line"]) assert.ok(doc.includes(s), s);
   for (const tab of ["brand", "pepe", "writing"]) assert.ok(sg.brandTab(tab).html.length > 1000, tab + " tab has content");
+  // 1.99qn: Pepe is written as a character - no prompt internals in the public guide
+  for (const s of ["SOUL.md", "plantbaked", "_scrub_family_terms", "5 to 15 words"]) assert.ok(!doc.includes(s), "no internals: " + s);
   assert.ok(rd("docs", "design-system.md").includes("brand.md"), "design-system.md points at brand.md");
   assert.ok(rd("docs", "README.md").includes("brand.md") && rd("docs", "README.md").includes("design-system.md"));
 });

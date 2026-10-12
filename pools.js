@@ -47,7 +47,7 @@ const INBOX_KEEP_MS = 30 * 86400000;
 const LABELS = {
   reserve: "🏛️ Federal Reserve", bingo: "🔢 Bingo pot", stakers: "📈 Staking rewards pool", fortknox: "🪙 Fort Knox (what bank heists rob)",
   incentives: "🎁 Incentive budget", heist: "🎰 Casino vault (what casino heists rob)", bank: "🏦 Bank vault (cash)",
-  mm: "📈 Market-maker vault (cash)", lotto: "🎟️ Lotto jackpot pot", vaultfloat: "⏳ Staking requests waiting for the cut-off",
+  mm: "📈 Market-maker vault (free PAT)", lotto: "🎟️ Lotto jackpot pot", vaultfloat: "⏳ Staking requests waiting for the cut-off",
   burn: "🔥 Burn reserve (out of circulation, waiting to be burned)",
 };
 

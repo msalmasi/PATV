@@ -209,7 +209,7 @@ test("index.js: both routes are Admin only (Staff lost access); the cards say wh
   assert.doesNotMatch(jp, /"Staff"/);
   const v = fs.readFileSync(path.join(repo, "views/admin/economy.ejs"), "utf8");
   assert.match(v, /Paid from the incentive budget/);
-  assert.match(v, /the Reserve only funds the protocol/i);
+  assert.match(v, /the Reserve only fills the protocol's pools/i);
   assert.doesNotMatch(v, /Paid from the Federal Reserve/);
   const g = fs.readFileSync(path.join(repo, "views/admin/games.ejs"), "utf8");
   assert.match(g, /id="jackpotReason"/);

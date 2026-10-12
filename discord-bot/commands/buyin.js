@@ -44,7 +44,7 @@ module.exports = {
         // Fetch user's current balance and inform them of insufficient funds
         const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
         const balance = balanceResponse.data.balance;
-        interaction.reply({ content: `${interaction.user} (PAT ${balance}), you have insufficient funds to buy ${amount} poker chips.`, ephemeral: true });
+        interaction.reply({ content: `${interaction.user} (PAT ${balance}), you don't have enough PAT to buy ${amount} poker chips.`, ephemeral: true });
       } else {
         console.error('Error during buy-in:', error);
         interaction.reply({ content: 'An error occurred during the buy-in process.', ephemeral: true });

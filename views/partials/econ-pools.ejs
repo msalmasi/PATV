@@ -3,7 +3,7 @@
     step-up. public/js/admin-pools.js renders it from GET /api/admin/econ/store. %>
 <section class="adm-card" id="pools" aria-labelledby="poolsT">
   <h2 id="poolsT">🏦 Protocol pools &amp; economy settings <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Every protocol pool (the Federal Reserve, Fort Knox, the incentive budget, the Casino vault, Bank / Market-maker cash, stakers, bingo, the burn reserve, each room vault) once Pepe's pools are cut over to the site - moved only by keyed moves (<code>pool_moves</code>). Before the cutover this shows the switch and what Pepe syncs. Routing, econ_cfg and Fed actions are applied by Pepe with the same rules as in chat (<code>!econ</code>); his answer saves the new table here. Runbook: <code>docs/pools-cutover-runbook.md</code>.</p>
+  <p class="adm-help">Every protocol pool (the Federal Reserve, Fort Knox, the incentive budget, the Casino vault, Bank / Market-maker free PAT, stakers, bingo, the burn reserve, each room vault) once Pepe's pools are cut over to the site - moved only by keyed moves (<code>pool_moves</code>). Before the cutover this shows the switch and what Pepe syncs. Routing, econ_cfg and Fed actions are applied by Pepe with the same rules as in chat (<code>!econ</code>); his answer saves the new table here. Runbook: <code>docs/pools-cutover-runbook.md</code>.</p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="poolsAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">
       <div class="adm-kv" id="poolsKv"><div><b>Status</b><span>loading…</span></div></div>

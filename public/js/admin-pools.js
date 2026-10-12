@@ -87,7 +87,7 @@
     ev.preventDefault();
     var t = $('econText').value.trim().replace(/^!?econ\s+/i, '');
     if (!t) { msg('Type an !econ command.', true); return; }
-    ask('Run "!econ ' + t + '" as you, in Pepe. Money moves only after its own confirm step.', { op: 'cmd', text: t });
+    ask('Run "!econ ' + t + '" as you, in Pepe. PAT moves only after its own confirm step.', { op: 'cmd', text: t });
   });
   $('poolsNo').addEventListener('click', function () { cancel(); msg('Cancelled - nothing sent.'); });
   $('poolsYes').addEventListener('click', function () {

@@ -317,7 +317,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
     newMessage.content.includes("user only has") &&
     newMessage.guild.id == "913269267691094026"
   ) {
-    client.channels.cache.get('1192942161747001344').send(`Last poker cash-out request failed. Not enough chips.`);
+    client.channels.cache.get('1192942161747001344').send(`Last poker chips-to-PAT request failed. Not enough chips.`);
   }else {
     return;
   }
