@@ -6801,5 +6801,10 @@
   "owner.ao.6": "自動審核（!automod）",
   "owner.ao.7": "房間機器人",
   "owner.ao.8": "指令價格（pat_costs）",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "自動（跟隨聊天）",
+  "owner.cap.roomvibe.title": "設定你的房間氛圍",
+  "owner.cap.roomvibe.howto": "Pepe 會學習你的房間說話的方式並配合。你可以自行設定類型（悠閒、吵架、調情……）、他要毒舌到什麼程度、加入他該知道的備註，或鎖定氛圍讓他不再重新學習。單獨輸入 !roomvibe 即可查看。",
+  "owner.cap.roominfo.title": "查看 Pepe 對你房間的了解",
+  "owner.cap.roominfo.howto": "顯示 Pepe 在你的房間裡學到的話題、常見梗與常客。refresh 會重新學習，forget 會清除，site on|off 則會把房間分析資料送到你的小站頁面。"
 }

@@ -7261,5 +7261,10 @@
   "owner.ao.6": "الإشراف الآلي (!automod)",
   "owner.ao.7": "روبوتات الغرفة",
   "owner.ao.8": "أسعار الأوامر (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "تلقائي (اتبع الدردشة)",
+  "owner.cap.roomvibe.title": "حدّد أجواء غرفتك",
+  "owner.cap.roomvibe.howto": "يتعلم Pepe طريقة كلام غرفتك ويتماشى معها. حدّد النوع بنفسك (هادئ، قتال، غزل...)، وحدّد قوة سخريته، وأضف ملاحظات يجب أن يعرفها، أو ثبّت الأجواء كي يتوقف عن إعادة تعلّمها. الأمر !roomvibe وحده يعرضها.",
+  "owner.cap.roominfo.title": "اطّلع على ما يعرفه Pepe عن غرفتك",
+  "owner.cap.roominfo.howto": "يعرض المواضيع والنكات المتكررة والمنتظمين الذين التقطهم Pepe في غرفتك. refresh يعيد تعلّمها، وforget يمسحها، وsite on|off يرسل تحليلات الغرفة إلى صفحة الباد."
 }

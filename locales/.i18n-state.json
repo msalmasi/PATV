@@ -6614,7 +6614,12 @@
     "owner.ao.6": "3db5f29c5403",
     "owner.ao.7": "2e089d708277",
     "owner.ao.8": "f0fd1da55ce7",
-    "owner.ao.9": "47540c52dd27"
+    "owner.ao.9": "47540c52dd27",
+    "owner.lang_auto": "5a69430eae07",
+    "owner.cap.roomvibe.title": "7d83dd81d623",
+    "owner.cap.roomvibe.howto": "57871c92ce4b",
+    "owner.cap.roominfo.title": "ac8bd3916565",
+    "owner.cap.roominfo.howto": "e3890dbd7828"
   },
   "lag": {},
   "reviewed": {}

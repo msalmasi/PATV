@@ -6803,5 +6803,10 @@
   "owner.ao.6": "automod (!automod)",
   "owner.ao.7": "bot room",
   "owner.ao.8": "harga perintah (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Auto (ikuti chat)",
+  "owner.cap.roomvibe.title": "Atur vibe room kamu",
+  "owner.cap.roomvibe.howto": "Pepe belajar cara room kamu ngobrol dan menyesuaikan diri. Atur jenisnya sendiri (santai, ribut, genit...), seberapa pedas dia nyindir, tambahkan catatan yang perlu dia tahu, atau kunci vibe-nya supaya dia berhenti mempelajarinya ulang. !roomvibe saja akan menampilkannya.",
+  "owner.cap.roominfo.title": "Lihat apa yang Pepe tahu tentang room kamu",
+  "owner.cap.roominfo.howto": "Menampilkan topik, lelucon yang sering muncul, dan member tetap yang sudah dikenali Pepe di room kamu. refresh mempelajarinya ulang, forget menghapusnya, dan site on|off mengirim analitik room ke halaman pad kamu."
 }

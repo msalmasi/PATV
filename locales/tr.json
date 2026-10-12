@@ -6893,5 +6893,10 @@
   "owner.ao.6": "otomatik moderasyon (!automod)",
   "owner.ao.7": "oda botları",
   "owner.ao.8": "komut fiyatları (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Otomatik (sohbeti takip et)",
+  "owner.cap.roomvibe.title": "Odanın havasını ayarla",
+  "owner.cap.roomvibe.howto": "Pepe odanın konuşma tarzını öğrenir ve ona uyar. Türü kendin ayarla (sakin, kavga, flörtöz...), ne kadar sert dalga geçeceğini belirle, bilmesi gereken notlar ekle ya da havayı kilitle ki yeniden öğrenmesin. Tek başına !roomvibe yazarsan onu gösterir.",
+  "owner.cap.roominfo.title": "Pepe'nin odan hakkında neler bildiğini gör",
+  "owner.cap.roominfo.howto": "Pepe'nin odanda topladığı konuları, süregelen şakaları ve düzenli katılımcıları gösterir. refresh bunları yeniden öğrenir, forget hepsini siler, site on|off ise odanın analizlerini pad sayfana gönderir."
 }

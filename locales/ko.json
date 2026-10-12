@@ -6801,5 +6801,10 @@
   "owner.ao.6": "자동 모더레이션 (!automod)",
   "owner.ao.7": "방 봇",
   "owner.ao.8": "명령어 가격 (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "자동 (채팅을 따름)",
+  "owner.cap.roomvibe.title": "방 분위기 설정하기",
+  "owner.cap.roomvibe.howto": "Pepe가 방의 대화 방식을 배우고 거기에 맞춰요. 분위기 유형(차분함, 싸움, 플러팅 등)을 직접 정하고, Pepe가 얼마나 세게 놀릴지 정하고, 알아야 할 메모를 추가하거나, 분위기를 고정해서 Pepe가 다시 배우지 않게 할 수 있어요. !roomvibe만 입력하면 현재 분위기를 보여줘요.",
+  "owner.cap.roominfo.title": "Pepe가 방에 대해 아는 것 보기",
+  "owner.cap.roominfo.howto": "Pepe가 방에서 파악한 주제, 반복되는 농담, 단골들을 보여줘요. refresh는 다시 배우고, forget은 모두 지우고, site on|off는 방 분석 자료를 패드 페이지로 보내요."
 }

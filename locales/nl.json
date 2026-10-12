@@ -6893,5 +6893,10 @@
   "owner.ao.6": "automod (!automod)",
   "owner.ao.7": "roombots",
   "owner.ao.8": "commandoprijzen (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Auto (volg de chat)",
+  "owner.cap.roomvibe.title": "Stel de sfeer van je room in",
+  "owner.cap.roomvibe.howto": "Pepe leert hoe je room praat en past zich daarop aan. Stel het type zelf in (chill, ruzie, flirterig...), bepaal hoe scherp hij roast, voeg notities toe die hij moet weten, of vergrendel de sfeer zodat hij hem niet steeds opnieuw leert. !roomvibe apart laat hem zien.",
+  "owner.cap.roominfo.title": "Zie wat Pepe over je room weet",
+  "owner.cap.roominfo.howto": "Toont de onderwerpen, terugkerende grappen en vaste bezoekers die Pepe in je room heeft opgepikt. refresh leert ze opnieuw aan, forget wist ze, en site on|off stuurt de analytics van de room naar je padpagina."
 }

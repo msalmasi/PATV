@@ -6940,5 +6940,10 @@
   "owner.ao.6": "automod (!automod)",
   "owner.ao.7": "bots da sala",
   "owner.ao.8": "preços dos comandos (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Automático (seguir o chat)",
+  "owner.cap.roomvibe.title": "Definir o clima da sua sala",
+  "owner.cap.roomvibe.howto": "O Pepe aprende como a sua sala fala e se adapta a ela. Defina o tipo você mesmo (tranquilo, briga, paquera...), quão pesado ele faz as zoações, adicione notas que ele deve saber, ou trave o clima para ele parar de reaprender. !roomvibe sozinho mostra o clima.",
+  "owner.cap.roominfo.title": "Ver o que o Pepe sabe sobre a sua sala",
+  "owner.cap.roominfo.howto": "Mostra os tópicos, piadas recorrentes e frequentadores que o Pepe captou na sua sala. refresh reaprende tudo, forget apaga tudo, e site on|off envia as análises da sala para a página do seu pad."
 }

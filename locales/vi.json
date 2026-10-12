@@ -6801,5 +6801,10 @@
   "owner.ao.6": "automod (!automod)",
   "owner.ao.7": "bot phòng",
   "owner.ao.8": "giá lệnh (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Tự động (theo chat)",
+  "owner.cap.roomvibe.title": "Đặt không khí phòng của bạn",
+  "owner.cap.roomvibe.howto": "Pepe học cách phòng của bạn nói chuyện và bắt chước theo. Tự chọn kiểu (thư giãn, đấu khẩu, tán tỉnh...), đặt mức độ châm chọc của cậu ấy, thêm ghi chú để cậu ấy biết, hoặc khóa không khí để cậu ấy thôi học lại. !roomvibe đứng một mình sẽ hiển thị nó.",
+  "owner.cap.roominfo.title": "Xem Pepe biết gì về phòng của bạn",
+  "owner.cap.roominfo.howto": "Hiển thị các chủ đề, trò đùa lặp lại và người thường xuyên mà Pepe đã thu thập trong phòng của bạn. refresh học lại chúng, forget xóa sạch, còn site on|off gửi thống kê của phòng lên trang pad của bạn."
 }

@@ -6940,5 +6940,10 @@
   "owner.ao.6": "automod (!automod)",
   "owner.ao.7": "bot della stanza",
   "owner.ao.8": "prezzi dei comandi (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Automatico (segue la chat)",
+  "owner.cap.roomvibe.title": "Imposta l'atmosfera della tua stanza",
+  "owner.cap.roomvibe.howto": "Pepe impara come parla la tua stanza e si adatta. Scegli tu il tipo (tranquilla, rissosa, civettuola...), quanto la prende in giro, aggiungi note che dovrebbe conoscere, oppure blocca l'atmosfera perché smetta di riimpararla. !roomvibe da solo la mostra.",
+  "owner.cap.roominfo.title": "Scopri cosa sa Pepe della tua stanza",
+  "owner.cap.roominfo.howto": "Mostra gli argomenti, le battute ricorrenti e gli abituali che Pepe ha notato nella tua stanza. refresh li riapprende, forget li cancella e site on|off invia le analisi della stanza alla pagina del tuo pad."
 }

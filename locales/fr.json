@@ -6940,5 +6940,10 @@
   "owner.ao.6": "l’automod (!automod)",
   "owner.ao.7": "les bots de la salle",
   "owner.ao.8": "les prix des commandes (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Auto (suivre le chat)",
+  "owner.cap.roomvibe.title": "Définis l'ambiance de ta salle",
+  "owner.cap.roomvibe.howto": "Pepe apprend comment parle ta salle et s'y adapte. Règle toi-même le type (détendu, combat, séducteur…), à quel point il charrie, ajoute des notes qu'il doit connaître, ou verrouille l'ambiance pour qu'il arrête de la réapprendre. !roomvibe seul l'affiche.",
+  "owner.cap.roominfo.title": "Voir ce que Pepe sait de ta salle",
+  "owner.cap.roominfo.howto": "Affiche les sujets, les blagues récurrentes et les habitués que Pepe a repérés dans ta salle. refresh les réapprend, forget les efface, et site on|off envoie les statistiques de la salle sur la page de ton pad."
 }

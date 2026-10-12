@@ -6801,5 +6801,10 @@
   "owner.ao.6": "自動モデレーション（!automod）",
   "owner.ao.7": "ルームのボット",
   "owner.ao.8": "コマンドの料金（pat_costs）",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "自動（チャットに合わせる）",
+  "owner.cap.roomvibe.title": "ルームの雰囲気を設定",
+  "owner.cap.roomvibe.howto": "Pepeはルームの話し方を学習して合わせます。雰囲気の種類（まったり、バトル、いちゃいちゃなど）は自分で設定でき、Pepeのツッコミの強さや覚えておいてほしいメモも追加できます。雰囲気を固定すると、Pepeが学び直さなくなります。!roomvibe だけを入力すると現在の設定が表示されます。",
+  "owner.cap.roominfo.title": "Pepeがルームについて知っていることを確認",
+  "owner.cap.roominfo.howto": "Pepeがルームで拾ったトピック、定番ネタ、常連が表示されます。refresh で再学習、forget で削除、site on|off でルームの分析をパッドページに送信するかどうかを切り替えます。"
 }

@@ -7077,5 +7077,10 @@
   "owner.ao.6": "automod (!automod)",
   "owner.ao.7": "boty pokoju",
   "owner.ao.8": "ceny komend (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Auto (wg czatu)",
+  "owner.cap.roomvibe.title": "Ustaw klimat swojego pokoju",
+  "owner.cap.roomvibe.howto": "Pepe uczy się, jak mówi twój pokój, i dopasowuje się do niego. Ustaw typ samodzielnie (spokojny, kłótliwy, flirciarski...), określ, jak mocno dogryza, dodaj notatki, które powinien znać, albo zablokuj klimat, żeby przestał uczyć się go od nowa. Samo !roomvibe pokazuje klimat.",
+  "owner.cap.roominfo.title": "Zobacz, co Pepe wie o twoim pokoju",
+  "owner.cap.roominfo.howto": "Pokazuje tematy, powtarzające się żarty i stałych bywalców, których Pepe zauważył w twoim pokoju. refresh uczy się ich na nowo, forget je kasuje, a site on|off wysyła analitykę pokoju na twoją stronę padu."
 }

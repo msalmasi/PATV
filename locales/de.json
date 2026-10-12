@@ -6893,5 +6893,10 @@
   "owner.ao.6": "Automod (!automod)",
   "owner.ao.7": "Raum-Bots",
   "owner.ao.8": "Befehlspreise (pat_costs)",
-  "owner.ao.9": "!lookpublic"
+  "owner.ao.9": "!lookpublic",
+  "owner.lang_auto": "Automatisch (dem Chat folgen)",
+  "owner.cap.roomvibe.title": "Stimmung deines Raums festlegen",
+  "owner.cap.roomvibe.howto": "Pepe lernt, wie in deinem Raum gesprochen wird, und passt sich an. Lege den Typ selbst fest (chillig, Streit, flirty...), wie heftig er austeilt, füge Notizen hinzu, die er wissen sollte, oder sperre die Stimmung, damit er sie nicht ständig neu lernt. !roomvibe allein zeigt sie an.",
+  "owner.cap.roominfo.title": "Sehen, was Pepe über deinen Raum weiß",
+  "owner.cap.roominfo.howto": "Zeigt die Themen, wiederkehrenden Witze und Stammgäste, die Pepe in deinem Raum aufgeschnappt hat. refresh lernt sie neu, forget löscht sie, und site on|off sendet die Analysen des Raums an deine Pad-Seite."
 }
