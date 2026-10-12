@@ -4859,7 +4859,7 @@
   "economy.map.f_heist": "Piętra skarbca napadu: Fort Knox i skarbiec Kasyna utrzymywane na poziomie 2 mln lub więcej",
   "economy.map.f_launch": "Dotacje startowe zasilające skarbce nowych padów",
   "economy.map.f_activity": "Nagrody za aktywność dla osób, które piszą i wchodzą na mikrofon",
-  "economy.map.f_topup": "Uzupełnienia padów wyrównujące to, co wypłaca skarbiec każdego pada",
+  "economy.map.f_topup": "Dopłaty za aktywność: dzielone według realnej aktywności każdego pada, nigdy nie więcej niż pad wypłaca",
   "economy.map.f_scaled": "Tygodniowy budżet rosnący wraz ze zweryfikowaną aktywnością",
   "economy.map.to_tr": "płynność błyskawiczna, pożyczki i granty, gdy zaczyna ich brakować",
   "economy.map.tr_h": "🎰 Kasyno · 🏦 Bank · 📈 Animator rynku",

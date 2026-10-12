@@ -4667,7 +4667,7 @@
   "economy.map.f_heist": "劫案金库底线：Fort Knox 与赌场金库保持在 200 万或以上",
   "economy.map.f_launch": "为新小站金库注入资金的启动补助",
   "economy.map.f_activity": "奖励聊天并上麦的人",
-  "economy.map.f_topup": "与各小站金库发放额相匹配的小站补充",
+  "economy.map.f_topup": "活跃度补充：按各小站的实际活跃度分配，且不超过该小站的发放额",
   "economy.map.f_scaled": "每周预算随已验证的活跃度增长",
   "economy.map.to_tr": "流动性闪借、贷款和补助，在资金不足时发放",
   "economy.map.tr_h": "🎰 庄家 · 🏦 银行 · 📈 做市商",

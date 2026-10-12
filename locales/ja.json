@@ -4667,7 +4667,7 @@
   "economy.map.f_heist": "ヘイスト金庫の下限: Fort Knoxとカジノ金庫を2M以上に保つ",
   "economy.map.f_launch": "新規パッドの金庫の元手となる開始助成金",
   "economy.map.f_activity": "チャットやマイクに参加した人への活動報酬",
-  "economy.map.f_topup": "各パッドの金庫の支払い額に合わせたパッドへの補充",
+  "economy.map.f_topup": "アクティビティ補充: 各パッドの実際の活動量に応じて配分され、そのパッドが支払う額を超えることはありません",
   "economy.map.f_scaled": "検証済みの活動に応じて増える週ごとの予算",
   "economy.map.to_tr": "不足したときの緊急流動性、貸付、助成金",
   "economy.map.tr_h": "🎰 ハウス · 🏦 銀行 · 📈 マーケットメーカー",

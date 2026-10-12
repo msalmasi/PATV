@@ -4750,7 +4750,7 @@
   "economy.map.f_heist": "Pisos dos cofres de assalto: Fort Knox e o cofre do Cassino mantidos em 2M ou mais",
   "economy.map.f_launch": "Subsídios de lançamento que alimentam os cofres dos novos pads",
   "economy.map.f_activity": "Recompensas de atividade para quem conversa e entra no microfone",
-  "economy.map.f_topup": "Reforços de pads que igualam o que cada cofre de pad paga",
+  "economy.map.f_topup": "Reforços de atividade: divididos conforme a atividade real de cada pad, nunca mais do que o pad paga",
   "economy.map.f_scaled": "Um orçamento semanal que cresce com a atividade verificada",
   "economy.map.to_tr": "liquidez relâmpago, empréstimos e subsídios quando ficam em falta",
   "economy.map.tr_h": "🎰 Casa · 🏦 Banco · 📈 Formador de mercado",

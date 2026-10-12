@@ -4750,7 +4750,7 @@
   "economy.map.f_heist": "Mínimos de bóvedas de atracos: Fort Knox y la bóveda del Casino, mantenidas en 2 M o más",
   "economy.map.f_launch": "Subvenciones de lanzamiento que alimentan las bóvedas de los pads nuevos",
   "economy.map.f_activity": "Recompensas por actividad para quienes chatean y se suben al micro",
-  "economy.map.f_topup": "Recargas de pads que igualan lo que paga cada bóveda de pad",
+  "economy.map.f_topup": "Recargas por actividad: se reparten según la actividad real de cada pad, nunca más de lo que el pad paga",
   "economy.map.f_scaled": "Un presupuesto semanal que crece con la actividad verificada",
   "economy.map.to_tr": "liquidez relámpago, préstamos y ayudas cuando se quedan cortas",
   "economy.map.tr_h": "🎰 La Casa · 🏦 El Banco · 📈 Creador de mercado",

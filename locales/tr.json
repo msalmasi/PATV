@@ -4731,7 +4731,7 @@
   "economy.map.f_heist": "Soygun kasası tabanları: Fort Knox ve 2M veya üzeri tutulan Kumarhane kasası",
   "economy.map.f_launch": "Yeni pad kasalarını başlatan açılış hibeleri",
   "economy.map.f_activity": "Sohbet eden ve mikrofona çıkan kişilere etkinlik ödülleri",
-  "economy.map.f_topup": "Her pad kasasının ödediğiyle eşleşen pad takviyeleri",
+  "economy.map.f_topup": "Etkinlik takviyeleri: her pad'in gerçek etkinliğine göre paylaştırılır, hiçbir zaman pad'in ödediğinden fazla değil",
   "economy.map.f_scaled": "Doğrulanmış etkinlikle büyüyen haftalık bir bütçe",
   "economy.map.to_tr": "açık verdiklerinde flaş likidite, krediler ve hibeler",
   "economy.map.tr_h": "🎰 House · 🏦 Banka · 📈 Piyasa yapıcı",

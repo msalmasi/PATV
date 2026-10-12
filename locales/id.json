@@ -4667,7 +4667,7 @@
   "economy.map.f_heist": "Lantai brankas perampokan: Fort Knox dan brankas Casino dijaga di 2 juta atau lebih",
   "economy.map.f_launch": "Hibah peluncuran untuk mengisi brankas pad baru",
   "economy.map.f_activity": "Hadiah aktivitas untuk orang yang mengobrol dan naik ke mikrofon",
-  "economy.map.f_topup": "Tambahan pad yang menyamai apa yang dibayarkan tiap brankas pad",
+  "economy.map.f_topup": "Tambahan aktivitas: dibagi sesuai aktivitas nyata tiap Pad, tidak pernah melebihi yang dibayarkan Pad",
   "economy.map.f_scaled": "Anggaran mingguan yang tumbuh seiring aktivitas terverifikasi",
   "economy.map.to_tr": "likuiditas kilat, pinjaman, dan hibah saat kehabisan dana",
   "economy.map.tr_h": "🎰 House · 🏦 Bank · 📈 Pembuat pasar",

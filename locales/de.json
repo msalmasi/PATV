@@ -4731,7 +4731,7 @@
   "economy.map.f_heist": "Heist-Tresorböden: Fort Knox und der Casino-Tresor, gehalten bei 2 Mio. oder mehr",
   "economy.map.f_launch": "Startzuschüsse, die die Tresore neuer Pads füllen",
   "economy.map.f_activity": "Aktivitätsbelohnungen für Leute, die chatten und ans Mikro gehen",
-  "economy.map.f_topup": "Pad-Aufstockungen, die dem entsprechen, was jeder Pad-Tresor auszahlt",
+  "economy.map.f_topup": "Aktivitäts-Aufstockungen: verteilt nach der echten Aktivität jedes Pads, nie mehr als das Pad auszahlt",
   "economy.map.f_scaled": "Ein wöchentliches Budget, das mit verifizierter Aktivität wächst",
   "economy.map.to_tr": "Blitzliquidität, Kredite und Zuschüsse, wenn es knapp wird",
   "economy.map.tr_h": "🎰 House · 🏦 Bank · 📈 Market Maker",

@@ -4750,7 +4750,7 @@
   "economy.map.f_heist": "Planchers des coffres de braquage : Fort Knox et le coffre du Casino maintenus à 2 M ou plus",
   "economy.map.f_launch": "Subventions de lancement qui alimentent les coffres des nouveaux pads",
   "economy.map.f_activity": "Récompenses d'activité pour ceux qui discutent et montent sur le micro",
-  "economy.map.f_topup": "Recharges des pads qui égalisent ce que chaque coffre de pad verse",
+  "economy.map.f_topup": "Recharges d'activité : réparties selon l'activité réelle de chaque pad, sans jamais dépasser ce que le pad verse",
   "economy.map.f_scaled": "Un budget hebdomadaire qui grandit avec l'activité vérifiée",
   "economy.map.to_tr": "liquidités flash, prêts et subventions quand elles viennent à manquer",
   "economy.map.tr_h": "🎰 Maison · 🏦 Banque · 📈 Teneur de marché",

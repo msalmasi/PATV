@@ -4750,7 +4750,7 @@
   "economy.map.f_heist": "Piani del caveau dei colpi: Fort Knox e il caveau del Casinò mantenuti a 2M o più",
   "economy.map.f_launch": "Contributi di lancio che alimentano i caveau dei nuovi pad",
   "economy.map.f_activity": "Ricompense per chi chatta e sale al microfono",
-  "economy.map.f_topup": "Ricariche dei pad che eguagliano quanto paga ogni caveau del pad",
+  "economy.map.f_topup": "Ricariche per attività: ripartite in base all'attività reale di ogni pad, mai più di quanto il pad paga",
   "economy.map.f_scaled": "Un budget settimanale che cresce con l'attività verificata",
   "economy.map.to_tr": "liquidità flash, prestiti e contributi quando scarseggiano",
   "economy.map.tr_h": "🎰 House · 🏦 Bank · 📈 Market maker",

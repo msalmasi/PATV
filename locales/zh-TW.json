@@ -4667,7 +4667,7 @@
   "economy.map.f_heist": "劫案金庫樓層：Fort Knox 與賭場金庫維持在 200 萬或以上",
   "economy.map.f_launch": "為新小站金庫注入資金的開站補助",
   "economy.map.f_activity": "給聊天與上麥克風用戶的活躍獎勵",
-  "economy.map.f_topup": "依各小站金庫發放金額進行的小站補充",
+  "economy.map.f_topup": "活動補充：依各小站的實際活動分配，且不會超過該小站的發放量",
   "economy.map.f_scaled": "隨經過驗證的活躍度成長的每週預算",
   "economy.map.to_tr": "資金不足時提供快速流動性、借貸與補助",
   "economy.map.tr_h": "🎰 莊家 · 🏦 銀行 · 📈 做市商",

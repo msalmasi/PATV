@@ -4731,7 +4731,7 @@
   "economy.map.f_heist": "Vaultvloeren van de overval: Fort Knox en de casinokluis, op 2M of meer gehouden",
   "economy.map.f_launch": "Startsubsidies die de kluizen van nieuwe pads vullen",
   "economy.map.f_activity": "Activiteitsbeloningen voor mensen die chatten en de mic pakken",
-  "economy.map.f_topup": "Pad-aanvullingen die gelijk zijn aan wat elke padkluis uitbetaalt",
+  "economy.map.f_topup": "Activiteitsaanvullingen: verdeeld naar de echte activiteit van elk pad, nooit meer dan het pad uitbetaalt",
   "economy.map.f_scaled": "Een wekelijks budget dat groeit met geverifieerde activiteit",
   "economy.map.to_tr": "flitsliquiditeit, leningen en subsidies als het krap wordt",
   "economy.map.tr_h": "🎰 House · 🏦 Bank · 📈 Marktmaker",

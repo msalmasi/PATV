@@ -4667,7 +4667,7 @@
   "economy.map.f_heist": "Sàn kho cướp: Fort Knox và kho Casino được giữ ở mức 2M trở lên",
   "economy.map.f_launch": "Khoản cấp khi ra mắt để tạo vốn cho kho của các pad mới",
   "economy.map.f_activity": "Phần thưởng hoạt động cho người chat và lên mic",
-  "economy.map.f_topup": "Bù cho pad khớp với số chi trả của kho mỗi pad",
+  "economy.map.f_topup": "Bù hoạt động: chia theo hoạt động thực tế của từng Pad, không bao giờ vượt quá số PAT mà Pad chi trả",
   "economy.map.f_scaled": "Ngân sách hằng tuần tăng theo hoạt động đã xác minh",
   "economy.map.to_tr": "thanh khoản tức thời, khoản vay và trợ cấp khi thiếu hụt",
   "economy.map.tr_h": "🎰 Nhà Cái · 🏦 Ngân hàng · 📈 Nhà tạo lập thị trường",

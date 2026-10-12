@@ -4667,7 +4667,7 @@
   "economy.map.f_heist": "강탈 금고 바닥값: Fort Knox와 카지노 금고를 200만 이상으로 유지",
   "economy.map.f_launch": "새 패드 금고에 씨앗 자금을 주는 출시 지원금",
   "economy.map.f_activity": "채팅하고 마이크에 올라간 사람들을 위한 활동 보상",
-  "economy.map.f_topup": "각 패드 금고의 지급액에 맞춰 채우는 패드 보충금",
+  "economy.map.f_topup": "활동 보충: 각 패드의 실제 활동에 따라 나눠지며, 패드가 지급하는 금액을 넘지 않아요",
   "economy.map.f_scaled": "검증된 활동에 따라 늘어나는 주간 예산",
   "economy.map.to_tr": "부족해지면 즉시 풀리는 유동성, 대출, 지원금",
   "economy.map.tr_h": "🎰 하우스 · 🏦 은행 · 📈 마켓 메이커",
