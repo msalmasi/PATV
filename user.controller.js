@@ -336,7 +336,18 @@ async function updateUsername(req, res) {
               req.flash('error', 'Username already taken');
               return res.redirect(editPage);
           }
-          await runQuery('UPDATE users SET username = ? WHERE userId = ?', [username, userId]);
+          // 1.99tc: a name another account used to have stays theirs; every rename is kept in username_history
+          const usernames = require('./usernames');
+          if (await usernames.reservedFor(username, userId)) {
+              req.flash('error', 'That username belonged to another account - pick another');
+              return res.redirect(editPage);
+          }
+          await usernames.ensure();
+          await require('./dbUtils').tx(async () => {
+              const was = (await getQuery('SELECT username FROM users WHERE userId = ?', [userId]))[0];
+              await runQuery('UPDATE users SET username = ? WHERE userId = ?', [username, userId]);
+              await usernames.record(userId, was ? was.username : req.user.username, username, 'rename:web');
+          });
           req.flash('success', 'Username changed.');
           clearLogin(res);
           res.redirect(`/login`);
@@ -518,11 +529,19 @@ async function _completeCamfrogLinkLocked(userId, camfrogUsername) {
     [cfLower, userId]
   );
 
+  // 1.99tc: the login this account had before (a !verify of a different Camfrog name replaces it) - kept in the login
+  // history so Pepe's records under the old login (gangs, stashes, loans...) still resolve to this account
+  const usernames = require('./usernames');
+  await usernames.ensure();
+  const before = ((await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]))[0] || {}).camfrogUsername;
+  if (before && before.toLowerCase().trim() !== cfLower) await usernames.recordLogin(userId, before, cfLower, 'camfrog:relink');
+
   let unlinkedFrom = null;
   if (otherAccounts.length > 0) {
     const other = otherAccounts[0];
     console.log(`[CF-RELINK] Unlinking camfrog "${cfLower}" from account ${other.username} (${other.userId})`);
     await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [other.userId]);
+    await usernames.recordLogin(other.userId, cfLower, null, 'camfrog:taken');
     // the Camfrog achievements go with the Camfrog name (quietly: no second XP/PAT)
     const copied = await copyCamfrogBadges(other.userId, userId);
     if (copied) console.log(`[CF-RELINK] copied ${copied} Camfrog achievement(s) to ${userId}`);
@@ -593,7 +612,9 @@ async function updateCamfrogUsername(req, res) {
 
   // Empty string = unlink
   if (!cfLower) {
+    const was = ((await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]))[0] || {}).camfrogUsername;
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [null, userId]);
+    if (was) await require('./usernames').recordLogin(userId, was, null, 'camfrog:unlink');   // 1.99tc: login history
     req.flash('success', 'Camfrog username unlinked.');
     return res.redirect(`/u/${username}/edit`);
   }

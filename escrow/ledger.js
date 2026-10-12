@@ -165,23 +165,25 @@ function digestOf(holds) {
 }
 
 // ── accounts ──
-async function accountFor({ userId, username, login }) {
-  if (userId) {
-    const r = (await getQuery("SELECT userId, username, camfrogUsername, casino_banned FROM users WHERE userId = ?", [String(userId)]))[0];
-    if (r) return r;
-  }
-  if (username) {
-    const r = (await getQuery("SELECT userId, username, camfrogUsername, casino_banned FROM users WHERE username = ?", [String(username)]))[0];
-    if (r) return r;
-  }
-  if (login) {
-    const r = (await getQuery(`SELECT userId, username, camfrogUsername, casino_banned FROM users WHERE LOWER(camfrogUsername) = LOWER(?)
-                               ORDER BY points_balance DESC LIMIT 1`, [String(login)]))[0];
-    if (r) return r;
-    const r2 = (await getQuery("SELECT userId, username, camfrogUsername, casino_banned FROM users WHERE LOWER(username) = LOWER(?)", [String(login)]))[0];
-    if (r2) return r2;
-  }
-  return null;
+/**
+ * The PATV account a record names. 1.99tc: userId first (followed through merges), then the username - an old name is
+ * resolved through username_history / the merge log when exactly one live account had it (usernames.js), then the
+ * Camfrog login. -> the users row or null. accountResolve() says why not (E_AMBIGUOUS vs not found).
+ */
+const ACCT_COLS = "userId, username, camfrogUsername, casino_banned";
+async function accountResolve({ userId, username, login }, opts = {}) {
+  const r = await require("../usernames").resolveRecord({ userId, username }, Object.assign({ cols: ACCT_COLS }, opts));
+  if (r.ok || r.code === "E_AMBIGUOUS" || !login) return r;
+  const a = (await getQuery(`SELECT ${ACCT_COLS} FROM users WHERE LOWER(camfrogUsername) = LOWER(?)
+                             ORDER BY points_balance DESC LIMIT 1`, [String(login)]))[0];
+  if (a) return { ok: true, user: a, via: "login" };
+  const b = (await getQuery(`SELECT ${ACCT_COLS} FROM users WHERE LOWER(username) = LOWER(?)`, [String(login)]))[0];
+  if (b) return { ok: true, user: b, via: "login" };
+  return r;
+}
+async function accountFor(q, opts = {}) {
+  const r = await accountResolve(q || {}, opts);
+  return r.ok ? r.user : null;
 }
 async function cpName(cp) {
   if (!cp) return undefined;
@@ -230,7 +232,7 @@ async function holdInTx({ key, hid, account, login, amount, ref, reason, cp, via
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'held', ?, ?, ?)`,
                  [id, key, String(ref), kindOf(ref), str(login || account.camfrogUsername || account.username, 60), account.username, account.userId, amt,
                   str(reason, 40), str(cp, 60), now(), d.transactionId, str(via, 20)]);
-  return { ok: true, hid: id, txid: d.transactionId, user: account.username };
+  return { ok: true, hid: id, txid: d.transactionId, user: account.username, user_id: account.userId };
 }
 
 async function loadHeld(ids) {
@@ -291,7 +293,7 @@ async function settleInTx({ key, hids, payouts, fees, ref, max }) {
   for (const h of hs) known[String(h.login || "").toLowerCase()] = { userId: h.user_id };
   const paid = [];
   for (const p of pay) {
-    let uid = p.userId;
+    let uid = p.userId || p.user_id;
     if (!uid && p.user) uid = ((await accountFor({ username: p.user })) || {}).userId;
     if (!uid && p.nick) uid = (known[p.nick.toLowerCase()] || {}).userId || ((await accountFor({ login: p.nick })) || {}).userId;
     if (!uid) throw new Refuse(404, `Couldn't find the account to pay (${p.user || p.nick}).`, "E_TARGET_NOT_FOUND", { payee: p.user || p.nick });
@@ -469,8 +471,9 @@ function parseExport(text) {
     seenIds.add(id);
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new Refuse(400, `hold ${id}: bad amount ${String(h.amount).slice(0, 20)}`);
     if (!REF_RE.test(String(h.ref || ""))) throw new Refuse(400, `hold ${id}: bad ref`);
-    if (!h.user) throw new Refuse(400, `hold ${id}: no PATV account`);
-    return { id, ref: String(h.ref), user: String(h.user).slice(0, 80), nick: str(h.nick, 60), amount, reason: str(h.reason, 40), cp: str(h.cp, 60),
+    const uid = h.user_id ? String(h.user_id).slice(0, 64) : null;      // 1.99tc: Pepe sends the stable userId when he has it
+    if (!h.user && !uid) throw new Refuse(400, `hold ${id}: no PATV account`);
+    return { id, ref: String(h.ref), user: String(h.user || "").slice(0, 80), user_id: uid, nick: str(h.nick, 60), amount, reason: str(h.reason, 40), cp: str(h.cp, 60),
              ts: Number(h.ts) || null };
   });
   return { p, holds };
@@ -508,15 +511,22 @@ async function importFromPepe(body) {
     if (Math.floor(Number(v)) !== (perKind[k] || 0)) throw new Refuse(400, `kind ${k}: ${perKind[k] || 0} vs ${v}`, "E_TOTALS");
   }
   for (const k of Object.keys(perKind)) if (Math.floor(Number((tt.per_kind || {})[k])) !== perKind[k]) throw new Refuse(400, `kind ${k}: ${perKind[k]} vs ${(tt.per_kind || {})[k]}`, "E_TOTALS");
-  const missing = [];
+  // 1.99tc: every hold's account - by userId when Pepe sent one, else the username, an OLD username resolved through the
+  // username history / merge log when exactly one live account had it; an ambiguous name is refused, never guessed
+  const missing = [], ambiguous = [], renamed = [];
   const accounts = {};
+  const akey = (h) => `${h.user_id || ""}|${h.user.toLowerCase()}`;
   for (const h of holds) {
-    if (accounts[h.user] !== undefined) continue;
-    const a = await accountFor({ username: h.user });
-    accounts[h.user] = a;
-    if (!a) missing.push(h.user);
+    if (accounts[akey(h)] !== undefined) continue;
+    const r = await accountResolve({ userId: h.user_id, username: h.user }, { strict: true, at: h.ts ? Math.floor(h.ts * 1000) : null });
+    accounts[akey(h)] = r.ok ? r.user : null;
+    if (r.ok && h.user && r.user.username !== h.user) renamed.push(`${h.user} -> ${r.user.username}`);
+    if (!r.ok && r.code === "E_AMBIGUOUS") ambiguous.push(r.error);
+    else if (!r.ok) missing.push(h.user || h.user_id);
   }
+  if (ambiguous.length) throw new Refuse(409, `ambiguous PATV account: ${ambiguous.slice(0, 5).join("; ")}`, "E_AMBIGUOUS", { ambiguous: ambiguous.slice(0, 50) });
   if (missing.length) throw new Refuse(409, `no PATV account for ${missing.slice(0, 10).join(", ")}`, "E_TARGET_NOT_FOUND", { missing: missing.slice(0, 50) });
+  if (renamed.length) console.log(`[escrow] import: ${renamed.length} hold account(s) found under an old name: ${renamed.slice(0, 20).join(", ")}`);
   const held = await heldTotal("pepe");
   if (held.count) throw new Refuse(409, `the escrow table already holds ${held.amount} in ${held.count} hold(s)`, "E_NOT_EMPTY");
   const clash = holds.length ? await getQuery(`SELECT id FROM escrow_holds WHERE id IN (${holds.map(() => "?").join(",")})`, holds.map((h) => h.id)) : [];
@@ -543,7 +553,7 @@ async function importFromPepe(body) {
       for (const c of clash) await runQuery("UPDATE escrow_holds SET id = id || '~' || ?, key = NULL WHERE id = ?", [String(now()), c.id]);
       const t = now();
       for (const h of holds) {
-        const a = accounts[h.user];
+        const a = accounts[akey(h)];
         await runQuery(`INSERT INTO escrow_holds (id, key, ref, kind, login, username, user_id, amount, reason, cp, state, created, via)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'held', ?, 'import')`,
                        [h.id, `import:${key}:${h.id}`, h.ref, kindOf(h.ref), h.nick || a.camfrogUsername || a.username, a.username, a.userId, h.amount,
@@ -734,5 +744,5 @@ function register(app, { isBotToken, addUser, patSupply }) {
 
 module.exports = { init, register, enabled, live, rev, bumpRev, meta, setMeta, tx, seen, record, holdInTx, refundInTx, settleInTx, grantInTx,
                    hold, refund, settle, grant, status, holdsHeld, holdsByIds, heldTotal, totalsByKind, digestOf, supplyRows, importFromPepe,
-                   exportState, rollbackToPepe, gamesState, SERVICE_KINDS, isServiceKind, emitInTx, wake, events, adminView, accountFor, kindOf, Refuse, isRefuse, GAMES,
+                   exportState, rollbackToPepe, gamesState, SERVICE_KINDS, isServiceKind, emitInTx, wake, events, adminView, accountFor, accountResolve, kindOf, Refuse, isRefuse, GAMES,
                    _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive };

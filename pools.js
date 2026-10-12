@@ -238,7 +238,9 @@ async function moveStatus(key) {
 }
 
 // ── /api/pat/charge: the wallet debit and its routing, in ONE transaction ──
-const userByName = async (username) => (await getQuery("SELECT userId, username FROM users WHERE username = ?", [String(username || "")]))[0] || null;
+// 1.99tc: an old (renamed / merged) username resolves through the username history (usernames.js), never a guess
+const userByName = async (username) => (await getQuery("SELECT userId, username FROM users WHERE username = ?", [String(username || "")]))[0]
+  || (username ? await require("./usernames").findUser(username, { cols: "userId, username" }) : null);
 
 /**
  * Pepe priced the command and split it by his PAT Routing table (`legs` = [[dest, amount], ...], summing to `amount`).

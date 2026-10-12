@@ -317,7 +317,8 @@ function register(app, { isBotToken, addUser }) {
     const idem = String(b.idem || "");
     if (!BOT_VERBS.has(verb) || !IDEM.test(idem)) return res.status(400).json({ ok: false, reply: "bad request" });
     const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername, class FROM users WHERE LOWER(username) = LOWER(?)",
-                              [String(b.username || "")]))[0];
+                              [String(b.username || "")]))[0]
+      || (b.username ? await require("../usernames").findUser(b.username, { cols: "userId, username, displayname, camfrogUsername, class" }) : null);
     if (!u) return res.json({ ok: false, reply: "no account found" });
     const room = b.room ? String(b.room).slice(0, 64) : null;
     if (room) svc.noteRooms([{ id: room, name: b.room_name || room }]);

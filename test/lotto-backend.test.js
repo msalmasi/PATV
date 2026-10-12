@@ -380,6 +380,37 @@ test("cutover: import -> totals match exactly -> backend on; export round-trips;
   assert.equal((await svc.info("u2")).mine, 12);
 });
 
+test("1.99tc cutover: a ticket owner renamed since the purchase still resolves (username history); an ambiguous old name is refused", async () => {
+  const U = require(path.join(repo, "usernames"));
+  await fresh({ on: false });
+  // cat renamed herself after buying; two other accounts both once called "tixdup" (renamed away)
+  await runQuery("UPDATE users SET username = 'Catherine' WHERE userId = 'u3'");
+  await U.record("u3", "cat", "Catherine", "rename:web");
+  for (const [id, now] of [["u8", "Dup8"], ["u9", "Dup9"]]) {
+    await runQuery("INSERT INTO users (userId, username, password, points_balance) VALUES (?, ?, 'x', 0)", [id, now]);
+    await U.record(id, "tixdup", now, "rename:web");
+  }
+  try {
+    const amb = exportFixture();
+    amb.tickets[0].user = "tixdup";
+    amb.totals.per_user = { tixdup: 1, ann: 9, bob: 10, cat: 10 }; amb.totals.players = 4;
+    const ra = await svc.importState(amb, "cut-amb", {});
+    assert.equal(ra.ok, false);
+    assert.match(ra.error, /ambiguous: the old PATV username tixdup was used by 2 accounts/);
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM lotto_tickets"))[0].n, 0);
+    // the export still says "cat" (Pepe's names): every ticket lands on u3 and the per-user totals match under today's name
+    const x = exportFixture();
+    const r = await svc.importState(x, "cut-renamed", {});
+    assert.ok(r.ok, JSON.stringify(r));
+    assert.deepEqual(r.totals.per_user, { ann: 10, bob: 10, catherine: 10 });
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM lotto_tickets WHERE userId = 'u3'"))[0].n, 10);
+  } finally {
+    await runQuery("UPDATE users SET username = 'cat' WHERE userId = 'u3'");
+    await runQuery("DELETE FROM users WHERE userId IN ('u8', 'u9')");
+    await runQuery("DELETE FROM username_history");
+  }
+});
+
 // ── HTTP ──
 test("HTTP: web purchase (JSON fetch only), the /act form path, Pepe's act / poll / pot, Telegram refused, old sync refused", async () => {
   await fresh();

@@ -75,6 +75,7 @@ const RULES = {
   // ledger
   "transactions.userId": M(), "transactions.counterparty": M(),
   "bonus_winners.userId": M(), "reserve_claims.userId": M(), "jackpot_rakes.userId": M(), "wheel_spins.userId": M(),
+  "username_history.userId": M(),   // 1.99tc: usernames.js - the merged account's old names now mean the target
   "bot_credit_log.userId": M(),     // 1.99jw: botcredits.js - the log of every bot credit / House move
   "blackjack.userId": M(), "poker_cashier.userId": M(), "poker_now_games.userId": M(), "user_redemptions.userId": M({ key: ["code"] }),
   "pat_burns.actor": M(), "pat_burns.actor_kind": { deny: FLAG },
@@ -659,6 +660,12 @@ async function logMerge({ via, from, to, pat = 0, xp = 0, report = {}, note = nu
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                            [Date.now(), String(via), from.userId, to.userId, from.username || null, to.username || null, Number(pat) || 0, Number(xp) || 0,
                             j(report.moved), j(report.folded), j(report.left), JSON.stringify(report.unclassified || []), note]);
+  // 1.99tc: the merged-away account's name now means the target (username_history - old Pepe records still name it)
+  if (from.username && to.userId) {
+    const un = require("./usernames");
+    await un.ensure();
+    await un.record(to.userId, from.username, to.username || null, "merge", { note: `merge (${String(via).slice(0, 30)})` });
+  }
   return r && (r.id || r.lastID);
 }
 

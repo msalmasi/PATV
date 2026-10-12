@@ -60,6 +60,8 @@ const twitchLogin = require("./twitchlogin");       // 1.99bu: users.twitchLogin
 twitchLogin.ensure();
 stale.startNoticeTimers();
 setTimeout(() => require("./accountMerge").ensureCamfrogUnique(), 3000);   // 1.99bs: one account per Camfrog login
+// 1.99tc: username history (renames + merges) and its one-time backfill - the resolver for stale names from Pepe (usernames.js)
+setTimeout(() => require("./usernames").backfillOnce(), 8000);
 setTimeout(() => require("./userlookup").ensureProviderUnique().catch(() => {}), 3500);   // 1.99fy: one account per Twitch / Discord id
 setTimeout(() => displaynames.ready().catch((e) => console.error("[displaynames] schema:", e.message)), 2000);
 const cookieParser = require("cookie-parser");
@@ -2025,13 +2027,16 @@ app.post("/api/wager/charge", async (req, res) => {
   const amount = Math.floor(Number(req.body && req.body.amount));
   const reason = ((req.body && req.body.reason) || "Wager").toString().slice(0, 40);
   if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
-  if (!username || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
+  const byId = req.body && req.body.userId ? String(req.body.userId) : null;     // 1.99tc: the stable id when Pepe has it
+  if ((!username && !byId) || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
   const idem = await idemBegin(req, res, "wager/charge");
   if (idem.replay) return;
   const reply = (status, body) => { idem.done(status, body); return res.status(status).json(body); };
   try {
-    const users = await getQuery("SELECT userId, casino_banned FROM users WHERE username = ?", [username]);
-    if (!users.length) return reply(404, { ok: false, error: "no_user" });
+    // 1.99tc: userId (followed through merges), else the username - an old (renamed / merged) one via usernames.js
+    const who = await require("./usernames").resolveRecord({ userId: byId, username }, { cols: "userId, username, casino_banned" });
+    if (!who.ok) return reply(who.code === "E_AMBIGUOUS" ? 409 : 404, { ok: false, error: who.code === "E_AMBIGUOUS" ? "ambiguous_user" : "no_user", detail: who.error });
+    const users = [who.user];
     const userId = users[0].userId;
     // Casino-banned users can't be charged for casino games (blackjack/hold'em/poker/wheel).
     if (users[0].casino_banned && /^(blackjack|holdem|poker|wheel)/i.test(reason)) {
@@ -2045,7 +2050,7 @@ app.post("/api/wager/charge", async (req, res) => {
     const route = patroutes.cleanRoute(req.body.route);
     const rkey = route ? idemKey(req) : null;
     if (route && patroutes.validKey(rkey)) {
-      const debit = await patroutes.charge({ key: rkey, userId, username, amount, reason, counterparty: cp, route });
+      const debit = await patroutes.charge({ key: rkey, userId, username: users[0].username || username, amount, reason, counterparty: cp, route });
       if (!debit.ok) {
         return debit.code === ledger.E_INSUFFICIENT
           ? reply(402, { ok: false, error: "insufficient" })
@@ -2072,12 +2077,20 @@ app.post("/api/wager/payout", async (req, res) => {
   const amount = Math.floor(Number(req.body && req.body.amount));
   const reason = ((req.body && req.body.reason) || "Winnings").toString().slice(0, 40);
   if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
-  if (!username || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
+  const byId = req.body && req.body.userId ? String(req.body.userId) : null;     // 1.99tc: the stable id when Pepe has it
+  if ((!username && !byId) || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
   const idem = await idemBegin(req, res, "wager/payout");
   if (idem.replay) return;
   try {
-    const users = await getQuery("SELECT userId FROM users WHERE username = ?", [username]);
-    if (!users.length) { idem.done(404, { ok: false, error: "no_user" }); return res.status(404).json({ ok: false, error: "no_user" }); }
+    // 1.99tc: a payout Pepe kept for days names the account as it was then: userId first, else the username - an old
+    // (renamed / merged) one resolved through usernames.js when exactly one live account had it
+    const who = await require("./usernames").resolveRecord({ userId: byId, username }, { cols: "userId, username" });
+    if (!who.ok) {
+      const body = { ok: false, error: who.code === "E_AMBIGUOUS" ? "ambiguous_user" : "no_user", detail: who.error };
+      idem.done(who.code === "E_AMBIGUOUS" ? 409 : 404, body);
+      return res.status(who.code === "E_AMBIGUOUS" ? 409 : 404).json(body);
+    }
+    const users = [who.user];
     const cp = await resolveCounterparty(req.body.counterparty);
     const paid = await ledger.post(users[0].userId, amount, reason, { counterparty: cp, resolveMerged: true, source: "wager/payout" });
     if (!paid.ok) {
@@ -2363,13 +2376,25 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
     if (taken.length > 0) {
       return res.status(409).json({ ok: false, error: "that username is taken" });
     }
-    await runQuery("UPDATE users SET username = ? WHERE userId = ?", [name, user.userId]);
-    res.json({ ok: true, old: user.username, username: name });
+    // 1.99tc: a name another account used to have stays theirs (old Pepe records may still name them) - usernames.js
+    const usernames = require("./usernames");
+    if (await usernames.reservedFor(name, user.userId)) {
+      return res.status(409).json({ ok: false, error: "that username belonged to another account - pick another" });
+    }
+    await usernames.ensure();
+    await require("./dbUtils").tx(async () => {
+      await runQuery("UPDATE users SET username = ? WHERE userId = ?", [name, user.userId]);
+      await usernames.record(user.userId, user.username, name, "rename:pepe");   // 1.99tc: username history
+    });
+    res.json({ ok: true, old: user.username, username: name, userId: user.userId });
   } catch (error) {
     console.error("Error renaming Camfrog user:", error);
     res.status(500).json({ ok: false, error: "internal server error" });
   }
 });
+
+// 1.99tc: POST /api/users/resolve - old (renamed / merged) usernames and merged-away userIds -> today's account (usernames.js)
+require("./usernames").register(app, { isBotToken });
 
 // This endpoint creates a new Camfrog user
 // Bot-only routes: the caller must present the bot token. An unset token

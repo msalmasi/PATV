@@ -690,15 +690,23 @@ function importState(x, key, { enable = false, actor = null } = {}) {
       return { ok: false, error: "the backend lotto isn't empty - nothing imported (reset it first on staging)" };
     if (!x || x.v !== 1 || !(x.draw > 0) || !(x.next_at > 0) || !Array.isArray(x.tickets) || !x.totals) return { ok: false, error: "bad export" };
     if (x.pending_draw) return { ok: false, error: "the export has a draw still paying - wait for it" };
-    // accounts
-    const names = Array.from(new Set(x.tickets.map((t) => String(t.user || "").toLowerCase())));
-    const umap = new Map();
-    for (let i = 0; i < names.length; i += 400) {
-      const chunk = names.slice(i, i + 400);
-      const rows = await getQuery(`SELECT userId, username FROM users WHERE LOWER(username) IN (${chunk.map(() => "?").join(",")})`, chunk);
-      for (const r of rows) umap.set(String(r.username).toLowerCase(), r.userId);
+    // accounts - 1.99tc: by the ticket's userId when Pepe sent one, else its username; an OLD (renamed / merged) username is
+    // resolved through the username history when exactly one live account had it, an ambiguous one refuses the import
+    const UN = require("../usernames");
+    const tkey = (t) => `${t.user_id || ""}|${String(t.user || "").toLowerCase()}`;
+    const umap = new Map();                 // tkey -> {userId, username}
+    const nameMap = new Map();              // exported username (lower) -> today's username (lower), for the per_user totals
+    const missing = [], ambiguous = [];
+    for (const t of x.tickets) {
+      const k = tkey(t);
+      if (umap.has(k)) continue;
+      const r = await UN.resolveRecord({ userId: t.user_id, username: t.user }, { strict: true });
+      if (r.ok) {
+        umap.set(k, r.user);
+        if (t.user) nameMap.set(String(t.user).toLowerCase(), String(r.user.username).toLowerCase());
+      } else { umap.set(k, null); (r.code === UN.E_AMBIGUOUS ? ambiguous : missing).push(r.code === UN.E_AMBIGUOUS ? r.error : (t.user || t.user_id)); }
     }
-    const missing = names.filter((n) => !umap.has(n));
+    if (ambiguous.length) return { ok: false, error: `${ambiguous.length} ticket owner(s) are ambiguous: ${ambiguous.slice(0, 3).join("; ")}`, ambiguous: ambiguous.slice(0, 20) };
     if (missing.length) return { ok: false, error: `${missing.length} ticket owner(s) have no PATV account`, missing: missing.slice(0, 20) };
     for (const t of x.tickets) if (!E.validPick(t.w, t.pb)) return { ok: false, error: "a ticket with bad numbers", ticket: t };
     const price = Math.trunc(Number(x.price) || E.RULES.PRICE);
@@ -713,7 +721,7 @@ function importState(x, key, { enable = false, actor = null } = {}) {
     for (let i = 0; i < x.tickets.length; i += 200) {
       const chunk = x.tickets.slice(i, i + 200);
       const vals = [];
-      for (const t of chunk) vals.push(draw, umap.get(String(t.user).toLowerCase()), String(t.who || t.user).slice(0, 40),
+      for (const t of chunk) vals.push(draw, umap.get(tkey(t)).userId, String(t.who || t.user || umap.get(tkey(t)).username).slice(0, 40),
                                        t.w.slice().sort((a, b) => a - b).join(","), t.pb, `import:${key}`, ts);
       await runQuery(`INSERT INTO lotto_tickets (draw, userId, name, w, pb, purchase, created) VALUES ${chunk.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ")}`, vals);
     }
@@ -723,7 +731,12 @@ function importState(x, key, { enable = false, actor = null } = {}) {
     }
     const got = await totals(draw);
     const want = { tickets: Math.trunc(x.totals.tickets), players: Math.trunc(x.totals.players), pot: Math.trunc(x.totals.pot),
-                   history: Math.min(60, Math.trunc(x.totals.history)), per_user: Object.fromEntries(Object.entries(x.totals.per_user || {}).map(([k, v]) => [k.toLowerCase(), v])) };
+                   history: Math.min(60, Math.trunc(x.totals.history)), per_user: {} };
+    // the export's per-user counts are keyed by the names Pepe had; the backend's by today's names (an old name was resolved)
+    for (const [k, v] of Object.entries(x.totals.per_user || {})) {
+      const now = nameMap.get(k.toLowerCase()) || k.toLowerCase();
+      want.per_user[now] = (want.per_user[now] || 0) + v;
+    }
     const match = sameTotals(got, want);
     if (!match) {
       // undo: the backend was empty, so everything in it is this import

@@ -518,7 +518,8 @@ function register(app, { isBotToken, addUser }) {
     if (op === "move") return botMove({ stashId: b.stash, amount: b.amount, stakedDelta: b.staked_delta, earned: b.earned, key: b.key, kind: b.kind, why: b.why });
     if (op === "move_status") return { ok: true, result: await moveStatus(b.key) };
     // money moves for a Camfrog user: Pepe resolved the account (b.username) and checked access with his alias rules
-    const uid = b.username ? ((await getQuery("SELECT userId FROM users WHERE username = ?", [String(b.username)]))[0] || {}).userId : null;
+    const uid = b.userId ? await require("./usernames").resolveUserId(b.userId)        // 1.99tc: the stable id first, old names resolve
+      : b.username ? ((await require("./usernames").findUser(b.username, { cols: "userId" })) || {}).userId || null : null;
     if (op === "deposit" || op === "withdraw" || op === "close") {
       if (!uid) throw new Refuse(404, "couldn't find a PAT account", "E_TARGET_NOT_FOUND");
       if (op === "deposit") return deposit({ stashId: b.stash, login, userId: uid, amount: b.amount, key: b.key, via: "chat" });

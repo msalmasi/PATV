@@ -158,3 +158,31 @@ test("the Camfrog !verify merge (completeCamfrogLink) uses the same rule: Lv3 + 
   assert.deepEqual({ ...(await row("f-me")) }, { xp: 1700, level: 3 });
   assert.equal(await row("f-auto"), undefined);
 });
+
+test("1.99tc: the Hfddhh incident end to end - !verify of a NEW Camfrog name (auto account merged) then a rename: the old username, the merged-away name and the OLD Camfrog login all still resolve", async () => {
+  await ready;
+  const U = require(path.join(repo, "usernames"));
+  await addUser("h-me", 2, 0, { username: "Hfd2", cf: "watermelon2" });
+  await addUser("h-auto", 1, 0, { username: "CFauto2", cf: "wutup2" });
+  await runQuery("INSERT INTO pending_camfrog_links (code, userId, camfrogUsername, expires_at) VALUES ('HFD123', 'h-me', 'wutup2', ?)",
+                 [new Date(Date.now() + 600000).toISOString()]);
+  let out = null;
+  const res = { status() { return this; }, json(d) { out = d; return this; } };
+  await uc.verifyCamfrogLink({ body: { code: "HFD123", camfrogUsername: "wutup2", password: "bot-token" } }, res);
+  assert.equal(out && out.success && out.merged, true, JSON.stringify(out));
+  // then the account is renamed (the bot route / Edit profile both record it)
+  await runQuery("UPDATE users SET username = 'WutUp2' WHERE userId = 'h-me'");
+  await U.record("h-me", "Hfd2", "WutUp2", "rename:pepe");
+  for (const old of ["Hfd2", "CFauto2"]) {
+    const r = await U.resolve(old, { strict: true });
+    assert.equal(r.ok && r.user.userId, "h-me", `${old}: ${r.error}`);
+  }
+  // Pepe's gang / stash / loan records keyed by the OLD Camfrog login
+  const l = await U.resolveLogin("watermelon2", { strict: true });
+  assert.equal(l.ok && l.user.userId, "h-me", l.error);
+  assert.equal(l.via, "history");
+  assert.equal((await U.resolveLogin("wutup2")).via, "current");
+  const rr = await U.resolveRecord({ userId: "u-gone-nowhere", username: "nobody-x", login: "watermelon2" });
+  assert.equal(rr.ok && rr.user.userId, "h-me");
+  assert.equal(rr.via, "login-history");
+});

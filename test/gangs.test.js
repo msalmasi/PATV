@@ -42,6 +42,8 @@ function packPools() {
   return { key: "pc-gangs-test", payload, digest: crypto.createHash("sha256").update(payload, "utf8").digest("hex"),
            totals: { sum: Object.values(POOLS).reduce((t, v) => t + v, 0), count: 4, per_pool: POOLS } };
 }
+// 1.99tc: zoltar is exported with an account that was later MERGED into u-zoltar (test.before records the merge): the
+// import resolves it through the merge and writes u-zoltar
 // prod's shape (gang_data.json): The Family-like gang + a tiny one
 const GANGS = {
   aa11bb22: { name: "The Family", tag: "FAM", boss: "foamy", officers: ["tricon"], members: ["foamy", "tricon", "zoltar", "ann_cf"], treasury: 1000,
@@ -52,7 +54,7 @@ const GANGS = {
               wars: { wins: 4, losses: 0 } },
 };
 const MEMBERS = { foamy: "aa11bb22", tricon: "aa11bb22", zoltar: "aa11bb22", ann_cf: "aa11bb22", bob_cf: "cc33dd44" };
-const USERS = { foamy: { userId: "u-foamy" }, tricon: { userId: "u-tricon" }, zoltar: { userId: "u-zoltar" }, ann_cf: { userId: "u1" }, bob_cf: { userId: "u2" } };
+const USERS = { foamy: { userId: "u-foamy" }, tricon: { userId: "u-tricon" }, zoltar: { userId: "u-zoltar-gone", username: "CFzoltar_old" }, ann_cf: { userId: "u1" }, bob_cf: { userId: "u2" } };
 function pack(extra = {}, key = "gc-0001") {
   const body = Object.assign({ v: 1, source: "pepe", gangs: GANGS, members: MEMBERS, users: USERS, disbanded: {}, supply_gangs: 1234,
                                casino_rep_done: ["cbj:t1:r1:u1"], cfg: { cut_rate: 0.05 } }, extra.payload || {});
@@ -82,6 +84,11 @@ test.before(async () => {
     await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername) VALUES (?, ?, 'x', ?, ?)", [id, name, b, cf]);
   }
   await runQuery("INSERT INTO supply_snapshot (id, pools) VALUES (1, ?)", [JSON.stringify(SUPPLY)]);
+  await require(path.join(repo, "ledger")).recordMerge("u-zoltar-gone", "u-zoltar", "test merge");
+  // two accounts were once called "gdup" (renamed away): a member carried by that name alone is ambiguous
+  const UN = require(path.join(repo, "usernames"));
+  await UN.record("u-foamy", "gdup", "CFfoamy", "rename:web");
+  await UN.record("u3", "gdup", "carl", "rename:web");
   await require(path.join(repo, "funding")).init();
   await require(path.join(repo, "casino", "rewards")).ensure();
   // two queued casino rep events: one Pepe already applied (in the export), one he didn't
@@ -119,6 +126,9 @@ test("import: digest, totals and identities are checked; a mismatch keeps nothin
   assert.equal((await post("/api/gangs/admin/import", pack({ totals: { treasury: 1 } }))).body.code, "E_TOTALS");
   const noUser = pack({ payload: { users: Object.assign({}, USERS, { zoltar: { userId: "u-nobody" } }) } });
   assert.equal((await post("/api/gangs/admin/import", noUser)).body.code, "E_IDENTITY");
+  const amb = await post("/api/gangs/admin/import", pack({ payload: { users: Object.assign({}, USERS, { zoltar: { userId: "u-nobody", username: "gdup" } }) } }));
+  assert.equal(amb.body.code, "E_AMBIGUOUS");
+  assert.match(amb.body.error, /zoltar: the old PATV username gdup was used by 2 accounts/);
   const pend = pack({ payload: { gangs: Object.assign({}, GANGS, { cc33dd44: Object.assign({}, GANGS.cc33dd44, { wd_pending: { w1: { net: 5 } } }) }) } });
   assert.equal((await post("/api/gangs/admin/import", pend)).body.code, "E_PENDING");
   assert.equal(await G.live(), false);
@@ -171,6 +181,7 @@ test("import: every gang lands, treasuries match, the supply doesn't move, the c
   assert.equal(fam.withdraw_today, 100000);
   assert.deepEqual(fam.wars, { wins: 5, losses: 7 });
   assert.deepEqual(st.members, MEMBERS);
+  assert.equal((await getQuery("SELECT userId FROM gang_members WHERE member_key = 'zoltar'"))[0].userId, "u-zoltar", "the merge was followed");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM casino_rep_queue WHERE acked IS NULL"))[0].n, 0);
   // the pool views never show a treasury
   assert.equal(Object.keys(await P.balances()).some((k) => k.startsWith("gang:")), false);

@@ -152,7 +152,8 @@ function register(app, { isBotToken, addUser, updateLevel }) {
   app.post("/api/lotto/bot/act", bot(async (b) => {
     if (String(b.channel || "") === "telegram") return { ok: false, code: "telegram" };
     const verb = String(b.verb || "").toLowerCase();
-    const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE LOWER(username) = LOWER(?)", [String(b.username || "")]))[0];
+    const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE LOWER(username) = LOWER(?)", [String(b.username || "")]))[0]
+      || (b.username ? await require("../usernames").findUser(b.username, { cols: "userId, username, displayname, camfrogUsername" }) : null);
     if (verb === "draw") {
       if (!b.admin) return { ok: false, code: "admin" };
       return svc.forceDraw(String(b.name || b.camfrog || "admin").slice(0, 40));

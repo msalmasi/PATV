@@ -258,8 +258,11 @@ function keyForUser(u) {
   return u && u.camfrogUsername ? low(u.camfrogUsername) : "u:" + u.userId;
 }
 async function userFor({ userId, username }) {
-  if (userId) return (await getQuery("SELECT userId, username, camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0] || null;
-  if (username) return (await getQuery("SELECT userId, username, camfrogUsername FROM users WHERE username = ?", [String(username)]))[0] || null;
+  // 1.99tc: a merged-away userId follows the merge; an old (renamed / merged) username resolves via usernames.js
+  if (userId || username) {
+    const r = await require("./usernames").resolveRecord({ userId, username });
+    return r.ok ? r.user : null;
+  }
   return null;
 }
 
@@ -901,14 +904,21 @@ async function importFromPepe(body) {
   for (const k of ["gangs", "members", "treasury", "rep"]) {
     if (Math.trunc(Number(tt[k])) !== exp[k]) throw new Refuse(400, `totals don't match: ${k} ${exp[k]} in the export vs ${tt[k]}`, "E_TOTALS");
   }
-  const uids = [...new Set(Object.values(users).map((u) => String(u.userId)))];
-  const have = new Set();
-  for (let i = 0; i < uids.length; i += 200) {
-    const part = uids.slice(i, i + 200);
-    for (const r of await getQuery(`SELECT userId FROM users WHERE userId IN (${part.map(() => "?").join(",")})`, part)) have.add(r.userId);
+  // 1.99tc: every member's account - the exported userId followed through merges, else the username (an old renamed /
+  // merged one via the username history, refused when ambiguous), else the member's Camfrog login. The resolved id is
+  // what gets written (an export made before a merge still lands on the surviving account).
+  const UN = require("./usernames");
+  const missing = [], ambiguous = [], moved = [];
+  for (const mk of Object.keys(users)) {
+    const u = users[mk] || {};
+    const r = await UN.resolveRecord({ userId: u.userId, username: u.username, login: mk }, { strict: true });
+    if (!r.ok) { (r.code === UN.E_AMBIGUOUS ? ambiguous : missing).push(r.code === UN.E_AMBIGUOUS ? `${mk}: ${r.error}` : `${mk} (${u.userId || u.username || "?"})`); continue; }
+    if (String(r.user.userId) !== String(u.userId)) moved.push(`${mk}: ${u.userId || "?"} -> ${r.user.userId} (${r.via})`);
+    users[mk] = Object.assign({}, u, { userId: r.user.userId, username: r.user.username });
   }
-  const missing = uids.filter((u) => !have.has(u));
+  if (ambiguous.length) throw new Refuse(409, `${ambiguous.length} member account(s) are ambiguous (${ambiguous.slice(0, 3).join("; ")})`, "E_AMBIGUOUS");
   if (missing.length) throw new Refuse(409, `${missing.length} member account(s) don't exist here (${missing.slice(0, 3).join(", ")})`, "E_IDENTITY");
+  if (moved.length) console.log(`[gangs] import: ${moved.length} member account(s) resolved past a merge / rename: ${moved.slice(0, 20).join(", ")}`);
   const heldGangPools = await getQuery("SELECT key, balance FROM pools WHERE key LIKE 'gang:%' AND balance != 0");
   if (heldGangPools.length) throw new Refuse(409, "gang treasuries already hold PAT here", "E_NOT_EMPTY");
   const backup = await backupDb("pre-gangs-import");
