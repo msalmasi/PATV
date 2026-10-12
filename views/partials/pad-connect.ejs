@@ -2,6 +2,8 @@
 <%# 1.99ja: the settings hub's platform connections (padconnect.js; public/js/pad-connect.js). Locals: slug, room, connect
     (padconnect.state: platform, camfrog, twitch, twitchLinked, twitchLogin, ownerIsViewer, staff, admin, code_ttl_h, pepeIn). %>
 <% const CN_ = connect, CF_ = CN_.camfrog, TW_ = CN_.twitch, PL_ = CN_.platform;
+   // 1.99qy: 💎 Prime Time Plus decides Camfrog rooms (padconnect.plusView: {enforced, has, spots})
+   const PX_ = CN_.plus || { enforced: false, has: false, spots: { left: 5, max: 5 } };
    const dt_ = (ms) => new Date(Number(ms) || 0).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
    const next_ = encodeURIComponent('/p/' + slug + '/settings?tab=address#connections'); %>
 <div class="sb-card ps-card pcn" id="connections" data-base="/api/rooms/<%= encodeURIComponent(slug) %>">
@@ -14,7 +16,9 @@
       <p class="note"><%- t('pad.conn.house') %></p>
     <% } else if (PL_ === 'camfrog') { %>
       <p><%- t('pad.conn.cf_connected', { name: (CF_ && CF_.external_name) || room.id }) %> <small class="muted">(<%- t('pad.conn.room_id', { id: '<code>' + t.esc(room.id) + '</code>' }) %><%- CF_ && CF_.verified_at ? ', ' + t('pad.conn.since', { date: dt_(CF_.verified_at).slice(0, 10) }) : '' %>)</small>.</p>
-      <% if (CF_) { %>
+      <% if (PX_.enforced) { %>
+        <p class="<%= PX_.has ? '' : 'note' %>"><%- PX_.has ? t('pad.conn.plus_in') : t('pad.conn.plus_out', { link: '<a href="/premium?pad=' + t.esc(encodeURIComponent(slug)) + '#plus">' + t('pad.conn.plus_get') + '</a>' }) %></p>
+      <% } else if (CF_) { %>
         <label class="ps-switch"><input type="checkbox" id="pcnJoin"<%= CF_.join_opt_in ? ' checked' : '' %>><span class="ps-sw" aria-hidden="true"></span>
           <span><%- t('pad.conn.want_pepe') %> <small class="muted">(<%- t('pad.conn.admin_approves') %> <%- CF_.join_status === 'approved' ? t('pad.conn.approved') : CF_.join_status === 'requested' ? t('pad.conn.waiting_admin') : CF_.join_status === 'denied' ? t('pad.conn.declined') : t('pad.conn.not_asked') %><%- CN_.pepeIn ? ' · ' + t('pad.conn.pepe_in') : '' %>)</small></span></label>
       <% } %>
@@ -33,10 +37,15 @@
       </ol>
       <p class="muted"><%- t('pad.conn.pepe_needed') %></p>
       <div class="row"><button type="button" class="btn" data-pcn="check"><%- t('pad.conn.check') %></button><button type="button" class="btn-s ghost" data-pcn="disconnect" data-platform="camfrog" data-soft="1"><%- t('pad.conn.cancel') %></button><span class="msg" id="pcnCfMsg" role="status" aria-live="polite"></span></div>
+    <% } else if (PX_.enforced && !PX_.has) { %>
+      <div class="note" id="pcnPlus"><p><b>💎 <%- t('pad.plusroom.h', { left: PX_.spots.left, max: PX_.spots.max }) %></b></p>
+        <p class="muted"><%- t('pad.plusroom.text', { max: PX_.spots.max }) %></p>
+        <a class="btn primary" href="/premium?pad=<%= encodeURIComponent(slug) %>#plus"><%- PX_.spots.soldOut ? t('pad.plusroom.cta_full') : t('pad.plus.cta') %></a></div>
     <% } else { %>
       <form id="pcnCfForm" class="ps-form" autocomplete="off">
         <label class="fld"><%- t('pad.conn.room_name') %> <small class="muted"><%- t('pad.conn.room_name_hint') %></small><input type="text" name="room" maxlength="64" required placeholder="<%- t('pad.conn.room_ph') %>"></label>
-        <label class="chk"><input type="checkbox" name="join"> <%- t('pad.conn.want_pepe') %> <small class="muted"><%- t('pad.conn.never_own') %></small></label>
+        <% if (PX_.enforced) { %><p class="muted ps-mini"><%- t('pad.conn.plus_joins') %></p><% } else { %>
+        <label class="chk"><input type="checkbox" name="join"> <%- t('pad.conn.want_pepe') %> <small class="muted"><%- t('pad.conn.never_own') %></small></label><% } %>
         <div class="row"><button type="submit" class="btn primary"><%- t('pad.conn.get_code') %></button><span class="msg" id="pcnCfMsg" role="status" aria-live="polite"></span></div>
       </form>
       <% if (CF_ === null) { %><p class="muted ps-mini"><%- t('pad.conn.prove', { h: CN_.code_ttl_h }) %></p><% } %>

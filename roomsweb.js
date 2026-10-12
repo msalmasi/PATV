@@ -129,7 +129,10 @@ function register(app, { addUser, isBotToken }) {
       if ((req.body || {}).room_settings || (req.body || {}).room_languages) await require("./padowner").storeSettings(req.body.room_settings, req.body.room_languages).catch((e) => console.error("[rooms] room settings:", e.message));
       let pass = null;
       try { pass = await require("./premium").passCamfrogs(); } catch (e) { console.error("[rooms] season pass list:", e.message); }
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
+      // 1.99qy: the Camfrog rooms Pepe should be in because of 💎 Prime Time Plus (pepe_plusrooms.py joins / leaves them)
+      let plusRooms = null;
+      try { plusRooms = await require("./padconnect").plusRoomsForPepe(); } catch (e) { console.error("[rooms] plus rooms:", e.message); }
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

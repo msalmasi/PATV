@@ -29,6 +29,18 @@
 //   Camfrog room (bridge log, room stats, room vault, royalties) stays with the room, which gets a fresh unowned pad if
 //   Pepe is still in it.
 //
+// 1.99qy 💎 PRIME TIME PLUS DECIDES CAMFROG ROOMS (the user's model, while premium_config plus_bridge_gate is on):
+//   * Starting a Camfrog connect needs the pad to have Prime Time Plus (bought on the site pad first - its Plus time moves
+//     with the pad when it's re-keyed to the room, padrekey.js). finishCamfrog re-checks it.
+//   * Pepe joining is no longer "owner opts in + a site admin approves": a connected Plus pad's room is on the list Pepe
+//     gets with every owner sync (plusRoomsForPepe), and he joins it and stays; a pending connect of a Plus pad is listed
+//     too, so he's in the room to see the code. When the pad's Plus runs out (after grace) it drops off the list and he
+//     leaves (the owner was told 3 days before, premium.plusLeaveNotices). Pepe enforces his own 5-room limit.
+//   * Ownership / vault / royalties: a VERIFIED connection is still the proof the room's owner runs it. Rooms connected
+//     before keep their pad, owner, vault and royalties - nothing is re-checked or taken away. Without Plus there are no
+//     new connects, so a non-Plus room can only get an owner from a site admin (Pads admin: owners), as house rooms do.
+//   Gate off: everything as before (connect free, join = opt-in + admin approval).
+//
 // TWITCH — the owner's PATV account must have Twitch linked through the existing OAuth sign-in (users.twitchId +
 //   twitchLogin, twitchlogin.js); that login IS the proof. The pad keeps its id; its platform becomes twitch and its
 //   Live tab embeds the channel's player (stageembed.js). One pad per channel. twitchChatHook() is where a Twitch chat
@@ -133,6 +145,35 @@ async function twitchOfUser(userId) {
   return (await getQuery(`SELECT ${c("twitchId")}, ${c("twitchLogin")} FROM users WHERE userId = ?`, [String(userId || "")]))[0] || {};
 }
 
+// ── 1.99qy: Prime Time Plus ──
+const P = () => require("./premium");
+const plusEnforced = () => { try { return !!P().config().plus_bridge_gate; } catch (e) { return false; } };
+const hasPlus = (roomId) => { try { return !!P().isPrimePlus(roomId); } catch (e) { return false; } };
+function plusView(roomId) {
+  let spots = { used: 0, max: 5, left: 5, soldOut: false };
+  try { spots = P().plusSpots(); } catch (e) { /* no premium */ }
+  return { enforced: plusEnforced(), has: hasPlus(roomId), spots };
+}
+/**
+ * The Camfrog rooms Pepe should be in because of Prime Time Plus (his owner sync): {enforced, max, rooms: [{id, name}],
+ * pending: [{name, pad}]} - rooms = connected Camfrog pads with Plus right now (house pads with Plus included), pending =
+ * a Plus pad's open connect request (Pepe goes in to see the code).
+ */
+async function plusRoomsForPepe() {
+  await init();
+  const out = { enforced: plusEnforced(), max: 5, rooms: [], pending: [] };
+  try { out.max = P().config().ptplus_max_rooms; } catch (e) { /* default */ }
+  for (const R of rooms.listCached()) {
+    if (!hasPlus(R.id) || (R.platform || rooms.platformOf(R.id)) !== "camfrog") continue;
+    const c = (await getQuery("SELECT external_name FROM pad_connections WHERE room_id = ? AND platform = 'camfrog' AND status = 'verified' ORDER BY id DESC LIMIT 1", [R.id]))[0];
+    out.rooms.push({ id: R.id, name: (c && c.external_name) || R.title || R.id, house: !!R.house });
+  }
+  for (const c of await getQuery("SELECT room_id, external_id, external_name FROM pad_connections WHERE platform = 'camfrog' AND status IN ('pending','review') AND code_expires > ?", [NOW()])) {
+    if (hasPlus(c.room_id)) out.pending.push({ name: c.external_id || c.external_name, pad: c.room_id });
+  }
+  return out;
+}
+
 /** What the settings card shows. */
 async function state(R, viewer) {
   await init();
@@ -145,6 +186,7 @@ async function state(R, viewer) {
     camfrog: cf, twitch: await current(R.id, "twitch"), discord: null,
     twitchLinked: !!own.twitchId, twitchLogin: tw, code_ttl_h: CODE_TTL / 3600e3,
     pepeIn: cf && cf.status === "verified" ? pepeIn(R.id) : null,
+    plus: plusView(R.id),                       // 1.99qy: {enforced, has, spots}
   };
 }
 function pepeIn(roomId) {
@@ -181,6 +223,11 @@ async function requestCamfrog(user, R, { room, join } = {}) {
   if ((R.platform || rooms.platformOf(R.id)) !== "site") {
     throw new Refuse(400, R.platform === "camfrog" ? "This pad is already a Camfrog pad." : "Disconnect this pad from " + R.platform + " first.");
   }
+  // 1.99qy: a Camfrog room comes with Prime Time Plus (it's what puts Pepe in the room)
+  if (plusEnforced() && !hasPlus(R.id)) {
+    const sp = plusView(R.id).spots;
+    throw new Refuse(403, `Connecting a Camfrog room comes with 💎 Prime Time Plus (${sp.left} of ${sp.max} spots left) - get it for this pad on /premium first.`);
+  }
   const name = String(room == null ? "" : room).replace(/\s+/g, " ").trim().slice(0, 64);
   if (!NAME_RE.test(name)) throw new Refuse(400, "Type the Camfrog room's name as it shows on its tab (letters, digits, spaces, . _ - ' ~).");
   const B = bridgeRoom(name);
@@ -192,7 +239,7 @@ async function requestCamfrog(user, R, { room, join } = {}) {
     await runQuery("UPDATE pad_connections SET status = 'cancelled', updated = ?, note = 'replaced by a new code' WHERE room_id = ? AND platform = 'camfrog' AND status IN ('pending','review')", [t, R.id]);
     await runQuery(`INSERT INTO pad_connections (room_id, platform, external_id, external_name, status, code, code_expires, requested_by, requested_at, join_opt_in, updated)
                     VALUES (?, 'camfrog', ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
-                   [R.id, B ? B.id : null, B ? B.name || name : name, code, t + CODE_TTL, user.userId, t, join ? 1 : 0, t]);
+                   [R.id, B ? B.id : null, B ? B.name || name : name, code, t + CODE_TTL, user.userId, t, join || plusEnforced() ? 1 : 0, t]);
   });
   await rooms.event(R.id, "pad-connect", user.username || "?", `Camfrog room "${name}": code issued${join ? " (asks for Pepe to join)" : ""}`);
   return current(R.id, "camfrog");
@@ -203,6 +250,7 @@ async function setJoin(user, R, on) {
   await mustOwn(user, R);
   const c = await current(R.id, "camfrog");
   if (!c) throw new Refuse(404, "This pad isn't connected to a Camfrog room.");
+  if (plusEnforced()) throw new Refuse(409, "Pepe is in the room while the pad has 💎 Prime Time Plus - there's nothing to ask for.");   // 1.99qy
   if (c.join_status === "approved" && on) return c;
   const status = !on ? "none" : c.status === "verified" ? "requested" : "none";
   await runQuery("UPDATE pad_connections SET join_opt_in = ?, join_status = CASE WHEN join_status = 'approved' AND ? = 0 THEN 'approved' ELSE ? END, updated = ? WHERE id = ?",
@@ -241,6 +289,8 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
       throw new Refuse(409, why);
     }
     if (await openSlots(R.id)) throw new Refuse(409, "This pad's stage has live or waiting slots - end them first, then try again.");
+    if (plusEnforced() && !hasPlus(R.id)) return { noPlus: true, c };     // 1.99qy: Plus ran out while the code was pending
+    const plusJoin = plusEnforced();
     const T = await rooms.get(target);
     const t = NOW();
     if (T) await runQuery("DELETE FROM rooms_registry WHERE room_id = ?", [T.id]);           // its rows merge below; its old address redirects
@@ -251,12 +301,16 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
     }
     await runQuery("UPDATE pad_connections SET room_id = ? WHERE room_id = ?", [target, R.id]);
     await runQuery(`UPDATE pad_connections SET status = 'verified', method = ?, verified_at = ?, verified_by = ?, external_id = ?, external_name = ?,
-                    evidence = ?, orig_id = ?, join_status = CASE WHEN join_opt_in = 1 THEN 'requested' ELSE join_status END, updated = ? WHERE id = ?`,
+                    evidence = ?, orig_id = ?, join_status = CASE WHEN ${plusJoin ? "1" : "0"} = 1 THEN 'approved' WHEN join_opt_in = 1 THEN 'requested' ELSE join_status END, updated = ? WHERE id = ?`,
                    [method || "admin", t, actor || null, target, String(roomName || c.external_name || target).slice(0, 100),
                     JSON.stringify(Object.assign(parse(c.evidence) || {}, evidence || {})).slice(0, 2000), R.id, t, c.id]);
-    return { R, T, target, moved: res.moved, c };
+    return { R, T, target, moved: res.moved, c, plusJoin };
   });
   if (out.already) return rooms.get((out.c && out.c.room_id) || "");
+  if (out.noPlus) {
+    await runQuery("UPDATE pad_connections SET status = 'cancelled', note = 'no Prime Time Plus', updated = ? WHERE id = ?", [NOW(), out.c.id]);
+    throw new Refuse(409, "Connecting a Camfrog room comes with 💎 Prime Time Plus - this pad doesn't have it any more.");
+  }
   await require("./padrekey").reloadCaches();
   const P = await rooms.get(out.target);
   try { require("./bridge").reslug(out.target); } catch (e) { /* no bridge */ }
@@ -264,7 +318,7 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
   console.log(`[padconnect] ${out.R.id} -> ${out.target} (${method}) moved ${JSON.stringify(out.moved)}`);
   await rooms.notify(P.owner.userId, { kind: "stage", title: `p/${P.slug} is now the pad of Camfrog room ${out.target}`, pm: true,
     body: "Its room bridge, room vault and owner !stage commands are yours now.", link: "/p/" + encodeURIComponent(P.slug) + "/settings?tab=address" });
-  if (out.c.join_opt_in) await tellAdmins(`Pepe join request: p/${P.slug}`, `${P.title} (Camfrog room ${out.target}) asks for Pepe to join.`);
+  if (out.c.join_opt_in && !out.plusJoin) await tellAdmins(`Pepe join request: p/${P.slug}`, `${P.title} (Camfrog room ${out.target}) asks for Pepe to join.`);
   try { require("./achievements").poke(out.c.requested_by); } catch (e) { /* achievements never block */ }   // 1.99mt: 🌉 Bridge Builder
   return P;
 }
@@ -466,6 +520,7 @@ async function adminOp(admin, id, op, { note } = {}) {
   if (op === "visit" || op === "join") {
     if (!isAdmin(admin)) throw new Refuse(403, "Only site Admins can send Pepe somewhere.");
     if (op === "join" && !(c.status === "verified" && c.join_opt_in)) throw new Refuse(409, "Pepe joins only a connected room whose owner asked for him.");
+    if (op === "join" && plusEnforced() && !hasPlus(c.room_id)) throw new Refuse(409, "Pepe stays only in Prime Time Plus rooms - this pad doesn't have it.");   // 1.99qy
     if (op === "visit" && !["pending", "review"].includes(c.status)) throw new Refuse(409, "Visits are for requests that are waiting.");
     const id2 = await require("./actions").queue(admin.userId, { kind: "room.visit", args: [String(c.external_name || c.external_id), op === "join" ? "stay" : "visit"],
       tag: "pad-" + op, label: `Pepe ${op === "join" ? "joins" : "visits"} ${name}` });
@@ -561,6 +616,6 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   }
 }
 
-module.exports = { init, register, state, current, requestCamfrog, setJoin, finishCamfrog, verifyFromPepe, pendingForPepe, checkTopics, expire,
+module.exports = { plusRoomsForPepe, plusView, plusEnforced, init, register, state, current, requestCamfrog, setJoin, finishCamfrog, verifyFromPepe, pendingForPepe, checkTopics, expire,
                    disconnect, connectTwitch, twitchOf, twitchChatHook, queueList, adminOp, newCode, cleanCode, PLATFORMS, Refuse,
                    _setClock: (fn) => { NOW = fn || (() => Date.now()); } };

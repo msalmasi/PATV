@@ -8,10 +8,16 @@
 //   prime_plus   a pad's tier         50,000,000 PAT / 30 days   target = the pad's room id (1.99qp: 💎 PRIME TIME PLUS)
 //
 // 1.99qp 💎 PRIME TIME PLUS = everything in Prime Time (isPrime() is true for a Plus pad) plus:
-//   * the CAMFROG BRIDGE: the pad's live Camfrog room on the website (chat, people, mic, room audio, the web relay /
-//     clips / snapshots). bridgeAllowed(roomId); enforced in bridge.js only while premium_config plus_bridge_gate is
-//     on (default OFF, so shipping it changes nothing - tools/ptplus-comps.js comps the bridged pads, checks no other
-//     bridged pad would lose it, then switches the gate on). House pads (Pepe's Pad, PepeLab, the Lounge) never gate.
+//   * the CAMFROG ROOM (1.99qy, the user's model): Prime Time Plus is what lets a pad be connected to a Camfrog room at all
+//     and what makes Pepe JOIN that room and stay. Without it: no new Camfrog connect, no Pepe in the room, no live room
+//     on the pad page. Pepe can be in at most 5 Camfrog rooms, so at most ptplus_max_rooms (5) pads have Plus at once
+//     (comps included - Pepe's own room is a lifetime comp). The cap is checked inside the charge / comp transaction
+//     (BEGIN IMMEDIATE, so two buyers can't both take the last spot); renewals and extensions of a pad that has Plus
+//     always go through. Sold out -> a waitlist (premium_plus_waitlist): everyone on it gets a notice when a spot frees.
+//     Enforcement (connect refused, Pepe leaving non-Plus pads' rooms, the live view hidden) runs while premium_config
+//     plus_bridge_gate is on; the cap always applies to sales. House pads never gate. Pepe gets the list through his
+//     owner sync (padconnect.plusRoomsForPepe) and joins / leaves himself (bot pepe_plusrooms.py, 5 rooms max).
+//     When a Plus period is about to end (3 days before its end, grace included) the pad's owner is told Pepe leaves then.
 //   * unlimited retention for the pad's chat logs AND recordings (Pepe's pepe_retention reads prime_plus per room from
 //     /api/rooms/owners);
 //   * a bigger room soundboard: padPerks().soundboardSlots = sb_slots_plus (Prime Time sb_slots_prime, none sb_slots_free);
@@ -99,7 +105,8 @@ const DEFAULTS = Object.freeze({
   prime_price: 10000000,           // PAT per period (experimental)
   season_price: 2000000,
   plus_price: 50000000,            // 1.99qp: 💎 Prime Time Plus
-  plus_bridge_gate: false,         // 1.99qp: the Camfrog bridge needs Plus (off = every bridged pad shows it, as before)
+  plus_bridge_gate: false,         // 1.99qp/qv: Prime Time Plus decides Camfrog rooms (connect, Pepe in the room, the live view)
+  ptplus_max_rooms: 5,             // 1.99qy: Plus pads at once, site-wide (Pepe can be in 5 Camfrog rooms)
   sb_slots_free: 0,                // 1.99qp: room soundboard slots per pad tier (the soundboard reads padPerks().soundboardSlots)
   sb_slots_prime: 8,
   sb_slots_plus: 24,
@@ -154,6 +161,7 @@ function cleanConfig(c) {
     season_price: int(c.season_price, 1000, 1e12, DEFAULTS.season_price),
     plus_price: int(c.plus_price, 1000, 1e12, DEFAULTS.plus_price),
     plus_bridge_gate: on(c.plus_bridge_gate, DEFAULTS.plus_bridge_gate),
+    ptplus_max_rooms: int(c.ptplus_max_rooms, 0, 50, DEFAULTS.ptplus_max_rooms),
     sb_slots_free: int(c.sb_slots_free, 0, 200, DEFAULTS.sb_slots_free),
     sb_slots_prime: int(c.sb_slots_prime, 0, 200, DEFAULTS.sb_slots_prime),
     sb_slots_plus: int(c.sb_slots_plus, 0, 200, DEFAULTS.sb_slots_plus),
@@ -197,6 +205,10 @@ function init() {
       catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
       await runQuery("CREATE INDEX IF NOT EXISTS premium_ledger_sub ON premium_ledger (sub_id, created)");
       await runQuery("CREATE TABLE IF NOT EXISTS premium_jobs (day TEXT PRIMARY KEY, started INTEGER NOT NULL, finished INTEGER, result TEXT)");
+      // 1.99qy: the Plus waitlist (sold out -> notify me) + the "Pepe leaves on <date>" notice marker
+      await runQuery("CREATE TABLE IF NOT EXISTS premium_plus_waitlist (user_id TEXT PRIMARY KEY, created INTEGER NOT NULL)");
+      try { await runQuery("ALTER TABLE premium_subs ADD COLUMN leave_noticed INTEGER"); }
+      catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
       await loadConfig();
       await loadCache();
     })().catch((e) => { ready = null; throw e; });
@@ -271,6 +283,67 @@ function plusOwner(userId, t = now()) {
   for (const R of rooms || []) if (R.owner && R.owner.userId === userId && isPrimePlus(R.id, t)) return true;
   return false;
 }
+// ── 1.99qy: the Plus cap ──
+/** Plus pads right now from the cache (pages): {used, max, left, soldOut} */
+function plusSpots(t = now()) {
+  maybeRefresh();
+  let used = 0;
+  for (const [k, s] of CACHE) if (k.startsWith("prime_plus:") && t < endsAt(s, t)) used++;
+  const max = CONFIG.ptplus_max_rooms;
+  return { used, max, left: Math.max(0, max - used), soldOut: used >= max };
+}
+/** Inside the caller's transaction: refuse NEW Plus time on `target` when every spot is taken (its own Plus renews). */
+async function plusCapCheck(target, t = now()) {
+  const mine = await subRow("prime_plus", target);
+  if (mine && t < endsAt(mine, t)) return;                          // already a Plus pad: extending never needs a spot
+  let used = 0;
+  for (const s of await getQuery("SELECT * FROM premium_subs WHERE tier = 'prime_plus' AND target <> ?", [target])) if (t < endsAt(s, t)) used++;
+  if (used >= CONFIG.ptplus_max_rooms) {
+    const e = new Refuse(409, `💎 Prime Time Plus is sold out - all ${CONFIG.ptplus_max_rooms} spots are taken (Pepe can only be in ${CONFIG.ptplus_max_rooms} Camfrog rooms). Join the waitlist on /premium and we'll tell you when one frees up.`);
+    e.soldOut = true;
+    throw e;
+  }
+}
+/** 1.99qy: the Plus waitlist - on: join, off: leave. -> {on} */
+async function plusWaitlist(user, on) {
+  await init();
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  if (on) await runQuery("INSERT OR IGNORE INTO premium_plus_waitlist (user_id, created) VALUES (?, ?)", [user.userId, now()]);
+  else await runQuery("DELETE FROM premium_plus_waitlist WHERE user_id = ?", [user.userId]);
+  return { on: !!on };
+}
+/** A spot is free: tell everyone on the waitlist (once - the list empties). -> how many were told */
+async function plusWaitlistNotify(t = now()) {
+  await init();
+  await loadCache();
+  if (plusSpots(t).soldOut) return 0;
+  const rows = await getQuery("SELECT user_id FROM premium_plus_waitlist");
+  for (const r of rows) {
+    const tr = tFor(r.user_id);
+    await notify(r.user_id, "room", `plus-spot-${r.user_id}-${dayKey(t)}`, tr("premium.pp.notice.spot_title"), tr("premium.pp.notice.spot_body"), "/premium#plus");
+  }
+  if (rows.length) await runQuery("DELETE FROM premium_plus_waitlist");
+  return rows.length;
+}
+/** 3 days before a Plus pad's time runs out (grace included): tell its owner Pepe leaves the room then. Once per end date. */
+async function plusLeaveNotices(t = now()) {
+  await init();
+  let n = 0;
+  for (const s of await getQuery("SELECT * FROM premium_subs WHERE tier = 'prime_plus'")) {
+    const end = endsAt(s, t);
+    if (!(end > t) || end === Infinity || end - t > 3 * DAY || Number(s.leave_noticed) === end) continue;
+    await runQuery("UPDATE premium_subs SET leave_noticed = ? WHERE id = ?", [end, s.id]);
+    const R = await require("./rooms").get(s.target);
+    const who = R && R.owner ? R.owner.userId : null;
+    if (!who) continue;
+    const tr = tFor(who);
+    await notify(who, "room", `plus-leave-${s.id}-${end}`, tr("premium.pp.notice.leave_title", { pad: `p/${R.slug || R.id}` }),
+      tr("premium.pp.notice.leave_body", { date: new Date(end).toISOString().slice(0, 10) }), `/premium?pad=${encodeURIComponent(R.slug || R.id)}#plus`);
+    n++;
+  }
+  return n;
+}
+
 /** 1.99qp: may this pad show its Camfrog room live on the site? Always while the gate is off; house pads always. */
 function bridgeAllowed(roomId, t) {
   if (!CONFIG.plus_bridge_gate) return true;
@@ -535,6 +608,7 @@ async function buy(user, opts = {}) {
   const out = await tx(async () => {
     const had = (await getQuery("SELECT * FROM premium_ledger WHERE ref = ?", [ref]))[0];
     if (had) return { dup: true, row: had };
+    if (T.id === "prime_plus") await plusCapCheck(target, t);          // 1.99qy: the 5-room cap, race-safe (BEGIN IMMEDIATE)
     const sub = await ensureSub(T.id, target, t);
     if (sub.comped && !compUntil(sub)) throw new Refuse(409, `${label} already has ${T.name} for free.`);
     // 1.99qp: Prime Time -> Plus upgrade: the pad's paid Prime Time time left becomes Plus time (price-weighted)
@@ -664,6 +738,7 @@ async function setComp(tier, target, on, by, note, opts = {}) {
   const t = now();
   const sub = await ensureSub(tier, target, t);
   const until = opts.until ? Math.round(Number(opts.until)) : 0;
+  if (on && tier === "prime_plus") await tx(() => plusCapCheck(target, t));     // 1.99qy: comps take a spot too
   if (on) {
     if (until && !(until > t)) throw new Refuse(400, "A comp has to end in the future.");
     if (sub.comped && !compUntil(sub)) {
@@ -840,7 +915,9 @@ async function tick({ force = false, t = now() } = {}) {
     const comps = await compAdmins();
     const compsEnded = await expireComps(t);
     const r = await renewDue(t);
-    const result = { day, comps, comps_ended: compsEnded, ...r };
+    const leaveNotices = await plusLeaveNotices(t).catch((e) => { console.error("[premium] plus leave notices:", e.message); return 0; });
+    const waitlisted = await plusWaitlistNotify(t).catch((e) => { console.error("[premium] plus waitlist:", e.message); return 0; });
+    const result = { day, comps, comps_ended: compsEnded, ...r, plus_leave_notices: leaveNotices, plus_waitlist_told: waitlisted };
     await runQuery("UPDATE premium_jobs SET finished = ?, result = ? WHERE day = ?", [now(), JSON.stringify(result), day]);
     if (r.renewed || r.failed || r.lapsed || comps.added || comps.removed || compsEnded) console.log("[premium] daily:", JSON.stringify(result));
     return result;
@@ -850,7 +927,9 @@ async function tick({ force = false, t = now() } = {}) {
 function startJob() {
   // an hourly look; the job itself runs once per UTC day (and its every step is idempotent)
   // 1.99ma: timed comps end within the hour (gates already stop at comp_until; this files the end + the notice)
-  const run = () => tick().then(() => expireComps()).catch((e) => console.error("[premium] daily job:", e.message));
+  // 1.99qy: hourly too - the "Pepe leaves on <date>" notice and the waitlist shouldn't wait a day
+  const run = () => tick().then(() => expireComps()).then(() => plusLeaveNotices()).then(() => plusWaitlistNotify())
+    .catch((e) => console.error("[premium] daily job:", e.message));
   setTimeout(run, 60 * 1000).unref();
   setInterval(run, 3600 * 1000).unref();
 }
@@ -907,6 +986,8 @@ async function state(viewer, padSlug) {
     sales: C.sales, period_days: C.period_days, grace_days: C.grace_days,
     prices: { prime_time: C.prime_price, prime_plus: C.plus_price, season_pass: C.season_price, sticker_pack: C.sticker_price },
     day_price: { prime_time: Math.ceil(C.prime_price / C.period_days), prime_plus: Math.ceil(C.plus_price / C.period_days) },
+    plus_spots: plusSpots(t),                        // 1.99qy: {used, max, left, soldOut}
+    plus_waitlisted: signed ? !!(await getQuery("SELECT 1 FROM premium_plus_waitlist WHERE user_id = ?", [viewer.userId]))[0] : false,
     perks: { prime_extra_slots: C.prime_extra_slots, prime_extra_badges: C.prime_extra_badges, sp_upload_mult: C.sp_upload_mult, sp_sticker_packs: C.sp_sticker_packs,
              sb_slots_free: C.sb_slots_free, sb_slots_prime: C.sb_slots_prime, sb_slots_plus: C.sb_slots_plus, plus_bridge_gate: C.plus_bridge_gate },
     routes: routesView(),
@@ -935,6 +1016,7 @@ function errBody(e) {
     const code = e.code && ERR[e.code] ? e.code : "E_REFUSED";
     const body = { ok: false, error: e.message, code, hint: ERR[code][1] };
     if (Array.isArray(e.suggestions)) { body.pad_query = e.pad_query || ""; body.suggestions = e.suggestions; }   // 1.99od: an unknown pad
+    if (e.soldOut) body.sold_out = true;                                                                        // 1.99qy: Plus is full
     return { status: e.status || 400, body };
   }
   const incident = crypto.randomBytes(4).toString("hex");
@@ -985,6 +1067,10 @@ function register(app, { addUser }) {
       res.json({ ok: true, ...r, state: await state(req.user, TIERS[b.tier] && TIERS[b.tier].kind === "pad" ? b.pad : null) });
     } catch (e) { fail(res, e); }
   });
+  // 1.99qy: 💎 Plus sold out -> "tell me when a spot frees up"
+  app.post("/api/premium/plus/waitlist", addUser, write, async (req, res) => {
+    try { res.json({ ok: true, ...(await plusWaitlist(req.user, (req.body || {}).on !== false)) }); } catch (e) { fail(res, e); }
+  });
   app.post("/api/premium/renew", addUser, write, async (req, res) => {
     try {
       const b = req.body || {};
@@ -1024,6 +1110,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
+  plusSpots, plusCapCheck, plusWaitlist, plusWaitlistNotify, plusLeaveNotices,
   isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

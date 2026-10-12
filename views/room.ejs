@@ -590,11 +590,13 @@
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else if (room.bridgeLocked) { %>
   <%# 1.99qp: the live Camfrog room is a 💎 Prime Time Plus perk (premium.bridgeAllowed) %>
+  <%# 1.99qy: Prime Time Plus is what connects a Camfrog room and puts Pepe in it - capped at ptplus_max_rooms pads %>
+  <% const sp_ = room.plusSpots || { left: 0, max: 5, soldOut: true }; %>
   <section class="card tease" id="rmPlusLock">
     <div class="big" aria-hidden="true">💎</div>
-    <h2 style="justify-content:center"><%- t('pad.plus.h') %></h2>
-    <p class="muted"><%- t('pad.plus.text') %></p>
-    <a class="btn" href="/premium?pad=<%= encodeURIComponent(room.slug) %>#plus"><%- t('pad.plus.cta') %></a>
+    <h2 style="justify-content:center"><%- t('pad.plusroom.h', { left: sp_.left, max: sp_.max }) %></h2>
+    <p class="muted"><%- t('pad.plusroom.text', { max: sp_.max }) %></p>
+    <a class="btn" href="/premium?pad=<%= encodeURIComponent(room.slug) %>#plus"><%- sp_.soldOut ? t('pad.plusroom.cta_full') : t('pad.plus.cta') %></a>
   </section>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else if (!liveOpen_) { %>

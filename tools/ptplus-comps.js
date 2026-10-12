@@ -1,21 +1,25 @@
 #!/usr/bin/env node
-// tools/ptplus-comps.js — 1.99qp: the launch comps of 💎 Prime Time Plus (user decision 2026-10-11), and the switch that
-// makes the Camfrog bridge a Plus perk. Run in the site directory (it opens ./myapp.db) - staging first, then prod.
+// tools/ptplus-comps.js — the launch comps of 💎 Prime Time Plus (user decisions 2026-10-11) and the switch that makes Plus
+// decide Camfrog rooms. Run in the site directory (it opens ./myapp.db) - staging first, then prod.
 //
-//   node tools/ptplus-comps.js --actor=<site admin>                     # DRY RUN: the targets, what they have now, and
-//                                                                       # which bridged pads would lose the bridge
+//   node tools/ptplus-comps.js --actor=<site admin>                     # DRY RUN: the Plus spots (N of ptplus_max_rooms),
+//                                                                       # the targets, and the rooms Pepe would LEAVE
 //   node tools/ptplus-comps.js --actor=<site admin> --apply             # comp them (comps.js, admin audit + notices)
-//   node tools/ptplus-comps.js --actor=<site admin> --apply --gate=on   # ... then switch premium_config plus_bridge_gate on,
-//                                                                       # only if no other bridged pad would lose its bridge
-//                                                                       # (--force-gate to switch it on anyway)
-//   node tools/ptplus-comps.js --actor=<site admin> --gate=off          # switch the gate off again (the bridge for everyone)
+//   node tools/ptplus-comps.js --actor=<site admin> --apply --gate=on   # ... then switch premium_config plus_bridge_gate on:
+//                                                                       # Plus decides Camfrog rooms (connect needs it, Pepe
+//                                                                       # leaves non-Plus pads' rooms, their live view hides).
+//                                                                       # Only if no bridged pad would lose Pepe (--force-gate)
+//   node tools/ptplus-comps.js --actor=<site admin> --gate=off          # back to the old model (connect free, no join/leave)
 //
-// Comps (premium.setComp through comps.compPremium: free, never routed, never auto-renewed, revocable on /admin/comps):
+// 1.99qy (the user's model): Plus is what puts Pepe in a Camfrog room, and he can be in 5 rooms, so at most
+// ptplus_max_rooms (default 5) pads have Plus at once - comps included. These comps take spots:
+//   Pepe's Pad      (PepeFrog.Room)                                        no end date   (Pepe's own room)
+//   PepeLab         (PepeBeta.Room)                                        no end date   only where Pepe sits in it (bridged
+//                                                                                        in the last 14 days = staging)
 //   players-lounge  (Players__lounge, Camfrog room You_Were_Never_Here)   3 periods (90 days)
 //   DRAMA_CENTRAL                                                         3 periods (90 days)
-//   Pepe's Pad      (PepeFrog.Room)                                        no end date
-// A pad that already has a Plus comp is skipped (so running it twice never extends anything). The running site picks
-// comps and the gate up within a minute (premium.js re-reads its cache + config every 60 s).
+// A pad that already has a Plus comp is skipped (running it twice never extends anything); a comp that would go over the
+// cap is refused (comps.compPremium -> premium.plusCapCheck). The running site picks comps and the gate up within a minute.
 "use strict";
 const path = require("path");
 const ROOT = path.join(__dirname, "..");
@@ -25,11 +29,6 @@ const C = require(path.join(ROOT, "comps"));
 const rooms = require(path.join(ROOT, "rooms"));
 
 const REASON = "Prime Time Plus launch comp (user decision 2026-10-11)";
-const TARGETS = [
-  { pad: "players-lounge", mode: "periods", n: 3, label: "Players__lounge" },
-  { pad: "DRAMA_CENTRAL", mode: "periods", n: 3, label: "DRAMA_CENTRAL" },
-  { pad: "PepeFrog.Room", mode: "lifetime", label: "Pepe's Pad" },
-];
 const BRIDGED_DAYS = 14;
 const arg = (k) => { const a = process.argv.find((x) => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : null; };
 const flag = (k) => process.argv.includes(`--${k}`);
@@ -45,37 +44,56 @@ const day = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : "-");
   const gate = arg("gate");
   await P.init();
   await rooms.init();
-  console.log(`${apply ? "APPLY" : "DRY RUN"} as ${admin.username} · plus_price ${P.config().plus_price.toLocaleString("en-US")} PAT · bridge gate now ${P.config().plus_bridge_gate ? "ON" : "off"}`);
+  const since = Date.now() - BRIDGED_DAYS * 86400000;
+  const bridged = await getQuery("SELECT id, name, updated FROM bridge_rooms WHERE updated >= ? ORDER BY updated DESC", [since]).catch(() => []);
+  const TARGETS = [
+    { pad: "PepeFrog.Room", mode: "lifetime", label: "Pepe's Pad" },
+    ...(bridged.some((b) => b.id === "PepeBeta.Room") ? [{ pad: "PepeBeta.Room", mode: "lifetime", label: "PepeLab" }] : []),
+    { pad: "players-lounge", mode: "periods", n: 3, label: "Players__lounge" },
+    { pad: "DRAMA_CENTRAL", mode: "periods", n: 3, label: "DRAMA_CENTRAL" },
+  ];
+  const sp0 = P.plusSpots();
+  console.log(`${apply ? "APPLY" : "DRY RUN"} as ${admin.username} · plus_price ${P.config().plus_price.toLocaleString("en-US")} PAT · ` +
+              `Plus spots ${sp0.used} of ${sp0.max} taken · Plus decides Camfrog rooms (gate): ${P.config().plus_bridge_gate ? "ON" : "off"}`);
 
   // ── the comps ──
   const plusIds = new Set();
+  let wouldUse = sp0.used;
   for (const T of TARGETS) {
     const R = await P.padTarget(T.pad);
     if (!R) { console.log(`  ✗ ${T.label}: no pad found for "${T.pad}" - skipped`); continue; }
     plusIds.add(R.id);
     const sub = await P.subRow("prime_plus", R.id);
     const st = P.statusOf(sub);
+    const active = sub && Date.now() < P.endsAt(sub);
     const what = T.mode === "lifetime" ? "no end date" : `${T.n} periods (${T.n * P.config().period_days} days)`;
     const head = `  ${T.label} -> p/${R.slug || R.id} [${R.id}] owner ${R.owner ? R.owner.username : R.house ? "house" : "none"}`;
     if (sub && sub.comped) { console.log(`${head}: already comped (${P.compUntil(sub) ? "until " + day(P.compUntil(sub)) : "no end date"}) - skipped`); continue; }
-    if (!apply) { console.log(`${head}: Plus now ${st}; would comp ${what}`); continue; }
-    const r = await C.compPremium(admin, { tier: "prime_plus", pad: R.id, mode: T.mode, n: T.n, reason: REASON });
-    console.log(`${head}: comped ${r.until ? "until " + day(r.until) : "with no end date"}`);
+    if (!apply) {
+      if (!active) wouldUse++;
+      console.log(`${head}: Plus now ${st}; would comp ${what}${!active && wouldUse > sp0.max ? "  !! OVER THE CAP - would be refused" : ""}`);
+      continue;
+    }
+    try {
+      const r = await C.compPremium(admin, { tier: "prime_plus", pad: R.id, mode: T.mode, n: T.n, reason: REASON });
+      console.log(`${head}: comped ${r.until ? "until " + day(r.until) : "with no end date"}`);
+    } catch (e) { console.log(`${head}: REFUSED - ${e.message}`); }
   }
   await P.loadCache();
+  const sp = P.plusSpots();
+  console.log(apply ? `Plus spots now: ${sp.used} of ${sp.max} taken (${sp.left} left)` : `Plus spots after the comps: ${Math.min(wouldUse, sp0.max)} of ${sp0.max} taken`);
 
-  // ── who would lose the bridge with the gate on ──
-  const since = Date.now() - BRIDGED_DAYS * 86400000;
-  const bridged = await getQuery("SELECT id, name, updated FROM bridge_rooms WHERE updated >= ? ORDER BY updated DESC", [since]).catch(() => []);
+  // ── rooms Pepe is in (bridged lately) that would lose him with the gate on ──
   const lose = [];
-  console.log(`bridged in the last ${BRIDGED_DAYS} days: ${bridged.length}`);
+  console.log(`bridged in the last ${BRIDGED_DAYS} days (rooms Pepe sits in): ${bridged.length}`);
   for (const b of bridged) {
     const R = rooms.getCached(b.id);
     const ok = (R && R.house) || P.isPrimePlus(b.id) || (!apply && plusIds.has(b.id));
     console.log(`  ${ok ? "✓" : "✗"} ${b.name || b.id} [${b.id}] last ${new Date(Number(b.updated)).toISOString().slice(0, 16)}${R && R.house ? " (house)" : ""}`);
     if (!ok) lose.push(b);
   }
-  if (lose.length) console.log(`!! ${lose.length} bridged pad(s) would lose the bridge with the gate on: ${lose.map((b) => b.name || b.id).join(", ")}`);
+  if (lose.length) console.log(`!! with the gate on Pepe would LEAVE ${lose.length} room(s): ${lose.map((b) => b.name || b.id).join(", ")}`);
+  console.log("note: rooms on Pepe's auto-join list that aren't bridged don't show here - check !rooms / the admin panel's Auto-join card too");
 
   // ── the gate ──
   if (gate === "on") {

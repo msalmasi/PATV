@@ -66,6 +66,22 @@ async function rekey(from, to) {
   if (tables.has("rooms_kv")) note("rooms_kv.seeded", await runQuery("UPDATE OR REPLACE rooms_kv SET key = ? WHERE key = ?", ["seeded:" + to, "seeded:" + from]));
   if (tables.has("feed_seen")) note("feed_seen.scope", await runQuery("UPDATE OR REPLACE feed_seen SET scope = ? WHERE scope = ?", ["pad:" + to, "pad:" + from]));
   if (tables.has("pepe_feed_log")) note("pepe_feed_log.scope", await runQuery("UPDATE pepe_feed_log SET scope = ? WHERE scope = ?", [to, from]));
+  // 1.99qy: a pad's 📺 Prime Time / 💎 Prime Time Plus (premium_subs.target = the pad id) moves with the pad - buying Plus
+  // for a site pad and then connecting its Camfrog room keeps the Plus. On a merge with the room's old (unowned) pad, the
+  // subscription that runs longer wins (a no-end comp beats everything); the other one's row is dropped (its ledger stays).
+  if (tables.has("premium_subs")) {
+    const P = require("./premium");
+    const end = (r) => { try { return P.endsAt(r); } catch (e) { return Number(r.paid_through) || 0; } };
+    for (const tier of ["prime_time", "prime_plus"]) {
+      const a = (await getQuery("SELECT * FROM premium_subs WHERE tier = ? AND target = ?", [tier, from]))[0];
+      if (!a) continue;
+      const b = (await getQuery("SELECT * FROM premium_subs WHERE tier = ? AND target = ?", [tier, to]))[0];
+      if (b && end(b) >= end(a)) { note("premium_subs.dropped", await runQuery("DELETE FROM premium_subs WHERE id = ?", [a.id])); continue; }
+      if (b) await runQuery("DELETE FROM premium_subs WHERE id = ?", [b.id]);
+      note("premium_subs.target", await runQuery("UPDATE premium_subs SET target = ? WHERE id = ?", [to, a.id]));
+    }
+    if (tables.has("premium_ledger")) note("premium_ledger.target", await runQuery("UPDATE premium_ledger SET target = ? WHERE target = ? AND tier IN ('prime_time','prime_plus')", [to, from]));
+  }
   return { moved };
 }
 
@@ -76,6 +92,7 @@ async function reloadCaches() {
   try { await require("./padaccess").load(); } catch (e) { /* not loaded in this process */ }
   try { await require("./padlook").loadCache(); } catch (e) { /* not loaded */ }
   try { require("./mainstage")._pubCache.clear(); } catch (e) { /* no stage */ }
+  try { await require("./premium").loadCache(); } catch (e) { /* not loaded */ }      // 1.99qy: Plus / Prime Time moved with the pad
 }
 
 module.exports = { rekey, padColumns, reloadCaches, ROOM_BOUND, ROOM_COLUMNS, FEED_KV_PREFIXES };

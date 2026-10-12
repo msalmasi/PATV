@@ -961,7 +961,8 @@ function register(app, { isBotToken, addUser }) {
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)),
               adult: !!(info && info.adult),                       // 1.99kz: the 18+ badge
-              bridgeLocked },                                       // 1.99qp: no 💎 bridge perk -> the upsell card
+              bridgeLocked,                                         // 1.99qp: no 💎 bridge perk -> the upsell card
+              plusSpots: bridgeLocked ? (() => { try { return require("./premium").plusSpots(); } catch (e) { return null; } })() : null },   // 1.99qy
       initial, padTabs, latest, feedSeen,
       dms: reg.hasRoute(app, "/messages"),          // 1.99co: the Manage panel's "Message" (DMs, when that page exists)
       pepeHere: here, stage: st,

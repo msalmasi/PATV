@@ -141,6 +141,10 @@
     <section class="card tier pp" id="plus" aria-labelledby="ppH">
       <h3 id="ppH"><span class="ds-ic" aria-hidden="true">💎</span> Prime Time Plus <span class="ds-tag"><%- t('premium.pp.tag') %></span></h3>
       <div class="price"><%= fmt(S.prices.prime_plus) %> PAT <small><%- t('premium.pt.per_period', { days: S.period_days, price: fmt(S.day_price.prime_plus) }) %></small></div>
+      <%# 1.99qy: at most ptplus_max_rooms Plus pads at once (Pepe can be in that many Camfrog rooms) %>
+      <% const SPOTS = S.plus_spots || { used: 0, max: 5, left: 5, soldOut: false }; const fullForPad = SPOTS.soldOut && !(PLUS && PLUS.active); %>
+      <p class="ds-row" id="ppSpots"><span class="ds-tag<%= SPOTS.soldOut ? '' : ' ac' %>"><%- t('premium.pp.spots', { used: SPOTS.used, max: SPOTS.max }) %></span><% if (SPOTS.soldOut) { %> <b><%- t('premium.pp.sold_out') %></b><% } %></p>
+      <p class="mut"><%- t('premium.pp.why_cap', { max: SPOTS.max }) %></p>
       <ul class="perks">
         <% PP_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span class="ds-ic lg" aria-hidden="true"><%= p[0] %></span><span><b><%- p[1] %></b><% if (p[3] === 'soon') { %><span class="ds-tag soon-tag"><%- t('premium.coming_soon') %></span><% } %><span class="d"><%- p[2] %></span></span></li><% }) %>
       </ul>
@@ -150,7 +154,9 @@
           <div><%- statusTxt(PLUS) %><% if (PLUS.renewing && PLUS.status !== 'comped') { %> · <%- t('premium.renews') %><% } %></div>
           <% if (PLUS.contributors && PLUS.contributors.length) { %><div class="mut" style="margin-block-start:6px"><%- t('premium.backed_by') %></div><ul class="contrib"><% PLUS.contributors.forEach((c) => { %><li><% if (c.anon) { %><%- t('premium.anon_backer') %><% } else { %><%= c.name %><% } %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
         </div>
-        <% if (PLUS.status !== 'comped') { %>
+        <% if (PLUS.status !== 'comped' && fullForPad) { %>
+          <% if (V.signed) { %><div class="row"><button type="button" class="ds-btn<%= S.plus_waitlisted ? ' ghost' : ' gold' %>" data-plus-wait="<%= S.plus_waitlisted ? '0' : '1' %>"><%- S.plus_waitlisted ? t('premium.pp.waitlist_off') : t('premium.pp.waitlist_on') %></button></div><% } %>
+        <% } else if (PLUS.status !== 'comped') { %>
           <% if (V.signed) { %>
             <% if (PLUS.upgrade) { %><p class="mut" id="ppUpgrade"><%- t('premium.pp.upgrade_note', { pt: PLUS.upgrade.pt_days, plus: PLUS.upgrade.plus_days }) %></p><% } %>
             <div class="row">
@@ -298,6 +304,10 @@
       b.disabled = true;
       var stkAnon = document.getElementById('stkAnon');
       post('/api/stickers/buy', { pack: b.getAttribute('data-stk-gift'), ref: ref(), to: who.trim(), anon: !!(stkAnon && stkAnon.checked) }).then(function (j) { b.disabled = false; done(j, _t('js.premium.gifted', 'Gifted to {user} 🎁', { user: who.trim() })); });
+    } else if (b.hasAttribute('data-plus-wait')) {                 // 1.99qy: sold out -> tell me when a spot frees up
+      var onW = b.getAttribute('data-plus-wait') === '1';
+      b.disabled = true;
+      post('/api/premium/plus/waitlist', { on: onW }).then(function (j) { b.disabled = false; done(j, onW ? _t('js.premium.waitlist_on', 'You’re on the waitlist - we’ll tell you when a spot frees up.') : _t('js.premium.waitlist_off', 'You’re off the waitlist.')); });
     } else if (b.hasAttribute('data-card') || b.hasAttribute('data-portal')) {
       var card = b.hasAttribute('data-card');
       b.disabled = true;
