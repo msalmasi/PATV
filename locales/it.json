@@ -6836,7 +6836,6 @@
   "owner.rc_games": "Giochi",
   "owner.rc_paid": "Pagato",
   "owner.rc_stayed": "Rimasto",
-  "owner.rc_people_n": "{n} persone",
   "owner.rc_topup": "+{n} abbinati dal budget incentivi",
   "owner.rc_games_left": "Giochi della stanza oggi: {left} di {allow} PAT ancora disponibili per i premi.",
   "owner.roy_old_h": "Vecchie quote (chiuse)",

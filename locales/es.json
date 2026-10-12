@@ -6836,7 +6836,6 @@
   "owner.rc_games": "Juegos",
   "owner.rc_paid": "Pagado",
   "owner.rc_stayed": "Quedó",
-  "owner.rc_people_n": "{n} personas",
   "owner.rc_topup": "+{n} igualados por el presupuesto de incentivos",
   "owner.rc_games_left": "Juegos de la sala hoy: quedan {left} de {allow} PAT para premios.",
   "owner.roy_old_h": "Regalías antiguas (cerradas)",

@@ -6696,7 +6696,6 @@
   "owner.rc_games": "เกม",
   "owner.rc_paid": "จ่ายแล้ว",
   "owner.rc_stayed": "คงเหลือ",
-  "owner.rc_people_n": "{n} คน",
   "owner.rc_topup": "+{n} จับคู่โดยงบสนับสนุน",
   "owner.rc_games_left": "เกมในห้องวันนี้: เหลือ {left} จาก {allow} PAT สำหรับรางวัล",
   "owner.roy_old_h": "ค่าตอบแทนเก่า (ปิดแล้ว)",

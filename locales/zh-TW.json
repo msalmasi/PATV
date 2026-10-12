@@ -6695,7 +6695,6 @@
   "owner.rc_games": "遊戲",
   "owner.rc_paid": "已發放",
   "owner.rc_stayed": "留存",
-  "owner.rc_people_n": "{n} 人",
   "owner.rc_topup": "+{n}，由激勵預算配對",
   "owner.rc_games_left": "今天房間遊戲還剩 {left} PAT 可發獎品（上限 {allow} PAT）。",
   "owner.roy_old_h": "舊分潤（已結束）",

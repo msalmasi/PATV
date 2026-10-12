@@ -6695,7 +6695,6 @@
   "owner.rc_games": "游戏",
   "owner.rc_paid": "已派发",
   "owner.rc_stayed": "留存",
-  "owner.rc_people_n": "{n} 人",
   "owner.rc_topup": "+{n}，由激励预算配平",
   "owner.rc_games_left": "今天房间游戏还可发放奖金：{left} / {allow} PAT。",
   "owner.roy_old_h": "旧分成（已结束）",

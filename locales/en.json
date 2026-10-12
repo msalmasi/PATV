@@ -6757,7 +6757,7 @@
   "owner.rc_games": "Games",
   "owner.rc_paid": "Paid",
   "owner.rc_stayed": "Stayed",
-  "owner.rc_people_n": {"one":"{count} person","other":"{count} people"},
+  "owner.rc_people_count": {"one":"{count} person","other":"{count} people"},
   "owner.rc_topup": "+{n} matched by the incentive budget",
   "owner.rc_games_left": "Room games today: {left} of {allow} PAT left for prizes.",
   "owner.roy_old_h": "Old royalties (closed)",
