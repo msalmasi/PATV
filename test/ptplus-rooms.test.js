@@ -208,3 +208,50 @@ test("1.99rd ownership vs connections: the owner is the registry's (creator / ad
   const doc = fs.readFileSync(path.join(repo, "docs", "pads-ownership-connections.md"), "utf8");
   assert.match(doc, /A connection never makes anyone an owner/);
 });
+
+test("1.99rl the vault belongs to the pad: connect -> disconnect -> reconnect to ANOTHER room; rate, royalties and escrow follow the pad, Pepe is told to move the PAT", async () => {
+  await PR.setConfig({ plus_bridge_gate: false }, "test");
+  const RK = require(path.join(repo, "padrekey"));
+  await require(path.join(repo, "roomvaults")).init();
+  await require(path.join(repo, "royalties")).init();
+  PCR._resetRecent();
+  const P = await PCR.create(U.cat, { title: "Cat Vault" });
+  const site0 = P.id;
+  const connect = async (roomId, name) => {
+    const c = await CN.requestCamfrog(U.cat, await rooms.get(P.id) || await rooms.bySlug("cat-vault"), { room: name });
+    const r = await CN.verifyFromPepe({ via: "topic", room: roomId, room_name: name, code: c.code, topic: c.code });
+    assert.equal(r.ok, true, r.message);
+  };
+  await connect("VaultA.Room", "Vault A");
+  // things the pad earned while it was VaultA.Room's pad
+  await runQuery("INSERT INTO room_vault_settings (room_id, rate, changed_at, changed_by) VALUES ('VaultA.Room', 12, 1, 'u-cat')");
+  await runQuery(`INSERT INTO royalty_ledger (room_id, owner_user_id, kind, source, amount, period, ref, created)
+                  VALUES ('VaultA.Room', 'u-cat', 'accrue', 'spend', 4321, 1, 'roy-test-1', 1)`);
+  const R = await rooms.get("VaultA.Room");
+  await CN.disconnect(U.cat, R, "camfrog");
+  const back = await rooms.bySlug("cat-vault");
+  assert.equal(back.id, site0);
+  assert.equal((await getQuery("SELECT rate FROM room_vault_settings WHERE room_id = ?", [site0]))[0].rate, 12, "the owner's payout rate follows the pad");
+  assert.equal((await getQuery("SELECT SUM(amount) AS a FROM royalty_ledger WHERE room_id = ?", [site0]))[0].a, 4321, "unpaid royalties follow the pad");
+  await connect("VaultB.Room", "Vault B");                                                         // a DIFFERENT room
+  assert.equal((await getQuery("SELECT rate FROM room_vault_settings WHERE room_id = 'VaultB.Room'"))[0].rate, 12);
+  assert.equal((await getQuery("SELECT SUM(amount) AS a FROM royalty_ledger WHERE room_id = 'VaultB.Room'"))[0].a, 4321);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM royalty_ledger WHERE room_id = 'VaultA.Room'"))[0].n, 0, "nothing left behind in the old room");
+  // Pepe's list: the three moves, in order (site -> A, A -> site, site -> B); the PAT moves on his side (vaultrekey_test.py)
+  const open = (await RK.vaultRekeysForPepe()).filter((x) => [x.from, x.to].some((v) => [site0, "VaultA.Room", "VaultB.Room"].includes(v)));
+  assert.deepEqual(open.map((x) => [x.from, x.to]), [[site0, "VaultA.Room"], ["VaultA.Room", site0], [site0, "VaultB.Room"]]);
+  assert.equal(await RK.vaultRekeysDone(open.map((x) => ({ id: x.id, amount: 100 }))), 3);
+  assert.equal(await RK.vaultRekeysDone(open.map((x) => ({ id: x.id, amount: 100 }))), 0, "idempotent");
+  assert.ok(!(await RK.vaultRekeysForPepe()).some((x) => open.some((o) => o.id === x.id)), "done ones aren't sent again");
+});
+
+test("1.99rl Twitch: the ACCOUNT link (identity / SSO) never creates a pad connection; only a pad-level connect does", () => {
+  for (const f of ["twitchlogin.js", "oauthlink.js", "userlinks.js", "ssolinks.js"]) {
+    const p = path.join(repo, f);
+    if (!fs.existsSync(p)) continue;
+    assert.doesNotMatch(fs.readFileSync(p, "utf8"), /pad_connections|padconnect/, f + " must not touch pad connections");
+  }
+  const doc = fs.readFileSync(path.join(repo, "docs", "pads-ownership-connections.md"), "utf8");
+  assert.match(doc, /account-level Twitch link/i);
+  assert.match(doc, /pad bridges/i);
+});

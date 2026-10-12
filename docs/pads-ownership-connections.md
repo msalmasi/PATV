@@ -37,19 +37,58 @@ A connection maps a pad to an outside room or channel, so Pepe and the site know
 - **Camfrog.** The pad's owner asks for a code (`PATV-XXXXXX`). They prove they run the room by putting the code in the
   room's topic, or someone types `!verifypad`, which a site admin reviews. The proof secures the **mapping**, so nobody
   can point their pad at someone else's room and pull its activity in. On success the pad takes the room's id
-  (`padrekey.js` re-keys it), and it keeps its owner, feed, follows, settings, address and Prime Time / Plus time.
-  Room-bound data stays with the room id: the bridge log, room stats and activity, Pepe's room vault pool, and economy
+  (`padrekey.js` re-keys it), and it keeps its owner, feed, follows, settings, address, Prime Time / Plus time and
+  **its room vault** (§2a). Room-bound data stays with the room id: the bridge log, room stats and activity, and economy
   telemetry.
-- **Twitch.** The owner's linked Twitch login is the proof; the pad keeps its id.
+- **Twitch (pad-level).** A pad-level Twitch connection makes the pad a Twitch channel's room: today its Live tab embeds
+  the channel's player; the chat bridge is coming later (`padconnect.twitchChatHook`). The owner's linked Twitch login is
+  the proof that they run the channel. The pad keeps its id.
 - **Discord / IRC.** The schema takes them, but there is no handler yet. A new platform needs an entry in
   `padconnect.PLATFORMS`, a connect / disconnect handler, and, if it should be gated, the platform name in
   `plus_gate_platforms`.
-- **Disconnect** (camfrog): the pad goes back to its `patv:` id with its feed, owner and Plus. The Camfrog room keeps
-  its own data and gets a fresh unowned registry row if Pepe is still in it.
+- **Disconnect** (camfrog): the pad goes back to its `patv:` id with its feed, owner, Plus and vault. The Camfrog room
+  keeps its own data (activity, stats, the bridge log) and gets a fresh unowned registry row if Pepe is still in it.
 
-> Known limit: a room vault is Pepe's pool keyed by the Camfrog room id (`room:<room id>`, `pepe_roomvault.py`). It
-> belongs to the room's activity. After a disconnect its balance stays with the room; the owner's royalties do not,
-> they stay with the owner. Moving a vault pool with a pad would need a Pepe-side re-key (not built).
+### Account links are not pad connections
+
+**The account-level Twitch link and a pad-level Twitch connection are two different things.**
+
+| | Account link | Pad connection |
+|---|---|---|
+| What | Your PATV account's identity on another service | A pad that *is* a room on another service, with a chat bridge |
+| Where | Edit profile → Connections; Sign in with Twitch / Google / Telegram / Plex (`twitchlogin.js`, `oauthlink.js`, `ssolinks.js`) | Pad settings → Address & platform (`padconnect.js`, `pad_connections`) |
+| Used for | Signing in, achievements, proving who you are | The pad's room: the live view, its chat bridge, its vault, Pepe in it |
+| Plus-gated | Never | Yes, per `plus_gate_platforms` (pad bridges) |
+
+Linking your account's Twitch never creates, changes or removes a pad connection (`test/ptplus-rooms.test.js` checks the
+account-link modules never touch `pad_connections`). A pad-level Twitch connect only *uses* the owner's account link as
+proof that they run the channel.
+
+**Pad bridges are the Plus-gated thing:** `camfrog` today, and `twitch`, `discord` and `irc` once their chat bridges
+exist. Add a platform to `plus_gate_platforms` when its bridge ships. The Twitch pad connection is not in the default
+list, because today it's a player embed with no bridge.
+
+### 2a. The vault belongs to the pad
+
+"The vault belongs to the pad" (the user, 2026-10-11). A pad's room vault, its owner's royalties and its launchpad state
+follow the PAD through connect, disconnect and reconnect, even to a different Camfrog room.
+
+- **On the site** (`padrekey.js`): the vault mirror, the owner's payout rate and its log (`room_vault_*`), owner
+  royalties (`royalty_ledger`, `royalty_runs`), the room-flow escrow (`room_flow_ledger`) and the launchpad tables move
+  with the pad.
+- **The PAT itself** is Pepe's pool `room:<pad id>`, local or on the site's `pools.js` (Phase 1). Every re-key files a
+  `pad_vault_rekeys` row `{from, to}`. The owner sync hands the open ones to Pepe.
+- **Pepe** (`pepe_roomvault._rv_rekeys`):
+  1. journals the move first (`econ_rooms.rekeys`);
+  2. moves the balance `room:<from>` → `room:<to>` with `_vault_transfer`: two keyed legs, `rvrekey-<id>:out` / `:in`,
+     the same on the local and the site pool paths (dual path: local only when the backend switch is explicitly off);
+  3. moves the vault's day records and the launchpad grants;
+  4. reports it done on the next sync.
+
+  A retry never moves twice. Supply never changes: one pool goes down by exactly what the other goes up
+  (`vaultrekey_test.py`).
+- **Merge:** connecting to a room that already had an unowned pad adds the moving pad's vault onto that room's.
+- **The 50M cap** doesn't apply to a re-key: it's the pad's own PAT.
 
 ## 3. 💎 Prime Time Plus gates connections
 
@@ -82,5 +121,10 @@ spot). Buying, gifting, chipping in or comping **new** Plus time on a pad withou
 extending a Plus pad always works. When full, /premium shows **Sold out** and a waitlist (`premium_plus_waitlist`); everyone
 on it is told when a spot frees.
 
-Launch comps (`tools/ptplus-comps.js`) take spots: Pepe's Pad (no end), PepeLab where Pepe sits in it (staging), and
-Players__lounge and DRAMA_CENTRAL for 3 periods each.
+Launch comps (`tools/ptplus-comps.js`) take spots:
+- Pepe's Pad: no end date.
+- Houseplants (`plant_based_chatting`): no end date (the user, 2026-10-11).
+- PepeLab: where Pepe sits in it (staging).
+- Players__lounge and DRAMA_CENTRAL: 3 periods each.
+
+That makes 4 of 5 on prod.

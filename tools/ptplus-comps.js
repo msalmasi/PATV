@@ -14,6 +14,8 @@
 // 1.99qy (the user's model): Plus is what puts Pepe in a Camfrog room, and he can be in 5 rooms, so at most
 // ptplus_max_rooms (default 5) pads have Plus at once - comps included. These comps take spots:
 //   Pepe's Pad      (PepeFrog.Room)                                        no end date   (Pepe's own room)
+//   Houseplants     (plant_based_chatting)                                 no end date   (1.99rl: the user's pick; no length
+//                                                                                        given - the dry run flags it)
 //   PepeLab         (PepeBeta.Room)                                        no end date   only where Pepe sits in it (bridged
 //                                                                                        in the last 14 days = staging)
 //   players-lounge  (Players__lounge, Camfrog room You_Were_Never_Here)   3 periods (90 days)
@@ -49,6 +51,9 @@ const day = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : "-");
   const TARGETS = [
     { pad: "PepeFrog.Room", mode: "lifetime", label: "Pepe's Pad" },
     ...(bridged.some((b) => b.id === "PepeBeta.Room") ? [{ pad: "PepeBeta.Room", mode: "lifetime", label: "PepeLab" }] : []),
+    // 1.99rl: the user (2026-10-11) - Houseplants gets Plus too; no length was given, so no end date like Pepe's Pad
+    // (the dry run prints it - confirm before --apply)
+    { pad: "plant_based_chatting", mode: "lifetime", label: "Houseplants", confirm: "no end date - the user didn't give a length; confirm" },
     { pad: "players-lounge", mode: "periods", n: 3, label: "Players__lounge" },
     { pad: "DRAMA_CENTRAL", mode: "periods", n: 3, label: "DRAMA_CENTRAL" },
   ];
@@ -71,7 +76,7 @@ const day = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : "-");
     if (sub && sub.comped) { console.log(`${head}: already comped (${P.compUntil(sub) ? "until " + day(P.compUntil(sub)) : "no end date"}) - skipped`); continue; }
     if (!apply) {
       if (!active) wouldUse++;
-      console.log(`${head}: Plus now ${st}; would comp ${what}${!active && wouldUse > sp0.max ? "  !! OVER THE CAP - would be refused" : ""}`);
+      console.log(`${head}: Plus now ${st}; would comp ${what}${T.confirm ? "  <- " + T.confirm : ""}${!active && wouldUse > sp0.max ? "  !! OVER THE CAP - would be refused" : ""}`);
       continue;
     }
     try {

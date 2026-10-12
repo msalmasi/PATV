@@ -130,9 +130,16 @@ function register(app, { addUser, isBotToken }) {
       let pass = null;
       try { pass = await require("./premium").passCamfrogs(); } catch (e) { console.error("[rooms] season pass list:", e.message); }
       // 1.99qy: the Camfrog rooms Pepe should be in because of 💎 Prime Time Plus (pepe_plusrooms.py joins / leaves them)
+      // 1.99rl: the room vault follows its pad - Pepe's done list in, the open re-keys out (padrekey.js)
+      let vaultRekeys = [];
+      try {
+        const RK = require("./padrekey");
+        if (req.body && Array.isArray(req.body.vault_rekeys_done)) await RK.vaultRekeysDone(req.body.vault_rekeys_done);
+        vaultRekeys = await RK.vaultRekeysForPepe();
+      } catch (e) { console.error("[rooms] vault rekeys:", e.message); }
       let plusRooms = null;
       try { plusRooms = await require("./padconnect").plusRoomsForPepe(); } catch (e) { console.error("[rooms] plus rooms:", e.message); }
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

@@ -114,7 +114,9 @@ const RULES = {
   "premium_subs.target": M({ key: ["tier"], merge: { paid_through: "MAX", stripe_through: "MAX", comped: "MAX" } }),
   "premium_subs.renewer_id": M(), "premium_subs.stripe_user": M(), "premium_subs.comp_by": { deny: NAME },
   "premium_ledger.target": M(), "premium_ledger.payer_id": M(), "premium_ledger.payer_name": { deny: NAME },
-  "premium_plus_waitlist.user_id": M({ key: [] }),          // 1.99qy: the 💎 Plus waitlist (one row per account)
+  "premium_plus_waitlist.user_id": M({ key: [] }),
+  "pad_vault_rekeys.from_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },
+  "pad_vault_rekeys.to_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },          // 1.99qy: the 💎 Plus waitlist (one row per account)
   // 1.99iw stickers.js: packs owned (both own a pack: one row stays)
   "user_sticker_packs.user_id": M({ key: ["pack_id"] }), "user_sticker_packs.payer_id": M(),
   // 1.99qw likeness.js: opt-outs (both have a row: the more private setting wins), the cuts follow both sides, a freeze

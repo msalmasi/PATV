@@ -245,7 +245,7 @@ test("Pepe joining: opted in + a site Admin's OK queues room.visit [name, stay];
   assert.equal((await CN.current(P.id, "camfrog")), null);
 });
 
-test("disconnect: back to its old site id with its feed; the room keeps its vault + activity and gets its own unowned pad", async () => {
+test("disconnect: back to its old site id with its feed AND its vault (1.99rl: the vault belongs to the pad); the room keeps its activity and gets its own unowned pad", async () => {
   await runQuery("INSERT INTO room_vault_state (room_id, balance, updated) VALUES ('Lily.Room', 777, 1)").catch(async () => {
     await require(path.join(repo, "roomvaults")).init();
     await runQuery("INSERT INTO room_vault_state (room_id, balance, updated) VALUES ('Lily.Room', 777, 1)");
@@ -259,7 +259,10 @@ test("disconnect: back to its old site id with its feed; the room keeps its vaul
   assert.equal(P.id, conn.orig_id, "its old patv: id when it's free");
   assert.deepEqual([P.platform, P.slug, P.owner.username], ["site", "bridge-pad", "otherowner"]);
   assert.equal((await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [post.id]))[0].room_id, P.id, "the feed comes along");
-  assert.equal((await getQuery("SELECT balance FROM room_vault_state WHERE room_id = 'Lily.Room'"))[0].balance, 777, "the vault stays with the room");
+  assert.equal((await getQuery("SELECT balance FROM room_vault_state WHERE room_id = ?", [P.id]))[0].balance, 777, "1.99rl: the vault's mirror follows the pad");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM room_vault_state WHERE room_id = 'Lily.Room'"))[0].n, 0);
+  const rk = await require(path.join(repo, "padrekey")).vaultRekeysForPepe();
+  assert.deepEqual(rk.slice(-1).map((x) => [x.from, x.to]), [["Lily.Room", P.id]], "1.99rl: Pepe is told to move the vault's PAT room:Lily.Room -> room:<pad>");
   assert.ok((await getQuery("SELECT 1 FROM room_activity WHERE room_id = 'Lily.Room'")).length, "activity stays with the room");
   const fresh = await rooms.get("Lily.Room");
   assert.ok(fresh && !fresh.owner && fresh.platform === "camfrog", "Pepe's still in it: a fresh unowned pad");
