@@ -1,0 +1,241 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'oracle', admIsAdmin: isAdmin }) %>
+<%# views/admin/oracle.ejs - 1.99uc: the AI judge's proposals and disputes (oracleadmin.js; oracle.js; docs/oracle-contract.md).
+    Data: summary (tiles), L = oracle.adminList (the list) or P = oracle.adminDetail (one proposal), evidenceHtml / linkify (escape
+    everything). public/js/admin-oracle.js: the countdowns and the in-page confirm dialog for the actions. %>
+<%
+  const fmtT = (ms) => ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '–';
+  const pct = (c) => Math.round((Number(c) || 0) * 100) + '%';
+  const left = (until) => {
+    const s = Math.round((Number(until) - now) / 1000);
+    if (s <= 0) return t('oadm.closed');
+    const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+    return d ? t('bx.dur.dh', { d, h }) : h ? t('bx.dur.hm', { h, m }) : t('bx.dur.m', { m: Math.max(1, m) });
+  };
+  const cd = (p) => p.state === 'proposed'
+    ? '<span class="oa-cd" data-until="' + Number(p.until) + '" data-closed="' + t('oadm.closed') + '">' + left(p.until) + '</span>'
+    : '<span class="oa-muted">' + fmtT(p.until) + '</span>';
+  const ST = { disputed: 'bad', failed: 'bad', due: 'warn', settled: 'ok', overridden: 'ok', superseded: '' };
+  const stLabel = (p) => p.state === 'proposed' ? (Number(p.until) > now ? t('oadm.st.window') : t('oadm.st.proposed')) : t('oadm.st.' + p.state);
+  const stPill = (p) => '<span class="adm-pill oa-st ' + (p.state === 'proposed' ? 'warn' : (ST[p.state] || '')) + '">' + stLabel(p) + '</span>';
+  const kindLabel = (k) => t('oadm.kind.' + k);
+  const shown = (p) => p.result && p.result !== p.outcome ? '<b>' + linkify(p.result) + '</b> <code>' + linkify(p.outcome) + '</code>' : '<b>' + linkify(p.outcome) + '</b>';
+  const who = (p) => {
+    const d = p.decided;
+    if (!d) return '–';
+    if (d.by === 'admin') return t('oadm.by.admin', { name: d.name });
+    return t('oadm.by.' + d.by);
+  };
+  const itemCell = (p) => '<a href="' + p.item.link + '"><code>' + p.ref + '</code></a> <span class="oa-muted">' + kindLabel(p.kind) + '</span>'
+    + (p.item.title ? '<div class="oa-title">' + linkify(p.item.title) + '</div>' : '');
+  const S = summary;
+  const F = L ? L.filters : {};
+  const qs = (o) => { const u = new URLSearchParams(); for (const [k, v] of Object.entries(Object.assign({}, F, o))) if (v) u.set(k, v); const s = u.toString(); return '/admin/oracle' + (s ? '?' + s : ''); };
+  const EVL = { text: t('oadm.ev.text'), price: t('oadm.ev.price'), auto: t('oadm.ev.auto') };
+%>
+<style>
+  .oa-muted { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .oa-title { margin-top: 2px; font-size: var(--ds-fs-meta); color: var(--ds-text-2); overflow-wrap: anywhere; max-width: 36ch; }
+  .adm-pill.warn { border-color: var(--ds-gold-line); color: var(--ds-gold-text); background: var(--ds-gold-bg); }
+  .oa-why details > summary { cursor: pointer; color: var(--ds-text-2); overflow-wrap: anywhere; }
+  .oa-why details[open] > summary { color: var(--ds-text-muted); }
+  .oa-why .oa-full { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ds-text); }
+  .oa-why { min-width: 22ch; max-width: 44ch; }
+  .oa-filters { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3); align-items: end; }
+  .oa-filters label { display: grid; gap: 4px; flex: 1 1 150px; font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); }
+  .oa-filters .adm-actions { flex: 0 0 auto; margin: 0; }
+  .oa-ev { display: grid; gap: var(--ds-sp-2); }
+  .oa-ev-part { padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-md); background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); min-width: 0; }
+  .oa-ev-part > b { display: block; font: 700 11px/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-text-muted); margin-bottom: 4px; }
+  .oa-ev-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.55; }
+  .oa-ev-json { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.5 var(--ds-mono, ui-monospace, monospace); color: var(--ds-text-2); max-height: 360px; overflow: auto; }
+  .oa-reason { margin: 0; padding: 10px 12px; border-inline-start: 3px solid var(--ds-info, #64b5f6); background: var(--ds-sunken); border-radius: var(--ds-r-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .oa-acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+  .oa-acts .oa-act { display: grid; gap: 4px; flex: 1 1 200px; max-width: 320px; }
+  .oa-acts .oa-act small { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); line-height: 1.4; }
+  .oa-tl { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .oa-tl li { position: relative; padding: 0 0 var(--ds-sp-3) 22px; border-inline-start: 2px solid var(--ds-line); margin-inline-start: 6px; }
+  .oa-tl li:last-child { border-inline-start-color: transparent; padding-bottom: 0; }
+  .oa-tl li::before { content: ""; position: absolute; inset-inline-start: -7px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--ds-surface-2, #222); border: 2px solid var(--ds-line-strong); }
+  .oa-tl li.admin::before { border-color: var(--ds-gold-line); background: var(--ds-gold-bg); }
+  .oa-tl li.bad::before { border-color: var(--ds-danger-line); }
+  .oa-tl li.ok::before { border-color: var(--ds-ok-line); background: var(--ds-ok-bg); }
+  .oa-tl .h { font-weight: 700; color: var(--ds-text-strong); }
+  .oa-tl .m { font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
+  .oa-tl .x { margin-top: 2px; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 14px; }
+  .oa-more { margin-top: var(--ds-sp-3); }
+  #oaModal .ds-field { display: grid; gap: 6px; margin-top: var(--ds-sp-3); }
+  #oaModal .ds-field input, #oaModal .ds-field select, #oaModal .ds-field textarea { width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid #333; background: var(--ds-sunken); color: var(--ds-text); font: inherit; }
+  #oaModal .ds-field textarea { min-height: 80px; resize: vertical; }
+  #oaModal .oa-err { color: var(--ds-danger); margin: var(--ds-sp-2) 0 0; }
+  #oaModal [hidden] { display: none !important; }
+  @media (max-width: 600px) { .oa-why { min-width: 18ch; } }
+</style>
+
+<div class="adm-head">
+  <h1><span class="ds-ic" aria-hidden="true">⚖️</span> <%- t('oadm.title') %></h1>
+  <p><%- t('oadm.lede') %></p>
+</div>
+<% if (!S.enabled) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⚠️</span><div><%- t('oadm.off') %></div></div><% } %>
+
+<div class="adm-tiles" role="list" aria-label="<%- t('oadm.summary') %>">
+  <a role="listitem" class="adm-tile <%= S.window ? 'warn' : '' %>" href="/admin/oracle?status=window"><span class="k"><%- t('oadm.tile.window') %></span><span class="v"><%= S.window %></span></a>
+  <a role="listitem" class="adm-tile <%= S.disputed ? 'bad' : '' %>" href="/admin/oracle?status=disputed"><span class="k"><%- t('oadm.tile.disputed') %></span><span class="v"><%= S.disputed %></span></a>
+  <a role="listitem" class="adm-tile <%= S.due ? 'warn' : '' %>" href="/admin/oracle?status=due"><span class="k"><%- t('oadm.tile.due') %></span><span class="v"><%= S.due %></span></a>
+  <a role="listitem" class="adm-tile <%= S.failed ? 'bad' : '' %>" href="/admin/oracle?status=failed"><span class="k"><%- t('oadm.tile.failed') %></span><span class="v"><%= S.failed %></span></a>
+  <a role="listitem" class="adm-tile ok" href="/admin/oracle?status=settled"><span class="k"><%- t('oadm.tile.settled7') %></span><span class="v"><%= S.settled7 %></span></a>
+</div>
+
+<% if (missing) { %>
+<section class="adm-card"><div class="ds-empty"><b><%- t('oadm.missing') %></b><p><a href="/admin/oracle"><%- t('oadm.back') %></a></p></div></section>
+<% } else if (P) { const p = P, can = P.can; %>
+<section class="adm-card" id="proposal" aria-labelledby="pT" data-key="<%= p.key %>">
+  <p class="oa-muted"><a href="/admin/oracle">‹ <%- t('oadm.back') %></a></p>
+  <h2 id="pT"><a href="<%= p.item.link %>"><code><%= p.ref %></code></a> <%- kindLabel(p.kind) %> <%- stPill(p) %></h2>
+  <% if (p.item.title) { %><p class="oa-title" style="max-width:none;font-size:15px"><%- linkify(p.item.title) %></p><% } %>
+  <div class="adm-kv">
+    <div><b><%- t('oadm.col.outcome') %></b><span><%- shown(p) %></span></div>
+    <div><b><%- t('oadm.col.conf') %></b><span><%= pct(p.confidence) %></span></div>
+    <div><b><%- t('oadm.col.at') %></b><span><%= fmtT(p.created) %></span></div>
+    <div><b><%- t('oadm.col.window') %></b><span><%- cd(p) %></span></div>
+    <div><b><%- t('oadm.col.disputes') %></b><span><%- t('oadm.disputes_n', { n: p.n_active, need: p.need }) %><%- p.n_disputes > p.n_active ? ' · ' + t('oadm.rejected_n', { n: p.n_disputes - p.n_active }) : '' %></span></div>
+    <div><b><%- t('oadm.col.final') %></b><span><%- p.final_outcome ? '<b>' + linkify(p.final_outcome) + '</b>' : '–' %></span></div>
+    <div><b><%- t('oadm.col.by') %></b><span><%- who(p) %><%- p.settled_at ? ' · ' + fmtT(p.settled_at) : '' %></span></div>
+    <div><b><%- t('oadm.col.owner') %></b><span><%- t(can.owner === 'site' ? 'oadm.owner.site' : 'oadm.owner.pepe') %></span></div>
+    <div><b><%- t('oadm.col.judge') %></b><span><%= p.judge %> · <code><%= p.key %></code></span></div>
+  </div>
+  <% if (p.admin_reason) { %><p class="adm-help"><%- t('oadm.admin_reason') %> <%- linkify(p.admin_reason) %></p><% } %>
+  <% if (p.settle_result && p.settle_result.error) { %><div class="ds-note danger"><span class="ds-ic" aria-hidden="true">⛔</span><div><b><%- t('oadm.settle_error') %></b> <%- linkify(p.settle_result.error) %></div></div><% } %>
+</section>
+
+<section class="adm-card" id="why" aria-labelledby="whyT">
+  <h2 id="whyT"><%- t('oadm.h.why') %></h2>
+  <p class="oa-reason"><%- p.reason ? linkify(p.reason) : t('oadm.no_reason') %></p>
+  <h3><%- t('oadm.h.evidence') %></h3>
+  <% const evh = evidenceHtml(p.evidence, EVL); %>
+  <% if (evh) { %><div class="oa-ev"><%- evh %></div><% } else { %><p class="adm-help"><%- t('oadm.no_evidence') %></p><% } %>
+</section>
+
+<section class="adm-card" id="actions" aria-labelledby="actT">
+  <h2 id="actT"><%- t('oadm.h.actions') %> <span class="adm-pill admin"><%- t('oadm.admins') %></span></h2>
+  <div class="oa-acts">
+    <% ['uphold', 'override', 'void', 'extend', 'reask'].forEach((a) => { const g = can[a]; %>
+      <div class="oa-act">
+        <button type="button" class="adm-btn <%= a === 'void' ? 'danger' : a === 'uphold' ? '' : 'ghost' %>" data-oa-action="<%= a %>"<%= g.ok ? '' : ' disabled' %>><%- t('oadm.act.' + a) %></button>
+        <small><%- g.ok ? t('oadm.act.' + a + '_help') : t('oadm.why.' + g.why) %></small>
+      </div>
+    <% }) %>
+  </div>
+  <% if (!can.uphold.ok && can.uphold.why === 'pepe_owned') { %><p class="adm-help"><%- t('oadm.pepe_room', { cmd: '<code>!' + (p.kind === 'wager' ? 'wager' : 'market') + ' settle ' + p.ref + ' &lt;result|void&gt;</code>' }) %></p><% } %>
+</section>
+
+<section class="adm-card" id="disputes" aria-labelledby="dT">
+  <h2 id="dT"><%- t('oadm.h.disputes') %></h2>
+  <% if (!p.disputes.length) { %><div class="ds-empty"><b><%- t('oadm.no_disputes') %></b><p><%- t('oadm.no_disputes_help') %></p></div><% } else { %>
+  <div class="adm-tbl"><table aria-label="<%- t('oadm.h.disputes') %>"><thead><tr><th><%- t('oadm.col.who') %></th><th><%- t('oadm.col.when') %></th><th><%- t('oadm.col.claim') %></th><th><%- t('oadm.col.dstatus') %></th><th></th></tr></thead><tbody>
+    <% p.disputes.forEach((d) => {
+         const dst = d.rejected ? 'rejected' : p.state === 'overridden' ? 'upheld' : ['settled', 'due'].includes(p.state) ? 'overruled' : p.state === 'superseded' ? 'closed' : 'open'; %>
+      <tr>
+        <td><b><%= d.login %></b></td>
+        <td><%= fmtT(d.ts) %></td>
+        <td class="oa-why"><%- d.why ? linkify(d.why) : '<span class="oa-muted">' + t('oadm.no_claim') + '</span>' %></td>
+        <td><span class="adm-pill <%= dst === 'open' ? 'warn' : dst === 'upheld' ? 'ok' : dst === 'rejected' ? 'bad' : '' %>"><%- t('oadm.dst.' + dst) %></span>
+          <% if (d.rejected) { %><div class="oa-muted"><%- t('oadm.rejected_by', { name: d.rejected.by, when: fmtT(d.rejected.at) }) %><%- d.rejected.why ? ': ' + linkify(d.rejected.why) : '' %></div><% } %></td>
+        <td><% if (!d.rejected && can.reject_dispute.ok) { %><button type="button" class="adm-btn sm ghost" data-oa-action="reject_dispute" data-login="<%= d.login %>"><%- t('oadm.act.reject_dispute') %></button><% } %></td>
+      </tr>
+    <% }) %>
+  </tbody></table></div>
+  <% } %>
+</section>
+
+<section class="adm-card" id="timeline" aria-labelledby="tlT">
+  <h2 id="tlT"><%- t('oadm.h.timeline') %></h2>
+  <ol class="oa-tl">
+    <% p.timeline.forEach((e) => { const cls = e.admin ? 'admin' : ['disputed', 'failed', 'dispute'].includes(e.ev) ? 'bad' : ['settled', 'overridden'].includes(e.ev) ? 'ok' : ''; %>
+      <li class="<%= cls %>">
+        <div class="h"><%- t('oadm.tl.' + e.ev) %><%- e.outcome ? ': <code>' + linkify(e.outcome) + '</code>' : '' %></div>
+        <div class="m"><%= fmtT(e.ts) %><%- e.by ? ' · ' + linkify(e.by) : '' %></div>
+        <% if (e.text) { %><div class="x"><%- linkify(e.text) %></div><% } %>
+      </li>
+    <% }) %>
+  </ol>
+</section>
+
+<div class="ds-scrim sheet" id="oaModal" hidden>
+  <div class="ds-modal" role="dialog" aria-modal="true" aria-labelledby="oaModalH">
+    <form id="oaForm" novalidate>
+      <div class="ds-modal-h"><h2 id="oaModalH"></h2><button type="button" class="ds-close" data-oa-close aria-label="<%- t('oadm.m.close') %>">×</button></div>
+      <% ['uphold', 'override', 'void', 'extend', 'reask', 'reject_dispute'].forEach((a) => { %>
+        <p data-for="<%= a %>" data-title="<%- t('oadm.act.' + a) %>" hidden><%- t('oadm.m.' + a, { ref: p.ref, outcome: p.outcome }) %></p>
+      <% }) %>
+      <div class="ds-field" data-for="override" hidden>
+        <label class="ds-label" for="oaOutcome"><%- t('oadm.m.outcome') %></label>
+        <input id="oaOutcome" name="outcome" type="text" maxlength="300" list="oaOpts" autocomplete="off">
+        <datalist id="oaOpts"><% p.item.options.filter((o) => o.toLowerCase() !== String(p.outcome).toLowerCase()).forEach((o) => { %><option value="<%= o %>"><% }) %></datalist>
+      </div>
+      <div class="ds-field" data-for="extend" hidden>
+        <label class="ds-label" for="oaMinutes"><%- t('oadm.m.minutes') %></label>
+        <select id="oaMinutes" name="minutes">
+          <% [[15, 'oadm.m.m15'], [60, 'oadm.m.m60'], [360, 'oadm.m.m360'], [1440, 'oadm.m.m1440'], [4320, 'oadm.m.m4320']].forEach(([v, k]) => { %><option value="<%= v %>"<%= v === 60 ? ' selected' : '' %>><%- t(k) %></option><% }) %>
+        </select>
+      </div>
+      <div class="ds-field">
+        <label class="ds-label" for="oaReason"><span data-reason-req hidden><%- t('oadm.m.reason_req') %></span><span data-reason-opt><%- t('oadm.m.reason_opt') %></span></label>
+        <textarea id="oaReason" name="reason" maxlength="200"></textarea>
+      </div>
+      <p class="oa-err" role="alert" id="oaErr"></p>
+      <div class="ds-modal-f"><button type="button" class="ds-btn ghost" data-oa-close><%- t('oadm.m.cancel') %></button><button type="submit" class="ds-btn" id="oaGo"><%- t('oadm.m.confirm') %></button></div>
+    </form>
+  </div>
+</div>
+
+<% } else { %>
+<section class="adm-card" id="list" aria-labelledby="listT">
+  <h2 id="listT"><%- t('oadm.h.list') %></h2>
+  <form class="oa-filters" method="get" action="/admin/oracle" role="search">
+    <label><%- t('oadm.f.status') %>
+      <select name="status"><option value=""><%- t('oadm.f.all') %></option>
+        <% ['window', 'proposed', 'disputed', 'due', 'settled', 'overridden', 'failed', 'superseded'].forEach((s) => { %><option value="<%= s %>"<%= F.status === s ? ' selected' : '' %>><%- t('oadm.fs.' + s) %></option><% }) %>
+      </select></label>
+    <label><%- t('oadm.f.kind') %>
+      <select name="kind"><option value=""><%- t('oadm.f.all') %></option>
+        <% ['market', 'pool', 'wager'].forEach((k) => { %><option value="<%= k %>"<%= F.kind === k ? ' selected' : '' %>><%- kindLabel(k) %></option><% }) %>
+      </select></label>
+    <label><%- t('oadm.f.from') %><input type="date" name="from" value="<%= F.from %>"></label>
+    <label><%- t('oadm.f.to') %><input type="date" name="to" value="<%= F.to %>"></label>
+    <div class="adm-actions"><button type="submit"><%- t('oadm.f.apply') %></button><a class="adm-btn ghost" href="/admin/oracle"><%- t('oadm.f.clear') %></a></div>
+  </form>
+  <% if (!L.items.length) { %>
+    <div class="ds-empty" style="margin-top:12px"><b><%- t('oadm.empty') %></b><p><%- t('oadm.empty_help') %></p></div>
+  <% } else { %>
+  <div class="adm-tbl"><table aria-label="<%- t('oadm.h.list') %>"><thead><tr>
+    <th><%- t('oadm.col.item') %></th><th><%- t('oadm.col.status') %></th><th><%- t('oadm.col.outcome') %></th><th><%- t('oadm.col.conf') %></th><th><%- t('oadm.col.why') %></th>
+    <th><%- t('oadm.col.at') %></th><th><%- t('oadm.col.window') %></th><th><%- t('oadm.col.disputes') %></th><th><%- t('oadm.col.final') %></th><th><%- t('oadm.col.by') %></th>
+  </tr></thead><tbody>
+    <% L.items.forEach((p) => { const r = p.reason || ''; const sm = p.summary || ''; %>
+    <tr>
+      <td><%- itemCell(p) %><div><a class="oa-muted" href="/admin/oracle?key=<%= encodeURIComponent(p.key) %>"><%- t('oadm.open') %> ›</a></div></td>
+      <td><%- stPill(p) %></td>
+      <td><%- shown(p) %></td>
+      <td class="num"><%= pct(p.confidence) %></td>
+      <td class="oa-why"><% if (r.length + sm.length <= 120) { %><%- linkify(r) %><% if (sm) { %><div class="oa-muted"><%- linkify(sm) %></div><% } %><% } else { %>
+        <details><summary><%- linkify(r.length > 110 ? r.slice(0, 110) + '…' : r || sm.slice(0, 110) + '…') %></summary>
+          <div class="oa-full"><%- linkify(r) %></div><% if (sm) { %><div class="oa-full oa-muted"><%- linkify(sm) %></div><% } %></details><% } %></td>
+      <td><%= fmtT(p.created) %></td>
+      <td><%- cd(p) %></td>
+      <td class="num"><%- t('oadm.disputes_n', { n: p.n_active, need: p.need }) %></td>
+      <td><%- p.final_outcome ? '<b>' + linkify(p.final_outcome) + '</b>' : '–' %></td>
+      <td><%- who(p) %></td>
+    </tr>
+    <% }) %>
+  </tbody></table></div>
+  <% if (L.more) { %><p class="oa-more"><a class="adm-btn ghost sm" href="<%= qs({ before: String(L.next) }) %>"><%- t('oadm.older') %> ›</a></p><% } %>
+  <% } %>
+</section>
+<% } %>
+
+<div class="ds-toasts" aria-live="polite" id="oaToasts"></div>
+<script src="/public/js/admin-oracle.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

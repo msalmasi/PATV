@@ -1236,6 +1236,7 @@ require("./escrow/ledger").register(app, { isBotToken, addUser, patSupply: (...a
 require("./escrow/games").register(app, { isBotToken, addUser });
 // Phase 5 (5.15): the AI judge proposes outcomes here; the site runs the dispute window and settles what it owns (oracle.js)
 require("./oracle").register(app, { isBotToken, addUser });
+require("./oracleadmin").register(app, { addUser });   // 1.99uc: /admin/oracle - the AI judge's proposals and disputes, admin actions
 require("./econstore").register(app, { isBotToken, addUser });
 // G1: the gang system on the site (gangs.js) - registry, ranks, treasuries (keyed pools rows), rep; /gtf/gangs pages
 require("./gangs").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });

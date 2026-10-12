@@ -515,8 +515,9 @@ function registerOracle() {
         const m = await M.getMarket(ref).catch(() => null);
         return !!m && ["open", "closed"].includes(m.status);
       },
-      settle: async (ref, outcome, key, pepeLogin) => act("markets", { verb: "settle", idem: `oracle-${key}`.slice(0, 120).replace(/[^A-Za-z0-9_.:@\-]/g, "-"),
-        actor: { pepe: true, login: pepeLogin || "pepe", via: "oracle" }, args: { ref, outcome } }),
+      // actor (1.99uc): an admin's settle from /admin/oracle passes its own; the window's settle is Pepe's judge
+      settle: async (ref, outcome, key, pepeLogin, actor) => act("markets", { verb: "settle", idem: `oracle-${key}`.slice(0, 120).replace(/[^A-Za-z0-9_.:@\-]/g, "-"),
+        actor: actor || { pepe: true, login: pepeLogin || "pepe", via: "oracle" }, args: { ref, outcome } }),
       participants: async (ref) => {
         const m = await M.getMarket(ref).catch(() => null);
         if (!m) return [];

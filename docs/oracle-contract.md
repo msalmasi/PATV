@@ -89,3 +89,30 @@ ignored, and a site-owned item it settles meanwhile is settled once (the escrow 
 ## Staging
 
 `oracle_meta.enabled` defaults on there; Pepe's switch is off until an admin runs `!aijudge backend on confirm`.
+
+## Admins: /admin/oracle (1.99uc)
+
+`oracleadmin.js` + `oracle.js` (`adminList` / `adminSummary` / `adminDetail` / `adminAct`), page `views/admin/oracle.ejs`,
+script `public/js/admin-oracle.js`, tests `test/oracle-admin.test.js`. Admins only; linked from the admin nav and /admin/economy.
+
+- **The list**: newest first, filters status (`window` = proposed and still open, `proposed`, `disputed`, `due`, `settled`,
+  `overridden`, `failed`, `superseded`), kind and date; summary tiles (open in window, disputed, due for Pepe, failed,
+  settled in the last 7 days). **The detail**: the rationale and the evidence (escaped; http(s) links only), the timeline
+  (the row + the feed's events + the admin actions, which outlive the feed's 14 days), the disputes and their status.
+- **Actions** (`POST /api/admin/oracle/act {key, action, idem, minutes, outcome, reason, login}`, same-site + `X-Requested-With:
+  fetch`). Each is keyed by `idem` (`oracle_admin_actions`; the same key answers the stored result), runs in one transaction on a
+  fresh read of the proposal, and goes to `admin_audit` (`oracle.<action>`):
+  - `extend` (5 min to 7 days; only `proposed`) - event `extended`;
+  - `uphold` = settle now: a site-owned item is settled through its resolver **as the admin** (`settle(ref, outcome, key, null,
+    actor)`, keyed `<key>:adm:<idem>`) from `proposed` / `disputed` / `failed` -> `settled`, event `settled`; a Pepe-owned one only
+    from `proposed` -> `due` (Pepe settles with his own copy of the call, which is why he can't take an override);
+  - `override` (a different outcome, reason required) / `void` (`void <why>`, a wager `void`): site-owned only -> `overridden`,
+    event `settled` with `{override: true, judge_outcome}` (Pepe's copy goes final);
+  - `reject_dispute {login}`: the dispute stays, marked `rejected`, and stops counting; a site-owned call it had escalated goes
+    back to `proposed` with at least 15 minutes left - event `dispute_rejected`. A rejected disputer can't file again;
+  - `reask`: `superseded` + event `reask`; Pepe forgets the call and its disputes and judges the item again (a new key). Offered
+    only while Pepe's feed poll says it handles it (`caps: ["reask"]` on `/api/oracle/bot/feed`, bot 1.99uc, fresher than 10 min).
+- New columns: `final_outcome`, `decided_by` (`window` | `pepe` | `admin:<name>`), `admin_reason`. The window's tick now handles
+  each row in one transaction and only while it is still `proposed`, so an admin's action is never overwritten.
+- Users dispute from the item page (`/markets/<id>` for markets and pools, `/wagers`) or in the room; that goes through Pepe
+  (`!market dispute` / `!wager dispute`, `checked: true`). The site has no direct dispute route of its own.
