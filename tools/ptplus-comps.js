@@ -50,7 +50,7 @@ const day = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : "-");
   const TARGETS = [
     { pad: "PepeFrog.Room", mode: "lifetime", label: "Pepe's Pad" },
     ...(bridged.some((b) => b.id === "PepeBeta.Room") ? [{ pad: "PepeBeta.Room", mode: "lifetime", label: "PepeLab" }] : []),
-    // 1.99rl / 1.99rt: the user (2026-10-11) - Houseplants gets Plus for 3 months, like players-lounge and DRAMA_CENTRAL
+    // 1.99rl / 1.99ru: the user (2026-10-11) - Houseplants gets Plus for 3 months, like players-lounge and DRAMA_CENTRAL
     { pad: "plant_based_chatting", mode: "periods", n: 3, label: "Houseplants" },
     { pad: "players-lounge", mode: "periods", n: 3, label: "Players__lounge" },
     { pad: "DRAMA_CENTRAL", mode: "periods", n: 3, label: "DRAMA_CENTRAL" },
