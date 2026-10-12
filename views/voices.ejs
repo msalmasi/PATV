@@ -37,7 +37,7 @@
   <div class="ds-stats"><div class="ds-stat"><span><%- t('lk.s_held') %></span><b class="gold"><%= num(lk.held) %></b><small>PAT</small></div>
     <div class="ds-stat"><span><%- t('lk.s_paid') %></span><b class="up"><%= num(lk.paid) %></b><small>PAT</small></div></div>
   <% } %>
-  <% if (locals.clone) { %><%- include('partials/voice-clone', { clone: clone, t: t }) %><% } %>
+  <% if (locals.clone) { %><%- include('partials/voice-clone', { clone: clone }) %><% } %>
   <% if (!mine.voices.length) { %>
     <section class="ds-card"><p class="ds-empty"><%- t('vs.mine_none') %></p></section>
   <% } %>
@@ -69,7 +69,7 @@
     <p class="ds-lead"><%- t('vs.lead') %></p>
     <div class="ds-ctas"><a class="ds-btn ghost" href="/voices/mine"><%- t('vs.mine_link') %></a><a class="ds-btn ghost" href="/soundboards"><%- t('vs.sb_link') %></a></div>
   </header>
-  <div class="vs-filters ds-seg" role="group" aria-label="<%- t('vs.filter') %>">
+  <div class="vs-filters" role="group" aria-label="<%- t('vs.filter') %>">
     <button type="button" class="ds-btn sm" data-vs-filter="all" aria-pressed="true"><%- t('vs.f_all') %></button>
     <button type="button" class="ds-btn sm ghost" data-vs-filter="stock" aria-pressed="false"><%- t('vs.f_stock') %></button>
     <button type="button" class="ds-btn sm ghost" data-vs-filter="clone" aria-pressed="false"><%- t('vs.f_clone') %></button>

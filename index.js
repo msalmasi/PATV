@@ -192,7 +192,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1177,6 +1177,7 @@ require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker 
 require("./likeness").register(app, { addUser, isBotToken });   // 1.99qw: likeness royalties (subject cuts, held + released daily) + opt-outs (/settings/likeness)
 require("./soundboards").register(app, { addUser, isBotToken });   // 1.99rh: 🔊 soundboards (packs, season board, legendaries, pad boards, the drawer, /soundboards)
 require("./voicestore").register(app, { addUser, isBotToken });   // 1.99rh: 🗣️ the voice store (/voices, /voices/mine) - Pepe is a client
+require("./voiceclone").register(app, { addUser, isBotToken });   // 1.99ri: 🎙️ !clonemyvoice - consent, recording checks, review, revocation (/voices/clone)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 require("./golive").register(app, { addUser });   // 1.99kp: 🎥 go-live alerts + stream-start announcements
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
@@ -1248,6 +1249,7 @@ require("./burns").register(app, { isBotToken, addUser });   // 1.99dk: PAT burn
 require("./roomsweb").register(app, { isBotToken, addUser });
 require("./royalties").start();
 require("./likeness").start();   // 1.99qw: likeness royalties - the daily release
+require("./voiceclone").start();   // 1.99ri: consent audio retention (30 days after a revocation)
 const bridge = require("./bridge");
 bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /p (Pads), /p/:slug (pad page), /api/bridge/sync
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)

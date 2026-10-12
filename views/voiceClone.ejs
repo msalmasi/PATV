@@ -1,0 +1,87 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /voices/clone - 1.99ri (voiceclone.js): !clonemyvoice's consent page - the plain-language terms, the 18+ attestation, consent,
+    the one-time phrase + script to read on the mic, live status, delete. Client: public/js/voice-clone.js %>
+<%- include('layout', { title: t('vc.title'), user: user }) %>
+<style>
+  .vcx .vc-terms { display: grid; gap: var(--ds-sp-2); margin: 0; padding: 0; list-style: none; }
+  .vcx .vc-terms li { display: grid; grid-template-columns: 28px 1fr; gap: var(--ds-sp-2); font-size: 14.5px; line-height: 1.55; color: var(--ds-text-2); }
+  .vcx .vc-terms b { color: var(--ds-text-strong); }
+  .vcx .vc-read { font-size: 18px; line-height: 1.6; color: var(--ds-text-strong); background: var(--ds-sunken); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md, 12px);
+                  padding: var(--ds-sp-3); margin: 0; overflow-wrap: anywhere; }
+  .vcx .vc-read.phrase { border-color: var(--ds-ac); }
+  .vcx .vc-steps { margin: 0; padding-inline-start: 1.3em; color: var(--ds-text-2); font-size: 14.5px; line-height: 1.6; }
+  .vcx .vc-msg { min-height: 1.2em; font-size: 13.5px; color: var(--ds-text-muted); margin: 0; }
+  .vcx .vc-msg.ok { color: var(--ds-ok); } .vcx .vc-msg.bad { color: var(--ds-danger); }
+  .vcx .ds-check { display: flex; gap: var(--ds-sp-2); align-items: flex-start; font-size: 14.5px; line-height: 1.5; }
+  .vcx .ds-check input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+  .vcx [hidden] { display: none !important; }
+</style>
+<%
+  const c = st.consent;
+  const when = (ms) => ms ? (t.date ? t.date(Number(ms), { timeStyle: 'short' }) : new Date(Number(ms)).toISOString().slice(11, 16)) : '';
+%>
+<main class="ds-page mid vcx" id="vcx" data-status="<%= c ? c.status : 'none' %>">
+  <a class="ds-back" href="/voices/mine">← <%- t('vc.back') %></a>
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🎙️</span> <%- t('vc.eyebrow') %></span>
+    <h1><%- t('vc.h1') %></h1>
+    <p class="ds-lead"><%- t('vc.lead') %></p>
+  </header>
+  <% if (!st.enabled) { %><div class="ds-note warn"><div><%- t('vc.off') %></div></div><% } %>
+
+  <section class="ds-card lg" aria-labelledby="vcTermsH">
+    <h2 class="ds-h2" id="vcTermsH"><span class="dot"></span><%- t('vc.terms_h') %></h2>
+    <ul class="vc-terms">
+      <li><span aria-hidden="true">🗣️</span><span><%- t('vc.t_what') %></span></li>
+      <li><span aria-hidden="true">🏠</span><span><%- t('vc.t_where') %></span></li>
+      <li><span aria-hidden="true">🎛️</span><span><%- t('vc.t_control') %></span></li>
+      <li><span aria-hidden="true">💸</span><span><%- t('vc.t_money') %></span></li>
+      <li><span aria-hidden="true">🚫</span><span><%- t('vc.t_never') %></span></li>
+      <li><span aria-hidden="true">🗑️</span><span><%- t('vc.t_delete') %></span></li>
+      <li><span aria-hidden="true">🔒</span><span><%- t('vc.t_privacy') %></span></li>
+    </ul>
+    <p class="ds-meta"><%- t('vc.terms_version', { v: st.terms_version }) %> · <a href="/api/voiceclone/record"><%- t('vc.download') %></a></p>
+  </section>
+
+  <% if (c && (c.status === 'active' || c.status === 'review' || c.status === 'approved')) { %>
+  <section class="ds-card lg" aria-labelledby="vcStateH">
+    <h2 class="ds-h2" id="vcStateH"><span class="dot"></span><%- t('vc.state_h') %></h2>
+    <p class="vc-msg ok"><%- t('vc.st.' + c.status, { voice: t.esc(c.voice || '') }) %></p>
+    <div class="ds-actions"><a class="ds-btn" href="/voices/mine"><%- t('vc.manage') %></a>
+      <button type="button" class="ds-btn danger" data-vc-revoke><%- t('vc.delete') %></button></div>
+    <p class="vc-msg" id="vcRevMsg" role="status" aria-live="polite"></p>
+  </section>
+  <% } else if (!st.linked) { %>
+  <section class="ds-card"><p class="vc-msg bad"><%- t('vc.need_link', { cmd: '<code>!verify</code>' }) %></p></section>
+  <% } else if (!st.can_start) { %>
+  <section class="ds-card"><p class="vc-msg bad"><%= st.why %></p></section>
+  <% } else { %>
+  <section class="ds-card lg" id="vcForm" aria-labelledby="vcConsentH" <%= c && c.status === 'phrase' && c.phrase ? 'hidden' : '' %>>
+    <h2 class="ds-h2" id="vcConsentH"><span class="dot"></span><%- t('vc.consent_h') %></h2>
+    <form class="ds-form" id="vcConsent" novalidate>
+      <label class="ds-check"><input type="checkbox" name="attest18" required><span><%- t('vc.attest18') %></span></label>
+      <label class="ds-check"><input type="checkbox" name="consent" required><span><%- t('vc.consent') %></span></label>
+      <label class="ds-field"><span class="ds-label"><%- t('vc.typed') %></span><input class="ds-in" name="typed_login" autocomplete="off" spellcheck="false" maxlength="40" placeholder="<%= st.login %>"></label>
+      <% if (st.auto) { %><p class="ds-meta"><%- st.auto.age_ok && st.auto.level_ok ? t('vc.auto_yes') : t('vc.auto_no', { days: st.auto.days, level: st.auto.level }) %></p><% } %>
+      <div class="ds-actions"><button class="ds-btn" type="submit"><%- t('vc.go') %></button></div>
+      <p class="vc-msg" id="vcMsg" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <section class="ds-card lg" id="vcRead" aria-labelledby="vcReadH" <%= c && c.status === 'phrase' && c.phrase ? '' : 'hidden' %>>
+    <h2 class="ds-h2" id="vcReadH"><span class="dot"></span><%- t('vc.read_h') %></h2>
+    <ol class="vc-steps">
+      <li><%- t('vc.step1') %></li>
+      <li><%- t('vc.step2', { secs: st.cfg.min_secs }) %></li>
+      <li><%- t('vc.step3') %></li>
+    </ol>
+    <h3 class="ds-h3"><%- t('vc.phrase_h') %></h3>
+    <p class="vc-read phrase" id="vcPhrase"><%= c && c.phrase || '' %></p>
+    <h3 class="ds-h3"><%- t('vc.script_h') %></h3>
+    <p class="vc-read" id="vcScript"><%= c && c.script || '' %></p>
+    <p class="ds-meta" id="vcExpires" data-expires="<%= c && c.expires_at || '' %>"><%- c && c.expires_at ? t('vc.expires', { when: when(c.expires_at) }) : '' %></p>
+    <p class="vc-msg" id="vcLive" role="status" aria-live="polite"></p>
+  </section>
+  <% } %>
+</main>
+<script src="/public/js/voice-clone.js?v=1" defer></script>

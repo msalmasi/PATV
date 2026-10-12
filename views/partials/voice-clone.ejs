@@ -1,0 +1,15 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99ri: the !clonemyvoice status card on /voices/mine (voiceclone.status) %>
+<% const _c = clone && clone.consent; %>
+<section class="ds-card" aria-labelledby="vsCloneH">
+  <h2 class="ds-h3" id="vsCloneH">🎙️ <%- t('vc.card_h') %></h2>
+  <% if (!clone.enabled) { %>
+    <p class="ds-meta"><%- t('vc.off') %></p>
+  <% } else if (_c && ['phrase', 'review', 'approved', 'active'].includes(_c.status)) { %>
+    <p class="ds-meta"><%- t('vc.st.' + _c.status, { voice: t.esc(_c.voice || '') }) %></p>
+    <div class="ds-actions"><a class="ds-btn ghost" href="/voices/clone"><%- t('vc.open') %></a></div>
+  <% } else { %>
+    <p class="ds-meta"><%- t('vc.card_none', { cmd: '<code>!clonemyvoice</code>' }) %></p>
+    <div class="ds-actions"><a class="ds-btn ghost" href="/voices/clone"><%- t('vc.start') %></a></div>
+  <% } %>
+</section>

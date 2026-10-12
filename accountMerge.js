@@ -128,6 +128,9 @@ const RULES = {
   "sb_clips.created_by": M(), "sb_clips.subject_login": { deny: NAME },
   "voice_owned.user_id": M({ key: ["voice_id"] }),
   "voices.owner_user_id": M(), "voices.owner_login": { deny: NAME },
+  // 1.99ri voiceclone.js: consent records follow the account (the proof of consent / revocation must survive a merge)
+  "voice_consents.user_id": M(), "voice_consents.login": { deny: NAME }, "voice_consents.typed_login": { deny: NAME },
+  "voice_consents.reviewed_by": { deny: NAME }, "voice_consents.revoked_by": { deny: NAME },
   // shop / markets / bounties / Pepe
   "shop_orders.buyer_id": M(), "shop_orders.seller_id": M(), "shop_orders.buyer_input": { deny: TEXT },
   "shop_orders.gift_from": M() /* 1.99lz: who paid for a gift */, "shop_orders.gift_note": { deny: TEXT },

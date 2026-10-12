@@ -6976,6 +6976,41 @@
     "url": "/soundboards"
    },
    "webchat": true
+  },
+  {
+   "id": "clonemyvoice",
+   "title": "!clonemyvoice",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!clonemyvoice",
+    "!clonevoice"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!clonemyvoice",
+    "!clonemyvoice status",
+    "!clonemyvoice delete"
+   ],
+   "summary": "Clone your own voice so Pepe can speak in it - opt-in, you set the prices, delete it any time.",
+   "details": "`!clonemyvoice` sends you a private link to the consent page: plain-language terms, an 18+ confirmation and your consent. You then get a one-time **phrase** and a short **script** to read on the mic - alone, in ONE turn, at least 30 seconds. Pepe checks that it's you (the phrase, its code and the script, nobody else on the mic) and the voice goes live: automatically for accounts 30+ days old at level 5+, otherwise after a quick staff review.\n\nYour voice starts **unlisted**. On [/voices/mine](/voices/mine) you decide whether it's in the store, its prices (per use up to 10,000; an unlock 100,000-1,000,000), your cut (10-50%, 30% by default), whether others may make it say anything (off unless you turn it on) and whether pad owners may use it on soundboards. Your cut is held 24 h and paid daily.\n\n`!clonemyvoice delete` (then `!clonemyvoice delete confirm`) deletes it: it stops at once, it's removed from both voice servers, and anyone who unlocked it gets half their PAT back. Only your own voice - never someone else's, a celebrity or an impression - and adults only.",
+   "examples": [
+    "!clonemyvoice",
+    "!clonemyvoice status",
+    "!clonemyvoice delete"
+   ],
+   "keywords": [
+    "clone",
+    "voice",
+    "tts",
+    "consent",
+    "voice store",
+    "royalty"
+   ],
+   "web": {
+    "label": "Clone your voice",
+    "url": "/voices/clone"
+   }
   }
  ],
  "undocumented": [
@@ -6983,5 +7018,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "4ef19c460fbfc4b6"
+ "hash": "4b7ce74a21815d48"
 }
