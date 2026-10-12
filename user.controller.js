@@ -999,29 +999,26 @@ async function awardBonus(userId, type, amount) {
     // Start a transaction
     const transactionId = uuidv4();
     const bonusId = uuidv4();
-    await runQuery("BEGIN TRANSACTION");
-
-    // Add points to the winner's points balance - logged only when it really moved (1.99ga)
-    const posted = await ledger.post(userId, Number(amount), "bonus win", { transactionId, resolveMerged: true, source: `bonus ${type}` });
+    // 1.99sr: the shared serialized transaction (mainstage tx) - a raw BEGIN here could collide with another module's
+    // open transaction, and the catch's bare ROLLBACK then undid THAT request's writes
+    const posted = await require("./mainstage")._tx(async () => {
+      // Add points to the winner's points balance - logged only when it really moved (1.99ga)
+      const p = await ledger.post(userId, Number(amount), "bonus win", { transactionId, resolveMerged: true, source: `bonus ${type}` });
+      if (!p.ok) return p;
+      await runQuery(
+        "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
+        [bonusId, type, p.userId, transactionId, amount]
+      );
+      return p;
+    });
     if (!posted.ok) {
-      await runQuery("ROLLBACK");
       await take.undo();
       return { success: false, code: posted.code };
     }
-
-    // Insert into bonus_winners table
-    await runQuery(
-      "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
-      [bonusId, type, posted.userId, transactionId, amount]
-    );
-
-    // Commit the transaction
-    await runQuery("COMMIT");
     console.log(`${amount} PAT bonus points awarded to ${userId} successfully.`)
     return  { success: true, message: `${amount} PAT bonus points awarded to ${userId} successfully.` };
   } catch (error) {
-    // Rollback in case of error
-    await runQuery("ROLLBACK");
+    // 1.99sr: tx() already rolled back its own transaction (a bare ROLLBACK could undo another request's)
     console.error("Failed to process bonus winner:", error);
     throw error; // Rethrow the error so the calling function can handle it
   }

@@ -3268,19 +3268,24 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
     const spinnerLevel = (lvlRow[0] && lvlRow[0].level) || 0;
     const outcome = await computeSpinResult(goldWheelMultiplier(spinnerLevel));
 
-    await runQuery("BEGIN TRANSACTION");
-
-    await ledger.postOrThrow(spinDetails[0].userId, -5000, "Wager: Gold Spin", { transactionId, source: "gold spin" });
-    await runQuery(
-      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-      [jackpotId, spinId, spinDetails[0].userId, 5000]
-    );
-    await runQuery(
-      `UPDATE wheel_spins SET result = 'PENDING', type = 'gold', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ?`,
-      [outcome.segmentIndex, outcome.payout, outcome.jackpotPct, spinId]
-    );
-
-    await runQuery("COMMIT");
+    // 1.99sr: the shared serialized transaction (mainstage tx: one at a time, BEGIN retried while another module's is
+    // open). A raw BEGIN here raced the public wheel's: one handler's failed BEGIN + ROLLBACK undid the other's ledger
+    // row mid-flight and its balance update then committed alone (prod 2026-10-12: a 5,000 debit with no row). The
+    // spin is claimed (INTENT -> PENDING) inside the transaction, so a double acknowledge can't charge twice.
+    const claimed = await require("./mainstage")._tx(async () => {
+      const up = await runQuery(
+        `UPDATE wheel_spins SET result = 'PENDING', type = 'gold', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ? AND result = 'INTENT'`,
+        [outcome.segmentIndex, outcome.payout, outcome.jackpotPct, spinId]
+      );
+      if (!up || up.changes !== 1) return false;
+      await ledger.postOrThrow(spinDetails[0].userId, -5000, "Wager: Gold Spin", { transactionId, source: "gold spin" });
+      await runQuery(
+        `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
+        [jackpotId, spinId, spinDetails[0].userId, 5000]
+      );
+      return true;
+    });
+    if (!claimed) return res.status(404).send("Spin not found or already processed");
 
     res.json({
       success: true,
@@ -3289,7 +3294,7 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
       display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
     });
   } catch (error) {
-    await runQuery("ROLLBACK").catch(() => {});   // 1.99fb: nothing open (BEGIN itself failed) must not hide the error
+    // 1.99sr: no bare ROLLBACK - tx() rolled back its own transaction; a bare one could undo ANOTHER request's
     console.error("Failed to finalize spin:", error);
     res
       .status(500)
@@ -3483,19 +3488,21 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
     // Public/OBS wheel prizes are fixed (PUBLIC_WHEEL_MULTIPLIER), same as publicwheel.js.
     const outcome = await computeSpinResult(PUBLIC_WHEEL_MULTIPLIER);
 
-    await runQuery("BEGIN TRANSACTION");
-
-    await ledger.postOrThrow(spinDetails[0].userId, -5000, "Wager: Public Spin", { transactionId, source: "public spin" });
-    await runQuery(
-      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-      [jackpotId, spinId, spinDetails[0].userId, 5000]
-    );
-    await runQuery(
-      `UPDATE wheel_spins SET result = 'PENDING', type = 'public', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ?`,
-      [outcome.segmentIndex, outcome.payout, outcome.jackpotPct, spinId]
-    );
-
-    await runQuery("COMMIT");
+    // 1.99sr: the shared serialized transaction, the spin claimed inside it - see /api/u/acknowledge-spin
+    const claimed = await require("./mainstage")._tx(async () => {
+      const up = await runQuery(
+        `UPDATE wheel_spins SET result = 'PENDING', type = 'public', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ? AND result = 'INTENT'`,
+        [outcome.segmentIndex, outcome.payout, outcome.jackpotPct, spinId]
+      );
+      if (!up || up.changes !== 1) return false;
+      await ledger.postOrThrow(spinDetails[0].userId, -5000, "Wager: Public Spin", { transactionId, source: "public spin" });
+      await runQuery(
+        `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
+        [jackpotId, spinId, spinDetails[0].userId, 5000]
+      );
+      return true;
+    });
+    if (!claimed) return res.status(404).send("Spin not found or already processed");
     const spinData = {
       message: `public spinid ${spinId} from ${username}`,
       spinId: spinId, // Include the spin ID for tracking
@@ -3515,7 +3522,7 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
     });
   } catch (error) {
-    await runQuery("ROLLBACK").catch(() => {});   // 1.99fb: nothing open (BEGIN itself failed) must not hide the error
+    // 1.99sr: no bare ROLLBACK - tx() rolled back its own transaction; a bare one could undo ANOTHER request's
     console.error("Failed to finalize spin:", error);
     res
       .status(500)

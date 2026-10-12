@@ -81,7 +81,7 @@ async function deriveIncentiveGroups(treasury) {
     const b = num(budgets[g]) || 0, s = num(spent[g]) || 0;
     await runQuery(`INSERT INTO incentive_groups (grp, week, budget, spent, remaining, updated) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(grp) DO UPDATE SET week = excluded.week, budget = excluded.budget, spent = excluded.spent,
-                    remaining = excluded.remaining, updated = excluded.updated`, [String(g).slice(0, 32), str(w.id, 20), b, s, Math.max(0, b - s), t]);
+                    remaining = excluded.remaining, updated = excluded.updated`, [String(g).slice(0, 32), str(w.id, 20), b, s, b < 0 ? null : Math.max(0, b - s), t]);   // 1.99sr: budget -1 = uncapped
     n++;
   }
   return n;

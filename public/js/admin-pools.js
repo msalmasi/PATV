@@ -47,7 +47,8 @@
     (view.fed_journal || []).forEach(function (f) { row(fed, [f.id, fmt(f.amount), f.pool || '', f.policy || '', f.state || '', f.reason || ''], [1]); });
     if (!(view.fed_journal || []).length) empty(fed, 6, 'Nothing journaled here yet.');
     var inc = $('poolsInc'); inc.textContent = '';
-    (view.incentive_groups || []).forEach(function (g) { row(inc, [g.grp, g.week || '', fmt(g.budget), fmt(g.spent), fmt(g.remaining)], [2, 3, 4]); });
+    // 1.99sr: a budget of -1 = the group is uncapped this week (Pepe's budget_<group> = unlimited)
+    (view.incentive_groups || []).forEach(function (g) { var unc = Number(g.budget) < 0; row(inc, [g.grp, g.week || '', unc ? 'uncapped' : fmt(g.budget), fmt(g.spent), unc ? '—' : fmt(g.remaining)], [2, 3, 4]); });
     $('poolsDocs').textContent = 'Journals held here: ' + (Object.keys(view.docs || {}).map(function (d) { return d + ' (rev ' + view.docs[d].rev + ', ' + when(view.docs[d].updated) + ')'; }).join(' · ') || 'none yet');
     var cat = (view.catalog && view.catalog.routes) || {};
     var rt = $('poolsRoutes'); rt.textContent = '';

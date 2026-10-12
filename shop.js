@@ -520,7 +520,9 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
 
     let orderId = null;
     try {
-      await runQuery("BEGIN TRANSACTION");
+      // 1.99sr: the shared serialized transaction (mainstage tx), not a raw BEGIN whose failure's ROLLBACK could undo
+      // another request's open transaction
+      await require("./mainstage")._tx(async () => {
       if (!comp) {
         const paid = await runQuery(
           "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
@@ -572,9 +574,8 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
                                                          : gift && gift.anon ? `🎁 An anonymous gift to ${username} — official store item`
                                                          : gift ? `🎁 Gift from ${payerName} to ${username} — official store item`
                                                          : "Official store item — delivered instantly");
-      await runQuery("COMMIT");
+      });
     } catch (error) {
-      try { await runQuery("ROLLBACK"); } catch (e) { /* nothing open */ }
       const known = /mid-purchase/.test(error.message);
       if (!known) console.error("Shop purchase error:", error);
       return {
