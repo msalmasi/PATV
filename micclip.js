@@ -33,6 +33,9 @@ const relay = require("./bridge-relay");
 
 const PREVIEW_TTL = 10 * 60 * 1000;
 const JOB_TTL = 3 * 60 * 1000;
+// 1.99sh: a request Pepe hasn't answered within PENDING_HOLD fails (the page gives up at about the same time) and stops
+// holding one of the account's OPEN_PER_USER slots; a late answer for it is turned away.
+const PENDING_HOLD = 60 * 1000;
 const MAX_BYTES = 6 * 1024 * 1024;
 const REQ_GAP = 15 * 1000, REQ_BURST = 6, REQ_WINDOW = 10 * 60 * 1000;
 const SAVE_GAP = 20 * 1000, SAVE_BURST = 3, SAVE_WINDOW = 10 * 60 * 1000;
@@ -70,13 +73,34 @@ function drop(c) {
   clips.delete(c.id);
 }
 const isOpen = (c) => c.state === "pending";
+/** A pending request past PENDING_HOLD -> failed (and its relay job withdrawn if Pepe hasn't taken it yet). */
+function timeOut(c, now = NOW()) {
+  if (!isOpen(c) || now - c.ts <= PENDING_HOLD) return false;
+  c.state = "failed"; c.status = "Pepe didn't answer in time — try again."; c.done = now; c.code = "E_TIMEOUT";
+  const j = relay._jobs.get(c.id);
+  if (j && j.state === "pending") relay._jobs.delete(c.id);
+  return true;
+}
+// 1.99sh: what counts against OPEN_PER_USER - a request still in flight (not timed out) or a preview you can still post
+// that you haven't posted yet. A posted clip (c.save) never counts, nor does an expired / failed / timed-out one.
+function holdsSlot(c, now = NOW()) {
+  timeOut(c, now);
+  return isOpen(c) || (c.state === "ready" && !c.save && now - c.done < PREVIEW_TTL);
+}
+function openFor(userId, now = NOW()) {
+  return [...clips.values()].filter((c) => c.userId === userId && holdsSlot(c, now)).sort((a, b) => a.ts - b.ts);
+}
 function sweep(now = NOW()) {
-  for (const c of [...clips.values()]) if (isOpen(c) ? now - c.ts > JOB_TTL : now - (c.done || c.ts) > PREVIEW_TTL) drop(c);
+  for (const c of [...clips.values()]) {
+    timeOut(c, now);
+    if (isOpen(c) ? now - c.ts > JOB_TTL : now - (c.done || c.ts) > PREVIEW_TTL) drop(c);
+  }
 }
 setInterval(() => sweep(), 30 * 1000).unref();
 
 function view(c, slug) {
   const j = relay._jobs.get(c.id);
+  timeOut(c);
   if (isOpen(c) && j && j.state === "done" && j.result && !j.result.ok) { c.state = "failed"; c.status = j.result.msg || "Pepe couldn't clip that."; c.done = NOW(); }
   const live = c.state === "ready" && NOW() - c.done < PREVIEW_TTL;
   const base = "/api/rooms/" + encodeURIComponent(slug) + "/micclip/" + c.id;
@@ -173,13 +197,19 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
         if (c.userId === u.userId && c.tx === tx && (isOpen(c) || (c.state === "ready" && NOW() - c.done < PREVIEW_TTL))) return res.json({ ok: true, id: c.id, again: true });
       }
       // 1.99ia: only a request still in flight or a preview you can still post counts (an expired one didn't)
-      const open = [...clips.values()].filter((c) => c.userId === u.userId && (isOpen(c) || (c.state === "ready" && NOW() - c.done < PREVIEW_TTL))).length;
-      if (open >= OPEN_PER_USER) return res.status(429).json({ ok: false, error: "Post or discard the clips you have first." });
+      // 1.99sh: ... and not one you already posted, nor a request Pepe never answered (PENDING_HOLD). The refusal lists the
+      // open ones (room page + id) so the page can offer a Discard for each.
+      const open = openFor(u.userId);
+      if (open.length >= OPEN_PER_USER) {
+        return res.status(429).json({ ok: false, code: "E_CLIPS_OPEN", error: "Post or discard the clips you have first.",
+          open: open.map((c) => ({ id: c.id, room: c.slug || req.params.slug, login: c.login, state: c.state, secs: c.secs || 0,
+                                   until: c.state === "ready" ? c.done + PREVIEW_TTL : c.ts + PENDING_HOLD })) });
+      }
       const lim = relay.limited("micclip|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
       const j = relay.newJob({ kind: "micclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, target: login, tx,
                                viewers: new Set([u.userId]) });
-      clips.set(j.id, { id: j.id, roomId: R.id, tx, login, userId: u.userId, username: u.username, state: "pending", status: "", ts: NOW(), done: 0,
+      clips.set(j.id, { id: j.id, roomId: R.id, slug: R.slug || String(req.params.slug), tx, login, userId: u.userId, username: u.username, state: "pending", status: "", ts: NOW(), done: 0,
                         secs: 0, text: "", viewerOk: false, cost: 0, save: null });
       console.log(`[micclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} speaker=${login} job=${j.id}`);
       res.json({ ok: true, id: j.id });
@@ -196,6 +226,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const c = clips.get(String(b.id || ""));
     if (!c) return res.status(404).json({ ok: false, error: "unknown clip" });
     const j = relay._jobs.get(c.id);
+    // 1.99sh: the page already gave up on it (timed out / discarded) - don't bring it back as an open preview
+    if (timeOut(c) || !isOpen(c)) return res.status(410).json({ ok: false, error: "too late" });
     if (String(b.state || "") === "ok") {
       let m4a = null;
       try { m4a = Buffer.from(String(b.data || ""), "base64"); } catch (e) { m4a = null; }
@@ -238,6 +270,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const x = mine(req, res);
     if (!x) return;
     if (x.c.save) return res.status(409).json({ ok: false, error: "It's being posted." });
+    // 1.99sh: discarding a request still in flight withdraws its job too (if Pepe hasn't taken it yet)
+    const j = relay._jobs.get(x.c.id);
+    if (j && j.state === "pending") relay._jobs.delete(x.c.id);
     drop(x.c);
     res.json({ ok: true });
   });
@@ -343,4 +378,4 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   });
 }
 
-module.exports = { register, sweep, voicesFor, removeMe, clipGate, PREVIEW_TTL, _clips: clips, _setDeps, _setClock, _setDir, fileOf };
+module.exports = { register, sweep, voicesFor, removeMe, clipGate, PREVIEW_TTL, PENDING_HOLD, OPEN_PER_USER, openFor, _clips: clips, _setDeps, _setClock, _setDir, fileOf };

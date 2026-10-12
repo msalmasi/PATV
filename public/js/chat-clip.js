@@ -16,7 +16,7 @@
       body: body === undefined ? undefined : JSON.stringify(body) })
       .then(function (r) {
         return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }).then(function (d) {
-          if (!r.ok || d.ok === false) { var e = new Error(d.error || ('HTTP ' + r.status)); e.code = d.code; throw e; }
+          if (!r.ok || d.ok === false) { var e = new Error(d.error || ('HTTP ' + r.status)); e.code = d.code; e.open = d.open; throw e; }
           return d;
         });
       });
@@ -144,7 +144,8 @@
     host.appendChild(mc);
     var cur = null;           // {id, timer, ...}
     function mcClose(discard) {
-      if (cur) { clearTimeout(cur.timer); if (discard && cur.id && cur.state === 'ready' && !cur.saving) api(api0 + '/micclip/' + cur.id + '/discard', {}).catch(function () { /* expires anyway */ }); }
+      // 1.99sh: a request still in flight is discarded too (it holds one of your 2 slots until Pepe answers), never a posted one
+      if (cur) { clearTimeout(cur.timer); if (discard && cur.id && (cur.state === 'ready' || cur.state === 'pending') && !cur.saving && !cur.posted) api(api0 + '/micclip/' + cur.id + '/discard', {}).catch(function () { /* expires anyway */ }); }
       cur = null; mc.hidden = true; mc.textContent = '';
     }
     function mcStatus(t, bad) { var s = mc.querySelector('.cc-msg'); if (!s) { s = el('div', 'cc-msg'); s.setAttribute('role', 'status'); s.setAttribute('aria-live', 'polite'); mc.appendChild(s); } s.textContent = t; s.classList.toggle('bad', !!bad); return s; }
@@ -184,7 +185,7 @@
       save.addEventListener('click', function () {
         save.disabled = true; cur.saving = true; st.textContent = 'Sending to Pepe…'; st.classList.remove('bad');
         api(api0 + '/micclip/' + v.id + '/save', { start: Math.round(Number(A.r.value) * 1000), end: Math.round(Number(B.r.value) * 1000) })
-          .then(function () { pollSave(v.id, st, save, 0); })
+          .then(function () { if (cur) cur.posted = true; pollSave(v.id, st, save, 0); })
           .catch(function (e) { save.disabled = false; cur.saving = false; st.textContent = e.message; st.classList.add('bad'); });
       });
     }
@@ -210,9 +211,29 @@
           cur.state = v.state;
           if (v.state === 'ready') return mcReady(v);
           if (v.state === 'failed' || v.state === 'expired') { mcStatus(v.status || 'Pepe couldn\'t clip that.', true); addClose(); return; }
-          if (n < 40) pollClip(id, n + 1); else { mcStatus('Pepe didn\'t answer — try again in a minute.', true); addClose(); }
+          // 1.99sh: give up after ~60 s (the site's PENDING_HOLD) and withdraw the request so it stops holding a slot
+          if (n < 50) pollClip(id, n + 1); else { api(api0 + '/micclip/' + id + '/discard', {}).catch(function () { /* times out anyway */ }); cur.state = 'failed'; mcStatus('Pepe didn\'t answer — try again in a minute.', true); addClose(); }
         }).catch(function (e) { mcStatus(e.message, true); addClose(); });
       }, 1200);
+    }
+    // 1.99sh: "Post or discard the clips you have first." lists the open ones, each with a Discard (the last one asks again)
+    function openList(list, tx) {
+      var box = el('div', 'mc-open');
+      list.forEach(function (o) {
+        var row = el('div', 'cc-row');
+        var what = (o.state === 'ready' ? '🔊 unposted preview of ' : '⏳ still waiting on Pepe for ') + (o.login || 'a mic-up') + (o.secs ? ' · ' + Math.round(o.secs) + 's' : '');
+        if (o.until) { var mins = Math.ceil((o.until - Date.now()) / 60000); what += ' · frees itself in ' + (mins <= 1 ? 'a minute' : mins + ' min'); }
+        row.appendChild(el('span', 'cc-hint', what));
+        var b = el('button', 'cc-btn', 'Discard'); b.type = 'button';
+        b.addEventListener('click', function () {
+          b.disabled = true;
+          api('/api/rooms/' + encodeURIComponent(o.room) + '/micclip/' + encodeURIComponent(o.id) + '/discard', {})
+            .then(function () { row.remove(); if (!box.querySelector('.cc-btn')) micClip(tx); })
+            .catch(function (e) { b.disabled = false; mcStatus(e.message, true); });
+        });
+        row.appendChild(b); box.appendChild(row);
+      });
+      mc.appendChild(box);
     }
     function addClose() { var b = el('button', 'cc-btn', 'Close'); b.type = 'button'; b.addEventListener('click', function () { mcClose(false); }); mc.appendChild(b); }
     function micClip(tx) {
@@ -220,8 +241,16 @@
       cur = { id: null, tx: tx };
       mc.hidden = false; mc.textContent = '';
       mcStatus('🔊 Asking Pepe for that mic-up…');
-      api(api0 + '/micclip', { tx: tx }).then(function (d) { cur.id = d.id; pollClip(d.id, 0); })
-        .catch(function (e) { mcStatus(e.message, true); addClose(); });
+      var me = cur;
+      api(api0 + '/micclip', { tx: tx }).then(function (d) {
+        if (cur !== me) { api(api0 + '/micclip/' + d.id + '/discard', {}).catch(function () { /* closed meanwhile */ }); return; }
+        cur.id = d.id; cur.state = 'pending'; pollClip(d.id, 0);
+      }).catch(function (e) {
+        if (cur !== me) return;
+        mcStatus(e.message, true);
+        if (e.code === 'E_CLIPS_OPEN' && e.open && e.open.length) openList(e.open, tx);
+        addClose();
+      });
       if (mc.scrollIntoView) mc.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
     function decorate(nodes) {

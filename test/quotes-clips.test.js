@@ -395,3 +395,79 @@ test("the live view tells the page about the room's !clip switch (🔊 Clip show
   const it = v.feed.find((x) => x.k === "tx");
   assert.equal(it.id, TX, "the 🎙 line carries the id the 🔊 Clip button sends");
 });
+
+// ── 1.99sh: the open-clip cap (OPEN_PER_USER) frees up: posted clips, discards, and requests Pepe never answered ──
+async function micLines(n, tag) {
+  const ids = [];
+  const evs = [];
+  for (let i = 0; i < n; i++) { const id = "tx-" + tag + String(i).padStart(15, "0"); ids.push(id); evs.push(ev("x.pepe.transcript", { id, user: u("carolcf"), text: "line " + tag + i })); }
+  await sync({ rooms: [{ room: ROOM, topic: "t", members: [u("alicecf"), u("bobcf"), u("carolcf")], count: 4, clip: true }], events: evs });
+  return ids;
+}
+async function askClip(x, tx) { relay._hits.clear(); return post(`/api/rooms/${SLUG}/micclip`, x, { tx }); }
+async function answer(id) {
+  return post("/api/bridge/micclip", null, { password: "bot", id, state: "ok", target: "carolcf", secs: 5, text: "hi", data: M4A.toString("base64"), viewer_ok: true, cost: 0 });
+}
+
+test("🔊 Clip cap (1.99sh): post two clips -> can clip a third", async () => {
+  micclip._clips.clear(); takeMicJobs();
+  U.erin = U.erin || await mkUser("erin", { camfrog: "erincf" });
+  const tx = await micLines(3, "1");
+  for (const t of tx.slice(0, 2)) {
+    const r = await askClip(U.erin, t);
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.equal((await answer(r.d.id)).status, 200);
+    relay._hits.clear();
+    const s = await post(`/api/rooms/${SLUG}/micclip/${r.d.id}/save`, U.erin, { start: 0, end: 5000 });
+    assert.equal(s.status, 200, JSON.stringify(s.d));
+  }
+  const r3 = await askClip(U.erin, tx[2]);
+  assert.equal(r3.status, 200, "posted clips don't count against the cap: " + JSON.stringify(r3.d));
+  micclip._clips.clear();
+});
+
+test("🔊 Clip cap (1.99sh): two open previews refuse a third, list them with their room, and a discard frees a slot", async () => {
+  micclip._clips.clear(); takeMicJobs();
+  U.finn = U.finn || await mkUser("finn", { camfrog: "finncf" });
+  const tx = await micLines(3, "2");
+  const ids = [];
+  for (const t of tx.slice(0, 2)) { const r = await askClip(U.finn, t); ids.push(r.d.id); await answer(r.d.id); }
+  const no = await askClip(U.finn, tx[2]);
+  assert.equal(no.status, 429);
+  assert.equal(no.d.code, "E_CLIPS_OPEN");
+  assert.deepEqual(no.d.open.map((o) => o.id), ids, "the open ones, oldest first");
+  assert.ok(no.d.open.every((o) => o.room === SLUG && o.state === "ready" && o.until > Date.now()), "each with its pad + when it frees itself");
+  const d = await post(`/api/rooms/${no.d.open[0].room}/micclip/${ids[0]}/discard`, U.finn, {});
+  assert.equal(d.status, 200);
+  assert.equal((await askClip(U.finn, tx[2])).status, 200, "discard -> can clip again");
+  micclip._clips.clear();
+});
+
+test("🔊 Clip cap (1.99sh): a request Pepe never answers stops holding a slot after PENDING_HOLD; a late answer is turned away", async () => {
+  micclip._clips.clear(); takeMicJobs();
+  U.gus = U.gus || await mkUser("gus", { camfrog: "guscf" });
+  const tx = await micLines(3, "3");
+  const a = await askClip(U.gus, tx[0]);
+  const b = await askClip(U.gus, tx[1]);
+  assert.equal((await askClip(U.gus, tx[2])).status, 429, "two in flight = the cap");
+  takeMicJobs();   // Pepe took them ... and never answers
+  const t0 = Date.now();
+  try {
+    micclip._setClock(() => t0 + micclip.PENDING_HOLD - 1000);
+    assert.equal((await askClip(U.gus, tx[2])).status, 429, "still waiting");
+    micclip._setClock(() => t0 + micclip.PENDING_HOLD + 1000);
+    const v = (await get(`/api/rooms/${SLUG}/micclip/${a.d.id}`, U.gus)).d;
+    assert.equal(v.state, "failed");
+    assert.equal(v.code, "E_TIMEOUT");
+    const late = await answer(b.d.id);
+    assert.equal(late.status, 410, "a late answer doesn't bring it back as an open preview");
+    assert.equal(micclip._clips.get(b.d.id).state, "failed");
+    const c = await askClip(U.gus, tx[2]);
+    assert.equal(c.status, 200, "freed after the timeout: " + JSON.stringify(c.d));
+    // a request discarded before Pepe took it is withdrawn from the relay too
+    const d = await askClip(U.gus, tx[0]);
+    assert.ok(relay._jobs.has(d.d.id));
+    assert.equal((await post(`/api/rooms/${SLUG}/micclip/${d.d.id}/discard`, U.gus, {})).status, 200);
+    assert.equal(relay._jobs.has(d.d.id), false, "Pepe never gets a discarded request");
+  } finally { micclip._setClock(() => Date.now()); micclip._clips.clear(); }
+});
