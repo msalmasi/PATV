@@ -1,0 +1,52 @@
+/* embedcards.css - the live cards public/js/embed-cards.js puts under a feed post / comment that links to a market, pool,
+   poll or bounty (embedcards.js). ds.css tokens; area accents from bets.css's vocabulary (markets green, pools = the
+   Wagers & Pools amber, polls cyan, bounties gold). The whole card opens the item: .ec-main's ::after covers it, the pad
+   link sits above that layer. */
+.ec { --ec-ac: var(--ds-acc-markets); --ec-ac2: var(--ds-acc-markets-2);
+      position: relative; display: grid; gap: var(--ds-sp-2, 8px); margin: var(--ds-sp-2h, 10px) 0 0; padding: var(--ds-sp-3, 12px) var(--ds-sp-3h, 14px);
+      max-width: 560px; background: var(--ds-surface, #121212); border: 1px solid var(--ds-line, #262626); border-inline-start: 3px solid var(--ec-ac);
+      border-radius: var(--ds-r-lg, 12px); color: var(--ds-text, #e6e6e6); font-size: var(--ds-fs-sm, 14px); line-height: 1.4;
+      transition: border-color .15s, box-shadow .15s; }
+.ec-pool { --ec-ac: var(--ds-acc-wagers); --ec-ac2: var(--ds-acc-wagers-2); }
+.ec-poll { --ec-ac: var(--ds-acc-polls); --ec-ac2: var(--ds-acc-polls-2); }
+.ec-bounty { --ec-ac: var(--ds-acc-bounties); --ec-ac2: var(--ds-acc-bounties-2); }
+.ec:hover, .ec:focus-within { border-color: var(--ec-ac); box-shadow: var(--ds-e-2, 0 4px 14px rgba(0, 0, 0, .35)); }
+.ec-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; color: var(--ds-text-muted, #9a9a9a); font-size: var(--ds-fs-meta, 12.5px); }
+.ec-kind { display: inline-flex; align-items: center; gap: 5px; color: var(--ec-ac2); font-weight: 700; }
+.ec-ic { font-family: var(--ds-font-emoji); font-size: 14px; line-height: 1; }
+.ec-ref { font: 700 11.5px/1 var(--ds-font-mono, monospace); color: var(--ec-ac2); padding: 3px 6px; border-radius: var(--ds-r-xs, 4px);
+          background: color-mix(in srgb, var(--ec-ac) 14%, transparent); }
+.ec-st { padding: 1px 8px; border-radius: var(--ds-r-pill, 999px); border: 1px solid var(--ds-line-strong, #333); font-weight: 700; color: #ccc; }
+.ec.is-open .ec-st { color: var(--ds-ok, #81c784); border-color: var(--ds-ok-line, #2e6b31); background: var(--ds-ok-bg); }
+.ec.is-closed .ec-st, .ec.is-settling .ec-st { color: var(--ds-warn, #f2c46d); border-color: var(--ds-warn-line, #6b531e); background: var(--ds-warn-bg); }
+.ec.is-settled .ec-st { color: var(--ds-info, #9fc9ff); border-color: var(--ds-info-line, #2f4f7a); background: var(--ds-info-bg); }
+.ec.is-void .ec-st, .ec.is-expired .ec-st { color: var(--ds-danger, #ffb3b3); border-color: var(--ds-danger-line, #7a3a3a); background: var(--ds-danger-bg); }
+.ec-when { font-variant-numeric: tabular-nums; }
+.ec-q { display: block; margin: 0; font-weight: 700; font-size: 15.5px; line-height: 1.35; color: var(--ds-text-strong, #fff); overflow-wrap: anywhere; }
+.ec-main { color: inherit; text-decoration: none; }
+.ec-main::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.ec-main:hover { text-decoration: underline; }
+.ec-main:focus-visible { outline: none; }
+.ec:has(.ec-main:focus-visible) { outline: 2px solid var(--ds-focus, #ffcf40); outline-offset: 2px; }
+.ec-opts { display: grid; gap: 4px; }
+.ec-opt { position: relative; display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 3px 8px; border-radius: var(--ds-r-sm, 6px);
+          background: var(--ds-sunken, #0c0c0c); overflow: hidden; }
+.ec-bar { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--ec-ac) 22%, transparent); transition: width .5s ease; }
+[dir="rtl"] .ec-bar { inset: 0 0 0 auto; }
+.ec-on, .ec-ov { position: relative; }
+.ec-on { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-ov { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ds-text-strong, #fff); }
+.ec-opt.on { box-shadow: inset 0 0 0 1px var(--ec-ac); }
+.ec-opt.on .ec-on { color: var(--ec-ac2); font-weight: 700; }
+.ec-more { color: var(--ds-text-muted, #9a9a9a); font-size: var(--ds-fs-meta, 12.5px); padding-inline-start: 8px; }
+.ec-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; color: var(--ds-text-muted, #9a9a9a); font-size: var(--ds-fs-meta, 12.5px); }
+.ec-fact { font-variant-numeric: tabular-nums; }
+.ec-pad { position: relative; z-index: 1; color: var(--ds-green-2, #81c784); font-weight: 700; }
+.ec-site { color: var(--ds-text-muted, #9a9a9a); font-weight: 500; }
+.ec-flash { animation: ec-flash 1.2s ease-out; }
+@keyframes ec-flash { from { box-shadow: 0 0 0 2px var(--ec-ac); } to { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) {
+  .ec, .ec-bar { transition: none; }
+  .ec-flash { animation: none; }
+}
+.cm-body + .ec, .cm .ec { max-width: 480px; }

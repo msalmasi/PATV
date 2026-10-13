@@ -1219,6 +1219,7 @@ require("./lotto").register(app, { isBotToken, addUser });
 require("./lotto/routes").register(app, { isBotToken, addUser, updateLevel });   // 1.99ml: Pepeball owned by the site (docs/lotto-backend.md)
 require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
+require("./embedcards").register(app, { addUser });   // live feed cards for linked markets / pools / polls / bounties (GET /api/embeds)
 require("./wallet").register(app, { isBotToken, addUser });
 // 1.99ne: a paid command's charge + its routing as one entry group (route intents Pepe applies and acks)
 const patroutes = require("./patroutes");
