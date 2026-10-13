@@ -1359,7 +1359,7 @@
     "!persona <name>|off"
    ],
    "summary": "Personality profiles.",
-   "details": "**Personality profiles.** Pepe stays Pepe (same memories, family and opinions) but talks in a different style: `dolly` (drag queen), the horror classics (`dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`), `pedro` (the Temu Pepe: dumber, Spanglish), `flirty` and `gothmommy` (Goth Mommy: deadpan, teasing, protective, calls herself mommy, speaks in the moxier voice), `reaper` (deadpan gallows humour), `skater` (chill skate-park slang) and `alien` (Zorp, a polite visitor studying the humans). Personas follow costumes: put on a costume and he gets the matching personality (`!persona link off` unlinks them). `!persona voice off` keeps him in the room's normal voice whatever the persona. Editable in the admin panel, and website admins can change his costume, persona and voice from the Pepe control panel on publicaccess.tv.",
+   "details": "**Personality profiles.** Pepe stays Pepe (same memories, family and opinions) but talks in a different style: `dolly` (drag queen), the horror classics (`dracula`, `frankenstein`, `mummy`, `freddy`, `jason`, `pennywise`, `werewolf`, `pinhead`), `pedro` (the Temu Pepe: dumber, Spanglish), `flirty` and `gothmommy` (Goth Mommy: deadpan, teasing, protective, calls herself mommy, speaks in the moxier voice), `reaper` (deadpan gallows humour), `skater` (chill skate-park slang) and `alien` (Zorp, a polite visitor studying the humans). `kawaii` and `vtuber` (a bubbly streamer idol) switch his avatar style instead of a costume. Personas follow costumes: put on a costume and he gets the matching personality (`!persona link off` unlinks them). `!persona voice off` keeps him in the room's normal voice whatever the persona. Editable in the admin panel, and website admins can change his costume, persona and voice from the Pepe control panel on publicaccess.tv.",
    "examples": [
     "!persona link off",
     "!persona voice off"
@@ -1392,7 +1392,7 @@
   },
   {
    "id": "pepebase",
-   "title": "!pepebase pixel|kawaii · !pepemod <modifier>",
+   "title": "!pepebase pixel|kawaii|vtuber · !pepemod <modifier>",
    "category": "chat",
    "role": "admin",
    "commands": [
@@ -1403,19 +1403,23 @@
     "!pepemods"
    ],
    "syntax": [
-    "!pepebase pixel|kawaii",
+    "!pepebase pixel|kawaii|vtuber",
     "!pepemod <modifier>",
     "!pepemods"
    ],
-   "summary": "Switch the art style of Pepe's overlay avatar, and dress up the kawaii style with its own modifiers.",
-   "details": "`!pepebase kawaii` draws Pepe as a soft kawaii frog on the overlay; `!pepebase pixel` (the default) brings back the pixel frog with its costumes and game outfits. `!pepemods` lists the modifiers for the current style (kawaii: bow, flower crown, cat ears, strawberry hat, sparkles, headset; one per slot) and `!pepemod <name>` puts one on. A costume or a modifier for the other style is refused with the reason. Experimental.",
+   "summary": "Switch the art style of Pepe's overlay avatar (pixel, kawaii or VTuber), and dress up the kawaii and VTuber styles with their own modifiers.",
+   "details": "`!pepebase kawaii` draws Pepe as a soft kawaii frog on the overlay; `!pepebase vtuber` (or `anime`) makes him VTuber Pepe, an anime-girl streamer version with big anime eyes, pink twin-tails, a headset mic and an idol outfit; `!pepebase pixel` (the default) brings back the pixel frog with its costumes and game outfits. `!pepemods` lists the modifiers for the current style (kawaii: bow, flower crown, cat ears, strawberry hat, sparkles, headset; VTuber: catphones, stars, hearthands, chibi; one per slot) and `!pepemod <name>` puts one on. `!persona vtuber` switches him to VTuber Pepe with the matching streamer-idol voice. A costume or a modifier for the other style is refused with the reason. Experimental.",
    "examples": [
     "!pepebase kawaii",
-    "!pepemod bow"
+    "!pepemod bow",
+    "!pepebase vtuber",
+    "!pepemod catphones"
    ],
    "keywords": [
     "avatar style",
     "kawaii",
+    "vtuber",
+    "anime",
     "overlay look"
    ]
   },
@@ -5861,7 +5865,7 @@
   },
   {
    "id": "greeter",
-   "title": "!greeter on|off · mic <%> · cooldown <min> · away <hours> · test <user>",
+   "title": "!greeter on|off · stats · new <mode> · regulars <mode> · dwell · away · rejoin · test <user>",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -5872,13 +5876,18 @@
    ],
    "syntax": [
     "!greeter on|off",
+    "stats",
+    "new off|text|text+mic",
+    "regulars off|text|mic",
     "mic <%>",
-    "cooldown <min>",
+    "dwell new|regular <seconds>",
     "away <hours>",
+    "rejoin <minutes>",
+    "cooldown <min>",
     "test <user>"
    ],
-   "summary": "Greeter mode (per room): Pepe welcomes people back with a personal line he writes himself — something he knows about them, or what the room's on about — never a canned \"welcome back\".",
-   "details": "**Greeter mode** (per room): Pepe welcomes people back with a personal line he writes himself — something he knows about them, or what the room's on about — never a canned \"welcome back\". Someone is \"back\" when Pepe saw them here before and then not for `away` hours (default 4). At most one greeting per `cooldown` minutes (default 3), and he won't repeat himself. `mic` sets the share spoken on the mic instead of typed (default 25%). First-time visitors aren't greeted. Saying wb me gets you one on demand.",
+   "summary": "Greeter mode (per room): Pepe says hello to people who stay a while - a relaxed shared welcome for newcomers, a short personal hello for regulars - and skips people who already left.",
+   "details": "**Greeter mode** (per room): nobody is greeted the moment they arrive. Newcomers who stay 90 s (`dwell new`) get one relaxed, shared welcome addressed to the room - everyone new within 30 s shares the line, no @-ping, no questions, nothing on the mic unless `new text+mic` (then a spoken welcome that names nobody). Regulars who stay 20 s (`dwell regular`) get a short personal hello, at most once per person every `away` hours (default 6), never after a quick rejoin (`rejoin`, default 20 min); `regulars mic` speaks a `mic` share (default 25%) when the mic is free right then. Right before greeting, Pepe re-checks they're still in the room; anyone who left, or who already chatted with Pepe, is skipped, and a greeting older than 60 s is dropped (it never waits in the mic queue). At most one greeting per `cooldown` minutes (default 3); a burst of joins or a busy chat skips regulars' hellos. `stats` shows what was sent and skipped since the restart. Saying wb me gets you one on demand.",
    "examples": [],
    "keywords": []
   },
@@ -7329,5 +7338,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "fb9769462f1f184a"
+ "hash": "fb3b0df41050946b"
 }

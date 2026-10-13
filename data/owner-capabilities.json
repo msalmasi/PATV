@@ -243,7 +243,7 @@
    "web": "/p/{slug}/owner#pepe",
    "web_action": "room.owner",
    "setting": "greeter_enabled",
-   "howto": "Switch Pepe's welcome-back greetings on or off (and leave him a note about what to mention), set how chatty he is (off, low, normal, high), allow music and the DJ, song requests, !say, picking a voice (-v) and spoken (-mic) replies in your room.",
+   "howto": "Switch Pepe's greetings on or off, choose how he welcomes newcomers (off, a shared low-key line in text, or text plus a spoken welcome that names nobody) and regulars (off, text, or sometimes on the mic), and leave him a note about what to mention. He only greets people who stay a while, never the same person twice in a few hours, and never in a burst of joins. Set how chatty he is (off, low, normal, high), allow music and the DJ, song requests, !say, picking a voice (-v) and spoken (-mic) replies in your room.",
    "owner_only": true,
    "code": [
     "pepe_roomowner.py:_op_web_setting"

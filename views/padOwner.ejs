@@ -155,7 +155,7 @@
       <%
         const ow = pepe.owner || {}, adm = pepe.admin || {};
         const lab = (k) => t('owner.set_' + k), why = (k) => t('owner.set_' + k + '_why');
-        const choiceLabel = (k, v) => (k === 'chatty' ? t('owner.chatty_' + v) : t.has('owner.' + (k === 'vibe' ? 'vt_' : 'rm_') + v) ? t('owner.' + (k === 'vibe' ? 'vt_' : 'rm_') + v) : t.esc(v));
+        const choiceLabel = (k, v) => (k === 'chatty' ? t('owner.chatty_' + v) : k === 'greet_new' ? t('owner.gn_' + v) : k === 'greet_regulars' ? t('owner.gr_' + v) : t.has('owner.' + (k === 'vibe' ? 'vt_' : 'rm_') + v) ? t('owner.' + (k === 'vibe' ? 'vt_' : 'rm_') + v) : t.esc(v));
         const notes = {
           soundboard: adm.soundboard_master === false ? t('owner.sb_master_off') : '',
           michog: adm.automod ? '' : t('owner.michog_admin_off'),
@@ -222,7 +222,7 @@
           <select class="ds-select po-ctl" data-po-set="language" aria-label="<%- lab(k) %>">
             <% LANGS.forEach(([c, n, nat]) => { %><option value="<%= c %>" <%= ow.language === c ? 'selected' : '' %>><%= c === 'auto' ? t('owner.lang_auto') : n + (nat && nat !== n ? ' · ' + nat : '') %></option><% }) %>
           </select>
-          <% } else if (k === 'chatty' || k === 'vibe' || k === 'roasts') { %>
+          <% } else if (k === 'chatty' || k === 'vibe' || k === 'roasts' || k === 'greet_new' || k === 'greet_regulars') { %>
           <select class="ds-select po-ctl" data-po-set="<%= k %>" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
             <% (CHOICES[k] || []).forEach((c) => { %><option value="<%= c %>" <%= v === c ? 'selected' : '' %>><%- c === 'auto' ? t('owner.' + (k === 'vibe' ? 'vt_auto' : 'rm_auto')) : choiceLabel(k, c) %></option><% }) %>
           </select>
