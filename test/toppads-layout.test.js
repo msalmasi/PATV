@@ -32,6 +32,7 @@ class El {
   }
   set className(v) { this.classList = new CL(this); v.split(" ").filter(Boolean).forEach((c) => this.classList.add(c)); }
   get isConnected() { return true; }
+  get childNodes() { return this.children; }
   appendChild(c) { c.parentElement = this; this.children.push(c); return c; }
   set textContent(v) { this._text = v; this.children = []; }
   get textContent() { return this._text + this.children.map((c) => c.textContent).join(""); }
@@ -130,6 +131,20 @@ test("chipfit: a short name needs no 8ch floor; other fixed items (🚀, 18+) ar
   assert.equal(r.bs.children.filter((c) => c.classList.contains("pfx-more")).length, 1);
 });
 
+test("chipfit: full pills (/p cards) - the +N title lists their words, not the icons", () => {
+  const r = row(150, 30, []);
+  ["Headliner", "Red Carpet", "On Air", "Est. 2026"].forEach((t) => {
+    const c = r.bs.appendChild(new El("span", { cls: "pfx-b", w: 60 }));
+    const ic = c.appendChild(new El("span", { text: "*" })); ic.setAttribute("aria-hidden", "true");
+    c.appendChild(new El("span", { text: t }));
+  });
+  runFit(r.box);
+  const m = more(r.bs);
+  assert.ok(m);
+  assert.doesNotMatch(m.title, /\*/);
+  assert.match(m.title, /On Air · Est\. 2026$/);
+});
+
 test("padcosmetics.fx(): badgesMini / badgesFit are one-line [data-fit] rows; badges (pad header) untouched", () => {
   const src = rd("padcosmetics.js");
   assert.match(src, /out\.badgesMini = `<span class="pfx-bs mini" data-fit>/);
@@ -141,7 +156,7 @@ test("views: Top Pads + /p cards use the fitting rows, name in the title, the sc
   const home = rd("views", "home.ejs"), rooms = rd("views", "rooms.ejs");
   assert.match(home, /<span class="nt[^"]*" title="<%= r\.name %>"><%= r\.name %><\/span><%- fx_ \? fx_\.badgesMini : '' %>/);
   assert.match(rooms, /title="<%= r\.title %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badgesFit : '' %>/);
-  for (const v of [home, rooms]) assert.match(v, /<script src="\/public\/js\/pad-chipfit\.js\?v=1" defer><\/script>/);
+  for (const v of [home, rooms]) assert.match(v, /<script src="\/public\/js\/pad-chipfit\.js\?v=2" defer><\/script>/);
   for (const f of ["home", "rooms", "room", "cosmetics", "padSettings", "premium"]) {
     const s = rd("views", f + ".ejs");
     assert.doesNotMatch(s, /padfx\.css\?v=4/, f);

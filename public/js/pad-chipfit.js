@@ -58,7 +58,13 @@
     if (k < 0) bs.classList.add('pfx-none');                 // not even "+N" fits: the name has the row
     else bs.classList.add('pfx-fitted');
   }
-  function label(c) { return c.getAttribute('title') || c.textContent.trim(); }
+  function label(c) {   // a mini chip's title, else the full pill's words (not its aria-hidden icon)
+    var t = c.getAttribute('title');
+    if (t) return t;
+    var s = '';
+    [].forEach.call(c.childNodes || [], function (n) { if (!(n.getAttribute && n.getAttribute('aria-hidden') === 'true')) s += n.textContent; });
+    return (s || c.textContent).trim();
+  }
   function setMore(more, hidden) {
     var names = hidden.map(label).join(' · ');
     more.textContent = '+' + hidden.length;

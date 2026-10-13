@@ -11,7 +11,7 @@
    /* 1.99qc: a translated label's leading emoji goes in a .ds-ic box (docs/design-system.md §7) */
    const IC_ = (s) => String(s).replace(/^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?)*)\s*/u, '<span class="ds-ic" aria-hidden="true">$1</span>'); %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
-<script src="/public/js/pad-chipfit.js?v=1" defer></script>
+<script src="/public/js/pad-chipfit.js?v=2" defer></script>
 <!-- views/rooms.ejs — the Pads (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
      1.99ed: a pad card is ONE link (a.ch) with no buttons and no links inside; fixed rows (head / meta /
