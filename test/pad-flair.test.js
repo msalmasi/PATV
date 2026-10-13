@@ -108,7 +108,7 @@ test("cleaning: names, emoji, colours", () => {
   assert.equal(PF.cleanColor("red; background:url(x)"), null);
   const dark = PF.cleanColor("#000010");
   assert.notEqual(dark.hex, "#000010", "too dark for the page: lightened");
-  assert.match(PF.html({ name: "<x>", color: "#66bb6a", ink: "#111111", emoji: "🌱" }), /^<span class="ufl" style="--fl:#66bb6a;--fli:#111111" title="Pad flair: &lt;x&gt;"><span class="ufl-e" aria-hidden="true">🌱<\/span>&lt;x&gt;<\/span>$/);
+  assert.match(PF.html({ name: "<x>", color: "#66bb6a", ink: "#111111", emoji: "🌱" }), /^<span class="ufl" style="--fl:#66bb6a;--fli:#111111" title="Pad flair: &lt;x&gt;"><span class="ufl-e" aria-hidden="true">🌱<\/span><span class="ufl-n">&lt;x&gt;<\/span><\/span>$/);
 });
 
 let F_REG, F_GREEN, F_MOD;
@@ -187,7 +187,7 @@ test("it shows next to the name in the pad's feed, on its posts' pages (post + c
   POST = await store.create(U.alice.userId, { community: ROOM_B, title: "Flair test post", body: "hello" });
   await store.comment(U.bob, POST.id, { body: "nice one" });
   const other = await store.create(U.alice.userId, { community: "patv:lounge", title: "Lounge post by alice" });
-  const chip = /<span class="ufl" style="--fl:#[0-9a-f]{6};--fli:#[0-9a-f]{6}" title="Pad flair: Green Thumb"><span class="ufl-e" aria-hidden="true">🌱<\/span>Green Thumb<\/span>/;
+  const chip = /<span class="ufl" style="--fl:#[0-9a-f]{6};--fli:#[0-9a-f]{6}" title="Pad flair: Green Thumb"><span class="ufl-e" aria-hidden="true">🌱<\/span><span class="ufl-n">Green Thumb<\/span><\/span>/;
   let r = await get("/p/" + slugB, U.alice);
   assert.equal(r.status, 200);
   assert.match(r.text, chip, "the pad's own feed");
@@ -232,7 +232,7 @@ test("the settings hub has the Flair & tags tab; deleting a flair takes it off e
   assert.equal(r.status, 200);
   assert.match(r.text, /data-tab="flair"/);
   assert.match(r.text, /id="flairMgr" data-slug="/);
-  assert.match(r.text, /pad-flair\.js\?v=2/);
+  assert.match(r.text, /pad-flair\.js\?v=3/);
   r = await get("/p/" + slugB + "/settings?tab=flair", U.owner);
   assert.match(r.text, /data-tab="flair"/);
   r = await post("/api/pads/" + slugB + "/flair/delete", U.alice, { id: F_GREEN.id });

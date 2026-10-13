@@ -696,7 +696,7 @@
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=9">
   <script src="/public/js/room-bridge.js?v=10"></script>
-  <link rel="stylesheet" href="/public/css/flair.css?v=3"><%# 1.99ir: pad flair chips on the chat %>
+  <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=2">
   <script src="/public/js/chat-clip.js?v=2"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=9">
@@ -755,9 +755,10 @@
     function flairEl(u) {
       var f = u && !u.anon && u.patv && u.patv.flair;
       if (!f || !f.name) return null;
-      var s = el('span', 'ufl', f.name);
+      var s = el('span', 'ufl');
       s.title = _t('js.pad.flair', 'Pad flair: {name}', { name: f.name });
-      if (f.emoji) s.insertBefore(el('span', 'ufl-e', f.emoji), s.firstChild);
+      if (f.emoji) s.appendChild(el('span', 'ufl-e', f.emoji));
+      s.appendChild(el('span', 'ufl-n', f.name));     // 1.99xm: its own span so a long name ellipsizes
       if (/^#[0-9a-f]{6}$/.test(f.color || '')) s.style.setProperty('--fl', f.color);
       if (/^#[0-9a-f]{6}$/.test(f.ink || '')) s.style.setProperty('--fli', f.ink);
       return s;

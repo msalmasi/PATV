@@ -195,7 +195,7 @@ async function of(roomId, userId) { return (await forUsers(roomId, [userId])).ge
 /** The chip (escaped; colour values are strict hex from cleanColor). */
 function html(f, { cls = "" } = {}) {
   if (!f || !f.name) return "";
-  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="${f.auto === "plex" ? "On our Plex server" : f.auto === "supporter" ? "Supports PATV with donations" : f.auto === "plus" ? "Runs this 💎 Prime Time Plus pad" : "Pad flair: " + esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}</span>`;
+  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="${f.auto === "plex" ? "On our Plex server" : f.auto === "supporter" ? "Supports PATV with donations" : f.auto === "plus" ? "Runs this 💎 Prime Time Plus pad" : "Pad flair: " + esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}<span class="ufl-n">${esc(f.name)}</span></span>`;
 }
 /** What the live chat JSON carries (rendered with textContent on the page). */
 const plain = (f) => (f ? { name: f.name, color: f.color, ink: f.ink, emoji: f.emoji || "" } : null);
@@ -442,7 +442,7 @@ async function setRequired(actor, roomId, on) {
 /** The post-flair chip (escaped; strict hex colours); href = the pad's feed filtered by it. */
 function postHtml(f, href = null) {
   if (!f || !f.name) return "";
-  const inner = `${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}`;
+  const inner = `${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}<span class="ufl-n">${esc(f.name)}</span>`;
   const st = `style="--fl:${esc(f.color)};--fli:${esc(f.ink)}"`;
   return href ? `<a class="pfl-post" ${st} href="${esc(href)}" title="Post flair: ${esc(f.name)}">${inner}</a>`
               : `<span class="pfl-post" ${st} title="Post flair: ${esc(f.name)}">${inner}</span>`;

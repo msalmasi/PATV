@@ -2,7 +2,22 @@
 .ufl { display: inline-flex; align-items: center; gap: 3px; max-width: 14em; margin: 0 2px 0 4px; padding: 0 7px; border-radius: 999px;
        background: var(--fl, #66bb6a); color: var(--fli, #111) !important; font: 600 11px/18px var(--ds-font); letter-spacing: 0;
        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; text-transform: none; }
-.ufl-e { font-size: 12px; line-height: 1; }
+.ufl-e { font-size: 12px; line-height: 1; flex: none; }
+/* 1.99xm: the name is its own span (padflair.html / postHtml / the page-JS chips) - text-overflow needs a block, not a flex
+   container's bare text run, so a long flair now ends in "…" (full name in the chip's title) instead of being cut mid-letter */
+.ufl-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 1.99xm: a name line with a flair (post header, comment head) stays ONE line and the pad name always shows: the flair gives
+   way first (down to its emoji + "…"), then the author's name; the pad keeps at least a few letters and ellipsizes, the time
+   and Follow never move. Nothing pushes the card wider than the screen. */
+.fp-meta, .cm > .cm-head { overflow: hidden; padding: 4px; margin: -4px; }   /* the padding keeps focus rings inside the clip */
+.fp-meta > .ufl, .cm-head > .ufl { flex: 0 1000 auto; min-width: 2.7em; margin: 0 0 0 2px; }
+.fp-meta > .fp-author, .cm-head > .fp-author { flex: 0 40 auto; min-width: 8ch; }
+.fp .fp-meta > .fp-where { flex: 0 1 auto; min-width: 9ch; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) {
+  .fp .fp-meta, .cm > .cm-head { gap: 4px; }
+  .fp-meta > .fp-author, .cm-head > .fp-author { min-width: 6ch; }
+  .fp .fp-meta > .fp-where { min-width: 8ch; }
+}
 .pfl { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid #262b28; border-radius: 10px; background: #121513; display: flex; flex-wrap: wrap;
        align-items: center; gap: 8px 12px; font: 13px/1.5 var(--ds-font); color: #bbb; }
 .pfl b { color: #ddd; }
