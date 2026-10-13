@@ -104,6 +104,11 @@ function act(verb, b, origin) {
   return serial(async () => {
     await bready;
     if (!(await backendLive())) return { ok: false, code: "off", msg: "polls aren't on the site right now" };
+    if (verb === "active") {
+      // 1.99vb: every running poll (one per pad) - Pepe's map of which rooms have a poll
+      const rows = await getQuery("SELECT data, pad FROM polls WHERE status = 'active' ORDER BY updated DESC LIMIT 100");
+      return { ok: true, polls: rows.map((r) => Object.assign(view(JSON.parse(r.data), []), r.pad ? { pad: r.pad } : {})) };
+    }
     const pad = await padOfCall(b);
     // 1.99ur: a vote / end from the website names its poll (the form's a0); chat means the room's pad's running poll
     let cur;

@@ -112,6 +112,8 @@ test("polls: one running poll per pad; chat finds its room's pad's poll, else a 
   // the website names its poll
   const x = await polls.act("vote", { voter: "gus", option: 1, poll_id: b.poll.id }, "web");
   assert.equal(x.poll.id, b.poll.id);
+  const all = await polls.act("active", {}, "camfrog");
+  assert.deepEqual(new Set(all.polls.map((p) => p.pad || null)), new Set(["DRAMA_CENTRAL", "patv:quiz", null]), "Pepe's map of running polls");
   const e = await polls.act("end", { by: "cat", poll_id: b.poll.id }, "web");
   assert.ok(e.ok);
   assert.equal((await polls.act("vote", { voter: "hal", option: 1, poll_id: b.poll.id }, "web")).code, "ended");

@@ -2870,7 +2870,7 @@
     "!pool new [question] judge @someone"
    ],
    "summary": "Betting pools — the simple way to bet as a group, no shares: !pool new Will it rain Friday?",
-   "details": "**Betting pools** — the simple way to bet as a group, no shares: `!pool new Will it rain Friday? judge @carol closes 2d` (yes/no, or `options a/b/c`). Bet with `!pool M5 yes 5k` (min 500, as often as you like). When the judge settles it (`!pool settle M5 yes`), the winners split the losing side's pot in proportion to their stakes, after **5% of the losing pot** goes to the casino — so a correct bet never pays back less than you put in. Nobody backed the winner, or it's voided, or the judge never calls it within 7 days: everyone is refunded. `!pools` lists the open ones; they're on [publicaccess.tv/wagers](https://publicaccess.tv/wagers).",
+   "details": "**Betting pools** — the simple way to bet as a group, no shares: `!pool new Will it rain Friday? judge @carol closes 2d` (yes/no, or `options a/b/c`). Bet with `!pool M5 yes 5k` (min 500, as often as you like). When the judge settles it (`!pool settle M5 yes`), the winners split the losing side's pot in proportion to their stakes, after **5% of the losing pot** goes to the casino — so a correct bet never pays back less than you put in. Nobody backed the winner, or it's voided, or the judge never calls it within 7 days: everyone is refunded. `!pools` lists the open ones; they're on [publicaccess.tv/wagers](https://publicaccess.tv/wagers), each with its own page at publicaccess.tv/markets/<id>.",
    "examples": [
     "!pool new Will it rain Friday? judge @carol closes 2d",
     "!pool M5 yes 5k",
@@ -2922,7 +2922,7 @@
     "!market new [question] judge @someone"
    ],
    "summary": "Open a prediction market anyone can trade — !market new Will Samira come back this week?",
-   "details": "Open a **prediction market** anyone can trade — `!market new Will Samira come back this week? judge @carol closes 2d`. Yes/no by default, or give 2–6 answers with `options red/blue/green`. Markets trade **shares**, like Polymarket: each answer has a price between 0 and 1 PAT (the crowd's odds), and every share of the winning answer pays **1 PAT**. Buy with `!market M3 yes 5k` (spend 5k PAT, min 500) — buying pushes the price up, selling pushes it down. Sell any time while trading is open with `!market sell M3 yes 300` or `all`, so you can lock in a profit (or cut a loss) before the result. `!market mine` shows your positions with your entry price, today's price and profit/loss; `!market M3` the prices, `!market list` the open ones. 2% fee on every buy and sell. Trading closes at the set time (default 1 day, max 30); the judge — who can't trade — calls it with `!market settle M3 yes`, or `!market settle M3 void <reason>`. **On a void, trading fees are not refunded** (they were taken when you traded): the Federal Reserve takes back its seed first, then holders split what's left in the market, up to what they put in — so if others sold at a profit before the void, holders get back less. Betting pools and wagers are different: a void there refunds every stake in full, fees included. All of it, judging included, works on [publicaccess.tv/markets](https://publicaccess.tv/markets) with a price chart. The Federal Reserve seeds each market's liquidity and gets back whatever's left over. Start one from the site too. For the old simple pool model, see `!pool`.",
+   "details": "Open a **prediction market** anyone can trade — `!market new Will Samira come back this week? judge @carol closes 2d`. Yes/no by default, or give 2–6 answers with `options red/blue/green`. Markets trade **shares**, like Polymarket: each answer has a price between 0 and 1 PAT (the crowd's odds), and every share of the winning answer pays **1 PAT**. Buy with `!market M3 yes 5k` (spend 5k PAT, min 500) — buying pushes the price up, selling pushes it down. Sell any time while trading is open with `!market sell M3 yes 300` or `all`, so you can lock in a profit (or cut a loss) before the result. `!market mine` shows your positions with your entry price, today's price and profit/loss; `!market M3` the prices, `!market list` the open ones. 2% fee on every buy and sell. Trading closes at the set time — a duration (`closes 2d`) or a date (`closes 2026-11-03 18:00 ET`, any zone name; default 1 day, within the admins' limits, normally 1 hour to 90 days) — and the AI judge is only asked after it; the judge — who can't trade — calls it with `!market settle M3 yes`, or `!market settle M3 void <reason>`. **On a void, trading fees are not refunded** (they were taken when you traded): the Federal Reserve takes back its seed first, then holders split what's left in the market, up to what they put in — so if others sold at a profit before the void, holders get back less. Betting pools and wagers are different: a void there refunds every stake in full, fees included. All of it, judging included, works on [publicaccess.tv/markets](https://publicaccess.tv/markets) with a price chart. The Federal Reserve seeds each market's liquidity and gets back whatever's left over. Start one from the site too. For the old simple pool model, see `!pool`.",
    "examples": [
     "!market new Will Samira come back this week? judge @carol closes 2d",
     "!market M3 yes 5k",
@@ -5217,10 +5217,34 @@
     "!econ engines detach <treasury|monetary|burn|all> confirm"
    ],
    "summary": "Hand the economy's clock-driven policy engines (the treasury's Monday waterfall and daily release, the monetary day, the burn accrual) to publicaccess.tv's scheduler, or bring them back into Pepe.",
-   "details": "Three engines, one switch each: **treasury** (the Monday 04:00 UTC surplus waterfall and the daily 04:00 release), **monetary** (the Fed band's floor mint and ceiling release, the Monday guarantee, issuance, the daily activity rewards) and **burn** (the burn reserve's accrual burn). Pepe runs an engine only while its switch is explicitly off; with it on he never runs it, even if the site is down (the site runs the period when it is back). Before a cutover the site runs the engine as a **dry run** (it records what would move) and then in **shadow** (it plans alongside Pepe every period and compares his plan with its own; admins set those on /admin/economy). **export** is the dry run of the hand-over: what Pepe would hand over (the periods he already ran, when his ticks were armed) and anything that blocks it (not within 20 minutes of 04:00 UTC, nothing mid-move here, the pools and the share book already on the site, the engine in shadow there). **cutover confirm** stops the engine here first, then the site takes it and runs every period from then on (one transaction per period, never twice); what it does is written into Pepe's own books as it happens (the epoch and day records, mints, Fed loan repayments, budget spends, burns) and Pepe still announces burns and tells admins about cap notices and failures. **rollback confirm** is the way back while the site answers (it goes back to shadow); **detach confirm** only when the site is gone for good (Pepe runs again from the next period boundary). **status** says where each engine runs (anyone can ask). Admin mints, Fed grants and loans, flash liquidity, the room payout recipe and the launchpad stay in Pepe.",
+   "details": "Three engines, one switch each: **treasury** (the Monday 04:00 UTC surplus waterfall and the daily 04:00 release), **monetary** (the Fed band's floor mint and ceiling release, the Monday guarantee, issuance, the daily activity rewards) and **burn** (the burn reserve's accrual burn). Pepe runs an engine only while its switch is explicitly off; with it on he never runs it, even if the site is down (the site runs the period when it is back). Before a cutover the site runs the engine as a **dry run** (it records what would move) and then in **shadow** (it plans alongside Pepe every period and compares his plan with its own; admins set those on /admin/economy). **export** is the dry run of the hand-over: what Pepe would hand over (the periods he already ran, when his ticks were armed) and anything that blocks it (not within 20 minutes of 04:00 UTC, nothing mid-move here, the pools and the share book already on the site, the engine in shadow there). **cutover confirm** stops the engine here first, then the site takes it and runs every period from then on (one transaction per period, never twice); what it does is written into Pepe's own books as it happens (the epoch and day records, mints, Fed loan repayments, budget spends, burns) and Pepe still announces burns and tells admins about cap notices and failures. **rollback confirm** is the way back while the site answers (it goes back to shadow); **detach confirm** only when the site is gone for good (Pepe runs again from the next period boundary). **status** says where each engine runs (anyone can ask). Admin mints, Fed grants and loans, flash liquidity and donation mints have their own switch (`!econ fed backend`); the room payout recipe and the launchpad stay in Pepe.",
    "examples": [
     "!econ engines status",
     "!econ engines export all"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "fedbackend",
+   "title": "!econ fed backend status|export|on|off|detach",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!econ"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!econ fed backend status",
+    "!econ fed backend export",
+    "!econ fed backend on",
+    "!econ fed backend off",
+    "!econ fed backend detach confirm"
+   ],
+   "summary": "Hand the Federal Reserve's one-off operations (admin mints, grants, Fed loans, flash liquidity, donation mints) and their books to publicaccess.tv, or bring them back into Pepe.",
+   "details": "The Fed's **event operations** - `!econ mint`, `!econ fund`, `!econ fedloan` (and its early repayment), flash liquidity, the Bank's default backstop, restore and seed mints, the donation mints - and their books (every mint, grant and loan, the monthly mint caps, the Fed band) move to the site as one: from then on the site checks the caps and the band, moves the PAT and writes the journal in **one transaction per operation**, so a monthly cap can never be passed by two mints landing at once (the site's scheduler mints through the same book). The commands keep their dry runs, confirms and texts; Pepe's copy of the journal becomes a read-only mirror (`!econ mints`, `!econ fedloan`, the admin card read it as before). **export** is the dry run: the journal's totals and checksum, checked by the site without changing anything (needs the pools and the share book already on the site, the economy layers on, nothing half-done here). **on** freezes the Fed's operations for a moment, sends the journal with a checksum and totals and switches only when the site confirms them with the supply unchanged. **off** is the way back while the site answers; **detach confirm** only when the site is gone for good (Pepe's mirror becomes his journal again). With the switch on and the site down an admin operation is refused - never written locally - and a booking whose PAT already moved (a weekly loan repayment, a Bank repayment of a flash loan) waits and is sent again. **status** says where the Fed's books live (anyone can ask).",
+   "examples": [
+    "!econ fed backend status",
+    "!econ fed backend export"
    ],
    "keywords": []
   },
@@ -7338,5 +7362,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "fb3b0df41050946b"
+ "hash": "117a1a9506e6e5eb"
 }

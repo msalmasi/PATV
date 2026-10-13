@@ -182,7 +182,8 @@ async function create(actor, a, t) {
   if (open >= MAX_OPEN && !auto) return fail("max_open", `You already have ${open} open markets.`, { open });
   await notePepe(actor);
   const id = await G().nextId(GAME);
-  const m = { id, question, options, creator: me.login, judge, room: a.room || actor.room || null, status: "open", created: t.nowS, closes: t.nowS + secs,
+  // 1.99vb: a room Pepe sends as null means "no room" (a website create: its pad was picked, or it's site-wide) - not the actor's room
+  const m = { id, question, options, creator: me.login, judge, room: a.room !== undefined ? a.room || null : actor.room || null, status: "open", created: t.nowS, closes: t.nowS + secs,
               bets: [], model: "pool", users: me.user ? { creator: me.user } : {}, via: actor.via || "room" };
   if (aiJudge) m.ai_judge = true;
   if (auto) m.auto = auto;
