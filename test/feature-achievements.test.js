@@ -107,7 +107,7 @@ test.before(async () => {
 
 test("catalog: 20 new web-side achievements with badge art and rewards in line with the rest; nothing farmable is generous", () => {
   const list = A.list();
-  assert.equal(list.length, 305);              // 1.99tt: + 2 🥷 heist market (heistmarket.test.js), 1.99pl: + 1 board royal, 1.99pa: + 101 (more-achievements.test.js), 1.99nj: + 25 📼 Plex-on-pads achievements, 1.99np: + 13 TV shows (plex-watch-stats.test.js), 1.99nq: + 13 🛒 heist shop, 1.99oo: + 9 🏪 store heist, 1.99pb: + 2 store drops (gtfstore.test.js)
+  assert.equal(list.length, 306);              // 1.99wn: + 1 🦜 voice clone (voiceclone-achievement.test.js), 1.99tt: + 2 🥷 heist market (heistmarket.test.js), 1.99pl: + 1 board royal, 1.99pa: + 101 (more-achievements.test.js), 1.99nj: + 25 📼 Plex-on-pads achievements, 1.99np: + 13 TV shows (plex-watch-stats.test.js), 1.99nq: + 13 🛒 heist shop, 1.99oo: + 9 🏪 store heist, 1.99pb: + 2 store drops (gtfstore.test.js)
   for (const id of NEW) {
     const a = list.find((x) => x.id === id);
     assert.ok(a, id);

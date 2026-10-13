@@ -244,6 +244,9 @@ async function created(b) {
   const t = now();
   const exists = await VS().voice(vid);
   if (exists && exists.owner_user_id !== c.user_id) throw new Refuse(409, "a different voice already has that name");
+  // 🦜 1.99wn: the achievements' one-off quiet backfill of the voices cloned before it runs BEFORE this one goes active (else this
+  // clone would be counted in it, quietly); never blocks the creation
+  try { await require("./achievements").voiceBackfill(); } catch (e) { /* the award is retried by any later check */ }
   if (exists) {
     await runQuery(`UPDATE voices SET kind = 'clone', owner_user_id = ?, owner_login = ?, status = 'active', consent_id = ?, vb_profile = ?, in_voicebox = 1, updated = ? WHERE id = ?`,
                    [c.user_id, c.login, c.id, String(b.profile_id || "").slice(0, 80), t, vid]);
@@ -255,6 +258,8 @@ async function created(b) {
   }
   await runQuery("UPDATE voice_consents SET status = 'active', voice_id = ?, vb_profile = ? WHERE id = ?", [vid, String(b.profile_id || "").slice(0, 80), c.id]);
   notify(c.user_id, "🎙️ Your voice is ready", "Try it: !say -v " + name + " hello. It's unlisted until you list it on /voices/mine - you set the prices and your cut.", "vc-made:" + c.id);
+  // 🦜 Voice of the Pond: XP + PAT (incentive budget, achievements group) + Pepe's room announcement via the achievement feed
+  try { require("./achievements").poke(c.user_id); } catch (e) { /* never blocks */ }
   return { ok: true, voice: vid };
 }
 async function createFailed(b) {

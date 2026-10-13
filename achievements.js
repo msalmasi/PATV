@@ -102,6 +102,8 @@ async function webMetrics(userId) {
   // 1.99lk: 📨 Telegram - linked by the bridge's /start code or Sign in with Telegram (telegram.js). Counted only once the
   // quiet backfill has run, so nobody linked before it gets a loud award from an unrelated check (a spin, a tip)
   const tgBackfilled = await telegramBackfill().then(() => true, () => false);
+  // 1.99wn: 🦜 a cloned voice (voiceclone.js / voicestore.js) - same rule as Telegram, its own quiet backfill
+  const voiceBackfilled = await voiceBackfill().then(() => true, () => false);
   // 1.99lu: 🍀 Google - linked from Edit profile or by Sign in with Google (ssolinks.js sso_links); same rule as Telegram
   const googleBackfilled = await googleBackfill().then(() => true, () => false);
   // 1.99mt: the feature achievements (gifts, Support PATV, Play from Plex, streams, clips, ...) - same rule, their own backfill
@@ -138,6 +140,7 @@ async function webMetrics(userId) {
     plex_days: plex.plex_days || 0,
     telegram_linked: tgBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM telegram_links WHERE user_id = ?", [userId])) : 0,
     google_linked: googleBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM sso_links WHERE provider = 'google' AND user_id = ?", [userId])) : 0,
+    voice_cloned: voiceBackfilled ? await voiceCloned(userId) : 0,
     ...Object.fromEntries(FEATURE_METRICS.map((k) => [k, feat[k] || 0])),
     ...Object.fromEntries(PP.METRICS.map((k) => [k, pp[k] || 0])),
     ...Object.fromEntries(SO.METRICS.map((k) => [k, so[k] || 0])),
@@ -232,7 +235,7 @@ const webBackfill = (async () => {
   if (done.length) return;
   // (the 📼 Plex, 📨 Telegram and 🍀 Google ones have their own quiet backfills, which also hand out their cosmetics)
   const PLEX_METRICS_ = ["plex_linked", "plex_member", "plex_days"];
-  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...FEATURE_METRICS,
+  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...VOICE_METRICS, ...FEATURE_METRICS,
                                                          ...require("./plexpad").METRICS, ...require("./achsocial").METRICS].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
@@ -341,6 +344,59 @@ function googleBackfill() {
     })().catch((e) => { googleBackfilling = null; throw e; });
   }
   return googleBackfilling;
+}
+
+// 1.99wn: 🦜 Voice of the Pond (cf_voice_clone) - cloned your own voice. Counts a !clonemyvoice consent whose VoiceBox profile
+// was made (voice_consents.voice_id is set only by voiceclone.created, when the consent goes active; review / denied / failed /
+// expired never set it, and a later revocation keeps it - achievements are for keeps), and a voice cloned before consent
+// tracking that the store has as this person's own (voices kind 'clone' with no consent_id, not revoked: owner_user_id, or the
+// owner_login Pepe imported it with when that login is this real account's). Tables this database doesn't have count as 0.
+const VOICE_METRICS = ["voice_cloned"];
+async function voiceCloned(userId) {
+  const one = async (sql, p) => { const r = await getQuery(sql, p).catch(() => []); return Number((r[0] && Object.values(r[0])[0]) || 0) || 0; };
+  if (await one("SELECT COUNT(*) FROM voice_consents WHERE user_id = ? AND voice_id IS NOT NULL", [userId])) return 1;
+  const u = (await getQuery("SELECT camfrogUsername, username FROM users WHERE userId = ?", [userId]).catch(() => []))[0] || {};
+  const login = u.camfrogUsername && !/^CF/i.test(String(u.username || "")) ? String(u.camfrogUsername).toLowerCase() : "";
+  return Math.min(1, await one(`SELECT COUNT(*) FROM voices WHERE kind = 'clone' AND consent_id IS NULL AND status != 'revoked'
+                                AND (owner_user_id = ? OR (owner_user_id IS NULL AND ? != '' AND LOWER(owner_login) = ?))`, [userId, login, login]));
+}
+
+// Once, quietly: everyone who already has a cloned voice (badge + its cosmetic unlocks only: no XP, PAT or announcement). Runs at
+// boot (the timer below), before any voice check (webMetrics) and before voiceclone.created marks a consent active, so only clones
+// made after it are announced. achievement_meta 'voiceclone_backfill' makes it a one-off; voiceBackfill({ force: true }) re-runs
+// it (still quiet, INSERT OR IGNORE - idempotent).
+let voiceBackfilling = null;
+function voiceBackfill({ force = false } = {}) {
+  if (force) voiceBackfilling = null;
+  if (!voiceBackfilling) {
+    voiceBackfilling = (async () => {
+      await ready;
+      await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
+      const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'voiceclone_backfill'");
+      if (done.length && !force) return { done: true, already: true, given: 0 };
+      const ach = catalog.filter((a) => a.side === "web" && VOICE_METRICS.includes(a.metric));
+      const ids = new Set();
+      for (const r of await getQuery("SELECT DISTINCT user_id AS u FROM voice_consents WHERE voice_id IS NOT NULL").catch(() => [])) if (r.u) ids.add(String(r.u));
+      for (const r of await getQuery(`SELECT owner_user_id AS u, owner_login AS l FROM voices
+                                      WHERE kind = 'clone' AND consent_id IS NULL AND status != 'revoked'`).catch(() => [])) {
+        if (r.u) ids.add(String(r.u));
+        else if (r.l) { const f = await findUser({ camfrogUsername: String(r.l) }); if (f) ids.add(String(f.userId)); }
+      }
+      const given = [];
+      for (const id of ids) {
+        if (!(await voiceCloned(id))) continue;
+        for (const a of ach) {
+          const r = await award({ userId: id }, a.id, null, { silent: true });
+          if (r.ok && r.awarded) given.push({ userId: id, badgeId: a.id });
+        }
+      }
+      await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES ('voiceclone_backfill', ?)",
+                     [JSON.stringify({ at: new Date().toISOString(), candidates: ids.size, given: given.length })]);
+      console.log(`[achievements] voice clone backfill: ${given.length} badge(s) given quietly (${ids.size} candidate account(s))`);
+      return { done: true, given: given.length, candidates: ids.size, list: given };
+    })().catch((e) => { voiceBackfilling = null; throw e; });
+  }
+  return voiceBackfilling;
 }
 
 // ── 1.99mt: achievements for the recent features (gifts, Support PATV, 📼 Play from Plex, streaming, mic clips, translations,
@@ -458,6 +514,8 @@ if (!process.env.NODE_TEST_CONTEXT) {
   const kick2 = setTimeout(() => {
     require("./achsocial").backfill().catch((e) => console.error("[achievements] social backfill:", e.message));
     require("./casino/rewards").quietBackfill().catch((e) => console.error("[casino] achievements quiet backfill:", e.message));
+    // 1.99wn: 🦜 Voice of the Pond for the voices already cloned
+    voiceBackfill().catch((e) => console.error("[achievements] voice clone backfill:", e.message));
   }, 100e3);
   if (kick2.unref) kick2.unref();
 }
@@ -480,4 +538,5 @@ function awardLogin(login, badgeId, { silent = false } = {}) {
 }
 
 module.exports = { award, awardCount, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS, googleBackfill, GOOGLE_METRICS,
+                   voiceBackfill, voiceCloned, VOICE_METRICS,
                    featureBackfill, featureMetrics, FEATURE_METRICS, mark, poke, webMetrics, awardLogin };

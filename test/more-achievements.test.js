@@ -114,7 +114,8 @@ test.before(async () => {
 test("catalog: 101 new achievements, badge art for each, tiers + rewards in line, localized, grouped (nothing new in 'Everything else')", async () => {
   const list = A.list();
   const fresh = list.filter((a) => NEW_PREFIXES.some((p) => a.id.startsWith(p)) || /^cf_(bj|holdem)_/.test(a.id) && !["cf_bj_natural", "cf_bj_100", "cf_bj_1000",
-    "cf_holdem_pot", "cf_holdem_25"].includes(a.id) || ["cf_reroll_10"].includes(a.id));
+    "cf_holdem_pot", "cf_holdem_25"].includes(a.id) || ["cf_reroll_10"].includes(a.id))
+    .filter((a) => a.id !== "cf_voice_clone");          // 1.99wn: 🦜 voice clone (voiceclone-achievement.test.js), its own metric
   assert.equal(fresh.length, 102, fresh.length);
   const band = { common: [500, 2000, 5000, 20000], uncommon: [2000, 5000, 20000, 50000], rare: [8000, 15000, 80000, 150000], legendary: [20000, 30000, 250000, 500000] };
   for (const a of fresh) {

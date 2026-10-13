@@ -248,6 +248,7 @@
     {"id": "cf_voice_3", "name": "Impressionist", "emoji": "🎭", "desc": "Own 3 of Pepe's voices.", "metric": "voices_owned", "threshold": 3, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "bot"},
     {"id": "cf_voice_25", "name": "Voice Actor", "emoji": "🎬", "desc": "Had Pepe say 25 lines in a voice you picked.", "metric": "voice_says", "threshold": 25, "xp": 3000, "pat": 25000, "tier": "uncommon", "side": "bot"},
     {"id": "cf_voice_kinds", "name": "Vocal Range", "emoji": "🎚️", "desc": "Had Pepe speak in 5 different voices for you.", "metric": "voice_kinds", "threshold": 5, "xp": 3000, "pat": 25000, "tier": "uncommon", "side": "bot"},
+    {"id": "cf_voice_clone", "name": "Voice of the Pond", "emoji": "🦜", "desc": "Cloned your voice with !clonemyvoice: Pepe can talk like you now.", "metric": "voice_cloned", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "web"},
     {"id": "cf_stickers_1", "name": "Peel and Stick", "emoji": "🏷️", "desc": "Sent a sticker in a Camfrog room.", "metric": "stickers_sent", "threshold": 1, "xp": 500, "pat": 5000, "tier": "common", "side": "bot"},
     {"id": "cf_stickers_100", "name": "Wallpapered", "emoji": "🧱", "desc": "Sent 100 stickers in the Camfrog rooms.", "metric": "stickers_sent", "threshold": 100, "xp": 3000, "pat": 25000, "tier": "uncommon", "side": "bot"},
     {"id": "cf_stickers_kinds", "name": "Mixed Bag", "emoji": "🧩", "desc": "Sent 25 different stickers.", "metric": "sticker_kinds", "threshold": 25, "xp": 3000, "pat": 25000, "tier": "uncommon", "side": "bot"},
