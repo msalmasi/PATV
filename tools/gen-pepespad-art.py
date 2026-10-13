@@ -1,6 +1,6 @@
 """Pepe's Pad showcase art (1.99wq): the pad's avatar and banner, drawn as pixel art in the PATV style.
 
-    python tools/gen-pepespad-art.py      -> tools/pepespad/avatar.png (512 x 512) + banner.png (1600 x 480)
+    python tools/gen-pepespad-art.py      -> tools/pepespad/avatar.png (512 x 512) + banner.png (1600 x 400)
 
 Same pixel Pepe as the sticker packs (tools/gen-stickers.py: his head, eyes, mouth and palette), on the site's dark arcade
 canvas (docs/design-system.md: --ds-bg #0f0f11, green #4caf50, gold #ffcf40, red for ON AIR). Each picture is drawn on a
@@ -171,54 +171,49 @@ def avatar():
 
 
 def banner():
-    """1600 x 480 (200 x 60 cells): a night-sky station - PEPE'S PAD in gold, what's on, the ON AIR TV with Pepe, the games."""
-    g = Grid(200, 60)
+    """1600 x 400 (200 x 50 cells, 4:1 - the pad header shows all of it): a night-sky station - PEPE'S PAD in gold over what's
+    on, the ON AIR TV with Pepe on the right. The pad's name, badges and Follow button sit over the lower half, so everything
+    that has to be read is in the top half and the bottom is a quiet skyline."""
+    g = Grid(200, 50)
     bands = [BG, BG, "#101113", "#101214", "#111416", "#111618", "#12181a", "#121a1b", "#121c1c", "#12201d", "#12241d", "#12281c", "#122c1b", DEEP]
-    for y in range(60):                                    # the sky: dark at the top, deep green at the bottom
-        g.rect(0, y, 199, y, bands[min(len(bands) - 1, y * len(bands) // 60)])
-    for (x, y, c) in [(7, 5, STAR), (23, 13, GOLDT), (41, 4, STAR), (60, 9, STAR), (88, 3, GOLDT), (104, 11, STAR), (121, 6, STAR),
-                      (139, 2, STAR), (171, 4, GOLDT), (186, 12, STAR), (196, 3, STAR), (136, 30, STAR), (99, 24, STAR), (3, 44, STAR)]:
+    for y in range(50):                                    # the sky: dark at the top, deep green at the bottom
+        g.rect(0, y, 199, y, bands[min(len(bands) - 1, y * len(bands) // 50)])
+    for (x, y, c) in [(7, 3, STAR), (41, 2, STAR), (66, 1, GOLDT), (104, 2, STAR), (121, 26, STAR), (133, 19, STAR),
+                      (194, 3, STAR), (3, 25, STAR), (60, 30, STAR), (96, 33, STAR), (196, 20, STAR)]:
         g.set(x, y, c)
-    S.sparkle(g, 8, 20, GOLDT); S.sparkle(g, 113, 4, GOLDT); S.sparkle(g, 192, 22, GOLDT)
+    S.sparkle(g, 5, 13, GOLDT); S.sparkle(g, 191, 12, GOLDT); S.sparkle(g, 128, 3, GOLDT)
     # the skyline: little buildings with lit windows (the pads)
     import random
     rnd = random.Random(7)
     x = 0
     while x < 200:
         w = rnd.randint(6, 13)
-        h = rnd.randint(4, 10)
-        g.rect(x, 59 - h, x + w - 1, 59, "#0b0f0c")
-        for wy in range(59 - h + 2, 58, 3):
+        h = rnd.randint(4, 9)
+        g.rect(x, 49 - h, x + w - 1, 49, "#0b0f0c")
+        for wy in range(49 - h + 2, 48, 3):
             for wx in range(x + 1, x + w - 1, 3):
                 if rnd.random() < 0.38:
                     g.set(wx, wy, rnd.choice([GOLDT, GREEN2, "#ffcc80"]))
         x += w + rnd.randint(0, 2)
-    g.rect(0, 58, 199, 59, "#0a0d0b")
+    g.rect(0, 48, 199, 49, "#0a0d0b")
     # the title
     t = "PEPE'S PAD"
     tw = width5(t, 2)
-    tx = 14
-    text5(g, t, tx + 1, 11, "#5c3a00", 2)                 # a one-cell drop shadow
-    text5(g, t, tx, 10, GOLD, 2)
+    tx, ty = 12, 4
+    text5(g, t, tx + 1, ty + 1, "#5c3a00", 2)              # a one-cell drop shadow
+    text5(g, t, tx, ty, GOLD, 2)
     for x in range(tx, tx + tw):                           # the top row of each letter catches the light
-        if g.px[10][x] == GOLD:
-            g.set(x, 10, GOLDT)
-    g.rect(tx, 28, tx + tw - 1, 28, GREEN)
+        if g.px[ty][x] == GOLD:
+            g.set(x, ty, GOLDT)
+    g.rect(tx, ty + 17, tx + tw - 1, ty + 17, GREEN)
     sub = "NEWS  CASINO  MARKETS"
     sx = tx + (tw - width5(sub)) // 2
-    text5(g, sub, sx, 31, GREEN2)
+    text5(g, sub, sx, ty + 20, GREEN2)
     for dx in (width5("NEWS") + 2, width5("NEWS  CASINO") + 2):   # dots between the words
-        g.rect(sx + dx, 34, sx + dx + 1, 35, GOLD)
-    # the games, along the bottom left
-    gx = tx + (tw - 76) // 2
-    coin(g, gx, 47); coin(g, gx + 2, 44); coin(g, gx + 1, 41)
-    card(g, gx + 12, 42, "heart"); card(g, gx + 20, 43, "spade")
-    ball(g, gx + 33, 43)
-    mic(g, gx + 47, 43)
-    note(g, gx + 57, 42); note(g, gx + 65, 45, GOLDT)
-    S.sparkle(g, gx + 74, 44, GOLDT)
+        g.rect(sx + dx, ty + 23, sx + dx + 1, ty + 24, GOLD)
+    coin(g, 124, 30); coin(g, 126, 27); coin(g, 125, 24)  # a little stack of PAT by the title
     # the station: an ON AIR TV with Pepe on screen
-    tv(g, 146, 18, 44, 34)
+    tv(g, 136, 13, 44, 30)
     png(g, os.path.join(OUT, "banner.png"), 8)
 
 
