@@ -370,6 +370,16 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(t.text, /<h2>20\. Contact<\/h2>/);
   assert.equal(terms.UPDATED, "11 October 2026");
   assert.match(p.text, new RegExp("Last updated " + terms.PRIVACY_UPDATED), "the Privacy Policy keeps its own date");
+  // 1.99wh: the Incognito section (§10) - a clarification of a user-controlled setting: the privacy date moves, VERSION doesn't
+  const inc = (p.text.match(/<h3 id="incognito">[\s\S]*?<\/section>/) || [""])[0];
+  assert.match(inc, /Settings → Privacy/);
+  assert.match(inc, /!incognito on/);
+  assert.match(inc, /doesn't delete/);
+  assert.match(inc, /privacy@publicaccess\.tv/);
+  assert.match(p.text, /href="#incognito"/);
+  assert.match(p.text, /13 October 2026:<\/b> added <a href="#incognito">/, "a dated change note");
+  assert.equal(terms.PRIVACY_UPDATED, "13 October 2026");
+  assert.equal(terms.VERSION, "2026-10-11", "the incognito section asks nobody to accept again");
   assert.match(t.text, /id="siteFootTpl"/, "footer links on every layout page");
   assert.match(t.text, /href="\/privacy">Privacy Policy/);
   assert.doesNotMatch(t.text, /class="draft"/, "no Draft banner while enforced");
