@@ -27,6 +27,7 @@ const TTL_DEFAULTS = Object.freeze({
   // other website actions
   "poll.vote": 30, "poll.create": 30, "poll.end": 30,
   "table": 2,                          // a seat move only makes sense at the table it was made for
+  "privacy.incognito": 15,            // 1.99wa: Settings → Privacy (incognito.js)
   "dj": 10, "pepe.look": 10, "room.ctl": 15, "room.visit": 30, "room.bridge": 30, "econ.burn": 30, "econ.routes": 30, "econ.cmd": 30,
   "aigen": 15,                         // = aigen.js QUEUE_TTL (its job is timed out by aigen's own sweep)
   "snap.save": 15, "camclip.save": 15, "micclip.save": 15, "stagecap.save": 30,

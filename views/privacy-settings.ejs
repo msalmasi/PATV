@@ -1,0 +1,80 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /settings/privacy - 1.99wa (incognito.js): Settings → Privacy. Incognito's ONE home on the website (the same switch as
+    !incognito in chat - Pepe applies it and reports the real state back) + links to the other privacy pages. Client:
+    public/js/privacy-settings.js. %>
+<%- include('layout', { title: t('inc.title'), user: user }) %>
+<style>
+  .pv .pv-set { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); min-height: 56px; padding: var(--ds-sp-2) 0; }
+  .pv .pv-set > div { min-width: 0; }
+  .pv .pv-set b { color: var(--ds-text-strong); }
+  .pv .pv-set.pending .ds-switch { opacity: .55; }
+  .pv .pv-why { margin: 0 0 var(--ds-sp-2); color: var(--ds-text-2); font-size: 14px; line-height: 1.55; }
+  .pv .pv-list { margin: 0 0 var(--ds-sp-2); padding-inline-start: 1.2em; color: var(--ds-text-2); font-size: 14px; line-height: 1.6; }
+  .pv .pv-st { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); margin: var(--ds-sp-2) 0 0; }
+  .pv .pv-st.ok { color: var(--ds-ok); } .pv .pv-st.bad { color: var(--ds-danger); } .pv .pv-st.wait { color: var(--ds-text-2); }
+  .pv .pv-log { list-style: none; margin: 0; padding: 0; font-size: 13px; color: var(--ds-text-2); }
+  .pv .pv-log li { display: flex; justify-content: space-between; gap: var(--ds-sp-2); padding: 6px 0; border-top: 1px solid var(--ds-line-soft); }
+  .pv .pv-log li:first-child { border-top: 0; }
+  .pv .pv-links a { display: flex; gap: var(--ds-sp-2); padding: 10px 0; border-top: 1px solid var(--ds-line-soft); text-decoration: none; color: inherit; }
+  .pv .pv-links a:first-child { border-top: 0; }
+  .pv .pv-links small { display: block; color: var(--ds-text-2); }
+</style>
+<%
+  const when = (ms) => ms ? (t.date ? t.date(Number(ms), { dateStyle: 'medium', timeStyle: 'short' }) : new Date(Number(ms)).toISOString()) : '';
+  const stateKey = st.on === null ? 'inc.st_unknown' : st.on ? 'inc.st_on' : 'inc.st_off';
+  const logLine = (r) => r.kind === 'request' ? t(r.on ? 'inc.log_req_on' : 'inc.log_req_off')
+    : r.kind === 'refused' ? t('inc.log_refused')
+    : t(r.on ? (r.via === 'web' ? 'inc.log_on_web' : 'inc.log_on_chat') : (r.via === 'web' ? 'inc.log_off_web' : 'inc.log_off_chat'));
+%>
+<main class="ds-page mid pv" id="pv">
+  <a class="ds-back" href="/settings">← <%- t('inc.back') %></a>
+  <header class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🔒</span> <%- t('inc.eyebrow') %></span>
+    <h1><%- t('inc.h1') %></h1>
+    <p class="ds-lead"><%- t('inc.lead') %></p>
+  </header>
+
+  <section class="ds-card lg" id="incognito" aria-labelledby="pvIncH"
+           data-linked="<%= st.linked ? 1 : 0 %>" data-on="<%= st.on === null ? '' : st.on ? 1 : 0 %>" data-waiting="<%= st.waiting ? st.waiting.id : '' %>"
+           data-want="<%= st.waiting && st.waiting.want !== null ? (st.waiting.want ? 1 : 0) : '' %>">
+    <h2 class="ds-h2" id="pvIncH"><span class="dot"></span>🕶️ <%- t('inc.h2') %></h2>
+    <p class="pv-why"><%- t('inc.what') %></p>
+    <ul class="pv-list">
+      <li><%- t('inc.what_memory') %></li>
+      <li><%- t('inc.what_web') %></li>
+      <li><%- t('inc.what_media') %></li>
+      <li><%- t('inc.what_stats') %></li>
+    </ul>
+    <p class="pv-why"><%- t('inc.what_not') %></p>
+
+    <% if (!st.linked) { %>
+      <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('inc.unlinked') %></div></div>
+      <div class="ds-ctas"><a class="ds-btn" href="/u/<%= encodeURIComponent(user) %>/edit#camfrogDiv"><%- t('inc.link_btn') %></a></div>
+    <% } else { %>
+      <div class="pv-set<%= st.waiting ? ' pending' : '' %>" id="pvRow">
+        <div><b><%- t('inc.switch') %></b><p class="ds-meta"><%- t('inc.identity', { login: st.login }) %></p></div>
+        <label class="ds-switch"><input type="checkbox" id="pvInc" <%= st.on ? 'checked' : '' %> <%= st.waiting ? 'disabled' : '' %> aria-label="<%- t('inc.switch') %>"><span></span></label>
+      </div>
+      <p class="pv-st<%= st.waiting ? ' wait' : st.failed ? ' bad' : '' %>" id="pvSt" role="status" aria-live="polite"><%- st.waiting ? t('inc.waiting') : st.failed ? t('inc.failed') : t(stateKey) %></p>
+      <p class="ds-meta" id="pvRep"><%- st.reported ? t('inc.reported', { when: when(st.reported) }) : t('inc.not_reported') %></p>
+    <% } %>
+    <p class="ds-meta"><%- t('inc.chat') %></p>
+
+    <% if (st.log && st.log.length) { %>
+    <details><summary class="ds-meta"><%- t('inc.log_h') %></summary>
+      <ul class="pv-log">
+        <% st.log.forEach((r) => { %><li><span><%- logLine(r) %></span><span><%= when(r.at) %></span></li><% }) %>
+      </ul>
+    </details>
+    <% } %>
+  </section>
+
+  <section class="ds-card lg" aria-labelledby="pvMoreH">
+    <h2 class="ds-h2" id="pvMoreH"><span class="dot"></span><%- t('inc.more_h') %></h2>
+    <nav class="pv-links">
+      <a href="/settings/likeness"><span class="ds-ic" aria-hidden="true">🪞</span><span><b><%- t('inc.more_likeness') %></b><small><%- t('inc.more_likeness_d') %></small></span></a>
+      <a href="/privacy"><span class="ds-ic" aria-hidden="true">📄</span><span><b><%- t('inc.more_policy') %></b><small><%- t('inc.more_policy_d') %></small></span></a>
+    </nav>
+  </section>
+</main>
+<script src="/public/js/privacy-settings.js?v=1" defer></script>

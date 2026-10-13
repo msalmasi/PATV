@@ -241,14 +241,18 @@
     "!incognito",
     "!forgetme on|off"
    ],
-   "summary": "Your own switch: with incognito on, nothing you say gets remembered at all — in the room or in PMs — and anything still waiting to be processed is binned.",
-   "details": "Your own switch: with incognito **on**, nothing you say gets remembered at all — in the room or in PMs — and anything still waiting to be processed is binned. **Off by default.** It stops new memories — it doesn't erase what he already knows (ask an admin if you want that wiped). Works from a PM or the room, and the reply always comes back privately.",
+   "summary": "Your own switch: with incognito on, nothing you say gets remembered at all — in the room or in PMs — and you show as \"someone\" on the website. Also on the website: Settings → Privacy.",
+   "details": "Your own switch: with incognito **on**, nothing you say gets remembered at all — in the room or in PMs — and anything still waiting to be processed is binned. **Off by default.** It stops new memories — it doesn't erase what he already knows (ask an admin if you want that wiped). Works from a PM or the room, and the reply always comes back privately.\n\nWhile it's on you're also private on the website: \"someone\" on the live room view (your lines aren't shown), captures of you are private, nobody can quote you or use your cam in AI pictures, and your top words aren't recorded in your profile analytics.\n\nThe same switch is on the website at [/settings/privacy](/settings/privacy) (Settings → Privacy) for a linked chat account - a change in either place shows in the other.",
    "examples": [],
    "keywords": [
     "privacy",
     "forget me",
     "stop remembering"
-   ]
+   ],
+   "web": {
+    "label": "Turn incognito on or off",
+    "url": "/settings/privacy"
+   }
   },
   {
    "id": "patv",
@@ -442,6 +446,35 @@
    "web": {
     "label": "The claim page shows what's waiting for you",
     "url": "/register"
+   }
+  },
+  {
+   "id": "signin",
+   "title": "!signin",
+   "category": "start",
+   "role": "everyone",
+   "commands": [
+    "!signin"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!signin"
+   ],
+   "summary": "Get a one-time link (by PM) that signs you in to your PATV account - no password needed.",
+   "details": "For a Camfrog name already linked to a PATV account. Pepe says \"check your PMs\" in the room and PMs you a link that works once, for 10 minutes; open it and press Sign in. Never share it. Not linked yet? Use !signup. Admin and staff accounts can't use it, and you can turn it off in Settings → Security.",
+   "examples": [
+    "!signin"
+   ],
+   "keywords": [
+    "sign in",
+    "log in",
+    "login link",
+    "forgot password",
+    "magic link"
+   ],
+   "web": {
+    "label": "Settings → Security: turn chat sign-in on or off",
+    "url": "/editProfile"
    }
   },
   {
@@ -7462,5 +7495,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "e1264b39a88b1d34"
+ "hash": "84552bb61317c004"
 }

@@ -66,7 +66,11 @@ async function hub(user, ctx = {}) {
   // ── Privacy & likeness ──
   const lk = await safe(() => require("./likeness").prefsOf(uid));
   const lkVals = lk ? Object.values(lk) : null;
+  // 1.99wa: incognito - Pepe's last report for the linked chat login (incognito.js; its one home is /settings/privacy)
+  const inc = await safe(() => require("./incognito").stateOf(uid));
+  const incSt = !inc ? null : !inc.linked ? st("not_linked") : inc.waiting ? st("waiting") : inc.on === null ? null : inc.on ? st("on", null, "ok") : st("off");
   const privacy = [
+    E("incognito", "🕶️", "/settings/privacy", incSt),
     E("likeness", "🪞", "/settings/likeness", lkVals ? st("n_of_on", { count: lkVals.filter(Boolean).length, total: lkVals.length }) : null),
     E("voice", "🗣️", "/voices/mine"),
     E("clone", "🎙️", "/voices/clone"),
