@@ -580,11 +580,12 @@ function register(app, { addUser }) {
       if (!target) throw new Refuse(404, "No such account.");
       if (target.userId === me.userId) throw new Refuse(403, "Another admin has to do this for your own account.", "E_SELF");
       if (String((req.body || {}).confirm || "").trim() !== target.username) throw new Refuse(400, "Type the member's username exactly to confirm.", "E_CONFIRM");
+      if (String((req.body || {}).reason || "").trim().length < 3) throw new Refuse(400, "Give a reason.", "E_REASON");   // 1.99wl
       if (await pendingOf(target.userId)) throw new Refuse(409, "Already scheduled.", "E_PENDING");
       const b = await blockers(target.userId);
       if (b.block.length) throw new Refuse(409, "Some things have to be closed first.", "E_BLOCKED", { block: b.block });
       const r = await schedule(target, { by: "admin:" + me.userId, reauth: "admin", reason: (req.body || {}).reason });
-      try { await require("./adminaudit").record(me, "account.delete", target, { execute_at: r.execute_at }, (req.body || {}).reason); } catch (e) { /* best effort */ }
+      await require("./adminaudit").record(me, "account.delete", target, { execute_at: r.execute_at }, (req.body || {}).reason);
       res.json(r);
     } catch (e) { fail(res, e); }
   });
@@ -592,8 +593,16 @@ function register(app, { addUser }) {
     const me = await admin(req, res); if (!me) return;
     try {
       await init();
+      // 1.99wl: a reason + the member's username typed as the confirmation; audited
+      const d = (await getQuery(`SELECT d.id, d.user_id, u.username FROM account_deletions d LEFT JOIN users u ON u.userId = d.user_id
+                                 WHERE d.id = ? AND d.state IN ('scheduled','held')`, [Number(req.params.id) || 0]))[0];
+      if (!d) throw new Refuse(404, "No pending deletion with that id.");
+      const b = req.body || {};
+      if (String(b.confirm || "").trim() !== d.username) throw new Refuse(400, "Type the member's username exactly to confirm.", "E_CONFIRM");
+      if (String(b.reason || "").trim().length < 3) throw new Refuse(400, "Give a reason.", "E_REASON");
       const r = await runQuery("UPDATE account_deletions SET state = 'cancelled', cancelled_at = ?, cancel_via = ? WHERE id = ? AND state IN ('scheduled','held')",
-                               [now(), "admin:" + me.userId, Number(req.params.id) || 0]);
+                               [now(), "admin:" + me.userId, d.id]);
+      if (r && r.changes) await require("./adminaudit").record(me, "account.delete_cancel", { userId: d.user_id, username: d.username }, { id: d.id }, String(b.reason).slice(0, 200));
       res.json({ ok: !!(r && r.changes) });
     } catch (e) { fail(res, e); }
   });

@@ -400,9 +400,15 @@ function register(app, { addUser }) {
     if (!row || row.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
     const target = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(req.params.id)]))[0];
     if (!target) return res.status(404).json({ ok: false, error: "No such account." });
+    // 1.99wl: a reason and the member's username typed as the confirmation (/admin/accounts); audited before it runs
+    const b = req.body || {};
+    const reason = String(b.reason || "").trim().slice(0, 200);
+    if (String(b.confirm || "").trim() !== target.username) return res.status(400).json({ ok: false, error: "Type the member's username exactly to confirm.", code: "E_CONFIRM" });
+    if (reason.length < 3) return res.status(400).json({ ok: false, error: "Give a reason.", code: "E_REASON" });
     try {
+      const me = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [req.user.userId]))[0];
+      await require("./adminaudit").record(me, "sessions.revoke_all", target, null, reason);
       const n = await revokeAll(target.userId, { why: "admin" });
-      try { await require("./adminaudit").record(req.user, "sessions.revoke_all", target, { revoked: n }, str((req.body || {}).reason, 200)); } catch (e) { /* audit is best effort */ }
       res.json({ ok: true, revoked: n });
     } catch (e) { console.error("[sessions] admin revoke:", e.message); res.status(500).json({ ok: false }); }
   });

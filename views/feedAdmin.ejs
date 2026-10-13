@@ -80,7 +80,7 @@
           <button type="button" data-fa="u-dismiss">Dismiss</button>
           <button type="button" data-fa="u-false">Dismiss · bad faith</button>
           <button type="button" class="bad" data-fa="u-ban">Ban from the feed…</button>
-          <% if (isAdmin) { %><button type="button" data-safety="details" data-user-id="<%= g.userId %>">🛡 View details</button><% } %>
+          <% if (isAdmin) { %><button type="button" data-safety="details" data-user-id="<%= g.userId %>">🛡 View details</button> <a href="/admin/accounts?u=<%= encodeURIComponent(g.username) %>">🔐 Account security</a><% } %>
           <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporters the outcome</label>
         </div>
       </div>

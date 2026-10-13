@@ -219,7 +219,7 @@ test("an admin can sign a member out everywhere (audited); members can't", async
   const c = await signIn("hal");
   const admin = await signIn("boss");
   assert.equal((await post("/api/admin/users/hal/sessions/revoke", c)).status, 403);
-  const r = await (await post("/api/admin/users/hal/sessions/revoke", admin, { reason: "compromised" })).json();
+  const r = await (await post("/api/admin/users/hal/sessions/revoke", admin, { reason: "compromised", confirm: "hal" })).json();
   assert.equal(r.revoked, 1);
   assert.equal(await who(c), null);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'sessions.revoke_all' AND target_id = 'hal'"))[0].n, 1);

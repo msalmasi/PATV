@@ -1,0 +1,89 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'accounts', admIsAdmin: isAdmin }) %>
+<%# views/admin/accounts.ejs - 1.99wl /admin/accounts (accountsadmin.js): look up a member -> sessions + deletion status + actions
+    (public/js/admin-accounts.js), every pending / held deletion, recent account-security events. Admins only. %>
+<%
+  const when = (ms) => ms ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(Number(ms), 'datetime') : '–';
+  const KIND = { chat_signin: t('admacct.ev.chat_signin'), chat_signin_refused: t('admacct.ev.chat_refused'), new_device: t('admacct.ev.new_device'),
+                 revoked: t('admacct.ev.revoked'), 'sessions.revoke_all': t('admacct.ev.admin_revoke'), 'account.delete': t('admacct.ev.admin_delete'),
+                 'account.delete_cancel': t('admacct.ev.admin_cancel') };
+%>
+<div class="adm-head">
+  <h1><%- t('admacct.h1') %></h1>
+  <p><%- t('admacct.lede') %></p>
+</div>
+
+<section class="adm-card" id="lookup" aria-labelledby="lookupT">
+  <h2 id="lookupT"><%- t('admacct.lookup') %></h2>
+  <form class="adm-form" id="aaFind" autocomplete="off">
+    <label for="aaQ"><%- t('admacct.lookup_label') %>
+      <input type="text" id="aaQ" name="u" value="<%= q %>" list="aaPeople" maxlength="120" placeholder="<%- t('admacct.lookup_ph') %>"></label>
+    <datalist id="aaPeople"></datalist>
+    <div class="adm-actions"><button type="submit"><%- t('admacct.show') %></button><span class="adm-msg" id="aaMsg" role="status"></span></div>
+  </form>
+  <div id="aaUser" hidden>
+    <h3 id="aaName"></h3>
+    <p class="adm-help" id="aaMeta"></p>
+    <h3><%- t('admacct.sessions') %></h3>
+    <div class="adm-tbl"><table>
+      <thead><tr><th><%- t('admacct.col.device') %></th><th><%- t('admacct.col.method') %></th><th><%- t('admacct.col.where') %></th><th><%- t('admacct.col.last') %></th><th><%- t('admacct.col.signed_in') %></th></tr></thead>
+      <tbody id="aaSessions"></tbody>
+    </table></div>
+    <form class="adm-form" id="aaRevoke">
+      <label for="aaRevokeWhy"><%- t('admacct.reason') %><input type="text" id="aaRevokeWhy" maxlength="200" required></label>
+      <label for="aaRevokeConfirm"><%- t('admacct.confirm') %><input type="text" id="aaRevokeConfirm" autocomplete="off" required></label>
+      <div class="adm-actions"><button type="submit" class="danger"><%- t('admacct.revoke_all') %></button><span class="adm-msg" id="aaRevokeMsg" role="status"></span></div>
+    </form>
+    <h3><%- t('admacct.deletion') %></h3>
+    <p id="aaDel"></p>
+    <ul id="aaBlockers" class="adm-help"></ul>
+    <form class="adm-form" id="aaDelForm">
+      <label for="aaDelWhy"><%- t('admacct.reason') %><input type="text" id="aaDelWhy" maxlength="200" required></label>
+      <label for="aaDelConfirm"><%- t('admacct.confirm') %><input type="text" id="aaDelConfirm" autocomplete="off" required></label>
+      <div class="adm-actions">
+        <button type="submit" class="danger" id="aaDelBtn"><%- t('admacct.schedule') %></button>
+        <button type="button" id="aaCancelBtn" hidden><%- t('admacct.cancel') %></button>
+        <span class="adm-msg" id="aaDelMsg" role="status"></span>
+      </div>
+      <p class="adm-help" style="grid-column:1/-1"><%- t('admacct.schedule_help') %></p>
+    </form>
+    <h3><%- t('admacct.their_events') %></h3>
+    <ul id="aaEvents" class="adm-help"></ul>
+  </div>
+</section>
+
+<section class="adm-card" id="deletions" aria-labelledby="delT">
+  <h2 id="delT"><%- t('admacct.pending') %> (<%= pending.length %>)</h2>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admacct.col.member') %></th><th><%- t('admacct.col.state') %></th><th><%- t('admacct.col.date') %></th><th><%- t('admacct.col.by') %></th><th><%- t('admacct.col.blockers') %></th></tr></thead>
+    <tbody>
+      <% if (!pending.length) { %><tr><td class="empty" colspan="5"><%- t('admacct.none_pending') %></td></tr><% } %>
+      <% pending.forEach((d) => { %><tr>
+        <td><a href="/admin/accounts?u=<%= encodeURIComponent(d.username || d.user_id) %>">@<%= d.username || d.user_id %></a></td>
+        <td><span class="adm-pill<%= d.state === 'held' ? ' bad' : '' %>"><%- t('admacct.st.' + d.state) %></span></td>
+        <td><%= when(d.execute_at) %></td>
+        <td><%= d.requested_by %></td>
+        <td><%= (d.blockers || []).map((b) => b.label).join('; ') || (d.held_reason || '–') %></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="events" aria-labelledby="evT">
+  <h2 id="evT"><%- t('admacct.events') %></h2>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admacct.col.when') %></th><th><%- t('admacct.col.what') %></th><th><%- t('admacct.col.member') %></th><th><%- t('admacct.col.detail') %></th></tr></thead>
+    <tbody>
+      <% if (!events.length) { %><tr><td class="empty" colspan="4"><%- t('admacct.no_events') %></td></tr><% } %>
+      <% events.forEach((e) => { %><tr>
+        <td><%= when(e.at) %></td><td><%= KIND[e.kind] || e.kind %></td>
+        <td><% if (e.username) { %><a href="/admin/accounts?u=<%= encodeURIComponent(e.username) %>">@<%= e.username %></a><% } else { %>–<% } %></td>
+        <td><%= e.detail || '' %></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+<script src="/public/js/admin-accounts.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

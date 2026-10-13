@@ -1,7 +1,7 @@
 <%- include('../partials/admin-open', { title, user, section: 'users', admIsAdmin: isAdmin }) %>
 <div class="adm-head">
   <h1>Users &amp; Accounts</h1>
-  <p>Roles and classes, XP, the welcome bonus and the stale-account cleanup. Each card saves on its own.</p>
+  <p>Roles and classes, XP, the welcome bonus and the stale-account cleanup. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
 </div>
 <% if (errors && errors.length) { %><div class="adm-flash err" role="alert"><%= errors %></div><% } %>
 

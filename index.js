@@ -4025,7 +4025,8 @@ require("./botcredits").register(app, { isBotToken, idemBegin, resolveCounterpar
 require("./autoescrow").register(app, { isBotToken, addUser });
 loginSessions.register(app, { addUser });   // 1.99wj: Settings → Account → Security: your devices, sign out everywhere (sessions.js)
 require("./accountexport").register(app, { addUser });   // 1.99wj: Settings → Account → Your data: "Download my data"
-require("./accountdelete").register(app, { addUser });   // 1.99wj: Settings → Account → Delete account (docs/account-deletion.md)
+require("./accountdelete").register(app, { addUser });
+require("./accountsadmin").register(app, { addUser });   // 1.99wl: /admin/accounts - Account security for admins   // 1.99wj: Settings → Account → Delete account (docs/account-deletion.md)
 require("./chatsignin").register(app, { isBotToken, addUser });   // !signin: a one-time sign-in link by PM for a linked Camfrog login (chatsignin.js)   // auto-account escrow (docs/auto-account-escrow.md): Pepe's PM list, the admin card, the 10-min tick
 
 // Grant XP to a user (bot-authenticated) — used for duel/heist wins. Runs the same
