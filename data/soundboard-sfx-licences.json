@@ -261,10 +261,10 @@
   },
   "lg-founder": {
    "file": "lg-founder.ogg",
-   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 1001",
-   "line": "Make way for the most ELECTRIFYING man on Camfrog.",
+   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 3014, normal tempo, tail trimmed (1.99xg: the user's pick of 18 animated takes)",
+   "line": "Make WAY! For the most... ELECTRIFYING... man... on CAMFROG!",
    "stt_check": "Make way for the most electrifying man on Camfrog.",
-   "secs": 3.85,
+   "secs": 4.21,
    "licence": "PATV's own"
   }
  }
