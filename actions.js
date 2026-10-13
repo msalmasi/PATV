@@ -14,6 +14,10 @@
 //          command's arguments, e.g. cmd=wager a0=@bob a1=10k a2="Lakers win" a3=judge a4=@carol
 //   back   the page to return to (a local path)
 //   tag    which page's activity list this belongs to (defaults to the first part of `back`)
+//   pad    (1.99ur) market / pool "new" and poll.create: the pad it's for (padlinks.checkPick: one the user can see; "" =
+//          site-wide). Sent on as the word pad:<id> (pad:none = site-wide), which Pepe's and the site's parsers read.
+//   until, tz  (1.99ur) market / pool "new": a picked close (unix seconds, from the form's date/time in the browser's zone)
+//          and that zone. Checked against the admins' bounds (mktcfg.js) here, then sent on as until:<s> tz:<zone>.
 //   idem   (1.99bj) a one-time key per submission, added to every /act form by views/partials/actions.ejs;
 //          the same key twice is one submission (refused here, and Pepe journals it too)
 const { runQuery, getQuery } = require("./dbUtils");
@@ -109,6 +113,28 @@ function register(app, { isBotToken, addUser }) {
     } else {
       args = words;
     }
+    // 1.99ur: the create forms' pad picker + a picked close date (markets / pools / polls)
+    const creating = (kind === "cmd" && (args[0] === "market" || args[0] === "pool") && /^(new|create)$/i.test(String(args[1] || "")))
+      || kind === "poll.create";
+    let padPick = null;
+    if (creating && b.pad !== undefined) {
+      padPick = await require("./padlinks").checkPick(req.user, b.pad);
+      if (padPick === null) return go("You can't post to that pad — pick another one.");
+    }
+    if (creating && kind === "cmd") {
+      const until = Math.floor(Number(b.until) || 0);
+      if (until) {
+        const secs = until - Math.floor(Date.now() / 1000);
+        const bad = args[0] === "market" ? await require("./mktcfg").checkClose(secs)
+          : secs < 300 || secs > 30 * 86400 ? "Betting can stay open from 5 minutes to 30 days." : null;
+        if (bad) return go(bad);
+        args = args.filter((w, i) => i < 2 || !/^closes?\s/i.test(w));       // the picked date replaces the duration
+        args.push("until:" + until);
+        const tz = require("./markets").cleanTz(b.tz);
+        if (tz) args.push("tz:" + tz);
+      }
+      if (padPick !== null) args.push("pad:" + (padPick || "none"));
+    }
     // 1.99ml: with the lotto backend on, a lotto form buys on the site directly - nothing is sent to Pepe
     if (kind === "cmd" && args[0] === "lotto") {
       try {
@@ -161,7 +187,7 @@ function register(app, { isBotToken, addUser }) {
     // 1.99ns: with the polls on the site (polls.js backend), a poll form is done here directly - nothing is sent to Pepe
     if (kind.startsWith("poll.")) {
       try {
-        const msg = await require("./polls").fromForm(req.user.userId, kind, words);
+        const msg = await require("./polls").fromForm(req.user.userId, kind, words, { pad: padPick });
         if (msg) return go(msg);
       } catch (e) {
         console.error("[act] polls backend:", e.message);

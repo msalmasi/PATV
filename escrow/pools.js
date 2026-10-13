@@ -120,18 +120,13 @@ function payoutPlan(m, result) {
 }
 
 // ── the display table the /markets and /wagers pages read (markets.js) ──
-let tableReady = null;
 async function mirror(m) {
-  if (!tableReady) tableReady = runQuery("CREATE TABLE IF NOT EXISTS markets (id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, closes INTEGER, updated INTEGER)");
-  await tableReady;
   const clean = require("../markets").cleanMarket(m);
   if (!clean) return;
-  await runQuery(`INSERT INTO markets (id, data, status, closes, updated) VALUES (?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status, closes = excluded.closes, updated = excluded.updated`,
-                 [clean.id, JSON.stringify(clean), clean.status, clean.closes, Date.now()]);
+  await require("../markets").storeRow(clean);      // 1.99ur: + its pad column (padlinks.js)
 }
 
-const FIELDS = ["id", "question", "options", "creator", "judge", "room", "status", "created", "closes", "model", "ai_judge", "ai", "ai_hold",
+const FIELDS = ["id", "question", "options", "creator", "judge", "room", "pad", "tz", "status", "created", "closes", "model", "ai_judge", "ai", "ai_hold",
                 "result", "settled_by", "void_reason", "fee", "ended", "bet_seq", "via", "users", "auto"];
 const view = (m) => {
   const out = {};
@@ -191,6 +186,9 @@ async function create(actor, a, t) {
               bets: [], model: "pool", users: me.user ? { creator: me.user } : {}, via: actor.via || "room" };
   if (aiJudge) m.ai_judge = true;
   if (auto) m.auto = auto;
+  // 1.99ur: the pad it belongs to (the website's pad picker, or Pepe's room for a chat create) + the creator's zone for a set close
+  if (a.pad) m.pad = String(a.pad).slice(0, 128);
+  if (a.tz && require("../markets").cleanTz(a.tz)) m.tz = require("../markets").cleanTz(a.tz);
   await G().save(GAME, m);
   await emit("created", m, { by: me.login, via: actor.via, secs });
   return { ok: true, ref: ref(m), pool: view(m), secs };
@@ -402,7 +400,9 @@ function durationSecs(n, unit) {
 }
 /** _market_create's parsing of "<question> judge @x [options a/b/c] [closes 2d]". */
 function parseCreate(text) {
-  text = String(text || "");
+  // 1.99ur: the website's create form adds pad:<pad id>, until:<unix s> (a picked close date) and tz:<zone>
+  const tok = require("../markets").createTokens(String(text || ""));
+  text = tok.text;
   const jm = [...text.matchAll(JUDGE_RE)];
   if (!jm.length) return { error: "Every pool needs a judge — add 'judge @someone' (they can't bet on it), or 'judge @pepe' to let Pepe decide it (experimental)." };
   const last = jm[jm.length - 1];
@@ -417,8 +417,10 @@ function parseCreate(text) {
   let secs = DEFAULT_SECS;
   const cm = CLOSES_RE.exec(text);
   if (cm) { secs = durationSecs(cm[1], cm[2]); text = (text.slice(0, cm.index) + " " + text.slice(cm.index + cm[0].length)).trim(); }
+  if (tok.until) secs = Math.round(tok.until - Date.now() / 1000);
   const ai = AI_WORDS.has(low(jword));
-  return { question: text, options, secs, ai_judge: ai, judge: ai ? null : { login: jword.replace(/^@+/, "") } };
+  return { question: text, options, secs, ai_judge: ai, judge: ai ? null : { login: jword.replace(/^@+/, "") },
+           ...(tok.pad ? { pad: tok.pad } : {}), ...(tok.tz ? { tz: tok.tz } : {}) };
 }
 function fromForm(words, actor) {
   const w = words.map((x) => String(x));

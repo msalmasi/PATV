@@ -41,11 +41,7 @@ async function mirror(m) {
   const clean = require("../markets").cleanMarket(m);
   if (!clean) return;
   await C.init();
-  await require("../dbUtils").runQuery(`INSERT INTO markets (id, data, status, closes, updated) VALUES (?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status, closes = excluded.closes, updated = excluded.updated`,
-                 [clean.id, JSON.stringify(clean), clean.status, clean.closes, Date.now()]).catch(async (e) => {
-    if (!/no such table/.test(String(e.message))) throw e;
-  });
+  await require("../markets").storeRow(clean);      // 1.99ur: + its pad column (padlinks.js)
 }
 async function put(m) {
   const c = await C.cfg();
@@ -86,7 +82,13 @@ async function create(actor, a, t) {
     return fail("bad_options", "give 2 to 6 options, e.g. options red/blue/green");
   }
   const secs = Math.trunc(Number(a.secs) || 0);
-  if (secs < 300 || secs > Number(c.max_secs)) return fail("bad_secs", `betting can stay open from 5 minutes to ${Math.round(Number(c.max_secs) / 86400)}d.`);
+  // 1.99ur: the admins' close bounds (mktcfg.js, /admin/markets) - a custom close date included; Pepe's auto markets keep 5 min .. the max
+  const mc = await require("../mktcfg").get();
+  const lo = a.auto ? 300 : mc.close_min_secs;
+  if (secs < lo || secs > mc.close_max_secs) {
+    return fail("bad_secs", `trading can close between ${require("../mktcfg").human(lo)} and ${require("../mktcfg").human(mc.close_max_secs)} from now.`,
+                { min: lo, max: mc.close_max_secs });
+  }
   const creator = String(a.creator || actor.login || "").slice(0, 60);
   const aiJudge = !!a.ai_judge;
   const judge = aiJudge ? String(a.pepe || actor.login || "") : String((a.judge && a.judge.login) || "").slice(0, 60);
@@ -112,6 +114,9 @@ async function create(actor, a, t) {
               created: t.nowS, closes: t.nowS + secs, bets: [] };
   if (aiJudge) m.ai_judge = true;
   if (a.auto && typeof a.auto === "object") m.auto = a.auto;
+  // 1.99ur: the pad it belongs to (the website's picker / the chat room's pad) + the creator's zone for a picked close
+  if (a.pad) m.pad = String(a.pad).slice(0, 128);
+  if (a.tz && require("../markets").cleanTz(a.tz)) m.tz = require("../markets").cleanTz(a.tz);
   X.newFields(m, t.nowS);
   m.seed_from = funder;
   await C.legs(`cap:mseed:${id}`, [{ pool: funder, amount: -seed }, { pool: potKey(id), amount: seed }],

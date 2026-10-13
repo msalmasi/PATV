@@ -40,9 +40,31 @@ function cleanAi(ai) {
            disputes: (ai.disputes || []).slice(0, 30).map((d) => ({ nick: String(d.nick || "").slice(0, 60), why: String(d.why || "").slice(0, 160) })) };
 }
 
+/** An IANA zone name ("America/New_York", "UTC") the runtime knows, else null. */
+function cleanTz(z) {
+  const s = String(z || "").trim();
+  if (!s || s.length > 64 || !/^[A-Za-z][A-Za-z0-9_+\-]*(\/[A-Za-z0-9_+\-]+){0,2}$/.test(s)) return null;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: s }); return s; } catch (e) { return null; }
+}
+
+/**
+ * 1.99ur: the extra words a website create form adds to "!market new ..." / "!pool new ...": pad:<pad id> (the pad picker),
+ * until:<unix seconds> (a picked close date/time) and tz:<IANA zone> (the creator's zone, shown with the close). Pepe's
+ * parser (pepe_market._market_create) reads the same words. -> {text (without them), pad, until, tz}
+ */
+function createTokens(text) {
+  let t = String(text || "");
+  const out = { pad: null, until: null, tz: null };
+  t = t.replace(/(^|\s)pad:(\S{1,128})(?=\s|$)/gi, (all, sp, v) => { out.pad = /^none$/i.test(v) ? "" : v; return sp; });
+  t = t.replace(/(^|\s)until:(\d{9,11})(?=\s|$)/gi, (all, sp, v) => { out.until = Number(v); return sp; });
+  t = t.replace(/(^|\s)tz:(\S{1,64})(?=\s|$)/gi, (all, sp, v) => { out.tz = cleanTz(v); return sp; });
+  out.text = t.replace(/\s+/g, " ").trim();
+  return out;
+}
+
 // 1.99th: Pepe's auto markets (camfrog-bot pepe_automkt.py) - what he made it from and how it settles: the 🤖 auto tag,
 // the exact criteria, the source link, the resolution time. spec is what Pepe needs to settle it (ESPN event, price level).
-const AUTO_CATS = new Set(["sports", "prices", "news"]);
+const AUTO_CATS = new Set(["sports", "prices", "news", "trending"]);   // 1.99ur: trending = ideas from Polymarket's trending list, our own wording
 const AUTO_RESOLVERS = new Set(["sports", "price", "ai"]);
 function cleanAuto(a) {
   if (!a || typeof a !== "object" || !AUTO_CATS.has(String(a.cat))) return null;
@@ -57,7 +79,26 @@ function cleanAuto(a) {
 }
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS markets (
-  id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, closes INTEGER, updated INTEGER)`).catch(() => {});
+  id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, closes INTEGER, updated INTEGER)`).catch(() => {})
+  // 1.99ur: the pad a market / pool belongs to (padlinks.js) - a column, so a mirror write never loses it and a pad re-key moves it
+  .then(() => runQuery("ALTER TABLE markets ADD COLUMN pad TEXT").catch(() => {}))
+  .then(() => runQuery("CREATE INDEX IF NOT EXISTS markets_pad ON markets (pad)").catch(() => {}));
+const padlinks = require("./padlinks");
+
+/**
+ * Store one display row (Pepe's snapshot, capital/markets.js and escrow/pools.js all write through here). The pad column is
+ * set from the record the first time it resolves and never overwritten after (padlinks.js).
+ */
+async function storeRow(clean) {
+  if (!clean || !clean.id) return;
+  await ready;
+  let pad = null;
+  try { pad = padlinks.resolve(clean); } catch (e) { pad = null; }
+  await runQuery(`INSERT INTO markets (id, data, status, closes, updated, pad) VALUES (?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status, closes = excluded.closes,
+                  updated = excluded.updated, pad = COALESCE(markets.pad, excluded.pad)`,
+                 [clean.id, JSON.stringify(clean), clean.status, clean.closes, Date.now(), pad]);
+}
 
 // Website bets (orders). The PAT moves in Pepe (escrow): he claims pending orders every few
 // seconds, places each through the same checks as a chat bet, and acks the result. A bet carries its
@@ -255,6 +296,9 @@ function cleanMarket(m) {
   const clean = {
     id, question: String(m.question || "").slice(0, 200), options: (m.options || []).map((o) => String(o).slice(0, 30)).slice(0, 6),
     creator: m.creator || "", judge: m.judge || "", room: m.room || "", status: m.status || "open",
+    // 1.99ur: the pad it was made for (padlinks.js) and, for a custom close, the creator's time zone (shown with the close)
+    ...(m.pad ? { pad: String(m.pad).slice(0, 128) } : {}),
+    ...(cleanTz(m.tz) ? { tz: cleanTz(m.tz) } : {}),
     created: Number(m.created) || 0, closes: Number(m.closes) || 0, result: m.result || null,
     settled_by: m.settled_by || null, fee: Number(m.fee) || 0, ended: Number(m.ended) || null,
     ai_judge: !!m.ai_judge, ai: cleanAi(m.ai), ...(m.model === "pool" ? { model: "pool" } : {}),
@@ -320,10 +364,7 @@ function register(app, { isBotToken, addUser }) {
           try { wm = was ? JSON.parse(was.data) : null; } catch (e) { wm = null; }
           if (wm && wm.model !== "lmsr") { console.error(`[markets] sync: M${id} is a site pool - Pepe's LMSR row for it ignored`); continue; }
         }
-        await runQuery(`INSERT INTO markets (id, data, status, closes, updated) VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status,
-                        closes = excluded.closes, updated = excluded.updated`,
-          [id, JSON.stringify(clean), clean.status, clean.closes, Date.now()]);
+        await storeRow(clean);
       }
       res.json({ success: true, stored: list.length });
     } catch (e) {
@@ -507,4 +548,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs, cleanMarket, cleanAi, cleanAuto };
+module.exports = { register, storeRow, cleanTz, createTokens, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs, cleanMarket, cleanAi, cleanAuto };

@@ -15,7 +15,10 @@ const { runQuery, getQuery } = require("./dbUtils");
 const actions = require("./actions");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS polls (
-  id TEXT PRIMARY KEY, data TEXT NOT NULL, status TEXT, created TEXT, updated INTEGER)`).catch(() => {});
+  id TEXT PRIMARY KEY, data TEXT NOT NULL, status TEXT, created TEXT, updated INTEGER)`).catch(() => {})
+  // 1.99ur: the pad a poll belongs to (padlinks.js): set from its pad / room when first stored, moved by a pad re-key
+  .then(() => runQuery("ALTER TABLE polls ADD COLUMN pad TEXT").catch(() => {}));
+const padlinks = require("./padlinks");
 const KEEP_DAYS = 90;
 const MAX_OPTIONS = 8;
 const WEB = "🌐";
@@ -50,15 +53,47 @@ async function event(kind, pollId, origin, data) {
   if (Math.random() < 0.05) runQuery("DELETE FROM poll_events WHERE ts < ?", [Date.now() - 48 * 3600000]).catch(() => {});
   for (const w of [...waiters]) w();
 }
+/** One polls row; the pad column is filled the first time the poll's pad / room resolves and never overwritten (padlinks.js). */
+async function storePoll(p) {
+  await ready;
+  let pad = null;
+  try { pad = padlinks.resolve(p); } catch (e) { pad = null; }
+  await runQuery(`INSERT INTO polls (id, data, status, created, updated, pad) VALUES (?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status, created = excluded.created,
+                  updated = excluded.updated, pad = COALESCE(polls.pad, excluded.pad)`,
+                 [p.id, JSON.stringify(p), p.status, p.created_at, Date.now(), pad]);
+}
 async function savePoll(p) {
-  await runQuery(`INSERT INTO polls (id, data, status, created, updated) VALUES (?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status, created = excluded.created, updated = excluded.updated`,
-                 [p.id, JSON.stringify(p), p.status, p.created_at, Date.now()]);
+  await storePoll(p);
   require("./achsocial").pokePoll(p);                        // 1.99pa: 🗳️ poll achievements (voters, a poll's creator)
 }
-async function activePoll() {
-  const r = (await getQuery("SELECT data FROM polls WHERE status = 'active' ORDER BY updated DESC LIMIT 1"))[0];
+/** The running poll stored for exactly this pad (null = the site-wide ones). */
+async function activeExact(pad) {
+  const r = pad ? (await getQuery("SELECT data FROM polls WHERE status = 'active' AND pad = ? ORDER BY updated DESC LIMIT 1", [pad]))[0]
+    : (await getQuery("SELECT data FROM polls WHERE status = 'active' AND pad IS NULL ORDER BY updated DESC LIMIT 1"))[0];
   return r ? JSON.parse(r.data) : null;
+}
+/**
+ * The running poll. 1.99ur: polls belong to pads - one running poll PER PAD. `pad` undefined = the newest running poll anywhere
+ * (callers that don't say where); a pad id = that pad's running poll, else a running site-wide one (pad NULL: polls from before
+ * pads, or made without one); null = the site-wide one.
+ */
+async function activePoll(pad) {
+  if (pad === undefined) {
+    const r = (await getQuery("SELECT data FROM polls WHERE status = 'active' ORDER BY updated DESC LIMIT 1"))[0];
+    return r ? JSON.parse(r.data) : null;
+  }
+  return (pad ? await activeExact(pad) : null) || activeExact(null);
+}
+async function pollById(id) {
+  const r = (await getQuery("SELECT data FROM polls WHERE id = ?", [String(id || "")]))[0];
+  return r ? JSON.parse(r.data) : null;
+}
+/** The pad a bot / web call means: an explicit pad (id / slug), else the chat room's pad (null = site-wide); undefined when neither was sent. */
+async function padOfCall(b) {
+  if (!b || (b.pad === undefined && b.room === undefined)) return undefined;
+  await padlinks.ready();
+  return padlinks.resolve({ pad: b.pad, room: b.room }) || null;
 }
 const nowStr = () => new Date().toISOString().slice(0, 19).replace("T", " ");
 /**
@@ -69,22 +104,30 @@ function act(verb, b, origin) {
   return serial(async () => {
     await bready;
     if (!(await backendLive())) return { ok: false, code: "off", msg: "polls aren't on the site right now" };
-    const cur = await activePoll();
+    const pad = await padOfCall(b);
+    // 1.99ur: a vote / end from the website names its poll (the form's a0); chat means the room's pad's running poll
+    let cur;
+    if (b.poll_id && (verb === "vote" || verb === "end")) {
+      cur = await pollById(b.poll_id);
+      if (cur && cur.status !== "active") return { ok: false, code: "ended", msg: "that poll has ended" };
+    } else cur = await activePoll(pad);
     if (verb === "current" || verb === "results") return { ok: true, poll: cur ? view(cur, []) : null };
     if (verb === "create") {
-      if (cur) return { ok: false, code: "busy", msg: "a poll is already running — vote on it, or wait for it to end", poll: view(cur, []) };
+      // one running poll per pad: only a running poll of the SAME pad (or, without a pad, any) blocks a new one
+      const mine = pad === undefined ? cur : await activeExact(pad);
+      if (mine) return { ok: false, code: "busy", msg: "a poll is already running here — vote on it, or wait for it to end", poll: view(mine, []) };
       const q = str(b.question, 300).trim();
       const options = (Array.isArray(b.options) ? b.options : []).map((o) => str(o, 120).trim()).filter(Boolean).slice(0, MAX_OPTIONS);
       if (!q || options.length < 2) return { ok: false, code: "bad", msg: "a poll needs a question and at least two options" };
       const p = cleanPoll({ id: "poll_" + crypto.randomBytes(4).toString("hex"), question: q.endsWith("?") ? q : q + "?", options, votes: {},
-                            creator: str(b.creator, 60), status: "active", created_at: nowStr() });
+                            creator: str(b.creator, 60), status: "active", created_at: nowStr(),
+                            ...(pad ? { pad } : {}), ...(b.room ? { room: str(b.room, 128) } : {}) });
       await savePoll(p);
       await event("created", p.id, origin, { poll: p });
       return { ok: true, poll: view(p, []) };
     }
     if (!cur) return { ok: false, code: "none", msg: "no active poll" };
     if (verb === "vote") {
-      if (b.poll_id && b.poll_id !== cur.id) return { ok: false, code: "ended", msg: "that poll has ended" };
       const n = Math.floor(Number(b.option));
       if (!(n >= 1 && n <= cur.options.length)) return { ok: false, code: "bad", msg: `pick 1-${cur.options.length}` };
       const voter = str(b.voter, 60).trim();
@@ -151,7 +194,7 @@ async function eventsAfter(after, waitS) {
   return rows.map((r) => ({ id: r.id, ts: r.ts, kind: r.kind, poll_id: r.poll_id, origin: r.origin, data: JSON.parse(r.data || "{}") }));
 }
 /** The website's /act poll forms while the site owns the polls. -> the message to show, or null (not live: queue to Pepe). */
-async function fromForm(userId, kind, words) {
+async function fromForm(userId, kind, words, opts = {}) {
   if (!(await backendLive())) return null;
   const me = (await getQuery("SELECT username, camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   if (!me) return "Couldn't find your account.";
@@ -162,11 +205,12 @@ async function fromForm(userId, kind, words) {
   }
   if (kind === "poll.create") {
     if (!me.camfrogUsername) return "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) - polls are started as it.";
-    const r = await act("create", { question: words[0], options: words.slice(1), creator: me.camfrogUsername }, "web");
+    // 1.99ur: the pad picker (actions.js checked the user may use it; "" = site-wide)
+    const r = await act("create", { question: words[0], options: words.slice(1), creator: me.camfrogUsername, pad: opts.pad == null ? "" : opts.pad }, "web");
     return r.ok ? "🗳️ Poll started." : r.msg;
   }
   if (kind === "poll.end") {
-    const r = await act("end", { by: me.camfrogUsername || WEB + me.username, admin: me.class === "Admin" }, "web");
+    const r = await act("end", { poll_id: words[0] || undefined, by: me.camfrogUsername || WEB + me.username, admin: me.class === "Admin" }, "web");
     return r.ok ? "🗳️ Poll ended." : r.msg;
   }
   return null;
@@ -187,6 +231,8 @@ function cleanPoll(p) {
   return {
     id, question: str(p.question, 300), options, votes, creator: str(p.creator, 60),
     status: p.status === "active" ? "active" : "ended", created_at: created,
+    // 1.99ur: the pad it belongs to (padlinks.js) / the chat room it was started in
+    ...(p.pad ? { pad: str(p.pad, 128) } : {}), ...(p.room ? { room: str(p.room, 128) } : {}),
   };
 }
 
@@ -244,10 +290,7 @@ function register(app, { isBotToken, addUser }) {
         if (!raw || typeof raw !== "object") continue;
         const p = cleanPoll(raw);
         if (!p) continue;
-        await runQuery(`INSERT INTO polls (id, data, status, created, updated) VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status,
-                        created = excluded.created, updated = excluded.updated`,
-          [p.id, JSON.stringify(p), p.status, p.created_at, Date.now()]);
+        await storePoll(p);
         require("./achsocial").pokePoll(p);                  // 1.99pa: 🗳️ poll achievements (a local Pepe's snapshot)
         stored++;
       }
