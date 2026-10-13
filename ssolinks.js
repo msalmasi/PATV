@@ -199,7 +199,7 @@ async function notifyLinked(user, providerLabel, what) {
     const I = require("./i18n");
     const t = I.tFor(I.getPref(userId) || "en");
     await require("./inbox").addSafe(userId, { kind: "system", title: t("auth.sso.notice_title", { provider: providerLabel }),
-      body: t("auth.sso.notice_body", { provider: providerLabel, what: what || "" }), link: `/u/${encodeURIComponent((user && user.username) || "")}/edit#connections`, ref: `ssolink:${providerLabel}:${clock()}` });
+      body: t("auth.sso.notice_body", { provider: providerLabel, what: what || "" }), link: "/settings/account#connections", ref: `ssolink:${providerLabel}:${clock()}` });
   } catch (e) { /* logged there */ }
 }
 
@@ -218,7 +218,7 @@ function register(app, { addUser, authView }) {
 
   app.get("/auth/sso/new", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (req.user && req.user.username) return res.redirect(`/u/${encodeURIComponent(req.user.username)}/edit#connections`);
+    if (req.user && req.user.username) return res.redirect("/settings/account#connections");   // 1.99vz
     const p = pendingFor(req);
     if (!p) return expired(req, res);
     let suggest = "";
@@ -231,7 +231,7 @@ function register(app, { addUser, authView }) {
   app.post("/auth/sso/create", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-up refused");
-    if (req.user && req.user.username) return res.redirect(`/u/${encodeURIComponent(req.user.username)}/edit#connections`);
+    if (req.user && req.user.username) return res.redirect("/settings/account#connections");   // 1.99vz
     const p = pendingFor(req);
     if (!p) return expired(req, res);
     if (!enabled(p)) return fail(req, res, "auth.sso.off", "That sign-in method isn't available right now.");

@@ -1,0 +1,248 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('setacct.title'), user: username }) %>
+<%# /settings/account - 1.99vz (index.js): Settings -> Account & sign-in. Username + email, Connections, Password, Security
+    (chat sign-in) and Time zone - moved here from Edit profile so each setting has one home. The forms and link flows
+    redirect back here; old /u/<name>/edit#connections etc. forward here. %>
+<%
+  const camfrogName = typeof camfrogUsername !== 'undefined' && camfrogUsername ? camfrogUsername : '';
+  // 1.99jx: the Time zone setting (tz.js): Automatic (the browser's zone) or any IANA zone
+  const tzPref_ = locals.tzPref || 'auto';
+  const tzZones_ = typeof locals.tzZones === 'function' ? locals.tzZones() : ['UTC'];
+%>
+<%- include('partials/account-css') %>
+<main class="ds-page mid pe">
+  <a class="ds-back" href="/settings">← <%- t('sethub.back') %></a>
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🔐</span> <%- t('sethub.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('setacct.h1') %></h1>
+    <p class="ds-sub"><%- t('setacct.lead', { link: '<a href="/u/' + encodeURIComponent(username) + '/edit">' + t('profile.edit_profile') + '</a>' }) %></p>
+  </div>
+  <%- include('partials/account-flash', { errors: errors, success: success }) %>
+  <nav class="jump" aria-label="<%- t('settings.sections_aria') %>">
+    <a href="#account"><%- t('settings.account') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a><a href="#security"><%- t('settings.security') %></a><a href="#timezone"><%- t('settings.timezone') %></a>
+  </nav>
+
+  <section class="card" id="account">
+    <h2><%- t('settings.account') %></h2>
+    <p class="lede"><%- t('setacct.account_lede') %></p>
+    <div class="grid2">
+      <form class="field" id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
+        <label class="lbl" for="username"><%- t('settings.account.username') %></label>
+        <div class="row"><input type="text" id="username" name="username" value="<%= username %>" maxlength="48" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
+        <span class="hint"><%- t('settings.account.username_hint') %></span>
+      </form>
+      <form class="field" id="emailForm" action="/api/u/<%= username %>/update/email" method="post">
+        <label class="lbl" for="email"><%- t('settings.account.email') %></label>
+        <div class="row"><input type="email" id="email" name="email" value="<%= email %>" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
+        <span class="hint"><%- t('settings.account.email_hint') %></span>
+      </form>
+    </div>
+  </section>
+
+  <section class="card" id="connections">
+    <h2><%- t('settings.connections') %></h2>
+    <p class="lede"><%- t('settings.connections.lede') %></p>
+    <div class="conn">
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#9146ff">
+          <svg viewBox="0 0 2400 2800" aria-hidden="true"><polygon fill="#fff" points="2200,1300 1800,1700 1400,1700 1050,2050 1050,1700 600,1700 600,200 2200,200"/><path fill="#9146ff" d="M500,0L0,500v1800h600v500l500-500h400l900-900V0H500z M2200,1300l-400,400h-400l-350,350v-350H600V200h1600V1300z"/><rect fill="#9146ff" x="1700" y="550" width="200" height="600"/><rect fill="#9146ff" x="1150" y="550" width="200" height="600"/></svg>
+        </span>
+        <span class="conn-name">Twitch<b><% if (twitchDisplayname) { %><span style="color:#bf94ff"><%= twitchDisplayname %></span><% } else { %><span class="none"><%- t('settings.connections.not_connected') %></span><% } %></b></span>
+        <button type="button" id="twitchLoginButton" class="btn twitch" onclick="loginWithTwitch()"><%- twitchDisplayname ? t('settings.connections.reconnect') : t('settings.connections.twitch') %></button>
+      </div>
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#5865f2">
+          <svg viewBox="0 -28.5 256 256" aria-hidden="true"><path fill="#fff" d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"/></svg>
+        </span>
+        <span class="conn-name">Discord<b><% if (discordUsername) { %><span style="color:#aab3ff"><%= discordUsername %></span><% } else { %><span class="none"><%- t('settings.connections.not_connected') %></span><% } %></b></span>
+        <button type="button" id="discordLoginButton" class="btn discord" onclick="loginWithDiscord()"><%- discordUsername ? t('settings.connections.reconnect') : t('settings.connections.discord') %></button>
+      </div>
+      <div class="conn-row" id="camfrogDiv">
+        <span class="conn-ico" style="background:#123d22">🐸</span>
+        <span class="conn-name">Camfrog<b><% if (camfrogName) { %><span style="color:#00cc66"><%= camfrogName %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
+        <span></span>
+        <form class="field conn-cf" id="camfrogForm" action="/api/u/<%= username %>/update/camfrog" method="post">
+          <label class="lbl" for="camfrogUsername"><%- t('settings.connections.cf_label') %></label>
+          <div class="row"><input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= camfrogName %>" placeholder="<%- t('settings.connections.cf_placeholder') %>"><button class="btn primary" type="submit"><%- t('settings.connections.cf_link') %></button></div>
+          <span class="hint"><%- t('settings.connections.cf_hint') %></span>
+        </form>
+      </div>
+      <%# 1.99jr: 📼 Plex (plexmembers.js self-link: Plex's own sign-in, a PIN; the same link as on /subscriptions) %>
+      <% const px_ = locals.plex || { rows: [], member: null }; const pxRows_ = px_.rows || []; const pxLive_ = px_.member;
+         const pxRow_ = pxRows_.find((r) => r.active) || pxRows_.find((r) => r.pending) || pxRows_[0] || null;
+         const pxDate_ = (ms) => new Date(Number(ms)).toISOString().slice(0, 10); %>
+      <div class="conn-row" id="plexDiv">
+        <span class="conn-ico" style="background:#1f1f1f;color:#e5a00d">📼</span>
+        <span class="conn-name">Plex<b><% if (pxRow_) { %><span style="color:#e5a00d"><%= pxRow_.username || pxRow_.plex_id %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b>
+          <% if (pxLive_) { %><small class="px-st"><span class="chip plex">📼 <%- pxLive_.access === 'owner' ? t('settings.connections.plex_owner') : t('settings.connections.plex_member') %></span>
+            <%- pxLive_.access === 'owner' ? t('subs.plex_owner') : pxLive_.access === 'lifetime' ? t('subs.plex_lifetime') : (pxLive_.access === 'manual' || pxLive_.access === 'pre-existing') ? t('subs.plex_kept') : pxLive_.expires ? t('subs.plex_until', { date: pxDate_(pxLive_.expires) }) : '' %></small>
+          <% } else if (pxRow_ && pxRow_.pending) { %><small class="px-st"><%- t('subs.plex_pending', { plex: pxRow_.username || '?' }) %></small>
+          <% } else if (pxRow_) { %><small class="px-st"><%- t('subs.plex_linked_off', { plex: pxRow_.username || '?' }) %></small><% } %>
+        </span>
+        <% if (pxRow_ && pxRow_.link_source !== 'admin') { %>
+          <button type="button" class="btn" data-plex-unlink="<%= pxRow_.plex_id %>"><%- t('subs.plex_unlink') %></button>
+        <% } else if (!pxRow_ && locals.plexLink) { %>
+          <button type="button" class="btn plex" id="plexLinkBtn" data-back="profile"<%= locals.plexPin ? ' data-pin="' + locals.plexPin + '"' : '' %>><%- t('settings.connections.plex_link') %></button>
+        <% } else { %><span></span><% } %>
+        <div class="conn-cf"><span class="status" id="plexStatus" role="status" aria-live="polite"></span>
+          <span class="hint"><%- t('settings.connections.plex_hint', { link: '<a href="/subscriptions#plex">' + t('subs.title') + '</a>' }) %> <a href="/plex">📼 <%- t('nav.plex') %> ›</a></span></div>
+      </div>
+      <%# 1.99lb: Google (googlesso.js - OpenID Connect; a proven link by Google's account id, never by email). Shown when it's set up or linked. %>
+      <% const gg_ = locals.google || { on: false, linked: false, email: '' }; if (gg_.on || gg_.linked) { %>
+      <div class="conn-row" id="googleDiv">
+        <span class="conn-ico" style="background:#fff">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        </span>
+        <span class="conn-name">Google<b><% if (gg_.linked) { %><span style="color:#8ab4f8"><%= gg_.email || t('settings.connections.google_linked_short') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
+        <% if (gg_.linked) { %>
+          <button type="button" class="btn" data-google-unlink><%- t('settings.connections.google_unlink') %></button>
+        <% } else { %>
+          <form class="conn-act" action="/auth/google/link" method="POST" style="margin:0"><button type="submit" class="btn google"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><%- t('settings.connections.google_link') %></button></form>
+        <% } %>
+        <div class="conn-cf"><span class="status" id="googleStatus" role="status" aria-live="polite"></span>
+          <span class="hint"><%- t('settings.connections.google_hint') %><% if (!gg_.linked) { %> <%- t('settings.connections.google_ach', { link: '<a href="/achievements">' + t('settings.connections.google_ach_link') + '</a>' }) %><% } %></span></div>
+      </div>
+      <% } %>
+      <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
+      <% const tg_ = locals.telegram || { linked: false, handle: null }; %>
+      <div class="conn-row" id="telegramDiv">
+        <span class="conn-ico" style="background:#1a7bb0;color:#fff">✈️</span>
+        <span class="conn-name">Telegram<b><% if (tg_.linked) { %><span style="color:#7cc8f0"><%= tg_.handle ? '@' + tg_.handle : t('settings.connections.tg_linked') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
+        <a class="btn telegram" href="/settings/telegram"><%- tg_.linked ? t('settings.connections.tg_manage') : t('settings.connections.tg_link') %></a>
+        <div class="conn-cf"><span class="hint"><%- t('settings.connections.tg_hint') %><% if (tg_.signin) { %> <%- t('settings.connections.tg_signin_hint') %><% } %></span></div>
+      </div>
+      <%# 1.99ks: 🪙 Crypto wallets (cryptopay.js) - linked ONLY by signing a message in the wallet; several allowed %>
+      <% const cw_ = locals.cryptoW; if (cw_) { %>
+      <div class="conn-row" id="cryptoDiv" data-crypto-box>
+        <span class="conn-ico" style="background:#1d2a3a">🪙</span>
+        <span class="conn-name"><%- t('settings.connections.crypto') %><b><% if (cw_.wallets.length) { %><span style="color:#90caf9"><%- t('settings.connections.crypto_n', { n: cw_.wallets.length }) %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
+        <span></span>
+        <div class="conn-cf">
+          <% cw_.wallets.forEach((w) => { %>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0"><small><%= w.family === 'evm' ? 'Ethereum / Base' : 'Solana' %></small> <code style="font-size:12px;word-break:break-all"><%= w.address %></code>
+              <button type="button" class="btn" data-crypto-unlink="<%= w.id %>"><%- t('support.unlink') %></button></div>
+          <% }) %>
+          <% if (cw_.on) { %>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+            <button type="button" class="btn" data-crypto-link="evm">🦊 <%- t('support.link_evm') %></button>
+            <button type="button" class="btn" data-crypto-link="sol">👻 <%- t('support.link_sol') %></button>
+          </div>
+          <% } %>
+          <span class="status" data-crypto-msg role="status" aria-live="polite"></span>
+          <span class="hint"><%- t('settings.connections.crypto_hint', { link: '<a href="/support">' + t('support.title') + '</a>' }) %></span>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="card" id="password">
+    <h2><%- t('settings.password') %></h2>
+    <p class="lede"><%- t('settings.password.lede') %></p>
+    <form class="grid2 pw-form" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
+      <div class="field"><label class="lbl" for="password"><%- t('settings.password.new') %></label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div class="field"><label class="lbl" for="confirm_password"><%- t('settings.password.confirm') %></label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div class="pw-act"><button class="btn primary" type="submit"><%- t('settings.password.update') %></button></div>
+    </form>
+    <span class="status err pw-status" id="pwStatus" role="status" aria-live="polite"></span>
+  </section>
+
+  <section class="card" id="security">
+    <h2><%- t('settings.security') %></h2>
+    <p class="lede"><%- t('settings.security.lede') %></p>
+    <div class="conn">
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#1f3a2a" aria-hidden="true">💬</span>
+        <span class="conn-name"><b><%- t('settings.security.chat_signin') %></b><span class="pv-d"><%- t('settings.security.chat_signin_d') %></span></span>
+        <label class="btn"><input type="checkbox" id="csToggle" disabled> <span id="csToggleL"></span></label>
+      </div>
+    </div>
+    <span class="status" id="csStatus" role="status" aria-live="polite"></span>
+    <details id="csLogBox"><summary><%- t('settings.security.recent') %></summary><ul id="csLog" class="hint"></ul></details>
+    <script src="/public/js/chat-signin-setting.js?v=1" defer></script>
+  </section>
+
+  <section class="card" id="timezone">
+    <h2><%- t('settings.timezone') %></h2>
+    <p class="lede"><%- t('settings.timezone.lede') %></p>
+    <form class="field" id="tzForm" action="/api/settings/timezone" method="post">
+      <label class="lbl" for="tzSelect"><%- t('settings.timezone.label') %></label>
+      <div class="row">
+        <select id="tzSelect" name="tz">
+          <option value="auto"<%= tzPref_ === 'auto' ? ' selected' : '' %>><%- t('settings.timezone.auto') %></option>
+          <% tzZones_.forEach((z) => { %><option value="<%= z %>"<%= tzPref_ === z ? ' selected' : '' %>><%= z.replace(/_/g, ' ') %></option><% }) %>
+        </select>
+        <button class="btn primary" type="submit" id="tzSave"><%- t('settings.save') %></button>
+      </div>
+      <span class="hint" id="tzNow"></span>
+      <span class="status" id="tzStatus" role="status" aria-live="polite"></span>
+    </form>
+  </section>
+</main>
+
+<script>
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+  function validateForm() {
+    var p = document.getElementById("password").value, c = document.getElementById("confirm_password").value;
+    if (p !== c) { document.getElementById("pwStatus").textContent = _t('js.settings.pw_mismatch', "Passwords do not match."); return false; }
+    return true;
+  }
+  function loginWithTwitch() { window.location.href = '/auth/twitch'; }
+  function loginWithDiscord() { window.location.href = '/auth/discord'; }
+
+  // the Time zone setting (1.99jx): POST {tz} to /api/settings/timezone, then reload so every time follows it
+  (function () {
+    var f = document.getElementById('tzForm'), sel = document.getElementById('tzSelect');
+    var btn = document.getElementById('tzSave'), st = document.getElementById('tzStatus'), now = document.getElementById('tzNow');
+    if (!f || !sel) return;
+    function show() {
+      var T = window.PATVTime, z = sel.value === 'auto' ? ((T && T.browser) || 'UTC') : sel.value, txt = '';
+      try { txt = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: z, timeZoneName: 'short' }).format(new Date()); } catch (e) {}
+      if (now) now.textContent = txt ? _t('js.settings.timezone.now', 'Now: {time} ({zone})', { time: txt, zone: z.replace(/_/g, ' ') }) : '';
+    }
+    sel.addEventListener('change', show);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
+    function say(msg, ok) { st.textContent = msg; st.className = 'status ' + (ok ? 'ok' : 'err'); }
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      btn.disabled = sel.disabled = true;
+      say(_t('js.settings.language.saving', 'Saving…'), true);
+      fetch('/api/settings/timezone', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ tz: sel.value }) })
+        .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
+        .then(function (d) {
+          if (d && d.success) { location.reload(); return; }
+          throw new Error((d && d.message) || '');
+        })
+        .catch(function (err) {
+          btn.disabled = sel.disabled = false;
+          say((err && err.message) || _t('js.settings.timezone.failed', "Couldn't save your time zone - try again."), false);
+        });
+    });
+  })();
+
+</script>
+<script src="/public/js/plex-link.js?v=1" defer></script>
+<% if (locals.google && google.linked) { %><script>
+  // 1.99lb: Connections -> Google unlink (googlesso.js; refused when it's the last way to sign in)
+  (function () {
+    var b = document.querySelector('[data-google-unlink]'), st = document.getElementById('googleStatus');
+    if (!b) return;
+    var _t = typeof __t === 'function' ? __t : function (k, d) { return d; };
+    b.addEventListener('click', function () {
+      if (!window.confirm(_t('js.settings.google.unlink_q', "Unlink Google? You won't be able to sign in with it any more."))) return;
+      b.disabled = true;
+      fetch('/api/sso/google/unlink', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (d) {
+          if (d && d.ok) { window.location.reload(); return; }
+          b.disabled = false;
+          st.textContent = (d && d.code === 'E_LAST_METHOD') ? _t('js.settings.sso.last_method', "That's the only way you can sign in. Set a password first (below), then unlink it.") : ((d && d.error) || _t('js.settings.telegram.error', 'Something went wrong.'));
+        })
+        .catch(function () { b.disabled = false; st.textContent = _t('js.settings.telegram.error', 'Something went wrong.'); });
+    });
+  })();
+</script><% } %>
+<% if (locals.cryptoW) { %><script src="/public/js/crypto-link.js?v=2" defer></script><% } %>
+</body>
+</html>

@@ -92,7 +92,7 @@ function register(app, { addUser }) {
     const done = (path, ok) => res.status(ok ? 200 : 400).json({ ok: !!ok, redirect: path });
     const fail = (key, en) => { req.flash("error", tr(req, key, en)); return done("/login", false); };
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Cross-site sign-in refused" });
-    if (req.user && req.user.username) return done(`/u/${encodeURIComponent(req.user.username)}/edit#connections`, true);
+    if (req.user && req.user.username) return done("/settings/account#connections", true);   // 1.99vz: Connections live on Settings -> Account
     await conf.init().catch(() => {});
     if (!enabled()) return fail("auth.sso.off", "That sign-in method isn't available right now.");
     const ip = guard.clientIp(req);

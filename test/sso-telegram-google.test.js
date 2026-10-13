@@ -414,7 +414,7 @@ test("Google: link from Edit profile (signed in), one per account, unlink", asyn
   await b.post("/login", { username: "cal", password: PASSWORD });
   assert.equal(b.who(), "cal");
   let { cb } = await googleSignIn(b, { sub: "g-20", email: "cal@gmail.test", email_verified: true }, { link: true });
-  assert.equal(cb.location, "/u/cal/edit#connections");
+  assert.equal(cb.location, "/settings/account#connections");   // 1.99vz: Connections live on Settings -> Account
   assert.equal((await SSO.linkOf("google", cal.userId)).subject, "g-20");
   // someone else's Google (already linked to zed) can't be linked here
   ({ cb } = await googleSignIn(b, { sub: "g-2" }, { link: true }));
@@ -518,14 +518,14 @@ test("switches + config: buttons show only when on AND configured; admin card AP
   assert.equal(adm.class, "Admin");
 });
 
-test("Edit profile: Connections has a Google row (link / unlink) and the Telegram sign-in hint", async () => {
+test("Settings -> Account: Connections has a Google row (link / unlink) and the Telegram sign-in hint", async () => {
   const ejs = require("ejs");
   const layout = require(path.join(repo, "profilelayout"));
   const loc = (extra) => Object.assign({ username: "pb", displayname: "pb", twitchDisplayname: null, discordUsername: null, camfrogUsername: null,
     avatar: "/a.png", email: "", points_balance: 0, level: 41, classh: "Admin", profileCosmetics: null, layout: layout.sanitize(layout.DEFAULT),
     sections: layout.SECTIONS, subSections: layout.SUBS, privPanels: layout.PRIV, errors: [], success: [], ogPath: "/u/pb/edit", plex: { rows: [], member: null },
-    plexLink: true, plexPin: null }, extra);
-  const file = path.join(repo, "views", "editProfile.ejs");
+    plexLink: true, plexPin: null, user: "pb", cryptoW: null, telegram: null }, extra);
+  const file = path.join(repo, "views", "settingsAccount.ejs");   // 1.99vz: moved from Edit profile
   let html = await ejs.renderFile(file, loc({ google: { on: true, linked: false, email: "" }, telegram: { linked: false, handle: null, signin: true } }));
   assert.match(html, /id="googleDiv"/);
   assert.match(html, /action="\/auth\/google\/link" method="POST"/);

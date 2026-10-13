@@ -301,11 +301,8 @@
             <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 <%- t('profile.menu.achievements') %></a>
             <a role="menuitem" href="/cosmetics?tab=mine#tabs"><span class="ds-ic" aria-hidden="true">🎨</span> <%- t('profile.menu.cosmetics') %></a>
             <a role="menuitem" href="/premium"><span class="ds-ic" aria-hidden="true">🎟️</span> <%- t('profile.menu.season_pass') %></a>
-            <a role="menuitem" href="/subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('subs.title') %></a>
-            <%# 1.99ta: your voice (voice store + !clonemyvoice status) and the likeness opt-outs %>
-            <a role="menuitem" href="/voices/mine"><span class="ds-ic" aria-hidden="true">🗣️</span> <%- t('vs.mine_link') %></a>
-            <a role="menuitem" href="/voices/clone"><span class="ds-ic" aria-hidden="true">🎙️</span> <%- t('vc.title') %></a>
-            <a role="menuitem" href="/settings/likeness"><span class="ds-ic" aria-hidden="true">🪞</span> <%- t('settings.privacy.likeness') %></a>
+            <%# 1.99vz: subscriptions, your voice, voice cloning and likeness live in Settings - one entry here %>
+            <a role="menuitem" href="/settings"><span class="ds-ic" aria-hidden="true">⚙️</span> <%- t('nav.settings') %></a>
             <% const crMe_ = locals.creatorProfile || { on: false }; if (crMe_.on) { %><a role="menuitem" href="<%= crMe_.badge ? '/creator' : '/creators#apply' %>"><span class="ds-ic" aria-hidden="true">⭐</span> <%- crMe_.badge ? t('nav.creator_dash') : t('nav.become_creator') %></a><% } %>
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open><span class="ds-ic" aria-hidden="true">🎮</span> <%- t('profile.menu.gtf_wardrobe') %></button><% } %>
             <hr>

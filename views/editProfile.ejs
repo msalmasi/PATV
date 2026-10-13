@@ -1,21 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: t('settings.page_title'), user: username }) %>
 <%
-  // Normalize flash message — could be string, array, or empty
-  function flashStr(v) {
-    if (!v) return '';
-    if (Array.isArray(v)) return v.join(' ');
-    return String(v);
-  }
-  const errStr = flashStr(errors);
-  const succStr = flashStr(success);
-  function parseVerify(msg) {
-    const m = msg && msg.match(/!verify (\w+)/);
-    return m ? { code: m[1], full: msg } : null;
-  }
-  const verifyInfo = parseVerify(errStr) || parseVerify(succStr);
-  const verifyMsgText = (errStr || succStr).replace(/!verify \w+.*/, '').trim();
-
   // equipped cosmetics, same as the profile hero
   const pc = typeof profileCosmetics !== 'undefined' && profileCosmetics ? profileCosmetics : null;
   const cx = (k) => (pc && pc.equipped && pc.equipped[k] ? pc.equipped[k].r : null);
@@ -36,252 +21,18 @@
   // section / panel names and descriptions come from profilelayout.js; the catalog has them by id (HTML-safe, printed raw)
   const lbl_ = (o) => t.has('settings.layout.label.' + o.id) ? t('settings.layout.label.' + o.id) : t.esc(o.label);
   const desc_ = (o) => t.has('settings.layout.desc.' + o.id) ? t('settings.layout.desc.' + o.id) : t.esc(o.desc || '');
-  // the Language setting (i18n.js): every supported language + "Automatic"; renders without the middleware's locals too
-  const langs_ = Array.isArray(locals.i18nLangs) && locals.i18nLangs.length ? locals.i18nLangs : [{ code: 'en', name: 'English', english: 'English' }];
-  const langPref_ = locals.langPref || 'auto';
-  // 1.99jx: the Time zone setting (tz.js): Automatic (the browser's zone) or any IANA zone
-  const tzPref_ = locals.tzPref || 'auto';
-  const tzZones_ = typeof locals.tzZones === 'function' ? locals.tzZones() : ['UTC'];
 %>
 <%- include('partials/cosmetics-css') %>
-<style>
-  /* 1.99ps (polish G4): on the design system - .ds-page.mid + tokens, docs/design-system.md "Area notes: profile, account and auth" */
-  .pe { gap: var(--ds-sp-4); }
-  .pe .card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); min-width: 0; scroll-margin-top: calc(var(--ds-nav-h) + 16px); }
-  /* one section-heading style: the pixel heading (.ds-pixel-h), same as the profile */
-  .pe h2 { margin: 0 0 var(--ds-sp-1h); font: var(--ds-fs-pixel-h)/1.6 var(--ds-font-pixel); letter-spacing: var(--ds-ls-pixel-h); text-transform: uppercase; color: var(--ds-gold); }
-  .pe .lede { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); margin: 0 0 var(--ds-sp-4); }
-  .pe .muted { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
-  .pe .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .pe .top-acts { display: flex; flex-wrap: wrap; gap: 8px; }
-  /* buttons: pills. 44px next to a 44px field (forms, connections); 36px in toolbars (.top-acts, hero, layout actions). .primary = accent fill + dark ink */
-  .pe .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-1h); min-height: var(--ds-tap); margin: 0; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill);
-             border: 1px solid var(--ds-line-strong); background: transparent; color: var(--ds-text) !important; font: 700 14px/1.1 var(--ds-font); cursor: pointer;
-             text-decoration: none !important; white-space: nowrap; box-shadow: none; transition: border-color var(--ds-dur-1), filter var(--ds-dur-1); }
-  .pe .btn:hover { border-color: var(--ds-ac); background: rgba(255, 255, 255, .03); }
-  .pe .btn:focus-visible, .pe .lay-grip:focus-visible, .pe .mv button:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
-  .pe .btn.primary { background: var(--ds-ac); border-color: transparent; color: var(--ds-on-ac) !important; }
-  .pe .btn.primary:hover { background: var(--ds-ac); filter: brightness(1.1); }
-  .pe .top-acts .btn, .pe .hero-foot .btn, .pe .lay-actions .btn { min-height: 36px; padding: 0 var(--ds-sp-3h); font-size: 13.5px; }
-  @media (pointer: coarse) { .pe .top-acts .btn, .pe .hero-foot .btn, .pe .lay-actions .btn { min-height: 40px; } }
-  .pe .btn.ghost { background: transparent; }
-  .pe .btn.twitch { background: #9146ff; border-color: #9146ff; color: #fff !important; }
-  .pe .btn.discord { background: #5865f2; border-color: #5865f2; color: #fff !important; }
-  .pe .btn svg { width: 18px; height: 18px; flex: none; }
-  .pe #twitchLoginButton, .pe #discordLoginButton { display: inline-flex; width: auto; min-height: var(--ds-tap); margin: 0; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill); font: 700 14px/1.1 var(--ds-font); }
-  .pe #twitchLoginButton { background: var(--ds-twitch); border-color: var(--ds-twitch); color: #fff !important; }
-  .pe #discordLoginButton { background: var(--ds-discord); border-color: var(--ds-discord); color: #fff !important; }
-  .pe #twitchLoginButton:hover, .pe #discordLoginButton:hover { filter: brightness(1.1); }
-  .pe .btn:disabled { filter: grayscale(.6) brightness(.7); cursor: not-allowed; }
-  .pe .btn.primary:disabled:hover { filter: grayscale(.6) brightness(.7); }
-  .pe .jump { display: flex; flex-wrap: wrap; gap: 6px; }
-  /* jump links: .ds-tab pills (36px, 40 on touch) */
-  .pe .jump a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill); border: 1px solid #2a2a2a;
-                background: #151515; color: var(--ds-text-2); font: 500 var(--ds-fs-meta)/1 var(--ds-font); white-space: nowrap; text-decoration: none; }
-  .pe .jump a:hover { border-color: var(--ds-ac); color: var(--ds-text-strong); text-decoration: none; }
-  @media (pointer: coarse) { .pe .jump a { min-height: 40px; } }
-
-  /* messages */
-  .pe .msg { overflow-wrap: anywhere; }
-
-  /* hero preview (mirrors the profile hero) */
-  .pe .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ds-sp-4) var(--ds-sp-5); align-items: center; border-radius: var(--ds-r-2xl);
-              background: radial-gradient(90% 140% at 0% 0%, var(--ds-green-bg), transparent 60%), #111; }
-  .pe .avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: var(--ds-sunken);
-                box-shadow: 0 0 0 6px rgba(76, 175, 80, .12); }
-  .pe .who .nm { margin: 0; font: 700 var(--ds-fs-h1)/var(--ds-lh-h1) var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; }
-  .pe .handle { color: var(--ds-text-muted); font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
-  /* 1.99jr: one pill style - same height / padding / line-height, centred in a flex row (the Preview pill used to pick up
-     the privacy panel's .pv grid + padding and stretch the row, which pushed the other pills' text to the top) */
-  .pe .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
-  .pe .chip { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 24px; margin: 0;
-              padding: 0 10px; font-size: 12px; line-height: 1; white-space: nowrap; border-radius: var(--ds-r-pill); border: 1px solid #2c3a2d;
-              background: #0f1a10; color: #b9d8bb; }
-  .pe .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
-  .pe .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
-  .pe .chip.chip-preview { border-color: #5a4a1c; background: #1d1a10; color: #e8cf7a; }
-  .pe .chip.plex { border-color: #8a5a12; background: #241806; color: #f3c04f; text-decoration: none; }
-  .pe .hero-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
-
-  /* forms */
-  .pe .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px 18px; }
-  .pe form.field { margin: 0; display: grid; gap: 6px; align-content: start; }
-  .pe label.lbl { font: 700 var(--ds-fs-label)/1.3 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: #b9b9b9; }
-  .pe .row { display: flex; gap: 8px; }
-  .pe .row input { flex: 1; min-width: 0; }
-  /* fields: the .ds-in spec (44px, radius 10, sunken, #333 line, accent focus halo; 16px on phones) - styles.css's global input rules reset here */
-  .pe input[type="text"], .pe input[type="email"], .pe input[type="password"], .pe select {
-    width: 100%; min-width: 0; min-height: var(--ds-tap); margin: 0; padding: 10px 12px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken);
-    color: #eee; font: 400 15px/1.3 var(--ds-font); box-sizing: border-box; transition: border-color var(--ds-dur-1), box-shadow var(--ds-dur-1); }
-  .pe select { flex: 1; }
-  .pe input[type="text"]:hover, .pe input[type="email"]:hover, .pe input[type="password"]:hover, .pe select:hover { border-color: #444; }
-  .pe input[type="text"]:focus, .pe input[type="email"]:focus, .pe input[type="password"]:focus, .pe select:focus { border-color: var(--ds-ac); outline: none; box-shadow: 0 0 0 3px var(--ds-ac-bg); }
-  @media (max-width: 760px) { .pe input[type="text"], .pe input[type="email"], .pe input[type="password"], .pe select { font-size: 16px; } }
-  .pe .hint { font-size: 12px; color: var(--ds-text-faint); }
-  .pe .status { font-size: 13px; min-height: 18px; }
-  .pe .status.ok { color: #81c784; }
-  .pe .status.err { color: #ef9a9a; }
-
-  /* avatar */
-  .pe .avup { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 18px; align-items: center; }
-  .pe .avup img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 2px solid #2b2b2b; background: var(--ds-sunken); }
-  .pe .file { position: relative; display: inline-flex; }
-  .pe .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-  .pe .file:focus-within .btn { box-shadow: var(--ds-focus-ring); }
-
-  /* connections */
-  .pe .conn { display: grid; gap: 10px; }
-  .pe .conn-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: var(--ds-sp-3); align-items: center; background: var(--ds-sunken);
-                  border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-lg); padding: var(--ds-sp-3) var(--ds-sp-3h); }
-  .pe .conn-ico { width: 36px; height: 36px; border-radius: var(--ds-r-md); display: grid; place-items: center; font-size: 18px; }
-  .pe .conn-ico svg { width: 20px; height: 20px; }
-  .pe .conn-name { font-size: 14px; }
-  .pe .conn-name b { display: block; font-size: 15px; overflow-wrap: anywhere; }
-  .pe .conn-name .none { color: var(--ds-text-faint); font-weight: normal; }
-  .pe .conn-cf { grid-column: 1 / -1; }
-  .pe .conn-name .pv-d { display: block; margin-top: 2px; color: var(--ds-text-muted); font-size: 13px; line-height: 1.4; }   /* 1.99ta: privacy & likeness rows */
-  .pe .conn-name .px-st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--ds-text-muted); }
-  .pe .btn.telegram { background: #1a7bb0; border-color: transparent; color: #fff !important; }   /* Telegram blue darkened for 4.7:1 white ink */
-  .pe .btn.telegram:hover { background: #1a7bb0; filter: brightness(1.1); }
-  .pe .btn.plex { background: var(--ds-plex); border-color: transparent; color: #1a1200 !important; }
-  .pe .btn.plex:hover { background: var(--ds-plex); filter: brightness(1.1); }
-  /* 1.99lu: Link Google = Google's light sign-in button (white, #1f1f1f text 16:1, #747775 outline, the G). The old inline
-     colour lost to .pe .btn's #ddd !important - pale grey on white */
-  .pe .btn.google { background: #fff; border-color: #747775; color: #1f1f1f !important; font-weight: 700; }
-  .pe .btn.google:hover { background: #f2f2f2; border-color: #747775; }
-
-  /* 1.99lu: Password - the cells sit on the grid's bottom edge and the button is as tall as the inputs, so it lines up with
-     them (it used to sit at the labels' height); the status message gets its own row */
-  .pe .pw-form { align-items: end; }
-  .pe .pw-form .field { display: grid; gap: var(--ds-sp-1h); }
-  .pe .pw-form input[type="password"], .pe .pw-act .btn { height: var(--ds-tap); }
-  .pe .pw-act { display: flex; }
-  .pe .pw-status { display: block; margin-top: 8px; }
-  .pe .pw-status:empty { min-height: 0; margin: 0; }
-
-  /* layout editor */
-  .pe .lay-fixed b { color: var(--ds-text-2); }
-  .pe .lay-fixed { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--ds-r-md); border: 1px dashed #2b2b2b; color: var(--ds-text-muted); font-size: 13px; margin-bottom: 8px; }
-  .pe .lay { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .pe .lay-item { display: grid; grid-template-columns: 28px 30px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
-                  background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); padding: 10px 12px; transition: border-color var(--ds-dur-2), background var(--ds-dur-2); }
-  .pe .lay-item.off { background: #0b0b0b; border-style: dashed; }
-  .pe .lay-item.off .lay-ico, .pe .lay-item.off .lay-txt { opacity: .5; }
-  .pe .lay-item.dragging { border-color: var(--ds-ac); background: #102012; box-shadow: 0 8px 24px rgba(0,0,0,.5); position: relative; z-index: 2; }
-  .pe .lay-grip { width: 28px; height: 36px; margin: 0; box-shadow: none; border: 0; padding: 0; border-radius: 6px; background: transparent; color: var(--ds-text-faint); cursor: grab; touch-action: none;
-                  font-size: 18px; line-height: 1; display: grid; place-items: center; }
-  .pe .lay-grip:hover { color: var(--ds-text-2); background: #181818; }
-  .pe .lay-item.dragging .lay-grip { cursor: grabbing; }
-  .pe .lay-ico { font-size: 20px; text-align: center; }
-  .pe .lay-txt b { display: block; font-size: 15px; color: var(--ds-text); }
-  .pe .lay-txt small { display: block; color: var(--ds-text-muted); font-size: 12px; margin-top: 1px; }
-  .pe .lay-subs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .pe .lay-subs label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ds-text-2); padding: 3px 9px 3px 6px; border-radius: var(--ds-r-pill);
-                        border: 1px solid #2a2a2a; background: #141414; cursor: pointer; user-select: none; }
-  .pe .lay-subs label:has(input:not(:checked)) { color: var(--ds-text-faint); border-style: dashed; text-decoration: line-through; }
-  .pe .lay-subs input { margin: 0; accent-color: var(--ds-ac); }
-  .pe .lay-item.off .lay-subs, .pe .lay-item.off .lay-priv { pointer-events: none; }
-  .pe .lay-item.off .lay-priv { opacity: .5; }
-  /* privacy panels: three-state segmented control */
-  .pe .lay-priv { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--ds-line-soft); }
-  .pe .lay-priv-h { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ds-text-muted); }
-  .pe .lay-priv-h span { text-transform: none; letter-spacing: 0; color: var(--ds-text-faint); }
-  .pe .pv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 9px 10px;
-            border-radius: var(--ds-r-md); background: #111; border: 1px solid #1d1d1d; margin: 0; min-width: 0; }
-  .pe .pv-txt { min-width: 0; }
-  .pe .pv-txt b { display: block; font-size: 14px; color: var(--ds-text); font-weight: 700; }
-  .pe .pv-txt small { display: block; font-size: 12px; color: var(--ds-text-muted); margin-top: 1px; }
-  .pe .seg { display: inline-grid; grid-template-columns: repeat(3, auto); border: 1px solid #2b2b2b; border-radius: var(--ds-r-md); overflow: hidden; background: #0b0b0b; }
-  .pe .seg label { position: relative; display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 11px; font-size: 12.5px; color: var(--ds-text-muted);
-                   cursor: pointer; user-select: none; white-space: nowrap; border-inline-start: 1px solid #2b2b2b; }
-  .pe .seg label:first-child { border-inline-start: 0; }
-  .pe .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  .pe .seg label:hover { color: #ddd; background: #151515; }
-  .pe .seg label:has(input:focus-visible) { outline: 2px solid var(--ds-focus); outline-offset: -2px; }
-  .pe .seg label.s-public:has(input:checked) { background: #13301a; color: #b9f0c0; }
-  .pe .seg label.s-private:has(input:checked) { background: #2b2210; color: #f0d58a; }
-  .pe .seg label.s-hidden:has(input:checked) { background: #2a1414; color: #f0a8a8; }
-  .pe .pv.is-private { border-color: #3a2f18; }
-  .pe .pv.is-hidden { border-style: dashed; }
-  .pe .pv.is-hidden .pv-txt { opacity: .6; }
-  .pe .sw { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--ds-text-muted); user-select: none; white-space: nowrap; }
-  .pe .sw input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  .pe .sw .tr { width: 38px; height: 22px; border-radius: var(--ds-r-pill); background: #2a2a2a; position: relative; transition: background .15s; flex: none; }
-  .pe .sw .tr::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #888; transition: transform .15s, background .15s; }
-  .pe .sw input:checked + .tr { background: var(--ds-ac); }
-  .pe .sw input:checked + .tr::after { transform: translateX(16px); background: #fff; }
-  .pe .sw input:focus-visible + .tr { box-shadow: var(--ds-focus-ring); }
-  .pe .sw .st { min-width: 46px; }
-  .pe .mv { display: inline-flex; gap: 4px; }
-  .pe .mv button { width: 36px; height: 36px; margin: 0; padding: 0; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-line-strong); background: #1c1c1f; color: var(--ds-text-2); cursor: pointer; font-size: 12px; box-shadow: none; }
-  .pe .mv button:hover:not(:disabled) { border-color: var(--ds-ac); color: #fff; }
-  .pe .mv button:disabled { opacity: .3; cursor: default; }
-  .pe .lay-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
-  .pe .lay-actions .dirty { font-size: 13px; color: #e8cf7a; display: none; }
-  .pe .lay-actions .dirty.on { display: inline; }
-  .pe .lay-note { font-size: 12px; color: var(--ds-text-faint); margin-top: 10px; }
-  .pe .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
-  /* verify box (kept from before) */
-  .verify-box { background: linear-gradient(135deg, #1a2f1a, #0f1f0f); border: 1px solid var(--ds-green); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); box-shadow: 0 0 24px rgba(76,175,80,0.3); animation: pulse-border 2s ease-in-out infinite; }
-  @keyframes pulse-border { 0%, 100% { box-shadow: 0 0 24px rgba(76,175,80,0.3); } 50% { box-shadow: 0 0 36px rgba(76,175,80,0.6); } }
-  .verify-header { font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-gold); margin-bottom: var(--ds-sp-3); }
-  .verify-msg { color: #b0b0b0; font-size: 0.95rem; margin-bottom: 16px; line-height: 1.4; }
-  .verify-instructions { color: #ddd; font-size: 0.9rem; margin-bottom: 8px; }
-  .verify-code-wrap { display: flex; align-items: center; gap: 12px; background: #0a0f0a; padding: 14px 18px; border-radius: 8px; border: 1px solid #2a4a2a; flex-wrap: wrap; }
-  .verify-cmd { font-family: var(--ds-font-mono); font-size: 1.2rem; color: #fff; flex: 1; }
-  .verify-code { color: var(--ds-green-2); font-weight: 700; font-size: 1.4rem; letter-spacing: 2px; }
-  .verify-copy { min-height: 36px; margin: 0; background: var(--ds-green); color: var(--ds-on-ac); border: none; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill); cursor: pointer; font: 700 13.5px/1 var(--ds-font); box-shadow: none; }
-  .verify-copy:hover { filter: brightness(1.1); }
-  .verify-copy:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
-  .verify-expires { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); margin-top: var(--ds-sp-3); text-align: end; }
-
-  @media (max-width: 600px) {
-    .pe .card { padding: var(--ds-sp-4); }
-    .pe .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
-    .pe .chips { justify-content: center; }
-    .pe .hero-foot { justify-content: center; }
-    .pe .hero .cx-banner { margin: -16px -16px 0; }
-    .pe .lay-item { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px 10px; padding: 10px; }
-    .pe .lay-item .lay-ico { display: none; }
-    .pe .lay-item .lay-grip { grid-row: 1 / span 2; align-self: center; }
-    .pe .lay-item .lay-txt { grid-column: 2 / -1; }
-    .pe .lay-item .sw { grid-column: 2; grid-row: 2; justify-self: start; }
-    .pe .lay-item .mv { grid-column: 3; grid-row: 2; }
-    .pe .lay-subs { margin-top: 6px; }
-    .pe .pv { grid-template-columns: minmax(0, 1fr); }
-    .pe .seg { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .pe .seg label { justify-content: center; min-height: 40px; padding: 4px; white-space: normal; text-align: center; line-height: 1.2; font-size: 12px; }
-    .pe .avup { grid-template-columns: 1fr; justify-items: center; text-align: center; }
-    .pe .conn-row { grid-template-columns: 36px minmax(0, 1fr); }
-    .pe .conn-row > .btn, .pe .conn-row > form { grid-column: 1 / -1; }
-    .pe .conn-row > .btn, .pe .conn-row > form.conn-act .btn { width: 100%; box-sizing: border-box; }
-    .pe .pw-act .btn { width: 100%; }
-  }
-  @media (prefers-reduced-motion: reduce) { .verify-box { animation: none; } .pe .lay-item, .pe .sw .tr, .pe .sw .tr::after, .pe .btn, .pe input, .pe select { transition: none; } }
-</style>
+<%- include('partials/account-css') %>
 
 <main class="ds-page mid pe">
+  <a class="ds-back" href="/settings">← <%- t('sethub.back') %></a>
   <div class="top">
     <h1 class="ds-h1"><%- t('profile.edit_profile') %></h1>
-    <span class="top-acts"><a class="btn" href="/subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('subs.title') %></a> <a class="btn" href="/settings/likeness"><span class="ds-ic" aria-hidden="true">🪞</span> <%- t('lk.title') %></a> <a class="btn" href="/u/<%= username %>"><%- t('settings.view_profile') %></a></span>
+    <span class="top-acts"><a class="btn" href="/settings"><span class="ds-ic" aria-hidden="true">⚙️</span> <%- t('sethub.h1') %></a> <a class="btn" href="/u/<%= username %>"><%- t('settings.view_profile') %></a></span>
   </div>
 
-  <% if (verifyInfo) { %>
-    <div class="verify-box">
-      <div class="verify-header">⚠ <%- t('settings.verify.header') %></div>
-      <div class="verify-msg"><%= verifyMsgText %></div>
-      <div class="verify-instructions"><%- t('settings.verify.instructions') %></div>
-      <div class="verify-code-wrap">
-        <span class="verify-cmd">!verify <span class="verify-code"><%= verifyInfo.code %></span></span>
-        <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent=this.dataset.copied; setTimeout(()=>this.textContent=this.dataset.copy,2000);" data-copied="<%- t('settings.verify.copied') %>" data-copy="<%- t('settings.verify.copy') %>"><%- t('settings.verify.copy') %></button>
-      </div>
-      <div class="verify-expires">⏱ <%- t('settings.verify.expires') %></div>
-    </div>
-  <% } else { %>
-    <% if (errStr) { %><div class="ds-note danger msg err" role="alert"><%= errStr %></div><% } %>
-    <% if (succStr) { %><div class="ds-note ok msg ok" role="status"><%= succStr %></div><% } %>
-  <% } %>
+  <%- include('partials/account-flash', { errors: errors, success: success }) %>
 
   <!-- live preview of the profile hero -->
   <section class="card hero cx-host" aria-label="<%- t('settings.preview_aria') %>">
@@ -309,61 +60,18 @@
   </section>
 
   <nav class="jump" aria-label="<%- t('settings.sections_aria') %>">
-    <a href="#account"><%- t('settings.account') %></a><a href="#language"><%- t('settings.language') %></a><a href="#timezone"><%- t('settings.timezone') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#privacy"><%- t('settings.privacy') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a>
+    <a href="#account"><%- t('settings.name_h') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#elsewhere"><%- t('settings.elsewhere_h') %></a>
   </nav>
 
   <section class="card" id="account">
-    <h2><%- t('settings.account') %></h2>
-    <p class="lede"><%- t('settings.account.lede') %></p>
-    <div class="grid2">
+    <h2><%- t('settings.name_h') %></h2>
+    <p class="lede"><%- t('settings.name.lede') %></p>
+    <div>
       <form class="field" id="displaynameForm" action="/api/u/<%= username %>/update/displayname" method="post">
         <label class="lbl" for="displayname"><%- t('settings.account.displayname') %></label>
         <div class="row"><input type="text" id="displayname" name="displayname" value="<%= displayname %>" maxlength="32" required><button class="btn primary" type="submit"><%- t('settings.save') %></button></div>
       </form>
-      <form class="field" id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
-        <label class="lbl" for="username"><%- t('settings.account.username') %></label>
-        <div class="row"><input type="text" id="username" name="username" value="<%= username %>" maxlength="48" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
-        <span class="hint"><%- t('settings.account.username_hint') %></span>
-      </form>
-      <form class="field" id="emailForm" action="/api/u/<%= username %>/update/email" method="post">
-        <label class="lbl" for="email"><%- t('settings.account.email') %></label>
-        <div class="row"><input type="email" id="email" name="email" value="<%= email %>" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
-        <span class="hint"><%- t('settings.account.email_hint') %></span>
-      </form>
     </div>
-  </section>
-
-  <section class="card" id="language">
-    <h2><%- t('settings.language') %></h2>
-    <p class="lede"><%- t('settings.language.lede') %></p>
-    <form class="field" id="languageForm" action="/api/settings/language" method="post">
-      <label class="lbl" for="langSelect"><%- t('settings.language.label') %></label>
-      <div class="row">
-        <select id="langSelect" name="lang">
-          <option value="auto"<%= langPref_ === 'auto' ? ' selected' : '' %>><%- t('settings.language.auto') %></option>
-          <% langs_.forEach((l) => { %><option value="<%= l.code %>" lang="<%= l.code %>"<%= langPref_ === l.code ? ' selected' : '' %>><%= l.name %><%= l.english && l.english !== l.name ? ' (' + l.english + ')' : '' %></option><% }) %>
-        </select>
-        <button class="btn primary" type="submit" id="langSave"><%- t('settings.save') %></button>
-      </div>
-      <span class="status" id="langStatus" role="status" aria-live="polite"></span>
-    </form>
-  </section>
-
-  <section class="card" id="timezone">
-    <h2><%- t('settings.timezone') %></h2>
-    <p class="lede"><%- t('settings.timezone.lede') %></p>
-    <form class="field" id="tzForm" action="/api/settings/timezone" method="post">
-      <label class="lbl" for="tzSelect"><%- t('settings.timezone.label') %></label>
-      <div class="row">
-        <select id="tzSelect" name="tz">
-          <option value="auto"<%= tzPref_ === 'auto' ? ' selected' : '' %>><%- t('settings.timezone.auto') %></option>
-          <% tzZones_.forEach((z) => { %><option value="<%= z %>"<%= tzPref_ === z ? ' selected' : '' %>><%= z.replace(/_/g, ' ') %></option><% }) %>
-        </select>
-        <button class="btn primary" type="submit" id="tzSave"><%- t('settings.save') %></button>
-      </div>
-      <span class="hint" id="tzNow"></span>
-      <span class="status" id="tzStatus" role="status" aria-live="polite"></span>
-    </form>
   </section>
 
   <section class="card" id="avatar">
@@ -436,218 +144,16 @@
     </form>
   </section>
 
-  <%# 1.99ta: privacy & likeness - the likeness opt-outs (likeness.js), your voice in the voice store (voicestore.js) and
-      !clonemyvoice (voiceclone.js); these pages had no way in from settings %>
-  <section class="card" id="privacy">
-    <h2><%- t('settings.privacy') %></h2>
-    <p class="lede"><%- t('settings.privacy.lede') %></p>
-    <div class="conn">
-      <div class="conn-row">
-        <span class="conn-ico" style="background:#2a2440" aria-hidden="true">🪞</span>
-        <span class="conn-name"><b><%- t('settings.privacy.likeness') %></b><span class="pv-d"><%- t('settings.privacy.likeness_d') %></span></span>
-        <a class="btn" href="/settings/likeness"><%- t('settings.privacy.manage') %></a>
-      </div>
-      <div class="conn-row">
-        <span class="conn-ico" style="background:#1d3346" aria-hidden="true">🗣️</span>
-        <span class="conn-name"><b><%- t('vs.mine_link') %></b><span class="pv-d"><%- t('settings.privacy.voice_d') %></span></span>
-        <a class="btn" href="/voices/mine"><%- t('settings.privacy.manage') %></a>
-      </div>
-      <div class="conn-row">
-        <span class="conn-ico" style="background:#3a1f2a" aria-hidden="true">🎙️</span>
-        <span class="conn-name"><b><%- t('vc.title') %></b><span class="pv-d"><%- t('settings.privacy.clone_d') %></span></span>
-        <a class="btn" href="/voices/clone"><%- t('settings.privacy.clone_open') %></a>
-      </div>
-    </div>
-  </section>
-
-  <section class="card" id="connections">
-    <h2><%- t('settings.connections') %></h2>
-    <p class="lede"><%- t('settings.connections.lede') %></p>
-    <div class="conn">
-      <div class="conn-row">
-        <span class="conn-ico" style="background:#9146ff">
-          <svg viewBox="0 0 2400 2800" aria-hidden="true"><polygon fill="#fff" points="2200,1300 1800,1700 1400,1700 1050,2050 1050,1700 600,1700 600,200 2200,200"/><path fill="#9146ff" d="M500,0L0,500v1800h600v500l500-500h400l900-900V0H500z M2200,1300l-400,400h-400l-350,350v-350H600V200h1600V1300z"/><rect fill="#9146ff" x="1700" y="550" width="200" height="600"/><rect fill="#9146ff" x="1150" y="550" width="200" height="600"/></svg>
-        </span>
-        <span class="conn-name">Twitch<b><% if (twitchDisplayname) { %><span style="color:#bf94ff"><%= twitchDisplayname %></span><% } else { %><span class="none"><%- t('settings.connections.not_connected') %></span><% } %></b></span>
-        <button type="button" id="twitchLoginButton" class="btn twitch" onclick="loginWithTwitch()"><%- twitchDisplayname ? t('settings.connections.reconnect') : t('settings.connections.twitch') %></button>
-      </div>
-      <div class="conn-row">
-        <span class="conn-ico" style="background:#5865f2">
-          <svg viewBox="0 -28.5 256 256" aria-hidden="true"><path fill="#fff" d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"/></svg>
-        </span>
-        <span class="conn-name">Discord<b><% if (discordUsername) { %><span style="color:#aab3ff"><%= discordUsername %></span><% } else { %><span class="none"><%- t('settings.connections.not_connected') %></span><% } %></b></span>
-        <button type="button" id="discordLoginButton" class="btn discord" onclick="loginWithDiscord()"><%- discordUsername ? t('settings.connections.reconnect') : t('settings.connections.discord') %></button>
-      </div>
-      <div class="conn-row" id="camfrogDiv">
-        <span class="conn-ico" style="background:#123d22">🐸</span>
-        <span class="conn-name">Camfrog<b><% if (camfrogName) { %><span style="color:#00cc66"><%= camfrogName %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
-        <span></span>
-        <form class="field conn-cf" id="camfrogForm" action="/api/u/<%= username %>/update/camfrog" method="post">
-          <label class="lbl" for="camfrogUsername"><%- t('settings.connections.cf_label') %></label>
-          <div class="row"><input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= camfrogName %>" placeholder="<%- t('settings.connections.cf_placeholder') %>"><button class="btn primary" type="submit"><%- t('settings.connections.cf_link') %></button></div>
-          <span class="hint"><%- t('settings.connections.cf_hint') %></span>
-        </form>
-      </div>
-      <%# 1.99jr: 📼 Plex (plexmembers.js self-link: Plex's own sign-in, a PIN; the same link as on /subscriptions) %>
-      <% const px_ = locals.plex || { rows: [], member: null }; const pxRows_ = px_.rows || []; const pxLive_ = px_.member;
-         const pxRow_ = pxRows_.find((r) => r.active) || pxRows_.find((r) => r.pending) || pxRows_[0] || null;
-         const pxDate_ = (ms) => new Date(Number(ms)).toISOString().slice(0, 10); %>
-      <div class="conn-row" id="plexDiv">
-        <span class="conn-ico" style="background:#1f1f1f;color:#e5a00d">📼</span>
-        <span class="conn-name">Plex<b><% if (pxRow_) { %><span style="color:#e5a00d"><%= pxRow_.username || pxRow_.plex_id %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b>
-          <% if (pxLive_) { %><small class="px-st"><span class="chip plex">📼 <%- pxLive_.access === 'owner' ? t('settings.connections.plex_owner') : t('settings.connections.plex_member') %></span>
-            <%- pxLive_.access === 'owner' ? t('subs.plex_owner') : pxLive_.access === 'lifetime' ? t('subs.plex_lifetime') : (pxLive_.access === 'manual' || pxLive_.access === 'pre-existing') ? t('subs.plex_kept') : pxLive_.expires ? t('subs.plex_until', { date: pxDate_(pxLive_.expires) }) : '' %></small>
-          <% } else if (pxRow_ && pxRow_.pending) { %><small class="px-st"><%- t('subs.plex_pending', { plex: pxRow_.username || '?' }) %></small>
-          <% } else if (pxRow_) { %><small class="px-st"><%- t('subs.plex_linked_off', { plex: pxRow_.username || '?' }) %></small><% } %>
-        </span>
-        <% if (pxRow_ && pxRow_.link_source !== 'admin') { %>
-          <button type="button" class="btn" data-plex-unlink="<%= pxRow_.plex_id %>"><%- t('subs.plex_unlink') %></button>
-        <% } else if (!pxRow_ && locals.plexLink) { %>
-          <button type="button" class="btn plex" id="plexLinkBtn" data-back="profile"<%= locals.plexPin ? ' data-pin="' + locals.plexPin + '"' : '' %>><%- t('settings.connections.plex_link') %></button>
-        <% } else { %><span></span><% } %>
-        <div class="conn-cf"><span class="status" id="plexStatus" role="status" aria-live="polite"></span>
-          <span class="hint"><%- t('settings.connections.plex_hint', { link: '<a href="/subscriptions#plex">' + t('subs.title') + '</a>' }) %> <a href="/plex">📼 <%- t('nav.plex') %> ›</a></span></div>
-      </div>
-      <%# 1.99lb: Google (googlesso.js - OpenID Connect; a proven link by Google's account id, never by email). Shown when it's set up or linked. %>
-      <% const gg_ = locals.google || { on: false, linked: false, email: '' }; if (gg_.on || gg_.linked) { %>
-      <div class="conn-row" id="googleDiv">
-        <span class="conn-ico" style="background:#fff">
-          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-        </span>
-        <span class="conn-name">Google<b><% if (gg_.linked) { %><span style="color:#8ab4f8"><%= gg_.email || t('settings.connections.google_linked_short') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
-        <% if (gg_.linked) { %>
-          <button type="button" class="btn" data-google-unlink><%- t('settings.connections.google_unlink') %></button>
-        <% } else { %>
-          <form class="conn-act" action="/auth/google/link" method="POST" style="margin:0"><button type="submit" class="btn google"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><%- t('settings.connections.google_link') %></button></form>
-        <% } %>
-        <div class="conn-cf"><span class="status" id="googleStatus" role="status" aria-live="polite"></span>
-          <span class="hint"><%- t('settings.connections.google_hint') %><% if (!gg_.linked) { %> <%- t('settings.connections.google_ach', { link: '<a href="/achievements">' + t('settings.connections.google_ach_link') + '</a>' }) %><% } %></span></div>
-      </div>
-      <% } %>
-      <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
-      <% const tg_ = locals.telegram || { linked: false, handle: null }; %>
-      <div class="conn-row" id="telegramDiv">
-        <span class="conn-ico" style="background:#1a7bb0;color:#fff">✈️</span>
-        <span class="conn-name">Telegram<b><% if (tg_.linked) { %><span style="color:#7cc8f0"><%= tg_.handle ? '@' + tg_.handle : t('settings.connections.tg_linked') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
-        <a class="btn telegram" href="/settings/telegram"><%- tg_.linked ? t('settings.connections.tg_manage') : t('settings.connections.tg_link') %></a>
-        <div class="conn-cf"><span class="hint"><%- t('settings.connections.tg_hint') %><% if (tg_.signin) { %> <%- t('settings.connections.tg_signin_hint') %><% } %></span></div>
-      </div>
-      <%# 1.99ks: 🪙 Crypto wallets (cryptopay.js) - linked ONLY by signing a message in the wallet; several allowed %>
-      <% const cw_ = locals.cryptoW; if (cw_) { %>
-      <div class="conn-row" id="cryptoDiv" data-crypto-box>
-        <span class="conn-ico" style="background:#1d2a3a">🪙</span>
-        <span class="conn-name"><%- t('settings.connections.crypto') %><b><% if (cw_.wallets.length) { %><span style="color:#90caf9"><%- t('settings.connections.crypto_n', { n: cw_.wallets.length }) %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
-        <span></span>
-        <div class="conn-cf">
-          <% cw_.wallets.forEach((w) => { %>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0"><small><%= w.family === 'evm' ? 'Ethereum / Base' : 'Solana' %></small> <code style="font-size:12px;word-break:break-all"><%= w.address %></code>
-              <button type="button" class="btn" data-crypto-unlink="<%= w.id %>"><%- t('support.unlink') %></button></div>
-          <% }) %>
-          <% if (cw_.on) { %>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
-            <button type="button" class="btn" data-crypto-link="evm">🦊 <%- t('support.link_evm') %></button>
-            <button type="button" class="btn" data-crypto-link="sol">👻 <%- t('support.link_sol') %></button>
-          </div>
-          <% } %>
-          <span class="status" data-crypto-msg role="status" aria-live="polite"></span>
-          <span class="hint"><%- t('settings.connections.crypto_hint', { link: '<a href="/support">' + t('support.title') + '</a>' }) %></span>
-        </div>
-      </div>
-      <% } %>
-    </div>
-  </section>
-
-  <section class="card" id="password">
-    <h2><%- t('settings.password') %></h2>
-    <p class="lede"><%- t('settings.password.lede') %></p>
-    <form class="grid2 pw-form" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
-      <div class="field"><label class="lbl" for="password"><%- t('settings.password.new') %></label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
-      <div class="field"><label class="lbl" for="confirm_password"><%- t('settings.password.confirm') %></label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
-      <div class="pw-act"><button class="btn primary" type="submit"><%- t('settings.password.update') %></button></div>
-    </form>
-    <span class="status err pw-status" id="pwStatus" role="status" aria-live="polite"></span>
-  </section>
-
-  <section class="card" id="security">
-    <h2><%- t('settings.security') %></h2>
-    <p class="lede"><%- t('settings.security.lede') %></p>
-    <div class="conn">
-      <div class="conn-row">
-        <span class="conn-ico" style="background:#1f3a2a" aria-hidden="true">💬</span>
-        <span class="conn-name"><b><%- t('settings.security.chat_signin') %></b><span class="pv-d"><%- t('settings.security.chat_signin_d') %></span></span>
-        <label class="btn"><input type="checkbox" id="csToggle" disabled> <span id="csToggleL"></span></label>
-      </div>
-    </div>
-    <span class="status" id="csStatus" role="status" aria-live="polite"></span>
-    <details id="csLogBox"><summary><%- t('settings.security.recent') %></summary><ul id="csLog" class="hint"></ul></details>
-    <script src="/public/js/chat-signin-setting.js?v=1" defer></script>
+  <%# 1.99vz: one home per setting - the account side lives in Settings %>
+  <section class="card" id="elsewhere">
+    <h2><%- t('settings.elsewhere_h') %></h2>
+    <p class="lede"><%- t('settings.elsewhere.lede') %></p>
+    <div class="top-acts"><a class="btn primary" href="/settings/account"><span class="ds-ic" aria-hidden="true">🔐</span> <%- t('setacct.h1') %></a> <a class="btn" href="/settings"><span class="ds-ic" aria-hidden="true">⚙️</span> <%- t('sethub.h1') %></a></div>
   </section>
 </main>
 
 <script>
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
-  function validateForm() {
-    var p = document.getElementById("password").value, c = document.getElementById("confirm_password").value;
-    if (p !== c) { document.getElementById("pwStatus").textContent = _t('js.settings.pw_mismatch', "Passwords do not match."); return false; }
-    return true;
-  }
-  function loginWithTwitch() { window.location.href = '/auth/twitch'; }
-  function loginWithDiscord() { window.location.href = '/auth/discord'; }
-
-  // the Language setting: POST {lang} to /api/settings/language, then reload so the page renders in it
-  (function () {
-    var lf = document.getElementById('languageForm'), sel = document.getElementById('langSelect');
-    var btn = document.getElementById('langSave'), st = document.getElementById('langStatus');
-    if (!lf || !sel) return;
-    function lsay(msg, ok) { st.textContent = msg; st.className = 'status ' + (ok ? 'ok' : 'err'); }
-    lf.addEventListener('submit', function (e) {
-      e.preventDefault();
-      btn.disabled = sel.disabled = true;
-      lsay(_t('js.settings.language.saving', 'Saving…'), true);
-      fetch('/api/settings/language', { method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ lang: sel.value }) })
-        .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
-        .then(function (d) {
-          if (d && d.success) { location.reload(); return; }
-          throw new Error((d && d.message) || '');
-        })
-        .catch(function (err) {
-          btn.disabled = sel.disabled = false;
-          lsay((err && err.message) || _t('js.settings.language.failed', "Couldn't save your language - try again."), false);
-        });
-    });
-  })();
-
-  // the Time zone setting (1.99jx): POST {tz} to /api/settings/timezone, then reload so every time follows it
-  (function () {
-    var f = document.getElementById('tzForm'), sel = document.getElementById('tzSelect');
-    var btn = document.getElementById('tzSave'), st = document.getElementById('tzStatus'), now = document.getElementById('tzNow');
-    if (!f || !sel) return;
-    function show() {
-      var T = window.PATVTime, z = sel.value === 'auto' ? ((T && T.browser) || 'UTC') : sel.value, txt = '';
-      try { txt = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: z, timeZoneName: 'short' }).format(new Date()); } catch (e) {}
-      if (now) now.textContent = txt ? _t('js.settings.timezone.now', 'Now: {time} ({zone})', { time: txt, zone: z.replace(/_/g, ' ') }) : '';
-    }
-    sel.addEventListener('change', show);
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
-    function say(msg, ok) { st.textContent = msg; st.className = 'status ' + (ok ? 'ok' : 'err'); }
-    f.addEventListener('submit', function (e) {
-      e.preventDefault();
-      btn.disabled = sel.disabled = true;
-      say(_t('js.settings.language.saving', 'Saving…'), true);
-      fetch('/api/settings/timezone', { method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ tz: sel.value }) })
-        .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
-        .then(function (d) {
-          if (d && d.success) { location.reload(); return; }
-          throw new Error((d && d.message) || '');
-        })
-        .catch(function (err) {
-          btn.disabled = sel.disabled = false;
-          say((err && err.message) || _t('js.settings.timezone.failed', "Couldn't save your time zone - try again."), false);
-        });
-    });
-  })();
 
   (function () {
     // live preview: display name
@@ -794,27 +300,15 @@
     refresh();
   })();
 </script>
-<script src="/public/js/plex-link.js?v=1" defer></script>
-<% if (locals.google && google.linked) { %><script>
-  // 1.99lb: Connections -> Google unlink (googlesso.js; refused when it's the last way to sign in)
+<script>
+  // 1.99vz: these cards moved - old links (#connections, #password, ...) forward to their one home
   (function () {
-    var b = document.querySelector('[data-google-unlink]'), st = document.getElementById('googleStatus');
-    if (!b) return;
-    var _t = typeof __t === 'function' ? __t : function (k, d) { return d; };
-    b.addEventListener('click', function () {
-      if (!window.confirm(_t('js.settings.google.unlink_q', "Unlink Google? You won't be able to sign in with it any more."))) return;
-      b.disabled = true;
-      fetch('/api/sso/google/unlink', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
-        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
-        .then(function (d) {
-          if (d && d.ok) { window.location.reload(); return; }
-          b.disabled = false;
-          st.textContent = (d && d.code === 'E_LAST_METHOD') ? _t('js.settings.sso.last_method', "That's the only way you can sign in. Set a password first (below), then unlink it.") : ((d && d.error) || _t('js.settings.telegram.error', 'Something went wrong.'));
-        })
-        .catch(function () { b.disabled = false; st.textContent = _t('js.settings.telegram.error', 'Something went wrong.'); });
-    });
+    var h = (location.hash || '').slice(1), to = null;
+    if (/^(connections|password|security|timezone|camfrogDiv|plexDiv|googleDiv|telegramDiv|cryptoDiv)$/.test(h)) to = '/settings/account#' + h;
+    else if (h === 'language') to = '/language?next=' + encodeURIComponent(location.pathname);
+    else if (h === 'privacy') to = '/settings#privacy';
+    if (to) location.replace(to);
   })();
-</script><% } %>
-<% if (locals.cryptoW) { %><script src="/public/js/crypto-link.js?v=2" defer></script><% } %>
+</script>
 </body>
 </html>

@@ -109,7 +109,7 @@ test("linked player: the picker posts the same /act commands; their tickets as b
   assert.match(text, /<b>2<\/b> tickets in the draw/);
   assert.match(text, /<span class="pb-b">3<\/span><span class="pb-b">9<\/span><span class="pb-b">14<\/span><span class="pb-b">27<\/span><span class="pb-b pb">6<\/span>/);
   const bob = await get("/lotto", "u2");
-  assert.match(bob.text, /Link a chat account \(Edit profile → Connections; for Camfrog, <code>!verify<\/code>\)/);
+  assert.match(bob.text, /Link a chat account \(Settings → Account → Connections; for Camfrog, <code>!verify<\/code>\)/);
 });
 
 test("the draw: the site keeps last draw's tickets, lights the matches and shows the winnings; anonymised winners stay plain", async () => {

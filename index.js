@@ -552,7 +552,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
         await oauthLink.linkRewards({ userId: currentUser.userId, provider: "twitch", providerId: twitchUser.id, priorFlag: prior ? prior.twitchBonus : 1 });
         await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "twitch",
                                                 email: twitchUser.email, verified: !!twitchUser.email });
-        return res.redirect(`/u/${encodeURIComponent(currentUser.username)}/edit`);
+        return res.redirect("/settings/account#connections");   // 1.99vz: Connections live on Settings -> Account
       }
     } else {
       // Handle new or returning Twitch users
@@ -664,13 +664,13 @@ function pendingConflict(req, provider) {
 async function conflictPage(req, res, provider) {
   const L = LINKS[provider];
   const c = pendingConflict(req, provider);
-  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/edit` : "/login");
+  if (!c) return res.redirect(req.user ? "/settings/account#connections" : "/login");
   try {
     const other = (await getQuery("SELECT username, displayname, points_balance FROM users WHERE userId = ?", [c.existingUserId]))[0];
     if (!other) {
       delete req.session.conflict;
       req.flash("error", `That ${L.label} account's other PATV account no longer exists. Try linking ${L.label} again.`);
-      return res.redirect(`/u/${encodeURIComponent(req.user.username)}/edit`);
+      return res.redirect("/settings/account#connections");
     }
     res.render("resolve-conflict", {
       user: req.user.username,
@@ -693,7 +693,7 @@ async function mergeConflict(req, res, provider) {
   const L = LINKS[provider];
   if (!guard.sameSite(req)) return res.status(403).send("Cross-site request refused");
   const c = pendingConflict(req, provider);
-  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/edit` : "/login");
+  if (!c) return res.redirect(req.user ? "/settings/account#connections" : "/login");
   const body = req.body || {};
   if (body.decision === "yes" && body.confirm !== "1") {
     req.flash("error", "Tick the box to confirm the merge.");
@@ -701,7 +701,7 @@ async function mergeConflict(req, res, provider) {
   }
   // one decision per conflict: a double-submit or a replay finds nothing pending
   delete req.session.conflict;
-  const edit = `/u/${encodeURIComponent(req.user.username)}/edit`;
+  const edit = "/settings/account#connections";
   if (body.decision !== "yes") {
     req.flash("success", `Kept separate - your ${L.label} stays linked to the other account.`);
     return res.redirect(edit);
@@ -842,7 +842,7 @@ app.get("/auth/discord/callback", async (req, res) => {
         await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "discord",
                                                 email: discordEmail, verified: !!discordEmail });
         require("./requestroles").kick(currentUser.userId);   // 1.99la: a store role bought before linking Discord is given now
-        return res.redirect(`/u/${encodeURIComponent(currentUser.username)}/edit`);
+        return res.redirect("/settings/account#connections");   // 1.99vz: Connections live on Settings -> Account
       }
     } else {
       // Handle new or returning Discord users
@@ -1259,6 +1259,7 @@ require("./mentions").register(app, { addUser });      // 1.99ii: 📣 room ment
 require("./feedmentions").register(app, { addUser });  // 1.99kk: @mentions + #hashtags in posts and comments - /api/mentions/suggest (autocomplete)
 require("./banner").register(app, { addUser, isBotToken });        // 1.99kk: the homepage banner slot - paid PAT bookings (off until priced), house promos, /sponsor, /admin/banner
 require("./telegram").register(app, { isBotToken, addUser });   // 1.99kn: Telegram link + alerts + access tiers (/settings/telegram); the bot runs in Pepe
+require("./settingshub").register(app, { addUser });   // 1.99vz: the /settings hub - one map of every account / preference page
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./casino/routes").register(app, { isBotToken, addUser });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md)
 require("./userstats").register(app, { isBotToken });
@@ -2148,7 +2149,9 @@ app.get("/api/u/:username/avatar", addUser, async (req, res) => {
   }
 });
 
-// Get user profile editor (1.99dv: was /u/:username/profile/edit)
+// Get user profile editor (1.99dv: was /u/:username/profile/edit). 1.99vz: Edit profile is only how others see you (display
+// name, avatar, layout); the account cards (username / email, Connections, Password, Security, Time zone) moved to
+// /settings/account and Language lives on /language - each setting has ONE home. Old #fragments forward client-side.
 app.get(
   "/u/:username/edit",
   authenticateToken,
@@ -2157,10 +2160,12 @@ app.get(
     const username = req.user ? req.user.username : null; // Fallback to null if no user in session
     const usernameProfile = req.params.username; // Fallback to null if no user in session
     const sql =
-      "SELECT userId, username, displayname, class, level, twitchDisplayname, discordUsername, camfrogUsername, avatar, email, points_balance FROM users WHERE username = ?";
+      "SELECT userId, username, displayname, class, level, camfrogUsername, avatar, points_balance FROM users WHERE username = ?";
 
     try {
       if (username == usernameProfile) {
+        // 1.99vz: back from the Plex link flow (an old forwardUrl) -> Connections' new home
+        if (/^\d{1,15}$/.test(String(req.query.plex || ""))) return res.redirect("/settings/account?plex=" + String(req.query.plex) + "#connections");
         const results = await getQuery(sql, [usernameProfile]);
         if (results.length > 0) {
           const user = results[0]; // Extract user data
@@ -2169,27 +2174,11 @@ app.get(
           let pc = null, layout = profileLayout.sanitize(profileLayout.DEFAULT);
           try { pc = await cosmetics.profileData(user.username); } catch (e) { console.error("edit profile cosmetics:", e.message); }
           try { layout = await profileLayout.get(user.userId); } catch (e) { console.error("edit profile layout:", e.message); }
-          // 1.99jr: Connections → 📼 Plex (plexmembers.js self-link)
-          let plex = null, plexLink = false;
-          try { plex = await require("./plexmembers").mine(user.userId); plexLink = !!require("./mediaconf").get().plex_selflink; } catch (e) { console.error("edit profile plex:", e.message); }
-          // 1.99kn: Connections -> Telegram (telegram.js)
-          let telegram = null;
-          try { const tl = await require("./telegram").linkOf(user.userId); telegram = { linked: !!tl, handle: tl && tl.handle ? tl.handle : null, signin: telegramSso.enabled() }; } catch (e) { console.error("edit profile telegram:", e.message); }
-          // 1.99lb: Connections -> Google (googlesso.js; ssolinks sso_links)
-          let google = null;
-          try { const gl = await ssoLinks.linkOf("google", user.userId); google = { on: googleSso.enabled(), linked: !!gl, email: gl ? gl.email || gl.name || "" : "" }; } catch (e) { console.error("edit profile google:", e.message); }
-          // 1.99ks: Connections → 🪙 Crypto wallets (cryptopay.js: linked by signature only)
-          let cryptoW = null;
-          try { const CP = require("./cryptopay"); await CP.init(); const ws = await CP.wallets(user.userId); if (CP.enabled() || ws.length) cryptoW = { on: CP.enabled(), wallets: ws }; } catch (e) { console.error("edit profile crypto:", e.message); }
           res.render("editProfile", {
-            // Render profile.ejs with user data
             username: user.username,
             displayname: user.displayname,
-            twitchDisplayname: user.twitchDisplayname,
-            discordUsername: user.discordUsername,
             camfrogUsername: user.camfrogUsername,
             avatar: user.avatar,
-            email: user.email,
             points_balance: user.points_balance,
             level: user.level,
             classh: user.class,
@@ -2200,8 +2189,6 @@ app.get(
             privPanels: profileLayout.PRIV,
             errors: errorMessages,
             success: successMessages,
-            plex, plexLink, telegram, google, cryptoW,
-            plexPin: /^\d{1,15}$/.test(String(req.query.plex || "")) ? String(req.query.plex) : null,
           });
         } else {
           res.status(404).send("User not found.");
@@ -2215,6 +2202,46 @@ app.get(
     }
   }
 );
+
+// 1.99vz: Settings -> Account & sign-in - username / email, Connections (Twitch, Discord, Camfrog, Plex, Google, Telegram,
+// crypto wallets), Password, Security (chat sign-in) and Time zone; moved here from Edit profile (the ONE home for each).
+// The account forms and link flows redirect back here (user.controller ACCOUNT_PAGE) with their flash messages.
+app.get("/settings/account", addUser, async (req, res) => {
+  if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl.split("#")[0]));
+  try {
+    const user = (await getQuery("SELECT userId, username, displayname, twitchDisplayname, discordUsername, camfrogUsername, email FROM users WHERE userId = ?", [req.user.userId]))[0];
+    if (!user) return res.redirect("/login?next=%2Fsettings%2Faccount");
+    res.set("Cache-Control", "private, no-store");
+    // 1.99jr: Connections → 📼 Plex (plexmembers.js self-link)
+    let plex = null, plexLink = false;
+    try { plex = await require("./plexmembers").mine(user.userId); plexLink = !!require("./mediaconf").get().plex_selflink; } catch (e) { console.error("settings account plex:", e.message); }
+    // 1.99kn: Connections -> Telegram (telegram.js)
+    let telegram = null;
+    try { const tl = await require("./telegram").linkOf(user.userId); telegram = { linked: !!tl, handle: tl && tl.handle ? tl.handle : null, signin: telegramSso.enabled() }; } catch (e) { console.error("settings account telegram:", e.message); }
+    // 1.99lb: Connections -> Google (googlesso.js; ssolinks sso_links)
+    let google = null;
+    try { const gl = await ssoLinks.linkOf("google", user.userId); google = { on: googleSso.enabled(), linked: !!gl, email: gl ? gl.email || gl.name || "" : "" }; } catch (e) { console.error("settings account google:", e.message); }
+    // 1.99ks: Connections → 🪙 Crypto wallets (cryptopay.js: linked by signature only)
+    let cryptoW = null;
+    try { const CP = require("./cryptopay"); await CP.init(); const ws = await CP.wallets(user.userId); if (CP.enabled() || ws.length) cryptoW = { on: CP.enabled(), wallets: ws }; } catch (e) { console.error("settings account crypto:", e.message); }
+    res.render("settingsAccount", {
+      user: user.username,
+      username: user.username,
+      displayname: user.displayname,
+      twitchDisplayname: user.twitchDisplayname,
+      discordUsername: user.discordUsername,
+      camfrogUsername: user.camfrogUsername,
+      email: user.email,
+      errors: req.flash ? req.flash("error") : [],
+      success: req.flash ? req.flash("success") : [],
+      plex, plexLink, telegram, google, cryptoW,
+      plexPin: /^\d{1,15}$/.test(String(req.query.plex || "")) ? String(req.query.plex) : null,
+    });
+  } catch (error) {
+    console.error("settings account:", error);
+    res.status(500).send("Internal Server Error.");
+  }
+});
 
 // Fetch user profile
 app.get("/api/u/:username/profile", async (req, res) => {

@@ -148,7 +148,7 @@ const tr = (req, key, en, vars) => (req && typeof req.t === "function" ? req.t(k
 function register(app, { addUser }) {
   conf.init().catch(() => {});
   const fail = (req, res, key, en, back) => { req.flash("error", tr(req, key, en)); return res.redirect(back || "/login"); };
-  const editPage = (u) => `/u/${encodeURIComponent(u.username)}/edit#connections`;
+  const editPage = (u) => "/settings/account#connections";   // 1.99vz: Connections live on Settings -> Account
 
   async function start(req, res, mode) {
     res.set("Cache-Control", "no-store");

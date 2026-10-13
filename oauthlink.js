@@ -102,7 +102,7 @@ async function emailNotice(req, { userId, username, provider }) {
   try { if (req && typeof req.flash === "function") req.flash("success", noticeText(provider)); } catch (e) { /* no session */ }
   try {
     await require("./inbox").addSafe(userId, { kind: "system", title: "Email added for account recovery", body: noticeText(provider),
-      link: username ? `/u/${encodeURIComponent(username)}/edit` : "/", ref: `email-capture:${provider}` });
+      link: username ? "/settings/account#account" : "/", ref: `email-capture:${provider}` });
   } catch (e) { console.error("[auth] email notice:", e.message); }
 }
 

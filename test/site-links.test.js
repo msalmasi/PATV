@@ -181,19 +181,19 @@ test("cos-stickers.js: the buy API, defaults that match en.json", () => {
 });
 
 // ── voices, likeness, owner guide ──
-test("Edit profile: a Privacy & likeness card links the likeness opt-outs, your voice and clone your voice", () => {
-  const v = src("views", "editProfile.ejs");
-  const card = /<section class="card" id="privacy">[\s\S]*?<\/section>/.exec(v);
-  assert.ok(card, "the card");
-  for (const h of ["/settings/likeness", "/voices/mine", "/voices/clone"]) assert.ok(card[0].includes('href="' + h + '"'), h);
-  assert.match(v, /<a href="#privacy"><%- t\('settings\.privacy'\) %><\/a>/, "in the jump links");
-  for (const k of ["settings.privacy", "settings.privacy.lede", "settings.privacy.likeness", "settings.privacy.likeness_d", "settings.privacy.voice_d", "settings.privacy.clone_d", "settings.privacy.manage", "settings.privacy.clone_open"]) assert.ok(EN[k], k);
+test("the likeness opt-outs, your voice and clone your voice are linked from Settings -> Privacy & likeness (1.99vz: their one way in)", async () => {
+  // 1.99vz: Edit profile's Privacy & likeness card moved to the /settings hub (one home per setting)
+  assert.doesNotMatch(src("views", "editProfile.ejs"), /id="privacy"/);
+  const HUB = require(path.join(repo, "settingshub"));
+  const secs = await HUB.hub({ userId: U.fan.userId, username: "fan" }, {});
+  const priv = secs.find((s) => s.id === "privacy").entries.map((e) => e.href);
+  for (const h of ["/settings/likeness", "/voices/mine", "/voices/clone"]) assert.ok(priv.includes(h), h);
 });
 
 test("the owner's profile menu, /voices, /soundboards, the pad drawer and create-a-pad link the unlinked pages", () => {
   const prof = src("views", "profile.ejs");
   const menu = /<% if \(isMe\) \{ %>[\s\S]*?<\/form>/.exec(prof)[0];
-  for (const h of ["/voices/mine", "/voices/clone", "/settings/likeness"]) assert.ok(menu.includes('href="' + h + '"'), "profile menu: " + h);
+  assert.ok(menu.includes('href="/settings"'), "profile menu: Settings (1.99vz: voice / clone / likeness live there)");
   const voices = src("views", "voices.ejs");
   assert.match(voices, /<% if \(locals\.cloneOn\) \{ %><a class="ds-btn" href="\/voices\/clone">/);
   assert.match(src("voicestore.js"), /mine: null, cloneOn: cloneOn\(\)/);

@@ -322,7 +322,7 @@ function register(app, { addUser, noTimers } = {}) {
     if (!guard.sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     next();
   };
-  // 1.99jr: the page moved to a top-level /subscriptions (there's no /settings hub); old links / inbox notices still work
+  // 1.99jr: the page moved to a top-level /subscriptions (linked from the /settings hub since 1.99vz); old links / inbox notices still work
   app.get("/settings/subscriptions", (req, res) => {
     const q = req.originalUrl.indexOf("?");
     res.redirect(301, "/subscriptions" + (q >= 0 ? req.originalUrl.slice(q) : ""));

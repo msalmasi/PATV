@@ -1,0 +1,33 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99vz: flash messages + the Camfrog !verify code box (Edit profile and Settings -> Account). Locals: errors, success. %>
+<%
+  // Normalize flash message — could be string, array, or empty
+  function flashStr(v) {
+    if (!v) return '';
+    if (Array.isArray(v)) return v.join(' ');
+    return String(v);
+  }
+  const errStr = flashStr(errors);
+  const succStr = flashStr(success);
+  function parseVerify(msg) {
+    const m = msg && msg.match(/!verify (\w+)/);
+    return m ? { code: m[1], full: msg } : null;
+  }
+  const verifyInfo = parseVerify(errStr) || parseVerify(succStr);
+  const verifyMsgText = (errStr || succStr).replace(/!verify \w+.*/, '').trim();
+%>
+  <% if (verifyInfo) { %>
+    <div class="verify-box">
+      <div class="verify-header">⚠ <%- t('settings.verify.header') %></div>
+      <div class="verify-msg"><%= verifyMsgText %></div>
+      <div class="verify-instructions"><%- t('settings.verify.instructions') %></div>
+      <div class="verify-code-wrap">
+        <span class="verify-cmd">!verify <span class="verify-code"><%= verifyInfo.code %></span></span>
+        <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent=this.dataset.copied; setTimeout(()=>this.textContent=this.dataset.copy,2000);" data-copied="<%- t('settings.verify.copied') %>" data-copy="<%- t('settings.verify.copy') %>"><%- t('settings.verify.copy') %></button>
+      </div>
+      <div class="verify-expires">⏱ <%- t('settings.verify.expires') %></div>
+    </div>
+  <% } else { %>
+    <% if (errStr) { %><div class="ds-note danger msg err" role="alert"><%= errStr %></div><% } %>
+    <% if (succStr) { %><div class="ds-note ok msg ok" role="status"><%= succStr %></div><% } %>
+  <% } %>

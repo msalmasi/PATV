@@ -463,7 +463,7 @@
       var p = el('p', { text: _t('js.msg.notices_explain', 'When Pepe executes a stake, a loan gets paid, you\'re picked to judge a wager, an order ships or someone tips you, it shows up here.') });
       if (!me.camfrog) {
         p.appendChild(document.createTextNode(' '));
-        p.appendChild(el('a', { href: '/u/' + encodeURIComponent(me.username) + '/edit', text: _t('js.msg.link_camfrog', 'Link your Camfrog name') }));
+        p.appendChild(el('a', { href: '/settings/account#connections', text: _t('js.msg.link_camfrog', 'Link your Camfrog name') }));
         p.appendChild(document.createTextNode(' ' + _t('js.msg.link_camfrog_tail', 'to get Pepe\'s notices too.')));
       }
       em.appendChild(p);
@@ -1002,6 +1002,12 @@
   setForm.alerts.addEventListener('change', function () { setForm.nopreview.disabled = !setForm.alerts.checked; });
   $('dmGearBtn').addEventListener('click', function () { fillSettings(); $('dmSetMsg').textContent = ''; openDlg(setDlg); });
   $('dmSetClose').addEventListener('click', function () { setDlg.close(); });
+  // 1.99vz: /messages?settings=1 (the /settings hub's "Messages & notices" row) opens this dialog; the flag is then dropped
+  // from the address so a reload or Back doesn't reopen it
+  if (/[?&]settings=1(&|$)/.test(location.search)) {
+    try { history.replaceState(history.state, '', location.pathname + location.search.replace(/([?&])settings=1(&|$)/, function (m, a, b) { return b ? a : ''; }).replace(/\?$/, '') + location.hash); } catch (e) {}
+    fillSettings(); $('dmSetMsg').textContent = ''; openDlg(setDlg);
+  }
   $('dmBlocks').addEventListener('click', function (e) {
     var b = e.target.closest('[data-unblock]');
     if (!b) return;

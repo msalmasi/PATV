@@ -149,8 +149,8 @@ async function redeem(token, { now = Date.now(), ip = null, agent = null, signIn
   await log({ userId: u.userId, login: r.login, kind: "used", ip, agent, at: now });
   const where = [ip, agent].filter(Boolean).join(" · ") || "an unknown browser";
   await require("./inbox").addSafe(u.userId, { kind: "system", title: "Signed in from chat (!signin)",
-    body: `Your Camfrog name ${r.login} used a one-time chat link to sign in to this account from ${where}. Not you? Change your Camfrog password, and turn chat sign-in off in Settings → Security.`,
-    link: `/u/${encodeURIComponent(u.username)}/edit#security`, ref: `chatsignin:${h.slice(0, 16)}` });
+    body: `Your Camfrog name ${r.login} used a one-time chat link to sign in to this account from ${where}. Not you? Change your Camfrog password, and turn chat sign-in off in Settings → Account → Security.`,
+    link: "/settings/account#security", ref: `chatsignin:${h.slice(0, 16)}` });
   console.log(`[chatsignin] ${u.username} signed in from chat`);
   return { ok: true, user: u };
 }

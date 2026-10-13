@@ -19,6 +19,8 @@ const multer = require('multer');
 const sharp = require('sharp');
 const AWS = require('aws-sdk');
 const upload = multer({ dest: 'uploads/' });
+// 1.99vz: the account forms (username, email, password, Camfrog / Twitch / Discord links) live on Settings -> Account
+const ACCOUNT_PAGE = '/settings/account';
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -319,7 +321,7 @@ async function loginUser(req, res) {
 async function updateUsername(req, res) {
   const username = String((req.body && req.body.username) || '').trim();
   const userId = req.user.userId;
-  const editPage = `/u/${encodeURIComponent(req.user.username)}/edit`;
+  const editPage = ACCOUNT_PAGE + '#account';
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
   const problem = guard.checkUsername(username, req);   // 1.99ui: in the member's language
   if (problem) {
@@ -379,11 +381,11 @@ async function updateEmail(req, res) {
         if (err) {
             console.error(err.message);
             req.flash('error', 'Error processing request');
-            return res.redirect(`/u/${username}/edit`);
+            return res.redirect(ACCOUNT_PAGE + '#account');
         }
         if (user) {
             req.flash('error', 'Email already taken');
-            return res.redirect(`/u/${username}/edit`);
+            return res.redirect(ACCOUNT_PAGE + '#account');
         }
   
         const token = generateValidationToken();
@@ -393,7 +395,7 @@ async function updateEmail(req, res) {
 
         await runQuery('UPDATE users SET email = ?, isEmailVerified = 0 WHERE userId = ?', [email, userId]);
         req.flash('success', 'Verification email sent.');
-        res.redirect(`/u/${username}/edit`);
+        res.redirect(ACCOUNT_PAGE + '#account');
       });
 };
 
@@ -402,7 +404,7 @@ async function updatePassword(req, res) {
   const password = typeof (req.body && req.body.password) === 'string' ? req.body.password : '';
   const userId = req.user.userId;
   const username = req.user.username;
-  const editPage = `/u/${encodeURIComponent(username)}/edit#password`;
+  const editPage = ACCOUNT_PAGE + '#password';
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
   const problem = guard.checkPassword(password, username);
   if (problem) {
@@ -475,7 +477,7 @@ async function updateDiscordId(req, res) {
   const username = req.user.username;
   await runQuery('UPDATE users SET avatar = ? WHERE discordId = ?', [discordId, userId]);
   req.flash('success', 'Discord changed.');
-  res.redirect(`/u/${username}/edit`);
+  res.redirect(ACCOUNT_PAGE + '#connections');
 };
 
 // Update twitch
@@ -485,7 +487,7 @@ async function updateTwitchId(req, res) {
   const username = req.user.username;
   await runQuery('UPDATE users SET avatar = ? WHERE twitchId = ?', [twitchId, userId]);
   req.flash('success', 'Twitch changed.');
-  res.redirect(`/u/${username}/edit`);
+  res.redirect(ACCOUNT_PAGE + '#connections');
 };
 
 // Internal helper: complete the camfrog link.
@@ -628,7 +630,7 @@ async function updateCamfrogUsername(req, res) {
     if (was) await require('./loginrekey').changedSafe(userId, was, null, 'camfrog:unlink');   // 1.99tj: records follow the account
     if (was) await require('./loginrekey').changedSafe(userId, was, null, 'camfrog:unlink');   // 1.99tj: records follow the account
     req.flash('success', 'Camfrog username unlinked.');
-    return res.redirect(`/u/${username}/edit`);
+    return res.redirect(ACCOUNT_PAGE + '#connections');
   }
 
   try {
@@ -636,7 +638,7 @@ async function updateCamfrogUsername(req, res) {
     const me = await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]);
     if (me[0]?.camfrogUsername && me[0].camfrogUsername.toLowerCase() === cfLower) {
       req.flash('success', 'Camfrog username already linked.');
-      return res.redirect(`/u/${username}/edit`);
+      return res.redirect(ACCOUNT_PAGE + '#connections');
     }
 
     // Check if another non-CF account already owns this camfrog username
@@ -666,7 +668,7 @@ async function updateCamfrogUsername(req, res) {
     console.error('[CF-LINK] Initiate error:', err);
     req.flash('error', 'Failed to initiate Camfrog link.');
   }
-  res.redirect(`/u/${username}/edit`);
+  res.redirect(ACCOUNT_PAGE + '#connections');
 };
 
 // Step 2: Bot calls this when a user types !verify CODE in Camfrog chat.

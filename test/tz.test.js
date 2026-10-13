@@ -114,9 +114,10 @@ test("the layout hands the saved zone to localtime.js, which loads before page s
   assert.match(js, /timeZoneName: 'short'/);
 });
 
-test("the Edit profile page has the Time zone picker next to Language", () => {
-  const src = fs.readFileSync(path.join(repo, "views", "editProfile.ejs"), "utf8");
-  assert.ok(src.indexOf('id="language"') < src.indexOf('id="timezone"') && src.indexOf('id="timezone"') < src.indexOf('id="avatar"'));
+test("Settings -> Account has the Time zone picker (1.99vz: its one home; Edit profile has none)", () => {
+  const src = fs.readFileSync(path.join(repo, "views", "settingsAccount.ejs"), "utf8");
+  assert.ok(src.indexOf('id="security"') < src.indexOf('id="timezone"'));
+  assert.doesNotMatch(fs.readFileSync(path.join(repo, "views", "editProfile.ejs"), "utf8"), /id="tzSelect"/);
   assert.match(src, /<select id="tzSelect" name="tz">/);
   assert.match(src, /fetch\('\/api\/settings\/timezone'/);
 });

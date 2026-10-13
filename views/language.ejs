@@ -14,6 +14,7 @@
   @media (prefers-reduced-motion: reduce) { .lp ul a { transition: none; } }
 </style>
 <main class="ds-page read lp">
+  <% if (user) { %><a class="ds-back" href="/settings">← <%- t('sethub.back') %></a><% } %>
   <div class="ds-head">
     <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">🌐</span> <%- t('lang.heading') %></h1>
     <p class="ds-sub"><%- t('lang.intro') %></p>

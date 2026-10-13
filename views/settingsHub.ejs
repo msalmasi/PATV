@@ -1,0 +1,62 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /settings - 1.99vz (settingshub.js): the map of every account / preference page, grouped. Each row: an icon tile, a title,
+    a one-line description and (where it was cheap to read) the current state. No JS: every row is a plain link. %>
+<%- include('layout', { title: t('sethub.title'), user: user }) %>
+<style>
+  .sh .sh-jump { margin-block-start: var(--ds-sp-1); }
+  .sh .sh-sec { scroll-margin-block-start: 72px; }
+  .sh .sh-sec .ds-list { margin-block-start: calc(var(--ds-sp-1) * -1); }
+  .sh .ds-list > li { padding: 0; }
+  .sh .sh-row { display: flex; align-items: center; gap: var(--ds-sp-3); width: calc(100% + var(--ds-sp-2) * 2); box-sizing: border-box; min-height: 60px; padding: var(--ds-sp-2h) var(--ds-sp-2);
+                margin-inline: calc(var(--ds-sp-2) * -1); border-radius: var(--ds-r-md); color: var(--ds-text); text-decoration: none;
+                transition: background var(--ds-dur-1); }
+  .sh .sh-row:hover { background: var(--ds-hover); text-decoration: none; }
+  .sh .sh-row:focus-visible { outline: 2px solid var(--ds-gold); outline-offset: 2px; }
+  .sh .sh-txt { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+  .sh .sh-txt b { color: var(--ds-text-strong); font-size: var(--ds-fs-body, 15px); font-weight: 700; overflow-wrap: anywhere; }
+  .sh .sh-txt span { color: var(--ds-text-muted); font-size: var(--ds-fs-sm); line-height: 1.45; }
+  .sh .sh-end { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; max-width: 45%; }
+  .sh .sh-end .ds-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .sh .ds-tag.ok { color: var(--ds-ok); border-color: var(--ds-ok-line); background: var(--ds-ok-bg); }
+  .sh .ds-tag.warn { color: var(--ds-warn); border-color: var(--ds-warn-line); background: var(--ds-warn-bg); }
+  .sh .ds-tag.gold { color: var(--ds-gold-text); border-color: var(--ds-gold-line); background: var(--ds-gold-bg); font-variant-numeric: tabular-nums; }
+  .sh .sh-chev { color: var(--ds-text-faint); font-size: 18px; line-height: 1; }
+  [dir="rtl"] .sh .sh-chev { transform: scaleX(-1); }
+  @media (max-width: 560px) {
+    .sh .sh-row { flex-wrap: wrap; gap: var(--ds-sp-1h) var(--ds-sp-2h); }
+    .sh .sh-txt { flex-basis: calc(100% - 36px - var(--ds-sp-2h) - 24px); }
+    .sh .sh-end { max-width: none; margin-inline-start: calc(36px + var(--ds-sp-2h)); order: 3; flex-basis: calc(100% - 36px - var(--ds-sp-2h)); min-width: 0; justify-content: space-between; }
+    .sh .sh-end:not(:has(.ds-tag)) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .sh .sh-row { transition: none; } }
+</style>
+<main class="ds-page mid sh" id="sh">
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">⚙️</span> <%- t('sethub.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('sethub.h1') %></h1>
+    <p class="ds-sub"><%- t('sethub.lead') %></p>
+  </div>
+
+  <nav class="ds-tabs wrap sh-jump" aria-label="<%- t('sethub.jump') %>">
+    <% sections.forEach((s) => { %><a class="ds-tab" href="#<%= s.id %>"><%- t('sethub.sec.' + s.id) %></a><% }) %>
+  </nav>
+
+  <% sections.forEach((s) => { %>
+  <section class="ds-card lg sh-sec" id="<%= s.id %>" aria-labelledby="sh-<%= s.id %>-h">
+    <h2 class="ds-h2 dot" id="sh-<%= s.id %>-h"><%- t('sethub.sec.' + s.id) %></h2>
+    <ul class="ds-list">
+      <% s.entries.forEach((e) => { const st = e.state; %>
+      <li data-entry="<%= e.id %>">
+        <a class="sh-row" href="<%= e.href %>">
+          <span class="ds-ic tile" aria-hidden="true"><%= e.icon %></span>
+          <span class="sh-txt"><b><% if (e.raw) { %><%= e.title %><% } else { %><%- t(e.title) %><% } %></b><span><%- t(e.desc) %></span></span>
+          <span class="sh-end"><% if (st) { %><span class="ds-tag<%= st.tone ? ' ' + st.tone : '' %>" data-state><%- t(st.k, Object.assign({}, st.v, st.v.n != null ? { n: t.num ? t.num(st.v.n) : String(st.v.n) } : {})) %></span><% } %><span class="sh-chev" aria-hidden="true">›</span></span>
+        </a>
+      </li>
+      <% }) %>
+    </ul>
+  </section>
+  <% }) %>
+</main>
+</body>
+</html>

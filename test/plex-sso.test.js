@@ -154,7 +154,7 @@ test("a linked Plex account signs in (same login cookie as a password sign-in); 
   assert.ok(calls.some((c) => c.p === "/api/v2/user" && c.token === TOKEN), "the token was used once to read who it is");
   // signed in already: /auth/plex goes to Connections
   const again = await b.get("/auth/plex");
-  assert.equal(again.location, "/u/alice/edit#connections");
+  assert.equal(again.location, "/settings/account#connections");   // 1.99vz: Connections live on Settings -> Account
 });
 
 test("NEVER auto-linked by email or username: an unlinked Plex account matching an existing account isn't signed in to it", async () => {
@@ -319,20 +319,22 @@ test("/settings/subscriptions redirects to /subscriptions (query kept)", async (
   assert.equal(s.location, "/login?next=%2Fsubscriptions");
 });
 
-test("Edit profile: Connections has 📼 Plex (link / unlink / member status) and one pill style in the hero", async () => {
+test("Settings -> Account: Connections has 📼 Plex (link / unlink / member status); Edit profile keeps one pill style in the hero", async () => {
   const ejs = require("ejs");
   const layout = require(path.join(repo, "profilelayout"));
   const loc = (plex, extra) => Object.assign({ username: "pb", displayname: "pb", twitchDisplayname: null, discordUsername: null, camfrogUsername: null,
     avatar: "/a.png", email: "", points_balance: 0, level: 41, classh: "Admin", profileCosmetics: null, layout: layout.sanitize(layout.DEFAULT),
-    sections: layout.SECTIONS, subSections: layout.SUBS, privPanels: layout.PRIV, errors: [], success: [], ogPath: "/u/pb/edit", plex, plexLink: true, plexPin: null }, extra);
-  const file = path.join(repo, "views", "editProfile.ejs");
-  let html = await ejs.renderFile(file, loc({ rows: [], member: null }));
+    sections: layout.SECTIONS, subSections: layout.SUBS, privPanels: layout.PRIV, errors: [], success: [], ogPath: "/u/pb/edit", plex, plexLink: true, plexPin: null, user: "pb", telegram: null, google: null, cryptoW: null }, extra);
+  const edit = await ejs.renderFile(path.join(repo, "views", "editProfile.ejs"), loc({ rows: [], member: null }));
+  assert.doesNotMatch(edit, /id="plexDiv"/, "1.99vz: Connections moved to Settings -> Account");
+  assert.doesNotMatch(edit, /class="chip pv"/, "the Preview pill no longer shares the privacy panel's .pv class");
+  assert.match(edit, /class="chip chip-preview"/);
+  const file = path.join(repo, "views", "settingsAccount.ejs");
+  let html = await ejs.renderFile(file, loc({ rows: [], member: null }, { user: "pb", telegram: null, google: null, cryptoW: null }));
   assert.match(html, /id="plexDiv"/);
   assert.match(html, /id="plexLinkBtn" data-back="profile"/);
   assert.match(html, /href="\/subscriptions"/);
   assert.match(html, /\/public\/js\/plex-link\.js/);
-  assert.doesNotMatch(html, /class="chip pv"/, "the Preview pill no longer shares the privacy panel's .pv class");
-  assert.match(html, /class="chip chip-preview"/);
   html = await ejs.renderFile(file, loc({ rows: [{ plex_id: "77", username: "pbplex", on_server: 1, pending: 0, access: "monthly", expires: Date.UTC(2026, 10, 1), link_source: "self", active: true }],
                                           member: { plex_id: "77", username: "pbplex", access: "monthly", expires: Date.UTC(2026, 10, 1) } }));
   assert.match(html, /pbplex/);
@@ -340,7 +342,7 @@ test("Edit profile: Connections has 📼 Plex (link / unlink / member status) an
   assert.match(html, /2026-11-01/);
   html = await ejs.renderFile(file, loc({ rows: [{ plex_id: "78", username: "adm", on_server: 1, pending: 0, access: "manual", link_source: "admin", active: true }], member: null }));
   assert.doesNotMatch(html, /data-plex-unlink/, "an admin's link can't be undone here");
-  const css = fs.readFileSync(file, "utf8");
+  const css = fs.readFileSync(path.join(repo, "views", "partials", "account-css.ejs"), "utf8");
   assert.match(css, /\.pe \.chips \{ display: flex; flex-wrap: wrap; align-items: center;/);
   assert.match(css, /\.pe \.chip \{ display: inline-flex; align-items: center;[^}]*height: 24px;[^}]*line-height: 1;/);
 });
@@ -348,7 +350,7 @@ test("Edit profile: Connections has 📼 Plex (link / unlink / member status) an
 test("the start route links back where it started (profile vs subscriptions)", async () => {
   const u = await mkUser("ivy");
   const p = await PM.linkStart(u, { back: "profile" });
-  assert.match(decodeURIComponent(p.url), /forwardUrl=.*\/u\/ivy\/edit\?plex=\d+/);
+  assert.match(decodeURIComponent(p.url), /forwardUrl=.*\/settings\/account\?plex=\d+/);   // 1.99vz
   const s = await PM.linkStart(u);
   assert.match(decodeURIComponent(s.url), /forwardUrl=.*\/subscriptions\?plex=\d+/);
 });

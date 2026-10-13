@@ -641,7 +641,7 @@ async function linkStart(user, { back } = {}) {
   pins.set(id, { userId: user.userId, at: clock() });
   const url = "https://app.plex.tv/auth#?" + new URLSearchParams({ clientID: CLIENT_ID(), code, "context[device][product]": "PATV",
     // 1.99jr: back to where they started - Edit profile → Connections, or /subscriptions
-    forwardUrl: SITE() + (back === "profile" && user.username ? "/u/" + encodeURIComponent(user.username) + "/edit?plex=" + id : "/subscriptions?plex=" + id) }).toString();
+    forwardUrl: SITE() + (back === "profile" && user.username ? "/settings/account?plex=" + id : "/subscriptions?plex=" + id) }).toString();
   return { ok: true, pin: id, url };
 }
 /** Poll a PIN: once the user signed in to Plex, read WHO (id, username, email) with that one-time token, then drop it. */

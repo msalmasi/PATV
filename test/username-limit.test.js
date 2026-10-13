@@ -184,7 +184,7 @@ test("the client-side copies of the limit agree with usernamerules.USERNAME_MAX"
   const src = (f) => fs.readFileSync(path.join(repo, f), "utf8");
   const max = String(UR.USERNAME_MAX);
   for (const f of ["views/register.ejs", "views/plexSso.ejs", "views/ssoNew.ejs"]) assert.match(src(f), new RegExp(`name="username"[^]{0,300}?maxlength="${max}"`), f);
-  assert.match(src("views/editProfile.ejs"), new RegExp(`id="username" name="username"[^]{0,80}?maxlength="${max}"`));
+  assert.match(src("views/settingsAccount.ejs"), new RegExp(`id="username" name="username"[^]{0,80}?maxlength="${max}"`));
   assert.ok(src("views/partials/auth-js.ejs").includes(`[A-Za-z0-9_.-]{3,${max}}$/`));
   assert.match(src("public/js/mention-complete.js"), new RegExp(`var USERNAME_MAX = ${max};`));
 });

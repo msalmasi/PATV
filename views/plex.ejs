@@ -90,7 +90,7 @@
     <% } else if (!signedIn) { %>
       <p class="mut"><%- t('plex.iss.signin', { link: '<a href="/login?next=%2Fplex%23issues">' + t('nav.signin') + '</a>' }) %></p>
     <% } else if (!issues.may) { %>
-      <p class="mut"><%- t('plex.iss.members', { link: '<a href="/u/' + t.esc(encodeURIComponent(user)) + '/edit#connections">' + t('plex.acc.link') + '</a>' }) %></p>
+      <p class="mut"><%- t('plex.iss.members', { link: '<a href="/settings/account#connections">' + t('plex.acc.link') + '</a>' }) %></p>
     <% } else { %>
       <div id="pxi" data-ok="1">
         <form class="pxi-search" id="pxiForm" role="search" autocomplete="off">
@@ -142,7 +142,7 @@
     <div class="acts">
       <% if (signedIn) { %><a class="bt pri" href="/subscriptions#plex"><%- t('plex.acc.manage') %></a><% } %>
       <a class="bt" href="/shop"><%- t('nav.shop') %></a>
-      <% if (signedIn) { %><a class="bt" href="/u/<%= encodeURIComponent(user) %>/edit#connections"><%- t('plex.acc.link') %></a><% } %>
+      <% if (signedIn) { %><a class="bt" href="/settings/account#connections"><%- t('plex.acc.link') %></a><% } %>
     </div>
   </section>
 

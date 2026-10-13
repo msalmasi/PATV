@@ -104,7 +104,7 @@ function register(app, { addUser, authView } = {}) {
 
   app.get("/auth/plex", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (req.user && req.user.username) return res.redirect(`/u/${encodeURIComponent(req.user.username)}/edit#connections`);
+    if (req.user && req.user.username) return res.redirect("/settings/account#connections");
     await conf.init().catch(() => {});
     if (!enabled()) return fail(req, res, "auth.plex.off", "Plex sign-in isn't available right now.");
     // the session cookie is per host: start on the host Plex will send them back to
@@ -165,7 +165,7 @@ function register(app, { addUser, authView } = {}) {
 
   app.get("/auth/plex/new", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (req.user && req.user.username) return res.redirect(`/u/${encodeURIComponent(req.user.username)}/edit#connections`);
+    if (req.user && req.user.username) return res.redirect("/settings/account#connections");
     const p = pendingFor(req);
     if (!p) return fail(req, res, "auth.plex.expired", "That Plex sign-in expired or didn't start here. Please try again.");
     let suggest = "";
@@ -176,7 +176,7 @@ function register(app, { addUser, authView } = {}) {
   app.post("/auth/plex/create", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-up refused");
-    if (req.user && req.user.username) return res.redirect(`/u/${encodeURIComponent(req.user.username)}/edit#connections`);
+    if (req.user && req.user.username) return res.redirect("/settings/account#connections");
     const p = pendingFor(req);
     if (!p) return fail(req, res, "auth.plex.expired", "That Plex sign-in expired or didn't start here. Please try again.");
     if (!enabled()) return fail(req, res, "auth.plex.off", "Plex sign-in isn't available right now.");

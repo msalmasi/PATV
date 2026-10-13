@@ -14,6 +14,7 @@
   .tg #tgCodeBox { display: grid; gap: var(--ds-sp-2h); }
 </style>
 <main class="ds-page mid tg">
+  <a class="ds-back" href="/settings">← <%- t('sethub.back') %></a>
   <div class="ds-head">
     <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">✈️</span> <%- t('settings.telegram.eyebrow') %></span>
     <h1 class="ds-h1"><%- t('settings.telegram.h1') %></h1>
@@ -50,7 +51,7 @@
     <p class="ds-sub" id="tgNoCf" hidden><%- t('settings.telegram.no_camfrog') %></p>
   </section>
 
-  <section class="ds-card lg" aria-labelledby="tgAlertsH">
+  <section class="ds-card lg" id="alerts" aria-labelledby="tgAlertsH">
     <h2 class="ds-h3" id="tgAlertsH"><%- t('settings.telegram.alerts_h') %></h2>
     <p class="ds-sub"><%- t('settings.telegram.alerts_note', { n: boot.hourMax }) %> <a href="/settings/mentions"><%- t('settings.telegram.mentions_link') %></a></p>
     <div class="kinds" id="tgKinds"></div>
