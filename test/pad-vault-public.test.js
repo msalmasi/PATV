@@ -125,7 +125,8 @@ test("donate: any signed-in account, a keyed roomvault.deposit action, anon pass
   assert.equal(last.tag, "vault");
   assert.match(last.label, /donate 2,500 PAT to the pad vault \(anonymously\)/);
   assert.deepEqual(JSON.parse(rows.find((x) => x.id === a.d.id).args), [PLANT, "5000"]);
-  await assert.rejects(RV.donate(LOUNGE, fan, { amount: 5000, idem: key() }), /Camfrog room/, "a site pad has no pad vault");
+  const sd = await RV.donate(LOUNGE, fan, { amount: 5000, idem: key() });
+  assert.ok(sd.id, "1.99uu: a site pad has a pad vault too - donations are queued like any pad's");
   await sync({ on: false, rooms: [{ id: PLANT, balance: 210000, days: {}, history: [] }] });
   assert.equal((await D("fan", { amount: 5000, idem: key() })).status, 409, "pad vaults not open: refused, nothing queued");
   await sync({ on: true, cap: 50000000, rooms: [{ id: PLANT, balance: 210000, days: {}, history: [] }] });

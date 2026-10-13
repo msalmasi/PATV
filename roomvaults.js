@@ -17,6 +17,11 @@
 //                                     raises the owner-share cap or a gang's bond. No Camfrog name linked = Pepe charges the
 //                                     PATV account itself. `anon` keeps the donor's name off the public list.
 //
+// EVERY PAD HAS A VAULT (1.99uu, the user 2026-10-12: "earning does not need Plus"): a pad connected to a chat room or not
+// (Camfrog, site-only, Twitch, Discord) - hasVault() / boosts.vaultEligible(). A profile pad only while profile vaults are on.
+// Its row here appears with Pepe's first sync that lists it (an empty vault has no row: card() answers 0 - lazily), or
+// with tools/padvault-rows.js (an idempotent backfill of empty rows; supply unchanged).
+//
 // "Pad vault" is the name users see (1.99sn); the code, tables and Pepe's pool keys keep "room vault" / room:<id>.
 //
 // E-4 (Pepe's pepe_recipe.py, flag econ_room_payouts): each room's sync row may carry `recipe` {epochs: the last 7 payout
@@ -120,6 +125,7 @@ function cleanRecipe(r) {
   const epochs = (Array.isArray(r.epochs) ? r.epochs : []).slice(-7).filter((e) => e && DAY_RE.test(String(e.day || ""))).map((e) => {
     const o = { day: e.day, rate: Math.round((Number(e.rate) || 0) * 100) / 100, house: !!e.house, vwm: Math.round((Number(e.vwm) || 0) * 10) / 10, why: {} };
     for (const k of EP_NUM) o[k] = Math.max(0, int(e[k]));
+    o.basis = ["chat", "pad", "profile"].includes(e.basis) ? e.basis : null;     // 1.99uu: what the owner gate measured
     for (const k of ["owner", "gang", "streamers", "people"]) {
       if (e.why && typeof e.why[k] === "string") o.why[k] = e.why[k].replace(/[<>]/g, "").slice(0, 80);
     }
@@ -175,7 +181,12 @@ async function sync(body) {
                       rc ? JSON.stringify(rc) : null, dn ? JSON.stringify(dn) : null]);
     }
     await metaSet({ on: b.on === true, cap: int(b.cap) || null, total: Math.max(0, int(b.total)), synced: t,
-                    deposit_min: int(b.deposit_min) || null, recipe: cleanRecipeMeta(b.recipe), profile_vaults: b.profile_vaults === true });
+                    deposit_min: int(b.deposit_min) || null, profile_vaults: b.profile_vaults === true,
+                    // 1.99uu: the recipe copy's profile_vaults is the sync's own flag when an older Pepe leaves it out (it
+                    // read false on prod while profile vaults were on)
+                    recipe: cleanRecipeMeta(b.recipe && typeof b.recipe === "object"
+                      ? Object.assign({}, b.recipe, { profile_vaults: typeof b.recipe.profile_vaults === "boolean" ? b.recipe.profile_vaults : b.profile_vaults === true })
+                      : b.recipe) });
     PROFILE_ON = b.profile_vaults === true;
   });
   return { settings: await settingsMap() };
@@ -247,11 +258,11 @@ async function card(roomId, user, opts = {}) {
   };
 }
 
-/** A Camfrog pad always has a vault; a profile pad once Pepe's profile vaults are on. */
+/** 1.99uu: every pad has a vault, connected to a chat room or not; a profile pad once Pepe's profile vaults are on. */
 function hasVault(roomId) {
   const rooms = require("./rooms");
-  const p = rooms.platformOf(roomId);
-  return p === "camfrog" || (p === "profile" && profileVaultsOn());
+  if (!String(roomId || "")) return false;
+  return rooms.platformOf(roomId) !== "profile" || profileVaultsOn();
 }
 
 /** The owner (or staff) sets the payout rate: 2-15%, whole or half percent, once per 7 days (staff: any time). */
@@ -260,7 +271,7 @@ async function setRate(roomId, user, rate) {
   const rooms = require("./rooms");
   const R = await rooms.get(String(roomId || ""));
   if (!R) throw new Refuse(404, "No such pad.");
-  if (!hasVault(R.id)) throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
+  if (!hasVault(R.id)) throw new Refuse(400, "This pad has no vault yet.");
   if (!(await rooms.canManage(user, R.id))) throw new Refuse(403, "Only the pad's owner can set its payout rate.");
   const r = Math.round(Number(rate) * 2) / 2;
   if (!Number.isFinite(r) || r < RATE.min || r > RATE.max) throw new Refuse(400, `Pick a rate between ${RATE.min}% and ${RATE.max}%.`);
@@ -292,7 +303,7 @@ async function donate(roomId, user, { amount, idem, anon } = {}) {
   const rooms = require("./rooms");
   const R = await rooms.get(String(roomId || ""));
   if (!R) throw new Refuse(404, "No such pad.");
-  if (!hasVault(R.id)) throw new Refuse(400, "Only pads with a Camfrog room have a pad vault.");
+  if (!hasVault(R.id)) throw new Refuse(400, "This pad has no vault yet.");
   if (!IDEM_RE.test(String(idem || ""))) throw new Refuse(400, "Reload the page and try again.");
   const a = typeof amount === "number" ? amount : /^\s*\d+\s*$/.test(String(amount || "")) ? parseInt(amount, 10) : NaN;
   const c = await card(R.id, user, {});

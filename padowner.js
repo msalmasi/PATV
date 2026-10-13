@@ -4,6 +4,7 @@
 //   * 🏦 Room vault   balance, 7-day inflow / deposits / paid out, the day-by-day table and the latest moves (roomvaults.js
 //                     card), and TOP UP: POST /api/rooms/:slug/vault/topup {amount, idem} queues the website action
 //                     "roomvault.deposit" = exactly `!roomvault deposit <amount>` as the account's linked Camfrog login
+//                     (1.99uu: no Camfrog name linked = from the PATV account itself; every pad has a vault, connected or not)
 //                     (camfrog-bot pepe_roomowner._op_web_deposit -> pepe_roomvault._rv_deposit: escrow hold -> settle,
 //                     min deposit, cap, journaled, never counted as inflow). KEYED: the form's one-time key (idem) makes a
 //                     double click one deposit (actions.js unique (user, idem) + Pepe's webactions.json journal).
@@ -313,7 +314,9 @@ async function pageData(R, viewer) {
   const slug = web.linkSlug(R);
   const camfrog = rooms.platformOf(R.id) === "camfrog";
   const safe = async (fn, d = null) => { try { return await fn(); } catch (e) { console.error("[padowner]", e.message); return d; } };
-  const vault = camfrog ? await safe(() => require("./roomvaults").card(R.id, viewer, { canManage: true, staff: rooms.isStaff(viewer) })) : null;
+  // 1.99uu: every pad has a vault (connected to a chat room or not) - the vault, top-up and payout cards show on any pad
+  const vaultPad = require("./roomvaults").hasVault(R.id);
+  const vault = vaultPad ? await safe(() => require("./roomvaults").card(R.id, viewer, { canManage: true, staff: rooms.isStaff(viewer) })) : null;
   const roy = R.owner && R.owner.userId ? await safe(() => require("./royalties").status(R.id, R.owner.userId)) : null;
   // E-4: what the owner earned from the payout recipe's owner share (recipe.js credits)
   const share = R.owner && R.owner.userId ? await safe(() => require("./recipe").earned(R.id, R.owner.userId, "owner")) : null;
@@ -327,7 +330,7 @@ async function pageData(R, viewer) {
   const u = (await getQuery("SELECT camfrogUsername, points_balance FROM users WHERE userId = ?", [viewer.userId]))[0] || {};
   const recent = await safe(() => require("./actions").recentFor(viewer.userId, "owner", 6), []);
   return {
-    room: R, slug, camfrog, staff: rooms.isStaff(viewer), mine: !!(R.owner && R.owner.userId === viewer.userId),
+    room: R, slug, camfrog, vaultPad, staff: rooms.isStaff(viewer), mine: !!(R.owner && R.owner.userId === viewer.userId),
     vault, roy, share, prime: prem && prem.pad ? prem.pad : null, primePrice: prem && prem.prices ? prem.prices.prime_time : null,
     primePerks: prem ? prem.perks : null, stage, requested: ownerStage ? ownerStage.requested.length : 0,
     pepe, live, linked: u.camfrogUsername || null, balance: Number(u.points_balance) || 0, recent,
@@ -363,6 +366,15 @@ function register(app, { addUser }) {
     if (!R) { bad(res, 404, "No such pad."); return null; }
     if (!(await rooms.canManage(req.user, R.id))) { bad(res, 403, "Only this pad's owner can do that."); return null; }
     if (rooms.platformOf(R.id) !== "camfrog") { bad(res, 400, "This pad has no Camfrog room."); return null; }
+    return R;
+  }
+  // 1.99uu: the vault routes work on every pad (connected or not); the Pepe-in-the-room routes keep ownedPad (Camfrog)
+  async function ownedVaultPad(req, res) {
+    if (!req.user || !req.user.userId) { bad(res, 401, "Sign in first."); return null; }
+    const R = await require("./roomsweb").resolveRoom(req.params.slug);
+    if (!R) { bad(res, 404, "No such pad."); return null; }
+    if (!(await rooms.canManage(req.user, R.id))) { bad(res, 403, "Only this pad's owner can do that."); return null; }
+    if (!require("./roomvaults").hasVault(R.id)) { bad(res, 400, "This pad has no vault yet."); return null; }
     return R;
   }
   const queued = (res, e) => {
@@ -502,16 +514,16 @@ function register(app, { addUser }) {
     } catch (e) { queued(res, e); }
   });
 
-  // Top up the room vault = !roomvault deposit <amount> as the linked Camfrog login, keyed by the form's one-time idem
+  // Top up the room vault = !roomvault deposit <amount> as the linked Camfrog login (1.99uu: or, with no Camfrog name linked,
+  // from the PATV account itself - the same path as the pad page's Donate), keyed by the form's one-time idem
   app.post("/api/rooms/:slug/vault/topup", addUser, express.json({ limit: "2kb" }), jsonOnly, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const R = await ownedPad(req, res); if (!R) return;
+    const R = await ownedVaultPad(req, res); if (!R) return;
     const b = req.body || {};
     const idem = String(b.idem || "");
     if (!IDEM_RE.test(idem)) return bad(res, 400, "Reload the page and try again.");
     const amount = typeof b.amount === "number" ? b.amount : /^\s*\d+\s*$/.test(String(b.amount || "")) ? parseInt(b.amount, 10) : NaN;
     const u = (await getQuery("SELECT camfrogUsername, points_balance FROM users WHERE userId = ?", [req.user.userId]))[0] || {};
-    if (!u.camfrogUsername) return bad(res, 403, "Link your Camfrog name first: type !verify in a Camfrog room with Pepe - deposits come from that name.");
     let card = null;
     try { card = await require("./roomvaults").card(R.id, req.user, { canManage: true }); } catch (e) { card = null; }
     const min = (card && card.deposit_min) || 1000, cap = (card && card.cap) || 50000000;
@@ -531,11 +543,12 @@ function register(app, { addUser }) {
   // the cards' live numbers (after a top-up / a setting)
   app.get("/api/rooms/:slug/owner/state", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const R = await ownedPad(req, res); if (!R) return;
+    const R = await ownedVaultPad(req, res); if (!R) return;          // 1.99uu: any pad (the Pepe part: Camfrog pads)
     try {
       const vault = await require("./roomvaults").card(R.id, req.user, { canManage: true, staff: rooms.isStaff(req.user) });
       const u = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [req.user.userId]))[0] || {};
-      res.json({ ok: true, vault, pepe: await settingsFor(R.id), balance: Number(u.points_balance) || 0 });
+      const pepe = rooms.platformOf(R.id) === "camfrog" ? await settingsFor(R.id) : null;
+      res.json({ ok: true, vault, pepe, balance: Number(u.points_balance) || 0 });
     } catch (e) { console.error("[padowner] state", e); bad(res, 500, "Something went wrong."); }
   });
 }

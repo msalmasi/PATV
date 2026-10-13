@@ -427,7 +427,7 @@
     "!verifypad [PATV-code]"
    ],
    "summary": "Prove this chat room (a Camfrog room) belongs to a PATV pad's owner, to connect the pad to the room.",
-   "details": "Connect your PATV pad to its chat room (Camfrog today): in the pad's settings (Address & platform) type the room's name and get a code like `PATV-AB23CD`. The fastest proof is putting that code in the room's **topic** (only the room's owner and operators can) - Pepe spots it within a couple of minutes, no admin needed. Or type `!verifypad PATV-AB23CD` in the room: a site admin then confirms it. Pepe has to be in the room for either. Once connected, the pad gets the room's live chat on the website, its pad vault and the owner's `!stage` commands. Pepe only joins your room if you ask for it in the pad's settings and a site admin approves.",
+   "details": "Connect your PATV pad to its chat room (Camfrog today): in the pad's settings (Address & platform) type the room's name and get a code like `PATV-AB23CD`. The fastest proof is putting that code in the room's **topic** (only the room's owner and operators can) - Pepe spots it within a couple of minutes, no admin needed. Or type `!verifypad PATV-AB23CD` in the room: a site admin then confirms it. Pepe has to be in the room for either. Once connected, the pad gets the room's live chat on the website, what's spent in the room in its pad vault and the owner's `!stage` commands. Pepe only joins your room if you ask for it in the pad's settings and a site admin approves.",
    "examples": [
     "!verifypad PATV-AB23CD"
    ],
@@ -611,8 +611,8 @@
    "syntax": [
     "!topic [text]"
    ],
-   "summary": "Set the room topic through Pepe — 1,000 PAT (admins free).",
-   "details": "Set the room topic through Pepe — **1,000 PAT** (admins free). Pepe holds off his own automatic topics for a while afterwards, so yours stays up.",
+   "summary": "Set the room topic through Pepe — 1,000 PAT (admins and the pad's owner in their own room free).",
+   "details": "Set the room topic through Pepe — **1,000 PAT** (admins free; the pad's owner is free in their own room, up to 6 changes an hour). Pepe holds off his own automatic topics for a while afterwards, so yours stays up. Pad codes (PATV-...) can't be set through Pepe: the room's owner types those into the topic themselves.",
    "examples": [],
    "keywords": [],
    "cost_key": "topic",
@@ -2694,7 +2694,7 @@
     "!padvault recipe"
    ],
    "summary": "This pad's vault: what the pad has earned, what it took in over the last 7 days, and deposits.",
-   "details": "Every pad with a connected chat room has a **pad vault**. Paid commands, songs, voices, heist gear and other spending in the room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were in the room 3 of the last 7 days and the room was active 3 of them; capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. Payouts of 25,000 or more ride a 10-minute convoy (`!hijack`). `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
+   "details": "Every pad has a **pad vault**, connected to a chat room or not. Paid commands, songs, voices, heist gear and other spending in a connected room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were in the room 3 of the last 7 days and the room was active 3 of them - a pad without a connected room counts the owner's days on the pad (posting, commenting, streaming, moderating) and days with 3+ qualified members active there; capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old; with activity top-ups on, also members whose posts on the pad got real engagement) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. Payouts of 25,000 or more ride a 10-minute convoy (`!hijack`). `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
    "examples": [
     "!padvault",
     "!padvault deposit 5k",
@@ -7329,5 +7329,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "ad8a4dfa2b7446d0"
+ "hash": "fb9769462f1f184a"
 }

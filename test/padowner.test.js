@@ -140,7 +140,7 @@ test("owner settings -> one room.owner action; validated; owner only", async () 
   assert.equal(bad.status, 400, "no X-Requested-With -> refused");
 });
 
-test("top up = a keyed roomvault.deposit action; amount checks; linked name required", async () => {
+test("top up = a keyed roomvault.deposit action; amount checks; no linked name needed (1.99uu)", async () => {
   await runQuery("DELETE FROM pepe_actions");
   await require(path.join(repo, "roomvaults")).sync({ on: true, cap: 50000000, rooms: [{ id: PLANT, balance: 1000, days: {}, history: [] }] });
   const idem = "k" + "a".repeat(20);
@@ -167,8 +167,8 @@ test("top up = a keyed roomvault.deposit action; amount checks; linked name requ
   assert.equal(r.status, 403, "not the owner");
   await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [owner.userId]);
   r = await post(`/api/rooms/${SLUG}/vault/topup`, "owner", { amount: 5000, idem: "k" + "c".repeat(20) });
-  assert.equal(r.status, 403);
-  assert.match(r.d.error, /Link your Camfrog/);
+  assert.equal(r.status, 200, "1.99uu: no Camfrog name linked = the deposit comes from the PATV account (like a donation)");
+  assert.equal((await actions()).filter((x) => x.kind === "roomvault.deposit").length, 2);
   await runQuery("UPDATE users SET camfrogUsername = 'foamy1111' WHERE userId = ?", [owner.userId]);
 });
 

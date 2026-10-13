@@ -506,7 +506,7 @@
    "title": "Top up your pad vault from the website",
    "web": "/p/{slug}/owner#vault",
    "web_action": "roomvault.deposit",
-   "howto": "The Top up form on the owner page deposits PAT from your linked Camfrog name into the pad vault (minimum 1,000). It's exactly !padvault deposit: deposits never count as the pad's income, and a double click is one deposit.",
+   "howto": "The Top up form on the owner page deposits PAT from your linked Camfrog name (or your PATV account if you haven't linked one) into the pad vault (minimum 1,000). It's exactly !padvault deposit: deposits never count as the pad's income, and a double click is one deposit.",
    "owner_only": false,
    "code": [
     "pepe_roomowner.py:_op_web_deposit",

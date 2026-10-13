@@ -91,7 +91,7 @@
       <% [['page', '🏠', { n: F.rules }], ['feed', '📝', {}], ['stage', '📺', { n: F.stageMax }], ['vault', '🏦', {}], ['chat', '🌉', {}], ['panel', '👑', {}]].forEach(([k, ic, v]) => { %>
       <article class="ds-card pg-card">
         <h3><span class="ds-ic" aria-hidden="true"><%= ic %></span> <%- t('owners.what.' + k + '_t') %></h3>
-        <p><%- t('owners.what.' + k + '_d', v) %></p>
+        <p><%- t('owners.what.' + k + '_d', v) %><% if (k === 'chat' && F.plusGate) { %> <%- t('owners.what.chat_plus') %><% } %></p>
       </article><% }) %>
     </div>
   </section>
@@ -112,9 +112,10 @@
         <li><%- t('owners.earn.donate') %></li>
         <li><%- t('owners.earn.sb') %></li>
         <% if (F.launchpad) { %><li><%- t('owners.earn.launch') %></li><% } %>
+        <% if (F.profileVaults) { %><li><%- t('owners.earn.profile') %></li><% } %>
       </ul>
       <p><%- t('owners.earn.fair') %></p>
-      <p class="ds-meta"><%- t('owners.earn.needs') %><% if (F.plusGate) { %> <%- t('owners.earn.needs_plus') %><% } %> <%- t('owners.earn.economy') %></p>
+      <p class="ds-meta"><%- t('owners.earn.needs') %> <%- t('owners.earn.economy') %></p>
     </div>
   </section>
 

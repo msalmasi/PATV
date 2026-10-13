@@ -103,9 +103,9 @@
     <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
     <% if (camfrog) { %><a class="ds-tab" href="#mod">🛡️ <%- t('owner.nav_mod') %></a><% } %>
     <% if (locals.site) { %><a class="ds-tab" href="#site">🌐 <%- t('owner.nav_site') %></a><% } %>
-    <% if (camfrog) { %><a class="ds-tab" href="#vault">💰 <%- t('owner.nav_vault') %></a><% } %>
+    <% if (locals.vaultPad) { %><a class="ds-tab" href="#vault">💰 <%- t('owner.nav_vault') %></a><% } %>
     <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
-    <% if (camfrog) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
+    <% if (locals.vaultPad) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
     <a class="ds-tab" href="#prime">📺 <%- t('owner.nav_prime') %></a>
     <a class="ds-tab" href="#stage">🎬 <%- t('owner.nav_stage') %></a>
     <% if (camfrog) { %><a class="ds-tab" href="#soundboard">🔊 <%- t('owner.nav_sb') %></a><% } %>
@@ -361,7 +361,8 @@
     <div class="ds-stat"><span><%- t('owner.s_prime') %></span><b><%- prime && prime.active ? t('owner.prime_on') : t('owner.prime_off') %></b><small><%- prime && prime.active && prime.ends ? t('owner.until', { when: dd(prime.ends) }) : (prime && prime.comped ? t('owner.comped') : '&nbsp;') %></small></div>
   </div>
 
-  <% if (camfrog) { %>
+  <%# 1.99uu: every pad has a vault (connected to a chat room or not) - roomvaults.hasVault %>
+  <% if (locals.vaultPad) { %>
   <section class="ds-card lg" id="vault" aria-labelledby="poVaultH">
     <h2 class="ds-h2" id="poVaultH"><span class="dot"></span>💰 <%- t('owner.vault_h') %>
       <% if (vault) { %><span class="ds-chip <%= vault.live ? 'ok' : 'warn' %>"><%- vault.live ? t('owner.vault_live') : t('owner.vault_paused') %></span><% } %></h2>
@@ -378,9 +379,7 @@
     <form class="ds-form" id="poTopup" novalidate>
       <h3 class="ds-h3"><%- t('owner.topup_h') %></h3>
       <p class="po-why"><%- t('owner.topup_why', { min: num(vault.deposit_min) }) %></p>
-      <% if (!linked) { %>
-        <div class="ds-note warn"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('owner.topup_link') %></div></div>
-      <% } else { %>
+      <% { %>
       <div class="ds-field">
         <label class="ds-label" for="poAmt"><%- t('owner.topup_amount') %></label>
         <div class="ds-in-group">
@@ -388,7 +387,7 @@
                  data-min="<%= vault.deposit_min %>" data-room="<%= Math.max(0, vault.cap - vault.balance) %>" data-bal="<%= balance %>" aria-describedby="poAmtHint">
           <span class="ds-in-addon">PAT</span>
         </div>
-        <p class="ds-hint" id="poAmtHint"><%- t('owner.topup_hint', { bal: num(balance), login: linked, room: num(Math.max(0, vault.cap - vault.balance)) }) %></p>
+        <p class="ds-hint" id="poAmtHint"><%- linked ? t('owner.topup_hint', { bal: num(balance), login: linked, room: num(Math.max(0, vault.cap - vault.balance)) }) : t('owner.topup_hint_web', { bal: num(balance), room: num(Math.max(0, vault.cap - vault.balance)) }) %></p>
         <div class="po-quick">
           <% [10000, 50000, 100000, 500000].filter((q) => q >= vault.deposit_min).forEach((q) => { %><button type="button" class="ds-quick" data-amt="<%= q %>"><%= num(q) %></button><% }) %>
         </div>
@@ -461,7 +460,7 @@
     <% } %>
   </section>
 
-  <% if (camfrog && vault) { %>
+  <% if (locals.vaultPad && vault) { %>
   <section class="ds-card lg" id="recipe" aria-labelledby="poRcH">
     <h2 class="ds-h2" id="poRcH"><span class="dot"></span>💸 <%- t('owner.recipe_h') %></h2>
     <p class="po-why"><%- t('owner.recipe_why', { owner: pct('owner_pct', 0.15), gang: pct('gang_pct', 0.15), streamers: pct('streamer_pct', 0.25), people: pct('people_pct', 0.35), games: pct('games_pct', 0.10), convoy: num(rcCfg.convoy_min || 25000) }) %></p>

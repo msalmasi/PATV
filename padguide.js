@@ -7,7 +7,10 @@
 //                           whether activity top-ups reach pad vaults (recipe.activity_pads)
 //   roomvaults.RATE         the payout rate bounds the owner picks from
 //   funding.state.launchpad whether the pad launchpad (owner deposit matching, newcomer welcomes) is live
-//   premium.config()        Prime Time / Plus prices, the period, the Plus bridge gate; premium.plusSpots() the spots left
+//   roomvaults.profileVaultsOn()  whether profiles have vaults (Pepe's econ_profile_vaults, as he last synced it)
+//   premium.config()        Prime Time / Plus prices, the period, the Plus bridge gate (only for CONNECTING a Camfrog room -
+//                           1.99uu: earning never needs a tier or a chat connection: every pad has a vault);
+//                           premium.plusSpots() the spots left
 //   padrules / mainstage    the house-rule count and the most stage slots a pad can have
 //
 // CONNECTED CHAT SERVICES: Pepe's command docs are per service. Adding a service is one entry in SERVICES (+ its
@@ -50,6 +53,7 @@ async function facts() {
   const gatePlatforms = Array.isArray(pc.plus_gate_platforms) ? pc.plus_gate_platforms : ["camfrog"];
   return {
     vaultLive: !!(ov && ov.live), cap: (ov && ov.cap) || 50000000,
+    profileVaults: !!(ov && ov.live) && (await safe(() => require("./roomvaults").profileVaultsOn(), false)),
     recipeLive: !!rc.on, activityPads: !!rc.activity_pads,
     owner: pct("owner_pct", 0.15), gang: pct("gang_pct", 0.15), streamers: pct("streamer_pct", 0.25), people: pct("people_pct", 0.35),
     games: pct("games_pct", 0.10), capPct: pct("cap_i7", 0.25), ownerDays: Number(cfg.owner_days) || 3, eligDays: Number(cfg.elig_days) || 3,

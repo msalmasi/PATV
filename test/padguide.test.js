@@ -86,3 +86,22 @@ test("the reference links back; an owner gets Manage your pad", async () => {
   assert.equal(r.status, 200);
   assert.ok(/href="\/p\/[^"]+\/owner"/.test(r.text), "Manage your pad for the owner");
 });
+
+test("1.99uu: earning needs no tier and no chat connection; Plus is about connecting a Camfrog room; profile vaults once on", async () => {
+  const RV = require(path.join(repo, "roomvaults"));
+  const text = (r) => r.text.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  RV._setProfileVaults(false);
+  const off = text(await page("/pads/owners", null));
+  assert.ok(!/vaults run for pads connected/i.test(off) && !/Connecting one takes/i.test(off), "no 'vaults need a connected room / Plus'");
+  assert.ok(off.includes("No tier and no chat connection needed"), "basic pads earn");
+  assert.ok(off.includes("a basic pad has a feed, a stage and a vault"), "the earn lead says what a basic pad has");
+  assert.ok(off.includes("connecting your pad to a live Camfrog chat room with Pepe in it"), "Plus adds the Camfrog connection");
+  assert.ok(off.includes("Prime Time chip-ins") && en["owners.earn.launch"].includes("newcomers get a welcome gift"), "the approved wording stays");
+  assert.ok(!off.includes("Your profile has a vault too"), "profile vaults off: not mentioned");
+  assert.equal(en["owners.earn.needs_plus"], undefined, "the 'needs Plus' string is gone");
+  // profile vaults on (Pepe's sync) and pad vaults live: the guide mentions them
+  await RV.sync({ on: true, profile_vaults: true, rooms: [] });
+  const on = text(await page("/pads/owners", null));
+  assert.ok(on.includes("Your profile has a vault too"), "profile vaults on: mentioned");
+  RV._setProfileVaults(false);
+});

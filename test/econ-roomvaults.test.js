@@ -112,7 +112,7 @@ test("routeInTx OFF: the room half is held in the escrow exactly as before E-3",
   assert.equal(w0 - (await wallets()), -((await claimsSum()) - c0) + 5000, "site conservation: debit == claims + escrow");
 });
 
-test("routeInTx ON: the room half is a room:<flow>:<room> claim (never escrow); owner / site pad = all Fort Knox", async () => {
+test("routeInTx ON: the room half is a room:<flow>:<room> claim (never escrow); the owner = all Fort Knox; a site pad has a vault too", async () => {
   F.sync(LIVE);
   const w0 = await wallets(), c0 = await claimsSum(), e0 = (await B.escrow()).room_vault;
   const r = await B.boost(fan, DRAMA, { amount: 8001, ref: ref() });
@@ -126,9 +126,10 @@ test("routeInTx ON: the room half is a room:<flow>:<room> claim (never escrow); 
   // the owner boosting their own pad: all Fort Knox (7.1)
   const o = await B.boost(owner, PLANT, { amount: 3000, ref: ref() });
   assert.deepEqual([o.fortknox, o.room_vault], [3000, 0]);
-  // a pad that can't have a room vault (a site pad - pad cosmetics / challenge fees can name one): all Fort Knox
+  // 1.99uu: a site pad (no chat room connected) has a vault too - its room half is a claim like any pad's
   const t = await B.tx(() => B.routeInTx({ ref: "t-" + ref(), kind: "pad_cosmetic", room_id: LOUNGE, payer_id: fan.userId, amount: 999, owner_self: false, flow: "pad_cosmetics" }));
-  assert.deepEqual([t.fortknox, t.room_vault, t.rv_to], [999, 0, null]);
+  assert.deepEqual([t.fortknox, t.room_vault], [500, 499], "a site pad: 50/50 like a Camfrog pad");
+  assert.equal((await getQuery("SELECT flow FROM reserve_claims WHERE flow = ?", ["room:pad_cosmetics:" + LOUNGE])).length, 1, "the room half is a claim for the site pad's vault");
   const u = await B.tx(() => B.routeInTx({ ref: "t-" + ref(), kind: "challenge_fee", room_id: "Not.Registered", payer_id: null, amount: 500, owner_self: false, flow: "challenge_fee" }));
   assert.deepEqual([u.fortknox, u.room_vault], [500, 0], "an unregistered room: all Fort Knox");
   // the room claims are not the Reserve's: fundable() for a Reserve flow is unchanged by them
@@ -218,7 +219,7 @@ test("roomvaults: Pepe's sync, the pad card (inflow vs deposits), the owner's ra
   T += 7 * DAY + 1;
   assert.deepEqual(await RV.setRate(DRAMA, owner, 7.5), { rate: 7.5, changed: true });
   assert.deepEqual(await RV.setRate(DRAMA, staff, 9), { rate: 9, changed: true }, "staff can change it any time");
-  await assert.rejects(RV.setRate(LOUNGE, staff, 9), /Camfrog room/, "a site pad has no room vault");
+  assert.equal((await RV.setRate(LOUNGE, staff, 9)).rate, 9, "1.99uu: a site pad has a vault (and a rate) too");
   const s2 = await post("/api/g/roomvaults/sync", { password: "bot-token", on: true, rooms: [] });
   assert.equal(s2.body.settings[DRAMA].rate, 9, "the rate goes back to Pepe (stored for E-4)");
   assert.equal((await RV.card(DRAMA, fan, {})).balance, 0, "a room Pepe no longer lists is at 0");

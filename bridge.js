@@ -970,9 +970,9 @@ function register(app, { isBotToken, addUser }) {
       manage,
       schedule: await require("./mainstage").roomSchedule(R.id, req.user, manage).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
       analytics: reg.hasRoute(app, "/p/:slug/analytics"),
-      // economy v2 E-3: the room vault card (About tab), Camfrog pads only (roomvaults.js)
+      // economy v2 E-3: the pad vault card (About tab) - 1.99uu: every pad, connected or not (roomvaults.js)
       twitch: platform === "twitch" ? await twitchPlayer(R.id, req.hostname) : null,      // 1.99ja: a Twitch pad's login + its player
-      roomVault: siteOnly ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage, staff: reg.isStaff(req.user) })
+      roomVault: !require("./roomvaults").hasVault(R.id) ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage, staff: reg.isStaff(req.user) })
         .catch((e) => { console.error("[roomvaults] card:", e.message); return null; }),
       feed,
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",

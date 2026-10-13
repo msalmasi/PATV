@@ -11,6 +11,15 @@
 //                  streamer, their known alts and flagged viewers are already out), minus muted minutes, at most 120
 //                  per viewer per streamer; only viewers whose account is >= 7 days old, level >= 2 and verified
 //                  (email, Discord or Twitch). Pepe's own stream has no streamer to pay.
+//     pad_days / owner_pad_days  (1.99uu) the connection-neutral equivalents of active_days / the owner's presence, for
+//                  a pad WITHOUT a connected Camfrog room (Pepe uses them there; a connected pad keeps the chat measures).
+//                  Days in the 7 ending `day` (UTC):
+//                    pad_days        >= 3 distinct QUALIFIED accounts (engagement.qualified: >= 7 days old, level >= 2,
+//                                    verified / linked, not archived, not an alt) posted, commented or upvoted on the pad's
+//                                    feed (posts whose home is the pad) or watched / streamed on its stage (econ_watch 'ok')
+//                    owner_pad_days  the owner posted or commented there, streamed on its stage to a verified viewer, or
+//                                    moderated it (room_events: feed removals / restores / bans, automod reversals, mod
+//                                    actions sent to Pepe)
 //     people       the anti-farming gates for the participant slice (V3 23.3): the Camfrog login is linked to a PATV
 //                  account >= 7 days old, level >= 2, not archived and not flagged by the welcome dedupe (dup_of)
 //   POST /api/g/recipe/credit  (bot token) {ref, userId, amount, room, slice, day} -> one credit, keyed by ref (a retry
@@ -107,6 +116,54 @@ async function activeDays(roomId, day) {
   return rows.filter((d) => (Number(d.minutes) || 0) >= GATES.active_minutes && (Number(d.peak) || 0) >= GATES.active_peak).length;
 }
 
+// 1.99uu: what counts as "moderating the pad" for owner_pad_days (rooms.event names)
+const MOD_EVENTS = Object.freeze(["feed-remove", "feed-restore", "feed-comment-remove", "feed-ban", "feed-automod-reverse",
+                                  "feed-tag-remove", "pepe-room"]);
+const safeQ = async (sql, args) => { try { return await getQuery(sql, args); } catch (e) { return []; } };
+const utcDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+/** 1.99uu: a pad's activity measured on the pad itself, for the 7 days ending `day` -> {pad_days, owner_pad_days}. */
+async function padDays(R, day, t = clock()) {
+  const id = String((R && R.id) || "");
+  const end = Date.parse(day + "T00:00:00Z") + DAY_MS, start = end - 7 * DAY_MS;
+  const days = new Map();                                     // day -> Set(userId)
+  const cell = (d) => { if (!days.has(d)) days.set(d, new Set()); return days.get(d); };
+  const ownerId = R && R.owner_kind === "user" && R.owner ? String(R.owner.userId || "") : "";
+  const ownerName = R && R.owner ? String(R.owner.username || "").toLowerCase() : "";
+  const owner = new Set();
+  const feed = [
+    ...(await safeQ(`SELECT author_id AS uid, created FROM feed_posts WHERE home_pad = ? AND created >= ? AND created < ? AND deleted_at IS NULL`, [id, start, end])),
+    ...(await safeQ(`SELECT c.author_id AS uid, c.created FROM feed_comments c JOIN feed_posts p ON p.id = c.post_id
+                     WHERE p.home_pad = ? AND c.created >= ? AND c.created < ? AND c.deleted_at IS NULL`, [id, start, end])),
+  ];
+  for (const r of feed) {
+    const d = utcDay(Number(r.created));
+    cell(d).add(String(r.uid));
+    if (ownerId && String(r.uid) === ownerId) owner.add(d);
+  }
+  for (const r of await safeQ(`SELECT v.user_id AS uid, v.created FROM feed_votes v JOIN feed_posts p ON p.id = v.post_id
+                               WHERE p.home_pad = ? AND v.value > 0 AND v.created >= ? AND v.created < ?`, [id, start, end])) {
+    cell(utcDay(Number(r.created))).add(String(r.uid));
+  }
+  for (const r of await safeQ(`SELECT day, viewer_id, streamer_id FROM econ_watch WHERE room_id = ? AND day >= ? AND day < ? AND status = 'ok'
+                               AND secs - COALESCE(muted_secs, 0) >= 60`, [id, utcDay(start), utcDay(end)])) {
+    cell(r.day).add(String(r.viewer_id));
+    if (r.streamer_id) cell(r.day).add(String(r.streamer_id));
+    if (ownerId && String(r.streamer_id || "") === ownerId) owner.add(r.day);
+  }
+  if (ownerName) {
+    for (const r of await safeQ(`SELECT ts FROM room_events WHERE room_id = ? AND ts >= ? AND ts < ? AND LOWER(actor) = ?
+                                 AND what IN (${MOD_EVENTS.map(() => "?").join(",")})`, [id, start, end, ownerName, ...MOD_EVENTS])) {
+      owner.add(utcDay(Number(r.ts)));
+    }
+  }
+  const all = [...new Set([...days.values()].flatMap((x) => [...x]))];
+  const q = all.length ? await require("./engagement").qualified(all, t).catch(() => ({})) : {};
+  let padN = 0;
+  for (const set of days.values()) if ([...set].filter((u) => q[u] && q[u].ok).length >= GATES.active_peak) padN += 1;
+  return { pad_days: padN, owner_pad_days: owner.size };
+}
+
 async function inputs(body) {
   await init();
   const b = body || {};
@@ -120,8 +177,10 @@ async function inputs(body) {
     if (!id) continue;
     const R = await rooms.get(id).catch(() => null);
     const owner = R && R.owner_kind === "user" && R.owner && R.owner.userId ? { userId: R.owner.userId } : null;
+    // 1.99uu: + the pad's own activity (a pad without a connected Camfrog room is measured on the pad; Pepe picks)
+    const pd = R && rooms.platformOf(id) !== "camfrog" ? await padDays(R, day) : { pad_days: 0, owner_pad_days: 0 };
     out.push({ room: id, active_days: await activeDays(id, day), owner, streamers: await streamerVwm(id, day),
-               people: await peopleGates(x.logins) });
+               people: await peopleGates(x.logins), ...pd });
   }
   return { ok: true, day, rooms: out };
 }
@@ -184,5 +243,5 @@ function register(app, { isBotToken }) {
   });
 }
 
-module.exports = { init, inputs, credit, earned, peopleGates, streamerVwm, activeDays, register, GATES, Refuse,
+module.exports = { init, inputs, credit, earned, peopleGates, streamerVwm, activeDays, padDays, MOD_EVENTS, register, GATES, Refuse,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };
