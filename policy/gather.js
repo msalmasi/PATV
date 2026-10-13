@@ -26,6 +26,12 @@ async function docs() {
   try { return await require("../econstore").getDocs(); } catch (e) { return {}; }
 }
 const docOf = (all, name) => ((all[name] || {}).doc) || {};
+/** Pepe's econ_layers doc - or, once the Fed's books live on the site (P4-1, fed/service.js), the site's own journal. */
+async function layersOf(all) {
+  const F = require("../fed/service");
+  if (await F.live()) return F.layersDoc();
+  return docOf(all, "econ_layers");
+}
 
 /** Pepe's pushed config + the site's econ_cfg overrides. */
 async function config() {
@@ -179,13 +185,13 @@ async function epoch(nowS, eid) {
   return { kind: "epoch", now: nowS, eid, cfg, consts, flags, pools: await poolsNow(),
            prices: Object.fromEntries(Object.entries(prices).map(([a, b]) => [a, Number(b)])), navs, bank_nav: V.nav("bank", k),
            mm_seeds: Math.trunc(Number(k.mm_book.seeds) || 0), vaults: book, auto, stashes, journal: await journal(push),
-           bank_lent: await bankLent(docOf(all, "econ_treasury")), fed_loans: await fedLoans(docOf(all, "econ_layers")) };
+           bank_lent: await bankLent(docOf(all, "econ_treasury")), fed_loans: await fedLoans(await layersOf(all)) };
 }
 async function daily(nowS, did) {
   const { cfg, consts, flags } = await config();
   const all = await docs();
-  return { kind: "daily", now: nowS, did, cfg, consts, flags, pools: await poolsNow(), fed_loans: await fedLoans(docOf(all, "econ_layers")),
-           mints: await mints(docOf(all, "econ_layers"), nowS), week: await week(docOf(all, "econ_treasury")) };
+  return { kind: "daily", now: nowS, did, cfg, consts, flags, pools: await poolsNow(), fed_loans: await fedLoans(await layersOf(all)),
+           mints: await mints(await layersOf(all), nowS), week: await week(docOf(all, "econ_treasury")) };
 }
 async function monetary(nowS, did, guarantee) {
   const { push, cfg, consts, flags } = await config();
@@ -202,9 +208,9 @@ async function monetary(nowS, did, guarantee) {
     try { supply = (await require("../supply").patSupply()).total || null; } catch (e) { supply = null; }
   }
   return { kind: "monetary", now: nowS, did, guarantee: !!guarantee, cfg, consts, flags, pools: await poolsNow(),
-           mints: await mints(docOf(all, "econ_layers"), nowS), journal: await journal(push), week: await week(docOf(all, "econ_treasury")),
+           mints: await mints(await layersOf(all), nowS), journal: await journal(push), week: await week(docOf(all, "econ_treasury")),
            local_day: ld, days, rows, skip, supply };
 }
 
 module.exports = { epoch, daily, monetary, config, poolsNow, journal, dailyDone, localDay, prevDays, partRows, fedLoans, mints, week, bankLent,
-                   docs, docOf, BUDGET_KEYS };
+                   docs, docOf, layersOf, BUDGET_KEYS };

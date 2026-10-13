@@ -11,7 +11,9 @@ const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 for (const [file, route] of [["pools.js", "/api/pools/admin/import"], ["escrow/ledger.js", "/api/escrow/admin/import"],
                              ["gangs.js", "/api/gangs/admin/import"], ["capital/service.js", "/api/capital/admin/import"],
                              // 2026-10-12: Pepe's econ docs push (the prod PayloadTooLargeError since the pools cutover)
-                             ["econstore.js", "/api/econ/docs/put"]]) {
+                             ["econstore.js", "/api/econ/docs/put"],
+                             // P4-1: the Fed's journal export (every mint ever)
+                             ["fed/service.js", "/api/fed/admin/import"]]) {
   test(`${route} skips the global JSON parser and parses a big body itself`, () => {
     assert.ok(read("index.js").includes(`req.path === "${route}"`), "index.js skip list has " + route);
     const src = read(file);

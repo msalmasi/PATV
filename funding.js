@@ -612,15 +612,19 @@ const roomVaultsLive = () => state.room_vaults !== null;
 
 async function claims() {
   await ready;
+  // P4-1: while the Fed's books live on the site, fed/service.js journals the donation mints and settles those claims itself
+  let fedLive = false;
+  try { fedLive = await require("./fed/service").live(); } catch (e) { fedLive = false; }
+  const noDon = fedLive ? " AND c.flow != 'mint:donation'" : "";
   // E-2: only claims the website has actually paid (queued = 0); a queued grant reaches Pepe once it's paid
   // 1.99jw: + userId, username (Pepe names the member in his journal) and meta (JSON text, e.g. a donation's terms)
   try {
     return await getQuery(`SELECT c.claimId, c.flow, c.type, c.amount, c.created, c.userId, u.username, c.meta FROM reserve_claims c
                            LEFT JOIN users u ON u.userId = c.userId
-                           WHERE c.settled = 0 AND COALESCE(c.queued,0) = 0 ORDER BY c.created, c.rowid LIMIT 500`);
+                           WHERE c.settled = 0 AND COALESCE(c.queued,0) = 0${noDon} ORDER BY c.created, c.rowid LIMIT 500`);
   } catch (e) {        // no users table (a bare test database)
     return getQuery(`SELECT claimId, flow, type, amount, created, userId, NULL AS username, meta FROM reserve_claims
-                     WHERE settled = 0 AND COALESCE(queued,0) = 0 ORDER BY created, rowid LIMIT 500`);
+                     WHERE settled = 0 AND COALESCE(queued,0) = 0${noDon.replace("c.", "")} ORDER BY created, rowid LIMIT 500`);
   }
 }
 

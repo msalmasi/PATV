@@ -100,7 +100,9 @@ async function putDocs(docs, { force = false } = {}) {
     if (cur && !force && Number(cur.rev) > rev) { out[name] = { ok: false, stale: true, rev: Number(cur.rev) }; continue; }
     await runQuery(`INSERT INTO econ_docs (name, doc, rev, updated) VALUES (?, ?, ?, ?)
                     ON CONFLICT(name) DO UPDATE SET doc = excluded.doc, rev = excluded.rev, updated = excluded.updated`, [name, text, rev, Date.now()]);
-    if (name === "econ_layers") await deriveFedJournal(x.doc);
+    // P4-1: once the Fed's books live on the site, fed/service.js writes fed_journal with every record - Pepe's pushed
+    // econ_layers is then his read-only mirror of them and never overwrites the journal
+    if (name === "econ_layers" && !(await require("./fed/service").live().catch(() => false))) await deriveFedJournal(x.doc);
     if (name === "econ_treasury") await deriveIncentiveGroups(x.doc);
     out[name] = { ok: true, rev };
   }

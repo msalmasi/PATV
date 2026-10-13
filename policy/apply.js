@@ -89,6 +89,15 @@ async function protocolBook(v, amount, key) {
 
 // ── a Fed mint (pepe_layers._fed_mint for the scheduler's policies: floor / issuance) ──
 async function fedMint({ amount, policy, reason, actor, key, dest = "reserve", period, engine, nowS }) {
+  // P4-1: once the Fed's books live on the site (fed/service.js), its journal and the monthly caps are fed/service's - ONE
+  // writer for every mint, checked and journaled inside this run's transaction (dbUtils.tx: no other mint lands in between)
+  const F = require("../fed/service");
+  if (await F.live()) {
+    const m = await F.mintInTx({ amount, policy, reason, actor: String(actor || "schedule").slice(0, 40), key, dest, via: "site" });
+    if (!m.ok) return { ok: false, cap: !!m.cap, room: m.room, why: `the monthly mint cap for ${m.source} is reached (${E.fmt(m.room)} left)` };
+    if (!m.dup) await C.effect(`mint:${key}`, { engine, period, kind: "fed_mint", data: { key, rec: m.rec } });
+    return { ok: true, dup: !!m.dup, rec: m.rec };
+  }
   const have = (await getQuery("SELECT rec FROM policy_mints WHERE key = ?", [key]))[0];
   if (have) return { ok: true, dup: true, rec: C.parse(have.rec, null) };
   const all = await G.docs();
@@ -113,6 +122,13 @@ async function fedMint({ amount, policy, reason, actor, key, dest = "reserve", p
                   ON CONFLICT(id) DO NOTHING`, [`mint:${key}`, amount, dest, policy, rec.reason, rec.actor, nowS, JSON.stringify(rec), Date.now()]).catch(() => {});
   await C.effect(`mint:${key}`, { engine, period, kind: "fed_mint", data: { key, rec } });
   return { ok: true, rec };
+}
+
+/** P4-1: with the Fed's books on the site, a loan repayment leg is booked against the loan book in the same transaction
+ * (mark "<period>-<vault>", the mark Pepe's _fl_apply_repay uses - the effect he mirrors is then a no-op there). */
+async function bookRepaid(period, vault, amount) {
+  const F = require("../fed/service");
+  if (await F.live()) await F.repaidInTx({ mark: `${period}-${vault}`, vault, amount, epoch: period });
 }
 
 // ── shared bits ──
@@ -143,6 +159,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
     for (const leg of plan.legs) {
       await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why);
       if (leg.tid.endsWith("-loan")) {
+        await bookRepaid(eid, leg.vault, leg.amt);
         await C.effect(`loan_repay:${eid}-${leg.vault}`, { engine: "treasury", period: eid, kind: "loan_repay",
                                                            data: { mark: `${eid}-${leg.vault}`, epoch: eid, vault: leg.vault, amount: leg.amt } });
       }
@@ -180,6 +197,7 @@ async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site" } 
     for (const leg of plan.legs) {
       await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why);
       if (leg.tid.endsWith("-loan") && leg.vault) {
+        await bookRepaid(did, leg.vault, leg.amt);
         await C.effect(`loan_repay:${did}-${leg.vault}`, { engine: "treasury", period: did, kind: "loan_repay",
                                                            data: { mark: `${did}-${leg.vault}`, epoch: did, vault: leg.vault, amount: leg.amt } });
       }

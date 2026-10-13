@@ -38,7 +38,7 @@ const RETIRED = {
 const STAYS = {
   room_payouts: "stays in Pepe: the E-4 recipe, activity -> pads and profile vaults score Camfrog observations (anti-AFK chat, speech-verified mic, convoys)",
   launchpad: "stays in Pepe: grants are paid after an admin review on the site; the momentum is already the site's",
-  fed_ops: "stays in Pepe: admin mint / fund / fedloan / flash / donation mints are events, their PAT already moves on the site's pools",
+  fed_ops: "P4-1: admin mint / fund / fedloan / flash / donation mints are events on the site's fed/service.js (one writer for the journal and the mint caps) once the Fed events backend is live; Pepe's commands are its thin client",
 };
 const LEASE_MS = 90 * 1000;
 const HOLDER = `${os.hostname()}:${process.pid}:${crypto.randomBytes(4).toString("hex")}`;
