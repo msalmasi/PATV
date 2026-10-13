@@ -20,10 +20,14 @@ function cookieOptions() {
   };
 }
 
-// Sign a user in: user needs userId, username, class.
+// Sign a user in: user needs userId, username, class. 1.99wj: and `sid`, the server-side session (sessions.js) - every
+// sign-in goes through sessions.signIn, which makes the session and calls this. A token without a sid (one from before
+// sessions, or a test's) is converted into a session by sessions.gate on its next request.
 function issueLogin(res, user) {
+  const claims = { userId: user.userId, username: user.username, class: user.class };
+  if (user.sid) claims.sid = user.sid;
   const token = jwt.sign(
-    { userId: user.userId, username: user.username, class: user.class },
+    claims,
     process.env.SECRET_KEY,
     { expiresIn: `${LOGIN_DAYS}d` }
   );
@@ -63,7 +67,7 @@ async function refreshLogin(res, decoded, getQuery) {
     return null;
   }
   if (cur.username !== decoded.username || cur.class !== decoded.class) {
-    issueLogin(res, cur);
+    issueLogin(res, Object.assign({}, cur, { sid: decoded.sid }));   // 1.99wj: the same session
     return { ...decoded, username: cur.username, class: cur.class };
   }
   renewLogin(res, decoded);

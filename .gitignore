@@ -28,3 +28,5 @@ uploads/
 backups/
 media/
 *.bak
+# 1.99wj: "Download my data" zips (accountexport.js) - runtime data, deleted after 7 days
+account-exports/

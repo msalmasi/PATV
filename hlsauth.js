@@ -43,7 +43,7 @@ const ROOM_TTL_MS = 10 * 60e3;       // stream -> pad (never changes for a slot)
 const MISS_TTL_MS = 10e3;            // a stream name with no slot (yet)
 const OK_TTL_MS = 15e3;              // a cached "allowed"
 const NO_TTL_MS = 2e3;               // a cached "refused"
-const LOGIN_TTL_MS = 60e3;           // a verified login cookie -> user id
+const LOGIN_TTL_MS = 5e3;            // a verified login cookie -> user id (1.99wj: 5 s, so a sign-out everywhere reaches HLS fast)
 let NOW = () => Date.now();
 
 const roomCache = new Map();         // stream -> {room|null, until}
@@ -72,8 +72,9 @@ async function roomOf(stream) {
   return p;
 }
 
-/** The user id of a valid jwt login cookie (verified once a minute per cookie), else null. */
-function loginOf(cookieHeader) {
+/** The user id of a valid jwt login cookie whose server-side session is live (sessions.js; checked every LOGIN_TTL_MS per
+ *  cookie), else null. */
+async function loginOf(cookieHeader) {
   const m = /(?:^|;\s*)jwt=([^;]+)/.exec(String(cookieHeader || ""));
   if (!m || !process.env.SECRET_KEY) return null;
   let tok = m[1];
@@ -83,6 +84,8 @@ function loginOf(cookieHeader) {
   if (c && c.until > NOW()) return c.uid;
   let uid = null;
   try { uid = (jwt.verify(tok, process.env.SECRET_KEY) || {}).userId || null; } catch (e) { uid = null; }
+  // 1.99wj: a revoked / expired session is no login (sessions.js); the check is cached like the token
+  if (uid) { try { uid = await require("./sessions").userIdOfToken(tok); } catch (e) { /* keep the token's view */ } }
   logins.set(k, { uid: uid ? String(uid) : null, until: NOW() + LOGIN_TTL_MS });
   trim(logins, 20000);
   return uid ? String(uid) : null;
@@ -111,7 +114,7 @@ async function decide({ uri, ip, cookie } = {}) {
 
   let pt = "";
   try { pt = new URLSearchParams(query).get("pt") || ""; } catch (e) { pt = ""; }
-  const uid = loginOf(cookie);
+  const uid = await loginOf(cookie);
   const key = stream + "|" + (ip || "") + "|" + pt + "|" + (uid || "");
   const c = decisions.get(key);
   if (c && c.until > NOW()) { stats.cached++; return { ok: c.ok, why: c.why + "/cached" }; }

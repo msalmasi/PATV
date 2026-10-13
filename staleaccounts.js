@@ -453,6 +453,7 @@ async function restore(userId, via = "manual") {
     // 1.99nk: a Camfrog ROOM BOT's account (tools/bot-account-cleanup.js, tier BOT) stays archived - a lookup or a sign-in
     // never revives it; only an explicit restore(userId, "unbot") does
     if (a && a.tier === "BOT" && via !== "unbot") return null;
+    if (a && a.tier === "DELETED") return null;          // 1.99wj: an account its owner deleted (accountdelete.js) is never revived
     const amt = a ? Math.max(0, Math.floor(Number(a.reclaimed) || 0)) : 0;
     const r = await runQuery("UPDATE users SET archived_at = NULL, points_balance = points_balance + ? WHERE userId = ? AND archived_at IS NOT NULL", [amt, userId]);
     if (!r.changes) return null;

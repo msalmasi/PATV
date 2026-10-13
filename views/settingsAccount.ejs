@@ -19,7 +19,7 @@
   </div>
   <%- include('partials/account-flash', { errors: errors, success: success }) %>
   <nav class="jump" aria-label="<%- t('settings.sections_aria') %>">
-    <a href="#account"><%- t('settings.account') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a><a href="#security"><%- t('settings.security') %></a><a href="#timezone"><%- t('settings.timezone') %></a>
+    <a href="#account"><%- t('settings.account') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a><a href="#security"><%- t('settings.security') %></a><a href="#timezone"><%- t('settings.timezone') %></a><a href="#data"><%- t('settings.data') %></a><a href="#delete"><%- t('settings.delete') %></a>
   </nav>
 
   <section class="card" id="account">
@@ -42,6 +42,7 @@
   <section class="card" id="connections">
     <h2><%- t('settings.connections') %></h2>
     <p class="lede"><%- t('settings.connections.lede') %></p>
+    <p class="hint" style="margin:-8px 0 12px"><%- t('settings.connections.unlink_sessions', { link: '<a href="#security">' + t('settings.security.devices') + '</a>' }) %></p>
     <div class="conn">
       <div class="conn-row">
         <span class="conn-ico" style="background:#9146ff">
@@ -142,6 +143,9 @@
     <form class="grid2 pw-form" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
       <div class="field"><label class="lbl" for="password"><%- t('settings.password.new') %></label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
       <div class="field"><label class="lbl" for="confirm_password"><%- t('settings.password.confirm') %></label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <%# 1.99wj: this device stays signed in; the others are signed out unless unticked (sessions.js) %>
+      <input type="hidden" name="signout_others_field" value="1">
+      <label class="hint" style="grid-column:1/-1;display:flex;gap:8px;align-items:center"><input type="checkbox" name="signout_others" value="on" checked> <%- t('settings.password.signout_others') %></label>
       <div class="pw-act"><button class="btn primary" type="submit"><%- t('settings.password.update') %></button></div>
     </form>
     <span class="status err pw-status" id="pwStatus" role="status" aria-live="polite"></span>
@@ -160,7 +164,18 @@
     <span class="status" id="csStatus" role="status" aria-live="polite"></span>
     <details id="csLogBox"><summary><%- t('settings.security.recent') %></summary><ul id="csLog" class="hint"></ul></details>
     <script src="/public/js/chat-signin-setting.js?v=1" defer></script>
+
+    <%# 1.99wj: Your devices - the account's server-side sessions (sessions.js, public/js/account-security.js) %>
+    <h3 class="sec-h" id="devices"><%- t('settings.security.devices') %></h3>
+    <p class="hint"><%- t('settings.security.devices_d') %></p>
+    <div class="conn" id="devList" aria-live="polite"><p class="hint"><%- t('settings.security.loading') %></p></div>
+    <div class="dev-acts">
+      <button type="button" class="btn" id="devOthers"><%- t('settings.security.signout_others') %></button>
+      <button type="button" class="btn" id="devAll"><%- t('settings.security.signout_all') %></button>
+    </div>
+    <span class="status" id="devStatus" role="status" aria-live="polite"></span>
   </section>
+
 
   <section class="card" id="timezone">
     <h2><%- t('settings.timezone') %></h2>
@@ -178,6 +193,29 @@
       <span class="status" id="tzStatus" role="status" aria-live="polite"></span>
     </form>
   </section>
+
+  <%# 1.99wj: Your data - "Download my data" (accountexport.js) %>
+  <section class="card" id="data">
+    <h2><%- t('settings.data') %></h2>
+    <p class="lede"><%- t('settings.data.lede') %></p>
+    <div class="dev-acts"><button type="button" class="btn primary" id="expBtn"><%- t('settings.data.download') %></button></div>
+    <span class="status" id="expStatus" role="status" aria-live="polite"></span>
+    <ul class="hint" id="expList"></ul>
+  </section>
+
+  <%# 1.99wj: Delete account (accountdelete.js, docs/account-deletion.md) - the flow is its own page %>
+  <section class="card" id="delete">
+    <h2><%- t('settings.delete') %></h2>
+    <p class="lede"><%- t('settings.delete.lede') %></p>
+    <a class="btn" href="/settings/account/delete"><%- t('settings.delete.start') %></a>
+  </section>
+  <style>
+    .pe .sec-h { margin: var(--ds-sp-5) 0 var(--ds-sp-1); font: 700 15px/1.3 var(--ds-font); color: var(--ds-text-strong); }
+    .pe .dev-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--ds-sp-3); }
+    .pe .dev-row .conn-name small { display: block; color: var(--ds-text-muted); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+    .pe .dev-here { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-ac); color: var(--ds-ac); font-size: 11.5px; font-weight: 700; }
+  </style>
+  <script src="/public/js/account-security.js?v=1" defer></script>
 </main>
 
 <script>

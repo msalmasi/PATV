@@ -1969,6 +1969,8 @@ async function ban(user, target, { room = "", reason = "", days = 0 } = {}) {
   await runQuery("INSERT OR REPLACE INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, ?, ?, ?, ?)",
                  [u.userId, roomId, u.username, cleanLine(reason, 200) || null, user.username, NOW(), until]);
   if (roomId) await rooms.event(roomId, "feed-ban", user.username, `${u.username}${until ? " until " + new Date(until).toISOString() : ""}`);
+  // 1.99wj: a site-wide ban by staff also signs the account out everywhere (sessions.js); a pad owner's ban doesn't
+  if (!roomId) { try { await require("./sessions").revokeAll(u.userId, { why: "ban" }); } catch (e) { console.error("[feed] ban sign-out:", e.message); } }
   return { userId: u.userId, username: u.username, until };
 }
 async function unban(user, userId, room = "") {

@@ -96,6 +96,11 @@ require("./hlsauth").register(app);
 
 // Cookie Parser Middleware
 app.use(cookieParser(process.env.APP_SESSION_SECRET));
+// 1.99wj: server-side sign-in sessions (sessions.js) - a revoked / expired session is a signed-out request for everything
+// below (req.cookies.jwt is removed), and a cookie from before sessions is converted into one here. Must stay right after
+// cookie-parser, before anything reads the login cookie.
+const loginSessions = require("./sessions");
+app.use(loginSessions.gate);
 
 app.use(
   session({
@@ -511,6 +516,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
 
     // Attempt to decode the existing JWT from the cookie
     let currentUser;
+    let signedUp = false;   // 1.99wj: this sign-in created the account (no new-device notice)
     if (req.cookies.jwt) {
       try {
         currentUser = jwt.verify(req.cookies.jwt, process.env.SECRET_KEY);
@@ -629,12 +635,13 @@ app.get("/auth/twitch/callback", async (req, res) => {
             [1, newUser.userId]
           );
           currentUser = newUser;
+          signedUp = true;
         }
       }
       await twitchLogin.save(twitchUser.id, twitchUser.login);
       await stale.touch(currentUser.userId, "twitch sign-in");   // 1.99bm: an archived account comes back
-      // Sign them in (90-day sliding login - see middleware/loginCookie.js)
-      issueLogin(res, currentUser);
+      // Sign them in (90-day sliding login - see middleware/loginCookie.js; 1.99wj: a server-side session, sessions.js)
+      await loginSessions.signIn(req, res, currentUser, "twitch", { signup: signedUp });
       res.redirect(oauth.next || "/");
     }
   } catch (error) {
@@ -805,6 +812,7 @@ app.get("/auth/discord/callback", async (req, res) => {
 
     // Attempt to decode the existing JWT from the cookie
     let currentUser;
+    let signedUp = false;   // 1.99wj: this sign-in created the account (no new-device notice)
     if (req.cookies.jwt) {
       try {
         currentUser = jwt.verify(req.cookies.jwt, process.env.SECRET_KEY);
@@ -918,11 +926,12 @@ app.get("/auth/discord/callback", async (req, res) => {
             [1, newUser.userId]
           );
           currentUser = newUser;
+          signedUp = true;
         }
       }
       await stale.touch(currentUser.userId, "discord sign-in");   // 1.99bm: an archived account comes back
-      // Sign them in (90-day sliding login - see middleware/loginCookie.js)
-      issueLogin(res, currentUser);
+      // Sign them in (90-day sliding login - see middleware/loginCookie.js; 1.99wj: a server-side session, sessions.js)
+      await loginSessions.signIn(req, res, currentUser, "discord", { signup: signedUp });
       res.redirect(oauth.next || "/");
     }
   } catch (error) {
@@ -1120,6 +1129,8 @@ app.post("/reset-password/:token", async (req, res) => {
       [hashedPassword, rows[0].userId, hash, Date.now()]);
     if (!r.changes) return expired();
     await require("./ssolinks").markPassword(rows[0].userId, true);   // 1.99lb: last-method guard
+    // 1.99wj: a reset by email signs every device out (whoever had the old password, or a stolen cookie, is out)
+    await loginSessions.revokeAll(rows[0].userId, { why: "password reset" }).catch((e) => console.error("[auth] reset revoke:", e.message));
     console.log(`[auth] password reset for ${rows[0].username}`);
     clearLogin(res);
     req.flash("success", "Password changed. Sign in with your new password.");
@@ -1478,8 +1489,11 @@ function notFound(req, res, heading, message) {
 }
 
 // HTTP POST endpoint for logging out.
-app.post("/logout", (req, res) => {
+app.post("/logout", async (req, res) => {
   if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-out refused");
+  // 1.99wj: the session ends on the server too (sessions.js) - a copy of the cookie stops working
+  const s = req.loginSession;
+  if (s && s.id) await loginSessions.revoke(s.userId, s.id, "signed out").catch((e) => console.error("[auth] logout revoke:", e.message));
   clearLogin(res);
   res.redirect("/");
 });
@@ -4009,6 +4023,9 @@ app.post(
 // (source + ref required, logged, idempotent), POST /api/users/merge-balance, POST /api/g/stale/reclaimed.
 require("./botcredits").register(app, { isBotToken, idemBegin, resolveCounterparty });
 require("./autoescrow").register(app, { isBotToken, addUser });
+loginSessions.register(app, { addUser });   // 1.99wj: Settings → Account → Security: your devices, sign out everywhere (sessions.js)
+require("./accountexport").register(app, { addUser });   // 1.99wj: Settings → Account → Your data: "Download my data"
+require("./accountdelete").register(app, { addUser });   // 1.99wj: Settings → Account → Delete account (docs/account-deletion.md)
 require("./chatsignin").register(app, { isBotToken, addUser });   // !signin: a one-time sign-in link by PM for a linked Camfrog login (chatsignin.js)   // auto-account escrow (docs/auto-account-escrow.md): Pepe's PM list, the admin card, the 10-min tick
 
 // Grant XP to a user (bot-authenticated) — used for duel/heist wins. Runs the same

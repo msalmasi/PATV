@@ -1,0 +1,74 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('acctdel.title'), user: username }) %>
+<%# /settings/account/delete - 1.99wj (accountdelete.js): what deleting does, what to close first, re-authentication + the typed
+    confirmation. The policy: docs/account-deletion.md. %>
+<%- include('partials/account-css') %>
+<main class="ds-page mid pe">
+  <a class="ds-back" href="/settings/account#delete">← <%- t('settings.account') %></a>
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🗑️</span> <%- t('sethub.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('acctdel.h1') %></h1>
+    <p class="ds-sub"><%- t('acctdel.lead', { days: graceDays }) %></p>
+  </div>
+
+  <section class="card">
+    <h2><%- t('acctdel.what') %></h2>
+    <ul class="acctdel-list">
+      <li><%- t('acctdel.what.profile') %></li>
+      <li><%- t('acctdel.what.posts') %></li>
+      <li><%- t('acctdel.what.dms') %></li>
+      <li><%- t('acctdel.what.pat') %></li>
+      <li><%- t('acctdel.what.camfrog') %></li>
+      <li><%- t('acctdel.what.kept') %></li>
+      <li><%- t('acctdel.what.grace', { days: graceDays }) %></li>
+    </ul>
+    <p class="hint"><%- t('acctdel.export_first', { link: '<a href="/settings/account#data">' + t('settings.data.download') + '</a>' }) %></p>
+  </section>
+
+  <% if (elevated) { %>
+  <section class="card">
+    <h2><%- t('acctdel.elevated_h') %></h2>
+    <p class="lede"><%- t('acctdel.elevated') %></p>
+  </section>
+  <% } else if (block.length) { %>
+  <section class="card" id="blockers">
+    <h2><%- t('acctdel.block_h') %></h2>
+    <p class="lede"><%- t('acctdel.block_lede') %></p>
+    <ul class="acctdel-list">
+      <% block.forEach((b) => { %><li><%= b.label %><% if (b.href) { %> · <a href="<%= b.href %>"><%- t('acctdel.go') %></a><% } %></li><% }) %>
+    </ul>
+  </section>
+  <% } else { %>
+  <% if (settle.length) { %>
+  <section class="card">
+    <h2><%- t('acctdel.settle_h') %></h2>
+    <ul class="acctdel-list"><% settle.forEach((s) => { %><li><%= s.label %></li><% }) %></ul>
+  </section>
+  <% } %>
+  <section class="card" id="confirm">
+    <h2><%- t('acctdel.confirm_h') %></h2>
+    <form id="delForm" class="grid2" autocomplete="off">
+      <% if (hasPassword && !fresh) { %>
+      <div class="field"><label class="lbl" for="delPw"><%- t('acctdel.password') %></label>
+        <input type="password" id="delPw" name="password" autocomplete="current-password" maxlength="72">
+        <span class="hint"><%- t('acctdel.password_or_fresh') %></span></div>
+      <% } else if (!fresh) { %>
+      <p class="hint" style="grid-column:1/-1"><%- t('acctdel.fresh_needed') %></p>
+      <% } else { %>
+      <p class="hint" style="grid-column:1/-1"><%- t('acctdel.fresh_ok') %></p>
+      <% } %>
+      <div class="field"><label class="lbl" for="delConfirm"><%- t('acctdel.type', { name: '<code>' + username.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]) + '</code>' }) %></label>
+        <input type="text" id="delConfirm" name="confirm" autocomplete="off" spellcheck="false" data-want="<%= username %>"></div>
+      <div style="grid-column:1/-1"><button class="btn" type="submit" id="delBtn" disabled><%- t('acctdel.button', { days: graceDays }) %></button></div>
+    </form>
+    <span class="status" id="delStatus" role="status" aria-live="polite"></span>
+  </section>
+  <% } %>
+</main>
+<style>
+  .pe .acctdel-list { margin: 0 0 var(--ds-sp-3); padding-left: 20px; display: grid; gap: 6px; color: var(--ds-text-2); line-height: 1.5; }
+  .pe #delBtn:not(:disabled) { background: var(--ds-danger-fill); border-color: var(--ds-danger-line); color: var(--ds-danger-ink) !important; }
+</style>
+<script src="/public/js/account-delete.js?v=1" defer></script>
+</body>
+</html>

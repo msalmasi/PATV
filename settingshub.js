@@ -32,6 +32,7 @@ async function hub(user, ctx = {}) {
   const tg = await safe(() => require("./telegram").linkOf(uid));
   const plex = await safe(() => require("./plexmembers").mine(uid));
   const google = await safe(() => require("./ssolinks").linkOf("google", uid));
+  const devices = await safe(async () => (await require("./sessions").list(uid)).length);
   const conns = [!!row.camfrogUsername, !!row.twitchDisplayname, !!row.discordUsername, !!(plex && plex.rows && plex.rows.length), !!tg, !!google];
   const linked = conns.filter(Boolean).length;
   const account = [
@@ -40,6 +41,10 @@ async function hub(user, ctx = {}) {
     E("camfrog", "🐸", ACCT + "#camfrogDiv", row.camfrogUsername ? st("as", { name: row.camfrogUsername }, "ok") : st("not_linked")),
     E("password", "🔑", ACCT + "#password", pwSet === null ? null : pwSet ? st("pw_set", null, "ok") : st("pw_unset", null, "warn")),
     E("chatsignin", "💬", ACCT + "#security", chatOn === null ? null : chatOn ? st("on", null, "ok") : st("off")),
+    // 1.99wj: your devices (sessions.js), your data (accountexport.js), delete account (accountdelete.js)
+    E("devices", "🖥️", ACCT + "#devices", devices === null ? null : st("devices_n", { count: devices })),
+    E("data", "📦", ACCT + "#data"),
+    E("delete", "🗑️", "/settings/account/delete"),
   ];
 
   // ── Profile: how others see you (one home: Edit profile - linked, never copied here) ──

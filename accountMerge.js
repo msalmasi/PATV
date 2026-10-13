@@ -345,6 +345,15 @@ const RULES = {
   "age_attest.user_id": M({ key: [] }),
   "explicit_readiness.owner": { deny: TEXT }, "explicit_readiness.updated_by": { deny: NAME },
   "takedown_cases.reporter_id": M(), "takedown_cases.resolved_by": { deny: NAME },
+  // 1.99wj: sessions.js - the merged-away account's sign-ins END with the merge (sessions.revokeForMerge in moveUserRows deletes
+  // them), never moved: a cookie for the old account must not become a login to the target
+  "sessions.user_id": { keep: "1.99wj sessions.js: never moved - the merged-away account's sessions are deleted by the merge (sessions.revokeForMerge)" },
+  "session_cutoffs.user_id": { keep: "1.99wj sessions.js: never moved - deleted with the merged-away account's sessions (sessions.revokeForMerge)" },
+  // 1.99wj: accountexport.js / accountdelete.js - an export file is of the account it was made for; the deletion journal names its account
+  "account_exports.user_id": { keep: "1.99wj accountexport.js: an export is a copy of the account it was made for" },
+  "account_deletions.user_id": { keep: "1.99wj accountdelete.js: the deletion journal names the account" },
+  "account_deletions.requested_by": { deny: "who asked: 'self' or 'admin:<userId>' (an audit label)" },
+  "account_deletion_routes.user_id": { keep: "1.99wj accountdelete.js: the routing journal of a deleted account's balance" },
 };
 
 /** The rule for one column: its RULES entry, else null (an unclassified candidate). */
@@ -578,6 +587,10 @@ async function moveUserRows(fromId, toId, opts = {}) {
   // posts / comments the old account voted on: their cached counts are recomputed afterwards
   if (await tableExists("feed_votes")) out.recount.posts = (await getQuery("SELECT DISTINCT post_id AS id FROM feed_votes WHERE user_id = ?", [fromId])).map((r) => r.id);
   if (await tableExists("feed_comment_votes")) out.recount.comments = (await getQuery("SELECT DISTINCT comment_id AS id FROM feed_comment_votes WHERE user_id = ?", [fromId])).map((r) => r.id);
+
+  // 1.99wj: the merged-away account's sign-ins end here (sessions.js) - never moved to the target
+  try { const n = await require("./sessions").revokeForMerge(fromId); if (n) out.folded["sessions (ended)"] = n; }
+  catch (e) { console.error("[MERGE] session revoke:", e.message); throw e; }
 
   await mergeConversations(fromId, toId, out);
   await mergeProfilePad(fromId, toId, out);

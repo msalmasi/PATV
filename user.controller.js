@@ -133,8 +133,8 @@ async function registerUser(req, res) {
       console.error("[auth] fresh_meat badge:", e.message);
     }
 
-    // Signed straight in (same 90-day login as a normal sign-in).
-    issueLogin(res, { userId, username, class: "pleb" });
+    // Signed straight in (same 90-day login as a normal sign-in; 1.99wj: a server-side session, sessions.js)
+    await require("./sessions").signIn(req, res, { userId, username, class: "pleb" }, next && next.startsWith("/claim/") ? "claim" : "password", { signup: true });
     req.flash("success", req.t ? req.t('auth.welcome', { name: username }) : `Welcome to PATV, ${username}! Check your email to verify your address.`);
     return res.redirect(next || `/u/${encodeURIComponent(username)}/wheel`);
   } catch (error) {
@@ -222,9 +222,16 @@ async function sendVerificationEmail(email, username, token) {
 // (a ban, 2FA) belongs HERE so every path gets it; today a sign-in brings an archived account back (1.99bm) and issues
 // the 90-day sliding login (middleware/loginCookie.js). Site restrictions (casino ban, feed bans, red list) are not
 // sign-in blocks - they're enforced where they apply, whichever way the member signed in.
-async function finishLogin(req, res, user, via) {
+// 1.99wj: the login is a server-side session (sessions.js: "Your devices", sign out everywhere) - `via` names the method.
+function methodOf(via) {
+  const v = String(via || "").toLowerCase();
+  for (const m of ["plex", "google", "telegram", "discord", "twitch", "claim"]) if (v.includes(m)) return m;
+  if (v.includes("chat")) return "chat";
+  return "password";
+}
+async function finishLogin(req, res, user, via, opts = {}) {
   await require("./staleaccounts").touch(user.userId, via || "sign-in");
-  issueLogin(res, { userId: user.userId, username: user.username, class: user.class });
+  await require("./sessions").signIn(req, res, user, opts.method || methodOf(via), { signup: /sign-up|signup/i.test(String(via || "")) || !!opts.signup });
   return user;
 }
 
@@ -304,7 +311,8 @@ async function loginUser(req, res) {
       return back(req.t ? req.t('auth.err.bad_login') : "That username and password don't match. Check caps lock, or reset your password.", "password");
     }
     loginPairLimit.reset(ip + "|" + who);
-    await finishLogin(req, res, user, "sign-in");
+    if (next && next.startsWith("/claim/")) await finishLogin(req, res, user, "claim sign-in");   // 1.99wj: the session's method (a !signup claim link)
+    else await finishLogin(req, res, user, "sign-in");
     // 1.99jr: "I already have an account" after a Plex sign-in that wasn't linked yet - link it now (plexsso.js; only
     // when this form asked for it, and only the Plex account THIS browser just signed in to)
     if (body.link_plex === "1") await require("./plexsso").linkPendingTo(req, user).catch((e) => console.error("[auth] plex link after sign-in:", e.message));
@@ -352,6 +360,8 @@ async function updateUsername(req, res) {
               await usernames.record(userId, was ? was.username : req.user.username, username, 'rename:web');
           });
           req.flash('success', 'Username changed.');
+          // 1.99wj: this device signs in again with the new name - its session ends on the server too (sessions.js)
+          if (req.loginSession) await require('./sessions').revoke(req.loginSession.userId, req.loginSession.id, 'username changed').catch(() => {});
           clearLogin(res);
           res.redirect(`/login`);
         });
@@ -414,11 +424,17 @@ async function updatePassword(req, res) {
   const hashedPassword = await bcrypt.hash(password, 12);
   await runQuery('UPDATE users SET password = ? WHERE userId = ?', [hashedPassword, userId]);
   await require('./ssolinks').markPassword(userId, true);   // 1.99lb: a password the member chose (last-method guard)
-  // Sign out and back in with the new password. (This used to redirect to GET /logout, which
-  // doesn't exist - logout is POST-only - so changing your password ended on a 404.)
-  clearLogin(res);
-  req.flash('success', 'Password changed. Sign in with your new password.');
-  res.redirect('/login');
+  // 1.99wj: this device stays signed in (its server-side session, sessions.js); "Sign out my other devices" is ticked by
+  // default. A form without the switch (an old cached page) counts as ticked - the safe side.
+  const b = req.body || {};
+  const others = !b.signout_others_field || b.signout_others === 'on' || b.signout_others === '1' || b.signout_others === 'true';
+  const cur = req.loginSession && req.loginSession.id;
+  let n = 0;
+  if (others) n = await require('./sessions').revokeAll(userId, { except: cur || null, why: 'password changed' });
+  if (others && !cur) clearLogin(res);
+  req.flash('success', req.t ? req.t(others ? 'settings.password.changed_out' : 'settings.password.changed', { count: n })
+                             : (others ? `Password changed. ${n} other device(s) signed out.` : 'Password changed.'));
+  res.redirect(others && !cur ? '/login' : editPage);
 };
 
 // Change the avatar

@@ -28,6 +28,7 @@ const TTL_DEFAULTS = Object.freeze({
   "poll.vote": 30, "poll.create": 30, "poll.end": 30,
   "table": 2,                          // a seat move only makes sense at the table it was made for
   "privacy.incognito": 15,            // 1.99wa: Settings → Privacy (incognito.js)
+  "privacy.forget": 7 * 1440,         // 1.99wj: a deleted account's Camfrog login - Pepe forgets it (accountdelete.js retries an expired one)
   "dj": 10, "pepe.look": 10, "room.ctl": 15, "room.visit": 30, "room.bridge": 30, "econ.burn": 30, "econ.routes": 30, "econ.cmd": 30,
   "aigen": 15,                         // = aigen.js QUEUE_TTL (its job is timed out by aigen's own sweep)
   "snap.save": 15, "camclip.save": 15, "micclip.save": 15, "stagecap.save": 30,
@@ -38,7 +39,7 @@ const TTL_DEFAULTS = Object.freeze({
   "bounty:add": 60, "bounty:claim": 120, "bounty:reject": 120, "bounty:dispute": 240, "bounty:resolve": 240, "bounty:cancel": 240,
   "default": 60,
 });
-const NO_NOTICE = new Set(["notify", "table"]);
+const NO_NOTICE = new Set(["notify", "table", "privacy.forget"]);
 const NOTICE_KIND = { market: "market", pool: "market", wager: "wager", bounty: "bounty", loan: "loan", lotto: "lotto",
                       cosmetic: "cosmetics", stash: "staking", donate: "system", avatar: "system" };
 const MAX_MIN = 7 * 1440;
