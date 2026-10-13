@@ -1162,6 +1162,12 @@ async function crosspostRefusal(u, o, R) {
 /** One crosspost row in pad R (charged; rolled back + refunded on failure). -> {id, pending} */
 async function crosspostOne(u, o, R, title, announce = true) {
   const pending = (await roomSettings(R.id)).approval && !(await rooms.canManage(u, R.id));
+  // 1.99vl: the target pad's content filter checks the crosspost's own title + the original's text it embeds (a block is
+  // this pad's refusal, before the charge; a hide stores it hidden there). Crossposting to several pads isn't "repeat" spam.
+  const filt = await FILTER().check(u, [R.id], { kind: "post", title: [title, o.title].filter(Boolean).join("\n"), body: o.body || "",
+                                                 links: o.link_url ? 1 : 0, dup: false });
+  if (filt && filt.action === "block") throw new Refuse(422, filt.message);
+  const filtHide = !!(filt && filt.action === "hide");
   const cost = CONFIG.price_post;
   const id = newId();
   const label = `feed crosspost ${id}`;
@@ -1171,8 +1177,9 @@ async function crosspostOne(u, o, R, title, announce = true) {
     // nsfw: the original's effective flag at the time (the embed also follows the original live, see decorate)
     await runQuery("INSERT INTO feed_posts (id, author_id, title, nsfw, global, cost, created, crosspost_of, home_pad) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
                    [id, u.userId, title, effNsfw(o) ? 1 : 0, cost, t, o.id, R.id]);       // 1.99ep: a crosspost's home is its own pad
-    await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, R.id, t, pending ? (announce ? 1 : 2) : 0]);
-    if (!pending && announce) await queueMention(R.id, id);
+    await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending, hidden_at, hidden_by) VALUES (?, ?, ?, ?, ?, ?)",
+                   [id, R.id, t, pending ? (announce ? 1 : 2) : 0, filtHide ? t : null, filtHide ? FILTER().BY : null]);
+    if (!pending && announce && !filtHide) await queueMention(R.id, id);
     await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
     await TAGS().copyTags(o.id, id);              // 1.99iq: a crosspost starts with the original's tags
     await recountPost(id);
@@ -1185,7 +1192,8 @@ async function crosspostOne(u, o, R, title, announce = true) {
     throw e;
   }
   console.log(`[feed] crosspost ${id} of ${o.id} by ${u.username} to ${R.id}${pending ? " (pending approval)" : ""}`);
-  return { id, pending };
+  if (filt) await FILTER().record(filt, { kind: "post", postId: id, authorId: u.userId }).catch((e) => console.error("[feed] filter record:", e.message));
+  return { id, pending, safety: filt && filt.message ? { action: filt.action, selfharm: filt.selfharm, message: filt.message } : undefined };
 }
 /**
  * 1.99ct: crosspost `origId` into several pads. input: {pads: [id|slug|p/slug, ...], title?}.
@@ -1241,6 +1249,7 @@ async function crosspostMany(userId, origId, input = {}) {
     try {
       const made = await crosspostOne(u, o, R, title, wantsAnnounce(R));
       Object.assign(res, { status: made.pending ? "pending" : "created", id: made.id, url: await postLink(made.id) });
+      if (made.safety) res.safety = made.safety;                  // 1.99vl: the target pad's content filter note
     } catch (e) {
       if (!e.refuse) console.error(`[feed] crosspost ${o.id} -> ${R.id}:`, e);
       Object.assign(res, { status: "refused", code: e.refuse ? e.status : 500, error: e.refuse ? e.message : "Something went wrong - it wasn't posted." });

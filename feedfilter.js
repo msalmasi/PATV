@@ -27,6 +27,8 @@
 // NOTE 1.99ux: a site-wide command/feature master-switch model was being built in parallel; this module keeps its own
 // simple master + default (filter:global.enabled / default_on) until that lands - fold it in then.
 //
+// CROSSPOSTS (1.99vl): the TARGET pad's filter checks the crosspost's own title + the original's title / body it embeds
+// (a block refuses that pad only; a hide stores it hidden there); crossposting to several pads never counts as repeat spam.
 // NEVER FILTERED: Pepe, site staff, the pad's own owner (they are its moderators - as in feedautomod), posts made on
 // someone's behalf (room generations, story keeps). Image safety, reports, TAKE IT DOWN and the CSAM escalation are
 // separate and always on.
@@ -526,7 +528,7 @@ const CARE_BODY = "Something you wrote sounded like you might be going through a
  * {action: allow|flag|hide|block, roomId, cats: [{cat, action, kinds, terms}], selfharm: null|notice|flag, message, ms}.
  * action "block": the caller refuses with `message` (already logged + counted here).
  */
-async function check(u, roomIds, { kind = "post", title = "", body = "", links = 0, edit = false, postId = null, commentId = null } = {}) {
+async function check(u, roomIds, { kind = "post", title = "", body = "", links = 0, edit = false, postId = null, commentId = null, dup = true } = {}) {
   const t0 = process.hrtime.bigint();
   await init();
   const store = require("./feedstore");
@@ -544,8 +546,8 @@ async function check(u, roomIds, { kind = "post", title = "", body = "", links =
   if (!pads.length) return null;
   const text = [title, body].filter(Boolean).join("\n");
   const hits = scan(text, { kind, links });
-  const dup = edit ? 0 : dupCount(u.userId, text);
-  if (dup >= SPAM.dup_count) {
+  const dupN = edit || !dup ? 0 : dupCount(u.userId, text);
+  if (dupN >= SPAM.dup_count) {
     const s = hits.find((h) => h.cat === "spam");
     if (s) s.kinds.push("repeat"); else hits.push({ cat: "spam", kinds: ["repeat"], terms: [] });
   }

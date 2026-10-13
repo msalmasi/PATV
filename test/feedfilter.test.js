@@ -425,6 +425,43 @@ test("the admin page: admins only; renders the switches, counts, log and lists",
   assert.match(r.text, /name="hate_words"/);
 });
 
+test("crossposts: the target pad's filter checks the crosspost's own title and the original it embeds", async () => {
+  // the original lives in a pad without the filter; OWNED has it on (hate = hide)
+  assert.equal((await setPad(U.sideowner, slug.other, "on", false)).status, 200);
+  const orig = (await mkPost(U.alice, { title: "my cat", body: "look at him" }, OTHER)).d.id;
+  // a clean crosspost goes up untouched
+  let r = await post(`/api/feed/posts/${orig}/crosspost`, U.carol, { pads: [OWNED], title: "so cute" });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.d.results[0].status, "created");
+  assert.equal((await placement(r.d.results[0].id)).hidden_at, null);
+  // a slur in the crosspost's own title is hidden in the target pad and reported
+  const orig2 = (await mkPost(U.alice, { title: "my dog", body: "look at her" }, OTHER)).d.id;
+  r = await post(`/api/feed/posts/${orig2}/crosspost`, U.bob, { pads: [OWNED], title: "look at this f4gg0t" });
+  assert.equal(r.status, 200, r.text);
+  const x = r.d.results[0];
+  assert.equal(x.status, "created", JSON.stringify(x));
+  assert.equal(x.safety.action, "hide");
+  assert.ok((await placement(x.id)).hidden_at);
+  assert.equal((await filterReports(x.id))[0].reason, "hate");
+  // block: that pad refuses it, nothing charged or stored; the original's own text counts too
+  await setPad(U.owner, slug.owned, "act_doxxing", "block");
+  const dox = (await mkPost(U.alice, { body: "call him 555-867-5309" }, OTHER)).d.id;
+  const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_posts"))[0].n;
+  r = await post(`/api/feed/posts/${dox}/crosspost`, U.carol, { pads: [OWNED] });
+  assert.equal(r.d.results[0].status, "refused");
+  assert.equal(r.d.results[0].code, 422);
+  assert.match(r.d.results[0].error, /content filter stopped your post/);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM feed_posts"))[0].n, n);
+  await setPad(U.owner, slug.owned, "act_doxxing", null, true);
+  // crossposting the same text again and again is never "repeat" spam
+  for (let i = 0; i < 4; i++) {
+    const p2 = (await mkPost(U.alice, { title: "event tonight", body: "come along to the room at 9" }, OTHER)).d.id;
+    const y = await post(`/api/feed/posts/${p2}/crosspost`, U.carol, { pads: [OWNED], title: "event tonight" });
+    assert.equal(y.d.results[0].status, "created", JSON.stringify(y.d.results[0]));
+    assert.equal(y.d.results[0].safety, undefined, "crosspost " + i);
+  }
+});
+
 test("Pepe and posts made on someone's behalf are never filtered", async () => {
   assert.equal(await FF.check({ userId: store.PEPE_ID, username: "Pepe" }, [OWNED], { body: "n1ggers" }), null);
   const v = await FF.check(await store.account(U.alice.userId), [OWNED], { body: "n1ggers" });
