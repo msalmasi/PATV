@@ -314,6 +314,10 @@ const RULES = {
   "restream_toggles.target": M({ key: [] }), "restream_toggles.by": M(),
   "econ_watch.streamer_id": M(), "econ_watch.viewer_id": M({ key: ["day", "stream"], merge: { secs: "SUM", muted_secs: "SUM", beats: "SUM" } }),
   "econ_watch_keys.viewer_id": M({ key: ["day", "stream", "k"] }),
+  // 1.99wu: E-5 verified watch-minutes rollup (vwm.js) - a merged streamer's days fold into the target's
+  "stage_watch.streamer_id": M({ key: ["day", "room_id"], merge: { vwm: "SUM", viewers: "SUM", raw_min: "SUM", muted_min: "SUM", self_min: "SUM",
+                                                                  alt_min: "SUM", gate_min: "SUM", cap_min: "SUM", final: "MIN" } }),
+  "challenge_holds.userId": M(),                      // 1.99wu: E-8 mic-challenge prize holds (challengepay.js) - who was paid
   "pad_site_overrides.by_user": { deny: NAME },   // 1.99up: who last set a pad's "Pepe on your pad's page" setting (padsite.js) - a label
   "pad_slug_aliases.by": M(),      // 1.99iy: who changed a pad's address (padaddress.js) - a username, moved like the other "by"s
   "rooms_registry.created_by": M(),   // 1.99iz: who made a member-made pad (padcreate.js); the owner column has its own rule

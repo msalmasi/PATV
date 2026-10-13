@@ -51,6 +51,7 @@ const LABELS = {
   mm: "📈 Market-maker vault (free PAT)", lotto: "🎟️ Lotto jackpot pot", vaultfloat: "⏳ Staking requests waiting for the cut-off",
   burn: "🔥 Burn reserve (out of circulation, waiting to be burned)",
   likeness: "🪞 Likeness cuts held for their subjects (24 h)",          // 1.99rv: likeness.js escrow
+  chalhold: "🎤 Mic-challenge prizes held until judged",                 // 1.99wu: challengepay.js E-8 holds
 };
 
 class Refuse extends Error {

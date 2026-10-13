@@ -35,7 +35,7 @@ const econ = require(path.join(repo, "econ"));
 const DAY = 24 * 3600 * 1000;
 const T = Date.UTC(2026, 9, 11, 18, 0, 0);
 const DAYSTR = "2026-10-11";
-rooms._setClock(() => T); RC._setClock(() => T); RY._setClock(() => T); RV._setClock(() => T); S._setClock(() => T); B._setClock(() => T);
+rooms._setClock(() => T); require(path.join(repo, "vwm"))._setClock(() => T); RC._setClock(() => T); RY._setClock(() => T); RV._setClock(() => T); S._setClock(() => T); B._setClock(() => T);
 const PLANT = "plant_based_chatting";
 const old = new Date(T - 30 * DAY).toISOString().replace("T", " ").slice(0, 19);
 const young = new Date(T - 2 * DAY).toISOString().replace("T", " ").slice(0, 19);

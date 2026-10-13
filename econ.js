@@ -16,6 +16,10 @@
 //                                        (welcome-bonus dedupe keys, dup_of) are excluded; viewers
 //                                        sharing a browser (or > 3 sharing a network) on the same
 //                                        stream are flagged as likely alts.
+//                                        E-5 (1.99wu, doc 7.2): at most 3 accounts per browser and per
+//                                        network (IPv4 /24, IPv6 /64) per stream count - the 4th and later
+//                                        by first beat are 'alt'; a viewer on the streamer's own browser or
+//                                        address (welcome keys) is 'self'. vwm.js rolls the rows up per day.
 //                                        E-4: every answer carries a one-time server NONCE that the next beat must echo;
 //                                        a beat without it (a replayed / scripted beat, a second tab) restarts the session
 //                                        with no credit. The recipe (recipe.js) pays only status 'ok' minutes minus muted
@@ -38,7 +42,11 @@ const BEAT_MAX_MS = 45000;          // a gap longer than this restarts the sessi
 const BEAT_CREDIT_MAX = 30;         // seconds credited per beat
 const POS_ADVANCE_MIN = 5;          // the media position must move at least this much between beats
 const VWM_CAP_MIN = 120;            // per viewer per streamer per day (doc 7.2)
-const IP_MAX = 3;                   // more accounts than this on one network for one stream -> flagged
+// E-5 (doc 7.2): "per IP/24 and device fingerprint, at most 3 accounts per stream" - the first three accounts seen on
+// one network (IPv4 /24, IPv6 /64) or one browser for a stream that day count, the 4th and later are flagged 'alt'
+// (E-0 flagged EVERY account on a network once it held more than 3, and any 2nd account on a browser)
+const NET_MAX = 3;
+const DEV_MAX = 3;
 const STRONG = ["cf", "discord", "twitch", "email", "dev"];
 
 const day = (t) => new Date(t == null ? Date.now() : t).toISOString().slice(0, 10);
@@ -64,6 +72,8 @@ const ready = (async () => {
   await runQuery(`CREATE INDEX IF NOT EXISTS econ_watch_room ON econ_watch (day, room_id)`);
   await runQuery(`CREATE TABLE IF NOT EXISTS econ_watch_keys (day TEXT NOT NULL, stream TEXT NOT NULL, k TEXT NOT NULL,
                   viewer_id TEXT NOT NULL, PRIMARY KEY (day, stream, k, viewer_id))`);
+  // E-5: when an account first showed up on a key (the first NET_MAX / DEV_MAX accounts of a key count, later ones don't)
+  try { await runQuery("ALTER TABLE econ_watch_keys ADD COLUMN first_ts INTEGER"); } catch (e) { /* already there */ }
 })().catch((e) => console.error("[econ] init:", e));
 
 // ── config ──
@@ -175,33 +185,67 @@ async function relation(viewerId, streamerId) {
   return out;
 }
 
-// Request keys (browser + network), the same hashes the welcome dedupe uses.
+// E-5: the network a beat came from - an IPv4 address by its /24, an IPv6 one by its /64 (welcome.normIp already cut it)
+function netOf(ip) {
+  const s = String(ip || "");
+  if (!s) return null;
+  if (s.includes(":")) return s;
+  const m = s.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/);
+  return m ? `${m[1]}.${m[2]}.${m[3]}.0/24` : s;
+}
+
+// Request keys (browser + network), the same hashes the welcome dedupe uses; E-5 adds "net" (the /24 or /64).
 function requestKeys(req, res) {
-  const out = [];
+  let out = [];
   try {
-    if (typeof welcome.reqKeys === "function") return welcome.reqKeys(req, res);
-    const ip = welcome.normIp(guard.clientIp(req));
-    if (ip) out.push(["ip", welcome.hash("ip", ip)]);
+    if (typeof welcome.reqKeys === "function") out = welcome.reqKeys(req, res).slice();
+    else {
+      const ip = welcome.normIp(guard.clientIp(req));
+      if (ip) out.push(["ip", welcome.hash("ip", ip)]);
+    }
+    const net = netOf(welcome.normIp(guard.clientIp(req)));
+    if (net) out.push(["net", welcome.hash("net", net)]);
   } catch (e) { /* no keys */ }
   return out;
 }
 
+// E-5 (doc 7.2: "the streamer's own account, its known alts ... and shared device/IP clusters are excluded"): the
+// browser or the exact address this beat came from is one the streamer's own account was seen on (welcome keys).
+async function streamerCluster(streamerId, keys) {
+  if (!streamerId) return null;
+  const ks = keys.filter(([kind]) => kind === "dev" || kind === "ip").map(([, k]) => k);
+  if (!ks.length) return null;
+  try {
+    const r = await getQuery(`SELECT kind FROM welcome_keys WHERE userId = ? AND k IN (${ks.map(() => "?").join(",")}) LIMIT 1`, [streamerId, ...ks]);
+    return r[0] ? (r[0].kind === "dev" ? "on the streamer's own browser" : "on the streamer's own network address") : null;
+  } catch (e) { return null; }
+}
+
+// Where this viewer stands among the accounts seen on these keys for this stream today (0 = the first), by first seen.
+async function rankOn(d, stream, viewerId, ks) {
+  const rows = await getQuery(`SELECT viewer_id, MIN(COALESCE(first_ts, 0)) AS t FROM econ_watch_keys
+                               WHERE day = ? AND stream = ? AND k IN (${ks.map(() => "?").join(",")}) GROUP BY viewer_id ORDER BY t, viewer_id`,
+                              [d, stream, ...ks]);
+  const i = rows.findIndex((r) => r.viewer_id === viewerId);
+  return { n: rows.length, rank: i < 0 ? rows.length : i };
+}
+
 async function altCheck(d, stream, viewerId, keys) {
-  if (!keys.length) return null;
-  for (const [, k] of keys) {
-    await runQuery("INSERT OR IGNORE INTO econ_watch_keys (day, stream, k, viewer_id) VALUES (?, ?, ?, ?)", [d, stream, k, viewerId]);
-  }
-  const dev = keys.filter(([kind]) => kind === "dev").map(([, k]) => k);
-  if (dev.length) {
-    const r = await getQuery(`SELECT COUNT(DISTINCT viewer_id) AS n FROM econ_watch_keys WHERE day = ? AND stream = ? AND k IN (${dev.map(() => "?").join(",")}) AND viewer_id != ?`,
-      [d, stream, ...dev, viewerId]);
-    if (r[0] && r[0].n > 0) return "same browser as another viewer";
-  }
-  const ip = keys.filter(([kind]) => kind === "ip").map(([, k]) => k);
-  if (ip.length) {
-    const r = await getQuery(`SELECT COUNT(DISTINCT viewer_id) AS n FROM econ_watch_keys WHERE day = ? AND stream = ? AND k IN (${ip.map(() => "?").join(",")})`,
-      [d, stream, ...ip]);
-    if (r[0] && r[0].n > IP_MAX) return `${r[0].n} accounts on one network`;
+  if (keys.length) {
+    const t = clock();
+    for (const [, k] of keys) {
+      await runQuery("INSERT OR IGNORE INTO econ_watch_keys (day, stream, k, viewer_id, first_ts) VALUES (?, ?, ?, ?, ?)", [d, stream, k, viewerId, t]);
+    }
+    const dev = keys.filter(([kind]) => kind === "dev").map(([, k]) => k);
+    if (dev.length) {
+      const r = await rankOn(d, stream, viewerId, dev);
+      if (r.rank >= DEV_MAX) return `account ${r.rank + 1} on one browser (${DEV_MAX} count)`;
+    }
+    const net = keys.filter(([kind]) => kind === "net").map(([, k]) => k);
+    if (net.length) {
+      const r = await rankOn(d, stream, viewerId, net);
+      if (r.rank >= NET_MAX) return `account ${r.rank + 1} on one network (${NET_MAX} count)`;
+    }
   }
   const dup = await dupOf(viewerId);
   if (dup) return "flagged by the welcome dedupe";
@@ -274,8 +318,13 @@ async function beat(req, res) {
   const d = day(now);
   const rel = await relation(u, info.streamer_id);
   let status = rel.status, reason = rel.reason || null;
+  const keys = requestKeys(req, res);
   if (status === "ok") {
-    const alt = await altCheck(d, info.stream, u, requestKeys(req, res));
+    const near = await streamerCluster(info.streamer_id, keys);      // E-5: the streamer's own browser / address
+    if (near) { status = "self"; reason = near; }
+  }
+  if (status === "ok") {
+    const alt = await altCheck(d, info.stream, u, keys);
     if (alt) { status = "alt"; reason = alt; }
   }
   const muted = b.muted === true ? step.credit : 0;
@@ -285,7 +334,8 @@ async function beat(req, res) {
                   ON CONFLICT(day, stream, viewer_id) DO UPDATE SET secs = secs + excluded.secs, muted_secs = muted_secs + excluded.muted_secs,
                   beats = beats + 1, updated = excluded.updated,
                   status = CASE WHEN status = 'self' OR excluded.status = 'self' THEN 'self' WHEN status = 'alt' OR excluded.status = 'alt' THEN 'alt' ELSE 'ok' END,
-                  reason = COALESCE(reason, excluded.reason)`,
+                  reason = CASE WHEN excluded.status = 'self' AND status != 'self' THEN excluded.reason
+                                WHEN excluded.status = 'alt' AND status = 'ok' THEN excluded.reason ELSE COALESCE(reason, excluded.reason) END`,
     [d, info.stream, info.room_id, info.streamer_id, u, step.credit, muted, status, reason, now]);
   return { code: 200, body: { ok: true, counted: true, secs: step.credit, status, nonce } };
 }

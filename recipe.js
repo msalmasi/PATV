@@ -65,8 +65,12 @@ async function dupSet(ids) {
   } catch (e) { return new Set(); }
 }
 
-/** The participant gates for a batch of Camfrog logins -> {login: {ok, userId, why}}. */
-async function peopleGates(logins, t = clock()) {
+/** The participant gates for a batch of Camfrog logins -> {login: {ok, userId, why}}. `o` (1.99wu): {min_age_days, min_level}
+ *  for the other anti-alt gates that share these rules (E-7 convoy hits: 14 days / level 3; E-8 challenge prizes: 7 / 2). */
+async function peopleGates(logins, t = clock(), o = {}) {
+  const has = (v) => v !== undefined && v !== null && v !== "" && Number.isFinite(Number(v));
+  const minAge = has(o.min_age_days) ? Math.max(0, Math.min(365, Number(o.min_age_days))) : GATES.min_age_days;
+  const minLevel = has(o.min_level) ? Math.max(0, Math.min(100, Math.floor(Number(o.min_level)))) : GATES.min_level;
   const clean = [...new Set((logins || []).map((l) => String(l || "").toLowerCase()).filter((l) => LOGIN_RE.test(l)))].slice(0, 400);
   const out = {};
   if (!clean.length) return out;
@@ -80,37 +84,18 @@ async function peopleGates(logins, t = clock()) {
     const u = byLogin.get(l);
     if (!u) out[l] = { ok: false, why: "no linked PATV account" };
     else if (u.archived_at) out[l] = { ok: false, why: "archived account" };
-    else if (ageDays(u.created_at, t) < GATES.min_age_days) out[l] = { ok: false, why: "account younger than 7 days" };
-    else if ((Number(u.level) || 0) < GATES.min_level) out[l] = { ok: false, why: "below level 2" };
-    else if (dups.has(u.userId)) out[l] = { ok: false, why: "flagged as an alt" };
+    else if (ageDays(u.created_at, t) < minAge) out[l] = { ok: false, userId: u.userId, why: `account younger than ${minAge} days` };
+    else if ((Number(u.level) || 0) < minLevel) out[l] = { ok: false, userId: u.userId, why: `below level ${minLevel}` };
+    else if (dups.has(u.userId)) out[l] = { ok: false, userId: u.userId, why: "flagged as an alt" };
     else out[l] = { ok: true, userId: u.userId };
   }
   return out;
 }
 
-/** Verified watch-minutes per streamer on one room's stage for one day. */
-async function streamerVwm(roomId, day, t = clock()) {
-  let rows = [];
-  try {
-    rows = await getQuery(`SELECT w.streamer_id, w.viewer_id, w.secs, w.muted_secs, u.level, u.created_at, u.isEmailVerified, u.discordId, u.twitchId
-                           FROM econ_watch w JOIN users u ON u.userId = w.viewer_id
-                           WHERE w.day = ? AND w.room_id = ? AND w.status = 'ok' AND w.streamer_id IS NOT NULL AND w.stream LIKE 'slot:%'`,
-                          [day, roomId]);
-  } catch (e) { return []; }
-  const per = new Map();
-  for (const r of rows) {
-    if (ageDays(r.created_at, t) < GATES.min_age_days || (Number(r.level) || 0) < GATES.min_level) continue;
-    if (!(Number(r.isEmailVerified) === 1 || r.discordId || r.twitchId)) continue;
-    const min = Math.min(GATES.vwm_cap, Math.max(0, (Number(r.secs) || 0) - (Number(r.muted_secs) || 0)) / 60);
-    if (min <= 0) continue;
-    const s = per.get(r.streamer_id) || { userId: r.streamer_id, vwm: 0, viewers: 0 };
-    s.vwm += min; s.viewers += 1;
-    per.set(r.streamer_id, s);
-  }
-  if (!per.size) return [];
-  const live = await getQuery(`SELECT userId FROM users WHERE userId IN (${[...per.keys()].map(() => "?").join(",")})`, [...per.keys()]);
-  const exists = new Set(live.map((r) => r.userId));
-  return [...per.values()].filter((s) => exists.has(s.userId)).map((s) => ({ ...s, vwm: Math.round(s.vwm * 10) / 10 }));
+/** Verified watch-minutes per streamer on one room's stage for one day. E-5: the daily rollup (vwm.js, table stage_watch):
+ *  status 'ok' minutes minus muted ones from gated viewers, at most 120 per viewer per STREAMER per day across every pad. */
+async function streamerVwm(roomId, day) {
+  try { return await require("./vwm").forRoom(roomId, day); } catch (e) { console.error("[recipe] vwm:", e.message); return []; }
 }
 
 async function activeDays(roomId, day) {
@@ -240,6 +225,16 @@ function register(app, { isBotToken }) {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     try { res.json(await inputs(b)); } catch (e) { fail(res, e); }
+  });
+  // 1.99wu: the shared anti-alt gates for one or more Camfrog logins with the caller's thresholds (E-7 convoy hits, E-8 prizes)
+  app.post("/api/g/recipe/gates", async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try {
+      await init();
+      res.json({ ok: true, gates: await peopleGates(Array.isArray(b.logins) ? b.logins : [b.login], clock(),
+                                                       { min_age_days: b.min_age_days, min_level: b.min_level }) });
+    } catch (e) { fail(res, e); }
   });
   app.post("/api/g/recipe/credit", async (req, res) => {
     const b = req.body || {};

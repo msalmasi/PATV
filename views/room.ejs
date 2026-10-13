@@ -1203,6 +1203,13 @@
     </section>
     <%# 1.99sn: 💰 the pad vault, public, first card under About (partials/pad-vault-card.ejs; roomvaults.js) %>
     <% if (typeof roomVault !== 'undefined' && roomVault) { %><%- include('partials/pad-vault-card', { rv: roomVault, room, slug: room.slug, signed: giftSigned_, siteOnly: siteOnly_, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %><% } %>
+    <%# 1.99wu: 🎤 mic challenges (economy v2 E-8): the pad's latest judged performances + today's prize budget, filled by
+        public/js/pad-challenges.js from GET /api/rooms/:slug/challenges (challengepay.js); stays hidden until there is one %>
+    <% if (!siteOnly_) { %><section class="card pc-card" id="challenges" aria-labelledby="pcH" data-slug="<%= room.slug %>" hidden>
+      <h2 id="pcH"><span><%- t('pad.chal.h') %></span></h2>
+      <p class="muted pc-budget" data-pc="budget"></p>
+      <ol class="pc-list" data-pc="list"></ol>
+    </section><% } %>
     <%# 1.99ur: 🔮 the pad's own markets, pools and polls (padbets.js, partials/pad-bets-card.ejs) %>
     <% if (typeof padBets !== 'undefined' && padBets) { %><%- include('partials/pad-bets-card', { pb: padBets, slug: room.slug }) %><% } %>
     <%# 1.99ew: 🎁 gift a premium cosmetic to this pad (padcosmetics.js, public/js/pad-cosmetics.js); the owner buys from ⚙ settings %>
@@ -1253,6 +1260,7 @@
   <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=4" defer></script><% } %>
   <% if (typeof roomVault !== 'undefined' && roomVault) { %><script src="/public/js/pad-vault.js?v=2" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>
+  <% if (!siteOnly_) { %><script src="/public/js/pad-challenges.js?v=1" defer></script><% } %>
   <script>
   // 1.99ef: the header's ⋯ menu - closes on an outside click / Esc / after a pick; "Copy link" copies the pad's address
   (function () {

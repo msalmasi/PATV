@@ -52,6 +52,8 @@ const DEFAULTS = Object.freeze({
   pct_max: 10,          // ceilings: whatever Pepe asks for is clamped to these
   cap_max: 150000,
   payout_max: 25000,    // one prize, at most (Pepe's max is 20,000 = 10/10 x 2,000)
+  week_pct: 15,         // E-8 (doc 10: "prize <= 5% of the vault per challenge and 15% per week"): held + paid in 7 days
+  hold_ttl_min: 30,     // E-8: a hold Pepe never resolved goes back to the pad vault after this long
 });
 const DAY = 24 * 3600 * 1000;
 const REF_RE = /^[A-Za-z0-9_.:-]{3,80}$/;
@@ -66,6 +68,15 @@ function init() {
     ready = (async () => {
       await require("./boosts").init();                 // room_flow_ledger + reserve_claims
       await runQuery("CREATE TABLE IF NOT EXISTS challenge_pay_config (key TEXT PRIMARY KEY, value TEXT)");
+      // E-8 (1.99wu): prizes HELD from the pad vault when a challenge opens, and every judged performance for the pad page
+      await runQuery(`CREATE TABLE IF NOT EXISTS challenge_holds (ref TEXT PRIMARY KEY, room_id TEXT NOT NULL, amount INTEGER NOT NULL,
+                      state TEXT NOT NULL DEFAULT 'held', paid INTEGER NOT NULL DEFAULT 0, userId TEXT, cat TEXT, login TEXT,
+                      created INTEGER NOT NULL, done INTEGER, note TEXT)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS challenge_holds_room ON challenge_holds (room_id, state, created)");
+      await runQuery(`CREATE TABLE IF NOT EXISTS challenge_runs (ref TEXT PRIMARY KEY, room_id TEXT NOT NULL, ts INTEGER NOT NULL, cat TEXT,
+                      mode TEXT, name TEXT, score REAL, paid INTEGER NOT NULL DEFAULT 0, fee INTEGER NOT NULL DEFAULT 0, vs_name TEXT,
+                      vs_score REAL, note TEXT)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS challenge_runs_room ON challenge_runs (room_id, ts)");
       const c = { ...DEFAULTS };
       for (const r of await getQuery("SELECT key, value FROM challenge_pay_config")) {
         try { if (r.key in DEFAULTS) c[r.key] = JSON.parse(r.value); } catch (e) { /* skip */ }
@@ -83,6 +94,8 @@ function cleanConfig(c) {
     pct_max: num(c.pct_max, 0, 50, DEFAULTS.pct_max),
     cap_max: Math.floor(num(c.cap_max, 0, 10000000, DEFAULTS.cap_max)),
     payout_max: Math.floor(num(c.payout_max, 0, 10000000, DEFAULTS.payout_max)),
+    week_pct: num(c.week_pct, 0, 100, DEFAULTS.week_pct),
+    hold_ttl_min: Math.floor(num(c.hold_ttl_min, 5, 24 * 60, DEFAULTS.hold_ttl_min)),
   };
   o.pct = num(c.pct, 0, o.pct_max, Math.min(DEFAULTS.pct, o.pct_max));
   o.cap = Math.floor(num(c.cap, 0, o.cap_max, Math.min(DEFAULTS.cap, o.cap_max)));
@@ -199,6 +212,187 @@ async function fee(roomId, b = {}) {
   });
 }
 
+// ── E-8 (1.99wu): the prize HELD from room:<id> when a challenge opens (camfrog-bot docs/ECONOMY-V2.md 9, 10, 12 E-8) ──
+// Needs the pools on this site (pools.js live): the hold is a keyed pool move room:<id> -> "chalhold" (a protocol pool, in
+// the supply like any other), the prize a keyed pool -> wallet payment out of it, the rest a keyed move back - each with
+// its challenge_holds row in ONE dbUtils.tx, so the supply never changes. With the pools still in Pepe (or Pepe's
+// econ_challenges off) Pepe keeps the interim path (/challenge/payout).
+//   POST /api/rooms/:room/challenge/hold     {ref, amount, min, pct, cap, week_pct?, cat, login}
+//     the budget counts what is HELD as already paid: 24 h = min(cap, pct% of (balance + held + paid 24 h)) - held - paid
+//     24 h; 7 days = week_pct% of (balance + held + paid 7 d) - held - paid 7 d. held = min(amount, payout_max, both, the
+//     balance); under `min` nothing is held (code empty | cap) and the challenge runs for glory.
+//     -> {ok, held, balance, left} | {ok:false, code: no_room|off|pools_local|empty|cap|bad}; the same ref again = the first answer
+//   POST /api/rooms/:room/challenge/resolve  {ref, userId?, amount, login, cat, score}
+//     pays min(amount, held) to userId (0 / no userId = glory) as a 'challenge' row (rv_to 'room', counted by the caps)
+//     and returns the rest to the pad vault. Idempotent: a resolved hold answers its stored result. A hold Pepe left
+//     unresolved for hold_ttl_min goes back to the pad vault by itself (code expired).
+//   POST /api/rooms/:room/challenge/result   {ref, cat, mode, name|null, score, paid, fee, vs_name, vs_score, note}  the pad page list
+//   GET  /api/rooms/:slug/challenges         (public) the last 20 judged performances + today's prize budget; incognito = no name
+const HOLD_POOL = "chalhold";
+const holdKey = (ref) => "chalhold:" + ref;
+
+async function poolsLive() {
+  try { return !!(await require("./pools").live()); } catch (e) { return false; }
+}
+
+async function holdBudget(roomId, opts = {}) {
+  const C = CONFIG;
+  const P = require("./pools");
+  const has = (v) => v !== undefined && v !== null && v !== "" && Number.isFinite(Number(v));
+  const pct = Math.min(C.pct_max, Math.max(0, has(opts.pct) ? Number(opts.pct) : C.pct));
+  const cap = Math.min(C.cap_max, Math.max(0, has(opts.cap) ? Math.floor(Number(opts.cap)) : C.cap));
+  const wpct = Math.max(0, Math.min(100, has(opts.week_pct) ? Number(opts.week_pct) : C.week_pct));
+  const balance = Math.max(0, await P.balance("room:" + roomId));
+  const t = now();
+  const paidSince = async (since) => Math.max(0, Math.floor(Number((await getQuery(
+    "SELECT COALESCE(-SUM(room_vault), 0) AS p FROM room_flow_ledger WHERE room_id = ? AND kind = 'challenge' AND created > ?", [roomId, since]))[0].p) || 0));
+  const held = Math.max(0, Math.floor(Number((await getQuery(
+    "SELECT COALESCE(SUM(amount), 0) AS h FROM challenge_holds WHERE room_id = ? AND state = 'held'", [roomId]))[0].h) || 0));
+  const paid24 = await paidSince(t - DAY), paid7 = await paidSince(t - 7 * DAY);
+  const cap24 = Math.min(cap, Math.floor(((balance + held + paid24) * pct) / 100));
+  const capW = Math.floor(((balance + held + paid7) * wpct) / 100);
+  const left = Math.max(0, Math.min(balance, cap24 - held - paid24, capW - held - paid7));
+  return { balance, held, paid24, paid7, cap: cap24, week_cap: capW, left, pct, week_pct: wpct };
+}
+
+async function sweepHolds() {
+  await init();
+  if (!(await poolsLive())) return 0;
+  const old = await getQuery("SELECT ref, room_id FROM challenge_holds WHERE state = 'held' AND created < ? LIMIT 50",
+                             [now() - CONFIG.hold_ttl_min * 60000]);
+  let n = 0;
+  for (const h of old) {
+    try { await settleHold(h.ref, { userId: null, amount: 0, expired: true }); n++; } catch (e) { console.error("[challengepay] sweep", h.ref, e.message); }
+  }
+  return n;
+}
+
+async function hold(roomId, b = {}) {
+  await init();
+  const rawRef = String(b.ref || "");
+  const amount = Math.floor(Number(b.amount));
+  const min = Math.max(1, Math.floor(Number(b.min) || 1));
+  if (!REF_RE.test(rawRef) || !Number.isFinite(amount) || amount <= 0 || amount > 1e9) return { ok: false, code: "bad", held: 0 };
+  const R = await require("./rooms").get(String(roomId || ""));
+  if (!R) return { ok: false, code: "no_room", held: 0 };
+  if (!CONFIG.on) return { ok: false, code: "off", held: 0 };
+  if (!(await poolsLive())) return { ok: false, code: "pools_local", held: 0 };
+  await sweepHolds().catch(() => 0);
+  const P = require("./pools");
+  const { tx } = require("./dbUtils");
+  try {
+    return await tx(async () => {
+      const had = (await getQuery("SELECT * FROM challenge_holds WHERE ref = ?", [rawRef]))[0];
+      if (had) return { ok: had.room_id === R.id, dup: true, held: Number(had.amount), state: had.state, room: had.room_id };
+      const bud = await holdBudget(R.id, b);
+      if (bud.balance < min) throw new Refuse("empty");
+      const amt = Math.min(amount, CONFIG.payout_max, bud.left, bud.balance);
+      if (amt < min) throw new Refuse("cap");
+      await P.move({ key: holdKey(rawRef), legs: [["room:" + R.id, -amt], [HOLD_POOL, amt]], flow: "challenge_hold",
+                     why: "mic challenge prize held", kind: "move", via: "challenge" });
+      await runQuery("INSERT INTO challenge_holds (ref, room_id, amount, state, cat, login, created) VALUES (?, ?, ?, 'held', ?, ?, ?)",
+                     [rawRef, R.id, amt, String(b.cat || "").replace(/[^a-z]/g, "").slice(0, 12) || null,
+                      String(b.login || "").slice(0, 40) || null, now()]);
+      return { ok: true, dup: false, held: amt, balance: bud.balance - amt, left: bud.left - amt, room: R.id };
+    });
+  } catch (e) {
+    if (e && e.refuse) return { ok: false, code: e.code, held: 0 };
+    if (e && e.code === "E_INSUFFICIENT") return { ok: false, code: "empty", held: 0 };
+    throw e;
+  }
+}
+
+/** Pay (part of) a hold and return the rest - one transaction, keyed by the hold's ref (a resolved hold answers its result). */
+async function settleHold(rawRef, b) {
+  const P = require("./pools");
+  const ledger = require("./ledger");
+  const { tx } = require("./dbUtils");
+  return tx(async () => {
+    const h = (await getQuery("SELECT * FROM challenge_holds WHERE ref = ?", [rawRef]))[0];
+    if (!h) return { ok: false, code: "no_hold", paid: 0 };
+    if (h.state !== "held") {
+      return { ok: h.state !== "expired", code: h.state === "expired" ? "expired" : (h.note || undefined), dup: true, paid: Number(h.paid) || 0,
+               released: Number(h.amount) - (Number(h.paid) || 0), room: h.room_id, vault: "room" };
+    }
+    let pay = b.expired ? 0 : Math.max(0, Math.min(Math.floor(Number(b.amount) || 0), Number(h.amount)));
+    let uid = null, uname = null, code;
+    if (pay > 0 && b.userId) {
+      uid = await ledger.resolveUserId(String(b.userId));
+      if (!uid) { pay = 0; code = "no_account"; }
+      else uname = ((await getQuery("SELECT username FROM users WHERE userId = ?", [uid]))[0] || {}).username || null;
+    } else pay = 0;
+    if (pay > 0) {
+      const R = await require("./rooms").get(h.room_id).catch(() => null);
+      const cat = String(b.cat || h.cat || "").replace(/[^a-z]/g, "").slice(0, 12);
+      const score = Number.isFinite(Number(b.score)) && b.score !== null && b.score !== "" ? Math.max(0, Math.min(10, Number(b.score))) : null;
+      await P.fund({ key: "chalpay:" + rawRef, pool: HOLD_POOL, userId: uid, amount: pay, flow: "challenge",
+                     type: ("🎤 mic challenge prize" + (R ? " p/" + R.slug : "")).slice(0, 40) });
+      await runQuery(`INSERT INTO room_flow_ledger (ref, kind, room_id, payer_id, payer_name, amount, fortknox, room_vault, owner_self, via, created, detail, rv_to)
+                      VALUES (?, 'challenge', ?, ?, ?, ?, 0, ?, 0, 'chat', ?, ?, 'room')`,
+                     ["challenge:" + rawRef, h.room_id, uid, uname, -pay, -pay, now(),
+                      `mic challenge ${cat || "?"}${score !== null ? " " + score + "/10" : ""} (held prize)${b.login ? " by " + String(b.login).slice(0, 40) : ""}`.slice(0, 200)]);
+    }
+    const back = Number(h.amount) - pay;
+    if (back > 0) {
+      await P.move({ key: "chalrel:" + rawRef, legs: [[HOLD_POOL, -back], ["room:" + h.room_id, back]], flow: "challenge_hold",
+                     why: b.expired ? "mic challenge hold expired" : "mic challenge hold returned", kind: "move", via: "challenge" });
+    }
+    const state = b.expired ? "expired" : pay > 0 ? "paid" : "released";
+    await runQuery("UPDATE challenge_holds SET state = ?, paid = ?, userId = ?, done = ?, note = ? WHERE ref = ? AND state = 'held'",
+                   [state, pay, uid, now(), code || null, rawRef]);
+    return { ok: !b.expired, code: b.expired ? "expired" : code, dup: false, paid: pay, released: back, room: h.room_id, username: uname, vault: "room" };
+  });
+}
+
+async function resolve(roomId, b = {}) {
+  await init();
+  const rawRef = String(b.ref || "");
+  if (!REF_RE.test(rawRef)) return { ok: false, code: "bad", paid: 0 };
+  if (!(await poolsLive())) return { ok: false, code: "pools_local", paid: 0 };
+  const h = (await getQuery("SELECT room_id FROM challenge_holds WHERE ref = ?", [rawRef]))[0];
+  if (!h) return { ok: false, code: "no_hold", paid: 0 };
+  const R = await require("./rooms").get(String(roomId || "")).catch(() => null);
+  if (!R || R.id !== h.room_id) return { ok: false, code: "bad", paid: 0 };
+  return settleHold(rawRef, { userId: b.userId || null, amount: b.amount, cat: b.cat, score: b.score, login: b.login });
+}
+
+const RUN_MODES = new Set(["solo", "open", "h2h"]);
+async function recordRun(roomId, b = {}) {
+  await init();
+  const rawRef = String(b.ref || "");
+  if (!REF_RE.test(rawRef)) return { ok: false, code: "bad" };
+  const R = await require("./rooms").get(String(roomId || "")).catch(() => null);
+  if (!R) return { ok: false, code: "no_room" };
+  const name = (v) => (v == null || v === "" ? null : String(v).replace(/[<>]/g, "").slice(0, 40));
+  const sc = (v) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.min(10, Number(v))));
+  await runQuery(`INSERT INTO challenge_runs (ref, room_id, ts, cat, mode, name, score, paid, fee, vs_name, vs_score, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(ref) DO UPDATE SET paid = MAX(paid, excluded.paid), score = COALESCE(excluded.score, score), note = COALESCE(excluded.note, note)`,
+                 [rawRef, R.id, now(), String(b.cat || "").replace(/[^a-z]/g, "").slice(0, 12) || null, RUN_MODES.has(b.mode) ? b.mode : "solo",
+                  name(b.name), sc(b.score), Math.max(0, Math.floor(Number(b.paid) || 0)), Math.max(0, Math.floor(Number(b.fee) || 0)),
+                  name(b.vs_name), sc(b.vs_score), b.note ? String(b.note).slice(0, 80) : null]);
+  return { ok: true };
+}
+
+/** The pad page's list. Public: names only as Pepe sent them (an incognito performer has none). */
+async function listForRoom(roomId) {
+  await init();
+  const runs = await getQuery(`SELECT ts, cat, mode, name, score, paid, fee, vs_name, vs_score FROM challenge_runs WHERE room_id = ?
+                               ORDER BY ts DESC LIMIT 20`, [roomId]);
+  let budget = null;
+  if (await poolsLive()) {
+    try { const b = await holdBudget(roomId, {}); budget = { left: b.left, paid24: b.paid24, held: b.held, pct: b.pct, week_pct: b.week_pct }; } catch (e) { budget = null; }
+  }
+  return { ok: true, runs: runs.map((r) => ({ ts: r.ts, cat: r.cat, mode: r.mode, name: r.name, score: r.score, paid: Number(r.paid) || 0,
+                                              fee: Number(r.fee) || 0, vs_name: r.vs_name, vs_score: r.vs_score })), budget };
+}
+
+let sweepTimer = null;
+function startSweeper() {
+  if (sweepTimer) return;
+  sweepTimer = setInterval(() => { sweepHolds().catch((e) => console.error("[challengepay] sweep:", e.message)); }, 5 * 60000);
+  if (sweepTimer.unref) sweepTimer.unref();
+}
+
 function register(app, { addUser, isBotToken }) {
   const bot = (req, res) => {
     if (!isBotToken((req.body || {}).password)) { res.status(403).json({ error: "unauthorized" }); return false; }
@@ -223,6 +417,35 @@ function register(app, { addUser, isBotToken }) {
     if (!bot(req, res)) return;
     try { res.json(await fee(req.params.room, req.body || {})); } catch (e) { fail(res, e); }
   });
+  app.post("/api/rooms/:room/challenge/hold", async (req, res) => {
+    if (!bot(req, res)) return;
+    try { res.json(await hold(req.params.room, req.body || {})); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/rooms/:room/challenge/resolve", async (req, res) => {
+    if (!bot(req, res)) return;
+    try {
+      const r = await resolve(req.params.room, req.body || {});
+      if (r.ok && !r.dup && r.paid > 0) {
+        try { await require("./rooms").event(r.room, "challenge-prize", r.username || "", `${r.paid} PAT from the pad vault (held prize)`); } catch (e) { /* audit only */ }
+      }
+      res.json(r);
+    } catch (e) { fail(res, e); }
+  });
+  app.post("/api/rooms/:room/challenge/result", async (req, res) => {
+    if (!bot(req, res)) return;
+    try { res.json(await recordRun(req.params.room, req.body || {})); } catch (e) { fail(res, e); }
+  });
+  app.get("/api/rooms/:slug/challenges", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const rooms = require("./rooms");
+      const key = String(req.params.slug || "").slice(0, 120);
+      const R = (await rooms.bySlug(key).catch(() => null)) || (await rooms.get(key).catch(() => null));
+      if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
+      res.json(await listForRoom(R.id));
+    } catch (e) { fail(res, e); }
+  });
+  startSweeper();
   app.get("/api/challenge/admin", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
@@ -243,4 +466,6 @@ function register(app, { addUser, isBotToken }) {
 }
 
 module.exports = { init, config, setConfig, cleanConfig, budget, vault, payout, fee, register, DEFAULTS,
+                   hold, resolve, recordRun, listForRoom, sweepHolds, holdBudget, HOLD_POOL,
+                   _stopSweeper: () => { if (sweepTimer) clearInterval(sweepTimer); sweepTimer = null; },
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };

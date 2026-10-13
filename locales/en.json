@@ -8728,5 +8728,12 @@
   "automkt.adm.weights": "Mix (relative weights, 0 = never)",
   "automkt.adm.marquee": "Sports: marquee events only (finals, championships, the postseason, numbered UFC cards; no single regular matches)",
   "automkt.adm.pad": "Pad they go to (blank = Pepe's Pad)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Mic challenges",
+  "js.padchal.budget": "Prize budget left today: {left} PAT from the pad vault ({held} PAT held for performances being judged).",
+  "js.padchal.glory": "for glory",
+  "js.padchal.someone": "someone 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "entry fee {fee} PAT"
 }

@@ -209,12 +209,20 @@ test("watch: the streamer and their linked accounts are excluded (status self)",
   }
 });
 
-test("watch: a viewer sharing another viewer's browser is flagged alt", async () => {
+test("watch: up to 3 accounts on one browser count, the 4th is flagged alt (E-5, doc 7.2)", async () => {
   now += 600000;
-  await beat("v3", { pos: 0 });                                       // same patv_dev cookie as v1
+  await beat("v3", { pos: 0 });                                       // same patv_dev cookie as v1: the 2nd account there
   now += 30000;
-  const r = await beat("v3", { pos: 30 });
-  assert.equal(r.counted, true); assert.equal(r.status, "alt");
+  let r = await beat("v3", { pos: 30 });
+  assert.equal(r.counted, true); assert.equal(r.status, "ok");
+  for (const [u, want] of [["w4", "ok"], ["w5", "alt"]]) {            // the 3rd still counts, the 4th doesn't
+    now += 1000;
+    await beat(u, { pos: 0 }, { "x-dev": DEV("a"), "cf-connecting-ip": "10.9.9.9" });     // another network: the browser decides
+    now += 30000;
+    r = await beat(u, { pos: 30 }, { "x-dev": DEV("a"), "cf-connecting-ip": "10.9.9.9" });
+    assert.equal(r.counted, true); assert.equal(r.status, want, u);
+    now -= 30000;
+  }
 });
 
 test("watch: Pepe's stream resolves the room from the page", async () => {
@@ -240,7 +248,7 @@ test("telemetry: admins only; per-room revenue, watch, participants and the dry 
     assert.equal(dc.revenue.by_via.pm, 1000);
     assert.equal(dc.split.owner_self, 10000);
     assert.equal(dc.split.to_vault, (10000 + 1000 - 1000) / 2);
-    assert.equal(dc.watch.vwm, Math.round((30 + 30 + 30) / 60));          // v1 + v2 + Pepe's stream (v2); alt / self apart
+    assert.equal(dc.watch.vwm, Math.round((30 + 30 + 30 + 30 + 30) / 60));  // v1 + v2 + v3 + w4 + Pepe's stream (v2); alt / self apart
     assert.equal(dc.watch.self_min, 1); assert.equal(dc.watch.alt_min, 1);
     assert.equal(dc.people.unique, 2);                                      // alice (12 lines), bob (7.5 mic min)
     assert.ok(dc.dryrun && dc.dryrun.inflow === 5000 && dc.dryrun.paid > 0 && dc.dryrun.balance > 0);
