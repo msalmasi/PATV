@@ -36,7 +36,8 @@
     e.preventDefault();
     var E = set.elements, msg = document.getElementById('bnSetMsg');
     var body = { banner_enabled: E.banner_enabled.checked, banner_paid_enabled: E.banner_paid_enabled.checked, banner_chat_sponsor: E.banner_chat_sponsor.checked,
-                 banner_chat_sponsor_mic: E.banner_chat_sponsor_mic.checked,
+                 banner_chat_sponsor_mic: E.banner_chat_sponsor_mic.checked, banner_chat_house_promos: E.banner_chat_house_promos.checked,
+                 banner_chat_house_promos_mic: E.banner_chat_house_promos_mic.checked,
                  banner_price_per_day: Number(E.banner_price_per_day.value), banner_max_days: Number(E.banner_max_days.value),
                  banner_max_bookings: Number(E.banner_max_bookings.value), banner_lead_days: Number(E.banner_lead_days.value) };
     msg.textContent = 'Saving…'; msg.className = 'adm-msg';

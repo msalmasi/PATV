@@ -36,6 +36,8 @@
 // CHAT SPONSOR (1.99qr, admin switch banner_chat_sponsor, default off): an approved booking's headline + link also runs in
 // Pepe's !sponsor rotation in the Camfrog rooms on its booked days - see chatSponsors() below. 1.99tc: banner_chat_sponsor_mic
 // (default ON) makes it a `-mic` sponsor: Pepe also speaks it on the mic, music ducked, in rooms whose TTS is on.
+// 1.99xe: chat_house_promos (default ON): no paid sponsor today -> the house promos fill that chat slot, "From PATV" (chatHouse);
+// chat_house_promos_mic (default OFF) has Pepe speak them too.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -60,6 +62,8 @@ const DEFAULTS = Object.freeze({
   lead_days: 60,              // how far ahead a booking may start
   chat_sponsor: false,        // 1.99qr: approved bookings also run in Pepe's !sponsor rotation in the Camfrog rooms
   chat_sponsor_mic: true,     // 1.99tc: ...and Pepe also SPEAKS the line on the mic (ducking the music) where the room has TTS on
+  chat_house_promos: true,    // 1.99xe: no paid sponsor today -> the house promos rotate in Pepe's chat sponsor slot ("From PATV")
+  chat_house_promos_mic: false, // 1.99xe: ...spoken too? OFF: free house ads never talk over a room's music / mic
 });
 const DEFAULT_PROMOS = Object.freeze([
   { id: "lotto", kind: "lotto", link: "/lotto", weight: 3, sort: 1 },
@@ -161,7 +165,7 @@ async function readConfig() {
 // setting names (the admin page / API) -> config keys
 const SETTING_NAMES = Object.freeze({ banner_enabled: "enabled", banner_paid_enabled: "paid_enabled", banner_price_per_day: "price_per_day",
   banner_max_days: "max_days", banner_max_bookings: "max_bookings", banner_lead_days: "lead_days", banner_chat_sponsor: "chat_sponsor",
-  banner_chat_sponsor_mic: "chat_sponsor_mic" });
+  banner_chat_sponsor_mic: "chat_sponsor_mic", banner_chat_house_promos: "chat_house_promos", banner_chat_house_promos_mic: "chat_house_promos_mic" });
 function cleanConfig(c, base = DEFAULTS) {
   const src = {};
   for (const [k, v] of Object.entries(c || {})) src[SETTING_NAMES[k] || k] = v;
@@ -176,6 +180,8 @@ function cleanConfig(c, base = DEFAULTS) {
     lead_days: int(src.lead_days, 2, 365, base.lead_days),
     chat_sponsor: on(src.chat_sponsor, base.chat_sponsor),
     chat_sponsor_mic: on(src.chat_sponsor_mic, base.chat_sponsor_mic),
+    chat_house_promos: on(src.chat_house_promos, base.chat_house_promos),
+    chat_house_promos_mic: on(src.chat_house_promos_mic, base.chat_house_promos_mic),
   };
 }
 function config() { return { ...CONFIG }; }
@@ -548,9 +554,14 @@ async function pick({ lotto = null, lang = "en", t = NOW() } = {}) {
 // its last day over).
 const siteBase = () => String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL
   || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
-/** -> {on, items: [{id, headline, line, link (absolute or null), by, start, end, until (ms: the end of its last day)}]} */
+/** -> {on, mic, items: [{id, headline, line, link (absolute or null), by, start, end, until (ms: the end of its last day)}],
+ *      house: {on, mic, items: [{id, kind, headline, line, link, weight}]}} (1.99xe: house promos, below) */
 async function chatSponsors(t = NOW()) {
   await init();
+  const paid = await chatBookings(t);
+  return { ...paid, house: await chatHouse(paid.items.length > 0) };
+}
+async function chatBookings(t) {
   if (!CONFIG.chat_sponsor) return { on: false, mic: false, items: [] };
   const today = dayKey(t);
   const rows = await getQuery(`SELECT b.* FROM banner_days d JOIN banner_bookings b ON b.id = d.booking_id WHERE d.day = ? AND b.status = 'approved'`, [today]);
@@ -563,6 +574,56 @@ async function chatSponsors(t = NOW()) {
                  start: r.start_day, end: endDay(r), until: dayStart(addDays(endDay(r), 1)) });
   }
   return { on: true, mic: !!CONFIG.chat_sponsor_mic, items };      // 1.99tc: mic = Pepe also reads it aloud (rooms with TTS on)
+}
+
+// ── 1.99xe: house promos in Pepe's chat sponsor slot (chat_house_promos, default ON) ──
+// With NO paid sponsor running in chat today (no approved booking listed above - a booking always wins), Pepe rotates the
+// enabled house promos (banner_promos: Pepeball, Season Pass, Prime Time, Plex, the Wheel, Support PATV, admins' own)
+// in his chat sponsor slot, tagged "From PATV" instead of "Sponsored" - it's our own ad, and it says so. Same headline +
+// line + link as the homepage card; the dynamic ones render their CURRENT values (the Pepeball jackpot + draw time, the
+// donation rate / a live donation promo's boosted rate) each time Pepe asks (every few minutes). A promo whose page isn't
+// live (no jackpot / draw yet, no donation rail on) is left out, like on the homepage. Pepe (pepe_bannersponsor.py) runs
+// ONE house line an hour at most, only while his whole !sponsor rotation is empty (a member's !sponsor wins too), only
+// in rooms whose own settings allow sponsor / house ad lines, and never inside a room's shared ad-slot gap.
+// MIC: chat_house_promos_mic, default OFF - paid sponsors bought the read; free house ads don't talk over a room's music.
+let EN = null;
+function enText(key, vars) {
+  if (!EN) { try { EN = JSON.parse(fs.readFileSync(path.join(__dirname, "locales", "en.json"), "utf8")); } catch (e) { EN = {}; } }
+  const raw = EN[key];
+  if (typeof raw !== "string") return "";
+  return plainText(raw.replace(/\{!?(\w+)\}/g, (m, k) => (vars[k] == null ? "" : String(vars[k]))));
+}
+// catalog values are HTML-safe text: chat wants plain words
+const plainText = (s) => String(s || "").replace(/<[^>]*>/g, "").replace(/&(amp|lt|gt|quot|#34|#39|nbsp);/g, (m, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#34": '"', "#39": "'", nbsp: " " })[e]);
+async function lottoNow() {
+  try {
+    const row = (await getQuery("SELECT data FROM lotto_state WHERE id = 1"))[0];
+    const L = row ? JSON.parse(row.data) : null;
+    return L ? { jackpot: Number(L.jackpot) || 0, next_at: Number(L.next_at) || 0 } : null;
+  } catch (e) { return null; }
+}
+async function chatHouse(paidToday) {
+  const mic = !!CONFIG.chat_house_promos_mic;
+  if (!CONFIG.chat_house_promos) return { on: false, mic, items: [] };
+  if (paidToday) return { on: true, mic, items: [], paid: true };          // a paid booking owns the slot today
+  const lotto = await lottoNow();
+  const vars = { jackpot: lotto && lotto.jackpot ? compact(lotto.jackpot) : null, draw: lotto && lotto.next_at ? drawLabel(lotto.next_at, "en") : null };
+  const sup = supportTerms();
+  if (sup) Object.assign(vars, sup);
+  const items = [];
+  for (const p of await promos()) {
+    if (p.kind === "lotto" && !(vars.jackpot && vars.draw)) continue;
+    if (p.kind === "support" && !sup) continue;
+    const fill = (s) => plainText(String(s || "").replace(/\{(jackpot|draw)\}/g, (m, k) => vars[k] || ""));
+    const own = !!(p.headline || p.line);                                    // an admin's own text, else the built-in
+    const base = p.kind === "support" && vars.promo_on ? "support_promo" : p.kind;
+    const headline = cleanLine(own ? fill(p.headline) : enText(`banner.promo.${base}.h`, vars), HEADLINE_MAX);
+    if (!headline) continue;
+    const line = cleanLine(own ? fill(p.line) : enText(`banner.promo.${base}.l`, vars), LINE_MAX) || null;
+    const link = p.link ? (p.link[0] === "/" ? siteBase() + p.link : p.link) : null;
+    items.push({ id: "h:" + p.id, kind: p.kind, headline, line, link, weight: Math.max(1, Math.min(10, Number(p.weight) || 1)) });
+  }
+  return { on: true, mic, items };
 }
 
 // ── stats (aggregate counts only) ──
@@ -787,7 +848,7 @@ function register(app, { addUser, isBotToken = () => false, noTimers = false }) 
   }
 }
 
-module.exports = { init, register, chatSponsors, config, setConfig, settingsView, cleanConfig, book, cancel, decide, takedown, expire, pick, promos, savePromo, deletePromo,
+module.exports = { init, register, chatSponsors, chatHouse, config, setConfig, settingsView, cleanConfig, book, cancel, decide, takedown, expire, pick, promos, savePromo, deletePromo,
                    state, adminData, calendar, mine, count, statsFor, storeImage, openUpload, chunkUpload, finishUpload, encode, cleanLink, dayKey, dayStart,
                    addDays, drawLabel, compact, setSafetyCheck, filePath, imageUrl, _setDir, Refuse, DEFAULTS, DEFAULT_PROMOS, PROMO_KINDS, BANNER_TZ, SETTING_NAMES,
                    _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _uploads: UP, _mine: MINE, _seen: SEEN };

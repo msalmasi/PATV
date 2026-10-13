@@ -235,6 +235,57 @@ test("banner chat sponsor: off by default; on -> today's approved booking for Pe
   assert.deepEqual(r.d.items, [], "switched off -> Pepe drops it");
 });
 
+test("1.99xe: house promos fill Pepe's chat sponsor slot when no paid booking runs; toggle, mic flag, live values", async () => {
+  // the switches as the test above left them: chat_sponsor off (today's approved booking isn't in chat), house promos default ON
+  let r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
+  assert.deepEqual([r.d.on, r.d.items], [false, []]);
+  let H = r.d.house;
+  assert.deepEqual([H.on, H.mic], [true, false], "house promos ship on, spoken off");
+  const ids = H.items.map((x) => x.id);
+  assert.ok(ids.includes("h:season_pass") && ids.includes("h:wheel"), ids.join());
+  assert.ok(!ids.includes("h:lotto"), "no jackpot / draw yet -> the Pepeball promo sits out");
+  assert.ok(!ids.includes("h:support"), "no donation rail on -> the Support promo sits out");
+  const sp = H.items.find((x) => x.id === "h:season_pass");
+  assert.equal(sp.headline, "🎟️ Season Pass", "the built-in text, plain");
+  assert.equal(sp.link, "https://publicaccess.tv/premium", "an absolute link");
+  assert.ok(sp.line && !/[<>]/.test(sp.line));
+  // live values: the Pepeball jackpot + draw render each time Pepe asks
+  await runQuery("CREATE TABLE IF NOT EXISTS lotto_state (id INTEGER PRIMARY KEY, data TEXT, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO lotto_state (id, data, updated) VALUES (1, ?, ?)", [JSON.stringify({ jackpot: 1234567, next_at: Date.now() + 86400e3 }), Date.now()]);
+  await runQuery("INSERT INTO banner_promos (id, kind, headline, line, link, enabled, weight, sort) VALUES ('mine', 'custom', 'Pot is {jackpot} PAT', 'Draw {draw}', 'https://x.test/a', 1, 4, 9)");
+  await runQuery("INSERT INTO banner_promos (id, kind, headline, link, enabled, weight, sort) VALUES ('offp', 'custom', 'Hidden', '/x', 0, 1, 10)");
+  r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
+  H = r.d.house;
+  const lo = H.items.find((x) => x.id === "h:lotto");
+  assert.ok(lo, "a jackpot + draw -> the Pepeball promo runs");
+  assert.match(lo.headline, /Pepeball jackpot: 1\.2M PAT/);
+  assert.match(lo.line, /^Draw \S+day .+ ET\./);
+  const mine = H.items.find((x) => x.id === "h:mine");
+  assert.equal(mine.headline, "Pot is 1.2M PAT");
+  assert.equal(mine.weight, 4);
+  assert.ok(!H.items.some((x) => x.id === "h:offp"), "a switched-off promo stays out");
+  await runQuery("UPDATE lotto_state SET data = ? WHERE id = 1", [JSON.stringify({ jackpot: 9000000, next_at: Date.now() + 86400e3 })]);
+  r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
+  assert.match(r.d.house.items.find((x) => x.id === "h:lotto").headline, /9M PAT/, "the current value, not a cached one");
+  // a paid booking in chat always wins: the house list empties
+  await BN.setConfig({ banner_chat_sponsor: true }, "test");
+  r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
+  assert.equal(r.d.items.length, 1);
+  assert.deepEqual([r.d.house.on, r.d.house.items, r.d.house.paid], [true, [], true], "paid booking overrides the house promos");
+  await BN.setConfig({ banner_chat_sponsor: false }, "test");
+  // the mic flag
+  await BN.setConfig({ banner_chat_house_promos_mic: true }, "test");
+  r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
+  assert.equal(r.d.house.mic, true);
+  assert.ok(r.d.house.items.length > 0);
+  // the toggle off -> nothing
+  await BN.setConfig({ banner_chat_house_promos: false }, "test");
+  r = await post("/api/banner/chat-sponsors", null, { password: "bot-token" });
+  assert.deepEqual([r.d.house.on, r.d.house.items], [false, []], "toggle off -> no house promos in chat");
+  await BN.setConfig({ banner_chat_house_promos: true, banner_chat_house_promos_mic: false }, "test");
+  await runQuery("DELETE FROM banner_promos WHERE id IN ('mine', 'offp')");
+});
+
 // ── 1.99tf ──
 const REPORT2 = { [PLANT]: { owner: { snap: true, clip: true, challenge: true, language: "auto", soundboard: false, global_unblock: false, greeter: true,
   greeter_note: "Say hi <b>", chatty: "low", music: false, music_requests: false, trivia: true, pictionary: true, heist: true, wheel: true, bingo: true,

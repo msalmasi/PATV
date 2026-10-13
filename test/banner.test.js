@@ -90,7 +90,9 @@ test("ships enabled with paid booking OFF and the proposed price; booking is ref
   const s = BN.settingsView();
   assert.equal(s.banner_chat_sponsor, false, "1.99qr: the chat-sponsor switch ships off");
   assert.equal(s.banner_chat_sponsor_mic, true, "1.99tc: once on, Pepe also speaks it (mic mode default on)");
-  assert.deepEqual(Object.keys(s).sort(), ["banner_chat_sponsor", "banner_chat_sponsor_mic", "banner_enabled", "banner_lead_days", "banner_max_bookings", "banner_max_days", "banner_paid_enabled", "banner_price_per_day"]);
+  assert.equal(s.banner_chat_house_promos, true, "1.99xe: house promos fill the chat slot by default");
+  assert.equal(s.banner_chat_house_promos_mic, false, "1.99xe: ...but aren't spoken by default");
+  assert.deepEqual(Object.keys(s).sort(), ["banner_chat_house_promos", "banner_chat_house_promos_mic", "banner_chat_sponsor", "banner_chat_sponsor_mic", "banner_enabled", "banner_lead_days", "banner_max_bookings", "banner_max_days", "banner_paid_enabled", "banner_price_per_day"]);
   // the routing row: 100% Fort Knox
   assert.deepEqual(require(path.join(repo, "premium")).DEFAULTS.routes.banner, [["fortknox", 100]]);
 });
