@@ -228,3 +228,16 @@ test("roomvaults: Pepe's sync, the pad card (inflow vs deposits), the owner's ra
   const ov = await RV.overview(5);
   assert.equal(ov.live, true);
 });
+
+test("1.99vy: the /economy vault list links a profile's vault to /u/<name>/vault, a pad's to its About tab", async () => {
+  const u = await mkUser({ username: "vaultie" });
+  const P = await rooms.ensureProfile(u.userId);
+  assert.ok(P && rooms.isProfile(P.id));
+  await runQuery("INSERT OR REPLACE INTO room_vault_state (room_id, balance, days) VALUES (?, ?, '{}')", [P.id, 7777777]);
+  await runQuery("INSERT OR REPLACE INTO room_vault_state (room_id, balance, days) VALUES (?, ?, '{}')", [DRAMA, 6666666]);
+  const ov = await RV.overview(10);
+  const prof = ov.rooms.find((r) => r.room_id === P.id);
+  assert.equal(prof.href, "/u/vaultie/vault");
+  const pad = ov.rooms.find((r) => r.room_id === DRAMA);
+  assert.match(pad.href, /^\/p\/[^/?#]+\?tab=about#vault$/);
+});

@@ -8,6 +8,10 @@
 //     heist role, the actions; unconfigured: says so with a "Change look" CTA) - no big GTF card on the page
 //   - the "More" menu holds tip jar / PAT history / achievements / cosmetics / log out; Edit profile + Wallet stay out
 //   - the stat strip (PAT, Level + XP bar, Badges) replaces the stat tiles and the Level card
+//   - 1.99vy: the 💰 profile vault is its own page (/u/<name>/vault): the main profile shows the feed first and only a
+//     "💰 Vault" link in the tab bar; the subpage has the card (Donate for others, the owner's note for themselves);
+//     ?tab=vault / the page with vaults off redirect (profilelayout.vaultRoute); an old #vault hash is sent on by
+//     profile-tabs.js
 //   - the legacy "something went wrong" action result reads as a (fixed) bug; a real reason is shown as sent
 //   NODE_PATH=G:/PATV/node_modules node --test test/profile-tabs.test.js
 //   PROFILE_SHOTS=<dir> also writes the rendered pages there (for screenshots)
@@ -105,6 +109,7 @@ async function render(who, opts = {}) {
     gtf: { heistHelp: "/gtf#heists", turfGuide: "/gtf#turf", turfMap: "/gtf#map", gangs: "/gtf#gangs" },
     camfrog: "alicecf", gtfAvatar: { svg, items: opts.items || [] },
     analytics: null, layout: L, profileLayoutMod: layout, profileTab: opts.tab || "",
+    profileVault: opts.vault || null, vaultView: !!opts.vaultView,
     social, previewVisitor: !!opts.preview, avatarActs: owner ? (opts.acts || []) : [], avatarMsg: "", tipJarNew: owner ? 3 : 0,
     ogBase: "http://test", ogPath: "/u/alice",
   };
@@ -277,4 +282,83 @@ test("the tab script is cache-busted", () => {
   const src = fs.readFileSync(path.join(repo, "views", "profile.ejs"), "utf8");
   assert.match(src, /\/public\/js\/profile-tabs\.js\?v=\d+/);
   assert.ok(fs.existsSync(path.join(repo, "public", "js", "profile-tabs.js")));
+});
+
+// ── 1.99vy: the profile vault's own page ──
+const CARD = { live: true, recipe: { live: true }, cap: 50000000, balance: 1250000, inflow7: 40000, topup7: 12000, deposits7: 5000,
+  deposit_min: 1000, week: { paid: 9000, stays: 1241000, owner: 4000, people: 5000 }, viewer: { balance: 80000 },
+  donors: [{ who: "bob", anon: false, ts: 1760000000000, amount: 5000 }] };
+const PV = (card) => ({ slug: "u-alice", card: card === undefined ? null : card });
+
+test("vault: the main profile has no vault card - the feed comes first after the header; a 💰 Vault link sits in the tab bar", async () => {
+  for (const who of ["owner", "visitor", "anon"]) {
+    const html = await render(who, { vault: PV() });
+    save("vault-main-" + who, html);
+    assert.doesNotMatch(html, /class="card pv-card"|id="rvDonate"|pad-vault\.js/, who + ": no vault card on the profile");
+    const hero = html.indexOf('<section class="card hero'), nav = html.indexOf('<nav class="pf-tabs"');
+    assert.ok(hero > 0 && nav > hero, "the tab bar comes after the header");
+    assert.ok(panelOpen(html, "posts"), who + ": Posts open");
+    assert.ok(html.indexOf('id="tab-posts"') > nav && html.indexOf('id="tab-posts"') < html.indexOf('id="tab-overview"'), "the feed is the first panel");
+    const between = html.slice(html.indexOf("</section>", hero), nav);
+    assert.doesNotMatch(between, /<section class="card(?! pf-story)/, who + ": nothing big between the header and the feed");
+    assert.match(html, /<a class="pf-tab pf-vault" href="\/u\/alice\/vault" data-vault-link title="The profile vault[^"]*"><span aria-hidden="true">💰<\/span>Vault<\/a>/, who);
+    assert.deepEqual(tabsOf(html), ["posts", "overview"], "the vault link isn't a client-side tab");
+  }
+  assert.match(await render("owner", { vault: PV(), preview: true }), /href="\/u\/alice\/vault\?preview=visitor" data-vault-link/);
+  assert.doesNotMatch(await render("visitor", {}), /data-vault-link|\/u\/alice\/vault/, "profile vaults off: no link");
+});
+
+test("vault: /u/<name>/vault shows the header, the tab bar (links back) and the vault card - Donate for others, a note for the owner", async () => {
+  const vis = await render("visitor", { vault: PV(CARD), vaultView: true, tab: "vault" });
+  save("vault-page-visitor", vis);
+  assert.match(vis, /<title>[^<]*Alice(?:'|&#39;)s vault on Public Access/);
+  assert.match(vis, /class="card pv-card" id="vault"/);
+  assert.match(vis, /<form class="ds-form" id="rvDonate" data-slug="u-alice"/, "Donate works for others");
+  assert.match(vis, /id="vault-donate"/);
+  assert.match(vis, /\/public\/js\/pad-vault\.js\?v=\d+/);
+  assert.match(vis, /1,250,000/);
+  assert.match(vis, /<a class="pf-tab pf-vault" href="\/u\/alice\/vault" aria-current="page">/);
+  assert.match(vis, /<a class="pf-tab" href="\/u\/alice\/posts">/, "Posts goes back to the profile");
+  assert.match(vis, /<a class="pf-tab" href="\/u\/alice\/overview">/);
+  assert.doesNotMatch(vis, /data-tab=|role="tabpanel"|Pixel frogs are back/, "no client tabs / feed on the vault page");
+  const own = await render("owner", { vault: PV(CARD), vaultView: true, tab: "vault" });
+  save("vault-page-owner", own);
+  assert.match(own, /This is your vault - other people can donate to it/);
+  assert.doesNotMatch(own, /id="rvDonate"/, "no donating to yourself");
+  assert.match(own, /Your vault fills when other people spend on your profile/);
+  assert.match(own, /href="\/u\/alice\/saved"/);
+  const anon = await render("anon", { vault: PV(CARD), vaultView: true, tab: "vault" });
+  assert.match(anon, /href="\/login\?next=%2Fu%2Falice%2Fvault%23vault-donate"/, "sign in comes back to the vault's Donate");
+});
+
+test("vault: routing - ?tab=vault and vaults off redirect; old #vault links are sent to the page", async () => {
+  const R = layout.vaultRoute;
+  assert.deepEqual(R({ tab: undefined, qtab: undefined, has: true, username: "alice" }), { vault: false });
+  assert.deepEqual(R({ tab: "posts", qtab: "vault", has: true, username: "alice" }), { vault: false });
+  assert.deepEqual(R({ tab: "vault", has: true, username: "alice" }), { vault: true });
+  assert.deepEqual(R({ tab: "vault", has: false, username: "alice" }), { redirect: "/u/alice", status: 302 });
+  assert.deepEqual(R({ tab: undefined, qtab: "Vault", has: true, username: "a b" }), { redirect: "/u/a%20b/vault", status: 301 });
+  assert.deepEqual(R({ tab: undefined, qtab: "vault", has: true, username: "alice", preview: true }), { redirect: "/u/alice/vault?preview=visitor", status: 301 });
+  assert.ok(require(path.join(repo, "index.js").replace("index.js", "profilelayout.js")).vaultRoute === R);
+  const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  assert.match(src, /:tab\(posts\|overview\|analytics\|plex\|vault\)/, "the route takes /vault");
+  assert.match(src, /profileLayout\.vaultRoute\(/);
+  // profile-tabs.js: #vault / #vault-donate on the profile -> /u/<name>/vault (keeping the Donate anchor); other hashes stay
+  const vm = require("vm");
+  const js = fs.readFileSync(path.join(repo, "public", "js", "profile-tabs.js"), "utf8");
+  const run = (hash, withLink = true) => {
+    let went = null;
+    const link = { getAttribute: (k) => (k === "href" ? "/u/alice/vault" : null) };
+    const root = { querySelector: (sel) => (sel === "[data-vault-link]" && withLink ? link : null), querySelectorAll: () => [] };
+    const doc = { querySelector: (sel) => (sel === ".pf[data-profile]" ? root : null), querySelectorAll: () => [], getElementById: () => null, addEventListener() {} };
+    const ctx = { document: doc, location: { hash, href: "/u/alice", replace: (u) => { went = u; } }, history: { replaceState() {} },
+                  window: { addEventListener() {} }, setTimeout, HTMLElement: function () {} };
+    ctx.window.document = doc;
+    try { vm.runInNewContext(js, ctx); } catch (e) { if (went === null) throw e; }
+    return went;
+  };
+  assert.equal(run("#vault"), "/u/alice/vault");
+  assert.equal(run("#vault-donate"), "/u/alice/vault#vault-donate");
+  assert.equal(run("#badges"), null);
+  assert.equal(run("#vault", false), null, "profile vaults off: nothing to go to");
 });

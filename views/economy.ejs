@@ -792,7 +792,7 @@
         <% if (_rv.rooms.length) { %>
         <ul>
           <% _rv.rooms.forEach((r) => { %>
-            <li><% if (r.slug) { %><a href="/p/<%= encodeURIComponent(r.slug) %>?tab=about#vault"><%= r.title %></a><% } else { %><%= r.title %><% } %>:
+            <li><% const rvHref_ = r.href || (r.slug ? '/p/' + encodeURIComponent(r.slug) + '?tab=about#vault' : null); if (rvHref_) { %><a href="<%= rvHref_ %>"><%= r.title %></a><% } else { %><%= r.title %><% } %>:
               <b><%= _rf(r.balance) %></b> PAT (<%= _rf(r.inflow7) %> in over the last 7 days)</li>
           <% }) %>
         </ul>

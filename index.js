@@ -1492,7 +1492,9 @@ async function profileStoryFor(user, viewer, owner) {
 }
 
 // Get user profile
-app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex)"], addUser, async (req, res) => {
+// 1.99vy: /u/<name>/vault - the 💰 profile vault on a page of its own (was a card above the feed; an old #vault link
+// lands there through profile-tabs.js). With profile vaults off it goes back to the profile.
+app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)"], addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
   const usernameProfile = req.params.username; // Fallback to null if no user in session
   const sql =
@@ -1514,6 +1516,20 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex)"], ad
         layout = { priv: profileLayout.PRIV_IDS };
       }
       const L = profileLayout.view(layout, { owner: isOwner, admin: isAdmin, preview });
+      // 2026-10-12: 💰 the profile's vault once profile vaults are on (roomvaults.js; Pepe's econ_profile_vaults).
+      // 1.99vy: shown on /u/<name>/vault only - the main profile carries a "💰 Vault" link in its tab bar (no card data)
+      const wantVault = req.params.tab === "vault" || (!req.params.tab && String(req.query.tab || "").toLowerCase() === "vault");
+      const profileVault = await (async () => {
+        const RV = require("./roomvaults");
+        await RV.init();
+        if (!RV.profileVaultsOn()) return null;
+        const P = await require("./rooms").ensureProfile(user.userId);
+        if (!P) return null;
+        return { slug: P.slug, card: wantVault ? await RV.card(P.id, preview ? null : req.user, {}) : null };
+      })().catch((e) => { console.error("profile vault:", e.message); return null; });
+      const vr = profileLayout.vaultRoute({ tab: req.params.tab, qtab: req.query.tab, has: !!(profileVault && (profileVault.card || !wantVault)),
+                                            username: user.username, preview });
+      if (vr.redirect) return res.redirect(vr.status, vr.redirect);
       res.render("profile", {
         // Render profile.ejs with user data
         username: username,
@@ -1554,15 +1570,8 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex)"], ad
         social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })
           .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
-        // 2026-10-12: 💰 the profile's vault once profile vaults are on (roomvaults.js; Pepe's econ_profile_vaults)
-        profileVault: await (async () => {
-          const RV = require("./roomvaults");
-          await RV.init();
-          if (!RV.profileVaultsOn()) return null;
-          const P = await require("./rooms").ensureProfile(user.userId);
-          if (!P) return null;
-          return { slug: P.slug, card: await RV.card(P.id, preview ? null : req.user, {}) };
-        })().catch((e) => { console.error("profile vault:", e.message); return null; }),
+        profileVault,
+        vaultView: vr.vault,      // 1.99vy: /u/<name>/vault - the header, the tab bar and the vault card, nothing else
         viewerIsAdmin: isAdmin && !preview,      // 1.99ma: the ⋯ menu's "🎁 Comp…" (admins: /admin/comps?user=)
         // 1.99qp: ⭐ PATV Creators on the profile - the Creator chip + Subscribe (their creator page), the owner's dashboard /
         // "Become a creator" link; nothing while the feature is off

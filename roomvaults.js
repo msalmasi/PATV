@@ -337,7 +337,10 @@ async function overview(limit = 10) {
     try { days = JSON.parse(r.days || "{}"); } catch (e) { days = {}; }
     const keys = Object.keys(days).sort().slice(-7);
     const R = await rooms.get(r.room_id).catch(() => null);
-    out.push({ room_id: r.room_id, title: R ? R.title : r.room_id, slug: R ? R.slug : null, balance: int(r.balance),
+    // 1.99vy: a profile pad's vault lives on the profile (/u/<name>/vault), not on a pad page
+    const href = R && R.profile && R.profile.username ? "/u/" + encodeURIComponent(R.profile.username) + "/vault"
+      : R && R.slug ? "/p/" + encodeURIComponent(String(R.slug).toLowerCase()) + "?tab=about#vault" : null;
+    out.push({ room_id: r.room_id, title: R ? R.title : r.room_id, slug: R ? R.slug : null, href, balance: int(r.balance),
                inflow7: keys.reduce((s, k) => s + int(days[k].in), 0) });
   }
   return { live: meta.on === true, total: int(meta.total), cap: meta.cap || 50000000, rooms: out,

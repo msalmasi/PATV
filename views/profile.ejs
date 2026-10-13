@@ -1,5 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
-<%- include('layout', { title: t('profile.page_title', { name: displayname || usernameProfile }), user: username, og: typeof og !== 'undefined' ? og : null }) %>
+<% const vaultView_ = typeof vaultView !== 'undefined' && !!vaultView && typeof profileVault !== 'undefined' && !!profileVault && !!profileVault.card; -%>
+<%- include('layout', { title: vaultView_ ? t('profile.vault.page_title', { name: displayname || usernameProfile }) : t('profile.page_title', { name: displayname || usernameProfile }), user: username, og: typeof og !== 'undefined' ? og : null }) %>
 <%
   // 1.99du: header (photo + GTF portrait, name, stat strip, primary actions + "More") and tabs under it -
   // Posts (default) · Overview · Analytics, in the owner's layout order (profilelayout.tabsFor).
@@ -51,6 +52,9 @@
   const soc = typeof social !== 'undefined' && social ? social : null;
   const tabs = PL ? PL.tabsFor(L, has) : [];
   const active = PL ? PL.pickTab(tabs, typeof profileTab !== 'undefined' ? profileTab : '') : null;
+  // 1.99vy: the 💰 profile vault is a page of its own (/u/<name>/vault); the main profile only links it from the tab bar
+  const pv = typeof profileVault !== 'undefined' && profileVault ? profileVault : null;
+  const vaultHref = base + '/vault' + (previewing ? '?preview=visitor' : '');
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
@@ -159,7 +163,7 @@
                 border: 1px solid #2a2a2a; background: #151515; color: var(--ds-text-2) !important; font: 500 var(--ds-fs-sm)/1 var(--ds-font); white-space: nowrap; text-decoration: none !important;
                 transition: border-color var(--ds-dur-1), color var(--ds-dur-1); }
   .pf .pf-tab:hover { border-color: var(--ds-ac); color: var(--ds-text-strong) !important; }
-  .pf .pf-tab[aria-selected="true"] { border-color: var(--ds-ac); background: var(--ds-ac-bg); color: var(--ds-text-strong) !important; font-weight: 700; }
+  .pf .pf-tab[aria-selected="true"], .pf .pf-tab[aria-current="page"] { border-color: var(--ds-ac); background: var(--ds-ac-bg); color: var(--ds-text-strong) !important; font-weight: 700; }
   .pf .pf-tab:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
   .pf .pf-tab.is-hidden { opacity: .6; }
   .pf .pf-tab .eye { font-size: 11px; }
@@ -322,7 +326,7 @@
   <%# 1.99ez: their story ring (own uploads + captures of them, userstories.js); the owner adds stories and picks whether
       captures of them show here %>
   <% const pst_ = typeof profileStory !== 'undefined' && profileStory ? profileStory : null; %>
-  <% if (pst_ && (pst_.rooms.length || pst_.owner)) { %>
+  <% if (!vaultView_ && pst_ && (pst_.rooms.length || pst_.owner)) { %>
     <section class="card pf-story" aria-label="<%- t('profile.story.aria') %>">
       <%- include('partials/story-strip', { story: { rooms: pst_.rooms, caps: [], room: null, signed: pst_.signed, compose: pst_.owner, pad: 'profile' }, heading: '📸 ' + t('profile.story.heading'), next: base }) %>
       <% if (pst_.owner && pst_.prefs) { %>
@@ -343,13 +347,6 @@
         </script>
       <% } %>
     </section>
-  <% } %>
-
-  <%# 2026-10-12: 💰 the profile's vault (profile vaults on: roomvaults.card on user:<id>) %>
-  <% if (typeof profileVault !== 'undefined' && profileVault) { %>
-    <%- include('partials/profile-vault-card', { rv: profileVault.card, slug: profileVault.slug, name: displayname || usernameProfile, uname: usernameProfile,
-                 signed: !!username, isMe: !!(username && username === usernameProfile) && !previewing, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %>
-    <script src="/public/js/pad-vault.js?v=2" defer></script>
   <% } %>
 
   <% if (previewing) { %>
@@ -416,12 +413,28 @@
   </section>
   <% };
   %>
-  <% if (tabs.length) { %>
+  <% if (vaultView_) { %>
+    <%# 1.99vy: /u/<name>/vault - the tab bar as plain links back to the profile (no panels here), then the vault card %>
+    <nav class="pf-tabs" aria-label="<%- t('profile.tabs_aria') %>">
+      <% tabs.forEach((tb) => { %>
+        <a class="pf-tab<%= tb.hidden ? ' is-hidden' : '' %>" href="<%= tabHref(tb.id) %>"><span aria-hidden="true"><%= tb.icon %></span><%- t.has('profile.tab.' + tb.id) ? t('profile.tab.' + tb.id) : t.esc(tb.label) %></a>
+      <% }) %>
+      <a class="pf-tab pf-vault" href="<%= vaultHref %>" aria-current="page"><span aria-hidden="true">💰</span><%- t('profile.tab.vault') %></a>
+      <% if (isMe) { %><a class="pf-tab" href="<%= base %>/saved" title="<%- t('profile.tab.saved_title') %>"><span aria-hidden="true">🔖</span><%- t('profile.tab.saved') %></a><% } %>
+    </nav>
+    <div class="pf-panel pf-vaultpage">
+      <%- include('partials/profile-vault-card', { rv: pv.card, slug: pv.slug, name: displayname || usernameProfile, uname: usernameProfile,
+                   signed: !!username, isMe, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %>
+    </div>
+    <script src="/public/js/pad-vault.js?v=2" defer></script>
+  <% } else if (tabs.length) { %>
     <nav class="pf-tabs" role="tablist" aria-label="<%- t('profile.tabs_aria') %>">
       <% tabs.forEach((tb) => { %>
         <a class="pf-tab<%= tb.hidden ? ' is-hidden' : '' %>" role="tab" id="tb-<%= tb.id %>" href="<%= tabHref(tb.id) %>" data-tab="<%= tb.id %>" aria-controls="tab-<%= tb.id %>"
            aria-selected="<%= tb.id === active ? 'true' : 'false' %>" tabindex="<%= tb.id === active ? '0' : '-1' %>"<%- tb.hidden ? ' title="' + t('profile.hidden_from_visitors') + '"' : '' %>><span aria-hidden="true"><%= tb.icon %></span><%- t.has('profile.tab.' + tb.id) ? t('profile.tab.' + tb.id) : t.esc(tb.label) %><% if (tb.hidden) { %> <span class="eye" aria-label="<%- t('profile.hidden_from_visitors_lc') %>">👁</span><% } %></a>
       <% }) %>
+      <%# 1.99vy: 💰 the profile vault - a link to its own page (an old #vault link is sent there by profile-tabs.js) %>
+      <% if (pv) { %><a class="pf-tab pf-vault" href="<%= vaultHref %>" data-vault-link title="<%- t('profile.tab.vault_title') %>"><span aria-hidden="true">💰</span><%- t('profile.tab.vault') %></a><% } %>
       <%# 1.99eq: the owner's private Saved captures (storykeep.js) - a page of its own, never shown to visitors %>
       <% if (isMe) { %><a class="pf-tab" href="<%= base %>/saved" title="<%- t('profile.tab.saved_title') %>"><span aria-hidden="true">🔖</span><%- t('profile.tab.saved') %></a><% } %>
     </nav>
@@ -482,6 +495,6 @@
   </div>
 </div>
 <% } %>
-<script src="/public/js/profile-tabs.js?v=2" defer></script>
+<script src="/public/js/profile-tabs.js?v=3" defer></script>
 </body>
 </html>

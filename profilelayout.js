@@ -235,4 +235,19 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { SECTIONS, TABS, TAB_OF, DEFAULT_TAB, tabsFor, pickTab, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, PRIV_DEFAULT_PRIVATE, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };
+/**
+ * 1.99vy: the 💰 profile vault's own page, /u/<name>/vault (it used to be a card above the feed). Given the path's tab,
+ * ?tab= and whether this profile has a vault: {vault: true|false} to render, or {redirect, status} - an old ?tab=vault
+ * goes to the path (301), the page with profile vaults off goes back to the profile (302). (An old #vault hash never
+ * reaches the server: public/js/profile-tabs.js sends it on.)
+ */
+function vaultRoute({ tab, qtab, has, username, preview }) {
+  const base = "/u/" + encodeURIComponent(String(username || ""));
+  const want = tab === "vault" || (!tab && String(qtab || "").toLowerCase() === "vault");
+  if (!want) return { vault: false };
+  if (!has) return { redirect: base, status: 302 };
+  if (tab !== "vault") return { redirect: base + "/vault" + (preview ? "?preview=visitor" : ""), status: 301 };
+  return { vault: true };
+}
+
+module.exports = { vaultRoute, SECTIONS, TABS, TAB_OF, DEFAULT_TAB, tabsFor, pickTab, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, PRIV_DEFAULT_PRIVATE, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };

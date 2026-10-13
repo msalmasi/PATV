@@ -3,6 +3,7 @@
 // 1.99dv: /u/<name>/<tab>, was ?tab=); this switches them without a reload and keeps the URL deep-linkable.
 // A #hash that names a tab (#posts, #overview, #analytics - an old /u/<name>/profile#posts link lands here with
 // it) opens that tab and moves the address to its path; one inside a tab (#profile-settings, #badges) opens it.
+// 1.99vy: #vault / #vault-donate (the profile vault card used to sit above the feed) -> /u/<name>/vault.
 // The GTF popover is a native [popover] (light dismiss + Esc); ?gtf=1 opens it on load - the "New
 // avatar" form comes back there so the request's result shows.
 (function () {
@@ -46,10 +47,21 @@
     });
   });
 
+  // 1.99vy: the 💰 profile vault moved to its own page (/u/<name>/vault) - an old /u/<name>#vault (or #vault-donate) link
+  // goes there, keeping the Donate anchor
+  var vaultLink = root.querySelector("[data-vault-link]");
+  function toVault(h) {
+    if (!vaultLink || !/^vault(?:-donate)?$/.test(h)) return false;
+    var href = vaultLink.getAttribute("href");
+    try { location.replace(href + (h === "vault-donate" ? "#vault-donate" : "")); } catch (e) { location.href = href; }
+    return true;
+  }
+
   // #hash -> the tab it names or the tab that holds it
   function fromHash() {
     var h = (location.hash || "").slice(1);
     if (!h) return;
+    if (toVault(h)) return;
     var named = null;
     tabs.forEach(function (t) { if (t.getAttribute("data-tab") === h) named = t; });
     if (named && activate(h, { url: named.getAttribute("href") })) return;

@@ -5,6 +5,7 @@
     out (the owner from their posts' engagement, capped at 25% of what others spent here; the people who engaged with their
     posts), the last week, recent donations and a public Donate form (public/js/pad-vault.js: the same keyed, confirmed
     donation as a pad's vault - the ids rvDonate / rvAmt / rvAnon / rvDonateMsg are what that script binds to).
+    1.99vy: rendered on the profile's own vault page /u/<name>/vault (views/profile.ejs vaultView), no longer above the feed.
     Locals: rv (the card), slug (the profile pad's slug), name (display name), uname (username), signed, isMe, num. %>
 <% const live_ = !!rv.live, rc_ = rv.recipe || {}, payLive_ = !!rc_.live;
    const cap_ = rv.cap || 50000000, head_ = Math.max(0, cap_ - rv.balance);
@@ -50,7 +51,7 @@
   <div class="pv-donate" id="vault-donate">
     <h3><%- t('profile.vault.donate_h', { name: t.esc(name) }) %></h3>
     <% if (!signed) { %>
-      <a class="ds-btn gold sm" href="/login?next=<%= encodeURIComponent('/u/' + uname + '#vault') %>"><span class="ds-ic" aria-hidden="true">🪙</span><%- t('pad.vault.donate_signin') %></a>
+      <a class="ds-btn gold sm" href="/login?next=<%= encodeURIComponent('/u/' + uname + '/vault#vault-donate') %>"><span class="ds-ic" aria-hidden="true">🪙</span><%- t('pad.vault.donate_signin') %></a>
     <% } else if (!live_) { %>
       <p class="ds-note"><span class="ds-ic" aria-hidden="true">⏳</span><span><%- t('pad.vault.donate_closed') %></span></p>
     <% } else if (isMe) { %>

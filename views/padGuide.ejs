@@ -112,7 +112,7 @@
         <li><%- t('owners.earn.donate') %></li>
         <li><%- t('owners.earn.sb') %></li>
         <% if (F.launchpad) { %><li><%- t('owners.earn.launch') %></li><% } %>
-        <% if (F.profileVaults) { %><li><%- t('owners.earn.profile') %></li><% } %>
+        <% if (F.profileVaults) { %><li><%- t('owners.earn.profile') %><% if (locals.user) { %> <a href="/u/<%= encodeURIComponent(locals.user) %>/vault"><%- t('owners.earn.profile_link') %> →</a><% } %></li><% } %>
       </ul>
       <p><%- t('owners.earn.fair') %></p>
       <p class="ds-meta"><%- t('owners.earn.needs') %> <%- t('owners.earn.economy') %></p>
