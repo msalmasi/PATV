@@ -3215,6 +3215,48 @@
   "js.feed.tip.tally_title": {
     "other": "{n} tip cho bài đăng này, tổng {pat} PAT"
   },
+  "js.embed.awaiting": "đang chờ kết quả",
+  "js.embed.bettors": {
+    "other": "{count} người cược"
+  },
+  "js.embed.bounty": "Truy nã",
+  "js.embed.bounty_wait": "đang chờ trả thưởng",
+  "js.embed.claims": {
+    "other": "{count} lượt nhận"
+  },
+  "js.embed.closes_in": "đóng sau {left}",
+  "js.embed.closing": "đang đóng",
+  "js.embed.ends_in": "kết thúc sau {left}",
+  "js.embed.left_d": "{d}n {h}g",
+  "js.embed.left_h": "{h}g {m}p",
+  "js.embed.left_m": "{m}p {s}s",
+  "js.embed.market": "Thị trường",
+  "js.embed.more": "+{count} nữa",
+  "js.embed.mult": "trả ×{mult}",
+  "js.embed.open_aria": "Mở {kind} {ref}: {title}",
+  "js.embed.pad_title": "Pad chứa nó",
+  "js.embed.poll": "Khảo sát",
+  "js.embed.pool": "Quỹ cược",
+  "js.embed.pool_title": "{pat} PAT cho lựa chọn này",
+  "js.embed.pot": "{pat} PAT trong quỹ",
+  "js.embed.price_title": "{price} PAT mỗi phần",
+  "js.embed.result": "Kết quả: {result}",
+  "js.embed.reward": "Thưởng {pat} PAT",
+  "js.embed.sitewide": "Toàn trang",
+  "js.embed.st.closed": "Đã đóng",
+  "js.embed.st.ended": "Đã kết thúc",
+  "js.embed.st.expired": "Hết hạn",
+  "js.embed.st.open": "Đang mở",
+  "js.embed.st.settled": "Đã quyết toán",
+  "js.embed.st.settling": "Đang quyết toán",
+  "js.embed.st.void": "Đã hủy",
+  "js.embed.traders": {
+    "other": "{count} người giao dịch"
+  },
+  "js.embed.volume": "{pat} PAT đã giao dịch",
+  "js.embed.votes": {
+    "other": "{count} phiếu bầu"
+  },
   "js.pad.tip.aria": "Tip cho {name}",
   "js.pad.tip.title": "💸 Tip cho {name}",
   "js.pad.tip.close": "Đóng",

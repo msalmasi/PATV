@@ -3266,6 +3266,52 @@
     "one": "{n} انعام به این پست، {pat} PAT",
     "other": "{n} انعام به این پست، در کل {pat} PAT"
   },
+  "js.embed.awaiting": "در انتظار نتیجه",
+  "js.embed.bettors": {
+    "one": "{count} شرط‌بند",
+    "other": "{count} شرط‌بند"
+  },
+  "js.embed.bounty": "جایزه",
+  "js.embed.bounty_wait": "در انتظار پرداخت جایزه",
+  "js.embed.claims": {
+    "one": "{count} درخواست",
+    "other": "{count} درخواست"
+  },
+  "js.embed.closes_in": "تا {left} دیگر بسته می‌شود",
+  "js.embed.closing": "همین حالا بسته می‌شود",
+  "js.embed.ends_in": "تا {left} دیگر تمام می‌شود",
+  "js.embed.left_d": "{d} روز {h} ساعت",
+  "js.embed.left_h": "{h} ساعت {m} دقیقه",
+  "js.embed.left_m": "{m} دقیقه {s} ثانیه",
+  "js.embed.market": "بازار",
+  "js.embed.more": "+{count} دیگر",
+  "js.embed.mult": "پرداخت ×{mult}",
+  "js.embed.open_aria": "باز کردن {kind} {ref}: {title}",
+  "js.embed.pad_title": "پدی که به آن تعلق دارد",
+  "js.embed.poll": "نظرسنجی",
+  "js.embed.pool": "استخر شرط",
+  "js.embed.pool_title": "{pat} PAT روی این گزینه",
+  "js.embed.pot": "{pat} PAT در صندوق",
+  "js.embed.price_title": "{price} PAT برای هر سهم",
+  "js.embed.result": "نتیجه: {result}",
+  "js.embed.reward": "پاداش {pat} PAT",
+  "js.embed.sitewide": "کل سایت",
+  "js.embed.st.closed": "بسته",
+  "js.embed.st.ended": "تمام شده",
+  "js.embed.st.expired": "منقضی شده",
+  "js.embed.st.open": "باز",
+  "js.embed.st.settled": "تسویه شده",
+  "js.embed.st.settling": "در حال تسویه",
+  "js.embed.st.void": "باطل شده",
+  "js.embed.traders": {
+    "one": "{count} معامله‌گر",
+    "other": "{count} معامله‌گر"
+  },
+  "js.embed.volume": "{pat} PAT معامله شده",
+  "js.embed.votes": {
+    "one": "{count} رأی",
+    "other": "{count} رأی"
+  },
   "js.pad.tip.aria": "انعام به {name}",
   "js.pad.tip.title": "💸 انعام به {name}",
   "js.pad.tip.close": "بستن",

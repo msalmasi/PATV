@@ -3268,6 +3268,52 @@
     "one": "{n} fooi op dit bericht, {pat} PAT",
     "other": "{n} fooien op dit bericht, {pat} PAT in totaal"
   },
+  "js.embed.awaiting": "wachten op het resultaat",
+  "js.embed.bettors": {
+    "one": "{count} wedder",
+    "other": "{count} wedders"
+  },
+  "js.embed.bounty": "Premie",
+  "js.embed.bounty_wait": "wachten op de uitbetaling",
+  "js.embed.claims": {
+    "one": "{count} claim",
+    "other": "{count} claims"
+  },
+  "js.embed.closes_in": "sluit over {left}",
+  "js.embed.closing": "sluit nu",
+  "js.embed.ends_in": "eindigt over {left}",
+  "js.embed.left_d": "{d}d {h}u",
+  "js.embed.left_h": "{h}u {m}m",
+  "js.embed.left_m": "{m}m {s}s",
+  "js.embed.market": "Markt",
+  "js.embed.more": "+{count} meer",
+  "js.embed.mult": "betaalt ×{mult}",
+  "js.embed.open_aria": "Open {kind} {ref}: {title}",
+  "js.embed.pad_title": "De pad waartoe het behoort",
+  "js.embed.poll": "Poll",
+  "js.embed.pool": "Inzetpot",
+  "js.embed.pool_title": "{pat} PAT op deze optie",
+  "js.embed.pot": "{pat} PAT in de pot",
+  "js.embed.price_title": "{price} PAT per aandeel",
+  "js.embed.result": "Resultaat: {result}",
+  "js.embed.reward": "{pat} PAT beloning",
+  "js.embed.sitewide": "Sitebreed",
+  "js.embed.st.closed": "Gesloten",
+  "js.embed.st.ended": "Afgelopen",
+  "js.embed.st.expired": "Verlopen",
+  "js.embed.st.open": "Open",
+  "js.embed.st.settled": "Uitbetaald",
+  "js.embed.st.settling": "Uitbetalen",
+  "js.embed.st.void": "Ongeldig",
+  "js.embed.traders": {
+    "one": "{count} handelaar",
+    "other": "{count} handelaars"
+  },
+  "js.embed.volume": "{pat} PAT verhandeld",
+  "js.embed.votes": {
+    "one": "{count} stem",
+    "other": "{count} stemmen"
+  },
   "js.pad.tip.aria": "{name} een fooi geven",
   "js.pad.tip.title": "💸 {name} een fooi geven",
   "js.pad.tip.close": "Sluiten",

@@ -3268,6 +3268,52 @@
     "one": "اس پوسٹ پر {n} ٹِپ، {pat} PAT",
     "other": "اس پوسٹ پر {n} ٹِپس، کل {pat} PAT"
   },
+  "js.embed.awaiting": "نتیجے کا انتظار ہے",
+  "js.embed.bettors": {
+    "one": "{count} شرط لگانے والا",
+    "other": "{count} شرط لگانے والے"
+  },
+  "js.embed.bounty": "انعام",
+  "js.embed.bounty_wait": "ادائیگی کا انتظار ہے",
+  "js.embed.claims": {
+    "one": "{count} دعویٰ",
+    "other": "{count} دعوے"
+  },
+  "js.embed.closes_in": "{left} میں بند ہوگا",
+  "js.embed.closing": "ابھی بند ہو رہا ہے",
+  "js.embed.ends_in": "{left} میں ختم ہوگا",
+  "js.embed.left_d": "{d} دن {h} گھنٹے",
+  "js.embed.left_h": "{h} گھنٹے {m} منٹ",
+  "js.embed.left_m": "{m} منٹ {s} سیکنڈ",
+  "js.embed.market": "مارکیٹ",
+  "js.embed.more": "+{count} مزید",
+  "js.embed.mult": "ادائیگی ×{mult}",
+  "js.embed.open_aria": "{kind} {ref} کھولیں: {title}",
+  "js.embed.pad_title": "وہ پیڈ جس سے یہ تعلق رکھتا ہے",
+  "js.embed.poll": "پول",
+  "js.embed.pool": "شرط کا پول",
+  "js.embed.pool_title": "اس آپشن پر {pat} PAT",
+  "js.embed.pot": "پوٹ میں {pat} PAT",
+  "js.embed.price_title": "فی شیئر {price} PAT",
+  "js.embed.result": "نتیجہ: {result}",
+  "js.embed.reward": "{pat} PAT انعام",
+  "js.embed.sitewide": "پوری سائٹ",
+  "js.embed.st.closed": "بند",
+  "js.embed.st.ended": "ختم",
+  "js.embed.st.expired": "میعاد ختم",
+  "js.embed.st.open": "کھلا",
+  "js.embed.st.settled": "طے شدہ",
+  "js.embed.st.settling": "طے ہو رہا ہے",
+  "js.embed.st.void": "منسوخ",
+  "js.embed.traders": {
+    "one": "{count} ٹریڈر",
+    "other": "{count} ٹریڈرز"
+  },
+  "js.embed.volume": "{pat} PAT ٹریڈ ہوئے",
+  "js.embed.votes": {
+    "one": "{count} ووٹ",
+    "other": "{count} ووٹ"
+  },
   "js.pad.tip.aria": "{name} کو ٹِپ",
   "js.pad.tip.title": "💸 {name} کو ٹِپ",
   "js.pad.tip.close": "بند کریں",

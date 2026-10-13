@@ -3215,6 +3215,48 @@
   "js.feed.tip.tally_title": {
     "other": "この投稿には {n} 件のチップがあり、合計 {pat} PAT です"
   },
+  "js.embed.awaiting": "結果を待っています",
+  "js.embed.bettors": {
+    "other": "{count}人が賭けています"
+  },
+  "js.embed.bounty": "懸賞金",
+  "js.embed.bounty_wait": "支払いを待っています",
+  "js.embed.claims": {
+    "other": "{count}件の申請"
+  },
+  "js.embed.closes_in": "あと{left}で締め切り",
+  "js.embed.closing": "まもなく締め切り",
+  "js.embed.ends_in": "あと{left}で終了",
+  "js.embed.left_d": "{d}日{h}時間",
+  "js.embed.left_h": "{h}時間{m}分",
+  "js.embed.left_m": "{m}分{s}秒",
+  "js.embed.market": "マーケット",
+  "js.embed.more": "+{count}件",
+  "js.embed.mult": "×{mult}の配当",
+  "js.embed.open_aria": "{kind} {ref}を開く: {title}",
+  "js.embed.pad_title": "所属するパッド",
+  "js.embed.poll": "投票",
+  "js.embed.pool": "賭けプール",
+  "js.embed.pool_title": "この選択肢に{pat} PAT",
+  "js.embed.pot": "ポット: {pat} PAT",
+  "js.embed.price_title": "1株あたり{price} PAT",
+  "js.embed.result": "結果: {result}",
+  "js.embed.reward": "{pat} PATの報酬",
+  "js.embed.sitewide": "サイト全体",
+  "js.embed.st.closed": "締切",
+  "js.embed.st.ended": "終了",
+  "js.embed.st.expired": "期限切れ",
+  "js.embed.st.open": "受付中",
+  "js.embed.st.settled": "精算済み",
+  "js.embed.st.settling": "精算中",
+  "js.embed.st.void": "無効",
+  "js.embed.traders": {
+    "other": "{count}人が取引中"
+  },
+  "js.embed.volume": "取引高 {pat} PAT",
+  "js.embed.votes": {
+    "other": "{count}票"
+  },
   "js.pad.tip.aria": "{name}にチップ",
   "js.pad.tip.title": "💸 {name}にチップ",
   "js.pad.tip.close": "閉じる",

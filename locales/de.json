@@ -3268,6 +3268,52 @@
     "one": "{n} Trinkgeld für diesen Beitrag, {pat} PAT",
     "other": "{n} Trinkgelder für diesen Beitrag, insgesamt {pat} PAT"
   },
+  "js.embed.awaiting": "wartet auf das Ergebnis",
+  "js.embed.bettors": {
+    "one": "{count} Wetter",
+    "other": "{count} Wetter"
+  },
+  "js.embed.bounty": "Kopfgeld",
+  "js.embed.bounty_wait": "wartet auf die Auszahlung",
+  "js.embed.claims": {
+    "one": "{count} Anspruch",
+    "other": "{count} Ansprüche"
+  },
+  "js.embed.closes_in": "schließt in {left}",
+  "js.embed.closing": "schließt jetzt",
+  "js.embed.ends_in": "endet in {left}",
+  "js.embed.left_d": "{d}T {h}h",
+  "js.embed.left_h": "{h}h {m}m",
+  "js.embed.left_m": "{m}m {s}s",
+  "js.embed.market": "Markt",
+  "js.embed.more": "+{count} weitere",
+  "js.embed.mult": "zahlt ×{mult}",
+  "js.embed.open_aria": "{kind} {ref} öffnen: {title}",
+  "js.embed.pad_title": "Der Pad, zu dem es gehört",
+  "js.embed.poll": "Umfrage",
+  "js.embed.pool": "Wettpool",
+  "js.embed.pool_title": "{pat} PAT auf dieser Option",
+  "js.embed.pot": "{pat} PAT im Topf",
+  "js.embed.price_title": "{price} PAT pro Anteil",
+  "js.embed.result": "Ergebnis: {result}",
+  "js.embed.reward": "{pat} PAT Belohnung",
+  "js.embed.sitewide": "Seitenweit",
+  "js.embed.st.closed": "Geschlossen",
+  "js.embed.st.ended": "Beendet",
+  "js.embed.st.expired": "Abgelaufen",
+  "js.embed.st.open": "Offen",
+  "js.embed.st.settled": "Abgerechnet",
+  "js.embed.st.settling": "Wird abgerechnet",
+  "js.embed.st.void": "Annulliert",
+  "js.embed.traders": {
+    "one": "{count} Trader",
+    "other": "{count} Trader"
+  },
+  "js.embed.volume": "{pat} PAT gehandelt",
+  "js.embed.votes": {
+    "one": "{count} Stimme",
+    "other": "{count} Stimmen"
+  },
   "js.pad.tip.aria": "{name} Trinkgeld geben",
   "js.pad.tip.title": "💸 {name} Trinkgeld geben",
   "js.pad.tip.close": "Schließen",

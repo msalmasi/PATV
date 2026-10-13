@@ -3215,6 +3215,48 @@
   "js.feed.tip.tally_title": {
     "other": "{n} tip di posting ini, {pat} PAT seluruhnya"
   },
+  "js.embed.awaiting": "menunggu hasil",
+  "js.embed.bettors": {
+    "other": "{count} pemasang taruhan"
+  },
+  "js.embed.bounty": "Bounty",
+  "js.embed.bounty_wait": "menunggu pembayaran",
+  "js.embed.claims": {
+    "other": "{count} klaim"
+  },
+  "js.embed.closes_in": "ditutup dalam {left}",
+  "js.embed.closing": "ditutup sekarang",
+  "js.embed.ends_in": "berakhir dalam {left}",
+  "js.embed.left_d": "{d}h {h}j",
+  "js.embed.left_h": "{h}j {m}m",
+  "js.embed.left_m": "{m}m {s}d",
+  "js.embed.market": "Pasar",
+  "js.embed.more": "+{count} lainnya",
+  "js.embed.mult": "membayar ×{mult}",
+  "js.embed.open_aria": "Buka {kind} {ref}: {title}",
+  "js.embed.pad_title": "Pad asalnya",
+  "js.embed.poll": "Jajak pendapat",
+  "js.embed.pool": "Kumpulan taruhan",
+  "js.embed.pool_title": "{pat} PAT pada opsi ini",
+  "js.embed.pot": "{pat} PAT dalam pot",
+  "js.embed.price_title": "{price} PAT per saham",
+  "js.embed.result": "Hasil: {result}",
+  "js.embed.reward": "hadiah {pat} PAT",
+  "js.embed.sitewide": "Seluruh situs",
+  "js.embed.st.closed": "Ditutup",
+  "js.embed.st.ended": "Berakhir",
+  "js.embed.st.expired": "Kedaluwarsa",
+  "js.embed.st.open": "Buka",
+  "js.embed.st.settled": "Diselesaikan",
+  "js.embed.st.settling": "Sedang diselesaikan",
+  "js.embed.st.void": "Dibatalkan",
+  "js.embed.traders": {
+    "other": "{count} trader"
+  },
+  "js.embed.volume": "{pat} PAT diperdagangkan",
+  "js.embed.votes": {
+    "other": "{count} suara"
+  },
   "js.pad.tip.aria": "Beri tip ke {name}",
   "js.pad.tip.title": "💸 Beri tip ke {name}",
   "js.pad.tip.close": "Tutup",

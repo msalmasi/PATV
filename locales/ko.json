@@ -3215,6 +3215,48 @@
   "js.feed.tip.tally_title": {
     "other": "이 게시물에 팁 {n}개, 총 {pat} PAT"
   },
+  "js.embed.awaiting": "결과를 기다리는 중",
+  "js.embed.bettors": {
+    "other": "{count}명 베팅"
+  },
+  "js.embed.bounty": "현상금",
+  "js.embed.bounty_wait": "지급을 기다리는 중",
+  "js.embed.claims": {
+    "other": "{count}건 청구"
+  },
+  "js.embed.closes_in": "{left} 후 마감",
+  "js.embed.closing": "곧 마감",
+  "js.embed.ends_in": "{left} 후 종료",
+  "js.embed.left_d": "{d}일 {h}시간",
+  "js.embed.left_h": "{h}시간 {m}분",
+  "js.embed.left_m": "{m}분 {s}초",
+  "js.embed.market": "마켓",
+  "js.embed.more": "+{count}개 더",
+  "js.embed.mult": "배당 ×{mult}",
+  "js.embed.open_aria": "{kind} {ref} 열기: {title}",
+  "js.embed.pad_title": "소속 패드",
+  "js.embed.poll": "투표",
+  "js.embed.pool": "베팅 풀",
+  "js.embed.pool_title": "이 선택지에 {pat} PAT",
+  "js.embed.pot": "팟에 {pat} PAT",
+  "js.embed.price_title": "주당 {price} PAT",
+  "js.embed.result": "결과: {result}",
+  "js.embed.reward": "{pat} PAT 보상",
+  "js.embed.sitewide": "사이트 전체",
+  "js.embed.st.closed": "마감",
+  "js.embed.st.ended": "종료",
+  "js.embed.st.expired": "만료",
+  "js.embed.st.open": "진행 중",
+  "js.embed.st.settled": "정산 완료",
+  "js.embed.st.settling": "정산 중",
+  "js.embed.st.void": "무효",
+  "js.embed.traders": {
+    "other": "트레이더 {count}명"
+  },
+  "js.embed.volume": "{pat} PAT 거래됨",
+  "js.embed.votes": {
+    "other": "{count}표"
+  },
   "js.pad.tip.aria": "{name}님에게 팁",
   "js.pad.tip.title": "💸 {name}님에게 팁",
   "js.pad.tip.close": "닫기",

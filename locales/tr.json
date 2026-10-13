@@ -3268,6 +3268,52 @@
     "one": "Bu gönderide {n} bahşiş, {pat} PAT",
     "other": "Bu gönderide {n} bahşiş, toplam {pat} PAT"
   },
+  "js.embed.awaiting": "sonucu bekleniyor",
+  "js.embed.bettors": {
+    "one": "{count} bahisçi",
+    "other": "{count} bahisçi"
+  },
+  "js.embed.bounty": "Ödül görevi",
+  "js.embed.bounty_wait": "ödülün ödenmesi bekleniyor",
+  "js.embed.claims": {
+    "one": "{count} talep",
+    "other": "{count} talep"
+  },
+  "js.embed.closes_in": "{left} sonra kapanır",
+  "js.embed.closing": "şimdi kapanıyor",
+  "js.embed.ends_in": "{left} sonra bitiyor",
+  "js.embed.left_d": "{d}g {h}s",
+  "js.embed.left_h": "{h}s {m}dk",
+  "js.embed.left_m": "{m}dk {s}sn",
+  "js.embed.market": "Piyasa",
+  "js.embed.more": "+{count} daha",
+  "js.embed.mult": "×{mult} öder",
+  "js.embed.open_aria": "Aç {kind} {ref}: {title}",
+  "js.embed.pad_title": "Ait olduğu pad",
+  "js.embed.poll": "Anket",
+  "js.embed.pool": "Bahis havuzu",
+  "js.embed.pool_title": "Bu seçenekte {pat} PAT",
+  "js.embed.pot": "Havuzda {pat} PAT",
+  "js.embed.price_title": "Hisse başına {price} PAT",
+  "js.embed.result": "Sonuç: {result}",
+  "js.embed.reward": "{pat} PAT ödül",
+  "js.embed.sitewide": "Site geneli",
+  "js.embed.st.closed": "Kapalı",
+  "js.embed.st.ended": "Bitti",
+  "js.embed.st.expired": "Süresi doldu",
+  "js.embed.st.open": "Açık",
+  "js.embed.st.settled": "Sonuçlandı",
+  "js.embed.st.settling": "Sonuçlandırılıyor",
+  "js.embed.st.void": "İptal edildi",
+  "js.embed.traders": {
+    "one": "{count} trader",
+    "other": "{count} trader"
+  },
+  "js.embed.volume": "{pat} PAT işlem gördü",
+  "js.embed.votes": {
+    "one": "{count} oy",
+    "other": "{count} oy"
+  },
   "js.pad.tip.aria": "{name} için bahşiş",
   "js.pad.tip.title": "💸 {name} için bahşiş",
   "js.pad.tip.close": "Kapat",

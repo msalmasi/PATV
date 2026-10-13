@@ -3216,6 +3216,48 @@
   "js.feed.tip.tally_title": {
     "other": "{n} ทิปในโพสต์นี้ รวม {pat} PAT"
   },
+  "js.embed.awaiting": "รอผลลัพธ์",
+  "js.embed.bettors": {
+    "other": "ผู้เดิมพัน {count} คน"
+  },
+  "js.embed.bounty": "ค่าหัว",
+  "js.embed.bounty_wait": "รอการจ่ายรางวัล",
+  "js.embed.claims": {
+    "other": "การเคลม {count} รายการ"
+  },
+  "js.embed.closes_in": "ปิดใน {left}",
+  "js.embed.closing": "กำลังปิด",
+  "js.embed.ends_in": "สิ้นสุดใน {left}",
+  "js.embed.left_d": "{d} วัน {h} ชม.",
+  "js.embed.left_h": "{h} ชม. {m} นาที",
+  "js.embed.left_m": "{m} นาที {s} วินาที",
+  "js.embed.market": "ตลาด",
+  "js.embed.more": "+อีก {count}",
+  "js.embed.mult": "จ่าย ×{mult}",
+  "js.embed.open_aria": "เปิด{kind} {ref}: {title}",
+  "js.embed.pad_title": "pad ที่สังกัด",
+  "js.embed.poll": "โพล",
+  "js.embed.pool": "พูลการเดิมพัน",
+  "js.embed.pool_title": "{pat} PAT ในตัวเลือกนี้",
+  "js.embed.pot": "{pat} PAT ในหม้อรางวัล",
+  "js.embed.price_title": "{price} PAT ต่อหุ้น",
+  "js.embed.result": "ผลลัพธ์: {result}",
+  "js.embed.reward": "รางวัล {pat} PAT",
+  "js.embed.sitewide": "ทั้งเว็บไซต์",
+  "js.embed.st.closed": "ปิดแล้ว",
+  "js.embed.st.ended": "จบแล้ว",
+  "js.embed.st.expired": "หมดอายุ",
+  "js.embed.st.open": "เปิดอยู่",
+  "js.embed.st.settled": "ชำระแล้ว",
+  "js.embed.st.settling": "กำลังชำระ",
+  "js.embed.st.void": "ยกเลิกแล้ว",
+  "js.embed.traders": {
+    "other": "{count} ผู้เทรด"
+  },
+  "js.embed.volume": "{pat} PAT ซื้อขายแล้ว",
+  "js.embed.votes": {
+    "other": "{count} โหวต"
+  },
   "js.pad.tip.aria": "ทิป {name}",
   "js.pad.tip.title": "💸 ทิป {name}",
   "js.pad.tip.close": "ปิด",

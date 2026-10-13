@@ -3215,6 +3215,48 @@
   "js.feed.tip.tally_title": {
     "other": "本帖共 {n} 次打赏，合计 {pat} PAT"
   },
+  "js.embed.awaiting": "等待结果",
+  "js.embed.bettors": {
+    "other": "{count} 位投注者"
+  },
+  "js.embed.bounty": "悬赏",
+  "js.embed.bounty_wait": "等待发放奖励",
+  "js.embed.claims": {
+    "other": "{count} 次认领"
+  },
+  "js.embed.closes_in": "{left}后截止",
+  "js.embed.closing": "即将截止",
+  "js.embed.ends_in": "{left}后结束",
+  "js.embed.left_d": "{d}天{h}小时",
+  "js.embed.left_h": "{h}小时{m}分钟",
+  "js.embed.left_m": "{m}分{s}秒",
+  "js.embed.market": "市场",
+  "js.embed.more": "+{count} 更多",
+  "js.embed.mult": "赔率 ×{mult}",
+  "js.embed.open_aria": "打开{kind} {ref}：{title}",
+  "js.embed.pad_title": "所属小站",
+  "js.embed.poll": "投票",
+  "js.embed.pool": "投注池",
+  "js.embed.pool_title": "此选项已投 {pat} PAT",
+  "js.embed.pot": "奖池中有 {pat} PAT",
+  "js.embed.price_title": "每份 {price} PAT",
+  "js.embed.result": "结果：{result}",
+  "js.embed.reward": "奖励 {pat} PAT",
+  "js.embed.sitewide": "全站",
+  "js.embed.st.closed": "已关闭",
+  "js.embed.st.ended": "已结束",
+  "js.embed.st.expired": "已过期",
+  "js.embed.st.open": "进行中",
+  "js.embed.st.settled": "已结算",
+  "js.embed.st.settling": "结算中",
+  "js.embed.st.void": "已作废",
+  "js.embed.traders": {
+    "other": "{count} 位交易者"
+  },
+  "js.embed.volume": "已交易 {pat} PAT",
+  "js.embed.votes": {
+    "other": "{count} 票"
+  },
   "js.pad.tip.aria": "打赏 {name}",
   "js.pad.tip.title": "💸 打赏 {name}",
   "js.pad.tip.close": "关闭",

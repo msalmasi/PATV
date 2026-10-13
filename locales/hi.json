@@ -3268,6 +3268,52 @@
     "one": "इस पोस्ट पर {n} टिप, {pat} PAT",
     "other": "इस पोस्ट पर {n} टिप्स, कुल {pat} PAT"
   },
+  "js.embed.awaiting": "परिणाम का इंतज़ार है",
+  "js.embed.bettors": {
+    "one": "{count} बेटर",
+    "other": "{count} बेटर्स"
+  },
+  "js.embed.bounty": "इनाम",
+  "js.embed.bounty_wait": "भुगतान का इंतज़ार है",
+  "js.embed.claims": {
+    "one": "{count} दावा",
+    "other": "{count} दावे"
+  },
+  "js.embed.closes_in": "{left} में बंद होगा",
+  "js.embed.closing": "अभी बंद हो रहा है",
+  "js.embed.ends_in": "{left} में समाप्त",
+  "js.embed.left_d": "{d} दिन {h} घंटे",
+  "js.embed.left_h": "{h} घंटे {m} मिनट",
+  "js.embed.left_m": "{m} मिनट {s} सेकंड",
+  "js.embed.market": "मार्केट",
+  "js.embed.more": "+{count} और",
+  "js.embed.mult": "भुगतान ×{mult}",
+  "js.embed.open_aria": "{kind} {ref} खोलें: {title}",
+  "js.embed.pad_title": "वह पैड जिससे यह जुड़ा है",
+  "js.embed.poll": "पोल",
+  "js.embed.pool": "बेटिंग पूल",
+  "js.embed.pool_title": "इस विकल्प पर {pat} PAT",
+  "js.embed.pot": "पॉट में {pat} PAT",
+  "js.embed.price_title": "प्रति शेयर {price} PAT",
+  "js.embed.result": "परिणाम: {result}",
+  "js.embed.reward": "{pat} PAT इनाम",
+  "js.embed.sitewide": "पूरी साइट पर",
+  "js.embed.st.closed": "बंद",
+  "js.embed.st.ended": "समाप्त",
+  "js.embed.st.expired": "समय समाप्त",
+  "js.embed.st.open": "खुला",
+  "js.embed.st.settled": "निपटाया गया",
+  "js.embed.st.settling": "निपटाया जा रहा है",
+  "js.embed.st.void": "रद्द",
+  "js.embed.traders": {
+    "one": "{count} ट्रेडर",
+    "other": "{count} ट्रेडर्स"
+  },
+  "js.embed.volume": "{pat} PAT ट्रेड हुए",
+  "js.embed.votes": {
+    "one": "{count} वोट",
+    "other": "{count} वोट"
+  },
   "js.pad.tip.aria": "{name} को टिप दें",
   "js.pad.tip.title": "💸 {name} को टिप दें",
   "js.pad.tip.close": "बंद करें",
