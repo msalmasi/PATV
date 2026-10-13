@@ -26,7 +26,7 @@
       <span class="v"><%= R && R.balance !== null ? fmt(R.balance) : '—' %> <small>PAT</small></span>
       <span class="s"><% if (R) { %>Today: <%= fmt(R.todayTotal) %> PAT paid out by the site<%= R.today.length ? ' (' + R.today.slice(0, 3).map((f) => f.flow + ' ' + fmt(f.t)).join(', ') + ')' : '' %> · synced <%= ago(R.syncedAt) %><% } else { %>No Reserve data<% } %></span>
     </a>
-    <a class="adm-tile <%= L && L.pending ? 'warn' : 'ok' %>" href="/wallet#admin-requests" id="tileLoans">
+    <a class="adm-tile <%= L && L.pending ? 'warn' : 'ok' %>" href="/admin/economy#admin-requests" id="tileLoans">
       <span class="k">🤝 Loan requests</span>
       <span class="v"><%= L && L.known ? L.pending : '—' %> <small>pending</small></span>
       <span class="s"><% if (L && L.known) { %><%= L.reserveOpen %> Reserve loans open<%= L.book != null ? ' · book ' + fmt(L.book) + ' PAT' : '' %><%= L.enabled === false ? ' · lending CLOSED' : '' %><% } else { %>No loan data from Pepe yet<% } %></span>

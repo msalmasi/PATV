@@ -229,31 +229,10 @@ function register(app, { isBotToken, addUser }) {
         }
       }
 
-      let admin = null;
-      if (isAdmin) {
-        // requesters' credit scores, live (level + account age from users)
-        const pend = (ln.requests || []).filter((r) => r.status === "pending" || r.status === "approving");
-        const names = [...new Set(pend.map((r) => low(r.nick)))].slice(0, 200);
-        const rows = names.length ? await getQuery(`SELECT LOWER(camfrogUsername) AS c, level, created_at FROM users WHERE LOWER(camfrogUsername) IN (${names.map(() => "?").join(",")})`, names) : [];
-        const byName = Object.fromEntries(rows.map((r) => [r.c, r]));
-        for (const r of pend) r.creditLive = credit.forCamfrog(ln.reserve || { limits: {} }, r.nick, byName[low(r.nick)] || null);
-        const all = open.slice().sort((a, b) => b.balance - a.balance).map((s) => {
-          const p = staking.positionFor(sk, s);
-          return { ...s, hold: (p && p.hold) || {}, vaulted: staking.holdValue(p) };
-        });
-        admin = {
-          stashes: all,
-          totals: all.reduce((t, s) => ({ balance: t.balance + s.balance, vaulted: t.vaulted + s.vaulted }), { balance: 0, vaulted: 0 }),
-          pending: (ln.requests || []).filter((r) => r.status === "pending" || r.status === "approving").sort((a, b) => (a.created || 0) - (b.created || 0)),
-          reserveLoans: (ln.loans || []).filter((l) => l.reserve && OPEN.has(l.status)).map((l) => ({ ...l, ref: `L${l.id}`, left: Math.max(0, l.owed - l.paid) }))
-            .sort((a, b) => (a.due || 0) - (b.due || 0)),
-        };
-      }
-
       res.render("wallet", {
         user: u.username, signedIn: true, msg, camfrog, isAdmin, now: Date.now() / 1000,
         bal: Number(u.points_balance) || 0, myStashes, vaults: sk || null, stashesUpdated: st.updated || null,
-        borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, settledPositions, admin,
+        borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, settledPositions,
         myLimit: reserveLimit(ln.reserve || null, camfrog || (reserveOn ? me : null), u.level), // only ever the signed-in user's own
         myCredit: (camfrog || me) ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog || me, u) : null,
         linked: !!camfrog, loansOn, reserveOn: reserveOn && !!(camfrog || me),
@@ -273,4 +252,36 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, cleanStashes, cleanLoans, reserveLimit };
+/**
+ * 1.99xs: the admins' Reserve desk on /admin/economy#loans (was the ADMIN sections of /wallet): pending Reserve loan requests
+ * with each requester's live credit score, the open Reserve loans (the book) and every open stash with its vault holdings.
+ * -> {pending, reserveLoans, reserve, stashes, totals}
+ */
+async function adminBook() {
+  const OPEN = new Set(["offered", "accepting", "funding", "active"]);
+  const SS = require("./stashes");
+  const siteStashes = await SS.live().catch(() => false);
+  const st = siteStashes ? { stashes: await SS.list() } : ((await load("stashes")) || { stashes: [] });
+  const sk = await staking.latest();
+  const ln = (await load("loans")) || { loans: [], requests: [], reserve: null };
+  const open = (st.stashes || []).filter((s) => !s.closed);
+  const pend = (ln.requests || []).filter((r) => r.status === "pending" || r.status === "approving");
+  const names = [...new Set(pend.map((r) => low(r.nick)))].slice(0, 200);
+  const rows = names.length ? await getQuery(`SELECT LOWER(camfrogUsername) AS c, level, created_at FROM users WHERE LOWER(camfrogUsername) IN (${names.map(() => "?").join(",")})`, names) : [];
+  const byName = Object.fromEntries(rows.map((r) => [r.c, r]));
+  for (const r of pend) r.creditLive = credit.forCamfrog(ln.reserve || { limits: {} }, r.nick, byName[low(r.nick)] || null);
+  const all = open.slice().sort((a, b) => b.balance - a.balance).map((s) => {
+    const p = staking.positionFor(sk, s);
+    return { ...s, hold: (p && p.hold) || {}, vaulted: staking.holdValue(p) };
+  });
+  return {
+    stashes: all,
+    totals: all.reduce((t, s) => ({ balance: t.balance + s.balance, vaulted: t.vaulted + s.vaulted }), { balance: 0, vaulted: 0 }),
+    pending: pend.sort((a, b) => (a.created || 0) - (b.created || 0)),
+    reserveLoans: (ln.loans || []).filter((l) => l.reserve && OPEN.has(l.status)).map((l) => ({ ...l, ref: `L${l.id}`, left: Math.max(0, l.owed - l.paid) }))
+      .sort((a, b) => (a.due || 0) - (b.due || 0)),
+    reserve: ln.reserve ? { book: ln.reserve.book, room: ln.reserve.room } : null,
+  };
+}
+
+module.exports = { register, cleanStashes, cleanLoans, reserveLimit, adminBook };

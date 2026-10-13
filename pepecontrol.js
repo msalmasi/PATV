@@ -1,10 +1,10 @@
-// pepecontrol.js - the admin-only "Pepe control panel" at the bottom of the homepage.
+// pepecontrol.js - the admin-only "Pepe control panel" on /admin/pepe#control (1.99xs: no longer on the homepage).
 //
 // Restarting Pepe from outside Camfrog. It must work when Pepe himself is hung or crashed, so it
 // does NOT go through Pepe's web-action queue (actions.js): the VM supervisor (camfrog-bot
 // vm/pepe-supervisor.ps1 + vm/control.py) polls this site over HTTPS, outbound only:
 //
-//   admin (homepage) --POST /api/pepe/control/command--> pepe_control_cmds (status "pending")
+//   admin (/admin/pepe) --POST /api/pepe/control/command--> pepe_control_cmds (status "pending")
 //   VM poller        --GET  /api/pepe/control/pending--> claims it atomically (at most once)
 //   VM poller        --POST /api/pepe/control/ack-----> accepted / waiting / running / done / failed
 //   VM poller        --POST /api/pepe/control/heartbeat-> status shown in the panel
@@ -363,7 +363,7 @@ async function view() {
 
 function register(app, { isBotToken, addUser }) {
   ensure().catch((e) => console.error("[pepecontrol] init:", e.message));
-  // the homepage partial makes its CSRF token with this (views/partials/pepe-control.ejs)
+  // the panel partial makes its CSRF token with this (views/partials/pepe-control.ejs)
   app.locals.pepeCtlCsrf = csrfToken;
 
   const botToken = (req) => req.get("x-bot-token") || (req.body && typeof req.body.password === "string" ? req.body.password : "");

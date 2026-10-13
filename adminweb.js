@@ -140,7 +140,7 @@ async function overview(me) {
   else if (pepe && pepe.hung) alerts.push({ level: "warn", text: "Pepe looks hung (no output)", href: "/admin/pepe" });
   if (reserve && reserve.balance === null) alerts.push({ level: "warn", text: "Reserve balance never synced from Pepe - Reserve-funded payouts are skipped", href: "/admin/economy#reserve" });
   else if (reserve && reserve.syncedAt && Date.now() - reserve.syncedAt > 30 * 60 * 1000) alerts.push({ level: "warn", text: "Reserve balance not synced for over 30 minutes", href: "/admin/economy#reserve" });
-  if (loans && loans.pending) alerts.push({ level: "warn", text: `${loans.pending} loan request${loans.pending === 1 ? "" : "s"} to decide`, href: "/wallet#admin-requests" });
+  if (loans && loans.pending) alerts.push({ level: "warn", text: `${loans.pending} loan request${loans.pending === 1 ? "" : "s"} to decide`, href: "/admin/economy#admin-requests" });
   if (shop && shop.disputes) alerts.push({ level: "warn", text: `${shop.disputes} disputed shop order${shop.disputes === 1 ? "" : "s"}`, href: "/shop/admin" });
   if (shop && shop.review) alerts.push({ level: "info", text: `${shop.review} shop listing${shop.review === 1 ? "" : "s"} awaiting review`, href: "/shop/admin" });
   if (disk && disk.free !== null && disk.free < disk.minFreeGb * 2 * 1024 ** 3) alerts.push({ level: "warn", text: `Low disk: ${(disk.free / 1024 ** 3).toFixed(1)} GB free (uploads stop below ${disk.minFreeGb} GB)`, href: "/admin/system" });
@@ -202,7 +202,11 @@ function register(app, { addUser }) {
     return { reserve: isAdmin ? await safe(reserveStatus) : null, loans: isAdmin ? await safe(loanStatus) : null, roy, shop: await safe(shopStatus),
              inc: isAdmin ? await safe(incentiveStatus) : null,
              // 1.99jw: Pepe's monetary policy (flash switches, Fed loan room, House floor, donation rate, grant cap)
-             monetary: isAdmin ? require("./funding").state.monetary : null };
+             monetary: isAdmin ? require("./funding").state.monetary : null,
+             // 1.99xs: the Reserve desk (wallet.adminBook; was the ADMIN sections of /wallet) + the loan commands' results
+             book: isAdmin ? await safe(() => require("./wallet").adminBook(), null) : null,
+             acts: isAdmin ? await safe(() => require("./actions").recentFor(me.userId, "admin-loans"), []) : [],
+             msg: req.query.msg ? String(req.query.msg).slice(0, 300) : null };
   }));
   // 1.99ol: + the casino front-end switches (casino_settings bj_front / hm_front; saved through /api/casino/admin/settings)
   // 1.99xq: + the GTF heist market settings (heistmarket.adminView; was a card on /gtf/market), admins only

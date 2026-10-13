@@ -1,6 +1,6 @@
 <%#
-  views/partials/pepe-control.ejs - admin-only Pepe control panel (pepecontrol.js), included once at
-  the bottom of the homepage. Emits NOTHING unless the viewer's account (fresh from the DB) is Admin;
+  views/partials/pepe-control.ejs - admin-only Pepe control panel (pepecontrol.js), included on
+  /admin/pepe#control (1.99xs: no longer on the homepage). Emits NOTHING unless the viewer's account (fresh from the DB) is Admin;
   the API checks the role again on every call.
 %><% if (typeof me !== 'undefined' && me && me.class === 'Admin' && typeof pepeCtlCsrf === 'function') { %>
 <style>

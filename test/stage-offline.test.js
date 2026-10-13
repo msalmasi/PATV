@@ -174,3 +174,13 @@ test("labels: the pad page header pill and the /p guide use the same room wordin
   assert.doesNotMatch(guide, pill("LIVE"));
   // a real render of the pad page header
 });
+
+test("1.99xs: the homepage has no admin controls - staff get one link line (picker on /pads/admin#front, Pepe's panel on /admin/pepe)", async () => {
+  const me = { userId: "a1", username: "boss", class: "Admin", level: 1 };
+  const html = await renderHome({ tops, me, username: "boss", staff: true, stageAdmin: { front: "auto", admin: true } });
+  assert.doesNotMatch(html, /id="stAdmin"|id="stRoomSel"|\/api\/rooms\/front|data-fp-re|class="pc"/);
+  assert.match(html, /href="\/pads\/admin#front"/);
+  assert.match(html, /href="\/admin\/pepe#control"/);
+  const pleb = await renderHome({ tops });
+  assert.doesNotMatch(pleb, /\/pads\/admin#front|\/admin\/pepe#control/);
+});

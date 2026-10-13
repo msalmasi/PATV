@@ -1,0 +1,96 @@
+<%#
+  1.99xs: the admins' Reserve desk on /admin/economy#loans (wallet.js adminBook; was the ADMIN sections of the public /wallet):
+  pending Reserve loan requests with the requester's live credit score (approve with amount / term / rate overrides, or deny
+  with a reason), the Reserve book (open Reserve loans) with "Grant a Reserve loan", and every open stash with its vault
+  holdings. The forms post to /act like before (kind=cmd, cmd=loan - Pepe runs them); the result comes back to this page.
+  Pass { book, acts, msg }.
+%><%
+  const B = locals.book;
+  const _fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const _ul = typeof locals.ul === 'function' ? locals.ul : (n) => String(n == null ? '' : n).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' }[c]));
+  const _when = (ts) => ts ? (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime') : '';
+  const _dur = (s) => { s = Number(s) || 0; return s >= 86400 ? +(s / 86400).toFixed(1) + 'd' : s >= 3600 ? Math.round(s / 3600) + 'h' : Math.round(s / 60) + 'm'; };
+  const _now = Date.now() / 1000;
+  const _due = (d) => { if (!d) return ''; const s = Math.round(d - _now); if (s <= 0) return '<span class="adm-pill bad">overdue</span>'; return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm'; };
+  const _pts = (p) => (p > 0 ? '+' : p < 0 ? '−' : '±') + Math.abs(p);
+  const _VN = { bank: '🏦 Bank', house: '🎰 House', mm: '📈 Market maker', auto: '🤖 Auto' };
+  const _hold = (h) => ['bank', 'house', 'mm', 'auto'].filter((k) => h && h[k]).map((k) => _VN[k] + ' ' + _fmt(h[k].value)).join(' · ');
+  const _hidden = (cmd) => '<input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="' + cmd + '"><input type="hidden" name="back" value="/admin/economy"><input type="hidden" name="tag" value="admin-loans">';
+%>
+<% if (!B) { %><p class="adm-help">Couldn't load the loan book.</p><% } else { %>
+<%- include('actions', { acts: locals.acts || [], msg: locals.msg || null }) %>
+
+<h3 id="admin-requests">Reserve loan requests <span class="adm-pill <%= B.pending.length ? 'admin' : '' %>"><%= B.pending.length %></span></h3>
+<% if (!B.pending.length) { %><p class="adm-help">No pending loan requests.</p><% } else { %>
+<div class="adm-tbl"><table aria-label="Reserve loan requests">
+  <thead><tr><th>Request</th><th>Member</th><th class="num">Asked</th><th>Credit</th><th>Why</th><th>Approve (blank = as asked)</th><th>Deny</th></tr></thead>
+  <tbody>
+  <% B.pending.forEach((r) => { const rc = r.creditLive; %>
+    <tr>
+      <td>LR<%= r.id %><span class="adm-help" style="display:block;margin:0"><%= r.status %> · <%- _when(r.created) %></span></td>
+      <td><%- _ul(r.nick) %></td>
+      <td class="num"><%= _fmt(r.amount) %> PAT<span class="adm-help" style="display:block;margin:0"><%= _dur(r.term) %></span></td>
+      <td><% if (rc) { %><b><%= rc.score %></b> <span class="adm-pill"><%= rc.band %></span>
+        <span class="adm-help" style="display:block;margin:0"><%= rc.factors.filter((f) => f.points).slice(0, 3).map((f) => f.label + ' (' + _pts(f.points) + ')').join(' · ') %><%= r.credit != null && r.credit !== rc.score ? ' · was ' + r.credit + ' when asked' : '' %></span><% } else { %>-<% } %></td>
+      <td><%= r.why %></td>
+      <td>
+        <form class="adm-inline" method="post" action="/act"><%- _hidden('loan') %>
+          <input type="hidden" name="a0" value="approve"><input type="hidden" name="a1" value="LR<%= r.id %>">
+          <input type="number" name="a2" min="1" step="1" placeholder="<%= _fmt(r.amount) %>" title="Amount (blank = as asked)" aria-label="Amount (blank = as asked)" style="width:110px">
+          <input type="text" name="a3" pattern="[0-9]+[hdw]" placeholder="<%= _dur(r.term) %>" title="Term like 7d (blank = as asked)" aria-label="Term like 7d (blank = as asked)" style="width:70px">
+          <input type="text" name="a4" pattern="[0-9]+(\.[0-9]+)?%?" placeholder="rate %" title="Rate % per week (blank = default)" aria-label="Rate % per week (blank = default)" style="width:80px">
+          <button type="submit">Approve</button>
+        </form>
+      </td>
+      <td>
+        <form class="adm-inline" method="post" action="/act"><%- _hidden('loan') %>
+          <input type="hidden" name="a0" value="deny"><input type="hidden" name="a1" value="LR<%= r.id %>">
+          <input type="text" name="a2" maxlength="200" placeholder="Reason" aria-label="Reason">
+          <button class="danger" type="submit">Deny</button>
+        </form>
+      </td>
+    </tr>
+  <% }) %>
+  </tbody>
+</table></div>
+<% } %>
+
+<h3 id="admin-book">Reserve book</h3>
+<div class="adm-kv">
+  <div><b>Outstanding</b><span><%= B.reserve ? _fmt(B.reserve.book) + ' PAT' : '—' %></span></div>
+  <div><b>Room left</b><span><%= B.reserve ? _fmt(B.reserve.room) + ' PAT' : '—' %></span></div>
+  <div><b>Active Reserve loans</b><span><%= B.reserveLoans.length %></span></div>
+</div>
+<% if (B.reserveLoans.length) { %>
+<div class="adm-tbl"><table aria-label="Open Reserve loans">
+  <thead><tr><th>Loan</th><th>Borrower</th><th class="num">Principal</th><th class="num">Owed</th><th class="num">Paid</th><th class="num">Left</th><th>Due</th></tr></thead>
+  <tbody>
+  <% B.reserveLoans.forEach((l) => { %>
+    <tr><td><%= l.ref %><%- l.late ? ' <span class="adm-pill bad">LATE</span>' : '' %></td><td><%- _ul(l.borrower) %></td><td class="num"><%= _fmt(l.principal) %></td>
+      <td class="num"><%= _fmt(l.owed) %></td><td class="num"><%= _fmt(l.paid) %></td><td class="num"><%= _fmt(l.left) %></td><td><%- _due(l.due) %></td></tr>
+  <% }) %>
+  </tbody>
+</table></div>
+<% } %>
+<form class="adm-form" method="post" action="/act" style="margin-top:var(--ds-sp-3)"><%- _hidden('loan') %>
+  <input type="hidden" name="a0" value="grant">
+  <label>🏦 Grant a Reserve loan to<input type="text" name="a1" maxlength="60" placeholder="@user" required autocomplete="off"></label>
+  <label>Amount (PAT)<input type="number" name="a2" min="1" step="1" required></label>
+  <label>Term (e.g. 7d)<input type="text" name="a3" pattern="[0-9]+[hdw]" required></label>
+  <div class="adm-actions"><button type="submit">Grant</button></div>
+</form>
+
+<h3 id="admin-stashes">All stashes <span class="adm-pill"><%= B.stashes.length %></span></h3>
+<% if (!B.stashes.length) { %><p class="adm-help">No stashes.</p><% } else { %>
+<div class="adm-tbl"><table aria-label="All stashes">
+  <thead><tr><th>Stash</th><th class="num">Balance</th><th class="num">In vaults</th><th>Holdings</th><th>Members</th></tr></thead>
+  <tbody>
+  <% B.stashes.forEach((s) => { %>
+    <tr><td><%- _ul(s.owner) %>/<%= s.name %></td><td class="num"><%= _fmt(s.balance) %></td><td class="num"><%= _fmt(s.vaulted) %></td>
+      <td><%= _hold(s.hold) %></td><td><%= (s.member_names || s.members || []).join(', ') %></td></tr>
+  <% }) %>
+  <tr><td><b><%= B.stashes.length %> stashes</b></td><td class="num"><b><%= _fmt(B.totals.balance) %></b></td><td class="num"><b><%= _fmt(B.totals.vaulted) %></b></td><td></td><td></td></tr>
+  </tbody>
+</table></div>
+<% } %>
+<% } %>

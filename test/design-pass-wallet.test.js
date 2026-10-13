@@ -62,13 +62,29 @@ test("/wallet: balance up front, quick actions, recent activity and every form i
   assert.match(html, /<form class="card" id="send" method="get" action="\/search"/, "send/tip works without JS too (search)");
   // the forms post the same commands as before
   for (const cmd of ["stash", "loan", "donate"]) assert.match(html, new RegExp('name="cmd" value="' + cmd + '"'), cmd);
-  for (const a0 of ["deposit", "stake", "create", "repay", "reserve", "request", "grant"]) assert.ok(html.includes('value="' + a0 + '"'), a0);
-  for (const id of ["lend", "reserve-request", "credit", "donate", "admin-requests", "admin-book", "admin-stashes", "stashes", "staking", "loans", "reserve", "positions"]) assert.ok(html.includes('id="' + id + '"'), id);
+  for (const a0 of ["deposit", "stake", "create", "repay", "reserve", "request"]) assert.ok(html.includes('value="' + a0 + '"'), a0);
+  for (const id of ["lend", "reserve-request", "credit", "donate", "stashes", "staking", "loans", "reserve", "positions"]) assert.ok(html.includes('id="' + id + '"'), id);
+  // 1.99xs: the admins' Reserve desk moved to /admin/economy#loans - an admin gets a link, nothing else
+  for (const id of ["admin-requests", "admin-book", "admin-stashes"]) assert.ok(!html.includes('id="' + id + '"'), id);
+  assert.match(html, /href="\/admin\/economy#loans"/);
+  const pleb = await (await fetch(base + "/wallet", { headers: { "x-test-user": "u2" } })).text();
+  assert.doesNotMatch(pleb, /\/admin\/economy/);
   assert.match(html, /How stashes and staking work/);
   // signed out: the sign-in prompt, no forms
   const out = await (await fetch(base + "/wallet")).text();
   assert.match(out, /to see your wallet/);
   assert.doesNotMatch(out, /name="cmd"/);
+});
+
+test("1.99xs: the Reserve desk renders on /admin/economy#loans (requests, the book + grant, all stashes)", async () => {
+  const book = await require(path.join(repo, "wallet")).adminBook();
+  assert.equal(book.stashes.length, 1);
+  const html = await ejs.renderFile(path.join(repo, "views", "partials", "admin-loans.ejs"), { book, acts: [], msg: null, ul }, opts);
+  for (const id of ["admin-requests", "admin-book", "admin-stashes"]) assert.ok(html.includes('id="' + id + '"'), id);
+  assert.match(html, /name="cmd" value="loan"/);
+  assert.match(html, /value="grant"/);
+  assert.match(html, /name="back" value="\/admin\/economy"/);
+  assert.match(html, /savings/);
 });
 
 test("/history: every filter, link and ledger row, grouped by day", async () => {

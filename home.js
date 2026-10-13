@@ -252,8 +252,8 @@ function register(app, { addUser, xpForNextLevel }) {
       const onStage = rooms.find((r) => r.id === front.id) || null;
       const room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
       const isStaff = !!(me && (me.class === "Admin" || me.class === "Staff"));
-      const stageAdmin = isStaff ? { front: reg.frontSetting(), rooms: (await reg.list()).map((r) => ({ id: r.id, title: r.title })),
-                                     status: await reg.frontStatus().catch(() => null) } : null;
+      // 1.99xs: staff only get a link line now (the picker is on /pads/admin#front, Pepe's panel on /admin/pepe#control)
+      const stageAdmin = isStaff ? { front: reg.frontSetting(), admin: me.class === "Admin" } : null;
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
       // 1.99fu: signed-out visitors too when the room's pad is Public (padaccess.full)

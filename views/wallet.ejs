@@ -1,8 +1,8 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: t('wallet.title'), user: user}) %>
 <%# 1.99lx design pass: the wallet in the newer pages' look (/premium, /lotto, the banner) - balance up front, quick actions,
-    recent activity, stashes + staking explained. Every form, field and anchor (#lend #reserve-request #credit #donate
-    #admin-requests #admin-book #admin-stashes) is the same as before. -%>
+    recent activity, stashes + staking explained. Every form, field and anchor (#lend #reserve-request #credit #donate)
+    is the same as before. 1.99xs: the ADMIN sections (#admin-requests #admin-book #admin-stashes) moved to /admin/economy#loans. -%>
 <style>
   /* 1.99pr polish: .ds-page + ds tokens; the page classes below only keep what is wallet-specific */
   .wl { gap: var(--ds-sp-6); }
@@ -32,7 +32,6 @@
   .wl .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: var(--ds-sp-3); }
   .wl .card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); display: grid; gap: var(--ds-sp-2h); align-content: start; min-width: 0; margin: 0; }
   .wl .card.own { border-color: var(--ds-green-line); background: linear-gradient(180deg, var(--ds-green-bg) 0%, var(--ds-surface) 45%); }
-  .wl .card.admin { border-color: var(--ds-gold-line); }
   .wl .card.welcome { border-color: var(--ds-gold-line); background: linear-gradient(180deg, var(--ds-gold-bg), transparent 45%), var(--ds-surface); }
   .wl .card-h { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-2); flex-wrap: wrap; }
   .wl .card-h b { font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); }
@@ -51,7 +50,6 @@
   .wl .forms { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: var(--ds-sp-3); }
   .wl .forms > form { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); align-content: start; }
   .wl .forms > form > b:first-of-type { color: var(--ds-text-strong); font-size: var(--ds-fs-h4); }
-  .wl .forms > form.admin { border-color: var(--ds-gold-line); }
   .wl input[type=number], .wl input[type=text], .wl select { box-sizing: border-box; margin: 0; background: var(--ds-sunken); color: #eee; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-md);
        padding: 10px 12px; min-height: var(--ds-tap); max-width: 100%; min-width: 0; font: 400 15px/1.3 var(--ds-font); }
   .wl input[type=number]:hover, .wl input[type=text]:hover, .wl select:hover { border-color: #444; }
@@ -67,7 +65,6 @@
   .wl button:disabled, .wl button[aria-busy="true"] { filter: grayscale(.6) brightness(.7); cursor: not-allowed; }
   .wl button.alt { background: #1c1c1f; color: var(--ds-text); border-color: #2c2c2c; }
   .wl button.danger { background: var(--ds-danger-fill); color: var(--ds-danger-ink); border-color: var(--ds-danger-line); }
-  .wl button.admin { background: var(--ds-warn-fill); color: #1a1200; }
   .wl button.gold { background: var(--ds-gold-grad); color: var(--ds-on-gold); }
   .wl form.inline button, .wl td button { min-height: 36px; padding: 0 var(--ds-sp-3h); font-size: 13.5px; }
   .wl label { cursor: pointer; font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
@@ -219,7 +216,8 @@
     <% if (canLoan) { %><a class="ds-tab" href="#loans"><%- t('wallet.nav.loans') %></a><% } %>
     <a class="ds-tab" href="#reserve"><%- t('wallet.nav.reserve') %></a>
     <a class="ds-tab" href="#positions"><%- t('wallet.nav.markets') %></a>
-    <% if (admin) { %><a class="ds-tab" href="#admin-requests"><%- t('wallet.nav.admin') %></a><% } %>
+    <%# 1.99xs: the admins' Reserve desk (requests, the book, all stashes) lives on /admin/economy#loans %>
+    <% if (locals.isAdmin) { %><a class="ds-tab" href="/admin/economy#loans">🛠️ <%- t('wallet.nav.admin') %></a><% } %>
   </div></nav>
 
   <!-- ───────── Recent activity · send / tip · give ───────── -->
@@ -536,80 +534,6 @@
     <p class="info"><%- t('wallet.settled.info') %></p>
   <% } %>
   </section>
-
-  <!-- ───────── Admin ───────── -->
-  <% if (admin) { %>
-  <section class="sec" aria-label="Admin">
-    <h2 id="admin-requests" class="ds-pixel-h">ADMIN · RESERVE REQUESTS</h2>
-    <% if (!admin.pending.length) { %><p class="info">No pending loan requests.</p><% } %>
-    <div class="grid">
-      <% admin.pending.forEach((r) => { %>
-        <div class="card admin">
-          <span class="ref">LR<%= r.id %> · <%= r.status %> · <%- when(r.created) %></span>
-          <span class="name"><%- ul(r.nick) %> wants <%= fmt(r.amount) %> PAT for <%= dur(r.term) %></span>
-          <% const rc = r.creditLive; if (rc) { %>
-            <span class="info">📊 Credit <b><%= rc.score %></b> <span class="band <%= bandCls(rc.band) %>"><%= rc.band %></span>
-              <%= rc.factors.filter((f) => f.points).slice(0, 3).map((f) => f.label + ' (' + pts(f.points) + ')').join(' · ') %>
-              <%= r.credit != null && r.credit !== rc.score ? '· was ' + r.credit + ' when asked' : '' %></span>
-          <% } %>
-          <span class="info">“<%= r.why %>”</span>
-          <form class="inline" method="post" action="/act"><%- hidden('loan') %>
-            <input type="hidden" name="a0" value="approve"><input type="hidden" name="a1" value="LR<%= r.id %>">
-            <input type="number" name="a2" min="1" step="1" placeholder="<%= fmt(r.amount) %>" title="Amount (blank = as asked)" aria-label="Amount (blank = as asked)">
-            <input type="text" name="a3" pattern="[0-9]+[hdw]" placeholder="<%= dur(r.term) %>" title="Term like 7d (blank = as asked)" aria-label="Term like 7d (blank = as asked)">
-            <input type="text" name="a4" pattern="[0-9]+(\.[0-9]+)?%?" placeholder="rate %" title="Rate % per week (blank = default)" aria-label="Rate % per week (blank = default)">
-            <button class="admin" type="submit">Approve</button>
-          </form>
-          <form class="inline" method="post" action="/act"><%- hidden('loan') %>
-            <input type="hidden" name="a0" value="deny"><input type="hidden" name="a1" value="LR<%= r.id %>">
-            <input type="text" name="a2" maxlength="200" placeholder="Reason" aria-label="Reason">
-            <button class="danger" type="submit">Deny</button>
-          </form>
-        </div>
-      <% }) %>
-    </div>
-
-    <h2 id="admin-book" class="ds-pixel-h">ADMIN · RESERVE BOOK</h2>
-    <% if (reserve) { %>
-      <div class="ds-stats">
-        <div class="ds-stat"><span>Outstanding</span><b class="gold"><%= fmt(reserve.book) %></b></div>
-        <div class="ds-stat"><span>Room left</span><b class="green"><%= fmt(reserve.room) %></b></div>
-        <div class="ds-stat"><span>Active loans</span><b><%= admin.reserveLoans.length %></b></div>
-      </div>
-    <% } %>
-    <% if (admin.reserveLoans.length) { %>
-      <div class="ds-tbl"><table>
-        <tr><th>Loan</th><th>Borrower</th><th class="r">Principal</th><th class="r">Owed</th><th class="r">Paid</th><th class="r">Left</th><th>Due</th></tr>
-        <% admin.reserveLoans.forEach((l) => { %>
-          <tr><td class="ref"><%= l.ref %><%- l.late ? ' <span class="pill late">LATE</span>' : '' %></td><td><%- ul(l.borrower) %></td><td class="r"><%= fmt(l.principal) %></td>
-            <td class="r"><%= fmt(l.owed) %></td><td class="r"><%= fmt(l.paid) %></td><td class="r"><%= fmt(l.left) %></td><td><%- l.due ? (l.due > now ? cd(l.due) : '<span class="down">overdue</span>') : '' %></td></tr>
-        <% }) %>
-      </table></div>
-    <% } %>
-    <div class="forms">
-      <form class="admin" method="post" action="/act"><%- hidden('loan') %>
-        <b><span class="ds-ic" aria-hidden="true">🏦</span> Grant a Reserve loan</b>
-        <input type="hidden" name="a0" value="grant">
-        <input type="text" name="a1" data-at maxlength="60" placeholder="@user" aria-label="@user" required>
-        <input type="number" name="a2" min="1" step="1" placeholder="Amount (PAT)" aria-label="Amount (PAT)" required>
-        <input type="text" name="a3" pattern="[0-9]+[hdw]" placeholder="Term, e.g. 7d" aria-label="Term, e.g. 7d" required>
-        <button class="admin" type="submit">Grant</button>
-      </form>
-    </div>
-
-    <h2 id="admin-stashes" class="ds-pixel-h">ADMIN · ALL STASHES</h2>
-    <% if (!admin.stashes.length) { %><p class="info">No stashes.</p><% } else { %>
-      <div class="ds-tbl"><table>
-        <tr><th>Stash</th><th class="r">Balance</th><th class="r">In vaults</th><th>Holdings</th><th>Members</th></tr>
-        <% admin.stashes.forEach((s) => { %>
-          <tr><td><%- ul(s.owner) %>/<%= s.name %></td><td class="r"><%= fmt(s.balance) %></td><td class="r"><%= fmt(s.vaulted) %></td>
-            <td><%= holdLine(s.hold) %></td><td><%= (s.member_names || s.members || []).join(', ') %></td></tr>
-        <% }) %>
-        <tr class="tot"><td><%= admin.stashes.length %> stashes</td><td class="r"><%= fmt(admin.totals.balance) %></td><td class="r"><%= fmt(admin.totals.vaulted) %></td><td></td><td></td></tr>
-      </table></div>
-    <% } %>
-  </section>
-  <% } %>
 
   <script>
     (function () {

@@ -234,7 +234,7 @@
 
 <section class="adm-card" id="loans" aria-labelledby="loansT">
   <h2 id="loansT">Loans &amp; credit <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Reserve loan requests are approved or declined on the wallet page (its admin sections show each requester's live credit score). Pepe sends the loan book; rates and limits are his.</p>
+  <p class="adm-help">Approve or decline Reserve loan requests here (each with the requester's live credit score), grant Reserve loans and see every stash. Pepe runs the loan commands and sends the loan book; rates and limits are his.</p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!L || !L.known) { %><p class="adm-help">No loan data from Pepe yet.</p><% } else { %>
     <div class="adm-kv">
       <div><b>Pending requests</b><span><%= L.pending %><%= L.pending && isFinite(L.oldest) ? ' · oldest ' + ago(L.oldest * (L.oldest < 1e12 ? 1000 : 1)) : '' %></span></div>
@@ -245,11 +245,8 @@
       <div><b>Synced</b><span><%= ago(L.updated) %></span></div>
     </div>
   <% } %>
-  <div class="adm-actions" style="margin-top:10px">
-    <a class="adm-btn ghost" href="/wallet#admin-requests">Loan requests ›</a>
-    <a class="adm-btn ghost" href="/wallet#admin-book">Reserve book ›</a>
-    <a class="adm-btn ghost" href="/wallet#admin-stashes">All stashes ›</a>
-  </div>
+  <%# 1.99xs: the Reserve desk (was the ADMIN sections of /wallet) %>
+  <% if (isAdmin) { %><%- include('../partials/admin-loans', { book: locals.book, acts: locals.acts, msg: locals.msg }) %><% } %>
 </section>
 
 <div class="adm-cols">

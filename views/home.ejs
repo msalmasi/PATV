@@ -108,21 +108,8 @@
   .hm .stage .bar .sub { color: var(--ds-text-2); font-size: var(--ds-fs-meta); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hm .stage .bar .sub a { color: var(--ds-green-2) !important; }
   .hm .stage.live #stSub { display: none; }
-  /* admin-only strip: collapsed to one line by default */
-  .hm .stage-adm { margin: 0 var(--px) var(--gap); border: 1px solid var(--ds-gold-line); border-radius: var(--ds-r-lg); background: var(--ds-gold-bg); font-size: var(--ds-fs-meta); color: var(--ds-text-2); min-width: 0; }
-  .hm .stage-adm > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 6px; min-height: 40px; align-items: center; padding: 0 12px; color: var(--ds-gold-text); font-weight: 700; min-width: 0;
-                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hm .stage-adm > summary::-webkit-details-marker { display: none; }
-  .hm .stage-adm > summary .muted { font-weight: 400; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
-  .hm .stage-adm > summary .gear { display: inline-block; transition: transform var(--ds-dur-2); }
-  .hm .stage-adm[open] > summary .gear { transform: rotate(60deg); }
-  .hm .stage-adm > summary:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: -2px; border-radius: var(--ds-r-lg); }
-  .hm .stage-admin { display: grid; gap: 8px; padding: 0 12px 10px; min-width: 0; }
-  .hm .stage-admin .sa-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
-  .hm .stage-admin select { min-height: 36px; margin: 0; background: var(--ds-sunken); color: #eee; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-md); padding: 0 10px; font: 14px var(--ds-font); min-width: 0; max-width: 100%; }
-  
-  .hm .stage-admin #stAdminMsg:empty { display: none; }
-  .hm .stage-admin .sa-link { margin-left: auto; white-space: nowrap; }
+  /* 1.99xs: staff get one small link line instead of the old admin strip (the controls live in the admin area) */
+  .hm .stage-admlink { margin: 0 var(--px) var(--gap); font-size: var(--ds-fs-meta); color: var(--ds-text-muted); }
   /* 1.99eo: one layout on and off air - the player box (or the off-air slate in its place) + the side column */
   .hm .stage-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--gap); padding: 0 var(--px) var(--px); align-items: start; }
   /* the player column: the video, then its Snap / Clip row at the same width */
@@ -362,10 +349,6 @@
   .hm .pitch .btn { min-height: 44px; padding: 0 var(--ds-sp-5); font-size: 15px; }
   .hm h2 .h2r { display: inline-flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .hm h2 .h2r small { color: var(--muted); }
-  /* 1.99dw: the admin Pepe control panel (partials/pepe-control) is a card like the rest */
-  .hm .pc { background: var(--card); border-color: var(--line); }
-  .hm .pc > summary { padding: var(--py) var(--px); }
-  .hm .pc .pc-body { padding: 0 var(--px) var(--py); }
   
 
   @media (max-width: 1100px) {
@@ -417,7 +400,7 @@
   @media (max-width: 520px) { .hm .stabs .adm { margin-inline-start: 0; } }
   @media (prefers-reduced-motion: reduce) {
     .hm .dot { animation: none; }
-    .hm .btn, .hm .todo a, .hm .lvl span, .hm .stage-adm > summary .gear, .hm .stab { transition: none; }
+    .hm .btn, .hm .todo a, .hm .lvl span, .hm .stab { transition: none; }
   }
   /* 1.99bi: room stages - featured star, embeds, the Go live call to action */
   .hm .stab .star { color: var(--gold); }
@@ -476,30 +459,8 @@
       <span class="sub" id="stSub"><%- live ? (st.since ? t('home.stage.on_air_for', { d: dur_(st.since) }) : t('home.stage.live_now')) : (st.ended ? t('home.stage.last_on_air', { ago: ago(st.ended) }) : t('home.stage.nothing')) %></span>
     </div>
     <% if (stageAdmin) { %>
-    <%# 1.99ds: every admin-only control in one collapsible strip (collapsed by default, remembered per browser) %>
-    <details class="stage-adm" id="stAdmBox">
-      <summary><span class="gear" aria-hidden="true">⚙</span> Admin <span class="muted">· front page: <%= frontInfo ? frontInfo.title : '—' %> (<%= stageAdmin.front === 'auto' ? 'auto pick' : 'pinned' %>)</span></summary>
-      <form class="stage-admin" id="stAdmin" autocomplete="off">
-        <div class="sa-row">
-          <label for="stRoomSel">Front-page pad</label>
-          <select id="stRoomSel">
-            <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (most active pad, switches at most every <%= stageAdmin.status && stageAdmin.status.cfg ? stageAdmin.status.cfg.hold_min : 30 %> min)</option>
-            <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.front === r.id ? ' selected' : '' %>><%= r.title %><%= r.title !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
-          </select>
-          <button type="submit" class="btn">Feature on the homepage</button>
-          <span id="stAdminMsg" aria-live="polite"></span>
-          <a class="sa-link" href="/pads/admin">Pads admin ›</a>
-        </div>
-        <%- include('partials/front-pick', { fp: stageAdmin.status, open: false }) %>
-      </form>
-    </details>
-    <script>
-      (function () {
-        var d = document.getElementById('stAdmBox'), K = 'patv.home.adminOpen';
-        try { if (localStorage.getItem(K) === '1') d.open = true; } catch (e) {}
-        d.addEventListener('toggle', function () { try { localStorage.setItem(K, d.open ? '1' : '0'); } catch (e) {} });
-      })();
-    </script>
+    <%# 1.99xs: the admin strip (front-page picker + its auto-pick status) moved to /pads/admin#front; staff get a link %>
+    <p class="stage-admlink">⚙ Front page: <%= frontInfo ? frontInfo.title : '—' %> (<%= stageAdmin.front === 'auto' ? 'auto pick' : 'pinned' %>) · <a href="/pads/admin#front">Pads admin ›</a><% if (stageAdmin.admin) { %> · <a href="/admin/pepe#control">Pepe control panel ›</a><% } %></p>
     <% } %>
     <div class="stabs" id="stTabs" role="tablist" aria-label="<%- t('home.stage.tabs_aria') %>"></div>
     <div class="stage-body">
@@ -694,8 +655,8 @@
     </ol>
   </section>
 
-  <%# 1.99dw: the old link row is in the site footer now (layout.ejs); the member count is in the Top frogs header %>
-  <%- include('partials/pepe-control', { me }) %>
+  <%# 1.99dw: the old link row is in the site footer now (layout.ejs); the member count is in the Top frogs header.
+      1.99xs: the admin Pepe control panel is on /admin/pepe#control only (linked from the stage's staff line) %>
 </main>
 
 <script>
@@ -764,21 +725,6 @@
       api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
       onAir: function (on, sub) { setPill(on, sub || (on ? _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now'))); }
     });
-
-    // admin: which room the homepage features (a site setting - Pepe's !activeroom is untouched)
-    var adm = document.getElementById('stAdmin');
-    if (adm) {
-      var admMsg = document.getElementById('stAdminMsg'), admBtn = adm.querySelector('button');
-      adm.addEventListener('submit', function (e) {
-        e.preventDefault();
-        admBtn.disabled = true; admMsg.textContent = 'Saving…';
-        fetch('/api/rooms/front', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ room: document.getElementById('stRoomSel').value }) })
-          .then(function (r) { return r.json(); })
-          .then(function (d) { if (!d.ok) { admMsg.textContent = d.error || 'Not saved.'; admBtn.disabled = false; return; } location.reload(); })
-          .catch(function () { admMsg.textContent = 'Couldn\'t reach the site.'; admBtn.disabled = false; });
-      });
-    }
 
     // ── NOW SPINNING / LAST SPIN on the stage wheel, in the spinner's name colour ──
     function spinLine(sp) {

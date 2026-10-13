@@ -73,11 +73,15 @@ test("my credit score, band and factors sit next to my borrow limit", async () =
   assert.doesNotMatch(h, /davecf|462|470/, "nobody else's score");
 });
 
-test("admins see each requester's live score on the request cards", async () => {
+test("admins see each requester's live score on the request cards (1.99xs: on /admin/economy#loans, not /wallet)", async () => {
   const h = await (await page("u2")).text();
-  assert.match(h, /LR7/);
-  assert.match(h, /📊 Credit <b>462<\/b> <span class="band poor">Poor/);
-  assert.match(h, /was 470 when asked/);
+  assert.doesNotMatch(h, /LR7/, "no admin desk on the public wallet");
+  assert.match(h, /href="\/admin\/economy#loans"/);
+  const book = await wallet.adminBook();
+  const a = await require("ejs").renderFile(path.join(repo, "views", "partials", "admin-loans.ejs"), { book, acts: [], msg: null });
+  assert.match(a, /LR7/);
+  assert.match(a, /<b>462<\/b> <span class="adm-pill">Poor<\/span>/);
+  assert.match(a, /was 470 when asked/);
 });
 
 test("a lender can look up a borrower's score (any signed-in account, 1.99wr); signed-out can't", async () => {

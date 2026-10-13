@@ -1,8 +1,8 @@
 <%#
   views/partials/front-pick.ejs (1.99cj) — the homepage's automatic room pick for site staff: which
   room it is, its score broken down, when it was chosen / how long it's held, the ranking of every live
-  room, and a "Re-evaluate now" button (POST /api/rooms/front/reevaluate). Used on the homepage's admin
-  bar (compact) and on /pads/admin (open).
+  room, and a "Re-evaluate now" button (POST /api/rooms/front/reevaluate). Used on /pads/admin#front
+  (open; 1.99xs: no longer on the homepage).
   Pass { fp: rooms.frontStatus(), open: bool }.
 %>
 <% const F = (typeof fp !== 'undefined' && fp) || null; const A = F && F.auto; const C = (F && F.cfg) || { w: {} }; const B = C.boost || { on: true, k: 0.1, cap: 25, rel: 0.5, half_min: 60 };
