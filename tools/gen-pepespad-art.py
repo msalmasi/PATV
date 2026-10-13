@@ -101,7 +101,7 @@ def tv(g, x0, y0, w, h, face=True, onair=True):
     g.rect(cx - 9, y0 - 8, cx - 8, y0 - 7, GOLD); g.rect(cx + 8, y0 - 8, cx + 9, y0 - 7, GOLD)
     g.rect(x0, y0, x0 + w - 1, y0 + h - 1, GREY)
     g.rect(x0 + 1, y0 + 1, x0 + w - 2, y0 + 1, GREY2)
-    sx0, sy0, sx1, sy1 = x0 + 3, y0 + 3, x0 + w - 10, y0 + h - 4
+    sx0, sy0, sx1, sy1 = x0 + 3, y0 + 3, x0 + w - 8, y0 + h - 4
     g.rect(sx0 - 1, sy0 - 1, sx1 + 1, sy1 + 1, K)
     g.rect(sx0, sy0, sx1, sy1, DEEP)
     for y in range(sy0, sy1 + 1, 2):
@@ -110,11 +110,11 @@ def tv(g, x0, y0, w, h, face=True, onair=True):
         p = pepe("smile")
         paste(g, p, sx0 + (sx1 - sx0 + 1 - 24) // 2, sy0 + (sy1 - sy0 + 1 - 22) // 2)
     g.pts([(sx0 + 1, sy0 + 1), (sx0 + 2, sy0 + 1), (sx0 + 1, sy0 + 2)], "#2f6b3d")     # glass glint
-    kx = x0 + w - 6                                        # knobs + speaker
+    kx = x0 + w - 4                                        # knobs + speaker
     g.rect(kx - 1, y0 + 4, kx + 1, y0 + 6, GREY3); g.set(kx, y0 + 5, GOLD)
     g.rect(kx - 1, y0 + 9, kx + 1, y0 + 11, GREY3); g.set(kx, y0 + 10, GREEN)
     for yy in range(y0 + 14, y0 + h - 4, 2):
-        g.rect(kx - 2, yy, kx + 2, yy, GREY2)
+        g.rect(kx - 1, yy, kx + 1, yy, GREY2)
     g.rect(x0 + 3, y0 + h, x0 + 5, y0 + h + 1, GREY2); g.rect(x0 + w - 6, y0 + h, x0 + w - 4, y0 + h + 1, GREY2)     # feet
     if onair:                                              # the ON AIR sign on top
         lw = width5("ON AIR") + 4
@@ -171,15 +171,16 @@ def avatar():
 
 
 def banner():
-    """1600 x 400 (200 x 50 cells, 4:1 - the pad header shows all of it): a night-sky station - PEPE'S PAD in gold over what's
-    on, the ON AIR TV with Pepe on the right. The pad's name, badges and Follow button sit over the lower half, so everything
-    that has to be read is in the top half and the bottom is a quiet skyline."""
+    """1600 x 400 (200 x 50 cells, 4:1): a night-sky station - PEPE'S PAD in gold over what's on, the TV with Pepe on the right.
+    The pad header crops it: 180 px tall on a desktop (~6.4:1 - rows 10-40 show) and 120 px on a phone (~3.25:1 - columns
+    19-181 show), with a fade at the bottom - so the title and the TV live in that safe box, the ON AIR sign and the skyline
+    are extras for the taller crops."""
     g = Grid(200, 50)
     bands = [BG, BG, "#101113", "#101214", "#111416", "#111618", "#12181a", "#121a1b", "#121c1c", "#12201d", "#12241d", "#12281c", "#122c1b", DEEP]
     for y in range(50):                                    # the sky: dark at the top, deep green at the bottom
         g.rect(0, y, 199, y, bands[min(len(bands) - 1, y * len(bands) // 50)])
-    for (x, y, c) in [(7, 3, STAR), (41, 2, STAR), (66, 1, GOLDT), (104, 2, STAR), (121, 26, STAR), (133, 19, STAR),
-                      (194, 3, STAR), (3, 25, STAR), (60, 30, STAR), (96, 33, STAR), (196, 20, STAR)]:
+    for (x, y, c) in [(7, 3, STAR), (41, 2, STAR), (66, 1, GOLDT), (104, 2, STAR), (144, 38, STAR), (10, 31, STAR),
+                      (194, 3, STAR), (3, 25, STAR), (60, 38, STAR), (96, 41, STAR), (196, 20, STAR)]:
         g.set(x, y, c)
     S.sparkle(g, 5, 13, GOLDT); S.sparkle(g, 191, 12, GOLDT); S.sparkle(g, 128, 3, GOLDT)
     # the skyline: little buildings with lit windows (the pads)
@@ -199,7 +200,7 @@ def banner():
     # the title
     t = "PEPE'S PAD"
     tw = width5(t, 2)
-    tx, ty = 12, 4
+    tx, ty = 22, 12
     text5(g, t, tx + 1, ty + 1, "#5c3a00", 2)              # a one-cell drop shadow
     text5(g, t, tx, ty, GOLD, 2)
     for x in range(tx, tx + tw):                           # the top row of each letter catches the light
@@ -211,9 +212,9 @@ def banner():
     text5(g, sub, sx, ty + 20, GREEN2)
     for dx in (width5("NEWS") + 2, width5("NEWS  CASINO") + 2):   # dots between the words
         g.rect(sx + dx, ty + 23, sx + dx + 1, ty + 24, GOLD)
-    coin(g, 124, 30); coin(g, 126, 27); coin(g, 125, 24)  # a little stack of PAT by the title
+    coin(g, 141, 22); coin(g, 142, 19); coin(g, 141, 16)   # a little stack of PAT between the title and the TV
     # the station: an ON AIR TV with Pepe on screen
-    tv(g, 136, 13, 44, 30)
+    tv(g, 148, 12, 34, 29)
     png(g, os.path.join(OUT, "banner.png"), 8)
 
 
