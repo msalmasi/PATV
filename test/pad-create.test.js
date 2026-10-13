@@ -92,7 +92,16 @@ test("defaults: on, any linked account, 7 days, level 2, 2 pads each, free; recl
 test("who may: link, age, level, balance - each listed; Discord counts as linked; staff skip everything", async () => {
   assert.ok((await PC.eligibility(U.maker)).ok);
   assert.ok((await PC.eligibility(U.discorder)).ok, "a Discord link counts for 'any'");
-  assert.match((await PC.eligibility(U.unlinked)).reasons.join(" "), /Link an account/);
+  assert.match((await PC.eligibility(U.unlinked)).reasons.join(" "), /To create a pad, link an account/);
+  // 1.99ws (connections audit B): any proven identity counts (verified.js) - a Telegram link, a Google sign-in, a Plex link
+  const V = require(path.join(repo, "verified"));
+  await runQuery("CREATE TABLE IF NOT EXISTS telegram_links (user_id TEXT PRIMARY KEY, tg_id TEXT NOT NULL UNIQUE, handle TEXT, link_source TEXT NOT NULL DEFAULT 'self', proof TEXT NOT NULL DEFAULT 'start_code', linked_at INTEGER NOT NULL, paused INTEGER NOT NULL DEFAULT 0)");
+  await runQuery("INSERT INTO telegram_links (user_id, tg_id, linked_at) VALUES (?, '777', 1)", [U.unlinked.userId]);
+  V.forget(U.unlinked.userId);
+  assert.ok((await PC.eligibility(U.unlinked)).ok, "a Telegram link counts for 'any'");
+  await runQuery("DELETE FROM telegram_links WHERE user_id = ?", [U.unlinked.userId]);
+  V.forget(U.unlinked.userId);
+  assert.equal((await PC.eligibility(U.unlinked)).ok, false, "unlinked again");
   assert.match((await PC.eligibility(U.newbie)).reasons.join(" "), /7 days old \(5 more days\)/);
   assert.match((await PC.eligibility(U.low)).reasons.join(" "), /level 2 \(you're level 1\)/);
   assert.match((await PC.eligibility(null)).reasons.join(" "), /Sign in/);

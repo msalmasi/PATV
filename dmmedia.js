@@ -91,13 +91,15 @@ class MediaRefuse extends Error { constructor(status, msg) { super(msg); this.st
 const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 const feedConfig = () => { try { return require("./feedstore").config(); } catch (e) { return { max_image_mb: 10, media_min_level: 2, global_quota_gb: 20, min_free_gb: 8 }; } };
 
-/** Why `u` (an account row) can't send pictures, or null. Same rule as feed uploads. */
-function pictureRefusal(u) {
+/** Why `u` (an account row) can't send pictures, or null. Same rule as feed uploads: 1.99ws - any proven identity
+ *  (verified.js: chat login, Discord, Twitch, Telegram, Google, Plex) or level media_min_level. Async since 1.99ws. */
+async function pictureRefusal(u) {
   if (!u) return "Sign in first.";
-  if (isStaff(u) || u.camfrogUsername) return null;
+  const V = require("./verified");
+  if (isStaff(u) || (await V.verify(u))) return null;
   const min = Number(feedConfig().media_min_level) || 0;
   if ((Number(u.level) || 0) >= min) return null;
-  return `Sending pictures needs a linked chat account (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) or level ${min}.`;
+  return `Sending pictures needs level ${min}, or ${V.LINK_HINT}.`;
 }
 
 async function usedBytes(userId) {
@@ -111,7 +113,7 @@ async function usedBytes(userId) {
 // ── uploads ──
 async function open(u, { size, nsfw = false } = {}) {
   await init();
-  const why = pictureRefusal(u);
+  const why = await pictureRefusal(u);
   if (why) throw new MediaRefuse(403, why);
   const C = feedConfig();
   const n = Math.floor(Number(size));
@@ -236,7 +238,7 @@ async function checkAttach(u, ids) {
   const want = [...new Set((Array.isArray(ids) ? ids : []).map(String))];
   if (!want.length) return [];
   if (want.length > MAX_PER_MESSAGE) throw new MediaRefuse(400, `Up to ${MAX_PER_MESSAGE} pictures per message.`);
-  const why = pictureRefusal(u);
+  const why = await pictureRefusal(u);
   if (why) throw new MediaRefuse(403, why);
   for (const id of want) {
     const a = await row(id);

@@ -230,16 +230,19 @@ function _setDirs(hls, pepe) { HLS_DIR = path.resolve(hls); PEPE_HLS_DIR = path.
 async function account(userId) {
   const C = new Set((await getQuery("PRAGMA table_info(users)")).map((c) => c.name));
   const col = (c) => (C.has(c) ? c : `NULL AS ${c}`);
-  return (await getQuery(`SELECT userId, username, displayname, class, ${col("level")}, ${col("camfrogUsername")}, ${col("created_at")}, ${col("discordId")}, ${col("twitchId")}
+  const u = (await getQuery(`SELECT userId, username, displayname, class, ${col("level")}, ${col("camfrogUsername")}, ${col("created_at")}, ${col("discordId")}, ${col("twitchId")}
                           FROM users WHERE userId = ?`, [String(userId || "")]))[0] || null;
+  return u ? require("./verified").attach(u) : null;     // 1.99ws: + its proven identities (verified.js)
 }
-/** null if this account may capture the stages, else why not. */
+/** null if this account may capture the stages, else why not. 1.99ws (connections audit B): any proven identity
+ *  (verified.js - was a Camfrog link only) or level MIN_LEVEL: keeps harassment clips from throwaway accounts out. */
 function eligibility(u) {
   if (!u) return "Sign in first.";
   if (deps.isStaff(u)) return null;
-  if (u.camfrogUsername) return null;
+  const V = require("./verified");
+  if (V.isVerified(u)) return null;
   if ((Number(u.level) || 0) >= MIN_LEVEL) return null;
-  return `Snapping and clipping the stage needs a linked chat account (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) or level ${MIN_LEVEL}.`;
+  return `Snapping and clipping the stage needs level ${MIN_LEVEL}, or ${V.LINK_HINT}.`;
 }
 // ── switches (1.99cw) ──
 // 1.99iu: names the pad's Camfrog room and the chat switch a room mod types there (bridge.snapOffText)

@@ -153,7 +153,7 @@ test("who may: linked name or level >= 2; banned / new unlinked accounts refused
   const mk = (u, body) => post("/api/feed/aigen", u, Object.assign({ kind: "image", prompt: "a frog in a top hat", pad: LOUNGE }, body));
   let r = await mk(U.newbie);
   assert.equal(r.status, 403);
-  assert.match(r.d.error, /linked chat account.*or level 2/);
+  assert.match(r.d.error, /needs level 2, or link an account in Settings → Account → Connections/);
   r = await mk(U.banned);
   assert.equal(r.status, 403, "a feed ban");
   assert.equal((await mk(U.alice, { kind: "music" })).status, 400);

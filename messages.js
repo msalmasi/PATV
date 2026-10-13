@@ -1280,7 +1280,7 @@ function register(app, { isBotToken, addUser }) {
       const unread = await unreadTotal(me.userId);
       // 1.99cu: the notices (inbox.js) are the pinned "🔔 Notices" item of this page; their first page comes with the boot data
       const nt = await inbox.feed(me.userId, notices ? { page: req.query.page, kind: String(req.query.kind || "") || null } : {});
-      const picsWhy = dmmedia.pictureRefusal(me);
+      const picsWhy = await dmmedia.pictureRefusal(me);
       const pepeAcc = await account(PEPE_ID);            // 1.99ik: the 🐸 "Message Pepe" button
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
       res.render("messages", {

@@ -45,10 +45,13 @@ function createdMs(v) {
 async function account(userId) {
   const cols = new Set((await getQuery("PRAGMA table_info(users)")).map((c) => c.name));
   const c = (k) => (cols.has(k) ? k : `NULL AS ${k}`);
-  return (await getQuery(`SELECT userId, username, class, ${c("level")}, ${c("created_at")}, ${c("points_balance")}, ${c("camfrogUsername")},
+  const u = (await getQuery(`SELECT userId, username, class, ${c("level")}, ${c("created_at")}, ${c("points_balance")}, ${c("camfrogUsername")},
                           ${c("discordId")}, ${c("twitchId")}, ${c("archived_at")} FROM users WHERE userId = ?`, [String(userId || "")]))[0] || null;
+  return u ? require("./verified").attach(u) : null;     // 1.99ws: + its proven identities (verified.js)
 }
-const linkedAny = (u) => !!(u && (u.camfrogUsername || u.discordId || u.twitchId));
+// 1.99ws (connections audit B): any proven identity (verified.js: chat login, Discord, Twitch, Telegram, Google, Plex) -
+// pad spam / slug squatting from throwaway accounts stays out
+const linkedAny = (u) => require("./verified").isVerified(u);
 
 /** How many pads `userId` made and still owns. */
 async function madeCount(userId) {
@@ -72,7 +75,7 @@ async function eligibility(user, { now = NOW() } = {}) {
   if (rooms.isStaff(u)) { out.ok = true; out.staff = true; out.fee = 0; return out; }
   if (!C.create_on) out.reasons.push("Creating pads is switched off right now.");
   if (C.create_link === "camfrog" && !u.camfrogUsername) out.reasons.push("Link your Camfrog name first (type !verify in a Camfrog room with Pepe).");
-  else if (C.create_link === "any" && !linkedAny(u)) out.reasons.push("Link an account first: your Camfrog name (!verify in a room with Pepe), Discord or Twitch.");
+  else if (C.create_link === "any" && !linkedAny(u)) out.reasons.push("To create a pad, " + require("./verified").LINK_HINT + ".");
   const born = createdMs(u.created_at);
   if (C.create_min_age_days > 0) {
     const age = born ? (now - born) / DAY : 0;

@@ -164,3 +164,22 @@ kept for the v2 rewrite.
 
 The "Edit profile → Connections" wording in the remaining refusals now says "Settings → Account → Connections" (1.99vz
 moved it).
+
+### B. One `isVerified(u)` (1.99ws, site)
+
+`verified.js`: any proven identity counts - a chat login (Camfrog `!verify`), Discord, Twitch (OAuth), Telegram (the
+`/start` code from the user's own Telegram), Google (OIDC, self link) or Plex (a trusted link source). Each can be
+linked to ONE PATV account only, so one identity can't vouch for a set of sock puppets. A verified email does NOT
+count (a fresh address is free); level / age stay each gate's own fallback. Account rows from `feedstore.account`,
+`stagecap.account` and `padcreate.account` carry their proofs; `isVerified(u)` is then synchronous.
+
+| Gate | Protects against | Before | After |
+|---|---|---|---|
+| Feed media upload (`feedstore.postRefusal` media) | illegal / abusive uploads and storage abuse from throwaways | Camfrog link or level 2 | verified or level 2 |
+| DM pictures (`dmmedia.pictureRefusal`, now async) | the same, in private | Camfrog link or level | verified or level |
+| Stage snaps / clips (`stagecap.eligibility`) | harassment clips from throwaways | Camfrog link or level 2 | verified or level 2 |
+| Downvotes count (`feedstore.downCounts`) | brigading with sock puppets | Camfrog link or level | verified or level |
+| "New account" limits (`feedstore.isNewAccount`) | post / comment / report spam | Camfrog, Discord or Twitch | verified |
+| Feed `require_link_to_post` | admin's "proven accounts only" | Camfrog link | verified |
+| A pad's "who can post: linked" (`padSettings` label "Verified accounts") | owner's "proven accounts only" | Camfrog link | verified |
+| Pad create, `create_link: "any"` (`padcreate.linkedAny`) | pad spam, slug squatting | Camfrog, Discord or Twitch | verified (`create_link: "camfrog"` stays an explicit admin choice) |

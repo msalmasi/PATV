@@ -50,6 +50,7 @@
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
+const VERIFIED = require("./verified");     // 1.99ws: the one "proven identity" test (connections audit B)
 const rooms = require("./rooms");
 const terms = require("./terms");
 
@@ -481,9 +482,10 @@ async function userCols() {
 async function account(userId) {
   const C = await userCols();
   const pick = (c) => (C.has(c) ? c : `NULL AS ${c}`);
-  return (await getQuery(`SELECT userId, username, class, ${pick("displayname")}, ${pick("camfrogUsername")}, ${pick("level")}, ${pick("created_at")},
+  const u = (await getQuery(`SELECT userId, username, class, ${pick("displayname")}, ${pick("camfrogUsername")}, ${pick("level")}, ${pick("created_at")},
                           ${pick("casino_banned")}, ${pick("archived_at")}, ${pick("points_balance")}, ${pick("discordId")}, ${pick("twitchId")}
                           FROM users WHERE userId = ?`, [userId]))[0] || null;
+  return u ? VERIFIED.attach(u) : null;          // 1.99ws: + its proven identities (verified.js) for the trust gates
 }
 function createdMs(u) {
   if (!u || !u.created_at) return 0;
@@ -492,7 +494,7 @@ function createdMs(u) {
 }
 function isNewAccount(u, C = CONFIG) {
   if (!u) return true;
-  if (u.camfrogUsername || u.discordId || u.twitchId) return false;      // a linked identity isn't "new"
+  if (VERIFIED.isVerified(u)) return false;      // a proven identity isn't "new" (1.99ws: any of them, verified.js)
   const t = createdMs(u);
   return !t || NOW() - t < C.new_account_hours * 3600 * 1000;
 }
@@ -529,11 +531,12 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
       if (r) return { status: 403, message: `Pepe says: ${r.reason || "you were moderated in this room recently"}.` };
     }
   }
-  if (C.require_link_to_post && !u.camfrogUsername && !isStaff(u) && !isPepe(u)) {
-    return { status: 403, message: "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe)." };
+  // 1.99ws (connections audit B): any proven identity (verified.js), not only a Camfrog link
+  if (C.require_link_to_post && !VERIFIED.isVerified(u) && !isStaff(u) && !isPepe(u)) {
+    return { status: 403, message: "To post, " + VERIFIED.LINK_HINT + "." };
   }
-  if (media && !isStaff(u) && !isPepe(u) && !u.camfrogUsername && (Number(u.level) || 0) < C.media_min_level) {
-    return { status: 403, message: `Uploading pictures, audio and video needs a linked chat account (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) or level ${C.media_min_level}.` };
+  if (media && !isStaff(u) && !isPepe(u) && !VERIFIED.isVerified(u) && (Number(u.level) || 0) < C.media_min_level) {
+    return { status: 403, message: `Uploading pictures, audio and video needs level ${C.media_min_level}, or ${VERIFIED.LINK_HINT}.` };
   }
   return null;
 }
@@ -1450,7 +1453,8 @@ function cleanDir(dir, on) {
   if (on !== undefined) return on ? 1 : 0;
   return null;
 }
-const downCounts = (u, C = CONFIG) => !!u && (isStaff(u) || !!u.camfrogUsername || (Number(u.level) || 0) >= C.downvote_min_level);
+// 1.99ws: any proven identity (verified.js) - anti-brigade: a sock puppet has none
+const downCounts = (u, C = CONFIG) => !!u && (isStaff(u) || VERIFIED.isVerified(u) || (Number(u.level) || 0) >= C.downvote_min_level);
 const voteLog = new Map();      // userId -> [timestamps] of recent vote changes (in memory; resets on restart)
 function voteRate(u) {
   if (isStaff(u)) return null;
@@ -1597,7 +1601,7 @@ async function comment(user, postId, { body, parent } = {}) {
   if (!isStaff(u) && !isPepe(u)) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_comments WHERE author_id = ? AND created > ?", [u.userId, NOW() - 3600e3]))[0].n;
     if (n >= CONFIG.comments_per_hour) throw new Refuse(429, "You've commented a lot this hour - try again later.");
-    if (isNewAccount(u) && n >= 10) throw new Refuse(429, "New accounts can comment 10 times an hour - link your Camfrog name (!verify) to lift that.");
+    if (isNewAccount(u) && n >= 10) throw new Refuse(429, "New accounts can comment 10 times an hour - to lift that, " + VERIFIED.LINK_HINT + ".");
     const g = burst("comment|" + u.userId, CONFIG.comment_gap_secs * 1000);
     if (g) throw new Refuse(429, `Slow down - try again in ${g}s.`);
   }
@@ -2207,7 +2211,8 @@ async function roomPostRefusal(u, roomId) {
   const S = await roomSettings(roomId);
   const R = rooms.getCached(roomId);
   const name = R ? R.title : roomId;
-  if (S.who === "linked" && !u.camfrogUsername) return { status: 403, message: `${name} takes posts from linked Camfrog accounts - type !verify in a Camfrog room with Pepe.` };
+  // 1.99ws: "linked" = any proven identity (verified.js) - Camfrog, Discord, Twitch, Telegram, Google or Plex
+  if (S.who === "linked" && !(await VERIFIED.verify(u))) return { status: 403, message: `${name} takes posts from verified accounts - ${VERIFIED.LINK_HINT}.` };
   if (S.who === "followers") {
     const ok = followerCheck ? await followerCheck(u.userId, roomId) : false;
     if (!ok && !(await isRoomMember(u.userId, roomId))) return { status: 403, message: `Only ${name}'s followers can post there.` };

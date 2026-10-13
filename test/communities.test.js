@@ -231,7 +231,7 @@ test("posting: exactly one community, by id or slug; the composer's picker = the
   const onC = (await page("/p/" + slug(ROOM_C), U.alice)).text;
   assert.match(onC, new RegExp(`value="${ROOM_C.replace(".", "\\.")}"[^>]*checked`));
   const onB = (await page("/p/" + slug(ROOM_B), U.lvl)).text;
-  assert.match(onB, /✋ Houseplants takes posts from linked Camfrog accounts.*You can still pick another pad/);
+  assert.match(onB, /✋ Houseplants takes posts from verified accounts.*You can still pick another pad/);
   const F = await web.roomFeed(ROOM_C, U.alice, {});
   assert.equal(F.composer.room, ROOM_C);
   await mod(U.ownerB, slug(ROOM_B), { op: "settings", settings: { who: "everyone" } });
