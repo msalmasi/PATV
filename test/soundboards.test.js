@@ -340,6 +340,21 @@ test("1.99vu: catalogue files go to Pepe as audio jobs and replace a clip's audi
   assert.equal((await SB.clipStatus("sfx-tada")).status, "render", "failed an hour ago -> offered again");
   assert.equal((await SB.clipStatus("sfx-gong")).status, "failed", "failed a minute ago -> not yet");
 
+  // 1.99we: a clip still playing its OLD audio after its new file failed 5 times is offered again (boot, and hourly)
+  await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: "hype-encore", data: wav(2).toString("base64") });
+  await runQuery("UPDATE sb_clips SET note = 'voice: x', pending = 0, tries = 5 WHERE id = 'hype-encore'");
+  await SB._seed();
+  let enc = await SB.clipStatus("hype-encore");
+  assert.deepEqual([enc.status, enc.pending, enc.tries], ["active", 1, 0], "boot: the old WAV plays, the file is asked for again");
+  await runQuery("UPDATE sb_clips SET pending = 0, tries = 5, updated = ? WHERE id = 'hype-encore'", [Date.now() - 2 * 3600e3]);
+  await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" });
+  enc = await SB.clipStatus("hype-encore");
+  assert.deepEqual([enc.pending, enc.tries], [1, 0], "hourly: asked for again");
+  await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: "hype-encore", data: wav(2.2).toString("base64") });
+  await SB._seed();
+  enc = await SB.clipStatus("hype-encore");
+  assert.equal(enc.pending, 0, "once the file's audio is up: done (its src noted), nothing more to ask");
+
   // live clips: a re-seed never puts one back in 'render'; one stuck there (the prod bug) is healed by the sync
   await runQuery("UPDATE sb_clips SET status = 'render', audio = NULL WHERE id = 'lg-gawk'");
   const healed = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;

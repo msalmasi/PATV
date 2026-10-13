@@ -190,7 +190,7 @@ async function seedCatalog() {
   let i = 0;
   for (const c of want) {
     ids.add(c.id);
-    const cur = (await getQuery("SELECT text, voice, status, src, audio FROM sb_clips WHERE id = ?", [c.id]))[0];
+    const cur = (await getQuery("SELECT text, voice, status, src, audio, note FROM sb_clips WHERE id = ?", [c.id]))[0];
     const src = c.live ? null : fileSrc(c);
     if (!cur) {
       // live: playable at once (Pepe renders it at every play); a file: an audio render job; else a TTS render job
@@ -204,8 +204,10 @@ async function seedCatalog() {
     } else if (src) {
       // a ready-made file: a NEW file (or one changed since) goes to Pepe again; the old WAV plays until the new one is up
       // 1.99vx: one that FAILED (Pepe couldn't fetch / convert it) is offered again at every boot - a deploy or restart retries it
-      const fresh = cur.src !== src || cur.status === "failed";
       const hasAudio = !!cur.audio && cur.status !== "removed" && cur.status !== "failed";
+      // 1.99we: ...and so is a clip still playing audio that ISN'T this file (its upload notes the file's src) - e.g. Pepe
+      // failed 5 times, which cleared `pending` and left the old WAV in place
+      const fresh = cur.src !== src || cur.status === "failed" || (hasAudio && cur.note !== src);
       await runQuery(`UPDATE sb_clips SET board = ?, label = ?, emoji = ?, voice = ?, text = ?, rarity = ?, sort = ?, live = 0, supply = ?, updated = ?, src = ?,
                       status = CASE WHEN ? THEN (CASE WHEN ? THEN (CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'active' END) ELSE 'render' END)
                                     WHEN status = 'removed' THEN 'render' ELSE status END,
@@ -435,6 +437,10 @@ async function botState() {
   // that couldn't fetch it (bot 1.99wb: his session stripped the bot token -> 403) recovers on his own once he's fixed
   await runQuery(`UPDATE sb_clips SET status = 'render', tries = 0, note = 'retrying the catalogue file', updated = ?
                   WHERE catalog = 1 AND status = 'failed' AND src LIKE 'file:%' AND updated < ?`, [now(), now() - 3600e3]);
+  // 1.99we: the same for a clip that still plays its OLD audio (its file's upload never landed): offered again
+  await runQuery(`UPDATE sb_clips SET pending = 1, tries = 0, updated = ?
+                  WHERE catalog = 1 AND status IN ('active','hidden') AND src LIKE 'file:%' AND IFNULL(pending, 0) = 0
+                        AND IFNULL(note, '') != src AND updated < ?`, [now(), now() - 3600e3]);
   const rows = await getQuery("SELECT * FROM sb_clips WHERE status IN ('active','render') ORDER BY board, sort, created");
   const season = seasonNow();
   const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id)))
