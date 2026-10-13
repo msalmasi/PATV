@@ -887,7 +887,9 @@
       if (u && !u.anon && u.patv && u.patv.username) { n = el('a', 'w', label(u)); n.href = '/u/' + encodeURIComponent(u.patv.username); }
       else n = el('span', 'w', label(u));
       if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
-      if (u && !u.anon && !u.self && u.login) n.title = u.login;
+      if (u && !u.anon && !u.self && u.login && !u.acct) n.title = u.login;
+      // 1.99xa: a line sent from the website (Pepe relayed it) - their own chat, marked
+      if (u && u.web) { n.appendChild(document.createTextNode('\u00a0\ud83c\udf10')); n.title = _t('js.pad.chat.web', 'Sent from the website'); }
       return n;
     }
     function chipTitle(c, u) { if (u && !u.anon && u.login && u.display && u.display.toLowerCase() !== u.login.toLowerCase()) c.title = u.login; return c; }

@@ -742,7 +742,13 @@
       if (u.patv) { n = el('a', 'who'); n.href = '/u/' + encodeURIComponent(u.patv.username); n.textContent = u.display || u.login; }
       else n = el('span', 'who', u.display || u.login);
       if (u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
-      if (u.self) n.title = 'Pepe'; else if (u.display && u.login && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;
+      if (u.self) n.title = 'Pepe'; else if (u.display && u.login && !u.acct && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;
+      // 1.99xa: a line they sent from the website (Pepe relayed it) - their own chat, marked so the room can tell
+      if (u.web) {
+        var wrap = el('span', 'who-web'); wrap.appendChild(n);
+        var mk = el('span', 'web-mark', '\u00a0\ud83c\udf10'); mk.title = _t('js.pad.chat.web', 'Sent from the website'); wrap.appendChild(mk);
+        return wrap;
+      }
       return n;
     }
     // 1.99ir: their flair in this pad (padflair.js) - text only, colours must be strict hex

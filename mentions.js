@@ -238,6 +238,7 @@ function matchLine(IDX, line, t) {
   const out = [];
   for (const U of IDX.users) {
     if (U.login && U.login === speaker) continue;                         // your own line
+    if (speaker === "u:" + String(U.userId).toLowerCase()) continue;       // 1.99xa: your own web-relay line (no chat login)
     const w = U.words.find((x) => (!x.room || x.room === line.roomId) && x.re.test(it.text));
     if (!w) continue;
     if (PA && !PA.full({ userId: U.userId, class: U.class }, line.roomId)) continue;     // a pad they can't see

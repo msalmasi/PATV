@@ -13,12 +13,19 @@
 
 const CAP_TTL_MS = 10 * 60 * 1000;
 let seenAt = 0;
+// 1.99xa: `relay_cap: 1` = a Pepe (camfrog-bot 1.99xa+) for whom a web-relay line is NORMAL chat (logged + remembered as the
+// sender, "u:<userId>" for an account with no chat login), who honours an ACCOUNT's incognito ("privacy.incognito" for
+// "u:<userId>") and enforces !bridge block (bridgeblocks.js). An older Pepe never says it: the site then keeps the old paths.
+let relaySeenAt = 0;
 let clock = () => Date.now();
 
 /** A claim / sync body from Pepe: remember whether he can act for an account. */
 function note(body) {
   if (body && (body.actor_cap === 1 || body.actor_cap === true || body.actor_cap === "1")) seenAt = clock();
+  if (body && (body.relay_cap === 1 || body.relay_cap === true || body.relay_cap === "1")) relaySeenAt = clock();
 }
+/** 1.99xa: true while a Pepe that treats relay lines as normal chat (and account incognito / bridge blocks) was heard from. */
+function relayOn() { return relaySeenAt > 0 && clock() - relaySeenAt < CAP_TTL_MS; }
 /** true while a Pepe that acts for accounts was heard from recently. */
 function on() { return seenAt > 0 && clock() - seenAt < CAP_TTL_MS; }
 
@@ -29,4 +36,5 @@ function actorOf(u, display) {
            display: display ? String(display).slice(0, 40) : null };
 }
 
-module.exports = { note, on, actorOf, CAP_TTL_MS, _set: (t) => { seenAt = t; }, _setClock: (f) => { clock = f; } };
+module.exports = { note, on, relayOn, actorOf, CAP_TTL_MS, _set: (t) => { seenAt = t; }, _setRelay: (t) => { relaySeenAt = t; },
+  _setClock: (f) => { clock = f; } };

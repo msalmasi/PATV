@@ -25,12 +25,16 @@
 // "🌐 <PATV username> (PATV web): ..." (camfrog-bot 1.99wt pepe_relay._relay_say_account): the username (unique on PATV),
 // never a free-text display name, and a label a chat login's relay never gets, so nobody passes for a Camfrog user. Only
 // while a Pepe that acts for accounts is running (actorcap.js), and only for an account that (accountRefusal):
-//   * has proven an identity (verified.js: Discord, Twitch, Telegram, Google or Plex - the anti-throwaway rule)
+//   * has proven an identity (verified.js: a verified email, Discord, Twitch, Telegram, Google or Plex - the anti-throwaway rule)
 //   * isn't archived, casino-restricted, banned from the whole feed or from THIS pad's feed (the pad owner's ban)
 //   * whose username isn't another account's linked chat login (no "🌐 alice" next to the real alice)
 //   * says nothing the short-text guard catches (textguard.js: slurs, threats, doxxing, PAT scams, fake staff)
-// Pepe adds the room's ignore lists, time-outs and his own rate limit, and remembers none of it. Clips, cam snapshots /
-// saves and typed "!" commands stay chat-login only; a 🐸 Pepe menu action runs as the account (padpepe.js).
+// Pepe adds the room's ignore lists, time-outs and his own rate limit. 1.99xa: what it says is NORMAL chat for the account
+// (Pepe logs and remembers it under "u:<userId>" unless the account switched incognito on in Settings -> Privacy). Clips, cam
+// snapshots / saves and typed "!" commands stay chat-login only; a 🐸 Pepe menu action runs as the account (padpepe.js).
+//
+// Blocks (1.99xa, bridgeblocks.js): a room's mods / the pad's owner / Pepe's admins can block an account's web relay into a room
+// (or every room: admins) - its say / clip / "!" lines are refused here with the reason, and Pepe refuses them too (his mirror).
 //
 // Chat commands (1.99): a relay line starting with "!" is a COMMAND, not chat. It is queued as a
 // "cmd" job carrying the account's verified Camfrog link (users.camfrogUsername - never anything
@@ -199,6 +203,11 @@ async function accountRefusal(u, R, text) {
   return null;
 }
 
+/** 1.99xa: why a room mod's / an admin's !bridge block refuses this account's relay into room R (bridgeblocks.js), or null. */
+async function blockedWhy(R, u) {
+  try { return await require("./bridgeblocks").refusal(R.id, u.userId); } catch (e) { return null; }
+}
+
 function newJob(fields) {
   const j = Object.assign({ id: "w" + crypto.randomBytes(8).toString("hex"), state: "pending", at: Date.now(), claimed: 0, tries: 0, result: null }, fields);
   jobs.set(j.id, j);
@@ -306,6 +315,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const text = clean((req.body || {}).text, SAY_MAX);
     if (text.startsWith("!")) return runCmd(req, res, u, R, text);
     if (!text) return res.status(400).json({ ok: false, error: "Type something first." });
+    const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block (bridgeblocks.js)
+    if (blk) return res.status(403).json({ ok: false, error: blk, blocked: true });
     if (!u.camfrogUsername) {
       const why = await accountRefusal(u, R, text);          // 1.99wv: a PATV account with no chat login (see the top)
       if (why) return res.status(why.status).json({ ok: false, error: why.error });
@@ -327,6 +338,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (c === "!commands") return res.json({ ok: true, local: true, reply: commandsText(cmds), cmds });
     if (!Object.keys(cmds).length) return res.status(403).json({ ok: false, error: "Commands from the website aren't on in this Camfrog room." });
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Typed commands run as a chat name - link a chat account first (Settings \u2192 Account \u2192 Connections). The \ud83d\udc38 Pepe menu works with your PATV account." });
+    const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block
+    if (blk) return res.status(403).json({ ok: false, error: blk, blocked: true });
     if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
       return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
     }
@@ -360,6 +373,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const R = roomFor(req, res, "micRelay");
     if (!R) return;
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
+    const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block
+    if (blk) return res.status(403).json({ ok: false, error: blk, blocked: true });
     const buf = Buffer.isBuffer(req.body) ? req.body : null;
     const secs = Number(req.get("x-clip-secs")) || 0;
     if (!buf || buf.length < 500) return res.status(400).json({ ok: false, error: "That recording is empty." });

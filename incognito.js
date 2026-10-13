@@ -16,6 +16,11 @@
 //                                          table: listed linked logins on, every other stored one off.
 //   GET  /settings/privacy                 the page (views/privacy-settings.ejs, public/js/privacy-settings.js)
 //
+// 1.99xa: an account with NO chat login has a chat identity too - the account key "u:<userId>" its web-relay lines are logged
+// and remembered under (camfrog-bot pepe_relay / pepe_acctactor). While a Pepe that understands it runs (actorcap.relayOn) the
+// switch works for that key exactly like a login's: the same action, the same report, stored under "u:<userId>". Once the
+// account links a chat login, the login is its identity again (the key's row stays as history).
+//
 //   incognito_state   login (lower, PK), on, updated (Pepe's ms of the change), reported (when the site heard it), via
 //   incognito_log     id, user_id, login, at, kind request|applied|refused, on, via, ip
 //   incognito_meta    key/value: last_full (when Pepe last sent the whole list)
@@ -28,6 +33,8 @@ const RATE_MAX = 10;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const WAIT_MS = 15 * 60 * 1000;          // a request older than this with no report is no longer "waiting"
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
+const ACCT_RE = /^u:([A-Za-z0-9-]{6,64})$/;              // 1.99xa: an account with no chat login (see the top)
+const isKey = (l) => LOGIN_RE.test(l) || ACCT_RE.test(l);
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -65,14 +72,26 @@ async function hasArchived() {
 /** The live account a chat login is linked to, or null. */
 async function userByLogin(login) {
   const l = low(login);
+  const m = ACCT_RE.exec(String(login == null ? "" : login).trim());
+  if (m) {
+    return (await getQuery(`SELECT userId, username, camfrogUsername FROM users WHERE userId = ? AND (camfrogUsername IS NULL OR camfrogUsername = '')
+                            ${(await hasArchived()) ? "AND archived_at IS NULL" : ""}`, [m[1]]))[0] || null;
+  }
   if (!l || !LOGIN_RE.test(l)) return null;
   return (await getQuery(`SELECT userId, username, camfrogUsername FROM users WHERE lower(camfrogUsername) = ? ${(await hasArchived()) ? "AND archived_at IS NULL" : ""}
                           LIMIT 1`, [l]))[0] || null;
 }
 async function loginOf(userId) {
   const r = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0];
-  const l = r ? low(r.camfrogUsername) : "";
-  return l && LOGIN_RE.test(l) ? l : null;
+  if (!r) return null;
+  const l = low(r.camfrogUsername);
+  if (l) return LOGIN_RE.test(l) ? l : null;
+  // 1.99xa: no chat login -> the account key, while a Pepe that honours it runs (or once he has reported on it)
+  const key = "u:" + String(userId);
+  if (!ACCT_RE.test(key)) return null;
+  if (require("./actorcap").relayOn()) return key;
+  const had = (await getQuery("SELECT 1 AS x FROM incognito_state WHERE login = ?", [key]))[0];
+  return had ? key : null;
 }
 async function lastFull() {
   const r = (await getQuery("SELECT value FROM incognito_meta WHERE key = 'last_full'"))[0];
@@ -84,7 +103,12 @@ async function lastFull() {
 async function stateOf(userId) {
   await init();
   const login = await loginOf(userId);
-  const out = { linked: !!login, login, on: null, updated: null, reported: null, waiting: null, failed: null, log: [] };
+  const out = { linked: !!login, login, account: !!(login && ACCT_RE.test(login)), on: null, updated: null, reported: null, waiting: null,
+                failed: null, log: [] };
+  if (out.account) {
+    const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [String(userId)]))[0];
+    out.name = u ? u.username : null;
+  }
   out.log = await getQuery(`SELECT at, kind, "on" AS "on", via FROM incognito_log WHERE user_id = ? AND kind IN ('request', 'applied', 'refused')
                             ORDER BY id DESC LIMIT 8`, [String(userId)]);
   if (!login) return out;
@@ -146,7 +170,7 @@ async function sync(body) {
   for (const it of items) {
     const login = low(it && it.login);
     const ts = Math.floor(Number(it && it.ts) || 0);
-    if (!login || !LOGIN_RE.test(login) || !(ts > 0)) { ignored++; continue; }
+    if (!login || !isKey(login) || !(ts > 0)) { ignored++; continue; }
     if (it.on === true) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [login, t]);
     else await runQuery("DELETE FROM incognito_anon WHERE login = ?", [login]);
     const u = await userByLogin(login);
@@ -162,17 +186,18 @@ async function sync(body) {
     applied++;
     if (it.changed !== false) {
       const where = via === "web" ? "from Settings → Privacy" : "with !incognito in chat";
+      const who = ACCT_RE.test(login) ? "your PATV account (what you say in pad chat rooms from the website)" : `your chat name ${login}`;
       await require("./inbox").addSafe(u.userId, {
         kind: "system",
         title: on ? "🕶️ Incognito is on" : "🕶️ Incognito is off",
         body: on
-          ? `Pepe switched incognito ON for your chat name ${login} (${where}). He won't remember anything new you say, and the website shows you as "someone". Not you? Turn it off in Settings → Privacy.`
-          : `Pepe switched incognito OFF for your chat name ${login} (${where}). He remembers what you tell him again, and the website shows your name. Not you? Turn it back on in Settings → Privacy.`,
+          ? `Pepe switched incognito ON for ${who} (${where}). He won't remember anything new you say, and the website shows you as "someone". Not you? Turn it off in Settings → Privacy.`
+          : `Pepe switched incognito OFF for ${who} (${where}). He remembers what you tell him again, and the website shows your name. Not you? Turn it back on in Settings → Privacy.`,
         link: "/settings/privacy", ref: `incog:${login}:${ts}` });
     }
   }
   if (Array.isArray(body && body.full)) {
-    const set = new Set(body.full.map(low).filter((l) => LOGIN_RE.test(l)));
+    const set = new Set(body.full.map(low).filter(isKey));
     for (const r of await getQuery("SELECT login FROM incognito_anon")) if (!set.has(r.login)) await runQuery("DELETE FROM incognito_anon WHERE login = ?", [r.login]);
     for (const l of set) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [l, t]);
     // stored logins that are no longer on the list -> off

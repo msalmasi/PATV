@@ -203,8 +203,33 @@ Relay lines from an account with no chat login go into the room as **"🌐 <PATV
 username, never a free-text display name, and a label no chat login's relay gets ("(web)"). The site refuses an account
 that hasn't proven an identity (`verified.js`), is archived / casino-restricted / feed-banned on that pad or site-wide,
 whose username is another member's chat login, or whose line trips `textguard.js`; Pepe adds the room's ignore lists
-(`u:<id>` or `🌐<username>`), time-outs, a casino restriction and his rate limit, logs it to the mod log, and never
-remembers it (no incognito switch exists without a chat login, so it is treated as incognito).
+(`u:<id>` or `🌐<username>`), time-outs, a casino restriction and his rate limit, and logs it to the mod log. ~~Never
+remembers it~~ - replaced in 1.99xa (below): it is normal chat, keyed by the account.
+
+#### C follow-ups (1.99xa: site + bot)
+
+**Relayed web chat is normal chat.** The user's rule: a line said through the pad's relay is that person's normal chat.
+Pepe (`pepe_relay._relay_normal_chat`) runs every per-line step a room chat line runs in `on_message` - the chat log (an
+ordinary `[chat]` line, written once; Pepe's own "🌐 ... (web)" post is never logged or handled again), profile analytics,
+memory, Telegram keyword alerts, the raffle, chat XP, achievements (chat + streak), feedback - then the chat buffer and the
+chatty gate; room knowledge, `!seen`, search, quotes and the analytics backfill read the log line like any other. Not run:
+what is about being *in* the room (handing over `!relay` messages, the greeter, game answers / "red me", economy activity
+minutes). A linked account's lines are its login's; an account with no chat login is logged, remembered and counted under
+its account key **`u:<userId>`** (records follow it to a login it links later). The bridge sync carries the line's sender +
+own words (`web`), so the pad page, mentions, quotes and room activity show it as **their** line, marked 🌐 (an older site
+keeps showing Pepe's post). **Incognito** is room chat's rule: an incognito login's lines are not remembered; an account
+with no chat login now has the same switch in Settings → Privacy for its key `u:<userId>` (website action
+`privacy.incognito`), offered while a Pepe that says `relay_cap: 1` runs (`actorcap.relayOn`).
+
+**`!bridge block`.** A room's mods / the pad's owner / Pepe admins can block one account's web relay into a room (say, clips,
+typed commands, the Pepe menu) for a while or until lifted; Pepe admins also in every room. It never touches the person's
+normal Camfrog chat. Chat: `!bridge block <name> [global] [30m|2h|1d|7d|perm] [reason]`, `!bridge unblock <name>`, `!bridge
+blocks` (`<name>` = `🌐name`, `u:<id>`, a PATV username or a linked chat name). Web: the pad owner page's "Moderate your
+room" card and `/admin/bridge`. The site is the source of truth (`bridgeblocks.js`, table `bridge_blocks` keyed by room +
+account, `''` = every room; writes in `dbUtils.tx`, idempotent by key; audited in the pad's event log / `admin_audit`);
+`bridge-relay.js` and `padpepe.js` refuse a blocked account, and Pepe refuses its jobs from a mirror the bridge sync sends
+whenever his copy is old (`blocks_v`), so a stale or unreachable site is still covered. Pepe's chat command writes through
+`POST /api/bridge/blocks`; with the site down it refuses (no split local state).
 
 | Surface | No chat login, now | Still needs a chat login (why) |
 |---|---|---|

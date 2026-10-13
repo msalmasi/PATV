@@ -55,8 +55,9 @@ const recent = (a) => (Array.isArray(a) ? a : []).slice(0, RECENT).filter((e) =>
                  room: str(e.room, 64), who: e.who ? str(e.who, 40) : null, note: e.note ? str(e.note, 40) : null }));
 
 function clean(u) {
-  const login = str(u.login, 40).toLowerCase();
-  if (!/^[\w.\-]{2,40}$/.test(login)) return null;
+  // 1.99xa: or the account key "u:<userId>" of an account with no chat login (its web-relay lines are normal chat)
+  const login = str(u.login, 70).toLowerCase();
+  if (!/^[\w.\-]{2,40}$/.test(login) && !/^u:[a-z0-9-]{6,64}$/.test(login)) return null;
   const out = { login, first: int(u.first), last: int(u.last) };
   if (u.chat && typeof u.chat === "object") {
     const c = u.chat;
@@ -272,7 +273,7 @@ async function forProfile(camfrogLogin, viewer) {
   if (!camfrogLogin) return null;
   let s;
   try { s = await get(camfrogLogin); } catch (e) { console.error("[userstats] get:", e); return null; }
-  if (!s) return { empty: true };
+  if (!s) return /^u:/.test(String(camfrogLogin)) ? null : { empty: true };   // 1.99xa: an account key with no chat yet shows nothing
   const md = await meta().catch(() => ({}));
   const v = viewer || {};
   const priv = !!(v.owner || v.admin);

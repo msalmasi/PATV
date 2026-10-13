@@ -21,6 +21,24 @@
   <% } %>
 </section>
 
+<section class="adm-card" id="blocks" aria-labelledby="blkT">
+  <h2 id="blkT">Web relay blocks <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Accounts blocked from talking into a Camfrog room from the website (relay lines, clips, <code>!commands</code>, the Pepe menu) - by a room's mods / the pad's owner (<code>!bridge block</code>, the owner page) or here. Leave the room empty to block in <b>every</b> room. A linked chat login keeps its normal Camfrog chat. Pepe enforces the same list.</p>
+  <% if (isAdmin) { %>
+  <form id="blkForm" class="adm-form">
+    <label>Who<input type="text" name="target" placeholder="🌐name, u:&lt;id&gt;, username or chat name" autocomplete="off" required></label>
+    <label>Room id<input type="text" name="room" placeholder="empty = every room" autocomplete="off"></label>
+    <label>For<select name="hours"><option value="24">24 hours</option><option value="168">7 days</option><option value="720">30 days</option><option value="0">until lifted</option></select></label>
+    <label>Reason<input type="text" name="reason" maxlength="120" autocomplete="off"></label>
+    <div class="adm-actions"><button type="submit">Block</button><span id="blkMsg" class="adm-msg" role="status"></span></div>
+  </form>
+  <div class="adm-tbl"><table aria-label="Web relay blocks">
+    <thead><tr><th>Account</th><th>Room</th><th>Until (UTC)</th><th>Reason</th><th>By</th><th></th></tr></thead>
+    <tbody id="blkRows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <% } %>
+</section>
+
 <section class="adm-card" aria-labelledby="bridgeMoreT">
   <h2 id="bridgeMoreT">Per pad</h2>
   <p class="adm-help">Each pad's bridge settings and its room moderation are on the pad's own Manage page; the list of pads is on <a href="/pads/admin#owners">Pads › Pads &amp; owners</a>.</p>
@@ -51,6 +69,45 @@
       .catch(function (e) { msg.textContent = e.message; msg.className = 'adm-msg err'; });
   }
   f.addEventListener('submit', function (e) { e.preventDefault(); load(); });
+  load();
+})();
+// 1.99xa: web relay blocks (bridgeblocks.js)
+(function () {
+  'use strict';
+  var f = document.getElementById('blkForm'), body = document.getElementById('blkRows'), msg = document.getElementById('blkMsg');
+  if (!f) return;
+  function td(t) { var d = document.createElement('td'); d.textContent = t == null ? '' : String(t); return d; }
+  function req(method, data) {
+    return fetch('/api/admin/bridge/blocks', { method: method, credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function load() {
+    req('GET').then(function (d) {
+      body.textContent = '';
+      (d.blocks || []).forEach(function (b) {
+        var tr = document.createElement('tr');
+        [b.username || b.userId, b.global ? 'every room' : b.room, b.until ? new Date(b.until).toISOString().slice(0, 16).replace('T', ' ') : 'until lifted',
+         b.reason, b.by].forEach(function (v) { tr.appendChild(td(v)); });
+        var c = document.createElement('td'), btn = document.createElement('button');
+        btn.type = 'button'; btn.textContent = 'Unblock';
+        btn.addEventListener('click', function () {
+          btn.disabled = true;
+          req('POST', { op: 'unblock', room: b.room, target: 'u:' + b.userId }).then(load)
+            .catch(function (e) { btn.disabled = false; msg.textContent = e.message; msg.className = 'adm-msg err'; });
+        });
+        c.appendChild(btn); tr.appendChild(c); body.appendChild(tr);
+      });
+      if (!(d.blocks || []).length) { var tr = document.createElement('tr'), c = td('Nobody is blocked.'); c.colSpan = 6; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
+    }).catch(function (e) { msg.textContent = e.message; msg.className = 'adm-msg err'; });
+  }
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var d = { op: 'block', target: f.elements.target.value.trim(), room: f.elements.room.value.trim(), hours: f.elements.hours.value, reason: f.elements.reason.value.trim() };
+    msg.textContent = 'Blocking…'; msg.className = 'adm-msg';
+    req('POST', d).then(function (r) { msg.textContent = 'Blocked ' + ((r.target && r.target.username) || d.target) + (d.room ? ' in ' + d.room : ' in every room') + '.'; msg.className = 'adm-msg ok'; f.reset(); load(); })
+      .catch(function (err) { msg.textContent = err.message; msg.className = 'adm-msg err'; });
+  });
   load();
 })();
 </script>

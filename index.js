@@ -1570,7 +1570,8 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         gtfAvatar: userstats.avatarFor(res.locals.profileCosmetics),
         // Camfrog activity analytics (userstats.js). The privacy panels (top words, moderated against,
         // itemised mod list, mod commands) follow the user's layout: only data this viewer may see is loaded.
-        analytics: await userstats.forProfile(user.camfrogUsername, {
+        // 1.99xa: an account with no chat login: its web-relay chat, kept by Pepe under "u:<userId>"
+        analytics: await userstats.forProfile(user.camfrogUsername || ("u:" + String(user.userId).toLowerCase()), {
           owner: isOwner && !preview,
           admin: isAdmin && !preview,
           show: L.show,

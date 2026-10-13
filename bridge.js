@@ -53,9 +53,15 @@ const plain = (v, n) => str(String(v == null ? "" : v).replace(/<[^>]*>/g, ""), 
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const slugify = (s) => String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "room";
 
-function cleanUser(u) {
+// 1.99xa: a web-relay sender with no chat login is the account key "u:<userId>" (camfrog-bot pepe_acctactor.py)
+const ACCT_RE = /^u:([A-Za-z0-9-]{6,64})$/;
+function cleanUser(u, allowAcct = false) {
   if (!u || typeof u !== "object") return null;
   if (u.anonymous) return { anon: true, display: "someone" };
+  if (allowAcct && ACCT_RE.test(str(u.login || u.id, 70))) {
+    const login = str(u.login || u.id, 70);
+    return { login, display: plain(u.display, 40) || "🌐 a PATV member", acct: true };
+  }
   const login = str(u.login || u.id, 40);
   if (!LOGIN_RE.test(login)) return null;
   const out = { login, display: plain(u.display, 40) || login };
@@ -162,6 +168,15 @@ function feedItem(ev) {
   const ts = Date.parse(ev.ts) || Date.now();
   switch (ev.type) {
     case "message": {
+      // 1.99xa: a web-relay line (Pepe's "🌐 <name> (web): ..." post) carries `web` = {user, text}: the SENDER and their
+      // own words. It is shown as THEIR line (normal chat: mentions, quotes, room activity), marked 🌐, not as Pepe's.
+      // Older Pepes send only Pepe's own line (below).
+      const w = d.web && typeof d.web === "object" ? d.web : null;
+      if (w) {
+        const wu = cleanUser(w.user, true);
+        const wt = str(w.text, 400);
+        if (wu && !wu.anon && !wu.self && wt) return { k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt };
+      }
       const u = cleanUser(d.user);
       const text = str(d.text, 400);
       if (!u || !text || u.anon) return null;          // Pepe never sends an opted-out user's line; belt and braces
@@ -471,14 +486,23 @@ async function ingest(body) {
 const UL = require("./userlinks");
 const NAME_TTL = 60 * 1000, NAME_MAX = 5000;
 const nameCache = new Map();            // login key -> {acc: {username, display, avatar} | null, at}
+// 1.99xa: an account key "u:<userId>" (a web-relay sender with no chat login) resolves by its id
+const nameKey = (login) => { const m = ACCT_RE.exec(String(login || "")); return m ? "u:" + m[1] : UL.keyOf(login); };
 async function resolveNames(users) {
-  const now = Date.now(), miss = new Set();
+  const now = Date.now(), miss = new Set(), missIds = new Set();
   for (const u of users) {
     if (!u || u.anon || !u.login) continue;
-    const k = UL.keyOf(u.login);
+    const k = nameKey(u.login);
     if (!k) continue;
     const c = nameCache.get(k);
-    if (!c || now - c.at > NAME_TTL) miss.add(k);
+    if (!c || now - c.at > NAME_TTL) (k.startsWith("u:") ? missIds : miss).add(k);
+  }
+  if (missIds.size) {
+    const ids = [...missIds].slice(0, 400).map((k) => k.slice(2));
+    try {
+      const found = await UL.resolve({ ids });
+      for (const id of ids) { nameCache.delete("u:" + id); nameCache.set("u:" + id, { acc: found.ids.get(id) || null, at: now }); }
+    } catch (e) { console.error("[bridge] account names:", e.message); }
   }
   const keys = [...miss];
   for (let i = 0; i < keys.length; i += 400) {
@@ -501,8 +525,8 @@ function withPatv(u, C, F = null) {
   const login = String(u.login || "");
   const cfName = plain(u.display, 40);
   const out = { ...u, display: cfName || login };
-  if (cfName && cfName.toLowerCase() !== login.toLowerCase()) out.cf = cfName;
-  const hit = C && C.get(UL.keyOf(login));
+  if (cfName && cfName.toLowerCase() !== login.toLowerCase() && !u.acct) out.cf = cfName;
+  const hit = C && C.get(nameKey(login));
   const acc = hit && hit.acc;
   if (!acc) return out;
   out.patv = { username: acc.username, avatar: safeImg(acc.avatar), style: cosmetics.nameStyle(acc.username) || "" };
@@ -751,7 +775,9 @@ function register(app, { isBotToken, addUser }) {
       const r = await ingest(body);
       const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
       // 1.99co: the linked logins watching each pad -> Pepe sends their Manage-panel caps (padmod.js)
-      res.json({ success: true, ...r, jobs: relay.takeJobs(liveIds), viewers: require("./padmod").viewersFor(liveIds) });
+      // 1.99xa: Pepe's web-relay block mirror (bridgeblocks.js), only when his copy is older than ours
+      const blocks = await require("./bridgeblocks").forSync(body);
+      res.json({ success: true, ...r, jobs: relay.takeJobs(liveIds), viewers: require("./padmod").viewersFor(liveIds), ...blocks });
     } catch (e) {
       console.error("[bridge] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
@@ -836,6 +862,7 @@ function register(app, { isBotToken, addUser }) {
 
   // 1.99qp: the web side of the bridge treats a pad without the bridge perk as not live (isLiveShown)
   relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });
+  require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });      // 1.99xa: !bridge block - web senders blocked per room / everywhere
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)
   require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)

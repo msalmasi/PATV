@@ -485,6 +485,26 @@
    ]
   },
   {
+   "id": "bridge_block",
+   "area": "room",
+   "title": "Block someone from talking into your room from the website",
+   "commands": [
+    "!bridge"
+   ],
+   "syntax": [
+    "!bridge block <name> [30m|2h|1d|7d|perm] [reason]",
+    "!bridge unblock <name>",
+    "!bridge blocks"
+   ],
+   "web": "/p/{slug}/owner#mod",
+   "howto": "Stop a website member from talking into your room from the pad page (chat lines, voice clips, !commands, the Pepe menu) - for a while or until you lift it. Someone with a linked chat name keeps their normal Camfrog chat. Name them as the room sees them (🌐name), by PATV username or by chat name; the same list is in Moderate your room on your owner page.",
+   "owner_only": true,
+   "code": [
+    "pepe_bridge.py:handle_bridge",
+    "pepe_bridgeblock.py:_bb_can"
+   ]
+  },
+  {
    "id": "room_fine",
    "area": "room",
    "title": "Fine someone",
