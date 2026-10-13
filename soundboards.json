@@ -96,7 +96,7 @@
   "legendaries": [
     { "id": "lg-gawk", "label": "Gawk gawk gawk", "emoji": "🎰", "text": "Gawk gawk gawk gawk gawk!", "voice": "random", "live": true, "price": 20000000,
       "desc": "A different voice every time you play it." },
-    { "id": "lg-founder", "label": "Founder", "emoji": "👑", "text": "Make WAY for the most ELECTRIFYING man on CAMFROG!", "file": "lg-founder.ogg", "price": 10000000, "supply": 25, "numbered": true,
+    { "id": "lg-founder", "label": "Founder", "emoji": "👑", "text": "Make way for the most ELECTRIFYING man on Camfrog.", "file": "lg-founder.ogg", "price": 10000000, "supply": 25, "numbered": true,
       "desc": "One of 25, numbered." }
   ]
 }

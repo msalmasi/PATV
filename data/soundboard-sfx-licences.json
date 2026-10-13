@@ -261,10 +261,10 @@
   },
   "lg-founder": {
    "file": "lg-founder.ogg",
-   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 2006, atempo 1.08 (1.99ww hyped re-take: ring-announcer script, best of 72 takes by pitch/brightness)",
-   "line": "Make WAY! For the most ELECTRIFYING man... on CAMFROG!!!",
+   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 1001",
+   "line": "Make way for the most ELECTRIFYING man on Camfrog.",
    "stt_check": "Make way for the most electrifying man on Camfrog.",
-   "secs": 2.84,
+   "secs": 3.85,
    "licence": "PATV's own"
   }
  }
