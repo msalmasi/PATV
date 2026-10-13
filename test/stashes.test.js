@@ -84,6 +84,9 @@ test("the import: digest + totals checked, a verified backup first, then idempot
   assert.equal(other.status, 409);
   const s3 = await S.get("3");
   assert.deepEqual(s3.members, ["ann_cf"], "the owner isn't a member of their own stash");
+  // 1.99wy: the import keys them by ACCOUNT ("u:<userId>"); Pepe still sees the chat logins
+  assert.deepEqual([s3.owner_key, s3.member_keys, s3.owner, s3.owner_name], ["u:u2", ["u:u1"], "slacker_", "slack"]);
+  assert.equal((await S.get("1")).owner_key, "u:u3");
   assert.equal(s3.staked, 1000);
   assert.equal((await S.total()).amount, 80995000, "closed stashes hold nothing");
 });
@@ -152,7 +155,9 @@ test("the website form does it without Pepe: create, deposit, withdraw, grant, r
   assert.equal(await bal("u2"), 500);
   assert.match(await S.fromForm("u2", ["rename", "ann_cf/savings", "x"], "idem00007"), /don't have a stash/, "only the owner renames");
   assert.match(await S.fromForm("u1", ["rename", "savings", "rainy"], "idem00008"), /'savings' is now 'rainy'/);
-  assert.match(await S.fromForm("u4", ["create", "x"], "idem00009"), /Link a chat account/);
+  // 1.99wy: stashes belong to the ACCOUNT - an account with no chat login opens one too (held as "u:u4")
+  assert.match(await S.fromForm("u4", ["create", "x"], "idem00009"), /created/);
+  assert.equal((await S.list()).find((s) => s.name === "x").owner_key, "u:u4");
   const before = await bal("u1");
   assert.match(await S.fromForm("u1", ["close", "rainy"], "idem00010"), /closed - 1,000 PAT sent to your wallet/);
   assert.equal(await bal("u1"), before + 1000);

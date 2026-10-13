@@ -11,7 +11,8 @@
 //                        id - keyed + journaled on his side, so a replay changes nothing.
 //   login_rekey_archive  a value a re-key couldn't merge (the new key already had one) - kept, never lost.
 //
-// The site re-keys its own tables in the SAME transaction as the change: stashes (owner / members), held escrow holds
+// The site re-keys its own tables in the SAME transaction as the change: stashes (1.99wy: only rows a bare login still
+// holds - stashes belong to the account), held escrow holds
 // (login), escrow game records (bounties / loans / wagers JSON), the capital cluster's records (markets / Reserve loans /
 // requests JSON, Phase 3), GTF records + mirror + open ops (with a rev bump so
 // Pepe's mirror follows), gang members / invites / boss, voice unlocks. PATV usernames inside records (user / username /
@@ -94,7 +95,7 @@ function score(text) {
 const more = (a, b) => { const x = score(a), y = score(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return true; };
 
 /** Re-key the site's own login-keyed tables from oldKey to newKey. Run it inside a transaction. -> [change lines] */
-async function rekeySite(oldKey, newKey, changeId = null) {
+async function rekeySite(oldKey, newKey, changeId = null, userId = null) {
   const old = low(oldKey), nw = String(newKey);
   const log = [];
   const archive = async (tbl, recKey, data) => {
@@ -103,16 +104,12 @@ async function rekeySite(oldKey, newKey, changeId = null) {
     log.push({ table: tbl, action: "archived (the new key already had one)", key: recKey });
   };
   if (await hasTable("stashes")) {
-    for (const r of await getQuery("SELECT id FROM stashes WHERE lower(owner) = ?", [old])) {
-      await runQuery("UPDATE stashes SET owner = ?, updated = ? WHERE id = ?", [nw, Date.now(), r.id]);
-      log.push({ table: "stashes", action: "owner", key: r.id, from: old, to: nw });
-    }
-  }
-  if (await hasTable("stash_members")) {
-    for (const r of await getQuery("SELECT stash_id FROM stash_members WHERE lower(login) = ?", [old])) {
-      await runQuery("INSERT OR IGNORE INTO stash_members (stash_id, login) VALUES (?, ?)", [r.stash_id, nw]);
-      await runQuery("DELETE FROM stash_members WHERE stash_id = ? AND lower(login) = ?", [r.stash_id, old]);
-      log.push({ table: "stash_members", action: "member", key: r.stash_id, from: old, to: nw });
+    // 1.99wy: stashes belong to the ACCOUNT ("u:<userId>", stashes.js) - a login change doesn't move them. Only rows still
+    // held by a bare login become the account's: its old login (a row the stash re-key hadn't reached) and the login it
+    // just linked (a chat login no account had - "stays as-is until it links").
+    if (userId) {
+      const isLogin = (k) => k && !/^u:/.test(k);
+      for (const l of await require("./stashes").claimLogin({ userId, oldLogin: isLogin(old) ? old : null, newLogin: isLogin(nw) ? nw : null })) log.push(l);
     }
   }
   if (await hasTable("escrow_holds")) {
@@ -261,7 +258,7 @@ async function changed(userId, oldLogin, newLogin, via, { at = null } = {}) {
     const r = await runQuery(`INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES (?, ?, ?, ?, ?, ?, ?)`,
                              [String(userId), low(oldLogin) || null, low(newLogin) || null, oldKey, newKey, Math.trunc(Number(at) || Date.now()), String(via).slice(0, 40)]);
     const id = r && (r.id || r.lastID);
-    const log = await rekeySite(oldKey, newKey, id);
+    const log = await rekeySite(oldKey, newKey, id, userId);
     await runQuery("UPDATE login_changes SET site_result = ? WHERE id = ?", [JSON.stringify(log).slice(0, 20000), id]);
     if (log.length) console.log(`[login-rekey] #${id} ${oldKey} -> ${newKey} (${userId}, ${via}): ${log.length} site change(s)`);
     return id;
@@ -295,7 +292,7 @@ async function relink(oldLogin, userId, { apply = false, via = "admin:relink" } 
   if (!apply) {
     let log = null;
     try {
-      await tx(async () => { log = await rekeySite(old, newKey, null); throw new DryRun("dry run"); });
+      await tx(async () => { log = await rekeySite(old, newKey, null, u.userId); throw new DryRun("dry run"); });
     } catch (e) { if (!(e instanceof DryRun)) throw e; }
     return { ok: true, dry: true, user: u, from: old, to: newKey, site: log };
   }

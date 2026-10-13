@@ -305,7 +305,7 @@ test("upload validation: magic bytes, pictures only, size cap, new accounts, EXI
   assert.equal((await post("/api/messages/uploads", U.ann, { size: 60 * 1024 * 1024 })).status, 413);
   const nl = await post("/api/messages/uploads", U.nolink, { size: 1000 });
   assert.equal(nl.status, 403, "level 1 and unlinked: no pictures");
-  assert.match(nl.d.error, /needs level 2, or link an account/);
+  assert.match(nl.d.error, /needs level 2, or verify your email address, or link an account/);
   // EXIF + GPS in, nothing out
   const jpg = await sharp({ create: { width: 80, height: 60, channels: 3, background: "#3a6" } }).jpeg()
     .withMetadata({ exif: { IFD0: { Make: "SpyCam", Model: "X1" }, IFD3: { GPSLatitudeRef: "N", GPSLatitude: "51/1 30/1 0/1" } } }).toBuffer();

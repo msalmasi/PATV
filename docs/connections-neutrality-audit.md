@@ -95,7 +95,7 @@ fall back to the PATV account, so some gates are stale.
 | 2 | Market creation | `views/markets.ejs:111`; `markets.js:470`; `actions.js` doesn't intercept `cmd=market` | Create form hidden (betting works) | View, then Pepe | M | Route create to `capital/markets` when live |
 | 3 | Wagers, bounties, pools | `views/wagers.ejs:190`, `wagers.js:113`; `views/bounties.ejs:68`, `bounties.js:275` | Forms hidden | View only while the escrow game is live (`escrow/games.js:288` accepts the username) | M | Gate on `gameLive()`, not the link |
 | 4 | Poll creation | `polls.js:164` | Refused (voting works as `🌐username`) | Server | M | Create as `🌐username`, like votes |
-| 5 | Lotto | `views/lotto.ejs:250` | Gated only with the lotto backend off | View/Pepe | L | Keep the backend on, retire the Pepe path |
+| 5 | Lotto | `views/lotto.ejs:250` | Gated only with the lotto backend off | View/Pepe | L | Keep the backend on; the Pepe path STAYS as the local-only option (the switch rule - user, 2026-10-13) |
 | 6 | Owner pad-vault top-up | `padowner.js:426` | Refused, although the public Donate to the same vault takes unlinked accounts (`roomvaults.js:289`) | Server, inconsistent | H | Drop the check (same `roomvault.deposit` action) |
 | 7 | Talking in a pad's live chat (relay, `!cmds`, push-to-talk, snapshots) | `bridge-relay.js:271,287,320,434` | 403: you can't talk in a pad without a Camfrog name | Server | H | Relay as the PATV username; keep `!cmds` linked until WP-C |
 | 8 | Pad Pepe menu, DJ requests, cam/mic clips, web moderation | `padpepe.js:79`, `roomdj.js:236`, `camclip.js:115,150,255`, `micclip.js:176`, `padmod.js:262` | 403 | Server | M (mod and clips are genuinely Camfrog-room) | Account actor (WP-C) for DJ and the Pepe menu |
@@ -133,7 +133,7 @@ public pad-vault donate; pad create (default `create_link: "any"`); market betti
 
 | WP | Scope | Covers | Effort | Needs |
 |---|---|---|---|---|
-| **A. Stale gates** | Wallet `canAct` split (loans/Reserve unlinked), wagers/bounties/pools gate on `gameLive()`, owner top-up check dropped, polls created as `🌐username`, lotto Pepe path retired | (b) 1 partly, 3, 4, 5, 6 | S (1 day) | Site only |
+| **A. Stale gates** | Wallet `canAct` split (loans/Reserve unlinked), wagers/bounties/pools gate on `gameLive()`, owner top-up check dropped, polls created as `🌐username` (the lotto's local Pepe path is kept: the switch rule) | (b) 1 partly, 3, 4, 5, 6 | S (1 day) | Site only |
 | **B. `isVerified(u)`** | One helper (any proven link) for media upload, DM pictures, stage capture, downvotes, pad `who=linked`, pad create | (b) 13 | S (half a day) | Site only |
 | **C. Account actor for Pepe actions** | `actor {userId, username, login?}` on `pepe_actions` and relay jobs; Pepe runs by account and echoes the PATV name in rooms | (b) 7, 8, 9, 11, 12, 14; (c) 3 | M (3-4 days) | Bot change, ship bot first |
 | **D. Site-side records** | `cmd=market` to `capital/markets`; stashes and staking by `u:<id>`; a donate handler; cosmetics owned by userId | (b) 1, 2, 10 | M (3-5 days) | Pepe must treat the site as source of truth for those |
@@ -155,10 +155,10 @@ kept for the v2 rewrite.
 
 | (b) # | Feature | Before | After |
 |---|---|---|---|
-| 1 | Wallet | one `canAct = !!camfrog` hid stashes, staking, loans, the Reserve borrow form and donate | Per section. **Loans** (P2P) show while the escrow `loans` game runs on the site, the **Reserve** borrow form while the capital cluster is live (both take the account); the borrower / lender / position key is the username only while no other account has it as a chat login (`accountkey.gameName`). **Stashes / staking** are shown with why they still need a chat login (owner and members are chat names; Pepe moves stashes in and out of the vaults by login; keying them `u:<id>` is WP-D) and a link to Settings → Account → Connections. **Donate** stays with Pepe (see C). `/wallet/credit` (look up a borrower) takes any signed-in account |
+| 1 | Wallet | one `canAct = !!camfrog` hid stashes, staking, loans, the Reserve borrow form and donate | Per section. **Loans** (P2P) show while the escrow `loans` game runs on the site, the **Reserve** borrow form while the capital cluster is live (both take the account); the borrower / lender / position key is the username only while no other account has it as a chat login (`accountkey.gameName`). **Stashes / staking** were shown with why they still needed a chat login - superseded by D-1 below (1.99wy: they belong to the account). **Donate** stays with Pepe (see C). `/wallet/credit` (look up a borrower) takes any signed-in account |
 | 3 | Wagers, pools, bounties | create / accept / bet / dispute forms needed a Camfrog link | each form shows while its escrow game is live on the site (`escrow/games.gameLive`), else for linked accounts only (Pepe's path) |
 | 4 | Poll creation | refused without a link | created as `🌐<username>` (the name web votes already used); the author can end it |
-| 5 | Lotto | gated with the backend off | unchanged on purpose: with `lotto_backend` on the page and the form already take the account (1.99ml); the Pepe fallback stays only for a site whose lotto still runs on Pepe (prod, until the lotto cutover) |
+| 5 | Lotto | gated with the backend off | unchanged on purpose: with `lotto_backend` on the page and the form already take the account (1.99ml); Pepe's local lotto stays as the local-only option behind the switch (the switch rule: never deleted; local mode only when the switch is explicitly off) |
 | 6 | Owner pad-vault top-up | - | verified: no link check since 1.99uu (`padowner.js` top-up -> `roomvault.deposit` from the account) |
 | 11 | GTF sheet, heist market | link required | unchanged: a GTF character exists only for a chat login (heists happen in chat rooms; Telegram excludes them), so there is nothing to show an unlinked account. Wording points to Settings → Account → Connections |
 
@@ -169,8 +169,10 @@ moved it).
 
 `verified.js`: any proven identity counts - a chat login (Camfrog `!verify`), Discord, Twitch (OAuth), Telegram (the
 `/start` code from the user's own Telegram), Google (OIDC, self link) or Plex (a trusted link source). Each can be
-linked to ONE PATV account only, so one identity can't vouch for a set of sock puppets. A verified email does NOT
-count (a fresh address is free); level / age stay each gate's own fallback. Account rows from `feedstore.account`,
+linked to ONE PATV account only, so one identity can't vouch for a set of sock puppets. **1.99wy: a verified email counts
+too** (the user, 2026-10-13: "just as trivial to create as Discord / Google / Plex or Camfrog"): `users.isEmailVerified`
+with a real address (an "@" - Pepe's placeholder addresses never count); an unconfirmed address doesn't. Level / age stay
+each gate's own fallback. Account rows from `feedstore.account`,
 `stagecap.account` and `padcreate.account` carry their proofs; `isVerified(u)` is then synchronous.
 
 | Gate | Protects against | Before | After |
@@ -217,7 +219,33 @@ remembers it (no incognito switch exists without a chat login, so it is treated 
 | Polls | yes (1.99wr: `🌐username` on the site's polls; `u:<id>` on Pepe's local polls) | - |
 | Cosmetics buy / gift (`/cosmetics`) | yes; a gift to an unlinked account goes `@u:<id>` | - |
 | Wagers, bounties, pools, P2P loans, lotto | yes on the site (A) | Pepe's local path while a site switch is off (keyed by login) |
-| Stashes + vault staking, GTF sheet / avatar re-roll, heist market | - | still keyed by chat login (WP-D) |
+| Stashes + vault staking | yes (1.99wy, D-1 below) | - |
+| GTF sheet / avatar re-roll, heist market | - | still keyed by chat login (WP-D) |
 | Voice clone (`!clonemyvoice`) | - | the consent is read on a Camfrog mic |
 | Telegram commands | yes, as the account | `!patv`, `!avatar`, `!stash`, and `!relay` / `!tell` / `!message` (delivered in chat under a chat name) |
 | Snap from stage capture / AI generate | unchanged (already by account at level 2) | - |
+
+### D-1. Stashes + vault staking belong to the account (site 1.99wy, bot 1.99wy)
+
+**Why they were still Camfrog-keyed:** stashes moved to the site on 2026-10-11 (1.99ne) and the vault book on 2026-10-13
+(Phase 3), but both cutovers imported Pepe's stores as they were. Pepe kept a stash under the login that typed
+`!stash create` (owner and members were Camfrog logins), and nothing re-keyed them after the import. The vault book itself
+was never login-keyed: shares are held per stash (`s<id>`), so staking follows whoever owns the stash.
+
+Now (`stashes.js`): `stashes.owner` / `stash_members.login` hold `u:<userId>`; a bare chat login only for a login no PATV
+account has linked (it becomes the account's the moment one links it: `loginrekey.changed` -> `stashes.claimLogin`). A
+login change never moves an account's stash; an account merge does (`accountMerge` special step `mergeStashes`).
+
+| Surface | Now |
+|---|---|
+| Website (`/wallet`, `/staking`) | any signed-in account creates, deposits, withdraws, grants, renames, closes, stakes and unstakes; owner / members shown by PATV username |
+| Chat (`!stash`, `!stash stake/unstake`) | Pepe sends the login + the account he resolved (`user_id`); the site maps a login to its account through the link and checks access by account (owner for grant / rename / close / stake / unstake, owner or member for deposit / withdraw: `E_NO_ACCESS`) |
+| Pepe's mirror / export | `owner` / `members` stay CHAT keys (the linked login, else `u:<userId>`), plus `owner_id` / `owner_name` / `member_names`, so an older Pepe, `owner/name` refs and a detach to local mode keep working |
+| Telegram | `!stash` runs as the account for an account with no chat login |
+| Grant / revoke | by chat login, PATV username or `u:<id>` - stored as the account |
+
+The one-off: `node tools/stash-rekey.js --key=<k>` (dry run) / `--apply` - a verified backup, then one transaction that
+re-keys and checks every stash's balance / stake lock / earned / name / dates, the totals, the move journal, the vault book,
+every NAV and share price and the total supply (each exactly equal, else rolled back); keyed (the same key again prints the
+stored result).
+

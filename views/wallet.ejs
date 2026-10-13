@@ -210,7 +210,7 @@
   <% } else if (welcomeStatus && welcomeStatus.state === 'paid') { %>
     <p class="center info"><span class="ds-ic" aria-hidden="true">👋</span> <%- t('wallet.welcome.paid', { n: fmt(welcomeStatus.amount) }) %></p>
   <% } %>
-  <% if (!linked) { %><p class="ds-note hint"><%- t('wallet.link_hint') %></p><% } %>
+  <% if (!linked && !locals.stashOn) { %><p class="ds-note hint"><%- t('wallet.link_hint') %></p><% } %>
 
   <nav class="ds-subnav" aria-label="<%- t('wallet.nav.label') %>"><div class="ds-tabs">
     <a class="ds-tab" href="#activity"><%- t('wallet.nav.activity') %></a>
@@ -263,7 +263,7 @@
   </section>
 
   <!-- ───────── Stashes ───────── -->
-  <% if (!linked) { %>
+  <% if (!linked && !locals.stashOn) { %>
   <section class="sec" id="stashes" aria-labelledby="stH">
     <div class="sec-h"><h2 id="stH" class="ds-pixel-h"><%- t('wallet.h.stashes') %></h2><a class="info" href="/economy#stash"><%- t('wallet.stash.more') %></a></div>
     <p class="ds-note hint"><%- t('wallet.stash.need_chat', { link: '<a href="/settings/account#connections">' + t('wallet.connections') + '</a>' }) %></p>
@@ -290,7 +290,7 @@
           <div class="ds-stat"><span><%- t('wallet.in_vaults') %></span><b class="green"><%= fmt(s.vaulted) %></b></div>
         </div>
         <span class="info"><%- holdLine(s.hold) || t('wallet.stash.nothing_staked') %></span>
-        <span class="info"><%- t('wallet.stash.members', { list: [s.owner].concat(s.members || []).join(', ') }) %></span>
+        <span class="info"><%- t('wallet.stash.members', { list: [s.owner_name || s.owner].concat(s.member_names || s.members || []).join(', ') }) %></span>
         <form class="inline" method="post" action="/act"><%- hidden('stash') %>
           <select name="a0" aria-label="<%- t('wallet.stash.deposit') %> / <%- t('wallet.stash.withdraw') %>"><option value="deposit"><%- t('wallet.stash.deposit') %></option><option value="withdraw"><%- t('wallet.stash.withdraw') %></option></select>
           <input type="hidden" name="a1" value="<%= s.ref %>">
@@ -603,7 +603,7 @@
         <tr><th>Stash</th><th class="r">Balance</th><th class="r">In vaults</th><th>Holdings</th><th>Members</th></tr>
         <% admin.stashes.forEach((s) => { %>
           <tr><td><%- ul(s.owner) %>/<%= s.name %></td><td class="r"><%= fmt(s.balance) %></td><td class="r"><%= fmt(s.vaulted) %></td>
-            <td><%= holdLine(s.hold) %></td><td><%= (s.members || []).join(', ') %></td></tr>
+            <td><%= holdLine(s.hold) %></td><td><%= (s.member_names || s.members || []).join(', ') %></td></tr>
         <% }) %>
         <tr class="tot"><td><%= admin.stashes.length %> stashes</td><td class="r"><%= fmt(admin.totals.balance) %></td><td class="r"><%= fmt(admin.totals.vaulted) %></td><td></td><td></td></tr>
       </table></div>

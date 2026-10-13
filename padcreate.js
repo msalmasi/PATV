@@ -49,7 +49,7 @@ async function account(userId) {
                           ${c("discordId")}, ${c("twitchId")}, ${c("archived_at")} FROM users WHERE userId = ?`, [String(userId || "")]))[0] || null;
   return u ? require("./verified").attach(u) : null;     // 1.99ws: + its proven identities (verified.js)
 }
-// 1.99ws (connections audit B): any proven identity (verified.js: chat login, Discord, Twitch, Telegram, Google, Plex) -
+// 1.99ws (connections audit B): any proven identity (verified.js: chat login, Discord, Twitch, Telegram, Google, Plex; 1.99wy: a verified email) -
 // pad spam / slug squatting from throwaway accounts stays out
 const linkedAny = (u) => require("./verified").isVerified(u);
 

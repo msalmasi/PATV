@@ -108,17 +108,22 @@ const SETTLED_HOLDS = new Set(["pending welcome bonus", "pending Camfrog link"])
 /** Admins / staff / moderators can't delete themselves (chatsignin.elevated: a class other than a member, or a staff role). */
 async function elevated(user) { return require("./chatsignin").elevated(user); }
 
-/** The sole-owned, unstaked stashes of a login while the site owns stashes (these are auto-settled). -> {auto:[], block:bool} */
-async function stashPlan(login) {
+/** The sole-owned, unstaked stashes of an account while the site owns stashes (these are auto-settled). 1.99wy: stashes
+ *  are held by "u:<userId>" (stashes.js); a row its linked login still holds (not re-keyed yet) counts too.
+ *  -> {auto:[], block:bool} */
+async function stashPlan(login, uid = null) {
   const out = { auto: [], block: false, live: false };
-  if (!login || !(await tableExists("stashes"))) return out;
+  const keys = [...new Set([uid ? `u:${uid}` : null, login ? low(login) : null].filter(Boolean))];
+  if (!keys.length || !(await tableExists("stashes"))) return out;
   try { out.live = !!(await require("./stashes").live()); } catch (e) { out.live = false; }
-  const owned = await getQuery("SELECT id, balance, staked FROM stashes WHERE owner = ? AND closed IS NULL", [login]);
+  const IN = `(${keys.map(() => "?").join(",")})`;
+  const owned = await getQuery(`SELECT id, balance, staked FROM stashes WHERE lower(owner) IN ${IN} AND closed IS NULL`, keys.map(low));
   const member = (await tableExists("stash_members")) ? await getQuery(`SELECT s.id FROM stash_members m JOIN stashes s ON s.id = m.stash_id
-                                                                         WHERE m.login = ? AND s.closed IS NULL AND s.owner != ?`, [login, login]) : [];
+                                                                         WHERE lower(m.login) IN ${IN} AND s.closed IS NULL AND lower(s.owner) NOT IN ${IN}`,
+                                                                        keys.map(low).concat(keys.map(low))) : [];
   if (member.length) out.block = true;                       // a member of someone else's stash: leave it
   for (const s of owned) {
-    const others = (await tableExists("stash_members")) ? (await getQuery("SELECT COUNT(*) AS n FROM stash_members WHERE stash_id = ? AND login != ?", [s.id, login]))[0].n : 0;
+    const others = (await tableExists("stash_members")) ? (await getQuery(`SELECT COUNT(*) AS n FROM stash_members WHERE stash_id = ? AND lower(login) NOT IN ${IN}`, [s.id].concat(keys.map(low))))[0].n : 0;
     if (!out.live || others > 0 || Number(s.staked) > 0) { if (Number(s.balance) > 0 || Number(s.staked) > 0 || others > 0) out.block = true; continue; }
     out.auto.push(s);
   }
@@ -147,7 +152,7 @@ async function blockers(userId, { now: t = now() } = {}) {
   // the shared "in flight" check (the same one merges and the stale cleanup use)
   let holds = [];
   try { holds = await require("./staleaccounts").holdsFor(uid, { now: t }); } catch (e) { holds = ["(couldn't check everything - try again)"]; }
-  const sp = await stashPlan(login);
+  const sp = await stashPlan(login, uid);
   for (const h of holds) {
     if (SETTLED_HOLDS.has(h)) { S(h === "pending welcome bonus" ? "welcome" : "cflink", h === "pending welcome bonus" ? "Your pending welcome bonus is cancelled" : "A pending Camfrog link is cancelled"); continue; }
     if (h === "stash" && !sp.block) continue;                // only stashes the routing can take on its own
@@ -343,11 +348,11 @@ async function settle(uid, login, report) {
   bump("pending_actions_cancelled", await run("pepe_actions", ["user_id", "status"], `UPDATE pepe_actions SET status = 'failed', message = 'account deleted', updated = ? WHERE user_id = ? AND status = 'pending' AND kind != ?`, [t, uid, FORGET_KIND]));
   bump("creator_plans_closed", await run("creator_plans", ["creator_id", "active"], "UPDATE creator_plans SET active = 0 WHERE creator_id = ?", [uid]));
   // sole-owned stashes (site-owned, unstaked, nobody else in them): into the wallet first, so the routing takes it
-  const sp = await stashPlan(login);
+  const sp = await stashPlan(login, uid);
   for (const s of sp.auto) {
     if (Number(s.balance) > 0) {
       const S = require("./stashes");
-      const r = await S.withdraw({ key: `acctdel-${uid}-stash-${s.id}`, login, stashId: s.id, amount: "all", userId: uid, via: "account-deleted" });
+      const r = await S.withdraw({ key: `acctdel-${uid}-stash-${s.id}`, login: login || `u:${uid}`, stashId: s.id, amount: "all", userId: uid, via: "account-deleted" });
       if (!r || r.ok === false) throw new Error(`stash ${s.id} withdrawal refused: ${(r && (r.code || r.error)) || "?"}`);
       bump("stash_pat", Number(s.balance));
     }

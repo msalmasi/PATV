@@ -26,6 +26,21 @@
 // through /api/stash/bot/* and the website does deposits / withdrawals / members / rename / close itself - with or
 // without Pepe. Vault staking (stake / unstake into the capital vaults) stays Pepe's: he moves the PAT between a stash
 // and his vaults with keyed bot moves.
+//
+// 1.99wy: a stash belongs to a PATV ACCOUNT, not a chat login. `stashes.owner` and `stash_members.login` hold a holder
+// key: "u:<userId>" for an account, or a bare chat login (lower case) only for a login no PATV account has linked yet
+// (it moves to "u:<userId>" the moment an account links it - loginrekey.changed -> claimLogin). Why it was still a login
+// until now: the 1.99ne hand-over imported Pepe's pvaults.json as it was (his stashes were keyed by the login that typed
+// `!stash create`), and nothing re-keyed them afterwards. tools/stash-rekey.js moves existing rows (one keyed
+// transaction; balances, stake locks, the vault book and every NAV exactly unchanged). Every reader takes both forms, so
+// the code is right before and after that one-off.
+//   * the website acts as the signed-in account (no chat login needed); chat commands arrive from Pepe with the login
+//     (and the account Pepe resolved for it) - the site maps the login to its account through the link (resolveRecord)
+//     and checks access by account (owner / member) itself.
+//   * what Pepe sees (bot/state, the export): `owner` / `members` are the holders' CHAT keys - the linked login, else
+//     "u:<userId>" (Pepe's account nick, 1.99wt) - so his mirror, his `owner/name` refs and a detach to local mode keep
+//     working; `owner_id` / `owner_name` / `member_names` name the accounts.
+// The vault book (capital/vaults.js) holds shares per STASH ("s<id>"), so staking follows the stash's owner account.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -42,6 +57,91 @@ class Refuse extends Error {
 }
 const low = (s) => String(s || "").trim().replace(/^@+/, "").toLowerCase();
 const now = () => Date.now();
+
+// ── 1.99wy: holder keys (an account "u:<userId>", or a bare chat login no account has linked yet) ──
+const ACCT_RE = /^u:([A-Za-z0-9_-]{1,64})$/;
+const acctKey = (userId) => `u:${userId}`;
+const uidOfKey = (k) => { const m = ACCT_RE.exec(String(k || "").trim()); return m ? m[1] : null; };
+const isAcctKey = (k) => !!uidOfKey(k);
+/** A stored key in its canonical form: account keys keep their case (ids), logins are lower case. */
+const normKey = (k) => (isAcctKey(k) ? String(k).trim() : low(k));
+const stripGlobe = (s) => String(s || "").trim().replace(/^@+/, "").replace(/^\u{1F310}\s*/u, "");
+const ACOLS = "userId, username, camfrogUsername";
+
+/**
+ * What a holder key stands for NOW: {key, userId, username, login, chat} - `chat` is the key Pepe uses for it (the linked
+ * login, else "u:<userId>"; a bare login with no account stays itself). An account key follows merges. `cache` (a Map)
+ * is shared by one listing.
+ */
+async function holderInfo(key, cache = null) {
+  const k = normKey(key);
+  if (cache && cache.has(k)) return cache.get(k);
+  let out = { key: k, userId: null, username: null, login: null, chat: k };
+  const uid = uidOfKey(k);
+  if (uid) {
+    const id = (await require("./usernames").resolveUserId(uid)) || null;
+    const u = id ? (await getQuery(`SELECT ${ACOLS} FROM users WHERE userId = ?`, [id]))[0] : null;
+    if (u) out = { key: k, userId: u.userId, username: u.username, login: low(u.camfrogUsername) || null, chat: low(u.camfrogUsername) || acctKey(u.userId) };
+  } else if (k) {
+    const u = await getQuery(`SELECT ${ACOLS} FROM users WHERE lower(trim(camfrogUsername)) = ? LIMIT 2`, [k]);
+    if (u.length === 1) out = { key: k, userId: u[0].userId, username: u[0].username, login: k, chat: k };
+  }
+  if (cache) cache.set(k, out);
+  return out;
+}
+
+/**
+ * The actor of a stash command: {userId, username, login, keys} - `keys` are the holder keys that are THIS actor (its
+ * account key and, for a row not re-keyed yet, its linked login). From the website: {userId}. From Pepe: the account he
+ * resolved for the nick (userId / username) and/or the chat login - the site maps a login to its account through the
+ * link (an account nick "u:<id>" is that account). A login with no account is just itself.
+ */
+async function actorOf({ userId = null, username = null, login = null } = {}) {
+  const U = require("./usernames");
+  const lg = login == null ? "" : String(login).trim().replace(/^@+/, "");
+  const nickUid = uidOfKey(lg);
+  let row = null;
+  if (userId || nickUid) {
+    const r = await U.resolveRecord({ userId: userId || nickUid }, { cols: ACOLS });
+    if (r.ok) row = r.user;
+  }
+  if (!row && lg && !nickUid) {
+    const r = await U.resolveLogin(lg, { cols: ACOLS });
+    if (r.ok) row = r.user;
+  }
+  if (!row && username) {
+    const r = await U.resolve(String(username), { cols: ACOLS });
+    if (r.ok) row = r.user;
+  }
+  if (row) {
+    const keys = new Set([acctKey(row.userId)]);
+    if (row.camfrogUsername) keys.add(low(row.camfrogUsername));
+    return { userId: row.userId, username: row.username, login: low(row.camfrogUsername) || null, keys };
+  }
+  const bare = nickUid ? "" : low(lg);
+  const ok = LOGIN_RE.test(bare);
+  return { userId: null, username: null, login: ok ? bare : null, keys: new Set(ok ? [bare] : []) };
+}
+/** The key a NEW holder row gets for this actor: its account, else its bare login. */
+const holderKeyOf = (actor) => (actor && actor.userId ? acctKey(actor.userId) : (actor && actor.login) || null);
+/** A plain login string where an actor is expected (older callers): a login-only actor. */
+const asActor = (a) => (a && a.keys instanceof Set ? a
+  : { userId: null, username: null, login: low(a) || null, keys: new Set(low(a) ? [low(a)] : []) });
+/** The account a typed name means (a member to grant / revoke): "u:<id>", a linked chat login, a PATV username, else a
+ *  bare chat login. -> {key, keys, userId, label} | null */
+async function holderFor(who) {
+  const w = stripGlobe(who);
+  if (!w) return null;
+  let a = await actorOf({ login: w });
+  if (!a.userId && !isAcctKey(w)) {
+    const r = await require("./usernames").resolve(w, { cols: ACOLS });
+    if (r.ok) a = await actorOf({ userId: r.user.userId });
+  }
+  if (a.userId) return { key: acctKey(a.userId), keys: a.keys, userId: a.userId, label: a.login || a.username };
+  if (isAcctKey(w)) return null;
+  const b = low(w);
+  return LOGIN_RE.test(b) ? { key: b, keys: new Set([b]), userId: null, label: b } : null;
+}
 
 let ready = null;
 function init() {
@@ -83,14 +183,21 @@ async function enabled() {
 async function live() {
   return !!(await meta("imported"));
 }
+/** bumpRev for callers inside OTHER modules' transactions (login re-key, merges): never creates tables there (a rolled-back
+ *  CREATE would leave init() memoized without them) - only bumps when stash_meta exists. */
+async function bumpRevQuiet() {
+  if (!(await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'stash_meta'")).length) return;
+  await runQuery(`INSERT INTO stash_meta (key, value) VALUES ('rev', '1')
+                  ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)`);
+}
 async function bumpRev() {
   const r = ((await meta("rev")) || 0) + 1;
   await setMeta("rev", r);
   return r;
 }
 
-// one money transaction at a time on the shared connection (mainstage's chain, like boosts / stage settles)
-const tx = (fn) => require("./mainstage")._tx(fn);
+// one money transaction at a time on the shared connection (dbUtils.tx: the one chain every module shares)
+const tx = (fn) => require("./dbUtils").tx(fn);
 
 // 1.99nk: the shared PAT-amount parser (public/js/patamount.js = Pepe's pepe_amount rules): 1,000,000 / 5k / 1.5m / 1b
 function parseAmount(raw) {
@@ -106,38 +213,76 @@ async function membersOf(ids) {
   for (const r of rows) (out[r.stash_id] = out[r.stash_id] || []).push(r.login);
   return out;
 }
-function shape(s, members) {
-  return { id: String(s.id), name: s.name, owner: s.owner, members: members || [], balance: Number(s.balance) || 0,
-           staked: Number(s.staked) || 0, earned: Number(s.earned) || 0, created: s.created || null, closed: s.closed || null };
+/**
+ * One stash for readers. `owner` / `members` are CHAT keys (what Pepe and his mirror use: the linked login, else
+ * "u:<userId>"); `owner_key` / `member_keys` are the stored holder keys; `owner_id` / `owner_name` (+ member_ids /
+ * member_names) name the accounts (null id = a chat login no account has linked yet).
+ */
+async function shape(s, memberKeys, cache) {
+  const o = await holderInfo(s.owner, cache);
+  const ms = [];
+  for (const m of memberKeys || []) ms.push(await holderInfo(m, cache));
+  return { id: String(s.id), name: s.name, owner: o.chat, owner_key: o.key, owner_id: o.userId, owner_name: o.username || o.chat,
+           members: ms.map((m) => m.chat), member_keys: ms.map((m) => m.key), member_ids: ms.map((m) => m.userId),
+           member_names: ms.map((m) => m.username || m.chat),
+           balance: Number(s.balance) || 0, staked: Number(s.staked) || 0, earned: Number(s.earned) || 0,
+           created: s.created || null, closed: s.closed || null };
 }
-/** Every stash (closed too with all=true), in Pepe's snapshot shape. */
+/** Every stash (closed too with all=true). */
 async function list({ all = false } = {}) {
   await init();
   const rows = await getQuery(`SELECT * FROM stashes ${all ? "" : "WHERE closed IS NULL"} ORDER BY CAST(id AS INTEGER), id`);
   const mem = await membersOf(rows.map((r) => String(r.id)));
-  return rows.map((r) => shape(r, mem[String(r.id)]));
+  const cache = new Map();
+  const out = [];
+  for (const r of rows) out.push(await shape(r, mem[String(r.id)], cache));
+  return out;
 }
 async function get(id) {
   await init();
   const r = (await getQuery("SELECT * FROM stashes WHERE id = ?", [String(id)]))[0];
   if (!r) return null;
-  return shape(r, (await membersOf([String(r.id)]))[String(r.id)]);
+  return shape(r, (await membersOf([String(r.id)]))[String(r.id)], new Map());
 }
-const canUse = (s, login) => !!login && (low(s.owner) === low(login) || (s.members || []).some((m) => low(m) === low(login)));
+/** Is `actor` (actorOf(), or a plain login) this stash's owner? By account when both are known, else by key. */
+function isOwner(s, actor) {
+  const a = asActor(actor);
+  if (!s) return false;
+  if (a.userId && s.owner_id && s.owner_id === a.userId) return true;
+  const k = s.owner_key !== undefined ? s.owner_key : normKey(s.owner);
+  return a.keys.has(normKey(k)) || (s.owner_key !== undefined && a.keys.has(low(s.owner)));
+}
+/** May `actor` use this stash (owner or member)? */
+function canUse(s, actor) {
+  const a = asActor(actor);
+  if (!s || !a.keys.size) return false;
+  if (isOwner(s, a)) return true;
+  if (a.userId && (s.member_ids || []).some((id) => id && id === a.userId)) return true;
+  const keys = (s.member_keys || []).concat(s.members || []);
+  return keys.some((m) => a.keys.has(normKey(m)));
+}
+/** "owner/name" for a raw stashes row, with the owner's PATV username. */
+const refOf = async (row) => { const o = await holderInfo(row.owner); return `${o.username || o.chat}/${row.name}`; };
 const free = (s) => Math.max(0, (Number(s.balance) || 0) - (Number(s.staked) || 0));
+/** How someone typed an owner ("owner/name"): the chat key, the PATV username, the stored key (a leading 🌐 is ignored). */
+const ownerMatches = (s, hint) => {
+  const h = low(stripGlobe(hint));
+  return [s.owner, s.owner_name, s.owner_key].some((x) => x && low(x) === h);
+};
 
 /** A stash by the name a user typed: their own first, then ones they can use; "owner/name" disambiguates. */
-async function find(login, raw, { ownerOnly = false } = {}) {
+async function find(actor, raw, { ownerOnly = false } = {}) {
+  const a = actor && actor.keys instanceof Set ? actor : (await actorOf({ login: actor }));
   const r = low(raw);
   const slash = r.lastIndexOf("/");
   const ownerHint = slash >= 0 ? r.slice(0, slash) : "";
   const name = slash >= 0 ? r.slice(slash + 1) : r;
-  const hits = (await list()).filter((s) => s.name === name && (!ownerHint || low(s.owner) === ownerHint)
-    && (!ownerOnly || low(s.owner) === low(login)) && canUse(s, login));
-  const mine = hits.filter((s) => low(s.owner) === low(login));
+  const hits = (await list()).filter((s) => s.name === name && (!ownerHint || ownerMatches(s, ownerHint))
+    && (!ownerOnly || isOwner(s, a)) && canUse(s, a));
+  const mine = hits.filter((s) => isOwner(s, a));
   if (mine.length) return mine[0];
   if (hits.length === 1) return hits[0];
-  if (hits.length > 1) throw new Refuse(409, `More than one stash is called that - say owner/name, e.g. ${hits.slice(0, 3).map((h) => `${h.owner}/${name}`).join(" or ")}.`);
+  if (hits.length > 1) throw new Refuse(409, `More than one stash is called that - say owner/name, e.g. ${hits.slice(0, 3).map((h) => `${h.owner_name}/${name}`).join(" or ")}.`);
   throw new Refuse(404, `You don't have a stash called '${name}'.`);
 }
 
@@ -191,7 +336,7 @@ async function deposit({ stashId, login, userId, amount, key, via = "web" }) {
                                 d.code === ledger.E_INSUFFICIENT ? "E_INSUFFICIENT_PAT" : "E_TARGET_NOT_FOUND");
     await runQuery("UPDATE stashes SET balance = balance + ?, updated = ? WHERE id = ?", [amt, now(), s.id]);
     const bal = Number(s.balance) + amt;
-    const out = { ok: true, stash: String(s.id), ref: `${s.owner}/${s.name}`, amount: amt, balance: bal };
+    const out = { ok: true, stash: String(s.id), ref: await refOf(s), amount: amt, balance: bal };
     await record(key, { stash_id: s.id, kind: "deposit", amount: amt, login, user_id: userId, txid: d.transactionId, via }, out);
     await bumpRev();
     return out;
@@ -214,14 +359,14 @@ async function withdraw({ stashId, login, userId, amount, key, via = "web" }) {
       throw new Refuse(400, String(amount).toLowerCase() === "all" ? "There's nothing to take out." : `Move at least ${MIN_MOVE.toLocaleString("en-US")} PAT.`);
     }
     if (amt > f) {
-      throw new Refuse(409, `${s.owner}/${s.name} has ${f.toLocaleString("en-US")} PAT you can take out` +
+      throw new Refuse(409, `${await refOf(s)} has ${f.toLocaleString("en-US")} PAT you can take out` +
                             (Number(s.staked) ? ` (${Number(s.staked).toLocaleString("en-US")} PAT is staked - unstake it first).` : "."), "E_INSUFFICIENT_PAT");
     }
     const u = await runQuery("UPDATE stashes SET balance = balance - ?, updated = ? WHERE id = ? AND balance - staked >= ?", [amt, now(), s.id, amt]);
     if (!u || u.changes !== 1) throw new Refuse(409, "The stash changed - try again.");
     const c = await ledger.post(userId, amt, "stash-withdraw", { resolveMerged: true, source: "stash-withdraw" });
     if (!c.ok) throw new Refuse(404, "Couldn't find the account to pay.", "E_TARGET_NOT_FOUND");   // rolls the stash debit back
-    const out = { ok: true, stash: String(s.id), ref: `${s.owner}/${s.name}`, amount: amt, balance: Number(s.balance) - amt };
+    const out = { ok: true, stash: String(s.id), ref: await refOf(s), amount: amt, balance: Number(s.balance) - amt };
     await record(key, { stash_id: s.id, kind: "withdraw", amount: -amt, login, user_id: c.userId, txid: c.transactionId, via }, out);
     await bumpRev();
     return out;
@@ -265,43 +410,58 @@ async function moveStatus(key) {
 }
 
 // ── no money: create / members / rename / close ──
-async function create({ login, name, by = "web" }) {
+/** The open stashes held under any of these keys (one account's: its "u:<id>" + a not-yet-re-keyed login). */
+async function ownedBy(keys) {
+  const ks = [...keys].map((k) => low(k)).filter(Boolean);
+  if (!ks.length) return [];
+  return getQuery(`SELECT id, name FROM stashes WHERE closed IS NULL AND lower(owner) IN (${ks.map(() => "?").join(",")})`, ks);
+}
+/** `actor` (actorOf()) or, for older callers, `login` (resolved to its account through the link). */
+async function create({ login, actor, name, by = "web" }) {
   await requireLive();
   name = low(name);
   if (!NAME_RE.test(name)) throw new Refuse(400, "Stash names are 1-20 letters, digits, - or _.");
-  if (!LOGIN_RE.test(String(login || ""))) throw new Refuse(400, "Link a chat account first (Settings → Account → Connections) - stashes belong to it.", "E_NOT_LINKED");
+  const a = actor && actor.keys instanceof Set ? actor : await actorOf({ login });
+  const ownerKey = holderKeyOf(a);
+  if (!ownerKey) throw new Refuse(400, "Couldn't find your PATV account.", "E_TARGET_NOT_FOUND");
   return tx(async () => {
-    const owned = await getQuery("SELECT name FROM stashes WHERE owner = ? AND closed IS NULL", [low(login)]);
+    const owned = await ownedBy(a.keys);
     if (owned.length >= MAX_OWNED) throw new Refuse(409, `You already own ${owned.length} stashes (max ${MAX_OWNED}).`);
     if (owned.some((s) => s.name === name)) throw new Refuse(409, `You already have a stash called '${name}'.`);
     const seq = Math.max(Number((await meta("seq")) || 0),
                          Number(((await getQuery("SELECT MAX(CAST(id AS INTEGER)) AS m FROM stashes"))[0] || {}).m || 0)) + 1;
     await setMeta("seq", seq);
     await runQuery("INSERT INTO stashes (id, owner, name, balance, staked, earned, created, updated) VALUES (?, ?, ?, 0, 0, 0, ?, ?)",
-                   [String(seq), low(login), name, now() / 1000, now()]);
+                   [String(seq), ownerKey, name, now() / 1000, now()]);
     await bumpRev();
-    return { ok: true, stash: shape({ id: seq, owner: low(login), name, balance: 0, staked: 0, earned: 0, created: now() / 1000 }, []), by };
+    return { ok: true, stash: await get(String(seq)), by };
   });
 }
 async function setMembers({ stashId, who, add }) {
   await requireLive();
-  const w = low(who);
-  if (!LOGIN_RE.test(w)) throw new Refuse(400, `I don't know who '${who}' is.`);
+  const h = await holderFor(who);
+  if (!h) throw new Refuse(400, `I don't know who '${who}' is.`);
   return tx(async () => {
     const s = await get(stashId);
     if (!s || s.closed) throw new Refuse(404, "That stash doesn't exist (or is closed).");
+    const isThem = (key, id) => (h.userId && id && id === h.userId) || h.keys.has(normKey(key));
     if (add) {
-      if (w === low(s.owner)) throw new Refuse(409, "You already own it.");
-      if (s.members.some((m) => low(m) === w)) throw new Refuse(409, `${w} already has access.`);
+      if (isThem(s.owner_key, s.owner_id)) throw new Refuse(409, "You already own it.");
+      if (s.member_keys.some((m, i) => isThem(m, s.member_ids[i]))) throw new Refuse(409, `${h.label} already has access.`);
       if (s.members.length >= MAX_MEMBERS) throw new Refuse(409, `A stash can have at most ${MAX_MEMBERS} members.`);
-      await runQuery("INSERT INTO stash_members (stash_id, login) VALUES (?, ?)", [s.id, w]);
+      await runQuery("INSERT INTO stash_members (stash_id, login) VALUES (?, ?)", [s.id, h.key]);
     } else {
-      const r = await runQuery("DELETE FROM stash_members WHERE stash_id = ? AND login = ?", [s.id, w]);
-      if (!r || !r.changes) throw new Refuse(404, `${w} doesn't have access.`);
+      let n = 0;
+      for (let i = 0; i < s.member_keys.length; i++) {
+        if (!isThem(s.member_keys[i], s.member_ids[i])) continue;
+        const r = await runQuery("DELETE FROM stash_members WHERE stash_id = ? AND lower(login) = lower(?)", [s.id, s.member_keys[i]]);
+        n += (r && r.changes) || 0;
+      }
+      if (!n) throw new Refuse(404, `${h.label} doesn't have access.`);
     }
     await runQuery("UPDATE stashes SET updated = ? WHERE id = ?", [now(), s.id]);
     await bumpRev();
-    return { ok: true, stash: s.id, who: w, add: !!add };
+    return { ok: true, stash: s.id, who: h.label, who_key: h.key, add: !!add };
   });
 }
 async function rename({ stashId, name }) {
@@ -311,7 +471,8 @@ async function rename({ stashId, name }) {
   return tx(async () => {
     const s = await get(stashId);
     if (!s || s.closed) throw new Refuse(404, "That stash doesn't exist (or is closed).");
-    if ((await getQuery("SELECT 1 FROM stashes WHERE owner = ? AND name = ? AND closed IS NULL AND id != ?", [low(s.owner), name, s.id])).length) {
+    const ownerKeys = s.owner_id ? (await actorOf({ userId: s.owner_id })).keys : new Set([s.owner_key]);
+    if ((await ownedBy(ownerKeys)).some((x) => x.name === name && String(x.id) !== String(s.id))) {
       throw new Refuse(409, `You already have a stash called '${name}'.`);
     }
     await runQuery("UPDATE stashes SET name = ?, updated = ? WHERE id = ?", [name, now(), s.id]);
@@ -401,6 +562,7 @@ async function importFromPepe(body) {
                      [s.id, s.owner, s.name, s.balance, s.staked, s.earned, s.created, s.closed, now()]);
       for (const m of s.members) await runQuery("INSERT OR IGNORE INTO stash_members (stash_id, login) VALUES (?, ?)", [s.id, m]);
     }
+    await rekeyInTx();                                                              // 1.99wy: held by accounts from the start
     const check = (await getQuery("SELECT COALESCE(SUM(balance),0) AS t, COUNT(*) AS n FROM stashes"))[0];
     const open = (await getQuery("SELECT COALESCE(SUM(balance),0) AS t FROM stashes WHERE closed IS NULL"))[0].t;
     if (check.n !== list.length || open !== tot) throw new Refuse(500, "the imported totals didn't verify - rolled back");
@@ -410,6 +572,171 @@ async function importFromPepe(body) {
   });
   console.log(`[stashes] imported ${list.length} stash(es) holding ${tot} PAT from Pepe (backup ${backup})`);
   return { ok: true, total: tot, count: list.length, backup };
+}
+
+// ── 1.99wy: login keys -> account keys ──
+/** The key a stored holder key should have now: an account key follows merges; a login maps to the account linked to it
+ *  NOW (the link; 1.99tj - never through the login history); a login no account has stays itself. -> {to, why} */
+async function targetKey(key) {
+  const k = normKey(key);
+  const uid = uidOfKey(k);
+  if (uid) {
+    const id = await require("./usernames").resolveUserId(uid);
+    return id ? { to: acctKey(id), why: id === uid ? "account" : "merged account" } : { to: k, why: "account not found (kept)" };
+  }
+  const r = await require("./usernames").resolveLogin(k, { cols: "userId" });
+  return r.ok ? { to: acctKey(r.user.userId), why: "linked login" } : { to: k, why: r.code === "E_AMBIGUOUS" ? "login on 2+ accounts (kept)" : "no account (kept)" };
+}
+
+/**
+ * Inside the caller's transaction: every owner / member key to its account key (targetKey). A member who is the owner's
+ * own account is dropped (the owner isn't a member), and so is a second row for the same account. Balances, stake
+ * locks, ids, names, the move journal and the vault book are not touched. -> {owners: [...], members: [...], kept: [...]}
+ */
+async function rekeyInTx() {
+  const out = { owners: [], members: [], kept: [] };
+  const cache = new Map();
+  const tk = async (k) => { if (!cache.has(k)) cache.set(k, await targetKey(k)); return cache.get(k); };
+  const owners = {};
+  for (const s of await getQuery("SELECT id, owner FROM stashes ORDER BY CAST(id AS INTEGER), id")) {
+    const t = await tk(s.owner);
+    owners[String(s.id)] = t.to;
+    if (t.to !== s.owner) {
+      const u = await runQuery("UPDATE stashes SET owner = ? WHERE id = ? AND owner = ?", [t.to, s.id, s.owner]);
+      if (!u || u.changes !== 1) throw new Refuse(409, `stash ${s.id} changed during the re-key`);
+      out.owners.push({ stash: String(s.id), from: s.owner, to: t.to, why: t.why });
+    } else if (!isAcctKey(t.to)) out.kept.push({ stash: String(s.id), role: "owner", key: s.owner, why: t.why });
+  }
+  for (const m of await getQuery("SELECT stash_id, login FROM stash_members ORDER BY stash_id, rowid")) {
+    const t = await tk(m.login);
+    const sid = String(m.stash_id);
+    const drop = t.to === owners[sid] ? "the owner's own account" : null;
+    if (t.to === m.login && !drop) { if (!isAcctKey(t.to)) out.kept.push({ stash: sid, role: "member", key: m.login, why: t.why }); continue; }
+    await runQuery("DELETE FROM stash_members WHERE stash_id = ? AND login = ?", [m.stash_id, m.login]);
+    let why = drop;
+    if (!drop) {
+      const ins = await runQuery("INSERT OR IGNORE INTO stash_members (stash_id, login) VALUES (?, ?)", [m.stash_id, t.to]);
+      if (!ins || !ins.changes) why = "already a member as that account";
+    }
+    out.members.push({ stash: sid, from: m.login, to: why ? null : t.to, why: why || t.why });
+  }
+  if (out.owners.length || out.members.length) await bumpRev();
+  return out;
+}
+
+/** The exact state the re-key must leave unchanged, per stash + totals (+ a digest). Read inside the transaction. */
+async function moneyFacts() {
+  const rows = await getQuery("SELECT id, name, balance, staked, earned, created, closed FROM stashes ORDER BY CAST(id AS INTEGER), id");
+  const moves = (await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS a, COALESCE(SUM(staked_delta),0) AS sd FROM stash_moves"))[0];
+  const open = rows.filter((r) => r.closed == null);
+  const facts = { stashes: rows.map((r) => [String(r.id), r.name, Number(r.balance), Number(r.staked), Number(r.earned), r.created, r.closed]),
+                  count: rows.length, open: open.length, total: open.reduce((t, r) => t + Number(r.balance), 0),
+                  staked: open.reduce((t, r) => t + Number(r.staked), 0), moves: [moves.n, moves.a, moves.sd] };
+  facts.digest = crypto.createHash("sha256").update(JSON.stringify(facts), "utf8").digest("hex");
+  return facts;
+}
+
+/**
+ * The one-off (tools/stash-rekey.js): login-keyed stashes -> account keys, keyed by `key`, ONE transaction. Checks, in the
+ * same transaction: every stash's balance / stake lock / earned / name / dates, the totals, the move journal, the vault
+ * book (shares per stash), every vault's NAV and share price, and the total PAT supply - each exactly equal before and
+ * after, else it rolls back. apply=false runs the same and rolls back (the dry run). A key already applied answers its
+ * stored result; `supplyFn` / `vaultFacts` are injectable for tests.
+ */
+class DryRun extends Error {}
+async function rekeyAll({ key, apply = false, supplyFn = null, vaultFacts = null, backup = true } = {}) {
+  await init();
+  if (!/^[A-Za-z0-9_.:-]{4,80}$/.test(String(key || ""))) throw new Refuse(400, "give a --key (4-80 of A-Z a-z 0-9 _ . : -)");
+  if (!(await live())) throw new Refuse(409, "the stashes aren't on the site (not imported) - nothing to re-key", "E_NOT_LIVE");
+  const done = await meta(`rekey:${key}`);
+  if (done) return Object.assign({}, done, { already: true });
+  const supply = supplyFn || (async () => (await require("./supply").patSupply()).total);
+  const vfacts = vaultFacts || defaultVaultFacts;
+  const bk = apply && backup ? await backupDb("pre-stash-rekey") : null;
+  let result = null;
+  try {
+    await tx(async () => {
+      const before = { money: await moneyFacts(), vaults: await vfacts(), supply: await supply(),
+                       holders: await getQuery("SELECT (SELECT COUNT(*) FROM stashes) AS s, (SELECT COUNT(*) FROM stash_members) AS m") };
+      const changes = await rekeyInTx();
+      const after = { money: await moneyFacts(), vaults: await vfacts(), supply: await supply() };
+      const checks = {
+        stashes: before.money.digest === after.money.digest,
+        vault_book: JSON.stringify(before.vaults) === JSON.stringify(after.vaults),
+        supply: before.supply === after.supply,
+      };
+      result = { ok: Object.values(checks).every(Boolean), key, apply, checks, changes,
+                 totals: { count: after.money.count, open: after.money.open, total: after.money.total, staked: after.money.staked,
+                           supply: after.supply, digest: after.money.digest },
+                 vaults: after.vaults, backup: bk };
+      if (!result.ok) throw new Refuse(500, `the re-key didn't verify (${Object.keys(checks).filter((k) => !checks[k]).join(", ")}) - rolled back`, "E_VERIFY");
+      if (!apply) throw new DryRun("dry run");
+      await setMeta(`rekey:${key}`, Object.assign({}, result, { at: now() }));
+      await setMeta("acct_keyed", { at: now(), key });
+    });
+  } catch (e) {
+    if (!(e instanceof DryRun)) throw e;
+  }
+  if (apply && result) console.log(`[stashes] re-keyed to accounts (${key}): ${result.changes.owners.length} owner(s), ${result.changes.members.length} member row(s), ${result.changes.kept.length} kept; totals unchanged`);
+  return result;
+}
+/** The vault book and every NAV / share price, read in the open transaction (capital/vaults.js; {} without it). */
+async function defaultVaultFacts() {
+  let V;
+  try { V = require("./capital/vaults"); } catch (e) { return {}; }
+  const d = await V.load();
+  if (!d || !d.inited) return { inited: false };
+  const k = await V.ctx();
+  const p = V.prices(d, k);
+  const nav = {};
+  for (const v of V.VAULTS) nav[v] = V.nav(v, k);
+  return { book: crypto.createHash("sha256").update(JSON.stringify({ v: d.v, auto: d.auto, queue: d.queue }), "utf8").digest("hex"),
+           nav, prices: p, auto_nav: Number(d.auto.total) * p[V.AUTO] };
+}
+
+/** An account just linked `login` (loginrekey.changed, in its transaction): stash rows held by that bare login (no account
+ *  had it) and rows held by its OLD login become the account's. -> [{table, action, key, from, to}] */
+async function claimLogin({ userId, oldLogin = null, newLogin = null } = {}) {
+  if (!userId) return [];
+  const log = [];
+  const to = acctKey(userId);
+  for (const l of [low(oldLogin), low(newLogin)].filter((x) => x && !isAcctKey(x))) {
+    for (const r of await getQuery("SELECT id FROM stashes WHERE lower(owner) = ?", [l])) {
+      await runQuery("UPDATE stashes SET owner = ?, updated = ? WHERE id = ?", [to, now(), r.id]);
+      log.push({ table: "stashes", action: "owner", key: String(r.id), from: l, to });
+    }
+    for (const r of await getQuery("SELECT stash_id FROM stash_members WHERE lower(login) = ?", [l])) {
+      const own = (await getQuery("SELECT owner FROM stashes WHERE id = ?", [r.stash_id]))[0];
+      if (!own || own.owner !== to) await runQuery("INSERT OR IGNORE INTO stash_members (stash_id, login) VALUES (?, ?)", [r.stash_id, to]);
+      await runQuery("DELETE FROM stash_members WHERE stash_id = ? AND lower(login) = ?", [r.stash_id, l]);
+      log.push({ table: "stash_members", action: "member", key: String(r.stash_id), from: l, to });
+    }
+  }
+  if (log.length) await bumpRevQuiet();
+  return log;
+}
+
+/** accountMerge (moveUserRows, in its transaction): the merged-away account's stashes / memberships become the target's. */
+async function mergeAccounts(fromId, toId) {
+  if (!fromId || !toId || fromId === toId) return { owners: 0, members: 0 };
+  const hasT = async (t) => (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length > 0;
+  if (!(await hasT("stashes"))) return { owners: 0, members: 0 };
+  const from = acctKey(fromId), to = acctKey(toId);
+  const o = await runQuery("UPDATE stashes SET owner = ?, updated = ? WHERE owner = ?", [to, now(), from]);
+  let m = 0;
+  if (await hasT("stash_members")) {
+    for (const r of await getQuery("SELECT stash_id FROM stash_members WHERE login = ?", [from])) {
+      const own = (await getQuery("SELECT owner FROM stashes WHERE id = ?", [r.stash_id]))[0];
+      if (!own || own.owner !== to) await runQuery("INSERT OR IGNORE INTO stash_members (stash_id, login) VALUES (?, ?)", [r.stash_id, to]);
+      await runQuery("DELETE FROM stash_members WHERE stash_id = ? AND login = ?", [r.stash_id, from]);
+      m++;
+    }
+    // the target may now be listed as a member of a stash it owns
+    await runQuery("DELETE FROM stash_members WHERE login = ? AND stash_id IN (SELECT id FROM stashes WHERE owner = ?)", [to, to]);
+  }
+  const owners = (o && o.changes) || 0;
+  if (owners || m) await bumpRevQuiet();
+  return { owners, members: m };
 }
 
 // ── the website's /act stash form (wallet.ejs) ──
@@ -422,35 +749,34 @@ async function fromForm(userId, words, idem) {
   if (!(await live())) return null;
   const sub = low(words[0] || "list");
   if (["stake", "unstake", "yield", "vaults"].includes(sub)) return null;
-  const u = (await getQuery("SELECT username, camfrogUsername FROM users WHERE userId = ?", [userId]))[0];
-  if (!u) return "Couldn't find your account.";
-  const me = u.camfrogUsername;
-  if (!me) return "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) - stashes belong to it.";
+  // 1.99wy: the signed-in ACCOUNT acts - no chat login needed (stashes belong to accounts)
+  const me = await actorOf({ userId });
+  if (!me.userId) return "Couldn't find your account.";
   const key = (op) => `web:${userId}:${op}:${/^[A-Za-z0-9_-]{8,64}$/.test(String(idem || "")) ? idem : crypto.randomBytes(9).toString("hex")}`;
   try {
     if (sub === "create" || sub === "new" || sub === "open") {
-      const r = await create({ login: me, name: words[1] });
+      const r = await create({ actor: me, name: words[1] });
       return `🔐 Stash '${r.stash.name}' created. Deposit into it below; grant someone access to share it.`;
     }
     if (["deposit", "in", "put", "store"].includes(sub)) {
       const s = await find(me, words[1]);
       const amt = parseAmount(words[2]);
       if (!amt) return `Move at least ${fmt(MIN_MOVE)} PAT.`;
-      const r = await deposit({ stashId: s.id, login: me, userId, amount: amt, key: key("deposit") });
+      const r = await deposit({ stashId: s.id, login: me.login || acctKey(userId), userId, amount: amt, key: key("deposit") });
       return r.dup ? "Already done - that deposit went through once." : `🔐 Deposited ${fmt(r.amount)} PAT into ${r.ref} - balance ${fmt(r.balance)} PAT.`;
     }
     if (["withdraw", "out", "take"].includes(sub)) {
       const s = await find(me, words[1]);
       const raw = low(words[2]) === "all" ? "all" : parseAmount(words[2]);
       if (!raw) return `Move at least ${fmt(MIN_MOVE)} PAT.`;
-      const r = await withdraw({ stashId: s.id, login: me, userId, amount: raw, key: key("withdraw") });
+      const r = await withdraw({ stashId: s.id, login: me.login || acctKey(userId), userId, amount: raw, key: key("withdraw") });
       return r.dup ? "Already done - that withdrawal went through once." : `🔐 Withdrew ${fmt(r.amount)} PAT from ${r.ref} to your wallet. Left: ${fmt(r.balance)} PAT.`;
     }
     if (["grant", "share", "allow", "add", "revoke", "remove", "unshare", "kick"].includes(sub)) {
       const add = ["grant", "share", "allow", "add"].includes(sub);
       const s = await find(me, words[1], { ownerOnly: true });
       const r = await setMembers({ stashId: s.id, who: words[2], add });
-      return `🔐 ${r.who} ${add ? "can now use" : "no longer has access to"} ${s.owner}/${s.name}.`;
+      return `🔐 ${r.who} ${add ? "can now use" : "no longer has access to"} ${s.owner_name}/${s.name}.`;
     }
     if (sub === "rename") {
       const s = await find(me, words[1], { ownerOnly: true });
@@ -470,7 +796,7 @@ async function fromForm(userId, words, idem) {
     }
     const mine = (await list()).filter((s) => canUse(s, me));
     if (!mine.length) return "🔐 No stashes yet - create one below.";
-    return mine.slice(0, 6).map((s) => `🔐 ${s.owner}/${s.name}: ${fmt(s.balance)} PAT`).join(" · ");
+    return mine.slice(0, 6).map((s) => `🔐 ${s.owner_name}/${s.name}: ${fmt(s.balance)} PAT`).join(" · ");
   } catch (e) {
     if (e instanceof Refuse) return e.message;
     console.error("[stashes] form:", e);
@@ -511,22 +837,31 @@ function register(app, { isBotToken, addUser }) {
   }));
   app.post("/api/stash/bot/act", bot(async (b) => {
     const op = String(b.op || "");
-    const login = low(b.login);
-    if (op === "create") return create({ login, name: b.name, by: "pepe" });
-    if (op === "members") return setMembers({ stashId: b.stash, who: b.who, add: !!b.add });
-    if (op === "rename") return rename({ stashId: b.stash, name: b.name });
+    const login = String(b.login || "").trim();
     if (op === "move") return botMove({ stashId: b.stash, amount: b.amount, stakedDelta: b.staked_delta, earned: b.earned, key: b.key, kind: b.kind, why: b.why });
     if (op === "move_status") return { ok: true, result: await moveStatus(b.key) };
-    // money moves for a Camfrog user: Pepe resolved the account (b.username) and checked access with his alias rules
-    const uid = b.userId ? await require("./usernames").resolveUserId(b.userId)        // 1.99tc: the stable id first, old names resolve
+    // 1.99wy: a chat command acts as the ACCOUNT: the one Pepe resolved for the nick (user_id / userId / username - the
+    // account he charges), else the account the login is linked to (resolveRecord through the link). Access is checked
+    // here by account: owner for owner-only ops, owner or member for money moves.
+    const sentId = b.user_id || b.userId || null;
+    const uid = sentId ? await require("./usernames").resolveUserId(sentId)            // 1.99tc: the stable id first, old names resolve
       : b.username ? ((await require("./usernames").findUser(b.username, { cols: "userId" })) || {}).userId || null : null;
-    if (op === "deposit" || op === "withdraw" || op === "close") {
-      if (!uid) throw new Refuse(404, "couldn't find a PAT account", "E_TARGET_NOT_FOUND");
-      if (op === "deposit") return deposit({ stashId: b.stash, login, userId: uid, amount: b.amount, key: b.key, via: "chat" });
-      if (op === "withdraw") return withdraw({ stashId: b.stash, login, userId: uid, amount: b.amount, key: b.key, via: "chat" });
-      return close({ stashId: b.stash, ownerUserId: uid, key: b.key, via: "chat", unstake: !!b.unstake });
+    const actor = uid ? await actorOf({ userId: uid }) : await actorOf({ login });
+    if (op === "create") return create({ actor, name: b.name, by: "pepe" });
+    if (!["members", "rename", "close", "deposit", "withdraw"].includes(op)) throw new Refuse(400, "unknown op");
+    const s = await get(b.stash);
+    if (!s || s.closed) throw new Refuse(404, "That stash doesn't exist (or is closed).");
+    const ownerOp = ["members", "rename", "close"].includes(op);
+    if (ownerOp ? !isOwner(s, actor) : !canUse(s, actor)) {
+      throw new Refuse(403, ownerOp ? "Only the stash's owner can do that." : "You don't have access to that stash.", "E_NO_ACCESS");
     }
-    throw new Refuse(400, "unknown op");
+    if (op === "members") return setMembers({ stashId: b.stash, who: b.who, add: !!b.add });
+    if (op === "rename") return rename({ stashId: b.stash, name: b.name });
+    if (!actor.userId) throw new Refuse(404, "couldn't find a PAT account", "E_TARGET_NOT_FOUND");
+    const lg = low(login) || actor.login || acctKey(actor.userId);
+    if (op === "deposit") return deposit({ stashId: b.stash, login: lg, userId: actor.userId, amount: b.amount, key: b.key, via: "chat" });
+    if (op === "withdraw") return withdraw({ stashId: b.stash, login: lg, userId: actor.userId, amount: b.amount, key: b.key, via: "chat" });
+    return close({ stashId: b.stash, ownerUserId: actor.userId, key: b.key, via: "chat", unstake: !!b.unstake });
   }));
   // admins: switch the backend on/off before the import (after it, the site owns the stashes for good)
   app.post("/api/admin/stash-backend", addUser, async (req, res) => {
@@ -542,4 +877,7 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { init, register, enabled, live, list, get, find, total, deposit, withdraw, botMove, moveStatus, create, setMembers,
-                   rename, close, importFromPepe, fromForm, parseAmount, canUse, free, userIdFor, Refuse, MIN_MOVE, MAX_OWNED };
+                   rename, close, importFromPepe, fromForm, parseAmount, canUse, isOwner, free, userIdFor, Refuse, MIN_MOVE, MAX_OWNED,
+                   // 1.99wy: account keys
+                   actorOf, holderInfo, holderFor, acctKey, uidOfKey, isAcctKey, targetKey, rekeyInTx, rekeyAll, moneyFacts, claimLogin,
+                   mergeAccounts };

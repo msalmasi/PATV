@@ -2211,7 +2211,7 @@ async function roomPostRefusal(u, roomId) {
   const S = await roomSettings(roomId);
   const R = rooms.getCached(roomId);
   const name = R ? R.title : roomId;
-  // 1.99ws: "linked" = any proven identity (verified.js) - Camfrog, Discord, Twitch, Telegram, Google or Plex
+  // 1.99ws: "linked" = any proven identity (verified.js) - Camfrog, Discord, Twitch, Telegram, Google, Plex or (1.99wy) a verified email
   if (S.who === "linked" && !(await VERIFIED.verify(u))) return { status: 403, message: `${name} takes posts from verified accounts - ${VERIFIED.LINK_HINT}.` };
   if (S.who === "followers") {
     const ok = followerCheck ? await followerCheck(u.userId, roomId) : false;

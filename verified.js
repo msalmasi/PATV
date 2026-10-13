@@ -14,8 +14,12 @@
 //   plex      plex_members           - a Plex account linked by a trusted source (plexsso.TRUSTED: self / admin / wizarr
 //                                      / overseerr); plex_id is the key, so one Plex account -> one PATV account
 //
-// NOT counted: a verified email address (a fresh address costs nothing - the audit's list leaves it out), and site
-// level / account age, which stay each gate's own separate fallback ("verified OR level >= N").
+//   email     users.isEmailVerified - 1.99wy (the user, 2026-10-13): a VERIFIED email address counts too, "just as trivial
+//             to create as Discord / Google / Plex or Camfrog". The address has to be a real one (an "@") the account
+//             confirmed (the emailed link, or a provider that reports it verified); users.email is unique per account.
+//
+// NOT counted: an unconfirmed email address, and site level / account age, which stay each gate's own separate fallback
+// ("verified OR level >= N").
 //
 // What each gate protects against (all keep that protection - every proof above costs at least what a Discord or
 // Twitch account did, and those already counted):
@@ -42,10 +46,14 @@ const COLUMN_PROOFS = [["camfrog", "camfrogUsername"], ["discord", "discordId"],
 const CACHE_MS = 60 * 1000;
 const cache = new Map();          // userId -> {at, list}  (the table proofs only)
 
+// 1.99wy: a confirmed email address on the row (isEmailVerified + an address with "@"); a row without both columns gets it
+// from the table proof below
+const emailProof = (u) => !!u && Number(u.isEmailVerified) === 1 && String(u.email || "").includes("@");
 function columnProofs(u) {
   const out = [];
   if (!u) return out;
   for (const [name, col] of COLUMN_PROOFS) if (u[col]) out.push(name);
+  if (emailProof(u)) out.push("email");
   return out;
 }
 
@@ -60,6 +68,7 @@ async function tableProofs(userId, { fresh = false } = {}) {
   const hit = cache.get(id);
   if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return hit.list;
   const list = [];
+  if ((await rows("SELECT 1 FROM users WHERE userId = ? AND isEmailVerified = 1 AND email LIKE '%@%' LIMIT 1", [id])).length) list.push("email");
   if ((await rows("SELECT 1 FROM telegram_links WHERE user_id = ? LIMIT 1", [id])).length) list.push("telegram");
   if ((await rows("SELECT 1 FROM sso_links WHERE provider = 'google' AND user_id = ? AND link_source = 'self' LIMIT 1", [id])).length) list.push("google");
   let trusted = ["self", "admin", "wizarr", "overseerr"];
@@ -74,7 +83,7 @@ async function tableProofs(userId, { fresh = false } = {}) {
 /** Attach `proofs` (every proven identity) to an account row and return it. Needs u.userId. */
 async function attach(u, opts) {
   if (!u) return u;
-  const list = columnProofs(u).concat(await tableProofs(u.userId, opts));
+  const list = [...new Set(columnProofs(u).concat(await tableProofs(u.userId, opts)))];
   Object.defineProperty(u, "proofs", { value: list, enumerable: false, configurable: true, writable: true });
   return u;
 }
@@ -97,6 +106,6 @@ async function verify(u) {
 function forget(userId) { cache.delete(String(userId || "")); }
 
 // The refusal copy every converted gate uses for "link something first".
-const LINK_HINT = "link an account in Settings → Account → Connections (a chat account - for Camfrog, type !verify in a room with Pepe - or Discord, Twitch, Telegram, Google or Plex)";
+const LINK_HINT = "verify your email address, or link an account in Settings → Account → Connections (a chat account - for Camfrog, type !verify in a room with Pepe - or Discord, Twitch, Telegram, Google or Plex)";
 
 module.exports = { isVerified, verify, attach, tableProofs, columnProofs, forget, LINK_HINT, _cache: cache };

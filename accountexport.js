@@ -112,9 +112,12 @@ async function collect(userId, { at = now() } = {}) {
   await put("wallet", "level_up_rewards", rows("levelup_rewards", "userId = ?", [uid]));
   await put("wallet", "welcome_bonus", rows("welcome_bonus", "userId = ?", [uid], { omit: ["dup_of"] }));
   // holdings
-  if (login) {
-    await put("holdings", "stashes_owned", rows("stashes", "owner = ?", [login]));
-    await put("holdings", "stash_memberships", rows("stash_members", "login = ?", [login]));
+  // 1.99wy: stashes are held by the account ("u:<userId>"); a row its login still holds (not re-keyed yet) too
+  {
+    const ks = [`u:${uid}`].concat(login ? [String(login).toLowerCase()] : []);
+    const IN = `(${ks.map(() => "?").join(",")})`;
+    await put("holdings", "stashes_owned", rows("stashes", `lower(owner) IN ${IN}`, ks.map((k) => k.toLowerCase())));
+    await put("holdings", "stash_memberships", rows("stash_members", `lower(login) IN ${IN}`, ks.map((k) => k.toLowerCase())));
   }
   await put("holdings", "stash_moves", rows("stash_moves", "user_id = ?", [uid]));
   await put("holdings", "escrow_holds", rows("escrow_holds", "user_id = ?", [uid], { omit: ["cp"] }));

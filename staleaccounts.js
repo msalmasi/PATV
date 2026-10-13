@@ -301,7 +301,8 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     }
     // Pepe keys loans/stashes/gangs by Camfrog login: those belong to the person (the primary account),
     // so a duplicate copy only picks up what names its own PATV username
-    const keys = (f.dupOf ? [String(f.username || "").toLowerCase()] : [f.login, String(f.username || "").toLowerCase()]).filter(Boolean);
+    // 1.99wy: an account with no chat login holds stashes (and Pepe's account-nick records) as "u:<userId>"
+    const keys = (f.dupOf ? [String(f.username || "").toLowerCase()] : [f.login, String(f.username || "").toLowerCase(), `u:${f.userId}`.toLowerCase()]).filter(Boolean);
     for (const fx of facts) {
       for (const k of keys) for (const why of fx.holds.get(k) || []) f.holds.add(why);
       if (f.login) f.cfSeen = Math.max(f.cfSeen, fx.seen.get(f.login) || 0);

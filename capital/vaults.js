@@ -171,6 +171,12 @@ async function request(actor, a, t) {
   const S = require("../stashes");
   const s = await S.get(a.stash);
   if (!s || s.closed) return { ok: false, code: "no_stash", error: "that stash doesn't exist (or is closed)." };
+  // 1.99wy: only the stash's OWNER (an account; a chat login maps to its account through the link) stakes / unstakes it.
+  // Pepe's own engine calls (actor.pepe) aren't a person.
+  if (!actor.pepe && (actor.userId || actor.login || actor.username)) {
+    const who = await S.actorOf({ userId: actor.userId || null, username: actor.username || null, login: actor.login || null });
+    if (!S.isOwner(s, who)) return { ok: false, code: "not_owner", error: "only the stash's owner can stake or unstake it." };
+  }
   const kind = a.kind === "withdraw" ? "withdraw" : "deposit";
   const vault = String(a.vault || (kind === "deposit" ? AUTO : "")).toLowerCase();
   if (![...VAULTS, AUTO].includes(vault)) return { ok: false, code: "bad_vault", error: "the vaults are bank, house, mm (market maker) and auto." };
@@ -181,7 +187,7 @@ async function request(actor, a, t) {
   if (kind === "deposit") {
     const amt = Math.trunc(Number(a.amount) || 0);
     if (amt < Number(c.min_move)) return { ok: false, code: "min", error: `stake at least PAT ${fmt(c.min_move)}.` };
-    if (amt > S.free(s)) return { ok: false, code: "insufficient", error: `${s.owner}/${s.name} only has PAT ${fmt(S.free(s))} free.` };
+    if (amt > S.free(s)) return { ok: false, code: "insufficient", error: `${s.owner_name}/${s.name} only has PAT ${fmt(S.free(s))} free.` };
     item.amount = amt;
     item.tid_hold = `${qid}-hold`;
     await transfer(item.tid_hold, `stash:${s.id}`, "vaultfloat", amt, "vault deposit");
@@ -567,7 +573,8 @@ async function publish() {
   for (const id of ids) {
     const [pos] = position(d, id, p);
     const sv = (await S.get(id)) || {};
-    snap.positions[id] = { owner: sv.owner, name: sv.name, members: sv.members || [],
+    snap.positions[id] = { owner: sv.owner, owner_id: sv.owner_id || null, owner_name: sv.owner_name || sv.owner, name: sv.name, members: sv.members || [],
+                           member_ids: sv.member_ids || [],
                            hold: Object.fromEntries(Object.entries(pos).map(([v, [s, val]]) => [v, { shares: s, value: Math.trunc(val) }])) };
   }
   snap.queue = Object.values(d.queue).filter((q) => ["pending", "moving"].includes(q.state))

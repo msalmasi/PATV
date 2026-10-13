@@ -92,7 +92,7 @@ test("defaults: on, any linked account, 7 days, level 2, 2 pads each, free; recl
 test("who may: link, age, level, balance - each listed; Discord counts as linked; staff skip everything", async () => {
   assert.ok((await PC.eligibility(U.maker)).ok);
   assert.ok((await PC.eligibility(U.discorder)).ok, "a Discord link counts for 'any'");
-  assert.match((await PC.eligibility(U.unlinked)).reasons.join(" "), /To create a pad, link an account/);
+  assert.match((await PC.eligibility(U.unlinked)).reasons.join(" "), /To create a pad, verify your email address, or link an account/);
   // 1.99ws (connections audit B): any proven identity counts (verified.js) - a Telegram link, a Google sign-in, a Plex link
   const V = require(path.join(repo, "verified"));
   await runQuery("CREATE TABLE IF NOT EXISTS telegram_links (user_id TEXT PRIMARY KEY, tg_id TEXT NOT NULL UNIQUE, handle TEXT, link_source TEXT NOT NULL DEFAULT 'self', proof TEXT NOT NULL DEFAULT 'start_code', linked_at INTEGER NOT NULL, paused INTEGER NOT NULL DEFAULT 0)");

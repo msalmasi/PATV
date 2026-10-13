@@ -182,17 +182,23 @@ function register(app, { isBotToken, addUser }) {
       const isAdmin = u.class === "Admin";
       // 1.99ne: the site's own stashes once they moved here (stashes.js), else Pepe's last snapshot
       const SS = require("./stashes");
-      const st = (await SS.live().catch(() => false)) ? { stashes: await SS.list(), updated: Date.now() } : ((await load("stashes")) || { stashes: [] });
+      const siteStashes = await SS.live().catch(() => false);
+      const st = siteStashes ? { stashes: await SS.list(), updated: Date.now() } : ((await load("stashes")) || { stashes: [] });
       const sk = await staking.latest(); // vault staking snapshot (staking.js)
       const ln = (await load("loans")) || { loans: [], requests: [], reserve: null };
       const open = (st.stashes || []).filter((s) => !s.closed);
 
-      // stashes I own or belong to; `ref` is how the chat command names it for me
-      const myStashes = me ? open.filter((s) => low(s.owner) === me || (s.members || []).some((m) => low(m) === me)).map((s) => {
-        const owner = low(s.owner) === me;
+      // stashes I own or belong to; `ref` is how the chat command names it for me. 1.99wy: once the site owns them they
+      // belong to the ACCOUNT (stashes.js) - any signed-in account has them, chat login or not; Pepe's old snapshot
+      // (a site still on his stashes) is by chat login
+      const stashAcct = siteStashes ? await SS.actorOf({ userId: req.user.userId }) : null;
+      const mineStash = (s) => (stashAcct ? SS.canUse(s, stashAcct) : !!me && (low(s.owner) === me || (s.members || []).some((m) => low(m) === me)));
+      const ownStash = (s) => (stashAcct ? SS.isOwner(s, stashAcct) : low(s.owner) === me);
+      const myStashes = open.filter(mineStash).map((s) => {
+        const owner = ownStash(s);
         const p = staking.positionFor(sk, s);
-        return { ...s, owner_me: owner, ref: owner ? s.name : `${s.owner}/${s.name}`, hold: (p && p.hold) || {}, vaulted: staking.holdValue(p) };
-      }).sort((a, b) => (b.owner_me - a.owner_me) || (b.balance - a.balance)) : [];
+        return { ...s, owner_me: owner, ref: owner ? s.name : `${s.owner_name || s.owner}/${s.name}`, hold: (p && p.hold) || {}, vaulted: staking.holdValue(p) };
+      }).sort((a, b) => (b.owner_me - a.owner_me) || (b.balance - a.balance));
 
       const mineLoan = (l) => me && (low(l.borrower) === me || low(l.lender) === me);
       const myLoans = me ? (ln.loans || []).filter(mineLoan).map((l) => ({
@@ -251,6 +257,7 @@ function register(app, { isBotToken, addUser }) {
         myLimit: reserveLimit(ln.reserve || null, camfrog || (reserveOn ? me : null), u.level), // only ever the signed-in user's own
         myCredit: (camfrog || me) ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog || me, u) : null,
         linked: !!camfrog, loansOn, reserveOn: reserveOn && !!(camfrog || me),
+        stashOn: !!camfrog || siteStashes,                         // 1.99wy: site-owned stashes belong to the account
         donateOn: !!camfrog || require("./actorcap").on(),          // 1.99wv: Pepe charges the PATV account (u:<userId>)
         welcomeStatus: await welcome.status(req.user.userId).catch(() => null),
         // 1.99lx: the last few PAT movements (history.js, the same sentences /history shows) for the Recent activity card

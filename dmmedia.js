@@ -92,7 +92,7 @@ const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 const feedConfig = () => { try { return require("./feedstore").config(); } catch (e) { return { max_image_mb: 10, media_min_level: 2, global_quota_gb: 20, min_free_gb: 8 }; } };
 
 /** Why `u` (an account row) can't send pictures, or null. Same rule as feed uploads: 1.99ws - any proven identity
- *  (verified.js: chat login, Discord, Twitch, Telegram, Google, Plex) or level media_min_level. Async since 1.99ws. */
+ *  (verified.js: chat login, Discord, Twitch, Telegram, Google, Plex, a verified email - 1.99wy) or level media_min_level. Async since 1.99ws. */
 async function pictureRefusal(u) {
   if (!u) return "Sign in first.";
   const V = require("./verified");

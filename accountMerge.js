@@ -228,7 +228,10 @@ const RULES = {
   // 1.99ne: patroutes.js (a routed charge's intent follows its payer's account; payer = the Camfrog login), stashes.js
   // (owned by a Camfrog login; a move's account follows the merge), actionttl.js (an admin's username)
   "pat_route_intents.user_id": M(), "pat_route_intents.payer": { deny: NAME },
-  "stashes.owner": { deny: "a Camfrog login (the stash follows the login, not the PATV account)" }, "stash_moves.user_id": M(),
+  // 1.99wy: a stash belongs to the ACCOUNT ("u:<userId>", stashes.js) - the merged-away account's stashes and memberships
+  // become the target's (mergeStashes); a bare chat login (no account linked it yet) isn't a userId
+  "stashes.owner": { deny: "a holder key (\"u:<userId>\" or a bare chat login), never a raw userId - mergeStashes moves the u: keys" },
+  "stash_moves.user_id": M(),
   // 1.99rn: gtfsheet.js - a website re-roll's journal row (keyed by the click; the op itself applies to a Camfrog login, the
   // charge is a ledger row that follows the merge)
   "gtf_ops.user_id": { keep: "the website's GTF ops journal (who clicked a re-roll; keyed by the click, applied by Camfrog login)" },
@@ -600,6 +603,12 @@ async function moveUserRows(fromId, toId, opts = {}) {
   await mergeConversations(fromId, toId, out);
   await mergeProfilePad(fromId, toId, out);
   await mergeWelcome(fromId, toId, out);
+  // 1.99wy: stashes are held by "u:<userId>" (owner + stash_members) - the merged-away account's go to the target
+  {
+    const r = await require("./stashes").mergeAccounts(fromId, toId);
+    if (r.owners) bump(out, "stashes.owner", r.owners);
+    if (r.members) bump(out, "stash_members.login", r.members);
+  }
 
   for (const { table, column, rule } of await discover()) {
     if (rule && (rule.deny || rule.keep || rule.special)) continue;

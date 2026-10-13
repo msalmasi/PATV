@@ -70,6 +70,7 @@ function clean(body) {
     }
     positions[str(id, 40)] = {
       owner: str(p.owner, 60), name: str(p.name, 20),
+      owner_id: p.owner_id ? str(p.owner_id, 64) : null, owner_name: p.owner_name ? str(p.owner_name, 60) : null,   // 1.99wy
       members: (Array.isArray(p.members) ? p.members : []).slice(0, 50).map((m) => str(m, 60)),
       hold,
     };
@@ -222,20 +223,34 @@ function register(app, { isBotToken, addUser }) {
     const msg = req.query.msg ? String(req.query.msg).slice(0, 200) : null;
     try {
       const snap = await latest();
-      let camfrog = null, signedIn = false, acts = [];
+      let camfrog = null, signedIn = false, acts = [], me = null;
       if (req.user && req.user.userId) {
         const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
         signedIn = !!u;
         camfrog = (u && u.camfrogUsername) || null;
         acts = await actions.recentFor(req.user.userId, "staking");
+        // 1.99wy: stashes belong to the ACCOUNT (stashes.js) - "mine" is the signed-in account's, chat login or not
+        if (u) me = await require("./stashes").actorOf({ userId: req.user.userId }).catch(() => null);
       }
-      const base = { user: req.user ? req.user.username : null, signedIn, camfrog, msg, acts, now: Date.now() / 1000, snap: null };
+      const base = { user: req.user ? req.user.username : null, signedIn, camfrog, msg, acts, now: Date.now() / 1000, snap: null,
+                     canStake: !!camfrog || !!(me && me.userId && (await require("./stashes").live().catch(() => false))) };
       if (!snap) return res.render("staking", base);
 
-      // My stashes: positions I'm in, plus any open stash of mine from the wallet snapshot (so a
-      // stash with nothing staked yet can still stake).
+      // My stashes: positions I'm in, plus any open stash of mine (so a stash with nothing staked yet can still stake).
       let mine = [];
-      if (camfrog) {
+      const SS = require("./stashes");
+      const siteOwned = await SS.live().catch(() => false);
+      if (me && me.userId && siteOwned) {
+        for (const s of (await SS.list()).filter((x) => SS.canUse(x, me))) {
+          const p = (snap.positions || {})[String(s.id)] || null;
+          const ownerMe = SS.isOwner(s, me);
+          const keys = new Set([String(s.id), low(s.name), low(s.owner + "/" + s.name), low(s.owner_name + "/" + s.name)]);
+          mine.push({ id: s.id, owner: s.owner, owner_name: s.owner_name, name: s.name, members: s.member_names, hold: (p && p.hold) || {},
+                      total: holdValue(p), balance: s.balance, owner_me: ownerMe, ref: ownerMe ? s.name : `${s.owner_name}/${s.name}`,
+                      pending: (snap.queue || []).filter((q) => keys.has(String(q.stash)) || keys.has(low(q.stash))) });
+        }
+        mine.sort((a, b) => (b.owner_me - a.owner_me) || (b.total - a.total));
+      } else if (camfrog) {
         const me = low(camfrog);
         const seen = new Set();
         Object.entries(snap.positions || {}).forEach(([id, p]) => {

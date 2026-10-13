@@ -265,7 +265,7 @@
   <h2 class="ds-pixel-h">YOUR STAKES</h2>
   <% if (!signedIn) { %>
     <p class="info"><a href="/login">Sign in</a> to see and manage your stashes' stakes.</p>
-  <% } else if (!camfrog) { %>
+  <% } else if (!camfrog && !locals.canStake) { %>
     <p class="ds-note warn hint">Link a chat account (Settings → Account → Connections; for Camfrog, <code>!verify</code>) to stake from here — Pepe runs it as you.</p>
   <% } else if (!mine.length) { %>
     <p class="info">You don't own or share a stash yet. <a href="/wallet">Create one in your wallet ›</a></p>
@@ -293,7 +293,7 @@
       <form method="post" action="/act"><%- hidden('stash') %>
         <b><span class="ds-ic" aria-hidden="true">📥</span> Stake</b>
         <input type="hidden" name="a0" value="stake">
-        <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner %>/<%= m.name %></option><% }) %></select>
+        <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner_name || m.owner %>/<%= m.name %></option><% }) %></select>
         <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
         <%- vaultSelect('auto') %>
         <button type="submit">Stake</button>
@@ -302,7 +302,7 @@
       <form method="post" action="/act"><%- hidden('stash') %>
         <b><span class="ds-ic" aria-hidden="true">📤</span> Unstake</b>
         <input type="hidden" name="a0" value="unstake">
-        <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner %>/<%= m.name %></option><% }) %></select>
+        <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner_name || m.owner %>/<%= m.name %></option><% }) %></select>
         <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
         <%- vaultSelect('auto') %>
         <button class="alt" type="submit">Unstake</button>

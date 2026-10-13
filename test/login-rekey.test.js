@@ -85,8 +85,10 @@ test("relink apply: every site record moves to the account's new login, recorded
   const r = await R.relink("oldx", "a1", { apply: true });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.ok(r.id > 0);
-  assert.equal((await one("SELECT owner FROM stashes WHERE id = '11'")).owner, "newy");
-  assert.deepEqual((await getQuery("SELECT login FROM stash_members WHERE stash_id = '11' ORDER BY login")).map((x) => x.login), ["bee", "newy"]);
+  // 1.99wy: a stash belongs to the ACCOUNT - a row its old login still held becomes "u:a1" (not the new login), and the
+  // account isn't a member of its own stash
+  assert.equal((await one("SELECT owner FROM stashes WHERE id = '11'")).owner, "u:a1");
+  assert.deepEqual((await getQuery("SELECT login FROM stash_members WHERE stash_id = '11' ORDER BY login")).map((x) => x.login), ["bee"]);
   assert.equal((await one("SELECT login FROM escrow_holds WHERE id = 'h3919'")).login, "newy");
   assert.equal((await one("SELECT login FROM escrow_holds WHERE id = 'h1'")).login, "oldx", "a finished hold is history - untouched");
   const b3 = JSON.parse((await one("SELECT data FROM escrow_games WHERE game = 'bounties' AND id = 3")).data);
@@ -125,10 +127,10 @@ test("a takeover / unlink: the account keeps its records under u:<userId>; nothi
   const id = await R.changed("b1", "bee", null, "camfrog:taken");
   assert.ok(id);
   assert.equal((await one("SELECT owner FROM stashes WHERE id = '20'")).owner, "u:b1");
-  assert.deepEqual((await getQuery("SELECT login FROM stash_members WHERE stash_id = '11' ORDER BY login")).map((x) => x.login), ["newy", "u:b1"]);
-  // the account links a new login later: u:b1 -> its new login
+  assert.deepEqual((await getQuery("SELECT login FROM stash_members WHERE stash_id = '11' ORDER BY login")).map((x) => x.login), ["u:b1"]);
+  // the account links a new login later: its stashes stay the ACCOUNT's (1.99wy - were moved to the new login)
   await R.changed("b1", null, "bee2", "camfrog:relink");
-  assert.equal((await one("SELECT owner FROM stashes WHERE id = '20'")).owner, "bee2");
+  assert.equal((await one("SELECT owner FROM stashes WHERE id = '20'")).owner, "u:b1");
   assert.equal(await R.changed("b1", "Bee2", "bee2", "camfrog:relink"), null, "same key: nothing");
   const feed = await R.since(1);
   assert.deepEqual(feed.changes.map((c) => [c.old_key, c.new_key]), [["bee", "u:b1"], ["u:b1", "bee2"]]);

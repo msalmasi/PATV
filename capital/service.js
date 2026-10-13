@@ -488,20 +488,21 @@ async function stashForm(userId, words) {
   if (!(await C.live())) return null;
   const sub = C.low(words[0]);
   if (!["stake", "unstake"].includes(sub)) return null;
-  const u = (await require("../dbUtils").getQuery("SELECT userId, username, camfrogUsername FROM users WHERE userId = ?", [userId]))[0];
-  if (!u) return "Couldn't find your account.";
-  if (!u.camfrogUsername) return "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) - stashes belong to it.";
+  // 1.99wy: stashes (and so their vault positions) belong to the ACCOUNT - no chat login needed
   const S = require("../stashes");
+  const me = await S.actorOf({ userId });
+  if (!me.userId) return "Couldn't find your account.";
+  const u = { userId: me.userId, username: me.username, camfrogUsername: me.login };
   let s;
-  try { s = await S.find(u.camfrogUsername, words[1], { ownerOnly: true }); } catch (e) { return e.message; }
+  try { s = await S.find(me, words[1], { ownerOnly: true }); } catch (e) { return e.message; }
   const vault = String(words[3] || "").toLowerCase().replace("marketmaker", "mm").replace("market", "mm");
   const all = C.low(words[2]) === "all";
   const amount = all ? (sub === "stake" ? S.free(s) : 0) : S.parseAmount(words[2]);
-  const actor = { userId: u.userId, username: u.username, login: u.camfrogUsername, via: "web" };
+  const actor = { userId: u.userId, username: u.username, login: u.camfrogUsername || S.acctKey(u.userId), via: "web" };
   const res = await act("vaults", { verb: sub, actor, args: { stash: s.id, vault: vault || (sub === "stake" ? "auto" : ""), amount, all: sub === "unstake" && all } });
   if (!res.ok) return res.error || "Couldn't queue that — nothing moved.";
   const when = new Date(Number(res.next_epoch || 0) * 1000).toISOString().slice(11, 16);
-  if (sub === "stake") return `🏦 PAT ${C.fmt(res.item.amount)} from ${s.owner}/${s.name} goes into ${V.LABEL[res.item.vault]} at the next cut-off (${when} UTC), at that day's share price.`;
+  if (sub === "stake") return `🏦 PAT ${C.fmt(res.item.amount)} from ${s.owner_name}/${s.name} goes into ${V.LABEL[res.item.vault]} at the next cut-off (${when} UTC), at that day's share price.`;
   return `🏦 Unstaking ~PAT ${C.fmt(res.item.value)} from ${V.LABEL[res.item.vault]} at the next cut-off (${when} UTC); it lands back in ${s.name}.`;
 }
 
