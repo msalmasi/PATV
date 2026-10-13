@@ -8617,5 +8617,9 @@
   "js.inc.slow": "Pepe نے ابھی جواب نہیں دیا - جب وہ دے گا تو ہو جائے گا۔",
   "js.inc.not_sent": "نہیں بھیجا گیا - دوبارہ کوشش کریں۔",
   "js.inc.unreachable": "سائٹ تک رسائی نہیں ہو سکی - دوبارہ کوشش کریں۔",
-  "js.inc.reported": "Pepe نے آخری بار اسے {when} بتایا تھا۔"
+  "js.inc.reported": "Pepe نے آخری بار اسے {when} بتایا تھا۔",
+  "automkt.adm.weights": "ملاپ (نسبتی وزن، 0 = کبھی نہیں)",
+  "automkt.adm.marquee": "کھیل: صرف اہم ایونٹس (فائنلز، چیمپئن شپس، پوسٹ سیزن، نمبر والے UFC کارڈز؛ عام انفرادی میچ نہیں)",
+  "automkt.adm.pad": "جس پیڈ میں جائیں (خالی = Pepe's Pad)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

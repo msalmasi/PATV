@@ -8507,5 +8507,9 @@
   "js.inc.slow": "Pepe belum menjawab - akan terjadi saat dia menjawab.",
   "js.inc.not_sent": "Belum terkirim - coba lagi.",
   "js.inc.unreachable": "Tidak bisa terhubung ke situs - coba lagi.",
-  "js.inc.reported": "Pepe terakhir melaporkannya {when}."
+  "js.inc.reported": "Pepe terakhir melaporkannya {when}.",
+  "automkt.adm.weights": "Campuran (bobot relatif, 0 = tidak pernah)",
+  "automkt.adm.marquee": "Olahraga: hanya acara utama (final, kejuaraan, musim playoff, kartu UFC bernomor; bukan pertandingan reguler tunggal)",
+  "automkt.adm.pad": "Pad tujuan (kosong = Pad Pepe)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

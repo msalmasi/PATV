@@ -8617,5 +8617,9 @@
   "js.inc.slow": "Pepe henüz yanıt vermedi - yanıt verdiğinde gerçekleşecek.",
   "js.inc.not_sent": "Gönderilmedi - tekrar dene.",
   "js.inc.unreachable": "Siteye ulaşılamadı - tekrar dene.",
-  "js.inc.reported": "Pepe en son {when} bildirdi."
+  "js.inc.reported": "Pepe en son {when} bildirdi.",
+  "automkt.adm.weights": "Karışım (göreli ağırlıklar, 0 = asla)",
+  "automkt.adm.marquee": "Spor: yalnızca öne çıkan etkinlikler (finaller, şampiyonalar, sezon sonu maçları, numaralı UFC kartları; tekil normal maçlar yok)",
+  "automkt.adm.pad": "Gidecekleri pad (boş = Pepe'nin Pad'i)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

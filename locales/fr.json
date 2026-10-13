@@ -8684,5 +8684,9 @@
   "js.inc.slow": "Pepe n’a pas encore répondu, ce sera fait quand il le fera.",
   "js.inc.not_sent": "Non envoyé, réessaie.",
   "js.inc.unreachable": "Impossible de joindre le site, réessaie.",
-  "js.inc.reported": "Pepe l’a signalé pour la dernière fois {when}."
+  "js.inc.reported": "Pepe l’a signalé pour la dernière fois {when}.",
+  "automkt.adm.weights": "Mélange (poids relatifs, 0 = jamais)",
+  "automkt.adm.marquee": "Sports : événements phares uniquement (finales, championnats, phase finale, cartes UFC numérotées ; pas de matchs de saison régulière isolés)",
+  "automkt.adm.pad": "Pad de destination (vide = Pad de Pepe)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

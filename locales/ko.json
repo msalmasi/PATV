@@ -8505,5 +8505,9 @@
   "js.inc.slow": "Pepe가 아직 답하지 않았어요 - 답하면 적용될 거예요.",
   "js.inc.not_sent": "보내지 않았어요 - 다시 시도해 주세요.",
   "js.inc.unreachable": "사이트에 연결할 수 없어요 - 다시 시도해 주세요.",
-  "js.inc.reported": "Pepe가 마지막으로 알려준 시간: {when}."
+  "js.inc.reported": "Pepe가 마지막으로 알려준 시간: {when}.",
+  "automkt.adm.weights": "혼합 (상대 가중치, 0 = 사용 안 함)",
+  "automkt.adm.marquee": "스포츠: 주요 행사만 (결승, 챔피언십, 포스트시즌, 번호가 붙은 UFC 대회; 일반 경기 단건 제외)",
+  "automkt.adm.pad": "게시할 패드 (비워 두면 Pepe의 패드)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

@@ -8601,5 +8601,8 @@
   "js.inc.slow": "Pepe هنوز جواب نداده - وقتی جواب بده انجام می‌شه.",
   "js.inc.not_sent": "فرستاده نشد - دوباره امتحان کن.",
   "js.inc.unreachable": "به سایت وصل نشد - دوباره امتحان کن.",
-  "js.inc.reported": "Pepe آخرین بار {when} گزارش داد."
+  "js.inc.reported": "Pepe آخرین بار {when} گزارش داد.",
+  "automkt.adm.weights": "ترکیب (وزن‌های نسبی، ۰ = هرگز)",
+  "automkt.adm.marquee": "ورزش: فقط رویدادهای اصلی (فینال‌ها، قهرمانی‌ها، پس‌فصل، کارت‌های شماره‌دار UFC؛ بدون مسابقه‌های عادی)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

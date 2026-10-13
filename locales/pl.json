@@ -8841,5 +8841,9 @@
   "js.inc.slow": "Pepe jeszcze nie odpowiedział - stanie się to, gdy odpowie.",
   "js.inc.not_sent": "Nie wysłano - spróbuj ponownie.",
   "js.inc.unreachable": "Nie udało się połączyć ze stroną - spróbuj ponownie.",
-  "js.inc.reported": "Pepe ostatnio zgłosił to {when}."
+  "js.inc.reported": "Pepe ostatnio zgłosił to {when}.",
+  "automkt.adm.weights": "Mieszanka (wagi względne, 0 = nigdy)",
+  "automkt.adm.marquee": "Sport: tylko najważniejsze wydarzenia (finały, mistrzostwa, play-off, numerowane gale UFC; bez pojedynczych zwykłych meczów)",
+  "automkt.adm.pad": "Pad, do którego trafiają (puste = Pepe's Pad)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

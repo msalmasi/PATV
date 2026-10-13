@@ -8506,5 +8506,9 @@
   "js.inc.slow": "Pepe ยังไม่ตอบ - จะเกิดขึ้นเมื่อเขาตอบ",
   "js.inc.not_sent": "ยังไม่ได้ส่ง - ลองอีกครั้ง",
   "js.inc.unreachable": "เชื่อมต่อกับเว็บไซต์ไม่ได้ - ลองอีกครั้ง",
-  "js.inc.reported": "Pepe แจ้งสถานะล่าสุดเมื่อ {when}"
+  "js.inc.reported": "Pepe แจ้งสถานะล่าสุดเมื่อ {when}",
+  "automkt.adm.weights": "สัดส่วน (น้ำหนักสัมพัทธ์ 0 = ไม่เคย)",
+  "automkt.adm.marquee": "กีฬา: เฉพาะรายการสำคัญเท่านั้น (รอบชิงชนะเลิศ แชมเปียนชิพ รอบหลังฤดูกาล การ์ด UFC ที่มีหมายเลข; ไม่รวมแมตช์ปกติทีละแมตช์)",
+  "automkt.adm.pad": "pad ที่จะไปยัง (ว่าง = Pepe's Pad)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

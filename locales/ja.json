@@ -8505,5 +8505,9 @@
   "js.inc.slow": "Pepeはまだ応答していません。応答があった時点で反映されます。",
   "js.inc.not_sent": "送信されませんでした。もう一度お試しください。",
   "js.inc.unreachable": "サイトに接続できませんでした。もう一度お試しください。",
-  "js.inc.reported": "Pepeは最後に {when} に報告しました。"
+  "js.inc.reported": "Pepeは最後に {when} に報告しました。",
+  "automkt.adm.weights": "ミックス（相対的な重み、0 = 使用しない）",
+  "automkt.adm.marquee": "スポーツ: 注目イベントのみ（決勝、選手権、ポストシーズン、番号付きUFCカード。通常の個別試合は除外）",
+  "automkt.adm.pad": "投稿先のパッド（空欄 = Pepe's Pad）",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

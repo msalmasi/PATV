@@ -8617,5 +8617,9 @@
   "js.inc.slow": "Pepe hat noch nicht geantwortet – es passiert, sobald er das tut.",
   "js.inc.not_sent": "Nicht gesendet – versuch es nochmal.",
   "js.inc.unreachable": "Die Seite ist nicht erreichbar – versuch es nochmal.",
-  "js.inc.reported": "Pepe hat es zuletzt {when} gemeldet."
+  "js.inc.reported": "Pepe hat es zuletzt {when} gemeldet.",
+  "automkt.adm.weights": "Mix (relative Gewichte, 0 = nie)",
+  "automkt.adm.marquee": "Sport: nur große Events (Finals, Meisterschaften, die Playoffs, nummerierte UFC-Karten; keine einzelnen Ligaspiele)",
+  "automkt.adm.pad": "Pad, in das sie gehen (leer = Pepe's Pad)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

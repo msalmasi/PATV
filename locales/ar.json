@@ -9065,5 +9065,9 @@
   "js.inc.slow": "لم يرد Pepe بعد - سيحدث ذلك عندما يرد.",
   "js.inc.not_sent": "لم يُرسل - حاول مرة أخرى.",
   "js.inc.unreachable": "تعذّر الوصول إلى الموقع - حاول مرة أخرى.",
-  "js.inc.reported": "أبلغ Pepe عن ذلك آخر مرة {when}."
+  "js.inc.reported": "أبلغ Pepe عن ذلك آخر مرة {when}.",
+  "automkt.adm.weights": "المزيج (أوزان نسبية، 0 = لا يُستخدم أبدًا)",
+  "automkt.adm.marquee": "الرياضة: الأحداث البارزة فقط (النهائيات، البطولات، مرحلة ما بعد الموسم، بطاقات UFC المرقّمة؛ دون المباريات العادية الفردية)",
+  "automkt.adm.pad": "الباد الذي تذهب إليه (فارغ = باد Pepe)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

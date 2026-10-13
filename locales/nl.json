@@ -8617,5 +8617,9 @@
   "js.inc.slow": "Pepe heeft nog niet geantwoord - het gebeurt zodra hij dat doet.",
   "js.inc.not_sent": "Niet verstuurd - probeer opnieuw.",
   "js.inc.unreachable": "Kon de site niet bereiken - probeer opnieuw.",
-  "js.inc.reported": "Pepe heeft het laatst gemeld {when}."
+  "js.inc.reported": "Pepe heeft het laatst gemeld {when}.",
+  "automkt.adm.weights": "Mix (relatieve gewichten, 0 = nooit)",
+  "automkt.adm.marquee": "Sport: alleen grote evenementen (finales, kampioenschappen, het naseizoen, genummerde UFC-kaarten; geen losse reguliere wedstrijden)",
+  "automkt.adm.pad": "Pad waar ze naartoe gaan (leeg = Pepe's Pad)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

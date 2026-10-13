@@ -8505,5 +8505,9 @@
   "js.inc.slow": "Pepe chưa trả lời - việc này sẽ diễn ra khi anh ấy trả lời.",
   "js.inc.not_sent": "Chưa gửi - hãy thử lại.",
   "js.inc.unreachable": "Không kết nối được với website - hãy thử lại.",
-  "js.inc.reported": "Lần cuối Pepe báo trạng thái này {when}."
+  "js.inc.reported": "Lần cuối Pepe báo trạng thái này {when}.",
+  "automkt.adm.weights": "Tỷ lệ trộn (trọng số tương đối, 0 = không bao giờ)",
+  "automkt.adm.marquee": "Thể thao: chỉ các sự kiện nổi bật (chung kết, giải vô địch, vòng loại sau mùa giải, các card UFC có số; không có trận thường lệ đơn lẻ)",
+  "automkt.adm.pad": "Pad đích (để trống = Pad của Pepe)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

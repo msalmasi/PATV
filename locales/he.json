@@ -8729,5 +8729,9 @@
   "js.inc.slow": "Pepe עדיין לא ענה - זה יקרה כשהוא יענה.",
   "js.inc.not_sent": "לא נשלח - נסו שוב.",
   "js.inc.unreachable": "לא הצלחנו להגיע לאתר - נסו שוב.",
-  "js.inc.reported": "Pepe דיווח לאחרונה על כך {when}."
+  "js.inc.reported": "Pepe דיווח לאחרונה על כך {when}.",
+  "automkt.adm.weights": "תמהיל (משקלים יחסיים, 0 = אף פעם)",
+  "automkt.adm.marquee": "ספורט: אירועי דגל בלבד (גמרים, אליפויות, הפלייאוף, כרטיסי UFC ממוספרים; בלי משחקים רגילים בודדים)",
+  "automkt.adm.pad": "פד שאליו הם מגיעים (ריק = הפד של Pepe)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

@@ -8684,5 +8684,9 @@
   "js.inc.slow": "O Pepe ainda não respondeu - vai acontecer quando ele responder.",
   "js.inc.not_sent": "Não enviado - tente de novo.",
   "js.inc.unreachable": "Não foi possível acessar o site - tente de novo.",
-  "js.inc.reported": "O Pepe informou por último {when}."
+  "js.inc.reported": "O Pepe informou por último {when}.",
+  "automkt.adm.weights": "Mix (pesos relativos, 0 = nunca)",
+  "automkt.adm.marquee": "Esportes: só eventos de destaque (finais, campeonatos, pós-temporada, eventos numerados do UFC; sem jogos regulares isolados)",
+  "automkt.adm.pad": "Pad de destino (vazio = Pad do Pepe)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

@@ -8684,5 +8684,9 @@
   "js.inc.slow": "Pepe non ha ancora risposto - succederà quando risponderà.",
   "js.inc.not_sent": "Non inviato - riprova.",
   "js.inc.unreachable": "Impossibile raggiungere il sito - riprova.",
-  "js.inc.reported": "Pepe lo ha segnalato l'ultima volta {when}."
+  "js.inc.reported": "Pepe lo ha segnalato l'ultima volta {when}.",
+  "automkt.adm.weights": "Mix (pesi relativi, 0 = mai)",
+  "automkt.adm.marquee": "Sport: solo eventi di punta (finali, campionati, playoff, card UFC numerate; niente singole partite di regular season)",
+  "automkt.adm.pad": "Pad di destinazione (vuoto = Pad di Pepe)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

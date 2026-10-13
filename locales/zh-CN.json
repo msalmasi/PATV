@@ -8505,5 +8505,9 @@
   "js.inc.slow": "Pepe 还没有回复，等他回复后会生效。",
   "js.inc.not_sent": "未发送，请重试。",
   "js.inc.unreachable": "无法连接网站，请重试。",
-  "js.inc.reported": "Pepe 上次报告的时间是 {when}。"
+  "js.inc.reported": "Pepe 上次报告的时间是 {when}。",
+  "automkt.adm.weights": "组合（相对权重，0 = 从不）",
+  "automkt.adm.marquee": "体育：仅限重磅赛事（决赛、冠军赛、季后赛、编号的 UFC 赛事；不含普通单场比赛）",
+  "automkt.adm.pad": "投放到的小站（留空 = Pepe's Pad）",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }
