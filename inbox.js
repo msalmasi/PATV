@@ -36,6 +36,7 @@ const KINDS = {
   shop:        { icon: "🏪", label: "Shop", link: "/shop/orders" },
   cosmetics:   { icon: "🎨", label: "Cosmetics", link: "/cosmetics" },
   lotto:       { icon: "🎟️", label: "Lotto", link: "/lotto" },
+  raffle:      { icon: "🎫", label: "Raffles (wins, draws, refunds)", link: "/raffles" },   // 1.99xk: raffles.js
   tip:         { icon: "💸", label: "Tips", link: "/history" },
   achievement: { icon: "🏅", label: "Achievements", link: "/achievements" },
   stage:       { icon: "📺", label: "Stage & streaming", link: "/stage" },

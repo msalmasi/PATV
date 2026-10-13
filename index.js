@@ -1249,6 +1249,8 @@ require("./gtfsheet").register(app, { isBotToken, addUser });
 require("./gtfboards").register(app, { addUser });
 // 1.99tt: the 🥷 heist market (/gtf/market) - players sell heist items for PAT; Pepe moves the items (heistmarket.js)
 require("./heistmarket").register(app, { isBotToken, addUser });
+// 1.99xk: 🎫 PAT Raffles (/raffles) - site-owned raffles: escrowed tickets, provably fair draws; Pepe is a chat client (raffles.js)
+require("./raffles").register(app, { isBotToken, addUser });
 // 1.99ns Phase 1: every protocol pool on the site (pools.js) + the economy settings and journals (econstore.js)
 require("./pools").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
 // 1.99ou Phase 2: the escrow ledger (every escrowed stake) + the escrow game engines (wagers, ...) - docs/escrow-cutover-runbook.md

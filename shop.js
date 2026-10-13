@@ -449,6 +449,60 @@ async function compOrder({ admin, to, title, reason, note }) {
   });
 }
 
+// ── 1.99xk: 🎫 an official item as a PAT Raffles prize (raffles.js) ──
+// The raffle reserves ONE of the item's stock when it's made (quantity - 1, nothing sold yet) and gives it back if it doesn't
+// draw. At the draw the winner gets a completed official order exactly like a gift: a role is granted, the sale hooks run
+// (a Plex invite), the store is told to deliver a staff item. Who paid is the raffle's business (the creator's escrowed item
+// price goes to the store owner; a house raffle's item is PATV's own - price 0). Only giftable items PATV delivers itself
+// (staff / invite / role) can be raffled - not the per-owner spin boost, not the retired request credits.
+const RAFFLE_DELIVERY = ["staff", "invite", "role"];
+/** The official items a raffle can offer right now: [{prizeId, prize, cost, quantity, image_url, delivery}] */
+async function raffleItems() {
+  await ready;
+  const rows = await getQuery(`SELECT prizeId, prize, cost, quantity, image_url, status FROM prizes
+                               WHERE seller_id IS NULL AND COALESCE(status, 'active') = 'active' AND quantity > 0 ORDER BY cost`);
+  const cat = require("./shopcatalog");
+  return rows.filter((p) => {
+    const i = cat.info(p);
+    return i && i.gift && RAFFLE_DELIVERY.includes(i.delivery) && !REQUEST_ITEMS.includes(p.prizeId) && !isSpinboost(p);
+  }).map((p) => ({ prizeId: p.prizeId, prize: p.prize, cost: Number(p.cost) || 0, quantity: p.quantity, image_url: p.image_url || (cat.info(p) || {}).art || null,
+                   delivery: (cat.info(p) || {}).delivery }));
+}
+/** INSIDE the open transaction: take one of the item out of stock for a raffle. Throws (rolls the raffle back) when it can't. */
+async function raffleReserveInTx(prizeId) {
+  const r = await runQuery("UPDATE prizes SET quantity = quantity - 1 WHERE prizeId = ? AND quantity > 0 AND seller_id IS NULL AND COALESCE(status, 'active') = 'active'",
+                           [String(prizeId || "")]);
+  if (!r.changes) { const e = new Refuse(409, "That item just sold out - pick another prize."); e.code = "E_SOLD_OUT"; throw e; }
+}
+/** INSIDE the open transaction: a raffle that didn't draw gives its reserved item back. */
+async function raffleReleaseInTx(prizeId) {
+  await runQuery("UPDATE prizes SET quantity = quantity + 1 WHERE prizeId = ?", [String(prizeId || "")]);
+}
+/** INSIDE the open transaction: the raffle winner's completed official order (a role is granted here). -> the order id */
+async function raffleOrderInTx({ prizeId, title, winnerId, payerId, payerName, price, raffleId }) {
+  const role = ROLE_PRIZES[prizeId] || null;
+  if (role) await runQuery("INSERT OR IGNORE INTO user_roles (userId, role, source) VALUES (?, ?, ?)", [winnerId, role, `raffle:R${raffleId}`]);
+  await runQuery("UPDATE prizes SET sold = COALESCE(sold, 0) + 1 WHERE prizeId = ?", [prizeId]);
+  const t = Date.now();
+  const p = Math.max(0, Math.floor(Number(price) || 0));
+  const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
+      seller_paid, status, source, created, completed_at, closed_at, updated, gift_from, gift_note)
+    VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', 'raffle', ?, ?, ?, ?, ?, ?)`,
+    [prizeId, winnerId, String(title || "Raffle prize").slice(0, 120), p, p, t, t, t, t, payerId || null, `🎫 Raffle R${raffleId}`]);
+  await event(o.id, "completed", payerName || "PATV", `🎫 Won in raffle R${raffleId}${payerName ? ` (prize put up by ${payerName})` : " (a house raffle)"} — official store item`);
+  return o.id;
+}
+/** After the draw committed: the sale hooks (a Plex invite), the store's delivery email, the winner's notice. Never throws. */
+function raffleOrderAfter({ orderId, prizeId, title, userId, username, price, raffleId }) {
+  try {
+    runSaleHooks({ orderId, prizeId, title, price: Number(price) || 0, userId, username, source: "raffle" });
+    sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", "Raffle prize to deliver",
+              `${username} won ${title} in raffle R${raffleId} (order ${orderId}) - deliver it to ${username}.`).catch(() => {});
+    notify(userId, { subject: `🎫 You won ${title} in raffle R${raffleId}`, text: "It's on your orders page - PATV delivers it.",
+                     pm: `🎫 You won ${title} in a PATV raffle!`, link: `/shop/orders/${orderId}` }).catch(() => {});
+  } catch (e) { console.error("[shop] raffle order:", e.message); }
+}
+
 // The official store: identical to the pre-marketplace purchase, plus a completed order row.
 // The spin boost is priced per buyer and paid to the House (see the header).
 // 1.99lz: gift = {payerId, payerName, note}: userId / username are the RECIPIENT (the item, its role, sale hooks and the
@@ -1691,4 +1745,5 @@ module.exports = { register, purchasePrize, orderAction, onOfficialSale, saleHoo
                    compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
                    maskAnonGift,                                          // 1.99mt: anonymous gifts
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise,
-                   browse, featured, validateListing, localImagePath, H /* 1.99lz: for the storefront tests */, attachArt /* 1.99mv */ };
+                   browse, featured, validateListing, localImagePath, H /* 1.99lz: for the storefront tests */, attachArt /* 1.99mv */,
+                   raffleItems, raffleReserveInTx, raffleReleaseInTx, raffleOrderInTx, raffleOrderAfter /* 1.99xk: raffles.js */ };

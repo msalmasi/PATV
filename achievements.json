@@ -278,6 +278,8 @@
     {"id": "cf_boost_1", "name": "Liftoff", "emoji": "🚀", "desc": "Boosted someone else's pad.", "metric": "boost_pads", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common", "side": "web"},
     {"id": "cf_boost_5", "name": "Hype Machine", "emoji": "📢", "desc": "Boosted 5 different pads.", "metric": "boost_pads", "threshold": 5, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "web"},
     {"id": "cf_banner", "name": "Billboard", "emoji": "🪧", "desc": "Had a homepage banner booking approved.", "metric": "banners", "threshold": 1, "xp": 3000, "pat": 25000, "tier": "uncommon", "side": "web"},
+    {"id": "cf_raffle_host", "name": "Ringmaster", "emoji": "🎪", "desc": "Ran a raffle that drew with 3+ different people buying tickets.", "metric": "raffles_made", "threshold": 1, "xp": 3000, "pat": 25000, "tier": "uncommon", "side": "web"},
+    {"id": "cf_raffle_win", "name": "Golden Ticket", "emoji": "🎫", "desc": "Won a raffle that 3+ different people bought tickets in.", "metric": "raffle_wins", "threshold": 1, "xp": 2000, "pat": 15000, "tier": "common", "side": "web"},
     {"id": "cf_wager_made", "name": "Shake On It", "emoji": "🤝", "desc": "Settled a wager with someone.", "metric": "wagers_settled", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common", "side": "bot"},
     {"id": "cf_wager_rivals", "name": "Take All Comers", "emoji": "📒", "desc": "Settled wagers against 5 different people.", "metric": "wager_rivals", "threshold": 5, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "bot"},
     {"id": "cf_market_made", "name": "Market Maker", "emoji": "📊", "desc": "Created a market that settled with 3 or more other traders.", "metric": "markets_made", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common", "side": "bot"},

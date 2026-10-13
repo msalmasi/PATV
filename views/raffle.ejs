@@ -1,0 +1,155 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: 'R' + v.id + ' · ' + v.title, user: user}) %>
+<%# views/raffle.ejs - 1.99xk: one 🎫 raffle (raffles.detail): the prize, the live numbers (price, sold / target, your odds, the
+    countdown), buying tickets, the winner, a custom prize's confirm / report, the creator's cancel, the admins' takedown /
+    decision, who's in, and the provably fair proof (checked in the browser by public/js/raffles.js once the seed is out). %>
+<link rel="stylesheet" href="/public/css/bets.css?v=3">
+<script src="/public/js/raffles.js?v=1" defer></script>
+<%- include('partials/rf-css') %>
+<%
+  const fmt = (n) => t.num(Number(n) || 0);
+  const goal = v.trigger === 'target' ? v.target : v.min_tickets;
+  const pct = goal ? Math.min(100, Math.round(v.sold * 100 / goal)) : 0;
+  const chip = { open: 'c-open', drawn: 'c-won', complete: 'c-won', delivering: 'c-settling', disputed: 'c-disputed', expired: 'c-expired', removed: 'c-void', refunded: 'c-void' }[v.status] || 'c-ended';
+  const mine = v.mine || 0;
+  const odds = v.sold ? Math.round(mine * 1000 / v.sold) / 10 : 0;
+  const left = (at) => { let s = Math.max(0, Math.round((at - Date.now()) / 1000)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; };
+  const whenKind = v.trigger === 'date' && Date.now() < (v.draw_at || 0) ? 'draw' : 'exp';
+  const canBuy = on && v.status === 'open' && me && !v.isCreator && Date.now() < v.expires_at;
+  const capLeft = v.max_tickets ? Math.max(0, v.max_tickets - v.sold) : null;
+  const perLeft = v.max_per_user ? Math.max(0, v.max_per_user - mine) : null;
+  const maxBuy = Math.max(0, Math.min(cfg.buy_max, capLeft === null ? cfg.buy_max : capLeft, perLeft === null ? cfg.buy_max : perLeft));
+  const prizeLine = v.prize.kind === 'pat' ? fmt(v.prize.amount) + ' PAT' : v.prize.name;
+  const dt = (ms) => ms ? '<time class="rf-dt" datetime="' + new Date(ms).toISOString() + '">' + new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC</time>' : '';
+%>
+<main class="bx ds-page flow mid rf" id="rf-one" data-rf-id="<%= v.id %>">
+  <a class="bx-back" href="/raffles"><span class="arr" aria-hidden="true">‹</span> <%- t('rf.all') %></a>
+  <article class="bx-card rf-card<%= v.house ? ' house' : '' %>">
+    <div class="bx-top">
+      <span class="bx-ref">R<%= v.id %></span>
+      <% if (v.house) { %><span class="bx-chip rf-chip-house"><span class="ds-ic" aria-hidden="true">🏛️</span> <%- t('rf.official') %></span><% } %>
+      <span class="bx-chip <%= chip %>"><%- t('rf.st.' + v.status) %></span>
+      <% if (v.padv) { %><a class="bx-pad" style="margin-inline-start:auto" href="<%= v.padv.url %>"><span class="ds-ic" aria-hidden="true">📍</span> <%= v.padv.title %></a>
+      <% } else { %><span class="bx-pad" style="margin-inline-start:auto"><span class="ds-ic" aria-hidden="true">📍</span> <%- t('bx.pad.sitewide') %></span><% } %>
+    </div>
+    <% if (v.image) { %><img class="rf-img<%= /\/public\/img\//.test(v.image) ? ' art' : '' %>" src="<%= v.image %>" alt="" referrerpolicy="no-referrer"><% } %>
+    <h1 style="margin:0;font:700 clamp(22px,4.6vw,30px)/1.25 var(--ds-font);color:var(--ds-text-strong);overflow-wrap:anywhere"><%= v.title %></h1>
+    <div class="rf-prize"><span class="k"><%- t('rf.prize') %></span> <%= prizeLine %></div>
+    <% if (v.prize.kind === 'custom') { %><p class="bx-fine"><%- v.house ? t('rf.custom_house') : t('rf.custom_note', { days: cfg.custom_hold_days }) %></p><% } %>
+    <% if (v.prize.kind === 'item') { %><p class="bx-fine"><%- t('rf.item_note') %></p><% } %>
+    <% if (v.description) { %><p style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere"><%= v.description %></p><% } %>
+    <div class="bx-meta"><%- v.house ? t('rf.by_house') : t('rf.by', { who: ul(v.creator || '?') }) %> · <%- t('rf.created_at', { when: dt(v.created) }) %></div>
+    <% if (v.status === 'open') { %>
+      <div class="bx-bar" role="img" aria-label="<%- t('rf.progress_aria', { sold: fmt(v.sold), goal: fmt(goal) }) %>"><span style="width: <%= pct %>%"></span></div>
+    <% } %>
+    <div class="rf-stats">
+      <div class="rf-stat"><span><%- t('rf.s_price') %></span><b><%= fmt(v.price) %> PAT</b></div>
+      <div class="rf-stat"><span><%- t('rf.s_sold') %></span><b><%= fmt(v.sold) %><%= v.max_tickets ? ' / ' + fmt(v.max_tickets) : '' %></b></div>
+      <div class="rf-stat"><span><%- t('rf.s_min') %></span><b><%= fmt(v.min_tickets) %><%= v.min_hit ? ' ✓' : '' %></b></div>
+      <div class="rf-stat"><span><%- t('rf.s_pot') %></span><b><%= fmt(v.pot) %> PAT</b></div>
+      <div class="rf-stat"><span><%- t('rf.s_people') %></span><b><%= fmt(v.entrant_count) %></b></div>
+      <% if (v.max_per_user) { %><div class="rf-stat"><span><%- t('rf.s_maxper') %></span><b><%= fmt(v.max_per_user) %></b></div><% } %>
+      <% if (me) { %><div class="rf-stat"><span><%- t('rf.s_yours') %></span><b><%= fmt(mine) %><%= mine ? ' · ' + odds + '%' : '' %></b></div><% } %>
+    </div>
+    <div class="bx-meta">
+      <% if (v.trigger === 'target') { %><%- t('rf.rule_target', { target: fmt(v.target) }) %><% } else { %><%- t('rf.rule_date', { when: dt(v.draw_at), min: fmt(v.min_tickets) }) %><% } %>
+      · <%- t('rf.rule_expiry', { when: dt(v.expires_at) }) %>
+      <% if (!v.house) { %> · <%- t('rf.rule_fee', { fee: v.fee_pct }) %><% } else { %> · <%- t('rf.rule_house') %><% } %>
+    </div>
+    <% if (v.status === 'open') { %><div class="rf-when" data-rf-at="<%= v.next_at %>" data-rf-kind="<%= whenKind %>"><%- t(whenKind === 'draw' ? 'rf.draws_in' : 'rf.expires_in', { left: left(v.next_at) }) %></div><% } %>
+  </article>
+
+  <p class="rf-msg" id="rf-msg" role="status" aria-live="polite" hidden></p>
+
+  <% if (v.winner) { %>
+    <section class="rf-win" aria-labelledby="rfw">
+      <span class="bx-eyebrow" id="rfw"><%- t('rf.winner_h') %></span>
+      <span class="w">🏆 <%- ul(v.winner) %></span>
+      <span><%- t('rf.winner_ticket', { no: fmt(v.winning_no), n: fmt(v.sold) }) %> · <%= prizeLine %></span>
+      <% if (v.status === 'delivering') { %><span class="bx-fine"><%- t('rf.delivering', { when: dt(v.release_at) }) %></span><% } %>
+      <% if (v.status === 'disputed') { %><span class="bx-fine"><%- t('rf.disputed') %></span><% } %>
+      <% if (v.status === 'complete' && v.prize.kind === 'custom') { %><span class="bx-fine"><%- t('rf.complete') %></span><% } %>
+    </section>
+  <% } %>
+  <% if (['expired', 'removed', 'refunded'].includes(v.status)) { %>
+    <p class="bx-note"><%- t('rf.closed_' + v.status) %><%= v.close_reason ? ' (' + v.close_reason + ')' : '' %></p>
+  <% } %>
+
+  <% if (canBuy) { %>
+    <h2 class="bx-h"><%- t('rf.h_buy') %></h2>
+    <% if (maxBuy > 0) { %>
+      <form class="bx-form bx-card rf-buy" data-rf-form="buy" data-rf-url="/api/raffles/<%= v.id %>/buy" data-rf-done="reload" data-rf-price="<%= v.price %>">
+        <input type="hidden" name="idem" value="<%= idem %>"><input type="hidden" name="expect" value="<%= v.price %>">
+        <label class="bx-field"><%- t('rf.f_qty') %><input class="bx-in" type="number" name="qty" min="1" max="<%= maxBuy %>" value="1" required></label>
+        <div class="bx-chips"><% [1, 5, 10, 25].filter((n) => n <= maxBuy).forEach((n) => { %><button type="button" class="bx-qa" data-rf-qty="<%= n %>"><%= n %></button><% }) %></div>
+        <p class="rf-total" data-rf-total><%- t('rf.total', { pat: '<b>' + fmt(v.price) + '</b>' }) %></p>
+        <p class="bx-fine"><%- t('rf.buy_note', { bal: fmt(balance) }) %></p>
+        <div class="bx-row"><button class="bx-btn" type="submit">🎟️ <%- t('rf.buy_btn') %></button></div>
+      </form>
+    <% } else { %>
+      <p class="bx-note"><%- perLeft === 0 ? t('rf.max_reached') : t('rf.sold_out') %></p>
+    <% } %>
+  <% } else if (v.status === 'open' && !me) { %>
+    <p class="bx-note"><%- t('rf.signin_buy') %></p>
+  <% } else if (v.status === 'open' && v.isCreator) { %>
+    <p class="bx-fine"><%- t('rf.own') %></p>
+  <% } %>
+
+  <% if (v.isWinner && v.status === 'delivering') { %>
+    <div class="bx-row2">
+      <form class="bx-form bx-card" data-rf-form="confirm" data-rf-url="/api/raffles/<%= v.id %>/confirm" data-rf-done="reload" data-rf-confirm="<%- t('rf.confirm_q') %>">
+        <b><%- t('rf.confirm_h') %></b><p class="bx-fine"><%- t('rf.confirm_note') %></p>
+        <button class="bx-btn" type="submit"><%- t('rf.confirm_btn') %></button>
+      </form>
+      <form class="bx-form bx-card" data-rf-form="dispute" data-rf-url="/api/raffles/<%= v.id %>/dispute" data-rf-done="reload">
+        <b><%- t('rf.dispute_h') %></b>
+        <label class="bx-field"><%- t('rf.dispute_note') %><input class="bx-in" type="text" name="note" maxlength="300" required></label>
+        <button class="bx-btn danger" type="submit"><%- t('rf.dispute_btn') %></button>
+      </form>
+    </div>
+  <% } %>
+
+  <% if (v.isCreator && v.status === 'open' && !v.sold) { %>
+    <form class="bx-form" data-rf-form="cancel" data-rf-url="/api/raffles/<%= v.id %>/cancel" data-rf-done="reload" data-rf-confirm="<%- t('rf.cancel_q') %>">
+      <div class="bx-row"><button class="bx-btn ghost sm" type="submit"><%- t('rf.cancel_btn') %></button></div>
+    </form>
+  <% } %>
+
+  <% if (admin && ['open', 'delivering', 'disputed'].includes(v.status)) { %>
+    <h2 class="bx-h"><%- t('rf.h_mod') %></h2>
+    <% if (v.status !== 'open') { %>
+      <% if (v.status === 'disputed') { %><p class="bx-note"><%- t('rf.dispute_admin') %></p><% } %>
+      <div class="bx-row">
+        <form data-rf-form="decide" data-rf-url="/api/raffles/<%= v.id %>/decide" data-rf-done="reload" data-rf-confirm="<%- t('rf.release_q') %>"><input type="hidden" name="decision" value="release"><button class="bx-btn sm" type="submit"><%- t('rf.release_btn') %></button></form>
+        <form data-rf-form="decide" data-rf-url="/api/raffles/<%= v.id %>/decide" data-rf-done="reload" data-rf-confirm="<%- t('rf.refund_q') %>"><input type="hidden" name="decision" value="refund"><button class="bx-btn danger sm" type="submit"><%- t('rf.refund_btn') %></button></form>
+      </div>
+    <% } %>
+    <form class="bx-form bx-card" data-rf-form="takedown" data-rf-url="/api/raffles/<%= v.id %>/takedown" data-rf-done="reload" data-rf-confirm="<%- t('rf.takedown_q') %>">
+      <label class="bx-field"><%- t('rf.takedown_reason') %><input class="bx-in" type="text" name="reason" maxlength="200" required></label>
+      <button class="bx-btn danger sm" type="submit"><%- t('rf.takedown_btn') %></button>
+    </form>
+  <% } %>
+
+  <h2 class="bx-h"><%- t('rf.h_who') %> <span class="bx-n"><%= v.entrant_count %></span></h2>
+  <% if (!v.entrants.length) { %><p class="bx-fine"><%- t('rf.nobody') %></p><% } else { %>
+    <div class="rf-who"><% v.entrants.forEach((e) => { %><span><%- ul(e.name) %> <b>×<%= fmt(e.qty) %></b></span><% }) %></div>
+  <% } %>
+  <% if (v.myTickets && v.myTickets.length) { %><p class="bx-fine"><%- t('rf.my_numbers', { list: v.myTickets.map(([a, b]) => a === b ? '#' + a : '#' + a + '-' + b).join(', ') }) %></p><% } %>
+
+  <h2 class="bx-h"><%- t('rf.h_fair') %></h2>
+  <div class="rf-proof" id="rf-proof">
+    <span><%- t('rf.fair_how') %></span>
+    <span><%- t('rf.fair_commit') %> <code><%= v.commitment %></code></span>
+    <% if (v.server_seed) { %>
+      <span><%- t('rf.fair_digest') %> <code><%= v.tickets_digest %></code></span>
+      <span><%- t('rf.fair_seed') %> <code><%= v.server_seed %></code></span>
+      <span data-rf-verify><%- t('rf.fair_checking') %></span>
+    <% } else { %>
+      <span><%- t('rf.fair_secret') %></span>
+    <% } %>
+  </div>
+
+  <div class="bx-foot"><%- t('rf.foot') %></div>
+</main>
+</body>
+</html>

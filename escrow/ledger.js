@@ -41,7 +41,8 @@ const GAMES = ["wagers", "bounties", "pools", "loans"];
 // Holds a site SERVICE owns outright (PATV Creators, creators.js): never Pepe's - not in his mirror, never handed back by a
 // rollback, never counted by the cutover's emptiness / verify checks, and his keyed calls can't move them.
 //   CRS creator subscription period, CRP pay-per-view unlock (CRT ticket, CRM paid message request: reserved for P2)
-const SERVICE_KINDS = Object.freeze(["CRS", "CRP", "CRT", "CRM"]);
+//   1.99xk 🎫 PAT Raffles (raffles.js): RFT ticket purchase, RFP a creator's PAT prize, RFI a creator's Prize Shop item price
+const SERVICE_KINDS = Object.freeze(["CRS", "CRP", "CRT", "CRM", "RFT", "RFP", "RFI"]);
 const PEPE_SQL = `kind NOT IN (${SERVICE_KINDS.map((k) => `'${k}'`).join(",")})`;
 const isServiceKind = (k) => SERVICE_KINDS.includes(String(k || ""));
 
@@ -447,7 +448,7 @@ async function supplyRows(rows) {
     // not live: Pepe's rows carry his escrow; the site services' holds (left held after a rollback) are only here
     const sv = await heldTotal("service").catch(() => ({ amount: 0 }));
     if (!(sv.amount > 0)) return rows;
-    return (rows || []).filter((p) => String(p.key || "") !== "escrow:service").concat([{ key: "escrow:service", label: "🔒 Escrow holds (PATV Creators)", amount: sv.amount }]);
+    return (rows || []).filter((p) => String(p.key || "") !== "escrow:service").concat([{ key: "escrow:service", label: "🔒 Escrow holds (PATV Creators, raffles)", amount: sv.amount }]);
   }
   const keep = (rows || []).filter((p) => String(p.key || "") !== "escrow:holds");
   const t = await heldTotal();

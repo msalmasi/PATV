@@ -10,6 +10,7 @@
 .ec-pool { --ec-ac: var(--ds-acc-wagers); --ec-ac2: var(--ds-acc-wagers-2); }
 .ec-poll { --ec-ac: var(--ds-acc-polls); --ec-ac2: var(--ds-acc-polls-2); }
 .ec-bounty { --ec-ac: var(--ds-acc-bounties); --ec-ac2: var(--ds-acc-bounties-2); }
+.ec-raffle { --ec-ac: var(--ds-acc-raffles, #ff8a5c); --ec-ac2: var(--ds-acc-raffles-2, #ffc2a6); }
 .ec:hover, .ec:focus-within { border-color: var(--ec-ac); box-shadow: var(--ds-e-2, 0 4px 14px rgba(0, 0, 0, .35)); }
 .ec-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; color: var(--ds-text-muted, #9a9a9a); font-size: var(--ds-fs-meta, 12.5px); }
 .ec-kind { display: inline-flex; align-items: center; gap: 5px; color: var(--ec-ac2); font-weight: 700; }

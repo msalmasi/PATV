@@ -1222,6 +1222,8 @@
     </section><% } %>
     <%# 1.99ur: 🔮 the pad's own markets, pools and polls (padbets.js, partials/pad-bets-card.ejs) %>
     <% if (typeof padBets !== 'undefined' && padBets) { %><%- include('partials/pad-bets-card', { pb: padBets, slug: room.slug }) %><% } %>
+    <%# 1.99xk: 🎫 the pad's raffles (raffles.forPad, partials/pad-raffles-card.ejs) %>
+    <% if (typeof padRaffles !== 'undefined' && padRaffles) { %><%- include('partials/pad-raffles-card', { pr: padRaffles, slug: room.slug }) %><% } %>
     <%# 1.99ew: 🎁 gift a premium cosmetic to this pad (padcosmetics.js, public/js/pad-cosmetics.js); the owner buys from ⚙ settings %>
     <section class="card ab-gift" id="gift" aria-labelledby="giftH">
       <h2 id="giftH"><span><%- t('pad.gift.h') %></span></h2>

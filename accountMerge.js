@@ -244,6 +244,10 @@ const RULES = {
   "heist_market_listings.seller_id": M(), "heist_market_listings.buyer_id": M(), "heist_market_listings.holder_id": M(),
   "heist_market_listings.seller_login": { deny: NAME }, "heist_market_listings.buyer_login": { deny: NAME },
   "heist_market_ops.user_id": M(),
+  // 1.99xk: 🎫 PAT Raffles (raffles.js) - raffles and tickets follow the account
+  "raffles.creator_id": M(), "raffles.winner_id": M(), "raffles.dispute_by": M(), "raffles.closed_by": M(),
+  "raffles.target": { deny: "a ticket count (the draw target)" }, "raffles.creator_payout": { deny: "a PAT amount" },
+  "raffle_tickets.user_id": M(),
   "action_ttl_config.actor": { deny: NAME },
   // 1.99ou: escrow/ledger.js - an escrowed stake follows its account (a refund / payout also resolves merged ids)
   "escrow_holds.user_id": M(),

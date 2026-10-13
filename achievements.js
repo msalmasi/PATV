@@ -413,7 +413,8 @@ function voiceBackfill({ force = false } = {}) {
 // FEATURE_METRICS are counted only once their own quiet backfill has run (featureBackfill, achievement_meta
 // 'feature_backfill_1'), so nobody whose history already qualifies gets a loud award from an unrelated check.
 const FEATURE_METRICS = ["gift_people", "gifts_received", "donations", "donated_usd", "wallet_linked", "plex_plays", "plex_binges",
-  "plex_requests", "streams", "stream_featured", "mic_clips", "pepe_clips", "translations", "sticker_packs", "pads_made", "pads_connected"];
+  "plex_requests", "streams", "stream_featured", "mic_clips", "pepe_clips", "translations", "sticker_packs", "pads_made", "pads_connected",
+  "raffles_made", "raffle_wins"];                                     // 1.99xk: 🎫 PAT Raffles (raffles.achMetrics)
 const PEPE_SUBJECT = "Pepe";              // micclip: Pepe's own TTS mic-ups are captured with subject "Pepe" (1.99md)
 
 /** A durable "this happened" mark for metrics whose source row changes later (a slot that stops being featured). */
@@ -431,6 +432,8 @@ async function featureMetrics(userId) {
   const one = async (sql, p) => { const r = await getQuery(sql, p).catch(() => []); return Number((r[0] && Object.values(r[0])[0]) || 0) || 0; };
   let g = {};
   try { g = await require("./gifts").achMetrics(userId); } catch (e) { g = {}; }
+  let rf = {};
+  try { rf = await require("./raffles").achMetrics(userId); } catch (e) { rf = {}; }   // 1.99xk: a drawn raffle with 3+ different buyers
   await marksReady;
   const DON = "FROM reserve_claims WHERE flow = 'mint:donation' AND userId = ? AND amount > 0";
   return {
@@ -458,6 +461,8 @@ async function featureMetrics(userId) {
     sticker_packs: await one("SELECT COUNT(DISTINCT pack_id) FROM user_sticker_packs WHERE user_id = ?", [userId]),
     pads_made: await one("SELECT COUNT(*) FROM rooms_registry WHERE created_by = ? AND origin = 'user' AND COALESCE(platform, '') != 'profile'", [userId]),
     pads_connected: await one("SELECT COUNT(*) FROM pad_connections WHERE requested_by = ? AND platform = 'camfrog' AND status = 'verified'", [userId]),
+    raffles_made: rf.raffles_made || 0,
+    raffle_wins: rf.raffle_wins || 0,
   };
 }
 

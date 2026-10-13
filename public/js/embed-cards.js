@@ -11,7 +11,7 @@
   var MAX_REFS = 30, MAX_PER_BOX = 3, EVERY = 25000, MAX_BACKOFF = 300000;
   var FINAL = { settled: 1, void: 1, ended: 1, expired: 1 };
 
-  /** An href (absolute or relative) -> "M12" | "P:poll_ab" | "BT3" | null. Only this site's own hosts count. */
+  /** An href (absolute or relative) -> "M12" | "P:poll_ab" | "BT3" | "R7" (1.99xk raffles) | null. Only this site's own hosts count. */
   function refFromHref(href, base, hosts) {
     if (!href || typeof href !== 'string') return null;
     var u;
@@ -27,6 +27,7 @@
     if ((m = p.match(/^\/markets\/m?(\d{1,9})\/?$/i))) return 'M' + parseInt(m[1], 10);
     if ((m = p.match(/^\/bounties\/(?:bt)?(\d{1,9})\/?$/i))) return 'BT' + parseInt(m[1], 10);
     if ((m = p.match(/^\/polls\/([A-Za-z0-9_-]{1,40})\/?$/))) return 'P:' + m[1];
+    if ((m = p.match(/^\/raffles\/r?(\d{1,9})\/?$/i))) return 'R' + parseInt(m[1], 10);
     return null;
   }
 
@@ -76,9 +77,9 @@
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = unent(text); return e; }
   function kindLabel(k) {
     return k === 'market' ? _t('js.embed.market', 'Market') : k === 'pool' ? _t('js.embed.pool', 'Betting pool')
-      : k === 'poll' ? _t('js.embed.poll', 'Poll') : _t('js.embed.bounty', 'Bounty');
+      : k === 'poll' ? _t('js.embed.poll', 'Poll') : k === 'raffle' ? _t('js.embed.raffle', 'Raffle') : _t('js.embed.bounty', 'Bounty');
   }
-  var ICON = { market: '📈', pool: '🎲', poll: '🗳️', bounty: '🎯' };
+  var ICON = { market: '📈', pool: '🎲', poll: '🗳️', bounty: '🎯', raffle: '🎫' };
   function stLabel(s) {
     switch (s) {
       case 'open': return _t('js.embed.st.open', 'Open');
@@ -100,8 +101,10 @@
     var now = Date.now() + skew;
     if (it.status === 'open' && it.closes) {
       var l = leftText(it.closes - now);
+      if (it.kind === 'raffle') return it.trigger === 'date' ? _t('js.embed.draws_in', 'draws in {left}', { left: l }) : _t('js.embed.expires_in', 'expires in {left}', { left: l });
       return it.kind === 'bounty' ? _t('js.embed.ends_in', 'ends in {left}', { left: l }) : _t('js.embed.closes_in', 'closes in {left}', { left: l });
     }
+    if (it.kind === 'raffle' && it.status === 'settled' && it.result) return _t('js.embed.raffle_won', 'Won by {who}', { who: it.result });
     if (it.status === 'closed' || it.status === 'settling') return it.kind === 'bounty' ? _t('js.embed.bounty_wait', 'waiting for the payout') : _t('js.embed.awaiting', 'waiting for the result');
     if (it.status === 'settled' && it.result) return _t('js.embed.result', 'Result: {result}', { result: it.result });
     return '';
@@ -160,6 +163,8 @@
     if (it.kind === 'market') facts.push(_t('js.embed.volume', '{pat} PAT traded', { pat: num(it.volume) }), _t('js.embed.traders', '{count} traders', { count: it.traders || 0 }));
     else if (it.kind === 'pool') facts.push(_t('js.embed.pot', '{pat} PAT in the pot', { pat: num(it.pot) }), _t('js.embed.bettors', '{count} bettors', { count: it.bettors || 0 }));
     else if (it.kind === 'poll') facts.push(_t('js.embed.votes', '{count} votes', { count: it.votes || 0 }));
+    else if (it.kind === 'raffle') facts.push(_t('js.embed.prize', 'Prize: {prize}', { prize: it.prize || '' }), _t('js.embed.ticket', '{pat} PAT a ticket', { pat: num(it.price) }),
+                                             _t('js.embed.sold', '{sold}/{goal} tickets', { sold: num(it.sold), goal: num(it.goal) }));
     else facts.push(_t('js.embed.reward', '{pat} PAT reward', { pat: num(it.pot) }), _t('js.embed.claims', '{count} claims', { count: it.claims || 0 }));
     facts.forEach(function (f, i) { if (i) foot.appendChild(el('span', 'ec-dot', '·')).setAttribute('aria-hidden', 'true'); foot.appendChild(el('span', 'ec-fact', f)); });
     foot.appendChild(el('span', 'ec-dot', '·')).setAttribute('aria-hidden', 'true');
@@ -178,7 +183,7 @@
     if (reduce) return;
     card.classList.remove('ec-flash'); void card.offsetWidth; card.classList.add('ec-flash');
   }
-  var sig = function (it) { return it ? JSON.stringify([it.status, it.options, it.volume, it.pot, it.votes, it.claims, it.result]) : ''; };
+  var sig = function (it) { return it ? JSON.stringify([it.status, it.options, it.volume, it.pot, it.votes, it.claims, it.result, it.sold]) : ''; };
 
   function apply(items) {
     Object.keys(items).forEach(function (ref) {

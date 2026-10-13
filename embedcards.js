@@ -3,7 +3,8 @@
 // current prices / pool split / vote split, pot or volume, time left, status and pad. The feed has no SSE, so the client
 // polls GET /api/embeds?refs=M12,P:poll_ab12,BT3 (batched, at most MAX_REFS refs) every ~25 s while the tab is visible.
 //
-// Refs: M<id> (markets AND pools - the same `markets` table; /markets/<id>), P:<poll id> (/polls/<id>), BT<id> (bounties).
+// Refs: M<id> (markets AND pools - the same `markets` table; /markets/<id>), P:<poll id> (/polls/<id>), BT<id> (bounties),
+// 1.99xk: R<id> (🎫 raffles, raffles.js cards(); /raffles/<id>).
 // Privacy: an item on an Approved pad the viewer can't see (padaccess.canSee) comes back as null - exactly like a missing
 // item, so the endpoint can't be used to probe what exists. No auth needed; the answer is viewer-aware, so it's cached
 // privately and briefly.
@@ -23,6 +24,8 @@ function parseRef(s) {
   if (m) return { kind: "m", id: parseInt(m[1], 10), ref: "M" + parseInt(m[1], 10) };
   m = t.match(/^bt:?(\d{1,9})$/i);
   if (m) return { kind: "bt", id: parseInt(m[1], 10), ref: "BT" + parseInt(m[1], 10) };
+  m = t.match(/^r:?(\d{1,9})$/i);
+  if (m) return { kind: "r", id: parseInt(m[1], 10), ref: "R" + parseInt(m[1], 10) };
   m = t.match(/^p:([A-Za-z0-9_-]{1,40})$/i);
   if (m) return { kind: "p", id: m[1], ref: "P:" + m[1] };
   return null;
@@ -123,6 +126,11 @@ async function build(refs, viewer, nowMs = Date.now()) {
   for (const row of mRows) { let raw = {}; try { raw = JSON.parse(row.data); } catch (e) { continue; } add("M" + row.id, row.pad, raw, () => marketCard(row, nowMs)); }
   for (const row of pRows) { let raw = {}; try { raw = JSON.parse(row.data); } catch (e) { continue; } add("P:" + row.id, row.pad, raw, () => pollCard(row)); }
   for (const row of bRows) { let raw = {}; try { raw = JSON.parse(row.data); } catch (e) { continue; } add("BT" + row.id, null, { room: raw.room }, () => bountyCard(row, nowMs)); }
+  // 1.99xk: raffles answer for themselves (their own pad check: an invisible pad's raffle stays null)
+  const rIds = ids("r");
+  if (rIds.length) {
+    try { Object.assign(out, await require("./raffles").cards(rIds, viewer)); } catch (e) { console.error("[embeds] raffles:", e.message); }
+  }
   return out;
 }
 

@@ -1012,6 +1012,8 @@ function register(app, { isBotToken, addUser }) {
         .catch((e) => { console.error("[roomvaults] card:", e.message); return null; }),
       feed,
       padBets: await require("./padbets").forPad(R.id).catch((e) => { console.error("[padbets]", e.message); return null; }),   // 1.99ur
+      // 1.99xk: 🎫 the pad's raffles (raffles.forPad) - shown while the feature is on
+      padRaffles: require("./raffles").enabledSync() ? await require("./raffles").forPad(R.id, req.user || null).catch((e) => { console.error("[raffles] pad card:", e.message); return null; }) : null,
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",
     });
   });

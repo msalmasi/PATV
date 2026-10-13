@@ -124,7 +124,7 @@ function register(app, { addUser }) {
         langName = hit ? (Array.isArray(hit) ? hit[1] : hit.name) : code;
       } catch (e) { langName = null; }
       const ctx = {
-        creatorNav: app.locals && app.locals.creatorNav, supportOn: app.locals && app.locals.supportOn, myPads: app.locals && app.locals.myPads,
+        creatorNav: app.locals && app.locals.creatorNav, supportOn: app.locals && app.locals.supportOn, rafflesOn: app.locals && app.locals.rafflesOn, myPads: app.locals && app.locals.myPads,
         langName, tz: L.tz || null, tzAuto: !L.tzSaved,
       };
       res.render("settingsHub", { user: req.user.username, sections: await hub(req.user, ctx) });

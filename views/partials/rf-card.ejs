@@ -1,0 +1,32 @@
+<%#
+  1.99xk: one raffle as a card on /raffles (raffles.shape). Pass { r, t }. House raffles are gold-framed with an "Official" chip.
+  The countdown text is the server's; public/js/raffles.js keeps [data-rf-at] ticking.
+%>
+<% const T_ = locals.t || locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+   const r_ = locals.r; const f_ = (n) => T_.num(Number(n) || 0);
+   const goal_ = r_.trigger === 'target' ? r_.target : r_.min_tickets;
+   const pct_ = goal_ ? Math.min(100, Math.round(r_.sold * 100 / goal_)) : 0;
+   const chip_ = { open: 'c-open', drawn: 'c-won', complete: 'c-won', delivering: 'c-settling', disputed: 'c-disputed', expired: 'c-expired', removed: 'c-void', refunded: 'c-void' }[r_.status] || 'c-ended';
+   const img_ = r_.image || null;
+   const left_ = (at) => { let s = Math.max(0, Math.round((at - Date.now()) / 1000)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; }; %>
+<a class="bx-card rf-card<%= r_.house ? ' house' : '' %>" href="<%= r_.url %>" id="raffle-<%= r_.id %>">
+  <div class="bx-top">
+    <span class="bx-ref">R<%= r_.id %></span>
+    <% if (r_.house) { %><span class="bx-chip rf-chip-house"><span class="ds-ic" aria-hidden="true">🏛️</span> <%- T_('rf.official') %></span><% } %>
+    <span class="bx-chip <%= chip_ %>"><%- T_('rf.st.' + r_.status) %></span>
+    <span style="margin-inline-start:auto" class="bx-pad"><span class="ds-ic" aria-hidden="true">📍</span> <%= r_.padv ? r_.padv.title : T_('bx.pad.sitewide') %></span>
+  </div>
+  <% if (img_) { %><img class="rf-img<%= /\/public\/img\//.test(img_) ? ' art' : '' %>" src="<%= img_ %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
+  <h3><%= r_.title %></h3>
+  <div class="rf-prize"><span class="k"><%- T_('rf.prize') %></span> <%= r_.prize.kind === 'pat' ? f_(r_.prize.amount) + ' PAT' : r_.prize.name %></div>
+  <% if (r_.status === 'open') { %>
+    <div class="bx-bar" role="img" aria-label="<%- T_('rf.progress_aria', { sold: f_(r_.sold), goal: f_(goal_) }) %>"><span style="width: <%= pct_ %>%"></span></div>
+  <% } %>
+  <div class="rf-facts">
+    <span><b><%= f_(r_.price) %></b> <%- T_('rf.per_ticket') %></span>
+    <span><%- T_('rf.sold_of', { sold: '<b>' + f_(r_.sold) + '</b>', goal: f_(goal_) }) %></span>
+    <% if (r_.status === 'open' && r_.next_at) { const k_ = r_.trigger === 'date' && Date.now() < (r_.draw_at || 0) ? 'draw' : 'exp'; %><span class="rf-when" data-rf-at="<%= r_.next_at %>" data-rf-kind="<%= k_ %>"><%- T_(k_ === 'draw' ? 'rf.draws_in' : 'rf.expires_in', { left: left_(r_.next_at) }) %></span><% } %>
+    <% if (r_.winner) { %><span>🏆 <b><%= r_.winner %></b></span><% } %>
+  </div>
+  <% if (r_.mine) { %><div class="rf-mine">🎟️ <%- T_('rf.you_have', { count: r_.mine, n: f_(r_.mine) }) %></div><% } %>
+</a>
