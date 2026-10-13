@@ -185,17 +185,25 @@
         notes.autotopic = atNotes.join(' ');
         notes.autotopic_every = t('owner.autotopic_floor', { n: atFloor });
         notes.stt_language = t('owner.stt_global', { lang: sttR.global === 'auto' || !sttR.global ? t('owner.stt_auto') : sttName(sttR.global) });
+        // 1.99vc: Pepe's speaking language - what "default" means, and a fixed language the room's voice can't speak
+        const ttsR = pepe.tts || {}, ttsList = (CHOICES && CHOICES.tts) || [];
+        const ttsName = (c) => { const x = ttsList.find((y) => y[0] === c); return x ? x[1] : String(c || ''); };
+        const ttsNotes = [t('owner.tts_global', { lang: ttsR.global === 'auto' || !ttsR.global ? t('owner.tts_auto') : ttsName(ttsR.global) })];
+        if (ttsR.fallback) ttsNotes.push(t('owner.tts_fallback', { lang: ttsName(ttsR.effective), voice: t.esc(ttsR.voice || 'Pepe') }));
+        notes.tts_language = ttsNotes.join(' ');
+        const MOFF = pepe.masters_off || {};
         const TMAX = (typeof TOPIC_MAX !== 'undefined' && TOPIC_MAX) || 200;
       %>
       <% GROUPS.forEach(([g, gic, keys]) => { %>
       <h3 class="ds-h4 po-gh"<% if (g === 'topic') { %> id="topic"<% } %>><%= gic %> <%- t('owner.grp_' + g) %></h3>
       <p class="ds-meta"><%- t('owner.grp_' + g + '_why') %></p>
       <div class="po-sets">
-        <% keys.forEach((k) => { const v = ow[k], known = (v !== undefined && v !== null) || k === 'topic'; %>
+        <% keys.forEach((k) => { const v = ow[k], moff = MOFF[k], known = ((v !== undefined && v !== null) || k === 'topic'), live = known && !moff; %>
         <div class="po-set<%= k === 'greeter_note' || k === 'topic' ? ' po-set-note' : '' %>" data-po-row="<%= k %>">
           <div>
             <b><%= ICONS[k] || '' %> <%- lab(k) %></b>
             <p class="ds-meta"><%- why(k) %><% if (notes[k]) { %> <span class="po-admin"><%- notes[k] %></span><% } %></p>
+            <% if (moff) { %><p class="ds-fine"><span class="ds-chip warn" data-po-moff="<%= k %>">⛔ <%- t('owner.master_off') %></span> <%- t('owner.master_off_why') %></p><% } %>
             <% if (k === 'topic') { %><p class="ds-fine" id="poTopicNow"><%- tp.text ? t('owner.topic_now', { topic: tp.text }) : t('owner.topic_unknown') %></p><% } %>
             <% if (!known && k !== 'greeter_note') { %><p class="ds-fine"><%- t('owner.unreported') %></p><% } %>
             <span class="po-st" data-po-st="<%= k %>" role="status" aria-live="polite"></span>
@@ -206,49 +214,56 @@
             <button type="submit" class="ds-btn sm ghost"><%- t('owner.topic_set') %></button>
           </form>
           <% } else if (k === 'autotopic_every') { %>
-          <select class="ds-select po-ctl" data-po-set="autotopic_every" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+          <select class="ds-select po-ctl" data-po-set="autotopic_every" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <option value="default" <%= v === 'default' ? 'selected' : '' %>><%- t('owner.every_default', { n: tp.every_effective || atFloor }) %></option>
             <% atEvery.forEach((n) => { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.every_n', { n }) %></option><% }) %>
             <% if (known && v !== 'default' && !atEvery.includes(v)) { %><option value="<%= v %>" selected><%- t('owner.every_n', { n: v }) %></option><% } %>
           </select>
           <% } else if (k === 'stt_language') { %>
-          <select class="ds-select po-ctl" data-po-set="stt_language" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+          <select class="ds-select po-ctl" data-po-set="stt_language" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <option value="default" <%= v === 'default' ? 'selected' : '' %>><%- t('owner.stt_default') %></option>
             <option value="auto" <%= v === 'auto' ? 'selected' : '' %>><%- t('owner.stt_auto') %></option>
             <% sttList.forEach(([c, n]) => { %><option value="<%= c %>" <%= v === c ? 'selected' : '' %>><%= n %></option><% }) %>
             <% if (known && v !== 'default' && v !== 'auto' && !sttList.some((x) => x[0] === v)) { %><option value="<%= v %>" selected><%= v %></option><% } %>
+          </select>
+          <% } else if (k === 'tts_language') { %>
+          <select class="ds-select po-ctl" data-po-set="tts_language" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
+            <option value="default" <%= v === 'default' ? 'selected' : '' %>><%- t('owner.tts_default') %></option>
+            <option value="auto" <%= v === 'auto' ? 'selected' : '' %>><%- t('owner.tts_auto') %></option>
+            <% ttsList.forEach(([c, n]) => { %><option value="<%= c %>" <%= v === c ? 'selected' : '' %>><%= n %><%- ttsR.supported && !ttsR.supported.includes(c) ? ' · ' + t('owner.tts_not_voice') : '' %></option><% }) %>
+            <% if (known && v !== 'default' && v !== 'auto' && !ttsList.some((x) => x[0] === v)) { %><option value="<%= v %>" selected><%= v %></option><% } %>
           </select>
           <% } else if (k === 'language') { %>
           <select class="ds-select po-ctl" data-po-set="language" aria-label="<%- lab(k) %>">
             <% LANGS.forEach(([c, n, nat]) => { %><option value="<%= c %>" <%= ow.language === c ? 'selected' : '' %>><%= c === 'auto' ? t('owner.lang_auto') : n + (nat && nat !== n ? ' · ' + nat : '') %></option><% }) %>
           </select>
           <% } else if (k === 'chatty' || k === 'vibe' || k === 'roasts' || k === 'greet_new' || k === 'greet_regulars') { %>
-          <select class="ds-select po-ctl" data-po-set="<%= k %>" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+          <select class="ds-select po-ctl" data-po-set="<%= k %>" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <% (CHOICES[k] || []).forEach((c) => { %><option value="<%= c %>" <%= v === c ? 'selected' : '' %>><%- c === 'auto' ? t('owner.' + (k === 'vibe' ? 'vt_auto' : 'rm_auto')) : choiceLabel(k, c) %></option><% }) %>
           </select>
           <% } else if (k === 'strikes') { %>
-          <select class="ds-select po-ctl" data-po-set="strikes" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+          <select class="ds-select po-ctl" data-po-set="strikes" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <option value="default"><%- t('owner.strikes_default', { n: adm.strike_default || 3 }) %></option>
             <% for (let n = (adm.strike_min || 2); n <= (adm.strike_max || 5); n++) { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.strikes_n', { n }) %></option><% } %>
           </select>
           <% } else if (k === 'room_voice') { %>
-          <select class="ds-select po-ctl" data-po-set="room_voice" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+          <select class="ds-select po-ctl" data-po-set="room_voice" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <option value="default" <%= v === 'default' ? 'selected' : '' %>><%- t('owner.voice_default', { name: t.esc(pv.default || 'Pepe') }) %></option>
             <% vlist.forEach((vv) => { %><option value="<%= vv.id %>" <%= v === vv.id ? 'selected' : '' %>><%= vv.display %><%- vv.own ? ' · ' + t('owner.voice_own') : '' %></option><% }) %>
             <% if (known && v !== 'default' && !vlist.some((vv) => vv.id === v)) { %><option value="<%= v %>" selected disabled><%= v %> · <%- t('owner.voice_notyours') %></option><% } %>
           </select>
           <% } else if (k === 'convo_quiet') { %>
-          <select class="ds-select po-ctl" data-po-set="convo_quiet" aria-label="<%- lab(k) %>" <%= known ? '' : 'disabled' %>>
+          <select class="ds-select po-ctl" data-po-set="convo_quiet" aria-label="<%- lab(k) %>" <%= live ? '' : 'disabled' %>>
             <% quiet.forEach((n) => { %><option value="<%= n %>" <%= v === n ? 'selected' : '' %>><%- t('owner.convo_min', { n }) %></option><% }) %>
             <% if (known && !quiet.includes(v)) { %><option value="<%= v %>" selected><%- t('owner.convo_min', { n: v }) %></option><% } %>
           </select>
           <% } else if (k === 'greeter_note') { %>
           <form class="po-note" data-po-note novalidate>
-            <input class="ds-in" type="text" maxlength="160" data-po-set="greeter_note" value="<%= v || '' %>" placeholder="<%- t('owner.note_ph') %>" aria-label="<%- lab(k) %>" autocomplete="off">
-            <button type="submit" class="ds-btn sm ghost"><%- t('owner.note_save') %></button>
+            <input class="ds-in" type="text" maxlength="160" data-po-set="greeter_note" value="<%= v || '' %>" placeholder="<%- t('owner.note_ph') %>" aria-label="<%- lab(k) %>" autocomplete="off" <%= moff ? 'disabled' : '' %>>
+            <button type="submit" class="ds-btn sm ghost" <%= moff ? 'disabled' : '' %>><%- t('owner.note_save') %></button>
           </form>
           <% } else { %>
-          <label class="ds-switch" title="<%- lab(k) %>"><input type="checkbox" data-po-set="<%= k %>" <%= v === true ? 'checked' : '' %> <%= known ? '' : 'disabled' %> aria-label="<%- lab(k) %>"><span></span></label>
+          <label class="ds-switch" title="<%- lab(k) %>"><input type="checkbox" data-po-set="<%= k %>" <%= v === true ? 'checked' : '' %> <%= live ? '' : 'disabled' %> aria-label="<%- lab(k) %>"><span></span></label>
           <% } %>
         </div><% }) %>
       </div>
@@ -258,11 +273,12 @@
       <p class="ds-meta"><%- t('owner.bridge_why') %></p>
       <% if (pepe.bridged === false) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🔌</span><div><%- t('owner.not_bridged') %></div></div><% } %>
       <div class="po-sets" id="poBridge">
-        <% [['relay', '💬'], ['mic', '🎙️'], ['cams', '📷'], ['audio', '🔊'], ['transcripts', '📝']].forEach(([k, ic]) => { const v = (pepe.bridge || {})[k]; %>
+        <% [['relay', '💬'], ['mic', '🎙️'], ['cams', '📷'], ['audio', '🔊'], ['transcripts', '📝']].forEach(([k, ic]) => { const v = (pepe.bridge || {})[k], moff = (pepe.masters_off || {})['br:' + k]; %>
         <div class="po-set" data-po-row="br:<%= k %>">
           <div><b><%= ic %> <%- t('owner.br_' + k) %></b><p class="ds-meta"><%- t('owner.br_' + k + '_why') %></p>
+            <% if (moff) { %><p class="ds-fine"><span class="ds-chip warn">⛔ <%- t('owner.master_off') %></span> <%- t('owner.master_off_why') %></p><% } %>
             <span class="po-st" data-po-st="br:<%= k %>" role="status" aria-live="polite"></span></div>
-          <label class="ds-switch"><input type="checkbox" data-po-bridge="<%= k %>" <%= v === true ? 'checked' : '' %> aria-label="<%- t('owner.br_' + k) %>"><span></span></label>
+          <label class="ds-switch"><input type="checkbox" data-po-bridge="<%= k %>" <%= v === true ? 'checked' : '' %> <%= moff ? 'disabled' : '' %> aria-label="<%- t('owner.br_' + k) %>"><span></span></label>
         </div><% }) %>
       </div>
 

@@ -129,12 +129,12 @@
       ctls(k).forEach(function (c) {
         if (c === document.activeElement && c.type === 'text') return;
         setVal(c, p.owner[k]);
-        c.disabled = false;
+        c.disabled = !!(p.masters_off && p.masters_off[k]);   // 1.99vc: switched off by PATV admins (value kept)
       });
     });
     Object.keys(p.bridge || {}).forEach(function (k) {
       if (pending['br:' + k]) return;
-      ctls('br:' + k).forEach(function (c) { setVal(c, p.bridge[k]); });
+      ctls('br:' + k).forEach(function (c) { setVal(c, p.bridge[k]); c.disabled = !!(p.masters_off && p.masters_off['br:' + k]); });
     });
     paintStatus(p.status);
     paintSync();

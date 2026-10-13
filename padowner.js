@@ -31,6 +31,11 @@
 //                     autotopic_every inside the admins' floor) and the room's SPEECH-TO-TEXT language (stt_language:
 //                     default / auto / a code - the transcriber's language hint for that room's mic clips; NOT the
 //                     "language" setting, which is the language Pepe chats in, 1.99jl).
+//                     1.99vc: + Pepe's SPEAKING language (tts_language: default / auto / a code - sent with every TTS request
+//                     for the room; a fixed language the room's voice can't speak falls back to English and the page says
+//                     so, from Pepe's `tts` report) and the admins' MASTER SWITCHES (camfrog-bot pepe_cmdswitch, site
+//                     cmdswitch.js): a setting whose master is off is in Pepe's `masters_off` and shows disabled with
+//                     "Switched off by PATV admins" - the owner's own value is kept, and Pepe refuses a change to it.
 //   * 🌐 Pepe on your pad's page   1.99up, padsite.js: his posts / comments / feed moderation on the pad's site side, for
 //                     any pad (site-applied, inherit-with-reset, the safety floor) - POST /api/rooms/:slug/owner/site
 //   * ❓ What you can do with Pepe in your room   data/owner-capabilities.json, GENERATED from Pepe's code by camfrog-bot
@@ -70,7 +75,7 @@ const OWNER_GROUPS = Object.freeze([
   ["topic", "🏷️", ["topic", "autotopic", "autotopic_every"]],      // 1.99up
   ["basics", "⚙️", ["snap", "clip", "challenge", "soundboard", "language", "stt_language"]],
   ["pepe", "🐸", ["greeter", "greet_new", "greet_regulars", "greeter_note", "chatty", "convo", "convo_quiet", "music", "music_requests", "dj_talk", "say", "voices", "mic_replies"]],
-  ["voice", "🗣️", ["room_voice", "captions", "alerts"]],              // 1.99tn
+  ["voice", "🗣️", ["room_voice", "tts_language", "captions", "alerts"]],   // 1.99tn; 1.99vc: + the speaking language
   ["games", "🎲", ["trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino"]],
   ["mod", "🛡️", ["global_unblock", "michog", "strikes", "votes"]],
   ["vibe", "🎭", ["vibe", "roasts", "vibe_lock"]],
@@ -79,7 +84,7 @@ const OWNER_ICONS = Object.freeze({ snap: "📸", clip: "📹", challenge: "🎤
   chatty: "💬", music: "🎵", music_requests: "🎶", say: "🗣️", voices: "🎭", mic_replies: "🎙️", trivia: "❓", pictionary: "🎨", heist: "💰",
   wheel: "🎡", bingo: "🔢", pvp: "🥊", casino: "🃏", global_unblock: "🔓", michog: "🎤", strikes: "⚖️", votes: "🗳️", vibe: "🎭",
   roasts: "🔥", vibe_lock: "🔒", room_voice: "🗣️", convo: "💡", convo_quiet: "⏳", captions: "💬", alerts: "📣", dj_talk: "📻",
-  topic: "🏷️", autotopic: "🤖", autotopic_every: "⏱️", stt_language: "📝" });
+  topic: "🏷️", autotopic: "🤖", autotopic_every: "⏱️", stt_language: "📝", tts_language: "🌍" });
 // what the read-only list ("everything else") must not repeat: the owner's own switches, by report key
 const OWNER_COVERS = Object.freeze(new Set(["say", "music", "music_queue", "music_play", "heist", "poker", "blackjack", "wheel", "trivia",
   "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "greeter", "chatty"]));
@@ -87,7 +92,7 @@ const NOTE_MAX = 160;
 const CHOICE_RE = /^[a-z_]{1,24}$/;
 const STT_RE = /^[a-z]{2,3}$/;
 let CHOICES = { vibe: ["auto"], roasts: ["auto"], chatty: OWNER_SETTINGS.chatty.slice(),
-  greet_new: OWNER_SETTINGS.greet_new.slice(), greet_regulars: OWNER_SETTINGS.greet_regulars.slice(), autotopic_every: AUTOTOPIC_EVERY.slice(), stt: [] };
+  greet_new: OWNER_SETTINGS.greet_new.slice(), greet_regulars: OWNER_SETTINGS.greet_regulars.slice(), autotopic_every: AUTOTOPIC_EVERY.slice(), stt: [], tts: [] };
 function setChoices(c) {
   const list = (v) => (Array.isArray(v) ? v.filter((x) => CHOICE_RE.test(String(x))).slice(0, 30).map(String) : []);
   const out = { vibe: list(c && c.vibe), roasts: list(c && c.roasts), chatty: OWNER_SETTINGS.chatty.slice(),
@@ -97,6 +102,9 @@ function setChoices(c) {
   out.autotopic_every = ev.length ? ev : AUTOTOPIC_EVERY.slice();
   out.stt = c && Array.isArray(c.stt) ? c.stt.filter((x) => Array.isArray(x) && STT_RE.test(String(x[0])))
     .slice(0, 120).map((x) => [String(x[0]), String(x[1] || x[0]).replace(/[<>"&]/g, "").slice(0, 40)]) : [];
+  // 1.99vc: the languages Pepe's TTS takes (VoiceBox's list, pepe_roomowner.TTS_LANG_NAMES)
+  out.tts = c && Array.isArray(c.tts) ? c.tts.filter((x) => Array.isArray(x) && STT_RE.test(String(x[0])))
+    .slice(0, 60).map((x) => [String(x[0]), String(x[1] || x[0]).replace(/[<>"&]/g, "").slice(0, 40)]) : [];
   for (const k of ["vibe", "roasts"]) if (!out[k].length || out[k][0] !== "auto") out[k] = ["auto"].concat(out[k].filter((x) => x !== "auto"));
   CHOICES = out;
   return out;
@@ -217,6 +225,7 @@ function cleanOne(s) {
   // 1.99up: the auto-topic's interval ("default" = Pepe's global slider) and the room's STT language
   if (ow.autotopic_every === "default" || (Number.isInteger(ow.autotopic_every) && ow.autotopic_every >= 5 && ow.autotopic_every <= 180)) owner.autotopic_every = ow.autotopic_every;
   if (typeof ow.stt_language === "string" && (ow.stt_language === "default" || ow.stt_language === "auto" || STT_RE.test(ow.stt_language))) owner.stt_language = ow.stt_language;
+  if (typeof ow.tts_language === "string" && (ow.tts_language === "default" || ow.tts_language === "auto" || STT_RE.test(ow.tts_language))) owner.tts_language = ow.tts_language;
   const ad = o.admin && typeof o.admin === "object" ? o.admin : {};
   const int = (v, d) => (Number.isInteger(v) && v >= 1 && v <= 10 ? v : d);
   const admin = { soundboard_master: ad.soundboard_master !== false, automod: ad.automod === true, chatty_llm: ad.chatty_llm !== false,
@@ -233,6 +242,20 @@ function cleanOne(s) {
   const sv = o.stt && typeof o.stt === "object" ? o.stt : null;
   const sttCode = (v) => (typeof v === "string" && (v === "auto" || STT_RE.test(v)) ? v : null);
   const stt = sv ? { global: sttCode(sv.global), effective: sttCode(sv.effective), own: bool(sv.own) } : null;
+  // 1.99vc: Pepe's speaking language here (pepe_roomowner._op_tts_report) - what the room's voice can speak, any fallback
+  const tv = o.tts && typeof o.tts === "object" ? o.tts : null;
+  const codes = (v) => (Array.isArray(v) ? v.filter((x) => STT_RE.test(String(x))).slice(0, 40).map(String) : null);
+  const tts = tv ? { own: sttCode(tv.own), global: sttCode(tv.global), effective: sttCode(tv.effective),
+    voice: typeof tv.voice === "string" && VOICE_RE.test(tv.voice) ? tv.voice : null,
+    engine: typeof tv.engine === "string" && /^[a-z_]{1,24}$/.test(tv.engine) ? tv.engine : null,
+    supported: codes(tv.supported), fallback: sttCode(tv.fallback) } : null;
+  // 1.99vc: the admins' master switches over the owner's settings: {owner key | "br:<x>": the switch's name}
+  const masters_off = {};
+  if (o.masters_off && typeof o.masters_off === "object" && !Array.isArray(o.masters_off)) {
+    for (const [k, v] of Object.entries(o.masters_off).slice(0, 60)) {
+      if (/^(br:)?[a-z_]{1,30}$/.test(k)) masters_off[k] = String(v || "").replace(/[\u0000-\u001f<>]/g, " ").slice(0, 80);
+    }
+  }
   const features = sec(o.features, ["say", "ask", "look", "roast", "camroast", "music", "music_queue", "music_play", "shop", "heist", "turf",
     "poker", "blackjack", "wheel", "trivia", "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "cam_flag", "greeter", "chatty",
     "casino_backend", "auto_dj", "kickback", "modfines", "tts"]);
@@ -255,7 +278,7 @@ function cleanOne(s) {
     home: st.home === true, paused: st.paused === true, staging: st.staging === true,
   } : null;
   return { owner, bridge: sec(o.bridge, ["relay", "mic", "cams", "audio", "transcripts", "cmds"]), bridged: bool(o.bridged), admin, status,
-           features, prices, vibe, voice, pepe_here: bool(o.pepe_here), topic, stt };
+           features, prices, vibe, voice, pepe_here: bool(o.pepe_here), topic, stt, tts, masters_off };
 }
 /** POST /api/rooms/owners `room_settings` -> the table (the set Pepe sends replaces the rows it names). */
 async function storeSettings(raw, languages, choices) {
@@ -451,9 +474,18 @@ function register(app, { addUser }) {
     } else if (key === "stt_language") {
       // 1.99up: default (Pepe's global setting) / auto / one of the transcriber's languages Pepe sent (he re-checks)
       ok = value === "default" || value === "auto" || CHOICES.stt.some((x) => x[0] === value) || (!CHOICES.stt.length && STT_RE.test(value));
+    } else if (key === "tts_language") {
+      // 1.99vc: default (Pepe's global) / auto / one of the TTS languages Pepe sent (he re-checks, and the voice's engine)
+      ok = value === "default" || value === "auto" || CHOICES.tts.some((x) => x[0] === value) || (!CHOICES.tts.length && STT_RE.test(value));
     }
     else ok = Object.prototype.hasOwnProperty.call(OWNER_SETTINGS, key) && OWNER_SETTINGS[key].includes(value);
     if (!ok) return bad(res, 400, "That isn't a setting you can change here.");
+    // 1.99vc: a setting the admins switched off everywhere (Pepe's report) - kept as it is, not queued
+    {
+      const cur = await settingsFor(R.id).catch(() => null);
+      const off = cur && cur.masters_off ? cur.masters_off[key] : null;
+      if (off) return bad(res, 409, "Switched off by PATV admins right now - your setting is kept for when it's back.");
+    }
     // 1.99tn: a burst limit per account + pad (Pepe limits per room too); staff aren't limited
     if (!rooms.isStaff(req.user)) {
       const rk = req.user.userId + "|" + R.id, t = Date.now();

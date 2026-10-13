@@ -1,0 +1,145 @@
+<%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: isAdmin }) %>
+<%# 1.99vc: Pepe's command switches (cmdswitch.js -> website action cmd.switch -> camfrog-bot pepe_cmdswitch.py). Admins only. %>
+<div class="adm-head">
+  <h1>Pepe's commands</h1>
+  <p>Every command and feature Pepe has, with two switches each. <b>Master</b> off = off in every room, whatever a room or its pad owner chose (their owner page shows the toggle as "Switched off by PATV admins" and keeps their setting). <b>Default</b> = what rooms without their own setting follow. A switched-off command answers "that's switched off right now" and charges nothing; passive features just stay quiet. The list comes from Pepe's own command catalog, so a new command shows up here by itself, switched on. In chat: <code>!cmdswitch</code>; on the VM: Pepe's admin panel, "Command switches".</p>
+</div>
+
+<section class="adm-card" id="switches" aria-labelledby="csT">
+  <h2 id="csT">Switches <span class="adm-pill admin">admins</span> <span class="adm-pill" id="csOnline"><%= v.online ? 'live' : 'offline' %></span> <span class="adm-pill" id="csCount"></span></h2>
+  <div class="adm-inline" role="search" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <input type="search" id="csQ" class="adm-filter" placeholder="Search commands and features" aria-label="Search commands and features" style="flex:1;min-width:180px">
+    <select id="csCat" aria-label="Category"><option value="">Every category</option></select>
+    <select id="csAi" aria-label="AI cost"><option value="">AI or not</option><option value="any">AI only</option></select>
+    <label class="adm-help"><input type="checkbox" id="csOff"> switched off only</label>
+  </div>
+  <div class="adm-actions" style="flex-wrap:wrap">
+    <span class="adm-help">Selected: <b id="csN">0</b></span>
+    <button type="button" class="adm-btn sm danger" data-bulk="master:off">Master off</button>
+    <button type="button" class="adm-btn sm ghost" data-bulk="master:on">Master on</button>
+    <button type="button" class="adm-btn sm ghost" data-bulk="default:off">Default off</button>
+    <button type="button" class="adm-btn sm ghost" data-bulk="default:on">Default on</button>
+    <button type="button" class="adm-btn sm ghost" data-preset="image">All AI image + video commands off</button>
+    <button type="button" class="adm-btn sm ghost" data-preset="ai">All AI off</button>
+  </div>
+  <label class="adm-help" style="display:block">Reason (optional, goes in the log) <input type="text" id="csWhy" maxlength="200" style="width:100%;max-width:420px"></label>
+  <p class="adm-msg" id="csMsg" role="status" aria-live="polite"></p>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr>
+    <th><input type="checkbox" id="csAll" aria-label="Select every row shown"></th><th>Command / feature</th><th>Category</th><th>AI</th>
+    <th>Master</th><th>Default</th><th class="num" title="rooms with their own setting (how many of them off)">Rooms</th></tr></thead>
+    <tbody id="csRows"><tr><td colspan="7" class="adm-help">Loading…</td></tr></tbody></table></div>
+  <p class="adm-help" id="csOrphans"></p>
+</section>
+
+<section class="adm-card" id="log" aria-labelledby="lgT">
+  <h2 id="lgT">Change log</h2>
+  <p class="adm-help">Every change, from here (admin audit log), Pepe's admin panel and chat (Pepe's own log).</p>
+  <ul id="csLog" class="adm-help"></ul>
+</section>
+
+<script>
+(function () {
+  'use strict';
+  var V = <%- JSON.stringify(v).replace(/</g, '\\u003c') %>;
+  var SEL = {};
+  var AI_ICON = { text: '💬', vision: '👁️', image: '🖼️', video: '🎬', audio: '🎵', voice: '🗣️', stt: '📝', web: '🌐' };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function when(ms) { return ms ? new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''; }
+  function rows() { return (V.state && V.state.switches) || []; }
+  function cats() { var o = {}; ((V.state && V.state.categories) || []).forEach(function (c) { o[c[0]] = c[1]; }); return o; }
+  function fillCats() {
+    var s = document.getElementById('csCat'); if (s.options.length > 1) return;
+    ((V.state && V.state.categories) || []).forEach(function (c) { var o = el('option', null, c[1]); o.value = c[0]; s.appendChild(o); });
+    Object.keys(AI_ICON).forEach(function (k) { var o = el('option', null, AI_ICON[k] + ' ' + k); o.value = k; document.getElementById('csAi').appendChild(o); });
+  }
+  function shown() {
+    var q = document.getElementById('csQ').value.trim().toLowerCase(), cat = document.getElementById('csCat').value;
+    var ai = document.getElementById('csAi').value, off = document.getElementById('csOff').checked;
+    return rows().filter(function (s) {
+      return (!cat || s.cat === cat) && (!ai || (ai === 'any' ? !!s.ai : s.ai === ai)) && (!off || !s.master || !s.default)
+        && (!q || (s.label + ' ' + s.id + ' ' + (s.cmds || []).join(' ')).toLowerCase().indexOf(q) >= 0);
+    });
+  }
+  function sw(s, field) {
+    var on = field === 'master' ? s.master : s.default;
+    var b = el('button', 'adm-btn sm ' + (on ? 'ghost' : 'danger'), on ? 'On' : 'Off');
+    b.type = 'button'; b.setAttribute('data-id', s.id); b.setAttribute('data-f', field); b.setAttribute('data-v', on ? 'off' : 'on');
+    b.setAttribute('aria-label', (field === 'master' ? 'Master switch' : 'Global default') + ' for ' + s.label + ': ' + (on ? 'on' : 'off'));
+    return b;
+  }
+  function render() {
+    fillCats();
+    document.getElementById('csOnline').textContent = V.online ? 'live' : 'offline' + (V.at ? ' (last report ' + when(V.at) + ')' : '');
+    var all = rows(), C = cats(), list = shown();
+    var offN = all.filter(function (s) { return !s.master; }).length;
+    document.getElementById('csCount').textContent = all.length + ' switches · ' + offN + ' master off';
+    var body = document.getElementById('csRows'); body.textContent = '';
+    if (!list.length) { var tr0 = el('tr'); var td0 = el('td', 'adm-help', V.state ? 'Nothing matches.' : 'No report from Pepe yet.'); td0.colSpan = 7; tr0.appendChild(td0); body.appendChild(tr0); }
+    list.forEach(function (s) {
+      var tr = el('tr');
+      var c0 = el('td'); var cb = el('input'); cb.type = 'checkbox'; cb.checked = !!SEL[s.id]; cb.setAttribute('data-sel', s.id); cb.setAttribute('aria-label', 'Select ' + s.label); c0.appendChild(cb); tr.appendChild(c0);
+      var n = el('td'); n.appendChild(el('b', null, s.label));
+      if (s.passive) { n.appendChild(document.createTextNode(' ')); n.appendChild(el('span', 'adm-pill', 'passive')); }
+      if (s.legacy) { n.appendChild(document.createTextNode(' ')); n.appendChild(el('span', 'adm-pill', s.legacy)); }
+      if ((s.cmds || []).length) n.appendChild(el('div', 'adm-help', s.cmds.slice(0, 8).join(' ')));
+      if ((s.owner || []).length) n.appendChild(el('div', 'adm-help', 'Pad owners: ' + s.owner.join(', ')));
+      tr.appendChild(n);
+      tr.appendChild(el('td', 'adm-help', C[s.cat] || s.cat));
+      var a = el('td'); if (s.ai) a.appendChild(el('span', 'adm-pill admin', (AI_ICON[s.ai] || '') + ' AI · ' + s.ai)); tr.appendChild(a);
+      var m = el('td'); m.appendChild(sw(s, 'master')); tr.appendChild(m);
+      var d = el('td'); if (s.has_default) d.appendChild(sw(s, 'default')); else d.appendChild(el('span', 'adm-help', '–')); tr.appendChild(d);
+      tr.appendChild(el('td', 'num', s.global_only ? '–' : (s.rooms_own ? s.rooms_own + (s.rooms_off ? ' (' + s.rooms_off + ' off)' : '') : '0')));
+      body.appendChild(tr);
+    });
+    document.getElementById('csN').textContent = Object.keys(SEL).length;
+    var orph = (V.state && V.state.orphans) || [];
+    document.getElementById('csOrphans').textContent = orph.length ? 'Saved master switches for commands Pepe no longer has (ignored): ' + orph.join(', ') : '';
+    var log = document.getElementById('csLog'); log.textContent = '';
+    (V.actions || []).forEach(function (x) {
+      var mark = x.status === 'done' ? '✅ ' : x.status === 'failed' ? '❌ ' : '⏳ ';
+      log.appendChild(el('li', null, mark + when(x.created) + ' ' + (x.username || '') + ': ' + (x.label || '') + (x.message ? ' - ' + x.message : '')));
+    });
+    ((V.state && V.state.audit) || []).filter(function (x) { return x.via !== 'website'; }).slice(0, 10).forEach(function (x) {
+      log.appendChild(el('li', null, '🐸 ' + when(x.ts) + ' ' + x.by + ' (' + x.via + '): ' + x.field + ' ' + (x.on ? 'ON' : 'OFF') + ' - ' + x.ids.join(', ')));
+    });
+  }
+  function load() {
+    return fetch('/api/admin/pepe/commands', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.ok) { V = d; render(); } }).catch(function () {});
+  }
+  function send(ids, field, value) {
+    var msg = document.getElementById('csMsg');
+    if (!ids.length) { msg.textContent = 'Select at least one row first.'; return; }
+    if (field === 'master' && value === 'off' && ids.length > 3 && !confirm('Switch ' + ids.length + ' commands / features off in every room?')) return;
+    msg.textContent = '…';
+    return fetch('/api/admin/pepe/commands', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ ids: ids, field: field, value: value, reason: document.getElementById('csWhy').value }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { msg.textContent = d.ok ? 'Sent to Pepe - the table updates in a few seconds.' : '❌ ' + (d.error || 'failed'); setTimeout(load, 4000); load(); })
+      .catch(function () { msg.textContent = '❌ The site did not answer.'; });
+  }
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest ? ev.target.closest('button') : null;
+    if (!t) return;
+    if (t.hasAttribute('data-id')) send([t.getAttribute('data-id')], t.getAttribute('data-f'), t.getAttribute('data-v'));
+    else if (t.hasAttribute('data-bulk')) { var p = t.getAttribute('data-bulk').split(':'); send(Object.keys(SEL), p[0], p[1]); }
+    else if (t.hasAttribute('data-preset')) {
+      var kind = t.getAttribute('data-preset');
+      send(rows().filter(function (s) { return s.master && (kind === 'ai' ? !!s.ai : (s.ai === 'image' || s.ai === 'video')); }).map(function (s) { return s.id; }), 'master', 'off');
+    }
+  });
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (t.hasAttribute && t.hasAttribute('data-sel')) { if (t.checked) SEL[t.getAttribute('data-sel')] = 1; else delete SEL[t.getAttribute('data-sel')]; document.getElementById('csN').textContent = Object.keys(SEL).length; }
+    else if (t.id === 'csAll') { shown().forEach(function (s) { if (t.checked) SEL[s.id] = 1; else delete SEL[s.id]; }); render(); }
+    else if (t.id === 'csCat' || t.id === 'csAi' || t.id === 'csOff') render();
+  });
+  document.getElementById('csQ').addEventListener('input', render);
+  render();
+  setInterval(function () { if (!document.hidden) load(); }, 15000);
+})();
+</script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

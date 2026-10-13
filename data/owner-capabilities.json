@@ -388,6 +388,20 @@
    ]
   },
   {
+   "id": "room_tts",
+   "area": "room",
+   "title": "Pick the language Pepe speaks in your room",
+   "web": "/p/{slug}/owner#pepe",
+   "web_action": "room.owner",
+   "web_setting": "tts_language",
+   "setting": "tts_language",
+   "howto": "When Pepe talks on the mic he speaks each line in the language it's written in (auto) - that's Pepe's default. Fix it to one language for a room that speaks it, or go back to the default. A voice that can't speak the language you pick speaks English instead, and your owner page says so.",
+   "owner_only": true,
+   "code": [
+    "pepe_roomowner.py:_op_web_setting"
+   ]
+  },
+  {
    "id": "bridge",
    "area": "room",
    "title": "Connect your room to its pad page",
@@ -527,6 +541,7 @@
   "Pepe's persona and costume (one Pepe for every room)",
   "the auto-topic's master switch and the shortest auto-topic interval owners may pick",
   "house ads (!promo) and sponsors",
-  "the mic slots and the transcriber's global rules (auto-detect allow-list, per-person languages)"
+  "the mic slots and the transcriber's global rules (auto-detect allow-list, per-person languages)",
+  "the master switches that turn a command or feature off everywhere (your setting is kept)"
  ]
 }

@@ -7481,6 +7481,7 @@
   "owner.ao.10": "the auto-topic's master switch and the shortest auto-topic interval owners may pick",
   "owner.ao.11": "house ads (!promo) and sponsors",
   "owner.ao.12": "the mic slots and the transcriber's global rules (auto-detect allow-list, per-person languages)",
+  "owner.ao.13": "the master switches that turn a command or feature off everywhere (your setting is kept)",
   "owner.lang_auto": "Auto (follow the chat)",
   "owner.cap.roomvibe.title": "Set your room's vibe",
   "owner.cap.roomvibe.howto": "Pepe learns how your room talks and matches it. Set the type yourself (chill, fight, flirty...), how hard he roasts, add notes he should know, or lock the vibe so he stops relearning it. !roomvibe on its own shows it.",
@@ -8246,6 +8247,8 @@
   "owner.cap.room_autotopic.howto": "Switch the auto-topic on or off and pick how often (every 15 minutes to every 3 hours), never more often than Pepe's admins allow. Until you choose, your room follows Pepe's default.",
   "owner.cap.room_stt.title": "Pick the language Pepe transcribes your room's mic in",
   "owner.cap.room_stt.howto": "Follow Pepe's default, auto-detect each clip, or fix one language for a room that speaks it. It's the transcription only: the language Pepe answers in is his chat language.",
+  "owner.cap.room_tts.title": "Pick the language Pepe speaks in your room",
+  "owner.cap.room_tts.howto": "Pepe speaks each line in the language it's written in by default. Fix one language for a room that speaks it, or go back to the default. A voice that can't speak your pick speaks English instead, and your owner page says so.",
   "owner.cap.web_room_topic.title": "Set the room topic",
   "owner.cap.web_room_topic.howto": "Type your room's topic on this page and Pepe sets it in your connected room.",
   "owner.cap.web_pad_site.title": "Choose what Pepe does on your pad's page",
@@ -8343,5 +8346,14 @@
   "pad.bets.poll_ended": "ended",
   "pad.bets.new_market": "Market",
   "pad.bets.new_pool": "Pool",
-  "pad.bets.new_poll": "Poll"
+  "pad.bets.new_poll": "Poll",
+  "owner.set_tts_language": "Pepe's speaking language",
+  "owner.set_tts_language_why": "The language Pepe speaks in on the mic here. Auto (Pepe's default) speaks each line in the language it's written in; pick one for a room that speaks it. This is the voice only - the language he chats in is the Language setting.",
+  "owner.tts_default": "Pepe's default",
+  "owner.tts_auto": "Auto (the language each line is written in)",
+  "owner.tts_global": "Pepe's default is {lang}.",
+  "owner.tts_fallback": "The room's voice ({voice}) can't speak {lang}, so Pepe speaks English here until the voice changes.",
+  "owner.tts_not_voice": "not with this voice",
+  "owner.master_off": "Switched off by PATV admins",
+  "owner.master_off_why": "It's off in every room right now. Your setting is kept and comes back when they switch it on again."
 }

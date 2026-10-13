@@ -2870,7 +2870,7 @@
     "!pool new [question] judge @someone"
    ],
    "summary": "Betting pools — the simple way to bet as a group, no shares: !pool new Will it rain Friday?",
-   "details": "**Betting pools** — the simple way to bet as a group, no shares: `!pool new Will it rain Friday? judge @carol closes 2d` (yes/no, or `options a/b/c`). Bet with `!pool M5 yes 5k` (min 500, as often as you like). When the judge settles it (`!pool settle M5 yes`), the winners split the losing side's pot in proportion to their stakes, after **5% of the losing pot** goes to the casino — so a correct bet never pays back less than you put in. Nobody backed the winner, or it's voided, or the judge never calls it within 7 days: everyone is refunded. `!pools` lists the open ones; they're on [publicaccess.tv/wagers](https://publicaccess.tv/wagers), each with its own page at publicaccess.tv/markets/<id>.",
+   "details": "**Betting pools** — the simple way to bet as a group, no shares: `!pool new Will it rain Friday? judge @carol closes 2d` (yes/no, or `options a/b/c`). Bet with `!pool M5 yes 5k` (min 500, as often as you like). When the judge settles it (`!pool settle M5 yes`), the winners split the losing side's pot in proportion to their stakes, after **5% of the losing pot** goes to the casino — so a correct bet never pays back less than you put in. Nobody backed the winner, or it's voided, or the judge never calls it within 7 days: everyone is refunded. `!pools` lists the open ones; they're on [publicaccess.tv/wagers](https://publicaccess.tv/wagers).",
    "examples": [
     "!pool new Will it rain Friday? judge @carol closes 2d",
     "!pool M5 yes 5k",
@@ -2922,7 +2922,7 @@
     "!market new [question] judge @someone"
    ],
    "summary": "Open a prediction market anyone can trade — !market new Will Samira come back this week?",
-   "details": "Open a **prediction market** anyone can trade — `!market new Will Samira come back this week? judge @carol closes 2d`. Yes/no by default, or give 2–6 answers with `options red/blue/green`. Markets trade **shares**, like Polymarket: each answer has a price between 0 and 1 PAT (the crowd's odds), and every share of the winning answer pays **1 PAT**. Buy with `!market M3 yes 5k` (spend 5k PAT, min 500) — buying pushes the price up, selling pushes it down. Sell any time while trading is open with `!market sell M3 yes 300` or `all`, so you can lock in a profit (or cut a loss) before the result. `!market mine` shows your positions with your entry price, today's price and profit/loss; `!market M3` the prices, `!market list` the open ones. 2% fee on every buy and sell. Trading closes at the set time — a duration (`closes 2d`) or a date (`closes 2026-11-03 18:00 ET`, any zone name; default 1 day, within the admins' limits, normally 1 hour to 90 days) — and the AI judge is only asked after it; the judge — who can't trade — calls it with `!market settle M3 yes`, or `!market settle M3 void <reason>`. **On a void, trading fees are not refunded** (they were taken when you traded): the Federal Reserve takes back its seed first, then holders split what's left in the market, up to what they put in — so if others sold at a profit before the void, holders get back less. Betting pools and wagers are different: a void there refunds every stake in full, fees included. All of it, judging included, works on [publicaccess.tv/markets](https://publicaccess.tv/markets) with a price chart. The Federal Reserve seeds each market's liquidity and gets back whatever's left over. Start one from the site too. For the old simple pool model, see `!pool`.",
+   "details": "Open a **prediction market** anyone can trade — `!market new Will Samira come back this week? judge @carol closes 2d`. Yes/no by default, or give 2–6 answers with `options red/blue/green`. Markets trade **shares**, like Polymarket: each answer has a price between 0 and 1 PAT (the crowd's odds), and every share of the winning answer pays **1 PAT**. Buy with `!market M3 yes 5k` (spend 5k PAT, min 500) — buying pushes the price up, selling pushes it down. Sell any time while trading is open with `!market sell M3 yes 300` or `all`, so you can lock in a profit (or cut a loss) before the result. `!market mine` shows your positions with your entry price, today's price and profit/loss; `!market M3` the prices, `!market list` the open ones. 2% fee on every buy and sell. Trading closes at the set time (default 1 day, max 30); the judge — who can't trade — calls it with `!market settle M3 yes`, or `!market settle M3 void <reason>`. **On a void, trading fees are not refunded** (they were taken when you traded): the Federal Reserve takes back its seed first, then holders split what's left in the market, up to what they put in — so if others sold at a profit before the void, holders get back less. Betting pools and wagers are different: a void there refunds every stake in full, fees included. All of it, judging included, works on [publicaccess.tv/markets](https://publicaccess.tv/markets) with a price chart. The Federal Reserve seeds each market's liquidity and gets back whatever's left over. Start one from the site too. For the old simple pool model, see `!pool`.",
    "examples": [
     "!market new Will Samira come back this week? judge @carol closes 2d",
     "!market M3 yes 5k",
@@ -5955,6 +5955,44 @@
    "keywords": []
   },
   {
+   "id": "cmdswitch",
+   "title": "!cmdswitch",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!cmdswitch",
+    "!cmdswitches"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!cmdswitch",
+    "!cmdswitch <command|id>",
+    "!cmdswitch <command|id> on|off",
+    "!cmdswitch default <command|id> on|off",
+    "!cmdswitch ai on|off"
+   ],
+   "summary": "The master switch for any command or feature: off means off in every room, whatever the room or the pad owner set.",
+   "details": "Every user-facing command and feature has a **master switch** (off = off everywhere) on top of its **global default** (what rooms follow) and each room's own setting. `!cmdswitch` lists what's off; `!cmdswitch !imagine` shows one switch (master, default, this room, the result here); `!cmdswitch !imagine off` turns the master off; `!cmdswitch default !trivia off` changes the default rooms follow; `!cmdswitch ai off` switches every AI command and feature off at once. A switched-off command answers with one short line and charges nothing; passive features (chatty, greetings, the auto-topic...) just stay quiet. Admins can still use a switched-off command's settings words (on, off, status, cancel...). Every change is logged. The full table, with search and bulk actions, is on the website's admin pages (Pepe > Commands).",
+   "examples": [
+    "!cmdswitch",
+    "!cmdswitch !imagine off",
+    "!cmdswitch default !trivia off",
+    "!cmdswitch ai on"
+   ],
+   "keywords": [
+    "switch off",
+    "disable command",
+    "turn off",
+    "master switch",
+    "kill switch",
+    "ai off"
+   ],
+   "web": {
+    "label": "Commands (admin)",
+    "url": "/admin/pepe/commands"
+   }
+  },
+  {
    "id": "transcript",
    "title": "!transcript on/off/status",
    "category": "admin",
@@ -7362,5 +7400,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "117a1a9506e6e5eb"
+ "hash": "b32cffc874fb8930"
 }
