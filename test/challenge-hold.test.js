@@ -126,6 +126,18 @@ test("the 7-day cap: 15% of (balance + held + paid in 7 days)", async () => {
   assert.equal(r.held, 17000);
 });
 
+test("1.99xb: the entry fee is 0..10,000 - checked on the hold and the result", async () => {
+  for (const fee of [-1, 10001, 2.5, "x"]) {
+    assert.equal((await post(`/api/rooms/${PLANT}/challenge/hold`, { ref: "AC9-" + String(fee).replace(/\W/g, "n"), amount: 20000, min: 5000, fee })).code, "bad_fee");
+  }
+  assert.equal((await post(`/api/rooms/${PLANT}/challenge/result`, { ref: "AC9-r", cat: "sing", fee: 20000 })).code, "bad_fee");
+  const ok0 = await post(`/api/rooms/${PLANT}/challenge/hold`, { ref: "AC9-zero", amount: 20000, min: 5000, pct: 10, cap: 150000, fee: 0 });
+  assert.notEqual(ok0.code, "bad_fee");
+  const ok10 = await post(`/api/rooms/${PLANT}/challenge/hold`, { ref: "AC9-max", amount: 20000, min: 5000, pct: 10, cap: 150000, fee: 10000 });
+  assert.notEqual(ok10.code, "bad_fee");
+  assert.equal(CP.FEE_MAX, 10000);
+});
+
 test("results for the pad page: public, newest first, no name for an incognito performer", async () => {
   await post(`/api/rooms/${PLANT}/challenge/result`, { ref: "AC1-1", cat: "sing", mode: "solo", name: "singer", score: 7, paid: 14000 });
   await post(`/api/rooms/${PLANT}/challenge/result`, { ref: "AC2-1", cat: "moan", mode: "open", name: null, score: 3, paid: 0 });

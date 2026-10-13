@@ -217,7 +217,7 @@ async function fee(roomId, b = {}) {
 // the supply like any other), the prize a keyed pool -> wallet payment out of it, the rest a keyed move back - each with
 // its challenge_holds row in ONE dbUtils.tx, so the supply never changes. With the pools still in Pepe (or Pepe's
 // econ_challenges off) Pepe keeps the interim path (/challenge/payout).
-//   POST /api/rooms/:room/challenge/hold     {ref, amount, min, pct, cap, week_pct?, cat, login}
+//   POST /api/rooms/:room/challenge/hold     {ref, amount, min, pct, cap, week_pct?, cat, login, fee?}  (fee 0..10,000, else bad_fee)
 //     the budget counts what is HELD as already paid: 24 h = min(cap, pct% of (balance + held + paid 24 h)) - held - paid
 //     24 h; 7 days = week_pct% of (balance + held + paid 7 d) - held - paid 7 d. held = min(amount, payout_max, both, the
 //     balance); under `min` nothing is held (code empty | cap) and the challenge runs for glory.
@@ -229,6 +229,10 @@ async function fee(roomId, b = {}) {
 //   POST /api/rooms/:room/challenge/result   {ref, cat, mode, name|null, score, paid, fee, vs_name, vs_score, note}  the pad page list
 //   GET  /api/rooms/:slug/challenges         (public) the last 20 judged performances + today's prize budget; incognito = no name
 const HOLD_POOL = "chalhold";
+// 1.99xb (the user, 2026-10-13): each challenge picks its own entry fee, 0..10,000 PAT, default 0 (no fee, no escrow).
+// Pepe holds the fee in escrow; the site re-checks the bounds on every hold and result that carries one.
+const FEE_MAX = 10000;
+const feeOk = (v) => v === undefined || v === null || v === "" || (Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= FEE_MAX);
 const holdKey = (ref) => "chalhold:" + ref;
 
 async function poolsLive() {
@@ -273,6 +277,7 @@ async function hold(roomId, b = {}) {
   const amount = Math.floor(Number(b.amount));
   const min = Math.max(1, Math.floor(Number(b.min) || 1));
   if (!REF_RE.test(rawRef) || !Number.isFinite(amount) || amount <= 0 || amount > 1e9) return { ok: false, code: "bad", held: 0 };
+  if (!feeOk(b.fee)) return { ok: false, code: "bad_fee", held: 0 };
   const R = await require("./rooms").get(String(roomId || ""));
   if (!R) return { ok: false, code: "no_room", held: 0 };
   if (!CONFIG.on) return { ok: false, code: "off", held: 0 };
@@ -361,6 +366,7 @@ async function recordRun(roomId, b = {}) {
   await init();
   const rawRef = String(b.ref || "");
   if (!REF_RE.test(rawRef)) return { ok: false, code: "bad" };
+  if (!feeOk(b.fee)) return { ok: false, code: "bad_fee" };
   const R = await require("./rooms").get(String(roomId || "")).catch(() => null);
   if (!R) return { ok: false, code: "no_room" };
   const name = (v) => (v == null || v === "" ? null : String(v).replace(/[<>]/g, "").slice(0, 40));
@@ -465,7 +471,7 @@ function register(app, { addUser, isBotToken }) {
   });
 }
 
-module.exports = { init, config, setConfig, cleanConfig, budget, vault, payout, fee, register, DEFAULTS,
+module.exports = { FEE_MAX, init, config, setConfig, cleanConfig, budget, vault, payout, fee, register, DEFAULTS,
                    hold, resolve, recordRun, listForRoom, sweepHolds, holdBudget, HOLD_POOL,
                    _stopSweeper: () => { if (sweepTimer) clearInterval(sweepTimer); sweepTimer = null; },
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };
