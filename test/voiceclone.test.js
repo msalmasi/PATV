@@ -123,6 +123,10 @@ test("recording: the site re-scores the transcript; failures count against 3 tri
   assert.equal(after.auto_approved, 1);
   assert.ok(after.audio && fs.existsSync(path.join(process.env.VC_DIR, after.audio)), "the consent recording is kept");
   assert.equal(VC.score(row, "I am vetcf and I consent to patv cloning my voice code four seven two nine").code_ok, row.code === "4729");
+  // 1.99wm: STT spells a login's digits and an acronym out ("Foamy One One One One", "P A T V") - still the phrase
+  const spelled = { phrase: "I am foamy1111, and I consent to PATV cloning my voice. Code 7-3-9-3.", code: "7393", script: "x" };
+  assert.ok(VC.score(spelled, "I am Foamy One One One One, and I consent to P A T V cloning my voice. Code seven three nine three").phrase_score >= 100);
+  assert.ok(VC.score(spelled, "I am somebody else, and I agree to cloning a voice").phrase_score < 85, "another phrase still fails");
 });
 
 test("a young / low-level account goes to staff review; staff approve or deny", async () => {
