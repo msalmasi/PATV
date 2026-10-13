@@ -9,6 +9,7 @@
   "author": "pb",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "@noble/curves": "1.9.7",
     "@noble/hashes": "1.8.0",
     "@sendgrid/mail": "^8.1.3",

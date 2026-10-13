@@ -1,8 +1,17 @@
 // shopart.js — 🎨 "Generate image" for shop items (1.99xr): a picture in the house prize-shop style, made on demand.
 //
 // The official items' pictures are hand-drawn by CODE (tools/gen-shop-art.py): a pixel sprite on a 48 x 36 grid with a 1-px
-// dark outline, standing on a soft shadow in a radial spotlight of its shelf's colour, written as crisp <rect> runs. Code can't
-// draw an arbitrary item, so this asks an IMAGE MODEL for the sprite and then rebuilds it in exactly that format:
+// dark outline, standing on a soft shadow in a radial spotlight of its shelf's colour, written as crisp <rect> runs.
+//
+// 1.99xy - two ENGINES (/admin/shopart "engine"):
+//   sprite  Claude (Anthropic API, ANTHROPIC_API_KEY, model claude-opus-5-5 | claude-sonnet-5-5) writes the drawing program the way
+//           gen-shop-art.py's item functions are written - as JSON DATA (shopsprite.js: whitelisted ops, strictly validated, never
+//           evaluated), rendered here by a byte-for-byte port of the Python renderer. One retry on an invalid answer.
+//   paint   the 1.99xr path below: an IMAGE MODEL (Gemini) paints the item, which is then rebuilt in the house format.
+//   auto    (default) sprite when ANTHROPIC_API_KEY is set, else paint; a failed sprite falls back to paint when GEMINI_API_KEY is set.
+// The text guard, image safety, caps, previews and the log are the same for both (log: engine, model, ms, tokens_in / tokens_out).
+//
+// The paint engine:
 //
 //   1. text guards: the item's name + description + the optional extra prompt go through feedfilter.scan (hate / threats /
 //      doxxing / spam = refused) and a short list of adult / gore words (refused). The style prompt itself says: generic,
@@ -27,7 +36,9 @@
 //   staff_per_hour / staff_per_day   30 / 200
 //   global_per_day                   500       the whole site, a cost guard
 //   model      gemini-3.1-flash-image (Nano Banana 2) | gemini-3-pro-image-preview | gemini-2.5-flash-image ...
-// No GEMINI_API_KEY on this env = the button isn't shown (status says unavailable) and /generate answers 503.
+//   engine auto | sprite | paint; sprite_model, sprite_effort (low | medium | high), sprite_review (a 2nd Claude call that looks at
+//   the render and fixes it - off by default: about double the time and cost)
+// No key for any usable engine on this env = the button isn't shown (status says unavailable) and /generate answers 503.
 //
 // LOG: table shopart_gens - one row per attempt: who, when, the texts, shelf, model, status (preview | accepted | refused |
 // failed), why, ms, the safety log id. /admin/shopart lists the newest with thumbnails.
@@ -60,8 +71,13 @@ const CATEGORY_SHELF = { "Gift cards": "goods", "Digital": "perks", "Services": 
 const SPARKS = [[5, 5], [42, 7], [40, 30], [6, 24]];
 const REFS = ["gaming-pc", "ring", "pizza-for-blake", "watch"];
 
+// 1.99xy: two engines - "sprite" (Claude writes a gen-shop-art-style drawing program, shopsprite.js; ANTHROPIC_API_KEY) and
+// "paint" (Gemini paints a picture that is pixelated here; GEMINI_API_KEY). auto = sprite when its key is set, paint otherwise / on failure.
+const ENGINES = Object.freeze(["auto", "sprite", "paint"]);
+const SS = require("./shopsprite");
 const DEFAULTS = Object.freeze({ staff_on: true, users_on: true, user_per_hour: 3, user_per_day: 10, staff_per_hour: 30, staff_per_day: 200,
-                                 global_per_day: 500, model: MODELS[0] });
+                                 global_per_day: 500, model: MODELS[0], engine: "auto", sprite_model: SS.SPRITE_MODELS[0], sprite_effort: "medium",
+                                 sprite_review: false });
 const LIMITS = { user_per_hour: [0, 100], user_per_day: [0, 1000], staff_per_hour: [0, 1000], staff_per_day: [0, 10000], global_per_day: [0, 100000] };
 
 // adult / gore words the prompt may not ask for (the model and the image check are the real guards; this stops the obvious)
@@ -94,6 +110,11 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS shopart_gens (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, username TEXT,
         staff INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, title TEXT, description TEXT, extra TEXT, shelf TEXT, model TEXT,
         status TEXT NOT NULL, reason TEXT, file TEXT, ms INTEGER, safety_log INTEGER, accepted_at INTEGER)`);
+      // 1.99xy: which engine drew it + the Claude tokens (in = prompt incl. cache, out = thinking + answer)
+      const cols = (await getQuery("PRAGMA table_info(shopart_gens)")).map((r) => r.name);
+      for (const [c, t] of [["engine", "TEXT"], ["tokens_in", "INTEGER"], ["tokens_out", "INTEGER"]]) {
+        if (!cols.includes(c)) await runQuery(`ALTER TABLE shopart_gens ADD COLUMN ${c} ${t}`);
+      }
       await runQuery("CREATE INDEX IF NOT EXISTS shopart_gens_user ON shopart_gens (user_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS shopart_gens_created ON shopart_gens (created)");
       await runQuery("CREATE INDEX IF NOT EXISTS shopart_gens_file ON shopart_gens (file)");
@@ -114,6 +135,10 @@ function cleanConfig(c, base = DEFAULTS) {
     o[k] = src[k] != null && src[k] !== "" && isFinite(n) ? Math.min(hi, Math.max(lo, n)) : base[k];
   }
   o.model = MODELS.includes(src.model) ? src.model : base.model;
+  o.engine = ENGINES.includes(src.engine) ? src.engine : base.engine;
+  o.sprite_model = SS.SPRITE_MODELS.includes(src.sprite_model) ? src.sprite_model : base.sprite_model;
+  o.sprite_effort = SS.EFFORTS.includes(src.sprite_effort) ? src.sprite_effort : base.sprite_effort;
+  o.sprite_review = src.sprite_review != null ? bool(src.sprite_review) : base.sprite_review;
   return o;
 }
 let CFG = null;
@@ -135,7 +160,15 @@ async function setConfig(patch, actor) {
   return next;
 }
 
-const keyed = () => !!process.env.GEMINI_API_KEY;
+const hasSprite = () => !!process.env.ANTHROPIC_API_KEY;
+const hasPaint = () => !!process.env.GEMINI_API_KEY;
+/** The engines to try, in order, for this config: sprite first (auto / sprite), Gemini as the fallback when its key is set. */
+function engines(c = DEFAULTS) {
+  if (c.engine === "paint") return hasPaint() ? ["paint"] : [];
+  if (c.engine === "sprite") return hasSprite() ? (hasPaint() ? ["sprite", "paint"] : ["sprite"]) : [];
+  return [hasSprite() && "sprite", hasPaint() && "paint"].filter(Boolean);
+}
+const keyed = (c = DEFAULTS) => engines(c).length > 0;
 const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 
 async function usage(userId, t = NOW()) {
@@ -152,8 +185,8 @@ async function usage(userId, t = NOW()) {
  */
 async function status(me, { minLevel = 0 } = {}) {
   if (!me || !me.userId) return { available: false, reason: "signin" };
-  if (!keyed()) return { available: false, reason: "nokey" };
   const c = await config();
+  if (!keyed(c)) return { available: false, reason: "nokey" };
   const staff = isStaff(me);
   if (!(staff ? c.staff_on : c.users_on)) return { available: false, reason: "off", staff };
   if (!staff && (Number(me.level) || 0) < minLevel) return { available: false, reason: "level", staff, minLevel };
@@ -479,21 +512,37 @@ function runs(g, fill) {
 const blank = () => Array.from({ length: H_ }, () => new Array(W_).fill(null));
 const xmlEsc = (s) => String(s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c]));
 
-/** The sprite grid -> the SVG, framed exactly like gen-shop-art.py render() (spotlight, floor shadow, sparkles). */
-function renderSvg(grid, title, shelf) {
+/**
+ * The sprite grid -> the SVG, framed exactly like gen-shop-art.py render() (spotlight, floor shadow, sparkles, and since 1.99xy
+ * the optional corner chip `tag` - "1 MO", "+100" ...). Byte-for-byte the same output as the Python for the same sprite.
+ */
+function renderSvg(grid, title, shelf, tag = null) {
   const [inner, outer] = SHELF_BG[shelf] || SHELF_BG.more;
   const sh = blank();
   for (let y = 0; y < H_; y++) for (let x = 0; x < W_; x++) if (((x + 0.5 - 24) / 15) ** 2 + ((y + 0.5 - 33.2) / 2.2) ** 2 <= 1) sh[y][x] = "#000";
   const sp = blank();
   for (const [x, y] of SPARKS) for (const [dx, dy] of [[0, -1], [-1, 0], [0, 0], [1, 0], [0, 1]]) sp[y + dy][x + dx] = "#fff";
-  return [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W_} ${H_}" shape-rendering="crispEdges">`,
+  const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W_} ${H_}" shape-rendering="crispEdges">`,
     `<title>${xmlEsc(String(title || "").slice(0, 80))}</title>`,
     `<defs><radialGradient id="s" cx="50%" cy="42%" r="65%"><stop offset="0" stop-color="${inner}"/><stop offset="1" stop-color="${outer}"/></radialGradient></defs>`,
     `<rect width="${W_}" height="${H_}" fill="url(#s)"/>`,
     '<g fill-opacity=".35">' + runs(sh).join("") + "</g>",
     '<g fill-opacity=".28">' + runs(sp).join("") + "</g>",
-    ...runs(grid), "</svg>"].join("\n") + "\n";
+    ...runs(grid)];
+  const SS = require("./shopsprite");
+  if (tag && [...String(tag)].every((ch) => SS.FONT[ch])) {
+    const t = SS.makeGrid();
+    const x1 = W_ - 2, x0 = x1 - SS.textWidth(tag) - 3;
+    t.rect(x0, H_ - 9, x1, H_ - 2, "#0b0b0b");
+    t.rect(x0 + 1, H_ - 10, x1 - 1, H_ - 1, "#0b0b0b");
+    t.text(tag, x0 + 2, H_ - 8, tag === "LIFE" || tag === "+100" ? "#ffe27a" : "#ffffff");
+    out.push(...runs(t.px));
+  }
+  out.push("</svg>");
+  return out.join("\n") + "\n";
 }
+
+const toPng = (svg) => require("sharp")(Buffer.from(svg), { density: 72 * 8 }).resize(W_ * 8, H_ * 8, { kernel: "nearest" }).png().toBuffer();
 
 // ── generate / accept ──
 const oneLine = (s, n) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
@@ -527,45 +576,71 @@ async function generateOne(me, b, { minLevel = 0, safety = null } = {}) {
   if (title.length < 3) throw new GenError("Give the item a title first (3+ characters) - the picture is drawn from it.", "title");
   const shelf = shelfFor(b.shelf, b.category);
   const t0 = NOW();
-  const row = await runQuery(`INSERT INTO shopart_gens (user_id, username, staff, created, title, description, extra, shelf, model, status)
-                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running')`, [me.userId, me.username || null, st.staff ? 1 : 0, t0, title, description || null, extra || null, shelf, c.model]);
+  const order = engines(c);
+  const planned = order[0] === "sprite" ? c.sprite_model : c.model;
+  const row = await runQuery(`INSERT INTO shopart_gens (user_id, username, staff, created, title, description, extra, shelf, model, status, engine)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`, [me.userId, me.username || null, st.staff ? 1 : 0, t0, title, description || null, extra || null, shelf, planned, order[0] || null]);
   const id = row.id;
+  const tok = { input: 0, output: 0 };
   const end = async (status, reason, extraCols = {}) => {
     const cols = Object.assign({ status, reason: reason || null, ms: NOW() - t0 }, extraCols);
+    if (tok.input || tok.output) Object.assign(cols, { tokens_in: tok.input, tokens_out: tok.output });
     await runQuery(`UPDATE shopart_gens SET ${Object.keys(cols).map((k) => k + " = ?").join(", ")} WHERE id = ?`, [...Object.values(cols), id]);
   };
   const bad = textProblem(title, description, extra);
   if (bad) { await end("refused", "text: " + bad); throw new GenError(bad, "text"); }
-  let out;
-  try {
-    out = await PROVIDER({ prompt: stylePrompt({ title, description, extra }), refs: await references(), model: c.model });
-  } catch (e) {
-    const msg = e.gen ? e.message : "The picture model is busy or failed - try again in a minute.";
-    await end(e.code === "blocked" ? "refused" : "failed", (e.code || "error") + ": " + String(e.message).slice(0, 200));
-    if (!e.gen) console.error("[shopart] model:", String(e.message).slice(0, 200));
-    throw e.gen ? e : new GenError(msg, "model", 502);
+  // the engines in order: a failed / invalid sprite answer (already retried once inside) falls back to Gemini when it's set up;
+  // a model that DECLINES the item is a refusal, never retried on the other engine
+  const notes = [];
+  let svg = null, png = null, used = null, engine = null;
+  for (const eng of order) {
+    try {
+      let grid, tag = null;
+      if (eng === "sprite") {
+        const r = await SS.sprite({ title, description, extra, shelf }, { model: c.sprite_model, effort: c.sprite_effort, review: c.sprite_review,
+          renderPng: (g, t) => toPng(renderSvg(g, title, shelf, t)) });
+        tok.input += r.usage.input; tok.output += r.usage.output;
+        grid = r.grid; tag = r.tag; used = r.model;
+        if (r.attempts > 1) notes.push("sprite: 2nd try");
+        if (r.warnings.length) notes.push("sprite: " + r.warnings.join("; ").slice(0, 160));
+      } else {
+        const out = await PROVIDER({ prompt: stylePrompt({ title, description, extra }), refs: await references(), model: c.model });
+        used = out.model;
+        grid = await toSprite(out.buf);
+      }
+      svg = renderSvg(grid, title, shelf, tag);
+      png = await toPng(svg);
+      engine = eng;
+      break;
+    } catch (e) {
+      if (e.usage) { tok.input += e.usage.input || 0; tok.output += e.usage.output || 0; }
+      const why = eng + " " + (e.code || "error") + ": " + String(e.message).slice(0, 160);
+      notes.push(why);
+      if (e.code === "blocked") {
+        await end("refused", notes.join(" | "), { engine: eng, model: eng === "sprite" ? c.sprite_model : c.model });
+        throw e.gen ? e : new GenError("The picture model refused that item (its safety filter).", "blocked");
+      }
+      if (!e.gen && !e.sprite) console.error("[shopart] " + eng + ":", String(e.message).slice(0, 200));
+      if (eng === order[order.length - 1]) {
+        await end("failed", notes.join(" | "), { engine: eng });
+        if (e.gen && e.code !== "model") throw e;
+        throw new GenError("The picture model is busy or failed - try again in a minute.", "model", 502);
+      }
+    }
   }
-  let svg, png;
-  try {
-    const grid = await toSprite(out.buf);
-    svg = renderSvg(grid, title, shelf);
-    png = await require("sharp")(Buffer.from(svg), { density: 72 * 8 }).resize(W_ * 8, H_ * 8, { kernel: "nearest" }).png().toBuffer();
-  } catch (e) {
-    await end("failed", "process: " + String(e.message).slice(0, 200), { model: out.model });
-    throw e.gen ? e : new GenError("That picture couldn't be processed - try again.", "process", 502);
-  }
+  const reason = notes.length ? notes.join(" | ").slice(0, 400) : null;
   // the same image-safety check an uploaded pad picture gets (surface "shop", the strict profile policy)
   let v = { ok: true };
   try {
     v = await (safety || require("./imagesafety").check)({ surface: "shop", kind: "image", buf: png, userId: me.userId, ref: "shopart:" + id });
   } catch (e) { v = { ok: false, reason: "The picture couldn't be safety-checked right now - try again in a minute." }; }
   if (!v.ok || v.nsfw) {
-    await end("refused", "safety: " + (v.reason || "nsfw"), { model: out.model, safety_log: v.logId || null });
+    await end("refused", "safety: " + (v.reason || "nsfw"), { engine, model: used, safety_log: v.logId || null });
     throw new GenError(v.reason || "That picture didn't pass the image safety check.", "safety");
   }
   const file = crypto.randomBytes(16).toString("hex") + ".svg";
   fs.writeFileSync(path.join(dir(), file), svg);
-  await end("preview", null, { model: out.model, file, safety_log: v.logId || null });
+  await end("preview", reason, { engine, model: used, file, safety_log: v.logId || null });
   const after = await status(me, { minLevel });
   return { id, url: urlOf(file), preview: "/media/shopart/" + file, shelf, left: after.left || null };
 }
@@ -670,8 +745,8 @@ function register(app, { addUser }) {
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
       res.render("admin/shopart", { user: me.username, title: "Admin · Shop pictures", section: "shopart", me, isAdmin: me.class === "Admin",
-        errors: [], success: req.query.saved ? ["Saved."] : [], C: await config(), keyed: keyed(), rows: await recent(100), stats: await stats(),
-        MODELS, LIMITS });
+        errors: [], success: req.query.saved ? ["Saved."] : [], C: await config(), keyed: keyed(await config()), keys: { sprite: hasSprite(), paint: hasPaint() }, order: engines(await config()),
+        rows: await recent(100), stats: await stats(), MODELS, LIMITS, ENGINES, SPRITE_MODELS: SS.SPRITE_MODELS, EFFORTS: SS.EFFORTS });
     } catch (e) {
       console.error("[shopart] admin:", e);
       res.status(500).send("Couldn't load the admin page.");
@@ -683,7 +758,7 @@ function register(app, { addUser }) {
     if (!guard.sameSite(req)) return res.status(403).send("Bad request.");
     try {
       const b = req.body || {};
-      await setConfig({ ...b, staff_on: !!b.staff_on, users_on: !!b.users_on }, { userId: me.userId, username: me.username });
+      await setConfig({ ...b, staff_on: !!b.staff_on, users_on: !!b.users_on, sprite_review: !!b.sprite_review }, { userId: me.userId, username: me.username });
       res.redirect(303, "/admin/shopart?saved=1#settings");
     } catch (e) {
       console.error("[shopart] save:", e);
@@ -692,8 +767,8 @@ function register(app, { addUser }) {
   });
 }
 
-function _reset() { CFG = null; REF_CACHE = null; PROVIDER = gemini; }
+function _reset() { CFG = null; REF_CACHE = null; PROVIDER = gemini; SS._reset(); }
 
 module.exports = { register, init, config, setConfig, cleanConfig, status, generate, accept, sweep, recent, stats, usage, textProblem, stylePrompt,
                    toSprite, renderSvg, foreground, setProvider, isArtUrl, urlOf, filePath, dir, _setDir, _setClock, _reset,
-                   DEFAULTS, MODELS, SHELVES, SHELF_BG, CATEGORY_SHELF, GenError };
+                   engines, DEFAULTS, MODELS, ENGINES, SHELVES, SHELF_BG, CATEGORY_SHELF, GenError };

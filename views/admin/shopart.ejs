@@ -2,7 +2,7 @@
 <%#
   views/admin/shopart.ejs - 1.99xr: the shop's "🎨 Generate image" button (shopart.js): who may use it, the caps, the model, and
   the log of every generation (previews are visible to staff here; accepted ones are the public pictures). Admins change the
-  settings; Staff can look. Data: C = shopart.config(), keyed (the env has an image-model key), rows, stats, MODELS, LIMITS.
+  settings; Staff can look. Data: C = shopart.config(), keyed (a usable engine has its key), keys, order, rows, stats, MODELS, LIMITS.
 %>
 <%
   const when = (t) => t ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(t, 'datetime') : '';
@@ -12,20 +12,24 @@
   <h1><span class="ds-ic" aria-hidden="true">🎨</span> Shop pictures</h1>
   <p>The <b>🎨 Generate image</b> button on every shop item form (Manage Prizes, Shop admin, the item editor and members' listings on
      <a href="/shop/seller">/shop/seller</a>) draws the item in the shop's pixel-art house style: an image model sketches it from the title + description,
-     then the site rebuilds it on the same 48 × 36 grid, palette treatment, outline and spotlight as the hand-made prize pictures. The text goes through the
+     drawn by one of two engines: <b>sprite</b> - Claude writes the drawing program the way the hand-made prize pictures were written
+     (a JSON list of rectangles, ellipses, lines … checked strictly, never run as code) - or <b>paint</b> - Gemini paints it and the site
+     rebuilds it on the same 48 × 36 grid. Both end up with the same palette treatment, outline and spotlight as the hand-made prize pictures. The text goes through the
      content filter first, and the picture through <a href="/admin/imagesafety">image safety</a> (surface "Generated shop pictures") before anyone sees it.
      The style prompt asks for generic, unbranded products - no logos, text or real people.</p>
 </div>
 
 <section class="adm-card" aria-labelledby="saT">
   <h2 id="saT">Status
-    <span class="adm-pill <%= keyed ? 'ok' : 'bad' %>"><%= keyed ? 'Image model key set' : 'No GEMINI_API_KEY on this env - the button is hidden' %></span>
+    <span class="adm-pill <%= keyed ? 'ok' : 'bad' %>"><%= keyed ? 'Engines: ' + order.join(' → ') : 'No key for the chosen engine on this env - the button is hidden' %></span>
+    <span class="adm-pill <%= keys.sprite ? 'ok' : '' %>">ANTHROPIC_API_KEY <%= keys.sprite ? 'set' : 'missing' %></span>
+    <span class="adm-pill <%= keys.paint ? 'ok' : '' %>">GEMINI_API_KEY <%= keys.paint ? 'set' : 'missing' %></span>
     <span class="adm-pill <%= C.staff_on ? 'ok' : '' %>">Staff: <%= C.staff_on ? 'ON' : 'OFF' %></span>
     <span class="adm-pill <%= C.users_on ? 'ok' : '' %>">Members: <%= C.users_on ? 'ON' : 'OFF' %></span>
   </h2>
   <div class="adm-kv">
     <div><b>Last 24 h</b><span><%= stats.day || 0 %> tries · <%= stats.made || 0 %> made · <%= stats.used || 0 %> used · <%= stats.refused || 0 %> refused · <%= stats.failed || 0 %> failed (site cap <%= C.global_per_day %>)</span></div>
-    <div><b>Model</b><span><code><%= C.model %></code> (Google Gemini; key from the environment, never shown)</span></div>
+    <div><b>Engine</b><span><code><%= C.engine %></code> · sprite: <code><%= C.sprite_model %></code> (effort <%= C.sprite_effort %><%= C.sprite_review ? ', with a review pass' : '' %>) · paint: <code><%= C.model %></code> (keys from the environment, never shown)</span></div>
   </div>
 </section>
 
@@ -41,7 +45,11 @@
     <label><span>Staff: per hour</span><input type="number" name="staff_per_hour" min="<%= LIMITS.staff_per_hour[0] %>" max="<%= LIMITS.staff_per_hour[1] %>" value="<%= C.staff_per_hour %>"<%= isAdmin ? '' : ' disabled' %>></label>
     <label><span>Staff: per day</span><input type="number" name="staff_per_day" min="<%= LIMITS.staff_per_day[0] %>" max="<%= LIMITS.staff_per_day[1] %>" value="<%= C.staff_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
     <label><span>Whole site: per day (cost guard)</span><input type="number" name="global_per_day" min="<%= LIMITS.global_per_day[0] %>" max="<%= LIMITS.global_per_day[1] %>" value="<%= C.global_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label><span>Model</span><select name="model"<%= isAdmin ? '' : ' disabled' %>><% MODELS.forEach((m) => { %><option<%= m === C.model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
+    <label><span>Engine</span><select name="engine"<%= isAdmin ? '' : ' disabled' %>><% ENGINES.forEach((m) => { %><option value="<%= m %>"<%= m === C.engine ? ' selected' : '' %>><%= { auto: 'auto (sprite, Gemini as fallback)', sprite: 'sprite (Claude)', paint: 'paint (Gemini)' }[m] %></option><% }) %></select></label>
+    <label><span>Sprite model (Claude)</span><select name="sprite_model"<%= isAdmin ? '' : ' disabled' %>><% SPRITE_MODELS.forEach((m) => { %><option<%= m === C.sprite_model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
+    <label><span>Sprite effort</span><select name="sprite_effort"<%= isAdmin ? '' : ' disabled' %>><% EFFORTS.forEach((m) => { %><option<%= m === C.sprite_effort ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
+    <label class="ck"><span>Sprite review (<code>sprite_review</code>)</span><span><input type="checkbox" name="sprite_review" value="1"<%= C.sprite_review ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> Claude looks at its render once and fixes it (about 2× the time and cost)</span></label>
+    <label><span>Paint model (Gemini)</span><select name="model"<%= isAdmin ? '' : ' disabled' %>><% MODELS.forEach((m) => { %><option<%= m === C.model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
     <p class="adm-help" style="grid-column:1/-1">Every try counts toward the caps (refused and failed ones too - each one is a model call). One picture at a time per account.
        Unused previews are deleted after a day.</p>
     <% if (isAdmin) { %><div style="grid-column:1/-1"><button type="submit" class="adm-btn">Save</button></div><% } %>
@@ -59,7 +67,7 @@
           <div><b>#<%= r.id %></b> <%= r.title %> · <%= when(r.created) %> · by <%= r.username || r.user_id %><%= r.staff ? ' (staff)' : '' %>
             <span class="adm-pill <%= s[0] %>"><%= s[1] %></span></div>
           <% if (r.description || r.extra) { %><div class="adm-help"><%= [r.description, r.extra].filter(Boolean).join(' · ').slice(0, 300) %></div><% } %>
-          <div class="adm-help"><%= r.model || '' %><%= r.shelf ? ' · ' + r.shelf : '' %><%= r.ms != null ? ' · ' + (r.ms / 1000).toFixed(1) + ' s' : '' %><%= r.reason ? ' · ' + r.reason : '' %><% if (r.safety_log) { %> · <a href="/admin/imagesafety#review">safety check #<%= r.safety_log %></a><% } %></div>
+          <div class="adm-help"><%= r.engine ? r.engine + ' · ' : '' %><%= r.model || '' %><%= r.shelf ? ' · ' + r.shelf : '' %><%= r.ms != null ? ' · ' + (r.ms / 1000).toFixed(1) + ' s' : '' %><%= r.tokens_in || r.tokens_out ? ' · ' + (r.tokens_in || 0) + ' in / ' + (r.tokens_out || 0) + ' out tokens' : '' %><%= r.reason ? ' · ' + r.reason : '' %><% if (r.safety_log) { %> · <a href="/admin/imagesafety#review">safety check #<%= r.safety_log %></a><% } %></div>
         </div>
       </li>
     <% }) %>
