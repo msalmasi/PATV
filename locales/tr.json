@@ -8827,5 +8827,12 @@
   "automkt.adm.weights": "Karışım (göreli ağırlıklar, 0 = asla)",
   "automkt.adm.marquee": "Spor: yalnızca öne çıkan etkinlikler (finaller, şampiyonalar, sezon sonu maçları, numaralı UFC kartları; tekil normal maçlar yok)",
   "automkt.adm.pad": "Gidecekleri pad (boş = Pepe'nin Pad'i)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Mikrofon meydan okumaları",
+  "js.padchal.budget": "Bugün kalan ödül bütçesi: pad kasasından {left} PAT ({held} PAT, değerlendirilmekte olan performanslar için ayrılmış).",
+  "js.padchal.glory": "şöhret için",
+  "js.padchal.someone": "biri 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "giriş ücreti {fee} PAT"
 }

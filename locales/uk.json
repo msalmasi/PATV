@@ -9061,5 +9061,12 @@
   "automkt.adm.weights": "Суміш (відносні ваги, 0 = ніколи)",
   "automkt.adm.marquee": "Спорт: лише головні події (фінали, чемпіонати, післясезон, пронумеровані карти UFC; без окремих звичайних матчів)",
   "automkt.adm.pad": "Пад, куди вони йдуть (порожньо = Пад Pepe)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Виклики з мікрофоном",
+  "js.padchal.budget": "Призовий бюджет на сьогодні: залишилось {left} PAT зі сховища паду ({held} PAT заблоковано для виступів, що оцінюються).",
+  "js.padchal.glory": "за славу",
+  "js.padchal.someone": "хтось 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} проти {b}",
+  "js.padchal.fee": "вступний внесок {fee} PAT"
 }

@@ -9061,5 +9061,12 @@
   "automkt.adm.weights": "Mieszanka (wagi względne, 0 = nigdy)",
   "automkt.adm.marquee": "Sport: tylko najważniejsze wydarzenia (finały, mistrzostwa, play-off, numerowane gale UFC; bez pojedynczych zwykłych meczów)",
   "automkt.adm.pad": "Pad, do którego trafiają (puste = Pepe's Pad)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Wyzwania z mikrofonem",
+  "js.padchal.budget": "Pozostała pula nagród na dziś: {left} PAT ze Skarbca pada ({held} PAT zarezerwowane na oceniane występy).",
+  "js.padchal.glory": "dla chwały",
+  "js.padchal.someone": "ktoś 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "wpisowe {fee} PAT"
 }

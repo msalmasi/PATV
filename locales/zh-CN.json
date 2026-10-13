@@ -8707,5 +8707,12 @@
   "automkt.adm.weights": "组合（相对权重，0 = 从不）",
   "automkt.adm.marquee": "体育：仅限重磅赛事（决赛、冠军赛、季后赛、编号的 UFC 赛事；不含普通单场比赛）",
   "automkt.adm.pad": "投放到的小站（留空 = Pepe's Pad）",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 麦克风挑战",
+  "js.padchal.budget": "今日剩余奖金：小站金库中还有 {left} PAT（{held} PAT 为待评审表演预留）。",
+  "js.padchal.glory": "为了荣耀",
+  "js.padchal.someone": "某人 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} 对 {b}",
+  "js.padchal.fee": "参赛费 {fee} PAT"
 }

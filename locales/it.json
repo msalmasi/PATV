@@ -8898,5 +8898,12 @@
   "automkt.adm.weights": "Mix (pesi relativi, 0 = mai)",
   "automkt.adm.marquee": "Sport: solo eventi di punta (finali, campionati, playoff, card UFC numerate; niente singole partite di regular season)",
   "automkt.adm.pad": "Pad di destinazione (vuoto = Pad di Pepe)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Sfide al microfono",
+  "js.padchal.budget": "Budget premi rimasto oggi: {left} PAT dal caveau del pad ({held} PAT trattenuti per le esibizioni in valutazione).",
+  "js.padchal.glory": "per la gloria",
+  "js.padchal.someone": "qualcuno 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "quota d'ingresso {fee} PAT"
 }

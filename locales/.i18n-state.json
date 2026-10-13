@@ -8468,7 +8468,14 @@
     "automkt.adm.weights": "3b8ab8419791",
     "automkt.adm.marquee": "90533287b61b",
     "automkt.adm.pad": "8feaa67c37a4",
-    "automkt.adm.pad_ph": "10c9f65fcbea"
+    "automkt.adm.pad_ph": "10c9f65fcbea",
+    "pad.chal.h": "deb085fb4df9",
+    "js.padchal.budget": "f4941e719cbb",
+    "js.padchal.glory": "bcfa54b7561a",
+    "js.padchal.someone": "e13500b510ca",
+    "js.padchal.won": "394ec3013f7c",
+    "js.padchal.vs": "48def4fedcec",
+    "js.padchal.fee": "9b0032e9c349"
   },
   "lag": {},
   "reviewed": {}

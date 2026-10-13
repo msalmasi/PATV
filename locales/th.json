@@ -8708,5 +8708,12 @@
   "automkt.adm.weights": "สัดส่วน (น้ำหนักสัมพัทธ์ 0 = ไม่เคย)",
   "automkt.adm.marquee": "กีฬา: เฉพาะรายการสำคัญเท่านั้น (รอบชิงชนะเลิศ แชมเปียนชิพ รอบหลังฤดูกาล การ์ด UFC ที่มีหมายเลข; ไม่รวมแมตช์ปกติทีละแมตช์)",
   "automkt.adm.pad": "pad ที่จะไปยัง (ว่าง = Pepe's Pad)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 ท้าประชันไมค์",
+  "js.padchal.budget": "งบรางวัลที่เหลือวันนี้: {left} PAT จากห้องนิรภัยของ pad ({held} PAT ถูกพักไว้สำหรับการแสดงที่กำลังตัดสิน).",
+  "js.padchal.glory": "เพื่อเกียรติยศ",
+  "js.padchal.someone": "ใครบางคน 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "ค่าเข้าร่วม {fee} PAT"
 }

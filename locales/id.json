@@ -8709,5 +8709,12 @@
   "automkt.adm.weights": "Campuran (bobot relatif, 0 = tidak pernah)",
   "automkt.adm.marquee": "Olahraga: hanya acara utama (final, kejuaraan, musim playoff, kartu UFC bernomor; bukan pertandingan reguler tunggal)",
   "automkt.adm.pad": "Pad tujuan (kosong = Pad Pepe)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Tantangan mic",
+  "js.padchal.budget": "Sisa anggaran hadiah hari ini: {left} PAT dari brankas pad ({held} PAT ditahan untuk penampilan yang sedang dinilai).",
+  "js.padchal.glory": "demi kehormatan",
+  "js.padchal.someone": "seseorang 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "biaya masuk {fee} PAT"
 }

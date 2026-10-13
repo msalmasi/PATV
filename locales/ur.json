@@ -8825,5 +8825,12 @@
   "automkt.adm.weights": "ملاپ (نسبتی وزن، 0 = کبھی نہیں)",
   "automkt.adm.marquee": "کھیل: صرف اہم ایونٹس (فائنلز، چیمپئن شپس، پوسٹ سیزن، نمبر والے UFC کارڈز؛ عام انفرادی میچ نہیں)",
   "automkt.adm.pad": "جس پیڈ میں جائیں (خالی = Pepe's Pad)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 مائیک چیلنجز",
+  "js.padchal.budget": "آج کا باقی انعامی بجٹ: پیڈ والٹ سے {left} PAT ({held} PAT ان پرفارمنسز کے لیے روکے گئے ہیں جن کا فیصلہ ہو رہا ہے)۔",
+  "js.padchal.glory": "شہرت کے لیے",
+  "js.padchal.someone": "کوئی 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} بمقابلہ {b}",
+  "js.padchal.fee": "داخلہ فیس {fee} PAT"
 }

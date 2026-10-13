@@ -8943,5 +8943,12 @@
   "automkt.adm.weights": "תמהיל (משקלים יחסיים, 0 = אף פעם)",
   "automkt.adm.marquee": "ספורט: אירועי דגל בלבד (גמרים, אליפויות, הפלייאוף, כרטיסי UFC ממוספרים; בלי משחקים רגילים בודדים)",
   "automkt.adm.pad": "פד שאליו הם מגיעים (ריק = הפד של Pepe)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 אתגרי מיקרופון",
+  "js.padchal.budget": "תקציב הפרסים שנותר להיום: {left} PAT מכספת הפד ({held} PAT מוחזקים עבור הופעות שנמצאות בשיפוט).",
+  "js.padchal.glory": "לתהילה",
+  "js.padchal.someone": "מישהו 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} נגד {b}",
+  "js.padchal.fee": "דמי כניסה {fee} PAT"
 }

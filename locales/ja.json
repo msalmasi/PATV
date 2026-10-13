@@ -8707,5 +8707,12 @@
   "automkt.adm.weights": "ミックス（相対的な重み、0 = 使用しない）",
   "automkt.adm.marquee": "スポーツ: 注目イベントのみ（決勝、選手権、ポストシーズン、番号付きUFCカード。通常の個別試合は除外）",
   "automkt.adm.pad": "投稿先のパッド（空欄 = Pepe's Pad）",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 マイクチャレンジ",
+  "js.padchal.budget": "本日の残りの賞金: パッドの金庫から {left} PAT (審査中のパフォーマンス用に {held} PAT を保留中)。",
+  "js.padchal.glory": "名誉のために",
+  "js.padchal.someone": "誰か 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "参加料 {fee} PAT"
 }

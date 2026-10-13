@@ -9061,5 +9061,12 @@
   "automkt.adm.weights": "Микс (относительные веса, 0 = никогда)",
   "automkt.adm.marquee": "Спорт: только главные события (финалы, чемпионаты, плей-офф, пронумерованные карды UFC; без обычных одиночных матчей)",
   "automkt.adm.pad": "Пад назначения (пусто = Pepe's Pad)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Челленджи с микрофоном",
+  "js.padchal.budget": "Призовой бюджет на сегодня: осталось {left} PAT из хранилища пада ({held} PAT удерживаются для выступлений, которые оцениваются).",
+  "js.padchal.glory": "ради славы",
+  "js.padchal.someone": "кто-то 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} против {b}",
+  "js.padchal.fee": "взнос {fee} PAT"
 }

@@ -8825,5 +8825,12 @@
   "automkt.adm.weights": "Mix (relatieve gewichten, 0 = nooit)",
   "automkt.adm.marquee": "Sport: alleen grote evenementen (finales, kampioenschappen, het naseizoen, genummerde UFC-kaarten; geen losse reguliere wedstrijden)",
   "automkt.adm.pad": "Pad waar ze naartoe gaan (leeg = Pepe's Pad)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Mic-uitdagingen",
+  "js.padchal.budget": "Prijzenbudget over vandaag: {left} PAT uit de padkluis ({held} PAT vastgehouden voor optredens die worden beoordeeld).",
+  "js.padchal.glory": "voor de eer",
+  "js.padchal.someone": "iemand 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "inschrijfgeld {fee} PAT"
 }

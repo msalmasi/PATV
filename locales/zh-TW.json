@@ -8707,5 +8707,12 @@
   "automkt.adm.weights": "混合比例（相對權重，0 = 永不）",
   "automkt.adm.marquee": "體育：僅限重大賽事（決賽、錦標賽、季後賽、編號 UFC 賽事；不含一般單場比賽）",
   "automkt.adm.pad": "投放的小站（留空 = Pepe's Pad）",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 麥克風挑戰",
+  "js.padchal.budget": "今日獎金剩餘 {left} PAT，來自小站金庫（{held} PAT 為待評審表演鎖定）。",
+  "js.padchal.glory": "為了榮耀",
+  "js.padchal.someone": "某人 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "參加費 {fee} PAT"
 }

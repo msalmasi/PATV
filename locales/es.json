@@ -8898,5 +8898,12 @@
   "automkt.adm.weights": "Mezcla (pesos relativos, 0 = nunca)",
   "automkt.adm.marquee": "Deportes: solo eventos destacados (finales, campeonatos, la postemporada, eventos UFC numerados; nada de partidos regulares sueltos)",
   "automkt.adm.pad": "Pad al que van (vacío = Pad de Pepe)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 Retos de micro",
+  "js.padchal.budget": "Presupuesto de premios que queda hoy: {left} PAT de la bóveda del pad ({held} PAT retenidos para actuaciones pendientes de valoración).",
+  "js.padchal.glory": "por la gloria",
+  "js.padchal.someone": "alguien 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} vs {b}",
+  "js.padchal.fee": "cuota de entrada {fee} PAT"
 }

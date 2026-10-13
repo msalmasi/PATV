@@ -9297,5 +9297,12 @@
   "automkt.adm.weights": "المزيج (أوزان نسبية، 0 = لا يُستخدم أبدًا)",
   "automkt.adm.marquee": "الرياضة: الأحداث البارزة فقط (النهائيات، البطولات، مرحلة ما بعد الموسم، بطاقات UFC المرقّمة؛ دون المباريات العادية الفردية)",
   "automkt.adm.pad": "الباد الذي تذهب إليه (فارغ = باد Pepe)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 تحديات الميكروفون",
+  "js.padchal.budget": "ميزانية الجوائز المتبقية اليوم: {left} PAT من خزنة الباد ({held} PAT محجوزة للعروض قيد التحكيم).",
+  "js.padchal.glory": "من أجل المجد",
+  "js.padchal.someone": "شخص ما 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} ضد {b}",
+  "js.padchal.fee": "رسوم الدخول {fee} PAT"
 }

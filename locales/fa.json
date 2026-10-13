@@ -8821,5 +8821,12 @@
   "automkt.adm.weights": "ترکیب (وزن‌های نسبی، ۰ = هرگز)",
   "automkt.adm.marquee": "ورزش: فقط رویدادهای اصلی (فینال‌ها، قهرمانی‌ها، پس‌فصل، کارت‌های شماره‌دار UFC؛ بدون مسابقه‌های عادی)",
   "automkt.adm.pad": "پدی که به آن می‌روند (خالی = پد Pepe)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 چالش‌های میکروفن",
+  "js.padchal.budget": "بودجه‌ی جایزه‌ی باقی‌مانده‌ی امروز: {left} PAT از گاوصندوق پد ({held} PAT برای اجراهایی که در حال داوری‌اند رزرو شده).",
+  "js.padchal.glory": "برای افتخار",
+  "js.padchal.someone": "یکی 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} در برابر {b}",
+  "js.padchal.fee": "ورودی {fee} PAT"
 }

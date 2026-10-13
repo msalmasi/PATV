@@ -8825,5 +8825,12 @@
   "automkt.adm.weights": "मिक्स (सापेक्ष वज़न, 0 = कभी नहीं)",
   "automkt.adm.marquee": "खेल: केवल प्रमुख आयोजन (फ़ाइनल, चैंपियनशिप, पोस्टसीज़न, क्रमांकित UFC कार्ड; कोई नियमित मैच नहीं)",
   "automkt.adm.pad": "जिस पैड पर वे जाएँगे (खाली छोड़ें = Pepe का पैड)",
-  "automkt.adm.pad_ph": "PepeFrog.Room"
+  "automkt.adm.pad_ph": "PepeFrog.Room",
+  "pad.chal.h": "🎤 माइक चैलेंज",
+  "js.padchal.budget": "आज के लिए बचा इनाम बजट: पैड वॉल्ट से {left} PAT ({held} PAT उन परफ़ॉर्मेंस के लिए रोका गया है जिनका मूल्यांकन हो रहा है).",
+  "js.padchal.glory": "सिर्फ़ शोहरत के लिए",
+  "js.padchal.someone": "कोई 🕶️",
+  "js.padchal.won": "+{paid} PAT",
+  "js.padchal.vs": "{a} बनाम {b}",
+  "js.padchal.fee": "प्रवेश शुल्क {fee} PAT"
 }
