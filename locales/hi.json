@@ -5854,8 +5854,8 @@
   "polls.h1": "रूम क्या सोचता है?",
   "polls.lead": "Pepe पैड के चैट रूम में एक समय पर एक पोल चलाता है। यहाँ या चैट में वोट करें; दोबारा वोट करने पर आपका वोट बदल जाता है।",
   "polls.stat_votes": {
-    "one": "मौजूदा पोल पर एक वोट",
-    "other": "मौजूदा पोल पर वोट"
+    "one": "चल रहे पोल पर वोट",
+    "other": "चल रहे पोल पर वोट"
   },
   "polls.stat_past": "पिछले पोल",
   "polls.h_current": "मौजूदा पोल",
@@ -8291,5 +8291,73 @@
   "js.owner.topic_short": "पहले एक टॉपिक टाइप करें।",
   "js.owner.saving": "सेव हो रहा है…",
   "js.owner.site_saved": "सेव हो गया - Pepe अगली फ़ीड जाँच से इसे फ़ॉलो करेंगे।",
-  "js.owner.site_reset_done": "डिफ़ॉल्ट पर वापस।"
+  "js.owner.site_reset_done": "डिफ़ॉल्ट पर वापस।",
+  "bx.pad.filter": "पैड",
+  "bx.pad.all": "सभी पैड",
+  "bx.pad.sitewide": "साइट-वाइड",
+  "bx.pad.show_void": "रद्द किए गए दिखाएँ ({n})",
+  "bx.pad.apply": "फ़िल्टर",
+  "bx.pad.showing": "केवल {!pad} दिखाए जा रहे हैं",
+  "bx.pad.showing_site": "केवल साइट-वाइड वाले दिखाए जा रहे हैं",
+  "bx.pad.clear": "हर पैड दिखाएँ",
+  "bx.pad.label": "वह पैड जिसका यह है",
+  "bx.pad.pick": "पैड",
+  "bx.pad.sitewide_opt": "साइट-वाइड (कोई पैड नहीं)",
+  "bx.pad.mine": "आपके पैड",
+  "bx.pad.others": "पैड",
+  "bx.pad.pick_note": "यह उस पैड के पेज पर और सूचियों में उस पैड के नीचे दिखता है।",
+  "bx.d.days": {
+    "one": "{n} दिन",
+    "other": "{n} दिन"
+  },
+  "bx.d.hours": {
+    "one": "{n} घंटा",
+    "other": "{n} घंटे"
+  },
+  "bx.d.mins": {
+    "one": "{n} मिनट",
+    "other": "{n} मिनट"
+  },
+  "markets.f_custom": "तारीख और समय चुनें…",
+  "markets.f_close_at": "ट्रेडिंग इस समय बंद होगी",
+  "markets.f_bounds": "अभी से {min} और {max} के बीच।",
+  "markets.auto.cat.trending": "ट्रेंडिंग",
+  "market.who_pad": "जज {!judge} · बनाने वाले {!creator} · पैड {!pad}",
+  "market.time.market_tz": "मार्केट का समय: {!when} ({!zone})",
+  "market.time.left": "{!left} में बंद होगा",
+  "polls.stat_running": {
+    "one": "चल रहा पोल",
+    "other": "चल रहे पोल"
+  },
+  "polls.ended": "समाप्त",
+  "polls.all": "सभी पोल",
+  "polls.h_this": "यह पोल",
+  "polls.h_running": "चल रहे पोल",
+  "polls.f_note_pad": "हर पैड पर एक समय में एक ही पोल चलता है। कम से कम 2 विकल्प दें।",
+  "pad.menu.bets": "🔮 मार्केट, पूल और पोल",
+  "pad.bets.h": "मार्केट, पूल और पोल",
+  "pad.bets.empty": "यहाँ अभी कुछ नहीं है। इस पैड के लिए भविष्यवाणी मार्केट, दांव पूल या पोल शुरू करें।",
+  "pad.bets.markets": {
+    "one": "{n} मार्केट",
+    "other": "{n} मार्केट"
+  },
+  "pad.bets.pools": {
+    "one": "{n} दांव पूल",
+    "other": "{n} दांव पूल"
+  },
+  "pad.bets.polls": {
+    "one": "{n} पोल",
+    "other": "{n} पोल"
+  },
+  "pad.bets.none_markets": "कोई खुला मार्केट नहीं है।",
+  "pad.bets.none_pools": "कोई खुला पूल नहीं है।",
+  "pad.bets.none_polls": "अभी कोई पोल नहीं है।",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "{left} में बंद होगा",
+  "pad.bets.judging": "जज के फ़ैसले का इंतज़ार",
+  "pad.bets.poll_live": "चल रहा है · {n} वोट",
+  "pad.bets.poll_ended": "समाप्त",
+  "pad.bets.new_market": "मार्केट",
+  "pad.bets.new_pool": "पूल",
+  "pad.bets.new_poll": "पोल"
 }

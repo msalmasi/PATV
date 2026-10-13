@@ -5770,7 +5770,7 @@
   "polls.h1": "Apa kata ruangan?",
   "polls.lead": "Pepe menjalankan satu polling sekaligus di room chat pad. Vote dari sini atau di chat; vote ulang akan memindahkan votemu.",
   "polls.stat_votes": {
-    "other": "vote untuk polling saat ini"
+    "other": "suara di polling yang berjalan"
   },
   "polls.stat_past": "polling sebelumnya",
   "polls.h_current": "Polling saat ini",
@@ -8188,5 +8188,66 @@
   "js.owner.topic_short": "Ketik topik dulu.",
   "js.owner.saving": "Menyimpan…",
   "js.owner.site_saved": "Tersimpan - Pepe akan mengikutinya mulai dari pengecekan feed berikutnya.",
-  "js.owner.site_reset_done": "Kembali ke default."
+  "js.owner.site_reset_done": "Kembali ke default.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Semua pad",
+  "bx.pad.sitewide": "Seluruh situs",
+  "bx.pad.show_void": "Tampilkan yang dibatalkan ({n})",
+  "bx.pad.apply": "Filter",
+  "bx.pad.showing": "Hanya menampilkan {!pad}",
+  "bx.pad.showing_site": "Hanya menampilkan yang seluruh situs",
+  "bx.pad.clear": "tampilkan semua pad",
+  "bx.pad.label": "Pad tempatnya berada",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Seluruh situs (tanpa pad)",
+  "bx.pad.mine": "Pad-mu",
+  "bx.pad.others": "Pad",
+  "bx.pad.pick_note": "Ini tampil di halaman pad itu dan di bawah pad itu dalam daftar.",
+  "bx.d.days": {
+    "other": "{n} hari"
+  },
+  "bx.d.hours": {
+    "other": "{n} jam"
+  },
+  "bx.d.mins": {
+    "other": "{n} menit"
+  },
+  "markets.f_custom": "Pilih tanggal dan waktu…",
+  "markets.f_close_at": "Perdagangan ditutup pada",
+  "markets.f_bounds": "Antara {min} dan {max} dari sekarang.",
+  "markets.auto.cat.trending": "Sedang tren",
+  "market.who_pad": "juri {!judge} · dibuat oleh {!creator} · pad {!pad}",
+  "market.time.market_tz": "Waktu pasar: {!when} ({!zone})",
+  "market.time.left": "ditutup dalam {!left}",
+  "polls.stat_running": {
+    "other": "polling berjalan"
+  },
+  "polls.ended": "Berakhir",
+  "polls.all": "Semua polling",
+  "polls.h_this": "Polling ini",
+  "polls.h_running": "Polling yang berjalan",
+  "polls.f_note_pad": "Satu polling berjalan per pad dalam satu waktu. Berikan minimal 2 opsi.",
+  "pad.menu.bets": "🔮 Pasar, kolam & polling",
+  "pad.bets.h": "Pasar, kolam & polling",
+  "pad.bets.empty": "Belum ada apa-apa di sini. Mulai pasar prediksi, kolam taruhan, atau polling untuk pad ini.",
+  "pad.bets.markets": {
+    "other": "{n} pasar"
+  },
+  "pad.bets.pools": {
+    "other": "{n} kolam taruhan"
+  },
+  "pad.bets.polls": {
+    "other": "{n} polling"
+  },
+  "pad.bets.none_markets": "Belum ada pasar terbuka.",
+  "pad.bets.none_pools": "Belum ada kolam terbuka.",
+  "pad.bets.none_polls": "Belum ada polling.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "tutup dalam {left}",
+  "pad.bets.judging": "menunggu juri",
+  "pad.bets.poll_live": "berjalan · {n} suara",
+  "pad.bets.poll_ended": "selesai",
+  "pad.bets.new_market": "Pasar",
+  "pad.bets.new_pool": "Kolam",
+  "pad.bets.new_poll": "Polling"
 }

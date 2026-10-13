@@ -5769,7 +5769,7 @@
   "polls.h1": "ห้องคิดยังไงกันบ้าง?",
   "polls.lead": "Pepe ดำเนินการโพลได้ทีละหนึ่งโพลในห้องแชตของ pad โหวตที่นี่หรือในแชตก็ได้ โหวตซ้ำจะเปลี่ยนคะแนนของคุณ",
   "polls.stat_votes": {
-    "other": "โหวตในโพลปัจจุบัน"
+    "other": "โหวตในโพลที่กำลังดำเนินอยู่"
   },
   "polls.stat_past": "โพลที่ผ่านมา",
   "polls.h_current": "โพลปัจจุบัน",
@@ -8187,5 +8187,66 @@
   "js.owner.topic_short": "พิมพ์หัวข้อก่อน",
   "js.owner.saving": "กำลังบันทึก…",
   "js.owner.site_saved": "บันทึกแล้ว - Pepe จะทำตามตั้งแต่การตรวจฟีดครั้งถัดไปของเขา",
-  "js.owner.site_reset_done": "กลับไปใช้ค่าเริ่มต้นแล้ว"
+  "js.owner.site_reset_done": "กลับไปใช้ค่าเริ่มต้นแล้ว",
+  "bx.pad.filter": "pad",
+  "bx.pad.all": "ทุก pad",
+  "bx.pad.sitewide": "ทั้งเว็บไซต์",
+  "bx.pad.show_void": "แสดงที่ถูกยกเลิก ({n})",
+  "bx.pad.apply": "กรอง",
+  "bx.pad.showing": "แสดงเฉพาะ {!pad}",
+  "bx.pad.showing_site": "แสดงเฉพาะรายการทั้งเว็บไซต์",
+  "bx.pad.clear": "แสดงทุก pad",
+  "bx.pad.label": "pad ที่สังกัด",
+  "bx.pad.pick": "pad",
+  "bx.pad.sitewide_opt": "ทั้งเว็บไซต์ (ไม่อยู่ใน pad)",
+  "bx.pad.mine": "pad ของคุณ",
+  "bx.pad.others": "Pads",
+  "bx.pad.pick_note": "จะแสดงในหน้าของ pad นั้นและอยู่ใต้ pad นั้นในรายการ",
+  "bx.d.days": {
+    "other": "{n} วัน"
+  },
+  "bx.d.hours": {
+    "other": "{n} ชั่วโมง"
+  },
+  "bx.d.mins": {
+    "other": "{n} นาที"
+  },
+  "markets.f_custom": "เลือกวันที่และเวลา…",
+  "markets.f_close_at": "การซื้อขายปิดเมื่อ",
+  "markets.f_bounds": "ระหว่าง {min} ถึง {max} จากตอนนี้",
+  "markets.auto.cat.trending": "กำลังมาแรง",
+  "market.who_pad": "ผู้ตัดสิน {!judge} · สร้างโดย {!creator} · pad {!pad}",
+  "market.time.market_tz": "เวลาตลาด: {!when} ({!zone})",
+  "market.time.left": "ปิดในอีก {!left}",
+  "polls.stat_running": {
+    "other": "โพลที่กำลังดำเนินอยู่"
+  },
+  "polls.ended": "สิ้นสุดแล้ว",
+  "polls.all": "โพลทั้งหมด",
+  "polls.h_this": "โพลนี้",
+  "polls.h_running": "โพลที่กำลังดำเนินอยู่",
+  "polls.f_note_pad": "แต่ละ pad จะมีโพลได้ครั้งละหนึ่งโพล ต้องมีตัวเลือกอย่างน้อย 2 ข้อ",
+  "pad.menu.bets": "🔮 ตลาด, พูลเดิมพัน และโพล",
+  "pad.bets.h": "ตลาด, พูลเดิมพัน และโพล",
+  "pad.bets.empty": "ยังไม่มีอะไรที่นี่ เริ่มตลาดทำนาย พูลเดิมพัน หรือโพลสำหรับ pad นี้ได้เลย",
+  "pad.bets.markets": {
+    "other": "{n} ตลาด"
+  },
+  "pad.bets.pools": {
+    "other": "{n} พูลเดิมพัน"
+  },
+  "pad.bets.polls": {
+    "other": "{n} โพล"
+  },
+  "pad.bets.none_markets": "ยังไม่มีตลาดที่เปิดอยู่",
+  "pad.bets.none_pools": "ยังไม่มีพูลที่เปิดอยู่",
+  "pad.bets.none_polls": "ยังไม่มีโพล",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "ปิดใน {left}",
+  "pad.bets.judging": "รอผู้ตัดสิน",
+  "pad.bets.poll_live": "กำลังดำเนินอยู่ · {n} โหวต",
+  "pad.bets.poll_ended": "จบแล้ว",
+  "pad.bets.new_market": "ตลาด",
+  "pad.bets.new_pool": "พูล",
+  "pad.bets.new_poll": "โพล"
 }

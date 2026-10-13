@@ -5850,8 +5850,8 @@
   "polls.h1": "اتاق چی فکر می‌کنه؟",
   "polls.lead": "Pepe توی اتاق‌های چت پدها همزمان فقط یک نظرسنجی رو اجرا می‌کنه. اینجا یا توی چت رأی بده؛ دوباره رأی دادن، رأیت رو جابه‌جا می‌کنه.",
   "polls.stat_votes": {
-    "one": "رأی روی نظرسنجی فعلی",
-    "other": "رأی روی نظرسنجی فعلی"
+    "one": "رأی روی نظرسنجی‌های در جریان",
+    "other": "رأی روی نظرسنجی‌های در جریان"
   },
   "polls.stat_past": "نظرسنجی‌های قبلی",
   "polls.h_current": "نظرسنجی فعلی",
@@ -8287,5 +8287,73 @@
   "js.owner.topic_short": "اول یه موضوع بنویس.",
   "js.owner.saving": "در حال ذخیره…",
   "js.owner.site_saved": "ذخیره شد - Pepe از بررسی بعدی فیدش دنبالش می‌کنه.",
-  "js.owner.site_reset_done": "برگشت به حالت پیش‌فرض."
+  "js.owner.site_reset_done": "برگشت به حالت پیش‌فرض.",
+  "bx.pad.filter": "پد",
+  "bx.pad.all": "همه پدها",
+  "bx.pad.sitewide": "کل سایت",
+  "bx.pad.show_void": "نمایش باطل‌شده‌ها ({n})",
+  "bx.pad.apply": "فیلتر",
+  "bx.pad.showing": "فقط {!pad} نشان داده می‌شود",
+  "bx.pad.showing_site": "فقط موارد کل سایت نشان داده می‌شود",
+  "bx.pad.clear": "نمایش همه پدها",
+  "bx.pad.label": "پدی که به آن تعلق دارد",
+  "bx.pad.pick": "پد",
+  "bx.pad.sitewide_opt": "کل سایت (بدون پد)",
+  "bx.pad.mine": "پدهای تو",
+  "bx.pad.others": "پدها",
+  "bx.pad.pick_note": "روی صفحه همان پد و زیر آن پد در فهرست‌ها نشان داده می‌شود.",
+  "bx.d.days": {
+    "one": "{n} روز",
+    "other": "{n} روز"
+  },
+  "bx.d.hours": {
+    "one": "{n} ساعت",
+    "other": "{n} ساعت"
+  },
+  "bx.d.mins": {
+    "one": "{n} دقیقه",
+    "other": "{n} دقیقه"
+  },
+  "markets.f_custom": "تاریخ و ساعت را انتخاب کن…",
+  "markets.f_close_at": "معاملات بسته می‌شود در",
+  "markets.f_bounds": "از الان بین {min} و {max}.",
+  "markets.auto.cat.trending": "داغ‌ترین‌ها",
+  "market.who_pad": "داور {!judge} · ساخته‌شده توسط {!creator} · پد {!pad}",
+  "market.time.market_tz": "زمان بازار: {!when} ({!zone})",
+  "market.time.left": "تا {!left} دیگر بسته می‌شود",
+  "polls.stat_running": {
+    "one": "نظرسنجی در جریان",
+    "other": "نظرسنجی در جریان"
+  },
+  "polls.ended": "پایان یافته",
+  "polls.all": "همه نظرسنجی‌ها",
+  "polls.h_this": "این نظرسنجی",
+  "polls.h_running": "نظرسنجی‌های در جریان",
+  "polls.f_note_pad": "در هر پد در هر لحظه فقط یک نظرسنجی اجرا می‌شود. حداقل ۲ گزینه بده.",
+  "pad.menu.bets": "🔮 بازارها، استخرها و نظرسنجی‌ها",
+  "pad.bets.h": "بازارها، استخرها و نظرسنجی‌ها",
+  "pad.bets.empty": "اینجا هنوز چیزی نیست. برای این پد یک بازار پیش‌بینی، یک استخر شرط یا یک نظرسنجی شروع کن.",
+  "pad.bets.markets": {
+    "one": "{n} بازار",
+    "other": "{n} بازار"
+  },
+  "pad.bets.pools": {
+    "one": "{n} استخر شرط",
+    "other": "{n} استخر شرط"
+  },
+  "pad.bets.polls": {
+    "one": "{n} نظرسنجی",
+    "other": "{n} نظرسنجی"
+  },
+  "pad.bets.none_markets": "هیچ بازار بازی‌ای باز نیست.",
+  "pad.bets.none_pools": "هیچ استخر شرطی باز نیست.",
+  "pad.bets.none_polls": "هنوز نظرسنجی‌ای نیست.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "بسته می‌شود در {left}",
+  "pad.bets.judging": "منتظر داور",
+  "pad.bets.poll_live": "در جریان · {n} رأی",
+  "pad.bets.poll_ended": "تمام شد",
+  "pad.bets.new_market": "بازار",
+  "pad.bets.new_pool": "استخر",
+  "pad.bets.new_poll": "نظرسنجی"
 }

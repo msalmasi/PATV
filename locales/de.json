@@ -5854,8 +5854,8 @@
   "polls.h1": "Was denkt der Raum?",
   "polls.lead": "Pepe führt immer nur eine Umfrage gleichzeitig über die Chaträume der Pads. Stimme hier oder im Chat ab; erneutes Abstimmen ändert deine Stimme.",
   "polls.stat_votes": {
-    "one": "Stimme zur aktuellen Umfrage",
-    "other": "Stimmen zur aktuellen Umfrage"
+    "one": "Stimme bei den laufenden Umfragen",
+    "other": "Stimmen bei den laufenden Umfragen"
   },
   "polls.stat_past": "vergangene Umfragen",
   "polls.h_current": "Aktuelle Umfrage",
@@ -8291,5 +8291,73 @@
   "js.owner.topic_short": "Gib zuerst ein Thema ein.",
   "js.owner.saving": "Speichern…",
   "js.owner.site_saved": "Gespeichert – Pepe übernimmt es bei seiner nächsten Feed-Prüfung.",
-  "js.owner.site_reset_done": "Zurück auf den Standard."
+  "js.owner.site_reset_done": "Zurück auf den Standard.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Alle Pads",
+  "bx.pad.sitewide": "Seitenweit",
+  "bx.pad.show_void": "Ungültige anzeigen ({n})",
+  "bx.pad.apply": "Filtern",
+  "bx.pad.showing": "Nur {!pad} wird angezeigt",
+  "bx.pad.showing_site": "Nur seitenweite werden angezeigt",
+  "bx.pad.clear": "alle Pads anzeigen",
+  "bx.pad.label": "Das Pad, zu dem es gehört",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Seitenweit (kein Pad)",
+  "bx.pad.mine": "Deine Pads",
+  "bx.pad.others": "Pads",
+  "bx.pad.pick_note": "Es wird auf der Seite dieses Pads und unter diesem Pad in den Listen angezeigt.",
+  "bx.d.days": {
+    "one": "{n} Tag",
+    "other": "{n} Tage"
+  },
+  "bx.d.hours": {
+    "one": "{n} Stunde",
+    "other": "{n} Stunden"
+  },
+  "bx.d.mins": {
+    "one": "{n} Minute",
+    "other": "{n} Minuten"
+  },
+  "markets.f_custom": "Datum und Uhrzeit wählen…",
+  "markets.f_close_at": "Handel schließt um",
+  "markets.f_bounds": "Zwischen {min} und {max} ab jetzt.",
+  "markets.auto.cat.trending": "Im Trend",
+  "market.who_pad": "Richter {!judge} · erstellt von {!creator} · Pad {!pad}",
+  "market.time.market_tz": "Markt-Zeit: {!when} ({!zone})",
+  "market.time.left": "schließt in {!left}",
+  "polls.stat_running": {
+    "one": "laufende Umfrage",
+    "other": "laufende Umfragen"
+  },
+  "polls.ended": "Beendet",
+  "polls.all": "Alle Umfragen",
+  "polls.h_this": "Diese Umfrage",
+  "polls.h_running": "Laufende Umfragen",
+  "polls.f_note_pad": "Pro Pad läuft immer nur eine Umfrage. Gib mindestens 2 Optionen an.",
+  "pad.menu.bets": "🔮 Märkte, Pools & Umfragen",
+  "pad.bets.h": "Märkte, Pools & Umfragen",
+  "pad.bets.empty": "Hier ist noch nichts. Starte einen Vorhersagemarkt, einen Wett-Pool oder eine Umfrage für dieses Pad.",
+  "pad.bets.markets": {
+    "one": "{n} Markt",
+    "other": "{n} Märkte"
+  },
+  "pad.bets.pools": {
+    "one": "{n} Wett-Pool",
+    "other": "{n} Wett-Pools"
+  },
+  "pad.bets.polls": {
+    "one": "{n} Umfrage",
+    "other": "{n} Umfragen"
+  },
+  "pad.bets.none_markets": "Keine offenen Märkte.",
+  "pad.bets.none_pools": "Keine offenen Pools.",
+  "pad.bets.none_polls": "Noch keine Umfragen.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "schließt in {left}",
+  "pad.bets.judging": "wartet auf den Richter",
+  "pad.bets.poll_live": "läuft · {n} Stimmen",
+  "pad.bets.poll_ended": "beendet",
+  "pad.bets.new_market": "Markt",
+  "pad.bets.new_pool": "Pool",
+  "pad.bets.new_poll": "Umfrage"
 }

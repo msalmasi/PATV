@@ -5940,9 +5940,9 @@
   "polls.h1": "מה החדר חושב?",
   "polls.lead": "Pepe מנהל סקר אחד בכל פעם בחדרי הצ'אט של הפדים. הצביעו כאן או בצ'אט; הצבעה חוזרת משנה את ההצבעה שלכם.",
   "polls.stat_votes": {
-    "one": "הצבעה על הסקר הנוכחי",
-    "two": "שתי הצבעות על הסקר הנוכחי",
-    "other": "הצבעות על הסקר הנוכחי"
+    "one": "הצבעה על הסקרים הפעילים",
+    "two": "שתי הצבעות על הסקרים הפעילים",
+    "other": "הצבעות על הסקרים הפעילים"
   },
   "polls.stat_past": "סקרים קודמים",
   "polls.h_current": "הסקר הנוכחי",
@@ -8396,5 +8396,80 @@
   "js.owner.topic_short": "הקלידו קודם נושא.",
   "js.owner.saving": "שומר…",
   "js.owner.site_saved": "נשמר - Pepe יעקוב אחריו מבדיקת הפיד הבאה שלו.",
-  "js.owner.site_reset_done": "חזרה לברירת המחדל."
+  "js.owner.site_reset_done": "חזרה לברירת המחדל.",
+  "bx.pad.filter": "פד",
+  "bx.pad.all": "כל הפדים",
+  "bx.pad.sitewide": "לכל האתר",
+  "bx.pad.show_void": "הצג מבוטלים ({n})",
+  "bx.pad.apply": "סינון",
+  "bx.pad.showing": "מציג רק את {!pad}",
+  "bx.pad.showing_site": "מציג רק פריטים לכל האתר",
+  "bx.pad.clear": "הצג כל פד",
+  "bx.pad.label": "הפד שאליו זה שייך",
+  "bx.pad.pick": "פד",
+  "bx.pad.sitewide_opt": "לכל האתר (ללא פד)",
+  "bx.pad.mine": "הפדים שלך",
+  "bx.pad.others": "פדים",
+  "bx.pad.pick_note": "זה מוצג בדף של הפד ומתחתיו ברשימות.",
+  "bx.d.days": {
+    "one": "{n} יום",
+    "two": "{n} יומיים",
+    "other": "{n} ימים"
+  },
+  "bx.d.hours": {
+    "one": "{n} שעה",
+    "two": "{n} שעתיים",
+    "other": "{n} שעות"
+  },
+  "bx.d.mins": {
+    "one": "{n} דקה",
+    "two": "{n} דקותיים",
+    "other": "{n} דקות"
+  },
+  "markets.f_custom": "בחרו תאריך ושעה…",
+  "markets.f_close_at": "המסחר נסגר ב",
+  "markets.f_bounds": "בין {min} ל-{max} מעכשיו.",
+  "markets.auto.cat.trending": "טרנדים",
+  "market.who_pad": "שופט {!judge} · נוצר על ידי {!creator} · פד {!pad}",
+  "market.time.market_tz": "שעון השוק: {!when} ({!zone})",
+  "market.time.left": "נסגר בעוד {!left}",
+  "polls.stat_running": {
+    "one": "סקר פעיל",
+    "two": "שני סקרים פעילים",
+    "other": "סקרים פעילים"
+  },
+  "polls.ended": "הסתיים",
+  "polls.all": "כל הסקרים",
+  "polls.h_this": "הסקר הזה",
+  "polls.h_running": "סקרים פעילים",
+  "polls.f_note_pad": "בכל פד רץ סקר אחד בכל רגע. יש לתת לו לפחות 2 אפשרויות.",
+  "pad.menu.bets": "🔮 שווקים, מאגרים וסקרים",
+  "pad.bets.h": "שווקים, מאגרים וסקרים",
+  "pad.bets.empty": "אין כאן כלום עדיין. פתחו שוק חיזויים, מאגר הימורים או סקר לפד הזה.",
+  "pad.bets.markets": {
+    "one": "{n} שוק",
+    "two": "{n} שווקים",
+    "other": "{n} שווקים"
+  },
+  "pad.bets.pools": {
+    "one": "{n} מאגר הימורים",
+    "two": "{n} מאגרי הימורים",
+    "other": "{n} מאגרי הימורים"
+  },
+  "pad.bets.polls": {
+    "one": "{n} סקר",
+    "two": "{n} סקרים",
+    "other": "{n} סקרים"
+  },
+  "pad.bets.none_markets": "אין שווקים פתוחים.",
+  "pad.bets.none_pools": "אין מאגרים פתוחים.",
+  "pad.bets.none_polls": "אין סקרים עדיין.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "נסגר בעוד {left}",
+  "pad.bets.judging": "ממתין לשופט",
+  "pad.bets.poll_live": "פעיל · {n} הצבעות",
+  "pad.bets.poll_ended": "הסתיים",
+  "pad.bets.new_market": "שוק",
+  "pad.bets.new_pool": "מאגר",
+  "pad.bets.new_poll": "סקר"
 }

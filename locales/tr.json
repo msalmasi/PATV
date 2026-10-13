@@ -5854,8 +5854,8 @@
   "polls.h1": "Oda ne düşünüyor?",
   "polls.lead": "Pepe, pad'lerin sohbet odalarında aynı anda yalnızca bir anket yürütür. Buradan ya da sohbetten oy ver; tekrar oy vermek oyunu değiştirir.",
   "polls.stat_votes": {
-    "one": "mevcut anketteki oy",
-    "other": "mevcut anketteki oy"
+    "one": "devam eden anketlerdeki oy",
+    "other": "devam eden anketlerdeki oylar"
   },
   "polls.stat_past": "geçmiş anket",
   "polls.h_current": "Güncel anket",
@@ -8291,5 +8291,73 @@
   "js.owner.topic_short": "Önce bir konu yaz.",
   "js.owner.saving": "Kaydediliyor…",
   "js.owner.site_saved": "Kaydedildi - Pepe bir sonraki akış kontrolünde bunu takip eder.",
-  "js.owner.site_reset_done": "Varsayılana döndürüldü."
+  "js.owner.site_reset_done": "Varsayılana döndürüldü.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Tüm pad'ler",
+  "bx.pad.sitewide": "Site geneli",
+  "bx.pad.show_void": "Geçersizleri göster ({n})",
+  "bx.pad.apply": "Filtrele",
+  "bx.pad.showing": "Yalnızca {!pad} gösteriliyor",
+  "bx.pad.showing_site": "Yalnızca site geneli olanlar gösteriliyor",
+  "bx.pad.clear": "tüm pad'leri göster",
+  "bx.pad.label": "Ait olduğu pad",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Site geneli (pad yok)",
+  "bx.pad.mine": "Pad'lerin",
+  "bx.pad.others": "Pad'ler",
+  "bx.pad.pick_note": "Bu, o pad'in sayfasında ve listelerde o pad'in altında görünür.",
+  "bx.d.days": {
+    "one": "{n} gün",
+    "other": "{n} gün"
+  },
+  "bx.d.hours": {
+    "one": "{n} saat",
+    "other": "{n} saat"
+  },
+  "bx.d.mins": {
+    "one": "{n} dakika",
+    "other": "{n} dakika"
+  },
+  "markets.f_custom": "Bir tarih ve saat seç…",
+  "markets.f_close_at": "İşlemler şu zamanda kapanır",
+  "markets.f_bounds": "Şu andan itibaren {min} ile {max} arasında.",
+  "markets.auto.cat.trending": "Trend",
+  "market.who_pad": "hakem {!judge} · oluşturan {!creator} · pad {!pad}",
+  "market.time.market_tz": "Piyasa saati: {!when} ({!zone})",
+  "market.time.left": "{!left} sonra kapanır",
+  "polls.stat_running": {
+    "one": "devam eden anket",
+    "other": "devam eden anket"
+  },
+  "polls.ended": "Bitti",
+  "polls.all": "Tüm anketler",
+  "polls.h_this": "Bu anket",
+  "polls.h_running": "Devam eden anketler",
+  "polls.f_note_pad": "Her pad'de aynı anda yalnızca bir anket çalışır. En az 2 seçenek ver.",
+  "pad.menu.bets": "🔮 Piyasalar, havuzlar ve anketler",
+  "pad.bets.h": "Piyasalar, havuzlar ve anketler",
+  "pad.bets.empty": "Henüz burada bir şey yok. Bu pad için bir tahmin piyasası, bahis havuzu ya da anket başlat.",
+  "pad.bets.markets": {
+    "one": "{n} piyasa",
+    "other": "{n} piyasa"
+  },
+  "pad.bets.pools": {
+    "one": "{n} bahis havuzu",
+    "other": "{n} bahis havuzu"
+  },
+  "pad.bets.polls": {
+    "one": "{n} anket",
+    "other": "{n} anket"
+  },
+  "pad.bets.none_markets": "Açık piyasa yok.",
+  "pad.bets.none_pools": "Açık havuz yok.",
+  "pad.bets.none_polls": "Henüz anket yok.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "{left} sonra kapanıyor",
+  "pad.bets.judging": "hakemin kararı bekleniyor",
+  "pad.bets.poll_live": "devam ediyor · {n} oy",
+  "pad.bets.poll_ended": "bitti",
+  "pad.bets.new_market": "Piyasa",
+  "pad.bets.new_pool": "Havuz",
+  "pad.bets.new_poll": "Anket"
 }

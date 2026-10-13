@@ -6026,10 +6026,10 @@
   "polls.h1": "Co myśli pokój?",
   "polls.lead": "Pepe prowadzi jedną ankietę naraz w pokojach czatu padów. Głosuj tutaj albo na czacie; ponowne głosowanie zmienia twój głos.",
   "polls.stat_votes": {
-    "one": "głos w obecnej ankiecie",
-    "few": "głosy w obecnej ankiecie",
-    "many": "głosów w obecnej ankiecie",
-    "other": "głosów w obecnej ankiecie"
+    "one": "głos w trwających ankietach",
+    "few": "głosy w trwających ankietach",
+    "many": "głosów w trwających ankietach",
+    "other": "głosu w trwających ankietach"
   },
   "polls.stat_past": "poprzednie ankiety",
   "polls.h_current": "Obecna ankieta",
@@ -8501,5 +8501,87 @@
   "js.owner.topic_short": "Najpierw wpisz temat.",
   "js.owner.saving": "Zapisywanie…",
   "js.owner.site_saved": "Zapisano - Pepe śledzi to przy następnym sprawdzeniu kanału.",
-  "js.owner.site_reset_done": "Przywrócono domyślne."
+  "js.owner.site_reset_done": "Przywrócono domyślne.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Wszystkie pady",
+  "bx.pad.sitewide": "Ogólne",
+  "bx.pad.show_void": "Pokaż unieważnione ({n})",
+  "bx.pad.apply": "Filtruj",
+  "bx.pad.showing": "Pokazuję tylko {!pad}",
+  "bx.pad.showing_site": "Pokazuję tylko ogólne",
+  "bx.pad.clear": "pokaż wszystkie pady",
+  "bx.pad.label": "Pad, do którego należy",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Ogólne (bez padu)",
+  "bx.pad.mine": "Twoje pady",
+  "bx.pad.others": "Pady",
+  "bx.pad.pick_note": "Pokazuje się na stronie tego padu i pod nim na listach.",
+  "bx.d.days": {
+    "one": "{n} dzień",
+    "few": "{n} dni",
+    "many": "{n} dni",
+    "other": "{n} dnia"
+  },
+  "bx.d.hours": {
+    "one": "{n} godzina",
+    "few": "{n} godziny",
+    "many": "{n} godzin",
+    "other": "{n} godziny"
+  },
+  "bx.d.mins": {
+    "one": "{n} minuta",
+    "few": "{n} minuty",
+    "many": "{n} minut",
+    "other": "{n} minuty"
+  },
+  "markets.f_custom": "Wybierz datę i godzinę…",
+  "markets.f_close_at": "Handel zamyka się o",
+  "markets.f_bounds": "Między {min} a {max} od teraz.",
+  "markets.auto.cat.trending": "Popularne",
+  "market.who_pad": "sędzia {!judge} · utworzył {!creator} · pad {!pad}",
+  "market.time.market_tz": "Czas rynku: {!when} ({!zone})",
+  "market.time.left": "zamyka się za {!left}",
+  "polls.stat_running": {
+    "one": "aktywna ankieta",
+    "few": "aktywne ankiety",
+    "many": "aktywnych ankiet",
+    "other": "aktywnych ankiet"
+  },
+  "polls.ended": "Zakończone",
+  "polls.all": "Wszystkie ankiety",
+  "polls.h_this": "Ta ankieta",
+  "polls.h_running": "Aktywne ankiety",
+  "polls.f_note_pad": "Na jednym padzie w danym czasie działa jedna ankieta. Podaj co najmniej 2 opcje.",
+  "pad.menu.bets": "🔮 Rynki, pule i ankiety",
+  "pad.bets.h": "Rynki, pule i ankiety",
+  "pad.bets.empty": "Nic tu jeszcze nie ma. Otwórz rynek przewidywań, pulę zakładów albo ankietę dla tego padu.",
+  "pad.bets.markets": {
+    "one": "{n} rynek",
+    "few": "{n} rynki",
+    "many": "{n} rynków",
+    "other": "{n} rynku"
+  },
+  "pad.bets.pools": {
+    "one": "{n} pula zakładów",
+    "few": "{n} pule zakładów",
+    "many": "{n} pul zakładów",
+    "other": "{n} puli zakładów"
+  },
+  "pad.bets.polls": {
+    "one": "{n} ankieta",
+    "few": "{n} ankiety",
+    "many": "{n} ankiet",
+    "other": "{n} ankiety"
+  },
+  "pad.bets.none_markets": "Brak otwartych rynków.",
+  "pad.bets.none_pools": "Brak otwartych pul.",
+  "pad.bets.none_polls": "Brak ankiet.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "zamyka się za {left}",
+  "pad.bets.judging": "czeka na sędziego",
+  "pad.bets.poll_live": "trwa · {n} głosów",
+  "pad.bets.poll_ended": "zakończona",
+  "pad.bets.new_market": "Rynek",
+  "pad.bets.new_pool": "Pula",
+  "pad.bets.new_poll": "Ankieta"
 }

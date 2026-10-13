@@ -5895,9 +5895,9 @@
   "polls.h1": "Que pense la salle ?",
   "polls.lead": "Pepe gère un seul sondage à la fois dans les salons de chat des pads. Vote ici ou dans le chat ; revoter déplace ton vote.",
   "polls.stat_votes": {
-    "one": "vote sur le sondage en cours",
-    "many": "votes sur le sondage en cours",
-    "other": "votes sur le sondage en cours"
+    "one": "vote sur les sondages en cours",
+    "other": "votes sur les sondages en cours",
+    "many": "de votes sur les sondages en cours"
   },
   "polls.stat_past": "sondages passés",
   "polls.h_current": "Sondage en cours",
@@ -8351,5 +8351,80 @@
   "js.owner.topic_short": "Tape d’abord un sujet.",
   "js.owner.saving": "Enregistrement…",
   "js.owner.site_saved": "Enregistré : Pepe le suit à partir de sa prochaine vérification du fil.",
-  "js.owner.site_reset_done": "Retour à la valeur par défaut."
+  "js.owner.site_reset_done": "Retour à la valeur par défaut.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Tous les pads",
+  "bx.pad.sitewide": "Tout le site",
+  "bx.pad.show_void": "Afficher les annulés ({n})",
+  "bx.pad.apply": "Filtrer",
+  "bx.pad.showing": "Affichage de {!pad} uniquement",
+  "bx.pad.showing_site": "Affichage des éléments du site uniquement",
+  "bx.pad.clear": "afficher tous les pads",
+  "bx.pad.label": "Le pad auquel il appartient",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Tout le site (sans pad)",
+  "bx.pad.mine": "Tes pads",
+  "bx.pad.others": "Pads",
+  "bx.pad.pick_note": "Il s'affiche sur la page de ce pad et sous ce pad dans les listes.",
+  "bx.d.days": {
+    "many": "{n} jours",
+    "one": "{n} jour",
+    "other": "{n} jours"
+  },
+  "bx.d.hours": {
+    "many": "{n} heures",
+    "one": "{n} heure",
+    "other": "{n} heures"
+  },
+  "bx.d.mins": {
+    "many": "{n} minutes",
+    "one": "{n} minute",
+    "other": "{n} minutes"
+  },
+  "markets.f_custom": "Choisir une date et une heure…",
+  "markets.f_close_at": "Les échanges se ferment à",
+  "markets.f_bounds": "Entre {min} et {max} à partir de maintenant.",
+  "markets.auto.cat.trending": "Tendances",
+  "market.who_pad": "juge {!judge} · créé par {!creator} · pad {!pad}",
+  "market.time.market_tz": "Heure du marché : {!when} ({!zone})",
+  "market.time.left": "ferme dans {!left}",
+  "polls.stat_running": {
+    "many": "sondages en cours",
+    "one": "sondage en cours",
+    "other": "sondages en cours"
+  },
+  "polls.ended": "Terminé",
+  "polls.all": "Tous les sondages",
+  "polls.h_this": "Ce sondage",
+  "polls.h_running": "Sondages en cours",
+  "polls.f_note_pad": "Un seul sondage tourne par pad à la fois. Propose au moins 2 options.",
+  "pad.menu.bets": "🔮 Marchés, paris & sondages",
+  "pad.bets.h": "Marchés, paris & sondages",
+  "pad.bets.empty": "Rien pour l'instant. Lance un marché de prédiction, un pool de paris ou un sondage pour ce pad.",
+  "pad.bets.markets": {
+    "one": "{n} marché",
+    "other": "{n} marchés",
+    "many": "{n} de marchés"
+  },
+  "pad.bets.pools": {
+    "one": "{n} pool de paris",
+    "other": "{n} pools de paris",
+    "many": "{n} de pools de paris"
+  },
+  "pad.bets.polls": {
+    "one": "{n} sondage",
+    "other": "{n} sondages",
+    "many": "{n} de sondages"
+  },
+  "pad.bets.none_markets": "Aucun marché ouvert.",
+  "pad.bets.none_pools": "Aucun pool ouvert.",
+  "pad.bets.none_polls": "Aucun sondage pour l'instant.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "se termine dans {left}",
+  "pad.bets.judging": "en attente de l'arbitre",
+  "pad.bets.poll_live": "en cours · {n} votes",
+  "pad.bets.poll_ended": "terminé",
+  "pad.bets.new_market": "Marché",
+  "pad.bets.new_pool": "Pool",
+  "pad.bets.new_poll": "Sondage"
 }

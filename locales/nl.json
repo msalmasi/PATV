@@ -5854,8 +5854,8 @@
   "polls.h1": "Wat vindt de room?",
   "polls.lead": "Pepe leidt één poll tegelijk over de chatrooms van de pads. Stem hier of in de chat; opnieuw stemmen verplaatst je stem.",
   "polls.stat_votes": {
-    "one": "stem op de huidige peiling",
-    "other": "stemmen op de huidige peiling"
+    "one": "stem op de lopende peilingen",
+    "other": "stemmen op de lopende peilingen"
   },
   "polls.stat_past": "eerdere peilingen",
   "polls.h_current": "Huidige peiling",
@@ -8291,5 +8291,73 @@
   "js.owner.topic_short": "Typ eerst een onderwerp.",
   "js.owner.saving": "Opslaan…",
   "js.owner.site_saved": "Opgeslagen - Pepe volgt het bij zijn volgende feedcontrole.",
-  "js.owner.site_reset_done": "Terug naar de standaard."
+  "js.owner.site_reset_done": "Terug naar de standaard.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Alle pads",
+  "bx.pad.sitewide": "Sitebreed",
+  "bx.pad.show_void": "Toon ongeldige ({n})",
+  "bx.pad.apply": "Filteren",
+  "bx.pad.showing": "Alleen {!pad} tonen",
+  "bx.pad.showing_site": "Alleen sitebrede tonen",
+  "bx.pad.clear": "toon elke pad",
+  "bx.pad.label": "De pad waar het bij hoort",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Sitebreed (geen pad)",
+  "bx.pad.mine": "Jouw pads",
+  "bx.pad.others": "Pads",
+  "bx.pad.pick_note": "Het wordt getoond op de pagina van die pad en onder die pad in de lijsten.",
+  "bx.d.days": {
+    "one": "{n} dag",
+    "other": "{n} dagen"
+  },
+  "bx.d.hours": {
+    "one": "{n} uur",
+    "other": "{n} uur"
+  },
+  "bx.d.mins": {
+    "one": "{n} minuut",
+    "other": "{n} minuten"
+  },
+  "markets.f_custom": "Kies een datum en tijd…",
+  "markets.f_close_at": "Handel sluit om",
+  "markets.f_bounds": "Tussen {min} en {max} vanaf nu.",
+  "markets.auto.cat.trending": "Trending",
+  "market.who_pad": "beoordelaar {!judge} · gemaakt door {!creator} · pad {!pad}",
+  "market.time.market_tz": "Markttijd: {!when} ({!zone})",
+  "market.time.left": "sluit over {!left}",
+  "polls.stat_running": {
+    "one": "lopende peiling",
+    "other": "lopende peilingen"
+  },
+  "polls.ended": "Afgelopen",
+  "polls.all": "Alle peilingen",
+  "polls.h_this": "Deze peiling",
+  "polls.h_running": "Lopende peilingen",
+  "polls.f_note_pad": "Er loopt per pad tegelijk één peiling. Geef minstens 2 opties op.",
+  "pad.menu.bets": "🔮 Markten, pools & peilingen",
+  "pad.bets.h": "Markten, pools & peilingen",
+  "pad.bets.empty": "Nog niets hier. Start een voorspellingsmarkt, een weddenschapspool of een peiling voor deze pad.",
+  "pad.bets.markets": {
+    "one": "{n} markt",
+    "other": "{n} markten"
+  },
+  "pad.bets.pools": {
+    "one": "{n} weddenschapspool",
+    "other": "{n} weddenschapspools"
+  },
+  "pad.bets.polls": {
+    "one": "{n} peiling",
+    "other": "{n} peilingen"
+  },
+  "pad.bets.none_markets": "Geen open markten.",
+  "pad.bets.none_pools": "Geen open pools.",
+  "pad.bets.none_polls": "Nog geen peilingen.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "sluit over {left}",
+  "pad.bets.judging": "wacht op de beoordelaar",
+  "pad.bets.poll_live": "lopend · {n} stemmen",
+  "pad.bets.poll_ended": "afgelopen",
+  "pad.bets.new_market": "Markt",
+  "pad.bets.new_pool": "Pool",
+  "pad.bets.new_poll": "Peiling"
 }

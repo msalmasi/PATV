@@ -5895,9 +5895,9 @@
   "polls.h1": "O que a sala acha?",
   "polls.lead": "O Pepe roda uma enquete por vez nas salas de chat dos pads. Vote aqui ou no chat; votar de novo muda o seu voto.",
   "polls.stat_votes": {
-    "one": "voto na enquete atual",
-    "many": "votos na enquete atual",
-    "other": "votos na enquete atual"
+    "many": "votos nas enquetes em andamento",
+    "one": "voto nas enquetes em andamento",
+    "other": "votos nas enquetes em andamento"
   },
   "polls.stat_past": "enquetes anteriores",
   "polls.h_current": "Enquete atual",
@@ -8351,5 +8351,80 @@
   "js.owner.topic_short": "Digite um tópico primeiro.",
   "js.owner.saving": "Salvando…",
   "js.owner.site_saved": "Salvo - o Pepe acompanha a partir da próxima checagem do feed dele.",
-  "js.owner.site_reset_done": "Voltou ao padrão."
+  "js.owner.site_reset_done": "Voltou ao padrão.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Todos os pads",
+  "bx.pad.sitewide": "Do site",
+  "bx.pad.show_void": "Mostrar anulados ({n})",
+  "bx.pad.apply": "Filtrar",
+  "bx.pad.showing": "Mostrando só {!pad}",
+  "bx.pad.showing_site": "Mostrando só os do site",
+  "bx.pad.clear": "mostrar todos os pads",
+  "bx.pad.label": "O pad a que pertence",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Do site (sem pad)",
+  "bx.pad.mine": "Seus pads",
+  "bx.pad.others": "Pads",
+  "bx.pad.pick_note": "Aparece na página desse pad e embaixo dele nas listas.",
+  "bx.d.days": {
+    "one": "{n} dia",
+    "many": "{n} dias",
+    "other": "{n} dias"
+  },
+  "bx.d.hours": {
+    "one": "{n} hora",
+    "many": "{n} horas",
+    "other": "{n} horas"
+  },
+  "bx.d.mins": {
+    "one": "{n} minuto",
+    "many": "{n} minutos",
+    "other": "{n} minutos"
+  },
+  "markets.f_custom": "Escolha uma data e hora…",
+  "markets.f_close_at": "Negociação fecha em",
+  "markets.f_bounds": "Entre {min} e {max} a partir de agora.",
+  "markets.auto.cat.trending": "Em alta",
+  "market.who_pad": "juiz {!judge} · criado por {!creator} · pad {!pad}",
+  "market.time.market_tz": "Horário do mercado: {!when} ({!zone})",
+  "market.time.left": "fecha em {!left}",
+  "polls.stat_running": {
+    "one": "enquete em andamento",
+    "many": "enquetes em andamento",
+    "other": "enquetes em andamento"
+  },
+  "polls.ended": "Encerrada",
+  "polls.all": "Todas as enquetes",
+  "polls.h_this": "Esta enquete",
+  "polls.h_running": "Enquetes em andamento",
+  "polls.f_note_pad": "Só uma enquete roda por pad de cada vez. Dê pelo menos 2 opções.",
+  "pad.menu.bets": "🔮 Mercados, bolões e enquetes",
+  "pad.bets.h": "Mercados, bolões e enquetes",
+  "pad.bets.empty": "Nada por aqui ainda. Crie um mercado de previsão, um bolão de apostas ou uma enquete para este pad.",
+  "pad.bets.markets": {
+    "many": "{n} mercados",
+    "one": "{n} mercado",
+    "other": "{n} mercados"
+  },
+  "pad.bets.pools": {
+    "many": "{n} bolões",
+    "one": "{n} bolão",
+    "other": "{n} bolões"
+  },
+  "pad.bets.polls": {
+    "many": "{n} enquetes",
+    "one": "{n} enquete",
+    "other": "{n} enquetes"
+  },
+  "pad.bets.none_markets": "Nenhum mercado aberto.",
+  "pad.bets.none_pools": "Nenhum bolão aberto.",
+  "pad.bets.none_polls": "Nenhuma enquete ainda.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "fecha em {left}",
+  "pad.bets.judging": "aguardando o juiz",
+  "pad.bets.poll_live": "em andamento · {n} votos",
+  "pad.bets.poll_ended": "encerrada",
+  "pad.bets.new_market": "Mercado",
+  "pad.bets.new_pool": "Bolão",
+  "pad.bets.new_poll": "Enquete"
 }

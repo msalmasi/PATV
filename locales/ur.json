@@ -5854,8 +5854,8 @@
   "polls.h1": "روم کیا سوچتا ہے؟",
   "polls.lead": "Pepe پیڈز کے چیٹ رومز میں ایک وقت میں ایک پول چلاتا ہے۔ یہاں یا چیٹ میں ووٹ دیں؛ دوبارہ ووٹ دینے سے آپ کا ووٹ بدل جاتا ہے۔",
   "polls.stat_votes": {
-    "one": "موجودہ پول پر ایک ووٹ",
-    "other": "موجودہ پول پر ووٹ"
+    "one": "جاری پولز پر ایک ووٹ",
+    "other": "جاری پولز پر ووٹ"
   },
   "polls.stat_past": "پچھلے پولز",
   "polls.h_current": "موجودہ پول",
@@ -8291,5 +8291,73 @@
   "js.owner.topic_short": "پہلے کوئی ٹاپک لکھیں۔",
   "js.owner.saving": "محفوظ ہو رہا ہے…",
   "js.owner.site_saved": "محفوظ ہو گیا - Pepe اگلی فیڈ چیک میں اسے فالو کرے گا۔",
-  "js.owner.site_reset_done": "ڈیفالٹ پر واپس آ گیا۔"
+  "js.owner.site_reset_done": "ڈیفالٹ پر واپس آ گیا۔",
+  "bx.pad.filter": "پیڈ",
+  "bx.pad.all": "تمام پیڈز",
+  "bx.pad.sitewide": "پوری سائٹ",
+  "bx.pad.show_void": "کالعدم دکھائیں ({n})",
+  "bx.pad.apply": "فلٹر",
+  "bx.pad.showing": "صرف {!pad} دکھائے جا رہے ہیں",
+  "bx.pad.showing_site": "صرف پوری سائٹ والے دکھائے جا رہے ہیں",
+  "bx.pad.clear": "تمام پیڈز دکھائیں",
+  "bx.pad.label": "وہ پیڈ جس سے یہ منسلک ہے",
+  "bx.pad.pick": "پیڈ",
+  "bx.pad.sitewide_opt": "پوری سائٹ (کوئی پیڈ نہیں)",
+  "bx.pad.mine": "آپ کے پیڈز",
+  "bx.pad.others": "پیڈز",
+  "bx.pad.pick_note": "یہ اُس پیڈ کے صفحے پر اور فہرستوں میں اُس پیڈ کے تحت دکھائی دے گا۔",
+  "bx.d.days": {
+    "one": "{n} دن",
+    "other": "{n} دن"
+  },
+  "bx.d.hours": {
+    "one": "{n} گھنٹہ",
+    "other": "{n} گھنٹے"
+  },
+  "bx.d.mins": {
+    "one": "{n} منٹ",
+    "other": "{n} منٹ"
+  },
+  "markets.f_custom": "تاریخ اور وقت منتخب کریں…",
+  "markets.f_close_at": "ٹریڈنگ اس وقت بند ہوگی",
+  "markets.f_bounds": "ابھی سے {min} اور {max} کے درمیان۔",
+  "markets.auto.cat.trending": "ٹرینڈنگ",
+  "market.who_pad": "جج {!judge} · بنانے والا {!creator} · پیڈ {!pad}",
+  "market.time.market_tz": "مارکیٹ کا وقت: {!when} ({!zone})",
+  "market.time.left": "{!left} میں بند ہوگی",
+  "polls.stat_running": {
+    "one": "جاری پولز",
+    "other": "جاری پولز"
+  },
+  "polls.ended": "ختم شدہ",
+  "polls.all": "تمام پولز",
+  "polls.h_this": "یہ پول",
+  "polls.h_running": "جاری پولز",
+  "polls.f_note_pad": "ہر پیڈ پر ایک وقت میں ایک ہی پول چلتا ہے۔ اس میں کم از کم 2 آپشنز دیں۔",
+  "pad.menu.bets": "🔮 مارکیٹس، پول اور پولز",
+  "pad.bets.h": "مارکیٹس، پول اور پولز",
+  "pad.bets.empty": "یہاں ابھی کچھ نہیں ہے۔ اس پیڈ کے لیے پیشن گوئی کی مارکیٹ، شرط کا پول یا پول شروع کریں۔",
+  "pad.bets.markets": {
+    "one": "{n} مارکیٹ",
+    "other": "{n} مارکیٹس"
+  },
+  "pad.bets.pools": {
+    "one": "{n} بیٹنگ پول",
+    "other": "{n} بیٹنگ پولز"
+  },
+  "pad.bets.polls": {
+    "one": "{n} پول",
+    "other": "{n} پولز"
+  },
+  "pad.bets.none_markets": "کوئی کھلی مارکیٹ نہیں۔",
+  "pad.bets.none_pools": "کوئی کھلا پول نہیں۔",
+  "pad.bets.none_polls": "ابھی کوئی پول نہیں۔",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "{left} میں بند ہوگا",
+  "pad.bets.judging": "جج کے فیصلے کا انتظار",
+  "pad.bets.poll_live": "جاری · {n} ووٹ",
+  "pad.bets.poll_ended": "ختم",
+  "pad.bets.new_market": "مارکیٹ",
+  "pad.bets.new_pool": "بیٹنگ پول",
+  "pad.bets.new_poll": "پول"
 }

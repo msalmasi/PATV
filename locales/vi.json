@@ -5768,7 +5768,7 @@
   "polls.h1": "Cả phòng nghĩ sao?",
   "polls.lead": "Pepe chỉ chạy một cuộc bình chọn mỗi lúc qua các phòng chat của pad. Bình chọn tại đây hoặc trong chat; bình chọn lại sẽ đổi phiếu của bạn.",
   "polls.stat_votes": {
-    "other": "phiếu cho bình chọn hiện tại"
+    "other": "phiếu cho các bình chọn đang diễn ra"
   },
   "polls.stat_past": "bình chọn đã qua",
   "polls.h_current": "Bình chọn hiện tại",
@@ -8186,5 +8186,66 @@
   "js.owner.topic_short": "Nhập chủ đề trước đã.",
   "js.owner.saving": "Đang lưu…",
   "js.owner.site_saved": "Đã lưu - Pepe sẽ theo dõi từ lần kiểm tra bảng tin tiếp theo.",
-  "js.owner.site_reset_done": "Đã trở về mặc định."
+  "js.owner.site_reset_done": "Đã trở về mặc định.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Tất cả pad",
+  "bx.pad.sitewide": "Toàn trang",
+  "bx.pad.show_void": "Hiện đã vô hiệu ({n})",
+  "bx.pad.apply": "Lọc",
+  "bx.pad.showing": "Chỉ hiện {!pad}",
+  "bx.pad.showing_site": "Chỉ hiện mục toàn trang",
+  "bx.pad.clear": "hiện mọi pad",
+  "bx.pad.label": "Pad mà nó thuộc về",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Toàn trang (không thuộc pad)",
+  "bx.pad.mine": "Pad của bạn",
+  "bx.pad.others": "Pad",
+  "bx.pad.pick_note": "Nó hiện trên trang của pad đó và dưới pad đó trong danh sách.",
+  "bx.d.days": {
+    "other": "{n} ngày"
+  },
+  "bx.d.hours": {
+    "other": "{n} giờ"
+  },
+  "bx.d.mins": {
+    "other": "{n} phút"
+  },
+  "markets.f_custom": "Chọn ngày và giờ…",
+  "markets.f_close_at": "Giao dịch đóng lúc",
+  "markets.f_bounds": "Trong khoảng từ {min} đến {max} kể từ bây giờ.",
+  "markets.auto.cat.trending": "Thịnh hành",
+  "market.who_pad": "trọng tài {!judge} · tạo bởi {!creator} · pad {!pad}",
+  "market.time.market_tz": "Giờ thị trường: {!when} ({!zone})",
+  "market.time.left": "đóng sau {!left}",
+  "polls.stat_running": {
+    "other": "cuộc bình chọn đang chạy"
+  },
+  "polls.ended": "Đã kết thúc",
+  "polls.all": "Tất cả bình chọn",
+  "polls.h_this": "Bình chọn này",
+  "polls.h_running": "Bình chọn đang chạy",
+  "polls.f_note_pad": "Mỗi pad chỉ chạy một bình chọn tại một thời điểm. Cần ít nhất 2 lựa chọn.",
+  "pad.menu.bets": "🔮 Thị trường, hồ cược & bình chọn",
+  "pad.bets.h": "Thị trường, hồ cược & bình chọn",
+  "pad.bets.empty": "Chưa có gì ở đây. Hãy tạo thị trường dự đoán, hồ cược hoặc bình chọn cho pad này.",
+  "pad.bets.markets": {
+    "other": "{n} thị trường"
+  },
+  "pad.bets.pools": {
+    "other": "{n} hồ cược"
+  },
+  "pad.bets.polls": {
+    "other": "{n} bình chọn"
+  },
+  "pad.bets.none_markets": "Chưa có thị trường nào đang mở.",
+  "pad.bets.none_pools": "Chưa có hồ cược nào đang mở.",
+  "pad.bets.none_polls": "Chưa có bình chọn nào.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "đóng sau {left}",
+  "pad.bets.judging": "đang chờ trọng tài",
+  "pad.bets.poll_live": "đang diễn ra · {n} phiếu",
+  "pad.bets.poll_ended": "đã kết thúc",
+  "pad.bets.new_market": "Thị trường",
+  "pad.bets.new_pool": "Hồ cược",
+  "pad.bets.new_poll": "Bình chọn"
 }

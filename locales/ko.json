@@ -5768,7 +5768,7 @@
   "polls.h1": "방 사람들의 생각은 어떨까요?",
   "polls.lead": "Pepe는 패드들의 채팅방 전체에서 투표를 한 번에 하나씩 진행해요. 여기 또는 채팅에서 투표하세요. 다시 투표하면 표가 바뀌어요.",
   "polls.stat_votes": {
-    "other": "현재 투표에 참여한 표"
+    "other": "진행 중인 투표의 표"
   },
   "polls.stat_past": "지난 투표",
   "polls.h_current": "현재 투표",
@@ -8186,5 +8186,66 @@
   "js.owner.topic_short": "먼저 주제를 입력해 주세요.",
   "js.owner.saving": "저장하는 중…",
   "js.owner.site_saved": "저장했어요 - Pepe가 다음 피드 확인 때 따라가요.",
-  "js.owner.site_reset_done": "기본값으로 되돌렸어요."
+  "js.owner.site_reset_done": "기본값으로 되돌렸어요.",
+  "bx.pad.filter": "패드",
+  "bx.pad.all": "모든 패드",
+  "bx.pad.sitewide": "사이트 전체",
+  "bx.pad.show_void": "무효 항목 보기 ({n})",
+  "bx.pad.apply": "필터",
+  "bx.pad.showing": "{!pad}만 보는 중",
+  "bx.pad.showing_site": "사이트 전체 항목만 보는 중",
+  "bx.pad.clear": "모든 패드 보기",
+  "bx.pad.label": "이 항목이 속한 패드",
+  "bx.pad.pick": "패드",
+  "bx.pad.sitewide_opt": "사이트 전체 (패드 없음)",
+  "bx.pad.mine": "내 패드",
+  "bx.pad.others": "패드",
+  "bx.pad.pick_note": "해당 패드의 페이지와 목록에서 그 패드 아래에 표시돼요.",
+  "bx.d.days": {
+    "other": "{n}일"
+  },
+  "bx.d.hours": {
+    "other": "{n}시간"
+  },
+  "bx.d.mins": {
+    "other": "{n}분"
+  },
+  "markets.f_custom": "날짜와 시간 선택…",
+  "markets.f_close_at": "거래 마감 시간",
+  "markets.f_bounds": "지금부터 {min}에서 {max} 사이예요.",
+  "markets.auto.cat.trending": "인기",
+  "market.who_pad": "심판 {!judge} · 만든 사람 {!creator} · 패드 {!pad}",
+  "market.time.market_tz": "마켓 시간: {!when} ({!zone})",
+  "market.time.left": "{!left} 후 마감",
+  "polls.stat_running": {
+    "other": "진행 중인 투표"
+  },
+  "polls.ended": "종료됨",
+  "polls.all": "모든 투표",
+  "polls.h_this": "이 투표",
+  "polls.h_running": "진행 중인 투표",
+  "polls.f_note_pad": "패드마다 한 번에 하나의 투표만 진행돼요. 선택지는 최소 2개를 주세요.",
+  "pad.menu.bets": "🔮 마켓, 풀 & 투표",
+  "pad.bets.h": "마켓, 풀 & 투표",
+  "pad.bets.empty": "아직 아무것도 없어요. 이 패드에 예측 마켓, 베팅 풀 또는 투표를 시작해 보세요.",
+  "pad.bets.markets": {
+    "other": "{n} 마켓"
+  },
+  "pad.bets.pools": {
+    "other": "{n} 베팅 풀"
+  },
+  "pad.bets.polls": {
+    "other": "{n} 투표"
+  },
+  "pad.bets.none_markets": "열린 마켓이 없어요.",
+  "pad.bets.none_pools": "열린 풀이 없어요.",
+  "pad.bets.none_polls": "아직 투표가 없어요.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "{left} 후 마감",
+  "pad.bets.judging": "심판 대기 중",
+  "pad.bets.poll_live": "진행 중 · 투표 {n}표",
+  "pad.bets.poll_ended": "종료됨",
+  "pad.bets.new_market": "마켓",
+  "pad.bets.new_pool": "풀",
+  "pad.bets.new_poll": "투표"
 }

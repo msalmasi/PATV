@@ -5895,9 +5895,9 @@
   "polls.h1": "Cosa pensa la stanza?",
   "polls.lead": "Pepe gestisce un sondaggio alla volta tra le stanze chat dei pad. Vota qui o in chat; votare di nuovo sposta il tuo voto.",
   "polls.stat_votes": {
-    "one": "voto sul sondaggio attuale",
-    "many": "voti sul sondaggio attuale",
-    "other": "voti sul sondaggio attuale"
+    "one": "voto sui sondaggi in corso",
+    "other": "voti sui sondaggi in corso",
+    "many": "voti sui sondaggi in corso"
   },
   "polls.stat_past": "sondaggi passati",
   "polls.h_current": "Sondaggio attuale",
@@ -8351,5 +8351,80 @@
   "js.owner.topic_short": "Scrivi prima un argomento.",
   "js.owner.saving": "Salvataggio…",
   "js.owner.site_saved": "Salvato - Pepe lo segue dal suo prossimo controllo del feed.",
-  "js.owner.site_reset_done": "Tornato al predefinito."
+  "js.owner.site_reset_done": "Tornato al predefinito.",
+  "bx.pad.filter": "Pad",
+  "bx.pad.all": "Tutti i pad",
+  "bx.pad.sitewide": "Tutto il sito",
+  "bx.pad.show_void": "Mostra annullati ({n})",
+  "bx.pad.apply": "Filtra",
+  "bx.pad.showing": "Mostrando solo {!pad}",
+  "bx.pad.showing_site": "Mostrando solo quelli di tutto il sito",
+  "bx.pad.clear": "mostra tutti i pad",
+  "bx.pad.label": "Il pad a cui appartiene",
+  "bx.pad.pick": "Pad",
+  "bx.pad.sitewide_opt": "Tutto il sito (nessun pad)",
+  "bx.pad.mine": "I tuoi pad",
+  "bx.pad.others": "Pad",
+  "bx.pad.pick_note": "Compare nella pagina di quel pad e sotto quel pad negli elenchi.",
+  "bx.d.days": {
+    "one": "{n} giorno",
+    "many": "{n} giorni",
+    "other": "{n} giorni"
+  },
+  "bx.d.hours": {
+    "one": "{n} ora",
+    "many": "{n} ore",
+    "other": "{n} ore"
+  },
+  "bx.d.mins": {
+    "one": "{n} minuto",
+    "many": "{n} minuti",
+    "other": "{n} minuti"
+  },
+  "markets.f_custom": "Scegli data e ora…",
+  "markets.f_close_at": "Le contrattazioni chiudono alle",
+  "markets.f_bounds": "Tra {min} e {max} da ora.",
+  "markets.auto.cat.trending": "Di tendenza",
+  "market.who_pad": "giudice {!judge} · creato da {!creator} · pad {!pad}",
+  "market.time.market_tz": "Orario del mercato: {!when} ({!zone})",
+  "market.time.left": "chiude tra {!left}",
+  "polls.stat_running": {
+    "one": "sondaggio in corso",
+    "many": "sondaggi in corso",
+    "other": "sondaggi in corso"
+  },
+  "polls.ended": "Terminato",
+  "polls.all": "Tutti i sondaggi",
+  "polls.h_this": "Questo sondaggio",
+  "polls.h_running": "Sondaggi in corso",
+  "polls.f_note_pad": "Un sondaggio alla volta per pad. Inserisci almeno 2 opzioni.",
+  "pad.menu.bets": "🔮 Mercati, pool e sondaggi",
+  "pad.bets.h": "Mercati, pool e sondaggi",
+  "pad.bets.empty": "Non c'è ancora niente qui. Avvia un mercato di previsioni, un pool di scommesse o un sondaggio per questo pad.",
+  "pad.bets.markets": {
+    "one": "{n} mercato",
+    "other": "{n} mercati",
+    "many": "{n} mercati"
+  },
+  "pad.bets.pools": {
+    "one": "{n} pool di scommesse",
+    "other": "{n} pool di scommesse",
+    "many": "{n} pool di scommesse"
+  },
+  "pad.bets.polls": {
+    "one": "{n} sondaggio",
+    "other": "{n} sondaggi",
+    "many": "{n} sondaggi"
+  },
+  "pad.bets.none_markets": "Nessun mercato aperto.",
+  "pad.bets.none_pools": "Nessun pool aperto.",
+  "pad.bets.none_polls": "Nessun sondaggio ancora.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "chiude tra {left}",
+  "pad.bets.judging": "in attesa del giudice",
+  "pad.bets.poll_live": "in corso · {n} voti",
+  "pad.bets.poll_ended": "terminato",
+  "pad.bets.new_market": "Mercato",
+  "pad.bets.new_pool": "Pool",
+  "pad.bets.new_poll": "Sondaggio"
 }

@@ -5768,7 +5768,7 @@
   "polls.h1": "ルームの皆さんはどう思いますか？",
   "polls.lead": "Pepeは一度に1つの投票を、パッドのチャットルーム全体で実行します。ここかチャットで投票できます。再投票すると票が変わります。",
   "polls.stat_votes": {
-    "other": "現在の投票への票"
+    "other": "進行中の投票への票"
   },
   "polls.stat_past": "過去の投票",
   "polls.h_current": "現在の投票",
@@ -8186,5 +8186,66 @@
   "js.owner.topic_short": "まずトピックを入力してください。",
   "js.owner.saving": "保存中…",
   "js.owner.site_saved": "保存しました。Pepeは次回のフィードチェックから反映します。",
-  "js.owner.site_reset_done": "初期設定に戻しました。"
+  "js.owner.site_reset_done": "初期設定に戻しました。",
+  "bx.pad.filter": "パッド",
+  "bx.pad.all": "すべてのパッド",
+  "bx.pad.sitewide": "サイト全体",
+  "bx.pad.show_void": "無効を表示 ({n})",
+  "bx.pad.apply": "絞り込み",
+  "bx.pad.showing": "{!pad} のみ表示中",
+  "bx.pad.showing_site": "サイト全体のもののみ表示中",
+  "bx.pad.clear": "すべてのパッドを表示",
+  "bx.pad.label": "所属するパッド",
+  "bx.pad.pick": "パッド",
+  "bx.pad.sitewide_opt": "サイト全体（パッドなし）",
+  "bx.pad.mine": "あなたのパッド",
+  "bx.pad.others": "パッド",
+  "bx.pad.pick_note": "そのパッドのページと、一覧のそのパッドの下に表示されます。",
+  "bx.d.days": {
+    "other": "{n}日"
+  },
+  "bx.d.hours": {
+    "other": "{n}時間"
+  },
+  "bx.d.mins": {
+    "other": "{n}分"
+  },
+  "markets.f_custom": "日時を選択…",
+  "markets.f_close_at": "取引終了時刻",
+  "markets.f_bounds": "今から{min}〜{max}の間。",
+  "markets.auto.cat.trending": "トレンド",
+  "market.who_pad": "審判 {!judge} · 作成者 {!creator} · パッド {!pad}",
+  "market.time.market_tz": "マーケット時間: {!when} ({!zone})",
+  "market.time.left": "締切まで {!left}",
+  "polls.stat_running": {
+    "other": "実施中の投票"
+  },
+  "polls.ended": "終了",
+  "polls.all": "すべての投票",
+  "polls.h_this": "この投票",
+  "polls.h_running": "実施中の投票",
+  "polls.f_note_pad": "パッドごとに同時に実施できる投票は1件です。選択肢は2つ以上入力してください。",
+  "pad.menu.bets": "🔮 マーケット、プール、投票",
+  "pad.bets.h": "マーケット、プール、投票",
+  "pad.bets.empty": "まだ何もありません。このパッドで予測マーケット、賭けプール、投票を始めてみましょう。",
+  "pad.bets.markets": {
+    "other": "{n}件のマーケット"
+  },
+  "pad.bets.pools": {
+    "other": "{n}件の賭けプール"
+  },
+  "pad.bets.polls": {
+    "other": "{n}件の投票"
+  },
+  "pad.bets.none_markets": "開催中のマーケットはありません。",
+  "pad.bets.none_pools": "開催中のプールはありません。",
+  "pad.bets.none_polls": "まだ投票はありません。",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "締切まで{left}",
+  "pad.bets.judging": "判定待ち",
+  "pad.bets.poll_live": "進行中 · {n}票",
+  "pad.bets.poll_ended": "終了",
+  "pad.bets.new_market": "マーケット",
+  "pad.bets.new_pool": "プール",
+  "pad.bets.new_poll": "投票"
 }

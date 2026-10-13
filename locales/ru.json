@@ -6026,10 +6026,10 @@
   "polls.h1": "Что думает комната?",
   "polls.lead": "Pepe ведёт одно голосование за раз в чат-комнатах падов. Голосуйте здесь или в чате; повторное голосование меняет ваш голос.",
   "polls.stat_votes": {
-    "one": "голос в текущем опросе",
-    "few": "голоса в текущем опросе",
-    "many": "голосов в текущем опросе",
-    "other": "голоса в текущем опросе"
+    "one": "голос в текущих опросах",
+    "few": "голоса в текущих опросах",
+    "many": "голосов в текущих опросах",
+    "other": "голоса в текущих опросах"
   },
   "polls.stat_past": "прошлых опросов",
   "polls.h_current": "Текущий опрос",
@@ -8501,5 +8501,87 @@
   "js.owner.topic_short": "Сначала введи тему.",
   "js.owner.saving": "Сохраняем…",
   "js.owner.site_saved": "Сохранено. Pepe подхватит это при следующей проверке ленты.",
-  "js.owner.site_reset_done": "Вернули по умолчанию."
+  "js.owner.site_reset_done": "Вернули по умолчанию.",
+  "bx.pad.filter": "Пад",
+  "bx.pad.all": "Все пады",
+  "bx.pad.sitewide": "На весь сайт",
+  "bx.pad.show_void": "Показать аннулированные ({n})",
+  "bx.pad.apply": "Фильтровать",
+  "bx.pad.showing": "Показаны только из {!pad}",
+  "bx.pad.showing_site": "Показаны только общие для сайта",
+  "bx.pad.clear": "показать все пады",
+  "bx.pad.label": "Пад, к которому это относится",
+  "bx.pad.pick": "Пад",
+  "bx.pad.sitewide_opt": "На весь сайт (без пада)",
+  "bx.pad.mine": "Твои пады",
+  "bx.pad.others": "Пады",
+  "bx.pad.pick_note": "Это показывается на странице пада и в списках под этим падом.",
+  "bx.d.days": {
+    "one": "{n} день",
+    "few": "{n} дня",
+    "many": "{n} дней",
+    "other": "{n} дня"
+  },
+  "bx.d.hours": {
+    "one": "{n} час",
+    "few": "{n} часа",
+    "many": "{n} часов",
+    "other": "{n} часа"
+  },
+  "bx.d.mins": {
+    "one": "{n} минута",
+    "few": "{n} минуты",
+    "many": "{n} минут",
+    "other": "{n} минуты"
+  },
+  "markets.f_custom": "Выбрать дату и время…",
+  "markets.f_close_at": "Торги закроются в",
+  "markets.f_bounds": "От {min} до {max} от текущего момента.",
+  "markets.auto.cat.trending": "Популярное",
+  "market.who_pad": "судья {!judge} · создал {!creator} · пад {!pad}",
+  "market.time.market_tz": "Время рынка: {!when} ({!zone})",
+  "market.time.left": "закроется через {!left}",
+  "polls.stat_running": {
+    "one": "идущий опрос",
+    "few": "идущих опроса",
+    "many": "идущих опросов",
+    "other": "идущих опросов"
+  },
+  "polls.ended": "Завершён",
+  "polls.all": "Все опросы",
+  "polls.h_this": "Этот опрос",
+  "polls.h_running": "Идущие опросы",
+  "polls.f_note_pad": "В каждом паде одновременно идёт только один опрос. Дай не меньше 2 вариантов.",
+  "pad.menu.bets": "🔮 Рынки, пулы и опросы",
+  "pad.bets.h": "Рынки, пулы и опросы",
+  "pad.bets.empty": "Здесь пока пусто. Запусти рынок предсказаний, пул пари или опрос для этого пада.",
+  "pad.bets.markets": {
+    "one": "{n} рынок",
+    "few": "{n} рынка",
+    "many": "{n} рынков",
+    "other": "{n} рынка"
+  },
+  "pad.bets.pools": {
+    "one": "{n} пул пари",
+    "few": "{n} пула пари",
+    "many": "{n} пулов пари",
+    "other": "{n} пула пари"
+  },
+  "pad.bets.polls": {
+    "one": "{n} опрос",
+    "few": "{n} опроса",
+    "many": "{n} опросов",
+    "other": "{n} опроса"
+  },
+  "pad.bets.none_markets": "Открытых рынков нет.",
+  "pad.bets.none_pools": "Открытых пулов нет.",
+  "pad.bets.none_polls": "Опросов пока нет.",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "закрывается через {left}",
+  "pad.bets.judging": "ждём судью",
+  "pad.bets.poll_live": "идёт · голосов: {n}",
+  "pad.bets.poll_ended": "завершён",
+  "pad.bets.new_market": "Рынок",
+  "pad.bets.new_pool": "Пул",
+  "pad.bets.new_poll": "Опрос"
 }

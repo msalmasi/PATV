@@ -5768,7 +5768,7 @@
   "polls.h1": "房间里大家怎么想？",
   "polls.lead": "Pepe 在各个小站的聊天室中一次只运行一个投票。可在此或聊天中投票；重新投票即可更改你的选择。",
   "polls.stat_votes": {
-    "other": "当前投票的票数"
+    "other": "进行中投票的票数"
   },
   "polls.stat_past": "往期投票",
   "polls.h_current": "当前投票",
@@ -8186,5 +8186,66 @@
   "js.owner.topic_short": "请先输入话题。",
   "js.owner.saving": "保存中…",
   "js.owner.site_saved": "已保存 - Pepe 会在下次动态检查时跟进。",
-  "js.owner.site_reset_done": "已恢复默认。"
+  "js.owner.site_reset_done": "已恢复默认。",
+  "bx.pad.filter": "小站",
+  "bx.pad.all": "全部小站",
+  "bx.pad.sitewide": "全站",
+  "bx.pad.show_void": "显示已作废（{n}）",
+  "bx.pad.apply": "筛选",
+  "bx.pad.showing": "仅显示 {!pad}",
+  "bx.pad.showing_site": "仅显示全站的",
+  "bx.pad.clear": "显示所有小站",
+  "bx.pad.label": "所属小站",
+  "bx.pad.pick": "小站",
+  "bx.pad.sitewide_opt": "全站（无小站）",
+  "bx.pad.mine": "你的小站",
+  "bx.pad.others": "小站",
+  "bx.pad.pick_note": "会显示在该小站的页面中，并在列表里归在该小站下。",
+  "bx.d.days": {
+    "other": "{n} 天"
+  },
+  "bx.d.hours": {
+    "other": "{n} 小时"
+  },
+  "bx.d.mins": {
+    "other": "{n} 分钟"
+  },
+  "markets.f_custom": "选择日期和时间…",
+  "markets.f_close_at": "交易截止于",
+  "markets.f_bounds": "从现在起 {min} 到 {max} 之间。",
+  "markets.auto.cat.trending": "热门",
+  "market.who_pad": "裁判 {!judge} · 创建者 {!creator} · 小站 {!pad}",
+  "market.time.market_tz": "市场时间：{!when}（{!zone}）",
+  "market.time.left": "{!left}后截止",
+  "polls.stat_running": {
+    "other": "进行中的投票"
+  },
+  "polls.ended": "已结束",
+  "polls.all": "全部投票",
+  "polls.h_this": "本次投票",
+  "polls.h_running": "进行中的投票",
+  "polls.f_note_pad": "每个小站同一时间只能进行一个投票。至少需要 2 个选项。",
+  "pad.menu.bets": "🔮 市场、奖池与投票",
+  "pad.bets.h": "市场、奖池与投票",
+  "pad.bets.empty": "这里还没有内容。为本小站发起一个预测市场、一个对赌奖池或一项投票吧。",
+  "pad.bets.markets": {
+    "other": "{n} 个市场"
+  },
+  "pad.bets.pools": {
+    "other": "{n} 个对赌奖池"
+  },
+  "pad.bets.polls": {
+    "other": "{n} 项投票"
+  },
+  "pad.bets.none_markets": "暂无开放中的市场。",
+  "pad.bets.none_pools": "暂无开放中的奖池。",
+  "pad.bets.none_polls": "还没有投票。",
+  "pad.bets.lead": "{o} {pct}%",
+  "pad.bets.closes": "{left}后截止",
+  "pad.bets.judging": "等待裁判裁定",
+  "pad.bets.poll_live": "进行中 · {n} 票",
+  "pad.bets.poll_ended": "已结束",
+  "pad.bets.new_market": "市场",
+  "pad.bets.new_pool": "奖池",
+  "pad.bets.new_poll": "投票"
 }
