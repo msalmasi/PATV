@@ -42,6 +42,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
+const BUDGET = require("./public/js/donpromo-budget");   // 1.99vi: the budget arithmetic + wording, shared with the admin form
 
 const DAY = 86400000;
 const MAX_DAYS = 7;
@@ -75,6 +76,10 @@ function init() {
         promo_rate INTEGER, normal_rate INTEGER, promo_pat INTEGER NOT NULL, normal_pat INTEGER NOT NULL, bonus INTEGER NOT NULL, bonus_pct REAL)`);
       await runQuery("CREATE INDEX IF NOT EXISTS donation_promo_credits_user ON donation_promo_credits (promo_id, user_id)");
       await runQuery("CREATE INDEX IF NOT EXISTS donation_promo_credits_key ON donation_promo_credits (promo_id, donor_key)");
+      // 1.99vi: the cents of a donation that would have earned the promo rate (inside the donor's cap) but got the normal rate
+      // because the promo's budget had run out (> 0 = a budget fallback; the admin card counts them)
+      const cc = (await getQuery("SELECT name FROM pragma_table_info('donation_promo_credits')")).map((r) => r.name);
+      if (!cc.includes("budget_short_cents")) await runQuery("ALTER TABLE donation_promo_credits ADD COLUMN budget_short_cents INTEGER NOT NULL DEFAULT 0");
       await runQuery("CREATE TABLE IF NOT EXISTS donation_promo_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER, actor TEXT)");
       // 1.99ts: the daily donation limit - every donation's USD by account and by when it was paid (card: also the OPEN
       // checkouts, so two tabs can't double up), and per-member overrides
@@ -104,8 +109,8 @@ function init() {
   return ready;
 }
 
-class Refuse extends Error { constructor(status, message) { super(message); this.status = status; this.refuse = true; } }
-const refuse = (m, s = 400) => new Refuse(s, m);
+class Refuse extends Error { constructor(status, message, code = null, detail = null) { super(message); this.status = status; this.refuse = true; this.code = code; this.detail = detail; } }
+const refuse = (m, s = 400, code = null, detail = null) => new Refuse(s, m, code, detail);
 const normalTerms = () => { try { return require("./funding").donationTerms(); } catch (e) { return { rate: 500000, bonus_pct: 20 }; } };
 
 // ── the cache (sync readers: the homepage banner) ──
@@ -191,7 +196,10 @@ async function computeTerms({ userId = null, donorKey = null, cents, paidAt }) {
   const u = await usage(p.id, id);
   const s = split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
                     promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } });
-  return { s: { ...s, promo: { id: p.id, label: p.label || null } }, p, rate, id };
+  // 1.99vi: what the donor's cap still allowed at the promo rate but the budget didn't (= a budget fallback)
+  const capFits = Math.min(s.usd_cents, Math.max(0, Math.floor(p.cap_cents) - Math.floor(u.usedCents)));
+  const budgetShort = p.budget_pat == null ? 0 : Math.max(0, capFits - s.promo_cents);
+  return { s: { ...s, promo: { id: p.id, label: p.label || null } }, p, rate, id, budgetShort };
 }
 /** 1.99uh: what a donation would credit (PAT + the incentive bonus = what it mints), without writing anything. */
 async function previewTerms(args) { await init(); return (await computeTerms(args)).s; }
@@ -209,12 +217,14 @@ async function creditTerms({ ref, userId = null, donorKey = null, cents, paidAt,
     if (!ref) return { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
     const C = await computeTerms({ userId, donorKey, cents, paidAt });
     if (!C.p) return C.s;
-    const { s, p, rate, id } = C;
+    const { s, p, rate, id, budgetShort } = C;
     const at = Number(paidAt);
     await runQuery(`INSERT INTO donation_promo_credits (ref, promo_id, user_id, donor_key, via, paid_at, credited, usd_cents, promo_cents, normal_cents,
-                    promo_rate, normal_rate, promo_pat, normal_pat, bonus, bonus_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    promo_rate, normal_rate, promo_pat, normal_pat, bonus, bonus_pct, budget_short_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [String(ref), p.id, id.col === "user_id" ? id.v : null, id.col === "donor_key" ? id.v : null, via, at, clock(), s.usd_cents, s.promo_cents,
-       s.normal_cents, rate, T.rate, s.promo_pat, s.normal_pat, s.bonus, T.bonus_pct]);
+       s.normal_cents, rate, T.rate, s.promo_pat, s.normal_pat, s.bonus, T.bonus_pct, budgetShort || 0]);
+    if (budgetShort > 0) console.warn(`[donpromo] budget fallback: ${ref} (${via || "?"}) - $${(budgetShort / 100).toFixed(2)} got the normal rate because ` +
+                                      `${p.id}'s budget (${Number(p.budget_pat).toLocaleString("en-US")} PAT) ran out`);
     return { ...s, promo: { id: p.id, label: p.label || null } };
   };
   return inTx() ? run() : tx(run);
@@ -614,6 +624,18 @@ function budgetOf(v) {
   if (!Number.isFinite(n) || n < 1 || n > 1e12) throw refuse("The budget is a whole number of PAT (or empty for none).");
   return n;
 }
+const yes = (v) => v === true || v === 1 || v === "1" || v === "on" || v === "true";
+/**
+ * 1.99vi: a budget smaller than ONE donor's full promo allowance (cap x promo rate) is almost always a typo (1000 meant as
+ * $1,000 = 1,000 PAT). Refused (409, code "budget_small", detail = DPBudget.check) unless b.confirm_budget.
+ */
+function guardBudget(budgetPat, capCents, rate, b) {
+  const w = BUDGET.check(budgetPat, capCents, rate);
+  if (!w || yes(b.confirm_budget)) return;
+  throw refuse(`This budget runs out after $${BUDGET.usd(w.budget_cents)} of promo donations - less than one donor's full promo allowance ` +
+               `($${BUDGET.usd(w.cap_cents)} = ${BUDGET.fmt(w.allowance_pat)} PAT). The budget is in PAT, not dollars. Did you mean ${BUDGET.fmt(w.suggest_pat)} PAT? ` +
+               `Confirm to keep it.`, 409, "budget_small", w);
+}
 function windowOf(b, now) {
   let starts = b.starts == null || b.starts === "" ? now : int(b.starts);
   let ends = int(b.ends);
@@ -649,6 +671,7 @@ async function create(admin, b = {}) {
   const W = windowOf(b, now);
   checkWindow(W.starts, W.ends, now, { isNew: true });
   const budget = budgetOf(b.budget);
+  guardBudget(budget, P.cap_cents, effectiveRate(P, T.rate), b);
   const label = cleanLabel(b.label);
   const enabled = b.enabled === undefined ? 1 : (b.enabled === true || b.enabled === 1 || b.enabled === "1" || b.enabled === "on") ? 1 : 0;
   const row = await tx(async () => {
@@ -698,6 +721,9 @@ async function edit(admin, id, b = {}) {
         const used = (await usage(p.id, null)).usedBudget;
         if (next.budget_pat < used) throw refuse(`${used.toLocaleString("en-US")} PAT were already credited at the promo rate - the budget can't go below that.`);
       }
+    }
+    if (next.budget_pat != null && (String(next.budget_pat) !== String(p.budget_pat) || next.cap_cents !== p.cap_cents || next.rate !== p.rate || next.mult !== p.mult)) {
+      guardBudget(next.budget_pat, next.cap_cents, effectiveRate(next, normalTerms().rate), b);
     }
     if (b.enabled !== undefined) next.enabled = (b.enabled === true || b.enabled === 1 || b.enabled === "1" || b.enabled === "on") ? 1 : 0;
     if (!Number.isFinite(next.starts) || !Number.isFinite(next.ends)) throw refuse("Bad times.");
@@ -774,16 +800,30 @@ async function setSettings(admin, b = {}) {
 async function stats(id) {
   const r = (await getQuery(`SELECT COUNT(*) AS n, COUNT(DISTINCT COALESCE(user_id, donor_key)) AS donors, COALESCE(SUM(usd_cents),0) AS usd,
       COALESCE(SUM(promo_cents),0) AS promo_usd, COALESCE(SUM(promo_pat),0) AS promo_pat, COALESCE(SUM(normal_pat),0) AS normal_pat,
-      COALESCE(SUM(bonus),0) AS bonus, COALESCE(SUM(promo_pat - (promo_cents * normal_rate) / 100),0) AS extra
+      COALESCE(SUM(bonus),0) AS bonus, COALESCE(SUM(promo_pat - (promo_cents * normal_rate) / 100),0) AS extra,
+      COALESCE(SUM(CASE WHEN budget_short_cents > 0 THEN 1 ELSE 0 END),0) AS fallbacks, COALESCE(SUM(budget_short_cents),0) AS short
       FROM donation_promo_credits WHERE promo_id = ?`, [id]))[0];
   return { donations: r.n, donors: r.donors, usd_cents: r.usd, promo_cents: r.promo_usd, promo_pat: r.promo_pat, normal_pat: r.normal_pat, bonus: r.bonus,
-           extra_pat: Math.max(0, Math.floor(r.extra)) };
+           extra_pat: Math.max(0, Math.floor(r.extra)), budget_fallbacks: Number(r.fallbacks) || 0, budget_short_cents: Number(r.short) || 0 };
 }
 function statusOf(p, now) {
   if (p.cancelled) return "cancelled";
   if (p.ends <= now) return "ended";
   if (p.starts > now) return p.enabled ? "scheduled" : "draft";
   return p.enabled ? "live" : "paused";
+}
+/**
+ * 1.99vi: the promo card's budget line: used / total in PAT and (at the promo rate) in dollars, whether it has run out while
+ * the promo is still running, and whether it is smaller than one donor's allowance. null = no budget.
+ */
+function budgetState(p, st, rate, status) {
+  if (p.budget_pat == null) return null;
+  const r = rate || Number(p.rate) || 0;
+  const used = Number(st.promo_pat) || 0, left = Math.max(0, p.budget_pat - used);
+  const exhausted = r > 0 ? BUDGET.centsOf(left, r) < 1 : left <= 0;
+  return { pat: p.budget_pat, used_pat: used, left_pat: left, cents: BUDGET.centsOf(p.budget_pat, r), used_cents: Number(st.promo_cents) || 0,
+           exhausted, exhausted_live: exhausted && (status === "live" || status === "paused"), small: !!BUDGET.check(p.budget_pat, p.cap_cents, r),
+           allowance_pat: BUDGET.allowance(p.cap_cents, r) };
 }
 /** The admin card: settings, the normal terms, every promo (newest first) with its numbers. */
 async function adminState() {
@@ -793,8 +833,9 @@ async function adminState() {
   const rows = await getQuery("SELECT * FROM donation_promos ORDER BY starts DESC LIMIT 50");
   const promos = [];
   for (const p of rows) {
-    promos.push({ ...p, status: statusOf(p, now), cap_usd: p.cap_cents / 100, effective_rate: effectiveRate(p, T.rate), stats: await stats(p.id),
-                  locked: p.starts <= now || (await hasCredits(p.id)) });
+    const st = await stats(p.id), status = statusOf(p, now), rate = effectiveRate(p, T.rate);
+    promos.push({ ...p, status, cap_usd: p.cap_cents / 100, effective_rate: rate, stats: st,
+                  locked: p.starts <= now || (await hasCredits(p.id)), budget: budgetState(p, st, rate, status) });
   }
   let log = [];
   try { log = await require("./adminaudit").recent("donation_promo", 30); } catch (e) { log = []; }
@@ -822,7 +863,7 @@ function register(app, { addUser, noTimers } = {}) {
     if (signed && (!req.user || !req.user.userId)) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (admin && !isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
     try { res.json({ ok: true, ...(await fn(req, req.body || {})) }); } catch (e) {
-      if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message });
+      if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, ...(e.code ? { code: e.code, detail: e.detail } : {}) });
       console.error("[donpromo]", e && e.message);
       res.status(500).json({ ok: false, error: "Something went wrong." });
     }
@@ -856,7 +897,7 @@ function register(app, { addUser, noTimers } = {}) {
 module.exports = {
   init, register, creditTerms, metaOf, noteOf, receiptLine, split, effectiveRate, live, liveCached, quote, create, edit, end, setSettings, adminState,
   promoByDay, nextMidnight, dayWindow, daily, limitCheck, reserveCheckout, attachSession, releaseHold, expireSession, recordCredit,
-  setOverride, overrideOf, limitState, donorKeyOf,
+  setOverride, overrideOf, limitState, donorKeyOf, budgetState,
   // 1.99uh
   previewTerms, ensureFrozen, globalCaps, globalCheck, globalPublic, globalAdmin, globalMaxUsd, prepare, dayKey, mintOf,
   _setSupply: (fn) => { supplyFn = fn || (async () => (await require("./supply").patSupply()).total); }, refresh, Refuse, BONUS_BASES, DEFAULTS, MAX_DAYS, HARD_CEILING_X, MAX_CAP_USD,

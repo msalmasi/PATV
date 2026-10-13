@@ -194,7 +194,9 @@ test("card and crypto credit the same: same amounts, split, bonus and claim meta
 });
 
 test("the budget: promo PAT across all donors stop at the budget (a straddling donation splits), then the normal rate", async () => {
-  const p = await DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, budget: 70000000, starts: now, ends: now + H });
+  // 1.99vi: 70M < one donor's full allowance ($100 x 1M = 100M) -> refused unless confirmed
+  await assert.rejects(DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, budget: 70000000, starts: now, ends: now + H }), (e) => e.code === "budget_small");
+  const p = await DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, budget: 70000000, starts: now, ends: now + H, confirm_budget: true });
   await SB.handleEvent(card("evt_g1", "fay", 5000, now + 1));     // 50M of the 70M
   await SB.handleEvent(card("evt_g2", "gus", 5000, now + 2));     // 20M fit ($20), $30 normal
   assert.equal(await bal("fay"), 50000000);
@@ -202,11 +204,18 @@ test("the budget: promo PAT across all donors stop at the budget (a straddling d
   await SB.handleEvent(card("evt_g3", "gus", 1000, now + 3));     // budget gone: normal
   assert.equal(await bal("gus"), 35000000 + 5000000);
   assert.equal((await DP.live("u-gus")).budget_left_pat, 0);
+  // 1.99vi: the two donations the budget cut short are counted ($30 + $10 that the cap still allowed), and the card says exhausted
+  let st = (await DP.adminState()).promos.find((x) => x.id === p.id);
+  assert.deepEqual([st.stats.budget_fallbacks, st.stats.budget_short_cents], [2, 4000]);
+  assert.deepEqual([st.budget.used_pat, st.budget.pat, st.budget.used_cents, st.budget.cents, st.budget.exhausted_live], [70000000, 70000000, 7000, 7000, true]);
   // the budget can't be edited below what's used; the locked fields can't change after the start
   await assert.rejects(DP.edit(ADMIN, p.id, { budget: 1000 }), /can't go below/);
   await assert.rejects(DP.edit(ADMIN, p.id, { rate: 1500000 }), /has started/);
   await assert.rejects(DP.edit(ADMIN, p.id, { cap_usd: 500 }), /has started/);
-  const e = await DP.edit(ADMIN, p.id, { budget: 90000000, label: "more room", ends: now + 2 * H });
+  await assert.rejects(DP.edit(ADMIN, p.id, { budget: 90000000 }), /Did you mean 100,000,000 PAT/);
+  const e = await DP.edit(ADMIN, p.id, { budget: 90000000, label: "more room", ends: now + 2 * H, confirm_budget: true });
+  st = (await DP.adminState()).promos.find((x) => x.id === p.id);
+  assert.equal(st.budget.exhausted_live, false, "room again after the budget was raised");
   assert.equal(e.budget_pat, 90000000);
   await SB.handleEvent(card("evt_g4", "fay", 5000, now + 4));     // 20M more fit ($20 of fay's remaining $50)
   assert.equal(await bal("fay"), 50000000 + 20000000 + 15000000);
