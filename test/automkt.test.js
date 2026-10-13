@@ -182,3 +182,36 @@ test("the feed post: one per batch, at most one every 6 h and 3 a day", async ()
   assert.equal(POSTS.length, 3, "the daily cap (3 in 24 h) holds");
   assert.equal((await post("/api/automkt/announce", { password: "bot-token", items: [] })).status, 400);
 });
+
+test("1.99vc trending + polls: the settings pass through, a poll's feed line links /polls/<id>, the admin page shows the toggles", async () => {
+  const r = await post("/api/admin/automkt", { action: "set", args: { cfg: { cats: { trending: true, bogus: true }, polls: false, poly_every_h: "12", poll_hours: 48 } } },
+                       { "x-test-user": "u4" });
+  assert.equal(r.body.ok, true, JSON.stringify(r.body));
+  const q = (await post("/api/automkt/sync", { password: "bot-token" })).body.requests.pop();
+  assert.deepEqual(q.args, { cfg: { cats: { trending: true }, polls: false, poly_every_h: 12, poll_hours: 48 } });
+  await post("/api/automkt/ack", { password: "bot-token", id: q.id, ok: true, message: "saved" });
+  const real = Date.now;
+  A._setClock(() => real() + 30 * 86400e3);
+  const items = [{ ref: "poll:poll_ab12", kind: "poll", poll_id: "poll_ab12", question: "Which rivalry is the most fun to watch?", options: ["A", "B"],
+                   closes: now + 86400, cat: "trending", tag: "Sports", model: "poll" },
+                 { ref: "M7", id: 7, question: M7.question, options: ["yes", "no"], closes: now + 86400, cat: "trending", tag: "Crypto", model: "lmsr" },
+                 { ref: "poll:x", kind: "poll", poll_id: "../etc", question: "A bad id?", options: ["A", "B"], closes: now + 86400, cat: "trending" }];
+  const n0 = POSTS.length;
+  const a = await post("/api/automkt/announce", { password: "bot-token", items });
+  A._setClock(null);
+  assert.equal(a.body.posted, true, JSON.stringify(a.body));
+  const body = POSTS[n0].body;
+  assert.match(body, /Poll: Which rivalry is the most fun to watch\? \(A \/ B\)/);
+  assert.match(body, /\/polls\/poll_ab12/);
+  assert.match(body, /🔥 M7: Will Bitcoin/);
+  assert.match(body, /\/markets\/7/);
+  assert.doesNotMatch(body, /A bad id|etc/, "a poll id that isn't a plain id is dropped");
+  const pg = await page("u4", "/admin/markets");
+  assert.equal(pg.status, 200);
+  assert.match(pg.text, /name="cat_trending"/);
+  assert.match(pg.text, /Polymarket topics as ideas/);
+  assert.match(pg.text, /name="poly_every_h"/);
+  assert.match(pg.text, /name="poll_hours"/);
+  assert.match(pg.text, /Never a market AND a pool or poll on the same topic/);
+  assert.deepEqual(leaked(pg.text), []);
+});

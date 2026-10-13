@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'markets', admIsAdmin: isAdmin }) %>
 <%# views/admin/markets.ejs - 1.99th: Pepe's auto markets (automkt.js; camfrog-bot pepe_automkt.py). Data: A = automkt.adminState():
     {state: Pepe's last status push, at, online, requests: the admins' recent requests, feed: the feed-post log}.
@@ -30,7 +31,13 @@
       <label class="adm-check"><input type="checkbox" name="cat_sports"> 🏟️ Sports</label>
       <label class="adm-check"><input type="checkbox" name="cat_prices"> 📈 Prices</label>
       <label class="adm-check"><input type="checkbox" name="cat_news"> 📰 News</label>
+      <label class="adm-check"><input type="checkbox" name="cat_trending"> 🔥 <%= t('automkt.adm.trending') %></label>
     </fieldset>
+    <p class="adm-help adm-adv"><%= t('automkt.adm.trending_help') %></p>
+    <label>…<%= t('automkt.adm.poly_every') %><input type="number" name="poly_every_h" min="1" max="72"></label>
+    <label class="adm-check"><input type="checkbox" name="polls"> 📊 <%= t('automkt.adm.polls') %></label>
+    <label><%= t('automkt.adm.poll_hours') %><input type="number" name="poll_hours" min="1" max="168"></label>
+    <p class="adm-help adm-adv"><%= t('automkt.adm.dedupe_help') %></p>
     <label class="adm-check"><input type="checkbox" name="announce"> Announce new ones in Pepe's rooms</label>
     <label>…at most one line every (minutes)<input type="number" name="announce_gap_min" min="0" max="1440"></label>
     <label class="adm-check"><input type="checkbox" name="feed_post"> Post them on the feed (at most one post every 6 h, 3 a day)</label>
@@ -75,7 +82,8 @@
 </section>
 
 <script id="amData" type="application/json"><%- JSON.stringify(A).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-automkt.js?v=1" defer></script>
+<script id="amL" type="application/json"><%- JSON.stringify({ trending: t('automkt.adm.trending_state'), trending_err: t('automkt.adm.trending_err'), idea: t('automkt.adm.idea'), poll: t('automkt.adm.poll_link') }).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/admin-automkt.js?v=2" defer></script>
 <%- include('../partials/admin-mktcfg') %>
 <%- include('../partials/admin-close') %>
 </body>

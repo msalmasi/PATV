@@ -6,6 +6,9 @@
   var A = {};
   try { A = JSON.parse(el.textContent || "{}"); } catch (e) { A = {}; }
   var $ = function (id) { return document.getElementById(id); };
+  var L = {};
+  try { L = JSON.parse(($("amL") || {}).textContent || "{}"); } catch (e) { L = {}; }
+  function fill(s, v) { return String(s || "").replace(/\{!?(\w+)\}/g, function (m, k) { return v[k] == null ? "" : String(v[k]); }); }
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function when(sec) { return sec ? new Date(Number(sec) * 1000).toISOString().slice(0, 16).replace("T", " ") : "-"; }
@@ -23,6 +26,13 @@
   function queued(node, j, what) {
     if (j && j.ok) { A = j; render(); say(node, what + " sent to Pepe - he picks it up within a minute.", true); setTimeout(reload, 20000); setTimeout(reload, 70000); }
     else say(node, (j && j.error) || "Failed.", false);
+  }
+
+  function kindTag(v) {
+    return v.kind ? " <i>(" + esc(v.kind) + (v.kind !== "market" ? ": " + esc((v.options || []).join(" / ")) : "") + ")</i>" : "";
+  }
+  function ideaLine(v) {
+    return v.idea && v.idea.title ? "<div class=\"adm-help\">" + esc(fill(L.idea, { title: v.idea.title })) + "</div>" : "";
   }
 
   function stateLine(v) {
@@ -47,6 +57,8 @@
     if (f && S.cfg && !f.dataset.dirty) {
       f.enabled.checked = !!c.enabled; f.per_week.value = c.per_week; f.review.value = c.review;
       f.cat_sports.checked = !!(c.cats || {}).sports; f.cat_prices.checked = !!(c.cats || {}).prices; f.cat_news.checked = !!(c.cats || {}).news;
+      f.cat_trending.checked = !!(c.cats || {}).trending; f.polls.checked = c.polls !== false;
+      f.poly_every_h.value = c.poly_every_h || 6; f.poll_hours.value = c.poll_hours || 24;
       f.announce.checked = !!c.announce; f.announce_gap_min.value = c.announce_gap_min; f.feed_post.checked = !!c.feed_post; f.seed_cap_week.value = c.seed_cap_week;
       var o = S.options || {};
       var box = function (k, label) {
@@ -59,7 +71,9 @@
     }
     $("amWeek").innerHTML = S.cfg ? ("This week: <b>" + num(w.count) + " / " + num(w.target) + "</b> (" + Object.keys(w.by_cat || {}).map(function (k) { return esc(k) + " " + num(w.by_cat[k]); }).join(", ") + ")"
       + " · next " + (c.enabled ? (S.next_due ? when(S.next_due) + " UTC" : "-") : "off") + " · auto seed this week " + num(w.seed_used) + " / " + num(w.seed_cap) + " PAT"
-      + (S.busy ? " · <b>working…</b>" : "")) : "";
+      + (S.busy ? " · <b>working…</b>" : "")
+      + (S.poly && (c.cats || {}).trending ? "<br>" + esc(fill(L.trending, { n: num(S.poly.count), at: S.poly.at ? when(S.poly.at) + " UTC" : "-", h: S.poly.every_h || c.poly_every_h }))
+        + (S.poly.error ? " · " + esc(fill(L.trending_err, { err: S.poly.error })) : "") : "")) : "";
     var pv = S.preview;
     $("amPreview").innerHTML = pv && pv.items ? ("<h3>Preview (" + when(pv.at) + " UTC)</h3>" + (pv.items.length ? "<ul>" + pv.items.map(function (p) {
       return "<li>[" + esc(p.cat) + (p.tag ? " · " + esc(p.tag) : "") + "] <b>" + esc(p.question) + "</b> " + esc((p.options || []).join(" / ")) + " · closes " + when(p.closes) + " · resolves " + when(p.resolve_at)
@@ -68,12 +82,14 @@
       + ((pv.skipped || []).length ? "<details><summary>Skipped (" + pv.skipped.length + ")</summary><ul class=\"adm-help\">" + pv.skipped.map(function (s) { return "<li>" + esc(s.question) + " - " + esc(s.why) + "</li>"; }).join("") + "</ul></details>" : "")) : "";
     var rv = S.review || [];
     $("amReview").innerHTML = rv.length ? rv.map(function (v) {
-      return "<tr><td>" + esc(v.id) + "</td><td><b>" + esc(v.question) + "</b><div class=\"adm-help\">" + esc(v.criteria) + " <a href=\"" + esc(v.source_url) + "\" target=\"_blank\" rel=\"noopener\">source</a></div></td><td>"
+      return "<tr><td>" + esc(v.id) + "</td><td><b>" + esc(v.question) + "</b>" + kindTag(v) + ideaLine(v) + "<div class=\"adm-help\">" + esc(v.criteria)
+        + (v.source_url ? " <a href=\"" + esc(v.source_url) + "\" target=\"_blank\" rel=\"noopener\">source</a>" : "") + "</div></td><td>"
         + when(v.closes) + "</td><td>" + when(v.resolve_at) + "</td><td><button type=\"button\" data-ok=\"" + esc(v.id) + "\">✅ Approve</button> <button type=\"button\" class=\"adm-btn danger\" data-no=\"" + esc(v.id) + "\">Reject</button></td></tr>";
     }).join("") : "<tr><td class=\"empty\" colspan=\"5\">Nothing waiting.</td></tr>";
     var it = S.items || [];
     $("amItems").innerHTML = it.length ? it.map(function (v) {
-      var ref = v.ref ? "<a href=\"/markets/" + esc(String(v.ref).replace(/^M/, "")) + "\">" + esc(v.ref) + "</a>" : esc(v.id);
+      var ref = v.poll_id ? "<a href=\"/polls/" + encodeURIComponent(String(v.poll_id)) + "\">" + esc(fill(L.poll, { id: v.poll_id })) + "</a>"
+        : (v.ref ? "<a href=\"/markets/" + esc(String(v.ref).replace(/^M/, "")) + "\">" + esc(v.ref) + "</a>" : esc(v.id));
       return "<tr><td>" + ref + "</td><td>" + esc(v.cat) + (v.tag ? " · " + esc(v.tag) : "") + "<br>" + esc(v.model || v.kind || "") + "</td><td>" + esc(v.question) + "</td><td>" + when(v.closes) + "</td><td>" + when(v.resolve_at) + "</td><td>" + stateLine(v) + "</td></tr>";
     }).join("") : "<tr><td class=\"empty\" colspan=\"6\">None yet.</td></tr>";
     $("amReqs").innerHTML = (A.requests || []).length ? A.requests.map(function (r) {
@@ -92,7 +108,8 @@
       var lists = { leagues: [], assets: [], feeds: [] };
       Array.prototype.forEach.call(f.querySelectorAll("[data-list]"), function (x) { if (x.checked) lists[x.dataset.list].push(x.value); });
       var cfg = { enabled: f.enabled.checked, per_week: Number(f.per_week.value), review: f.review.value,
-                  cats: { sports: f.cat_sports.checked, prices: f.cat_prices.checked, news: f.cat_news.checked },
+                  cats: { sports: f.cat_sports.checked, prices: f.cat_prices.checked, news: f.cat_news.checked, trending: f.cat_trending.checked },
+                  polls: f.polls.checked, poly_every_h: Number(f.poly_every_h.value), poll_hours: Number(f.poll_hours.value),
                   announce: f.announce.checked, announce_gap_min: Number(f.announce_gap_min.value), feed_post: f.feed_post.checked,
                   seed_cap_week: Number(f.seed_cap_week.value), leagues: lists.leagues, assets: lists.assets, feeds: lists.feeds };
       post({ action: "set", args: { cfg: cfg } }).then(function (j) { delete f.dataset.dirty; queued(f.querySelector("[data-msg]"), j, "Settings"); });

@@ -4,7 +4,8 @@
 // resolution state, the preview, the sources) and pulls the admins' requests from here - outbound only, like the control panel.
 //   POST /api/automkt/sync      (bot)  {status} -> {ok, requests: [{id, action, args, by}]}   (handed out once; re-offered after 5 min)
 //   POST /api/automkt/ack       (bot)  {id, ok, message, extra}
-//   POST /api/automkt/announce  (bot)  {items: [{ref, id, question, options, closes, cat, tag, model}]} -> a feed post as Pepe in
+//   POST /api/automkt/announce  (bot)  {items: [{ref, id, question, options, closes, cat, tag, model}]} (1.99vc: or a poll
+//                                      {kind: "poll", poll_id, ...} -> links /polls/<id>) -> a feed post as Pepe in
 //                                      the Camfrog Lounge, rate-limited here (FEED_GAP_MS, FEED_PER_DAY) whatever Pepe sends
 //   GET  /admin/markets         the admin page (views/admin/markets.ejs + public/js/admin-automkt.js)
 //   GET  /api/admin/automkt     (admins) {state, requests}
@@ -17,6 +18,8 @@ const ACTIONS = new Set(["set", "generate", "preview", "approve", "reject"]);
 const FEED_GAP_MS = 6 * 3600e3;          // at most one auto-market feed post every 6 h ...
 const FEED_PER_DAY = 3;                  // ... and 3 a day
 const RECLAIM_MS = 5 * 60e3;
+const CATS = ["sports", "prices", "news", "trending"];   // 1.99vc: trending = Polymarket topics as ideas (Pepe's own wording), off by default
+const POLL_ID = /^[A-Za-z0-9_-]{1,64}$/;
 let clock = () => Date.now();
 
 let ready = null;
@@ -65,11 +68,14 @@ async function ack(body) {
 /** The 🤖 auto-markets feed post (one for a batch). Rate-limited here whatever Pepe sends. */
 async function announce(body) {
   await init();
-  const items = (Array.isArray(body && body.items) ? body.items : []).slice(0, 6).filter((x) => x && Number(x.id) > 0 && x.question);
+  // 1.99vc: an auto POLL ({kind: "poll", poll_id}) links /polls/<id>; markets and pools /markets/<id>
+  const isPoll = (x) => x && x.kind === "poll" && POLL_ID.test(String(x.poll_id || ""));
+  const items = (Array.isArray(body && body.items) ? body.items : []).slice(0, 6).filter((x) => x && x.question && (isPoll(x) || Number(x.id) > 0));
   if (!items.length) throw new Refuse(400, "nothing to announce");
   const now = clock();
   const recent = await getQuery("SELECT at FROM automkt_feed WHERE post_id IS NOT NULL AND at > ? ORDER BY at DESC", [now - 86400e3]);
-  const refs = JSON.stringify(items.map((x) => `M${Math.floor(Number(x.id))}`));
+  const refOf = (x) => (isPoll(x) ? `P:${x.poll_id}` : `M${Math.floor(Number(x.id))}`);
+  const refs = JSON.stringify(items.map(refOf));
   const skip = async (why) => { await runQuery("INSERT INTO automkt_feed (at, post_id, refs, skipped) VALUES (?, NULL, ?, ?)", [now, refs, why]); return { ok: true, posted: false, skipped: why }; };
   if (recent.length >= FEED_PER_DAY) return skip("daily cap");
   if (recent.length && now - recent[0].at < FEED_GAP_MS) return skip("too soon after the last one");
@@ -79,13 +85,16 @@ async function announce(body) {
   const store = require("./feedstore");
   const rooms = require("./rooms");
   const acct = await pf.ensureAccount();
-  const CAT = { sports: "🏟️", prices: "📈", news: "📰" };
+  const CAT = { sports: "🏟️", prices: "📈", news: "📰", trending: "🔥" };
   const when = (s) => new Date(Number(s) * 1000).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET";
   const title = items.length === 1 ? t("automkt.feed.title_one", { q: String(items[0].question).slice(0, 120) })
                                    : t("automkt.feed.title_many", { n: items.length });
-  const lines = items.map((x) => t("automkt.feed.line", { ic: CAT[x.cat] || "🔮", ref: `M${Math.floor(Number(x.id))}`, q: String(x.question).slice(0, 200),
-                                                         opts: (x.options || []).map(String).join(" / ").slice(0, 120), closes: when(x.closes),
-                                                         link: `/markets/${Math.floor(Number(x.id))}` }));
+  const lines = items.map((x) => (isPoll(x)
+    ? t("automkt.feed.line_poll", { ic: "📊", q: String(x.question).slice(0, 200), opts: (x.options || []).map(String).join(" / ").slice(0, 120),
+                                    closes: when(x.closes), link: `/polls/${encodeURIComponent(String(x.poll_id))}` })
+    : t("automkt.feed.line", { ic: CAT[x.cat] || "🔮", ref: `M${Math.floor(Number(x.id))}`, q: String(x.question).slice(0, 200),
+                               opts: (x.options || []).map(String).join(" / ").slice(0, 120), closes: when(x.closes),
+                               link: `/markets/${Math.floor(Number(x.id))}` })));
   const text = [t("automkt.feed.intro"), "", ...lines, "", t("automkt.feed.foot")].join("\n");
   const p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX || 200), body: text.slice(0, 3000), community: rooms.LOUNGE_ID, nsfw: false, announce: [] }, {});
   try { await require("./contentaudit").record({ via: "bot", bot: true }, { kind: "post", id: p.id, postId: p.id, event: "create", user: await store.account(acct.userId) }); } catch (e) { /* audit is best effort here */ }
@@ -114,10 +123,10 @@ async function request(me, b) {
     const c = a.cfg && typeof a.cfg === "object" ? a.cfg : {};
     const cfg = {};
     if ("enabled" in c) cfg.enabled = !!c.enabled;
-    for (const k of ["per_week", "announce_gap_min", "seed_cap_week"]) if (c[k] !== undefined && Number.isFinite(Number(c[k]))) cfg[k] = Math.max(0, Math.floor(Number(c[k])));
+    for (const k of ["per_week", "announce_gap_min", "seed_cap_week", "poly_every_h", "poll_hours"]) if (c[k] !== undefined && Number.isFinite(Number(c[k]))) cfg[k] = Math.max(0, Math.floor(Number(c[k])));
     if (["news", "all", "none"].includes(c.review)) cfg.review = c.review;
-    if (c.cats && typeof c.cats === "object") cfg.cats = Object.fromEntries(["sports", "prices", "news"].filter((k) => k in c.cats).map((k) => [k, !!c.cats[k]]));
-    for (const k of ["announce", "feed_post"]) if (k in c) cfg[k] = !!c[k];
+    if (c.cats && typeof c.cats === "object") cfg.cats = Object.fromEntries(CATS.filter((k) => k in c.cats).map((k) => [k, !!c.cats[k]]));
+    for (const k of ["announce", "feed_post", "polls"]) if (k in c) cfg[k] = !!c[k];
     for (const k of ["leagues", "assets", "feeds"]) if (Array.isArray(c[k])) cfg[k] = c[k].map((x) => String(x).slice(0, 20)).slice(0, 20);
     if (!Object.keys(cfg).length) throw new Refuse(400, "Nothing to change.");
     args = { cfg };
