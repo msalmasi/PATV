@@ -415,6 +415,65 @@
    }
   },
   {
+   "id": "signup",
+   "title": "!signup",
+   "category": "start",
+   "role": "everyone",
+   "commands": [
+    "!signup"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!signup",
+    "!claim"
+   ],
+   "summary": "Get a one-click link (by PM) to make your free PATV account and collect the PAT waiting for you.",
+   "details": "Pepe PMs you a link that works once, for 30 minutes. It opens publicaccess.tv: create a free account (or sign in) and one click links your Camfrog name - no !verify needed. Any PAT held for you from achievements and level-ups moves into your wallet. A bare !claim does the same (!claim <area> is still turf).",
+   "examples": [
+    "!signup"
+   ],
+   "keywords": [
+    "sign up",
+    "claim pat",
+    "create account",
+    "waiting pat",
+    "register"
+   ],
+   "web": {
+    "label": "The claim page shows what's waiting for you",
+    "url": "/register"
+   }
+  },
+  {
+   "id": "autoescrow",
+   "title": "!autoescrow [announce [confirm]]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!autoescrow"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!autoescrow",
+    "!autoescrow announce",
+    "!autoescrow announce confirm"
+   ],
+   "summary": "Admins: the chat-account escrow as Pepe sees it, and the launch-day announcement.",
+   "details": "!autoescrow shows the site's switch and how many logins have PAT held. !autoescrow announce shows the launch line and the rooms; add confirm to post it once in each of Pepe's rooms (only while the switch is on at /admin/economy).",
+   "examples": [
+    "!autoescrow announce"
+   ],
+   "keywords": [
+    "escrow",
+    "signup drive",
+    "launch announcement"
+   ],
+   "web": {
+    "label": "The Chat-account escrow card",
+    "url": "/admin/economy#autoescrow"
+   }
+  },
+  {
    "id": "verifypad",
    "title": "!verifypad [code]",
    "category": "start",
@@ -2698,7 +2757,7 @@
     "!padvault recipe"
    ],
    "summary": "This pad's vault: what the pad has earned, what it took in over the last 7 days, and deposits.",
-   "details": "Every pad has a **pad vault**, connected to a chat room or not. Paid commands, songs, voices, heist gear and other spending in a connected room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were in the room 3 of the last 7 days and the room was active 3 of them - a pad without a connected room counts the owner's days on the pad (posting, commenting, streaming, moderating) and days with 3+ qualified members active there; capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old; with activity top-ups on, also members whose posts on the pad got real engagement) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. Payouts of 25,000 or more ride a 10-minute convoy (`!hijack`). `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
+   "details": "Every pad has a **pad vault**, connected to a chat room or not. Paid commands, songs, voices, heist gear and other spending in a connected room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were active 3 of the last 7 days and the pad was active 3 of them - either place counts: in the connected room, or on the pad itself (posting, commenting, streaming, moderating; days with 3+ qualified members active there); capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old; with activity top-ups on, also members whose posts on the pad got real engagement) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. Payouts of 25,000 or more ride a 10-minute convoy (`!hijack`). `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
    "examples": [
     "!padvault",
     "!padvault deposit 5k",
@@ -2870,7 +2929,7 @@
     "!pool new [question] judge @someone"
    ],
    "summary": "Betting pools — the simple way to bet as a group, no shares: !pool new Will it rain Friday?",
-   "details": "**Betting pools** — the simple way to bet as a group, no shares: `!pool new Will it rain Friday? judge @carol closes 2d` (yes/no, or `options a/b/c`). Bet with `!pool M5 yes 5k` (min 500, as often as you like). When the judge settles it (`!pool settle M5 yes`), the winners split the losing side's pot in proportion to their stakes, after **5% of the losing pot** goes to the casino — so a correct bet never pays back less than you put in. Nobody backed the winner, or it's voided, or the judge never calls it within 7 days: everyone is refunded. `!pools` lists the open ones; they're on [publicaccess.tv/wagers](https://publicaccess.tv/wagers).",
+   "details": "**Betting pools** — the simple way to bet as a group, no shares: `!pool new Will it rain Friday? judge @carol closes 2d` (yes/no, or `options a/b/c`). Bet with `!pool M5 yes 5k` (min 500, as often as you like). When the judge settles it (`!pool settle M5 yes`), the winners split the losing side's pot in proportion to their stakes, after **5% of the losing pot** goes to the casino — so a correct bet never pays back less than you put in. Nobody backed the winner, or it's voided, or the judge never calls it within 7 days: everyone is refunded. `!pools` lists the open ones; they're on [publicaccess.tv/wagers](https://publicaccess.tv/wagers), each with its own page at publicaccess.tv/markets/<id>.",
    "examples": [
     "!pool new Will it rain Friday? judge @carol closes 2d",
     "!pool M5 yes 5k",
@@ -2922,7 +2981,7 @@
     "!market new [question] judge @someone"
    ],
    "summary": "Open a prediction market anyone can trade — !market new Will Samira come back this week?",
-   "details": "Open a **prediction market** anyone can trade — `!market new Will Samira come back this week? judge @carol closes 2d`. Yes/no by default, or give 2–6 answers with `options red/blue/green`. Markets trade **shares**, like Polymarket: each answer has a price between 0 and 1 PAT (the crowd's odds), and every share of the winning answer pays **1 PAT**. Buy with `!market M3 yes 5k` (spend 5k PAT, min 500) — buying pushes the price up, selling pushes it down. Sell any time while trading is open with `!market sell M3 yes 300` or `all`, so you can lock in a profit (or cut a loss) before the result. `!market mine` shows your positions with your entry price, today's price and profit/loss; `!market M3` the prices, `!market list` the open ones. 2% fee on every buy and sell. Trading closes at the set time (default 1 day, max 30); the judge — who can't trade — calls it with `!market settle M3 yes`, or `!market settle M3 void <reason>`. **On a void, trading fees are not refunded** (they were taken when you traded): the Federal Reserve takes back its seed first, then holders split what's left in the market, up to what they put in — so if others sold at a profit before the void, holders get back less. Betting pools and wagers are different: a void there refunds every stake in full, fees included. All of it, judging included, works on [publicaccess.tv/markets](https://publicaccess.tv/markets) with a price chart. The Federal Reserve seeds each market's liquidity and gets back whatever's left over. Start one from the site too. For the old simple pool model, see `!pool`.",
+   "details": "Open a **prediction market** anyone can trade — `!market new Will Samira come back this week? judge @carol closes 2d`. Yes/no by default, or give 2–6 answers with `options red/blue/green`. Markets trade **shares**, like Polymarket: each answer has a price between 0 and 1 PAT (the crowd's odds), and every share of the winning answer pays **1 PAT**. Buy with `!market M3 yes 5k` (spend 5k PAT, min 500) — buying pushes the price up, selling pushes it down. Sell any time while trading is open with `!market sell M3 yes 300` or `all`, so you can lock in a profit (or cut a loss) before the result. `!market mine` shows your positions with your entry price, today's price and profit/loss; `!market M3` the prices, `!market list` the open ones. 2% fee on every buy and sell. Trading closes at the set time — a duration (`closes 2d`) or a date (`closes 2026-11-03 18:00 ET`, any zone name; default 1 day, within the admins' limits, normally 1 hour to 90 days) — and the AI judge is only asked after it; the judge — who can't trade — calls it with `!market settle M3 yes`, or `!market settle M3 void <reason>`. **On a void, trading fees are not refunded** (they were taken when you traded): the Federal Reserve takes back its seed first, then holders split what's left in the market, up to what they put in — so if others sold at a profit before the void, holders get back less. Betting pools and wagers are different: a void there refunds every stake in full, fees included. All of it, judging included, works on [publicaccess.tv/markets](https://publicaccess.tv/markets) with a price chart. The Federal Reserve seeds each market's liquidity and gets back whatever's left over. Start one from the site too. For the old simple pool model, see `!pool`.",
    "examples": [
     "!market new Will Samira come back this week? judge @carol closes 2d",
     "!market M3 yes 5k",
@@ -5613,7 +5672,7 @@
   },
   {
    "id": "automkt",
-   "title": "!automkt [status|on|off|now|preview|list|approve|reject|count|mode|cat]",
+   "title": "!automkt [status|on|off|now|preview|list|approve|reject|count|mode|cat|trending|polls]",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -5622,10 +5681,11 @@
    ],
    "aliases": [],
    "syntax": [
-    "!automkt [status|on|off|now [n]|preview|list|approve <id>|reject <id> [why]|count <n>|mode news|all|none|cat sports|prices|news on|off]"
+    "!automkt [status|on|off|now [n]|preview|list|approve <id>|reject <id> [why]|count <n>|mode news|all|none]",
+    "!automkt [cat sports|prices|news|trending on|off | trending on|off | polls on|off | polyevery <h> | pollhours <h>]"
    ],
    "summary": "Pepe's auto markets: markets and pools he opens himself about real-world events.",
-   "details": "**Auto markets.** Pepe opens a few prediction markets and betting pools a week by himself about real-world events: **sports** fixtures (who wins, from ESPN's scoreboard: NFL, NBA, MLB, NHL, Premier League, UFC), **prices** (will Bitcoin / the S&P 500 be above a round level at a set time, from Coinbase / Yahoo Finance) and **news** (clear yes/no questions written from BBC and NPR headlines). Each one has exact resolution criteria, a source link, a close time BEFORE the event starts and a resolution time, and is tagged 🤖 auto on [/markets](https://publicaccess.tv/markets). Sports and prices settle from the same data source; news questions go to Pepe's AI judge with the criteria. Postponed, cancelled or unreadable ones are voided (pools refund every stake) or handed to the admins. Markets are seeded by the Market maker vault like any other (a weekly cap; no seed = a yes/no pool instead), and never about deaths, violence, elections, private people, adult or illegal topics, or anything players could influence.\n\n`!automkt` shows the status; `on` / `off` switches it (off by default); `now [n]` makes n right away; `preview` shows what's next without creating anything; `list` the review queue and the latest; `approve <id>` / `reject <id> [why]` the ones waiting for review (by default news questions wait for an admin's OK); `count <n>` = how many a week; `mode news|all|none` = which ones need review; `cat sports|prices|news on|off`. The same controls are in the admin panel (Games, **Auto markets**) and on the website at /admin/markets.",
+   "details": "**Auto markets.** Pepe opens a few prediction markets and betting pools a week by himself about real-world events: **sports** fixtures (who wins, from ESPN's scoreboard: NFL, NBA, MLB, NHL, Premier League, UFC), **prices** (will Bitcoin / the S&P 500 be above a round level at a set time, from Coinbase / Yahoo Finance) and **news** (clear yes/no questions written from BBC and NPR headlines). Each one has exact resolution criteria, a source link, a close time BEFORE the event starts and a resolution time, and is tagged 🤖 auto on [/markets](https://publicaccess.tv/markets). Sports and prices settle from the same data source; news questions go to Pepe's AI judge with the criteria. Postponed, cancelled or unreadable ones are voided (pools refund every stake) or handed to the admins. Markets are seeded by the Market maker vault like any other (a weekly cap; no seed = a yes/no pool instead), and never about deaths, violence, elections, private people, adult or illegal topics, or anything players could influence.\n\n`!automkt` shows the status; `on` / `off` switches it (off by default); `now [n]` makes n right away; `preview` shows what's next without creating anything; `list` the review queue and the latest; `approve <id>` / `reject <id> [why]` the ones waiting for review (by default news questions wait for an admin's OK); `count <n>` = how many a week; `mode news|all|none` = which ones need review; `cat sports|prices|news on|off`.\n\n**Trending** (off by default; `!automkt trending on|off`): Pepe looks at the busiest topics on Polymarket's public data a few times a day and uses them as IDEAS only - he writes his own question, his own resolution criteria and date and links an official source (never a prediction-market site); anything too close to their wording, or about politics, war, people's health, minors or anything else off-limits, is thrown away. Trending ones wait for review like news ones. Pepe never opens a market AND a pool (or a poll) about the same topic: he checks every live market, pool and poll and remembers recent topics for 30 days. The type fits the question: yes/no = a market, one winner out of several = a pool, an opinion = a room poll (`!automkt polls on|off`, one at a time, open `pollhours` hours), mixed so the feed isn't all one kind. `polyevery <h>` = how often the trending list is refreshed (default 6 h). Every announcement links to the item's page. The same controls are in the admin panel (Games, **Auto markets**) and on the website at /admin/markets.",
    "examples": [
     "!automkt",
     "!automkt on",
@@ -5969,15 +6029,17 @@
     "!cmdswitch <command|id>",
     "!cmdswitch <command|id> on|off",
     "!cmdswitch default <command|id> on|off",
-    "!cmdswitch ai on|off"
+    "!cmdswitch ai on|off",
+    "!cmdswitch test on|off"
    ],
    "summary": "The master switch for any command or feature: off means off in every room, whatever the room or the pad owner set.",
-   "details": "Every user-facing command and feature has a **master switch** (off = off everywhere) on top of its **global default** (what rooms follow) and each room's own setting. `!cmdswitch` lists what's off; `!cmdswitch !imagine` shows one switch (master, default, this room, the result here); `!cmdswitch !imagine off` turns the master off; `!cmdswitch default !trivia off` changes the default rooms follow; `!cmdswitch ai off` switches every AI command and feature off at once. A switched-off command answers with one short line and charges nothing; passive features (chatty, greetings, the auto-topic...) just stay quiet. Admins can still use a switched-off command's settings words (on, off, status, cancel...). Every change is logged. The full table, with search and bulk actions, is on the website's admin pages (Pepe > Commands).",
+   "details": "Every user-facing command and feature has a **master switch** (off = off everywhere) on top of its **global default** (what rooms follow) and each room's own setting. `!cmdswitch` lists what's off; `!cmdswitch !imagine` shows one switch (master, default, this room, the result here); `!cmdswitch !imagine off` turns the master off; `!cmdswitch default !trivia off` changes the default rooms follow; `!cmdswitch ai off` switches every AI command and feature off at once. A switched-off command answers with one short line and charges nothing; passive features (chatty, greetings, the auto-topic...) just stay quiet. Switches bind admins too - they can still use a switched-off command's settings words (on, off, status, cancel...), and `!cmdswitch test on` gives YOU an hour of test mode in which only you can use switched-off commands (Pepe says 🧪 test mode when he lets you through; it ends by itself, `!cmdswitch test off` ends it sooner, and it's logged). The AI model registry's on/off lives here too: every AI model function has its row (or is its feature's own switch). Every change is logged. The full table, with search and bulk actions, is on the website's admin pages (Pepe > Commands).",
    "examples": [
     "!cmdswitch",
     "!cmdswitch !imagine off",
     "!cmdswitch default !trivia off",
-    "!cmdswitch ai on"
+    "!cmdswitch ai on",
+    "!cmdswitch test on"
    ],
    "keywords": [
     "switch off",
@@ -7400,5 +7462,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "b32cffc874fb8930"
+ "hash": "e1264b39a88b1d34"
 }
