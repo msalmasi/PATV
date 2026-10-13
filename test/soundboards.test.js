@@ -327,6 +327,12 @@ test("1.99vu: catalogue files go to Pepe as audio jobs and replace a clip's audi
     assert.equal((await SB.clipStatus("sfx-crickets")).status, "active");
   } finally { SB._setAudioSrc(was); }
 
+  // 1.99vx: a catalogue file Pepe failed on (5 tries) is offered again at the next boot
+  await runQuery("UPDATE sb_clips SET status = 'failed', tries = 5, audio = NULL WHERE id = 'sfx-tada'");
+  await SB._seed();
+  const tada = await SB.clipStatus("sfx-tada");
+  assert.deepEqual([tada.status, tada.tries], ["render", 0]);
+
   // live clips: a re-seed never puts one back in 'render'; one stuck there (the prod bug) is healed by the sync
   await runQuery("UPDATE sb_clips SET status = 'render', audio = NULL WHERE id = 'lg-gawk'");
   const healed = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;

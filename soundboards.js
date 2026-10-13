@@ -203,8 +203,9 @@ async function seedCatalog() {
                       WHERE id = ?`, [c.board, c.label, c.emoji, c.voice, c.text, c.rarity, i, c.supply || null, t, c.id]);
     } else if (src) {
       // a ready-made file: a NEW file (or one changed since) goes to Pepe again; the old WAV plays until the new one is up
-      const fresh = cur.src !== src;
-      const hasAudio = !!cur.audio && cur.status !== "removed";
+      // 1.99vx: one that FAILED (Pepe couldn't fetch / convert it) is offered again at every boot - a deploy or restart retries it
+      const fresh = cur.src !== src || cur.status === "failed";
+      const hasAudio = !!cur.audio && cur.status !== "removed" && cur.status !== "failed";
       await runQuery(`UPDATE sb_clips SET board = ?, label = ?, emoji = ?, voice = ?, text = ?, rarity = ?, sort = ?, live = 0, supply = ?, updated = ?, src = ?,
                       status = CASE WHEN ? THEN (CASE WHEN ? THEN (CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'active' END) ELSE 'render' END)
                                     WHEN status = 'removed' THEN 'render' ELSE status END,
