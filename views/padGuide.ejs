@@ -59,6 +59,20 @@
   .pg .pg-end { text-align: center; justify-items: center; }
   .pg .pg-end .ds-ctas { justify-content: center; }
   .pg .pg-mine { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ds-sp-1h); margin: 0; padding: 0; list-style: none; }
+  /* new-here primer + glossary (1.99xh) */
+  .pg .pg-new { border-color: #2f5f7a; background: linear-gradient(180deg, #0c1a26 0%, var(--ds-surface) 60%); }
+  .pg .pg-new > .ds-meta { margin: 0; }
+  .pg .pg-primer { margin: 0; display: grid; gap: var(--ds-sp-3) var(--ds-sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+  .pg .pg-primer > div { display: grid; gap: 4px; align-content: start; min-width: 0; }
+  .pg .pg-primer dt { display: flex; align-items: center; gap: var(--ds-sp-2); font-weight: 700; color: var(--ds-text-strong); }
+  .pg .pg-primer dd, .pg .pg-gloss dd { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.55; }
+  .pg .pg-gloss { margin: 0; display: grid; gap: 0; padding-block: var(--ds-sp-2); }
+  .pg .pg-gloss > div { display: grid; gap: 2px var(--ds-sp-4); padding-block: var(--ds-sp-3); border-block-end: 1px solid var(--ds-line-soft); scroll-margin-top: 72px; min-width: 0; }
+  .pg .pg-gloss > div:last-child { border-block-end: 0; }
+  @media (min-width: 700px) { .pg .pg-gloss > div { grid-template-columns: 180px minmax(0, 1fr); } }
+  .pg .pg-gloss dt { font-weight: 700; color: var(--ds-text-strong); }
+  .pg .pg-gloss > div:target { background: color-mix(in srgb, var(--ds-green) 10%, transparent); border-radius: var(--ds-r-md); }
+  .pg a[href^="#g-"] { text-decoration: underline dotted; text-underline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { .pg *, .pg *::before, .pg *::after { animation: none !important; transition: none !important; } }
 </style>
 <main class="ds-page pg" id="pg">
@@ -77,12 +91,24 @@
   </section>
 
   <nav class="ds-subnav" aria-label="<%- t('owners.nav') %>"><div class="ds-tabs">
+    <a class="ds-tab" href="#new"><%- t('owners.nav_new') %></a>
     <a class="ds-tab" href="#what"><%- t('owners.nav_what') %></a>
     <a class="ds-tab" href="#earn"><%- t('owners.nav_earn') %></a>
     <a class="ds-tab" href="#pepe"><%- t('owners.nav_pepe') %></a>
     <a class="ds-tab" href="#can"><%- t('owners.nav_can') %></a>
     <a class="ds-tab" href="#tiers"><%- t('owners.nav_tiers') %></a>
+    <a class="ds-tab" href="#glossary"><%- t('owners.nav_glossary') %></a>
   </div></nav>
+
+  <section class="ds-card lg pg-sec pg-new" id="new" aria-labelledby="pgNewH">
+    <h2 class="ds-h2" id="pgNewH">👋 <%- t('owners.new_h') %></h2>
+    <p class="ds-lead"><%- t('owners.new_lead') %></p>
+    <dl class="pg-primer">
+      <% [['patv', '📡'], ['pad', '🏠'], ['pat', '🪙'], ['pepe', '🐸'], ['vault', '🏦'], ['tiers', '📺']].forEach(([k, ic]) => { %>
+      <div><dt><span class="ds-ic" aria-hidden="true"><%= ic %></span> <%- t('owners.new.' + k + '_t') %></dt><dd><%- t('owners.new.' + k + '_d') %></dd></div><% }) %>
+    </dl>
+    <p class="ds-meta"><%- t('owners.new_more', { link: '<a href="#glossary">' + t('owners.gl_link') + '</a>' }) %></p>
+  </section>
 
   <section class="pg-sec" id="what" aria-labelledby="pgWhatH">
     <h2 class="ds-h2" id="pgWhatH"><span class="dot"></span><%- t('owners.what_h') %></h2>
@@ -103,7 +129,7 @@
     <ol class="pg-steps">
       <li><b><%- t('owners.earn.s1_t') %></b><p><%- t('owners.earn.s1_d') %></p></li>
       <li><b><%- t('owners.earn.s2_t') %></b><p><%- t('owners.earn.s2_d', { rate: F.rate.default, min: F.rate.min, max: F.rate.max, owner: F.owner, streamers: F.streamers, people: F.people, gang: F.gang, games: F.games }) %></p></li>
-      <li><b><%- t('owners.earn.s3_t') %></b><p><%- t('owners.earn.s3_d', { days: F.ownerDays, active: F.eligDays, cap: F.capPct }) %></p></li>
+      <li><b><%- t('owners.earn.s3_t') %></b><p><%- t('owners.earn.s3_d', { owner: F.owner, days: F.ownerDays, active: F.eligDays, cap: F.capPct }) %></p></li>
     </ol>
     <div class="ds-card lg pg-card">
       <h3><span class="ds-ic" aria-hidden="true">🪙</span> <%- t('owners.earn.more_h') %></h3>
@@ -167,7 +193,7 @@
 
   <section class="pg-sec" id="tiers" aria-labelledby="pgTierH">
     <h2 class="ds-h2" id="pgTierH"><span class="dot"></span>📺 <%- t('owners.tiers_h') %></h2>
-    <p class="ds-lead"><%- t('owners.tiers_lead') %></p>
+    <p class="ds-lead"><%- t('owners.tiers_lead', { days: F.days }) %></p>
     <div class="ds-grid lg">
       <article class="ds-card lg pg-card pg-tier pt">
         <h3><span class="ds-ic" aria-hidden="true">📺</span> Prime Time</h3>
@@ -198,6 +224,16 @@
     <ul class="pg-mine"><% mine_.forEach((p) => { %><li><a class="ds-tab" href="<%= p.href %>">👑 <%= p.title %></a></li><% }) %></ul>
     <% } %>
     <p class="ds-meta"><%- t('owners.ref_note', { link: '<a href="/pads/owner-guide">' + t('owners.ref_link') + '</a>' }) %></p>
+  </section>
+
+  <section class="pg-sec" id="glossary" aria-labelledby="pgGlH">
+    <h2 class="ds-h2" id="pgGlH"><span class="dot"></span>📖 <%- t('owners.gl_h') %></h2>
+    <p class="ds-lead"><%- t('owners.gl_lead') %></p>
+    <% const glv_ = { cap: num(F.cap), rate: F.rate.default, min: F.rate.min, max: F.rate.max, owner: F.owner, streamers: F.streamers, people: F.people, gang: F.gang, games: F.games }; %>
+    <dl class="ds-card lg pg-gloss">
+      <% ['pat', 'pad', 'vault', 'payout', 'split', 'boost', 'stage', 'flair', 'prime', 'plus', 'chat', 'room', 'pepe', 'gang', 'fortknox', 'padiquette'].forEach((k) => { %>
+      <div id="g-<%= k %>"><dt><%- t('owners.gl.' + k + '_t') %></dt><dd><%- t('owners.gl.' + k + '_d', glv_) %></dd></div><% }) %>
+    </dl>
   </section>
 </main>
 </body>

@@ -13,6 +13,9 @@
 //                           premium.plusSpots() the spots left
 //   padrules / mainstage    the house-rule count and the most stage slots a pad can have
 //
+// 1.99xh: written for a brand-new user - a "New here?" primer (PATV, pads, PAT as points, Pepe, vaults, Prime Time / Plus)
+// and a glossary at the bottom (#g-<term>, the live payout split and vault cap); terms link to it the first time they appear.
+//
 // CONNECTED CHAT SERVICES: Pepe's command docs are per service. Adding a service is one entry in SERVICES (+ its
 // owners.svc.<id>_d string): the "What you can do with Pepe" cards link every goal to each service's command guide.
 "use strict";

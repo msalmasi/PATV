@@ -93,7 +93,7 @@ test("1.99uu: earning needs no tier and no chat connection; Plus is about connec
   RV._setProfileVaults(false);
   const off = text(await page("/pads/owners", null));
   assert.ok(!/vaults run for pads connected/i.test(off) && !/Connecting one takes/i.test(off), "no 'vaults need a connected room / Plus'");
-  assert.ok(off.includes("No tier and no chat connection needed"), "basic pads earn");
+  assert.ok(off.includes("No upgrade and no chat room needed"), "basic pads earn");
   assert.ok(off.includes("a basic pad has a feed, a stage and a vault"), "the earn lead says what a basic pad has");
   assert.ok(off.includes("connecting your pad to a live Camfrog chat room with Pepe in it"), "Plus adds the Camfrog connection");
   assert.ok(off.includes("Prime Time chip-ins") && en["owners.earn.launch"].includes("newcomers get a welcome gift"), "the approved wording stays");
@@ -104,4 +104,24 @@ test("1.99uu: earning needs no tier and no chat connection; Plus is about connec
   const on = text(await page("/pads/owners", null));
   assert.ok(on.includes("Your profile has a vault too"), "profile vaults on: mentioned");
   RV._setProfileVaults(false);
+});
+
+test("1.99xh: a new user's primer and a glossary; every glossary link lands; PAT is points, never money or currency", async () => {
+  const r = await page("/pads/owners", null);
+  assert.equal(r.status, 200);
+  for (const id of ['id="new"', 'id="glossary"', 'href="#new"', 'href="#glossary"']) assert.ok(r.text.includes(id), id);
+  for (const k of ["patv", "pad", "pat", "pepe", "vault", "tiers"]) assert.ok(en["owners.new." + k + "_t"] && en["owners.new." + k + "_d"], "primer " + k);
+  // every #g-<term> link on the page has its glossary entry
+  const links = new Set([...r.text.matchAll(/href="#g-([a-z]+)"/g)].map((m) => m[1]));
+  assert.ok(links.size >= 5, "terms link to the glossary");
+  for (const g of links) assert.ok(r.text.includes(`id="g-${g}"`), "glossary entry " + g);
+  for (const g of ["pat", "pad", "vault", "payout", "split", "boost", "stage", "flair", "prime", "plus", "chat", "room", "pepe", "gang"]) {
+    assert.ok(r.text.includes(`id="g-${g}"`), "glossary has " + g);
+  }
+  const text = r.text.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ");
+  assert.ok(/no cash value/.test(text), "PAT has no cash value");
+  assert.ok(!/(money|currency|cash out|launchpad|recipe|slices?|top-?ups?)/i.test(text), "no money words, no jargon");
+  // the split's live numbers show in the glossary too
+  const F = await PG.facts();
+  assert.ok(text.includes(`streamers ${F.streamers}%`), "split numbers are live");
 });
