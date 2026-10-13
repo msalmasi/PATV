@@ -1,0 +1,51 @@
+<%- include('layout', { title: 'Claim your PAT', user: user }) %>
+<%#
+  Auto-account escrow (autoescrow.js, docs/auto-account-escrow.md): the page Pepe's !signup / !claim link opens.
+  info = claimInfo(token) or null (unknown / used / expired); done = redeemClaim's answer after the button; error = its refusal.
+  Signed out: create a free account or sign in, both come back here (?next=). Signed in: one button links the Camfrog login
+  (the same merge !verify runs) and pays out what was waiting. The form POSTs to this same URL (strict same-origin check).
+%>
+<link rel="stylesheet" href="/public/css/pad-access.css?v=2">
+<main class="ds-page narrow flow pa-lock" id="claimPage">
+  <section class="pa-card" aria-labelledby="clH">
+    <% const fmt = (n) => Number(n || 0).toLocaleString('en-US'); %>
+    <% if (done) { %>
+      <div class="pa-ic" aria-hidden="true">🎉</div>
+      <h1 id="clH">Linked!</h1>
+      <p class="pa-st" role="status"><b><%= done.login %></b> is now your Camfrog name on PATV.
+        <% if (done.released || done.addedBalance) { %>PAT <%= fmt((done.released || 0) + (done.addedBalance || 0)) %> moved into your wallet.<% } %></p>
+      <p><a class="pa-btn primary" href="/wallet">Open my wallet</a></p>
+    <% } else if (!info) { %>
+      <div class="pa-ic" aria-hidden="true">⌛</div>
+      <h1 id="clH">This link has expired</h1>
+      <p class="pa-what">Claim links work once, for 30 minutes. Type <b>!signup</b> in any room with Pepe for a fresh one.</p>
+      <% if (error) { %><p class="pa-mut" role="alert"><%= error %></p><% } %>
+    <% } else if (info.state === 'linked') { %>
+      <div class="pa-ic" aria-hidden="true">🔗</div>
+      <h1 id="clH"><%= info.login %> is already linked</h1>
+      <p class="pa-what">That Camfrog name belongs to the PATV account <b><%= info.linkedTo %></b>. Sign in to it to see its wallet.</p>
+      <% if (error) { %><p class="pa-mut" role="alert"><%= error %></p><% } %>
+      <% if (!user) { %><p><a class="pa-btn primary" href="/login">Sign in</a></p><% } %>
+    <% } else { %>
+      <div class="pa-ic" aria-hidden="true">🎁</div>
+      <h1 id="clH"><% if (info.waiting > 0) { %>You have PAT <%= fmt(info.waiting) %> waiting<% } else { %>Claim your PAT<% } %></h1>
+      <p class="pa-what">Hi <b><%= info.login %></b>! <% if (info.waiting > 0) { %>That's what you earned in chat from achievements and level-ups.<% } %>
+        <% if (info.wallet > 0) { %>Your chat wallet's PAT <%= fmt(info.wallet) %> comes with it.<% } %>
+        It's kept for you as long as you're active - it expires after <%= months %> months without activity.</p>
+      <% if (error) { %><p class="pa-mut" role="alert"><%= error %></p><% } %>
+      <% if (!user) { %>
+        <p><a class="pa-btn primary" href="/register?next=<%= encodeURIComponent(here) %>">Create my free account</a></p>
+        <p class="pa-mut">Already on PATV? <a href="/login?next=<%= encodeURIComponent(here) %>">Sign in</a> - you'll come straight back here.</p>
+      <% } else { %>
+        <form method="post" action="<%= here %>">
+          <p class="pa-what">Link <b><%= info.login %></b> to your account <b><%= user %></b>? Your Camfrog name will use this account's PAT in chat.</p>
+          <button type="submit" class="pa-btn primary"><span class="ds-ic" aria-hidden="true">🔗</span>Link it and collect my PAT</button>
+        </form>
+        <form class="pa-mut" action="/logout" method="POST">Not you? <button type="submit" class="pa-btn">Sign out</button> first.</form>
+      <% } %>
+      <p class="pa-mut">This link works once and expires <time data-ts="<%= info.expires %>"><%= new Date(info.expires).toISOString().slice(11, 16) %> UTC</time>.</p>
+    <% } %>
+  </section>
+</main>
+</body>
+</html>

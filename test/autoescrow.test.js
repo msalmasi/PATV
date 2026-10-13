@@ -96,7 +96,10 @@ test("switch off: everything is paid to the wallet as before", async () => {
 });
 
 test("earn -> escrow: a free reward for an auto account is held, once per transaction id; supply doesn't move", async () => {
-  await AE.setSettings({ enabled: true }, { userId: "admin", username: "boss" });
+  assert.deepEqual([...(await AE.kinds())], ["achievements", "levelup", "level-up-bonus"], "the user's starting list");
+  // these tests hold Pepe's other free rewards too (an admin can add them on the card)
+  await AE.setSettings({ enabled: true, kinds: "achievements levelup level-up-bonus activity-reward camfrog-raffle mic-hourly beg" },
+                       { userId: "admin", username: "boss" });
   const s0 = await supply();
   // the incentive budget pays it (a pool leg) and the escrow holds it - like the policy's activity payout
   await tx(async () => {
@@ -113,7 +116,7 @@ test("earn -> escrow: a free reward for an auto account is held, once per transa
   assert.equal(await held("auto1"), 1000, "a retried credit is held once");
   const [e] = await entries("auto1");
   assert.equal(e.login, "chatty");
-  assert.equal(e.expires_at, AE.addMonthsUTC(e.earned_at, 6));
+  assert.ok(e.expires_at >= AE.addMonthsUTC(e.earned_at, 6), "six months after the last activity (the retry counts)");
   // the supply page has its own row
   const rows = await AE.supplyRows([{ key: "wallets", amount: 1 }]);
   assert.deepEqual(rows.find((x) => x.key === "auto_escrow").amount, 1000);
@@ -204,37 +207,62 @@ test("account merge between two auto accounts keeps the rewards held; a sign-in 
   assert.equal(await bal("auto3"), 600);
 });
 
-test("the six-month window: per entry, calendar months UTC, never claimable after its date, expiry -> the Fed, idempotent", async () => {
+test("the window: six calendar months (UTC) after the account's LAST activity; never claimable after it; expiry -> incentives", async () => {
   assert.equal(AE.addMonthsUTC(Date.UTC(2026, 7, 31, 12), 6), Date.UTC(2027, 1, 28, 12));        // 31 Aug -> 28 Feb
   assert.equal(AE.addMonthsUTC(Date.UTC(2027, 7, 31, 12), 6), Date.UTC(2028, 1, 29, 12));        // leap year
   assert.equal(AE.addMonthsUTC(Date.UTC(2026, 9, 12, 23, 59, 59), 6), Date.UTC(2027, 3, 12, 23, 59, 59));
-  // two rewards a few seconds apart around midnight UTC
+  // two rewards a few seconds apart around midnight UTC: earning is activity, so both now expire 6 months after the second
   const late = Date.UTC(2025, 9, 12, 23, 59, 59), early = Date.UTC(2025, 9, 13, 0, 0, 1);    // (long before the other tests' rewards)
   await AE.credit("auto5", 1000, "Achievement: A", { kind: "achievements", transactionId: "late", now: late });
   await AE.credit("auto5", 2000, "Achievement: B", { kind: "achievements", transactionId: "early", now: early });
+  assert.deepEqual((await entries("auto5")).map((x) => x.expires_at), [AE.addMonthsUTC(early, 6), AE.addMonthsUTC(early, 6)]);
+  // activity a month later (a spin: a debit) pushes BOTH back to six months after it
+  const act = Date.UTC(2025, 10, 20, 15);
+  assert.equal(await AE.touch("auto5", { now: act, why: "test", force: true }), 2);
+  assert.deepEqual((await entries("auto5")).map((x) => x.expires_at), [AE.addMonthsUTC(act, 6), AE.addMonthsUTC(act, 6)]);
+  // ...at most once a day: a second touch the same UTC day changes nothing
+  assert.equal(await AE.touch("auto5", { now: act + 3600000, why: "test" }), 0);
   const s0 = await supply();
-  const fed0 = await P.balance("reserve");
-  // a run one second before the first expiry: nothing; a run at its exact second: only the first; whatever hour the job runs
-  assert.equal((await AE.expire({ now: AE.addMonthsUTC(late, 6) - 1000 })).entries, 0);
-  assert.equal((await AE.expire({ now: AE.addMonthsUTC(late, 6) })).entries, 1);
-  assert.equal(await P.balance("reserve"), fed0 + 1000);
-  // between the two expiries, a claim releases only what is still inside its window
-  // (the first is gone already; the job not having run yet would change nothing: release() checks the date itself)
-  assert.equal((await AE.waiting("auto5", { now: AE.addMonthsUTC(late, 6) })).amount, 2000);
-  assert.equal((await AE.waiting("auto5", { now: AE.addMonthsUTC(early, 6) })).amount, 0, "past its date it is not waiting any more");
-  // expiry again at the same time: a no-op; later: the second
-  assert.equal((await AE.expire({ now: AE.addMonthsUTC(late, 6) })).entries, 0);
-  const r2 = await AE.expire({ now: AE.addMonthsUTC(early, 6) + 5 * 3600000 });           // the job ran five hours late
-  assert.equal(r2.entries, 1);
-  assert.equal(await P.balance("reserve"), fed0 + 3000);
+  const inc0 = await P.balance("incentives");
+  const due = AE.addMonthsUTC(act, 6);
+  // a run one second before the date: nothing; at its exact second: both; whatever hour the job runs
+  assert.equal((await AE.expire({ now: due - 1000 })).entries, 0);
+  assert.equal((await AE.waiting("auto5", { now: due - 1000 })).amount, 3000);
+  assert.equal((await AE.waiting("auto5", { now: due })).amount, 0, "past its date it is not waiting any more, job or not");
+  // activity AFTER the date doesn't bring it back
+  assert.equal(await AE.touch("auto5", { now: due + 1000, force: true }), 0);
+  const r = await AE.expire({ now: due + 5 * 3600000 });                                 // the job ran five hours late
+  assert.equal(r.entries, 2);
+  assert.equal(await P.balance("incentives"), inc0 + 3000, "the routing row's default: the incentive budget");
   assert.equal(await supply(), s0);
+  assert.equal((await AE.expire({ now: due + 6 * 3600000 })).entries, 0, "idempotent");
   const ex = await entries("auto5");
   assert.deepEqual(ex.map((x) => x.state), ["expired", "expired"]);
-  assert.equal(ex[1].done_at, AE.addMonthsUTC(early, 6) + 5 * 3600000);
   // an account linked after its rewards expired gets nothing from them
   await runQuery("UPDATE users SET email = 'woke@example.com' WHERE userId = 'auto5'");
-  assert.equal((await AE.release("auto5", { now: AE.addMonthsUTC(early, 6) + DAY })).released, 0);
+  assert.equal((await AE.release("auto5", { now: due + DAY })).released, 0);
   await runQuery("UPDATE users SET email = 'k3j4h5g6f7d8s' WHERE userId = 'auto5'");
+});
+
+test("activity: a debit (own spending), chat / mic seen by Pepe and activity credits reset the clock; a tip received doesn't", async () => {
+  await user("auto8", { username: "CFhhhh8888", cf: "spender", bal: 1000 });
+  await AA.markNew("auto8");
+  const t0 = Date.now() - 100 * DAY;
+  await AE.credit("auto8", 300, "Achievement: Z", { kind: "achievements", transactionId: "z-auto8", now: t0 });
+  const exp0 = (await entries("auto8"))[0].expires_at;
+  // a tip received (a credit that isn't activity) changes nothing
+  await ledger.post("auto8", 50, "tip received");
+  await new Promise((r) => setImmediate(r));
+  assert.equal((await entries("auto8"))[0].expires_at, exp0);
+  // a spin (a debit of its own PAT) moves it to six months from now
+  await ledger.post("auto8", -100, "Wager: Public Spin");
+  await new Promise((r) => setTimeout(r, 30));
+  const exp1 = (await entries("auto8"))[0].expires_at;
+  assert.ok(exp1 > exp0 + 90 * DAY, "pushed back by the debit");
+  // Pepe saw them talk (POST /api/autoescrow/seen): debounced, already today
+  assert.deepEqual(await AE.seen("spender"), { ok: true, moved: 0 });
+  assert.ok((await AE.heldLogins()).includes("spender"));
+  assert.ok(AE.ACTIVITY_KINDS.includes("activity-reward") && AE.ACTIVITY_KINDS.includes("mic-hourly"));
 });
 
 test("the routing row decides where unclaimed PAT goes (rest to the Fed); without site pools it's a Reserve claim", async () => {
@@ -278,15 +306,17 @@ test("the stale cleanup: escrow isn't the balance, archive and expiry never take
   const p1 = await stale.purge({ now: t + DAY, dryRun: false });
   assert.equal(p1.purged, 0);
   assert.match(p1.skipped.map((x) => x.why).join(","), /auto escrow/);
-  // the escrow expires to the Fed on its own clock: the reclaimed wallet (claim) + the escrow (pool) = everything, once each
+  // the escrow expires on its own clock (to the incentive budget): the reclaimed wallet (claim) + the escrow (pool), once each
+  const inc0 = await P.balance("incentives");
   await AE.expire({ now: AE.addMonthsUTC(t, 6) });
-  assert.equal(await P.balance("reserve"), fed0 + 1000);
+  assert.equal(await P.balance("incentives"), inc0 + 1000);
+  assert.equal(await P.balance("reserve"), fed0);
   assert.equal(await supply(), s0 - 500, "the -500 is the stale claim Pepe / the pools settle into the Fed");
   const p2 = await stale.purge({ now: AE.addMonthsUTC(t, 6) + DAY, dryRun: false });
   assert.equal(p2.purged, 1);
 });
 
-test("Pepe's PM list: only auto accounts with something new, at most every 3 days", async () => {
+test("Pepe's reminders: auto accounts with something held, at most once a week", async () => {
   const t = Date.now();
   await user("auto7", { username: "CFgggg7777", cf: "newbie" });
   await AA.markNew("auto7");
@@ -299,12 +329,80 @@ test("Pepe's PM list: only auto accounts with something new, at most every 3 day
   assert.ok(!L.some((x) => x.login === "realguy_cf"));
   assert.equal(await AE.notified("newbie", { now: t, upto: me.upto }), true);
   assert.ok(!(await AE.noticeLogins({ now: t })).some((x) => x.login === "newbie"));
-  await AE.credit("auto7", 70, "bonus win", { kind: "beg", transactionId: "beg2-auto7" });
-  assert.ok(!(await AE.noticeLogins({ now: t + DAY })).some((x) => x.login === "newbie"), "not again within 3 days");
-  L = await AE.noticeLogins({ now: t + 3 * DAY + 1 });
+  assert.ok(!(await AE.noticeLogins({ now: t + 6 * DAY })).some((x) => x.login === "newbie"), "not again within a week");
+  L = await AE.noticeLogins({ now: t + 7 * DAY + 1 });
   const again = L.find((x) => x.login === "newbie");
-  assert.equal(again.fresh, 70);
-  assert.equal(again.waiting, 120);
+  assert.ok(again, "a week later: reminded again while something is held, new or not");
+  assert.equal(again.fresh, 0);
+  await AE.credit("auto7", 70, "bonus win", { kind: "beg", transactionId: "beg2-auto7" });
+  assert.equal((await AE.noticeLogins({ now: t + 7 * DAY + 1 })).find((x) => x.login === "newbie").fresh, 70);
+});
+
+test("the claim link: Pepe issues it to the login, the signed-in account takes the login once and collects", async () => {
+  await user("auto10", { username: "CFjjjj1010", cf: "claimer", bal: 250 });
+  await AA.markNew("auto10");
+  await AE.credit("auto10", 900, "Achievement: Q", { kind: "achievements", transactionId: "q-auto10" });
+  await user("newacct", { username: "claimer_real", email: "claimer@example.com" });
+  const L = await AE.claimLink("claimer");
+  assert.equal(L.ok, true);
+  assert.equal(L.state, "auto");
+  assert.equal(L.waiting, 900);
+  assert.equal(L.wallet, 250);
+  const token = L.url.split("/claim/")[1];
+  assert.match(token, /^[A-Za-z0-9_-]{32}$/);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM auto_escrow_claimlinks WHERE token_hash = ?", [token])).length ? 1 : 1, 1);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM auto_escrow_claimlinks WHERE token_hash = ?", [token]))[0].n, 0, "only the hash is stored");
+  const info = await AE.claimInfo(token);
+  assert.deepEqual([info.login, info.state, info.waiting, info.wallet], ["claimer", "auto", 900, 250]);
+  assert.equal(await AE.claimInfo("nope-nope-nope-nope-nope"), null);
+  // the link step (completeCamfrogLink in production): merge the auto account into the signed-in one
+  const linked = [];
+  const link = async (uid, login) => {
+    linked.push([uid, login]);
+    await tx(async () => {
+      await runQuery("UPDATE users SET points_balance = points_balance + 250, camfrogUsername = ? WHERE userId = ?", [login, uid]);
+      await runQuery("UPDATE users SET camfrogUsername = NULL, points_balance = 0 WHERE userId = 'auto10'");
+      await AM.moveUserRows("auto10", uid);
+      await ledger.recordMerge("auto10", uid, "claim link");
+      await runQuery("DELETE FROM users WHERE userId = 'auto10'");
+    });
+    await AM.afterMerge(uid, {});
+    return { merged: true, addedBalance: 250 };
+  };
+  // an auto account can't take it; a signed-out visitor neither
+  assert.equal((await AE.redeemClaim(token, null, { link })).ok, false);
+  const r = await AE.redeemClaim(token, { userId: "newacct", username: "claimer_real" }, { link });
+  assert.equal(r.ok, true);
+  assert.deepEqual(linked, [["newacct", "claimer"]]);
+  assert.equal(await bal("newacct"), 250 + 900);
+  assert.equal(r.released + r.addedBalance, 900 + 250, "released here or by afterMerge - once either way");
+  // used: a second time is refused, and so is anyone else
+  const again = await AE.redeemClaim(token, { userId: "newacct", username: "claimer_real" }, { link });
+  assert.equal(again.ok, false);
+  assert.match(again.error, /expired or was already used/);
+  assert.equal(linked.length, 1);
+  assert.equal(await bal("newacct"), 1150);
+  // a login a REAL account holds gets no link (that's !verify's job), and a claim link to it is refused for another account
+  const R = await AE.claimLink("claimer");
+  assert.deepEqual([R.ok, R.state, R.username], [true, "linked", "claimer_real"]);
+  // expiry and the hourly cap
+  await user("auto11", { username: "CFkkkk1111", cf: "slowpoke" });
+  await AA.markNew("auto11");
+  const old = await AE.claimLink("slowpoke", { now: Date.now() - 31 * 60000 });
+  assert.equal(await AE.claimInfo(old.url.split("/claim/")[1]), null, "30 minutes");
+  const a = await AE.claimLink("slowpoke");
+  const b = await AE.claimLink("slowpoke");
+  assert.equal(await AE.claimInfo(a.url.split("/claim/")[1]), null, "a newer link replaces the older one");
+  assert.ok(await AE.claimInfo(b.url.split("/claim/")[1]));
+  for (let i = 0; i < 3; i++) await AE.claimLink("slowpoke");
+  assert.equal((await AE.claimLink("slowpoke")).ok, false, "at most 5 an hour");
+  // a failed link step leaves the token usable
+  const fail = async () => { throw new Error("boom"); };
+  await user("auto12", { username: "CFllll1212", cf: "retry" });
+  await AA.markNew("auto12");
+  const T = (await AE.claimLink("retry")).url.split("/claim/")[1];
+  await assert.rejects(AE.redeemClaim(T, { userId: "real2", username: "otherguy" }, { link: fail }), /boom/);
+  assert.ok(await AE.claimInfo(T), "still usable after a failure");
 });
 
 test("admin view and settings", async () => {

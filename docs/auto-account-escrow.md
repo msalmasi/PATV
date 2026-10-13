@@ -1,6 +1,18 @@
 # Auto-account escrow (PAT waiting to be claimed)
 
-Status: built on staging (site + bot), **switch OFF** by default. Prod ships dark.
+Status: built on staging (site + bot), **switch OFF** by default. Prod ships dark; the user plans to turn it on with
+the v2 launch as a sign-up drive.
+
+**The user's decisions (2026-10-12, round 2)** - built:
+
+1. The window is **six months after the account's last activity**, not per entry (below).
+2. Held kinds to start: **only achievements and level-ups** (the site's achievement payouts, its level-up rewards and
+   milestones, Pepe's level-up bonus). Everything else stays spendable; the admin card can add kinds later.
+3. Expired PAT goes to the **incentive budget** (the `auto_escrow_expired` routing row's default).
+4. The welcome PAT stays spendable.
+5. Reminders **once a week** while something is held, saying it can expire.
+6. Signing up is one command: `!signup` (or a bare `!claim`) PMs a one-click claim link (below).
+7. A launch-day room announcement, ready but not run: `!autoescrow announce` (below).
 
 ## The idea
 
@@ -68,11 +80,14 @@ computed, not a flag someone has to remember to clear, so no sign-in path can fo
 ### What goes to escrow
 
 Only **free rewards**: PAT the protocol hands out for being there, not PAT the person won from other players or
-from their own stake. Default list (editable on the admin card):
+from their own stake. Default list (the user's decision; editable on the admin card):
 
 * site payout flows: `achievements`, `levelup`
-* Pepe's credit types (`/api/bonus/chatwinner` `type`): `activity-reward`, `camfrog-raffle`, `camfrog-trivia`,
-  `mic-hourly`, `level-up-bonus`, `moan-bonus`, `beg`, `pictionary-win`
+* Pepe's credit type (`/api/bonus/chatwinner` `type`): `level-up-bonus`
+
+Candidates an admin can add later: `activity-reward`, `camfrog-raffle`, `camfrog-trivia`, `mic-hourly`, `moan-bonus`,
+`beg`, `pictionary-win`. At the default list the 30-day sizing above is about **21M** (achievements 12.3M, level-ups
+7.8M, Pepe's level-up bonus 0.9M) instead of 32M, and activity rewards (the big grower) stay spendable.
 
 **Game winnings stay spendable.** An auto account that stakes its own PAT (a duel, a spin, blackjack, a heist
 buy-in) gets the stake back and the winnings in its wallet. Holding them would mean holding the person's own money:
@@ -128,28 +143,70 @@ with their original expiry.
 The switch only controls **new holds**: switching it off never strands anything - existing entries are still
 claimable and still expire.
 
-### The six-month window
+### The six-month window: after the account's last activity
 
-**Per entry**: each entry expires six calendar months (UTC) after it was earned (31 Aug -> 28 Feb). A rolling window
-per account would let a regular who never claims keep a growing pile forever, which defeats the point; per entry,
-"what you earned in chat waits six months" is easy to explain and every entry has one fixed date.
+(First built per entry; the user chose this instead.) Everything an account has held expires **six calendar months (UTC)
+after its last activity** (31 Aug -> 28 Feb). Active chat users can put off signing up as long as they keep coming;
+one-time visitors expire. Kept as one `expires_at` per entry that every activity moves forward for ALL the account's
+held entries (never backwards, and never for an entry already past its date).
+
+What counts as activity:
+
+* **spending its own PAT** - every debit of the wallet (`ledger.post` with a negative amount): a spin, a bet, a game
+  stake, a tip sent, a purchase, a paid command;
+* **chat or mic** - Pepe reports a login with something held when it speaks or takes the mic
+  (`POST /api/autoescrow/seen`; only logins on the `held` list he fetches), and the credits that only reach someone
+  active: activity rewards, top mic, `!beg`, trivia / pictionary wins, the moan bonus;
+* **earning a held reward** (a level-up or an achievement comes from being there).
+
+Not activity: being in a room's user list, a tip received, a raffle drawn while away. Debounced to one reset per account
+per UTC day (in memory; a restart can cost one extra cheap UPDATE).
 
 Expiry runs on the site (`autoescrow.tick`, every 10 minutes; idempotent, keyed batches): every held entry whose
 `expires_at` has passed goes to the destination of the PAT Routing row **`auto_escrow_expired`** (default: 100% to
-the Federal Reserve; an admin can route it elsewhere - the remainder of a split goes to the Fed, as with every row).
+the incentive budget, the user's choice - it is where most of these rewards came from; an admin can route it elsewhere -
+the remainder of a split goes to the Fed, as with every row).
 While the pools live on the site the move is a pool leg in the same transaction; if they don't, a negative
 `reserve_claims` row (`auto_escrow_expired`) that Pepe's funding tick credits to the Reserve (the stale cleanup's
-path). Entries are never claimable once `expires_at` has passed, whether or not the job has run yet - so the outcome
+path; so while the pools are still Pepe's, expiry lands in the Fed whatever the row says). Entries are never claimable once `expires_at` has passed, whether or not the job has run yet - so the outcome
 never depends on the time of day the job happens to run.
 
 ### In chat
 
-* `!balance` shows spendable plus waiting: "you currently have PAT 12,000. PAT 85,000 more is waiting for you -
-  claim it at publicaccess.tv within 6 months (!verify)."
-* Pepe PMs an auto user **when he sees them** (the stale-notice pattern): at most once every 3 days per account,
-  and only when something new was escrowed since the last PM. The site keeps the per-account state
-  (`/api/autoescrow/notice-logins`, `/api/autoescrow/notified`); a credit answered `escrowed: true` makes Pepe refresh
-  the list early.
+* `!balance` shows spendable plus waiting: "you currently have PAT 12,000. PAT 85,000 more is waiting for you - it
+  expires if you're inactive for 6 months. Claim it free: !signup".
+* Pepe reminds an auto user **when he sees them** (the stale-notice pattern): at most **once a week** per account while
+  something is held: "🎁 PAT X is waiting for you - it expires if you're inactive for 6 months - claim it free at
+  publicaccess.tv: type !signup". The site keeps the per-account state (`/api/autoescrow/notice-logins`,
+  `/api/autoescrow/notified`); a credit answered `escrowed: true` makes Pepe refresh the list early.
+
+### Signing up: `!signup` / `!claim` and the claim page
+
+1. In chat, `!signup` (or `!claim` with nothing after it - `!claim <area>` is still the turf command) makes Pepe ask the
+   site for a claim link for the login that typed it (`POST /api/autoescrow/claim-link`) and **PM** it to them.
+   Pepe knows who typed the command, which is exactly the proof `!verify` relies on.
+2. The link (`/claim/<token>`) is a 32-character random token: one use, 30 minutes, only its SHA-256 stored, at most
+   5 per login per hour, a newer one replaces the older. A login a real account already holds gets no link ("already
+   linked to <account>").
+3. The page says "You have PAT X waiting" (plus the chat wallet that comes along). Signed out: **Create my free
+   account** or **Sign in**, both with `?next=` back to the page. Signed in: one button, **Link it and collect my PAT**
+   (a POST to the same URL with a strict same-origin check - Origin or Referer must be this site), which spends the token
+   first and then runs `!verify`'s own merge (`user.controller.completeCamfrogLink`): the auto account's wallet, XP,
+   badges and escrow move and the escrow is released. A failed merge gives the token back.
+4. So there is no `!verify` step: the account is created, the person lands back on the page signed in, one click.
+   It isn't fully automatic on sign-up on purpose: linking a Camfrog name lets that name spend the account's PAT in chat,
+   so it takes an explicit click by the signed-in owner (a link opened in the wrong browser can't attach itself to
+   someone else's account). The page sends `Referrer-Policy: same-origin`, `noindex`, `no-store`.
+
+### Launch day
+
+`!autoescrow announce` (admin) shows the text and the rooms; `!autoescrow announce confirm` posts it once in each of
+Pepe's rooms (a few seconds apart; the rooms done are remembered in `autoescrow_announced.json`, so a repeat skips
+them), and only while the site's switch is on. Text:
+
+> 🎁 New on PublicAccess: the PAT you earn here from achievements and level-ups is now saved for you until you sign
+> up. Type !signup for a one-click link to your free publicaccess.tv account and collect it. It keeps as long as you're
+> active (it expires after 6 months without activity).
 
 ### The stale-account cleanup
 
@@ -169,15 +226,11 @@ expires in the next 30 days, claimed vs expired by month, the escrowed kinds (ed
 
 ## Tests
 
-`test/autoescrow.test.js`: earn -> escrow; claim on link -> released once (twice is a no-op); expiry -> the Fed;
+`test/autoescrow.test.js`: earn -> escrow; claim on link -> released once (twice is a no-op); expiry -> incentives; activity resets the clock (debits, chat, debounce); the claim link (one use, hashed, TTL, cap, already-linked, retry after a failure);
 game-stake winnings stay spendable; the cleanup's purge skips held entries and archive / escrow never double-reclaim;
 an account merge (auto -> real releases, auto -> auto keeps); expiry independent of the time of day it runs; supply
 unchanged across hold / claim / expiry.
 
-## Open questions for the user
+## Decisions still open
 
-1. Welcome PAT: spendable (default) or escrowed too?
-2. The notice rate (one PM per 3 days, only when something new was held) - OK?
-3. Expired PAT -> the Fed by default (routing row `auto_escrow_expired`). Would you rather it refill the incentive
-   budget it mostly came from?
-4. The kinds list: anything else Pepe pays for free that should be held (drops, turf wages, store-heist scores)?
+* None blocking. When to turn it on (the user: with the v2 launch) and whether to add more kinds later.

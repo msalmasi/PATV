@@ -140,6 +140,9 @@ async function postIn(userId, amount, type, opts) {
     console.warn(`[ledger] ${type} ${amount} for ${target}: balance not moved (${code}) - row withdrawn`);
     return { ok: false, code, userId: target };
   }
+  // auto-account escrow: spending its own PAT is activity - it pushes back the expiry of an auto account's held rewards
+  // (autoescrow.touchSoon: debounced to once a day, runs after this transaction, never throws)
+  if (amount < 0) { try { require("./autoescrow").touchSoon(target, "debit:" + type); } catch (e) { /* never blocks a post */ } }
   return { ok: true, userId: target, transactionId: txId };
 }
 

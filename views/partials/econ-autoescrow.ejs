@@ -3,11 +3,13 @@
     through POST /api/admin/autoescrow/settings (audit-logged). %>
 <section class="adm-card" id="autoescrow" aria-labelledby="autoescrowT">
   <h2 id="autoescrowT"><span class="ds-ic" aria-hidden="true">⏳</span> Chat-account escrow <span class="adm-pill admin">admins</span></h2>
-  <p class="adm-help">Free rewards (achievements, level-ups, activity rewards, raffles, top mic…) earned by Pepe's automatic Camfrog accounts
-    wait here instead of landing in a wallet nobody can sign in to. Linking the Camfrog name to a real PATV account (<code>!verify</code>,
-    Edit profile → Connections) pays it all out at once. Each reward expires six months after it was earned and goes where the PAT Routing row
-    <code>auto_escrow_expired</code> sends it (the Federal Reserve by default). Game winnings, tips and refunds are never held; balances from
-    before the switch aren't touched. The switch only controls new holds - off, everything held is still claimable and still expires.</p>
+  <p class="adm-help">Free rewards (to start: achievements and level-ups) earned by Pepe's automatic Camfrog accounts wait here instead of
+    landing in a wallet nobody can sign in to. Claiming is one click: <code>!signup</code> in chat PMs a link that creates or signs in to a
+    PATV account and links the Camfrog name (or the usual <code>!verify</code> / Edit profile → Connections). Everything held expires six
+    months after the account's <b>last activity</b> (spending its own PAT, chat or mic, earning) and goes where the PAT Routing row
+    <code>auto_escrow_expired</code> sends it (the incentive budget by default). Pepe reminds a held account at most once a week. Game
+    winnings, tips, refunds and the welcome PAT are never held; balances from before the switch aren't touched. The switch only controls
+    new holds - off, everything held is still claimable and still expires.</p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="aescAdm">
       <div class="adm-kv" id="aescKv"><div><b>Status</b><span>Loading…</span></div></div>
@@ -33,6 +35,6 @@
       </details>
       <p class="adm-msg" id="aescMsg" role="status"></p>
     </div>
-    <script src="/public/js/admin-autoescrow.js?v=1" defer></script>
+    <script src="/public/js/admin-autoescrow.js?v=2" defer></script>
   <% } %>
 </section>
