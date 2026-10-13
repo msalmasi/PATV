@@ -22,6 +22,12 @@
     <button type="button" class="adm-btn sm ghost" data-preset="image">All AI image + video commands off</button>
     <button type="button" class="adm-btn sm ghost" data-preset="ai">All AI off</button>
   </div>
+  <div class="adm-actions" id="csTest" style="flex-wrap:wrap;align-items:center">
+    <span class="adm-pill" id="csTestPill">🧪 test mode off</span>
+    <button type="button" class="adm-btn sm ghost" data-test="on">Test mode on (1 hour, only you)</button>
+    <button type="button" class="adm-btn sm ghost" data-test="off">Test mode off</button>
+    <span class="adm-help">Master switches bind admins too. Test mode lets only you - as your linked Camfrog name - use switched-off commands for an hour. Pepe says "🧪 test mode" when he lets you through; it's logged.</span>
+  </div>
   <label class="adm-help" style="display:block">Reason (optional, goes in the log) <input type="text" id="csWhy" maxlength="200" style="width:100%;max-width:420px"></label>
   <p class="adm-msg" id="csMsg" role="status" aria-live="polite"></p>
   <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr>
@@ -67,8 +73,16 @@
     b.setAttribute('aria-label', (field === 'master' ? 'Master switch' : 'Global default') + ' for ' + s.label + ': ' + (on ? 'on' : 'off'));
     return b;
   }
+  function paintTest() {
+    var p = document.getElementById('csTestPill'), until = V.my_test_until;
+    var others = ((V.state && V.state.testers) || []).filter(function (x) { return x.login !== V.me && x.until > Date.now(); });
+    p.textContent = until && until > Date.now() ? '🧪 test mode ON for you until ' + when(until) : (V.me ? '🧪 test mode off' : '🧪 link your Camfrog name to use test mode');
+    p.className = 'adm-pill' + (until && until > Date.now() ? ' admin' : '');
+    if (others.length) p.textContent += ' · also: ' + others.map(function (x) { return x.login; }).join(', ');
+  }
   function render() {
     fillCats();
+    paintTest();
     document.getElementById('csOnline').textContent = V.online ? 'live' : 'offline' + (V.at ? ' (last report ' + when(V.at) + ')' : '');
     var all = rows(), C = cats(), list = shown();
     var offN = all.filter(function (s) { return !s.master; }).length;
@@ -81,6 +95,7 @@
       var n = el('td'); n.appendChild(el('b', null, s.label));
       if (s.passive) { n.appendChild(document.createTextNode(' ')); n.appendChild(el('span', 'adm-pill', 'passive')); }
       if (s.legacy) { n.appendChild(document.createTextNode(' ')); n.appendChild(el('span', 'adm-pill', s.legacy)); }
+      if ((s.model_funcs || []).length) n.appendChild(el('div', 'adm-help', 'AI model function' + (s.model_funcs.length > 1 ? 's' : '') + ': ' + s.model_funcs.join(', ')));
       if ((s.cmds || []).length) n.appendChild(el('div', 'adm-help', s.cmds.slice(0, 8).join(' ')));
       if ((s.owner || []).length) n.appendChild(el('div', 'adm-help', 'Pad owners: ' + s.owner.join(', ')));
       tr.appendChild(n);
@@ -124,6 +139,15 @@
     if (!t) return;
     if (t.hasAttribute('data-id')) send([t.getAttribute('data-id')], t.getAttribute('data-f'), t.getAttribute('data-v'));
     else if (t.hasAttribute('data-bulk')) { var p = t.getAttribute('data-bulk').split(':'); send(Object.keys(SEL), p[0], p[1]); }
+    else if (t.hasAttribute('data-test')) {
+      var msg = document.getElementById('csMsg'); msg.textContent = '…';
+      fetch('/api/admin/pepe/commands', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ field: 'test', value: t.getAttribute('data-test') }) })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { msg.textContent = d.ok ? 'Sent to Pepe - test mode changes in a few seconds.' : '❌ ' + (d.error || 'failed'); setTimeout(load, 4000); })
+        .catch(function () { msg.textContent = '❌ The site did not answer.'; });
+    }
     else if (t.hasAttribute('data-preset')) {
       var kind = t.getAttribute('data-preset');
       send(rows().filter(function (s) { return s.master && (kind === 'ai' ? !!s.ai : (s.ai === 'image' || s.ai === 'video')); }).map(function (s) { return s.id; }), 'master', 'off');

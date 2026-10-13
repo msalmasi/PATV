@@ -200,3 +200,31 @@ test("the owner page: master off = disabled + 'Switched off by PATV admins', val
   const pg2 = await get("/p/" + SLUG + "/owner", "owner");
   assert.ok(pg2.text.includes("can&#39;t speak Hebrew") || pg2.text.includes("can't speak Hebrew"), "the fallback note");
 });
+
+test("1.99vn: an admin's test mode (their linked name) + AI model rows", async () => {
+  await runQuery("UPDATE pepe_actions SET status = 'done'");
+  const t = table([{ id: "ai.summary", kind: "ai_func", label: "AI model: transcript summaries", cat: "ai", ai: "text", passive: true,
+                     master: false, has_default: false, global_only: true, model_funcs: ["summary"] }]);
+  t.testers = [{ login: "bossy", until: Date.now() + 3600e3 }, { login: "<x>", until: 0 }];
+  let r = await post("/api/pepe/cmdswitch/state", null, { password: "bot-token", state: t });
+  assert.equal(r.status, 200);
+  const v = await CS.view(staff);
+  const row = v.state.switches.find((s) => s.id === "ai.summary");
+  assert.equal(row.kind, "ai_func");
+  assert.deepEqual(row.model_funcs, ["summary"]);
+  assert.deepEqual(v.state.testers.map((x) => x.login), ["bossy"], "junk tester dropped");
+  assert.equal(v.me, "bossy");
+  assert.ok(v.my_test_until > Date.now(), "the page knows the viewer is in test mode");
+  r = await post("/api/admin/pepe/commands", "staff", { field: "test", value: "on" });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  const a = (await actions("cmd.switch")).pop();
+  assert.deepEqual(JSON.parse(a.args), ["test", "on"]);
+  const au = await getQuery("SELECT detail FROM admin_audit WHERE action = 'pepe_cmdswitch' ORDER BY id DESC LIMIT 1");
+  assert.deepEqual(JSON.parse(au[0].detail), { field: "test", value: "on", login: "bossy" });
+  r = await post("/api/admin/pepe/commands", "fan", { field: "test", value: "on" });
+  assert.equal(r.status, 403, "admins only");
+  r = await post("/api/admin/pepe/commands", "staff", { ids: ["ai.summary"], field: "master", value: "on" });
+  assert.equal(r.status, 200, "an AI model row is switchable like any other");
+  const pg = await get("/admin/pepe/commands", "staff");
+  assert.ok(pg.text.includes('data-test="on"') && pg.text.includes("csTestPill"), "the test mode toggle is on the page");
+});

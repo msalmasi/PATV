@@ -12,6 +12,10 @@
 //          "cmd.switch" [field, value, id...] (actions.js; Pepe runs it for site_admin only) + one admin_audit row
 //          ("pepe_cmdswitch", adminaudit.js). Pepe audits it again on his side (cmdswitch_audit.json + his mod log).
 //   admin  --GET  /api/admin/pepe/commands--> {online, state, actions, audit}
+//   admin  --POST /api/admin/pepe/commands {field: "test", value: on|off}--> "cmd.switch" [test, on|off]: THAT admin's test
+//          mode (1.99vn): an hour in which only they can use master-off commands (Pepe re-checks they're a Pepe admin by
+//          their linked Camfrog name; it ends by itself; audited both sides). Masters bind admins otherwise.
+// 1.99vn: the AI model registry's per-function on/off is in this table too (rows kind "ai_func", "ai.<func>").
 // Effective value in a room = master AND (the room's own value, else the global default). The owner page shows a setting
 // whose master is off as "Switched off by PATV admins" (padowner.js masters_off) with the owner's own value kept.
 "use strict";
@@ -51,7 +55,8 @@ const int = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(100000, Ma
 function cleanState(s) {
   if (!s || typeof s !== "object" || !Array.isArray(s.switches)) return null;
   const switches = s.switches.slice(0, 1000).map((x) => (x && typeof x === "object" && ID_RE.test(String(x.id || "")) ? {
-    id: String(x.id), kind: x.kind === "command" ? "command" : "feature", label: str(x.label, 100) || String(x.id),
+    id: String(x.id), kind: x.kind === "command" || x.kind === "ai_func" ? x.kind : "feature",
+    model_funcs: (Array.isArray(x.model_funcs) ? x.model_funcs : []).slice(0, 10).map((f) => str(f, 30)).filter((f) => /^[a-z_]{1,30}$/.test(f)), label: str(x.label, 100) || String(x.id),
     cat: /^[a-z_]{1,20}$/.test(String(x.cat || "")) ? String(x.cat) : "chat", ai: AI.has(x.ai) ? x.ai : null,
     cmds: (Array.isArray(x.cmds) ? x.cmds : []).slice(0, 20).map((c) => str(c, 30)).filter((c) => /^![a-z0-9_]{1,29}$/i.test(c)),
     passive: !!x.passive, master: x.master !== false, default: x.default !== false, has_default: x.has_default !== false,
@@ -66,7 +71,10 @@ function cleanState(s) {
     on: !!(a && a.on), by: str(a && a.by, 60), via: str(a && a.via, 20),
     ids: (Array.isArray(a && a.ids) ? a.ids : []).slice(0, 100).map((x) => str(x, 60)) }));
   const orphans = (Array.isArray(s.orphans) ? s.orphans : []).slice(0, 50).map((x) => str(x, 60));
-  return { switches, categories, audit, orphans };
+  const testers = (Array.isArray(s.testers) ? s.testers : []).slice(0, 50)
+    .map((t) => ({ login: str(t && t.login, 60).toLowerCase(), until: Number(t && t.until) > 0 ? Math.floor(Number(t.until)) : 0 }))
+    .filter((t) => t.login && t.until);
+  return { switches, categories, audit, orphans, testers, test_ttl: Number.isFinite(Number(s.test_ttl)) ? Math.floor(Number(s.test_ttl)) : 3600 };
 }
 
 async function setState(raw) {
@@ -81,7 +89,7 @@ async function setState(raw) {
   return true;
 }
 
-async function view() {
+async function view(user) {
   await init();
   const t = NOW();
   let actions = [];
@@ -91,7 +99,33 @@ async function view() {
   } catch (e) { actions = []; }
   let audit = [];
   try { audit = await require("./adminaudit").recent("pepe_cmdswitch", 20); } catch (e) { audit = []; }
-  return { now: t, online: !!(STATE && t - STATE.at < ONLINE_MS), at: STATE ? STATE.at : null, state: STATE ? STATE.data : null, actions, audit };
+  let me = null;
+  if (user && user.userId) {
+    try { me = ((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [user.userId]))[0] || {}).camfrogUsername || null; } catch (e) { me = null; }
+  }
+  const mine = me && STATE && STATE.data ? (STATE.data.testers || []).find((x) => x.login === String(me).toLowerCase() && x.until > t) : null;
+  return { now: t, online: !!(STATE && t - STATE.at < ONLINE_MS), at: STATE ? STATE.at : null, state: STATE ? STATE.data : null, actions, audit,
+           me: me ? String(me).toLowerCase() : null, my_test_until: mine ? mine.until : null };
+}
+
+/** 1.99vn: the acting admin's own test mode -> one "cmd.switch" [test, on|off] action (Pepe uses their linked Camfrog name). */
+async function requestTest(user, value) {
+  const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [user.userId]))[0] || {};
+  if (!u.camfrogUsername) throw new Refuse(400, "Link your Camfrog name first - test mode is for the name you use Pepe as.");
+  if (!(STATE && NOW() - STATE.at < ONLINE_MS)) throw new Refuse(409, "Pepe hasn't reported his switches lately (offline?) - try again in a few minutes.");
+  const key = String(user.userId || user.username || "").toLowerCase();
+  if (hits.blocked(key)) throw new Refuse(429, `Slow down - at most ${RATE.max} changes a minute.`);
+  hits.hit(key);
+  try {
+    await require("./adminaudit").record(user, "pepe_cmdswitch", null, { field: "test", value, login: u.camfrogUsername }, null);
+  } catch (e) { console.error("[cmdswitch] audit:", e.message); throw new Refuse(500, "Couldn't write the audit log - nothing was changed."); }
+  try {
+    return await require("./actions").queue(user.userId, { kind: "cmd.switch", args: ["test", value], tag: "pepe-commands",
+      label: `Test mode ${value.toUpperCase()} (${u.camfrogUsername})` });
+  } catch (e) {
+    if (e && e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment.");
+    throw e;
+  }
 }
 
 /** An admin's change -> the queued action ids (one per CHUNK switches). */
@@ -99,9 +133,10 @@ async function request(user, b = {}) {
   await init();
   if (!user || user.class !== "Admin") throw new Refuse(403, "Admins only.");
   const field = String(b.field || "").toLowerCase();
-  if (field !== "master" && field !== "default") throw new Refuse(400, "Master or default?");
+  if (field !== "master" && field !== "default" && field !== "test") throw new Refuse(400, "Master or default?");
   const value = String(b.value || "").toLowerCase();
   if (value !== "on" && value !== "off") throw new Refuse(400, "On or off?");
+  if (field === "test") return [await requestTest(user, value)];
   const ids = [...new Set((Array.isArray(b.ids) ? b.ids : []).map((x) => String(x || "").trim().toLowerCase()))].filter((x) => ID_RE.test(x));
   if (!ids.length) throw new Refuse(400, "Pick at least one command or feature.");
   if (ids.length > 400) throw new Refuse(400, "That's too many at once.");
@@ -154,12 +189,12 @@ function register(app, { isBotToken, addUser }) {
   app.get("/admin/pepe/commands", addUser, admin(false), async (req, res) => {
     try {
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
-      res.render("admin/pepeCommands", { user: req.user.username, title: "Admin · Pepe's commands", section: "pepe", isAdmin: true, v: await view() });
+      res.render("admin/pepeCommands", { user: req.user.username, title: "Admin · Pepe's commands", section: "pepe", isAdmin: true, v: await view(req.user) });
     } catch (e) { console.error("[cmdswitch] page:", e); res.status(500).send("Couldn't load the page."); }
   });
   app.get("/api/admin/pepe/commands", addUser, admin(true), async (req, res) => {
     res.set("Cache-Control", "no-store");
-    try { res.json({ ok: true, ...(await view()) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: true, ...(await view(req.user)) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/admin/pepe/commands", addUser, admin(true), fetchOnly, async (req, res) => {
     try { res.json({ ok: true, ids: await request(req.user, req.body || {}) }); } catch (e) { fail(res, e); }
