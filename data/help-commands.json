@@ -1634,10 +1634,14 @@
    "syntax": [
     "!dueltop"
    ],
-   "summary": "Dice duel leaderboard.",
-   "details": "Dice duel leaderboard.",
+   "summary": "Dice duel leaderboard (top 10 in chat), with a link to the full GTF leaderboards.",
+   "details": "Dice duel leaderboard: the top 10 in chat by net points won, with a link to the full board on publicaccess.tv/gtf/leaderboards.",
    "examples": [],
    "keywords": [],
+   "web": {
+    "label": "Duel leaderboard",
+    "url": "/gtf/leaderboards?board=duel"
+   },
    "webchat": true
   },
   {
@@ -1700,9 +1704,13 @@
     "!brawltop"
    ],
    "summary": "Leaderboards for The Arena and Brawls.",
-   "details": "Leaderboards for The Arena and Brawls. `!brawltop` works like `!dueltop`: ranked by wins minus losses, with each brawler's W/L and net PAT won (losses and net PAT count from this update). Your record also shows on your `!sheet`.",
+   "details": "Leaderboards for The Arena and Brawls. `!brawltop` works like `!dueltop`: ranked by wins minus losses, with each brawler's W/L and net PAT won (losses and net PAT count from this update). Your record also shows on your `!sheet`. Both link the full boards on publicaccess.tv/gtf/leaderboards.",
    "examples": [],
    "keywords": [],
+   "web": {
+    "label": "Arena & brawl leaderboards",
+    "url": "/gtf/leaderboards?board=arena"
+   },
    "webchat": true
   },
   {
@@ -3420,13 +3428,13 @@
     "!heisttop",
     "!heistboard"
    ],
-   "summary": "Show the heist leaderboard — top hauls and deepest runs — plus a link to the full guide & \"vault cracked by…\" hall of fame.",
-   "details": "Show the heist leaderboard — top hauls and deepest runs — plus a link to the full guide & \"vault cracked by…\" hall of fame.",
+   "summary": "Show the top 3 heist hauls and the deepest run, plus a link to the full Grand Theft Frogger leaderboards on publicaccess.tv/gtf/leaderboards.",
+   "details": "Show the top 3 heist hauls and the deepest run in chat, plus a link to the full **Grand Theft Frogger leaderboards** (publicaccess.tv/gtf/leaderboards): total points stolen, deepest runs, survival rate, the arena, brawls and duels. Players who are `!incognito` show as \"someone\".",
    "examples": [],
    "keywords": [],
    "web": {
-    "label": "The heist leaderboard",
-    "url": "https://pepe.publicaccess.tv/heist"
+    "label": "The GTF leaderboards",
+    "url": "/gtf/leaderboards"
    },
    "webchat": true
   },
@@ -7496,5 +7504,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "809823a23a1cf5ca"
+ "hash": "d12460dee011e1dc"
 }

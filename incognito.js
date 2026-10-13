@@ -19,6 +19,8 @@
 //   incognito_state   login (lower, PK), on, updated (Pepe's ms of the change), reported (when the site heard it), via
 //   incognito_log     id, user_id, login, at, kind request|applied|refused, on, via, ip
 //   incognito_meta    key/value: last_full (when Pepe last sent the whole list)
+//   incognito_anon    login (lower, PK), since - 1.99wg: every login Pepe reports on, linked or not, only so public game boards
+//                     (gtfboards.js) show them as "someone"
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -41,6 +43,9 @@ function init() {
         kind TEXT NOT NULL, "on" INTEGER, via TEXT, ip TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS incognito_log_user ON incognito_log (user_id, at)");
       await runQuery("CREATE TABLE IF NOT EXISTS incognito_meta (key TEXT PRIMARY KEY, value TEXT)");
+      // 1.99wg: every login Pepe reports incognito, linked or not - ONLY to show them as "someone" on public boards that
+      // hold their game records (gtfboards.js: the GTF leaderboards). No account, no audit, no notice for these.
+      await runQuery("CREATE TABLE IF NOT EXISTS incognito_anon (login TEXT PRIMARY KEY, since INTEGER)");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -142,6 +147,8 @@ async function sync(body) {
     const login = low(it && it.login);
     const ts = Math.floor(Number(it && it.ts) || 0);
     if (!login || !LOGIN_RE.test(login) || !(ts > 0)) { ignored++; continue; }
+    if (it.on === true) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [login, t]);
+    else await runQuery("DELETE FROM incognito_anon WHERE login = ?", [login]);
     const u = await userByLogin(login);
     if (!u) { ignored++; continue; }                       // only linked chat identities are kept
     const on = it.on === true;
@@ -166,6 +173,8 @@ async function sync(body) {
   }
   if (Array.isArray(body && body.full)) {
     const set = new Set(body.full.map(low).filter((l) => LOGIN_RE.test(l)));
+    for (const r of await getQuery("SELECT login FROM incognito_anon")) if (!set.has(r.login)) await runQuery("DELETE FROM incognito_anon WHERE login = ?", [r.login]);
+    for (const l of set) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [l, t]);
     // stored logins that are no longer on the list -> off
     for (const r of await getQuery(`SELECT login FROM incognito_state WHERE "on" = 1`)) {
       if (!set.has(r.login)) await runQuery(`UPDATE incognito_state SET "on" = 0, reported = ? WHERE login = ?`, [t, r.login]);

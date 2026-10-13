@@ -1232,6 +1232,8 @@ require("./stashes").register(app, { isBotToken, addUser });
 require("./gtfstore").register(app, { isBotToken, addUser });
 // 1.99rn: the heist sheet page (/gtf/sheet/:login) + web re-rolls + Pepe's sheet mirror / catalog
 require("./gtfsheet").register(app, { isBotToken, addUser });
+// 1.99wg: the GTF leaderboards (/gtf/leaderboards) - from the site's GTF records or Pepe's mirror (retires the Netlify heist board)
+require("./gtfboards").register(app, { addUser });
 // 1.99tt: the 🥷 heist market (/gtf/market) - players sell heist items for PAT; Pepe moves the items (heistmarket.js)
 require("./heistmarket").register(app, { isBotToken, addUser });
 // 1.99ns Phase 1: every protocol pool on the site (pools.js) + the economy settings and journals (econstore.js)

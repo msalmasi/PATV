@@ -13,7 +13,7 @@ const LINKS = {
   turfGuide: "https://pepe.publicaccess.tv/turfwars",
   turfMap: "https://pepe.publicaccess.tv/turf",
   gangs: "/gtf/gangs",                      // G1: the gang board lives on the site (Pepe's Netlify board retired)
-  heistBoard: "https://pepe.publicaccess.tv/heist",
+  heistBoard: "/gtf/leaderboards",          // 1.99wg: the GTF leaderboards on the site (gtfboards.js; Pepe's Netlify board retired)
   heistMarket: "/gtf/market",               // 1.99tt: players sell heist items (heistmarket.js)
 };
 

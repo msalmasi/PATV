@@ -1,0 +1,130 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('gtf.lb.title'), user: user }) %>
+<%#
+  views/gtfboards.ejs - 1.99wg: the Grand Theft Frogger leaderboards (gtfboards.js view): loot, deepest runs, survival rate,
+  the arena, brawls and duels (all-time: the sheets keep running totals only), plus the gang board link. Arcade look of the
+  GTF pages (partials/gangs-css: .gg cards, pixel heads); one column on phones. "someone" = !incognito / GTF section private.
+%>
+<%- include('partials/gangs-css') %>
+<%
+  const fmt = (n) => { try { return BigInt(String(n == null ? 0 : n)).toLocaleString('en-US'); } catch (e) { return String(n); } };
+  const sg = (n) => { let b; try { b = BigInt(String(n || 0)); } catch (e) { b = 0n; } return (b > 0n ? '+' : '') + b.toLocaleString('en-US'); };
+  const neg = (n) => { try { return BigInt(String(n || 0)) < 0n; } catch (e) { return false; } };
+  const DEFS = [
+    { id: 'loot', icon: '💰', accent: 'gold',
+      main: (r) => fmt(r.loot) + ' <small>' + t('gtf.lb.points') + '</small>', sub: (r) => t('gtf.lb.n_heists', { count: Number(r.heists) || 0, n: fmt(r.heists) }) },
+    { id: 'deep', icon: '🔐', accent: 'violet',
+      main: (r) => 'R' + r.deepest, sub: (r) => t('gtf.lb.n_cracks', { count: Number(r.cracks) || 0, n: fmt(r.cracks) }) },
+    { id: 'survive', icon: '🛡️', accent: 'green',
+      main: (r) => r.rate.toFixed(1) + '%', sub: (r) => t('gtf.lb.survived', { ok: fmt(r.survived), n: fmt(r.heists) }) },
+    { id: 'arena', icon: '🏟️', accent: 'red',
+      main: (r) => t('gtf.lb.n_wins', { count: Number(r.wins) || 0, n: fmt(r.wins) }), sub: () => '' },
+    { id: 'brawl', icon: '🥊', accent: 'gold',
+      main: (r) => fmt(r.w) + 'W–' + fmt(r.l) + 'L', sub: (r) => '<span class="' + (neg(r.net) ? 'neg' : 'pos') + '">' + sg(r.net) + '</span> ' + t('gtf.lb.points') },
+    { id: 'duel', icon: '🎲', accent: 'violet',
+      main: (r) => '<span class="' + (neg(r.net) ? 'neg' : 'pos') + '">' + sg(r.net) + '</span> <small>' + t('gtf.lb.points') + '</small>', sub: (r) => fmt(r.w) + 'W–' + fmt(r.l) + 'L' },
+  ];
+  const order = focus ? [DEFS.find((d) => d.id === focus)].concat(DEFS.filter((d) => d.id !== focus)) : DEFS;
+  const SHOW = 10;
+  const row = (d, r) => {
+    const who = r.anon
+      ? '<span class="ava sm anon" aria-hidden="true">🕶️</span><span class="nm"><i>' + t('gtf.lb.someone') + '</i></span>'
+      : (r.seed ? '<span class="ava sm" data-seed="' + r.seed + '" aria-hidden="true"></span>' : '<span class="ava sm" aria-hidden="true"></span>')
+        + '<span class="nm"><a href="' + r.href + '">' + t.esc(r.name) + '</a>' + (r.mine ? ' <span class="you">' + t('gtf.lb.you') + '</span>' : '') + '</span>';
+    const sub = d.sub(r);
+    return '<li class="lr' + (r.rank <= 3 ? ' p' + r.rank : '') + (r.mine ? ' mine' : '') + '"><span class="rk">' + r.rank + '</span>' + who
+      + '<span class="val"><b>' + d.main(r) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span></li>';
+  };
+%>
+<style>
+  .gb .hero { background: radial-gradient(90% 130% at 0% 0%, #2b200a 0%, rgba(17,17,17,0) 60%), radial-gradient(80% 120% at 100% 100%, #0e2a14 0%, rgba(17,17,17,0) 60%), #111; }
+  .gb .hero::after { background: repeating-linear-gradient(-45deg, var(--gold) 0 12px, #111 12px 24px); }
+  .gb .eyebrow { color: var(--gold); }
+  .gb .jump { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--ds-sp-4); }
+  .gb .jump a { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 var(--ds-sp-3); border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong);
+                background: rgba(10,10,10,.6); color: var(--ds-text); font: 700 13px/1 var(--ds-font); text-decoration: none; }
+  .gb .jump a:hover, .gb .jump a:focus-visible { border-color: var(--gold); text-decoration: none; }
+  .gb .jump a:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .gb .period { display: inline-flex; align-items: center; gap: 6px; font: 9px/1.6 var(--ds-font-pixel); letter-spacing: .06em; color: var(--ds-on-gold); background: var(--gold); padding: 4px 8px; border-radius: var(--ds-r-xs); }
+  .gb .boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ds-sp-4); align-items: start; }
+  .gb .card { scroll-margin-top: 80px; }
+  .gb .card.red { border-top: 3px solid var(--red); }
+  .gb .card.focus { box-shadow: 0 0 0 2px var(--ds-gold-line), var(--ds-e-2); }
+  .gb .card h2 { display: flex; align-items: center; gap: var(--ds-sp-2); }
+  .gb .card h2 .ic { font: 18px/1 var(--ds-font-emoji); }
+  .gb .desc { margin: calc(-1 * var(--ds-sp-2)) 0 var(--ds-sp-3); color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.5; }
+  .gb ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .gb .lr { display: grid; grid-template-columns: 30px 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: var(--ds-tap); padding: 6px 10px;
+            background: var(--ds-sunken); border: 1px solid var(--ds-line-soft); border-radius: var(--ds-r-md); }
+  .gb .lr .rk { font: 10px var(--ds-font-pixel); color: #a0a8a0; text-align: center; }
+  .gb .lr.p1 { border-color: var(--ds-gold-line); background: linear-gradient(90deg, rgba(255,207,64,.10), rgba(0,0,0,0) 60%), var(--ds-sunken); }
+  .gb .lr.p1 .rk { color: var(--gold); font-size: 13px; } .gb .lr.p2 .rk { color: #d6d6d6; font-size: 12px; } .gb .lr.p3 .rk { color: #e09a5a; font-size: 12px; }
+  .gb .lr.mine { border-color: var(--green); box-shadow: inset 0 0 0 1px rgba(111,220,123,.25); }
+  .gb .lr .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; }
+  .gb .lr .nm a { color: var(--ds-text-strong); font-weight: 700; }
+  .gb .lr .nm i { color: var(--mut); }
+  .gb .you { font: 8px var(--ds-font-pixel); color: #0b0b0b; background: var(--green); padding: 3px 5px; border-radius: var(--ds-r-xs); vertical-align: middle; }
+  .gb .ava.anon { font: 15px/1 var(--ds-font-emoji); }
+  .gb .val { text-align: end; font-variant-numeric: tabular-nums; min-width: 0; }
+  .gb .val b { display: block; color: var(--ds-text-strong); font-size: 14.5px; white-space: nowrap; }
+  .gb .val b small { color: var(--mut); font-weight: 400; font-size: 11.5px; }
+  .gb .val > small { display: block; color: var(--mut); font-size: 12px; white-space: nowrap; }
+  .gb .pos { color: var(--green); } .gb .neg { color: var(--red); }
+  .gb details { margin-top: 4px; }
+  .gb details summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; color: var(--ds-green-2); font-size: var(--ds-fs-sm); font-weight: 700; }
+  .gb details[open] summary { margin-bottom: 4px; }
+  .gb .gap { text-align: center; color: var(--mut); font: 10px var(--ds-font-pixel); padding: 2px 0; }
+  .gb .gangs { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); flex-wrap: wrap; }
+  .gb .gangs p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.5; flex: 1 1 260px; }
+  @media (max-width: 900px) { .gb .boards { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 420px) { .gb .lr { grid-template-columns: 24px 30px minmax(0, 1fr) auto; gap: 8px; padding: 6px 8px; } .gb .val > small { font-size: 11px; } }
+</style>
+<main class="ds-page wide gg gb">
+  <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <%- t('gtf.lb.crumb') %></div>
+  <section class="hero" aria-labelledby="gbH">
+    <div class="eyebrow"><%- t('gtf.lb.eyebrow') %></div>
+    <h1 id="gbH"><span class="ds-ic" aria-hidden="true">🏆</span><%- t('gtf.lb.h1') %></h1>
+    <p class="lead"><%- t('gtf.lb.lead', { cmd: '<code>!heisttop</code>' }) %></p>
+    <nav class="jump" aria-label="<%- t('gtf.lb.jump') %>">
+      <% DEFS.forEach((d) => { %><a href="#<%= d.id %>"><span aria-hidden="true"><%= d.icon %></span><%- t('gtf.lb.b.' + d.id) %></a><% }) %>
+      <a href="/gtf/gangs"><span aria-hidden="true">🎩</span><%- t('gtf.lb.b.gangs') %></a>
+    </nav>
+  </section>
+
+  <p><span class="period" aria-current="true">⏱ <%- t('gtf.lb.all_time') %></span></p>
+
+  <% if (!v.mode) { %>
+    <div class="banner"><%- t('gtf.lb.none', { cmd: '<code>!sheet</code>' }) %></div>
+  <% } else { %>
+  <div class="boards">
+    <% order.forEach((d) => { const b = v.boards[d.id]; %>
+    <section class="card <%= d.accent %><%= focus === d.id ? ' focus' : '' %>" id="<%= d.id %>" aria-labelledby="gb-<%= d.id %>">
+      <h2 id="gb-<%= d.id %>" class="ds-pixel-h"><span class="ic" aria-hidden="true"><%= d.icon %></span><%- t('gtf.lb.b.' + d.id) %></h2>
+      <p class="desc"><%- t('gtf.lb.d.' + d.id, { n: v.survive_min }) %></p>
+      <% if (!b.rows.length) { %>
+        <p class="note"><%- t('gtf.lb.empty') %></p>
+      <% } else { %>
+        <ol><%- b.rows.slice(0, SHOW).map((r) => row(d, r)).join('') %></ol>
+        <% if (b.rows.length > SHOW) { %>
+        <details><summary><%- t('gtf.lb.more', { n: b.rows.length }) %></summary><ol><%- b.rows.slice(SHOW).map((r) => row(d, r)).join('') %></ol></details>
+        <% } %>
+        <% if (b.me) { %><div class="gap" aria-hidden="true">⋯</div><ol><%- row(d, b.me) %></ol><% } %>
+        <p class="note"><%- t('gtf.lb.ranked', { count: b.total, n: b.total.toLocaleString('en-US') }) %></p>
+      <% } %>
+    </section>
+    <% }) %>
+  </div>
+  <% } %>
+
+  <section class="card violet gangs" aria-labelledby="gbGangs">
+    <p><b id="gbGangs">🎩 <%- t('gtf.lb.b.gangs') %></b> · <%- t('gtf.lb.gangs') %></p>
+    <a class="btn small" href="/gtf/gangs"><%- t('gtf.lb.gangs_go') %> ›</a>
+  </section>
+
+  <p class="note"><%- t('gtf.lb.privacy', { cmd: '<code>!incognito</code>', link: '<a href="/settings/privacy">' + t('gtf.lb.privacy_link') + '</a>' }) %>
+    <% if (v.mode === 'mirror') { %> <%- t('gtf.lb.mirror') %><% if (v.ts) { %> · <span data-ago="<%= v.ts %>"></span><% } %><% } %>
+    <%- t('gtf.lb.chat', { cmds: '<code>!heisttop</code> <code>!arenatop</code> <code>!brawltop</code> <code>!dueltop</code>' }) %></p>
+  <%- include('partials/gangs-avatars') %>
+</main>
+</body>
+</html>
