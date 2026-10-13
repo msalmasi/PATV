@@ -7533,6 +7533,7 @@
   "owner.ao.10": "der Hauptschalter für das Auto-Thema und das kürzeste Auto-Thema-Intervall, das Besitzer wählen dürfen",
   "owner.ao.11": "Hauswerbung (!promo) und Sponsoren",
   "owner.ao.12": "die Mikro-Slots und die globalen Regeln des Transkribierers (Erlaubnisliste für automatische Erkennung, Sprachen pro Person)",
+  "owner.ao.13": "die Hauptschalter, die einen Befehl oder eine Funktion überall ausschalten (deine Einstellung bleibt erhalten)",
   "owner.lang_auto": "Automatisch (dem Chat folgen)",
   "owner.cap.roomvibe.title": "Stimmung deines Raums festlegen",
   "owner.cap.roomvibe.howto": "Pepe lernt, wie in deinem Raum gesprochen wird, und passt sich an. Lege den Typ selbst fest (chillig, Streit, flirty...), wie heftig er austeilt, füge Notizen hinzu, die er wissen sollte, oder sperre die Stimmung, damit er sie nicht ständig neu lernt. !roomvibe allein zeigt sie an.",
@@ -8304,6 +8305,8 @@
   "owner.cap.room_autotopic.howto": "Schalte das automatische Thema ein oder aus und wähle, wie oft es wechselt (alle 15 Minuten bis alle 3 Stunden), aber nie häufiger, als Pepes Admins erlauben. Solange du nichts wählst, folgt dein Raum Pepes Standard.",
   "owner.cap.room_stt.title": "Wähle die Sprache, in der Pepe das Mikro deines Raums transkribiert",
   "owner.cap.room_stt.howto": "Folge Pepes Standard, lass jeden Clip automatisch erkennen oder lege eine Sprache für einen Raum fest, in dem sie gesprochen wird. Es geht nur um die Transkription: Die Sprache, in der Pepe antwortet, ist seine Chat-Sprache.",
+  "owner.cap.room_tts.title": "Wähle die Sprache, in der Pepe in deinem Raum spricht",
+  "owner.cap.room_tts.howto": "Pepe spricht jede Zeile standardmäßig in der Sprache, in der sie geschrieben ist. Lege für einen Raum, der eine bestimmte Sprache spricht, eine feste Sprache fest, oder geh zurück zum Standard. Eine Stimme, die deine Wahl nicht sprechen kann, spricht stattdessen Englisch, und deine Besitzerseite sagt dir das.",
   "owner.cap.web_room_topic.title": "Raum-Thema festlegen",
   "owner.cap.web_room_topic.howto": "Tippe das Thema deines Raums auf dieser Seite ein, und Pepe setzt es in deinem verbundenen Raum.",
   "owner.cap.web_pad_site.title": "Wähle, was Pepe auf deiner Pad-Seite macht",
@@ -8422,5 +8425,14 @@
   "pad.bets.poll_ended": "beendet",
   "pad.bets.new_market": "Markt",
   "pad.bets.new_pool": "Pool",
-  "pad.bets.new_poll": "Umfrage"
+  "pad.bets.new_poll": "Umfrage",
+  "owner.set_tts_language": "Pepes Sprechsprache",
+  "owner.set_tts_language_why": "Die Sprache, in der Pepe hier übers Mikrofon spricht. Auto (Pepes Standard) spricht jede Zeile in der Sprache, in der sie geschrieben ist; wähle eine feste Sprache für einen Raum, der eine bestimmte Sprache spricht. Das betrifft nur die Stimme - in welcher Sprache er chattet, bestimmt die Einstellung Sprache.",
+  "owner.tts_default": "Pepes Standard",
+  "owner.tts_auto": "Auto (die Sprache, in der jede Zeile geschrieben ist)",
+  "owner.tts_global": "Pepes Standard ist {lang}.",
+  "owner.tts_fallback": "Die Stimme des Raums ({voice}) kann {lang} nicht sprechen, deshalb spricht Pepe hier Englisch, bis sich die Stimme ändert.",
+  "owner.tts_not_voice": "nicht mit dieser Stimme",
+  "owner.master_off": "Von PATV-Admins ausgeschaltet",
+  "owner.master_off_why": "Es ist gerade in jedem Raum ausgeschaltet. Deine Einstellung bleibt erhalten und kehrt zurück, sobald sie es wieder einschalten."
 }

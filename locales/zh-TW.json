@@ -7430,6 +7430,7 @@
   "owner.ao.10": "自動主題的總開關，以及房主可以選擇的最短自動主題間隔",
   "owner.ao.11": "站內廣告（!promo）與贊助商",
   "owner.ao.12": "麥克風欄位，以及轉錄器的全域規則（自動偵測允許清單、每人語言）",
+  "owner.ao.13": "在所有房間關閉某項指令或功能的總開關（你的設定會保留）",
   "owner.lang_auto": "自動（跟隨聊天）",
   "owner.cap.roomvibe.title": "設定你的房間氛圍",
   "owner.cap.roomvibe.howto": "Pepe 會學習你的房間說話的方式並配合。你可以自行設定類型（悠閒、吵架、調情……）、他要毒舌到什麼程度、加入他該知道的備註，或鎖定氛圍讓他不再重新學習。單獨輸入 !roomvibe 即可查看。",
@@ -8199,6 +8200,8 @@
   "owner.cap.room_autotopic.howto": "開啟或關閉自動主題，並選擇頻率（每 15 分鐘至每 3 小時），但不會超過 Pepe 管理員允許的頻率。在你選擇之前，你的房間會遵循 Pepe 的預設值。",
   "owner.cap.room_stt.title": "選擇 Pepe 轉錄你房間麥克風所用的語言",
   "owner.cap.room_stt.howto": "遵循 Pepe 的預設、為每段錄音自動偵測，或為說該語言的房間固定一種語言。這只影響轉錄：Pepe 回覆所用的語言是他的聊天語言。",
+  "owner.cap.room_tts.title": "選擇 Pepe 在你房間說的語言",
+  "owner.cap.room_tts.howto": "Pepe 預設會以每句話寫的語言說話。可為會說該語言的房間固定一種語言，或恢復預設。若語音無法說你選的語言，會改用英文，你的主人頁面也會標示。",
   "owner.cap.web_room_topic.title": "設定房間主題",
   "owner.cap.web_room_topic.howto": "在本頁輸入你房間的主題，Pepe 就會將它設定到你已連結的房間。",
   "owner.cap.web_pad_site.title": "選擇 Pepe 在你小站頁面上的行為",
@@ -8310,5 +8313,14 @@
   "pad.bets.poll_ended": "已結束",
   "pad.bets.new_market": "市場",
   "pad.bets.new_pool": "對賭池",
-  "pad.bets.new_poll": "投票"
+  "pad.bets.new_poll": "投票",
+  "owner.set_tts_language": "Pepe 的說話語言",
+  "owner.set_tts_language_why": "Pepe 在此處麥克風上說的語言。自動（Pepe 的預設）會以每句話寫的語言發音；若房間使用某種語言，可選定該語言。這只影響語音，他聊天用的語言請在「語言」設定中變更。",
+  "owner.tts_default": "Pepe 的預設",
+  "owner.tts_auto": "自動（每句話所寫的語言）",
+  "owner.tts_global": "Pepe 的預設為 {lang}。",
+  "owner.tts_fallback": "房間的語音（{voice}）無法說 {lang}，因此在語音變更前，Pepe 在此改說英文。",
+  "owner.tts_not_voice": "此語音不支援",
+  "owner.master_off": "已由 PATV 管理員關閉",
+  "owner.master_off_why": "目前在所有房間都已關閉。你的設定會保留，待管理員重新開啟時會恢復。"
 }

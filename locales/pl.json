@@ -7739,6 +7739,7 @@
   "owner.ao.10": "główny przełącznik automatycznego tematu i najkrótszy interwał automatycznego tematu, jaki właściciele mogą wybrać",
   "owner.ao.11": "domowe reklamy (!promo) i sponsorzy",
   "owner.ao.12": "sloty mikrofonu i globalne reguły transkrypcji (lista dozwolonych do auto-wykrywania, języki dla poszczególnych osób)",
+  "owner.ao.13": "główne przełączniki, które wyłączają polecenie lub funkcję wszędzie (twoje ustawienie zostaje zachowane)",
   "owner.lang_auto": "Auto (wg czatu)",
   "owner.cap.roomvibe.title": "Ustaw klimat swojego pokoju",
   "owner.cap.roomvibe.howto": "Pepe uczy się, jak mówi twój pokój, i dopasowuje się do niego. Ustaw typ samodzielnie (spokojny, kłótliwy, flirciarski...), określ, jak mocno dogryza, dodaj notatki, które powinien znać, albo zablokuj klimat, żeby przestał uczyć się go od nowa. Samo !roomvibe pokazuje klimat.",
@@ -8514,6 +8515,8 @@
   "owner.cap.room_autotopic.howto": "Włącz lub wyłącz automatyczny temat i wybierz częstotliwość (od co 15 minut do co 3 godziny), nigdy częściej, niż pozwalają administratorzy Pepe. Dopóki nie wybierzesz, twój pokój korzysta z domyślnych ustawień Pepe.",
   "owner.cap.room_stt.title": "Wybierz język, w którym Pepe transkrybuje mikrofon twojego pokoju",
   "owner.cap.room_stt.howto": "Użyj domyślnego ustawienia Pepe, automatycznego wykrywania w każdym klipie lub stałego języka dla pokoju, który nim mówi. To tylko transkrypcja: językiem, w jakim Pepe odpowiada, jest jego język czatu.",
+  "owner.cap.room_tts.title": "Wybierz język, którym Pepe mówi w twoim pokoju",
+  "owner.cap.room_tts.howto": "Pepe domyślnie mówi każdą kwestię w języku, w którym jest napisana. Ustaw stały język dla pokoju, który nim mówi, albo wróć do domyślnego. Głos, który nie potrafi mówić wybranym językiem, mówi zamiast tego po angielsku, a twoja strona właściciela o tym informuje.",
   "owner.cap.web_room_topic.title": "Ustaw temat pokoju",
   "owner.cap.web_room_topic.howto": "Wpisz temat pokoju na tej stronie, a Pepe ustawi go w twoim połączonym pokoju.",
   "owner.cap.web_pad_site.title": "Wybierz, co Pepe robi na stronie twojego padu",
@@ -8646,5 +8649,14 @@
   "pad.bets.poll_ended": "zakończona",
   "pad.bets.new_market": "Rynek",
   "pad.bets.new_pool": "Pula",
-  "pad.bets.new_poll": "Ankieta"
+  "pad.bets.new_poll": "Ankieta",
+  "owner.set_tts_language": "Język mówienia Pepe'a",
+  "owner.set_tts_language_why": "Język, w którym Pepe mówi tutaj przez mikrofon. Auto (domyślne Pepe'a) mówi każdą kwestię w języku, w którym jest napisana; wybierz jeden dla pokoju, który nim mówi. To dotyczy tylko głosu - językiem, w którym pisze na czacie, jest ustawienie Język.",
+  "owner.tts_default": "Domyślne Pepe'a",
+  "owner.tts_auto": "Auto (język, w którym napisana jest każda kwestia)",
+  "owner.tts_global": "Domyślnym językiem Pepe'a jest {lang}.",
+  "owner.tts_fallback": "Głos pokoju ({voice}) nie potrafi mówić w języku {lang}, więc Pepe mówi tutaj po angielsku, dopóki głos się nie zmieni.",
+  "owner.tts_not_voice": "nie z tym głosem",
+  "owner.master_off": "Wyłączone przez administratorów PATV",
+  "owner.master_off_why": "Jest teraz wyłączone we wszystkich pokojach. Twoje ustawienie zostaje zachowane i wróci, gdy znów je włączą."
 }

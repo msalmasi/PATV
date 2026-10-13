@@ -7430,6 +7430,7 @@
   "owner.ao.10": "자동 주제의 마스터 스위치와 방 주인이 고를 수 있는 가장 짧은 자동 주제 간격",
   "owner.ao.11": "하우스 광고 (!promo)와 스폰서",
   "owner.ao.12": "마이크 슬롯과 음성 변환기의 전역 규칙(자동 감지 허용 목록, 사람별 언어)",
+  "owner.ao.13": "명령어나 기능을 모든 곳에서 끄는 마스터 스위치예요 (내 설정은 유지돼요)",
   "owner.lang_auto": "자동 (채팅을 따름)",
   "owner.cap.roomvibe.title": "방 분위기 설정하기",
   "owner.cap.roomvibe.howto": "Pepe가 방의 대화 방식을 배우고 거기에 맞춰요. 분위기 유형(차분함, 싸움, 플러팅 등)을 직접 정하고, Pepe가 얼마나 세게 놀릴지 정하고, 알아야 할 메모를 추가하거나, 분위기를 고정해서 Pepe가 다시 배우지 않게 할 수 있어요. !roomvibe만 입력하면 현재 분위기를 보여줘요.",
@@ -8199,6 +8200,8 @@
   "owner.cap.room_autotopic.howto": "자동 주제를 켜거나 끄고 주기를 고를 수 있어요 (15분마다부터 3시간마다까지). Pepe 관리자가 허용하는 것보다 더 자주는 안 돼요. 직접 고르기 전까지는 Pepe의 기본값을 따라요.",
   "owner.cap.room_stt.title": "Pepe가 방 마이크를 받아 적을 언어 고르기",
   "owner.cap.room_stt.howto": "Pepe의 기본값을 따르거나, 클립마다 언어를 자동 감지하거나, 해당 언어를 쓰는 방이라면 한 가지 언어로 고정할 수 있어요. 받아쓰기에만 적용돼요. Pepe가 답하는 언어는 Pepe의 채팅 언어예요.",
+  "owner.cap.room_tts.title": "내 방에서 Pepe가 말할 언어 고르기",
+  "owner.cap.room_tts.howto": "Pepe는 기본적으로 각 문장을 그 문장이 쓰인 언어로 말해요. 그 언어를 쓰는 방이라면 언어를 고정하거나 기본값으로 되돌릴 수 있어요. 고른 언어를 말할 수 없는 음성은 대신 영어로 말하고, 소유자 페이지에 그렇게 표시돼요.",
   "owner.cap.web_room_topic.title": "방 주제 설정하기",
   "owner.cap.web_room_topic.howto": "이 페이지에 방 주제를 입력하면 Pepe가 연결된 방에 설정해요.",
   "owner.cap.web_pad_site.title": "패드 페이지에서 Pepe가 하는 일 고르기",
@@ -8310,5 +8313,14 @@
   "pad.bets.poll_ended": "종료됨",
   "pad.bets.new_market": "마켓",
   "pad.bets.new_pool": "풀",
-  "pad.bets.new_poll": "투표"
+  "pad.bets.new_poll": "투표",
+  "owner.set_tts_language": "Pepe의 말하기 언어",
+  "owner.set_tts_language_why": "여기 마이크에서 Pepe가 말하는 언어예요. 자동(Pepe 기본값)은 각 문장을 쓰인 언어로 말하고, 그 언어를 쓰는 방이라면 하나를 고를 수 있어요. 이건 음성만 바꾸고, Pepe가 채팅하는 언어는 언어 설정에서 바꿔요.",
+  "owner.tts_default": "Pepe 기본값",
+  "owner.tts_auto": "자동 (각 문장이 쓰인 언어)",
+  "owner.tts_global": "Pepe 기본값은 {lang}이에요.",
+  "owner.tts_fallback": "이 방의 음성({voice})은 {lang}을 말할 수 없어서, 음성이 바뀔 때까지 여기서 Pepe는 영어로 말해요.",
+  "owner.tts_not_voice": "이 음성으로는 안 돼요",
+  "owner.master_off": "PATV 관리자가 껐어요",
+  "owner.master_off_why": "지금은 모든 방에서 꺼져 있어요. 내 설정은 유지되고, 다시 켜지면 돌아와요."
 }

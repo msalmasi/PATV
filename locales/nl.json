@@ -7533,6 +7533,7 @@
   "owner.ao.10": "de hoofdschakelaar van het automatische onderwerp en het kortste interval voor automatische onderwerpen dat eigenaren mogen kiezen",
   "owner.ao.11": "huisadvertenties (!promo) en sponsors",
   "owner.ao.12": "de micsloten en de globale regels van de transcriber (toegestane lijst voor automatische detectie, talen per persoon)",
+  "owner.ao.13": "de hoofdschakelaars die een commando of functie overal uitzetten (je instelling blijft bewaard)",
   "owner.lang_auto": "Auto (volg de chat)",
   "owner.cap.roomvibe.title": "Stel de sfeer van je room in",
   "owner.cap.roomvibe.howto": "Pepe leert hoe je room praat en past zich daarop aan. Stel het type zelf in (chill, ruzie, flirterig...), bepaal hoe scherp hij roast, voeg notities toe die hij moet weten, of vergrendel de sfeer zodat hij hem niet steeds opnieuw leert. !roomvibe apart laat hem zien.",
@@ -8304,6 +8305,8 @@
   "owner.cap.room_autotopic.howto": "Zet het automatische onderwerp aan of uit en kies hoe vaak (elke 15 minuten tot elke 3 uur), nooit vaker dan Pepe's beheerders toestaan. Tot je kiest, volgt je room Pepe's standaard.",
   "owner.cap.room_stt.title": "Kies de taal waarin Pepe de microfoon van je room transcribeert",
   "owner.cap.room_stt.howto": "Volg Pepe's standaard, laat elke clip automatisch detecteren, of kies één vaste taal voor een room die die spreekt. Het gaat alleen om de transcriptie: de taal waarin Pepe antwoordt is zijn chattaal.",
+  "owner.cap.room_tts.title": "Kies de taal waarin Pepe in je room spreekt",
+  "owner.cap.room_tts.howto": "Pepe spreekt elke regel standaard uit in de taal waarin hij geschreven is. Zet één taal vast voor een room die die taal spreekt, of ga terug naar de standaard. Een stem die jouw keuze niet kan spreken, spreekt in plaats daarvan Engels, en je eigenpagina laat dat zien.",
   "owner.cap.web_room_topic.title": "Stel het roomonderwerp in",
   "owner.cap.web_room_topic.howto": "Typ het onderwerp van je room op deze pagina en Pepe stelt het in in je verbonden room.",
   "owner.cap.web_pad_site.title": "Kies wat Pepe doet op de pagina van je pad",
@@ -8422,5 +8425,14 @@
   "pad.bets.poll_ended": "afgelopen",
   "pad.bets.new_market": "Markt",
   "pad.bets.new_pool": "Pool",
-  "pad.bets.new_poll": "Peiling"
+  "pad.bets.new_poll": "Peiling",
+  "owner.set_tts_language": "Pepes spreektaal",
+  "owner.set_tts_language_why": "De taal waarin Pepe hier via de microfoon spreekt. Auto (Pepes standaard) spreekt elke regel uit in de taal waarin hij geschreven is; kies één taal voor een room die die taal spreekt. Dit geldt alleen voor de stem, de taal waarin hij chat is de instelling Taal.",
+  "owner.tts_default": "Pepes standaard",
+  "owner.tts_auto": "Auto (de taal waarin elke regel geschreven is)",
+  "owner.tts_global": "Pepes standaard is {lang}.",
+  "owner.tts_fallback": "De stem van de room ({voice}) kan {lang} niet spreken, dus Pepe spreekt hier Engels tot de stem verandert.",
+  "owner.tts_not_voice": "niet met deze stem",
+  "owner.master_off": "Uitgeschakeld door PATV-beheerders",
+  "owner.master_off_why": "Het staat nu in elke room uit. Je instelling blijft bewaard en komt terug zodra ze het weer aanzetten."
 }

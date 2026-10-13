@@ -7533,6 +7533,7 @@
   "owner.ao.10": "otomatik konunun ana anahtarı ve sahiplerin seçebileceği en kısa otomatik konu aralığı",
   "owner.ao.11": "ev reklamları (!promo) ve sponsorlar",
   "owner.ao.12": "mikrofon slotları ve çözümleyicinin genel kuralları (otomatik algılama izin listesi, kişi başı diller)",
+  "owner.ao.13": "Bir komutu veya özelliği her yerde kapatan ana anahtarlar (ayarın korunur)",
   "owner.lang_auto": "Otomatik (sohbeti takip et)",
   "owner.cap.roomvibe.title": "Odanın havasını ayarla",
   "owner.cap.roomvibe.howto": "Pepe odanın konuşma tarzını öğrenir ve ona uyar. Türü kendin ayarla (sakin, kavga, flörtöz...), ne kadar sert dalga geçeceğini belirle, bilmesi gereken notlar ekle ya da havayı kilitle ki yeniden öğrenmesin. Tek başına !roomvibe yazarsan onu gösterir.",
@@ -8304,6 +8305,8 @@
   "owner.cap.room_autotopic.howto": "Otomatik konuyu açıp kapatabilir ve sıklığını seçebilirsin (15 dakikada bir ile 3 saatte bir arası), Pepe'nin yöneticilerinin izin verdiğinden daha sık olmaz. Sen seçene kadar odan Pepe'nin varsayılanını izler.",
   "owner.cap.room_stt.title": "Pepe'nin odanın mikrofonunu çevireceği dili seç",
   "owner.cap.room_stt.howto": "Pepe'nin varsayılanını izle, her klibin dilini otomatik algıla ya da odada bu dili konuşuluyorsa tek bir dili sabitle. Bu yalnızca çeviri için; Pepe'nin yanıt verdiği dil, sohbet dilidir.",
+  "owner.cap.room_tts.title": "Pepe'nin odada konuştuğu dili seç",
+  "owner.cap.room_tts.howto": "Pepe her satırı varsayılan olarak yazıldığı dilde konuşur. Bu dili konuşan bir oda için dili sabitle ya da varsayılana dön. Seçtiğin dili seslendiremeyen bir ses bunun yerine İngilizce konuşur ve sahip sayfan bunu belirtir.",
   "owner.cap.web_room_topic.title": "Oda konusunu belirle",
   "owner.cap.web_room_topic.howto": "Odanın konusunu bu sayfaya yaz, Pepe bunu bağlı odanda ayarlar.",
   "owner.cap.web_pad_site.title": "Pepe'nin pad sayfanda neler yapacağını seç",
@@ -8422,5 +8425,14 @@
   "pad.bets.poll_ended": "bitti",
   "pad.bets.new_market": "Piyasa",
   "pad.bets.new_pool": "Havuz",
-  "pad.bets.new_poll": "Anket"
+  "pad.bets.new_poll": "Anket",
+  "owner.set_tts_language": "Pepe'nin konuşma dili",
+  "owner.set_tts_language_why": "Pepe'nin buradaki mikrofonda konuştuğu dil. Otomatik (Pepe'nin varsayılanı) her satırı yazıldığı dilde konuşur; bu dili konuşan bir oda için bir dil seç. Bu yalnızca ses için - sohbet ettiği dil Dil ayarıdır.",
+  "owner.tts_default": "Pepe'nin varsayılanı",
+  "owner.tts_auto": "Otomatik (her satırın yazıldığı dil)",
+  "owner.tts_global": "Pepe'nin varsayılanı {lang}.",
+  "owner.tts_fallback": "Odanın sesi ({voice}) {lang} dilini konuşamıyor, bu yüzden ses değişene kadar Pepe burada İngilizce konuşur.",
+  "owner.tts_not_voice": "bu sesle olmaz",
+  "owner.master_off": "PATV yöneticileri tarafından kapatıldı",
+  "owner.master_off_why": "Şu anda her odada kapalı. Ayarın korunur ve yeniden açıldığında geri gelir."
 }

@@ -7591,6 +7591,7 @@
   "owner.ao.10": "o interruptor geral do auto-tópico e o menor intervalo de auto-tópico que os donos podem escolher",
   "owner.ao.11": "anúncios da casa (!promo) e patrocinadores",
   "owner.ao.12": "os slots de microfone e as regras globais do transcritor (lista de permissões de detecção automática, idiomas por pessoa)",
+  "owner.ao.13": "as chaves gerais que desligam um comando ou recurso em todos os lugares (sua configuração é mantida)",
   "owner.lang_auto": "Automático (seguir o chat)",
   "owner.cap.roomvibe.title": "Definir o clima da sua sala",
   "owner.cap.roomvibe.howto": "O Pepe aprende como a sua sala fala e se adapta a ela. Defina o tipo você mesmo (tranquilo, briga, paquera...), quão pesado ele faz as zoações, adicione notas que ele deve saber, ou trave o clima para ele parar de reaprender. !roomvibe sozinho mostra o clima.",
@@ -8364,6 +8365,8 @@
   "owner.cap.room_autotopic.howto": "Ligue ou desligue o tópico automático e escolha a frequência (de 15 minutos a cada 3 horas), nunca com mais frequência do que os admins do Pepe permitem. Até você escolher, sua sala segue o padrão do Pepe.",
   "owner.cap.room_stt.title": "Escolha o idioma em que o Pepe transcreve o microfone da sua sala",
   "owner.cap.room_stt.howto": "Seguir o padrão do Pepe, detectar o idioma de cada clipe automaticamente, ou fixar um idioma para uma sala que fala esse idioma. É só a transcrição: o idioma em que o Pepe responde é o idioma do chat dele.",
+  "owner.cap.room_tts.title": "Escolha o idioma em que o Pepe fala na sua sala",
+  "owner.cap.room_tts.howto": "O Pepe fala cada frase no idioma em que ela está escrita, por padrão. Fixe um idioma para uma sala que o fale, ou volte ao padrão. Uma voz que não consegue falar o idioma escolhido fala em inglês, e sua página de dono mostra isso.",
   "owner.cap.web_room_topic.title": "Definir o tópico da sala",
   "owner.cap.web_room_topic.howto": "Digite o tópico da sua sala nesta página e o Pepe o define na sua sala conectada.",
   "owner.cap.web_pad_site.title": "Escolha o que o Pepe faz na página do seu pad",
@@ -8489,5 +8492,14 @@
   "pad.bets.poll_ended": "encerrada",
   "pad.bets.new_market": "Mercado",
   "pad.bets.new_pool": "Bolão",
-  "pad.bets.new_poll": "Enquete"
+  "pad.bets.new_poll": "Enquete",
+  "owner.set_tts_language": "Idioma de fala do Pepe",
+  "owner.set_tts_language_why": "O idioma em que o Pepe fala no microfone aqui. Automático (padrão do Pepe) fala cada frase no idioma em que ela está escrita; escolha um para uma sala que fale esse idioma. Isso vale só para a voz - o idioma em que ele conversa é a configuração de Idioma.",
+  "owner.tts_default": "Padrão do Pepe",
+  "owner.tts_auto": "Automático (o idioma em que cada frase está escrita)",
+  "owner.tts_global": "O padrão do Pepe é {lang}.",
+  "owner.tts_fallback": "A voz da sala ({voice}) não consegue falar {lang}, então o Pepe fala inglês aqui até a voz mudar.",
+  "owner.tts_not_voice": "não com esta voz",
+  "owner.master_off": "Desligado pelos admins da PATV",
+  "owner.master_off_why": "Está desligado em todas as salas agora. Sua configuração é mantida e volta quando eles ligarem de novo."
 }

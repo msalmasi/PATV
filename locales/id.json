@@ -7432,6 +7432,7 @@
   "owner.ao.10": "sakelar utama auto-topic dan interval auto-topic terpendek yang boleh dipilih owner",
   "owner.ao.11": "iklan rumah (!promo) dan sponsor",
   "owner.ao.12": "slot mic dan aturan global transkriber (daftar izin deteksi otomatis, bahasa per orang)",
+  "owner.ao.13": "saklar utama yang mematikan perintah atau fitur di mana-mana (pengaturanmu tetap tersimpan)",
   "owner.lang_auto": "Auto (ikuti chat)",
   "owner.cap.roomvibe.title": "Atur vibe room kamu",
   "owner.cap.roomvibe.howto": "Pepe belajar cara room kamu ngobrol dan menyesuaikan diri. Atur jenisnya sendiri (santai, ribut, genit...), seberapa pedas dia nyindir, tambahkan catatan yang perlu dia tahu, atau kunci vibe-nya supaya dia berhenti mempelajarinya ulang. !roomvibe saja akan menampilkannya.",
@@ -8201,6 +8202,8 @@
   "owner.cap.room_autotopic.howto": "Nyalakan atau matikan topik otomatis dan pilih seberapa sering (setiap 15 menit sampai setiap 3 jam), tidak pernah lebih sering dari yang diizinkan admin Pepe. Sampai kamu memilih, room kamu mengikuti default Pepe.",
   "owner.cap.room_stt.title": "Pilih bahasa transkripsi mic room kamu oleh Pepe",
   "owner.cap.room_stt.howto": "Ikuti default Pepe, deteksi otomatis tiap klip, atau tetapkan satu bahasa untuk room yang memakainya. Ini hanya transkripsi: bahasa jawaban Pepe tetap bahasa chat-nya.",
+  "owner.cap.room_tts.title": "Pilih bahasa yang diucapkan Pepe di room-mu",
+  "owner.cap.room_tts.howto": "Pepe mengucapkan tiap baris dalam bahasa tempat baris itu ditulis secara default. Tetapkan satu bahasa untuk room yang memakainya, atau kembali ke default. Suara yang tidak bisa mengucapkan pilihanmu akan berbicara dalam bahasa Inggris, dan halaman owner-mu akan memberitahukannya.",
   "owner.cap.web_room_topic.title": "Atur topik room",
   "owner.cap.web_room_topic.howto": "Ketik topik room kamu di halaman ini dan Pepe akan mengaturnya di room kamu yang terhubung.",
   "owner.cap.web_pad_site.title": "Pilih apa yang dilakukan Pepe di halaman pad kamu",
@@ -8312,5 +8315,14 @@
   "pad.bets.poll_ended": "selesai",
   "pad.bets.new_market": "Pasar",
   "pad.bets.new_pool": "Kolam",
-  "pad.bets.new_poll": "Polling"
+  "pad.bets.new_poll": "Polling",
+  "owner.set_tts_language": "Bahasa bicara Pepe",
+  "owner.set_tts_language_why": "Bahasa yang dipakai Pepe saat berbicara lewat mic di sini. Otomatis (default Pepe) mengucapkan tiap baris dalam bahasa tempat baris itu ditulis; pilih satu untuk room yang memakainya. Ini hanya untuk suara - bahasa saat dia chat adalah pengaturan Bahasa.",
+  "owner.tts_default": "Default Pepe",
+  "owner.tts_auto": "Otomatis (bahasa tiap baris ditulis)",
+  "owner.tts_global": "Default Pepe adalah {lang}.",
+  "owner.tts_fallback": "Suara room ({voice}) tidak bisa mengucapkan {lang}, jadi Pepe berbicara dalam bahasa Inggris di sini sampai suaranya diganti.",
+  "owner.tts_not_voice": "tidak dengan suara ini",
+  "owner.master_off": "Dimatikan oleh admin PATV",
+  "owner.master_off_why": "Saat ini dimatikan di semua room. Pengaturanmu tetap tersimpan dan akan kembali saat mereka menyalakannya lagi."
 }

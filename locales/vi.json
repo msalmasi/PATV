@@ -7430,6 +7430,7 @@
   "owner.ao.10": "công tắc tổng của chủ đề tự động và khoảng thời gian chủ đề tự động ngắn nhất mà chủ phòng có thể chọn",
   "owner.ao.11": "quảng cáo trong nhà (!promo) và nhà tài trợ",
   "owner.ao.12": "các vị trí mic và quy tắc chung của bộ chuyển giọng nói (danh sách cho phép tự nhận diện, ngôn ngữ riêng từng người)",
+  "owner.ao.13": "các công tắc tổng bật/tắt một lệnh hoặc tính năng ở mọi nơi (cài đặt của bạn vẫn được giữ lại)",
   "owner.lang_auto": "Tự động (theo chat)",
   "owner.cap.roomvibe.title": "Đặt không khí phòng của bạn",
   "owner.cap.roomvibe.howto": "Pepe học cách phòng của bạn nói chuyện và bắt chước theo. Tự chọn kiểu (thư giãn, đấu khẩu, tán tỉnh...), đặt mức độ châm chọc của cậu ấy, thêm ghi chú để cậu ấy biết, hoặc khóa không khí để cậu ấy thôi học lại. !roomvibe đứng một mình sẽ hiển thị nó.",
@@ -8199,6 +8200,8 @@
   "owner.cap.room_autotopic.howto": "Bật hoặc tắt chủ đề tự động và chọn tần suất (từ 15 phút đến 3 giờ một lần), không bao giờ thường xuyên hơn mức quản trị viên Pepe cho phép. Cho đến khi bạn chọn, phòng của bạn theo mặc định của Pepe.",
   "owner.cap.room_stt.title": "Chọn ngôn ngữ Pepe phiên âm micro phòng của bạn",
   "owner.cap.room_stt.howto": "Theo mặc định của Pepe, tự nhận diện ngôn ngữ cho mỗi clip, hoặc cố định một ngôn ngữ cho phòng dùng ngôn ngữ đó. Đây chỉ là phiên âm: ngôn ngữ Pepe trả lời là ngôn ngữ chat của Pepe.",
+  "owner.cap.room_tts.title": "Chọn ngôn ngữ Pepe nói trong phòng của bạn",
+  "owner.cap.room_tts.howto": "Mặc định, Pepe đọc từng dòng bằng ngôn ngữ mà dòng đó được viết. Bạn có thể cố định một ngôn ngữ cho phòng nào nói ngôn ngữ đó, hoặc quay lại mặc định. Giọng nào không nói được ngôn ngữ bạn chọn sẽ nói tiếng Anh thay thế, và trang chủ của bạn sẽ thông báo điều đó.",
   "owner.cap.web_room_topic.title": "Đặt chủ đề phòng",
   "owner.cap.web_room_topic.howto": "Nhập chủ đề phòng của bạn trên trang này và Pepe sẽ đặt nó trong phòng đã kết nối.",
   "owner.cap.web_pad_site.title": "Chọn những gì Pepe làm trên trang pad của bạn",
@@ -8310,5 +8313,14 @@
   "pad.bets.poll_ended": "đã kết thúc",
   "pad.bets.new_market": "Thị trường",
   "pad.bets.new_pool": "Hồ cược",
-  "pad.bets.new_poll": "Bình chọn"
+  "pad.bets.new_poll": "Bình chọn",
+  "owner.set_tts_language": "Ngôn ngữ nói của Pepe",
+  "owner.set_tts_language_why": "Ngôn ngữ Pepe nói qua micro ở đây. Tự động (mặc định của Pepe) đọc từng dòng bằng ngôn ngữ mà dòng đó được viết; chọn một ngôn ngữ cho phòng nói ngôn ngữ đó. Đây chỉ là giọng nói - ngôn ngữ Pepe dùng để chat là cài đặt Ngôn ngữ.",
+  "owner.tts_default": "Mặc định của Pepe",
+  "owner.tts_auto": "Tự động (ngôn ngữ mà từng dòng được viết)",
+  "owner.tts_global": "Mặc định của Pepe là {lang}.",
+  "owner.tts_fallback": "Giọng của phòng ({voice}) không nói được {lang}, nên Pepe sẽ nói tiếng Anh ở đây cho đến khi đổi giọng.",
+  "owner.tts_not_voice": "không hỗ trợ với giọng này",
+  "owner.master_off": "Đã bị quản trị viên PATV tắt",
+  "owner.master_off_why": "Hiện đang tắt ở mọi phòng. Cài đặt của bạn vẫn được giữ và sẽ quay lại khi họ bật lại."
 }

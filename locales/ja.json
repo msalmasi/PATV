@@ -7430,6 +7430,7 @@
   "owner.ao.10": "自動トピックのメインスイッチと、オーナーが選べる最短の自動トピック間隔",
   "owner.ao.11": "ハウス広告（!promo）とスポンサー",
   "owner.ao.12": "マイク枠と文字起こしの全体ルール（自動検出の許可リスト、話者ごとの言語）",
+  "owner.ao.13": "すべてのルームでコマンドや機能をオフにするマスタースイッチです（あなたの設定は保持されます）",
   "owner.lang_auto": "自動（チャットに合わせる）",
   "owner.cap.roomvibe.title": "ルームの雰囲気を設定",
   "owner.cap.roomvibe.howto": "Pepeはルームの話し方を学習して合わせます。雰囲気の種類（まったり、バトル、いちゃいちゃなど）は自分で設定でき、Pepeのツッコミの強さや覚えておいてほしいメモも追加できます。雰囲気を固定すると、Pepeが学び直さなくなります。!roomvibe だけを入力すると現在の設定が表示されます。",
@@ -8199,6 +8200,8 @@
   "owner.cap.room_autotopic.howto": "自動トピックのオン/オフを切り替え、更新頻度（15分おきから3時間おきまで）を選べます。ただしPepeの管理者が許可する頻度を超えることはありません。選ぶまでは、ルームはPepeの既定の設定に従います。",
   "owner.cap.room_stt.title": "Pepeがルームのマイク音声を文字起こしする言語を選ぶ",
   "owner.cap.room_stt.howto": "Pepeの既定に従う、クリップごとに自動検出する、またはその言語を話すルーム向けに一つの言語に固定する、から選べます。これは文字起こしだけの設定です。Pepeが返答する言語はPepeのチャット言語で決まります。",
+  "owner.cap.room_tts.title": "ルームでPepeが話す言語を選ぶ",
+  "owner.cap.room_tts.howto": "Pepeは、デフォルトでは各発言を書かれた言語で話します。その言語を話すルームでは言語を固定でき、デフォルトに戻すこともできます。選んだ言語を話せない音声の場合は英語で話し、その旨がオーナーページに表示されます。",
   "owner.cap.web_room_topic.title": "ルームのトピックを設定",
   "owner.cap.web_room_topic.howto": "このページにルームのトピックを入力すると、Pepeが接続中のルームに設定します。",
   "owner.cap.web_pad_site.title": "パッドページでPepeに何をさせるかを選ぶ",
@@ -8310,5 +8313,14 @@
   "pad.bets.poll_ended": "終了",
   "pad.bets.new_market": "マーケット",
   "pad.bets.new_pool": "プール",
-  "pad.bets.new_poll": "投票"
+  "pad.bets.new_poll": "投票",
+  "owner.set_tts_language": "Pepeの話す言語",
+  "owner.set_tts_language_why": "ここでマイクを通してPepeが話す言語です。自動（Pepeのデフォルト）では各発言を書かれた言語で話します。その言語を話すルームでは言語を固定できます。これは音声のみの設定で、チャットで使う言語は言語設定に従います。",
+  "owner.tts_default": "Pepeのデフォルト",
+  "owner.tts_auto": "自動（各発言が書かれた言語）",
+  "owner.tts_global": "Pepeのデフォルトは{lang}です。",
+  "owner.tts_fallback": "このルームの音声（{voice}）は{lang}を話せないため、音声が変わるまでPepeはここで英語を話します。",
+  "owner.tts_not_voice": "この音声では不可",
+  "owner.master_off": "PATVの管理者がオフにしています",
+  "owner.master_off_why": "現在すべてのルームでオフになっています。あなたの設定は保持されており、再びオンになると元に戻ります。"
 }

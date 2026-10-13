@@ -7591,6 +7591,7 @@
   "owner.ao.10": "l'interruttore principale del topic automatico e l'intervallo minimo del topic automatico che i proprietari possono scegliere",
   "owner.ao.11": "annunci della casa (!promo) e sponsor",
   "owner.ao.12": "gli slot del microfono e le regole globali del trascrittore (lista di rilevamento automatico, lingue per persona)",
+  "owner.ao.13": "gli interruttori generali che disattivano un comando o una funzione ovunque (la tua impostazione viene mantenuta)",
   "owner.lang_auto": "Automatico (segue la chat)",
   "owner.cap.roomvibe.title": "Imposta l'atmosfera della tua stanza",
   "owner.cap.roomvibe.howto": "Pepe impara come parla la tua stanza e si adatta. Scegli tu il tipo (tranquilla, rissosa, civettuola...), quanto la prende in giro, aggiungi note che dovrebbe conoscere, oppure blocca l'atmosfera perché smetta di riimpararla. !roomvibe da solo la mostra.",
@@ -8364,6 +8365,8 @@
   "owner.cap.room_autotopic.howto": "Attiva o disattiva l'argomento automatico e scegli la frequenza (da ogni 15 minuti a ogni 3 ore), mai più spesso di quanto consentito dagli amministratori di Pepe. Finché non scegli, la tua stanza segue il predefinito di Pepe.",
   "owner.cap.room_stt.title": "Scegli la lingua in cui Pepe trascrive il microfono della tua stanza",
   "owner.cap.room_stt.howto": "Segui il predefinito di Pepe, rileva automaticamente la lingua di ogni clip, oppure fissa una lingua per una stanza che la parla. È solo la trascrizione: la lingua in cui Pepe risponde è la sua lingua di chat.",
+  "owner.cap.room_tts.title": "Scegli la lingua in cui Pepe parla nella tua stanza",
+  "owner.cap.room_tts.howto": "Pepe parla ogni battuta nella lingua in cui è scritta, per impostazione predefinita. Fissa una lingua per una stanza che la parla, oppure torna a quella predefinita. Una voce che non sa parlare la lingua scelta parla in inglese, e la tua pagina del proprietario lo segnala.",
   "owner.cap.web_room_topic.title": "Imposta l'argomento della stanza",
   "owner.cap.web_room_topic.howto": "Scrivi l'argomento della tua stanza in questa pagina e Pepe lo imposta nella stanza collegata.",
   "owner.cap.web_pad_site.title": "Scegli cosa fa Pepe nella pagina del tuo pad",
@@ -8489,5 +8492,14 @@
   "pad.bets.poll_ended": "terminato",
   "pad.bets.new_market": "Mercato",
   "pad.bets.new_pool": "Pool",
-  "pad.bets.new_poll": "Sondaggio"
+  "pad.bets.new_poll": "Sondaggio",
+  "owner.set_tts_language": "Lingua di Pepe per il parlato",
+  "owner.set_tts_language_why": "La lingua in cui Pepe parla al microfono qui. Automatico (predefinito di Pepe) parla ogni battuta nella lingua in cui è scritta; scegline una per una stanza che la parla. Riguarda solo la voce: la lingua in cui chatta è l'impostazione Lingua.",
+  "owner.tts_default": "Predefinito di Pepe",
+  "owner.tts_auto": "Automatico (la lingua in cui è scritta ogni battuta)",
+  "owner.tts_global": "Il predefinito di Pepe è {lang}.",
+  "owner.tts_fallback": "La voce della stanza ({voice}) non sa parlare {lang}, quindi qui Pepe parla in inglese finché la voce non cambia.",
+  "owner.tts_not_voice": "non con questa voce",
+  "owner.master_off": "Disattivato dagli admin di PATV",
+  "owner.master_off_why": "Al momento è disattivato in ogni stanza. La tua impostazione viene mantenuta e torna quando lo riattivano."
 }
