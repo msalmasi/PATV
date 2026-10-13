@@ -203,7 +203,9 @@ test("panel markup: Pepe's look section for admins only, thumbnails exist for ev
   // 1.99fo: the base picker + extras grid, with a thumbnail per base and per kawaii modifier
   assert.match(html, /id="plBases"/);
   assert.match(html, /id="plMods"/);
-  for (const id of ["base-pixel", "base-kawaii", "mod-bow", "mod-flowercrown", "mod-catears", "mod-strawberryhat", "mod-sparkles", "mod-headset", "mod-hearts"]) {
+  for (const id of ["base-pixel", "base-kawaii", "mod-bow", "mod-flowercrown", "mod-catears", "mod-strawberryhat", "mod-sparkles", "mod-headset", "mod-hearts",
+    // 1.99us: the VTuber base + its modifiers
+    "base-vtuber", "mod-catphones", "mod-stars", "mod-hearthands", "mod-chibi"]) {
     assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
   }
   // 1.99gn: the read-only "Automatic looks" strip (kawaii heist mask, game outfits, bottle service)
