@@ -7991,6 +7991,8 @@
   "ach.d.cf_hm_sale_1": "在抢劫市场上把一件抢劫物品卖给了其他玩家。",
   "ach.n.cf_hm_relic": "销赃人",
   "ach.d.cf_hm_relic": "在劫案市场上卖出一件稀有遗物（灌铅骰子或金库图纸）。",
+  "ach.n.cf_voice_clone": "池塘之声",
+  "ach.d.cf_voice_clone": "用 !clonemyvoice 克隆了你的声音：Pepe 现在能像你一样说话了。",
   "gtf.sheet.sell_link": "在抢劫市场上出售物品",
   "hm.soulbound": "灵魂绑定",
   "hm.soulbound_t": "灵魂绑定：遗物留在发现它的玩家身上。无法出售、交易或典当。",

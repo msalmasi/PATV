@@ -7991,6 +7991,8 @@
   "ach.d.cf_hm_sale_1": "在搶案市場把搶案道具賣給其他玩家。",
   "ach.n.cf_hm_relic": "銷贓者",
   "ach.d.cf_hm_relic": "在劫案市場上賣出一件稀有遺物（灌水骰子或金庫藍圖）。",
+  "ach.n.cf_voice_clone": "池塘之聲",
+  "ach.d.cf_voice_clone": "用 !clonemyvoice 複製了你的聲音：Pepe 現在也能像你一樣說話了。",
   "gtf.sheet.sell_link": "在搶案市場賣出道具",
   "hm.soulbound": "靈魂綁定",
   "hm.soulbound_t": "靈魂綁定：歸發現它的玩家所有，無法販售、交易或典當。",

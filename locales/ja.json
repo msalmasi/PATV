@@ -7991,6 +7991,8 @@
   "ach.d.cf_hm_sale_1": "強盗マーケットで別のプレイヤーに強盗アイテムを販売しました。",
   "ach.n.cf_hm_relic": "故買屋",
   "ach.d.cf_hm_relic": "強盗マーケットで珍しい遺物（細工サイコロまたは金庫の設計図）を売却しました。",
+  "ach.n.cf_voice_clone": "池の声",
+  "ach.d.cf_voice_clone": "!clonemyvoice で声をクローンしました。Pepeがあなたのように話せるようになりました。",
   "gtf.sheet.sell_link": "強盗マーケットでアイテムを販売",
   "hm.soulbound": "ソウルバウンド",
   "hm.soulbound_t": "ソウルバウンド：発見したプレイヤーの元に残ります。売却、交換、質入れはできません。",

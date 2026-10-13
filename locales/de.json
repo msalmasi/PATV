@@ -8102,6 +8102,8 @@
   "ach.d.cf_hm_sale_1": "Einen Coup-Gegenstand auf dem Coup-Markt an einen anderen Spieler verkauft.",
   "ach.n.cf_hm_relic": "Hehler",
   "ach.d.cf_hm_relic": "Hast eine seltene Reliquie (Gezinkte Würfel oder Tresor-Baupläne) auf dem Raubzug-Markt verkauft.",
+  "ach.n.cf_voice_clone": "Stimme des Teichs",
+  "ach.d.cf_voice_clone": "Deine Stimme mit !clonemyvoice geklont: Pepe kann jetzt reden wie du.",
   "gtf.sheet.sell_link": "Gegenstände auf dem Coup-Markt verkaufen",
   "hm.soulbound": "seelengebunden",
   "hm.soulbound_t": "Seelengebunden: Bleibt bei dem Spieler, der sie gefunden hat. Sie kann nicht verkauft, getauscht oder verpfändet werden.",

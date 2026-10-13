@@ -8324,6 +8324,8 @@
   "ach.d.cf_hm_sale_1": "Sprzedano przedmiot napadu innemu graczowi na rynku napadów.",
   "ach.n.cf_hm_relic": "Paser",
   "ach.d.cf_hm_relic": "Sprzedano rzadki relikt (Obciążone kości lub Plany skarbca) na rynku skoków.",
+  "ach.n.cf_voice_clone": "Głos stawu",
+  "ach.d.cf_voice_clone": "Sklonowano twój głos za pomocą !clonemyvoice: Pepe potrafi teraz mówić jak ty.",
   "gtf.sheet.sell_link": "Sprzedaj przedmioty na rynku napadów",
   "hm.soulbound": "przypisany do gracza",
   "hm.soulbound_t": "Przypisany do gracza: zostaje u gracza, który go znalazł. Nie można go sprzedać, wymienić ani oddać w zastaw.",

@@ -7991,6 +7991,8 @@
   "ach.d.cf_hm_sale_1": "Đã bán một vật phẩm cướp cho người chơi khác ở Chợ cướp.",
   "ach.n.cf_hm_relic": "Kẻ Tiêu Thụ",
   "ach.d.cf_hm_relic": "Đã bán một di vật hiếm (Xúc Xắc Gian Lận hoặc Bản Vẽ Kho) trên thị trường trộm cắp.",
+  "ach.n.cf_voice_clone": "Tiếng Nói Của Ao",
+  "ach.d.cf_voice_clone": "Đã sao chép giọng của bạn bằng !clonemyvoice: giờ Pepe có thể nói như bạn.",
   "gtf.sheet.sell_link": "Bán vật phẩm ở Chợ cướp",
   "hm.soulbound": "ràng buộc linh hồn",
   "hm.soulbound_t": "Ràng buộc linh hồn: vật phẩm luôn ở lại với người chơi đã tìm thấy. Không thể bán, trao đổi hay cầm cố.",

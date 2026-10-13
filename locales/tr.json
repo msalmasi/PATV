@@ -8104,6 +8104,8 @@
   "ach.d.cf_hm_sale_1": "Soygun pazarında başka bir oyuncuya soygun eşyası sattın.",
   "ach.n.cf_hm_relic": "Paçavracı",
   "ach.d.cf_hm_relic": "Soygun pazarında nadir bir eser (Hileli Zar veya Kasa Planları) sattın.",
+  "ach.n.cf_voice_clone": "Göletin Sesi",
+  "ach.d.cf_voice_clone": "Sesini !clonemyvoice ile klonladın: Pepe artık senin gibi konuşabilir.",
   "gtf.sheet.sell_link": "Soygun pazarında eşya sat",
   "hm.soulbound": "ruha bağlı",
   "hm.soulbound_t": "Ruha bağlı: bulan oyuncuda kalır. Satılamaz, takas edilemez veya rehine verilemez.",

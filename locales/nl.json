@@ -8102,6 +8102,8 @@
   "ach.d.cf_hm_sale_1": "Een overvalitem aan een andere speler verkocht op de overvalmarkt.",
   "ach.n.cf_hm_relic": "Heler",
   "ach.d.cf_hm_relic": "Een zeldzame relikwie (Geladen Dobbelstenen of Kluisblauwdrukken) verkocht op de overvalmarkt.",
+  "ach.n.cf_voice_clone": "Stem van de vijver",
+  "ach.d.cf_voice_clone": "Je stem gekloond met !clonemyvoice: Pepe kan nu net als jij praten.",
   "gtf.sheet.sell_link": "Items verkopen op de overvalmarkt",
   "hm.soulbound": "zielgebonden",
   "hm.soulbound_t": "Zielgebonden: het blijft bij de speler die het vond. Het kan niet verkocht, geruild of verpand worden.",

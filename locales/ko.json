@@ -7991,6 +7991,8 @@
   "ach.d.cf_hm_sale_1": "강도 시장에서 다른 플레이어에게 강도 아이템을 판매했어요.",
   "ach.n.cf_hm_relic": "장물아비",
   "ach.d.cf_hm_relic": "강탈 마켓에서 희귀 유물(조작된 주사위 또는 금고 설계도)을 팔았어요.",
+  "ach.n.cf_voice_clone": "연못의 목소리",
+  "ach.d.cf_voice_clone": "!clonemyvoice로 목소리를 복제했어요: 이제 Pepe도 당신처럼 말할 수 있어요.",
   "gtf.sheet.sell_link": "강도 시장에서 아이템 판매하기",
   "hm.soulbound": "영혼 귀속",
   "hm.soulbound_t": "영혼 귀속: 발견한 플레이어에게 계속 남아요. 판매, 거래, 전당포 맡기가 불가능해요.",

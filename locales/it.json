@@ -8168,6 +8168,8 @@
   "ach.d.cf_hm_sale_1": "Hai venduto un oggetto per colpi a un altro giocatore nel mercato dei colpi.",
   "ach.n.cf_hm_relic": "Ricettatore",
   "ach.d.cf_hm_relic": "Hai venduto una reliquia rara (Dadi Truccati o Progetti del Caveau) nel mercato dei colpi.",
+  "ach.n.cf_voice_clone": "Voce dello Stagno",
+  "ach.d.cf_voice_clone": "Hai clonato la tua voce con !clonemyvoice: ora Pepe può parlare come te.",
   "gtf.sheet.sell_link": "Vendi oggetti nel mercato dei colpi",
   "hm.soulbound": "vincolato al giocatore",
   "hm.soulbound_t": "Vincolato al giocatore: resta con chi l&#39;ha trovato. Non può essere venduto, scambiato o impegnato.",

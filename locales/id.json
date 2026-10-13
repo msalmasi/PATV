@@ -7993,6 +7993,8 @@
   "ach.d.cf_hm_sale_1": "Menjual item perampokan ke pemain lain di pasar perampokan.",
   "ach.n.cf_hm_relic": "Penadah",
   "ach.d.cf_hm_relic": "Menjual relik langka (Dadu Palsu atau Cetak Biru Brankas) di pasar perampokan.",
+  "ach.n.cf_voice_clone": "Suara Kolam",
+  "ach.d.cf_voice_clone": "Mengkloning suaramu dengan !clonemyvoice: Pepe sekarang bisa bicara seperti kamu.",
   "gtf.sheet.sell_link": "Jual item di pasar perampokan",
   "hm.soulbound": "terikat jiwa",
   "hm.soulbound_t": "Terikat jiwa: tetap dimiliki pemain yang menemukannya. Tidak bisa dijual, ditukar, atau digadaikan.",
