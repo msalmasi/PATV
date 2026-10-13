@@ -180,6 +180,9 @@ function feedItem(ev) {
       const u = cleanUser(d.user);
       const text = str(d.text, 400);
       if (!u || !text || u.anon) return null;          // Pepe never sends an opted-out user's line; belt and braces
+      // 1.99xu: the caption of Pepe's own TTS mic-up ("🔊 <line>", tagged by the bot as the audio starts). The same mic-up
+      // reaches the pad as its 🎙 transcript line, so ingest() drops this one while the room has transcripts on.
+      if (d.caption === "tts" && d.self === true && u.self) return { k: "msg", ts, u, text, cap: "tts" };
       return { k: "msg", ts, u, text };
     }
     case "member.join": {
@@ -432,6 +435,10 @@ async function ingest(body) {
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = feedItem(ev);
     if (!it) continue;
+    // 1.99xu: Pepe's TTS mic-up caption - shown once, as the 🎙 transcript line that follows it (Camfrog's room chat keeps
+    // the caption; a pad with transcripts off keeps it here too - there it's the only text of the mic-up)
+    if (it.cap === "tts" && R.transcripts !== false) continue;
+    delete it.cap;
     if (it.k === "tx" && it.id && R.feed.some((x) => x.k === "tx" && x.id === it.id)) continue;   // one line per mic-up
     it.c = ++cursor;
     if (it.k === "msg" || it.k === "tx") lines.set(R.id, (lines.get(R.id) || 0) + 1);
