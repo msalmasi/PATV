@@ -8,7 +8,19 @@
   .sbx .sb-clip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px 4px 6px; border-radius: var(--ds-r-pill);
                   border: 1px solid var(--ds-line); background: var(--ds-sunken); font-size: 13.5px; color: var(--ds-text-2); }
   .sbx .sb-clip.rare { border-color: #3b6fd8; } .sbx .sb-clip.epic { border-color: #9b4bd8; } .sbx .sb-clip.legendary { border-color: #e5a00d; }
-  .sbx .sb-play { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--ds-ac-bg); color: var(--ds-text-strong); cursor: pointer; flex: none; }
+  /* 1.99vu: the ▶ sat low and to the right - styles.css's global `button {padding: 10px 20px}` squeezed a text glyph into a 28 px
+     circle (and the glyph's own metrics differ per font / platform). Now: no padding, a grid that centres an SVG icon, the
+     triangle nudged right by its optical centre. Playing swaps it for a ■ (class .on, aria-pressed). */
+  .sbx .sb-play { box-sizing: border-box; display: inline-grid; place-items: center; width: 28px; height: 28px; min-width: 28px; padding: 0; margin: 0;
+                  border-radius: 50%; border: 0; background: var(--ds-ac-bg); color: var(--ds-text-strong); cursor: pointer; flex: none; line-height: 0; }
+  .sbx .sb-play svg { width: 14px; height: 14px; fill: currentColor; display: block; pointer-events: none; }
+  .sbx .sb-play .i-play { transform: translateX(1px); }
+  .sbx .sb-play .i-stop, .sbx .sb-play.on .i-play { display: none; }
+  .sbx .sb-play.on .i-stop { display: block; }
+  .sbx .sb-play.on { background: var(--ds-ac); color: var(--ds-on-ac, #fff); }
+  .sbx .sb-noprev { cursor: default; font-size: 14px; line-height: 1; }
+  .sbx .sb-sub { margin: var(--ds-sp-3) 0 0; }
+  .sbx .sb-live-note { margin: var(--ds-sp-1h) 0 0; }
   .sbx .sb-play:disabled { opacity: .4; cursor: default; }
   .sbx .sb-play:focus-visible { box-shadow: var(--ds-focus-ring); outline: 0; }
   .sbx .sb-price { color: var(--ds-text-muted); font-size: 12px; }
@@ -22,7 +34,8 @@
   const num = (n) => (t.num ? t.num(Math.round(Number(n) || 0)) : Math.round(Number(n) || 0).toLocaleString('en-US'));
   const PAT = (n) => `<span class="ds-pat"><b>${num(n)}</b><small>PAT</small></span>`;
   const rar = (r) => t('sb.rarity.' + (r || 'common'));
-  const clipList = (clips) => clips.map((c) => `<li class="sb-clip ${c.rarity}"><button type="button" class="sb-play" data-audio="${c.audio || ''}" ${c.audio ? '' : 'disabled'} aria-label="${t('sb.preview')}: ${t.esc(c.label)}">▶</button><span>${t.esc(c.emoji || '')} ${t.esc(c.label)}</span><span class="sb-price">${c.free ? '∞' : num(c.price)}</span></li>`).join('');
+  const ICON = '<svg class="i-play" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 2.8v10.4L13 8z"/></svg><svg class="i-stop" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg>';
+  const clipList = (clips) => clips.map((c) => `<li class="sb-clip ${c.rarity}"><button type="button" class="sb-play" data-audio="${c.audio || ''}" ${c.audio ? '' : 'disabled'} aria-label="${t('sb.preview')}: ${t.esc(c.label)}" aria-pressed="false">${ICON}</button><span>${t.esc(c.emoji || '')} ${t.esc(c.label)}</span><span class="sb-price">${c.free ? '∞' : num(c.price)}</span></li>`).join('');
   const buyBtn = (item, price, owned, extra) => owned ? `<span class="ds-chip ok">${t('sb.owned')}</span>` :
     (d.signed ? `<button type="button" class="ds-btn gold" data-sb-buy="${item}">${t('sb.buy', { pat: num(price) })}</button>${extra || ''}` : `<a class="ds-btn ghost" href="/login?next=%2Fsoundboards">${t('sb.signin')}</a>`);
 %>
@@ -67,7 +80,13 @@
   <section class="ds-card lg" aria-labelledby="sbGlobalH">
     <h2 class="ds-h2" id="sbGlobalH"><span class="dot"></span><%= d.global.emoji %> <%= d.global.name %></h2>
     <p class="sb-how"><%- t('sb.global_why') %></p>
-    <ul class="sb-clips"><%- clipList(d.global.clips) %></ul>
+    <%# 1.99vu: the voice lines, then 🎛️ Sound effects (catalogue "group": "sfx" - real CC0 sound effects) %>
+    <% const gVoice = d.global.clips.filter((c) => c.group !== 'sfx'), gSfx = d.global.clips.filter((c) => c.group === 'sfx'); %>
+    <ul class="sb-clips"><%- clipList(gVoice) %></ul>
+    <% if (gSfx.length) { %>
+    <h3 class="ds-h3 sb-sub" id="sbSfxH">🎛️ <%- t('sb.sfx_h') %></h3>
+    <ul class="sb-clips" aria-labelledby="sbSfxH"><%- clipList(gSfx) %></ul>
+    <% } %>
     <div class="sb-foot"><span><b><%- t('sb.all_access') %></b> · <%- PAT(d.all_access.price) %></span><%- buyBtn(d.all_access.item, d.all_access.price, d.all_access.owned) %></div>
   </section>
 
@@ -77,11 +96,13 @@
     <section class="ds-card" aria-label="<%= g.label %>">
       <h3 class="ds-h3"><%= g.emoji %> <%= g.label %></h3>
       <p class="ds-meta"><%= g.desc %><% if (g.supply) { %> · <%- t('sb.left', { n: Math.max(0, g.supply - g.sold), of: g.supply }) %><% } %></p>
-      <ul class="sb-clips"><li class="sb-clip legendary"><button type="button" class="sb-play" data-audio="<%= g.audio || '' %>" <%= g.audio ? '' : 'disabled' %> aria-label="<%- t('sb.preview') %>: <%= g.label %>">▶</button><span><%- t('sb.rarity.legendary') %><%- g.live ? ' · ' + t('sb.live_voice') : '' %></span></li></ul>
+      <%# 1.99vu: a live clip has no preview WAV (Pepe renders it in a random voice at every play) - no player, the dice + a note %>
+      <ul class="sb-clips"><li class="sb-clip legendary"><% if (g.audio) { %><button type="button" class="sb-play" data-audio="<%= g.audio %>" aria-label="<%- t('sb.preview') %>: <%= g.label %>" aria-pressed="false"><%- ICON %></button><% } else { %><span class="sb-play sb-noprev" aria-hidden="true"><%= g.live ? '🎲' : '…' %></span><% } %><span><%- t('sb.rarity.legendary') %><%- g.live ? ' · ' + t('sb.live_voice') : '' %></span></li></ul>
+      <% if (g.live && !g.audio) { %><p class="ds-meta sb-live-note"><%- t('sb.live_note') %></p><% } %>
       <div class="sb-foot"><%- PAT(g.price) %><%- (g.supply && g.sold >= g.supply && !g.owned) ? `<span class="ds-chip warn">${t('sb.sold_out')}</span>` : buyBtn(g.item, g.price, g.owned) %></div>
     </section>
     <% }) %>
   </div>
   <p class="ds-meta"><%- t('sb.report_note') %></p>
 </main>
-<script src="/public/js/soundboards.js?v=1" defer></script>
+<script src="/public/js/soundboards.js?v=2" defer></script>

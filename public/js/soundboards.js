@@ -14,11 +14,13 @@
     if (b.classList.contains('sb-play')) {
       var src = b.getAttribute('data-audio');
       if (!src) return;
-      if (player && playing === b) { player.pause(); player = null; playing.textContent = '▶'; playing = null; return; }
-      if (player) { player.pause(); if (playing) playing.textContent = '▶'; }
-      player = new Audio(src); playing = b; b.textContent = '■';
-      player.addEventListener('ended', function () { if (playing === b) { b.textContent = '▶'; playing = null; player = null; } });
-      player.play().catch(function () { b.textContent = '▶'; say(_t('js.sb.cant_play', 'Couldn\'t play that preview.'), 'bad'); });
+      // 1.99vu: the icon is an SVG pair (▶ / ■) - the state is a class + aria-pressed, never the button's text
+      var mark = function (x, on) { if (!x) return; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); };
+      if (player && playing === b) { player.pause(); player = null; mark(playing, false); playing = null; return; }
+      if (player) { player.pause(); mark(playing, false); }
+      player = new Audio(src); playing = b; mark(b, true);
+      player.addEventListener('ended', function () { if (playing === b) { mark(b, false); playing = null; player = null; } });
+      player.play().catch(function () { mark(b, false); say(_t('js.sb.cant_play', 'Couldn\'t play that preview.'), 'bad'); });
       return;
     }
     var item = b.getAttribute('data-sb-buy');

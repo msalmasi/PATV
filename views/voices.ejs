@@ -7,7 +7,7 @@
   .vsx .vs-grid { display: grid; gap: var(--ds-sp-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
   .vsx .vs-card { display: grid; gap: var(--ds-sp-2); align-content: start; }
   .vsx .vs-top { display: flex; align-items: center; gap: var(--ds-sp-2); }
-  .vsx .vs-play { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--ds-ac-bg); color: var(--ds-text-strong); cursor: pointer; flex: none; font-size: 15px; }
+  .vsx .vs-play { box-sizing: border-box; display: inline-grid; place-items: center; padding: 0 0 0 2px; line-height: 1; width: 40px; height: 40px; border-radius: 50%; border: 0; /* 1.99vu: styles.css's global button padding pushed the glyph off-centre */ background: var(--ds-ac-bg); color: var(--ds-text-strong); cursor: pointer; flex: none; font-size: 15px; }
   .vsx .vs-play:disabled { opacity: .4; cursor: default; }
   .vsx .vs-play:focus-visible { box-shadow: var(--ds-focus-ring); outline: 0; }
   .vsx .vs-name { font-weight: 700; color: var(--ds-text-strong); overflow-wrap: anywhere; }

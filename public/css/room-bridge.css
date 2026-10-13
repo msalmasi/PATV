@@ -85,3 +85,4 @@
 .sbd-msg.ok { color: var(--ds-ok, #6c6); } .sbd-msg.bad { color: var(--ds-danger, #e66); }
 .sbd-foot { margin: 4px 0 0; font-size: 12.5px; }
 .sbd-empty { margin: 4px; color: var(--ds-text-muted, #999); font-size: 13px; }
+.sbd-sub { grid-column: 1 / -1; margin: 6px 2px 0; font-size: 12px; font-weight: 700; color: var(--ds-text-muted, #999); } /* 1.99vu */

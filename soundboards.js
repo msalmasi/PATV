@@ -6,7 +6,7 @@
 // as the signed-in account's Camfrog name), with the cooldowns, the per-room queue and the Season Pass priority lane.
 //
 // BOARDS
-//   global          12 clips (soundboards.json), everyone may play them per use (rarity price); free with All-Access
+//   global          voice lines + 🎛️ sound effects (soundboards.json), everyone may play them per use (rarity price); free with All-Access
 //   pack:<id>       8 clips each; the pack's owners play them free, anyone else per use (rarity price)
 //   season:<id>     12 clips, the current season only; free with a 🎟️ Season Pass (or the season board bought), else 2,500
 //   legend          single-clip cosmetics, own-only (Gawk gawk gawk 20,000,000 - a random free voice every play; Founder
@@ -24,6 +24,14 @@
 // AUDIO: WAV files in SB_DIR, served at /sb/audio/<id>.wav (previews). A clip without audio is status 'render': Pepe's sync
 //   hands it out as a render job (tts: text + voice; audio: a source file + trim) and uploads the WAV
 //   (POST /api/soundboards/bot/audio); one longer than its cap is 'failed'.
+//   1.99vu: a catalogue clip may name a ready-made audio file ("file": "<id>.ogg" in data/soundboard-audio/, made and checked by
+//   hand - real sound effects, or a TTS take verified with STT): its src becomes file:<name>#<sha12> and Pepe gets it as an
+//   AUDIO render job (he fetches /api/soundboards/bot/src/<id>, converts it with ffmpeg and uploads the WAV like a mic clip).
+//   A clip that already has audio keeps playing the old WAV until the new one is up (sb_clips.pending = 1); the replaced WAV is
+//   kept in SB_DIR/.replaced/. A changed file (new sha) is sent again; the clip id never changes (ownership, plays, likeness
+//   cuts and room slots all point at it). Catalogue "group": "sfx" files a global clip under 🎛️ Sound effects.
+//   Live clips (the Gawk legendary) need no WAV - Pepe renders them at every play - so they are 'active' from the start
+//   (1.99vu: they were seeded 'render', the render queue skips live clips, so they never became playable; healed at boot + sync).
 // REPORTS: 🚩 on every clip; 3 distinct reporters hide it pending review (/admin/soundboards). The pad owner removes room
 //   clips at once; the person heard in a mic clip can "Remove me" (also instant).
 //
@@ -44,6 +52,10 @@ const { runQuery, getQuery } = require("./dbUtils");
 
 const DIR = process.env.SB_DIR ? path.resolve(process.env.SB_DIR) : path.join(__dirname, "uploads", "soundboards");
 const CATALOG_FILE = path.join(__dirname, "soundboards.json");
+// 1.99vu: ready-made catalogue audio (sound effects, verified TTS takes) - see AUDIO above; data/soundboard-sfx-licences.json
+let AUDIO_SRC = process.env.SB_AUDIO_SRC ? path.resolve(process.env.SB_AUDIO_SRC) : path.join(__dirname, "data", "soundboard-audio");
+const FILE_RE = /^[a-z0-9][a-z0-9-]{0,60}\.(ogg|opus|mp3|wav|flac)$/;
+const GROUPS = ["sfx"];
 const RARITIES = Object.freeze({ common: 6, rare: 8, epic: 10, legendary: 12 });
 const ROOM_SECS = 10;
 const DEFAULTS = Object.freeze({
@@ -78,11 +90,12 @@ class Refuse extends Error {
 }
 
 // ── catalogue (soundboards.json) ──
-let CAT = { global: { clips: [] }, packs: [], seasons: [], legendaries: [], byPack: {}, bySeason: {}, byLegend: {} };
+let CAT = { global: { clips: [] }, packs: [], seasons: [], legendaries: [], byPack: {}, bySeason: {}, byLegend: {}, groupOf: {} };
 function loadCatalog(file = CATALOG_FILE) {
   const raw = JSON.parse(fs.readFileSync(file, "utf8"));
   const clip = (c, extra) => Object.assign({ id: String(c.id), label: String(c.label || c.id).slice(0, LABEL_MAX), emoji: String(c.emoji || "🔊").slice(0, 8),
-    text: String(c.text || "").slice(0, 200), voice: c.voice == null ? null : String(c.voice).slice(0, 40), rarity: RARITIES[c.rarity] ? c.rarity : "common" }, extra || {});
+    text: String(c.text || "").slice(0, 200), voice: c.voice == null ? null : String(c.voice).slice(0, 40), rarity: RARITIES[c.rarity] ? c.rarity : "common",
+    file: FILE_RE.test(String(c.file || "")) ? String(c.file) : null, group: GROUPS.includes(c.group) ? c.group : null }, extra || {});
   const out = { global: { name: (raw.global || {}).name || "Global board", emoji: (raw.global || {}).emoji || "🌍", clips: ((raw.global || {}).clips || []).map((c) => clip(c)) },
                 packs: [], seasons: [], legendaries: [], byPack: {}, bySeason: {}, byLegend: {} };
   for (const p of raw.packs || []) {
@@ -103,6 +116,8 @@ function loadCatalog(file = CATALOG_FILE) {
     out.legendaries.push(lg);
     out.byLegend[lg.id] = lg;
   }
+  out.groupOf = {};
+  for (const c of out.global.clips) if (c.group) out.groupOf[c.id] = c.group;
   CAT = out;
   return CAT;
 }
@@ -122,6 +137,8 @@ function init() {
         price INTEGER, status TEXT NOT NULL DEFAULT 'render', note TEXT, sort INTEGER DEFAULT 0, created_by TEXT, created INTEGER, updated INTEGER,
         catalog INTEGER DEFAULT 0, live INTEGER DEFAULT 0, supply INTEGER, tries INTEGER DEFAULT 0)`);
       await runQuery("CREATE INDEX IF NOT EXISTS sb_clips_board ON sb_clips (board, status)");
+      // 1.99vu: a clip whose audio is being replaced (a new catalogue file) keeps playing until Pepe has uploaded the new WAV
+      try { await runQuery("ALTER TABLE sb_clips ADD COLUMN pending INTEGER DEFAULT 0"); } catch (e) { /* already there */ }
       await runQuery(`CREATE TABLE IF NOT EXISTS sb_owned (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, item TEXT NOT NULL, source TEXT NOT NULL,
         payer_id TEXT, price INTEGER NOT NULL DEFAULT 0, ref TEXT NOT NULL, period TEXT, serial INTEGER, routing TEXT, created INTEGER NOT NULL)`);
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS sb_owned_own ON sb_owned (user_id, item)");
@@ -160,7 +177,8 @@ async function setConfig(patch, actor) {
 }
 const config = () => CONFIG;
 
-/** Catalogue clips -> sb_clips (a changed text / voice is rendered again; retired ones are hidden). */
+/** Catalogue clips -> sb_clips (a changed text / voice is rendered again; retired ones are hidden). 1.99vu: live clips are
+ *  'active' (no WAV), a catalogue file is installed through Pepe (fileState), and a live clip stuck in 'render' is healed. */
 async function seedCatalog() {
   const t = now();
   const want = [];
@@ -172,14 +190,35 @@ async function seedCatalog() {
   let i = 0;
   for (const c of want) {
     ids.add(c.id);
-    const cur = (await getQuery("SELECT text, voice, status FROM sb_clips WHERE id = ?", [c.id]))[0];
+    const cur = (await getQuery("SELECT text, voice, status, src, audio FROM sb_clips WHERE id = ?", [c.id]))[0];
+    const src = c.live ? null : fileSrc(c);
     if (!cur) {
-      await runQuery(`INSERT INTO sb_clips (id, board, label, emoji, kind, voice, text, rarity, status, sort, created_by, created, updated, catalog, live, supply)
-                      VALUES (?, ?, ?, ?, 'tts', ?, ?, ?, 'render', ?, 'catalog', ?, ?, 1, ?, ?)`,
-                     [c.id, c.board, c.label, c.emoji, c.voice, c.text, c.rarity, i, t, t, c.live ? 1 : 0, c.supply || null]);
+      // live: playable at once (Pepe renders it at every play); a file: an audio render job; else a TTS render job
+      await runQuery(`INSERT INTO sb_clips (id, board, label, emoji, kind, voice, text, src, rarity, status, sort, created_by, created, updated, catalog, live, supply)
+                      VALUES (?, ?, ?, ?, 'tts', ?, ?, ?, ?, ?, ?, 'catalog', ?, ?, 1, ?, ?)`,
+                     [c.id, c.board, c.label, c.emoji, c.voice, c.text, src, c.rarity, c.live ? "active" : "render", i, t, t, c.live ? 1 : 0, c.supply || null]);
+    } else if (c.live) {
+      await runQuery(`UPDATE sb_clips SET board = ?, label = ?, emoji = ?, voice = ?, text = ?, rarity = ?, sort = ?, live = 1, supply = ?, updated = ?,
+                      status = CASE WHEN status IN ('render', 'removed', 'failed') THEN 'active' ELSE status END, tries = 0, pending = 0
+                      WHERE id = ?`, [c.board, c.label, c.emoji, c.voice, c.text, c.rarity, i, c.supply || null, t, c.id]);
+    } else if (src) {
+      // a ready-made file: a NEW file (or one changed since) goes to Pepe again; the old WAV plays until the new one is up
+      const fresh = cur.src !== src;
+      const hasAudio = !!cur.audio && cur.status !== "removed";
+      await runQuery(`UPDATE sb_clips SET board = ?, label = ?, emoji = ?, voice = ?, text = ?, rarity = ?, sort = ?, live = 0, supply = ?, updated = ?, src = ?,
+                      status = CASE WHEN ? THEN (CASE WHEN ? THEN (CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'active' END) ELSE 'render' END)
+                                    WHEN status = 'removed' THEN 'render' ELSE status END,
+                      pending = CASE WHEN ? AND ? THEN 1 ELSE pending END, tries = CASE WHEN ? THEN 0 ELSE tries END
+                      WHERE id = ?`,
+                     [c.board, c.label, c.emoji, c.voice, c.text, c.rarity, i, c.supply || null, t, src,
+                      fresh ? 1 : 0, hasAudio ? 1 : 0, fresh ? 1 : 0, hasAudio ? 1 : 0, fresh ? 1 : 0, c.id]);
+    } else if (c.file) {
+      // the file is named but unreadable here (a bad deploy?): keep the clip's current audio - never fall back to a TTS render
+      await runQuery("UPDATE sb_clips SET board = ?, label = ?, emoji = ?, rarity = ?, sort = ?, updated = ? WHERE id = ?", [c.board, c.label, c.emoji, c.rarity, i, t, c.id]);
     } else {
-      const again = cur.text !== c.text || (cur.voice || null) !== (c.voice || null);
+      const again = cur.text !== c.text || (cur.voice || null) !== (c.voice || null) || String(cur.src || "").startsWith("file:");
       await runQuery(`UPDATE sb_clips SET board = ?, label = ?, emoji = ?, voice = ?, text = ?, rarity = ?, sort = ?, live = ?, supply = ?, updated = ?,
+                      src = CASE WHEN src LIKE 'file:%' THEN NULL ELSE src END,
                       status = CASE WHEN ? THEN 'render' WHEN status = 'removed' THEN 'render' ELSE status END, tries = CASE WHEN ? THEN 0 ELSE tries END
                       WHERE id = ?`, [c.board, c.label, c.emoji, c.voice, c.text, c.rarity, i, c.live ? 1 : 0, c.supply || null, t, again ? 1 : 0, again ? 1 : 0, c.id]);
     }
@@ -187,6 +226,27 @@ async function seedCatalog() {
   }
   const cat = await getQuery("SELECT id FROM sb_clips WHERE catalog = 1 AND status != 'removed'");
   for (const r of cat) if (!ids.has(r.id)) await runQuery("UPDATE sb_clips SET status = 'removed', note = 'left the catalogue', updated = ? WHERE id = ?", [t, r.id]);
+  await healLive();
+}
+/** 1.99vu: a live clip never waits for a WAV (the render queue skips live clips) - one left in 'render' is made playable. */
+async function healLive() {
+  const r = await runQuery("UPDATE sb_clips SET status = 'active', tries = 0, updated = ? WHERE live = 1 AND status = 'render'", [now()]);
+  if (r && r.changes) console.log(`[soundboards] ${r.changes} live clip(s) were stuck in 'render' - now active`);
+}
+/** The src marker of a catalogue clip with a ready-made file: file:<name>#<sha12 of the file> (null: no file / unreadable). */
+const _fileShas = new Map();
+function fileSrc(c) {
+  if (!c || !c.file) return null;
+  const full = path.join(AUDIO_SRC, c.file);
+  try {
+    const st = fs.statSync(full);
+    const k = `${full}:${st.size}:${st.mtimeMs}`;
+    if (!_fileShas.has(k)) _fileShas.set(k, sha(fs.readFileSync(full)).slice(0, 12));
+    return `file:${c.file}#${_fileShas.get(k)}`;
+  } catch (e) {
+    console.error(`[soundboards] catalogue file missing for ${c.id}: ${c.file}`);
+    return null;
+  }
 }
 
 // ── ownership ──
@@ -227,6 +287,7 @@ async function allowance(userId, t = now()) {
 // ── clips ──
 const pub = (c) => ({ id: c.id, board: c.board, label: c.label, emoji: c.emoji, kind: c.kind, rarity: c.rarity, secs: c.secs ? Math.round(c.secs * 10) / 10 : null,
                       voice: c.voice || null, subject: c.subject_login || null, price: priceOf(c), status: c.status, live: !!c.live,
+                      group: (c.board === "global" && CAT.groupOf[c.id]) || null,
                       audio: c.status === "active" && c.audio ? `/sb/audio/${c.id}.wav?v=${String(c.sha || "").slice(0, 8)}` : null });
 async function clip(id) { await init(); return (await getQuery("SELECT * FROM sb_clips WHERE id = ?", [String(id || "")]))[0] || null; }
 async function boardClips(board, statuses = ["active"]) {
@@ -333,6 +394,17 @@ function saveWav(id, buf, secsHint, cap) {
   if (secs > cap + 0.25) return { status: "failed", secs, note: `too long (${secs.toFixed(1)} s, the cap is ${cap} s)` };
   fs.mkdirSync(DIR, { recursive: true });
   const file = id + ".wav";
+  // 1.99vu: a WAV being replaced (a re-render, a new catalogue file) is kept in .replaced/<id>.<sha8>.wav - the way back
+  try {
+    const old = path.join(DIR, file);
+    if (fs.existsSync(old)) {
+      const prev = fs.readFileSync(old);
+      if (sha(prev) !== sha(buf)) {
+        fs.mkdirSync(path.join(DIR, ".replaced"), { recursive: true });
+        fs.writeFileSync(path.join(DIR, ".replaced", `${id}.${sha(prev).slice(0, 8)}.wav`), prev);
+      }
+    }
+  } catch (e) { console.error(`[soundboards] couldn't keep the old audio of ${id}: ${e.message}`); }
   fs.writeFileSync(path.join(DIR, file), buf);
   return { status: "active", audio: file, sha: sha(buf), secs };
 }
@@ -342,18 +414,22 @@ async function storeAudio(id, buf, voice) {
   const r = saveWav(id, buf, 0, capFor(c));
   const t = now();
   if (r.status !== "active") {
-    await runQuery("UPDATE sb_clips SET status = 'failed', note = ?, tries = tries + 1, updated = ? WHERE id = ?", [r.note || "bad audio", t, id]);
+    // 1.99vu: a clip that already plays (its new file was refused) keeps its old WAV
+    await runQuery(`UPDATE sb_clips SET status = CASE WHEN pending = 1 AND audio IS NOT NULL THEN status ELSE 'failed' END, pending = 0, note = ?, tries = tries + 1,
+                    updated = ? WHERE id = ?`, [r.note || "bad audio", t, id]);
     return { ok: false, status: "failed", note: r.note || "bad audio" };
   }
   // `rendered_voice`: the voice Pepe actually used (a "random" catalogue clip is rolled once, at render time)
-  await runQuery(`UPDATE sb_clips SET audio = ?, sha = ?, secs = ?, status = CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'active' END, note = ?, updated = ? WHERE id = ?`,
-                 [r.audio, r.sha, r.secs, voice ? ("voice: " + String(voice).slice(0, 40)) : null, t, id]);
+  await runQuery(`UPDATE sb_clips SET audio = ?, sha = ?, secs = ?, status = CASE WHEN status = 'hidden' THEN 'hidden' ELSE 'active' END, note = ?, pending = 0, tries = 0,
+                  updated = ? WHERE id = ?`,
+                 [r.audio, r.sha, r.secs, voice ? ("voice: " + String(voice).slice(0, 40)) : (String(c.src || "").startsWith("file:") ? c.src.slice(0, 120) : null), t, id]);
   return { ok: true, status: "active", secs: r.secs };
 }
 
 // ── what Pepe gets ──
 async function botState() {
   await init();
+  await healLive();
   const rows = await getQuery("SELECT * FROM sb_clips WHERE status IN ('active','render') ORDER BY board, sort, created");
   const season = seasonNow();
   const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id)))
@@ -373,8 +449,11 @@ async function botState() {
   const optouts = await L().optoutMap().catch(() => ({}));
   const sbOut = Object.keys(optouts).filter((k) => (optouts[k] || []).includes("soundboard"));
   const render = (await getQuery(`SELECT id, kind, voice, text, src, trim_start, trim_end, board, rarity, live FROM sb_clips
-                                  WHERE status = 'render' AND live = 0 AND tries < 5 ORDER BY created LIMIT 6`))
-    .map((c) => ({ id: c.id, kind: c.kind, voice: c.voice, text: c.text, src: c.src ? `/api/soundboards/bot/src/${c.id}` : null,
+                                  WHERE (status = 'render' OR (pending = 1 AND status IN ('active','hidden'))) AND live = 0 AND tries < 5
+                                  ORDER BY created LIMIT 6`))
+    // a catalogue file is an AUDIO job (Pepe fetches + converts it like a mic clip); the version rides on the URL
+    .map((c) => ({ id: c.id, kind: String(c.src || "").startsWith("file:") ? "audio" : c.kind, voice: c.voice, text: c.text,
+                   src: c.src ? `/api/soundboards/bot/src/${c.id}` + (String(c.src).startsWith("file:") ? `?v=${String(c.src).split("#")[1] || ""}` : "") : null,
                    trim_start: c.trim_start, trim_end: c.trim_end, cap: capFor(c) }));
   return { on: CONFIG.enabled, cfg: CONFIG, season: season ? { id: season.id, name: season.name, emoji: season.emoji } : null, clips, owned, sp, sb_optouts: sbOut, render };
 }
@@ -547,7 +626,10 @@ function register(app, { addUser, isBotToken }) {
     try {
       if (b.failed) {
         await init();
-        await runQuery("UPDATE sb_clips SET tries = tries + 1, note = ?, status = CASE WHEN tries + 1 >= 5 THEN 'failed' ELSE status END, updated = ? WHERE id = ?",
+        // 1.99vu: a clip that already has audio (its new catalogue file failed) keeps playing it; after 5 tries it stops asking
+        await runQuery(`UPDATE sb_clips SET tries = tries + 1, note = ?,
+                        status = CASE WHEN tries + 1 >= 5 AND NOT (pending = 1 AND audio IS NOT NULL) THEN 'failed' ELSE status END,
+                        pending = CASE WHEN tries + 1 >= 5 THEN 0 ELSE pending END, updated = ? WHERE id = ?`,
                        [String(b.failed).slice(0, 200), now(), String(b.id || "")]);
         return res.json({ ok: true });
       }
@@ -559,6 +641,14 @@ function register(app, { addUser, isBotToken }) {
     try {
       const c = await clip(req.params.id);
       if (!c || !c.src) return res.status(404).end();
+      if (c.src.startsWith("file:")) {
+        // 1.99vu: a catalogue file (data/soundboard-audio) - only names the catalogue itself allows (FILE_RE, no paths)
+        const name = c.src.slice(5).split("#")[0];
+        const full = path.join(AUDIO_SRC, name);
+        if (!FILE_RE.test(name) || path.dirname(full) !== AUDIO_SRC || !fs.existsSync(full)) return res.status(404).end();
+        res.set("Cache-Control", "no-store");
+        return res.sendFile(full);
+      }
       if (c.src.startsWith("media:")) {
         const M = require("./media");
         const m = (await getQuery("SELECT file FROM media WHERE id = ?", [c.src.slice(6)]))[0];
@@ -774,6 +864,8 @@ async function adminState() {
 module.exports = {
   init, config, setConfig, loadCatalog, seasonNow, botState, notePlays, roomBoard, addRoomClip, removeClip, storeAudio, buy, grantComp, allowance, ownedItems,
   report, removeMe, priceOf, clipStatus: clip, freeFor, textRefusal, wavSecs, register, Refuse, RARITIES, ROOM_SECS,
-  get CAT() { return CAT; }, get DIR() { return DIR; },
+  get CAT() { return CAT; }, get DIR() { return DIR; }, get AUDIO_SRC() { return AUDIO_SRC; }, fileSrc, healLive,
+  _setAudioSrc: (d) => { AUDIO_SRC = path.resolve(d); },
+  _seed: () => seedCatalog(),
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

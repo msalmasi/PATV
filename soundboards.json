@@ -1,21 +1,36 @@
 {
-  "_comment": "Soundboard catalogue (1.99rh, soundboards.js). Clips are TTS lines Pepe renders once (VoiceBox) and caches; 'voice' null = Pepe's default voice, 'random' = a random free stock voice picked at render time (re-rolled every play when 'live'). Rarity sets the per-use price (common 1,000 / rare 2,500 / epic 5,000) and the length cap (6 / 8 / 10 s; legendaries 12 s). Ids are permanent: never reuse or rename one (ownership and plays point at them). Packs: owners play their clips free (cooldowns still apply); anyone else pays per use. Legendaries are own-only. The season board is unlimited with a Season Pass and per-use (2,500) for everyone else.",
+  "_comment": "Soundboard catalogue (1.99rh, soundboards.js). Clips are TTS lines Pepe renders once (VoiceBox) and caches - or (1.99vu) a ready-made 'file' in data/soundboard-audio/ (real CC0 sound effects, sources + licences in data/soundboard-sfx-licences.json; TTS takes verified with STT) that Pepe converts and uploads; 'group': 'sfx' lists a global clip under Sound effects; 'voice' null = Pepe's default voice, 'random' = a random free stock voice picked at render time (re-rolled every play when 'live'). Rarity sets the per-use price (common 1,000 / rare 2,500 / epic 5,000) and the length cap (6 / 8 / 10 s; legendaries 12 s). Ids are permanent: never reuse or rename one (ownership and plays point at them). Packs: owners play their clips free (cooldowns still apply); anyone else pays per use. Legendaries are own-only. The season board is unlimited with a Season Pass and per-use (2,500) for everyone else.",
   "global": {
     "name": "Global board",
     "emoji": "🌍",
     "clips": [
-      { "id": "g-airhorn", "label": "Air horn", "emoji": "📯", "rarity": "common", "text": "Bwaaaaap! Bwaaap bwaaap!" },
-      { "id": "g-letsgo", "label": "Let's go", "emoji": "🚀", "rarity": "common", "text": "Let's goooooo!" },
-      { "id": "g-noway", "label": "No way", "emoji": "😲", "rarity": "common", "text": "No. Way. No way!" },
-      { "id": "g-sus", "label": "Sus", "emoji": "🤨", "rarity": "common", "text": "Hmm. That's kinda sus." },
+      { "id": "g-airhorn", "label": "Air horn", "emoji": "📯", "rarity": "common", "text": "Bwaaaaap! Bwaaap bwaaap!", "file": "g-airhorn.ogg", "group": "sfx" },
+      { "id": "g-letsgo", "label": "Let's go", "emoji": "🚀", "rarity": "common", "text": "Let's goooooo!", "file": "g-letsgo.ogg" },
+      { "id": "g-noway", "label": "No way", "emoji": "😲", "rarity": "common", "text": "No. Way. No way!", "file": "g-noway.ogg" },
+      { "id": "g-sus", "label": "Sus", "emoji": "🤨", "rarity": "common", "text": "Hmm. That's kinda sus.", "file": "g-sus.ogg" },
       { "id": "g-applause", "label": "Applause", "emoji": "👏", "rarity": "common", "text": "Clap clap clap clap. Bravo. Bravo." },
-      { "id": "g-bruh", "label": "Bruh", "emoji": "😐", "rarity": "common", "text": "Bruuuuh." },
+      { "id": "g-bruh", "label": "Bruh", "emoji": "😐", "rarity": "common", "text": "Bruuuuh.", "file": "g-bruh.ogg" },
       { "id": "g-micdrop", "label": "Mic drop", "emoji": "🎤", "rarity": "rare", "text": "And that, ladies and gentlemen, is a mic drop." },
       { "id": "g-touchgrass", "label": "Touch grass", "emoji": "🌱", "rarity": "rare", "text": "Somebody in here needs to go touch some grass." },
       { "id": "g-ratio", "label": "Ratio", "emoji": "📉", "rarity": "rare", "text": "Ratio. Plus L. Plus you fell off." },
-      { "id": "g-dramatic", "label": "Dun dun dunnn", "emoji": "🎭", "rarity": "rare", "text": "Dun. Dun. Dunnnnnn." },
+      { "id": "g-dramatic", "label": "Dun dun dunnn", "emoji": "🎭", "rarity": "rare", "text": "Dun. Dun. Dunnnnnn.", "file": "g-dramatic.ogg", "group": "sfx" },
       { "id": "g-breaking", "label": "Breaking news", "emoji": "📰", "rarity": "epic", "text": "Breaking news. Local frog is still the best thing in this chatroom. More at eleven." },
-      { "id": "g-legend", "label": "Living legend", "emoji": "🏆", "rarity": "epic", "text": "Everybody stand up. A living legend just touched the mic." }
+      { "id": "g-legend", "label": "Living legend", "emoji": "🏆", "rarity": "epic", "text": "Everybody stand up. A living legend just touched the mic." },
+      { "id": "g-dogshit", "label": "Dog shit", "emoji": "💩", "rarity": "rare", "text": "This room is, absolute, dog shit.", "file": "g-dogshit.ogg" },
+      { "id": "sfx-crickets", "label": "Crickets", "emoji": "🦗", "rarity": "common", "text": "", "file": "sfx-crickets.ogg", "group": "sfx" },
+      { "id": "sfx-rimshot", "label": "Rimshot", "emoji": "🥁", "rarity": "common", "text": "", "file": "sfx-rimshot.ogg", "group": "sfx" },
+      { "id": "sfx-sadtrombone", "label": "Sad trombone", "emoji": "🎺", "rarity": "common", "text": "", "file": "sfx-sadtrombone.ogg", "group": "sfx" },
+      { "id": "sfx-applause", "label": "Crowd applause", "emoji": "👏", "rarity": "common", "text": "", "file": "sfx-applause.ogg", "group": "sfx" },
+      { "id": "sfx-boo", "label": "Booing", "emoji": "👎", "rarity": "common", "text": "", "file": "sfx-boo.ogg", "group": "sfx" },
+      { "id": "sfx-laugh", "label": "Laugh track", "emoji": "😂", "rarity": "common", "text": "", "file": "sfx-laugh.ogg", "group": "sfx" },
+      { "id": "sfx-scratch", "label": "Record scratch", "emoji": "💿", "rarity": "common", "text": "", "file": "sfx-scratch.ogg", "group": "sfx" },
+      { "id": "sfx-drumroll", "label": "Drum roll", "emoji": "🪘", "rarity": "common", "text": "", "file": "sfx-drumroll.ogg", "group": "sfx" },
+      { "id": "sfx-gong", "label": "Gong", "emoji": "🔔", "rarity": "common", "text": "", "file": "sfx-gong.ogg", "group": "sfx" },
+      { "id": "sfx-ding", "label": "Ding", "emoji": "🛎️", "rarity": "common", "text": "", "file": "sfx-ding.ogg", "group": "sfx" },
+      { "id": "sfx-whoosh", "label": "Whoosh", "emoji": "💨", "rarity": "common", "text": "", "file": "sfx-whoosh.ogg", "group": "sfx" },
+      { "id": "sfx-explosion", "label": "Explosion", "emoji": "💥", "rarity": "common", "text": "", "file": "sfx-explosion.ogg", "group": "sfx" },
+      { "id": "sfx-cashregister", "label": "Cash register", "emoji": "🤑", "rarity": "common", "text": "", "file": "sfx-cashregister.ogg", "group": "sfx" },
+      { "id": "sfx-tada", "label": "Ta-da", "emoji": "🎉", "rarity": "common", "text": "", "file": "sfx-tada.ogg", "group": "sfx" }
     ]
   },
   "packs": [
@@ -25,24 +40,24 @@
         { "id": "hype-fire", "label": "Fire", "emoji": "🔥", "rarity": "common", "text": "That was fire. Straight fire." },
         { "id": "hype-sheesh", "label": "Sheesh", "emoji": "🥶", "rarity": "common", "text": "Sheeeeeeesh." },
         { "id": "hype-goat", "label": "The GOAT", "emoji": "🐐", "rarity": "common", "text": "The goat has spoken." },
-        { "id": "hype-encore", "label": "Encore", "emoji": "🎶", "rarity": "common", "text": "Encore! Encore! One more time!" },
+        { "id": "hype-encore", "label": "Encore", "emoji": "🎶", "rarity": "common", "text": "Encore! Encore! One more time!", "file": "hype-encore.ogg" },
         { "id": "hype-crowd", "label": "Crowd goes wild", "emoji": "🙌", "rarity": "rare", "text": "And the crowd goes absolutely wild!" },
         { "id": "hype-banger", "label": "Banger", "emoji": "💥", "rarity": "rare", "text": "Certified banger. Run it back." },
-        { "id": "hype-mvp", "label": "MVP", "emoji": "🏅", "rarity": "rare", "text": "M V P. M V P. M V P!" },
+        { "id": "hype-mvp", "label": "MVP", "emoji": "🏅", "rarity": "rare", "text": "M V P. M V P. M V P!", "file": "hype-mvp.ogg" },
         { "id": "hype-hall", "label": "Hall of fame", "emoji": "🏛️", "rarity": "epic", "text": "Put that one in the hall of fame. Frame it. Hang it on the wall." }
       ]
     },
     {
       "id": "drama", "name": "Drama Pack", "emoji": "🍿", "desc": "For when the room gets spicy.", "kind": "standard",
       "clips": [
-        { "id": "drama-tea", "label": "Spill the tea", "emoji": "🫖", "rarity": "common", "text": "Ooh. Spill the tea." },
+        { "id": "drama-tea", "label": "Spill the tea", "emoji": "🫖", "rarity": "common", "text": "Ooh. Spill the tea.", "file": "drama-tea.ogg" },
         { "id": "drama-popcorn", "label": "Popcorn", "emoji": "🍿", "rarity": "common", "text": "Hold on, let me get my popcorn." },
-        { "id": "drama-oop", "label": "Oop", "emoji": "😬", "rarity": "common", "text": "Oop. Oh no. Oh no no no." },
-        { "id": "drama-receipts", "label": "Receipts", "emoji": "🧾", "rarity": "common", "text": "Somebody pull up the receipts." },
+        { "id": "drama-oop", "label": "Oop", "emoji": "😬", "rarity": "common", "text": "Oop. Oh no. Oh no no no.", "file": "drama-oop.ogg" },
+        { "id": "drama-receipts", "label": "Receipts", "emoji": "🧾", "rarity": "common", "text": "Somebody pull up the receipts.", "file": "drama-receipts.ogg" },
         { "id": "drama-salty", "label": "Salty", "emoji": "🧂", "rarity": "rare", "text": "Why is it so salty in here all of a sudden?" },
-        { "id": "drama-clown", "label": "Clown", "emoji": "🤡", "rarity": "rare", "text": "Honk honk. The circus is in town." },
+        { "id": "drama-clown", "label": "Clown", "emoji": "🤡", "rarity": "rare", "text": "Honk honk. The circus is in town.", "file": "drama-clown.ogg" },
         { "id": "drama-objection", "label": "Objection", "emoji": "⚖️", "rarity": "rare", "text": "Objection! Your honor, this is outrageous." },
-        { "id": "drama-plot", "label": "Plot twist", "emoji": "🌀", "rarity": "epic", "text": "Plot twist. Nobody saw that coming. Nobody." }
+        { "id": "drama-plot", "label": "Plot twist", "emoji": "🌀", "rarity": "epic", "text": "Plot twist. Nobody saw that coming. Nobody.", "file": "drama-plot.ogg" }
       ]
     },
     {
@@ -50,11 +65,11 @@
       "clips": [
         { "id": "cl-ribbit", "label": "Ribbit", "emoji": "🐸", "rarity": "common", "text": "Ribbit. Ribbit." },
         { "id": "cl-feelsgood", "label": "Feels good", "emoji": "😌", "rarity": "common", "text": "Feels good, man." },
-        { "id": "cl-join", "label": "Join join join", "emoji": "🚨", "rarity": "common", "text": "Join. Join. Join. Join." },
+        { "id": "cl-join", "label": "Join join join", "emoji": "🚨", "rarity": "common", "text": "Join. Join. Join. Join.", "file": "cl-join.ogg" },
         { "id": "cl-vault", "label": "The vault", "emoji": "🏦", "rarity": "common", "text": "The vault is calling. Do you hear it?" },
         { "id": "cl-pond", "label": "Back to the pond", "emoji": "💧", "rarity": "rare", "text": "Alright. Everybody back to the pond." },
         { "id": "cl-heist", "label": "Heist time", "emoji": "💰", "rarity": "rare", "text": "Masks on. It's heist time." },
-        { "id": "cl-bet", "label": "Bet", "emoji": "🎲", "rarity": "rare", "text": "Bet. Put your points where your mouth is." },
+        { "id": "cl-bet", "label": "Bet", "emoji": "🎲", "rarity": "rare", "text": "Bet. Put your points where your mouth is.", "file": "cl-bet.ogg" },
         { "id": "cl-sad", "label": "Sad frog", "emoji": "😢", "rarity": "epic", "text": "And on that day, a frog shed a single tear. The end." }
       ]
     }
@@ -81,7 +96,7 @@
   "legendaries": [
     { "id": "lg-gawk", "label": "Gawk gawk gawk", "emoji": "🎰", "text": "Gawk gawk gawk gawk gawk!", "voice": "random", "live": true, "price": 20000000,
       "desc": "A different voice every time you play it." },
-    { "id": "lg-founder", "label": "Founder", "emoji": "👑", "text": "Make way. A founder of the pond has entered the room.", "price": 10000000, "supply": 25, "numbered": true,
+    { "id": "lg-founder", "label": "Founder", "emoji": "👑", "text": "Make way for the most ELECTRIFYING man on Camfrog.", "file": "lg-founder.ogg", "price": 10000000, "supply": 25, "numbered": true,
       "desc": "One of 25, numbered." }
   ]
 }

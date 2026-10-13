@@ -52,7 +52,10 @@
       tabs.appendChild(b);
     });
     var cur = data.tabs.filter(function (x) { return x.key === tab; })[0];
-    cur.clips.forEach(function (c) {
+    // 1.99vu: the global board's sound effects (catalogue "group": "sfx") after its voice lines, under a divider
+    var list = cur.clips.filter(function (c) { return c.group !== 'sfx'; }), fx = cur.clips.filter(function (c) { return c.group === 'sfx'; });
+    list.concat(fx).forEach(function (c, i) {
+      if (fx.length && i === list.length) grid.appendChild(el('p', 'sbd-sub', '🎛️ ' + _t('js.sbd.sfx', 'Sound effects')));
       var wrap = el('div', 'sbd-it');
       var b = el('button', 'sbd-b ' + (c.rarity || 'common')); b.type = 'button';
       b.appendChild(el('span', 'sbd-e', c.emoji || '🔊'));

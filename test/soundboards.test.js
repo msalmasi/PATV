@@ -97,11 +97,15 @@ test.after(() => { server.close(); });
 
 test("catalogue: every clip seeded for rendering; Pepe's sync hands out render jobs, not unrendered clips' audio", async () => {
   const n = (await getQuery("SELECT COUNT(*) AS n FROM sb_clips WHERE catalog = 1"))[0].n;
-  assert.equal(n, 12 + 3 * 8 + 12 + 2, "global 12 + 3 packs + the season board + 2 legendaries");
+  const nGlobal = SB.CAT.global.clips.length;
+  assert.ok(nGlobal >= 12 + 15, "the global board: voice lines + 🎛️ sound effects (1.99vu)");
+  assert.equal(n, nGlobal + 3 * 8 + 12 + 2, "global + 3 packs + the season board + 2 legendaries");
   const r = await call("POST", "/api/soundboards/bot/sync", null, { password: "bot", plays: [{ clip: "g-airhorn", room: "X", login: "a", paid: 1000 }] });
   assert.equal(r.status, 200);
   assert.equal(r.d.render.length, 6, "six render jobs at a time");
-  assert.ok(r.d.render.every((j) => j.kind === "tts" && j.text && j.cap));
+  // a TTS line, or (1.99vu) a ready-made catalogue file as an audio job Pepe fetches + converts
+  assert.ok(r.d.render.every((j) => j.cap && (j.kind === "tts" ? !!j.text : /^\/api\/soundboards\/bot\/src\/[a-z0-9-]+\?v=[0-9a-f]{12}$/.test(j.src))), JSON.stringify(r.d.render));
+  assert.equal(r.d.clips.find((c) => c.id === "lg-gawk").status, "active", "1.99vu: a live clip is playable from the start (no WAV needed)");
   assert.ok(r.d.clips.every((c) => c.status === "render" ? !c.audio : true));
   assert.equal(r.d.clips.find((c) => c.id === "lg-gawk").text, "Gawk gawk gawk gawk gawk!", "a live clip carries its line (rendered at every play)");
   assert.equal((await call("POST", "/api/soundboards/bot/sync", null, { password: "x" })).status, 403);
@@ -262,4 +266,81 @@ test("voice store: Pepe's import (kept as they are), sync, D12 default for new c
   assert.ok(!(await VS.pickable()).some((v) => v.id === "ksox4"), "a paused clone isn't offered to pad boards");
   assert.equal((await call("GET", "/voices", U.alice)).status, 200);
   assert.equal((await call("GET", "/voices/mine", U.ksox)).status, 200);
+});
+
+test("1.99vu: catalogue files go to Pepe as audio jobs and replace a clip's audio without a gap; live clips never wait in 'render'", async () => {
+  // every catalogue file is in the repo, named in the catalogue, with a licence / provenance entry
+  const lic = JSON.parse(fs.readFileSync(path.join(repo, "data", "soundboard-sfx-licences.json"), "utf8"));
+  const all = [...SB.CAT.global.clips, ...SB.CAT.packs.flatMap((p) => p.clips), ...SB.CAT.legendaries].filter((c) => c.file);
+  assert.ok(all.length >= 30);
+  for (const c of all) {
+    assert.ok(fs.existsSync(path.join(repo, "data", "soundboard-audio", c.file)), c.file);
+    assert.ok(lic.sfx[c.id] || lic.generated[c.id], "provenance for " + c.id);
+    if (lic.sfx[c.id]) assert.equal(lic.sfx[c.id].licence, "CC0 1.0");
+  }
+  const sfx = SB.CAT.global.clips.filter((c) => c.group === "sfx").map((c) => c.id);
+  assert.ok(sfx.includes("sfx-crickets") && sfx.includes("g-airhorn"), "Sound effects on the global board");
+
+  // the bot fetches a file source with its token only
+  const job = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  const cr = job.clips.find((c) => c.id === "sfx-crickets");
+  assert.ok(!cr || (cr.status === "render" && !cr.audio), "not playable before its WAV is up");
+  let f = await fetch(base + "/api/soundboards/bot/src/sfx-crickets", { headers: { "x-bot-token": "bot" } });
+  assert.equal(f.status, 200);
+  assert.deepEqual(Buffer.from(await f.arrayBuffer()), fs.readFileSync(path.join(repo, "data", "soundboard-audio", "sfx-crickets.ogg")));
+  assert.equal((await fetch(base + "/api/soundboards/bot/src/sfx-crickets")).status, 403);
+  let r = await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: "sfx-crickets", data: wav(4.6).toString("base64") });
+  assert.equal(r.d.status, "active");
+  assert.equal((await SB.clipStatus("sfx-crickets")).note.slice(0, 22), "file:sfx-crickets.ogg#");
+  const api = (await call("GET", "/api/soundboards", U.alice)).d;
+  assert.equal(api.global.clips.find((c) => c.id === "sfx-crickets").group, "sfx");
+
+  // a CHANGED file: the clip keeps playing its old WAV (pending) until the new one is up; the old one is kept
+  const alt = fs.mkdtempSync(path.join(tmp, "audio-"));
+  for (const x of fs.readdirSync(SB.AUDIO_SRC)) fs.copyFileSync(path.join(SB.AUDIO_SRC, x), path.join(alt, x));
+  fs.appendFileSync(path.join(alt, "sfx-crickets.ogg"), Buffer.from("changed"));
+  const was = SB.AUDIO_SRC;
+  SB._setAudioSrc(alt);
+  try {
+    await SB._seed();
+    let c = await SB.clipStatus("sfx-crickets");
+    assert.deepEqual([c.status, c.pending], ["active", 1], "still playable while the new file renders");
+    const sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+    assert.ok(sync.clips.some((x) => x.id === "sfx-crickets" && x.audio), "Pepe still has the old audio");
+    const oldSha = c.sha;
+    await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: "sfx-crickets", data: wav(3.3).toString("base64") });
+    c = await SB.clipStatus("sfx-crickets");
+    assert.deepEqual([c.status, c.pending], ["active", 0]);
+    assert.notEqual(c.sha, oldSha, "a new sha = a new ?v= for every cache");
+    assert.ok(fs.existsSync(path.join(process.env.SB_DIR, ".replaced", `sfx-crickets.${oldSha.slice(0, 8)}.wav`)), "the replaced WAV is kept");
+    await SB._seed();
+    assert.equal((await SB.clipStatus("sfx-crickets")).pending, 0, "the same file again: nothing to do (idempotent)");
+    // a refused new file never takes the old audio away
+    fs.appendFileSync(path.join(alt, "sfx-crickets.ogg"), Buffer.from("again"));
+    await SB._seed();
+    for (let k = 0; k < 5; k++) await call("POST", "/api/soundboards/bot/audio", null, { password: "bot", id: "sfx-crickets", failed: "ffmpeg said no" });
+    c = await SB.clipStatus("sfx-crickets");
+    assert.deepEqual([c.status, c.pending], ["active", 0], "5 failures: stops asking, keeps playing");
+    // a file that's gone (a bad deploy): the clip keeps its audio, no TTS render
+    fs.unlinkSync(path.join(alt, "sfx-crickets.ogg"));
+    await SB._seed();
+    assert.equal((await SB.clipStatus("sfx-crickets")).status, "active");
+  } finally { SB._setAudioSrc(was); }
+
+  // live clips: a re-seed never puts one back in 'render'; one stuck there (the prod bug) is healed by the sync
+  await runQuery("UPDATE sb_clips SET status = 'render', audio = NULL WHERE id = 'lg-gawk'");
+  const healed = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  assert.equal(healed.clips.find((c) => c.id === "lg-gawk").status, "active");
+  assert.ok(!healed.render.some((j) => j.id === "lg-gawk"));
+  await runQuery("UPDATE sb_clips SET status = 'render' WHERE id = 'lg-gawk'");
+  await SB._seed();
+  assert.equal((await SB.clipStatus("lg-gawk")).status, "active", "healed at startup too");
+
+  // the store: the ▶ is an SVG pair (centred, not a text glyph), Sound effects listed, a live clip without a WAV gets the note
+  const page = await call("GET", "/soundboards", U.alice);
+  assert.match(page.text, /class="sb-play"[^>]*aria-pressed="false"><svg class="i-play"/);
+  assert.match(page.text, /id="sbSfxH">🎛️ Sound effects/);
+  assert.match(page.text, /sb-noprev" aria-hidden="true">🎲/);
+  assert.match(page.text, /different random voice every time/);
+  assert.doesNotMatch(page.text, /data-audio=""/, "no empty players");
 });
