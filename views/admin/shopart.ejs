@@ -1,0 +1,76 @@
+<%- include('../partials/admin-open', { title: 'Shop pictures', user, section: 'shopart', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/shopart.ejs - 1.99xr: the shop's "🎨 Generate image" button (shopart.js): who may use it, the caps, the model, and
+  the log of every generation (previews are visible to staff here; accepted ones are the public pictures). Admins change the
+  settings; Staff can look. Data: C = shopart.config(), keyed (the env has an image-model key), rows, stats, MODELS, LIMITS.
+%>
+<%
+  const when = (t) => t ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(t, 'datetime') : '';
+  const ST = { preview: ['admin', 'preview'], accepted: ['ok', 'used'], refused: ['bad', 'refused'], failed: ['bad', 'failed'], expired: ['', 'expired'], running: ['', 'running'] };
+%>
+<div class="adm-head">
+  <h1><span class="ds-ic" aria-hidden="true">🎨</span> Shop pictures</h1>
+  <p>The <b>🎨 Generate image</b> button on every shop item form (Manage Prizes, Shop admin, the item editor and members' listings on
+     <a href="/shop/seller">/shop/seller</a>) draws the item in the shop's pixel-art house style: an image model sketches it from the title + description,
+     then the site rebuilds it on the same 48 × 36 grid, palette treatment, outline and spotlight as the hand-made prize pictures. The text goes through the
+     content filter first, and the picture through <a href="/admin/imagesafety">image safety</a> (surface "Generated shop pictures") before anyone sees it.
+     The style prompt asks for generic, unbranded products - no logos, text or real people.</p>
+</div>
+
+<section class="adm-card" aria-labelledby="saT">
+  <h2 id="saT">Status
+    <span class="adm-pill <%= keyed ? 'ok' : 'bad' %>"><%= keyed ? 'Image model key set' : 'No GEMINI_API_KEY on this env - the button is hidden' %></span>
+    <span class="adm-pill <%= C.staff_on ? 'ok' : '' %>">Staff: <%= C.staff_on ? 'ON' : 'OFF' %></span>
+    <span class="adm-pill <%= C.users_on ? 'ok' : '' %>">Members: <%= C.users_on ? 'ON' : 'OFF' %></span>
+  </h2>
+  <div class="adm-kv">
+    <div><b>Last 24 h</b><span><%= stats.day || 0 %> tries · <%= stats.made || 0 %> made · <%= stats.used || 0 %> used · <%= stats.refused || 0 %> refused · <%= stats.failed || 0 %> failed (site cap <%= C.global_per_day %>)</span></div>
+    <div><b>Model</b><span><code><%= C.model %></code> (Google Gemini; key from the environment, never shown)</span></div>
+  </div>
+</section>
+
+<section class="adm-card" id="settings" aria-labelledby="setT">
+  <h2 id="setT">Settings</h2>
+  <% if (success && success.length) { %><p class="adm-msg ok" role="status"><%= success[0] %></p><% } %>
+  <% if (!isAdmin) { %><p class="adm-help">Only Admins can change these.</p><% } %>
+  <form class="adm-form" method="POST" action="/admin/shopart">
+    <label class="ck"><span>Admins + Staff (<code>staff_on</code>)</span><span><input type="checkbox" name="staff_on" value="1"<%= C.staff_on ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> can generate</span></label>
+    <label class="ck"><span>Members (<code>users_on</code>)</span><span><input type="checkbox" name="users_on" value="1"<%= C.users_on ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> can generate (signed in + the shop's level to sell)</span></label>
+    <label><span>Member: per hour</span><input type="number" name="user_per_hour" min="<%= LIMITS.user_per_hour[0] %>" max="<%= LIMITS.user_per_hour[1] %>" value="<%= C.user_per_hour %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label><span>Member: per day</span><input type="number" name="user_per_day" min="<%= LIMITS.user_per_day[0] %>" max="<%= LIMITS.user_per_day[1] %>" value="<%= C.user_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label><span>Staff: per hour</span><input type="number" name="staff_per_hour" min="<%= LIMITS.staff_per_hour[0] %>" max="<%= LIMITS.staff_per_hour[1] %>" value="<%= C.staff_per_hour %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label><span>Staff: per day</span><input type="number" name="staff_per_day" min="<%= LIMITS.staff_per_day[0] %>" max="<%= LIMITS.staff_per_day[1] %>" value="<%= C.staff_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label><span>Whole site: per day (cost guard)</span><input type="number" name="global_per_day" min="<%= LIMITS.global_per_day[0] %>" max="<%= LIMITS.global_per_day[1] %>" value="<%= C.global_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label><span>Model</span><select name="model"<%= isAdmin ? '' : ' disabled' %>><% MODELS.forEach((m) => { %><option<%= m === C.model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
+    <p class="adm-help" style="grid-column:1/-1">Every try counts toward the caps (refused and failed ones too - each one is a model call). One picture at a time per account.
+       Unused previews are deleted after a day.</p>
+    <% if (isAdmin) { %><div style="grid-column:1/-1"><button type="submit" class="adm-btn">Save</button></div><% } %>
+  </form>
+</section>
+
+<section class="adm-card" id="log" aria-labelledby="logT">
+  <h2 id="logT">Recent generations</h2>
+  <% if (!rows.length) { %><p class="adm-help">Nothing yet.</p><% } %>
+  <ul class="sa-log">
+    <% rows.forEach((r) => { const s = ST[r.status] || ['', r.status]; %>
+      <li>
+        <div class="sa-th"><% if (r.file && (r.status === 'preview' || r.status === 'accepted')) { %><img src="/media/shopart/<%= r.file %>" alt="#<%= r.id %>" loading="lazy" width="96" height="72"><% } %></div>
+        <div>
+          <div><b>#<%= r.id %></b> <%= r.title %> · <%= when(r.created) %> · by <%= r.username || r.user_id %><%= r.staff ? ' (staff)' : '' %>
+            <span class="adm-pill <%= s[0] %>"><%= s[1] %></span></div>
+          <% if (r.description || r.extra) { %><div class="adm-help"><%= [r.description, r.extra].filter(Boolean).join(' · ').slice(0, 300) %></div><% } %>
+          <div class="adm-help"><%= r.model || '' %><%= r.shelf ? ' · ' + r.shelf : '' %><%= r.ms != null ? ' · ' + (r.ms / 1000).toFixed(1) + ' s' : '' %><%= r.reason ? ' · ' + r.reason : '' %><% if (r.safety_log) { %> · <a href="/admin/imagesafety#review">safety check #<%= r.safety_log %></a><% } %></div>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
+</section>
+<style>
+  .sa-log { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-2, 8px); }
+  .sa-log li { display: grid; grid-template-columns: 96px 1fr; gap: var(--ds-sp-3, 12px); align-items: start; padding: var(--ds-sp-2, 8px) 0; border-top: 1px solid var(--ds-line, #333); }
+  .sa-log .sa-th img { width: 96px; height: 72px; image-rendering: pixelated; border-radius: 6px; background: #111; }
+  .sa-log li > div { min-width: 0; overflow-wrap: anywhere; }
+</style>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

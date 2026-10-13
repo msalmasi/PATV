@@ -142,6 +142,7 @@
       <label>Stock <input type="number" name="stock" min="0" value="1" required></label>
       <label>Image (https:// link or /public/img/… path, optional) <input type="text" name="image_url" maxlength="500" inputmode="url" autocomplete="off" pattern="https://\S+|/\S+" title="An https:// link or a site path such as /public/img/shop/ps5-pro.svg" placeholder="/public/img/shop/….svg or https://…"></label>
       <label class="wide">Description <textarea name="description" maxlength="1000"></textarea></label>
+      <%- include('partials/shopart-gen', { shelf: '' }) %>
     </div>
     <p class="muted">Official items are sold instantly: the PAT goes to the store owner's account and the order is completed at once (as the classic prize store always did).</p>
     <div><button type="submit">Add official item</button></div>

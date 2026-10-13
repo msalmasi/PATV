@@ -5,7 +5,7 @@
     returns to the button that opened it). The requests themselves are unchanged. %>
 <style>
   .mp .mp-form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; }
-  .mp .mp-form .ds-actions { grid-column: 1 / -1; }
+  .mp .mp-form .ds-actions, .mp .mp-form .mp-wide { grid-column: 1 / -1; }
   .mp #costContainer { display: grid; }   /* styles.css has #costContainer { display: block } (an old wheel form) */
   .mp .spin-status { height: auto; min-height: 1.5em; padding: 0; margin: 0; text-align: start; color: var(--ds-danger); font-size: var(--ds-fs-sm); font-weight: 700; }
   .mp .spin-status.ok { color: var(--ds-ok); }
@@ -37,6 +37,11 @@
         <label for="prizeQty">Prize Qty</label>
         <input class="ds-in num" type="text" id="prizeQty" name="quantity" inputmode="numeric">
       </div>
+      <div class="ds-field mp-wide">
+        <label for="prizeImage">Image (optional: /public/img/… path, https:// link, or 🎨 Generate below)</label>
+        <input class="ds-in" type="text" id="prizeImage" name="image_url" maxlength="500" inputmode="url" autocomplete="off" placeholder="/public/img/shop/….svg">
+      </div>
+      <%- include('partials/shopart-gen', { shelf: '' }) %>
       <div class="ds-actions">
         <button id="addPrizeBtn" class="ds-btn">Add New Prize</button>
         <div id="PrizeListStatus" class="spin-status" role="status" aria-live="polite"></div>
@@ -83,6 +88,11 @@
           <label for="editPrizeQuantity">Quantity</label>
           <input type="number" class="ds-in num" id="editPrizeQuantity" name="quantity" required min="0" inputmode="numeric">
         </div>
+        <div class="ds-field">
+          <label for="editPrizeImage">Image (optional)</label>
+          <input type="text" class="ds-in" id="editPrizeImage" name="image_url" maxlength="500" inputmode="url" autocomplete="off">
+        </div>
+        <%- include('partials/shopart-gen', { shelf: '' }) %>
         <div class="ds-modal-f">
           <button type="button" class="ds-btn ghost" data-mp-close>Cancel</button>
           <button type="submit" class="ds-btn">Save Changes</button>
@@ -136,7 +146,7 @@
           tr.appendChild(cell(prize.cost, 'r'));
           tr.appendChild(cell(prize.quantity, 'r'));
           var acts = document.createElement('td');
-          acts.appendChild(button('Edit', 'ds-btn sm ghost', function () { window.openEditModal(prize.prizeId, prize.prize, prize.cost, prize.quantity); }));
+          acts.appendChild(button('Edit', 'ds-btn sm ghost', function () { window.openEditModal(prize.prizeId, prize.prize, prize.cost, prize.quantity, prize.image_url); }));
           acts.appendChild(button('Remove', 'ds-btn sm danger', function () { window.removePrize(prize.prize); }));
           tr.appendChild(acts);
           tbody.appendChild(tr);
@@ -155,8 +165,9 @@
       window.fetchPrizes = fetchPrizes;
 
       // Open the edit modal with prize details
-      window.openEditModal = function (prizeId, prizeName, cost, quantity) {
+      window.openEditModal = function (prizeId, prizeName, cost, quantity, imageUrl) {
         $('#editPrizeId').val(prizeId);
+        $('#editPrizeImage').val(imageUrl || '');
         $('#editPrizeName').val(prizeName);
         $('#editPrizeCost').val(cost);
         $('#editPrizeQuantity').val(quantity);
@@ -181,7 +192,8 @@
             prizeId: $('#editPrizeId').val(),
             prizeName: $('#editPrizeName').val(),
             cost: $('#editPrizeCost').val(),
-            quantity: $('#editPrizeQuantity').val()
+            quantity: $('#editPrizeQuantity').val(),
+            image_url: $('#editPrizeImage').val()
           },
           success: function (response) {
             if (response && response.message && response.message.includes('successfully')) say('Prize list edited successfully.', false, true);
@@ -213,7 +225,8 @@
         fetch('/api/prizes/edit', {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ action: 'add', prizeName: document.getElementById('prizeName').value,
-                                 cost: document.getElementById('prizeCost').value, quantity: document.getElementById('prizeQty').value }),
+                                 cost: document.getElementById('prizeCost').value, quantity: document.getElementById('prizeQty').value,
+                                 image_url: document.getElementById('prizeImage').value }),
           method: 'POST'
         }).then(function (response) {
           if (!response.ok) return response.text().then(function (t) { var e = new Error('Failed to edit prize list.'); e.detail = response.status === 400 ? t : ''; throw e; });

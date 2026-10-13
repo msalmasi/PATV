@@ -204,6 +204,7 @@ const RULES = {
   "pepe_feed_log.by": M(), "pepe_feed_log.target": M(), "pepe_feed_mutes.by": M(), "pepe_feed_seen.target": M({ key: [] }),
   "user_reports.target_id": M(), "user_reports.reporter_id": M(), "user_reports.resolved_by": M(),
   "image_safety_log.user_id": M(), "image_safety_log.reviewed_by": M(),
+  "shopart_gens.user_id": M({ name: "username" }),   // 1.99xr: shop picture generations (shopart.js) - the log + the per-account caps
   "content_audit.user_id": M(), "content_audit.target_id": M(),
   "content_audit_views.admin_id": M(), "content_audit_views.target_id": M(), "content_audit_views.subject_id": M(),
   "content_audit_views.admin_name": { deny: NAME }, "content_audit_views.target_kind": { deny: FLAG },

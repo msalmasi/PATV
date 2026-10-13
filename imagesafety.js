@@ -64,15 +64,17 @@ const crypto = require("crypto");
 const SHUTDOWN = require("./shutdown");
 const { runQuery, getQuery } = require("./dbUtils");
 
-const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked"]);
+const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked", "shop"]);
 const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures", banner: "Homepage banner ads",
-                                      locked: "Locked creator posts (PATV Creators)" });
+                                      locked: "Locked creator posts (PATV Creators)", shop: "Generated shop pictures" });
 // 1.99kk: "banner" = a paid homepage banner (banner.js) - everyone sees it, so the strict profile policy (no NSFW at all)
 // 1.99pv: "locked" = the files of a PATV Creators locked post (subscriber-only / pay-per-view, creators.js). Paid content gets
 // fewer outside eyes, so it has its own switch (locked_enforce) that ALWAYS enforces and fails CLOSED, whatever the master
 // switch and shadow mode say. Policy group "locked" (a SFW creator) or "locked_r18" (an 18+ "R-rated" community: suggestive
 // passes, explicit nudity / sexual content never does). A locked post can never be NSFW, so "nsfw" / "nsfw_pad" mean refuse there.
-const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile", locked: "locked" });
+// 1.99xr: "shop" = a picture made by the shop's Generate image button (shopart.js) - shown on public shop pages, so the strict
+// profile policy (nothing NSFW)
+const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile", locked: "locked", shop: "profile" });
 const POLICY_GROUPS = Object.freeze(["profile", "media", "locked", "locked_r18"]);
 const CATEGORIES = Object.freeze(["nudity_explicit", "sexual", "suggestive", "minor_risk", "gore", "hate_symbols"]);
 const POLICY_KEYS = Object.freeze([...CATEGORIES, "nsfw_level"]);
@@ -89,7 +91,7 @@ const DEFAULTS = Object.freeze({
   // is switched by an admin (/admin/imagesafety) - until then creators.js refuses locked pictures / videos (text locks only).
   locked_enforce: !!process.env.STAGING,
   enabled: false, shadow: false, fail_mode: "open", timeout_secs: 20, video_frames: 3, notify_minor: true, retention_days: 30,
-  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true, locked: true }),
+  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true, locked: true, shop: true }),
   thresholds: Object.freeze({ nudity_explicit: 0.5, sexual: 0.5, suggestive: 0.5, minor_risk: 0.4, gore: 0.5, hate_symbols: 0.6 }),
   policy: DEFAULT_POLICY,
 });
@@ -262,7 +264,7 @@ function refusalMessage(surface, why, padAllowsNsfw, group) {
   if (group === "locked") return "Locked posts must be safe for work: no nudity, sexual or suggestive content (Creator Terms). Suggestive content is allowed only on 18+ profiles and pads.";
   if (group === "locked_r18") return "Locked posts can be suggestive on an 18+ profile or pad, but never explicit: no nudity or sexual acts (Creator Terms).";
   if (GROUP[surface] === "profile") {
-    const what = surface === "profile_photo" ? "Profile photos" : surface === "banner" ? "Homepage banners" : "Pad avatars and banners";
+    const what = surface === "profile_photo" ? "Profile photos" : surface === "banner" ? "Homepage banners" : surface === "shop" ? "Shop pictures" : "Pad avatars and banners";
     return `That picture looks like adult or graphic content - ${what} must be safe for work (Terms).`;
   }
   if (!padAllowsNsfw && (why.includes("nudity_explicit") || why.includes("sexual"))) return "That looks like explicit content, and this pad doesn't allow NSFW posts.";

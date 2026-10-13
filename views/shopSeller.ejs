@@ -27,6 +27,7 @@
       <label><%- t('shop.sd.f.image') %> <input type="text" name="image_url" maxlength="500" inputmode="url" autocomplete="off" pattern="https://\S+|/\S+" value="<%= v.image_url || '' %>" placeholder="https://…"></label>
       <label class="wide"><%- t('shop.sd.f.desc') %>
         <textarea name="description" maxlength="1000"><%= v.description || '' %></textarea></label>
+      <%- include('partials/shopart-gen', { shelf: 'market' }) %>
       <label class="wide"><%- t('shop.sd.f.ask') %> <input type="text" name="buyer_prompt" maxlength="120" value="<%= v.buyer_prompt || '' %>" placeholder="<%- t('shop.sd.f.ask_ph') %>"></label>
     </div>
 <% }; %>

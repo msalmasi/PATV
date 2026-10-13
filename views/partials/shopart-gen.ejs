@@ -1,0 +1,51 @@
+<%#
+  views/partials/shopart-gen.ejs - 1.99xr: the "🎨 Generate image" button for a shop item form (shopart.js, public/js/shopart.js).
+  Put it inside the <form> that has the item's title (name=title or prizeName), description, category and image_url fields.
+  It starts HIDDEN: the script asks /api/shopart/status and only shows it when this account may generate (the site switch for
+  staff / members, the shop's level to sell, an image-model key on this env). Params: shelf (optional default spotlight).
+  Every string is printed here from the catalog (shopart.*), so the script needs no i18n of its own.
+%><%
+  const _t = locals.i18nT || locals.t || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+  const _shelf = typeof shelf !== 'undefined' && shelf ? shelf : '';
+  const _shelves = ['camfrog', 'plex', 'roles', 'perks', 'gaming', 'goods', 'fun', 'more', 'market'];
+%>
+<div class="sa-gen wide" data-shopart hidden
+     data-s-working="<%= _t('shopart.working') %>" data-s-left="<%= _t('shopart.left', { hour: '{hour}', day: '{day}' }) %>" data-s-used="<%= _t('shopart.used') %>"
+     data-s-need-title="<%= _t('shopart.need_title') %>" data-s-failed="<%= _t('shopart.failed') %>" data-s-again="<%= _t('shopart.again') %>">
+  <div class="sa-row">
+    <button type="button" class="sa-go ds-btn sm" data-sa-go><%= _t('shopart.btn') %></button>
+    <label class="sa-f"><span><%= _t('shopart.spot') %></span>
+      <select data-sa-shelf>
+        <option value=""><%= _t('shopart.spot_auto') %></option>
+        <% _shelves.forEach((s) => { %><option value="<%= s %>"<%= s === _shelf ? ' selected' : '' %>><%= _t('shop.shelf.' + s) %></option><% }) %>
+      </select>
+    </label>
+    <label class="sa-f sa-x"><span><%= _t('shopart.extra') %></span><input type="text" data-sa-extra maxlength="200" placeholder="<%= _t('shopart.extra_ph') %>"></label>
+  </div>
+  <p class="sa-hint"><%= _t('shopart.hint') %> <span data-sa-left></span></p>
+  <div class="sa-prev" data-sa-prev hidden>
+    <img data-sa-img alt="<%= _t('shopart.preview_alt') %>" width="240" height="180">
+    <div class="sa-acts">
+      <button type="button" class="ds-btn sm" data-sa-use><%= _t('shopart.use') %></button>
+      <button type="button" class="ds-btn sm ghost" data-sa-again><%= _t('shopart.again') %></button>
+    </div>
+  </div>
+  <p class="sa-msg" data-sa-msg role="status" aria-live="polite"></p>
+</div>
+<style>
+  .sa-gen { display: grid; gap: 6px; padding: 10px 12px; border: 1px dashed var(--ds-line, #333); border-radius: 10px; grid-column: 1 / -1; }
+  .sa-gen[hidden] { display: none; }
+  .sa-gen .sa-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; }
+  .sa-gen .sa-f { display: grid; gap: 2px; font-size: .85em; min-width: 0; }
+  .sa-gen .sa-x { flex: 1 1 220px; }
+  .sa-gen .sa-f input, .sa-gen .sa-f select { width: 100%; box-sizing: border-box; }
+  .sa-gen .sa-hint, .sa-gen .sa-msg { margin: 0; font-size: .82em; color: var(--ds-text-muted, #aaa); }
+  .sa-gen .sa-msg.err { color: var(--ds-danger, #e57373); font-weight: 700; }
+  .sa-gen .sa-msg.ok { color: var(--ds-ok, #4caf50); font-weight: 700; }
+  .sa-gen .sa-prev { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .sa-gen .sa-prev[hidden] { display: none; }
+  .sa-gen .sa-prev img { width: 240px; max-width: 100%; height: auto; aspect-ratio: 4 / 3; image-rendering: pixelated; border-radius: 8px; background: #111; }
+  .sa-gen .sa-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sa-gen.busy .sa-go, .sa-gen.busy [data-sa-again], .sa-gen.busy [data-sa-use] { opacity: .5; pointer-events: none; }
+</style>
+<script src="/public/js/shopart.js" defer></script>

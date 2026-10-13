@@ -1180,6 +1180,7 @@ require("./padcreate").register(app, { addUser });    // 1.99iz: members create 
 require("./padconnect").register(app, { addUser, isBotToken });   // 1.99ja: connect a pad to Camfrog (verified) / Twitch; Pepe's /api/pads/verify
 require("./imagesafety").register(app, { isBotToken, addUser });   // 1.99fc: image safety checks via Pepe's vision (OFF by default; /admin/imagesafety)
 require("./imagesafety").install();   // 1.99fc: padlook / stories / feed posts / DM pictures go through it (a pass-through while it's off)
+require("./shopart").register(app, { addUser });   // 1.99xr: the shop's 🎨 Generate image button (house pixel style; GEMINI_API_KEY; /admin/shopart)
 require("./help").register(app, { addUser, isBotToken, clientIp: guard.clientIp });   // 1.99fq: /help (Pepe's commands, published by Pepe) + its "ask how to do something" prompter
 require("./padlook").register(app, { addUser });       // 1.99es: a pad's look - avatar, banner, accent (/api/rooms/:slug/look, /media/pad/<file>)
 require("./padcosmetics").register(app, { addUser });   // 1.99ew: premium pad cosmetics - frames, glows, badges, animated avatar (/api/rooms/:slug/cosmetics; 100% Fort Knox / gift 50/50)

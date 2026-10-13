@@ -1053,7 +1053,9 @@ function validateListing(b) {
   if (!(price >= 1 && price <= PRICE_MAX)) throw new Refuse(400, `Price must be 1–${PRICE_MAX.toLocaleString()} PAT.`);
   if (!(stock >= 0 && stock <= STOCK_MAX)) throw new Refuse(400, `Stock must be 0–${STOCK_MAX.toLocaleString()}.`);
   const local = localImagePath(image_url);
-  if (local) {
+  if (require("./shopart").isArtUrl(image_url)) {
+    // 1.99xr: a picture made by the Generate image button (shopart.js) and accepted - served at /media/shopart/<32 hex>.svg
+  } else if (local) {
     // 1.99lz: one of the shop's own pictures (public/img/shop, tools/gen-shop-art.py); 1.99nh: any picture the site serves
     // from /public (static files only), with "/img/..." normalized to the "/public/img/..." it is really served at
     image_url = local;
@@ -1381,9 +1383,9 @@ function register(app, deps) {
   app.get("/api/prizes", async (req, res) => {
     try {
       await ready;
-      const rows = await getQuery("SELECT prizeId, prize, cost, quantity FROM prizes WHERE seller_id IS NULL AND status = 'active'");
+      const rows = await getQuery("SELECT prizeId, prize, cost, quantity, image_url FROM prizes WHERE seller_id IS NULL AND status = 'active'");
       // the spin boost's cost here is its first-copy price; buying it charges the buyer's own price
-      res.json(rows.map((row) => ({ prize: row.prize, cost: row.cost, prizeId: row.prizeId, quantity: row.quantity,
+      res.json(rows.map((row) => ({ prize: row.prize, cost: row.cost, prizeId: row.prizeId, quantity: row.quantity, image_url: row.image_url || null,
         ...(row.prizeId === SPINBOOST_ID ? { cost_note: `${SPINBOOST_BASE.toLocaleString()} for your first, +${SPINBOOST_STEP.toLocaleString()} for each one you own` } : {}) })));
     } catch (error) {
       console.error(error);
@@ -1704,6 +1706,14 @@ function register(app, deps) {
       // characters (stored as text and escaped wherever it is shown) and whole-number cost / quantity in range.
       const prizeName = oneLine(req.body.prizeName, 80);
       const cost = toInt(req.body.cost), quantity = toInt(req.body.quantity);
+      // 1.99xr: an optional picture (the Generate image button, a /public/img path or an https:// link - checked like a listing's);
+      // not sent = the picture is left as it is
+      const imgSent = req.body.image_url !== undefined;
+      let image_url = null;
+      if (imgSent && String(req.body.image_url).trim()) {
+        try { image_url = validateListing({ title: "xxx", category: settings.categories[0], price: 1, stock: 0, image_url: req.body.image_url }).image_url; }
+        catch (e) { return res.status(400).send(e.refuse ? e.message : "Bad picture."); }
+      }
       try {
         await ready;
         if (action === "add") {
@@ -1711,14 +1721,17 @@ function register(app, deps) {
           if (!(cost >= 0 && cost <= PRICE_MAX)) return res.status(400).send(`Cost must be a whole number, 0-${PRICE_MAX.toLocaleString()} PAT.`);
           if (!(quantity >= 0 && quantity <= STOCK_MAX)) return res.status(400).send(`Quantity must be a whole number, 0-${STOCK_MAX.toLocaleString()}.`);
           if (prizeId) {
-            const r = await runQuery("UPDATE prizes SET prize = ?, cost = ?, quantity = ?, updated = ? WHERE prizeId = ? AND seller_id IS NULL",
-                                     [prizeName, cost, quantity, Date.now(), prizeId]);
+            const r = imgSent
+              ? await runQuery("UPDATE prizes SET prize = ?, cost = ?, quantity = ?, image_url = ?, updated = ? WHERE prizeId = ? AND seller_id IS NULL",
+                               [prizeName, cost, quantity, image_url, Date.now(), prizeId])
+              : await runQuery("UPDATE prizes SET prize = ?, cost = ?, quantity = ?, updated = ? WHERE prizeId = ? AND seller_id IS NULL",
+                               [prizeName, cost, quantity, Date.now(), prizeId]);
             if (!r.changes) return res.status(404).send("Prize not found.");
             res.json({ message: "Prize updated successfully." });
           } else {
-            await runQuery(`INSERT INTO prizes (prizeId, prize, cost, quantity, delivery, status, sold, created, updated)
-                            VALUES (?, ?, ?, ?, 'instant', 'active', 0, ?, ?)`,
-                           [uuidv4(), prizeName, cost, quantity, Date.now(), Date.now()]);
+            await runQuery(`INSERT INTO prizes (prizeId, prize, cost, quantity, delivery, image_url, status, sold, created, updated)
+                            VALUES (?, ?, ?, ?, 'instant', ?, 'active', 0, ?, ?)`,
+                           [uuidv4(), prizeName, cost, quantity, image_url, Date.now(), Date.now()]);
             res.json({ message: "Prize added successfully." });
           }
         } else if (action === "remove") {
