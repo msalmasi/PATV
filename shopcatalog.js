@@ -44,6 +44,7 @@ const ITEMS = {
   "178a838b-df7f-42b7-aef4-915d6a8a5c4a": { key: "nitro-1m", shelf: "perks", delivery: "staff" },
   "4b0c7b3c-61f5-4294-a4a4-b932f8977670": { key: "nitro-1y", shelf: "perks", delivery: "staff" },
   "9c0aa228-e0c4-46dd-97cc-dc41a245bc05": { key: "ps5-pro", shelf: "gaming", delivery: "staff" },
+  "741fa7e3-5804-454f-a064-c5b537fb782a": { key: "switch-2", shelf: "gaming", delivery: "staff" },   // 1.99xp, tools/add-switch-2.js
   "35433a15-f2d4-4b43-b886-3bdb1686e8b2": { key: "gaming-pc", shelf: "gaming", delivery: "staff" },
   "1289bc9c-4c1f-4f02-b61f-354d4c51ff0b": { key: "gta6", shelf: "gaming", delivery: "staff" },
   "5509b71a-e671-4004-8932-fc82059ace41": { key: "retro-game", shelf: "gaming", delivery: "staff" },

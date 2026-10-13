@@ -526,6 +526,45 @@ def a_pizza():
     return g
 
 
+def a_handheld():
+    """Nintendo Switch 2 (generic, no logos): a handheld with its two controllers on, a frog hopping on the screen."""
+    g = Grid()
+    BODY, PAD, KEY, STICK = "#1e1f24", "#2b2d33", "#4a4d55", "#121216"
+    # the two controllers, rounded ends, a coloured rail where each meets the screen
+    g.rect(3, 11, 11, 31, PAD)
+    g.rect(36, 11, 44, 31, PAD)
+    for (x, y) in ((3, 11), (4, 11), (3, 12), (3, 31), (4, 31), (3, 30), (44, 11), (43, 11), (44, 12), (44, 31), (43, 31), (44, 30)):
+        g.set(x, y, None)
+    g.rect(11, 12, 11, 30, "#2f9bff")
+    g.rect(36, 12, 36, 30, "#ff4b5c")
+    # left: stick up top, four arrow keys below; right: four face keys up top, stick below
+    g.ellipse(7.5, 15.5, 2.2, 2.2, STICK); g.set(7, 15, "#3a3c44")
+    g.pts([(7, 22), (7, 26), (5, 24), (9, 24)], KEY)
+    g.pts([(40, 13), (40, 17), (38, 15), (42, 15)], KEY)
+    g.ellipse(40.5, 23.5, 2.2, 2.2, STICK); g.set(40, 23, "#3a3c44")
+    g.set(9, 12, KEY); g.pts([(38, 12), (38, 13)], KEY)
+    # the screen in its bezel: sky, sun, a cloud, green hills, a frog mid-hop over a coin
+    g.rect(12, 11, 35, 31, BODY)
+    s = Grid()   # the game on screen, drawn on its own grid and clipped to the glass
+    s.rect(13, 12, 34, 30, "#5ec8ff")
+    s.rect(13, 12, 34, 14, "#3aa8f0")
+    s.ellipse(30.5, 16.5, 2.2, 2.2, "#ffd166")
+    s.rect(16, 15, 20, 16, "#f5f5f5"); s.rect(17, 14, 19, 14, "#f5f5f5")
+    s.ellipse(17, 29, 7, 5, FROGD)
+    s.ellipse(31, 30, 8, 5.5, "#2e9a44")
+    s.rect(13, 28, 34, 30, "#8a5a2b")
+    s.rect(13, 27, 34, 27, FROGL)
+    s.ellipse(24.5, 21.5, 2.6, 2.0, FROG)
+    s.pts([(23, 20), (26, 20)], "#f5f5f5")
+    s.pts([(23, 19), (26, 19)], FROG)
+    s.pts([(22, 23), (27, 23)], FROGD)
+    s.pts([(33, 13), (32, 14), (33, 14)], "#e8f6ff")   # a glint of glass in the corner
+    for y in range(12, 31):
+        for x in range(13, 35):
+            g.set(x, y, s.get(x, y))
+    return g
+
+
 # key -> (title, shelf, sprite fn, tag)
 ITEMS = {
     "camfrog-pro-1m": ("Camfrog Pro, 1 month", "camfrog", lambda: member_card("pro", False), "1 MO"),
@@ -546,6 +585,7 @@ ITEMS = {
     "role-curator": ("Curator role", "roles", a_clapper, "ROLE"),
     "role-high-roller": ("High Roller role", "roles", a_highroller, "ROLE"),
     "ps5-pro": ("Console", "gaming", a_console, None),
+    "switch-2": ("Handheld console", "gaming", a_handheld, None),
     "gaming-pc": ("Custom gaming PC", "gaming", a_pc, None),
     "gta6": ("Game pre-order", "gaming", a_gamecase, None),
     "retro-game": ("Random retro game", "gaming", a_cart, "RETRO"),
