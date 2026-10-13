@@ -255,9 +255,13 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
   if (step("pepe")) {
     const PS = M("padsite");
     const st = await PS.state(R0.id);
+    // a house pad without settings of its own FOLLOWS the site-wide (All) ones; the first change gives it its own row (from the
+    // defaults), so then every key here is written - not only the ones that differ from what it inherited
+    await M("feedstore").init();
+    const inherited = (await M("feedstore").kvGet("pepe:scope:" + R0.id)) == null;
     for (const [k, v] of PEPE_SITE) {
       const cur = st.values[k] ? st.values[k].value : undefined;
-      if (JSON.stringify(cur) === JSON.stringify(v)) { same("pepe", `${k} = ${fmt(v)}`); continue; }
+      if (!inherited && JSON.stringify(cur) === JSON.stringify(v)) { same("pepe", `${k} = ${fmt(v)}`); continue; }
       plan("pepe", `${k} ${fmt(cur)} -> ${fmt(v)}`);
       if (APPLY) await PS.set(admin, R0.id, k, v);
     }
