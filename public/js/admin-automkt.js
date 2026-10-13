@@ -59,6 +59,10 @@
       f.cat_sports.checked = !!(c.cats || {}).sports; f.cat_prices.checked = !!(c.cats || {}).prices; f.cat_news.checked = !!(c.cats || {}).news;
       f.cat_trending.checked = !!(c.cats || {}).trending; f.polls.checked = c.polls !== false;
       f.poly_every_h.value = c.poly_every_h || 6; f.poll_hours.value = c.poll_hours || 24;
+      var w = c.weights || {};                                  // 1.99wd: the mix, marquee sports, the auto pad
+      ["sports", "prices", "news", "trending"].forEach(function (k) { if (f["w_" + k]) f["w_" + k].value = w[k] != null ? w[k] : ""; });
+      if (f.marquee_only) f.marquee_only.checked = c.marquee_only !== false;
+      if (f.pad) f.pad.value = c.pad || "";
       f.announce.checked = !!c.announce; f.announce_gap_min.value = c.announce_gap_min; f.feed_post.checked = !!c.feed_post; f.seed_cap_week.value = c.seed_cap_week;
       var o = S.options || {};
       var box = function (k, label) {
@@ -112,6 +116,12 @@
                   polls: f.polls.checked, poly_every_h: Number(f.poly_every_h.value), poll_hours: Number(f.poll_hours.value),
                   announce: f.announce.checked, announce_gap_min: Number(f.announce_gap_min.value), feed_post: f.feed_post.checked,
                   seed_cap_week: Number(f.seed_cap_week.value), leagues: lists.leagues, assets: lists.assets, feeds: lists.feeds };
+      if (f.w_sports) {
+        cfg.weights = {};
+        ["sports", "prices", "news", "trending"].forEach(function (k) { if (f["w_" + k].value !== "") cfg.weights[k] = Number(f["w_" + k].value); });
+        cfg.marquee_only = f.marquee_only.checked;
+        cfg.pad = f.pad.value.trim();
+      }
       post({ action: "set", args: { cfg: cfg } }).then(function (j) { delete f.dataset.dirty; queued(f.querySelector("[data-msg]"), j, "Settings"); });
     });
   }

@@ -8538,5 +8538,9 @@
   "js.inc.slow": "Pepe hasn't answered yet - it will happen when he does.",
   "js.inc.not_sent": "Not sent - try again.",
   "js.inc.unreachable": "Couldn't reach the site - try again.",
-  "js.inc.reported": "Pepe last reported it {when}."
+  "js.inc.reported": "Pepe last reported it {when}.",
+  "automkt.adm.weights": "Mix (relative weights, 0 = never)",
+  "automkt.adm.marquee": "Sports: marquee events only (finals, championships, the postseason, numbered UFC cards; no single regular matches)",
+  "automkt.adm.pad": "Pad they go to (blank = Pepe's Pad)",
+  "automkt.adm.pad_ph": "PepeFrog.Room"
 }

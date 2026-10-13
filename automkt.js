@@ -126,7 +126,13 @@ async function request(me, b) {
     for (const k of ["per_week", "announce_gap_min", "seed_cap_week", "poly_every_h", "poll_hours"]) if (c[k] !== undefined && Number.isFinite(Number(c[k]))) cfg[k] = Math.max(0, Math.floor(Number(c[k])));
     if (["news", "all", "none"].includes(c.review)) cfg.review = c.review;
     if (c.cats && typeof c.cats === "object") cfg.cats = Object.fromEntries(CATS.filter((k) => k in c.cats).map((k) => [k, !!c.cats[k]]));
-    for (const k of ["announce", "feed_post", "polls"]) if (k in c) cfg[k] = !!c[k];
+    for (const k of ["announce", "feed_post", "polls", "marquee_only"]) if (k in c) cfg[k] = !!c[k];
+    // 1.99wd: the category weights (0..10, 0 = never) and the pad auto markets / pools / polls go to ("" = Pepe's Pad)
+    if (c.weights && typeof c.weights === "object") {
+      cfg.weights = Object.fromEntries(CATS.filter((k) => k in c.weights && Number.isFinite(Number(c.weights[k])))
+        .map((k) => [k, Math.max(0, Math.min(10, Number(c.weights[k])))]));
+    }
+    if (typeof c.pad === "string" && /^[A-Za-z0-9._:~\-]{0,128}$/.test(c.pad.trim())) cfg.pad = c.pad.trim();
     for (const k of ["leagues", "assets", "feeds"]) if (Array.isArray(c[k])) cfg[k] = c[k].map((x) => String(x).slice(0, 20)).slice(0, 20);
     if (!Object.keys(cfg).length) throw new Refuse(400, "Nothing to change.");
     args = { cfg };

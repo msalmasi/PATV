@@ -38,6 +38,15 @@
     <label class="adm-check"><input type="checkbox" name="polls"> 📊 <%= t('automkt.adm.polls') %></label>
     <label><%= t('automkt.adm.poll_hours') %><input type="number" name="poll_hours" min="1" max="168"></label>
     <p class="adm-help adm-adv"><%= t('automkt.adm.dedupe_help') %></p>
+    <%# 1.99wd: the mix (relative weights, 0 = never), marquee sports only, the pad they all go to %>
+    <fieldset class="adm-fs"><legend><%= t('automkt.adm.weights') %></legend>
+      <label>🏟️ Sports<input type="number" name="w_sports" min="0" max="10" step="0.05"></label>
+      <label>📈 Prices<input type="number" name="w_prices" min="0" max="10" step="0.05"></label>
+      <label>📰 News<input type="number" name="w_news" min="0" max="10" step="0.05"></label>
+      <label>🔥 <%= t('automkt.adm.trending') %><input type="number" name="w_trending" min="0" max="10" step="0.05"></label>
+    </fieldset>
+    <label class="adm-check"><input type="checkbox" name="marquee_only"> 🏆 <%= t('automkt.adm.marquee') %></label>
+    <label><%= t('automkt.adm.pad') %><input type="text" name="pad" maxlength="128" placeholder="<%= t('automkt.adm.pad_ph') %>"></label>
     <label class="adm-check"><input type="checkbox" name="announce"> Announce new ones in Pepe's rooms</label>
     <label>…at most one line every (minutes)<input type="number" name="announce_gap_min" min="0" max="1440"></label>
     <label class="adm-check"><input type="checkbox" name="feed_post"> Post them on the feed (at most one post every 6 h, 3 a day)</label>
@@ -83,7 +92,7 @@
 
 <script id="amData" type="application/json"><%- JSON.stringify(A).replace(/</g, '\\u003c') %></script>
 <script id="amL" type="application/json"><%- JSON.stringify({ trending: t('automkt.adm.trending_state'), trending_err: t('automkt.adm.trending_err'), idea: t('automkt.adm.idea'), poll: t('automkt.adm.poll_link') }).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-automkt.js?v=2" defer></script>
+<script src="/public/js/admin-automkt.js?v=3" defer></script>
 <%- include('../partials/admin-mktcfg') %>
 <%- include('../partials/admin-close') %>
 </body>
