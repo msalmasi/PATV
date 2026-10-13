@@ -116,3 +116,100 @@ test("polls: one running poll per pad; chat finds its room's pad's poll, else a 
   assert.ok(e.ok);
   assert.equal((await polls.act("vote", { voter: "hal", option: 1, poll_id: b.poll.id }, "web")).code, "ended");
 });
+
+// ── the pages: pad on cards, ?pad= filter, voided hidden by default, the create forms' pad picker + close picker ──
+test("the lists: pads on the cards, ?pad= filters, voided ones hidden unless ?void=1; /polls/<id>; the pad page's card", async () => {
+  const express = require("express");
+  const cookieParser = require("cookie-parser");
+  const tz = require(path.join(repo, "tz"));
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, camfrogUsername, class, points_balance) VALUES ('u1', 'ann', 'ann_cf', 'pleb', 100000)");
+  const app = express();
+  app.set("view engine", "ejs");
+  app.set("views", path.join(repo, "views"));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
+  app.use(cookieParser());
+  app.use(tz.middleware(() => null));
+  const addUser = (req, res, next) => { req.user = req.get("x-user") ? { userId: req.get("x-user"), username: "ann" } : null; next(); };
+  markets.register(app, { isBotToken: (t) => t === "bot-token", addUser });
+  require(path.join(repo, "wagers")).register(app, { isBotToken: (t) => t === "bot-token", addUser });
+  require(path.join(repo, "polls")).register(app, { isBotToken: (t) => t === "bot-token", addUser });
+  require(path.join(repo, "actions")).register(app, { isBotToken: (t) => t === "bot-token", addUser });
+  const server = app.listen(0);
+  const base = "http://127.0.0.1:" + server.address().port;
+  const get = async (p, user) => (await fetch(base + p, { headers: user ? { "x-user": user } : {} })).text();
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const lm = (id, extra) => ({ id, model: "lmsr", question: `Market ${id}?`, options: ["Yes", "No"], b: 50000, volume: 1000, q: { Yes: 0, No: 0 },
+                                 status: "open", creator: "ann_cf", judge: "bob", created: now - 60, closes: now + 7200, positions: {}, trades: [], history: [], ...extra });
+    await markets.storeRow(markets.cleanMarket(lm(911, { room: "DRAMA_CENTRAL" })));
+    await markets.storeRow(markets.cleanMarket(lm(912, { pad: "patv:quiz", tz: "Asia/Tokyo" })));
+    await markets.storeRow(markets.cleanMarket(lm(913, { room: "DRAMA_CENTRAL", status: "void", void_reason: "test", paid_out: { at: now, total: 0, result: "void test" } })));
+    await markets.storeRow(markets.cleanMarket({ id: 914, model: "pool", question: "Pool 914?", options: ["a", "b"], status: "open", creator: "ann_cf", judge: "bob",
+                                                 created: now - 60, closes: now + 7200, pad: "patv:quiz", bets: [] }));
+    await markets.storeRow(markets.cleanMarket({ id: 915, model: "pool", question: "Pool 915?", options: ["a", "b"], status: "void", creator: "ann_cf", judge: "bob",
+                                                 created: now - 600, closes: now - 60, ended: now, pad: "patv:quiz", bets: [] }));
+    let h = await get("/markets");
+    assert.match(h, /Market 911\?/);
+    assert.match(h, /Market 912\?/);
+    assert.doesNotMatch(h, /Market 913\?/, "a voided market is hidden by default");
+    assert.match(h, /Show voided \(1\)/);
+    assert.match(h, /📍<\/span> Quiz Night/);
+    h = await get("/markets?void=1");
+    assert.match(h, /Market 913\?/);
+    h = await get("/markets?pad=quiz-night");
+    assert.match(h, /Market 912\?/);
+    assert.doesNotMatch(h, /Market 911\?/);
+    assert.match(h, /Showing <a href="\/p\/quiz-night">Quiz Night<\/a> only/);
+    h = await get("/markets?pad=quiz-night", "u1");
+    assert.match(h, /<option value="patv:quiz" selected>Quiz Night<\/option>/, "the create form defaults to the pad you came from");
+    assert.match(h, /data-close-pick data-min-secs="3600" data-max-secs="7776000"/);
+    h = await get("/markets/912");
+    assert.match(h, /pad <a class="pad-link" href="\/p\/quiz-night">Quiz Night<\/a>/);
+    assert.match(h, /Market time: .*GMT\+9 \(Asia\/Tokyo\)/);
+    h = await get("/markets/911");
+    assert.match(h, /pad <a class="pad-link" href="\/p\/drama-central">Drama Central<\/a>/);
+    // pools on /wagers
+    h = await get("/wagers");
+    assert.match(h, /Pool 914\?/);
+    assert.doesNotMatch(h, /Pool 915\?/);
+    h = await get("/wagers?void=1&pad=quiz-night");
+    assert.match(h, /Pool 915\?/);
+    // polls: the permalink and the filter
+    const polls = await getQuery("SELECT id, pad FROM polls");
+    const quiz = polls.find((p) => p.pad === "patv:quiz");
+    h = await get("/polls/" + quiz.id);
+    assert.match(h, /This poll/);
+    assert.match(h, /Quiz tonight\?/);
+    assert.equal((await fetch(base + "/polls/nope_123")).status, 404);
+    h = await get("/polls?pad=drama-central");
+    assert.match(h, /Best snack\?/);
+    assert.doesNotMatch(h, /Quiz tonight\?/);
+    // the pad page's card
+    const pb = await require(path.join(repo, "padbets")).forPad("patv:quiz");
+    assert.deepEqual(pb.markets.map((m) => m.id), [912]);
+    assert.deepEqual(pb.pools.map((m) => m.id).filter((id) => id > 910), [914], "(901 / 902 above are old-style rows: pools)");
+    assert.ok(!pb.pools.some((m) => m.id === 915), "the voided pool isn't listed");
+    // the create form: the pad + a picked close go to Pepe as words; a pad nobody knows / a close out of bounds are refused
+    const act = async (body) => {
+      const r = await fetch(base + "/act", { method: "POST", redirect: "manual", headers: { "x-user": "u1", "content-type": "application/x-www-form-urlencoded" },
+                                             body: new URLSearchParams(body).toString() });
+      return decodeURIComponent(String(r.headers.get("location") || ""));
+    };
+    const until = now + 3 * 86400;
+    let loc = await act({ kind: "cmd", cmd: "market", a0: "new", a1: "Will it snow?", a3: "judge @bob", a4: "closes 1d", pad: "patv:quiz",
+                          until: String(until), tz: "Europe/Paris", back: "/markets" });
+    assert.match(loc, /Sent to Pepe/);
+    const q = (await getQuery("SELECT args FROM pepe_actions ORDER BY id DESC LIMIT 1"))[0];
+    assert.deepEqual(JSON.parse(q.args), ["market", "new", "Will it snow?", "judge @bob", "until:" + until, "tz:Europe/Paris", "pad:patv:quiz"]);
+    loc = await act({ kind: "cmd", cmd: "market", a0: "new", a1: "Will it hail?", a3: "judge @bob", pad: "no-such-pad", back: "/markets" });
+    assert.match(loc, /can't post to that pad/);
+    loc = await act({ kind: "cmd", cmd: "market", a0: "new", a1: "Will it hail?", a3: "judge @bob", until: String(now + 600), back: "/markets" });
+    assert.match(loc, /between 1 hour and 90 days/);
+    loc = await act({ kind: "cmd", cmd: "market", a0: "new", a1: "Will it fog?", a3: "judge @bob", pad: "", back: "/markets" });
+    assert.deepEqual(JSON.parse((await getQuery("SELECT args FROM pepe_actions ORDER BY id DESC LIMIT 1"))[0].args).slice(-1), ["pad:none"],
+                     "site-wide is said out loud (Pepe then ignores the room the creator happens to be in)");
+  } finally {
+    server.close();
+  }
+});

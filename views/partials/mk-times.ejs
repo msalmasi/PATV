@@ -21,13 +21,22 @@
    if (created_) parts_.push(T_('market.time.opened', { when: tm_(created_) }));
    if (closes_) parts_.push(T_(open_ ? 'market.time.closes' : 'market.time.closed', { when: tm_(closes_) }) + (open_ ? ' (' + T_('market.time.in', { left: left_(closes_) }) + ')' : ''));
    if (ai_ && Number(ai_.at) && (ai_.state === 'proposed' || ai_.state === 'disputed' || ai_.state === 'final')) parts_.push(T_('market.time.judged', { when: tm_(Number(ai_.at)) }));
-   if (settledAt_ && (S_ || /^(settled|void|resolved)$/.test(String(mt_.status)))) parts_.push(T_('market.time.settled', { when: tm_(settledAt_) })); %>
+   if (settledAt_ && (S_ || /^(settled|void|resolved)$/.test(String(mt_.status)))) parts_.push(T_('market.time.settled', { when: tm_(settledAt_) }));
+   // 1.99ur: a close the creator picked shows in the MARKET's time zone (theirs) too, with a live countdown while open
+   let mtz_ = null;
+   if (mt_.tz && closes_ && !locals.compact) {
+     try {
+       const s_ = new Date(closes_ * 1000).toLocaleString('en-US', { timeZone: mt_.tz, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+       mtz_ = { when: s_, zone: mt_.tz };
+     } catch (e) { mtz_ = null; }
+   } %>
 <% if (parts_.length) { %>
 <div class="mk-times<%= locals.compact ? ' compact' : '' %>">
   <span class="mk-t-line"><%- parts_.join(' · ') %></span>
   <% if (relQ_ && created_ && closes_ && !locals.compact) { %>
     <span class="mk-t-win"><%- T_('market.time.window', { from: tm_(created_), to: tm_(closes_) }) %></span>
   <% } %>
+  <% if (mtz_) { %><span class="mk-t-mtz"><%- T_('market.time.market_tz', { when: T_.esc(mtz_.when), zone: T_.esc(mtz_.zone) }) %><% if (open_) { %> · <%- T_('market.time.left', { left: '<span class="cd" data-until="' + closes_ + '">' + T_.esc(left_(closes_)) + '</span>' }) %><% } %></span><% } %>
   <% if (!locals.compact) { %><span class="mk-t-note"><%= T_('market.time.tz_note') %></span><% } %>
 </div>
 <% } %>

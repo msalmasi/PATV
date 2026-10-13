@@ -75,7 +75,8 @@ test("an existing user is linked: display name, profile href, login in the title
   assert.match(h, /<tr><td><a class="ulink" href="\/u\/pb" title="foamy1111">Foamy &lt;3<\/a>&nbsp;<span class="ulink-web" title="Made on the website">🌐<\/span><\/td>/);
   assert.doesNotMatch(h, /\/u\/CFa1b2c3d4/, "the real account wins over a random CF one on the same login");
   // the header: creator linked (by Camfrog login), case-insensitive in the trades too
-  assert.match(h, /created by <a class="ulink" href="\/u\/ritchie" title="ritchiecuh">Ritchie<\/a> in <a class="pad-link" href="\/p\/[a-z0-9_-]+" title="p\/[a-z0-9_-]+">plant_based_chatting<\/a>/);
+  // 1.99ur: the pad it belongs to (padlinks.js) by its title, not the raw chat room id
+  assert.match(h, /created by <a class="ulink" href="\/u\/ritchie" title="ritchiecuh">Ritchie<\/a> · pad <a class="pad-link" href="\/p\/[a-z0-9_-]+">Houseplants<\/a>/);
   assert.match(h, /<a class="ulink" href="\/u\/ritchie" title="RitchieCuh">Ritchie<\/a><\/td>/);
 });
 

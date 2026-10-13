@@ -155,3 +155,17 @@ a.bx-card:hover, a.bx-card:focus-visible { border-color: var(--ds-ac); transform
   .bx *, .bx *::before, .bx *::after { animation: none !important; transition: none !important; }
   a.bx-card:hover, a.bx-card:focus-visible, .bx-btn:hover, .bx-btn:active { transform: none; }
 }
+
+/* 1.99ur: pads on the lists - the pad filter bar (partials/bx-padfilter), the pad chip on cards, the close date picker */
+.bx-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2) var(--ds-sp-4); padding: var(--ds-sp-2h) var(--ds-sp-3h);
+             background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); font-size: var(--ds-fs-sm); }
+.bx-filter-pad { display: inline-flex; align-items: center; gap: var(--ds-sp-2); min-width: 0; max-width: 100%; }
+.bx-filter-pad .bx-in { width: auto; min-width: 0; max-width: min(100%, 320px); }
+.bx-filter-lbl { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: var(--ds-ls-label, .04em); }
+.bx-filter-on { color: var(--ds-text-2); overflow-wrap: anywhere; }
+.bx-pad { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; color: var(--ds-text-muted); font-size: var(--ds-fs-xs);
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.bx-pad { color: var(--ds-text-2); text-decoration: none; }
+a.bx-pad:hover, a.bx-pad:focus-visible { color: var(--ds-text-strong); text-decoration: underline; }
+.bx-close-custom { display: grid; gap: 4px; }
+.bx-close-custom[hidden] { display: none; }

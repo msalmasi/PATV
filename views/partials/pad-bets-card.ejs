@@ -1,0 +1,51 @@
+<%#
+  1.99ur: a pad's own prediction markets, betting pools and polls (padbets.forPad) - the About tab's card (#bets). Each list
+  links to the full page filtered to this pad, and the Create buttons open those pages' forms with this pad picked.
+  Pass { pb (padbets.forPad), slug }.
+%>
+<% const T_ = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+   const pb_ = locals.pb || { markets: [], pools: [], polls: [], counts: {} };
+   const q_ = '?pad=' + encodeURIComponent(locals.slug || '');
+   const n_ = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
+   const left_ = (s) => { s = Math.max(0, Math.round(s - Date.now() / 1000)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.max(1, Math.floor(s / 60)) + 'm'; }; %>
+<section class="card pbets" id="bets" aria-labelledby="pbetsH">
+  <h2 id="pbetsH"><span><span class="ds-ic" aria-hidden="true">🔮</span> <%- T_('pad.bets.h') %></span></h2>
+  <% if (!pb_.any) { %><p class="muted" style="margin:0"><%- T_('pad.bets.empty') %></p><% } %>
+  <% const list_ = (kind, items, href, icon, emptyKey) => { %>
+    <div class="pb-col">
+      <h3><span class="ds-ic" aria-hidden="true"><%= icon %></span> <a href="<%= href + q_ %>"><%- T_('pad.bets.' + kind, { count: (pb_.counts || {})[kind] || 0, n: n_((pb_.counts || {})[kind]) }) %></a></h3>
+      <% if (!items.length) { %><p class="muted pb-none"><%- T_(emptyKey) %></p><% } %>
+      <ul>
+        <% items.forEach((it) => { %>
+          <li><a href="<%= kind === 'polls' ? '/polls/' + encodeURIComponent(it.id) : '/markets/' + it.id %>">
+            <span class="pb-q"><%= it.question %></span>
+            <span class="pb-meta"><% if (kind === 'polls') { %><%- it.active ? T_('pad.bets.poll_live', { n: n_(it.total) }) : T_('pad.bets.poll_ended') %><% } else { %><%- it.lead ? T_('pad.bets.lead', { o: it.lead.name, pct: it.lead.pct }) + ' · ' : '' %><%- it.open ? T_('pad.bets.closes', { left: left_(it.closes) }) : T_('pad.bets.judging') %><% } %></span>
+          </a></li>
+        <% }) %>
+      </ul>
+    </div>
+  <% }; %>
+  <div class="pb-grid">
+    <% list_('markets', pb_.markets || [], '/markets', '📈', 'pad.bets.none_markets') %>
+    <% list_('pools', pb_.pools || [], '/wagers', '🎱', 'pad.bets.none_pools') %>
+    <% list_('polls', pb_.polls || [], '/polls', '🗳️', 'pad.bets.none_polls') %>
+  </div>
+  <div class="pb-ctas">
+    <a class="ds-btn sm" href="/markets<%= q_ %>#new">＋ <%- T_('pad.bets.new_market') %></a>
+    <a class="ds-btn sm ghost" href="/wagers<%= q_ %>#start">＋ <%- T_('pad.bets.new_pool') %></a>
+    <a class="ds-btn sm ghost" href="/polls<%= q_ %>#pl-create">＋ <%- T_('pad.bets.new_poll') %></a>
+  </div>
+</section>
+<style>
+  .pbets .pb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--ds-sp-3); }
+  .pbets h3 { margin: 0 0 var(--ds-sp-1h, 6px); font-size: var(--ds-fs-sm, 14px); }
+  .pbets h3 a { color: var(--ds-text-strong); text-decoration: none; }
+  .pbets h3 a:hover, .pbets h3 a:focus-visible { text-decoration: underline; }
+  .pbets ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .pbets li a { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--ds-line); border-radius: var(--ds-r-md, 8px); background: var(--ds-sunken); color: inherit; text-decoration: none; min-width: 0; }
+  .pbets li a:hover, .pbets li a:focus-visible { border-color: var(--ds-line-strong); }
+  .pbets .pb-q { color: var(--ds-text); font-size: var(--ds-fs-sm, 14px); overflow-wrap: anywhere; }
+  .pbets .pb-meta { color: var(--ds-text-muted); font-size: var(--ds-fs-xs, 12px); }
+  .pbets .pb-none { margin: 0; font-size: var(--ds-fs-xs, 12px); }
+  .pbets .pb-ctas { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); margin-top: var(--ds-sp-3); }
+</style>

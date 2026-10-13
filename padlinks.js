@@ -86,7 +86,7 @@ function fromParam(v) {
 async function choicesFor(user, wanted) {
   await ready();
   let access = null;
-  try { access = require("./padaccess"); } catch (e) { access = null; }
+  try { access = require("./padaccess"); await access.init(); } catch (e) { access = access || null; }
   const u = user && user.userId ? user : null;
   const visible = (p) => !access || !access.canSee || access.canSee(u, p.id);
   const all = rooms.listCached().filter(visible);
@@ -113,7 +113,7 @@ async function checkPick(user, v) {
   const p = lookup(s);
   if (!p) return null;
   let access = null;
-  try { access = require("./padaccess"); } catch (e) { access = null; }
+  try { access = require("./padaccess"); await access.init(); } catch (e) { access = access || null; }
   const u = user && user.userId ? user : null;
   if (access && access.canSee && !access.canSee(u, p.id)) return null;
   return p.id;

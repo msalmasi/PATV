@@ -1,0 +1,16 @@
+<%#
+  1.99ur: the pad picker on the create forms (markets / pools / polls): which pad it belongs to. Defaults to the pad you came
+  from (?pad=, the pad page's Create buttons), else your own pad, else site-wide (padlinks.choicesFor). actions.js checks the
+  pick (padlinks.checkPick) and sends it on as pad:<id>. Pass { pick: {choices, def} }.
+%>
+<% const T_ = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+   const P_ = locals.pick || { choices: [], def: '' };
+   const mine_ = (P_.choices || []).filter((c) => c.mine), rest_ = (P_.choices || []).filter((c) => !c.mine); %>
+<label class="bx-field"><%- T_('bx.pad.pick') %>
+  <select class="bx-in" name="pad">
+    <option value=""<%= !P_.def ? ' selected' : '' %>><%- T_('bx.pad.sitewide_opt') %></option>
+    <% if (mine_.length) { %><optgroup label="<%- T_('bx.pad.mine') %>"><% mine_.forEach((c) => { %><option value="<%= c.id %>"<%= P_.def === c.id ? ' selected' : '' %>><%= c.title %></option><% }) %></optgroup><% } %>
+    <% if (rest_.length) { %><optgroup label="<%- T_('bx.pad.others') %>"><% rest_.forEach((c) => { %><option value="<%= c.id %>"<%= P_.def === c.id ? ' selected' : '' %>><%= c.title %></option><% }) %></optgroup><% } %>
+  </select>
+  <span class="bx-fine"><%- T_('bx.pad.pick_note') %></span>
+</label>

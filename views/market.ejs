@@ -5,8 +5,8 @@
     settled (1.99dy; the re-settle banner stays), then the price board (odds bars + the price chart) next to the trade
     panel (outcome tiles, amount with quick picks, the live LMSR estimate, the judge's resolve form), the judgement and
     evidence (partials/aijudge), your position, your website orders and every trade. Same forms, routes and fields. %>
-<link rel="stylesheet" href="/public/css/bets.css?v=2">
-<script src="/public/js/bets.js?v=1" defer></script>
+<link rel="stylesheet" href="/public/css/bets.css?v=3">
+<script src="/public/js/bets.js?v=2" defer></script>
 <style>
   /* 1.99pp: design-system tokens throughout; the wrapper is .ds-page (1040 + gutter) - the tables scroll inside .tbl at 375 px */
   .mk { --ds-ac: var(--ds-acc-markets); --ds-ac-2: var(--ds-acc-markets-2); --ds-ac-bg: rgba(76, 175, 80, .14); --ds-ac-line: var(--ds-green-line); }
@@ -162,7 +162,7 @@
     <header class="mk-head">
       <div class="bx-top">
         <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
-        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news','trending'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %>
       </div>
       <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
       <%- include('partials/mk-times', { m, now }) %>
@@ -171,7 +171,7 @@
         <div class="st"><span class="bx-chip c-<%= k %>"><%- k === 'open' ? t('market.st.open') : k === 'settled' ? t('market.st.resolved', { result: m.result, by: byWho() }) : k === 'void' ? t('market.st.void') : k === 'settling' ? t('market.st.settling') : t('market.st.closed') %></span></div>
       <% } %>
       <% meta(false) %>
-      <div class="info mk-who"><%- t('market.who', { judge: ul(m.judge), creator: ul(m.creator), room: padLink(m.room, t('market.a_room')) }) %></div>
+      <div class="info mk-who"><%- t('market.who_pad', { judge: ul(m.judge), creator: ul(m.creator), pad: m.padv ? '<a class="pad-link" href="' + t.esc(m.padv.url) + '">' + t.esc(m.padv.title) + '</a>' : t('bx.pad.sitewide') }) %></div>
     </header>
     <% if (S) { %>
       <div class="settled <%= S.kind %>" id="settlement" style="--oc: <%= sColor %>">
@@ -402,14 +402,14 @@
     <header class="mk-head">
       <div class="bx-top"><span class="bx-chip c-plain"><%- m.model === 'pool' ? t('market.pool.kind') : t('market.pool.kind_old') %></span>
         <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
-        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %></div>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news','trending'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %></div>
       <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
       <%- include('partials/mk-times', { m, now }) %>
       <%- include('partials/mk-auto', { m }) %>
       <% const k = m.status === 'open' ? 'open' : m.status === 'settled' ? 'settled' : m.status === 'void' ? 'void' : 'closed'; %>
       <div class="st"><span class="bx-chip c-<%= k %>"><%- k === 'open' ? t('market.pool.st_open') : k === 'settled' ? t('market.pool.st_settled', { result: m.result, by: byWho() }) : k === 'void' ? t('market.pool.st_void') : t('market.pool.st_closed') %></span></div>
       <% meta(true) %>
-      <div class="info mk-who"><%- t('market.who', { judge: ul(m.judge), creator: ul(m.creator), room: padLink(m.room, t('market.a_room')) }) %></div>
+      <div class="info mk-who"><%- t('market.who_pad', { judge: ul(m.judge), creator: ul(m.creator), pad: m.padv ? '<a class="pad-link" href="' + t.esc(m.padv.url) + '">' + t.esc(m.padv.title) + '</a>' : t('bx.pad.sitewide') }) %></div>
     </header>
     <div class="mk-main<%= side ? ' two' : '' %>">
       <section class="board">

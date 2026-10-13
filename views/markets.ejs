@@ -3,8 +3,8 @@
 <%# views/markets.ejs - 1.99ly design pass (bets.css): a hero with the live numbers, market cards with each outcome's
     odds bar (Yes green / No red, the leader lit), status chips, a live "closes in" countdown and the market's times in
     the viewer's zone; the create form unchanged underneath (same /act post, same fields). %>
-<link rel="stylesheet" href="/public/css/bets.css?v=2">
-<script src="/public/js/bets.js?v=1" defer></script>
+<link rel="stylesheet" href="/public/css/bets.css?v=3">
+<script src="/public/js/bets.js?v=2" defer></script>
 <style>
   /* 1.99pp: design-system tokens (bets.css maps the bx-* classes onto ds.css); markets green accent */
   .mk { --ds-ac: var(--ds-acc-markets); --ds-ac-2: var(--ds-acc-markets-2); --ds-ac-bg: rgba(76, 175, 80, .14); --ds-ac-line: var(--ds-green-line); }
@@ -45,8 +45,8 @@
         <span class="bx-ref"><%= m.ref %></span>
         <span class="bx-chip c-<%= c[0] %>"><%- c[1] %></span>
         <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.ai_tag') %></span><% } %>
-        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %>
-        <% if (m.room) { %><span class="room"><%= m.room %></span><% } %>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news','trending'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %>
+        <span class="room bx-pad" title="<%- t('bx.pad.label') %>"><span class="ds-ic" aria-hidden="true">📍</span> <%= m.padv ? m.padv.title : t('bx.pad.sitewide') %></span>
       </div>
       <p class="bx-q"><%= m.question %></p>
       <div class="opts">
@@ -93,6 +93,8 @@
     </div>
   </header>
 
+  <%- include('partials/bx-padfilter', { filter: locals.filter || {}, base: '/markets', voidToggle: true }) %>
+
   <h2 class="bx-h"><%- t('markets.h_live') %> <span class="bx-n"><%= fmt(live.length) %></span></h2>
   <% if (!live.length) { %>
     <div class="bx-empty"><span class="ic" aria-hidden="true">🔮</span><b><%- t('markets.empty_live') %></b><span><%- t('markets.empty_live_sub') %></span>
@@ -113,14 +115,27 @@
   <% } else { %>
     <form class="newmk bx-form" method="post" action="/act">
       <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="market">
-      <input type="hidden" name="back" value="/markets"><input type="hidden" name="tag" value="markets">
+      <input type="hidden" name="back" value="/markets<%= locals.filter && filter.slug ? '?pad=' + encodeURIComponent(filter.slug) : '' %>"><input type="hidden" name="tag" value="markets">
+      <input type="hidden" name="until" value=""><input type="hidden" name="tz" value="">
       <input type="hidden" name="a0" value="new">
       <label class="bx-field"><%- t('markets.f_q') %> <input class="bx-in" type="text" name="a1" maxlength="200" required placeholder="<%- t('markets.f_q_ph') %>"></label>
       <label class="bx-field"><%- t('markets.f_opts') %> <input class="bx-in" type="text" name="a2" maxlength="190" placeholder="<%- t('markets.f_opts_ph') %>" data-prefix="options "></label>
       <div class="bx-row2">
         <label class="bx-field"><%- t('markets.f_judge') %> <input class="bx-in" type="text" name="a3" maxlength="40" placeholder="@someone" data-prefix="judge "></label>
-        <label class="bx-field"><%- t('markets.f_closes') %> <select class="bx-in" name="a4"><option value="closes 1h"><%- t('bx.d.1h') %></option><option value="closes 1d" selected><%- t('bx.d.1d') %></option><option value="closes 2d"><%- t('bx.d.2d') %></option><option value="closes 7d"><%- t('bx.d.7d') %></option><option value="closes 30d"><%- t('bx.d.30d') %></option></select></label>
+        <% const B_ = locals.bounds || { close_min_secs: 3600, close_max_secs: 90 * 86400 };
+           const presets_ = [['1h', 3600], ['1d', 86400], ['2d', 172800], ['7d', 604800], ['30d', 2592000]].filter((x) => x[1] >= B_.close_min_secs && x[1] <= B_.close_max_secs);
+           const human_ = (s) => s % 86400 === 0 ? t('bx.d.days', { count: s / 86400, n: s / 86400 }) : s % 3600 === 0 ? t('bx.d.hours', { count: s / 3600, n: s / 3600 }) : t('bx.d.mins', { count: Math.round(s / 60), n: Math.round(s / 60) });
+           const bmsg_ = t('markets.f_bounds', { min: human_(B_.close_min_secs), max: human_(B_.close_max_secs) }); %>
+        <div class="bx-field" data-close-pick data-min-secs="<%= B_.close_min_secs %>" data-max-secs="<%= B_.close_max_secs %>" data-bounds-msg="<%= bmsg_ %>">
+          <label><%- t('markets.f_closes') %> <select class="bx-in" name="a4">
+            <% presets_.forEach((x) => { %><option value="closes <%= x[0] %>"<%= x[0] === '1d' ? ' selected' : '' %>><%- t('bx.d.' + x[0]) %></option><% }) %>
+            <option value="custom"<%= presets_.some((x) => x[0] === '1d') ? '' : ' selected' %>><%- t('markets.f_custom') %></option></select></label>
+          <label class="bx-close-custom" data-close-custom hidden><span><%- t('markets.f_close_at') %> <span class="bx-fine">(<span data-close-tz>UTC</span>)</span></span>
+            <input class="bx-in" type="datetime-local" step="60" aria-describedby="mkBounds"></label>
+          <span class="bx-fine" id="mkBounds"><%- bmsg_ %></span>
+        </div>
       </div>
+      <%- include('partials/bx-padpick', { pick: locals.pick || { choices: [], def: '' } }) %>
       <label class="bx-check"><input type="checkbox" data-ai> <span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.f_ai') %></label>
       <div class="bx-row"><button class="bx-btn" type="submit"><%- t('markets.f_submit') %></button></div>
       <p class="bx-fine"><%- t('markets.f_fine') %></p>

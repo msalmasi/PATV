@@ -1,0 +1,13 @@
+<%# 1.99ur: the market close bounds (mktcfg.js) - how soon / how far out a creator may set a prediction market's close (the
+    web form's custom date, chat's `closes ...`). Saved on the site; Pepe reads them within a few minutes. %>
+<section class="adm-card" id="closebounds" aria-labelledby="cbT">
+  <h2 id="cbT">Market close bounds <span class="adm-msg" id="cbMsg"></span></h2>
+  <p class="adm-help">Creators (website and chat) can set a market's close anywhere between these, from now. Default 1 hour to 90 days;
+    allowed range 5 minutes to 365 days. Trading stops at the close and the AI judge is asked only after it. Pepe's auto markets keep their own minimum.</p>
+  <form id="cbForm" class="adm-form" autocomplete="off">
+    <label>Earliest close (hours)<input type="number" name="min_h" min="0.0833" max="8760" step="any" required></label>
+    <label>Latest close (days)<input type="number" name="max_d" min="0.01" max="365" step="any" required></label>
+    <div class="adm-actions"><button class="ds-btn sm" type="submit">Save</button></div>
+  </form>
+</section>
+<script src="/public/js/admin-mktcfg.js?v=1" defer></script>

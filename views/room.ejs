@@ -477,6 +477,7 @@
             <% if (feed_ && feed_.rules) { %><a role="menuitem" href="?tab=about#rules" data-pad-tab="about" data-open="rules"><%- t('pad.menu.rules') %></a><% } %>
             <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>"><%- t('pad.menu.analytics') %></a><% } %>
             <% if (typeof roomVault !== 'undefined' && roomVault) { %><a role="menuitem" href="?tab=about#vault" data-pad-tab="about" data-open="vault"><%- t('pad.vault.h') %></a><% } %>
+            <% if (typeof padBets !== 'undefined' && padBets) { %><a role="menuitem" href="?tab=about#bets" data-pad-tab="about"><%- t('pad.menu.bets') %></a><% } %>
             <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>"><%- t('pad.menu.copy') %></button>
             <a role="menuitem" href="/premium?pad=<%= encodeURIComponent(room.slug) %>"><%- primeOn_ ? t('pad.menu.prime_on') : '📺 Prime Time' %></a>
             <% if (feed_ && feed_.mod && feed_.mod.admin) { %><a role="menuitem" href="/admin/comps?pad=<%= encodeURIComponent(room.slug) %>#premium">🎁 <%- t('pad.menu.comp_prime') %></a><% } %>
@@ -1187,6 +1188,8 @@
     </section>
     <%# 1.99sn: 💰 the pad vault, public, first card under About (partials/pad-vault-card.ejs; roomvaults.js) %>
     <% if (typeof roomVault !== 'undefined' && roomVault) { %><%- include('partials/pad-vault-card', { rv: roomVault, room, slug: room.slug, signed: giftSigned_, siteOnly: siteOnly_, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %><% } %>
+    <%# 1.99ur: 🔮 the pad's own markets, pools and polls (padbets.js, partials/pad-bets-card.ejs) %>
+    <% if (typeof padBets !== 'undefined' && padBets) { %><%- include('partials/pad-bets-card', { pb: padBets, slug: room.slug }) %><% } %>
     <%# 1.99ew: 🎁 gift a premium cosmetic to this pad (padcosmetics.js, public/js/pad-cosmetics.js); the owner buys from ⚙ settings %>
     <section class="card ab-gift" id="gift" aria-labelledby="giftH">
       <h2 id="giftH"><span><%- t('pad.gift.h') %></span></h2>

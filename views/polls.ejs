@@ -2,8 +2,11 @@
 <%- include('layout', { title: t('polls.title'), user: user}) %>
 <%# views/polls.ejs - 1.99ly design pass (bets.css): hero, the current poll as a big card where each option is one tappable
     row (option, count, %, tally bar; the whole row is the vote button - the same poll.vote post), the winner and your vote
-    marked, the start form when nothing is running, past polls as compact cards. %>
-<link rel="stylesheet" href="/public/css/bets.css?v=2">
+    marked, the start form when nothing is running, past polls as compact cards.
+    1.99ur: polls belong to pads - every pad's running poll (one per pad), the pad on each card, the pad filter (?pad=), the
+    pad picker on the start form, and /polls/<id> (focus: that poll on top - the link Pepe and the feed cards use). %>
+<link rel="stylesheet" href="/public/css/bets.css?v=3">
+<script src="/public/js/bets.js?v=2" defer></script>
 <style>
   /* 1.99pp: the polls cyan accent with the ds names; .ds-page.mid (900) */
   .pl { --ds-ac: var(--ds-acc-polls); --ds-ac-2: var(--ds-acc-polls-2); --ds-ac-bg: rgba(79, 195, 247, .13); --ds-ac-line: #1f5a73; --ds-on-ac: #04202c; }
@@ -38,11 +41,17 @@
   .pl .endbtn { justify-self: start; }
   .pl .hint { margin-top: 12px; }
   @media (max-width: 420px) { .pl .live .opt { grid-template-columns: minmax(0, 1fr); } .pl .live .opt .num { justify-self: start; } }
+  .pl .plq { color: inherit; text-decoration: none; }
+  .pl .plq:hover, .pl .plq:focus-visible { text-decoration: underline; }
   .pl .past-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 12px; }
 </style>
 <%
   const linked = !!(me && me.camfrogUsername);
   const fmt = (n) => t.num(Number(n) || 0);
+  const F = locals.filter || {};
+  const backTo = locals.focus ? '/polls/' + focus.id : '/polls' + (F.slug ? '?pad=' + encodeURIComponent(F.slug) : '');
+  const padChip = (p) => p.padv ? '<a class="bx-pad" href="' + t.esc(p.padv.url) + '" title="' + t('bx.pad.label') + '"><span class="ds-ic" aria-hidden="true">📍</span> ' + t.esc(p.padv.title) + '</a>'
+    : '<span class="bx-pad"><span class="ds-ic" aria-hidden="true">📍</span> ' + t('bx.pad.sitewide') + '</span>';
   const bars = (p, voting) => { %>
     <div class="opts">
       <% p.rows.forEach((r, i) => { const won = p.status !== 'active' && r.lead;
@@ -54,7 +63,7 @@
           <form class="vote" method="post" action="/act">
             <input type="hidden" name="kind" value="poll.vote">
             <input type="hidden" name="a0" value="<%= p.id %>"><input type="hidden" name="a1" value="<%= i + 1 %>">
-            <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
+            <input type="hidden" name="back" value="<%= backTo %>"><input type="hidden" name="tag" value="polls">
             <button class="opt votebtn<%= r.mine ? ' mine' : '' %>" type="submit"<%= r.mine ? ' disabled' : '' %> aria-label="<%- t('polls.vote_for', { o: r.text }) %>"><%- inner %></button>
           </form>
         <% } else { %>
@@ -62,26 +71,13 @@
         <% } %>
       <% }) %>
     </div>
-<% }; %>
-<main class="bx ds-page flow mid pl">
-  <header class="bx-hero">
-    <div class="bx-eyebrow"><span class="ds-ic" aria-hidden="true">🗳️</span> <%- t('polls.eyebrow') %></div>
-    <h1><%- t('polls.h1') %></h1>
-    <p class="bx-lead"><%- t('polls.lead') %></p>
-    <div class="bx-stats">
-      <span class="bx-stat"><b><%= active ? fmt(active.total) : '0' %></b><%- t('polls.stat_votes', { count: active ? active.total : 0 }) %></span>
-      <span class="bx-stat"><b><%= fmt(past.length) %></b><%- t('polls.stat_past') %></span>
-    </div>
-  </header>
-
-  <%- include('partials/actions', { acts, msg }) %>
-
-  <h2 class="bx-h"><%- t('polls.h_current') %><% if (active) { %> <span class="bx-chip c-open"><%- t('polls.live') %></span><% } %></h2>
-  <% if (active) { %>
-    <div class="card bx-card live">
-      <p class="q"><%= active.question %></p>
-      <div class="info"><%- t('polls.started_by', { who: t.esc(active.creator || t('polls.someone')) }) %><%- active.created_at ? ' · ' + t.esc(active.created_at) : '' %> · <%- t('polls.votes', { count: active.total, n: fmt(active.total) }) %></div>
-      <% bars(active, !!me) %>
+<% };
+  const liveCard = (p) => { %>
+    <div class="card bx-card live" id="poll-<%= p.id %>">
+      <div class="bx-top"><span class="bx-chip c-open"><%- t('polls.live') %></span><span style="margin-inline-start:auto"><%- padChip(p) %></span></div>
+      <p class="q"><a href="/polls/<%= p.id %>" class="plq"><%= p.question %></a></p>
+      <div class="info"><%- t('polls.started_by', { who: t.esc(p.creator || t('polls.someone')) }) %><%- p.created_at ? ' · ' + t.esc(p.created_at) : '' %> · <%- t('polls.votes', { count: p.total, n: fmt(p.total) }) %></div>
+      <% bars(p, !!me) %>
       <% if (!user) { %>
         <p class="info" style="margin:0"><%- t('polls.signin') %></p>
       <% } else if (me && !linked) { %>
@@ -89,46 +85,76 @@
       <% } else if (me) { %>
         <p class="info" style="margin:0"><%- t('polls.tap') %></p>
       <% } %>
-      <% if (canEnd) { %>
+      <% if (p.canEnd) { %>
         <form method="post" action="/act" onsubmit="return confirm(<%= JSON.stringify(t('polls.end_confirm')) %>)">
-          <input type="hidden" name="kind" value="poll.end"><input type="hidden" name="a0" value="<%= active.id %>">
-          <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
+          <input type="hidden" name="kind" value="poll.end"><input type="hidden" name="a0" value="<%= p.id %>">
+          <input type="hidden" name="back" value="<%= backTo %>"><input type="hidden" name="tag" value="polls">
           <button class="bx-btn danger sm endbtn" type="submit"><%- t('polls.end') %></button>
         </form>
       <% } %>
     </div>
-  <% } else { %>
-    <div class="bx-empty"><span class="ic" aria-hidden="true">🗳️</span><b><%- t('polls.empty') %></b><span><%- t('polls.empty_sub') %></span></div>
-    <% if (linked) { %>
-      <form class="create bx-form bx-card" method="post" action="/act" id="pl-create" style="margin-top:12px">
-        <b><%- t('polls.f_h') %></b>
-        <p class="bx-fine"><%- t('polls.f_note') %></p>
-        <input type="hidden" name="kind" value="poll.create">
-        <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
-        <label class="bx-field"><%- t('polls.f_q') %><input class="bx-in" type="text" name="a0" maxlength="200" placeholder="<%- t('polls.f_q_ph') %>" required></label>
-        <div class="bx-row2">
-          <% for (let i = 1; i <= maxOptions; i++) { %>
-            <input class="bx-in" type="text" name="a<%= i %>" maxlength="100" aria-label="<%- t('polls.f_opt', { n: i }) %>" placeholder="<%- i > 2 ? t('polls.f_opt_opt', { n: i }) : t('polls.f_opt', { n: i }) %>"<%= i <= 2 ? ' required' : '' %>>
-          <% } %>
-        </div>
-        <div class="bx-row"><button class="bx-btn" type="submit"><%- t('polls.f_btn') %></button></div>
-      </form>
-    <% } else if (user) { %>
-      <p class="bx-note hint"><%- t('polls.link') %></p>
-    <% } %>
-  <% } %>
-
-  <h2 class="bx-h"><%- t('polls.h_past') %> <span class="bx-n"><%= past.length %></span></h2>
-  <% if (!past.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">📜</span><b><%- t('polls.empty_past') %></b></div><% } %>
-  <div class="past-grid">
-  <% past.forEach((p) => { %>
-    <div class="card bx-card past">
-      <p class="q"><%= p.question %></p>
+<% };
+  const pastCard = (p) => { %>
+    <div class="card bx-card past" id="poll-<%= p.id %>">
+      <div class="bx-top"><span class="bx-chip c-ended"><%- t('polls.ended') %></span><span style="margin-inline-start:auto"><%- padChip(p) %></span></div>
+      <p class="q"><a href="/polls/<%= p.id %>" class="plq"><%= p.question %></a></p>
       <div class="info"><%- t('polls.by', { who: /^🌐/.test(p.creator || '') ? ul(p.creator, { user: p.creator.replace(/^🌐/, '') }) : ul(p.creator || t('polls.someone')) }) %><%- p.created_at ? ' · ' + t.esc(p.created_at) : '' %> · <%- t('polls.votes', { count: p.total, n: fmt(p.total) }) %></div>
       <% bars(p, false) %>
     </div>
-  <% }) %>
-  </div>
+<% };
+  const runningVotes = actives.reduce((a, p) => a + (p.total || 0), 0);
+  const runningShown = actives.filter((p) => !locals.focus || p.id !== focus.id);
+  const pastShown = past.filter((p) => !locals.focus || p.id !== focus.id); %>
+<main class="bx ds-page flow mid pl">
+  <header class="bx-hero">
+    <div class="bx-eyebrow"><span class="ds-ic" aria-hidden="true">🗳️</span> <%- t('polls.eyebrow') %></div>
+    <h1><%- t('polls.h1') %></h1>
+    <p class="bx-lead"><%- t('polls.lead') %></p>
+    <div class="bx-stats">
+      <span class="bx-stat"><b><%= fmt(actives.length) %></b><%- t('polls.stat_running', { count: actives.length }) %></span>
+      <span class="bx-stat"><b><%= fmt(runningVotes) %></b><%- t('polls.stat_votes', { count: runningVotes }) %></span>
+      <span class="bx-stat"><b><%= fmt(past.length) %></b><%- t('polls.stat_past') %></span>
+    </div>
+  </header>
+
+  <%- include('partials/actions', { acts, msg }) %>
+
+  <% if (locals.focus) { %>
+    <a class="bx-back" href="/polls"><span class="arr" aria-hidden="true">‹</span> <%- t('polls.all') %></a>
+    <h2 class="bx-h"><%- t('polls.h_this') %></h2>
+    <% if (focus.status === 'active') liveCard(focus); else pastCard(focus); %>
+  <% } %>
+
+  <%- include('partials/bx-padfilter', { filter: F, base: '/polls', voidToggle: false }) %>
+
+  <h2 class="bx-h"><%- t('polls.h_running') %> <span class="bx-n"><%= runningShown.length %></span></h2>
+  <% if (!runningShown.length) { %>
+    <div class="bx-empty"><span class="ic" aria-hidden="true">🗳️</span><b><%- t('polls.empty') %></b><span><%- t('polls.empty_sub') %></span></div>
+  <% } %>
+  <div class="past-grid"><% runningShown.forEach((p) => liveCard(p)) %></div>
+
+  <% if (linked) { %>
+    <form class="create bx-form bx-card" method="post" action="/act" id="pl-create" style="margin-top:12px">
+      <b><%- t('polls.f_h') %></b>
+      <p class="bx-fine"><%- t('polls.f_note_pad') %></p>
+      <input type="hidden" name="kind" value="poll.create">
+      <input type="hidden" name="back" value="<%= '/polls' + (F.slug ? '?pad=' + encodeURIComponent(F.slug) : '') %>"><input type="hidden" name="tag" value="polls">
+      <label class="bx-field"><%- t('polls.f_q') %><input class="bx-in" type="text" name="a0" maxlength="200" placeholder="<%- t('polls.f_q_ph') %>" required></label>
+      <div class="bx-row2">
+        <% for (let i = 1; i <= maxOptions; i++) { %>
+          <input class="bx-in" type="text" name="a<%= i %>" maxlength="100" aria-label="<%- t('polls.f_opt', { n: i }) %>" placeholder="<%- i > 2 ? t('polls.f_opt_opt', { n: i }) : t('polls.f_opt', { n: i }) %>"<%= i <= 2 ? ' required' : '' %>>
+        <% } %>
+      </div>
+      <%- include('partials/bx-padpick', { pick: locals.pick || { choices: [], def: '' } }) %>
+      <div class="bx-row"><button class="bx-btn" type="submit"><%- t('polls.f_btn') %></button></div>
+    </form>
+  <% } else if (user) { %>
+    <p class="bx-note hint"><%- t('polls.link') %></p>
+  <% } %>
+
+  <h2 class="bx-h"><%- t('polls.h_past') %> <span class="bx-n"><%= pastShown.length %></span></h2>
+  <% if (!pastShown.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">📜</span><b><%- t('polls.empty_past') %></b></div><% } %>
+  <div class="past-grid"><% pastShown.forEach((p) => pastCard(p)) %></div>
 
   <div class="bx-foot"><%- t('polls.foot') %></div>
 </main>

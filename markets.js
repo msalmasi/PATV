@@ -337,6 +337,43 @@ async function poolsOnSite() {
   try { return await require("./escrow/games").gameLive("pools"); } catch (e) { return false; }
 }
 
+/** 1.99ur: is this market / pool voided (or cancelled)? The lists hide those unless asked. */
+function isVoided(m) {
+  return (m.settle && m.settle.kind === "void") || m.status === "void" || m.status === "cancelled" || /^void\b/i.test(String(m.result || ""));
+}
+
+/**
+ * 1.99ur: the rows a list page shows, with each one's pad: m.padId (the pad column, else resolved from the record; null =
+ * site-wide) and m.padv ({id, slug, title, url} | null). Rows on a pad the viewer can't see are left out. ?pad= filters,
+ * ?void=1 shows the voided ones. -> {rows, filter: {pad, padTitle, slug, pads: [{slug, title, n}], showVoid, voided}}
+ */
+async function listRows(req, { keep = () => true, limit = 1000 } = {}) {
+  await ready;
+  await padlinks.ready();
+  const PA = require("./padaccess");
+  try { await PA.init(); } catch (e) { /* the gate's own problem */ }
+  const want = padlinks.fromParam(req.query.pad);              // null = every pad, "" = site-wide, else a pad id
+  const showVoid = /^(1|true|yes|on)$/i.test(String(req.query.void || ""));
+  let rows = (await getQuery("SELECT data, pad FROM markets ORDER BY id DESC LIMIT ?", [limit])).map((r) => {
+    const d = JSON.parse(r.data);
+    const v = view(d);
+    v.padId = r.pad || padlinks.resolve(d) || null;
+    v.padv = padlinks.view(v.padId);
+    Object.defineProperty(v, "raw", { value: d, enumerable: false });     // the stored record (wagers.viewPool wants it)
+    return v;
+  }).filter(keep).filter((m) => !m.padId || PA.canSee(req.user || null, m.padId));
+  const counts = new Map();
+  for (const m of rows) { const k = m.padv ? m.padv.slug : "none"; counts.set(k, { slug: k, title: m.padv ? m.padv.title : null, n: ((counts.get(k) || {}).n || 0) + 1 }); }
+  if (want !== null) rows = rows.filter((m) => (m.padId || "") === want);
+  const voided = rows.filter(isVoided).length;
+  if (!showVoid) rows = rows.filter((m) => !isVoided(m));
+  const pv = want ? padlinks.view(want) : null;
+  if (pv && !counts.has(pv.slug)) counts.set(pv.slug, { slug: pv.slug, title: pv.title, n: 0 });
+  const pads = [...counts.values()].sort((a, b) => (a.slug === "none") - (b.slug === "none") || String(a.title).localeCompare(String(b.title)));
+  return { rows, filter: { pad: want, slug: want === "" ? "none" : pv ? pv.slug : "", padTitle: pv ? pv.title : null, padUrl: pv ? pv.url : null,
+                           pads, showVoid, voided } };
+}
+
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   // Snapshot push (Pepe)
@@ -504,10 +541,10 @@ function register(app, { isBotToken, addUser }) {
 
   app.get("/markets", addUser, async (req, res) => {
     await ready;
-    const rows = (await getQuery("SELECT data FROM markets ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)))
-      .filter((m) => m.shares || m.auto);         // 1.99th: + Pepe's auto pools (sports winners), so every 🤖 auto one is listed here
-    const live = rows.filter((m) => LIVE.has(m.status) && !m.settle).sort((a, b) => a.closes - b.closes);
-    const done = rows.filter((m) => !LIVE.has(m.status) || m.settle).sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 40);
+    // 1.99ur: ?pad=<slug|none> filters by pad; voided markets are hidden unless ?void=1 (the list's toggle)
+    const L = await listRows(req, { keep: (m) => m.shares || m.auto });   // 1.99th: + Pepe's auto pools (sports winners)
+    const live = L.rows.filter((m) => LIVE.has(m.status) && !m.settle).sort((a, b) => a.closes - b.closes);
+    const done = L.rows.filter((m) => !LIVE.has(m.status) || m.settle).sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 40);
     let linked = false, acts = [];
     if (req.user && req.user.userId) {
       const u = await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]);
@@ -515,6 +552,7 @@ function register(app, { isBotToken, addUser }) {
       acts = await actions.recentFor(req.user.userId, "markets");
     }
     res.render("markets", { user: req.user ? req.user.username : null, live, done, now: Date.now() / 1000, linked, acts,
+                            filter: L.filter, pick: await padlinks.choicesFor(req.user, req.query.pad), bounds: await require("./mktcfg").get(),
                             msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null });
   });
 
@@ -541,6 +579,16 @@ function register(app, { isBotToken, addUser }) {
     }
     res.locals.og = require("./og").forMarket(req, JSON.parse(rows[0].data));
     const v = view(JSON.parse(rows[0].data), me);
+    // 1.99ur: the pad it belongs to (the pad column, else resolved from its record)
+    await padlinks.ready();
+    const prow = (await getQuery("SELECT pad FROM markets WHERE id = ?", [id]))[0];
+    v.padId = (prow && prow.pad) || padlinks.resolve(v) || null;
+    v.padv = padlinks.view(v.padId);
+    if (v.padId) {
+      const PA = require("./padaccess");
+      try { await PA.init(); } catch (e) { /* the gate's own problem */ }
+      if (!PA.canSee(req.user || null, v.padId)) return res.status(404).render("market", { user: req.user ? req.user.username : null, m: null, now: Date.now() / 1000, orders: [], msg: null, bal: null });
+    }
     acts = settledActs(acts, v);
     orders = orders.map((o) => ({ ...o, message: o.message ? fixOrderMessage(o.message) : o.message }));
     res.render("market", { user: req.user ? req.user.username : null, m: v, now: Date.now() / 1000, judgeMe, acts, inIt, fmtPrice,
@@ -548,4 +596,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, storeRow, cleanTz, createTokens, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs, cleanMarket, cleanAi, cleanAuto };
+module.exports = { register, storeRow, cleanTz, createTokens, listRows, isVoided, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs, cleanMarket, cleanAi, cleanAuto };

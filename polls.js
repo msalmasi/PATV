@@ -314,30 +314,66 @@ function register(app, { isBotToken, addUser }) {
     }
   });
 
-  app.get("/polls", addUser, async (req, res) => {
+  // 1.99ur: /polls lists every pad's running poll (one per pad) and the past ones; ?pad=<slug|none> filters by pad;
+  // /polls/<id> is a poll's own page (the permalink Pepe's announcements and the feed cards link to)
+  const page = async (req, res, focusId) => {
     try {
       await ready;
+      await padlinks.ready();
+      const PA = require("./padaccess");
+      try { await PA.init(); } catch (e) { /* the gate's own problem */ }
       let me = null, acts = [], keys = [];
       if (req.user && req.user.userId) {
         me = (await getQuery("SELECT username, camfrogUsername, class, points_balance FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
         acts = await actions.recentFor(req.user.userId, "polls");
         if (me) keys = [me.camfrogUsername, WEB + me.username].filter(Boolean);
       }
-      const rows = await getQuery("SELECT data FROM polls ORDER BY created DESC, updated DESC LIMIT 80");
-      const all = rows.map((r) => view(JSON.parse(r.data), keys));
-      const active = all.find((p) => p.status === "active") || null;
-      const past = all.filter((p) => p !== active && p.status !== "active").slice(0, 50);
+      const want = padlinks.fromParam(req.query.pad);
+      const rows = await getQuery("SELECT data, pad FROM polls ORDER BY created DESC, updated DESC LIMIT 400");
+      let all = rows.map((r) => {
+        const d = JSON.parse(r.data);
+        const v = view(d, keys);
+        v.padId = r.pad || padlinks.resolve(d) || null;
+        v.padv = padlinks.view(v.padId);
+        return v;
+      }).filter((p) => !p.padId || PA.canSee(req.user || null, p.padId));
+      let focus = null;
+      if (focusId) {
+        focus = all.find((p) => p.id === focusId) || null;
+        if (!focus) {
+          return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such poll",
+            message: "That poll doesn't exist (or it's on a pad you can't see).", title: "Poll not found" });
+        }
+      }
+      const counts = new Map();
+      for (const p of all) { const k = p.padv ? p.padv.slug : "none"; counts.set(k, { slug: k, title: p.padv ? p.padv.title : null, n: ((counts.get(k) || {}).n || 0) + 1 }); }
+      if (want !== null) all = all.filter((p) => (p.padId || "") === want);
       const isAdmin = !!(me && me.class === "Admin");
-      const canEnd = !!(active && me && (isAdmin || (me.camfrogUsername && same(me.camfrogUsername, active.creator))
-                                         || same(WEB + me.username, active.creator)));
+      const canEndOf = (p) => !!(p && p.status === "active" && me && (isAdmin || (me.camfrogUsername && same(me.camfrogUsername, p.creator))
+                                                                     || same(WEB + me.username, p.creator)));
+      const actives = all.filter((p) => p.status === "active");
+      for (const p of actives) p.canEnd = canEndOf(p);
+      if (focus) focus.canEnd = canEndOf(focus);
+      const past = all.filter((p) => p.status !== "active").slice(0, 50);
+      const pv = want ? padlinks.view(want) : null;
+      if (pv && !counts.has(pv.slug)) counts.set(pv.slug, { slug: pv.slug, title: pv.title, n: 0 });
+      const filter = { pad: want, slug: want === "" ? "none" : pv ? pv.slug : "", padTitle: pv ? pv.title : null, padUrl: pv ? pv.url : null,
+                       pads: [...counts.values()].sort((a, b) => (a.slug === "none") - (b.slug === "none") || String(a.title).localeCompare(String(b.title))) };
       res.render("polls", {
-        user: req.user ? req.user.username : null, me, active, past, canEnd, maxOptions: MAX_OPTIONS,
+        user: req.user ? req.user.username : null, me, actives, active: actives[0] || null, past, focus, filter, maxOptions: MAX_OPTIONS,
+        canEnd: canEndOf(actives[0]), pick: await padlinks.choicesFor(req.user, req.query.pad || (focus && focus.padv ? focus.padv.slug : "")),
         acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
       });
     } catch (e) {
       console.error("[polls] page:", e);
       res.status(500).send("Something went wrong.");
     }
+  };
+  app.get("/polls", addUser, (req, res) => page(req, res, null));
+  app.get("/polls/:id", addUser, (req, res) => {
+    const id = String(req.params.id || "");
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) return res.redirect("/polls");
+    return page(req, res, id);
   });
 }
 

@@ -1,0 +1,25 @@
+<%#
+  1.99ur: the pad filter on the markets / pools / polls lists (padlinks.js): a pad select (with each pad's count) and, where it
+  applies, the "show voided" toggle. A plain GET form (?pad=<slug|none>&void=1); public/js/bets.js submits it on change.
+  Pass { filter (markets.listRows' filter), base (the list's path), voidToggle, hash (an anchor to keep) }.
+%>
+<% const T_ = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+   const F_ = locals.filter || {}; %>
+<form class="bx-filter" method="get" action="<%= locals.base || '' %><%= locals.hash ? '#' + locals.hash : '' %>" data-autosubmit>
+  <label class="bx-filter-pad"><span class="bx-filter-lbl"><%- T_('bx.pad.filter') %></span>
+    <select class="bx-in" name="pad">
+      <option value=""<%= !F_.slug ? ' selected' : '' %>><%- T_('bx.pad.all') %></option>
+      <% (F_.pads || []).forEach((p_) => { %>
+        <option value="<%= p_.slug %>"<%= F_.slug === p_.slug ? ' selected' : '' %>><%= p_.slug === 'none' ? T_('bx.pad.sitewide') : p_.title %> (<%= p_.n %>)</option>
+      <% }) %>
+    </select>
+  </label>
+  <% if (locals.voidToggle) { %>
+    <label class="bx-check"><input type="checkbox" name="void" value="1"<%= F_.showVoid ? ' checked' : '' %>> <%- T_('bx.pad.show_void', { count: F_.voided || 0, n: F_.voided || 0 }) %></label>
+  <% } %>
+  <noscript><button class="bx-btn sm ghost" type="submit"><%- T_('bx.pad.apply') %></button></noscript>
+  <% if (F_.slug) { %>
+    <span class="bx-filter-on"><%- F_.slug === 'none' ? T_('bx.pad.showing_site') : T_('bx.pad.showing', { pad: '<a href="' + T_.esc(F_.padUrl || '#') + '">' + T_.esc(F_.padTitle || '') + '</a>' }) %>
+      · <a href="<%= locals.base || '' %><%= F_.showVoid ? '?void=1' : '' %>"><%- T_('bx.pad.clear') %></a></span>
+  <% } %>
+</form>

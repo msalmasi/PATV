@@ -3,8 +3,8 @@
 <%# views/wagers.ejs - 1.99ly design pass (bets.css): hero + how-it-works tiles, offers waiting for you first, wager cards
     (challenger VS opponent, the terms, the pot, a status chip, a live countdown with the time in the viewer's zone),
     pool cards with odds bars, the two start forms and the settled tables. Every form posts the same /act command. %>
-<link rel="stylesheet" href="/public/css/bets.css?v=2">
-<script src="/public/js/bets.js?v=1" defer></script>
+<link rel="stylesheet" href="/public/css/bets.css?v=3">
+<script src="/public/js/bets.js?v=2" defer></script>
 <style>
   /* 1.99pp: the wagers & pools amber accent, set with the ds names (bets.css aliases --ac* to them) */
   .wg { --ds-ac: var(--ds-acc-wagers); --ds-ac-2: var(--ds-acc-wagers-2); --ds-ac-bg: rgba(224, 160, 48, .14); --ds-ac-line: var(--ds-warn-line); --ds-on-ac: #1a1200; }
@@ -139,7 +139,8 @@
       <div class="bx-top"><span class="bx-ref"><%= m.ref %></span>
         <%- m.status === 'open' ? '<span class="bx-chip c-open">' + t('wagers.pool_open') + '</span>' : m.status === 'closed' ? '<span class="bx-chip c-closed">' + t('wagers.pool_closed') + '</span>' : '<span class="bx-chip">' + t.esc(m.status) + '</span>' %>
         <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> AI</span><% } %>
-        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %></div>
+        <% if (m.auto) { %><span class="bx-chip c-ai c-plain"><span class="ds-ic" aria-hidden="true">🤖</span> <%- t('markets.auto_tag') %> · <%- t('markets.auto.cat.' + (['sports','prices','news','trending'].includes(m.auto.cat) ? m.auto.cat : 'news')) %></span><% } %>
+        <% if (m.padv) { %><a class="bx-pad" style="margin-inline-start:auto" href="<%= m.padv.url %>" title="<%- t('bx.pad.label') %>"><span class="ds-ic" aria-hidden="true">📍</span> <%= m.padv.title %></a><% } else { %><span class="bx-pad" style="margin-inline-start:auto"><span class="ds-ic" aria-hidden="true">📍</span> <%- t('bx.pad.sitewide') %></span><% } %></div>
       <a class="q" href="/markets/<%= m.id %>"><%= m.question %></a>
       <div class="opts">
         <% m.options.forEach((o) => { %>
@@ -199,7 +200,8 @@
   <% if (!liveShown.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">⚔️</span><b><%- t('wagers.empty_live') %></b><a class="bx-btn sm" href="#start"><%- t('wagers.cta_new') %></a></div><% } %>
   <div class="bx-grid"><% liveShown.forEach((w) => wagerCard(w, false)) %></div>
 
-  <h2 class="bx-h"><%- t('wagers.h_pools') %> <span class="bx-n"><%= pools.length %></span></h2>
+  <h2 class="bx-h" id="pools"><%- t('wagers.h_pools') %> <span class="bx-n"><%= pools.length %></span></h2>
+  <%- include('partials/bx-padfilter', { filter: locals.filter || {}, base: '/wagers', voidToggle: true, hash: 'pools' }) %>
   <% if (!pools.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">🎲</span><b><%- t('wagers.empty_pools') %></b></div><% } %>
   <div class="bx-grid"><% pools.forEach((m) => poolCard(m)) %></div>
 
@@ -233,6 +235,7 @@
         <label class="bx-field"><%- t('wagers.f_closes') %> <select class="bx-in" name="a4">
           <option value="closes 1h"><%- t('bx.d.1h') %></option><option value="closes 1d" selected><%- t('bx.d.1d') %></option><option value="closes 2d"><%- t('bx.d.2d') %></option>
           <option value="closes 7d"><%- t('bx.d.7d') %></option><option value="closes 30d"><%- t('bx.d.30d') %></option></select></label>
+        <%- include('partials/bx-padpick', { pick: locals.pick || { choices: [], def: '' } }) %>
         <button class="bx-btn" type="submit"><%- t('wagers.f_p_btn') %></button>
         <p class="bx-fine"><%- t('wagers.f_p_fine', { n: fmt(poolMin) }) %></p>
       </form>

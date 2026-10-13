@@ -975,6 +975,7 @@ function register(app, { isBotToken, addUser }) {
       roomVault: !require("./roomvaults").hasVault(R.id) ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage, staff: reg.isStaff(req.user) })
         .catch((e) => { console.error("[roomvaults] card:", e.message); return null; }),
       feed,
+      padBets: await require("./padbets").forPad(R.id).catch((e) => { console.error("[padbets]", e.message); return null; }),   // 1.99ur
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",
     });
   });

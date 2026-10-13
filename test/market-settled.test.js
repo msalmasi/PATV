@@ -164,7 +164,9 @@ test("open markets are unchanged: live price, value, sell button", async () => {
 });
 
 test("the markets list: settled card shows 100/0 with the last trade, void is greyed, open is live", async () => {
-  const h = await page(null, "/markets");
+  // 1.99ur: voided markets are hidden from the list unless asked for (?void=1, the list's toggle)
+  assert.doesNotMatch(await page(null, "/markets"), /href="\/markets\/28"/);
+  const h = await page(null, "/markets?void=1");
   const card = (id) => h.slice(h.indexOf(`href="/markets/${id}"`), h.indexOf("</a>", h.indexOf(`href="/markets/${id}"`)));
   assert.match(card(27), /settled: No/);
   assert.match(card(27), /<b>100%<\/b> · paid 1 PAT\/share · last 82%/);

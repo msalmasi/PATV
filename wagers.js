@@ -126,16 +126,18 @@ function register(app, { isBotToken, addUser }) {
       const doneW = ws.filter((w) => !LIVE.has(w.status) && (w.status === "won" || w.status === "void"))
         .sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 20);
 
-      const ms = (await getQuery("SELECT data FROM markets ORDER BY id DESC LIMIT 300")).map((r) => JSON.parse(r.data))
-        .filter((m) => m.model !== "lmsr");
-      const pools = ms.filter((m) => POOL_LIVE.has(m.status)).map((m) => viewPool(m, me))
+      // 1.99ur: the pools list filters by pad (?pad=) and hides voided / cancelled pools unless ?void=1 (markets.listRows)
+      const L = await markets.listRows(req, { keep: (m) => m.model !== "lmsr" });
+      const withPad = (v) => Object.assign(viewPool(v.raw, me), { padId: v.padId, padv: v.padv });
+      const pools = L.rows.filter((v) => POOL_LIVE.has(v.status)).map(withPad)
         .sort((a, b) => (b.inIt - a.inIt) || (a.closes - b.closes));
-      const doneP = ms.filter((m) => !POOL_LIVE.has(m.status)).map((m) => viewPool(m, me))
+      const doneP = L.rows.filter((v) => !POOL_LIVE.has(v.status)).map(withPad)
         .sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 15);
 
       res.render("wagers", {
         user: req.user ? req.user.username : null, signedIn: !!(req.user && req.user.userId),
         camfrog, me, bal, isAdmin, now, offers, live, doneW, pools, doneP, acts,
+        filter: L.filter, pick: await require("./padlinks").choicesFor(req.user, req.query.pad),   // 1.99ur
         msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null,
         wagerMin: WAGER_MIN, poolMin: POOL_MIN, feePct: FEE_PCT,
       });
