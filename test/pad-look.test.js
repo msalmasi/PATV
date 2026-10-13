@@ -306,12 +306,12 @@ test("Top Pads: avatar, name, then 🚀 on the left; the 👥 / 🎙 counts in t
   const html = await renderHome({ tops, padAv: PL.avatarHtml });
   const box = html.slice(html.indexOf('id="tpH"'), html.indexOf("</ol>", html.indexOf('id="tpH"')));
   const li = box.split("<li>").slice(1);
-  assert.match(li[0], /<span class="n"><span class="pad-av tp-av has-img"[^>]*><img[^>]*><\/span><span class="nt">Houseplants<\/span><span class="bm boost-mark"[^>]*>🚀 5\.4k<\/span><\/span><span class="v">/);
-  assert.match(li[1], /<span class="n"><span class="pad-av tp-av" aria-hidden="true">O<\/span><span class="nt">Other<\/span><\/span><span class="v">/);
+  assert.match(li[0], /<span class="n"><span class="pad-av tp-av has-img"[^>]*><img[^>]*><\/span><span class="nt" title="Houseplants">Houseplants<\/span><span class="bm boost-mark"[^>]*>🚀 5\.4k<\/span><\/span><span class="v">/);
+  assert.match(li[1], /<span class="n"><span class="pad-av tp-av" aria-hidden="true">O<\/span><span class="nt" title="Other">Other<\/span><\/span><span class="v">/);
   const v = (s) => s.slice(s.indexOf('<span class="v">'), s.indexOf("</a>") + 4);   // 1.99hm: the 🎧 button after </a> is per pad
   assert.equal(v(li[0]).replace(/12|2/g, "N"), v(li[1]).replace(/3|0/g, "N"), "the right-hand columns are identical markup");
   assert.doesNotMatch(v(li[0]), /boost-mark/);
-  assert.match(html, /\.hm \.tp \.rooms-mini \.v > span \{ display: inline-block; min-width: 3\.2em; text-align: end;[^}]*\}/);
+  assert.match(html, /\.hm \.tp \.rooms-mini \.v > span \{ display: inline-block; min-width: 2\.8em; text-align: end;[^}]*\}/);
 });
 
 test("Your show: the homepage card is one line + Go live / Pads (no bullets); /p's card is the same line", async () => {
@@ -329,7 +329,7 @@ test("Your show: the homepage card is one line + Go live / Pads (no bullets); /p
 
 test("/p cards + Trending: the 🚀 badge right after the pad's name, never among the status pills / stat tags", () => {
   const src = rd(path.join(repo, "views", "rooms.ejs"));
-  assert.match(src, /<span class="ch-name"><%- PAV_\(r\.id[^%]*%><span class="t[^"]*"><%= r\.title %><\/span>(<%- fx_ \? fx_\.badges : '' %>)?<%- BM\(r\.boost_pat, 'pill ch-mark'\) %><\/span>/);
+  assert.match(src, /<span class="ch-name"><%- PAV_\(r\.id[^%]*%><span class="t[^"]*"( title="<%= r\.title %>")?><%= r\.title %><\/span>(<%- fx_ \? fx_\.badges(Fit)? : '' %>)?<%- BM\(r\.boost_pat, 'pill ch-mark'\) %><\/span>/);
   const badges = src.slice(src.indexOf('<span class="ch-badges">'), src.indexOf("</span>\n          </div>", src.indexOf('<span class="ch-badges">')));
   assert.doesNotMatch(badges, /BM\(/);
   assert.match(src, /<span class="tn"><a class="t" href="[^"]*"><%= r\.title %><\/a><%- BM\(r\.boost_pat, 'tg boost'\) %><\/span>/);

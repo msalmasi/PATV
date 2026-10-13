@@ -64,7 +64,8 @@
 <script src="/public/js/stage-lowlat.js?v=2"></script>
 <% } %><script src="/public/js/stage-room.js?v=8"></script>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
-<link rel="stylesheet" href="/public/css/padfx.css?v=4">
+<link rel="stylesheet" href="/public/css/padfx.css?v=5">
+<script src="/public/js/pad-chipfit.js?v=1" defer></script>
 <script src="/public/js/stage-capture.js?v=2"></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw3">
@@ -139,8 +140,11 @@
   .hm .tp .rooms-mini .n { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; }
   .hm .tp .rooms-mini .nt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hm .tp .rooms-mini .n .bm { flex: none; }
-  .hm .tp .rooms-mini .n .pfx-bs { flex: none; }   /* 1.99ew: pad badges (icons) by the name */
-  .hm .tp .rooms-mini a.pfx { border-radius: var(--ds-r-sm); }
+  /* 1.99ew: pad badges (icons) by the name; 1.99xt: they collapse to fit (padfx.css [data-fit] + pad-chipfit.js) - the
+     name keeps >= 8ch (ellipsized, full name in the title), the 👥 / 🎙 counts and 🎧 never get squeezed */
+  .hm .tp .rooms-mini .nt { flex: 0 1 auto; }
+  .hm .tp .rooms-mini .n > .tp-av, .hm .tp .rooms-mini .n > .bm, .hm .tp .rooms-mini .n > .adult18 { flex: none; }
+  .hm .tp .rooms-mini a.pfx { border-radius: var(--ds-r-sm); padding-inline: 6px; }   /* a framed (featured) row: content off the frame */
   /* 1.99hm: 🎧 listen to a pad from the homepage (one room at a time; greyed when its audio relay is off) */
   .hm .tp .rooms-mini li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 6px; }
   .hm .tp .rooms-mini li > a { min-width: 0; }
@@ -154,7 +158,7 @@
   @media (pointer: coarse) { .hm .tp-ls { width: 40px; height: 40px; } }
   .hm #tpAudioBox:empty { display: none; }
   .hm #tpAudioBox { margin-top: 8px; }
-  .hm .tp .rooms-mini .v > span { display: inline-block; min-width: 3.2em; text-align: end; font-variant-numeric: tabular-nums; }
+  .hm .tp .rooms-mini .v > span { display: inline-block; min-width: 2.8em; text-align: end; font-variant-numeric: tabular-nums; }
   .hm .pad-av { width: 20px; height: 20px; flex: none; border-radius: var(--ds-r-xs); overflow: hidden; display: inline-grid; place-items: center; background: #1c2a1c; font-size: 11px; font-weight: 700; color: #fff; }
   .hm .pad-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* 1.99ek: Top Pads + the shared 🚀 boost badge (boostmark.js) */
@@ -534,7 +538,7 @@
             <% tops_.forEach((r) => { %>
               <%# 1.99es: the 🚀 badge sits by the NAME (not among the counts), so the 👥 / 🎙 columns line up boosted or not; the pad's avatar (padlook.js) first %>
               <% const fx_ = PFX_(r.id); %>
-              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %><% if (r.adult) { %><span class="adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %></span><span class="v"><span title="<%- t('home.tp.in_room', { n: r.count }) %>"><span class="ds-ic" aria-hidden="true">👥</span> <%= r.count %></span><span title="<%- t('home.n_on_mic', { n: r.micCount }) %>"><span class="ds-ic" aria-hidden="true">🎙</span> <%= r.micCount %></span></span></a><% const lsWhy_ = !r.audio ? t('home.tp.relay_off') : !r.listen ? (me ? t('home.tp.members_only') : t('home.tp.sign_in_listen')) : ''; %><button type="button" class="tp-ls" data-listen="<%= r.slug %>" data-name="<%= r.name %>" aria-pressed="false" aria-label="<%- lsWhy_ ? t('home.tp.listen_why', { name: r.name, why: lsWhy_ }) : t('home.tp.listen_to_live', { name: r.name }) %>" title="<%- lsWhy_ ? '🔇 ' + lsWhy_ : t('home.tp.listen_live') %>"<%= lsWhy_ ? ' disabled' : '' %>>🎧</button><% const np_ = npText_(r.np), npm_ = npText_(r.np && r.np.mic); %><span class="np" data-np="<%= r.id %>"<%- np_ ? ' title="' + np_ + '"' : ' hidden' %>><%- np_ %></span><span class="np" data-npm="<%= r.id %>"<%- npm_ ? ' title="' + npm_ + '"' : ' hidden' %>><%- npm_ %></span></li>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>" title="<%= r.name %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %><% if (r.adult) { %><span class="adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %></span><span class="v"><span title="<%- t('home.tp.in_room', { n: r.count }) %>"><span class="ds-ic" aria-hidden="true">👥</span> <%= r.count %></span><span title="<%- t('home.n_on_mic', { n: r.micCount }) %>"><span class="ds-ic" aria-hidden="true">🎙</span> <%= r.micCount %></span></span></a><% const lsWhy_ = !r.audio ? t('home.tp.relay_off') : !r.listen ? (me ? t('home.tp.members_only') : t('home.tp.sign_in_listen')) : ''; %><button type="button" class="tp-ls" data-listen="<%= r.slug %>" data-name="<%= r.name %>" aria-pressed="false" aria-label="<%- lsWhy_ ? t('home.tp.listen_why', { name: r.name, why: lsWhy_ }) : t('home.tp.listen_to_live', { name: r.name }) %>" title="<%- lsWhy_ ? '🔇 ' + lsWhy_ : t('home.tp.listen_live') %>"<%= lsWhy_ ? ' disabled' : '' %>>🎧</button><% const np_ = npText_(r.np), npm_ = npText_(r.np && r.np.mic); %><span class="np" data-np="<%= r.id %>"<%- np_ ? ' title="' + np_ + '"' : ' hidden' %>><%- np_ %></span><span class="np" data-npm="<%= r.id %>"<%- npm_ ? ' title="' + npm_ + '"' : ' hidden' %>><%- npm_ %></span></li>
             <% }) %>
           </ol>
           <div id="tpAudioBox"></div>

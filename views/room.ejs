@@ -443,7 +443,7 @@
    const giftSigned_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user);
    // 1.99iv: 📺 Prime Time (premium.js) - the intro sweep on open + the ⋯ menu entry
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
-<link rel="stylesheet" href="/public/css/padfx.css?v=4">
+<link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <main class="ds-page rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
   <%# 1.99tc: the tier intro - 💎 Prime Time Plus gets its own title card, Prime Time the gold sweep (partials/pad-intro.ejs) %>

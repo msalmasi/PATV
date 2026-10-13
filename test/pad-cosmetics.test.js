@@ -321,7 +321,7 @@ test("equip rules: owner / site admin only; one frame, one glow; up to 3 badges;
   assert.equal(fx.glow, "pfx-g pfx-g-soft");
   assert.match(fx.badges, /^<span class="pfx-bs"><span class="pfx-b"><span aria-hidden="true">📅<\/span>Est\. 2026<\/span><span class="pfx-b"><span aria-hidden="true">🌱<\/span>Community<\/span><\/span>$/);
   assert.match(fx.badgesMini, /class="pfx-b mini" title="Est\. 2026"/);
-  assert.deepEqual(PC.fx("Quiet.Nothing"), { cls: "", layer: "", glow: "", badges: "", badgesMini: "", any: false });
+  assert.deepEqual(PC.fx("Quiet.Nothing"), { cls: "", layer: "", glow: "", badges: "", badgesMini: "", badgesFit: "", any: false });
 });
 
 test("HTTP: GET state (role + routing text), buy JSON-only + same-site + double-click safe, equip owner-only, insufficient PAT code", async () => {
@@ -463,7 +463,7 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   }, extra);
   const page = async (u) => (await ejs.renderFile(path.join(repo, "views", "room.ejs"), roomLocals(u))).replace(/\r\n/g, "\n");
   let html = await page("fan");
-  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/padfx\.css\?v=4">/);
+  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/padfx\.css\?v=5">/);
   assert.match(html, /<section class="hero pfx pfx-f-pride is-anim" aria-labelledby="rmTitle"><span class="pfx-l" aria-hidden="true"><\/span>/);
   assert.match(html, /<span class="rm-nm pfx-g pfx-g-rainbow">Houseplants<\/span><span class="pfx-bs">/);
   assert.match(html, /role="menuitem" data-pad-gift="[^"]+">🎁 Gift a cosmetic<\/button>/, "⋯ menu for a non-owner");
@@ -480,10 +480,10 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   // /p cards + Top Pads
   const rooms_ = rd("views/rooms.ejs");
   assert.match(rooms_, /<a class="ch[^"]*<%= fx_ && fx_\.cls \? ' ' \+ fx_\.cls : '' %>" href="[^"]*"><%- fx_ \? fx_\.layer : '' %>/);
-  assert.match(rooms_, /<span class="t<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badges : '' %>/);
+  assert.match(rooms_, /<span class="t<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>" title="<%= r\.title %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badgesFit : '' %>/);
   const home = rd("views/home.ejs");
-  assert.match(home, /<span class="nt<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>"><%= r\.name %><\/span><%- fx_ \? fx_\.badgesMini : '' %>/);
-  assert.match(home, /padfx\.css\?v=4/);
+  assert.match(home, /<span class="nt<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>" title="<%= r\.name %>"><%= r\.name %><\/span><%- fx_ \? fx_\.badgesMini : '' %>/);
+  assert.match(home, /padfx\.css\?v=5/);
   // settings: the ✨ Cosmetics section inside the 🎨 Look card
   const ps = rd("views/padSettings.ejs");
   const look = ps.slice(ps.indexOf('<h3>🎨 Look</h3>'), ps.indexOf('id="royalties"'));

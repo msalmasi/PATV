@@ -305,10 +305,11 @@ function badgeHtml(item, mini) {
  *   cls    classes for the framed box ("pfx pfx-f-embers is-anim") - the box also needs `layer` as its first child
  *   layer  the effect layer html (absolute, behind the content, aria-hidden)
  *   glow   classes for the element holding the pad's NAME ("pfx-g pfx-g-gold")
- *   badges / badgesMini   the badge pills (wrapped), full or icon-only
+ *   badges / badgesMini   the badge pills (wrapped), full or icon-only (mini: one line that fits, data-fit)
+ *   badgesFit             the full pills on one line that fits (data-fit; pad-chipfit.js)
  */
 function fx(roomId) {
-  const out = { cls: "", layer: "", glow: "", badges: "", badgesMini: "", any: false };
+  const out = { cls: "", layer: "", glow: "", badges: "", badgesMini: "", badgesFit: "", any: false };
   let c;
   try { c = require("./padlook").cosmeticsOf(roomId); } catch (e) { return out; }
   const prime = isPrime(roomId), plus = prime && isPlus(roomId);
@@ -324,7 +325,10 @@ function fx(roomId) {
   if (prime) bs.unshift(plus ? PLUS_BADGE : PRIME_BADGE);
   if (bs.length) {
     out.badges = `<span class="pfx-bs">${bs.map((b) => badgeHtml(b, false)).join("")}</span>`;
-    out.badgesMini = `<span class="pfx-bs mini">${bs.map((b) => badgeHtml(b, true)).join("")}</span>`;
+    // 1.99xt: data-fit = one line that collapses to fit (public/js/pad-chipfit.js: the first chips + a "+N" chip,
+    // the rest in its title; the pad's name keeps >= 8ch) - Top Pads rows (mini) and the /p cards (badgesFit)
+    out.badgesMini = `<span class="pfx-bs mini" data-fit>${bs.map((b) => badgeHtml(b, true)).join("")}</span>`;
+    out.badgesFit = `<span class="pfx-bs" data-fit>${bs.map((b) => badgeHtml(b, false)).join("")}</span>`;
   }
   out.any = !!(out.cls || out.glow || out.badges);
   return out;

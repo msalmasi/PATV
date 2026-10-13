@@ -71,6 +71,14 @@
   white-space: nowrap; text-shadow: none; -webkit-text-fill-color: currentColor; }
 .pfx-b.mini { padding: 0 4px; font-size: 10.5px; }
 .pfx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* 1.99xt: [data-fit] badge rows (Top Pads, /p cards) stay on ONE line and give way before the pad's name.
+   pad-chipfit.js shows the first chips that fit + a "+N" chip (the rest in its title); without JS the chips wrap into a
+   clipped second line (whole chips drop) and shrink 8x faster than the name. */
+.pfx-bs[data-fit] { flex: 0 8 auto; min-width: 0; flex-wrap: wrap; overflow: hidden; max-height: 22px; }
+.pfx-bs[data-fit].pfx-measure { flex: none; flex-wrap: nowrap; max-height: none; }
+.pfx-bs[data-fit].pfx-fitted { flex: 0 0 auto; flex-wrap: nowrap; }
+.pfx-bs[data-fit].pfx-none, .pfx-bs[data-fit] > .pfx-off { display: none !important; }
+.pfx-b.pfx-more { cursor: help; font-variant-numeric: tabular-nums; color: var(--ds-text-2, #c8c8c8); background: #1a1a1a; border-color: #3a3a3a; }
 
 /* the pad page's 🎁 entries (About card button, ⋯ menu item) */
 .rm .about button.ab-btn { cursor: pointer; font-family: inherit; }
