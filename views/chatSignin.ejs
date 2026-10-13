@@ -1,0 +1,39 @@
+<%- include('layout', { title: 'Sign in from chat', user: user }) %>
+<%#
+  !signin (chatsignin.js): the page Pepe's one-time link opens - /signin#t=<token>. The token lives in the URL FRAGMENT, which a
+  browser never sends: public/js/chat-signin.js reads it, clears it from the address bar, asks who it's for (POST
+  /api/chatsignin/peek) and shows one button - a same-origin form POST to /signin that spends it and signs in.
+  error (after a POST): expired | off | elevated | slow | error.
+%>
+<link rel="stylesheet" href="/public/css/pad-access.css?v=2">
+<main class="ds-page narrow flow pa-lock" id="csPage">
+  <section class="pa-card" aria-labelledby="csH">
+    <% if (error) { %>
+      <div class="pa-ic" aria-hidden="true"><%= error === 'expired' ? '⌛' : '🔒' %></div>
+      <h1 id="csH"><%= error === 'expired' ? 'This sign-in link has expired' : "You can't sign in this way" %></h1>
+      <p class="pa-what">
+        <% if (error === 'expired') { %>Chat sign-in links work once, for a few minutes. Type <b>!signin</b> in any room with Pepe for a new one.
+        <% } else if (error === 'off') { %>Chat sign-in is turned off for this account. Sign in with your password, then switch it back on in Settings → Security if you want it.
+        <% } else if (error === 'elevated') { %>Admin and staff accounts can't sign in from chat. Please sign in with your password.
+        <% } else if (error === 'slow') { %>Too many tries from your network. Wait a few minutes, then type <b>!signin</b> again.
+        <% } else { %>Something went wrong. Type <b>!signin</b> in chat for a new link.<% } %>
+      </p>
+      <p><a class="pa-btn primary" href="/login">Sign in with a password</a></p>
+    <% } else { %>
+      <div id="csBox" data-state="loading">
+        <div class="pa-ic" aria-hidden="true">🐸</div>
+        <h1 id="csH">Sign in from chat</h1>
+        <p class="pa-what" id="csWhat">Checking your link…</p>
+        <form method="post" action="/signin" id="csForm" hidden>
+          <input type="hidden" name="token" id="csToken" value="">
+          <button type="submit" class="pa-btn primary" id="csGo">Sign in</button>
+        </form>
+        <p class="pa-mut" id="csMore" hidden>Not you, or didn't ask for this? Just close this page - nothing happens until the button is pressed.</p>
+        <noscript><p class="pa-what">This page needs JavaScript. Or <a href="/login">sign in with a password</a>.</p></noscript>
+      </div>
+    <% } %>
+  </section>
+</main>
+<% if (!error) { %><script src="/public/js/chat-signin.js?v=1" defer></script><% } %>
+</body>
+</html>

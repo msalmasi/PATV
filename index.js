@@ -3969,7 +3969,8 @@ app.post(
 // credit must name its source + ref; every call logged in bot_credit_log, idempotent per ref), POST /api/g/heist/jackpot-adjust
 // (source + ref required, logged, idempotent), POST /api/users/merge-balance, POST /api/g/stale/reclaimed.
 require("./botcredits").register(app, { isBotToken, idemBegin, resolveCounterparty });
-require("./autoescrow").register(app, { isBotToken, addUser });   // auto-account escrow (docs/auto-account-escrow.md): Pepe's PM list, the admin card, the 10-min tick
+require("./autoescrow").register(app, { isBotToken, addUser });
+require("./chatsignin").register(app, { isBotToken, addUser });   // !signin: a one-time sign-in link by PM for a linked Camfrog login (chatsignin.js)   // auto-account escrow (docs/auto-account-escrow.md): Pepe's PM list, the admin card, the 10-min tick
 
 // Grant XP to a user (bot-authenticated) — used for duel/heist wins. Runs the same
 // updateLevel path as the wheel, so level-ups and their bonuses behave identically.

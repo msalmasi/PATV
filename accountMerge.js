@@ -243,6 +243,9 @@ const RULES = {
   "auto_escrow.user_id": M(), "auto_escrow.claimed_by": M(), "auto_escrow_claims.user_id": M(),
   "auto_escrow_notices.user_id": M({ key: [], merge: { last_at: "MAX", last_entry: "MAX" } }),
   "auto_escrow_claimlinks.used_by": M(),          // the account that used a !signup claim link
+  // chatsignin.js (!signin): links, the owner's switch (off wins) and the account's chat sign-in log follow the account
+  "chat_signin_tokens.user_id": M(), "chat_signin_log.user_id": M(),
+  "chat_signin_prefs.user_id": M({ key: [], merge: { enabled: "MIN" } }),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)
   "fed_journal.actor": { deny: NAME }, "pat_routes.by": { deny: NAME }, "pat_routes_log.by": { deny: NAME },

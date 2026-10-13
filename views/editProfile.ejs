@@ -567,6 +567,21 @@
     </form>
     <span class="status err pw-status" id="pwStatus" role="status" aria-live="polite"></span>
   </section>
+
+  <section class="card" id="security">
+    <h2><%- t('settings.security') %></h2>
+    <p class="lede"><%- t('settings.security.lede') %></p>
+    <div class="conn">
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#1f3a2a" aria-hidden="true">💬</span>
+        <span class="conn-name"><b><%- t('settings.security.chat_signin') %></b><span class="pv-d"><%- t('settings.security.chat_signin_d') %></span></span>
+        <label class="btn"><input type="checkbox" id="csToggle" disabled> <span id="csToggleL"></span></label>
+      </div>
+    </div>
+    <span class="status" id="csStatus" role="status" aria-live="polite"></span>
+    <details id="csLogBox"><summary><%- t('settings.security.recent') %></summary><ul id="csLog" class="hint"></ul></details>
+    <script src="/public/js/chat-signin-setting.js?v=1" defer></script>
+  </section>
 </main>
 
 <script>
