@@ -375,22 +375,52 @@
   },
   {
    "id": "xp",
-   "title": "!xp · !level",
+   "title": "!xp · !level · !rank",
    "category": "start",
    "role": "everyone",
    "commands": [
     "!xp",
-    "!level"
+    "!level",
+    "!rank"
    ],
    "aliases": [],
    "syntax": [
     "!xp",
-    "!level"
+    "!level",
+    "!rank"
    ],
-   "summary": "Check your current level and XP.",
-   "details": "Check your current level and XP. Earn XP from chatting (1/msg) and mic time (1/sec).",
+   "summary": "Check your current level, its tier name and your XP.",
+   "details": "Check your current level and XP, plus your level's tier name: every 10 levels has one (Tadpole, Froglet, Pond Hopper, Lily Pad Regular ... Eternal Frog, then Pond Deity I, II ...). Earn XP from chatting (1/msg) and mic time (1/sec).",
    "examples": [],
    "keywords": [],
+   "webchat": true
+  },
+  {
+   "id": "streak",
+   "title": "!streak [@user]",
+   "category": "start",
+   "role": "everyone",
+   "commands": [
+    "!streak",
+    "!streaks"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!streak",
+    "!streak @user"
+   ],
+   "summary": "Your 🔥 daily activity streak: days in a row you showed up.",
+   "details": "A day counts when you chat, hop on the mic or run a command in a Camfrog room, or post, comment, spin the wheel, play a game or tip on publicaccess.tv. Days run midnight to midnight New York time. Shows your current run, your best, whether today counted yet and the next milestone; 7, 30, 100 and 365 days in a row are achievements with XP and PAT. Add @user to see someone else's (not for !incognito users or anyone who hid it on their profile).",
+   "examples": [
+    "!streak",
+    "!streak @frogfan"
+   ],
+   "keywords": [
+    "streak",
+    "daily",
+    "days in a row",
+    "fire"
+   ],
    "webchat": true
   },
   {
@@ -1038,6 +1068,33 @@
     "!bridge transcripts on|off"
    ],
    "keywords": []
+  },
+  {
+   "id": "bridge-block",
+   "title": "!bridge block <name> [global] [duration] [reason]",
+   "category": "chat",
+   "role": "mod",
+   "commands": [],
+   "aliases": [],
+   "syntax": [
+    "!bridge block <name> [global] [30m|2h|1d|7d|perm] [reason]",
+    "!bridge unblock <name> [global]",
+    "!bridge blocks"
+   ],
+   "summary": "Stop someone talking into this room from the website (the pad page's relay) - for a while or until lifted.",
+   "details": "Blocks a website member's **web relay** into this room: their chat lines, voice clips, typed `!commands` and the Pepe menu from the pad page. It doesn't touch normal Camfrog chat - someone with a linked chat name still talks in the room as usual (that's what `!kick` / `!ban` / `!timeout` are for).\n\n`<name>` is how the room sees them (`🌐name`), their PATV username, or their chat name. Durations: `30m`, `2h`, `1d`, `7d`, or `perm` (until lifted, the default); the rest of the line is the reason they're shown.\n\nWho: this room's mods, the pad's owner and Pepe admins. `global` (Pepe admins only) blocks them in every room. `!bridge blocks` lists this room's blocks (and the global ones); `!bridge unblock <name>` lifts one.\n\nThe list lives on publicaccess.tv (the pad's owner page and /admin/bridge show and change it too); Pepe keeps a copy, so a block still holds if the website is down - but a new block or unblock needs the website to answer.",
+   "examples": [
+    "!bridge block 🌐webbob 2h spamming links",
+    "!bridge unblock webbob",
+    "!bridge blocks"
+   ],
+   "keywords": [
+    "web relay",
+    "block",
+    "website",
+    "pad",
+    "bridge"
+   ]
   },
   {
    "id": "micstats",
@@ -2335,13 +2392,13 @@
    "aliases": [],
    "syntax": [
     "!challenge <moan|sing|laugh|fart|beatbox|impression> [@user] [impression target]",
-    "!challenge open <category> [2m] [impression target]",
+    "!challenge open <category> [2m] [fee 5k] [impression target]",
     "!challenge <category> @a @b [stake]",
     "!challenge top <category> [week] · !challenge vault",
     "!challenge cancel [@user|ACn] · !challenge close"
    ],
    "summary": "A room's owner or an admin starts a mic performance; Pepe's AI judges score it out of 10, and good scores win PAT from that pad's vault.",
-   "details": "Only the room's **owner** or a Pepe **admin** can start one. `!challenge sing @bob` counts Bob in: he grabs the mic within 60 s and the judges (an audio AI) score the performance out of 10 with a one-liner. `!challenge open sing 2m` opens a round anyone in the room can enter once with `!sing`. `!challenge sing @a @b 10k` is a head-to-head: both must `!accept` within 60 s, both stakes are held, both perform in turn and the higher score takes the pot minus 5% (half to Fort Knox, half to the pad's vault). Ties, no-shows, cancels and judge failures refund the stakes. **Prizes** for solo and open-round goes come from **this pad's vault escrow** on publicaccess.tv (the room half of boosts, slot fees and pad gifts): score × 2,000 PAT from 5/10 (laugh and fart 1,200), up to 20,000, and a room pays at most 5% of its vault (max 60,000) a day. An empty vault means you play for glory: the score still counts on `!challenge top`. No prize when you start your own challenge or perform in your own room. Recordings, music and TTS are disqualified. Clips are judged in memory and never stored; incognito users can't perform. `!challenge vault` shows this room's prize budget. Admins: `!challenge on|off`, `!challenge status`, `!challenge set <key> <value>`, `!challenge set pay <category> <per point> [min score] [max]`; owners can switch it on or off for their own room.",
+   "details": "Only the room's **owner** or a Pepe **admin** can start one. `!challenge sing @bob` counts Bob in: he grabs the mic within 60 s and the judges (an audio AI) score the performance out of 10 with a one-liner. `!challenge open sing 2m` opens a round anyone in the room can enter once with `!sing`. `!challenge sing @a @b 10k` is a head-to-head: both must `!accept` within 60 s, both stakes are held, both perform in turn and the higher score takes the pot minus 5% (half to Fort Knox, half to the pad's vault). Ties, no-shows, cancels and judge failures refund the stakes. **Prizes** for solo and open-round goes come from **this pad's vault escrow** on publicaccess.tv (the room half of boosts, slot fees and pad gifts): score × 2,000 PAT from 5/10 (laugh and fart 1,200), up to 20,000, and a room pays at most 5% of its vault (max 60,000) a day. An empty vault means you play for glory: the score still counts on `!challenge top`. No prize when you start your own challenge or perform in your own room. Recordings, music and TTS are disqualified. Clips are judged in memory and never stored; incognito users can't perform. `!challenge vault` shows this room's prize budget. Admins: `!challenge on|off`, `!challenge status`, `!challenge set <key> <value>`, `!challenge set pay <category> <per point> [min score] [max]`; owners can switch it on or off for their own room. With economy E-8 on, the prize is **held** from the pad vault when a performance starts (the room hears the real figure), prizes need a PATV account linked to your chat login that is 7+ days old, level 2+, not an alt, and 15 minutes in the room today (otherwise it's for glory), the gang that controls the room can't win a challenge one of its members started, and an open round can carry an **entry fee** the starter picks (`!challenge open sing 2m fee 5k`, 0-10,000 PAT; no fee unless one is set): held when you enter, into the pad vault once you're judged, refunded if you never perform. Every judged performance is listed on the pad page.",
    "examples": [
     "!challenge sing @bob",
     "!challenge open moan 3m",
@@ -2459,7 +2516,7 @@
     "!econ"
    ],
    "summary": "The economy layers at a glance: the Federal Reserve (and its loans to the Treasury vaults), Fort Knox and the incentive budget.",
-   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (pad vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the pad's vault; needs the layers on), `!econ recipe` (the room payout recipe: `cutover` [confirm <id>], `on|off`, `preview [room]`, `run`, `cfg`; pad top-ups: `!econ activitypads preview|on|off`, profile vaults: `!econ profilevaults on|off`), `!econ roomvaults migrate` (moves the pads' pad-vault escrow on the website into their pad vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that topped the Federal Reserve up to 25M, done 2026-10-09 - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose PAT is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Treasury loans are repaid first from that vault's weekly surplus. `!econ fedloan fortknox|casino <amount> <reason>` lends to Fort Knox or the Casino vault, up to the pool's cap and inside the same 10M; it is repaid first from that pool's overflow above its cap (the daily release pays the Fed before the incentive budget) or early with `!econ fedloan repay <id> [amount]` (dry run + confirm). The incentive budget, the lotto pot and pad vaults are grant only (`!econ fund`): they have no surplus of their own to repay from. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ get [key]` (the economy v2 floors, targets, caps and weekly budgets - every number on the admin panel's Federal Reserve & floors card - with their defaults; one key shows its value, default and label), `!econ set <key> <value>` (changes one, e.g. `!econ set fortknox_floor 2.5m`; `!econ set <key> default` puts it back; validated - whole PAT, floor at most the target / cap, weekly budgets at most 100M in total - applied at once and logged on the card; keys: house_target, house_hard_floor, bank_target, bank_hard_floor, bank_lent_mult_pct, bank_peak_days, mm_target, mm_hard_floor, fedloan_cap, fortknox_floor, fortknox_cap, casino_floor, casino_cap (above either cap the daily release sends the overflow into the incentive budget), budget_<group> and pace_<group> (days a group's week is spread over, 0 = not paced) for welcome, levelup, achievements, misc, royalties, roomgames, turf, season, launchpad), `!econ monetary` (economy v3: the Federal Reserve's band - it mints back up to its floor (default 25M, 50M on prod), at most 5M a day, and releases what is above its ceiling, 150M, to the burn or the incentive budget - the Monday incentive guarantee, organic issuance and Fed flash liquidity), `!econ mints` (this month's mints per source - issuance, floor, admin, loans, restores, donations, seed - against their monthly caps, and the latest mints), `!econ mint <amount> <reason>` (an admin mint into the Federal Reserve only - never a pool or a wallet; a dry run first, then `!econ mint confirm <id>`; logged, no cap of its own, counted in the monthly total cap), `!econ fund <house|bank|mm|fortknox|casino|incentives|lotto|room:<id>> <amount> <reason>` (a Fed grant: moves PAT the Fed holds into that pool, not repayable, nothing minted - a dry run first, then `!econ fund confirm <id>`; a grant that takes the Fed below its floor is flagged and needs the confirm twice - the next daily tick mints the Fed back up inside the caps; Fort Knox, the Casino vault and pad vaults take at most what fits under their cap; also the admin panel's \"Fill a pool from the Reserve\" form, grant or loan), `!econ fedseed <total> [reason]` (mints the Federal Reserve up to <total>, once per total - a dry run first, then `!econ fedseed confirm <id>`), `!econ flash` (the Fed's flash liquidity: when a player loan, a House payout or a market seed is bigger than the Bank, the House or the Market maker can pay, the Fed lends that vault the gap at once, inside the Fed loan cap; an admin action that draws on it asks for a second confirm), `!econ set` also takes the v3 keys: fed_floor, fed_ceiling, fed_floor_mint_daily, fed_ceiling_action burn|incentives, incentive_guarantee on|off, issuance_mode off|pct|fixed, issuance_pct_month, issuance_fixed_month, issuance_activity_scaling, mintcap_<issuance|floor|loan|restore|total> (a number or unlimited; the admin mint has no cap of its own and counts toward mintcap_total), flash_bank / flash_house / flash_mm on|off, grant_weekly_cap, donation_rate, donation_bonus_pct, staker_share_pct, fed_split_pct, room_vault_cap, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their pad vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
+   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (pad vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the pad's vault; needs the layers on), `!econ recipe` (the room payout recipe: `cutover` [confirm <id>], `on|off`, `preview [room]`, `run`, `cfg`; `!econ vwm [status [YYYY-MM-DD]]|on|off` pays the streamer slice on verified watch-minutes (E-5); `!econ convoys on|off` puts payouts of 25k+ on hittable convoys (E-7); `!econ challenges on|off|cfg` holds mic-challenge prizes from the pad vault, with prize gates and open-round entry fees (E-8); pad top-ups: `!econ activitypads preview|on|off`, profile vaults: `!econ profilevaults on|off`), `!econ roomvaults migrate` (moves the pads' pad-vault escrow on the website into their pad vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that topped the Federal Reserve up to 25M, done 2026-10-09 - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose PAT is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Treasury loans are repaid first from that vault's weekly surplus. `!econ fedloan fortknox|casino <amount> <reason>` lends to Fort Knox or the Casino vault, up to the pool's cap and inside the same 10M; it is repaid first from that pool's overflow above its cap (the daily release pays the Fed before the incentive budget) or early with `!econ fedloan repay <id> [amount]` (dry run + confirm). The incentive budget, the lotto pot and pad vaults are grant only (`!econ fund`): they have no surplus of their own to repay from. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ get [key]` (the economy v2 floors, targets, caps and weekly budgets - every number on the admin panel's Federal Reserve & floors card - with their defaults; one key shows its value, default and label), `!econ set <key> <value>` (changes one, e.g. `!econ set fortknox_floor 2.5m`; `!econ set <key> default` puts it back; validated - whole PAT, floor at most the target / cap, weekly budgets at most 100M in total - applied at once and logged on the card; keys: house_target, house_hard_floor, bank_target, bank_hard_floor, bank_lent_mult_pct, bank_peak_days, mm_target, mm_hard_floor, fedloan_cap, fortknox_floor, fortknox_cap, casino_floor, casino_cap (above either cap the daily release sends the overflow into the incentive budget), budget_<group> and pace_<group> (days a group's week is spread over, 0 = not paced) for welcome, levelup, achievements, misc, royalties, roomgames, turf, season, launchpad), `!econ monetary` (economy v3: the Federal Reserve's band - it mints back up to its floor (default 25M, 50M on prod), at most 5M a day, and releases what is above its ceiling, 150M, to the burn or the incentive budget - the Monday incentive guarantee, organic issuance and Fed flash liquidity), `!econ mints` (this month's mints per source - issuance, floor, admin, loans, restores, donations, seed - against their monthly caps, and the latest mints), `!econ mint <amount> <reason>` (an admin mint into the Federal Reserve only - never a pool or a wallet; a dry run first, then `!econ mint confirm <id>`; logged, no cap of its own, counted in the monthly total cap), `!econ fund <house|bank|mm|fortknox|casino|incentives|lotto|room:<id>> <amount> <reason>` (a Fed grant: moves PAT the Fed holds into that pool, not repayable, nothing minted - a dry run first, then `!econ fund confirm <id>`; a grant that takes the Fed below its floor is flagged and needs the confirm twice - the next daily tick mints the Fed back up inside the caps; Fort Knox, the Casino vault and pad vaults take at most what fits under their cap; also the admin panel's \"Fill a pool from the Reserve\" form, grant or loan), `!econ fedseed <total> [reason]` (mints the Federal Reserve up to <total>, once per total - a dry run first, then `!econ fedseed confirm <id>`), `!econ flash` (the Fed's flash liquidity: when a player loan, a House payout or a market seed is bigger than the Bank, the House or the Market maker can pay, the Fed lends that vault the gap, inside the Fed loan cap; an admin action that draws on it asks for a second confirm), `!econ set` also takes the v3 keys: fed_floor, fed_ceiling, fed_floor_mint_daily, fed_ceiling_action burn|incentives, incentive_guarantee on|off, issuance_mode off|pct|fixed, issuance_pct_month, issuance_fixed_month, issuance_activity_scaling, mintcap_<issuance|floor|loan|restore|total> (a number or unlimited; the admin mint counts toward mintcap_total), flash_bank / flash_house / flash_mm on|off, grant_weekly_cap, donation_rate, donation_bonus_pct, staker_share_pct, fed_split_pct, room_vault_cap, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their pad vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
    "examples": [
     "!econ",
     "!econ mint 5m restock the Fed after the event",
@@ -2798,7 +2855,7 @@
     "!padvault recipe"
    ],
    "summary": "This pad's vault: what the pad has earned, what it took in over the last 7 days, and deposits.",
-   "details": "Every pad has a **pad vault**, connected to a chat room or not. Paid commands, songs, voices, heist gear and other spending in a connected room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were active 3 of the last 7 days and the pad was active 3 of them - either place counts: in the connected room, or on the pad itself (posting, commenting, streaming, moderating; days with 3+ qualified members active there); capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old; with activity top-ups on, also members whose posts on the pad got real engagement) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. Payouts of 25,000 or more ride a 10-minute convoy (`!hijack`). `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
+   "details": "Every pad has a **pad vault**, connected to a chat room or not. Paid commands, songs, voices, heist gear and other spending in a connected room go half to the pad's vault and half to Fort Knox (until room payouts start, the owner's 10% royalty comes first on commands in a pad with an owner). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!padvault` shows the balance, the last 7 days' inflow and deposits; `!padvault deposit 5000` adds your own PAT (minimum 1,000; add `anon` to keep your name off the pad's public donation list; deposits never count as the pad's income); `!padvault history` lists the latest moves; `!padvault all` lists the biggest vaults. Once room payouts are on, every vault pays out once a day through the **payout recipe**: a budget of the owner's daily rate (2-15%, 10% by default, picked on the pad page) of its balance, split into owner 15% (when they were active 3 of the last 7 days and the pad was active 3 of them - either place counts: in the connected room, or on the pad itself (posting, commenting, streaming, moderating; days with 3+ qualified members active there); capped at 25% of the room's average daily income; house pads never pay an owner), the controlling gang 15%, streamers 25% (verified watch-minutes on the pad's stage), regulars 35% (10+ real chat lines or 5+ minutes of heard speech that day, a PATV account a week old; with activity top-ups on, also members whose posts on the pad got real engagement) and room games 10% (the day's prize pool for the raffle, top mic and pictionary; XP only once it's used). Each slice pays only what was earned; the rest stays in the vault. With convoys on, payouts of 25,000 or more ride a 10-minute convoy (`!hit`); otherwise every payout is paid at once. `!padvault recipe` shows the room's last payout day. PAT are points, not money. `!roomvault` still works (the old name). Also on the pad page's About tab (with a Donate button for anyone signed in) and the owner panel.",
    "examples": [
     "!padvault",
     "!padvault deposit 5k",
@@ -3813,7 +3870,7 @@
   },
   {
    "id": "room-hijack",
-   "title": "!hijack",
+   "title": "!hit / !hijack",
    "category": "heists",
    "role": "everyone",
    "commands": [
@@ -3821,13 +3878,13 @@
    ],
    "aliases": [],
    "syntax": [
+    "!hit",
+    "!hit convoy",
     "!hijack"
    ],
-   "summary": "Hit a room convoy carrying a gang's slice of the room - typed in that room, once a day.",
-   "details": "When a gang's daily slice of a room is 25,000 PAT or more it leaves on a **convoy** for 10 minutes, announced in the room. `!hijack` (in that room, not the receiving gang, one attempt a day, 5,000 buy-in) musters a crew that others `!join`; the gang can `!defend`. Win and the crew splits up to **20%** of the convoy and gets the buy-ins back; lose and the buy-ins go into the pad's vault.",
-   "examples": [
-    "!hijack"
-   ],
+   "summary": "Hit a payout convoy - typed in the room it left from, once a day, if you've been there 30 minutes today.",
+   "details": "With convoys on, a room payout or a gang's daily slice of 25,000 PAT or more leaves on a **convoy** for 10 minutes, announced in the room. `!hit` (or `!hijack`; `!hit convoy` if you're also at a blackjack table) musters a crew that others `!join` (5,000 buy-in each). To crew you need to be **in that room** and to have been there **30 minutes today**, with a PATV account linked to your chat login that is at least **14 days old and level 3+**, not flagged as an alt - and you can't hit a convoy carrying your own payout or your own gang's slice. One attempt a day. The gang that controls the room can `!defend`. Win and the crew splits up to **20%** of the convoy and gets the buy-ins back - a convoy can only be hit once; lose and the buy-ins go into the pad's vault.",
+   "examples": [],
    "keywords": []
   },
   {
@@ -5753,7 +5810,7 @@
     "chatty"
    ],
    "summary": "Configure Pepe's voice.",
-   "details": "Configure Pepe's voice. **on/off** enables TTS; **voice <name>** sets the default voice (list them with **!mic tts voices**, which is public); **model <1.7B|0.6B|1B|3B>** and **engine <name>** switch the TTS model; **chatty <0-100>** sets how often Pepe mics up his chat lines instead of typing them; **caption on/off** also posts the text when he mics up (for accessibility); **test [text]** speaks a test line.",
+   "details": "Configure Pepe's voice. **on/off** enables TTS; **voice <name>** sets the default voice (list them with **!mic tts voices**, which is public); **model <1.7B|0.6B|1B|3B>** and **engine <name>** switch the TTS model; **chatty <0-100>** sets how often Pepe mics up his chat lines instead of typing them; **caption on/off** also posts the text when he mics up, and a soundboard clip's line as it plays (for accessibility; ON by default); **test [text]** speaks a test line.",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -6202,6 +6259,37 @@
    "keywords": []
   },
   {
+   "id": "saymod",
+   "title": "!saymod [off · light · standard · strict] [-global]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!saymod"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!saymod",
+    "off",
+    "light",
+    "standard",
+    "strict",
+    "-global",
+    "llm on",
+    "llm off",
+    "stats"
+   ],
+   "summary": "The !say moderator: keeps repeats, slurs and targeted abuse off Pepe's mic. Off unless a room picks a level.",
+   "details": "Checks what people have Pepe say out loud (`!say`, `!remind`/`!relay` with `-mic`, soundboard TTS clips) **before anything is charged** - a refused line costs nothing and the sender gets a short reason (never their own words back). Levels: **light** refuses repeats (the same line a third time in 2 min), slurs aimed at someone, threats, doxxing and \"kys\"; **standard** adds any slur and insults aimed at someone in the room; **strict** adds harsh swearing and, if `llm on`, a cheap AI read of what the word lists let through. Three refusals in 10 minutes pause that person's spoken requests for 15 minutes. `!saymod` shows this room's level; `!saymod <level>` sets it for this room, `-global` for every room without its own; pad owners pick theirs on the owner page. PATV admins have a master switch (the commands page, `say_mod`).",
+   "examples": [
+    "!saymod",
+    "!saymod standard",
+    "!saymod light -global",
+    "!saymod llm on",
+    "!saymod stats"
+   ],
+   "keywords": []
+  },
+  {
    "id": "activeroom",
    "title": "!activeroom [room] [force] · auto",
    "category": "admin",
@@ -6534,7 +6622,7 @@
   },
   {
    "id": "memory-alias-add",
-   "title": "!memory alias add [user] [alias]",
+   "title": "!memory alias add [user] [alias] [type=...]",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6542,11 +6630,14 @@
    ],
    "aliases": [],
    "syntax": [
-    "!memory alias add [user] [alias]"
+    "!memory alias add [user] [alias] [type=...]"
    ],
    "summary": "Manually add an alias for a user.",
-   "details": "Manually add an alias for a user.",
-   "examples": [],
+   "details": "Manually add an alias for a user. The alias is the rest of the line, so it can be several words (`!memory alias add foamy1111 big foam`). The type is optional: add `type=real_name` (or `type=nickname`, the default) at the end; `!memory alias add bob bobby real_name` still works for a one-word alias.",
+   "examples": [
+    "!memory alias add foamy1111 big foam",
+    "!memory alias add bob robert type=real_name"
+   ],
    "keywords": []
   },
   {
@@ -6562,8 +6653,10 @@
     "!memory alias remove [user] [alias]"
    ],
    "summary": "Remove an alias from a user.",
-   "details": "Remove an alias from a user.",
-   "examples": [],
+   "details": "Remove an alias from a user. The alias is the rest of the line, so a multi-word alias is removed whole (`!memory alias remove foamy1111 fomi one`).",
+   "examples": [
+    "!memory alias remove foamy1111 fomi one"
+   ],
    "keywords": []
   },
   {
@@ -7504,5 +7597,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "d12460dee011e1dc"
+ "hash": "9be7dead612cd4ed"
 }

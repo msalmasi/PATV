@@ -66,6 +66,8 @@ const OWNER_SETTINGS = Object.freeze(Object.assign(Object.fromEntries(OWNER_BOOL
   // (a short personal hello; mic = sometimes spoken, when the mic is free) - camfrog-bot pepe_greeter greeter_new / greeter_regulars
   greet_new: ["off", "text", "text_mic"],
   greet_regulars: ["off", "text", "mic"],
+  // 1.99xh: the !say TTS moderator's level in this room (camfrog-bot pepe_saymod; off by default - Pepe re-checks)
+  say_mod: ["off", "light", "standard", "strict"],
 }));
 // 1.99up: the auto-topic's interval choices (pepe_roomowner.AUTOTOPIC_EVERY - Pepe sends his own list in room_choices)
 const AUTOTOPIC_EVERY = Object.freeze([15, 20, 30, 45, 60, 90, 120, 180]);
@@ -77,14 +79,14 @@ const OWNER_GROUPS = Object.freeze([
   ["pepe", "🐸", ["greeter", "greet_new", "greet_regulars", "greeter_note", "chatty", "convo", "convo_quiet", "music", "music_requests", "dj_talk", "say", "voices", "mic_replies"]],
   ["voice", "🗣️", ["room_voice", "tts_language", "captions", "alerts"]],   // 1.99tn; 1.99vc: + the speaking language
   ["games", "🎲", ["trivia", "pictionary", "heist", "wheel", "bingo", "pvp", "casino"]],
-  ["mod", "🛡️", ["global_unblock", "michog", "strikes", "votes"]],
+  ["mod", "🛡️", ["global_unblock", "michog", "strikes", "votes", "say_mod"]],
   ["vibe", "🎭", ["vibe", "roasts", "vibe_lock"]],
 ]);
 const OWNER_ICONS = Object.freeze({ snap: "📸", clip: "📹", challenge: "🎤", soundboard: "🔊", language: "🌐", greeter: "👋", greet_new: "🌱", greet_regulars: "🤝", greeter_note: "📝",
   chatty: "💬", music: "🎵", music_requests: "🎶", say: "🗣️", voices: "🎭", mic_replies: "🎙️", trivia: "❓", pictionary: "🎨", heist: "💰",
   wheel: "🎡", bingo: "🔢", pvp: "🥊", casino: "🃏", global_unblock: "🔓", michog: "🎤", strikes: "⚖️", votes: "🗳️", vibe: "🎭",
   roasts: "🔥", vibe_lock: "🔒", room_voice: "🗣️", convo: "💡", convo_quiet: "⏳", captions: "💬", alerts: "📣", dj_talk: "📻",
-  topic: "🏷️", autotopic: "🤖", autotopic_every: "⏱️", stt_language: "📝", tts_language: "🌍" });
+  topic: "🏷️", autotopic: "🤖", autotopic_every: "⏱️", stt_language: "📝", tts_language: "🌍", say_mod: "🛡️" });
 // what the read-only list ("everything else") must not repeat: the owner's own switches, by report key
 const OWNER_COVERS = Object.freeze(new Set(["say", "music", "music_queue", "music_play", "heist", "poker", "blackjack", "wheel", "trivia",
   "duel", "brawl", "arena", "showdown", "pictionary", "mic_flag", "greeter", "chatty"]));
@@ -92,11 +94,13 @@ const NOTE_MAX = 160;
 const CHOICE_RE = /^[a-z_]{1,24}$/;
 const STT_RE = /^[a-z]{2,3}$/;
 let CHOICES = { vibe: ["auto"], roasts: ["auto"], chatty: OWNER_SETTINGS.chatty.slice(),
-  greet_new: OWNER_SETTINGS.greet_new.slice(), greet_regulars: OWNER_SETTINGS.greet_regulars.slice(), autotopic_every: AUTOTOPIC_EVERY.slice(), stt: [], tts: [] };
+  greet_new: OWNER_SETTINGS.greet_new.slice(), greet_regulars: OWNER_SETTINGS.greet_regulars.slice(), say_mod: OWNER_SETTINGS.say_mod.slice(),
+  autotopic_every: AUTOTOPIC_EVERY.slice(), stt: [], tts: [] };
 function setChoices(c) {
   const list = (v) => (Array.isArray(v) ? v.filter((x) => CHOICE_RE.test(String(x))).slice(0, 30).map(String) : []);
   const out = { vibe: list(c && c.vibe), roasts: list(c && c.roasts), chatty: OWNER_SETTINGS.chatty.slice(),
-    greet_new: OWNER_SETTINGS.greet_new.slice(), greet_regulars: OWNER_SETTINGS.greet_regulars.slice() };   // 1.99uy
+    greet_new: OWNER_SETTINGS.greet_new.slice(), greet_regulars: OWNER_SETTINGS.greet_regulars.slice(),   // 1.99uy
+    say_mod: OWNER_SETTINGS.say_mod.slice() };                                                            // 1.99xh
   // 1.99up: the auto-topic's intervals and the transcriber's languages, from Pepe's own lists
   const ev = c && Array.isArray(c.autotopic_every) ? c.autotopic_every.filter((n) => Number.isInteger(n) && n >= 5 && n <= 180).slice(0, 20) : [];
   out.autotopic_every = ev.length ? ev : AUTOTOPIC_EVERY.slice();
@@ -215,7 +219,7 @@ function cleanOne(s) {
   const lang = typeof ow.language === "string" ? ow.language.toLowerCase() : "auto";
   owner.language = LANG_RE.test(lang) ? lang : "auto";
   if (OWNER_SETTINGS.chatty.includes(ow.chatty)) owner.chatty = ow.chatty;
-  for (const k of ["greet_new", "greet_regulars"]) if (OWNER_SETTINGS[k].includes(ow[k])) owner[k] = ow[k];   // 1.99uy
+  for (const k of ["greet_new", "greet_regulars", "say_mod"]) if (OWNER_SETTINGS[k].includes(ow[k])) owner[k] = ow[k];   // 1.99uy, 1.99xh
   for (const k of ["vibe", "roasts"]) if (typeof ow[k] === "string" && CHOICE_RE.test(ow[k])) owner[k] = ow[k];
   if (Number.isInteger(ow.strikes) && ow.strikes >= 1 && ow.strikes <= 10) owner.strikes = ow.strikes;
   if (typeof ow.greeter_note === "string") owner.greeter_note = cleanNote(ow.greeter_note);
