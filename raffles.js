@@ -953,7 +953,7 @@ async function dispute(userId, id, note) {
   await event("disputed", r.id, { id: r.id, title: r.title, rooms: [] });
   try {
     const admins = await getQuery("SELECT userId FROM users WHERE class = 'Admin'");
-    for (const a of admins) await require("./inbox").addSafe(a.userId, { kind: "admin", title: `🎫 Raffle R${r.id} prize disputed`, body: `${r.winner_name}: ${why}`, link: `/raffles/${r.id}`, ref: `raffle-dispute:${r.id}` });
+    for (const a of admins) await require("./inbox").addSafe(a.userId, { kind: "admin", title: `🎫 Raffle R${r.id} prize disputed`, body: `${r.winner_name}: ${why}`, link: `/admin/raffles#R${r.id}`, ref: `raffle-dispute:${r.id}` });
   } catch (e) { /* notices never block */ }
   return { ok: true, status: "disputed" };
 }
@@ -1010,6 +1010,23 @@ async function takedown(adminId, id, reason) {
   else throw new Refuse(409, `That raffle is ${r.status} - nothing to take down.`, "E_STATE");
   try { await require("./adminaudit").record(a, "raffle_takedown", null, { raffle: r.id }, why); } catch (e) { /* optional */ }
   return Object.assign({ ok: true }, out);
+}
+/**
+ * 1.99xq: the admins' page (/admin/raffles) - what needs a decision (disputed / waiting on delivery), every open raffle (house
+ * and community, every pad - admins see them all) and the last closed / drawn ones. -> {review, open, recent}
+ */
+async function adminState({ recent = 30 } = {}) {
+  await init();
+  const q = (where, order, lim) => getQuery(`SELECT * FROM raffles WHERE ${where} ORDER BY ${order} LIMIT ?`, [lim]);
+  const review = await q("status IN ('disputed','delivering')", "CASE WHEN status = 'disputed' THEN 0 ELSE 1 END, COALESCE(dispute_at, drawn_at, 0) DESC", 200);
+  const open = await q("status = 'open'", "house DESC, expires_at ASC", 500);
+  const past = await q("status NOT IN ('open','disputed','delivering')", "COALESCE(closed_at, drawn_at, updated, 0) DESC", Math.max(1, Math.min(200, recent)));
+  const nm = await names([...review, ...open, ...past].flatMap((r) => [r.creator_id, r.dispute_by, r.closed_by]));
+  const view = (r) => Object.assign(shape(r, { creatorName: nm.get(r.creator_id) }), {
+    dispute_note: r.dispute_note || null, dispute_by: r.dispute_by ? (nm.get(r.dispute_by) || r.dispute_by) : null, dispute_at: r.dispute_at || null,
+    closed_by: r.closed_by ? (nm.get(r.closed_by) || r.closed_by) : null,
+  });
+  return { review: review.map(view), open: open.map(view), recent: past.map(view) };
 }
 /** The creator cancels before anyone bought a ticket (the prize comes back). */
 async function cancel(userId, id) {
@@ -1200,6 +1217,24 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
     const cfg = b.config && typeof b.config === "object" ? await setConfig(b.config, a) : config();
     return { ok: true, enabled: await enabled(), config: cfg };
   }));
+  // 1.99xq: the admins' page - the switch, the settings, House raffles, the review queue and takedowns (was a card on /raffles)
+  app.get("/admin/raffles", addUser, async (req, res) => {
+    if (!uid(req)) return res.redirect("/login");
+    try {
+      await init();
+      const me = await userRow(uid(req));
+      res.set("Cache-Control", "no-store");
+      res.set("X-Robots-Tag", "noindex");
+      if (!isAdmin(me)) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The raffle settings are for site admins.", title: "Admins only" });
+      const padlinks = require("./padlinks");
+      try { await padlinks.ready(); } catch (e) { /* no pads: site-wide only */ }
+      res.render("admin/raffles", {
+        user: me.username, isAdmin: true, title: "Admin · Raffles", on: await enabled(), escrowLive: await escrowLive(), cfg: config(), defaults: DEFAULTS, limits: LIMITS,
+        A: await adminState(), shares: await feeShares().catch(() => []), items: await eligibleItems(),
+        pick: await padlinks.choicesFor(req.user || null, "").catch(() => ({ choices: [], def: "" })), idem: crypto.randomBytes(9).toString("hex"),
+      });
+    } catch (e) { console.error("[raffles] admin page:", e); res.status(500).send("Something went wrong."); }
+  });
   app.get("/api/raffles/:id/fair", addUser, async (req, res) => {
     try {
       await init();
@@ -1262,7 +1297,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
 }
 module.exports = {
   init, register, enabled, enabledSync, setEnabled, config, setConfig, cleanConfig, create, buy, draw, maybeDraw, expire, cancel, takedown, confirmDelivery,
-  dispute, decide, tick, list, detail, forPad, cards, botAct, eventsAfter, verify, ticketsDigest, winningNumber, commitmentOf, feeShares, feeLegs, achMetrics,
+  dispute, decide, tick, list, detail, adminState, forPad, cards, botAct, eventsAfter, verify, ticketsDigest, winningNumber, commitmentOf, feeShares, feeLegs, achMetrics,
   Refuse, DEFAULTS, FLOW, KINDS: [KIND_TICKET, KIND_PRIZE, KIND_ITEM], STATUSES,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSettleChunk: (n) => { SETTLE_CHUNK = Math.max(1, Math.min(2000, Math.floor(n) || 2000)); },

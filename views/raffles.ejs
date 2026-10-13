@@ -2,7 +2,8 @@
 <%- include('layout', { title: t('rf.title'), user: user}) %>
 <%# views/raffles.ejs - 1.99xk: 🎫 PAT Raffles (raffles.js). House (official) raffles first and highlighted, then the community
     ones; Open / Drawn / Closed tabs; the pad filter; the create form (#new: prize = PAT / a Prize Shop item / custom, ticket
-    price, max per person, minimum, draw on a date or at a ticket target, expiry, pad, picture); the admins' switch + settings.
+    price, max per person, minimum, draw on a date or at a ticket target, expiry, pad, picture - partials/rf-create). 1.99xq: the admins'
+    switch, settings, House raffles and moderation live on /admin/raffles (views/admin/raffles.ejs); admins only get a link here.
     Forms post JSON through public/js/raffles.js (X-Requested-With: fetch). %>
 <link rel="stylesheet" href="/public/css/bets.css?v=3">
 <script src="/public/js/bets.js?v=2" defer></script>
@@ -27,10 +28,13 @@
       <span class="bx-stat"><b><%= fmt(sold) %></b><%- t('rf.stat_tickets', { count: sold }) %></span>
       <span class="bx-stat"><b><%= fmt(L.house.length) %></b><%- t('rf.stat_house', { count: L.house.length }) %></span>
     </div>
-    <% if (on && me && verified && escrowLive) { %><div class="bx-ctas"><a class="bx-btn" href="#new">＋ <%- t('rf.cta_new') %></a></div><% } %>
+    <% if ((on && me && verified && escrowLive) || admin) { %><div class="bx-ctas">
+      <% if (on && me && verified && escrowLive) { %><a class="bx-btn" href="#new">＋ <%- t('rf.cta_new') %></a><% } %>
+      <% if (admin) { %><a class="bx-btn ghost" href="/admin/raffles">🛠️ <%- t('rf.manage_admin') %></a><% } %>
+    </div><% } %>
   </header>
 
-  <% if (!on) { %><p class="bx-note" role="status"><%- admin ? t('rf.off_admin') : t('rf.off') %></p><% } %>
+  <% if (!on) { %><p class="bx-note" role="status"><%- admin ? t('rf.off_admin2', { link: '<a href="/admin/raffles#settings">/admin/raffles</a>' }) : t('rf.off') %></p><% } %>
   <% if (msg) { %><p class="bx-ok" role="status"><%= msg %></p><% } %>
   <p class="rf-msg" id="rf-msg" role="status" aria-live="polite" hidden></p>
 
@@ -64,75 +68,7 @@
   <% } else if (!verified) { %>
     <p class="bx-note"><%- t('rf.verify_first') %></p>
   <% } else { %>
-    <form class="bx-form bx-card rf-create" data-rf-form="create" data-rf-url="/api/raffles/create" data-rf-done="go">
-      <input type="hidden" name="idem" value="<%= idem %>">
-      <input type="hidden" name="tz" value="">
-      <p class="bx-fine"><%- t('rf.f_note', { fee: cfg.fee_pct }) %></p>
-      <% if (admin) { %>
-        <label class="bx-check"><input type="checkbox" name="house" value="1"> <span><%- t('rf.f_house') %></span></label>
-      <% } %>
-      <label class="bx-field"><%- t('rf.f_title') %><input class="bx-in" type="text" name="title" maxlength="90" required placeholder="<%- t('rf.f_title_ph') %>"></label>
-      <label class="bx-field"><%- t('rf.f_desc') %><textarea class="bx-in" name="description" rows="3" maxlength="1500" placeholder="<%- t('rf.f_desc_ph') %>"></textarea></label>
-
-      <fieldset class="rf-fs">
-        <legend><%- t('rf.f_prize') %></legend>
-        <div class="bx-chips" role="radiogroup">
-          <label class="bx-check"><input type="radio" name="prize_kind" value="pat" checked> <span>💰 <%- t('rf.f_prize_pat') %></span></label>
-          <label class="bx-check"><input type="radio" name="prize_kind" value="item"<%= items.length ? '' : ' disabled' %>> <span>🏪 <%- t('rf.f_prize_item') %></span></label>
-          <label class="bx-check"><input type="radio" name="prize_kind" value="custom"<%= cfg.custom_allowed || admin ? '' : ' disabled' %>> <span>✨ <%- t('rf.f_prize_custom') %></span></label>
-        </div>
-        <label class="bx-field" data-rf-show="pat"><%- t('rf.f_prize_amount') %><input class="bx-in" type="text" inputmode="decimal" name="prize_amount" placeholder="<%- t('rf.f_prize_amount_ph') %>"></label>
-        <p class="bx-fine" data-rf-show="pat"><%- t('rf.f_prize_pat_note') %></p>
-        <label class="bx-field" data-rf-show="item" hidden><%- t('rf.f_item') %>
-          <select class="bx-in" name="prize_item">
-            <% items.forEach((it) => { %><option value="<%= it.prizeId %>"><%= it.prize %> · <%= fmt(it.cost) %> PAT · <%- t('rf.f_item_left', { count: it.quantity, n: fmt(it.quantity) }) %></option><% }) %>
-          </select>
-        </label>
-        <p class="bx-fine" data-rf-show="item" hidden><%- t('rf.f_item_note') %></p>
-        <label class="bx-field" data-rf-show="custom" hidden><%- t('rf.f_custom') %><input class="bx-in" type="text" name="prize_text" maxlength="200" placeholder="<%- t('rf.f_custom_ph') %>"></label>
-        <p class="bx-fine" data-rf-show="custom" hidden><%- t('rf.f_custom_note', { days: cfg.custom_hold_days }) %></p>
-      </fieldset>
-
-      <div class="bx-row2">
-        <label class="bx-field"><%- t('rf.f_price') %><input class="bx-in" type="text" inputmode="decimal" name="price" required placeholder="<%- t('rf.f_price_ph') %>"></label>
-        <label class="bx-field"><%- t('rf.f_min') %><input class="bx-in" type="number" name="min_tickets" min="1" value="1"></label>
-        <label class="bx-field"><%- t('rf.f_maxper') %><input class="bx-in" type="number" name="max_per_user" min="0" placeholder="<%- t('rf.f_nolimit') %>"></label>
-      </div>
-      <p class="bx-fine"><%- t('rf.f_price_note', { min: fmt(cfg.price_min), max: fmt(cfg.price_max) }) %></p>
-
-      <fieldset class="rf-fs">
-        <legend><%- t('rf.f_when') %></legend>
-        <div class="bx-chips" role="radiogroup">
-          <label class="bx-check"><input type="radio" name="trigger" value="target" checked> <span>🎯 <%- t('rf.f_trig_target') %></span></label>
-          <label class="bx-check"><input type="radio" name="trigger" value="date"> <span>📅 <%- t('rf.f_trig_date') %></span></label>
-        </div>
-        <label class="bx-field" data-rf-show-trig="target"><%- t('rf.f_target') %><input class="bx-in" type="number" name="target" min="1" placeholder="100"></label>
-        <label class="bx-field" data-rf-show-trig="date" hidden><%- t('rf.f_draw_at') %><input class="bx-in" type="datetime-local" name="draw_at"></label>
-        <label class="bx-field" data-rf-show-trig="date" hidden><%- t('rf.f_cap') %><input class="bx-in" type="number" name="max_tickets" min="0" placeholder="<%- t('rf.f_nolimit') %>"></label>
-        <label class="bx-field"><%- t('rf.f_expires') %><input class="bx-in" type="datetime-local" name="expires_at"></label>
-        <p class="bx-fine"><%- t('rf.f_when_note', { days: cfg.max_days }) %></p>
-      </fieldset>
-
-      <%- include('partials/bx-padpick', { pick: locals.pick || { choices: [], def: '' } }) %>
-      <label class="bx-field"><%- t('rf.f_image') %><input class="bx-in" type="text" name="image_url" maxlength="500" placeholder="<%- admin ? t('rf.f_image_ph_admin') : t('rf.f_image_ph') %>"></label>
-      <div class="bx-row"><button class="bx-btn" type="submit">🎫 <%- t('rf.f_btn') %></button></div>
-    </form>
-  <% } %>
-
-  <% if (admin) { %>
-    <h2 class="bx-h" id="admin"><%- t('rf.h_admin') %></h2>
-    <form class="bx-form bx-card" data-rf-form="admin" data-rf-url="/api/admin/raffles" data-rf-done="reload">
-      <label class="bx-check"><input type="checkbox" name="enabled" value="1"<%= on ? ' checked' : '' %>> <span><%- t('rf.adm_enabled') %></span></label>
-      <div class="bx-row2">
-        <% ['fee_pct', 'price_min', 'price_max', 'buy_max', 'open_max', 'per_day', 'prize_min', 'prize_max', 'custom_hold_days', 'max_days', 'min_lead_min', 'grace_hours'].forEach((k) => { %>
-          <label class="bx-field"><%= k %><input class="bx-in" type="number" name="config.<%= k %>" value="<%= cfg[k] %>"></label>
-        <% }) %>
-      </div>
-      <label class="bx-check"><input type="checkbox" name="config.custom_allowed" value="1"<%= cfg.custom_allowed ? ' checked' : '' %>> <span>custom_allowed</span></label>
-      <label class="bx-check"><input type="checkbox" name="config.announce_milestones" value="1"<%= cfg.announce_milestones ? ' checked' : '' %>> <span>announce_milestones</span></label>
-      <p class="bx-fine"><%- t('rf.adm_route') %></p>
-      <div class="bx-row"><button class="bx-btn" type="submit"><%- t('rf.adm_save') %></button></div>
-    </form>
+    <%- include('partials/rf-create', { t, cfg, items, pick: locals.pick, idem, house: false }) %>
   <% } %>
 
   <div class="bx-foot"><%- t('rf.foot') %></div>

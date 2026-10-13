@@ -1,0 +1,27 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99xq: the GTF heist market settings on /admin/games (heistmarket.js adminView / POST /api/admin/heist-market; was a card
+    on the public /gtf/market page). public/js/admin-heistmarket.js saves it. Pass { t, isAdmin, hm }. %>
+<% const _hmFmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US'); %>
+<section class="adm-card" id="heistmarket" aria-labelledby="hmAdmT">
+  <h2 id="hmAdmT"><%- t('hm.adm.title') %> <span class="adm-pill admin">admins</span></h2>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!locals.hm) { %><p class="adm-help"><%- t('hm.adm.failed') %></p><% } else { const adm = locals.hm; %>
+  <p class="adm-help"><%- t('hm.adm_stats', { n: _hmFmt(adm.sales.n), volume: _hmFmt(adm.sales.volume), fees: _hmFmt(adm.sales.fees), ops: _hmFmt(adm.open_ops) }) %>
+    <%- t('hm.adm_route', { shares: adm.fee_shares.length ? adm.fee_shares.map((s) => s[0] + ' ' + s[1] + '%').join(', ') : 'reserve 100%', link: '<a href="/admin/economy">/admin/economy</a>' }) %></p>
+  <form id="hmAdmF" class="adm-form" novalidate autocomplete="off" data-saved="<%= t('hm.adm_saved') %>" data-failed="<%- t('hm.fail') %>">
+    <label for="aFee"><%- t('hm.adm_fee') %><input id="aFee" name="fee_pct" inputmode="decimal" value="<%= adm.config.fee_pct %>"></label>
+    <label for="aMin"><%- t('hm.adm_min') %><input id="aMin" name="min_price" inputmode="numeric" value="<%= adm.config.min_price %>"></label>
+    <label for="aMax"><%- t('hm.adm_max') %><input id="aMax" name="max_price" inputmode="numeric" value="<%= adm.config.max_price %>"></label>
+    <label for="aRate"><%- t('hm.adm_rate') %><input id="aRate" name="list_per_hour" inputmode="numeric" value="<%= adm.config.list_per_hour %>"></label>
+    <label for="aOpen"><%- t('hm.adm_open') %><input id="aOpen" name="open_max" inputmode="numeric" value="<%= adm.config.open_max %>"></label>
+    <label for="aAnn"><%- t('hm.adm_announce') %><input id="aAnn" name="announce_min" inputmode="numeric" value="<%= adm.config.announce_min %>"></label>
+    <label for="aUnt"><%- t('hm.adm_untradable') %><input id="aUnt" name="untradable" value="<%= adm.config.untradable.join(', ') %>" placeholder="mastermind, fence"></label>
+    <label for="aPawn"><input id="aPawn" name="pawn_on" type="checkbox"<%= adm.config.pawn_on ? ' checked' : '' %>> <%- t('hm.adm_pawn_on') %></label>
+    <label for="aPRate"><%- t('hm.adm_pawn_rate') %><input id="aPRate" name="pawn_rate" inputmode="decimal" value="<%= adm.config.pawn_rate %>"></label>
+    <label for="aPSrc"><%- t('hm.adm_pawn_src') %><input id="aPSrc" name="pawn_source" value="<%= adm.config.pawn_source %>"></label>
+    <label for="aPVal" style="grid-column:1/-1"><%- t('hm.adm_pawn_values') %><input id="aPVal" name="pawn_values" value="<%= Object.entries(adm.config.pawn_values).map(([k, n]) => k + '=' + n).join(', ') %>" placeholder="kingpinring=250000"></label>
+    <div class="adm-actions"><button type="submit"><%- t('hm.adm_save') %></button><span class="adm-msg" id="hmAdmMsg" role="status" aria-live="polite"></span></div>
+  </form>
+  <p class="adm-help" style="margin-top:10px"><a href="/gtf/market"><%- t('hm.adm.open_market') %> ›</a></p>
+  <script src="/public/js/admin-heistmarket.js?v=1" defer></script>
+  <% } %>
+</section>

@@ -1,8 +1,8 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'R' + v.id + ' · ' + v.title, user: user}) %>
 <%# views/raffle.ejs - 1.99xk: one 🎫 raffle (raffles.detail): the prize, the live numbers (price, sold / target, your odds, the
-    countdown), buying tickets, the winner, a custom prize's confirm / report, the creator's cancel, the admins' takedown /
-    decision, who's in, and the provably fair proof (checked in the browser by public/js/raffles.js once the seed is out). %>
+    countdown), buying tickets, the winner, a custom prize's confirm / report, the creator's cancel, a link to /admin/raffles for
+    admins (1.99xq: takedown / release / refund moved there), who's in, and the provably fair proof (checked in the browser by public/js/raffles.js once the seed is out). %>
 <link rel="stylesheet" href="/public/css/bets.css?v=3">
 <script src="/public/js/raffles.js?v=1" defer></script>
 <%- include('partials/rf-css') %>
@@ -115,19 +115,9 @@
     </form>
   <% } %>
 
-  <% if (admin && ['open', 'delivering', 'disputed'].includes(v.status)) { %>
-    <h2 class="bx-h"><%- t('rf.h_mod') %></h2>
-    <% if (v.status !== 'open') { %>
-      <% if (v.status === 'disputed') { %><p class="bx-note"><%- t('rf.dispute_admin') %></p><% } %>
-      <div class="bx-row">
-        <form data-rf-form="decide" data-rf-url="/api/raffles/<%= v.id %>/decide" data-rf-done="reload" data-rf-confirm="<%- t('rf.release_q') %>"><input type="hidden" name="decision" value="release"><button class="bx-btn sm" type="submit"><%- t('rf.release_btn') %></button></form>
-        <form data-rf-form="decide" data-rf-url="/api/raffles/<%= v.id %>/decide" data-rf-done="reload" data-rf-confirm="<%- t('rf.refund_q') %>"><input type="hidden" name="decision" value="refund"><button class="bx-btn danger sm" type="submit"><%- t('rf.refund_btn') %></button></form>
-      </div>
-    <% } %>
-    <form class="bx-form bx-card" data-rf-form="takedown" data-rf-url="/api/raffles/<%= v.id %>/takedown" data-rf-done="reload" data-rf-confirm="<%- t('rf.takedown_q') %>">
-      <label class="bx-field"><%- t('rf.takedown_reason') %><input class="bx-in" type="text" name="reason" maxlength="200" required></label>
-      <button class="bx-btn danger sm" type="submit"><%- t('rf.takedown_btn') %></button>
-    </form>
+  <% if (admin) { %>
+    <%# 1.99xq: moderation (release / refund / take down) lives on /admin/raffles - admins get a link, nothing else %>
+    <p class="bx-fine"><a href="/admin/raffles#R<%= v.id %>">🛠️ <%- t('rf.manage_admin') %></a><%- v.status === 'disputed' ? ' · ' + t('rf.dispute_admin') : '' %></p>
   <% } %>
 
   <h2 class="bx-h"><%- t('rf.h_who') %> <span class="bx-n"><%= v.entrant_count %></span></h2>

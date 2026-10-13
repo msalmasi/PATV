@@ -44,9 +44,6 @@
   .hm dialog::backdrop { background: rgba(0,0,0,.6); }
   .hm dialog h3 { margin: 0 0 var(--ds-sp-2); font: 12px/1.5 var(--ds-font-pixel); color: var(--gold); letter-spacing: .06em; }
   .hm dialog p { margin: 0 0 var(--ds-sp-3); color: var(--ds-text-2); line-height: 1.5; }
-  .hm .adm form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 8px; align-items: end; }
-  .hm .adm .chk { display: flex; gap: 8px; align-items: center; min-height: var(--ds-tap); }
-  .hm .adm .chk input { width: auto; min-height: 0; }
   @media (max-width: 600px) { .hm form.sell { grid-template-columns: minmax(0, 1fr); } }
 </style>
 <main class="ds-page wide gg hm" id="hmPage">
@@ -60,6 +57,7 @@
       <div class="stat"><dt><%- t('hm.stat_fee') %></dt><dd><%= v.config.fee_pct %>%<small><%- t('hm.stat_fee_to') %></small></dd></div>
       <% if (v.config.pawn_on) { %><div class="stat"><dt><%- t('hm.stat_pawn') %></dt><dd><%= v.config.pawn_rate %>%<small><%- t('hm.stat_pawn_of') %></small></dd></div><% } %>
     </div>
+    <% if (v.admin) { %><p class="note"><a href="/admin/games#heistmarket">🛠️ <%- t('hm.manage_admin') %></a></p><% } %>
   </section>
 
   <div class="grid2">
@@ -163,29 +161,6 @@
     </div>
   </div>
 
-  <% if (adm) { %>
-  <section class="card adm" aria-labelledby="hmAdm">
-    <h2 id="hmAdm" class="ds-pixel-h"><%- t('hm.adm_h') %></h2>
-    <p class="note"><%- t('hm.adm_stats', { n: fmt(adm.sales.n), volume: fmt(adm.sales.volume), fees: fmt(adm.sales.fees), ops: fmt(adm.open_ops) }) %>
-      <%- t('hm.adm_route', { shares: adm.fee_shares.length ? adm.fee_shares.map((s) => s[0] + ' ' + s[1] + '%').join(', ') : 'reserve 100%', link: '<a href="/admin/economy">/admin/economy</a>' }) %></p>
-    <form id="hmAdmF" novalidate>
-      <label class="l" for="aFee"><%- t('hm.adm_fee') %><input id="aFee" name="fee_pct" inputmode="decimal" value="<%= adm.config.fee_pct %>"></label>
-      <label class="l" for="aMin"><%- t('hm.adm_min') %><input id="aMin" name="min_price" inputmode="numeric" value="<%= adm.config.min_price %>"></label>
-      <label class="l" for="aMax"><%- t('hm.adm_max') %><input id="aMax" name="max_price" inputmode="numeric" value="<%= adm.config.max_price %>"></label>
-      <label class="l" for="aRate"><%- t('hm.adm_rate') %><input id="aRate" name="list_per_hour" inputmode="numeric" value="<%= adm.config.list_per_hour %>"></label>
-      <label class="l" for="aOpen"><%- t('hm.adm_open') %><input id="aOpen" name="open_max" inputmode="numeric" value="<%= adm.config.open_max %>"></label>
-      <label class="l" for="aAnn"><%- t('hm.adm_announce') %><input id="aAnn" name="announce_min" inputmode="numeric" value="<%= adm.config.announce_min %>"></label>
-      <label class="l" for="aUnt"><%- t('hm.adm_untradable') %><input id="aUnt" name="untradable" value="<%= adm.config.untradable.join(', ') %>" placeholder="mastermind, fence"></label>
-      <label class="chk" for="aPawn"><input id="aPawn" name="pawn_on" type="checkbox"<%= adm.config.pawn_on ? ' checked' : '' %>> <%- t('hm.adm_pawn_on') %></label>
-      <label class="l" for="aPRate"><%- t('hm.adm_pawn_rate') %><input id="aPRate" name="pawn_rate" inputmode="decimal" value="<%= adm.config.pawn_rate %>"></label>
-      <label class="l" for="aPSrc"><%- t('hm.adm_pawn_src') %><input id="aPSrc" name="pawn_source" value="<%= adm.config.pawn_source %>"></label>
-      <label class="l" for="aPVal"><%- t('hm.adm_pawn_values') %><input id="aPVal" name="pawn_values" value="<%= Object.entries(adm.config.pawn_values).map(([k, n]) => k + '=' + n).join(', ') %>" placeholder="kingpinring=250000"></label>
-      <div class="acts"><button class="btn gold" type="submit"><%- t('hm.adm_save') %></button></div>
-    </form>
-    <div class="msg" id="hmAdmMsg" role="status" aria-live="polite"></div>
-  </section>
-  <% } %>
-
   <dialog id="hmConfirm" aria-labelledby="hmCH">
     <h3 id="hmCH"></h3>
     <p id="hmCP"></p>
@@ -197,7 +172,7 @@
                         pawn_h: t('hm.confirm_pawn_h'), pawn_p: t('hm.confirm_pawn_p'), delist_h: t('hm.confirm_delist_h'), delist_p: t('hm.confirm_delist_p'),
                         go: t('hm.confirm_go'), fail: t('hm.fail'), net: t('hm.net_err'), listed: t('hm.listed'), bought: t('hm.bought'), delisted: t('hm.delisted'),
                         claimed: t('hm.claimed'), pawned: t('hm.pawning'), hint_shop: t('hm.hint_shop'), hint_last: t('hm.hint_last'), hint_pawn: t('hm.hint_pawn'),
-                        reason: t('hm.adm_reason'), saved: t('hm.adm_saved') }) %>;
+                        reason: t('hm.adm_reason') }) %>;
     var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' }[c]; }); };
     var fmtT = function (tpl, v) { return String(tpl).replace(/\{(!?)(\w+)\}/g, function (m, raw, k) { return v && v[k] != null ? (raw ? String(v[k]) : esc(v[k])) : m; }); };
     var num = function (n) { return Number(n || 0).toLocaleString('en-US'); };
@@ -280,17 +255,6 @@
     // a listing on its way in or out: look again in a few seconds (Pepe moves the item between the sheet and the market)
     var moving = document.querySelectorAll('[data-status="escrowing"],[data-status="sold"],[data-status="returning"],[data-status="claiming"]').length;
     if (moving && !document.querySelector('dialog[open]')) setTimeout(function () { if (!busy && !document.querySelector('dialog[open]') && !document.activeElement.closest('form')) location.reload(); }, 6000);
-    var af = document.getElementById('hmAdmF');
-    if (af) af.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var g = function (n) { return af.elements[n]; }, cfg = {};
-      ['fee_pct', 'min_price', 'max_price', 'list_per_hour', 'open_max', 'announce_min', 'pawn_rate'].forEach(function (k) { cfg[k] = Number(String(g(k).value).replace(/[, _]/g, '')); });
-      cfg.pawn_on = g('pawn_on').checked; cfg.pawn_source = g('pawn_source').value.trim();
-      cfg.untradable = g('untradable').value.split(/[\s,]+/).filter(Boolean);
-      cfg.pawn_values = {}; g('pawn_values').value.split(/[,;]+/).forEach(function (p) { var m = p.split('='); if (m.length === 2 && m[0].trim()) cfg.pawn_values[m[0].trim()] = Number(m[1].replace(/[, _]/g, '')); });
-      post('/api/admin/heist-market', { config: cfg }, 1).then(function (j) { show(document.getElementById('hmAdmMsg'), !!j.ok, j.ok ? S.saved : esc(j.error || S.fail)); })
-        .catch(function () { show(document.getElementById('hmAdmMsg'), false, S.net); });
-    });
   })();
   </script>
 </main>

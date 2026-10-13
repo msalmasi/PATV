@@ -342,10 +342,20 @@ test("the page renders for visitors, members and admins; web calls need a same-s
   cookieUser = "u2";
   html = await (await fetch(base + "/gtf/market")).text();
   assert.match(html, /SELL AN ITEM/);
+  assert.doesNotMatch(html, /\/admin\/games#heistmarket/, "members get no admin link");
   assert.match(html, /YOUR LISTINGS/);
   cookieUser = "u9";
   html = await (await fetch(base + "/gtf/market")).text();
-  assert.match(html, /MARKET SETTINGS/);
+  // 1.99xq: the settings moved to /admin/games#heistmarket - admins get a link on the public page, no form
+  assert.doesNotMatch(html, /hmAdmF|\/api\/admin\/heist-market"/);
+  assert.match(html, /href="\/admin\/games#heistmarket"/);
+  const games = await ejs.renderFile(path.join(repo, "views", "admin", "games.ejs"),
+                                     { title: "Admin · Games", user: "boss", section: "games", isAdmin: true, casino: null, hm: await M.adminView() });
+  assert.match(games, /id="heistmarket"/);
+  assert.match(games, /id="hmAdmF"/);
+  assert.match(games, /name="pawn_values"/);
+  const staff = await ejs.renderFile(path.join(repo, "views", "admin", "games.ejs"), { title: "Admin · Games", user: "s", section: "games", isAdmin: false, casino: null, hm: null });
+  assert.doesNotMatch(staff, /id="hmAdmF"/);
   cookieUser = "u2";
   const r = await post("/api/gtf/market/list", { item: "lockpick", price: 5, idem: "c-xsite-01" });
   assert.equal(r.status, 403);

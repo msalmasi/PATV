@@ -1,0 +1,143 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'raffles', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/raffles.ejs - 1.99xq: 🎫 PAT Raffles for admins (raffles.js; was a settings card on the public /raffles page).
+  The switch + settings (POST /api/admin/raffles), an official House raffle (the create form with the house flag,
+  partials/rf-create), the review queue (disputed / waiting on delivery: release or refund) and every open raffle (take down
+  with full refunds). Forms post JSON through public/js/raffles.js (data-rf-form, X-Requested-With: fetch). Admins only.
+  Data: on, escrowLive, cfg, defaults, limits, A = raffles.adminState() {review, open, recent}, shares (raffle_fee routing),
+  items, pick, idem.
+%>
+<%
+  const fmt = (n) => t.num(Number(n) || 0);
+  const when = (ms) => ms ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(ms, 'datetime') : '-';
+  const NUMS = ['fee_pct', 'price_min', 'price_max', 'buy_max', 'prize_min', 'prize_max', 'open_max', 'per_day', 'min_lead_min', 'max_days', 'grace_hours', 'custom_hold_days'];
+  const prize = (r) => r.prize.kind === 'pat' ? fmt(r.prize.amount) + ' PAT' : (r.prize.name || r.prize.text || '-');
+  const who = (r) => r.house ? '🏛️ ' + t('rf.adm.house_short') : (r.creator || '?');
+%>
+<link rel="stylesheet" href="/public/css/bets.css?v=3">
+<script src="/public/js/patamount.js" defer></script>
+<script src="/public/js/raffles.js?v=1" defer></script>
+<%- include('../partials/rf-css') %>
+<style>
+  .adm-rf .rf-msg { margin: 0 0 var(--ds-sp-3); }
+  .adm-rf .adm-inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+  .adm-rf .adm-inline input[type=text] { min-width: 160px; }
+  .adm-rf td .sub { display: block; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+  .adm-rf tr:target td { background: var(--ds-gold-bg); }
+  .adm-rf .rf-create { max-width: 760px; }
+</style>
+
+<div class="adm-rf rf">
+<div class="adm-head">
+  <h1><span class="ds-ic" aria-hidden="true">🎫</span> <%- t('rf.adm.h1') %></h1>
+  <p><%- t('rf.adm.lead', { link: '<a href="/raffles">/raffles</a>' }) %></p>
+</div>
+<p class="rf-msg" id="rf-msg" role="status" aria-live="polite" hidden></p>
+
+<section class="adm-card" id="settings" aria-labelledby="rfSetT">
+  <h2 id="rfSetT"><%- t('rf.adm.h_settings') %>
+    <span class="adm-pill <%= on ? 'ok' : 'bad' %>"><%- on ? t('rf.adm.on') : t('rf.adm.off') %></span>
+    <% if (!escrowLive) { %><span class="adm-pill"><%- t('rf.adm.escrow_off') %></span><% } %>
+  </h2>
+  <form class="adm-form" data-rf-form="admin" data-rf-url="/api/admin/raffles" data-rf-done="reload" autocomplete="off">
+    <label style="grid-column:1/-1"><input type="checkbox" name="enabled" value="1"<%= on ? ' checked' : '' %>> <%- t('rf.adm_enabled') %></label>
+    <% NUMS.forEach((k) => { const L = limits[k] || []; %>
+      <label><%- t('rf.adm.k.' + k) %> <small>(<%- t('rf.adm.default', { n: fmt(defaults[k]) }) %>)</small>
+        <input type="number" name="config.<%= k %>" value="<%= cfg[k] %>"<% if (L.length) { %> min="<%= L[0] %>" max="<%= L[1] %>"<% } %> step="1"></label>
+    <% }) %>
+    <label><input type="checkbox" name="config.custom_allowed" value="1"<%= cfg.custom_allowed ? ' checked' : '' %>> <%- t('rf.adm.k.custom_allowed') %></label>
+    <label><input type="checkbox" name="config.announce_milestones" value="1"<%= cfg.announce_milestones ? ' checked' : '' %>> <%- t('rf.adm.k.announce_milestones') %></label>
+    <div class="adm-actions"><button type="submit"><%- t('rf.adm_save') %></button></div>
+  </form>
+  <p class="adm-help"><%- t('rf.adm.route_now', { shares: (shares || []).map((s) => s[0] + ' ' + s[1] + '%').join(', ') || '-', link: '<a href="/admin/economy">/admin/economy</a>' }) %></p>
+  <p class="adm-help"><%- t('rf.adm_route') %></p>
+</section>
+
+<section class="adm-card" id="review" aria-labelledby="rfRevT">
+  <h2 id="rfRevT"><%- t('rf.adm.h_review') %> <span class="adm-pill <%= A.review.length ? 'admin' : '' %>"><%= A.review.length %></span></h2>
+  <p class="adm-help"><%- t('rf.adm.review_help') %></p>
+  <% if (!A.review.length) { %><p class="adm-help"><%- t('rf.adm.review_none') %></p><% } else { %>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('rf.adm.col_raffle') %></th><th><%- t('rf.adm.col_status') %></th><th><%- t('rf.adm.col_prize') %></th><th class="num"><%- t('rf.adm.col_pot') %></th><th><%- t('rf.adm.col_note') %></th><th><%- t('rf.adm.col_decide') %></th></tr></thead>
+    <tbody>
+    <% A.review.forEach((r) => { %>
+      <tr id="R<%= r.id %>">
+        <td><a href="<%= r.url %>">R<%= r.id %></a> <%= r.title %><span class="sub"><%= who(r) %><%= r.winner ? ' → ' + r.winner : '' %></span></td>
+        <td><span class="adm-pill <%= r.status === 'disputed' ? 'bad' : '' %>"><%- t('rf.st.' + r.status) %></span><span class="sub"><%= r.status === 'disputed' ? when(r.dispute_at) : t('rf.adm.releases', { at: when(r.release_at) }) %></span></td>
+        <td><%= prize(r) %></td>
+        <td class="num"><%= fmt(r.pot) %></td>
+        <td><%= r.dispute_note ? (r.dispute_by ? r.dispute_by + ': ' : '') + r.dispute_note : '-' %></td>
+        <td>
+          <div class="adm-inline">
+            <form class="adm-inline" data-rf-form="decide" data-rf-url="/api/raffles/<%= r.id %>/decide" data-rf-done="reload" data-rf-confirm="<%- t('rf.release_q') %>"><input type="hidden" name="decision" value="release"><button class="adm-btn sm" type="submit"><%- t('rf.release_btn') %></button></form>
+            <form class="adm-inline" data-rf-form="decide" data-rf-url="/api/raffles/<%= r.id %>/decide" data-rf-done="reload" data-rf-confirm="<%- t('rf.refund_q') %>"><input type="hidden" name="decision" value="refund"><button class="adm-btn sm danger" type="submit"><%- t('rf.refund_btn') %></button></form>
+          </div>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <% } %>
+</section>
+
+<section class="adm-card" id="open" aria-labelledby="rfOpenT">
+  <h2 id="rfOpenT"><%- t('rf.adm.h_open') %> <span class="adm-pill"><%= A.open.length %></span></h2>
+  <p class="adm-help"><%- t('rf.adm.open_help') %></p>
+  <% if (!A.open.length) { %><p class="adm-help"><%- t('rf.adm.open_none') %></p><% } else { %>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('rf.adm.col_raffle') %></th><th><%- t('rf.adm.col_prize') %></th><th class="num"><%- t('rf.adm.col_sold') %></th><th class="num"><%- t('rf.adm.col_pot') %></th><th><%- t('rf.adm.col_next') %></th><th><%- t('rf.takedown_reason') %></th></tr></thead>
+    <tbody>
+    <% A.open.forEach((r) => { %>
+      <tr id="R<%= r.id %>">
+        <td><a href="<%= r.url %>">R<%= r.id %></a> <%= r.title %><span class="sub"><%= who(r) %><%= r.padv ? ' · ' + r.padv.title : '' %></span></td>
+        <td><%= prize(r) %></td>
+        <td class="num"><%= fmt(r.sold) %><%= r.goal ? ' / ' + fmt(r.goal) : '' %></td>
+        <td class="num"><%= fmt(r.pot) %></td>
+        <td><%= when(r.next_at) %></td>
+        <td>
+          <form class="adm-inline" data-rf-form="takedown" data-rf-url="/api/raffles/<%= r.id %>/takedown" data-rf-done="reload" data-rf-confirm="<%- t('rf.takedown_q') %>">
+            <input type="text" name="reason" maxlength="200" required aria-label="<%- t('rf.takedown_reason') %>">
+            <button class="adm-btn sm danger" type="submit"><%- t('rf.takedown_btn') %></button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <% } %>
+</section>
+
+<section class="adm-card" id="house" aria-labelledby="rfHouseT">
+  <h2 id="rfHouseT"><%- t('rf.adm.h_house') %></h2>
+  <p class="adm-help"><%- t('rf.adm.house_help') %></p>
+  <% if (!on) { %><p class="adm-help"><%- t('rf.adm.house_off') %></p><% } %>
+  <% if (!escrowLive) { %><p class="adm-help"><%- t('rf.escrow_off') %></p><% } else { %>
+    <%- include('../partials/rf-create', { t, cfg, items, pick, idem, house: true }) %>
+  <% } %>
+</section>
+
+<section class="adm-card" id="recent" aria-labelledby="rfRecT">
+  <h2 id="rfRecT"><%- t('rf.adm.h_recent') %></h2>
+  <% if (!A.recent.length) { %><p class="adm-help"><%- t('rf.adm.recent_none') %></p><% } else { %>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('rf.adm.col_raffle') %></th><th><%- t('rf.adm.col_status') %></th><th><%- t('rf.adm.col_prize') %></th><th class="num"><%- t('rf.adm.col_sold') %></th><th><%- t('rf.adm.col_outcome') %></th></tr></thead>
+    <tbody>
+    <% A.recent.forEach((r) => { %>
+      <tr id="R<%= r.id %>">
+        <td><a href="<%= r.url %>">R<%= r.id %></a> <%= r.title %><span class="sub"><%= who(r) %></span></td>
+        <td><span class="adm-pill"><%- t('rf.st.' + r.status) %></span><span class="sub"><%= when(r.closed_at || r.drawn_at) %></span></td>
+        <td><%= prize(r) %></td>
+        <td class="num"><%= fmt(r.sold) %></td>
+        <td><%= r.winner ? '🏆 ' + r.winner : (r.close_reason || '-') %><%= r.closed_by ? ' · ' + r.closed_by : '' %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <% } %>
+</section>
+</div>
+
+<%- include('../partials/admin-close') %>
+</body>
+</html>

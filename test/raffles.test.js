@@ -484,14 +484,30 @@ test("Pepe: list / show / buy by Camfrog login, the events feed (cursor), the sw
   assert.equal(await supply(), SUPPLY0);
 });
 
-test("pages render (list, one raffle, the create form, the admin card) and the feed embed card answers R<id>", async () => {
+test("pages render (list, one raffle, the create form, /admin/raffles) and the feed embed card answers R<id>", async () => {
   const l = await page(U.ann, "/raffles");
   assert.equal(l.status, 200, l.text.slice(0, 400));
   assert.match(l.text, /Run a raffle/);
   assert.match(l.text, /data-rf-form="create"/);
   assert.doesNotMatch(l.text, /\brf\.[a-z_]+\b(?![-\w])/.test(l.text) ? /\brf\.(title|h1|lead|f_[a-z_]+)\b/ : /$^/);
-  const adm = await page(U.boss, "/raffles?status=drawn");
+  // 1.99xq: no admin card on the public page - admins get a link; the settings / House raffle / moderation live on /admin/raffles
+  const pub = await page(U.boss, "/raffles?status=drawn");
+  assert.equal(pub.status, 200, pub.text.slice(0, 400));
+  assert.doesNotMatch(pub.text, /data-rf-form="admin"|\/api\/admin\/raffles|name="house"/);
+  assert.match(pub.text, /href="\/admin\/raffles"/);
+  assert.doesNotMatch(l.text, /href="\/admin\/raffles"/, "members get no admin link");
+  const adm = await page(U.boss, "/admin/raffles");
+  assert.equal(adm.status, 200, adm.text.slice(0, 400));
   assert.match(adm.text, /data-rf-form="admin"/);
+  assert.match(adm.text, /data-rf-url="\/api\/admin\/raffles"/);
+  assert.match(adm.text, /name="config\.fee_pct"/);
+  assert.match(adm.text, /name="house" value="1"/);
+  assert.equal((await page(U.ann, "/admin/raffles")).status, 403);
+  const oneAdm = await page(U.boss, "/raffles/" + R1);
+  assert.doesNotMatch(oneAdm.text, /\/api\/raffles\/\d+\/(takedown|decide)/, "moderation moved to /admin/raffles");
+  assert.match(oneAdm.text, /href="\/admin\/raffles#R/);
+  const st = await RF.adminState();
+  assert.ok(Array.isArray(st.review) && Array.isArray(st.open) && Array.isArray(st.recent));
   const one = await page(U.ann, "/raffles/" + R1);
   assert.equal(one.status, 200, one.text.slice(0, 400));
   assert.match(one.text, /Provably fair/);

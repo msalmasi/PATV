@@ -833,8 +833,8 @@ function register(app, { isBotToken, addUser }) {
     try {
       const sort = ["price", "price_desc", "newest"].includes(String(req.query.sort)) ? String(req.query.sort) : "newest";
       const v = await view(uid(req), { sort });
-      const adm = v.admin ? await adminView() : null;
-      res.render("heistmarket", { user: req.user ? req.user.username : null, v, adm, sort, signedIn: !!uid(req) });
+      // 1.99xq: the market settings live on /admin/games#heistmarket (adminView there); admins get a link here
+      res.render("heistmarket", { user: req.user ? req.user.username : null, v, sort, signedIn: !!uid(req) });
     } catch (e) { console.error("[heistmarket] page:", e); res.status(500).send("Something went wrong."); }
   });
   app.get("/api/gtf/market", addUser, async (req, res) => {
