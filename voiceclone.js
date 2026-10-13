@@ -167,8 +167,14 @@ function coverage(want, got) {
   if (!w.length) return 0;
   const bag = new Map();
   for (const x of g) bag.set(x, (bag.get(x) || 0) + 1);
+  // 1.99wm: STT spells some words out - "foamy1111" comes back as "Foamy One One One One", "PATV" as "P A T V". A word of 4+
+  // characters the bag misses still counts when the transcript, squashed (number words -> digits, no spaces), contains it.
+  const squashed = g.join("");
   let hit = 0;
-  for (const x of w) { const n = bag.get(x) || 0; if (n > 0) { hit++; bag.set(x, n - 1); } }
+  for (const x of w) {
+    const n = bag.get(x) || 0;
+    if (n > 0) { hit++; bag.set(x, n - 1); } else if (x.length >= 4 && squashed.includes(x)) hit++;
+  }
   return Math.round((hit / w.length) * 1000) / 10;
 }
 /** The site's own scoring of Pepe's transcript (Pepe's numbers are advisory; these decide). */
