@@ -431,6 +431,10 @@ async function storeAudio(id, buf, voice) {
 async function botState() {
   await init();
   await healLive();
+  // 1.99wc: a catalogue sound file Pepe failed on is offered again an hour later (not just at the next boot) - a Pepe
+  // that couldn't fetch it (bot 1.99wb: his session stripped the bot token -> 403) recovers on his own once he's fixed
+  await runQuery(`UPDATE sb_clips SET status = 'render', tries = 0, note = 'retrying the catalogue file', updated = ?
+                  WHERE catalog = 1 AND status = 'failed' AND src LIKE 'file:%' AND updated < ?`, [now(), now() - 3600e3]);
   const rows = await getQuery("SELECT * FROM sb_clips WHERE status IN ('active','render') ORDER BY board, sort, created");
   const season = seasonNow();
   const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id)))

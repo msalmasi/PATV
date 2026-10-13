@@ -333,6 +333,13 @@ test("1.99vu: catalogue files go to Pepe as audio jobs and replace a clip's audi
   const tada = await SB.clipStatus("sfx-tada");
   assert.deepEqual([tada.status, tada.tries], ["render", 0]);
 
+  // 1.99wc: ...and an hour after it failed, at Pepe's next sync, without a boot
+  await runQuery("UPDATE sb_clips SET status = 'failed', tries = 5, updated = ? WHERE id = 'sfx-tada'", [Date.now() - 2 * 3600e3]);
+  await runQuery("UPDATE sb_clips SET status = 'failed', tries = 5, updated = ? WHERE id = 'sfx-gong'", [Date.now() - 60e3]);
+  await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" });
+  assert.equal((await SB.clipStatus("sfx-tada")).status, "render", "failed an hour ago -> offered again");
+  assert.equal((await SB.clipStatus("sfx-gong")).status, "failed", "failed a minute ago -> not yet");
+
   // live clips: a re-seed never puts one back in 'render'; one stuck there (the prod bug) is healed by the sync
   await runQuery("UPDATE sb_clips SET status = 'render', audio = NULL WHERE id = 'lg-gawk'");
   const healed = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
