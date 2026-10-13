@@ -232,7 +232,7 @@ test("the settings hub has the Flair & tags tab; deleting a flair takes it off e
   assert.equal(r.status, 200);
   assert.match(r.text, /data-tab="flair"/);
   assert.match(r.text, /id="flairMgr" data-slug="/);
-  assert.match(r.text, /pad-flair\.js\?v=1/);
+  assert.match(r.text, /pad-flair\.js\?v=2/);
   r = await get("/p/" + slugB + "/settings?tab=flair", U.owner);
   assert.match(r.text, /data-tab="flair"/);
   r = await post("/api/pads/" + slugB + "/flair/delete", U.alice, { id: F_GREEN.id });

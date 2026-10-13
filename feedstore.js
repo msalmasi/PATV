@@ -653,6 +653,9 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   // 2026-10-12: 💸 boost upvotes (engagement.js) - {n, total} per post, shown as the post's boosted total
   let BO = new Map();
   if (!_inner) { try { BO = await require("./posttips").forPosts(ids, { kind: "boost" }); } catch (e) { BO = new Map(); } }
+  // 1.99wq: post flair (padflair.js) - the label its home pad gave the post
+  let PFL = new Map();
+  try { PFL = await require("./padflair").postFlairsFor(ids); } catch (e) { PFL = new Map(); }
   // 1.99ir: pad flair (padflair.js) - in a pad's own feed (ctxRoom), and on a post's page for its home pad
   const FL = new Map();
   if (!_inner) {
@@ -732,6 +735,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       voice: VOI.get(r.id) || null,                              // 1.99fp: a mic clip's speakers (micclip.voicesFor)
       tags: TG.get(r.id) || [],                                  // 1.99iq: content tags (feedtags.js)
       flair: FL.get(r.id) || null,                               // 1.99ir: the author's flair in this pad (padflair.js)
+      postFlair: PFL.get(r.id) || null,                          // 1.99wq: the post's flair in its home pad (padflair.js)
       tips: TP.get(r.id) || null,                                // 1.99pv: 💸 post tips {n, total} (posttips.js)
       boosts: BO.get(r.id) || null,                              // 2026-10-12: 💸 boost upvotes {n, total} (engagement.js)
     };
@@ -806,7 +810,7 @@ function rankSpec(sort, t = "all", now = NOW()) {
  * Deleted posts never show; report-hidden ones only to staff.
  */
 async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false,
-                      media = false, textOnly = false, offset = null, idsOnly = false, quotes = false, quotesToo = false, tag = null, ids = null } = {}) {
+                      media = false, textOnly = false, offset = null, idsOnly = false, quotes = false, quotesToo = false, tag = null, ids = null, flair = null } = {}) {
   await init();
   const staff = isStaff(viewer);
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
@@ -877,6 +881,8 @@ async function list({ room = null, author = null, following = null, authors: aut
   if (quotes) scope.push(QUOTE_SQL);
   // 1.99iq: ?tag= - posts carrying this (live) tag
   if (tag) { const tf = TAGS().filterSql(String(tag)); scope.push(tf.sql); sargs.push(...tf.args); }
+  // 1.99wq: ?flair= - posts carrying this post flair (padflair.js)
+  if (flair) { const ff = require("./padflair").filterSql(flair); scope.push(ff.sql); sargs.push(...ff.args); }
   // 1.99iq: only these posts (search hits - search.js orders them itself)
   if (Array.isArray(ids)) {
     const want = [...new Set(ids.map(String))].slice(0, 500);
@@ -1006,6 +1012,9 @@ async function create(userId, input, deps = {}) {
   if (!roomIds.length) throw new Refuse(400, "Choose a pad to post in.");
   if (!title && !body && !linkIn && !attIds.length) throw new Refuse(400, "Write something, add a link or attach a file.");
   const tags = TAGS().parseTags(input.tags);           // 1.99iq: refused before anything is charged
+  // 1.99wq: post flair in the home pad (padflair.js) - an unknown / mods-only / missing-but-required one is refused here, before
+  // any charge; posts made for someone (room generations, kept captures) are exempt from "posts here need a flair"
+  const postFlair = roomIds.length ? await require("./padflair").checkPostFlair(u, roomIds[0], input.flair, { exempt: !!(deps.roomGen || deps.onBehalf) }) : null;
   const refusal = await postRefusal(u, roomIds, { media: attIds.length > 0 });
   if (refusal) throw new Refuse(refusal.status, refusal.message);
   // 1.99eq: deps.onBehalf - a story capture posted to its pad (storykeep.js) by the pad's owner / a mod / an admin and
@@ -1097,10 +1106,12 @@ async function create(userId, input, deps = {}) {
     // the author's own upvote (Reddit-style; they can take it back, never turn it into a downvote) - never Pepe's
     if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
     if (tags.length) await TAGS().setTags(id, tags);
+    if (postFlair) await require("./padflair").setPostFlair(id, roomIds[0], postFlair, u.username || u.userId);     // 1.99wq
     await recountPost(id);
     if (!isPepe(u)) require("./achievements").poke(u.userId);      // 1.99pa: 📝 post achievements (achsocial.js)
   } catch (e) {
     await runQuery("DELETE FROM feed_post_tags WHERE post_id = ?", [id]).catch(() => {});
+    await runQuery("DELETE FROM feed_post_flair WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("UPDATE feed_attachments SET post_id = NULL WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_post_rooms WHERE post_id = ?", [id]).catch(() => {});
@@ -1185,6 +1196,7 @@ async function crosspostOne(u, o, R, title, announce = true) {
     await recountPost(id);
   } catch (e) {
     await runQuery("DELETE FROM feed_post_tags WHERE post_id = ?", [id]).catch(() => {});
+    await runQuery("DELETE FROM feed_post_flair WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_post_rooms WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_posts WHERE id = ?", [id]).catch(() => {});
@@ -1344,6 +1356,11 @@ async function edit(user, id, patch) {
   }
   // 1.99iq: the post's tags (the Edit form's tag box; a tag a pad mod removed stays removed) - not an edit of the text
   if (patch.tags !== undefined && patch.tags !== null) await TAGS().setTags(id, TAGS().parseTags(patch.tags));
+  // 1.99wq: the post's flair in its home pad ("" = none, unless the pad requires one)
+  if (patch.flair !== undefined && patch.flair !== null && r.home_pad) {
+    const PFm = require("./padflair");
+    await PFm.setPostFlair(id, r.home_pad, await PFm.checkPostFlair(await account(user.userId), r.home_pad, patch.flair), user.username || user.userId);
+  }
   const onlyInAll = patch.title == null && patch.body == null && patch.nsfw == null;
   // 1.99ux: a changed title / body goes through the content filter (a block refuses the edit, a hide hides it in its pad)
   let filt = null;

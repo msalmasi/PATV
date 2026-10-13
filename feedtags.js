@@ -32,6 +32,9 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS feed_post_tags (post_id TEXT NOT NULL, tag TEXT NOT NULL, created INTEGER,
                       removed_at INTEGER, removed_by TEXT, removed_room TEXT, PRIMARY KEY (post_id, tag))`);
       await runQuery("CREATE INDEX IF NOT EXISTS feed_post_tags_tag ON feed_post_tags (tag, post_id)");
+      // 1.99wq: a pad's OWN tags (its owner / mods pick them): shown first in its tag bar and the composer's suggestions,
+      // and what Pepe tags his posts there with (pepetags.js)
+      await runQuery("CREATE TABLE IF NOT EXISTS pad_tags (room_id TEXT NOT NULL, tag TEXT NOT NULL, sort INTEGER NOT NULL DEFAULT 0, by TEXT, at INTEGER, PRIMARY KEY (room_id, tag))");
     })().catch((e) => { console.error("[tags] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -155,6 +158,40 @@ async function removeTag(user, postId, tagRaw, roomId = null) {
   return { tags: await liveTags(p.id) };
 }
 
+// ── 1.99wq: the pad's own tags ──
+const MAX_PAD_TAGS = 12;
+/** The pad's own tags, in its order. */
+async function padTags(roomId) {
+  if (!roomId) return [];
+  await init();
+  return (await getQuery("SELECT tag FROM pad_tags WHERE room_id = ? ORDER BY sort, tag", [String(roomId)])).map((r) => r.tag);
+}
+/** Replace the pad's own tags (an array or "news, music #recap"); the caller checked the actor manages the pad. -> the tags */
+async function setPadTags(actor, roomId, input) {
+  await init();
+  // like parseTags: with commas / "#" a phrase stays one tag ("plant care, diy"), else spaces separate ("news music")
+  const raw = String(input == null ? "" : input).slice(0, 800);
+  const pieces = Array.isArray(input) ? input.slice(0, 60).map(String) : /[,#\n]/.test(raw) ? raw.split(/[,#\n]+/) : raw.split(/\s+/);
+  const out = [];
+  for (const p of pieces) { const t = normTag(p); if (t && !out.includes(t)) out.push(t); }
+  if (out.length > MAX_PAD_TAGS) throw new Refuse(400, `Up to ${MAX_PAD_TAGS} pad tags.`);
+  const t = NOW(), who = (actor && (actor.username || actor.userId)) || null;
+  await runQuery("DELETE FROM pad_tags WHERE room_id = ?", [String(roomId)]);
+  let i = 0;
+  for (const tag of out) await runQuery("INSERT INTO pad_tags (room_id, tag, sort, by, at) VALUES (?, ?, ?, ?, ?)", [String(roomId), tag, i++, who, t]);
+  await require("./rooms").event(String(roomId), "feed-pad-tags", who || "?", out.map((x) => "#" + x).join(" ") || "(none)").catch(() => {});
+  return out;
+}
+/** The pad's tag bar / suggestions: its own tags first (with their counts), then the popular ones. -> [{tag, n, own?}] */
+async function padBar(roomId, { viewer = null, limit = 10 } = {}) {
+  const own = await padTags(roomId).catch(() => []);
+  const pop = await popular(roomId, { viewer, limit: Math.max(limit, 15) }).catch(() => []);
+  const n = new Map(pop.map((r) => [r.tag, r.n]));
+  const out = own.map((tag) => ({ tag, n: n.get(tag) || 0, own: true }));
+  for (const r of pop) if (!own.includes(r.tag)) out.push(r);
+  return out.slice(0, Math.max(limit, own.length));
+}
+
 function register(app, { addUser }) {
   init().catch(() => {});
   const sameSite = (req) => {
@@ -199,4 +236,5 @@ function register(app, { addUser }) {
 }
 
 module.exports = { init, normTag, parseTags, setTags, copyTags, liveTags, tagsFor, filterSql, popular, popularMany, removeTag, register, Refuse,
+                   padTags, setPadTags, padBar, MAX_PAD_TAGS,
                    MAX_TAGS, TAG_MIN, TAG_MAX, _setClock: (fn) => { NOW = fn || (() => Date.now()); } };

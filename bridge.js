@@ -943,7 +943,8 @@ function register(app, { isBotToken, addUser }) {
     // /feed/c/<slug>?sort=... addresses carry over) or the older ?fsort= &ft= &fp=
     const q = req.query || {};
     const fq = { fsort: q.fsort || q.sort, ft: q.ft || q.t, fp: q.fp || q.p, view: q.view,      // 1.99fn: ?view=list|gallery (feedgallery.js)
-                 tag: typeof q.tag === "string" ? q.tag : "" };              // 1.99iq: ?tag= (feedtags.js)
+                 tag: typeof q.tag === "string" ? q.tag : "",                // 1.99iq: ?tag= (feedtags.js)
+                 flair: typeof q.flair === "string" ? q.flair.slice(0, 12) : "" };   // 1.99wq: ?flair= (padflair.js post flair)
     // 1.99dx: the pad page's tabs (Live/Stage · Feed · About, public/js/pad-tabs.js) - which one opens first
     // 1.99qp: a Camfrog pad without the 💎 bridge perk shows an upsell where its live room would be
     const bridgeLocked = !R.offline && !siteOnly && !bridgeOk(R.id);

@@ -166,7 +166,7 @@ test("editing replaces the tags; the composer and the edit form carry a tag box"
   const page = await get("/feed", U.alice);
   assert.match(page.text, /<input name="tags" maxlength="200" placeholder="Tags \(optional\)/);
   assert.match(page.text, /data-tag-suggest="/);
-  assert.match(page.text, /feed-tags\.js\?v=1/);
+  assert.match(page.text, /feed-tags\.js\?v=2/);
   assert.match(page.text, /<input name="tags" maxlength="200" value="monstera, yellow-leaves"/, "the author's edit form");
 });
 

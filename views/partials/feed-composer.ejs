@@ -39,6 +39,8 @@
     <div class="fc-tags">
       <input name="tags" maxlength="200" placeholder="<%- t('feed.fc.tags_ph', { n: tg_.max }) %>" aria-label="<%- t('feed.fc.tags_aria') %>" autocomplete="off" spellcheck="false">
       <div class="fc-tagsug" data-tag-suggest="<%= JSON.stringify(tg_.suggest || {}) %>" data-max="<%= tg_.max %>" aria-label="<%- t('feed.fc.tags_sug') %>" hidden></div>
+      <%# 1.99wq: the picked pad's post flair (padflair.js) - feed-tags.js fills it for the pad; hidden when the pad has none %>
+      <label class="fc-flair" hidden><span><%- t('feed.flair.label') %></span> <select name="flair" data-flairs="<%= JSON.stringify(cp.flairs || {}) %>" data-none="<%- t('feed.flair.none') %>" data-pick="<%- t('feed.flair.pick') %>" aria-label="<%- t('feed.flair.aria') %>"></select></label>
     </div>
     <ul class="fc-files" id="fcFiles" aria-live="polite"></ul>
     <%# 1.99di: "✨ Generate" - Pepe's !imagine / !video as you (aigen.js): the same price, filters and refunds as chat %>

@@ -71,7 +71,27 @@
       chips.appendChild(c);
     });
   }
-  form.addEventListener('change', function (ev) { if (ev.target && ev.target.name === 'community') paint(); });
+  // 1.99wq: the picked pad's post flair (padflair.js): its choices, "pick one" when the pad requires it; hidden when it has none
+  var fsel = form.querySelector('select[name=flair][data-flairs]');
+  var flairs = {};
+  try { flairs = fsel ? JSON.parse(fsel.getAttribute('data-flairs') || '{}') || {} : {}; } catch (e) { flairs = {}; }
+  function paintFlair() {
+    if (!fsel) return;
+    var wrap = fsel.closest('.fc-flair') || fsel;
+    var P = flairs[picked()];
+    var keep = fsel.value;
+    fsel.textContent = '';
+    if (!P || !P.list || !P.list.length) { wrap.hidden = true; return; }
+    var o0 = document.createElement('option'); o0.value = '';
+    o0.textContent = P.required ? fsel.getAttribute('data-pick') || 'Pick a flair' : fsel.getAttribute('data-none') || 'No flair';
+    fsel.appendChild(o0);
+    P.list.forEach(function (f) { var o = document.createElement('option'); o.value = String(f.id); o.textContent = (f.emoji ? f.emoji + ' ' : '') + f.name; fsel.appendChild(o); });
+    fsel.required = !!P.required;
+    if (keep && P.list.some(function (f) { return String(f.id) === keep; })) fsel.value = keep;
+    wrap.hidden = false;
+  }
+  form.addEventListener('change', function (ev) { if (ev.target && ev.target.name === 'community') { paint(); paintFlair(); } });
   box.addEventListener('input', paint);
   paint();
+  paintFlair();
 })();

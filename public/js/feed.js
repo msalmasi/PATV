@@ -127,7 +127,23 @@
       if (window.patvCrosspost) window.patvCrosspost.open(id, b.getAttribute('data-title') || '');
       return;
     }
-    if (act === 'edit') { var art = b.closest('.fp'); art.querySelector('.fp-editf').classList.remove('hide'); return; }
+    if (act === 'edit') {
+      var art = b.closest('.fp'); var ef = art.querySelector('.fp-editf'); ef.classList.remove('hide');
+      // 1.99wq: the home pad's post flairs (padflair.js) - loaded once, shown only when the pad has some
+      var fs = ef.querySelector('select[data-flair-pad]');
+      if (fs && !fs.getAttribute('data-loaded')) {
+        fs.setAttribute('data-loaded', '1');
+        fetch('/api/pads/' + encodeURIComponent(fs.getAttribute('data-flair-pad')) + '/flair', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+          var P = j && j.post;
+          if (!P || !P.flairs || !P.flairs.length) return;
+          var cur = fs.getAttribute('data-cur') || '';
+          var o0 = document.createElement('option'); o0.value = ''; o0.textContent = P.required ? _t('js.feed.flair.pick', 'Pick a flair') : _t('js.feed.flair.none', 'No flair'); fs.appendChild(o0);
+          P.flairs.forEach(function (f) { var o = document.createElement('option'); o.value = String(f.id); o.textContent = (f.emoji ? f.emoji + ' ' : '') + f.name; fs.appendChild(o); });
+          fs.value = cur; fs.hidden = false;
+        }).catch(function () {});
+      }
+      return;
+    }
     if (act === 'edit-cancel') { b.closest('.fp-editf').classList.add('hide'); return; }
     if (act === 'delete' || act === 'admin-delete') {
       var why = '';
@@ -278,7 +294,8 @@
     } else if (act === 'edit-save') {
       api('/api/feed/posts/' + postOf(f) + '/edit', { title: f.elements.title.value, body: f.elements.body.value, nsfw: f.elements.nsfw.checked,
         inAll: f.elements.inAll ? f.elements.inAll.checked : undefined,
-        tags: f.elements.tags ? f.elements.tags.value : undefined }).then(function () { location.reload(); }).catch(fail);      // 1.99iq: tags
+        tags: f.elements.tags ? f.elements.tags.value : undefined,      // 1.99iq: tags
+        flair: f.elements.flair && !f.elements.flair.hidden ? f.elements.flair.value : undefined }).then(function () { location.reload(); }).catch(fail);      // 1.99wq: post flair
     }
   });
 

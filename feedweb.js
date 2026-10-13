@@ -169,7 +169,7 @@ const PL = require("./postlabel"), UL = require("./userlook");
 const TAGS = require("./feedtags");
 const tagHref = (tag, padSlug = null) => (padSlug ? "/p/" + encodeURIComponent(padSlug) + "?tag=" + encodeURIComponent(tag) + "#feed" : "/feed?tag=" + encodeURIComponent(tag));
 // 1.99ir: a person's flair in a pad (padflair.js) - the chip next to their name
-const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, flair: (f) => require("./padflair").html(f), postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, flair: (f) => require("./padflair").html(f), postFlair: (f, href) => require("./padflair").postHtml(f, href), postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
@@ -232,13 +232,29 @@ async function composerFor(viewer, roomId) {
   const tagSuggest = {};
   try {
     const per = await TAGS.popularMany(all.filter((r) => !r.profile).map((r) => r.id), { viewer, limit: 8 });
-    for (const [id, list] of per) if (list.length) tagSuggest[id] = list;
+    for (const [id, list] of per) {
+      const own = await TAGS.padTags(id).catch(() => []);          // 1.99wq: the pad's own tags first
+      const merged = [...own, ...list.filter((x) => !own.includes(x))];
+      if (merged.length) tagSuggest[id] = merged.slice(0, 12);
+    }
     tagSuggest[""] = (await TAGS.popular(null, { viewer, limit: 8 })).map((r) => r.tag);
   } catch (e) { /* suggestions are a convenience */ }
+  // 1.99wq: post flair per pad - the ones this viewer may use (mods-only ones for the pad's mods) + "required"
+  const flairs = {};
+  try {
+    const PFm = require("./padflair");
+    for (const r of all) {
+      if (r.profile) continue;
+      const R0 = await PFm.postRules(r.id);
+      if (!R0.flairs.length) continue;
+      const mod = await PFm.mayModFlair(viewer, r.id);
+      flairs[r.id] = { required: R0.required, list: R0.flairs.filter((f) => mod || !f.mod_only).map((f) => ({ id: f.id, name: f.name, emoji: f.emoji })) };
+    }
+  } catch (e) { /* flair choices are a convenience; the server checks on post */ }
   // 1.99pv: ⭐ PATV Creators - the lock options (null unless the viewer is an active creator)
   const creator = await require("./creators").composerInfo(viewer).catch(() => null);
   return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all, creator,
-           tags: { max: TAGS.MAX_TAGS, len: TAGS.TAG_MAX, suggest: tagSuggest },
+           tags: { max: TAGS.MAX_TAGS, len: TAGS.TAG_MAX, suggest: tagSuggest }, flairs,
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
            refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: (() => { const m = spMult(viewer.userId); return { image: C.max_image_mb * m, audio: C.max_audio_mb * m, video: C.max_video_mb * m, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs, seasonPass: m > 1 }; })(),
@@ -258,11 +274,16 @@ async function roomFeed(roomId, reqUser, query = {}) {
   const top = TOPS.has(query.ft) ? query.ft : "week";
   const page = Math.max(1, parseInt(query.fp, 10) || 1);
   const tag = query.tag ? TAGS.normTag(String(query.tag).slice(0, 80)) : null;          // 1.99iq: ?tag=
-  const L = await store.list({ room: roomId, sort, top, page, viewer, limit: 10, tag });
+  // 1.99wq: ?flair=<id> - one of the pad's post flairs (padflair.js)
+  const PFm = require("./padflair");
+  const postRules = await PFm.postRules(roomId).catch(() => ({ required: false, flairs: [] }));
+  const flairOn = query.flair ? postRules.flairs.find((f) => String(f.id) === String(query.flair)) || null : null;
+  const L = await store.list({ room: roomId, sort, top, page, viewer, limit: 10, tag, flair: flairOn ? flairOn.id : null });
   const mod = viewer ? { admin: store.isStaff(viewer), owner: await rooms.canManage(viewer, roomId) } : { admin: false, owner: false };
   return {
     room: roomId, sort, top, page, posts: L.posts, more: L.more, viewer, mod, tag,
-    popularTags: await TAGS.popular(roomId, { viewer, limit: 10 }).catch(() => []),     // 1.99iq
+    popularTags: await TAGS.padBar(roomId, { viewer, limit: 10 }).catch(() => []),     // 1.99iq; 1.99wq: the pad's own tags first
+    postFlairs: postRules.flairs, flairOn,                                            // 1.99wq: the flair filter bar
     // 1.99ir: "Your flair here" - the viewer's flair and the pad's self-assignable ones (padflair.js)
     flair: viewer ? await require("./padflair").mine(viewer, roomId).catch(() => null) : null,
     slug: (rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId),
@@ -273,7 +294,7 @@ async function roomFeed(roomId, reqUser, query = {}) {
     follow: { following: viewer ? await follows.isFollowing(viewer.userId, "room", roomId) : false, followers: await follows.followers("room", roomId) },
     composer: await composerFor(viewer, roomId),
     // 1.99fn: List / Gallery (?view= wins, then the account's choice; the first grid page when it's Gallery)
-    gallery: tag ? null : await FG.forFeed(viewer, "p/" + ((rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId)), { query, sort, t: top }),
+    gallery: tag || flairOn ? null : await FG.forFeed(viewer, "p/" + ((rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId)), { query, sort, t: top }),
     rules: await require("./padrules").effective(roomId),                   // 1.99dc: the pad page's Rules card
     mention: mod.owner ? await store.mentionOn(roomId) : null,
     queue: mod.owner || mod.admin ? (await store.roomReports(roomId)).length + (await store.roomPending(roomId, viewer)).length : 0,

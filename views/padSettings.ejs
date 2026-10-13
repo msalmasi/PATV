@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=3">
 <link rel="stylesheet" href="/public/css/padfx.css?v=4">
 <link rel="stylesheet" href="/public/css/pad-access.css?v=2">
-<link rel="stylesheet" href="/public/css/flair.css?v=2"><%# 1.99ir: the Flair tab (padflair.js) %>
+<link rel="stylesheet" href="/public/css/flair.css?v=3"><%# 1.99ir: the Flair tab (padflair.js) %>
 <link rel="stylesheet" href="/public/css/tags.css?v=3">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
@@ -506,6 +506,31 @@
       <p class="fl-msg" data-fl="givemsg" role="status" aria-live="polite"></p>
       <div class="fa-scroll"><table class="fl-people"><tbody data-fl="people"></tbody></table></div>
     </div>
+    <%# 1.99wq: post flair (padflair.js) - labels for POSTS; public/js/pad-flair.js draws it from the same data-state %>
+    <div class="sb-card ps-card" id="postFlairMgr">
+      <h3>Post flair <small class="mut" data-pf="count"></small></h3>
+      <p class="ps-mini">Labels for posts - 📰 News, 🎰 Casino, ❓ Question… The author picks one when posting (or in the post's Edit form); it shows before the post's title and filters this pad's feed. "Mods only" ones are for you and the site admins (and Pepe in a house pad).</p>
+      <label class="ck"><input type="checkbox" data-pf="required"> Every post here needs a flair</label>
+      <ul class="fl-list" data-pf="list" aria-live="polite"></ul>
+      <form class="fl-form" data-pf="form" autocomplete="off">
+        <div class="fl-fields">
+          <label>Name <input type="text" name="name" maxlength="<%= flair.nameMax %>" required placeholder="e.g. News"></label>
+          <label>Emoji <input type="text" name="emoji" maxlength="16" placeholder="📰" aria-label="Emoji (optional)"></label>
+          <label>Colour <input type="color" name="color" value="#66bb6a"></label>
+        </div>
+        <label class="ck"><input type="checkbox" name="mod_only"> Mods only</label>
+        <div class="cm-row"><span class="fl-msg" data-pf="msg" role="status" aria-live="polite"></span><button type="button" class="btn-s ghost" data-pf="cancel" hidden>Cancel</button><button type="submit" class="btn-s" data-pf="save">Add post flair</button></div>
+      </form>
+    </div>
+    <div class="sb-card ps-card" id="padTagsMgr">
+      <h3>This pad's tags</h3>
+      <p class="ps-mini">Up to <span data-pt="max">12</span> tags that fit this pad. They come first in its tag bar and in the composer's suggestions, and Pepe uses them when he posts here.</p>
+      <form class="fa-inline" data-pt="form" autocomplete="off">
+        <input name="tags" maxlength="400" placeholder="news, music, recap" aria-label="This pad's tags" style="flex:1 1 16em;min-width:0">
+        <button type="submit" class="btn-s">Save tags</button>
+      </form>
+      <p class="fl-msg" data-pt="msg" role="status" aria-live="polite"></p>
+    </div>
     <div class="sb-card ps-card" id="tags">
       <h3>Tags in this pad</h3>
       <p class="ps-mini">People can add up to 5 tags to a post. A tag filters the pad's feed (<code>/p/<%= slug %>?tag=…</code>). To take a tag off a post, use the ✕ next to it on the post - you see it on posts in this pad; the author can't put it back. Removals go in the audit log.</p>
@@ -527,6 +552,6 @@
 <script src="/public/js/pad-look.js?v=1" defer></script>
 <script src="/public/js/pad-access.js?v=1" defer></script>
 <script src="/public/js/pad-cosmetics.js?v=4" defer></script>
-<% if (typeof flair !== 'undefined' && flair) { %><script src="/public/js/pad-flair.js?v=1" defer></script><% } %>
+<% if (typeof flair !== 'undefined' && flair) { %><script src="/public/js/pad-flair.js?v=2" defer></script><% } %>
 </body>
 </html>

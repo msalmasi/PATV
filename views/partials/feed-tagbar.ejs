@@ -11,7 +11,7 @@
     <a<%- sw_ %> class="ftg-clear" href="<%= href('') %>"><%- t('feed.tags.show_all') %></a>
   <% } else { %>
     <span class="ftg-k"><%- t('feed.tags.popular') %></span>
-    <span class="ftg-list"><% pop_.forEach((tg) => { %><a<%- sw_ %> class="ftag" href="<%= href(tg.tag) %>" title="<%- t('feed.n_posts', { count: tg.n, n: tg.n }) %>">#<%= tg.tag %></a><% }) %></span>
+    <span class="ftg-list"><% pop_.forEach((tg) => { %><a<%- sw_ %> class="ftag<%= tg.own ? ' own' : '' %>" href="<%= href(tg.tag) %>"<% if (tg.n) { %> title="<%- t('feed.n_posts', { count: tg.n, n: tg.n }) %>"<% } %>>#<%= tg.tag %></a><% }) %></span>
   <% } %>
 </nav>
 <% } %>

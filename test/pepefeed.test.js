@@ -344,7 +344,8 @@ test("limits: auto posts need auto on, obey posts per day (scope + global), spac
   await PF.setGlobal(U.admin, { llm_budget_usd: 0.01 });
   await PF.setScope(U.admin, "", { auto: true, posts_per_day: 5, gap_min: 0, quiet_start: -1, quiet_end: -1 });
   assert.equal((await mk("", "news", 0.011)).status, 200, "the call that crosses it is already paid for");
-  r = await mk("", "news", 0.001);
+  // (1.99wq: another story - the same one again would be refused as a repeat before any limit, pepetopics.js)
+  r = await bot("/api/pepe/feed/post", { scope: "", title: "Volcano erupts in Iceland", body: "Lava everywhere near Grindavik", kind: "news", cost: 0.001 });
   assert.equal(r.status, 429); assert.match(r.d.error, /budget/);
   // master switch
   await resetLimits();

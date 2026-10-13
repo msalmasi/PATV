@@ -252,7 +252,9 @@ test("posts / comments / kinds reach the gate, the post route and Pepe's sync", 
   PS._reset();
   await PS.set(owner, PLANT, "posts", true);
   await PS.set(owner, PLANT, "post_kinds", ["recap"]);
-  await assert.rejects(PF.post({ scope: PLANT, title: "Some news", body: "x", kind: "news", cost: 0 }), /kind are off/);
+  await assert.rejects(PF.post({ scope: PLANT, title: "A question", body: "x", kind: "question", cost: 0 }), /kind are off/);
+  // 1.99wq: a news post is routed (pepetopics.js) - with no pad taking news it goes nowhere
+  await assert.rejects(PF.post({ scope: PLANT, title: "Some news", body: "x", kind: "news", cost: 0 }), /kind are off|no pad takes/);
   const sync = await PF.sync({});
   const e = sync.scopes[PLANT];
   assert.ok(e, "the pad is in Pepe's sync");

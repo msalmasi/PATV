@@ -170,14 +170,17 @@ test("the feed post: one per batch, at most one every 6 h and 3 a day", async ()
   assert.match(POSTS[0].body, /\/markets\/8/);
   assert.match(POSTS[0].body, /no cash value/);
   assert.doesNotMatch(POSTS[0].body, /&#39;|&amp;/, "plain text, not HTML-escaped");
-  assert.equal(POSTS[0].community, "patv:lounge");
+  // 1.99wq: one pad - the best fit, else the auto pad, else Pepe's Pad (was the Camfrog Lounge)
+  assert.equal(POSTS[0].community, require(path.join(repo, "rooms")).HOUSE_ROOM);
   r = await post("/api/automkt/announce", { password: "bot-token", items: items.slice(0, 1) });
   assert.equal(r.body.posted, false);
   assert.match(r.body.skipped, /too soon/);
   const real = Date.now;
   let t = real();
   A._setClock(() => t);
-  for (let i = 0; i < 3; i++) { t += 6 * 3600e3 + 1000; await post("/api/automkt/announce", { password: "bot-token", items: items.slice(0, 1) }); }
+  // 1.99wq: a batch already announced is never posted again (pepetopics.js) - so each round announces a new market
+  const fresh = (i) => [{ ref: "M" + (20 + i), id: 20 + i, question: ["Will the Lakers beat the Celtics on Friday?", "Will gold close above $2,900 this week?", "Will it snow in Denver before Halloween?"][i], options: ["yes", "no"], closes: now + 86400, cat: "news", model: "lmsr" }];
+  for (let i = 0; i < 3; i++) { t += 6 * 3600e3 + 1000; await post("/api/automkt/announce", { password: "bot-token", items: fresh(i) }); }
   A._setClock(null);
   assert.equal(POSTS.length, 3, "the daily cap (3 in 24 h) holds");
   assert.equal((await post("/api/automkt/announce", { password: "bot-token", items: [] })).status, 400);

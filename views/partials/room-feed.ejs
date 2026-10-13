@@ -5,7 +5,7 @@
   (the page's pad view)
 %><%
   const F = feed;
-  const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, ft: fx.TIMED.has(F.sort) ? F.top : '', fp: '', tag: F.tag || '' }, o); if (x.fsort === 'new') x.fsort = ''; Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
+  const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, ft: fx.TIMED.has(F.sort) ? F.top : '', fp: '', tag: F.tag || '', flair: F.flairOn ? String(F.flairOn.id) : '' }, o); if (x.fsort === 'new') x.fsort = ''; Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
   const mods = new Set(F.mod.owner || F.mod.admin ? [F.room] : []);
   const here_ = '/p/' + encodeURIComponent(room.slug);
   // 1.99dx: the tabbed pad page renders the story strip under its header and the Rules card in the Feed tab's side column
@@ -32,13 +32,25 @@
         <span class="pfl-msg" role="status" aria-live="polite"></span>
       <% } %>
     </div>
-    <script src="/public/js/pad-flair.js?v=1" defer></script>
+    <script src="/public/js/pad-flair.js?v=2" defer></script>
   <% } %>
   <%# 1.99iq: content tags - this pad's ?tag= filter and its popular tags (feedtags.js) %>
   <%- include('feed-tagbar', { fx, tag: F.tag || null, popular: F.popularTags || [], href: (t) => fq({ tag: t, fp: '' }), swap: false }) %>
+  <%# 1.99wq: the pad's post flairs (padflair.js) - each one filters the feed (?flair=<id>) %>
+  <% const pf_ = F.postFlairs || []; if (pf_.length) { %>
+    <nav class="ftg pfl-bar" aria-label="<%- t('feed.flair.bar') %>">
+      <% if (F.flairOn) { %>
+        <span class="ftg-on"><%- t('feed.flair.showing') %> <%- fx.postFlair(F.flairOn) %></span>
+        <a class="ftg-clear" href="<%= fq({ flair: '', fp: '' }) %>"><%- t('feed.tags.show_all') %></a>
+      <% } else { %>
+        <span class="ftg-k"><%- t('feed.flair.label') %></span>
+        <span class="ftg-list"><% pf_.forEach((f) => { %><%- fx.postFlair(f, fq({ flair: String(f.id), fp: '' })) %><% }) %></span>
+      <% } %>
+    </nav>
+  <% } %>
   <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: t('pad.feed.sort_label'), hop: F.tag ? null : 'p/' + room.slug, gallery: F.gallery || null }) %>
   <% if (!F.posts.length) { %>
-    <p class="empty"><%- F.page > 1 ? t('pad.feed.no_more') : F.tag ? t('pad.feed.no_tagged', { tag: F.tag }) : t('pad.feed.empty') %></p>
+    <p class="empty"><%- F.page > 1 ? t('pad.feed.no_more') : F.tag ? t('pad.feed.no_tagged', { tag: F.tag }) : F.flairOn ? t('feed.flair.none_here') : t('pad.feed.empty') %></p>
   <% } else { %>
     <div class="fd-list">
       <% F.posts.forEach((p) => { %><%- include('feed-post', { p, fx, embeds, host, viewer: F.viewer, modRooms: mods, detail: false, ctxRoom: F.room }) %><% }) %>

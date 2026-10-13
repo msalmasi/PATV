@@ -2,13 +2,13 @@
 <link rel="stylesheet" href="/public/css/stories.css?v=7">
 <link rel="stylesheet" href="/public/css/quotes.css?v=2"><%# 1.99fp: quote cards, mic clip waveforms %>
 <link rel="stylesheet" href="/public/css/tags.css?v=3"><%# 1.99iq: content tags %>
-<link rel="stylesheet" href="/public/css/flair.css?v=2"><%# 1.99ir: pad flair chips %>
+<link rel="stylesheet" href="/public/css/flair.css?v=3"><%# 1.99ir: pad flair chips %>
 <link rel="stylesheet" href="/public/css/embedcards.css?v=1"><script src="/public/js/embed-cards.js?v=2" defer></script><%# live cards for linked markets / pools / polls / bounties (embedcards.js) %>
 <script src="/public/js/feed-safety.js?v=4" defer></script>
-<script src="/public/js/feed.js?v=13" data-signed="<%= viewer ? '1' : '' %>" defer></script>
-<script src="/public/js/feed-composer.js?v=15" defer></script>
+<script src="/public/js/feed.js?v=14" data-signed="<%= viewer ? '1' : '' %>" defer></script>
+<script src="/public/js/feed-composer.js?v=16" defer></script>
 <script src="/public/js/feed-crosspost.js?v=7" defer></script>
-<script src="/public/js/feed-tags.js?v=1" defer></script>
+<script src="/public/js/feed-tags.js?v=2" defer></script>
 <% if (typeof viewer !== 'undefined' && viewer) { %><script src="/public/js/mention-complete.js?v=1" defer></script><%# 1.99kk: @mention autocomplete (feedmentions.js) %><% } %>
 <link rel="stylesheet" href="/public/css/posttips.css?v=2"><%# 1.99pv: 💸 post tips %>
 <% if (typeof viewer !== 'undefined' && viewer && viewer.username) { %><script src="/public/js/patamount.js?v=1" defer></script><script src="/public/js/post-tip.js?v=2" data-me="<%= viewer.username %>" defer></script><script src="/public/js/post-boost.js?v=1" data-me="<%= viewer.username %>" defer></script><% } %>

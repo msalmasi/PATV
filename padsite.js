@@ -43,6 +43,7 @@ const SPEC = Object.freeze({
   posts: { group: "posts", type: "bool", def: false },
   post_kinds: { group: "posts", type: "kinds", def: null },          // null = every kind
   posts_per_day: { group: "posts", type: "choice", def: 1, choices: PER_DAY },
+  labels: { group: "posts", type: "bool", def: true },              // 1.99wq: he flairs + tags his posts from the pad's own (pepelabels.js)
   announce: { group: "posts", type: "bool", def: true },
   replies: { group: "comments", type: "bool", def: true },
   comments: { group: "comments", type: "bool", def: false },
@@ -50,7 +51,7 @@ const SPEC = Object.freeze({
   automod: { group: "moderation", type: "bool", def: false },
   automod_level: { group: "moderation", type: "choice", def: "standard", choices: Object.keys(LEVELS) },
 });
-const GROUPS = Object.freeze([["general", "🐸", ["feed"]], ["posts", "📝", ["posts", "post_kinds", "posts_per_day", "announce"]],
+const GROUPS = Object.freeze([["general", "🐸", ["feed"]], ["posts", "📝", ["posts", "post_kinds", "posts_per_day", "labels", "announce"]],
   ["comments", "💬", ["replies", "comments", "comment_rate"]], ["moderation", "🛡️", ["automod", "automod_level"]]]);
 // the protections owners never change (shown read-only on the card)
 const FLOOR = Object.freeze(["image_safety", "reports", "takedown", "csam", "severe_hidden", "admin_lock"]);
@@ -90,7 +91,7 @@ async function state(roomId) {
   const kinds = PF().kindsOf(S);
   const eff = {
     feed: S.enabled !== false, posts: PF().postsOn(S), post_kinds: kinds.length === PF().KINDS.length ? null : kinds,
-    posts_per_day: S.posts_per_day, announce: ann, replies: S.respond !== false, comments: PF().commentsOn(S), comment_rate: rateOf(S),
+    posts_per_day: S.posts_per_day, labels: S.labels !== false, announce: ann, replies: S.respond !== false, comments: PF().commentsOn(S), comment_rate: rateOf(S),
     automod: !!A.on, automod_level: levelOf(A),
   };
   const values = {};
@@ -148,6 +149,7 @@ async function set(user, roomId, key, value, { reset = false } = {}) {
     else if (key === "posts") await pf.resetScope(user, id, ["posts"]);
     else if (key === "post_kinds") await pf.resetScope(user, id, ["kinds"]);
     else if (key === "posts_per_day") await pf.resetScope(user, id, ["posts_per_day"]);
+    else if (key === "labels") await pf.resetScope(user, id, ["labels"]);
     else if (key === "replies") await pf.resetScope(user, id, ["respond"]);
     else if (key === "comments") await pf.resetScope(user, id, ["comments"]);
     else if (key === "comment_rate") await pf.resetScope(user, id, ["comments_per_day", "gap_min"]);
@@ -160,6 +162,7 @@ async function set(user, roomId, key, value, { reset = false } = {}) {
     else if (key === "posts") await pf.setScope(user, id, { posts: v });
     else if (key === "post_kinds") await pf.setScope(user, id, { kinds: v });
     else if (key === "posts_per_day") await pf.setScope(user, id, { posts_per_day: v });
+    else if (key === "labels") await pf.setScope(user, id, { labels: v });
     else if (key === "replies") await pf.setScope(user, id, { respond: v });
     else if (key === "comments") await pf.setScope(user, id, { comments: v });
     else if (key === "comment_rate") await pf.setScope(user, id, { ...RATES[v] });

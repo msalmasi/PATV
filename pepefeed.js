@@ -33,6 +33,12 @@
 //   posts / comments  1.99up (the owner panel's "Pepe on your pad's page", padsite.js): his own posts / his auto comments
 //                   separately. Unset = follow `auto` (the old single switch, still what the settings tab edits).
 //   kinds           1.99up: which of his own post kinds may go here (KINDS); unset = all. A post of another kind is refused.
+//   labels          1.99wq: he flairs and tags his own posts here from the pad's own post flairs / tags (pepelabels.js). Default ON;
+//                   off = no optional labels (a flair the pad REQUIRES is still put on)
+// 1.99wq ONE STORY, ONE PAD: a news post (and a DJ write-up) goes through pepetopics.js - refused when the same or a similar
+// story went out in the last 48 h anywhere; a news post is ROUTED to the best-fit pad (else Pepe's Pad) whatever scope the bot
+// asked for. The sync carries `news` {scope (the one scope the bot writes news for), recent (48 h of topics)} and per scope
+// `labels` {flairs, required, tags} so the bot's model picks only from the pad's own flairs / tags.
 // Global caps (feed_kv "pepe:global", admins only) override every scope: enabled (master switch), posts_per_day,
 // comments_per_day (all scopes together), llm_budget_usd (what Pepe reports spending on feed calls per 24 h),
 // reply_gap_secs, writes_per_min.
@@ -127,7 +133,7 @@ function cleanScope(c) {
   for (const k of Object.keys(SCOPE_LIMITS)) o[k] = clampInt(c[k], SCOPE_LIMITS[k], SCOPE_DEFAULTS[k]);
   for (const k of ["enabled", "auto", "admin_lock"]) if (c[k] != null) o[k] = bool(c[k]);
   // 1.99up: own posts / auto comments / post kinds - only when set (unset = follow `auto` / all kinds)
-  for (const k of ["posts", "comments"]) if (c[k] != null) o[k] = bool(c[k]);
+  for (const k of ["posts", "comments", "labels"]) if (c[k] != null) o[k] = bool(c[k]);       // 1.99wq: + labels
   if (Array.isArray(c.kinds)) o.kinds = KINDS.filter((k) => c.kinds.includes(k));
   // 1.99cq: a stored vision value counts only once someone explicitly changed it (vision_set); old rows saved the
   // old OFF default on every save, so without the mark they follow today's default (ON)
@@ -269,7 +275,7 @@ async function resetScope(user, scope, fields) {
   if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this pad's owner can do that.");
   const raw = (await readJson("pepe:scope:" + scope)) || {};
   if (cleanScope(raw).admin_lock && !admin) throw new Refuse(403, "A site admin has locked Pepe's settings for this pad.");
-  const RESETTABLE = ["enabled", "respond", "auto", "posts", "comments", "kinds", "posts_per_day", "comments_per_day", "gap_min", "vision"];
+  const RESETTABLE = ["enabled", "respond", "auto", "posts", "comments", "kinds", "posts_per_day", "comments_per_day", "gap_min", "vision", "labels"];
   for (const f of (fields || []).filter((x) => RESETTABLE.includes(x))) { delete raw[f]; delete raw[f + "_set"]; }
   await store.kvSet("pepe:scope:" + scope, JSON.stringify(raw));
   await log({ action: "settings", scope, by: user.username, note: ("reset " + (fields || []).join(",")).slice(0, 400) });
@@ -674,6 +680,24 @@ async function sync(body = {}) {
   for (const r of await getQuery("SELECT scope, kind, MAX(at) AS at FROM pepe_feed_log WHERE action = 'post' AND at > ? GROUP BY scope, kind", [NOW() - 7 * DAY])) {
     (res.lastKinds[r.scope] = res.lastKinds[r.scope] || {})[r.kind || "other"] = r.at;
   }
+  // 1.99wq: what he may label his posts with in each pad he posts in (pepelabels.js) - names only, the site re-checks on the post
+  const LB = require("./pepelabels");
+  for (const id of postScopesOn) {
+    const pid = id || rooms.LOUNGE_ID;
+    try {
+      const P = await LB.forPad(pid);
+      scopes[id].labels = { on: scopes[id].labels !== false, required: P.required, tags: P.tags,
+                            flairs: P.flairs.map((f) => ({ name: f.name, emoji: f.emoji || "" })) };
+    } catch (e) { /* labels are optional */ }
+  }
+  // 1.99wq: one story, one pad - the bot writes news for ONE scope (the site routes the post to the best-fit pad) and skips
+  // headlines already taken in the last 48 h
+  try {
+    const TP = require("./pepetopics");
+    const newsScope = postScopesOn.includes(rooms.HOUSE_ROOM) ? rooms.HOUSE_ROOM
+      : (postScopesOn.find((k) => k && (scopes[k].kinds || []).includes("news") && scopes[k].house) || (postScopesOn.includes("") ? "" : null));
+    res.news = { scope: newsScope, recent: (await TP.recent()).map((r) => ({ kind: r.kind, key: r.key, title: r.title, room: r.room, at: r.at })) };
+  } catch (e) { res.news = { scope: null, recent: [] }; }
   // the day's captures per auto room (stories.js: opted-out subjects are already null)
   for (const id of postScopesOn) {
     if (!id) continue;
@@ -746,15 +770,30 @@ async function comment(b, req = null) {
   return { ok: true, id: r.id, url: await store.postLink(postId, "#c-" + r.id) };
 }
 
-/** Pepe posts on his own. {scope, title, body, kind, cost} -> {ok, id, url} */
+/** Pepe posts on his own. {scope, title, body, kind, cost, story?, flair?, tags?} -> {ok, id, url, scope, flair, tags} */
 async function post(b, req = null) {
   await init();
   const acct = await ensureAccount();
   const G = await globalCaps();
-  const scope = String(b.scope || "");
+  let scope = String(b.scope || "");
+  const asked = scope;
   const kind = KINDS.includes(b.kind) ? b.kind : "other";
   const refuse = async (st, msg) => { await log({ action: "refused", why: "auto", scope, kind, cost: b.cost, note: msg }); throw new Refuse(st, msg); };
   if (scope && !(await rooms.get(scope))) await refuse(404, "No such pad.");
+  // 1.99wq: one story, one pad (pepetopics.js) - a repeat of a story from the last 48 h is refused wherever it went; a news post
+  // goes to the best-fit pad (else Pepe's Pad), whichever scope the bot asked for
+  const TP = require("./pepetopics");
+  const topic = TP.DEDUPED.has(kind) ? { kind, story: b.story && typeof b.story === "object" ? b.story : {}, title: b.title, body: b.body } : null;
+  if (topic) {
+    const dup = await TP.duplicate(topic);
+    if (dup) await refuse(409, `already posted: ${dup.why}${dup.room ? " in " + dup.room : ""}`);
+    if (TP.ROUTED.has(kind)) {
+      const to = await TP.route({ ...topic, scope: scope || null });
+      if (!to.room) await refuse(403, to.why);
+      scope = to.room;
+      topic.routed = to;
+    }
+  }
   // 1.99ci: a post needs a community - his All-scope posts go to the Camfrog Lounge
   const S = await scopeSettings(scope);
   const no = gate("post", "auto", S, G, await usage(), { scope, cost: b.cost });
@@ -764,11 +803,23 @@ async function post(b, req = null) {
   if (writeRate(G)) await refuse(429, "too many writes this minute");
   const title = String(b.title || "").trim(), text = String(b.body || "").trim();
   if (!title && !text) await refuse(400, "Empty post.");
-  const p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX), body: text.slice(0, 3000), community: scope || rooms.LOUNGE_ID,
-                                              nsfw: false, announce: [] }, {});
+  // 1.99wq: his flair + tags from THIS pad's own (pepelabels.js) - never invented, never a rule broken (a required flair he
+  // can't use refuses the post in feedstore.create)
+  const home = scope || rooms.LOUNGE_ID;
+  const L = await require("./pepelabels").pick({ roomId: home, kind, flair: b.flair, tags: b.tags, title, body: text }).catch(() => ({ flair: null, tags: [] }));
+  let p;
+  try {
+    p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX), body: text.slice(0, 3000), community: home,
+                                          nsfw: false, announce: [], tags: L.tags, flair: L.flair ? L.flair.id : "" }, {});
+  } catch (e) {
+    if (e && e.refuse) await refuse(e.status || 400, e.message);
+    throw e;
+  }
   await audit.record(auditCtx(), { kind: "post", id: p.id, postId: p.id, event: "create", user: await store.account(acct.userId) });
-  await log({ action: "post", why: "auto", scope, post: p.id, kind, cost: b.cost, note: b.model || null });
-  return { ok: true, id: p.id, url: p.url };
+  const routed = topic && topic.routed ? ` (routed ${asked || "All"} -> ${scope}: ${topic.routed.why})` : "";
+  await log({ action: "post", why: "auto", scope, post: p.id, kind, cost: b.cost, note: ((b.model || "") + routed).trim() || null });
+  if (topic) await TP.remember({ ...topic, room: home, post: p.id }).catch((e) => console.error("[pepefeed] topic:", e.message));
+  return { ok: true, id: p.id, url: p.url, scope, flair: L.flair ? L.flair.name : null, tags: L.tags };
 }
 
 /** He looked and passed (the model said skip, his own guards said no). The target is never offered again. */

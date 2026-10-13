@@ -56,8 +56,11 @@
     <%# 1.99ex: no title -> the shared label (postlabel.js), muted, when the card has nothing else that names it (a
         picture / video / audio / capture only post); a body or link card already says what it is %>
     <% const lab_ = p.title ? null : fx.labelOf(p); const fbT_ = lab_ && lab_.level >= 4 && !p.deleted ? lab_.text : ''; %>
-    <% if (p.title || fbT_ || p.nsfw || p.hidden || p.deleted || p.pending || p.roomHidden || p.locked || (p.mine && p.onProfile && !p.inAll)) { %>
+    <%# 1.99wq: the post's flair in its home pad (padflair.js) - before the title; it filters the pad's feed %>
+    <% const pfl_ = p.postFlair && !p.deleted ? p.postFlair : null; const pflPad_ = pfl_ ? ((p.roomsAll || []).find((x) => x.id === p.homePad && !x.profile) || null) : null; %>
+    <% if (p.title || fbT_ || pfl_ || p.nsfw || p.hidden || p.deleted || p.pending || p.roomHidden || p.locked || (p.mine && p.onProfile && !p.inAll)) { %>
       <div class="fp-titlerow">
+        <% if (pfl_ && fx.postFlair) { %><%- fx.postFlair(pfl_, pflPad_ ? '/p/' + encodeURIComponent(pflPad_.slug) + '?flair=' + pfl_.id + '#feed' : null) %><% } %>
         <% if (p.title) { %><h3 class="fp-title"><% if (detail_) { %><%= p.title %><% } else { %><a href="<%= url_ %>"><%= p.title %></a><% } %></h3><% } else if (fbT_) { %><h3 class="fp-title fp-fb"><% if (detail_) { %><%= fbT_ %><% } else { %><a href="<%= url_ %>"><%= fbT_ %></a><% } %></h3><% } %>
         <% if (p.nsfw) { %><span class="tag nsfw"><%- t('feed.nsfw') %></span><% } %>
         <% if (p.hidden) { %><span class="tag warn" title="<%- t('feed.p.hidden_title') %>"><%- t('feed.p.hidden') %></span><% } %>
@@ -174,6 +177,8 @@
         <input name="title" maxlength="140" value="<%= p.title %>" placeholder="<%- t('feed.title_opt') %>" aria-label="<%- t('feed.title_aria') %>">
         <textarea name="body" maxlength="5000" rows="4" aria-label="<%- t('feed.text_aria') %>"><%= p.body %></textarea>
         <input name="tags" maxlength="200" value="<%= (p.tags || []).join(', ') %>" placeholder="<%- t('feed.p.tags_ph', { n: fx.MAX_TAGS || 5 }) %>" aria-label="<%- t('feed.tags.aria') %>" autocomplete="off">
+        <% const hp_ = (p.roomsAll || []).find((x) => x.id === p.homePad && !x.profile); if (hp_) { %><%# 1.99wq: post flair - the pad's choices load when the form opens (feed.js) %>
+        <select name="flair" data-flair-pad="<%= hp_.slug %>" data-cur="<%= p.postFlair ? p.postFlair.id : '' %>" aria-label="<%- t('feed.flair.aria') %>" hidden></select><% } %>
         <div class="row"><label class="ck"><input type="checkbox" name="nsfw"<%= p.nsfwAuthor ? ' checked' : '' %>> <%- t('feed.nsfw') %></label>
           <% if (p.onProfile) { %><label class="ck" title="<%- t('feed.p.inall_title') %>"><input type="checkbox" name="inAll"<%= p.inAll ? ' checked' : '' %>> <%- t('feed.inall') %></label><% } %>
           <span class="grow"></span><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="edit-cancel"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.save') %></button></div>

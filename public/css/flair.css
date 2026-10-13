@@ -29,3 +29,15 @@
 .fl-msg { min-height: 1.2em; font-size: 13px; color: var(--ds-text-muted); }
 .fl-msg.err { color: #ff8a80; }
 @media (max-width: 520px) { .fl-form input[type=text] { width: 100%; } .fl-form .fl-fields > label { flex: 1 1 100%; } }
+/* 1.99wq: post flair (padflair.js postHtml) - a squarer label before a post's title; the pad feed's flair filter bar; the composer picker */
+.pfl-post { display: inline-flex; align-items: center; gap: 4px; max-width: 16em; margin: 0 6px 0 0; padding: 1px 8px; border-radius: 6px;
+            background: var(--fl, #66bb6a); color: var(--fli, #111) !important; font: 700 11.5px/18px var(--ds-font); text-decoration: none !important;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; flex: none; }
+a.pfl-post:hover, a.pfl-post:focus-visible { filter: brightness(1.12); outline: none; box-shadow: 0 0 0 2px #0008, 0 0 0 3px var(--fl, #66bb6a); }
+.pfl-post .ufl-e { font-size: 12.5px; }
+.pfl-bar .ftg-list { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.pfl-bar .pfl-post { margin: 0; }
+.fc-flair { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; font: 600 12px/1.4 var(--ds-font); color: #aaa; }
+.fc-flair[hidden] { display: none; }
+.fc-flair select, .fp-editf select[name=flair] { background: #0d0d0d; color: #eee; border: 1px solid var(--ds-line-strong); border-radius: 6px; padding: 4px 6px; font: inherit; max-width: 100%; }
+.ftag.own { border-color: #3d6b47; }

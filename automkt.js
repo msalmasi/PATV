@@ -6,7 +6,10 @@
 //   POST /api/automkt/ack       (bot)  {id, ok, message, extra}
 //   POST /api/automkt/announce  (bot)  {items: [{ref, id, question, options, closes, cat, tag, model}]} (1.99vc: or a poll
 //                                      {kind: "poll", poll_id, ...} -> links /polls/<id>) -> a feed post as Pepe in
-//                                      the Camfrog Lounge, rate-limited here (FEED_GAP_MS, FEED_PER_DAY) whatever Pepe sends
+//                                      ONE pad (1.99wq, pepetopics.js: the best fit for the questions, else `pad` - the auto
+//                                      pad Pepe sends - else Pepe's Pad; was always the Camfrog Lounge), never the same batch
+//                                      twice in 48 h, flaired + tagged from that pad's own (pepelabels.js kind "markets"),
+//                                      rate-limited here (FEED_GAP_MS, FEED_PER_DAY) whatever Pepe sends
 //   GET  /admin/markets         the admin page (views/admin/markets.ejs + public/js/admin-automkt.js)
 //   GET  /api/admin/automkt     (admins) {state, requests}
 //   POST /api/admin/automkt     (admins, same-site JSON) {action: set|generate|preview|approve|reject, args} -> queued for Pepe
@@ -96,7 +99,19 @@ async function announce(body) {
                                opts: (x.options || []).map(String).join(" / ").slice(0, 120), closes: when(x.closes),
                                link: `/markets/${Math.floor(Number(x.id))}` })));
   const text = [t("automkt.feed.intro"), "", ...lines, "", t("automkt.feed.foot")].join("\n");
-  const p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX || 200), body: text.slice(0, 3000), community: rooms.LOUNGE_ID, nsfw: false, announce: [] }, {});
+  // 1.99wq: one story, one pad (pepetopics.js) + his flair / tags there (pepelabels.js)
+  const TP = require("./pepetopics");
+  const topic = { kind: "markets", key: "mkt:" + JSON.parse(refs).slice().sort().join(","), story: { headline: items.map((x) => String(x.question)).join(" ").slice(0, 600) }, title };
+  const dup = await TP.duplicate(topic).catch(() => null);
+  if (dup) return skip("already announced (" + dup.why + ")");
+  let fallback = rooms.HOUSE_ROOM;
+  if (typeof body.pad === "string" && body.pad.trim()) { const R0 = await require("./feedstore").communityOf(body.pad.trim()).catch(() => null); if (R0 && !R0.profile) fallback = R0.id; }
+  const to = await TP.route({ ...topic, fallback, force: true }).catch(() => ({ room: fallback }));
+  const home = to.room || fallback;
+  const L = await require("./pepelabels").pick({ roomId: home, kind: "markets", title, body: text }).catch(() => ({ flair: null, tags: [] }));
+  const p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX || 200), body: text.slice(0, 3000), community: home, nsfw: false, announce: [],
+                                              tags: L.tags, flair: L.flair ? L.flair.id : "" }, {});
+  await TP.remember({ ...topic, room: home, post: p.id }).catch(() => {});
   try { await require("./contentaudit").record({ via: "bot", bot: true }, { kind: "post", id: p.id, postId: p.id, event: "create", user: await store.account(acct.userId) }); } catch (e) { /* audit is best effort here */ }
   await runQuery("INSERT INTO automkt_feed (at, post_id, refs, skipped) VALUES (?, ?, ?, NULL)", [now, String(p.id), refs]);
   return { ok: true, posted: true, id: p.id, url: p.url };

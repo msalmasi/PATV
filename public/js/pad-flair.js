@@ -152,4 +152,79 @@
   });
   resetForm();
   draw();
+
+  // ── 1.99wq: post flair + the pad's own tags (the same state: S.post, S.padTags) ──
+  var pfm = document.getElementById('postFlairMgr');
+  var pfList = pfm && pfm.querySelector('[data-pf=list]'), pfForm = pfm && pfm.querySelector('form[data-pf=form]');
+  var pfReq = pfm && pfm.querySelector('[data-pf=required]'), pfMsg = pfm && pfm.querySelector('[data-pf=msg]');
+  var pfEditing = null;
+  function pfReset() {
+    pfEditing = null; pfForm.reset(); pfForm.elements.color.value = '#66bb6a';
+    pfForm.querySelector('[data-pf=save]').textContent = 'Add post flair';
+    pfForm.querySelector('[data-pf=cancel]').hidden = true;
+  }
+  function pfDraw() {
+    var P = S.post || { flairs: [], required: false, max: 20 };
+    pfList.textContent = '';
+    if (!P.flairs.length) pfList.appendChild(el('li', 'mut', 'No post flairs yet - add the first one below.'));
+    P.flairs.forEach(function (f) {
+      var li = el('li', 'fl-row');
+      var c = chip(f); c.className = 'pfl-post'; li.appendChild(c);
+      li.appendChild(el('span', 'fl-meta', (f.mod_only ? 'mods only' : 'anyone posting') + ' · ' + f.n + ' post' + (f.n === 1 ? '' : 's')));
+      li.appendChild(el('span', 'grow'));
+      var ed = el('button', 'btn-s ghost', 'Edit'); ed.type = 'button';
+      ed.addEventListener('click', function () {
+        pfEditing = f.id;
+        pfForm.elements.name.value = f.name; pfForm.elements.emoji.value = f.emoji || '';
+        pfForm.elements.color.value = HEX.test(f.color) ? f.color : '#66bb6a'; pfForm.elements.mod_only.checked = !!f.mod_only;
+        pfForm.querySelector('[data-pf=save]').textContent = 'Save changes';
+        pfForm.querySelector('[data-pf=cancel]').hidden = false;
+        pfForm.elements.name.focus();
+      });
+      var del = el('button', 'btn-s ghost', 'Delete'); del.type = 'button';
+      del.addEventListener('click', function () {
+        if (!window.confirm('Delete the post flair "' + f.name + '"?' + (f.n ? ' ' + f.n + ' post' + (f.n === 1 ? '' : 's') + ' lose it.' : ''))) return;
+        del.disabled = true;
+        api(base + '/delete', { id: f.id }).then(function (j) { S = Object.assign(S, j.manage); if (pfEditing === f.id) pfReset(); pfDraw(); say('Deleted.', false, pfMsg); })
+          .catch(function (e) { del.disabled = false; say(e.message, true, pfMsg); });
+      });
+      li.appendChild(ed); li.appendChild(del);
+      pfList.appendChild(li);
+    });
+    pfm.querySelector('[data-pf=count]').textContent = P.flairs.length + ' / ' + P.max;
+    pfReq.checked = !!P.required;
+  }
+  if (pfm && pfList && pfForm && pfReq) {
+    pfForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var b = pfForm.querySelector('[data-pf=save]');
+      b.disabled = true; say('Saving…', false, pfMsg);
+      var body = { kind: 'post', name: pfForm.elements.name.value, emoji: pfForm.elements.emoji.value, color: pfForm.elements.color.value, mod_only: pfForm.elements.mod_only.checked };
+      if (pfEditing) body.id = pfEditing;
+      api(base + '/save', body).then(function (j) { b.disabled = false; S = Object.assign(S, j.manage); pfReset(); pfDraw(); say('Saved.', false, pfMsg); })
+        .catch(function (e) { b.disabled = false; say(e.message, true, pfMsg); });
+    });
+    pfForm.querySelector('[data-pf=cancel]').addEventListener('click', function () { pfReset(); say('', false, pfMsg); });
+    pfReq.addEventListener('change', function () {
+      pfReq.disabled = true;
+      api(base + '/required', { on: pfReq.checked }).then(function (j) { pfReq.disabled = false; S = Object.assign(S, j.manage); pfDraw(); say(pfReq.checked ? 'Posts here now need a flair.' : 'Post flair is optional.', false, pfMsg); })
+        .catch(function (e) { pfReq.disabled = false; pfReq.checked = !pfReq.checked; say(e.message, true, pfMsg); });
+    });
+    pfReset();
+    pfDraw();
+  }
+  var ptm = document.getElementById('padTagsMgr');
+  var ptForm = ptm && ptm.querySelector('form[data-pt=form]'), ptMsg = ptm && ptm.querySelector('[data-pt=msg]');
+  if (ptm && ptForm) {
+    ptForm.elements.tags.value = (S.padTags || []).join(', ');
+    var mx = ptm.querySelector('[data-pt=max]'); if (mx && S.padTagsMax) mx.textContent = String(S.padTagsMax);
+    ptForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var b = ptForm.querySelector('button[type=submit]');
+      b.disabled = true; say('Saving…', false, ptMsg);
+      api(base + '/tags', { tags: ptForm.elements.tags.value }).then(function (j) {
+        b.disabled = false; S = Object.assign(S, j.manage); ptForm.elements.tags.value = (S.padTags || []).join(', '); say('Saved.', false, ptMsg);
+      }).catch(function (e) { b.disabled = false; say(e.message, true, ptMsg); });
+    });
+  }
 })();
