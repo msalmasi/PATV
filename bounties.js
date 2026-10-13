@@ -272,13 +272,16 @@ function register(app, { isBotToken, addUser }) {
     const now = Date.now() / 1000;
     const live = rows.filter((b) => b.status === "open").sort((a, b) => b.total - a.total);
     const done = rows.filter((b) => b.status !== "open").sort((a, b) => (b.resolved || b.deadline) - (a.resolved || a.deadline)).slice(0, 40);
-    let linked = false, acts = [];
+    let linked = false, acts = [], canAct = false;
     if (req.user && req.user.userId) {
       const u = await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]);
       linked = !!(u[0] && u[0].camfrogUsername);
       acts = await actions.recentFor(req.user.userId, "bounties");
+      // 1.99wr (connections audit A): while the bounties game runs on the site it takes the PATV account; else Pepe runs
+      // the form as the linked chat login
+      canAct = linked || await require("./escrow/games").gameLive("bounties").then((x) => !!x).catch(() => false);
     }
-    res.render("bounties", { user: req.user ? req.user.username : null, live, done, now, linked, acts,
+    res.render("bounties", { user: req.user ? req.user.username : null, live, done, now, linked, canAct, acts,
                              msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null });
   });
 

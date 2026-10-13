@@ -530,10 +530,10 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
     }
   }
   if (C.require_link_to_post && !u.camfrogUsername && !isStaff(u) && !isPepe(u)) {
-    return { status: 403, message: "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe)." };
+    return { status: 403, message: "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe)." };
   }
   if (media && !isStaff(u) && !isPepe(u) && !u.camfrogUsername && (Number(u.level) || 0) < C.media_min_level) {
-    return { status: 403, message: `Uploading pictures, audio and video needs a linked chat account (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) or level ${C.media_min_level}.` };
+    return { status: 403, message: `Uploading pictures, audio and video needs a linked chat account (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) or level ${C.media_min_level}.` };
   }
   return null;
 }

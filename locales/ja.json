@@ -616,7 +616,6 @@
   "wallet.welcome.done_paused": "達成しました — 数分以内に支払われます（現在、管理者により一時停止中）。",
   "wallet.welcome.connect": "Discord/Twitch連携ボーナスも一緒に支払われます。",
   "wallet.welcome.paid": "ウェルカムボーナス支払い済み：PAT {n}。",
-  "wallet.link_hint": "ここからストラッシュ、ステーキング、ローンを使うには、チャットアカウントを連携してください（プロフィール編集 → 接続。Camfrogの場合は<code>!verify</code>）。Pepeがあなたの代わりに操作します。",
   "wallet.h.stashes": "隠し資金",
   "wallet.stash.none": "所有または共有している隠し資金はまだありません。隠し資金は、金庫にステークして利回りを得られる共有のPAT口座です。",
   "wallet.stash.yours": "自分",

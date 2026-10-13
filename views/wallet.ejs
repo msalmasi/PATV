@@ -150,7 +150,12 @@
   const cd = (t) => '<span data-until="' + Number(t) + '">' + left(t) + '</span>';
   const dur = (s) => { s = Number(s) || 0; return s >= 86400 ? +(s / 86400).toFixed(1) + 'd' : s >= 3600 ? Math.round(s / 3600) + 'h' : Math.round(s / 60) + 'm'; };
   const rate = (l) => l.rate_basis === 'week' ? t('wallet.rate_week', { r: l.rate }) : t('wallet.rate_flat', { r: l.rate });   // HTML-safe
-  const canAct = !!camfrog;
+  // 1.99wr (connections audit A): each section shows where its service works for THIS account - loans and the Federal
+  // Reserve run by account on the site; stashes + vault staking still belong to a chat login (explained below)
+  const linked = typeof locals.linked === 'boolean' ? locals.linked : !!camfrog;
+  const canLoan = linked || !!locals.loansOn;
+  const canReserve = linked || !!locals.reserveOn;
+  const canDonate = linked || !!locals.donateOn;
   const hidden = (cmd) => '<input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="' + cmd + '"><input type="hidden" name="back" value="/wallet"><input type="hidden" name="tag" value="wallet">';
   const LS = { offered: t('wallet.ls.offered'), accepting: t('wallet.ls.accepting'), funding: t('wallet.ls.funding'), active: t('wallet.ls.active'), repaid: t('wallet.ls.repaid'), forgiven: t('wallet.ls.forgiven'), declined: t('wallet.ls.declined'), cancelled: t('wallet.ls.cancelled'), expired: t('wallet.ls.expired'), failed: t('wallet.ls.failed') };   // HTML-safe
   const stName = (s) => t.has('wallet.status.' + s) ? t('wallet.status.' + s) : t.esc(s);
@@ -176,7 +181,7 @@
     <div class="ds-eyebrow"><%- t('wallet.eyebrow') %></div>
     <h1 id="wlH" class="bal ds-pat xl"><b><%= fmt(bal) %></b> <span>PAT</span></h1>
     <p class="who"><%- camfrog ? t('wallet.hero.camfrog', { name: camfrog }) + ' · ' : '' %><a href="/history"><%- t('wallet.history_link') %></a> · <a href="/subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('subs.title') %></a></p>
-    <% if (canAct) { %>
+    <% if (linked || canLoan) { %>
     <div class="ds-stats">
       <div class="ds-stat"><span><%- t('wallet.hero.in_stashes') %></span><b><%= fmt(inStashes) %></b></div>
       <div class="ds-stat"><span><%- t('wallet.hero.in_vaults') %></span><b class="up"><%= fmt(inVaults) %></b></div>
@@ -185,7 +190,7 @@
     <% } %>
     <nav class="quick" aria-label="<%- t('wallet.act.label') %>">
       <a class="ds-btn gold sm" href="#send"><span class="ds-ic" aria-hidden="true">💸</span> <%- t('wallet.act.send') %></a>
-      <% if (canAct) { %><a class="ds-btn ghost sm" href="#stashes"><span class="ds-ic" aria-hidden="true">🔐</span> <%- t('wallet.act.stashes') %></a><% } %>
+      <a class="ds-btn ghost sm" href="#stashes"><span class="ds-ic" aria-hidden="true">🔐</span> <%- t('wallet.act.stashes') %></a>
       <a class="ds-btn ghost sm" href="/history"><span class="ds-ic" aria-hidden="true">🧾</span> <%- t('wallet.act.history') %></a>
       <a class="ds-btn ghost sm pink" href="/support"><span class="ds-ic" aria-hidden="true">💖</span> <%- t('wallet.act.support') %></a>
     </nav>
@@ -205,13 +210,13 @@
   <% } else if (welcomeStatus && welcomeStatus.state === 'paid') { %>
     <p class="center info"><span class="ds-ic" aria-hidden="true">👋</span> <%- t('wallet.welcome.paid', { n: fmt(welcomeStatus.amount) }) %></p>
   <% } %>
-  <% if (!canAct) { %><p class="ds-note warn hint"><%- t('wallet.link_hint') %></p><% } %>
+  <% if (!linked) { %><p class="ds-note hint"><%- t('wallet.link_hint') %></p><% } %>
 
   <nav class="ds-subnav" aria-label="<%- t('wallet.nav.label') %>"><div class="ds-tabs">
     <a class="ds-tab" href="#activity"><%- t('wallet.nav.activity') %></a>
-    <% if (canAct) { %><a class="ds-tab" href="#stashes"><%- t('wallet.nav.stashes') %></a><% } %>
+    <a class="ds-tab" href="#stashes"><%- t('wallet.nav.stashes') %></a>
     <a class="ds-tab" href="#staking"><%- t('wallet.nav.staking') %></a>
-    <% if (canAct) { %><a class="ds-tab" href="#loans"><%- t('wallet.nav.loans') %></a><% } %>
+    <% if (canLoan) { %><a class="ds-tab" href="#loans"><%- t('wallet.nav.loans') %></a><% } %>
     <a class="ds-tab" href="#reserve"><%- t('wallet.nav.reserve') %></a>
     <a class="ds-tab" href="#positions"><%- t('wallet.nav.markets') %></a>
     <% if (admin) { %><a class="ds-tab" href="#admin-requests"><%- t('wallet.nav.admin') %></a><% } %>
@@ -242,7 +247,7 @@
           </div>
           <span class="info"><a href="/u/<%= encodeURIComponent(user) %>/tip"><%- t('wallet.send.jar') %></a></span>
         </form>
-        <% if (canAct) { %>
+        <% if (canDonate) { %>
           <form class="card" method="post" action="/act" id="donate"><%- hidden('donate') %>
             <b class="name"><span class="ds-ic" aria-hidden="true">🎁</span> <%- t('wallet.donate.h') %></b>
             <label><%- t('wallet.donate.into') %> <select name="a0"><option value="casino">💰 <%- t('wallet.donate.casino') %></option><option value="lotto">🎟️ <%- t('wallet.donate.lotto') %></option><option value="house">🎰 <%- t('wallet.donate.house') %></option><option value="fortknox">🪙 <%- t('wallet.donate.fortknox') %></option></select></label>
@@ -258,7 +263,12 @@
   </section>
 
   <!-- ───────── Stashes ───────── -->
-  <% if (canAct) { %>
+  <% if (!linked) { %>
+  <section class="sec" id="stashes" aria-labelledby="stH">
+    <div class="sec-h"><h2 id="stH" class="ds-pixel-h"><%- t('wallet.h.stashes') %></h2><a class="info" href="/economy#stash"><%- t('wallet.stash.more') %></a></div>
+    <p class="ds-note hint"><%- t('wallet.stash.need_chat', { link: '<a href="/settings/account#connections">' + t('wallet.connections') + '</a>' }) %></p>
+  </section>
+  <% } else { %>
   <section class="sec" id="stashes" aria-labelledby="stH">
     <div class="sec-h"><h2 id="stH" class="ds-pixel-h"><%- t('wallet.h.stashes') %></h2><a class="info" href="/economy#stash"><%- t('wallet.stash.more') %></a></div>
     <details class="card" <%= myStashes.length ? '' : 'open' %>>
@@ -344,7 +354,7 @@
   </section>
 
   <!-- ───────── Loans ───────── -->
-  <% if (canAct) {
+  <% if (canLoan) {
        const loanTable = (list, side) => { %>
     <div class="ds-tbl"><table>
       <tr><th><%- t('wallet.loan.loan') %></th><th><%- side === 'b' ? t('wallet.loan.lender') : t('wallet.loan.borrower') %></th><th class="r"><%- t('wallet.loan.principal') %></th><th><%- t('wallet.loan.rate') %></th><th class="r"><%- t('wallet.loan.owed') %></th><th class="r"><%- t('wallet.loan.paid') %></th><th class="r"><%- t('wallet.loan.left') %></th><th><%- t('wallet.loan.due') %></th><th></th></tr>
@@ -457,7 +467,7 @@
       </div>
     <% } %>
     </div>
-    <% if (canAct && reserve.enabled) { %>
+    <% if (canReserve && reserve.enabled) { %>
       <div class="forms">
         <% if (ml.state === 'ok' || ml.state === 'nodata') { %>
         <form method="post" action="/act"><%- hidden('loan') %>

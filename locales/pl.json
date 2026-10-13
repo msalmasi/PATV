@@ -640,7 +640,6 @@
   "wallet.welcome.done_paused": "Udało się — wypłata w ciągu kilku minut (obecnie wstrzymana przez adminów).",
   "wallet.welcome.connect": "Bonus za połączenie Discord/Twitch jest wypłacany razem z nim.",
   "wallet.welcome.paid": "Bonus powitalny wypłacony: PAT {n}.",
-  "wallet.link_hint": "Połącz konto czatu (Edytuj profil → Połączenia; w Camfrog wpisz <code>!verify</code>), by korzystać stąd ze schowków, stakingu i pożyczek — Pepe prowadzi je w twoim imieniu.",
   "wallet.h.stashes": "MOJE SKRYTKI",
   "wallet.stash.none": "Nie masz jeszcze własnej ani współdzielonej skrytki. Skrytka to wspólne konto PAT, które możesz stakować w skarbcach dla zysku.",
   "wallet.stash.yours": "twoja",

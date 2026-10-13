@@ -624,7 +624,6 @@
   "wallet.welcome.done_paused": "Geschafft — er wird innerhalb weniger Minuten ausgezahlt (gerade von den Admins pausiert).",
   "wallet.welcome.connect": "Dein Discord/Twitch-Verbindungsbonus wird damit ausgezahlt.",
   "wallet.welcome.paid": "Willkommensbonus ausgezahlt: PAT {n}.",
-  "wallet.link_hint": "Verknüpfe ein Chat-Konto (Profil bearbeiten → Verbindungen; für Camfrog <code>!verify</code>), um von hier aus Stashes, Staking und Kredite zu nutzen – Pepe führt sie in deinem Namen aus.",
   "wallet.h.stashes": "MEINE VERSTECKE",
   "wallet.stash.none": "Du besitzt oder teilst noch kein Versteck. Ein Versteck ist ein gemeinsames PAT-Konto, das du für Rendite in die Tresore staken kannst.",
   "wallet.stash.yours": "deins",

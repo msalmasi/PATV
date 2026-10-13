@@ -624,7 +624,6 @@
   "wallet.welcome.done_paused": "Tamamladın — birkaç dakika içinde ödenir (şu anda adminler tarafından duraklatıldı).",
   "wallet.welcome.connect": "Discord/Twitch bağlantı bonusun da onunla birlikte ödenir.",
   "wallet.welcome.paid": "Hoş geldin bonusu ödendi: PAT {n}.",
-  "wallet.link_hint": "Buradan kasalar, STAKE ve krediler için bir sohbet hesabı bağla (Ayarlar → Hesap → Bağlantılar; Camfrog için <code>!verify</code>). Pepe bunları senin adına yönetir.",
   "wallet.h.stashes": "ZULALARIM",
   "wallet.stash.none": "Henüz sahip olduğun ya da paylaştığın bir zula yok. Zula, getiri için kasalara stake edebileceğin ortak bir PAT hesabıdır.",
   "wallet.stash.yours": "senin",

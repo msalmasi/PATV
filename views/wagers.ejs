@@ -55,7 +55,10 @@
   const when = (ts) => ts ? tzT(ts, 'datetime') : '';
   const left = (tt) => { const s = Math.max(0, Math.round(tt - now)); return s >= 86400 ? t('bx.dur.dh', { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600) }) : s >= 3600 ? t('bx.dur.hm', { h: Math.floor(s / 3600), m: Math.floor(s % 3600 / 60) }) : s > 0 ? t('bx.dur.m', { m: Math.max(1, Math.floor(s / 60)) }) : t('wagers.now'); };
   const cd = (tt) => '<span class="cd" data-until="' + Number(tt) + '">' + left(tt) + '</span>';
-  const canAct = !!(signedIn && camfrog);
+  // 1.99wr (connections audit A): wagers / pools run by account on the site while their escrow game is live there (the
+  // username is the player); otherwise Pepe runs them as the linked chat login
+  const canWager = !!(signedIn && (camfrog || locals.wagersLive));
+  const canPool = !!(signedIn && (camfrog || locals.poolsLive));
   const hidden = (cmd) => '<input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="' + cmd + '"><input type="hidden" name="back" value="/wagers"><input type="hidden" name="tag" value="wagers">';
   const ST = { offered: ['waiting', 'wagers.st.offered'], accepting: ['accepting', 'wagers.st.accepting'], active: ['open', 'wagers.st.active'], settling: ['settling', 'wagers.st.settling'],
                won: ['won', 'wagers.st.won'], void: ['void', 'wagers.st.void'], expired: ['expired', 'wagers.st.expired'], declined: ['declined', 'wagers.st.declined'], cancelled: ['cancelled', 'wagers.st.cancelled'] };
@@ -76,7 +79,7 @@
         <% if (st === 'proposed' && ai.until) { %><span class="info"><%- ai.until > now ? t('wagers.ai.final_in', { left: cd(ai.until) }) : t('wagers.ai.final_soon') %></span><% } %>
         <% if (st === 'disputed') { %><span class="info"><%- t('wagers.ai.disputed') %></span><% } %>
         <% if (ai.disputes && ai.disputes.length) { %><ul><% ai.disputes.forEach((d) => { %><li><b><%- ul(d.nick) %></b>: <%= d.why %></li><% }) %></ul><% } %>
-        <% if (st === 'proposed' && inIt && canAct && (!ai.until || ai.until > now)) { %>
+        <% if (st === 'proposed' && inIt && (cmd === 'pool' ? canPool : canWager) && (!ai.until || ai.until > now)) { %>
           <form class="inline" method="post" action="/act"><%- hidden(cmd) %>
             <input type="hidden" name="a0" value="dispute"><input type="hidden" name="a1" value="<%= ref %>">
             <input class="bx-in" type="text" name="a2" maxlength="200" placeholder="<%- t('wagers.ai.why_ph') %>" aria-label="<%- t('wagers.ai.why_ph') %>" required>
@@ -85,7 +88,7 @@
         <% } %>
       <% } else if (st === 'final' || st === 'done') { %><span class="call"><%- t('wagers.ai.decided', { result: ai.result }) %></span><% if (ai.reason) { %><span class="reason"><%= ai.reason %></span><% } %>
       <% } else { %><span class="info"><%- t('wagers.ai.idle') %></span><% } %>
-      <% if ((!st || st === 'unsure') && live && inIt && canAct) { %>
+      <% if ((!st || st === 'unsure') && live && inIt && (cmd === 'pool' ? canPool : canWager)) { %>
         <form class="inline" method="post" action="/act"><%- hidden(cmd) %>
           <input type="hidden" name="a0" value="ai"><input type="hidden" name="a1" value="<%= ref %>">
           <button class="bx-btn blue sm" type="submit"><%- t('wagers.ai.ask') %></button>
@@ -108,7 +111,7 @@
         <%- t('wagers.winner_gets', { n: fmt(w.payout) }) %>
       </span>
       <% if (w.ai_judge) aiBox('wager', w.ref, w, w.inIt, w.status === 'active'); %>
-      <% if (canAct) { %>
+      <% if (canWager) { %>
         <% if (offer) { %>
           <div class="acts">
             <form class="inline" method="post" action="/act"><%- hidden('wager') %><input type="hidden" name="a0" value="accept"><input type="hidden" name="a1" value="<%= w.ref %>"><button class="bx-btn gold" type="submit"><%- t('wagers.accept', { n: fmt(w.amount) }) %></button></form>
@@ -153,7 +156,7 @@
       <span class="info"><%- t('wagers.pool_bets', { count: m.betCount, n: fmt(m.betCount), who: fmt(m.bettors) }) %><% if (!m.ai_judge) { %> · <%- t('wagers.judge', { who: ul(m.judge) }) %><% } %> · <%- t('wagers.by_who', { who: ul(m.creator) }) %>
         <% if (m.mine.length) { %><br><%- t('wagers.you', { bets: m.mine.map((x) => t('wagers.you_on', { n: fmt(x.amount), o: x.option })).join(', ') }) %><% } %></span>
       <% if (m.ai_judge) aiBox('pool', m.ref, m, m.inIt, m.status === 'open' || m.status === 'closed'); %>
-      <% if (canAct && m.status === 'open' && m.closes > now) { %>
+      <% if (canPool && m.status === 'open' && m.closes > now) { %>
         <form class="inline" method="post" action="/act"><%- hidden('pool') %><input type="hidden" name="a0" value="<%= m.ref %>">
           <select class="bx-in" name="a1" required aria-label="<%- t('wagers.pick') %>"><% m.options.forEach((o) => { %><option value="<%= o.name %>"><%= o.name %></option><% }) %></select>
           <input class="bx-in" type="text" name="a2" inputmode="numeric" autocomplete="off" spellcheck="false" pattern="\s*(\d{1,3}(,\d{3})+|\d+(_\d+)*)?(\.\d+)?[kKmMbB]?\s*" placeholder="<%- t('wagers.min_ph', { n: fmt(poolMin) }) %>" aria-label="PAT" required>
@@ -206,8 +209,9 @@
   <div class="bx-grid"><% pools.forEach((m) => poolCard(m)) %></div>
 
   <h2 class="bx-h" id="start"><%- t('wagers.h_start') %></h2>
-  <% if (canAct) { %>
+  <% if (canWager || canPool) { %>
     <div class="forms">
+      <% if (canWager) { %>
       <form class="bx-form" method="post" action="/act" id="wf"><%- hidden('wager') %>
         <b><span class="ds-ic" aria-hidden="true">⚔️</span> <%- t('wagers.f_w_h') %></b>
         <label class="bx-field"><%- t('wagers.f_opp') %><input class="bx-in" type="text" name="a0" maxlength="60" placeholder="<%- t('wagers.f_opp_ph') %>" required></label>
@@ -223,6 +227,8 @@
         <button class="bx-btn" type="submit"><%- t('wagers.f_w_btn') %></button>
         <p class="bx-fine"><%- t('wagers.f_w_fine') %></p>
       </form>
+      <% } %>
+      <% if (canPool) { %>
       <form class="bx-form" method="post" action="/act" id="pf"><%- hidden('pool') %>
         <b><span class="ds-ic" aria-hidden="true">🎲</span> <%- t('wagers.f_p_h') %></b>
         <input type="hidden" name="a0" value="new">
@@ -239,6 +245,7 @@
         <button class="bx-btn" type="submit"><%- t('wagers.f_p_btn') %></button>
         <p class="bx-fine"><%- t('wagers.f_p_fine', { n: fmt(poolMin) }) %></p>
       </form>
+      <% } %>
     </div>
     <script>
       (function () {
@@ -248,15 +255,21 @@
           ai.addEventListener('change', () => { j.disabled = ai.checked; });
           return () => ai.checked ? 'judge @pepe' : (at(j.value) ? 'judge ' + at(j.value) : '');
         }
-        const wj = judge('wf'), pj = judge('pf');
-        document.getElementById('wf').addEventListener('submit', (e) => {
-          const f = e.target; f.a0.value = at(f.a0.value); document.getElementById('wf-a3').value = wj();
-        });
-        document.getElementById('pf').addEventListener('submit', () => {
-          const opts = document.getElementById('pf-opts').value.split(/[\/,|]/).map((s) => s.trim()).filter(Boolean);
-          document.getElementById('pf-a2').value = opts.length >= 2 ? 'options ' + opts.join('/') : '';
-          document.getElementById('pf-a3').value = pj();
-        });
+        const wf = document.getElementById('wf'), pf = document.getElementById('pf');
+        if (wf) {
+          const wj = judge('wf');
+          wf.addEventListener('submit', (e) => {
+            const f = e.target; f.a0.value = at(f.a0.value); document.getElementById('wf-a3').value = wj();
+          });
+        }
+        if (pf) {
+          const pj = judge('pf');
+          pf.addEventListener('submit', () => {
+            const opts = document.getElementById('pf-opts').value.split(/[\/,|]/).map((s) => s.trim()).filter(Boolean);
+            document.getElementById('pf-a2').value = opts.length >= 2 ? 'options ' + opts.join('/') : '';
+            document.getElementById('pf-a3').value = pj();
+          });
+        }
       })();
     </script>
   <% } else { %>

@@ -630,7 +630,6 @@
   "wallet.welcome.done_paused": "¡Lo lograste! Se paga en pocos minutos (ahora mismo está pausado por los admins).",
   "wallet.welcome.connect": "Tu bono por conectar Discord/Twitch se paga junto con él.",
   "wallet.welcome.paid": "Bono de bienvenida pagado: PAT {n}.",
-  "wallet.link_hint": "Vincula una cuenta de chat (Editar perfil → Conexiones; para Camfrog, <code>!verify</code>) para usar botes, STAKING y préstamos desde aquí. Pepe los gestiona en tu nombre.",
   "wallet.h.stashes": "MIS RESERVAS",
   "wallet.stash.none": "Aún no tienes ni compartes ninguna reserva. Una reserva es una cuenta PAT compartida que puedes poner en staking en las bóvedas para obtener rendimiento.",
   "wallet.stash.yours": "tuya",

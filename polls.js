@@ -209,9 +209,11 @@ async function fromForm(userId, kind, words, opts = {}) {
     return r.ok ? "🗳️ " + r.msg : r.msg;
   }
   if (kind === "poll.create") {
-    if (!me.camfrogUsername) return "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) - polls are started as it.";
     // 1.99ur: the pad picker (actions.js checked the user may use it; "" = site-wide)
-    const r = await act("create", { question: words[0], options: words.slice(1), creator: me.camfrogUsername, pad: opts.pad == null ? "" : opts.pad }, "web");
+    // 1.99wr (connections audit A): the PATV account is the author - its chat login when linked, else "🌐username" (the
+    // name its votes already go under; it may end its own poll by that name, canEndOf)
+    const r = await act("create", { question: words[0], options: words.slice(1), creator: me.camfrogUsername || WEB + me.username,
+                                    pad: opts.pad == null ? "" : opts.pad }, "web");
     return r.ok ? "🗳️ Poll started." : r.msg;
   }
   if (kind === "poll.end") {
@@ -366,6 +368,7 @@ function register(app, { isBotToken, addUser }) {
                        pads: [...counts.values()].sort((a, b) => (a.slug === "none") - (b.slug === "none") || String(a.title).localeCompare(String(b.title))) };
       res.render("polls", {
         user: req.user ? req.user.username : null, me, actives, active: actives[0] || null, past, focus, filter, maxOptions: MAX_OPTIONS,
+        canCreate: !!(me && (me.camfrogUsername || await backendLive())),       // 1.99wr: the site runs polls by account
         canEnd: canEndOf(actives[0]), pick: await padlinks.choicesFor(req.user, req.query.pad || (focus && focus.padv ? focus.padv.slug : "")),
         acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
       });

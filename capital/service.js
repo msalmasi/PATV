@@ -490,7 +490,7 @@ async function stashForm(userId, words) {
   if (!["stake", "unstake"].includes(sub)) return null;
   const u = (await require("../dbUtils").getQuery("SELECT userId, username, camfrogUsername FROM users WHERE userId = ?", [userId]))[0];
   if (!u) return "Couldn't find your account.";
-  if (!u.camfrogUsername) return "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) - stashes belong to it.";
+  if (!u.camfrogUsername) return "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) - stashes belong to it.";
   const S = require("../stashes");
   let s;
   try { s = await S.find(u.camfrogUsername, words[1], { ownerOnly: true }); } catch (e) { return e.message; }

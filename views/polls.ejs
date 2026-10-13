@@ -133,7 +133,7 @@
   <% } %>
   <div class="past-grid"><% runningShown.forEach((p) => liveCard(p)) %></div>
 
-  <% if (linked) { %>
+  <% if (typeof canCreate !== 'undefined' ? canCreate : linked) { %>
     <form class="create bx-form bx-card" method="post" action="/act" id="pl-create" style="margin-top:12px">
       <b><%- t('polls.f_h') %></b>
       <p class="bx-fine"><%- t('polls.f_note_pad') %></p>

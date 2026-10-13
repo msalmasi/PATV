@@ -144,3 +144,23 @@ public pad-vault donate; pad create (default `create_link: "any"`); market betti
 
 Suggested order: A and B now (cheap, user-visible), then C (unblocks talking in pads and Telegram), then E → F → G as
 the multi-service track.
+
+## Status of work packages A-C (1.99wr onwards)
+
+The user's direction (2026-10-13): most of this only needs a PATV account; the bridge relays chat under the PATV
+username; owners don't need a Camfrog account; the PAT system lives outside Camfrog. A, B and C are done here; D-G are
+kept for the v2 rewrite.
+
+### A. Stale gates (1.99wr, site)
+
+| (b) # | Feature | Before | After |
+|---|---|---|---|
+| 1 | Wallet | one `canAct = !!camfrog` hid stashes, staking, loans, the Reserve borrow form and donate | Per section. **Loans** (P2P) show while the escrow `loans` game runs on the site, the **Reserve** borrow form while the capital cluster is live (both take the account); the borrower / lender / position key is the username only while no other account has it as a chat login (`accountkey.gameName`). **Stashes / staking** are shown with why they still need a chat login (owner and members are chat names; Pepe moves stashes in and out of the vaults by login; keying them `u:<id>` is WP-D) and a link to Settings → Account → Connections. **Donate** stays with Pepe (see C). `/wallet/credit` (look up a borrower) takes any signed-in account |
+| 3 | Wagers, pools, bounties | create / accept / bet / dispute forms needed a Camfrog link | each form shows while its escrow game is live on the site (`escrow/games.gameLive`), else for linked accounts only (Pepe's path) |
+| 4 | Poll creation | refused without a link | created as `🌐<username>` (the name web votes already used); the author can end it |
+| 5 | Lotto | gated with the backend off | unchanged on purpose: with `lotto_backend` on the page and the form already take the account (1.99ml); the Pepe fallback stays only for a site whose lotto still runs on Pepe (prod, until the lotto cutover) |
+| 6 | Owner pad-vault top-up | - | verified: no link check since 1.99uu (`padowner.js` top-up -> `roomvault.deposit` from the account) |
+| 11 | GTF sheet, heist market | link required | unchanged: a GTF character exists only for a chat login (heists happen in chat rooms; Telegram excludes them), so there is nothing to show an unlinked account. Wording points to Settings → Account → Connections |
+
+The "Edit profile → Connections" wording in the remaining refusals now says "Settings → Account → Connections" (1.99vz
+moved it).

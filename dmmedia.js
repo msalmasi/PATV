@@ -97,7 +97,7 @@ function pictureRefusal(u) {
   if (isStaff(u) || u.camfrogUsername) return null;
   const min = Number(feedConfig().media_min_level) || 0;
   if ((Number(u.level) || 0) >= min) return null;
-  return `Sending pictures needs a linked chat account (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) or level ${min}.`;
+  return `Sending pictures needs a linked chat account (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) or level ${min}.`;
 }
 
 async function usedBytes(userId) {

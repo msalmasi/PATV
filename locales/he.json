@@ -632,7 +632,6 @@
   "wallet.welcome.done_paused": "עשית את זה — הוא ישולם תוך כמה דקות (המנהלים השהו את זה כרגע).",
   "wallet.welcome.connect": "בונוס חיבור Discord/Twitch משולם יחד איתו.",
   "wallet.welcome.paid": "בונוס הצטרפות שולם: PAT {n}.",
-  "wallet.link_hint": "קשרו חשבון צ׳אט (הגדרות ← חשבון ← חיבורים; ל־Camfrog: <code>!verify</code>) כדי להשתמש במחסנים, בסטייקינג ובהלוואות מכאן — Pepe מפעיל אותם בשמכם.",
   "wallet.h.stashes": "המחבואים שלי",
   "wallet.stash.none": "עדיין אין לך מחבוא משלך או משותף. מחבוא הוא חשבון PAT משותף שאפשר לעשות ממנו סטייקינג בכספות בשביל תשואה.",
   "wallet.stash.yours": "שלך",

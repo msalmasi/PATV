@@ -630,7 +630,6 @@
   "wallet.welcome.done_paused": "C'est fait — il est versé d'ici quelques minutes (mis en pause par les admins pour l'instant).",
   "wallet.welcome.connect": "Ton bonus de connexion Discord/Twitch est versé avec.",
   "wallet.welcome.paid": "Bonus de bienvenue versé : PAT {n}.",
-  "wallet.link_hint": "Lie un compte de chat (Réglages → Compte → Connexions ; pour Camfrog, <code>!verify</code>) pour utiliser les coffres, le STAKING et les prêts depuis ici. Pepe les gère en ton nom.",
   "wallet.h.stashes": "MES PLANQUES",
   "wallet.stash.none": "Tu ne possèdes ni ne partages encore de planque. Une planque est un compte PAT partagé que tu peux placer dans les coffres pour un rendement.",
   "wallet.stash.yours": "à toi",

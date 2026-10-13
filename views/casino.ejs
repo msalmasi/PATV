@@ -161,7 +161,7 @@
   <% if (!user) { %>
     <p class="hint">You're watching. <a href="/login">Sign in</a> and link a chat account to take a seat.</p>
   <% } else if (!me || !me.camfrogUsername) { %>
-    <p class="hint">To play from here, link a chat account (Edit profile → Connections; for Camfrog, type <code>!verify</code> in a room with Pepe). You play as that name — the same seat, balance and rules as in chat. Until then you can watch.</p>
+    <p class="hint">To play from here, link a chat account (Settings → Account → Connections; for Camfrog, type <code>!verify</code> in a room with Pepe). You play as that name — the same seat, balance and rules as in chat. Until then you can watch.</p>
   <% } else if (me.casino_banned) { %>
     <p class="warn">You're banned from the casino, so you can watch but not play.</p>
   <% } else { %>
@@ -220,7 +220,7 @@
     <div class="card">
       <h3><span class="ds-ic" aria-hidden="true">🌐</span>Playing from this page</h3>
       <ul>
-        <li>Sign in and link a chat account (Edit profile → Connections; for Camfrog, <code>!verify</code> in a room). You play <i>as</i> that name: same seat, same PAT balance, same limits, fees and timers as typing the commands in chat.</li>
+        <li>Sign in and link a chat account (Settings → Account → Connections; for Camfrog, <code>!verify</code> in a room). You play <i>as</i> that name: same seat, same PAT balance, same limits, fees and timers as typing the commands in chat.</li>
         <li>Your moves go to Pepe and land in a second or two; the room sees them like any chat move, and chat players' moves show up here.</li>
         <li>Your hole cards are shown only to you, once you're signed in. Nobody else can fetch them — not other players, not spectators.</li>
         <li>Closing the tab doesn't stop the clock: the turn timer treats you exactly like an idle chat player.</li>

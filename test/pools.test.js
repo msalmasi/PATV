@@ -268,6 +268,13 @@ test("polls backend: off until attached; chat + web votes on the site; detach ha
   assert.deepEqual(ev.body.events.map((e) => e.kind + ":" + e.origin), ["voted:camfrog", "voted:web"]);
   assert.equal(await POLLS.fromForm("u2", "poll.end", []), "only the poll's creator or an admin can end it");
   assert.equal(await POLLS.fromForm("u3", "poll.end", []), "🗳️ Poll ended.");
+  // 1.99wr (connections audit A): an account with no chat login starts a poll as "🌐<username>" and can end its own
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, points_balance) VALUES ('u9', 'webonly', 0)");
+  assert.equal(await POLLS.fromForm("u9", "poll.create", ["Pizza?", "yes", "no"]), "🗳️ Poll started.");
+  const mine = (await post("/api/polls/bot/act", { verb: "current" })).body.poll;
+  assert.equal(mine.creator, "🌐webonly");
+  assert.equal(await POLLS.fromForm("u2", "poll.end", []), "only the poll's creator or an admin can end it");
+  assert.equal(await POLLS.fromForm("u9", "poll.end", []), "🗳️ Poll ended.");
   const sync = await post("/api/polls/sync", { polls: [] });
   assert.equal(sync.status, 409, "a local snapshot can't overwrite site-owned polls");
   const d = await post("/api/polls/bot/act", { verb: "detach" });

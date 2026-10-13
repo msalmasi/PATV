@@ -80,7 +80,7 @@ test("admins see each requester's live score on the request cards", async () => 
   assert.match(h, /was 470 when asked/);
 });
 
-test("a lender can look up a borrower's score; unlinked or signed-out can't", async () => {
+test("a lender can look up a borrower's score (any signed-in account, 1.99wr); signed-out can't", async () => {
   const r = await page("u1", "/wallet/credit?u=@davecf");
   assert.equal(r.status, 200);
   const d = await r.json();
@@ -88,7 +88,7 @@ test("a lender can look up a borrower's score; unlinked or signed-out can't", as
   assert.equal(d.score, 462);
   assert.equal(d.band, "Poor");
   assert.equal(d.top[0].key, "defaults");
-  assert.equal((await page("u3", "/wallet/credit?u=davecf")).status, 403);
+  assert.equal((await page("u3", "/wallet/credit?u=davecf")).status, 200);   // unlinked: P2P loans run by account now
   assert.equal((await page(null, "/wallet/credit?u=davecf")).status, 401);
   assert.equal((await page("u1", "/wallet/credit?u=nobody")).status, 404);
   assert.equal((await page("u1", "/wallet/credit?u=%3Cscript%3E")).status, 400);
@@ -112,4 +112,28 @@ test("a pending welcome bonus shows what's left to do", async () => {
   assert.match(h, /active on 2 different days/);
   const a = await (await page("u1")).text();
   assert.doesNotMatch(a, /Welcome bonus/);
+});
+
+// 1.99wr (connections audit A): an account with no chat login sees each wallet section where its service works by account
+test("unlinked: stashes explain the chat login, loans show while the site runs them", async () => {
+  const L = require(path.join(repo, "escrow/ledger"));
+  const G = require(path.join(repo, "escrow/games"));
+  let h = await (await page("u3")).text();
+  assert.match(h, /id="stashes"/);                                        // the section is there ...
+  assert.match(h, /Stashes and vault staking still belong to a chat login/); // ... saying why
+  assert.match(h, /href="\/settings\/account#connections"/);
+  assert.doesNotMatch(h, /name="cmd" value="stash"/);                      // no stash forms
+  assert.doesNotMatch(h, /id="lend"/);                                     // P2P loans: Pepe's, as a chat login
+  assert.doesNotMatch(h, /id="donate"/);                                   // donations: Pepe runs them (account actor = C)
+  await L.init();
+  await L.setMeta("live", true);
+  await L.setMeta("live:loans", true);
+  L._forgetLive();
+  await new Promise((r) => setTimeout(r, 2100));                           // the 2 s live caches
+  h = await (await page("u3")).text();
+  assert.match(h, /id="lend"/);                                            // the escrow game takes the account
+  assert.match(h, /href="#loans"/);
+  const a = await (await page("u1")).text();
+  assert.match(a, /name="cmd" value="stash"/);                             // linked: unchanged
+  assert.doesNotMatch(a, /Stashes and vault staking still belong/);
 });

@@ -65,7 +65,7 @@
   <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: typeof msg !== 'undefined' ? msg : null }) %>
   <% if (!user) { %>
     <div class="bx-empty"><span class="ic" aria-hidden="true">🔑</span><b><%- t('bounties.signin') %></b><a class="bx-btn sm" href="/login"><%- t('bx.signin_btn') %></a></div>
-  <% } else if (typeof linked === 'undefined' || !linked) { %>
+  <% } else if (!(typeof canAct !== 'undefined' ? canAct : (typeof linked !== 'undefined' && linked))) { %>
     <p class="bx-note"><%- t('bounties.link') %></p>
   <% } else { %>
     <form class="newbt bx-form" method="post" action="/act">

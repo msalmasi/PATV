@@ -630,7 +630,6 @@
   "wallet.welcome.done_paused": "Você conseguiu — é pago em poucos minutos (pausado pelos admins no momento).",
   "wallet.welcome.connect": "Seu bônus por conectar Discord/Twitch é pago junto.",
   "wallet.welcome.paid": "Bônus de boas-vindas pago: PAT {n}.",
-  "wallet.link_hint": "Vincule uma conta de chat (Editar perfil → Conexões; para o Camfrog, <code>!verify</code>) para usar cofres, staking e empréstimos daqui — o Pepe os executa em seu nome.",
   "wallet.h.stashes": "MINHAS RESERVAS",
   "wallet.stash.none": "Você ainda não tem nem compartilha nenhuma reserva. Uma reserva é uma conta PAT compartilhada que você pode colocar em staking nos cofres para render.",
   "wallet.stash.yours": "sua",

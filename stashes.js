@@ -269,7 +269,7 @@ async function create({ login, name, by = "web" }) {
   await requireLive();
   name = low(name);
   if (!NAME_RE.test(name)) throw new Refuse(400, "Stash names are 1-20 letters, digits, - or _.");
-  if (!LOGIN_RE.test(String(login || ""))) throw new Refuse(400, "Link a chat account first (Edit profile → Connections) - stashes belong to it.", "E_NOT_LINKED");
+  if (!LOGIN_RE.test(String(login || ""))) throw new Refuse(400, "Link a chat account first (Settings → Account → Connections) - stashes belong to it.", "E_NOT_LINKED");
   return tx(async () => {
     const owned = await getQuery("SELECT name FROM stashes WHERE owner = ? AND closed IS NULL", [low(login)]);
     if (owned.length >= MAX_OWNED) throw new Refuse(409, `You already own ${owned.length} stashes (max ${MAX_OWNED}).`);
@@ -425,7 +425,7 @@ async function fromForm(userId, words, idem) {
   const u = (await getQuery("SELECT username, camfrogUsername FROM users WHERE userId = ?", [userId]))[0];
   if (!u) return "Couldn't find your account.";
   const me = u.camfrogUsername;
-  if (!me) return "Link a chat account first (Edit profile → Connections; for Camfrog, type !verify in a room with Pepe) - stashes belong to it.";
+  if (!me) return "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) - stashes belong to it.";
   const key = (op) => `web:${userId}:${op}:${/^[A-Za-z0-9_-]{8,64}$/.test(String(idem || "")) ? idem : crypto.randomBytes(9).toString("hex")}`;
   try {
     if (sub === "create" || sub === "new" || sub === "open") {

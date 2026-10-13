@@ -5,7 +5,8 @@
 // each stash's holdings from it. Stashes and loans run in Pepe; he pushes a full snapshot of each here whenever one
 // changes (POST /api/wallet/stashes and /api/wallet/loans). We keep only the latest snapshot of each
 // (table wallet_snapshots, one row per key). Everything a user does here goes through the website
-// action queue (actions.js, POST /act), which Pepe runs as the user's linked Camfrog name.
+// action queue (actions.js, POST /act): the site runs what it owns by account (escrow loans, the Federal Reserve,
+// stashes); the rest Pepe runs as the user (1.99wr: each section is shown where its service works for this account).
 const { runQuery, getQuery } = require("./dbUtils");
 const markets = require("./markets");
 const actions = require("./actions");
@@ -143,15 +144,16 @@ function register(app, { isBotToken, addUser }) {
     }
   });
 
-  // A borrower's credit score for someone about to lend to them (the P2P form). Signed-in users with
-  // a linked Camfrog name only - the same thing !loan check shows in a room. Score, band, top factors.
+  // A borrower's credit score for someone about to lend to them (the P2P form). Any signed-in account (1.99wr; was linked
+  // Camfrog names only) - the same thing !loan check shows anyone in a room. Score, band, top factors.
   app.get("/wallet/credit", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ error: "sign in" });
     const name = String(req.query.u || "").trim().replace(/^@+/, "").slice(0, 60);
     if (!/^[A-Za-z0-9_.\-]{1,60}$/.test(name)) return res.status(400).json({ error: "who?" });
     try {
-      const me = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (!me || !me.camfrogUsername) return res.status(403).json({ error: "link a chat account first (Edit profile → Connections)" });
+      // 1.99wr: any signed-in account (P2P loans run by account on the site now) - was: a linked Camfrog name only
+      const me = (await getQuery("SELECT userId FROM users WHERE userId = ?", [req.user.userId]))[0];
+      if (!me) return res.status(401).json({ error: "sign in" });
       const row = (await getQuery("SELECT camfrogUsername, level, created_at FROM users WHERE LOWER(camfrogUsername) = LOWER(?) LIMIT 1", [name]))[0];
       if (!row) return res.status(404).json({ error: `${name} has no PATV account yet` });
       const ln = (await load("loans")) || { reserve: null };
@@ -170,7 +172,13 @@ function register(app, { isBotToken, addUser }) {
       const u = (await getQuery("SELECT username, camfrogUsername, class, points_balance, level, created_at FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!u) return res.render("wallet", { user: req.user.username, signedIn: false, msg });
       const camfrog = u.camfrogUsername || null;
-      const me = camfrog ? low(camfrog) : null;
+      // 1.99wr (connections audit A): an account with no chat login is still the borrower / lender / trader in the games
+      // the site runs by account (escrow loans, the Federal Reserve, market positions keep its PATV username). Its username
+      // is only used as the key while no OTHER account has it as a linked chat login - never someone else's records.
+      const me = await require("./accountkey").gameName({ userId: req.user.userId, username: u.username, camfrogUsername: camfrog });
+      const gameOn = async (g) => { try { return !!(await require("./escrow/games").gameLive(g)); } catch (e) { return false; } };
+      const loansOn = !!camfrog || await gameOn("loans");
+      const reserveOn = !!camfrog || await require("./capital/core").live().then((x) => !!x).catch(() => false);
       const isAdmin = u.class === "Admin";
       // 1.99ne: the site's own stashes once they moved here (stashes.js), else Pepe's last snapshot
       const SS = require("./stashes");
@@ -207,7 +215,7 @@ function register(app, { isBotToken, addUser }) {
           let m;
           try { m = JSON.parse(r.data); } catch (e) { continue; }
           if (m.model !== "lmsr" || !(m.positions || {})[me]) continue;
-          const v = markets.view(m, [camfrog]);
+          const v = markets.view(m, [camfrog || me]);
           if (!v.mine || !v.mine.length) continue;
           const row = { id: m.id, ref: v.ref, question: m.question, status: m.status, closes: m.closes, mine: v.mine, settle: v.settle };
           if (!v.settle && ["open", "closed", "settling"].includes(m.status)) positions.push(row);
@@ -240,8 +248,9 @@ function register(app, { isBotToken, addUser }) {
         user: u.username, signedIn: true, msg, camfrog, isAdmin, now: Date.now() / 1000,
         bal: Number(u.points_balance) || 0, myStashes, vaults: sk || null, stashesUpdated: st.updated || null,
         borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, settledPositions, admin,
-        myLimit: reserveLimit(ln.reserve || null, camfrog, u.level), // only ever the signed-in user's own
-        myCredit: camfrog ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog, u) : null,
+        myLimit: reserveLimit(ln.reserve || null, camfrog || (reserveOn ? me : null), u.level), // only ever the signed-in user's own
+        myCredit: (camfrog || me) ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog || me, u) : null,
+        linked: !!camfrog, loansOn, reserveOn: reserveOn && !!(camfrog || me),
         welcomeStatus: await welcome.status(req.user.userId).catch(() => null),
         // 1.99lx: the last few PAT movements (history.js, the same sentences /history shows) for the Recent activity card
         recent: await require("./history").forUser(req.user.userId, { period: "30d", perPage: 6 }).then((h) => h.items).catch(() => []),

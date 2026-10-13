@@ -616,7 +616,6 @@
   "wallet.welcome.done_paused": "달성했어요 — 몇 분 안에 지급돼요 (지금은 관리자가 일시 중지했어요).",
   "wallet.welcome.connect": "Discord/Twitch 연결 보너스도 함께 지급돼요.",
   "wallet.welcome.paid": "웰컴 보너스 지급 완료: PAT {n}.",
-  "wallet.link_hint": "채팅 계정을 연결하면(설정 → 계정 → 연결, Camfrog는 <code>!verify</code>) 여기에서 스태시, 스테이킹, 대출을 사용할 수 있어요. Pepe가 나 대신 처리해 줘요.",
   "wallet.h.stashes": "내 비상금",
   "wallet.stash.none": "아직 소유하거나 공유하는 비상금이 없어요. 비상금은 금고에 스테이킹해서 수익을 얻을 수 있는 공유 PAT 계좌예요.",
   "wallet.stash.yours": "내 것",

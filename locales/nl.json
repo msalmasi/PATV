@@ -624,7 +624,6 @@
   "wallet.welcome.done_paused": "Gelukt — hij wordt binnen een paar minuten uitbetaald (nu even gepauzeerd door de admins).",
   "wallet.welcome.connect": "Je Discord/Twitch-koppelbonus wordt erbij uitbetaald.",
   "wallet.welcome.paid": "Welkomstbonus uitbetaald: PAT {n}.",
-  "wallet.link_hint": "Koppel een chataccount (Instellingen → Account → Verbindingen; voor Camfrog <code>!verify</code>) om hier stashes, staking en leningen te gebruiken. Pepe voert ze namens jou uit.",
   "wallet.h.stashes": "MIJN VOORRADEN",
   "wallet.stash.none": "Je hebt of deelt nog geen voorraad. Een voorraad is een gedeelde PAT-rekening die je in de kluizen kunt staken voor rendement.",
   "wallet.stash.yours": "van jou",

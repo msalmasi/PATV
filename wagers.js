@@ -109,11 +109,15 @@ function register(app, { isBotToken, addUser }) {
     try {
       await ready;
       let me = null, camfrog = null, bal = null, isAdmin = false, acts = [];
+      // 1.99wr (connections audit A): while an escrow game runs on the site it takes the PATV account (by username)
+      const gameOn = async (g) => { try { return !!(await require("./escrow/games").gameLive(g)); } catch (e) { return false; } };
+      const wagersLive = await gameOn("wagers"), poolsLive = await gameOn("pools");
       if (req.user && req.user.userId) {
         const u = (await getQuery("SELECT username, camfrogUsername, class, points_balance FROM users WHERE userId = ?", [req.user.userId]))[0];
         if (u) {
           camfrog = u.camfrogUsername || null;
-          me = camfrog ? low(camfrog) : null;
+          // an unlinked account is its username in the site's games - only while no other account has that name as a chat login
+          me = await require("./accountkey").gameName({ userId: req.user.userId, username: u.username, camfrogUsername: camfrog });
           bal = Number(u.points_balance) || 0;
           isAdmin = u.class === "Admin";
         }
@@ -136,7 +140,7 @@ function register(app, { isBotToken, addUser }) {
 
       res.render("wagers", {
         user: req.user ? req.user.username : null, signedIn: !!(req.user && req.user.userId),
-        camfrog, me, bal, isAdmin, now, offers, live, doneW, pools, doneP, acts,
+        camfrog, me, bal, isAdmin, now, offers, live, doneW, pools, doneP, acts, wagersLive, poolsLive,
         filter: L.filter, pick: await require("./padlinks").choicesFor(req.user, req.query.pad),   // 1.99ur
         msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null,
         wagerMin: WAGER_MIN, poolMin: POOL_MIN, feePct: FEE_PCT,

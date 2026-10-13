@@ -656,7 +656,6 @@
   "wallet.welcome.done_paused": "أنجزتها — تُدفع خلال دقائق (أوقفها المشرفون مؤقتًا الآن).",
   "wallet.welcome.connect": "مكافأة ربط Discord/Twitch تُدفع معها.",
   "wallet.welcome.paid": "دُفعت مكافأة الترحيب: PAT {n}.",
-  "wallet.link_hint": "اربط حساب دردشة (الإعدادات ← الحساب ← الاتصالات؛ لـ Camfrog أرسل <code>!verify</code>) لاستخدام المدخرات والتخزين والقروض من هنا. يديرها Pepe نيابةً عنك.",
   "wallet.h.stashes": "مخابئي",
   "wallet.stash.none": "لا تملك مخبأً ولا تشارك فيه بعد. المخبأ حساب PAT مشترك يمكنك تخزينه في الخزائن لتحقيق عائد.",
   "wallet.stash.yours": "لك",

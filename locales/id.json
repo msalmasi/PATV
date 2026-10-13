@@ -616,7 +616,6 @@
   "wallet.welcome.done_paused": "Kamu sudah memenuhinya — akan dibayar dalam beberapa menit (saat ini sedang dijeda oleh admin).",
   "wallet.welcome.connect": "Bonus menghubungkan Discord/Twitch-mu dibayar bersamaan.",
   "wallet.welcome.paid": "Bonus sambutan sudah dibayar: PAT {n}.",
-  "wallet.link_hint": "Tautkan akun chat (Edit profil → Koneksi; untuk Camfrog, <code>!verify</code>) untuk memakai simpanan, staking, dan pinjaman dari sini — Pepe menjalankannya atas namamu.",
   "wallet.h.stashes": "SIMPANANKU",
   "wallet.stash.none": "Kamu belum memiliki atau berbagi simpanan. Simpanan adalah akun PAT bersama yang bisa kamu stake ke brankas untuk mendapat imbal hasil.",
   "wallet.stash.yours": "milikmu",

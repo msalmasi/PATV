@@ -630,7 +630,6 @@
   "wallet.welcome.done_paused": "Fatto — viene pagato entro pochi minuti (al momento messo in pausa dagli admin).",
   "wallet.welcome.connect": "Il bonus per collegare Discord/Twitch viene pagato insieme.",
   "wallet.welcome.paid": "Bonus di benvenuto pagato: PAT {n}.",
-  "wallet.link_hint": "Collega un account chat (Impostazioni → Account → Connessioni; per Camfrog, <code>!verify</code>) per usare da qui stash, staking e prestiti: Pepe li gestisce per tuo conto.",
   "wallet.h.stashes": "LE MIE SCORTE",
   "wallet.stash.none": "Non possiedi né condividi ancora una scorta. Una scorta è un conto PAT condiviso che puoi mettere in staking nei caveau per un rendimento.",
   "wallet.stash.yours": "tua",

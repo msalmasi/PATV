@@ -616,7 +616,6 @@
   "wallet.welcome.done_paused": "Bạn đã hoàn thành — thưởng sẽ được trả trong vài phút (hiện admin đang tạm dừng).",
   "wallet.welcome.connect": "Thưởng kết nối Discord/Twitch được trả cùng lúc.",
   "wallet.welcome.paid": "Đã trả thưởng chào mừng: PAT {n}.",
-  "wallet.link_hint": "Liên kết một tài khoản chat (Chỉnh sửa hồ sơ → Kết nối; với Camfrog, gõ <code>!verify</code>) để dùng kho tiền, staking và khoản vay từ đây — Pepe sẽ thao tác thay bạn.",
   "wallet.h.stashes": "QUỸ CỦA TÔI",
   "wallet.stash.none": "Bạn chưa sở hữu hay tham gia quỹ nào. Quỹ là tài khoản PAT chung mà bạn có thể stake vào kho để sinh lời.",
   "wallet.stash.yours": "của bạn",

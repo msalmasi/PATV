@@ -616,7 +616,6 @@
   "wallet.welcome.done_paused": "你已達成——幾分鐘內入帳（管理員目前已暫停發放）。",
   "wallet.welcome.connect": "你的 Discord/Twitch 連結獎勵會一起發放。",
   "wallet.welcome.paid": "新手獎勵已發放：PAT {n}。",
-  "wallet.link_hint": "連結聊天帳號（設定 → 帳號 → 連結；Camfrog 請輸入 <code>!verify</code>），即可在這裡使用儲存、質押和借貸，Pepe 會以你的身分替你操作。",
   "wallet.h.stashes": "我的小金庫",
   "wallet.stash.none": "你還沒有擁有或共用的小金庫。小金庫是一個共用的 PAT 帳戶，可以質押到金庫中賺取收益。",
   "wallet.stash.yours": "你的",
