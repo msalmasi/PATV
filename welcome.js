@@ -39,7 +39,7 @@ const DISPOSABLE = new Set(["mailinator.com", "guerrillamail.com", "guerrillamai
   "maildrop.cc", "throwawaymail.com", "fakeinbox.com", "mohmal.com", "emailondeck.com", "mintemail.com", "spamgourmet.com",
   "tempr.email", "discard.email", "mailnesia.com", "moakt.com", "burnermail.io", "temp-mail.io", "1secmail.com", "inboxkitten.com"]);
 const DEV_COOKIE = "patv_dev";
-const CF_RANDOM = /^CF[a-z0-9]{8}$/;
+const { AUTO_NAME: CF_RANDOM } = require("./autoaccount");   // the one auto-account test
 
 let salt = null;
 let cfg = Object.assign({}, DEFAULTS);
@@ -375,7 +375,7 @@ async function backfill() {
   const recent = new Date(Date.now() - 30 * 86400000).toISOString().replace("T", " ").slice(0, 19);
   // unpaid recent Pepe-created / Discord / Twitch accounts follow the new rule
   const unpaid = await getQuery(`SELECT u.userId FROM users u WHERE u.created_at >= ?
-      AND (u.username GLOB 'CF[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]' OR u.discordBonus = 1 OR u.twitchBonus = 1)
+      AND (u.username GLOB '${require("./autoaccount").AUTO_GLOB}' OR u.discordBonus = 1 OR u.twitchBonus = 1)
       AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.userId = u.userId AND t.type = 'Welcome PAT')
       AND NOT EXISTS (SELECT 1 FROM bonus_winners b WHERE b.userId = u.userId AND b.type LIKE '%connect%')`, [recent]);
   for (let i = 0; i < unpaid.length; i += 200) {

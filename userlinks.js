@@ -93,7 +93,7 @@ async function hasArchived(q) {
   return archCol;
 }
 
-const isCf = (u) => /^cf[a-z0-9]{8}$/i.test(String(u || ""));
+const isCf = (u) => require("./autoaccount").isAutoName(u, { anyCase: true });   // the one auto-account test
 let displaynames = null;
 function displayOf(r) {
   if (!displaynames) { try { displaynames = require("./displaynames"); } catch (e) { displaynames = { usable: (s) => String(s || "").trim() }; } }

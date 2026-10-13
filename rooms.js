@@ -183,7 +183,7 @@ async function findUser(name) {
   const names = ["username", "displayname", "camfrogUsername", "discordUsername", "twitchDisplayname"].filter((c) => C.has(c));
   const rows = await getQuery(`SELECT userId, username, ${ucol(C, "displayname")} AS displayname, ${ucol(C, "camfrogUsername")} AS camfrogUsername
     FROM users WHERE ${names.map((c) => `LOWER(COALESCE(${c},'')) = ?`).join(" OR ")}`, names.map(() => n));
-  const isAuto = (r) => /^CF[a-z0-9]{8}$/.test(String(r.username));
+  const isAuto = (r) => require("./autoaccount").isAutoName(r.username);
   // 1.99bn: an automatic account whose Camfrog "login" is really ANOTHER account's display / Discord /
   // Twitch name is never picked (Pepe once made foamy1111's display name "plantbaked" into a login of
   // its own). It's dropped before anything else is weighed.

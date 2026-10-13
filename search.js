@@ -151,7 +151,7 @@ async function people(p, viewer, limit = PEOPLE_MAX) {
   let priv = new Set();
   try { priv = await require("./stories").privateLogins([...new Set(cfOnly.concat(shownCf))]); } catch (e) { priv = new Set(cfOnly.map((x) => String(x).toLowerCase())); }
   const isPriv = (r) => !!r.camfrogUsername && priv.has(String(r.camfrogUsername).toLowerCase());
-  const auto = (r) => /^CF[a-z0-9]{8}$/.test(String(r.username));
+  const auto = (r) => require("./autoaccount").isAutoName(r.username);
   const rank = (r) => {
     const u = String(r.username || "").toLowerCase(), d = String(r.displayname || "").toLowerCase();
     if (u === n || d === n) return 0;

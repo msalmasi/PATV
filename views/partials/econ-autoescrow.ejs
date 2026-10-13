@@ -1,0 +1,38 @@
+<%# Auto-account escrow (autoescrow.js, docs/auto-account-escrow.md): free rewards earned by Camfrog AUTO accounts wait here
+    for six months. public/js/admin-autoescrow.js renders it from GET /api/admin/autoescrow and saves the switch / the kinds
+    through POST /api/admin/autoescrow/settings (audit-logged). %>
+<section class="adm-card" id="autoescrow" aria-labelledby="autoescrowT">
+  <h2 id="autoescrowT"><span class="ds-ic" aria-hidden="true">⏳</span> Chat-account escrow <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Free rewards (achievements, level-ups, activity rewards, raffles, top mic…) earned by Pepe's automatic Camfrog accounts
+    wait here instead of landing in a wallet nobody can sign in to. Linking the Camfrog name to a real PATV account (<code>!verify</code>,
+    Edit profile → Connections) pays it all out at once. Each reward expires six months after it was earned and goes where the PAT Routing row
+    <code>auto_escrow_expired</code> sends it (the Federal Reserve by default). Game winnings, tips and refunds are never held; balances from
+    before the switch aren't touched. The switch only controls new holds - off, everything held is still claimable and still expires.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="aescAdm">
+      <div class="adm-kv" id="aescKv"><div><b>Status</b><span>Loading…</span></div></div>
+      <form class="adm-form" id="aescForm" autocomplete="off">
+        <label for="aescOn">Hold new rewards<select id="aescOn"><option value="false">off</option><option value="true">on</option></select></label>
+        <label for="aescKinds">Held kinds (comma-separated)<input type="text" id="aescKinds" maxlength="800"></label>
+        <label for="aescNote">Note<input type="text" id="aescNote" maxlength="200"></label>
+        <div class="adm-actions"><button type="submit">Save</button></div>
+      </form>
+      <h3>Top accounts</h3>
+      <div class="adm-tbl"><table aria-label="Top accounts with PAT waiting">
+        <thead><tr><th>Account</th><th>Camfrog</th><th>Waiting</th><th>Rewards</th><th>Next expiry</th></tr></thead>
+        <tbody id="aescTop"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table></div>
+      <details><summary>By kind</summary>
+        <div class="adm-tbl"><table aria-label="Held by kind"><thead><tr><th>Kind</th><th>Rewards</th><th>PAT</th></tr></thead><tbody id="aescKind"></tbody></table></div>
+      </details>
+      <details><summary>Claimed vs expired, by month</summary>
+        <div class="adm-tbl"><table aria-label="Claimed and expired by month"><thead><tr><th>Month</th><th>Claimed</th><th>Expired</th><th>Held that month</th></tr></thead><tbody id="aescHist"></tbody></table></div>
+      </details>
+      <details><summary>Recent claims</summary>
+        <div class="adm-tbl"><table aria-label="Recent claims"><thead><tr><th>When</th><th>Account</th><th>PAT</th><th>Rewards</th><th>How</th></tr></thead><tbody id="aescClaims"></tbody></table></div>
+      </details>
+      <p class="adm-msg" id="aescMsg" role="status"></p>
+    </div>
+    <script src="/public/js/admin-autoescrow.js?v=1" defer></script>
+  <% } %>
+</section>

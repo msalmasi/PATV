@@ -238,6 +238,10 @@ const RULES = {
   "action_ttl_config.actor": { deny: NAME },
   // 1.99ou: escrow/ledger.js - an escrowed stake follows its account (a refund / payout also resolves merged ids)
   "escrow_holds.user_id": M(),
+  // auto-account escrow (autoescrow.js): the held rewards follow the account; afterMerge releases them once the target is a real
+  // account (an auto -> auto duplicate merge keeps them held, same expiry)
+  "auto_escrow.user_id": M(), "auto_escrow.claimed_by": M(), "auto_escrow_claims.user_id": M(),
+  "auto_escrow_notices.user_id": M({ key: [], merge: { last_at: "MAX", last_entry: "MAX" } }),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)
   "fed_journal.actor": { deny: NAME }, "pat_routes.by": { deny: NAME }, "pat_routes_log.by": { deny: NAME },
@@ -723,6 +727,12 @@ async function afterMerge(toId, report = {}) {
     const u = (await getQuery("SELECT xp, level FROM users WHERE userId = ?", [toId]))[0];
     if (u && (Number(u.xp) || 0) >= uc.xpForNextLevel(Number(u.level) || 0)) await uc.updateLevel(toId, 0);
   } catch (e) { console.error("[MERGE] level-up after merge:", e.message); }
+  // auto-account escrow: rewards an auto account had waiting are the target's now - paid out if it is a real account
+  try {
+    if (loaded("autoescrow") || (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auto_escrow'")).length) {
+      await require("./autoescrow").releaseSafe(toId, "merge");
+    }
+  } catch (e) { console.error("[MERGE] auto escrow:", e.message); }
 }
 
 /** A Camfrog name moving from one real account to another takes its Camfrog achievements (cf_*)

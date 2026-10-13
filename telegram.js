@@ -147,7 +147,7 @@ async function siteBanned(userId) {
 function hasPass(userId) {
   try { return !!require("./premium").hasPass(userId); } catch (e) { return false; }
 }
-const CF_AUTO = /^cf[a-z0-9]{8}$/i;
+const { AUTO_LOGIN: CF_AUTO } = require("./autoaccount");   // the one auto-account test
 /** 'none' | 'alerts' | 'full' for an account (see ACCESS above). */
 async function tierOf(acc) {
   if (!acc || acc.archived_at) return "none";

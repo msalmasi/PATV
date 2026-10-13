@@ -48,7 +48,11 @@
 // Purging (purge()): tier A only, after graceDays (default 60) and only if still archived, still
 // empty and still free of holds: the users row and its non-ledger rows (badges, cosmetics, inbox,
 // welcome rows...) go; the ledger (transactions, bonus_winners, spins, rakes, reserve_claims...) stays
-// for audit, with a snapshot of the account in account_archive.
+// for audit, with a snapshot of the account in account_archive. Not while it has auto-account escrow held (autoescrow.js).
+//
+// Auto-account escrow (docs/auto-account-escrow.md): held rewards are NOT the account's balance here - no tier or threshold
+// counts them, archive / restore never touch them (they expire to the routing row on their own clock), so the cleanup and
+// the escrow never reclaim the same PAT.
 //
 // Nothing here runs by itself. migrate-stale-accounts.js is the operator's tool (dry run by default).
 "use strict";
@@ -56,8 +60,7 @@ const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const DAY = 86400000;
-const CF_RANDOM = /^CF[a-z0-9]{8}$/;
-const CF_RANDOM_LOGIN = /^cf[a-z0-9]{8}$/;
+const { AUTO_NAME: CF_RANDOM, AUTO_LOGIN: CF_RANDOM_LOGIN } = require("./autoaccount");   // the one auto-account test
 const DEFAULTS = { tierADays: 90, dormantDays: 180, lowMax: 3, lowDays: 2, graceDays: 60, welcomeDays: 90, botKeepMin: 100000, botKeepAny: 150000 };
 // The tiers an apply / a notice run selects unless told otherwise (A2 joined in 1.99bs).
 const DEFAULT_TIERS = ["A", "B", "C", "G", "A2"];
@@ -502,6 +505,11 @@ async function purge({ now = Date.now(), dryRun = true, bot = null } = {}) {
   const facts = new Map((await gather({ now, bot })).map((f) => [f.userId, f]));
   const out = { due: due.length, purged: 0, skipped: [] };
   for (const { userId } of due) {
+    // auto-account escrow (autoescrow.js): rewards still held for it stay claimable until their own expiry - purged by a later run
+    if ((await tableExists("auto_escrow")) && (await getQuery("SELECT 1 FROM auto_escrow WHERE user_id = ? AND state = 'held' LIMIT 1", [userId])).length) {
+      out.skipped.push({ userId, why: "auto escrow held (claimable until it expires)" });
+      continue;
+    }
     const f = facts.get(userId);
     if (f && (f.holds.size || f.cpRefs)) { out.skipped.push({ userId, why: [...f.holds].join(",") || "counterparty in others' history" }); continue; }
     if (dryRun) { out.purged++; continue; }

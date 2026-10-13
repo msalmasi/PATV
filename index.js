@@ -2432,6 +2432,7 @@ app.post('/api/users/camfrog/register', async (req, res) => {
       throw e;
     }
     await displaynames.markNewAccount(userId).catch(() => {});
+    await require("./autoaccount").markNew(userId);           // provenance: Pepe made it (auto-account escrow, autoaccount.js)
     // 1.99bg: no welcome cash at sign-up (it was farmable with alts). The welcome bonus vests once
     // the account has really been used, once per person - welcome.js. `identity` is Pepe's alias
     // identity for this login (one person, several Camfrog logins). points_balance is ignored.
@@ -2542,14 +2543,17 @@ function getUsername(userId) {
 function getUserBalance(req, res) {
   const username = req.params.username;
   db.get(
-    `SELECT points_balance FROM users WHERE username = ?`,
+    `SELECT userId, points_balance FROM users WHERE username = ?`,
     [username],
     (err, row) => {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
       if (row) {
-        return res.json({ balance: row.points_balance });
+        // auto-account escrow: what is waiting to be claimed (Pepe's !balance shows it) - only when there is some
+        return require("./autoescrow").waiting(row.userId).then((w) => res.json(w.amount > 0
+          ? { balance: row.points_balance, waiting: w.amount, waiting_next_expiry: w.next_expiry } : { balance: row.points_balance }))
+          .catch(() => res.json({ balance: row.points_balance }));
       } else {
         return res.status(404).json({ error: "User not found" });
       }
@@ -3963,6 +3967,7 @@ app.post(
 // credit must name its source + ref; every call logged in bot_credit_log, idempotent per ref), POST /api/g/heist/jackpot-adjust
 // (source + ref required, logged, idempotent), POST /api/users/merge-balance, POST /api/g/stale/reclaimed.
 require("./botcredits").register(app, { isBotToken, idemBegin, resolveCounterparty });
+require("./autoescrow").register(app, { isBotToken, addUser });   // auto-account escrow (docs/auto-account-escrow.md): Pepe's PM list, the admin card, the 10-min tick
 
 // Grant XP to a user (bot-authenticated) — used for duel/heist wins. Runs the same
 // updateLevel path as the wheel, so level-ups and their bonuses behave identically.

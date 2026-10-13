@@ -453,7 +453,7 @@ function register(app, { addUser, isBotToken }) {
       const login = String(b.by || "").trim().toLowerCase().slice(0, 40);
       // the account linked to that Camfrog login: a real account ahead of a leftover automatic CF one (displaynames.findByCamfrog's rule)
       const u = login ? (await getQuery(`SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = ?
-                                         ORDER BY (username GLOB 'CF[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]') ASC, rowid ASC LIMIT 1`, [login]))[0] : null;
+                                         ORDER BY (username GLOB '${require("./autoaccount").AUTO_GLOB}') ASC, rowid ASC LIMIT 1`, [login]))[0] : null;
       if (!u) return res.json({ ok: false, message: "link your Camfrog name to a PATV account first (publicaccess.tv, Edit profile)" });
       const r = await boost({ userId: u.userId, username: u.username }, R.id, { amount: b.amount, ref: b.ref, via: "chat", login });
       clearCache();

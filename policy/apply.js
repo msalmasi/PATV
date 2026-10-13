@@ -240,7 +240,9 @@ async function payActivity(did, inputs, plan, nowS) {
         if ((await P.balance("incentives")) < amt) { stopped = true; throw new Halt("the incentive budget can't cover it", "E_INSUFFICIENT"); }
         await poolLeg(`${ref}:out`, "incentives", -amt, "activity_rewards");
         const transactionId = require("uuid").v4();
-        const posted = await ledger.post(u.userId, amt, "bonus win", { requireCover: true, transactionId, source: "bonus activity-reward from incentives" });
+        // auto-account escrow (autoescrow.js): an auto account's activity reward is held for it instead, while that switch is on
+        const posted = await require("../autoescrow").credit(u.userId, amt, "bonus win", { requireCover: true, transactionId, kind: "activity-reward",
+                                                                                         source: "bonus activity-reward from incentives" });
         if (!posted.ok) throw new Halt("credit refused", posted.code || "E_CREDIT");
         await runQuery("INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
                        [require("uuid").v4(), "activity-reward", posted.userId, transactionId, amt]);

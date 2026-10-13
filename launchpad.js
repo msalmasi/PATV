@@ -180,7 +180,7 @@ async function usersByLogin(logins) {
   for (let i = 0; i < logins.length; i += 300) {
     const part = logins.slice(i, i + 300);
     const rows = await getQuery(`SELECT userId, LOWER(camfrogUsername) AS l, username FROM users WHERE LOWER(camfrogUsername) IN (${part.map(() => "?").join(",")})
-      ORDER BY (username GLOB 'CF[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]') DESC, rowid DESC`, part);
+      ORDER BY (username GLOB '${require("./autoaccount").AUTO_GLOB}') DESC, rowid DESC`, part);
     for (const r of rows) out.set(r.l, r.userId);        // last write wins: the real account, oldest first
   }
   return out;

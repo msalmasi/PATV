@@ -11,6 +11,7 @@
 //   escrow:holds      escrow/ledger.js (Phase 2)                           route_intents  patroutes.js (charged, not routed yet)
 //   markets           capital/service.js market pots (Phase 3)
 //   room_vault_escrow boosts.js (held for the pads)                        casino:tables  PAT at the casino backend's tables:
+//   auto_escrow       autoescrow.js (auto accounts' free rewards, 6 months)
 //                                                                                          blackjack stakes in a round, hold'em stacks
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
@@ -87,6 +88,8 @@ async function patSupply() {
   try { pools = await require("./escrow/ledger").supplyRows(pools); } catch (e) { /* no escrow tables yet */ }
   // Phase 3: once the capital cluster lives on the site the market pots are counted from the pools table, not Pepe's "markets" row
   try { pools = await require("./capital/service").supplyRows(pools); } catch (e) { /* no capital tables yet */ }
+  // auto-account escrow (autoescrow.js): free rewards held for Camfrog auto accounts until claimed or expired (6 months)
+  try { pools = await require("./autoescrow").supplyRows(pools); } catch (e) { /* no auto escrow table yet */ }
   // 1.99ne: paid-command PAT already taken from wallets that Pepe hasn't routed into his pools yet (patroutes.js)
   try {
     const u = await require("./patroutes").unrouted();

@@ -14,9 +14,8 @@ const MAX_LEN = 32;
 // The generator makes "CF" + 8 of [a-z0-9]. As a display name it's matched case-sensitively (a
 // person may well call themselves "CFredSmith"); Camfrog logins are stored lowercased, so for a
 // login the loose form applies.
-const CF_RANDOM = /^CF[a-z0-9]{8}$/;
-const CF_RANDOM_LOGIN = /^cf[a-z0-9]{8}$/i;
-const CF_GLOB = "CF[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9]";
+// the one auto-account test (autoaccount.js)
+const { AUTO_NAME: CF_RANDOM, AUTO_LOGIN: CF_RANDOM_LOGIN, AUTO_GLOB: CF_GLOB } = require("./autoaccount");
 
 // Camfrog display names can carry <...> markup; strip it, plus control / zero-width / bidi
 // characters, collapse whitespace and cap the length (by code point, never splitting a pair).

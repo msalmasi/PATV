@@ -16,7 +16,8 @@
 //        A POSITIVE amount whose type isn't discord-* / twitch-* must carry `source` (the pool Pepe debited, <= 64)
 //        and `ref` (<= 80), else 400 {success:false, error:"unsourced"} and nothing moves. discord-* / twitch-* credits
 //        are still paid on the site out of the platform_rewards flow (funding.js). Debits (negative) are as before:
-//        only what the balance covers.
+//        only what the balance covers. A free reward (the type is on autoescrow's kinds list) for a Camfrog AUTO account
+//        is held in auto_escrow instead while that switch is on: 200 with escrowed:true, expires_at (docs/auto-account-escrow.md).
 //   POST /api/g/heist/jackpot-adjust {password, amount, userId?, source, ref}   source (<= 64) and ref (<= 80) required.
 //   POST /api/users/merge-balance {password, fromUserId, toUserId, ref}  the WHOLE balance of fromUserId moves to
 //        toUserId atomically, two "account merge" transactions rows (out / in, each naming the other account), idempotent
@@ -135,21 +136,25 @@ async function chatwinner(body, deps = {}) {
       }
       // Credit, or debit only what the balance covers: a deduction can never take anyone below zero.
       const transactionId = require("uuid").v4();
-      const posted = await ledger.post(userId, Math.trunc(amt), "bonus win", { requireCover: true, counterparty: cp, transactionId,
-                                                                           source: `bonus ${type}${src.value ? " from " + src.value : ""}` });
+      // auto-account escrow (autoescrow.js): a free reward for a Camfrog auto account is held instead (platform rewards never)
+      const posted = await require("./autoescrow").credit(userId, Math.trunc(amt), "bonus win", { requireCover: true, counterparty: cp, transactionId,
+                                                                           source: `bonus ${type}${src.value ? " from " + src.value : ""}`,
+                                                                           kind: platform ? null : String(type) });
       if (!posted.ok) {
         if (posted.code === ledger.E_INSUFFICIENT) throw new Refusal(402, { success: false, error: "insufficient" }, "insufficient");
         throw new Refusal(404, { success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND }, "no_user");
       }
       await runQuery("INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
                      [require("uuid").v4(), type, posted.userId, transactionId, Math.trunc(amt)]);
-      return { userId: posted.userId };
+      return { userId: posted.userId, escrowed: !!posted.escrowed, expires_at: posted.expires_at || null };
     });
   } catch (e) {
     if (e instanceof Refusal) return { status: e.status, json: e.body };
     throw e;
   }
   if (out.duplicate) return { status: 200, json: Object.assign({ duplicate: true }, okBody) };
+  // escrowed: Pepe tells the person it's waiting for them (pepe_autoescrow.py) - it isn't in their wallet
+  if (out.result && out.result.escrowed) return { status: 200, json: Object.assign({}, okBody, { escrowed: true, expires_at: out.result.expires_at }) };
   return { status: 200, json: okBody };
 }
 

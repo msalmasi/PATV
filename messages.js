@@ -1111,7 +1111,7 @@ async function claimAlerts({ limit = 50 } = {}) {
 // nobody signs in to those, so they could never read the reply). The recipient is a linked Camfrog login first (in a
 // room people know each other by those), else a PATV username; "u/<name>" forces the PATV username. Then it is an
 // ordinary send(): blocks, "who can message me", the new-account rule and every rate limit apply as on the site. ──
-const CF_AUTO = /^cf[a-z0-9]{8}$/i;
+const { AUTO_LOGIN: CF_AUTO } = require("./autoaccount");   // the one auto-account test
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 /** The account a Camfrog login is linked to: a real one before a "CF…" auto one. null = none; {auto: true} = only an auto one. */
 async function linkedAccount(login) {

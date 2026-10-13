@@ -466,7 +466,8 @@ async function fundPayoutEx(userId, amount, flow, type) {
     }
     return { ok: false, queued: false };
   }
-  const r = await ledger.post(target, amount, type || flow, { resolveMerged: true, source: `funding:${flow}` });
+  // auto-account escrow (autoescrow.js): a free reward (achievements, levelup) for a Camfrog auto account is held for it instead
+  const r = await require("./autoescrow").credit(target, amount, type || flow, { resolveMerged: true, source: `funding:${flow}`, kind: flow });
   if (!r.ok) {
     try { await take.undo(); } catch (e) { console.error(`[funding] ${flow}: undo failed:`, e.message); }
     return { ok: false, queued: false };
@@ -486,7 +487,9 @@ function drainQueue() {
     const ledger = require("./ledger");
     // crash recovery: a claim caught mid-pay is paid if its transaction exists, else it waits again
     for (const c of await getQuery("SELECT claimId FROM reserve_claims WHERE queued = 2")) {
-      const tx = await getQuery("SELECT 1 FROM transactions WHERE transactionId = ?", ["iq-" + c.claimId]);
+      let tx = await getQuery("SELECT 1 FROM transactions WHERE transactionId = ?", ["iq-" + c.claimId]);
+      // ...or it was held for an auto account (autoescrow.js: the entry's key is the transaction id it would have had)
+      if (!tx.length) tx = await getQuery("SELECT 1 FROM auto_escrow WHERE key = ?", ["iq-" + c.claimId]).catch(() => []);
       await runQuery("UPDATE reserve_claims SET queued = ?, paid_at = COALESCE(paid_at, ?) WHERE claimId = ? AND queued = 2",
                      [tx.length ? 0 : 1, tx.length ? Date.now() : null, c.claimId]);
     }
@@ -501,8 +504,8 @@ function drainQueue() {
       if (!(await canFundIncentives(flow, c.amount, true))) { blocked.add(g); continue; }
       const take = await runQuery("UPDATE reserve_claims SET queued = 2 WHERE claimId = ? AND queued = 1", [c.claimId]);
       if (!take || take.changes !== 1) continue;
-      const r = await ledger.post(c.userId, c.amount, c.type || flow, { resolveMerged: true, transactionId: "iq-" + c.claimId,
-                                                                       source: `funding:${flow} (queued)` });
+      const r = await require("./autoescrow").credit(c.userId, c.amount, c.type || flow, { resolveMerged: true, transactionId: "iq-" + c.claimId,
+                                                                                         source: `funding:${flow} (queued)`, kind: flow });
       if (!r.ok) {
         await runQuery("UPDATE reserve_claims SET queued = 9 WHERE claimId = ?", [c.claimId]);
         console.warn(`[funding] queued ${flow} ${c.amount} for ${c.userId} dropped (${r.code})`);
@@ -510,6 +513,7 @@ function drainQueue() {
       }
       await runQuery("UPDATE reserve_claims SET queued = 0, paid_at = ? WHERE claimId = ?", [Date.now(), c.claimId]);
       paid++;
+      if (r.escrowed) continue;                     // held for an auto account: nobody reads that inbox (the claim notice says it)
       try {
         await require("./inbox").addSafe(r.userId, { kind: "system", title: `Paid: PAT ${Number(c.amount).toLocaleString("en-US")}`,
           body: `${c.type || flow} - it waited for the weekly incentive budget and is in your wallet now.`, link: "/wallet",
