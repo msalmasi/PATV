@@ -199,7 +199,8 @@ suite (6 pre-existing failures: `@noble/curves` missing locally), `policy_client
 
 ## 12. Known limits
 
-- **The mint caps have two writers until the Fed's event operations move (Phase 4b).** The site's floor / issuance mints and Pepe's
+- **(Fixed by P4-1, `docs/fed-events-cutover-runbook.md`: once the Fed events backend is live the site is the caps' only writer.)**
+  **Until then the mint caps have two writers.** The site's floor / issuance mints and Pepe's
   admin / loan / flash / donation mints both journal Fed mints. Each checks the caps against the freshest merged view (Pepe's
   pushed `fed_mints` + the site's `policy_mints`), so a cap can only be overshot by two mints in the same seconds (`mintcap_total`
   is 100M on prod; the floor cap 30M is the site's alone after the cutover).

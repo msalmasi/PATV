@@ -654,14 +654,21 @@ rule as v2 §16 ("riskiest thing (money) first").
   shadow for the 2026-10-19 Monday. Runbook: `docs/policy-engines-cutover-runbook.md`.
 - **Retired, not ported:** automint (dead under the layers), the wheel cut (gone since 1.99pk), the Casino-vault feed (a no-op under
   the live treasury; v1 stays Pepe's), layers recovery (subsumed: one transaction per site run).
-- **Stays in Pepe for now (Phase 4b / v2):** the Fed's event operations (admin mint, `!econ fund`, `!econ fedloan`, flash, donation
-  mints - PAT already on the site's pools and share book; the journal stays his, so the mint caps have two writers until they move);
+- **Stays in Pepe for now (Phase 4b / v2):** ~~the Fed's event operations~~ (moved by P4-1, below);
   the E-4 recipe, activity → pads, profile vaults (Camfrog observations, convoys); the launchpad's grant payments; room-vault claim
   settling; the incentive budget's week record (the routed payouts' pacing).
 - **Found on the way:** prod's `PayloadTooLargeError` is Pepe's econ docs push (`/api/econ/docs/put`, ~116 KB > the 100 KB global
   parser) - every push since the pools cutover failed and the site kept the cutover's copy (`fed_journal`, `incentive_groups` stale).
   Fixed in 1.99ug (the route's own body limit + the skip list); it must reach prod before any Phase 4 shadow.
-- **Open questions:** (P4-1) move the Fed's event operations to the site so the Fed has one writer (recommended next, before v2);
+- **P4-1 built (site 1.99uv, bot 1.99va; on staging 2026-10-13): the Fed's event operations on the site, one writer.** `fed/service.js`
+  owns the Fed's journal (mints, grants, loans, repayments, flash repayments), the monthly mint caps and the band checks; every op
+  (admin mint, grant, Fed loan incl. flash and the Bank's default backstop, early repayment, the waterfall's loan booking, restore /
+  seed mints) is ONE keyed `dbUtils.tx`, and the scheduler's floor / issuance mints and loan legs book through the same functions
+  (the global tx chain serializes them: a cap can't be overshot). Donation mints: the site journals the wallet + bonus mints and
+  settles the claim itself. Pepe's commands are thin clients with the same texts; his journal is a read-only mirror. Switch
+  `fed_meta.enabled` + `fed_client.json` / `!econ fed backend`; cutover (sha256 + totals, supply unchanged) / rollback / detach.
+  Runbook: `docs/fed-events-cutover-runbook.md`. Needs Phase 3 on prod first.
+- **Open questions:** (P4-1) done - see above;
   (P4-2) activity rewards to a login with no PATV account - keep Pepe's old behaviour (create the account) or not pay (the site
   today: not paid, stays in the budget); (P4-3) the cutover date relative to Phase 3 on prod (recommended: two shadow Mondays,
   2026-10-19 and 10-26, then Tuesday 10-27).
