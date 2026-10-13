@@ -438,7 +438,8 @@ function cleanImage(raw, house) {
   return u.href;
 }
 function guardText(label, s) {
-  if (require("./textguard").bad(s) || require("./textguard").hasPadCode(s)) throw new Refuse(400, `The ${label} has something Pepe can't repeat - reword it.`, "E_TEXT");
+  // (not textguard.hasPadCode: that guards room TOPICS, and it reads "PATV Friday..." as a pad code)
+  if (require("./textguard").bad(s)) throw new Refuse(400, `The ${label} has something Pepe can't repeat - reword it.`, "E_TEXT");
 }
 /** A date / time input: ms, a unix-seconds number, or an ISO / datetime-local string (+ tz offset minutes from the form). */
 function parseWhen(v, tzOffsetMin) {
@@ -474,6 +475,7 @@ async function validate(user, b) {
     out.prize_item = it.prizeId;
     out.prize_name = str(it.prize, 120);
     out.prize_cost = Number(it.cost) || 0;
+    out.item_image = it.image_url || null;                     // the card's picture when none is given
   } else {
     if (!house && !C.custom_allowed) throw new Refuse(400, "Custom prizes are switched off right now.", "E_PRIZE");
     const text = str(b.prize_text, 200);
@@ -522,7 +524,8 @@ async function validate(user, b) {
   }
   if (maxPer && out.max_tickets && maxPer > out.max_tickets) out.max_per_user = out.max_tickets;
   out.expires_at = exp;
-  out.image_url = cleanImage(b.image_url, house);
+  out.image_url = cleanImage(b.image_url, house) || out.item_image || null;
+  delete out.item_image;
   return out;
 }
 /** Where a create lands: a pad the user may use, else Pepe's Pad for a house raffle, else site-wide. */

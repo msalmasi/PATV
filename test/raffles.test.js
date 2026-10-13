@@ -169,6 +169,9 @@ test("validation: prizes, prices, triggers, expiry, pictures, text guard", async
   await bad({ title: "send me your pat" }, "E_TEXT");
   await bad({ prize_kind: "item", prize_item: "spinboost100" }, "E_ITEM");     // the per-owner spin boost can't be raffled
   await bad({ title: "x" }, "E_TITLE");
+  // 1.99xl: "PATV Friday ..." isn't a pad code (that check is for room topics)
+  const ok = await RF.create(U.maker.userId, PAT_RAFFLE({ title: "PATV Friday Mega Raffle", prize_amount: 1000 }));
+  await RF.cancel(U.maker.userId, ok.id);
 });
 
 test("buy: numbers are contiguous, the hold is escrowed, the same key is one purchase; the creator and their alt can't buy", async () => {
