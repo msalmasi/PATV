@@ -1,0 +1,95 @@
+<%- include('partials/admin-open', { title: 'Content filter', user: user, section: 'feed', admIsAdmin: true }) %>
+<link rel="stylesheet" href="/public/css/feed.css?v=19">
+<%#
+  views/feedFilterAdmin.ejs - the cheap content filter's admin page (1.99ux, feedfilter.js): the master switch, the default
+  for pads that haven't chosen, the default action per category, the daily counts (for tuning false positives), every
+  flag / hide / block, the word lists (admins only - they are offensive by nature; edits are stored in the DB, never in
+  the public repo) and a test box.
+%>
+<%
+  const actLabel = { allow: 'Allow (count only)', flag: 'Flag to the queue', hide: 'Hide pending review', block: 'Block on submit', notice: 'Private helplines note' };
+  const catLabel = { hate: 'Slurs & hate', doxxing: 'Personal details (doxxing)', threats: 'Threats', selfharm: 'Self-harm', spam: 'Spam' };
+  const listLabel = { hate_words: 'Hate - words (word = whole word, word* = starts with, *word* = anywhere in a word; two words = a phrase)',
+    hate_phrases: 'Hate - phrases', hate_allow: 'Hate - allowed words (never a match: Nigeria, Scunthorpe...; matched as written)',
+    hate_allow_phrases: 'Hate - allowed phrases ("chink in the armour")', threat_phrases: 'Threats - phrases', selfharm_phrases: 'Self-harm - phrases',
+    spam_phrases: 'Spam - scam phrases', dox_cues: 'Doxxing - cue phrases ("her address is"; they upgrade a weak match)', dox_public: 'Doxxing - public addresses that never count' };
+%>
+<main class="fd fd-admin">
+  <div class="crumb"><a href="/admin">Admin</a> › <a href="/feed/admin">Feed</a> › Content filter</div>
+  <h1>🧹 Content filter</h1>
+  <p class="sub">A fast word-and-pattern check on new posts and comments (no model). Pads opt in from their owner panel (🧹 Safety); profiles are pads too.
+    It runs first, on submit; Pepe's feed automod is the optional extra that runs after it. The pad's owner, site staff and Pepe are never filtered.
+    Image safety, reports, TAKE IT DOWN and the CSAM escalation are separate and always on.</p>
+
+  <section class="fa-card pf-card" id="global">
+    <h2>Switches and defaults</h2>
+    <form class="pf-form fa-cfg" data-url="/api/feed/admin/filter" data-wrap="global">
+      <fieldset>
+        <label class="ck"><input type="checkbox" name="enabled"<%= G.enabled ? ' checked' : '' %>> Master switch: the filter runs (off = nothing is checked anywhere, whatever a pad chose)</label>
+        <label class="ck"><input type="checkbox" name="default_on"<%= G.default_on ? ' checked' : '' %>> On by default for pads that haven't chosen (off = opt-in)</label>
+        <% CATS.forEach((c) => { const ch = c === 'selfharm' ? SELFHARM_ACTIONS : ACTIONS; %>
+        <label><span><%= catLabel[c] %> <span class="mut">(built-in default: <%= actLabel[DEFAULT_ACTIONS[c]] %>)</span></span>
+          <select name="act_<%= c %>"><% ch.forEach((a) => { %><option value="<%= a %>"<%= G.actions[c] === a ? ' selected' : '' %>><%= actLabel[a] %></option><% }) %></select></label>
+        <% }) %>
+      </fieldset>
+      <p class="mut">Pads that changed a category keep their own choice. One email or one street address on its own is never more than flagged; a link flood is <%= SPAM.links_post %>+ links in a post or <%= SPAM.links_comment %>+ in a comment.</p>
+      <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save</button></div>
+    </form>
+  </section>
+
+  <section class="fa-card" id="counts">
+    <h2>Hits per day (UTC, last 14 days)</h2>
+    <p class="sub">Every hit is counted, allowed ones too - a category with many hits and few real problems needs its list tuned.</p>
+    <% if (!days.length) { %><p class="mut">Nothing yet.</p><% } else { %>
+    <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Day</th><% CATS.forEach((c) => { %><th><%= catLabel[c] %></th><% }) %></tr></thead><tbody>
+      <% days.forEach((d) => { %><tr><td class="mut"><%= d.day %></td><% CATS.forEach((c) => { const x = d.cats[c] || {}; const parts = Object.entries(x).map(([a, n]) => a + ' ' + n); %><td><%= parts.length ? parts.join(' · ') : '–' %></td><% }) %></tr><% }) %>
+    </tbody></table></div>
+    <% } %>
+  </section>
+
+  <section class="fa-card" id="log">
+    <h2>Recent flags, hides and blocks</h2>
+    <% if (!log.length) { %><p class="mut">None yet.</p><% } else { %>
+    <div class="fa-scroll"><table class="fa-t pf-log"><thead><tr><th>When (UTC)</th><th>Pad</th><th>What</th><th>Caught</th><th>Did</th></tr></thead><tbody>
+      <% log.forEach((r) => { %><tr><td class="mut"><%= new Date(r.at).toISOString().slice(5, 16).replace('T', ' ') %></td>
+        <td><a href="/p/<%= encodeURIComponent(r.pad.slug) %>/owner#safety"><%= r.pad.title %></a></td>
+        <td><%= r.kind === 'post' ? '📝' : '💬' %> <% if (r.href) { %><a href="<%= r.href %>"><%= r.what || '(open)' %></a><% } else { %><span class="mut">(not stored)</span><% } %> <span class="mut">by <%= r.author %><%= r.edit ? ' · edit' : '' %></span></td>
+        <td><%= r.cats.map((c) => catLabel[c] || c).join(', ') %><div class="mut pf-note"><%= r.kinds.join(', ') %><%= r.terms ? ' · ' + r.terms : '' %></div></td>
+        <td><%= r.state === 'released' ? '↩ released by ' + r.released_by : r.action %></td></tr><% }) %>
+    </tbody></table></div>
+    <% } %>
+  </section>
+
+  <section class="fa-card" id="test">
+    <h2>Test a text</h2>
+    <p class="sub">What the current lists catch (with every category on), and how long the scan took. Nothing is stored.</p>
+    <form id="ffTest" class="fa-inline">
+      <textarea name="text" rows="3" maxlength="20000" aria-label="Text to test" style="flex:1 1 100%"></textarea>
+      <button type="submit" class="btn-s">Test</button>
+    </form>
+    <pre id="ffOut" class="mut" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+  </section>
+
+  <section class="fa-card pf-card" id="lists">
+    <h2>Word lists</h2>
+    <p class="sub">Now using: <b><%= L.source === 'db' ? 'edited lists (stored in the database)' : 'the built-in lists (data/feedfilter-lists.json)' %></b>. One entry per line; lines starting with # are ignored.
+      Matching ignores case, accents, look-alike letters, leetspeak (a=@/4, i=1/!, o=0, s=$/5...), extra repeated letters, spacing and punctuation inside a word.
+      Phrases: [a|b] = one of, [x]? = optional, ~ = up to two words in between. Edits are stored in the database, not in the public repo.</p>
+    <form class="pf-form" data-url="/api/feed/admin/filter" data-wrap="lists">
+      <fieldset>
+        <% L.keys.forEach((k) => { %><label style="display:block"><span><%= listLabel[k] || k %> <span class="mut">(<%= L.lists[k].length %>)</span></span>
+          <textarea name="<%= k %>" rows="<%= Math.min(14, Math.max(4, L.lists[k].length + 1)) %>" spellcheck="false" style="width:100%;font-family:var(--ds-font-mono, monospace);font-size:12.5px"><%= L.lists[k].join('\n') %></textarea></label><% }) %>
+      </fieldset>
+      <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save the lists</button></div>
+    </form>
+    <% if (L.source === 'db') { %>
+    <form class="pf-form" data-url="/api/feed/admin/filter" data-wrap="reset_lists">
+      <label class="ck"><input type="checkbox" name="confirm" required> Throw away the edited lists and go back to the built-in ones</label>
+      <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Reset to built-in</button></div>
+    </form>
+    <% } %>
+  </section>
+</main>
+<script src="/public/js/pepe-feed.js?v=7" defer></script>
+<script src="/public/js/feed-filter-admin.js?v=1" defer></script>
+<%- include('partials/admin-close') %>

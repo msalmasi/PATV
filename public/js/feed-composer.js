@@ -733,6 +733,7 @@
       });
     }).then(function (d) {
       clearTimeout(saveTimer); clearDraft(); restoring = true;     // posted: the draft is done
+      if (d && d.safety && d.safety.message) alert(d.safety.message);     // 1.99ux: the content filter's note (hidden / flagged / helplines)
       errEl.textContent = _t('js.feed.fc.posted', 'Posted ✔'); errEl.classList.add('ok');
       // stay on a pad page (the new post shows on top of New); elsewhere open the post
       var u = new URL(location.href);

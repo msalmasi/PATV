@@ -76,6 +76,11 @@
   .po .po-kinds { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1h) var(--ds-sp-3); max-width: 420px; justify-content: flex-end; }
   .po .po-kinds .ds-check { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: 13.5px; }
   @media (max-width: 520px) { .po .po-set:has(.po-kinds) { flex-wrap: wrap; } .po .po-kinds { justify-content: flex-start; max-width: 100%; } }
+  /* 1.99ux: the content filter card */
+  .po .po-flt .po-ctl { max-width: 240px; }
+  .po .po-flt-log li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .po .po-flt-act { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--ds-sp-1h); flex: none; }
+  @media (max-width: 520px) { .po .po-flt .po-set { flex-wrap: wrap; } .po .po-flt .po-ctl { max-width: 100%; width: 100%; } .po .po-flt-log li { flex-wrap: wrap; } }
 </style>
 <main class="ds-page po" id="po" <% if (!guide) { %>data-slug="<%= slug %>"<% } %>>
 <% if (guide) { %>
@@ -103,6 +108,7 @@
     <% if (camfrog) { %><a class="ds-tab" href="#pepe">🐸 <%- t('owner.nav_pepe') %></a><% } %>
     <% if (camfrog) { %><a class="ds-tab" href="#mod">🛡️ <%- t('owner.nav_mod') %></a><% } %>
     <% if (locals.site) { %><a class="ds-tab" href="#site">🌐 <%- t('owner.nav_site') %></a><% } %>
+    <% if (locals.filter) { %><a class="ds-tab" href="#safety">🧹 <%- t('owner.nav_safety') %></a><% } %>
     <% if (locals.vaultPad) { %><a class="ds-tab" href="#vault">💰 <%- t('owner.nav_vault') %></a><% } %>
     <a class="ds-tab" href="#royalties">👑 <%- t('owner.nav_roy') %></a>
     <% if (locals.vaultPad) { %><a class="ds-tab" href="#recipe">💸 <%- t('owner.recipe_h') %></a><% } %>
@@ -354,6 +360,60 @@
   </section>
   <% } %>
 
+  <% if (locals.filter) { const F = filter; const shLabel = (a) => t('owner.flt_sh_' + a); const actLabel = (c, a) => (c === 'selfharm' ? shLabel(a) : t('owner.flt_act_' + a)); %>
+  <%# 1.99ux: the cheap content filter (feedfilter.js) - any pad, opt-in. Runs first, on submit; Pepe's moderation (above) is the extra. %>
+  <section class="ds-card lg po-flt" id="safety" aria-labelledby="poFltH" data-slug="<%= slug %>">
+    <h2 class="ds-h2" id="poFltH"><span class="dot"></span>🧹 <%- t('owner.flt_h') %></h2>
+    <p class="po-why"><%- t('owner.flt_why') %></p>
+    <% if (!F.master) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏸️</span><div><%- t('owner.flt_master_off') %></div></div><% } %>
+    <div class="po-sets">
+      <div class="po-set" data-pf-row="on">
+        <div>
+          <b><%- t('owner.flt_on') %></b>
+          <p class="ds-meta"><%- t('owner.flt_on_why') %></p>
+          <p class="ds-fine"><span data-pf-def="on" <%= F.on.own ? 'hidden' : '' %>><%- t('owner.site_def', { v: F.on.def ? t('owner.on') : t('owner.off') }) %></span>
+            <button type="button" class="ds-btn sm ghost" data-pf-reset="on" <%= F.on.own && !F.locked ? '' : 'hidden' %>><%- t('owner.site_reset', { v: '' }) %> <span class="ds-meta">(<%- t('owner.site_def', { v: F.on.def ? t('owner.on') : t('owner.off') }) %>)</span></button>
+            <% if (F.locked) { %><span class="po-admin"><%- t('owner.site_locked') %></span><% } %></p>
+          <span class="po-st" data-pf-st="on" role="status" aria-live="polite"></span>
+        </div>
+        <label class="ds-switch" title="<%- t('owner.flt_on') %>"><input type="checkbox" data-pf-set="on" <%= F.on.value ? 'checked' : '' %> <%= F.locked ? 'disabled' : '' %> aria-label="<%- t('owner.flt_on') %>"><span></span></label>
+      </div>
+    </div>
+    <h3 class="ds-h4 po-gh">🗂️ <%- t('owner.flt_cats_h') %></h3>
+    <p class="ds-meta"><%- t('owner.flt_cats_why') %></p>
+    <div class="po-sets">
+      <% F.cats.forEach((c) => { const it = F.actions[c]; const key = 'act_' + c; %>
+      <div class="po-set" data-pf-row="<%= key %>">
+        <div>
+          <b><%- t('owner.flt_cat_' + c) %></b>
+          <p class="ds-meta"><%- t('owner.flt_cat_' + c + '_why') %></p>
+          <p class="ds-fine"><span data-pf-def="<%= key %>" <%= it.own ? 'hidden' : '' %>><%- t('owner.site_def', { v: actLabel(c, it.def) }) %></span>
+            <button type="button" class="ds-btn sm ghost" data-pf-reset="<%= key %>" <%= it.own && !F.locked ? '' : 'hidden' %>><%- t('owner.site_reset', { v: '' }) %> <span class="ds-meta">(<%- t('owner.site_def', { v: actLabel(c, it.def) }) %>)</span></button></p>
+          <span class="po-st" data-pf-st="<%= key %>" role="status" aria-live="polite"></span>
+        </div>
+        <select class="ds-select po-ctl" data-pf-set="<%= key %>" aria-label="<%- t('owner.flt_cat_' + c) %>" <%= F.locked ? 'disabled' : '' %>>
+          <% it.choices.forEach((a) => { %><option value="<%= a %>" <%= it.value === a ? 'selected' : '' %>><%- actLabel(c, a) %></option><% }) %>
+        </select>
+      </div><% }) %>
+    </div>
+    <h3 class="ds-h4 po-gh">📋 <%- t('owner.flt_recent_h') %></h3>
+    <p class="ds-meta"><%- t('owner.flt_queue') %></p>
+    <ul class="po-ro po-flt-week" aria-label="<%- t('owner.flt_week_h') %>"><% F.cats.forEach((c) => { %><li><span><%- t('owner.flt_cat_' + c) %></span><span class="ds-chip <%= F.counts[c] ? 'warn' : 'mute' %>"><%- t('owner.flt_week_n', { n: F.counts[c] || 0 }) %></span></li><% }) %></ul>
+    <% if (!F.recent.length) { %><p class="ds-meta"><%- t('owner.flt_recent_none') %></p><% } else { %>
+    <ul class="po-hist po-flt-log">
+      <% F.recent.forEach((r) => { %><li data-pf-item="<%= r.id %>">
+        <span><%= r.kind === 'post' ? '📝' : '💬' %> <% if (r.href) { %><a href="<%= r.href %>"><%= r.what || t('owner.flt_' + r.kind) %></a><% } else { %><%- t('owner.flt_' + r.kind) %><% } %>
+          <span class="ds-meta">· <%= r.author %> · <%= r.cats.map((c) => t('owner.flt_cat_' + c)).join(', ') %></span></span>
+        <span class="po-flt-act"><% if (r.state === 'released') { %><span class="ds-chip ok"><%- t('owner.flt_released', { who: r.released_by || '?' }) %></span>
+          <% } else { %><span class="ds-chip <%= r.action === 'flag' ? 'info' : 'warn' %>"><%- t('owner.flt_did_' + r.action) %></span><% } %>
+          <% if (r.releasable) { %><button type="button" class="ds-btn sm ghost" data-pf-release="<%= r.id %>"><%- t('owner.flt_release') %></button><% } %></span>
+      </li><% }) %>
+    </ul>
+    <span class="po-st" data-pf-st="release" role="status" aria-live="polite"></span>
+    <% } %>
+  </section>
+  <% } %>
+
   <div class="ds-stats" aria-label="<%- t('owner.summary') %>">
     <% if (vault) { %><div class="ds-stat"><span><%- t('owner.s_vault') %></span><b class="gold"><%= num(vault.balance) %></b><small>PAT</small></div><% } %>
     <div class="ds-stat"><span><%- t('owner.s_pending') %></span><b class="gold"><%= share && room.owner_kind === 'user' ? num(share.d7) : '—' %></b><small><%- room.owner_kind === 'user' ? t('owner.v_7d') : t('owner.no_roy_short') %></small></div>
@@ -549,6 +609,7 @@
 </main>
 <% if (!guide) { %><script src="/public/js/pad-owner.js?v=4" defer></script><% } %>
 <% if (!guide && locals.site) { %><script src="/public/js/pad-owner-site.js?v=1" defer></script><% } %>
+<% if (!guide && locals.filter) { %><script src="/public/js/pad-owner-filter.js?v=1" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><link rel="stylesheet" href="/public/css/room-mod.css?v=9"><script src="/public/js/room-mod.js?v=11" defer></script><script src="/public/js/pad-owner-mod.js?v=1" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><script src="/public/js/pad-sb-owner.js?v=1" defer></script><% } %>
 </body>

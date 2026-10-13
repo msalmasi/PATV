@@ -305,6 +305,7 @@ function visibleSql(now = NOW(), blocked = []) {
 const PADACCESS = () => require("./padaccess");
 const TAGS = () => require("./feedtags");          // 1.99iq: content tags
 const CREATORS = () => require("./creators");      // 1.99pv: ⭐ PATV Creators - locked posts + 18+ communities
+const FILTER = () => require("./feedfilter");      // 1.99ux: the cheap content filter (opt-in per pad; before Pepe's automod)
 async function blockedFor(viewer) {
   if (isStaff(viewer)) return [];
   try { await PADACCESS().init(); return PADACCESS().blockedFor(viewer); } catch (e) { console.error("[feed] pad access:", e.message); return []; }
@@ -1018,6 +1019,11 @@ async function create(userId, input, deps = {}) {
     if (why) throw new Refuse(why.status, why.message);
     if (!deps.onBehalf && (await roomSettings(rid)).approval && !(await rooms.canManage(u, rid))) pendingIn.add(rid);
   }
+  // 1.99ux: the cheap content filter (feedfilter.js; opt-in per pad, synchronous, no model). A block is refused here,
+  // before anything is charged; a hide stores the post hidden in that pad (no announcements / mention notices).
+  const filt = deps.roomGen || deps.onBehalf ? null : await FILTER().check(u, roomIds, { kind: "post", title, body, links: linkIn ? 1 : 0 });
+  if (filt && filt.action === "block") throw new Refuse(422, filt.message);
+  const filtHide = !!(filt && filt.action === "hide");
   // attachments: mine, ready, not on a post yet
   let atts = [];
   if (attIds.length) {
@@ -1083,8 +1089,10 @@ async function create(userId, input, deps = {}) {
     const announce = Array.isArray(input.announce) ? new Set(input.announce.map(String)) : null;
     const wants = (rid) => !announce || announce.has(rid) || [...announce].some((x) => (rooms.getCached(rid) || {}).slug === x);
     for (const rid of roomIds) {
-      await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, rid, t, pendingIn.has(rid) ? (wants(rid) ? 1 : 2) : 0]);
-      if (!pendingIn.has(rid) && wants(rid) && !lock) await queueMention(rid, id);     // 1.99pv: Pepe never announces locked posts
+      const hid = filtHide && rid === filt.roomId;
+      await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created, pending, hidden_at, hidden_by) VALUES (?, ?, ?, ?, ?, ?)",
+                     [id, rid, t, pendingIn.has(rid) ? (wants(rid) ? 1 : 2) : 0, hid ? t : null, hid ? FILTER().BY : null]);
+      if (!pendingIn.has(rid) && wants(rid) && !lock && !filtHide) await queueMention(rid, id);     // 1.99pv: Pepe never announces locked posts
     }
     // the author's own upvote (Reddit-style; they can take it back, never turn it into a downvote) - never Pepe's
     if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
@@ -1101,11 +1109,14 @@ async function create(userId, input, deps = {}) {
     throw e;
   }
   console.log(`[feed] post ${id} by ${u.username} community=${roomIds.join(",")} files=${atts.length} link=${link ? link.domain : "-"} cost=${cost}`);
+  // 1.99ux: the filter's log, report, author notice (+ the self-harm note) - never fails the post
+  if (filt) await FILTER().record(filt, { kind: "post", postId: id, authorId: u.userId }).catch((e) => console.error("[feed] filter record:", e.message));
   const made = await get(id, u);
+  if (made && filt && filt.message) made.safety = { action: filt.action, selfharm: filt.selfharm, message: filt.message };
   // 1.99kk: @mentions in the body (feedmentions.js; not while the post waits for a pad's approval everywhere)
-  if (made && body && !lock) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, link: made.url || await postLink(id) });
+  if (made && body && !lock && !filtHide) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, link: made.url || await postLink(id) });
   // 1.99bz: followers who asked for it get an inbox notice (default off); never blocks the post
-  if (made) {
+  if (made && !filtHide) {
     const pending = require("./follows").notifyNewPost(made, u.displayname || u.username);
     if (deps.awaitNotices) await pending;
   }
@@ -1325,9 +1336,17 @@ async function edit(user, id, patch) {
   // 1.99iq: the post's tags (the Edit form's tag box; a tag a pad mod removed stays removed) - not an edit of the text
   if (patch.tags !== undefined && patch.tags !== null) await TAGS().setTags(id, TAGS().parseTags(patch.tags));
   const onlyInAll = patch.title == null && patch.body == null && patch.nsfw == null;
+  // 1.99ux: a changed title / body goes through the content filter (a block refuses the edit, a hide hides it in its pad)
+  let filt = null;
+  if (!onlyInAll && (title !== r.title || body !== r.body) && !isPepe(user)) {
+    const roomIds = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [id])).map((x) => x.room_id);
+    filt = await FILTER().check(await account(user.userId), roomIds, { kind: "post", title, body, links: r.link_url ? 1 : 0, edit: true, postId: id });
+    if (filt && filt.action === "block") throw new Refuse(422, filt.message);
+  }
   if (!onlyInAll) await runQuery("UPDATE feed_posts SET title = ?, body = ?, nsfw = ?, edited = ? WHERE id = ?", [title || null, body || null, nsfw, NOW(), id]);
-  // 1.99kk: names added by the edit get their @mention notice (feedmentions.js)
-  if (!onlyInAll && body && body !== r.body) {
+  if (filt) await FILTER().record(filt, { kind: "post", postId: id, authorId: r.author_id }).catch((e) => console.error("[feed] filter record:", e.message));
+  // 1.99kk: names added by the edit get their @mention notice (feedmentions.js) - not for an edit the filter hid
+  if (!onlyInAll && body && body !== r.body && !(filt && filt.action === "hide")) {
     const u = await account(user.userId);
     if (u) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, prevText: r.body, link: await postLink(id) });
   }
@@ -1562,14 +1581,21 @@ async function comment(user, postId, { body, parent } = {}) {
     if (!par || par.deleted_at || par.hidden_at) throw new Refuse(404, "That comment is gone.");
     if (par.parent_id) par = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [par.parent_id]))[0] || par;   // replies stay one level deep
   }
+  // 1.99ux: the cheap content filter (feedfilter.js; the post's pad decides) - a block is refused, a hide is stored hidden
+  const filt = await FILTER().check(u, roomIds, { kind: "comment", body: text });
+  if (filt && filt.action === "block") throw new Refuse(422, filt.message);
+  const filtHide = !!(filt && filt.action === "hide");
   const id = newId(10);
   const t = NOW();
-  await runQuery("INSERT INTO feed_comments (id, post_id, parent_id, author_id, body, created) VALUES (?, ?, ?, ?, ?, ?)",
-                 [id, postId, par ? par.id : null, u.userId, text, t]);
+  await runQuery("INSERT INTO feed_comments (id, post_id, parent_id, author_id, body, created, hidden_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                 [id, postId, par ? par.id : null, u.userId, text, t, filtHide ? t : null]);
+  if (filt) await FILTER().record(filt, { kind: "comment", postId, commentId: id, authorId: u.userId }).catch((e) => console.error("[feed] filter record:", e.message));
+  const safety = filt && filt.message ? { action: filt.action, selfharm: filt.selfharm, message: filt.message } : undefined;
   if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_comment_votes (comment_id, post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, 1, 1, ?, ?)", [id, postId, u.userId, t, t]);
   await recountComment(id);
   await recount(postId);
   if (!isPepe(u)) require("./achievements").poke(u.userId);        // 1.99pa: 💬 comment achievements (achsocial.js)
+  if (filtHide) return { id, safety };                              // 1.99ux: hidden by the filter - no notices until it's released
   // notices: the post's author, and the person replied to (never yourself, never twice)
   const who = u.displayname || u.username;
   const what = (p.title || p.body || "your post").replace(/\s+/g, " ").slice(0, 60);
@@ -1585,7 +1611,7 @@ async function comment(user, postId, { body, parent } = {}) {
   }
   // 1.99kk: @mentions (feedmentions.js; never the people just told above)
   await require("./feedmentions").notify({ author: u, kind: "comment", id, postId, text, skip: [...told], link });
-  return { id };
+  return { id, safety };
 }
 async function recount(postId) {
   const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_comments WHERE post_id = ? AND deleted_at IS NULL", [postId]))[0].n;
@@ -1598,9 +1624,17 @@ async function editComment(user, id, body) {
   const text = cleanText(body, COMMENT_MAX);
   if (!text) throw new Refuse(400, "A comment can't be empty.");
   await stickerCheck(user.userId, text);
-  await runQuery("UPDATE feed_comments SET body = ?, edited = ? WHERE id = ?", [text, NOW(), c.id]);
-  // 1.99kk: names added by the edit get their @mention notice (feedmentions.js)
+  // 1.99ux: an edit goes through the content filter too (a block refuses the edit, a hide hides the comment)
+  let filt = null;
   if (text !== c.body) {
+    const roomIds = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [c.post_id])).map((r) => r.room_id);
+    filt = await FILTER().check(await account(user.userId), roomIds, { kind: "comment", body: text, edit: true, postId: c.post_id, commentId: c.id });
+    if (filt && filt.action === "block") throw new Refuse(422, filt.message);
+  }
+  await runQuery("UPDATE feed_comments SET body = ?, edited = ? WHERE id = ?", [text, NOW(), c.id]);
+  if (filt) await FILTER().record(filt, { kind: "comment", postId: c.post_id, commentId: c.id, authorId: c.author_id }).catch((e) => console.error("[feed] filter record:", e.message));
+  // 1.99kk: names added by the edit get their @mention notice (feedmentions.js) - not for an edit the filter hid
+  if (text !== c.body && !(filt && filt.action === "hide")) {
     const u = await account(user.userId);
     if (u) await require("./feedmentions").notify({ author: u, kind: "comment", id: c.id, postId: c.post_id, text, prevText: c.body, link: await postLink(c.post_id, "#c-" + c.id) });
   }

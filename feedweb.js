@@ -796,7 +796,7 @@ function register(app, { addUser, isBotToken }) {
       if (await termsGate(req)) return termsRefusal(res);
       const p = await store.create(req.user.userId, req.body || {}, { preview: previewDep });
       await record(req, { kind: "post", id: p.id, postId: p.id, event: "create" });
-      res.json({ ok: true, id: p.id, url: p.url });
+      res.json({ ok: true, id: p.id, url: p.url, safety: p.safety });       // 1.99ux: the content filter's note, if any
     } catch (e) { fail(res, e); }
   });
   // 1.99ci: crosspost {community, title?} -> a new post in that community embedding this one

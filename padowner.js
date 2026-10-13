@@ -144,6 +144,7 @@ const WEB_CAPS = Object.freeze([
   { id: "web_room_mod", area: "room", route: "POST /api/rooms/:slug/mod", where: "/p/{slug}/owner#mod" },                       // 1.99ti
   { id: "web_room_topic", area: "room", route: "POST /api/rooms/:slug/owner/topic", where: "/p/{slug}/owner#topic" },          // 1.99up
   { id: "web_pad_site", area: "feed", route: "POST /api/rooms/:slug/owner/site", where: "/p/{slug}/owner#site" },              // 1.99up
+  { id: "web_pad_filter", area: "feed", route: "POST /api/rooms/:slug/owner/filter", where: "/p/{slug}/owner#safety" },        // 1.99ux: feedfilter.js
 ]);
 // 1.99ti: Pepe in / out of the pad's Camfrog room (website action "room.ctl" from the owner; Pepe re-checks owner, Plus, his
 // 5-room cap, his home room and staging). One per CTL_GAP_MS per pad here too.
@@ -339,6 +340,7 @@ async function pageData(R, viewer) {
     CHOICES, GROUPS: OWNER_GROUPS, ICONS: OWNER_ICONS, readonly: pepe ? readonlyList(pepe) : null, VOICES: voices || [], CONVO_QUIET,
     plus: camfrog ? await safe(() => require("./premium").isPrimePlus(R.id), false) : false,
     site: await safe(() => require("./padsite").state(R.id)),          // 1.99up: Pepe on the pad's site side (any pad)
+    filter: await safe(() => require("./feedfilter").state(R.id)),     // 1.99ux: the cheap content filter (any pad)
     TOPIC_MAX,
   };
 }
@@ -359,6 +361,7 @@ function register(app, { addUser }) {
   const bad = (res, st, error) => res.status(st).json({ ok: false, error });
   if (app.locals) app.locals.myPads = myPads;          // 1.99ti: layout.ejs (You > My pads) + profile.ejs
   require("./padsite").register(app, { addUser });      // 1.99up: Pepe on the pad's site side (padsite.js)
+  require("./feedfilter").register(app, { addUser });   // 1.99ux: the cheap content filter (owner card + /feed/admin/filter)
   const jsonOnly = (req, res, next) => (req.is("application/json") && req.get("X-Requested-With") === "fetch" ? next() : bad(res, 400, "Bad request."));
   async function ownedPad(req, res) {
     if (!req.user || !req.user.userId) { bad(res, 401, "Sign in first."); return null; }

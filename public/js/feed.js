@@ -270,6 +270,7 @@
           return api(curl, body);
         });
       }).then(function (d) {
+        if (d && d.safety && d.safety.message) alert(d.safety.message);     // 1.99ux: the content filter's note (hidden / flagged / helplines)
         location.hash = 'c-' + d.id; location.reload();
       }).catch(fail);
     } else if (act === 'cedit-save') {
