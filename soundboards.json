@@ -5,7 +5,7 @@
     "emoji": "🌍",
     "clips": [
       { "id": "g-airhorn", "label": "Air horn", "emoji": "📯", "rarity": "common", "text": "Bwaaaaap! Bwaaap bwaaap!", "file": "g-airhorn.ogg", "group": "sfx" },
-      { "id": "g-letsgo", "label": "Let's go", "emoji": "🚀", "rarity": "common", "text": "Let's goooooo!", "file": "g-letsgo.ogg" },
+      { "id": "g-letsgo", "label": "Let's go", "emoji": "🚀", "rarity": "common", "text": "LET'S GOOOOOO!!!", "file": "g-letsgo.ogg" },
       { "id": "g-noway", "label": "No way", "emoji": "😲", "rarity": "common", "text": "No. Way. No way!", "file": "g-noway.ogg" },
       { "id": "g-sus", "label": "Sus", "emoji": "🤨", "rarity": "common", "text": "Hmm. That's kinda sus.", "file": "g-sus.ogg" },
       { "id": "g-applause", "label": "Applause", "emoji": "👏", "rarity": "common", "text": "Clap clap clap clap. Bravo. Bravo." },
@@ -96,7 +96,7 @@
   "legendaries": [
     { "id": "lg-gawk", "label": "Gawk gawk gawk", "emoji": "🎰", "text": "Gawk gawk gawk gawk gawk!", "voice": "random", "live": true, "price": 20000000,
       "desc": "A different voice every time you play it." },
-    { "id": "lg-founder", "label": "Founder", "emoji": "👑", "text": "Make way for the most ELECTRIFYING man on Camfrog.", "file": "lg-founder.ogg", "price": 10000000, "supply": 25, "numbered": true,
+    { "id": "lg-founder", "label": "Founder", "emoji": "👑", "text": "Make WAY for the most ELECTRIFYING man on CAMFROG!", "file": "lg-founder.ogg", "price": 10000000, "supply": 25, "numbered": true,
       "desc": "One of 25, numbered." }
   ]
 }

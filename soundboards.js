@@ -348,6 +348,10 @@ async function addRoomClip(roomId, who, o) {
   } else {
     subject = low(o.subject) || null;
     if (subject && !LOGIN_RE.test(subject)) subject = null;
+    // 1.99ww: a mic clip may bring its transcript (Pepe's !sb addmic) - its chat caption when it plays; a line that wouldn't
+    // pass as a TTS line is simply not kept (the clip still is)
+    const said = String(o.text || "").replace(/[\u0000-\u001f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, TEXT_MAX);
+    text = said && !textRefusal(said) ? said : null;
     if (subject) {
       const su = await L().userByLogin(subject);
       if (su && !(await L().allows(su.userId, "soundboard"))) throw new Refuse(403, `${subject} has opted out of being on soundboards.`);
@@ -444,7 +448,9 @@ async function botState() {
   const rows = await getQuery("SELECT * FROM sb_clips WHERE status IN ('active','render') ORDER BY board, sort, created");
   const season = seasonNow();
   const clips = rows.filter((c) => c.board !== "sample" && (!String(c.board).startsWith("season:") || (season && c.board === "season:" + season.id)))
-    .map((c) => Object.assign(pub(c), { text: c.live ? c.text : undefined, voice_owner: null, sha: c.sha || null }));
+    // 1.99ww: every clip carries its line - Pepe posts it in the room as the clip plays (his TTS caption switch); a mic clip's
+    // line is the transcript Pepe stored with it (or none); a sound effect is shown by its label (pub().group)
+    .map((c) => Object.assign(pub(c), { text: c.text || undefined, voice_owner: null, sha: c.sha || null }));
   // the owners of cloned voices (their cut) and who may not be on a soundboard any more
   try {
     const VS = require("./voicestore");

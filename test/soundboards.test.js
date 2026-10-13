@@ -108,6 +108,10 @@ test("catalogue: every clip seeded for rendering; Pepe's sync hands out render j
   assert.equal(r.d.clips.find((c) => c.id === "lg-gawk").status, "active", "1.99vu: a live clip is playable from the start (no WAV needed)");
   assert.ok(r.d.clips.every((c) => c.status === "render" ? !c.audio : true));
   assert.equal(r.d.clips.find((c) => c.id === "lg-gawk").text, "Gawk gawk gawk gawk gawk!", "a live clip carries its line (rendered at every play)");
+  // 1.99ww: every clip carries its line (Pepe's chat caption); a sound effect is marked so it's shown by its label
+  const lg = r.d.clips.find((c) => c.id === "g-letsgo");
+  assert.ok(lg && /^Let's go/i.test(lg.text), JSON.stringify(lg));
+  assert.equal(r.d.clips.find((c) => c.id === "sfx-crickets").group, "sfx");
   assert.equal((await call("POST", "/api/soundboards/bot/sync", null, { password: "x" })).status, 403);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sb_plays"))[0].n, 1, "plays are recorded");
 });
@@ -199,9 +203,13 @@ test("pad boards: Prime Time slots, the text guard, the speaker's opt-out, owner
   assert.equal((await call("GET", "/api/rooms/sb-room/soundboard/manage", U.owner)).d.used, 1);
   // chat: !sb addmic with Pepe's ready WAV
   r = await call("POST", "/api/soundboards/bot/room-clip", null, { password: "bot", room: ROOM.id, camfrog: "ownercf", kind: "audio", label: "Live", subject: "alicecf",
-                                                                   data: wav(3).toString("base64"), secs: 3 });
+                                                                   data: wav(3).toString("base64"), secs: 3, text: "I am the\nmain <b>character</b>" });
   assert.equal(r.status, 200, JSON.stringify(r.d));
   assert.equal(r.d.clip.status, "active");
+  // 1.99ww: the mic-up's transcript is kept (one clean line) and Pepe's sync carries it - his chat caption as it plays
+  const withLine = (await SB.botState()).clips.find((c) => c.id === r.d.clip.id);
+  assert.equal(withLine.text, "I am the main b character /b", JSON.stringify(withLine));
+  assert.equal(withLine.kind, "audio");
 });
 
 test("reports hide a clip at 3; the person heard in it removes it at once", async () => {

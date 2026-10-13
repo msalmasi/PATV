@@ -221,10 +221,10 @@
   },
   "g-letsgo": {
    "file": "g-letsgo.ogg",
-   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 1001",
-   "line": "Let's gooo!",
+   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 2004 (1.99ww hyped re-take: shouted script, best of 96 takes by pitch/brightness)",
+   "line": "LET'S. GOOOOOOOO!!!",
    "stt_check": "Let's go!",
-   "secs": 1.43,
+   "secs": 1.19,
    "licence": "PATV's own"
   },
   "g-noway": {
@@ -261,10 +261,10 @@
   },
   "lg-founder": {
    "file": "lg-founder.ogg",
-   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 1001",
-   "line": "Make way for the most ELECTRIFYING man on Camfrog.",
+   "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 2006, atempo 1.08 (1.99ww hyped re-take: ring-announcer script, best of 72 takes by pitch/brightness)",
+   "line": "Make WAY! For the most ELECTRIFYING man... on CAMFROG!!!",
    "stt_check": "Make way for the most electrifying man on Camfrog.",
-   "secs": 3.85,
+   "secs": 2.84,
    "licence": "PATV's own"
   }
  }
