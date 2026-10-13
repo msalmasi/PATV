@@ -215,3 +215,30 @@ test("the lists: pads on the cards, ?pad= filters, voided ones hidden unless ?vo
     server.close();
   }
 });
+
+test("tools/backfill-market-pads.js: dry run by default; --web-pad moves website-made rows (only from their room's pad)", async () => {
+  const { execFileSync } = require("child_process");
+  await runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, camfrog TEXT,
+                  site_admin INTEGER, kind TEXT, args TEXT, tag TEXT, label TEXT, status TEXT, message TEXT, created INTEGER, claimed INTEGER, updated INTEGER)`);
+  await runQuery(`INSERT INTO pepe_actions (user_id, username, kind, args, status, message) VALUES ('u1', 'ann', 'cmd', '["market","new","Q?"]', 'done', '📈 New market M931: ...')`);
+  const now = Math.floor(Date.now() / 1000);
+  const row = { model: "lmsr", options: ["Yes", "No"], b: 50000, volume: 0, q: { Yes: 0, No: 0 }, status: "open", creator: "ann", judge: "bob",
+                created: now, closes: now + 7200, positions: {}, trades: [], history: [] };
+  // a website-made market the room put on PepeBeta.Room's pad, and a chat one with no pad column yet
+  await markets.storeRow(markets.cleanMarket({ ...row, id: 931, question: "Web made?", room: "PepeBeta.Room" }));
+  await runQuery("INSERT INTO markets (id, data, status, closes, updated, pad) VALUES (932, ?, 'open', ?, ?, NULL)",
+                 [JSON.stringify({ ...row, id: 932, question: "Chat made?", room: "DRAMA_CENTRAL" }), now + 7200, Date.now()]);
+  const run = (...a) => execFileSync(process.execPath, [path.join(repo, "tools", "backfill-market-pads.js"), "--dir=" + tmp, ...a],
+                                     { env: { ...process.env, NODE_PATH: process.env.NODE_PATH || "" }, encoding: "utf8" });
+  let out = run("--web-pad=drama-central");
+  assert.match(out, /M931\s+lmsr .* -> DRAMA_CENTRAL\s+\[web \(--web-pad drama-central\)\] move/);
+  assert.match(out, /M932 .* -> DRAMA_CENTRAL\s+\[room\] set/);
+  assert.match(out, /dry run - nothing written/);
+  assert.equal((await getQuery("SELECT pad FROM markets WHERE id = 931"))[0].pad, "PepeBeta.Room", "a dry run writes nothing");
+  out = run("--web-pad=drama-central", "--apply", "--backup-dir=" + path.join(tmp, "bk"));
+  assert.match(out, /applied: \d+ row\(s\)/);
+  assert.equal((await getQuery("SELECT pad FROM markets WHERE id = 931"))[0].pad, "DRAMA_CENTRAL");
+  assert.equal((await getQuery("SELECT pad FROM markets WHERE id = 932"))[0].pad, "DRAMA_CENTRAL");
+  assert.ok(fs.readdirSync(path.join(tmp, "bk")).some((f) => /^myapp-pre-marketpads-/.test(f)), "a backup first");
+  assert.doesNotMatch(run("--web-pad=drama-central"), / move| set$/m, "idempotent");
+});

@@ -1,6 +1,6 @@
 // tools/backfill-market-pads.js — 1.99ur: give every market / betting pool / poll its pad (padlinks.js). DRY RUN BY DEFAULT.
 //
-//   node tools/backfill-market-pads.js [--dir=<folder with myapp.db>] [--apply] [--web-sitewide] [--backup-dir=<dir>] [--json]
+//   node tools/backfill-market-pads.js [--dir=<folder with myapp.db>] [--apply] [--web-sitewide | --web-pad=<slug|id>] [--backup-dir=<dir>] [--json]
 //
 // Before 1.99ur a market / pool / poll had no pad: markets and pools carried the CHAT ROOM they were made in (`room` in the
 // JSON row), polls nothing at all. The site never let you pick a pad, so the room was an artifact:
@@ -9,7 +9,9 @@
 //     when exactly one has it (how = room-title) - reported
 //   * a website create ran in "the room the creator happened to be in right now" (pepe_webact._webact_home_room) - no
 //     choice was ever made. Found through pepe_actions (a done "!market new" / "!pool new" whose reply names the M id).
-//     Kept on that room's pad by default (reported as web-room); --web-sitewide makes them site-wide instead.
+//     Kept on that room's pad by default (reported as web-room); --web-sitewide makes them site-wide instead, and 1.99vm
+//     --web-pad=<slug|id> puts them all on that pad (the user's call: drama-central) - also MOVING ones already set (action
+//     "move"; only website-made rows, only from the pad the room gave them).
 //   * no room at all                                                                            -> site-wide (NULL)
 //   * a room no pad knows ("Camfrog", a typo)                                                   -> reported, left NULL
 // Only the `pad` COLUMN of the markets / polls tables is written (the JSON rows are the engines' and are rewritten on every
@@ -56,6 +58,11 @@ async function webCreated() {
 async function survey() {
   await padlinks.ready();
   const web = await webCreated();
+  let webPad = null;
+  if (args["web-pad"]) {
+    webPad = padlinks.lookup(String(args["web-pad"]));
+    if (!webPad) throw new Error(`--web-pad: no pad "${args["web-pad"]}"`);
+  }
   const plan = [];
   for (const [table, key] of [["markets", "id"], ["polls", "id"]]) {
     if (!(await hasTable(table))) continue;
@@ -68,13 +75,14 @@ async function survey() {
       const isWeb = table === "markets" && web.has(Number(r.id));
       let want = pad, action;
       if (isWeb && args["web-sitewide"]) { want = null; }
-      if (r.pad) action = r.pad === want ? "ok" : "differs (kept)";
+      if (isWeb && webPad) { want = webPad.id; }
+      if (r.pad) action = r.pad === want ? "ok" : isWeb && webPad && r.pad === pad ? "move" : "differs (kept)";
       else if (want) action = "set";
       else if (d.room && !pad) action = "unresolved (left site-wide)";
       else action = "site-wide";
       plan.push({ table, id: r.id, ref: table === "markets" ? `M${r.id}` : String(r.id), model: d.model || (table === "polls" ? "poll" : "pool"),
                   status: d.status || null, room: d.room || null, pad_field: d.pad || null, column: r.pad || null, want: want || null,
-                  how: isWeb ? (args["web-sitewide"] ? "web (site-wide)" : `web-room (${how || "none"})`) : how, action,
+                  how: isWeb ? (webPad ? `web (--web-pad ${webPad.slug})` : args["web-sitewide"] ? "web (site-wide)" : `web-room (${how || "none"})`) : how, action,
                   web: isWeb ? web.get(Number(r.id)) : null });
     }
   }
@@ -93,7 +101,7 @@ async function backup(dir) {
   const plan = await survey();
   const count = (f) => plan.filter(f).length;
   const summary = {
-    rows: plan.length, set: count((p) => p.action === "set"), ok: count((p) => p.action === "ok"),
+    rows: plan.length, set: count((p) => p.action === "set"), move: count((p) => p.action === "move"), ok: count((p) => p.action === "ok"),
     site_wide: count((p) => p.action === "site-wide"), unresolved: count((p) => p.action.startsWith("unresolved")),
     differs: count((p) => p.action.startsWith("differs")),
     by_how: plan.reduce((a, p) => { const k = p.how || "none"; a[k] = (a[k] || 0) + 1; return a; }, {}),
@@ -102,7 +110,7 @@ async function backup(dir) {
   };
   if (args.json) console.log(JSON.stringify({ apply, summary, plan }, null, 1));
   else {
-    for (const p of plan) if (p.action !== "ok") console.log(`${p.ref.padEnd(14)} ${String(p.model).padEnd(5)} ${String(p.status || "").padEnd(8)} room=${JSON.stringify(p.room)} -> ${p.want || "(site-wide)"}  [${p.how || "-"}] ${p.action}${p.web ? ` (web action #${p.web.action} by ${p.web.by})` : ""}`);
+    for (const p of plan) if (p.action !== "ok" || p.web) console.log(`${p.ref.padEnd(14)} ${String(p.model).padEnd(5)} ${String(p.status || "").padEnd(8)} room=${JSON.stringify(p.room)} -> ${p.want || "(site-wide)"}  [${p.how || "-"}] ${p.action}${p.web ? ` (web action #${p.web.action} by ${p.web.by})` : ""}`);
     console.log(JSON.stringify(summary, null, 1));
   }
   if (!apply) { console.log("dry run - nothing written (add --apply)"); return; }
@@ -112,10 +120,15 @@ async function backup(dir) {
   let n = 0;
   await tx(async () => {
     for (const p of plan) {
+      if (p.action === "move") {          // only from the pad the backfill / the room gave it (never a re-keyed or hand-set pad)
+        const r = await runQuery(`UPDATE ${p.table} SET pad = ? WHERE id = ? AND pad = ?`, [p.want, p.id, p.column]);
+        n += (r && r.changes) || 0;
+        continue;
+      }
       if (p.action !== "set") continue;
       const r = await runQuery(`UPDATE ${p.table} SET pad = ? WHERE id = ? AND pad IS NULL`, [p.want, p.id]);
       n += (r && r.changes) || 0;
     }
   });
-  console.log(`applied: ${n} row(s) given a pad`);
+  console.log(`applied: ${n} row(s) given / moved to a pad`);
 })().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
