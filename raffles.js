@@ -35,9 +35,10 @@
 //   `${tickets_digest}:R<id>:${counter}`) word stream. The seed is revealed after the draw; /raffles/<id> re-checks it in
 //   the browser (and verify() here).
 //
-// ABUSE: verified accounts only (verified.js) create; creations per day, open raffles per user, a max ticket price and
-//   ticket count; the creator and their linked alts (welcome_bonus.dup_of, shared device / identity keys) can't buy; text
+// ABUSE: verified accounts only (verified.js) create; creations per day, open raffles per user, a max ticket price; the
+//   creator and their linked alts (welcome_bonus.dup_of, shared device / identity keys) can't buy; text
 //   guard on everything Pepe repeats; community pictures are site pictures only; admin takedown with full refunds.
+//   1.99xo (the user): NO ticket limit per raffle (only 1,000 tickets per purchase as a request-size guard); max PAT prize 1.5B.
 //
 // Tables (records follow the ACCOUNT - accountMerge.js rules):
 //   raffles        one row per raffle (see init)
@@ -62,6 +63,8 @@ const now = () => clock();
 const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 const str = (v, n) => String(v == null ? "" : v).replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 const int = (v) => { const n = Math.floor(Number(String(v == null ? "" : v).replace(/[,_\s]/g, ""))); return Number.isFinite(n) ? n : NaN; };
+/** Tickets a raffle may hold at a price: no product cap (1.99xo) - only the pot (price x tickets) must stay a safe integer. */
+const MAX_TICKETS = (price) => Math.floor(Number.MAX_SAFE_INTEGER / Math.max(1, Number(price) || 1));
 /** A typed PAT amount ("25k", "1.5m", "12,000" - Pepe's rules, public/js/patamount.js) -> int or NaN. */
 const pat = (v) => { if (typeof v === "number") return Math.floor(v); const n = require("./public/js/patamount").parse(v); return n ? Math.floor(n) : NaN; };
 
@@ -73,10 +76,11 @@ class Refuse extends Error {
 const DEFAULTS = Object.freeze({
   fee_pct: 10,                 // % of a community raffle's ticket pot, to the raffle_fee routing row (House by default)
   price_min: 10, price_max: 1000000,          // a ticket's price
-  tickets_max: 100000,         // a raffle's ticket cap / target ceiling
-  buy_max: 1000,               // tickets in one purchase
-  purchases_max: 2000,         // purchases (escrow holds) per raffle - the draw settles them in one move
-  prize_min: 1000, prize_max: 1000000000,     // a PAT prize
+  // 1.99xo (the user): NO ticket limit per raffle - a target / cap / minimum is any whole number (only the pot has to stay a
+  // safe integer); the draw settles the ticket holds in chunks of SETTLE_CHUNK inside its one transaction, so the number of
+  // separate purchases isn't capped either
+  buy_max: 1000,               // tickets in one purchase (a request-size guard, not a raffle limit)
+  prize_min: 1000, prize_max: 1500000000,     // a PAT prize (1.99xo: 1.5B, the user)
   open_max: 3,                 // live community raffles per creator
   per_day: 3,                  // community raffles a creator can make per 24 h
   min_lead_min: 10,            // a date draw at least this far ahead
@@ -87,7 +91,7 @@ const DEFAULTS = Object.freeze({
   announce_milestones: true,   // Pepe announces 25 / 50 / 75 / 100% of the target (or the minimum)
 });
 const LIMITS = {
-  fee_pct: [0, 50], price_min: [1, 1e9], price_max: [1, 1e10], tickets_max: [1, 1e6], buy_max: [1, 1e5], purchases_max: [10, 2000],
+  fee_pct: [0, 50], price_min: [1, 1e9], price_max: [1, 1e10], buy_max: [1, 1e5],
   prize_min: [1, 1e12], prize_max: [1, 1e12], open_max: [0, 100], per_day: [0, 100], min_lead_min: [0, 1440], max_days: [1, 365],
   grace_hours: [0, 720], custom_hold_days: [1, 60],
 };
@@ -488,10 +492,10 @@ async function validate(user, b) {
   if (!(price >= C.price_min && price <= C.price_max)) throw new Refuse(400, `A ticket costs ${fmt(C.price_min)}-${fmt(C.price_max)} PAT.`, "E_PRICE");
   out.price = price;
   const minT = b.min_tickets === undefined || b.min_tickets === "" ? 1 : int(b.min_tickets);
-  if (!(minT >= 1 && minT <= C.tickets_max)) throw new Refuse(400, `The minimum is 1-${fmt(C.tickets_max)} tickets.`, "E_MIN");
+  if (!(minT >= 1 && minT <= MAX_TICKETS(price))) throw new Refuse(400, "The minimum is 1 ticket or more.", "E_MIN");
   out.min_tickets = minT;
   const maxPer = b.max_per_user === undefined || b.max_per_user === "" ? 0 : int(b.max_per_user);
-  if (!(maxPer >= 0 && maxPer <= C.tickets_max)) throw new Refuse(400, "Max tickets per person: leave it empty for no limit, or 1 and up.", "E_MAXPER");
+  if (!(maxPer >= 0 && maxPer <= MAX_TICKETS(price))) throw new Refuse(400, "Max tickets per person: leave it empty for no limit, or 1 and up.", "E_MAXPER");
   out.max_per_user = maxPer;
   const t = now();
   const trig = String(b.trigger) === "target" ? "target" : String(b.trigger) === "date" ? "date" : null;
@@ -506,7 +510,7 @@ async function validate(user, b) {
     }
     out.draw_at = at;
     const maxT = b.max_tickets === undefined || b.max_tickets === "" ? 0 : int(b.max_tickets);
-    if (!(maxT === 0 || (maxT >= minT && maxT <= C.tickets_max))) throw new Refuse(400, "The ticket cap must be at least the minimum (or empty for no cap).", "E_MAX");
+    if (!(maxT === 0 || (maxT >= minT && maxT <= MAX_TICKETS(price)))) throw new Refuse(400, "The ticket cap must be at least the minimum (or empty for no cap).", "E_MAX");
     out.max_tickets = maxT;
     out.target = 0;
     if (exp === null) exp = Math.max(at + C.grace_hours * HOUR, Math.min(at + 3 * DAY, t + C.max_days * DAY));
@@ -515,7 +519,7 @@ async function validate(user, b) {
     }
   } else {
     const target = int(b.target);
-    if (!(target >= Math.max(1, minT) && target <= C.tickets_max)) throw new Refuse(400, `The target must be ${fmt(Math.max(1, minT))}-${fmt(C.tickets_max)} tickets (at least the minimum).`, "E_TARGET");
+    if (!(target >= Math.max(1, minT) && target <= MAX_TICKETS(price))) throw new Refuse(400, `The target must be at least ${fmt(Math.max(1, minT))} tickets (the minimum).`, "E_TARGET");
     out.target = target;
     out.max_tickets = target;
     out.draw_at = null;
@@ -666,14 +670,13 @@ async function buy(userId, { id, qty, idem, expect, via = "web" } = {}) {
     if (t >= r.expires_at) throw new Refuse(409, "That raffle has expired.", "E_CLOSED");
     const cap = r.max_tickets || 0;
     if (cap && r.sold + n > cap) throw new Refuse(409, r.sold >= cap ? "It's sold out." : `Only ${fmt(cap - r.sold)} ticket(s) left.`, "E_SOLD_OUT");
-    if (r.purchases >= C.purchases_max) throw new Refuse(409, "This raffle has taken as many separate purchases as it can - it's full.", "E_FULL");
     const have = Number((await getQuery("SELECT COALESCE(SUM(qty),0) AS n FROM raffle_tickets WHERE raffle_id = ? AND user_id = ? AND state != 'refunded'",
                                         [r.id, user.userId]))[0].n) || 0;
     if (r.max_per_user && have + n > r.max_per_user) {
       throw new Refuse(409, have >= r.max_per_user ? `You have the most tickets one person can hold (${r.max_per_user}).` : `You can buy ${r.max_per_user - have} more.`, "E_MAX_PER");
     }
     const amount = r.price * n;
-    if (!Number.isSafeInteger(amount)) throw new Refuse(400, "Too many.", "E_QTY");
+    if (!Number.isSafeInteger(amount) || !Number.isSafeInteger(r.pot + amount)) throw new Refuse(400, "Too many.", "E_QTY");
     const esc = ESC();
     const account = await esc.accountFor({ userId: user.userId });
     const h = await esc.holdInTx({ key: `rfb:${r.id}:${user.userId}:${s}`, hid: null, account, amount, ref: `${KIND_TICKET}-${r.id}`,
@@ -715,6 +718,36 @@ async function buy(userId, { id, qty, idem, expect, via = "web" } = {}) {
 }
 
 // ── the draw ──
+// settleInTx spends at most 2,000 holds per call (escrow/ledger.js); a raffle with more purchases is settled in several keyed
+// calls inside the draw's ONE transaction - the fee legs fill the first chunks, the creator's payout (or the House) the rest.
+let SETTLE_CHUNK = 2000;
+/** In the open transaction: spend every ticket hold of `r` -> `payee` (a userId; null = the whole pot to the House) minus `legs`. */
+async function settlePotInTx(r, tickets, { payee, legs, how }) {
+  const esc = ESC();
+  const chunks = [];
+  for (let i = 0; i < tickets.length; i += SETTLE_CHUNK) chunks.push(tickets.slice(i, i + SETTLE_CHUNK));
+  const queue = (legs || []).map(([d, a]) => [d, a]);
+  for (let c = 0; c < chunks.length; c++) {
+    const part = chunks[c];
+    const total = part.reduce((a, x) => a + x.amount, 0);
+    let room = total;
+    const fees = [];
+    if (!payee) fees.push(["jackpot", total]), room = 0;
+    while (room > 0 && queue.length) {
+      const take = Math.min(room, queue[0][1]);
+      fees.push([queue[0][0], take]);
+      room -= take;
+      queue[0][1] -= take;
+      if (queue[0][1] <= 0) queue.shift();
+    }
+    const key = c === 0 ? `rfd:${r.id}:pot` : `rfd:${r.id}:pot:${c}`;
+    await esc.settleInTx({ key, hids: part.map((x) => x.hold_id), ref: `${KIND_TICKET}-${r.id}`, max: 2000, fees,
+                           payouts: payee && room > 0 ? [{ userId: payee, amount: room, reason: "raffle ticket sales", cp: "raffle R" + r.id }] : [] });
+    await esc.record(key, { op: "settle", ref: `${KIND_TICKET}-${r.id}`, amount: total, via: "raffles", result: { ok: true, payout: payee ? room : 0, fees, how: how || null } });
+  }
+  if (queue.some(([, a]) => a > 0)) throw new Error(`raffle R${r.id}: fee legs exceed the pot`);
+  await runQuery("UPDATE raffle_tickets SET state = 'spent' WHERE raffle_id = ? AND state = 'held'", [r.id]);
+}
 async function maybeDraw(id) {
   const r = await raffleRow(id);
   if (!r || r.status !== "open") return null;
@@ -751,10 +784,8 @@ async function draw(id) {
     const creator = await userRow(r.creator_id);
     // the ticket pot
     if (r.house) {
-      await esc.settleInTx({ key: `rfd:${r.id}:pot`, hids, payouts: [], fees: [["jackpot", r.pot]], ref: `${KIND_TICKET}-${r.id}`, max: 2000 });
+      await settlePotInTx(r, tickets, { payee: null, legs: [], how: "house" });
       legs = [["jackpot", r.pot]];
-      await esc.record(`rfd:${r.id}:pot`, { op: "settle", ref: `${KIND_TICKET}-${r.id}`, amount: r.pot, via: "raffles", result: { ok: true, house: r.pot } });
-      await runQuery("UPDATE raffle_tickets SET state = 'spent' WHERE raffle_id = ? AND state = 'held'", [r.id]);
     } else if (custom) {
       status = "delivering";                                    // the pot waits in escrow for the winner's confirmation
       releaseAt = t + CONFIG.custom_hold_days * DAY;
@@ -764,10 +795,7 @@ async function draw(id) {
       fee = Math.floor(r.pot * r.fee_pct / 100);
       payout = r.pot - fee;
       legs = await feeLegs(fee);
-      await esc.settleInTx({ key: `rfd:${r.id}:pot`, hids, ref: `${KIND_TICKET}-${r.id}`, max: 2000, fees: legs,
-                             payouts: payout > 0 ? [{ userId: r.creator_id, amount: payout, reason: "raffle ticket sales", cp: "raffle R" + r.id }] : [] });
-      await esc.record(`rfd:${r.id}:pot`, { op: "settle", ref: `${KIND_TICKET}-${r.id}`, amount: r.pot, via: "raffles", result: { ok: true, payout, fees: legs } });
-      await runQuery("UPDATE raffle_tickets SET state = 'spent' WHERE raffle_id = ? AND state = 'held'", [r.id]);
+      await settlePotInTx(r, tickets, { payee: r.creator_id, legs, how: "draw" });
     }
     // the prize
     if (r.prize_kind === "pat") {
@@ -886,12 +914,7 @@ async function releaseInTx(r, how) {
   const fee = Math.floor(pot * r.fee_pct / 100);
   const payout = pot - fee;
   const legs = await feeLegs(fee);
-  if (tickets.length) {
-    await esc.settleInTx({ key: `rfd:${r.id}:pot`, hids: tickets.map((x) => x.hold_id), ref: `${KIND_TICKET}-${r.id}`, max: 2000, fees: legs,
-                           payouts: payout > 0 ? [{ userId: r.creator_id, amount: payout, reason: "raffle ticket sales", cp: "raffle R" + r.id }] : [] });
-    await esc.record(`rfd:${r.id}:pot`, { op: "settle", ref: `${KIND_TICKET}-${r.id}`, amount: pot, via: "raffles", result: { ok: true, payout, fees: legs, how } });
-    await runQuery("UPDATE raffle_tickets SET state = 'spent' WHERE raffle_id = ? AND state = 'held'", [r.id]);
-  }
+  if (tickets.length) await settlePotInTx(r, tickets, { payee: r.creator_id, legs, how });
   const t = now();
   const u = await runQuery("UPDATE raffles SET status = 'complete', fee = ?, creator_payout = ?, fee_legs = ?, closed_at = ?, close_reason = ?, updated = ? WHERE id = ? AND status IN ('delivering','disputed')",
                            [fee, payout, JSON.stringify(legs), t, how, t, r.id]);
@@ -1242,4 +1265,5 @@ module.exports = {
   dispute, decide, tick, list, detail, forPad, cards, botAct, eventsAfter, verify, ticketsDigest, winningNumber, commitmentOf, feeShares, feeLegs, achMetrics,
   Refuse, DEFAULTS, FLOW, KINDS: [KIND_TICKET, KIND_PRIZE, KIND_ITEM], STATUSES,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
+  _setSettleChunk: (n) => { SETTLE_CHUNK = Math.max(1, Math.min(2000, Math.floor(n) || 2000)); },
 };

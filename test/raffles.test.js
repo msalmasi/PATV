@@ -412,22 +412,50 @@ test("admin takedown refunds every ticket and the prize; creators cancel only be
   assert.equal(await supply(), SUPPLY0);
 });
 
-test("abuse limits: open raffles per creator, raffles per day, the purchase cap", async () => {
+test("abuse limits: open raffles per creator, raffles per day, max per person, 1,000 tickets a purchase; no raffle-size cap", async () => {
   await RF.setConfig({ open_max: 2, per_day: 50 });
   const a = await RF.create(U.dan.userId, PAT_RAFFLE({ prize_amount: 1000 }));
   await RF.create(U.dan.userId, PAT_RAFFLE({ prize_amount: 1000 }));
   await assert.rejects(RF.create(U.dan.userId, PAT_RAFFLE({ prize_amount: 1000 })), refused("E_OPEN_MAX"));
   await RF.setConfig({ open_max: 50, per_day: 2 });
   await assert.rejects(RF.create(U.dan.userId, PAT_RAFFLE({ prize_amount: 1000 })), refused("E_RATE"));
-  await RF.setConfig({ ...RF.DEFAULTS, per_day: 100, open_max: 100, purchases_max: 10 });
+  await RF.setConfig({ ...RF.DEFAULTS, per_day: 100, open_max: 100 });
   const r = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 100, prize_amount: 1000, max_per_user: 3 }));
   assert.equal((await RF.buy(U.ann.userId, { id: r.id, qty: 3, idem: "ann-max-0001" })).ok, true);
   await assert.rejects(RF.buy(U.ann.userId, { id: r.id, qty: 1, idem: "ann-max-0002" }), refused("E_MAX_PER"));
-  const r2 = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 100, prize_amount: 1000 }));
-  for (let i = 0; i < 10; i++) assert.equal((await RF.buy(U.bob.userId, { id: r2.id, qty: 1, idem: "bob-cap-" + String(i).padStart(4, "0") })).ok, true);
-  await assert.rejects(RF.buy(U.cat.userId, { id: r2.id, qty: 1, idem: "cat-cap-0001" }), refused("E_FULL"));
-  await RF.setConfig({ ...RF.DEFAULTS, per_day: 100, open_max: 100 });
+  await assert.rejects(RF.buy(U.ann.userId, { id: r.id, qty: 1001, idem: "ann-max-0003" }), refused("E_QTY"), "1,000 a purchase");
+  // 1.99xo: no ticket limit per raffle - a 10M-ticket target / cap / minimum is fine
+  await runQuery("UPDATE users SET points_balance = points_balance + 2000000000 WHERE userId = 'u_maker'");
+  SUPPLY0 += 2000000000;
+  const big = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 10000000, min_tickets: 5000000, prize_amount: "1.5b", price: 10 }));
+  assert.equal((await raffle(big.id)).target, 10000000);
+  await assert.rejects(RF.create(U.maker.userId, PAT_RAFFLE({ prize_amount: "1.6b" })), refused("E_PRIZE"), "the max PAT prize is 1.5B");
+  assert.equal("tickets_max" in RF.config() || "purchases_max" in RF.config(), false, "no ticket / purchase cap settings");
+  const r2 = big;
   for (const id of [a.id, r.id, r2.id]) await RF.takedown(U.boss.userId, id, "test cleanup");
+  assert.equal(await supply(), SUPPLY0);
+});
+
+test("1.99xo: many separate purchases settle in chunks inside the one draw transaction - fee, payout and supply exact", async () => {
+  RF._setSettleChunk(3);
+  const r = await RF.create(U.maker.userId, PAT_RAFFLE({ target: 8, prize_amount: 1000, price: 1001 }));
+  const m0 = await bal(U.maker), h0 = await house();
+  const who = [U.ann, U.bob, U.cat, U.dan, U.ann, U.bob, U.cat, U.dan];
+  for (let i = 0; i < 8; i++) await RF.buy(who[i].userId, { id: r.id, qty: 1, idem: "chunk-buy-" + String(i).padStart(4, "0") });
+  const row = await raffle(r.id);
+  assert.equal(row.status, "drawn");
+  assert.equal(row.fee, 800);
+  assert.equal(await bal(U.maker), m0 + 8008 - 800);
+  assert.equal(await house(), h0 + 800);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_moves WHERE key LIKE ?", [`rfd:${r.id}:pot%`]))[0].n, 3, "3 chunks of 3/3/2");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_holds WHERE ref = ? AND state = 'held'", [`RFT-${r.id}`]))[0].n, 0);
+  // a house raffle too
+  const hr = await RF.create(U.boss.userId, PAT_RAFFLE({ house: true, target: 5, prize_amount: 1000, price: 1000 }));
+  const h1 = await house();
+  for (let i = 0; i < 5; i++) await RF.buy(who[i].userId, { id: hr.id, qty: 1, idem: "chunk-house-" + String(i).padStart(4, "0") });
+  assert.equal((await raffle(hr.id)).status, "drawn");
+  assert.equal(await house(), h1 + 5000 - 1000);
+  RF._setSettleChunk(2000);
   assert.equal(await supply(), SUPPLY0);
 });
 

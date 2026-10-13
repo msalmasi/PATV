@@ -95,8 +95,8 @@
 
       <div class="bx-row2">
         <label class="bx-field"><%- t('rf.f_price') %><input class="bx-in" type="text" inputmode="decimal" name="price" required placeholder="<%- t('rf.f_price_ph') %>"></label>
-        <label class="bx-field"><%- t('rf.f_min') %><input class="bx-in" type="number" name="min_tickets" min="1" max="<%= cfg.tickets_max %>" value="1"></label>
-        <label class="bx-field"><%- t('rf.f_maxper') %><input class="bx-in" type="number" name="max_per_user" min="0" max="<%= cfg.tickets_max %>" placeholder="<%- t('rf.f_nolimit') %>"></label>
+        <label class="bx-field"><%- t('rf.f_min') %><input class="bx-in" type="number" name="min_tickets" min="1" value="1"></label>
+        <label class="bx-field"><%- t('rf.f_maxper') %><input class="bx-in" type="number" name="max_per_user" min="0" placeholder="<%- t('rf.f_nolimit') %>"></label>
       </div>
       <p class="bx-fine"><%- t('rf.f_price_note', { min: fmt(cfg.price_min), max: fmt(cfg.price_max) }) %></p>
 
@@ -106,9 +106,9 @@
           <label class="bx-check"><input type="radio" name="trigger" value="target" checked> <span>🎯 <%- t('rf.f_trig_target') %></span></label>
           <label class="bx-check"><input type="radio" name="trigger" value="date"> <span>📅 <%- t('rf.f_trig_date') %></span></label>
         </div>
-        <label class="bx-field" data-rf-show-trig="target"><%- t('rf.f_target') %><input class="bx-in" type="number" name="target" min="1" max="<%= cfg.tickets_max %>" placeholder="100"></label>
+        <label class="bx-field" data-rf-show-trig="target"><%- t('rf.f_target') %><input class="bx-in" type="number" name="target" min="1" placeholder="100"></label>
         <label class="bx-field" data-rf-show-trig="date" hidden><%- t('rf.f_draw_at') %><input class="bx-in" type="datetime-local" name="draw_at"></label>
-        <label class="bx-field" data-rf-show-trig="date" hidden><%- t('rf.f_cap') %><input class="bx-in" type="number" name="max_tickets" min="0" max="<%= cfg.tickets_max %>" placeholder="<%- t('rf.f_nolimit') %>"></label>
+        <label class="bx-field" data-rf-show-trig="date" hidden><%- t('rf.f_cap') %><input class="bx-in" type="number" name="max_tickets" min="0" placeholder="<%- t('rf.f_nolimit') %>"></label>
         <label class="bx-field"><%- t('rf.f_expires') %><input class="bx-in" type="datetime-local" name="expires_at"></label>
         <p class="bx-fine"><%- t('rf.f_when_note', { days: cfg.max_days }) %></p>
       </fieldset>
@@ -124,7 +124,7 @@
     <form class="bx-form bx-card" data-rf-form="admin" data-rf-url="/api/admin/raffles" data-rf-done="reload">
       <label class="bx-check"><input type="checkbox" name="enabled" value="1"<%= on ? ' checked' : '' %>> <span><%- t('rf.adm_enabled') %></span></label>
       <div class="bx-row2">
-        <% ['fee_pct', 'price_min', 'price_max', 'tickets_max', 'buy_max', 'open_max', 'per_day', 'prize_min', 'prize_max', 'custom_hold_days', 'max_days', 'min_lead_min', 'grace_hours', 'purchases_max'].forEach((k) => { %>
+        <% ['fee_pct', 'price_min', 'price_max', 'buy_max', 'open_max', 'per_day', 'prize_min', 'prize_max', 'custom_hold_days', 'max_days', 'min_lead_min', 'grace_hours'].forEach((k) => { %>
           <label class="bx-field"><%= k %><input class="bx-in" type="number" name="config.<%= k %>" value="<%= cfg[k] %>"></label>
         <% }) %>
       </div>
