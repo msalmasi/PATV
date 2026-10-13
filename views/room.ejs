@@ -225,9 +225,21 @@
   .rm .lstat { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13.5px; color: #aab3aa; padding: 0 4px; }
   .rm .lstat b { color: var(--ds-text); }
   .rm .lstat .ls-sep { color: var(--ds-text-faint); }
+  /* 1.99wk: the ⚙ settings hub carries a "Settings" label next to the 👑 owner-panel button (two different pages) */
+  .rm .ibtn:has(> .ps-lbl) { width: auto; min-width: 40px; padding: 0 12px; gap: 6px; }
+  .rm .ibtn .ps-lbl { font-size: 14px; font-weight: bold; }
   @media (max-width: 640px) {
-    .rm .hd-acts { flex: 1 1 100%; padding-top: 0; justify-content: flex-end; }
+    .rm .hd-acts { flex: 1 1 100%; padding-top: 0; justify-content: flex-end; flex-wrap: wrap; row-gap: 8px; }
     .rm .hd-follow { margin-right: auto; }
+    /* phones: the ⚙ goes back to a bare icon (its tooltip / aria-label still say what it is); for a manager Follow takes
+       its own row so "👑 Manage your pad" + ⚙ + ⋯ fit on the next, labelled */
+    .rm .ibtn:has(> .ps-lbl) { padding: 0; width: 40px; }
+    .rm .ibtn .ps-lbl { display: none; }
+    .rm .hd-acts:has(.po-cta) .hd-follow { flex: 1 1 100%; }
+  }
+  @media (max-width: 300px) {
+    /* the narrowest screens: the 👑 button keeps its crown, the words go (aria-label keeps them) */
+    .rm .po-cta .po-lbl { display: none; }
   }
   /* 1.99dx: story strip under the header, the sticky tab bar, the merged Stage card's action row, the latest-posts card */
   .rm .rm-story { padding: 10px 14px; }
@@ -238,7 +250,6 @@
   .rm .ptab { appearance: none; flex: 1 1 0; min-width: max-content; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px;
               border-radius: 9px; border: 1px solid transparent; background: none; color: #aab3aa; font: inherit; font-size: 14.5px; font-weight: bold; cursor: pointer; white-space: nowrap; }
   .rm .ptab:hover { color: #fff; background: #161616; }
-  .rm a.ptab-owner { text-decoration: none; color: var(--ds-gold-text, #ffd54f); flex: 0 1 auto; }
   .rm .po-cta { white-space: nowrap; }
   .rm .ptab[aria-selected="true"] { color: #fff; background: #12301a; border-color: #2f6b3a; }
   .rm .ptab .pdot { width: 8px; height: 8px; border-radius: 50%; background: #ff5252; animation: rmPulse 1.6s ease-in-out infinite; }
@@ -468,9 +479,12 @@
       <div class="hd-acts">
         <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: t('pad.hdr.follow') }) %>
           <span class="hd-fc" title="<%- t('pad.hdr.follow_tip') %>"><%- t('pad.hdr.followers', { count: fcount_, n: '<b data-follower-count-kind="room" data-follower-count-id="' + t.esc(feed_.room) + '">' + t.esc(fcount_.toLocaleString('en-US')) + '</b>' }) %></span></div><% } %>
-        <%# 1.99ti: a labelled "👑 Manage your pad" for the owner (staff see "Owner panel") - it was a bare icon nobody found %>
-        <% if (manage_) { %><a class="ds-btn sm gold po-link po-cta" href="/p/<%= encodeURIComponent(room.slug) %>/owner" title="<%- t('pad.owner_panel') %>">👑 <%- isOwner_ ? t('pad.manage_pad') : t('pad.owner_panel') %></a><% } %>
-        <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%- psTitle_ %>" aria-label="<%- psTitle_ %>">⚙<% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
+        <%# 1.99ti: a labelled "👑 Manage your pad" for the owner (staff see "Owner panel") - it was a bare icon nobody found.
+            1.99wk: the ONE owner-panel link in the header / tab bar (the tab bar's "Owner" tab is gone). The ⚙ next to it is a
+            different page - the settings hub /p/<slug>/settings (page, stage, feed, Pepe, rules, moderation; padsettings.js),
+            not the owner panel (vault, payouts, Pepe's room settings; padowner.js) - so it stays, labelled "Settings" %>
+        <% if (manage_) { %><a class="ds-btn sm gold po-link po-cta" href="/p/<%= encodeURIComponent(room.slug) %>/owner" title="<%- t('pad.owner_panel') %>" aria-label="<%- isOwner_ ? t('pad.manage_pad') : t('pad.owner_panel') %>">👑 <span class="po-lbl"><%- isOwner_ ? t('pad.manage_pad') : t('pad.owner_panel') %></span></a><% } %>
+        <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%- psTitle_ %>" aria-label="<%- psTitle_ %>">⚙<span class="ps-lbl" aria-hidden="true"><%- t('pad.about.settings') %></span><% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
         <details class="hd-more" id="rmMore">
           <summary class="ibtn" aria-label="<%- t('pad.menu.aria') %>" title="<%- t('pad.menu.more') %>">⋯</summary>
           <div class="hd-menu" role="menu">
@@ -494,8 +508,8 @@
   <nav class="ptabs" id="padTabs" role="tablist" aria-label="<%- t('pad.tab.aria') %>">
     <% PT_.tabs.forEach((tb_) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= tb_ %>" data-tab="<%= tb_ %>" aria-controls="padPanel-<%= tb_ %>" aria-selected="<%= tabOn_(tb_) ? 'true' : 'false' %>" tabindex="<%= tabOn_(tb_) ? 0 : -1 %>">
       <% if (tb_ === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%- liveLabel_ %><% } else if (tb_ === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span><%- t('pad.tab.feed') %> <span class="pnew" id="padFeedNew" hidden></span><% } else { %><%- t('pad.tab.about') %><% } %></button><% }) %>
-    <%# 1.99ti: owners / managers get an "Owner" tab - a link to the owner panel (it's its own page, not a panel here) %>
-    <% if (manage_) { %><a class="ptab ptab-owner" href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.tab.owner') %></a><% } %>
+    <%# 1.99ti put an "Owner" tab here too; 1.99wk: gone - the header's 👑 button is THE owner-panel link (old ?tab=owner /
+        #owner links go there: bridge.js redirects the query, pad-tabs.js the fragment) %>
   </nav>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <%# 1.99ja: a Twitch pad plays its channel (padconnect.js twitchOf; the player URL is built by stageembed.js from the checked login) %>
@@ -1235,7 +1249,7 @@
     </section>
     <% } %>
   </section>
-  <script src="/public/js/pad-tabs.js?v=6"></script>
+  <script src="/public/js/pad-tabs.js?v=7"></script>
   <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=4" defer></script><% } %>
   <% if (typeof roomVault !== 'undefined' && roomVault) { %><script src="/public/js/pad-vault.js?v=2" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>

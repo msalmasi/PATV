@@ -925,6 +925,12 @@ function register(app, { isBotToken, addUser }) {
     res.locals.og = { title: `p/${slug} — ${title} on PATV`, description: (info && info.description) || `${title}: a pad on Public Access TV.`,
                       image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent(("p/" + slug).slice(0, 60)), url: res.locals.ogBase + "/p/" + encodeURIComponent(slug) };
     const manage = await reg.canManage(req.user, R.id);
+    // 1.99wk: the pad page's old "Owner" tab (1.99ti) is gone - the header's 👑 button is the one owner-panel link;
+    // an old ?tab=owner link goes to the owner panel for whoever can manage the pad (anyone else: the pad page, no tab)
+    if (String((req.query || {}).tab || "").toLowerCase() === "owner") {
+      if (manage) return res.redirect(302, "/p/" + encodeURIComponent(slug) + "/owner");
+      return res.redirect(302, "/p/" + encodeURIComponent(slug));
+    }
     // 1.99fu: who can see this pad (padaccess.js). The page gate already turned anyone outside an Approved pad away;
     // liveOpen = the members-tier content (the live room, its topic, story pictures, analytics): signed in, or anyone
     // on a Public pad

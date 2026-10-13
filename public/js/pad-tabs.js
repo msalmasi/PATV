@@ -118,6 +118,13 @@
     return null;
   }
 
+  /** 1.99wk: #owner (the removed Owner tab) -> the header's owner-panel link, or null (not #owner / no link on the page). */
+  function ownerPanelFor(hash, doc) {
+    if (String(hash || '').replace(/^#/, '').toLowerCase() !== 'owner' || !doc || !doc.querySelector) return null;
+    var a = doc.querySelector('a.po-cta[href]');
+    return a ? a.getAttribute('href') : null;
+  }
+
   function init(o) {
     var doc = root.document;
     var bar = doc.getElementById('padTabs');
@@ -238,13 +245,17 @@
       if (t) show(t, {});
     });
 
+    // 1.99wk: the old "Owner" tab (1.99ti) is gone - an old #owner link goes to the owner panel (the header's 👑 button,
+    // only drawn for whoever can manage the pad); anyone else just gets the pad page
+    var po = ownerPanelFor(root.location.hash, doc);
+    if (po) { root.location.replace(po); return null; }
     var requested = requestedTab(root.location.search, root.location.hash);
     show(pickTab({ tabs: tabs, platform: o.platform, active: o.active, requested: requested, stored: store(keyTab) }), {});
     if (/^#(?:rules|vault(?:-donate)?)$/i.test(root.location.hash)) { var r = doc.getElementById(root.location.hash.slice(1)); if (r) { if (r.tagName === 'DETAILS') r.open = true; try { r.scrollIntoView({ block: 'start' }); } catch (x) { /* */ } } }
     return { show: show, current: function () { return current; } };
   }
 
-  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, newCount: newCount, newIds: newIds, badgeText: badgeText, mergeSeen: mergeSeen, needsPush: needsPush,
+  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, ownerPanelFor: ownerPanelFor, newCount: newCount, newIds: newIds, badgeText: badgeText, mergeSeen: mergeSeen, needsPush: needsPush,
               parseStored: parseStored, storedValue: storedValue, FEED_STICKY_MS: FEED_STICKY_MS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PATVPadTabs = api;

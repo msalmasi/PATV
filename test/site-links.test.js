@@ -211,7 +211,7 @@ test("the owner panel stays one click from the pad header for whoever can manage
   const room = src("views", "room.ejs");
   // 1.99vm: every pad has an owner panel (its vault, payouts, stage) - not only Camfrog pads
   assert.match(room, /<% if \(manage_\) \{ %><a class="ds-btn sm gold po-link po-cta" href="\/p\/<%= encodeURIComponent\(room\.slug\) %>\/owner"/);
-  // 1.99ti: a labelled button ("Manage your pad" for the owner) + an Owner tab in the pad's tab bar
+  // 1.99ti: a labelled button ("Manage your pad" for the owner); 1.99wk: the tab bar's Owner tab is gone - one link
   assert.match(room, /isOwner_ \? t\('pad\.manage_pad'\) : t\('pad\.owner_panel'\)/);
-  assert.match(room, /<a class="ptab ptab-owner" href="\/p\/<%= encodeURIComponent\(room\.slug\) %>\/owner">/);
+  assert.doesNotMatch(room, /ptab-owner/);
 });

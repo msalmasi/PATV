@@ -182,7 +182,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   assert.match(about, /<details class="rf-rules" id="rules" open>/, "the #rules anchor is in About");
   assert.equal((html.match(/id="rules"/g) || []).length, 1, "one #rules anchor");
   assert.match(html, /<span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden><\/span>Feed <span class="pnew" id="padFeedNew" hidden><\/span>/);
-  assert.match(html, /pad-tabs\.js\?v=6/);
+  assert.match(html, /pad-tabs\.js\?v=7/);
   // the composer: folded into its bar, the pad named
   assert.match(feedPanel, /id="fcBar"/);
   assert.match(feedPanel, new RegExp("Post something to p/" + s + "…"));

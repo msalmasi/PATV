@@ -114,6 +114,35 @@ test("requestedTab: ?tab= and #hash deep links (aliases), feed sorts / pages mea
   assert.equal(T.requestedTab("?tab=bogus", "#nothing"), null);
 });
 
+test("1.99wk: an old #owner link (the removed Owner tab) -> the header's owner-panel link when the page has one", () => {
+  const doc = (href) => ({ querySelector: (sel) => (sel === "a.po-cta[href]" && href ? { getAttribute: () => href } : null) });
+  assert.equal(T.ownerPanelFor("#owner", doc("/p/x/owner")), "/p/x/owner");
+  assert.equal(T.ownerPanelFor("#Owner", doc("/p/x/owner")), "/p/x/owner");
+  assert.equal(T.ownerPanelFor("#owner", doc(null)), null, "no owner button (not a manager): stay on the pad page");
+  assert.equal(T.ownerPanelFor("#feed", doc("/p/x/owner")), null);
+  assert.equal(T.ownerPanelFor("", doc("/p/x/owner")), null);
+  assert.equal(T.requestedTab("?tab=owner", "#owner"), null, "owner is not a tab any more");
+});
+
+test("1.99wk: exactly ONE owner-panel link in the header + tab bar for a manager, none for anyone else; ⚙ is the settings hub", async () => {
+  const PT = { tabs: ["live", "feed", "about"], initial: "live", active: true, camfrog: true, posts: [] };
+  const top = (html) => html.slice(html.indexOf('<section class="hero"'), html.indexOf('</nav>', html.indexOf('id="padTabs"')) + 6);
+  const ownerLinks = (html) => (top(html).match(/href="\/p\/plant_based_chatting\/owner"/g) || []).length;
+  for (const [who, extra] of [["the owner", { user: "pb" }], ["staff", { user: "admin1" }]]) {
+    const html = await renderRoom(Object.assign({ manage: true, padTabs: PT }, extra));
+    assert.equal(ownerLinks(html), 1, who + ": one owner-panel link");
+    const tabs = html.slice(html.indexOf('id="padTabs"'), html.indexOf('</nav>', html.indexOf('id="padTabs"')));
+    assert.doesNotMatch(tabs, /ptab-owner|\/owner"/, who + ": no Owner tab");
+    assert.deepEqual((tabs.match(/data-tab="(\w+)"/g) || []).map((x) => x.slice(10, -1)), ["live", "feed", "about"]);
+    assert.match(top(html), /<a class="ibtn ps-link" href="\/p\/plant_based_chatting\/settings" title="Pad settings: [^"]*"[^>]*>⚙<span class="ps-lbl" aria-hidden="true">Settings<\/span>/,
+      who + ": the ⚙ is the settings hub (a different page), labelled");
+  }
+  assert.match(await renderRoom({ manage: true, padTabs: PT, user: "pb" }), /👑 <span class="po-lbl">Manage your pad<\/span>/);
+  const nope = await renderRoom({ manage: false, padTabs: PT, user: "someone" });
+  assert.equal(ownerLinks(nope), 0, "a non-manager: no owner-panel link");
+  assert.doesNotMatch(top(nope), /ps-link|po-cta/);
+});
+
 test("padTabsFor (server): active = people in the room besides Pepe, or the stage on air", () => {
   const base = { platform: "camfrog", live: true, feed: true, pepeHere: true, pepeOn: false, slots: [], query: "/p/x" };
   let t = bridge.padTabsFor(Object.assign({}, base, { members: [{ login: "pepe", self: true }] }));
@@ -200,7 +229,7 @@ test("1.99ef header zones: identity (name, p/slug + quiet type tags, one descrip
   const idZone = hero.slice(hero.indexOf('class="hd-id"'), hero.indexOf('class="hd-acts"'));
   assert.match(idZone, /<div class="padref">p\/plant_based_chatting<\/div><span class="hd-tags">[\s\S]*🐸 Camfrog Pad[\s\S]*👑 Pad owner: pb/);
   const acts = hero.slice(hero.indexOf('class="hd-acts"'));
-  assert.match(acts, /class="ibtn ps-link"[^>]*>⚙<span class="ps-q" aria-hidden="true">2<\/span>/, "approvals badge on ⚙");
+  assert.match(acts, /class="ibtn ps-link"[^>]*>⚙<span class="ps-lbl" aria-hidden="true">Settings<\/span><span class="ps-q" aria-hidden="true">2<\/span>/, "approvals badge on ⚙");
   const menu = acts.slice(acts.indexOf('class="hd-menu"'));
   assert.match(menu, /href="\/p\/plant_based_chatting\/analytics">📈 Pad analytics/);
   assert.match(menu, /data-copy-link="\/p\/plant_based_chatting">🔗 Copy link/);
@@ -214,7 +243,7 @@ test("1.99ef header zones: identity (name, p/slug + quiet type tags, one descrip
   // a different tagline shows; the public gets no ⚙
   const pub = await renderRoom({ room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: false, topic: "Grow stuff", platform: "camfrog", description: "Plants and chat" } });
   assert.match(pub, /<div class="topic" id="rmTopic" data-desc="Plants and chat">Grow stuff<\/div>/);
-  assert.doesNotMatch(pub, /ps-link/);
+  assert.doesNotMatch(pub, /class="ibtn ps-link"/);
   assert.match(pub, /id="rmStDot" aria-hidden="true">⚪/);
   assert.match(pub, /data-copy-link=/, "everyone gets ⋯ (Copy link)");
   // site pads: no status line
@@ -302,7 +331,7 @@ test("end to end: the menu a viewer gets comes from THEIR live-view caps, and th
   }
   await new Promise((r) => setTimeout(r, 150));
   const app = express();
-  app.use((req, res, next) => { const u = req.get("x-test-user"); req.user = u ? { userId: u, username: u } : null; next(); });
+  app.use((req, res, next) => { const u = req.get("x-test-user"); req.user = u ? { userId: u, username: u, class: req.get("x-test-class") || undefined } : null; next(); });
   bridge.register(app, { isBotToken: (t) => t === "bot-token", addUser: (req, res, next) => next() });
   const server = app.listen(0);
   try {
@@ -325,6 +354,17 @@ test("end to end: the menu a viewer gets comes from THEIR live-view caps, and th
     r = await fetch(base + "/api/rooms/tabsroom/mod", { method: "POST", headers: H("uS"), body: JSON.stringify({ action: "djban", target: "bob" }) });
     assert.equal(r.status, 200);
     assert.equal((await r.json()).line, "!djban bob");
+    // 1.99wk: the removed "Owner" tab - an old ?tab=owner link goes to the owner panel for whoever can manage the pad,
+    // anyone else lands on the pad page (no tab)
+    const go = async (q, h) => fetch(base + "/p/tabsroom" + q, { redirect: "manual", headers: h || {} });
+    r = await go("?tab=owner", { "x-test-user": "uN", "x-test-class": "Admin" });
+    assert.equal(r.status, 302); assert.equal(r.headers.get("location"), "/p/tabsroom/owner");
+    r = await go("?tab=Owner&x=1", { "x-test-user": "uN", "x-test-class": "Admin" });
+    assert.equal(r.headers.get("location"), "/p/tabsroom/owner", "case-insensitive");
+    r = await go("?tab=owner", { "x-test-user": "uS" });
+    assert.equal(r.status, 302); assert.equal(r.headers.get("location"), "/p/tabsroom", "a non-manager: the pad page");
+    r = await go("?tab=owner");
+    assert.equal(r.headers.get("location"), "/p/tabsroom", "signed out: the pad page");
   } finally { server.close(); }
 });
 
