@@ -1,0 +1,43 @@
+<%# Q11 (ECONOMY-V3 23.2, the user 2026-10-13): the activity-scaled guarantee target. policy/gscale.js computes it from the
+    recipe ledger (the week's gated pad-payout participants); the switch is `!econ set guarantee_scaled on|off`, a website
+    action Pepe runs (econ.cmd, the same password step-up as the Protocol pools card). While it is off the card is the DRY
+    RUN: what the target would have been each Monday. public/js/admin-gscale.js; GET /api/admin/econ/gscale. %>
+<section class="adm-card" id="gscale" aria-labelledby="gsT">
+  <h2 id="gsT"><span class="ds-ic" aria-hidden="true">📐</span> Activity-scaled guarantee <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">The Monday guarantee tops the incentive budget up to a weekly target. With this switch on, the target follows participation: <b>base × participants ÷ reference</b>, kept between the min and the max, then averaged over the last few weeks. <b>Participants</b> = the accounts paid a pad recipe payout (regulars, streamers, owners) that week; all of them passed the anti-farm gates. <b>Reference</b> = the median of the first weeks of pad payouts (live since 2026-10-12). Until those weeks are in, the target stays at the base. While the switch is off, the fixed target applies and the table shows what the scaled target <i>would</i> have been.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="gsAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">
+      <div class="ds-stats gs-stats">
+        <div class="ds-stat"><span>Scaled target</span><b id="gsState">…</b><small id="gsStateSub">loading</small></div>
+        <div class="ds-stat"><span>Participants last week</span><b id="gsLast">—</b><small id="gsLastSub"></small></div>
+        <div class="ds-stat"><span>This week so far</span><b id="gsNow">—</b><small id="gsNowSub"></small></div>
+        <div class="ds-stat"><span>Reference</span><b id="gsRef">—</b><small id="gsRefSub"></small></div>
+        <div class="ds-stat"><span>Raw target</span><b id="gsRaw">—</b><small id="gsRawSub"></small></div>
+        <div class="ds-stat"><span>Smoothed target</span><b id="gsTarget">—</b><small id="gsTargetSub"></small></div>
+      </div>
+      <div class="adm-actions gs-actions">
+        <button type="button" class="adm-btn" id="gsToggle" disabled>Turn on</button>
+      </div>
+      <div id="gsConfirm" class="gs-confirm" hidden>
+        <p class="adm-help" id="gsWhat"></p>
+        <label for="gsPw" class="adm-help">Confirm with your account password</label>
+        <input type="password" id="gsPw" maxlength="200" autocomplete="current-password">
+        <div class="adm-actions"><button type="button" id="gsYes">Send it</button><button type="button" id="gsNo" class="adm-btn ghost">Cancel</button></div>
+      </div>
+      <p class="adm-msg gs-out" id="gsMsg" role="status" aria-live="polite"></p>
+      <h3>Each Monday <span class="adm-help" id="gsHistNote"></span></h3>
+      <div class="adm-tbl"><table aria-label="The scaled target on each Monday">
+        <thead><tr><th>Monday</th><th>Participants (week before)</th><th>Reference</th><th>Raw</th><th>Smoothed target</th></tr></thead>
+        <tbody id="gsRows"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
+      </table></div>
+      <p class="adm-help">The settings (<code>guarantee_base</code>, <code>guarantee_min</code>, <code>guarantee_max</code>, <code>guarantee_smooth_weeks</code>, <code>guarantee_ref_weeks</code>) are in the Protocol pools &amp; economy settings card above, or <code>!econ set &lt;key&gt; &lt;value&gt;</code>. The heist vaults' % caps follow the week's target, so they scale too once this is on.</p>
+    </div>
+    <style>
+      .gs-stats { margin: var(--ds-sp-2, 8px) 0; }
+      .gs-actions { flex-wrap: wrap; }
+      .gs-out { white-space: pre-wrap; overflow-wrap: anywhere; }
+      .gs-confirm input { width: 100%; max-width: 320px; }
+    </style>
+    <script src="/public/js/admin-gscale.js?v=1" defer></script>
+  <% } %>
+</section>

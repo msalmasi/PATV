@@ -39,6 +39,9 @@ const DEFAULTS = {
   incentive_guarantee_target: 0, issuance_to_guarantee: true, activity_rewards: false, issuance_mode: "off",
   issuance_pct_month: 1.0, issuance_fixed_month: 10000000, issuance_activity_scaling: true, mintcap_issuance: -1,
   mintcap_floor: 30000000, mintcap_loan: -1, mintcap_restore: -1, mintcap_total: -1, staker_share_pct: 20.0, fed_split_pct: 50.0,
+  // Q11 (ECONOMY-V3 23.2): the activity-scaled guarantee target - OFF by default (the fixed target holds)
+  guarantee_scaled: false, guarantee_base: 25000000, guarantee_min: 15000000, guarantee_max: 40000000, guarantee_smooth_weeks: 3,
+  guarantee_ref_weeks: 4,
 };
 const CONSTS = { VAULT_MIN_MOVE: 1000, VAULT_CEIL_APR: 0.25, VAULT_EPOCH_UTC_HOUR: 4, HOUSE_MIN_CASH: 5000000,
                  VAULT_MM_MIN_TARGET: 1000000, VAULT_TARGET_MULT: 1.5, HEIST_VAULT_MIN: 2000000, HEIST_VAULT_CAP: 10000000 };
@@ -176,11 +179,52 @@ function budgetSum(c) {
   for (const g of GROUPS) t += Math.max(0, ecBudget(c, g));
   return t;
 }
-function guaranteeBase(c) {
+const WEEK = 7 * 86400;
+/** Q11 (ECONOMY-V3 23.2, pepe_monetary.gscale): the activity-scaled guarantee target for the week that starts at the epoch
+ *  boundary M. `weeks` = [[week start, gated payout participants], ...] - the site's recipe ledger (recipe_credits, slices
+ *  owner / streamers / people, distinct accounts per epoch week), complete weeks only.
+ *    reference  the median of the first `ref_weeks` complete weeks (none yet: "collecting", the target stays at base)
+ *    raw(m)     the target computed on Monday m = clamp(int(base x n(m - 7 d) / reference), min, max); a week the list lacks
+ *               (stale data) uses the latest week it has
+ *    target     smoothing: the mean (//) of the last `smooth_weeks` raw targets, raw(M), raw(M - 7 d), ... (before the
+ *               reference existed each one is the base) */
+function gscale(weeks, M, cfgGet) {
+  const base = pyInt(cfgGet("guarantee_base")), lo = pyInt(cfgGet("guarantee_min")), hi = pyInt(cfgGet("guarantee_max"));
+  const S = Math.max(1, pyInt(cfgGet("guarantee_smooth_weeks"))), R = Math.max(1, pyInt(cfgGet("guarantee_ref_weeks")));
+  M = pyInt(M);
+  const have = new Map();
+  for (const w of weeks || []) {
+    if (!Array.isArray(w) || w.length < 2) continue;
+    const ws = pyInt(w[0]);
+    if (ws + WEEK <= M) have.set(ws, pyInt(w[1]));
+  }
+  const ks = [...have.keys()].sort((a, b) => a - b);
+  let ref = null;
+  if (ks.length >= R) {
+    const ns = ks.slice(0, R).map((k) => have.get(k)).sort((a, b) => a - b);
+    const mid = Math.floor(R / 2);
+    ref = R % 2 ? ns[mid] : (ns[mid - 1] + ns[mid]) / 2.0;
+  }
+  const rawAt = (m) => {
+    if (ref === null || ref <= 0) return base;
+    const done = ks.filter((k) => k + WEEK <= m);
+    if (done.length < R) return base;
+    const n = have.has(m - WEEK) ? have.get(m - WEEK) : have.get(done[done.length - 1]);
+    return Math.max(lo, Math.min(hi, Math.trunc(base * n / ref)));
+  };
+  const raws = [];
+  for (let i = 0; i < S; i++) raws.push(rawAt(M - i * WEEK));
+  const target = floorDiv(raws.reduce((t, x) => t + x, 0), S);
+  return { base, min: lo, max: hi, smooth_weeks: S, ref_weeks: R, weeks_have: ks.length, collecting: ref === null,
+           reference: ref, participants: have.has(M - WEEK) ? have.get(M - WEEK) : null, raw: raws[0], raws, target };
+}
+const gscaleOf = (inp, c, now) => gscale(inp.gweeks || [], weekStart(now, c.hour()), (k) => c.raw(k));
+function guaranteeBase(c, inp, now) {
+  if (inp && c.raw("guarantee_scaled")) return gscaleOf(inp, c, now).target;
   const t = pyInt(c.raw("incentive_guarantee_target"));
   return t > 0 ? t : budgetSum(c);
 }
-const weekTarget = (inp, c, now) => guaranteeBase(c) + weekIssuance(inp, c, now);
+const weekTarget = (inp, c, now) => guaranteeBase(c, inp, now) + weekIssuance(inp, c, now);
 /** Fort Knox ("fortknox") / the Casino vault ("casino") cap: fixed, or max(floor, pct x this week's guarantee target). */
 function heistCap(inp, c, which, now) {
   let fixed, floor, pk;
@@ -527,6 +571,6 @@ function planActivity(inp, localDay, amount) {
 }
 
 module.exports = { planEpoch, planDaily, planMonetary, planActivity, weekStart, dayStart, epochId, dayId, monthOf, resolveWeek, budgetLeft,
-                   capRoom, mintsMtd, weekIssuance, weekTarget, heistCap, guaranteeBase, budgetSum, loansByVault, poolOwed, target, stakers,
+                   capRoom, mintsMtd, weekIssuance, weekTarget, heistCap, guaranteeBase, gscale, gscaleOf, WEEK, budgetSum, loansByVault, poolOwed, target, stakers,
                    activity, floorDiv, floorDivF, pyInt, fmt, pyFloatStr, cmpPy, C, BUDGETS, GROUPS, CAPPED, SOURCES, TREASURY, CASH, FED,
                    INCENTIVES, FORTKNOX, CASINO, GUARANTEE_WAIT, DEFAULTS, CONSTS };

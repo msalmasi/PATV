@@ -14,6 +14,7 @@
 //                                  fed_mints, a budget spend whose key isn't in site_spends, a bank sample not in bank_lent
 //   participation rows             econ_participation (Pepe's E-0 sync), the local day = Pepe's (America/New_York)
 //   total supply (issuance pct)    supply.patSupply
+//   gweeks (Q11, scaled target on) policy/gscale.js: the weekly gated pad-payout participants (recipe_credits)
 "use strict";
 const P = require("../pools");
 const C = require("./core");
@@ -31,6 +32,16 @@ async function layersOf(all) {
   const F = require("../fed/service");
   if (await F.live()) return F.layersDoc();
   return docOf(all, "econ_layers");
+}
+
+/** Q11: while `guarantee_scaled` is on, the weekly gated payout participant series the scaled guarantee target reads (the
+ *  guarantee and the heist caps that follow it) - policy/gscale.js; Pepe sends the same key from his copy of it. */
+async function withGweeks(inp) {
+  if (!(inp.cfg || {}).guarantee_scaled) return inp;
+  const h = Number((inp.consts || {}).VAULT_EPOCH_UTC_HOUR);
+  try { inp.gweeks = await require("./gscale").weeks(inp.now, Number.isFinite(h) ? h : E.CONSTS.VAULT_EPOCH_UTC_HOUR); }
+  catch (e) { inp.gweeks = []; }
+  return inp;
 }
 
 /** Pepe's pushed config + the site's econ_cfg overrides. */
@@ -182,16 +193,16 @@ async function epoch(nowS, eid) {
   }
   const navs = {};
   for (const v of Object.keys(book)) navs[v] = V.nav(v, k);
-  return { kind: "epoch", now: nowS, eid, cfg, consts, flags, pools: await poolsNow(),
+  return withGweeks({ kind: "epoch", now: nowS, eid, cfg, consts, flags, pools: await poolsNow(),
            prices: Object.fromEntries(Object.entries(prices).map(([a, b]) => [a, Number(b)])), navs, bank_nav: V.nav("bank", k),
            mm_seeds: Math.trunc(Number(k.mm_book.seeds) || 0), vaults: book, auto, stashes, journal: await journal(push),
-           bank_lent: await bankLent(docOf(all, "econ_treasury")), fed_loans: await fedLoans(await layersOf(all)) };
+           bank_lent: await bankLent(docOf(all, "econ_treasury")), fed_loans: await fedLoans(await layersOf(all)) });
 }
 async function daily(nowS, did) {
   const { cfg, consts, flags } = await config();
   const all = await docs();
-  return { kind: "daily", now: nowS, did, cfg, consts, flags, pools: await poolsNow(), fed_loans: await fedLoans(await layersOf(all)),
-           mints: await mints(await layersOf(all), nowS), week: await week(docOf(all, "econ_treasury")) };
+  return withGweeks({ kind: "daily", now: nowS, did, cfg, consts, flags, pools: await poolsNow(), fed_loans: await fedLoans(await layersOf(all)),
+                      mints: await mints(await layersOf(all), nowS), week: await week(docOf(all, "econ_treasury")) });
 }
 async function monetary(nowS, did, guarantee) {
   const { push, cfg, consts, flags } = await config();
@@ -207,10 +218,10 @@ async function monetary(nowS, did, guarantee) {
   if (c.issuance_mode === "pct") {
     try { supply = (await require("../supply").patSupply()).total || null; } catch (e) { supply = null; }
   }
-  return { kind: "monetary", now: nowS, did, guarantee: !!guarantee, cfg, consts, flags, pools: await poolsNow(),
-           mints: await mints(await layersOf(all), nowS), journal: await journal(push), week: await week(docOf(all, "econ_treasury")),
-           local_day: ld, days, rows, skip, supply };
+  return withGweeks({ kind: "monetary", now: nowS, did, guarantee: !!guarantee, cfg, consts, flags, pools: await poolsNow(),
+                      mints: await mints(await layersOf(all), nowS), journal: await journal(push), week: await week(docOf(all, "econ_treasury")),
+                      local_day: ld, days, rows, skip, supply });
 }
 
-module.exports = { epoch, daily, monetary, config, poolsNow, journal, dailyDone, localDay, prevDays, partRows, fedLoans, mints, week, bankLent,
+module.exports = { epoch, daily, monetary, withGweeks, config, poolsNow, journal, dailyDone, localDay, prevDays, partRows, fedLoans, mints, week, bankLent,
                    docs, docOf, layersOf, BUDGET_KEYS };

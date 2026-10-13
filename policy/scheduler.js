@@ -423,6 +423,7 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/policy/bot/report", big, bot((b) => report(b)));
   app.post("/api/policy/bot/ack", bot(async (b) => ({ ok: true, acked: await C.ack(b.keys) })));
   app.post("/api/policy/admin/cutover", big, bot((b) => cutover(b)));
+  require("./gscale").register(app, { isBotToken, addUser });      // Q11: the activity-scaled guarantee's series + admin card
   app.post("/api/policy/admin/rollback", bot((b) => rollback(b)));
   if (process.env.STAGING) {
     app.post("/api/policy/admin/test-clock", bot(async (b) => ({ ok: true, offset_ms: await C.setTestClock(b.at === undefined ? null : b.at) })));

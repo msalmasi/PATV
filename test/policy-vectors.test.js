@@ -58,3 +58,20 @@ for (const kind of ["epoch", "daily", "monetary"]) {
     assert.ok(legs > 0 && pat > 0, `${kind}: the vectors move PAT (${legs} legs, ${pat} PAT)`);
   });
 }
+
+// Q11 (ECONOMY-V3 23.2): the activity-scaled guarantee target - pepe_monetary.gscale on random weekly participant series
+// (pre-reference, clamps, smoothing, stale lists), the same numbers here
+test("gscale: every activity-scaled target equals Pepe's", () => {
+  const cases = data.gscale || [];
+  assert.ok(cases.length >= 100, `gscale cases: ${cases.length}`);
+  const bad = [];
+  for (const [i, c] of cases.entries()) {
+    const diffs = [];
+    same(E.gscale(c.weeks, c.M, (k) => c.cfg[k]), c.expected, `gscale ${i}`, diffs);
+    if (diffs.length) bad.push(diffs.slice(0, 4).join("\n"));
+  }
+  assert.equal(bad.length, 0, `${bad.length} differ:\n${bad.slice(0, 5).join("\n---\n")}`);
+  assert.ok(cases.some((c) => !c.expected.collecting && c.expected.raws.some((x) => x === c.expected.min)), "a clamp at min");
+  assert.ok(cases.some((c) => !c.expected.collecting && c.expected.raws.some((x) => x === c.expected.max)), "a clamp at max");
+  assert.ok(cases.some((c) => c.expected.collecting), "a pre-reference case");
+});
