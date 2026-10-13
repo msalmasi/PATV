@@ -112,7 +112,7 @@ test("refusals: closed cam, not in the room, switched off, unlinked, signed out,
   r = await post("uA", { action: "look", target: "pepebeta" });
   assert.equal(r.status, 400);
   r = await post("uN", { action: "look", target: "bob" });
-  assert.equal(r.status, 403); assert.match(r.d.error, /Link your Camfrog/);
+  assert.equal(r.status, 403); assert.match(r.d.error, /link a chat account first/);   // an old Pepe (no actor_cap): unlinked still refused
   r = await post(null, { action: "look", target: "bob" });
   assert.equal(r.status, 401);
   const bad = await fetch(base + "/api/rooms/pepebeta/pepe", { method: "POST", headers: { "content-type": "application/json", "x-test-user": "uA" }, body: "{}" });

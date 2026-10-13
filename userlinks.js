@@ -68,12 +68,16 @@ function refKey(v) {
  */
 function ul(name, opts = {}) {
   const raw = String(name == null ? "" : name);
-  const shown = opts.text != null ? String(opts.text) : raw;
-  const tail = opts.web ? WEB : "";
+  // 1.99wv (connections audit C): "u:<userId>" is a PATV account with no chat login acting through Pepe (a market's
+  // creator, a seat, a donor) - resolved by its id, shown with the 🌐 marker, never as the raw id
+  const acctId = opts.uid == null && opts.user == null ? (/^u:([A-Za-z0-9-]{6,64})$/.exec(raw.trim()) || [])[1] || null : null;
+  const shown = opts.text != null ? String(opts.text) : acctId ? "a PATV member" : raw;
+  const tail = opts.web || acctId ? WEB : "";
   const hidden = opts.anon || ANON.has(raw.trim().toLowerCase()) || (opts.text != null && ANON.has(shown.trim().toLowerCase()));
   let kind = "", ref = "";
   if (opts.uid != null && opts.uid !== false) { kind = "i"; ref = refKey(opts.uid); }
   else if (opts.user != null && opts.user !== false) { kind = "u"; ref = refKey(opts.user === true ? raw : opts.user).toLowerCase(); }
+  else if (acctId) { kind = "i"; ref = refKey(acctId); }
   const key = hidden ? "" : kind ? ref : keyOf(raw);
   if (!key) return esc(shown) + tail;
   const flags = (opts.text != null ? "t" : "") + kind;
@@ -195,7 +199,7 @@ async function finish(html) {
     const acc = flags.includes("i") ? found.ids.get(refKey(r))
       : flags.includes("u") ? found.usernames.get(refKey(r).toLowerCase())
         : found.logins.get(keyOf(raw));
-    return acc ? linkHtml(raw, acc) : inner;
+    return acc ? linkHtml(/^u:/.test(raw) ? acc.username : raw, acc) : inner;   // 1.99wv: never an account id in the tooltip
   });
 }
 

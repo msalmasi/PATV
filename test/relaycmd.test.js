@@ -68,7 +68,7 @@ test("a ! line is a command job with the account's verified Camfrog link - never
 test("unlinked accounts are refused with the link hint", async () => {
   const r = await say("!help", "u2");
   assert.equal(r.status, 403);
-  assert.match(r.d.error, /Link your Camfrog name/);
+  assert.match(r.d.error, /link a chat account first/);
 });
 
 test("not signed in -> 401", async () => {

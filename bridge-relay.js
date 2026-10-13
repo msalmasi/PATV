@@ -21,6 +21,17 @@
 // from a browser. Pepe says with each snapshot whether the !snap rules let THIS viewer save it (on /
 // admins-only / opted out); Save and Download only show when they do.
 //
+// A PATV account with NO chat login (1.99wv, connections audit C): a chat line is relayed as the ACCOUNT - Pepe posts it as
+// "🌐 <PATV username> (PATV web): ..." (camfrog-bot 1.99wt pepe_relay._relay_say_account): the username (unique on PATV),
+// never a free-text display name, and a label a chat login's relay never gets, so nobody passes for a Camfrog user. Only
+// while a Pepe that acts for accounts is running (actorcap.js), and only for an account that (accountRefusal):
+//   * has proven an identity (verified.js: Discord, Twitch, Telegram, Google or Plex - the anti-throwaway rule)
+//   * isn't archived, casino-restricted, banned from the whole feed or from THIS pad's feed (the pad owner's ban)
+//   * whose username isn't another account's linked chat login (no "🌐 alice" next to the real alice)
+//   * says nothing the short-text guard catches (textguard.js: slurs, threats, doxxing, PAT scams, fake staff)
+// Pepe adds the room's ignore lists, time-outs and his own rate limit, and remembers none of it. Clips, cam snapshots /
+// saves and typed "!" commands stay chat-login only; a 🐸 Pepe menu action runs as the account (padpepe.js).
+//
 // Chat commands (1.99): a relay line starting with "!" is a COMMAND, not chat. It is queued as a
 // "cmd" job carrying the account's verified Camfrog link (users.camfrogUsername - never anything
 // from the request), and Pepe runs it in that room as that login through his real dispatcher: the
@@ -164,6 +175,30 @@ async function webName(u) {
   return d;
 }
 
+/**
+ * 1.99wv (connections audit C): why a PATV account with NO chat login can't relay `text` into pad room R, or null.
+ * -> {status, error} | null. See the top of the file for what each rule protects against.
+ */
+async function accountRefusal(u, R, text) {
+  const link = "link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe)";
+  if (!require("./actorcap").on()) return { status: 403, error: "To talk in the chat room from here, " + link + "." };
+  const FS = require("./feedstore");
+  const A = await FS.account(u.userId).catch(() => null);
+  if (!A || A.archived_at) return { status: 403, error: "This account can't talk here." };
+  const V = require("./verified");
+  if (!(await V.verify(A))) return { status: 403, error: "To talk in a pad's chat room with your PATV account, " + V.LINK_HINT + "." };
+  if (A.casino_banned) return { status: 403, error: "Your account is restricted." };
+  const t = Date.now();
+  const bans = await getQuery("SELECT room_id FROM feed_bans WHERE user_id = ? AND (room_id = '' OR room_id = ?) AND (until IS NULL OR until > ?)",
+    [u.userId, R.id, t]).catch(() => []);
+  if (bans.length) return { status: 403, error: "You can't talk in this pad." };
+  if (!(await require("./accountkey").ownsName(u.username, u.userId))) {
+    return { status: 403, error: "Your PATV username is another member's chat name, so it can't be used here - " + link + "." };
+  }
+  if (require("./textguard").bad(text)) return { status: 400, error: "Pepe won't relay that." };
+  return null;
+}
+
 function newJob(fields) {
   const j = Object.assign({ id: "w" + crypto.randomBytes(8).toString("hex"), state: "pending", at: Date.now(), claimed: 0, tries: 0, result: null }, fields);
   jobs.set(j.id, j);
@@ -185,6 +220,8 @@ function takeJobs(liveRoomIds) {
     if (!due) continue;
     j.state = "claimed"; j.claimed = now; j.tries++;
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
+    // 1.99wv (connections audit C): the ACCOUNT behind every job - Pepe acts as `camfrog` when there is one, else as the account
+    if (j.userId) { base.user_id = j.userId; base.actor = j.actor || { userId: j.userId, username: j.username || null, login: j.camfrog || null, display: null }; }
     if (j.kind === "say" || j.kind === "cmd") base.text = j.text;
     // 1.99co: a pad Manage-panel action (padmod.js) - the site-built line plus what Pepe re-checks / logs
     if (j.kind === "cmd" && j.gui) { base.gui = j.gui; if (j.reason) base.reason = j.reason; }
@@ -268,12 +305,17 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!R) return;
     const text = clean((req.body || {}).text, SAY_MAX);
     if (text.startsWith("!")) return runCmd(req, res, u, R, text);
-    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
     if (!text) return res.status(400).json({ ok: false, error: "Type something first." });
+    if (!u.camfrogUsername) {
+      const why = await accountRefusal(u, R, text);          // 1.99wv: a PATV account with no chat login (see the top)
+      if (why) return res.status(why.status).json({ ok: false, error: why.error });
+    }
     const lim = limited("say|" + u.userId, 3000, 5, 60000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
-    const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, display: await webName(u), text });
-    console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} job=${j.id}`);
+    const display = u.camfrogUsername ? await webName(u) : "";
+    const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
+                       actor: require("./actorcap").actorOf(u, display) });
+    console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });
 
@@ -284,7 +326,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const cmds = R.cmds || {};
     if (c === "!commands") return res.json({ ok: true, local: true, reply: commandsText(cmds), cmds });
     if (!Object.keys(cmds).length) return res.status(403).json({ ok: false, error: "Commands from the website aren't on in this Camfrog room." });
-    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe \u2014 commands run as that name." });
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Typed commands run as a chat name - link a chat account first (Settings \u2192 Account \u2192 Connections). The \ud83d\udc38 Pepe menu works with your PATV account." });
     if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
       return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
     }
@@ -502,6 +544,6 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { register, takeJobs, webName, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
+module.exports = { register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
   _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };

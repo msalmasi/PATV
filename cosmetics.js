@@ -964,6 +964,7 @@ function register(app, { isBotToken, addUser }) {
       d.stkCfg = null;
       if (d.tab === "stickers") { try { const C = require("./premium").config(); d.stkCfg = { price: C.sticker_price, spPer: C.sp_sticker_packs, sales: !!C.sales }; } catch (e) { d.stkCfg = null; } }
       res.locals.og = require("./og").forPage(req, "PATV Cosmetics", "Name colors, profile banners, borders, effects and Grand Theft Frogger avatar gear. Buy, earn, trade.");
+      d.acctActor = !!(d.me && !d.me.camfrog && require("./actorcap").on());   // 1.99wv: Pepe buys as the PATV account
       res.render("cosmetics", d);
     } catch (e) {
       console.error("[cosmetics] page:", e);
@@ -1071,7 +1072,8 @@ function register(app, { isBotToken, addUser }) {
     try {
       const me = await resolveUser({ userId: req.user.userId });
       if (!me) return back("Couldn't find your account.");
-      if (!me.camfrogUsername) return back("Link a chat account first (Settings → Account → Connections) — Pepe runs this as you.");
+      // 1.99wv (connections audit C): with no chat login Pepe buys as the PATV account itself (u:<userId>; the items live here anyway)
+      if (!me.camfrogUsername && !require("./actorcap").on()) return back("Link a chat account first (Settings → Account → Connections) — Pepe runs this as you.");
       const op = String(b.op || "");
       let args;
       if (op === "buy" || op === "gift") {
@@ -1084,10 +1086,10 @@ function register(app, { isBotToken, addUser }) {
         } else {
           const to = await resolveUser(cleanName(b.to));
           if (!to) return back("Couldn't find who you're gifting to.");
-          if (!to.camfrogUsername) return back(`${to.username} hasn't linked a Camfrog name, so Pepe can't deliver it.`);
+          if (!to.camfrogUsername && !require("./actorcap").on()) return back(`${to.username} hasn't linked a chat account, so Pepe can't deliver it.`);
           if (to.userId === me.userId) return back("That's you — use Buy instead.");
           try { await require("./gifts").guard(me, to); } catch (e) { return back(e.message); }    // 1.99ma: blocks + gift rate limit
-          args = ["cosmetic", "gift", it.id, "@" + to.camfrogUsername];
+          args = ["cosmetic", "gift", it.id, "@" + (to.camfrogUsername || "u:" + to.userId)];     // 1.99wv: an account by id
           if (require("./gifts").anonFlag(b.anon)) args.push("anon");     // 1.99mt: Pepe's notice then says "Someone" (bot 1.99mu)
         }
       } else if (op === "buylisting") {

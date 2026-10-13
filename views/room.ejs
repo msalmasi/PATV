@@ -655,7 +655,7 @@
   </section>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else { %>
-  <%- include('partials/room-dj', { slug: room.slug, linked: linked }) %>
+  <%- include('partials/room-dj', { slug: room.slug, linked: linked || !!locals.acctActor }) %>
   <div class="grid">
     <section class="card" aria-labelledby="chatH">
       <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small></h2>
@@ -665,8 +665,12 @@
       <div class="compose hide" id="rmCompose">
         <% if (!signedIn) { %>
           <p class="muted" style="margin:0"><%- t('pad.chat.takes') %> <%- t('pad.chat.signin_link', { link: '<a href="/login?next=' + encodeURIComponent('/p/' + room.slug) + '">' + t('pad.signin') + '</a>' }) %></p>
-        <% } else if (!linked) { %>
+        <% } else if (!linked && !locals.acctActor) { %>
           <p class="muted" style="margin:0"><%- t('pad.chat.takes') %> <%- t('pad.chat.link_first', { cmd: '<code>!verify</code>' }) %></p>
+        <% } else if (!linked) { %>
+          <%# 1.99wv: a PATV account with no chat login - lines go in as "🌐 <username> (PATV web)"; push-to-talk / soundboard need a chat login %>
+          <p class="muted" style="margin:0 0 6px"><%- t('pad.chat.as_account') %></p>
+          <div id="rmRelay"></div>
         <% } else { %>
           <div id="rmRelay"></div>
           <div id="rmPtt"></div>

@@ -296,7 +296,7 @@
   </div>
 
   <%- include('partials/actions', { acts, msg }) %>
-  <% if (me && !me.camfrog) { %>
+  <% if (me && !me.camfrog && !locals.acctActor) { %>
     <div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⚠️</span><div>Buying and gifting new items runs through Pepe as your linked chat name — <a href="/settings/account#connections">link a chat account</a> (Connections) first. Equipping, listing and gifting items you already own work without it.</div></div>
   <% } %>
 

@@ -97,7 +97,7 @@ test("whois: tiers, minimal fields, banned / archived / auto accounts", async ()
   assert.deepEqual(await TG.whois({ tg_id: "999" }), { linked: false });
   const a = await TG.whois({ tg_id: "333" });
   assert.equal(a.tier, "full");
-  assert.deepEqual(Object.keys(a.user).sort(), ["camfrog", "display", "username"]);
+  assert.deepEqual(Object.keys(a.user).sort(), ["camfrog", "display", "user_id", "username"]);   // 1.99wv: + the account id (Pepe acts as u:<userId> with no chat login)
   assert.equal(a.user.camfrog, "alicecf");
   const b = await TG.whois({ tg_id: "222" });
   assert.equal(b.tier, "alerts");

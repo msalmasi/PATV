@@ -76,9 +76,14 @@ function register(app, { addUser, bySlug, isLive }) {
     if (!req.user || !req.user.userId) return bad(res, 401, "Sign in first.");
     const u = (await getQuery("SELECT userId, username, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
     if (!u) return bad(res, 401, "Sign in first.");
-    if (!u.camfrogUsername) return bad(res, 403, "Link your Camfrog name first: type !verify in a Camfrog room with Pepe - commands run as that name.");
     const R = bySlug(req.params.slug);
     if (!R || !isLive(R)) return bad(res, 404, "That Camfrog room isn't live right now.");
+    if (!u.camfrogUsername) {
+      // 1.99wv (connections audit C): a PATV account with no chat login runs the menu as itself (Pepe charges the account and
+      // echoes "🌐 <PATV username> (PATV web)"); the same account rules as a relayed line (bridge-relay.accountRefusal)
+      const why = await relay.accountRefusal(u, R, "");
+      if (why) return bad(res, why.status, why.error);
+    }
     const b = req.body || {};
     const built = buildLine(b.action, b.target);
     if (built.error) return bad(res, 400, built.error);
@@ -86,8 +91,8 @@ function register(app, { addUser, bySlug, isLive }) {
     if (why) return bad(res, why.status, why.error);
     const lim = relay.limited("cmd|" + u.userId, relay.CMD_GAP, relay.CMD_BURST, relay.CMD_WINDOW);
     if (lim) return bad(res, 429, lim);
-    const j = relay.newJob({ kind: "cmd", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername,
-      text: built.line, pepe: built.action });
+    const j = relay.newJob({ kind: "cmd", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "",
+      text: built.line, pepe: built.action, actor: require("./actorcap").actorOf(u) });
     console.log(`[padpepe] room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} action=${built.action} job=${j.id}`);
     relay.cmdLog({ userId: u.userId, username: u.username, camfrog: u.camfrogUsername, room: R.id,
       command: built.line + " [pepe menu]", job: j.id, status: "pending", result: "" });

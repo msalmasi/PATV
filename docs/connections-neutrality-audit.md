@@ -183,3 +183,41 @@ count (a fresh address is free); level / age stay each gate's own fallback. Acco
 | Feed `require_link_to_post` | admin's "proven accounts only" | Camfrog link | verified |
 | A pad's "who can post: linked" (`padSettings` label "Verified accounts") | owner's "proven accounts only" | Camfrog link | verified |
 | Pad create, `create_link: "any"` (`padcreate.linkedAny`) | pad spam, slug squatting | Camfrog, Discord or Twitch | verified (`create_link: "camfrog"` stays an explicit admin choice) |
+
+### C. The account as the actor (bot 1.99wt, site 1.99wv)
+
+Every website action (`actions.js` claim, `tables.js` claim) and every relay job (`bridge-relay.takeJobs`) now carries
+`user_id` and `actor` {userId, username, login, display}. Pepe (`pepe_acctactor.py`) acts as the linked chat login when
+there is one, else as the **account nick `u:<userId>`**: `find_or_create_user` answers that PATV account by id (never
+creates one), charges hit the account, `dn()` shows "🌐 <name>", it holds no roles, and nobody can type it as a chat
+sender. It is the key `loginrekey.js` / `pepe_loginrekey.py` already use for an account with no login, so the records
+follow the account to a chat login it links later. On the site, `userlinks.ul("u:<id>")` shows the account.
+
+Compatibility: Pepe says `actor_cap: 1` on each claim / sync; the site offers the account-only paths only while it has
+heard that in the last 10 minutes (`actorcap.js`). An old Pepe never says it, so an unlinked account keeps the old
+refusals; an old site never sends `actor`, so a new Pepe refuses unlinked actions as before.
+
+Relay lines from an account with no chat login go into the room as **"🌐 <PATV username> (PATV web): ..."** - the
+username, never a free-text display name, and a label no chat login's relay gets ("(web)"). The site refuses an account
+that hasn't proven an identity (`verified.js`), is archived / casino-restricted / feed-banned on that pad or site-wide,
+whose username is another member's chat login, or whose line trips `textguard.js`; Pepe adds the room's ignore lists
+(`u:<id>` or `🌐<username>`), time-outs, a casino restriction and his rate limit, logs it to the mod log, and never
+remembers it (no incognito switch exists without a chat login, so it is treated as incognito).
+
+| Surface | No chat login, now | Still needs a chat login (why) |
+|---|---|---|
+| Pad live chat (relay lines) | yes, as above | - |
+| 🐸 Pepe menu (look / camroast / roast) | yes, charged from the account | - |
+| Typed `!commands` from the relay, Manage panel | - | Pepe's dispatcher authorises them by the login's room roles / mod history |
+| Push-to-talk clips, cam snapshots + Save snap, cam / mic clip saves | - | they act on a Camfrog room's mic and cams as a member of that room; audio can't be text-guarded |
+| DJ panel (find / pick / skip / vibe ...) | yes (`u:<id>` requester) | DJ admin verbs stay Pepe-admin logins |
+| Casino tables (legacy Pepe tables) | yes, seated as "🌐 <name>" | - (the casino backend already plays by account) |
+| Donate to a pool (`/wallet`) | yes | - |
+| Market create (`/markets`) | yes, creator `u:<id>` | - |
+| Polls | yes (1.99wr: `🌐username` on the site's polls; `u:<id>` on Pepe's local polls) | - |
+| Cosmetics buy / gift (`/cosmetics`) | yes; a gift to an unlinked account goes `@u:<id>` | - |
+| Wagers, bounties, pools, P2P loans, lotto | yes on the site (A) | Pepe's local path while a site switch is off (keyed by login) |
+| Stashes + vault staking, GTF sheet / avatar re-roll, heist market | - | still keyed by chat login (WP-D) |
+| Voice clone (`!clonemyvoice`) | - | the consent is read on a Camfrog mic |
+| Telegram commands | yes, as the account | `!patv`, `!avatar`, `!stash`, and `!relay` / `!tell` / `!message` (delivered in chat under a chat name) |
+| Snap from stage capture / AI generate | unchanged (already by account at level 2) | - |

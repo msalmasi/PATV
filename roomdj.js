@@ -162,7 +162,9 @@ async function viewer(req) {
   const u = (await getQuery("SELECT username, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
   if (!u) return null;
   const cf = String(u.camfrogUsername || "").toLowerCase();
-  return { userId: req.user.userId, camfrog: cf || null, djAdmin: !!cf && S.admins.dj.has(cf), musicAdmin: !!cf && S.admins.music.has(cf) };
+  // 1.99wv (connections audit C): with no chat login the PATV account requests (Pepe acts as "u:<userId>") while he can
+  const acct = !cf && require("./actorcap").on() ? "u:" + req.user.userId : null;
+  return { userId: req.user.userId, camfrog: cf || null, acct, djAdmin: !!cf && S.admins.dj.has(cf), musicAdmin: !!cf && S.admins.music.has(cf) };
 }
 
 /** What a signed-in viewer's panel shows. */
@@ -179,8 +181,8 @@ async function panelFor(R, me) {
     active: true, age: Math.max(0, Date.now() - S.at),   // the page runs the progress bar on from here
     room: { queue: room.queue, play: room.play, pause: room.pause, talk: room.talk, patter: room.patter, price: room.price },
     state: st,
-    me: { linked: !!(me && me.camfrog), djAdmin: !!(me && me.djAdmin), musicAdmin: !!(me && me.musicAdmin),
-          vibeVoted: !!(me && me.camfrog && st && st.dj.vote && S.vibeVoters.has(me.camfrog)) },
+    me: { linked: !!(me && (me.camfrog || me.acct)), djAdmin: !!(me && me.djAdmin), musicAdmin: !!(me && me.musicAdmin),
+          vibeVoted: !!(me && (me.camfrog || me.acct) && st && st.dj.vote && S.vibeVoters.has(me.camfrog || me.acct)) },
     acts: acts.map((a) => ({ id: a.id, label: a.label, status: a.status, message: a.message || "" })),
   };
 }
@@ -233,7 +235,7 @@ function register(app, { isBotToken, addUser, bySlug = defaultBySlug }) {
     const room = djRoom(R.id);
     if (!room) return res.status(409).json({ ok: false, error: "The music isn't on in this pad right now." });
     const me = await viewer(req);
-    if (!me || !me.camfrog) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
+    if (!me || !(me.camfrog || me.acct)) return res.status(403).json({ ok: false, error: "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe)." });
     const b = req.body || {};
     const verb = String(b.verb || "");
     const who = Object.prototype.hasOwnProperty.call(VERBS, verb) ? VERBS[verb] : null;

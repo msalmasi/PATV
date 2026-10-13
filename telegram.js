@@ -258,7 +258,7 @@ async function whois({ tg_id, seen } = {}) {
   try { disp = require("./displaynames").usable(acc.displayname) || ""; } catch (e) { /* plain */ }
   const cf = acc.camfrogUsername && !CF_AUTO.test(acc.username) ? String(acc.camfrogUsername).toLowerCase() : null;
   return { linked: true, tier, lang: langOf(acc.userId),
-           user: { username: acc.username, display: snip(disp || acc.username, 40), camfrog: cf } };
+           user: { username: acc.username, display: snip(disp || acc.username, 40), camfrog: cf, user_id: acc.userId } };   // 1.99wv
 }
 
 // ── preferences ──

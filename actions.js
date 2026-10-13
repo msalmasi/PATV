@@ -3,7 +3,9 @@
 // A signed-in user submits a form; we store it as an action and Pepe claims pending actions every
 // few seconds, runs each AS that user through the same chat command (so every rule and fee is the
 // same as in a room), and acks with what he would have replied. Pages show the user's recent actions
-// with that reply. Most actions need a linked Camfrog name, because in chat you ARE that name.
+// with that reply. 1.99wv (connections audit C): each claimed action carries the account as its `actor` ({userId,
+// username, login, display}); Pepe acts as the linked chat login, else as the account itself ("u:<userId>", camfrog-bot
+// pepe_acctactor.py). Which forms an account with no chat login sees depends on actorcap.on() (a capable Pepe).
 //
 // Forms post to /act with:
 //   kind   cmd | poll.vote | poll.create | poll.end
@@ -209,6 +211,7 @@ function register(app, { isBotToken, addUser }) {
   // Pepe takes pending actions (and claimed ones he never answered)
   app.post("/api/actions/claim", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+    require("./actorcap").note(req.body);        // 1.99wv: a Pepe that acts for accounts says so (actorcap.js)
     await ready;
     // 1.99ne: overdue pending rows expire first (actionttl.js) - never handed out late
     await ttl.sweepTable("pepe_actions").catch((e) => console.error("[actions] ttl sweep:", e.message));
@@ -227,7 +230,9 @@ function register(app, { isBotToken, addUser }) {
     res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
+      // 1.99wv (connections audit C): the ACCOUNT is the actor - Pepe acts as its chat login, else as "u:<userId>"
       return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin, idem: a.idem || null,
+               user_id: a.user_id, actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null },
                created: a.created || null, expires_at: ttl.expiresAt("pepe_actions", a) };   // 1.99ne: Pepe won't START it after this
     }) });
   });

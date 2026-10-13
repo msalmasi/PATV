@@ -251,6 +251,7 @@ function register(app, { isBotToken, addUser }) {
         myLimit: reserveLimit(ln.reserve || null, camfrog || (reserveOn ? me : null), u.level), // only ever the signed-in user's own
         myCredit: (camfrog || me) ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog || me, u) : null,
         linked: !!camfrog, loansOn, reserveOn: reserveOn && !!(camfrog || me),
+        donateOn: !!camfrog || require("./actorcap").on(),          // 1.99wv: Pepe charges the PATV account (u:<userId>)
         welcomeStatus: await welcome.status(req.user.userId).catch(() => null),
         // 1.99lx: the last few PAT movements (history.js, the same sentences /history shows) for the Recent activity card
         recent: await require("./history").forUser(req.user.userId, { period: "30d", perPage: 6 }).then((h) => h.items).catch(() => []),

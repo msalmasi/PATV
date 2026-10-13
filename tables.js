@@ -280,6 +280,7 @@ function register(app, { isBotToken, addUser }) {
   // Pepe's fast lane: website table actions only. Old ones are dropped, not run late.
   app.post("/api/tables/claim", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+    require("./actorcap").note(req.body);        // 1.99wv (actorcap.js)
     try {
       const now = Date.now();
       await runQuery(`UPDATE pepe_actions SET status = 'failed', message = ?, updated = ?
@@ -290,7 +291,8 @@ function register(app, { isBotToken, addUser }) {
       res.json({ actions: rows.map((a) => {
         let args = [];
         try { args = JSON.parse(a.args); } catch (e) { args = []; }
-        return { id: a.id, kind: "table", args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin };
+        return { id: a.id, kind: "table", args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin,
+                 user_id: a.user_id, actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null } };   // 1.99wv
       }) });
     } catch (e) {
       console.error("[tables] claim:", e.message);
@@ -310,6 +312,8 @@ function register(app, { isBotToken, addUser }) {
           const acts = await actions.recentFor(req.user.userId, "casino", 6);
           out.me = {
             username: u.username, camfrog: u.camfrogUsername || null, banned: !!u.casino_banned, admin: u.class === "Admin",
+            // 1.99wv: who the page plays as - the chat login, else the PATV account while Pepe acts for accounts
+            playAs: u.camfrogUsername || (require("./actorcap").on() ? "🌐 " + u.username : null),
             seats: PRIV.get(String(u.username).toLowerCase()) || [],            // ONLY this user's own seats
             // 1.99ep: a failure shows the friendly message + its error code (weberrors.js)
             actions: acts.map((a) => ({ id: a.id, label: a.label, status: a.status, message: a.err ? a.err.message : a.message,
@@ -331,7 +335,8 @@ function register(app, { isBotToken, addUser }) {
     if (!u) return res.status(401).json({ ok: false, error: "Sign in to play." });
     const isAdmin = u.class === "Admin";
     const adminAct = String((req.body || {}).game) === "admin";
-    if (!adminAct && !u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) — you play as that name." });
+    // 1.99wv (connections audit C): with no chat login the PATV account plays (Pepe seats "🌐 <name>", charged from the account)
+    if (!adminAct && !u.camfrogUsername && !require("./actorcap").on()) return res.status(403).json({ ok: false, error: "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) — you play as that name." });
     if (!adminAct && u.casino_banned) return res.status(403).json({ ok: false, error: "You're banned from the casino." });
     const built = buildArgs(req.body || {}, isAdmin);
     if (built.error) return res.status(400).json({ ok: false, error: built.error });
@@ -364,6 +369,7 @@ function register(app, { isBotToken, addUser }) {
       let me = null;
       if (req.user && req.user.userId) {
         me = (await getQuery("SELECT username, camfrogUsername, points_balance, casino_banned FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
+        if (me) me.playAs = me.camfrogUsername || (require("./actorcap").on() ? "🌐 " + me.username : null);   // 1.99wv
       }
       let pokerNow = [];
       if (focus === "holdem") {

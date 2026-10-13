@@ -746,6 +746,7 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
       relay.applyAcks(body.acks);
+      require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
       require("./quotes").setHidden(body.hidden_h);   // 1.99fp: who is private right now (hashes) - quotes never name them
       const r = await ingest(body);
       const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
@@ -963,6 +964,7 @@ function register(app, { isBotToken, addUser }) {
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access,
+      acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,

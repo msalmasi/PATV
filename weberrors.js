@@ -12,7 +12,7 @@
 
 const ERRORS = Object.freeze({
   // who you are / what you may do
-  E_NOT_LINKED: ["Your PATV account isn't linked to a Camfrog name yet.", "Link it on your profile (type !verify in any Camfrog room) - website actions run as that name."],
+  E_NOT_LINKED: ["That needs a chat account linked to your PATV account.", "Link one in Settings → Account → Connections (for Camfrog, type !verify in a room with Pepe)."],
   E_NO_PERMISSION: ["You're not allowed to do that.", "It's limited to the owner, an admin, or a higher level - ask one of them."],
   E_BANNED: ["You're blocked from doing that right now.", "A ban or an ignore is in place - talk to a room admin if you think it's a mistake."],
   // money
@@ -43,7 +43,7 @@ const CODES = Object.freeze(Object.keys(ERRORS));
 const RULES = [
   ["E_INTERRUPTED", /^interrupted by a restart/],
   ["E_INTERNAL", /^something went wrong/],
-  ["E_NOT_LINKED", /link your camfrog name|\bverify\b.*first|isn't linked/],
+  ["E_NOT_LINKED", /link your camfrog name|link a chat account|needs a chat login|\bverify\b.*first|isn't linked/],
   ["E_INSUFFICIENT_PAT", /insufficient pat|not enough pat|don't have enough|you have [\d,]+\b|costs? [\d,.]+[km]? pat\b.*\byou have|can't afford|couldn't take the pat/],
   ["E_BANNED", /you're banned|is ignoring your commands|you are banned|you're blocked/],
   ["E_ROOM_OFFLINE", /pepe isn't in (that|this|the)|isn't on in that room|not in that room/],

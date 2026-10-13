@@ -272,14 +272,14 @@
     if (!el) return;
     const me = S.me;
     const seat = mySeat(t);
-    const sig = JSON.stringify([t.id, t.phase, t.turn, t.can_deal, seat, sending, me && me.camfrog, me && me.banned, t.game === "bj" ? t.seats.map((s) => [s.bet, s.pending, s.autobet]) : 0]);
+    const sig = JSON.stringify([t.id, t.phase, t.turn, t.can_deal, seat, sending, me && (me.playAs || me.camfrog), me && me.banned, t.game === "bj" ? t.seats.map((s) => [s.bet, s.pending, s.autobet]) : 0]);
     if (sig === sigCtl) return;
     sigCtl = sig;
     const keep = {};
     el.querySelectorAll("input").forEach((i) => { if (i.id && i.value) keep[i.id] = i.value; });
     let h = "";
     if (!SIGNED) h = `<p class="info" style="margin:0">You're watching. <a href="/login">Sign in</a> to play.</p>`;
-    else if (!me || !me.camfrog) h = `<p class="info" style="margin:0">Link your Camfrog name (<code>!verify</code> in a room) to play from here.</p>`;
+    else if (!me || !(me.playAs || me.camfrog)) h = `<p class="info" style="margin:0">Link a chat account (Settings → Account → Connections) to play from here.</p>`;
     else if (me.banned) h = `<p class="info" style="margin:0">You're banned from the casino.</p>`;
     else if (t.game === "holdem") h = holdemCtl(t, seat);
     else h = bjCtl(t, seat);
@@ -398,7 +398,7 @@
   // ── lobby: open tables + start form ──
   function renderLobby() {
     const me = S.me;
-    const canPlay = SIGNED && me && me.camfrog && !me.banned;
+    const canPlay = SIGNED && me && (me.playAs || me.camfrog) && !me.banned;   // 1.99wv: the PATV account plays too
     const sig = JSON.stringify([S.tables.map((t) => [t.id, t.game, t.room_name, t.seats.length, t.phase, t.featured]), S.rooms, S.busy, S.stale, canPlay, sending, S.max_tables]);
     if (sig === sigLobby) return;
     sigLobby = sig;

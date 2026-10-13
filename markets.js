@@ -551,6 +551,8 @@ function register(app, { isBotToken, addUser }) {
       linked = !!(u[0] && u[0].camfrogUsername);
       acts = await actions.recentFor(req.user.userId, "markets");
     }
+    // 1.99wv (connections audit C): with no chat login the PATV account opens the market through Pepe (as u:<userId>)
+    linked = linked || (!!(req.user && req.user.userId) && require("./actorcap").on());
     res.render("markets", { user: req.user ? req.user.username : null, live, done, now: Date.now() / 1000, linked, acts,
                             filter: L.filter, pick: await padlinks.choicesFor(req.user, req.query.pad), bounds: await require("./mktcfg").get(),
                             msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null });
