@@ -641,7 +641,9 @@ async function evaluateAuto(summary, { force = false, actor = "auto", now = nowM
     }
     // 1.99fu: an Approved (members-only) pad is never the automatic pick - the homepage's featured room is for everyone
     try { await require("./padaccess").init(); } catch (e) { /* no levels loaded: nothing is Approved */ }
-    const ranked = FR.rank(withAct(notApproved(summary), CFG, now, bmap), CFG, now);
+    // 1.99vm: + every pad without a connected Camfrog room, scored by its site activity (padsignals.js: feed + stage)
+    const all = await withSitePads(summary, now);
+    const ranked = FR.rank(withAct(notApproved(all), CFG, now, bmap), CFG, now);
     const { state, switched } = FR.decide(AUTO, ranked, CFG, now, { force });
     state.ranked = ranked.slice(0, 8).map((r) => ({ id: r.id, score: r.score, activity: r.activity, boost: r.boost, parts: r.parts, dead: r.dead, lastAt: r.lastAt }));
     if (state.id) {
@@ -725,6 +727,12 @@ async function boostPats(now = nowMs()) {
     return await require("./boosts").activeMap(now, (cfg.boost && cfg.boost.half_min) || 60);
   } catch (e) { console.error("[rooms] boost pats:", e.message); return new Map(); }
 }
+/** 1.99vm: the bridge's summary rows + a site-activity row for every pad without a connected Camfrog room
+ *  (padsignals.js; the front pick's window). The homepage uses it for Top Pads; the automatic pick merges it itself. */
+async function withSitePads(summary, now = nowMs()) {
+  const cfg = await frontCfg();
+  return require("./padsignals").merge(summary || [], cfg.window_min, now);
+}
 /** 1.99ek: the LIVE pads ranked NOW by the front pick's own score (activity + boost points, frontroom.rank) -
  *  the homepage's "Top Pads". `summary` = bridge.summary() rows. -> {ranked: [{id, score, ...}], boosts: Map id -> active PAT} */
 async function rankLive(summary, { now = nowMs() } = {}) {
@@ -732,7 +740,8 @@ async function rankLive(summary, { now = nowMs() } = {}) {
   const boosts = await boostPats(now);
   let scored = boosts;                 // the ranking also counts the launchpad's boost credit; the 🚀 badges don't
   try { scored = await require("./boosts").activeMap(now, (cfg.boost && cfg.boost.half_min) || 60, { credits: true }); } catch (e) { scored = boosts; }
-  const ranked = FR.rank(withAct(summary, cfg, now, cfg.boost && cfg.boost.on ? scored : null), cfg, now);
+  const all = await withSitePads(summary, now);            // 1.99vm: pads without a chat room rank on their site activity
+  const ranked = FR.rank(withAct(all, cfg, now, cfg.boost && cfg.boost.on ? scored : null), cfg, now);
   return { ranked, boosts };
 }
 
@@ -800,7 +809,7 @@ function hasRoute(app, path) {
 module.exports = {
   init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
   setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, boostPats, rankLive, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
-  _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, followName, inheritableSlug, findUser, event,
+  _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, withSitePads, notify, followName, inheritableSlug, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
   PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,

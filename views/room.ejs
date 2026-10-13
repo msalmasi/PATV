@@ -469,7 +469,7 @@
         <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: t('pad.hdr.follow') }) %>
           <span class="hd-fc" title="<%- t('pad.hdr.follow_tip') %>"><%- t('pad.hdr.followers', { count: fcount_, n: '<b data-follower-count-kind="room" data-follower-count-id="' + t.esc(feed_.room) + '">' + t.esc(fcount_.toLocaleString('en-US')) + '</b>' }) %></span></div><% } %>
         <%# 1.99ti: a labelled "👑 Manage your pad" for the owner (staff see "Owner panel") - it was a bare icon nobody found %>
-        <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><a class="ds-btn sm gold po-link po-cta" href="/p/<%= encodeURIComponent(room.slug) %>/owner" title="<%- t('pad.owner_panel') %>">👑 <%- isOwner_ ? t('pad.manage_pad') : t('pad.owner_panel') %></a><% } %>
+        <% if (manage_) { %><a class="ds-btn sm gold po-link po-cta" href="/p/<%= encodeURIComponent(room.slug) %>/owner" title="<%- t('pad.owner_panel') %>">👑 <%- isOwner_ ? t('pad.manage_pad') : t('pad.owner_panel') %></a><% } %>
         <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%- psTitle_ %>" aria-label="<%- psTitle_ %>">⚙<% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
         <details class="hd-more" id="rmMore">
           <summary class="ibtn" aria-label="<%- t('pad.menu.aria') %>" title="<%- t('pad.menu.more') %>">⋯</summary>
@@ -495,7 +495,7 @@
     <% PT_.tabs.forEach((tb_) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= tb_ %>" data-tab="<%= tb_ %>" aria-controls="padPanel-<%= tb_ %>" aria-selected="<%= tabOn_(tb_) ? 'true' : 'false' %>" tabindex="<%= tabOn_(tb_) ? 0 : -1 %>">
       <% if (tb_ === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%- liveLabel_ %><% } else if (tb_ === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span><%- t('pad.tab.feed') %> <span class="pnew" id="padFeedNew" hidden></span><% } else { %><%- t('pad.tab.about') %><% } %></button><% }) %>
     <%# 1.99ti: owners / managers get an "Owner" tab - a link to the owner panel (it's its own page, not a panel here) %>
-    <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><a class="ptab ptab-owner" href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.tab.owner') %></a><% } %>
+    <% if (manage_) { %><a class="ptab ptab-owner" href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.tab.owner') %></a><% } %>
   </nav>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <%# 1.99ja: a Twitch pad plays its channel (padconnect.js twitchOf; the player URL is built by stageembed.js from the checked login) %>
@@ -539,8 +539,9 @@
   </section>
   <%# 1.99ee: go live / slots / schedule are their own card under the stage card (the stage card is the player + Snap / Clip).
       🚀 Boost replaces "★ Get featured": featuring is earned (the front page's automatic ranking); a boost adds to this
-      pad's score there (boosts.js). Only Camfrog pads can be on the front page, so only they show the button. %>
-  <% const BO_ = RS.boost || null, canBoost_ = !siteOnly_ && (room.platform || 'camfrog') === 'camfrog', signedIn_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user); %>
+      pad's score there (boosts.js). 1.99vm: every pad can be on the front page (a pad without a chat room ranks on its site
+      activity, padsignals.js), so every pad shows the button. %>
+  <% const BO_ = RS.boost || null, canBoost_ = (room.platform || 'camfrog') !== 'profile', signedIn_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user); %>
   <section class="card golive-card" id="rmGoLive" aria-labelledby="rmGoLiveH">
     <h2 id="rmGoLiveH" class="gl-h"><%- t('pad.golive.h') %></h2>
     <div class="stage-bar">
@@ -1183,7 +1184,7 @@
         <% if (!siteOnly_) { %><dt><%- t('pad.about.cf_room') %></dt><dd><%= room.camfrogName || room.name %></dd><% } %>
         <% if (typeof twitch !== 'undefined' && twitch && twitch.login) { %><dt>Twitch</dt><dd><a href="https://twitch.tv/<%= twitch.login %>" rel="noopener" target="_blank">twitch.tv/<%= twitch.login %></a></dd><% } %>
         <% if (manage_) { %><dt><%- t('pad.about.settings') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings"><%- t('pad.about.settings_link') %></a></dd><% } %>
-        <% if (manage_ && !siteOnly_ && (room.platform || 'camfrog') === 'camfrog') { %><dt><%- t('pad.owner_panel') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.owner_panel') %></a></dd><% } %>
+        <% if (manage_) { %><dt><%- t('pad.owner_panel') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.owner_panel') %></a></dd><% } %>
       </dl>
     </section>
     <%# 1.99sn: 💰 the pad vault, public, first card under About (partials/pad-vault-card.ejs; roomvaults.js) %>

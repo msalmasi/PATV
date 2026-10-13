@@ -34,6 +34,7 @@ const rooms = require(path.join(repo, "rooms"));
 const B = require(path.join(repo, "boosts"));
 const S = require(path.join(repo, "mainstage"));
 const E = require(path.join(repo, "engagement"));
+const PS = require(path.join(repo, "padsignals"));
 const store = require(path.join(repo, "feedstore"));
 const econ = require(path.join(repo, "econ"));
 
@@ -42,7 +43,7 @@ const T = Date.UTC(2026, 9, 12, 6, 0, 0);
 const DAYSTR = "2026-10-11";
 const D = (n) => Date.UTC(2026, 9, 11 - n, 12, 0, 0);          // noon UTC, n days before the settled day
 const dstr = (n) => new Date(D(n)).toISOString().slice(0, 10);
-rooms._setClock(() => T); RC._setClock(() => T); RV._setClock(() => T); B._setClock(() => T); S._setClock(() => T); E._setClock(() => T);
+rooms._setClock(() => T); RC._setClock(() => T); RV._setClock(() => T); B._setClock(() => T); S._setClock(() => T); E._setClock(() => T); PS._setClock(() => T);
 const GARDEN = "patv:garden", PLANT = "plant_based_chatting";
 const OLD = "2026-08-01 00:00:00", YOUNG = "2026-10-10 00:00:00";
 const LIVE = { reserve: 5000000, flows: {}, fortknox: 0, room_vaults: { on: true, cap: 50000000 } };
@@ -137,10 +138,12 @@ test("recipe inputs: a pad without a connected room is measured on the pad (qual
   assert.deepEqual(g.owner, { userId: "gard" });
   assert.equal(g.pad_days, 3, "days 0, 2 and 3 (day 1's young accounts don't count; nothing else)");
   assert.equal(g.owner_pad_days, 3, "the owner streamed (day 2), posted (day 3), moderated (day 4); a rate change and day 9 don't count");
-  assert.deepEqual([p.pad_days, p.owner_pad_days], [0, 0], "a Camfrog pad keeps the chat measures (active_days / presence)");
+  assert.deepEqual([p.pad_days, p.owner_pad_days], [0, 0], "a Camfrog pad with no feed / stage activity: 0 pad days");
   assert.equal(typeof p.active_days, "number");
   const direct = await RC.padDays(await rooms.get(GARDEN), DAYSTR);
-  assert.deepEqual(direct, { pad_days: 3, owner_pad_days: 3 });
+  assert.deepEqual([direct.pad_days, direct.owner_pad_days], [3, 3]);
+  assert.deepEqual(direct.pad_dates, [dstr(3), dstr(2), dstr(0)], "the dates themselves (1.99vm)");
+  assert.deepEqual(direct.owner_pad_dates, [dstr(4), dstr(3), dstr(2)]);
 });
 
 test("the sync: the recipe copy's profile_vaults follows the sync flag when Pepe leaves it out", async () => {
@@ -170,4 +173,50 @@ test("tools/padvault-rows.js: dry run reports, --apply adds empty rows once (sup
   assert.deepEqual([again.rows_to_add, again.applied], [0, 0], "idempotent");
   const sum1 = (await getQuery("SELECT COALESCE(SUM(balance),0) AS s FROM room_vault_state"))[0];
   assert.equal(sum1.s, sum0.s, "supply unchanged (empty rows)");
+});
+
+test("1.99vm: a connected pad's days join its chat room's and its pad's (either place qualifies; a day counts once)", async () => {
+  // Houseplants: bridged active on day 1 and day 3; on the pad: day 3 (again) and day 5 with 3 qualified members
+  for (const [d, m, pk] of [[dstr(1), 90, 4], [dstr(3), 120, 5]]) {
+    await runQuery("INSERT INTO room_activity (room_id, day, minutes, peak, lines) VALUES (?, ?, ?, ?, 0)", [PLANT, d, m, pk]);
+  }
+  for (const n of [3, 5]) {
+    const pid = await mkPost("m1", PLANT, D(n));
+    await comment(pid, "m2", D(n) + 60e3); await up(pid, "m3", D(n) + 90e3);
+  }
+  const pb = await rooms.get(PLANT);
+  const pid = await mkPost(pb.owner.userId, PLANT, D(6));               // the owner posts on the pad on day 6
+  const r = await post("/api/g/recipe/inputs", { password: "bot-token", day: DAYSTR, rooms: [{ room: PLANT, owner_login: "foamy1111", logins: [] }] });
+  const x = r.body.rooms[0];
+  assert.deepEqual(x.active_dates, [dstr(3), dstr(1)].sort(), "the bridged active days");
+  assert.deepEqual(x.pad_dates, [dstr(5), dstr(3)].sort(), "the pad's own active days");
+  assert.equal(x.active_days, 2, "active_days is still the room's alone (older Pepes)");
+  assert.equal(x.active_any_days, 3, "room OR pad: days 1, 3, 5 - day 3 once");
+  assert.deepEqual(x.owner_pad_dates, [dstr(6)], "the owner's pad days go to Pepe as dates (he joins them with Camfrog presence)");
+  assert.ok(pid);
+});
+
+test("1.99vm: every pad can be boosted and can rank on the front page / Top Pads by its site activity", async () => {
+  const b = await B.boost(fan, GARDEN, { amount: 10001, ref: "r-garden-b1" });
+  assert.deepEqual([b.fortknox, b.room_vault], [5001, 5000], "a site-only pad can be boosted; the room half goes to its vault");
+  await assert.rejects(B.boost(fan, rooms.profileId(owner.userId), { amount: 5000, ref: "r-prof-b1" }), /Profiles can't be boosted|No such pad/);
+  PS._reset();
+  let rows = await PS.rows(20, T);
+  const g0 = rows.find((r) => r.id === GARDEN);
+  assert.equal(g0.live, false, "nothing in the last 20 minutes: not live (no score)");
+  assert.ok(!rows.some((r) => r.id === PLANT), "a Camfrog pad keeps its bridge row (no site row)");
+  // fresh activity: m1 posts, m2 comments, m3 + a 2-day-old account upvote, and someone watches the stage now
+  const pid = await mkPost("m1", GARDEN, T - 5 * 60e3);
+  await comment(pid, "m2", T - 4 * 60e3); await up(pid, "m3", T - 3 * 60e3); await up(pid, "n1", T - 3 * 60e3);
+  await runQuery(`INSERT INTO econ_watch (day, stream, room_id, streamer_id, viewer_id, secs, muted_secs, beats, status, updated) VALUES (?, 'slot:g2', ?, 'gard', 'fan', 60, 0, 2, 'ok', ?)`,
+                 ["2026-10-12", GARDEN, T - 30e3]);
+  PS._reset();
+  rows = await PS.rows(20, T);
+  const g = rows.find((r) => r.id === GARDEN);
+  assert.equal(g.live, true);
+  assert.deepEqual([g.act.chatters, g.act.lines, g.act.people, g.act.micMin], [3, 2, 1, 0], "3 qualified chatters (the young account doesn't count), 2 lines, 1 viewer");
+  const merged = await PS.merge([{ id: PLANT, slug: "houseplants", name: "Houseplants", count: 3, live: true }], 20, T);
+  assert.ok(merged.some((r) => r.id === GARDEN), "the site pad joins the bridge's rows");
+  const RL = await rooms.rankLive([], { now: T });
+  assert.ok(RL.ranked.some((r) => r.id === GARDEN && r.score > 0), "rankLive (Top Pads / the front pick) includes the site pad with a score");
 });

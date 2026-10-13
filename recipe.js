@@ -11,8 +11,11 @@
 //                  streamer, their known alts and flagged viewers are already out), minus muted minutes, at most 120
 //                  per viewer per streamer; only viewers whose account is >= 7 days old, level >= 2 and verified
 //                  (email, Discord or Twitch). Pepe's own stream has no streamer to pay.
-//     pad_days / owner_pad_days  (1.99uu) the connection-neutral equivalents of active_days / the owner's presence, for
-//                  a pad WITHOUT a connected Camfrog room (Pepe uses them there; a connected pad keeps the chat measures).
+//     pad_days / owner_pad_days  (1.99uu) the connection-neutral equivalents of active_days / the owner's presence
+//                  (+ pad_dates / owner_pad_dates, active_dates and active_any_days = |active_dates U pad_dates|, 1.99vm).
+//                  A pad without a connected Camfrog room is measured on these alone; a CONNECTED pad (1.99vm, the user)
+//                  qualifies on either place: a day counts when the room OR the pad was active, and an owner day when the
+//                  owner was in the room OR active on the pad.
 //                  Days in the 7 ending `day` (UTC):
 //                    pad_days        >= 3 distinct QUALIFIED accounts (engagement.qualified: >= 7 days old, level >= 2,
 //                                    verified / linked, not archived, not an alt) posted, commented or upvoted on the pad's
@@ -111,9 +114,13 @@ async function streamerVwm(roomId, day, t = clock()) {
 }
 
 async function activeDays(roomId, day) {
+  return (await activeDates(roomId, day)).length;
+}
+/** 1.99vm: the bridged active days themselves (UTC dates), so Pepe can join them with the pad's own days. */
+async function activeDates(roomId, day) {
   const end = Date.parse(day + "T00:00:00Z") + DAY_MS;
   const rows = await require("./rooms").activity(roomId, end - 7 * DAY_MS, end).catch(() => []);
-  return rows.filter((d) => (Number(d.minutes) || 0) >= GATES.active_minutes && (Number(d.peak) || 0) >= GATES.active_peak).length;
+  return rows.filter((d) => (Number(d.minutes) || 0) >= GATES.active_minutes && (Number(d.peak) || 0) >= GATES.active_peak).map((d) => d.day);
 }
 
 // 1.99uu: what counts as "moderating the pad" for owner_pad_days (rooms.event names)
@@ -159,9 +166,9 @@ async function padDays(R, day, t = clock()) {
   }
   const all = [...new Set([...days.values()].flatMap((x) => [...x]))];
   const q = all.length ? await require("./engagement").qualified(all, t).catch(() => ({})) : {};
-  let padN = 0;
-  for (const set of days.values()) if ([...set].filter((u) => q[u] && q[u].ok).length >= GATES.active_peak) padN += 1;
-  return { pad_days: padN, owner_pad_days: owner.size };
+  const padDates = [];
+  for (const [d, set] of days) if ([...set].filter((u) => q[u] && q[u].ok).length >= GATES.active_peak) padDates.push(d);
+  return { pad_days: padDates.length, owner_pad_days: owner.size, pad_dates: padDates.sort(), owner_pad_dates: [...owner].sort() };
 }
 
 async function inputs(body) {
@@ -177,10 +184,13 @@ async function inputs(body) {
     if (!id) continue;
     const R = await rooms.get(id).catch(() => null);
     const owner = R && R.owner_kind === "user" && R.owner && R.owner.userId ? { userId: R.owner.userId } : null;
-    // 1.99uu: + the pad's own activity (a pad without a connected Camfrog room is measured on the pad; Pepe picks)
-    const pd = R && rooms.platformOf(id) !== "camfrog" ? await padDays(R, day) : { pad_days: 0, owner_pad_days: 0 };
-    out.push({ room: id, active_days: await activeDays(id, day), owner, streamers: await streamerVwm(id, day),
-               people: await peopleGates(x.logins), ...pd });
+    // 1.99uu: + the pad's own activity. 1.99vm (the user): for EVERY pad - a connected pad's owner share counts the pad's
+    // days alongside its chat room's (either qualifies; Pepe joins the dates: active_any_days, and the owner's Camfrog
+    // presence days with owner_pad_dates)
+    const pd = R ? await padDays(R, day) : { pad_days: 0, owner_pad_days: 0, pad_dates: [], owner_pad_dates: [] };
+    const ad = await activeDates(id, day);
+    out.push({ room: id, active_days: ad.length, active_dates: ad, active_any_days: new Set([...ad, ...pd.pad_dates]).size,
+               owner, streamers: await streamerVwm(id, day), people: await peopleGates(x.logins), ...pd });
   }
   return { ok: true, day, rooms: out };
 }
@@ -243,5 +253,5 @@ function register(app, { isBotToken }) {
   });
 }
 
-module.exports = { init, inputs, credit, earned, peopleGates, streamerVwm, activeDays, padDays, MOD_EVENTS, register, GATES, Refuse,
+module.exports = { init, inputs, credit, earned, peopleGates, streamerVwm, activeDays, activeDates, padDays, MOD_EVENTS, register, GATES, Refuse,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };

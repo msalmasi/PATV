@@ -232,7 +232,9 @@ async function boost(user, roomId, opts = {}) {
   const rooms = require("./rooms");
   const R = await rooms.get(roomId);
   if (!R) throw new Refuse(404, "No such pad.");
-  if (R.platform !== "camfrog") throw new Refuse(400, "Only Camfrog pads can be on the front page, so only they can be boosted.");
+  // 1.99vm (the user): every pad can be on the front page, so every pad can be boosted (a pad without a chat room ranks on
+  // its site activity - padsignals.js); a profile isn't a front-page pad
+  if (rooms.isProfile(R.id)) throw new Refuse(400, "Profiles can't be boosted - boost a pad.");
   // 1.99nk: a typed amount ("1,000,000" / "50k") reads the same as in chat (public/js/patamount.js)
   const amount = typeof opts.amount === "string" ? require("./public/js/patamount").parse(opts.amount) : Math.floor(Number(opts.amount));
   if (!Number.isFinite(amount) || amount < C.min || amount > C.max) {

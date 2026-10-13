@@ -232,12 +232,14 @@ function register(app, { addUser, xpForNextLevel }) {
       const pepeHere = bridge.pepeIn(front.id) !== false;
       const frontReg = await reg.get(front.id).catch(() => null);
       // 1.99ek: Top Pads (the front pick's score, live pads only) + every pad's active boost PAT for the 🚀 badges
-      const RL = await reg.rankLive(rooms).catch((e) => { console.error("[home] top pads:", e.message); return { ranked: [], boosts: new Map() }; });
-      const tops = topPads(rooms, RL.ranked, RL.boosts, 5);
+      // 1.99vm: every pad can be a Top Pad - pads without a connected Camfrog room rank on their site activity (padsignals.js)
+      const pads = PA.visibleRows(viewer, await reg.withSitePads(allRooms).catch(() => allRooms));
+      const RL = await reg.rankLive(pads).catch((e) => { console.error("[home] top pads:", e.message); return { ranked: [], boosts: new Map() }; });
+      const tops = topPads(pads, RL.ranked, RL.boosts, 5);
       // 1.99hm: 🎧 listen from the homepage - may this viewer hear the pad (padaccess.full, same as /p/<slug>/audio)?
       for (const t of tops) t.listen = PA.full(viewer, t.id);
       // 1.99kp: what's on in each Top Pad (refreshed by the page every 30 s: /api/home/nowplaying)
-      const NP = await nowPlaying(rooms.filter((r) => tops.some((t) => t.id === r.id))).catch(() => new Map());
+      const NP = await nowPlaying(pads.filter((r) => tops.some((t) => t.id === r.id))).catch(() => new Map());
       for (const t of tops) t.np = NP.get(t.id) || null;
       const frontInfo = frontReg ? { id: frontReg.id, slug: web.linkSlug(frontReg), title: frontReg.title, pinned: front.pinned,
                                      owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,

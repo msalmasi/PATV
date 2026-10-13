@@ -185,7 +185,8 @@ test("idempotent: the same ref twice (a double click) charges once; refusals mov
   await assert.rejects(B.boost(poor, PLANT, { amount: 100, ref: ref() }), (e) => e.status === 402);
   await assert.rejects(B.boost(u, PLANT, { amount: 99, ref: ref() }), (e) => e.status === 400, "below the minimum");
   await assert.rejects(B.boost(u, PLANT, { amount: 5000, ref: "bad ref!" }), (e) => e.status === 400);
-  await assert.rejects(B.boost(u, "patv:lounge", { amount: 5000, ref: ref() }), (e) => e.status === 400 && /Camfrog pads/.test(e.message), "a site pad can't be on the front page");
+  // 1.99vm (the user): every pad can be on the front page, so a site pad can be boosted; a profile can't
+  await assert.rejects(B.boost(u, "user:" + u.userId, { amount: 5000, ref: ref() }), (e) => e.status === 400 || e.status === 404, "a profile isn't a front-page pad");
   await assert.rejects(B.boost(null, PLANT, { amount: 5000, ref: ref() }), (e) => e.status === 401);
   assert.equal(await bal(poor.userId), 50); assert.equal(await bal(u.userId), START - 3000);
   // the money switch
