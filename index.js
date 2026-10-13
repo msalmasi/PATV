@@ -123,6 +123,8 @@ app.use(flash());
 
 // Set the view engine to ejs
 app.set("view engine", "ejs");
+// 1.99xi: the level tier name ("🐸 Froglet") for any view - levelTier(level, t) (leveltiers.js, data/level-tiers.json)
+app.locals.levelTier = (level, t) => require("./leveltiers").labelOf(level, t);
 
 // Set the views directory
 app.set("views", "./views");
@@ -1277,6 +1279,7 @@ require("./settingshub").register(app, { addUser });   // 1.99vz: the /settings 
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./casino/routes").register(app, { isBotToken, addUser });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md)
 require("./userstats").register(app, { isBotToken });
+require("./streaks").register(app, { isBotToken, addUser });   // 1.99xi: 🔥 daily activity streaks (Pepe's !streak, /api/streaks/me, the grace rule)
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation
 require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)
 require("./pepecontrol").register(app, { isBotToken, addUser });
@@ -1561,6 +1564,8 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         points_balance: user.points_balance,
         badges: badges,
         xpForNextLevel: xpForNextLevel,
+        // 1.99xi: 🔥 the daily activity streak (streaks.js) - shown in the header like the level ("streak" layout item)
+        streak: await require("./streaks").forUser(user.userId).catch((e) => { console.error("profile streak:", e.message); return null; }),
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
         canSeeHistory: !preview && !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
         heistSheet: await gtf.sheetFor(user.camfrogUsername),
@@ -2628,7 +2633,8 @@ function getUserLevel (req, res) {
           return res.status(500).json({ error: err.message });
         }
         if (row) {
-          return res.json({ xp: row.xp, level: row.level });
+          // 1.99xi: + the level's tier name (Pepe's !level / !rank)
+          return res.json({ xp: row.xp, level: row.level, tier: require("./leveltiers").forApi(row.level) });
         } else {
           return res.status(404).json({ error: "User not found" });
         }
@@ -3939,6 +3945,7 @@ async function settleSpin(spinId) {
   const xp = payout * 0.005;
   const levelUpInfo = await updateLevel(spin.userId, xp);
   achievements.checkWeb(spin.userId);              // spins / wheel winnings / jackpot achievements
+  require("./streaks").note(spin.userId, "spin");   // 1.99xi: 🔥 a settled spin keeps the daily streak
   const out = { result: payout, jackpot: isJackpot, jackpotPct: spin.jackpot_pct || 0, grand, xp, levelUp: levelUpInfo };
   // 1.99: a settled spin can drop a cosmetic - very rarely (the wheel runs ~850 times a day), the
   // jackpot slice more often (rare or better). Rates and the shared daily cap come from Pepe's table.

@@ -327,6 +327,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
                        actor: require("./actorcap").actorOf(u, display) });
     console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}`);
+    require("./streaks").note(u.userId, "relay");          // 1.99xi: 🔥 chatting into a pad's room from the web keeps the daily streak
     res.json({ ok: true, id: j.id });
   });
 

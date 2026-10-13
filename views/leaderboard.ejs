@@ -11,10 +11,13 @@
     : String(u.displayname || u.username).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const prof = (u) => '/u/' + encodeURIComponent(u.username);
   const isMe = (u) => !!user && u.username === user;
+  // 1.99xi: the level's tier name ("🐸 Froglet", leveltiers.js via app.locals.levelTier)
+  const tierOf = (lv) => (typeof locals.levelTier === 'function' ? locals.levelTier(lv, t) : '');
+  const tierTag = (lv) => { const s = tierOf(lv); return s ? '<span class="tier-n">' + s + '</span>' : ''; };
   // metric per board: [big value, unit]
   const metric = {
     pat:    (u) => [fmt(u.points_balance), 'PAT'],
-    level:  (u) => [t('rank.lv', { n: fmt(u.level) }), t('rank.xp', { n: fmt(u.xp) })],
+    level:  (u) => [t('rank.lv', { n: fmt(u.level) }), tierTag(u.level) + ' ' + t('rank.xp', { n: fmt(u.xp) })],
     badges: (u) => [fmt(u.badges), t('rank.badge_unit', { count: Number(u.badges) })],
   };
   const boards = [
@@ -87,6 +90,8 @@
   .lb-row .who a:hover { color: #fff; text-decoration: underline; }
   .lb-row .lv { display: grid; gap: var(--ds-sp-1); font-size: var(--ds-fs-meta); color: #ccc; }
   .lb-row .lv small { color: var(--ds-text-faint); }
+  .lb-row .lv .tier-n, .lb-pod .tier-n { color: var(--ds-ok-ink); font-weight: 700; font-size: var(--ds-fs-xs); white-space: nowrap; }
+  .lb-pod .tier-n { display: block; }
   .lb-row .bar { height: 6px; background: #1f1f1f; border-radius: var(--ds-r-pill); overflow: hidden; }
   .lb-row .bar span { display: block; height: 100%; background: var(--ds-green); }
   .lb-row .amt { text-align: end; font-weight: 700; color: var(--ds-gold-text); white-space: nowrap; }
@@ -178,7 +183,7 @@
             <span class="av"><% if (avs[u.username]) { %><%- avs[u.username] %><% } else { %><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><% } %></span>
             <span class="nm"><%- nameOf(u) %><% if (isMe(u)) { %><span class="me-tag"><%- t('rank.you') %></span><% } %></span>
             <span class="val"><%- v[0] %></span>
-            <span class="sub"><%- v[1] %><% if (b.id !== 'level') { %> &middot; <%- t('rank.lv', { n: fmt(u.level) }) %><% } %></span>
+            <span class="sub"><%- v[1] %><% if (b.id !== 'level') { %> &middot; <span title="<%= tierOf(u.level).replace(/<[^>]*>/g, '') %>"><%- t('rank.lv', { n: fmt(u.level) }) %></span><% } %></span>
           </a>
         <% }) %>
       </div>
@@ -191,7 +196,7 @@
             <li class="lb-row<%= b.id === 'level' ? ' lvl-board' : '' %><%= isMe(u) ? ' me' : '' %>">
               <span class="rk"><%= i + 1 %></span>
               <span class="who"><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><a href="<%= prof(u) %>"><%- nameOf(u) %></a><% if (isMe(u)) { %><span class="me-tag"><%- t('rank.you') %></span><% } %></span>
-              <span class="lv"><span><%- t('rank.lv', { n: fmt(u.level) }) %> <small><%- t('rank.xp', { n: fmt(u.xp) }) %></small></span><span class="bar"><span style="width: <%= pctOf(u).toFixed(1) %>%"></span></span></span>
+              <span class="lv"><span><%- t('rank.lv', { n: fmt(u.level) }) %> <%- tierTag(u.level) %> <small><%- t('rank.xp', { n: fmt(u.xp) }) %></small></span><span class="bar"><span style="width: <%= pctOf(u).toFixed(1) %>%"></span></span></span>
               <% if (b.id === 'badges') { %>
                 <span class="amt"><%= fmt(u.badges) %></span>
               <% } else { %>

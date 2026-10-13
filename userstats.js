@@ -392,6 +392,8 @@ function register(app, { isBotToken }) {
                         ON CONFLICT(login) DO UPDATE SET data = excluded.data, updated = excluded.updated`,
           [row.login, JSON.stringify(row), now]);
         saved++;
+        // 1.99xi: 🔥 today's (and the last two days') chat / mic / command days keep the account's daily streak (streaks.js)
+        try { await require("./streaks").fromLogins(require("./streaks").fromUserstats(row)); } catch (e) { console.error("[userstats] streaks:", e.message); }
       }
       await runQuery(`INSERT INTO camfrog_userstats_meta (id, tz, days, updated) VALUES (1, ?, ?, ?)
                       ON CONFLICT(id) DO UPDATE SET tz = excluded.tz, days = excluded.days, updated = excluded.updated`,

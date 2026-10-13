@@ -254,6 +254,11 @@
   .hm .me .top { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
   .hm .me .top .nm { font-size: var(--ds-fs-h3); font-weight: 700; color: #fff; overflow-wrap: anywhere; }
   .hm .me .top b { color: #fff; font-variant-numeric: tabular-nums; }
+  /* 1.99xi: the level's tier name + the 🔥 daily streak */
+  .hm .me .top .tier-n { color: var(--ds-ok-ink); font-weight: 700; }
+  .hm .me .top .stk-n { color: var(--ds-text-2); text-decoration: none; white-space: nowrap; }
+  .hm .me .top .stk-n.on { color: #ffb347; font-weight: 700; }
+  .hm .me .top .stk-n:hover { text-decoration: underline; }
   .hm .lvl { height: 8px; background: #1f1f1f; border-radius: 999px; overflow: hidden; max-width: 380px; }
   .hm .lvl span { display: block; height: 100%; background: linear-gradient(90deg, var(--ds-green), var(--ds-green-2)); border-radius: 999px; transition: width var(--ds-dur-3) ease; }
   .hm .chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
@@ -587,7 +592,7 @@
     </div>
     <div class="who">
       <div class="top"><span class="nm <%= nameCss ? 'cx-name' : '' %>" style="<%= nameCss %>"><%= me.displayname || me.username %></span>
-        <span><span class="ds-ic" aria-hidden="true">💰</span> <b id="balTop"><%= fmt(me.points_balance) %></b> PAT</span><span><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('home.me.lv') %> <b><%= me.level %></b> · <%= fmt(me.xp) %>/<%= fmt(need) %> XP</span></div>
+        <span><span class="ds-ic" aria-hidden="true">💰</span> <b id="balTop"><%= fmt(me.points_balance) %></b> PAT</span><span><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('home.me.lv') %> <b><%= me.level %></b><% if (typeof locals.levelTier === 'function') { %> <span class="tier-n" title="<%- t('profile.tier_title') %>"><%- locals.levelTier(me.level, t) %></span><% } %> · <%= fmt(me.xp) %>/<%= fmt(need) %> XP</span><% if (me.streak && me.streak.best > 0) { %><a class="stk-n<%= me.streak.current ? ' on' : '' %>" href="/u/<%= encodeURIComponent(me.username) %>" title="<%- t('profile.streak_title') %>"><span aria-hidden="true">🔥</span> <%- t('home.me.streak', { count: me.streak.current }) %><% if (me.streak.atRisk) { %> · <%- t('home.me.streak_risk') %><% } %></a><% } %></div>
       <div class="lvl" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="<%- t('home.me.xp_aria') %>"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
       <div class="chips">
         <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>">🔗 <%- t('home.me.link_camfrog') %></a><% } %>
@@ -682,7 +687,7 @@
             <span class="av"><% if (u.gtf) { %><%- u.gtf %><% } else { %><img src="<%= pic(u.avatar) %>" alt="" loading="lazy"><% } %></span>
             <span class="nm <%= cs ? 'cx-name' : '' %>" style="<%= cs %>"><%= u.displayname || u.username %></span>
             <span class="pt"><%= short(u.points_balance) %> PAT</span>
-            <span class="lv"><%- t('home.tf.level', { n: u.level }) %></span>
+            <span class="lv"<% if (typeof locals.levelTier === 'function') { %> title="<%= locals.levelTier(u.level, t).replace(/<[^>]*>/g, '') %>"<% } %>><%- t('home.tf.level', { n: u.level }) %></span>
           </a>
         </li>
       <% }) %>

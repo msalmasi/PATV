@@ -30,6 +30,8 @@ const SECTIONS = [
   { id: "posts", label: "Posts", desc: "Posts tab (opens first): your feed posts, and the composer for you", icon: "📝" },
   { id: "stats", label: "Stat strip", desc: "Header: PAT balance and badge count", icon: "📊" },
   { id: "level", label: "XP bar", desc: "Header: progress to the next level", icon: "⭐" },
+  // 1.99xi: 🔥 the daily activity streak tile in the header (streaks.js)
+  { id: "streak", label: "Streak", desc: "Header: your 🔥 daily activity streak and your best one", icon: "🔥" },
   { id: "avatar", label: "GTF avatar", desc: "Header: your Grand Theft Frogger portrait — click it for the wardrobe", icon: "🐸" },
   { id: "gtf", label: "Grand Theft Frogger", desc: "Overview tab: heist sheet and GTF links", icon: "🥷" },
   { id: "badges", label: "Badges", desc: "Overview tab: every badge you've earned", icon: "🏅" },

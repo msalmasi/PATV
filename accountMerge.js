@@ -117,6 +117,9 @@ const RULES = {
   "achievement_feed.userId": M(),
   // 1.99mt: durable achievement marks (achievements.js mark: ⭐ Headliner) - one per account + mark
   "ach_marks.userId": M({ key: ["mark"], merge: { created: "MIN" } }),
+  // 1.99xi streaks.js: 🔥 the days an account was active (one row per day + source) - both accounts' days count for the
+  // survivor's streak (it's computed from these rows, nothing else to settle); a day both had keeps the earliest moment
+  "activity_days.userId": M({ key: ["day", "src"], merge: { at: "MIN" } }),
   "user_roles.userId": M({ key: ["role"], merge: { granted_at: "MIN" } }), "user_roles.granted_at": { deny: "a date" },
   "user_cosmetics.user_id": M(), "user_cosmetic_equips.user_id": M({ key: ["kind"] }),
   "cosmetic_listings.seller_id": M(), "cosmetic_listings.buyer_id": M(),

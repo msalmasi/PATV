@@ -1,0 +1,27 @@
+{
+  "_doc": "1.99xi: level tier names - every 10 levels has a name (leveltiers.js). Lv 0-9 is the first tier. Edit a name here AND its locales/en.json key tier.<key> (test/streaks.test.js checks they match); the i18n sync translates it. Levels past the last tier keep the `beyond` name with a Roman numeral per further 10 levels (Lv 200-209 = Pond Deity I, 210-219 = II ...).",
+  "step": 10,
+  "tiers": [
+    { "key": "tadpole", "name": "Tadpole", "emoji": "🫧" },
+    { "key": "froglet", "name": "Froglet", "emoji": "🐸" },
+    { "key": "pond_hopper", "name": "Pond Hopper", "emoji": "💧" },
+    { "key": "lily_pad_regular", "name": "Lily Pad Regular", "emoji": "🪷" },
+    { "key": "reed_runner", "name": "Reed Runner", "emoji": "🌾" },
+    { "key": "marsh_croaker", "name": "Marsh Croaker", "emoji": "🎶" },
+    { "key": "bog_boss", "name": "Bog Boss", "emoji": "🍄" },
+    { "key": "bayou_baron", "name": "Bayou Baron", "emoji": "🎩" },
+    { "key": "swamp_legend", "name": "Swamp Legend", "emoji": "🐊" },
+    { "key": "frog_prince", "name": "Frog Prince", "emoji": "💚" },
+    { "key": "pond_monarch", "name": "Pond Monarch", "emoji": "👑" },
+    { "key": "mire_mystic", "name": "Mire Mystic", "emoji": "🔮" },
+    { "key": "fen_phantom", "name": "Fen Phantom", "emoji": "👻" },
+    { "key": "wetland_warlord", "name": "Wetland Warlord", "emoji": "⚔️" },
+    { "key": "rainforest_oracle", "name": "Rainforest Oracle", "emoji": "🌿" },
+    { "key": "croak_titan", "name": "Croak Titan", "emoji": "🗿" },
+    { "key": "storm_leaper", "name": "Storm Leaper", "emoji": "⛈️" },
+    { "key": "moon_hopper", "name": "Moon Hopper", "emoji": "🌙" },
+    { "key": "cosmic_croaker", "name": "Cosmic Croaker", "emoji": "🌌" },
+    { "key": "eternal_frog", "name": "Eternal Frog", "emoji": "✨" }
+  ],
+  "beyond": { "key": "pond_deity", "name": "Pond Deity", "emoji": "🌟" }
+}

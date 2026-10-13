@@ -55,6 +55,9 @@
   // 1.99vy: the 💰 profile vault is a page of its own (/u/<name>/vault); the main profile only links it from the tab bar
   const pv = typeof profileVault !== 'undefined' && profileVault ? profileVault : null;
   const vaultHref = base + '/vault' + (previewing ? '?preview=visitor' : '');
+  // 1.99xi: the level's tier name (leveltiers.js via app.locals.levelTier) and the 🔥 daily streak (streaks.js forUser)
+  const tierLbl_ = typeof locals.levelTier === 'function' ? locals.levelTier(level, t) : '';
+  const stk_ = locals.streak || null;
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
@@ -104,6 +107,18 @@
   .pf .ps.lv { flex: 3 1 240px; }
   .pf .ps .lv-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ds-sp-2); }
   .pf .ps .lv-row small, .pf .ps.fw .fw-row small { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* 1.99xi: the tier name next to the level number, and the 🔥 streak tile */
+  .pf .ps .lv-name { display: inline-flex; align-items: baseline; gap: var(--ds-sp-2); min-width: 0; flex-wrap: wrap; }
+  .pf .ps .tier { font: 700 var(--ds-fs-xs)/1.3 var(--ds-font); color: var(--ds-ok-ink); background: var(--ds-green-bg); border: 1px solid var(--ds-green-line);
+                  border-radius: var(--ds-r-pill); padding: 1px 8px; white-space: nowrap; }
+  .pf .ps.stk { flex: 1 1 150px; }
+  .pf .ps.stk .stk-row { display: flex; align-items: baseline; gap: var(--ds-sp-2); flex-wrap: wrap; }
+  .pf .ps.stk .stk-row small { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pf .ps.stk:not(.on) b { color: var(--ds-text-muted); }
+  .pf .ps.stk.on b { color: #ffb347; }
+  .pf .ps.stk .stk-note { font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+  .pf .ps.stk .stk-note.ok { color: var(--ds-ok-ink); }
+  .pf .ps.stk .stk-note.risk { color: var(--ds-warn-ink); }
   .pf .xb { height: 6px; background: #1f1f1f; border-radius: var(--ds-r-pill); overflow: hidden; margin-top: var(--ds-sp-1); }
   .pf .xb span { display: block; height: 100%; background: var(--ds-green); border-radius: var(--ds-r-pill); }
   .pf .ps.is-hidden > :not(.pf-hid) { opacity: .45; }
@@ -273,9 +288,16 @@
       <% } %>
       <div class="ps lv<%= L.show('level') && L.hidden('level') ? ' is-hidden' : '' %>" title="<%- t('profile.level_title') %>">
         <span class="k"><%- t('profile.level') %></span>
-        <span class="lv-row"><b><%= level %></b><% if (L.show('level')) { %><small><%= fmt(xp) %> / <%= fmt(need) %> XP</small><% } %></span>
+        <span class="lv-row"><span class="lv-name"><b><%= level %></b><% if (tierLbl_) { %><span class="tier" title="<%- t('profile.tier_title') %>"><%- tierLbl_ %></span><% } %></span><% if (L.show('level')) { %><small><%= fmt(xp) %> / <%= fmt(need) %> XP</small><% } %></span>
         <% if (L.show('level')) { %><div class="xb" role="progressbar" aria-label="<%- t('profile.xp_to_level', { n: level + 1 }) %>" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div><% } %>
       </div>
+      <% if (stk_ && L.show('streak') && (stk_.best > 0 || isMe)) { const sh_ = L.hidden('streak'); %>
+        <div class="ps stk<%= stk_.current > 0 ? ' on' : '' %><%= sh_ ? ' is-hidden' : '' %>" title="<%- t('profile.streak_title') %>">
+          <span class="k"><%- t('profile.streak') %></span>
+          <span class="stk-row"><b><span aria-hidden="true">🔥</span> <%= fmt(stk_.current) %></b><small><%- t('profile.streak_days', { count: stk_.current }) %> · <%- t('profile.streak_best', { n: fmt(stk_.best) }) %></small></span>
+          <% if (isMe && stk_.todayDone) { %><span class="stk-note ok"><%- t('profile.streak_today_done') %></span><% } else if (isMe && stk_.atRisk) { %><span class="stk-note risk"><%- t('profile.streak_at_risk') %></span><% } else if (isMe && !stk_.current) { %><span class="stk-note"><%- t('profile.streak_start') %></span><% } %>
+        </div>
+      <% } %>
       <% if (L.show('stats')) { %>
         <a class="ps<%= L.hidden('stats') ? ' is-hidden' : '' %>" href="/achievements?user=<%= enc %>"><span class="k"><%- t('profile.badges') %></span><b><%= badges.length %></b></a>
       <% } %>

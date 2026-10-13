@@ -112,6 +112,9 @@ async function render(who, opts = {}) {
     profileVault: opts.vault || null, vaultView: !!opts.vaultView,
     social, previewVisitor: !!opts.preview, avatarActs: owner ? (opts.acts || []) : [], avatarMsg: "", tipJarNew: owner ? 3 : 0,
     ogBase: "http://test", ogPath: "/u/alice",
+    // 1.99xi: the tier name (index.js app.locals.levelTier) and the 🔥 streak (streaks.forUser) - only when a test asks
+    ...(opts.tiers ? { levelTier: (lv, t) => require(path.join(repo, "leveltiers")).labelOf(lv, t) } : {}),
+    streak: opts.streak || null,
   };
   return ejs.renderFile(path.join(repo, "views", "profile.ejs"), locals);
 }
@@ -361,4 +364,26 @@ test("vault: routing - ?tab=vault and vaults off redirect; old #vault links are 
   assert.equal(run("#vault-donate"), "/u/alice/vault#vault-donate");
   assert.equal(run("#badges"), null);
   assert.equal(run("#vault", false), null, "profile vaults off: nothing to go to");
+});
+
+test("1.99xi: the level's tier name sits next to the level; the 🔥 streak tile shows current + best (owner hints, hide switch)", async () => {
+  const st = { current: 12, best: 30, todayDone: false, atRisk: true, lastDay: "2026-10-12", startDay: "2026-10-01" };
+  let html = await render("owner", { items: ITEMS, tiers: true, streak: st });
+  save("streak-owner", html);
+  assert.match(html, /class="tier"[^>]*>🐸 Froglet<\/span>/);
+  assert.match(html, /class="ps stk on"/);
+  assert.match(html, /🔥<\/span> 12<\/b><small>12 days · best 30<\/small>/);
+  assert.match(html, /Do something today to keep it/, "the owner sees the at-risk hint");
+  html = await render("visitor", { items: ITEMS, tiers: true, streak: st });
+  save("streak-visitor", html);
+  assert.match(html, /class="ps stk on"/);
+  assert.doesNotMatch(html, /Do something today/, "hints are the owner's");
+  html = await render("visitor", { items: ITEMS, tiers: true, streak: st, hidden: ["streak"] });
+  assert.doesNotMatch(html, /class="ps stk/, "hidden from visitors");
+  html = await render("visitor", { items: ITEMS, tiers: true, streak: { current: 0, best: 0 } });
+  assert.doesNotMatch(html, /class="ps stk/, "a visitor sees no empty streak");
+  html = await render("owner", { items: ITEMS, tiers: true, streak: { current: 0, best: 0 } });
+  assert.match(html, /Show up today to start one/);
+  html = await render("visitor", { items: ITEMS });
+  assert.doesNotMatch(html, /class="tier"|class="ps stk/, "rendered bare (no site locals): neither");
 });

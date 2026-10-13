@@ -124,6 +124,12 @@ async function webMetrics(userId) {
   const soIds = catalog.filter((a) => a.side === "web" && SO.METRICS.includes(a.metric)).map((a) => a.id);
   const soHeld = soIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${soIds.map(() => "?").join(",")})`, [userId, ...soIds]) : 0;
   const so = soBackfilled && soHeld < soIds.length ? await SO.metrics(userId).catch(() => ({})) : {};
+  // 1.99xi: 🔥 daily activity streaks (streaks.js) - the best run, 0 until the streak history import + its quiet milestones have
+  // run; skipped once every milestone is held (checkWeb runs on every spin)
+  const ST = require("./streaks");
+  const stIds = catalog.filter((a) => a.side === "web" && a.metric === ST.METRIC).map((a) => a.id);
+  const stHeld = stIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${stIds.map(() => "?").join(",")})`, [userId, ...stIds]) : 0;
+  const activityStreak = stIds.length && stHeld < stIds.length ? await ST.metric(userId).catch(() => 0) : 0;
   const spent = await one(`SELECT COALESCE(SUM(-points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WAGER}`, [userId]);
   const won = await one(`SELECT COALESCE(SUM(points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WIN}`, [userId]);
   return {
@@ -141,6 +147,7 @@ async function webMetrics(userId) {
     telegram_linked: tgBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM telegram_links WHERE user_id = ?", [userId])) : 0,
     google_linked: googleBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM sso_links WHERE provider = 'google' AND user_id = ?", [userId])) : 0,
     voice_cloned: voiceBackfilled ? await voiceCloned(userId) : 0,
+    activity_streak: activityStreak,
     ...Object.fromEntries(FEATURE_METRICS.map((k) => [k, feat[k] || 0])),
     ...Object.fromEntries(PP.METRICS.map((k) => [k, pp[k] || 0])),
     ...Object.fromEntries(SO.METRICS.map((k) => [k, so[k] || 0])),
@@ -236,7 +243,7 @@ const webBackfill = (async () => {
   // (the 📼 Plex, 📨 Telegram and 🍀 Google ones have their own quiet backfills, which also hand out their cosmetics)
   const PLEX_METRICS_ = ["plex_linked", "plex_member", "plex_days"];
   const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...VOICE_METRICS, ...FEATURE_METRICS,
-                                                         ...require("./plexpad").METRICS, ...require("./achsocial").METRICS].includes(a.metric));
+                                                         ...require("./plexpad").METRICS, ...require("./achsocial").METRICS, "activity_streak"].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
   for (const u of users) {

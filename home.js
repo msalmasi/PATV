@@ -209,8 +209,10 @@ function register(app, { addUser, xpForNextLevel }) {
       let me = null;
       if (username) {
         me = (await getQuery(
-          "SELECT username, displayname, class, level, xp, avatar, email, points_balance, camfrogUsername FROM users WHERE username = ?",
+          "SELECT userId, username, displayname, class, level, xp, avatar, email, points_balance, camfrogUsername FROM users WHERE username = ?",
           [username]))[0] || null;
+        // 1.99xi: 🔥 the daily streak next to the level (streaks.js)
+        if (me) me.streak = await require("./streaks").forUser(me.userId).catch(() => null);
       }
       const [S, allRooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
       // 1.99fu: pad visibility (padaccess.js) - an Approved pad this viewer is outside of isn't on their homepage at all

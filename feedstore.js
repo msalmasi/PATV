@@ -1112,6 +1112,7 @@ async function create(userId, input, deps = {}) {
     if (postFlair) await require("./padflair").setPostFlair(id, roomIds[0], postFlair, u.username || u.userId);     // 1.99wq
     await recountPost(id);
     if (!isPepe(u)) require("./achievements").poke(u.userId);      // 1.99pa: 📝 post achievements (achsocial.js)
+    if (!isPepe(u)) require("./streaks").note(u.userId, "post");    // 1.99xi: 🔥 a post keeps the daily streak
   } catch (e) {
     await runQuery("DELETE FROM feed_post_tags WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_post_flair WHERE post_id = ?", [id]).catch(() => {});
@@ -1625,6 +1626,7 @@ async function comment(user, postId, { body, parent } = {}) {
   await recountComment(id);
   await recount(postId);
   if (!isPepe(u)) require("./achievements").poke(u.userId);        // 1.99pa: 💬 comment achievements (achsocial.js)
+  if (!isPepe(u)) require("./streaks").note(u.userId, "comment");   // 1.99xi: 🔥 a comment keeps the daily streak
   if (filtHide) return { id, safety };                              // 1.99ux: hidden by the filter - no notices until it's released
   // notices: the post's author, and the person replied to (never yourself, never twice)
   const who = u.displayname || u.username;

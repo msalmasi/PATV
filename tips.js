@@ -86,6 +86,7 @@ async function transferPat(senderUsername, recipientUsername, rawAmount, note = 
   const achievements = require("./achievements");   // lazy: achievements.js pulls in a lot at load
   achievements.checkWeb(sender.userId);            // tipped / tips-received achievements
   achievements.checkWeb(recipient.userId);
+  require("./streaks").note(sender.userId, "tip");   // 1.99xi: 🔥 sending a tip keeps the daily streak
   const after = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [sender.userId]);
   return { ok: true, status: 200, msg: "Tip sent successfully.", amount,
            balance: after.length ? Math.floor(after[0].points_balance || 0) : null,

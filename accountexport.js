@@ -163,6 +163,7 @@ async function collect(userId, { at = now() } = {}) {
   await put("achievements", "badges", rows("user_badges", "userId = ?", [uid]));
   await put("achievements", "feed", rows("achievement_feed", "userId = ?", [uid]));
   await put("achievements", "marks", rows("ach_marks", "userId = ?", [uid]));
+  await put("achievements", "streak_days", rows("activity_days", "userId = ?", [uid]));   // 1.99xi: 🔥 the days your streak is made of
   await put("achievements", "casino_counts", rows("casino_ach_counts", "userId = ?", [uid]));
   await put("cosmetics", "items", rows("user_cosmetics", "user_id = ?", [uid]));
   await put("cosmetics", "equipped", rows("user_cosmetic_equips", "user_id = ?", [uid]));

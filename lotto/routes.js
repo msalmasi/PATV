@@ -107,6 +107,7 @@ function register(app, { isBotToken, addUser, updateLevel }) {
     const out = await svc.buy(actor, picks ? { picks } : { quick: b.quick }, `lt:web-${actor.uid}-${idem}`,
                               { confirmDup: true, confirm: b.confirm === true || b.confirm === 1 || b.confirm === "1" });
     const error = out.ok ? null : out.code === "dup" ? dupAsk(out.draw) : MSG[out.code] || "Something went wrong.";
+    if (out.ok && !out.replay) require("../streaks").note(actor.uid, "game");   // 1.99xi: 🔥 a Pepeball ticket keeps the daily streak
     res.status(out.ok ? 200 : 409).json(Object.assign({ error }, out));
   });
 

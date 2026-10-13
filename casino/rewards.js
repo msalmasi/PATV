@@ -137,6 +137,7 @@ async function blackjackRound(T, n, results, maxBet) {
     for (const r of results || []) {
       const uid = r.key;
       const k = `cbj:${T.id}:r${n}:${uid}`;
+      require("../streaks").note(uid, "game");          // 1.99xi: 🔥 a blackjack round keeps the daily streak
       await bump(`${k}:hands`, uid, "bj_hands", (r.hands || []).length || 1);
       await winReward(T, k, uid, (Number(r.total_payout) || 0) - (Number(r.total_bet) || 0));
       await blackjackSeatAch(T, k, uid, r, ((T.eng && T.eng.results) || {}).dealer);    // 1.99pa
@@ -205,7 +206,11 @@ async function holdemHand(T, hand, won, contrib) {
     await winReward(T, `chm:${T.id}:h${hand}:${uid}`, uid, (Number(amt) || 0) - (Number((contrib || {})[uid]) || 0));
   }
   try {
-    for (const [uid, put] of Object.entries(contrib || {})) if (Number(put) > 0) await bump(`chm:${T.id}:h${hand}:${uid}:hands`, uid, "holdem_hands", 1);
+    for (const [uid, put] of Object.entries(contrib || {})) {
+      if (!(Number(put) > 0)) continue;
+      await bump(`chm:${T.id}:h${hand}:${uid}:hands`, uid, "holdem_hands", 1);
+      require("../streaks").note(uid, "game");           // 1.99xi: 🔥 a hold'em hand keeps the daily streak
+    }
   } catch (e) {
     console.error("[casino] rewards (hold'em hands):", e.message);
   }

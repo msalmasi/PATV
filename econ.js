@@ -147,6 +147,8 @@ async function ingestParticipation(rows) {
        Math.max(0, int(x.cmds)), Math.max(0, Math.min(1440, int(x.active_min))), now]);
     saved++;
   }
+  // 1.99xi: 🔥 the days these logins chatted / were on mic / ran a command keep their accounts' daily streaks (streaks.js)
+  try { await require("./streaks").fromLogins(require("./streaks").fromParticipation(rows)); } catch (e) { console.error("[econ] streaks:", e.message); }
   return saved;
 }
 
