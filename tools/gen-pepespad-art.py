@@ -118,7 +118,7 @@ def tv(g, x0, y0, w, h, face=True, onair=True):
     g.rect(x0 + 3, y0 + h, x0 + 5, y0 + h + 1, GREY2); g.rect(x0 + w - 6, y0 + h, x0 + w - 4, y0 + h + 1, GREY2)     # feet
     if onair:                                              # the ON AIR sign on top
         lw = width5("ON AIR") + 4
-        lx = x0 + 2
+        lx = x0
         g.rect(lx, y0 - 11, lx + lw - 1, y0 - 3, ONAIR)
         g.rect(lx + 1, y0 - 10, lx + lw - 2, y0 - 4, "#b71c1c")
         text5(g, "ON AIR", lx + 2, y0 - 10, "#ffebee")
@@ -172,9 +172,9 @@ def avatar():
 
 def banner():
     """1600 x 400 (200 x 50 cells, 4:1): a night-sky station - PEPE'S PAD in gold over what's on, the TV with Pepe on the right.
-    The pad header crops it: 180 px tall on a desktop (~6.4:1 - rows 10-40 show) and 120 px on a phone (~3.25:1 - columns
-    19-181 show), with a fade at the bottom - so the title and the TV live in that safe box, the ON AIR sign and the skyline
-    are extras for the taller crops."""
+    The pad header crops it: 180 px tall on a desktop (~6.4:1 - rows 10-40 show) and 120 px on a phone (~2.5:1 - about columns
+    38-162 show), with a fade at the bottom - so the title sits in the middle of that safe box, the TV on the right (desktop),
+    the ON AIR sign and the skyline are extras for the taller crops."""
     g = Grid(200, 50)
     bands = [BG, BG, "#101113", "#101214", "#111416", "#111618", "#12181a", "#121a1b", "#121c1c", "#12201d", "#12241d", "#12281c", "#122c1b", DEEP]
     for y in range(50):                                    # the sky: dark at the top, deep green at the bottom
@@ -200,7 +200,7 @@ def banner():
     # the title
     t = "PEPE'S PAD"
     tw = width5(t, 2)
-    tx, ty = 22, 12
+    tx, ty = (200 - width5("PEPE'S PAD", 2)) // 2 - 3, 12      # centred left of the TV; a phone crop keeps the whole title
     text5(g, t, tx + 1, ty + 1, "#5c3a00", 2)              # a one-cell drop shadow
     text5(g, t, tx, ty, GOLD, 2)
     for x in range(tx, tx + tw):                           # the top row of each letter catches the light
@@ -212,9 +212,9 @@ def banner():
     text5(g, sub, sx, ty + 20, GREEN2)
     for dx in (width5("NEWS") + 2, width5("NEWS  CASINO") + 2):   # dots between the words
         g.rect(sx + dx, ty + 23, sx + dx + 1, ty + 24, GOLD)
-    coin(g, 141, 22); coin(g, 142, 19); coin(g, 141, 16)   # a little stack of PAT between the title and the TV
+    coin(g, tx - 12, 22); coin(g, tx - 11, 19); coin(g, tx - 12, 16)   # a little stack of PAT before the title
     # the station: an ON AIR TV with Pepe on screen
-    tv(g, 148, 12, 34, 29)
+    tv(g, 162, 12, 35, 29)
     png(g, os.path.join(OUT, "banner.png"), 8)
 
 
