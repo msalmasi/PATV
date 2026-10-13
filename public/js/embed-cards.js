@@ -69,7 +69,11 @@
   var skew = 0;        // server now - local now
   var timer = null, backoff = EVERY, inflight = false, queued = false, lastFetch = 0;
 
-  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  // 1.99vd: some stored titles / options arrive HTML-escaped (Pepe's chat text: "Test&gt;") - decode the basic entities before
+  // setting them as TEXT (never as HTML)
+  var ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&#x27;': "'", '&apos;': "'" };
+  function unent(s) { return String(s).replace(/&(?:amp|lt|gt|quot|apos|#39|#x27);/g, function (m) { return ENT[m]; }); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = unent(text); return e; }
   function kindLabel(k) {
     return k === 'market' ? _t('js.embed.market', 'Market') : k === 'pool' ? _t('js.embed.pool', 'Betting pool')
       : k === 'poll' ? _t('js.embed.poll', 'Poll') : _t('js.embed.bounty', 'Bounty');
