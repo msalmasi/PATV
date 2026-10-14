@@ -175,7 +175,7 @@
     const MM_KEYS = ['heading', 'sub', 'updated', 'stale', 'none', 'off', 'st.open', 'st.cooldown', 'st.running', 'st.lobby', 'st.vault_low',
       'st.no_convoy', 'st.off', 'st.busy', 'cd', 'ready', 'busy', 'vault', 'cargo', 'till', 'needs', 'last', 'never', 'out.cracked', 'out.taken',
       'out.getaway', 'out.door', 'out.busted', 'out.bailed', 'crew', 'heat', 'heat_v', 'buyin', 'buyin_l', 'live', 'live_lobby', 'live_run', 'go',
-      'ago.s', 'ago.m', 'ago.h', 'ago.d', 'prereq.casino', 'prereq.blueprints', 'door', 'convoy_until', 'radar'];
+      'ago.s', 'ago.m', 'ago.h', 'ago.d', 'prereq.casino', 'prereq.blueprints', 'door', 'convoy_until', 'radar', 'watch', 'watch_page'];   // 1.99zh: + the live heist page
     const MM = {};
     MM_KEYS.forEach((k) => { MM[k] = t('gtf.mm.' + k); });
     const mmJson = (v) => JSON.stringify(v == null ? null : v).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -187,9 +187,9 @@
         <h2 id="gtfMapH" class="ds-pixel-h"><span class="ds-ic" aria-hidden="true">🗺️</span><%- MM['heading'] %></h2>
         <div class="mm-upd" id="mmUpd" aria-live="polite"></div>
       </div>
-      <p><%- MM['sub'] %></p>
+      <p><%- MM['sub'] %> <a href="/gtf/heist"><%- MM['watch_page'] %></a></p>
     </div>
-    <div class="mm-live" id="mmLive" role="status"><span class="siren"><span class="ds-ic" aria-hidden="true">🚨</span><%- MM['live'] %></span><span class="txt" id="mmLiveTxt"></span><span class="pips" id="mmPips" aria-hidden="true"></span></div>
+    <div class="mm-live" id="mmLive" role="status"><span class="siren"><span class="ds-ic" aria-hidden="true">🚨</span><%- MM['live'] %></span><span class="txt" id="mmLiveTxt"></span><span class="pips" id="mmPips" aria-hidden="true"></span><a class="ds-btn sm" href="/gtf/heist"><%- MM['watch'] %></a></div>
     <div class="city" id="mmCity"><p class="mm-empty"><%- MM['none'] %></p></div>
   </section>
   <script>

@@ -1,0 +1,137 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('gtf.live.title'), user: user }) %>
+<%#
+  views/gtfHeist.ejs - 1.99zh 📺 the live heist page (gtfheist.js). The stage is Pepe's own OBS overlay page (served at
+  /gtf/heist/overlay, uploaded by Pepe) framed in feed mode (?view=games&feed=/api/gtf/heist/live) - the same renderer as on
+  stream. Beside it: the heist's summary (job, room, round, the crew: in / pinched / bailed and the loot they hold) and the
+  run's chat lines, polled from the same feed. Locals: user, first (gtfheist.live(0) at render time).
+%>
+<%
+  const KEYS = ['none', 'lobby', 'running', 'ended', 'cancelled', 'crew', 'st_in', 'st_out', 'st_bailed', 'held', 'prize', 'log', 'stale',
+                'buyin', 'started_by', 'rounds', 'door', 'no_lines', 'secs', 'min'];
+  const L = {};
+  KEYS.forEach((k) => { L[k] = t('gtf.live.' + k); });
+  const J = (v) => JSON.stringify(v == null ? null : v).split('<').join('\\x3c').split(String.fromCharCode(0x2028)).join(' ').split(String.fromCharCode(0x2029)).join(' ');
+%>
+<style>
+  .hl { --gold: var(--ds-acc-gtf); --red: var(--ds-acc-gtf-red); --mut: var(--ds-text-muted); }
+  .hl .head { display: flex; align-items: baseline; gap: var(--ds-sp-3); flex-wrap: wrap; margin-bottom: var(--ds-sp-4); }
+  .hl .head h1 { margin: 0; }
+  .hl .head p { margin: 0; color: var(--mut); flex: 1 1 260px; }
+  .hl .grid { display: grid; gap: var(--ds-sp-4); grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 900px) { .hl .grid { grid-template-columns: minmax(0, 1fr); } }
+  .hl .stage { position: relative; aspect-ratio: 16 / 9; width: 100%; border-radius: var(--ds-r-xl); overflow: hidden; border: 1px solid var(--ds-line);
+               background: radial-gradient(90% 120% at 0% 0%, #2b0d0d 0%, rgba(17,17,17,0) 60%), radial-gradient(80% 120% at 100% 100%, #0e2a14 0%, rgba(17,17,17,0) 60%), #0b0d0b; }
+  .hl .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+  .hl .stage .idle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: var(--ds-sp-6);
+                     color: var(--mut); font-size: var(--ds-fs-sm); pointer-events: none; }
+  .hl .stage.on .idle { display: none; }
+  .hl .card { background: var(--ds-surface, #151515); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); display: grid; gap: var(--ds-sp-3); }
+  .hl .status { font-weight: 700; }
+  .hl .status .em { margin-inline-end: .35em; }
+  .hl .meta { color: var(--mut); font-size: var(--ds-fs-sm); display: flex; flex-wrap: wrap; gap: var(--ds-sp-1) var(--ds-sp-3); }
+  .hl .pips { display: flex; gap: 3px; flex-wrap: wrap; }
+  .hl .pips b { width: 10px; height: 10px; background: #3a1d1d; border: 1px solid #6b2b2b; }
+  .hl .pips b.done { background: #ff4d4d; border-color: #ff8080; }
+  .hl .pips b.now { background: var(--gold); border-color: #fff1b8; }
+  .hl h2 { font-size: var(--ds-fs-md, 15px); margin: 0; }
+  .hl .crew { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-1h, 6px); }
+  .hl .crew li { display: flex; align-items: center; gap: var(--ds-sp-2); min-width: 0; }
+  .hl .crew .ava { flex: none; width: 32px; height: 32px; border-radius: 6px; background: #0e160e; overflow: hidden; }
+  .hl .crew .ava svg { width: 32px; height: 32px; display: block; }
+  .hl .crew .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hl .crew .st { flex: none; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--ds-line); color: var(--mut); }
+  .hl .crew .st.in { color: #7cfc9a; border-color: #2f5d3a; }
+  .hl .crew .st.out { color: #ff8080; border-color: #6b2b2b; }
+  .hl .crew .st.bailed { color: var(--gold); border-color: var(--ds-gold-line); }
+  .hl .crew .held { flex: none; font-variant-numeric: tabular-nums; color: var(--mut); font-size: 12px; }
+  .hl .log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 420px; overflow: auto; font-size: var(--ds-fs-sm); line-height: 1.45; }
+  .hl .log li { padding-bottom: 6px; border-bottom: 1px solid var(--ds-line); overflow-wrap: anywhere; }
+  .hl .log time { color: var(--mut); font-size: 11px; margin-inline-end: 6px; font-variant-numeric: tabular-nums; }
+  .hl .muted { color: var(--mut); font-size: var(--ds-fs-sm); margin: 0; }
+</style>
+<main class="ds-page wide hl">
+  <div class="head">
+    <h1><%- t('gtf.live.h') %></h1>
+    <p><%- t('gtf.live.lede') %> <a href="/gtf#gtfMap"><%- t('gtf.live.minimap') %></a></p>
+  </div>
+  <div class="grid">
+    <div class="stage<%= first && first.heist ? ' on' : '' %>" id="hlStage">
+      <iframe src="/gtf/heist/overlay?view=games&amp;feed=/api/gtf/heist/live" title="<%- t('gtf.live.frame') %>" loading="eager" referrerpolicy="same-origin"></iframe>
+      <div class="idle" id="hlIdle"><%- L.none %></div>
+    </div>
+    <div class="card" aria-live="polite">
+      <div class="status" id="hlStatus"><%- L.none %></div>
+      <div class="meta" id="hlMeta"></div>
+      <div class="pips" id="hlPips" aria-hidden="true"></div>
+      <h2><%- L.crew %></h2>
+      <ul class="crew" id="hlCrew"></ul>
+      <h2><%- L.log %></h2>
+      <ul class="log" id="hlLog"><li class="muted"><%- L.no_lines %></li></ul>
+    </div>
+  </div>
+</main>
+<script>
+(function () {
+  'use strict';
+  var L = <%- J(L) %>;
+  var state = <%- J(first) %>;
+  var fmt = function (n) { return Math.round(Number(n) || 0).toLocaleString(document.documentElement.lang || 'en'); };
+  var esc = function (s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; };
+  var fill = function (s, o) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return o[k] != null ? o[k] : m; }); };
+  var avaReady = false;
+  var sc = document.createElement('script'); sc.src = '/public/js/avatar.js'; sc.onload = function () { avaReady = true; render(); }; document.head.appendChild(sc);
+  function ava(seed) { return avaReady && typeof window.pepeAvatarSVG === 'function' && seed != null ? window.pepeAvatarSVG(seed, 32) : ''; }
+
+  function render() {
+    var h = state && state.heist, s = h && h.summary;
+    var stage = document.getElementById('hlStage');
+    stage.classList.toggle('on', !!h);
+    var st = document.getElementById('hlStatus'), meta = document.getElementById('hlMeta'), pips = document.getElementById('hlPips');
+    var crew = document.getElementById('hlCrew'), log = document.getElementById('hlLog');
+    if (!h || !s) {
+      st.innerHTML = esc(L.none); meta.innerHTML = ''; pips.innerHTML = ''; crew.innerHTML = '';
+      log.innerHTML = '<li class="muted">' + esc(L.no_lines) + '</li>';
+      return;
+    }
+    var line;
+    if (s.phase === 'cancelled') line = L.cancelled;
+    else if (h.ended) line = L.ended;
+    else if (s.phase === 'lobby') {
+      var left = s.lobby_ends ? Math.max(0, Math.round(s.lobby_ends - Date.now() / 1000)) : null;
+      line = fill(L.lobby, { room: esc(s.room || '?'), left: left == null ? '' : (left >= 60 ? Math.ceil(left / 60) + ' ' + L.min : left + ' ' + L.secs) });
+    } else line = fill(L.running, { round: s.round || 1, rounds: s.rounds || '?', room: esc(s.room || '?') });
+    st.innerHTML = '<span class="em" aria-hidden="true">' + esc(s.emoji || '💰') + '</span>' + esc(s.scenario || '') + ' · ' + line;
+    var m = [];
+    if (s.prize) m.push(fill(L.prize, { n: fmt(s.prize) }));
+    if (s.buyin) m.push(fill(L.buyin, { n: fmt(s.buyin) }));
+    if (s.rounds) m.push(fill(L.rounds, { n: s.rounds }) + (s.door ? ' · ' + L.door : ''));
+    if (s.started_by) m.push(fill(L.started_by, { name: esc(s.started_by) }));
+    if (state.at && Date.now() - state.at > 10 * 60e3 && !h.ended) m.push(L.stale);
+    meta.innerHTML = m.map(function (x) { return '<span>' + x + '</span>'; }).join('');
+    var p = '';
+    if (s.phase === 'running' && !h.ended) for (var k = 1; k <= Math.min(20, s.rounds || 0); k++) p += '<b class="' + (k < s.round ? 'done' : k === s.round ? 'now' : '') + '"></b>';
+    pips.innerHTML = p;
+    crew.innerHTML = (s.crew || []).map(function (c) {
+      return '<li><span class="ava" aria-hidden="true">' + ava(c.seed) + '</span><span class="nm">' + esc(c.name) + '</span>' +
+        (c.held ? '<span class="held">' + fill(L.held, { n: fmt(c.held) }) + '</span>' : '') +
+        '<span class="st ' + esc(c.status) + '">' + esc(L['st_' + c.status] || c.status) + '</span></li>';
+    }).join('');
+    var lines = (h.lines || []).slice().reverse();
+    log.innerHTML = lines.length ? lines.map(function (l) {
+      var d = new Date(l.t);
+      return '<li><time datetime="' + d.toISOString() + '">' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '</time>' + esc(l.text) + '</li>';
+    }).join('') : '<li class="muted">' + esc(L.no_lines) + '</li>';
+  }
+  function poll() {
+    fetch('/api/gtf/heist/live', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.ok) { state = j; render(); } }).catch(function () {});
+  }
+  render();
+  setInterval(function () { if (!document.hidden) poll(); }, 3000);
+  setInterval(function () { var s = state && state.heist && state.heist.summary; if (s && s.phase === 'lobby') render(); }, 1000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+})();
+</script>
+</body>
+</html>
