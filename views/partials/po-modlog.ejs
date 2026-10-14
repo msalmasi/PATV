@@ -1,0 +1,34 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99zf: the pad owner panel's "🛡️ Moderation history" (pepemodlog.js): Pepe's mod log for THIS room (kicks, bans, time-outs,
+    mic blocks, roles, automod strikes / fines, topic) + the site's web bridge blocks and live-cam ends, newest first, filter + paging.
+    Own partial (views/padOwner.ejs includes it) so the room-page reorg doesn't collide with it. Locals: t, slug. JS: pad-modlog.js %>
+<style>
+  .po-ml-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 10px 0; }
+  .po-ml-bar label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--ds-text-2); }
+  .po-ml-bar input, .po-ml-bar select { min-width: 0; }
+  .po-ml-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .po-ml-list li { padding: 8px 10px; border: 1px solid var(--ds-border); border-radius: 8px; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+  .po-ml-list .po-ml-when { color: var(--ds-text-2); font-size: 12px; margin-right: 6px; }
+  .po-ml-list .po-ml-cat { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--ds-border); margin-right: 6px; color: var(--ds-text-2); }
+  .po-ml-list .po-ml-det { color: var(--ds-text-2); }
+  .po-ml-pager { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+</style>
+<section class="ds-card lg" id="modlog" aria-labelledby="poMlH" data-slug="<%= slug %>">
+  <h2 class="ds-h2" id="poMlH"><span class="dot"></span>📜 <%- t('owner.ml_h') %></h2>
+  <p class="po-why"><%- t('owner.ml_why') %></p>
+  <form class="po-ml-bar" id="poMlForm" autocomplete="off" role="search">
+    <label><span><%- t('owner.ml_cat') %></span><select name="cat">
+      <% ['', 'kick', 'ban', 'timeout', 'mic', 'roles', 'automod', 'bridge', 'room', 'misc'].forEach(function (c) { %><option value="<%= c %>"><%- t('owner.ml_c_' + (c || 'all')) %></option><% }) %>
+    </select></label>
+    <label><span><%- t('owner.ml_q') %></span><input type="search" name="q" maxlength="40"></label>
+    <button type="submit" class="ds-btn"><%- t('owner.ml_go') %></button>
+  </form>
+  <p class="ds-meta" id="poMlMsg" role="status" aria-live="polite"></p>
+  <ul class="po-ml-list" id="poMlList"></ul>
+  <div class="po-ml-pager">
+    <button type="button" class="ds-btn ghost" id="poMlNewer" disabled><%- t('owner.ml_newer') %></button>
+    <button type="button" class="ds-btn ghost" id="poMlOlder" disabled><%- t('owner.ml_older') %></button>
+    <span class="ds-meta" id="poMlPage"></span>
+  </div>
+</section>
+<script src="/public/js/pad-modlog.js?v=1" defer></script>

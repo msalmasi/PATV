@@ -39,6 +39,13 @@ const ERRORS = Object.freeze({
 });
 const CODES = Object.freeze(Object.keys(ERRORS));
 
+// 1.99zf: website actions that never move PAT (room control, owner settings / topic / bridge switches, privacy, command
+// switches) - an E_INTERNAL there says to check the page, not the balance (bot pepe_weberrors.NO_PAT_KINDS, the same list)
+const NO_PAT_KINDS = ["room.ctl", "room.owner", "room.topic", "room.bridge", "room.visit", "stage.room", "cmd.switch", "privacy.incognito", "privacy.forget"];
+const movesPat = (kind) => !kind || !NO_PAT_KINDS.includes(String(kind));
+const INTERNAL_NO_PAT = ["Something went wrong on Pepe's side.", "It may not have happened - reload the page to see where it stands before trying again; give support the incident id if it keeps happening."];
+const ROOM_CTL_NOTE = "The room change may not have happened - check Pepe's status on this page before trying again.";
+
 // The bot's classifier (pepe_weberrors._RULES), for rows acked before codes existed. First match wins.
 const RULES = [
   ["E_INTERRUPTED", /^interrupted by a restart/],
@@ -92,8 +99,15 @@ function present(a) {
       : ERRORS.E_INTERNAL[0] + " Check your balance before trying again.";
   }
   if (!message) message = ERRORS[code][0];
-  const hint = (known && a.hint ? String(a.hint) : ERRORS[code][1]).slice(0, 300);
+  let hint = (known && a.hint ? String(a.hint) : ERRORS[code][1]).slice(0, 300);
+  if (code === "E_INTERNAL" && !movesPat(a.kind)) {
+    // 1.99zf: an older Pepe said "Check your balance" for every action - not what a room join / a setting needs
+    const note = String(a.kind) === "room.ctl" ? ROOM_CTL_NOTE : "It may not have happened - reload the page to see where it stands before trying again.";
+    message = message.replace(/\s*Check your balance before trying again\.?/i, "");
+    if (!/may not have happened/i.test(message)) message = message.replace(/\s*$/, "") + " " + note;
+    hint = INTERNAL_NO_PAT[1];
+  }
   return { code, message: message.slice(0, 400), hint, incident, legacy: !known };
 }
 
-module.exports = { ERRORS, CODES, RULES, classify, present };
+module.exports = { ERRORS, CODES, RULES, NO_PAT_KINDS, movesPat, classify, present };

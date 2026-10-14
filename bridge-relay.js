@@ -286,9 +286,10 @@ async function accountRefusal(u, R, text) {
   return null;
 }
 
-/** 1.99xa: why a room mod's / an admin's !bridge block refuses this account's relay into room R (bridgeblocks.js), or null. */
-async function blockedWhy(R, u) {
-  try { return await require("./bridgeblocks").refusal(R.id, u.userId); } catch (e) { return null; }
+/** 1.99xa: why a room mod's / an admin's !bridge block refuses this account's relay into room R (bridgeblocks.js), or null.
+ *  1.99zf: per bridge feature (chat / commands / soundboard / voice / snapshots / livecams / clips; an "all" block covers each). */
+async function blockedWhy(R, u, feature = "chat") {
+  try { return await require("./bridgeblocks").refusal(R.id, u.userId, feature); } catch (e) { return null; }
 }
 
 function newJob(fields) {
@@ -424,8 +425,8 @@ async function sayLine(u, R, text, cid, opts = {}) {
     return { status: 200, body: { ok: true, id: j.id, cid, dup: true, state: j.state } };
   }
   if (!text) return { status: 400, body: { ok: false, code: "empty", error: "Type something first." } };
-  const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block (bridgeblocks.js)
-  if (blk) return { status: 403, body: { ok: false, code: "blocked", error: blk, blocked: true } };
+  const blk = await blockedWhy(R, u, "chat");             // 1.99xa: !bridge block (bridgeblocks.js)
+  if (blk) return { status: 403, body: { ok: false, code: "blocked", error: blk, blocked: true, feature: "chat" } };
   if (!u.camfrogUsername) {
     const why = await accountRefusal(u, R, text);          // 1.99wv: a PATV account with no chat login (see the top)
     if (why) return { status: why.status, body: { ok: false, code: "account", error: why.error } };
@@ -527,8 +528,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (c === "!commands") return res.json({ ok: true, local: true, reply: commandsText(cmds), cmds });
     if (!Object.keys(cmds).length) return res.status(403).json({ ok: false, error: "Commands from the website aren't on in this Camfrog room." });
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Typed commands run as a chat name - link a chat account first (Settings \u2192 Account \u2192 Connections). The \ud83d\udc38 Pepe menu works with your PATV account." });
-    const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block
-    if (blk) return res.status(403).json({ ok: false, error: blk, blocked: true });
+    const feat = c === "!sb" ? "soundboard" : "commands";  // 1.99zf: the pad soundboard's buttons are "!sb <id>" lines
+    const blk = await blockedWhy(R, u, feat);               // 1.99xa: !bridge block
+    if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: feat });
     if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
       return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
     }
@@ -562,8 +564,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const R = roomFor(req, res, "micRelay");
     if (!R) return;
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
-    const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block
-    if (blk) return res.status(403).json({ ok: false, error: blk, blocked: true });
+    const blk = await blockedWhy(R, u, "voice");            // 1.99xa: !bridge block
+    if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "voice" });
     const buf = Buffer.isBuffer(req.body) ? req.body : null;
     const secs = Number(req.get("x-clip-secs")) || 0;
     if (!buf || buf.length < 500) return res.status(400).json({ ok: false, error: "That recording is empty." });
@@ -593,6 +595,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const R = roomFor(req, res, "cams");
     if (!R) return;
     if (!(await padFull(u.userId, R.id))) return res.status(403).json(PAD_DENIED);
+    const blk = await blockedWhy(R, u, "snapshots");        // 1.99zf: a bridge block on cam snapshots
+    if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "snapshots" });
     const login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
     const m = R.members.find((x) => !x.anon && String(x.login).toLowerCase() === login);
     if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
@@ -688,6 +692,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!R) return;
     if (!(await padFull(u.userId, R.id))) return res.status(403).json(PAD_DENIED);
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
+    const blk = await blockedWhy(R, u, "snapshots");        // 1.99zf
+    if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "snapshots" });
     const sid = String((req.body || {}).sid || "").slice(0, 40);
     let s = null, login = "";
     for (const [k, v] of snaps) if (sid && v.sid === sid && k.startsWith(R.id + "|")) { s = v; login = k.slice(R.id.length + 1); break; }

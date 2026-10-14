@@ -28,13 +28,33 @@
   <form id="blkForm" class="adm-form">
     <label>Who<input type="text" name="target" placeholder="🌐name, u:&lt;id&gt;, username or chat name" autocomplete="off" required></label>
     <label>Room id<input type="text" name="room" placeholder="empty = every room" autocomplete="off"></label>
+    <label>What<select name="feature"><option value="all">everything</option><option value="chat">chat</option><option value="commands">commands + Pepe menu</option><option value="soundboard">soundboard</option><option value="voice">voice clips</option><option value="snapshots">cam snapshots</option><option value="livecams">live cams</option><option value="clips">cam + mic clips</option></select></label>
     <label>For<select name="hours"><option value="24">24 hours</option><option value="168">7 days</option><option value="720">30 days</option><option value="0">until lifted</option></select></label>
     <label>Reason<input type="text" name="reason" maxlength="120" autocomplete="off"></label>
     <div class="adm-actions"><button type="submit">Block</button><span id="blkMsg" class="adm-msg" role="status"></span></div>
   </form>
   <div class="adm-tbl"><table aria-label="Web relay blocks">
-    <thead><tr><th>Account</th><th>Room</th><th>Until (UTC)</th><th>Reason</th><th>By</th><th></th></tr></thead>
-    <tbody id="blkRows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    <thead><tr><th>Account</th><th>Room</th><th>What</th><th>Until (UTC)</th><th>Reason</th><th>By</th><th></th></tr></thead>
+    <tbody id="blkRows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <p class="adm-help">One account's restrictions as toggles: <a href="/admin/users#bridgebans">Users › Web bridge restrictions</a>.</p>
+  <% } %>
+</section>
+
+<%# 1.99zf: Pepe's mod log, every room (pepemodlog.js; owners see their own room's on the pad's owner panel) %>
+<section class="adm-card" id="modlog" aria-labelledby="mlT">
+  <h2 id="mlT">Moderation history <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Pepe's mod log (kicks, bans, time-outs, mic blocks, roles, automod strikes / fines, topic) synced from Pepe, plus the site's web bridge blocks and live-cam ends - newest first. Each pad's owner sees their own room's on the pad's owner panel.</p>
+  <% if (isAdmin) { %>
+  <form id="mlForm" class="adm-form">
+    <label>Room id<input type="text" name="room" placeholder="empty = every room" autocomplete="off"></label>
+    <label>Kind<select name="cat"><option value="">all</option><option>kick</option><option>ban</option><option>timeout</option><option>mic</option><option>roles</option><option>automod</option><option>bridge</option><option>room</option><option value="misc">other</option></select></label>
+    <label>Name / text<input type="text" name="q" maxlength="40" autocomplete="off"></label>
+    <div class="adm-actions"><button type="submit">Show</button><button type="button" id="mlOlder" class="adm-btn ghost" disabled>Older</button><span id="mlMsg" class="adm-msg" role="status"></span></div>
+  </form>
+  <div class="adm-tbl"><table aria-label="Moderation history">
+    <thead><tr><th>When (UTC)</th><th>Room</th><th>Kind</th><th>Type</th><th>By</th><th>Target</th><th>Details</th></tr></thead>
+    <tbody id="mlRows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
   </table></div>
   <% } %>
 </section>
@@ -87,28 +107,60 @@
       body.textContent = '';
       (d.blocks || []).forEach(function (b) {
         var tr = document.createElement('tr');
-        [b.username || b.userId, b.global ? 'every room' : b.room, b.until ? new Date(b.until).toISOString().slice(0, 16).replace('T', ' ') : 'until lifted',
+        [b.username || b.userId, b.global ? 'every room' : b.room, b.feature || 'all', b.until ? new Date(b.until).toISOString().slice(0, 16).replace('T', ' ') : 'until lifted',
          b.reason, b.by].forEach(function (v) { tr.appendChild(td(v)); });
         var c = document.createElement('td'), btn = document.createElement('button');
         btn.type = 'button'; btn.textContent = 'Unblock';
         btn.addEventListener('click', function () {
           btn.disabled = true;
-          req('POST', { op: 'unblock', room: b.room, target: 'u:' + b.userId }).then(load)
+          req('POST', { op: 'unblock', room: b.room, target: 'u:' + b.userId, feature: b.feature || 'all' }).then(load)
             .catch(function (e) { btn.disabled = false; msg.textContent = e.message; msg.className = 'adm-msg err'; });
         });
         c.appendChild(btn); tr.appendChild(c); body.appendChild(tr);
       });
-      if (!(d.blocks || []).length) { var tr = document.createElement('tr'), c = td('Nobody is blocked.'); c.colSpan = 6; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
+      if (!(d.blocks || []).length) { var tr = document.createElement('tr'), c = td('Nobody is blocked.'); c.colSpan = 7; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
     }).catch(function (e) { msg.textContent = e.message; msg.className = 'adm-msg err'; });
   }
   f.addEventListener('submit', function (e) {
     e.preventDefault();
-    var d = { op: 'block', target: f.elements.target.value.trim(), room: f.elements.room.value.trim(), hours: f.elements.hours.value, reason: f.elements.reason.value.trim() };
+    var d = { op: 'block', target: f.elements.target.value.trim(), room: f.elements.room.value.trim(), feature: f.elements.feature.value, hours: f.elements.hours.value, reason: f.elements.reason.value.trim() };
     msg.textContent = 'Blocking…'; msg.className = 'adm-msg';
     req('POST', d).then(function (r) { msg.textContent = 'Blocked ' + ((r.target && r.target.username) || d.target) + (d.room ? ' in ' + d.room : ' in every room') + '.'; msg.className = 'adm-msg ok'; f.reset(); load(); })
       .catch(function (err) { msg.textContent = err.message; msg.className = 'adm-msg err'; });
   });
   load();
+})();
+// 1.99zf: the moderation history, every room (pepemodlog.js)
+(function () {
+  'use strict';
+  var f = document.getElementById('mlForm'), body = document.getElementById('mlRows'), msg = document.getElementById('mlMsg'), older = document.getElementById('mlOlder');
+  if (!f) return;
+  var page = 0;
+  function td(t) { var d = document.createElement('td'); d.textContent = t == null ? '' : String(t); return d; }
+  function load(append) {
+    var q = new URLSearchParams();
+    ['room', 'cat', 'q'].forEach(function (k) { var v = f.elements[k].value.trim(); if (v) q.set(k, v); });
+    q.set('page', String(page)); q.set('limit', '100');
+    msg.textContent = 'Loading…'; msg.className = 'adm-msg';
+    fetch('/api/admin/pepe/modlog?' + q.toString(), { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); })
+      .then(function (d) {
+        if (!append) body.textContent = '';
+        (d.rows || []).forEach(function (r) {
+          var tr = document.createElement('tr');
+          tr.appendChild(td(r.ts ? new Date(Number(r.ts)).toISOString().slice(0, 16).replace('T', ' ') : ''));
+          [r.room, r.cat, r.type, r.actor, r.target, r.details].forEach(function (v) { tr.appendChild(td(v)); });
+          body.appendChild(tr);
+        });
+        if (!append && !(d.rows || []).length) { var tr = document.createElement('tr'), c = td('Nothing yet.'); c.colSpan = 7; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
+        older.disabled = !d.more;
+        msg.textContent = ''; msg.className = 'adm-msg ok';
+      })
+      .catch(function (e) { msg.textContent = e.message; msg.className = 'adm-msg err'; });
+  }
+  f.addEventListener('submit', function (e) { e.preventDefault(); page = 0; load(false); });
+  older.addEventListener('click', function () { page++; load(true); });
+  load(false);
 })();
 </script>
 <% } %>

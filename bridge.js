@@ -1006,6 +1006,7 @@ function register(app, { isBotToken, addUser }) {
   relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown, gated: (R) => isLive(R) && !bridgeOk(R.id),
                         liveIds: () => new Set([...rooms.values()].filter(isLive).map((R) => R.id)) });
   require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });      // 1.99xa: !bridge block - web senders blocked per room / everywhere
+  require("./pepemodlog").register(app, { isBotToken, addUser, bySlug });        // 1.99zf: Pepe's mod log per room (owner panel moderation history)
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover
   require("./camviewers").register(app, { isBotToken, addUser });   // 1.99yq: 👁 who opened your cam (Pepe PMs you) + !blockviewer / the privacy card

@@ -12,6 +12,10 @@
   var url = '/api/rooms/' + encodeURIComponent(slug) + '/blocks';
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function when(ms) { var d = new Date(ms); return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  // 1.99zf: a block covers one bridge feature or all of them
+  var FEAT = { all: _t('js.owner.bblk_f_all', 'everything'), chat: _t('js.owner.bblk_f_chat', 'chat'), commands: _t('js.owner.bblk_f_commands', 'commands + Pepe menu'),
+    soundboard: _t('js.owner.bblk_f_soundboard', 'soundboard'), voice: _t('js.owner.bblk_f_voice', 'voice clips'), snapshots: _t('js.owner.bblk_f_snapshots', 'cam snapshots'),
+    livecams: _t('js.owner.bblk_f_livecams', 'live cams'), clips: _t('js.owner.bblk_f_clips', 'cam + mic clips') };
   function say(text, bad) { msg.textContent = text || ''; msg.className = 'ds-meta' + (bad ? ' bad' : ''); }
   function post(body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-requested-with': 'fetch' },
@@ -23,7 +27,7 @@
     rows.forEach(function (b) {
       var li = el('li');
       li.appendChild(el('b', null, '🌐 ' + (b.username || '?')));
-      var bits = [b.until ? _t('js.owner.bblk_until', 'until {when}', { when: when(b.until) }) : _t('js.owner.bblk_lifted', 'until lifted')];
+      var bits = [FEAT[b.feature || 'all'] || b.feature, b.until ? _t('js.owner.bblk_until', 'until {when}', { when: when(b.until) }) : _t('js.owner.bblk_lifted', 'until lifted')];
       if (b.global) bits.push(_t('js.owner.bblk_global', 'every room (PATV admins)'));
       if (b.reason) bits.push(b.reason);
       if (b.by) bits.push(_t('js.owner.bblk_by', 'by {name}', { name: b.by }));
@@ -32,7 +36,7 @@
         var u = el('button', 'pm-btn', _t('js.owner.bblk_unblock', 'Unblock')); u.type = 'button';
         u.addEventListener('click', function () {
           u.disabled = true;
-          post({ op: 'unblock', target: 'u:' + b.userId }).then(function () { say(_t('js.owner.bblk_unblocked', 'Unblocked.')); load(); })
+          post({ op: 'unblock', target: 'u:' + b.userId, feature: b.feature || 'all' }).then(function () { say(_t('js.owner.bblk_unblocked', 'Unblocked.')); load(); })
             .catch(function (e) { u.disabled = false; say(e.message, true); });
         });
         li.appendChild(u);
@@ -51,8 +55,15 @@
     var target = form.elements.target.value.trim();
     if (!target) return;
     say(_t('js.owner.bblk_working', 'Blocking…'));
-    post({ op: 'block', target: target, hours: form.elements.hours.value, reason: form.elements.reason.value.trim() })
-      .then(function (d) { form.reset(); say(_t('js.owner.bblk_done', '{name} can\'t talk into this room from the website now.', { name: (d.target && d.target.username) || target })); load(); })
+    var feature = form.elements.feature ? form.elements.feature.value : 'all';
+    post({ op: 'block', target: target, hours: form.elements.hours.value, reason: form.elements.reason.value.trim(), feature: feature })
+      .then(function (d) {
+        var name = (d.target && d.target.username) || target;
+        form.reset();
+        say(feature === 'all' ? _t('js.owner.bblk_done', '{name} can\'t talk into this room from the website now.', { name: name })
+          : _t('js.owner.bblk_done_f', '{name} is blocked from {what} in this room now.', { name: name, what: FEAT[feature] || feature }));
+        load();
+      })
       .catch(function (err) { say(err.message, true); });
   });
   load();

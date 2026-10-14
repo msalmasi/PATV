@@ -226,7 +226,9 @@ const RULES = {
   "admin_audit.admin_id": M(), "admin_audit.target_id": M(), "admin_audit.admin_name": { deny: NAME }, "admin_audit.target_name": { deny: NAME },
   "help_misses.user_id": M(), "bridge_cmd_log.user_id": M(),
   // 1.99xa bridgeblocks.js: a web-relay block follows the blocked account (one per room: an "until lifted" one wins); the blocker too
-  "bridge_blocks.user_id": M({ key: ["room_id"], merge: { until: "NULL_WINS" }, name: "username" }), "bridge_blocks.blocked_by": M(),
+  // 1.99zf pepemodlog.js: Pepe's mod log per room - who acted / was acted on are Camfrog logins (labels), never userIds
+  "pepe_modlog.actor": { deny: NAME }, "pepe_modlog.target": { deny: NAME },
+  "bridge_blocks.user_id": M({ key: ["room_id", "feature"], merge: { until: "NULL_WINS" }, name: "username" }), "bridge_blocks.blocked_by": M(),
   // 1.99uc: /admin/oracle - one row per admin action on an AI-judge proposal (its idempotency key); the admin follows a merge
   "oracle_admin_actions.admin_id": M(), "oracle_admin_actions.admin": { deny: NAME },
   // 1.99lj: the casino backend - the action journal replays a stored answer by its idempotency key (history, keyed by the

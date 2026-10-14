@@ -60,6 +60,28 @@
     <script src="/public/js/admin-donlimit.js?v=1" defer></script>
   </section>
 
+  <%# 1.99zf: one account's web bridge restrictions in EVERY room (bridgeblocks.js, global rows per feature; admin_audit bridge_block) %>
+  <% if (isAdmin) { %>
+  <section class="adm-card" id="bridgebans" aria-labelledby="bridgebansT">
+    <h2 id="bridgebansT"><span class="ds-ic" aria-hidden="true">🌐</span> Web bridge restrictions (one member) <span class="adm-pill admin">admins</span></h2>
+    <p class="adm-help">Stop one account using parts of the web bridge in <b>every</b> room: tick what they can't use, pick how long and why, Save. Untick to lift. Enforced by the site on every bridge write path (and by Pepe's mirror); the member sees the reason when something is refused. Every change is in the admin audit (<code>bridge_block</code>). Rooms' own blocks (by their owner / mods) are listed under it; all blocks: <a href="/admin/bridge#blocks">Bridge › Web relay blocks</a>.</p>
+    <form id="bbUserForm" class="adm-form" autocomplete="off">
+      <label for="bbUser">Who (username, chat name or u:&lt;id&gt;)<input type="text" id="bbUser" required maxlength="70"></label>
+      <div class="adm-actions"><button type="button" id="bbLook" class="adm-btn ghost">Look up</button></div>
+      <fieldset id="bbFeats" hidden style="border:0;padding:0;margin:0">
+        <legend class="adm-help">Blocked in every room from…</legend>
+        <div id="bbFeatList"></div>
+        <label for="bbHours">For<select id="bbHours"><option value="1">1 hour</option><option value="24" selected>24 hours</option><option value="168">7 days</option><option value="720">30 days</option><option value="0">until lifted</option></select></label>
+        <label for="bbReason">Reason (shown to them; for the log)<input type="text" id="bbReason" maxlength="120"></label>
+        <div class="adm-actions"><button type="submit">Save</button></div>
+      </fieldset>
+      <span id="bbMsg" class="adm-msg" role="status"></span>
+      <ul class="adm-help" id="bbRooms" style="margin:0;padding-left:18px"></ul>
+    </form>
+    <script src="/public/js/admin-bridgebans.js?v=1" defer></script>
+  </section>
+  <% } %>
+
   <section class="adm-card" id="merges" aria-labelledby="mergesT">
     <h2 id="mergesT">Account merges</h2>
     <p class="adm-help">Merges happen on their own: linking a Camfrog name (<code>!verify</code>) folds Pepe's auto-made account into the real one, and a Twitch/Discord sign-in that belongs to another account offers the member a merge. Duplicate and alt merges by hand are a server script (dry run first), not a button here.</p>

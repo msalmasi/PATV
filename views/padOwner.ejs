@@ -325,6 +325,8 @@
           <option value="1"><%- t('owner.bblk_1h') %></option><option value="24" selected><%- t('owner.bblk_24h') %></option>
           <option value="168"><%- t('owner.bblk_7d') %></option><option value="720"><%- t('owner.bblk_30d') %></option>
           <option value="0"><%- t('owner.bblk_perm') %></option></select></label>
+        <label><span><%- t('owner.bblk_what') %></span><select name="feature">
+          <% ['all', 'chat', 'commands', 'soundboard', 'voice', 'snapshots', 'livecams', 'clips'].forEach(function (f) { %><option value="<%= f %>"><%- t('owner.bblk_f_' + f) %></option><% }) %></select></label>
         <label><span><%- t('owner.bblk_reason') %></span><input type="text" name="reason" maxlength="120"></label>
         <button type="submit" class="ds-btn"><%- t('owner.bblk_btn') %></button>
       </form>
@@ -334,6 +336,9 @@
     </div>
   </section>
   <% } %>
+
+  <%# 1.99zf: 📜 Moderation history (pepemodlog.js) - its own partial %>
+  <% if (!guide && slug) { %><%- include('partials/po-modlog', { slug }) %><% } %>
 
   <% if (locals.site) { %>
   <%# 1.99up: Pepe on the pad's SITE side (padsite.js) - any pad. Site-applied: the values are the real effective ones, saved
@@ -643,7 +648,7 @@
 <% if (!guide) { %><script src="/public/js/pad-owner.js?v=4" defer></script><% } %>
 <% if (!guide && locals.site) { %><script src="/public/js/pad-owner-site.js?v=1" defer></script><% } %>
 <% if (!guide && locals.filter) { %><script src="/public/js/pad-owner-filter.js?v=1" defer></script><% } %>
-<% if (!guide && locals.camfrog) { %><link rel="stylesheet" href="/public/css/room-mod.css?v=9"><script src="/public/js/room-mod.js?v=11" defer></script><script src="/public/js/pad-owner-mod.js?v=1" defer></script><script src="/public/js/pad-bridge-blocks.js?v=1" defer></script><% } %>
+<% if (!guide && locals.camfrog) { %><link rel="stylesheet" href="/public/css/room-mod.css?v=9"><script src="/public/js/room-mod.js?v=11" defer></script><script src="/public/js/pad-owner-mod.js?v=1" defer></script><script src="/public/js/pad-bridge-blocks.js?v=2" defer></script><% } %>
 <% if (!guide && locals.camfrog) { %><script src="/public/js/pad-sb-owner.js?v=1" defer></script><% } %>
 </body>
 </html>

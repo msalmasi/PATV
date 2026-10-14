@@ -189,8 +189,21 @@
         watch(d.id, function (ok, m) {
           q('[data-po-ctl]').forEach(function (x) { x.disabled = false; });
           say(ctlMsg, m || (ok ? _t('js.owner.saved', 'Done.') : _t('js.owner.refused', 'Pepe refused it.')), ok ? 'ok' : ok === false ? 'bad' : '');
-          // a join / leave takes a while: re-read his status a few times
-          [3000, 10000, 25000, 60000].forEach(function (ms) { setTimeout(function () { poll(applyState); }, ms); });
+          // a join / leave takes a while: re-read his status a few times. 1.99zf: and show the REAL outcome - when his room
+          // state ends up what was asked (in after a join / rejoin, out after a leave), that replaces the answer above (an
+          // error that still ended with him in the room, a "joining…" that finished)
+          var settled = false;
+          [3000, 10000, 25000, 60000].forEach(function (ms) {
+            setTimeout(function () {
+              poll(function (p) {
+                applyState(p);
+                var st = p && p.status && p.status.state;
+                if (settled || !st) return;
+                if ((verb === 'join' || verb === 'rejoin') && st === 'in') { settled = true; say(ctlMsg, _t('js.owner.ps_now_in', 'Pepe is in your room now.'), 'ok'); }
+                else if (verb === 'leave' && (st === 'out' || st === 'paused')) { settled = true; say(ctlMsg, _t('js.owner.ps_now_out', 'Pepe has left your room.'), 'ok'); }
+              });
+            }, ms);
+          });
         });
       }).catch(function () { q('[data-po-ctl]').forEach(function (x) { x.disabled = false; }); say(ctlMsg, _t('js.owner.unreachable_set', 'Couldn\'t reach the site.'), 'bad'); });
     });

@@ -184,6 +184,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
       if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: LINK });
+      const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
+      if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       const tx = String((req.body || {}).tx || "");
       const it = TX_RE.test(tx) ? (R.feed || []).find((x) => x && x.k === "tx" && x.id === tx) : null;
       if (!it) return res.status(404).json({ ok: false, error: "That mic line isn't in the room's feed any more." });
@@ -286,6 +288,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const { c, R } = x;
       const u = await me(req);
       if (!u || !u.camfrogUsername) return res.status(403).json({ ok: false, error: LINK });
+      const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
+      if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired — clip it again." });
       if (!c.viewerOk) return res.status(403).json({ ok: false, error: "You can't post clips here." });
       const off = clipGate(R, u);

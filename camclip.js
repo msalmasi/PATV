@@ -160,6 +160,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!R.cams) return res.status(403).json({ ok: false, error: "Cam snapshots aren't switched on in this Camfrog room." });
       if (!(await relay.padFull(u.userId, R.id))) return res.status(403).json(relay.PAD_DENIED);
       if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
+      const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
+      if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       const login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
       const secs = SECS.includes(Number((req.body || {}).secs)) ? Number(req.body.secs) : SECS_DEFAULT;
       const m = LOGIN_RE.test(login) ? (R.members || []).find((x) => !x.anon && String(x.login || "").toLowerCase() === login) : null;
@@ -268,6 +270,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const { c, R } = x;
       const u = await me(req);
       if (!u || !u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
+      const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
+      if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired - record a fresh one." });
       if (!c.rule || c.rule === "no" || !c.viewerOk) return res.status(403).json({ ok: false, error: "Clips of them can't be saved here." });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });

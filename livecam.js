@@ -720,7 +720,10 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       const wait = viewHit.blocked("u:" + u.userId);
       if (wait) { res.set("Retry-After", String(wait)); return res.status(429).json({ ok: false, code: "rate", error: "Slow down a little." }); }
       viewHit.hit("u:" + u.userId);
-      res.json(await start(u, room(req), String((req.body || {}).login || "")));
+      const R = room(req);
+      const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "livecams");   // 1.99zf: a bridge block on live cams
+      if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "livecams" });
+      res.json(await start(u, R, String((req.body || {}).login || "")));
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/:slug/livecam/beat", addUser, async (req, res) => {
@@ -732,6 +735,11 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
     if (!(await require("./bridge-relay").padFull(req.user.userId, R.id))) {
       stop(req.user.userId, R.id, String((req.body || {}).login || ""));
       return fail(res, refuse("pad_access"));
+    }
+    const blk = await require("./bridgeblocks").refusal(R.id, req.user.userId, "livecams");   // 1.99zf: blocked mid-stream -> it ends
+    if (blk) {
+      stop(req.user.userId, R.id, String((req.body || {}).login || ""));
+      return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "livecams", state: "ended" });
     }
     res.json(beat(req.user.userId, R.id, String((req.body || {}).login || "")));
   });
@@ -753,7 +761,10 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       const login = String((req.body || {}).login || "").toLowerCase();
       if (!LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?", "bad");
       if (!mayEnd(u, R, login)) throw new Refuse(403, "Only the cam's owner, the room's mods and the pad owner can end it.", "forbidden");
-      res.json(endBy(u, R, login));
+      const out = endBy(u, R, login);
+      // 1.99zf: a mod / the owner / staff ending someone else's live cam goes in the room's moderation history (pepemodlog.js)
+      if (String(u.camfrogUsername || "").toLowerCase() !== login) require("./rooms").event(R.id, "livecam-end", u.username || null, `ended the live view of ${login}'s cam`);
+      res.json(out);
     } catch (e) { fail(res, e); }
   });
 

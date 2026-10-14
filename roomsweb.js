@@ -286,10 +286,13 @@ function register(app, { addUser, isBotToken }) {
   });
   app.get("/api/rooms/action/:id", addUser, needUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const a = (await getQuery("SELECT status, message, updated FROM pepe_actions WHERE id = ? AND user_id = ?", [parseInt(req.params.id, 10) || 0, req.user.userId]))[0];
+    const a = (await getQuery("SELECT * FROM pepe_actions WHERE id = ? AND user_id = ?", [parseInt(req.params.id, 10) || 0, req.user.userId]))[0];
     if (!a) return res.status(404).json({ ok: false, error: "No such action." });
+    // 1.99zf: a failure is shown the weberrors way (its kind decides the wording: a room join never says "check your balance")
+    const err = require("./weberrors").present(a);
     // 1.99tf: `updated` = when Pepe answered - the owner page waits for a settings report newer than that before it calls a switch confirmed
-    res.json({ ok: true, status: a.status, message: a.message || "", updated: Number(a.updated) || null });
+    res.json({ ok: true, status: a.status, message: err ? err.message : a.message || "", code: err ? err.code : undefined,
+               incident: err ? err.incident : undefined, updated: Number(a.updated) || null });
   });
 
   // ── admin ──

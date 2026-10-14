@@ -85,7 +85,7 @@ function register(app, { addUser, bySlug, isLive }) {
       if (why) return bad(res, why.status, why.error);
     }
     // 1.99xa: an account a room mod / admin blocked from the web relay (bridgeblocks.js) can't drive Pepe into the room either
-    const blk = await require("./bridgeblocks").refusal(R.id, u.userId).catch(() => null);
+    const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "commands").catch(() => null);   // 1.99zf: the commands feature
     if (blk) return bad(res, 403, blk);
     const b = req.body || {};
     const built = buildLine(b.action, b.target);
