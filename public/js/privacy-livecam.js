@@ -8,7 +8,7 @@
   function say(text, kind) { st.textContent = text || ''; st.className = 'pv-st' + (kind ? ' ' + kind : ''); }
   function paint(off) {
     box.checked = !off;
-    say(off ? _t('js.lc.st_off', 'Off - nobody can watch your cam live on the website.') : _t('js.lc.st_on', 'On - members can watch your cam live.'));
+    say(off ? _t('js.lc.st_off', 'Off - nobody can see your cam on the website: no live video, snapshots or clips.') : _t('js.lc.st_on', 'On - members can watch your cam live, take snapshots and clips.'));
   }
   box.addEventListener('change', function () {
     var off = !box.checked;

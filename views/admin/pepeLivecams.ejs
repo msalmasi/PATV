@@ -94,7 +94,7 @@
     document.getElementById('lcVer').textContent = V.v ? 'v' + V.v + (V.updated_by ? ' · ' + V.updated_by + ' ' + when(V.updated_at) : '') : 'defaults (never saved)';
     document.getElementById('usPepe').textContent = b && b.online ? 'Pepe online' : 'Pepe offline' + (b ? ' (last poll ' + when(b.at) + ')' : '');
     document.getElementById('usLine').textContent = (V.cfg.enabled ? '' : '⛔ switched OFF · ') + (V.webrtc ? '' : '⛔ WebRTC (webrtc_enabled) is off · ') +
-      u.live + ' / ' + u.max_live + ' live cams · ' + u.viewers + ' / ' + u.viewerCap + ' viewers · ' + u.mbps + ' of ' + u.budget_mbps + ' Mbps to viewers (' + u.publishMbps + ' Mbps in from Pepe) · ' + V.optouts + ' opted out';
+      u.live + ' / ' + u.max_live + ' live cams · ' + u.viewers + ' / ' + u.viewerCap + ' viewers · ' + u.mbps + ' of ' + u.budget_mbps + ' Mbps to viewers (' + u.publishMbps + ' Mbps in from Pepe) · ' + V.optouts + ' opted out' + (V.camviewers ? ' · ' + V.camviewers.blocks + ' viewer blocks by ' + V.camviewers.owners + ' cam owners' : '');
     var p = b && b.pool;
     document.getElementById('usPool').textContent = p ? 'Pepe\'s pool: ' + p.open + ' cams open, room for ' + p.capacity + (p.learned_max ? ' (Camfrog\'s own limit seen: ' + p.learned_max + ')' : '') +
       ' · closed ' + (p.closed || 0) + ' (' + (p.evicted || 0) + ' to make room), ' + (p.close_fail || 0) + ' failed' + (b.cfgFrom ? ' · settings from ' + b.cfgFrom : '') : 'No pool report from Pepe yet.';

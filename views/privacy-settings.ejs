@@ -89,6 +89,32 @@
     <% } %>
     <p class="ds-meta"><%- t('lc.chat') %></p>
   </section>
+
+  <%# 1.99yq (camviewers.js): who opened your cam through the website + the people you blocked from it. Client:
+      public/js/privacy-camviewers.js (GET / POST /api/privacy/camviewers). %>
+  <section class="ds-card lg" id="camviewers" aria-labelledby="pvCvH">
+    <h2 class="ds-h2" id="pvCvH"><span class="dot"></span>👁 <%- t('cv.h2') %></h2>
+    <p class="pv-why"><%- t('cv.what') %></p>
+    <% if (!lc.linked) { %>
+      <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('lc.unlinked') %></div></div>
+    <% } else { %>
+      <div id="pvCv">
+        <h3 class="ds-h3"><%- t('cv.live_h') %></h3>
+        <ul class="pv-log" id="pvCvLive"><li><span><%- t('cv.loading') %></span></li></ul>
+        <h3 class="ds-h3"><%- t('cv.recent_h') %></h3>
+        <ul class="pv-log" id="pvCvRecent"></ul>
+        <h3 class="ds-h3"><%- t('cv.blocks_h') %></h3>
+        <p class="pv-why"><%- t('cv.blocks_what') %></p>
+        <ul class="pv-log" id="pvCvBlocks"></ul>
+        <form id="pvCvForm" class="ds-row" autocomplete="off">
+          <div class="ds-field"><label class="ds-label" for="pvCvName"><%- t('cv.add_label') %></label><input class="ds-in" id="pvCvName" maxlength="42" required></div>
+          <button type="submit" class="ds-btn sm"><%- t('cv.add') %></button>
+        </form>
+        <p class="pv-st" id="pvCvSt" role="status" aria-live="polite"></p>
+      </div>
+    <% } %>
+    <p class="ds-meta"><%- t('cv.chat') %></p>
+  </section>
   <% } %>
 
   <section class="ds-card lg" aria-labelledby="pvMoreH">
@@ -100,4 +126,5 @@
   </section>
 </main>
 <script src="/public/js/privacy-settings.js?v=1" defer></script>
-<script src="/public/js/privacy-livecam.js?v=1" defer></script>
+<script src="/public/js/privacy-livecam.js?v=2" defer></script>
+<script src="/public/js/privacy-camviewers.js?v=1" defer></script>

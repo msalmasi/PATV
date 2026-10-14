@@ -1060,12 +1060,78 @@
     "!bridge [hide|show]"
    ],
    "summary": "Is this room live on its PATV pad?",
-   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to signed-in users on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there. `!bridge hide` makes you \"someone\" on the website (no name, your lines not shown); `!incognito on` does the same. Mic transcripts show in the feed too. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming.",
+   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to signed-in users on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there. `!bridge hide` makes you \"someone\" on the website (no name, your lines not shown); `!incognito on` does the same. Mic transcripts show in the feed too. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay.",
    "examples": [
     "!bridge hide",
     "!incognito on",
     "!bridge on|off",
     "!bridge transcripts on|off"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "livecam",
+   "title": "!livecam [off|on]",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!livecam"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!livecam [off|on]"
+   ],
+   "summary": "Can people on the website see your cam (live, snapshots, clips)?",
+   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. Everyone is in by default: `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; `!livecam on` allows it again. It's the same switch as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your setting. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`).",
+   "examples": [
+    "!livecam off",
+    "!livecam on",
+    "!bridge livecams off"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "whowatching",
+   "title": "!whowatching",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!whowatching"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!whowatching",
+    "!whowatching <user>"
+   ],
+   "summary": "Who's watching your cam - on the website and in Camfrog.",
+   "details": "Pepe PMs you who has your cam open: on the website (watching it **live** right now, plus anyone who took a snapshot or a clip in the last 30 minutes, with their PATV and Camfrog names) and in Camfrog itself (Pepe asks the server with `/whowatching` - the server only answers him where he has room powers; your own Camfrog always shows who's viewing you). Only about your own cam; admins can name anyone. The same list is in Settings → Privacy on publicaccess.tv. Block someone from the website with `!blockviewer <name>`.",
+   "examples": [
+    "!whowatching"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "blockviewer",
+   "title": "!blockviewer <name> · !unblockviewer <name>",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!blockviewer",
+    "!unblockviewer",
+    "!blockviewers"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!blockviewer <name>",
+    "!unblockviewer <name>",
+    "!blockviewer"
+   ],
+   "summary": "Stop one person opening your cam on the website.",
+   "details": "`!blockviewer <name>` stops that PATV account from opening your cam on the website - no live view, no snapshots, no clips; if they're watching live right now it ends at once, and they're only told your cam isn't available. `<name>` is their PATV name or their Camfrog name (Pepe's PM about who opened your cam tells you which to type). `!unblockviewer <name>` lets them back, `!blockviewer` on its own lists who you blocked. It's the same list as Settings → Privacy on publicaccess.tv. It's about the website only - inside Camfrog, use Camfrog's own ignore. To keep your cam off the website for everyone: `!livecam off`.",
+   "examples": [
+    "!blockviewer creep42",
+    "!unblockviewer creep42",
+    "!blockviewer"
    ],
    "keywords": []
   },
@@ -5136,23 +5202,20 @@
   },
   {
    "id": "watchlist",
-   "title": "!watchlist <user> · !whowatching <user>",
+   "title": "!watchlist <user>",
    "category": "moderation",
    "role": "admin",
    "commands": [
-    "!watchlist",
-    "!whowatching"
+    "!watchlist"
    ],
    "aliases": [],
    "syntax": [
-    "!watchlist <user>",
-    "!whowatching <user>"
+    "!watchlist <user>"
    ],
-   "summary": "!watchlist: whose cams that person has open.",
-   "details": "`!watchlist`: whose cams that person has open. `!whowatching`: who has their cam open. Pepe asks the Camfrog server in this room and relays the answer (he may need room powers for the server to answer). He also checks on his own, rarely — only when the room is arguing about who's watching whom, and at most once every 10 minutes.",
+   "summary": "Whose cams that person has open.",
+   "details": "Whose cams that person has open: Pepe runs Camfrog's `/watchlist` in this room and relays what the server answers (he may need room powers for the server to answer). He also checks on his own, rarely — only when the room is arguing about who's watching whom, and at most once every 10 minutes. Admins can also name anyone with `!whowatching <user>` (see !whowatching).",
    "examples": [
-    "!watchlist",
-    "!whowatching"
+    "!watchlist"
    ],
    "keywords": []
   },
@@ -7634,5 +7697,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "47e3e351454f4197"
+ "hash": "c13fcf1d66c6edba"
 }

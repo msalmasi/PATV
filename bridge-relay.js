@@ -64,6 +64,7 @@ const express = require("express");
 const crypto = require("crypto");
 const { getQuery, runQuery } = require("./dbUtils");
 const queueAction = (...a) => require("./actions").queue(...a);   // lazy: actions.js opens its table on load
+const CV = () => require("./camviewers");                         // 1.99yq: opt-out / private / the owner's blocks + "X opened your cam"
 // 1.99yh: cam snapshots / clips / live cams follow the pad's access rule like the room audio (padaccess.full: signed in,
 // and inside an Approved pad). The /api/rooms/:slug gate (padaccess.register) covers Approved pads already; this is the
 // route's own check, so a snapshot never depends on middleware order or on how the slug resolved. Fails closed.
@@ -595,6 +596,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
     const m = R.members.find((x) => !x.anon && String(x.login).toLowerCase() === login);
     if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
+    const ref = await CV().camRefusal(login, u.userId);
+    if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
     const key = R.id + "|" + login;
     const cached = snaps.get(key);
     // Whoever asks shares the frame they're shown - and only they may save it (Save snap, 1.99ap).
@@ -602,6 +605,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     // frame gets Save only where the room lets everyone !snap.
     if (cached && Date.now() - cached.ts < SNAP_TARGET_GAP) {
       if (cached.viewers) cached.viewers.add(u.userId);
+      if (cached.ok) CV().noteView("snap", R.id, login, u);
       return res.json({ ok: true, cached: true });
     }
     for (const j of jobs.values()) {
@@ -639,6 +643,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     snaps.set(roomId + "|" + login, { sid: "f" + crypto.randomBytes(9).toString("hex"), ts: Date.now(), ok: !!img, status: clean(b.status, 120), img,
       viewers: new Set(j && j.viewers ? j.viewers : []), rule, okFor, cost, saves: new Map() });
     if (j) { j.state = "done"; j.result = { ok: !!img, msg: clean(b.status, 120) }; }
+    // 1.99yq: everyone this frame is shown to opened their cam - Pepe tells the owner (only once there IS a picture)
+    if (img && j && j.viewers) CV().noteViewers("snap", roomId, login, [...j.viewers]);
     res.json({ ok: true });
   });
 
@@ -649,6 +655,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!R || !R.cams) return res.status(404).json({ state: "off" });
     if (!(await padFull(req.user.userId, R.id))) return res.status(403).json(PAD_DENIED);
     const login = String(req.params.login || "").toLowerCase().slice(0, 40);
+    const ref = await CV().camRefusal(login, req.user.userId);         // 1.99yq: blocked / switched off since the frame was taken
+    if (ref) return res.json({ state: "refused", status: ref.error });
     const s = snaps.get(R.id + "|" + login);
     const pending = [...jobs.values()].some((j) => j.kind === "snap" && j.roomId === R.id && j.target === login && j.state !== "done");
     if (s && (!pending || Date.now() - s.ts < SNAP_TARGET_GAP)) {
@@ -686,6 +694,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!s || !s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return res.status(410).json({ ok: false, error: "That snapshot expired — take a fresh one." });
     if (!s.viewers || !s.viewers.has(u.userId)) return res.status(403).json({ ok: false, error: "That isn't a snapshot you asked for." });
     if (saveRight(s, u.userId) === null) return res.status(403).json({ ok: false, error: "Snaps of them aren't allowed here." });
+    const ref = await CV().camRefusal(login, u.userId);
+    if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
     const prev = s.saves.get(u.userId);
     if (prev) {
       const a = (await getQuery("SELECT status FROM pepe_actions WHERE id = ? AND user_id = ?", [prev, u.userId]))[0];
@@ -738,7 +748,13 @@ function snapForGen(roomId, sid, userId) {
     if (!sid || s.sid !== sid || !k.startsWith(roomId + "|")) continue;
     if (!s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return { status: 410, error: "That snapshot expired — take a fresh one." };
     if (!s.viewers || !s.viewers.has(userId)) return { status: 403, error: "That isn't a snapshot you asked for." };
-    return { login: k.slice(roomId.length + 1), img: s.img, ts: s.ts };
+    const login = k.slice(roomId.length + 1);
+    // 1.99yq: the owner's switch and blocks (sync parts; Pepe re-checks private / hidden himself)
+    try {
+      if (require("./livecam").optedOut(login)) return { status: 403, error: CV().MSG.opted_out };
+      if (CV().blocked(login, userId)) return { status: 403, error: CV().UNAVAILABLE };
+    } catch (e) { /* the modules are there */ }
+    return { login, img: s.img, ts: s.ts };
   }
   return { status: 410, error: "That snapshot expired — take a fresh one." };
 }

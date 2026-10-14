@@ -86,6 +86,11 @@ const RULES = {
   "livecam_cfg.updated_by": { deny: "1.99yh: the admin's username who last saved the live-cam settings (audit label; admin_audit has the id)" },
   "livecam_optout.user_id": M(), "livecam_audit.viewer_id": M({ name: "viewer_name" }), "livecam_audit.viewer_name": { deny: NAME },
   "livecam_audit.target": { deny: "1.99yh: the Camfrog login of the cam watched, not a userId" },
+  // 1.99yq who's watching your cam (camviewers.js): a block on a viewer account and its view log move with that account
+  "cam_blocks.user_id": M({ key: ["owner"], name: "username" }),
+  "cam_blocks.owner": { deny: "1.99yq: the Camfrog login of the cam whose owner made the block, not a userId" },
+  "cam_views.user_id": M({ name: "username" }),
+  "cam_views.owner": { deny: "1.99yq: the Camfrog login of the cam that was viewed, not a userId" },
   "donation_promo_settings.actor": { deny: NAME },
   // 1.99ts: the daily donation limit - a member's donations by day move (a merged account shares ONE daily limit); an override
   // folds into the target's (the target's own override wins when both have one)

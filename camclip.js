@@ -25,6 +25,9 @@
 //      account) and uploads it as a capture (/api/media kind "clip", subject + subject_login, by the viewer) - so it
 //      lands in that pad's story (and the subject's profile story, userstories.js) with the usual provenance, and is
 //      refunded if publishing fails. Discard (or the TTL) deletes the preview.
+// 1.99yq: the cam owner's switch (!livecam off / Settings → Privacy now covers clips too) and their blocks
+// (camviewers.camRefusal) are checked on the request, the popover's button, every preview read and the save; a finished
+// clip tells the owner (Pepe PMs them, camviewers.noteViewers).
 "use strict";
 const fs = require("fs");
 const os = require("os");
@@ -63,6 +66,9 @@ const deps = {
   privateLogins: (list) => require("./stories").privateLogins(list),
   modCaps: (R, login) => { try { return require("./padmod").capsFor(R, login); } catch (e) { return null; } },
   queueAction: (...a) => require("./actions").queue(...a),
+  // 1.99yq: the owner's switch (!livecam off covers clips too), private, and their blocks - one check for every cam path
+  camRefusal: (login, userId) => require("./camviewers").camRefusal(login, userId),
+  noteViewers: (...a) => require("./camviewers").noteViewers(...a),
 };
 /** 1.99fb: may this account clip while the room's !clip is off / unknown? Site admins, and anyone Pepe gave
  *  room-moderation caps on their linked login (the ⋯ menu's source). Pepe re-checks with chat !clip's admin rule. */
@@ -116,6 +122,7 @@ async function clipInfo(R, userId, login) {
   else if (deps.snapSwitch(R.id) !== true) off = OFF(R.id);
   else if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) off = CLIP_OFF(R.id);
   else if ((await deps.privateLogins([login])).has(String(login).toLowerCase())) off = "They keep their activity private, so their cam can't be clipped.";
+  else { const ref = await deps.camRefusal(login, userId); if (ref) off = ref.error; }
   const b = busyFor(R.id, String(login).toLowerCase());
   if (!off && deps.clipSwitch(R.id) !== true) hint = ADMIN_HINT;
   return { secs: SECS, def: SECS_DEFAULT, off, busy: b ? (b.userId === userId ? b.id : true) : null, ...(hint ? { hint } : {}) };
@@ -137,6 +144,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const R = bySlug(req.params.slug);
     if (!c || !R || c.roomId !== R.id || !req.user || c.userId !== req.user.userId) { res.status(404).json({ ok: false, error: "No such clip." }); return null; }
     if (!(await relay.padFull(req.user.userId, R.id))) { res.status(403).json(relay.PAD_DENIED); return null; }
+    const ref = await deps.camRefusal(c.login, req.user.userId);   // 1.99yq: blocked / switched off since it was recorded
+    if (ref) { res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error }); return null; }
     return { c, R };
   };
 
@@ -156,6 +165,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const m = LOGIN_RE.test(login) ? (R.members || []).find((x) => !x.anon && String(x.login || "").toLowerCase() === login) : null;
       if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
       if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });
+      const ref = await deps.camRefusal(login, u.userId);
+      if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
       if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF(R.id), code: "E_FEATURE_OFF" });
       const busy = busyFor(R.id, login);
@@ -206,6 +217,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
         c.viewerOk = !!b.viewer_ok;
         c.cost = Math.max(0, parseInt(b.cost, 10) || 0);
         c.state = "ready"; c.status = "ok"; c.done = NOW();
+        try { deps.noteViewers("clip", c.roomId, c.login, [c.userId]); } catch (e) { /* best effort */ }   // 1.99yq: Pepe tells the owner
       }
     } else {
       c.state = "failed"; c.status = relay.clean(b.status, 160) || "Pepe couldn't clip that cam."; c.done = NOW();

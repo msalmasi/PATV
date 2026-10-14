@@ -14,7 +14,9 @@
 // rule as the room audio; 18+ pads are signed-in anyway). Never the cam of Pepe himself, of someone off cam, private
 // (!bridge hide / !incognito: Pepe shows them as "someone", so no login reaches the page), keeping their room activity
 // private (Settings → Privacy → analytics) or opted out of live video (livecam_optout: /settings/privacy or !livecam off
-// in Camfrog - one home, this table; Pepe's command writes through his poll).
+// in Camfrog - one home, this table; Pepe's command writes through his poll; 1.99yq: it covers snapshots and clips too), or
+// blocked by the owner (camviewers.js: !blockviewer / the privacy card - "isn't available", a block ends their stream at
+// once). Every new viewer is noted (camviewers.noteView) and Pepe PMs the owner (the notices ride this poll: cv_notify).
 // Caps: viewers_free (1) live cams at once per account, viewers_sp (4) with a Season Pass (premium.hasPass); every cam
 // stream is the same kbps, so the site-wide viewer cap is budget_mbps / kbps; max_live cams publishing at once; Pepe's
 // own pool (the cams his Camfrog keeps open) answers "slots_busy" when it can't make room.
@@ -74,6 +76,7 @@ let clock = () => Date.now();
 const now = () => clock();
 const W = () => require("./webrtc");
 const bridgeRooms = () => { try { return require("./bridge")._rooms; } catch (e) { return new Map(); } };
+const CV = () => require("./camviewers");     // 1.99yq: who's watching + blocks
 
 class Refuse extends Error { constructor(status, msg, code, extra) { super(msg); this.status = status; this.refuse = true; this.code = code; this.extra = extra || null; } }
 
@@ -308,7 +311,8 @@ const CODES = {
   room_off: [403, "Live cams aren't on in this Camfrog room."],
   pad_access: [403, "This pad's live room is for its approved members."],
   not_on_cam: [400, "They aren't on cam."],
-  opted_out: [403, "They've switched off live video of their cam."],
+  opted_out: [403, "They've switched their cam off for the website."],
+  unavailable: [403, "That cam isn't available right now."],     // 1.99yq: the owner blocked this viewer (camviewers.js) - said neutrally
   ended_by: [403, "Their live cam was ended - try again in a few minutes."],
   nopepe: [503, "Pepe can't do live cams right now."],
   viewer_cap: [429, "You're already watching as many live cams as you can."],
@@ -341,6 +345,7 @@ async function start(u, R, login, t = now()) {
   if (!m || !m.on_cam) throw refuse("not_on_cam");
   if (optedOut(login)) throw refuse("opted_out");
   try { if ((await require("./stories").privateLogins([login])).has(login)) throw refuse("opted_out"); } catch (e) { if (e.refuse) throw e; }
+  if (CV().blocked(login, u.userId)) throw refuse("unavailable");          // 1.99yq: !blockviewer / the privacy card
   const k = keyOf(R.id, login);
   if ((COOL.get(k) || 0) > t) throw refuse("ended_by");
   if (!botOk(t)) throw refuse("nopepe");
@@ -392,6 +397,22 @@ function beat(userId, roomId, login, t = now()) {
   v.beat = t;
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
   return { ok: true, state: stateOf(S, t), viewers: freshViewers(S, t).length, botWhy: S.botWhy || null };
+}
+/** 1.99yq: the owner blocked this viewer - drop them from every live relay of the cam now (the reader is kicked). -> count */
+function dropViewerOf(login, userId, why = "blocked", t = now()) {
+  let n = 0;
+  const l = String(login || "").toLowerCase();
+  for (const S of SESS.values()) if (!S.ended && S.login === l && dropViewer(S, String(userId), why, t)) n++;
+  return n;
+}
+/** 1.99yq: who has `login`'s cam open live right now -> [{userId, username, room, since}] */
+function watchersOf(login, t = now()) {
+  const l = String(login || "").toLowerCase(), out = [];
+  for (const S of SESS.values()) {
+    if (S.ended || S.login !== l) continue;
+    for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: v.username, room: S.roomId, since: v.since });
+  }
+  return out;
 }
 function stop(userId, roomId, login, t = now()) {
   const S = SESS.get(keyOf(roomId, login));
@@ -473,7 +494,9 @@ async function forBot(body, t = now()) {
     }
   }
   const c = cfg();
-  return { ok: true, v: CFG.v, cfg: Object.fromEntries(BOT_KEYS.map((k) => [k, c[k]])), want, optout: [...OPTOUT].slice(0, 5000) };
+  let cvNotify = [];
+  try { cvNotify = CV().forBot(body, t); } catch (e) { cvNotify = []; }   // 1.99yq: "X opened your cam" notices for Pepe to PM
+  return { ok: true, v: CFG.v, cfg: Object.fromEntries(BOT_KEYS.map((k) => [k, c[k]])), want, optout: [...OPTOUT].slice(0, 5000), cv_notify: cvNotify };
 }
 
 // ── MediaMTX ──
@@ -515,8 +538,11 @@ async function auth(b, action, proto) {
     const v = S.viewers.get(String(c.uid));
     if (!v || now() - v.beat > BEAT_MS) return 403;
     if (optedOut(S.login)) return 403;
+    if (CV().blocked(S.login, c.uid)) return 403;
     if (!(await require("./bridge-relay").padFull(c.uid, S.roomId))) return 403;
     if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) v.readers.add(String(b.id));
+    // 1.99yq: the video really reaches them now -> Pepe PMs the cam's owner who it is (camviewers.js rate-limits it)
+    if (!v.noted) { v.noted = true; CV().noteViewers("live", S.roomId, S.login, [String(c.uid)]); }
     return 200;
   }
   return 403;
@@ -549,7 +575,7 @@ async function adminView() {
            bot: BOT ? { at: BOT.at, online: botOk(t), pool: BOT.pool, cfgFrom: BOT.cfgFrom } : null, sessions,
            usage: { viewers, viewerCap: viewerCap(c), mbps: Math.round((viewers * c.kbps) / 100) / 10, budget_mbps: c.budget_mbps, live: sessions.length,
                     max_live: c.max_live, publishMbps: Math.round((sessions.length * c.kbps) / 100) / 10 },
-           optouts: OPTOUT.size, audit, recent };
+           optouts: OPTOUT.size, camviewers: CV().stats(), audit, recent };
 }
 
 // ── routes ──
@@ -568,7 +594,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
   };
   const me = async (req) => {
     if (!req.user || !req.user.userId) return null;
-    return (await getQuery("SELECT userId, username, camfrogUsername, class FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
+    return (await getQuery("SELECT userId, username, displayname, camfrogUsername, class FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
   };
   const room = (req) => {
     const R = bySlug(req.params.slug);
@@ -686,7 +712,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
 
 module.exports = {
   register, init, normalize, save, current, viewerCap, pathFor, pubKey, readTicket, checkTicket, camForPath, start, beat, stop, endBy, mayEnd,
-  forBot, noteSync, auth, hint, adminView, setOptout, optoutState, optedOut, sweep, PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
+  forBot, noteSync, auth, hint, adminView, setOptout, optoutState, optedOut, sweep, dropViewerOf, watchersOf, PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
   _sessions: SESS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
