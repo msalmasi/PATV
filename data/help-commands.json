@@ -1727,7 +1727,7 @@
     "!spin"
    ],
    "summary": "Spin the Wheel of Misfortune.",
-   "details": "Spin the Wheel of Misfortune. Costs 5,000 PAT per spin, and every spin goes into the casino jackpot — which pays the prizes too. The thin **glowing gold slice** is the jackpot: it lands about **1 in 3,000 spins** and always pays a rolled share of the **wheel jackpot** (the casino pot, capped at 5M) — usually a few hundred thousand, sometimes millions, and once in a while the whole thing.",
+   "details": "Spin the Wheel of Misfortune. Costs 5,000 PAT per spin, and every spin goes into the casino jackpot — which pays the prizes too. The thin **glowing gold slice** is the jackpot: it lands about **1 in 3,000 spins** and always pays a rolled share of the **wheel jackpot** (the casino pot, capped at 5M) — usually a few hundred thousand, sometimes millions, and once in a while the whole thing. In chat Pepe keeps it quiet: a short \"spinning\" line in the room and your result by private message (/msg); only a **jackpot** is announced to the room.",
    "examples": [],
    "keywords": [
     "wheel",
@@ -2958,6 +2958,34 @@
     "room earnings",
     "pad earnings",
     "donate to a pad"
+   ]
+  },
+  {
+   "id": "padfine",
+   "title": "!padfine <pad> <amount> <reason> · !padmove <from> <to> <amount> <reason>",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!padfine",
+    "!padmove"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!padfine <pad> <amount> <reason>",
+    "!padmove <from pad> <to pad> <amount> <reason>",
+    "!padfine confirm <code>",
+    "!padfine log"
+   ],
+   "summary": "Admins: fine a pad's vault, or move PAT from one pad vault to another.",
+   "details": "A **fine** takes PAT out of a pad's vault and sends it where the PAT Routing row `fine_pad` says (the Federal Reserve by default, like every fine; a fine can never go to a pad vault or an owner). A **move** takes PAT out of one pad vault and puts it in another (the other vault's cap applies). Both need a reason and a confirm step (`!padfine confirm <code>` within 2 minutes); the whole amount or nothing. The pad is its room id, its address or its title. The pad's owner gets a notice with the reason, every move is in the admin audit log and in both pads' vault history, and the PAT supply doesn't change. `!padfine log` lists the latest ones. Also on the website: Pads admin, \"Pad vault fines & transfers\".",
+   "examples": [
+    "!padfine DRAMA_CENTRAL 500k spamming paid commands to farm the vault",
+    "!padmove DRAMA_CENTRAL PepeFrog.Room 10M one-off move approved by the owner"
+   ],
+   "keywords": [
+    "fine pad",
+    "pad vault fine",
+    "move pad vault"
    ]
   },
   {
@@ -7722,5 +7750,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "421fe3c7cfda3f03"
+ "hash": "5ab0c24553feaf70"
 }

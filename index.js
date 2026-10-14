@@ -1209,6 +1209,7 @@ require("./hop").register(app, { addUser });   // 1.99eq: Hop - the full-screen 
 require("./feedgallery").register(app, { addUser });   // 1.99fn: the feeds' Gallery view (/api/feed/gallery) + the per-account List / Gallery choice (/api/feed/view)
 require("./media").register(app, { isBotToken, addUser });
 require("./pvpcfg").register(app, { isBotToken, addUser });    // 1.99yc: duels / brawls accept + replacement knobs (/admin/games#pvp, Pepe reads POST /api/pvp/cfg)
+require("./spincfg").register(app, { addUser });                 // 1.99yz: chat !spin private by default (/admin/games#chatspin; sent with each chat spin)
 require("./mktcfg").register(app, { isBotToken, addUser });    // 1.99ur: market close bounds (admins) - before /markets/:id
 require("./markets").register(app, { isBotToken, addUser });
 require("./automkt").register(app, { isBotToken, addUser });   // 1.99th: Pepe's auto markets - status/requests from Pepe, the feed post, /admin/markets
@@ -3511,7 +3512,8 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
         timestamp: new Date(),
       });
   
-      res.json({ spinId });
+      // 1.99yz: chat_private = how Pepe answers a chat !spin (spincfg.js, /admin/games#chatspin; default private)
+      res.json({ spinId, chat_private: await require("./spincfg").chatPrivate() });
     } catch (error) {
       console.error("Failed to prepare spin:", error);
       res.status(500).send("Failed to process spin");

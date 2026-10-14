@@ -1,0 +1,19 @@
+<%# 1.99yz: how Pepe answers a chat !spin (spincfg.js) - private by default (a short line in the room, the result by /msg; a
+    jackpot is still shouted in the room). Pepe reads it from each chat spin's answer. public/js/admin-spincfg.js. Admins only. %>
+<section class="adm-card" id="chatspin" aria-labelledby="chatspinT">
+  <h2 id="chatspinT">Chat spins (!spin) <span class="adm-pill admin">admins</span> <span class="adm-msg" id="spinCfgMsg" role="status" aria-live="polite"></span></h2>
+  <% if (!locals.isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <p class="adm-help">How Pepe answers <code>!spin</code> in a chat room. <b>Private</b> (the default): a short "spinning" line in the room and
+    the result sent to the spinner by <code>/msg</code>; only a <b>jackpot</b> is announced in the room. <b>Public</b>: every result in the room,
+    as before. Spins on the website and the OBS wheel page don't change. Applies to the next <code>!spin</code>.</p>
+  <form id="spinCfgForm" class="adm-form" autocomplete="off">
+    <label for="spinCfgMode">Chat spin results
+      <select id="spinCfgMode" name="chat_private">
+        <option value="private">Private - by /msg, jackpots in the room</option>
+        <option value="public">Public - every result in the room</option>
+      </select></label>
+    <div class="adm-actions"><button class="ds-btn sm" type="submit">Save</button></div>
+  </form>
+  <script src="/public/js/admin-spincfg.js?v=1" defer></script>
+  <% } %>
+</section>
