@@ -240,6 +240,14 @@ test("the pad's live view hint and the admin view", async () => {
   assert.ok(Array.isArray(v.sessions) && Array.isArray(v.recent));
   await assert.rejects(LC.save({ class: "pleb" }, { cfg: { fps: 10 } }), /Admins only/);
   await assert.rejects(LC.save({ class: "Admin", userId: "staff" }, { cfg: { fps: 99 } }), /fps/);
+  // 1.99yq: the video source - prod default reencode, sent to Pepe with its fallback time; junk refused
+  assert.equal((await bot()).d.cfg.source, "reencode");
+  await LC.save({ class: "Admin", userId: "staff", username: "boss" }, { cfg: { source: "passthrough", pt_fallback_s: 8 } });
+  const b = (await bot()).d.cfg;
+  assert.equal(b.source, "passthrough");
+  assert.equal(b.pt_fallback_s, 8);
+  await assert.rejects(LC.save({ class: "Admin", userId: "staff" }, { cfg: { source: "magic" } }), /source/);
+  await LC.save({ class: "Admin", userId: "staff", username: "boss" }, { cfg: { source: "reencode", pt_fallback_s: 6 } });
 });
 
 test("the pages: /admin/pepe/livecams for admins only; the 📡 card on /settings/privacy", async () => {

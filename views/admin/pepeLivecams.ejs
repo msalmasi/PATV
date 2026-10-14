@@ -3,7 +3,7 @@
     next poll (~1-5 s). Admins only. %>
 <div class="adm-head">
   <h1>Live cams</h1>
-  <p>Signed-in pad members can press <b>▶ Live</b> on someone's cam and watch it live (WebRTC). Pepe opens the cam in Camfrog, grabs its window in a helper process and publishes one H.264 stream per cam to MediaMTX; every viewer of that cam shares it. Nothing is recorded. Rooms switch it with <code>!bridge livecams on|off</code> (needs <code>!bridge cams on</code>); anyone can opt out with <code>!livecam off</code> or Settings → Privacy.</p>
+  <p>Signed-in pad members can press <b>▶ Live</b> on someone's cam and watch it live (WebRTC). Pepe opens the cam in Camfrog and publishes one H.264 stream per cam to MediaMTX - either Camfrog's own video passed straight through, or its window grabbed and re-encoded (the Source setting); every viewer of that cam shares it. Nothing is recorded. Rooms switch it with <code>!bridge livecams on|off</code> (needs <code>!bridge cams on</code>); anyone can opt out with <code>!livecam off</code> or Settings → Privacy.</p>
 </div>
 
 <section class="adm-card" id="usage" aria-labelledby="usT">
@@ -24,6 +24,8 @@
     </fieldset>
     <fieldset>
       <legend>Stream</legend>
+      <label>Source <select name="source"><option value="reencode">Re-encode - grab the cam window, x264 at the fps / bitrate below</option><option value="passthrough">Pass-through - Camfrog's own H.264 forwarded untouched (native ~30 fps, no encoding; new viewers wait for the cam's next keyframe, up to ~3 s)</option><option value="auto">Auto - pass-through when Pepe can, else re-encode</option></select></label>
+      <label>Pass-through falls back to re-encode after this many seconds without video <input type="number" name="pt_fallback_s" inputmode="numeric"></label>
       <label>Frames per second <input type="number" name="fps" inputmode="numeric"></label>
       <label>Video bitrate per cam (kbps) <input type="number" name="kbps" inputmode="numeric"></label>
       <label>Keyframe every (s) - new viewers start at the next one <input type="number" name="keyint_s" step="0.5" inputmode="decimal"></label>
@@ -105,7 +107,8 @@
       var c = el('td'); c.appendChild(el('b', null, s.display || s.login)); c.appendChild(el('div', 'adm-help', s.room + ' · since ' + when(s.since))); tr.appendChild(c);
       tr.appendChild(el('td', null, s.state + (s.botState ? ' (Pepe: ' + s.botState + ')' : '') + (s.botWhy ? ' · ' + s.botWhy : '')));
       tr.appendChild(el('td', null, s.viewers.map(function (v) { return v.username || v.userId; }).join(', ') + ' · ' + s.readers + ' connected'));
-      tr.appendChild(el('td', 'num', s.bot && s.bot.grab_fps ? s.bot.grab_fps + ' fps · ' + s.bot.grab_ms + ' ms' : '–'));
+      tr.appendChild(el('td', 'num', s.bot && s.bot.source === 'passthrough' ? 'pass-through' + (s.bot.fps ? ' · ' + s.bot.fps + ' fps' : '')
+        : s.bot && s.bot.grab_fps ? s.bot.grab_fps + ' fps · ' + s.bot.grab_ms + ' ms' + (s.bot.fallback ? ' (re-encode: ' + s.bot.fallback + ')' : '') : '–'));
       var td = el('td'); var x = el('button', 'adm-btn ghost', 'End'); x.type = 'button';
       x.addEventListener('click', function () {
         if (!confirm('End ' + (s.display || s.login) + '\'s live cam? Everyone watching is dropped; it can\'t restart for 10 minutes.')) return;

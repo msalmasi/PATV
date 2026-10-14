@@ -68,9 +68,15 @@ const FIELDS = Object.freeze({
   close_method: { def: "wmclose", choices: ["wmclose", "button", "off"] },
   capture:      { def: "blt", choices: ["blt", "pw2"] },   // how Pepe reads a cam's window (blt: no Camfrog UI-thread cost)
   ui_budget_ms: { def: 300, min: 50, max: 800 },
+  // 1.99yq: where Pepe's video comes from (bot 1.99yp pepe_livecam_pt.py): reencode = grab the cam window + x264 /
+  // passthrough = forward Camfrog's own H.264 untouched (native 30 fps, no encode) / auto = pass-through when Pepe can.
+  // Pass-through falls back to re-encode by itself after pt_fallback_s without video. Prod default: reencode.
+  source:        { def: STAGING ? "auto" : "reencode", choices: ["reencode", "passthrough", "auto"] },
+  pt_fallback_s: { def: 6, min: 2, max: 30 },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
-const BOT_KEYS = ["enabled", "close_idle", "fps", "kbps", "keyint_s", "max_live", "pool_max", "idle_close_s", "close_method", "ui_budget_ms", "capture"];
+const BOT_KEYS = ["enabled", "close_idle", "fps", "kbps", "keyint_s", "max_live", "pool_max", "idle_close_s", "close_method", "ui_budget_ms", "capture",
+  "source", "pt_fallback_s"];
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -467,7 +473,8 @@ async function forBot(body, t = now()) {
     seen.add(S.key);
     S.botState = str(x.state, 20);
     S.botInfo = { grab_fps: Number(x.grab_fps) || null, grab_ms: Number(x.grab_ms) || null, size: Array.isArray(x.size) ? x.size.slice(0, 2) : null,
-                  restarts: Number(x.restarts) || 0, up_s: Number(x.up_s) || 0, setup_ms: Number(x.setup_ms) || null };
+                  restarts: Number(x.restarts) || 0, up_s: Number(x.up_s) || 0, setup_ms: Number(x.setup_ms) || null,
+                  source: x.source === "passthrough" ? "passthrough" : "reencode", fps: Number(x.fps) || null, fallback: str(x.fallback, 60) || null };
     if (S.botState === "live" && !S.liveAt) S.liveAt = t;
     if (S.botState === "ended" || S.botState === "stopped") {
       const why = str(x.why, 30);
