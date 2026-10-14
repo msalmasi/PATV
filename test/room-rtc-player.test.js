@@ -153,3 +153,19 @@ test("webrtc-client.js: listen() is audio-only WHEP and retries a 404 (not publi
   assert.match(fn, /e\.status === 404 && Date\.now\(\) \+ 800 < deadline/);
   assert.match(js, /window\.PATVRtc = \{ ice: ice, play: play, publish: publish, listen: listen \}/);
 });
+
+test("1.99ya: the ⚡ listener asks for a ~200 ms jitter buffer (jitterBufferTarget / playoutDelayHint)", () => {
+  const js = fs.readFileSync(path.join(repo, "public", "js", "webrtc-client.js"), "utf8");
+  const fn = js.slice(js.indexOf("function listen("), js.indexOf("function preferH264("));
+  assert.match(fn, /jitterTarget\(e\.receiver, o\.jitterMs == null \? 200 : o\.jitterMs\)/);
+  const jt = js.slice(js.indexOf("function jitterTarget("), js.indexOf("function preferH264("));
+  const run = new Function(jt + "; return jitterTarget;")();
+  const std = { jitterBufferTarget: null };
+  run(std, 200);
+  assert.equal(std.jitterBufferTarget, 200, "standard: ms");
+  const old = { playoutDelayHint: 0 };
+  run(old, 200);
+  assert.equal(old.playoutDelayHint, 0.2, "Chrome's older hint: seconds");
+  assert.doesNotThrow(() => run(null, 200));
+  assert.match(SRC, /listen\(j\.whep, rau, \{ timeout: RTC_TIMEOUT_MS, jitterMs: RTC_JITTER_MS \}\)/);
+});

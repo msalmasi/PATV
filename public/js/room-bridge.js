@@ -67,6 +67,7 @@
   // the same way as before 1.99il. A connection failure is remembered for RTC_RETRY_MS so a network that blocks
   // WebRTC goes straight to MP3 next time. The badge says which: "⚡ live" or "standard".
   var RTC_RETRY_MS = 10 * 60 * 1000, RTC_TIMEOUT_MS = 9000;
+  var RTC_JITTER_MS = 200;                   // 1.99ya: the ⚡ player's jitter buffer target (webrtc-client.js listen)
   // reasons that are NOT this network's fault (no 10-minute "go straight to MP3" memory for them)
   var RTC_SOFT = { off: 1, 'not-eligible': 1, busy: 1, 'no-audio': 1, denied: 1, rate: 1, stale: 1, error: 1,
                    'not-published': 1, http: 1, blocked: 1, lost: 1 };   // lost: also Pepe restarting his publish
@@ -163,11 +164,12 @@
     // means stuttering. Fill a small cushion first (CUSHION s of audio, or give up waiting after 20 s and
     // play what there is), then play. 1.99hq: 0.75 s (was 2.5 s) + live-edge catch-up below.
     var CUSHION = 0.75, waitTimer = null;
-    // Live edge (mirrors stage-player.js): more than EDGE_HI s buffered ahead -> play at 1.05x (pitch kept)
-    // until back under EDGE_LO; more than EDGE_JUMP ahead -> jump to EDGE_KEEP s before the newest audio.
-    var EDGE_LO = 0.9, EDGE_HI = 1.3, EDGE_JUMP = 4, EDGE_KEEP = 0.6, RATE_UP = 1.05;
-    // ...and under EDGE_DRY s ahead -> 0.96x until EDGE_LO again, easing off before the buffer runs dry
-    var EDGE_DRY = 0.3, RATE_DOWN = 0.96;
+    // Live edge. 1.99ya: the old 1.05x / 0.96x pitch-kept rate nudges (every time the buffer wandered past 1.3 s /
+    // under 0.3 s) were a warble you could hear - the time-stretcher's artefacts, switched on and off all the time.
+    // Now: only a real backlog is caught up - more than EDGE_HI s ahead -> 1.02x (pitch follows, no stretcher: a
+    // barely-there 1/3 semitone) until back under EDGE_LO; more than EDGE_JUMP ahead -> jump to EDGE_KEEP s before
+    // the newest audio. Never slowed down: a short buffer just waits for the next chunk.
+    var EDGE_LO = 1.0, EDGE_HI = 2.0, EDGE_JUMP = 4, EDGE_KEEP = 0.8, RATE_UP = 1.02;
     function ahead() { var b = au.buffered; return b.length ? b.end(b.length - 1) - au.currentTime : 0; }
     // 1.99hq: where the browser can, the stream is fed through Media Source Extensions: the <audio> element's
     // own progressive loader takes the MP3 in ~2-3 s gulps (so playback stalled and ran 2-3 s behind however
@@ -242,7 +244,7 @@
           if (gen !== startGen || !playing) throw 'stale';
           if (!j || !j.ok || !j.whep) throw (j && j.fallback) || 'error';
           setState(j.ready ? _t('js.pad.audio.connecting_rtc', 'connecting ⚡…') : _t('js.pad.audio.starting_rtc', 'starting ⚡…'), 'wait');
-          return window.PATVRtc.listen(j.whep, rau, { timeout: RTC_TIMEOUT_MS });
+          return window.PATVRtc.listen(j.whep, rau, { timeout: RTC_TIMEOUT_MS, jitterMs: RTC_JITTER_MS });
         })
         .then(function (sess) {
           if (gen !== startGen || !playing) { sess.close(); throw 'stale'; }
@@ -327,7 +329,14 @@
     au.addEventListener('playing', function () { setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
     au.addEventListener('error', function () { if (playing && mode === 'mp3') stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); });
     rau.addEventListener('playing', function () { if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
-    function setRate(r) { try { if (au.playbackRate !== r) au.playbackRate = r; } catch (e) { /* fixed rate */ } }
+    function setRate(r) {
+      try {
+        if (au.playbackRate === r) return;
+        // 1.99ya: no pitch-kept time stretching (its artefacts were the warble) - a 2 % catch-up just plays faster
+        try { au.preservesPitch = false; au.mozPreservesPitch = false; au.webkitPreservesPitch = false; } catch (e) { /* old engine */ }
+        au.playbackRate = r;
+      } catch (e) { /* fixed rate */ }
+    }
     var lastEdge = 0;
     function edge() {
       if (!playing || !startedAt || au.paused || mode !== 'mp3') { setRate(1); return; }
@@ -341,8 +350,7 @@
         return;
       }
       if (a > EDGE_HI) setRate(RATE_UP);
-      else if (a < EDGE_DRY) setRate(RATE_DOWN);
-      else if ((au.playbackRate > 1 && a <= EDGE_LO) || (au.playbackRate < 1 && a >= EDGE_LO)) setRate(1);
+      else if (au.playbackRate !== 1 && a <= EDGE_LO) setRate(1);
       var behind = (now - startedAt) / 1000 - au.currentTime;          // time lost to stalls (catch-up shrinks it)
       var lagging = behind >= 6 || a > EDGE_JUMP / 2;
       jump.classList.toggle('hide', behind < 6);

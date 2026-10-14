@@ -7,9 +7,12 @@
 //                                          video is actually playing; rejects on any error or the timeout.
 //   PATVRtc.publish(whipUrl, mediaStream, {token, maxKbps, timeout})   WHIP, send-only, H.264 + Opus (H.264
 //                                          so MediaMTX can also make HLS of it). Resolves once connected.
-//   PATVRtc.listen(whepUrl, audio, {timeout})        1.99il: WHEP, audio only (a pad's room audio, roomrtc.js). The
-//                                          room's path appears a moment after the ticket (Pepe starts publishing when
-//                                          asked), so a 404 is retried until the timeout. Resolves once it plays.
+//   PATVRtc.listen(whepUrl, audio, {timeout, jitterMs})   1.99il: WHEP, audio only (a pad's room audio, roomrtc.js).
+//                                          The room's path appears a moment after the ticket (Pepe starts publishing
+//                                          when asked), so a 404 is retried until the timeout. Resolves once it plays.
+//                                          1.99ya: jitterMs (default 200) = the receiver's jitter buffer target
+//                                          (RTCRtpReceiver.jitterBufferTarget / Chrome's playoutDelayHint), so bursty
+//                                          delivery is absorbed instead of heard as crackle.
 //   session.close()     ends it (and DELETEs the WHIP / WHEP resource)
 //   session.onfail      called once if the connection is lost after it started
 //   session.setCap(kbps) / session.replace(track)     (publish) bitrate cap / swap a camera or mic live
@@ -115,7 +118,10 @@
         var pc = new RTCPeerConnection({ iceServers: servers }), resource = null;
         pc.addTransceiver('audio', { direction: 'recvonly' });
         var ms = new MediaStream();
-        pc.ontrack = function (e) { ms.addTrack(e.track); if (audio.srcObject !== ms) audio.srcObject = ms; };
+        pc.ontrack = function (e) {
+          jitterTarget(e.receiver, o.jitterMs == null ? 200 : o.jitterMs);
+          ms.addTrack(e.track); if (audio.srcObject !== ms) audio.srcObject = ms;
+        };
         var go = negotiate(pc, url, null).then(function (loc) { resource = loc; return connected(pc); }).then(function () {
           var p = audio.play();
           return p && p.then ? p.catch(function (err) { var e = new Error('Playback was blocked'); e.blocked = true; e.cause = err; throw e; }) : null;
@@ -133,6 +139,13 @@
     });
   }
 
+  // 1.99ya: ask the receiver to hold ~ms of audio (standard jitterBufferTarget, in ms; Chrome's older playoutDelayHint,
+  // in s). The browser still adapts above it; this only stops it from running so lean that every late packet is a gap.
+  function jitterTarget(rx, ms) {
+    if (!rx || !(ms > 0)) return;
+    try { if ('jitterBufferTarget' in rx) rx.jitterBufferTarget = ms; } catch (e) { /* not settable here */ }
+    try { if ('playoutDelayHint' in rx) rx.playoutDelayHint = ms / 1000; } catch (e) { /* not settable here */ }
+  }
   function preferH264(tr) {
     if (!tr.setCodecPreferences || !window.RTCRtpSender || !RTCRtpSender.getCapabilities) return;
     var caps = RTCRtpSender.getCapabilities('video');
