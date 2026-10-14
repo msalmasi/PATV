@@ -149,9 +149,15 @@ test("Pepe's answers and the timeouts: refused (with his code), never picked up 
   const b = await say("u1", "nobody home", "cPEPE00002");
   relay._sweep(Date.now() + relay.SAY_PENDING_TTL + 1000);
   m = (await live("u1")).mine.find((x) => x.cid === "cPEPE00002");
+  assert.equal(m.state, "pending", "1.99yg: no long-polling Pepe -> his 30 s sync gets SAY_PENDING_TTL_SYNC");
+  await bot("/api/bridge/relay/pull", { wait: 0 });               // a long-polling Pepe now (it takes that line)
+  const b2 = await say("u1", "nobody home again", "cPEPE00022");
+  relay._sweep(Date.now() + relay.SAY_PENDING_TTL + 1000);
+  m = (await live("u1")).mine.find((x) => x.cid === "cPEPE00022");
   assert.equal(m.ok, false);
   assert.equal(m.code, "nopepe");
-  assert.equal(relay.takeJobs(new Set([ROOM.id])).filter((j) => j.id === b.d.id).length, 0, "a timed-out line is never sent later");
+  assert.equal(relay.takeJobs(new Set([ROOM.id])).filter((j) => j.id === b2.d.id).length, 0, "a timed-out line is never sent later");
+  assert.ok(b.d.id);
   const c = await say("u1", "lost ack", "cPEPE00003");
   relay.takeJobs(new Set([ROOM.id]));
   relay._sweep(Date.now() + relay.SAY_CLAIM_TTL + 1000);

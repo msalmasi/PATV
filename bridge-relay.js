@@ -87,6 +87,9 @@ const hits = new Map();          // `${kind}|${userId}` -> [timestamps]
 const SAY_QUEUE_MAX = 5;                 // say lines waiting to go out, per member per room
 const SAY_MINUTE_MAX = 20;               // say lines a minute per member (a sanity cap - Pepe paces the room itself)
 const SAY_PENDING_TTL = 20 * 1000;       // never picked up by Pepe this long -> failed (it never left the site)
+// 1.99yg: a Pepe that doesn't long-poll (an older one, or !bridge fast off) takes jobs only with his sync, which in a quiet
+// room comes with the 30 s snapshot - give those lines this long instead
+const SAY_PENDING_TTL_SYNC = 45 * 1000;
 const SAY_CLAIM_TTL = 60 * 1000;         // picked up but never confirmed this long -> failed "unconfirmed"
 const PULL_WAIT_MAX = 10 * 1000;         // Pepe's long-poll (staging's router gives a POST 15 s)
 const CID_RE = /^[A-Za-z0-9_-]{6,40}$/;
@@ -169,7 +172,8 @@ function sweep(now) {
     // 1.99ye: a say that Pepe never picked up never left the site - say so (the page offers Retry); one he picked up but
     // never confirmed may or may not be in the room (it is never re-offered, so a retry is the member's call)
     if (j.kind !== "say" || j.state === "done") continue;
-    if (j.state === "pending" && now - j.at > SAY_PENDING_TTL) failJob(j, "nopepe", "Pepe isn't picking up messages right now — try again in a moment");
+    const pendTtl = now - lastPull < 60 * 1000 ? SAY_PENDING_TTL : SAY_PENDING_TTL_SYNC;
+    if (j.state === "pending" && now - j.at > pendTtl) failJob(j, "nopepe", "Pepe isn't picking up messages right now — try again in a moment");
     else if (j.state === "claimed" && now - j.claimed > SAY_CLAIM_TTL) failJob(j, "unconfirmed", "Pepe didn't confirm it — it may not have reached the room");
   }
   for (const [id, j] of jobs) {
@@ -736,7 +740,7 @@ function saveRight(s, userId) {
 }
 
 module.exports = { register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
-  sayLine, roomRefusal, noteEcho, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_CLAIM_TTL,   // 1.99ye
+  sayLine, roomRefusal, noteEcho, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_PENDING_TTL_SYNC, SAY_CLAIM_TTL,   // 1.99ye
   _cids: cids, _pullers: pullers, _lastPull: () => lastPull,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
   _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };
