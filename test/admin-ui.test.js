@@ -160,7 +160,8 @@ test("control inventory: every control of the old /admin/panel is on its section
                      "stale-admin", "stale-dates", "stale-counts", "stale-vias"],
     "/admin/economy": ["pointsTransferForm", "pointsUsername", "pointsAmount", "transferStatus", "redemption-codes", "code", "points", "uses_allowed", "expiration_date",
                        "codeStatus", "redemptionCodesList"],
-    "/admin/games": ["manualSpinForm", "spinUsername", "spin", "spinStatus", "jackpotForm", "jackpotAmount", "jackpotStatus"],
+    "/admin/games": ["manualSpinForm", "spinUsername", "spin", "spinStatus", "jackpotForm", "jackpotAmount", "jackpotStatus",
+                     "pvp", "pvpForm", "pvpQuiet", "pvpMax", "pvpWin"],     // 1.99yc: the duel / brawl knobs (pvpcfg.js)
     "/admin/cosmetics": ["badges", "name", "description", "points", "icon", "requirement", "badgeStatus", "badgesList"],
   };
   for (const [url, ids] of Object.entries(where)) {

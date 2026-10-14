@@ -1208,6 +1208,7 @@ require("./userstories").register(app, { addUser });  // 1.99ez: your own story 
 require("./hop").register(app, { addUser });   // 1.99eq: Hop - the full-screen media viewer (/hop, /p/<pad>/hop, /u/<user>/hop, /api/hop)
 require("./feedgallery").register(app, { addUser });   // 1.99fn: the feeds' Gallery view (/api/feed/gallery) + the per-account List / Gallery choice (/api/feed/view)
 require("./media").register(app, { isBotToken, addUser });
+require("./pvpcfg").register(app, { isBotToken, addUser });    // 1.99yc: duels / brawls accept + replacement knobs (/admin/games#pvp, Pepe reads POST /api/pvp/cfg)
 require("./mktcfg").register(app, { isBotToken, addUser });    // 1.99ur: market close bounds (admins) - before /markets/:id
 require("./markets").register(app, { isBotToken, addUser });
 require("./automkt").register(app, { isBotToken, addUser });   // 1.99th: Pepe's auto markets - status/requests from Pepe, the feed post, /admin/markets

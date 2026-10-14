@@ -1,0 +1,18 @@
+<%# 1.99yc: Pepe's PvP challenge knobs (pvpcfg.js) - !duel / !brawl accept + replacement rules. Saved on the site; Pepe
+    reads them within 10 minutes (POST /api/pvp/cfg). public/js/admin-pvpcfg.js loads + saves it. Admins only. %>
+<section class="adm-card" id="pvp" aria-labelledby="pvpT">
+  <h2 id="pvpT">Duels &amp; brawls <span class="adm-pill admin">admins</span> <span class="adm-msg" id="pvpMsg" role="status" aria-live="polite"></span></h2>
+  <% if (!locals.isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <p class="adm-help">Pepe's <code>!duel</code> / <code>!brawl</code> challenges. The target must be in the challenger's room, and a challenge
+    is accepted in the room it was made in (always on). A plain <code>!accept</code> only takes a challenge when nothing aimed at that person
+    changed in the quiet window; otherwise Pepe shows the terms and wants <code>!accept X12</code>, so a challenger can't swap in a bigger
+    fight right before the answer. Pepe picks changes up within 10 minutes. The accept time limit stays in Pepe's own admin panel (rate table).</p>
+  <form id="pvpForm" class="adm-form" autocomplete="off" novalidate>
+    <label for="pvpQuiet">Quiet window before a plain !accept (seconds, 0 = off)<input type="number" id="pvpQuiet" name="accept_quiet_secs" min="0" max="300" step="1" required></label>
+    <label for="pvpMax">Challenges to the same person (incl. replacements)<input type="number" id="pvpMax" name="replace_max" min="1" max="20" step="1" required></label>
+    <label for="pvpWin">... per (seconds)<input type="number" id="pvpWin" name="replace_window_secs" min="30" max="3600" step="1" required></label>
+    <div class="adm-actions"><button class="ds-btn sm" type="submit">Save</button></div>
+  </form>
+  <script src="/public/js/admin-pvpcfg.js?v=1" defer></script>
+  <% } %>
+</section>

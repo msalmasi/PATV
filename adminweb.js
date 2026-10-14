@@ -4,7 +4,7 @@
 //   /admin              Overview: Pepe, Reserve, reports, loan requests, stage, stale cleanup, alerts
 //   /admin/users        roles + classes, XP, welcome bonus, stale-account cleanup
 //   /admin/economy      Reserve + today's flows, loans/credit, PAT grants, redemption codes, royalties, shop
-//   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq)
+//   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq), duel / brawl knobs #pvp (1.99yc, pvpcfg.js)
 //   /admin/cosmetics    badges (create / list / delete), links to cosmetics + achievements
 //   /admin/bridge       the web command audit log (GET /api/bridge/cmdlog, admins only)
 //   /admin/pepe         the Pepe control panel (views/partials/pepe-control.ejs) + where his feed settings live

@@ -1668,7 +1668,7 @@
     "!duel cancel [X12]"
    ],
    "summary": "Challenge someone to a dice duel for PAT.",
-   "details": "Challenge someone to a dice duel for PAT — `!duel @bob 5000`. Your stake is held in escrow straight away and the challenge gets an id (like `X12`). They have **2 minutes** to `!accept` or `!decline`; if they don't answer it expires and your stake comes back. Changed your mind? `!duel cancel` (or `!withdraw`) takes it back any time before they accept. You can challenge several people at once (up to 3); challenging the same person again replaces your old challenge. The target has to have a PAT account and be in the room.",
+   "details": "Challenge someone to a dice duel for PAT — `!duel @bob 5000`. Your stake is held in escrow straight away and the challenge gets an id (like `X12`). They have **2 minutes** to `!accept` or `!decline`; if they don't answer it expires and your stake comes back. Changed your mind? `!duel cancel` (or `!withdraw`) takes it back any time before they accept. You can challenge several people at once (up to 3); challenging the same person again replaces your old challenge (Pepe announces the old and new terms; at most 3 challenges to the same person per 2 minutes). The target has to have a PAT account and be in the same room as you right now (or on that pad's page, signed in).",
    "examples": [
     "!duel @bob 5000",
     "!duel cancel"
@@ -3196,7 +3196,7 @@
     "!decline [id]"
    ],
    "summary": "Accept or decline anything waiting on you: a duel or brawl (2 minutes to answer), a wager or loan offer, a mic head-to-head.",
-   "details": "Accept or decline anything waiting on you: a duel or brawl (`X12`, 2 minutes to answer), a wager (`W12`) or loan (`L5`) offer (10 minutes), or a mic head-to-head (`AC3`). With one thing waiting, plain `!accept` takes it; with more than one Pepe lists them and you add the id. Accepting a duel or brawl takes your matching stake into escrow and the fight starts.",
+   "details": "Accept or decline anything waiting on you: a duel or brawl (`X12`, 2 minutes to answer), a wager (`W12`) or loan (`L5`) offer (10 minutes), or a mic head-to-head (`AC3`). With one thing waiting, plain `!accept` takes it; with more than one Pepe lists them and you add the id. If a duel or brawl aimed at you was made, replaced or withdrawn in the last 15 seconds, plain `!accept` shows you the terms and you accept with the id (`!accept X12`), so nobody can swap a bigger fight in just before you answer. A duel or brawl is accepted in the room it was made in. Accepting one takes your matching stake into escrow and the fight starts.",
    "examples": [
     "!accept",
     "!accept X12",
@@ -3204,6 +3204,41 @@
    ],
    "keywords": [],
    "webchat": true
+  },
+  {
+   "id": "raffle",
+   "title": "!raffle · PAT Raffles",
+   "category": "markets",
+   "role": "everyone",
+   "commands": [
+    "!raffle",
+    "!raffles"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!raffle",
+    "!raffle <id>",
+    "!raffle buy <id> [how many]"
+   ],
+   "summary": "🎫 PAT Raffles: see the open raffles and buy tickets - anyone verified can run one on publicaccess.tv.",
+   "details": "🎫 **PAT Raffles** run on publicaccess.tv: someone puts up a prize (PAT, a Prize Shop item or a custom prize), sets a ticket price, and a **provably fair** draw picks the winner - on a date (if the minimum is sold) or the moment a target number of tickets is sold. **!raffle** lists the open ones (🏛️ official house raffles first), **!raffle 12** shows one, **!raffle buy 12 5** buys 5 tickets as your linked PATV account. Every ticket is held in escrow until the draw; a raffle that doesn't draw by its expiry refunds every ticket in full. You can't buy tickets in your own raffle (or a linked account's). The winner gets the prize, the creator the ticket sales minus a 10% fee (to the House); an official raffle's tickets all go to the House. Pepe announces new raffles, milestones and the draw in the raffle's pad room and Pepe's Pad (official ones in every room). Run your own, see the proof of every draw: [publicaccess.tv/raffles](https://publicaccess.tv/raffles). PAT are points with no cash value. (Not the automatic chat raffle - chatting still enters you in that one.)",
+   "examples": [
+    "!raffle",
+    "!raffle 12",
+    "!raffle buy 12 5"
+   ],
+   "keywords": [
+    "raffle",
+    "tickets",
+    "draw",
+    "prize",
+    "lottery",
+    "giveaway"
+   ],
+   "web": {
+    "label": "PAT Raffles",
+    "url": "/raffles"
+   }
   },
   {
    "id": "withdraw",
@@ -7597,5 +7632,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "9be7dead612cd4ed"
+ "hash": "d31af3d205f8c296"
 }

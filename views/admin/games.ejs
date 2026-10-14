@@ -2,7 +2,7 @@
 <%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: isAdmin }) %>
 <div class="adm-head">
   <h1>Games</h1>
-  <p>The wheel and its jackpot, the casino front end and the GTF heist market. Hold'em, blackjack and the chat games run in Pepe; their settings are his.</p>
+  <p>The wheel and its jackpot, the casino front end, the GTF heist market and the duel / brawl rules. Hold'em, blackjack and the chat games run in Pepe; their settings are his.</p>
 </div>
 
 <div class="adm-cols">
@@ -59,6 +59,7 @@
   <div class="adm-actions"><a class="adm-btn ghost" href="/casino">Casino lobby ›</a><a class="adm-btn ghost" href="/lotto">Lotto ›</a></div>
 </section>
 <%- include('../partials/admin-heistmarket', { t, isAdmin, hm: locals.hm }) %>
+<%- include('../partials/admin-pvpcfg', { isAdmin }) %>
 <script src="/public/js/admin-panel.js?v=4" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
