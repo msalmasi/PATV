@@ -408,6 +408,7 @@ async function ingest(body) {
     R.relay = !!s.relay;
     R.micRelay = !!s.mic_relay;
     R.cams = !!s.cams;
+    R.livecams = typeof s.livecams === "boolean" ? s.livecams : false;   // 1.99yh: !bridge livecams (an older Pepe: no live cams)
     R.snapOn = typeof s.snap === "boolean" ? s.snap : null;   // 1.99cw: the room's !snap switch (null = an older Pepe)
     R.clipOn = typeof s.clip === "boolean" ? s.clip : null;   // 1.99fa: the room's !clip switch (null = an older Pepe)
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
@@ -623,6 +624,7 @@ const isLive = (R) => Date.now() - R.updated < STALE_MS;
 const bridgeOk = (id) => { try { return require("./premium").bridgeAllowed(id); } catch (e) { return true; } };
 const isLiveShown = (R) => isLive(R) && bridgeOk(R.id);
 const rtcHint = (R) => { try { return require("./roomrtc").hint(R); } catch (e) { return false; } };
+const livecamHint = (R, userId) => { try { return require("./livecam").hint(R, userId); } catch (e) { return null; } };
 // 1.99bi: the room's PATV title (owner-editable, rooms.js) when it has one, else what Pepe calls it
 const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); return (r && r.title) || R.name; } catch (e) { return R.name; } };
 
@@ -803,6 +805,8 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             // 1.99ia: switched on but not streaming -> the player says why instead of just "audio relay off"
             audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
+            // 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) - null = not here; {slots: {used, max}, watching} for this viewer
+            livecams: isLive(R) ? livecamHint(R, userId) : null,
             clip: clipSwitch(R.id),       // 1.99fp: the room's !clip switch (true / false / null = unknown) - 🔊 Clip on 🎙 lines
             cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null,
             // 1.99qr: the 🐸 Pepe submenu (padpepe.js) - only while web commands are on in the room
@@ -1003,6 +1007,7 @@ function register(app, { isBotToken, addUser }) {
                         liveIds: () => new Set([...rooms.values()].filter(isLive).map((R) => R.id)) });
   require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });      // 1.99xa: !bridge block - web senders blocked per room / everywhere
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
+  require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover
   require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)
   require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
   require("./padmod").register(app, { addUser, bySlug, isLive: isLiveShown });     // 1.99co: the pad Manage panel

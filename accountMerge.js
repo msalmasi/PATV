@@ -82,6 +82,10 @@ const RULES = {
   "donation_promos.updated_by": { deny: "1.99tq: the admin's username who last edited the donation promo (audit label)" },
   "donation_promos.ended_by": { deny: "1.99tq: the admin's username who ended the donation promo (audit label)" },
   "room_audio_cfg.updated_by": { deny: "1.99yd: the admin's username who last saved the room-audio settings (audit label; admin_audit has the id)" },
+  // 1.99yh live cams (livecam.js): the opt-out is keyed by chat login; the audit keeps who watched (moved with the account)
+  "livecam_cfg.updated_by": { deny: "1.99yh: the admin's username who last saved the live-cam settings (audit label; admin_audit has the id)" },
+  "livecam_optout.user_id": M(), "livecam_audit.viewer_id": M({ name: "viewer_name" }), "livecam_audit.viewer_name": { deny: NAME },
+  "livecam_audit.target": { deny: "1.99yh: the Camfrog login of the cam watched, not a userId" },
   "donation_promo_settings.actor": { deny: NAME },
   // 1.99ts: the daily donation limit - a member's donations by day move (a merged account shares ONE daily limit); an override
   // folds into the target's (the target's own override wins when both have one)

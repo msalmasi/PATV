@@ -76,6 +76,7 @@ let clock = () => Date.now();
 const now = () => clock();
 const ms = () => require("./mainstage");
 const RR = () => require("./roomrtc");          // 1.99il: room audio over WebRTC
+const LC = () => require("./livecam");          // 1.99yh: live cams (their paths share the room-audio family)
 const turnSecret = () => String(process.env.TURN_SECRET || "");   // read per call: never cached, never logged
 
 function enabled() {
@@ -189,6 +190,7 @@ async function whipAuth(b, opts = {}) {
   }
   if (RR().PATH_RE.test(path)) {                                 // 1.99il: a room's audio (roomrtc.js)
     if (!path.startsWith(RR().PREFIX)) return peer() && !opts.forwarded ? forward(b) : 403;   // the other site's
+    if (LC().camForPath(path)) return LC().auth(b, action, proto);   // 1.99yh: a live cam (livecam.js) - same path family
     return RR().auth(b, action, proto);
   }
   if (!PATH_RE.test(path)) return 403;
@@ -273,6 +275,7 @@ async function sync() {
   pepeSeen = { ready: ((list && list.items) || []).some((p) => p && p.name === pepePath() && (p.ready || p.available)), at: now() };
   // 1.99il: room audio paths - their readers keep a room published (roomrtc.js); never slots (PATH_RE below)
   try { RR().noteSync((list && list.items) || []); } catch (e) { console.error("[webrtc] room audio sync:", e.message); }
+  try { LC().noteSync((list && list.items) || []); } catch (e) { console.error("[webrtc] live cam sync:", e.message); }
   for (const p of (list && list.items) || []) {
     if (p && (p.ready || p.available) && typeof p.name === "string" && PATH_RE.test(p.name) && p.name.startsWith(S.STREAM_PREFIX)) ready.set(p.name, p);
   }

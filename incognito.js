@@ -242,7 +242,10 @@ function register(app, { addUser, isBotToken }) {
     try {
       if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent("/settings/privacy"));
       res.set("Cache-Control", "private, no-store");
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId) });
+      // 1.99yh: + the 📡 live-cam switch (livecam.js owns it; the card is here - one privacy page)
+      let lc = null;
+      try { lc = await require("./livecam").optoutState(req.user.userId); } catch (e) { lc = null; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc });
     } catch (e) { next(e); }
   });
 }

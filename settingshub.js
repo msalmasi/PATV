@@ -74,8 +74,12 @@ async function hub(user, ctx = {}) {
   // 1.99wa: incognito - Pepe's last report for the linked chat login (incognito.js; its one home is /settings/privacy)
   const inc = await safe(() => require("./incognito").stateOf(uid));
   const incSt = !inc ? null : !inc.linked ? st("not_linked") : inc.waiting ? st("waiting") : inc.on === null ? null : inc.on ? st("on", null, "ok") : st("off");
+  // 1.99yh: 📡 live cam - may members watch your cam live (livecam.js; its home is /settings/privacy#livecam)
+  const lc = await safe(() => require("./livecam").optoutState(uid));
+  const lcSt = !lc ? null : !lc.linked ? st("not_linked") : lc.off ? st("off") : st("on", null, "ok");
   const privacy = [
     E("incognito", "🕶️", "/settings/privacy", incSt),
+    E("livecam", "📡", "/settings/privacy#livecam", lcSt),
     E("likeness", "🪞", "/settings/likeness", lkVals ? st("n_of_on", { count: lkVals.filter(Boolean).length, total: lkVals.length }) : null),
     E("voice", "🗣️", "/voices/mine"),
     E("clone", "🎙️", "/voices/clone"),

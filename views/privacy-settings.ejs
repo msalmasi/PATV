@@ -69,6 +69,28 @@
     <% } %>
   </section>
 
+  <% if (locals.lc) { %>
+  <section class="ds-card lg" id="livecam" aria-labelledby="pvLcH" data-linked="<%= lc.linked ? 1 : 0 %>">
+    <h2 class="ds-h2" id="pvLcH"><span class="dot"></span>📡 <%- t('lc.h2') %></h2>
+    <p class="pv-why"><%- t('lc.what') %></p>
+    <ul class="pv-list">
+      <li><%- t('lc.what_who') %></li>
+      <li><%- t('lc.what_told') %></li>
+      <li><%- t('lc.what_never') %></li>
+    </ul>
+    <% if (!lc.linked) { %>
+      <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('lc.unlinked') %></div></div>
+    <% } else { %>
+      <div class="pv-set" id="pvLcRow">
+        <div><b><%- t('lc.switch') %></b><p class="ds-meta"><%- t('lc.identity', { login: lc.login }) %></p></div>
+        <label class="ds-switch"><input type="checkbox" id="pvLc" <%= lc.off ? '' : 'checked' %> aria-label="<%- t('lc.switch') %>"><span></span></label>
+      </div>
+      <p class="pv-st" id="pvLcSt" role="status" aria-live="polite"><%- lc.off ? t('lc.st_off') : t('lc.st_on') %></p>
+    <% } %>
+    <p class="ds-meta"><%- t('lc.chat') %></p>
+  </section>
+  <% } %>
+
   <section class="ds-card lg" aria-labelledby="pvMoreH">
     <h2 class="ds-h2" id="pvMoreH"><span class="dot"></span><%- t('inc.more_h') %></h2>
     <nav class="pv-links">
@@ -78,3 +100,4 @@
   </section>
 </main>
 <script src="/public/js/privacy-settings.js?v=1" defer></script>
+<script src="/public/js/privacy-livecam.js?v=1" defer></script>

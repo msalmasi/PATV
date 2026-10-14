@@ -151,7 +151,7 @@ test("webrtc-client.js: listen() is audio-only WHEP and retries a 404 (not publi
   assert.match(fn, /addTransceiver\('audio', \{ direction: 'recvonly' \}\)/);
   assert.doesNotMatch(fn, /addTransceiver\('video'/);
   assert.match(fn, /e\.status === 404 && Date\.now\(\) \+ 800 < deadline/);
-  assert.match(js, /window\.PATVRtc = \{ ice: ice, play: play, publish: publish, listen: listen \}/);
+  assert.match(js, /window\.PATVRtc = \{ ice: ice, play: play, publish: publish, listen: listen, watch: watch \}/);
 });
 
 test("1.99ya: the ⚡ listener asks for a ~200 ms jitter buffer (jitterBufferTarget / playoutDelayHint)", () => {

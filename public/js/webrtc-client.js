@@ -188,5 +188,39 @@
       }, function (e) { closeQuietly(pc, resource); throw e; });
     });
   }
-  window.PATVRtc = { ice: ice, play: play, publish: publish, listen: listen };
+  // 1.99yh: a live cam (livecam.js) - WHEP, video only. Like listen(): Pepe starts publishing when asked (opening the
+  // cam takes a few seconds), so a 404 is retried until the timeout. Resolves once the video plays (muted: a cam has no sound).
+  function watch(url, video, o) {
+    o = o || {};
+    if (!window.RTCPeerConnection || !window.MediaStream) return Promise.reject(new Error('This browser has no WebRTC'));
+    var deadline = Date.now() + (o.timeout || 30000);
+    video.muted = true; video.playsInline = true; video.setAttribute('playsinline', '');
+    return ice().then(function (servers) {
+      function attempt() {
+        if (o.cancelled && o.cancelled()) return Promise.reject(Object.assign(new Error('cancelled'), { cancelled: true }));
+        var pc = new RTCPeerConnection({ iceServers: servers }), resource = null;
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        var ms = new MediaStream();
+        pc.ontrack = function (e) { ms.addTrack(e.track); if (video.srcObject !== ms) video.srcObject = ms; };
+        var go = negotiate(pc, url, null).then(function (loc) { resource = loc; return connected(pc); }).then(function () {
+          return new Promise(function (res) {
+            if (!video.paused && video.readyState >= 2) return res();
+            video.addEventListener('playing', res, { once: true });
+            var p = video.play(); if (p && p.catch) p.catch(function () {});
+          });
+        });
+        var left = Math.max(1000, deadline - Date.now());
+        return timeout(go, left, 'Live cam').then(function () { return session(pc, resource); }, function (e) {
+          closeQuietly(pc, resource);
+          if (e && e.status === 404 && Date.now() + 1200 < deadline) {
+            return new Promise(function (res) { setTimeout(res, 1000); }).then(attempt);
+          }
+          throw e;
+        });
+      }
+      return attempt();
+    });
+  }
+
+  window.PATVRtc = { ice: ice, play: play, publish: publish, listen: listen, watch: watch };
 })();

@@ -1,0 +1,154 @@
+<%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: isAdmin }) %>
+<%# 1.99yh: 📡 live cams (livecam.js). The site owns these settings; Pepe (camfrog-bot pepe_livecam.py) picks them up on his
+    next poll (~1-5 s). Admins only. %>
+<div class="adm-head">
+  <h1>Live cams</h1>
+  <p>Signed-in pad members can press <b>▶ Live</b> on someone's cam and watch it live (WebRTC). Pepe opens the cam in Camfrog, grabs its window in a helper process and publishes one H.264 stream per cam to MediaMTX; every viewer of that cam shares it. Nothing is recorded. Rooms switch it with <code>!bridge livecams on|off</code> (needs <code>!bridge cams on</code>); anyone can opt out with <code>!livecam off</code> or Settings → Privacy.</p>
+</div>
+
+<section class="adm-card" id="usage" aria-labelledby="usT">
+  <h2 id="usT"><span class="ds-ic" aria-hidden="true">📡</span> Now <span class="adm-pill" id="usPepe"></span></h2>
+  <p class="adm-help" id="usLine"></p>
+  <p class="adm-help" id="usPool"></p>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Cam</th><th>State</th><th>Viewers</th><th class="num">Grab</th><th></th></tr></thead>
+    <tbody id="usRows"><tr><td colspan="5" class="adm-help">Loading…</td></tr></tbody></table></div>
+</section>
+
+<section class="adm-card" id="settings" aria-labelledby="lcT">
+  <h2 id="lcT">Settings <span class="adm-pill admin">admins</span> <span class="adm-pill" id="lcVer"></span></h2>
+  <form class="adm-form" id="lcForm" autocomplete="off" novalidate>
+    <fieldset>
+      <legend>Switches</legend>
+      <label><input type="checkbox" name="enabled"> Live cams on (the kill switch - off ends every live cam at once)</label>
+      <label><input type="checkbox" name="close_idle"> Pepe closes cams nobody used for the idle time below (never one with live viewers)</label>
+    </fieldset>
+    <fieldset>
+      <legend>Stream</legend>
+      <label>Frames per second <input type="number" name="fps" inputmode="numeric"></label>
+      <label>Video bitrate per cam (kbps) <input type="number" name="kbps" inputmode="numeric"></label>
+      <label>Keyframe every (s) - new viewers start at the next one <input type="number" name="keyint_s" step="0.5" inputmode="decimal"></label>
+      <label>Camfrog UI time all grabs may take (ms per second) - above it every live cam's grab rate drops <input type="number" name="ui_budget_ms" inputmode="numeric"></label>
+    </fieldset>
+    <fieldset>
+      <legend>Caps</legend>
+      <label>Live cams at once (site-wide) <input type="number" name="max_live" inputmode="numeric"></label>
+      <label>Live cams one viewer may watch at once <input type="number" name="viewers_free" inputmode="numeric"></label>
+      <label>...with a Season Pass <input type="number" name="viewers_sp" inputmode="numeric"></label>
+      <label>Bandwidth budget (Mbps) - viewers site-wide = budget ÷ bitrate <input type="number" name="budget_mbps" inputmode="numeric"></label>
+      <label>Linger after the last viewer (s) <input type="number" name="linger_s" inputmode="numeric"></label>
+    </fieldset>
+    <fieldset>
+      <legend>Pepe's cam pool</legend>
+      <label>Cams Pepe keeps open at most <input type="number" name="pool_max" inputmode="numeric"></label>
+      <label>Idle time before a cam is closed (s) <input type="number" name="idle_close_s" inputmode="numeric"></label>
+      <label>How Pepe closes a cam <select name="close_method"><option value="wmclose">close its window (WM_CLOSE)</option><option value="button">press its ✕ button</option><option value="off">never close (pool full = "slots busy")</option></select></label>
+    </fieldset>
+    <label>Note for the log (optional) <input type="text" name="reason" maxlength="200"></label>
+    <div class="adm-actions">
+      <button type="submit">Save</button>
+      <button type="button" class="adm-btn ghost" id="lcReset">Reset to defaults</button>
+    </div>
+    <p class="adm-msg" id="lcMsg" role="status" aria-live="polite"></p>
+  </form>
+</section>
+
+<section class="adm-card" id="recent" aria-labelledby="rcT">
+  <h2 id="rcT">Recent viewing (audit)</h2>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>When</th><th>Viewer</th><th>Cam</th><th>Room</th><th class="num">Seconds</th><th>Ended</th></tr></thead>
+    <tbody id="rcRows"></tbody></table></div>
+  <h2>Setting changes</h2>
+  <ul id="lcLog" class="adm-help"></ul>
+</section>
+
+<style>
+  #lcForm fieldset { border: 1px solid var(--adm-line, rgba(127,127,127,.3)); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
+  #lcForm label { display: block; margin: 6px 0; }
+  #lcForm small.def { opacity: .7; margin-left: 6px; }
+  #lcForm .bad input, #lcForm .bad select { outline: 2px solid #d33; }
+  #lcForm small.err { color: #d33; margin-left: 6px; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+  var V = <%- JSON.stringify(v).replace(/</g, '\\u003c') %>;
+  var form = document.getElementById('lcForm'), msg = document.getElementById('lcMsg');
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function when(ms) { return ms ? new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''; }
+  var KEYS = Object.keys(V.fields);
+  KEYS.forEach(function (k) {
+    var f = V.fields[k], inp = form.elements[k];
+    if (!inp || !inp.closest) return;
+    if (inp.type === 'number' && f.min != null) { inp.min = f.min; inp.max = f.max; if (!inp.step) inp.step = '1'; }
+    inp.closest('label').appendChild(el('small', 'def', 'default ' + (f.bool ? (f.def ? 'on' : 'off') : f.def) + (f.min != null ? ' · ' + f.min + '–' + f.max : '')));
+  });
+  function fill(c) { KEYS.forEach(function (k) { var inp = form.elements[k]; if (!inp) return; if (inp.type === 'checkbox') inp.checked = !!c[k]; else inp.value = String(c[k]); }); }
+  function collect() { var c = {}; KEYS.forEach(function (k) { var inp = form.elements[k]; if (!inp) return; c[k] = inp.type === 'checkbox' ? inp.checked : inp.value.trim(); }); return c; }
+  function api(url, body) {
+    return fetch(url, body ? { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) }
+      : { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); });
+  }
+  function paint() {
+    var u = V.usage, b = V.bot;
+    document.getElementById('lcVer').textContent = V.v ? 'v' + V.v + (V.updated_by ? ' · ' + V.updated_by + ' ' + when(V.updated_at) : '') : 'defaults (never saved)';
+    document.getElementById('usPepe').textContent = b && b.online ? 'Pepe online' : 'Pepe offline' + (b ? ' (last poll ' + when(b.at) + ')' : '');
+    document.getElementById('usLine').textContent = (V.cfg.enabled ? '' : '⛔ switched OFF · ') + (V.webrtc ? '' : '⛔ WebRTC (webrtc_enabled) is off · ') +
+      u.live + ' / ' + u.max_live + ' live cams · ' + u.viewers + ' / ' + u.viewerCap + ' viewers · ' + u.mbps + ' of ' + u.budget_mbps + ' Mbps to viewers (' + u.publishMbps + ' Mbps in from Pepe) · ' + V.optouts + ' opted out';
+    var p = b && b.pool;
+    document.getElementById('usPool').textContent = p ? 'Pepe\'s pool: ' + p.open + ' cams open, room for ' + p.capacity + (p.learned_max ? ' (Camfrog\'s own limit seen: ' + p.learned_max + ')' : '') +
+      ' · closed ' + (p.closed || 0) + ' (' + (p.evicted || 0) + ' to make room), ' + (p.close_fail || 0) + ' failed' + (b.cfgFrom ? ' · settings from ' + b.cfgFrom : '') : 'No pool report from Pepe yet.';
+    var rows = document.getElementById('usRows'); rows.textContent = '';
+    if (!V.sessions.length) { var tr0 = el('tr'); var td0 = el('td', 'adm-help', 'No live cams right now.'); td0.colSpan = 5; tr0.appendChild(td0); rows.appendChild(tr0); }
+    V.sessions.forEach(function (s) {
+      var tr = el('tr');
+      var c = el('td'); c.appendChild(el('b', null, s.display || s.login)); c.appendChild(el('div', 'adm-help', s.room + ' · since ' + when(s.since))); tr.appendChild(c);
+      tr.appendChild(el('td', null, s.state + (s.botState ? ' (Pepe: ' + s.botState + ')' : '') + (s.botWhy ? ' · ' + s.botWhy : '')));
+      tr.appendChild(el('td', null, s.viewers.map(function (v) { return v.username || v.userId; }).join(', ') + ' · ' + s.readers + ' connected'));
+      tr.appendChild(el('td', 'num', s.bot && s.bot.grab_fps ? s.bot.grab_fps + ' fps · ' + s.bot.grab_ms + ' ms' : '–'));
+      var td = el('td'); var x = el('button', 'adm-btn ghost', 'End'); x.type = 'button';
+      x.addEventListener('click', function () {
+        if (!confirm('End ' + (s.display || s.login) + '\'s live cam? Everyone watching is dropped; it can\'t restart for 10 minutes.')) return;
+        api('/api/admin/pepe/livecams/end', { key: s.key }).then(function (d) { if (d.view) { V = d.view; paint(); } });
+      });
+      td.appendChild(x); tr.appendChild(td); rows.appendChild(tr);
+    });
+    var rc = document.getElementById('rcRows'); rc.textContent = '';
+    (V.recent || []).forEach(function (r) {
+      var tr = el('tr');
+      [when(r.started), r.viewer_name || '?', r.target, r.room_id].forEach(function (t) { tr.appendChild(el('td', null, t)); });
+      tr.appendChild(el('td', 'num', r.secs == null ? '…' : String(r.secs)));
+      tr.appendChild(el('td', null, r.end_reason || 'watching'));
+      rc.appendChild(tr);
+    });
+    var log = document.getElementById('lcLog'); log.textContent = '';
+    (V.audit || []).forEach(function (a) {
+      var d = a.detail || {}, ch = d.changed || {};
+      var what = Object.keys(ch).map(function (k) { return k + ' ' + ch[k][0] + ' → ' + ch[k][1]; }).join(', ') || 'no change';
+      log.appendChild(el('li', null, when(a.at) + ' · ' + (a.admin || '?') + ' · v' + (d.v || '?') + ': ' + what + (a.reason ? ' — ' + a.reason : '')));
+    });
+  }
+  function send(body) {
+    msg.textContent = '…';
+    Array.prototype.forEach.call(form.querySelectorAll('.bad'), function (x) { x.classList.remove('bad'); });
+    Array.prototype.forEach.call(form.querySelectorAll('small.err'), function (x) { x.remove(); });
+    api('/api/admin/pepe/livecams', body).then(function (d) {
+      if (!d.ok) {
+        msg.textContent = '❌ ' + (d.error || 'failed');
+        Object.keys(d.fields || {}).forEach(function (k) { var i = form.elements[k]; var l = i && i.closest ? i.closest('label') : null; if (l) { l.classList.add('bad'); l.appendChild(el('small', 'err', d.fields[k])); } });
+        return;
+      }
+      if (d.view) V = d.view;
+      fill(V.cfg); paint();
+      msg.textContent = d.same ? 'No change.' : '✅ Saved as v' + d.v + ' - Pepe picks it up on his next poll.';
+      form.elements.reason.value = '';
+    }).catch(function () { msg.textContent = '❌ The site did not answer.'; });
+  }
+  form.addEventListener('submit', function (ev) { ev.preventDefault(); send({ cfg: collect(), reason: form.elements.reason.value.trim() || undefined }); });
+  document.getElementById('lcReset').addEventListener('click', function () { if (confirm('Reset every live-cam setting to its default?')) send({ reset: true }); });
+  fill(V.cfg); paint();
+  setInterval(function () { if (!document.hidden) api('/api/admin/pepe/livecams').then(function (d) { if (d && d.ok) { var v0 = V.v; V = d; if (v0 !== d.v) fill(V.cfg); paint(); } }).catch(function () {}); }, 5000);
+})();
+</script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>
