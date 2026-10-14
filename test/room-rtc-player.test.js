@@ -29,7 +29,7 @@ function fakeEl(tag) {
   return e;
 }
 /** Load the player with a stubbed fetch (the ticket) and PATVRtc.listen (the WHEP connection). */
-function load({ ticket, listen, rtc = true, failMemory = null }) {
+function load({ ticket, listen, rtc = true, failMemory = null, timers = null }) {
   const store = new Map(failMemory ? [["patvRoomRtcFail", String(failMemory)]] : []);
   const calls = { ticket: 0, listen: [] };
   const win = { addEventListener() {} };
@@ -43,7 +43,7 @@ function load({ ticket, listen, rtc = true, failMemory = null }) {
   const ctx = { window: win, document: { createElement: fakeEl, addEventListener() {}, hidden: false }, navigator: {}, fetch: win.fetch,
                 sessionStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) },
                 localStorage: { getItem: () => null, setItem() {} },
-                setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, requestAnimationFrame: () => 0, cancelAnimationFrame() {}, console };
+                setTimeout: (fn, ms) => { if (timers) timers.push({ fn, ms }); return 0; }, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, requestAnimationFrame: () => 0, cancelAnimationFrame() {}, console };
   win.document = ctx.document;
   vm.runInNewContext(SRC, ctx);
   const host = fakeEl("div");
@@ -167,5 +167,44 @@ test("1.99ya: the ⚡ listener asks for a ~200 ms jitter buffer (jitterBufferTar
   run(old, 200);
   assert.equal(old.playoutDelayHint, 0.2, "Chrome's older hint: seconds");
   assert.doesNotThrow(() => run(null, 200));
-  assert.match(SRC, /listen\(j\.whep, rau, \{ timeout: RTC_TIMEOUT_MS, jitterMs: RTC_JITTER_MS \}\)/);
+  assert.match(SRC, /listen\(j\.whep, rau, \{ timeout: RTC_TIMEOUT_MS, jitterMs: isFinite\(jit\) && jit >= 0 && jit <= 4000 \? jit : RTC_JITTER_MS \}\)/);
+});
+
+test("1.99yd: the jitter target comes with the ticket (/admin/pepe/audio); missing / silly -> 200 ms", async () => {
+  for (const [given, want] of [[350, 350], [undefined, 200], [99999, 200], ["x", 200], [0, 0]]) {
+    const P = load({ ticket: { ok: true, whep: "x", jitter_ms: given }, listen: async (u, el) => { el.srcObject = {}; return fakeSession(); } });
+    click(P.play, P);
+    await settle();
+    assert.equal(P.calls.listen[0].o.jitterMs, want, String(given));
+  }
+});
+
+test("1.99yd: a ⚡ session lost mid-play (Pepe restarted his publish) plays MP3, then quietly goes back to ⚡", async () => {
+  const timers = [];
+  let n = 0;
+  const sessions = [];
+  const P = load({ timers, ticket: { ok: true, whep: "x", ready: true, jitter_ms: 300 },
+                   listen: async (u, el) => { n++; if (n === 2) { const e = new Error("404"); e.status = 404; throw e; } el.srcObject = {}; const s = fakeSession(); sessions.push(s); return s; } });
+  click(P.play, P);
+  await settle();
+  assert.equal(P.mode.textContent, "⚡ live");
+  sessions[0].onfail();
+  await settle();
+  assert.equal(P.mode.textContent, "standard", "MP3 at once");
+  assert.match(String(P.au.src), /^\/p\/alpha\/audio\?t=/);
+  const t1 = timers.filter((t) => t.ms === 2500).pop();
+  assert.ok(t1, "a ⚡ retry is scheduled in 2.5 s");
+  t1.fn();
+  await settle();
+  assert.equal(P.calls.ticket, 2);
+  assert.equal(P.mode.textContent, "standard", "not published yet (404): still MP3");
+  const t2 = timers.filter((t) => t.ms === 6000).pop();
+  assert.ok(t2, "...and another try in 6 s");
+  t2.fn();
+  await settle();
+  assert.equal(P.calls.ticket, 3);
+  assert.equal(P.mode.textContent, "⚡ live", "back on ⚡");
+  assert.equal(P.au.attrs.src, undefined);
+  assert.equal(P.state.textContent, "LIVE");
+  assert.equal(P.store.get("patvRoomRtcFail"), undefined, "never counted against the network");
 });

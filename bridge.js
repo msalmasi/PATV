@@ -797,7 +797,10 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     await load();
     const R = rooms.get(String(body.room || ""));
-    if (!R || !R.audio) return res.json({ success: true, listeners: 0, rtc: null });
+    // 1.99yd: the room-audio settings (roomaudiocfg.js, /admin/pepe/audio) ride on every answer when his acfg_v is older
+    let acfg = {};
+    try { acfg = require("./roomaudiocfg").forBot(body); } catch (e) { acfg = {}; }
+    if (!R || !R.audio) return res.json({ success: true, listeners: 0, rtc: null, ...acfg });
     // 1.99il: a Pepe that can publish the room over WebRTC says so on every post (rtc_cap); the answer's `rtc` tells
     // him to publish (url + bearer) or stop (null), rtc_beat: 1 = heartbeat every second while the room could be asked
     if (body.rtc_cap === true) { try { require("./roomrtc").noteCap(R); } catch (e) { /* optional */ } }
@@ -810,7 +813,7 @@ function register(app, { isBotToken, addUser }) {
     }
     let rtc = { rtc: null };
     try { rtc = require("./roomrtc").forBot(R); } catch (e) { console.error("[bridge] room rtc:", e.message); }
-    res.json({ success: true, listeners: a.listeners.size, ...rtc });
+    res.json({ success: true, listeners: a.listeners.size, ...rtc, ...acfg });
   });
 
   // 1.99il: ⚡ low-latency room audio (roomrtc.js) - the page asks for a WHEP read ticket first; anything other than

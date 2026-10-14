@@ -67,7 +67,10 @@
   // the same way as before 1.99il. A connection failure is remembered for RTC_RETRY_MS so a network that blocks
   // WebRTC goes straight to MP3 next time. The badge says which: "⚡ live" or "standard".
   var RTC_RETRY_MS = 10 * 60 * 1000, RTC_TIMEOUT_MS = 9000;
-  var RTC_JITTER_MS = 200;                   // 1.99ya: the ⚡ player's jitter buffer target (webrtc-client.js listen)
+  var RTC_JITTER_MS = 200;                   // 1.99ya: the ⚡ player's jitter buffer target (webrtc-client.js listen);
+                                             // 1.99yd: the ticket's jitter_ms (the site's /admin/pepe/audio setting) wins
+  var RTC_REJOIN_MS = [2500, 6000, 15000];   // 1.99yd: a ⚡ session lost mid-play (Pepe restarted his publish, e.g. a
+                                             // room-audio settings change) plays MP3 at once and tries ⚡ again after these
   // reasons that are NOT this network's fault (no 10-minute "go straight to MP3" memory for them)
   var RTC_SOFT = { off: 1, 'not-eligible': 1, busy: 1, 'no-audio': 1, denied: 1, rate: 1, stale: 1, error: 1,
                    'not-published': 1, http: 1, blocked: 1, lost: 1 };   // lost: also Pepe restarting his publish
@@ -236,15 +239,34 @@
       try { rau.pause(); rau.srcObject = null; } catch (e) { /* no srcObject */ }
     }
     // ⚡: ticket -> WHEP; resolves when it plays, rejects with the reason (the caller falls back to MP3)
-    function startRtc(gen) {
+    var rejoinTimer = null, rejoinTries = 0;
+    // 1.99yd: after a lost ⚡ session the MP3 relay plays; ⚡ is tried again quietly and takes over when it connects
+    function rtcRejoin(gen) {
+      clearTimeout(rejoinTimer);
+      if (rejoinTries >= RTC_REJOIN_MS.length) return;
+      rejoinTimer = setTimeout(function () {
+        if (!playing || gen !== startGen || mode !== 'mp3' || !rtcWanted()) return;
+        startRtc(gen, true).then(function () {
+          clearInterval(waitTimer); rejoinTries = 0;
+          mseStop();
+          try { au.pause(); au.removeAttribute('src'); au.load(); } catch (e) { /* gone */ }
+        }).catch(function (e) {
+          if (rtcWhy(e) === 'stale' || gen !== startGen || !playing) return;
+          if (!rtcSess) { try { rau.pause(); rau.srcObject = null; } catch (x) { /* no srcObject */ } }
+          rtcRejoin(gen);
+        });
+      }, RTC_REJOIN_MS[rejoinTries++]);
+    }
+    function startRtc(gen, quiet) {
       return fetch('/api/rooms/' + encodeURIComponent(cur) + '/audio/rtc', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
         .then(function (r) { return r.json().catch(function () { return null; }); })
         .then(function (j) {
           if (gen !== startGen || !playing) throw 'stale';
           if (!j || !j.ok || !j.whep) throw (j && j.fallback) || 'error';
-          setState(j.ready ? _t('js.pad.audio.connecting_rtc', 'connecting ⚡…') : _t('js.pad.audio.starting_rtc', 'starting ⚡…'), 'wait');
-          return window.PATVRtc.listen(j.whep, rau, { timeout: RTC_TIMEOUT_MS, jitterMs: RTC_JITTER_MS });
+          if (!quiet) setState(j.ready ? _t('js.pad.audio.connecting_rtc', 'connecting ⚡…') : _t('js.pad.audio.starting_rtc', 'starting ⚡…'), 'wait');
+          var jit = Number(j.jitter_ms);
+          return window.PATVRtc.listen(j.whep, rau, { timeout: RTC_TIMEOUT_MS, jitterMs: isFinite(jit) && jit >= 0 && jit <= 4000 ? jit : RTC_JITTER_MS });
         })
         .then(function (sess) {
           if (gen !== startGen || !playing) { sess.close(); throw 'stale'; }
@@ -255,12 +277,13 @@
           sess.onfail = function () {                 // lost after it started: carry on with the MP3 relay
             if (rtcSess !== sess) return;
             rtcSess = null; noteRtcFail('lost');
-            if (playing && gen === startGen) { setState(_t('js.pad.audio.reconnecting', 'reconnecting…'), 'wait'); startMp3(); }
+            if (playing && gen === startGen) { setState(_t('js.pad.audio.reconnecting', 'reconnecting…'), 'wait'); startMp3(); rtcRejoin(gen); }
           };
         });
     }
     function start() {
       clearInterval(waitTimer); startedAt = 0;
+      clearTimeout(rejoinTimer); rejoinTries = 0;
       shared.players.forEach(function (p) { if (p !== me) p.halt(); });   // one room at a time on the page
       var gen = ++startGen;
       rtcClose(); mseStop(); setMode(null);
@@ -308,6 +331,7 @@
       }, 250);
     }
     function stop(msg) {
+      clearTimeout(rejoinTimer);
       playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
       startGen++; rtcClose(); setMode(null);
       mseStop();

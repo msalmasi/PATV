@@ -137,7 +137,10 @@ function ticket(user, R, t = now()) {
   want(R.id, t);
   const s = st(R.id);
   const url = W().whepUrl(p) + "?pt=" + encodeURIComponent(readTicket(user && user.userId ? user.userId : null, p, t));
-  return { ok: true, whep: url, ready: !!s.ready && t - s.seenAt <= SYNC_FRESH_MS, expires: t + TICKET_MS };
+  // 1.99yd: the player's jitter buffer target comes from the room-audio settings (/admin/pepe/audio)
+  let jitter = 200;
+  try { jitter = require("./roomaudiocfg").jitterMs(); } catch (e) { jitter = 200; }
+  return { ok: true, whep: url, ready: !!s.ready && t - s.seenAt <= SYNC_FRESH_MS, expires: t + TICKET_MS, jitter_ms: jitter };
 }
 
 /** What Pepe's audio post gets back for room R: rtc = publish now (url, bearer, path) or null = don't; rtc_beat. */

@@ -81,6 +81,7 @@ const RULES = {
   "donation_promos.created_by": { deny: "1.99tq: the admin's username who created the donation promo (audit label)" },
   "donation_promos.updated_by": { deny: "1.99tq: the admin's username who last edited the donation promo (audit label)" },
   "donation_promos.ended_by": { deny: "1.99tq: the admin's username who ended the donation promo (audit label)" },
+  "room_audio_cfg.updated_by": { deny: "1.99yd: the admin's username who last saved the room-audio settings (audit label; admin_audit has the id)" },
   "donation_promo_settings.actor": { deny: NAME },
   // 1.99ts: the daily donation limit - a member's donations by day move (a merged account shares ONE daily limit); an override
   // folds into the target's (the target's own override wins when both have one)

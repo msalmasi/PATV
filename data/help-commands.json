@@ -6269,7 +6269,7 @@
   },
   {
    "id": "audiostats",
-   "title": "!audiostats [prio on · off] [helper on · off]",
+   "title": "!audiostats [prio on · off] [helper on · off] [latency <s>]",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6282,14 +6282,16 @@
     "prio on",
     "prio off",
     "helper on",
-    "helper off"
+    "helper off",
+    "latency <0.2-3.0>"
    ],
    "summary": "How healthy the audio Pepe broadcasts is: dropouts in his voice and on the virtual mic.",
-   "details": "Pepe plays his voice (TTS, DJ drops, clips) from a small helper process of its own with a generous buffer, and listens to the virtual mic (what Camfrog sends) for **gaps** - moments of silence cut into music or speech, the sign of a player that fell behind. `!audiostats` shows the voice clips played and their underflows, the gaps heard on the cable (total and the last minute), the process priorities (Camfrog and Spotify are kept above OBS; Pepe himself at normal) and the command worker's queue. Every minute with gaps is logged as `[AUDIO-UNDERRUN]`. `prio off` stops raising Camfrog/Spotify; `helper off` plays the voice inside Pepe again (both remembered; `on` switches them back).",
+   "details": "Pepe plays his voice (TTS, DJ drops, clips) from a small helper process of its own with a generous buffer, and listens to the virtual mic (what Camfrog sends) for **gaps** - moments of silence cut into music or speech, the sign of a player that fell behind. `!audiostats` shows the voice clips played and their underflows, the gaps heard on the cable (total and the last minute), the process priorities (Camfrog and Spotify are kept above OBS; Pepe himself at normal) and the command worker's queue. Every minute with gaps is logged as `[AUDIO-UNDERRUN]`. `prio off` stops raising Camfrog/Spotify; `helper off` plays the voice inside Pepe again (both remembered; `on` switches them back). It also shows the room-audio settings in force and each streamed room's audio stats. `latency <s>` sets the room mixer's jitter cushion (website room audio and per-room recording) - the same setting as Room audio on the website's admin page (/admin/pepe/audio), where the other room-audio knobs live; it is saved there.",
    "examples": [
     "!audiostats",
     "!audiostats prio off",
-    "!audiostats helper on"
+    "!audiostats helper on",
+    "!audiostats latency 1.0"
    ],
    "keywords": []
   },
@@ -7632,5 +7634,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "d31af3d205f8c296"
+ "hash": "47e3e351454f4197"
 }

@@ -1289,6 +1289,7 @@ require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/ana
 require("./pepecontrol").register(app, { isBotToken, addUser });
 require("./roomctl").register(app, { isBotToken, addUser });   // 1.99kp: 📡 /admin/pepe/rooms - join / leave / active / mute Pepe's Camfrog rooms
 require("./cmdswitch").register(app, { isBotToken, addUser }); // 1.99vc: 🎛️ /admin/pepe/commands - master switch + global default per command
+require("./roomaudiocfg").register(app, { isBotToken, addUser }); // 1.99yd: 🔊 /admin/pepe/audio - room-audio settings Pepe streams pads with
 require("./textscan").register(app, { isBotToken }); // 1.99xh: POST /api/pepe/textscan - the content filter for Pepe's !say moderator
 require("./burns").register(app, { isBotToken, addUser });   // 1.99dk: PAT burning - the burn reserve's public log + admin burns   // admin-only Pepe control panel (homepage) + VM supervisor poll/ack
 // 1.99bi: room owners + per-room stages + royalties (pad owner dashboard /p/:slug/manage, /pads/admin)

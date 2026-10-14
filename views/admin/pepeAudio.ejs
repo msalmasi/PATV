@@ -1,0 +1,199 @@
+<%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: isAdmin }) %>
+<%# 1.99yd: room-audio settings (roomaudiocfg.js). The site owns them; Pepe (camfrog-bot pepe_audiocfg.py) applies them within seconds. Admins only. %>
+<div class="adm-head">
+  <h1>Room audio</h1>
+  <p>How Pepe streams a Camfrog room's sound to its pad: the ⚡ WebRTC publish (pacing and its buffer), the room mixer, the listener's jitter buffer and the bitrates. One global setting for every pad. Pepe picks a save up in a few seconds; <code>!audiostats latency &lt;s&gt;</code> in chat changes the mixer latency here too.</p>
+</div>
+
+<section class="adm-card" id="room-audio" aria-labelledby="raT">
+  <h2 id="raT"><span class="ds-ic" aria-hidden="true">🔊</span> Room audio settings <span class="adm-pill admin">admins</span> <span class="adm-pill" id="raVer"></span></h2>
+  <p class="adm-help">Changing the pacing, the buffer of the pacing in use or the Opus bitrate restarts each live ⚡ publish: the old WebRTC session ends, the new one connects about a second later. Listeners hear the MP3 relay for those seconds and their player switches back to ⚡ by itself. The mixer latency applies at once, the MP3 bitrate from the next chunk, the jitter target from a listener's next ⚡ connection.</p>
+  <form class="adm-form" id="raForm" autocomplete="off" novalidate>
+    <fieldset>
+      <legend>WebRTC pacing</legend>
+      <label><input type="radio" name="pacing" value="helper"> Helper process (1.99yb) - its own process, so Pepe's busy moments don't reach the stream</label>
+      <label><input type="radio" name="pacing" value="inprocess"> In-process (1.99ya) - a thread inside Pepe; less delay, more dropouts while he's busy</label>
+    </fieldset>
+    <fieldset data-for="helper">
+      <legend>Helper buffer</legend>
+      <label>Mode <select name="helper_mode"><option value="adaptive">adaptive - follows the gaps in Pepe's feed</option><option value="fixed">fixed - always the same delay</option></select></label>
+      <label data-mode="fixed">Fixed target (ms) <input type="number" name="helper_fixed_ms" inputmode="numeric"></label>
+      <label data-mode="adaptive">Adaptive minimum (ms) <input type="number" name="helper_min_ms" inputmode="numeric"></label>
+      <label data-mode="adaptive">Adaptive maximum (ms) <input type="number" name="helper_max_ms" inputmode="numeric"></label>
+      <label data-mode="adaptive">Headroom over the largest gap (ms) <input type="number" name="helper_headroom_ms" inputmode="numeric"></label>
+      <label data-mode="adaptive">Gap window (s) - how long a gap keeps the buffer up <input type="number" name="helper_window_s" inputmode="numeric"></label>
+    </fieldset>
+    <fieldset data-for="inprocess">
+      <legend>In-process buffer</legend>
+      <label>Prebuffer (ms) <input type="number" name="inproc_prebuffer_ms" inputmode="numeric"></label>
+      <label>Splice threshold (ms) - above this, frames are crossfaded out <input type="number" name="inproc_splice_ms" inputmode="numeric"></label>
+    </fieldset>
+    <fieldset>
+      <legend>Mixer and listener</legend>
+      <label>Room mixer latency (s) - net audio's jitter cushion (website audio and per-room recording) <input type="number" name="mixer_latency_s" step="0.05" inputmode="decimal"></label>
+      <label>⚡ listener jitter buffer target (ms) - the browser holds this much <input type="number" name="jitter_ms" inputmode="numeric"></label>
+    </fieldset>
+    <fieldset>
+      <legend>Bitrates</legend>
+      <label>Opus (⚡ WebRTC), kbps <input type="number" name="opus_kbps" inputmode="numeric"></label>
+      <label>MP3 relay (fallback), kbps <select name="mp3_kbps"></select></label>
+    </fieldset>
+    <label>Note for the log (optional) <input type="text" name="reason" maxlength="200" placeholder="e.g. trying fixed 1 s tonight"></label>
+    <div class="adm-actions">
+      <button type="submit">Save</button>
+      <button type="button" class="adm-btn ghost" id="raReset">Reset to defaults</button>
+    </div>
+    <p class="adm-msg" id="raMsg" role="status" aria-live="polite"></p>
+  </form>
+</section>
+
+<section class="adm-card" id="live" aria-labelledby="lvT">
+  <h2 id="lvT">What Pepe runs now <span class="adm-pill" id="lvOnline"></span></h2>
+  <p class="adm-help" id="lvRuns"></p>
+  <p class="adm-help">Per room that streams to a pad: the ⚡ publish (pacing actually in use, buffer now / its target), the mixer latency, and the latest <code>[AUDIO-STATS]</code> line (one a minute while someone listens).</p>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Room</th><th>⚡ publish</th><th class="num">Buffer / target</th><th class="num">Mixer</th><th class="num">MP3 👂</th></tr></thead>
+    <tbody id="lvRows"><tr><td colspan="5" class="adm-help">Loading…</td></tr></tbody></table></div>
+  <div id="lvStats"></div>
+</section>
+
+<section class="adm-card" id="log" aria-labelledby="lgT">
+  <h2 id="lgT">Changes</h2>
+  <ul id="raLog" class="adm-help"></ul>
+</section>
+
+<style>
+  #raForm fieldset { border: 1px solid var(--adm-line, rgba(127,127,127,.3)); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
+  #raForm fieldset.dim { opacity: .55; }
+  #raForm label { display: block; margin: 6px 0; }
+  #raForm small.def { opacity: .7; margin-left: 6px; }
+  #raForm .bad input, #raForm .bad select { outline: 2px solid #d33; }
+  #raForm small.err { color: #d33; margin-left: 6px; }
+  #lvStats pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 6px 0; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+  var V = <%- JSON.stringify(v).replace(/</g, '\\u003c') %>;
+  var form = document.getElementById('raForm'), msg = document.getElementById('raMsg');
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function when(ms) { return ms ? new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''; }
+  var KEYS = Object.keys(V.fields);
+  var mp3 = form.elements.mp3_kbps;
+  V.fields.mp3_kbps.choices.forEach(function (k) { var o = el('option', null, k + ' kbps'); o.value = String(k); mp3.appendChild(o); });
+  KEYS.forEach(function (k) {                       // ranges + the default next to each field
+    var f = V.fields[k], inp = form.elements[k];
+    if (!inp || !inp.closest) { if (k !== 'pacing') return; }
+    var lab = k === 'pacing' ? form.querySelector('fieldset legend') : inp.closest('label');
+    if (inp && inp.type === 'number' && f.min != null) { inp.min = f.min; inp.max = f.max; if (!inp.step) inp.step = '1'; }
+    var d = el('small', 'def', 'default ' + f.def + (f.min != null ? ' · ' + f.min + '–' + f.max : ''));
+    if (lab) lab.appendChild(d);
+  });
+  function fill(cfg) {
+    KEYS.forEach(function (k) {
+      if (k === 'pacing') { Array.prototype.forEach.call(form.querySelectorAll('input[name=pacing]'), function (r) { r.checked = r.value === cfg.pacing; }); return; }
+      var inp = form.elements[k]; if (inp) inp.value = String(cfg[k]);
+    });
+    dim();
+  }
+  function dim() {
+    var pacing = (form.querySelector('input[name=pacing]:checked') || {}).value, mode = form.elements.helper_mode.value;
+    Array.prototype.forEach.call(form.querySelectorAll('fieldset[data-for]'), function (fs) { fs.classList.toggle('dim', fs.getAttribute('data-for') !== pacing); });
+    Array.prototype.forEach.call(form.querySelectorAll('label[data-mode]'), function (l) { l.style.display = l.getAttribute('data-mode') === mode ? '' : 'none'; });
+  }
+  form.addEventListener('change', dim);
+  function clearErrors() {
+    Array.prototype.forEach.call(form.querySelectorAll('.bad'), function (x) { x.classList.remove('bad'); });
+    Array.prototype.forEach.call(form.querySelectorAll('small.err'), function (x) { x.remove(); });
+  }
+  function showErrors(fields) {
+    Object.keys(fields || {}).forEach(function (k) {
+      var inp = form.elements[k]; var lab = inp && inp.closest ? inp.closest('label') : null;
+      if (lab) { lab.classList.add('bad'); lab.appendChild(el('small', 'err', fields[k])); }
+    });
+  }
+  function head() {
+    document.getElementById('raVer').textContent = V.v ? 'v' + V.v + (V.updated_by ? ' · ' + V.updated_by + ' ' + when(V.updated_at) : '') : 'defaults (never saved)';
+  }
+  function fmtCfg(c) {
+    if (!c) return '?';
+    var pace = c.pacing === 'helper' ? 'helper (' + (c.helper_mode === 'fixed' ? 'fixed ' + c.helper_fixed_ms + ' ms' :
+      'adaptive ' + c.helper_min_ms + '–' + c.helper_max_ms + ' ms +' + c.helper_headroom_ms + ' ms / ' + c.helper_window_s + ' s') + ')' :
+      'in-process (prebuffer ' + c.inproc_prebuffer_ms + ' ms, splice > ' + c.inproc_splice_ms + ' ms)';
+    return pace + ' · mixer ' + c.mixer_latency_s + ' s · jitter ' + c.jitter_ms + ' ms · Opus ' + c.opus_kbps + ' / MP3 ' + c.mp3_kbps + ' kbps';
+  }
+  function live() {
+    var b = V.bot;
+    document.getElementById('lvOnline').textContent = V.online ? 'live' : 'offline' + (V.bot_at ? ' (last report ' + when(V.bot_at) + ')' : '');
+    var runs = document.getElementById('lvRuns');
+    if (!b) runs.textContent = 'No report from Pepe yet (he reports every 20 s; an older Pepe doesn\'t).';
+    else {
+      var sync = b.src === 'site' && b.v === V.v ? '✅ in sync with v' + V.v : '⏳ runs ' + (b.src === 'site' ? 'v' + b.v : 'his ' + (b.src || '?') + ' copy') + ' - v' + V.v + ' arrives with his next post';
+      runs.textContent = sync + '. ' + fmtCfg(b.cfg) + (b.helper_enabled === false ? ' · (helper disabled in code: HELPER = False)' : '') + (b.net_audio ? '' : ' · net audio is OFF');
+    }
+    var body = document.getElementById('lvRows'), stats = document.getElementById('lvStats');
+    body.textContent = ''; stats.textContent = '';
+    var rooms = b && b.rooms ? Object.keys(b.rooms) : [];
+    if (!rooms.length) { var tr0 = el('tr'); var td0 = el('td', 'adm-help', 'No room is streaming to a pad right now.'); td0.colSpan = 5; tr0.appendChild(td0); body.appendChild(tr0); }
+    rooms.forEach(function (name) {
+      var r = b.rooms[name], p = r.rtc;
+      var tr = el('tr');
+      var n = el('td'); n.appendChild(el('b', null, name)); if (!r.streaming) n.appendChild(el('div', 'adm-help', 'not streaming now'));
+      tr.appendChild(n);
+      tr.appendChild(el('td', null, p ? (p.state + ' · ' + (p.pacing || '?') + (p.restarts ? ' · ' + p.restarts + ' restarts' : '') + (p.underruns ? ' · ' + p.underruns + ' underrun frames' : '')) : 'off'));
+      tr.appendChild(el('td', 'num', p ? (p.buffer_ms == null ? '–' : p.buffer_ms) + ' / ' + (p.target_ms ? p.target_ms + ' ms' : '–') : '–'));
+      tr.appendChild(el('td', 'num', r.mixer_latency_s == null ? '–' : r.mixer_latency_s + ' s'));
+      tr.appendChild(el('td', 'num', r.mp3_listeners == null ? '–' : String(r.mp3_listeners)));
+      body.appendChild(tr);
+      if (r.stats) { var d = el('div'); d.appendChild(el('div', 'adm-help', name + ' · ' + when(r.stats_at))); d.appendChild(el('pre', null, r.stats)); stats.appendChild(d); }
+    });
+    var log = document.getElementById('raLog'); log.textContent = '';
+    (V.audit || []).forEach(function (a) {
+      var d = a.detail || {}, ch = d.changed || {};
+      var what = Object.keys(ch).map(function (k) { return k + ' ' + ch[k][0] + ' → ' + ch[k][1]; }).join(', ') || (d.action === 'reset' ? 'reset (no change)' : 'no change');
+      log.appendChild(el('li', null, when(a.at) + ' · ' + (a.admin || '?') + ' · v' + (d.v || '?') + (d.action === 'reset' ? ' · RESET' : '') + ': ' + what + (a.reason ? ' — ' + a.reason : '')));
+    });
+    head();
+  }
+  function collect() {
+    var cfg = {};
+    KEYS.forEach(function (k) {
+      if (k === 'pacing') { var r = form.querySelector('input[name=pacing]:checked'); if (r) cfg.pacing = r.value; return; }
+      var inp = form.elements[k]; if (inp) cfg[k] = inp.value.trim();
+    });
+    return cfg;
+  }
+  function send(body, done) {
+    msg.textContent = '…'; clearErrors();
+    return fetch('/api/admin/pepe/audio', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { msg.textContent = '❌ ' + (d.error || 'failed'); showErrors(d.fields); return; }
+        if (d.view) V = d.view;
+        fill(V.cfg); live();
+        msg.textContent = d.same ? 'No change.' : '✅ Saved as v' + d.v + ' - Pepe picks it up within a few seconds (see "What Pepe runs now").';
+        if (done) done();
+      })
+      .catch(function () { msg.textContent = '❌ The site did not answer.'; });
+  }
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var reason = form.elements.reason.value.trim();
+    send({ cfg: collect(), reason: reason || undefined }, function () { form.elements.reason.value = ''; });
+  });
+  document.getElementById('raReset').addEventListener('click', function () {
+    if (!confirm('Reset every room-audio setting to its default?')) return;
+    send({ reset: true, reason: form.elements.reason.value.trim() || undefined });
+  });
+  function load() {
+    return fetch('/api/admin/pepe/audio', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.ok) { var editing = V.v !== d.v; V = d; if (editing) fill(V.cfg); live(); } }).catch(function () {});
+  }
+  fill(V.cfg); live();
+  setInterval(function () { if (!document.hidden) load(); }, 5000);
+})();
+</script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>
