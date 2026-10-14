@@ -694,8 +694,8 @@
       </section>
     </aside>
   </div>
-  <link rel="stylesheet" href="/public/css/room-bridge.css?v=9">
-  <script src="/public/js/room-bridge.js?v=12"></script>
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
+  <script src="/public/js/room-bridge.js?v=13"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=2">
   <script src="/public/js/chat-clip.js?v=2"></script>
@@ -827,7 +827,9 @@
       if (feedEl.firstChild && feedEl.firstChild.tagName === 'P') feedEl.removeChild(feedEl.firstChild);
       var frag = document.createDocumentFragment();
       items.forEach(function (it) { var n = item(it); if (n) frag.appendChild(n); });
-      feedEl.appendChild(frag);
+      // 1.99ye: above your own lines that are still on their way (room-bridge.js relay outbox), like a native chat
+      var anchor = roomRelay && roomRelay.anchor ? roomRelay.anchor() : null;
+      if (anchor && anchor.parentNode === feedEl) feedEl.insertBefore(frag, anchor); else feedEl.appendChild(frag);
       while (feedEl.childNodes.length > 300) feedEl.removeChild(feedEl.firstChild);
       if (first && wantLine) {
         if (showLine()) return;
@@ -928,7 +930,9 @@
 
     var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug, { showOff: true });   // greyed while the relay is off
     var chatClip = window.PATVChatClip ? PATVChatClip.init({ feed: feedEl, host: document.getElementById('rmClip'), slug: slug, linked: <%= linked ? 'true' : 'false' %> }) : null;   // 1.99fp
-    var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
+    // 1.99ye: your messages show in the chat at once (sending… / ✓ sent / not sent · Retry), built with this page's line style
+    var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
+      feed: feedEl, line: item, onBottom: function () { jump.style.display = 'none'; } }) : null;
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
     var snapEl = null, snapTimer = null, snapWho = null;
     function snapClose() { clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(clipTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
@@ -1175,18 +1179,33 @@
       cursor = Math.max(cursor, d.cursor);
     }
 
+    // 1.99ye: a long-poll (?wait=1): the site answers the moment something changes (a line, the people / mic, your
+    // message's state) - or after 20 s with nothing - and the page asks again at once. A site that answers without
+    // `lp` (older) is polled every 1.5 s as before. v / mv = the room's / your messages' versions the page has seen.
+    var lp = { ok: false, v: data && data.ver != null ? data.ver : null, mv: data && data.mver != null ? data.mver : null }, inflight = false;
     function poll() {
       timer = null;
-      if (document.hidden) return;
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live?after=' + cursor, { credentials: 'same-origin', cache: 'no-store' })
+      if (document.hidden || inflight) return;
+      inflight = true;
+      var q = '?after=' + cursor + '&wait=1' + (lp.v != null ? '&v=' + lp.v : '') + (lp.mv != null ? '&mv=' + lp.mv : '') +
+        (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '');
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live' + q, { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); } if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (d) { fails = 0; setStatus(''); apply(d, false); })
-        .catch(function () { fails++; setStatus(fails > 2 ? _t('js.pad.chat.reconnecting', 'reconnecting…') : '', fails > 2); })
-        .then(function () { schedule(); });
+        .then(function (d) {
+          fails = 0; setStatus('');
+          lp.ok = !!d.lp && !d.gone;
+          if (d.gone) return;
+          if (d.ver != null) lp.v = d.ver;
+          if (d.mver != null) lp.mv = d.mver;
+          apply(d, false);
+        })
+        .catch(function () { fails++; lp.ok = false; setStatus(fails > 2 ? _t('js.pad.chat.reconnecting', 'reconnecting…') : '', fails > 2); })
+        .then(function () { inflight = false; schedule(); });
     }
     function setStatus(t, err) { var s = document.getElementById('rmStatus'); if (!s) return; s.textContent = t; s.classList.toggle('err', !!err); }
-    function schedule() { if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(15000, 1500 * Math.pow(2, fails)) : 1500); }
+    function schedule() { if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(15000, 1500 * Math.pow(2, fails)) : (lp.ok ? 50 : 1500)); }
     document.addEventListener('visibilitychange', function () { if (!document.hidden) { clearTimeout(timer); timer = null; poll(); } });
+    window.addEventListener('online', function () { if (fails) { clearTimeout(timer); timer = null; fails = 0; poll(); } });
 
     try { apply(data, true); } finally { schedule(); }   // the poll always starts
   })();

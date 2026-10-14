@@ -46,6 +46,20 @@
 // "🌐 <name> (web): !cmd ..."; replies he would have PM'd come back in the ack and show only in
 // that user's own relay feed. Every command is written to bridge_cmd_log (account, Camfrog login,
 // room, command, result) - admins read it at /api/bridge/cmdlog. "!commands" is answered here.
+//
+// 1.99ye: the web chat feels native.
+//   * the page shows a line the moment it's typed ("sending…"), then "✓ sent" when Pepe has put it into the room (his
+//     ack, sent the moment the packet is out), and swaps it for the room's own line when that comes back (the echo names
+//     the job: `data.web.job`). A refusal comes back with a reason and a `code` (blocked, rate, queue_full, too_long,
+//     offline, gated, relay_off, account, nopepe, unconfirmed, ...).
+//   * a say carries the page's client id (`cid`): the same cid again returns the job it already made, so a retry after a
+//     lost answer can't post twice. A say job is offered to Pepe ONCE (like a command): a lost ack is reported as
+//     "unconfirmed" after SAY_CLAIM_TTL instead of risking a double post.
+//   * several lines in a row: up to SAY_QUEUE_MAX waiting per member per room (and SAY_MINUTE_MAX a minute); they go to
+//     Pepe in order and HE paces them for the room (pepe_relay's say lane) - nothing is refused for being quick.
+//   * push, not polling: Pepe long-polls POST /api/bridge/relay/pull (answered the moment a job is queued) and posts acks
+//     to /api/bridge/relay/ack straight away; the page long-polls /live?wait=1 (bridge.js). The old paths (jobs + acks
+//     riding Pepe's sync, the page polling every 1.5 s) still work - an older Pepe / page just uses them.
 const express = require("express");
 const crypto = require("crypto");
 const { getQuery, runQuery } = require("./dbUtils");
@@ -68,6 +82,21 @@ const jobs = new Map();          // id -> {id, kind, roomId, userId, username, c
 const snaps = new Map();         // `${roomId}|${login}` -> {sid, ts, ok, status, img: Buffer, viewers: Set(userId), rule, okFor: Map(userId -> price), cost, saves: Map(userId -> action id)}
 const frames = new Map();        // frame id -> {img, userId, username, roomId, login, ts}   (frames queued for a save)
 const hits = new Map();          // `${kind}|${userId}` -> [timestamps]
+
+// -- 1.99ye: the native-feeling web chat (see the top) --
+const SAY_QUEUE_MAX = 5;                 // say lines waiting to go out, per member per room
+const SAY_MINUTE_MAX = 20;               // say lines a minute per member (a sanity cap - Pepe paces the room itself)
+const SAY_PENDING_TTL = 20 * 1000;       // never picked up by Pepe this long -> failed (it never left the site)
+const SAY_CLAIM_TTL = 60 * 1000;         // picked up but never confirmed this long -> failed "unconfirmed"
+const PULL_WAIT_MAX = 10 * 1000;         // Pepe's long-poll (staging's router gives a POST 15 s)
+const CID_RE = /^[A-Za-z0-9_-]{6,40}$/;
+const CODE_RE = /^[a-z_]{2,24}$/;
+const cids = new Map();                  // `${userId}|${cid}` -> job id (idempotent say)
+const pullers = [];                      // Pepe's waiting long-polls: () => void
+let notifyFn = null;                     // (roomId, userId) => void - bridge.js wakes the room's page long-polls
+let lastPull = 0, drainHooked = false, draining = false;
+const LAT = [];                          // the last LAT_KEEP say lines' timings (ms after the site took them)
+const LAT_KEEP = 200;
 
 // -- chat commands from the relay (1.99) --
 const CMD_GAP = 2000, CMD_BURST = 10, CMD_WINDOW = 60 * 1000;      // = Pepe's own per-login limit
@@ -136,6 +165,13 @@ function limited(key, gap, burst, windowMs) {
 }
 
 function sweep(now) {
+  for (const j of jobs.values()) {
+    // 1.99ye: a say that Pepe never picked up never left the site - say so (the page offers Retry); one he picked up but
+    // never confirmed may or may not be in the room (it is never re-offered, so a retry is the member's call)
+    if (j.kind !== "say" || j.state === "done") continue;
+    if (j.state === "pending" && now - j.at > SAY_PENDING_TTL) failJob(j, "nopepe", "Pepe isn't picking up messages right now — try again in a moment");
+    else if (j.state === "claimed" && now - j.claimed > SAY_CLAIM_TTL) failJob(j, "unconfirmed", "Pepe didn't confirm it — it may not have reached the room");
+  }
   for (const [id, j] of jobs) {
     const open = j.state !== "done";
     // 1.99ez: a cam clip (camclip.js) records for up to 30 s after Pepe gets to it - kept like a mic clip
@@ -144,8 +180,42 @@ function sweep(now) {
   for (const [k, s] of snaps) if (now - s.ts > SNAP_TTL) snaps.delete(k);
   for (const [k, f] of frames) if (now - f.ts > FRAME_TTL) frames.delete(k);
   for (const [k, q] of hits) if (!q.length || now - q[q.length - 1] > 15 * 60 * 1000) hits.delete(k);
+  for (const [k, id] of cids) if (!jobs.has(id)) cids.delete(k);
 }
-setInterval(() => sweep(Date.now()), 15 * 1000).unref();
+setInterval(() => sweep(Date.now()), 5 * 1000).unref();      // 1.99ye: 5 s (was 15) - a say's timeout shows promptly
+
+/** 1.99ye: tell bridge.js a job changed (its room's waiting page long-polls wake; the owner's `mine` moved on). */
+function notify(j) {
+  if (!notifyFn || !j) return;
+  try { notifyFn(j.roomId, j.userId || null); } catch (e) { /* a page wake can't break the relay */ }
+}
+function setNotify(fn) { notifyFn = typeof fn === "function" ? fn : null; }
+function failJob(j, code, msg) {
+  j.state = "done"; j.doneAt = Date.now();
+  j.result = { ok: false, msg: clean(msg, 200), code };
+  j.data = null;
+  notify(j);
+}
+function wakePullers() {
+  for (const f of pullers.splice(0)) { try { f(); } catch (e) { /* gone */ } }
+}
+function hookDrain() {
+  if (drainHooked) return;
+  drainHooked = true;
+  try { require("./shutdown").onDrain(() => { draining = true; wakePullers(); }); } catch (e) { /* no graceful stop here */ }
+}
+/** 1.99ye: one say line's timings, kept for the staging latency report and logged. */
+function noteLatency(j) {
+  if (j.kind !== "say" || j.latDone) return;
+  j.latDone = true;
+  const d = (t) => (t ? t - j.at : null);
+  const s = { at: j.at, claim: d(j.claimed), ack: d(j.ackAt), echo: d(j.echoAt), via: j.via || "sync", pepe: j.pepeT || null };
+  LAT.push(s);
+  if (LAT.length > LAT_KEEP) LAT.splice(0, LAT.length - LAT_KEEP);
+  console.log(`[bridge-relay] say-lat job=${j.id} via=${s.via} claim=${s.claim}ms ack=${s.ack}ms echo=${s.echo}ms` +
+              (s.pepe ? ` pepe-wait=${s.pepe.wait}ms pepe-send=${s.pepe.send}ms` : ""));
+}
+function latency() { return LAT.slice(); }
 
 const clean = (s, n) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, " ")
   .replace(/<[^<>]{0,60}>/g, "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -211,11 +281,14 @@ async function blockedWhy(R, u) {
 function newJob(fields) {
   const j = Object.assign({ id: "w" + crypto.randomBytes(8).toString("hex"), state: "pending", at: Date.now(), claimed: 0, tries: 0, result: null }, fields);
   jobs.set(j.id, j);
+  wakePullers();                 // 1.99ye: Pepe's waiting long-poll gets it now
+  notify(j);
   return j;
 }
 
-/** The jobs to hand Pepe with this sync response (pending, or claimed but never acked). */
-function takeJobs(liveRoomIds) {
+/** The jobs to hand Pepe with this sync response (pending, or claimed but never acked).
+ *  `via` (1.99ye): "pull" = Pepe's long-poll, else his sync - kept on say jobs for the latency report. */
+function takeJobs(liveRoomIds, via = "sync") {
   const now = Date.now(), out = [];
   for (const j of jobs.values()) {
     if (!liveRoomIds.has(j.roomId)) continue;
@@ -225,10 +298,14 @@ function takeJobs(liveRoomIds) {
     // 1.99fp: a mic clip preview too (once is enough - the browser asks again)
     // 1.99il: a tip announcement too (a re-offer could say it twice)
     // 1.99kp: a stream-start announcement too (golive.js); 1.99lr: a 📼 queue's "now playing" too; 1.99nk: a boost too
-    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.kind !== "boostnote" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
+    // 1.99ye: a say too - it carries a client id now, and "unconfirmed" (SAY_CLAIM_TTL) is safer than a double post
+    const due = j.state === "pending" || (j.kind !== "say" && j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.kind !== "boostnote" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
     j.state = "claimed"; j.claimed = now; j.tries++;
+    if (j.kind === "say") j.via = via;
+    notify(j);
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
+    if (j.kind === "say" && j.cid) base.cid = j.cid;          // 1.99ye: the page's client id (Pepe logs it with the line)
     // 1.99wv (connections audit C): the ACCOUNT behind every job - Pepe acts as `camfrog` when there is one, else as the account
     if (j.userId) { base.user_id = j.userId; base.actor = j.actor || { userId: j.userId, username: j.username || null, login: j.camfrog || null, display: null }; }
     if (j.kind === "say" || j.kind === "cmd") base.text = j.text;
@@ -266,9 +343,20 @@ function applyAcks(acks) {
     }
     const st = j.kind === "clip" && PROGRESS[a.state] ? a.state : "done";
     if (stateRank(st) < stateRank(j.state)) continue;          // an older step arriving late
+    // 1.99ye: a say already settled by its echo (or failed by a timeout) keeps that answer
+    if (j.kind === "say" && j.state === "done" && j.result) { if (!j.ackAt) j.ackAt = Date.now(); continue; }
     j.state = st;
     j.result = { ok: !!a.ok, msg: clean(a.msg, 200) };
+    if (typeof a.code === "string" && CODE_RE.test(a.code)) j.result.code = a.code;
     if (st === "done") j.doneAt = Date.now();
+    if (j.kind === "say") {
+      j.ackAt = Date.now();
+      // Pepe's own clock: how long the line waited in his say lane (pacing) and in his send queue
+      const t = a.t && typeof a.t === "object" ? a.t : null;
+      const ms = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(600000, Math.round(Number(v)))) : null);
+      if (t) j.pepeT = { wait: ms(t.wait), send: ms(t.send) };
+    }
+    notify(j);
     if (j.kind === "cmd") {
       j.result.replies = replies;
       cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
@@ -283,52 +371,139 @@ function applyAcks(acks) {
   }
 }
 
-/** This user's recent relay jobs in a room (for the composer's status line). */
+/** 1.99ye: the room's own line for say job `jobId` arrived (feed cursor `c`) - the page swaps its pending line for it. */
+function noteEcho(jobId, c) {
+  const j = jobs.get(String(jobId || ""));
+  if (!j || j.kind !== "say" || j.echoC) return false;
+  j.echoC = c; j.echoAt = Date.now();
+  if (j.state !== "done" || !j.result || !j.result.ok) { j.state = "done"; j.doneAt = j.echoAt; j.result = { ok: true, msg: "sent" }; }
+  noteLatency(j);
+  notify(j);
+  return true;
+}
+
+/** This user's recent relay jobs in a room (for the composer's status line). 1.99ye: a say carries its client id
+ *  (`cid`), `c` = the feed cursor of its own room line once that came back, and `code` = why it failed. */
 function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
     if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.kind === "tipnote" || j.kind === "golive" || j.kind === "nowplaying" || j.kind === "boostnote" || j.gui || j.setting || j.pepe) continue;   // panel jobs: padmod.js / padpepe.js
     const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
     if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
+    if (j.kind === "say") {
+      if (j.cid) o.cid = j.cid;
+      if (j.echoC) o.c = j.echoC;
+      if (j.result && j.result.code) o.code = j.result.code;
+    }
     out.push(o);
   }
-  return out.slice(-8);
+  return out.slice(-12);
 }
 
-function register(app, { isBotToken, addUser, bySlug, isLive }) {
+/** 1.99ye: one say line from member `u` (a users row: userId, username, displayname, camfrogUsername) into live room R.
+ *  The /say route and the staging test route both come here. -> {status, body}. `cid` = the page's client id: the same
+ *  one again answers with the job it already made (never a second post). */
+async function sayLine(u, R, text, cid, opts = {}) {
+  cid = CID_RE.test(String(cid || "")) ? String(cid) : "";
+  const key = cid ? u.userId + "|" + cid : "";
+  if (key && cids.has(key) && jobs.has(cids.get(key))) {
+    const j = jobs.get(cids.get(key));
+    return { status: 200, body: { ok: true, id: j.id, cid, dup: true, state: j.state } };
+  }
+  if (!text) return { status: 400, body: { ok: false, code: "empty", error: "Type something first." } };
+  const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block (bridgeblocks.js)
+  if (blk) return { status: 403, body: { ok: false, code: "blocked", error: blk, blocked: true } };
+  if (!u.camfrogUsername) {
+    const why = await accountRefusal(u, R, text);          // 1.99wv: a PATV account with no chat login (see the top)
+    if (why) return { status: why.status, body: { ok: false, code: "account", error: why.error } };
+  }
+  let open = 0;
+  for (const j of jobs.values()) if (j.kind === "say" && j.userId === u.userId && j.roomId === R.id && j.state !== "done") open++;
+  if (open >= SAY_QUEUE_MAX) {
+    return { status: 429, body: { ok: false, code: "queue_full", max: SAY_QUEUE_MAX, error: `You have ${SAY_QUEUE_MAX} messages waiting to go out — give them a second.` } };
+  }
+  const lim = limited("say|" + u.userId, 0, SAY_MINUTE_MAX, 60000);
+  if (lim) return { status: 429, body: { ok: false, code: "rate", error: lim } };
+  const display = u.camfrogUsername ? await webName(u) : "";
+  const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
+                     actor: require("./actorcap").actorOf(u, display), cid: cid || null });
+  if (key) cids.set(key, j.id);
+  console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}${opts.test ? " (staging test)" : ""}`);
+  if (!opts.test) require("./streaks").note(u.userId, "relay");     // 1.99xi: 🔥 chatting into a pad's room from the web keeps the daily streak
+  return { status: 200, body: { ok: true, id: j.id, cid: cid || null } };
+}
+
+/** 1.99ye: why web relay `flag` can't be used in pad room R right now -> {status, body} | null. `gated` = the pad has no
+ *  💎 bridge perk (bridge.js: the room is live but its web side is Prime Time Plus). */
+function roomRefusal(R, flag, isLive, gated) {
+  if (R && gated && gated(R)) return { status: 403, body: { ok: false, code: "gated", error: "This pad's live chat room comes with 💎 Prime Time Plus." } };
+  if (!R || !isLive(R)) return { status: 404, body: { ok: false, code: "offline", error: "That Camfrog room isn't live right now (Pepe isn't in it)." } };
+  if (!R[flag]) return { status: 403, body: { ok: false, code: "relay_off", error: "That isn't switched on in this Camfrog room." } };
+  return null;
+}
+
+function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, liveIds = null }) {
   const me = async (req) => {
     if (!req.user || !req.user.userId) return null;
     return (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
   };
   const roomFor = (req, res, flag) => {
     const R = bySlug(req.params.slug);
-    if (!R || !isLive(R)) { res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." }); return null; }
-    if (!R[flag]) { res.status(403).json({ ok: false, error: "That isn't switched on in this Camfrog room." }); return null; }
+    const why = roomRefusal(R, flag, isLive, gated);
+    if (why) { res.status(why.status).json(why.body); return null; }
     return R;
   };
 
   app.post("/api/rooms/:slug/say", addUser, express.json({ limit: "8kb" }), async (req, res) => {
     const u = await me(req);
-    if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
+    if (!u) return res.status(401).json({ ok: false, code: "signin", error: "Sign in first." });
     const R = roomFor(req, res, "relay");
     if (!R) return;
-    const text = clean((req.body || {}).text, SAY_MAX);
-    if (text.startsWith("!")) return runCmd(req, res, u, R, text);
-    if (!text) return res.status(400).json({ ok: false, error: "Type something first." });
-    const blk = await blockedWhy(R, u);                     // 1.99xa: !bridge block (bridgeblocks.js)
-    if (blk) return res.status(403).json({ ok: false, error: blk, blocked: true });
-    if (!u.camfrogUsername) {
-      const why = await accountRefusal(u, R, text);          // 1.99wv: a PATV account with no chat login (see the top)
-      if (why) return res.status(why.status).json({ ok: false, error: why.error });
+    const body = req.body || {};
+    // 1.99ye: too long is refused (with the limit), never cut short silently - the composer counts down to SAY_MAX
+    const text = clean(body.text, SAY_MAX + 1);
+    if (text.startsWith("!")) return runCmd(req, res, u, R, text.slice(0, SAY_MAX));
+    if (text.length > SAY_MAX) return res.status(400).json({ ok: false, code: "too_long", max: SAY_MAX, error: `That's too long — ${SAY_MAX} characters at most.` });
+    const out = await sayLine(u, R, text, body.cid);
+    res.status(out.status).json(out.body);
+  });
+
+  // 1.99ye: Pepe's long-poll for relay jobs - answered the moment one is queued (newJob wakes it), else after `wait` s
+  // with none. Acks ride along; /api/bridge/relay/ack takes them on their own (Pepe sends one as soon as a line is out).
+  app.post("/api/bridge/relay/pull", express.json({ limit: "256kb" }), async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    hookDrain();
+    applyAcks(b.acks);
+    lastPull = Date.now();
+    const ids = () => (liveIds ? liveIds() : new Set());
+    let out = draining ? [] : takeJobs(ids(), "pull");
+    const wait = Math.min(PULL_WAIT_MAX, Math.max(0, Number(b.wait) * 1000 || 0));
+    if (!out.length && wait > 0 && !draining) {
+      await new Promise((resolve) => {
+        let done = false;
+        const fin = () => {
+          if (done) return;
+          done = true; clearTimeout(t);
+          const i = pullers.indexOf(fin); if (i >= 0) pullers.splice(i, 1);
+          resolve();
+        };
+        const t = setTimeout(fin, wait);
+        pullers.push(fin);
+        res.on("close", fin);
+      });
+      // Pepe hung up meanwhile (a timeout, a restart): never claim jobs for an answer nobody reads
+      if (res.writableEnded || res.destroyed || (req.socket && req.socket.destroyed)) return;
+      out = draining ? [] : takeJobs(ids(), "pull");
+      lastPull = Date.now();
     }
-    const lim = limited("say|" + u.userId, 3000, 5, 60000);
-    if (lim) return res.status(429).json({ ok: false, error: lim });
-    const display = u.camfrogUsername ? await webName(u) : "";
-    const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
-                       actor: require("./actorcap").actorOf(u, display) });
-    console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}`);
-    require("./streaks").note(u.userId, "relay");          // 1.99xi: 🔥 chatting into a pad's room from the web keeps the daily streak
-    res.json({ ok: true, id: j.id });
+    res.json({ ok: true, jobs: out, ...(draining && !out.length ? { retry: true, idle: 3 } : {}) });
+  });
+  app.post("/api/bridge/relay/ack", express.json({ limit: "256kb" }), (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    applyAcks(b.acks);
+    res.json({ ok: true });
   });
 
   // A "!" line: a command run by Pepe as the account's linked Camfrog login (see the top of the file).
@@ -561,5 +736,7 @@ function saveRight(s, userId) {
 }
 
 module.exports = { register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
+  sayLine, roomRefusal, noteEcho, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_CLAIM_TTL,   // 1.99ye
+  _cids: cids, _pullers: pullers, _lastPull: () => lastPull,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
   _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };

@@ -457,23 +457,48 @@
   // the same permissions and prices as typing it there (1.99). Typing "!" opens a list of the room's
   // allowed commands (with prices); "!commands" lists them all. Answers Pepe would have PM'd show
   // here, for you only; public answers land in the room feed.
-  function relay(host, slug) {
+  //
+  // 1.99ye: a native chat composer. With opts.feed (the page's chat list) + opts.line (the page's own line builder) a
+  // message shows in the chat the moment you send it, in your own style, marked "🕓 sending…" (faded), then "✓ sent"
+  // once Pepe has put it into the Camfrog room (his ack), and it is swapped for the room's own line when that comes back
+  // (matched by the job's client id - never shown twice). A refusal turns it red with the reason and ↻ Retry / ✕.
+  // The box never locks: type and send as many as you like - up to SAY_QUEUE wait at once; they go out in order, one
+  // POST at a time (the server keeps the order, Pepe paces them for the room). A lost connection keeps them queued
+  // ("waiting for connection…", the offline banner) and sends them when it's back; the client id makes a resend safe.
+  // ↑ in an empty box takes back your last failed message to edit. A counter shows near Camfrog's line limit.
+  var SAY_MAX = 300, SAY_QUEUE = 5, COUNT_FROM = 240, SETTLE_MS = 8000;
+  function newCid() {
+    var a = '', c = window.crypto || window.msCrypto;
+    if (c && c.getRandomValues) { var b = new Uint8Array(12); c.getRandomValues(b); for (var i = 0; i < b.length; i++) a += ('0' + b[i].toString(16)).slice(-2); }
+    else a = (Date.now().toString(16) + Math.random().toString(16).slice(2)).slice(0, 24);
+    return 'c' + a;
+  }
+  function relay(host, slug, opts) {
+    opts = opts || {};
+    var feedEl = opts.feed || null, mkLine = typeof opts.line === 'function' ? opts.line : null;
     var form = el('form', 'rb-say hide'); form.setAttribute('autocomplete', 'off');
     var lab = el('label', 'rb-sr', _t('js.pad.relay.label', 'Message or !command to the chat room')); lab.htmlFor = 'rbSay' + slug;
     var wrap = el('div', 'rb-say-in');
-    var inp = el('input'); inp.id = 'rbSay' + slug; inp.type = 'text'; inp.maxLength = 300; inp.required = true;
+    var inp = el('input'); inp.id = 'rbSay' + slug; inp.type = 'text'; inp.maxLength = SAY_MAX; inp.required = true;
     inp.placeholder = _t('js.pad.relay.placeholder', 'Say something — Pepe relays it as “🌐 you (web)”');
     inp.setAttribute('role', 'combobox'); inp.setAttribute('aria-autocomplete', 'list'); inp.setAttribute('aria-expanded', 'false');
     var list = el('ul', 'rb-ac hide'); list.id = 'rbAc' + slug; list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', _t('js.pad.relay.commands', 'Commands'));
     inp.setAttribute('aria-controls', list.id);
     wrap.appendChild(inp); wrap.appendChild(list);
     var btn = el('button', 'rb-btn rb-send', _t('js.pad.relay.send', 'Send')); btn.type = 'submit';
+    var count = el('span', 'rb-count hide'); count.setAttribute('aria-live', 'polite');
     var hint = el('div', 'rb-hint hide', _t('js.pad.relay.hint', 'Type !commands to see what you can run here as your linked chat name.'));
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
+    var note = el('div', 'rb-note hide'); note.setAttribute('role', 'status');
+    var offBar = el('div', 'rb-offline hide', _t('js.pad.relay.offline', 'You\'re offline — your messages will send when the connection is back.'));
+    offBar.setAttribute('role', 'status');
     var feed = el('ul', 'rb-cmdfeed'); feed.setAttribute('aria-live', 'polite'); feed.setAttribute('aria-label', _t('js.pad.relay.your_commands', 'Your commands'));
-    form.appendChild(lab); form.appendChild(wrap); form.appendChild(btn);
-    host.appendChild(form); host.appendChild(hint); host.appendChild(mine); host.appendChild(feed);
+    form.appendChild(lab); form.appendChild(wrap); form.appendChild(count); form.appendChild(btn);
+    host.appendChild(offBar); host.appendChild(form); host.appendChild(note); host.appendChild(hint); host.appendChild(mine); host.appendChild(feed);
     var last = '', lastJs = [], cmds = null, local = [], acIdx = -1, acItems = [];
+    // 1.99ye: the outbox - {cid, text, at, st: queue|posting|wait|sent|failed, id, off, why, code, node, stEl, settled}
+    var outbox = [], meU = null, busy = false, backoff = 0, retryTimer = null, noteTimer = null;
+    var optimistic = !!feedEl;
 
     function fmtPrice(n) { return n > 0 ? Number(n).toLocaleString('en-US') + ' PAT' : ''; }
     function closeAc() { list.classList.add('hide'); list.textContent = ''; acItems = []; acIdx = -1; inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); }
@@ -503,9 +528,22 @@
       });
       acIdx = -1; list.classList.remove('hide'); inp.setAttribute('aria-expanded', 'true'); paintAc();
     }
-    inp.addEventListener('input', openAc);
+    function paintCount() {
+      var n = inp.value.length, show = n >= COUNT_FROM;
+      count.classList.toggle('hide', !show);
+      count.classList.toggle('full', n >= SAY_MAX);
+      if (show) count.textContent = _t('js.pad.relay.chars_left', '{n} left', { n: Math.max(0, SAY_MAX - n) });
+      count.title = _t('js.pad.relay.chars_title', 'A Camfrog chat line holds {max} characters from the website', { max: SAY_MAX });
+    }
+    inp.addEventListener('input', function () { openAc(); paintCount(); });
     inp.addEventListener('blur', function () { setTimeout(closeAc, 100); });
     inp.addEventListener('keydown', function (e) {
+      // ↑ in an empty box: take back your last failed message to fix it (Camfrog can't edit a line once it's sent)
+      if (e.key === 'ArrowUp' && !inp.value && (list.classList.contains('hide') || !acItems.length)) {
+        for (var i = outbox.length - 1; i >= 0; i--) {
+          if (outbox[i].st === 'failed') { e.preventDefault(); inp.value = outbox[i].text; drop(outbox[i]); paintCount(); return; }
+        }
+      }
       if (list.classList.contains('hide') || !acItems.length) return;
       if (e.key === 'ArrowDown') { e.preventDefault(); acIdx = (acIdx + 1) % acItems.length; paintAc(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); acIdx = acIdx <= 0 ? acItems.length - 1 : acIdx - 1; paintAc(); }
@@ -530,38 +568,199 @@
       });
     }
 
+    // ── 1.99ye: the outbox ──
+    function post(body) {
+      return fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (d) { return { s: r.status, d: d }; }, function () { return { s: r.status, d: null }; }); });
+    }
+    function showNote(t) {
+      note.textContent = t; note.classList.toggle('hide', !t);
+      clearTimeout(noteTimer); if (t) noteTimer = setTimeout(function () { note.classList.add('hide'); }, 6000);
+    }
+    function setOffline(on) { offBar.classList.toggle('hide', !on); }
+    function waiting() { return outbox.filter(function (x) { return x.st === 'queue' || x.st === 'posting' || x.st === 'wait'; }).length; }
+    function nearBottom() { return !feedEl || feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 80; }
+    function toBottom() {
+      if (!feedEl) return;
+      feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = '';
+      if (opts.onBottom) { try { opts.onBottom(); } catch (e) { /* the page's pill */ } }
+    }
+    function optNode(it) {
+      var u = meU || { display: _t('js.pad.relay.you', 'you'), login: '', web: true };
+      var n = null;
+      try { n = mkLine ? mkLine({ k: 'msg', u: u, text: it.text, ts: it.at }) : null; } catch (e) { n = null; }
+      if (!n) { n = el('div', 'rb-optline'); n.appendChild(el('b', null, u.display || '')); n.appendChild(document.createTextNode(' ' + it.text)); }
+      n.classList.add('rb-opt'); n.setAttribute('data-cid', it.cid);
+      n.removeAttribute('data-c'); n.removeAttribute('data-k');      // not a room line (yet): no ✂️ Clip / quote on it
+      var s = el('span', 'rb-st');
+      (n.querySelector('.body') || n).appendChild(s);
+      it.node = n; it.stEl = s;
+      return n;
+    }
+    function paint(it) {
+      var n = it.node; if (!n) return;
+      var pend = it.st !== 'sent' && it.st !== 'failed';
+      n.classList.toggle('rb-opt-wait', pend);
+      n.classList.toggle('rb-opt-sent', it.st === 'sent');
+      n.classList.toggle('rb-opt-failed', it.st === 'failed');
+      // waiting lines stay at the bottom of the chat (the page inserts new room lines above them); a sent one that
+      // hasn't come back by SETTLE_MS (e.g. you're !incognito: the website never shows your lines) and a failed one
+      // keep their place
+      n.classList.toggle('rb-opt', pend || (it.st === 'sent' && !it.settled));
+      var s = it.stEl; s.textContent = '';
+      if (it.st === 'failed') {
+        s.appendChild(el('span', 'rb-st-t', '⚠ ' + _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: it.why || _t('js.pad.relay.refused', 'refused') })));
+        var rb = el('button', 'rb-st-b', _t('js.pad.relay.retry', 'Retry')); rb.type = 'button';
+        rb.addEventListener('click', function () { retry(it); });
+        var db = el('button', 'rb-st-b', '✕'); db.type = 'button'; db.title = _t('js.pad.relay.delete', 'Delete'); db.setAttribute('aria-label', db.title);
+        db.addEventListener('click', function () { drop(it); });
+        s.appendChild(rb); s.appendChild(db);
+      } else if (it.st === 'sent') {
+        s.textContent = '✓ ' + _t('js.pad.relay.sent', 'sent');
+        s.title = _t('js.pad.relay.sent_title', 'Pepe posted it in the Camfrog room');
+      } else {
+        s.textContent = '🕓 ' + (it.off ? _t('js.pad.relay.waiting_net', 'waiting for connection…') : _t('js.pad.relay.sending', 'sending…'));
+        s.title = '';
+      }
+    }
+    function place(it) {
+      if (!feedEl) return;
+      var stick = nearBottom();
+      var p = feedEl.firstChild;
+      if (p && p.tagName === 'P') feedEl.removeChild(p);                // "Nothing said yet"
+      feedEl.appendChild(it.node || optNode(it));
+      paint(it);
+      if (stick || it.mine) toBottom();
+    }
+    function drop(it) {
+      var i = outbox.indexOf(it); if (i >= 0) outbox.splice(i, 1);
+      if (it.node && it.node.parentNode) it.node.parentNode.removeChild(it.node);
+      it.node = null;
+    }
+    function fail(it, why, code) { it.st = 'failed'; it.off = false; it.why = why || ''; it.code = code || ''; paint(it); }
+    function retry(it) {
+      if (waiting() >= SAY_QUEUE) { showNote(_t('js.pad.relay.queue_full', 'Wait a moment — {n} messages are already on their way.', { n: SAY_QUEUE })); return; }
+      it.cid = newCid(); it.st = 'queue'; it.id = null; it.why = ''; it.code = ''; it.at = Date.now(); it.settled = false; it.mine = true;
+      if (it.node) { it.node.setAttribute('data-cid', it.cid); if (it.node.parentNode) it.node.parentNode.removeChild(it.node); }
+      place(it); pump();
+    }
+    function offlineRetry(it) {
+      it.st = 'queue'; it.off = true; paint(it); setOffline(true);
+      backoff = backoff ? Math.min(15000, backoff * 2) : 1000;
+      clearTimeout(retryTimer); retryTimer = setTimeout(pump, backoff);
+    }
+    // One POST at a time, in order: the site queues them in the order it gets them.
+    function pump() {
+      if (busy) return;
+      var it = null;
+      for (var i = 0; i < outbox.length; i++) if (outbox[i].st === 'queue') { it = outbox[i]; break; }
+      if (!it) return;
+      busy = true; it.st = 'posting';
+      post({ text: it.text, cid: it.cid }).then(function (x) {
+        busy = false;
+        if (outbox.indexOf(it) < 0) { pump(); return; }                  // deleted meanwhile
+        var d = x.d;
+        if (!d || x.s >= 500) { offlineRetry(it); return; }
+        setOffline(false); backoff = 0;
+        if (d.ok) { it.st = 'wait'; it.id = d.id; it.off = false; paint(it); }      // `mine` takes it from here
+        else if (d.code === 'queue_full') { it.st = 'queue'; paint(it); clearTimeout(retryTimer); retryTimer = setTimeout(pump, 1500); return; }
+        else if (x.s === 401) fail(it, _t('js.pad.relay.signed_out', 'you\'re signed out — sign in again'), 'signin');
+        else fail(it, d.error || _t('js.pad.relay.refused', 'refused'), d.code);
+        pump();
+      }, function () { busy = false; if (outbox.indexOf(it) >= 0) offlineRetry(it); else pump(); });
+    }
+    window.addEventListener('online', function () { if (outbox.some(function (x) { return x.st === 'queue'; })) { clearTimeout(retryTimer); backoff = 0; pump(); } });
+    window.addEventListener('beforeunload', function (e) {
+      if (outbox.some(function (x) { return x.st === 'queue' || x.st === 'posting'; })) { e.preventDefault(); e.returnValue = ''; }
+    });
+    function sendChat(text) {
+      if (waiting() >= SAY_QUEUE) {
+        showNote(_t('js.pad.relay.queue_full', 'Wait a moment — {n} messages are already on their way.', { n: SAY_QUEUE }));
+        return false;
+      }
+      var it = { cid: newCid(), text: text, at: Date.now(), st: 'queue', mine: true };
+      outbox.push(it);
+      place(it);
+      pump();
+      return true;
+    }
+    // A "!" command: sent at once (no optimistic line - its answer shows in your command list); never locks the box.
+    function sendCmd(text) {
+      post({ text: text }).then(function (x) {
+        var d = x.d || {};
+        if (d.ok && d.local) { local.push({ at: Date.now(), text: text, st: '', ok: true, replies: [d.reply || ''] }); local = local.slice(-2); renderFeed(lastJs); return; }
+        if (d.ok) return;
+        local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: d.error || _t('js.pad.relay.refused', 'refused') }), ok: false, replies: [] });
+        local = local.slice(-2); renderFeed(lastJs);
+      }, function () {
+        local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.unreachable', 'couldn\'t reach the site'), ok: false, replies: [] });
+        local = local.slice(-2); renderFeed(lastJs);
+      });
+    }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       closeAc();
       var text = inp.value.trim(); if (!text) return;
-      var isCmd = text.charAt(0) === '!';
-      btn.disabled = true;
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin',
-        headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ text: text }) })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.ok && d.local) { inp.value = ''; local.push({ at: Date.now(), text: text, st: '', ok: true, replies: [d.reply || ''] }); local = local.slice(-2); renderFeed(lastJs); return; }
-          if (d.ok) { inp.value = ''; if (!isCmd) mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') }); return; }
-          if (isCmd) { local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: d.error || _t('js.pad.relay.refused', 'refused') }), ok: false, replies: [] }); local = local.slice(-2); renderFeed(lastJs); }
-          else mine.textContent = '💬 ' + (d.error || _t('js.pad.relay.not_sent', 'not sent'));
-        })
-        .catch(function () { mine.textContent = '💬 ' + _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); })
-        .then(function () { setTimeout(function () { btn.disabled = false; }, isCmd ? 1500 : 3000); });
+      if (text.charAt(0) === '!') { inp.value = ''; sendCmd(text); }
+      else if (optimistic) { if (sendChat(text)) inp.value = ''; }
+      else {
+        // no chat list to show it in (an older page): the status line, as before
+        inp.value = '';
+        mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') });
+        post({ text: text, cid: newCid() }).then(function (x) { if (!x.d || !x.d.ok) mine.textContent = '💬 ' + ((x.d && x.d.error) || _t('js.pad.relay.not_sent', 'not sent')); },
+          function () { mine.textContent = '💬 ' + _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); });
+      }
+      paintCount();
+      inp.focus();
     });
+
+    // The live view's `mine` (this viewer's relay jobs, 1.99ye: with cid / c / code) -> the outbox lines' states.
+    function syncOutbox(js, cursor) {
+      var byCid = {};
+      js.forEach(function (j) { if (j.kind === 'say' && j.cid) byCid[j.cid] = j; });
+      outbox.slice().forEach(function (it) {
+        var j = byCid[it.cid];
+        if (!j) return;
+        it.id = j.id;
+        if (j.c && j.c <= cursor) { drop(it); return; }                // the room's own line is in the chat now
+        if (it.st === 'queue' || it.st === 'posting') return;          // our POST's answer decides first
+        var was = it.st;
+        if (j.state !== 'done') it.st = 'wait';
+        else if (j.ok) it.st = 'sent';
+        else { it.st = 'failed'; it.why = j.msg || ''; it.code = j.code || ''; }
+        if (it.st === 'sent' && was !== 'sent') {
+          it.sentAt = Date.now();
+          setTimeout(function () { if (outbox.indexOf(it) >= 0 && it.st === 'sent') { it.settled = true; paint(it); } }, SETTLE_MS);
+        }
+        if (it.st !== was) paint(it);
+      });
+    }
     return {
       update: function (d) {
         form.classList.toggle('hide', !(d && d.room && d.room.relay));
         cmds = d && d.room && d.room.cmds ? d.room.cmds : null;
         hint.classList.toggle('hide', !(cmds && d.room.relay));
         inp.placeholder = cmds ? _t('js.pad.relay.placeholder_cmds', 'Say something, or type ! for commands — relayed as “🌐 you (web)”') : _t('js.pad.relay.placeholder', 'Say something — Pepe relays it as “🌐 you (web)”');
+        if (d && d.me) meU = d.me;
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         lastJs = js;
+        if (optimistic) syncOutbox(js, (d && d.cursor) || 0);
         if (k === last) return;
         last = k;
-        var j = js.filter(function (x) { return x.kind === 'say'; }).pop();
-        if (j) mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: j.state === 'done' ? (j.ok ? (j.msg || _t('js.pad.relay.sent', 'sent')) : _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') })) : _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') });
+        if (!optimistic) {
+          var j = js.filter(function (x) { return x.kind === 'say'; }).pop();
+          if (j) mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: j.state === 'done' ? (j.ok ? (j.msg || _t('js.pad.relay.sent', 'sent')) : _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') })) : _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') });
+        }
         renderFeed(js);
       },
+      // 1.99ye: where the page puts new room lines - above your lines that are still on their way (null = at the end)
+      anchor: function () { return feedEl ? feedEl.querySelector('.rb-opt') : null; },
+      // does the page still need to send ?me=1 (your look for the pending lines)?
+      wantsMe: function () { return optimistic && !meU; },
+      pending: function () { return outbox.slice(); },
+      _send: sendChat,
     };
   }
 

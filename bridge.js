@@ -157,6 +157,7 @@ function replayActivity(R) {
 
 async function dropRoom(id) {
   rooms.delete(id);
+  wakeRoom(id);                                   // 1.99ye: its waiting pages answer (room gone)
   RA.drop(id);
   await runQuery("DELETE FROM bridge_rooms WHERE id = ?", [id]);
   await runQuery("DELETE FROM bridge_feed WHERE room_id = ?", [id]);
@@ -175,7 +176,9 @@ function feedItem(ev) {
       if (w) {
         const wu = cleanUser(w.user, true);
         const wt = str(w.text, 400);
-        if (wu && !wu.anon && !wu.self && wt) return { k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt };
+        // 1.99ye: `job` = the relay job this line came from (bridge-relay.noteEcho swaps the sender's pending line for it)
+        const jid = typeof w.job === "string" && /^w[0-9a-f]{16}$/.test(w.job) ? w.job : null;
+        if (wu && !wu.anon && !wu.self && wt) return Object.assign({ k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt }, jid ? { _job: jid } : {});
       }
       const u = cleanUser(d.user);
       const text = str(d.text, 400);
@@ -375,6 +378,7 @@ async function ingest(body) {
               room: rid(g.room), roomName: str(g.room_name, 100), pinned: !!g.pinned, rooms: roomList };
   }
   const touched = new Set();
+  const wake = new Set();                  // 1.99ye: rooms whose waiting page long-polls have something new
   const lines = new Map();                 // room id -> new chat lines this batch (room activity)
   for (const id of (Array.isArray(body.closed) ? body.closed : []).slice(0, MAX_ROOMS)) {
     if (typeof id === "string" && rooms.has(id)) await dropRoom(id);
@@ -412,6 +416,8 @@ async function ingest(body) {
     if (!R.audio) audioClose(R.id);
     RA.micSample(R.id, R.mic, now);
     R.updated = now;
+    R.ver = (R.ver || 0) + 1;                  // 1.99ye: a new snapshot (people, mic, topic, switches) - pages refresh
+    wake.add(R.id);
     touched.add(R);
   }
   const newItems = [];
@@ -431,7 +437,10 @@ async function ingest(body) {
     if (!R) continue;
     R.updated = now;
     touched.add(R);
-    if (ev.type === "room.update" && ev.data && ev.data.changes && typeof ev.data.changes.topic === "string") R.topic = str(ev.data.changes.topic, 200);
+    if (ev.type === "room.update" && ev.data && ev.data.changes && typeof ev.data.changes.topic === "string") {
+      R.topic = str(ev.data.changes.topic, 200);
+      R.ver = (R.ver || 0) + 1; wake.add(R.id);
+    }
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = feedItem(ev);
     if (!it) continue;
@@ -440,13 +449,17 @@ async function ingest(body) {
     if (it.cap === "tts" && R.transcripts !== false) continue;
     delete it.cap;
     if (it.k === "tx" && it.id && R.feed.some((x) => x.k === "tx" && x.id === it.id)) continue;   // one line per mic-up
+    const echoOf = it._job || null;
+    delete it._job;
     it.c = ++cursor;
+    wake.add(R.id);
     if (it.k === "msg" || it.k === "tx") lines.set(R.id, (lines.get(R.id) || 0) + 1);
     if (it.k === "msg") RA.line(R.id, it.u, now);
     else if (it.k === "tx" || it.k === "mic") RA.spoke(R.id, it.u, now);
     R.feed.push(it);
     if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
     newItems.push([R.id, it]);
+    if (echoOf) relay.noteEcho(echoOf, it.c);          // 1.99ye: the sender's pending line becomes this one
   }
   for (const [rid, it] of newItems) {
     const { c, ...rest } = it;
@@ -479,7 +492,65 @@ async function ingest(body) {
     lastFrontTick = now;
     summary(false).then((s) => require("./rooms").frontRoom(s)).catch((e) => console.error("[bridge] front room:", e.message));
   }
+  for (const id of wake) wakeRoom(id);           // 1.99ye: the pad pages waiting on this room answer now
   return { rooms: touched.size, items: newItems.length };
+}
+
+// ── 1.99ye: push to the pad page - /live?wait=1 is a long-poll ──
+// The page asks with what it has (after = feed cursor, v = the room's snapshot version, mv = the viewer's relay-job version)
+// and the answer waits until one of them moves on (a new line, a new snapshot, the viewer's say queued / sent / failed /
+// echoed), at most LP_MAX. The page asks again at once, so a line reaches the page ~one network round trip after Pepe's
+// sync instead of up to 1.5 s later. Older pages keep polling without `wait`.
+const LP_MAX = 20 * 1000;
+const roomWaiters = new Map();          // room id -> Set(fn)
+const mineVer = new Map();              // userId -> n (bumped on every change of their relay jobs)
+let lpDraining = false, lpDrainHooked = false;
+function wakeRoom(id) {
+  const s = roomWaiters.get(id);
+  if (!s) return;
+  for (const f of [...s]) { try { f(); } catch (e) { /* one page can't break another */ } }
+}
+function wakeAll() { for (const id of [...roomWaiters.keys()]) wakeRoom(id); }
+relay.setNotify((roomId, userId) => {
+  if (userId) {
+    mineVer.set(userId, (mineVer.get(userId) || 0) + 1);
+    if (mineVer.size > 20000) mineVer.delete(mineVer.keys().next().value);
+  }
+  if (roomId) wakeRoom(roomId);
+});
+const lastC = (R) => (R.feed && R.feed.length ? R.feed[R.feed.length - 1].c : 0);
+/** Wait (at most LP_MAX) until room R has something the page at (after, v, mv) hasn't seen. -> false when the page hung up. */
+function waitForChange(req, res, R, after, v, mv, userId) {
+  if (!lpDrainHooked) { lpDrainHooked = true; try { require("./shutdown").onDrain(() => { lpDraining = true; wakeAll(); }); } catch (e) { /* no graceful stop */ } }
+  const changed = () => lpDraining || rooms.get(R.id) !== R || lastC(R) > after || after > cursor ||
+    (v != null && String(R.ver || 0) !== v) || (!!userId && mv != null && String(mineVer.get(userId) || 0) !== mv);
+  if (changed()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let set = roomWaiters.get(R.id);
+    if (!set) { set = new Set(); roomWaiters.set(R.id, set); }
+    let done = false;
+    const fin = (alive) => {
+      if (done) return;
+      done = true; clearTimeout(t);
+      set.delete(check);
+      if (!set.size && roomWaiters.get(R.id) === set) roomWaiters.delete(R.id);
+      resolve(alive);
+    };
+    const check = () => { if (changed()) fin(true); };
+    const t = setTimeout(() => fin(true), LP_MAX);
+    set.add(check);
+    res.on("close", () => fin(false));
+  });
+}
+/** 1.99ye: the signed-in viewer as their own pending lines show them (their PATV name, avatar and name style). */
+async function meFor(userId) {
+  try {
+    const r = (await getQuery("SELECT username, displayname, avatar, camfrogUsername FROM users WHERE userId = ?", [String(userId || "")]))[0];
+    if (!r) return null;
+    const login = r.camfrogUsername ? String(r.camfrogUsername) : "u:" + userId;
+    return { login, display: plain(r.displayname, 40) || r.username, web: true,
+             patv: { username: r.username, avatar: safeImg(r.avatar), style: cosmetics.nameStyle(r.username) || "" } };
+  } catch (e) { return null; }
 }
 
 // ── names: PATV display name > Camfrog display name > login (1.99ea) ──
@@ -661,6 +732,7 @@ async function liveNotice(roomId, { who, pad, what, link, np = false } = {}) {
   if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
   const { c, ...rest } = it;
   await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, R.id, it.ts, JSON.stringify(rest)]);
+  wakeRoom(R.id);                                 // 1.99ye
   return true;
 }
 async function liveAnnounce(roomId, { streamer, pad, what, link, camfrog, userId, np = false } = {}) {
@@ -714,7 +786,7 @@ async function boostAnnounce({ roomId, userId, amount, pad, link } = {}) {
   }
 }
 
-async function liveView(R, after, userId, login, username = null) {
+async function liveView(R, after, userId, login, username = null, withMe = !after) {
   const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
   const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
   const F = await require("./padflair").byUsername(R.id).catch(() => null);          // 1.99ir: pad flair on the chat
@@ -736,6 +808,9 @@ async function liveView(R, after, userId, login, username = null) {
             // 1.99qr: the 🐸 Pepe submenu (padpepe.js) - only while web commands are on in the room
             pepe: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length && R.pepe && Object.keys(R.pepe).length ? R.pepe : null },
     mine: userId ? relay.mineFor(userId, R.id) : [],
+    // 1.99ye: the long-poll's versions (the page sends them back) + the viewer's own look for their pending lines
+    ver: R.ver || 0, mver: userId ? mineVer.get(userId) || 0 : 0,
+    ...(userId && withMe ? { me: await meFor(userId) } : {}),
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
     members: R.members.map(withTip),
@@ -867,11 +942,65 @@ function register(app, { isBotToken, addUser }) {
     const pm = require("./padmod");
     const login = signed ? await pm.linkedLogin(req.user.userId) : null;
     if (login) pm.noteViewer(R.id, login);
-    res.json(await liveView(R, after > cursor ? 0 : after, signed ? req.user.userId : null, login, signed ? req.user.username : null));
+    // 1.99ye: ?wait=1 - a long-poll (waitForChange); the answer says lp: true so the page asks again at once
+    const lp = req.query.wait === "1";
+    if (lp) {
+      const q = (k) => (typeof req.query[k] === "string" && /^\d{1,12}$/.test(req.query[k]) ? req.query[k] : null);
+      const alive = await waitForChange(req, res, R, after, q("v"), q("mv"), signed ? req.user.userId : null);
+      if (!alive) return;
+      if (rooms.get(R.id) !== R) return res.json({ gone: true, lp: true });
+    }
+    const aft = after > cursor ? 0 : after;
+    const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1");
+    res.json(lp ? Object.assign(out, { lp: true }) : out);
   });
 
+  // 1.99ye STAGING ONLY (bot token): drive the web relay end to end without a browser session - a say line as the account
+  // linked to `login`, that account's view of the pad (the same long-poll), and the say timings (bridge-relay.latency).
+  // tools/relay-latency.js uses them to measure the path before/after. They don't exist on prod.
+  if (process.env.STAGING) {
+    const testUser = async (login) => (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE LOWER(camfrogUsername) = LOWER(?) LIMIT 1",
+      [String(login || "").slice(0, 40)]))[0] || null;
+    app.post("/api/bridge/test/say", express.json({ limit: "8kb" }), async (req, res) => {
+      const b = req.body || {};
+      if (!isBotToken(b.password)) return res.status(403).json({ ok: false });
+      await load();
+      const R = bySlug(b.slug);
+      const why = relay.roomRefusal(R, "relay", isLiveShown, (x) => !bridgeOk(x.id));
+      if (why) return res.status(why.status).json(why.body);
+      const u = await testUser(b.login);
+      if (!u) return res.status(404).json({ ok: false, error: "no account linked to that login" });
+      const text = relay.clean(b.text, relay.SAY_MAX + 1);
+      if (text.length > relay.SAY_MAX || text.startsWith("!")) return res.status(400).json({ ok: false, code: "too_long" });
+      const out = await relay.sayLine(u, R, text, b.cid, { test: true });
+      res.status(out.status).json(out.body);
+    });
+    app.post("/api/bridge/test/live", express.json({ limit: "8kb" }), async (req, res) => {
+      const b = req.body || {};
+      if (!isBotToken(b.password)) return res.status(403).json({ ok: false });
+      await load();
+      const R = bySlug(b.slug);
+      if (!R) return res.status(404).json({ ok: false });
+      const u = await testUser(b.login);
+      const after = Math.max(0, Number(b.after) || 0);
+      const num = (x) => (x == null || x === "" ? null : String(Math.max(0, parseInt(x, 10) || 0)));
+      if (b.wait) {
+        const alive = await waitForChange(req, res, R, after, num(b.v), num(b.mv), u ? u.userId : null);
+        if (!alive) return;
+      }
+      const out = await liveView(R, after > cursor ? 0 : after, u ? u.userId : null, u ? u.camfrogUsername : null, u ? u.username : null);
+      res.json({ feed: out.feed, cursor: out.cursor, mine: out.mine, ver: out.ver, mver: out.mver, now: Date.now() });
+    });
+    app.post("/api/bridge/test/latency", express.json({ limit: "8kb" }), (req, res) => {
+      if (!isBotToken((req.body || {}).password)) return res.status(403).json({ ok: false });
+      res.json({ ok: true, samples: relay.latency(), lastPull: relay._lastPull() });
+    });
+  }
+
   // 1.99qp: the web side of the bridge treats a pad without the bridge perk as not live (isLiveShown)
-  relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });
+  // 1.99ye: gated = live but without the 💎 bridge perk (a say is refused with that reason); liveIds = Pepe's long-poll
+  relay.register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown, gated: (R) => isLive(R) && !bridgeOk(R.id),
+                        liveIds: () => new Set([...rooms.values()].filter(isLive).map((R) => R.id)) });
   require("./bridgeblocks").register(app, { isBotToken, addUser, bySlug });      // 1.99xa: !bridge block - web senders blocked per room / everywhere
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)

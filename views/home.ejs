@@ -820,8 +820,8 @@
 <% } %>
 
 <% if (rbJs_) { %>
-<link rel="stylesheet" href="/public/css/room-bridge.css?v=9">
-<script src="/public/js/room-bridge.js?v=12"></script>
+<link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
+<script src="/public/js/room-bridge.js?v=13"></script>
 <% } %>
 <% if ((me || roomLive) && room) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -874,13 +874,16 @@
     function chip(u, cls) { return chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
     var roomAudio = PATVRoom.audio(document.getElementById('lrAudioBox'), slug, { showOff: true });
     window.PATVHomeAudio = roomAudio;            // the Top Pads 🎧 buttons play through this player (one room at a time)
-    var relayHost = document.getElementById('lrRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
+    // 1.99ye: your messages show in the chat at once (sending… / ✓ sent / not sent · Retry)
+    var relayHost = document.getElementById('lrRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, { feed: feed, line: line }) : null;
     var pttHost = document.getElementById('lrPtt'), roomPtt = pttHost ? PATVRoom.ptt(pttHost, slug) : null;
     function apply(d) {
       var near = !started || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
       if (started && d.cursor < cursor) { started = false; cursor = 0; }
       if (!started) feed.textContent = '';
-      (d.feed || []).slice(-80).forEach(function (it) { var n = line(it); if (n) feed.appendChild(n); });
+      // 1.99ye: new room lines go above your own lines that are still on their way (room-bridge.js relay outbox)
+      var anchor = roomRelay && roomRelay.anchor ? roomRelay.anchor() : null;
+      (d.feed || []).slice(-80).forEach(function (it) { var n = line(it); if (!n) return; if (anchor && anchor.parentNode === feed) feed.insertBefore(n, anchor); else feed.appendChild(n); });
       if (!started && !feed.childNodes.length) feed.appendChild(el('p', 'muted', _t('js.home.room.quiet', 'Quiet right now — lines show up here the moment someone talks.')));
       if (started && (d.feed || []).length && feed.firstChild && feed.firstChild.tagName === 'P') feed.removeChild(feed.firstChild);
       while (feed.childNodes.length > 120) feed.removeChild(feed.firstChild);
@@ -906,19 +909,31 @@
         if (!ms.length) p.appendChild(el('span', 'muted', _t('js.home.room.just_pepe', 'Just Pepe')));
       }
     }
+    // 1.99ye: a long-poll (?wait=1, like the pad page): answered when something changes, asked again at once; an older
+    // site (no `lp` in the answer) is polled every 3 s as before
+    var lp = { ok: false, v: null, mv: null }, inflight = false;
     function poll() {
       timer = null;
-      if (document.hidden) return;
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live?after=' + cursor, { credentials: 'same-origin', cache: 'no-store' })
+      if (document.hidden || inflight) return;
+      inflight = true;
+      var q = '?after=' + cursor + '&wait=1' + (lp.v != null ? '&v=' + lp.v : '') + (lp.mv != null ? '&mv=' + lp.mv : '') +
+        (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '');
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live' + q, { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (d) { fails = 0; apply(d); })
-        .catch(function () { fails++; })
-        .then(function () { if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(30000, 3000 * Math.pow(2, fails)) : 3000); });
+        .then(function (d) {
+          fails = 0; lp.ok = !!d.lp && !d.gone;
+          if (d.gone) return;
+          if (d.ver != null) lp.v = d.ver;
+          if (d.mver != null) lp.mv = d.mver;
+          apply(d);
+        })
+        .catch(function () { fails++; lp.ok = false; })
+        .then(function () { inflight = false; if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(30000, 3000 * Math.pow(2, fails)) : (lp.ok ? 50 : 3000)); });
     }
     document.addEventListener('visibilitychange', function () { if (!document.hidden && !timer) poll(); });
     var init = JSON.parse(document.getElementById('lrInit').textContent);
     if (init) apply(init);
-    timer = setTimeout(poll, 3000);
+    timer = setTimeout(poll, 300);
   })();
 </script>
 <% } %>

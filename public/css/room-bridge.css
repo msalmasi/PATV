@@ -86,3 +86,22 @@
 .sbd-foot { margin: 4px 0 0; font-size: 12.5px; }
 .sbd-empty { margin: 4px; color: var(--ds-text-muted, #999); font-size: 13px; }
 .sbd-sub { grid-column: 1 / -1; margin: 6px 2px 0; font-size: 12px; font-weight: 700; color: var(--ds-text-muted, #999); } /* 1.99vu */
+/* 1.99ye: the native-feeling web chat - your lines on their way (room-bridge.js relay outbox) */
+.rb-say { grid-template-columns: minmax(0, 1fr) auto auto; }
+.rb-count { font-size: 11.5px; color: var(--ds-text-muted, #999); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rb-count.full { color: var(--ds-danger, #e66); font-weight: 700; }
+.rb-count.hide, .rb-note.hide, .rb-offline.hide { display: none; }
+.rb-note { color: var(--ds-warn, #e0b44c); font-size: 12.5px; margin-top: 4px; }
+.rb-offline { margin: 0 0 6px; padding: 5px 9px; border-radius: 8px; font-size: 12.5px; color: #1b1300; background: var(--ds-warn, #e0b44c); }
+.rb-opt-wait { opacity: .6; }
+.rb-opt-wait, .rb-opt-sent, .rb-opt-failed { transition: opacity .15s ease; }
+.rb-st { margin-left: 6px; font-size: 11.5px; color: var(--ds-text-muted, #999); white-space: nowrap; }
+.rb-opt-sent .rb-st { color: var(--ds-ok, #6c6); }
+.rb-opt-failed { opacity: 1; }
+.rb-opt-failed .rb-st { color: var(--ds-danger, #e66); white-space: normal; }
+.rb-opt-failed .body, .rb-opt-failed.rb-optline { box-shadow: inset 2px 0 0 var(--ds-danger, #e66); padding-left: 6px; }
+.rb-st-b { margin-left: 6px; padding: 1px 8px; min-height: 24px; border-radius: 999px; border: 1px solid var(--ds-danger, #e66); background: transparent;
+           color: var(--ds-danger, #e66); font: inherit; font-size: 11.5px; cursor: pointer; }
+.rb-st-b:hover, .rb-st-b:focus-visible { background: rgba(230, 102, 102, .15); outline: none; }
+.rb-optline { padding: 3px 0; }
+@media (prefers-reduced-motion: reduce) { .rb-opt-wait, .rb-opt-sent, .rb-opt-failed { transition: none; } }
