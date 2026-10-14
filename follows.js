@@ -141,6 +141,26 @@ async function lists(userId) {
   return out;
 }
 
+/** 1.99za: the pad ids this user follows, newest follow first (the nav's "My pads" + the /p "Following" section). */
+async function followedPadIds(userId, limit = 60) {
+  if (!userId) return [];
+  await init();
+  const rows = await getQuery("SELECT target_id FROM follows WHERE follower = ? AND target_kind = 'room' ORDER BY created_at DESC LIMIT ?",
+                              [String(userId), Math.max(1, Math.min(MAX_FOLLOWS, limit | 0))]);
+  return rows.map((r) => r.target_id);
+}
+/** Middleware (1.99za): res.locals.followedPadIds for HTML page views by a signed-in user - one indexed read, like the
+ *  nav's 🔔 count (inbox.navCount). layout.ejs merges them with the pads you own into "My pads". */
+function navPads(req, res, next) {
+  if (req.method !== "GET" || /^\/(api|public|og|uploads|events)\b|^\/healthz|^\/messages\/media\//.test(req.path)) return next();
+  const token = req.cookies && req.cookies.jwt;
+  if (!token || !process.env.SECRET_KEY) return next();
+  let d = null;
+  try { d = require("jsonwebtoken").verify(token, process.env.SECRET_KEY); } catch (e) { d = null; }
+  if (!d || !d.userId) return next();
+  followedPadIds(d.userId).then((ids) => { res.locals.followedPadIds = ids; }, () => {}).then(() => next());
+}
+
 async function prefs(userId) {
   await init();
   const r = (await getQuery("SELECT notify_posts FROM follow_prefs WHERE user_id = ?", [String(userId)]))[0];
@@ -231,4 +251,4 @@ function register(app, { addUser }) {
 }
 
 module.exports = { init, follow, isFollowing, followedAmong, followers, followingCount, counts, lists, prefs, setPrefs, feedFilter,
-                   notifyNewPost, register, resolve, Refuse, MAX_FOLLOWS, _setClock, _gaps: gaps };
+                   notifyNewPost, register, resolve, followedPadIds, navPads, Refuse, MAX_FOLLOWS, _setClock, _gaps: gaps };

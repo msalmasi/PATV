@@ -391,9 +391,40 @@ function myPads(username) {
   } catch (e) { return []; }
 }
 
+/** 1.99za: the menu's "My pads" - the pads this account owns AND the ones it follows (followedIds: newest follow first,
+ *  follows.navPads), one entry per pad. Order: pads whose chat room is live right now first, then yours, then the
+ *  followed ones (newest follow first). Every entry opens the pad itself; yours also carry `owner` (the owner panel).
+ *  -> {items: [{slug, title, href, owned, live, owner}], total, more} - `max` entries at most (cached, sync). */
+function navPads(username, followedIds, max = 6) {
+  const u = String(username || "").toLowerCase();
+  const out = { items: [], total: 0, more: false };
+  if (!u) return out;
+  try {
+    const web = require("./roomsweb");
+    let B = null;
+    try { B = require("./bridge"); } catch (e) { B = null; }
+    const liveOf = (id) => { try { const R = B && B._rooms.get(id); return !!(R && B.isLiveShown(R)); } catch (e) { return false; } };
+    const seen = new Set(), all = [];
+    const add = (R, owned, rank) => {
+      if (!R || R.profile || seen.has(R.id)) return;
+      seen.add(R.id);
+      const slug = web.linkSlug(R), href = "/p/" + encodeURIComponent(slug);
+      all.push({ slug, title: String(R.title || slug).slice(0, 40), href, owned, live: liveOf(R.id), owner: owned ? href + "/owner" : null, rank });
+    };
+    rooms.listCached().filter((R) => R && R.owner && String(R.owner.username || "").toLowerCase() === u)
+      .sort((a, b) => String(a.title).localeCompare(String(b.title))).forEach((R, i) => add(R, true, i));
+    (Array.isArray(followedIds) ? followedIds : []).forEach((id, i) => add(rooms.getCached(id), false, 1000 + i));
+    all.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || a.rank - b.rank);
+    out.total = all.length;
+    out.items = all.slice(0, max);
+    out.more = all.length > max;
+  } catch (e) { /* the menu just shows no pads */ }
+  return out;
+}
+
 function register(app, { addUser }) {
   const bad = (res, st, error) => res.status(st).json({ ok: false, error });
-  if (app.locals) app.locals.myPads = myPads;          // 1.99ti: layout.ejs (You > My pads) + profile.ejs
+  if (app.locals) { app.locals.myPads = myPads; app.locals.navPads = navPads; }   // 1.99ti: layout.ejs + profile.ejs; 1.99za: owned + followed
   require("./padsite").register(app, { addUser });      // 1.99up: Pepe on the pad's site side (padsite.js)
   require("./feedfilter").register(app, { addUser });   // 1.99ux: the cheap content filter (owner card + /feed/admin/filter)
   const jsonOnly = (req, res, next) => (req.is("application/json") && req.get("X-Requested-With") === "fetch" ? next() : bad(res, 400, "Bad request."));
@@ -601,5 +632,5 @@ function register(app, { addUser }) {
 
 module.exports = { register, init, storeSettings, settingsFor, soundboardState, cleanOne, capabilities, pageData, WEB_CAPS, OWNER_SETTINGS,
                    padVoices, ownerVoicesForPepe, CONVO_QUIET, AUTOTOPIC_EVERY, cleanTopic, topicProblem, TOPIC_MAX,
-                   OWNER_GROUPS, OWNER_BOOL, cleanNote, readonlyList, myPads, languages: () => LANGS, choices: () => CHOICES,
+                   OWNER_GROUPS, OWNER_BOOL, cleanNote, readonlyList, myPads, navPads, languages: () => LANGS, choices: () => CHOICES,
                    _reset: () => { CAPS = null; SET_HITS.clear(); TOPIC_HITS.clear(); } };

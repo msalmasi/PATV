@@ -126,7 +126,7 @@ test("1.99wk: an old #owner link (the removed Owner tab) -> the header's owner-p
 
 test("1.99wk: exactly ONE owner-panel link in the header + tab bar for a manager, none for anyone else; ⚙ is the settings hub", async () => {
   const PT = { tabs: ["live", "feed", "about"], initial: "live", active: true, camfrog: true, posts: [] };
-  const top = (html) => html.slice(html.indexOf('<section class="hero"'), html.indexOf('</nav>', html.indexOf('id="padTabs"')) + 6);
+  const top = (html) => html.slice(html.indexOf('<section class="hero'), html.indexOf('</nav>', html.indexOf('id="padTabs"')) + 6);
   const ownerLinks = (html) => (top(html).match(/href="\/p\/plant_based_chatting\/owner"/g) || []).length;
   for (const [who, extra] of [["the owner", { user: "pb" }], ["staff", { user: "admin1" }]]) {
     const html = await renderRoom(Object.assign({ manage: true, padTabs: PT }, extra));
@@ -211,7 +211,7 @@ test("page: tab bar, panels hidden (not removed), the Live tab's latest-posts ca
   assert.match(html, /PATVPadTabs\.init\(\{"slug":"plant_based_chatting","platform":"camfrog","active":true/);
 });
 
-test("page: site pads label the first tab Stage; the story strip sits above the tabs only when there are captures", async () => {
+test("page: site pads label the first tab Stage; the story strip (end of Live, 1.99za) only when there are captures", async () => {
   const site = await renderRoom({ room: { name: "Lounge", slug: "lounge", count: 0, live: false, topic: "", platform: "site", siteOnly: true, bridged: false },
     padTabs: { tabs: ["live", "about"], initial: "about", active: false, camfrog: false, posts: [] } });
   assert.match(site, /id="padTab-live"[^>]*>\s*<span class="pdot" aria-hidden="true" hidden><\/span>Stage<\/button>/);
@@ -219,26 +219,38 @@ test("page: site pads label the first tab Stage; the story strip sits above the 
   assert.doesNotMatch(site, /Join the Camfrog room/);
 });
 
-test("1.99ef header zones: identity (name, p/slug + quiet type tags, one description), actions (⚙ + ⋯), status in the Live tab", async () => {
+test("1.99za compact header: identity (avatar + name + badges, the chat-room pill), actions (Follow, ⚙, ⋯); the descriptive bits in About, the topic in the chat card", async () => {
   const own = await renderRoom({ manage: true, pepeHere: true, roomAnalytics: "/p/plant_based_chatting/analytics", schedule: { pending: 2, live: [], queue: [], upcoming: [] },
-    room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "plants  AND chat", platform: "camfrog",
+    room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "plants  AND chat", platform: "camfrog", adult: true,
       description: "Plants and chat", owner: "pb", ownerUser: "pb", camfrogName: "Plant Based Chatting" } });
-  const hero = own.slice(own.indexOf('<section class="hero"'), own.indexOf("</section>", own.indexOf('<section class="hero"')));
+  const hero = own.slice(own.indexOf('<section class="hero'), own.indexOf("</section>", own.indexOf('<section class="hero')));
+  assert.match(hero, /<section class="hero hero-c" id="rmHero" aria-labelledby="rmTitle">/);
   assert.doesNotMatch(hero, /class="chip|class="meta"/, "no mixed chip row in the header");
   assert.doesNotMatch(hero, /in the Camfrog room|Pepe is here|Camfrog room:/, "live status / room info not in the header");
+  // 1.99za: no description, p/slug, platform / owner tags or topic in the header any more - they're in About / the chat card
+  assert.doesNotMatch(hero, /class="desc"|class="padref"|class="hd-tags"|Camfrog Pad|Pad owner|id="rmTopic"/);
   const idZone = hero.slice(hero.indexOf('class="hd-id"'), hero.indexOf('class="hd-acts"'));
-  assert.match(idZone, /<div class="padref">p\/plant_based_chatting<\/div><span class="hd-tags">[\s\S]*🐸 Camfrog Pad[\s\S]*👑 Pad owner: pb/);
+  assert.match(idZone, /<h1 id="rmTitle"><span class="hd-nm"><span class="rm-nm" data-fit-name title="Houseplants">Houseplants<\/span><\/span><\/h1>/);
+  assert.match(idZone, /<div class="hd-st">\s*<span class="live chat" id="rmLive"[^>]*>[\s\S]*?<\/span><\/span>\s*<span class="htag adult18"/, "the chat-room pill, then 18+");
+  assert.match(idZone, /<a class="hd-about" href="\?tab=about#about" data-pad-tab="about" data-open="about">ℹ️ About<\/a>/);
   const acts = hero.slice(hero.indexOf('class="hd-acts"'));
   assert.match(acts, /class="ibtn ps-link"[^>]*>⚙<span class="ps-lbl" aria-hidden="true">Settings<\/span><span class="ps-q" aria-hidden="true">2<\/span>/, "approvals badge on ⚙");
   const menu = acts.slice(acts.indexOf('class="hd-menu"'));
   assert.match(menu, /href="\/p\/plant_based_chatting\/analytics">📈 Pad analytics/);
   assert.match(menu, /data-copy-link="\/p\/plant_based_chatting">🔗 Copy link/);
-  assert.match(hero, /<div class="topic" id="rmTopic" data-desc="Plants and chat"><\/div>/, "a tagline that repeats the description is not shown");
-  assert.equal((hero.match(/class="desc"/g) || []).length, 1, "one description line");
   const live = own.slice(own.indexOf('id="padPanel-live"'), own.indexOf('id="padPanel-about"'));
   assert.match(live.slice(0, 900), /<p class="lstat" id="rmLiveStat"><span id="rmStDot" aria-hidden="true">🟢<\/span>\s*<span><b id="rmCount">2<\/b> in <b>Plant Based Chatting<\/b><\/span>[\s\S]*🐸 Pepe is here<\/span><\/p>/, "status line at the top of Live");
+  assert.doesNotMatch(live, /Live from the pad's Camfrog room/, "the live-view note moved to About");
+  const chat = live.slice(live.indexOf('id="rmChat"'), live.indexOf('id="rmFeed"'));
+  assert.match(chat, /<div class="topic" id="rmTopic" data-desc="Plants and chat"><\/div>/, "a tagline that repeats the description is not shown");
   const about = own.slice(own.indexOf('id="padPanel-about"'));
-  assert.match(about, /<dt>Camfrog room<\/dt><dd>Plant Based Chatting<\/dd>/);
+  const card = about.slice(about.indexOf('id="about"'), about.indexOf("</section>", about.indexOf('id="about"')));
+  assert.match(card, /<div class="desc">Plants and chat<\/div>/);
+  assert.match(card, /<dt>Address<\/dt><dd><span class="padref">p\/plant_based_chatting<\/span><\/dd>/);
+  assert.match(card, /🐸 Camfrog Pad/); assert.match(card, /👑 pb/);
+  assert.match(card, /<dt>Who can see it<\/dt><dd><span class="ab-tags"><span class="htag">👥 Members<\/span><span class="htag adult18"/);
+  assert.match(card, /<dt>Camfrog room<\/dt><dd>Plant Based Chatting<\/dd>/);
+  assert.match(card, /<p class="ab-note" role="note">📡 <b>Live from the pad's Camfrog room/);
   assert.match(about, /📈 Analytics[\s\S]*See full analytics ›/, "1.99el: About's Analytics card");
   // a different tagline shows; the public gets no ⚙
   const pub = await renderRoom({ room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: false, topic: "Grow stuff", platform: "camfrog", description: "Plants and chat" } });
@@ -246,10 +258,14 @@ test("1.99ef header zones: identity (name, p/slug + quiet type tags, one descrip
   assert.doesNotMatch(pub, /class="ibtn ps-link"/);
   assert.match(pub, /id="rmStDot" aria-hidden="true">⚪/);
   assert.match(pub, /data-copy-link=/, "everyone gets ⋯ (Copy link)");
-  // site pads: no status line
+  // site pads: no status line, no chat-room pill; the platform badge is in About
   const site = await renderRoom({ room: { name: "Lounge", slug: "lounge", count: 0, live: false, topic: "", platform: "site", siteOnly: true, bridged: false } });
-  assert.doesNotMatch(site, /id="rmLiveStat"/);
-  assert.match(site, /🌐 Site Pad/);
+  assert.doesNotMatch(site, /id="rmLiveStat"|id="rmLive"/);
+  assert.match(site.slice(site.indexOf('id="padPanel-about"')), /🌐 Site Pad/);
+  // a link banner (no uploaded look) is the header strip, not a 200px picture above it
+  const bn = await renderRoom({ room: { name: "B", slug: "b", count: 0, live: false, topic: "", platform: "camfrog", banner: "https://example.com/b.png" } });
+  assert.match(bn, /<section class="hero hero-c has-bn" id="rmHero"[^>]*>\s*<div class="hero-bn" aria-hidden="true"><img src="https:\/\/example.com\/b.png" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer"><\/div>/);
+  assert.doesNotMatch(bn, /class="banner-img"/);
 });
 
 test("people list: the name stays the profile link; ⋯ for mods and (1.99fu) every signed-in viewer, next to the cam icon, opening the menu", async () => {

@@ -75,11 +75,35 @@
               // 1.99qp: ⭐ PATV Creators links (creators.navFor via app.locals.creatorNav) - hidden while the feature is off
               const _cr = typeof creatorNav === 'function' ? creatorNav(_in ? user : null) : { on: false, creator: false };
               const _here = typeof ogPath !== 'undefined' && ogPath && ogPath !== '/language' ? ogPath : '';
-              // 1.99ti: "My pads" - each pad this account owns, straight to its owner panel (padowner.myPads via app.locals)
-              const _myPads = _in && typeof myPads === 'function' ? myPads(user) : [];
+              // 1.99ti: "My pads" - each pad this account owns. 1.99za: + the pads you follow (follows.navPads ->
+              // res.locals.followedPadIds), live ones first, capped with "See all"; each opens the pad, yours keep a 👑
+              // shortcut to the owner panel (padowner.navPads via app.locals; myPads is the older owned-only list)
+              const _folIds = _in && typeof followedPadIds !== 'undefined' && Array.isArray(followedPadIds) ? followedPadIds : [];
+              const _padNav = !_in ? { items: [], more: false } : typeof navPads === 'function' ? navPads(user, _folIds)
+                : { items: (typeof myPads === 'function' ? myPads(user) : []).map((p) => ({ ...p, href: '/p/' + encodeURIComponent(p.slug), owned: true, owner: p.href })), more: false };
+              const _padItem = (p) => [p.href, p.live ? '<span class="nav-livedot" role="img" aria-label="' + t('nav.pad_live') + '"></span>' : p.owned ? '👑' : '📡',
+                t.esc(p.title), p.live ? 'nav-pad nav-padlive' : 'nav-pad',
+                p.owner ? '<a href="' + p.owner + '" class="nav-sub" title="' + t('nav.owner_panel_of', { pad: p.title }) + '" aria-label="' + t('nav.owner_panel_of', { pad: p.title }) + '">⚙</a>' : ''];
+              const _myPadItems = _padNav.items.map(_padItem).concat(_padNav.more || _folIds.length ? [['/p#following', '›', t('nav.mypads_all'), 'nav-seeall']] : []);
               // 2026-10-11: More and ☰ share one grouped list - [id, heading, items, class]; falsy items are gated off.
               // More skips the top-bar items (they're already on the bar); ☰ shows everything. Staff last, hidden until /api/u/.../profile says Admin.
               const sections = [
+                ['watch', t('nav.sec_watch'), [T.watch, T.pads, T.feed,
+                  ['/plex', '📼', t('nav.plex')],   // 1.99kp: the Plex hub (plexhub.js)
+                  _cr.on && ['/creators', '⭐', t('nav.creators')],   // 1.99qp: PATV Creators
+                ]],
+                _padNav.items.length && ['mypads', t('nav.sec_mypads'), _myPadItems],   // 1.99za: right under Watch - pads are what people come for
+                ['play', t('nav.sec_play'), [T.wheel, T.markets, T.wagers, T.gtf,
+                  ['/gtf/leaderboards', '🏆', t('nav.gtf_boards')],   // 1.99wg: the GTF leaderboards (gtfboards.js)
+                  ['/lotto', '🎟️', t('nav.lotto')],
+                  // D10/1.99ol: the PATV casino (/casino/<game>) when that game's front end is it, else Pepe's tables (tables.js)
+                  [_casino('bj') ? '/casino/blackjack' : '/blackjack', '🂡', t('nav.blackjack')],
+                  [_casino('holdem') ? '/casino/holdem' : '/poker', '🃏', t('nav.poker')],
+                  ['/bounties', '🎯', t('nav.bounties')],
+                  ['/polls', '🗳️', t('nav.polls')],     // 2026-10-11: the user - polls are interactive, so Play (was Info & links)
+                  _rafflesOn && ['/raffles', '🎫', t('nav.raffles')],   // 1.99xk: 🎫 PAT Raffles (raffles.js; the feature switch)
+                ]],
+                // 1.99za: You moved below Play (the user: Watch & hang out + your pads come first on a phone)
                 ['you', t('nav.sec_you'), [
                   _in && ['/u/' + user, '👤', t('nav.your_profile')],
                   _in && ['/settings', '⚙️', t('nav.settings')],   // 1.99vz: the settings hub (settingshub.js)
@@ -90,21 +114,6 @@
                   _in && _cr.on && (_cr.creator ? ['/creator', '⭐', t('nav.creator_dash')] : ['/creators#apply', '🌟', t('nav.become_creator')]),
                   ['/achievements', '🏅', t('nav.achievements')],
                   _in && ['/settings/telegram', '✈️', t('nav.telegram')],
-                ]],
-                _myPads.length && ['mypads', t('nav.sec_mypads'), _myPads.map((p) => [p.href, '👑', t.esc(p.title)])],
-                ['watch', t('nav.sec_watch'), [T.watch, T.pads, T.feed,
-                  ['/plex', '📼', t('nav.plex')],   // 1.99kp: the Plex hub (plexhub.js)
-                  _cr.on && ['/creators', '⭐', t('nav.creators')],   // 1.99qp: PATV Creators
-                ]],
-                ['play', t('nav.sec_play'), [T.wheel, T.markets, T.wagers, T.gtf,
-                  ['/gtf/leaderboards', '🏆', t('nav.gtf_boards')],   // 1.99wg: the GTF leaderboards (gtfboards.js)
-                  ['/lotto', '🎟️', t('nav.lotto')],
-                  // D10/1.99ol: the PATV casino (/casino/<game>) when that game's front end is it, else Pepe's tables (tables.js)
-                  [_casino('bj') ? '/casino/blackjack' : '/blackjack', '🂡', t('nav.blackjack')],
-                  [_casino('holdem') ? '/casino/holdem' : '/poker', '🃏', t('nav.poker')],
-                  ['/bounties', '🎯', t('nav.bounties')],
-                  ['/polls', '🗳️', t('nav.polls')],     // 2026-10-11: the user - polls are interactive, so Play (was Info & links)
-                  _rafflesOn && ['/raffles', '🎫', t('nav.raffles')],   // 1.99xk: 🎫 PAT Raffles (raffles.js; the feature switch)
                 ]],
                 ['shop', t('nav.sec_shop'), [
                   ['/shop', '🏪', t('nav.shop')],
@@ -134,7 +143,7 @@
                 const its = s[2].filter((l) => l && !(skipMain && main.includes(l)));
                 return its.length ? '<div class="nav-sec' + (s[3] ? ' ' + s[3] : '') + '" role="group" aria-labelledby="' + pre + s[0] + '"'
                   + (s[3] === 'adminLink' ? ' hidden' : '') + '><div class="nav-sec-h" id="' + pre + s[0] + '">' + s[1] + '</div>'
-                  + '<div class="nav-sec-items">' + its.map((l) => item(l, true)).join('') + '</div></div>' : '';
+                  + '<div class="nav-sec-items">' + its.map((l) => (l[4] ? '<div class="nav-row">' + item(l, true) + l[4] + '</div>' : item(l, true))).join('') + '</div></div>' : '';
               }).join('') + '</div>';
             %>
             <div class="navbar-left">
@@ -216,6 +225,15 @@
             .nav-sec[hidden] { display: none; }
             .nav-sec-h { padding: 10px 10px 4px; color: #9a9aa6; font: 700 11px/1.2 var(--ds-font); letter-spacing: .08em; text-transform: uppercase; }
             .nav-sec-items { display: grid; gap: 2px; }
+            /* 1.99za: My pads - a pad row with the owner-panel ⚙ beside it, the live dot, the See all row */
+            .nav-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+            .nav-row > .nav-link { flex: 1 1 auto; min-width: 0; }
+            .nav-pop .nav-sub { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; border-radius: var(--ds-r-sm); color: #9b9ba3; font-size: 15px; }
+            .nav-pop .nav-sub:hover, .nav-pop .nav-sub:focus-visible { background: var(--ds-hover); color: #fff; }
+            .nav-livedot { display: block; width: 10px; height: 10px; border-radius: 50%; background: var(--ds-live); box-shadow: 0 0 0 3px rgba(255,82,82,.18); }
+            .nav-pop .nav-link.nav-padlive { color: #fff; }
+            .nav-pop .nav-link.nav-seeall { color: var(--ds-green-2); font-size: 13px; }
+            .nav-pop .nav-pad .nav-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .nav-pop { grid-template-columns: minmax(0, 1fr); }   /* the search box's intrinsic width mustn't widen the menu past its scrollbar */
             .nav-more .nav-pop { width: 280px; max-width: calc(100vw - 24px); max-height: calc(100vh - 90px); overflow-y: auto; overscroll-behavior: contain; }
             @media (min-width: 1100px) { .nav-more .nav-pop { width: 520px; } .nav-more .nav-secs { columns: 2; column-gap: 8px; } }

@@ -1,0 +1,45 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99za: one pad card on /p (views/rooms.ejs) - shared by the "Following" section and the full grid. Pass { r, H }:
+    H = the page's helpers {PFX_, PAV_, BM, TXT, padBadge_, pepeOn} (rooms.ejs builds them). The card is ONE link (a.ch),
+    no links or buttons inside (1.99ed). %>
+<% const { PFX_, PAV_, BM, TXT, padBadge_, pepeOn } = H;
+   const liveNow = r.now.filter((s) => s.live); const desc = r.description || r.topic || '';
+   const pepeTip = t('rooms.pepe_tip'); %>
+        <% const fx_ = PFX_(r.id); %>
+        <a class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %><%= fx_ && fx_.cls ? ' ' + fx_.cls : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>"><%- fx_ ? fx_.layer : '' %>
+          <div class="ch-head">
+            <%# 1.99es: avatar, name, then the 🚀 badge by the name (it used to trail the status pills) %>
+            <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>" title="<%= r.title %>"><%= r.title %></span><%- fx_ ? fx_.badgesFit : '' %><%- BM(r.boost_pat, 'pill ch-mark') %></span>
+            <span class="ch-badges">
+              <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
+              <% if (r.adult) { %><span class="pill adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %>
+              <% if (r.access === 'approved') { %><span class="pill" title="<%- t('rooms.approved_tip') %>"><%- t('rooms.approved') %></span><% } else if (r.access === 'public') { %><span class="pill" title="<%- t('rooms.public_tip') %>"><%- t('rooms.public') %></span><% } %>
+              <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="<%- t('rooms.room_pill_tip') %>"><span class="dot" aria-hidden="true"></span><%- r.live ? t('rooms.room_active') : (r.bridged ? t('rooms.quiet') : t('rooms.off_web')) %></span><% } %>
+              <% if (liveNow.length) { %><span class="pill on" title="<%- t('rooms.on_stage_tip') %>"><%- t('rooms.on_stage', { n: liveNow.length }) %></span><% } %>
+            </span>
+          </div>
+          <div class="ch-meta">
+            <span class="padref">p/<%= r.slug %></span>
+            <% if (r.bridged && r.live && r.count > 0) { %><span title="<%- t('rooms.n_in_room', { n: r.count }) %>" aria-label="<%- t('rooms.n_in_room', { n: r.count }) %>">👥 <%= r.count %></span><% } %>
+            <% if (r.bridged && r.live && r.micCount > 0) { %><span title="<%- t('rooms.n_on_mic', { n: r.micCount }) %>" aria-label="<%- t('rooms.n_on_mic', { n: r.micCount }) %>">🎙 <%= r.micCount %></span><% } %>
+            <% if (r.house) { %><span class="own" title="<%- t('rooms.house_tip') %>"><%- t('rooms.house') %></span><% } else if (r.owner) { %><span class="own" title="<%- t('rooms.owner_tip') %>">👑 <%= r.owner %></span><% } %>
+            <span title="<%- t('rooms.slots_tip') %>"><%- t('rooms.slots', { now: r.now.length, total: r.slot_count }) %></span>
+            <% if (r.pepe_here) { %><span class="pepe-here" role="img" title="<%- pepeTip %>" aria-label="<%- pepeTip %>">🐸</span><% } %>
+          </div>
+          <div class="ch-desc"><%= desc.slice(0, 200) %></div>
+          <div class="ch-foot">
+            <div class="slotrow"><span class="k now"><%- t('rooms.now') %></span>
+              <ul>
+                <% if (!r.now.length) { %><li class="muted"><%- r.pepe_here ? (pepeOn ? t('rooms.pepe_slot_open') : t('rooms.pepe_off_slot_open')) : t('rooms.slot_open') %></li><% } %>
+                <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="' + t('rooms.featured') + '">★</span> ' : '' %><b><%- TXT(s.username, s.display) %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%- s.mode === 'embed' ? (s.embed_label ? t.esc(s.embed_label) : t('rooms.video')) : (s.live ? t('rooms.live') : t('rooms.starting')) %></span></li><% }) %>
+              </ul>
+            </div>
+            <div class="slotrow"><span class="k"><%- t('rooms.next') %></span>
+              <ul>
+                <% if (!r.next.length) { %><li class="muted"><%- t('rooms.nothing_booked') %></li><% } %>
+                <% r.next.slice(0, 2).forEach((n) => { %><li><%- (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(n.start_at, 'full') %><b><%- TXT(n.username, n.display) %></b><%= n.featured ? ' ★' : '' %><%= n.title ? ' — ' + n.title : '' %></li><% }) %>
+                <% if (r.next.length > 2) { %><li class="muted"><%- t('rooms.more_booked', { n: r.next.length - 2 }) %></li><% } %>
+              </ul>
+            </div>
+          </div>
+        </a>

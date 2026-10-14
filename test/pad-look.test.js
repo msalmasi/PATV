@@ -284,7 +284,7 @@ test("pad page: the accent as custom properties on <main>, the uploaded banner i
     analytics: false, feed: null, fx: require(path.join(repo, "feedweb")).fx, embeds: require(path.join(repo, "stageembed")), host: "publicaccess.tv",
   }).then((h) => h.replace(/\r\n/g, "\n"));
   assert.match(html, /<main class="ds-page rm pad-acc" style="--pad-accent:#f06292;--pad-accent-ink:#0b0b0b;--pad-banner-y:30%">/);
-  assert.match(html, new RegExp(`<section class="hero has-bn"[^>]*>\\s*<div class="hero-bn" aria-hidden="true"><img src="${L.banner}"`));
+  assert.match(html, new RegExp(`<section class="hero hero-c has-bn"[^>]*>\\s*<div class="hero-bn" aria-hidden="true"><img src="${L.banner}"`));
   assert.doesNotMatch(html, /old\.png/, "the uploaded banner wins over the old link");
   assert.match(html, /<h1 id="rmTitle"><span class="pad-av rm-av has-img" aria-hidden="true"><img src="\/media\/pad\/[a-f0-9]{32}_a\.webp"/);
   assert.match(html, /\.rm\.pad-acc \.ptab\[aria-selected="true"\] \{[^}]*var\(--pad-accent\)/);
@@ -329,8 +329,9 @@ test("Your show: the homepage card is one line + Go live / Pads (no bullets); /p
 
 test("/p cards + Trending: the 🚀 badge right after the pad's name, never among the status pills / stat tags", () => {
   const src = rd(path.join(repo, "views", "rooms.ejs"));
-  assert.match(src, /<span class="ch-name"><%- PAV_\(r\.id[^%]*%><span class="t[^"]*"( title="<%= r\.title %>")?><%= r\.title %><\/span>(<%- fx_ \? fx_\.badges(Fit)? : '' %>)?<%- BM\(r\.boost_pat, 'pill ch-mark'\) %><\/span>/);
-  const badges = src.slice(src.indexOf('<span class="ch-badges">'), src.indexOf("</span>\n          </div>", src.indexOf('<span class="ch-badges">')));
+  const card = rd(path.join(repo, "views", "partials", "pad-dir-card.ejs"));   // 1.99za: the /p card is a partial
+  assert.match(card, /<span class="ch-name"><%- PAV_\(r\.id[^%]*%><span class="t[^"]*"( title="<%= r\.title %>")?><%= r\.title %><\/span>(<%- fx_ \? fx_\.badges(Fit)? : '' %>)?<%- BM\(r\.boost_pat, 'pill ch-mark'\) %><\/span>/);
+  const badges = card.slice(card.indexOf('<span class="ch-badges">'), card.indexOf("</span>\n          </div>", card.indexOf('<span class="ch-badges">')));
   assert.doesNotMatch(badges, /BM\(/);
   assert.match(src, /<span class="tn"><a class="t" href="[^"]*"><%= r\.title %><\/a><%- BM\(r\.boost_pat, 'tg boost'\) %><\/span>/);
   const tags = src.slice(src.indexOf('<span class="tags">'), src.indexOf("</span></span>", src.indexOf('<span class="tags">')));

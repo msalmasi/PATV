@@ -155,7 +155,7 @@ test("padcosmetics.fx(): badgesMini / badgesFit are one-line [data-fit] rows; ba
 test("views: Top Pads + /p cards use the fitting rows, name in the title, the script + bumped padfx.css everywhere", () => {
   const home = rd("views", "home.ejs"), rooms = rd("views", "rooms.ejs");
   assert.match(home, /<span class="nt[^"]*" title="<%= r\.name %>"><%= r\.name %><\/span><%- fx_ \? fx_\.badgesMini : '' %>/);
-  assert.match(rooms, /title="<%= r\.title %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badgesFit : '' %>/);
+  assert.match(rd("views", "partials", "pad-dir-card.ejs"), /title="<%= r\.title %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badgesFit : '' %>/);   // 1.99za: the /p card partial
   for (const v of [home, rooms]) assert.match(v, /<script src="\/public\/js\/pad-chipfit\.js\?v=2" defer><\/script>/);
   for (const f of ["home", "rooms", "room", "cosmetics", "padSettings", "premium"]) {
     const s = rd("views", f + ".ejs");

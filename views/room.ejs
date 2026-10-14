@@ -443,6 +443,76 @@
   @media (prefers-reduced-motion: reduce) {
     .rm .ptab, .rm .ibtn, .rm .btn, .rm .line { transition: none; }
   }
+  /* ── 1.99za: chat first. A compact header (the look stays: banner strip, avatar, accent, frame / glow / badges), a Stage
+     card that hides while off air with nothing to pick, a Go live card that is one slim row while nothing is on / booked /
+     queued, room audio under the chat heading, then the cam strip slot -> mic -> people -> latest posts -> Manage room ── */
+  .rm .hero.hero-c { gap: 6px; padding: var(--ds-sp-3) var(--ds-sp-4); }
+  .rm .hero.hero-c.has-bn { padding-top: 0; }
+  .rm .hero-c .hero-bn { height: 104px; margin: 0 calc(-1 * var(--ds-sp-4)) 0; border-radius: calc(var(--ds-r-2xl) - 1px) calc(var(--ds-r-2xl) - 1px) 0 0; }
+  .rm .hero-c.has-bn .hd { margin-top: -34px; }
+  .rm .hero-c .hd { align-items: center; }
+  .rm .hero-c .hd-id { gap: 6px; flex: 1 1 280px; }
+  .rm .hero-c h1 { font-size: 23px; flex-wrap: nowrap; gap: 10px; min-width: 0; }
+  .rm .hero-c .rm-av { width: 48px; height: 48px; border-radius: 13px; }
+  .rm .hero-c .hd-nm { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
+  .rm .hero-c .rm-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rm .hd-st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+  .rm .hd-st .live { font-size: 11px; padding: 2px 9px; }
+  .rm a.hd-about { font-size: 12.5px; color: var(--ds-text-muted); padding: 2px 4px; border-radius: var(--ds-r-sm); }
+  .rm a.hd-about:hover, .rm a.hd-about:focus-visible { color: var(--ds-text); }
+  .rm .hero-c .hd-acts { padding-top: 0; }
+  .rm .ab-tags { display: inline-flex; flex-wrap: wrap; gap: 5px; }
+  .rm .ab-card .padref { font-size: 14px; }
+  .rm .ab-note { margin: 12px 0 0; padding: 10px 12px; border-radius: var(--ds-r-md); background: #12161d; border: 1px solid #2a3442; color: #b9c7da; font-size: 13px; line-height: 1.5; }
+  .rm .ab-note b { color: #e3ecf8; }
+  .rm .stage.is-off:not(:has(.stabs > *)) { display: none; }
+  .rm .stage h2 { margin-bottom: 8px; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) { padding: 8px 12px; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .gl-h { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .rs { display: none; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .stage-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .stage-bar .slots { flex: 1 1 220px; min-width: 0; font-size: 12.5px; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .stage-acts { gap: 6px; flex-wrap: nowrap; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .sact { min-height: 32px; padding: 4px 12px; font-size: 12.5px; flex: none; }
+  .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .boostbox { flex-basis: 100%; }
+  .rm .sact .l-short { display: none; }
+  .rm .rm-main { display: grid; gap: 14px; min-width: 0; align-content: start; }
+  .rm .rm-chat > h2 { margin-bottom: 6px; }
+  .rm .rm-chat .topic { color: #c9b46a; font-size: 13px; line-height: 1.4; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rm .rm-audio { margin: 0 0 8px; }
+  .rm .rm-audio:empty { display: none; }
+  @media (max-width: 860px) { .rm .feed { height: 50vh; min-height: 260px; } }
+  @media (max-width: 640px) {
+    .rm .hero-c .hero-bn { height: 64px; }
+    .rm .hero-c.has-bn .hd { margin-top: -26px; }
+    .rm .hero-c h1 { font-size: 19px; gap: 8px; }
+    .rm .hero-c .rm-av { width: 40px; height: 40px; border-radius: 11px; border-width: 2px; }
+    .rm .hero-c .hd { gap: 8px; }
+    .rm .hero-c .hd-acts { row-gap: 6px; }
+    /* phones: one less row - the chat-room pill, Follow and (for everyone else) ⋯ share a line; a manager's 👑 / ⚙ / ⋯
+       wrap to the next. The follower count and "ℹ️ About" are in the About tab (right below), the crumb's p/<slug> too */
+    .rm .crumb { display: none; }
+    .rm .hero-c .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .rm .hero-c .hd-id, .rm .hero-c .hd-acts { display: contents; }
+    .rm .hero-c h1 { flex: 1 1 100%; }
+    .rm .hero-c .hd-st { flex: 1 1 auto; }
+    .rm .hero-c .hd-follow, .rm .hd-acts:has(.po-cta) .hd-follow { flex: none; margin: 0; }
+    .rm .hero-c .hd-fc, .rm .hero-c a.hd-about { display: none; }
+    .rm .hero-c .hd { justify-content: flex-start; }
+    /* an on-air stage stays above the chat: its Snap / Clip price line keeps to one line (the preview dialog repeats it) */
+    .rm .stage .stcap { margin-top: 8px; }
+    .rm .stage .stcap-price { flex: 1 1 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  }
+  @media (max-width: 520px) {
+    .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .stage-bar .slots { display: none; }
+    .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .stage-acts { flex: 1 1 100%; }
+    .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .sact { flex: 1 1 0; padding: 4px 8px; min-width: 0; }
+    .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .sact .l-full { display: none; }
+    .rm .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) .sact .l-short { display: inline; }
+    /* the slim row goes under the live room on a phone (🎥 Go live is in the top bar too): the chat comes first */
+    #padPanel-live:has(> .rm-live) > .golive-card:not(:has(.srow, .upnext li, .plexq:not([hidden]))) { order: 1; }
+    #padPanel-live > .rm-live ~ * { order: 2; }
+  }
 </style>
 <%# 1.99es: the pad's look (padlook.js via app.locals): accent -> CSS custom properties on <main> (validated hex only),
     an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
@@ -456,37 +526,37 @@
    // 1.99iv: 📺 Prime Time (premium.js) - the intro sweep on open + the ⋯ menu entry
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
+<script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
 <main class="ds-page rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
   <%# 1.99tc: the tier intro - 💎 Prime Time Plus gets its own title card, Prime Time the gold sweep (partials/pad-intro.ejs) %>
   <% const introTier_ = typeof premiumPadPerks === 'function' ? (premiumPadPerks(room.id).tier || null) : (primeOn_ ? 'prime_time' : null); %>
   <%- include('partials/pad-intro', { introTier: introTier_ || (primeOn_ ? 'prime_time' : null), introPad: room.slug }) %>
-  <% if (room.banner && !(LK_ && LK_.banner)) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
-  <%# 1.99ef: the header is three zones - identity (left: name + LIVE, p/slug + quiet type tags, one description line),
-      actions (right: Follow + the follower count as plain text, ⚙ settings with the moderation / approvals badge,
-      ⋯ Rules / Pad analytics / Copy link) - and no status: who's in the room / Pepe is here is the Live tab's status
-      line, "Camfrog room: X" is in About. %>
+  <%# 1.99za: the header is COMPACT (the user: chat + room audio within a phone's first screen) - the pad's look stays
+      (banner strip, avatar, accent, the premium frame / name glow / badges, Prime Time intro) but everything descriptive
+      moved to the About tab's "About p/<slug>" card: description, p/<slug> + platform, access, owner / house pad, the
+      Camfrog room, how the live view works. Left: avatar + name + badges (one line that gives way, pad-chipfit.js), then
+      the chat-room pill (+ 18+); right: Follow + count, 👑 owner panel, ⚙ settings, ⋯. The room's topic is the chat
+      card's subtitle. A link banner (room.banner, no look) is the header strip too (was a 200px image above it).
+      1.99ef: the header is three zones - identity, actions, no status (who's in the room is the chat card's status line). %>
   <% const desc_ = (room.description || '').trim(), topic_ = (room.topic || '').trim();
      const sameTxt_ = (a, b) => a.replace(/\s+/g, ' ').toLowerCase() === b.replace(/\s+/g, ' ').toLowerCase();
      const fcount_ = feed_ && feed_.follow ? feed_.follow.followers : 0;
      const queue_ = feed_ && feed_.queue ? feed_.queue : 0, pending_ = schedule_ && schedule_.pending ? schedule_.pending : 0;
      const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
-     const psTitle_ = t('pad.hdr.settings_tip') + (queue_ ? ' · ' + t('pad.hdr.n_waiting_mod', { n: queue_ }) : '') + (pending_ ? ' · ' + t('pad.hdr.n_to_approve', { n: pending_ }) : ''); %>
-  <section class="hero<%= LK_ && LK_.banner ? ' has-bn' : '' %><%= PFX_ && PFX_.cls ? ' ' + PFX_.cls : '' %>" aria-labelledby="rmTitle"><%- PFX_ ? PFX_.layer : '' %>
-    <% if (LK_ && LK_.banner) { %><div class="hero-bn" aria-hidden="true"><img src="<%= LK_.banner %>" alt="" decoding="async"></div><% } %>
+     const psTitle_ = t('pad.hdr.settings_tip') + (queue_ ? ' · ' + t('pad.hdr.n_waiting_mod', { n: queue_ }) : '') + (pending_ ? ' · ' + t('pad.hdr.n_to_approve', { n: pending_ }) : '');
+     const bnSrc_ = (LK_ && LK_.banner) || room.banner || '', bnLook_ = !!(LK_ && LK_.banner); %>
+  <section class="hero hero-c<%= bnSrc_ ? ' has-bn' : '' %><%= PFX_ && PFX_.cls ? ' ' + PFX_.cls : '' %>" id="rmHero" aria-labelledby="rmTitle"><%- PFX_ ? PFX_.layer : '' %>
+    <% if (bnSrc_) { %><div class="hero-bn" aria-hidden="true"><img src="<%= bnSrc_ %>" alt="" decoding="async"<%- bnLook_ ? '' : ' loading="lazy" referrerpolicy="no-referrer"' %>></div><% } %>
     <div class="hd">
       <div class="hd-id">
-        <h1 id="rmTitle"><%- avHtml_ %><% if (PFX_ && PFX_.glow) { %><span class="rm-nm <%= PFX_.glow %>"><%= room.name %></span><% } else { %><%= room.name %><% } %><%- PFX_ ? PFX_.badges : '' %>
+        <h1 id="rmTitle"><%- avHtml_ %><span class="hd-nm"><span class="rm-nm<%= PFX_ && PFX_.glow ? ' ' + PFX_.glow : '' %>" data-fit-name title="<%= room.name %>"><%= room.name %></span><%- PFX_ ? PFX_.badgesFit : '' %></span></h1>
+        <div class="hd-st">
           <% if (!siteOnly_) { %><span class="live <%= room.live ? 'chat' : 'off' %>" id="rmLive" title="<%- t('pad.hdr.room_tip') %>"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%- room.live ? t('pad.room_active') : t('pad.room_offline') %></span></span><% } %>
-        </h1>
-        <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">
-          <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
           <% if (room.adult) { %><span class="htag adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %>
-          <% if (access_.level === 'approved') { %><span class="htag" title="<%- t('pad.hdr.approved_tip') %>"><%- t('pad.hdr.approved') %></span><% } else if (access_.level === 'public') { %><span class="htag" title="<%- t('pad.hdr.public_tip') %>"><%- t('pad.hdr.public') %></span><% } %>
-          <% if (room.house) { %><span class="htag own" title="<%- t('pad.hdr.run_by_pepe') %>"><%- t('pad.hdr.house') %></span><% } else if (room.owner) { %><a class="htag own" href="/u/<%= encodeURIComponent(room.ownerUser) %>"><%- t('pad.hdr.owner', { name: room.owner }) %></a><% } %>
-        </span></div>
-        <div class="topic" id="rmTopic" data-desc="<%= desc_ %>"><%= topic_ && !sameTxt_(topic_, desc_) ? topic_ : '' %></div>
-        <% if (desc_) { %><div class="desc"><%= desc_ %></div><% } %>
+          <% if (access_.level === 'approved') { %><span class="htag" title="<%- t('pad.hdr.approved_tip') %>"><%- t('pad.hdr.approved') %></span><% } %>
+          <a class="hd-about" href="?tab=about#about" data-pad-tab="about" data-open="about"><%- t('pad.hdr.about_link') %></a>
+        </div>
       </div>
       <div class="hd-acts">
         <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: t('pad.hdr.follow') }) %>
@@ -514,9 +584,6 @@
     </div>
   </section>
   <section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section>
-  <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length))) { %>
-    <section class="card rm-story" aria-label="<%- t('pad.story.aria') %>"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: t('pad.story.fresh'), next: '/p/' + encodeURIComponent(room.slug) }) %></section>
-  <% } %>
   <nav class="ptabs" id="padTabs" role="tablist" aria-label="<%- t('pad.tab.aria') %>">
     <% PT_.tabs.forEach((tb_) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= tb_ %>" data-tab="<%= tb_ %>" aria-controls="padPanel-<%= tb_ %>" aria-selected="<%= tabOn_(tb_) ? 'true' : 'false' %>" tabindex="<%= tabOn_(tb_) ? 0 : -1 %>">
       <% if (tb_ === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%- liveLabel_ %><% } else if (tb_ === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span><%- t('pad.tab.feed') %> <span class="pnew" id="padFeedNew" hidden></span><% } else { %><%- t('pad.tab.about') %><% } %></button><% }) %>
@@ -536,7 +603,8 @@
   <% if (!siteOnly_) { const cfName_ = room.camfrogName || room.name; %><p class="lstat" id="rmLiveStat"><span id="rmStDot" aria-hidden="true"><%= room.live ? '🟢' : '⚪' %></span>
     <% if (bridged_) { %><span><%- t('pad.live.n_in', { n: '<b id="rmCount">' + t.esc(room.count) + '</b>', room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } else { %><span><%- t('pad.live.cf_room', { room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } %>
     <% if (pepeHere_ === true) { %><span class="ls-sep" aria-hidden="true">·</span><span title="<%- t('pad.live.pepe_here_tip') %>"><%- t('pad.live.pepe_here') %></span><% } %></p><% } %>
-  <% if (bridged_ && !siteOnly_) { %><div class="banner" role="note">📡 <%- t('pad.live.banner') %></div><% } %>
+  <%# 1.99za: the "📡 Live from the pad's Camfrog room - read-only" note moved to the About card (it's reference, and it
+      sat between the header and the chat on every visit) %>
 
 <% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0;
      const fmtT = (ms) => new Date(ms).toISOString(); %>
@@ -568,14 +636,19 @@
       pad's score there (boosts.js). 1.99vm: every pad can be on the front page (a pad without a chat room ranks on its site
       activity, padsignals.js), so every pad shows the button. %>
   <% const BO_ = RS.boost || null, canBoost_ = (room.platform || 'camfrog') !== 'profile', signedIn_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user); %>
+  <%# 1.99za: condensed - while nothing is on, booked or queued (no .srow in the schedule, no "coming up" line, no 📼
+      player) the card is ONE slim row: the slot line + Go live / Book / 🚀 Boost (short labels on a phone); On now /
+      Coming up / Queue only appear when they have something. Pure CSS (:has), so room-schedule.js's 30 s refresh
+      opens it up / slims it down by itself. The Stage card above hides while it's off air with nothing to pick. %>
   <section class="card golive-card" id="rmGoLive" aria-labelledby="rmGoLiveH">
     <h2 id="rmGoLiveH" class="gl-h"><%- t('pad.golive.h') %></h2>
     <div class="stage-bar">
       <span class="slots"><span id="rmSlotsTxt"><%- t('pad.golive.slots', { open: RS.open || 0, count: (RS.room && RS.room.slot_count) || 1 }) %><%- RS.queue && RS.queue.length ? ' · ' + t('pad.golive.n_waiting', { n: RS.queue.length }) : '' %><%- RS.room && RS.room.slot_price ? ' · ' + t('pad.golive.price', { n: Number(RS.room.slot_price).toLocaleString('en-US') }) : ' · ' + t('pad.golive.free') %></span><% if (canBoost_) { %><span class="boosted" id="rmBoostTxt"<%= BO_ && BO_.last_hour > 0 ? '' : ' hidden' %>> · <%- t('pad.golive.boosted', { n: '<b>' + (BO_ ? Number(BO_.last_hour).toLocaleString('en-US') : 0) + '</b>' }) %></span><% } %></span>
       <div class="stage-acts">
-        <a class="sact primary" href="/stage?room=<%= encodeURIComponent(room.slug) %>"><%- t('pad.golive.here') %></a>
-        <a class="sact" href="/stage?room=<%= encodeURIComponent(room.slug) %>#whenSet"><%- t('pad.golive.book') %></a>
-        <% if (canBoost_) { %><% if (signedIn_) { %><button type="button" class="sact boost" id="rmBoostBtn" aria-expanded="false" aria-controls="rmBoostBox"><%- t('pad.golive.boost') %></button><% } else { %><a class="sact boost" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '#boost') %>"><%- t('pad.golive.boost') %></a><% } %><% } %>
+        <%# 1.99za: each action has a long and a short label - the short one shows in the slim row on a phone %>
+        <a class="sact primary" href="/stage?room=<%= encodeURIComponent(room.slug) %>"><span class="l-full"><%- t('pad.golive.here') %></span><span class="l-short"><%- t('pad.golive.here_short') %></span></a>
+        <a class="sact" href="/stage?room=<%= encodeURIComponent(room.slug) %>#whenSet"><span class="l-full"><%- t('pad.golive.book') %></span><span class="l-short"><%- t('pad.golive.book_short') %></span></a>
+        <% if (canBoost_) { %><% if (signedIn_) { %><button type="button" class="sact boost" id="rmBoostBtn" aria-expanded="false" aria-controls="rmBoostBox"><span class="l-full"><%- t('pad.golive.boost') %></span><span class="l-short"><%- t('pad.golive.boost_short') %></span></button><% } else { %><a class="sact boost" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '#boost') %>"><span class="l-full"><%- t('pad.golive.boost') %></span><span class="l-short"><%- t('pad.golive.boost_short') %></span></a><% } %><% } %>
       </div>
       <% if (canBoost_ && signedIn_) { %>
       <form class="boostbox" id="rmBoostBox" data-slug="<%= room.slug %>" hidden autocomplete="off">
@@ -668,9 +741,17 @@
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else { %>
   <%- include('partials/room-dj', { slug: room.slug, linked: linked || !!locals.acctActor }) %>
-  <div class="grid">
-    <section class="card" aria-labelledby="chatH">
+  <%# 1.99za: the live room, in the order the user asked for (phones read it top to bottom; on a wide screen the chat
+      column is on the left, the side column on the right): the chat (room audio ▶ right under its heading) -> the cam
+      strip slot -> On the mic -> In the chatroom -> Latest from the feed -> Manage room. %>
+  <div class="grid rm-live">
+    <div class="rm-main">
+    <section class="card rm-chat" id="rmChat" aria-labelledby="chatH">
       <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small></h2>
+      <%# the room's topic (was a header line; renderRoom keeps it current, hidden while it repeats the description) %>
+      <div class="topic" id="rmTopic" data-desc="<%= desc_ %>"><%= topic_ && !sameTxt_(topic_, desc_) ? topic_ : '' %></div>
+      <%# 🔊 room audio (PATVRoom.audio; 1.99yh live cams play their sound here too) - was under On the mic %>
+      <div class="rm-audio" id="rmAudioBox"></div>
       <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="<%- t('pad.chat.aria') %>"></div>
       <button class="jump" id="rmJump" type="button"><%- t('pad.chat.new') %></button>
       <div id="rmClip"></div><%# 1.99fp: ✂️ Clip chat + 🔊 mic clips (public/js/chat-clip.js) %>
@@ -690,20 +771,22 @@
         <% } %>
       </div>
     </section>
+    <%# ── cam strip slot (1.99za): the live cam strip's partial goes HERE, straight under the chat ── %>
+    </div>
     <aside class="side">
-      <%# 1.99co: the Manage panel - filled and shown by public/js/room-mod.js only when Pepe says this viewer moderates the room %>
-      <section class="card pm" id="rmMod" hidden></section>
-      <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
-      <section class="card" aria-labelledby="micH">
+      <section class="card rm-mic" id="rmMicCard" aria-labelledby="micH">
         <h2 id="micH"><span class="ht"><%- t('pad.mic.h') %></span></h2>
         <div class="mic" id="rmMic"></div>
-        <div id="rmAudioBox" style="margin-top:10px"></div>
       </section>
-      <section class="card" aria-labelledby="pplH">
+      <section class="card rm-ppl" id="rmPplCard" aria-labelledby="pplH">
         <h2 id="pplH"><span class="ht"><%- t('pad.people.h') %></span> <small id="rmPplN"></small></h2>
         <ul class="people" id="rmPeople"></ul>
         <p class="muted" id="rmListNote" style="margin:8px 0 0"></p>
       </section>
+      <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
+      <%# 1.99co: the Manage room panel - filled and shown by public/js/room-mod.js only when Pepe says this viewer
+          moderates the room. 1.99za: last in the column (was first) %>
+      <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
@@ -1232,6 +1315,10 @@
   })();
   </script>
 <% } %>
+  <%# 1.99za: the story strip (fresh captures) - was between the header and the tabs on every tab; now the end of Live %>
+  <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length))) { %>
+    <section class="card rm-story" aria-label="<%- t('pad.story.aria') %>"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: t('pad.story.fresh'), next: '/p/' + encodeURIComponent(room.slug) }) %></section>
+  <% } %>
   </section>
 <% if (feed_) { %>
   <section class="ppanel" id="padPanel-feed" role="tabpanel" aria-labelledby="padTab-feed"<%= tabOn_('feed') ? '' : ' hidden' %>>
@@ -1239,11 +1326,16 @@
   </section>
 <% } %>
   <section class="ppanel about" id="padPanel-about" role="tabpanel" aria-labelledby="padTab-about"<%= tabOn_('about') ? '' : ' hidden' %>>
-    <section class="card" aria-labelledby="abH">
+    <%# 1.99za: this card also holds what the compact header dropped: the address, the platform badge, access, 18+, the
+        pad's badges in full, the owner / house pad, and the live-view note (was a banner above the stage) %>
+    <section class="card ab-card" id="about" aria-labelledby="abH">
       <h2 id="abH"><span><%- t('pad.about.h', { slug: room.slug }) %></span></h2>
       <% if (room.description) { %><div class="desc"><%= room.description %></div><% } else { %><p class="muted" style="margin:0"><%- t('pad.about.no_desc') %></p><% } %>
       <dl>
         <dt><%- t('pad.about.pad') %></dt><dd><%= room.name %> · <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %></dd>
+        <dt><%- t('pad.about.address') %></dt><dd><span class="padref">p/<%= room.slug %></span></dd>
+        <dt><%- t('pad.about.access') %></dt><dd><span class="ab-tags"><% if (access_.level === 'approved') { %><span class="htag" title="<%- t('pad.hdr.approved_tip') %>"><%- t('pad.hdr.approved') %></span><% } else if (access_.level === 'public') { %><span class="htag" title="<%- t('pad.hdr.public_tip') %>"><%- t('pad.hdr.public') %></span><% } else { %><span class="htag"><%- t('pad.about.members') %></span><% } %><% if (room.adult) { %><span class="htag adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %></span></dd>
+        <% if (PFX_ && PFX_.badges) { %><dt><%- t('pad.about.badges') %></dt><dd><%- PFX_.badges %></dd><% } %>
         <dt><%- t('pad.about.run_by') %></dt><dd><% if (room.house) { %><%- t('pad.about.house') %><% } else if (room.owner) { %><a href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 <%= room.owner %></a><% } else { %><span class="muted"><%- t('pad.about.nobody') %></span><% } %></dd>
         <% if (feed_ && feed_.follow) { %><dt><%- t('pad.about.followers') %></dt><dd><%= feed_.follow.followers.toLocaleString('en-US') %></dd><% } %>
         <% if (!siteOnly_) { %><dt><%- t('pad.about.cf_room') %></dt><dd><%= room.camfrogName || room.name %></dd><% } %>
@@ -1251,6 +1343,7 @@
         <% if (manage_) { %><dt><%- t('pad.about.settings') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings"><%- t('pad.about.settings_link') %></a></dd><% } %>
         <% if (manage_) { %><dt><%- t('pad.owner_panel') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/owner">👑 <%- t('pad.owner_panel') %></a></dd><% } %>
       </dl>
+      <% if (bridged_ && !siteOnly_) { %><p class="ab-note" role="note">📡 <%- t('pad.live.banner') %></p><% } %>
     </section>
     <%# 1.99sn: 💰 the pad vault, public, first card under About (partials/pad-vault-card.ejs; roomvaults.js) %>
     <% if (typeof roomVault !== 'undefined' && roomVault) { %><%- include('partials/pad-vault-card', { rv: roomVault, room, slug: room.slug, signed: giftSigned_, siteOnly: siteOnly_, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %><% } %>

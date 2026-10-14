@@ -1058,7 +1058,13 @@ function register(app, { isBotToken, addUser }) {
     const want = String((req.query && req.query.platform) || "").toLowerCase();
     const platform = reg.PLATFORMS.includes(want) ? want : "";
     const rows = platform ? g.rows.filter((r) => r.platform === platform) : g.rows;
-    res.render("rooms", { padBadge: require("./pads").padBadge, boostMark: require("./boostmark").boostMark, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
+    // 1.99za: the "Following" section - the pads you follow that you can see (guideRows already left out the rest),
+    // whatever the platform filter, in the guide's order (live first)
+    let followRows = [];
+    if (signedIn) {
+      try { const ids = new Set(await require("./follows").followedPadIds(req.user.userId, 2000)); followRows = g.rows.filter((r) => ids.has(r.id)); } catch (e) { followRows = []; }
+    }
+    res.render("rooms", { followRows, padBadge: require("./pads").padBadge, boostMark: require("./boostmark").boostMark, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
   });
 
   // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header

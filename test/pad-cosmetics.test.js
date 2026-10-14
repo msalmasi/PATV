@@ -464,8 +464,12 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   const page = async (u) => (await ejs.renderFile(path.join(repo, "views", "room.ejs"), roomLocals(u))).replace(/\r\n/g, "\n");
   let html = await page("fan");
   assert.match(html, /<link rel="stylesheet" href="\/public\/css\/padfx\.css\?v=5">/);
-  assert.match(html, /<section class="hero pfx pfx-f-pride is-anim" aria-labelledby="rmTitle"><span class="pfx-l" aria-hidden="true"><\/span>/);
-  assert.match(html, /<span class="rm-nm pfx-g pfx-g-rainbow">Houseplants<\/span><span class="pfx-bs">/);
+  // 1.99za: the compact header keeps the look - the frame, the glow, the badges on one line that gives way (data-fit);
+  // the full badge list is in the About card
+  assert.match(html, /<section class="hero hero-c pfx pfx-f-pride is-anim" id="rmHero" aria-labelledby="rmTitle"><span class="pfx-l" aria-hidden="true"><\/span>/);
+  assert.match(html, /<span class="rm-nm pfx-g pfx-g-rainbow" data-fit-name title="Houseplants">Houseplants<\/span><span class="pfx-bs" data-fit>/);
+  assert.match(html, /<dt>Badges<\/dt><dd><span class="pfx-bs">/);
+  assert.match(html, /\/public\/js\/pad-chipfit\.js/);
   assert.match(html, /role="menuitem" data-pad-gift="[^"]+">🎁 Gift a cosmetic<\/button>/, "⋯ menu for a non-owner");
   assert.match(html, /<section class="card ab-gift" id="gift"[\s\S]*?never refunded[\s\S]*?data-pad-gift=/, "About tab entry + the no-refund rule");
   assert.match(html, /\/public\/js\/pad-cosmetics\.js\?v=4/);
@@ -476,9 +480,10 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   assert.match(html, /href="\/login\?next=[^"]+%23gift">🎁 Gift a cosmetic<\/a>/, "signed out: sign in first");
   // a pad with nothing equipped renders exactly as before
   html = (await ejs.renderFile(path.join(repo, "views", "room.ejs"), roomLocals("fan", { room: { ...roomLocals().room, id: "Bare.Room", ownerUser: null, owner: null } }))).replace(/\r\n/g, "\n");
-  assert.match(html, /<section class="hero" aria-labelledby="rmTitle">\n/);
-  // /p cards + Top Pads
-  const rooms_ = rd("views/rooms.ejs");
+  assert.match(html, /<section class="hero hero-c" id="rmHero" aria-labelledby="rmTitle">\n/);
+  assert.doesNotMatch(html, /<dt>Badges<\/dt>/);
+  // /p cards + Top Pads (1.99za: the /p card is its own partial - the Following section + the grid)
+  const rooms_ = rd("views/partials/pad-dir-card.ejs");
   assert.match(rooms_, /<a class="ch[^"]*<%= fx_ && fx_\.cls \? ' ' \+ fx_\.cls : '' %>" href="[^"]*"><%- fx_ \? fx_\.layer : '' %>/);
   assert.match(rooms_, /<span class="t<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>" title="<%= r\.title %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badgesFit : '' %>/);
   const home = rd("views/home.ejs");

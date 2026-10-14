@@ -104,7 +104,8 @@ test("room page: the Stage card (player + Snap / Clip) then its own Go live card
   assert.match(pub, /<section class="card golive-card" id="rmGoLive" aria-labelledby="rmGoLiveH">\s*<h2 id="rmGoLiveH"[^>]*>🎬 Go live<\/h2>/, "a small header, the same card style");
   assert.ok(card.includes('id="rmSched"'), "the schedule is inside the Go live card");
   assert.ok(card.indexOf('id="rmSlotsTxt"') < card.indexOf('id="rmBoostTxt"') && card.indexOf('id="rmBoostTxt"') < card.indexOf('id="rmSched"'), "status + boost line, then the actions, then the schedule");
-  assert.match(card, /<div class="stage-acts">\s*<a class="sact primary" href="\/stage\?room=plant_based_chatting">🎥 Go live here<\/a>\s*<a class="sact" href="\/stage\?room=plant_based_chatting#whenSet">📅 Book a slot<\/a>\s*<button type="button" class="sact boost" id="rmBoostBtn"[^>]*>🚀 Boost this pad<\/button>/);
+  // 1.99za: each action carries a long + a short label (the short one in the slim row on a phone)
+  assert.match(card, /<div class="stage-acts">\s*(<%#[^%]*%>\s*)?<a class="sact primary" href="\/stage\?room=plant_based_chatting"><span class="l-full">🎥 Go live here<\/span><span class="l-short">🎥 Go live<\/span><\/a>\s*<a class="sact" href="\/stage\?room=plant_based_chatting#whenSet"><span class="l-full">📅 Book a slot<\/span><span class="l-short">📅 Book<\/span><\/a>\s*<button type="button" class="sact boost" id="rmBoostBtn"[^>]*><span class="l-full">🚀 Boost this pad<\/span><span class="l-short">🚀 Boost<\/span><\/button>/);
   assert.doesNotMatch(pub, /rmFeatBtn|Get featured|feature=1/, "1.99ee: no paid featuring anywhere on the pad page");
   assert.match(pub, /id="rmBoostTxt" hidden>/, "no boosts yet: the boost line is hidden");
   assert.match(pub, /patamount\.js\?v=1" defer><\/script><script src="\/public\/js\/pad-boost\.js\?v=2/);   // 1.99nk

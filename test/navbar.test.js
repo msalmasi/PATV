@@ -76,8 +76,9 @@ const heads = (html) => [...html.matchAll(/<div class="nav-sec-h" id="([^"]*)">/
 test("More and ☰ menus: labelled sections in order, search on top, More skips the top-bar links", async () => {
   const n = nav(await render({ user: "someuser", supportOn: () => true, casinoOn: () => true }));
   const more = pop(n, "nav-more"), burger = pop(n, "nav-burger");
-  assert.deepEqual(heads(more), ["nm-you", "nm-watch", "nm-play", "nm-shop", "nm-info", "nm-staff"]);
-  assert.deepEqual(heads(burger), ["nb-you", "nb-watch", "nb-play", "nb-shop", "nb-info", "nb-staff"]);
+  // 1.99za: Watch & hang out first, You after Play (the user: pads come first on a phone)
+  assert.deepEqual(heads(more), ["nm-watch", "nm-play", "nm-you", "nm-shop", "nm-info", "nm-staff"]);
+  assert.deepEqual(heads(burger), ["nb-watch", "nb-play", "nb-you", "nb-shop", "nb-info", "nb-staff"]);
   for (const p of [more, burger]) {
     assert.ok(p.indexOf('class="nav-psearch"') < p.indexOf('class="nav-sec'), "search box first");
     assert.match(p, /role="group" aria-labelledby="n[mb]-you"/);
@@ -164,5 +165,38 @@ test("Polls sit under Play (interactive), not Info & links, in both More and ☰
     };
     assert.ok(sec("play").includes("/polls"), cls + ": Polls in Play");
     assert.ok(!sec("info").includes("/polls"), cls + ": not in Info & links");
+  }
+});
+
+// 1.99za: "My pads" = the pads you own + the pads you follow (padowner.navPads via app.locals, the ids from
+// follows.navPads), right under Watch & hang out; live ones first; yours keep a ⚙ owner-panel shortcut; capped + See all
+test("My pads: owned + followed under Watch, live first, owner-panel shortcut, See all", async () => {
+  const navPads = (u, ids) => {
+    assert.equal(u, "someuser");
+    assert.deepEqual(ids, ["r2", "r3"]);
+    return { items: [
+      { slug: "live-one", title: "Live <One>", href: "/p/live-one", owned: false, live: true, owner: null },
+      { slug: "mine", title: "Mine", href: "/p/mine", owned: true, live: false, owner: "/p/mine/owner" },
+      { slug: "fol", title: "Followed", href: "/p/fol", owned: false, live: false, owner: null },
+    ], more: true };
+  };
+  const n = nav(await render({ user: "someuser", navPads, followedPadIds: ["r2", "r3"] }));
+  for (const [cls, pre] of [["nav-burger", "nb-"], ["nav-more", "nm-"]]) {
+    const p = pop(n, cls);
+    assert.deepEqual(heads(p).slice(0, 3), [pre + "watch", pre + "mypads", pre + "play"]);
+    const sec = new RegExp('aria-labelledby="' + pre + 'mypads"[^]*?</div></div>').exec(p)[0];
+    assert.deepEqual(hrefs(sec), ["/p/live-one", "/p/mine", "/p/fol", "/p#following"], "pads open the pad itself, then See all");
+    assert.match(sec, /class="nav-link nav-pad nav-padlive"/, "a live pad is marked");
+    assert.match(sec, /<span class="nav-livedot" role="img" aria-label="Live now"><\/span>/);
+    assert.match(sec, /Live &lt;One&gt;/, "titles are escaped");
+    assert.match(sec, /<div class="nav-row"><a href="\/p\/mine"[^]*?<\/a><a href="\/p\/mine\/owner" class="nav-sub"/, "your pad keeps the owner panel shortcut");
+    assert.doesNotMatch(sec, /href="\/p\/fol\/owner"/, "no owner panel for a followed pad");
+  }
+});
+
+test("My pads: none when you own and follow nothing, and nothing signed out", async () => {
+  for (const locals of [{ user: "someuser", navPads: () => ({ items: [], more: false }) }, { navPads: () => { throw new Error("not called signed out"); } }]) {
+    const n = nav(await render(locals));
+    assert.doesNotMatch(n, /mypads/);
   }
 });

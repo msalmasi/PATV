@@ -213,6 +213,7 @@ const inbox = require("./inbox");
 app.use(inbox.navCount);
 const messages = require("./messages");             // 1.99cp: direct messages (/messages)
 app.use(messages.navCount);
+app.use(require("./follows").navPads);       // 1.99za: the pads you follow, for the nav's "My pads"
 // welcome bonus (welcome.js, 1.99bg): a device id for every browser + signed-in activity days
 const welcome = require("./welcome");
 const cookieUserId = (req) => {

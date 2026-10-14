@@ -23,6 +23,14 @@
   rows.forEach((r) => r.next.forEach((n) => sched.push({ ...n, room: r })));
   sched.sort((a, b) => a.start_at - b.start_at);
   const pepeOn = !!(pepe && pepe.active);
+  const plat_ = typeof platform !== 'undefined' ? platform : '', counts_ = typeof counts !== 'undefined' ? counts : {}, PL_ = typeof PAD_PLATFORMS !== 'undefined' ? PAD_PLATFORMS : { camfrog: { icon: '🐸', label: 'Camfrog Pad' }, site: { icon: '🌐', label: 'Site Pad' } };
+  const padBadge_ = typeof padBadge === 'function' ? padBadge : (p) => '<span class="pad-plat pp-' + p + '">' + (PL_[p] ? PL_[p].icon + ' ' + PL_[p].label : p) + '</span>';
+  const H_ = { PFX_, PAV_, BM, TXT, padBadge_, pepeOn };   // partials/pad-dir-card.ejs
+  // 1.99za: the pads you follow get their own section at the top (followRows: every followed pad you can see, any
+  // platform, in the route's order) and are left out of the full grid below, so nothing shows twice
+  const fol_ = typeof followRows !== 'undefined' && Array.isArray(followRows) ? followRows : [];
+  const folIds_ = new Set(fol_.map((r) => r.id));
+  const rest_ = rows.filter((r) => !folIds_.has(r.id));
 %>
 <style>
   .cg { --card: var(--ds-surface); --line: var(--ds-line); --px: var(--ds-sp-4); --py: var(--ds-sp-4); --cardgap: var(--ds-sp-4);
@@ -117,6 +125,8 @@
   .cg .sched time { color: var(--ds-green-2); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
   .cg .sched .w { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cg .owned { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cg .fol .fol-empty { margin: 0; }   /* 1.99za: the Following section */
+  .cg .fol { border-color: color-mix(in srgb, var(--ds-gold) 28%, var(--ds-line)); }
   .cg .empty { border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-lg); padding: var(--ds-sp-6) var(--ds-sp-4); text-align: center; color: var(--ds-text-muted); }
   /* a schedule row opens its pad - a stretched link (a.rl::after covers the row); other links sit above it */
   .cg .sched li { position: relative; cursor: pointer; transition: border-color .15s, background .15s; }
@@ -152,6 +162,20 @@
     <h1 class="ds-h1"><%- IC_(t('rooms.h1')) %></h1>
     <p class="lead"><%- t('rooms.lead') %><% if (!signedIn) { %> <%- t('rooms.lead_signin', { link: '<a href="/login">' + t('rooms.signin') + '</a>' }) %><% } %></p>
   </div>
+
+  <%# 1.99za: ⭐ Following - signed in only; the nav's "My pads › All my pads" lands here (#following) %>
+  <% if (signedIn) { %>
+  <section class="card fol" id="following" aria-labelledby="folH">
+    <h2 id="folH"><%- t('rooms.following_h') %> <small><%- fol_.length ? t('rooms.following_n', { count: fol_.length }) : t('rooms.following_sub') %></small></h2>
+    <% if (!fol_.length) { %>
+      <p class="muted fol-empty"><%- t('rooms.following_none') %></p>
+    <% } else { %>
+    <div class="grid">
+      <% fol_.forEach((r) => { %><%- include('partials/pad-dir-card', { r, H: H_ }) %><% }) %>
+    </div>
+    <% } %>
+  </section>
+  <% } %>
 
   <section class="cta" aria-label="<%- t('rooms.go_live_aria') %>">
     <div>
@@ -194,61 +218,19 @@
   </section>
 
   <section class="card" aria-labelledby="chH">
-    <h2 id="chH"><%- t('rooms.pads_h') %> <small><%- t('rooms.n_live', { n: rows.filter((r) => r.live).length }) %> · <%- t('rooms.n_pads', { count: rows.length }) %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>
+    <h2 id="chH"><%- fol_.length ? t('rooms.other_pads_h') : t('rooms.pads_h') %> <small><%- t('rooms.n_live', { n: rest_.filter((r) => r.live).length }) %> · <%- t('rooms.n_pads', { count: rest_.length }) %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>
     <%# 1.99x: filter by platform - All / Camfrog / Site (Twitch / Discord appear once a pad has them) %>
-    <% const plat_ = typeof platform !== 'undefined' ? platform : '', counts_ = typeof counts !== 'undefined' ? counts : {}, PL_ = typeof PAD_PLATFORMS !== 'undefined' ? PAD_PLATFORMS : { camfrog: { icon: '🐸', label: 'Camfrog Pad' }, site: { icon: '🌐', label: 'Site Pad' } };
-       const padBadge_ = typeof padBadge === 'function' ? padBadge : (p) => '<span class="pad-plat pp-' + p + '">' + (PL_[p] ? PL_[p].icon + ' ' + PL_[p].label : p) + '</span>'; %>
     <nav class="pad-filter" aria-label="<%- t('rooms.filter_aria') %>">
       <a href="/p"<%- plat_ ? '' : ' class="on" aria-current="page"' %>><%- t('rooms.all') %> <small><%= typeof allCount !== 'undefined' ? allCount : rows.length %></small></a>
       <% Object.keys(PL_).filter((k) => k === 'camfrog' || k === 'site' || counts_[k] || plat_ === k).forEach((k) => { %>
         <a href="/p?platform=<%= k %>"<%- plat_ === k ? ' class="on" aria-current="page"' : '' %>><%= PL_[k].icon %> <%= PL_[k].label.replace(/ Pad$/, '') %> <small><%= counts_[k] || 0 %></small></a>
       <% }) %>
     </nav>
-    <% if (!rows.length) { %>
-      <div class="empty"><%- plat_ ? t('rooms.none_platform') : t('rooms.none') %></div>
+    <% if (!rest_.length) { %>
+      <div class="empty"><%- rows.length ? t('rooms.all_followed') : plat_ ? t('rooms.none_platform') : t('rooms.none') %></div>
     <% } else { %>
     <div class="grid">
-      <% rows.forEach((r) => { const liveNow = r.now.filter((s) => s.live); const desc = r.description || r.topic || '';
-           const pepeTip = t('rooms.pepe_tip'); %>
-        <% const fx_ = PFX_(r.id); %>
-        <a class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %><%= fx_ && fx_.cls ? ' ' + fx_.cls : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>"><%- fx_ ? fx_.layer : '' %>
-          <div class="ch-head">
-            <%# 1.99es: avatar, name, then the 🚀 badge by the name (it used to trail the status pills) %>
-            <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>" title="<%= r.title %>"><%= r.title %></span><%- fx_ ? fx_.badgesFit : '' %><%- BM(r.boost_pat, 'pill ch-mark') %></span>
-            <span class="ch-badges">
-              <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
-              <% if (r.adult) { %><span class="pill adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %>
-              <% if (r.access === 'approved') { %><span class="pill" title="<%- t('rooms.approved_tip') %>"><%- t('rooms.approved') %></span><% } else if (r.access === 'public') { %><span class="pill" title="<%- t('rooms.public_tip') %>"><%- t('rooms.public') %></span><% } %>
-              <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="<%- t('rooms.room_pill_tip') %>"><span class="dot" aria-hidden="true"></span><%- r.live ? t('rooms.room_active') : (r.bridged ? t('rooms.quiet') : t('rooms.off_web')) %></span><% } %>
-              <% if (liveNow.length) { %><span class="pill on" title="<%- t('rooms.on_stage_tip') %>"><%- t('rooms.on_stage', { n: liveNow.length }) %></span><% } %>
-            </span>
-          </div>
-          <div class="ch-meta">
-            <span class="padref">p/<%= r.slug %></span>
-            <% if (r.bridged && r.live && r.count > 0) { %><span title="<%- t('rooms.n_in_room', { n: r.count }) %>" aria-label="<%- t('rooms.n_in_room', { n: r.count }) %>">👥 <%= r.count %></span><% } %>
-            <% if (r.bridged && r.live && r.micCount > 0) { %><span title="<%- t('rooms.n_on_mic', { n: r.micCount }) %>" aria-label="<%- t('rooms.n_on_mic', { n: r.micCount }) %>">🎙 <%= r.micCount %></span><% } %>
-            <% if (r.house) { %><span class="own" title="<%- t('rooms.house_tip') %>"><%- t('rooms.house') %></span><% } else if (r.owner) { %><span class="own" title="<%- t('rooms.owner_tip') %>">👑 <%= r.owner %></span><% } %>
-            <span title="<%- t('rooms.slots_tip') %>"><%- t('rooms.slots', { now: r.now.length, total: r.slot_count }) %></span>
-            <% if (r.pepe_here) { %><span class="pepe-here" role="img" title="<%- pepeTip %>" aria-label="<%- pepeTip %>">🐸</span><% } %>
-          </div>
-          <div class="ch-desc"><%= desc.slice(0, 200) %></div>
-          <div class="ch-foot">
-            <div class="slotrow"><span class="k now"><%- t('rooms.now') %></span>
-              <ul>
-                <% if (!r.now.length) { %><li class="muted"><%- r.pepe_here ? (pepeOn ? t('rooms.pepe_slot_open') : t('rooms.pepe_off_slot_open')) : t('rooms.slot_open') %></li><% } %>
-                <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="' + t('rooms.featured') + '">★</span> ' : '' %><b><%- TXT(s.username, s.display) %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%- s.mode === 'embed' ? (s.embed_label ? t.esc(s.embed_label) : t('rooms.video')) : (s.live ? t('rooms.live') : t('rooms.starting')) %></span></li><% }) %>
-              </ul>
-            </div>
-            <div class="slotrow"><span class="k"><%- t('rooms.next') %></span>
-              <ul>
-                <% if (!r.next.length) { %><li class="muted"><%- t('rooms.nothing_booked') %></li><% } %>
-                <% r.next.slice(0, 2).forEach((n) => { %><li><%- (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(n.start_at, 'full') %><b><%- TXT(n.username, n.display) %></b><%= n.featured ? ' ★' : '' %><%= n.title ? ' — ' + n.title : '' %></li><% }) %>
-                <% if (r.next.length > 2) { %><li class="muted"><%- t('rooms.more_booked', { n: r.next.length - 2 }) %></li><% } %>
-              </ul>
-            </div>
-          </div>
-        </a>
-      <% }) %>
+      <% rest_.forEach((r) => { %><%- include('partials/pad-dir-card', { r, H: H_ }) %><% }) %>
     </div>
     <% } %>
   </section>
