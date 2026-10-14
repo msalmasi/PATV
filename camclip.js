@@ -131,10 +131,12 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") { res.status(400).json({ ok: false, error: "Bad request." }); return false; }
     return true;
   };
-  const mine = (req, res) => {
+  // 1.99yh: the clip's pad must still let this viewer in (padaccess.full, like the room audio) - checked on every read
+  const mine = async (req, res) => {
     const c = clips.get(String(req.params.id || ""));
     const R = bySlug(req.params.slug);
     if (!c || !R || c.roomId !== R.id || !req.user || c.userId !== req.user.userId) { res.status(404).json({ ok: false, error: "No such clip." }); return null; }
+    if (!(await relay.padFull(req.user.userId, R.id))) { res.status(403).json(relay.PAD_DENIED); return null; }
     return { c, R };
   };
 
@@ -147,6 +149,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
       if (!R.cams) return res.status(403).json({ ok: false, error: "Cam snapshots aren't switched on in this Camfrog room." });
+      if (!(await relay.padFull(u.userId, R.id))) return res.status(403).json(relay.PAD_DENIED);
       if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
       const login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
       const secs = SECS.includes(Number((req.body || {}).secs)) ? Number(req.body.secs) : SECS_DEFAULT;
@@ -213,13 +216,13 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   });
 
   // 3. the requester's view of it
-  app.get("/api/rooms/:slug/camclip/:id", addUser, (req, res) => {
+  app.get("/api/rooms/:slug/camclip/:id", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const x = mine(req, res);
+    const x = await mine(req, res);
     if (x) res.json(view(x.c, req.params.slug));
   });
-  app.get("/api/rooms/:slug/camclip/:id/video", addUser, (req, res) => {
-    const x = mine(req, res);
+  app.get("/api/rooms/:slug/camclip/:id/video", addUser, async (req, res) => {
+    const x = await mine(req, res);
     if (!x) return;
     const f = fileOf(x.c.id);
     if (x.c.state !== "ready" || NOW() - x.c.done >= PREVIEW_TTL || !f || !fs.existsSync(f)) return res.status(410).json({ ok: false, error: "That clip expired." });
@@ -227,16 +230,16 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     res.type("video/mp4");
     res.sendFile(f, { acceptRanges: true });
   });
-  app.get("/api/rooms/:slug/camclip/:id/poster", addUser, (req, res) => {
-    const x = mine(req, res);
+  app.get("/api/rooms/:slug/camclip/:id/poster", addUser, async (req, res) => {
+    const x = await mine(req, res);
     if (!x) return;
     if (!x.c.poster) return res.status(404).end();
     res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
     res.type("image/jpeg").send(x.c.poster);
   });
-  app.post("/api/rooms/:slug/camclip/:id/discard", addUser, express.json({ limit: "4kb" }), (req, res) => {
+  app.post("/api/rooms/:slug/camclip/:id/discard", addUser, express.json({ limit: "4kb" }), async (req, res) => {
     if (!jsonOnly(req, res)) return;
-    const x = mine(req, res);
+    const x = await mine(req, res);
     if (!x) return;
     if (isOpen(x.c)) return res.status(409).json({ ok: false, error: "It's still recording." });
     if (x.c.save) return res.status(409).json({ ok: false, error: "It's being saved." });
@@ -248,7 +251,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   app.post("/api/rooms/:slug/camclip/:id/save", addUser, express.json({ limit: "4kb" }), async (req, res) => {
     if (!jsonOnly(req, res)) return;
     try {
-      const x = mine(req, res);
+      const x = await mine(req, res);
       if (!x) return;
       const { c, R } = x;
       const u = await me(req);

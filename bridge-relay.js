@@ -64,6 +64,14 @@ const express = require("express");
 const crypto = require("crypto");
 const { getQuery, runQuery } = require("./dbUtils");
 const queueAction = (...a) => require("./actions").queue(...a);   // lazy: actions.js opens its table on load
+// 1.99yh: cam snapshots / clips / live cams follow the pad's access rule like the room audio (padaccess.full: signed in,
+// and inside an Approved pad). The /api/rooms/:slug gate (padaccess.register) covers Approved pads already; this is the
+// route's own check, so a snapshot never depends on middleware order or on how the slug resolved. Fails closed.
+async function padFull(userId, roomId) {
+  if (!userId || !roomId) return false;
+  try { return !!(await require("./padaccess").fullFor(String(userId), roomId)); } catch (e) { return false; }
+}
+const PAD_DENIED = { ok: false, code: "pad_access", error: "This pad's live room is for its approved members." };
 
 const SAY_MAX = 300, CLIP_MAX_BYTES = 600 * 1024, CLIP_MAX_SECS = 30;
 const JOB_TTL = 3 * 60 * 1000, CLAIM_RETRY = 45 * 1000;
@@ -583,6 +591,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = roomFor(req, res, "cams");
     if (!R) return;
+    if (!(await padFull(u.userId, R.id))) return res.status(403).json(PAD_DENIED);
     const login = String((req.body || {}).login || "").toLowerCase().slice(0, 40);
     const m = R.members.find((x) => !x.anon && String(x.login).toLowerCase() === login);
     if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
@@ -638,6 +647,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
     const R = bySlug(req.params.slug);
     if (!R || !R.cams) return res.status(404).json({ state: "off" });
+    if (!(await padFull(req.user.userId, R.id))) return res.status(403).json(PAD_DENIED);
     const login = String(req.params.login || "").toLowerCase().slice(0, 40);
     const s = snaps.get(R.id + "|" + login);
     const pending = [...jobs.values()].some((j) => j.kind === "snap" && j.roomId === R.id && j.target === login && j.state !== "done");
@@ -668,6 +678,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = roomFor(req, res, "cams");
     if (!R) return;
+    if (!(await padFull(u.userId, R.id))) return res.status(403).json(PAD_DENIED);
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
     const sid = String((req.body || {}).sid || "").slice(0, 40);
     let s = null, login = "";
@@ -739,7 +750,7 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
+module.exports = { padFull, PAD_DENIED, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
   sayLine, roomRefusal, noteEcho, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_PENDING_TTL_SYNC, SAY_CLAIM_TTL,   // 1.99ye
   _cids: cids, _pullers: pullers, _lastPull: () => lastPull,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
