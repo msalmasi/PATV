@@ -245,7 +245,10 @@ function register(app, { addUser, isBotToken }) {
       // 1.99yh: + the 📡 live-cam switch (livecam.js owns it; the card is here - one privacy page)
       let lc = null;
       try { lc = await require("./livecam").optoutState(req.user.userId); } catch (e) { lc = null; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc });
+      // 1.99yt: + the 📺 "my cam on Pepe's main stream" opt-in (onair.js owns it)
+      let oa = null;
+      try { oa = await require("./onair").optinState(req.user.userId); } catch (e) { oa = null; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa });
     } catch (e) { next(e); }
   });
 }

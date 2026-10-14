@@ -117,6 +117,24 @@
   </section>
   <% } %>
 
+  <% if (locals.oa && oa.linked) { %>
+  <!-- 1.99yt: 📺 a cam on Pepe's main stream needs its owner's opt-in (onair.js) -->
+  <section class="ds-card lg" id="onair" aria-labelledby="pvOaH">
+    <h2 class="ds-h2" id="pvOaH"><span class="dot"></span>📺 <%- t('oa.h2') %></h2>
+    <p class="pv-why"><%- t('oa.what') %></p>
+    <ul class="pv-list">
+      <li><%- t('oa.what_told') %></li>
+      <li><%- t('oa.what_never') %></li>
+    </ul>
+    <div class="pv-set">
+      <div><b><%- t('oa.switch') %></b><p class="ds-meta"><%- t('lc.identity', { login: oa.login }) %></p></div>
+      <label class="ds-switch"><input type="checkbox" id="pvOa" <%= oa.on ? 'checked' : '' %> aria-label="<%- t('oa.switch') %>"><span></span></label>
+    </div>
+    <p class="pv-st" id="pvOaSt" role="status" aria-live="polite"><%- oa.on ? t('oa.st_on') : t('oa.st_off') %></p>
+    <p class="ds-meta"><%- t('oa.chat') %></p>
+  </section>
+  <% } %>
+
   <section class="ds-card lg" aria-labelledby="pvMoreH">
     <h2 class="ds-h2" id="pvMoreH"><span class="dot"></span><%- t('inc.more_h') %></h2>
     <nav class="pv-links">
@@ -126,5 +144,5 @@
   </section>
 </main>
 <script src="/public/js/privacy-settings.js?v=1" defer></script>
-<script src="/public/js/privacy-livecam.js?v=2" defer></script>
+<script src="/public/js/privacy-livecam.js?v=3" defer></script>
 <script src="/public/js/privacy-camviewers.js?v=1" defer></script>

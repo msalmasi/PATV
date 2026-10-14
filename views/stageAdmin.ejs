@@ -50,6 +50,36 @@
     <p class="muted">Pepe's stream is the default: lowest delay, ⚡ WebRTC, snaps / clips. Twitch going live never switches it by itself (Twitch is a relay of his stream). An embed takes the same links as a streamer's slot. Either way, ON AIR, snaps / clips and the front-pad pick follow Pepe's own stream; viewers can still pick "Pepe's own stream" next to his tab.</p>
   </section>
 
+  <% if (isAdmin) { %>
+  <!-- 1.99yt: 📺 On Pepe's OBS (onair.js POC) - one live slot or cam on his main stream + his Camfrog cam -->
+  <section class="sb-card" id="oaCard" aria-labelledby="oaT">
+    <h2 id="oaT"><span class="ds-ic" aria-hidden="true">📺</span> On Pepe's OBS <small class="muted">(POC)</small></h2>
+    <p id="oaNow" role="status">Loading…</p>
+    <div class="row"><button type="button" class="btn danger" id="oaOff" disabled>⏹ Take it off Pepe's stream</button><span class="msg" id="oaMsg" role="status"></span></div>
+    <h3>Live slots</h3>
+    <div class="tblwrap"><table><thead><tr><th>Who</th><th>Pad</th><th></th></tr></thead><tbody id="oaSlots"></tbody></table></div>
+    <h3>Cams</h3>
+    <div class="tblwrap"><table><thead><tr><th>Who</th><th>Room</th><th></th></tr></thead><tbody id="oaCams"></tbody></table></div>
+    <form id="oaCfg" class="settings" autocomplete="off">
+      <label class="chk"><input type="checkbox" name="enabled"> On-air enabled <small>(kill switch)</small></label>
+      <label class="chk"><input type="checkbox" name="cam_optin"> Cams need their owner's opt-in</label>
+      <label class="chk"><input type="checkbox" name="allow_library"> Allow 📼 Plex plays <small>(Twitch relay: DMCA risk)</small></label>
+      <label class="chk"><input type="checkbox" name="auto_scene"> Switch OBS to the on-air scene when needed</label>
+      <details class="adm-adv" style="grid-column: 1 / -1"><summary>OBS names and the cam encode</summary><div class="adm-adv-body settings">
+        <label>On-air scene<input type="text" name="scene" maxlength="60" spellcheck="false"></label>
+        <label>IRL scene (nested)<input type="text" name="irl_scene" maxlength="60" spellcheck="false"></label>
+        <label>IRL feed source (wins)<input type="text" name="irl_source" maxlength="60" spellcheck="false"></label>
+        <label>On-air source<input type="text" name="source" maxlength="60" spellcheck="false"></label>
+        <label>Cam fps<input type="number" name="cam_fps" min="5" max="30"></label>
+        <label>Cam kbps<input type="number" name="cam_kbps" min="200" max="6000"></label>
+      </div></details>
+      <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn">Save</button><span class="msg" id="oaCfgMsg" role="status"></span></div>
+    </form>
+    <details><summary class="muted">Log</summary><div class="tblwrap"><table><thead><tr><th>When</th><th>What</th><th>By</th><th>Target</th><th>Detail</th></tr></thead><tbody id="oaLog"></tbody></table></div></details>
+    <p class="muted">Pepe plays the pick in a media source under his IRL feed (OBS scene <i>IRL</i>, which sits in his program scenes under his avatar and overlay), so it goes out on his main stream, the Twitch relay and his Camfrog cam (the virtual camera shows the program scene). The operator's own IRL feed always wins: while it plays, the pick is hidden. Never Approved-only pads, embeds or NSFW slots. A slot's streamer is told and can take it off (<code>!onair off</code>); a cam needs its owner's opt-in (Settings → Privacy, or <code>!onair me on</code>) and Pepe tells them in Camfrog. It ends by itself when the slot ends or the cam goes. Camfrog: <code>!onair &lt;pad|user|slot id&gt;</code>, <code>!onair cam &lt;login&gt;</code>, <code>!onair off</code> (admins).</p>
+  </section>
+  <% } %>
+
   <!-- 1.99fk: 🟣 Twitch relays (restream.js) -->
   <section class="sb-card" id="rsCard" data-mode="admin" aria-labelledby="rsT">
     <h2 id="rsT"><span class="ds-ic" aria-hidden="true">🟣</span> Twitch relays</h2>
@@ -128,6 +158,7 @@
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/stage-admin.js?v=4" defer></script>
 <script src="/public/js/restream.js?v=1" defer></script>
+<% if (isAdmin) { %><script src="/public/js/onair-admin.js?v=1" defer></script><% } %>
 <%- include('partials/admin-close') %>
 </body>
 </html>

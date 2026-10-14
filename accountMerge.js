@@ -91,6 +91,11 @@ const RULES = {
   "cam_blocks.owner": { deny: "1.99yq: the Camfrog login of the cam whose owner made the block, not a userId" },
   "cam_views.user_id": M({ name: "username" }),
   "cam_views.owner": { deny: "1.99yq: the Camfrog login of the cam that was viewed, not a userId" },
+  // 1.99yt 📺 on Pepe's OBS (onair.js): the cam opt-in is keyed by chat login (user_id = who set it on the web)
+  "onair_optin.user_id": M(),
+  "onair_state.target": { deny: "1.99yt: JSON of what's on Pepe's main stream right now (slot id / chat login), short-lived, not a userId column" },
+  "onair_state.updated_by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) - admin_audit has the id" },
+  "onair_log.by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) in the on-air log" },
   "donation_promo_settings.actor": { deny: NAME },
   // 1.99ts: the daily donation limit - a member's donations by day move (a merged account shares ONE daily limit); an override
   // folds into the target's (the target's own override wins when both have one)

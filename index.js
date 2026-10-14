@@ -1218,6 +1218,7 @@ require("./bounties").register(app, { isBotToken, addUser });
 // 1.99al: paid Main Stage slots (book, RTMP key / browser relay, per-minute billing, admin cut)
 require("./mainstage").register(app, { isBotToken, addUser });
 require("./restream").register(app, { addUser });   // 1.99fk: "Also stream to Twitch" relay (deploy/restream)
+require("./onair").register(app, { addUser, isBotToken });   // 1.99yt: 📺 put a live slot / a cam on Pepe's OBS (main stream + his Camfrog cam) - POC
 require("./mediaweb").register(app, { addUser });   // 1.99ji: Plex / media - 📼 play from library on a stage (deploy/mediactl), 🎬 Overseerr requests (/requests), 🎟️ Wizarr invites; /admin/media
 require("./plexhub").register(app, { addUser });   // 1.99kp: 📼 /plex - the Plex hub (requests, your requests, access, Play from Plex, perks)
 require("./requestroles").register(app, { addUser, discordBridge });   // 1.99la: 🔭 Scout / 🎟️ Curator store roles -> PATV + Seerr + Discord; /admin/media/roles
