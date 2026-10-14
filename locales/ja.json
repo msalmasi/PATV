@@ -58,6 +58,9 @@
   "nav.menu": "メニュー",
   "nav.sec_you": "あなた",
   "nav.sec_mypads": "マイパッド",
+  "nav.pad_live": "配信中",
+  "nav.owner_panel_of": "オーナーパネル: {pad}",
+  "nav.mypads_all": "マイパッドをすべて表示",
   "nav.sec_watch": "視聴 &amp; くつろぐ",
   "nav.sec_play": "プレイ",
   "nav.sec_shop": "ショップ、サウンド &amp; サポート",
@@ -4023,6 +4026,14 @@
   "rooms.boost_aria": "{title}をブースト",
   "rooms.boost": "🚀 ブースト",
   "rooms.pads_h": "パッド",
+  "rooms.other_pads_h": "その他のパッド",
+  "rooms.following_h": "⭐ フォロー中",
+  "rooms.following_n": {
+    "other": "フォロー中のパッド {count}件"
+  },
+  "rooms.following_sub": "フォローしているパッドは、ここやメニューに表示されます",
+  "rooms.following_none": "まだパッドをフォローしていません。パッドの<b>フォロー</b>をタップすると、ここやメニューの<b>マイパッド</b>に表示されます。",
+  "rooms.all_followed": "ここにあるすべてのパッドをフォローしています。すべて上の「フォロー中」に表示されています。",
   "rooms.n_live": "{n}件ライブ中",
   "rooms.n_pads": {
     "other": "パッド {count} 個"
@@ -4095,6 +4106,7 @@
   "pad.hdr.house": "🐸 ハウスパッド",
   "pad.hdr.owner": "👑 パッドのオーナー：{name}",
   "pad.hdr.follow": "このパッドをフォロー",
+  "pad.hdr.about_link": "ℹ️ 概要",
   "pad.hdr.follow_tip": "このパッドをフォローすると、投稿がフォロー中のフィードに表示されます",
   "pad.hdr.followers": {
     "other": "フォロワー {!n} 人"
@@ -4136,6 +4148,9 @@
   "pad.golive.here": "🎥 ここで配信",
   "pad.golive.book": "📅 枠を予約",
   "pad.golive.boost": "🚀 このパッドをブースト",
+  "pad.golive.here_short": "🎥 配信",
+  "pad.golive.book_short": "📅 予約",
+  "pad.golive.boost_short": "🚀 ブースト",
   "pad.boost.what": "<b>{name}</b>をトップページのランキングで押し上げます。ブーストは1時間ごとに半減し、ここで人がチャットやマイクを使っている間だけ有効です。接戦の後押しにはなりますが、静かなパッドを支えることはできません。半分はこのパッドの金庫へ、半分はFort Knoxへ入ります。",
   "pad.boost.in_room": "チャットルームで: {!cmd}。",
   "pad.boost.amount": "金額",
@@ -4277,6 +4292,10 @@
   "pad.about.nobody": "まだいません",
   "pad.about.followers": "フォロワー",
   "pad.about.cf_room": "Camfrogのルーム",
+  "pad.about.address": "アドレス",
+  "pad.about.access": "閲覧できるユーザー",
+  "pad.about.members": "👥 メンバー",
+  "pad.about.badges": "バッジ",
   "pad.about.settings": "設定",
   "pad.about.settings_link": "⚙ パッド設定 ›",
   "pad.gift.h": "🎁 パッドのコスメ",

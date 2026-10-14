@@ -58,6 +58,9 @@
   "nav.menu": "Menu",
   "nav.sec_you": "Bạn",
   "nav.sec_mypads": "Pad của bạn",
+  "nav.pad_live": "Đang trực tiếp",
+  "nav.owner_panel_of": "Bảng quản lý: {pad}",
+  "nav.mypads_all": "Tất cả pad của tôi",
   "nav.sec_watch": "Xem &amp; trò chuyện",
   "nav.sec_play": "Chơi",
   "nav.sec_shop": "Cửa hàng, âm thanh &amp; ủng hộ",
@@ -4023,6 +4026,14 @@
   "rooms.boost_aria": "Boost {title}",
   "rooms.boost": "🚀 Boost",
   "rooms.pads_h": "Pad",
+  "rooms.other_pads_h": "Thêm pad",
+  "rooms.following_h": "⭐ Đang theo dõi",
+  "rooms.following_n": {
+    "other": "{count} pad bạn đang theo dõi"
+  },
+  "rooms.following_sub": "các pad bạn theo dõi sẽ hiện ở đây và trong menu",
+  "rooms.following_none": "Bạn chưa theo dõi pad nào. Nhấn <b>Theo dõi</b> trên một pad để giữ nó ở đây và trong <b>Pad của tôi</b> ở menu.",
+  "rooms.all_followed": "Bạn đang theo dõi mọi pad ở đây: tất cả đều nằm trong mục Đang theo dõi phía trên.",
   "rooms.n_live": "{n} đang trực tiếp",
   "rooms.n_pads": {
     "other": "{count} pad"
@@ -4095,6 +4106,7 @@
   "pad.hdr.house": "🐸 Pad chính thức",
   "pad.hdr.owner": "👑 Chủ pad: {name}",
   "pad.hdr.follow": "Theo dõi pad này",
+  "pad.hdr.about_link": "ℹ️ Giới thiệu",
   "pad.hdr.follow_tip": "Theo dõi pad này để nhận bài đăng của nó trên bảng tin Đang theo dõi",
   "pad.hdr.followers": {
     "other": "{!n} người theo dõi"
@@ -4136,6 +4148,9 @@
   "pad.golive.here": "🎥 Phát trực tiếp ở đây",
   "pad.golive.book": "📅 Đặt suất",
   "pad.golive.boost": "🚀 Boost pad này",
+  "pad.golive.here_short": "🎥 Phát trực tiếp",
+  "pad.golive.book_short": "📅 Đặt suất",
+  "pad.golive.boost_short": "🚀 Boost",
   "pad.boost.what": "Đẩy <b>{name}</b> lên thứ hạng trang chủ. Lượt đẩy giảm một nửa mỗi giờ và chỉ được tính khi mọi người ở đây đang chat hoặc dùng mic — chúng có thể quyết định một cuộc đua sát nút, nhưng không thể gánh một pad vắng lặng. Một nửa vào kho pad này, một nửa vào Fort Knox.",
   "pad.boost.in_room": "Trong phòng chat: {!cmd}.",
   "pad.boost.amount": "Số lượng",
@@ -4277,6 +4292,10 @@
   "pad.about.nobody": "Chưa có ai",
   "pad.about.followers": "Người theo dõi",
   "pad.about.cf_room": "Phòng Camfrog",
+  "pad.about.address": "Địa chỉ",
+  "pad.about.access": "Ai có thể xem",
+  "pad.about.members": "👥 Thành viên",
+  "pad.about.badges": "Huy hiệu",
   "pad.about.settings": "Cài đặt",
   "pad.about.settings_link": "⚙ Cài đặt pad ›",
   "pad.gift.h": "🎁 Trang trí pad",

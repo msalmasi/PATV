@@ -58,6 +58,9 @@
   "nav.menu": "메뉴",
   "nav.sec_you": "나",
   "nav.sec_mypads": "내 패드",
+  "nav.pad_live": "지금 방송 중",
+  "nav.owner_panel_of": "운영자 패널: {pad}",
+  "nav.mypads_all": "내 패드 전체",
   "nav.sec_watch": "시청 &amp; 어울리기",
   "nav.sec_play": "플레이",
   "nav.sec_shop": "상점, 사운드 &amp; 후원",
@@ -4023,6 +4026,14 @@
   "rooms.boost_aria": "{title} 부스트",
   "rooms.boost": "🚀 부스트",
   "rooms.pads_h": "패드",
+  "rooms.other_pads_h": "더 많은 패드",
+  "rooms.following_h": "⭐ 팔로잉",
+  "rooms.following_n": {
+    "other": "팔로우한 패드 {count}개"
+  },
+  "rooms.following_sub": "팔로우한 패드가 여기와 메뉴에 표시돼요",
+  "rooms.following_none": "아직 팔로우한 패드가 없어요. 패드에서 <b>팔로우</b>를 누르면 여기와 메뉴의 <b>내 패드</b> 아래에 표시돼요.",
+  "rooms.all_followed": "여기 있는 모든 패드를 팔로우하고 계세요. 위의 팔로잉에 모두 있어요.",
   "rooms.n_live": "{n}개 라이브",
   "rooms.n_pads": {
     "other": "패드 {count}개"
@@ -4095,6 +4106,7 @@
   "pad.hdr.house": "🐸 하우스 패드",
   "pad.hdr.owner": "👑 패드 주인: {name}",
   "pad.hdr.follow": "이 패드 팔로우",
+  "pad.hdr.about_link": "ℹ️ 소개",
   "pad.hdr.follow_tip": "이 패드를 팔로우하면 게시물이 팔로잉 피드에 나와요",
   "pad.hdr.followers": {
     "other": "팔로워 {!n}명"
@@ -4136,6 +4148,9 @@
   "pad.golive.here": "🎥 여기서 방송하기",
   "pad.golive.book": "📅 슬롯 예약",
   "pad.golive.boost": "🚀 이 패드 부스트",
+  "pad.golive.here_short": "🎥 방송하기",
+  "pad.golive.book_short": "📅 예약",
+  "pad.golive.boost_short": "🚀 부스트",
   "pad.boost.what": "<b>{name}</b>을(를) 첫 페이지 랭킹 위로 올려요. 부스트는 매시간 절반씩 줄고, 여기서 사람들이 채팅하거나 마이크를 쓰고 있을 때만 효과가 있어요. 접전에서 승부를 가를 수는 있지만 조용한 패드를 살리지는 못해요. 절반은 이 패드 금고로, 절반은 Fort Knox로 가요.",
   "pad.boost.in_room": "채팅방에서: {!cmd}.",
   "pad.boost.amount": "금액",
@@ -4277,6 +4292,10 @@
   "pad.about.nobody": "아직 없어요",
   "pad.about.followers": "팔로워",
   "pad.about.cf_room": "Camfrog 방",
+  "pad.about.address": "주소",
+  "pad.about.access": "볼 수 있는 사람",
+  "pad.about.members": "👥 멤버",
+  "pad.about.badges": "배지",
   "pad.about.settings": "설정",
   "pad.about.settings_link": "⚙ 패드 설정 ›",
   "pad.gift.h": "🎁 패드 꾸미기",

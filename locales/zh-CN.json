@@ -58,6 +58,9 @@
   "nav.menu": "菜单",
   "nav.sec_you": "你的",
   "nav.sec_mypads": "我的小站",
+  "nav.pad_live": "正在直播",
+  "nav.owner_panel_of": "站主面板：{pad}",
+  "nav.mypads_all": "我的全部小站",
   "nav.sec_watch": "观看 &amp; 闲聊",
   "nav.sec_play": "游戏",
   "nav.sec_shop": "商店、音效 &amp; 支持",
@@ -4023,6 +4026,14 @@
   "rooms.boost_aria": "助推 {title}",
   "rooms.boost": "🚀 助推",
   "rooms.pads_h": "小站",
+  "rooms.other_pads_h": "更多小站",
+  "rooms.following_h": "⭐ 关注",
+  "rooms.following_n": {
+    "other": "你关注的 {count} 个小站"
+  },
+  "rooms.following_sub": "你关注的小站会显示在这里和菜单中",
+  "rooms.following_none": "你还没有关注任何小站。在小站上点击<b>关注</b>，它就会保留在这里，并显示在菜单的<b>我的小站</b>下。",
+  "rooms.all_followed": "这里的小站你都已关注：它们都在上方的「关注」中。",
   "rooms.n_live": "{n} 个直播中",
   "rooms.n_pads": {
     "other": "{count} 个小站"
@@ -4095,6 +4106,7 @@
   "pad.hdr.house": "🐸 官方小站",
   "pad.hdr.owner": "👑 小站站主：{name}",
   "pad.hdr.follow": "关注这个小站",
+  "pad.hdr.about_link": "ℹ️ 简介",
   "pad.hdr.follow_tip": "关注这个小站，它的帖子就会出现在你的“关注”动态中",
   "pad.hdr.followers": {
     "other": "{!n} 位粉丝"
@@ -4136,6 +4148,9 @@
   "pad.golive.here": "🎥 在这里开播",
   "pad.golive.book": "📅 预约时段",
   "pad.golive.boost": "🚀 助推这个小站",
+  "pad.golive.here_short": "🎥 开播",
+  "pad.golive.book_short": "📅 预约",
+  "pad.golive.boost_short": "🚀 助推",
   "pad.boost.what": "把 <b>{name}</b> 推到首页排行榜前面。助推每小时衰减一半，并且只有在这里有人聊天或开麦时才会计入——它能左右胶着的竞争，但撑不起一个冷清的小站。一半进入这个小站的金库，一半进入 Fort Knox。",
   "pad.boost.in_room": "在聊天室中：{!cmd}。",
   "pad.boost.amount": "金额",
@@ -4277,6 +4292,10 @@
   "pad.about.nobody": "暂无",
   "pad.about.followers": "粉丝",
   "pad.about.cf_room": "Camfrog 房间",
+  "pad.about.address": "地址",
+  "pad.about.access": "谁可以看到",
+  "pad.about.members": "👥 成员",
+  "pad.about.badges": "徽章",
   "pad.about.settings": "设置",
   "pad.about.settings_link": "⚙ 小站设置 ›",
   "pad.gift.h": "🎁 小站装扮",

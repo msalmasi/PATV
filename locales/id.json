@@ -58,6 +58,9 @@
   "nav.menu": "Menu",
   "nav.sec_you": "Kamu",
   "nav.sec_mypads": "Pad-ku",
+  "nav.pad_live": "Live sekarang",
+  "nav.owner_panel_of": "Panel owner: {pad}",
+  "nav.mypads_all": "Semua pad-ku",
   "nav.sec_watch": "Tonton &amp; nongkrong",
   "nav.sec_play": "Main",
   "nav.sec_shop": "Toko, suara &amp; dukungan",
@@ -4023,6 +4026,14 @@
   "rooms.boost_aria": "Boost {title}",
   "rooms.boost": "🚀 Boost",
   "rooms.pads_h": "Pad",
+  "rooms.other_pads_h": "Pad lainnya",
+  "rooms.following_h": "⭐ Diikuti",
+  "rooms.following_n": {
+    "other": "{count} pad yang kamu ikuti"
+  },
+  "rooms.following_sub": "pad yang kamu ikuti muncul di sini dan di menumu",
+  "rooms.following_none": "Kamu belum mengikuti pad apa pun. Ketuk <b>Ikuti</b> di sebuah pad agar tetap ada di sini dan di bawah <b>Pad-ku</b> di menu.",
+  "rooms.all_followed": "Kamu mengikuti semua pad di sini: semuanya ada di Diikuti di atas.",
   "rooms.n_live": "{n} live",
   "rooms.n_pads": {
     "other": "{count} pad"
@@ -4095,6 +4106,7 @@
   "pad.hdr.house": "🐸 Pad resmi",
   "pad.hdr.owner": "👑 Pemilik pad: {name}",
   "pad.hdr.follow": "Ikuti pad ini",
+  "pad.hdr.about_link": "ℹ️ Tentang",
   "pad.hdr.follow_tip": "Ikuti pad ini agar postingannya muncul di Feed Mengikuti-mu",
   "pad.hdr.followers": {
     "other": "{!n} pengikut"
@@ -4136,6 +4148,9 @@
   "pad.golive.here": "🎥 Live di sini",
   "pad.golive.book": "📅 Booking slot",
   "pad.golive.boost": "🚀 Boost pad ini",
+  "pad.golive.here_short": "🎥 Live",
+  "pad.golive.book_short": "📅 Booking",
+  "pad.golive.boost_short": "🚀 Boost",
   "pad.boost.what": "Dorong <b>{name}</b> naik di peringkat halaman depan. Boost meluruh separuh setiap jam dan hanya dihitung selama ada orang yang mengobrol atau memakai mic di sini. Boost bisa menentukan persaingan yang ketat, tapi tidak bisa mengangkat pad yang sepi. Separuh masuk ke brankas pad ini, separuh ke Fort Knox.",
   "pad.boost.in_room": "Di ruang chat: {!cmd}.",
   "pad.boost.amount": "Jumlah",
@@ -4277,6 +4292,10 @@
   "pad.about.nobody": "Belum ada",
   "pad.about.followers": "Pengikut",
   "pad.about.cf_room": "Room Camfrog",
+  "pad.about.address": "Alamat",
+  "pad.about.access": "Siapa yang bisa lihat",
+  "pad.about.members": "👥 Anggota",
+  "pad.about.badges": "Lencana",
   "pad.about.settings": "Pengaturan",
   "pad.about.settings_link": "⚙ Pengaturan pad ›",
   "pad.gift.h": "🎁 Kosmetik pad",

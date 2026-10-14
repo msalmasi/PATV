@@ -58,6 +58,9 @@
   "nav.menu": "เมนู",
   "nav.sec_you": "คุณ",
   "nav.sec_mypads": "Pad ของฉัน",
+  "nav.pad_live": "ไลฟ์ตอนนี้",
+  "nav.owner_panel_of": "แผงเจ้าของ: {pad}",
+  "nav.mypads_all": "pad ทั้งหมดของฉัน",
   "nav.sec_watch": "ดู &amp; พูดคุย",
   "nav.sec_play": "เล่น",
   "nav.sec_shop": "ร้านค้า, เสียง &amp; การสนับสนุน",
@@ -4024,6 +4027,14 @@
   "rooms.boost_aria": "บูสต์ {title}",
   "rooms.boost": "🚀 บูสต์",
   "rooms.pads_h": "pad",
+  "rooms.other_pads_h": "pad เพิ่มเติม",
+  "rooms.following_h": "⭐ กำลังติดตาม",
+  "rooms.following_n": {
+    "other": "pad ที่คุณติดตาม {count} รายการ"
+  },
+  "rooms.following_sub": "pad ที่คุณติดตามจะแสดงที่นี่และในเมนูของคุณ",
+  "rooms.following_none": "คุณยังไม่ได้ติดตาม pad ใด แตะ <b>ติดตาม</b> ที่ pad เพื่อเก็บไว้ที่นี่และใต้ <b>pad ของฉัน</b> ในเมนู",
+  "rooms.all_followed": "คุณติดตาม pad ทุกอันที่นี่แล้ว ทั้งหมดอยู่ในกำลังติดตามด้านบน",
   "rooms.n_live": "ไลฟ์ {n}",
   "rooms.n_pads": {
     "other": "{count} pad"
@@ -4096,6 +4107,7 @@
   "pad.hdr.house": "🐸 pad ทางการ",
   "pad.hdr.owner": "👑 เจ้าของ pad: {name}",
   "pad.hdr.follow": "ติดตาม pad นี้",
+  "pad.hdr.about_link": "ℹ️ เกี่ยวกับ",
   "pad.hdr.follow_tip": "ติดตาม pad นี้เพื่อให้โพสต์ของมันขึ้นในฟีดที่ติดตาม",
   "pad.hdr.followers": {
     "other": "ผู้ติดตาม {!n} คน"
@@ -4137,6 +4149,9 @@
   "pad.golive.here": "🎥 ไลฟ์ที่นี่",
   "pad.golive.book": "📅 จองช่อง",
   "pad.golive.boost": "🚀 บูสต์ pad นี้",
+  "pad.golive.here_short": "🎥 ไลฟ์",
+  "pad.golive.book_short": "📅 จอง",
+  "pad.golive.boost_short": "🚀 บูสต์",
   "pad.boost.what": "ดัน <b>{name}</b> ขึ้นในอันดับหน้าแรก การเพิ่มแรงส่งจะลดลงครึ่งหนึ่งทุกชั่วโมง และนับเฉพาะเมื่อมีคนแชทหรือพูดในไมค์อยู่ที่นี่ ช่วยตัดสินการแข่งขันที่สูสีได้ แต่ไม่ช่วยพาทุก pad ที่เงียบ ครึ่งหนึ่งเข้าห้องนิรภัยของ pad นี้ อีกครึ่งเข้า Fort Knox",
   "pad.boost.in_room": "ในห้องแชท: {!cmd}",
   "pad.boost.amount": "จำนวน",
@@ -4278,6 +4293,10 @@
   "pad.about.nobody": "ยังไม่มีใคร",
   "pad.about.followers": "ผู้ติดตาม",
   "pad.about.cf_room": "ห้อง Camfrog",
+  "pad.about.address": "ที่อยู่",
+  "pad.about.access": "ใครเห็นได้บ้าง",
+  "pad.about.members": "👥 สมาชิก",
+  "pad.about.badges": "ตรา",
   "pad.about.settings": "การตั้งค่า",
   "pad.about.settings_link": "⚙ การตั้งค่า pad ›",
   "pad.gift.h": "🎁 ของตกแต่ง pad",

@@ -58,6 +58,9 @@
   "nav.menu": "選單",
   "nav.sec_you": "你的",
   "nav.sec_mypads": "我的小站",
+  "nav.pad_live": "正在直播",
+  "nav.owner_panel_of": "管理面板：{pad}",
+  "nav.mypads_all": "我的所有小站",
   "nav.sec_watch": "觀看 &amp; 閒逛",
   "nav.sec_play": "遊戲",
   "nav.sec_shop": "商店、音效 &amp; 支持",
@@ -4023,6 +4026,14 @@
   "rooms.boost_aria": "加速推廣 {title}",
   "rooms.boost": "🚀 加速推廣",
   "rooms.pads_h": "小站",
+  "rooms.other_pads_h": "更多小站",
+  "rooms.following_h": "⭐ 追蹤中",
+  "rooms.following_n": {
+    "other": "你追蹤的 {count} 個小站"
+  },
+  "rooms.following_sub": "你追蹤的小站會顯示在這裡和選單中",
+  "rooms.following_none": "你還沒有追蹤任何小站。在小站上點選 <b>追蹤</b>，就能把它留在這裡，也會出現在選單的 <b>我的小站</b> 下。",
+  "rooms.all_followed": "你已追蹤這裡的每個小站：它們都列在上方的追蹤中。",
   "rooms.n_live": "{n} 個直播中",
   "rooms.n_pads": {
     "other": "{count} 個小站"
@@ -4095,6 +4106,7 @@
   "pad.hdr.house": "🐸 官方小站",
   "pad.hdr.owner": "👑 小站站長：{name}",
   "pad.hdr.follow": "追蹤這個小站",
+  "pad.hdr.about_link": "ℹ️ 關於",
   "pad.hdr.follow_tip": "追蹤這個小站，它的貼文就會出現在你的「追蹤中」動態",
   "pad.hdr.followers": {
     "other": "{!n} 位粉絲"
@@ -4136,6 +4148,9 @@
   "pad.golive.here": "🎥 在這裡開播",
   "pad.golive.book": "📅 預約時段",
   "pad.golive.boost": "🚀 加速推廣這個小站",
+  "pad.golive.here_short": "🎥 開播",
+  "pad.golive.book_short": "📅 預約",
+  "pad.golive.boost_short": "🚀 加速",
   "pad.boost.what": "把 <b>{name}</b> 推到首頁排名前面。推升效果每小時減半，而且只有在這裡有人聊天或開麥時才會計算——它能左右激烈的競爭，但撐不起冷清的小站。一半進入此小站的金庫，一半進入 Fort Knox。",
   "pad.boost.in_room": "在聊天室中：{!cmd}。",
   "pad.boost.amount": "金額",
@@ -4277,6 +4292,10 @@
   "pad.about.nobody": "暫無",
   "pad.about.followers": "粉絲",
   "pad.about.cf_room": "Camfrog 房間",
+  "pad.about.address": "地址",
+  "pad.about.access": "誰可以看到",
+  "pad.about.members": "👥 成員",
+  "pad.about.badges": "徽章",
   "pad.about.settings": "設定",
   "pad.about.settings_link": "⚙ 小站設定 ›",
   "pad.gift.h": "🎁 小站裝扮",
