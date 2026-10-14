@@ -64,10 +64,11 @@ const FIELDS = Object.freeze({
   idle_close_s: { def: 300, min: 30, max: 3600 },
   linger_s:     { def: 20, min: 5, max: 300 },
   close_method: { def: "wmclose", choices: ["wmclose", "button", "off"] },
+  capture:      { def: "blt", choices: ["blt", "pw2"] },   // how Pepe reads a cam's window (blt: no Camfrog UI-thread cost)
   ui_budget_ms: { def: 300, min: 50, max: 800 },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
-const BOT_KEYS = ["enabled", "close_idle", "fps", "kbps", "keyint_s", "max_live", "pool_max", "idle_close_s", "close_method", "ui_budget_ms"];
+const BOT_KEYS = ["enabled", "close_idle", "fps", "kbps", "keyint_s", "max_live", "pool_max", "idle_close_s", "close_method", "ui_budget_ms", "capture"];
 
 let clock = () => Date.now();
 const now = () => clock();

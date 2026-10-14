@@ -27,6 +27,7 @@
       <label>Frames per second <input type="number" name="fps" inputmode="numeric"></label>
       <label>Video bitrate per cam (kbps) <input type="number" name="kbps" inputmode="numeric"></label>
       <label>Keyframe every (s) - new viewers start at the next one <input type="number" name="keyint_s" step="0.5" inputmode="decimal"></label>
+      <label>Frame grab <select name="capture"><option value="blt">BitBlt - DWM's copy of the window, ~0.1 ms, no Camfrog UI-thread work</option><option value="pw2">PrintWindow - as snapshots, ~40 ms of Camfrog's UI thread per frame</option></select></label>
       <label>Camfrog UI time all grabs may take (ms per second) - above it every live cam's grab rate drops <input type="number" name="ui_budget_ms" inputmode="numeric"></label>
     </fieldset>
     <fieldset>
