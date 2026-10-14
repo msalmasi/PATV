@@ -17,6 +17,10 @@
 //   session.onfail      called once if the connection is lost after it started
 //   session.setCap(kbps) / session.replace(track)     (publish) bitrate cap / swap a camera or mic live
 // Non-trickle ICE: the offer goes out after candidate gathering (bounded at 1.5 s) - one request, no PATCH.
+// 1.99zc (Safari): play() / watch() no longer wait for 'playing' when the browser REFUSES to start the video (iOS Low
+// Power Mode, Safari's per-site "Never Auto-Play", a muted-autoplay policy): the connection is up, so they resolve with
+// session.blocked = true and the page offers a tap-to-play (the session's media is fine - only autoplay was refused).
+// Before, Safari sat on "connecting" until the timeout and then reported the cam / stream as failed.
 (function () {
   'use strict';
   var iceCache = null;
@@ -87,6 +91,17 @@
     return s;
   }
   function closeQuietly(pc, resource) { try { pc.close(); } catch (e) {} drop(resource); }
+  // 1.99zc: resolves 'playing' once the video plays, or 'blocked' when the browser refuses to start it (NotAllowedError:
+  // Safari Low Power Mode / "Never Auto-Play") - the caller shows a tap-to-play. Other play() errors (AbortError when the
+  // source changes) keep waiting for 'playing' as before.
+  function started(video) {
+    return new Promise(function (res) {
+      if (!video.paused && video.readyState >= 2) return res('playing');
+      video.addEventListener('playing', function () { res('playing'); }, { once: true });
+      var p; try { p = video.play(); } catch (e) { p = null; }
+      if (p && p.catch) p.catch(function (err) { if (err && err.name === 'NotAllowedError') res('blocked'); });
+    });
+  }
 
   function play(url, video, o) {
     o = o || {};
@@ -98,13 +113,9 @@
       var ms = new MediaStream();
       pc.ontrack = function (e) { ms.addTrack(e.track); if (video.srcObject !== ms) video.srcObject = ms; };
       var go = negotiate(pc, url, null).then(function (loc) { resource = loc; return connected(pc); }).then(function () {
-        return new Promise(function (res) {
-          if (!video.paused && video.readyState >= 2) return res();
-          video.addEventListener('playing', res, { once: true });
-          var p = video.play(); if (p && p.catch) p.catch(function () {});
-        });
+        return started(video);
       });
-      return timeout(go, o.timeout || 8000, 'Low latency').then(function () { return session(pc, resource); },
+      return timeout(go, o.timeout || 8000, 'Low latency').then(function (how) { var ss = session(pc, resource); ss.blocked = how === 'blocked'; return ss; },
         function (e) { closeQuietly(pc, resource); throw e; });
     });
   }
@@ -203,14 +214,10 @@
         var ms = new MediaStream();
         pc.ontrack = function (e) { ms.addTrack(e.track); if (video.srcObject !== ms) video.srcObject = ms; };
         var go = negotiate(pc, url, null).then(function (loc) { resource = loc; return connected(pc); }).then(function () {
-          return new Promise(function (res) {
-            if (!video.paused && video.readyState >= 2) return res();
-            video.addEventListener('playing', res, { once: true });
-            var p = video.play(); if (p && p.catch) p.catch(function () {});
-          });
+          return started(video);
         });
         var left = Math.max(1000, deadline - Date.now());
-        return timeout(go, left, 'Live cam').then(function () { return session(pc, resource); }, function (e) {
+        return timeout(go, left, 'Live cam').then(function (how) { var ss = session(pc, resource); ss.blocked = how === 'blocked'; return ss; }, function (e) {
           closeQuietly(pc, resource);
           if (e && e.status === 404 && Date.now() + 1200 < deadline) {
             return new Promise(function (res) { setTimeout(res, 1000); }).then(attempt);

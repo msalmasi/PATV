@@ -1,0 +1,52 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99zc: 📌 the CAM STRIP on a pad's live room (public/js/pad-camstrip.js). Self-contained: this card, its styles and its
+    script. The page hands it the live view's room.livecams (window.PATVPadStrip.update) and the cam popover's
+    "📌 Pin to strip" (pad-livecam.js) moves cams into it. Hidden until a cam is pinned. Locals: slug. %>
+<section class="card cam-strip" id="rmStrip" aria-label="<%- t('pad.strip.aria') %>" hidden></section>
+<style>
+  .cam-strip { padding: 10px 12px 12px; min-width: 0; }
+  .cam-strip[hidden] { display: none; }
+  .cam-strip .cs-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cam-strip .cs-title { margin: 0; font-size: 15px; display: flex; align-items: baseline; gap: 2px; min-width: 0; }
+  .cam-strip .cs-count { color: var(--ds-text-muted, #999); font-weight: normal; font-size: 13px; font-family: var(--ds-font); }
+  .cam-strip .cs-acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .cam-strip .cs-btn { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--ds-line-strong, #333); background: #161616; color: #ddd;
+                       font: 13px var(--ds-font); cursor: pointer; }
+  .cam-strip .cs-btn:hover, .cam-strip .cs-btn:focus-visible { border-color: #5fd0e6; color: #fff; }
+  .cam-strip .cs-btn[hidden] { display: none; }
+  .cam-strip .cs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+  .cam-strip .cs-tile { min-width: 0; display: grid; gap: 4px; }
+  .cam-strip .cs-tile.big { grid-column: 1 / -1; }
+  .cam-strip .cs-vid { position: relative; aspect-ratio: 4 / 3; background: #000; border-radius: 10px; overflow: hidden; border: 1px solid #1d2b30; }
+  .cam-strip .cs-tile.big .cs-vid { max-height: 72vh; margin: 0 auto; width: 100%; }
+  .cam-strip video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  .cam-strip .cs-badge { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.65); color: #ddd; font: 11.5px var(--ds-font); padding: 2px 8px; border-radius: 999px; z-index: 2; }
+  .cam-strip .cs-badge.on { background: #b3261e; color: #fff; font-weight: bold; letter-spacing: .04em; }
+  .cam-strip .cs-ic { position: absolute; top: 6px; z-index: 3; width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 999px; border: 0; background: rgba(0,0,0,.65);
+                      color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+  .cam-strip .cs-ic:hover, .cam-strip .cs-ic:focus-visible { background: rgba(0,0,0,.9); outline: 2px solid #5fd0e6; }
+  .cam-strip .cs-x { right: 6px; }
+  .cam-strip .cs-big { right: 46px; }
+  .cam-strip .cs-over { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 12px; text-align: center;
+                        background: rgba(0,0,0,.55); z-index: 2; }
+  .cam-strip .cs-over[hidden], .cam-strip .cs-over [hidden] { display: none; }
+  .cam-strip .cs-msg { color: #e6c9b8; font-size: 13px; overflow-wrap: anywhere; }
+  .cam-strip .cs-msg:empty { display: none; }
+  .cam-strip .cs-name { font-size: 13.5px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+  .cam-strip .cs-note { margin: 8px 0 0; font-size: 12.5px; color: var(--ds-text-muted, #999); }
+  .cam-strip .cs-note:empty { display: none; }
+  /* phones: one swipeable row (scroll-snap), each cam most of the width so the next one peeks in */
+  @media (max-width: 700px) {
+    .cam-strip { padding: 10px 10px 12px; }
+    .cam-strip .cs-row { display: flex; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+                         gap: 8px; padding-bottom: 4px; scrollbar-width: thin; }
+    .cam-strip .cs-tile { flex: 0 0 78%; scroll-snap-align: start; }
+    .cam-strip:not(.cs-many) .cs-tile, .cam-strip .cs-tile.big { flex-basis: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .cam-strip .cs-row { scroll-behavior: auto; } }
+</style>
+<script src="/public/js/pad-camstrip.js?v=1"></script>
+<script>
+  window.PATVPadStrip = window.PATVCamStrip ? PATVCamStrip.init(document.getElementById('rmStrip'), <%- JSON.stringify(String(slug)).replace(/</g, '\\u003c') %>,
+    { audioHost: function () { return document.getElementById('rmAudioBox'); } }) : null;
+</script>

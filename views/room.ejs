@@ -610,12 +610,12 @@
      const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-  <script src="/public/js/stage-player.js?v=8"></script>
+  <script src="/public/js/stage-player.js?v=9"></script>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
-  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=3">
-  <script src="/public/js/webrtc-client.js?v=4"></script>
+  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=4">
+  <script src="/public/js/webrtc-client.js?v=5"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <% } %><script src="/public/js/stage-room.js?v=8"></script>
+  <% } %><script src="/public/js/stage-room.js?v=9"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=2"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
@@ -772,6 +772,7 @@
       </div>
     </section>
     <%# ── cam strip slot (1.99za): the live cam strip's partial goes HERE, straight under the chat ── %>
+    <%- include('partials/cam-strip', { slug: room.slug }) %><%# 1.99zc: 📌 the cam strip (pad-camstrip.js) %>
     </div>
     <aside class="side">
       <section class="card rm-mic" id="rmMicCard" aria-labelledby="micH">
@@ -790,13 +791,13 @@
     </aside>
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
-  <script src="/public/js/room-bridge.js?v=13"></script>
+  <script src="/public/js/room-bridge.js?v=14"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=2">
   <script src="/public/js/chat-clip.js?v=2"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=9">
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
-  <script src="/public/js/pad-livecam.js?v=1"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) %>
+  <script src="/public/js/pad-livecam.js?v=2"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) %>
   <script src="/public/js/room-mod.js?v=11"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=4" defer></script>
@@ -1059,7 +1060,8 @@
       var rf = el('button', null, _t('js.pad.snap.refresh', 'Refresh')); rf.type = 'button'; rf.addEventListener('click', function () { snapOpen(snapWho, true); }); row.appendChild(rf);
       box.appendChild(row);
       // 1.99yh: 📡 ▶ Live - the cam live over WebRTC, only when the viewer asks (livecam.js decides who may)
-      if (liveCams && window.PATVLiveCam) liveCtl = PATVLiveCam.row(box, slug, snapWho, liveCams, { audioHost: document.getElementById('rmAudioBox') });
+      if (liveCams && window.PATVLiveCam) liveCtl = PATVLiveCam.row(box, slug, snapWho, liveCams, { audioHost: document.getElementById('rmAudioBox'),
+        strip: window.PATVPadStrip || null, onPin: snapClose, stage: <%= manage_ ? 'true' : 'false' %> ? { slug: slug } : null });   // 1.99zc: 📌 strip / 🎬 stage
       // Save snap (1.99ap): only when the !snap rules let this viewer snap them (the server decides;
       // `save` is null otherwise, and then there's no Download either).
       if (s.state === 'ok' && s.img && s.save) snapSaveRow(box, s);
@@ -1277,6 +1279,7 @@
       safe('room', function () { renderRoom(d); });
       safe('compose', function () { renderCompose(d); });
       safe('audio', function () { roomAudio.update(d); });
+      safe('strip', function () { if (window.PATVPadStrip) PATVPadStrip.update(liveCams); });   // 1.99zc
       if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
       safe('feed', function () { addFeed(d.feed, first); });
       safe('clip', function () { if (chatClip) chatClip.update(d); });

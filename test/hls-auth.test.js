@@ -215,7 +215,7 @@ test("stage-player.js puts the stream's ?pt= back on every VHS request (child pl
   assert.equal(P.addQ("https://x/hls/broadcast.m3u8", "r=1"), "https://x/hls/broadcast.m3u8?r=1");
   const src = fs.readFileSync(path.join(repo, "public", "js", "stage-player.js"), "utf8");
   assert.ok(!src.includes("SRC + '?r='"));
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-player\.js\?v=8/);
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /stage-player\.js\?v=9/);
 });
 
 test("deploy/hls-auth: broadcast bypasses auth_request; slot paths are gated; staging routes to :3100", () => {

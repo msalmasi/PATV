@@ -31,6 +31,14 @@
 // Audit: livecam_audit, one row per viewer session (viewer, target, room, start, end, seconds, why it ended). Video is
 // never stored anywhere (MediaMTX records nothing; the HLS remux of these paths is refused by the hook).
 //
+// 1.99zc: 🎬 STAGE CAMS (mainstage.js slot source 'cam'): a pad owner / admin puts someone's live cam on the pad's stage.
+// The slot HOLDS the session (S.stage = slot id): it stays wanted while the slot is open (never ended as "unwatched"), with
+// the same consent rules as a viewer's ▶ Live (on cam, not opted out, not private, not ended by them, the room's switch).
+// Stage viewers ask for a ticket of their own (stageWatch: signed in + padaccess.full, inside the bandwidth budget) and beat
+// like a viewer; they are counted in the site-wide budget but never in anyone's personal live-cam slots. One publish by
+// Pepe serves the strip, the popover and the stage alike. When the session ends (opt-out, cam closed, ended by the owner /
+// a mod / staff) stageState says so and mainstage ends the slot.
+//
 // Path names share the room-audio family on MediaMTX (deploy/webrtc/mediamtx.yml "~^(room|stgr)-[0-9a-f]{16}$"), so no
 // MediaMTX change is needed: prod "room-<16 hex>", staging "stgr-<16 hex>", an HMAC of "live-cam-path:<room>|<login>"
 // that never collides with a room's audio path (different HMAC input). webrtc.js asks camForPath first.
@@ -255,7 +263,8 @@ function slotsOf(userId, t = now()) {
   for (const S of SESS.values()) if (!S.ended) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) n++; }
   return n;
 }
-function totalViewers(t = now()) { let n = 0; for (const S of SESS.values()) if (!S.ended) n += freshViewers(S, t).length; return n; }
+const freshStage = (S, t = now()) => (S.stageViewers ? [...S.stageViewers.entries()].filter(([, v]) => t - v.beat <= BEAT_MS) : []);
+function totalViewers(t = now()) { let n = 0; for (const S of SESS.values()) if (!S.ended) n += freshViewers(S, t).length + freshStage(S, t).length; return n; }
 const liveCount = () => [...SESS.values()].filter((S) => !S.ended).length;
 
 function audit(S, userId, v, why, t = now()) {
@@ -278,7 +287,9 @@ function endSession(S, why, t = now()) {
   if (!S || S.ended) return;
   S.ended = t;
   S.endWhy = why;
+  if (S.stage) S.lastStage = S.stage;      // 1.99zc: the stage slot reads why it ended (stageState)
   for (const uid of [...S.viewers.keys()]) dropViewer(S, uid, why, t);
+  if (S.stageViewers) { for (const v of S.stageViewers.values()) for (const rid of v.readers || []) kickReader(rid); S.stageViewers.clear(); }
   S.wantUntil = 0;
   if (S.sourceId) kickReader(S.sourceId);
   console.log(`[livecam] end room=${S.roomId} target=${S.login} why=${why}`);
@@ -287,7 +298,9 @@ function sweep(t = now()) {
   for (const S of [...SESS.values()]) {
     if (!S.ended) {
       for (const [uid, v] of [...S.viewers.entries()]) if (t - v.beat > BEAT_MS) dropViewer(S, uid, "gone", t);
-      if (!S.viewers.size && S.wantUntil && S.wantUntil < t) endSession(S, "unwatched", t);
+      if (S.stageViewers) for (const [uid, v] of [...S.stageViewers.entries()]) if (t - v.beat > BEAT_MS) { S.stageViewers.delete(uid); for (const rid of v.readers || []) kickReader(rid); }
+      if (S.stage) S.wantUntil = Math.max(S.wantUntil || 0, t + cfg().linger_s * 1000);   // 1.99zc: held by a stage slot
+      if (!S.viewers.size && !S.stage && S.wantUntil && S.wantUntil < t) endSession(S, "unwatched", t);
       else if (!S.liveAt && t - S.createdAt > START_MS) endSession(S, S.botWhy || "start_timeout", t);
     }
     if (S.ended && t - S.ended > 60 * 1000) { SESS.delete(S.key); if (BY_PATH.get(S.path) === S.key) BY_PATH.delete(S.path); }
@@ -368,7 +381,7 @@ async function start(u, R, login, t = now()) {
   if (!S) {
     const p = pathFor(R.id, login);
     S = { key: k, roomId: R.id, login, display: m.display || login, path: p, viewers: new Map(), createdAt: t, wantUntil: t + cfg().linger_s * 1000,
-          liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null, ended: 0, endWhy: null };
+          liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null, ended: 0, endWhy: null, stage: null, stageViewers: new Map() };
     SESS.set(k, S);
     BY_PATH.set(p, k);
     console.log(`[livecam] start room=${R.id} target=${login} viewer=${u.username || uid}`);
@@ -408,7 +421,12 @@ function beat(userId, roomId, login, t = now()) {
 function dropViewerOf(login, userId, why = "blocked", t = now()) {
   let n = 0;
   const l = String(login || "").toLowerCase();
-  for (const S of SESS.values()) if (!S.ended && S.login === l && dropViewer(S, String(userId), why, t)) n++;
+  for (const S of SESS.values()) {
+    if (S.ended || S.login !== l) continue;
+    if (dropViewer(S, String(userId), why, t)) n++;
+    const sv = S.stageViewers ? S.stageViewers.get(String(userId)) : null;          // 1.99zc: a stage viewer of that cam, too
+    if (sv) { S.stageViewers.delete(String(userId)); for (const rid of sv.readers || []) kickReader(rid); n++; }
+  }
   return n;
 }
 /** 1.99yq: who has `login`'s cam open live right now -> [{userId, username, room, since}] */
@@ -417,6 +435,7 @@ function watchersOf(login, t = now()) {
   for (const S of SESS.values()) {
     if (S.ended || S.login !== l) continue;
     for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: v.username, room: S.roomId, since: v.since });
+    for (const [uid, v] of freshStage(S, t)) out.push({ userId: uid, username: v.username || null, room: S.roomId, since: v.since, stage: true });   // 1.99zc
   }
   return out;
 }
@@ -443,6 +462,87 @@ function endBy(u, R, login, t = now()) {
   if (S) endSession(S, isStaff(u) && String(u.camfrogUsername || "").toLowerCase() !== login ? "ended_by_admin" : "ended_by", t);
   console.log(`[livecam] ended room=${R.id} target=${login} by=${u.username || u.userId}`);
   return { ok: true };
+}
+
+// ── 1.99zc: 🎬 stage cams (see the header) ──
+/** May `login`'s cam in room R go on a stage right now? The same rules as a viewer's ▶ Live, minus the viewer's own. */
+async function stageConsent(R, login, t = now()) {
+  if (!on()) throw refuse("off");
+  if (!R || !R.cams) throw refuse("room_off");
+  if (R.livecams === false) throw refuse("room_off");
+  login = String(login || "").toLowerCase();
+  const m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
+  if (!m || !m.on_cam) throw refuse("not_on_cam");
+  if (optedOut(login)) throw refuse("opted_out");
+  try { if ((await require("./stories").privateLogins([login])).has(login)) throw refuse("opted_out"); } catch (e) { if (e.refuse) throw e; }
+  if ((COOL.get(keyOf(R.id, login)) || 0) > t) throw refuse("ended_by");
+  if (!botOk(t)) throw refuse("nopepe");
+  return m;
+}
+/** A stage slot (mainstage, source 'cam') takes hold of `login`'s live cam in room R. -> {display} | throws Refuse */
+async function stageHold(R, login, slotId, t = now()) {
+  await init();
+  login = String(login || "").toLowerCase();
+  const m = await stageConsent(R, login, t);
+  const k = keyOf(R.id, login);
+  let S = SESS.get(k);
+  if (S && S.ended) { SESS.delete(k); S = null; }
+  if (S && S.stage && S.stage !== String(slotId)) throw new Refuse(409, "That cam is already on the stage.", "on_stage");
+  if (!S && liveCount() >= cfg().max_live) throw refuse("slots_busy");
+  if (!S) {
+    const p = pathFor(R.id, login);
+    S = { key: k, roomId: R.id, login, display: m.display || login, path: p, viewers: new Map(), createdAt: t, wantUntil: t + cfg().linger_s * 1000,
+          liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null, ended: 0, endWhy: null, stage: null, stageViewers: new Map() };
+    SESS.set(k, S);
+    BY_PATH.set(p, k);
+  }
+  if (!S.stageViewers) S.stageViewers = new Map();
+  S.stage = String(slotId);
+  S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
+  console.log(`[livecam] stage hold room=${R.id} target=${login} slot=${slotId}`);
+  return { display: m.display || login };
+}
+const stageSess = (slotId) => { for (const S of SESS.values()) if (S.stage === String(slotId)) return S; return null; };
+/** The slot ended / was cut: let go of the cam (viewers of the strip / popover keep watching). */
+function stageRelease(slotId, t = now()) {
+  for (const S of SESS.values()) {
+    if (S.stage !== String(slotId)) continue;
+    S.stage = null;
+    for (const v of S.stageViewers.values()) for (const rid of v.readers || []) kickReader(rid);
+    S.stageViewers.clear();
+    if (!freshViewers(S, t).length) S.wantUntil = Math.min(S.wantUntil || Infinity, t + cfg().linger_s * 1000);
+  }
+}
+/** -> {state: none | connecting | live | ended, why} for a stage slot's cam. */
+function stageState(slotId, t = now()) {
+  const S = stageSess(slotId);
+  if (!S) {
+    for (const X of SESS.values()) if (X.ended && X.lastStage === String(slotId)) return { state: "ended", why: X.endWhy || "ended" };
+    return { state: "none", why: null };
+  }
+  if (S.ended) return { state: "ended", why: S.endWhy || "ended" };
+  return { state: stateOf(S, t), why: S.botWhy || null, viewers: freshStage(S, t).length };
+}
+/** A stage viewer asks to watch the cam on slot `slotId` (or beats). -> {ok, whep, state, beat_ms} | throws Refuse */
+async function stageWatch(u, R, slotId, { beatOnly = false } = {}, t = now()) {
+  await init();
+  if (!u || !u.userId) throw refuse("signin");
+  if (!on()) throw refuse("off");
+  const S = stageSess(slotId);
+  if (!S || S.ended || S.roomId !== R.id) throw new Refuse(404, "That cam isn't on the stage any more.", "gone");
+  if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw refuse("pad_access");
+  const uid = String(u.userId);
+  if (CV().blocked(S.login, uid)) throw refuse("unavailable");          // 1.99yq rules: the owner blocked this viewer
+  let v = S.stageViewers.get(uid);
+  if (!v || t - v.beat > BEAT_MS) {
+    if (beatOnly) return { ok: true, state: "ended", why: "gone" };
+    if (totalViewers(t) + 1 > viewerCap()) throw refuse("budget");
+    v = { since: t, beat: t, username: u.username || null, readers: new Set() };
+    S.stageViewers.set(uid, v);
+  }
+  v.beat = t;
+  if (beatOnly) return { ok: true, state: stateOf(S, t) };
+  return { ok: true, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t), expires: t + TICKET_MS };
 }
 
 // ── Pepe ──
@@ -542,7 +642,7 @@ async function auth(b, action, proto) {
     try { tok = new URLSearchParams(String(b.query || "").replace(/^\?/, "")).get("pt"); } catch (e) { tok = null; }
     const c = checkTicket(tok, p);
     if (!c) return loopbackIp(b.ip) ? 403 : 401;
-    const v = S.viewers.get(String(c.uid));
+    const v = S.viewers.get(String(c.uid)) || (S.stage && S.stageViewers ? S.stageViewers.get(String(c.uid)) : null);   // 1.99zc: or a stage viewer
     if (!v || now() - v.beat > BEAT_MS) return 403;
     if (optedOut(S.login)) return 403;
     if (CV().blocked(S.login, c.uid)) return 403;
@@ -563,7 +663,7 @@ function hint(R, userId) {
   const t = now();
   const watching = [];
   for (const S of SESS.values()) if (!S.ended && S.roomId === R.id) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) watching.push(S.login); }
-  return { on: true, slots: { used: slotsOf(userId, t), max: maxSlots(userId) }, watching };
+  return { on: true, slots: { used: slotsOf(userId, t), max: maxSlots(userId) }, watching, sp_max: cfg().viewers_sp };   // 1.99zc: sp_max for the strip's hint
 }
 async function adminView() {
   await init();
@@ -574,7 +674,7 @@ async function adminView() {
   const sessions = [...SESS.values()].filter((S) => !S.ended).map((S) => ({
     key: S.key, room: S.roomId, login: S.login, display: S.display, state: stateOf(S, t), since: S.createdAt, liveAt: S.liveAt || null,
     viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since })), readers: S.readers, bot: S.botInfo || null,
-    botState: S.botState, botWhy: S.botWhy }));
+    botState: S.botState, botWhy: S.botWhy, stage: S.stage || null, stageViewers: freshStage(S, t).length }));
   const c = cfg();
   const viewers = totalViewers(t);
   const recent = await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason FROM livecam_audit ORDER BY id DESC LIMIT 30`);
@@ -719,7 +819,8 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
 
 module.exports = {
   register, init, normalize, save, current, viewerCap, pathFor, pubKey, readTicket, checkTicket, camForPath, start, beat, stop, endBy, mayEnd,
-  forBot, noteSync, auth, hint, adminView, setOptout, optoutState, optedOut, sweep, dropViewerOf, watchersOf, PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
+  forBot, noteSync, auth, hint, adminView, stageConsent, stageHold, stageRelease, stageState, stageWatch, setOptout, optoutState, optedOut, sweep, dropViewerOf, watchersOf,
+  PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
   _sessions: SESS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

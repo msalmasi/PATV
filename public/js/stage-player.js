@@ -157,6 +157,12 @@
     return { stats: function () { return { rebuffers: st.rebuffers, jumps: st.jumps, margin: st.margin, rate: st.rate, lead: st.lead, low: st.low, td: st.td }; } };
   }
 
+  // 1.99zc: Safari (any WebKit with Apple's HLS) plays HLS natively; everything else uses VHS (MSE)
+  function nativeHls() {
+    var B = window.videojs && window.videojs.browser;
+    if (!B || !(B.IS_ANY_SAFARI || B.IS_IOS)) return false;
+    try { return !!document.createElement('video').canPlayType('application/vnd.apple.mpegurl'); } catch (e) { return false; }
+  }
   function player(o) {
     var SRC = o.src || 'https://publicaccess.tv/hls/broadcast.m3u8';
     var p = null, retry = null, sync = null;
@@ -180,7 +186,11 @@
       o.wrap.appendChild(v);
       p = videojs(v, { muted: true, autoplay: true, liveui: true, fluid: false, preload: 'auto',
                        // 1.99fd: VHS may play inside the last 3 segments; liveSync decides how close
-                       html5: { vhs: { overrideNative: true, enableLowInitialPlaylist: true, allowSeeksWithinUnsafeLiveWindow: true } } });
+                       // 1.99zc: except on Safari (macOS / iOS / iPadOS): its own HLS player (overrideNative off there -
+                       // video.js's own default). VHS-over-MSE was forced on Safari, where Apple's player is the reliable
+                       // path (and iPhones before iOS 17.1 have no MSE at all); liveSync only steers VHS, so it idles there.
+                       html5: { vhs: { overrideNative: !nativeHls(), enableLowInitialPlaylist: true, allowSeeksWithinUnsafeLiveWindow: true },
+                                nativeAudioTracks: nativeHls(), nativeVideoTracks: nativeHls() } });
       sync = liveSync(p);
       hookGlobal(); hookPlayer(p);
       p.src({ src: SRC, type: 'application/x-mpegURL' });
@@ -224,5 +234,6 @@
   window.PATVStage.player = player;
   window.PATVStage.liveSync = liveSync;
   window.PATVStage._pt = { withPt: withPt, notePt: notePt, addQ: addQ };   // tests
+  window.PATVStage._nativeHls = nativeHls;
   window.PATVStage._live = { step: liveStep, state: liveState, rebuffered: rebuffered, LIVE: LIVE };   // tests
 })();

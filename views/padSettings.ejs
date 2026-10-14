@@ -172,6 +172,15 @@
         <tbody id="openRows"></tbody></table></div>
       <p class="msg" id="nowMsg" role="status" aria-live="polite"></p>
     </div>
+    <% if (typeof camfrog !== 'undefined' && camfrog) { %>
+    <%# 1.99zc: 🎬 a cam as a stage slot (mainstage camOpen; drawn by room-manage.js) %>
+    <div class="sb-card ps-card" id="stagecam">
+      <h3>📷 Put a cam on the stage</h3>
+      <p class="muted">Show someone's live Camfrog cam on your pad's stage, as one of its slots (free, live only - no booking). Pepe relays it once for everyone watching. Only people who haven't switched off live video of their cam can go up; they're told, and it ends by itself when they leave cam, switch live video off or end it. Cut it from "On the stage now".</p>
+      <ul class="mylist" id="camList"><li class="muted">Loading…</li></ul>
+      <p class="msg" id="camMsg" role="status" aria-live="polite"></p>
+    </div>
+    <% } %>
     <% if (typeof admin !== 'undefined' && admin) { %><%- include('partials/media-library', { room: room.id }) %><% } %>
     <div class="sb-card ps-card">
       <h3>Bookings</h3>
@@ -544,7 +553,7 @@
   </div>
 </main>
 <script id="rmgState" type="application/json"><%- JSON.stringify(st).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/room-manage.js?v=2" defer></script>
+<script src="/public/js/room-manage.js?v=3" defer></script>
 <script src="/public/js/feed-roommod.js?v=4" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <% if (camfrog) { %><script src="/public/js/room-mod.js?v=11" defer></script><% } %>

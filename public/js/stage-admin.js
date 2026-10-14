@@ -48,7 +48,7 @@
     var o = S.open || [];
     $('openRows').innerHTML = o.length ? o.map(function (s) {
       return '<tr><td><a href="/u/' + encodeURIComponent(s.username) + '">' + esc(s.display) + '</a><br><span class="muted">' + esc(s.room_id || '') +
-        (s.featured ? (s.feature_by === 'auto' ? ' · <b>★ auto-featured (live)</b>' : ' · ★ ' + esc(s.feature_by || '')) : '') + (s.mode === 'embed' ? ' · ' + esc(s.embed_label || 'video') : '') + '</span></td>' +
+        (s.featured ? (s.feature_by === 'auto' ? ' · <b>★ auto-featured (live)</b>' : ' · ★ ' + esc(s.feature_by || '')) : '') + (s.mode === 'embed' ? ' · ' + esc(s.embed_label || 'video') : '') + (s.cam ? ' · 📷 cam of ' + esc(s.cam.login || '') : '') + '</span></td>' +
         '<td>' + (s.live ? '<span class="live-tag">● LIVE</span>' : esc(s.status === 'waiting' ? 'waiting to go live' : 'off air')) + (s.relay ? ' · browser' : '') + '</td>' +
         '<td class="num">' + mmss(s.live_seconds) + '</td><td class="num">' + fmt(s.charged) + ' / ' + fmt(s.held) + '</td><td>' + when(s.created) + '</td>' +
         '<td><span class="row" style="margin:0">' + (s.featured && s.feature_by === 'auto' ? '<button type="button" class="btn" data-autocancel="' + esc(s.id) + '">Cancel auto-feature</button>' : '') +

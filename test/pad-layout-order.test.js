@@ -44,7 +44,8 @@ test("Live tab order: chat (room audio under its heading) -> On the mic -> In th
   assert.equal((html.match(/id="rmAudioBox"/g) || []).length, 1, "one audio box");
   // the chat column and the side column: chat + the cam strip slot left, mic / people / posts / manage right
   assert.match(live, /<div class="grid rm-live">\s*<div class="rm-main">\s*<section class="card rm-chat" id="rmChat"/);
-  assert.match(live, /<\/section>\s*<\/div>\s*<aside class="side">\s*<section class="card rm-mic" id="rmMicCard"/);
+  // 1.99zc: the cam strip partial (its card, styles, script) fills the slot under the chat, still inside the chat column
+  assert.match(live, /<\/section>\s*<section class="card cam-strip" id="rmStrip"[^>]*hidden><\/section>[\s\S]*?<\/script>\s*<\/div>\s*<aside class="side">\s*<section class="card rm-mic" id="rmMicCard"/);
   // the stage + go-live cards come before the chat, the header carries no description
   assert.ok(at(live, 'id="rmStage"') < at(live, 'id="rmGoLive"') && at(live, 'id="rmGoLive"') < at(live, 'id="rmChat"'));
 });

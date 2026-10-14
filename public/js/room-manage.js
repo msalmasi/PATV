@@ -14,18 +14,19 @@
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), credentials: 'same-origin' })
       .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); });
   }
-  function src(s) { return s.mode === 'embed' ? esc(s.embed_label || 'video link') : (s.relay ? 'browser' : 'stream'); }
+  function src(s) { return s.cam ? '📷 cam' : s.mode === 'embed' ? esc(s.embed_label || 'video link') : (s.relay ? 'browser' : 'stream'); }
   function render(S) {
     var o = S.open || [];
     $('openRows').innerHTML = o.length ? o.map(function (s) {
-      return '<tr><td><a href="/u/' + encodeURIComponent(s.username) + '">' + esc(s.display) + '</a>' + (s.title ? '<br><span class="muted">' + esc(s.title) + '</span>' : '') + '</td>' +
+      return '<tr><td>' + (s.cam ? '<b>' + esc(s.display) + '</b><br><span class="muted">put up by ' + esc(s.username) + '</span>'   // 1.99zc: 🎬 a cam slot
+                                 : '<a href="/u/' + encodeURIComponent(s.username) + '">' + esc(s.display) + '</a>' + (s.title ? '<br><span class="muted">' + esc(s.title) + '</span>' : '')) + '</td>' +
         '<td>' + (s.live ? '<span class="live-tag">● LIVE</span>' : esc(s.status === 'waiting' ? 'waiting to go live' : 'off air')) +
         (s.featured ? ' <span class="tag gold">★ ' + 'featured' + '</span>' : '') + '</td>' +
         '<td>' + src(s) + '</td><td class="num">' + mmss(s.live_seconds) + '</td><td class="num">' + fmt(s.charged) + ' / ' + fmt(s.held) + '</td>' +
         '<td><span class="row" style="margin:0">' + (s.featured ? '<button type="button" class="btn gold" data-act="unfeature" data-id="' + esc(s.id) + '">☆ Unfeature</button>'
                                                        : '<button type="button" class="btn gold" data-act="feature" data-id="' + esc(s.id) + '">★ Feature</button>') +
         '<button type="button" class="btn danger" data-act="cut" data-id="' + esc(s.id) + '">✂ Cut</button>' +
-        '<button type="button" class="btn danger" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">Cut + ban</button></span></td></tr>';
+        (s.cam ? '' : '<button type="button" class="btn danger" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">Cut + ban</button>') + '</span></td></tr>';
     }).join('') : '<tr><td colspan="6" class="muted">Nobody is on the stage — Pepe\'s stream shows.</td></tr>';
     var li = function (s, btns) {
       return '<li><span><b>' + esc(s.display) + '</b> · ' + when(s.start_at) + ' · ' + s.max_minutes + ' min' + (s.featured ? ' · ★ featured' : '') +
@@ -48,6 +49,39 @@
     $('banRows').innerHTML = b.length ? b.map(function (x) {
       return '<tr><td>' + esc(x.username) + '</td><td>' + esc(x.reason || '') + '</td><td>' + esc(x.by || '') + '</td><td><button type="button" class="btn" data-unban="' + esc(x.userId) + '">Unban</button></td></tr>';
     }).join('') : '<tr><td colspan="4" class="muted">No one.</td></tr>';
+  }
+  // 1.99zc: 🎬 put someone's live cam on the stage (mainstage camOpen; the same consent rules as live cams)
+  var camBox = $('camList');
+  function camLoad() {
+    if (!camBox) return;
+    fetch('/api/rooms/' + encodeURIComponent(slug) + '/stage/cams', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok) { camBox.innerHTML = '<li class="muted">' + esc(j.error || 'Not available.') + '</li>'; return; }
+        if (!j.live) { camBox.innerHTML = '<li class="muted">The pad\'s Camfrog room isn\'t live right now.</li>'; return; }
+        if (!j.livecams) { camBox.innerHTML = '<li class="muted">Live cams are off in this room (Pepe\'s <code>!bridge livecams</code> / <code>!bridge cams</code>).</li>'; return; }
+        var c = j.cams || [];
+        camBox.innerHTML = c.length ? c.map(function (x) {
+          return '<li><span><b>' + esc(x.display) + '</b>' + (x.display.toLowerCase() !== x.login ? ' <span class="muted">' + esc(x.login) + '</span>' : '') + '</span>' +
+            (x.slot ? '<span class="tag gold">🎬 on the stage</span>'
+              : x.blocked ? '<span class="muted">switched live video off</span>'
+              : '<button type="button" class="btn primary" data-cam="' + esc(x.login) + '">🎬 Put on stage</button>') + '</li>';
+        }).join('') : '<li class="muted">Nobody is on cam in the room right now.</li>';
+      }).catch(function () {});
+  }
+  if (camBox) {
+    camLoad(); setInterval(camLoad, 10000);
+    camBox.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-cam]');
+      if (!b) return;
+      var login = b.getAttribute('data-cam');
+      if (!confirm('Put ' + login + '\'s live cam on the stage? It takes one of the pad\'s slots; they are told, and it ends when they leave cam or switch live video off.')) return;
+      b.disabled = true;
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/stage/cam', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ login: login }) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); })
+        .then(function (j) { $('camMsg').textContent = j.ok ? 'On the stage - it shows in the pad\'s stage tabs as soon as Pepe has the cam live.' : (j.error || 'Could not do that.'); camLoad(); load(); })
+        .catch(function () { b.disabled = false; $('camMsg').textContent = 'Couldn\'t reach the site.'; });
+    });
   }
   function load() {
     return fetch('/api/rooms/' + encodeURIComponent(slug) + '/owner-state', { cache: 'no-store', credentials: 'same-origin' })

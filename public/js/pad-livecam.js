@@ -3,7 +3,12 @@
 // plays it in the popover with a ⚡ LIVE badge, "connecting…", the reason when it can't, and ✕ to stop (which frees
 // the viewer's live-cam slot at once). A cam has no sound of its own: the room's audio player is offered next to it.
 //
-//   PATVLiveCam.row(box, slug, who, info, {audioHost, onStart}) -> {stop()}   info = the live view's room.livecams
+//   PATVLiveCam.row(box, slug, who, info, {audioHost, onStart, strip, onPin, stage}) -> {stop()}   info = the live view's room.livecams
+// 1.99zc: strip = the page's cam strip (pad-camstrip.js): "📌 Pin to strip" moves the cam there - a cam already playing is
+//   HANDED OVER (same slot, same connection, nothing asked again); one that isn't starts in the strip. A cam that's in the
+//   strip shows "📌 In the strip" here instead of a second player. onPin() = the page closes the popover.
+//   stage = {slug} for the pad's owner / staff: "🎬 Put on stage" makes the cam a stage slot (mainstage camOpen).
+// PATVLiveCam.why(code, fallback) = the reason text (the strip and the stage use it too).
 // The page beats every 15 s while watching (the server drops a slot without beats after 45 s). All text via textContent.
 (function () {
   'use strict';
@@ -45,15 +50,45 @@
       acts.appendChild(b); box.appendChild(acts); return ctl;
     }
     var s = info.slots || { used: 0, max: 1 };
+    var strip = opts.strip || null;
+    if (strip && strip.has(who.login)) {                    // 1.99zc: it's playing in the strip already - one player per cam
+      var inS = el('button', 'live', _t('js.pad.strip.in', '📌 In the strip')); inS.type = 'button';
+      inS.addEventListener('click', function () { strip.focus(who.login); if (opts.onPin) opts.onPin(); });
+      acts.appendChild(inS); stageBtn(acts); box.appendChild(acts); box.appendChild(res); return ctl;
+    }
     var watchingThis = (info.watching || []).indexOf(String(who.login).toLowerCase()) >= 0;
     var left = Math.max(0, (s.max || 0) - (s.used || 0));
     var hint = el('span', 'lc-slots', _t('js.pad.live.slots', '{n} of {max} live slots free', { n: left, max: s.max || 0 }));
     b.title = _t('js.pad.live.title', 'Watch {name}\'s cam live (about a second behind the room)', { name: who.display || who.login });
     if (!left && !watchingThis) { b.disabled = true; res.textContent = why('viewer_cap'); }
-    acts.appendChild(b); acts.appendChild(hint);
+    acts.appendChild(b);
+    var pin = null;
+    if (strip) {                                             // 1.99zc: 📌 Pin to strip
+      pin = el('button', 'live pin', _t('js.pad.strip.pin', '📌 Pin to strip')); pin.type = 'button';
+      pin.title = _t('js.pad.strip.pin_title', 'Keep {name}\'s cam playing in the strip under the stage - watch several cams at once', { name: who.display || who.login });
+      if (!left && !watchingThis) pin.disabled = true;
+      acts.appendChild(pin);
+    }
+    acts.appendChild(hint);
+    stageBtn(acts);
     box.appendChild(acts); box.appendChild(stage); box.appendChild(res);
     var sess = null, beatT = null, gen = 0, video = null;
     function say(text, cls) { res.className = 'res' + (cls ? ' ' + cls : ''); res.textContent = text || ''; }
+    // 1.99zc: 🎬 the pad's owner / staff put this cam on the pad's stage (a cam slot - same consent rules as ▶ Live)
+    function stageBtn(into) {
+      if (!opts.stage || !opts.stage.slug) return;
+      var sb = el('button', 'live onstage', _t('js.pad.strip.stage', '🎬 Put on stage')); sb.type = 'button';
+      sb.title = _t('js.pad.strip.stage_title', 'Show {name}\'s live cam on this pad\'s stage (they are told; it ends when they leave cam or switch live video off)', { name: who.display || who.login });
+      sb.addEventListener('click', function () {
+        if (!confirm(_t('js.pad.strip.stage_q', 'Put {name}\'s cam on the stage? It takes one of the pad\'s stage slots.', { name: who.display || who.login }))) return;
+        sb.disabled = true;
+        post('/api/rooms/' + encodeURIComponent(opts.stage.slug) + '/stage/cam', { login: who.login }).then(function (d) {
+          sb.disabled = false;
+          say(d && d.ok ? _t('js.pad.strip.staged', 'On the stage now - it shows in the stage\'s tabs.') : why(d && d.code, d && d.error), d && d.ok ? 'ok' : 'bad');
+        }).catch(function () { sb.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
+      });
+      into.appendChild(sb);
+    }
     function teardown(tell) {
       gen++;
       clearInterval(beatT); beatT = null;
@@ -77,12 +112,14 @@
       return a;
     }
     function start() {
+      // 1.99zc: no WebRTC here (iOS Lockdown Mode, an old / embedded browser) - say so before taking a slot
+      if (!window.RTCPeerConnection) return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad');
       var my = ++gen;
       b.disabled = true; say(_t('js.pad.live.asking', 'Asking Pepe to go live…'));
       post(base, { login: who.login }).then(function (d) {
         if (my !== gen) return;
         if (!d || !d.ok) { b.disabled = false; return say(why(d && d.code, d && d.error), 'bad'); }
-        if (!window.PATVRtc || !PATVRtc.watch) { b.disabled = false; post(base + '/stop', { login: who.login }); return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad'); }
+        if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { b.disabled = false; post(base + '/stop', { login: who.login }); return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad'); }
         if (d.slots) hint.textContent = _t('js.pad.live.slots', '{n} of {max} live slots free', { n: Math.max(0, d.slots.max - d.slots.used), max: d.slots.max });
         box.classList.add('lc-on');
         if (opts.onStart) { try { opts.onStart(); } catch (e) { /* page's own */ } }
@@ -118,9 +155,26 @@
       }).catch(function () { if (my === gen) { b.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); } });
     }
     b.addEventListener('click', function () { if (!sess && !beatT) start(); });
+    if (pin) {
+      pin.addEventListener('click', function () {
+        var ok;
+        if (sess && video && video.srcObject) {               // playing: hand the connection + the slot over as they are
+          var h = { sess: sess, stream: video.srcObject, blocked: !!sess.blocked };
+          gen++; clearInterval(beatT); beatT = null; sess = null;
+          try { video.srcObject = null; } catch (e) { /* gone */ }
+          stage.textContent = ''; video = null; box.classList.remove('lc-on');
+          ok = strip.adopt(who, h);
+        } else {
+          if (beatT) teardown(false);                         // still connecting: the strip asks again (same slot - no /stop)
+          ok = strip.add(who);
+        }
+        if (ok) { if (opts.onPin) opts.onPin(); }
+        else say(why('viewer_cap'), 'bad');
+      });
+    }
     ctl.stop = function () { if (sess || beatT) teardown(true); };
     window.addEventListener('pagehide', ctl.stop);
     return ctl;
   }
-  window.PATVLiveCam = { row: row };
+  window.PATVLiveCam = { row: row, why: why };
 })();

@@ -19,6 +19,15 @@
 // Twitch channel/VOD (stageembed.js: parsed to {p,t,id}, rendered only with the official players). An
 // embed slot is "live" from the moment it opens (we can't see inside YouTube/Twitch).
 //
+// 1.99zc: 🎬 CAM slots (source 'cam', cam_login): the pad's owner (or staff) puts someone's live Camfrog cam on the stage
+// (camOpen). The video is the live-cam relay (livecam.js stageHold: ONE Pepe publish, shared with the strip / popover
+// viewers), so the same consent rules apply - on cam, not opted out of live video, not private, not ended by them.
+// Free, live-only (never scheduled / queued), inside the pad's slot count and max_concurrent; live while the relay is
+// live (tick -> camBeat), ended when the cam goes away (they opt out / leave cam / end it, or Pepe closes it). Stage
+// viewers get their own WHEP ticket (POST /api/stage/slots/:id/cam), counted in the live-cam bandwidth budget, never in
+// a viewer's personal live-cam slots. The cam's owner is told (inbox + Camfrog PM, or a PM via Pepe when unlinked).
+// userId / username = who put it there; displayname = the cam's name (what the stage tab shows).
+//
 // Lifecycle (status):
 //   requested --owner approves--> scheduled --start_at - lead--> waiting --first publish--> active --> ended
 //   (now)  ------------------------------------------------------> waiting | active (embed)
@@ -188,6 +197,7 @@ function init() {
       await addColumn("stage_slots", "via", "TEXT");                  // 1.99et: how it's live now - rtmp | browser | whip
       await addColumn("stage_slots", "source", "TEXT");               // 1.99ji: 'library' = 📼 played from the Plex library (medialib.js)
       await addColumn("stage_slots", "auto_off", "INTEGER NOT NULL DEFAULT 0");   // 1.99lm: its auto-feature was cancelled by a person
+      await addColumn("stage_slots", "cam_login", "TEXT");            // 1.99zc: 🎬 a cam slot's Camfrog login (source 'cam')
       await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
                       start_at = COALESCE(start_at, created) WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_status ON stage_slots (status)");
@@ -736,10 +746,11 @@ async function end(slotId, reason, actor) {
         amount: charged, owner_self: !!(RS.owner && RS.owner.userId === s.userId), via: "web", flow: "stage_slot",
         detail: `${s.displayname || s.username}: ${billedMinutes(s.live_ms)} min` });
     }
-    return { id: s.id, charged, refund, userId: s.userId, room_id: s.room_id, status: s.status };
+    return { id: s.id, charged, refund, userId: s.userId, room_id: s.room_id, status: s.status, source: s.source || null };
   });
   if (res && fee) { try { require("./boosts").telemetry(fee, fee.payer_name, "web"); } catch (e) { /* telemetry only */ } }
   if (res) {
+    if (res.source === "cam") { try { require("./livecam").stageRelease(res.id); } catch (e) { /* 1.99zc: no live cams */ } }
     stopRelay(res.id);
     for (const [cid, sid] of clients) if (sid === res.id) clients.delete(cid);
     lastTick.delete(res.id);
@@ -814,7 +825,7 @@ async function autoFeature(roomId, t = now()) {
 }
 /** 1.99mt: ⭐ Headliner - a durable mark (the featured flag itself goes away later) + the achievement check. */
 async function featuredMark(slot) {
-  if (!slot || !slot.userId || (slot.mode || "stream") !== "stream" || slot.source === "library") return;   // your own stream only
+  if (!slot || !slot.userId || (slot.mode || "stream") !== "stream" || slot.source === "library" || slot.source === "cam") return;   // your own stream only
   try {
     const A = require("./achievements");
     if (await A.mark(slot.userId, "stream_featured")) A.poke(slot.userId);
@@ -933,6 +944,7 @@ async function tick() {
   const C = CONFIG;
   for (const s of await openSlots()) {
     try {
+      if (s.source === "cam" && (await camBeat(s, t)) === "ended") continue;   // 1.99zc
       const live = isLive(s, t);
       const prev = lastTick.get(s.id);
       lastTick.set(s.id, t);
@@ -1180,8 +1192,10 @@ async function goLive(s, t, via) {
   pubCache.clear();
   if (!s.went_live) {
     event(s.id, "live", s.username, via || "rtmp", s.room_id);
-    require("./golive").slotLive(s);          // 1.99kp: 🎥 followers + the pad's announcement (once per stream)
-    try { require("./achievements").poke(s.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🔴 On Air / 🎬 Now Showing / 🛋️ Binge Mode
+    if (s.source !== "cam") {                 // 1.99zc: a cam slot isn't the booker's own stream - no go-live alert / achievement
+      require("./golive").slotLive(s);          // 1.99kp: 🎥 followers + the pad's announcement (once per stream)
+      try { require("./achievements").poke(s.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🔴 On Air / 🎬 Now Showing / 🛋️ Binge Mode
+    }
   }
   await autoFeature(s.room_id || rooms.HOUSE_ROOM, t).catch((e) => console.error("[stage] auto-feature:", e.message));   // 1.99lm
   return true;
@@ -1302,6 +1316,113 @@ async function regenKey(user, slotId) {
 }
 
 // 1.99fu: pad visibility (padaccess.js) - an Approved pad's stage takes bookings only from the people inside it
+// ── 1.99zc: 🎬 cam slots (see the header) ──
+const LC = () => require("./livecam");
+const CAM_LOGIN_RE = /^[\w.\-$]{1,40}$/;
+const CAM_END = new Set(["not_on_cam", "opted_out", "room_off", "ended_by", "off", "on_stage"]);   // refusals that end a cam slot
+function bridgeRoom(roomId) {
+  try { const B = require("./bridge")._rooms.get(String(roomId)); return B && Date.now() - (B.updated || 0) < 90 * 1000 ? B : null; } catch (e) { return null; }
+}
+const camMember = (B, login) => ((B && B.members) || []).find((x) => x && !x.anon && !x.self && String(x.login || "").toLowerCase() === login) || null;
+/** Tell the cam's owner: their linked PATV account (inbox + PM), else a Camfrog PM via Pepe (queued as the actor). */
+async function camNotify(login, actorUser, title, link) {
+  try {
+    const u = (await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = ? LIMIT 1", [login]))[0];
+    if (u) {
+      await rooms.notify(u.userId, { kind: "stage", title, body: "Switch off live video of your cam in Settings → Privacy (or !livecam off in Camfrog) to take it down.",
+                                     link, ref: "stage-cam:" + login + ":" + now() });
+      return;
+    }
+    const site = process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
+    if (actorUser && actorUser.userId) {
+      await require("./actions").queue(actorUser.userId, { kind: "notify", args: [login, `${title} - say !livecam off to take it down. ${site}${link}`.slice(0, 300), "stage"],
+                                                           tag: "stage-notify", label: title });
+    }
+  } catch (e) { console.error("[stage] cam notify:", e.message); }
+}
+/** The pad's owner / staff put `login`'s live cam on the stage. -> {slot} | throws Refuse */
+async function camOpen(user, opts = {}) {
+  await init();
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  const C = CONFIG;
+  if (!C.enabled) throw new Refuse(409, "The stage is switched off right now.");
+  const roomId = String(opts.room || "");
+  const R = await rooms.get(roomId);
+  if (!R) throw new Refuse(404, "No such pad.");
+  const B = bridgeRoom(roomId);
+  if (!B) throw new Refuse(409, "This pad's Camfrog room isn't live right now.");
+  const login = String(opts.login || "").toLowerCase();
+  if (!CAM_LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?");
+  const RS = await rooms.stageSettings(roomId);
+  const id = uuidv4();
+  const t = now();
+  // capacity first (cheap, nothing to undo), then the cam itself (the live-cam consent rules), then the row
+  const open0 = await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [roomId]);
+  if (open0.some((x) => x.source === "cam" && String(x.cam_login || "").toLowerCase() === login)) throw new Refuse(409, "That cam is already on this pad's stage.");
+  if (open0.length >= RS.slot_count) throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this pad are taken - end one first.` : "This pad's stage slot is taken - end it first.");
+  const held = await LC().stageHold(B, login, id, t);
+  try {
+    await tx(async () => {
+      const open = await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [roomId]);
+      if (open.length >= RS.slot_count) throw new Refuse(409, "This pad's stage slots are taken - end one first.");
+      const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
+      if (all[0].n >= C.max_concurrent) throw new Refuse(409, `The site already has ${all[0].n} streams open (the most at once) - try again later.`);
+      const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [user.userId]))[0];
+      if (!u) throw new Refuse(404, "Couldn't find your account.");
+      const display = String(held.display || login).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 60);
+      await runQuery(`INSERT INTO stage_slots (id, userId, username, displayname, status, created, max_minutes, price_per_min, held,
+                      key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, source, cam_login, via)
+                      VALUES (?, ?, ?, ?, 'waiting', ?, ?, 0, 0, NULL, ?, 'room_flow', ?, 'slot', 0, NULL, 'stream', NULL, ?, ?, 'cam', ?, 'cam')`,
+                     [id, user.userId, u.username, display, t, libraryMaxFor(RS), "cam-" + crypto.randomBytes(8).toString("hex"), roomId, t,
+                      cleanTitle("📷 " + display), login]);
+    });
+  } catch (e) { LC().stageRelease(id); throw e; }
+  pubCache.clear();
+  await event(id, "cam", user.username || "?", `📷 ${login} put on the stage`, roomId);
+  camNotify(login, user, `Your cam is on the stage of ${RS.title || "a pad"} on PATV`, "/p/" + encodeURIComponent(RS.slug || roomId)).catch(() => {});
+  return { slot: view(await getSlot(id)) };
+}
+/** tick: a cam slot follows its relay. -> "ended" when it ended the slot, else the relay's state */
+async function camBeat(s, t = now()) {
+  const login = String(s.cam_login || "").toLowerCase();
+  const B = bridgeRoom(s.room_id);
+  let why = null;
+  if (B) {
+    const m = camMember(B, login);
+    if (!m || !m.on_cam) why = "left_cam";
+    else if (B.livecams === false || !B.cams) why = "room_off";
+  }
+  if (!why && LC().optedOut(login)) why = "opted_out";
+  let st = LC().stageState(s.id, t);
+  if (!why && st.state === "ended") why = st.why || "ended";
+  if (!why && st.state === "none" && B) {                    // the site restarted (sessions are in memory): take hold again
+    try { await LC().stageHold(B, login, s.id, t); st = LC().stageState(s.id, t); } catch (e) { if (e && e.refuse && CAM_END.has(e.code)) why = e.code; }
+  }
+  if (why) { await end(s.id, "cam_" + String(why).slice(0, 24), "system"); return "ended"; }
+  if (st.state === "live") {
+    if (!s.publishing) await goLive(s, t, "cam");
+    else await runQuery("UPDATE stage_slots SET beat = ? WHERE id = ? AND settled = 0", [t, s.id]);
+  }
+  return st.state;
+}
+/** For the owner's UI: who is on cam in the pad's room right now, and whether they can go on the stage. */
+async function camCandidates(roomId) {
+  await init();
+  const B = bridgeRoom(roomId);
+  if (!B) return { live: false, livecams: false, cams: [] };
+  const open = await openSlots(roomId);
+  const onStage = new Map(open.filter((s) => s.source === "cam").map((s) => [String(s.cam_login || "").toLowerCase(), s.id]));
+  const list = (B.members || []).filter((x) => x && !x.anon && !x.self && x.on_cam && CAM_LOGIN_RE.test(String(x.login || ""))).slice(0, 80);
+  let priv = new Set();
+  try { priv = await require("./stories").privateLogins(list.map((x) => String(x.login).toLowerCase())); } catch (e) { priv = new Set(); }
+  const cams = list.map((x) => {
+    const login = String(x.login).toLowerCase();
+    return { login, display: String(x.display || x.login).slice(0, 60), slot: onStage.get(login) || null,
+             blocked: LC().optedOut(login) || priv.has(login) ? "opted_out" : null };
+  });
+  return { live: true, livecams: B.livecams !== false && !!B.cams, cams };
+}
+
 async function seesPad(user, roomId) {
   const PA = require("./padaccess");
   await PA.init();
@@ -1325,8 +1446,9 @@ function view(s, t = now()) {
     room_id: s.room_id || rooms.HOUSE_ROOM, kind: s.kind || "slot", featured: !!s.featured, feature_by: s.feature_by || null,
     mode: s.mode || "stream", embed: e, embed_label: e ? embeds.label(e) : null, title: s.title || null,
     // 1.99cr (stagecap.js): may viewers snap / clip this slot (its streamer's choice, default yes), is it NSFW
-    capture: !s.capture_off && !isEmbed(s) && s.via !== "whip", nsfw: !!s.nsfw,
+    capture: !s.capture_off && !isEmbed(s) && s.via !== "whip" && s.source !== "cam", nsfw: !!s.nsfw,
     library: s.source === "library",                                     // 1.99ji: 📼 played from the Plex library
+    cam: s.source === "cam" ? { login: s.cam_login || null } : null,    // 1.99zc: 🎬 someone's live cam
   };
 }
 // 1.99et: a WHIP slot's HLS comes from MediaMTX (webrtc.js), everything else from nginx-rtmp's /hls
@@ -1350,6 +1472,10 @@ async function publicSlots(roomId) {
   try { nameStyle = require("./cosmetics").nameStyle; } catch (e) { /* no cosmetics */ }
   const list = (await openSlots(roomId || undefined)).filter((s) => isLive(s, t)).map((s) => {
     const e = embedOf(s);
+    if (s.source === "cam") {               // 1.99zc: 🎬 the viewer asks for a WHEP ticket of their own (POST /api/stage/slots/:id/cam)
+      return { id: s.id, username: null, display: s.displayname || s.cam_login || "cam", nameCss: "", hls: null, embed: null, cam: true, since: s.went_live,
+               room_id: s.room_id, featured: !!s.featured, feature_by: s.feature_by || null, title: s.title || null, mode: "stream", capture: false, nsfw: !!s.nsfw };
+    }
     const whep = e ? null : whepOf(s);
     return {
       id: s.id, username: s.username, display: s.displayname || s.username, nameCss: nameStyle(s.username) || "",
@@ -1399,7 +1525,7 @@ async function roomSchedule(roomId, viewer, manage) {
   const q = await queueFor(roomId);
   const row = (s) => {
     const e = embedOf(s);
-    return { display: s.displayname || s.username, username: s.username || null, title: s.title || null, featured: !!s.featured, mode: isEmbed(s) ? "embed" : "stream",
+    return { display: s.displayname || s.username, username: s.source === "cam" ? null : s.username || null, title: s.title || null, featured: !!s.featured, mode: isEmbed(s) ? "embed" : "stream",
              embed_label: e ? embeds.label(e) : null, minutes: s.max_minutes, mine: !!me && s.userId === me };
   };
   const live = open.map((s) => ({ ...row(s), live: isLive(s, t), since: s.went_live || null, start_at: startOf(s),
@@ -1677,8 +1803,8 @@ function register(app, { addUser, isBotToken, noTimers }) {
       if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can cut slots.");
       const r = await end(s.id, "cut", actor(req));
       const b = req.body || {};
-      if (b.ban) await roomBan(s.room_id, s.username, b.reason || "cut from the stage", actor(req));
-      if (r) rooms.notify(s.userId, { kind: "stage", title: "Your stage slot was cut", body: r.refund ? `${r.refund.toLocaleString("en-US")} PAT unused was refunded.` : "",
+      if (b.ban && s.source !== "cam") await roomBan(s.room_id, s.username, b.reason || "cut from the stage", actor(req));   // 1.99zc: a cam slot's username is who put it up
+      if (r && s.source !== "cam") rooms.notify(s.userId, { kind: "stage", title: "Your stage slot was cut", body: r.refund ? `${r.refund.toLocaleString("en-US")} PAT unused was refunded.` : "",
                                       link: "/stage", ref: "stage-cut:" + s.id, pm: false }).catch(() => {});
       res.json({ ok: true, settled: r });
     } catch (e) { fail(res, e); }
@@ -1689,6 +1815,48 @@ function register(app, { addUser, isBotToken, noTimers }) {
       if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can approve.");
       res.json({ ok: await approve(s.id, actor(req)) });
     } catch (e) { fail(res, e); }
+  });
+  // 1.99zc: 🎬 cam slots - the owner's list + "put on the stage" (rooms.canManage), and a stage viewer's WHEP ticket / beat
+  const AG = require("./middleware/authGuard");
+  const camFetchOnly = (req, res) => {
+    if (req.get("X-Requested-With") !== "fetch" || !AG.sameSite(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return false; }
+    return true;
+  };
+  app.get("/api/rooms/:slug/stage/cams", addUser, needUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const R = await roomOf(req.params.slug);
+      if (!R || !(await rooms.canManage(req.user, R.id))) throw new Refuse(403, "Only this pad's owner can do that.");
+      res.json({ ok: true, ...(await camCandidates(R.id)) });
+    } catch (e) { fail(res, e); }
+  });
+  app.post("/api/rooms/:slug/stage/cam", addUser, needUser, async (req, res) => {
+    if (!camFetchOnly(req, res)) return;
+    try {
+      const R = await roomOf(req.params.slug);
+      if (!R || !(await rooms.canManage(req.user, R.id))) throw new Refuse(403, "Only this pad's owner can put a cam on the stage.");
+      res.json({ ok: true, ...(await camOpen(req.user, { room: R.id, login: (req.body || {}).login })) });
+    } catch (e) { fail(res, e); }
+  });
+  const camHits = AG.limiter({ max: 40, windowMs: 60 * 1000 });
+  app.post("/api/stage/slots/:id/cam", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!camFetchOnly(req, res)) return;
+    try {
+      if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, code: "signin", error: "Sign in to watch cams live." });
+      const beatOnly = (req.body || {}).beat === true;
+      if (!beatOnly) {
+        const wait = camHits.blocked("u:" + req.user.userId);
+        if (wait) { res.set("Retry-After", String(wait)); return res.status(429).json({ ok: false, code: "rate", error: "Slow down a little." }); }
+        camHits.hit("u:" + req.user.userId);
+      }
+      const s = await getSlot(req.params.id);
+      if (!s || s.source !== "cam" || s.settled || !["waiting", "active"].includes(s.status)) return res.json({ ok: true, state: "ended", why: "gone" });
+      res.json(await LC().stageWatch(req.user, { id: s.room_id }, s.id, { beatOnly }));
+    } catch (e) {
+      if (e && e.refuse) return res.status(e.status).json({ ok: false, code: e.code, error: e.message });
+      fail(res, e);
+    }
   });
   app.post("/api/stage/slots/:id/deny", addUser, needUser, async (req, res) => {
     try {
@@ -1765,6 +1933,7 @@ module.exports = {
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
+  camOpen, camBeat, camCandidates,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

@@ -17,3 +17,11 @@
 .sb .whip { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--ds-line-strong); }
 .sb .whip h3 { margin: 0 0 6px; font-size: 15px; color: var(--ds-green-2); }
 @media (max-width: 560px) { .player .lowlat { top: 6px; right: 6px; padding: 4px 8px; } }
+/* 1.99zc: 🎬 a cam slot on the stage (stage-room.js camShow): the live cam over WHEP, a status line, tap-to-play */
+.player .cam-stage { position: absolute; inset: 0; z-index: 1; background: #000; }
+.player .cam-stage .cam-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 86%; text-align: center;
+                              color: #ddd; background: rgba(0,0,0,.7); padding: 8px 12px; border-radius: 10px; font: 14px/1.35 var(--ds-font); z-index: 2; }
+.player .cam-stage .cam-msg:empty, .player .cam-stage .cam-msg.hide { display: none; }
+.player .cam-stage .cam-tap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3; min-height: 44px; padding: 0 18px;
+                              border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.7); color: #fff; font: bold 15px var(--ds-font); cursor: pointer; }
+.player .cam-stage .cam-tap.hide { display: none; }

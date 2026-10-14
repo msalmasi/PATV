@@ -158,6 +158,10 @@
       if (reduce || analyser || IOS) return;          // never on iOS (see the session notes)
       try {
         var c = ctx(); if (!c) return;
+        // 1.99zc (Safari): createMediaElementSource routes the element THROUGH the context - a context that isn't
+        // running (made / resumed outside a tap: Safari has no sticky activation for Web Audio) plays it SILENTLY,
+        // for good. No meter then; the element plays straight to the speakers.
+        if (c.state !== 'running' && !shared.unlocked) return;
         var src = c.createMediaElementSource(au);       // same-origin stream, so no CORS issue
         analyser = c.createAnalyser(); analyser.fftSize = 64;
         src.connect(analyser); analyser.connect(c.destination);
@@ -281,7 +285,25 @@
           };
         });
     }
+    // 1.99zc (Safari): unlock both players and the meter's AudioContext INSIDE the tap. WebKit only lets an element
+    // play sound later (the MP3 relay starts after its cushion, from a timer; the ⚡ -> MP3 fallback after a fetch)
+    // once play() was called on THAT element during a user gesture - so a play() + pause() here lifts the restriction.
+    // Before, Safari answered the cushioned play() with NotAllowedError ("tap ▶ to listen") on every tap, for ever.
+    function unlock() {
+      var gesture = !navigator.userActivation || navigator.userActivation.isActive;
+      if (!gesture) return;
+      [au, rau].forEach(function (x) {
+        if (x.getAttribute('src') || x.srcObject || !x.paused) return;
+        try { var p = x.play(); if (p && p.catch) p.catch(function () { /* nothing to play yet */ }); x.pause(); } catch (e) { /* old engine */ }
+      });
+      if (!IOS) {
+        var c = ctx();
+        if (c && c.state !== 'running' && c.state !== 'closed') { try { var r = c.resume(); if (r && r.catch) r.catch(function () {}); } catch (e) { /* resumes later */ } }
+        if (c) shared.unlocked = true;
+      }
+    }
     function start() {
+      unlock();
       clearInterval(waitTimer); startedAt = 0;
       clearTimeout(rejoinTimer); rejoinTries = 0;
       shared.players.forEach(function (p) { if (p !== me) p.halt(); });   // one room at a time on the page

@@ -26,6 +26,9 @@
 // HLS slots play in the shared video.js player (stage-player.js); embed slots (YouTube / Twitch) are
 // rendered only with the official players, from {p,t,id} re-checked here (never a raw URL).
 // manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot.
+// 1.99zc: 🎬 a CAM slot (s.cam: someone's live Camfrog cam the pad's owner put on the stage - mainstage camOpen) has no
+// HLS: the page asks for its own WHEP ticket (POST /api/stage/slots/<id>/cam, signed in + the pad's rule), plays it
+// with PATVRtc.watch (muted: a cam has no sound) and beats every 15 s like a live cam (livecam.js stageWatch).
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -63,6 +66,60 @@
     // a slot published over WHIP carries s.whep. Without it everything below is the plain HLS player.
     if (PATVStage.rtcWrap) player = PATVStage.rtcWrap(player, { wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute });
     var embedFor = null, loaded = document.readyState === 'complete';
+    // ── 1.99zc: 🎬 cam slots ──
+    var camCtl = null;
+    function camStop() { if (camCtl) { camCtl.stop(); camCtl = null; } }
+    function camPost(id, body) {
+      return fetch('/api/stage/slots/' + encodeURIComponent(id) + '/cam', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); });
+    }
+    function camShow(s) {
+      if (camCtl && camCtl.id === s.id) return;
+      camStop();
+      var my = { id: s.id, gen: 0, sess: null, beat: null }, box = document.createElement('div'), video = document.createElement('video');
+      box.className = 'cam-stage';
+      video.className = 'rtc-video'; video.muted = true; video.autoplay = true; video.playsInline = true; video.setAttribute('playsinline', '');
+      video.setAttribute('aria-label', _t('js.pad.live.aria', '{name}\'s cam, live', { name: s.display }));
+      var msg = document.createElement('div'); msg.className = 'cam-msg'; msg.setAttribute('role', 'status');
+      var tap = document.createElement('button'); tap.type = 'button'; tap.className = 'cam-tap hide'; tap.textContent = _t('js.pad.strip.tap', '▶ Tap to play');
+      tap.addEventListener('click', function () { var p = video.play(); if (p && p.then) p.then(function () { tap.classList.add('hide'); }, function () {}); });
+      box.appendChild(video); box.appendChild(tap); box.appendChild(msg);
+      o.wrap.appendChild(box);
+      if (o.unmute) o.unmute.classList.add('hide');
+      function say(t) { msg.textContent = t || ''; msg.classList.toggle('hide', !t); }
+      function done(t) {
+        clearInterval(my.beat); my.beat = null;
+        if (my.sess) { try { my.sess.close(); } catch (e) {} my.sess = null; }
+        try { video.srcObject = null; } catch (e) {}
+        if (o.reconnect) o.reconnect.classList.add('hide');
+        say(t);
+      }
+      var why = window.PATVLiveCam && PATVLiveCam.why ? PATVLiveCam.why : function (c, f) { return f || _t('js.pad.live.err_failed', 'Pepe couldn\'t open their cam live - try again in a bit.'); };
+      my.stop = function () { my.gen++; done(''); if (box.parentNode) box.parentNode.removeChild(box); };
+      camCtl = my;
+      var g = my.gen;
+      if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.')); return; }
+      if (o.reconnect) o.reconnect.classList.remove('hide');
+      say('');
+      camPost(s.id, {}).then(function (d) {
+        if (g !== my.gen) return;
+        if (!d || !d.ok || !d.whep) return done(d && d.state === 'ended' ? why(d.why) : why(d && d.code, d && d.error));
+        my.beat = setInterval(function () {
+          camPost(s.id, { beat: true }).then(function (k) {
+            if (g !== my.gen) return;
+            if (k && (k.ok === false || k.state === 'ended')) done(why(k.why || k.code, k.error));
+          }).catch(function () { /* a blip: the next beat */ });
+        }, 15000);
+        return PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return g !== my.gen; } }).then(function (ss) {
+          if (g !== my.gen) { ss.close(); return; }
+          my.sess = ss;
+          if (o.reconnect) o.reconnect.classList.add('hide');
+          if (ss.blocked) tap.classList.remove('hide');
+          ss.onfail = function () { if (g === my.gen) done(why('gone')); };
+        });
+      }).catch(function (e) { if (g === my.gen && !(e && e.cancelled)) done(why('failed')); });
+    }
     function featured() { for (var i = 0; i < slots.length; i++) if (slots[i].featured) return slots[i]; return null; }
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
     function pickDefault() { var f = featured(); view = f ? 'slot:' + f.id : 'pepe'; }
@@ -85,7 +142,11 @@
     function pepeEmbed() { return !ownPepe && pepeSrc && pepeSrc.mode === 'embed' && embedUrl(pepeSrc.embed) ? pepeSrc.embed : null; }
     function show() {
       var s = cur();
-      if (s && s.embed) {
+      if (!(s && s.cam)) camStop();
+      if (s && s.cam) {
+        player.stop(); setEmbed(null); camShow(s);
+        o.onAir && o.onAir(true, s.title || null);
+      } else if (s && s.embed) {
         player.stop(); setEmbed(s.embed);
         o.onAir && o.onAir(true, (s.title ? s.title + ' · ' : '') + _t('js.stage.room.from', 'from {platform}', { platform: s.embed.p === 'youtube' ? 'YouTube' : 'Twitch' }));
       } else if (s) {
@@ -112,6 +173,7 @@
     // his HLS on the server even while the page shows an admin-chosen embed, so it counts while HLS is on air.
     function selection() {
       var s = cur();
+      if (s && s.cam) return { stream: s.id, label: s.display, embed: true, capture: false, nsfw: !!s.nsfw };   // 1.99zc: no snaps / clips / watch-minutes of a cam
       if (s) return { stream: s.id, label: s.display, embed: !!s.embed, capture: !s.embed && s.capture !== false, nsfw: !!s.nsfw };
       if (pepeHere && pepeOn) return { stream: 'pepe', label: _t('js.stage.room.pepe_stream', 'Pepe\'s stream'), embed: false, capture: true, nsfw: false };
       return null;
@@ -142,7 +204,8 @@
              '<span class="dot" aria-hidden="true"></span>' + (s.featured ? '<span class="star" aria-label="' + esc(s.feature_by === 'auto' ? _t('js.stage.room.featured_auto', 'featured while live') : _t('js.stage.room.featured', 'featured')) + '"' +
                (s.feature_by === 'auto' ? ' title="' + esc(_t('js.stage.room.featured_auto_title', 'Featured automatically: it went live while nothing else was featured')) + '"' : '') + '>★</span>' : '') +
              '<span class="n' + (s.nameCss ? ' cx-name' : '') + '" style="' + esc(s.nameCss || '') + '">' + esc(s.display) + '</span>' +
-             (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') + '</button>';
+             (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') +
+             (s.cam ? '<span class="src">' + esc(_t('js.pad.strip.cam_src', '📷 cam')) + '</span>' : '') + '</button>';
       });
       var pOn = pepeOn;                                     // 1.99fv: his own stream only - Twitch never counts
       var pF = !!(pepeSrc && pepeSrc.featured);             // 1.99lm
@@ -154,7 +217,7 @@
         h += '<span class="adm">' + (s.featured ? '<button type="button" data-act="unfeature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.unfeature', '☆ Unfeature')) + '</button>'
                                                 : '<button type="button" data-act="feature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.feature', '★ Feature')) + '</button>') +
              '<button type="button" data-act="cut" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut', '✂ Cut')) + '</button>' +
-             '<button type="button" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut_ban', 'Cut + ban')) + '</button></span>';
+             (s.cam ? '' : '<button type="button" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut_ban', 'Cut + ban')) + '</button>') + '</span>';
       }
       box.innerHTML = h;
     }
