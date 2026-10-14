@@ -8,7 +8,8 @@
 <% const live_ = !!rv.live, rc_ = rv.recipe || {}, payLive_ = !!rc_.live;
    const cap_ = rv.cap || 50000000, head_ = Math.max(0, cap_ - rv.balance), fill_ = Math.min(100, 100 * rv.balance / (cap_ || 1));
    const kind_ = { flow: t('pad.vault.k_flow'), site: t('pad.vault.k_site'), deposit: t('pad.vault.k_deposit'), migration: t('pad.vault.k_migration'), refund: t('pad.vault.k_refund'),
-                   challenge: t('pad.vault.k_challenge'), launch: t('pad.vault.k_launch'), match: t('pad.vault.k_match'), recipe: t('pad.vault.k_recipe'), topup: t('pad.vault.k_topup') };
+                   challenge: t('pad.vault.k_challenge'), launch: t('pad.vault.k_launch'), match: t('pad.vault.k_match'), recipe: t('pad.vault.k_recipe'), topup: t('pad.vault.k_topup'),
+                   fine: t('pad.vault.k_fine'), xfer_out: t('pad.vault.k_xfer_out'), xfer_in: t('pad.vault.k_xfer_in') };
    const when_ = (ts) => (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime');
    const sp_ = rv.split || { owner: 15, gang: 15, streamers: 25, people: 35, games: 10 };
    const wk_ = rv.week;

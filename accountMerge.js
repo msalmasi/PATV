@@ -351,6 +351,9 @@ const RULES = {
   "rooms_registry.created_by": M(),   // 1.99iz: who made a member-made pad (padcreate.js); the owner column has its own rule
   "pad_connections.requested_by": M(), "pad_connections.verified_by": M(), "pad_connections.join_by": M(),   // 1.99ja: platform connections (padconnect.js)
   "room_vault_settings.changed_by": M(), "room_vault_rate_log.by": M(),      // economy v2 E-3 (roomvaults.js): who set a pad's payout rate
+  // 1.99yx admin pad vault fines / transfers (padfines.js): the admin's account moves; the actor is Pepe's label; to_room is a pad
+  "pad_vault_admin_moves.site_user": M(), "pad_vault_admin_moves.actor": { deny: NAME },
+  "pad_vault_admin_moves.to_room": { deny: "1.99yx: the pad a transfer went INTO (a room id, audit only)" },
   // the pad launchpad (launchpad.js): one newcomer welcome per person (folded), visits per pad per day; admins by name
   "launchpad_welcomes.user_id": M({ key: [] }), "launchpad_visits.user_id": M({ key: ["room_id", "day"] }),
   "launchpad_pads.enrolled_by": { deny: NAME }, "launchpad_grads.decided_by": { deny: NAME },

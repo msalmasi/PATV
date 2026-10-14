@@ -1,0 +1,35 @@
+<%# 1.99yx: ⚖️ pad vault FINES + admin TRANSFERS (padfines.js -> Pepe's pepe_padfine.py). Site Admins only; nonce + password
+    step-up like /admin/economy. public/js/admin-padfines.js runs it. Locals: list (the pads), isAdmin. %>
+<section class="sb-card" id="padfines" aria-labelledby="pfT">
+  <h2 id="pfT"><span class="ds-ic" aria-hidden="true">⚖️</span> Pad vault fines &amp; transfers <span class="adm-pill admin">admins</span></h2>
+  <% if (!isAdmin) { %><p class="muted">Admins only.</p><% } else { %>
+  <p class="muted">A <b>fine</b> takes PAT out of a pad's vault and sends it where Pepe's PAT Routing row <code>fine_pad</code> says
+    (<span id="pfRoute">the Federal Reserve by default, like every fine</span>; change it on <a href="/admin/economy">Economy › PAT Routing</a>).
+    A <b>transfer</b> moves PAT from one pad vault into another (that vault's cap applies). Pepe moves the whole amount or nothing,
+    the pad's owner gets a notice with your reason, both vaults' history shows it and every move is in the admin audit log.
+    The PAT supply doesn't change. In chat: <code>!padfine &lt;pad&gt; &lt;amount&gt; &lt;reason&gt;</code> · <code>!padmove &lt;from&gt; &lt;to&gt; &lt;amount&gt; &lt;reason&gt;</code>.</p>
+  <form id="pfForm" class="settings" autocomplete="off" novalidate>
+    <label>What
+      <select name="op" id="pfOp">
+        <option value="fine">Fine a pad vault</option>
+        <option value="transfer">Move PAT to another pad vault</option>
+      </select></label>
+    <label>Pad vault
+      <select name="from" id="pfFrom" required>
+        <% list.forEach((r) => { %><option value="<%= r.id %>"><%= r.title %> (<%= r.id %>)</option><% }) %>
+      </select></label>
+    <label id="pfToWrap" hidden>Into
+      <select name="to" id="pfTo">
+        <% list.forEach((r) => { %><option value="<%= r.id %>"><%= r.title %> (<%= r.id %>)</option><% }) %>
+      </select></label>
+    <label>Amount (PAT)<input type="number" name="amount" id="pfAmount" min="1" step="1" required></label>
+    <label style="grid-column: 1 / -1">Reason (the pad owner sees it)<input type="text" name="reason" id="pfReason" minlength="3" maxlength="200" required></label>
+    <label>Your account password<input type="password" name="password" id="pfPw" autocomplete="current-password" required></label>
+    <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary" id="pfGo">Send to Pepe</button><span class="msg" id="pfMsg" role="status" aria-live="polite"></span></div>
+  </form>
+  <h3 id="pfLogT">Latest fines &amp; transfers</h3>
+  <div class="tblwrap"><table aria-labelledby="pfLogT"><thead><tr><th>When</th><th>What</th><th class="num">PAT</th><th>Reason</th><th>By</th><th>Status</th></tr></thead>
+    <tbody id="pfLog"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody></table></div>
+  <script src="/public/js/admin-padfines.js?v=1" defer></script>
+  <% } %>
+</section>

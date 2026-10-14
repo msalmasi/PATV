@@ -30,6 +30,7 @@ const TTL_DEFAULTS = Object.freeze({
   "privacy.incognito": 15,            // 1.99wa: Settings → Privacy (incognito.js)
   "privacy.forget": 7 * 1440,         // 1.99wj: a deleted account's Camfrog login - Pepe forgets it (accountdelete.js retries an expired one)
   "dj": 10, "pepe.look": 10, "room.ctl": 15, "room.visit": 30, "room.bridge": 30, "econ.burn": 30, "econ.routes": 30, "econ.cmd": 30,
+  "roomvault.admin": 30,               // 1.99yx: /pads/admin pad vault fines / transfers (padfines.js)
   "aigen": 15,                         // = aigen.js QUEUE_TTL (its job is timed out by aigen's own sweep)
   "snap.save": 15, "camclip.save": 15, "micclip.save": 15, "stagecap.save": 30,
   "notify": 1440,                      // a Camfrog PM copy of a notice that is already in the inbox

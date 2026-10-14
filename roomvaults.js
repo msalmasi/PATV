@@ -89,11 +89,13 @@ function cleanDays(d) {
   for (const [k, v] of Object.entries(d && typeof d === "object" ? d : {}).slice(0, 40)) {
     if (!DAY_RE.test(k) || !v || typeof v !== "object") continue;
     out[k] = { in: int(v.in), dep: int(v.dep), mig: int(v.mig), out: int(v.out), ovf: int(v.ovf), lp: int(v.lp),   // lp: launchpad grants + owner match
-               top: int(v.top) };                                                                                   // E-4: the room reward top-up
+               top: int(v.top),                                                                                     // E-4: the room reward top-up
+               adm: int(v.adm) };                                                                                   // 1.99yx: admin fines / transfers (signed; padfines.js)
   }
   return out;
 }
-const KINDS = ["flow", "site", "deposit", "migration", "refund", "challenge", "launch", "match", "recipe", "topup"];   // launch / match: the launchpad; recipe / topup: E-4
+const KINDS = ["flow", "site", "deposit", "migration", "refund", "challenge", "launch", "match", "recipe", "topup",   // launch / match: the launchpad; recipe / topup: E-4
+               "fine", "xfer_out", "xfer_in"];                                                                     // 1.99yx: admin fines / transfers (padfines.js)
 // 1.99sn: a deposit's public face, as Pepe reports it - a display name, or anon (the login never leaves Pepe then)
 const cleanWho = (v) => String(v || "").replace(/[<>"&\u0000-\u001f]/g, "").trim().slice(0, 40);
 function donorOf(e) {

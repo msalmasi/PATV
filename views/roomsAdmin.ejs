@@ -6,7 +6,7 @@
 <main class="sb" id="ra">
   <div class="sb-head">
     <h1><span class="ds-ic" aria-hidden="true">🏠</span> Pads admin</h1>
-    <p class="lede">Who owns each pad, which pad the homepage features, and pad owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/p">Pads ›</a></p>
+    <p class="lede">Who owns each pad, which pad the homepage features, pad vault fines &amp; transfers, and pad owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/p">Pads ›</a></p>
   </div>
 
   <section class="sb-card" id="front" aria-labelledby="frontT">
@@ -72,6 +72,9 @@
       <input type="text" name="title" placeholder="title" aria-label="Title"><button type="submit" class="btn">Add pad</button><span class="msg" id="addMsg" role="status"></span></form>
     <p class="muted">Pads for the Camfrog rooms Pepe bridges are added automatically (no owner). Owner = one PATV account (matched by username, display name or Camfrog/Discord/Twitch name); <code>house</code> = Pepe's (site admins run it, no royalties). Owners sync to Pepe within ~2 minutes for chat <code>!stage</code> commands.</p>
   </section>
+
+  <%# 1.99yx: ⚖️ pad vault fines + admin transfers (padfines.js) %>
+  <%- include('partials/pads-admin-fines', { list, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
 
   <%# 1.99iy: pad addresses (+ 1.99iz creation, 1.99ja connections) - padcfg.js %>
   <% if (typeof padsCfg !== 'undefined' && padsCfg) { %><%- include('partials/pads-admin-cfg', { padsCfg, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %><% } %>
