@@ -9078,6 +9078,7 @@
   "ca.allow_ph": "PATVの名前",
   "ca.allow_add": "追加",
   "js.lc.saving": "保存中…",
+  "js.stage.cap_na_whip": "スナップとクリップは、超低遅延（WHIP）配信ではまだご利用いただけません。選択した設定は、OBSからRTMPで配信する場合、またはブラウザから配信する場合に適用されます。",
   "js.pf.type": "FORGETと入力して確認してください。",
   "js.pf.done": "完了：ここでPepeとの非公開メッセージ {n} 件を削除しました。残りは1分以内にPepeが忘れます。",
   "js.pad.live.ask": "🙋 視聴を依頼",

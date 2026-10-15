@@ -9078,6 +9078,7 @@
   "ca.allow_ph": "PATV 名称",
   "ca.allow_add": "添加",
   "js.lc.saving": "保存中…",
+  "js.stage.cap_na_whip": "快照和片段暂不支持超低延迟（WHIP）直播——你的选择仅在通过 OBS 的 RTMP 或浏览器直播时生效。",
   "js.pf.type": "请输入 FORGET 以确认。",
   "js.pf.done": "已完成：已在此删除 {n} 条与 Pepe 的私信。Pepe 会在一分钟内忘记其余内容。",
   "js.pad.live.ask": "🙋 申请观看",

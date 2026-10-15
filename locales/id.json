@@ -9080,6 +9080,7 @@
   "ca.allow_ph": "Nama PATV",
   "ca.allow_add": "Tambah",
   "js.lc.saving": "Menyimpan…",
+  "js.stage.cap_na_whip": "Snap dan klip belum tersedia untuk siaran latensi sangat rendah (WHIP) - pilihanmu berlaku saat kamu siaran dari OBS lewat RTMP atau dari browser.",
   "js.pf.type": "Ketik FORGET untuk konfirmasi.",
   "js.pf.done": "Selesai: {n} pesan pribadi dengan Pepe dihapus di sini. Pepe melupakan sisanya dalam satu menit.",
   "js.pad.live.ask": "🙋 Minta izin menonton",

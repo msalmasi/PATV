@@ -9078,6 +9078,7 @@
   "ca.allow_ph": "Tên PATV",
   "ca.allow_add": "Thêm",
   "js.lc.saving": "Đang lưu…",
+  "js.stage.cap_na_whip": "Ảnh và clip chưa có sẵn cho stream độ trễ siêu thấp (WHIP) - lựa chọn của bạn sẽ áp dụng khi bạn stream từ OBS qua RTMP hoặc từ trình duyệt.",
   "js.pf.type": "Gõ FORGET để xác nhận.",
   "js.pf.done": "Xong: đã xóa {n} tin nhắn riêng với Pepe tại đây. Pepe sẽ quên phần còn lại trong vòng một phút.",
   "js.pad.live.ask": "🙋 Hỏi để xem",

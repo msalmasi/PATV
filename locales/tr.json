@@ -9204,6 +9204,7 @@
   "ca.allow_ph": "PATV adı",
   "ca.allow_add": "Ekle",
   "js.lc.saving": "Kaydediliyor…",
+  "js.stage.cap_na_whip": "Ekran görüntüleri ve klipler, ultra düşük gecikmeli (WHIP) yayınlar için henüz kullanılamıyor - seçimin, OBS ile RTMP üzerinden veya tarayıcıdan yayın yaptığında geçerli olur.",
   "js.pf.type": "Onaylamak için FORGET yaz.",
   "js.pf.done": "Tamamlandı: Pepe ile olan {n} özel mesaj burada silindi. Pepe kalanları bir dakika içinde unutur.",
   "js.pad.live.ask": "🙋 İzlemek için sor",

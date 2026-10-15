@@ -9078,6 +9078,7 @@
   "ca.allow_ph": "PATV 이름",
   "ca.allow_add": "추가",
   "js.lc.saving": "저장 중…",
+  "js.stage.cap_na_whip": "스냅과 클립은 초저지연(WHIP) 방송에서는 아직 사용할 수 없어요 - OBS에서 RTMP로 방송하거나 브라우저에서 방송할 때는 선택한 설정이 적용돼요.",
   "js.pf.type": "확인하려면 FORGET을 입력하세요.",
   "js.pf.done": "완료: 여기서 Pepe와 나눈 비공개 메시지 {n}개가 삭제됐어요. 나머지는 1분 안에 Pepe가 잊어요.",
   "js.pad.live.ask": "🙋 시청 요청",

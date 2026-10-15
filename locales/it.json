@@ -9281,6 +9281,7 @@
   "ca.allow_ph": "Nome PATV",
   "ca.allow_add": "Aggiungi",
   "js.lc.saving": "Salvataggio…",
+  "js.stage.cap_na_whip": "Snap e clip non sono ancora disponibili per gli stream a latenza ultra-bassa (WHIP) - la tua scelta si applica quando trasmetti da OBS tramite RTMP o dal browser.",
   "js.pf.type": "Scrivi FORGET per confermare.",
   "js.pf.done": "Fatto: {n} messaggio/i privato/i con Pepe eliminato/i qui. Pepe dimentica il resto entro un minuto.",
   "js.pad.live.ask": "🙋 Chiedi di guardare",

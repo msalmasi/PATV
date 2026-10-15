@@ -9450,6 +9450,7 @@
   "ca.allow_ph": "Nazwa PATV",
   "ca.allow_add": "Dodaj",
   "js.lc.saving": "Zapisywanie…",
+  "js.stage.cap_na_whip": "Zdjęcia i klipy nie są jeszcze dostępne dla streamów o ultraniskim opóźnieniu (WHIP) - twój wybór obowiązuje, gdy streamujesz z OBS przez RTMP lub z przeglądarki.",
   "js.pf.type": "Wpisz FORGET, aby potwierdzić.",
   "js.pf.done": "Gotowe: prywatne wiadomości z Pepe zostały tutaj usunięte ({n}). Resztę Pepe zapomni w ciągu minuty.",
   "js.pad.live.ask": "🙋 Poproś o oglądanie",

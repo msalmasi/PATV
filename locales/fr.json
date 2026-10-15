@@ -9281,6 +9281,7 @@
   "ca.allow_ph": "Nom PATV",
   "ca.allow_add": "Ajouter",
   "js.lc.saving": "Enregistrement…",
+  "js.stage.cap_na_whip": "Les snaps et clips ne sont pas encore disponibles pour les streams à latence ultra-faible (WHIP) - ton choix s'applique quand tu diffuses depuis OBS en RTMP ou depuis le navigateur.",
   "js.pf.type": "Tape FORGET pour confirmer.",
   "js.pf.done": "Terminé : {n} message(s) privé(s) avec Pepe supprimé(s) ici. Pepe oublie le reste en moins d'une minute.",
   "js.pad.live.ask": "🙋 Demander à regarder",

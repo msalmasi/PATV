@@ -9202,6 +9202,7 @@
   "ca.allow_ph": "PATV-naam",
   "ca.allow_add": "Toevoegen",
   "js.lc.saving": "Opslaan…",
+  "js.stage.cap_na_whip": "Snaps en clips zijn nog niet beschikbaar voor streams met ultra lage latentie (WHIP) - je keuze geldt wanneer je via OBS met RTMP of vanuit de browser streamt.",
   "js.pf.type": "Typ FORGET om te bevestigen.",
   "js.pf.done": "Klaar: {n} privébericht(en) met Pepe hier verwijderd. Pepe vergeet de rest binnen een minuut.",
   "js.pad.live.ask": "🙋 Vragen om te kijken",

@@ -9281,6 +9281,7 @@
   "ca.allow_ph": "Nombre en PATV",
   "ca.allow_add": "Añadir",
   "js.lc.saving": "Guardando…",
+  "js.stage.cap_na_whip": "Las fotos y los clips aún no están disponibles para transmisiones de latencia ultrabaja (WHIP) - tu elección aplica cuando transmites desde OBS por RTMP o desde el navegador.",
   "js.pf.type": "Escribe FORGET para confirmar.",
   "js.pf.done": "Hecho: se borraron aquí {n} mensaje(s) privado(s) con Pepe. Pepe olvida el resto en un minuto.",
   "js.pad.live.ask": "🙋 Pedir ver",
