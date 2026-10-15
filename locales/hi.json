@@ -9429,7 +9429,7 @@
   "rf.adm.k.custom_hold_days": "कस्टम इनाम: विजेता का इंतज़ार करने वाला पॉट (दिन)",
   "rf.adm.k.custom_allowed": "कम्युनिटी रैफ़ल कस्टम इनाम दे सकते हैं",
   "rf.adm.k.announce_milestones": "Pepe लक्ष्य के 25 / 50 / 75 / 100% की घोषणा करता है",
-  "rf.adm.route_now": "raffle_fee रूट अभी: {shares} (इसे {!link} पर बदलें)।",
+  "rf.adm.route_now": "अभी raffle_fee रूट: {shares} ({!link} पर इसे बदलें)।",
   "rf.adm.h_review": "फ़ैसला चाहिए",
   "rf.adm.review_help": "डिलीवरी का इंतज़ार कर रहे कस्टम इनाम, और वे जिन्हें विजेता ने रिपोर्ट किया। Release टिकट बिक्री क्रिएटर को देता है (फ़ीस घटाकर); refund हर टिकट वापस देता है।",
   "rf.adm.review_none": "कुछ भी प्रतीक्षा में नहीं है।",

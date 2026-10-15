@@ -3418,7 +3418,7 @@
   "pad.conn.since": "sejak {date}",
   "pad.conn.want_pepe": "Aku mau Pepe ada di room-ku",
   "pad.conn.plus_in": "💎 Pad ini punya Prime Time Plus: Pepe ada di ruangan dan tetap di sana selama masa berlakunya.",
-  "pad.conn.plus_out": "Prime Time Plus pad ini sudah berakhir, jadi Pepe keluar dari ruang dan tidak tampil live di sini. Koneksi, pemilik, brankas pad, dan royalti tetap ada. {!link} untuk mengajak Pepe kembali.",
+  "pad.conn.plus_out": "Prime Time Plus pad ini sudah berakhir, jadi Pepe keluar dari room dan tidak tampil live di sini. Koneksi, pemilik, brankas pad, dan royalti tetap ada. {!link} untuk mengajak Pepe kembali.",
   "pad.conn.plus_get": "Dapatkan Prime Time Plus",
   "pad.conn.plus_joins": "💎 Dengan Prime Time Plus, Pepe bergabung sendiri ke ruangan untuk melihat kodenya, dan tetap di sana setelah terhubung.",
   "pad.conn.admin_approves": "admin situs yang menyetujuinya;",

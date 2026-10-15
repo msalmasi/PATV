@@ -9491,7 +9491,7 @@
   "rf.adm_enabled": "Sorteios PAT ativados (raffles_meta.enabled)",
   "rf.adm_route": "A taxa de um sorteio da comunidade vai para onde a linha raffle_fee da Rota PAT indicar (a Casa, por padrão), editada em /admin/economy. Sorteios da Casa enviam todos os bilhetes para a Casa.",
   "rf.adm_save": "Salvar",
-  "rf.off_admin2": "Os Sorteios PAT estão DESLIGADOS (raffles_meta.enabled). Só admins podem fazê-los agora - ligue em {!link}.",
+  "rf.off_admin2": "Os Sorteios PAT estão DESLIGADOS (raffles_meta.enabled). Só admins podem executá-los agora - ligue-os em {!link}.",
   "rf.manage_admin": "Gerenciar sorteios no admin",
   "rf.adm.h1": "Sorteios",
   "rf.adm.lead": "🎫 Sorteios PAT: a chave, os limites, os sorteios oficiais da House, disputas de prêmios e remoções. Membros compram bilhetes e criam os próprios sorteios em {!link}.",

@@ -9666,7 +9666,7 @@
   "rf.adm_enabled": "Loterie PAT włączone (raffles_meta.enabled)",
   "rf.adm_route": "Opłata za loterię społeczności trafia tam, gdzie wskazuje wiersz PAT Routing raffle_fee (domyślnie Dom), edytowany na /admin/economy. Loterie Domu wysyłają każdy bilet do Domu.",
   "rf.adm_save": "Zapisz",
-  "rf.off_admin2": "Loterie PAT są WYŁĄCZONE (raffles_meta.enabled). Tylko admini mogą je teraz prowadzić - włącz je w {!link}.",
+  "rf.off_admin2": "Loterie PAT są WYŁĄCZONE (raffles_meta.enabled). Tylko admini mogą je teraz prowadzić – włącz je w {!link}.",
   "rf.manage_admin": "Zarządzaj loteriami w panelu admina",
   "rf.adm.h1": "Loterie",
   "rf.adm.lead": "🎫 Loterie PAT: przełącznik, limity, oficjalne loterie House, spory o nagrody i usuwanie. Członkowie kupują losy i prowadzą własne loterie w {!link}.",

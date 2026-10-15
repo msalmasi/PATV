@@ -3477,7 +3477,7 @@
   "pad.conn.since": "seit {date}",
   "pad.conn.want_pepe": "Ich hätte gern Pepe in meinem Raum",
   "pad.conn.plus_in": "💎 Dieses Pad hat Prime Time Plus: Pepe ist im Raum und bleibt, solange es läuft.",
-  "pad.conn.plus_out": "Die Prime Time Plus dieses Pads ist abgelaufen, daher hat Pepe den Raum verlassen und das Pad zeigt hier nicht live an. Verbindung, Besitzer, Pad-Tresor und Tantiemen bleiben erhalten. {!link}, um Pepe zurückzuholen.",
+  "pad.conn.plus_out": "Das Prime Time Plus dieses Pads ist abgelaufen, daher hat Pepe den Raum verlassen und das Pad wird hier nicht mehr live angezeigt. Verbindung, Besitzer, Pad-Tresor und Tantiemen bleiben erhalten. {!link}, um Pepe zurückzuholen.",
   "pad.conn.plus_get": "Prime Time Plus holen",
   "pad.conn.plus_joins": "💎 Mit Prime Time Plus tritt Pepe selbstständig dem Raum bei, um den Code zu sehen, und bleibt, sobald die Verbindung steht.",
   "pad.conn.admin_approves": "ein Admin genehmigt es;",

@@ -3499,7 +3499,7 @@
   "pad.conn.since": "desde el {date}",
   "pad.conn.want_pepe": "Quiero a Pepe en mi sala",
   "pad.conn.plus_in": "💎 Este pad tiene Prime Time Plus: Pepe está en la sala y se queda mientras dure.",
-  "pad.conn.plus_out": "El Prime Time Plus de este pad ha terminado, así que Pepe salió de la sala y aquí no aparece en vivo. La conexión, el dueño, la bóveda del pad y las regalías se mantienen. {!link} para que Pepe vuelva.",
+  "pad.conn.plus_out": "El Prime Time Plus de este pad ha terminado, así que Pepe salió de la sala y aquí ya no se muestra en vivo. La conexión, el dueño, la bóveda del pad y las regalías se mantienen. {!link} para que Pepe vuelva.",
   "pad.conn.plus_get": "Obtener Prime Time Plus",
   "pad.conn.plus_joins": "💎 Con Prime Time Plus, Pepe se une a la sala por su cuenta para ver el código y se queda una vez conectada.",
   "pad.conn.admin_approves": "un admin del sitio lo aprueba;",
