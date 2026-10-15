@@ -147,8 +147,9 @@
     recovering: function () { return _t('js.owner.ps_recovering', 'Pepe is reconnecting (recovery mode)'); },
     out: function () { return _t('js.owner.ps_out', 'Pepe isn\'t in the room'); },
     paused: function () { return _t('js.owner.ps_paused', 'Pepe stays out (you sent him away)'); },
+    banned: function () { return _t('js.owner.ps_banned', 'Pepe is banned from this room'); },
   };
-  var ST_CHIP = { in: 'ok', joining: 'info', recovering: 'warn', out: 'mute', paused: 'mute' };
+  var ST_CHIP = { in: 'ok', joining: 'info', recovering: 'warn', out: 'mute', paused: 'mute', banned: 'bad' };
   function paintStatus(st) {
     if (!stBox || !st || !ST_TXT[st.state]) return;
     stBox.setAttribute('data-state', st.state);
@@ -157,6 +158,14 @@
     var j = document.getElementById('poJoined');
     if (j) j.textContent = st.state === 'in' && st.joined_at
       ? _t('js.owner.ps_joined', 'joined {when}', { when: new Date(st.joined_at).toLocaleString(window.PATV_I18N && PATV_I18N.lang || undefined) }) : '';
+    // 1.99zp: who banned him, and when Pepe tries again by himself (Join tries at once)
+    var bn = document.getElementById('poBanned');
+    if (bn) {
+      var b = st.state === 'banned' && st.banned;
+      bn.hidden = !b;
+      bn.textContent = b ? _t('js.owner.ps_banned_note', 'Banned by {by}. Pepe won\'t rejoin by himself until {when}; once the ban is lifted, press Join and he goes straight back in.',
+        { by: b.by || '?', when: b.retry_at ? new Date(b.retry_at).toLocaleString(window.PATV_I18N && PATV_I18N.lang || undefined) : '?' }) : '';
+    }
     var rm = document.getElementById('poRooms');
     if (rm) rm.textContent = _t('js.owner.ps_rooms', 'in {n} of his {max} rooms', { n: st.rooms, max: st.max });
     var home = stBox.getAttribute('data-home') === '1';

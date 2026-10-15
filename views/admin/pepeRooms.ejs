@@ -11,6 +11,7 @@
   <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Room</th><th class="num">👥</th><th class="num">🎙</th><th>Active</th><th>Sound</th><th></th></tr></thead>
     <tbody id="rmRows"><tr><td colspan="6" class="adm-help">Loading…</td></tr></tbody></table></div>
   <p class="adm-help" id="rmAudio"></p>
+  <p class="adm-help" id="rmBans" hidden></p>
   <div class="adm-actions"><label><input type="checkbox" id="rmForce"> force (Make active even mid-game / mid-mic)</label>
     <button type="button" data-rc="active" data-room="auto" class="adm-btn ghost">Active: auto</button></div>
 </section>
@@ -62,6 +63,13 @@
     });
     document.getElementById('rmAudio').textContent = 'Audio: ' + (st.net_audio ? 'net audio (each room its own sound)' : 'one room at a time - ' + (st.audio_room || 'all rooms'))
       + (st.busy ? ' · now: ' + st.busy.verb + ' ' + st.busy.room + '…' : '');
+    // 1.99zp: banned rooms (Pepe makes no automatic join there; Join below tries at once and clears it if he gets in)
+    var bans = document.getElementById('rmBans');
+    bans.hidden = !(st.bans && st.bans.length);
+    bans.textContent = (st.bans || []).map(function (b) {
+      return '🚫 banned from ' + b.room + (b.by ? ' (by ' + b.by + ')' : '') + (b.since ? ' since ' + new Date(b.since).toLocaleString() : '')
+        + (b.retry_at ? ' - next automatic try ' + new Date(b.retry_at).toLocaleString() : '');
+    }).join(' · ');
     var log = document.getElementById('rmLog');
     log.textContent = '';
     (V.actions || []).forEach(function (x) {

@@ -169,7 +169,7 @@ const WEB_CAPS = Object.freeze([
 const CTL_VERBS = new Set(["join", "leave", "rejoin"]);
 const CTL_GAP_MS = 2 * 60 * 1000;
 const CTL_LAST = new Map();
-const STATES = new Set(["in", "joining", "recovering", "out", "paused"]);
+const STATES = new Set(["in", "joining", "recovering", "out", "paused", "banned"]);   // 1.99zp: banned (bot pepe_roomban)
 // 1.99tn: owner setting changes per account + pad per SET_WINDOW_MS (staff exempt); Pepe has his own per-room limit
 const SET_MAX = 20;
 const SET_WINDOW_MS = 60 * 1000;
@@ -275,8 +275,13 @@ function cleanOne(s) {
   const vibe = o.vibe && typeof o.vibe === "object" ? { type: String(o.vibe.type || "").replace(/[^a-z_ -]/gi, "").slice(0, 24), locked: !!o.vibe.locked } : null;
   // 1.99ti: Pepe's own status for the room (pepe_roomowner._op_status)
   const st = o.status && typeof o.status === "object" ? o.status : null;
+  // 1.99zp: Pepe reports "out" + banned {by, at, since, retry_at} for a room that banned him; the panel shows it as banned
+  const ban = st && st.banned && typeof st.banned === "object" ? st.banned : null;
+  const bms = (v) => (Number(v) > 0 ? Math.floor(Number(v)) : null);
+  const banned = ban ? { by: String(ban.by || "").replace(/[\u0000-\u001f<>]/g, "").slice(0, 80), at: bms(ban.at), since: bms(ban.since),
+    retry_at: bms(ban.retry_at) } : null;
   const status = st && STATES.has(st.state) ? {
-    state: st.state, joined_at: Number.isFinite(Number(st.joined_at)) && Number(st.joined_at) > 0 ? Math.floor(Number(st.joined_at)) : null,
+    state: banned && st.state === "out" ? "banned" : st.state, banned, joined_at: Number.isFinite(Number(st.joined_at)) && Number(st.joined_at) > 0 ? Math.floor(Number(st.joined_at)) : null,
     rooms: Math.max(0, Math.min(50, Math.floor(Number(st.rooms) || 0))), max: Math.max(1, Math.min(50, Math.floor(Number(st.max) || 5))),
     phase: typeof st.phase === "string" && /^[a-z_]{1,16}$/.test(st.phase) ? st.phase : null,
     home: st.home === true, paused: st.paused === true, staging: st.staging === true,

@@ -60,8 +60,13 @@ function cleanState(s) {
     ts: Number(x && x.ts) > 0 ? Math.round(Number(x.ts) * 1000) : null, verb: str(x && x.verb, 10), room: str(x && x.room, 64),
     by: str(x && x.by, 60), ok: !!(x && x.ok), msg: str(x && x.msg, 200) }));
   const aj = (Array.isArray(s.autojoin) ? s.autojoin : []).slice(0, 30).map((e) => ({ name: str(e && e.name, 64), enabled: !!(e && e.enabled) })).filter((e) => e.name);
+  // 1.99zp: rooms Pepe is banned from (bot pepe_roomban: no automatic joins, a backoff retry, an owner/admin join tries)
+  const ms = (v) => (Number(v) > 0 ? Math.floor(Number(v)) : null);
+  const bans = (Array.isArray(s.bans) ? s.bans : []).slice(0, 30).map((b) => ({ room: str(b && b.room, 128), by: str(b && b.by, 80),
+    at: ms(b && b.at), since: ms(b && b.since), retry_at: ms(b && b.retry_at), tries: Math.max(0, Math.min(99, Math.floor(Number(b && b.tries) || 0))) }))
+    .filter((b) => b.room);
   return { rooms, active_room: str(s.active_room, 128) || null, active_auto: str(s.active_auto, 128) || null, pinned: !!s.pinned,
-           audio_room: str(s.audio_room, 128) || null, net_audio: !!s.net_audio, busy, log, autojoin: aj };
+           audio_room: str(s.audio_room, 128) || null, net_audio: !!s.net_audio, busy, log, autojoin: aj, bans };
 }
 
 async function setState(raw) {

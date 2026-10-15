@@ -132,7 +132,7 @@
       <%
         const ps = pepe.status || null;
         const psState = ps ? ps.state : 'unknown';
-        const psChip = { in: 'ok', joining: 'info', recovering: 'warn', out: 'mute', paused: 'mute', unknown: 'mute' }[psState] || 'mute';
+        const psChip = { in: 'ok', joining: 'info', recovering: 'warn', out: 'mute', paused: 'mute', banned: 'bad', unknown: 'mute' }[psState] || 'mute';
       %>
       <%# 1.99ti: Pepe in the pad's Camfrog room (pepe_roomowner._op_status) + join / leave / rejoin for Prime Time Plus pads %>
       <div class="po-status" id="poStatus" data-state="<%= psState %>" data-home="<%= ps && ps.home ? 1 : 0 %>">
@@ -151,6 +151,8 @@
       </div>
       <% if (!plus && !staff) { %><p class="ds-meta"><%- t('owner.ps_plus_only', { href: '/premium?pad=' + encodeURIComponent(slug) }) %></p><% } %>
       <% if (ps && ps.paused) { %><p class="ds-meta"><%- t('owner.ps_paused_note') %></p><% } %>
+      <%# 1.99zp: banned from the room (bot pepe_roomban) - by whom, and when he tries again by himself %>
+      <p class="ds-meta" id="poBanned" <%= psState === 'banned' && ps.banned ? '' : 'hidden' %>><% if (psState === 'banned' && ps.banned) { %><%- t('owner.ps_banned_note', { by: t.esc(ps.banned.by || '?'), when: ps.banned.retry_at ? dt(ps.banned.retry_at) : '?' }) %><% } %></p>
       <p class="po-msg" id="poCtlMsg" role="status" aria-live="polite"></p>
       <%
         const ow = pepe.owner || {}, adm = pepe.admin || {};
