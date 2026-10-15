@@ -4141,6 +4141,14 @@
   "rooms.boost": "🚀 بوست",
   "rooms.pads_h": "پدها",
   "rooms.other_pads_h": "پدهای بیشتر",
+  "rooms.followers": {
+    "one": "{!n} دنبال‌کننده",
+    "other": "{!n} دنبال‌کنندگان"
+  },
+  "rooms.followers_tip": {
+    "one": "{n} نفر این پد را دنبال می‌کند",
+    "other": "{n} نفر این پد را دنبال می‌کنند"
+  },
   "rooms.following_h": "⭐ دنبال‌شده‌ها",
   "rooms.following_n": {
     "one": "{count} پدی که دنبال می‌کنی",
@@ -4227,6 +4235,10 @@
   "pad.hdr.followers": {
     "one": "{!n} دنبال‌کننده",
     "other": "{!n} دنبال‌کننده"
+  },
+  "pad.hdr.followers_tip": {
+    "one": "{n} نفر این پد را دنبال می‌کند",
+    "other": "{n} نفر این پد را دنبال می‌کنند"
   },
   "pad.menu.aria": "بیشتر: قوانین، آمار، اشتراک‌گذاری",
   "pad.menu.more": "بیشتر",

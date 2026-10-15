@@ -4075,6 +4075,12 @@
   "rooms.boost": "🚀 Boost",
   "rooms.pads_h": "Pad",
   "rooms.other_pads_h": "Thêm pad",
+  "rooms.followers": {
+    "other": "{!n} người theo dõi"
+  },
+  "rooms.followers_tip": {
+    "other": "{n} người theo dõi pad này"
+  },
   "rooms.following_h": "⭐ Đang theo dõi",
   "rooms.following_n": {
     "other": "{count} pad bạn đang theo dõi"
@@ -4158,6 +4164,9 @@
   "pad.hdr.follow_tip": "Theo dõi pad này để nhận bài đăng của nó trên bảng tin Đang theo dõi",
   "pad.hdr.followers": {
     "other": "{!n} người theo dõi"
+  },
+  "pad.hdr.followers_tip": {
+    "other": "{n} người theo dõi pad này"
   },
   "pad.menu.aria": "Thêm: nội quy, phân tích, chia sẻ",
   "pad.menu.more": "Thêm",

@@ -4076,6 +4076,12 @@
   "rooms.boost": "🚀 บูสต์",
   "rooms.pads_h": "pad",
   "rooms.other_pads_h": "pad เพิ่มเติม",
+  "rooms.followers": {
+    "other": "{!n} ผู้ติดตาม"
+  },
+  "rooms.followers_tip": {
+    "other": "{n} คนติดตาม pad นี้"
+  },
   "rooms.following_h": "⭐ กำลังติดตาม",
   "rooms.following_n": {
     "other": "pad ที่คุณติดตาม {count} รายการ"
@@ -4159,6 +4165,9 @@
   "pad.hdr.follow_tip": "ติดตาม pad นี้เพื่อให้โพสต์ของมันขึ้นในฟีดที่ติดตาม",
   "pad.hdr.followers": {
     "other": "ผู้ติดตาม {!n} คน"
+  },
+  "pad.hdr.followers_tip": {
+    "other": "{n} คนติดตาม pad นี้"
   },
   "pad.menu.aria": "เพิ่มเติม: กฎ สถิติ แชร์",
   "pad.menu.more": "เพิ่มเติม",

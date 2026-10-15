@@ -4075,6 +4075,12 @@
   "rooms.boost": "🚀 ブースト",
   "rooms.pads_h": "パッド",
   "rooms.other_pads_h": "その他のパッド",
+  "rooms.followers": {
+    "other": "フォロワー {!n}人"
+  },
+  "rooms.followers_tip": {
+    "other": "{n}人がこのパッドをフォローしています"
+  },
   "rooms.following_h": "⭐ フォロー中",
   "rooms.following_n": {
     "other": "フォロー中のパッド {count}件"
@@ -4158,6 +4164,9 @@
   "pad.hdr.follow_tip": "このパッドをフォローすると、投稿がフォロー中のフィードに表示されます",
   "pad.hdr.followers": {
     "other": "フォロワー {!n} 人"
+  },
+  "pad.hdr.followers_tip": {
+    "other": "{n}人がこのパッドをフォローしています"
   },
   "pad.menu.aria": "その他：ルール、アナリティクス、共有",
   "pad.menu.more": "その他",

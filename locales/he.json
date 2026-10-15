@@ -4211,6 +4211,16 @@
   "rooms.boost": "🚀 קידום",
   "rooms.pads_h": "פדים",
   "rooms.other_pads_h": "פדים נוספים",
+  "rooms.followers": {
+    "one": "{!n} עוקב",
+    "two": "{!n} עוקבים",
+    "other": "{!n} עוקבים"
+  },
+  "rooms.followers_tip": {
+    "one": "{n} אדם עוקב אחרי הפד הזה",
+    "two": "{n} אנשים עוקבים אחרי הפד הזה",
+    "other": "{n} אנשים עוקבים אחרי הפד הזה"
+  },
   "rooms.following_h": "⭐ במעקב",
   "rooms.following_n": {
     "one": "{count} פד שאתה עוקב אחריו",
@@ -4300,6 +4310,11 @@
     "one": "עוקב {!n}",
     "two": "{!n} עוקבים",
     "other": "{!n} עוקבים"
+  },
+  "pad.hdr.followers_tip": {
+    "one": "{n} אדם עוקב אחרי הפד הזה",
+    "two": "{n} אנשים עוקבים אחרי הפד הזה",
+    "other": "{n} אנשים עוקבים אחרי הפד הזה"
   },
   "pad.menu.aria": "עוד: כללים, אנליטיקה, שיתוף",
   "pad.menu.more": "עוד",

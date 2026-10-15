@@ -4143,6 +4143,14 @@
   "rooms.boost": "🚀 बूस्ट",
   "rooms.pads_h": "पैड्स",
   "rooms.other_pads_h": "और पैड",
+  "rooms.followers": {
+    "one": "{!n} फ़ॉलोअर",
+    "other": "{!n} फ़ॉलोअर्स"
+  },
+  "rooms.followers_tip": {
+    "one": "{n} व्यक्ति इस पैड को फ़ॉलो करता है",
+    "other": "{n} लोग इस पैड को फ़ॉलो करते हैं"
+  },
   "rooms.following_h": "⭐ फ़ॉलोइंग",
   "rooms.following_n": {
     "one": "{count} पैड जिन्हें आप फ़ॉलो करते हैं",
@@ -4229,6 +4237,10 @@
   "pad.hdr.followers": {
     "one": "{!n} फ़ॉलोअर",
     "other": "{!n} फ़ॉलोअर्स"
+  },
+  "pad.hdr.followers_tip": {
+    "one": "{n} व्यक्ति इस पैड को फ़ॉलो करता है",
+    "other": "{n} लोग इस पैड को फ़ॉलो करते हैं"
   },
   "pad.menu.aria": "और: नियम, एनालिटिक्स, शेयर",
   "pad.menu.more": "और",

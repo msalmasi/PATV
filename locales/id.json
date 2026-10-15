@@ -4075,6 +4075,12 @@
   "rooms.boost": "🚀 Boost",
   "rooms.pads_h": "Pad",
   "rooms.other_pads_h": "Pad lainnya",
+  "rooms.followers": {
+    "other": "{!n} pengikut"
+  },
+  "rooms.followers_tip": {
+    "other": "{n} orang mengikuti pad ini"
+  },
   "rooms.following_h": "⭐ Diikuti",
   "rooms.following_n": {
     "other": "{count} pad yang kamu ikuti"
@@ -4158,6 +4164,9 @@
   "pad.hdr.follow_tip": "Ikuti pad ini agar postingannya muncul di Feed Mengikuti-mu",
   "pad.hdr.followers": {
     "other": "{!n} pengikut"
+  },
+  "pad.hdr.followers_tip": {
+    "other": "{n} orang mengikuti pad ini"
   },
   "pad.menu.aria": "Lainnya: aturan, analitik, bagikan",
   "pad.menu.more": "Lainnya",

@@ -4075,6 +4075,12 @@
   "rooms.boost": "🚀 助推",
   "rooms.pads_h": "小站",
   "rooms.other_pads_h": "更多小站",
+  "rooms.followers": {
+    "other": "{!n} 位粉丝"
+  },
+  "rooms.followers_tip": {
+    "other": "{n} 人关注这个小站"
+  },
   "rooms.following_h": "⭐ 关注",
   "rooms.following_n": {
     "other": "你关注的 {count} 个小站"
@@ -4158,6 +4164,9 @@
   "pad.hdr.follow_tip": "关注这个小站，它的帖子就会出现在你的“关注”动态中",
   "pad.hdr.followers": {
     "other": "{!n} 位粉丝"
+  },
+  "pad.hdr.followers_tip": {
+    "other": "{n} 人关注这个小站"
   },
   "pad.menu.aria": "更多：规则、数据分析、分享",
   "pad.menu.more": "更多",

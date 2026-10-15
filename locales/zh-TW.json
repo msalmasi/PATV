@@ -4075,6 +4075,12 @@
   "rooms.boost": "🚀 加速推廣",
   "rooms.pads_h": "小站",
   "rooms.other_pads_h": "更多小站",
+  "rooms.followers": {
+    "other": "{!n} 位粉絲"
+  },
+  "rooms.followers_tip": {
+    "other": "有 {n} 人追蹤這個小站"
+  },
   "rooms.following_h": "⭐ 追蹤中",
   "rooms.following_n": {
     "other": "你追蹤的 {count} 個小站"
@@ -4158,6 +4164,9 @@
   "pad.hdr.follow_tip": "追蹤這個小站，它的貼文就會出現在你的「追蹤中」動態",
   "pad.hdr.followers": {
     "other": "{!n} 位粉絲"
+  },
+  "pad.hdr.followers_tip": {
+    "other": "有 {n} 人追蹤這個小站"
   },
   "pad.menu.aria": "更多：規則、數據分析、分享",
   "pad.menu.more": "更多",

@@ -4145,6 +4145,14 @@
   "rooms.boost": "🚀 Boost",
   "rooms.pads_h": "Pad'ler",
   "rooms.other_pads_h": "Diğer pad'ler",
+  "rooms.followers": {
+    "one": "{!n} takipçi",
+    "other": "{!n} takipçi"
+  },
+  "rooms.followers_tip": {
+    "one": "Bu pad'i {n} kişi takip ediyor",
+    "other": "Bu pad'i {n} kişi takip ediyor"
+  },
   "rooms.following_h": "⭐ Takip edilenler",
   "rooms.following_n": {
     "one": "Takip ettiğin {count} pad",
@@ -4231,6 +4239,10 @@
   "pad.hdr.followers": {
     "one": "{!n} takipçi",
     "other": "{!n} takipçi"
+  },
+  "pad.hdr.followers_tip": {
+    "one": "Bu pad'i {n} kişi takip ediyor",
+    "other": "Bu pad'i {n} kişi takip ediyor"
   },
   "pad.menu.aria": "Daha fazla: kurallar, analizler, paylaş",
   "pad.menu.more": "Daha fazla",

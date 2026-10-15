@@ -4279,6 +4279,18 @@
   "rooms.boost": "🚀 Boost",
   "rooms.pads_h": "Pady",
   "rooms.other_pads_h": "Więcej padów",
+  "rooms.followers": {
+    "one": "{!n} obserwujący",
+    "few": "{!n} obserwujących",
+    "many": "{!n} obserwujących",
+    "other": "{!n} obserwujących"
+  },
+  "rooms.followers_tip": {
+    "one": "{n} osoba obserwuje ten pad",
+    "few": "{n} osoby obserwują ten pad",
+    "many": "{n} osób obserwuje ten pad",
+    "other": "{n} osób obserwuje ten pad"
+  },
   "rooms.following_h": "⭐ Obserwowane",
   "rooms.following_n": {
     "one": "{count} pad, który obserwujesz",
@@ -4371,6 +4383,12 @@
     "few": "{!n} obserwujących",
     "many": "{!n} obserwujących",
     "other": "{!n} obserwującego"
+  },
+  "pad.hdr.followers_tip": {
+    "one": "{n} osoba obserwuje ten pad",
+    "few": "{n} osoby obserwują ten pad",
+    "many": "{n} osób obserwuje ten pad",
+    "other": "{n} osób obserwuje ten pad"
   },
   "pad.menu.aria": "Więcej: zasady, analityka, udostępnianie",
   "pad.menu.more": "Więcej",

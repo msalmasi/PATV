@@ -4171,6 +4171,16 @@
   "rooms.boost": "🚀 Impulsar",
   "rooms.pads_h": "Pads",
   "rooms.other_pads_h": "Más pads",
+  "rooms.followers": {
+    "one": "{!n} seguidor",
+    "many": "{!n} de seguidores",
+    "other": "{!n} seguidores"
+  },
+  "rooms.followers_tip": {
+    "one": "{n} persona sigue este pad",
+    "many": "{n} de personas siguen este pad",
+    "other": "{n} personas siguen este pad"
+  },
   "rooms.following_h": "⭐ Siguiendo",
   "rooms.following_n": {
     "one": "{count} pad que sigues",
@@ -4258,6 +4268,11 @@
   "pad.hdr.followers": {
     "one": "{!n} seguidor",
     "other": "{!n} seguidores"
+  },
+  "pad.hdr.followers_tip": {
+    "one": "{n} persona sigue este pad",
+    "many": "{n} de personas siguen este pad",
+    "other": "{n} personas siguen este pad"
   },
   "pad.menu.aria": "Más: reglas, estadísticas, compartir",
   "pad.menu.more": "Más",

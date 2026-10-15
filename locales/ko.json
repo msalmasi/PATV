@@ -4075,6 +4075,12 @@
   "rooms.boost": "🚀 부스트",
   "rooms.pads_h": "패드",
   "rooms.other_pads_h": "더 많은 패드",
+  "rooms.followers": {
+    "other": "{!n} 팔로워"
+  },
+  "rooms.followers_tip": {
+    "other": "이 패드를 팔로우하는 사람이 {n}명이에요"
+  },
   "rooms.following_h": "⭐ 팔로잉",
   "rooms.following_n": {
     "other": "팔로우한 패드 {count}개"
@@ -4158,6 +4164,9 @@
   "pad.hdr.follow_tip": "이 패드를 팔로우하면 게시물이 팔로잉 피드에 나와요",
   "pad.hdr.followers": {
     "other": "팔로워 {!n}명"
+  },
+  "pad.hdr.followers_tip": {
+    "other": "이 패드를 팔로우하는 사람이 {n}명이에요"
   },
   "pad.menu.aria": "더보기: 규칙, 분석, 공유",
   "pad.menu.more": "더보기",

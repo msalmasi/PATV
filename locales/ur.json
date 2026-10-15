@@ -4143,6 +4143,14 @@
   "rooms.boost": "🚀 بوسٹ",
   "rooms.pads_h": "پیڈز",
   "rooms.other_pads_h": "مزید پیڈز",
+  "rooms.followers": {
+    "one": "{!n} فالوور",
+    "other": "{!n} فالوورز"
+  },
+  "rooms.followers_tip": {
+    "one": "{n} شخص اس پیڈ کو فالو کرتا ہے",
+    "other": "{n} افراد اس پیڈ کو فالو کرتے ہیں"
+  },
   "rooms.following_h": "⭐ فالو کردہ",
   "rooms.following_n": {
     "one": "{count} پیڈ جسے آپ فالو کرتے ہیں",
@@ -4229,6 +4237,10 @@
   "pad.hdr.followers": {
     "one": "{!n} فالوور",
     "other": "{!n} فالوورز"
+  },
+  "pad.hdr.followers_tip": {
+    "one": "{n} شخص اس پیڈ کو فالو کرتا ہے",
+    "other": "{n} افراد اس پیڈ کو فالو کرتے ہیں"
   },
   "pad.menu.aria": "مزید: اصول، تجزیات، شیئر",
   "pad.menu.more": "مزید",
