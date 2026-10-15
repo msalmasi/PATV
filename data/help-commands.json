@@ -1727,7 +1727,7 @@
     "!spin"
    ],
    "summary": "Spin the Wheel of Misfortune.",
-   "details": "Spin the Wheel of Misfortune. Costs 5,000 PAT per spin, and every spin goes into the casino jackpot — which pays the prizes too. The thin **glowing gold slice** is the jackpot: it lands about **1 in 3,000 spins** and always pays a rolled share of the **wheel jackpot** (the casino pot, capped at 5M) — usually a few hundred thousand, sometimes millions, and once in a while the whole thing. In chat Pepe keeps it quiet: a short \"spinning\" line in the room and your result by private message (/msg); only a **jackpot** is announced to the room.",
+   "details": "Spin the Wheel of Misfortune. Costs 5,000 PAT per spin, and every spin goes into the casino jackpot — which pays the prizes too. The thin **glowing gold slice** is the jackpot: it lands about **1 in 3,000 spins** and always pays a rolled share of the **wheel jackpot** (the casino pot, capped at 5M) — usually a few hundred thousand, sometimes millions, and once in a while the whole thing. In chat Pepe keeps it quiet: the spin (cost, your balance) and your result come by private message (/msg) and nothing is posted in the room - only a **jackpot** is announced to the room.",
    "examples": [],
    "keywords": [
     "wheel",
@@ -7750,5 +7750,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "35d079995b1dfa83"
+ "hash": "a8ecfee6004d7e64"
 }

@@ -1,4 +1,4 @@
-<%# 1.99yz: how Pepe answers a chat !spin (spincfg.js) - private by default (a short line in the room, the result by /msg; a
+<%# 1.99yz: how Pepe answers a chat !spin (spincfg.js) - private by default (the spin + its result by /msg, nothing in the room; a
     jackpot is still shouted in the room). Pepe reads it from each chat spin's answer. public/js/admin-spincfg.js. Admins only. %>
 <section class="adm-card" id="chatspin" aria-labelledby="chatspinT">
   <h2 id="chatspinT">Chat spins (!spin) <span class="adm-pill admin">admins</span> <span class="adm-msg" id="spinCfgMsg" role="status" aria-live="polite"></span></h2>
@@ -9,7 +9,7 @@
   <form id="spinCfgForm" class="adm-form" autocomplete="off">
     <label for="spinCfgMode">Chat spin results
       <select id="spinCfgMode" name="chat_private">
-        <option value="private">Private - by /msg, jackpots in the room</option>
+        <option value="private">Private - all by /msg, only jackpots in the room</option>
         <option value="public">Public - every result in the room</option>
       </select></label>
     <div class="adm-actions"><button class="ds-btn sm" type="submit">Save</button></div>
