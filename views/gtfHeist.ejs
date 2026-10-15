@@ -57,7 +57,7 @@
   </div>
   <div class="grid">
     <div class="stage<%= first && first.heist ? ' on' : '' %>" id="hlStage">
-      <iframe src="/gtf/heist/overlay?view=games&amp;feed=/api/gtf/heist/live" title="<%- t('gtf.live.frame') %>" loading="eager" referrerpolicy="same-origin"></iframe>
+      <iframe style="color-scheme: light" src="/gtf/heist/overlay?view=games&amp;feed=/api/gtf/heist/live" title="<%- t('gtf.live.frame') %>" loading="eager" referrerpolicy="same-origin"></iframe>
       <div class="idle" id="hlIdle"><%- L.none %></div>
     </div>
     <div class="card" aria-live="polite">
