@@ -169,6 +169,8 @@
       renderTabs();
       // 1.99aal: 🟣 admins - Pepe's Twitch relay switch on his stream's player (twitch-btn.js, only on admins' pages)
       if (window.PATVTwitchBtn) window.PATVTwitchBtn.sync(o.wrap.parentNode || o.wrap, !s && pepeHere && pepeOn);
+      // 1.99aan: ✂ Cut / 📺 Play content here under the player (site staff; onair-bar.js)
+      if (window.PATVOnAirBar && pepeHere) window.PATVOnAirBar.sync(o.wrap.parentNode || o.wrap);
       if (o.onShow) o.onShow(selection());
     }
     // 1.99cr: what's on screen, for the Snap / Clip bar (stage-capture.js). Pepe's stream is captured from

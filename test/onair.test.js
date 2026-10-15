@@ -322,3 +322,42 @@ test("1.99aal: the switch target is Main; a stored cfg from before (scene Pepe, 
   assert.equal(OA.config().scene, "Pepe");
   await OA.saveConfig({ scene: "Main" }, "test");
 });
+
+test("1.99aan: the player's ✂ Cut / 📺 Play bar - Admin + Staff only (endpoints 403 for members, settings Admin-only); pages load it only for staff", async () => {
+  const express = require("express");
+  const app = express();
+  app.use(express.json());
+  const addUser = (req, res, next) => {
+    const c = req.headers["x-test-class"];
+    req.user = c ? { userId: "u-" + c, username: "n-" + c, class: c } : null;
+    next();
+  };
+  OA.register(app, { addUser, isBotToken: () => false, noTimers: true });
+  const srv = await new Promise((ok) => { const s = app.listen(0, "127.0.0.1", () => ok(s)); });
+  const base = "http://127.0.0.1:" + srv.address().port;
+  const H = (c) => ({ "Content-Type": "application/json", "X-Requested-With": "fetch", ...(c ? { "x-test-class": c } : {}) });
+  const get = (c) => fetch(base + "/api/stage/admin/onair", { headers: H(c) });
+  const post = (c, b) => fetch(base + "/api/stage/admin/onair", { method: "POST", headers: H(c), body: JSON.stringify(b) });
+  try {
+    assert.equal((await get(null)).status, 403, "signed out");
+    assert.equal((await get("pleb")).status, 403, "a member");
+    assert.equal((await get("Staff")).status, 200);
+    assert.equal((await get("Admin")).status, 200);
+    assert.equal((await post("pleb", { action: "off" })).status, 403, "a member can't cut");
+    assert.equal((await post("Staff", { action: "off" })).status, 200, "staff can cut");
+    const a = await live();
+    assert.equal((await post("pleb", { action: "slot", slot_id: a.id })).status, 403);
+    const r = await post("Staff", { action: "slot", slot_id: a.id });
+    assert.equal(r.status, 200);
+    assert.equal((await r.json()).target.slot_id, a.id);
+    assert.equal((await post("Staff", { action: "config", cfg: { enabled: false } })).status, 403, "settings stay Admin-only");
+    assert.equal((await post("Staff", { action: "off" })).status, 200);
+  } finally { srv.close(); }
+  // the scripts are only on staff pages: the pad page behind onairAdmin (Admin / Staff, bridge.js), home behind a signed-in
+  // user + the 403 above (the bar never renders for anyone else)
+  const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
+  assert.match(room, /if \(typeof onairAdmin !== 'undefined' && onairAdmin\) \{ %>[^%]*onair-bar\.js/);
+  assert.equal((room.match(/onair-bar\.js/g) || []).length, 1);
+  const bridgeSrc = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
+  assert.match(bridgeSrc, /onairAdmin: !!\(req\.user && \(req\.user\.class === "Admin" \|\| req\.user\.class === "Staff"\)\)/);
+});
