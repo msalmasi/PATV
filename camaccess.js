@@ -2,8 +2,9 @@
 //
 // The on / off switch stays where it was (livecam_optout: /settings/privacy or !livecam off|on). While it's on, the cam
 // owner (their Camfrog login) picks one of these modes:
-//   everyone   any signed-in member (the default - what "on" always meant)
-//   members    signed-in members with a linked Camfrog name or another proven identity (verified.js)
+//   everyone   any signed-in member (what "on" meant before 1.99aav)
+//   members    signed-in members with a linked Camfrog name or another proven identity (verified.js) - THE DEFAULT since
+//              1.99aav (the user's call, 2026-10-15): an owner who never chose gets this; an explicit choice is kept
 //   followers  people who follow the owner's PATV account (follows.js; an owner without a linked account has no followers,
 //              so everyone else has to ask)
 //   request    nobody until the owner says yes
@@ -27,6 +28,7 @@ const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const MODES = ["everyone", "members", "followers", "request"];
+const DEFAULT_MODE = "members";            // 1.99aav: verified members, unless the owner chose otherwise
 const LOGIN_RE = /^[\w.\-$]{1,40}$/;
 const REQ_TTL_MS = 10 * 60 * 1000;
 const GRANT_MS = 6 * 3600 * 1000;
@@ -107,7 +109,7 @@ function init() {
 /** The owner's mode (sync once init() ran). */
 function accessOf(owner) {
   const a = ACCESS.get(low(owner));
-  return a ? { mode: a.mode, ask: a.ask } : { mode: "everyone", ask: true };
+  return a ? { mode: a.mode, ask: a.ask } : { mode: DEFAULT_MODE, ask: true };
 }
 const allowed = (owner, userId) => { const m = ALLOW.get(low(owner)); return !!(m && m.has(String(userId))); };
 function openReq(owner, userId, t = now()) {
@@ -162,7 +164,7 @@ async function setMode(owner, mode, { ask, via = "web", userId = null, t = now()
   await runQuery(`INSERT INTO cam_access (owner, mode, ask, updated, via, user_id) VALUES (?, ?, ?, ?, ?, ?)
                   ON CONFLICT(owner) DO UPDATE SET mode = excluded.mode, ask = excluded.ask, updated = excluded.updated, via = excluded.via,
                   user_id = COALESCE(excluded.user_id, cam_access.user_id)`, [o, a.mode, a.ask ? 1 : 0, t, via === "chat" ? "chat" : "web", userId]);
-  if (a.mode === "everyone") ACCESS.delete(o); else ACCESS.set(o, a);
+  ACCESS.set(o, a);                          // 1.99aav: "everyone" is a choice now (the default is members), so it's kept too
   const ended = await recheck(o, t);
   console.log(`[camaccess] ${o}: ${a.mode}${a.mode !== "everyone" && a.mode !== "request" ? (a.ask ? " (others can ask)" : " (no asking)") : ""} via ${via}${ended ? `, ${ended} live viewer(s) ended` : ""}`);
   return { ok: true, ...a, ended };
@@ -339,7 +341,7 @@ function stats() {
 
 module.exports = {
   init, gate, accessOf, setMode, listAllow, allow, disallow, ask, askState, answer, pendingFor, forBot, prune, stats, recheck,
-  MODES, MSG, REQ_TTL_MS, GRANT_MS, REASK_MS,
+  MODES, DEFAULT_MODE, MSG, REQ_TTL_MS, GRANT_MS, REASK_MS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setDeps: (d) => { deps = Object.assign({}, deps, d || {}); },
   _reset: () => { ACCESS = new Map(); ALLOW = new Map(); REQ.clear(); ASKED.clear(); ready = null; },

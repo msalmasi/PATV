@@ -44,8 +44,18 @@ test.before(async () => {
   await CV.init();
 });
 
-test("everyone is the default; the owner always sees their own cam", async () => {
+test("verified members is the default (1.99aav); everyone is a choice that's kept; the owner always sees their own cam", async () => {
+  assert.equal(CA.accessOf("alice").mode, "members");
+  assert.equal(await CA.gate("alice", "u-ver"), null);
+  const g = await CA.gate("alice", "u-rando");
+  assert.equal(g.code, "cam_members");
+  assert.equal(g.can_ask, true, "an unverified viewer can still ask");
+  await CA.setMode("alice", "everyone", { via: "web" });
+  assert.equal(CA.accessOf("alice").mode, "everyone");
   assert.equal(await CA.gate("alice", "u-rando"), null);
+  CA._reset();
+  await CA.init();
+  assert.equal(CA.accessOf("alice").mode, "everyone", "an explicit everyone survives a restart");
   await CA.setMode("alice", "request", { via: "web" });
   assert.equal(await CA.gate("alice", "u-owner"), null);
   await CA.setMode("alice", "everyone", { via: "web" });

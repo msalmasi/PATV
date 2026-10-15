@@ -1091,7 +1091,7 @@
     "!livecam ask on|off"
    ],
    "summary": "Can people on the website see your cam (live, snapshots, clips) - and who?",
-   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; `!livecam on` allows it again. While it's on, choose who: `!livecam everyone` (any signed-in member, the default), `!livecam members` (verified members: a linked Camfrog name or a verified account), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`).",
+   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; `!livecam on` allows it again. While it's on, choose who: `!livecam members` (verified members: a linked Camfrog name or a verified account - the default), `!livecam everyone` (any signed-in member), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`).",
    "examples": [
     "!livecam off",
     "!livecam followers",
@@ -7834,5 +7834,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "054edb6326317182"
+ "hash": "4109f8ff0515eab1"
 }

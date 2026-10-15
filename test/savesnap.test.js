@@ -17,6 +17,8 @@ const express = require("express");
 const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const relay = require(path.join(repo, "bridge-relay"));
 require(path.join(repo, "actions"));      // creates pepe_actions
+// 1.99aav: who may watch is camaccess.test.js's business - here every cam is "everyone" (the save rules are the subject)
+require(path.join(repo, "camviewers"))._setDeps({ gate: async () => null });
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(3000, 7)]);
 const R = { id: "Room.One", slug: "room-one", cams: true, members: [

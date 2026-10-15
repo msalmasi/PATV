@@ -34,7 +34,8 @@ CV._setClock(() => T);
 const kicked = [];
 LC._setKick((id) => kicked.push(id));
 const PRIVATE = new Set();
-CV._setDeps({ privateLogins: async (list) => new Set(list.filter((l) => PRIVATE.has(l))) });
+// 1.99aav: these tests are about notices / blocks, not who may watch (camaccess.test.js) - every cam is set to "everyone"
+CV._setDeps({ privateLogins: async (list) => new Set(list.filter((l) => PRIVATE.has(l))), gate: async () => null });
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(2000, 7)]);
 const R = { id: "Room.One", slug: "room-one", cams: true, livecams: true, members: [
