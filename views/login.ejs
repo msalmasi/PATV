@@ -24,6 +24,7 @@
     <div class="ds-note ok au-alert" role="status"><%- t('auth.sso.link_on_signin', { provider: ssoPending.label, who: ssoPending.who || ssoPending.label }) %></div>
     <% } %>
     <form action="/login" method="POST" data-au-form>
+      <% if (typeof authFormToken === "string" && authFormToken) { %><input type="hidden" name="_ft" value="<%= authFormToken %>"><% } %>
       <input type="hidden" name="next" value="<%= next %>">
       <% if (locals.plexPending) { %><input type="hidden" name="link_plex" value="1"><% } %>
       <% if (locals.ssoPending) { %><input type="hidden" name="link_sso" value="<%= ssoPending.provider %>"><% } %>

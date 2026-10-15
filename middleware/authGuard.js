@@ -53,16 +53,92 @@ function refererNext(req) {
 // CSRF: same check as the rest of the site. The login cookie is SameSite=Lax; this is a second
 // check for browsers that send Origin/Referer (they all do on form POSTs).
 // ---------------------------------------------------------------------------------------------
-function sameSite(req) {
-  const host = req.get("host");
-  const src = req.get("origin") || req.get("referer");
-  if (!src || !host) return true;
+// 1.99zl: hosts compare without a leading "www." (publicaccess.tv and www.publicaccess.tv are one site),
+// case-insensitively. staging.publicaccess.tv stays separate from prod.
+const siteHost = (h) => String(h || "").trim().toLowerCase().replace(/^www\./, "");
+function hostMatches(srcUrl, host) {
   try {
-    return new URL(src).host === host;
+    const h = siteHost(host);
+    return !!h && siteHost(new URL(srcUrl).host) === h;
   } catch (e) {
     return false;
   }
 }
+
+function sameSite(req) {
+  const host = req.get("host");
+  const src = req.get("origin") || req.get("referer");
+  if (!src || !host) return true;
+  return hostMatches(src, host);   // "Origin: null" (opaque) is refused here - JSON/fetch APIs stay strict
+}
+
+/**
+ * 1.99zl: where an auth FORM post came from - "same", "foreign", or "opaque" (no usable source: Origin
+ * absent or "null" and no Referer). Browsers send "Origin: null" on a POST from a page served with
+ * Referrer-Policy: no-referrer (the reset page used to be), from privacy modes and from some in-app
+ * webviews (Gmail / Instagram / Facebook) - an opaque origin is not evidence of a cross-site post.
+ */
+function originState(req) {
+  const host = req.get("host");
+  if (!host) return "opaque";
+  const origin = req.get("origin");
+  if (origin && origin !== "null") return hostMatches(origin, host) ? "same" : "foreign";
+  const ref = req.get("referer");
+  if (ref) return hostMatches(ref, host) ? "same" : "foreign";
+  return "opaque";
+}
+
+// Per-form token (double submit): a random value in a signed, httpOnly, SameSite=Lax cookie and the same value
+// in a hidden field. A cross-site POST never carries a Lax cookie, so a matching pair proves the form came from
+// a page of this site even when the browser hides the origin.
+const FORM_COOKIE = "au_ft";
+const FORM_TTL_MS = 2 * 3600 * 1000;
+const FORM_RE = /^[a-f0-9]{32}$/;
+function cookieValue(req) {
+  const v = (req.signedCookies && req.signedCookies[FORM_COOKIE]) || null;
+  return typeof v === "string" && FORM_RE.test(v) ? v : null;
+}
+/** The token for this visitor (reused while the cookie lives), setting the cookie when it's new. */
+function formToken(req, res) {
+  let v = cookieValue(req);
+  if (!v) v = require("crypto").randomBytes(16).toString("hex");
+  const secure = !!(req.secure || String(req.get("x-forwarded-proto") || "").split(",")[0].trim() === "https");
+  try {
+    res.cookie(FORM_COOKIE, v, { signed: true, httpOnly: true, sameSite: "lax", secure, path: "/", maxAge: FORM_TTL_MS });
+  } catch (e) {
+    return null;   // no cookie secret - the form simply goes without a token
+  }
+  return v;
+}
+/** Express middleware for the auth pages: res.locals.authFormToken for the hidden "_ft" field. */
+function formTokenMw(req, res, next) {
+  res.locals.authFormToken = formToken(req, res);
+  next();
+}
+function formTokenOk(req) {
+  const c = cookieValue(req);
+  const b = req.body && typeof req.body._ft === "string" ? req.body._ft : "";
+  if (!c || !FORM_RE.test(b)) return false;
+  return require("crypto").timingSafeEqual(Buffer.from(c), Buffer.from(b));
+}
+
+/**
+ * The CSRF check for the unauthenticated auth forms (sign-in, sign-up, forgot / reset password).
+ * same-site source: yes. foreign source: no. opaque: yes with a valid form token, yes when the browser
+ * sent neither Origin nor Referer (as sameSite() always allowed), and for "Origin: null" without a token
+ * only with opts.lowValue (forgot-password only mails the address typed; reset needs the secret token in
+ * its URL).
+ */
+function authFormOk(req, opts) {
+  const s = originState(req);
+  if (s === "same") return true;
+  if (s === "foreign") return false;
+  if (formTokenOk(req)) return true;
+  if (!req.get("origin")) return true;
+  return !!(opts && opts.lowValue);
+}
+
+const FORM_REFUSED = "We couldn't confirm this form came from publicaccess.tv. Please open the link in your regular browser (Chrome, Safari or Firefox) and try again.";
 
 // ---------------------------------------------------------------------------------------------
 // Rate limiting
@@ -172,6 +248,11 @@ module.exports = {
   safeNext,
   refererNext,
   sameSite,
+  originState,
+  authFormOk,
+  formToken,
+  formTokenMw,
+  FORM_REFUSED,
   clientIp,
   clientAddr,
   isLoopback,

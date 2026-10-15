@@ -353,6 +353,10 @@ app.get("/protected", authenticateToken, (req, res) => {
 // resetPassword.ejs; handlers in user.controller.js; helpers in middleware/authGuard.js) ──
 // Everything an auth page renders with: flash messages, what the visitor typed last time (never a
 // password), and a safe "return to" path - ?next= when given, else the page they came from.
+// 1.99zl: the auth forms carry a per-form token (hidden "_ft", guard.formTokenMw) so a browser that hides the
+// origin ("Origin: null" - privacy modes, in-app webviews) can still sign in / reset; see guard.authFormOk.
+app.get(["/login", "/register", "/forgot-password", "/reset-password/:token"], guard.formTokenMw);
+
 function authView(req, extra) {
   let form = {};
   // the newest one wins (two posts without a page view in between leave two)
@@ -1044,7 +1048,7 @@ app.get("/forgot-password", addUser, (req, res) => {
 });
 
 app.post("/forgot-password", async (req, res) => {
-  if (!guard.sameSite(req)) return res.status(403).send("Cross-site request refused");
+  if (!guard.authFormOk(req, { lowValue: true })) return res.status(403).send(guard.FORM_REFUSED);
   const email = String((req.body && req.body.email) || "").trim();
   const bad = guard.checkEmail(email);
   if (bad) {
@@ -1094,7 +1098,9 @@ app.get("/reset-password/:token", addUser, async (req, res) => {
       req.flash("error", "That reset link is invalid or has expired. Ask for a new one below.");
       return res.redirect("/forgot-password");
     }
-    res.set("Referrer-Policy", "no-referrer");   // the token is in this URL
+    // the token is in this URL: never sent to another site. 1.99zl: was "no-referrer", which makes every browser
+    // post the form with "Origin: null" - the CSRF check refused every password reset.
+    res.set("Referrer-Policy", "same-origin");
     res.render("resetPassword", authView(req, { token }));
   } catch (error) {
     console.error("[auth] reset page error:", error.message);
@@ -1104,7 +1110,7 @@ app.get("/reset-password/:token", addUser, async (req, res) => {
 });
 
 app.post("/reset-password/:token", async (req, res) => {
-  if (!guard.sameSite(req)) return res.status(403).send("Cross-site request refused");
+  if (!guard.authFormOk(req, { lowValue: true })) return res.status(403).send(guard.FORM_REFUSED);
   const token = req.params.token;
   const backHere = (msg, field) => {
     req.flash("error", msg);

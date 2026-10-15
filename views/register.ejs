@@ -28,6 +28,7 @@
     <% if (errs.length && !inline) { %><div class="ds-note danger au-alert" role="alert"><%= errs.join(' ') %></div><% } %>
 
     <form action="/register" method="POST" data-au-form>
+      <% if (typeof authFormToken === "string" && authFormToken) { %><input type="hidden" name="_ft" value="<%= authFormToken %>"><% } %>
       <input type="hidden" name="next" value="<%= next %>">
       <div class="ds-field au-field">
         <label for="username"><%- t('auth.username') %></label>
