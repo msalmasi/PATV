@@ -744,6 +744,9 @@
   <%# 1.99za: the live room, in the order the user asked for (phones read it top to bottom; on a wide screen the chat
       column is on the left, the side column on the right): the chat (room audio ▶ right under its heading) -> the cam
       strip slot -> On the mic -> In the chatroom -> Latest from the feed -> Manage room. %>
+  <%# ── cam strip slot (1.99zv): ABOVE the chat, under the stage / Go live cards (full width, desktop and phones). The card is
+      hidden (zero height) until a cam is pinned, and on phones it is one compact swipe row, so the chat + ▶ room audio stay near the top ── %>
+  <%- include('partials/cam-strip', { slug: room.slug }) %><%# 1.99zc: 📌 the cam strip (pad-camstrip.js; 1.99zv: above the chat) %>
   <div class="grid rm-live">
     <div class="rm-main">
     <section class="card rm-chat" id="rmChat" aria-labelledby="chatH">
@@ -771,8 +774,6 @@
         <% } %>
       </div>
     </section>
-    <%# ── cam strip slot (1.99za): the live cam strip's partial goes HERE, straight under the chat ── %>
-    <%- include('partials/cam-strip', { slug: room.slug }) %><%# 1.99zc: 📌 the cam strip (pad-camstrip.js) %>
     </div>
     <aside class="side">
       <section class="card rm-mic" id="rmMicCard" aria-labelledby="micH">

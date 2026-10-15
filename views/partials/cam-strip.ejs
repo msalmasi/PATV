@@ -35,13 +35,24 @@
   .cam-strip .cs-name { font-size: 13.5px; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
   .cam-strip .cs-note { margin: 8px 0 0; font-size: 12.5px; color: var(--ds-text-muted, #999); }
   .cam-strip .cs-note:empty { display: none; }
-  /* phones: one swipeable row (scroll-snap), each cam most of the width so the next one peeks in */
+  /* phones (1.99zv: the strip is above the chat): one COMPACT swipeable row - two small cams side by side (the next peeks
+     in), so the chat + ▶ room audio stay close to the top; ⤢ makes one full width */
   @media (max-width: 700px) {
     .cam-strip { padding: 10px 10px 12px; }
     .cam-strip .cs-row { display: flex; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
                          gap: 8px; padding-bottom: 4px; scrollbar-width: thin; }
-    .cam-strip .cs-tile { flex: 0 0 78%; scroll-snap-align: start; }
-    .cam-strip:not(.cs-many) .cs-tile, .cam-strip .cs-tile.big { flex-basis: 100%; }
+    .cam-strip .cs-head { gap: 4px; }
+    .cam-strip .cs-title { font-size: 13px; }
+    .cam-strip .cs-btn { min-height: 30px; padding: 0 10px; font-size: 12px; }
+    .cam-strip .cs-row { margin-top: 6px; }
+    .cam-strip .cs-tile { flex: 0 0 46%; scroll-snap-align: start; }
+    .cam-strip:not(.cs-many) .cs-tile { flex-basis: 62%; }
+    .cam-strip .cs-tile.big { flex-basis: 100%; }
+    .cam-strip .cs-name { font-size: 12.5px; }
+    .cam-strip .cs-ic { width: 32px; height: 32px; font-size: 14px; top: 4px; }
+    .cam-strip .cs-x { right: 4px; }
+    .cam-strip .cs-big { right: 40px; }
+    .cam-strip .cs-badge { left: 5px; top: 5px; font-size: 10.5px; padding: 1px 6px; }
   }
   @media (prefers-reduced-motion: reduce) { .cam-strip .cs-row { scroll-behavior: auto; } }
 </style>

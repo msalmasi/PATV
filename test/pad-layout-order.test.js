@@ -1,5 +1,5 @@
 // Offline tests for the 1.99za layout pass: the pad page puts the chat first (compact header, slim Stage / Go live,
-// room audio under the chat heading, then cam strip slot -> On the mic -> In the chatroom -> latest posts -> Manage
+// (1.99zv: the cam strip above the chat, under the stage) room audio under the chat heading, then On the mic -> In the chatroom -> latest posts -> Manage
 // room), the nav's "My pads" (owned + followed) and the /p "Following" section.
 //   node --test test/pad-layout-order.test.js      (needs the repo's node_modules)
 "use strict";
@@ -42,20 +42,25 @@ test("Live tab order: chat (room audio under its heading) -> On the mic -> In th
   const mic = live.slice(at(live, 'id="rmMicCard"'), at(live, 'id="rmPplCard"'));
   assert.doesNotMatch(mic, /rmAudioBox/);
   assert.equal((html.match(/id="rmAudioBox"/g) || []).length, 1, "one audio box");
-  // the chat column and the side column: chat + the cam strip slot left, mic / people / posts / manage right
+  // the chat column and the side column: chat left, mic / people / posts / manage right
   assert.match(live, /<div class="grid rm-live">\s*<div class="rm-main">\s*<section class="card rm-chat" id="rmChat"/);
-  // 1.99zc: the cam strip partial (its card, styles, script) fills the slot under the chat, still inside the chat column
-  assert.match(live, /<\/section>\s*<section class="card cam-strip" id="rmStrip"[^>]*hidden><\/section>[\s\S]*?<\/script>\s*<\/div>\s*<aside class="side">\s*<section class="card rm-mic" id="rmMicCard"/);
+  assert.match(live, /<\/section>\s*<\/div>\s*<aside class="side">\s*<section class="card rm-mic" id="rmMicCard"/);
+  // 1.99zv: the cam strip (hidden until a cam is pinned) sits ABOVE the chat, under the stage / Go live cards
+  assert.ok(at(live, 'id="rmGoLive"') < at(live, 'id="rmStrip"') && at(live, 'id="rmStrip"') < at(live, 'id="rmChat"'), "go live -> strip -> chat");
+  assert.match(live, /<section class="card cam-strip" id="rmStrip"[^>]*hidden><\/section>/);
   // the stage + go-live cards come before the chat, the header carries no description
   assert.ok(at(live, 'id="rmStage"') < at(live, 'id="rmGoLive"') && at(live, 'id="rmGoLive"') < at(live, 'id="rmChat"'));
 });
 
-test("the cam strip insertion point sits between the chat card and On the mic (source)", () => {
+test("the cam strip insertion point sits above the chat, under the stage / Go live cards (source)", () => {
   const src = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
-  const chat = src.indexOf('id="rmChat"'), slot = src.indexOf("cam strip slot (1.99za)"), mic = src.indexOf('id="rmMicCard"');
-  assert.ok(chat > 0 && slot > chat && mic > slot, "chat -> slot -> mic");
-  assert.ok(src.lastIndexOf("</section>", slot) > chat, "the slot is after the chat card closes");
-  assert.ok(src.indexOf("</div>", slot) < src.indexOf('<aside class="side">', slot), "and inside the chat column");
+  const golive = src.indexOf('id="rmGoLive"'), slot = src.indexOf("include('partials/cam-strip'"), grid = src.indexOf('<div class="grid rm-live">'), chat = src.indexOf('id="rmChat"');
+  assert.ok(golive > 0 && slot > golive && grid > slot && chat > grid, "go live -> strip -> chat grid");
+  assert.equal(src.split("include('partials/cam-strip'").length, 2, "one insertion point");
+  // compact on phones: zero height while empty, one short swipe row with tiles
+  const part = fs.readFileSync(path.join(repo, "views", "partials", "cam-strip.ejs"), "utf8");
+  assert.match(part, /\.cam-strip\[hidden\] \{ display: none; \}/);
+  assert.match(part, /@media \(max-width: 700px\)[\s\S]*scroll-snap-type: x mandatory/);
 });
 
 test("story strip: at the end of the Live tab when there are captures, never above the tabs", async () => {
