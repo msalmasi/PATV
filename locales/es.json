@@ -4485,7 +4485,6 @@
   "pad.streak.mine": "Tu racha habitual aquí: {n} días seguidos (mejor {b})",
   "pad.streak.mine_none": "Escribe o entra al micro aquí para empezar tu racha habitual.",
   "pad.streak.next": "próxima insignia a los {n} días",
-  "pad.streak.badges": "Los habituales ganan las insignias 👋 🪑 🏛️ a los 7, 30 y 100 días; el dueño del pad gana 💡 🏪 🗽 por la racha del pad.",
   "pad.vault.k_xfer_out": "🏠 movido a otro pad (admin)",
   "pad.vault.k_xfer_in": "🏠 movido desde otro pad (admin)",
   "pad.vault.h": "💰 Bóveda del pad",

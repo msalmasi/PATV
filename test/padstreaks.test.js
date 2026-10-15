@@ -115,14 +115,16 @@ test("metrics, card, profile", async () => {
   assert.equal(await PS.topForUser("c1"), null, "no running streak: nothing on the profile");
 });
 
-test("the catalog: six web achievements, XP and no PAT, localized", async () => {
+test("the catalog: eight web achievements, XP + the approved PAT, localized", async () => {
   const cat = JSON.parse(fs.readFileSync(path.join(repo, "achievements.json"), "utf8"));
   const list = (cat.achievements || cat).filter((a) => /^cf_(regular|padstreak)_/.test(a.id));
-  assert.equal(list.length, 6);
+  assert.equal(list.length, 8);
+  const PAT = { cf_regular_7: 15000, cf_regular_30: 60000, cf_regular_60: 200000, cf_regular_100: 400000,
+                cf_padstreak_7: 25000, cf_padstreak_30: 100000, cf_padstreak_60: 300000, cf_padstreak_100: 600000 };
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const a of list) {
     assert.equal(a.side, "web");
-    assert.equal(a.pat, 0, a.id + " pays no PAT (the user's call)");
+    assert.equal(a.pat, PAT[a.id], a.id + " pays the approved PAT");
     assert.ok(a.xp > 0);
     assert.equal(en["ach.n." + a.id], a.name);
     assert.equal(en["ach.d." + a.id], a.desc);

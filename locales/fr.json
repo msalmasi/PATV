@@ -4485,7 +4485,6 @@
   "pad.streak.mine": "Ta série d'habitué ici : {n} jours d'affilée (record {b})",
   "pad.streak.mine_none": "Discute ou viens au micro ici pour lancer ta série d'habitué.",
   "pad.streak.next": "prochain badge à {n} jours",
-  "pad.streak.badges": "Les habitués gagnent les badges 👋 🪑 🏛️ à 7, 30 et 100 jours ; le propriétaire du pad gagne 💡 🏪 🗽 pour la série du pad.",
   "pad.vault.k_xfer_out": "🏠 transféré vers un autre pad (admin)",
   "pad.vault.k_xfer_in": "🏠 transféré depuis un autre pad (admin)",
   "pad.vault.h": "💰 Coffre du pad",

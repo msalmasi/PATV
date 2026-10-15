@@ -4600,7 +4600,6 @@
   "pad.streak.mine": "Twoja seria stałego bywalca tutaj: {n} dni z rzędu (najlepsza: {b})",
   "pad.streak.mine_none": "Napisz na czacie lub wejdź na mikrofon, żeby zacząć swoją serię stałego bywalca.",
   "pad.streak.next": "następna odznaka po {n} dniach",
-  "pad.streak.badges": "Stali bywalcy zdobywają odznaki 👋 🪑 🏛️ po 7, 30 i 100 dniach; właściciel pada zdobywa 💡 🏪 🗽 za serię pada.",
   "pad.vault.k_xfer_out": "🏠 przeniesione do innego pada (administrator)",
   "pad.vault.k_xfer_in": "🏠 przeniesione z innego pada (administrator)",
   "pad.vault.h": "💰 Skarbiec pada",

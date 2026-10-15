@@ -4384,7 +4384,6 @@
   "pad.streak.mine": "你在這裡的常客連續：連續 {n} 天（最佳 {b}）",
   "pad.streak.mine_none": "在這裡聊天或上麥，即可開始你的常客連續紀錄。",
   "pad.streak.next": "下一枚徽章在 {n} 天",
-  "pad.streak.badges": "常客在連續 7、30 和 100 天時獲得 👋 🪑 🏛️ 徽章；小站的擁有者則因小站連續獲得 💡 🏪 🗽。",
   "pad.vault.k_xfer_out": "🏠 轉至其他小站（管理員）",
   "pad.vault.k_xfer_in": "🏠 從其他小站轉入（管理員）",
   "pad.vault.h": "💰 小站金庫",

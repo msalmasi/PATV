@@ -4456,7 +4456,6 @@
   "pad.streak.mine": "Jouw vaste reeks hier: {n} dagen op rij (beste {b})",
   "pad.streak.mine_none": "Chat of stap hier op de mic om je vaste reeks te starten.",
   "pad.streak.next": "volgende badge bij {n} dagen",
-  "pad.streak.badges": "Vaste bezoekers verdienen de badges 👋 🪑 🏛️ bij 7, 30 en 100 dagen; de eigenaar van de pad verdient 💡 🏪 🗽 voor de reeks van de pad.",
   "pad.vault.k_xfer_out": "🏠 overgezet naar een ander pad (admin)",
   "pad.vault.k_xfer_in": "🏠 overgezet van een ander pad (admin)",
   "pad.vault.h": "💰 Padkluis",

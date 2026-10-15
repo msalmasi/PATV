@@ -4456,7 +4456,6 @@
   "pad.streak.mine": "Deine Stammgast-Serie hier: {n} Tage am Stück (Bestwert {b})",
   "pad.streak.mine_none": "Chatte oder komm hier ans Mikro, um deine Stammgast-Serie zu starten.",
   "pad.streak.next": "nächstes Abzeichen bei {n} Tagen",
-  "pad.streak.badges": "Stammgäste verdienen die Abzeichen 👋 🪑 🏛️ bei 7, 30 und 100 Tagen; der Besitzer des Pads verdient 💡 🏪 🗽 für die Serie des Pads.",
   "pad.vault.k_xfer_out": "🏠 in ein anderes Pad verschoben (Admin)",
   "pad.vault.k_xfer_in": "🏠 aus einem anderen Pad übertragen (Admin)",
   "pad.vault.h": "💰 Pad-Tresor",

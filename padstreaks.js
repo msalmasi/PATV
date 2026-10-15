@@ -16,7 +16,9 @@
 // achievement launch.
 //
 // Rewards: the achievements (achievements.json cf_regular_* / cf_padstreak_*, side web, metrics pad_regular_streak / pad_streak)
-// carry XP like the other streak badges and NO PAT (pat 0 - a PAT amount is the user's call; proposal in the commit/report).
+// carry XP + PAT like the 🔥 daily streak milestones (1.99zx, the user 2026-10-14: regular 15k / 60k / 200k / 400k, pad owner
+// 25k / 100k / 300k / 600k at 7 / 30 / 60 / 100 days), paid like every achievement bonus (routing row "achievements": the incentive
+// budget's achievements group with the economy layers on, else the Reserve). History-reached milestones: badge only, no retro PAT.
 //
 //   pad_days        room_id, day, users (distinct active people, the most any source reported), src   PK (room_id, day)
 //   pad_regulars    room_id, userId, day                                                             PK (room_id, userId, day)
@@ -27,11 +29,12 @@
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 
-const BACKFILL_FLAG = "padstreak_backfill_1";
+const BACKFILL_FLAG = "padstreak_backfill_1";       // the history import
+const QUIET_FLAG = "padstreak_quiet_2";             // 1.99zx: the quiet badge pass - again for the 60-day tier (+ PAT from then on)
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ROOM_RE = /^[A-Za-z0-9_.:\-]{1,120}$/;
 const PEPE_LOGINS = new Set(["pepefrog", "pepebeta", "pepe", "pepebot"]);
-const MILESTONES = [7, 30, 100];
+const MILESTONES = [7, 30, 60, 100];
 const METRIC_PAD = "pad_streak", METRIC_REG = "pad_regular_streak";
 const DEFAULTS = Object.freeze({ min_users: 3 });
 
@@ -149,16 +152,22 @@ async function regularsOf(userId) {
   return out.sort((a, b) => b.current - a.current || b.best - a.best);
 }
 
-async function backfilled() {
+async function hasFlag(k) {
   await ready;
-  const r = await getQuery("SELECT 1 FROM achievement_meta WHERE k = ?", [BACKFILL_FLAG]).catch(() => []);
+  const r = await getQuery("SELECT 1 FROM achievement_meta WHERE k = ?", [k]).catch(() => []);
   return r.length > 0;
 }
+const imported = () => hasFlag(BACKFILL_FLAG);
+/** The history is imported AND its quiet badge pass (the current tiers) has run: from then on milestones are live (XP + PAT). */
+const backfilled = () => hasFlag(QUIET_FLAG);
 
 /** achievements.js webMetrics: {pad_regular_streak: the best regular run in any one pad, pad_streak: the best run of a pad this
  *  member owns now}. 0 before the backfill (nothing old is announced). */
 async function metrics(userId) {
   if (!userId || !(await backfilled())) return { [METRIC_PAD]: 0, [METRIC_REG]: 0 };
+  return rawMetrics(userId);
+}
+async function rawMetrics(userId) {
   const regs = await regularsOf(userId);
   const owned = await getQuery("SELECT room_id FROM rooms_registry WHERE owner_kind = 'user' AND owner_user_id = ?", [String(userId)]).catch(() => []);
   let pad = 0;
@@ -175,6 +184,13 @@ function backfill({ force = false } = {}) {
     await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
     if (!force && (await backfilled())) return { done: true, already: true };
     await loadPepe();
+    if (force || !(await imported())) await importHistory();
+    return quietPass();
+  })().catch((e) => { backfilling = null; throw e; });
+  return backfilling;
+}
+
+async function importHistory() {
     // 1. every participation row the site has (per room / day / login)
     const part = await getQuery("SELECT room_id AS room, day, login, lines, mic_min FROM econ_participation").catch(() => []);
     let fromPart = { pads: 0, regulars: 0 };
@@ -197,8 +213,14 @@ function backfill({ force = false } = {}) {
         }
       });
     }
-    // 3. what that history already earned: badge only (no XP, PAT or announcement)
-    await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES (?, ?)", [BACKFILL_FLAG, JSON.stringify({ at: new Date().toISOString(), running: true })]);
+    const rec = { at: new Date().toISOString(), participation_rows: part.length, roomstats_days: rsDays };
+    await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES (?, ?)", [BACKFILL_FLAG, JSON.stringify(rec)]);
+    console.log(`[padstreaks] history import: ${part.length} participation row(s), ${rsDays} analytics day(s)`);
+}
+
+/** What the history already earned, for every tier in the catalog: badge only (no XP, PAT or announcement) - the 1.99xi pattern.
+ *  Runs once per QUIET_FLAG (bumped when a tier is added: the 60-day ones, 1.99zx). */
+async function quietPass() {
     const A = require("./achievements");
     await A.ready;
     const ach = A.list().filter((a) => a.side === "web" && (a.metric === METRIC_PAD || a.metric === METRIC_REG));
@@ -208,19 +230,17 @@ function backfill({ force = false } = {}) {
     const given = {};
     for (const id of users) {
       if (!known.has(String(id)) || isPepe(id)) continue;
-      const m = await metrics(id);
+      const m = await rawMetrics(id);
       for (const a of ach) {
         if ((m[a.metric] || 0) < (a.threshold || 1)) continue;
         const r = await A.award({ userId: id }, a.id, null, { silent: true });
         if (r.ok && r.awarded) given[a.id] = (given[a.id] || 0) + 1;
       }
     }
-    const rec = { at: new Date().toISOString(), participation_rows: part.length, roomstats_days: rsDays, accounts: users.size, given };
-    await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES (?, ?)", [BACKFILL_FLAG, JSON.stringify(rec)]);
-    console.log(`[padstreaks] backfill: ${part.length} participation row(s), ${rsDays} analytics day(s); quiet badges ${JSON.stringify(given)}`);
+    const rec = { at: new Date().toISOString(), accounts: users.size, given };
+    await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES (?, ?)", [QUIET_FLAG, JSON.stringify(rec)]);
+    console.log(`[padstreaks] quiet badges ${JSON.stringify(given)}`);
     return Object.assign({ done: true }, rec);
-  })().catch((e) => { backfilling = null; throw e; });
-  return backfilling;
 }
 
 // ── API ──
@@ -281,5 +301,5 @@ if (!process.env.NODE_TEST_CONTEXT) {
 }
 
 module.exports = { ready, register, fromParticipation, padStreak, regularStreak, regularsOf, metrics, backfill, backfilled, card, topForUser,
-                   config, setConfig, MILESTONES, METRIC_PAD, METRIC_REG, BACKFILL_FLAG, _clearCache: () => { cfgCache = null; },
+                   config, setConfig, MILESTONES, METRIC_PAD, METRIC_REG, BACKFILL_FLAG, QUIET_FLAG, _clearCache: () => { cfgCache = null; },
                    _setClock: (f) => { clock = f || (() => Date.now()); } };

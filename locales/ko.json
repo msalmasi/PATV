@@ -4384,7 +4384,6 @@
   "pad.streak.mine": "여기서 내 단골 기록: {n}일 연속 (최고 {b})",
   "pad.streak.mine_none": "여기서 채팅하거나 마이크에 참여해서 단골 기록을 시작해 보세요.",
   "pad.streak.next": "다음 배지까지 {n}일",
-  "pad.streak.badges": "단골은 7, 30, 100일에 👋 🪑 🏛️ 배지를 받고, 패드 주인은 패드 연속 기록으로 💡 🏪 🗽 배지를 받아요.",
   "pad.vault.k_xfer_out": "🏠 다른 패드로 이동 (관리자)",
   "pad.vault.k_xfer_in": "🏠 다른 패드에서 이동 (관리자)",
   "pad.vault.h": "💰 패드 금고",
