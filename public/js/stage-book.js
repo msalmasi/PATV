@@ -198,7 +198,14 @@
     }
     // 1.99cr: may viewers snap / clip this stream, is it NSFW (not while a change is on its way)
     show('capOpts', !embed && !lib);
-    if (!capBusy) { $('capAllow').checked = s.capture !== false; $('capNsfw').checked = !!s.nsfw; }
+    // 1.99abe: the box is the streamer's own choice (capture_allowed); `capture` is also false when snaps / clips can't work on this
+    // stream at all (WHIP), which used to undo every click on the next poll - say so instead
+    if (!capBusy) { $('capAllow').checked = s.capture_allowed !== undefined ? !!s.capture_allowed : s.capture !== false; $('capNsfw').checked = !!s.nsfw; }
+    var na = $('capNa');
+    if (na) {
+      na.hidden = s.capture_na !== 'whip';
+      na.textContent = _t('js.stage.cap_na_whip', 'Snaps and clips aren\'t available for ultra-low-latency (WHIP) streams yet - your choice applies when you stream from OBS by RTMP or from the browser.');
+    }
     var k = null;
     try { k = sessionStorage.getItem(KEY_STORE + s.id); } catch (e) {}
     $('rtmpKey').value = k || '';

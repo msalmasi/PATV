@@ -70,6 +70,7 @@
         <legend><%- t('stage.cap_legend') %></legend>
         <label><input type="checkbox" id="capAllow" checked> <%- t('stage.cap_allow') %></label>
         <label><input type="checkbox" id="capNsfw"> <%- t('stage.cap_nsfw') %></label>
+        <p class="muted" id="capNa" hidden></p><%# 1.99abe: why snaps / clips can't work on this stream (WHIP) %>
       </fieldset>
       <p class="msg" id="slotMsg" role="status" aria-live="polite"></p>
 
@@ -272,7 +273,7 @@
   <% } %>
   <p class="muted center"><a href="/p"><%- t('stage.pads_link') %></a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
-<script src="/public/js/stage-book.js?v=10" defer></script>
+<script src="/public/js/stage-book.js?v=11" defer></script>
 <% if (me && px && px.show) { %><script src="/public/js/stage-plex.js?v=3" defer></script>
 <script>
   // 1.99kp: /stage?mode=plex (the /plex hub's "Play from Plex") picks the 📼 choice once the page's scripts are up

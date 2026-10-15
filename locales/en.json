@@ -9101,6 +9101,7 @@
   "ca.allow_ph": "PATV name",
   "ca.allow_add": "Add",
   "js.lc.saving": "Saving…",
+  "js.stage.cap_na_whip": "Snaps and clips aren't available for ultra-low-latency (WHIP) streams yet - your choice applies when you stream from OBS by RTMP or from the browser.",
   "js.pf.type": "Type FORGET to confirm.",
   "js.pf.done": "Done: {n} private message(s) with Pepe deleted here. Pepe forgets the rest within a minute.",
   "js.pad.live.ask": "🙋 Ask to watch",

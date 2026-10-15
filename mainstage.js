@@ -1484,6 +1484,10 @@ function view(s, t = now()) {
     mode: s.mode || "stream", embed: e, embed_label: e ? embeds.label(e) : null, title: s.title || null,
     // 1.99cr (stagecap.js): may viewers snap / clip this slot (its streamer's choice, default yes), is it NSFW
     capture: !s.capture_off && !isEmbed(s) && s.via !== "whip" && s.source !== "cam", nsfw: !!s.nsfw,
+    // 1.99abe: the streamer's own choice (the Go-live checkbox) apart from whether snaps / clips can work on this stream at all -
+    // the page re-synced the box from `capture`, which is false for a WHIP stream, so a click was undone on the next poll
+    capture_allowed: !s.capture_off,
+    capture_na: isEmbed(s) ? "embed" : s.via === "whip" ? "whip" : s.source === "cam" ? "cam" : null,
     library: s.source === "library",                                     // 1.99ji: 📼 played from the Plex library
     cam: s.source === "cam" ? { login: s.cam_login || null } : null,    // 1.99zc: 🎬 someone's live cam
   };
