@@ -19,7 +19,10 @@ const path = require("path");
 const SUFFIX = "-a";
 const PROBE_DELAY_MS = 12 * 1000;      // the first segments exist by then (hls_fragment 1 s; OBS keyframes every 2-8 s)
 const PROBE_TRIES = 4;
-const RESTARTS = 5;
+// 1.99abc: seen on prod - after an OBS stop / start the old repair's publisher lingers in nginx-rtmp for a while, so new tries
+// get "live: already publishing" (ffmpeg: Operation not permitted). Keep trying while the slot is live, the wait capped.
+const RESTARTS = 40;
+const RESTART_WAIT_MAX_MS = 30 * 1000;
 
 let deps = {
   hlsDir: () => path.resolve(process.env.STAGECAP_HLS_DIR || ("/mnt/hls" + (process.env.STAGING ? "/staging" : ""))),   // = stagecap.js
@@ -111,7 +114,7 @@ function start(s) {
     if (f.restarts < RESTARTS && (await deps.stillLive(s.id).catch(() => false))) {
       f.restarts++;
       console.log(`[stageaudio] ${s.stream}: repair exited (${code}) - restart ${f.restarts}/${RESTARTS}${err ? ": " + err.trim().split("\n").pop() : ""}`);
-      setTimeout(() => { if (!f.stopped) start(s); }, 3000 * f.restarts).unref();
+      setTimeout(() => { if (!f.stopped) start(s); }, Math.min(3000 * f.restarts, RESTART_WAIT_MAX_MS)).unref();
     } else {
       stop(s.id);
     }

@@ -45,7 +45,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -536,7 +536,9 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       if (busy >= cfg.maxStreams) throw fail(429, `Already ${busy} streams running (the most this box encodes at once).`);
       const rtmp = String(b.rtmp || "").replace(/\/+$/, ""), key = String(b.key || "");
       if (!cfg.rtmpAllow.some((p) => (rtmp + "/").startsWith(p))) throw fail(400, "RTMP target not allowed");
-      if (!/^[A-Za-z0-9_.~-]{8,200}$/.test(key)) throw fail(400, "bad stream key");
+      // 1.5.0 (site 1.99abc): the site's key form "<stage|stg>-<16 hex>?k=<secret>" (nginx-rtmp logs only the part before "?")
+      // or the old bare key
+      if (!/^(?:[A-Za-z0-9_.~-]{8,200}|(?:stage|stg)-[0-9a-f]{16}\?k=[A-Za-z0-9_.~-]{8,200})$/.test(key)) throw fail(400, "bad stream key");
       const ratingKey = String(b.ratingKey || "");
       if (!KEY_RE.test(ratingKey)) throw fail(400, "bad ratingKey");
       const info = await plex.item(ratingKey);

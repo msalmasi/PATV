@@ -459,6 +459,8 @@ function newKey() { return "ps" + crypto.randomBytes(30).toString("base64url"); 
 // name at "?": the name (public anyway - it's the HLS file name) is what its "notify: push" error line prints, the args ride
 // only in the on_publish POST (field k). The old bare-secret form still works (a key booked before, 📼 mediactl's keys).
 const pubKey = (stream, key) => `${stream}?k=${key}`;
+// 1.99abc: 📼 Plex (mediactl >= 1.5.0) gets the same form; STAGE_LIBRARY_PUBKEY=off = bare keys again (an older mediactl)
+const libKey = (stream, key) => (String(process.env.STAGE_LIBRARY_PUBKEY || "on").toLowerCase() === "off" || !stream ? key : pubKey(stream, key));
 function relayKey(slotId) {
   return "r." + slotId + "." + crypto.createHmac("sha256", RELAY_SECRET).update("stage-relay:" + slotId).digest("base64url").slice(0, 32);
 }
@@ -677,7 +679,9 @@ async function libraryOpen(user, opts = {}) {
   });
   pubCache.clear();
   await event(id, "library", user.username, `📼 ${title || "library"} (${minutes} min max)`, roomId);
-  return { slot: view(await getSlot(id)), key, rtmp: { server: RTMP_PUBLIC, key } };
+  const sl = await getSlot(id);
+  const lk = libKey(sl && sl.stream, key);                              // 1.99abc
+  return { slot: view(sl), key: lk, rtmp: { server: RTMP_PUBLIC, key: lk } };
 }
 /** A library slot needs more time (seeking back, a long pause): raise its max_minutes. */
 async function libraryExtend(slotId, minutes) {
@@ -715,7 +719,7 @@ async function libraryActivate(slotId, { title, minutes } = {}) {
   });
   pubCache.clear();
   await event(s.id, "library", s.username, `📼 booked slot started (${m} min max)`, s.room_id);
-  return key;
+  return libKey(s.stream, key);                                         // 1.99abc
 }
 /** 1.99lr: a fresh one-time key for an open library slot (the site restarted and forgot the raw key; the next title of a
  *  📼 queue publishes with it). The old key stops working for NEW publishes; one already on keeps its connection. */
@@ -724,7 +728,9 @@ async function libraryRekey(slotId) {
   const key = newKey();
   const r = await runQuery("UPDATE stage_slots SET key_hash = ? WHERE id = ? AND source = 'library' AND settled = 0 AND status IN ('waiting','active')",
                            [sha(key), String(slotId || "")]);
-  return r && r.changes ? key : null;
+  if (!(r && r.changes)) return null;
+  const sl = await getSlot(slotId);                                     // 1.99abc
+  return libKey(sl && sl.stream, key);
 }
 
 // ── settle: the ONLY place money comes back out of a slot ──
