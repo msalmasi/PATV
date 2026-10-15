@@ -47,6 +47,11 @@ const DEFAULTS = Object.freeze({
   cam_optin: true,               // a cam needs its owner's opt-in for the main stream
   allow_library: false,          // 📼 Plex library plays (Twitch relay = DMCA risk)
   auto_scene: true,              // switch OBS to `scene` when the program scene has no IRL in it
+  // 1.99aaa: IRL auto-switch - the operator's IRL feed going live while OBS is on one of irl_from switches OBS to `scene`
+  // (and back when it ends). Needs the IRL feed source always-on (Pepe's one-off `!onair setup irl`). Independent of
+  // `enabled` (that one is the 3rd-party on-air kill switch).
+  irl_switch: true,
+  irl_from: "BRB, Gaming",       // comma-separated OBS scene names
   scene: "Pepe",                 // OBS: the program scene to switch to
   irl_scene: "IRL",              // OBS: the nested scene that holds the IRL feed + the on-air source
   irl_source: "IRL BB",          // OBS: the operator's IRL feed (wins while PLAYING)
@@ -54,7 +59,7 @@ const DEFAULTS = Object.freeze({
   cam_fps: 15,                   // a cam on air: Pepe's local encode
   cam_kbps: 1500,
 });
-const BOOLS = ["enabled", "cam_optin", "allow_library", "auto_scene"];
+const BOOLS = ["enabled", "cam_optin", "allow_library", "auto_scene", "irl_switch"];
 const NAMES = ["scene", "irl_scene", "irl_source", "source"];
 const NUMS = { cam_fps: [5, 30], cam_kbps: [200, 6000] };
 
@@ -149,6 +154,11 @@ function clean(input, base = CFG) {
     if (!(k in src)) continue;
     const v = String(src[k] == null ? "" : src[k]).trim();
     if (OBS_NAME_RE.test(v)) cfg[k] = v; else errors[k] = "an OBS name (1-60 characters)";
+  }
+  if ("irl_from" in src) {
+    const list = String(src.irl_from == null ? "" : src.irl_from).split(",").map((x) => x.trim()).filter(Boolean);
+    if (list.length <= 12 && list.every((x) => OBS_NAME_RE.test(x)) && list.join(", ").length <= 300) cfg.irl_from = list.join(", ");
+    else errors.irl_from = "OBS scene names, comma-separated (at most 12)";
   }
   for (const [k, [lo, hi]] of Object.entries(NUMS)) {
     if (!(k in src)) continue;
@@ -332,6 +342,7 @@ async function forBot(body = {}, t = now()) {
 function sanitizeState(s) {
   const str = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, n);
   return { obs: str(s.obs, 20), applied: str(s.applied, 80), shown: !!s.shown, irl: !!s.irl, scene: str(s.scene, 60),
+           irl_watch: str(s.irl_watch, 10), irl_switched_from: str(s.irl_switched_from, 60),
            switched_from: str(s.switched_from, 60), source_ok: !!s.source_ok, err: str(s.err, 200), cam: str(s.cam, 30) };
 }
 /** !onair from Camfrog (Pepe checked who may): {action: set|off|leave|status, query, room, by, admin} -> {ok, msg}. */

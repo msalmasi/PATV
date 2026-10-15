@@ -200,3 +200,15 @@ test("the target survives a restart (persisted); the admin view lists slots / ca
   assert.equal(v.cams.find((c) => c.login === "bob").why, "no_optin");
   assert.ok(v.log.length > 0);
 });
+
+test("IRL auto-switch settings: on by default, irl_from a clean comma list, sent to Pepe regardless of the on-air switch", async () => {
+  assert.equal(OA.DEFAULTS.irl_switch, true);
+  assert.equal(OA.DEFAULTS.irl_from, "BRB, Gaming");
+  assert.equal(OA.clean({ irl_from: " BRB ,Starting Soon,, Gaming " }).cfg.irl_from, "BRB, Starting Soon, Gaming");
+  assert.ok(OA.clean({ irl_from: Array(14).fill("X").join(",") }).errors.irl_from);
+  await OA.saveConfig({ enabled: false, irl_switch: true, irl_from: "BRB" }, "test");
+  const r = await OA.forBot({ state: { irl_watch: "on", irl_switched_from: "BRB" } });
+  assert.deepEqual([r.cfg.enabled, r.cfg.irl_switch, r.cfg.irl_from], [false, true, "BRB"]);
+  assert.equal(OA.view().pepe.state.irl_watch, "on");
+  await OA.saveConfig({ irl_from: "BRB, Gaming" }, "test");
+});

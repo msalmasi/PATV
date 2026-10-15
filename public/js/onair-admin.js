@@ -28,6 +28,8 @@
     else if (s.shown) bits.push('showing it');
     if (s.scene) bits.push('scene ' + esc(s.scene) + (s.switched_from ? ' (switched from ' + esc(s.switched_from) + ')' : ''));
     if (s.cam) bits.push('cam ' + esc(s.cam));
+    bits.push(s.irl_watch === 'on' ? 'IRL auto-switch watching' + (s.irl_switched_from ? ' (switched from ' + esc(s.irl_switched_from) + ')' : '')
+      : s.irl_watch === 'setup' ? '<b>IRL auto-switch needs !onair setup irl</b>' : 'IRL auto-switch off');
     if (!s.source_ok) bits.push('<b>no on-air source in OBS - run !onair setup</b>');
     if (s.err) bits.push('<span class="rs-warn">⚠ ' + esc(s.err) + '</span>');
     return ' <span class="muted">Pepe: ' + bits.join(' · ') + '.</span>';
@@ -60,8 +62,8 @@
     var f = $('oaCfg');
     if (f && !cfgFilled) {
       cfgFilled = true;
-      ['enabled', 'cam_optin', 'allow_library', 'auto_scene'].forEach(function (k) { if (f[k]) f[k].checked = !!C[k]; });
-      ['scene', 'irl_scene', 'irl_source', 'source', 'cam_fps', 'cam_kbps'].forEach(function (k) { if (f[k]) f[k].value = C[k] == null ? '' : C[k]; });
+      ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch'].forEach(function (k) { if (f[k]) f[k].checked = !!C[k]; });
+      ['scene', 'irl_scene', 'irl_source', 'source', 'cam_fps', 'cam_kbps', 'irl_from'].forEach(function (k) { if (f[k]) f[k].value = C[k] == null ? '' : C[k]; });
     }
   }
   function act(body, msgEl) {
@@ -83,8 +85,8 @@
   $('oaCfg').addEventListener('submit', function (e) {
     e.preventDefault();
     var f = e.target, cfg = {};
-    ['enabled', 'cam_optin', 'allow_library', 'auto_scene'].forEach(function (k) { cfg[k] = !!f[k].checked; });
-    ['scene', 'irl_scene', 'irl_source', 'source'].forEach(function (k) { cfg[k] = f[k].value.trim(); });
+    ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch'].forEach(function (k) { cfg[k] = !!f[k].checked; });
+    ['scene', 'irl_scene', 'irl_source', 'source', 'irl_from'].forEach(function (k) { cfg[k] = f[k].value.trim(); });
     ['cam_fps', 'cam_kbps'].forEach(function (k) { cfg[k] = Number(f[k].value); });
     act({ action: 'config', cfg: cfg }, 'oaCfgMsg');
   });
