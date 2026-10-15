@@ -1483,11 +1483,11 @@ function view(s, t = now()) {
     room_id: s.room_id || rooms.HOUSE_ROOM, kind: s.kind || "slot", featured: !!s.featured, feature_by: s.feature_by || null,
     mode: s.mode || "stream", embed: e, embed_label: e ? embeds.label(e) : null, title: s.title || null,
     // 1.99cr (stagecap.js): may viewers snap / clip this slot (its streamer's choice, default yes), is it NSFW
-    capture: !s.capture_off && !isEmbed(s) && s.via !== "whip" && s.source !== "cam", nsfw: !!s.nsfw,
+    capture: !s.capture_off && !isEmbed(s) && (s.via !== "whip" || whipRelayed(s, t)) && s.source !== "cam", nsfw: !!s.nsfw,
     // 1.99abe: the streamer's own choice (the Go-live checkbox) apart from whether snaps / clips can work on this stream at all -
     // the page re-synced the box from `capture`, which is false for a WHIP stream, so a click was undone on the next poll
     capture_allowed: !s.capture_off,
-    capture_na: isEmbed(s) ? "embed" : s.via === "whip" ? "whip" : s.source === "cam" ? "cam" : null,
+    capture_na: isEmbed(s) ? "embed" : s.via === "whip" && !whipRelayed(s, t) ? "whip" : s.source === "cam" ? "cam" : null,
     library: s.source === "library",                                     // 1.99ji: 📼 played from the Plex library
     cam: s.source === "cam" ? { login: s.cam_login || null } : null,    // 1.99zc: 🎬 someone's live cam
   };
@@ -1501,8 +1501,22 @@ function hlsOf(s) {
 }
 // 1.99aaz: what Pepe's OBS plays for an on-air slot: the RTMP play URL of the slot's HLS-app stream (its audio-repaired copy
 // when there is one); a WHIP slot lives in MediaMTX, not nginx-rtmp, so it keeps its HLS. ONAIR_PULL=hls = the old behaviour.
+// 1.99abf: a WHIP slot is ALSO in nginx-rtmp while MediaMTX's slot-relay.sh runs (H.264 copy, Opus -> AAC): its playlist on
+// disk is fresh then. That copy is what stage snaps / clips cut and what Pepe's OBS pulls; viewers keep WHEP / MediaMTX HLS.
+const RELAY_HLS_DIR = require("path").resolve(process.env.STAGECAP_HLS_DIR || ("/mnt/hls" + (STAGING ? "/staging" : "")));
+const relayCache = new Map();   // stream -> {at, ok}
+function whipRelayed(s, t = now()) {
+  if (!s || s.via !== "whip" || !s.stream) return false;
+  const c = relayCache.get(s.stream);
+  if (c && t - c.at < 5000) return c.ok;
+  let ok = false;
+  try { ok = t - require("fs").statSync(require("path").join(RELAY_HLS_DIR, s.stream + ".m3u8")).mtimeMs < 30 * 1000; } catch (e) { ok = false; }
+  relayCache.set(s.stream, { at: t, ok });
+  if (relayCache.size > 500) relayCache.clear();
+  return ok;
+}
 function playUrlOf(s) {
-  if (s.via === "whip" || String(process.env.ONAIR_PULL || "rtmp").toLowerCase() === "hls") return hlsOf(s);
+  if ((s.via === "whip" && !whipRelayed(s)) || String(process.env.ONAIR_PULL || "rtmp").toLowerCase() === "hls") return hlsOf(s);
   let name = s.stream;
   try { name = require("./stageaudio").fixedName(s) || s.stream; } catch (e) { /* no repair */ }
   return `${RTMP_PLAY}/${name}`;
@@ -1532,7 +1546,7 @@ async function publicSlots(roomId) {
       id: s.id, username: s.username, display: s.displayname || s.username, nameCss: nameStyle(s.username) || "",
       hls: e ? null : hlsOf(s), embed: e, since: s.went_live, room_id: s.room_id,
       featured: !!s.featured, feature_by: s.feature_by || null, title: s.title || null, mode: s.mode || "stream",
-      capture: !e && !s.capture_off && s.via !== "whip", nsfw: !!s.nsfw,     // 1.99cr: the stage's Snap / Clip buttons (stagecap.js; not on MediaMTX's HLS)
+      capture: !e && !s.capture_off && (s.via !== "whip" || whipRelayed(s)), nsfw: !!s.nsfw,     // 1.99cr: the stage's Snap / Clip buttons (stagecap.js; 1.99abf: a WHIP slot once slot-relay.sh writes its HLS)
       ...(whep ? { whep } : {}),                                              // 1.99et: only while webrtc_enabled is on
     };
   }).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.since || 0) - (b.since || 0));
@@ -1983,7 +1997,7 @@ module.exports = {
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
-  publishGate, goLive, whipBeat, openSlotByStream, hlsOf, playUrlOf, RTMP_PLAY, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
+  publishGate, goLive, whipBeat, openSlotByStream, hlsOf, playUrlOf, whipRelayed, RTMP_PLAY, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
   camOpen, camBeat, camCandidates,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,

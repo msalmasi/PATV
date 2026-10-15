@@ -254,6 +254,7 @@ systemctl daemon-reload
 CHANGED_RELAY=0
 install -d -m 0755 -o root -g root /usr/local/lib/patv-webrtc
 put "$HERE/pepe-relay.sh" /usr/local/lib/patv-webrtc/pepe-relay.sh root root 0755 CHANGED_RELAY
+put "$HERE/slot-relay.sh" /usr/local/lib/patv-webrtc/slot-relay.sh root root 0755 CHANGED_RELAY   # 1.99abf: WHIP slots -> nginx-rtmp
 RELAY_CONF=/etc/mediamtx/pepe-relay.conf
 if [ ! -s "$RELAY_CONF" ]; then
   pname="${PEPE_RTMP_NAME:-$(awk -F= '/^STAGE_PEPE_KEYS=/ { sub(/^STAGE_PEPE_KEYS=/, ""); split($0, a, ","); print a[1] }' "$PROD_DIR/.env" | tr -d ' "' | head -1)}"

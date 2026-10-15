@@ -104,6 +104,10 @@ paths:
     runOnAvailableRestart: yes
   "~^(stage|stg)-[0-9a-f]{16}$":
     source: publisher
+    # 1.99abf: a WHIP slot is also pushed into nginx-rtmp under its name (H.264 copy, Opus -> AAC) so it gets the on-disk HLS
+    # stage snaps / clips cut and the RTMP pull Pepe's OBS plays (slot-relay.sh)
+    runOnReady: /usr/local/lib/patv-webrtc/slot-relay.sh
+    runOnReadyRestart: yes
   # 1.99il: a pad's Camfrog room audio (roomrtc.js) - Pepe publishes Opus over WHIP while the site says someone listens,
   # viewers play it over WHEP. Prod "room-<16 hex>", staging "stgr-<16 hex>". The hook allows WebRTC reads only.
   "~^(room|stgr)-[0-9a-f]{16}$":
