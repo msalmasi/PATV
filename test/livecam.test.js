@@ -140,6 +140,18 @@ test("max live cams and the bandwidth budget", async () => {
   await LC.save({ class: "Admin", userId: "staff", username: "boss" }, { cfg: { max_live: 4, budget_mbps: 1, kbps: 500 } });
   assert.equal(LC.viewerCap(), 2);
   assert.equal((await watch("bob", "sp")).d.code, "budget", "2 viewers x 500 kbps = the 1 Mbps budget");
+  // 1.99aab: a pass-through relay counts at the bitrate Pepe measures, not cfg.kbps - alice's cam at 40 kbit/s frees room
+  await bot({ live: [{ room: R.id, login: "alice", state: "live", source: "passthrough", kbps: 40 }] });
+  assert.equal((await watch("alice", "sp")).d.ok, true, "3 x 40 kbps fits the 1 Mbps budget");
+  const av = await LC.adminView();
+  const sa = av.sessions.find((x) => x.login === "alice");
+  assert.equal(sa.kbps, 40);
+  assert.equal(sa.measured, true);
+  assert.equal(sa.outKbps, 120);
+  assert.equal(av.usage.mbps, 0.1);
+  assert.equal((await watch("bob", "sp")).d.ok, true, "a new cam Pepe hasn't measured counts at cfg.kbps: 120 + 500 fits");
+  assert.equal((await watch("dana", "sp")).d.code, "budget", "620 + 500 doesn't");
+  for (const c of ["alice", "bob"]) await post("/api/rooms/room-one/livecam/stop", { login: c }, "sp");
   await LC.save({ class: "Admin", userId: "staff", username: "boss" }, { cfg: { budget_mbps: 100, kbps: 300 } });
   await post("/api/rooms/room-one/livecam/stop", { login: "alice" }, "v1");
   await post("/api/rooms/room-one/livecam/stop", { login: "alice" }, "v2");
@@ -240,7 +252,7 @@ test("the pad's live view hint and the admin view", async () => {
   assert.ok(Array.isArray(v.sessions) && Array.isArray(v.recent));
   await assert.rejects(LC.save({ class: "pleb" }, { cfg: { fps: 10 } }), /Admins only/);
   await assert.rejects(LC.save({ class: "Admin", userId: "staff" }, { cfg: { fps: 99 } }), /fps/);
-  // 1.99yq: the video source - prod default reencode, sent to Pepe with its fallback time; junk refused
+  // 1.99yr: the video source - prod default reencode, sent to Pepe with its fallback time; junk refused
   assert.equal((await bot()).d.cfg.source, "reencode");
   await LC.save({ class: "Admin", userId: "staff", username: "boss" }, { cfg: { source: "passthrough", pt_fallback_s: 8 } });
   const b = (await bot()).d.cfg;

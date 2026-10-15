@@ -76,7 +76,7 @@ const FIELDS = Object.freeze({
   close_method: { def: "wmclose", choices: ["wmclose", "button", "off"] },
   capture:      { def: "blt", choices: ["blt", "pw2"] },   // how Pepe reads a cam's window (blt: no Camfrog UI-thread cost)
   ui_budget_ms: { def: 300, min: 50, max: 800 },
-  // 1.99yq: where Pepe's video comes from (bot 1.99yp pepe_livecam_pt.py): reencode = grab the cam window + x264 /
+  // 1.99yr: where Pepe's video comes from (bot 1.99yp-1.99zw pepe_livecam_pt.py): reencode = grab the cam window + x264 /
   // passthrough = forward Camfrog's own H.264 untouched (native 30 fps, no encode) / auto = pass-through when Pepe can.
   // Pass-through falls back to re-encode by itself after pt_fallback_s without video. Prod default: reencode.
   source:        { def: STAGING ? "auto" : "reencode", choices: ["reencode", "passthrough", "auto"] },
@@ -265,6 +265,22 @@ function slotsOf(userId, t = now()) {
 }
 const freshStage = (S, t = now()) => (S.stageViewers ? [...S.stageViewers.entries()].filter(([, v]) => t - v.beat <= BEAT_MS) : []);
 function totalViewers(t = now()) { let n = 0; for (const S of SESS.values()) if (!S.ended) n += freshViewers(S, t).length + freshStage(S, t).length; return n; }
+// 1.99aab: each relay counts at its REAL bitrate - a pass-through cam at what Pepe measures coming in (a rolling average of
+// the broadcaster's own stream, ~20-60 kbit/s), a re-encoded one (or one Pepe hasn't reported yet) at cfg.kbps.
+const MIN_KBPS = 16;
+function rateOf(S, c = cfg()) {
+  const b = S && S.botInfo;
+  const k = b && b.source === "passthrough" ? Number(b.kbps) : NaN;
+  return Number.isFinite(k) && k > 0 ? Math.max(MIN_KBPS, Math.min(4000, k)) : c.kbps;
+}
+/** kbit/s going out to viewers site-wide right now (every fresh viewer x their cam's rate). */
+function usedKbps(t = now(), c = cfg()) {
+  let k = 0;
+  for (const S of SESS.values()) if (!S.ended) k += (freshViewers(S, t).length + freshStage(S, t).length) * rateOf(S, c);
+  return k;
+}
+/** One more viewer of S (null = a cam not relayed yet, counted at cfg.kbps) fits the bandwidth budget? */
+const fitsBudget = (S, t = now(), c = cfg()) => usedKbps(t, c) + rateOf(S, c) <= c.budget_mbps * 1000;
 const liveCount = () => [...SESS.values()].filter((S) => !S.ended).length;
 
 function audit(S, userId, v, why, t = now()) {
@@ -375,7 +391,7 @@ async function start(u, R, login, t = now()) {
   const used = slotsOf(uid, t), max = maxSlots(uid);
   if (!mine || t - mine.beat > BEAT_MS) {
     if (used >= max) throw refuse("viewer_cap", { slots: { used, max } });
-    if (totalViewers(t) + 1 > viewerCap()) throw refuse("budget");
+    if (!fitsBudget(S, t)) throw refuse("budget");
     if (!S && liveCount() >= cfg().max_live) throw refuse("slots_busy");
   }
   if (!S) {
@@ -399,7 +415,7 @@ async function start(u, R, login, t = now()) {
   v.beat = t;
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
   return { ok: true, key: k, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t),
-           slots: { used: slotsOf(uid, t), max }, kbps: cfg().kbps, expires: t + TICKET_MS };
+           slots: { used: slotsOf(uid, t), max }, kbps: rateOf(S), expires: t + TICKET_MS };
 }
 function stateOf(S, t = now()) {
   if (!S) return "none";
@@ -536,7 +552,7 @@ async function stageWatch(u, R, slotId, { beatOnly = false } = {}, t = now()) {
   let v = S.stageViewers.get(uid);
   if (!v || t - v.beat > BEAT_MS) {
     if (beatOnly) return { ok: true, state: "ended", why: "gone" };
-    if (totalViewers(t) + 1 > viewerCap()) throw refuse("budget");
+    if (!fitsBudget(S, t)) throw refuse("budget");
     v = { since: t, beat: t, username: u.username || null, readers: new Set() };
     S.stageViewers.set(uid, v);
   }
@@ -574,7 +590,8 @@ async function forBot(body, t = now()) {
     S.botState = str(x.state, 20);
     S.botInfo = { grab_fps: Number(x.grab_fps) || null, grab_ms: Number(x.grab_ms) || null, size: Array.isArray(x.size) ? x.size.slice(0, 2) : null,
                   restarts: Number(x.restarts) || 0, up_s: Number(x.up_s) || 0, setup_ms: Number(x.setup_ms) || null,
-                  source: x.source === "passthrough" ? "passthrough" : "reencode", fps: Number(x.fps) || null, fallback: str(x.fallback, 60) || null };
+                  source: x.source === "passthrough" ? "passthrough" : "reencode", fps: Number(x.fps) || null, fallback: str(x.fallback, 60) || null,
+                  kbps: Number.isFinite(Number(x.kbps)) && Number(x.kbps) >= 0 ? Math.min(100000, Number(x.kbps)) : null };
     if (S.botState === "live" && !S.liveAt) S.liveAt = t;
     if (S.botState === "ended" || S.botState === "stopped") {
       const why = str(x.why, 30);
@@ -671,17 +688,19 @@ async function adminView() {
   sweep(t);
   let audit = [];
   try { audit = await require("./adminaudit").recent(AUDIT, 15); } catch (e) { audit = []; }
+  const c = cfg();
   const sessions = [...SESS.values()].filter((S) => !S.ended).map((S) => ({
     key: S.key, room: S.roomId, login: S.login, display: S.display, state: stateOf(S, t), since: S.createdAt, liveAt: S.liveAt || null,
     viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since })), readers: S.readers, bot: S.botInfo || null,
+    kbps: Math.round(rateOf(S, c)), measured: !!(S.botInfo && S.botInfo.source === "passthrough" && Number(S.botInfo.kbps) > 0),
+    outKbps: Math.round(rateOf(S, c) * (freshViewers(S, t).length + freshStage(S, t).length)),
     botState: S.botState, botWhy: S.botWhy, stage: S.stage || null, stageViewers: freshStage(S, t).length }));
-  const c = cfg();
   const viewers = totalViewers(t);
   const recent = await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason FROM livecam_audit ORDER BY id DESC LIMIT 30`);
   return { now: t, v: CFG.v, cfg: { ...c }, defaults: { ...DEFAULTS }, fields: FIELDS, updated_at: CFG.at, updated_by: CFG.by, webrtc: W().enabled(),
            bot: BOT ? { at: BOT.at, online: botOk(t), pool: BOT.pool, cfgFrom: BOT.cfgFrom } : null, sessions,
-           usage: { viewers, viewerCap: viewerCap(c), mbps: Math.round((viewers * c.kbps) / 100) / 10, budget_mbps: c.budget_mbps, live: sessions.length,
-                    max_live: c.max_live, publishMbps: Math.round((sessions.length * c.kbps) / 100) / 10 },
+           usage: { viewers, viewerCap: viewerCap(c), mbps: Math.round(usedKbps(t, c) / 100) / 10, budget_mbps: c.budget_mbps, live: sessions.length,
+                    max_live: c.max_live, publishMbps: Math.round(sessions.reduce((a, x) => a + x.kbps, 0) / 100) / 10 },
            optouts: OPTOUT.size, camviewers: CV().stats(), audit, recent };
 }
 

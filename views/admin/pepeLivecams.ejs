@@ -10,8 +10,8 @@
   <h2 id="usT"><span class="ds-ic" aria-hidden="true">📡</span> Now <span class="adm-pill" id="usPepe"></span></h2>
   <p class="adm-help" id="usLine"></p>
   <p class="adm-help" id="usPool"></p>
-  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Cam</th><th>State</th><th>Viewers</th><th class="num">Grab</th><th></th></tr></thead>
-    <tbody id="usRows"><tr><td colspan="5" class="adm-help">Loading…</td></tr></tbody></table></div>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Cam</th><th>State</th><th>Viewers</th><th class="num">Grab</th><th class="num">Bitrate</th><th></th></tr></thead>
+    <tbody id="usRows"><tr><td colspan="6" class="adm-help">Loading…</td></tr></tbody></table></div>
 </section>
 
 <section class="adm-card" id="settings" aria-labelledby="lcT">
@@ -37,7 +37,7 @@
       <label>Live cams at once (site-wide) <input type="number" name="max_live" inputmode="numeric"></label>
       <label>Live cams one viewer may watch at once <input type="number" name="viewers_free" inputmode="numeric"></label>
       <label>...with a Season Pass <input type="number" name="viewers_sp" inputmode="numeric"></label>
-      <label>Bandwidth budget (Mbps) - viewers site-wide = budget ÷ bitrate <input type="number" name="budget_mbps" inputmode="numeric"></label>
+      <label>Bandwidth budget (Mbps) - every viewer counts at their cam's real bitrate (pass-through: measured; re-encode: the bitrate above) <input type="number" name="budget_mbps" inputmode="numeric"></label>
       <label>Linger after the last viewer (s) <input type="number" name="linger_s" inputmode="numeric"></label>
     </fieldset>
     <fieldset>
@@ -101,7 +101,7 @@
     document.getElementById('usPool').textContent = p ? 'Pepe\'s pool: ' + p.open + ' cams open, room for ' + p.capacity + (p.learned_max ? ' (Camfrog\'s own limit seen: ' + p.learned_max + ')' : '') +
       ' · closed ' + (p.closed || 0) + ' (' + (p.evicted || 0) + ' to make room), ' + (p.close_fail || 0) + ' failed' + (b.cfgFrom ? ' · settings from ' + b.cfgFrom : '') : 'No pool report from Pepe yet.';
     var rows = document.getElementById('usRows'); rows.textContent = '';
-    if (!V.sessions.length) { var tr0 = el('tr'); var td0 = el('td', 'adm-help', 'No live cams right now.'); td0.colSpan = 5; tr0.appendChild(td0); rows.appendChild(tr0); }
+    if (!V.sessions.length) { var tr0 = el('tr'); var td0 = el('td', 'adm-help', 'No live cams right now.'); td0.colSpan = 6; tr0.appendChild(td0); rows.appendChild(tr0); }
     V.sessions.forEach(function (s) {
       var tr = el('tr');
       var c = el('td'); c.appendChild(el('b', null, s.display || s.login)); c.appendChild(el('div', 'adm-help', s.room + ' · since ' + when(s.since))); tr.appendChild(c);
@@ -109,6 +109,9 @@
       tr.appendChild(el('td', null, s.viewers.map(function (v) { return v.username || v.userId; }).join(', ') + ' · ' + s.readers + ' connected'));
       tr.appendChild(el('td', 'num', s.bot && s.bot.source === 'passthrough' ? 'pass-through' + (s.bot.fps ? ' · ' + s.bot.fps + ' fps' : '')
         : s.bot && s.bot.grab_fps ? s.bot.grab_fps + ' fps · ' + s.bot.grab_ms + ' ms' + (s.bot.fallback ? ' (re-encode: ' + s.bot.fallback + ')' : '') : '–'));
+      // 1.99aab: what the cam really costs - measured (pass-through) or configured (re-encode) kbit/s, and x viewers out
+      tr.appendChild(el('td', 'num', (s.kbps != null ? s.kbps + ' kbit/s ' + (s.measured ? 'measured' : 'configured') : '–') +
+        (s.outKbps ? ' · ' + (Math.round(s.outKbps / 100) / 10) + ' Mbps out' : '')));
       var td = el('td'); var x = el('button', 'adm-btn ghost', 'End'); x.type = 'button';
       x.addEventListener('click', function () {
         if (!confirm('End ' + (s.display || s.login) + '\'s live cam? Everyone watching is dropped; it can\'t restart for 10 minutes.')) return;
