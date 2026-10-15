@@ -28,6 +28,7 @@ const TTL_DEFAULTS = Object.freeze({
   "poll.vote": 30, "poll.create": 30, "poll.end": 30,
   "table": 2,                          // a seat move only makes sense at the table it was made for
   "privacy.incognito": 15,            // 1.99wa: Settings → Privacy (incognito.js)
+  "privacy.forgetme": 1440,           // 1.99aat: 🧠 Settings → Privacy "Make Pepe forget me" (pepeforget.js)
   "privacy.forget": 7 * 1440,         // 1.99wj: a deleted account's Camfrog login - Pepe forgets it (accountdelete.js retries an expired one)
   "dj": 10, "pepe.look": 10, "room.ctl": 15, "room.visit": 30, "room.bridge": 30, "econ.burn": 30, "econ.routes": 30, "econ.cmd": 30,
   "roomvault.admin": 30,               // 1.99yx: /pads/admin pad vault fines / transfers (padfines.js)

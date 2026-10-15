@@ -41,7 +41,7 @@ const CODES = Object.freeze(Object.keys(ERRORS));
 
 // 1.99zf: website actions that never move PAT (room control, owner settings / topic / bridge switches, privacy, command
 // switches) - an E_INTERNAL there says to check the page, not the balance (bot pepe_weberrors.NO_PAT_KINDS, the same list)
-const NO_PAT_KINDS = ["room.ctl", "room.owner", "room.topic", "room.bridge", "room.visit", "stage.room", "cmd.switch", "privacy.incognito", "privacy.forget"];
+const NO_PAT_KINDS = ["room.ctl", "room.owner", "room.topic", "room.bridge", "room.visit", "stage.room", "cmd.switch", "privacy.incognito", "privacy.forget", "privacy.forgetme"];
 const movesPat = (kind) => !kind || !NO_PAT_KINDS.includes(String(kind));
 const INTERNAL_NO_PAT = ["Something went wrong on Pepe's side.", "It may not have happened - reload the page to see where it stands before trying again; give support the incident id if it keeps happening."];
 const ROOM_CTL_NOTE = "The room change may not have happened - check Pepe's status on this page before trying again.";

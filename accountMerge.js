@@ -101,6 +101,11 @@ const RULES = {
   "cam_requests.user_id": M({ name: "username" }),
   "cam_requests.owner": { deny: "1.99aar: the Camfrog login of the cam asked about, not a userId" },
   "cam_requests.by": { deny: FLAG },
+  // 1.99aat 🧠 make Pepe forget me (pepeforget.js): the request log moves with the account
+  "pepe_forget_log.user_id": M(),
+  "pepe_forget_log.login": { deny: NAME },
+  "pepe_forget_log.via": { deny: FLAG },
+  "pepe_forget_log.action_id": { deny: "1.99aat: the pepe_actions id of the request, not a userId" },
   // 1.99aaf 👻 staff ghost mode (ghost.js): the switch stays put (re-checked against the staff class anyway); the switch log
   // is the admins' audit and moves with the account like the view log
   "staff_ghost.user_id": { keep: "1.99aaf: a staff member's own ghost-mode switch - never carried to another account" },

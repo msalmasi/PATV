@@ -251,7 +251,10 @@ function register(app, { addUser, isBotToken }) {
       // 1.99aaf: 👻 ghost mode - its card shows to site staff only (ghost.js)
       let gh = null;
       try { const g = await require("./ghost").state(req.user.userId); gh = g.staff ? g : null; } catch (e) { gh = null; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh });
+      // 1.99aat: 🧠 "Make Pepe forget me" (pepeforget.js) - when it was last asked
+      let pf = null;
+      try { pf = await require("./pepeforget").last(req.user.userId); } catch (e) { pf = null; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf });
     } catch (e) { next(e); }
   });
 }
