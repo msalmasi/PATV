@@ -9,6 +9,8 @@
 //   padflair.js           flair slots (normal / Plus)
 //   stickers.json         the Season Pass's seasonal perk packs (🎃 Spooky Season ...) and the Plus pack
 //   mainstage room_rtc    whether low-latency room audio is live for Prime Time pads yet
+//   livecam.js            live cams one viewer may watch at once (viewers_free / viewers_sp - the Season Pass is what
+//                         raises it; pad tiers don't change it) and whether live cams are switched on
 //
 // A perk is {id, icon, title: [key, vars], desc: [key, vars], live}. `live: false` = announced, not built yet ("soon").
 // Text lives in locales/en.json (premium.* for the original perks, perks.* for 1.99tc's). Windows ({chat}, {rec}, {pm})
@@ -26,6 +28,7 @@ function values() {
   const fl = safe(() => require("./padflair"), {});
   const stk = (perk) => safe(() => require("./stickers").perkPacks(perk), []);
   const rtc = safe(() => require("./mainstage").config().room_rtc, "off");
+  const lc = safe(() => require("./livecam").current().cfg, {});
   return {
     prime_extra_slots: num("prime_extra_slots"), prime_extra_badges: num("prime_extra_badges"),
     sb_slots_free: num("sb_slots_free"), sb_slots_prime: num("sb_slots_prime"), sb_slots_plus: num("sb_slots_plus"),
@@ -35,6 +38,10 @@ function values() {
     flairs: Number(fl.MAX_FLAIRS) || 25, flairs_plus: Number(fl.MAX_FLAIRS_PLUS) || 50,
     sp_seasonal: stk("season_pass").filter((p) => p.season),
     lowlat_live: rtc === "prime" || rtc === "all",
+    // 1.99aak: live cams per viewer (livecam.js caps: free / Season Pass)
+    lc_free: Number.isFinite(Number(lc.viewers_free)) ? Number(lc.viewers_free) : 1,
+    lc_sp: Number.isFinite(Number(lc.viewers_sp)) ? Number(lc.viewers_sp) : 4,
+    lc_on: lc.enabled !== false,
   };
 }
 
@@ -85,6 +92,8 @@ function table(v = values()) {
     perk("sb_priority", "⏩", "perks.sp.sb_priority", "perks.sp.sb_priority_d", v.sb_on),
     perk("pm_logs", "🔒", ["perks.sp.pm", { pm: W("pm_pass") }], ["perks.sp.pm_d", { pm: W("pm_pass"), none: W("pm_days") }]),
     perk("telegram", "✈️", "perks.sp.telegram", "perks.sp.telegram_d"),
+    ...(v.lc_sp > v.lc_free ? [perk("livecams", "📡", ["perks.sp.livecams", { n: v.lc_sp }], ["perks.sp.livecams_d", { n: v.lc_sp, free: v.lc_free }],
+                                   v.lc_on)] : []),
     perk("flair", "🎨", "premium.sp.flair", "premium.sp.flair_d", false),
     perk("priority", "🐸", "premium.sp.priority", "premium.sp.priority_d", false),
   ];

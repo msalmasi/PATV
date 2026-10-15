@@ -35,6 +35,14 @@ test("the table reads the live config: slots, retention, soundboard, flair, seas
   assert.ok(seasonal && /Spooky Season \(Halloween\)/.test(seasonal.title[1].packs), "the 🎃 Season Pass stickers from stickers.json");
   for (const id of ["retention", "intro", "badge", "cosmetics", "stickers"]) assert.ok(byId("prime_plus", id), "plus: " + id);
   for (const id of ["sb_season", "sb_priority", "pm_logs", "telegram", "uploads"]) assert.ok(byId("season_pass", id), "season pass: " + id);
+  // 1.99aak: live cams per viewer - the Season Pass line carries livecam.js's caps (pad tiers don't change them)
+  const lc = byId("season_pass", "livecams");
+  const LCc = require(path.join(repo, "livecam")).current().cfg;
+  assert.ok(lc, "season pass: livecams");
+  assert.deepEqual(lc.title[1], { n: LCc.viewers_sp });
+  assert.deepEqual(lc.desc[1], { n: LCc.viewers_sp, free: LCc.viewers_free });
+  assert.match(t(lc.title[0], lc.title[1]), /Watch 4 live cams at once/);
+  assert.ok(!byId("prime_time", "livecams") && !byId("prime_plus", "livecams"), "no pad-tier live-cam perk");
   // every key the table uses exists in en.json
   for (const tier of Object.keys(T)) for (const p of T[tier]) for (const [k] of [p.title, p.desc]) assert.ok(k in en, k);
 });
