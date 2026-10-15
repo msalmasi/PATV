@@ -91,6 +91,16 @@ const RULES = {
   "cam_blocks.owner": { deny: "1.99yq: the Camfrog login of the cam whose owner made the block, not a userId" },
   "cam_views.user_id": M({ name: "username" }),
   "cam_views.owner": { deny: "1.99yq: the Camfrog login of the cam that was viewed, not a userId" },
+  // 1.99aar who may watch (camaccess.js): an "always allowed" viewer and their requests move with that account
+  "cam_access.user_id": M(),
+  "cam_access.owner": { deny: "1.99aar: the Camfrog login of the cam whose owner chose the mode, not a userId" },
+  "cam_access.via": { deny: FLAG },
+  "cam_allow.user_id": M({ key: ["owner"], name: "username" }),
+  "cam_allow.owner": { deny: "1.99aar: the Camfrog login of the cam whose owner keeps the list, not a userId" },
+  "cam_allow.via": { deny: FLAG },
+  "cam_requests.user_id": M({ name: "username" }),
+  "cam_requests.owner": { deny: "1.99aar: the Camfrog login of the cam asked about, not a userId" },
+  "cam_requests.by": { deny: FLAG },
   // 1.99aaf 👻 staff ghost mode (ghost.js): the switch stays put (re-checked against the staff class anyway); the switch log
   // is the admins' audit and moves with the account like the view log
   "staff_ghost.user_id": { keep: "1.99aaf: a staff member's own ghost-mode switch - never carried to another account" },

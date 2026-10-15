@@ -18,6 +18,14 @@
   .pv .pv-links a { display: flex; gap: var(--ds-sp-2); padding: 10px 0; border-top: 1px solid var(--ds-line-soft); text-decoration: none; color: inherit; }
   .pv .pv-links a:first-child { border-top: 0; }
   .pv .pv-links small { display: block; color: var(--ds-text-2); }
+  .pv .pv-ca { border-top: 1px solid var(--ds-line-soft); margin-top: var(--ds-sp-2); padding-top: var(--ds-sp-2); }
+  .pv .pv-ca[hidden] { display: none; }
+  .pv .pv-ca select, .pv .pv-ca-add input { min-height: 40px; max-width: 100%; border-radius: 8px; border: 1px solid var(--ds-line-strong); background: var(--ds-surface); color: var(--ds-text); padding: 0 10px; font: inherit; }
+  .pv .pv-ca-ask { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--ds-text-2); }
+  .pv .pv-ca-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--ds-sp-2); }
+  .pv .pv-ca-add input { flex: 1 1 200px; min-width: 0; }
+  .pv .pv-ca .pv-log li { align-items: center; flex-wrap: wrap; }
+  .pv .pv-ca .pv-log button { margin-inline-start: 6px; }
 </style>
 <%
   const when = (ms) => ms ? (t.date ? t.date(Number(ms), { dateStyle: 'medium', timeStyle: 'short' }) : new Date(Number(ms)).toISOString()) : '';
@@ -86,6 +94,25 @@
         <label class="ds-switch"><input type="checkbox" id="pvLc" <%= lc.off ? '' : 'checked' %> aria-label="<%- t('lc.switch') %>"><span></span></label>
       </div>
       <p class="pv-st" id="pvLcSt" role="status" aria-live="polite"><%- lc.off ? t('lc.st_off') : t('lc.st_on') %></p>
+      <%# 1.99aar (camaccess.js): who may watch while it's on, asking, the "always" list. Client: privacy-livecam.js %>
+      <div class="pv-ca" id="pvCa">
+        <div class="pv-set">
+          <div><b><%- t('ca.who') %></b><p class="ds-meta"><%- t('ca.who_meta') %></p></div>
+          <select id="pvCaMode" aria-label="<%- t('ca.who') %>">
+            <option value="everyone"><%- t('ca.m_everyone') %></option>
+            <option value="members"><%- t('ca.m_members') %></option>
+            <option value="followers"><%- t('ca.m_followers') %></option>
+            <option value="request"><%- t('ca.m_request') %></option>
+          </select>
+        </div>
+        <label class="pv-ca-ask" id="pvCaAskRow"><input type="checkbox" id="pvCaAsk"> <%- t('ca.ask') %></label>
+        <p class="pv-st" id="pvCaSt" role="status" aria-live="polite"></p>
+        <div id="pvCaAsks" hidden><h3 class="ds-h3"><%- t('ca.asks_h') %></h3><ul class="pv-log" id="pvCaAskList"></ul></div>
+        <h3 class="ds-h3"><%- t('ca.allow_h') %></h3>
+        <p class="ds-meta"><%- t('ca.allow_meta') %></p>
+        <ul class="pv-log" id="pvCaAllow"></ul>
+        <form id="pvCaAdd" class="pv-ca-add"><input type="text" name="target" maxlength="40" placeholder="<%- t('ca.allow_ph') %>" aria-label="<%- t('ca.allow_ph') %>" autocomplete="off"> <button type="submit" class="ds-btn"><%- t('ca.allow_add') %></button></form>
+      </div>
     <% } %>
     <p class="ds-meta"><%- t('lc.chat') %></p>
   </section>
@@ -163,6 +190,7 @@
   </section>
 </main>
 <script src="/public/js/privacy-settings.js?v=1" defer></script>
-<script src="/public/js/privacy-livecam.js?v=3" defer></script>
+<script src="/public/js/privacy-livecam.js?v=4" defer></script>
+<script src="/public/js/privacy-camaccess.js?v=1" defer></script>
 <script src="/public/js/privacy-camviewers.js?v=1" defer></script>
 <script src="/public/js/privacy-ghost.js?v=1" defer></script>

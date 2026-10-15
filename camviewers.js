@@ -69,6 +69,7 @@ let deps = {
   isGhost: (userId) => { try { return require("./ghost").isGhost(userId); } catch (e) { return false; } },
   dropViewer: (owner, userId, why) => { try { return require("./livecam").dropViewerOf(owner, userId, why); } catch (e) { return 0; } },
   liveWatchers: (owner) => { try { return require("./livecam").watchersOf(owner); } catch (e) { return []; } },
+  gate: (login, userId) => require("./camaccess").gate(login, userId),       // 1.99aar
 };
 
 // ── state ──
@@ -129,6 +130,11 @@ async function camRefusal(login, userId, opts = {}) {
   if (deps.optedOut(l)) return { code: "opted_out", status: 403, error: MSG.opted_out };
   try { if ((await deps.privateLogins([l])).has(l)) return { code: "private", status: 403, error: MSG.private }; } catch (e) { /* none */ }
   if (userId != null && blocked(l, userId)) return { code: "unavailable", status: 403, error: UNAVAILABLE };
+  // 1.99aar: the owner's mode beyond on / off - members / followers / on request + their "always" list (camaccess.js)
+  if (userId != null) {
+    const g = await deps.gate(l, userId);
+    if (g) return g;
+  }
   return null;
 }
 /** 1.99aak: which of the owner's rules a ghost view got past ("opted_out" | "private" | "blocked", comma-joined) or null. */
@@ -137,6 +143,7 @@ async function bypassOf(login, userId) {
   try { if (deps.optedOut(l)) out.push("opted_out"); } catch (e) { /* none */ }
   try { if ((await deps.privateLogins([l])).has(l)) out.push("private"); } catch (e) { /* none */ }
   if (userId != null && blocked(l, userId)) out.push("blocked");
+  try { const g = userId != null ? await deps.gate(l, userId) : null; if (g) out.push(g.code); } catch (e) { /* none */ }   // 1.99aar
   return out.length ? out.join(",") : null;
 }
 
@@ -345,7 +352,9 @@ function stats() {
 // ── routes ──
 function register(app, { addUser, isBotToken }) {
   init().catch((e) => console.error("[camviewers] init:", e.message));
-  const tm = setInterval(() => { prune(); }, 6 * 3600 * 1000);
+  const CA = require("./camaccess");                                     // 1.99aar: who may watch (modes, asks, the "always" list)
+  CA.init().catch((e) => console.error("[camaccess] init:", e.message));
+  const tm = setInterval(() => { prune(); CA.prune(); }, 6 * 3600 * 1000);
   if (tm.unref) tm.unref();
   const fail = (res, e) => { console.error("[camviewers]", e); res.status(500).json({ ok: false, error: "Something went wrong." }); };
 
@@ -360,6 +369,11 @@ function register(app, { addUser, isBotToken }) {
       if (op === "unblock") return res.json(await unblock(owner, b.target, { via: "chat" }));
       if (op === "list") { await init(); return res.json({ ok: true, blocks: listBlocks(owner) }); }
       if (op === "watching") return res.json({ ok: true, ...(await watching(owner)), blocks: listBlocks(owner).length });
+      // 1.99aar: !livecam everyone|members|followers|request [ask on|off] · !camok <name> [always] · !camno <name> · !camallow
+      if (op === "mode") return res.json(await CA.setMode(owner, String(b.mode || ""), { ask: typeof b.ask === "boolean" ? b.ask : undefined, via: "chat" }));
+      if (op === "answer") return res.json(await CA.answer(owner, b.target, String(b.how || ""), { via: "chat" }));
+      if (op === "disallow") return res.json(await CA.disallow(owner, b.target));
+      if (op === "access") { await CA.init(); return res.json({ ok: true, ...CA.accessOf(owner), allow: CA.listAllow(owner).length, pending: CA.pendingFor(owner) }); }
       res.status(400).json({ ok: false, error: "bad op" });
     } catch (e) { fail(res, e); }
   });
@@ -371,7 +385,9 @@ function register(app, { addUser, isBotToken }) {
       await init();
       const login = await loginOf(req.user.userId);
       if (!login) return res.json({ ok: true, linked: false });
-      res.json({ ok: true, linked: true, login, blocks: listBlocks(login), ...(await watching(login)) });
+      await CA.init();
+      res.json({ ok: true, linked: true, login, blocks: listBlocks(login), ...(await watching(login)),
+                 access: CA.accessOf(login), allow: CA.listAllow(login), asks: CA.pendingFor(login) });
     } catch (e) { fail(res, e); }
   });
   const hit = guard.limiter({ max: 30, windowMs: 60 * 60 * 1000 });
@@ -390,9 +406,16 @@ function register(app, { addUser, isBotToken }) {
       let r;
       if (op === "block") r = await block(login, b.target, { via: "web", byUserId: req.user.userId });
       else if (op === "unblock") r = await unblock(login, b.target, { via: "web" });
-      else return res.status(400).json({ ok: false, error: "block or unblock?" });
+      else if (op === "mode") r = await CA.setMode(login, String(b.mode || ""), { ask: typeof b.ask === "boolean" ? b.ask : undefined, via: "web", userId: String(req.user.userId) });
+      else if (op === "answer") r = await CA.answer(login, b.target, String(b.how || ""), { via: "web" });
+      else if (op === "allow") {
+        const v = await resolveViewer(b.target);
+        r = v.error ? { ok: false, error: v.error } : v.userId === String(req.user.userId) ? { ok: false, error: "That's you." } : await CA.allow(login, v, { via: "web" });
+      }
+      else if (op === "disallow") r = await CA.disallow(login, b.target);
+      else return res.status(400).json({ ok: false, error: "Unknown change." });
       if (!r.ok) return res.status(400).json(r);
-      res.json({ ...r, blocks: listBlocks(login) });
+      res.json({ ...r, blocks: listBlocks(login), access: CA.accessOf(login), allow: CA.listAllow(login), asks: CA.pendingFor(login) });
     } catch (e) { fail(res, e); }
   });
 }

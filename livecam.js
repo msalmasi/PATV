@@ -392,6 +392,9 @@ async function start(u, R, login, t = now()) {
   try { if ((await require("./stories").privateLogins([login])).has(login)) { if (!ghost) throw refuse("opted_out"); bypass = bypass || "private"; } }
   catch (e) { if (e.refuse) throw e; }
   if (CV().blocked(login, u.userId)) { if (!ghost) throw refuse("unavailable"); bypass = bypass || "blocked"; }   // 1.99yq: !blockviewer
+  // 1.99aar: the owner's mode (members / followers / on request + their "always" list, camaccess.js); a refused viewer may ask
+  const g = await require("./camaccess").gate(login, u.userId);
+  if (g) { if (!ghost) throw new Refuse(403, g.error, g.code, { can_ask: g.can_ask, pending: g.pending, mode: g.mode }); bypass = bypass || g.code; }
   const k = keyOf(R.id, login);
   if ((COOL.get(k) || 0) > t) throw refuse("ended_by");
   if (!botOk(t)) throw refuse("nopepe");
@@ -647,7 +650,10 @@ async function forBot(body, t = now()) {
   const c = cfg();
   let cvNotify = [];
   try { cvNotify = CV().forBot(body, t); } catch (e) { cvNotify = []; }   // 1.99yq: "X opened your cam" notices for Pepe to PM
-  return { ok: true, v: CFG.v, cfg: Object.fromEntries(BOT_KEYS.map((k) => [k, c[k]])), want, optout: [...OPTOUT].slice(0, 5000), cv_notify: cvNotify };
+  let caAsks = [];
+  try { caAsks = require("./camaccess").forBot(body, t); } catch (e) { caAsks = []; }   // 1.99aar: "X asks to watch your cam" for Pepe to PM
+  return { ok: true, v: CFG.v, cfg: Object.fromEntries(BOT_KEYS.map((k) => [k, c[k]])), want, optout: [...OPTOUT].slice(0, 5000), cv_notify: cvNotify,
+           ca_asks: caAsks };
 }
 
 // ── MediaMTX ──
@@ -773,6 +779,35 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "livecams");   // 1.99zf: a bridge block on live cams
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "livecams" });
       res.json(await start(u, R, String((req.body || {}).login || "")));
+    } catch (e) { fail(res, e); }
+  });
+  // 1.99aar: 🙋 ask the cam's owner to let you watch (their mode is members / followers / on request) + the answer so far
+  const askHit = guard.limiter({ max: 30, windowMs: 60 * 60 * 1000 });
+  app.post("/api/rooms/:slug/livecam/ask", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!fetchOnly(req, res)) return;
+    try {
+      const u = await me(req);
+      if (!u) throw refuse("signin");
+      if (askHit.blocked("u:" + u.userId)) return res.status(429).json({ ok: false, code: "rate", error: "That's a lot of asking - try again later." });
+      askHit.hit("u:" + u.userId);
+      const R = room(req);
+      if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw refuse("pad_access");
+      const login = String((req.body || {}).login || "").toLowerCase();
+      const m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
+      if (!m) throw refuse("not_on_cam");
+      const r = await require("./camaccess").ask(login, u, R.id);
+      res.status(r.ok ? 200 : r.code === "rate" ? 429 : 409).json(r);
+    } catch (e) { fail(res, e); }
+  });
+  app.get("/api/rooms/:slug/livecam/ask", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const u = await me(req);
+      if (!u) throw refuse("signin");
+      const login = String(req.query.login || "").toLowerCase();
+      if (!LOGIN_RE.test(login)) return res.status(400).json({ ok: false, error: "Whose cam?" });
+      res.json({ ok: true, ...(await require("./camaccess").askState(login, u.userId)) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/:slug/livecam/beat", addUser, async (req, res) => {

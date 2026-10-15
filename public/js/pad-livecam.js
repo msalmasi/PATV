@@ -121,7 +121,12 @@
       b.disabled = true; say(_t('js.pad.live.asking', 'Asking Pepe to go live…'));
       post(base, { login: who.login }).then(function (d) {
         if (my !== gen) return;
-        if (!d || !d.ok) { b.disabled = false; return say(why(d && d.code, d && d.error), 'bad'); }
+        if (!d || !d.ok) {
+          b.disabled = false;
+          say(why(d && d.code, d && d.error), 'bad');
+          if (d && (d.can_ask || d.pending)) askUi(!!d.pending);            // 1.99aar: members / followers / on request - ask the owner
+          return;
+        }
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) { b.disabled = false; post(base + '/stop', { login: who.login }); return say(_t('js.pad.live.err_browser', 'This browser can\'t play live cams.'), 'bad'); }
         if (d.slots) hint.textContent = _t('js.pad.live.slots', '{n} of {max} live slots free', { n: Math.max(0, d.slots.max - d.slots.used), max: d.slots.max });
         box.classList.add('lc-on');
@@ -157,6 +162,42 @@
         });
       }).catch(function () { if (my === gen) { b.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); } });
     }
+    // 1.99aar: 🙋 Ask to watch (camaccess.js): the owner is PM'd in Camfrog + told in their inbox; this waits for the answer
+    // (up to 10 minutes) and starts the cam by itself on a yes.
+    var askB = null, askT = null;
+    function askStop() { clearInterval(askT); askT = null; }
+    function askWait() {
+      askStop();
+      var until = Date.now() + 10 * 60 * 1000;
+      askT = setInterval(function () {
+        if (Date.now() > until) { askStop(); if (askB) { askB.disabled = false; askB.textContent = _t('js.pad.live.ask', '🙋 Ask to watch'); } return say(_t('js.pad.live.ask_none', 'No answer yet - you can ask again.')); }
+        fetch(base + '/ask?login=' + encodeURIComponent(who.login), { credentials: 'same-origin', cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (k) {
+            if (!k || !k.ok) return;
+            if (k.state === 'allowed') { askStop(); if (askB) { askB.remove(); askB = null; } say(_t('js.pad.live.ask_yes', 'They said yes!'), 'ok'); start(); }
+            else if (k.state === 'no') { askStop(); if (askB) askB.remove(); askB = null; say(_t('js.pad.live.ask_no', 'They said no.'), 'bad'); }
+          }).catch(function () { /* the next poll */ });
+      }, 5000);
+    }
+    function askUi(pending) {
+      if (!askB) {
+        askB = el('button', 'live ask', ''); askB.type = 'button';
+        askB.addEventListener('click', function () {
+          askB.disabled = true;
+          post(base + '/ask', { login: who.login }).then(function (k) {
+            if (k && k.ok && k.allowed) { askB.remove(); askB = null; return start(); }
+            if (!k || !k.ok) { askB.disabled = false; return say((k && k.error) || _t('js.pad.live.ask_fail', 'Couldn’t ask - try again in a bit.'), 'bad'); }
+            askB.textContent = _t('js.pad.live.asked', '⏳ Asked - waiting');
+            say(_t('js.pad.live.ask_sent', 'Asked - they’re told in Camfrog. This starts by itself if they say yes.'));
+            askWait();
+          }).catch(function () { askB.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
+        });
+        acts.insertBefore(askB, b.nextSibling);
+      }
+      if (pending) { askB.disabled = true; askB.textContent = _t('js.pad.live.asked', '⏳ Asked - waiting'); askWait(); }
+      else { askB.disabled = false; askB.textContent = _t('js.pad.live.ask', '🙋 Ask to watch'); }
+    }
     b.addEventListener('click', function () { if (!sess && !beatT) start(); });
     if (pin) {
       pin.addEventListener('click', function () {
@@ -175,7 +216,7 @@
         else say(why('viewer_cap'), 'bad');
       });
     }
-    ctl.stop = function () { if (sess || beatT) teardown(true); };
+    ctl.stop = function () { askStop(); if (sess || beatT) teardown(true); };
     window.addEventListener('pagehide', ctl.stop);
     return ctl;
   }
