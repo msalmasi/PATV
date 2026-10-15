@@ -378,8 +378,11 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(inc, /privacy@publicaccess\.tv/);
   assert.match(p.text, /href="#incognito"/);
   assert.match(p.text, /13 October 2026:<\/b> added <a href="#incognito">/, "a dated change note");
-  assert.equal(terms.PRIVACY_UPDATED, "13 October 2026");
-  assert.equal(terms.VERSION, "2026-10-11", "the incognito section asks nobody to accept again");
+  assert.equal(terms.PRIVACY_UPDATED, "15 October 2026");     // 1.99aax: live cams, forget me, export / delete, no crawlers
+  assert.match(p.text, /15 October 2026:<\/b> added <a href="#livecams">/, "a dated change note for 1.99aax");
+  assert.match(p.text, /id="forget"/);
+  assert.match(p.text, /ghost mode/);
+  assert.equal(terms.VERSION, "2026-10-11", "the incognito and 1.99aax sections ask nobody to accept again");
   assert.match(t.text, /id="siteFootTpl"/, "footer links on every layout page");
   assert.match(t.text, /href="\/privacy">Privacy Policy/);
   assert.doesNotMatch(t.text, /class="draft"/, "no Draft banner while enforced");

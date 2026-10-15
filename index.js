@@ -90,6 +90,9 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 let MemoryStore = session.MemoryStore;
 
+// 1.99aax: no search engines / AI crawlers - /robots.txt (link-preview bots allowed) + X-Robots-Tag on every response
+require("./crawlers").register(app);
+
 // 1.99gk: nginx's auth_request for RTMP-slot HLS on Approved pads (hlsauth.js) - before the session / body middleware,
 // so the per-segment check stays cheap and never makes a session
 require("./hlsauth").register(app);

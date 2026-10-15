@@ -24,14 +24,14 @@
     <ol>
       <li><a href="#who">Who's responsible</a></li>
       <li><a href="#collect">What we collect</a></li>
-      <li><a href="#rooms">Camfrog rooms on the website</a></li>
+      <li><a href="#rooms">Camfrog rooms on the website</a> (and <a href="#livecams">live cams</a>)</li>
       <li><a href="#safety">Safety data on posts and comments</a></li>
       <li><a href="#use">How we use it</a></li>
       <li><a href="#see">Who can see what</a> (and <a href="#messages">direct messages</a>)</li>
       <li><a href="#share">Who we share it with</a></li>
       <li><a href="#cookies">Cookies and local storage</a></li>
       <li><a href="#retention">How long we keep things</a></li>
-      <li><a href="#choices">Your choices and rights</a> (and <a href="#incognito">incognito</a>)</li>
+      <li><a href="#choices">Your choices and rights</a> (and <a href="#incognito">incognito</a>, <a href="#forget">making Pepe forget you</a>)</li>
       <li><a href="#children">Children</a></li>
       <li><a href="#security">Security</a></li>
       <li><a href="#transfers">Where data is stored</a></li>
@@ -66,6 +66,15 @@
   <section id="rooms">
     <h2>3. Camfrog rooms on the website</h2>
     <p>Pepe sits in public Camfrog rooms and mirrors them to the website for members: <b>public room chat</b>, who's in the room, who's on the mic, and <b>what's said on the mic, transcribed automatically</b> by speech-recognition software. Transcripts can be wrong. Private messages are never shown. If you type <code>!incognito</code> or <code>!bridge hide</code> in the room, you appear as "someone". Pad owners can switch the mirror, the audio and the transcripts off for their pad. Pepe's snaps and clips of a room (<code>!snap</code>, <code>!clip</code>) are shown as stories to signed-in members and expire after 24 hours by default.</p>
+    <h3 id="livecams">Live cams</h3>
+    <p>If you're on cam in a Camfrog room that's mirrored to the website, signed-in members who may see that pad's live room can <b>watch your cam live</b> (Pepe relays it, about a second behind), take a <b>snapshot</b> or record a short <b>clip</b>. <b>The live video is relayed, never recorded or stored.</b> Snapshots and clips are kept only if someone saves or posts them, at the price and under the rules of the room.</p>
+    <ul>
+      <li><b>Who can watch:</b> by default only <b>verified members</b> (a linked Camfrog name or another verified account). You can open it to every signed-in member, limit it to your followers on PATV, or to <b>only people you say yes to</b>, keep a list of people who can always watch, or switch it <b>off</b> completely. People who don't qualify can ask you; Pepe tells you in Camfrog and you answer yes for 6 hours, yes always, or no. Set it in <a href="/settings/privacy#livecam">Settings → Privacy</a> or with <code>!livecam</code>, <code>!camok</code> and <code>!camno</code> in Camfrog. Tightening it ends the live view of anyone who no longer qualifies.</li>
+      <li><b>You're told:</b> when someone opens your cam on the website, Pepe sends you a private message in Camfrog saying who. <code>!whowatching</code> and Settings → Privacy show who's watching. You can <b>block</b> anyone from your cam (<code>!blockviewer</code>); their live view ends at once.</li>
+      <li><b>Moderation by PATV staff:</b> PATV administrators and staff can view a cam that's live in a mirrored room even when its owner has switched it off, limited who can watch or blocked them ("ghost mode"), to keep PATV safe (anyone in that Camfrog room can see the cam anyway). You aren't told about these views, but <b>every one is logged</b> with what it got past and kept for 180 days for administrators to review. Ghost mode is for viewing only: it never lets staff save, post or reuse your cam (snapshots, clips or AI picture references).</li>
+      <li><b>Pepe's main stream:</b> your cam goes on Pepe's own broadcast (on publicaccess.tv, his Twitch channel and his Camfrog cam) only if you've allowed it (<code>!onair me on</code> or Settings → Privacy) or say yes when asked.</li>
+      <li><code>!incognito</code>, <code>!bridge hide</code> and <code>!livecam off</code> keep your cam off the website.</li>
+    </ul>
     <p>Things you say to Pepe, in rooms or on the site, are processed by automated systems — including AI language and speech models that we run ourselves or that service providers run for us — to produce his replies.</p>
   </section>
 
@@ -98,6 +107,7 @@
 
   <section id="see">
     <h2>6. Who can see what</h2>
+    <p>PATV asks search engines and AI crawlers not to crawl or index it (a <code>robots.txt</code> that turns them away and a "noindex" signal on every page), so PATV pages shouldn't show up in search results or be collected for AI training by crawlers that honour these signals. Link previews (for example when you paste a link in Discord or Telegram) still work. Public pages can still be opened by anyone who has the link.</p>
     <div class="tw"><table>
       <thead><tr><th>Information</th><th>Who sees it</th></tr></thead>
       <tbody>
@@ -107,6 +117,8 @@
         <tr><td>Reports you make</td><td>Site admins; pad owners for reports on posts in their pad (not child-safety, non-consensual imagery or copyright reports). The person you report isn't told who reported them.</td></tr>
         <tr><td>Safety data on posts and comments (IP, user agent, language, country, hashes)</td><td>Site administrators only, logged</td></tr>
         <tr><td>An author's account age and linked status</td><td>Site admins, and the owner of a pad the post is in</td></tr>
+        <tr><td>Your cam, live, in a mirrored room</td><td>Who you choose: verified members by default, every signed-in member, your followers, or only people you say yes to (or nobody) - see <a href="#livecams">Live cams</a>. Site admins and staff can view it for moderation (logged)</td></tr>
+        <tr><td>Who opened your cam on the website</td><td>You (through Pepe's messages, <code>!whowatching</code> and Settings → Privacy); staff moderation views are visible to site admins only</td></tr>
         <tr><td>Your direct messages</td><td>You and the people in the conversation. A site admin sees one only if it's reported to them (see below)</td></tr>
       </tbody>
     </table></div>
@@ -155,6 +167,9 @@
         <tr><td>Pepe's snaps and clips (stories)</td><td>24 hours by default</td></tr>
         <tr><td>Files of deleted posts</td><td>Purged 7 days after deletion; the post's record may be kept for moderation and legal reasons</td></tr>
         <tr><td>Reports and moderation records</td><td>As long as needed to handle repeat abuse and legal obligations</td></tr>
+        <tr><td>Live cam video</td><td>Never stored - it's relayed live only</td></tr>
+        <tr><td>Who opened your cam on the website</td><td>7 days; staff moderation views 180 days</td></tr>
+        <tr><td>Requests to watch your cam and your answers</td><td>30 days</td></tr>
         <tr><td>Inbox notices</td><td>Your latest 1,000</td></tr>
         <tr><td>Direct messages</td><td>Until the sender deletes them ("message deleted"). Clearing or deleting a conversation removes it from your view only; the other person keeps their copy. A reported message's copy is kept with the report as a moderation record</td></tr>
         <tr><td>Your account, content and PAT ledger</td><td>Until you delete the content or ask us to close the account; inactive accounts may be archived after notice</td></tr>
@@ -168,6 +183,9 @@
     <ul>
       <li>Edit or delete your posts and comments, and choose which profile panels are public, at any time.</li>
       <li>In Camfrog rooms, <code>!incognito</code> / <code>!bridge hide</code> keep your name off the website. Incognito does more than that: see <a href="#incognito">Incognito</a> below.</li>
+      <li>Choose who can see your cam on the website, or switch it off: see <a href="#livecams">Live cams</a>.</li>
+      <li><b>Make Pepe forget you</b> and delete your private conversations with him: see <a href="#forget">below</a>.</li>
+      <li><b>Download your data</b> or <b>delete your account</b> in <a href="/settings/account">Settings → Account</a>. A deleted account is closed after a 14-day grace period in which signing in cancels it; Pepe also forgets your Camfrog name.</li>
       <li>Turn inbox notices on or off in your inbox settings; choose who can message you, block people and turn Camfrog alerts for messages on or off in your message settings.</li>
       <li>Clear cookies and local storage in your browser (you'll be signed out).</li>
       <li>Depending on where you live, you may have the right to access, correct, delete or export your personal data, to object to or restrict some processing, and to complain to your data-protection authority. Email <a href="mailto:privacy@publicaccess.tv">privacy@publicaccess.tv</a> from the address on your account and we'll respond within the time the law requires. We may need to keep some data (for example safety records about content that was reported) where the law allows or requires.</li>
@@ -181,7 +199,14 @@
       <li><b>Captures of you are private:</b> snaps and clips that show you can't be kept or posted, your cam can't be used as a reference for AI pictures, and Pepe doesn't keep your mic audio for clips.</li>
       <li><b>You're left out of bounty evidence and analytics:</b> your lines are never quoted or sent to the AI judge when a bounty is checked, your most-used words aren't recorded for your profile analytics, and room statistics count you without naming you.</li>
     </ul>
-    <p><b>What it doesn't do:</b> it only stops <i>new</i> data. It doesn't delete what Pepe or the site already stored about you, including memories, chat logs, captures and analytics from before you switched it on. To have that deleted, or to get a copy of it, email <a href="mailto:privacy@publicaccess.tv">privacy@publicaccess.tv</a> from the address on your account (see your rights above). Your points, games and commands work as usual while it's on.</p>
+    <p><b>What it doesn't do:</b> it only stops <i>new</i> data. It doesn't delete what Pepe or the site already stored about you, including memories, chat logs, captures and analytics from before you switched it on. To delete Pepe's memories and your private conversations with him, use <a href="#forget">Make Pepe forget me</a>; for everything else, or to get a copy, use Settings → Account or email <a href="mailto:privacy@publicaccess.tv">privacy@publicaccess.tv</a> from the address on your account (see your rights above). Your points, games and commands work as usual while it's on.</p>
+    <h3 id="forget">Make Pepe forget me</h3>
+    <p>In <a href="/settings/privacy#forget">Settings → Privacy</a>, or with <code>!forgetme now</code> and then <code>!forgetme confirm</code> in Camfrog, you can make Pepe forget you. It deletes, and can't be undone:</p>
+    <ul>
+      <li>everything Pepe remembers about you: what he learned, your nicknames and linked names, and your mic history;</li>
+      <li>your private conversations with him: Camfrog private messages, "Message Pepe" on the website (for both sides of the conversation) and the Telegram chat.</li>
+    </ul>
+    <p>It doesn't delete what you said in public rooms (chat, mic transcripts, snaps and clips), because that's the room's record and involves other people, and it doesn't switch on incognito, so Pepe starts learning again if you keep talking to him. We keep a record that you asked (when, and how many messages were deleted), never what was said. Deleted data may persist in backups until they expire (see section 9).</p>
   </section>
 
   <section id="children">
@@ -203,6 +228,7 @@
     <h2>14. Changes</h2>
     <p>We'll update this policy when what we do changes. The "Last updated" date at the top shows the latest version; for significant changes we'll also give notice on the site.</p>
     <ul>
+      <li><b>15 October 2026:</b> added <a href="#livecams">Live cams</a> (section 3): who can watch your cam on the website (verified members by default), asking and answering, blocks, being told who watched, PATV staff moderation views ("ghost mode", logged), and Pepe's main stream; <a href="#forget">Make Pepe forget me</a> (section 10); downloading your data and deleting your account; and that PATV asks search engines and AI crawlers not to index it (section 6). New retention rows in section 9.</li>
       <li><b>13 October 2026:</b> added <a href="#incognito">Incognito</a> (section 10): what the incognito switch stops, what it doesn't delete, and that it can now be changed in Settings → Privacy as well as with <code>!incognito</code>. A clarification of a setting you control; nothing about what we collect changed.</li>
     </ul>
   </section>
