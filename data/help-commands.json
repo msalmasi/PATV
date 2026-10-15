@@ -138,10 +138,13 @@
    ],
    "aliases": [],
    "syntax": [
-    "!intro"
+    "!intro",
+    "!intro auto on|off [-global|-all]",
+    "!intro every <hours>",
+    "!intro status"
    ],
-   "summary": "Pepe introduces himself to the whole room: who he is, what PAT is, and where to start.",
-   "details": "Two short lines in the room: Pepe is the room's frog bot (games, heists, music, voice, the PublicAccess economy), PAT is the room's coin you earn by hanging out, chatting and playing, and `!balance`, `!spin` and `!help` are good first commands. Anyone can use it; once per room every 10 minutes (inside that, Pepe answers you by PM instead).",
+   "summary": "Pepe introduces himself to the room: who he is, what PAT is, the website and your privacy options.",
+   "details": "A few short lines in the room: who Pepe is (games, heists, the casino, music, the mic), what PAT is (free points you earn by chatting, being on the mic and playing - not money), how to get a free publicaccess.tv account, and - in rooms linked to the website - that signed-in members can follow the room there, with how to keep yourself off it (`!incognito`, `!livecam off`, `!bridge hide`). Anyone can use it; once per room every 10 minutes (inside that, Pepe answers you by PM instead). Pepe also posts it by himself, at most once every 6 hours per room and only while people are talking. Admins: `!intro auto on|off [-global|-all]` switches the automatic post for this room (or every room), `!intro every <hours>` sets how often, `!intro status` shows when it last went out.",
    "examples": [
     "!intro"
    ],
@@ -7797,5 +7800,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "cacf62ac72d0babb"
+ "hash": "c4a9bcc18c9abb16"
 }

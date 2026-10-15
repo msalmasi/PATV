@@ -267,7 +267,7 @@ async function camWhyNot(room, login, { optinOk = false, padOk = false } = {}) {
 const refuse = (code) => new Refuse(code === "gone" ? 404 : 409, WHY[code] || code, code);
 
 // ── set / clear ──
-async function setSlot(slotId, by, { admin, rights = false, ask = true, starting = false } = {}) {
+async function setSlot(slotId, by, { admin, rights = false, ask = true, starting = false, waitMs = 0 } = {}) {
   await init();
   if (!CFG.enabled) throw refuse("off");
   const s = await S().getSlot(String(slotId || ""));
@@ -288,7 +288,8 @@ async function setSlot(slotId, by, { admin, rights = false, ask = true, starting
   await dropPending(prev);
   TARGET = { id: (embed ? "e:" : "s:") + s.id + ":" + now().toString(36), kind: embed ? "embed" : "slot", slot_id: s.id, user_id: s.userId,
              username: s.username, pad, label, by: String(by), at: now(), live_at: now(), pad_ok: padOk || null, pending: [],
-             ...(embed ? { embed, rights: { by: String(by), at: now() } } : {}) };
+             ...(embed ? { embed, rights: { by: String(by), at: now() } } : {}),
+             ...(starting && waitMs > 0 ? { start_until: now() + waitMs } : {}) };     // 1.99aaq: time to start streaming
   if (!padOk) {
     const c = await C().ask({ kind: "pad", pad, slot_id: s.id, label, by, minutes: CFG.consent_min });
     TARGET.pending.push(c.id);
@@ -332,11 +333,29 @@ async function setLibrary(key, by, { admin, user } = {}) {
   if (!user) throw new Refuse(403, "Site staff only.", "staff_only");
   const r = await require("./medialib").play(user, { room: rooms().HOUSE_ROOM, key: String(key || "") });
   try {
-    return await setSlot(r.slot.id, by, { admin, ask: false, starting: true });
+    return await setSlot(r.slot.id, by, { admin, ask: false, starting: true, waitMs: 3 * 60 * 1000 });
   } catch (e) {
     await require("./medialib").stop(user, rooms().HOUSE_ROOM, "onair_failed").catch(() => {});
     throw e;
   }
+}
+// 1.99aaq: staff stream straight onto Pepe's stream from their own OBS (RTMP / WHIP) or the browser: a slot on Pepe's own
+// pad (the stage's normal booking - its limits, publish auth and Cut) that is the on-air pick from the start and goes out
+// as soon as it's live; nothing reaches OBS until then, and if nothing arrives within GOLIVE_WAIT_MS the pick is dropped.
+const GOLIVE_WAIT_MS = 10 * 60 * 1000;
+async function setGoLive(user, by, { admin, minutes, title } = {}) {
+  await init();
+  if (!CFG.enabled) throw refuse("off");
+  if (!user) throw new Refuse(403, "Site staff only.", "staff_only");
+  const m = [30, 60, 120, 180].includes(Number(minutes)) ? Number(minutes) : 60;
+  const b = await S().book(user, { room: rooms().HOUSE_ROOM, minutes: m, title: String(title || "").trim() || "Live on Pepe's stream" });
+  try {
+    await setSlot(b.slot.id, by, { admin, ask: false, starting: true, waitMs: GOLIVE_WAIT_MS });
+  } catch (e) {
+    await S().end(b.slot.id, "onair_failed", user.username).catch(() => {});
+    throw e;
+  }
+  return { slot_id: b.slot.id, minutes: m, rtmp: b.rtmp, wait_min: GOLIVE_WAIT_MS / 60000, page: "/stage" };
 }
 function tellLive(T) {
   if (!T || T.kind === "cam" || !T.user_id) return;
@@ -448,8 +467,8 @@ function check(t = now()) {
       const why = await slotWhyNot(s, { needLive: false, padOk: true }, t);
       if (why) return clear(why, "system");
       if (!pending && (T.pad_ok === "session" || T.pad_ok === "always") && !(await padConsent(T.pad))) return clear("consent_revoked", "system");
-      if (S().isLive(s, t)) T.live_at = t;
-      else if (t - (T.live_at || T.at) > LIVE_GRACE_MS) return clear("not_live", "system");
+      if (S().isLive(s, t)) { T.live_at = t; T.went_live = true; }
+      else if (t - (T.live_at || T.at) > LIVE_GRACE_MS && !(T.start_until && !T.went_live && t < T.start_until)) return clear("not_live", "system");
       if (T.kind === "embed" && !pending) {
         if (BOT && BOT.state && BOT.state.irl && botOk(t)) T.embed_play_at = t;     // hidden under the IRL feed: no stall clock
         const last = Math.max(T.at + EMBED_GRACE_MS, T.embed_play_at || 0);
@@ -473,6 +492,8 @@ async function botTarget() {
   if (T.kind === "slot") {
     const s = await S().getSlot(T.slot_id);
     if (!s) return null;
+    // 1.99aaq: a pick still waiting for its stream to start (go live / 📼) stays off OBS until it's live - no blank scene
+    if (T.start_until && !T.went_live && !S().isLive(s)) return null;
     return { id: T.id, kind: "slot", label: T.label, url: S().hlsOf(s), live: S().isLive(s), since: T.at };
   }
   if (T.kind === "embed") return { id: T.id, kind: "embed", label: T.label, url: playerUrl(T), since: T.at };
@@ -680,6 +701,11 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
       else if (b.action === "library") {
         await setLibrary(b.key, actor(req), { admin: adm(req), user: { userId: req.user.userId, username: req.user.username, class: req.user.class } });
       }
+      else if (b.action === "golive") {
+        const g = await setGoLive({ userId: req.user.userId, username: req.user.username, class: req.user.class }, actor(req),
+                                  { admin: adm(req), minutes: b.minutes, title: b.title });
+        return res.json({ ok: true, golive: g, ...(await adminView()) });
+      }
       else if (b.action === "off") await clear("off", actor(req), { admin: adm(req) });
       else if (b.action === "config") {
         if (req.user.class !== "Admin") throw new Refuse(403, "Admins only.", "admin_only");
@@ -742,7 +768,7 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
 }
 
 module.exports = {
-  register, init, forBot, botCommand, setSlot, setCam, setEmbed, setLibrary, clear, saveConfig, check, adminView, view, config, clean, setOptin, optinState, optedIn,
+  register, init, forBot, botCommand, setSlot, setCam, setEmbed, setLibrary, setGoLive, clear, saveConfig, check, adminView, view, config, clean, setOptin, optinState, optedIn,
   slotWhyNot, camWhyNot, resolveSlot, Refuse, DEFAULTS, WHY, LIVE_GRACE_MS, EMBED_GRACE_MS, onConsentChange, embedForToken, embedState, playerToken,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reset: () => { CFG = { ...DEFAULTS }; TARGET = null; V = 0; BOT = null; OPTIN = new Map(); ready = null; },

@@ -402,9 +402,42 @@ test("1.99aao: a Plex title from the player bar plays on Pepe's pad and goes on 
     const tgt = OA.view().target;
     assert.equal(tgt.kind, "slot");
     assert.equal(tgt.pad, rooms.HOUSE_ROOM);
-    T += OA.LIVE_GRACE_MS + 1000;                         // the stream never came up: taken off like any slot
+    assert.equal((await OA.forBot({})).target, null, "not live yet: nothing on OBS");
+    T += OA.LIVE_GRACE_MS + 1000;                         // still inside its 3-minute start window
+    await OA.check();
+    assert.ok(OA.view().target);
+    T += 3 * 60 * 1000;                                   // the stream never came up: taken off like any slot
     await OA.check();
     assert.equal(OA.view().target, null);
     assert.equal(stopped, 0);
   } finally { ML.play = orig.play; ML.stop = orig.stop; }
+});
+
+test("1.99aaq: staff go live straight onto Pepe's stream - a slot on his pad, off OBS until it's live, dropped after 10 min without a stream", async () => {
+  const u = await mkUser();
+  const staff = { ...u, class: "Staff" };
+  const g = await OA.setGoLive(staff, "web:" + u.username, { minutes: 60, title: "Q&A" });
+  assert.equal(g.minutes, 60);
+  assert.ok(g.rtmp && g.rtmp.key && g.rtmp.server);
+  const tgt = OA.view().target;
+  assert.equal(tgt.kind, "slot");
+  assert.equal(tgt.slot_id, g.slot_id);
+  assert.equal(tgt.pad, rooms.HOUSE_ROOM);
+  assert.ok(!JSON.stringify(OA.view()).includes(g.rtmp.key), "the key never leaves the requester's answer");
+  assert.equal((await OA.forBot({})).target, null, "nothing on OBS before the stream starts");
+  T += 5 * 60 * 1000;                                     // OBS still being set up: kept
+  await OA.check();
+  assert.ok(OA.view().target);
+  assert.equal((await pub(g.rtmp.key, ++cids)).status, 302);
+  await OA.check();
+  const r = await OA.forBot({});
+  assert.equal(r.target.kind, "slot");
+  assert.equal(r.target.live, true);
+  // a second go-live with nothing streaming is dropped after the wait
+  await OA.clear("test", "test");
+  for (const s of await getQuery("SELECT id FROM stage_slots WHERE status != 'ended'")) await S.end(s.id, "test_cleanup", "test");
+  await OA.setGoLive(staff, "web:" + u.username, {});
+  T += 10 * 60 * 1000 + 1000;
+  await OA.check();
+  assert.equal(OA.view().target, null);
 });

@@ -4,6 +4,8 @@
 //   "On air: <what>" + ✂ Cut      only while something is on air (or waiting for an owner's OK); a confirm step, then the
 //                                  same action as the card's Take off / !onair off (audited the same way)
 //   📺 Play content here          a compact picker of everything that can go on Pepe's OBS:
+//                                  🎥 go live yourself (1.99aaq): a slot on Pepe's pad - OBS key / WHIP / browser on
+//                                  /stage - that goes on air the moment it's live (nothing on OBS before that),
 //                                  🔗 a YouTube / Twitch link pasted straight in (1.99aao; the rights tick every time),
 //                                  📼 a Plex title searched and played on Pepe's own pad (1.99aao; needs allow_library),
 //                                  live pad slots (streams, embeds, 📼) and cams - with the card's rules: the rights tick
@@ -52,10 +54,13 @@
       '.oap label{font-size:12px;color:var(--ds-text-2,#ccc)}.oap .oap-top{display:flex;justify-content:space-between;align-items:center;gap:8px}' +
       '.oap form{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}' +
       '.oap input[type=url],.oap input[type=search]{flex:1 1 220px;min-width:0;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--ds-line-strong,#444);background:#0d0d0d;color:#eee;font:13px var(--ds-font,sans-serif)}' +
+      '.oap select,.oap .oap-gl input{min-height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--ds-line-strong,#444);background:#0d0d0d;color:#eee;font:13px var(--ds-font,sans-serif);max-width:100%}' +
+      '.oap .oap-gl p{margin:6px 0;overflow-wrap:anywhere}.oap .oap-gl input{width:min(340px,100%)}' +
       '.oap .oap-plex li img{width:32px;height:48px;object-fit:cover;border-radius:4px;background:#222;flex:0 0 auto}' +
       '.oap .oap-plex .oap-who{display:flex;align-items:center;gap:8px;flex:1 1 200px}';
     document.head.appendChild(s);
   }
+  var waiting = function (T) { return !!(T && T.start_until && !T.went_live); };   // a go-live / 📼 pick whose stream hasn't started
   function msg(text) { var m = panel && panel.querySelector('.oap-msg'); if (m) m.textContent = text || ''; }
   function act(body, done) {
     msg('Working…');
@@ -67,7 +72,7 @@
       data = j; paint();
       done && done(j);
       var T = j.target;
-      msg(!T ? 'Off Pepe’s stream.' : (T.pending || []).length ? 'Asked the owner - it goes on air once they allow it.' : 'On Pepe’s stream now (Pepe switches OBS in a few seconds).');
+      msg(!T ? 'Off Pepe’s stream.' : (T.pending || []).length ? 'Asked the owner - it goes on air once they allow it.' : waiting(T) ? 'Waiting for the stream - it goes on air as soon as it’s live.' : 'On Pepe’s stream now (Pepe switches OBS in a few seconds).');
     }).catch(function () { msg('Couldn’t reach the site.'); });
   }
   // the Snap / Clip bar and this bar share one row under the player (no half-empty rows)
@@ -98,7 +103,7 @@
     place();
     var T = data.target, C = data.cfg || {};
     var h = '';
-    if (T) h += '<span class="oab-now">' + ((T.pending || []).length ? '⏳ Waiting for the owner: ' : '📺 On air: ') + '<b>' + esc(T.label) + '</b></span>' +
+    if (T) h += '<span class="oab-now">' + ((T.pending || []).length ? '⏳ Waiting for the owner: ' : waiting(T) ? '⏳ Waiting for the stream: ' : '📺 On air: ') + '<b>' + esc(T.label) + '</b></span>' +
       '<button type="button" class="oab-cut" data-oab="cut">✂ Cut</button>';
     h += '<button type="button" data-oab="play"' + (C.enabled ? '' : ' disabled title="On-air is switched off (/stage/admin)"') + '>📺 Play content here</button>';
     bar.innerHTML = h;
@@ -120,6 +125,11 @@
     panel = el('div', 'oap');
     var C = (data && data.cfg) || {};
     panel.innerHTML = '<div class="oap-top"><b>📺 Play on Pepe’s stream + his Camfrog cam</b><button type="button" data-x="1" aria-label="Close">✕</button></div>' +
+      '<h4>🎥 Go live on Pepe’s stream</h4>' +
+      '<form class="oap-golive"><select name="minutes" aria-label="How long"><option value="30">30 min</option><option value="60" selected>1 hour</option>' +
+      '<option value="120">2 hours</option><option value="180">3 hours</option></select>' +
+      '<input type="search" name="title" placeholder="Title (optional)" aria-label="Title" maxlength="80" autocomplete="off"><button type="submit">🎥 Get my stream key</button></form>' +
+      '<div class="oap-gl"></div>' +
       '<h4>🔗 YouTube / Twitch link</h4>' +
       '<form class="oap-link"><input type="url" name="url" placeholder="Paste a YouTube or Twitch link" aria-label="YouTube or Twitch link" autocomplete="off">' +
       '<label><input type="checkbox" name="rights"> I have the rights to rebroadcast this</label><button type="submit">📺 Play</button></form>' +
@@ -136,7 +146,18 @@
     panel.addEventListener('submit', function (e) {
       e.preventDefault();
       var f = e.target;
-      if (f.classList.contains('oap-link')) {
+      if (f.classList.contains('oap-golive')) {
+        var T0 = data && data.target;
+        if (T0 && !window.confirm('This replaces “' + T0.label + '” on Pepe’s stream as soon as you go live. Continue?')) return;
+        act({ action: 'golive', minutes: Number(f.minutes.value), title: f.title.value.trim() }, function (j) {
+          var g = j && j.ok && j.golive, box = panel && panel.querySelector('.oap-gl');
+          if (!g || !box) return;
+          box.innerHTML = '<p>Stream from <b>OBS</b> (Settings → Stream → Custom), within ' + esc(g.wait_min) + ' minutes - it goes on Pepe’s stream as soon as it’s live:</p>' +
+            '<p><label>Server <input type="text" readonly value="' + esc(g.rtmp ? g.rtmp.server : '') + '"></label> <button type="button" data-copy="0">Copy</button></p>' +
+            '<p><label>Stream key <input type="password" readonly value="' + esc(g.rtmp ? g.rtmp.key : '') + '"></label> <button type="button" data-copy="1">Copy</button></p>' +
+            '<p class="oap-why">Or use WHIP / your browser’s camera: <a href="' + esc(g.page) + '" target="_blank" rel="noopener">your slot on /stage</a>. ✂ Cut or ending the slot takes it off.</p>';
+        });
+      } else if (f.classList.contains('oap-link')) {
         var url = f.url.value.trim();
         if (!url) { msg('Paste a YouTube or Twitch link.'); return; }
         if (!f.rights.checked) { msg('Tick “I have the rights to rebroadcast this” first.'); return; }
@@ -160,6 +181,14 @@
     panel.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b || b.type === 'submit') return;
       if (b.getAttribute('data-x') === '1') { panel.remove(); panel = null; return; }
+      if (b.hasAttribute('data-copy')) {
+        var inp = panel.querySelectorAll('.oap-gl input')[Number(b.getAttribute('data-copy'))];
+        if (!inp) return;
+        var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(inp.value).then(done, function () { inp.type = 'text'; inp.select(); });
+        else { inp.type = 'text'; inp.select(); }
+        return;
+      }
       if (b.hasAttribute('data-show')) {                     // a show: list its episodes in place of the results
         msg('Loading…');
         fetch('/api/medialib/item/' + encodeURIComponent(b.getAttribute('data-show')), { credentials: 'same-origin', cache: 'no-store' })
