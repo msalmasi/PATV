@@ -69,7 +69,7 @@ const MAX_TRIES = 5;
 const KEEP_MS = 3 * 86400e3;
 const TEXT_MAX = 3500;               // Telegram's limit is 4096
 const TG_ID_RE = /^[1-9]\d{0,19}$/;
-const DEFAULT_ON = new Set(["dm", "mention", "tip", "follow", "stage", "store_purchase"]);   // 1.99tp: store_purchase - an admin set them up for it
+const DEFAULT_ON = new Set(["dm", "mention", "tip", "follow", "stage", "store_purchase", "ops"]);   // 1.99aai: "ops" = opsalerts.js, admins only, never a notice kind   // 1.99tp: store_purchase - an admin set them up for it
 const isLiveKind = (k) => /live/i.test(String(k || ""));    // go-live alerts (whatever the go-live feature names its kind)
 
 let NOW = () => Date.now();
@@ -265,7 +265,7 @@ async function whois({ tg_id, seen } = {}) {
 function kinds() {
   let list = [];
   try { list = require("./inbox").kindList(); } catch (e) { list = []; }
-  return list.filter((k) => k.key !== "admin");
+  return list.filter((k) => k.key !== "admin" && k.key !== "ops");
 }
 const defaultOn = (kind) => DEFAULT_ON.has(kind) || isLiveKind(kind);
 async function prefs(userId) {

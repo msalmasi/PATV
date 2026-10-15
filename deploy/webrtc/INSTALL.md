@@ -294,3 +294,21 @@ The script backs up first, to `/root/patv-webrtc-backups/rollback-<time>/`. Then
 
 After that it re-checks that Pepe's HLS is still updating, that both sites return 200, and that nothing
 listens on 8189 or 3478. It is idempotent and stops at the first error.
+
+## Relay watchdog (1.99aai)
+
+On 2026-10-14 the WHIP relay (`pepe-relay.sh`) kept running while its audio and video timestamps drifted apart
+after an RTP loss burst. For 8 hours nginx-rtmp wrote 0.02 s HLS segments, each behind a DISCONTINUITY, and every
+player failed. `pepe-relay-watchdog.sh` (a systemd timer, every 20 s, as root) catches that and restarts only the
+relay ffmpeg; MediaMTX starts a fresh one at once (`runOnAvailableRestart`). It never touches OBS, the WHIP session,
+MediaMTX or nginx.
+
+- **Bad =** more than 40 "force fragment split" lines in 30 s, or a playlist that is missing or stale (45 s), or one
+  whose segments are mostly shorter than 0.5 s or all behind a DISCONTINUITY. Two bad checks in a row = restart.
+- **Backoff:** 60 s between restarts, doubling to 30 min; reset after 30 min without one.
+- **Alerts:** every restart and the first healthy check after it go to `POST /api/ops/alert` on the prod site
+  (loopback + bot token): every site admin's inbox and Telegram (alerts outbox, kind `ops`).
+- **Install / remove:** `bash deploy/webrtc/install-relay-watchdog.sh [--dry-run | --remove]` from the site checkout.
+  Settings: `/etc/default/pepe-relay-watchdog`. Log: `journalctl -u pepe-relay-watchdog`.
+- `pepe-relay.sh` also has an optional `TIMESTAMPS=wallclock` line for `/etc/mediamtx/pepe-relay.conf` (arrival-time
+  timestamps instead of RTP/RTCP ones). It is off by default and not yet proven against a real loss burst.

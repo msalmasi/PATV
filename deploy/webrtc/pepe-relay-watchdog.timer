@@ -1,0 +1,10 @@
+[Unit]
+Description=PATV 1.99aai: check Pepe's main-stream HLS relay every 20 s
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=20s
+AccuracySec=2s
+
+[Install]
+WantedBy=timers.target

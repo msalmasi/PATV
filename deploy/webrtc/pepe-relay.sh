@@ -10,6 +10,11 @@
 # filtered so the URL can't reach the journal. Installed by install.sh to /usr/local/lib/patv-webrtc/pepe-relay.sh.
 #   RTMP_TARGET=rtmp://127.0.0.1/<app>/<stream name>      (loopback only)
 #   AUDIO_BITRATE=160k                                     (optional)
+#   TIMESTAMPS=source | wallclock                          (optional, 1.99aai; default source = as before)
+#     wallclock: stamp every packet with its arrival time instead of the RTP/RTCP-derived time (input
+#     -use_wallclock_as_timestamps 1 + discardcorrupt), audio resampled to follow it (aresample async). Meant for the
+#     2026-10-14 failure (A/V timestamps drifting apart after an RTP loss burst), but NOT yet proven against a real
+#     MediaMTX loss burst - keep "source" on prod until it is; pepe-relay-watchdog.sh is the safety net either way.
 set -u
 CONF="${PEPE_RELAY_CONF:-/etc/mediamtx/pepe-relay.conf}"
 conf() { sed -n "s/^$1=//p" "$CONF" 2>/dev/null | head -1; }
@@ -21,14 +26,20 @@ case "$TARGET" in
   *) echo "pepe-relay: RTMP_TARGET must be a loopback rtmp:// URL" >&2; exit 1 ;;
 esac
 case "${ABR:-160k}" in [0-9]*k) ;; *) ABR=160k ;; esac
+TSMODE="$(conf TIMESTAMPS)"
+IN_TS=() ; AF=()
+case "${TSMODE:-source}" in
+  wallclock) IN_TS=(-use_wallclock_as_timestamps 1 -fflags +discardcorrupt); AF=(-af aresample=async=1000) ;;
+  *) TSMODE=source ;;
+esac
 SRC="rtsp://127.0.0.1:${RTSP_PORT:-8554}/${MTX_PATH:?MTX_PATH is set by MediaMTX}"
-echo "pepe-relay: ${MTX_PATH} -> nginx-rtmp (H.264 copy, Opus -> AAC ${ABR:-160k})" >&2
+echo "pepe-relay: ${MTX_PATH} -> nginx-rtmp (H.264 copy, Opus -> AAC ${ABR:-160k}, timestamps ${TSMODE})" >&2
 # exec: MediaMTX's SIGINT goes straight to ffmpeg (clean RTMP close). stderr goes through a filter that blanks the
 # target (read from the environment, not an argument), so a connect error can't print the key.
 export PEPE_RELAY_TARGET="$TARGET"
 exec ffmpeg -hide_banner -nostdin -loglevel error \
-  -rtsp_transport tcp -analyzeduration 3000000 -probesize 2000000 -i "$SRC" \
-  -map 0:v:0 -map '0:a:0?' -c:v copy -c:a aac -b:a "${ABR:-160k}" -ar 48000 -ac 2 \
+  -rtsp_transport tcp -analyzeduration 3000000 -probesize 2000000 "${IN_TS[@]}" -i "$SRC" \
+  -map 0:v:0 -map '0:a:0?' -c:v copy "${AF[@]}" -c:a aac -b:a "${ABR:-160k}" -ar 48000 -ac 2 \
   -f flv "$TARGET" \
   2> >(awk 'BEGIN { t = ENVIRON["PEPE_RELAY_TARGET"] }
             { if (t != "") while ((i = index($0, t)) > 0) $0 = substr($0, 1, i - 1) "<rtmp-target>" substr($0, i + length(t))

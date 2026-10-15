@@ -1,0 +1,9 @@
+[Unit]
+Description=PATV 1.99aai: Pepe main-stream HLS relay watchdog (restarts a broken pepe-relay ffmpeg, alerts admins)
+After=mediamtx.service nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/patv-webrtc/pepe-relay-watchdog.sh
+TimeoutStartSec=60
+Nice=5
