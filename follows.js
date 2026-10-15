@@ -91,6 +91,7 @@ async function follow(user, kind, id, on = true) {
   } else {
     await runQuery("DELETE FROM follows WHERE follower = ? AND target_kind = ? AND target_id = ?", [user.userId, kind, T.id]);
   }
+  if (kind === "room") dropRoomCounts();
   return { following: !!on, followers: await followers(kind, T.id) };
 }
 
@@ -140,6 +141,24 @@ async function lists(userId) {
   }
   return out;
 }
+
+/** 1.99aae: follower counts for EVERY pad in one aggregate (the /p cards) - Map room_id -> n, cached ROOM_COUNTS_MS
+ *  and dropped on any follow / unfollow, so a page of cards never costs a query per pad. */
+const ROOM_COUNTS_MS = 60e3;
+let roomCounts = { at: 0, map: null, p: null };
+async function roomFollowerCounts() {
+  if (roomCounts.map && NOW() - roomCounts.at < ROOM_COUNTS_MS) return roomCounts.map;
+  if (roomCounts.p) return roomCounts.p;
+  roomCounts.p = (async () => {
+    await init();
+    const rows = await getQuery("SELECT target_id, COUNT(*) AS n FROM follows WHERE target_kind = 'room' GROUP BY target_id");
+    const map = new Map(rows.map((r) => [r.target_id, r.n]));
+    roomCounts = { at: NOW(), map, p: null };
+    return map;
+  })().catch((e) => { roomCounts.p = null; throw e; });
+  return roomCounts.p;
+}
+function dropRoomCounts() { roomCounts = { at: 0, map: null, p: null }; }
 
 /** 1.99za: the pad ids this user follows, newest follow first (the nav's "My pads" + the /p "Following" section). */
 async function followedPadIds(userId, limit = 60) {
@@ -251,4 +270,4 @@ function register(app, { addUser }) {
 }
 
 module.exports = { init, follow, isFollowing, followedAmong, followers, followingCount, counts, lists, prefs, setPrefs, feedFilter,
-                   notifyNewPost, register, resolve, followedPadIds, navPads, Refuse, MAX_FOLLOWS, _setClock, _gaps: gaps };
+                   notifyNewPost, register, resolve, followedPadIds, navPads, roomFollowerCounts, Refuse, MAX_FOLLOWS, _setClock, _gaps: gaps };

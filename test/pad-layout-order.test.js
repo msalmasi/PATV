@@ -151,3 +151,64 @@ test("/p: a Following section on top for signed-in viewers; followed pads are no
   html = await render({ signedIn: false, user: null });
   assert.doesNotMatch(html, /id="following"/);
 });
+
+// ── 1.99aae: the launchpad card at the end of Live; follower counts on the /p cards and in the header ──
+test("launchpad: the card is the last thing in the Live tab (after Manage room and the story strip), not above the tabs", async () => {
+  const html = await renderRoom({});
+  const live = html.slice(html.indexOf('id="padPanel-live"'), html.indexOf('id="padPanel-about"'));
+  assert.ok(at(html, 'id="padLaunch"') > at(html, 'id="padTabs"'), "below the tab bar");
+  assert.ok(at(live, 'id="padLaunch"') > at(live, 'id="rmMod"'), "after Manage room");
+  assert.match(live, /<section class="card pad-launch" id="padLaunch" data-slug="plant_based_chatting" aria-label="[^"]+" hidden><\/section>\s*<\/section>\s*(<section class="ppanel|$)/, "the panel's last element");
+  const src = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
+  assert.ok(src.indexOf('id="padLaunch"') > src.indexOf('class="card rm-story"'), "after the story strip too");
+  assert.equal((src.match(/id="padLaunch"/g) || []).length, 1);
+  assert.match(html, /pad-launch\.js\?v=\d+/, "its script still loads");
+});
+
+test("follows.roomFollowerCounts: one GROUP BY for every pad, cached, dropped on a follow", async () => {
+  await follows.init();
+  await runQuery("DELETE FROM follows WHERE target_kind = 'room'");
+  for (const [u, r] of [["a", "R.1"], ["b", "R.1"], ["c", "R.1"], ["a", "R.2"]]) {
+    await runQuery("INSERT INTO follows (follower, target_kind, target_id, created_at) VALUES (?, 'room', ?, ?)", [u, r, Date.now()]);
+  }
+  const m1 = await follows.roomFollowerCounts();
+  assert.equal(m1.get("R.1"), 3); assert.equal(m1.get("R.2"), 1); assert.equal(m1.get("R.3"), undefined);
+  // cached: a row added behind its back doesn't show until the cache drops (a follow() drops it)
+  await runQuery("INSERT INTO follows (follower, target_kind, target_id, created_at) VALUES ('d', 'room', 'R.2', 1)");
+  assert.equal((await follows.roomFollowerCounts()).get("R.2"), 1, "served from the cache");
+  const src = fs.readFileSync(path.join(repo, "follows.js"), "utf8");
+  assert.match(src, /if \(kind === "room"\) dropRoomCounts\(\);/, "a follow / unfollow drops the cache");
+  assert.match(fs.readFileSync(path.join(repo, "roomsweb.js"), "utf8"), /roomFollowerCounts\(\)[\s\S]{0,2500}followers: fcount\.get\(id\) \|\| 0/, "guideRows: one aggregate, a Map lookup per row");
+});
+
+test("/p cards show the follower count in 1.2k form (exact number in the tooltip), Following and More pads alike", async () => {
+  const row = (id, title, followers) => ({ id, slug: id.toLowerCase(), title, owner: null, ownerUser: null, house: false, bridged: false, live: false, count: 0, micCount: 0,
+    topic: "", description: "", slot_count: 1, now: [], next: [], pepe_here: false, platform: "site", site_only: true, boost_pat: 0, access: "members", followers });
+  const rows = [row("Aa", "Alpha", 1234), row("Bb", "Bravo", 1), row("Cc", "Charlie", 0)];
+  const html = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), { user: "u", signedIn: true, staff: false, owned: [], pepe: { active: false }, ul: (n) => n, rows, followRows: [rows[0]] });
+  const fol = html.slice(at(html, 'id="following"'), html.indexOf("</section>", html.indexOf('id="following"')));
+  assert.match(fol, /<span class="fol-n" title="1,234 people follow this pad"><b>1\.2k<\/b> followers<\/span>/);
+  assert.match(html, /<span class="fol-n" title="1 person follows this pad"><b>1<\/b> follower<\/span>/);
+  assert.match(html, /<span class="fol-n" title="0 people follow this pad"><b>0<\/b> followers<\/span>/);
+  // the real formatter when the app provides it
+  const bm = require(path.join(repo, "boostmark"));
+  const html2 = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), { user: "u", signedIn: true, staff: false, owned: [], pepe: { active: false }, ul: (n) => n, rows, followRows: [], fmtCount: bm.fmtPat });
+  assert.match(html2, /<b>1\.2k<\/b> followers/);
+});
+
+test("pad header: the follower count in 1.2k form, the exact number in the tooltip, a count chip by Follow on phones", async () => {
+  const feed = { room: "R.1", follow: { following: false, followers: 15320 }, viewer: null, mod: {}, caps: [], storyRooms: [], rules: null, queue: 0, sort: "new", top: "", tag: "",
+    flairOn: null, page: 1, more: false, posts: [], gallery: false, popularTags: [], postFlairs: [], flair: null, composer: null };
+  const html = await renderRoom({ feed, fx: require(path.join(repo, "feedweb")).fx, embeds: require(path.join(repo, "stageembed")), host: "x" });
+  const hero = html.slice(html.indexOf('<section class="hero'), html.indexOf("</section>", html.indexOf('<section class="hero')));
+  assert.match(hero, /<span class="hd-fc" title="15,320 people follow this pad"><b data-compact="1" data-follower-count-kind="room" data-follower-count-id="R\.1">15\.3k<\/b> followers<\/span>/);
+  assert.match(hero, /<span class="hd-fcs" title="15,320 people follow this pad" aria-label="15,320 people follow this pad"><b data-compact="1"[^>]*>15\.3k<\/b><\/span>/);
+  assert.match(html, /\.rm \.hd-fcs \{ display: none; \}/);
+  assert.match(html, /@media \(max-width: 640px\) \{[\s\S]*?\.rm \.hero-c \.hd-fcs \{ display: inline-flex;/);
+  const js = fs.readFileSync(path.join(repo, "public", "js", "follow.js"), "utf8");
+  assert.match(js, /x\.hasAttribute\('data-compact'\) \? compact\(d\.followers\)/, "a follow repaints the compact counts");
+  const vm = require("vm"), box = { window: {}, document: { addEventListener() {} } };
+  vm.runInNewContext(js.replace("if (window.__patvFollow) return;", "window.__compact = compact; return;"), box);
+  const c = box.window.__compact;
+  assert.deepEqual([0, 999, 1000, 1234, 15320, 125000, 1250000].map(c), ["0", "999", "1k", "1.2k", "15.3k", "125k", "1.3M"]);
+});

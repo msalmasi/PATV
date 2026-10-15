@@ -3,6 +3,7 @@
     H = the page's helpers {PFX_, PAV_, BM, TXT, padBadge_, pepeOn} (rooms.ejs builds them). The card is ONE link (a.ch),
     no links or buttons inside (1.99ed). %>
 <% const { PFX_, PAV_, BM, TXT, padBadge_, pepeOn } = H;
+   const CN_ = H.CN_ || String, fol_ = Math.max(0, Number(r.followers) || 0);
    const liveNow = r.now.filter((s) => s.live); const desc = r.description || r.topic || '';
    const pepeTip = t('rooms.pepe_tip'); %>
         <% const fx_ = PFX_(r.id); %>
@@ -20,6 +21,8 @@
           </div>
           <div class="ch-meta">
             <span class="padref">p/<%= r.slug %></span>
+            <%# 1.99aae: followers (roomsweb.guideRows r.followers - one cached aggregate) %>
+            <span class="fol-n" title="<%- t('rooms.followers_tip', { count: fol_, n: fol_.toLocaleString('en-US') }) %>"><%- t('rooms.followers', { count: fol_, n: '<b>' + t.esc(CN_(fol_)) + '</b>' }) %></span>
             <% if (r.bridged && r.live && r.count > 0) { %><span title="<%- t('rooms.n_in_room', { n: r.count }) %>" aria-label="<%- t('rooms.n_in_room', { n: r.count }) %>">👥 <%= r.count %></span><% } %>
             <% if (r.bridged && r.live && r.micCount > 0) { %><span title="<%- t('rooms.n_on_mic', { n: r.micCount }) %>" aria-label="<%- t('rooms.n_on_mic', { n: r.micCount }) %>">🎙 <%= r.micCount %></span><% } %>
             <% if (r.house) { %><span class="own" title="<%- t('rooms.house_tip') %>"><%- t('rooms.house') %></span><% } else if (r.owner) { %><span class="own" title="<%- t('rooms.owner_tip') %>">👑 <%= r.owner %></span><% } %>

@@ -429,7 +429,8 @@ function navPads(username, followedIds, max = 6) {
 
 function register(app, { addUser }) {
   const bad = (res, st, error) => res.status(st).json({ ok: false, error });
-  if (app.locals) { app.locals.myPads = myPads; app.locals.navPads = navPads; }   // 1.99ti: layout.ejs + profile.ejs; 1.99za: owned + followed
+  if (app.locals) { app.locals.myPads = myPads; app.locals.navPads = navPads; app.locals.fmtCount = require("./boostmark").fmtPat; }   // 1.99aae: fmtCount = 1.2k counts (follower counts)
+  // myPads / navPads: 1.99ti layout.ejs + profile.ejs; 1.99za owned + followed
   require("./padsite").register(app, { addUser });      // 1.99up: Pepe on the pad's site side (padsite.js)
   require("./feedfilter").register(app, { addUser });   // 1.99ux: the cheap content filter (owner card + /feed/admin/filter)
   const jsonOnly = (req, res, next) => (req.is("application/json") && req.get("X-Requested-With") === "fetch" ? next() : bad(res, 400, "Bad request."));

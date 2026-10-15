@@ -54,7 +54,10 @@ async function guideRows(signedIn, viewer) {
     else byId.get(b.id).br = b;
   }
   const pepe = B.stage();
-  const bpat = await rooms.boostPats();       // 1.99ek: active boost PAT per pad (one cached query) for the 🚀 badges
+  const bpat = await rooms.boostPats();
+  // 1.99aae: followers per pad for the cards - one cached aggregate (follows.roomFollowerCounts), never a query per pad
+  let fcount = new Map();
+  try { fcount = await require("./follows").roomFollowerCounts(); } catch (e) { fcount = new Map(); }       // 1.99ek: active boost PAT per pad (one cached query) for the 🚀 badges
   const out = [];
   for (const [id, x] of byId) {
     const r = x.reg, b = x.br;
@@ -71,6 +74,7 @@ async function guideRows(signedIn, viewer) {
       platform: rooms.platformOf(id),            // 1.99x: camfrog | site | twitch | discord (a bridged-only room is camfrog)
       site_only: rooms.isCommunityOnly(id),      // 1.99ck: a pad with no Camfrog room (the Camfrog Lounge)
       boost_pat: Math.round(bpat.get(id) || 0),  // 1.99ek: active (decayed) boost PAT - 0 = not boosted
+      followers: fcount.get(id) || 0,            // 1.99aae: follower count (the /p cards)
       access: PA.levelOf(id),                    // 1.99fu: public | members | approved
     });
   }

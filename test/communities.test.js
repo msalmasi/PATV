@@ -385,12 +385,15 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   // a pad page: its header (name, p/<slug>, description, follow, owner) and that pad's feed, sorted by ?sort=
   await rooms.setPage(ROOM_B, { description: "Plants <b>and</b> chat" }, "test");
   const pb = (await page("/p/plant-based-chatting?sort=new", U.bob)).text;
-  assert.match(pb, /<h1 id="rmTitle">Houseplants/);
-  assert.ok(pb.includes('<div class="padref">p/plant-based-chatting</div>'));
+  // 1.99za: the compact header (name + badges); p/<slug>, the description and the owner are in the About card
+  assert.match(pb, /<h1 id="rmTitle"><span class="hd-nm"><span class="rm-nm[^"]*" data-fit-name title="Houseplants">Houseplants/);
+  assert.ok(pb.includes('<dt>Address</dt><dd><span class="padref">p/plant-based-chatting</span></dd>'));
   assert.ok(pb.includes("Plants &lt;b&gt;and&lt;/b&gt; chat"));
   assert.match(pb, /title="Follow this pad" class="fw-btn[^"]*" data-follow-kind="room" data-follow-id="plant_based_chatting"/);
-  assert.match(pb, /👑 Pad owner: /);
-  assert.match(pb, /<span class="hd-fc"[^>]*><b data-follower-count-kind="room"[^>]*>\d+<\/b> followers?<\/span>/, "1.99ef: the follower count is plain text by Follow, not a chip");
+  assert.match(pb, /<dt>Run by<\/dt><dd><a href="\/u\/[^"]+">👑 /);
+  // 1.99aae: the count in 1.2k form, plain text by Follow (+ the phone's count chip), the exact number in the tooltip
+  assert.match(pb, /<span class="hd-fc" title="\d+ (person follows|people follow) this pad"><b data-compact="1" data-follower-count-kind="room"[^>]*>\d+<\/b> followers?<\/span>/, "1.99ef: plain text by Follow, not a chip");
+  assert.match(pb, /<span class="hd-fcs" title="[^"]+" aria-label="[^"]+"><b data-compact="1" data-follower-count-kind="room"/);
   assert.ok(pb.includes("📡 Camfrog room") && pb.includes("legacyRoom04"));
   assert.ok(pb.includes("🐸 Camfrog Pad"), "1.99x: a Camfrog-backed pad wears the Camfrog badge");
   assert.ok(pb.includes('href="/p">Pads</a>'));

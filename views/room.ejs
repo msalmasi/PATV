@@ -222,6 +222,7 @@
   .rm .hd-follow .fw-btn { min-height: 36px; padding: 7px 16px; font-size: 14px; font-weight: bold; }
   .rm .hd-fc { font-size: 13px; color: var(--ds-text-muted); white-space: nowrap; }
   .rm .hd-fc b { color: #ddd; font-variant-numeric: tabular-nums; }
+  .rm .hd-fcs { display: none; }   /* 1.99aae: the phone's count chip by Follow */
   .rm .ibtn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid #2b2b2b;
               background: #161616; color: #ccc !important; font-size: 17px; line-height: 1; cursor: pointer; list-style: none; user-select: none; }
   .rm .ibtn:hover { border-color: var(--ds-green); color: #fff !important; }
@@ -498,6 +499,15 @@
     .rm .hero-c .hd-st { flex: 1 1 auto; }
     .rm .hero-c .hd-follow, .rm .hd-acts:has(.po-cta) .hd-follow { flex: none; margin: 0; }
     .rm .hero-c .hd-fc, .rm .hero-c a.hd-about { display: none; }
+    .rm .hero-c .hd-fcs { display: inline-flex; align-items: center; min-height: 36px; padding: 0 7px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong);
+                          font-size: 13px; color: var(--ds-text-2); white-space: nowrap; }
+    .rm .hero-c .hd-fcs b { color: var(--ds-text); font-variant-numeric: tabular-nums; }
+    .rm .hero-c .hd-follow { gap: 6px; }
+    .rm .hero-c .hd { gap: 8px 6px; }
+    .rm .hero-c .hd-follow .fw-btn { padding-inline: 11px; font-size: 13px; }
+    .rm .hd-st .live { padding: 2px 7px; }
+    .rm .hero.hero-c { padding-inline: var(--ds-sp-3); }
+    .rm .hero-c .hero-bn { margin-inline: calc(-1 * var(--ds-sp-3)); }
     .rm .hero-c .hd { justify-content: flex-start; }
     /* an on-air stage stays above the chat: its Snap / Clip price line keeps to one line (the preview dialog repeats it) */
     .rm .stage .stcap { margin-top: 8px; }
@@ -542,6 +552,7 @@
   <% const desc_ = (room.description || '').trim(), topic_ = (room.topic || '').trim();
      const sameTxt_ = (a, b) => a.replace(/\s+/g, ' ').toLowerCase() === b.replace(/\s+/g, ' ').toLowerCase();
      const fcount_ = feed_ && feed_.follow ? feed_.follow.followers : 0;
+     const CN_ = typeof fmtCount === 'function' ? fmtCount : (n) => { n = Math.max(0, Math.round(Number(n) || 0)); if (n < 1000) return String(n); const u = n < 1e6 ? [1e3, 'k'] : n < 1e9 ? [1e6, 'M'] : [1e9, 'B']; const x = n / u[0]; return (x < 100 ? (Math.round(x * 10) / 10).toFixed(1).replace(/\.0$/, '') : String(Math.round(x))) + u[1]; };   // 1.99aae: 1.2k counts (boostmark.fmtPat)
      const queue_ = feed_ && feed_.queue ? feed_.queue : 0, pending_ = schedule_ && schedule_.pending ? schedule_.pending : 0;
      const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
      const psTitle_ = t('pad.hdr.settings_tip') + (queue_ ? ' · ' + t('pad.hdr.n_waiting_mod', { n: queue_ }) : '') + (pending_ ? ' · ' + t('pad.hdr.n_to_approve', { n: pending_ }) : '');
@@ -560,7 +571,11 @@
       </div>
       <div class="hd-acts">
         <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: t('pad.hdr.follow') }) %>
-          <span class="hd-fc" title="<%- t('pad.hdr.follow_tip') %>"><%- t('pad.hdr.followers', { count: fcount_, n: '<b data-follower-count-kind="room" data-follower-count-id="' + t.esc(feed_.room) + '">' + t.esc(fcount_.toLocaleString('en-US')) + '</b>' }) %></span></div><% } %>
+          <%# 1.99aae: the count in 1.2k form (the exact number in the tooltip); on a phone a small count chip by Follow
+              (.hd-fcs) instead of the words. follow.js repaints both (data-compact) after a follow / unfollow %>
+          <% const fcTip_ = t('pad.hdr.followers_tip', { count: fcount_, n: fcount_.toLocaleString('en-US') }), fcB_ = (cls) => '<b' + (cls ? ' class="' + cls + '"' : '') + ' data-compact="1" data-follower-count-kind="room" data-follower-count-id="' + t.esc(feed_.room) + '">' + t.esc(CN_(fcount_)) + '</b>'; %>
+          <span class="hd-fc" title="<%= fcTip_ %>"><%- t('pad.hdr.followers', { count: fcount_, n: fcB_('') }) %></span>
+          <span class="hd-fcs" title="<%= fcTip_ %>" aria-label="<%= fcTip_ %>"><%- fcB_('') %></span></div><% } %>
         <%# 1.99ti: a labelled "👑 Manage your pad" for the owner (staff see "Owner panel") - it was a bare icon nobody found.
             1.99wk: the ONE owner-panel link in the header / tab bar (the tab bar's "Owner" tab is gone). The ⚙ next to it is a
             different page - the settings hub /p/<slug>/settings (page, stage, feed, Pepe, rules, moderation; padsettings.js),
@@ -583,7 +598,6 @@
       </div>
     </div>
   </section>
-  <section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section>
   <nav class="ptabs" id="padTabs" role="tablist" aria-label="<%- t('pad.tab.aria') %>">
     <% PT_.tabs.forEach((tb_) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= tb_ %>" data-tab="<%= tb_ %>" aria-controls="padPanel-<%= tb_ %>" aria-selected="<%= tabOn_(tb_) ? 'true' : 'false' %>" tabindex="<%= tabOn_(tb_) ? 0 : -1 %>">
       <% if (tb_ === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%- liveLabel_ %><% } else if (tb_ === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span><%- t('pad.tab.feed') %> <span class="pnew" id="padFeedNew" hidden></span><% } else { %><%- t('pad.tab.about') %><% } %></button><% }) %>
@@ -1323,6 +1337,9 @@
   <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length))) { %>
     <section class="card rm-story" aria-label="<%- t('pad.story.aria') %>"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: t('pad.story.fresh'), next: '/p/' + encodeURIComponent(room.slug) }) %></section>
   <% } %>
+  <%# 1.99aae: 🚀 the launchpad card (pad-launch.js fills it; hidden unless this pad is on the launchpad) - the very
+      end of Live (was between the header and the tabs on every tab) %>
+  <section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section>
   </section>
 <% if (feed_) { %>
   <section class="ppanel" id="padPanel-feed" role="tabpanel" aria-labelledby="padTab-feed"<%= tabOn_('feed') ? '' : ' hidden' %>>

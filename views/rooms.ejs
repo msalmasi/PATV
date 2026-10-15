@@ -25,7 +25,9 @@
   const pepeOn = !!(pepe && pepe.active);
   const plat_ = typeof platform !== 'undefined' ? platform : '', counts_ = typeof counts !== 'undefined' ? counts : {}, PL_ = typeof PAD_PLATFORMS !== 'undefined' ? PAD_PLATFORMS : { camfrog: { icon: '🐸', label: 'Camfrog Pad' }, site: { icon: '🌐', label: 'Site Pad' } };
   const padBadge_ = typeof padBadge === 'function' ? padBadge : (p) => '<span class="pad-plat pp-' + p + '">' + (PL_[p] ? PL_[p].icon + ' ' + PL_[p].label : p) + '</span>';
-  const H_ = { PFX_, PAV_, BM, TXT, padBadge_, pepeOn };   // partials/pad-dir-card.ejs
+  // 1.99aae: 1.2k-style counts (boostmark.fmtPat via app.locals.fmtCount; the same rule inline when rendered bare)
+  const CN_ = typeof fmtCount === 'function' ? fmtCount : (n) => { n = Math.max(0, Math.round(Number(n) || 0)); if (n < 1000) return String(n); const u = n < 1e6 ? [1e3, 'k'] : n < 1e9 ? [1e6, 'M'] : [1e9, 'B']; const x = n / u[0]; return (x < 100 ? (Math.round(x * 10) / 10).toFixed(1).replace(/\.0$/, '') : String(Math.round(x))) + u[1]; };
+  const H_ = { PFX_, PAV_, BM, TXT, padBadge_, pepeOn, CN_ };   // partials/pad-dir-card.ejs
   // 1.99za: the pads you follow get their own section at the top (followRows: every followed pad you can see, any
   // platform, in the route's order) and are left out of the full grid below, so nothing shows twice
   const fol_ = typeof followRows !== 'undefined' && Array.isArray(followRows) ? followRows : [];
@@ -125,7 +127,8 @@
   .cg .sched time { color: var(--ds-green-2); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
   .cg .sched .w { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cg .owned { display: flex; gap: 8px; flex-wrap: wrap; }
-  .cg .fol .fol-empty { margin: 0; }   /* 1.99za: the Following section */
+  .cg .fol .fol-empty { margin: 0; }
+  .cg .ch-meta .fol-n b { color: var(--ds-text); font-variant-numeric: tabular-nums; }   /* 1.99aae: followers on the card */   /* 1.99za: the Following section */
   .cg .fol { border-color: color-mix(in srgb, var(--ds-gold) 28%, var(--ds-line)); }
   .cg .empty { border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-lg); padding: var(--ds-sp-6) var(--ds-sp-4); text-align: center; color: var(--ds-text-muted); }
   /* a schedule row opens its pad - a stretched link (a.rl::after covers the row); other links sit above it */

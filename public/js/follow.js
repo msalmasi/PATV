@@ -3,6 +3,13 @@
 // Signed-out buttons are plain links to the sign-in page. Same-site JSON with X-Requested-With: fetch.
 (function () {
   'use strict';
+  // 1.99aae: 1.2k counts (the same rule as boostmark.fmtPat on the server) for [data-compact] follower counts
+  function compact(n) {
+    n = Math.max(0, Math.round(Number(n) || 0));
+    if (n < 1000) return String(n);
+    var u = n < 1e6 ? [1e3, 'k'] : n < 1e9 ? [1e6, 'M'] : [1e9, 'B'], x = n / u[0];
+    return (x < 100 ? (Math.round(x * 10) / 10).toFixed(1).replace(/\.0$/, '') : String(Math.round(x))) + u[1];
+  }
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   if (window.__patvFollow) return;
   window.__patvFollow = true;
@@ -27,7 +34,7 @@
       // every button for the same target (an author can appear on several cards)
       document.querySelectorAll('button[data-follow-kind="' + kind + '"]').forEach(function (x) { if (x.getAttribute('data-follow-id') === id) paint(x, d.following); });
       document.querySelectorAll('[data-follower-count-kind="' + kind + '"]').forEach(function (x) {
-        if (x.getAttribute('data-follower-count-id') === id) x.textContent = d.followers.toLocaleString('en-US');
+        if (x.getAttribute('data-follower-count-id') === id) x.textContent = x.hasAttribute('data-compact') ? compact(d.followers) : d.followers.toLocaleString('en-US');
       });
     }).catch(function (e) { alert(e.message); }).then(function () { b.disabled = false; });
   });
