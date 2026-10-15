@@ -7827,12 +7827,75 @@
     "label": "Clone your voice",
     "url": "/voices/clone"
    }
+  },
+  {
+   "id": "escrow",
+   "title": "!escrow [backend] status · cutover · rollback",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!escrow"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!escrow",
+    "!escrow backend export",
+    "!escrow backend cutover confirm",
+    "!escrow backend rollback confirm",
+    "!escrow <wagers|bounties|pools|loans> backend status"
+   ],
+   "summary": "Where the escrow ledger runs (Pepe or publicaccess.tv) - the stakes held for wagers, bounties, pools, loans and games.",
+   "details": "**status** (anyone): where escrowed stakes live and how many holds there are. **Admins:** `!escrow backend export` checks a cutover without moving anything (holds, total PAT, any problem); `!escrow backend cutover confirm` moves every escrowed stake to publicaccess.tv (totals must match or nothing moves); `!escrow backend rollback confirm` brings them back onto Pepe (the site must answer). `!escrow wagers|bounties|pools|loans backend …` does the same for one escrow game. `!backends` shows every backend switch at once.",
+   "examples": [
+    "!escrow",
+    "!escrow backend export"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "plusrooms",
+   "title": "!plusrooms",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!plusrooms"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!plusrooms"
+   ],
+   "summary": "💎 The Prime Time Plus room list from publicaccess.tv and what Pepe did with it.",
+   "details": "Admins: the rooms connected through Prime Time Plus (the pads whose Camfrog room Pepe joins), whether the list is enforced (when it isn't, Pepe changes nothing), the most allowed, how many are pending, how many rooms Pepe is in, and his last pass (joined / left / skipped / banned). Replies by PM.",
+   "examples": [
+    "!plusrooms"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "retention",
+   "title": "!retention [status|dryrun|set|delete]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!retention"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!retention",
+    "!retention dryrun",
+    "!retention set <kind> <days|unlimited>",
+    "!retention delete on confirm",
+    "!retention delete off"
+   ],
+   "summary": "🗄️ How long Pepe keeps chat logs, PM logs, transcripts and recordings - and the daily clean-up.",
+   "details": "Admins. `!retention` shows whether deletion is on (off = the daily pass only reports) and the last pass. `!retention dryrun` counts what would be deleted without touching anything. `!retention set <kind> <days|unlimited>` changes one keep-window (7 days or more). `!retention delete on confirm` lets the daily pass delete what the dry run lists - never while a room's Prime Time / Season Pass status is unknown (paid tiers keep logs longer); `!retention delete off` goes back to reporting only. Replies by PM.",
+   "examples": [
+    "!retention",
+    "!retention dryrun"
+   ],
+   "keywords": []
   }
  ],
- "undocumented": [
-  "!escrow",
-  "!plusrooms",
-  "!retention"
- ],
- "hash": "4109f8ff0515eab1"
+ "undocumented": [],
+ "hash": "0deac0c7049f569b"
 }
