@@ -78,7 +78,7 @@ async function registerUser(req, res) {
   const next = guard.safeNext(body.next);
   const back = (msg, field) => backTo(req, res, "/register", next, msg, { username: username.slice(0, 64), email: email.slice(0, 254), field });
 
-  if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-up refused");
+  if (!guard.authFormOk(req)) return res.status(403).send(guard.FORM_REFUSED);   // 1.99zl
   const ip = guard.clientIp(req);
   const wait = registerLimit.blocked(ip);
   if (wait) return back(req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.`);
@@ -285,7 +285,7 @@ async function loginUser(req, res) {
   const next = guard.safeNext(body.next);
   const back = (msg, field) => backTo(req, res, "/login", next, msg, { username: ident, field });
 
-  if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-in refused");
+  if (!guard.authFormOk(req)) return res.status(403).send(guard.FORM_REFUSED);   // 1.99zl
   if (!ident) return back(req.t ? req.t('auth.login.username_required') : "Enter your username or email.", "username");
   if (!password) return back(req.t ? req.t('auth.login.password_required') : "Enter your password.", "password");
 
