@@ -103,6 +103,7 @@ function register(app, { addUser, isBotToken }) {
   require("./challengepay").register(app, { addUser, isBotToken });   // mic challenge prizes out of a pad's room-vault escrow
   require("./roomvaults").register(app, { addUser, isBotToken });
   require("./padfines").register(app, { addUser, isBotToken });      // 1.99yx: admin pad vault fines / transfers (/pads/admin#padfines)
+  require("./padstreaks").register(app, { addUser });            // 1.99zm: 🔥 pad streaks + regular streaks (/api/rooms/:slug/streak)
   require("./recipe").register(app, { isBotToken });               // economy v2 E-4: the payout recipe's gates, watch-minutes, credits, royalty cutover
   require("./vwm").register(app, { isBotToken, addUser });          // economy v2 E-5: verified watch-minutes, the daily stage_watch rollup
   require("./padowner").register(app, { addUser });               // 1.99qr: the room owner's Pepe control panel (/p/<slug>/owner)

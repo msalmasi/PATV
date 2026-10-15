@@ -1582,6 +1582,14 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         xpForNextLevel: xpForNextLevel,
         // 1.99xi: 🔥 the daily activity streak (streaks.js) - shown in the header like the level ("streak" layout item)
         streak: await require("./streaks").forUser(user.userId).catch((e) => { console.error("profile streak:", e.message); return null; }),
+        // 1.99zm: 🔥 their longest running regular streak in one pad (padstreaks.js) - not shown to others while they're incognito
+        padRegular: await (async () => {
+          if (!(req.user && req.user.userId === user.userId)) {
+            const inc = await require("./incognito").stateOf(user.userId).catch(() => null);
+            if (inc && inc.on) return null;
+          }
+          return require("./padstreaks").topForUser(user.userId);
+        })().catch(() => null),
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
         canSeeHistory: !preview && !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
         heistSheet: await gtf.sheetFor(user.camfrogUsername),

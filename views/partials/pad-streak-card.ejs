@@ -1,0 +1,21 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99zm: 🔥 the pad streak (padstreaks.js) on the About tab - the pad's run of "alive" days and, for a signed-in member, their own
+    regular streak here. Filled by public/js/pad-streak.js from GET /api/rooms/:slug/streak; stays hidden until it answers.
+    Locals: slug. %>
+<% const PSK = ['h', 'days', 'best', 'rule', 'today_done', 'at_risk', 'none', 'mine', 'mine_none', 'next', 'badges'];
+   const PSL = {}; PSK.forEach((k) => { PSL[k] = t('pad.streak.' + k); }); %>
+<style>
+  .ps-card .ps-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .ps-card .ps-n { font-size: 1.6em; font-variant-numeric: tabular-nums; }
+  .ps-card .ps-note, .ps-card .ps-rule { margin: 4px 0 0; }
+  .ps-card .ps-me { margin: 6px 0 0; font-weight: 600; }
+</style>
+<section class="card ps-card" id="padstreak" aria-labelledby="psH" data-slug="<%= slug %>" hidden>
+  <h2 id="psH"><span><%- PSL.h %></span></h2>
+  <div class="ps-row"><b class="ps-n" data-ps="cur">0</b><span data-ps="cur_l"></span><small class="muted" data-ps="best"></small></div>
+  <p class="muted ps-note" data-ps="note"></p>
+  <p class="ps-me" data-ps="me"></p>
+  <p class="muted ps-rule" data-ps="rule"></p>
+  <script type="application/json" data-ps="labels"><%- JSON.stringify(PSL).split('<').join('\\u003c') %></script>
+</section>
+<script src="/public/js/pad-streak.js?v=1" defer></script>

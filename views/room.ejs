@@ -1350,6 +1350,8 @@
     </section>
     <%# 1.99sn: 💰 the pad vault, public, first card under About (partials/pad-vault-card.ejs; roomvaults.js) %>
     <% if (typeof roomVault !== 'undefined' && roomVault) { %><%- include('partials/pad-vault-card', { rv: roomVault, room, slug: room.slug, signed: giftSigned_, siteOnly: siteOnly_, num: (n) => Math.round(Number(n) || 0).toLocaleString('en-US') }) %><% } %>
+    <%# 1.99zm: 🔥 the pad streak + your regular streak here (padstreaks.js, partials/pad-streak-card.ejs) %>
+    <% if (!siteOnly_) { %><%- include('partials/pad-streak-card', { slug: room.slug }) %><% } %>
     <%# 1.99wu: 🎤 mic challenges (economy v2 E-8): the pad's latest judged performances + today's prize budget, filled by
         public/js/pad-challenges.js from GET /api/rooms/:slug/challenges (challengepay.js); stays hidden until there is one %>
     <% if (!siteOnly_) { %><section class="card pc-card" id="challenges" aria-labelledby="pcH" data-slug="<%= room.slug %>" hidden>

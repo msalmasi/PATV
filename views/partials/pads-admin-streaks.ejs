@@ -1,0 +1,15 @@
+<%# 1.99zm: 🔥 pad streaks (padstreaks.js) - how many people make a pad's day count. Site Admins; public/js/admin-padstreaks.js. %>
+<section class="sb-card" id="padstreaks" aria-labelledby="pstT">
+  <h2 id="pstT"><span class="ds-ic" aria-hidden="true">🔥</span> Pad streaks <span class="adm-pill admin">admins</span></h2>
+  <% if (!isAdmin) { %><p class="muted">Admins only.</p><% } else { %>
+  <p class="muted">A pad's streak is its run of days on which at least this many different people chatted or talked on the mic in its room
+    (Pepe never counts); each member also has a regular streak per pad. Shown on the pad's About tab and as "Regular at" on profiles.
+    Badges: 👋 🪑 🏛️ for regulars and 💡 🏪 🗽 for the pad's owner at 7, 30 and 100 days - XP only, no PAT.
+    Changing the number re-reads the whole history at the new bar.</p>
+  <form id="pstForm" class="row" autocomplete="off">
+    <label>People who make a day count <input type="number" name="min_users" id="pstMin" min="1" max="50" step="1" required style="width:6em"></label>
+    <button type="submit" class="btn primary">Save</button><span class="msg" id="pstMsg" role="status" aria-live="polite"></span>
+  </form>
+  <script src="/public/js/admin-padstreaks.js?v=1" defer></script>
+  <% } %>
+</section>

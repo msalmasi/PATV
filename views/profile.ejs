@@ -295,6 +295,7 @@
         <div class="ps stk<%= stk_.current > 0 ? ' on' : '' %><%= sh_ ? ' is-hidden' : '' %>" title="<%- t('profile.streak_title') %>">
           <span class="k"><%- t('profile.streak') %></span>
           <span class="stk-row"><b><span aria-hidden="true">🔥</span> <%= fmt(stk_.current) %></b><small><%- t('profile.streak_days', { count: stk_.current }) %> · <%- t('profile.streak_best', { n: fmt(stk_.best) }) %></small></span>
+          <% const preg_ = locals.padRegular; if (preg_ && preg_.current > 0) { %><span class="stk-note pad"><%- t('profile.regular_at', { pad: preg_.slug ? '<a href="/p/' + encodeURIComponent(String(preg_.slug).toLowerCase()) + '?tab=about#padstreak">' + t.esc(preg_.title) + '</a>' : t.esc(preg_.title), n: fmt(preg_.current) }) %><%- preg_.more > 0 ? ' · ' + t('profile.regular_more', { n: preg_.more }) : '' %></span><% } %>
           <% if (isMe && stk_.todayDone) { %><span class="stk-note ok"><%- t('profile.streak_today_done') %></span><% } else if (isMe && stk_.atRisk) { %><span class="stk-note risk"><%- t('profile.streak_at_risk') %></span><% } else if (isMe && !stk_.current) { %><span class="stk-note"><%- t('profile.streak_start') %></span><% } %>
         </div>
       <% } %>

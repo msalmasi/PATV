@@ -149,6 +149,8 @@ async function ingestParticipation(rows) {
   }
   // 1.99xi: 🔥 the days these logins chatted / were on mic / ran a command keep their accounts' daily streaks (streaks.js)
   try { await require("./streaks").fromLogins(require("./streaks").fromParticipation(rows)); } catch (e) { console.error("[econ] streaks:", e.message); }
+  // 1.99zm: 🔥 pad streaks + each member's regular streak in that pad (padstreaks.js)
+  try { await require("./padstreaks").fromParticipation(rows); } catch (e) { console.error("[econ] padstreaks:", e.message); }
   return saved;
 }
 

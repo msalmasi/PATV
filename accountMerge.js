@@ -355,6 +355,7 @@ const RULES = {
   "room_vault_settings.changed_by": M(), "room_vault_rate_log.by": M(),      // economy v2 E-3 (roomvaults.js): who set a pad's payout rate
   // 1.99yx admin pad vault fines / transfers (padfines.js): the admin's account moves; the actor is Pepe's label; to_room is a pad
   "pad_vault_admin_moves.site_user": M(), "pad_vault_admin_moves.actor": { deny: NAME },
+  "pad_regulars.userId": M({ key: ["room_id", "day"] }),   // 1.99zm padstreaks.js: regular days fold per pad + day
   "pad_vault_admin_moves.to_room": { deny: "1.99yx: the pad a transfer went INTO (a room id, audit only)" },
   // the pad launchpad (launchpad.js): one newcomer welcome per person (folded), visits per pad per day; admins by name
   "launchpad_welcomes.user_id": M({ key: [] }), "launchpad_visits.user_id": M({ key: ["room_id", "day"] }),
