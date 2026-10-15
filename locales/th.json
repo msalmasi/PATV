@@ -3145,6 +3145,8 @@
   "gtf.live.stale": "Pepe ไม่ได้ส่งอัปเดตมาสักพักแล้ว",
   "gtf.live.secs": "วิ",
   "gtf.live.min": "นาที",
+  "gtf.live.soon": "ใกล้เข้ามาแล้ว…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "สด · อัปเดตเมื่อ {ago}",
   "gtf.mm.stale": "Pepe ไม่ได้รายงานมาสักพักแล้ว ข้อมูลนี้จึงอาจล้าสมัย",
   "gtf.mm.none": "ยังไม่มีข้อมูลสด Pepe รายงานประมาณนาทีละครั้ง",

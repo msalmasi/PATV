@@ -3300,6 +3300,8 @@
   "gtf.live.stale": "Pepe давно не присылал обновлений.",
   "gtf.live.secs": "с",
   "gtf.live.min": "мин",
+  "gtf.live.soon": "с секунды на секунду…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "В эфире · обновлено {ago}",
   "gtf.mm.stale": "Pepe давно не выходил на связь, так что данные могут быть устаревшими.",
   "gtf.mm.none": "Живых данных пока нет. Pepe выходит на связь примерно раз в минуту.",

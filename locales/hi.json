@@ -3196,6 +3196,8 @@
   "gtf.live.stale": "Pepe ने कुछ देर से कोई अपडेट नहीं भेजा है।",
   "gtf.live.secs": "सेक",
   "gtf.live.min": "मिनट",
+  "gtf.live.soon": "किसी भी पल…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "लाइव · अपडेट: {ago}",
   "gtf.mm.stale": "Pepe ने कुछ देर से रिपोर्ट नहीं दी है, इसलिए यह जानकारी पुरानी हो सकती है।",
   "gtf.mm.none": "अभी कोई लाइव डेटा नहीं है। Pepe लगभग हर मिनट रिपोर्ट करता है।",

@@ -3196,6 +3196,8 @@
   "gtf.live.stale": "Pepe bir süredir güncelleme göndermedi.",
   "gtf.live.secs": "sn",
   "gtf.live.min": "dk",
+  "gtf.live.soon": "birazdan…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Canlı · {ago} güncellendi",
   "gtf.mm.stale": "Pepe bir süredir bilgi vermedi, o yüzden bu bilgiler eski olabilir.",
   "gtf.mm.none": "Henüz canlı veri yok. Pepe yaklaşık dakikada bir bilgi verir.",

@@ -3213,6 +3213,8 @@
   "gtf.live.stale": "O Pepe não envia uma atualização há um tempo.",
   "gtf.live.secs": "s",
   "gtf.live.min": "min",
+  "gtf.live.soon": "a qualquer segundo…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Ao vivo · atualizado {ago}",
   "gtf.mm.stale": "O Pepe não atualiza há um tempo, então isso pode estar desatualizado.",
   "gtf.mm.none": "Ainda não há dados ao vivo. O Pepe atualiza cerca de uma vez por minuto.",

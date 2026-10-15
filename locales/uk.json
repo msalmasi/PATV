@@ -3300,6 +3300,8 @@
   "gtf.live.stale": "Pepe давно не надсилав оновлень.",
   "gtf.live.secs": "с",
   "gtf.live.min": "хв",
+  "gtf.live.soon": "ось-ось…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Наживо · оновлено {ago}",
   "gtf.mm.stale": "Pepe давно не відгукувався, тож дані можуть бути застарілими.",
   "gtf.mm.none": "Наживо даних ще немає. Pepe відгукується приблизно раз на хвилину.",

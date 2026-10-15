@@ -3213,6 +3213,8 @@
   "gtf.live.stale": "Pepe non invia aggiornamenti da un po’.",
   "gtf.live.secs": "s",
   "gtf.live.min": "min",
+  "gtf.live.soon": "a momenti…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "In diretta · aggiornato {ago}",
   "gtf.mm.stale": "Pepe non segnala da un po&#39;, quindi questi dati potrebbero non essere aggiornati.",
   "gtf.mm.none": "Nessun dato in diretta ancora. Pepe segnala circa una volta al minuto.",

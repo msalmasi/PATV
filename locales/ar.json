@@ -3404,6 +3404,8 @@
   "gtf.live.stale": "لم يُرسل Pepe تحديثًا منذ مدة.",
   "gtf.live.secs": "ث",
   "gtf.live.min": "د",
+  "gtf.live.soon": "في أي لحظة…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "مباشر · حُدّث {ago}",
   "gtf.mm.stale": "لم يُرسل Pepe تحديثًا منذ مدة، لذا قد تكون هذه المعلومات قديمة.",
   "gtf.mm.none": "لا توجد بيانات مباشرة بعد. يرسل Pepe تحديثًا كل دقيقة تقريبًا.",

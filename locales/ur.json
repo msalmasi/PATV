@@ -3196,6 +3196,8 @@
   "gtf.live.stale": "Pepe نے کافی دیر سے کوئی اپڈیٹ نہیں بھیجی۔",
   "gtf.live.secs": "س",
   "gtf.live.min": "منٹ",
+  "gtf.live.soon": "کسی بھی لمحے…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "لائیو · {ago} کو اپڈیٹ ہوا",
   "gtf.mm.stale": "Pepe نے کافی دیر سے رپورٹ نہیں دی، اس لیے یہ معلومات پرانی ہو سکتی ہیں۔",
   "gtf.mm.none": "ابھی تک کوئی لائیو ڈیٹا نہیں۔ Pepe ہر ایک منٹ کے لگ بھگ رپورٹ دیتا ہے۔",

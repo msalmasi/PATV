@@ -3144,6 +3144,8 @@
   "gtf.live.stale": "Pepe đã lâu không gửi cập nhật.",
   "gtf.live.secs": "giây",
   "gtf.live.min": "phút",
+  "gtf.live.soon": "sắp rồi…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Trực tiếp · cập nhật {ago}",
   "gtf.mm.stale": "Pepe lâu rồi chưa báo cáo, nên dữ liệu này có thể đã cũ.",
   "gtf.mm.none": "Chưa có dữ liệu trực tiếp. Pepe báo cáo khoảng mỗi phút một lần.",

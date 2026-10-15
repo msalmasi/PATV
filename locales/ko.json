@@ -3144,6 +3144,8 @@
   "gtf.live.stale": "Pepe가 한동안 업데이트를 보내지 않았어요.",
   "gtf.live.secs": "초",
   "gtf.live.min": "분",
+  "gtf.live.soon": "곧이에요…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "라이브 · {ago} 업데이트",
   "gtf.mm.stale": "Pepe가 한동안 소식이 없어서 정보가 오래됐을 수 있어요.",
   "gtf.mm.none": "아직 라이브 데이터가 없어요. Pepe는 약 1분마다 소식을 전해요.",

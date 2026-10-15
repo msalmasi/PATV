@@ -3194,6 +3194,8 @@
   "gtf.live.stale": "Pepe مدتیه آپدیتی نفرستاده.",
   "gtf.live.secs": "ثانیه",
   "gtf.live.min": "دقیقه",
+  "gtf.live.soon": "هر لحظه…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "زنده · {ago} به‌روز شد",
   "gtf.mm.stale": "Pepe مدتیه گزارش نداده، پس ممکنه این اطلاعات قدیمی باشه.",
   "gtf.mm.none": "هنوز داده‌ای نیست. Pepe تقریباً هر دقیقه گزارش می‌ده.",

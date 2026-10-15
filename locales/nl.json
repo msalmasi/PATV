@@ -3196,6 +3196,8 @@
   "gtf.live.stale": "Pepe heeft al een tijdje geen update gestuurd.",
   "gtf.live.secs": "s",
   "gtf.live.min": "min",
+  "gtf.live.soon": "elk moment…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Live · bijgewerkt {ago}",
   "gtf.mm.stale": "Pepe heeft al een tijdje niets gemeld, dus dit kan verouderd zijn.",
   "gtf.mm.none": "Nog geen livegegevens. Pepe meldt zich ongeveer één keer per minuut.",

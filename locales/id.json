@@ -3144,6 +3144,8 @@
   "gtf.live.stale": "Pepe belum mengirim pembaruan dalam beberapa waktu.",
   "gtf.live.secs": "dtk",
   "gtf.live.min": "mnt",
+  "gtf.live.soon": "sebentar lagi…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Live · diperbarui {ago}",
   "gtf.mm.stale": "Pepe belum lapor dalam beberapa waktu, jadi data ini mungkin sudah lama.",
   "gtf.mm.none": "Belum ada data live. Pepe lapor sekitar sekali per menit.",

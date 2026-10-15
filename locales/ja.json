@@ -3144,6 +3144,8 @@
   "gtf.live.stale": "Pepeからしばらく更新がありません。",
   "gtf.live.secs": "秒",
   "gtf.live.min": "分",
+  "gtf.live.soon": "まもなく…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "ライブ · {ago}に更新",
   "gtf.mm.stale": "Pepeからしばらく報告がないため、情報が古い可能性があります。",
   "gtf.mm.none": "ライブデータはまだありません。Pepeは約1分ごとに報告します。",

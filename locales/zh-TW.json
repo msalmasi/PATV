@@ -3144,6 +3144,8 @@
   "gtf.live.stale": "Pepe 已有一段時間沒有傳送更新。",
   "gtf.live.secs": "秒",
   "gtf.live.min": "分鐘",
+  "gtf.live.soon": "隨時…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "即時 · 更新於 {ago}前",
   "gtf.mm.stale": "Pepe 已經有一段時間沒有回報，因此這些資料可能已過時。",
   "gtf.mm.none": "還沒有即時資料。Pepe 大約每分鐘回報一次。",

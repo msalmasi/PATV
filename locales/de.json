@@ -3196,6 +3196,8 @@
   "gtf.live.stale": "Pepe hat schon länger kein Update geschickt.",
   "gtf.live.secs": "s",
   "gtf.live.min": "min",
+  "gtf.live.soon": "jeden Moment…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Live · aktualisiert {ago}",
   "gtf.mm.stale": "Pepe hat sich schon länger nicht gemeldet, die Daten sind also vielleicht veraltet.",
   "gtf.mm.none": "Noch keine Live-Daten. Pepe meldet sich etwa einmal pro Minute.",

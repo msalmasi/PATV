@@ -3248,6 +3248,8 @@
   "gtf.live.stale": "Pepe לא שלח עדכון כבר זמן מה.",
   "gtf.live.secs": "שנ׳",
   "gtf.live.min": "דק׳",
+  "gtf.live.soon": "בכל רגע…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "בשידור חי · עודכן {ago}",
   "gtf.mm.stale": "Pepe לא דיווח כבר זמן מה, ייתכן שהמידע לא עדכני.",
   "gtf.mm.none": "אין עדיין נתונים חיים. Pepe מדווח בערך פעם בדקה.",
