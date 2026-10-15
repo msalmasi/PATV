@@ -30,6 +30,7 @@ const ALLOW = [
   /name="community"|input\[name=community\]|name === 'community'|\bcommunity: |\.community\b|communities\s*\|\||\(d\.communities|data-comm[\w-]*|fc-comm[\w-]*|\/api\/feed\/communities/g,
   /discord\.com\/channels\/[\d/]+/g, /#(poker|blackjack)(<\/a>)? channel/g, /\.name = 'community'/g, /Twitch channel/g, /twitch\.tv\/channel/g, /\?channel=|channel: '|e\.t === 'channel'/g,
   /spin the channel Wheel/gi,
+  /T === 'channel'|o\.channel = /g,   // 1.99aag: onair-player.js - the YouTube / Twitch embed players' own parameter names
   /community pot/g,   // 1.99mn: the incentive budget's public name (banner + /support), the people's pot - not a pad
   /PATV is a community|is a community hangout|The community|community website|community site|community token|community perks|Public Access community|from the community|private streaming video platform and community/g,
 ];

@@ -100,6 +100,9 @@ const RULES = {
   "onair_state.target": { deny: "1.99yt: JSON of what's on Pepe's main stream right now (slot id / chat login), short-lived, not a userId column" },
   "onair_state.updated_by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) - admin_audit has the id" },
   "onair_log.by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) in the on-air log" },
+  // 1.99aag on-demand consent (onairconsent.js): who was asked moves with the account; "by" is an actor label
+  "onair_consent.owner_id": M(), "onair_pad_allow.owner_id": M(),
+  "onair_consent.by": { deny: "1.99aag: an actor label (web:<username> / pepe:<login>) of who asked" },
   "donation_promo_settings.actor": { deny: NAME },
   // 1.99ts: the daily donation limit - a member's donations by day move (a merged account shares ONE daily limit); an override
   // folds into the target's (the target's own override wins when both have one)

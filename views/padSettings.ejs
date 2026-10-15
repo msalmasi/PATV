@@ -172,6 +172,12 @@
         <tbody id="openRows"></tbody></table></div>
       <p class="msg" id="nowMsg" role="status" aria-live="polite"></p>
     </div>
+    <%# 1.99aag: 📺 the owner's standing OK for Pepe's main stream (onairconsent.js) - only matters on an Approved-only pad %>
+    <div class="sb-card ps-card" id="oaPadAllowCard">
+      <h3>📺 Pepe's main stream</h3>
+      <p class="muted">Admins can put a live stream from a pad on Pepe's main stream (publicaccess.tv, his Twitch relay and his Camfrog cam). On an Approved-only pad they have to ask you first - you get an instant request to allow or deny. Tick this to allow it without being asked; untick to revoke.</p>
+      <div id="oaPadAllow" data-pad="<%= room.id %>"></div>
+    </div>
     <% if (typeof camfrog !== 'undefined' && camfrog) { %>
     <%# 1.99zc: 🎬 a cam as a stage slot (mainstage camOpen; drawn by room-manage.js) %>
     <div class="sb-card ps-card" id="stagecam">
@@ -558,6 +564,7 @@
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <% if (camfrog) { %><script src="/public/js/room-mod.js?v=11" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>
+<script src="/public/js/onair-consent.js?v=1" defer></script>
 <script src="/public/js/pad-look.js?v=1" defer></script>
 <script src="/public/js/pad-access.js?v=1" defer></script>
 <script src="/public/js/pad-cosmetics.js?v=4" defer></script>

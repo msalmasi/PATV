@@ -1144,6 +1144,7 @@ function register(app, { isBotToken, addUser }) {
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access,
+      onairAdmin: !!(req.user && req.user.class === "Admin"),   // 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",

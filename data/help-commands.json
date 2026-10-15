@@ -1106,10 +1106,12 @@
     "!onair <pad|user|slot id>",
     "!onair cam <login>",
     "!onair setup",
-    "!onair setup irl"
+    "!onair setup irl",
+    "!onair setup embed",
+    "!onair yes|always|no"
    ],
    "summary": "May admins put your cam on Pepe's main stream?",
-   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). The operator's own IRL feed always wins. Managed on /stage/admin (kill switch, log).",
+   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). YouTube / Twitch embed slots need `rights` at the end (`!onair <pad|user> rights`) to confirm you may rebroadcast them; `!onair setup embed` adds their browser source once. A slot on an Approved-only pad or a cam without an opt-in waits for its owner's OK: the owner gets an instant request, and a cam owner answers Pepe's PM with `!onair yes` (this time), `!onair always` or `!onair no`. The operator's own IRL feed always wins. Managed on /stage/admin (kill switch, log).",
    "examples": [
     "!onair me on",
     "!onair off"
@@ -7773,5 +7775,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "d64a30c52ef011dd"
+ "hash": "6c18a381943d5245"
 }

@@ -1,0 +1,21 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# 1.99aag: 📺 /onair/consent/<id> - the pad owner's / cam owner's on-demand OK for Pepe's main stream (onairconsent.js).
+    Client: public/js/onair-consent.js (the same buttons as the pad page's prompt). %>
+<%- include('layout', { title: t('oac.title'), user: user }) %>
+<main class="ds-page mid" id="oac">
+  <section class="ds-card lg">
+    <h1 class="ds-h2">📺 <%- t('oac.title') %></h1>
+    <% if (!c) { %>
+      <p><%- t('oac.none') %></p>
+    <% } else if (c.status !== 'pending' || c.expires <= Date.now()) { %>
+      <p><b><%= c.label %></b></p>
+      <p><%- t('oac.done', { status: c.status === 'pending' ? 'expired' : c.status }) %></p>
+    <% } else { %>
+      <p><%- c.kind === 'pad' ? t('oac.what_pad') : t('oac.what_cam') %></p>
+      <p><b><%= c.label %></b></p>
+      <p class="ds-meta"><%- t('oac.where') %></p>
+      <div class="oac-box" data-oac="<%= c.id %>" data-kind="<%= c.kind %>"></div>
+    <% } %>
+  </section>
+</main>
+<script src="/public/js/onair-consent.js?v=1" defer></script>

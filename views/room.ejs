@@ -812,6 +812,8 @@
   <script src="/public/js/chat-clip.js?v=2"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=9">
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
+<% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
+  <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=1"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
   <script src="/public/js/pad-livecam.js?v=3"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) %>
   <script src="/public/js/room-mod.js?v=11"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
@@ -1087,6 +1089,8 @@
       if (s.state === 'ok' && s.img && s.clip) snapClipRow(box, s);
       // 1.99qr: 🐸 Pepe on this cam - 👀 Look / 🔥 Cam roast / 🎤 Roast with their prices, a confirm step, Pepe's answer
       if (s.state === 'ok' && s.img && signedIn && livePepe && window.PATVRoom && PATVRoom.pepe) PATVRoom.pepe.camRow(box, slug, snapWho, livePepe);
+      // 1.99aag: 📺 admins - put this cam on Pepe's OBS (his main stream + his Camfrog cam); onair.js decides (opt-in / owner's OK)
+      if (window.PATVOnAirCam) PATVOnAirCam.row(box, snapWho);
     }
     var clipTimer = null;
     function snapClipRow(box, s) {

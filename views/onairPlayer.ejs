@@ -1,0 +1,22 @@
+<!doctype html>
+<%# 1.99aag: 📺 the embed player for Pepe's OBS (onair.js). Loaded ONLY by OBS's browser source "PATV OnAir Web": the official
+    YouTube IFrame player / Twitch embed player, full frame, sound on, and its state reported to the site every few seconds
+    (an embed that stops playing is taken off air). A stale / wrong token = an empty transparent page. %>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PATV on air</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  #oaPlayer, #oaPlayer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+</style>
+</head>
+<body>
+<% if (embed) { %>
+<div id="oaPlayer" data-p="<%= embed.p %>" data-t="<%= embed.t %>" data-id="<%= embed.id %>" data-token="<%= token %>" data-parent="<%= parent %>"></div>
+<script src="/public/js/onair-player.js?v=1"></script>
+<% } %>
+</body>
+</html>

@@ -110,7 +110,7 @@ test("refused: not live, private pad, embed, Plex unless allowed", async () => {
   await assert.rejects(OA.setSlot("nope", "t"), (e) => e.code === "gone");
   const s = await S.getSlot((await live()).id);
   assert.equal(await OA.slotWhyNot({ ...s, room_id: PRIV }), "pad_private");
-  assert.equal(await OA.slotWhyNot({ ...s, mode: "embed" }), "embed");
+  assert.equal(await OA.slotWhyNot({ ...s, mode: "embed" }), null);                 // 1.99aag: embeds are allowed (with the rights tick)
   assert.equal(await OA.slotWhyNot({ ...s, nsfw: 1 }), "nsfw");
   assert.equal(await OA.slotWhyNot({ ...s, source: "library" }), "library");
   await OA.saveConfig({ allow_library: true }, "test");
@@ -197,7 +197,7 @@ test("the target survives a restart (persisted); the admin view lists slots / ca
   const v = await OA.adminView();
   assert.ok(v.slots.some((s) => s.id === a.id && s.why === null));
   assert.ok(v.cams.some((c) => c.login === "carl") === false);                 // off cam: not listed
-  assert.equal(v.cams.find((c) => c.login === "bob").why, "no_optin");
+  assert.deepEqual([v.cams.find((c) => c.login === "bob").why, v.cams.find((c) => c.login === "bob").ask], [null, true]);   // 1.99aag: askable
   assert.ok(v.log.length > 0);
 });
 
@@ -211,4 +211,98 @@ test("IRL auto-switch settings: on by default, irl_from a clean comma list, sent
   assert.deepEqual([r.cfg.enabled, r.cfg.irl_switch, r.cfg.irl_from], [false, true, "BRB"]);
   assert.equal(OA.view().pepe.state.irl_watch, "on");
   await OA.saveConfig({ irl_from: "BRB, Gaming" }, "test");
+});
+
+// ── 1.99aag: embeds + on-demand consent ──
+const OC = require(path.join(repo, "onairconsent"));
+OC._setClock(() => T);
+
+test("embeds: need the rights tick (logged), play through the player page token, taken off when they stop playing", async () => {
+  const u = await mkUser();
+  const b = await S.book(u, { minutes: 30, mode: "embed", embed: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" });
+  await assert.rejects(OA.setSlot(b.slot.id, "web:boss"), (e) => e.code === "rights");
+  await OA.setSlot(b.slot.id, "web:boss", { rights: true });
+  const tgt = OA.view().target;
+  assert.equal(tgt.kind, "embed");
+  assert.deepEqual(tgt.embed, { p: "youtube", t: "video", id: "dQw4w9WgXcQ" });
+  const r = await OA.forBot({});
+  assert.match(r.target.url, /\/onair\/player\?t=/);
+  const tok = decodeURIComponent(r.target.url.split("t=")[1]);
+  assert.equal(OA.embedForToken(tok).id, tgt.id);
+  assert.equal(OA.embedForToken(tok.slice(0, -2) + "xx"), null);
+  const set = (await getQuery("SELECT detail FROM onair_log WHERE what = 'set' ORDER BY id DESC LIMIT 1"))[0];
+  assert.match(set.detail, /rights_confirmed/);
+  assert.deepEqual(OA.embedState(tok, "playing"), { on: true });
+  T += OA.EMBED_GRACE_MS + 60 * 1000;
+  await OA.check();
+  assert.ok(OA.view().target, "playing a minute ago - still on");
+  OA.embedState(tok, "ended");
+  T += OA.config().embed_stall_s * 1000 + 1000;
+  await OA.check();
+  assert.equal(OA.view().target, null);
+  assert.equal((await getQuery("SELECT detail FROM onair_log WHERE what = 'end' ORDER BY id DESC LIMIT 1"))[0].detail, "embed_not_playing");
+  assert.deepEqual(OA.embedState(tok, "playing"), { on: false });           // a stale page blanks itself
+});
+
+test("Approved-only pad: the owner is asked; nothing reaches Pepe until Allow; deny / expiry drop it; 'always' remembered and revocable", async () => {
+  OC.padOwnerId = (pad) => (pad === PRIV ? "u-owner" : null);
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, password, points_balance) VALUES ('u-owner', 'padowner', 'Pad Owner', 'x', 0)");
+  const told = [];
+  rooms.notify = async (uid, n) => { told.push([uid, n.title, n.link]); return true; };
+  const a = await live();
+  await runQuery("UPDATE stage_slots SET room_id = ? WHERE id = ?", [PRIV, a.id]);
+  await assert.rejects(OA.setSlot(a.id, "t", { ask: false }), (e) => e.code === "pad_private");
+  await OA.setSlot(a.id, "web:boss", { ask: true });
+  const [cid] = OA.view().target.pending;
+  assert.ok(cid);
+  assert.equal(told[0][0], "u-owner");
+  assert.match(told[0][2], /^\/onair\/consent\//);
+  assert.equal((await OA.forBot({})).target, null, "pending: Pepe gets nothing");
+  assert.equal((await OC.mine("u-owner"))[0].id, cid);
+  await assert.rejects(OC.decide(cid, "once", { userId: "someone-else" }), /isn't yours/);
+  await OC.decide(cid, "once", { userId: "u-owner" });
+  const r = await OA.forBot({});
+  assert.equal(r.target.kind, "slot");
+  assert.ok(told.some((x) => x[1] === "You're on Pepe's main stream"));
+  // deny
+  await OA.clear("t", "t");
+  await OA.setSlot(a.id, "web:boss", { ask: true });
+  await OC.decide(OA.view().target.pending[0], "deny", { userId: "u-owner" });
+  assert.equal(OA.view().target, null);
+  // expiry
+  await OA.setSlot(a.id, "web:boss", { ask: true });
+  T += OA.config().consent_min * 60000 + 1000;
+  await runQuery("UPDATE stage_slots SET beat = ? WHERE id = ?", [T, a.id]);
+  await OA.check();
+  assert.equal(OA.view().target, null);
+  assert.equal((await getQuery("SELECT detail FROM onair_log WHERE what = 'end' ORDER BY id DESC LIMIT 1"))[0].detail, "consent_expired");
+  // always: no ask next time; revoking takes it off
+  await OA.setSlot(a.id, "web:boss", { ask: true });
+  await OC.decide(OA.view().target.pending[0], "always", { userId: "u-owner" });
+  await OA.clear("t", "t");
+  await OA.setSlot(a.id, "web:boss");
+  assert.deepEqual([OA.view().target.pending, OA.view().target.pad_ok], [[], "always"]);
+  await OC.setPadAllow(PRIV, "u-owner", false);
+  assert.equal(OA.view().target, null);
+  rooms.notify = async () => true;
+});
+
+test("cams without an opt-in: an admin can ask; Pepe gets the ask to PM; !onair yes puts it on, this time only", async () => {
+  CAMROOM.updated = Date.now();
+  await OA.saveConfig({ cam_optin: true }, "test");
+  await assert.rejects(OA.setCam(CAMROOM.id, "dave", "t"), (e) => e.code === "not_on_cam");
+  CAMROOM.members.push({ login: "dave", display: "Dave", on_cam: true });
+  await assert.rejects(OA.setCam(CAMROOM.id, "dave", "t"), (e) => e.code === "no_optin");
+  await OA.setCam(CAMROOM.id, "dave", "web:boss", { ask: true });
+  let r = await OA.forBot({});
+  assert.equal(r.target, null);
+  assert.deepEqual(r.asks.map((x) => x.login), ["dave"]);
+  r = await OA.forBot({ cmd: { action: "consent", answer: "yes", by: "dave" } });
+  assert.equal(r.result.ok, true);
+  assert.equal(r.target.kind, "cam");
+  assert.equal(OA.optedIn("dave"), false, "this time only - no standing opt-in");
+  await OA.check();
+  assert.ok(OA.view().target, "a once-OK keeps it on air");
+  r = await OA.forBot({ cmd: { action: "consent", answer: "yes", by: "dave" } });
+  assert.equal(r.result.ok, false);                                    // nothing pending any more
 });
