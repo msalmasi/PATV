@@ -1119,6 +1119,28 @@
    "keywords": []
   },
   {
+   "id": "twitch",
+   "title": "!twitch on|off|status",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!twitch"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!twitch",
+    "!twitch on",
+    "!twitch off"
+   ],
+   "summary": "Switch Pepe's Twitch relay on or off.",
+   "details": "Pepe's main stream is relayed to his Twitch channel by the website. `!twitch` says whether the relay is on and live, `!twitch on` / `!twitch off` switches it - the same switch as the 🟣 button on Pepe's player on publicaccess.tv and the Twitch relays card on /stage/admin. Every switch is logged. Admins only.",
+   "examples": [
+    "!twitch",
+    "!twitch off"
+   ],
+   "keywords": []
+  },
+  {
    "id": "whowatching",
    "title": "!whowatching",
    "category": "chat",
@@ -7775,5 +7797,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "6c18a381943d5245"
+ "hash": "5caafdb1d77855f5"
 }

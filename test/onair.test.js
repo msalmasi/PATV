@@ -203,14 +203,14 @@ test("the target survives a restart (persisted); the admin view lists slots / ca
 
 test("IRL auto-switch settings: on by default, irl_from a clean comma list, sent to Pepe regardless of the on-air switch", async () => {
   assert.equal(OA.DEFAULTS.irl_switch, true);
-  assert.equal(OA.DEFAULTS.irl_from, "BRB, Gaming");
+  assert.equal(OA.DEFAULTS.irl_from, "Pepe, PepeGame, BRB, Gaming");   // 1.99aal
   assert.equal(OA.clean({ irl_from: " BRB ,Starting Soon,, Gaming " }).cfg.irl_from, "BRB, Starting Soon, Gaming");
   assert.ok(OA.clean({ irl_from: Array(14).fill("X").join(",") }).errors.irl_from);
   await OA.saveConfig({ enabled: false, irl_switch: true, irl_from: "BRB" }, "test");
   const r = await OA.forBot({ state: { irl_watch: "on", irl_switched_from: "BRB" } });
   assert.deepEqual([r.cfg.enabled, r.cfg.irl_switch, r.cfg.irl_from], [false, true, "BRB"]);
   assert.equal(OA.view().pepe.state.irl_watch, "on");
-  await OA.saveConfig({ irl_from: "BRB, Gaming" }, "test");
+  await OA.saveConfig({ irl_from: "Pepe, PepeGame, BRB, Gaming" }, "test");
 });
 
 // ── 1.99aag: embeds + on-demand consent ──
@@ -305,4 +305,20 @@ test("cams without an opt-in: an admin can ask; Pepe gets the ask to PM; !onair 
   assert.ok(OA.view().target, "a once-OK keeps it on air");
   r = await OA.forBot({ cmd: { action: "consent", answer: "yes", by: "dave" } });
   assert.equal(r.result.ok, false);                                    // nothing pending any more
+});
+
+test("1.99aal: the switch target is Main; a stored cfg from before (scene Pepe, the old IRL list) moves over once", async () => {
+  assert.equal(OA.DEFAULTS.scene, "Main");
+  await OA.clear("t", "t");
+  const old = { ...OA.config(), scene: "Pepe", irl_from: "BRB, Gaming" };
+  delete old.cfg_rev;
+  await runQuery("UPDATE onair_state SET cfg = ? WHERE id = 1", [JSON.stringify(old)]);
+  OA._reset();
+  await OA.init();
+  assert.deepEqual([OA.config().scene, OA.config().irl_from], ["Main", "Pepe, PepeGame, BRB, Gaming"]);
+  await OA.saveConfig({ scene: "Pepe" }, "test");                 // an admin's own choice afterwards sticks
+  OA._reset();
+  await OA.init();
+  assert.equal(OA.config().scene, "Pepe");
+  await OA.saveConfig({ scene: "Main" }, "test");
 });

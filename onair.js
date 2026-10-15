@@ -63,8 +63,8 @@ const DEFAULTS = Object.freeze({
   // (and back when it ends). Needs the IRL feed source always-on (Pepe's one-off `!onair setup irl`). Independent of
   // `enabled` (that one is the 3rd-party on-air kill switch).
   irl_switch: true,
-  irl_from: "BRB, Gaming",       // comma-separated OBS scene names
-  scene: "Pepe",                 // OBS: the program scene to switch to
+  irl_from: "Pepe, PepeGame, BRB, Gaming",   // comma-separated OBS scene names (1.99aal: + Pepe / PepeGame - their Wheel / game overlay cover the IRL)
+  scene: "Main",                 // OBS: the program scene to switch to (1.99aal: "Main" - "Pepe" has the Wheel over the IRL scene)
   irl_scene: "IRL",              // OBS: the nested scene that holds the IRL feed + the on-air source
   irl_source: "IRL BB",          // OBS: the operator's IRL feed (wins while PLAYING)
   source: "PATV OnAir",          // OBS: the on-air media source
@@ -132,11 +132,22 @@ function init() {
                       by TEXT, kind TEXT, ref TEXT, label TEXT, detail TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS onair_log_at ON onair_log (at)");
       const r = (await getQuery("SELECT v, cfg, target FROM onair_state WHERE id = 1"))[0];
+      let migrated = false;
       if (r) {
         V = Number(r.v) || 0;
-        try { CFG = clean(JSON.parse(r.cfg) || {}, DEFAULTS).cfg; } catch (e) { CFG = { ...DEFAULTS }; }
+        let raw = {};
+        try { raw = JSON.parse(r.cfg) || {}; } catch (e) { raw = {}; }
+        CFG = clean(raw, DEFAULTS).cfg;
+        // 1.99aal: one-time move of the switch target from "Pepe" (the Wheel covers the pick there) to "Main", and the IRL
+        // auto-switch "from" list to include Pepe / PepeGame - only where the old defaults were still in place
+        if (!(Number(raw.cfg_rev) >= 2)) {
+          if (CFG.scene === "Pepe") CFG.scene = DEFAULTS.scene;
+          if (CFG.irl_from === "BRB, Gaming") CFG.irl_from = DEFAULTS.irl_from;
+          migrated = true;
+        }
         try { TARGET = r.target ? JSON.parse(r.target) : null; } catch (e) { TARGET = null; }
       }
+      if (migrated) await persist("migration 1.99aal");
       OPTIN = new Map((await getQuery("SELECT login, on_air, updated, via FROM onair_optin")).map((x) =>
         [String(x.login).toLowerCase(), { on: !!x.on_air, updated: Number(x.updated) || 0, via: x.via || null }]));
     })().catch((e) => { ready = null; throw e; });
@@ -148,7 +159,7 @@ async function persist(by) {
   await runQuery(`INSERT INTO onair_state (id, v, cfg, target, updated_at, updated_by) VALUES (1, ?, ?, ?, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET v = excluded.v, cfg = excluded.cfg, target = excluded.target,
                   updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-                 [V, JSON.stringify(CFG), TARGET ? JSON.stringify(TARGET) : null, now(), String(by || "?").slice(0, 80)]);
+                 [V, JSON.stringify({ ...CFG, cfg_rev: 2 }), TARGET ? JSON.stringify(TARGET) : null, now(), String(by || "?").slice(0, 80)]);
 }
 async function log(what, by, T, detail) {
   try {

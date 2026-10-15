@@ -299,7 +299,18 @@ async function adminState(t = now()) {
 }
 
 // ── routes ──
-function register(app, { addUser }) {
+/** 1.99aal: switch Pepe's main relay on / off (the page's 🟣 button, Pepe's !twitch) - the same toggle as /stage/admin,
+ *  audited (admin_audit "restream"). who = {userId, username} of the admin (Pepe: userId "pepe"). -> forMain() */
+async function switchMain(on, who, via) {
+  if (on && !(await destRow(MAIN_OWNER))) throw new Refuse(400, "Save Pepe's Twitch stream key first (/stage/admin).");
+  const before = !!(await toggleOf(MAIN));
+  await setToggle(MAIN, !!on, (via === "pepe" ? "pepe:" : "") + (who.username || who.userId || "?"));
+  try { await require("./adminaudit").record(who, "restream", null, { action: "main_toggle", on: !!on, was: before, via }); }
+  catch (e) { console.error("[restream] audit:", e.message); }
+  return forMain();
+}
+
+function register(app, { addUser, isBotToken }) {
   const rooms = require("./rooms");
   const guard = require("./middleware/authGuard");
   const fail = (res, e) => {
@@ -378,10 +389,24 @@ function register(app, { addUser }) {
   app.post("/api/restream/admin/main/toggle", addUser, needAdmin, csrf, async (req, res) => {
     noStore(res);
     try {
-      const on = !!(req.body || {}).on;
-      if (on && !(await destRow(MAIN_OWNER))) throw new Refuse(400, "Save Pepe's Twitch stream key first.");
-      await setToggle(MAIN, on, actor(req));
-      res.json({ ok: true, main: await forMain() });
+      res.json({ ok: true, main: await switchMain(!!(req.body || {}).on, { userId: req.user.userId, username: req.user.username }, "web") });
+    } catch (e) { fail(res, e); }
+  });
+  // 1.99aal: the 🟣 button on the stage player (admins) - just Pepe's main relay state
+  app.get("/api/restream/admin/main", addUser, needAdmin, async (req, res) => {
+    noStore(res);
+    try { res.json({ ok: true, configured: configured(), main: await forMain() }); } catch (e) { fail(res, e); }
+  });
+  // 1.99aal: Pepe's !twitch on|off|status (he checks his admins; the bot token here)
+  app.post("/api/restream/bot/main", async (req, res) => {
+    noStore(res);
+    const b = req.body || {};
+    if (typeof isBotToken !== "function" || !isBotToken(b.password)) return res.status(403).json({ ok: false });
+    try {
+      const who = { userId: "pepe", username: String(b.by || "?").slice(0, 40) };
+      const act = String(b.action || "status");
+      const main = act === "on" || act === "off" ? await switchMain(act === "on", who, "pepe") : await forMain();
+      res.json({ ok: true, configured: configured(), main });
     } catch (e) { fail(res, e); }
   });
   // staff can always switch a streamer's relay OFF (never on - that's the streamer's call)
@@ -394,7 +419,7 @@ function register(app, { addUser }) {
 module.exports = {
   mainRelayLive,
   register, init, encrypt, decrypt, mask, cleanKey, cleanServer, saveDest, deleteDest, destRow, destView, toggleOf, setToggle,
-  noteMain, mainLive, desired, workerSync, statusOf, me, adminState, forMain, configured, Refuse,
+  noteMain, mainLive, desired, workerSync, statusOf, me, adminState, forMain, configured, Refuse, switchMain,
   MAIN, MAIN_OWNER, DEFAULT_SERVER, TWITCH_MAX_KBPS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reset: () => { mainBeat = 0; STATUS = new Map(); workerAt = 0; workerInfo = null; },

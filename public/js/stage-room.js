@@ -167,6 +167,8 @@
         o.onAir && o.onAir(any, any ? (pepeHere ? _t('js.stage.room.pepe_off_pick', 'Pepe\'s stream is off air - pick a stream above') : _t('js.stage.room.pick', 'pick a stream above')) : _t('js.stage.room.nothing', 'nothing streaming right now'));
       }
       renderTabs();
+      // 1.99aal: 🟣 admins - Pepe's Twitch relay switch on his stream's player (twitch-btn.js, only on admins' pages)
+      if (window.PATVTwitchBtn) window.PATVTwitchBtn.sync(o.wrap.parentNode || o.wrap, !s && pepeHere && pepeOn);
       if (o.onShow) o.onShow(selection());
     }
     // 1.99cr: what's on screen, for the Snap / Clip bar (stage-capture.js). Pepe's stream is captured from

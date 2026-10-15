@@ -174,7 +174,7 @@ test("HTTP: owner-only, CSRF on writes, keys never returned, loopback + token wo
     req.user = id ? { userId: id, username: "n-" + id, class: req.headers["x-test-class"] || "pleb" } : null;
     next();
   };
-  R.register(app, { addUser });
+  R.register(app, { addUser, isBotToken: (t) => t === "bot-token" });
   const srv = await new Promise((ok) => { const s = app.listen(0, "127.0.0.1", () => ok(s)); });
   const base = "http://127.0.0.1:" + srv.address().port;
   const H = (u, extra = {}) => ({ "Content-Type": "application/json", "X-Requested-With": "fetch", ...(u ? { "x-test-user": u } : {}), ...extra });
@@ -207,6 +207,20 @@ test("HTTP: owner-only, CSRF on writes, keys never returned, loopback + token wo
     assert.equal((await post("/api/restream/admin/main/toggle", "staff1", { on: true }, { "x-test-class": "Staff" })).status, 403, "staff can't run Pepe's relay");
     assert.equal((await post("/api/restream/admin/main/dest", "adm", { key: KEY }, { "x-test-class": "Admin" })).status, 200);
     assert.equal((await post("/api/restream/admin/main/toggle", "adm", { on: true }, { "x-test-class": "Admin" })).status, 200);
+    // 1.99aal: the player's 🟣 button (admins only) + Pepe's !twitch (bot token), both audited
+    assert.equal((await fetch(base + "/api/restream/admin/main", { headers: H("staff1", { "x-test-class": "Staff" }) })).status, 403);
+    res = await fetch(base + "/api/restream/admin/main", { headers: H("adm", { "x-test-class": "Admin" }) });
+    assert.equal((await res.json()).main.on, true);
+    assert.equal((await post("/api/restream/bot/main", null, { password: "nope", action: "off" })).status, 403);
+    res = await post("/api/restream/bot/main", null, { password: "bot-token", action: "off", by: "plantbaked" });
+    assert.equal((await res.json()).main.on, false);
+    assert.equal(await R.toggleOf(R.MAIN), false);
+    res = await post("/api/restream/bot/main", null, { password: "bot-token", action: "status" });
+    assert.equal((await res.json()).main.on, false);
+    const aud = await getQuery("SELECT admin_id, admin_name, detail FROM admin_audit WHERE action = 'restream' ORDER BY id");
+    assert.ok(aud.some((r) => r.admin_id === "adm" && /"on":true/.test(r.detail)), "the web toggle is audited");
+    assert.ok(aud.some((r) => r.admin_id === "pepe" && r.admin_name === "plantbaked" && /"via":"pepe"/.test(r.detail)), "!twitch is audited");
+    await post("/api/restream/admin/main/toggle", "adm", { on: true }, { "x-test-class": "Admin" });
     res = await fetch(base + "/api/restream/admin", { headers: H("staff1", { "x-test-class": "Staff" }) });
     txt = await res.text();
     assert.equal(res.status, 200);

@@ -143,7 +143,7 @@ test("live detection ignores Twitch: off air on his HLS = off air, whatever Twit
   for (const v of ["home.ejs", "room.ejs"]) {
     const src = fs.readFileSync(path.join(repo, "views", v), "utf8");
     assert.ok(src.includes("pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\\\u003c') %>"), v + " passes st.pepe_src (escaped)");
-    assert.match(src, /stage-room\.js\?v=9/, v + " cache-buster");
+    assert.match(src, /stage-room\.js\?v=10/, v + " cache-buster");
   }
 });
 
