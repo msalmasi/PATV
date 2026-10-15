@@ -135,6 +135,25 @@
   </section>
   <% } %>
 
+  <% if (locals.gh) { %>
+  <%# 1.99aaf (ghost.js): 👻 ghost mode - site staff only. Client: public/js/privacy-ghost.js (POST /api/privacy/ghost). %>
+  <section class="ds-card lg" id="ghost" aria-labelledby="pvGhH">
+    <h2 class="ds-h2" id="pvGhH"><span class="dot"></span>👻 <%- t('gh.h2') %> <span class="ds-meta">(<%- t('gh.staff') %>)</span></h2>
+    <p class="pv-why"><%- t('gh.what') %></p>
+    <ul class="pv-list">
+      <li><%- t('gh.what_hidden') %></li>
+      <li><%- t('gh.what_audit') %></li>
+      <li><%- t('gh.what_consent') %></li>
+    </ul>
+    <div class="pv-set">
+      <div><b><%- t('gh.switch') %></b></div>
+      <label class="ds-switch"><input type="checkbox" id="pvGh" <%= gh.on ? 'checked' : '' %> aria-label="<%- t('gh.switch') %>"><span></span></label>
+    </div>
+    <p class="pv-st" id="pvGhSt" role="status" aria-live="polite"><%- gh.on ? t('gh.st_on') : t('gh.st_off') %></p>
+    <p class="ds-meta"><%- t('gh.chat') %></p>
+  </section>
+  <% } %>
+
   <section class="ds-card lg" aria-labelledby="pvMoreH">
     <h2 class="ds-h2" id="pvMoreH"><span class="dot"></span><%- t('inc.more_h') %></h2>
     <nav class="pv-links">
@@ -146,3 +165,4 @@
 <script src="/public/js/privacy-settings.js?v=1" defer></script>
 <script src="/public/js/privacy-livecam.js?v=3" defer></script>
 <script src="/public/js/privacy-camviewers.js?v=1" defer></script>
+<script src="/public/js/privacy-ghost.js?v=1" defer></script>

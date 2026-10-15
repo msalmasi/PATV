@@ -179,7 +179,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const lim = relay.limited("camclip|" + u.userId, CLIP_GAP, CLIP_BURST, CLIP_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
       const j = relay.newJob({ kind: "camclip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, target: login, secs,
-                               viewers: new Set([u.userId]) });
+                               viewers: new Set([u.userId]), ghost: (() => { try { return require("./ghost").isGhost(u.userId); } catch (e) { return false; } })() });
       clips.set(j.id, { id: j.id, roomId: R.id, login, userId: u.userId, username: u.username, secs, state: "pending", status: "", ts: NOW(), done: 0,
                         poster: null, rule: null, viewerOk: false, cost: 0, save: null });
       console.log(`[camclip] request room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${login} secs=${secs} job=${j.id}`);

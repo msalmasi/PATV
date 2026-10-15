@@ -248,7 +248,10 @@ function register(app, { addUser, isBotToken }) {
       // 1.99yt: + the 📺 "my cam on Pepe's main stream" opt-in (onair.js owns it)
       let oa = null;
       try { oa = await require("./onair").optinState(req.user.userId); } catch (e) { oa = null; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa });
+      // 1.99aaf: 👻 ghost mode - its card shows to site staff only (ghost.js)
+      let gh = null;
+      try { const g = await require("./ghost").state(req.user.userId); gh = g.staff ? g : null; } catch (e) { gh = null; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh });
     } catch (e) { next(e); }
   });
 }

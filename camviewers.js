@@ -22,6 +22,8 @@
 //        (up to DIGEST_MAX names, then "+N more").
 //    The notices ride Pepe's live-cam poll (POST /api/bridge/livecam: `cv: true` in, `cv_notify` out, `cv_ack` back in).
 //    A Pepe that doesn't send `cv: true` (older) gets none (he still has his old room line).
+//    1.99aaf: a view by staff in 👻 ghost mode (ghost.js) is logged with ghost = 1 (kept 180 days, on /admin/pepe/livecams)
+//    and never becomes a notice, nor shows in watching() below.
 // 3. !whowatching / the privacy card - watching(owner): who has the cam open live right now (livecam sessions) + who took
 //    a snapshot / clip in the last RECENT_MS.
 // 4. Blocks - one home, table cam_blocks (owner = the cam's Camfrog login, user_id = the PATV account): !blockviewer /
@@ -48,6 +50,7 @@ const DIGEST_MAX = 6;
 const KEEP_MS = 7 * 24 * 3600 * 1000;
 const MAX_BLOCKS = 500;
 const KINDS = new Set(["live", "snap", "clip"]);
+const GHOST_KEEP_MS = 180 * 24 * 3600 * 1000;   // = ghost.js
 const WEB_MARK = "\u{1f310}";
 
 let clock = () => Date.now();
@@ -63,6 +66,7 @@ const MSG = {
 let deps = {
   optedOut: (login) => { try { return require("./livecam").optedOut(login); } catch (e) { return false; } },
   privateLogins: (list) => require("./stories").privateLogins(list),
+  isGhost: (userId) => { try { return require("./ghost").isGhost(userId); } catch (e) { return false; } },
   dropViewer: (owner, userId, why) => { try { return require("./livecam").dropViewerOf(owner, userId, why); } catch (e) { return 0; } },
   liveWatchers: (owner) => { try { return require("./livecam").watchersOf(owner); } catch (e) { return []; } },
 };
@@ -84,6 +88,9 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS cam_views (id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, room_id TEXT, user_id TEXT NOT NULL,
                       username TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL)`);
       await runQuery("CREATE INDEX IF NOT EXISTS cam_views_owner ON cam_views (owner, at)");
+      // 1.99aaf: 👻 a staff member in ghost mode (ghost.js) - logged, never notified / listed
+      const cols = (await getQuery("PRAGMA table_info(cam_views)")).map((c) => c.name);
+      if (!cols.includes("ghost")) await runQuery("ALTER TABLE cam_views ADD COLUMN ghost INTEGER NOT NULL DEFAULT 0");
       await loadBlocks();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -137,8 +144,10 @@ function noteView(kind, roomId, owner, u, t = now()) {
     if (!KINDS.has(kind) || !LOGIN_RE.test(o) || !u || !u.userId) return false;
     const uid = String(u.userId);
     if (low(u.camfrogUsername) === o) return false;                    // their own cam
-    init().then(() => runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at) VALUES (?, ?, ?, ?, ?, ?)",
-      [o, String(roomId || ""), uid, u.username || null, kind, t])).catch((e) => console.error("[camviewers] log:", e.message));
+    const ghost = !!deps.isGhost(uid);                                  // 1.99aaf: 👻 staff ghost mode - logged (ghost = 1), nobody told
+    init().then(() => runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [o, String(roomId || ""), uid, u.username || null, kind, t, ghost ? 1 : 0])).catch((e) => console.error("[camviewers] log:", e.message));
+    if (ghost) return false;
     const k = o + "|" + uid;
     const prev = NOTED.get(k);
     if (prev && (kind === "live" ? prev.kind === "live" && t - prev.at < LIVE_GAP_MS : t - prev.at < RECENT_MS)) return false;
@@ -199,7 +208,8 @@ function forBot(body, t = now()) {
   return out;
 }
 function prune(t = now()) {
-  return runQuery("DELETE FROM cam_views WHERE at < ?", [t - KEEP_MS]).catch(() => {});
+  // 1.99aaf: ghost views are the admins' audit - kept GHOST_KEEP_MS (ghost.js), not the 7-day window
+  return runQuery("DELETE FROM cam_views WHERE (ghost = 0 AND at < ?) OR at < ?", [t - KEEP_MS, t - GHOST_KEEP_MS]).catch(() => {});
 }
 
 // ── who's watching ──
@@ -216,8 +226,8 @@ async function watching(owner, t = now()) {
   await init();
   const o = low(owner);
   if (!LOGIN_RE.test(o)) return { live: [], recent: [] };
-  const live = (deps.liveWatchers(o) || []).filter((x) => x && x.userId);
-  const rows = await getQuery(`SELECT user_id, kind, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? GROUP BY user_id, kind ORDER BY at DESC LIMIT 200`,
+  const live = (deps.liveWatchers(o) || []).filter((x) => x && x.userId && !x.ghost);          // 1.99aaf: ghosts aren't listed
+  const rows = await getQuery(`SELECT user_id, kind, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND ghost = 0 GROUP BY user_id, kind ORDER BY at DESC LIMIT 200`,
     [o, t - RECENT_MS]);
   const U = await usersById(live.map((x) => x.userId).concat(rows.map((r) => r.user_id)));
   const liveIds = new Set(live.map((x) => String(x.userId)));

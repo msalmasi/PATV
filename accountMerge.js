@@ -91,6 +91,10 @@ const RULES = {
   "cam_blocks.owner": { deny: "1.99yq: the Camfrog login of the cam whose owner made the block, not a userId" },
   "cam_views.user_id": M({ name: "username" }),
   "cam_views.owner": { deny: "1.99yq: the Camfrog login of the cam that was viewed, not a userId" },
+  // 1.99aaf 👻 staff ghost mode (ghost.js): the switch stays put (re-checked against the staff class anyway); the switch log
+  // is the admins' audit and moves with the account like the view log
+  "staff_ghost.user_id": { keep: "1.99aaf: a staff member's own ghost-mode switch - never carried to another account" },
+  "ghost_log.user_id": M({ name: "username" }),
   // 1.99yt 📺 on Pepe's OBS (onair.js): the cam opt-in is keyed by chat login (user_id = who set it on the web)
   "onair_optin.user_id": M(),
   "onair_state.target": { deny: "1.99yt: JSON of what's on Pepe's main stream right now (slot id / chat login), short-lived, not a userId column" },

@@ -333,6 +333,8 @@ function takeJobs(liveRoomIds, via = "sync") {
     if ((j.kind === "say" || j.kind === "clip") && j.display) base.display = j.display;
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
     if (j.kind === "camclip") { base.target = j.target; base.viewer = j.username; base.secs = j.secs; }
+    // 1.99aaf: 👻 staff in ghost mode - Pepe keeps them out of the room's mod log (the site audits it: cam_views ghost = 1)
+    if ((j.kind === "snap" || j.kind === "camclip") && j.ghost) base.ghost = true;
     if (j.kind === "micclip") { base.target = j.target; base.viewer = j.username; base.tx = j.tx; }   // 1.99fp: 🔊 Clip on a 🎙 line
     // 1.99il: 💸 a tip made from this pad's page - Pepe says it in the room (target = the recipient's login)
     if (j.kind === "tipnote") { base.target = j.target; base.amount = j.amount; if (j.display) base.display = j.display; }
@@ -621,7 +623,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const lim = limited("snap|" + u.userId, SNAP_VIEWER_GAP, 6, 60000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
     const j = newJob({ kind: "snap", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "",
-      target: login, viewers: new Set([u.userId]) });
+      target: login, viewers: new Set([u.userId]), ghost: (() => { try { return require("./ghost").isGhost(u.userId); } catch (e) { return false; } })() });
     console.log(`[bridge-relay] snap room=${R.id} viewer=${u.username} target=${login} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });

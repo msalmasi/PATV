@@ -63,6 +63,16 @@
   <ul id="lcLog" class="adm-help"></ul>
 </section>
 
+<section class="adm-card" id="ghost" aria-labelledby="ghT">
+  <h2 id="ghT">👻 Ghost views (staff ghost mode)</h2>
+  <p class="adm-help">Site staff can switch on ghost mode (Settings → Privacy, or <code>!ghost on</code>): the cams they open on the website don't tell the owner and they aren't listed in anyone's "who's watching". Every one of those views is listed here (kept 180 days), with every switch on / off. Ghost mode never gets past an owner's opt-out, privacy or blocks.</p>
+  <p class="adm-help" id="ghOn"></p>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>When</th><th>Staff</th><th>What</th><th>Cam</th><th>Room</th></tr></thead>
+    <tbody id="ghRows"></tbody></table></div>
+  <h2>Ghost mode switches</h2>
+  <ul id="ghLog" class="adm-help"></ul>
+</section>
+
 <style>
   #lcForm fieldset { border: 1px solid var(--adm-line, rgba(127,127,127,.3)); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
   #lcForm label { display: block; margin: 6px 0; }
@@ -122,11 +132,22 @@
     var rc = document.getElementById('rcRows'); rc.textContent = '';
     (V.recent || []).forEach(function (r) {
       var tr = el('tr');
-      [when(r.started), r.viewer_name || '?', r.target, r.room_id].forEach(function (t) { tr.appendChild(el('td', null, t)); });
+      [when(r.started), (r.viewer_name || '?') + (r.ghost ? ' 👻' : ''), r.target, r.room_id].forEach(function (t) { tr.appendChild(el('td', null, t)); });
       tr.appendChild(el('td', 'num', r.secs == null ? '…' : String(r.secs)));
       tr.appendChild(el('td', null, r.end_reason || 'watching'));
       rc.appendChild(tr);
     });
+    var G = V.ghost || { on: [], views: [], log: [] };
+    document.getElementById('ghOn').textContent = G.on && G.on.length ? 'In ghost mode now: ' + G.on.join(', ') : 'Nobody is in ghost mode now.';
+    var gr = document.getElementById('ghRows'); gr.textContent = '';
+    if (!G.views.length) { var e0 = el('tr'); e0.appendChild(el('td', null, 'No ghost views yet.')); gr.appendChild(e0); }
+    G.views.forEach(function (r) {
+      var tr = el('tr');
+      [when(r.at), r.username || '?', r.kind, r.owner, r.room || ''].forEach(function (t) { tr.appendChild(el('td', null, t)); });
+      gr.appendChild(tr);
+    });
+    var gl = document.getElementById('ghLog'); gl.textContent = '';
+    G.log.forEach(function (a) { gl.appendChild(el('li', null, when(a.at) + ' · ' + (a.username || '?') + ' · ghost ' + (a.on ? 'ON' : 'off') + ' (' + a.via + ')')); });
     var log = document.getElementById('lcLog'); log.textContent = '';
     (V.audit || []).forEach(function (a) {
       var d = a.detail || {}, ch = d.changed || {};

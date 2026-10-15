@@ -91,6 +91,9 @@ const now = () => clock();
 const W = () => require("./webrtc");
 const bridgeRooms = () => { try { return require("./bridge")._rooms; } catch (e) { return new Map(); } };
 const CV = () => require("./camviewers");     // 1.99yq: who's watching + blocks
+const isGhost = (uid) => { try { return require("./ghost").isGhost(uid); } catch (e) { return false; } };   // 1.99aaf: 👻 staff ghost mode
+/** 1.99aaf: the viewers anyone may be told about (a ghost is never counted where people see it; budgets still count them). */
+const shownCount = (list) => list.filter(([, v]) => !v.ghost).length;
 
 class Refuse extends Error { constructor(status, msg, code, extra) { super(msg); this.status = status; this.refuse = true; this.code = code; this.extra = extra || null; } }
 
@@ -107,6 +110,8 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS livecam_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT NOT NULL, target TEXT NOT NULL,
                       viewer_id TEXT NOT NULL, viewer_name TEXT, started INTEGER NOT NULL, ended INTEGER, secs INTEGER, end_reason TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS livecam_audit_started ON livecam_audit (started)");
+      const acols = (await getQuery("PRAGMA table_info(livecam_audit)")).map((c) => c.name);   // 1.99aaf: 👻 ghost views are audited too
+      if (!acols.includes("ghost")) await runQuery("ALTER TABLE livecam_audit ADD COLUMN ghost INTEGER NOT NULL DEFAULT 0");
       const r = (await getQuery("SELECT v, data, updated_at, updated_by FROM livecam_cfg WHERE id = 1"))[0];
       if (r) {
         let d = {};
@@ -404,11 +409,11 @@ async function start(u, R, login, t = now()) {
   }
   let v = S.viewers.get(uid);
   if (!v) {
-    v = { since: t, beat: t, username: u.username || null, readers: new Set(), auditId: null };
+    v = { since: t, beat: t, username: u.username || null, readers: new Set(), auditId: null, ghost: isGhost(uid) };
     S.viewers.set(uid, v);
     try {
-      const r = await runQuery("INSERT INTO livecam_audit (room_id, target, viewer_id, viewer_name, started) VALUES (?, ?, ?, ?, ?)",
-                               [R.id, login, uid, u.username || null, t]);
+      const r = await runQuery("INSERT INTO livecam_audit (room_id, target, viewer_id, viewer_name, started, ghost) VALUES (?, ?, ?, ?, ?, ?)",
+                               [R.id, login, uid, u.username || null, t, v.ghost ? 1 : 0]);
       v.auditId = r && r.id ? Number(r.id) : null;
     } catch (e) { console.error("[livecam] audit:", e.message); }
   }
@@ -431,7 +436,7 @@ function beat(userId, roomId, login, t = now()) {
   if (!v || t - v.beat > BEAT_MS) return { ok: true, state: "ended", why: "gone" };
   v.beat = t;
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
-  return { ok: true, state: stateOf(S, t), viewers: freshViewers(S, t).length, botWhy: S.botWhy || null };
+  return { ok: true, state: stateOf(S, t), viewers: shownCount(freshViewers(S, t)), botWhy: S.botWhy || null, ...(v.ghost ? { ghost: true } : {}) };
 }
 /** 1.99yq: the owner blocked this viewer - drop them from every live relay of the cam now (the reader is kicked). -> count */
 function dropViewerOf(login, userId, why = "blocked", t = now()) {
@@ -450,8 +455,8 @@ function watchersOf(login, t = now()) {
   const l = String(login || "").toLowerCase(), out = [];
   for (const S of SESS.values()) {
     if (S.ended || S.login !== l) continue;
-    for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: v.username, room: S.roomId, since: v.since });
-    for (const [uid, v] of freshStage(S, t)) out.push({ userId: uid, username: v.username || null, room: S.roomId, since: v.since, stage: true });   // 1.99zc
+    for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: v.username, room: S.roomId, since: v.since, ghost: !!v.ghost });
+    for (const [uid, v] of freshStage(S, t)) out.push({ userId: uid, username: v.username || null, room: S.roomId, since: v.since, stage: true, ghost: !!v.ghost });   // 1.99zc
   }
   return out;
 }
@@ -537,7 +542,7 @@ function stageState(slotId, t = now()) {
     return { state: "none", why: null };
   }
   if (S.ended) return { state: "ended", why: S.endWhy || "ended" };
-  return { state: stateOf(S, t), why: S.botWhy || null, viewers: freshStage(S, t).length };
+  return { state: stateOf(S, t), why: S.botWhy || null, viewers: shownCount(freshStage(S, t)) };
 }
 /** A stage viewer asks to watch the cam on slot `slotId` (or beats). -> {ok, whep, state, beat_ms} | throws Refuse */
 async function stageWatch(u, R, slotId, { beatOnly = false } = {}, t = now()) {
@@ -553,7 +558,7 @@ async function stageWatch(u, R, slotId, { beatOnly = false } = {}, t = now()) {
   if (!v || t - v.beat > BEAT_MS) {
     if (beatOnly) return { ok: true, state: "ended", why: "gone" };
     if (!fitsBudget(S, t)) throw refuse("budget");
-    v = { since: t, beat: t, username: u.username || null, readers: new Set() };
+    v = { since: t, beat: t, username: u.username || null, readers: new Set(), ghost: isGhost(uid) };
     S.stageViewers.set(uid, v);
   }
   v.beat = t;
@@ -614,7 +619,10 @@ async function forBot(body, t = now()) {
       if (optedOut(S.login)) { endSession(S, "opted_out", t); continue; }
       const key = pubKey(S.path);
       if (!key) continue;
-      want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: key, path: S.path, viewers: Math.max(1, freshViewers(S, t).length) });
+      // 1.99aaf: ghosts aren't counted; ghost_only = nobody but staff in ghost mode watches -> Pepe says nothing in the room
+      const fv = freshViewers(S, t), shown = shownCount(fv);
+      want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: key, path: S.path, viewers: Math.max(1, shown),
+                  ...(fv.length && !shown && !S.stage ? { ghost_only: true } : {}) });
     }
   }
   const c = cfg();
@@ -680,8 +688,10 @@ function hint(R, userId) {
   const t = now();
   const watching = [];
   for (const S of SESS.values()) if (!S.ended && S.roomId === R.id) { const v = S.viewers.get(String(userId)); if (v && t - v.beat <= BEAT_MS) watching.push(S.login); }
-  return { on: true, slots: { used: slotsOf(userId, t), max: maxSlots(userId) }, watching, sp_max: cfg().viewers_sp };   // 1.99zc: sp_max for the strip's hint
+  return { on: true, slots: { used: slotsOf(userId, t), max: maxSlots(userId) }, watching, sp_max: cfg().viewers_sp,
+           ...(isGhost(userId) ? { ghost: true } : {}) };   // 1.99aaf: the 👻 badge on the popover   // 1.99zc: sp_max for the strip's hint
 }
+async function ghostView() { try { return await require("./ghost").adminView(); } catch (e) { return null; } }
 async function adminView() {
   await init();
   const t = now();
@@ -691,17 +701,17 @@ async function adminView() {
   const c = cfg();
   const sessions = [...SESS.values()].filter((S) => !S.ended).map((S) => ({
     key: S.key, room: S.roomId, login: S.login, display: S.display, state: stateOf(S, t), since: S.createdAt, liveAt: S.liveAt || null,
-    viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since })), readers: S.readers, bot: S.botInfo || null,
+    viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since, ghost: !!v.ghost })), readers: S.readers, bot: S.botInfo || null,
     kbps: Math.round(rateOf(S, c)), measured: !!(S.botInfo && S.botInfo.source === "passthrough" && Number(S.botInfo.kbps) > 0),
     outKbps: Math.round(rateOf(S, c) * (freshViewers(S, t).length + freshStage(S, t).length)),
     botState: S.botState, botWhy: S.botWhy, stage: S.stage || null, stageViewers: freshStage(S, t).length }));
   const viewers = totalViewers(t);
-  const recent = await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason FROM livecam_audit ORDER BY id DESC LIMIT 30`);
+  const recent = await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason, ghost FROM livecam_audit ORDER BY id DESC LIMIT 30`);
   return { now: t, v: CFG.v, cfg: { ...c }, defaults: { ...DEFAULTS }, fields: FIELDS, updated_at: CFG.at, updated_by: CFG.by, webrtc: W().enabled(),
            bot: BOT ? { at: BOT.at, online: botOk(t), pool: BOT.pool, cfgFrom: BOT.cfgFrom } : null, sessions,
            usage: { viewers, viewerCap: viewerCap(c), mbps: Math.round(usedKbps(t, c) / 100) / 10, budget_mbps: c.budget_mbps, live: sessions.length,
                     max_live: c.max_live, publishMbps: Math.round(sessions.reduce((a, x) => a + x.kbps, 0) / 100) / 10 },
-           optouts: OPTOUT.size, camviewers: CV().stats(), audit, recent };
+           optouts: OPTOUT.size, camviewers: CV().stats(), ghost: await ghostView(), audit, recent };
 }
 
 // ── routes ──

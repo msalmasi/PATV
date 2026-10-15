@@ -1009,7 +1009,8 @@ function register(app, { isBotToken, addUser }) {
   require("./pepemodlog").register(app, { isBotToken, addUser, bySlug });        // 1.99zf: Pepe's mod log per room (owner panel moderation history)
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover
-  require("./camviewers").register(app, { isBotToken, addUser });   // 1.99yq: 👁 who opened your cam (Pepe PMs you) + !blockviewer / the privacy card
+  require("./camviewers").register(app, { isBotToken, addUser });
+  require("./ghost").register(app, { isBotToken, addUser });   // 1.99aaf: 👻 staff ghost mode (cam views tell nobody; always audited)   // 1.99yq: 👁 who opened your cam (Pepe PMs you) + !blockviewer / the privacy card
   require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)
   require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
   require("./padmod").register(app, { addUser, bySlug, isLive: isLiveShown });     // 1.99co: the pad Manage panel

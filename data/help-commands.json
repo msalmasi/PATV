@@ -1162,6 +1162,28 @@
    "keywords": []
   },
   {
+   "id": "ghost",
+   "title": "!ghost [on|off]",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!ghost"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!ghost",
+    "!ghost on",
+    "!ghost off"
+   ],
+   "summary": "👻 Ghost mode for site staff: open cams on the website without telling the owner - always audited.",
+   "details": "For moderation. While it's on, opening someone's cam on the website (live, a snapshot or a clip) doesn't send them Pepe's PM, you aren't listed in their `!whowatching` or the privacy page's who's-watching list, you aren't counted in the viewer numbers, and Pepe leaves it out of the room's mod log. It's never silent: every ghost view and every switch on or off is logged for the admins (Admin → Pepe → Live cams). It doesn't get past anyone's choices - a cam switched off for the website (`!livecam off`), kept private or blocked to you stays closed. Only accounts whose PATV class is Admin or Staff can switch it on; the same switch is in Settings → Privacy. `!ghost` on its own shows your setting.",
+   "examples": [
+    "!ghost on",
+    "!ghost off"
+   ],
+   "keywords": []
+  },
+  {
    "id": "bridge-block",
    "title": "!bridge block <name> [global] [duration] [reason]",
    "category": "chat",
@@ -7751,5 +7773,5 @@
   "!plusrooms",
   "!retention"
  ],
- "hash": "f65909df6ef76c6a"
+ "hash": "d64a30c52ef011dd"
 }

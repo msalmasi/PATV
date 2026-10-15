@@ -29,6 +29,7 @@
       case 'slots_busy': return _t('js.pad.live.err_busy', 'All live cam slots are busy - try again in a bit.');
       case 'budget': return _t('js.pad.live.err_budget', 'Live cams are full right now - try again in a bit.');
       case 'nopepe': return _t('js.pad.live.err_pepe', 'Pepe can\'t do live cams right now.');
+      case 'unavailable': return _t('js.pad.live.err_unavailable', 'That cam isn\'t available right now.');
       case 'room_off': case 'off': return _t('js.pad.live.err_off', 'Live cams aren\'t on in this room.');
       case 'ended_by': case 'ended_by_admin': return _t('js.pad.live.err_ended', 'Their live cam was ended.');
       case 'cam_closed': return _t('js.pad.live.err_closed', 'Their cam closed.');
@@ -49,6 +50,8 @@
       b.disabled = true; b.title = _t('js.pad.live.err_signin', 'Sign in to watch cams live.');
       acts.appendChild(b); box.appendChild(acts); return ctl;
     }
+    // 1.99aaf: 👻 staff in ghost mode see it on every cam popover (snapshots / clips / live tell the owner nothing - audited)
+    if (info.ghost) box.appendChild(el('div', 'lc-ghost', _t('js.pad.live.ghost', '👻 ghost - the owner isn\'t told (logged for admins)')));
     var s = info.slots || { used: 0, max: 1 };
     var strip = opts.strip || null;
     if (strip && strip.has(who.login)) {                    // 1.99zc: it's playing in the strip already - one player per cam
