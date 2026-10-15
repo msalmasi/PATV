@@ -361,3 +361,50 @@ test("1.99aan: the player's ✂ Cut / 📺 Play bar - Admin + Staff only (endpoi
   const bridgeSrc = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
   assert.match(bridgeSrc, /onairAdmin: !!\(req\.user && \(req\.user\.class === "Admin" \|\| req\.user\.class === "Staff"\)\)/);
 });
+
+test("1.99aao: a pasted YouTube / Twitch link goes on air straight from the player bar (rights tick, stall clock, no slot)", async () => {
+  await assert.rejects(OA.setEmbed("https://example.com/x", "web:boss", { rights: true }), (e) => e.code === "embed_bad");
+  await assert.rejects(OA.setEmbed("https://www.twitch.tv/somechannel", "web:boss"), (e) => e.code === "rights");
+  await OA.setEmbed("https://www.twitch.tv/somechannel", "web:boss", { rights: true });
+  const tgt = OA.view().target;
+  assert.equal(tgt.kind, "embed");
+  assert.equal(tgt.direct, true);
+  assert.equal(tgt.slot_id, null);
+  assert.equal(tgt.embed.p, "twitch");
+  const r = await OA.forBot({});
+  assert.match(r.target.url, /\/onair\/player\?t=/);
+  const set = (await getQuery("SELECT ref, detail FROM onair_log WHERE what = 'set' ORDER BY id DESC LIMIT 1"))[0];
+  assert.match(set.ref, /^link:twitch:/);
+  assert.match(set.detail, /rights_confirmed/);
+  const tok = decodeURIComponent(r.target.url.split("t=")[1]);
+  OA.embedState(tok, "playing");
+  T += OA.EMBED_GRACE_MS + 60 * 1000;
+  await OA.check();
+  assert.ok(OA.view().target, "no slot behind it - still on while it plays");
+  T += OA.config().embed_stall_s * 1000 + 1000;
+  await OA.check();
+  assert.equal(OA.view().target, null);
+});
+
+test("1.99aao: a Plex title from the player bar plays on Pepe's pad and goes on air at once; refused while allow_library is off", async () => {
+  const ML = require(path.join(repo, "medialib"));
+  const orig = { play: ML.play, stop: ML.stop };
+  let played = null, stopped = 0;
+  ML.play = async (user, b) => { played = b; const s = await S.book(await mkUser(), { minutes: 30, room: b.room }); return { ok: true, slot: { id: s.slot.id } }; };
+  ML.stop = async () => { stopped += 1; return { ok: true }; };
+  try {
+    const boss = { userId: "u-boss", username: "boss", class: "Staff" };
+    await assert.rejects(OA.setLibrary("123", "web:boss", { user: boss }), (e) => e.code === "library");
+    assert.equal(played, null);
+    await OA.saveConfig({ allow_library: true }, "test");
+    await OA.setLibrary("123", "web:boss", { user: boss });
+    assert.deepEqual(played, { room: rooms.HOUSE_ROOM, key: "123" });
+    const tgt = OA.view().target;
+    assert.equal(tgt.kind, "slot");
+    assert.equal(tgt.pad, rooms.HOUSE_ROOM);
+    T += OA.LIVE_GRACE_MS + 1000;                         // the stream never came up: taken off like any slot
+    await OA.check();
+    assert.equal(OA.view().target, null);
+    assert.equal(stopped, 0);
+  } finally { ML.play = orig.play; ML.stop = orig.stop; }
+});
