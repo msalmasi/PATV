@@ -2105,6 +2105,8 @@
   "perks.sp.pm_d": "Pepe เก็บข้อความส่วนตัวของคุณกับเขา {!pm} หากไม่มี Season Pass: {!none}",
   "perks.sp.telegram": "แชทกับ Pepe บน Telegram",
   "perks.sp.telegram_d": "เมื่อเชื่อม Telegram แล้ว คุณจะคุยกับ Pepe และใช้คำสั่งที่อนุญาตจากบอต Telegram ของเขาได้ หากไม่มี Season Pass คุณจะได้รับการแจ้งเตือนเท่านั้น",
+  "perks.sp.livecams": "ดูไลฟ์กล้อง {n} กล้องพร้อมกัน",
+  "perks.sp.livecams_d": "กด ▶ Live ที่กล้องของใครบางคนบน pad เพื่อดูสด ช้ากว่าห้องประมาณ 1 วินาที สมาชิกที่ลงชื่อเข้าใช้ทุกคนดูได้ {free} กล้องพร้อมกัน ส่วน Season Pass ให้ดูได้สูงสุด {n} กล้องพร้อมกัน Prime Time และ Prime Time Plus เป็นระดับของ pad และไม่เปลี่ยนแปลงสิ่งนี้ เพราะนับต่อผู้ชมแต่ละคน",
   "perks.included": "สิ่งที่รวมอยู่",
   "perks.tier_h": "ระดับ pad",
   "perks.tier_none": "pad นี้ยังไม่มีระดับ Prime Time และ Prime Time Plus จะเพิ่ม:",

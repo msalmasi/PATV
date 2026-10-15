@@ -2143,6 +2143,8 @@
   "perks.sp.pm_d": "Pepe پیام‌های خصوصی‌ات با خودش را {!pm} نگه می‌دارد. بدون پس: {!none}.",
   "perks.sp.telegram": "گفتگو با Pepe در Telegram",
   "perks.sp.telegram_d": "با لینک کردن Telegram، با Pepe حرف بزن و دستورهای مجاز را از ربات Telegram او اجرا کن. بدون Season Pass فقط هشدار می‌گیری.",
+  "perks.sp.livecams": "همزمان {n} دوربین زنده را تماشا کن",
+  "perks.sp.livecams_d": "روی پد، روی دوربین یک نفر ▶ Live را بزن و زنده تماشا کن؛ حدود یک ثانیه از اتاق عقب‌تر است. هر عضو واردشده می‌تواند همزمان {free} را تماشا کند؛ با Season Pass می‌توانی همزمان تا {n} را تماشا کنی. Prime Time و Prime Time Plus سطح‌های پد هستند و این را تغییر نمی&#39;دهند - برای هر بیننده جداست.",
   "perks.included": "چی داخلشه",
   "perks.tier_h": "سطح پد",
   "perks.tier_none": "این پد هنوز سطحی ندارد. Prime Time و Prime Time Plus این‌ها را اضافه می‌کنند:",

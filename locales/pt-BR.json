@@ -2158,6 +2158,8 @@
   "perks.sp.pm_d": "O Pepe mantém suas mensagens privadas com ele {!pm}. Sem o passe: {!none}.",
   "perks.sp.telegram": "Converse com o Pepe no Telegram",
   "perks.sp.telegram_d": "Com o Telegram vinculado, converse com o Pepe e use os comandos permitidos no bot dele no Telegram. Sem o passe, você recebe só alertas.",
+  "perks.sp.livecams": "Assista a {n} câmeras ao vivo ao mesmo tempo",
+  "perks.sp.livecams_d": "Clique em ▶ Ao vivo na câmera de alguém em um Pad e assista ao vivo, cerca de um segundo atrás da sala. Todo membro logado pode assistir {free} por vez; um Season Pass permite assistir até {n} ao mesmo tempo. Prime Time e Prime Time Plus são níveis de pad e não mudam isso - é por espectador.",
   "perks.included": "O que está incluído",
   "perks.tier_h": "Nível do pad",
   "perks.tier_none": "Este pad ainda não tem nível. Prime Time e Prime Time Plus adicionam:",

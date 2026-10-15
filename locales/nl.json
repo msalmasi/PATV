@@ -2143,6 +2143,8 @@
   "perks.sp.pm_d": "Pepe bewaart je privéberichten met hem {!pm}. Zonder pass: {!none}.",
   "perks.sp.telegram": "Chat met Pepe op Telegram",
   "perks.sp.telegram_d": "Met Telegram gekoppeld praat je met Pepe en voer je de toegestane commando's uit via zijn Telegram-bot. Zonder pass krijg je alleen meldingen.",
+  "perks.sp.livecams": "Bekijk {n} livecams tegelijk",
+  "perks.sp.livecams_d": "Druk op ▶ Live bij iemands cam op een pad en bekijk die live, ongeveer een seconde achter de kamer. Elk ingelogd lid kan {free} tegelijk bekijken; met een Season Pass kun je er tot {n} tegelijk bekijken. Prime Time en Prime Time Plus zijn padniveaus en veranderen dit niet - het geldt per kijker.",
   "perks.included": "Wat is inbegrepen",
   "perks.tier_h": "Pad-niveau",
   "perks.tier_none": "Dit pad heeft nog geen niveau. Prime Time en Prime Time Plus voegen toe:",

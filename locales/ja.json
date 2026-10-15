@@ -2104,6 +2104,8 @@
   "perks.sp.pm_d": "Pepeはあなたとのプライベートメッセージを{!pm}保存します。パスなしの場合: {!none}。",
   "perks.sp.telegram": "TelegramでPepeとチャット",
   "perks.sp.telegram_d": "Telegramをリンクすると、Pepeと話したり、PepeのTelegramボットで許可されたコマンドを実行したりできます。パスなしの場合は通知のみ受け取れます。",
+  "perks.sp.livecams": "{n}件のライブカメラを同時に視聴",
+  "perks.sp.livecams_d": "パッドの誰かのカメラで「▶ Live」を押すと、ルームより約1秒遅れでライブ視聴できます。ログイン済みのメンバーは全員、同時に{free}件まで視聴できます。Season Passを利用すると、同時に最大{n}件まで視聴できます。Prime TimeとPrime Time Plusはパッドのティアで、この上限は変わりません。上限は視聴者ごとです。",
   "perks.included": "含まれるもの",
   "perks.tier_h": "パッドのティア",
   "perks.tier_none": "このパッドにはまだティアがありません。Prime Time と Prime Time Plus では次が追加されます:",

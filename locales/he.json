@@ -2182,6 +2182,8 @@
   "perks.sp.pm_d": "Pepe שומר את ההודעות הפרטיות שלכם איתו {!pm}. בלי Pass: {!none}.",
   "perks.sp.telegram": "צ'אט עם Pepe בטלגרם",
   "perks.sp.telegram_d": "כשטלגרם מקושר, דברו עם Pepe והפעילו את הפקודות המותרות מהבוט שלו בטלגרם. בלי Pass תקבלו התראות בלבד.",
+  "perks.sp.livecams": "צפו בעד {n} מצלמות חיות בו-זמנית",
+  "perks.sp.livecams_d": "לחצו על ▶ Live במצלמה של מישהו בפד וצפו בה בשידור חי, כשנייה אחרי החדר. כל חבר מחובר יכול לצפות ב-{free} בכל פעם; Season Pass מאפשר לצפות עד {n} בו-זמנית. Prime Time ו-Prime Time Plus הן דרגות פד ואינן משנות זאת - זה לכל צופה.",
   "perks.included": "מה כלול",
   "perks.tier_h": "רמת הפד",
   "perks.tier_none": "לפד הזה אין עדיין רמה. Prime Time ו-Prime Time Plus מוסיפים:",

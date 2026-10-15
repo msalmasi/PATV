@@ -2104,6 +2104,8 @@
   "perks.sp.pm_d": "Pepe 會保留你與他的私訊 {!pm}。未持有通行證：{!none}。",
   "perks.sp.telegram": "在 Telegram 與 Pepe 聊天",
   "perks.sp.telegram_d": "連結 Telegram 後，就能與 Pepe 聊天，並在他的 Telegram 機器人中執行允許的指令。未持有通行證的話，只會收到提醒。",
+  "perks.sp.livecams": "同時觀看 {n} 個直播鏡頭",
+  "perks.sp.livecams_d": "在小站中按下某人鏡頭上的 ▶ 直播，即可即時觀看，畫面比房間慢約一秒。每位已登入的成員可同時觀看 {free} 個鏡頭；Season Pass 讓你最多可同時觀看 {n} 個。Prime Time 與 Prime Time Plus 是小站等級，不會改變這項設定，因為它是針對每位觀眾而定的。",
   "perks.included": "包含內容",
   "perks.tier_h": "小站等級",
   "perks.tier_none": "這個小站還沒有等級。Prime Time 與 Prime Time Plus 會新增：",

@@ -2104,6 +2104,8 @@
   "perks.sp.pm_d": "Pepe menyimpan pesan pribadimu dengannya {!pm}. Tanpa pass: {!none}.",
   "perks.sp.telegram": "Chat dengan Pepe di Telegram",
   "perks.sp.telegram_d": "Dengan Telegram tertaut, ngobrol dengan Pepe dan jalankan perintah yang diizinkan dari bot Telegram-nya. Tanpa pass, kamu hanya dapat notifikasi.",
+  "perks.sp.livecams": "Tonton {n} kamera langsung sekaligus",
+  "perks.sp.livecams_d": "Tekan ▶ Live pada kamera seseorang di pad, lalu tonton langsung, sekitar satu detik di belakang ruangan. Setiap anggota yang sudah masuk bisa menonton {free} sekaligus; Season Pass memungkinkanmu menonton hingga {n} sekaligus. Prime Time dan Prime Time Plus adalah tingkatan pad dan tidak mengubah ini&#39; - ini berlaku per penonton.",
   "perks.included": "Yang sudah termasuk",
   "perks.tier_h": "Tingkat pad",
   "perks.tier_none": "Pad ini belum punya tingkat. Prime Time dan Prime Time Plus menambahkan:",

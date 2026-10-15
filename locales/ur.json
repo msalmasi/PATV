@@ -2143,6 +2143,8 @@
   "perks.sp.pm_d": "Pepe آپ کے نجی پیغامات اس کے ساتھ {!pm} رکھتا ہے۔ پاس کے بغیر: {!none}۔",
   "perks.sp.telegram": "Telegram پر Pepe سے چیٹ کریں",
   "perks.sp.telegram_d": "Telegram لنک ہونے کے بعد، Pepe سے بات کریں اور اس کے Telegram بوٹ سے اجازت یافتہ کمانڈز چلائیں۔ پاس کے بغیر آپ کو صرف الرٹس ملیں گے۔",
+  "perks.sp.livecams": "ایک وقت میں {n} لائیو کیمز دیکھیں",
+  "perks.sp.livecams_d": "پیڈ پر کسی کے کیم پر ▶ Live دبائیں اور اسے لائیو دیکھیں، کمرے سے تقریباً ایک سیکنڈ پیچھے۔ ہر سائن ان ممبر ایک وقت میں {free} دیکھ سکتا ہے؛ Season Pass آپ کو ایک ساتھ {n} تک دیکھنے دیتا ہے۔ Prime Time اور Prime Time Plus پیڈ کے درجے ہیں اور اس میں تبدیلی نہیں کرتے - یہ ہر ناظر کے لحاظ سے ہے۔",
   "perks.included": "شامل چیزیں",
   "perks.tier_h": "پیڈ ٹیئر",
   "perks.tier_none": "اس پیڈ کا ابھی کوئی ٹیئر نہیں ہے۔ Prime Time اور Prime Time Plus شامل کرتے ہیں:",

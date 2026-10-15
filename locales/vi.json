@@ -2104,6 +2104,8 @@
   "perks.sp.pm_d": "Pepe giữ tin nhắn riêng của bạn với nó {!pm}. Không có gói: {!none}.",
   "perks.sp.telegram": "Trò chuyện với Pepe trên Telegram",
   "perks.sp.telegram_d": "Khi đã liên kết Telegram, bạn có thể trò chuyện với Pepe và dùng các lệnh được phép từ bot Telegram của nó. Không có gói, bạn chỉ nhận thông báo.",
+  "perks.sp.livecams": "Xem {n} cam trực tiếp cùng lúc",
+  "perks.sp.livecams_d": "Nhấn ▶ Live trên cam của ai đó trong một Pad để xem trực tiếp, chậm hơn phòng khoảng một giây. Mọi thành viên đã đăng nhập đều có thể xem {free} cam cùng lúc; Season Pass cho phép bạn xem tối đa {n} cam cùng lúc. Prime Time và Prime Time Plus là các bậc của Pad và không thay đổi điều này - tính theo từng người xem.",
   "perks.included": "Bao gồm",
   "perks.tier_h": "Cấp độ pad",
   "perks.tier_none": "Pad này chưa có cấp độ. Prime Time và Prime Time Plus bổ sung:",

@@ -2143,6 +2143,8 @@
   "perks.sp.pm_d": "Pepe, onunla olan özel mesajlarını {!pm} saklar. Geçiş olmadan: {!none}.",
   "perks.sp.telegram": "Pepe ile Telegram'da sohbet et",
   "perks.sp.telegram_d": "Telegram bağlıyken Pepe ile konuş ve Telegram botundan izin verilen komutları çalıştır. Geçiş olmadan yalnızca uyarı alırsın.",
+  "perks.sp.livecams": "Aynı anda {n} canlı kamerayı izle",
+  "perks.sp.livecams_d": "Bir pad&#39;de birinin kamerasında ▶ Canlı&#39;ya bas ve odadan yaklaşık bir saniye geride canlı izle. Giriş yapmış her üye aynı anda {free} kamerayı izleyebilir; Season Pass ile aynı anda {n} kameraya kadar izleyebilirsin. Prime Time ve Prime Time Plus pad seviyeleridir ve bunu değiştirmez - bu izleyici başına geçerlidir.",
   "perks.included": "Dahil olanlar",
   "perks.tier_h": "Pad seviyesi",
   "perks.tier_none": "Bu pad'in henüz bir seviyesi yok. Prime Time ve Prime Time Plus şunları ekler:",

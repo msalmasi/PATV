@@ -2104,6 +2104,8 @@
   "perks.sp.pm_d": "Pepe는 나와 주고받은 개인 메시지를 {!pm} 보관해요. 패스가 없으면: {!none}.",
   "perks.sp.telegram": "Telegram에서 Pepe와 채팅하기",
   "perks.sp.telegram_d": "Telegram을 연결하면 Pepe와 대화하고 그의 Telegram 봇에서 허용된 명령을 실행할 수 있어요. 패스가 없으면 알림만 받아요.",
+  "perks.sp.livecams": "동시에 {n}개의 라이브 캠 보기",
+  "perks.sp.livecams_d": "패드에 있는 누군가의 캠에서 ▶ 라이브를 누르면 방보다 약 1초 늦게 실시간으로 볼 수 있어요. 로그인한 모든 회원은 한 번에 {free}개까지 볼 수 있고, Season Pass를 사용하면 동시에 최대 {n}개까지 볼 수 있어요. Prime Time과 Prime Time Plus는 패드 등급이라 이 설정을 바꾸지 않아요. 시청자마다 따로 적용돼요.",
   "perks.included": "포함된 혜택",
   "perks.tier_h": "패드 등급",
   "perks.tier_none": "이 패드에는 아직 등급이 없어요. Prime Time과 Prime Time Plus에서 추가되는 혜택:",
