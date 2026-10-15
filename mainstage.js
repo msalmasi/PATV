@@ -65,6 +65,9 @@ const STAGING = !!process.env.STAGING;
 const RTMP_APP = process.env.STAGE_RTMP_APP || (STAGING ? "stage_staging" : "stage");   // ingest
 const OUT_APP = process.env.STAGE_OUT_APP || (STAGING ? "live_staging" : "live");         // HLS
 const RTMP_PUBLIC = process.env.STAGE_RTMP_URL || `rtmp://stream.publicaccess.tv/${RTMP_APP}`;
+// 1.99aaz: where a remote player (Pepe's OBS on the homelab VM) pulls a slot as ONE continuous RTMP stream from the HLS app.
+// HLS made OBS's media source play in 2 s jumps (one segment, then a freeze until the next - measured 2026-10-15).
+const RTMP_PLAY = process.env.STAGE_RTMP_PLAY || RTMP_PUBLIC.replace(/\/[^/]*$/, "/" + OUT_APP);
 const RTMP_LOCAL = process.env.STAGE_RTMP_LOCAL || `rtmp://127.0.0.1/${RTMP_APP}`;
 const OUT_LOCAL = process.env.STAGE_OUT_LOCAL || `rtmp://127.0.0.1/${OUT_APP}`;
 // nginx-rtmp wants a distinct hls_path per application: the staging app writes to /mnt/hls/staging
@@ -1486,6 +1489,14 @@ function hlsOf(s) {
   try { const fx = require("./stageaudio").fixedName(s); if (fx) return `${HLS_BASE}/${fx}.m3u8`; } catch (e) { /* no repair */ }
   return `${HLS_BASE}/${s.stream}.m3u8`;
 }
+// 1.99aaz: what Pepe's OBS plays for an on-air slot: the RTMP play URL of the slot's HLS-app stream (its audio-repaired copy
+// when there is one); a WHIP slot lives in MediaMTX, not nginx-rtmp, so it keeps its HLS. ONAIR_PULL=hls = the old behaviour.
+function playUrlOf(s) {
+  if (s.via === "whip" || String(process.env.ONAIR_PULL || "rtmp").toLowerCase() === "hls") return hlsOf(s);
+  let name = s.stream;
+  try { name = require("./stageaudio").fixedName(s) || s.stream; } catch (e) { /* no repair */ }
+  return `${RTMP_PLAY}/${name}`;
+}
 // ...and, while webrtc_enabled is on, its WHEP URL for the ⚡ Low latency toggle (absent otherwise)
 function whepOf(s) {
   if (s.via !== "whip" || isEmbed(s)) return null;
@@ -1962,7 +1973,7 @@ module.exports = {
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
-  publishGate, goLive, whipBeat, openSlotByStream, hlsOf, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
+  publishGate, goLive, whipBeat, openSlotByStream, hlsOf, playUrlOf, RTMP_PLAY, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
   camOpen, camBeat, camCandidates,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,

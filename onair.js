@@ -500,7 +500,7 @@ async function botTarget() {
     if (!s) return null;
     // 1.99aaq: a pick still waiting for its stream to start (go live / 📼) stays off OBS until it's live - no blank scene
     if (T.start_until && !T.went_live && !S().isLive(s)) return null;
-    return { id: T.id, kind: "slot", label: T.label, url: S().hlsOf(s), live: S().isLive(s), since: T.at };
+    return { id: T.id, kind: "slot", label: T.label, url: (S().playUrlOf || S().hlsOf)(s), live: S().isLive(s), since: T.at };
   }
   if (T.kind === "embed") return { id: T.id, kind: "embed", label: T.label, url: playerUrl(T), since: T.at };
   return { id: T.id, kind: "cam", label: T.label, room: T.room, login: T.login, display: T.display, since: T.at };

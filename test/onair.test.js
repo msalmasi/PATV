@@ -89,14 +89,19 @@ test("switched off: nothing can be set; switching off takes the target down", as
   assert.ok(logs.some((l) => l.what === "end" && l.detail === "switched_off"));
 });
 
-test("a live public slot goes on air; Pepe gets its HLS URL; the streamer is told", async () => {
+test("a live public slot goes on air; Pepe gets its RTMP play URL (HLS with ONAIR_PULL=hls); the streamer is told", async () => {
   const told = [];
   rooms.notify = async (uid, n) => { told.push([uid, n.title]); return true; };
   const a = await live();
   await OA.setSlot(a.id, "web:boss");
   const r = await OA.forBot({ state: { obs: "ok", shown: true, irl: false, scene: "Pepe", source_ok: true } });
   assert.equal(r.target.kind, "slot");
-  assert.match(r.target.url, /^https:\/\/publicaccess\.tv\/hls\/stage-[0-9a-f]{16}\.m3u8$/);
+  // 1.99aaz: one continuous RTMP pull from the HLS app (HLS made OBS's media source play in 2 s jumps)
+  assert.match(r.target.url, /^rtmp:\/\/stream\.publicaccess\.tv\/live\/stage-[0-9a-f]{16}$/);
+  process.env.ONAIR_PULL = "hls";
+  assert.match((await OA.forBot({ state: { obs: "ok", shown: true, irl: false, scene: "Pepe", source_ok: true } })).target.url,
+    /^https:\/\/publicaccess\.tv\/hls\/stage-[0-9a-f]{16}\.m3u8$/);
+  delete process.env.ONAIR_PULL;
   assert.equal(r.cfg.irl_source, "IRL BB");
   assert.deepEqual(told, [[a.user.userId, "You're on Pepe's main stream"]]);
   assert.equal(OA.view().pepe.state.scene, "Pepe");
