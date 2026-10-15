@@ -91,6 +91,7 @@ function init() {
       // 1.99aaf: 👻 a staff member in ghost mode (ghost.js) - logged, never notified / listed
       const cols = (await getQuery("PRAGMA table_info(cam_views)")).map((c) => c.name);
       if (!cols.includes("ghost")) await runQuery("ALTER TABLE cam_views ADD COLUMN ghost INTEGER NOT NULL DEFAULT 0");
+      if (!cols.includes("bypass")) await runQuery("ALTER TABLE cam_views ADD COLUMN bypass TEXT");   // 1.99aak: what a ghost got past
       await loadBlocks();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -117,14 +118,26 @@ function blocked(login, userId) {
  * May `userId` see `login`'s cam through the website (live, snapshot, clip)? null = yes, else {code, status, error}.
  * The one check every path asks. `userId` may be null (only the owner's own switches are checked then).
  */
-async function camRefusal(login, userId) {
+async function camRefusal(login, userId, opts = {}) {
   const l = low(login);
   if (!LOGIN_RE.test(l)) return { code: "unavailable", status: 404, error: UNAVAILABLE };
   await init();
+  // 1.99aak: staff in 👻 ghost mode get past the owner's switch-off, "private" and blocks to VIEW (moderation - the user's
+  // decision, 2026-10-15; anyone in the Camfrog room can see the cam anyway). Audited: noteView records what was bypassed.
+  // opts.strict (saving a snapshot / clip as a post, an AI picture reference) never bypasses - nothing public comes of it.
+  if (!opts.strict && userId != null && deps.isGhost(String(userId))) return null;
   if (deps.optedOut(l)) return { code: "opted_out", status: 403, error: MSG.opted_out };
   try { if ((await deps.privateLogins([l])).has(l)) return { code: "private", status: 403, error: MSG.private }; } catch (e) { /* none */ }
   if (userId != null && blocked(l, userId)) return { code: "unavailable", status: 403, error: UNAVAILABLE };
   return null;
+}
+/** 1.99aak: which of the owner's rules a ghost view got past ("opted_out" | "private" | "blocked", comma-joined) or null. */
+async function bypassOf(login, userId) {
+  const l = low(login), out = [];
+  try { if (deps.optedOut(l)) out.push("opted_out"); } catch (e) { /* none */ }
+  try { if ((await deps.privateLogins([l])).has(l)) out.push("private"); } catch (e) { /* none */ }
+  if (userId != null && blocked(l, userId)) out.push("blocked");
+  return out.length ? out.join(",") : null;
 }
 
 // ── views + notices ──
@@ -145,8 +158,9 @@ function noteView(kind, roomId, owner, u, t = now()) {
     const uid = String(u.userId);
     if (low(u.camfrogUsername) === o) return false;                    // their own cam
     const ghost = !!deps.isGhost(uid);                                  // 1.99aaf: 👻 staff ghost mode - logged (ghost = 1), nobody told
-    init().then(() => runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [o, String(roomId || ""), uid, u.username || null, kind, t, ghost ? 1 : 0])).catch((e) => console.error("[camviewers] log:", e.message));
+    init().then(async () => runQuery("INSERT INTO cam_views (owner, room_id, user_id, username, kind, at, ghost, bypass) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [o, String(roomId || ""), uid, u.username || null, kind, t, ghost ? 1 : 0, ghost ? await bypassOf(o, uid) : null]))
+      .catch((e) => console.error("[camviewers] log:", e.message));
     if (ghost) return false;
     const k = o + "|" + uid;
     const prev = NOTED.get(k);
@@ -384,7 +398,7 @@ function register(app, { addUser, isBotToken }) {
 }
 
 module.exports = {
-  init, register, camRefusal, blocked, noteView, noteViewers, forBot, watching, block, unblock, listBlocks, resolveViewer, stats, prune,
+  init, register, camRefusal, bypassOf, blocked, noteView, noteViewers, forBot, watching, block, unblock, listBlocks, resolveViewer, stats, prune,
   UNAVAILABLE, MSG, RECENT_MS, LIVE_GAP_MS, OWNER_GAP_MS, NOTE_TTL_MS, RESEND_MS, DIGEST_MAX,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setDeps: (d) => { deps = Object.assign({}, deps, d || {}); },

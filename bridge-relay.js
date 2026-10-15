@@ -702,7 +702,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!s || !s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return res.status(410).json({ ok: false, error: "That snapshot expired — take a fresh one." });
     if (!s.viewers || !s.viewers.has(u.userId)) return res.status(403).json({ ok: false, error: "That isn't a snapshot you asked for." });
     if (saveRight(s, u.userId) === null) return res.status(403).json({ ok: false, error: "Snaps of them aren't allowed here." });
-    const ref = await CV().camRefusal(login, u.userId);
+    const ref = await CV().camRefusal(login, u.userId, { strict: true });   // 1.99aak: a 👻 ghost can't SAVE past the owner's rules
     if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
     const prev = s.saves.get(u.userId);
     if (prev) {

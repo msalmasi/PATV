@@ -140,7 +140,7 @@ test("a ghost's live view: no notice, not listed, not counted - but audited (cam
   assert.ok(view.recent.some((r) => r.ghost === 1));
 });
 
-test("a ghost's snapshot: no notice, Pepe's job says ghost; opt-outs and blocks still refuse a ghost", async () => {
+test("a ghost's snapshot: no notice, Pepe's job says ghost; 1.99aak: blocks / opt-outs don't stop a ghost (logged), saving still refused", async () => {
   relay._hits.clear();
   const r = await post(`/api/rooms/${R.slug}/snap`, { login: "bob" }, "adm");
   assert.equal(r.d.ok, true);
@@ -152,14 +152,40 @@ test("a ghost's snapshot: no notice, Pepe's job says ghost; opt-outs and blocks 
   assert.deepEqual((await bot()).d.cv_notify, [], "bob isn't told");
   const v = await getQuery("SELECT ghost FROM cam_views WHERE owner = 'bob'");
   assert.deepEqual(v.map((x) => x.ghost), [1]);
+  // 1.99aak (the user's decision): for moderation a ghost gets past a block and the opt-out to VIEW - audited with what it got past
   await CV.block("bob", "adm_u");
-  relay._hits.clear();
-  assert.equal((await post(`/api/rooms/${R.slug}/snap`, { login: "bob" }, "adm")).status, 403, "a block refuses a ghost too");
+  assert.equal(await CV.camRefusal("bob", "adm"), null, "a block doesn't stop a ghost viewing");
+  assert.equal((await CV.camRefusal("bob", "adm", { strict: true })).code, "unavailable", "...but saving / posting keeps the block");
+  CV.noteView("snap", R.id, "bob", { userId: "adm", username: "adm_u" }, T);
+  await settle();
+  const b1 = await getQuery("SELECT bypass FROM cam_views WHERE owner = 'bob' AND bypass IS NOT NULL ORDER BY id DESC LIMIT 1");
+  assert.equal(b1[0] && b1[0].bypass, "blocked", "the bypass is logged");
   await CV.unblock("bob", "adm_u");
   await LC.setOptout("bob", true, { via: "chat", ts: T });
-  relay._hits.clear();
-  assert.equal((await post(`/api/rooms/${R.slug}/snap`, { login: "bob" }, "adm")).status, 403, "so does the opt-out");
+  assert.equal(await CV.camRefusal("bob", "adm"), null, "nor does the opt-out");
+  assert.equal((await CV.camRefusal("bob", "adm", { strict: true })).code, "opted_out");
+  assert.equal(await CV.bypassOf("bob", "adm"), "opted_out");
+  assert.equal((await CV.camRefusal("bob", "someone_else")).code, "opted_out", "everyone else: the owner's rules");
   await LC.setOptout("bob", false, { via: "chat", ts: T + 1 });
+});
+
+test("1.99aak: !livecam off drops everyone but the ghost; a ghost can start a live view past it (audited), members can't", async () => {
+  await bot();
+  await watchAndRead("alice", "stf");
+  await watchAndRead("alice", "pleb");
+  await bot({ live: [{ room: R.id, login: "alice", state: "live" }] });
+  await LC.setOptout("alice", true, { via: "chat", ts: T });
+  const after = await bot();
+  const w = (after.d.want || []).find((x) => x.login === "alice");
+  assert.ok(w, "the session lives on for the ghost");
+  assert.equal(w.bypass, true, "Pepe is told to publish it despite the opt-out");
+  assert.equal((await post(`/api/rooms/${R.slug}/livecam`, { login: "alice" }, "pleb")).status, 403, "members: the owner's rule");
+  await post(`/api/rooms/${R.slug}/livecam/stop`, { login: "alice" }, "stf").catch(() => {});
+  const r = await post(`/api/rooms/${R.slug}/livecam`, { login: "alice" }, "stf");
+  assert.equal(r.d.ok, true, JSON.stringify(r.d));
+  const la = await getQuery("SELECT bypass FROM livecam_audit WHERE viewer_id = 'stf' AND bypass IS NOT NULL");
+  assert.ok(la.some((x) => x.bypass === "opted_out"), "the bypass is in the audit");
+  await LC.setOptout("alice", false, { via: "chat", ts: T + 1 });
 });
 
 test("ghost views are kept past the 7-day window; a demoted account stops being a ghost; switching off", async () => {

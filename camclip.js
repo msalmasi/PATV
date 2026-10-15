@@ -67,7 +67,8 @@ const deps = {
   modCaps: (R, login) => { try { return require("./padmod").capsFor(R, login); } catch (e) { return null; } },
   queueAction: (...a) => require("./actions").queue(...a),
   // 1.99yq: the owner's switch (!livecam off covers clips too), private, and their blocks - one check for every cam path
-  camRefusal: (login, userId) => require("./camviewers").camRefusal(login, userId),
+  camRefusal: (login, userId, opts) => require("./camviewers").camRefusal(login, userId, opts),
+  isGhost: (userId) => { try { return require("./ghost").isGhost(userId); } catch (e) { return false; } },   // 1.99aak
   noteViewers: (...a) => require("./camviewers").noteViewers(...a),
 };
 /** 1.99fb: may this account clip while the room's !clip is off / unknown? Site admins, and anyone Pepe gave
@@ -121,7 +122,7 @@ async function clipInfo(R, userId, login) {
   if (!u || !u.camfrogUsername) off = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
   else if (deps.snapSwitch(R.id) !== true) off = OFF(R.id);
   else if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) off = CLIP_OFF(R.id);
-  else if ((await deps.privateLogins([login])).has(String(login).toLowerCase())) off = "They keep their activity private, so their cam can't be clipped.";
+  else if (!deps.isGhost(userId) && (await deps.privateLogins([login])).has(String(login).toLowerCase())) off = "They keep their activity private, so their cam can't be clipped.";   // 1.99aak: 👻 ghosts get past it (audited)
   else { const ref = await deps.camRefusal(login, userId); if (ref) off = ref.error; }
   const b = busyFor(R.id, String(login).toLowerCase());
   if (!off && deps.clipSwitch(R.id) !== true) hint = ADMIN_HINT;
@@ -166,7 +167,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const secs = SECS.includes(Number((req.body || {}).secs)) ? Number(req.body.secs) : SECS_DEFAULT;
       const m = LOGIN_RE.test(login) ? (R.members || []).find((x) => !x.anon && String(x.login || "").toLowerCase() === login) : null;
       if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
-      if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });
+      if (!deps.isGhost(u.userId) && (await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });   // 1.99aak: 👻 ghosts get past it (audited)
       const ref = await deps.camRefusal(login, u.userId);
       if (ref) return res.status(ref.status).json({ ok: false, code: ref.code, error: ref.error });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
@@ -274,6 +275,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired - record a fresh one." });
       if (!c.rule || c.rule === "no" || !c.viewerOk) return res.status(403).json({ ok: false, error: "Clips of them can't be saved here." });
+      // 1.99aak: a 👻 ghost may record past the owner's rules, never SAVE (publish) past them
+      const sref = await deps.camRefusal(c.login, u.userId, { strict: true });
+      if (sref) return res.status(sref.status).json({ ok: false, code: sref.code, error: sref.error });
+      if ((await deps.privateLogins([c.login])).has(String(c.login).toLowerCase())) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
       if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF(R.id), code: "E_FEATURE_OFF" });
       if (c.save) {

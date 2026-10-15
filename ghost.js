@@ -12,9 +12,11 @@
 // Settings → Privacy (shown to staff only) - POST /api/privacy/ghost {on}; Pepe's `!ghost on|off` (Pepe admins whose
 // linked PATV account is Admin / Staff) writes the same row through POST /api/bridge/ghost (bot token).
 //
-// Consent: ghost mode does NOT bypass the cam owner's opt-out (!livecam off), "private", or their blocks - those still
-// refuse a ghost like anyone else (camviewers.camRefusal). Moderation viewing of a cam that opted out is a policy decision
-// left to the user.
+// Consent (1.99aak, the user's decision 2026-10-15): for MODERATION a ghost gets past the cam owner's opt-out
+// (!livecam off), "private" and their blocks to VIEW (live, snapshot, clip preview) - the cam is on in the Camfrog room
+// anyway. Every such view is logged with what it got past (cam_views.bypass / livecam_audit.bypass, shown below and on
+// /admin/pepe/livecams). Nothing public comes of it: saving a snapshot / clip as a post and AI picture references keep
+// the owner's rules (camRefusal {strict}).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const guard = require("./middleware/authGuard");
@@ -81,10 +83,10 @@ async function adminView(limit = 50) {
   const log = await getQuery("SELECT username, on_, via, at FROM ghost_log ORDER BY id DESC LIMIT 30");
   let views = [];
   try {
-    views = await getQuery(`SELECT owner, room_id, username, kind, at FROM cam_views WHERE ghost = 1 ORDER BY id DESC LIMIT ?`, [limit]);
+    views = await getQuery(`SELECT owner, room_id, username, kind, at, bypass FROM cam_views WHERE ghost = 1 ORDER BY id DESC LIMIT ?`, [limit]);
   } catch (e) { views = []; }
   return { on: [...ON.values()].map((x) => x.username), log: log.map((r) => ({ username: r.username, on: !!r.on_, via: r.via, at: Number(r.at) })),
-           views: views.map((r) => ({ owner: r.owner, room: r.room_id, username: r.username, kind: r.kind, at: Number(r.at) })) };
+           views: views.map((r) => ({ owner: r.owner, room: r.room_id, username: r.username, kind: r.kind, at: Number(r.at), bypass: r.bypass || null })) };
 }
 
 function register(app, { addUser, isBotToken }) {

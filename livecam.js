@@ -112,6 +112,7 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS livecam_audit_started ON livecam_audit (started)");
       const acols = (await getQuery("PRAGMA table_info(livecam_audit)")).map((c) => c.name);   // 1.99aaf: 👻 ghost views are audited too
       if (!acols.includes("ghost")) await runQuery("ALTER TABLE livecam_audit ADD COLUMN ghost INTEGER NOT NULL DEFAULT 0");
+      if (!acols.includes("bypass")) await runQuery("ALTER TABLE livecam_audit ADD COLUMN bypass TEXT");   // 1.99aak: what a ghost got past
       const r = (await getQuery("SELECT v, data, updated_at, updated_by FROM livecam_cfg WHERE id = 1"))[0];
       if (r) {
         let d = {};
@@ -207,7 +208,7 @@ async function setOptout(login, off, { via = "web", userId = null, ts = now() } 
   await runQuery(`INSERT INTO livecam_optout (login, off, updated, via, user_id) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(login) DO UPDATE SET off = excluded.off, updated = excluded.updated, via = excluded.via, user_id = COALESCE(excluded.user_id, livecam_optout.user_id)`,
                  [l, off ? 1 : 0, ts, via === "chat" ? "chat" : "web", userId]);
-  if (off) { OPTOUT.add(l); for (const S of [...SESS.values()]) if (S.login === l) endSession(S, "opted_out"); }
+  if (off) { OPTOUT.add(l); for (const S of [...SESS.values()]) if (S.login === l) ownerClosed(S, "opted_out"); }
   else OPTOUT.delete(l);
   return true;
 }
@@ -383,9 +384,14 @@ async function start(u, R, login, t = now()) {
   login = String(login || "").toLowerCase();
   const m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
   if (!m || !m.on_cam) throw refuse("not_on_cam");
-  if (optedOut(login)) throw refuse("opted_out");
-  try { if ((await require("./stories").privateLogins([login])).has(login)) throw refuse("opted_out"); } catch (e) { if (e.refuse) throw e; }
-  if (CV().blocked(login, u.userId)) throw refuse("unavailable");          // 1.99yq: !blockviewer / the privacy card
+  // 1.99aak: staff in 👻 ghost mode get past the owner's opt-out, "private" and blocks (moderation - the user's decision,
+  // 2026-10-15); the bypass is audited (livecam_audit / cam_views bypass) and nobody is told. Everyone else: the owner's rules.
+  const ghost = isGhost(u.userId);
+  let bypass = null;
+  if (optedOut(login)) { if (!ghost) throw refuse("opted_out"); bypass = "opted_out"; }
+  try { if ((await require("./stories").privateLogins([login])).has(login)) { if (!ghost) throw refuse("opted_out"); bypass = bypass || "private"; } }
+  catch (e) { if (e.refuse) throw e; }
+  if (CV().blocked(login, u.userId)) { if (!ghost) throw refuse("unavailable"); bypass = bypass || "blocked"; }   // 1.99yq: !blockviewer
   const k = keyOf(R.id, login);
   if ((COOL.get(k) || 0) > t) throw refuse("ended_by");
   if (!botOk(t)) throw refuse("nopepe");
@@ -409,11 +415,11 @@ async function start(u, R, login, t = now()) {
   }
   let v = S.viewers.get(uid);
   if (!v) {
-    v = { since: t, beat: t, username: u.username || null, readers: new Set(), auditId: null, ghost: isGhost(uid) };
+    v = { since: t, beat: t, username: u.username || null, readers: new Set(), auditId: null, ghost: isGhost(uid), bypass };
     S.viewers.set(uid, v);
     try {
-      const r = await runQuery("INSERT INTO livecam_audit (room_id, target, viewer_id, viewer_name, started, ghost) VALUES (?, ?, ?, ?, ?, ?)",
-                               [R.id, login, uid, u.username || null, t, v.ghost ? 1 : 0]);
+      const r = await runQuery("INSERT INTO livecam_audit (room_id, target, viewer_id, viewer_name, started, ghost, bypass) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                               [R.id, login, uid, u.username || null, t, v.ghost ? 1 : 0, bypass]);
       v.auditId = r && r.id ? Number(r.id) : null;
     } catch (e) { console.error("[livecam] audit:", e.message); }
   }
@@ -438,10 +444,20 @@ function beat(userId, roomId, login, t = now()) {
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
   return { ok: true, state: stateOf(S, t), viewers: shownCount(freshViewers(S, t)), botWhy: S.botWhy || null, ...(v.ghost ? { ghost: true } : {}) };
 }
+/** 1.99aak: the cam's owner switched it off for the website: everyone but staff in 👻 ghost mode is dropped (a stage slot
+ *  ends - it's public); the session ends when nobody is left. -> true when it lives on (ghosts only). */
+function ownerClosed(S, why, t = now()) {
+  if (!S || S.ended) return false;
+  if (S.stage) { endSession(S, why, t); return false; }
+  for (const [uid, v] of [...S.viewers.entries()]) if (!(v.ghost && isGhost(uid))) dropViewer(S, uid, why, t);
+  if (!S.viewers.size) { endSession(S, why, t); return false; }
+  return true;
+}
 /** 1.99yq: the owner blocked this viewer - drop them from every live relay of the cam now (the reader is kicked). -> count */
 function dropViewerOf(login, userId, why = "blocked", t = now()) {
   let n = 0;
   const l = String(login || "").toLowerCase();
+  if (isGhost(userId)) return 0;                       // 1.99aak: a block doesn't stop staff in 👻 ghost mode (audited)
   for (const S of SESS.values()) {
     if (S.ended || S.login !== l) continue;
     if (dropViewer(S, String(userId), why, t)) n++;
@@ -600,7 +616,8 @@ async function forBot(body, t = now()) {
     if (S.botState === "live" && !S.liveAt) S.liveAt = t;
     if (S.botState === "ended" || S.botState === "stopped") {
       const why = str(x.why, 30);
-      if (TERMINAL.has(why)) endSession(S, why, t);
+      if (why === "opted_out") ownerClosed(S, why, t);                     // 1.99aak: a ghost keeps watching
+      else if (TERMINAL.has(why)) endSession(S, why, t);
     }
   }
   for (const x of (Array.isArray(body.refused) ? body.refused.slice(0, 50) : [])) {
@@ -608,7 +625,8 @@ async function forBot(body, t = now()) {
     if (!S || S.ended || seen.has(S.key)) continue;
     const why = str(x.why, 30);
     S.botWhy = why;
-    if (TERMINAL.has(why)) endSession(S, why, t);
+    if (why === "opted_out") ownerClosed(S, why, t);
+    else if (TERMINAL.has(why)) endSession(S, why, t);
   }
   const want = [];
   if (on()) {
@@ -616,13 +634,14 @@ async function forBot(body, t = now()) {
       if (S.ended) continue;
       const R = rooms.get ? rooms.get(S.roomId) : null;
       if (!R || R.livecams === false || !R.cams) { endSession(S, R ? "room_off" : "offline", t); continue; }
-      if (optedOut(S.login)) { endSession(S, "opted_out", t); continue; }
+      if (optedOut(S.login) && !ownerClosed(S, "opted_out", t)) continue;     // 1.99aak: only staff in ghost mode stay
       const key = pubKey(S.path);
       if (!key) continue;
       // 1.99aaf: ghosts aren't counted; ghost_only = nobody but staff in ghost mode watches -> Pepe says nothing in the room
       const fv = freshViewers(S, t), shown = shownCount(fv);
       want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: key, path: S.path, viewers: Math.max(1, shown),
-                  ...(fv.length && !shown && !S.stage ? { ghost_only: true } : {}) });
+                  ...(fv.length && !shown && !S.stage ? { ghost_only: true } : {}),
+                  ...(optedOut(S.login) ? { bypass: true } : {}) });     // 1.99aak: Pepe publishes it for the ghost despite !livecam off
     }
   }
   const c = cfg();
@@ -669,8 +688,9 @@ async function auth(b, action, proto) {
     if (!c) return loopbackIp(b.ip) ? 403 : 401;
     const v = S.viewers.get(String(c.uid)) || (S.stage && S.stageViewers ? S.stageViewers.get(String(c.uid)) : null);   // 1.99zc: or a stage viewer
     if (!v || now() - v.beat > BEAT_MS) return 403;
-    if (optedOut(S.login)) return 403;
-    if (CV().blocked(S.login, c.uid)) return 403;
+    const gh = !!v.ghost && isGhost(c.uid);                                // 1.99aak: 👻 staff in ghost mode get past these
+    if (optedOut(S.login) && !gh) return 403;
+    if (CV().blocked(S.login, c.uid) && !gh) return 403;
     if (!(await require("./bridge-relay").padFull(c.uid, S.roomId))) return 403;
     if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) v.readers.add(String(b.id));
     // 1.99yq: the video really reaches them now -> Pepe PMs the cam's owner who it is (camviewers.js rate-limits it)
