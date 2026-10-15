@@ -91,7 +91,8 @@ test("booking holds the full max up front; refusals move nothing", async () => {
   const r = await S.book(u, { minutes: 10 });
   assert.equal(r.slot.held, 1000);
   assert.equal(r.slot.status, "waiting");
-  assert.ok(r.key.length >= 32 && /^[A-Za-z0-9_-]+$/.test(r.key));
+  // 1.99aay: "<public stream name>?k=<secret>" - nginx-rtmp logs only the part before "?"
+  assert.ok(new RegExp(`^${r.slot.stream}\\?k=ps[A-Za-z0-9_-]{40}$`).test(r.key), r.key);
   assert.equal(await balance(u.userId), START - 1000);
   const row = await S.getSlot(r.slot.id);
   assert.notEqual(row.key_hash, r.key, "key stored hashed, not in clear");

@@ -155,7 +155,12 @@
           box.innerHTML = '<p>Stream from <b>OBS</b> (Settings → Stream → Custom), within ' + esc(g.wait_min) + ' minutes - it goes on Pepe’s stream as soon as it’s live:</p>' +
             '<p><label>Server <input type="text" readonly value="' + esc(g.rtmp ? g.rtmp.server : '') + '"></label> <button type="button" data-copy="0">Copy</button></p>' +
             '<p><label>Stream key <input type="password" readonly value="' + esc(g.rtmp ? g.rtmp.key : '') + '"></label> <button type="button" data-copy="1">Copy</button></p>' +
-            '<p class="oap-why">Or use WHIP / your browser’s camera: <a href="' + esc(g.page) + '" target="_blank" rel="noopener">your slot on /stage</a>. ✂ Cut or ending the slot takes it off.</p>';
+            // 1.99aay: WHIP right here (OBS 30+: Settings → Stream → Service "WHIP"; lower delay than RTMP)
+            (g.whip ? '<p><b>Or WHIP</b> (OBS 30+: Service → WHIP):</p>' +
+              '<p><label>Server <input type="text" readonly value="' + esc(g.whip.url) + '"></label> <button type="button" data-copy="2">Copy</button></p>' +
+              '<p><label>Bearer token <input type="password" readonly value="' + esc(g.whip.token) + '"></label> <button type="button" data-copy="3">Copy</button></p>' : '') +
+            '<p class="oap-why">In OBS: audio on (AAC, track 1) and keyframe interval 2 s - a stream without audio frames won’t play on the site. ' +
+            'Browser camera: <a href="' + esc(g.page) + '" target="_blank" rel="noopener">your slot on /stage</a>. ✂ Cut or ending the slot takes it off.</p>';
         });
       } else if (f.classList.contains('oap-link')) {
         var url = f.url.value.trim();

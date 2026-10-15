@@ -428,6 +428,9 @@ test("1.99aaq: staff go live straight onto Pepe's stream - a slot on his pad, of
   T += 5 * 60 * 1000;                                     // OBS still being set up: kept
   await OA.check();
   assert.ok(OA.view().target);
+  // 1.99aay: the key is "<stream>?k=<secret>"; the secret only opens ITS slot's stream name
+  assert.ok(g.rtmp.key.startsWith(tgt.pad === rooms.HOUSE_ROOM ? (await S.getSlot(g.slot_id)).stream + "?k=" : "x"), g.rtmp.key);
+  assert.equal((await pub(g.rtmp.key.replace(/^[^?]+/, S.STREAM_PREFIX + "0000000000000000"), ++cids)).status, 403);
   assert.equal((await pub(g.rtmp.key, ++cids)).status, 302);
   await OA.check();
   const r = await OA.forBot({});

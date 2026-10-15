@@ -355,7 +355,13 @@ async function setGoLive(user, by, { admin, minutes, title } = {}) {
     await S().end(b.slot.id, "onair_failed", user.username).catch(() => {});
     throw e;
   }
-  return { slot_id: b.slot.id, minutes: m, rtmp: b.rtmp, wait_min: GOLIVE_WAIT_MS / 60000, page: "/stage" };
+  // 1.99aay: + WHIP (OBS 30+ "WHIP" service, or any WHIP client): the slot's URL + a bearer token valid for the same start window
+  let whip = null;
+  try {
+    const W = require("./webrtc");
+    if (W.enabled()) whip = { url: W.whipUrl(b.slot.stream), token: W.whipToken(b.slot.id), expires: now() + GOLIVE_WAIT_MS };
+  } catch (e) { whip = null; }
+  return { slot_id: b.slot.id, minutes: m, rtmp: b.rtmp, whip, wait_min: GOLIVE_WAIT_MS / 60000, page: "/stage" };
 }
 function tellLive(T) {
   if (!T || T.kind === "cam" || !T.user_id) return;

@@ -452,6 +452,10 @@ const tx = (fn) => require("./dbUtils").tx(fn);
 // ── keys ──
 const sha = (s) => crypto.createHash("sha256").update(String(s)).digest("hex");
 function newKey() { return "ps" + crypto.randomBytes(30).toString("base64url"); }   // 42 chars
+// 1.99aay: the key a streamer pastes into OBS is "<the slot's public stream name>?k=<secret>". nginx-rtmp splits the publish
+// name at "?": the name (public anyway - it's the HLS file name) is what its "notify: push" error line prints, the args ride
+// only in the on_publish POST (field k). The old bare-secret form still works (a key booked before, 📼 mediactl's keys).
+const pubKey = (stream, key) => `${stream}?k=${key}`;
 function relayKey(slotId) {
   return "r." + slotId + "." + crypto.createHmac("sha256", RELAY_SECRET).update("stage-relay:" + slotId).digest("base64url").slice(0, 32);
 }
@@ -628,7 +632,8 @@ async function book(user, opts = {}) {
     // 1.99lm: ...and maybe the pad's featured stream from now
     if (await autoFeature(roomId).catch((e) => { console.error("[stage] auto-feature:", e.message); return null; })) slot = await getSlot(out.id);
   }
-  return { slot: view(slot), key, rtmp: key ? { server: RTMP_PUBLIC, key } : null };
+  const pk = key && slot ? pubKey(slot.stream, key) : key;            // 1.99aay: "<stream>?k=<secret>" (the secret never reaches a log)
+  return { slot: view(slot), key: pk, rtmp: pk ? { server: RTMP_PUBLIC, key: pk } : null };
 }
 
 // ── 1.99ji: 📼 library slots (medialib.js) ──
@@ -752,6 +757,7 @@ async function end(slotId, reason, actor) {
   if (res) {
     if (res.source === "cam") { try { require("./livecam").stageRelease(res.id); } catch (e) { /* 1.99zc: no live cams */ } }
     stopRelay(res.id);
+    try { require("./stageaudio").stop(res.id); } catch (e) { /* none */ }   // 1.99aay
     for (const [cid, sid] of clients) if (sid === res.id) clients.delete(cid);
     lastTick.delete(res.id);
     pubCache.clear();
@@ -1115,7 +1121,14 @@ async function slotByName(name) {
 async function rtmpCallback(f) {
   await init();
   const call = String(f.call || "");
-  const name = String(f.name || "");
+  // 1.99aay: nginx-rtmp splits "<stream>?k=<secret>" into name + an args field k; a caller that didn't split (or a test) is
+  // split here the same way, so both arrive as name = the stream, f.k = the secret
+  let name = String(f.name || "");
+  const qi = name.indexOf("?");
+  if (qi >= 0) {
+    if (!(typeof f.k === "string" && f.k)) f = { ...f, k: new URLSearchParams(name.slice(qi + 1)).get("k") || "" };
+    name = name.slice(0, qi);
+  }
   const app = String(f.app || "");
   const cid = String(f.clientid || "") + "@" + app;
   const t = now();
@@ -1128,9 +1141,12 @@ async function rtmpCallback(f) {
       return { status: 200 };
     }
     if (call === "publish_done") return { status: 200 };
+    if (typeof f.k === "string" && f.k) return { status: 403 };        // 1.99aay: a slot key is never right on the HLS app
     if (!name.startsWith(STREAM_PREFIX)) return { status: 403 };
     if (call === "publish" && !isLoopback(f.addr)) return { status: 403 };
-    const s = (await getQuery(`SELECT * FROM stage_slots WHERE stream = ? AND status IN ${OPEN}`, [name]))[0];
+    // 1.99aay: "<stream>-a" = stageaudio.js's repaired copy of an open slot (local only, like the slot's own push)
+    const base = require("./stageaudio").baseName(name) || name;
+    const s = (await getQuery(`SELECT * FROM stage_slots WHERE stream = ? AND status IN ${OPEN}`, [base]))[0];
     if (!s || s.settled || isEmbed(s)) return { status: 403 };
     return { status: 200 };
   }
@@ -1139,10 +1155,13 @@ async function rtmpCallback(f) {
   // ── the ingest application: slot keys + relay keys ──
   if (call === "publish") {
     const relayFor = parseRelayKey(name);
-    const s = await publishGate({ key: name, addr: f.addr }, t);
+    // 1.99aay: the new key form "<stream>?k=<secret>" arrives as name = the stream, f.k = the secret; the old form as name = the secret
+    const secret = typeof f.k === "string" && f.k ? f.k : null;
+    const s = secret ? await publishGate({ key: secret, stream: name, addr: f.addr }, t) : await publishGate({ key: name, addr: f.addr }, t);
     if (!s) return { status: 403 };
     if (!(await goLive(s, t, relayFor ? "browser" : "rtmp"))) return { status: 403 };
     clients.set(cid, s.id);
+    if (!relayFor) { try { require("./stageaudio").check(s); } catch (e) { /* the repair is optional */ } }   // 1.99aay: OBS audio check
     return { status: 302, location: `${OUT_LOCAL}/${s.stream}` };
   }
 
@@ -1151,6 +1170,7 @@ async function rtmpCallback(f) {
     if (!s) return { status: call === "publish_done" ? 200 : 403 };
     if (call === "publish_done") {
       clients.delete(cid);
+      try { require("./stageaudio").stop(s.id); } catch (e) { /* none */ }   // 1.99aay
       await runQuery("UPDATE stage_slots SET publishing = 0, last_live = ? WHERE id = ? AND settled = 0", [t, s.id]);
       pubCache.clear();
       return { status: 200 };
@@ -1170,7 +1190,13 @@ async function rtmpCallback(f) {
 //   {slotId}   a caller that already proved who it is (webrtc.js: a signed browser WHIP token)
 async function publishGate(o = {}, t = now()) {
   await init();
-  const key = String(o.key || "");
+  let key = String(o.key || "");
+  // 1.99aay: the whole "<stream>?k=<secret>" (a WHIP bearer token pasted from the RTMP key, a direct caller) = stream + secret
+  const qi = key.indexOf("?");
+  if (qi >= 0) {
+    o = { ...o, stream: o.stream || key.slice(0, qi) };
+    key = new URLSearchParams(key.slice(qi + 1)).get("k") || "";
+  }
   let s = null;
   const relayFor = o.slotId ? null : parseRelayKey(key);
   if (o.slotId) s = await getSlot(o.slotId);
@@ -1179,6 +1205,7 @@ async function publishGate(o = {}, t = now()) {
     s = await getSlot(relayFor);
   } else if (key && !key.startsWith(STREAM_PREFIX)) {
     s = (await getQuery(`SELECT * FROM stage_slots WHERE key_hash = ? AND status IN ${OPEN}`, [sha(key)]))[0] || null;
+    if (s && o.stream && s.stream !== o.stream) s = null;           // 1.99aay: "<stream>?k=<secret>" - the secret must be THAT slot's
   }
   if (!s || !["waiting", "active"].includes(s.status) || s.settled || isEmbed(s) || t > deadline(s)) return null;
   if (await isBanned(s.userId, s.room_id)) return null;
@@ -1312,7 +1339,8 @@ async function regenKey(user, slotId) {
   const key = newKey();
   await runQuery("UPDATE stage_slots SET key_hash = ? WHERE id = ? AND settled = 0", [sha(key), s.id]);
   await event(s.id, "key", user.username, "new key", s.room_id);
-  return { key, rtmp: { server: RTMP_PUBLIC, key } };
+  const pk = pubKey(s.stream, key);                                     // 1.99aay
+  return { key: pk, rtmp: { server: RTMP_PUBLIC, key: pk } };
 }
 
 // 1.99fu: pad visibility (padaccess.js) - an Approved pad's stage takes bookings only from the people inside it
@@ -1454,6 +1482,8 @@ function view(s, t = now()) {
 // 1.99et: a WHIP slot's HLS comes from MediaMTX (webrtc.js), everything else from nginx-rtmp's /hls
 function hlsOf(s) {
   if (s.via === "whip") { try { return require("./webrtc").hlsUrl(s.stream); } catch (e) { /* fall through */ } }
+  // 1.99aay: a stream with a broken audio track plays from its repaired copy (stageaudio.js: video copied + silent audio)
+  try { const fx = require("./stageaudio").fixedName(s); if (fx) return `${HLS_BASE}/${fx}.m3u8`; } catch (e) { /* no repair */ }
   return `${HLS_BASE}/${s.stream}.m3u8`;
 }
 // ...and, while webrtc_enabled is on, its WHEP URL for the ⚡ Low latency toggle (absent otherwise)
@@ -1932,7 +1962,7 @@ module.exports = {
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
-  publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
+  publishGate, goLive, whipBeat, openSlotByStream, hlsOf, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
   camOpen, camBeat, camCandidates,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,
