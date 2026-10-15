@@ -44,8 +44,13 @@ test("events, scenes, sessions", async () => {
   await H.push({ kind: "rolls", events: [{ event: "heist", data: { action: "rolls", rolls: [{ name: "alice", roll: 14 }] } }, { event: "heist", data: { action: "bogus" } }] });
   f = await H.live(0);
   assert.deepEqual(f.events.map((e) => e.data.action), ["round", "rolls"], "the first call: only the current scene (from the last round)");
+  // 1.99@S: the countdown rides along after the rolls and is part of the current scene
+  await H.push({ kind: "timer", events: [{ event: "heist", data: { action: "timer", kind: "bail", label: "Round 2 in", secs: 16, until: Date.now() + 16000 } }] });
+  const ft = await H.live(0);
+  assert.deepEqual(ft.events.map((e) => e.data.action), ["round", "rolls", "timer"], "the timer is kept and replayed with its scene");
+  assert.ok(ft.now > 0, "the feed carries the site clock (countdown skew)");
   const after = await H.live(f.events[0].id);
-  assert.deepEqual(after.events.map((e) => e.data.action), ["rolls"]);
+  assert.deepEqual(after.events.map((e) => e.data.action), ["rolls", "timer"]);
   assert.equal(f.heist.lines.length, 1);
   assert.equal(f.heist.summary.crew[1].name, "<b>bob</b>", "kept as text (the page escapes it)");
   // a new heist: a fresh log

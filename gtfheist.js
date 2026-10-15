@@ -23,7 +23,7 @@ const EV_KEEP = 200, LINES_KEEP = 80, OVERLAY_MAX = 2 * 1024 * 1024;
 const ENDED_SHOW_MS = 15 * 60e3;          // how long a finished heist's summary stays on the page
 const STALE_MS = 10 * 60e3;               // a heist Pepe hasn't updated for this long is shown as over
 const SCENES = new Set(["start", "round", "vault", "getaway", "closed"]);
-const ACTIONS = new Set(["start", "round", "rolls", "vault", "crack", "getaway", "closed"]);
+const ACTIONS = new Set(["start", "round", "rolls", "vault", "crack", "getaway", "closed", "timer"]);   // 1.99aad: + timer (the countdown)
 const now = () => Date.now();
 
 let ready = null;

@@ -3162,6 +3162,8 @@
   "gtf.live.stale": "Pepe hasn't sent an update for a while.",
   "gtf.live.secs": "s",
   "gtf.live.min": "min",
+  "gtf.live.soon": "any second…",
+  "gtf.live.bail_open": "!bail open",
   "gtf.mm.updated": "Live · updated {ago}",
   "gtf.mm.stale": "Pepe hasn&#39;t reported in a while, so this may be out of date.",
   "gtf.mm.none": "No live data yet. Pepe reports in about once a minute.",

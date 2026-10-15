@@ -8,7 +8,7 @@
 %>
 <%
   const KEYS = ['none', 'lobby', 'running', 'ended', 'cancelled', 'crew', 'st_in', 'st_out', 'st_bailed', 'held', 'prize', 'log', 'stale',
-                'buyin', 'started_by', 'rounds', 'door', 'no_lines', 'secs', 'min'];
+                'buyin', 'started_by', 'rounds', 'door', 'no_lines', 'secs', 'min', 'soon', 'bail_open'];
   const L = {};
   KEYS.forEach((k) => { L[k] = t('gtf.live.' + k); });
   const J = (v) => JSON.stringify(v == null ? null : v).split('<').join('\\x3c').split(String.fromCharCode(0x2028)).join(' ').split(String.fromCharCode(0x2029)).join(' ');
@@ -29,6 +29,8 @@
   .hl .card { background: var(--ds-surface, #151515); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); display: grid; gap: var(--ds-sp-3); }
   .hl .status { font-weight: 700; }
   .hl .status .em { margin-inline-end: .35em; }
+  .hl .next { font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .hl .next.urgent { color: #ff6a5a; }
   .hl .meta { color: var(--mut); font-size: var(--ds-fs-sm); display: flex; flex-wrap: wrap; gap: var(--ds-sp-1) var(--ds-sp-3); }
   .hl .pips { display: flex; gap: 3px; flex-wrap: wrap; }
   .hl .pips b { width: 10px; height: 10px; background: #3a1d1d; border: 1px solid #6b2b2b; }
@@ -62,6 +64,7 @@
     </div>
     <div class="card" aria-live="polite">
       <div class="status" id="hlStatus"><%- L.none %></div>
+      <div class="next" id="hlNext" role="timer" hidden></div>
       <div class="meta" id="hlMeta"></div>
       <div class="pips" id="hlPips" aria-hidden="true"></div>
       <h2><%- L.crew %></h2>
@@ -98,7 +101,7 @@
     if (s.phase === 'cancelled') line = L.cancelled;
     else if (h.ended) line = L.ended;
     else if (s.phase === 'lobby') {
-      var left = s.lobby_ends ? Math.max(0, Math.round(s.lobby_ends - Date.now() / 1000)) : null;
+      var left = s.lobby_ends ? Math.max(0, Math.round(s.lobby_ends - (Date.now() - skew) / 1000)) : null;
       line = fill(L.lobby, { room: esc(s.room || '?'), left: left == null ? '' : (left >= 60 ? Math.ceil(left / 60) + ' ' + L.min : left + ' ' + L.secs) });
     } else line = fill(L.running, { round: s.round || 1, rounds: s.rounds || '?', room: esc(s.room || '?') });
     st.innerHTML = '<span class="em" aria-hidden="true">' + esc(s.emoji || '💰') + '</span>' + esc(s.scenario || '') + ' · ' + line;
@@ -123,12 +126,30 @@
       return '<li><time datetime="' + d.toISOString() + '">' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '</time>' + esc(l.text) + '</li>';
     }).join('') : '<li class="muted">' + esc(L.no_lines) + '</li>';
   }
+  // 1.99aad: the countdown to the next round / the vault door - the heist's last event when it's Pepe's "timer" (any later
+  // event replaces it); `until` is Pepe's moment, corrected by the site clock's skew. Ticks on its own, 4x a second.
+  var skew = state && state.now ? Date.now() - state.now : 0;
+  function nextTick() {
+    var el = document.getElementById('hlNext');
+    var h = state && state.heist, ev = (state && state.events) || [];
+    var last = null;
+    for (var i = ev.length - 1; i >= 0; i--) { if (ev[i].event === 'heist') { last = ev[i]; break; } }
+    var d = last && last.data;
+    if (!h || h.ended || !d || d.action !== 'timer' || !d.until) { el.hidden = true; return; }
+    var left = Math.ceil((Number(d.until) + skew - Date.now()) / 1000);
+    el.textContent = '⏱ ' + (d.label || '') + ' ' + (left > 0 ? (left >= 60 ? Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') : left + L.secs) : L.soon) +
+      (d.kind === 'bail' || d.kind === 'door' ? ' · ' + L.bail_open : '');
+    el.classList.toggle('urgent', left > 0 && left <= 5);
+    el.hidden = false;
+  }
   function poll() {
     fetch('/api/gtf/heist/live', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); })
-      .then(function (j) { if (j && j.ok) { state = j; render(); } }).catch(function () {});
+      .then(function (j) { if (j && j.ok) { state = j; if (j.now) skew = Date.now() - j.now; render(); nextTick(); } }).catch(function () {});
   }
   render();
-  setInterval(function () { if (!document.hidden) poll(); }, 3000);
+  nextTick();
+  setInterval(nextTick, 250);
+  setInterval(function () { if (!document.hidden) poll(); }, 2000);
   setInterval(function () { var s = state && state.heist && state.heist.summary; if (s && s.phase === 'lobby') render(); }, 1000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
 })();
