@@ -146,7 +146,7 @@
     function mcClose(discard) {
       // 1.99sh: a request still in flight is discarded too (it holds one of your 2 slots until Pepe answers), never a posted one
       if (cur) { clearTimeout(cur.timer); if (discard && cur.id && (cur.state === 'ready' || cur.state === 'pending') && !cur.saving && !cur.posted) api(api0 + '/micclip/' + cur.id + '/discard', {}).catch(function () { /* expires anyway */ }); }
-      cur = null; mc.hidden = true; mc.textContent = '';
+      cur = null; mc.hidden = true; mc.textContent = ''; mc.classList.remove('mc-done');
     }
     function mcStatus(t, bad) { var s = mc.querySelector('.cc-msg'); if (!s) { s = el('div', 'cc-msg'); s.setAttribute('role', 'status'); s.setAttribute('aria-live', 'polite'); mc.appendChild(s); } s.textContent = t; s.classList.toggle('bad', !!bad); return s; }
     function mcReady(v) {
@@ -183,25 +183,52 @@
       var st = mcStatus(v.save ? 'Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.' : 'The room\'s !clip rules don\'t let you post clips here.');
       cancel.addEventListener('click', function () { au.pause(); mcClose(true); });
       save.addEventListener('click', function () {
-        save.disabled = true; cur.saving = true; st.textContent = 'Sending to Pepe…'; st.classList.remove('bad');
+        save.disabled = true; cancel.disabled = true; cur.saving = true; st.textContent = 'Posting… Pepe is cutting your clip.'; st.classList.remove('bad');
         api(api0 + '/micclip/' + v.id + '/save', { start: Math.round(Number(A.r.value) * 1000), end: Math.round(Number(B.r.value) * 1000) })
           .then(function () { if (cur) cur.posted = true; pollSave(v.id, st, save, 0); })
-          .catch(function (e) { save.disabled = false; cur.saving = false; st.textContent = e.message; st.classList.add('bad'); });
+          .catch(function (e) { save.disabled = false; cancel.disabled = false; cur.saving = false; st.textContent = e.message; st.classList.add('bad'); });
       });
     }
     function pollSave(id, st, btn, n) {
       if (!cur || cur.id !== id) return;
       cur.timer = setTimeout(function () {
         api(api0 + '/micclip/' + id + '/save', undefined, 'GET').then(function (d) {
-          if (d.status === 'done') {
-            st.textContent = '🔊 Posted. ';
-            if (d.url) { var a = el('a', null, 'View it →'); a.href = d.url; st.appendChild(a); } else st.textContent = '🔊 ' + (d.message || 'Posted.');
-            return;
-          }
-          if (d.status === 'failed') { st.textContent = d.message || 'Pepe couldn\'t post it.'; st.classList.add('bad'); btn.disabled = false; cur.saving = false; return; }
+          if (d.status === 'done') { mcDone(d); return; }
+          if (d.status === 'failed') { st.textContent = d.message || 'Pepe couldn\'t post it.'; st.classList.add('bad'); btn.disabled = false; cur.saving = false; cur.posted = false; mc.querySelectorAll('.cc-btn[disabled]').forEach(function (b) { b.disabled = false; }); return; }
           if (n < 60) pollSave(id, st, btn, n + 1); else { st.textContent = 'Pepe is taking a while — check the pad\'s feed in a minute.'; }
         }).catch(function () { if (n < 60) pollSave(id, st, btn, n + 1); });
       }, n ? 2000 : 1200);
+    }
+    // 1.99abj: once posted the editor is done - swap it for a clear "posted" card (View it + Close) that closes on its own
+    function mcDone(d) {
+      var me = cur; if (me) clearTimeout(me.timer);
+      mc.querySelectorAll('audio').forEach(function (a) { a.pause(); });
+      mc.textContent = ''; mc.classList.add('mc-done');
+      var box = el('div', 'mc-done-box'); box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+      box.appendChild(el('div', 'mc-done-h', '✅ Clip posted to the pad'));
+      if (d.message && !d.url) box.appendChild(el('div', 'cc-msg', d.message));
+      var row = el('div', 'cc-row');
+      if (d.url) { var a = el('a', 'cc-btn primary', 'View it →'); a.href = d.url; row.appendChild(a); }
+      var x = el('button', 'cc-btn', 'Close'); x.type = 'button'; row.appendChild(x);
+      box.appendChild(row);
+      var bar = el('div', 'mc-done-bar'); var fill = el('i'); bar.appendChild(fill); box.appendChild(bar);
+      mc.appendChild(box);
+      var left = 12000, held = false, t0 = Date.now();
+      function shut() { if (cur === me) { mc.classList.remove('mc-done'); mcClose(false); } }
+      function tick() {
+        if (cur !== me) return;
+        if (!held) left -= Date.now() - t0; t0 = Date.now();
+        fill.style.width = Math.max(0, left / 120) + '%';
+        if (left <= 0) return shut();
+        if (me) me.timer = setTimeout(tick, 200);
+      }
+      // hovering or focusing it holds it open
+      box.addEventListener('pointerenter', function () { held = true; });
+      box.addEventListener('pointerleave', function () { held = false; });
+      box.addEventListener('focusin', function () { held = true; });
+      box.addEventListener('focusout', function () { held = false; });
+      x.addEventListener('click', shut);
+      tick();
     }
     function pollClip(id, n) {
       if (!cur || cur.id !== id) return;

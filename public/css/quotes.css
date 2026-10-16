@@ -65,6 +65,12 @@
 .mc-trim { display: grid; grid-template-columns: auto minmax(0, 1fr) 4.5em; gap: 4px 8px; align-items: center; font-size: 12.5px; color: #bbb; }
 .mc-trim input[type="range"] { width: 100%; accent-color: #8b7bd8; }
 .mc-trim output { font-variant-numeric: tabular-nums; text-align: right; }
+.mc-done-box { display: grid; gap: 10px; }
+.mc-done-h { font-size: 16px; font-weight: 700; color: #e9fbe9; }
+a.cc-btn { text-decoration: none; display: inline-block; }
+.mc-done-bar { height: 3px; border-radius: 2px; background: #1c241d; overflow: hidden; }
+.mc-done-bar i { display: block; height: 100%; width: 100%; background: var(--ds-green); transition: width .2s linear; }
+.cc-panel.mc-done { border-color: var(--ds-green); }
 .mc-text { font-size: 13px; color: #d7c9ff; overflow-wrap: anywhere; max-height: 6.5em; overflow-y: auto; }
 @media (max-width: 480px) { .fq { font-size: 13px; padding: 8px 10px; } }
 
