@@ -31,6 +31,8 @@
     bits.push(s.irl_watch === 'on' ? 'IRL auto-switch watching' + (s.irl_switched_from ? ' (switched from ' + esc(s.irl_switched_from) + ')' : '')
       : s.irl_watch === 'setup' ? '<b>IRL auto-switch needs !onair setup irl</b>' : 'IRL auto-switch off');
     if (!s.source_ok) bits.push('<b>no on-air source in OBS - run !onair setup</b>');
+    if (s.mic_audio) bits.push(s.mic_audio === 'on' ? 'sound to his mic' : s.mic_audio === 'setup' ? '<b>sound to his mic needs !onair setup audio</b>'
+      : s.mic_audio === 'restart' ? '<b>sound to his mic: restart OBS once (or pick CABLE Input as OBS\'s monitoring device)</b>' : '');
     if (s.err) bits.push('<span class="rs-warn">⚠ ' + esc(s.err) + '</span>');
     return ' <span class="muted">Pepe: ' + bits.join(' · ') + '.</span>';
   }
@@ -67,7 +69,7 @@
     var f = $('oaCfg');
     if (f && !cfgFilled) {
       cfgFilled = true;
-      ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch'].forEach(function (k) { if (f[k]) f[k].checked = !!C[k]; });
+      ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch', 'mic_audio'].forEach(function (k) { if (f[k]) f[k].checked = !!C[k]; });
       ['scene', 'irl_scene', 'irl_source', 'source', 'web_source', 'cam_fps', 'cam_kbps', 'irl_from', 'embed_stall_s', 'consent_min'].forEach(function (k) { if (f[k]) f[k].value = C[k] == null ? '' : C[k]; });
     }
   }
@@ -96,7 +98,7 @@
   $('oaCfg').addEventListener('submit', function (e) {
     e.preventDefault();
     var f = e.target, cfg = {};
-    ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch'].forEach(function (k) { cfg[k] = !!f[k].checked; });
+    ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch', 'mic_audio'].forEach(function (k) { if (f[k]) cfg[k] = !!f[k].checked; });
     ['scene', 'irl_scene', 'irl_source', 'source', 'web_source', 'irl_from'].forEach(function (k) { cfg[k] = f[k].value.trim(); });
     ['cam_fps', 'cam_kbps', 'embed_stall_s', 'consent_min'].forEach(function (k) { cfg[k] = Number(f[k].value); });
     act({ action: 'config', cfg: cfg }, 'oaCfgMsg');

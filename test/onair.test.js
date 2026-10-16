@@ -449,3 +449,71 @@ test("1.99aaq: staff go live straight onto Pepe's stream - a slot on his pad, of
   await OA.check();
   assert.equal(OA.view().target, null);
 });
+
+test("1.99abj: links from chat (rights), ⏰ queued next up / at a time (New York clock), a direct link ends with its video, mic_audio", async () => {
+  const OQ = require(path.join(repo, "onairqueue"));
+  OQ._setClock(() => T);
+  await OA.saveConfig({ enabled: true }, "test");
+  await OA.clear("test", "test");
+  const cmd = (c) => OA.botCommand({ by: "boss", admin: true, ...c });
+  // !onair <link> needs "rights"; with it, on air at once
+  assert.match((await cmd({ action: "set", query: "https://youtu.be/dQw4w9WgXcQ" })).msg, /rights/);
+  assert.equal(OA.view().target, null);
+  assert.equal((await cmd({ action: "set", query: "https://youtu.be/dQw4w9WgXcQ rights" })).ok, true);
+  assert.equal(OA.view().target.kind, "embed");
+  assert.equal((await OA.botCommand({ by: "rando", admin: false, action: "set", query: "https://youtu.be/dQw4w9WgXcQ rights" })).ok, false);
+  // queue next up: plays when the current one ends (its video ended -> off at once)
+  assert.match((await cmd({ action: "queue", query: "https://www.twitch.tv/somechannel" })).msg, /rights/);
+  const q1 = await cmd({ action: "queue", query: "https://www.twitch.tv/somechannel rights" });
+  assert.equal(q1.ok, true, q1.msg);
+  assert.match((await cmd({ action: "queue", query: "" })).msg, /next up/);
+  await OA.check();
+  assert.match(OA.view().target.label, /YouTube|youtu/i, "still the first one");
+  const tok = decodeURIComponent((await OA.forBot({})).target.url.split("t=")[1]);
+  T += 10 * 1000;
+  OA.embedState(tok, "ended");
+  await OA.check();
+  const tgt = OA.view().target;
+  assert.ok(tgt && tgt.queued, "the queued link went on");
+  assert.equal(tgt.embed.p, "twitch");
+  assert.equal((await OQ.list()).length, 0);
+  const set = (await getQuery("SELECT by, detail FROM onair_log WHERE what = 'set' ORDER BY id DESC LIMIT 1"))[0];
+  assert.match(set.by, /^queue:pepe:boss/);
+  assert.match(set.detail, /queued_by/);
+  // at a time: parsed in New York time, replaces the pick when due; missed when the switch is off past LATE_MS
+  const at9 = OQ.parseWhen("9pm", Date.UTC(2026, 9, 16, 12, 0));          // 08:00 EDT -> 21:00 EDT = 01:00 UTC next day
+  assert.equal(new Date(at9).toISOString(), "2026-10-17T01:00:00.000Z");
+  assert.equal(OQ.parseWhen("9", T), null, "a bare hour is ambiguous");
+  assert.equal(OQ.parseWhen("in 1h30m", T), T + 90 * 60 * 1000);
+  assert.equal(new Date(OQ.parseWhen("21:30 tomorrow", Date.UTC(2026, 9, 16, 12, 0))).toISOString(), "2026-10-18T01:30:00.000Z");
+  assert.match((await cmd({ action: "queue", when: "teatime", query: "https://youtu.be/dQw4w9WgXcQ rights" })).msg, /can't read/);
+  const q2 = await cmd({ action: "queue", when: "in 30m", query: "https://youtu.be/dQw4w9WgXcQ rights" });
+  assert.equal(q2.ok, true, q2.msg);
+  assert.match(q2.msg, /ET/);
+  const tok2 = decodeURIComponent((await OA.forBot({})).target.url.split("t=")[1]);
+  T += 29 * 60 * 1000;
+  OA.embedState(tok2, "playing");                       // still playing (else the stall clock takes it off)
+  await OA.check();
+  assert.equal(OA.view().target.embed.p, "twitch", "not yet");
+  T += 2 * 60 * 1000;
+  await OA.check();
+  assert.equal(OA.view().target.embed.p, "youtube", "due: replaced the pick");
+  await cmd({ action: "queue", when: "in 5m", query: "https://youtu.be/dQw4w9WgXcQ rights" });
+  await OA.saveConfig({ enabled: false }, "test");
+  T += OQ.LATE_MS + 6 * 60 * 1000;
+  await OA.check();
+  assert.equal((await OQ.list()).length, 0);
+  assert.equal((await OQ.recent(1))[0].status, "missed");
+  await OA.saveConfig({ enabled: true }, "test");
+  // unqueue
+  await cmd({ action: "queue", when: "in 1h", query: "https://youtu.be/dQw4w9WgXcQ rights" });
+  assert.match((await cmd({ action: "unqueue", query: "all" })).msg, /Cancelled 1/);
+  // mic_audio: a plain on/off setting, sent to Pepe; his state passes through
+  assert.equal(OA.config().mic_audio, false);
+  await OA.saveConfig({ mic_audio: true }, "test");
+  const r = await OA.forBot({ state: { mic_audio: "restart" } });
+  assert.equal(r.cfg.mic_audio, true);
+  assert.equal(OA.view().pepe.state.mic_audio, "restart");
+  await OA.saveConfig({ mic_audio: false }, "test");
+  await OA.clear("test", "test");
+});

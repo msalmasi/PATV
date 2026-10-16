@@ -11,6 +11,8 @@
 //                                  live pad slots (streams, embeds, 📼) and cams - with the card's rules: the rights tick
 //                                  for an embed, "Ask the owner" for an Approved-only pad / a cam without an opt-in.
 //                                  The server applies everything (IRL wins, the Main scene).
+//                                  1.99abj: ⏰ Queue a link instead - next up (after what's on) or at a time picked here
+//                                  (your browser's clock; Pepe's chat uses New York time) - and the "Up next" list.
 // stage-room.js calls PATVOnAirBar.sync(playerBox) whenever the stage view changes.
 (function () {
   'use strict';
@@ -57,7 +59,9 @@
       '.oap select,.oap .oap-gl input{min-height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--ds-line-strong,#444);background:#0d0d0d;color:#eee;font:13px var(--ds-font,sans-serif);max-width:100%}' +
       '.oap .oap-gl p{margin:6px 0;overflow-wrap:anywhere}.oap .oap-gl input{width:min(340px,100%)}' +
       '.oap .oap-plex li img{width:32px;height:48px;object-fit:cover;border-radius:4px;background:#222;flex:0 0 auto}' +
-      '.oap .oap-plex .oap-who{display:flex;align-items:center;gap:8px;flex:1 1 200px}';
+      '.oap .oap-plex .oap-who{display:flex;align-items:center;gap:8px;flex:1 1 200px}' +
+      '.oap input[type=datetime-local]{min-height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--ds-line-strong,#444);background:#0d0d0d;color:#eee;font:13px var(--ds-font,sans-serif);max-width:100%;color-scheme:dark}' +
+      '.oap .oap-q b{font-variant-numeric:tabular-nums}';
     document.head.appendChild(s);
   }
   var waiting = function (T) { return !!(T && T.start_until && !T.went_live); };   // a go-live / 📼 pick whose stream hasn't started
@@ -132,7 +136,10 @@
       '<div class="oap-gl"></div>' +
       '<h4>🔗 YouTube / Twitch link</h4>' +
       '<form class="oap-link"><input type="url" name="url" placeholder="Paste a YouTube or Twitch link" aria-label="YouTube or Twitch link" autocomplete="off">' +
-      '<label><input type="checkbox" name="rights"> I have the rights to rebroadcast this</label><button type="submit">📺 Play</button></form>' +
+      '<label><input type="checkbox" name="rights"> I have the rights to rebroadcast this</label><button type="submit">📺 Play</button>' +
+      '<button type="submit" data-later="1" title="Next up after what\u2019s on now, or at the time you pick">⏰ Queue</button>' +
+      '<label>at <input type="datetime-local" name="at" aria-label="Play at (optional)"></label></form>' +
+      '<div class="oap-queue"></div>' +
       '<h4>📼 Plex</h4>' +
       (C.allow_library
         ? '<form class="oap-plexq"><input type="search" name="q" placeholder="Search the library" aria-label="Search the Plex library" autocomplete="off"><button type="submit">Search</button></form>' +
@@ -166,6 +173,19 @@
         var url = f.url.value.trim();
         if (!url) { msg('Paste a YouTube or Twitch link.'); return; }
         if (!f.rights.checked) { msg('Tick “I have the rights to rebroadcast this” first.'); return; }
+        var later = !!(e.submitter && e.submitter.hasAttribute('data-later'));
+        if (!later && f.at.value) later = true;              // a time picked = queue it, even from 📺 Play
+        if (later) {
+          var at = f.at.value ? new Date(f.at.value).getTime() : null;
+          if (f.at.value && !isFinite(at)) { msg('That time isn’t valid.'); return; }
+          msg('Working…');
+          api({ action: 'queue', url: url, at: at, rights: true }).then(function (j) {
+            if (!j.ok) { msg(j.error || 'Couldn’t queue that.'); return; }
+            data = j; paint(); f.reset();
+            msg(at ? '⏰ Queued for ' + new Date(at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) + ' - it replaces whatever is on then.' : '⏰ Queued - it plays after what’s on now.');
+          }).catch(function () { msg('Couldn’t reach the site.'); });
+          return;
+        }
         act({ action: 'embed', url: url, rights: true }, function (j) { if (j && j.ok) { f.reset(); } });
       } else if (f.classList.contains('oap-plexq')) {
         var q = f.q.value.trim();
@@ -186,6 +206,13 @@
     panel.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b || b.type === 'submit') return;
       if (b.getAttribute('data-x') === '1') { panel.remove(); panel = null; return; }
+      if (b.hasAttribute('data-unq')) {
+        b.disabled = true;
+        api({ action: 'unqueue', id: b.getAttribute('data-unq') }).then(function (j) {
+          if (j.ok) { data = j; paint(); msg('Removed from the queue.'); } else { b.disabled = false; msg(j.error || 'Couldn’t remove it.'); }
+        }).catch(function () { b.disabled = false; msg('Couldn’t reach the site.'); });
+        return;
+      }
       if (b.hasAttribute('data-copy')) {
         var inp = panel.querySelectorAll('.oap-gl input')[Number(b.getAttribute('data-copy'))];
         if (!inp) return;
@@ -238,6 +265,15 @@
   }
   // only the live lists repaint on the 15 s poll; the link box and the Plex search keep what was typed
   function fillPanel() {
+    var qb = panel && panel.querySelector('.oap-queue');
+    if (qb) {
+      var Q = data.queue || [];
+      qb.innerHTML = Q.length ? '<h4>⏰ Up next</h4><ul class="oap-q">' + Q.map(function (r) {
+        return '<li><span class="oap-who"><b>' + (r.at ? esc(new Date(r.at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : 'Next up') +
+          '</b> ' + esc(r.label) + ' <span class="oap-why">by ' + esc(String(r.by || '').replace(/^(web|pepe):/, '')) + '</span></span>' +
+          '<button type="button" data-unq="' + esc(r.id) + '" aria-label="Remove from the queue">✕</button></li>';
+      }).join('') + '</ul>' : '';
+    }
     var live = panel && panel.querySelector('.oap-live'); if (!live) return;
     var T = data.target;
     var slots = (data.slots || []).map(function (s) {

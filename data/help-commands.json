@@ -1141,16 +1141,21 @@
     "!onair off",
     "!onair",
     "!onair <pad|user|slot id>",
+    "!onair <YouTube / Twitch link> rights",
     "!onair cam <login>",
-    "!onair setup",
-    "!onair setup irl",
-    "!onair setup embed",
+    "!onair queue <link> rights",
+    "!onair at <time> <link> rights",
+    "!onair in <30m> <link> rights",
+    "!onair queue · !onair unqueue <id|all>",
+    "!onair setup [irl|embed|audio]",
     "!onair yes|always|no"
    ],
    "summary": "May admins put your cam on Pepe's main stream?",
-   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). YouTube / Twitch embed slots need `rights` at the end (`!onair <pad|user> rights`) to confirm you may rebroadcast them; `!onair setup embed` adds their browser source once. A slot on an Approved-only pad or a cam without an opt-in waits for its owner's OK: the owner gets an instant request, and a cam owner answers Pepe's PM with `!onair yes` (this time), `!onair always` or `!onair no`. The operator's own IRL feed always wins. Managed on /stage/admin (kill switch, log).",
+   "details": "Admins can put a live pad stream or someone's Camfrog cam on Pepe's main stream for a while - it then shows on publicaccess.tv, on Pepe's Twitch relay and on Pepe's own cam here. A cam needs its owner's OK first: `!onair me on` allows it, `!onair me off` says no (the same switch as Settings → Privacy on publicaccess.tv; `!livecam off`, `!bridge hide` and `!incognito on` always keep your cam off it). Pepe tells you when your cam goes on, and `!onair off` takes your own cam or stream off at once. `!onair` shows what's on. Admins: `!onair <pad|user|slot id>` puts a live slot on, `!onair cam <login>` someone on cam in this room, `!onair off` ends it, `!onair setup` adds the media source to Pepe's OBS once; `!onair setup irl` keeps the IRL feed's receiver open while hidden so OBS can switch to it when it goes live from BRB / Gaming (`!onair setup irl-off` undoes it). YouTube / Twitch embed slots need `rights` at the end (`!onair <pad|user> rights`) to confirm you may rebroadcast them; `!onair setup embed` adds their browser source once. A slot on an Approved-only pad or a cam without an opt-in waits for its owner's OK: the owner gets an instant request, and a cam owner answers Pepe's PM with `!onair yes` (this time), `!onair always` or `!onair no`. The operator's own IRL feed always wins. Staff (Pepe's staff role) can run it too. A YouTube / Twitch link goes on directly: `!onair <link> rights`. **Later:** `!onair queue <link> rights` plays it after what's on now; `!onair at 9pm <link> rights` (or `21:30`, `9:30pm tomorrow` - New York time) or `!onair in 45m <link> rights` puts it on at that time, replacing whatever is on; `!onair queue` lists them, `!onair unqueue <id|all>` cancels. A link ends with its video, so the next one starts. **Sound in Camfrog:** `!onair setup audio` (once) points OBS's monitoring at Pepe's mic cable; with 🎤 Pick's sound on Pepe's mic on /stage/admin, rooms with `!mic onair on` hear the pick while Pepe holds the mic. Managed on /stage/admin (kill switch, log); staff also have 📺 Play content here (with ⏰ Queue) under Pepe's player.",
    "examples": [
     "!onair me on",
+    "!onair https://youtu.be/dQw4w9WgXcQ rights",
+    "!onair at 9pm https://www.twitch.tv/somechannel rights",
     "!onair off"
    ],
    "keywords": []
@@ -6158,7 +6163,7 @@
   },
   {
    "id": "mic-alerts-on-off-music-on-off",
-   "title": "!mic alerts on|off · music on|off",
+   "title": "!mic alerts on|off · music on|off · onair on|off",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6167,11 +6172,14 @@
    "aliases": [],
    "syntax": [
     "!mic alerts on|off",
-    "music on|off"
+    "!mic music on|off",
+    "!mic onair on|off"
    ],
    "summary": "alerts switches the alert sound channel on or off for this room — the full alert controls are under !alerts.",
-   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it.",
-   "examples": [],
+   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something on air on his OBS (`!onair`) plays, so the room hears its sound - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room.",
+   "examples": [
+    "!mic onair on"
+   ],
    "keywords": [],
    "webchat": true
   },
@@ -7897,5 +7905,5 @@
   }
  ],
  "undocumented": [],
- "hash": "0deac0c7049f569b"
+ "hash": "84d4ed481ed097b7"
 }

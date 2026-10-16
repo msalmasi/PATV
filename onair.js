@@ -40,6 +40,10 @@
 //     hasn't opted in needs the cam owner's OK - the pick waits (pending) and only goes on air after Allow; Deny / no
 //     answer in consent_min minutes drops it.
 //   * audit: onair_log (every set / end / config change, who and why) + admin_audit rows for the web admin's actions.
+//   * 1.99abj: `!onair <YouTube / Twitch link> rights` from Camfrog (the same pasted link as the player bar); ⏰ links queued
+//     for later - next up, or at a time (onairqueue.js; a direct link now ends with its video so the next one starts);
+//     mic_audio: the pick's sound also goes to Pepe's Camfrog mic (Pepe sets the on-air sources to monitor into his mic
+//     cable - only after `!onair setup audio` - and holds the mic in rooms with `!mic onair on`).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -74,8 +78,9 @@ const DEFAULTS = Object.freeze({
   consent_min: 10,               // an owner's on-demand OK expires after this many minutes
   cam_fps: 15,                   // a cam on air: Pepe's local encode
   cam_kbps: 1500,
+  mic_audio: false,              // 1.99abj: the pick's sound into Pepe's Camfrog mic (needs `!onair setup audio` once)
 });
-const BOOLS = ["enabled", "cam_optin", "allow_library", "auto_scene", "irl_switch"];
+const BOOLS = ["enabled", "cam_optin", "allow_library", "auto_scene", "irl_switch", "mic_audio"];
 const NAMES = ["scene", "irl_scene", "irl_source", "source", "web_source"];
 const NUMS = { cam_fps: [5, 30], cam_kbps: [200, 6000], embed_stall_s: [30, 600], consent_min: [1, 60] };
 
@@ -88,6 +93,7 @@ const bridge = () => require("./bridge");
 const LC = () => require("./livecam");
 const C = () => require("./onairconsent");
 const EMB = () => require("./stageembed");
+const Q = () => require("./onairqueue");
 
 class Refuse extends Error { constructor(status, msg, code) { super(msg); this.status = status; this.refuse = true; this.code = code || null; } }
 
@@ -103,6 +109,7 @@ const WHY = {
   consent_expired: "The owner didn't answer in time.",
   consent_revoked: "The pad owner revoked their OK.",
   embed_not_playing: "The embed stopped playing (ended, an ad, unavailable or offline).",
+  embed_ended: "The video ended.",
   banned: "That streamer is banned from the stage.",
   library: "📼 Plex plays are off for Pepe's main stream (allow_library) - his stream is relayed to Twitch.",
   offline: "That Camfrog room isn't live on the site.",
@@ -304,7 +311,7 @@ async function setSlot(slotId, by, { admin, rights = false, ask = true, starting
 }
 // 1.99aao: staff paste a YouTube / Twitch link straight onto Pepe's stream from the player bar (no pad slot behind it).
 // Same rules as an embed slot: the rights tick every time, the stall clock, the IRL feed wins; nobody to ask or tell.
-async function setEmbed(url, by, { admin, rights = false } = {}) {
+async function setEmbed(url, by, { admin, rights = false, queued = null } = {}) {
   await init();
   if (!CFG.enabled) throw refuse("off");
   let embed = null;
@@ -316,10 +323,11 @@ async function setEmbed(url, by, { admin, rights = false } = {}) {
   await dropPending(prev);
   TARGET = { id: "e:link:" + now().toString(36), kind: "embed", direct: true, slot_id: null, user_id: null, pad: rooms().HOUSE_ROOM,
              label: "🔗 " + EMB().label(embed), by: String(by), at: now(), live_at: now(), pad_ok: "house", pending: [],
-             embed, rights: { by: String(by), at: now() } };
+             embed, rights: queued ? { by: queued.by, at: queued.created } : { by: String(by), at: now() },
+             ...(queued ? { queued: queued.id } : {}) };
   await persist(by);
   if (prev) await log("replaced", by, prev);
-  const detail = { rights_confirmed: true, link: true };
+  const detail = { rights_confirmed: true, link: true, ...(queued ? { queued: queued.id, queued_by: queued.by, booked_at: queued.at } : {}) };
   await log("set", by, TARGET, detail);
   if (admin) await audit(admin, "set", TARGET, detail);
   return view();
@@ -458,11 +466,32 @@ function check(t = now()) {
   checking = (async () => {
     await init();
     await C().sweep().catch((e) => console.error("[onair] consent sweep:", e.message));
+    await checkTarget(t);
+    await queueTick(t).catch((e) => console.error("[onair] queue:", e.message));
+    return null;
+  })().finally(() => { checking = null; });
+  return checking;
+}
+/** 1.99abj: a booked link that's due goes on now (replacing the pick); with nothing on air, the next-up link. */
+async function queueTick(t = now()) {
+  const r = await Q().due({ idle: !TARGET, enabled: CFG.enabled }, t);
+  if (!r) return;
+  try {
+    await setEmbed(r.url, "queue:" + r.by, { rights: true, queued: r });
+    await Q().mark(r.id, "played", null, t);
+  } catch (e) {
+    await Q().mark(r.id, "failed", (e && e.message) || "failed", t);
+    console.error("[onair] queued link", r.id, "failed:", e && e.message);
+  }
+}
+async function checkTarget(t) {
     if (!TARGET) return null;
     if (!CFG.enabled) return clear("switched_off", "system");
     const T = TARGET;
     const pending = (T.pending || []).length > 0;
     if (T.kind === "embed" && T.direct) {                                     // 1.99aao: a pasted link - only the stall clock
+      // 1.99abj: ...and its video ending (the player says so) - the next queued link starts right away
+      if (!pending && T.embed_state === "ended" && T.embed_seen_at && T.embed_seen_at - T.at > 5000) return clear("embed_ended", "system");
       if (!pending) {
         if (BOT && BOT.state && BOT.state.irl && botOk(t)) T.embed_play_at = t;
         const last = Math.max(T.at + EMBED_GRACE_MS, T.embed_play_at || 0);
@@ -487,8 +516,6 @@ function check(t = now()) {
       if (!pending && (T.pad_ok === "session" || T.pad_ok === "always") && !(await padConsent(T.pad))) return clear("consent_revoked", "system");
     }
     return null;
-  })().finally(() => { checking = null; });
-  return checking;
 }
 
 // ── what Pepe gets ──
@@ -548,14 +575,18 @@ function sanitizeState(s) {
   const str = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, n);
   return { obs: str(s.obs, 20), applied: str(s.applied, 80), shown: !!s.shown, irl: !!s.irl, scene: str(s.scene, 60),
            irl_watch: str(s.irl_watch, 10), irl_switched_from: str(s.irl_switched_from, 60),
-           switched_from: str(s.switched_from, 60), source_ok: !!s.source_ok, err: str(s.err, 200), cam: str(s.cam, 30) };
+           switched_from: str(s.switched_from, 60), source_ok: !!s.source_ok, err: str(s.err, 200), cam: str(s.cam, 30),
+           mic_audio: str(s.mic_audio, 10) };
 }
 /** !onair from Camfrog (Pepe checked who may): {action: set|off|leave|status, query, room, by, admin} -> {ok, msg}. */
 async function botCommand(c) {
   const by = "pepe:" + String(c.by || "?").slice(0, 40);
   const action = String(c.action || "");
   try {
-    if (action === "status") return { ok: true, msg: statusLine() };
+    if (action === "status") {
+      const n = (await Q().list().catch(() => [])).length;
+      return { ok: true, msg: statusLine() + (n ? ` ⏰ ${n} queued (!onair queue).` : "") };
+    }
     if (action === "consent") {                  // the cam owner answers in Camfrog: !onair yes | always | no
       const who = String(c.by || "").toLowerCase();
       const a = (await C().camAsks()).filter((x) => x.login === who).pop();
@@ -583,21 +614,57 @@ async function botCommand(c) {
     if (action === "off") { await clear("off", by); return { ok: true, msg: "Off Pepe's main stream - back to normal." }; }
     const said = () => ((TARGET.pending || []).length ? "Asked for the owner's OK - it goes on air once they allow it: " : "On Pepe's main stream: ") + TARGET.label;
     if (action === "cam") { await setCam(c.room, c.query, by, { ask: true }); return { ok: true, msg: said() }; }
+    if (action === "queue" || action === "unqueue") return await botQueue(c, by);
     if (action === "set") {
       let q = String(c.query || "").trim();
       const rights = /\s+rights$/i.test(q);
       if (rights) q = q.replace(/\s+rights$/i, "");
+      if (isLink(q)) {                           // 1.99abj: a YouTube / Twitch link straight from chat
+        if (!rights) return { ok: false, msg: "Add \"rights\" to confirm you have the rights to rebroadcast it (it goes out on Pepe's stream and his Twitch relay): !onair <link> rights" };
+        await setEmbed(q, by, { rights: true });
+        return { ok: true, msg: "On Pepe's main stream: " + TARGET.label };
+      }
       const s = await resolveSlot(q);
       if (s.mode === "embed" && !rights) return { ok: false, msg: "That's a YouTube / Twitch embed - add \"rights\" to confirm you have the rights to rebroadcast it: !onair " + q + " rights" };
       await setSlot(s.id, by, { rights, ask: true });
       return { ok: true, msg: said() };
     }
-    return { ok: false, msg: "usage: !onair <pad|user|slot id> | !onair cam <login> | !onair off" };
+    return { ok: false, msg: "usage: !onair <pad|user|slot id|link rights> | !onair cam <login> | !onair queue | !onair off" };
   } catch (e) {
     if (e && e.refuse) return { ok: false, msg: e.message };
     console.error("[onair] cmd:", e);
     return { ok: false, msg: "Something went wrong." };
   }
+}
+const isLink = (q) => /^(https?:\/\/)?([a-z0-9-]+\.)*(youtube\.com|youtu\.be|twitch\.tv)(\/|$)/i.test(String(q || "").trim());
+/** 1.99abj: !onair queue [<link> rights] · !onair at <time> <link> rights · !onair in <30m> <link> rights · !onair unqueue <id|all>. */
+async function botQueue(c, by) {
+  if (c.action === "unqueue") {
+    const n = await Q().cancel(c.query, by);
+    return n ? { ok: true, msg: `Cancelled ${n} queued link${n === 1 ? "" : "s"}.` } : { ok: false, msg: "Nothing queued matches that - !onair queue lists them." };
+  }
+  const words = String(c.query || "").trim().split(/\s+/).filter(Boolean);
+  const rights = words.length && /^rights$/i.test(words[words.length - 1]);
+  if (rights) words.pop();
+  const li = words.findIndex(isLink);
+  if (li < 0 && !String(c.when || "").trim()) {                  // no link: the list
+    const rows = await Q().list();
+    if (!rows.length) return { ok: true, msg: "⏰ Nothing queued. !onair queue <link> rights (next up) · !onair at 9pm <link> rights · !onair in 30m <link> rights" };
+    return { ok: true, msg: "⏰ " + rows.slice(0, 6).map((r) => `[${r.id}] ${r.at ? Q().fmt(r.at) : "next up"}: ${r.label}`).join(" · ") +
+      (rows.length > 6 ? ` (+${rows.length - 6} more)` : "") + " - !onair unqueue <id|all>" };
+  }
+  if (li < 0) return { ok: false, msg: "Which link? !onair at 9pm <YouTube / Twitch link> rights" };
+  const url = words[li];
+  const whenText = (String(c.when || "") + " " + words.filter((w, i) => i !== li).join(" ")).trim();
+  let at = null;
+  if (whenText) {
+    at = Q().parseWhen(whenText);
+    if (at == null) return { ok: false, msg: `I can't read "${whenText}" as a time - try 9pm, 21:30, 9:30pm tomorrow or in 45m (New York time).` };
+  }
+  if (!rights) return { ok: false, msg: "Add \"rights\" at the end to confirm you have the rights to rebroadcast it: !onair " + (at ? "at <time> " : "queue ") + "<link> rights" };
+  const r = await Q().add({ url, at, by });
+  return { ok: true, msg: `⏰ Queued [${r.id}] ${r.label} - ` + (r.at ? `on Pepe's stream ${Q().fmt(r.at)} (replaces whatever is on).` : "next up, after what's on now.") +
+    (CFG.enabled ? "" : " On-air is switched OFF right now (/stage/admin).") };
 }
 /** A live slot by id (prefix), pad (slug / room id) or streamer name. Throws Refuse when none / several. */
 async function resolveSlot(q) {
@@ -659,7 +726,8 @@ async function adminView() {
   const logRows = await getQuery("SELECT at, what, by, kind, ref, label, detail FROM onair_log ORDER BY id DESC LIMIT 40");
   const pending = [];
   for (const id of (TARGET && TARGET.pending) || []) { const c = await C().get(id); if (c) pending.push(c); }
-  return { ...view(), now: t, slots, cams, pending, log: logRows, why: WHY, optins: [...OPTIN.values()].filter((o) => o.on).length };
+  const queue = await Q().list().catch(() => []);
+  return { ...view(), now: t, slots, cams, pending, log: logRows, why: WHY, optins: [...OPTIN.values()].filter((o) => o.on).length, queue };
 }
 
 // ── routes ──
@@ -704,6 +772,17 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
       if (b.action === "slot") await setSlot(b.slot_id, actor(req), { admin: adm(req), rights: b.rights === true, ask: b.ask === true });
       else if (b.action === "cam") await setCam(b.room, b.login, actor(req), { admin: adm(req), ask: b.ask === true });
       else if (b.action === "embed") await setEmbed(b.url, actor(req), { admin: adm(req), rights: b.rights === true });
+      else if (b.action === "queue") {                 // 1.99abj: ⏰ a link for later (at = ms, or null = next up)
+        if (b.rights !== true) throw refuse("rights");
+        const r = await Q().add({ url: b.url, at: b.at == null || b.at === "" ? null : Number(b.at), by: actor(req) });
+        await log("queued", actor(req), null, { id: r.id, label: r.label, at: r.at });
+        await audit(adm(req), "queue", null, { id: r.id, label: r.label, at: r.at, rights_confirmed: true });
+      }
+      else if (b.action === "unqueue") {
+        const n = await Q().cancel(b.id, actor(req));
+        if (!n) throw new Refuse(404, "That queued link is gone.", "gone");
+        await audit(adm(req), "unqueue", null, { id: String(b.id || "").slice(0, 20) });
+      }
       else if (b.action === "library") {
         await setLibrary(b.key, actor(req), { admin: adm(req), user: { userId: req.user.userId, username: req.user.username, class: req.user.class } });
       }
@@ -774,7 +853,7 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
 }
 
 module.exports = {
-  register, init, forBot, botCommand, setSlot, setCam, setEmbed, setLibrary, setGoLive, clear, saveConfig, check, adminView, view, config, clean, setOptin, optinState, optedIn,
+  register, init, forBot, botCommand, botQueue, isLink, setSlot, setCam, setEmbed, setLibrary, setGoLive, clear, saveConfig, check, adminView, view, config, clean, setOptin, optinState, optedIn,
   slotWhyNot, camWhyNot, resolveSlot, Refuse, DEFAULTS, WHY, LIVE_GRACE_MS, EMBED_GRACE_MS, onConsentChange, embedForToken, embedState, playerToken,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reset: () => { CFG = { ...DEFAULTS }; TARGET = null; V = 0; BOT = null; OPTIN = new Map(); ready = null; },

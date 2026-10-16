@@ -66,6 +66,7 @@
       <label class="chk"><input type="checkbox" name="allow_library"> Allow 📼 Plex plays <small>(Twitch relay: DMCA risk)</small></label>
       <label class="chk"><input type="checkbox" name="auto_scene"> Switch OBS to the on-air scene when needed</label>
       <label class="chk" title="When the operator's IRL feed goes live while OBS is on one of these scenes, OBS switches to the on-air scene (Pepe) and back when it ends. Needs !onair setup irl once (the IRL source keeps its receiver open while hidden). Not tied to the on-air switch."><input type="checkbox" name="irl_switch"> 🎥 IRL auto-switch</label>
+      <label class="chk" title="The pick's sound also goes into Pepe's Camfrog mic (the same cable as Spotify), so rooms with !mic onair on hear it while Pepe holds the mic. Needs !onair setup audio once."><input type="checkbox" name="mic_audio"> 🎤 Pick's sound on Pepe's mic</label>
       <label>&nbsp;↳ from scenes <small>(comma-separated)</small><input type="text" name="irl_from" maxlength="300" spellcheck="false" placeholder="BRB, Gaming"></label>
       <details class="adm-adv" style="grid-column: 1 / -1"><summary>OBS names and the cam encode</summary><div class="adm-adv-body settings">
         <label>Switch OBS to this scene (on-air + IRL) <small>(one that shows the IRL scene with nothing big over it)</small><input type="text" name="scene" maxlength="60" spellcheck="false"></label>
@@ -163,7 +164,7 @@
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/stage-admin.js?v=5" defer></script>
 <script src="/public/js/restream.js?v=1" defer></script>
-<% if (isAdmin) { %><script src="/public/js/onair-admin.js?v=1" defer></script><% } %>
+<% if (isAdmin) { %><script src="/public/js/onair-admin.js?v=2" defer></script><% } %>
 <%- include('partials/admin-close') %>
 </body>
 </html>
