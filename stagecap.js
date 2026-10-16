@@ -488,6 +488,14 @@ async function canDelete(user, m) {
     const acct = user.camfrogUsername !== undefined ? user : await require("./feedstore").account(user.userId).catch(() => null);
     return !!acct && require("./storykeep").isPadMod(acct, m.room);
   }
+  // 1.99abh: a capture made in Camfrog (!snap / !clip, source NULL): the person who took it - their linked chat name is the
+  // requester's login Pepe sent - and the person in it (their likeness), besides the pad's managers and staff above
+  if (!m.source) {
+    if (!m.by_login && !m.subject_login) return false;
+    const acct = user.camfrogUsername !== undefined ? user : await require("./feedstore").account(user.userId).catch(() => null);
+    const mine = acct && acct.camfrogUsername ? String(acct.camfrogUsername).toLowerCase() : "";
+    return !!mine && (mine === String(m.by_login || "").toLowerCase() || mine === String(m.subject_login || "").toLowerCase());
+  }
   if (m.source !== "stage") return false;
   if (m.by_user_id && m.by_user_id === user.userId) return true;
   if (m.slot_id) {
@@ -503,6 +511,7 @@ async function remove(user, mediaId) {
   if (!m) throw refuse(404, "No such capture.");
   if (!(await canDelete(user, m))) {
     throw refuse(403, m.source === "user" ? "Only the person who posted this story, the pad's owner or mods, or an admin can remove it."
+      : !m.source ? "Only the person who took it, the person in it, the pad's owner or mods, or an admin can delete this."
       : "Only the pad's owner, an admin, the person who took it or the streamer can delete this.");
   }
   try { fs.unlinkSync(path.join(media.DIR, m.file)); } catch (e) { /* gone */ }
