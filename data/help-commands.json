@@ -5744,7 +5744,7 @@
    "id": "redlist",
    "title": "!redlist [add|remove <user>]",
    "category": "moderation",
-   "role": "admin",
+   "role": "owner",
    "commands": [
     "!redlist"
    ],
@@ -5752,10 +5752,12 @@
    "syntax": [
     "!redlist",
     "!redlist add <user>",
-    "!redlist remove <user>"
+    "!redlist remove <user>",
+    "!redlist clear",
+    "!redlist grant on|off|auto"
    ],
    "summary": "This room's red list, the list automod works from; add `-all` to change the list every room shares.",
-   "details": "With no arguments it shows this room's list (or the shared one, if the room has no list of its own). Someone in a time-out for abusing their powers can't be added back until it ends.",
+   "details": "With no arguments it shows this room's list (or the shared one, if the room has no list of its own). Someone in a time-out for abusing their powers can't be added back until it ends. **Pad owners** keep their own room's list too (here or on publicaccess.tv: the pad's **Manage → 🟥 Red list**). It only works where Pepe can give admin - he has to be the room's Camfrog owner, which today is only Pepe's Pad (`!redlist grant on|off|auto`, Pepe admins: auto = a room named after him). Elsewhere the list is kept but 'red me' says Pepe can't give admin there.",
    "examples": [],
    "keywords": []
   },
@@ -6163,7 +6165,7 @@
   },
   {
    "id": "mic-alerts-on-off-music-on-off",
-   "title": "!mic alerts on|off · music on|off · onair on|off",
+   "title": "!mic alerts · music · onair · regrab",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6173,10 +6175,11 @@
    "syntax": [
     "!mic alerts on|off",
     "!mic music on|off",
-    "!mic onair on|off"
+    "!mic onair on|off",
+    "!mic regrab fast|normal"
    ],
    "summary": "alerts switches the alert sound channel on or off for this room — the full alert controls are under !alerts.",
-   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something on air on his OBS (`!onair`) plays, so the room hears its sound - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room.",
+   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something with sound is on air on his OBS - a stream or 📼 Plex slot, a YouTube / Twitch link (`!onair`), or the IRL feed while it's on screen; never a Camfrog cam (no sound) - so the room hears it - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room. **regrab fast** (per room): when the room's mic timer drops Pepe while he's holding the mic on purpose (the jukebox, an on-air pick, hold mode) he takes it straight back - about a second later - instead of waiting for his next check. A human blocking his mic still keeps him off.",
    "examples": [
     "!mic onair on"
    ],
@@ -7905,5 +7908,5 @@
   }
  ],
  "undocumented": [],
- "hash": "3ba62fee06c5509b"
+ "hash": "236fe6a18b95ce6c"
 }

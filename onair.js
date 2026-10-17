@@ -530,7 +530,10 @@ async function botTarget() {
     return { id: T.id, kind: "slot", label: T.label, url: (S().playUrlOf || S().hlsOf)(s), live: S().isLive(s), since: T.at };
   }
   if (T.kind === "embed") return { id: T.id, kind: "embed", label: T.label, url: playerUrl(T), since: T.at };
-  return { id: T.id, kind: "cam", label: T.label, room: T.room, login: T.login, display: T.display, since: T.at };
+  // 1.99abv: `consent` = the cam owner OK'd THIS pick (!onair yes / always, the consent page) or opted in / opt-in is off -
+  // Pepe's own check only knows the standing opt-ins, so a one-time OK used to be refused on his side ("no_optin").
+  // check() above still ends the pick when that OK lapses.
+  return { id: T.id, kind: "cam", label: T.label, room: T.room, login: T.login, display: T.display, since: T.at, consent: !!T.cam_ok };
 }
 // the embed player page's token: the pick's id + an HMAC (only that pick; a new pick = a new URL)
 const sig = (id) => crypto.createHmac("sha256", SECRET).update("onair-player:" + id).digest("base64url").slice(0, 32);

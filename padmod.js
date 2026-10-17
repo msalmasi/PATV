@@ -38,7 +38,19 @@ const ACTIONS = {
   fine: "!fine", casinoban: "!casinoban", casinounban: "!casinounban", djban: "!djban", djunban: "!djunban",
   // 1.99pg: Camfrog room roles (Pepe's !friend / !mod / !admin / !unrole = the room's oplist)
   role_friend: "!friend", role_mod: "!mod", role_admin: "!admin", role_unrole: "!unrole",
+  // 1.99abv: the room's 🟥 red list (who may type "red me" for room admin) - Pepe admins + the pad's owner, and only
+  // where Pepe can GRANT admin (caps.redlist.capable: he's the room's Camfrog owner - his own pad, or a room's own bot)
+  redlist_add: "!redlist", redlist_remove: "!redlist",
 };
+const REDLIST_ACTIONS = new Set(["redlist_add", "redlist_remove"]);
+/** null = OK, else why this red-list change is refused (Pepe re-checks all of it). */
+function redlistRefusal(action, caps) {
+  if (!REDLIST_ACTIONS.has(action)) return null;
+  const r = caps && caps.redlist;
+  if (!r || !r.edit) return "The red list is for Pepe admins and the pad's owner.";
+  if (!r.capable) return "Pepe can't give admin in this room (he isn't its Camfrog owner), so the red list does nothing here yet.";
+  return null;
+}
 // 1.99pg: role actions are Pepe owner/admin only (caps.admin; a staff/trusted grant never unlocks them), on anyone
 // including yourself; a Pepe admin can't change a Pepe OWNER's role (caps.owners lists them for non-owner admins).
 // Pepe re-checks both. Every outcome lands in the pad's event log (room_events "pad-role", bridge-relay applyAcks).
@@ -127,6 +139,8 @@ function buildModLine(action, target, args) {
     return h ? { line: `!timeout ${who} ${h}` } : { error: "Pick a time-out of 1 to 720 hours." };
   }
   if (a === "strike_appeal") return { line: `!strike appeal ${who}` };
+  if (a === "redlist_add") return { line: `!redlist add ${who}` };
+  if (a === "redlist_remove") return { line: `!redlist remove ${who}` };
   if (a === "fine") {
     const n = intIn(x.amount, 1, FINE_MAX);
     if (!n) return { error: "Fine a whole number of PAT, 1 or more." };
@@ -141,11 +155,16 @@ const ROLE_RE = /^[a-z]{1,12}$/;
 function cleanCaps(c) {
   if (!c || typeof c !== "object" || Array.isArray(c)) return null;
   const actions = (Array.isArray(c.actions) ? c.actions : []).filter((a) => a !== "topic" && Object.prototype.hasOwnProperty.call(ACTIONS, a)
-    && (!ROLE_ACTIONS.has(a) || c.admin === true || c.room_roles === true));   // 1.99pg: role actions next to admin (1.99ti: or the pad owner)
+    && (!ROLE_ACTIONS.has(a) || c.admin === true || c.room_roles === true)    // 1.99pg: role actions next to admin (1.99ti: or the pad owner)
+    && (!REDLIST_ACTIONS.has(a) || (c.redlist && c.redlist.edit === true)));   // 1.99abv: with the red list itself
   if (!actions.length) return null;
   const out = { actions: [...new Set(actions)], on: c.on !== false, roles: (Array.isArray(c.roles) ? c.roles : []).filter((r) => typeof r === "string" && ROLE_RE.test(r)).slice(0, 4) };
   if (c.topic_price != null && Number.isFinite(Number(c.topic_price))) out.topicPrice = Math.max(0, Math.min(1e9, Math.floor(Number(c.topic_price))));
   if (c.blocked) out.blocked = relay.clean(c.blocked, 120);
+  if (c.redlist && typeof c.redlist === "object" && c.redlist.edit === true) {
+    out.redlist = { edit: true, capable: c.redlist.capable === true,
+                    list: (Array.isArray(c.redlist.list) ? c.redlist.list : []).slice(0, 100).map((x) => cleanLogin(x).toLowerCase()).filter(Boolean) };
+  }
   if (c.room_roles === true && c.admin !== true) {
     // 1.99ti: the pad's owner in their own room - room roles too, never on Pepe's admins / owners
     out.room_roles = true;
@@ -284,7 +303,7 @@ function register(app, { addUser, bySlug, isLive }) {
       const why = selfRefusal(action, caps);
       if (why) return bad(res, 403, why);
     }
-    const roleWhy = roleRefusal(action, cleanLogin(b.target), caps, u.camfrogUsername);
+    const roleWhy = roleRefusal(action, cleanLogin(b.target), caps, u.camfrogUsername) || redlistRefusal(action, caps);
     if (roleWhy) return bad(res, 403, roleWhy);
     const lim = relay.limited("cmd|" + u.userId, relay.CMD_GAP, relay.CMD_BURST, relay.CMD_WINDOW)
       || (action !== "topic" ? relay.limited("mod|" + u.userId, MOD_GAP, MOD_BURST, MOD_WINDOW) : null);
@@ -358,5 +377,5 @@ function register(app, { addUser, bySlug, isLive }) {
   });
 }
 
-module.exports = { register, selfRefusal, SELF_LIFT, roleRefusal, ROLE_ACTIONS, timeoutRefusal, buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
+module.exports = { register, selfRefusal, SELF_LIFT, roleRefusal, ROLE_ACTIONS, redlistRefusal, REDLIST_ACTIONS, timeoutRefusal, buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
   ACTIONS, SETTINGS, TOPIC_MAX, REASON_MAX, _viewers: viewers, _linkCache: linkCache, _pwFails: pwFails };

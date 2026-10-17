@@ -305,6 +305,7 @@ test("cams without an opt-in: an admin can ask; Pepe gets the ask to PM; !onair 
   r = await OA.forBot({ cmd: { action: "consent", answer: "yes", by: "dave" } });
   assert.equal(r.result.ok, true);
   assert.equal(r.target.kind, "cam");
+  assert.equal(r.target.consent, true, "1.99abv: Pepe is told the owner OK'd this pick (his own check knows only standing opt-ins)");
   assert.equal(OA.optedIn("dave"), false, "this time only - no standing opt-in");
   await OA.check();
   assert.ok(OA.view().target, "a once-OK keeps it on air");

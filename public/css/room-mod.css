@@ -48,6 +48,12 @@
 .pm-topic-line { color: #c9b46a; font-size: 12.5px; background: #0d0d0d; border: 1px dashed #3a3420; border-radius: 6px; padding: 5px 8px; overflow-wrap: anywhere; }
 .pm-find { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
 .pm-set-grid { display: grid; gap: 6px; }
+/* 1.99abv: 🟥 the room's red list (greyed where Pepe can't grant admin) */
+.pm-rl { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pm-rl-i { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: rgba(229, 57, 53, .14);
+           border: 1px solid rgba(229, 57, 53, .45); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.pm-rl-i .pm-btn { min-height: 26px; padding: 0 8px; }
+.pm-redlist.pm-off .pm-rl, .pm-redlist.pm-off .pm-row { opacity: .5; }
 .pm-set { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; align-items: center; font-size: 13px; color: #ccc; }
 .pm-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
 .pm-results:empty { display: none; }

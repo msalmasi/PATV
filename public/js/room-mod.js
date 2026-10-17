@@ -95,6 +95,7 @@
   var TOPIC_MAX = 200, REASON_MAX = 120;
 
   function preview(action, login, args) {
+    if (action === 'redlist_add' || action === 'redlist_remove') return '!redlist ' + (action === 'redlist_add' ? 'add ' : 'remove ') + login;   // 1.99abv
     var a = A[action]; if (!a) return '';
     if (action === 'topic') return '!topic ' + (args.text || '');
     var s = a.cmd + ' ' + login;
@@ -252,6 +253,52 @@
     var bList = btn('keep', '🚫 Banned & punished', function () { openBanned(); });   // read-only: works with web moderation off too
     fWrap.appendChild(fForm); fWrap.appendChild(bList);
     body.appendChild(fWrap);
+
+    // 1.99abv: 🟥 the room's red list - who may type "red me" for room admin (Pepe admins + the pad's owner). Shown in
+    // every room; greyed where Pepe can't grant admin (he isn't the room's Camfrog owner - only his own pad today)
+    var rWrap = el('div', 'pm-sec pm-redlist hide');
+    rWrap.appendChild(el('div', 'pm-k', '🟥 Red list'));
+    var rNote = el('p', 'pm-hint', '');
+    var rList = el('ul', 'pm-rl'); rList.setAttribute('aria-label', 'Red list');
+    var rForm = el('form', 'pm-row');
+    var rIn = el('input'); rIn.type = 'text'; rIn.placeholder = 'Camfrog name'; rIn.maxLength = 40; rIn.setAttribute('aria-label', 'Camfrog name to add to the red list');
+    rIn.autocomplete = 'off';
+    var rGo = el('button', 'pm-btn go'); rGo.type = 'submit'; rGo.textContent = 'Add';
+    rForm.appendChild(rIn); rForm.appendChild(rGo);
+    rWrap.appendChild(rNote); rWrap.appendChild(rList); rWrap.appendChild(rForm);
+    rForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var who = rIn.value.trim().replace(/^@/, '');
+      if (!/^[A-Za-z0-9_.][\w.\-]{0,39}$/.test(who)) { rIn.setCustomValidity('A Camfrog login (letters, numbers, . _ -)'); rIn.reportValidity(); return; }
+      run('redlist_add', who, {}, function (ok) { if (ok) rIn.value = ''; }, rGo);
+    });
+    rIn.addEventListener('input', function () { rIn.setCustomValidity(''); });
+    body.appendChild(rWrap);
+    function paintRedlist() {
+      var r = caps && caps.redlist;
+      rWrap.classList.toggle('hide', !r);
+      if (!r) return;
+      var k = JSON.stringify(r) + (caps.on ? 1 : 0);
+      if (rWrap.dataset.k === k) return;
+      rWrap.dataset.k = k;
+      var live = !!(r.capable && caps.on);
+      rWrap.classList.toggle('pm-off', !r.capable);
+      rNote.textContent = r.capable
+        ? 'People on it type "red me" in the room and Pepe makes them a room admin.'
+        : 'Greyed out: Pepe can\'t give admin in this room - he isn\'t its Camfrog owner (today that\'s only Pepe\'s Pad). It turns on by itself when this room gets its own Pepe Bot.';
+      rList.textContent = '';
+      if (!r.list.length) rList.appendChild(el('li', 'pm-hint', 'Nobody yet.'));
+      r.list.forEach(function (login) {
+        var li = el('li', 'pm-rl-i');
+        li.appendChild(el('span', null, login));
+        var x = btn('', '✕', function () { run('redlist_remove', login, {}, null, x); });
+        x.setAttribute('aria-label', 'Remove ' + login + ' from the red list');
+        x.disabled = !live;
+        li.appendChild(x);
+        rList.appendChild(li);
+      });
+      rIn.disabled = rGo.disabled = !live;
+    }
 
     // room settings (Pepe admins, password every time)
     var sWrap = el('div', 'pm-sec pm-settings hide');
@@ -753,6 +800,7 @@
       tEdit.disabled = !caps.on;
       bList.disabled = false;
       fGo.disabled = !caps.on;
+      paintRedlist();
       paintSettings();
     }
 
