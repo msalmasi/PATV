@@ -89,15 +89,17 @@ async function announce(body) {
   const rooms = require("./rooms");
   const acct = await pf.ensureAccount();
   const CAT = { sports: "🏟️", prices: "📈", news: "📰", trending: "🔥" };
+  // 1.99abr: full URLs - the feed only links http(s) (feedweb.linkify), so "/markets/79" showed as plain text
+  const SITE = String(process.env.SITE_URL || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
   const when = (s) => new Date(Number(s) * 1000).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET";
   const title = items.length === 1 ? t("automkt.feed.title_one", { q: String(items[0].question).slice(0, 120) })
                                    : t("automkt.feed.title_many", { n: items.length });
   const lines = items.map((x) => (isPoll(x)
     ? t("automkt.feed.line_poll", { ic: "📊", q: String(x.question).slice(0, 200), opts: (x.options || []).map(String).join(" / ").slice(0, 120),
-                                    closes: when(x.closes), link: `/polls/${encodeURIComponent(String(x.poll_id))}` })
+                                    closes: when(x.closes), link: `${SITE}/polls/${encodeURIComponent(String(x.poll_id))}` })
     : t("automkt.feed.line", { ic: CAT[x.cat] || "🔮", ref: `M${Math.floor(Number(x.id))}`, q: String(x.question).slice(0, 200),
                                opts: (x.options || []).map(String).join(" / ").slice(0, 120), closes: when(x.closes),
-                               link: `/markets/${Math.floor(Number(x.id))}` })));
+                               link: `${SITE}/markets/${Math.floor(Number(x.id))}` })));
   const text = [t("automkt.feed.intro"), "", ...lines, "", t("automkt.feed.foot")].join("\n");
   // 1.99wq: one story, one pad (pepetopics.js) + his flair / tags there (pepelabels.js)
   const TP = require("./pepetopics");
