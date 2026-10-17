@@ -1,0 +1,115 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('bingo.title'), user: user}) %>
+<%# views/bingo.ejs - 1.99abn: 🎱 the live Bingo page (bingo.js). Pepe runs the game in chat; this follows it: the balls
+    called on a 75-number board (B I N G O columns in their bingo-hall colours, the last ball big), the pot and prizes,
+    the players, the winners - and the viewer's own cards with the called numbers daubed and a "line ready" nudge.
+    public/js/bingo-page.js draws it from the state below and keeps it live (GET /api/bingo/state). %>
+<style>
+  .bgx { --ds-ac: #ff5fa2; --ds-ac-2: #ffb3d1; --ds-ac-bg: rgba(255,95,162,.14); --ds-ac-line: #7a2a52; --ds-on-ac: #2a0716;
+         --cB: #3d8bff; --cI: #ff5252; --cN: #e8e8e8; --cG: #3ccf6e; --cO: #ffc93c; --daub: rgba(255,95,162,.85); }
+  .bgx section { min-width: 0; }
+  .bg-hero { border-radius: var(--ds-r-2xl, 18px); border: 1px solid var(--ds-line); padding: 24px 20px 20px;
+             background: radial-gradient(90% 140% at 100% 0%, var(--ds-ac-bg), transparent 60%), radial-gradient(70% 120% at 0% 100%, rgba(255,201,60,.07), transparent 60%), #111; }
+  @media (min-width: 700px) { .bg-hero { padding: 32px 32px 28px; } }
+  .bg-top { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; justify-content: space-between; }
+  .bg-word { margin: 0; font: 700 var(--ds-fs-display)/1.1 var(--ds-font); letter-spacing: .02em; display: flex; gap: 6px; flex-wrap: wrap; }
+  .bg-word span { display: inline-grid; place-items: center; width: 1.35em; height: 1.35em; border-radius: 50%; color: #111; font-size: .9em; }
+  .bg-word .B { background: var(--cB); } .bg-word .I { background: var(--cI); } .bg-word .N { background: var(--cN); }
+  .bg-word .G { background: var(--cG); } .bg-word .O { background: var(--cO); }
+  .bg-lead { margin: 10px 0 0; color: var(--ds-text-2, #ccc); max-width: 62ch; }
+  .bg-phase { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--ds-ac-line);
+              background: var(--ds-ac-bg); color: var(--ds-ac-2); font-weight: 700; font-size: 13px; }
+  .bg-phase.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ds-ac); animation: bgPulse 1.4s ease-in-out infinite; }
+  .bg-ball { flex: none; display: grid; place-items: center; width: 116px; height: 116px; border-radius: 50%; text-align: center;
+             background: radial-gradient(circle at 35% 30%, #fff, #f0f0f0 40%, #bdbdbd); box-shadow: 0 10px 24px rgba(0,0,0,.5), inset 0 -6px 12px rgba(0,0,0,.12); color: #111; }
+  .bg-ball b { display: block; font: 700 40px/1 var(--ds-font); font-variant-numeric: tabular-nums; }
+  .bg-ball small { display: block; font: 700 14px/1 var(--ds-font); margin-bottom: 2px; }
+  .bg-ball.pop { animation: bgPop .5s ease-out; }
+  .bg-ball.empty { background: #1a1a1a; color: var(--ds-text-muted, #999); box-shadow: none; border: 1px dashed #333; }
+  .bg-ball.empty b { font-size: 15px; font-weight: 500; }
+  .bg-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .bg-pill { padding: 7px 13px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid #333; font-size: 13px; color: var(--ds-text-2, #ccc); }
+  .bg-pill b { color: var(--ds-text-strong, #fff); font-size: 15px; font-variant-numeric: tabular-nums; margin-inline-start: 4px; }
+  .bg-h { margin: 0 0 10px; font: 700 18px/1.3 var(--ds-font); }
+  .bg-board { display: grid; grid-template-columns: 36px repeat(15, minmax(0, 1fr)); gap: 4px; }
+  .bg-board .L { display: grid; place-items: center; border-radius: 8px; font-weight: 700; color: #111; }
+  .bg-board .n { display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%; font: 600 12px/1 var(--ds-font); font-variant-numeric: tabular-nums;
+                 color: #6d6d6d; background: #161616; border: 1px solid #222; }
+  .bg-board .n.on { color: #111; border-color: transparent; }
+  .bg-board .n.last { box-shadow: 0 0 0 2px #fff, 0 0 12px rgba(255,255,255,.6); }
+  .bg-board .r0 .on, .bg-board .L.r0 { background: var(--cB); } .bg-board .r1 .on, .bg-board .L.r1 { background: var(--cI); }
+  .bg-board .r2 .on, .bg-board .L.r2 { background: var(--cN); } .bg-board .r3 .on, .bg-board .L.r3 { background: var(--cG); }
+  .bg-board .r4 .on, .bg-board .L.r4 { background: var(--cO); }
+  .bg-board .row { display: contents; }
+  @media (max-width: 560px) { .bg-board { grid-template-columns: 24px repeat(15, minmax(0, 1fr)); gap: 2px; } .bg-board .n { font-size: 9px; } }
+  .bg-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .bg-card { border-radius: 14px; padding: 12px; background: #fafafa; color: #111; box-shadow: 0 6px 18px rgba(0,0,0,.4); min-width: 0; }
+  .bg-card.ready { box-shadow: 0 0 0 3px var(--ds-ac), 0 0 22px rgba(255,95,162,.55); }
+  .bg-card h3 { margin: 0 0 8px; font: 700 13px/1.2 var(--ds-font); color: #555; display: flex; justify-content: space-between; gap: 8px; }
+  .bg-card h3 em { font-style: normal; color: #b0175d; }
+  .bg-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .bg-grid .h { display: grid; place-items: center; height: 30px; border-radius: 6px; font: 700 18px/1 var(--ds-font); color: #111; }
+  .bg-grid .h.c0 { background: var(--cB); } .bg-grid .h.c1 { background: var(--cI); } .bg-grid .h.c2 { background: #d6d6d6; }
+  .bg-grid .h.c3 { background: var(--cG); } .bg-grid .h.c4 { background: var(--cO); }
+  .bg-grid .s { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 6px; border: 1px solid #ddd; background: #fff;
+                font: 700 17px/1 var(--ds-font); font-variant-numeric: tabular-nums; }
+  .bg-grid .s.d::after { content: ""; position: absolute; inset: 12%; border-radius: 50%; background: var(--daub); mix-blend-mode: multiply; }
+  .bg-grid .s.fr { font-size: 10px; letter-spacing: .04em; color: #b0175d; }
+  .bg-note { color: var(--ds-text-2, #ccc); margin: 0; }
+  .bg-players { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .bg-players li { padding: 4px 10px; border-radius: 999px; background: #161616; border: 1px solid #262626; font-size: 13px; }
+  .bg-win { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--ds-ac-line); background: var(--ds-ac-bg); }
+  .bg-win p { margin: 0; } .bg-win p + p { margin-top: 4px; }
+  .bg-how ol { margin: 0; padding-inline-start: 20px; color: var(--ds-text-2, #ccc); } .bg-how li + li { margin-top: 4px; }
+  .bg-how code, .bg-note code { background: #1a1a1a; padding: 1px 6px; border-radius: 6px; color: var(--ds-ac-2); }
+  @keyframes bgPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  @keyframes bgPop { 0% { transform: scale(.6); } 70% { transform: scale(1.08); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .bg-phase.live::before, .bg-ball.pop { animation: none; } }
+</style>
+<main class="ds-page bgx" id="bingoPage">
+  <section class="bg-hero" aria-labelledby="bgTitle">
+    <div class="bg-top">
+      <div>
+        <h1 class="bg-word" id="bgTitle" aria-label="<%= t('bingo.title') %>"><span class="B">B</span><span class="I">I</span><span class="N">N</span><span class="G">G</span><span class="O">O</span></h1>
+        <p class="bg-lead"><%= t('bingo.lead') %></p>
+        <div id="bgPhase"></div>
+      </div>
+      <div class="bg-ball empty" id="bgBall" aria-live="polite"><div><b><%= t('bingo.no_ball') %></b></div></div>
+    </div>
+    <div class="bg-pills" id="bgPills"></div>
+  </section>
+  <section id="bgWinners" hidden></section>
+  <section aria-labelledby="bgMineH">
+    <h2 class="bg-h" id="bgMineH"><%= t('bingo.your_cards') %></h2>
+    <div id="bgMine"><p class="bg-note"><%= t('bingo.loading') %></p></div>
+  </section>
+  <section aria-labelledby="bgBoardH">
+    <h2 class="bg-h" id="bgBoardH"><%= t('bingo.board') %></h2>
+    <div class="bg-board" id="bgBoard" role="img" aria-label="<%= t('bingo.board') %>"></div>
+  </section>
+  <section aria-labelledby="bgPlayersH" id="bgPlayersS" hidden>
+    <h2 class="bg-h" id="bgPlayersH"><%= t('bingo.players') %></h2>
+    <ul class="bg-players" id="bgPlayers"></ul>
+  </section>
+  <section class="bg-how" aria-labelledby="bgHowH">
+    <h2 class="bg-h" id="bgHowH"><%= t('bingo.how') %></h2>
+    <ol>
+      <li><%- t('bingo.how_1') %></li>
+      <li><%- t('bingo.how_2') %></li>
+      <li><%- t('bingo.how_3') %></li>
+      <li><%- t('bingo.how_4') %></li>
+    </ol>
+  </section>
+</main>
+<script>window.BINGO = <%- JSON.stringify(st).replace(/</g, '\\u003c') %>;
+window.BINGO_T = <%- JSON.stringify({
+  none: t('bingo.none'), none_hint: t('bingo.none_hint'), lobby: t('bingo.phase_lobby'), running: t('bingo.phase_running'),
+  done: t('bingo.phase_done'), cancelled: t('bingo.phase_cancelled'), in_room: t('bingo.in_room', { room: '%ROOM%' }),
+  starts_in: t('bingo.starts_in', { s: '%S%' }), pot: t('bingo.pot'), line: t('bingo.line_prize'), full: t('bingo.full_prize'),
+  price: t('bingo.price'), players: t('bingo.players'), called: t('bingo.called'), last_ball: t('bingo.last_ball'), no_ball: t('bingo.no_ball'),
+  card_n: t('bingo.card_n', { n: '%N%' }), line_ready: t('bingo.line_ready'), full_ready: t('bingo.full_ready'), free: t('bingo.free'),
+  not_playing: t('bingo.not_playing'), join_hint: t('bingo.join_hint'), sign_in: t('bingo.sign_in'), link: t('bingo.link'),
+  winners_line: t('bingo.winners_line', { names: '%NAMES%' }), winners_full: t('bingo.winners_full', { names: '%NAMES%' }),
+  cancelled_why: t('bingo.cancelled_why', { why: '%WHY%' }), cards_n: t('bingo.cards_n', { n: '%N%' }), pat: 'PAT'
+}).replace(/</g, '\\u003c') %>;</script>
+<script src="/public/js/bingo-page.js?v=1" defer></script>

@@ -18,9 +18,10 @@
   }
   // the old cards' rule: a non-2xx is a failure; a 2xx whose message says "successfully" is a success
   function legacy(p, okText, failText, statusId) {
-    return p.then(function (r) { if (!r.ok) throw new Error(failText); return r.json(); })
+    // 1.99abn: a refusal shows the server's reason (e.g. "Link their Camfrog name first")
+    return p.then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error((d && d.message) || failText); return d; }); })
       .then(function (d) { if (d && d.message && d.message.indexOf('successfully') >= 0) say(statusId, true, okText); else say(statusId, false, (d && d.message) || failText); return d; })
-      .catch(function (e) { console.error('Admin request failed:', e); say(statusId, false, failText); });
+      .catch(function (e) { console.error('Admin request failed:', e); say(statusId, false, (e && e.message) || failText); });
   }
   function chip(label, extra) {
     var d = document.createElement('div');
@@ -54,7 +55,7 @@
       e.preventDefault();
       var username = $('userClassUsername').value;
       legacy(fetch(classEdit.getAttribute('action').replace('username', encodeURIComponent(username)), {
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ class: $('userClass').value }), method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ class: $('userClass').value }), method: 'POST',
       }), 'Class edited successfully.', 'Class change failed. Check the username.', 'classEditStatus');
     });
   }
@@ -81,7 +82,7 @@
     classList.addEventListener('submit', function (e) {
       e.preventDefault();
       legacy(fetch('/api/classes/edit', {
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: $('classAction').value, className: $('className').value }), method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: $('classAction').value, className: $('className').value }), method: 'POST',
       }), 'Class list edited successfully.', 'Class list change failed. Check the classname.', 'classListStatus').then(loadClasses);
     });
   }

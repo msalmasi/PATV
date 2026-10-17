@@ -1231,6 +1231,8 @@ require("./bounties").register(app, { isBotToken, addUser });
 require("./mainstage").register(app, { isBotToken, addUser });
 require("./restream").register(app, { addUser, isBotToken });   // 1.99fk: "Also stream to Twitch" relay (deploy/restream)
 require("./onair").register(app, { addUser, isBotToken });
+require("./staffroles").register(app, { isBotToken });
+require("./bingo").register(app, { addUser, isBotToken });     // 1.99abn: 🎱 the live Bingo page     // 1.99abn: Pepe's roles shared with the site
 require("./onairconsent").register(app, { addUser });   // 1.99aag: 📺 the pad / cam owner's on-demand OK for Pepe's main stream   // 1.99yt: 📺 put a live slot / a cam on Pepe's OBS (main stream + his Camfrog cam) - POC
 require("./mediaweb").register(app, { addUser });   // 1.99ji: Plex / media - 📼 play from library on a stage (deploy/mediactl), 🎬 Overseerr requests (/requests), 🎟️ Wizarr invites; /admin/media
 require("./plexhub").register(app, { addUser });   // 1.99kp: 📼 /plex - the Plex hub (requests, your requests, access, Play from Plex, perks)
@@ -2859,86 +2861,36 @@ app.post(
 );
 
 // HTTP POST endpoint to update a user class.
+// 1.99abn: Admins only (Staff could set anyone's class - Admin included), same-site + fetch header; Admin / Staff /
+// Assistant go through Pepe's shared roles (staffroles.js - his hierarchy: only owners make admins).
+const classGuard = (req, res) => {
+  const g = require("./middleware/authGuard");
+  if (!(g.sameSite(req) && req.get("X-Requested-With") === "fetch")) { res.status(403).json({ message: "Security check failed - reload the page." }); return false; }
+  return true;
+};
 app.post("/api/u/:username/class/update", addUser, async (req, res) => {
-  console.log(req.user);
-  const userType = req.user ? req.user.class : null;
-  const username = req.user ? req.user.username : null;
-  if (userType === "Admin" || userType === "Staff") {
-    const username = req.params.username;
-    const userClass = req.body.class;
-
-    const sql = "UPDATE users SET class = ? WHERE username = ?";
-    try {
-      const result = await runQuery(sql, [userClass, username]);
-      if (result.changes) {
-        res.json({ message: "User class updated successfully." });
-      } else {
-        res.status(404).send("User not found.");
-      }
-    } catch (error) {
-      console.error(error);
-      res.status(500).send("Failed to update user class.");
-    }
-  } else {
-    req.flash(
-      "error",
-      "Access denied. You must be an admin or staff to access this page."
-    );
-    return res.redirect("/login");
+  res.set("Cache-Control", "no-store");
+  if (!classGuard(req, res)) return;
+  try {
+    res.json(await require("./staffroles").classUpdate(req.user, req.params.username, (req.body || {}).class));
+  } catch (e) {
+    if (e && e.refuse) return res.status(e.status).json({ message: e.message });
+    console.error("[class update]", e);
+    res.status(500).json({ message: "Failed to update user class." });
   }
 });
 
 // HTTP POST endpoint to edit the list of classes.
 app.post("/api/classes/edit", addUser, async (req, res) => {
-  console.log(req.user);
-  const userType = req.user ? req.user.class : null;
-  const username = req.user ? req.user.username : null;
-  if (userType === "Admin" || userType === "Staff") {
-    const { action, className } = req.body;
-
-    if (action === "add") {
-      // First, check if the prize already exists
-      const checkSql = "SELECT classId FROM classes WHERE class = ?";
-      const result = await getQuery(checkSql, [className]);
-      const existingPrize = result[0]; // Assuming getQuery returns an array of results
-
-      if (existingPrize) {
-        // If it exists, don't do anything.
-        res.status(200).send("Class already exists.");
-      } else {
-        // If it does not exist, add new class
-        const classId = uuidv4(); // Function to generate a UUID v4
-        const sql = "INSERT INTO classes (classId, class) VALUES (?, ?)";
-        try {
-          await runQuery(sql, [classId, className]);
-          res.json({ message: "Class added successfully." });
-        } catch (error) {
-          console.error(error);
-          res.status(500).send("Failed to add class.");
-        }
-      }
-    } else if (action === "remove") {
-      const sql = "DELETE FROM classes WHERE class = ?";
-      try {
-        const result = await runQuery(sql, [className]);
-        if (result.changes) {
-          res.json({ message: "Class removed successfully." });
-        } else {
-          res.status(404).send("Class not found.");
-        }
-      } catch (error) {
-        console.error(error);
-        res.status(500).send("Failed to remove class.");
-      }
-    } else {
-      res.status(400).send("Invalid action specified.");
-    }
-  } else {
-    req.flash(
-      "error",
-      "Access denied. You must be an admin or staff to access this page."
-    );
-    return res.redirect("/login");
+  res.set("Cache-Control", "no-store");
+  if (!classGuard(req, res)) return;
+  try {
+    const b = req.body || {};
+    res.json(await require("./staffroles").classesEdit(req.user, b.action, b.className));
+  } catch (e) {
+    if (e && e.refuse) return res.status(e.status).json({ message: e.message });
+    console.error("[classes edit]", e);
+    res.status(500).json({ message: "Failed to edit the class list." });
   }
 });
 
@@ -2946,7 +2898,7 @@ app.post("/api/classes/edit", addUser, async (req, res) => {
 app.post("/api/admin/redemption-codes", authenticateToken, addUser, async (req, res) => {
     const { code, points, uses_allowed, expiration_date } = req.body;
     const userType = req.user ? req.user.class : null;
-    if (userType === "Admin" || userType === "Staff") {
+    if (userType === "Admin") {   // 1.99abn: Admins only - a code pays out of a vault, so Staff could fund themselves
         try {
             const existingCode = await getQuery("SELECT code FROM redemption_codes WHERE code = ?", [code]);
             if (existingCode.length > 0) {
@@ -2993,7 +2945,7 @@ app.get("/api/admin/redemption-codes", authenticateToken, addUser, async (req, r
 // HTTP DELETE endpoint for redemption code
 app.delete("/api/admin/redemption-codes/:code", authenticateToken, addUser, async (req, res) => {
         const userType = req.user ? req.user.class : null;
-        if (userType === "Admin" || userType === "Staff") {
+        if (userType === "Admin") {   // 1.99abn: Admins only (codes pay out of a vault)
         const { code } = req.params;
         try {
             await runQuery("DELETE FROM redemption_codes WHERE code = ?", [code]);

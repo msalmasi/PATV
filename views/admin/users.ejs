@@ -8,7 +8,7 @@
 <div class="adm-cols">
   <section class="adm-card" id="roles" aria-labelledby="rolesT">
     <h2 id="rolesT">Assign a class</h2>
-    <p class="adm-help">Sets an account's class (role). <b>Admin</b> and <b>Staff</b> open the admin area; only Admins see Pepe, the Reserve, loans, DM reports and the stale cleanup.</p>
+    <p class="adm-help">Sets an account's class (role). <b>Admin</b> and <b>Staff</b> open the admin area; only Admins see Pepe, the Reserve, loans, DM reports and the stale cleanup. <b>Admin</b>, <b>Staff</b> and <b>Assistant</b> are Pepe's roles too (owner / admin = Admin): they need a linked Camfrog name, follow Pepe's rules (only Pepe's owners make admins) and stay in step with <code>!role</code> in chat. Only Admins change classes.</p>
     <form id="classEditForm" class="adm-form" action="/api/u/username/class/update" method="POST">
       <label for="userClassUsername">Username<input type="text" id="userClassUsername" name="username" required autocomplete="off"></label>
       <label for="userClass">Class<select name="class" id="userClass" required><option value="">Select a class…</option></select></label>
@@ -166,7 +166,7 @@
 })();
 </script>
 <% } %>
-<script src="/public/js/admin-panel.js?v=4" defer></script>
+<script src="/public/js/admin-panel.js?v=5" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

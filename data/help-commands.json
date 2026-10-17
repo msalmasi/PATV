@@ -2382,7 +2382,7 @@
     "!bingo — PAT Bingo"
    ],
    "summary": "75-ball bingo on the stream overlay.",
-   "details": "75-ball bingo on the stream overlay. `!bingo start` opens a 60-second lobby; `!bingo buy` gets you a card (**PAT 2,500** each, up to 4 — `!bingo buy 3`), and Pepe PMs you your cards. He then calls a number every few seconds in chat and on the overlay. **You have to call it yourself:** type `!bingo` the moment one of your cards has a complete line — a row, column or diagonal (the centre is free) — and Pepe checks it against the numbers called so far, so you don't need to mark anything. The first line wins **30%** of the prize pool; play continues and the first **full card** wins the rest. Two valid calls on the same ball split the prize. **A wrong call costs PAT 1,000** (it goes into the pot) and benches you for 60 seconds. `!bingo card` re-sends your cards with the called numbers crossed out (XX). 10% of card sales goes to the casino. If nobody calls a prize before all 75 balls are out, it **rolls over** into the next game. Needs at least 2 players; if Pepe restarts mid-game, every card is refunded.",
+   "details": "75-ball bingo on the stream overlay. `!bingo start` opens a 60-second lobby; `!bingo buy` gets you a card (**PAT 2,500** each, up to 4 — `!bingo buy 3`), and Pepe PMs you your cards. He then calls a number every few seconds in chat and on the overlay. **You have to call it yourself:** type `!bingo` the moment one of your cards has a complete line — a row, column or diagonal (the centre is free) — and Pepe checks it against the numbers called so far, so you don't need to mark anything. The first line wins **30%** of the prize pool; play continues and the first **full card** wins the rest. Two valid calls on the same ball split the prize. **A wrong call costs PAT 1,000** (it goes into the pot) and benches you for 60 seconds. `!bingo card` re-sends your cards with the called numbers crossed out (XX). 10% of card sales goes to the casino. If nobody calls a prize before all 75 balls are out, it **rolls over** into the next game. Needs at least 2 players; if Pepe restarts mid-game, every card is refunded. **Follow it on publicaccess.tv/bingo** - the balls called, the pot, and your own cards marked as the numbers come out (sign in with your linked Camfrog name). Anyone can start a game; staff and assistants can end a stuck one.",
    "examples": [
     "!bingo start",
     "!bingo buy",
@@ -5148,7 +5148,7 @@
     "!timeout [user] [hours]"
    ],
    "summary": "Time a user out — pulls them off the mic/red list, de-mods and mutes them, then auto-lifts when the timer's up (default 24h).",
-   "details": "Time a user out — pulls them off the mic/red list, de-mods and mutes them, then auto-lifts when the timer's up (default 24h). Admins apply it instantly, in every room Pepe is in; anyone else **starts a community vote** (10 voters, 80% — same bar as !votemod). Pad owners time people out directly in their own pad's room only (up to 24 hours, never Pepe's admins or owners): Pepe mutes them in that room and nowhere else — no red list, no other rooms — and it auto-lifts on time (or with !untimeout).",
+   "details": "Time a user out — pulls them off the mic/red list, de-mods and mutes them, then auto-lifts when the timer's up (default 24h). Admins apply it instantly, in every room Pepe is in; anyone else **starts a community vote** (10 voters, 80% — same bar as !votemod). Pad owners time people out directly in their own pad's room only (up to 24 hours, never Pepe's admins or owners): Pepe mutes them in that room and nowhere else — no red list, no other rooms — and it auto-lifts on time (or with !untimeout). Pepe's **staff** apply it directly too - never on Pepe's admins or owners.",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -5320,7 +5320,7 @@
    "id": "modfines",
    "title": "!modfines on|off · exempt add|remove|list · strikes [user] · appeal <user>",
    "category": "moderation",
-   "role": "mod",
+   "role": "admin",
    "commands": [
     "!modfines"
    ],
@@ -5805,7 +5805,7 @@
     "!kick [user]"
    ],
    "summary": "Pepe kicks them from the room.",
-   "details": "Pepe kicks them from the room. Pad owners can do this in their own pad's room too (chat or the owner panel) - never on Pepe's admins or owners, or Pepe himself.",
+   "details": "Pepe kicks them from the room. Pad owners can do this in their own pad's room too (chat or the owner panel) - never on Pepe's admins or owners, or Pepe himself. Pepe's **staff** can too - never on Pepe's admins or owners.",
    "examples": [],
    "keywords": [
     "remove someone",
@@ -5882,7 +5882,7 @@
     "!unblockmic [user]"
    ],
    "summary": "Pepe blocks them from the mic, or unblocks them.",
-   "details": "Pepe blocks them from the mic, or unblocks them. Pepe's own blocks stick even with global unblock on. Pad owners can do this in their own pad's room too (chat or the owner panel) - never on Pepe's admins or owners, or Pepe himself.",
+   "details": "Pepe blocks them from the mic, or unblocks them. Pepe's own blocks stick even with global unblock on. Pad owners can do this in their own pad's room too (chat or the owner panel) - never on Pepe's admins or owners, or Pepe himself. Pepe's **staff** can block and unblock anyone (owners and admins too, for a stuck mic); **assistants** can unblock.",
    "examples": [],
    "keywords": [],
    "web": {
@@ -5923,7 +5923,7 @@
     "!moderator"
    ],
    "summary": "Pepe promotes them to moderator.",
-   "details": "Pepe promotes them to **moderator**. Room roles: Pepe admins/owners anywhere, and pad owners in their own pad's room (never on Pepe's admins or owners, or Pepe). Staff/trusted grants don't unlock them.",
+   "details": "Pepe promotes them to **moderator**. Room roles: Pepe admins/owners anywhere, and pad owners in their own pad's room (never on Pepe's admins or owners, or Pepe). Pepe's **staff** can promote anyone below admin (never lowering a room admin). Grants don't unlock it for anyone else.",
    "examples": [],
    "keywords": []
   },
@@ -5942,7 +5942,7 @@
     "!demote"
    ],
    "summary": "Pepe demotes them to friend.",
-   "details": "Pepe demotes them to **friend**. Room roles: Pepe admins/owners anywhere, and pad owners in their own pad's room (never on Pepe's admins or owners, or Pepe). Staff/trusted grants don't unlock them.",
+   "details": "Pepe demotes them to **friend**. Room roles: Pepe admins/owners anywhere, and pad owners in their own pad's room (never on Pepe's admins or owners, or Pepe). Pepe's **staff** can on anyone below admin, **assistants** on anyone below staff (neither can lower a room admin; assistants can't demote a moderator). Grants don't unlock it for anyone else.",
    "examples": [],
    "keywords": []
   },
@@ -6726,7 +6726,7 @@
   },
   {
    "id": "role",
-   "title": "!role <user> <owner|admin|staff|trusted|none> · !roles",
+   "title": "!role <user> <owner|admin|staff|assistant|trusted|none>",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6735,11 +6735,11 @@
    ],
    "aliases": [],
    "syntax": [
-    "!role <user> <owner|admin|staff|trusted|none>",
+    "!role <user> <owner|admin|staff|assistant|trusted|none>",
     "!roles"
    ],
    "summary": "Roles: owner > admin > staff > trusted > everyone.",
-   "details": "**Roles:** owner > admin > staff > trusted > everyone. Owners and admins run every admin command. **Staff** get admin powers only on the commands granted to staff (costumes, personas, conversation starters, DJ bans, mod fines, casino bans, cam pause, OBS scenes by default). Admins can hand out staff/trusted; only owners can make admins. `!roles` lists everyone. Also in the admin panel under **Roles & Permissions**.",
+   "details": "**Roles:** owner > admin > staff > assistant > trusted > everyone. **Owners** run everything and are the only ones who can mint or burn points, change the economy's settings and backend switches, run `!update` / `!reloadbot` / `!recovery` / `!botadmin`, delete data (`!retention`, `!memory prune`, `!gangs reset`) and make admins. **Admins** run every other admin command and hand out staff / assistant / trusted. **Staff** get the commands granted to staff (DJ and casino bans, `!onair`, plus everything assistants have) and moderate through Pepe: `!kick`, `!timeout`, `!mod` and `!friend` on anyone below admin, `!blockmic` / `!unblockmic` on anyone (a stuck mic). **Assistants** help run the show: costumes, personas, scenes, cam pause, the DJ's volume, cancelling duels, ending a stuck game, `!friend` on people below staff and `!unblockmic`. Roles are kept in step with publicaccess.tv: owner / admin = the site's Admin class, staff = Staff, assistant = Assistant (accounts linked to that Camfrog name) - a change in either place reaches the other within a minute. `!roles` lists everyone. Also in the admin panel under **Roles**.",
    "examples": [],
    "keywords": []
   },
@@ -6758,7 +6758,7 @@
     "!perm <!cmd> use|powers <role|default>"
    ],
    "summary": "Per-command permissions.",
-   "details": "Per-command permissions. `!perm !costume powers staff` lets staff use its admin parts; `!perm !video use trusted` makes a command trusted-only; `default` resets it; `!perm !cmd` shows the current setting.",
+   "details": "Per-command permissions. `!perm !costume powers staff` lets staff use its admin parts; `!perm !video use trusted` makes a command trusted-only; `default` resets it; `!perm !cmd` shows the current setting. Roles: owner, admin, staff, assistant, trusted. The owner-only commands (points, the economy, Pepe's process, deleting data) can't be handed to anyone.",
    "examples": [
     "!perm !costume powers staff",
     "!perm !video use trusted",
@@ -7905,5 +7905,5 @@
   }
  ],
  "undocumented": [],
- "hash": "84d4ed481ed097b7"
+ "hash": "3ba62fee06c5509b"
 }
