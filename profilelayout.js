@@ -32,6 +32,8 @@ const SECTIONS = [
   { id: "level", label: "XP bar", desc: "Header: progress to the next level", icon: "⭐" },
   // 1.99xi: 🔥 the daily activity streak tile in the header (streaks.js)
   { id: "streak", label: "Streak", desc: "Header: your 🔥 daily activity streak and your best one", icon: "🔥" },
+  // 1.99abt: the flag of the country you last signed in from, next to your name (sessions.country - Cloudflare's header)
+  { id: "country", label: "Country flag", desc: "Header: the flag of the country you last signed in from", icon: "🏳️" },
   { id: "avatar", label: "GTF avatar", desc: "Header: your Grand Theft Frogger portrait — click it for the wardrobe", icon: "🐸" },
   { id: "gtf", label: "Grand Theft Frogger", desc: "Overview tab: heist sheet and GTF links", icon: "🥷" },
   { id: "badges", label: "Badges", desc: "Overview tab: every badge you've earned", icon: "🏅" },

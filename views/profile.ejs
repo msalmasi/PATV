@@ -122,6 +122,14 @@
   .pf .xb { height: 6px; background: #1f1f1f; border-radius: var(--ds-r-pill); overflow: hidden; margin-top: var(--ds-sp-1); }
   .pf .xb span { display: block; height: 100%; background: var(--ds-green); border-radius: var(--ds-r-pill); }
   .pf .ps.is-hidden > :not(.pf-hid) { opacity: .45; }
+  /* 1.99abt: 🏳️ the country flag next to the name. Windows has no flag emoji, so flags come from the self-hosted
+     "Twemoji Country Flags" font (country-flag-emoji-polyfill, MIT; Twemoji art CC-BY 4.0 - public/fonts/twemoji-flags),
+     used for the flag code points only */
+  @font-face { font-family: "Twemoji Country Flags"; src: url("/public/fonts/twemoji-flags/TwemojiCountryFlags.woff2") format("woff2");
+               unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F; font-display: swap; }
+  .pf .cflag { font-family: "Twemoji Country Flags", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: .72em;
+               vertical-align: .12em; margin-inline-start: .15em; cursor: default; font-weight: 400; }
+  .pf .cflag.is-hidden { opacity: .45; }
   .pf .ps .pf-hid { top: 4px; inset-inline-end: 6px; font-size: 10px; padding: 2px 6px; }
   .pf .ps.fw .fw-row { display: flex; align-items: baseline; gap: var(--ds-sp-2); flex-wrap: wrap; }
   /* actions: the profile's buttons are .ds-btn.sm-sized pills (36px, 40 on touch); .primary = the filled accent with dark ink */
@@ -266,7 +274,12 @@
       <% } %>
     </div>
     <div class="who">
-      <h1><% if (cxName && cxName.css) { %><span class="cx-name" style="<%= cxName.css %>"><%= displayname || usernameProfile %></span><% } else { %><%= displayname || usernameProfile %><% } %></h1>
+      <h1><% if (cxName && cxName.css) { %><span class="cx-name" style="<%= cxName.css %>"><%= displayname || usernameProfile %></span><% } else { %><%= displayname || usernameProfile %><% } %><%
+        /* 1.99abt: 🏳️ the flag of the country they last signed in from ("country" layout item) */
+        if (typeof country !== 'undefined' && country) {
+          const cc_ = country, flag_ = String.fromCodePoint(...[...cc_].map((c) => 0x1F1E6 + c.charCodeAt(0) - 65));
+          let cn_ = cc_; try { cn_ = new Intl.DisplayNames([locals.lang || 'en'], { type: 'region' }).of(cc_) || cc_; } catch (e) { /* the code */ }
+          const ch_ = L.hidden('country'); %> <span class="cflag<%= ch_ ? ' is-hidden' : '' %>" role="img" aria-label="<%= t('profile.country_title', { country: cn_ }) %>" title="<%= t('profile.country_title', { country: cn_ }) %><%= ch_ ? ' · ' + t('profile.hidden_from_visitors') : '' %>"><%= flag_ %></span><% } %></h1>
       <div class="handle">@<%= usernameProfile %><% if (cf) { %> · 🐸 <%- t('profile.on_camfrog', { name: cf }) %><% } %></div>
       <div class="chips">
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
