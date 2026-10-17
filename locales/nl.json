@@ -150,6 +150,7 @@
   "profile.level": "Level",
   "profile.tier_title": "Jouw levelniveau: elke 10 levels een nieuwe naam, vanaf Kikkervisje.",
   "profile.streak": "Reeks",
+  "profile.country_title": "Laatst ingelogd vanuit {country}",
   "profile.streak_title": "🔥 Dagen op rij waarop je iets deed op PATV of in de Camfrog-rooms: chatten, de microfoon, een commando, een post of reactie, een draai aan het rad, een spel of een fooi. Een dag loopt van middernacht tot middernacht, New Yorkse tijd.",
   "profile.streak_days": {
     "one": "{count} dag",
@@ -322,6 +323,7 @@
   "settings.layout.label.stats": "Statistiekenbalk",
   "settings.layout.label.level": "XP-balk",
   "settings.layout.label.streak": "Reeks",
+  "settings.layout.label.country": "Landvlag",
   "settings.layout.label.avatar": "GTF-avatar",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Badges",
@@ -342,6 +344,7 @@
   "settings.layout.desc.stats": "Koptekst: PAT-saldo en aantal badges",
   "settings.layout.desc.level": "Koptekst: voortgang naar het volgende level",
   "settings.layout.desc.streak": "Koptekst: je 🔥 dagelijkse activiteitenreeks en je beste reeks",
+  "settings.layout.desc.country": "Koptekst: de vlag van het land waar je laatst bent ingelogd",
   "settings.layout.desc.avatar": "Koptekst: je Grand Theft Frogger-portret — klik erop voor de garderobe",
   "settings.layout.desc.gtf": "Tab Overzicht: heist-kaart en GTF-links",
   "settings.layout.desc.badges": "Tab Overzicht: alle badges die je hebt verdiend",

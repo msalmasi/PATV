@@ -149,6 +149,7 @@
   "profile.level": "Level",
   "profile.tier_title": "Tingkat level kamu: nama baru tiap 10 level, mulai dari Berudu.",
   "profile.streak": "Beruntun",
+  "profile.country_title": "Terakhir masuk dari {country}",
   "profile.streak_title": "🔥 Hari berturut-turut kamu melakukan sesuatu di PATV atau di ruang Camfrog: chat, mic, perintah, postingan atau komentar, putaran roda, game, atau tip. Satu hari dihitung dari tengah malam sampai tengah malam, waktu New York.",
   "profile.streak_days": {
     "other": "{count} hari"
@@ -316,6 +317,7 @@
   "settings.layout.label.stats": "Strip statistik",
   "settings.layout.label.level": "Bar XP",
   "settings.layout.label.streak": "Beruntun",
+  "settings.layout.label.country": "Bendera negara",
   "settings.layout.label.avatar": "Avatar GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Lencana",
@@ -336,6 +338,7 @@
   "settings.layout.desc.stats": "Header: saldo PAT dan jumlah lencana",
   "settings.layout.desc.level": "Header: progres ke level berikutnya",
   "settings.layout.desc.streak": "Header: streak aktivitas harian 🔥 kamu dan streak terbaikmu",
+  "settings.layout.desc.country": "Header: bendera negara tempat kamu terakhir masuk",
   "settings.layout.desc.avatar": "Header: potret Grand Theft Frogger-mu — klik untuk membuka lemari pakaian",
   "settings.layout.desc.gtf": "Tab Ringkasan: lembar heist dan tautan GTF",
   "settings.layout.desc.badges": "Tab Ringkasan: semua lencana yang sudah kamu dapatkan",

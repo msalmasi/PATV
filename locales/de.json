@@ -150,6 +150,7 @@
   "profile.level": "Level",
   "profile.tier_title": "Dein Level-Rang: alle 10 Level ein neuer Name, ab Kaulquappe.",
   "profile.streak": "Serie",
+  "profile.country_title": "Zuletzt angemeldet aus {country}",
   "profile.streak_title": "🔥 Tage in Folge, an denen du auf PATV oder in den Camfrog-Räumen etwas gemacht hast: chatten, das Mikro, ein Befehl, ein Beitrag oder Kommentar, ein Glücksrad-Dreh, ein Spiel oder ein Trinkgeld. Ein Tag läuft von Mitternacht bis Mitternacht, New Yorker Zeit.",
   "profile.streak_days": {
     "one": "{count} Tag",
@@ -322,6 +323,7 @@
   "settings.layout.label.stats": "Statistikleiste",
   "settings.layout.label.level": "XP-Leiste",
   "settings.layout.label.streak": "Serie",
+  "settings.layout.label.country": "Länderflagge",
   "settings.layout.label.avatar": "GTF-Avatar",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Abzeichen",
@@ -342,6 +344,7 @@
   "settings.layout.desc.stats": "Kopfzeile: PAT-Guthaben und Anzahl der Abzeichen",
   "settings.layout.desc.level": "Kopfzeile: Fortschritt zum nächsten Level",
   "settings.layout.desc.streak": "Kopfzeile: deine 🔥 tägliche Aktivitätsserie und deine beste",
+  "settings.layout.desc.country": "Kopfzeile: die Flagge des Landes, aus dem du dich zuletzt angemeldet hast",
   "settings.layout.desc.avatar": "Kopfzeile: dein Grand Theft Frogger-Porträt — klick drauf für die Garderobe",
   "settings.layout.desc.gtf": "Übersicht-Tab: Heist-Bogen und GTF-Links",
   "settings.layout.desc.badges": "Übersicht-Tab: alle Abzeichen, die du verdient hast",

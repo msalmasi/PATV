@@ -152,6 +152,7 @@
   "profile.level": "Уровень",
   "profile.tier_title": "Твой уровень: новое звание каждые 10 уровней, от Головастика.",
   "profile.streak": "Серия",
+  "profile.country_title": "Последний вход из {country}",
   "profile.streak_title": "🔥 Дни подряд, когда ты что-то делал на PATV или в комнатах Camfrog: писал в чат, говорил в микрофон, использовал команду, писал пост или комментарий, крутил колесо, играл или отправлял чаевые. День длится с полуночи до полуночи по нью-йоркскому времени.",
   "profile.streak_days": {
     "one": "{count} день",
@@ -334,6 +335,7 @@
   "settings.layout.label.stats": "Полоса статистики",
   "settings.layout.label.level": "Шкала XP",
   "settings.layout.label.streak": "Серия",
+  "settings.layout.label.country": "Флаг страны",
   "settings.layout.label.avatar": "Аватар GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Значки",
@@ -354,6 +356,7 @@
   "settings.layout.desc.stats": "Шапка: баланс PAT и число значков",
   "settings.layout.desc.level": "Шапка: прогресс до следующего уровня",
   "settings.layout.desc.streak": "Шапка: твоя ежедневная серия активности 🔥 и лучшая серия",
+  "settings.layout.desc.country": "Шапка: флаг страны, из которой ты в последний раз входил",
   "settings.layout.desc.avatar": "Шапка: твой портрет из Grand Theft Frogger — нажми, чтобы открыть гардероб",
   "settings.layout.desc.gtf": "Вкладка «Обзор»: карточка ограбления и ссылки GTF",
   "settings.layout.desc.badges": "Вкладка «Обзор»: все полученные тобой значки",

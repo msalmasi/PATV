@@ -150,6 +150,7 @@
   "profile.level": "سطح",
   "profile.tier_title": "رده سطحت: هر ۱۰ سطح یک اسم جدید، از نوزاد قورباغه به بالا.",
   "profile.streak": "استریک",
+  "profile.country_title": "آخرین ورود از {country}",
   "profile.streak_title": "🔥 روزهای پشت‌سرهمی که توی PATV یا توی اتاق‌های Camfrog کاری کردی: چت، میکروفون، یک دستور، یک پست یا کامنت، چرخش گردونه، یک بازی یا یک انعام. هر روز از نیمه‌شب تا نیمه‌شب به وقت نیویورک حساب می‌شه.",
   "profile.streak_days": {
     "one": "{count} روز",
@@ -322,6 +323,7 @@
   "settings.layout.label.stats": "نوار آمار",
   "settings.layout.label.level": "نوار XP",
   "settings.layout.label.streak": "استریک",
+  "settings.layout.label.country": "پرچم کشور",
   "settings.layout.label.avatar": "آواتار GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "نشان‌ها",
@@ -342,6 +344,7 @@
   "settings.layout.desc.stats": "سربرگ: موجودی PAT و تعداد نشان‌ها",
   "settings.layout.desc.level": "سربرگ: پیشرفت تا سطح بعد",
   "settings.layout.desc.streak": "هدر: استریک فعالیت روزانه 🔥 تو و بهترینش",
+  "settings.layout.desc.country": "هدر: پرچم کشوری که آخرین بار ازش وارد شدی",
   "settings.layout.desc.avatar": "سربرگ: پرتره Grand Theft Frogger تو — برای کمد لباس رویش کلیک کن",
   "settings.layout.desc.gtf": "زبانه نمای کلی: برگه سرقت و لینک‌های GTF",
   "settings.layout.desc.badges": "زبانه نمای کلی: همه نشان‌هایی که گرفته‌ای",

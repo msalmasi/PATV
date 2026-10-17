@@ -151,6 +151,7 @@
   "profile.level": "Nivel",
   "profile.tier_title": "Tu nivel: un nombre nuevo cada 10 niveles, desde Renacuajo en adelante.",
   "profile.streak": "Racha",
+  "profile.country_title": "Último inicio de sesión desde {country}",
   "profile.streak_title": "🔥 Días seguidos en los que hiciste algo en PATV o en las salas de Camfrog: chatear, usar el micrófono, un comando, una publicación o comentario, un giro de la ruleta, un juego o una propina. Un día va de medianoche a medianoche, hora de Nueva York.",
   "profile.streak_days": {
     "many": "{count} días",
@@ -327,6 +328,7 @@
   "settings.layout.label.stats": "Barra de estadísticas",
   "settings.layout.label.level": "Barra de XP",
   "settings.layout.label.streak": "Racha",
+  "settings.layout.label.country": "Bandera del país",
   "settings.layout.label.avatar": "Avatar GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Insignias",
@@ -347,6 +349,7 @@
   "settings.layout.desc.stats": "Cabecera: saldo PAT y número de insignias",
   "settings.layout.desc.level": "Cabecera: progreso hacia el siguiente nivel",
   "settings.layout.desc.streak": "Cabecera: tu racha de actividad diaria 🔥 y tu mejor racha",
+  "settings.layout.desc.country": "Encabezado: la bandera del país desde el que iniciaste sesión por última vez",
   "settings.layout.desc.avatar": "Cabecera: tu retrato de Grand Theft Frogger — haz clic para abrir el armario",
   "settings.layout.desc.gtf": "Pestaña Resumen: ficha de golpes y enlaces de GTF",
   "settings.layout.desc.badges": "Pestaña Resumen: todas las insignias que has ganado",

@@ -152,6 +152,7 @@
   "profile.level": "Рівень",
   "profile.tier_title": "Твій рівень: нова назва кожні 10 рівнів, починаючи з Пуголовка.",
   "profile.streak": "Серія",
+  "profile.country_title": "Останній вхід з {country}",
   "profile.streak_title": "🔥 Дні поспіль, коли ти щось робиш на PATV або в кімнатах Camfrog: чат, мікрофон, команда, допис чи коментар, обертання колеса, гра або чайові. День триває з півночі до півночі за нью-йоркським часом.",
   "profile.streak_days": {
     "one": "{count} день",
@@ -334,6 +335,7 @@
   "settings.layout.label.stats": "Смуга статистики",
   "settings.layout.label.level": "Шкала XP",
   "settings.layout.label.streak": "Серія",
+  "settings.layout.label.country": "Прапор країни",
   "settings.layout.label.avatar": "Аватар GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Значки",
@@ -354,6 +356,7 @@
   "settings.layout.desc.stats": "Шапка: баланс PAT і кількість значків",
   "settings.layout.desc.level": "Шапка: прогрес до наступного рівня",
   "settings.layout.desc.streak": "Шапка: твоя щоденна серія 🔥 і найкраща",
+  "settings.layout.desc.country": "Шапка: прапор країни, з якої ти востаннє входив",
   "settings.layout.desc.avatar": "Шапка: твій портрет із Grand Theft Frogger — клацни, щоб відкрити гардероб",
   "settings.layout.desc.gtf": "Вкладка Огляд: картка пограбування й посилання GTF",
   "settings.layout.desc.badges": "Вкладка Огляд: усі здобуті значки",

@@ -149,6 +149,7 @@
   "profile.level": "Cấp",
   "profile.tier_title": "Cấp bậc của bạn: mỗi 10 cấp có một tên mới, bắt đầu từ Nòng nọc.",
   "profile.streak": "Chuỗi ngày",
+  "profile.country_title": "Đăng nhập lần cuối từ {country}",
   "profile.streak_title": "🔥 Số ngày liên tiếp bạn có hoạt động trên PATV hoặc trong phòng Camfrog: trò chuyện, micro, lệnh, bài đăng hoặc bình luận, quay vòng quay, chơi game hoặc tip. Mỗi ngày tính từ nửa đêm đến nửa đêm, theo giờ New York.",
   "profile.streak_days": {
     "other": "{count} ngày"
@@ -316,6 +317,7 @@
   "settings.layout.label.stats": "Dải thống kê",
   "settings.layout.label.level": "Thanh XP",
   "settings.layout.label.streak": "Chuỗi ngày",
+  "settings.layout.label.country": "Cờ quốc gia",
   "settings.layout.label.avatar": "Avatar GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Huy hiệu",
@@ -336,6 +338,7 @@
   "settings.layout.desc.stats": "Đầu trang: số dư PAT và số huy hiệu",
   "settings.layout.desc.level": "Đầu trang: tiến độ lên cấp tiếp theo",
   "settings.layout.desc.streak": "Tiêu đề: chuỗi hoạt động 🔥 hằng ngày của bạn và chuỗi dài nhất",
+  "settings.layout.desc.country": "Đầu trang: cờ của quốc gia bạn đăng nhập lần cuối",
   "settings.layout.desc.avatar": "Đầu trang: chân dung Grand Theft Frogger của bạn — bấm vào để mở tủ đồ",
   "settings.layout.desc.gtf": "Tab Tổng quan: hồ sơ phi vụ và liên kết GTF",
   "settings.layout.desc.badges": "Tab Tổng quan: mọi huy hiệu bạn đã đạt được",

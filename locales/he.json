@@ -151,6 +151,7 @@
   "profile.level": "רמה",
   "profile.tier_title": "הדרגה שלך: שם חדש כל 10 רמות, החל מ-פולון.",
   "profile.streak": "רצף",
+  "profile.country_title": "הכניסה האחרונה הייתה מ-{country}",
   "profile.streak_title": "🔥 ימים ברצף שעשיתם בהם משהו ב-PATV או בחדרי Camfrog: צ'אט, מיקרופון, פקודה, פוסט או תגובה, סיבוב גלגל, משחק או טיפ. יום נמשך מחצות עד חצות, לפי שעון ניו יורק.",
   "profile.streak_days": {
     "one": "{count} יום",
@@ -328,6 +329,7 @@
   "settings.layout.label.stats": "פס סטטיסטיקות",
   "settings.layout.label.level": "פס XP",
   "settings.layout.label.streak": "רצף",
+  "settings.layout.label.country": "דגל מדינה",
   "settings.layout.label.avatar": "אווטאר GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "תגים",
@@ -348,6 +350,7 @@
   "settings.layout.desc.stats": "כותרת: יתרת PAT ומספר תגים",
   "settings.layout.desc.level": "כותרת: התקדמות לרמה הבאה",
   "settings.layout.desc.streak": "כותרת: רצף הפעילות היומי שלך 🔥 והשיא שלך",
+  "settings.layout.desc.country": "כותרת: דגל המדינה שממנה נכנסת לאחרונה",
   "settings.layout.desc.avatar": "כותרת: הדיוקן שלך ב־Grand Theft Frogger — לחצו עליו לארון הבגדים",
   "settings.layout.desc.gtf": "לשונית סקירה: גיליון שוד וקישורי GTF",
   "settings.layout.desc.badges": "לשונית סקירה: כל תג שהרווחת",

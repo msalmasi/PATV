@@ -150,6 +150,7 @@
   "profile.level": "लेवल",
   "profile.tier_title": "आपका लेवल टियर: हर 10 लेवल पर नया नाम, टैडपोल से शुरू होकर।",
   "profile.streak": "स्ट्रीक",
+  "profile.country_title": "पिछली बार {country} से साइन इन किया गया",
   "profile.streak_title": "🔥 लगातार वे दिन जब आपने PATV पर या Camfrog रूम में कुछ किया: चैट, माइक, कमांड, पोस्ट या कमेंट, व्हील स्पिन, गेम या टिप। एक दिन न्यूयॉर्क समय के अनुसार आधी रात से आधी रात तक चलता है।",
   "profile.streak_days": {
     "one": "{count} दिन",
@@ -322,6 +323,7 @@
   "settings.layout.label.stats": "आँकड़ों की पट्टी",
   "settings.layout.label.level": "XP बार",
   "settings.layout.label.streak": "स्ट्रीक",
+  "settings.layout.label.country": "देश का झंडा",
   "settings.layout.label.avatar": "GTF अवतार",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "बैज",
@@ -342,6 +344,7 @@
   "settings.layout.desc.stats": "हेडर: PAT बैलेंस और बैज की गिनती",
   "settings.layout.desc.level": "हेडर: अगले लेवल तक की प्रगति",
   "settings.layout.desc.streak": "हेडर: आपकी 🔥 दैनिक गतिविधि स्ट्रीक और आपकी सर्वश्रेष्ठ स्ट्रीक",
+  "settings.layout.desc.country": "हेडर: उस देश का झंडा जहाँ से आपने पिछली बार साइन इन किया था",
   "settings.layout.desc.avatar": "हेडर: आपका Grand Theft Frogger पोर्ट्रेट — वॉर्डरोब के लिए इस पर क्लिक करें",
   "settings.layout.desc.gtf": "ओवरव्यू टैब: हाइस्ट शीट और GTF लिंक",
   "settings.layout.desc.badges": "ओवरव्यू टैब: आपके कमाए हुए सभी बैज",

@@ -152,6 +152,7 @@
   "profile.level": "Poziom",
   "profile.tier_title": "Twój poziom: nowa nazwa co 10 poziomów, zaczynając od Kijanki.",
   "profile.streak": "Seria",
+  "profile.country_title": "Ostatnio zalogowano z: {country}",
   "profile.streak_title": "🔥 Dni z rzędu, w których coś zrobiłeś na PATV lub w pokojach Camfrog: czat, mikrofon, komenda, post lub komentarz, obrót kołem, gra albo napiwek. Dzień trwa od północy do północy, czas nowojorski.",
   "profile.streak_days": {
     "one": "{count} dzień",
@@ -334,6 +335,7 @@
   "settings.layout.label.stats": "Pasek statystyk",
   "settings.layout.label.level": "Pasek XP",
   "settings.layout.label.streak": "Seria",
+  "settings.layout.label.country": "Flaga kraju",
   "settings.layout.label.avatar": "Awatar GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Odznaki",
@@ -354,6 +356,7 @@
   "settings.layout.desc.stats": "Nagłówek: saldo PAT i liczba odznak",
   "settings.layout.desc.level": "Nagłówek: postęp do następnego poziomu",
   "settings.layout.desc.streak": "Nagłówek: twoja dzienna seria aktywności 🔥 i najlepsza seria",
+  "settings.layout.desc.country": "Nagłówek: flaga kraju, z którego ostatnio się logowałeś",
   "settings.layout.desc.avatar": "Nagłówek: twój portret z Grand Theft Frogger — kliknij, by otworzyć garderobę",
   "settings.layout.desc.gtf": "Zakładka Przegląd: karta skoku i linki GTF",
   "settings.layout.desc.badges": "Zakładka Przegląd: wszystkie zdobyte odznaki",

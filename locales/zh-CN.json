@@ -149,6 +149,7 @@
   "profile.level": "等级",
   "profile.tier_title": "你的等级段位：每 10 级换一个新称号，从蝌蚪开始。",
   "profile.streak": "连续天数",
+  "profile.country_title": "上次登录地区：{country}",
   "profile.streak_title": "🔥 在 PATV 或 Camfrog 房间里连续做过某件事的天数：聊天、开麦、指令、发帖或评论、转盘、游戏或打赏。每天按纽约时间从午夜到午夜计算。",
   "profile.streak_days": {
     "other": "{count} 天"
@@ -316,6 +317,7 @@
   "settings.layout.label.stats": "数据栏",
   "settings.layout.label.level": "XP 进度条",
   "settings.layout.label.streak": "连续天数",
+  "settings.layout.label.country": "国旗",
   "settings.layout.label.avatar": "GTF 头像",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "徽章",
@@ -336,6 +338,7 @@
   "settings.layout.desc.stats": "页头：PAT 余额和徽章数",
   "settings.layout.desc.level": "页头：升到下一级的进度",
   "settings.layout.desc.streak": "顶部栏：你的 🔥 每日活跃连续天数及最长记录",
+  "settings.layout.desc.country": "页眉：你上次登录所在国家的国旗",
   "settings.layout.desc.avatar": "页头：你的 Grand Theft Frogger 头像——点击打开衣橱",
   "settings.layout.desc.gtf": "概览标签页：劫案角色卡和 GTF 链接",
   "settings.layout.desc.badges": "概览标签页：你获得的所有徽章",

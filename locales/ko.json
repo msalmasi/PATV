@@ -149,6 +149,7 @@
   "profile.level": "레벨",
   "profile.tier_title": "당신의 레벨 등급: 10레벨마다 새 이름이 생기며, 올챙이부터 시작해요.",
   "profile.streak": "연속 기록",
+  "profile.country_title": "마지막 로그인 국가: {country}",
   "profile.streak_title": "🔥 PATV 또는 Camfrog 방에서 무언가를 한 날이 연속으로 이어진 기록이에요: 채팅, 마이크, 명령어, 게시물이나 댓글, 휠 돌리기, 게임 또는 팁. 하루는 뉴욕 시간 기준 자정부터 다음 자정까지예요.",
   "profile.streak_days": {
     "other": "{count}일"
@@ -316,6 +317,7 @@
   "settings.layout.label.stats": "통계 바",
   "settings.layout.label.level": "XP 바",
   "settings.layout.label.streak": "연속 기록",
+  "settings.layout.label.country": "국기",
   "settings.layout.label.avatar": "GTF 아바타",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "배지",
@@ -336,6 +338,7 @@
   "settings.layout.desc.stats": "헤더: PAT 잔액과 배지 수",
   "settings.layout.desc.level": "헤더: 다음 레벨까지 진행도",
   "settings.layout.desc.streak": "헤더: 🔥 일일 활동 연속 기록과 최고 기록",
+  "settings.layout.desc.country": "머리글: 마지막으로 로그인한 국가의 국기",
   "settings.layout.desc.avatar": "헤더: Grand Theft Frogger 초상화 — 클릭하면 옷장",
   "settings.layout.desc.gtf": "개요 탭: 강도 시트와 GTF 링크",
   "settings.layout.desc.badges": "개요 탭: 획득한 모든 배지",

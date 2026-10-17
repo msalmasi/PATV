@@ -150,6 +150,7 @@
   "profile.level": "لیول",
   "profile.tier_title": "آپ کا لیول ٹائر: ہر 10 لیولز پر ایک نیا نام، ٹیڈپول سے شروع ہو کر۔",
   "profile.streak": "اسٹریک",
+  "profile.country_title": "آخری بار {country} سے سائن ان کیا گیا",
   "profile.streak_title": "🔥 وہ مسلسل دن جب آپ نے PATV پر یا Camfrog رومز میں کچھ کیا: چیٹ، مائیک، کمانڈ، پوسٹ یا کمنٹ، پہیہ گھمانا، گیم یا ٹِپ۔ ایک دن نیویارک کے وقت کے مطابق آدھی رات سے آدھی رات تک ہوتا ہے۔",
   "profile.streak_days": {
     "one": "{count} دن",
@@ -322,6 +323,7 @@
   "settings.layout.label.stats": "اعداد و شمار کی پٹی",
   "settings.layout.label.level": "XP بار",
   "settings.layout.label.streak": "اسٹریک",
+  "settings.layout.label.country": "ملک کا جھنڈا",
   "settings.layout.label.avatar": "GTF اوتار",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "بیجز",
@@ -342,6 +344,7 @@
   "settings.layout.desc.stats": "ہیڈر: PAT بیلنس اور بیجز کی تعداد",
   "settings.layout.desc.level": "ہیڈر: اگلے لیول کی طرف پیش رفت",
   "settings.layout.desc.streak": "ہیڈر: آپ کی 🔥 روزانہ سرگرمی کی اسٹریک اور آپ کی بہترین اسٹریک",
+  "settings.layout.desc.country": "ہیڈر: اس ملک کا جھنڈا جہاں سے آپ نے آخری بار سائن ان کیا",
   "settings.layout.desc.avatar": "ہیڈر: آپ کا Grand Theft Frogger پورٹریٹ — الماری کے لیے اس پر کلک کریں",
   "settings.layout.desc.gtf": "جائزہ ٹیب: ڈکیتی شیٹ اور GTF لنکس",
   "settings.layout.desc.badges": "جائزہ ٹیب: آپ کا کمایا ہوا ہر بیج",

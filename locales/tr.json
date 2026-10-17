@@ -150,6 +150,7 @@
   "profile.level": "Seviye",
   "profile.tier_title": "Seviye unvanın: Kurbağa Yavrusu'ndan başlayarak her 10 seviyede yeni bir isim.",
   "profile.streak": "Seri",
+  "profile.country_title": "Son giriş yaptığın ülke: {country}",
   "profile.streak_title": "🔥 PATV'de veya Camfrog odalarında bir şey yaptığın üst üste günler: sohbet, mikrofon, bir komut, gönderi veya yorum, çark çevirme, oyun ya da bahşiş. Bir gün, New York saatiyle gece yarısından gece yarısına kadar sürer.",
   "profile.streak_days": {
     "one": "{count} gün",
@@ -322,6 +323,7 @@
   "settings.layout.label.stats": "İstatistik şeridi",
   "settings.layout.label.level": "XP çubuğu",
   "settings.layout.label.streak": "Seri",
+  "settings.layout.label.country": "Ülke bayrağı",
   "settings.layout.label.avatar": "GTF avatarı",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Rozetler",
@@ -342,6 +344,7 @@
   "settings.layout.desc.stats": "Başlık: PAT bakiyesi ve rozet sayısı",
   "settings.layout.desc.level": "Başlık: bir sonraki seviyeye ilerleme",
   "settings.layout.desc.streak": "Üst bilgi: 🔥 günlük etkinlik serin ve en iyi serin",
+  "settings.layout.desc.country": "Üst bilgi: son giriş yaptığın ülkenin bayrağı",
   "settings.layout.desc.avatar": "Başlık: Grand Theft Frogger portren — gardırop için tıkla",
   "settings.layout.desc.gtf": "Genel bakış sekmesi: soygun kartı ve GTF bağlantıları",
   "settings.layout.desc.badges": "Genel bakış sekmesi: kazandığın tüm rozetler",

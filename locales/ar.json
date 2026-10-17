@@ -154,6 +154,7 @@
   "profile.level": "المستوى",
   "profile.tier_title": "مستواك: اسم جديد كل 10 مستويات، بدءًا من شرغوف.",
   "profile.streak": "السلسلة",
+  "profile.country_title": "آخر تسجيل دخول من {country}",
   "profile.streak_title": "🔥 أيام متتالية شاركت فيها في PATV أو في غرف Camfrog: دردشة، ميكروفون، أمر، منشور أو تعليق، دورة عجلة، لعبة أو إكرامية. اليوم يمتد من منتصف الليل إلى منتصف الليل بتوقيت نيويورك.",
   "profile.streak_days": {
     "zero": "{count} يوم",
@@ -346,6 +347,7 @@
   "settings.layout.label.stats": "شريط الإحصائيات",
   "settings.layout.label.level": "شريط الخبرة",
   "settings.layout.label.streak": "السلسلة",
+  "settings.layout.label.country": "علم البلد",
   "settings.layout.label.avatar": "أفاتار GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "الشارات",
@@ -366,6 +368,7 @@
   "settings.layout.desc.stats": "الترويسة: رصيد PAT وعدد الشارات",
   "settings.layout.desc.level": "الترويسة: التقدم نحو المستوى التالي",
   "settings.layout.desc.streak": "الترويسة: سلسلة نشاطك اليومي 🔥 وأفضل سلسلة لك",
+  "settings.layout.desc.country": "الترويسة: علم البلد الذي سجّلت الدخول منه آخرًا",
   "settings.layout.desc.avatar": "الترويسة: صورتك في Grand Theft Frogger — انقر عليها لفتح الخزانة",
   "settings.layout.desc.gtf": "تبويب النظرة العامة: بطاقة السطو وروابط GTF",
   "settings.layout.desc.badges": "تبويب النظرة العامة: كل شارة كسبتها",

@@ -149,6 +149,7 @@
   "profile.level": "レベル",
   "profile.tier_title": "あなたのレベル区分: 10レベルごとに新しい名前が付きます。オタマジャクシから始まります。",
   "profile.streak": "連続日数",
+  "profile.country_title": "最後にログインした国: {country}",
   "profile.streak_title": "🔥 PATVやCamfrogのルームで、チャット、マイク、コマンド、投稿やコメント、ホイールのスピン、ゲーム、チップのいずれかを行った連続日数です。1日はニューヨーク時間の午前0時から翌日の午前0時までです。",
   "profile.streak_days": {
     "other": "{count}日"
@@ -316,6 +317,7 @@
   "settings.layout.label.stats": "統計バー",
   "settings.layout.label.level": "XPバー",
   "settings.layout.label.streak": "連続日数",
+  "settings.layout.label.country": "国旗",
   "settings.layout.label.avatar": "GTFアバター",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "バッジ",
@@ -336,6 +338,7 @@
   "settings.layout.desc.stats": "ヘッダー：PAT残高とバッジ数",
   "settings.layout.desc.level": "ヘッダー：次のレベルまでの進捗",
   "settings.layout.desc.streak": "ヘッダー: 🔥 毎日の活動の連続日数と最長記録",
+  "settings.layout.desc.country": "ヘッダー: 最後にログインした国の国旗",
   "settings.layout.desc.avatar": "ヘッダー：Grand Theft Froggerのポートレート — クリックでワードローブ",
   "settings.layout.desc.gtf": "概要タブ：強盗シートとGTFリンク",
   "settings.layout.desc.badges": "概要タブ：獲得したすべてのバッジ",

@@ -151,6 +151,7 @@
   "profile.level": "Nível",
   "profile.tier_title": "Seu nível: um novo nome a cada 10 níveis, começando em Girino.",
   "profile.streak": "Sequência",
+  "profile.country_title": "Último login feito de {country}",
   "profile.streak_title": "🔥 Dias seguidos em que você fez algo no PATV ou nas salas do Camfrog: chat, microfone, um comando, um post ou comentário, um giro na roleta, um jogo ou uma gorjeta. Cada dia vai da meia-noite à meia-noite, no horário de Nova York.",
   "profile.streak_days": {
     "one": "{count} dia",
@@ -327,6 +328,7 @@
   "settings.layout.label.stats": "Faixa de estatísticas",
   "settings.layout.label.level": "Barra de XP",
   "settings.layout.label.streak": "Sequência",
+  "settings.layout.label.country": "Bandeira do país",
   "settings.layout.label.avatar": "Avatar GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Medalhas",
@@ -347,6 +349,7 @@
   "settings.layout.desc.stats": "Cabeçalho: saldo PAT e número de medalhas",
   "settings.layout.desc.level": "Cabeçalho: progresso até o próximo nível",
   "settings.layout.desc.streak": "Cabeçalho: sua sequência 🔥 de atividade diária e a sua melhor",
+  "settings.layout.desc.country": "Cabeçalho: a bandeira do país de onde você fez o último login",
   "settings.layout.desc.avatar": "Cabeçalho: seu retrato de Grand Theft Frogger — clique para abrir o guarda-roupa",
   "settings.layout.desc.gtf": "Aba Visão geral: ficha de assalto e links do GTF",
   "settings.layout.desc.badges": "Aba Visão geral: todas as medalhas que você ganhou",

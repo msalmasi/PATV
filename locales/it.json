@@ -151,6 +151,7 @@
   "profile.level": "Livello",
   "profile.tier_title": "Il tuo livello: un nuovo nome ogni 10 livelli, a partire da Girino.",
   "profile.streak": "Serie",
+  "profile.country_title": "Ultimo accesso da {country}",
   "profile.streak_title": "🔥 Giorni consecutivi in cui hai fatto qualcosa su PATV o nelle stanze Camfrog: chat, microfono, un comando, un post o un commento, un giro della ruota, un gioco o una mancia. Un giorno va da mezzanotte a mezzanotte, ora di New York.",
   "profile.streak_days": {
     "one": "{count} giorno",
@@ -327,6 +328,7 @@
   "settings.layout.label.stats": "Barra statistiche",
   "settings.layout.label.level": "Barra XP",
   "settings.layout.label.streak": "Serie",
+  "settings.layout.label.country": "Bandiera del paese",
   "settings.layout.label.avatar": "Avatar GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Badge",
@@ -347,6 +349,7 @@
   "settings.layout.desc.stats": "Intestazione: saldo PAT e numero di badge",
   "settings.layout.desc.level": "Intestazione: progresso verso il livello successivo",
   "settings.layout.desc.streak": "Intestazione: la tua serie di attività giornaliere 🔥 e la tua migliore",
+  "settings.layout.desc.country": "Intestazione: la bandiera del paese da cui hai effettuato l'ultimo accesso",
   "settings.layout.desc.avatar": "Intestazione: il tuo ritratto Grand Theft Frogger — cliccalo per il guardaroba",
   "settings.layout.desc.gtf": "Scheda Panoramica: scheda colpo e link GTF",
   "settings.layout.desc.badges": "Scheda Panoramica: tutti i badge che hai guadagnato",

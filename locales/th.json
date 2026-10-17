@@ -149,6 +149,7 @@
   "profile.level": "เลเวล",
   "profile.tier_title": "ระดับของคุณ: ชื่อใหม่ทุก 10 ระดับ เริ่มจากลูกอ๊อด",
   "profile.streak": "สตรีค",
+  "profile.country_title": "เข้าสู่ระบบล่าสุดจาก {country}",
   "profile.streak_title": "🔥 จำนวนวันติดต่อกันที่คุณทำกิจกรรมบน PATV หรือในห้อง Camfrog ไม่ว่าจะเป็นแชท ไมค์ คำสั่ง โพสต์หรือคอมเมนต์ การหมุนวงล้อ เกม หรือทิป หนึ่งวันนับตั้งแต่เที่ยงคืนถึงเที่ยงคืน เวลานิวยอร์ก",
   "profile.streak_days": {
     "other": "{count} วัน"
@@ -316,6 +317,7 @@
   "settings.layout.label.stats": "แถบสถิติ",
   "settings.layout.label.level": "แถบ XP",
   "settings.layout.label.streak": "สตรีค",
+  "settings.layout.label.country": "ธงประเทศ",
   "settings.layout.label.avatar": "อวาตาร์ GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "ตรา",
@@ -336,6 +338,7 @@
   "settings.layout.desc.stats": "ส่วนหัว: ยอด PAT และจำนวนตรา",
   "settings.layout.desc.level": "ส่วนหัว: ความคืบหน้าสู่เลเวลถัดไป",
   "settings.layout.desc.streak": "ส่วนหัว: สตรีคกิจกรรมรายวัน 🔥 ของคุณและสตรีคสูงสุด",
+  "settings.layout.desc.country": "หัวข้อ: ธงของประเทศที่คุณเข้าสู่ระบบล่าสุด",
   "settings.layout.desc.avatar": "ส่วนหัว: ภาพ Grand Theft Frogger ของคุณ — คลิกเพื่อเปิดตู้เสื้อผ้า",
   "settings.layout.desc.gtf": "แท็บภาพรวม: ชีตปล้นและลิงก์ GTF",
   "settings.layout.desc.badges": "แท็บภาพรวม: ตราทุกอันที่คุณได้รับ",

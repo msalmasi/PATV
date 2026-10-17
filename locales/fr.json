@@ -151,6 +151,7 @@
   "profile.level": "Niveau",
   "profile.tier_title": "Ton niveau : un nouveau nom tous les 10 niveaux, à partir de Têtard.",
   "profile.streak": "Série",
+  "profile.country_title": "Dernière connexion depuis {country}",
   "profile.streak_title": "🔥 Jours d'affilée où tu as fait quelque chose sur PATV ou dans les salons Camfrog : chat, micro, commande, post ou commentaire, tour de roue, partie ou pourboire. Une journée va de minuit à minuit, heure de New York.",
   "profile.streak_days": {
     "many": "{count} jours",
@@ -327,6 +328,7 @@
   "settings.layout.label.stats": "Bandeau de stats",
   "settings.layout.label.level": "Barre d'XP",
   "settings.layout.label.streak": "Série",
+  "settings.layout.label.country": "Drapeau du pays",
   "settings.layout.label.avatar": "Avatar GTF",
   "settings.layout.label.gtf": "Grand Theft Frogger",
   "settings.layout.label.badges": "Badges",
@@ -347,6 +349,7 @@
   "settings.layout.desc.stats": "En-tête : solde PAT et nombre de badges",
   "settings.layout.desc.level": "En-tête : progression vers le niveau suivant",
   "settings.layout.desc.streak": "En-tête : ta série d'activité quotidienne 🔥 et ta meilleure série",
+  "settings.layout.desc.country": "En-tête : le drapeau du pays de ta dernière connexion",
   "settings.layout.desc.avatar": "En-tête : ton portrait Grand Theft Frogger — clique dessus pour la garde-robe",
   "settings.layout.desc.gtf": "Onglet Aperçu : fiche de casse et liens GTF",
   "settings.layout.desc.badges": "Onglet Aperçu : tous les badges que tu as gagnés",
