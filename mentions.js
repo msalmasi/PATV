@@ -15,7 +15,10 @@
 //     nothing new on Pepe's packet path, and no private word lists shipped to the bot
 //   * the cost: one precompiled regex test per (enabled user x line), against a cached index rebuilt on change
 // The catch: only BRIDGED rooms are covered - a room Pepe doesn't bridge has no feed (the settings page says so).
-// Web push: the site has no push subscriptions (no service worker / VAPID), so alerts are the 🔔 only for now.
+// 1.99acd: browser notifications (webpush.js, QW-1): a stored notice also queues a content-free Web Push ("You were mentioned
+// in <pad>", never the line or the speaker) for the browsers where the member turned it on (the 💬 Messages ⚙ dialog).
+// It adds push-only rules: a line older than webpush_late_s (bridge backlog) or from a speaker whose account the member
+// blocked in DMs stays inbox-only, and reading the notice before its grace (15 s / 60 s for alert words) cancels it.
 //
 // Never alerted: your own lines (by your linked login), Pepe's / bots' lines, anonymised or hidden speakers, a pad
 // you can't see (padaccess.full: the live room is members-tier), while muted or in your quiet hours (skipped, not
@@ -279,7 +282,16 @@ async function drain() {
       if (!IDX.users.length) continue;
       const inbox = require("./inbox");
       for (const line of batch) {
-        for (const m of matchLine(IDX, line, NOW())) await inbox.addSafe(m.user.userId, noticeFor(line, m.word));
+        for (const m of matchLine(IDX, line, NOW())) {
+          const n = noticeFor(line, m.word);
+          if (await inbox.addSafe(m.user.userId, n)) {
+            // 1.99acd: the browser notification (webpush.js) - content-free; late lines and blocked speakers stay inbox-only there
+            try {
+              require("./webpush").onMention(m.user.userId, { kind: m.word.own ? "mention" : "keyword", roomId: line.roomId, url: n.link, srcKey: n.ref,
+                                                              at: Number(line.it.ts) || 0, speaker: line.it.u && line.it.u.login, padName: line.name || null });
+            } catch (e) { /* never fails the alert */ }
+          }
+        }
       }
     }
   } finally {
@@ -324,7 +336,8 @@ function register(app, { addUser }) {
       const boot = { ...(await get(req.user.userId)), rooms: await rooms(req.user), wordsMax: WORDS_MAX, hourMax: HOUR_MAX };
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
       const golive = await require("./golive").prefs(req.user.userId).catch(() => null);   // 1.99kp
-      res.render("mentions", { title: "Mention alerts", user: req.user.username, boot, golive });
+      const pushOn = await require("./webpush").available(req.user).catch(() => false);    // 1.99acd: the "Browser notifications" link
+      res.render("mentions", { title: "Mention alerts", user: req.user.username, boot, golive, pushOn });
     } catch (e) {
       console.error("[mentions] page:", e.message);
       res.status(500).send("Couldn't load your mention alerts.");

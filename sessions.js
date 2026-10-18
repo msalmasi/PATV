@@ -192,6 +192,13 @@ async function revokeForMerge(fromId) {
   return (r && r.changes) || 0;
 }
 
+/** 1.99acd: is this session still allowed for this account? (webpush.js: a browser's notifications end with the sign-in
+ *  they were turned on under.) The 5 s cache, like gate(). */
+async function isLive(id, userId) {
+  if (!id || !userId) return false;
+  return valid(await load(String(id)), userId);
+}
+
 /** The member's live sessions (newest activity first). */
 async function list(userId, { current = null } = {}) {
   await init();
@@ -217,6 +224,13 @@ async function isFresh(req, within = FRESH_MS) {
  */
 async function signIn(req, res, user, method, opts = {}) {
   const { issueLogin } = require("./middleware/loginCookie");
+  // 1.99acd: ANOTHER account signing in over a live sign-in in this browser (a !signin link redeemed while signed in, a
+  // shared computer): the cookie is replaced, so the old session can never be used from here again - end it, so what hangs
+  // off it (webpush.js browser notifications) stops in this browser too, and it leaves the old account's device list.
+  const prev = req && req.loginSession;
+  if (prev && prev.id && prev.userId && String(prev.userId) !== String(user.userId)) {
+    try { await revoke(prev.userId, prev.id, "another account signed in"); } catch (e) { console.error("[sessions] replaced revoke:", e.message); }
+  }
   const s = await create(req, user.userId, method);
   issueLogin(res, { userId: user.userId, username: user.username, class: user.class, sid: s.sid });
   if (req) req.loginSession = { id: s.id, userId: String(user.userId) };
@@ -414,6 +428,6 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, gate, check, create, revoke, revokeAll, revokeForMerge, list, signIn, isFresh, userIdOfToken, describe,
+module.exports = { init, register, gate, check, create, revoke, revokeAll, revokeForMerge, list, signIn, isFresh, isLive, userIdOfToken, describe,
                    notifyIfNew, cutoffOf, METHODS, LOGIN_MS, CACHE_MS, SEEN_EVERY_MS, FRESH_MS, sha,
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _clearCache: () => { cache.clear(); cutoffCache.clear(); } };

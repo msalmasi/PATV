@@ -130,6 +130,7 @@ async function overview(me) {
     : [null, null, null, null];
   const disk = await safe(async () => diskStatus());
   const terms = await safe(async () => require("./terms").enforced(), null);
+  const push = isAdmin ? await safe(() => require("./webpush").health(), null) : null;   // 1.99acd: browser notifications (webpush.js)
 
   // alerts: the things worth acting on now, most urgent first
   const alerts = [];
@@ -149,6 +150,11 @@ async function overview(me) {
     if (d !== null && d >= 0 && d <= 7) alerts.push({ level: "info", text: `Stale-account archive runs in ${d} day${d === 1 ? "" : "s"} (${stale.applyOn})`, href: "/admin/users#stale-admin" });
   }
   if (terms === false) alerts.push({ level: "info", text: "Terms of Service aren't enforced yet", href: "/feed/admin#settings" });
+  // 1.99acd: Web Push switched on without a key pair, a push service refusing our VAPID signature, or many failed pushes
+  if (push && push.enabled && !push.keys.configured) alerts.push({ level: "warn", text: `Web Push is on but has no VAPID keys (${push.keys.why}) - nothing is sent`, href: "/admin/push" });
+  if (push && push.vapidErrorAt && Date.now() - push.vapidErrorAt < 3600e3) alerts.push({ level: "warn", text: `A push service refused our VAPID signature (${push.vapidErrorStatus || 401}) in the last hour`, href: "/admin/push#health" });
+  const pushFailed = push ? push.totals.failed || 0 : 0;
+  if (push && pushFailed > Math.max(20, (push.totals.sent || 0) / 2)) alerts.push({ level: "warn", text: `${pushFailed} browser notifications failed in the last 24 h`, href: "/admin/push#health" });
   return { isAdmin, pepe, reserve, loans, reports, stage, stale: stale ? { ...stale, daysLeft: stale.started ? daysUntil(stale.applyOn) : null } : null,
            shop, disk, terms, alerts };
 }

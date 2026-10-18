@@ -67,6 +67,16 @@ async function hub(user, ctx = {}) {
   if (tg && Array.isArray(tgPrefs) && tgPrefs.length) {
     notify.push(E("tgalerts", "🔔", "/settings/telegram#alerts", st("n_of_on", { count: tgPrefs.filter((p) => p.on).length, total: tgPrefs.length })));
   }
+  // 1.99acd: browser notifications (webpush.js) - while the switch is on and the member is in its audience; and, whatever
+  // the switches, while browsers of theirs are still saved (the dialog then offers only "Turn off everywhere")
+  const WP = require("./webpush");
+  if (await safe(() => WP.available(user), false)) {
+    const n = await safe(() => WP.countFor(uid));
+    notify.push(E("push", "🔔", "/messages?settings=1#push", n === null ? null : n ? st("push_n", { count: n }, "ok") : st("off")));
+  } else {
+    const n = await safe(() => WP.countAll(uid), 0);
+    if (n) notify.push(E("push", "🔔", "/messages?settings=1#push", st("push_n", { count: n })));
+  }
 
   // ── Privacy & likeness ──
   const lk = await safe(() => require("./likeness").prefsOf(uid));

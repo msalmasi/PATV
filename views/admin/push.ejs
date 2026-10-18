@@ -1,0 +1,107 @@
+<%- include('../partials/admin-open', { title: 'Web Push', user, section: 'push', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/push.ejs - browser notifications (1.99acd, webpush.js, QW-1): the kill switch, the audience, the per-kind switches
+  and timings, the key status (a fingerprint only) and delivery health. Admins only. Plain numbers: never an endpoint, a key or
+  a member's name. Saved by public/js/webpush-admin.js.
+%>
+<%
+  const when = (t) => t ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(t, 'datetime') : '';
+  const on = !!S.webpush_enabled;
+  const KIND_LABEL = { dm: 'Direct messages', mention: 'Mentions (your name in a pad, @you in posts)', keyword: 'Alert words', test: 'Tests' };
+  const OUTCOMES = ['sent', 'read', 'nodevice', 'off', 'failed', 'gone', 'waiting'];
+  const OUT_LABEL = { sent: 'sent', read: 'read first (cancelled)', nodevice: 'no browser', off: 'switched off', failed: 'failed', gone: 'subscription gone', waiting: 'waiting' };
+  const kindsSeen = Object.keys(H.day || {});
+  const n = (v) => Number(v || 0).toLocaleString('en-US');
+%>
+<div class="adm-head">
+  <h1><span class="ds-ic" aria-hidden="true">🔔</span> Web Push</h1>
+  <p>Browser notifications for direct messages and mentions on the site. A member turns them on per browser in the 💬 Messages ⚙
+     dialog. Every push is <b>content-free</b>: "New message" or "You were mentioned in &lt;pad&gt;" and a link, never what was said or
+     who said it (an Approved pad is never named). They're signed with this server's VAPID key and go through the browser maker's push
+     service (Google, Mozilla, Apple, Microsoft). Runbook: <code>docs/webpush.md</code>.</p>
+</div>
+
+<section class="adm-card" id="status" aria-labelledby="wpStT">
+  <h2 id="wpStT">Status
+    <span class="adm-pill <%= on && K.configured ? 'ok' : '' %>"><%= on ? (K.configured ? 'ON' : 'ON - but no keys, nothing is sent') : 'OFF' %></span>
+    <span class="adm-pill <%= K.configured ? 'ok' : 'bad' %>"><%= K.configured ? 'Keys configured' : 'Keys not configured' %></span>
+  </h2>
+  <div class="adm-kv">
+    <div><b>VAPID keys</b><span><%= K.configured ? 'Loaded - key id ' + K.kid : 'Not configured: ' + K.reason %></span></div>
+    <div><b>Audience</b><span><%= S.webpush_audience === 'everyone' ? 'Everyone' : S.webpush_audience === 'staff' ? 'Admins and staff' : 'Admins only' %></span></div>
+    <div><b>Kinds on</b><span><%= ['dm', 'mention', 'keyword'].filter((k) => S['webpush_kind_' + k]).map((k) => KIND_LABEL[k]).join(' · ') || 'none' %></span></div>
+    <div><b>Browsers</b><span><%= n(H.subs.total) %> with notifications on, for <%= n(H.subs.accounts) %> account<%= H.subs.accounts === 1 ? '' : 's' %><%= H.subs.stale ? ' · ' + n(H.subs.stale) + ' made with an older key (they re-subscribe)' : '' %></span></div>
+  </div>
+  <% if (!K.configured) { %>
+    <p class="adm-help">To set it up, run <code>node tools/vapid-keys.js --env &lt;the site's .env&gt; --subject mailto:&lt;ops address&gt;</code> on the server,
+       restart the site, and check the log for <code>[webpush] keys loaded</code>. One pair per instance; never rotate it once people
+       have turned notifications on (every browser would have to turn them on again).</p>
+  <% } %>
+</section>
+
+<section class="adm-card" id="settings" aria-labelledby="wpSetT">
+  <h2 id="wpSetT">Settings</h2>
+  <p class="adm-help">While the switch is off nothing is queued or sent, due pushes are dropped, and the Messages dialog shows nothing; subscriptions
+     are kept, so switching it back on resumes. Roll out with the audience: admins, then staff, then everyone.</p>
+  <form class="adm-form" id="wpSettings">
+    <label class="ck"><span>Kill switch (<code>webpush_enabled</code>)</span><span><input type="checkbox" name="webpush_enabled"<%= on ? ' checked' : '' %>> send browser notifications</span></label>
+    <label><span>Audience (<code>webpush_audience</code>)</span>
+      <select name="webpush_audience">
+        <option value="admins"<%= S.webpush_audience === 'admins' ? ' selected' : '' %>>Admins only</option>
+        <option value="staff"<%= S.webpush_audience === 'staff' ? ' selected' : '' %>>Admins and staff</option>
+        <option value="everyone"<%= S.webpush_audience === 'everyone' ? ' selected' : '' %>>Everyone</option>
+      </select></label>
+    <% ['dm', 'mention', 'keyword'].forEach((k) => { %>
+      <label class="ck"><span><%= KIND_LABEL[k] %> (<code>webpush_kind_<%= k %></code>)</span><span><input type="checkbox" name="webpush_kind_<%= k %>"<%= S['webpush_kind_' + k] ? ' checked' : '' %>> offer and send</span></label>
+    <% }) %>
+    <% [['webpush_grace_dm_s', 'DM grace, seconds'], ['webpush_grace_mention_s', 'Mention grace, seconds'], ['webpush_grace_keyword_s', 'Alert word grace, seconds'],
+        ['webpush_dm_gap_s', 'One DM push per conversation per, seconds'], ['webpush_hour_max', 'Pushes per account an hour'],
+        ['webpush_late_s', 'Pad lines older than this stay inbox-only, seconds']].forEach((f) => { %>
+      <label><span><%= f[1] %> (<code><%= f[0] %></code>, default <%= D[f[0]] %>)</span><input type="number" name="<%= f[0] %>" min="<%= L[f[0]][0] %>" max="<%= L[f[0]][1] %>" step="1" value="<%= S[f[0]] %>"></label>
+    <% }) %>
+    <label style="grid-column:1/-1"><span>More push service host names, comma-separated, exact names only - no wildcards (<code>webpush_hosts_extra</code>) - already allowed: <%= HOSTS.join(', ') %></span>
+      <input type="text" name="webpush_hosts_extra" maxlength="600" value="<%= S.webpush_hosts_extra %>" placeholder="push.example.com" autocomplete="off" spellcheck="false"></label>
+    <div class="adm-actions"><button type="submit">Save settings</button><span class="adm-msg" role="status"></span></div>
+  </form>
+  <p class="adm-help">The grace is how long a push waits; reading the message or the 🔔 notice on the site in that time cancels it (DM 0 s, mention
+     15 s, alert word 60 s by default). A focused tab already showing that page gets no notification either.</p>
+</section>
+
+<section class="adm-card" id="health" aria-labelledby="wpHT">
+  <h2 id="wpHT">Delivery</h2>
+  <p class="adm-help">The last 24 hours of the outbox, by kind. "Read first" = cancelled because it was read on the site during the grace;
+     "no browser" = the member has no browser on for that kind (or signed it out); "subscription gone" = the browser unsubscribed (404 / 410:
+     removed). A 401 or 403 means a push service refused our VAPID signature: the subscriptions are kept - check the keys, the subject and
+     the server clock.</p>
+  <div class="adm-tbl">
+    <table>
+      <thead><tr><th scope="col">Kind</th><% OUTCOMES.forEach((o) => { %><th scope="col" class="num"><%= OUT_LABEL[o] %></th><% }) %></tr></thead>
+      <tbody>
+        <% if (!kindsSeen.length) { %><tr><td class="empty" colspan="<%= OUTCOMES.length + 1 %>">Nothing in the last 24 hours.</td></tr><% } %>
+        <% kindsSeen.forEach((k) => { %>
+          <tr><th scope="row"><%= KIND_LABEL[k] || k %></th><% OUTCOMES.forEach((o) => { %><td class="num"><%= n((H.day[k] || {})[o]) %></td><% }) %></tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <div class="adm-kv" style="margin-top:12px">
+    <div><b>Queue</b><span><%= n(H.queue.waiting) %> waiting (<%= n(H.queue.due) %> due now)</span></div>
+    <div><b>Browsers by kind</b><span><%= Object.keys(H.subs.kinds).length ? Object.entries(H.subs.kinds).map(([k, v]) => (KIND_LABEL[k] || k) + ' ' + n(v)).join(' · ') : '-' %></span></div>
+    <div><b>Browsers by family</b><span><%= Object.keys(H.subs.browsers).length ? Object.entries(H.subs.browsers).map(([k, v]) => k + ' ' + n(v)).join(' · ') : '-' %></span></div>
+    <div><b>Push services (since <%= when(H.since) %>)</b><span><%= Object.keys(H.hosts).length ? Object.entries(H.hosts).map(([f, c]) => f + ': ' + Object.entries(c).map(([s, v]) => s + ' ' + n(v)).join(', ')).join(' · ') : 'nothing sent since the start' %></span></div>
+    <div><b>Not queued (since the start)</b><span><%= (() => { const out = []; for (const [k, o] of Object.entries(H.mem || {})) for (const [w, v] of Object.entries(o)) if (['cap', 'late', 'blocked', 'burst', 'muted'].includes(w)) out.push((KIND_LABEL[k] || k) + ' ' + w + ' ' + n(v)); return out.join(' · ') || '-'; })() %></span></div>
+    <div><b>Last error</b><span><%= H.lastError ? H.lastError.host + ' ' + H.lastError.status + ' at ' + when(H.lastError.at) : 'none' %><%= H.vapidErrorAt ? ' · VAPID signature refused (' + (H.vapidErrorStatus || 401) + ') at ' + when(H.vapidErrorAt) : '' %></span></div>
+  </div>
+</section>
+
+<section class="adm-card" id="test" aria-labelledby="wpTT">
+  <h2 id="wpTT">Test</h2>
+  <p class="adm-help">Sends a test notification to every browser where <b>you</b> turned notifications on (works while the switch is off, so the keys can be
+     checked before opening it up). Turn them on first in <a href="/messages?settings=1#push">Messages settings</a> - that needs the switch on with
+     you in the audience (the default audience is admins only).</p>
+  <div class="adm-actions"><button type="button" id="wpTest"<%= K.configured ? '' : ' disabled' %>>Send a test to my browsers</button><span class="adm-msg" role="status" id="wpTestMsg"></span></div>
+</section>
+<script src="/public/js/webpush-admin.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

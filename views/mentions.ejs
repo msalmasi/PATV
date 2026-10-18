@@ -49,6 +49,8 @@
       <label class="ck"><input type="checkbox" id="mnNames"> <span><%- t('settings.mentions.names') %></span></label>
       <div class="names" id="mnNameList" aria-label="<%- t('settings.mentions.names_aria') %>"></div>
       <p class="mut" id="mnNoLink" hidden><%- t('settings.mentions.nolink') %></p>
+      <%# 1.99acd: browser notifications live in the Messages ⚙ dialog (webpush.js); a link while they're offered to this member %>
+      <% if (locals.pushOn) { %><p class="mut">🔔 <%- t('settings.mentions.push', { link: '<a href="/messages?settings=1#push">' + t('settings.mentions.push_link') + '</a>' }) %></p><% } %>
     </section>
 
     <%# 1.99kk: @mentions in feed posts and comments (feedmentions.js) - on by default, same mute / quiet hours %>

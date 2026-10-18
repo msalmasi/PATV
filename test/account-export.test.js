@@ -70,6 +70,9 @@ test.before(async () => {
   await runQuery("INSERT INTO user_badges (userId, badgeId, awardedAt) VALUES ('me', 'fresh_meat', '2026-01-01')");
   await runQuery("INSERT INTO camfrog_userstats (login, data, updated) VALUES ('mecf', '{\"lines\": 99}', 1)");
   await runQuery("INSERT INTO user_reports (target_id, reporter_id, reason, created) VALUES ('me', 'you', 'REPORT-ABOUT-ME', 1)");
+  // 1.99acd: a browser with notifications on (webpush.js) - the endpoint path and the keys are capabilities, never exported
+  await runQuery(`INSERT INTO webpush_subs (endpoint, p256dh, auth, user_id, kinds, vapid_kid, ua, locale, created, updated, last_ok)
+                  VALUES ('https://fcm.googleapis.com/fcm/send/PUSH-ENDPOINT-SECRET', 'PUSH-P256DH-SECRET', 'PUSH-AUTH-SECRET', 'me', 'dm,mention', 'k', 'Chrome on Windows', 'es', 1, 1, 2)`);
   // the routes, with a header-picked user
   const express = require("express");
   const app = express();
@@ -97,11 +100,12 @@ test("the contents: the member's own data, by section", async () => {
   assert.equal(d.security.sessions[0].method, "google");
   assert.equal(d.chat.statistics.data.lines, 99);
   assert.equal(d.subscriptions.season_pass_and_prime_time.length, 1);
+  assert.deepEqual(d.notices.browser_notifications, [{ id: 1, push_service: "fcm.googleapis.com", kinds: ["dm", "mention"], browser: "Chrome on Windows", locale: "es", created: 1, last_ok: 2 }]);
 });
 
 test("never a secret, never someone else's private data", async () => {
   const s = JSON.stringify(await X.collect("me"));
-  for (const v of SECRETS) assert.ok(!s.includes(v), "leaked: " + v);
+  for (const v of SECRETS.concat(["PUSH-ENDPOINT-SECRET", "PUSH-P256DH-SECRET", "PUSH-AUTH-SECRET"])) assert.ok(!s.includes(v), "leaked: " + v);
   assert.ok(!s.includes("REPORT-ABOUT-ME"), "reports others filed about them are not theirs to read");
   assert.ok(!/"(password|resetPasswordToken|streamKey|emailVerificationToken|token_hash|code_hash|signature)"/.test(s), "no secret columns at all");
 });

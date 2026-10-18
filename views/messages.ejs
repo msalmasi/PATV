@@ -4,7 +4,7 @@
     with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there.
     1.99cz: groups (the ✎ "New conversation" dialog, the members dialog), pictures (the 🖼 tray, the lightbox) and post cards. %>
 <%- include('layout', { title: title, user: user, inboxUnread: typeof inboxUnread !== 'undefined' ? inboxUnread : 0, dmUnread: dmUnread }) %>
-<link rel="stylesheet" href="/public/css/messages.css?v=7">
+<link rel="stylesheet" href="/public/css/messages.css?v=8">
 <% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
 <main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
   <aside class="dm-side" aria-label="<%- t('msg.conversations') %>">
@@ -112,6 +112,28 @@
         <label class="ck sub"><input type="checkbox" name="nopreview"> <%- t('msg.set.nopreview') %></label>
         <p class="mut" id="dmSetCf"><%- t('msg.set.alerts_note') %></p>
       </fieldset>
+      <%# 1.99acd: 🔔 browser notifications (webpush.js; only while the switch is on and you're in its audience). public/js/webpush.js
+          runs it and saves on its own - the dialog's Save button doesn't touch it. push.off: not offered right now, but browsers of
+          yours are still saved - only "Turn off everywhere" (turning them off never depends on the switches). %>
+      <% if (locals.push && push.off) { %>
+      <fieldset id="push" data-push data-push-off>
+        <legend><%- t('msg.set.push_h') %></legend>
+        <p class="mut" style="margin:2px 0 6px"><%- t('msg.set.push_paused', { count: push.count }) %></p>
+        <div class="dm-push-acts"></div>
+        <span class="dm-push-st" role="status"></span>
+      </fieldset>
+      <% } else if (locals.push) { %>
+      <fieldset id="push" data-push data-key="<%= push.key %>" data-kid="<%= push.kid %>" data-kinds="<%= push.kinds.join(',') %>">
+        <legend><%- t('msg.set.push_h') %></legend>
+        <p class="mut" style="margin:2px 0 6px"><%- t('msg.set.push_note') %></p>
+        <div class="dm-push" hidden>
+          <% push.kinds.forEach((k) => { %><label class="ck"><input type="checkbox" data-kind="<%= k %>" checked> <%- t('msg.set.push_' + k) %></label><% }) %>
+        </div>
+        <p class="mut" style="margin:6px 0 0"><%- t('msg.set.push_kinds_note', { link: '<a href="/settings/mentions">' + t('msg.set.push_kinds_link') + '</a>' }) %></p>
+        <div class="dm-push-acts"></div>
+        <span class="dm-push-st" role="status"></span>
+      </fieldset>
+      <% } %>
       <fieldset>
         <legend><%- t('msg.set.pms_h') %></legend>
         <p class="mut" style="margin:2px 0 6px"><%- t('msg.set.pms_note') %></p>
@@ -185,7 +207,8 @@
 </main>
 <script>document.body.classList.add('dm-page');   /* messages.css: the page is one viewport-high app screen, no footer */</script>
 <script type="application/json" id="dmBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
-<script src="/public/js/messages.js?v=9" defer></script>
+<script src="/public/js/messages.js?v=10" defer></script>
+<% if (locals.push) { %><script src="/public/js/webpush.js?v=1" defer></script><% } %>
 <script src="/public/js/stickers.js?v=1" defer></script>
 </body>
 </html>

@@ -142,6 +142,9 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
   await runQuery("INSERT INTO escrow_holds (key, ref, kind, login, username, user_id, amount, state, created) VALUES ('h-done', 'W9', 'wager', 'delcf', 'deleteme', 'del', 50, 'paid', 1)");
   await runQuery("INSERT INTO camfrog_userstats (login, data, updated) VALUES ('delcf', '{\"lines\": 5}', 1)");
   await runQuery("INSERT INTO username_history (userId, old_username, new_username, at, via) VALUES ('del', 'oldname', 'deleteme', 1, 'rename:web')");
+  // 1.99acd: browser notifications (webpush.js)
+  await runQuery("INSERT INTO webpush_subs (endpoint, p256dh, auth, user_id, kinds, vapid_kid, created, updated) VALUES ('https://fcm.googleapis.com/fcm/send/del', 'p', 'a', 'del', 'dm', 'k', 1, 1)");
+  await runQuery("INSERT INTO webpush_outbox (user_id, kind, src_key, url, tag, due_at, created) VALUES ('del', 'dm', 'dm:x:1', '/messages', 'dm:x', 1, 1)");
   await S.create({ get: () => "" }, "del", "password");
   // the request, then the date
   const fresh = await S.create({ get: () => "" }, "del", "password");
@@ -186,7 +189,7 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
   assert.equal(ms[1].body, "their words");
   assert.ok((await getQuery("SELECT left_at FROM conversation_members WHERE user_id = 'del'"))[0].left_at);
   // personal rows gone
-  for (const [t, c] of [["inbox", "user_id"], ["sso_links", "user_id"], ["sessions", "user_id"], ["username_history", "userId"]]) {
+  for (const [t, c] of [["inbox", "user_id"], ["sso_links", "user_id"], ["sessions", "user_id"], ["username_history", "userId"], ["webpush_subs", "user_id"], ["webpush_outbox", "user_id"]]) {
     assert.equal((await getQuery(`SELECT COUNT(*) AS n FROM ${t} WHERE ${c} = 'del'`))[0].n, 0, t);
   }
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM camfrog_userstats WHERE login = 'delcf'"))[0].n, 0, "chat statistics for the login");

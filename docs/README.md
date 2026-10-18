@@ -29,5 +29,6 @@ Pepe's character bible is brand.md §5.
 | [gtf-backend.md](gtf-backend.md) | Grand Theft Frogger backend |
 | [lotto-backend.md](lotto-backend.md) | Pepeball backend |
 | [escrow-cutover-runbook.md](escrow-cutover-runbook.md), [gangs-cutover-runbook.md](gangs-cutover-runbook.md), [lotto-cutover-runbook.md](lotto-cutover-runbook.md), [pools-cutover-runbook.md](pools-cutover-runbook.md) | Cutover runbooks |
+| [webpush.md](webpush.md) | Browser notifications (Web Push, QW-1): VAPID keys, the switch and rollout, delivery health, the S5 hand-over to notify |
 
 Deploying is in `../deploy/README.md`.

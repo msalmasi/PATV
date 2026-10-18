@@ -19,6 +19,12 @@ S=/home/PATV-staging
 rm -f "$S/myapp.db.new" "$S/myapp.db.new-wal" "$S/myapp.db.new-shm"
 sqlite3 -cmd ".timeout 30000" /home/PATV/myapp.db "VACUUM INTO '$S/myapp.db.new';"
 [ "$(sqlite3 "$S/myapp.db.new" 'PRAGMA integrity_check;')" = "ok" ] || { echo "the copy failed integrity_check - staging untouched"; rm -f "$S/myapp.db.new"; exit 1; }
+# 1.99acd: never carry prod members' browser-notification subscriptions (webpush.js) into staging - staging would push
+# staging's DMs and mentions to their browsers if it ever had prod's VAPID keys. Their outbox goes too, and the switch is off.
+has_table() { [ "$(sqlite3 "$S/myapp.db.new" "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '$1';")" = "1" ]; }
+if has_table webpush_subs; then sqlite3 "$S/myapp.db.new" "DELETE FROM webpush_subs;"; fi
+if has_table webpush_outbox; then sqlite3 "$S/myapp.db.new" "DELETE FROM webpush_outbox;"; fi
+if has_table webpush_cfg; then sqlite3 "$S/myapp.db.new" "UPDATE webpush_cfg SET value = '0' WHERE key = 'webpush_enabled';"; fi
 echo "prod copied: $(du -h "$S/myapp.db.new" | cut -f1), $(sqlite3 "$S/myapp.db.new" 'select count(*) from users') users"
 
 pm2 stop patv-staging >/dev/null

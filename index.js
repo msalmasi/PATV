@@ -97,6 +97,11 @@ require("./crawlers").register(app);
 // so the per-segment check stays cheap and never makes a session
 require("./hlsauth").register(app);
 
+// 1.99acd: the Web Push service worker (webpush.js serveWorker) - before cookie-parser and the session / activity
+// middleware: browsers re-fetch it on their own (soft updates after navigations and pushes), and that must not extend a
+// sign-in (the one its notifications are bound to), count as a visit, or run the nav counts. It needs no user.
+app.get("/sw.js", require("./webpush").serveWorker);
+
 // Cookie Parser Middleware
 app.use(cookieParser(process.env.APP_SESSION_SECRET));
 // 1.99wj: server-side sign-in sessions (sessions.js) - a revoked / expired session is a signed-out request for everything
@@ -1297,6 +1302,7 @@ require("./banner").register(app, { addUser, isBotToken });        // 1.99kk: th
 require("./telegram").register(app, { isBotToken, addUser });   // 1.99kn: Telegram link + alerts + access tiers (/settings/telegram); the bot runs in Pepe
 require("./opsalerts").register(app, { isBotToken });   // 1.99aai: POST /api/ops/alert - VPS watchdogs (loopback + bot token) -> admins' inbox + Telegram outbox
 require("./settingshub").register(app, { addUser });   // 1.99vz: the /settings hub - one map of every account / preference page
+require("./webpush").register(app, { addUser });   // 1.99acd: 🔔 Web Push (QW-1) - browser notifications for DMs + mentions, /admin/push (OFF by default; /sw.js is mounted at the top)
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./casino/routes").register(app, { isBotToken, addUser });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md)
 require("./userstats").register(app, { isBotToken });

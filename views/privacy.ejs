@@ -53,6 +53,7 @@
       <li><b>Linked identities:</b> your Camfrog name (when you <code>!verify</code>), and your Discord or Twitch account id and display name when you sign in with them. We don't get your Discord or Twitch password. Discord and Twitch also give us the email address on that account when they have verified it: we use it to find your existing PATV account, and if your PATV account has no verified email yet we save it as your account email so you can recover your account. You can change it in your profile settings.</li>
       <li><b>Your content:</b> posts, comments, pictures, audio, video, links, votes, follows, reports, direct messages to other members, messages to Pepe and anything else you submit. Uploaded files are re-encoded and their embedded metadata (camera, GPS location) is removed.</li>
       <li><b>Activity in PAT features:</b> your PAT balance and ledger, games, bets, markets, wagers, staking, purchases, achievements and cosmetics.</li>
+      <li id="browser-notifications"><b>Browser notifications</b> (only if you turn them on, per browser, in Messages settings): the push address your browser gives us, the encryption keys that come with it, which kinds you picked (direct messages, mentions, alert words), the browser family (for example "Chrome on Windows" - never the full user agent), the page language, and which sign-in it was turned on under. A notification never contains what was said or who said it - only a line like "New message" or "You were mentioned in &lt;pad&gt;" (never the name of an Approved pad) and a link. It travels encrypted through your browser maker's push service (Google, Mozilla, Apple or Microsoft), which can't read it. Signing that browser out stops them; turn them off in Messages settings or in your browser.</li>
     </ul>
     <h3>We collect automatically</h3>
     <ul>
@@ -135,6 +136,7 @@
     <ul>
       <li><b>Service providers</b> who help us run PATV, only for that purpose: server hosting (Turnkey Internet, in the United States); network, DNS, security and email routing (Cloudflare); the Pepe help and overlay site (Netlify); emails such as sign-up verification and password resets (Resend, SendGrid); sign-in and our chat bots (Discord, Twitch); AI model providers that write Pepe's replies, make images and video, and read pictures when those features are used (currently Anthropic, Google (Gemini) and Z.ai (GLM), and, depending on configuration, OpenAI, Moonshot AI (Kimi), OpenRouter and TypeSafe); web search for Pepe's answers (Brave Search); and music (Spotify). Some speech, voice and vision processing runs on hardware we operate ourselves. We also read news headlines from Google News RSS, which receives nothing about you.</li>
       <li><b>Camfrog, Discord and Twitch</b>, when you link them or sign in with them, under their own privacy policies. Things Pepe says in a room are visible to that room.</li>
+      <li><b>Push services</b>, if you turn on browser notifications: your browser maker's push service (Google, Mozilla, Apple or Microsoft) passes each notification on, encrypted end to end to your browser - it sees that one was sent, not what it says (see <a href="#browser-notifications">section 2</a>).</li>
       <li><b>Embedded players:</b> YouTube (privacy-enhanced mode) and Twitch players only load when you click play, and then those companies receive your IP address and their own cookies apply. The site's fonts are loaded from Google Fonts.</li>
       <li><b>Authorities:</b> when the law requires it, to protect someone's safety, or to report child sexual abuse material to the National Center for Missing &amp; Exploited Children (NCMEC) via its CyberTipline, as required by 18 U.S.C. § 2258A, and law enforcement where appropriate — in which case we may share the content and the safety data we hold about it.</li>
       <li><b>If PATV changes hands</b>, data may transfer to the new operator under this policy.</li>
@@ -150,6 +152,7 @@
         <tr><td><code>jwt</code> (cookie)</td><td>Keeps you signed in</td><td>90 days, renewed while you use the site</td></tr>
         <tr><td><code>connect.sid</code> (cookie)</td><td>One-time messages between pages (for example "Welcome!" after sign-up)</td><td>Until you close the browser</td></tr>
         <tr><td><code>patv_dev</code> (cookie)</td><td>A random browser id used only for anti-abuse (welcome-bonus fairness and the hashed browser id in post safety data)</td><td>2 years</td></tr>
+        <tr><td>Service worker (<code>/sw.js</code>), only if you turn on browser notifications</td><td>Shows the notifications and opens the page you click. It doesn't cache anything or see your browsing</td><td>Until you unregister it or clear site data</td></tr>
         <tr><td>Local storage on your device</td><td>Your preferences: showing NSFW without blur, unsent post drafts, muted stories, the DJ booth open or closed, your camera and microphone choice for streaming, the last rankings tab, cosmetic display options, and whether you've seen the intro. These never leave your browser.</td><td>Until you clear them</td></tr>
       </tbody>
     </table></div>
@@ -172,6 +175,7 @@
         <tr><td>Who opened your cam on the website</td><td>7 days; staff moderation views 180 days</td></tr>
         <tr><td>Requests to watch your cam and your answers</td><td>30 days</td></tr>
         <tr><td>Inbox notices</td><td>Your latest 1,000</td></tr>
+        <tr><td>Browser notification subscriptions, and the record of notifications sent (kind and time, never the text)</td><td>Until you turn them off, sign that browser out or the browser drops the subscription; the record 3 days</td></tr>
         <tr><td>Direct messages</td><td>Until the sender deletes them ("message deleted"). Clearing or deleting a conversation removes it from your view only; the other person keeps their copy. A reported message's copy is kept with the report as a moderation record</td></tr>
         <tr><td>Your account, content and PAT ledger</td><td>Until you delete the content or ask us to close the account; inactive accounts may be archived after notice</td></tr>
         <tr><td>Backups</td><td>Backups are kept for up to 12 months and then deleted (nightly backups are overwritten within the month; monthly snapshots and backups taken before maintenance work are kept longer). Data you delete may persist in backups until they expire.</td></tr>
@@ -229,6 +233,7 @@
     <h2>14. Changes</h2>
     <p>We'll update this policy when what we do changes. The "Last updated" date at the top shows the latest version; for significant changes we'll also give notice on the site.</p>
     <ul>
+      <li><b>18 October 2026:</b> added <a href="#browser-notifications">Browser notifications</a> (section 2): opt-in per browser, what is stored, that a notification never carries what was said or who said it, and the push services that pass it on (section 7). New rows in sections 8 and 9.</li>
       <li><b>15 October 2026:</b> added <a href="#livecams">Live cams</a> (section 3): who can watch your cam on the website (verified members by default), asking and answering, blocks, being told who watched, PATV staff moderation views ("ghost mode", logged), and Pepe's main stream; <a href="#forget">Make Pepe forget me</a> (section 10); downloading your data and deleting your account; and that PATV asks search engines and AI crawlers not to index it (section 6). New retention rows in section 9.</li>
       <li><b>13 October 2026:</b> added <a href="#incognito">Incognito</a> (section 10): what the incognito switch stops, what it doesn't delete, and that it can now be changed in Settings → Privacy as well as with <code>!incognito</code>. A clarification of a setting you control; nothing about what we collect changed.</li>
     </ul>

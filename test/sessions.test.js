@@ -257,6 +257,16 @@ test("a new device files an inbox notice (not the same browser twice, not the fi
   assert.equal(await notices(), 3, "rate-limited");
 });
 
+test("1.99acd isLive(id, userId): a live session of that account (webpush.js binds a browser's notifications to it)", async () => {
+  const s = await S.create({ get: () => "" }, "ivy", "password");
+  assert.equal(await S.isLive(s.id, "ivy"), true);
+  assert.equal(await S.isLive(s.id, "hal"), false, "someone else's");
+  assert.equal(await S.isLive(null, "ivy"), false);
+  assert.equal(await S.isLive("no-such-session", "ivy"), false);
+  await S.revoke("ivy", s.id);
+  assert.equal(await S.isLive(s.id, "ivy"), false, "revoked");
+});
+
 test("coarse device names, never the raw user agent", () => {
   assert.equal(S.describe("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1"), "Safari on iOS");
   assert.equal(S.describe("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36"), "Chrome on Android");

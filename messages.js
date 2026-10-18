@@ -61,6 +61,11 @@
 // ("3 new messages from X" / "3 new messages in “Group”"), only after ALERT_GRACE_MS (reading it on the site in
 // the meantime cancels it), never with the text when the recipient chose "alert without preview" (or the sender
 // is !incognito - Pepe checks that and uses text_plain). A picture is "sent a photo" - never the picture or a link.
+//
+// Browser notifications (1.99acd, webpush.js): the same recipients (not muted, not blocking the sender, never Pepe)
+// get a content-free Web Push - "New message" and a link to the conversation, never the text or who sent it - in the
+// browsers where they turned it on (the ⚙ dialog's "Browser notifications"). Reading it first cancels it; at most one
+// per conversation per webpush_dm_gap_s. Muting a conversation stops these too.
 "use strict";
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
@@ -546,6 +551,8 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
     // 1.99kn: the Telegram alert (telegram.js: the member's switch, the preview rule, read-on-site cancels it)
     if (ra && !r.muted && !theyBlock) {
       try { require("./telegram").onDm(r.user_id, { conversationId: conv.id, messageId: mid, from: display(me), text, pics: picIds.length, group: group ? conv.title || "group" : null }); } catch (e) { /* never fails the send */ }
+      // 1.99acd: the browser notification (webpush.js: the member's per-browser switch, content-free, read-before-due cancels it)
+      try { require("./webpush").onDm(r.user_id, { conversationId: conv.id, messageId: mid }); } catch (e) { /* never fails the send */ }
     }
     emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...msg, blocked: true } : msg, conv: theirHead });
   }
@@ -691,7 +698,7 @@ async function renameGroup(user, conversationId, title) {
   await systemLine({ ...conv, title: tt }, user.userId, { op: "rename", title: tt });
   return { title: tt };
 }
-/** Mute a conversation (group or 1:1) for yourself: no Camfrog alerts, not in the nav count. */
+/** Mute a conversation (group or 1:1) for yourself: no Camfrog alerts, no browser notifications (1.99acd), not in the nav count. */
 async function setMute(user, conversationId, on) {
   await init();
   const m = await membership(conversationId, user.userId);
@@ -1227,6 +1234,8 @@ async function pepeReply({ conversation, upto, text } = {}) {
   emit(u.userId, { t: "msg", c: conv.id, m: msg, conv: head });
   // 1.99kn: Pepe's answer to "Message Pepe" reaches Telegram too (telegram.js onDm, the member's "dm" switch)
   try { require("./telegram").onDm(u.userId, { conversationId: conv.id, messageId: mid, from: (pepeAcc && display(pepeAcc)) || "Pepe", text: body }); } catch (e) { /* never fails the reply */ }
+  // 1.99acd: and a browser notification (webpush.js; a conversation muted by then is skipped when it's sent)
+  try { require("./webpush").onDm(u.userId, { conversationId: conv.id, messageId: mid }); } catch (e) { /* never fails the reply */ }
   return { message: { id: mid } };
 }
 
@@ -1282,10 +1291,11 @@ function register(app, { isBotToken, addUser }) {
       const nt = await inbox.feed(me.userId, notices ? { page: req.query.page, kind: String(req.query.kind || "") || null } : {});
       const picsWhy = await dmmedia.pictureRefusal(me);
       const pepeAcc = await account(PEPE_ID);            // 1.99ik: the 🐸 "Message Pepe" button
+      const push = await require("./webpush").clientConfig(me).catch(() => null);   // 1.99acd: the ⚙ dialog's 🔔 Browser notifications (null = not offered)
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
       res.render("messages", {
         title: notices ? (nt.unread ? `Notices (${nt.unread})` : "Notices") : (unread ? `Messages (${unread})` : "Messages"),
-        user: me.username, dmUnread: unread, inboxUnread: nt.unread,
+        user: me.username, dmUnread: unread, inboxUnread: nt.unread, push,
         boot: { me: { username: me.username, display: display(me), avatar: meLook.avatar || null, nameCss: meLook.nameCss || "", camfrog: !!me.camfrogUsername, isNew: isNewAccount(me), pictures: !picsWhy, picturesWhy: picsWhy },
                 conversations: convs, open, to, view: notices ? "notices" : null, prefs: await prefs(me.userId), blocks: await blockList(me.userId),
                 pepe: pepeAcc && !pepeAcc.archived_at ? { username: pepeAcc.username } : null,

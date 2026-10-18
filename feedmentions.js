@@ -11,8 +11,8 @@
 //   Emails (bob@x.com) never match: the "@" must not follow a letter / digit.
 //
 // NOTICES (notify): the 🔔 "mention" kind (inbox.js) - the same kind and the same preferences as room mention alerts
-// (mentions.feedAllowed: the "@mentions in posts and comments" switch, default on; the mute; quiet hours). Nobody is
-// told when:
+// (mentions.feedAllowed: the "@mentions in posts and comments" switch, default on; the mute; quiet hours) - and, 1.99acd,
+// a content-free browser notification where the member turned those on (webpush.js). Nobody is told when:
 //   * it's yourself, an archived account, or Pepe
 //   * either of you blocked the other (messages.js dm_blocks - the same blocks as DMs)
 //   * they couldn't see the post (feedstore.postSeenBy: an Approved pad they're outside of), or it's deleted / hidden /
@@ -172,11 +172,15 @@ async function notify(opts = {}) {
       if (!(await mentions.feedAllowed(a.userId, t))) continue;
       if (!under("a|" + author.userId, AUTHOR_HOUR, t) || !under("p|" + author.userId + "|" + a.userId, PAIR_HOUR, t) || !under("r|" + a.userId, RECIPIENT_HOUR, t)) continue;
       const where = opts.kind === "comment" ? "a comment" : "a post";
+      const ref = `fmention:${opts.kind === "comment" ? "c" : "p"}:${opts.id}:${a.userId}`;
       const stored = await inbox.addSafe(a.userId, {
-        kind: "mention", title: `💬 ${who} mentioned you in ${where}`, body: snip(opts.text, 300),
-        link: opts.link || "/feed", ref: `fmention:${opts.kind === "comment" ? "c" : "p"}:${opts.id}:${a.userId}`,
+        kind: "mention", title: `💬 ${who} mentioned you in ${where}`, body: snip(opts.text, 300), link: opts.link || "/feed", ref,
       });
       if (!stored) continue;
+      // 1.99acd: the browser notification (webpush.js) - "You were mentioned in a post / comment", never the text or the author
+      try {
+        require("./webpush").onMention(a.userId, { kind: "mention", roomId: null, ctx: opts.kind === "comment" ? "comment" : "post", url: opts.link || "/feed", srcKey: ref });
+      } catch (e) { /* never fails the notice */ }
       take("a|" + author.userId, t); take("p|" + author.userId + "|" + a.userId, t); take("r|" + a.userId, t);
       out.push(a.username);
     }

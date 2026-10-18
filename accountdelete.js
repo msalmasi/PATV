@@ -333,6 +333,7 @@ const DELETE_ROWS = [
   ["pad_user_flairs", "user_id", "uid"], ["feed_room_members", "user_id", "uid"], ["launchpad_visits", "user_id", "uid"], ["premium_plus_waitlist", "user_id", "uid"],
   ["camfrog_userstats", "login", "login"], ["golive_log", "user_id", "uid"],
   ["help_misses", "user_id", "uid"], ["age_attest", "user_id", "uid"], ["plex_watch_stats", "user_id", "uid"],
+  ["webpush_subs", "user_id", "uid"], ["webpush_outbox", "user_id", "uid"],   // 1.99acd: browser notifications (webpush.js)
 ];
 
 /** Settlements that run before the main transaction (each one idempotent). */

@@ -213,7 +213,7 @@
     blk.setAttribute('data-on', h && h.youBlocked ? '0' : '1');
     root.querySelectorAll('.dm-pop [data-for]').forEach(function (b) { b.hidden = b.getAttribute('data-for') === 'group' ? !grp : grp; });
     blk.hidden = grp || !w.username;
-    var mute = $('dmMMute'); mute.hidden = !S.open; mute.textContent = h && h.muted ? _t('js.msg.unmute_long', 'Unmute (Camfrog alerts back on)') : _t('js.msg.mute_long', 'Mute (no Camfrog alerts)');
+    var mute = $('dmMMute'); mute.hidden = !S.open; mute.textContent = h && h.muted ? _t('js.msg.unmute_long', 'Unmute (alerts back on)') : _t('js.msg.mute_long', 'Mute (no alerts)');
     root.querySelectorAll('[data-dm="clear"], [data-dm="hide"]').forEach(function (b) { b.hidden = !S.open; });
     var can = h ? h.canSend : (S.draft && S.draft.canSend);
     var why = h ? h.refusal : (S.draft && S.draft.refusal);
@@ -342,6 +342,7 @@
     showChat(true); setView('chat'); renderList();
     msgsEl.textContent = ''; $('dmStart').hidden = true; $('dmOlder').hidden = false;
     if (push) history.pushState({ c: id }, '', '/messages/c/' + id);
+    if (window.PATVPush) window.PATVPush.clear('dm:' + id);      // 1.99acd: this browser's notifications for it (public/js/webpush.js)
     return api('/api/messages/c/' + id + '?head=1').then(function (d) {
       if (S.open !== id) return;
       S.head = d.conversation; S.msgs = d.messages || []; S.more = !!d.more;
@@ -1007,6 +1008,8 @@
   if (/[?&]settings=1(&|$)/.test(location.search)) {
     try { history.replaceState(history.state, '', location.pathname + location.search.replace(/([?&])settings=1(&|$)/, function (m, a, b) { return b ? a : ''; }).replace(/\?$/, '') + location.hash); } catch (e) {}
     fillSettings(); $('dmSetMsg').textContent = ''; openDlg(setDlg);
+    // 1.99acd: ?settings=1#push (the /settings hub's 🔔 Browser notifications row) - straight to that part of the dialog
+    if (location.hash === '#push' && $('push')) { try { $('push').scrollIntoView({ block: 'start' }); } catch (e) { $('push').scrollIntoView(); } }
   }
   $('dmBlocks').addEventListener('click', function (e) {
     var b = e.target.closest('[data-unblock]');

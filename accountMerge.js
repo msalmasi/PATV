@@ -213,6 +213,9 @@ const RULES = {
   // 1.99kn: telegram.js - the survivor keeps its own Telegram link if it has one (one link per account, tg_id unique)
   "telegram_links.user_id": M({ key: [] }), "telegram_prefs.user_id": M({ key: ["kind"] }),
   "telegram_codes.user_id": M(), "telegram_outbox.user_id": M({ key: ["ref"] }),
+  // 1.99acd: webpush.js - browser notifications follow the account (an endpoint is unique on its own, so nothing collides; the
+  // moved rows' sign-ins end with the merge (sessions.revokeForMerge), so the next sweep removes them); the outbox is keyed by src_key
+  "webpush_subs.user_id": M(), "webpush_outbox.user_id": M({ key: ["src_key"] }), "webpush_cfg.actor": { deny: NAME },
   // 1.99lb: ssolinks.js - Sign in with Google links follow the account; the survivor keeps its own if it has one
   "sso_links.user_id": M({ key: ["provider"] }), "sso_links.subject": { deny: "the provider's account id, not a userId" },
   "welcome_bonus.userId": { special: "welcome bonus states are combined (mergeWelcome)" },

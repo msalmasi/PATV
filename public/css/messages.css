@@ -178,6 +178,16 @@ body.dm-page > .dm { flex: 1 1 0; height: auto; min-height: 0; }
 .dm-dlg-acts .dm-err { margin-right: auto; }
 .dm-dlg-acts button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--ds-line-menu); background: #1f1f25; color: #ddd; cursor: pointer; }
 .dm-dlg-acts button.pri { background: var(--dm-acc); border-color: var(--dm-acc); color: #fff; }
+/* 1.99acd: 🔔 browser notifications in the ⚙ dialog (public/js/webpush.js) */
+.dm-push { display: grid; }
+.dm-push[hidden] { display: none; }
+.dm-push-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.dm-push-acts:empty { display: none; }
+.dm-push-acts button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--ds-line-menu); background: #1f1f25; color: #ddd; cursor: pointer; white-space: nowrap; }
+.dm-push-acts button.pri { background: var(--dm-acc); border-color: var(--dm-acc); color: var(--ds-on-ac); }
+.dm-push-acts button[disabled] { opacity: .5; cursor: default; }
+.dm-push-st { display: block; margin-top: 6px; color: var(--dm-dim); font-size: 13px; }
+.dm-push-st:empty { display: none; }
 .dm-reasons { display: grid; gap: 4px; }
 .dm-reasons label { display: block; padding: 6px 8px; border-radius: 8px; border: 1px solid #26262c; cursor: pointer; }
 .dm-reasons label:has(input:checked) { border-color: var(--dm-acc); background: #0f1a10; }

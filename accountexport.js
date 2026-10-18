@@ -159,6 +159,8 @@ async function collect(userId, { at = now() } = {}) {
   await put("notices", "mention_words", rows("mention_words", "user_id = ?", [uid]));
   await put("notices", "go_live_alerts", rows("golive_prefs", "user_id = ?", [uid]));
   await put("notices", "telegram_alerts", rows("telegram_prefs", "user_id = ?", [uid]));
+  // 1.99acd: the browsers with notifications on (webpush.js) - the push service's host, never the endpoint's path or the keys
+  await put("notices", "browser_notifications", require("./webpush").exportFor(uid));
   // achievements + cosmetics
   await put("achievements", "badges", rows("user_badges", "userId = ?", [uid]));
   await put("achievements", "feed", rows("achievement_feed", "userId = ?", [uid]));
