@@ -11,7 +11,8 @@
 //   POST /api/admin/keys/family {family, legacy_enforce}      refuse the shared tokens on one route family
 //   POST /api/admin/keys/settings {enabled, bad_key, events, control_get}  the header kill switch, unresolvable keys, the
 //                                          /events mode, the VM's old GET claim of /api/pepe/control/pending (allow | refuse)
-//   POST /api/admin/hubseam/settings {tickets, heartbeat, sessions, privacy, econ, spans}
+//   POST /api/admin/hubseam/settings {tickets, heartbeat, sessions, privacy, erasure, export, econ, spans}   (1.99acm: + erasure, export;
+//                                          the page also shows the seam env, topic queues, the hub's calls in, exports waiting)
 // Who: viewing needs class Admin IN THE DATABASE (Staff get a flash + the Overview); every change needs an OWNER - Admin plus
 // Pepe role "owner" on the linked chat login (the user's 2026-10-16 rule: ops is owner-only). Changes need a same-origin fetch
 // with X-Requested-With: fetch, are written to admin_audit and answer Cache-Control: no-store.

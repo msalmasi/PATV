@@ -1,8 +1,11 @@
 # v1 chat tickets and the hub seam
 
-Site 1.99acf. The S0 pieces of the native chat plan that live in v1: chat tickets with their JWKS, and the first slice of
-the v1 seam (the hub outbox, the revoke hook, the request-time incognito call, the `econ/committed` callback, the
-heartbeat). Everything here is off until it is configured, and nothing is sent while no hub address is set.
+Site 1.99acf + 1.99acm. The S0 pieces of the native chat plan that live in v1: chat tickets with their JWKS, the v1
+seam (R-14: the hub outbox, the revoke hook, the request-time incognito call, the `econ/committed` callback, the heartbeat,
+1.99acm: the private-activity and `hidden_h` feeds, snapshots, rewind) and v1's half of the privacy seam (R-12, 1.99acm:
+account deletion, "Make Pepe forget me" and the export call). Everything here is off until it is configured, and nothing is
+sent while no hub address is set. The decisions behind 1.99acm are the "seam plan" D-numbers cited in the code comments; they are
+kept with the hub (`docs/seam-plan.md` in the platform repo).
 
 ## Chat tickets (`chatticket.js`)
 
@@ -78,6 +81,13 @@ rows from a refreshed staging copy and carries staging's sequence on.
 - **`emit()` rows** carry their payload. `emit()` runs only inside the action's `dbUtils.tx` (it throws otherwise), so the
   row commits or rolls back with the action, and it is deduped on `dedupe_key`.
 
+`HUB_V1_URL` is an **origin** (no path): the signature covers the raw request target, so a proxy or a path prefix that
+rewrote it would fail verification (status `url_path`). The outbound key id must be `v1-<env>-<n>` for this site's
+environment (`HUB_V1_ENV`: `prod`, `staging`, `test` or `dev`; empty = `staging` when `STAGING` is set, else `prod`);
+another one is never used (status `key_env`, an unknown `HUB_V1_ENV` is `bad_env`). The hub accepts only `v1-<its env>-…`
+ids, and v1 only `hub-<its env>-…` ids, so a staging key or a key of the other direction fails even if a proxy were
+miswired.
+
 ### Poster contract
 
 While `HUB_V1_URL` and `HUB_V1_KEY` are set, the poster wakes on every emit and polls every second. For each topic with
@@ -88,7 +98,8 @@ POST {HUB_V1_URL}/internal/v1/{topic}
 {"rows":[{"id":123,"topic":"sessions/revoked","entity":"sid:…","payload":{…},"created_at":1760727600000}, …]}
 ```
 
-Rows are marked posted only on a 2xx. Each topic has its own failure state: a topic the hub refuses (a 404 from an
+The hub answers 2xx only after its transaction has committed, so "posted" means "applied". Rows are marked posted only
+on a 2xx. Each topic has its own failure state: a topic the hub refuses (a 404 from an
 endpoint it hasn't built yet, a 500) backs off from 1 s to 30 s on its own, and the other topics keep posting in the same
 pass, so a revocation never waits behind another topic. Order is kept within a topic. `/admin/keys#seam` lists a topic
 that is backing off. The hub applies a row only if its `id` is above what it has for that `(topic, entity)`, so retries
@@ -96,9 +107,12 @@ and duplicates are harmless. Posted rows are deleted after 7 days. While no hub 
 days are deleted too (the hub bootstraps from snapshots, R-14).
 
 `HUB_V1_PROXY` (`host:port`, the userspace tailscaled HTTP proxy: 1055 prod, 1056 staging) is used for an `http://` hub
-(absolute-URI requests). HTTPS through CONNECT is left to the network-plane work. Nothing is posted to a plain `http://`
-hub address that isn't loopback unless `HUB_V1_PROXY` carries it (the tailnet, §1.4 / §16): session ids, account ids and
-privacy subjects never cross a network in cleartext. The status error is `insecure_url`, shown on `/admin/keys#seam`.
+(absolute-URI requests). HTTPS through CONNECT is left to the network-plane work. 1.99acm: a plain `http://` hub address
+is used only when its host is loopback or on the tailnet - `127.0.0.0/8`, `::1`, `localhost`, `100.64.0.0/10`,
+`fd7a:115c:a1e0::/48` or `*.ts.net`, the hub's own rule for `SEAM_V1_URL` - whether `HUB_V1_PROXY` is set or not
+(tailscaled's proxy dials any other host directly, in the clear): session ids, account ids and privacy subjects never cross
+a network in cleartext. The status error is `insecure_url`, shown on `/admin/keys#seam`. An outbound key equal to an
+inbound one (`HUB_V1_IN_KEY` / `HUB_V1_IN_PREV_KEY`) is never used either: `key_reuse`.
 
 ### Every request is signed (`hubsign.js`)
 
@@ -106,16 +120,26 @@ privacy subjects never cross a network in cleartext. The status error is `insecu
 X-PATV-Key-Id   HUB_V1_KEY_ID
 X-PATV-Ts       unix seconds (±60 s)
 X-PATV-Nonce    16 random bytes, hex (a cache refuses replays while the timestamp is in the window)
-X-PATV-Sig      v1=<hex HMAC-SHA256(HUB_V1_KEY, METHOD "\n" path "\n" ts "\n" nonce "\n" hex(sha256(body)))>
+X-PATV-Sig      v1=<hex HMAC-SHA256(HUB_V1_KEY, keyId "\n" METHOD "\n" path "\n" ts "\n" nonce "\n" hex(sha256(body)))>
 ```
 
-`path` is the request path with its query string, `body` the exact bytes sent. Test vector: key `test-key-not-real`,
+`keyId` is the `X-PATV-Key-Id` value as sent (1.99acm: signed too, so a captured request can't be relabelled with another
+key id that happens to share the secret - staging and prod, or the two directions), `path` the request path with its
+query string, `body` the exact bytes sent. The key is the UTF-8 bytes of the configured
+string (never decoded). **Shared vectors** (1.99acm): `test/fixtures/hubseam-sign-vectors.json` is byte-identical in the hub
+repo (`services/rooms/test/fixtures/`), and both repos pin its sha256, so a change on one side fails until the other is
+updated. It holds positive vectors in both directions (expected headers), negative vectors with their refusal codes, the
+`hidden_h` hashes and the `why` → reason table; `node tools/hubseam-vectors.js` checks it against `hubsign.js` (`--write`
+regenerates the computed fields). `hubsign.verifyFrom({dir, env, …})` is the receiver: refusals in this order - `missing`,
+`wrong_env` (a seam-shaped key id of the other direction or another environment), `unknown_key`, `stale`, `missing` (nonce
+format), `bad_sig`, `replay`, `busy`. Test vector: key `test-key-not-real`,
 `POST /internal/v1/heartbeat`, ts `1760727600`, nonce `00112233445566778899aabbccddeeff`, body `{"v":1}` (sha256
 `afbf9d0f3560b0fd7795e81c42a0a79ee6b6fc67e064f77826aee642cad28d91`) →
-`v1=d74f5230393ff8b27f916e4089692954d0135d024e45f87962d7e974927ad31d`. `verify()` is exported for the inbound side. It
-remembers a nonce until its timestamp leaves the ±60 s window (`ts + 60 s` plus a 5 s margin); only expired nonces are
-evicted, and a cache full of live nonces refuses new requests with `busy` (answer 503) instead of forgetting them. The
-cache is in memory, so a restart reopens the window for requests captured in the last two minutes.
+`v1=270a385ccba6ace561f8c1715198d39260435a33c0d61c721c5b5b533f26a18a` (key id `v1-prod-1`). `verify()` is exported for
+the inbound side. It remembers a nonce until its timestamp leaves the ±60 s window (`ts + 60 s` plus a 5 s margin); only
+expired nonces are evicted, and a cache full of live nonces refuses new requests with `busy` (answer 503) instead of
+forgetting them. That cache is in memory - a fast path: 1.99acm, the inbound routes also take every nonce durably (see
+"Calls into v1"), so a restart doesn't reopen the window.
 
 ### Topics
 
@@ -124,12 +148,18 @@ cache is in memory, so a restart reopens the window for requests captured in the
 | `sessions/revoked` | trigger on `sessions.revoked_at` (any writer, CLI scripts too) | `sid:<sessions.id>` | read at post time: `{kind:"session", sid: id[:32], account, v1_user, at, until, why}` (`{kind:"session", sid, gone:true}` if the row is gone) |
 | `sessions/revoked` | `sessions.revokeAll()` with nothing excepted: sign out everywhere, admin, feed ban, password reset, deletion request | `acct:<userId>` | `{kind:"account", account, v1_user, before, why}`: close every socket whose credential `iat < before` (4003) |
 | `sessions/revoked` | `sessions.revokeForMerge()` | `acct:<fromId>` | `{kind:"merge", account, into, v1_user, v1_into, before}`: close with 4005 |
-| `privacy/changed` | `incognito.request()` (web), in the action's transaction, before Pepe answers | `camfrog:<login>` or `acct:<userId>` | `{flag:"incognito", value, phase:"requested", via:"web", subject, at}` |
-| `privacy/changed` | `incognito.sync()` (Pepe's report), linked and unlinked logins | same | `{flag:"incognito", value, phase:"confirmed", via, subject, at}` |
-| `econ/committed` | `idemBegin` `done()` for a key starting `ix:` | the key | `{key, tx, outcome:{status, ok, code}, endpoint, at}` (refusals with a stored status included) |
+| `privacy/changed` | `incognito.request()` (web), in the action's transaction, before Pepe answers | `cfh:<login hash>` or `acct:<userId>` | `{flag:"incognito", value, phase:"requested", via:"web", subject, at}` |
+| `privacy/changed` | `incognito.sync()` (Pepe's report), linked and unlinked logins; 1.99acm: also every key Pepe's full list (`full`) turns ON or OFF, in one transaction with that heal | same | `{flag:"incognito", value, phase:"confirmed", via, subject, at}` |
+| `privacy/changed` | 1.99acm: trigger on `profile_layout` (any write) | `pa:<userId>` | read at post time: `{flag:"private_activity", value, subject:{acct, v1_user}, at}` - the Analytics section or its Rooms panel hidden (`stories.privateLogins`' rule; an unreadable layout counts as private) |
+| `privacy/changed` | 1.99acm: trigger on `hub_hidden_h` (`hubhidden.js`: Pepe's `hidden_h` from each bridge sync, only the difference written) | `hh:<h>` | read at post time: `{flag:"hidden_h", h, value, at}` (20-hex hashes only, never a login) |
+| `privacy/account-deleted` | 1.99acm: `accountdelete.execute()`, in the deletion's transaction | `acct:<userId>` | `{acct, v1_user, pseudonym, remove_public:false, request:<account_deletions.id>, at}` |
+| `privacy/forget` | 1.99acm: `pepeforget.request()` / `fromBot()` (linked accounts only), in the request's transaction | `forget:<pepe_forget_log.id>` | `{subject_kind:"acct", acct, v1_user, scope:"bot", ref, at}` |
+| `econ/committed` | `idemBegin` `done()` for a key starting `ix:` | the key | `{key, tx, outcome:{status, ok, code}, endpoint, at}` (refusals with a stored status included). The hub has no intake for it before R-4 (404; the topic backs off on its own). |
 
-`subject` is `{platform:"camfrog", login, acct?, v1_user?}`, or `{acct, v1_user}` for an account key. Never any line
-text. Hub rule: apply an incognito ON at `requested`, an OFF only at `confirmed`. "Sign out everywhere else" and a password
+`subject` is `{platform:"camfrog", login_h, acct?, v1_user?}`, or `{acct, v1_user}` for an account key. 1.99acm (seam
+plan D-6): a chat login never leaves v1 - its entity is `cfh:<h>` and its subject carries `login_h`, both
+`hubhidden.loginHash(login)` (`sha256("pepe-hidden:" + lower(trim(login)))[:20]`, `quotes.hiddenHash`'s form), so the hub
+stores no plaintext login anywhere (its feed positions and privacy mirror are keyed by the hash). Never any line text. Hub rule: apply an incognito ON at `requested`, an OFF only at `confirmed`. "Sign out everywhere else" and a password
 change keep the current device, so they send only the per-session rows. No v1 path issues `ix:` keys before S4 / S7a.
 
 **Account ids.** Every account field (`account`, `into`, `subject.acct`) is the hub's `account_id`: exactly the ticket's
@@ -141,16 +171,105 @@ change keep the current device, so they send only the per-session rows. No v1 pa
 directly. Every other time field is epoch **milliseconds**: `at`, `until`, `created_at` (rows and payloads) and the
 heartbeat's `at`.
 
+An account deletion names the account only - 1.99acm: never the released chat login nor a hash of it (an unkeyed hash of a
+short public username is reversible by dictionary, and the hub's deletion journal is write-once under Object Lock; the
+hub's erasure works on the account's lines, and an identity-scoped erasure is S2's, with its own design).
+`remove_public` stays `false` until the "also remove my public messages" choice exists (S1). "Make Pepe forget me" is scope `bot` (DMs with Pepe and his memory, never public lines); a login with no linked
+account sends nothing (identity-scoped requests are S2's `privacy/idn-request`).
+
 ### Heartbeat
 
 Every 30 s while configured and the `heartbeat` switch is on: a signed `POST {HUB_V1_URL}/internal/v1/heartbeat` with
-`{v:1, env:"prod"|"staging", at, outbox_head: MAX(hub_outbox.id), jwks_kids:[current, previous], version}` (`at` in epoch
-milliseconds).
+`{v:1, env, at, outbox_head, jwks_kids:[current, previous], version, switches, topics}` (`at` in epoch milliseconds).
+1.99acm: `env` is `HUB_V1_ENV`; `outbox_head` is the AUTOINCREMENT high-water mark (`sqlite_sequence.seq`, never
+`MAX(id)`, which is 0 on an emptied table); `switches` are the seam switches (`spans` excepted); `topics` has
+`{head, pending, oldest_pending_at}` for every topic with rows and every topic whose switch is on - the hub measures lag
+and privacy staleness from it.
+
+## Calls into v1 (`hubinbound.js`, 1.99acm)
+
+Signed by the hub with `hub-<env>-<n>` (`HUB_V1_IN_KEY_ID` / `HUB_V1_IN_KEY`, plus `HUB_V1_IN_PREV_KEY_ID` /
+`HUB_V1_IN_PREV_KEY` during a rotation). Without a valid inbound key the routes answer 404. The signature covers
+`req.originalUrl` (path and query exactly as sent) and the raw body: the site's JSON and form parsers skip `/internal/`.
+Refusals: `missing`, `unknown_key`, `wrong_env`, `stale`, `bad_sig` → 401, `replay` → 409, `busy` → 503 with
+`Retry-After: 2`; the answer carries the code only. Every answer is `Cache-Control: no-store`; logs carry the route, the
+code and counts - 1.99acm: refusal warnings at most one line per code per minute (the counters keep the totals). The hub
+reaches the routes over the tailnet (`tailscale serve` forwarding `/internal/v1/` unchanged); the public nginx must answer
+404 for `/internal/` case-insensitively (`location ~* ^/internal/ { return 404; }`, checked by `deploy/check-internal.sh` -
+deploy/README.md, an operator step before the inbound key is set). Defence in depth, before anything is parsed or verified
+and with no log line: a target that isn't exactly the lowercase `/internal/v1/` prefix (Express mounts are
+case-insensitive), or a request carrying Cloudflare's `cf-ray` / `cf-connecting-ip` headers, is a bare 404 (counted as
+"reached through the public site" on `/admin/keys#seam`).
+
+**Replays** (§16): besides `hubsign`'s in-memory cache, every verified request's nonce is taken durably, INSERT-first, in
+`hub_inbound_nonces(key_id, nonce, until)` - kept until the later of now and its timestamp, plus 10 minutes (the hub's
+rule) - before a snapshot page is served and inside the rewind's own transaction (a rewind that fails leaves no nonce).
+A v1 restart or deploy therefore never reopens the window. `huboutbox.cleanup()` sweeps expired rows hourly.
+
+```
+GET  /internal/v1/snapshot/<topic>?cursor=<opaque>
+  -> {v:1, topic, head, range:{after, through}, rows:[{entity, payload}], next, complete}     404 while the topic's switch is off
+POST /internal/v1/outbox/rewind {topic, after_id}
+  -> {ok, reposted, oldest_kept_id, head}
+```
+
+**Snapshots** list a topic's current **non-default** state in pages of 500, in byte order of the entity (SQLite BINARY,
+the hub's `COLLATE "C"`), with the payloads the feed carries. `head` is the outbox high-water mark, read first in the same
+SQLite transaction as the rows, so every row is at least as new as it: the hub applies a page row only where its feed
+position is at or below `head`. `range.after` is the cursor's entity (null on the first page) and `range.through` this
+page's last entity (null on the last page = to the end); the hub resets `privacy/changed` entities it holds inside the
+range but absent from the page. The cursor is base64url JSON `{k:<last entity>, s:<source>}`, opaque to the hub. Sources:
+
+| Topic | Rows |
+|---|---|
+| `sessions/revoked` | revoked sessions not yet expired (`sid:`), the account cutoffs the feed sent (`acct:`, 1.99acm: `session_cutoffs.hub_before` / `hub_why`, written only when `revokeAll` excepts nothing - never the cookie cutoff of "sign out everywhere else" or a password change, which keep this device; `before = ceil(hub_before / 1000)`), `account_merge_log` (`acct:<from_id>`, kind `merge`; a merge wins over a cutoff of the same id) |
+| `privacy/changed` | incognito keys confirmed ON (`incognito_state`, `incognito_anon` - unlinked logins too) or with a pending ON (an open `privacy.incognito` `["on"]` action newer than Pepe's last report, at most 24 h): `{flag:"incognito", value (confirmed), phase:"state", via (when ON), subject, at, pending_on, pending_at}`; private activity (`pa:`); `hub_hidden_h` (`hh:`) |
+| `privacy/account-deleted` | every `account_deletions` row in state `done` (the newest per account) |
+| `privacy/forget` | every `pepe_forget_log` row with an account |
+
+1.99acm: every source is a keyset read - at most `limit + 1` matching rows past the cursor, through an index where the
+entity is `<prefix><column>` (`sessions` by the partial index `hub_sessions_revoked`, cutoffs / deletions / hashes /
+layouts by their keys, merges by `account_merge_log_from`) - because a page runs inside `dbUtils.tx`, the process-wide
+chain. The incognito keys are cut at the cursor and the limit before any account is resolved, and a page's linked logins
+are resolved in one query on `users_camfrog_login` (`lower(trim(camfrogUsername))`). `privacy/forget` pages by the TEXT
+order of its decimal id (no index fits; the log is small).
+
+**Rewind** (the promotion runbook): `posted_at = NULL` on the kept rows of the topic with `id > after_id`, and the poster
+wakes. Posted rows are kept 7 days.
+
+## The export call (`accountexport.js`, 1.99acm)
+
+While the `export` switch is on and a hub is configured, "Download my data" also asks the hub:
+`GET {HUB_V1_URL}/internal/v1/privacy/export/acct/<the hub's account id>?ref=<the export's id>`, signed; the answer
+(`application/x-ndjson`, at most 64 MB, 60 s) is streamed to a 0600 temp file and must end with
+`{"t":"end","complete":true}` (a truncated answer is refused). It goes into the zip as `chat-hub.jsonl`, and the README
+names it. The export **never ships without it while the switch is on**: if the hub can't answer, the job goes back to
+`queued` with `hub_wait_since` (the first failure) and `hub_error` (a code), the 10-minute tick retries it (new jobs
+first), the member keeps seeing it as being prepared, and after 24 h a console error and `/admin/keys#seam` flag it. An
+account without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset) exports without it, and the README says
+so.
+
+## Fixtures and the contract suite
+
+- `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo
+  and pinned by sha256 in both (`test/hubsign.test.js`; `PATV_HUB_DIR=<hub checkout>` also compares the copies). The
+  golden rows are what each v1 builder must produce (`test/hubseam-golden.test.js`) and what the hub makes of them.
+  `.gitattributes` keeps them LF on every checkout.
+- `tools/hubseam-driver.js` is v1's side of the hub's contract suite (`services/rooms/test/seam-contract.integration.test.ts`,
+  run with `PATV_V1_DIR` pointing at this checkout): v1's real modules on a throwaway SQLite database in a fresh directory
+  under the OS temp dir (it refuses any other), driven over JSON lines on stdin / stdout. It is outside `test/` on purpose
+  (`node --test test/` runs every file there). How to run the suite: the hub repo's `docs/seam-contract.md`.
 
 ## Switches (`/admin/keys#seam`)
 
-`hubseam_settings`: `tickets`, `heartbeat`, `sessions`, `privacy`, `econ` (all off) and `spans` (on). A topic whose switch
-is off writes nothing. `tickets` can only be on together with `sessions` and `heartbeat` (above).
+`hubseam_settings`: `tickets`, `heartbeat`, `sessions`, `privacy`, 1.99acm: `erasure` (`privacy/account-deleted` and
+`privacy/forget` - one fan-out, on together) and `export` (the hub part of "Download my data"), `econ` (all off) and
+`spans` (on). A topic whose switch is off writes nothing and serves no snapshot. `tickets` can only be on together with
+`sessions` and `heartbeat` (above). The turn-on order on staging: hub `SEAM_ENABLED` → `heartbeat` → `sessions` →
+`privacy` → (S1) `erasure`, `export`. `/admin/keys#seam` also shows the seam environment and any outbound refusal, the
+per-topic queues, the hub's last snapshot and rewind calls and refusals, and exports waiting for the hub.
+
+When the privacy switches go on in S1, the privacy page names the chat hub in deletion and export.
 
 ## Bridge spans (`bridgespans.js`)
 
@@ -162,4 +281,23 @@ It only records and never affects the sync.
 ## Environment summary
 
 `CHAT_TICKET_KEY`, `CHAT_TICKET_KID`, `CHAT_TICKET_PREV_PUB`, `CHAT_TICKET_PREV_KID`, `CHAT_GENESIS_NS`, `HUB_V1_URL`,
-`HUB_V1_KEY_ID`, `HUB_V1_KEY`, `HUB_V1_PROXY` (names in `.env.example`, no values).
+`HUB_V1_KEY_ID`, `HUB_V1_KEY`, `HUB_V1_PROXY`, 1.99acm: `HUB_V1_ENV`, `HUB_V1_IN_KEY_ID`, `HUB_V1_IN_KEY`,
+`HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY` (names in `.env.example`, no values). Keys are per direction and per
+environment (four in all: v1 → hub and hub → v1, prod and staging), each generated separately (never one secret for two
+key ids: `key_reuse`), at least 32 random characters, and never printed: the operator copies them from the hub's SOPS
+file into the site's `.env` (0600).
+
+**Operator steps** (nothing here is live until they are done; every switch defaults off):
+1. nginx: `location ~* ^/internal/ { return 404; }` on the public server blocks of prod, www and staging, then
+   `bash deploy/check-internal.sh` (deploy/README.md) - before `HUB_V1_IN_KEY_ID` / `HUB_V1_IN_KEY` are set.
+2. `tailscale serve` mapping `/internal/v1/` to the site (127.0.0.1:3000 prod, :3100 staging), unchanged paths.
+3. The keys above, from the hub's SOPS file; `HUB_V1_ENV`; `HUB_V1_URL` (an origin: https, or http to loopback / the
+   tailnet) and `HUB_V1_PROXY` for an http tailnet hub.
+4. The switches, in the order under "Switches".
+
+A staging DB refresh (`deploy/keep-staging-tables.js`) keeps staging's own keys and switches, empties `hub_outbox` (its id
+sequence carries on) and, 1.99acm, `hub_hidden_h` and `hub_inbound_nonces` - those two first, the outbox last, since the
+copy carries prod's triggers - and marks prod's unfinished exports expired (`refresh-staging-db.sh`).
+
+**Pepe's hidden set** (`hubhidden.js`, 1.99acm): stored only while the `privacy` switch is on; turning the switch off
+empties `hub_hidden_h` (without a row for the hub), and the first bridge sync after it turns on writes the whole set.

@@ -18,6 +18,8 @@ process.env.SECRET_KEY = "test-secret";
 const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const I = require(path.join(repo, "incognito"));
 const HO = require(path.join(repo, "huboutbox"));
+const HH = require(path.join(repo, "hubhidden"));
+const cf = (l) => "cfh:" + HH.loginHash(l);                 // 1.99acm: a chat login leaves v1 only as its hash (seam plan D-6)
 
 const outbox = () => getQuery("SELECT topic, entity, payload, dedupe_key FROM hub_outbox WHERE topic = 'privacy/changed' ORDER BY id");
 const payloads = async () => (await outbox()).map((r) => ({ ...JSON.parse(r.payload), entity: r.entity, dedupe: r.dedupe_key }));
@@ -48,9 +50,10 @@ test("a web request: one 'requested' row in the action's transaction (ON and OFF
   const p = await payloads();
   assert.equal(p.length, 1);
   assert.deepEqual({ ...p[0], at: 0 }, { flag: "incognito", value: true, phase: "requested", via: "web", at: 0,
-                                         subject: { platform: "camfrog", login: "alicecf", acct: null, v1_user: "u-alice" }, entity: "camfrog:alicecf", dedupe: "incog-req:" + id },
+                                         subject: { platform: "camfrog", login_h: HH.loginHash("alicecf"), acct: null, v1_user: "u-alice" }, entity: cf("alicecf"), dedupe: "incog-req:" + id },
                    "a legacy id without CHAT_GENESIS_NS: no hub account id (acct null), the raw id as v1_user");
   assert.ok(!JSON.stringify(p).includes("203.0.113.9"), "no address");
+  assert.ok(!/alicecf/i.test(JSON.stringify(p.map((x) => ({ ...x, dedupe: null })))), "no login in what the hub gets");
   const { id: id2 } = await I.request("u-alice", false);
   const q = await payloads();
   assert.equal(q.length, 2);
@@ -81,9 +84,9 @@ test("Pepe's report: 'confirmed' rows for linked logins, unlinked logins and acc
                          { login: "u:u-nolink-1234", on: false, via: "chat", ts }] });
   let p = await payloads();
   assert.deepEqual(p.map((x) => [x.entity, x.phase, x.value, x.via, x.at]), [
-    ["camfrog:alicecf", "confirmed", true, "web", ts], ["camfrog:stranger", "confirmed", true, "chat", ts], ["acct:u-nolink-1234", "confirmed", false, "chat", ts]]);
-  assert.deepEqual(p[0].subject, { platform: "camfrog", login: "alicecf", acct: null, v1_user: "u-alice" }, "a linked login carries its account");
-  assert.deepEqual(p[1].subject, { platform: "camfrog", login: "stranger" }, "an unlinked login is covered too");
+    [cf("alicecf"), "confirmed", true, "web", ts], [cf("stranger"), "confirmed", true, "chat", ts], ["acct:u-nolink-1234", "confirmed", false, "chat", ts]]);
+  assert.deepEqual(p[0].subject, { platform: "camfrog", login_h: HH.loginHash("alicecf"), acct: null, v1_user: "u-alice" }, "a linked login carries its account");
+  assert.deepEqual(p[1].subject, { platform: "camfrog", login_h: HH.loginHash("stranger") }, "an unlinked login is covered too");
   assert.deepEqual(p[2].subject, { acct: null, v1_user: "u-nolink-1234" });
   assert.equal(p[0].dedupe, `incog:alicecf:${ts}`);
   // the same report again -> nothing new; an older report for a stored login -> nothing
@@ -109,4 +112,32 @@ test("the subject's acct is the hub's account_id - the ticket's sub (a legacy id
     assert.equal(p[1].subject.acct, CT.subjectOf("u-nolink-1234"));
     assert.equal(HO.accountOf("0F9E3C1A-1B2C-4D5E-8F90-A1B2C3D4E5F6"), "0f9e3c1a-1b2c-4d5e-8f90-a1b2c3d4e5f6", "a UUID userId is its own account_id");
   } finally { delete process.env.CHAT_GENESIS_NS; }
+});
+
+test("1.99acm: Pepe's full list writes a 'confirmed' row for every key it turns ON or OFF, in one transaction with the heal", async () => {
+  await HO.setSettings({ privacy: true });
+  await runQuery("DELETE FROM hub_outbox");
+  // state now: alicecf OFF (last report), stranger ON (anon), u:u-nolink-1234 ON. A list without stranger, with bobcf and newbie:
+  const before = new Set((await getQuery("SELECT login FROM incognito_anon")).map((r) => r.login));
+  assert.ok(before.has("stranger"));
+  await I.sync({ items: [], full: ["BobCF", "newbie", "u:u-nolink-1234"] });
+  const p = await payloads();
+  const by = Object.fromEntries(p.map((x) => [x.entity, x]));
+  assert.equal(by[cf("bobcf")].value, true, "a login ON only because the full list says so reaches the hub at once");
+  assert.equal(by[cf("bobcf")].phase, "confirmed");
+  assert.deepEqual(by[cf("bobcf")].subject, { platform: "camfrog", login_h: HH.loginHash("bobcf"), acct: null, v1_user: "u-bob" });
+  assert.equal(by[cf("newbie")].value, true, "an unlinked one too");
+  assert.deepEqual(by[cf("newbie")].subject, { platform: "camfrog", login_h: HH.loginHash("newbie") });
+  assert.equal(by[cf("stranger")].value, false, "a login the list drops is turned OFF");
+  assert.equal(by["acct:u-nolink-1234"], undefined, "an unchanged key writes nothing");
+  assert.equal(p.length, 3);
+  assert.equal((await getQuery(`SELECT "on" AS v FROM incognito_state WHERE login = 'bobcf'`))[0].v, 1, "the heal itself still happens");
+  // the same list again: nothing changes, nothing is written
+  await I.sync({ items: [], full: ["bobcf", "newbie", "u:u-nolink-1234"] });
+  assert.equal((await payloads()).length, 3);
+  // switch off: the heal runs, the hub gets nothing
+  await HO.setSettings({ privacy: false });
+  await I.sync({ items: [], full: [] });
+  assert.equal((await payloads()).length, 3);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM incognito_anon"))[0].n, 0);
 });

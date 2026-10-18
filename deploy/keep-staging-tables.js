@@ -11,7 +11,10 @@
 //   KEEP   prod's rows go, staging's own come back (by the columns both tables have; a table the copy lacks is created
 //          from staging's own CREATE statement first - staging can be a release ahead of prod).
 //   EMPTY  hub_outbox: prod's rows go and staging's id sequence carries on (never below what the staging hub has seen -
-//          its feed positions rely on monotonic ids; the hub heals from snapshots).
+//          its feed positions rely on monotonic ids; the hub heals from snapshots). 1.99acm: hub_hidden_h (Pepe's hidden_h
+//          set as prod's Pepe reported it - staging's Pepe repopulates it on his next sync) and hub_inbound_nonces, both
+//          BEFORE hub_outbox: prod's hh trigger fires on those deletes once staging's switches are back, and its rows must
+//          land in the outbox before the outbox is emptied, never after.
 // If that fails, a second transaction only clears KEEP + EMPTY in the copy (staging starts with defaults: no keys, every
 // switch at its safe default). Exit 0 when either worked, 1 when the copy couldn't be made safe (the caller then keeps
 // staging's old DB). Prints table names and row counts only - never a row.
@@ -20,7 +23,10 @@ const path = require("path");
 
 const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings",          // keys + switches
               "bot_route_log", "legacy_token_use", "legacy_token_daily", "events_auth_log", "bridge_spans"];   // logs
-const EMPTY = ["hub_outbox"];
+// hub_outbox LAST: the copy carries prod's triggers (huboutbox.init creates them on prod whatever the switches say), and with
+// staging's switches already restored a DELETE of a source table (hub_hidden_h's hh trigger) would write a row of prod's
+// data into the outbox just emptied - so every source table is emptied first, the outbox after them.
+const EMPTY = ["hub_hidden_h", "hub_inbound_nonces", "hub_outbox"];
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
 

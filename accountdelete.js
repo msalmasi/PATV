@@ -460,13 +460,28 @@ async function execute(userId, { force = false } = {}) {
                       ON CONFLICT(userId) DO UPDATE SET tier = 'DELETED', reason = excluded.reason, archived_at = excluded.archived_at, snapshot = excluded.snapshot,
                         restored_at = NULL, restored_via = NULL`, [uid, `acctdel-${reqRow.id}`, t, JSON.stringify({ pseudonym: pseudo })]);
     }
+    // 10. 1.99acm: the chat hub's erasure (huboutbox topic privacy/account-deleted, switch hubseam.erasure - the R-12 privacy
+    //     seam): committed with the deletion or not at all; the hub pseudonymises the account's chat lines as a "former member"
+    //     under this pseudonym, revokes its chat credentials and journals the erasure. remove_public stays false until the
+    //     "also remove my public messages" choice exists (S1, seam plan D-23).
+    //     The payload names the account only - never the released chat login, nor a hash of it (an unkeyed hash of a short
+    //     public username is reversible, and the hub's deletion journal is write-once; identity-scoped erasure is S2's).
     await runQuery("UPDATE account_deletions SET state = 'done', done_at = ?, pseudonym = ?, report = ?, held_reason = NULL WHERE id = ?",
                    [t, pseudo, JSON.stringify(report).slice(0, 20000), reqRow.id]);
+    await require("./huboutbox").emit("privacy/account-deleted", "acct:" + uid,
+      hubRow({ id: reqRow.id, user_id: uid, pseudonym: pseudo, done_at: t }), { dedupe: "acctdel:" + reqRow.id });
   });
   try { await require("./accountexport").removeAll(uid); } catch (e) { /* none */ }
   try { require("./sessions")._clearCache(); } catch (e) { /* none */ }
   console.log(`[acctdel] ${uid} deleted -> ${pseudo}${report.route ? ` (${report.route.amount} PAT -> ${report.route.legs.map(([d, a]) => `${d} ${a}`).join(", ")})` : ""}`);
   return { ok: true, state: "done", report };
+}
+
+/** 1.99acm: a done account_deletions row -> the chat hub's privacy/account-deleted payload (the feed row and the snapshot's).
+ *  acct is the hub's account_id (the ticket's sub), v1_user the raw id, request the deletion's id (the hub's origin ref). */
+function hubRow(r) {
+  return { acct: require("./huboutbox").accountOf(r.user_id), v1_user: String(r.user_id), pseudonym: r.pseudonym || null, remove_public: false,
+           request: Number(r.id), at: Number(r.done_at) || null };
 }
 
 /** A deleted account credited later (a late refund, a payout already in flight): route it the same way. */
@@ -616,6 +631,6 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, blockers, request, schedule, cancelOnSignIn, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
+module.exports = { hubRow, init, register, blockers, request, schedule, cancelOnSignIn, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
                    pendingOf, isDeleted, elevated, Refuse, FLOW, FORGET_KIND, GRACE_MS, NAME_COLUMNS, DELETE_ROWS,
                    _setClock: (f) => { clock = f || (() => Date.now()); } };

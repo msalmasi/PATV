@@ -13,8 +13,12 @@
 // What it is NOT: public room chat, mic transcripts and captures are the room's record (and other people's); this
 // doesn't switch on incognito either - Pepe starts learning again if they keep talking to him (the page says so).
 // Every request is logged (pepe_forget_log: who, when, how, counts) - nothing about what was said.
+// 1.99acm: the chat hub's half (huboutbox topic privacy/forget, switch hubseam.erasure - the R-12 privacy seam, seam plan D-24):
+// for a PATV account (the web request, or Pepe's for a linked login / account key) the DM wipe, the log row and a
+// privacy/forget row {subject_kind:"acct", acct, v1_user, scope:"bot", ref} commit in ONE transaction - the hub forgets the
+// account's conversations with its bots. A login with no linked account sends nothing (identity-scoped requests are S2's).
 "use strict";
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 const guard = require("./middleware/authGuard");
 
 const PEPE_ID = "pepe-bot";
@@ -68,17 +72,37 @@ async function request(userId, { t = now() } = {}) {
   const recent = (await getQuery("SELECT COUNT(*) AS n FROM pepe_forget_log WHERE user_id = ? AND at > ?", [uid, t - RATE_WINDOW_MS]))[0].n;
   if (recent >= RATE_MAX) throw new Refuse(429, "You've asked a few times today already - try again tomorrow.", "rate");
   const login = await loginOf(uid);
-  const dms = await wipeDms(uid, t);
-  let action = null;
+  await require("./messages").init();                 // (table creation never inside the transaction below)
+  let dms = 0, action = null, ref = null;
   try {
-    action = await require("./actions").queue(uid, { kind: "privacy.forgetme", args: [], tag: "privacy", label: "forget me" });
+    // 1.99acm: one transaction - the DM wipe, Pepe's action, the log row and the chat hub's privacy/forget row. The action is
+    // exempt from Pepe's "busy" cap (actions.queue): the request never depends on his queue having room
+    ({ dms, action, ref } = await tx(async () => {
+      const n = await wipeDms(uid, t);
+      const a = await require("./actions").queue(uid, { kind: "privacy.forgetme", args: [], tag: "privacy", label: "forget me" });
+      const r = await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms, action_id) VALUES (?, ?, ?, 'web', ?, ?)",
+                               [uid, login, t, n, a ? String(a) : null]);
+      const id = r && (r.id || r.lastID);
+      await emitForget(id, uid, t);
+      return { dms: n, action: a, ref: id };
+    }));
   } catch (e) {
     if (e && e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment, then try again.", "busy");
     throw e;
   }
-  await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms, action_id) VALUES (?, ?, ?, 'web', ?, ?)", [uid, login, t, dms, action ? String(action) : null]);
   console.log(`[pepeforget] ${uid}${login ? " (" + login + ")" : ""}: ${dms} DM(s) with Pepe deleted, Pepe asked to forget (web)`);
-  return { ok: true, dms, action };
+  return { ok: true, dms, action, ref };
+}
+
+/** 1.99acm: a pepe_forget_log row of an account -> the chat hub's privacy/forget payload (the feed row and the snapshot's). */
+function hubRow(r) {
+  return { subject_kind: "acct", acct: require("./huboutbox").accountOf(r.user_id), v1_user: String(r.user_id), scope: "bot", ref: Number(r.id),
+           at: Number(r.at) || null };
+}
+/** Inside the request's transaction: the privacy/forget row (a no-op while hubseam.erasure is off). */
+function emitForget(id, userId, t) {
+  if (!id || userId == null) return false;
+  return require("./huboutbox").emit("privacy/forget", "forget:" + id, hubRow({ id, user_id: userId, at: t }), { dedupe: "forget:" + id });
 }
 
 /** Pepe (bot token) after `!forgetme confirm` in Camfrog: the website half for the accounts linked to that login. */
@@ -89,10 +113,15 @@ async function fromBot(login, { t = now() } = {}) {
   const ids = l.startsWith("u:") ? [l.slice(2)]
     : (await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [l])).map((r) => String(r.userId));
   let dms = 0;
+  await require("./messages").init();
   for (const id of ids) {
-    const n = await wipeDms(id, t);
-    dms += n;
-    await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms) VALUES (?, ?, ?, 'chat', ?)", [id, l, t, n]);
+    // 1.99acm: per account, the wipe, the log row and the chat hub's privacy/forget row in one transaction
+    dms += await tx(async () => {
+      const n = await wipeDms(id, t);
+      const r = await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms) VALUES (?, ?, ?, 'chat', ?)", [id, l, t, n]);
+      await emitForget(r && (r.id || r.lastID), id, t);
+      return n;
+    });
   }
   if (!ids.length) await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms) VALUES (NULL, ?, ?, 'chat', 0)", [l, t]);
   console.log(`[pepeforget] ${l}: ${dms} DM(s) with Pepe deleted (chat, ${ids.length} linked account(s))`);
@@ -126,5 +155,5 @@ function register(app, { addUser, isBotToken }) {
   });
 }
 
-module.exports = { init, register, request, fromBot, wipeDms, last, Refuse, RATE_MAX, PEPE_ID,
+module.exports = { init, register, request, fromBot, wipeDms, last, hubRow, Refuse, RATE_MAX, PEPE_ID,
   _setClock: (fn) => { clock = fn || (() => Date.now()); } };

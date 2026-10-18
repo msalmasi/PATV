@@ -25,6 +25,10 @@ has_table() { [ "$(sqlite3 "$S/myapp.db.new" "SELECT COUNT(*) FROM sqlite_master
 if has_table webpush_subs; then sqlite3 "$S/myapp.db.new" "DELETE FROM webpush_subs;"; fi
 if has_table webpush_outbox; then sqlite3 "$S/myapp.db.new" "DELETE FROM webpush_outbox;"; fi
 if has_table webpush_cfg; then sqlite3 "$S/myapp.db.new" "UPDATE webpush_cfg SET value = '0' WHERE key = 'webpush_enabled';"; fi
+# 1.99acm: prod's unfinished "Download my data" jobs (one waiting for the chat hub can sit in 'queued' for days) must never run
+# on staging - they would zip prod members' data there, call the staging hub with prod account ids and send "export ready"
+# notices. (Prod's zips aren't copied: they live outside the database.)
+if has_table account_exports; then sqlite3 "$S/myapp.db.new" "UPDATE account_exports SET state = 'expired', file = NULL WHERE state IN ('queued', 'running');"; fi
 echo "prod copied: $(du -h "$S/myapp.db.new" | cut -f1), $(sqlite3 "$S/myapp.db.new" 'select count(*) from users') users"
 
 pm2 stop patv-staging >/dev/null

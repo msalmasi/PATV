@@ -30,6 +30,9 @@
 // 1.99acf: the chat hub's privacy cache (huboutbox.js topic privacy/changed, switch hubseam.privacy): a web request writes a
 // "requested" row in the same transaction as the action (the hub hides at once on ON; it un-hides only on "confirmed"), and
 // every change Pepe reports writes a "confirmed" row - for unlinked logins too. Subject ids only, never any line text.
+// 1.99acm: a login reaches the hub only as its hidden hash (entity "cfh:<h>", subject login_h - seam plan D-6), and Pepe's
+// full list (`full`) heals in one transaction that also writes a "confirmed" row for every key it turns ON or OFF, so a login
+// that is ON only through the full list is hidden on the hub at once, not at the next snapshot.
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 
@@ -82,8 +85,24 @@ async function userByLogin(login) {
                             ${(await hasArchived()) ? "AND archived_at IS NULL" : ""}`, [m[1]]))[0] || null;
   }
   if (!l || !LOGIN_RE.test(l)) return null;
-  return (await getQuery(`SELECT userId, username, camfrogUsername FROM users WHERE lower(camfrogUsername) = ? ${(await hasArchived()) ? "AND archived_at IS NULL" : ""}
-                          LIMIT 1`, [l]))[0] || null;
+  // 1.99acm: lower(trim(...)) with the partial index's own terms, so users_camfrog_login (accountMerge.js) answers it - not a scan
+  return (await getQuery(`SELECT userId, username, camfrogUsername FROM users WHERE lower(trim(camfrogUsername)) = ? ${LINKED}
+                          ${(await hasArchived()) ? "AND archived_at IS NULL" : ""} LIMIT 1`, [l]))[0] || null;
+}
+const LINKED = "AND camfrogUsername IS NOT NULL AND trim(camfrogUsername) != ''";
+/** 1.99acm: the live accounts of many chat logins in one indexed query (huboutbox's privacy/changed snapshot page). -> Map(login -> userId) */
+async function usersByLogins(logins) {
+  const want = [...new Set((logins || []).map(low).filter((l) => LOGIN_RE.test(l)))];
+  const out = new Map();
+  const arch = (await hasArchived()) ? "AND archived_at IS NULL" : "";
+  for (let i = 0; i < want.length; i += 400) {
+    const part = want.slice(i, i + 400);
+    for (const r of await getQuery(`SELECT userId, lower(trim(camfrogUsername)) AS l FROM users WHERE lower(trim(camfrogUsername)) IN (${part.map(() => "?").join(",")})
+                                    ${LINKED} ${arch}`, part)) {
+      if (!out.has(r.l)) out.set(r.l, String(r.userId));
+    }
+  }
+  return out;
 }
 async function loginOf(userId) {
   const r = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [String(userId)]))[0];
@@ -175,18 +194,30 @@ async function request(userId, on, { ip } = {}) {
   return { id };
 }
 
-// 1.99acf: the chat hub's id for a chat key (camfrog:<login> | acct:<userId>) and its subject - never any line text. The
-// subject's acct is the hub's account_id (the ticket's sub: huboutbox.accountOf -> chatticket.subjectOf, a legacy id -> its
-// UUIDv5), the raw users.userId beside it as v1_user; the entity stays v1's own ordering key.
+// 1.99acf: the chat hub's id for a chat key and its subject - never any line text. The subject's acct is the hub's account_id
+// (the ticket's sub: huboutbox.accountOf -> chatticket.subjectOf, a legacy id -> its UUIDv5), the raw users.userId beside it
+// as v1_user; the entity stays v1's own ordering key. 1.99acm (seam plan D-6): a chat login never leaves v1 - its entity is
+// "cfh:<h>" and its subject carries login_h, h = hubhidden.loginHash(login) (sha256("pepe-hidden:" + lower(trim(login)))[:20],
+// quotes.hiddenHash's form); an account key is "acct:<userId>". null for a key the hub wouldn't accept (never sent).
 function entityOf(login) {
   const m = ACCT_RE.exec(String(login));
-  return m ? "acct:" + m[1] : "camfrog:" + low(login);
+  if (m) return "acct:" + m[1];
+  const h = require("./hubhidden").loginHash(low(login));
+  return h ? "cfh:" + h : null;
 }
 function subjectOf(login, acct) {
   const m = ACCT_RE.exec(String(login));
   const of = (id) => ({ acct: require("./huboutbox").accountOf(id), v1_user: String(id) });
   if (m) return of(m[1]);
-  return acct ? { platform: "camfrog", login: low(login), ...of(acct) } : { platform: "camfrog", login: low(login) };
+  const lh = require("./hubhidden").loginHash(low(login));
+  return acct ? { platform: "camfrog", login_h: lh, ...of(acct) } : { platform: "camfrog", login_h: lh };
+}
+/** Inside a transaction: the hub's privacy/changed row for a key Pepe reported (phase "confirmed"). */
+function emitConfirmed(login, on, via, user, at, dedupe) {
+  const entity = entityOf(login);
+  if (!entity) return false;
+  return require("./huboutbox").emit("privacy/changed", entity,
+    { flag: "incognito", value: on, phase: "confirmed", via, subject: subjectOf(login, user && !ACCT_RE.test(login) ? user : null), at }, { dedupe });
 }
 
 /** Pepe's report. -> {applied, ignored} */
@@ -215,9 +246,7 @@ async function sync(body) {
                        [login, on ? 1 : 0, ts, t, via]);
         await log({ userId: u.userId, login, kind: "applied", on, via, at: t });
       }
-      await require("./huboutbox").emit("privacy/changed", entityOf(login),
-        { flag: "incognito", value: on, phase: "confirmed", via, subject: subjectOf(login, u && !ACCT_RE.test(login) ? u.userId : null), at: ts },
-        { dedupe: `incog:${login}:${ts}` });
+      await emitConfirmed(login, on, via, u ? u.userId : null, ts, `incog:${login}:${ts}`);
     });
     if (!u || stale) { ignored++; continue; }              // only linked chat identities are kept
     applied++;
@@ -234,19 +263,32 @@ async function sync(body) {
     }
   }
   if (Array.isArray(body && body.full)) {
+    // 1.99acm: the heal runs in ONE transaction with the chat hub's rows: every key whose effective state it changes (a login
+    // that is ON only because the full list says so - Pepe restarted, an item report was lost - or one the list turns OFF)
+    // writes a privacy/changed "confirmed" row at once, so the hub never waits for the next snapshot to hide it (§1.3, §9.2)
     const set = new Set(body.full.map(low).filter(isKey));
-    for (const r of await getQuery("SELECT login FROM incognito_anon")) if (!set.has(r.login)) await runQuery("DELETE FROM incognito_anon WHERE login = ?", [r.login]);
-    for (const l of set) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [l, t]);
-    // stored logins that are no longer on the list -> off
-    for (const r of await getQuery(`SELECT login FROM incognito_state WHERE "on" = 1`)) {
-      if (!set.has(r.login)) await runQuery(`UPDATE incognito_state SET "on" = 0, reported = ? WHERE login = ?`, [t, r.login]);
-    }
-    for (const l of set) {
-      if (!(await userByLogin(l))) continue;
-      await runQuery(`INSERT INTO incognito_state (login, "on", updated, reported, via) VALUES (?, 1, NULL, ?, 'full')
-                      ON CONFLICT(login) DO UPDATE SET "on" = 1, reported = excluded.reported`, [l, t]);
-    }
-    await runQuery("INSERT INTO incognito_meta (key, value) VALUES ('last_full', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(t)]);
+    await tx(async () => {
+      const changed = new Map();                         // key -> on
+      const wasOn = new Set((await getQuery("SELECT login FROM incognito_anon")).map((r) => r.login));
+      for (const r of await getQuery(`SELECT login FROM incognito_state WHERE "on" = 1`)) wasOn.add(r.login);
+      for (const l of wasOn) if (!set.has(l)) changed.set(l, false);
+      for (const l of set) if (!wasOn.has(l)) changed.set(l, true);
+      for (const l of wasOn) if (!set.has(l)) await runQuery("DELETE FROM incognito_anon WHERE login = ?", [l]);
+      for (const l of set) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [l, t]);
+      // stored logins that are no longer on the list -> off
+      for (const r of await getQuery(`SELECT login FROM incognito_state WHERE "on" = 1`)) {
+        if (!set.has(r.login)) await runQuery(`UPDATE incognito_state SET "on" = 0, reported = ? WHERE login = ?`, [t, r.login]);
+      }
+      const users = await usersByLogins([...set, ...changed.keys()].filter((l) => !ACCT_RE.test(l)));
+      const userOf = (l) => { const m = ACCT_RE.exec(l); return m ? m[1] : users.get(l) || null; };
+      for (const l of set) {
+        if (ACCT_RE.test(l) ? !(await userByLogin(l)) : !users.has(l)) continue;
+        await runQuery(`INSERT INTO incognito_state (login, "on", updated, reported, via) VALUES (?, 1, NULL, ?, 'full')
+                        ON CONFLICT(login) DO UPDATE SET "on" = 1, reported = excluded.reported`, [l, t]);
+      }
+      for (const [l, on] of changed) await emitConfirmed(l, on, "chat", userOf(l), t, `incog-full:${l}:${t}`);
+      await runQuery("INSERT INTO incognito_meta (key, value) VALUES ('last_full', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(t)]);
+    });
   }
   return { applied, ignored };
 }
@@ -296,4 +338,7 @@ function register(app, { addUser, isBotToken }) {
   });
 }
 
-module.exports = { init, register, request, sync, stateOf, RATE_MAX, RATE_WINDOW_MS, Refuse, _setClock: (f) => { clock = f; } };
+// 1.99acm: entityOf / subjectOf / userByLogin / loginOf are shared with huboutbox.js's privacy/changed snapshot (the same
+// entity and subject the feed rows carry).
+module.exports = { init, register, request, sync, stateOf, entityOf, subjectOf, userByLogin, usersByLogins, loginOf, isKey, ACCT_RE, RATE_MAX, RATE_WINDOW_MS,
+                   Refuse, _setClock: (f) => { clock = f; } };

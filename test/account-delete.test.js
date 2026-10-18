@@ -275,3 +275,37 @@ test("held: something new in flight at the date holds it (one notice); the doc a
   const doc = fs.readFileSync(path.join(repo, "docs", "account-deletion.md"), "utf8");
   for (const w of ["14", "PAT Routing", "account_deleted", "pseudonym", "privacy.forget", "TAKE IT DOWN"]) assert.ok(doc.includes(w), "doc mentions " + w);
 });
+
+test("1.99acm: the chat hub's privacy/account-deleted row commits with the deletion (and rolls back with it); no login, no login hash", async () => {
+  const HO = require(path.join(repo, "huboutbox"));
+  const H = require(path.join(repo, "hubhidden"));
+  await HO.init();
+  await HO.setSettings({ erasure: true });
+  process.env.CHAT_GENESIS_NS = "6ba7b812-9dad-11d1-80b4-00c04fd430c8";
+  try {
+    await user("hubdel", { username: "hubdeleter", cf: "HubDelCF" });
+    await D.schedule({ userId: "hubdel", username: "hubdeleter" }, { by: "self", reauth: "password" });
+    // a failure inside the deletion's transaction: neither the deletion nor the hub row lands
+    const emit = HO.emit;
+    HO.emit = async (...a) => { await emit(...a); throw new Error("boom"); };
+    try { await assert.rejects(D.execute("hubdel", { force: true }), /boom/); } finally { HO.emit = emit; }
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM hub_outbox WHERE topic = 'privacy/account-deleted'"))[0].n, 0, "rolled back with the deletion");
+    assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = 'hubdel' ORDER BY id DESC LIMIT 1"))[0].state, "scheduled");
+    const r = await D.execute("hubdel", { force: true });
+    assert.equal(r.state, "done");
+    const d = (await getQuery("SELECT id, pseudonym, done_at FROM account_deletions WHERE user_id = 'hubdel' AND state = 'done'"))[0];
+    const cols = (await getQuery("SELECT name FROM pragma_table_info('account_deletions')")).map((c) => c.name);
+    assert.ok(!cols.includes("hub_login_h"), "1.99acm: no login hash kept with the deletion (an unkeyed hash of a login is reversible)");
+    const row = (await getQuery("SELECT entity, payload, dedupe_key FROM hub_outbox WHERE topic = 'privacy/account-deleted'"))[0];
+    assert.equal(row.entity, "acct:hubdel");
+    assert.equal(row.dedupe_key, "acctdel:" + d.id);
+    assert.deepEqual(JSON.parse(row.payload), { acct: require(path.join(repo, "chatticket")).subjectOf("hubdel"), v1_user: "hubdel", pseudonym: d.pseudonym,
+                                                remove_public: false, request: d.id, at: d.done_at });
+    assert.ok(!row.payload.includes("hubdelcf") && !row.payload.includes("HubDelCF"), "no login in the row");
+    assert.ok(!row.payload.includes(H.loginHash("hubdelcf")), "...nor its hash");
+    assert.deepEqual(D.hubRow(d).request, d.id, "the snapshot's builder is the same");
+  } finally {
+    delete process.env.CHAT_GENESIS_NS;
+    await HO.setSettings({ erasure: false });
+  }
+});

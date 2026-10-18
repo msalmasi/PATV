@@ -142,3 +142,85 @@ test("the job: a zip with patv-data.json + README, a notice, the owner's downloa
   assert.equal((await getQuery("SELECT state FROM account_exports WHERE id = ?", [r.id]))[0].state, "expired");
   assert.ok(!fs.existsSync(path.join(X._dir(), j.file)));
 });
+
+test("1.99acm: the chat hub's part - chat-hub.jsonl while hubseam.export is on; the job waits (never ships without it) and finishes when the hub answers", async () => {
+  const http = require("http");
+  const HO = require(path.join(repo, "huboutbox"));
+  const hs = require(path.join(repo, "hubsign"));
+  const G = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "hubseam-golden-rows.json"), "utf8"));
+  await HO.init();
+  let mode = "ok";
+  const seen = [];
+  const hub = http.createServer((req, res) => {
+    seen.push({ url: req.url, ok: hs.verifyFrom({ dir: "v1", env: "test", method: req.method, path: req.url, body: "", headers: req.headers,
+                                                  keys: { "v1-test-1": "v1-test-key-not-real-0123456789" } }).ok });
+    if (mode === "down") { res.writeHead(503); return res.end(); }
+    res.writeHead(200, { "content-type": "application/x-ndjson" });
+    res.end(mode === "truncated" ? G.export_jsonl.split("\n").slice(0, 2).join("\n") + "\n" : G.export_jsonl);
+  });
+  await new Promise((r) => hub.listen(0, "127.0.0.1", r));
+  const env = { HUB_V1_URL: `http://127.0.0.1:${hub.address().port}`, HUB_V1_ENV: "test", HUB_V1_KEY_ID: "v1-test-1", HUB_V1_KEY: "v1-test-key-not-real-0123456789",
+                CHAT_GENESIS_NS: "6ba7b812-9dad-11d1-80b4-00c04fd430c8" };
+  Object.assign(process.env, env);
+  const job = async (uid) => {
+    clockAt += 2 * 86400000;
+    const id = require("crypto").randomBytes(16).toString("hex");
+    await runQuery("INSERT INTO account_exports (id, user_id, created, state) VALUES (?, ?, ?, 'queued')", [id, uid, clockAt]);
+    return id;
+  };
+  const row = (id) => getQuery("SELECT * FROM account_exports WHERE id = ?", [id]).then((r) => r[0]);
+  try {
+    // switch off: no hub part, nothing asked
+    let id = await job("me");
+    await X.run(id);
+    let files = unzip(fs.readFileSync(path.join(X._dir(), (await row(id)).file)));
+    assert.deepEqual(Object.keys(files).sort(), ["README.txt", "patv-data.json"]);
+    assert.equal(seen.length, 0);
+    await HO.setSettings({ export: true });
+    // on: the hub's JSONL rides in the zip; the README names it; the call is signed for the hub's account id
+    id = await job("me");
+    assert.equal((await X.run(id)).ok, true);
+    files = unzip(fs.readFileSync(path.join(X._dir(), (await row(id)).file)));
+    assert.deepEqual(Object.keys(files).sort(), ["README.txt", "chat-hub.jsonl", "patv-data.json"]);
+    assert.equal(files["chat-hub.jsonl"].toString("utf8"), G.export_jsonl);
+    assert.match(files["README.txt"].toString("utf8"), /chat-hub\.jsonl/);
+    assert.equal(seen[0].url, `/internal/v1/privacy/export/acct/${HO.accountOf("me")}?ref=${id}`);
+    assert.equal(seen[0].ok, true);
+    assert.deepEqual(fs.readdirSync(X._dir()).filter((f) => f.endsWith(".jsonl")), [], "no temp file left");
+    // the hub down: back to queued, waiting since the first failure; still waiting after a retry; done once it answers
+    mode = "down";
+    id = await job("me");
+    const c0 = X._collects();
+    assert.deepEqual(await X.run(id), { ok: false, waiting: true, error: "http_503" });
+    assert.equal(X._collects(), c0, "1.99acm: a job waiting for the hub never gathers the account (the hub part is asked first)");
+    let j = await row(id);
+    assert.deepEqual([j.state, j.hub_wait_since, j.hub_error], ["queued", clockAt, "http_503"]);
+    const since = j.hub_wait_since;
+    clockAt += 25 * 3600 * 1000;
+    mode = "truncated";
+    await X.run(id);
+    j = await row(id);
+    assert.deepEqual([j.state, j.hub_wait_since, j.hub_error], ["queued", since, "truncated"], "a body without its end line is refused");
+    assert.equal(X._collects(), c0, "...nor on a retry");
+    assert.deepEqual(await X.hubWaits(), { waiting: 1, oldest_since: since, overdue: true }, "/admin/keys#seam flags it after 24 h");
+    mode = "ok";
+    await X.tick();
+    j = await row(id);
+    assert.equal(j.state, "ready");
+    assert.equal(X._collects(), c0 + 1, "gathered once, when the hub answered");
+    assert.equal(j.hub_error, null);
+    assert.ok(unzip(fs.readFileSync(path.join(X._dir(), j.file)))["chat-hub.jsonl"]);
+    assert.equal((await X.hubWaits()).waiting, 0);
+    // no hub account id (a legacy id, no namespace): exported without it, and the README says so
+    delete process.env.CHAT_GENESIS_NS;
+    id = await job("me");
+    assert.equal((await X.run(id)).ok, true);
+    files = unzip(fs.readFileSync(path.join(X._dir(), (await row(id)).file)));
+    assert.ok(!files["chat-hub.jsonl"]);
+    assert.match(files["README.txt"].toString("utf8"), /no chat hub id/);
+  } finally {
+    await HO.setSettings({ export: false });
+    for (const k of Object.keys(env)) delete process.env[k];
+    hub.close();
+  }
+});

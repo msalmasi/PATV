@@ -22,6 +22,18 @@
 //
 // Routes: GET /api/account/export (the member's exports), POST /api/account/export (same-origin fetch; 429 + `retry_at`
 // once a day), GET /settings/account/export/:id (the download).
+//
+// 1.99acm - the chat hub's part (the R-12 privacy seam, §9.4; switch hubseam.export, off): while it is on and a hub is
+// configured (HUB_V1_URL), the zip also carries chat-hub.jsonl - what the chat hub keeps about the account (its chat lines,
+// privacy flags and requests, chat sessions without secrets, account cutoffs, pads owned there), fetched with a signed
+// GET /internal/v1/privacy/export/acct/<the hub's account id>?ref=<this export's id> (huboutbox.getSigned: streamed to a 0600
+// temp file, 64 MB / 60 s caps). The answer must end with its {"t":"end","complete":true} line (a truncated one is refused).
+// The export never ships without that part while the switch is on (seam plan D-25): when the hub can't answer, the job goes
+// back to 'queued' with hub_wait_since (the first failure) and hub_error (a code), the 10-minute tick retries it, the member
+// keeps seeing "being prepared", and after 24 h ops is told (a console error once, /admin/keys#seam). The hub part is asked
+// FIRST: the account is gathered only once it arrived (or isn't needed), never on every retry of a waiting job. An account with no hub
+// account id (a legacy id while CHAT_GENESIS_NS is unset) exports without it, and the README says so.
+//   account_exports  + hub_wait_since, hub_error
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -47,6 +59,9 @@ function init() {
         id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'queued', file TEXT, bytes INTEGER,
         finished INTEGER, error TEXT, expires INTEGER)`);
       await runQuery("CREATE INDEX IF NOT EXISTS account_exports_user ON account_exports (user_id, created)");
+      const have = (await getQuery("SELECT name FROM pragma_table_info('account_exports')")).map((c) => c.name);   // 1.99acm
+      if (!have.includes("hub_wait_since")) await runQuery("ALTER TABLE account_exports ADD COLUMN hub_wait_since INTEGER");
+      if (!have.includes("hub_error")) await runQuery("ALTER TABLE account_exports ADD COLUMN hub_error TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -70,7 +85,9 @@ async function rows(table, where, params, { omit = [], order = null } = {}) {
 }
 
 /** Everything for one account. -> plain object (the JSON in the zip). */
+let collects = 0;                 // tests: how often the whole account was gathered
 async function collect(userId, { at = now() } = {}) {
+  collects++;
   tableCols.clear();
   const uid = String(userId);
   const u = (await getQuery("SELECT * FROM users WHERE userId = ?", [uid]))[0];
@@ -268,6 +285,50 @@ patv-data.json is everything PATV keeps about your account, as of the time in "e
 
 Questions or a correction: publicaccess.tv/privacy
 `;
+// 1.99acm: the chat hub's part (or why it is missing)
+const README_HUB = `
+chat-hub.jsonl is what PATV's chat hub keeps about your account: one JSON object per line - your chat messages there, your
+privacy settings and requests, your chat sign-ins (never a secret), and the pads you own there. Its last line says it is
+complete.
+`;
+const README_NO_HUB = `
+Your account has no chat hub id yet, so chat-hub.jsonl isn't included. Ask us at publicaccess.tv/privacy if you need it.
+`;
+const HUB_WAIT_ALERT_MS = DAY;
+const HUB_MAX_BYTES = 64 << 20;
+
+/** 1.99acm: the hub part. -> {skip: true} (switch off / no hub), {none: true} (no hub account id), {data: Buffer} or
+ *  {wait: code}. */
+async function hubPart(job) {
+  const ho = require("./huboutbox");
+  if (!ho.on("export") || !String(process.env.HUB_V1_URL || "").trim()) return { skip: true };
+  const acct = ho.accountOf(job.user_id);
+  if (!acct) return { none: true };
+  fs.mkdirSync(dir(), { recursive: true });
+  const tmp = path.join(dir(), `.${job.id}.hub-${process.pid}-${Date.now()}.jsonl`);
+  const r = await ho.getSigned(`/internal/v1/privacy/export/acct/${encodeURIComponent(acct)}?ref=${encodeURIComponent(job.id)}`,
+                               { toFile: tmp, maxBytes: HUB_MAX_BYTES, timeoutMs: 60000 });
+  if (!r.ok) return { wait: r.error || ("http_" + r.status) };
+  try {
+    const data = fs.readFileSync(tmp);
+    const lines = data.toString("utf8").split("\n").filter((l) => l.trim());
+    let end = null;
+    try { end = JSON.parse(lines[lines.length - 1]); } catch (e) { end = null; }
+    if (!end || end.t !== "end" || end.complete !== true) return { wait: "truncated" };
+    return { data };
+  } finally {
+    try { fs.unlinkSync(tmp); } catch (e) { /* gone */ }
+  }
+}
+
+/** For /admin/keys#seam: exports waiting for the chat hub. -> {waiting, oldest_since, overdue} */
+async function hubWaits() {
+  await init();
+  const r = (await getQuery("SELECT COUNT(*) AS n, MIN(hub_wait_since) AS oldest FROM account_exports WHERE state = 'queued' AND hub_wait_since IS NOT NULL"))[0] || {};
+  const oldest = r.oldest == null ? null : Number(r.oldest);
+  return { waiting: Number(r.n) || 0, oldest_since: oldest, overdue: !!oldest && now() - oldest > HUB_WAIT_ALERT_MS };
+}
+const alerted = new Set();
 
 // ── jobs ──
 /** Ask for an export. -> {ok, id} | {ok:false, code:"E_RATE", retry_at} */
@@ -292,14 +353,32 @@ async function run(id) {
     if (!claim || !claim.changes) return null;
     const job = (await getQuery("SELECT * FROM account_exports WHERE id = ?", [id]))[0];
     try {
+      // 1.99acm: the chat hub's part FIRST - required while hubseam.export is on (the job waits for the hub, never ships without
+      // it) - so a job waiting for the hub doesn't gather the whole account on every tick only to throw it away. (A refusal -
+      // no key, key_env, insecure_url - comes back from getSigned without a network call.)
+      const hub = await hubPart(job);
+      if (hub.wait) {
+        const t = now();
+        const since = Number(job.hub_wait_since) || t;
+        await runQuery("UPDATE account_exports SET state = 'queued', hub_wait_since = ?, hub_error = ? WHERE id = ?", [since, String(hub.wait).slice(0, 40), id]);
+        if (t - since > HUB_WAIT_ALERT_MS && !alerted.has(id)) {
+          alerted.add(id);
+          console.error(`[export] ${id}: waiting for the chat hub for over 24 h (${hub.wait}) - check /admin/keys#seam`);
+        }
+        return { ok: false, waiting: true, error: hub.wait };
+      }
       const data = await collect(job.user_id);
-      const buf = zip([{ name: "patv-data.json", data: JSON.stringify(data, null, 2) }, { name: "README.txt", data: README }], new Date(now()));
+      const files = [{ name: "patv-data.json", data: JSON.stringify(data, null, 2) }];
+      if (hub.data) files.push({ name: "chat-hub.jsonl", data: hub.data });
+      files.push({ name: "README.txt", data: README + (hub.data ? README_HUB : hub.none ? README_NO_HUB : "") });
+      const buf = zip(files, new Date(now()));
       fs.mkdirSync(dir(), { recursive: true });
       const file = path.join(dir(), `${id}.zip`);
       fs.writeFileSync(file, buf, { mode: 0o600 });
       const t = now();
-      await runQuery("UPDATE account_exports SET state = 'ready', file = ?, bytes = ?, finished = ?, expires = ? WHERE id = ?",
+      await runQuery("UPDATE account_exports SET state = 'ready', file = ?, bytes = ?, finished = ?, expires = ?, hub_error = NULL WHERE id = ?",
                      [path.basename(file), buf.length, t, t + EXPORT_TTL_MS, id]);
+      alerted.delete(id);
       await require("./inbox").addSafe(job.user_id, { kind: "system", title: "Your data export is ready",
         body: "The copy of your PATV data you asked for is ready. Download it from Settings → Account → Your data within 7 days, signed in to this account.",
         link: "/settings/account#data", ref: `export:${id}` });
@@ -318,7 +397,8 @@ async function tick() {
   for (const j of await getQuery("SELECT id FROM account_exports WHERE state = 'running' AND created < ?", [now() - 30 * 60000])) {
     await runQuery("UPDATE account_exports SET state = 'queued' WHERE id = ? AND state = 'running'", [j.id]);
   }
-  for (const j of await getQuery("SELECT id FROM account_exports WHERE state = 'queued' ORDER BY created LIMIT 5")) await run(j.id);
+  // (1.99acm: new jobs before the ones waiting for the chat hub)
+  for (const j of await getQuery("SELECT id FROM account_exports WHERE state = 'queued' ORDER BY (hub_wait_since IS NOT NULL), created LIMIT 5")) await run(j.id);
   for (const j of await getQuery("SELECT id, file FROM account_exports WHERE state = 'ready' AND expires <= ?", [now()])) {
     if (j.file) { try { fs.unlinkSync(path.join(dir(), path.basename(j.file))); } catch (e) { /* gone */ } }
     await runQuery("UPDATE account_exports SET state = 'expired', file = NULL WHERE id = ?", [j.id]);
@@ -376,5 +456,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, request, run, tick, collect, zip, crc32, removeAll, mine, OMIT, RATE_MS, EXPORT_TTL_MS,
-                   _setClock: (f) => { clock = f || (() => Date.now()); }, _dir: dir };
+module.exports = { init, register, request, run, tick, collect, zip, crc32, removeAll, mine, hubWaits, OMIT, RATE_MS, EXPORT_TTL_MS,
+                   _setClock: (f) => { clock = f || (() => Date.now()); }, _dir: dir, _collects: () => collects };

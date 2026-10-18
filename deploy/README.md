@@ -89,7 +89,36 @@ Staging, and staging Pepe (which writes to it), drift from prod over time. On th
 `bash /home/PATV/deploy/refresh-staging-db.sh` replaces staging's database with a fresh copy of
 prod's. It keeps the old copy as `myapp.db.previous`. The per-environment tables stay staging's own
 (`deploy/keep-staging-tables.js` lists them: bot keys and their switches and logs, the hub seam switches, bridge
-spans; prod's `hub_outbox` rows are dropped). If that can't be done, staging keeps its old database.
+spans; prod's `hub_outbox` rows are dropped, and with them prod's `hub_hidden_h` set and inbound seam nonces - emptied
+before the outbox, because prod's triggers come along with the copy). 1.99acm: prod's unfinished "Download my data" jobs
+are marked expired in the copy, so staging never zips prod members' data. If that can't be done, staging keeps its old
+database.
+
+## The chat hub seam's /internal/ routes (1.99acm)
+
+`hubinbound.js` mounts `/internal/v1/...` (the chat hub's signed snapshot pulls and rewinds) on the website's own Express
+app. The hub reaches it over the tailnet (`tailscale serve` forwarding `/internal/v1/` unchanged to `127.0.0.1:3000` /
+`:3100`); it must never answer through the public site. HMAC still protects the routes, but every public request would
+reach the verifier. **Required before `HUB_V1_IN_KEY_ID` / `HUB_V1_IN_KEY` are set on a site:**
+
+1. In every public `server { }` block of nginx that proxies publicaccess.tv, www.publicaccess.tv and
+   staging.publicaccess.tv, before the other `location`s (case-insensitive: Express matches `/Internal/` too):
+
+   ```nginx
+   location ~* ^/internal/ { return 404; }
+   ```
+
+   `nginx -t && systemctl reload nginx` (a reload, never a restart).
+2. `bash /home/PATV/deploy/check-internal.sh` - read-only; every public host must answer 404 for `/internal/v1/...` in any
+   case (it also checks the sites' own guard on loopback). Re-run it after any nginx change.
+3. The keys (never reuse one secret: each direction and each environment gets its own, generated separately for staging
+   and prod; `huboutbox` refuses an outbound key equal to an inbound one as `key_reuse`, the hub refuses the same in its
+   config).
+
+Defence in depth in `hubinbound.js`: a target that isn't exactly the lowercase `/internal/v1/` prefix, or a request
+carrying Cloudflare's `cf-ray` / `cf-connecting-ip`, gets a bare 404 with no log line (counted once as "reached through
+the public site" on `/admin/keys#seam` - a non-zero count means step 1 is missing), and refusal warnings are rate-limited
+to one line per code per minute.
 
 ## The database is in WAL mode (1.99fb)
 

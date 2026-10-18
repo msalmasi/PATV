@@ -5,3 +5,6 @@
 *.sh text eol=lf
 deploy/** text eol=lf
 .github/** text eol=lf
+
+# The seam fixtures shared byte-for-byte with the hub repo (their sha256 is pinned in both)
+test/fixtures/hubseam-*.json text eol=lf

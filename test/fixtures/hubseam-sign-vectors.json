@@ -1,0 +1,586 @@
+{
+  "v": 1,
+  "about": "Shared HMAC test vectors of the v1 seam (CHAT-ARCHITECTURE §16, seam plan §2.1, §5.1). Byte-identical in the hub (services/rooms/test/fixtures) and v1 (test/fixtures); both repos pin its sha256. Generated from v1's hubsign.js, the reference implementation. Keys are test values, never used anywhere else.",
+  "algorithm": "X-PATV-Sig = v1=<hex HMAC-SHA256(utf8(key), key_id \\n METHOD \\n raw_target \\n ts \\n nonce \\n hex(sha256(body_bytes)))>; key_id = the X-PATV-Key-Id value as sent; ts unix seconds, ±60 s; nonce 16-64 hex, signed as sent; key ids v1-<env>-<n> (v1 -> hub) or hub-<env>-<n> (hub -> v1)",
+  "refusal_order": [
+    "missing",
+    "wrong_env",
+    "unknown_key",
+    "stale",
+    "missing (nonce format)",
+    "bad_sig",
+    "replay",
+    "busy"
+  ],
+  "keys": {
+    "v1-prod-1": "test-key-not-real",
+    "v1-test-1": "v1-test-key-0123456789abcdef-not-real",
+    "v1-test-0": "v1-test-previous-key-0123456789-not-real",
+    "hub-test-1": "hub-test-key-0123456789abcdef-not-real",
+    "v1-staging-1": "v1-staging-key-0123456789abcdef-not-real",
+    "v1-test-2": "v1-test-key-0123456789abcdef-not-real",
+    "v1-prod-2": "the-same-secret-reused-for-two-key-ids-not-real",
+    "v1-staging-2": "the-same-secret-reused-for-two-key-ids-not-real"
+  },
+  "positive": [
+    {
+      "name": "doc vector: heartbeat (docs/chat-tickets.md)",
+      "direction": "v1->hub",
+      "receiver_env": "prod",
+      "method": "POST",
+      "path": "/internal/v1/heartbeat",
+      "body": "{\"v\":1}",
+      "key_id": "v1-prod-1",
+      "ts": 1760727600,
+      "nonce": "00112233445566778899aabbccddeeff",
+      "now_s": 1760727600,
+      "body_sha256": "afbf9d0f3560b0fd7795e81c42a0a79ee6b6fc67e064f77826aee642cad28d91",
+      "base": "v1-prod-1\nPOST\n/internal/v1/heartbeat\n1760727600\n00112233445566778899aabbccddeeff\nafbf9d0f3560b0fd7795e81c42a0a79ee6b6fc67e064f77826aee642cad28d91",
+      "headers": {
+        "X-PATV-Key-Id": "v1-prod-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "00112233445566778899aabbccddeeff",
+        "X-PATV-Sig": "v1=270a385ccba6ace561f8c1715198d39260435a33c0d61c721c5b5b533f26a18a"
+      }
+    },
+    {
+      "name": "sessions/revoked batch with a non-ASCII why",
+      "direction": "v1->hub",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "key_id": "v1-test-1",
+      "ts": 1760727600,
+      "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "now_s": 1760727600,
+      "body_sha256": "e9ac2b93748c1b4c46bc9857a2c0445dd923b42c067c59b87db36a193b491924",
+      "base": "v1-test-1\nPOST\n/internal/v1/sessions/revoked\n1760727600\n0f1e2d3c4b5a69788796a5b4c3d2e1f0\ne9ac2b93748c1b4c46bc9857a2c0445dd923b42c067c59b87db36a193b491924",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      }
+    },
+    {
+      "name": "snapshot GET with a query, empty body",
+      "direction": "hub->v1",
+      "receiver_env": "test",
+      "method": "GET",
+      "path": "/internal/v1/snapshot/privacy/changed?cursor=eyJrIjoiY2FtZnJvZzphbGljZSIsInMiOiJpbmNvZ25pdG8ifQ",
+      "body": "",
+      "key_id": "hub-test-1",
+      "ts": 1760727600,
+      "nonce": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "now_s": 1760727600,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "base": "hub-test-1\nGET\n/internal/v1/snapshot/privacy/changed?cursor=eyJrIjoiY2FtZnJvZzphbGljZSIsInMiOiJpbmNvZ25pdG8ifQ\n1760727600\na1b2c3d4e5f60718293a4b5c6d7e8f90\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "headers": {
+        "X-PATV-Key-Id": "hub-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "X-PATV-Sig": "v1=7edaf93c696e73f5b3d11bfb78c83c3b30aff0825aac6874af0c7311f6757ab8"
+      }
+    },
+    {
+      "name": "export GET for an account",
+      "direction": "v1->hub",
+      "receiver_env": "test",
+      "method": "GET",
+      "path": "/internal/v1/privacy/export/acct/0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f?ref=77",
+      "body": "",
+      "key_id": "v1-test-1",
+      "ts": 1760727600,
+      "nonce": "5555aaaa5555aaaa5555aaaa5555aaaa",
+      "now_s": 1760727600,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "base": "v1-test-1\nGET\n/internal/v1/privacy/export/acct/0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f?ref=77\n1760727600\n5555aaaa5555aaaa5555aaaa5555aaaa\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "5555aaaa5555aaaa5555aaaa5555aaaa",
+        "X-PATV-Sig": "v1=c8d388819dbf5ba3a25dc8ae66907ddcb33b25183032ecd35cd2653e19ed46bc"
+      }
+    },
+    {
+      "name": "outbox rewind, hub -> v1",
+      "direction": "hub->v1",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/outbox/rewind",
+      "body": "{\"topic\":\"privacy/changed\",\"after_id\":1200}",
+      "key_id": "hub-test-1",
+      "ts": 1760727600,
+      "nonce": "fedcba9876543210fedcba9876543210",
+      "now_s": 1760727600,
+      "body_sha256": "d2216dd476c1401a57124335fc24f9200fa9ac90a4c27b8eac7d1aba72006d00",
+      "base": "hub-test-1\nPOST\n/internal/v1/outbox/rewind\n1760727600\nfedcba9876543210fedcba9876543210\nd2216dd476c1401a57124335fc24f9200fa9ac90a4c27b8eac7d1aba72006d00",
+      "headers": {
+        "X-PATV-Key-Id": "hub-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "fedcba9876543210fedcba9876543210",
+        "X-PATV-Sig": "v1=d946b0470a8b08d670a2074cbeb0c0338f3b4670998f1795a5b583d8e7a97793"
+      }
+    },
+    {
+      "name": "uppercase hex nonce (signed as sent)",
+      "direction": "v1->hub",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/heartbeat",
+      "body": "{\"v\":1,\"env\":\"test\"}",
+      "key_id": "v1-test-1",
+      "ts": 1760727600,
+      "nonce": "ABCDEF0123456789ABCDEF0123456789",
+      "now_s": 1760727600,
+      "body_sha256": "5916109d359210cfc819ba022d00dd66d6e55e2c52b51f0847b83b5a4951f13d",
+      "base": "v1-test-1\nPOST\n/internal/v1/heartbeat\n1760727600\nABCDEF0123456789ABCDEF0123456789\n5916109d359210cfc819ba022d00dd66d6e55e2c52b51f0847b83b5a4951f13d",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "ABCDEF0123456789ABCDEF0123456789",
+        "X-PATV-Sig": "v1=1bf7445d033d5aa7a018df3574df0e729622fbbbc87f4e0898a311e7f2e0d672"
+      }
+    },
+    {
+      "name": "the previous key during a rotation",
+      "direction": "v1->hub",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/privacy/changed",
+      "body": "{\"rows\":[]}",
+      "key_id": "v1-test-0",
+      "ts": 1760727600,
+      "nonce": "13579bdf13579bdf13579bdf13579bdf",
+      "now_s": 1760727600,
+      "body_sha256": "1633902c6cbba5e7770dbed172df754a25078bb76efe1f23474edc87f1a47655",
+      "base": "v1-test-0\nPOST\n/internal/v1/privacy/changed\n1760727600\n13579bdf13579bdf13579bdf13579bdf\n1633902c6cbba5e7770dbed172df754a25078bb76efe1f23474edc87f1a47655",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-0",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "13579bdf13579bdf13579bdf13579bdf",
+        "X-PATV-Sig": "v1=776ca86cd300f5b606b8e8864df8a200c5a1f9c3eee54cdc3493281a3cd95c27"
+      }
+    }
+  ],
+  "negative": [
+    {
+      "name": "61 s late",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727661,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "stale",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+      }
+    },
+    {
+      "name": "61 s early",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727539,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "stale",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+      }
+    },
+    {
+      "name": "body changed",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":42,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "bad_sig",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}"
+      }
+    },
+    {
+      "name": "path changed",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/privacy/changed",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "bad_sig",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "path": "/internal/v1/sessions/revoked"
+      }
+    },
+    {
+      "name": "query added",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked?x=1",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "bad_sig",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "path": "/internal/v1/sessions/revoked"
+      }
+    },
+    {
+      "name": "method changed",
+      "receiver_env": "test",
+      "method": "PUT",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "bad_sig",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "method": "POST"
+      }
+    },
+    {
+      "name": "signed with another key under the right id",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=8fb3a094c596ba1befc7079a0d09e1a9de621967ee5478e22e085afece077e92"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "bad_sig",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "key": "v1-test-0"
+      }
+    },
+    {
+      "name": "unknown key id",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-9",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=cfa1ede940df376af537d580f5145442f665d175e4d3855891cbed8afea5f7be"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "unknown_key",
+      "signed_as": {
+        "key_id": "v1-test-9",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "key": "v1-test-1"
+      }
+    },
+    {
+      "name": "a staging key at a test receiver",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-staging-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=73b965359aa9c3712448f766aeb888798f0f78e046124b79955cdd3ab2498b5c"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "wrong_env",
+      "signed_as": {
+        "key_id": "v1-staging-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+      }
+    },
+    {
+      "name": "the other direction's key",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "hub-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=6e77572b3c00b9ab002d390174a0eba00dbe447f472a1df15401c79b5eaecb52"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "wrong_env",
+      "signed_as": {
+        "key_id": "hub-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+      }
+    },
+    {
+      "name": "no signature header",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "missing",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "override": {
+          "X-PATV-Sig": null
+        }
+      }
+    },
+    {
+      "name": "a 15-hex nonce",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0123456789abcde",
+        "X-PATV-Sig": "v1=caf9b7b6d833673e321ee7f986ecb99421954d7a2d2dda99f066f6ee9420b81f"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "missing",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0123456789abcde"
+      }
+    },
+    {
+      "name": "a non-numeric timestamp",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-1",
+        "X-PATV-Ts": "17607276O0",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-0"
+      ],
+      "error": "stale",
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "override": {
+          "X-PATV-Ts": "17607276O0"
+        }
+      }
+    },
+    {
+      "name": "relabelled key id sharing the secret (current + another id)",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-test-2",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=f5df32ee2c33c1c7f9e72215871b456c6b6b88c90fd3583590f5cd6aae402ef1"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-test-1",
+        "v1-test-2"
+      ],
+      "signed_as": {
+        "key_id": "v1-test-1",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "relabel": "v1-test-2"
+      },
+      "error": "bad_sig"
+    },
+    {
+      "name": "a staging request relabelled with a prod id that shares its secret",
+      "receiver_env": "prod",
+      "method": "POST",
+      "path": "/internal/v1/sessions/revoked",
+      "body": "{\"rows\":[{\"id\":41,\"topic\":\"sessions/revoked\",\"entity\":\"sid:abababababababababababababababababababababababababababababababab\",\"payload\":{\"kind\":\"session\",\"sid\":\"abababababababababababababababab\",\"account\":\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"v1_user\":\"1001\",\"at\":1760727590000,\"until\":1763319590000,\"why\":\"déconnecté — signed out ✓\"},\"created_at\":1760727590123}]}",
+      "headers": {
+        "X-PATV-Key-Id": "v1-prod-2",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "X-PATV-Sig": "v1=defd13e5ac59fd704229002d5016ffecee4c92fe9270625af527f7805a5e8512"
+      },
+      "now_s": 1760727600,
+      "receiver_keys": [
+        "v1-prod-2"
+      ],
+      "signed_as": {
+        "key_id": "v1-staging-2",
+        "ts": 1760727600,
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "relabel": "v1-prod-2"
+      },
+      "error": "bad_sig"
+    }
+  ],
+  "hidden_h": [
+    {
+      "input": "Alice",
+      "login_valid": true,
+      "h": "a9359c0487b65dc652e7"
+    },
+    {
+      "input": " bob.smith ",
+      "login_valid": true,
+      "h": "e15ad3dec416e9c7933d"
+    },
+    {
+      "input": "x$y",
+      "login_valid": true,
+      "h": "4b7afa476f3f03f8c27e"
+    },
+    {
+      "input": "u:0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f",
+      "login_valid": false,
+      "h": "535a6a63d51270e7064b"
+    },
+    {
+      "input": "Zoë",
+      "login_valid": false,
+      "h": null
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "login_valid": false,
+      "h": null
+    }
+  ],
+  "why_reason": {
+    "signed out": "session_revoked",
+    "username changed": "session_revoked",
+    "signed out everywhere else": "session_revoked",
+    "signed out everywhere": "signed_out_everywhere",
+    "password reset": "password_changed",
+    "password changed": "password_changed",
+    "ban": "banned",
+    "account deletion requested": "deleted",
+    "admin": "other",
+    "": "other",
+    "(merge rows)": "merged"
+  }
+}

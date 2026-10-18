@@ -29,6 +29,7 @@ const SCHEMA = {
   legacy_token_daily: "CREATE TABLE legacy_token_daily (day TEXT NOT NULL, token TEXT NOT NULL, caller_hint TEXT NOT NULL, family TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL, PRIMARY KEY (day, token, caller_hint, family))",
   events_auth_log: "CREATE TABLE events_auth_log (day TEXT NOT NULL, type TEXT NOT NULL, chan TEXT NOT NULL, auth TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, type, chan, auth))",
   hub_outbox: "CREATE TABLE hub_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, entity TEXT NOT NULL, payload TEXT, created_at INTEGER NOT NULL, posted_at INTEGER, dedupe_key TEXT)",
+  hub_hidden_h: "CREATE TABLE hub_hidden_h (h TEXT PRIMARY KEY, since INTEGER NOT NULL)",
 };
 
 async function makeProd(file, { withKeyTables = true } = {}) {
@@ -36,7 +37,8 @@ async function makeProd(file, { withKeyTables = true } = {}) {
   await run(d, "CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT)");
   await run(d, "INSERT INTO users VALUES ('u1', 'prod-user')");
   if (withKeyTables) {
-    for (const t of ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings", "legacy_token_daily", "events_auth_log", "hub_outbox"]) await run(d, SCHEMA[t]);
+    for (const t of ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings", "legacy_token_daily", "events_auth_log", "hub_outbox", "hub_hidden_h"]) await run(d, SCHEMA[t]);
+    await run(d, "INSERT INTO hub_hidden_h (h, since) VALUES ('0123456789abcdef0123', 1)");   // 1.99acm: prod's Pepe's hidden set
     await run(d, "INSERT INTO bot_keys (caller, hash, tag, created_at, observe_since) VALUES ('pepe', 'PROD-HASH', 'prodtag', 1, 1)");
     await run(d, "INSERT INTO bot_keys_settings (key, value) VALUES ('events', 'enforce'), ('bad_key', 'refuse')");
     await run(d, "INSERT INTO bot_key_families (family, legacy_enforce) VALUES ('/api/bridge', 1)");
@@ -76,6 +78,7 @@ test("staging keeps its own keys, switches and logs; prod's go; hub_outbox is em
     assert.deepEqual(await all(d, "SELECT caller_hint FROM legacy_token_daily"), [{ caller_hint: "staging-hint" }], "staging's own usage history");
     assert.deepEqual(await all(d, "SELECT * FROM events_auth_log"), [], "a log staging didn't have: prod's rows still go");
     assert.deepEqual(await all(d, "SELECT * FROM hub_outbox"), [], "prod's unposted rows never reach the staging hub");
+    assert.deepEqual(await all(d, "SELECT * FROM hub_hidden_h"), [], "prod's hidden set goes (staging's Pepe repopulates it)");
     await run(d, "INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('sessions/revoked', 'sid:new', 3)");
     const id = (await all(d, "SELECT id FROM hub_outbox"))[0].id;
     assert.ok(id > 40, `the next id (${id}) is above every id staging handed out (40)`);
@@ -106,7 +109,7 @@ test("when keeping fails, prod's per-environment rows are cleared instead (stagi
   assert.equal(r.mode, "cleared");
   const d = db(prod);
   try {
-    for (const t of ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings", "legacy_token_daily", "events_auth_log", "hub_outbox"]) {
+    for (const t of ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings", "legacy_token_daily", "events_auth_log", "hub_outbox", "hub_hidden_h"]) {
       assert.deepEqual(await all(d, `SELECT * FROM ${t}`), [], t + " cleared");
     }
     assert.deepEqual(await all(d, "SELECT username FROM users"), [{ username: "prod-user" }]);
@@ -116,11 +119,51 @@ test("when keeping fails, prod's per-environment rows are cleared instead (stagi
 test("the lists cover every per-environment table, and the script runs it with staging stopped (or keeps the old DB)", () => {
   assert.deepEqual([...K.KEEP].sort(), ["bot_key_families", "bot_keys", "bot_keys_settings", "bot_route_log", "bridge_spans", "events_auth_log",
                                          "hubseam_settings", "legacy_token_daily", "legacy_token_use"].sort());
-  assert.deepEqual(K.EMPTY, ["hub_outbox"]);
+  assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");
   const stop = sh.indexOf("pm2 stop patv-staging"), keep = sh.indexOf("keep-staging-tables.js"), swap = sh.indexOf('mv "$S/myapp.db.new" "$S/myapp.db"');
   assert.ok(stop > 0 && keep > stop && swap > keep, "stop -> keep -> swap");
   assert.match(sh, /if ! node "\$\(dirname "\$0"\)\/keep-staging-tables\.js" "\$S\/myapp\.db" "\$S\/myapp\.db\.new"; then[\s\S]{0,300}rm -f "\$S\/myapp\.db\.new"[\s\S]{0,120}pm2 start patv-staging[\s\S]{0,40}exit 1/,
                "a copy that can't be made safe is thrown away and staging restarted on its old DB");
   assert.ok(!/DELETE FROM bot_keys;/.test(sh), "the old bot_keys-only handling is gone");
+  // 1.99acm: prod's unfinished exports never run on staging
+  assert.match(sh, /if has_table account_exports; then sqlite3 "\$S\/myapp\.db\.new" "UPDATE account_exports SET state = 'expired', file = NULL WHERE state IN \('queued', 'running'\);"; fi/);
+  assert.ok(sh.indexOf("UPDATE account_exports") < sh.indexOf("pm2 stop patv-staging"), "scrubbed in the copy before staging ever opens it");
+});
+
+test("1.99acm: prod's real hh trigger can't leak prod's hidden hashes into staging's emptied outbox (staging's privacy switch on)", async () => {
+  const prod = path.join(dir, "copy4.db"), stg = path.join(dir, "staging4.db");
+  await makeProd(prod); await makeStaging(stg);
+  // the copy carries prod's triggers exactly as huboutbox.init creates them (whatever prod's switches say)
+  const ms = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
+  const gate = "(SELECT value FROM hubseam_settings WHERE key = 'privacy') = 'true'";
+  const p = db(prod);
+  for (const [ev, ref] of [["INSERT", "NEW"], ["DELETE", "OLD"]]) {
+    await run(p, `CREATE TRIGGER hub_outbox_hh_${ev.toLowerCase()} AFTER ${ev} ON hub_hidden_h WHEN ${gate}
+                  BEGIN INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('privacy/changed', 'hh:' || ${ref}.h, ${ms}); END`);
+  }
+  await close(p);
+  const s = db(stg);
+  await run(s, "INSERT INTO hubseam_settings (key, value) VALUES ('privacy', 'true')");   // staging's privacy feed is on
+  await close(s);
+  const r = await K.main(stg, prod, sqlite3);
+  assert.equal(r.mode, "kept");
+  const d = db(prod);
+  try {
+    assert.deepEqual(await all(d, "SELECT key, value FROM hubseam_settings ORDER BY key"), [{ key: "privacy", value: "true" }, { key: "tickets", value: "true" }]);
+    assert.deepEqual(await all(d, "SELECT * FROM hub_hidden_h"), []);
+    assert.deepEqual(await all(d, "SELECT topic, entity FROM hub_outbox"), [], "no prod hash waits to be posted to the staging hub");
+  } finally { await close(d); }
+  // and the fallback clears in the same safe order
+  await makeProd(path.join(dir, "copy5.db"));
+  const p5 = db(path.join(dir, "copy5.db"));
+  await run(p5, "UPDATE hubseam_settings SET value = 'true' WHERE key = 'sessions'");
+  await run(p5, "INSERT INTO hubseam_settings (key, value) VALUES ('privacy', 'true')");
+  await run(p5, `CREATE TRIGGER hub_outbox_hh_delete AFTER DELETE ON hub_hidden_h WHEN ${gate}
+                 BEGIN INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('privacy/changed', 'hh:' || OLD.h, ${ms}); END`);
+  await close(p5);
+  const r5 = await K.main(path.join(dir, "no-such-dir", "missing.db"), path.join(dir, "copy5.db"), sqlite3);
+  assert.equal(r5.mode, "cleared");
+  const d5 = db(path.join(dir, "copy5.db"));
+  try { assert.deepEqual(await all(d5, "SELECT * FROM hub_outbox"), []); } finally { await close(d5); }
 });

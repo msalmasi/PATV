@@ -156,7 +156,7 @@ test("against a fake hub: <= 300 rows per topic in id order, trigger rows filled
   const s = await S.create(fakeReq, "acc-c", "password");
   await S.revoke("acc-c", s.id, "signed out from Settings");
   process.env.HUB_V1_URL = hubBase + "/";              // after the emits: no background wake races the passes below
-  process.env.HUB_V1_KEY_ID = "v1stg-test";
+  process.env.HUB_V1_KEY_ID = "v1-prod-test";
   process.env.HUB_V1_KEY = "hub-key-not-real";
   // two passes started together never post a row twice
   got.length = 0;
@@ -185,7 +185,7 @@ test("against a fake hub: <= 300 rows per topic in id order, trigger rows filled
   assert.equal(total, 650);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM hub_outbox WHERE posted_at IS NULL"))[0].n, 0, "all posted");
   got.push(sessReq);
-  const keys = { "v1stg-test": "hub-key-not-real" };
+  const keys = { "v1-prod-test": "hub-key-not-real" };
   let lastId = { };
   for (const g of got) {
     assert.equal(g.method, "POST");
@@ -282,8 +282,38 @@ test("a plain http:// hub address that isn't loopback is never posted to without
     assert.equal(HO.insecureUrl("http://127.0.0.1:9999"), false, "loopback is fine");
     assert.equal(HO.insecureUrl("http://[::1]:9999"), false);
     process.env.HUB_V1_PROXY = "127.0.0.1:1055";
-    assert.equal(HO.insecureUrl("http://hub.example.test:8443"), false, "the tailnet proxy carries it");
+    // 1.99acm: the proxy carries only tailnet destinations - tailscaled dials any other host directly, in the clear
+    assert.equal(HO.insecureUrl("http://hub.example.test:8443"), true, "a public name stays refused with the proxy set");
+    assert.equal(HO.insecureUrl("http://203.0.113.7:8080"), true, "a public address too");
+    assert.equal(HO.insecureUrl("http://100.63.255.1:8080"), true, "just below 100.64.0.0/10");
+    assert.equal(HO.insecureUrl("http://100.128.0.1:8080"), true, "just above it");
+    for (const ok of ["http://100.64.0.1:8080", "http://100.127.255.254", "http://patv-v2.tail1234.ts.net:8080", "http://[fd7a:115c:a1e0::5]:8080",
+                      "http://127.3.4.5", "http://localhost:8080"]) {
+      assert.equal(HO.insecureUrl(ok), false, ok);
+    }
+    assert.equal(HO.insecureUrl("http://[fd7a:115c:a1e1::5]:8080"), true, "another ULA prefix");
+    assert.equal(HO.insecureUrl("http://evil.ts.net.example.test"), true, "*.ts.net only as the suffix");
+    assert.equal(HO.refusal(), "insecure_url", "with the proxy set, a public hub address is still refused");
   } finally { process.env.HUB_V1_URL = savedUrl; delete process.env.HUB_V1_PROXY; }
+});
+
+test("1.99acm: an outbound key that equals an inbound key is never used (key_reuse)", async () => {
+  const saved = { k: process.env.HUB_V1_KEY, i: process.env.HUB_V1_IN_KEY, p: process.env.HUB_V1_IN_PREV_KEY };
+  try {
+    assert.equal(HO.refusal(), null);
+    process.env.HUB_V1_IN_KEY = process.env.HUB_V1_KEY;
+    assert.equal(HO.refusal(), "key_reuse");
+    assert.equal((await HO.postSigned("/internal/v1/heartbeat", { v: 1 })).error, "key_reuse");
+    process.env.HUB_V1_IN_KEY = "another-inbound-secret-0123456789abcdef";
+    process.env.HUB_V1_IN_PREV_KEY = process.env.HUB_V1_KEY;
+    assert.equal(HO.refusal(), "key_reuse", "the previous inbound key counts too");
+    delete process.env.HUB_V1_IN_PREV_KEY;
+    assert.equal(HO.refusal(), null);
+  } finally {
+    for (const [k, v] of [["HUB_V1_KEY", saved.k], ["HUB_V1_IN_KEY", saved.i], ["HUB_V1_IN_PREV_KEY", saved.p]]) {
+      if (v == null) delete process.env[k]; else process.env[k] = v;
+    }
+  }
 });
 
 test("the heartbeat: signed, carries outbox_head; off by switch; the proxy for an http:// hub", async () => {
@@ -295,22 +325,22 @@ test("the heartbeat: signed, carries outbox_head; off by switch; the proxy for a
   assert.equal(got.length, 1);
   assert.equal(got[0].url, "/internal/v1/heartbeat");
   const body = JSON.parse(got[0].body);
-  const head = (await getQuery("SELECT MAX(id) AS id FROM hub_outbox"))[0].id;
+  const head = (await getQuery("SELECT seq FROM sqlite_sequence WHERE name = 'hub_outbox'"))[0].seq;   // 1.99acm: the AUTOINCREMENT high-water mark
   assert.equal(body.outbox_head, head);
   assert.equal(body.v, 1);
   assert.equal(body.env, "prod");
   assert.equal(body.version, HO.VERSION);
   assert.ok(Array.isArray(body.jwks_kids));
-  assert.equal(hubsign.verify({ method: "POST", path: got[0].url, body: got[0].body, headers: got[0].headers, keys: { "v1stg-test": "hub-key-not-real" } }).ok, true);
+  assert.equal(hubsign.verify({ method: "POST", path: got[0].url, body: got[0].body, headers: got[0].headers, keys: { "v1-prod-test": "hub-key-not-real" } }).ok, true);
   // through the userspace tailscaled proxy: an absolute-URI request to the proxy
   const seen = [];
   const proxy = http.createServer((req, res) => { seen.push({ url: req.url, host: req.headers.host }); res.writeHead(200); res.end(); });
   await new Promise((r) => proxy.listen(0, "127.0.0.1", r));
-  process.env.HUB_V1_URL = "http://hub.example.test:8443";
+  process.env.HUB_V1_URL = "http://patv-v2.tail1234.ts.net:8443";        // 1.99acm: the proxy only ever carries a tailnet host
   process.env.HUB_V1_PROXY = "127.0.0.1:" + proxy.address().port;
   try {
     assert.equal((await HO.heartbeatOnce()).ok, true);
-    assert.deepEqual(seen, [{ url: "http://hub.example.test:8443/internal/v1/heartbeat", host: "hub.example.test:8443" }]);
+    assert.deepEqual(seen, [{ url: "http://patv-v2.tail1234.ts.net:8443/internal/v1/heartbeat", host: "patv-v2.tail1234.ts.net:8443" }]);
   } finally {
     proxy.close();
     delete process.env.HUB_V1_PROXY;
@@ -328,10 +358,10 @@ test("cleanup: posted rows go after 7 days; unposted ones only while no hub is c
   await runQuery("INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('econ/committed', 'old-unposted', ?)", [t - 8 * DAY]);
   process.env.HUB_V1_URL = hubBase;
   let r = await HO.cleanup();
-  assert.deepEqual(r, { posted: 1, unposted: 0 }, "a configured hub still gets its old unposted rows");
+  assert.deepEqual(r, { posted: 1, unposted: 0, nonces: 0 }, "a configured hub still gets its old unposted rows");
   delete process.env.HUB_V1_URL;
   r = await HO.cleanup();
-  assert.deepEqual(r, { posted: 0, unposted: 1 });
+  assert.deepEqual(r, { posted: 0, unposted: 1, nonces: 0 });
   const left = (await getQuery("SELECT entity FROM hub_outbox WHERE entity IN ('old-posted', 'new-posted', 'old-unposted')")).map((x) => x.entity);
   assert.deepEqual(left, ["new-posted"]);
 });

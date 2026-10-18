@@ -939,6 +939,8 @@ function register(app, { isBotToken, addUser }) {
       relay.applyAcks(body.acks);
       require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
       require("./quotes").setHidden(body.hidden_h);   // 1.99fp: who is private right now (hashes) - quotes never name them
+      // 1.99acm: ...and kept for the chat hub (hubhidden.js: only the difference is written; the sync never waits for it)
+      require("./hubhidden").note(body.hidden_h).catch((e) => console.error("[bridge] hidden_h:", e.message));
       const r = await ingest(body);
       const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
       // 1.99co: the linked logins watching each pad -> Pepe sends their Manage-panel caps (padmod.js)

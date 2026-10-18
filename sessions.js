@@ -66,6 +66,11 @@ function init() {
         notified INTEGER, revoked_at INTEGER, revoked_why TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id, revoked_at)");
       await runQuery("CREATE TABLE IF NOT EXISTS session_cutoffs (user_id TEXT PRIMARY KEY, after INTEGER NOT NULL, why TEXT)");
+      // 1.99acm: the account cutoff the chat hub's FEED was sent (huboutbox sessions/revoked "acct:"), so its repair snapshot
+      // lists exactly those - never the cookie cutoff of "sign out everywhere else" / a password change, which keep this device
+      const have = (await getQuery("SELECT name FROM pragma_table_info('session_cutoffs')")).map((c) => c.name);
+      if (!have.includes("hub_before")) await runQuery("ALTER TABLE session_cutoffs ADD COLUMN hub_before INTEGER");
+      if (!have.includes("hub_why")) await runQuery("ALTER TABLE session_cutoffs ADD COLUMN hub_why TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -189,6 +194,10 @@ async function revokeAll(userId, { except = null, why = "signed out everywhere",
                       ON CONFLICT(user_id) DO UPDATE SET after = MAX(after, excluded.after), why = excluded.why`, [String(userId), t, str(why, 40)]);
     }
     if (!except) {
+      // 1.99acm: what the hub was told, for the snapshot (with or without the cookie cutoff; `after` 0 = no cookie cutoff)
+      await runQuery(`INSERT INTO session_cutoffs (user_id, after, why, hub_before, hub_why) VALUES (?, 0, NULL, ?, ?)
+                      ON CONFLICT(user_id) DO UPDATE SET hub_before = MAX(COALESCE(hub_before, 0), excluded.hub_before), hub_why = excluded.hub_why`,
+                     [String(userId), t, str(why, 40)]);
       await require("./huboutbox").emit("sessions/revoked", "acct:" + String(userId),
         { kind: "account", account: hubAccount(userId), v1_user: String(userId), before: hubSecs(t), why: str(why, 40) });
     }

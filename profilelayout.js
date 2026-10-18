@@ -254,4 +254,5 @@ function vaultRoute({ tab, qtab, has, username, preview }) {
   return { vault: true };
 }
 
-module.exports = { vaultRoute, SECTIONS, TABS, TAB_OF, DEFAULT_TAB, tabsFor, pickTab, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, PRIV_DEFAULT_PRIVATE, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };
+// 1.99acm: `ready` (the table exists) - huboutbox.js puts its privacy/changed triggers on profile_layout
+module.exports = { ready, vaultRoute, SECTIONS, TABS, TAB_OF, DEFAULT_TAB, tabsFor, pickTab, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, PRIV_DEFAULT_PRIVATE, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };
