@@ -33,7 +33,9 @@ const KEY_RE = /^[A-Za-z0-9_.:@\-]{6,160}$/;
 const LOGIN_RE = /^[^\u0000-\u001f"<>]{1,80}$/;
 const METRIC_RE = /^[^\u0000-\u001f"<>]{1,80}$/;
 const NUM_RE = /^-?\d{1,40}(\.\d{1,20})?$/;
-const MAX_KEYS = new Set(["streak", "best", "level", "max", "best_streak", "peak", "deepest"]);   // pepe_loginrekey.MAX_KEYS
+// pepe_loginrekey.MAX_KEYS (1.99aco: + the duel / brawl win streaks - best run and current run - so two runs never add up)
+const MAX_KEYS = new Set(["streak", "best", "level", "max", "best_streak", "peak", "deepest",
+  "duel_streak", "brawl_streak", "duel_streak_run", "brawl_streak_run"]);
 const MAX_BATCH = 500;
 const MAX_EXTRA = 20000;
 

@@ -10,20 +10,34 @@
 //   replace_max          challenges + replacements one challenger may aim at the same target ...
 //   replace_window_secs  ... per this many seconds. Default 3 per 120 s; 1 .. 20, 30 .. 3600 s.
 //
+// 1.99aco: the win-streak achievements' anti-farming knobs (the duel / brawl "N in a row" badges; Pepe 1.99acn,
+// pepe_pvpstreak.py). A win that fails one of them neither extends nor breaks the winner's streak (the loser's resets):
+//   streak_min_stake        the stake (each side) a game needs to count. Default 10,000 PAT (= the achievement texts),
+//                           1,000 .. 10,000,000 - free 1-PAT duel rings can't build a streak.
+//   streak_min_acct_days    the opponent's PATV account must be this many days old ... Default 14, 0 .. 365.
+//   streak_min_level        ... and at least this level. Default 5, 0 .. 1000. An unknown age / level never counts
+//                           (throwaway Camfrog logins get an auto account the first time Pepe looks them up).
+//   streak_min_sheet_games  brawls: the opponent's sheet must have this many heists + brawls + arena wins. Default 10.
+//   streak_max_gap          brawls: the loser's clash strength (sum of the sheet's clash modifiers + arena gear) may be
+//                           at most this far below the winner's - a thrown or hopeless fight doesn't count. Default 6, 0 .. 60.
+//
 // Pepe reads them with POST /api/pvp/cfg every 10 minutes (and keeps his built-in defaults, the same as DEFAULTS
 // here, when the site doesn't answer). The clamp is the same on both sides (pepe_pvp.PVP_CFG_LIMITS).
 //
 //   GET  /api/admin/pvp-cfg   (admins)                        -> {ok, cfg, defaults, limits}
-//   POST /api/admin/pvp-cfg   (admins, same-site fetch JSON)   {accept_quiet_secs, replace_max, replace_window_secs} -> {ok, cfg}
-//   POST /api/pvp/cfg         (Pepe, bot token)                -> {ok, accept_quiet_secs, replace_max, replace_window_secs}
+//   POST /api/admin/pvp-cfg   (admins, same-site fetch JSON)   {any of the knobs} -> {ok, cfg}
+//   POST /api/pvp/cfg         (Pepe, bot token)                -> {ok, ...every knob}
 //
 // The card is on /admin/games#pvp (views/partials/admin-pvpcfg.ejs) - never on a public page.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
-const DEFAULTS = { accept_quiet_secs: 15, replace_max: 3, replace_window_secs: 120 };
-const LIMITS = { accept_quiet_secs: [0, 300], replace_max: [1, 20], replace_window_secs: [30, 3600] };
+const DEFAULTS = { accept_quiet_secs: 15, replace_max: 3, replace_window_secs: 120,
+  streak_min_stake: 10000, streak_min_acct_days: 14, streak_min_level: 5, streak_min_sheet_games: 10, streak_max_gap: 6 };
+const LIMITS = { accept_quiet_secs: [0, 300], replace_max: [1, 20], replace_window_secs: [30, 3600],
+  streak_min_stake: [1000, 10000000], streak_min_acct_days: [0, 365], streak_min_level: [0, 1000], streak_min_sheet_games: [0, 1000],
+  streak_max_gap: [0, 60] };
 
 let ready = null;
 function init() {
@@ -83,8 +97,11 @@ function register(app, { isBotToken, addUser }) {
     if (!(await admin(req, res))) return;
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     const b = req.body || {};
-    const cfg = await set({ accept_quiet_secs: b.accept_quiet_secs, replace_max: b.replace_max, replace_window_secs: b.replace_window_secs });
-    console.log(`[pvpcfg] ${req.user.username || req.user.userId}: quiet ${cfg.accept_quiet_secs}s, ${cfg.replace_max} per ${cfg.replace_window_secs}s`);
+    const patch = {};
+    for (const k of Object.keys(LIMITS)) if (Object.prototype.hasOwnProperty.call(b, k)) patch[k] = b[k];   // a missing knob keeps its value
+    const cfg = await set(patch);
+    console.log(`[pvpcfg] ${req.user.username || req.user.userId}: quiet ${cfg.accept_quiet_secs}s, ${cfg.replace_max} per ${cfg.replace_window_secs}s; ` +
+      `streaks: ${cfg.streak_min_stake}+ PAT, ${cfg.streak_min_acct_days}+ days, level ${cfg.streak_min_level}+, ${cfg.streak_min_sheet_games}+ sheet games, gap <= ${cfg.streak_max_gap}`);
     await require("./adminaudit").record(req.user, "pvp-cfg", null, cfg).catch((e) => console.warn(`[pvpcfg] audit: ${e.message}`));
     res.json({ ok: true, cfg });
   });

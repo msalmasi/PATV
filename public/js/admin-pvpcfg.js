@@ -3,7 +3,9 @@
   'use strict';
   var f = document.getElementById('pvpForm'), msg = document.getElementById('pvpMsg');
   if (!f) return;
-  var KEYS = ['accept_quiet_secs', 'replace_max', 'replace_window_secs'];
+  var KEYS = ['accept_quiet_secs', 'replace_max', 'replace_window_secs',
+    // 1.99aco: the win-streak achievements' anti-farming knobs
+    'streak_min_stake', 'streak_min_acct_days', 'streak_min_level', 'streak_min_sheet_games', 'streak_max_gap'];
   function say(t) { if (msg) msg.textContent = t; }
   function show(c) { KEYS.forEach(function (k) { if (f[k] && c && c[k] !== undefined) f[k].value = String(c[k]); }); }
   fetch('/api/admin/pvp-cfg', { credentials: 'same-origin' }).then(function (r) { return r.json(); })
@@ -11,7 +13,10 @@
   f.addEventListener('submit', function (e) {
     e.preventDefault();
     var body = {};
-    KEYS.forEach(function (k) { body[k] = Math.round(Number(f[k].value)); });
+    KEYS.forEach(function (k) {
+      var v = f[k] ? String(f[k].value).trim() : '';
+      if (v !== '' && isFinite(Number(v))) body[k] = Math.round(Number(v));   // an empty field keeps the saved value
+    });
     say('Saving…');
     fetch('/api/admin/pvp-cfg', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
