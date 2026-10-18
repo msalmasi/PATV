@@ -16,7 +16,7 @@ const { runQuery } = require(path.join(repo, "dbUtils"));
 const pvpcfg = require(path.join(repo, "pvpcfg"));
 
 let base, server;
-const STREAK = { streak_min_stake: 10000, streak_min_acct_days: 14, streak_min_level: 5, streak_min_sheet_games: 10, streak_max_gap: 6 };   // 1.99aco: the win-streak anti-farming knobs (pepe_pvpstreak.py)
+const STREAK = { streak_min_stake: 10000, streak_min_acct_days: 14, streak_min_level: 5, streak_min_sheet_games: 10, streak_max_gap: 12 };   // 1.99aco: the win-streak anti-farming knobs (pepe_pvpstreak.py)
 test.before(async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, class TEXT DEFAULT 'pleb')`);
   await runQuery("INSERT INTO users (userId, username, class) VALUES ('u_adm', 'adm', 'Admin'), ('u_joe', 'joe', 'pleb')");

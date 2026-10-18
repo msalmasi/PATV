@@ -34,7 +34,7 @@ const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DEFAULTS = { accept_quiet_secs: 15, replace_max: 3, replace_window_secs: 120,
-  streak_min_stake: 10000, streak_min_acct_days: 14, streak_min_level: 5, streak_min_sheet_games: 10, streak_max_gap: 6 };
+  streak_min_stake: 10000, streak_min_acct_days: 14, streak_min_level: 5, streak_min_sheet_games: 10, streak_max_gap: 12 };
 const LIMITS = { accept_quiet_secs: [0, 300], replace_max: [1, 20], replace_window_secs: [30, 3600],
   streak_min_stake: [1000, 10000000], streak_min_acct_days: [0, 365], streak_min_level: [0, 1000], streak_min_sheet_games: [0, 1000],
   streak_max_gap: [0, 60] };
