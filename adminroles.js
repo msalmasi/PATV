@@ -1,0 +1,75 @@
+// adminroles.js — 1.99acj site: /admin/roles, Pepe's roles & permissions, editable in place (release 1; pepeperms.js).
+//
+//   GET  /admin/roles                       the page (views/admin/roles.ejs, public/js/admin-roles.js)
+//   GET  /api/admin/roles                   the same data as JSON
+//   POST /api/admin/roles/role  {login, role}                    owner | admin | staff | assistant | trusted | none (!role)
+//   POST /api/admin/roles/perm  {cmd, kind, value, role?}        kind powers | use | targets (role staff | assistant);
+//                                                                value a role / floor, or "default" (!perm)
+//   POST /api/admin/roles/reset {cmd}                            the command's powers + use + floors back to Pepe's defaults
+// Who: viewing needs class Admin IN THE DATABASE (Staff get a flash + the Overview, others /login). Every change is decided
+// by the editor's PEPE role (pepe_roles, via their linked Camfrog login) with Pepe's own !role / !perm rules - owners
+// anything, admins within an admin's reach (pepeperms.permWhy / staffroles.setRole); others nothing. Changes need a
+// same-origin fetch with X-Requested-With: fetch, answer Cache-Control: no-store and are written to admin_audit.
+// Release 2 adds the website's own permissions to the page (the "Website permissions" section is a placeholder).
+"use strict";
+const { getQuery } = require("./dbUtils");
+const P = require("./pepeperms");
+
+const safe = async (fn, d) => { try { return await fn(); } catch (e) { return d; } };
+const sameOriginStrict = (req) => {
+  const src = req.get("origin") || req.get("referer");
+  try { return !!src && new URL(src).host === req.get("host"); } catch (e) { return false; }
+};
+async function meOf(req) {
+  if (!req.user || !req.user.userId) return null;
+  return (await safe(() => getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]), []))[0] || null;
+}
+
+function register(app, { addUser }) {
+  P.init().catch((e) => console.error("[adminroles] init:", e.message));
+
+  app.get("/admin/roles", addUser, async (req, res) => {
+    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent("/admin/roles"));
+    try {
+      const me = await meOf(req);
+      res.set("Cache-Control", "no-store");
+      res.set("X-Robots-Tag", "noindex");
+      if (!me || me.class !== "Admin") {
+        if (typeof req.flash === "function") req.flash("error", "Roles & permissions are for site admins.");
+        return res.redirect(me && me.class === "Staff" ? "/admin" : "/login");
+      }
+      const ed = await P.editorOf(me.userId);
+      res.render("admin/roles", { title: "Admin · Roles & permissions", user: me.username, isAdmin: true, view: await P.view(ed) });
+    } catch (e) { console.error("[adminroles] page:", e); res.status(500).send("Couldn't load the admin page."); }
+  });
+
+  app.get("/api/admin/roles", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const me = await meOf(req);
+    if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
+    if (me.class !== "Admin") return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
+    try { res.json({ ok: true, ...(await P.view(await P.editorOf(me.userId))) }); }
+    catch (e) { console.error("[adminroles] data:", e.message); res.status(500).json({ ok: false }); }
+  });
+
+  const change = (path, fn) => app.post(path, addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (req.get("X-Requested-With") !== "fetch" || !sameOriginStrict(req)) return res.status(403).json({ ok: false, code: "cross_site", error: "Security check failed - reload the page." });
+    const me = await meOf(req);
+    if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
+    if (me.class !== "Admin") return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
+    try {
+      const ed = await P.editorOf(me.userId);
+      res.json({ ok: true, ...(await fn(req.body || {}, ed)) });
+    } catch (e) {
+      if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, code: e.code, error: e.message });
+      console.error("[adminroles]", path, e.message);
+      res.status(500).json({ ok: false, code: "internal", error: "Something went wrong." });
+    }
+  });
+  change("/api/admin/roles/role", (b, ed) => P.setRole(ed, b.login, b.role));
+  change("/api/admin/roles/perm", (b, ed) => P.setPerm(ed, { kind: b.kind, cmd: b.cmd, value: b.value, role: b.role }));
+  change("/api/admin/roles/reset", (b, ed) => P.resetCmd(ed, b.cmd));
+}
+
+module.exports = { register };

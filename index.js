@@ -295,6 +295,7 @@ require("./adminxp").register(app, { addUser });
 // (huboutbox.js; nothing is sent while HUB_V1_URL is unset), bridge spans (bridgespans.js)
 botkeys.register(app);
 require("./adminkeys").register(app, { addUser });
+require("./adminroles").register(app, { addUser });   // 1.99acj: /admin/roles - Pepe's roles & per-command permissions, edited with his !role / !perm rules (pepeperms.js)
 require("./chatticket").register(app, { addUser });
 require("./huboutbox").start();
 require("./bridgespans").start();

@@ -1,0 +1,187 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'roles', admIsAdmin: isAdmin }) %>
+<%# views/admin/roles.ejs - 1.99acj /admin/roles (adminroles.js, pepeperms.js): Pepe's role holders, his per-command permissions
+    (admin powers / can use, the role ladder), the moderation targets of staff and assistants, notes, a placeholder for the
+    website's own permissions (release 2) and the chat commands that change the same things. Any site admin can look; changes
+    follow Pepe's !role / !perm rules by the viewer's Pepe role (public/js/admin-roles.js). Every value from the database is
+    escaped by EJS; the page script never builds HTML. %>
+<%
+  const V = view;
+  const ed = V.editor || {};
+  const canEdit = !!ed.admin;
+  const dis = canEdit ? '' : ' disabled';
+  const fmtFn = (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt);
+  const when = (ms) => ms ? fmtFn(Number(ms), 'datetime') : '–';
+  const RN = (r) => t('admroles.role.' + (r || 'none'));
+  const FL = (f) => t('admroles.floor.' + f);
+  const COLS = ['owner', 'admin', 'staff', 'assistant', 'trusted'];
+  const CF = { 1: 'friend', 2: 'moderator', 3: 'admin', 4: 'owner' };
+  const byText = (b) => b ? String(b).replace(/^web:/, '🌐 ').replace(/^pepe:/, '💬 ').replace(/^pepe$/, '💬') : '';
+%>
+<div class="adm-head">
+  <h1><%- t('admroles.title') %></h1>
+  <p><%- t('admroles.lede') %></p>
+  <% if (canEdit) { %><p class="adm-help" id="arYou"><%- t(ed.owner ? 'admroles.you_owner' : 'admroles.you_admin', { login: ed.login }) %></p>
+  <% } else { %><p class="adm-help" id="arReadOnly"><%- t('admroles.you_none', { login: ed.login || '–' }) %></p><% } %>
+  <% if (V.synced) { %><p class="adm-help" id="arSynced"><span class="adm-dot ok"></span> <%- t('admroles.sync_ok', { when: when(V.synced_at) }) %></p>
+  <% } else { %><div class="ds-note warn" id="arNotSynced" role="status"><span class="ds-ic" aria-hidden="true">⏳</span><div><p><%- t('admroles.sync_never') %></p></div></div><% } %>
+</div>
+
+<section class="adm-card" id="holders" aria-labelledby="arHoldT">
+  <h2 id="arHoldT"><%- t('admroles.holders.h') %></h2>
+  <p class="adm-help"><%- t('admroles.holders.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admroles.holders.login') %></th><th><%- t('admroles.holders.role') %></th><th><%- t('admroles.holders.accounts') %></th><th><%- t('admroles.holders.changed') %></th><th></th></tr></thead>
+    <tbody>
+      <% if (!V.holders.length) { %><tr><td class="empty" colspan="5"><%- t('admroles.holders.none') %></td></tr><% } %>
+      <% V.holders.forEach((h) => { const off = !canEdit || !h.editable || h.lastOwner; %><tr data-login="<%= h.login %>">
+        <td><code><%= h.login %></code></td>
+        <td>
+          <label class="sr-only" for="arRole-<%= h.login %>"><%- t('admroles.holders.role') %></label>
+          <select id="arRole-<%= h.login %>" data-set-role="<%= h.login %>" data-was="<%= h.role %>"<%- off ? ' disabled' : '' %>>
+            <% ['owner', 'admin', 'staff', 'assistant', 'trusted'].forEach((r) => { %><option value="<%= r %>"<%= r === h.role ? ' selected' : '' %><%- r !== h.role && !V.role_options.includes(r) ? ' disabled' : '' %>><%- RN(r) %></option><% }) %>
+          </select>
+          <% if (h.lastOwner) { %><span class="adm-help" title="<%- t('admroles.holders.last_owner') %>">🔒 <%- t('admroles.holders.last_owner') %></span><% } %>
+        </td>
+        <td><%= h.accounts.join(', ') || '–' %></td>
+        <td><%= h.ts > 1e12 ? when(h.ts) : '–' %></td>
+        <td><button type="button" class="danger" data-remove-role="<%= h.login %>"<%- off ? ' disabled' : '' %>><%- t('admroles.holders.remove') %></button> <span class="adm-msg" role="status"></span></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+  <form class="adm-form" id="arAddRole" autocomplete="off">
+    <h3><%- t('admroles.holders.add_h') %></h3>
+    <label for="arAddLogin"><%- t('admroles.holders.login') %><input type="text" id="arAddLogin" maxlength="40" pattern="[A-Za-z0-9_.\-$@]{1,41}" required<%- dis %>></label>
+    <label for="arAddRoleSel"><%- t('admroles.holders.role') %>
+      <select id="arAddRoleSel"<%- dis %>>
+        <% V.role_options.forEach((r) => { %><option value="<%= r %>"<%= r === 'staff' ? ' selected' : '' %>><%- RN(r) %></option><% }) %>
+      </select></label>
+    <div class="adm-actions"><button type="submit"<%- dis %>><%- t('admroles.save') %></button><span class="adm-msg" id="arAddMsg" role="status"></span></div>
+  </form>
+</section>
+
+<section class="adm-card" id="commands" aria-labelledby="arCmdT">
+  <h2 id="arCmdT"><%- t('admroles.cmds.h') %></h2>
+  <p class="adm-help"><%- t('admroles.cmds.help') %></p>
+  <% if (!V.synced) { %><p class="adm-help"><%- t('admroles.not_synced_short') %></p><% } else { %>
+  <p class="adm-help"><%- t('admroles.cmds.legend') %></p>
+  <div class="adm-tbl"><table class="ar-cmds">
+    <thead><tr><th><%- t('admroles.cmds.cmd') %></th><th><%- t('admroles.cmds.powers') %></th><th><%- t('admroles.cmds.use') %></th>
+      <% COLS.forEach((r) => { %><th class="ar-lad"><%- RN(r) %></th><% }) %><th></th></tr></thead>
+    <tbody>
+      <% V.commands.forEach((c) => { %><tr data-cmd="<%= c.cmd %>">
+        <td class="ar-cmd"><code><%= c.cmd %></code><% if (c.lock) { %><br><span class="adm-help" title="<%- t('admroles.cmds.lock_' + c.lock) %>">🔒 <%- t('admroles.cmds.lock_' + c.lock + '_short') %></span><% } %></td>
+        <td>
+          <label class="sr-only" for="arPw-<%= c.cmd %>"><%- t('admroles.cmds.powers') %> <%= c.cmd %></label>
+          <select id="arPw-<%= c.cmd %>" data-perm="powers" data-cmd="<%= c.cmd %>"<%- !canEdit || c.powers.locked || c.lock === 'owner' ? ' disabled' : '' %>>
+            <option value="default"<%= c.powers.over == null ? ' selected' : '' %>><%- t('admroles.default_opt', { v: RN(c.powers.def) }) %></option>
+            <% c.powers.options.forEach((o) => { %><option value="<%= o.v %>"<%= c.powers.over === o.v ? ' selected' : '' %><%- o.ok || c.powers.over === o.v ? '' : ' disabled' %>><%- RN(o.v) %></option><% }) %>
+          </select>
+          <% if (c.powers.by) { %><br><span class="adm-help"><%- t('admroles.set_by', { by: byText(c.powers.by) }) %></span><% } %>
+          <% if (c.powers.locked && c.lock !== 'owner') { %><br><span class="adm-help">🔒 <%- t('admroles.locked_by_owner') %></span><% } %>
+        </td>
+        <td>
+          <label class="sr-only" for="arUse-<%= c.cmd %>"><%- t('admroles.cmds.use') %> <%= c.cmd %></label>
+          <select id="arUse-<%= c.cmd %>" data-perm="use" data-cmd="<%= c.cmd %>"<%- !canEdit || c.use.locked ? ' disabled' : '' %>>
+            <option value="default"<%= c.use.over == null ? ' selected' : '' %>><%- t('admroles.default_opt', { v: RN('everyone') }) %></option>
+            <% c.use.options.forEach((o) => { %><option value="<%= o.v %>"<%= c.use.over === o.v ? ' selected' : '' %><%- o.ok || c.use.over === o.v ? '' : ' disabled' %>><%- RN(o.v) %></option><% }) %>
+          </select>
+          <% if (c.use.by) { %><br><span class="adm-help"><%- t('admroles.set_by', { by: byText(c.use.by) }) %></span><% } %>
+          <% if (c.use.locked) { %><br><span class="adm-help">🔒 <%- t('admroles.locked_by_owner') %></span><% } %>
+        </td>
+        <% c.ladder.forEach((l) => { %><td class="ar-lad"><span title="<%- t('admroles.cmds.mark_use') %>" aria-label="<%- t('admroles.cmds.mark_use') %>: <%- l.use ? t('admroles.yes') : t('admroles.no') %>"><%= l.use ? '✅' : '❌' %></span><span title="<%- t('admroles.cmds.mark_powers') %>" aria-label="<%- t('admroles.cmds.mark_powers') %>: <%- l.powers ? t('admroles.yes') : t('admroles.no') %>"><%= l.powers ? '✅' : '❌' %></span></td><% }) %>
+        <td><% if (c.overridden) { %><button type="button" class="ghost" data-reset="<%= c.cmd %>"<%- dis %>><%- t('admroles.reset') %></button><% } %> <span class="adm-msg" role="status"></span></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+  <p class="adm-help">🔒 <b><%- t('admroles.cmds.lock_owner_short') %></b>: <%- t('admroles.cmds.lock_owner') %><br>🔒 <b><%- t('admroles.cmds.lock_room_short') %></b>: <%- t('admroles.cmds.lock_room') %></p>
+  <form class="adm-form" id="arAddCmd" autocomplete="off">
+    <h3><%- t('admroles.cmds.add_h') %></h3>
+    <p class="adm-help"><%- t('admroles.cmds.add_help') %></p>
+    <label for="arAddCmdName"><%- t('admroles.cmds.cmd') %><input type="text" id="arAddCmdName" maxlength="40" placeholder="!video" required<%- dis %>></label>
+    <label for="arAddCmdPw"><%- t('admroles.cmds.powers') %>
+      <select id="arAddCmdPw"<%- dis %>>
+        <option value="default"><%- t('admroles.default_opt', { v: RN('admin') }) %></option>
+        <% ['owner', 'admin', 'staff', 'assistant', 'trusted'].forEach((r) => { %><option value="<%= r %>"<%- r === 'owner' && !ed.owner ? ' disabled' : '' %>><%- RN(r) %></option><% }) %>
+      </select></label>
+    <label for="arAddCmdUse"><%- t('admroles.cmds.use') %>
+      <select id="arAddCmdUse"<%- dis %>>
+        <option value="default"><%- t('admroles.default_opt', { v: RN('everyone') }) %></option>
+        <% ['owner', 'admin', 'staff', 'assistant', 'trusted', 'everyone'].forEach((r) => { %><option value="<%= r %>"<%- r === 'owner' && !ed.owner ? ' disabled' : '' %>><%- RN(r) %></option><% }) %>
+      </select></label>
+    <div class="adm-actions"><button type="submit"<%- dis %>><%- t('admroles.cmds.add') %></button><span class="adm-msg" id="arAddCmdMsg" role="status"></span></div>
+  </form>
+  <% } %>
+</section>
+
+<section class="adm-card" id="targets" aria-labelledby="arTgT">
+  <h2 id="arTgT"><%- t('admroles.targets.h') %></h2>
+  <p class="adm-help"><%- t('admroles.targets.help') %></p>
+  <% if (!V.synced) { %><p class="adm-help"><%- t('admroles.not_synced_short') %></p><% } else { %>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admroles.cmds.cmd') %></th><% (V.targets[0] ? V.targets[0].roles : []).forEach((r) => { %><th><%- t('admroles.targets.who_' + r.role) %></th><% }) %><th></th></tr></thead>
+    <tbody>
+      <% V.targets.forEach((row) => { const over = row.roles.some((r) => r.over != null); %><tr data-cmd="<%= row.cmd %>">
+        <td><code><%= row.cmd %></code><% if (row.room) { %> <span title="<%- t('admroles.cmds.lock_room') %>">🔒</span><% } %></td>
+        <% row.roles.forEach((r) => { %><td>
+          <label class="sr-only" for="arTg-<%= row.cmd %>-<%= r.role %>"><%- t('admroles.targets.who_' + r.role) %> <%= row.cmd %></label>
+          <select id="arTg-<%= row.cmd %>-<%= r.role %>" data-perm="targets" data-cmd="<%= row.cmd %>" data-role="<%= r.role %>"<%- !canEdit || r.locked ? ' disabled' : '' %>>
+            <option value="default"<%= r.over == null ? ' selected' : '' %>><%- t('admroles.default_opt', { v: FL(r.def) }) %></option>
+            <% r.options.filter((o) => o.inBounds).forEach((o) => { %><option value="<%= o.v %>"<%= r.over === o.v ? ' selected' : '' %><%- o.ok || r.over === o.v ? '' : ' disabled' %>><%- FL(o.v) %></option><% }) %>
+          </select>
+          <% if (r.by) { %><br><span class="adm-help"><%- t('admroles.set_by', { by: byText(r.by) }) %></span><% } %>
+          <% if (r.locked) { %><br><span class="adm-help">🔒 <%- t('admroles.locked_by_owner') %></span><% } %>
+        </td><% }) %>
+        <td><% if (over) { %><button type="button" class="ghost" data-reset="<%= row.cmd %>"<%- dis %>><%- t('admroles.reset') %></button><% } %> <span class="adm-msg" role="status"></span></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+  <p class="adm-help"><%- t('admroles.targets.admin_limits') %></p>
+  <% Object.keys(V.mod_cf_ceiling || {}).forEach((r) => { const n = V.mod_cf_ceiling[r]; %>
+  <p class="adm-help"><%- t('admroles.targets.ceiling_' + r, { cf: t('admroles.cf.' + (CF[n] || 'none')) }) %></p>
+  <% }) %>
+  <% } %>
+</section>
+
+<section class="adm-card" id="notes" aria-labelledby="arNotesT">
+  <h2 id="arNotesT"><%- t('admroles.notes.h') %></h2>
+  <ul class="adm-list">
+    <li><%- t('admroles.notes.real_role') %></li>
+    <li><%- t('admroles.notes.pad_owners') %></li>
+    <li><%- t('admroles.notes.sync') %></li>
+  </ul>
+</section>
+
+<section class="adm-card" id="website" aria-labelledby="arWebT" data-release="2">
+  <h2 id="arWebT"><%- t('admroles.website.h') %> <span class="adm-pill"><%- t('admroles.website.pill') %></span></h2>
+  <p class="adm-help"><%- t('admroles.website.placeholder') %></p>
+  <div id="arWebsitePerms" data-placeholder="release-2"></div>
+</section>
+
+<section class="adm-card" id="chat" aria-labelledby="arChatT">
+  <h2 id="arChatT"><%- t('admroles.chat.h') %></h2>
+  <p class="adm-help"><%- t('admroles.chat.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admroles.chat.cmd') %></th><th><%- t('admroles.chat.what') %></th><th><%- t('admroles.chat.who') %></th></tr></thead>
+    <tbody>
+      <% [
+        ['!roles', 'roles', 'admins'],
+        ['!role <user> <owner|admin|staff|assistant|trusted|none>', 'role', 'role'],
+        ['!perm <!cmd>', 'perm_show', 'admins'],
+        ['!perm <!cmd> powers <role|default>', 'perm_powers', 'perm'],
+        ['!perm <!cmd> use <role|everyone|default>', 'perm_use', 'perm'],
+        ['!perm <!cmd> targets <staff|assistant> <nobody|assistant|staff|admin|anyone|default>', 'perm_targets', 'targets'],
+      ].forEach((r) => { %><tr><td><code><%= r[0] %></code></td><td><%- t('admroles.chat.' + r[1]) %></td><td><%- t('admroles.chat.who_' + r[2]) %></td></tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+<style>
+  .ar-cmds .ar-lad { text-align: center; white-space: nowrap; }
+  .ar-cmds .ar-cmd { white-space: nowrap; }
+  .ar-cmds td.ar-lad span + span { margin-inline-start: 2px; }
+  .adm-main #commands select, .adm-main #targets select, .adm-main #holders select { max-width: 13rem; }
+</style>
+<script src="/public/js/admin-roles.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

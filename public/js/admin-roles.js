@@ -1,0 +1,88 @@
+// admin-roles.js - /admin/roles (adminroles.js, pepeperms.js, 1.99acj): role holders, per-command permissions (admin powers /
+// can use), moderation targets. Every change is a same-origin POST checked on the server with Pepe's own !role / !perm rules;
+// the page reloads to show the result (the ladder, who set what). Messages go in with textContent only.
+(function () {
+  'use strict';
+  var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) {
+    return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; });
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var H = { 'content-type': 'application/json', 'X-Requested-With': 'fetch' };
+  function errText(j) { return (j && j.error) || _t('js.admroles.failed', 'That did not work - try again.'); }
+  function say(el, msg, bad) { if (el) { el.textContent = msg || ''; el.className = 'adm-msg' + (bad ? ' err' : msg ? ' ok' : ''); } }
+  function msgNear(el) { var f = el && el.closest('tr, form, section'); return f ? f.querySelector('.adm-msg') : null; }
+  function post(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: H, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+      .catch(function () { return { ok: false }; });
+  }
+  function reloadSoon() { setTimeout(function () { location.reload(); }, 500); }
+  function done(el, j, undo) {
+    if (!j || !j.ok) { say(msgNear(el), errText(j), true); if (undo) undo(); return false; }
+    say(msgNear(el), _t('js.admroles.saved', 'Saved.'));
+    reloadSoon();
+    return true;
+  }
+
+  // role holders
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el || el.tagName !== 'SELECT') return;
+    if (el.hasAttribute('data-set-role')) {
+      var was = el.getAttribute('data-was');
+      say(msgNear(el), _t('js.admroles.working', 'Saving…'));
+      post('/api/admin/roles/role', { login: el.getAttribute('data-set-role'), role: el.value })
+        .then(function (j) { done(el, j, function () { el.value = was; }); });
+      return;
+    }
+    if (el.hasAttribute('data-perm')) {
+      var prev = el.getAttribute('data-prev');
+      var body = { kind: el.getAttribute('data-perm'), cmd: el.getAttribute('data-cmd'), value: el.value };
+      if (el.hasAttribute('data-role')) body.role = el.getAttribute('data-role');
+      say(msgNear(el), _t('js.admroles.working', 'Saving…'));
+      post('/api/admin/roles/perm', body).then(function (j) { done(el, j, function () { if (prev != null) el.value = prev; }); });
+    }
+  });
+  // remember each select's value so a refused change puts it back
+  Array.prototype.forEach.call(document.querySelectorAll('select[data-perm]'), function (s) { s.setAttribute('data-prev', s.value); });
+
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('button[data-remove-role], button[data-reset]') : null;
+    if (!b) return;
+    if (b.hasAttribute('data-remove-role')) {
+      var login = b.getAttribute('data-remove-role');
+      if (!window.confirm(_t('js.admroles.confirm_remove', 'Remove the role of {login}?', { login: login }))) return;
+      say(msgNear(b), _t('js.admroles.working', 'Saving…'));
+      post('/api/admin/roles/role', { login: login, role: 'none' }).then(function (j) { done(b, j); });
+      return;
+    }
+    var cmd = b.getAttribute('data-reset');
+    if (!window.confirm(_t('js.admroles.confirm_reset', 'Put {cmd} back to Pepe defaults?', { cmd: cmd }))) return;
+    say(msgNear(b), _t('js.admroles.working', 'Saving…'));
+    post('/api/admin/roles/reset', { cmd: cmd }).then(function (j) { done(b, j); });
+  });
+
+  if ($('arAddRole')) $('arAddRole').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var login = ($('arAddLogin').value || '').trim().replace(/^@/, '').toLowerCase();
+    if (!login) return say($('arAddMsg'), _t('js.admroles.need_login', 'Enter a Camfrog login.'), true);
+    say($('arAddMsg'), _t('js.admroles.working', 'Saving…'));
+    post('/api/admin/roles/role', { login: login, role: $('arAddRoleSel').value }).then(function (j) { done($('arAddRole'), j); });
+  });
+
+  if ($('arAddCmd')) $('arAddCmd').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var cmd = ($('arAddCmdName').value || '').trim().toLowerCase();
+    if (cmd && cmd.charAt(0) !== '!') cmd = '!' + cmd;
+    if (!cmd) return say($('arAddCmdMsg'), _t('js.admroles.need_cmd', 'Enter a command.'), true);
+    var pw = $('arAddCmdPw').value, use = $('arAddCmdUse').value;
+    if (pw === 'default' && use === 'default') return say($('arAddCmdMsg'), _t('js.admroles.need_change', 'Pick a setting that differs from the default.'), true);
+    say($('arAddCmdMsg'), _t('js.admroles.working', 'Saving…'));
+    var first = pw !== 'default' ? post('/api/admin/roles/perm', { kind: 'powers', cmd: cmd, value: pw }) : Promise.resolve({ ok: true });
+    first.then(function (j) {
+      if (!j || !j.ok) return done($('arAddCmd'), j);
+      if (use === 'default') return done($('arAddCmd'), j);
+      post('/api/admin/roles/perm', { kind: 'use', cmd: cmd, value: use }).then(function (j2) { done($('arAddCmd'), j2); });
+    });
+  });
+})();

@@ -191,7 +191,15 @@ function register(app, { isBotToken, noTimers } = {}) {
     res.set("Cache-Control", "no-store");
     const b = req.body || {};
     if (typeof isBotToken !== "function" || !isBotToken(b.password)) return res.status(403).json({ ok: false });
-    try { res.json(await botSync(b)); } catch (e) { console.error("[staffroles]", e); res.status(500).json({ ok: false }); }
+    try {
+      const out = await botSync(b);
+      // 1.99acj: + Pepe's per-command permissions and their defaults (pepeperms.js) - only when he sends them (1.99aci+);
+      // a failure there never costs the roles answer
+      if (b.perms || b.acl_defaults) {
+        try { Object.assign(out, await require("./pepeperms").botSync(b)); } catch (e) { console.error("[staffroles] perms:", e.message); }
+      }
+      res.json(out);
+    } catch (e) { console.error("[staffroles]", e); res.status(500).json({ ok: false }); }
   });
 }
 

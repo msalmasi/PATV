@@ -116,6 +116,7 @@ const RULES = {
   "onair_state.updated_by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) - admin_audit has the id" },
   "onair_log.by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) in the on-air log" },
   "pepe_roles.by": { deny: "1.99abn: who changed a Pepe role (web:<username> / pepe) - an actor label; the row is keyed by Camfrog login" },
+  "pepe_perms.by": { deny: "1.99acj: who changed one of Pepe's per-command permissions (web:<username> / pepe:<login>) - an actor label; the row is keyed by command" },
   "onair_queue.by": { deny: "1.99abj: who queued an on-air link (web:<username> / pepe:<login>) - an actor label like onair_log.by" },
   // 1.99aag on-demand consent (onairconsent.js): who was asked moves with the account; "by" is an actor label
   "onair_consent.owner_id": M(), "onair_pad_allow.owner_id": M(),
