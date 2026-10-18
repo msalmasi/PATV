@@ -5,7 +5,7 @@
   if (!f) return;
   var KEYS = ['accept_quiet_secs', 'replace_max', 'replace_window_secs',
     // 1.99aco: the win-streak achievements' anti-farming knobs
-    'streak_min_stake', 'streak_min_acct_days', 'streak_min_level', 'streak_min_sheet_games', 'streak_max_gap'];
+    'streak_min_stake', 'streak_min_acct_days', 'streak_min_level', 'streak_min_sheet_games', 'streak_max_gap', 'streak_repeat_hours'];
   function say(t) { if (msg) msg.textContent = t; }
   function show(c) { KEYS.forEach(function (k) { if (f[k] && c && c[k] !== undefined) f[k].value = String(c[k]); }); }
   fetch('/api/admin/pvp-cfg', { credentials: 'same-origin' }).then(function (r) { return r.json(); })

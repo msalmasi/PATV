@@ -16,15 +16,16 @@
     <h3 id="pvpStreakT" style="grid-column: 1 / -1; margin: var(--ds-sp-2) 0 0">Win-streak achievements (5 / 10 / 20 in a row)</h3>
     <p class="adm-help" id="pvpStreakHelp" style="grid-column: 1 / -1; margin: 0">A won duel or brawl that misses one of these doesn't extend
       the winner's streak (the loser's still resets). The opponent must be an established player: an account at least this old and at
-      this level (an unknown one never counts). Brawls also need the opponent's sheet played and an even match. Each opponent counts once
-      per 24 hours (repeats inside one streak are fine), never the winner's own alts (always on). The achievement texts say 10,000+ PAT.</p>
+      this level (an unknown one never counts). Brawls also need the opponent's sheet played and an even match. Beating the same
+      opponent again counts (set a repeat window below to limit that); the winner's own alts never count (always on). The achievement texts say 10,000+ PAT.</p>
     <label for="pvpStake">Minimum stake (PAT, each side)<input type="number" id="pvpStake" name="streak_min_stake" min="1000" max="10000000" step="1000" required aria-describedby="pvpStreakHelp"></label>
     <label for="pvpDays">Opponent's account age (days)<input type="number" id="pvpDays" name="streak_min_acct_days" min="0" max="365" step="1" required aria-describedby="pvpStreakHelp"></label>
     <label for="pvpLevel">Opponent's level<input type="number" id="pvpLevel" name="streak_min_level" min="0" max="1000" step="1" required aria-describedby="pvpStreakHelp"></label>
     <label for="pvpSheet">Brawls: opponent's sheet games (heists + brawls + arena wins)<input type="number" id="pvpSheet" name="streak_min_sheet_games" min="0" max="1000" step="1" required aria-describedby="pvpStreakHelp"></label>
     <label for="pvpGap">Brawls: how much weaker the loser may be (clash strength)<input type="number" id="pvpGap" name="streak_max_gap" min="0" max="60" step="1" required aria-describedby="pvpStreakHelp"></label>
+    <label for="pvpRepeat">Same opponent counts once per (hours, 0 = off)<input type="number" id="pvpRepeat" name="streak_repeat_hours" min="0" max="72" step="1" required aria-describedby="pvpStreakHelp"></label>
     <div class="adm-actions"><button class="ds-btn sm" type="submit">Save</button></div>
   </form>
-  <script src="/public/js/admin-pvpcfg.js?v=2" defer></script>
+  <script src="/public/js/admin-pvpcfg.js?v=3" defer></script>
   <% } %>
 </section>

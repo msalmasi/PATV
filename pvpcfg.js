@@ -19,7 +19,9 @@
 //                           (throwaway Camfrog logins get an auto account the first time Pepe looks them up).
 //   streak_min_sheet_games  brawls: the opponent's sheet must have this many heists + brawls + arena wins. Default 10.
 //   streak_max_gap          brawls: the loser's clash strength (sum of the sheet's clash modifiers + arena gear) may be
-//                           at most this far below the winner's - a thrown or hopeless fight doesn't count. Default 6, 0 .. 60.
+//                           at most this far below the winner's - a thrown or hopeless fight doesn't count. Default 12, 0 .. 60.
+//   streak_repeat_hours     1.99act: a win over the same opponent (or their alts) counts once per this many hours; 0 = off
+//                           (the default - repeat opponents are fine for now). 0 .. 72 (Pepe keeps finished games 3 days).
 //
 // Pepe reads them with POST /api/pvp/cfg every 10 minutes (and keeps his built-in defaults, the same as DEFAULTS
 // here, when the site doesn't answer). The clamp is the same on both sides (pepe_pvp.PVP_CFG_LIMITS).
@@ -34,10 +36,10 @@ const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DEFAULTS = { accept_quiet_secs: 15, replace_max: 3, replace_window_secs: 120,
-  streak_min_stake: 10000, streak_min_acct_days: 14, streak_min_level: 5, streak_min_sheet_games: 10, streak_max_gap: 12 };
+  streak_min_stake: 10000, streak_min_acct_days: 14, streak_min_level: 5, streak_min_sheet_games: 10, streak_max_gap: 12, streak_repeat_hours: 0 };
 const LIMITS = { accept_quiet_secs: [0, 300], replace_max: [1, 20], replace_window_secs: [30, 3600],
   streak_min_stake: [1000, 10000000], streak_min_acct_days: [0, 365], streak_min_level: [0, 1000], streak_min_sheet_games: [0, 1000],
-  streak_max_gap: [0, 60] };
+  streak_max_gap: [0, 60], streak_repeat_hours: [0, 72] };
 
 let ready = null;
 function init() {

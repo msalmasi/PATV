@@ -6,7 +6,7 @@
 //     awards nothing, a 5th win and a loss inside one heartbeat still award, held ids stay quiet
 //   * a login re-key keeps the larger run (MAX_KEYS), never the sum
 //   * review: the texts name the anti-farming rules Pepe applies (the stake floor = pvpcfg's default knob, established players,
-//     evenly matched brawls, each opponent once per 24 h, no alts)
+//     evenly matched brawls, no alts; 1.99act: the same-opponent window is a knob, off by default)
 //   NODE_PATH=G:/PATV/node_modules node --test test/pvp-streak-achievements.test.js
 "use strict";
 const test = require("node:test");
@@ -40,8 +40,8 @@ const ROWS = [
 ];
 // 1.99aco review: the anti-farming rules Pepe applies (pepe_pvpstreak.py) - the stake floor, established players, (brawls) an even
 // match, each opponent once per 24 h, never your own alts (1.99acn: repeat opponents inside one streak are allowed)
-const DUEL_DESC = (n) => `Won ${n} dice duels in a row at 10,000+ PAT vs established players - each opponent once per 24 h, no alts.`;
-const BRAWL_DESC = (n) => `Won ${n} brawls in a row at 10,000+ PAT vs established, evenly matched players - each once per 24 h, no alts.`;
+const DUEL_DESC = (n) => `Won ${n} dice duels in a row at 10,000+ PAT vs established players - no alts.`;
+const BRAWL_DESC = (n) => `Won ${n} brawls in a row at 10,000+ PAT vs established, evenly matched players - no alts.`;
 
 function pack(file, key) {
   const users = {};
@@ -105,7 +105,7 @@ test("the texts match Pepe's rules: the stake floor is pvpcfg's default (= pepe_
     const a = A.list().find((r) => r.id === id);
     assert.ok(a.desc.includes(floor + "+ PAT"), id + " names the stake floor");
     assert.match(a.desc, /established/, id);
-    assert.match(a.desc, /once per 24 h/, id);
+    assert.doesNotMatch(a.desc, /once per|per 24 h/, id);   // 1.99act: no same-opponent limit by default
     assert.doesNotMatch(a.desc, /per streak/, id);
     assert.match(a.desc, /no alts/, id);
     if (metric === "brawl_streak") assert.match(a.desc, /evenly matched/, id + ": the brawl strength rule");
