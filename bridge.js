@@ -163,8 +163,33 @@ async function dropRoom(id) {
   await runQuery("DELETE FROM bridge_feed WHERE room_id = ?", [id]);
 }
 
-/** One PCP event -> a feed item (or null). */
-function feedItem(ev) {
+/** 1.99acb: a web-relay line's sender as the say job the line names knows them (bridge-relay.echoJob): their linked chat
+ *  login, or - a member with NO chat login - their account key "u:<userId>", which the page resolves to their PATV name by
+ *  the id. `raw` = Pepe's sender ref, for the Camfrog display name. -> UserRef | null
+ *  A linked login the site can't show (a character outside [\w.-], 8 of 1210 on prod) is null - never re-keyed to the
+ *  account: every quote / likeness privacy rule (the !likeness clips-off opt-out, "remove me", Pepe's hidden_h for a later
+ *  !incognito) is keyed on the chat login, so a "u:<id>" line of a linked member would slip past all of them. Such a line
+ *  stays Pepe's own (still tagged with the job, so the sender's pending line resolves), as it always was. */
+function jobSender(J, raw) {
+  const cf = String(J.camfrog || "").toLowerCase();
+  const disp = plain(raw && typeof raw === "object" ? raw.display : "", 40) || plain(J.display, 40);
+  if (cf) return LOGIN_RE.test(cf) ? { login: cf, display: disp || cf, web: true } : null;
+  const key = "u:" + String(J.userId || "");
+  if (ACCT_RE.test(key)) return { login: key, display: disp || plain(J.username, 40) || "🌐 a PATV member", acct: true, web: true };
+  return null;
+}
+
+// 1.99acb: the sender's words inside Pepe's own posted relay line: "🌐 <name> (web): <words>" (a linked login) or
+// "🌐 <name> (PATV web): <words>" (a PATV account). Only for a line whose job this site holds and whose `web` came without
+// the words - Pepe redacts opted-out names in his posted line like in any line (the job's stored text is NOT redacted).
+const POSTED_RE = /^\u{1F310} .{1,80}? \((?:PATV )?web\): (.+)$/su;
+function postedWords(line) {
+  const m = POSTED_RE.exec(String(line || ""));
+  return m ? str(m[1], 400) : "";
+}
+
+/** One PCP event -> a feed item (or null). `roomId` = the room it came from (1.99acb: a relay echo's job must match it). */
+function feedItem(ev, roomId = null) {
   const d = ev.data && typeof ev.data === "object" ? ev.data : {};
   const ts = Date.parse(ev.ts) || Date.now();
   switch (ev.type) {
@@ -173,12 +198,37 @@ function feedItem(ev) {
       // own words. It is shown as THEIR line (normal chat: mentions, quotes, room activity), marked 🌐, not as Pepe's.
       // Older Pepes send only Pepe's own line (below).
       const w = d.web && typeof d.web === "object" ? d.web : null;
+      let webJob = null;
       if (w) {
-        const wu = cleanUser(w.user, true);
-        const wt = str(w.text, 400);
         // 1.99ye: `job` = the relay job this line came from (bridge-relay.noteEcho swaps the sender's pending line for it)
         const jid = typeof w.job === "string" && /^w[0-9a-f]{16}$/.test(w.job) ? w.job : null;
-        if (wu && !wu.anon && !wu.self && wt) return Object.assign({ k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt }, jid ? { _job: jid } : {});
+        // 1.99acb: the line is matched to its job BY THE JOB ID, never by its text. Pepe acked that job as never sent (an older
+        // Pepe reports the line to the bridge before the packet goes out): it isn't in the room, so it isn't shown here either.
+        const J = jid ? relay.echoJob(jid, roomId) : null;
+        if (J && J.sendFailed) {
+          console.log(`[bridge] relay echo dropped: job ${jid} was acked send_failed (the line never reached the room)`);
+          return null;
+        }
+        const wu = cleanUser(w.user, true);
+        const wt = str(w.text, 400);
+        const tag = jid ? { _job: jid } : {};
+        if (wu && !wu.anon && !wu.self && wt) return Object.assign({ k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt }, tag);
+        // 1.99acb: Pepe's sender ref didn't pass (a lost ref, a failed label lookup) but the job says who sent it: still THEIR
+        // line (their linked login, or their PATV account when they have no chat login) - never Pepe's. Words = Pepe's
+        // `web.text`, else the words in his own posted line (a partial payload); a linked login the site can't show stays
+        // Pepe's line (jobSender).
+        const hidden = !!(w.user && typeof w.user === "object" && (w.user.anonymous || w.user.is_self));
+        const words = wt || (J && !hidden ? postedWords(d.text) : "");
+        const ju = J && words && !hidden ? jobSender(J, w.user) : null;
+        if (ju) return Object.assign({ k: "msg", ts, u: ju, text: words }, tag);
+        // otherwise Pepe's own line below - still naming the job, so the sender's pending line is swapped for it (never
+        // shown twice, never left hanging). Logged: it proves which piece was missing next time.
+        if (jid) {
+          webJob = jid;
+          const who = !wu ? "missing/invalid" : wu.anon ? "hidden" : wu.self ? "self" : "ok";
+          const login = J && J.camfrog && !LOGIN_RE.test(String(J.camfrog).toLowerCase()) ? ", linked login not showable" : "";
+          console.log(`[bridge] relay echo for job ${jid} shown as Pepe's line (sender ${who}, words ${words ? "ok" : "missing"}, job ${J ? "known" : "unknown"}${login})`);
+        }
       }
       const u = cleanUser(d.user);
       const text = str(d.text, 400);
@@ -186,7 +236,7 @@ function feedItem(ev) {
       // 1.99xu: the caption of Pepe's own TTS mic-up ("🔊 <line>", tagged by the bot as the audio starts). The same mic-up
       // reaches the pad as its 🎙 transcript line, so ingest() drops this one while the room has transcripts on.
       if (d.caption === "tts" && d.self === true && u.self) return { k: "msg", ts, u, text, cap: "tts" };
-      return { k: "msg", ts, u, text };
+      return webJob ? { k: "msg", ts, u, text, _job: webJob } : { k: "msg", ts, u, text };
     }
     case "member.join": {
       if (d.initial) return null;                        // the burst when Pepe enters the room
@@ -443,7 +493,7 @@ async function ingest(body) {
       R.ver = (R.ver || 0) + 1; wake.add(R.id);
     }
     if (!FEED_TYPES.has(ev.type)) continue;
-    const it = feedItem(ev);
+    const it = feedItem(ev, R.id);
     if (!it) continue;
     // 1.99xu: Pepe's TTS mic-up caption - shown once, as the 🎙 transcript line that follows it (Camfrog's room chat keeps
     // the caption; a pad with transcripts off keeps it here too - there it's the only text of the mic-up)
@@ -460,7 +510,7 @@ async function ingest(body) {
     R.feed.push(it);
     if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
     newItems.push([R.id, it]);
-    if (echoOf) relay.noteEcho(echoOf, it.c);          // 1.99ye: the sender's pending line becomes this one
+    if (echoOf) relay.noteEcho(echoOf, it.c, R.id);    // 1.99ye: the sender's pending line becomes this one (1.99acb: same room only)
   }
   for (const [rid, it] of newItems) {
     const { c, ...rest } = it;
@@ -789,10 +839,28 @@ async function boostAnnounce({ roomId, userId, amount, pad, link } = {}) {
 }
 
 async function liveView(R, after, userId, login, username = null, withMe = !after) {
+  // 1.99acb: ONE synchronous snapshot, before any await - the lines, the cursor, the viewer's jobs (`mine`, with the cursor
+  // of each say's room line) and the versions. They used to be read on either side of the name / flair / account lookups
+  // below, and a Pepe sync landing in between (ingest pushes a line and settles its job synchronously) answered with a
+  // cursor - and the sender's mine[].c - PAST a line the answer didn't carry: the page dropped the pending line and its
+  // next ?after= skipped the room line for good (the line "didn't show up" until a reload). Pepe's ack + the line's echo in
+  // the same sync hit it every time the sender's page was waiting; a cold name cache let any line slip past any viewer.
   const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
-  const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
+  const at = { cursor, ver: R.ver || 0, mver: userId ? mineVer.get(userId) || 0 : 0, mine: userId ? relay.mineFor(userId, R.id) : [] };
+  const members = R.members, mic = R.mic;            // ingest replaces these arrays (never edits them): a snapshot too
+  const L = await resolveNames([...items.map((it) => it.u), ...members, ...mic]);
   const F = await require("./padflair").byUsername(R.id).catch(() => null);          // 1.99ir: pad flair on the chat
-  const feed = items.map((it) => (it.u ? { ...it, u: withPatv(it.u, L, F) } : it));
+  // 1.99acb: the viewer's OWN relayed line names its say job (+ the page's client id) - the page swaps its pending line for
+  // exactly this row, by the job, whatever its cursor says. Only the viewer's own jobs (mineFor is per account).
+  const myC = new Map();
+  for (const j of at.mine) if (j.kind === "say" && j.c) myC.set(j.c, j);
+  const feed = items.map((it) => {
+    if (!it.u) return it;
+    const o = { ...it, u: withPatv(it.u, L, F) };
+    const j = myC.get(it.c);
+    if (j) { o.job = j.id; if (j.cid) o.cid = j.cid; }
+    return o;
+  });
   // 1.99fu: 💸 Tip (signed-in viewers only)
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
@@ -811,15 +879,15 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null,
             // 1.99qr: the 🐸 Pepe submenu (padpepe.js) - only while web commands are on in the room
             pepe: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length && R.pepe && Object.keys(R.pepe).length ? R.pepe : null },
-    mine: userId ? relay.mineFor(userId, R.id) : [],
+    mine: at.mine,
     // 1.99ye: the long-poll's versions (the page sends them back) + the viewer's own look for their pending lines
-    ver: R.ver || 0, mver: userId ? mineVer.get(userId) || 0 : 0,
+    ver: at.ver, mver: at.mver,
     ...(userId && withMe ? { me: await meFor(userId) } : {}),
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
-    members: R.members.map(withTip),
-    mic: R.mic.map(withTip),
-    feed, cursor,
+    members: members.map(withTip),
+    mic: mic.map(withTip),
+    feed, cursor: at.cursor,
   };
 }
 

@@ -822,7 +822,7 @@
 
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
-<script src="/public/js/room-bridge.js?v=14"></script>
+<script src="/public/js/room-bridge.js?v=15"></script>
 <% } %>
 <% if ((me || roomLive) && room) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -878,13 +878,36 @@
     // 1.99ye: your messages show in the chat at once (sending… / ✓ sent / not sent · Retry)
     var relayHost = document.getElementById('lrRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, { feed: feed, line: line }) : null;
     var pttHost = document.getElementById('lrPtt'), roomPtt = pttHost ? PATVRoom.ptt(pttHost, slug) : null;
+    // 1.99acb: the feed cursors already shown - a line is shown once even when an answer brings it again (the widget polls from
+    // just before a line it was told about but never given: room-bridge.js relay.refetch), and such a late line goes in its
+    // place by cursor
+    var haveC = {}, haveList = [], maxC = 0;
     function apply(d) {
       var near = !started || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
       if (started && d.cursor < cursor) { started = false; cursor = 0; }
-      if (!started) feed.textContent = '';
+      if (!started) {
+        feed.textContent = ''; haveC = {}; haveList = []; maxC = 0;
+        if (roomRelay && roomRelay.reset) roomRelay.reset();
+      }
       // 1.99ye: new room lines go above your own lines that are still on their way (room-bridge.js relay outbox)
       var anchor = roomRelay && roomRelay.anchor ? roomRelay.anchor() : null;
-      (d.feed || []).slice(-80).forEach(function (it) { var n = line(it); if (!n) return; if (anchor && anchor.parentNode === feed) feed.insertBefore(n, anchor); else feed.appendChild(n); });
+      // 1.99acb: the lines this answer shows - its newest 80, plus an older one that names YOUR say job (job / cid): the relay
+      // outbox swaps your pending line only for a room line the page really shows, so it is told about these alone (an
+      // answer of 80+ lines - a tab coming back, a busy room - dropped your pending line for a line it never drew)
+      var all = d.feed || [];
+      var shown = all.length > 80 ? all.filter(function (it, i) { return i >= all.length - 80 || it.job || it.cid; }) : all;
+      shown.forEach(function (it) {
+        if (it.c && haveC[it.c]) return;
+        if (it.c) { haveC[it.c] = 1; haveList.push(it.c); }
+        var n = line(it); if (!n) return;
+        n._c = it.c || 0;
+        if (it.c && it.c < maxC) {
+          for (var k = 0; k < feed.childNodes.length; k++) { var x = feed.childNodes[k]; if (x._c && x._c > it.c) { feed.insertBefore(n, x); return; } }
+        }
+        if (anchor && anchor.parentNode === feed) feed.insertBefore(n, anchor); else feed.appendChild(n);
+      });
+      (d.feed || []).forEach(function (it) { if (it.c > maxC) maxC = it.c; });
+      while (haveList.length > 1000) delete haveC[haveList.shift()];
       if (!started && !feed.childNodes.length) feed.appendChild(el('p', 'muted', _t('js.home.room.quiet', 'Quiet right now — lines show up here the moment someone talks.')));
       if (started && (d.feed || []).length && feed.firstChild && feed.firstChild.tagName === 'P') feed.removeChild(feed.firstChild);
       while (feed.childNodes.length > 120) feed.removeChild(feed.firstChild);
@@ -897,8 +920,11 @@
       document.getElementById('lrLive').className = 'pill ' + (r.live ? 'chat' : 'off');
       document.getElementById('lrLiveTxt').textContent = r.live ? _t('js.home.room.active', '💬 ROOM ACTIVE') : _t('js.home.room.offline', 'ROOM OFFLINE');
       roomAudio.update(d);
-      if (roomRelay) roomRelay.update(d);
+      if (roomRelay) roomRelay.update(shown === all ? d : Object.assign({}, d, { feed: shown }));
       if (roomPtt) roomPtt.update(d);
+      // 1.99acb: your room line the site named but this answer didn't carry - ask again from just before it (once per line)
+      var miss = roomRelay && roomRelay.refetch ? roomRelay.refetch() : 0;
+      if (miss && miss <= cursor) cursor = miss - 1;
       var mk = JSON.stringify(d.mic);
       if (mk !== lastM) { lastM = mk; var m = document.getElementById('lrMic'); m.textContent = ''; if (!d.mic.length) m.appendChild(el('span', 'muted', _t('js.home.room.mic_free', 'Mic is free'))); d.mic.forEach(function (u) { m.appendChild(chip(u, 'mic')); }); }
       var pk = JSON.stringify(d.members);

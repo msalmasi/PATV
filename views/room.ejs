@@ -806,7 +806,7 @@
     </aside>
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
-  <script src="/public/js/room-bridge.js?v=14"></script>
+  <script src="/public/js/room-bridge.js?v=15"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=3">
   <script src="/public/js/chat-clip.js?v=3"></script>
@@ -935,12 +935,30 @@
       jump.style.display = 'block';
       return true;
     }
+    // 1.99acb: the feed cursors already in the chat - a line is shown once even when an answer brings it again (the page polls
+    // from just before a line it was told about but never given: room-bridge.js relay.refetch), and such a late line goes in
+    // its place by cursor, not at the end
+    var haveC = {}, haveList = [], maxC = 0;
     function addFeed(items, first) {
-      if (!items || !items.length) { if (first && !feedEl.childNodes.length) feedEl.appendChild(el('p', 'muted', _t('js.pad.chat.empty', 'Nothing said yet — it shows up here the moment someone talks.'))); return; }
+      items = (items || []).filter(function (it) { return !it.c || !haveC[it.c]; });
+      if (!items.length) { if (first && !feedEl.childNodes.length) feedEl.appendChild(el('p', 'muted', _t('js.pad.chat.empty', 'Nothing said yet — it shows up here the moment someone talks.'))); return; }
       var stick = first || nearBottom();
       if (feedEl.firstChild && feedEl.firstChild.tagName === 'P') feedEl.removeChild(feedEl.firstChild);
       var frag = document.createDocumentFragment();
-      items.forEach(function (it) { var n = item(it); if (n) frag.appendChild(n); });
+      items.forEach(function (it) {
+        var n = item(it);
+        if (it.c) { haveC[it.c] = 1; haveList.push(it.c); }
+        if (!n) return;
+        n._c = it.c || 0;
+        if (it.c && it.c < maxC) {
+          var after = null;
+          for (var k = 0; k < feedEl.childNodes.length; k++) { var x = feedEl.childNodes[k]; if (x._c && x._c > it.c) { after = x; break; } }
+          if (after) { feedEl.insertBefore(n, after); return; }
+        }
+        frag.appendChild(n);
+      });
+      items.forEach(function (it) { if (it.c > maxC) maxC = it.c; });
+      while (haveList.length > 2000) delete haveC[haveList.shift()];
       // 1.99ye: above your own lines that are still on their way (room-bridge.js relay outbox), like a native chat
       var anchor = roomRelay && roomRelay.anchor ? roomRelay.anchor() : null;
       if (anchor && anchor.parentNode === feedEl) feedEl.insertBefore(frag, anchor); else feedEl.appendChild(frag);
@@ -1294,15 +1312,21 @@
     function apply(d, first) {
       livePepe = d && d.room && d.room.pepe ? d.room.pepe : null;
       liveCams = d && d.room && d.room.livecams ? d.room.livecams : null;
+      if (d.cursor < cursor) {                                                  // the site restarted
+        feedEl.textContent = ''; cursor = 0; first = true; haveC = {}; haveList = []; maxC = 0;
+        safe('compose-reset', function () { if (roomRelay && roomRelay.reset) roomRelay.reset(); });   // 1.99acb: before compose reads this answer
+      }
       safe('mod', function () { if (roomMod) roomMod.update(d); });          // before the people list: it adds the manage buttons
       safe('room', function () { renderRoom(d); });
       safe('compose', function () { renderCompose(d); });
       safe('audio', function () { roomAudio.update(d); });
       safe('strip', function () { if (window.PATVPadStrip) PATVPadStrip.update(liveCams); });   // 1.99zc
-      if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
       safe('feed', function () { addFeed(d.feed, first); });
       safe('clip', function () { if (chatClip) chatClip.update(d); });
       cursor = Math.max(cursor, d.cursor);
+      // 1.99acb: your room line the site named but this answer didn't carry - ask again from just before it (once per line)
+      var miss = roomRelay && roomRelay.refetch ? roomRelay.refetch() : 0;
+      if (miss && miss <= cursor) cursor = miss - 1;
     }
 
     // 1.99ye: a long-poll (?wait=1): the site answers the moment something changes (a line, the people / mic, your

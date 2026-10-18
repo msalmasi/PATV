@@ -360,7 +360,13 @@ function applyAcks(acks) {
     const st = j.kind === "clip" && PROGRESS[a.state] ? a.state : "done";
     if (stateRank(st) < stateRank(j.state)) continue;          // an older step arriving late
     // 1.99ye: a say already settled by its echo (or failed by a timeout) keeps that answer
-    if (j.kind === "say" && j.state === "done" && j.result) { if (!j.ackAt) j.ackAt = Date.now(); continue; }
+    if (j.kind === "say" && j.state === "done" && j.result) {
+      if (!j.ackAt) j.ackAt = Date.now();
+      // 1.99acb: an older Pepe reports the line to the bridge before the packet goes out - a send failure after its echo means
+      // the room line shown here never reached Camfrog. Rare (never seen on prod); logged so a report can be checked.
+      if (j.echoC && !a.ok && a.code === "send_failed") console.log(`[bridge-relay] say job=${j.id} acked send_failed AFTER its echo (c=${j.echoC}) - the line shown may not be in the room`);
+      continue;
+    }
     j.state = st;
     j.result = { ok: !!a.ok, msg: clean(a.msg, 200) };
     if (typeof a.code === "string" && CODE_RE.test(a.code)) j.result.code = a.code;
@@ -387,15 +393,33 @@ function applyAcks(acks) {
   }
 }
 
-/** 1.99ye: the room's own line for say job `jobId` arrived (feed cursor `c`) - the page swaps its pending line for it. */
-function noteEcho(jobId, c) {
+/** 1.99ye: the room's own line for say job `jobId` arrived (feed cursor `c`) - the page swaps its pending line for it.
+ *  1.99acb: `roomId` = the room the line came from - a line in ANOTHER room never settles the job (the sender's page would
+ *  drop its pending line for a row that isn't in its chat; logged). An echo proves the line reached the room, so it settles a
+ *  timed-out say (unconfirmed / nopepe) as sent - but never one Pepe himself acked as never sent (send_failed). */
+function noteEcho(jobId, c, roomId = null) {
   const j = jobs.get(String(jobId || ""));
   if (!j || j.kind !== "say" || j.echoC) return false;
+  if (roomId && j.roomId !== roomId) {
+    console.log(`[bridge-relay] echo of say job=${j.id} came from room ${roomId}, not the job's room ${j.roomId} - not swapped in`);
+    return false;
+  }
+  if (j.result && !j.result.ok && j.result.code === "send_failed") return false;
   j.echoC = c; j.echoAt = Date.now();
   if (j.state !== "done" || !j.result || !j.result.ok) { j.state = "done"; j.doneAt = j.echoAt; j.result = { ok: true, msg: "sent" }; }
   noteLatency(j);
   notify(j);
   return true;
+}
+
+/** 1.99acb: the say job a room line names (its data.web.job) while this site still holds it, for attributing the line BY THE
+ *  JOB (bridge.js feedItem) - who sent it (their account, linked login, PATV display name) and whether Pepe acked it as never
+ *  sent. null = not a say job here (expired, another process) or a line from another room than the job's. */
+function echoJob(jobId, roomId = null) {
+  const j = jobs.get(String(jobId || ""));
+  if (!j || j.kind !== "say" || (roomId && j.roomId !== roomId)) return null;
+  return { id: j.id, userId: j.userId || "", username: j.username || "", camfrog: j.camfrog || "", display: j.display || "",
+           sendFailed: !!(j.result && !j.result.ok && j.result.code === "send_failed") };
 }
 
 /** This user's recent relay jobs in a room (for the composer's status line). 1.99ye: a say carries its client id
@@ -775,7 +799,7 @@ function saveRight(s, userId) {
 }
 
 module.exports = { padFull, PAD_DENIED, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
-  sayLine, roomRefusal, noteEcho, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_PENDING_TTL_SYNC, SAY_CLAIM_TTL,   // 1.99ye
+  sayLine, roomRefusal, noteEcho, echoJob, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_PENDING_TTL_SYNC, SAY_CLAIM_TTL,   // 1.99ye
   _cids: cids, _pullers: pullers, _lastPull: () => lastPull,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
   _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };

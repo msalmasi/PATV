@@ -738,15 +738,36 @@
       inp.focus();
     });
 
+    // 1.99acb: the room lines this page has been given (feed cursors), and the ones that name one of YOUR say jobs (the site
+    // tags your own relayed line with its job id + client id). A pending line is swapped out only for a room line the page
+    // really has - never on the cursor's word alone: an answer whose cursor ran past a line it didn't carry used to drop the
+    // pending line, and the page's next ?after= skipped the room line too (the message "didn't show up" until a reload).
+    var seenC = {}, seenList = [], landed = {}, landedList = [], miss = 0;
+    function land(k) { if (!landed[k]) { landed[k] = 1; landedList.push(k); } }
+    function noteFeed(feed) {
+      (feed || []).forEach(function (f) {
+        if (!f || !f.c) return;
+        if (!seenC[f.c]) { seenC[f.c] = 1; seenList.push(f.c); }
+        if (f.cid) land('c:' + f.cid);
+        if (f.job) land('j:' + f.job);
+      });
+      while (seenList.length > 1000) delete seenC[seenList.shift()];
+      while (landedList.length > 200) delete landed[landedList.shift()];
+    }
+    function hasLanded(it) { return !!(landed['c:' + it.cid] || (it.id && landed['j:' + it.id])); }
     // The live view's `mine` (this viewer's relay jobs, 1.99ye: with cid / c / code) -> the outbox lines' states.
     function syncOutbox(js, cursor) {
-      var byCid = {};
-      js.forEach(function (j) { if (j.kind === 'say' && j.cid) byCid[j.cid] = j; });
+      var byCid = {}, byId = {};
+      js.forEach(function (j) { if (j.kind === 'say') { if (j.cid) byCid[j.cid] = j; byId[j.id] = j; } });
       outbox.slice().forEach(function (it) {
-        var j = byCid[it.cid];
+        var j = byCid[it.cid] || (it.id ? byId[it.id] : null);
+        if (j) it.id = j.id;
+        if (hasLanded(it)) { drop(it); return; }                      // its room line (named by the job) is in the chat now
         if (!j) return;
-        it.id = j.id;
-        if (j.c && j.c <= cursor) { drop(it); return; }                // the room's own line is in the chat now
+        if (j.c && seenC[j.c]) { drop(it); return; }                  // the room's own line is in the chat now
+        // the site says the room line exists but this page never got it: keep yours (as sent - never lose a line) and ask
+        // the page to fetch from just before it once (it dedupes what it already shows)
+        if (j.c && j.c <= cursor && !it.refetched) { it.refetched = true; miss = miss ? Math.min(miss, j.c) : j.c; }
         if (it.st === 'queue' || it.st === 'posting') return;          // our POST's answer decides first
         var was = it.st;
         if (j.state !== 'done') it.st = 'wait';
@@ -768,7 +789,7 @@
         if (d && d.me) meU = d.me;
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         lastJs = js;
-        if (optimistic) syncOutbox(js, (d && d.cursor) || 0);
+        if (optimistic) { noteFeed(d && d.feed); syncOutbox(js, (d && d.cursor) || 0); }
         if (k === last) return;
         last = k;
         if (!optimistic) {
@@ -781,6 +802,15 @@
       anchor: function () { return feedEl ? feedEl.querySelector('.rb-opt') : null; },
       // does the page still need to send ?me=1 (your look for the pending lines)?
       wantsMe: function () { return optimistic && !meU; },
+      // 1.99acb: the feed cursor of your room line the page was told about but never given (0 = none) - the page polls from
+      // just before it once (asked once per line; cleared by asking)
+      refetch: function () { var m = miss; miss = 0; return m; },
+      // the page cleared its chat (the site restarted): what it had been given is gone with it; your lines still on their way
+      // (or not back yet) go back at the bottom of the chat instead of vanishing with it
+      reset: function () {
+        seenC = {}; seenList = []; landed = {}; landedList = []; miss = 0;
+        if (feedEl) outbox.forEach(function (it) { if (it.node && it.node.parentNode !== feedEl) feedEl.appendChild(it.node); });
+      },
       pending: function () { return outbox.slice(); },
       _send: sendChat,
     };
