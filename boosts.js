@@ -53,6 +53,7 @@
 "use strict";
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DEFAULTS = Object.freeze({
   pay: true,
@@ -491,14 +492,14 @@ function register(app, { addUser, isBotToken }) {
   });
   app.post("/api/boost/admin", addUser, jsonOnly, async (req, res) => {
     try {
-      if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only.");
+      if (!SP.can(req.user, "econ.boost_challenge_cosmetic_cfg")) throw new Refuse(403, "Admins only.");   // 1.99ack: Admins (was Staff)
       res.json({ ok: true, config: await setConfig(req.body || {}, req.user.username) });
     } catch (e) { fail(res, e); }
   });
   app.get("/api/boost/admin", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only.");
+      if (!SP.can(req.user, "econ.boost_challenge_cosmetic_cfg")) throw new Refuse(403, "Admins only.");
       await init();
       res.json({ ok: true, config: config(), escrow: await escrow() });
     } catch (e) { fail(res, e); }

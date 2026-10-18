@@ -10,6 +10,7 @@
 //   POST /api/markets/cfg         (Pepe, bot token)               -> {ok, close_min_secs, close_max_secs}
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DEFAULTS = { close_min_secs: 3600, close_max_secs: 90 * 86400 };
 const LIMITS = { min: 300, max: 365 * 86400 };
@@ -77,7 +78,7 @@ function register(app, { isBotToken, addUser }) {
   const admin = async (req, res) => {
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false }); return false; }
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return false; }
+    if (!SP.can(row, "games.config")) { res.status(403).json({ ok: false, error: "Admins only." }); return false; }
     return true;
   };
   app.get("/api/admin/markets-cfg", addUser, async (req, res) => {

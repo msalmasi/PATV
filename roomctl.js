@@ -18,6 +18,7 @@
 // and refused here too if the action is still waiting after 10 minutes (it would have expired anyway).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
 const VERBS = new Set(["join", "leave", "active", "mute", "unmute"]);
@@ -97,7 +98,7 @@ const LABEL = { join: "Join", leave: "Leave", active: "Make active", mute: "Mute
 /** An admin's change -> the queued action id. */
 async function request(user, b = {}) {
   await init();
-  if (!user || user.class !== "Admin") throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "pepe.rooms_commands_audio")) throw new Refuse(403, "Admins only.");
   const verb = String(b.verb || "").toLowerCase();
   if (!VERBS.has(verb)) throw new Refuse(400, "Unknown room action.");
   const room = str(b.room, 64);
@@ -144,7 +145,7 @@ function register(app, { isBotToken, addUser }) {
   init().catch((e) => console.error("[roomctl] init:", e.message));
   const admin = (json) => (req, res, next) => {
     if (!req.user || !req.user.userId) return json ? res.status(401).json({ ok: false, error: "Sign in first." }) : res.redirect("/login?next=/admin/pepe/rooms");
-    if (req.user.class !== "Admin") return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
+    if (!SP.can(req.user, "pepe.rooms_commands_audio")) return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
     next();
   };
   const fetchOnly = (req, res, next) => (guard.sameSite(req) && req.get("X-Requested-With") === "fetch"

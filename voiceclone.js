@@ -35,6 +35,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DIR = process.env.VC_DIR ? path.resolve(process.env.VC_DIR) : path.join(__dirname, "uploads", "voiceclone");
 const TERMS_VERSION = "2026-10-11";
@@ -415,7 +416,7 @@ function register(app, { addUser, isBotToken }) {
     res.status(500).json({ ok: false, error: "Something went wrong." });
   };
   const same = (req, res) => { if (!guard.sameSite(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return false; } return true; };
-  const staff = (u) => !!u && ["Admin", "Staff"].includes(u.class);
+  const staff = (u) => SP.can(u, "voiceclone.view");   // 1.99ack (siteperms.js): the review list + audio; deciding = voiceclone.decide
   const bot = (req, res) => { if (!isBotToken((req.body || {}).password)) { res.status(403).json({ ok: false }); return false; } return true; };
 
   // Pepe
@@ -512,7 +513,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/voiceclone/admin", addUser, json, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!same(req, res)) return;
-    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "voiceclone.decide")) return res.status(403).json({ ok: false, error: "Admins only." });
     try {
       const b = req.body || {};
       if (b.config) await setConfig(b.config, req.user.username);

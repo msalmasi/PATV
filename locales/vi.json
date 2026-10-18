@@ -675,8 +675,6 @@
   "admroles.notes.pad_owners": "Chủ pad có quy tắc riêng trên pad của họ (kiểm duyệt phòng trên chính phòng của họ, không bao giờ áp dụng cho quản trị viên hay chủ sở hữu của Pepe). Trang này không thay đổi các quy tắc đó.",
   "admroles.notes.sync": "Thay đổi thực hiện ở đây sẽ đến Pepe trong lần đồng bộ tiếp theo, và thay đổi thực hiện trong chat cũng hiện ở đây theo cách tương tự. Khi cả hai cùng thay đổi một cài đặt, thay đổi mới hơn sẽ được giữ lại.",
   "admroles.website.h": "Quyền trên website",
-  "admroles.website.pill": "Bản 2",
-  "admroles.website.placeholder": "Sắp có trong bản 2: quyền riêng của website, có thể chỉnh sửa tại đây.",
   "admroles.chat.h": "Thay đổi quyền từ chat",
   "admroles.chat.help": "Cùng các cài đặt, từ bất kỳ phòng nào Pepe đang có mặt. Áp dụng cùng quy tắc như trên trang này.",
   "admroles.chat.cmd": "Lệnh",

@@ -44,6 +44,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const media = require("./media");
 const rooms = require("./rooms");
 
@@ -60,7 +61,7 @@ class Refuse extends Error { constructor(status, msg) { super(msg); this.status 
 
 const store = () => require("./feedstore");
 const fm = () => require("./feedmedia");
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+const exempt = (u) => SP.can(u, "feed.limits_exempt");   // 1.99ack (siteperms.js; was isStaff)
 const lc = (s) => String(s || "").trim().toLowerCase();
 
 let ready = null;
@@ -321,7 +322,7 @@ async function create(user, { attachment, pad, nsfw } = {}) {
   if (!src || !fs.existsSync(src)) throw new Refuse(410, "That upload's file is gone - upload it again.");
   // rate: STORY_PER_DAY a day, one every STORY_GAP_MS (staff exempt)
   const t = NOW();
-  if (!isStaff(u)) {
+  if (!exempt(u)) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM media WHERE source = 'user' AND by_user_id = ? AND created > ?", [u.userId, t - WINDOW_MS]))[0].n;
     if (n >= STORY_PER_DAY) throw new Refuse(429, `You can post ${STORY_PER_DAY} stories a day.`);
     const last = gaps.get(u.userId) || 0;

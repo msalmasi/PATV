@@ -48,7 +48,7 @@ async function webActor(req) {
   const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername, class FROM users WHERE userId = ?", [req.user.userId]))[0];
   if (!u) return null;
   return { uid: u.userId, name: u.displayname || u.username, username: u.username, camfrog: u.camfrogUsername || null, via: "web",
-           iph: svc.ipHash(clientIp(req)), admin: u.class === "Admin" };
+           iph: svc.ipHash(clientIp(req)), admin: require("../siteperms").can(u, "casino.admin") };
 }
 
 // ── read-only extras for the table pages (D10 design pass): seat avatars, a spectator count, hand history ──
@@ -270,7 +270,7 @@ function register(app, { isBotToken, addUser }) {
     if (isBotToken(b.password)) actor = "pepe:" + String(b.actor || "bot").slice(0, 40);
     else if (isJsonFetch(req) && req.user && req.user.userId) {
       const u = (await getQuery("SELECT username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (u && u.class === "Admin") actor = u.username;
+      if (require("../siteperms").can(u, "casino.admin")) actor = u.username;
     }
     if (!actor) return res.status(403).json({ ok: false, error: "unauthorized" });
     try {

@@ -30,6 +30,7 @@
 // Merges: activity_days rows move to the surviving account (accountMerge.js, folded per day + source).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const TZ = "America/New_York";
 const SOURCES = ["chat", "mic", "cmd", "relay", "post", "comment", "spin", "game", "tip"];
@@ -417,11 +418,11 @@ function register(app, { addUser, isBotToken }) {
   });
   // admins: the grace rule
   app.get("/api/admin/streaks/config", addUser, async (req, res) => {
-    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ ok: false });
+    if (!SP.can(req.user, "games.config")) return res.status(403).json({ ok: false });
     res.json(Object.assign({ ok: true }, await config(), { milestones: MILESTONES, sources: SOURCES, backfill: await backfilled() }));
   });
   app.post("/api/admin/streaks/config", addUser, async (req, res) => {
-    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ ok: false });
+    if (!SP.can(req.user, "games.config")) return res.status(403).json({ ok: false });
     if (!require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false });
     res.json(Object.assign({ ok: true }, await setConfig(req.body || {})));
   });

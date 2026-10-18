@@ -675,8 +675,6 @@
   "admroles.notes.pad_owners": "パッドのオーナーは、自分のパッドで独自のルールを持ちます（自分のルームでのモデレーション。Pepe の管理者やオーナーには適用されません）。このページではそれらは変更されません。",
   "admroles.notes.sync": "ここで行った変更は、Pepe の次の同期時に反映されます。チャットで行った変更も同様に、ここに表示されます。両方が同じ設定を変更した場合は、新しい方の変更が優先されます。",
   "admroles.website.h": "ウェブサイトの権限",
-  "admroles.website.pill": "リリース 2",
-  "admroles.website.placeholder": "リリース 2 で追加予定：ウェブサイト独自の権限をここで編集できるようになります。",
   "admroles.chat.h": "チャットから権限を変更",
   "admroles.chat.help": "同じ設定を、Pepe がいる任意のルームから行えます。このページと同じルールが適用されます。",
   "admroles.chat.cmd": "コマンド",

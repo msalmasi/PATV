@@ -35,6 +35,7 @@
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
 const KINDS = { pepe: "Restart Pepe", full: "Restart Camfrog + Pepe" };
@@ -151,7 +152,7 @@ function fail(status, message) { const e = new Error(message); e.status = status
 /** An admin asks for a restart. Throws {status, message} when refused (every refusal is audited). */
 async function request(user, { kind, mode, nonce, password }, ip) {
   await ensure();
-  if (!user || user.class !== "Admin") throw fail(403, "Admins only.");
+  if (!SP.can(user, "pepe.control")) throw fail(403, "Admins only.");
   if (!Object.prototype.hasOwnProperty.call(KINDS, kind) || !Object.prototype.hasOwnProperty.call(MODES, mode)) throw fail(400, "Unknown command.");
   const what = KINDS[kind] + " (" + MODES[mode] + ")";
   if (!takeNonce(user, nonce)) {
@@ -266,7 +267,7 @@ const actions = () => require("./actions");      // lazy: actions.js opens its t
 /** An admin changes Pepe's look: queued for Pepe as a "pepe.look" website action. */
 async function lookRequest(user, { verb, value }, ip) {
   await ensure();
-  if (!user || user.class !== "Admin") throw fail(403, "Admins only.");
+  if (!SP.can(user, "pepe.control")) throw fail(403, "Admins only.");
   if (typeof verb !== "string" || !Object.prototype.hasOwnProperty.call(LOOK_VERBS, verb)) throw fail(400, "Unknown look control.");
   const v = String(value == null ? "" : value).trim().toLowerCase().slice(0, 40);
   const look = await currentLook();
@@ -381,7 +382,7 @@ function register(app, { isBotToken, addUser, ...opts }) {
   const bot = (req, res, next) => (isBotToken(botToken(req)) ? next() : res.status(403).json({ error: "unauthorized" }));
   const admin = (req, res, next) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in first." });
-    if (req.user.class !== "Admin") return res.status(403).json({ error: "Admins only." });
+    if (!SP.can(req.user, "pepe.control")) return res.status(403).json({ error: "Admins only." });
     next();
   };
   const csrf = (req, res, next) => {

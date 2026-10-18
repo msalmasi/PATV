@@ -19,6 +19,7 @@
 "use strict";
 const path = require("path");
 const { getQuery } = require("../dbUtils");
+const SP = require("../siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const svc = require("./service");
 const E = require("./engine");
 
@@ -49,7 +50,7 @@ async function webActor(req) {
   if (!req.user || !req.user.userId) return null;
   const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername, class FROM users WHERE userId = ?", [req.user.userId]))[0];
   if (!u) return null;
-  return { uid: u.userId, name: u.camfrogUsername || u.displayname || u.username, via: "web", admin: u.class === "Admin" };
+  return { uid: u.userId, name: u.camfrogUsername || u.displayname || u.username, via: "web", admin: SP.can(u, "escrow.override") };
 }
 
 /**
@@ -126,7 +127,7 @@ function register(app, { isBotToken, addUser, updateLevel }) {
     if (isBotToken(b.password)) actor = "pepe:" + String(b.actor || "bot").slice(0, 40);
     else if (isJsonFetch(req) && req.user && req.user.userId) {
       const u = (await getQuery("SELECT username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (u && u.class === "Admin") actor = u.username;
+      if (SP.can(u, "casino.admin")) actor = u.username;
     }
     if (!actor) return res.status(403).json({ ok: false, error: "unauthorized" });
     try { res.json({ ok: true, settings: await svc.setSetting(String(b.key || ""), b.value, actor) }); }

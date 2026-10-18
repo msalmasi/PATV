@@ -1,11 +1,13 @@
 <%- include('partials/admin-open', { title: 'Stage admin', user: user, section: 'stage', admIsAdmin: !!(typeof isAdmin !== 'undefined' && isAdmin) }) %>
+<%# 1.99ack: the admin-only parts ask their own capability (siteperms.js) %><% const _can = locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals);
+   const oaCfg = _can('onair.config'), rsMain = _can('restream.main'), mediaOk = _can('media.admin'); -%>
 <!-- views/stageAdmin.ejs — paid Main Stage slots: settings, open slots (cut), bans, booking log. -->
 <link rel="stylesheet" href="/public/css/stage.css?v=9">
 <% const C = state.config; %>
 <main class="sb" id="sa">
   <div class="sb-head">
     <h1><span class="ds-ic" aria-hidden="true">📺</span> Stage admin</h1>
-    <p class="lede">Pad stages: user slots, featuring, scheduling. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a><% if (typeof isAdmin !== 'undefined' && isAdmin) { %> · <a href="/admin/media#library">📼 Play from library ›</a><% } %></p>
+    <p class="lede">Pad stages: user slots, featuring, scheduling. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a><% if (mediaOk) { %> · <a href="/admin/media#library">📼 Play from library ›</a><% } %></p>
   </div>
 
   <section class="sb-card" id="open" aria-labelledby="openT">
@@ -50,7 +52,7 @@
     <p class="muted">Pepe's stream is the default: lowest delay, ⚡ WebRTC, snaps / clips. Twitch going live never switches it by itself (Twitch is a relay of his stream). An embed takes the same links as a streamer's slot. Either way, ON AIR, snaps / clips and the front-pad pick follow Pepe's own stream; viewers can still pick "Pepe's own stream" next to his tab.</p>
   </section>
 
-  <% if (isAdmin) { %>
+  <% if (oaCfg) { %>
   <!-- 1.99yt: 📺 On Pepe's OBS (onair.js POC) - one live slot or cam on his main stream + his Camfrog cam -->
   <section class="sb-card" id="oaCard" aria-labelledby="oaT">
     <h2 id="oaT"><span class="ds-ic" aria-hidden="true">📺</span> On Pepe's OBS <small class="muted">(POC)</small></h2>
@@ -92,7 +94,7 @@
     <p id="rsWorker" class="muted">Loading…</p>
     <h3>Pepe's main stream</h3>
     <div id="rsMain"></div>
-    <% if (isAdmin) { %>
+    <% if (rsMain) { %>
     <details class="adm-adv"><summary>Set / replace Pepe's Twitch key</summary>
       <form id="rsForm" class="settings" autocomplete="off">
         <label>Twitch stream key<input type="password" name="key" autocomplete="new-password" spellcheck="false" maxlength="200" placeholder="live_…"></label>
@@ -164,7 +166,7 @@
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/stage-admin.js?v=5" defer></script>
 <script src="/public/js/restream.js?v=1" defer></script>
-<% if (isAdmin) { %><script src="/public/js/onair-admin.js?v=2" defer></script><% } %>
+<% if (oaCfg) { %><script src="/public/js/onair-admin.js?v=2" defer></script><% } %>
 <%- include('partials/admin-close') %>
 </body>
 </html>

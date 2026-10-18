@@ -19,6 +19,7 @@
 // Every write still goes to its existing endpoint (same checks): nothing here grants anything new.
 "use strict";
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 const store = require("./feedstore");
 
@@ -36,7 +37,7 @@ async function addressData(R, viewer) {
   const PAD = require("./padaddress");
   const C = await require("./padcfg").get();
   return { aliases: await PAD.aliasesOf(R.id), next_at: await PAD.nextRenameAt(viewer, R), rename_days: C.rename_days,
-           staff: rooms.isStaff(viewer), min: PAD.MIN_LEN, max: PAD.MAX_LEN };
+           staff: SP.can(viewer, "pads.manage_any"), min: PAD.MIN_LEN, max: PAD.MAX_LEN };
 }
 
 /** Everything the hub shows for one pad (the viewer may manage it). */
@@ -57,7 +58,7 @@ async function hubData(R, viewer, app) {
   const automod = await AM.list(R.id, 60);
   return {
     room: R, slug: web.linkSlug(R), platform, camfrog,
-    staff: rooms.isStaff(viewer), admin: !!viewer && viewer.class === "Admin",
+    staff: SP.can(viewer, "pads.manage_any"), admin: SP.can(viewer, "media.library_free"),   // the 📼 Play from library card
     // stage + page + royalties (was /manage)
     st: await stage.ownerState(R.id), C: stage.config(), roy: R.owner ? await royalties.status(R.id, R.owner.userId) : null,
     golive: R.profile ? null : await require("./golive").padAnnounce(R.id),      // 1.99kp: 🎥 announce stream starts in the pad

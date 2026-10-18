@@ -1,4 +1,5 @@
 <%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: isAdmin }) %>
+<% const ctlOk = (locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals))('pepe.control'); -%>
 <div class="adm-head">
   <h1>Pepe</h1>
   <p>Restart Pepe or Camfrog on his VM, change his look, and see what he's doing. The same panel is still at the bottom of the homepage for admins.</p>
@@ -7,7 +8,7 @@
 <section class="adm-card" id="control" aria-labelledby="ctlT">
   <h2 id="ctlT">Control panel <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Status from the VM supervisor's heartbeat. Restarts need your account password; look changes run Pepe's admin chat commands as you. Everything is logged.</p>
-  <% if (isAdmin) { %>
+  <% if (ctlOk) { %>
     <%- include('../partials/pepe-control', { me }) %>
     <script>(function () { var d = document.getElementById('pepeCtl'); if (d) d.open = true; })();</script>
   <% } else { %>

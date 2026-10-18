@@ -86,7 +86,9 @@
                 p.owner ? '<a href="' + p.owner + '" class="nav-sub" title="' + t('nav.owner_panel_of', { pad: p.title }) + '" aria-label="' + t('nav.owner_panel_of', { pad: p.title }) + '">⚙</a>' : ''];
               const _myPadItems = _padNav.items.map(_padItem).concat(_padNav.more || _folIds.length ? [['/p#following', '›', t('nav.mypads_all'), 'nav-seeall']] : []);
               // 2026-10-11: More and ☰ share one grouped list - [id, heading, items, class]; falsy items are gated off.
-              // More skips the top-bar items (they're already on the bar); ☰ shows everything. Staff last, hidden until /api/u/.../profile says Admin.
+              // More skips the top-bar items (they're already on the bar); ☰ shows everything. Staff last: 1.99ack - shown (server-side) to
+              // anyone who can use an admin page (siteperms.js admin.area - Staff too now - or an Assistant's own pages), linking to their first one.
+              const _admHome = typeof adminHome === 'function' ? adminHome() : null;
               const sections = [
                 ['watch', t('nav.sec_watch'), [T.watch, T.pads, T.feed,
                   ['/plex', '📼', t('nav.plex')],   // 1.99kp: the Plex hub (plexhub.js)
@@ -134,16 +136,16 @@
                   ['https://twitch.tv/publicaccess_ttv', '<img src="/public/img/twitch.png" height="16" alt="">', 'Twitch'],
                   ['/language' + (_here ? '?next=' + encodeURIComponent(_here) : ''), '🌐', t('nav.language')],
                 ]],
-                ['staff', t('nav.sec_staff'), [['/admin', '🛠️', 'Admin', 'adminLink']], 'adminLink'],
+                ['staff', t('nav.sec_staff'), [[_admHome || '/admin', '🛠️', 'Admin', 'adminLink']], 'adminLink'],
               ];
               const item = (l, labelled) => '<a href="' + l[0] + '" class="nav-link' + (l[3] ? ' ' + l[3] : '') + '"'
-                + (l[3] === 'adminLink' ? ' hidden' : '') + (l[0].startsWith('http') ? ' rel="noopener"' : '')
+                + ((l[3] === 'adminLink' && !_admHome) || (l[3] === 'infoLink' && _admHome) ? ' hidden' : '') + (l[0].startsWith('http') ? ' rel="noopener"' : '')
                 + ' title="' + l[2] + '"><span class="ic">' + l[1] + '</span>'
                 + (labelled ? '<span class="nav-lbl">' + l[2] + '</span>' : '') + '</a>';
               const groups = (pre, skipMain) => '<div class="nav-secs">' + sections.filter(Boolean).map((s) => {
                 const its = s[2].filter((l) => l && !(skipMain && main.includes(l)));
                 return its.length ? '<div class="nav-sec' + (s[3] ? ' ' + s[3] : '') + '" role="group" aria-labelledby="' + pre + s[0] + '"'
-                  + (s[3] === 'adminLink' ? ' hidden' : '') + '><div class="nav-sec-h" id="' + pre + s[0] + '">' + s[1] + '</div>'
+                  + (s[3] === 'adminLink' && !_admHome ? ' hidden' : '') + '><div class="nav-sec-h" id="' + pre + s[0] + '">' + s[1] + '</div>'
                   + '<div class="nav-sec-items">' + its.map((l) => (l[4] ? '<div class="nav-row">' + item(l, true) + l[4] + '</div>' : item(l, true))).join('') + '</div></div>' : '';
               }).join('') + '</div>';
             %>
@@ -428,10 +430,6 @@
             .then(data => {
                 if (data.avatar) {
                     document.getElementById('userAvatar').src = data.avatar;
-                }
-                if (data.class === "Admin") {
-                    document.querySelectorAll('.adminLink').forEach(function (el) { el.hidden = false; });
-                    document.querySelectorAll('.infoLink').forEach(function (el) { el.hidden = true; });
                 }
             })
             .catch(error => console.error('Failed to fetch user data:', error));

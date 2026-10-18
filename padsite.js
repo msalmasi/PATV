@@ -27,6 +27,7 @@
 // reset is a room_events row ("pepe-site") on top of the stores' own logs (pepe_feed_log, feed-automod-settings).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 
 const RATES = Object.freeze({ low: { comments_per_day: 4, gap_min: 60 }, normal: { comments_per_day: 10, gap_min: 30 }, high: { comments_per_day: 25, gap_min: 15 } });
@@ -106,7 +107,7 @@ async function state(roomId) {
 }
 
 function limit(user, roomId) {
-  if (rooms.isStaff(user)) return null;
+  if (SP.can(user, "pads.manage_any")) return null;
   const k = user.userId + "|" + roomId, t = NOW();
   const hits = (HITS.get(k) || []).filter((x) => t - x < 3600e3);
   const minute = hits.filter((x) => t - x < SET_WINDOW_MS);

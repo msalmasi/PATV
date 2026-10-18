@@ -18,6 +18,7 @@
 // No per-pad overrides (one global default): the pacing / mixer knobs are per Pepe process, not per pad.
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
 // The settings: defaults = what bot 1.99ya / 1.99yb and site 1.99ya shipped. Ranges match pepe_roomrtc.CFG_RANGES.
@@ -150,7 +151,7 @@ async function store(admin, cfg, { action = "save", reason = null } = {}) {
 /** An admin's save (partial or full) or reset. Strict validation; nothing changes on any error. */
 async function save(user, body = {}) {
   await init();
-  if (!user || user.class !== "Admin") throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "pepe.rooms_commands_audio")) throw new Refuse(403, "Admins only.");
   const key = String(user.userId || user.username || "").toLowerCase();
   if (hits.blocked(key)) throw new Refuse(429, `Slow down - at most ${RATE.max} changes a minute.`);
   hits.hit(key);
@@ -226,7 +227,7 @@ function register(app, { isBotToken, addUser }) {
   init().catch((e) => console.error("[roomaudiocfg] init:", e.message));
   const admin = (json) => (req, res, next) => {
     if (!req.user || !req.user.userId) return json ? res.status(401).json({ ok: false, error: "Sign in first." }) : res.redirect("/login?next=/admin/pepe/audio");
-    if (req.user.class !== "Admin") return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
+    if (!SP.can(req.user, "pepe.rooms_commands_audio")) return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
     next();
   };
   const fetchOnly = (req, res, next) => (guard.sameSite(req) && req.get("X-Requested-With") === "fetch"

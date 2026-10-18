@@ -52,7 +52,7 @@
             <%# 1.99df: on a profile post: the profile's owner can block the commenter from commenting on their profile %>
             <% const prof_ = !c.mine && c.author && !c.author.bot && modRooms ? (p.roomsAll || []).find((r) => r.profile && modRooms.has(r.id)) : null;
                if (prof_) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= c.author.username %>" data-slug="<%= prof_.slug %>" data-what="commenting on your profile"><%- fx.icon('shield') %><%- t('feed.c.block') %></button><% } %>
-            <% if (viewer && viewer.class === 'Admin') { %><button type="button" role="menuitem" data-act="cdetails"><%- fx.icon('shield') %>Details (admin)</button><% } %>
+            <% if (viewer && (locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals))('feed.abuse_details', viewer)) { %><button type="button" role="menuitem" data-act="cdetails"><%- fx.icon('shield') %>Details (admin)</button><% } %>
           </div>
         </details>
       <% } %>

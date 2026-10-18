@@ -20,6 +20,7 @@
 // panel's data when this viewer may see it (forProfile takes the layout's show()).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const tautulli = require("./tautulli");
 
 const TRUSTED = ["self", "admin", "wizarr", "overseerr"];
@@ -294,7 +295,7 @@ function register(app, { addUser, noTimers } = {}) {
   const conf = require("./mediaconf");
   const guard = require("./middleware/authGuard");
   const admin = (req, res, next) => {
-    if (!conf.isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "media.admin")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.method === "POST" && !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     res.set("Cache-Control", "no-store");
     next();

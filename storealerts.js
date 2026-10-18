@@ -29,6 +29,7 @@
 // (sellers already get their own order notices, and a listing's buyer details belong to its seller).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const KIND = "store_purchase";
 const MAX_PER_ITEM = 25;
@@ -51,7 +52,8 @@ function init() {
 
 class Refuse extends Error { constructor(status, message) { super(message); this.status = status; this.refuse = true; } }
 const flag = (v) => v === true || v === 1 || v === "1" || v === "on" || v === "true";
-const isAdmin = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+// 1.99ack: was isAdmin (it meant Admin OR Staff): a recipient who runs the shop (shop.admin, siteperms.js) gets the full order
+const shopStaff = (u) => SP.can(u, "shop.admin");
 const oneLine = (s, n) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
 const when = (ms) => new Date(Number(ms) || Date.now()).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 
@@ -117,7 +119,7 @@ async function forItem(prizeId) {
   const rows = await getQuery(`SELECT a.*, u.username, u.class, u.camfrogUsername AS camfrog, b.username AS added_by_name
     FROM store_alerts a LEFT JOIN users u ON u.userId = a.user_id LEFT JOIN users b ON b.userId = a.added_by
     WHERE a.prize_id = ? ORDER BY a.created`, [String(prizeId || "")]);
-  return rows.map((r) => ({ user_id: r.user_id, username: r.username || null, camfrog: r.camfrog || null, admin: isAdmin(r),
+  return rows.map((r) => ({ user_id: r.user_id, username: r.username || null, camfrog: r.camfrog || null, admin: shopStaff(r),
                             tg: !!r.tg, pm: !!r.pm, details: !!r.details, added_by_name: r.added_by_name || null, updated: r.updated }));
 }
 
@@ -187,7 +189,7 @@ async function setRecipient(admin, prizeId, op, b = {}) {
  * o = the order (+ buyer_name, buyer_camfrog, giver_name), r = the recipient row (+ class).
  */
 function compose(o, r, t) {
-  const admin = isAdmin(r);
+  const admin = shopStaff(r);
   const details = !!r.details;
   const canOpen = admin || details;
   const site = SITE();

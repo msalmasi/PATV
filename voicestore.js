@@ -24,6 +24,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const BANDS = Object.freeze({ use_max: 10000, unlock_min: 100000, unlock_max: 1000000, roy_min: 10, roy_max: 50 });
 const NAME_RE = /^[\w .'\-()]{1,40}$/;
@@ -364,13 +365,13 @@ function register(app, { addUser, isBotToken }) {
   // staff
   app.get("/api/voices/admin", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (!req.user || !["Admin", "Staff"].includes(req.user.class)) return res.status(403).json({ ok: false });
+    if (!SP.can(req.user, "voices.view")) return res.status(403).json({ ok: false });
     try { res.json({ ok: true, voices: (await all()).map((v) => pub(v)), bands: BANDS }); } catch (e) { fail(res, e); }
   });
   app.post("/api/voices/admin", addUser, json, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!same(req, res)) return;
-    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "voices.manage")) return res.status(403).json({ ok: false, error: "Admins only." });
     try { const b = req.body || {}; res.json({ ok: true, voice: await adminUpdate(b.voice, b, req.user.username) }); } catch (e) { fail(res, e); }
   });
 }

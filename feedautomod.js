@@ -45,6 +45,7 @@
 // owner's own posts are never judged (they're the pad owner), so in practice it's other people's comments.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const store = require("./feedstore");
 const rooms = require("./rooms");
 const padrules = require("./padrules");
@@ -126,14 +127,15 @@ async function settings(scope) {
 }
 async function globalCaps() { await init(); return cleanGlobal(await readJson("automod:global")); }
 
-const isAdmin = (u) => !!u && u.class === "Admin";
+// 1.99ack (siteperms.js): All = feed.automod_global; a pad's admin lock (set it / change past it) = feed.admin_lock (locked: Admins)
+const globalOk = (u) => SP.can(u, "feed.automod_global");
 /** Change a scope's settings: All = site Admins; a pad = its owner (unless admin-locked) or an Admin. */
 async function setScope(user, scope, patch) {
   await init();
   scope = String(scope || "");
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
-  const admin = isAdmin(user);
-  if (!scope) { if (!admin) throw new Refuse(403, "Only site admins set the automod for All."); }
+  const admin = SP.can(user, "feed.admin_lock");
+  if (!scope) { if (!globalOk(user)) throw new Refuse(403, "Only site admins set the automod for All."); }
   else if (rooms.isProfile(scope)) throw new Refuse(403, "Profiles follow the site-wide automod switch for profiles (site admins, /feed/admin).");   // 1.99df
   else {
     if (!(await rooms.get(scope))) throw new Refuse(404, "No such pad.");
@@ -153,7 +155,7 @@ async function setScope(user, scope, patch) {
   return settings(scope);
 }
 async function setGlobal(user, patch) {
-  if (!isAdmin(user)) throw new Refuse(403, "Admins only.");
+  if (!globalOk(user)) throw new Refuse(403, "Admins only.");
   await init();
   const cur = await globalCaps();
   const next = cleanGlobal({ ...cur, ...(patch || {}) });
@@ -245,7 +247,7 @@ async function exempt(userId, roomId) {
   if (!userId || userId === PEPE_ID) return "Pepe";
   const u = (await getQuery("SELECT userId, class FROM users WHERE userId = ?", [userId]))[0];
   if (!u) return "account gone";
-  if (store.isStaff(u)) return "staff";
+  if (SP.can(u, "feed.limits_exempt")) return "staff";
   if (await rooms.canManage(u, roomId)) return "pad owner";
   return null;
 }
@@ -418,7 +420,7 @@ async function reverse(user, id, note = "") {
   const row = (await getQuery("SELECT * FROM feed_automod WHERE id = ?", [Number(id) || 0]))[0];
   if (!row) throw new Refuse(404, "No such automod action.");
   if (!(await rooms.canManage(user, row.room_id))) throw new Refuse(403, "Only this pad's owner can reverse it.");
-  if (row.rule === "csam" && !store.isStaff(user)) throw new Refuse(403, "Child-safety actions are reviewed by the site admins.");
+  if (row.rule === "csam" && !SP.can(user, "feed.automod_csam_reverse")) throw new Refuse(403, "Child-safety actions are reviewed by the site admins.");
   if (row.state === "reversed") return row;
   if (!["flag", "hide", "remove"].includes(row.action) && row.rule !== "csam") throw new Refuse(409, "Nothing to reverse - Pepe took no action on it.");
   const t = NOW();
@@ -477,7 +479,7 @@ async function noticeFor(user, id) {
   if (!row || !user || !user.userId) return null;
   const manage = await rooms.canManage(user, row.room_id);
   if (row.author_id !== user.userId && !manage) return null;
-  if (row.rule === "csam" && !store.isStaff(user)) return null;
+  if (row.rule === "csam" && !SP.can(user, "feed.automod_csam_reverse")) return null;
   const [d] = await decorateRows([row]);
   const site = G.rule(row.rule);
   let ruleDesc = site ? site.desc : "";
@@ -534,7 +536,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/feed/admin/automod", addUser, json, guard, async (req, res) => {
     try {
       const v = await viewer(req), b = req.body || {};
-      if (!isAdmin(v)) return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!globalOk(v)) return res.status(403).json({ ok: false, error: "Admins only." });
       const out = { ok: true };
       if (b.global) out.global = await setGlobal(v, b.global);
       if (b.main) out.main = await setScope(v, "", b.main);

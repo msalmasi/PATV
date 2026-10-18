@@ -63,6 +63,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const { getQuery, runQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const queueAction = (...a) => require("./actions").queue(...a);   // lazy: actions.js opens its table on load
 const CV = () => require("./camviewers");                         // 1.99yq: opt-out / private / the owner's blocks + "X opened your cam"
 // 1.99yh: cam snapshots / clips / live cams follow the pad's access rule like the room audio (padaccess.full: signed in,
@@ -573,7 +574,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
     const a = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    if (!a || a.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(a, "bridge.cmdlog")) return res.status(403).json({ ok: false, error: "Admins only." });
     await cmdLogReady;
     const where = [], args = [];
     if (req.query.room) { where.push("room = ?"); args.push(String(req.query.room).slice(0, 80)); }

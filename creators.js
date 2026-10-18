@@ -64,6 +64,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const NAME = "PATV Creators";
 // ── the explicit tier: HARD-DISABLED. Not a setting. Turning it on needs a code change after every gate in
@@ -257,7 +258,9 @@ function navFor(username) {
 // ── helpers ──
 const tx = (fn) => require("./mainstage")._tx(fn);
 const ESC = () => require("./escrow/ledger");
-const isStaff = (u) => !!(u && (u.class === "Admin" || u.class === "Staff"));
+// 1.99ack: capabilities (siteperms.js) - creators.admin (the staff queue / disputes / ledger), creators.pad_flags_any (any pad's
+// creator flags), feed.see_hidden (locked / 18+ posts), creators.config_explicit (the explicit tier's gates)
+const can = (u, k) => SP.can(u, k);
 const cleanLine = (s, n) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
 const KEY_RE = /^[A-Za-z0-9_.:\-]{8,80}$/;
 async function userRow(userId) { return (await getQuery("SELECT * FROM users WHERE userId = ?", [String(userId || "")]))[0] || null; }
@@ -283,8 +286,9 @@ const createdMsOf = (u) => {
 async function notify(userId, n) {
   try { await require("./inbox").addSafe(userId, { kind: "creator", link: "/creator", ...n }); } catch (e) { /* never blocks */ }
 }
-async function staffIds() { return (await getQuery("SELECT userId FROM users WHERE class = 'Admin'").catch(() => [])).map((r) => r.userId); }
-async function notifyStaff(n) { for (const id of await staffIds()) await notify(id, { kind: "admin", link: "/admin/creators", ...n }); }
+// the creators queue's notices go to the site Admins (a recipient list, not a capability - 1.99ack: was named staffIds)
+async function adminIds() { return (await getQuery("SELECT userId FROM users WHERE class = 'Admin'").catch(() => [])).map((r) => r.userId); }
+async function notifyStaff(n) { for (const id of await adminIds()) await notify(id, { kind: "admin", link: "/admin/creators", ...n }); }
 async function escrowLive() { try { return await ESC().live(); } catch (e) { return false; } }
 /** Monday 00:00 UTC of the week holding `t`. */
 function weekStart(t = now()) {
@@ -417,12 +421,12 @@ async function setPadFlags(user, roomId, { r18, allow_creators, attest } = {}) {
   const R = (await rooms.get(String(roomId || ""))) || (await rooms.bySlug(String(roomId || "")));
   if (!R) throw new Refuse(404, "No such pad.");
   if (rooms.isProfile(R.id)) throw new Refuse(400, "Your profile's rating is set on the creator application.");
-  if (!(R.owner && R.owner.userId === user.userId) && !isStaff(user)) throw new Refuse(403, "Only the pad's owner can do that.");
+  if (!(R.owner && R.owner.userId === user.userId) && !can(user, "creators.pad_flags_any")) throw new Refuse(403, "Only the pad's owner can do that.");
   const cur = (await getQuery("SELECT * FROM creator_pads WHERE room_id = ?", [R.id]))[0] || { r18: 0, allow_creators: 0 };
   let a = null;
   const wantR18 = r18 === undefined ? !!cur.r18 : !!(r18 === true || r18 === "1" || r18 === 1 || r18 === "on");
   if (wantR18 && !cur.r18) {
-    if (!isActiveCreator(user.userId) && !isStaff(user)) throw new Refuse(403, "Only an active creator can mark a pad 18+.", "E_NOT_CREATOR");
+    if (!isActiveCreator(user.userId) && !can(user, "creators.pad_flags_any")) throw new Refuse(403, "Only an active creator can mark a pad 18+.", "E_NOT_CREATOR");
     a = r18Attestation(attest);
     // an 18+ pad can't allow NSFW posts (R-rated, never explicit): switch the pad's NSFW allowance off
     try { await setPadAllowNsfwOff(R.id); } catch (e) { /* best effort */ }
@@ -449,7 +453,7 @@ async function setPadAllowNsfwOff(roomId) {
 // ── staff ──
 async function staffSet(actor, userId, { status, note, rating } = {}) {
   await init();
-  if (!isStaff(actor)) throw new Refuse(403, "Staff only.");
+  if (!can(actor, "creators.admin")) throw new Refuse(403, "Staff only.");
   const c = await creatorRow(userId);
   const u = await userRow(userId);
   if (!u) throw new Refuse(404, "No such account.");
@@ -615,7 +619,7 @@ async function applyLocks(outs, rows, viewer) {
   await init();
   const byId = new Map(rows.map((r) => [r.id, r]));
   const vid = viewer && viewer.userId ? viewer.userId : null;
-  const staff = isStaff(viewer);
+  const staff = can(viewer, "feed.see_hidden");
   const lockedIds = outs.filter((o) => { const r = byId.get(o.id); return r && r.lock_kind; }).map((o) => o.id);
   const r18Of = (o) => { const r = byId.get(o.id); return !!(r && (r.lock_rating === "r18" || isR18Room(r.home_pad) || (o.roomsAll || []).some((x) => !x.removed && isR18Room(x.id)))); };
   const anyR18 = outs.some(r18Of);
@@ -684,7 +688,7 @@ async function mediaGate(viewer, a) {
   const p = (await getQuery("SELECT id, author_id, home_pad, lock_kind, lock_tier, lock_rating FROM feed_posts WHERE id = ?", [a.post_id]).catch(() => []))[0];
   if (!p) return { allow: true, private: false };
   const vid = viewer && viewer.userId;
-  const staff = isStaff(viewer);
+  const staff = can(viewer, "feed.see_hidden");
   let r18 = p.lock_rating === "r18" || isR18Room(p.home_pad);
   if (!r18) r18 = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [p.id])).some((x) => isR18Room(x.room_id));
   if (!p.lock_kind && !r18) return { allow: true, private: false };
@@ -1230,7 +1234,7 @@ async function dispute(user, { ledger, reason, note } = {}) {
 /** Staff decision: refund (the whole hold back to the fan) or deny (unfreeze; it releases on schedule). */
 async function resolveDispute(actor, id, { action, note } = {}) {
   await init();
-  if (!isStaff(actor)) throw new Refuse(403, "Staff only.");
+  if (!can(actor, "creators.admin")) throw new Refuse(403, "Staff only.");
   const d = (await getQuery("SELECT * FROM creator_disputes WHERE id = ?", [Number(id) || 0]))[0];
   if (!d) throw new Refuse(404, "No such dispute.");
   if (d.status !== "open") throw new Refuse(409, "Already decided.");
@@ -1252,7 +1256,7 @@ async function resolveDispute(actor, id, { action, note } = {}) {
  */
 async function clawback(actor, ledgerId, note) {
   await init();
-  if (!isStaff(actor)) throw new Refuse(403, "Staff only.");
+  if (!can(actor, "creators.admin")) throw new Refuse(403, "Staff only.");
   const r = (await getQuery("SELECT * FROM creator_ledger WHERE id = ?", [Number(ledgerId) || 0]))[0];
   if (!r) throw new Refuse(404, "No such ledger row.");
   if (r.state === "held") { await runQuery("UPDATE creator_ledger SET frozen = 0 WHERE id = ?", [r.id]); await refundLedger(r.id, "clawback: " + (cleanLine(note, 120) || "reversed payment"), actor.username); return { ok: true, result: "refunded" }; }
@@ -1448,7 +1452,7 @@ async function readiness() {
 }
 async function setGate(actor, gate, { status, owner, evidence } = {}) {
   await init();
-  if (!actor || actor.class !== "Admin") throw new Refuse(403, "Admins only.");
+  if (!can(actor, "creators.config_explicit")) throw new Refuse(403, "Admins only.");
   if (!EXPLICIT_GATES.some((g) => g.key === gate)) throw new Refuse(404, "No such gate.");
   if (!GATE_STATUS.includes(status)) throw new Refuse(400, "Bad status.");
   await runQuery(`INSERT INTO explicit_readiness (gate, status, owner, evidence, updated_by, updated) VALUES (?, ?, ?, ?, ?, ?)

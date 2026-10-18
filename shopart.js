@@ -47,6 +47,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const W_ = 48, H_ = 36, EDGE = "#0a0a0a";
 const MAX_W = 40, MAX_H = 28;          // the sprite (before its outline): fits x 3..44, y 2..30 like the hand-drawn ones
@@ -169,7 +170,8 @@ function engines(c = DEFAULTS) {
   return [hasSprite() && "sprite", hasPaint() && "paint"].filter(Boolean);
 }
 const keyed = (c = DEFAULTS) => engines(c).length > 0;
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+// 1.99ack (siteperms.js): the staff tier of the generator, anyone's previews and /admin/shopart = shopart.view; its settings = shopart.admin
+const artStaff = (u) => SP.can(u, "shopart.view");
 
 async function usage(userId, t = NOW()) {
   await init();
@@ -187,7 +189,7 @@ async function status(me, { minLevel = 0 } = {}) {
   if (!me || !me.userId) return { available: false, reason: "signin" };
   const c = await config();
   if (!keyed(c)) return { available: false, reason: "nokey" };
-  const staff = isStaff(me);
+  const staff = artStaff(me);
   if (!(staff ? c.staff_on : c.users_on)) return { available: false, reason: "off", staff };
   if (!staff && (Number(me.level) || 0) < minLevel) return { available: false, reason: "level", staff, minLevel };
   const u = await usage(me.userId);
@@ -649,7 +651,7 @@ async function generateOne(me, b, { minLevel = 0, safety = null } = {}) {
 async function accept(me, id) {
   await init();
   const r = (await getQuery("SELECT * FROM shopart_gens WHERE id = ?", [Math.floor(Number(id)) || 0]))[0];
-  if (!r || (r.user_id !== me.userId && !isStaff(me)) || !r.file || !["preview", "accepted"].includes(r.status)) throw new GenError("No such picture (previews are kept for a day).", "gone", 404);
+  if (!r || (r.user_id !== me.userId && !artStaff(me)) || !r.file || !["preview", "accepted"].includes(r.status)) throw new GenError("No such picture (previews are kept for a day).", "gone", 404);
   if (!filePath(r.file) || !fs.existsSync(filePath(r.file))) throw new GenError("No such picture (previews are kept for a day).", "gone", 404);
   if (r.status === "preview") await runQuery("UPDATE shopart_gens SET status = 'accepted', accepted_at = ? WHERE id = ? AND status = 'preview'", [NOW(), r.id]);
   return { url: urlOf(r.file) };
@@ -717,7 +719,7 @@ function register(app, { addUser }) {
       if (!pub) {
         if (req.user === undefined && typeof addUser === "function") await new Promise((ok) => addUser(req, res, ok));
         const me = await meOf(req);
-        if (!me || (me.userId !== r.user_id && !isStaff(me))) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
+        if (!me || (me.userId !== r.user_id && !artStaff(me))) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
       }
       const H = { "Content-Type": "image/svg+xml", "X-Content-Type-Options": "nosniff", "Cache-Control": pub ? "public, max-age=31536000, immutable" : "private, no-store",
                   "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "Cross-Origin-Resource-Policy": "same-origin" };
@@ -732,7 +734,7 @@ function register(app, { addUser }) {
   // ── admin: /admin/shopart (Admins + Staff see it; Admins change the settings) ──
   const adminGate = async (req, res, next) => {
     const me = await meOf(req).catch(() => null);
-    if (!me || !isStaff(me)) {
+    if (!me || !artStaff(me)) {
       if (typeof req.flash === "function") req.flash("error", "Access denied. You must be an admin or staff to access this page.");
       return res.redirect("/login");
     }
@@ -744,7 +746,7 @@ function register(app, { addUser }) {
       const me = req.shopartMe;
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
-      res.render("admin/shopart", { user: me.username, title: "Admin · Shop pictures", section: "shopart", me, isAdmin: me.class === "Admin",
+      res.render("admin/shopart", { user: me.username, title: "Admin · Shop pictures", section: "shopart", me, isAdmin: SP.can(me, "shopart.admin"),
         errors: [], success: req.query.saved ? ["Saved."] : [], C: await config(), keyed: keyed(await config()), keys: { sprite: hasSprite(), paint: hasPaint() }, order: engines(await config()),
         rows: await recent(100), stats: await stats(), MODELS, LIMITS, ENGINES, SPRITE_MODELS: SS.SPRITE_MODELS, EFFORTS: SS.EFFORTS });
     } catch (e) {
@@ -754,7 +756,7 @@ function register(app, { addUser }) {
   });
   app.post("/admin/shopart", addUser, adminGate, async (req, res) => {
     const me = req.shopartMe;
-    if (me.class !== "Admin") return res.status(403).send("Admins only.");
+    if (!SP.can(me, "shopart.admin")) return res.status(403).send("Admins only.");
     if (!guard.sameSite(req)) return res.status(403).send("Bad request.");
     try {
       const b = req.body || {};

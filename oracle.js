@@ -26,6 +26,7 @@
 // With Pepe's switch on and the site down, his proposals wait under their keys; nothing is finalised on his side.
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const KEY_RE = /^[A-Za-z0-9_.:@\-]{6,160}$/;
 const KINDS = ["market", "pool", "wager"];
@@ -555,7 +556,7 @@ function register(app, { isBotToken, addUser }) {
     const uid = req.user && req.user.userId;
     if (!uid) return res.status(401).json({ ok: false, error: "Sign in first." });
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [uid]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(row, "econ.backend_cutover")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     await setMeta("enabled", !!(req.body || {}).on);
     res.json({ ok: true, enabled: await enabled() });

@@ -675,8 +675,6 @@
   "admroles.notes.pad_owners": "Pemilik pad punya aturannya sendiri di pad mereka (moderasi ruang di room mereka sendiri, tidak pernah atas admin atau owner Pepe). Halaman ini tidak mengubahnya.",
   "admroles.notes.sync": "Perubahan yang dibuat di sini akan sampai ke Pepe pada sinkronisasi berikutnya, dan perubahan yang dibuat di chat akan muncul di sini dengan cara yang sama. Jika keduanya mengubah pengaturan yang sama, perubahan yang lebih baru yang berlaku.",
   "admroles.website.h": "Izin website",
-  "admroles.website.pill": "Rilis 2",
-  "admroles.website.placeholder": "Hadir di rilis 2: izin website itu sendiri, bisa diedit di sini.",
   "admroles.chat.h": "Ubah izin dari chat",
   "admroles.chat.help": "Pengaturan yang sama, dari room mana pun tempat Pepe berada. Aturan yang sama berlaku seperti di halaman ini.",
   "admroles.chat.cmd": "Perintah",

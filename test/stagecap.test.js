@@ -97,7 +97,6 @@ test.before(async () => {
     pepeIn: () => pepeHere,
     roomCmds: (rid) => (rid === ROOM.id ? { "!snap": 30000, "!clip": 60000 } : {}),
     canManage: async (u, rid) => !!u && (u.class === "Admin" || (u.userId === U.owner.userId && rid === ROOM.id)),
-    isStaff: (u) => !!u && (u.class === "Admin" || u.class === "Staff"),
   });
   slotLive = await mkSlot("aaaaaaaa-1111", ROOM.id, U.streamer, { display: "Streamy" });
   slotEmbed = await mkSlot("bbbbbbbb-2222", ROOM.id, U.other, { mode: "embed", embed: JSON.stringify({ p: "youtube", t: "video", id: "dQw4w9WgXcQ" }) });

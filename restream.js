@@ -23,6 +23,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -319,8 +320,9 @@ function register(app, { addUser, isBotToken }) {
     res.status(500).json({ ok: false, error: "Something went wrong." });
   };
   const needUser = (req, res, next) => (req.user && req.user.userId ? next() : res.status(401).json({ ok: false, error: "Sign in first." }));
-  const needStaff = (req, res, next) => (rooms.isStaff(req.user) ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
-  const needAdmin = (req, res, next) => (req.user && req.user.class === "Admin" ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
+  // 1.99ack (siteperms.js): the relays card + switching a streamer's relay off = restream.staff; Pepe's main stream = restream.main (locked: Admins)
+  const needStaff = (req, res, next) => (SP.can(req.user, "restream.staff") ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
+  const needAdmin = (req, res, next) => (SP.can(req.user, "restream.main") ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
   // writes: JSON from this site's own pages only (Origin/Referer + X-Requested-With, like feedweb.js)
   const csrf = (req, res, next) => (guard.sameSite(req) && req.get("X-Requested-With") === "fetch" ? next()
     : res.status(403).json({ ok: false, error: "Bad request." }));
@@ -376,7 +378,7 @@ function register(app, { addUser, isBotToken }) {
   // ── admins (/stage/admin) ──
   app.get("/api/restream/admin", addUser, needStaff, async (req, res) => {
     noStore(res);
-    try { res.json({ ok: true, isAdmin: req.user.class === "Admin", ...(await adminState()) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: true, isAdmin: SP.can(req.user, "restream.main"), ...(await adminState()) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/restream/admin/main/dest", addUser, needAdmin, csrf, async (req, res) => {
     noStore(res);

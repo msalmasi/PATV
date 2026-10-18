@@ -1,4 +1,5 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<% const escOk = (locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals))('escrow.override'); -%>
 <%- include('layout', { title: b ? b.ref + ' · ' + b.task : t('bounty.nf_title'), user: user}) %>
 <%# views/bounty.ejs - 1.99ly design pass (bets.css): one bounty as a poster - the reward big with its status chip and a live
     countdown (end time in the viewer's zone), who posted it, how it gets verified, then the actions as cards (chip in,
@@ -118,7 +119,7 @@
               <span class="info"><%- b.verify ? t('bounty.claim_v', { who: b.creator }) : t('bounty.claim_m', { who: b.creator }) %> <%- t('bounty.claim_links') %></span>
             </form>
           <% } %>
-          <% if (b.mineCreator || isAdmin) { %>
+          <% if (b.mineCreator || escOk) { %>
             <form class="owner" method="post" action="/bounties/<%= b.id %>/resolve">
               <b><span class="ds-ic" aria-hidden="true">✅</span> <%- b.mineCreator ? t('bounty.pay_h') : t('bounty.pay_h_admin') %></b>
               <% if (b.claims.length) { %>

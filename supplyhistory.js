@@ -13,6 +13,7 @@
 //   GET /api/admin/econ/supply-history?days=90   (Admin) the rows + the last pushed monetary block (band, mtd)
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const SOURCES = ["issuance", "floor", "admin", "loan", "restore", "donation", "seed", "cutover"];
 const DAY_MS = 86400000;
@@ -161,7 +162,7 @@ function register(app, { addUser }) {
     try {
       if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
       const me = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (!me || me.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!SP.can(me, "econ.telemetry_policy")) return res.status(403).json({ ok: false, error: "Admins only." });
       // 1.99tq: the donation mints' promo part (the site's donation_promo_credits: PAT credited at a promo rate, and how much of
       // that is above the normal rate) per UTC day of this month - Pepe's journal books the whole donation under "donation"
       let donation_promo = {};

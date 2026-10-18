@@ -17,6 +17,7 @@
 // with X-Requested-With: fetch, are written to admin_audit and answer Cache-Control: no-store.
 "use strict";
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const safe = async (fn, d) => { try { return await fn(); } catch (e) { return d; } };
 
@@ -24,9 +25,9 @@ async function meOf(req) {
   if (!req.user || !req.user.userId) return null;
   return (await safe(() => getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]), []))[0] || null;
 }
-const isAdmin = (me) => !!me && me.class === "Admin";
+const canView = (me) => SP.can(me, "keys.view");
 async function isOwner(me) {
-  if (!isAdmin(me) || !me.camfrogUsername) return false;
+  if (!SP.can(me, "keys.manage") || !me.camfrogUsername) return false;   // keys.manage (locked: Admin) + a Pepe owner
   return (await safe(() => require("./staffroles").roleOf(me.camfrogUsername), null)) === "owner";
 }
 const sameOriginStrict = (req) => {
@@ -57,9 +58,9 @@ function register(app, { addUser }) {
       const me = await meOf(req);
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
-      if (!isAdmin(me)) {
+      if (!canView(me)) {
         if (typeof req.flash === "function") req.flash("error", "Bot keys & the chat seam are for site admins.");
-        return res.redirect(me && me.class === "Staff" ? "/admin" : "/login");
+        return res.redirect((me && SP.areaHome(me)) || "/login");
       }
       const d = await pageData();
       res.render("admin/keys", { title: "Admin · Bot keys & chat seam", user: me.username, isAdmin: true, me, owner: await isOwner(me), view: d });
@@ -70,7 +71,7 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "no-store");
     const me = await meOf(req);
     if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
-    if (!isAdmin(me)) return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
+    if (!canView(me)) return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
     try { res.json({ ok: true, owner: await isOwner(me), ...(await pageData()) }); }
     catch (e) { console.error("[adminkeys] data:", e.message); res.status(500).json({ ok: false }); }
   });

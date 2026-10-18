@@ -16,6 +16,7 @@
 // The markets themselves are ordinary markets / pools with an `auto` record (markets.cleanAuto) - /markets shows the 🤖 auto tag.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const ACTIONS = new Set(["set", "generate", "preview", "approve", "reject"]);
 const FEED_GAP_MS = 6 * 3600e3;          // at most one auto-market feed post every 6 h ...
@@ -167,10 +168,10 @@ async function request(me, b) {
   return { id: r && (r.id || r.lastID) };
 }
 
-async function isAdminNow(req) {
+async function marketsAdminNow(req) {
   if (!req.user || !req.user.userId) return null;
   const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-  return u && u.class === "Admin" ? { userId: u.userId, username: u.username } : null;
+  return SP.can(u, "markets.auto") ? { userId: u.userId, username: u.username } : null;
 }
 
 function register(app, { isBotToken, addUser }) {
@@ -192,13 +193,13 @@ function register(app, { isBotToken, addUser }) {
   const guard = require("./middleware/authGuard");
   app.get("/api/admin/automkt", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const me = await isAdminNow(req).catch(() => null);
+    const me = await marketsAdminNow(req).catch(() => null);
     if (!me) return res.status(403).json({ ok: false, error: "Admins only." });
     try { res.json({ ok: true, ...(await adminState()) }); } catch (e) { console.error("[automkt] admin:", e); res.status(500).json({ ok: false, error: "Couldn't load." }); }
   });
   app.post("/api/admin/automkt", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const me = await isAdminNow(req).catch(() => null);
+    const me = await marketsAdminNow(req).catch(() => null);
     if (!me) return res.status(403).json({ ok: false, error: "Admins only." });
     if (!guard.sameSite(req) || !req.is("application/json")) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     try { res.json({ ok: true, ...(await request(me, req.body || {})), ...(await adminState()) }); } catch (e) {
@@ -208,7 +209,7 @@ function register(app, { isBotToken, addUser }) {
     }
   });
   app.get("/admin/markets", addUser, async (req, res) => {
-    const me = await isAdminNow(req).catch(() => null);
+    const me = await marketsAdminNow(req).catch(() => null);
     if (!me) { if (typeof req.flash === "function") req.flash("error", "Admins only."); return res.redirect("/login"); }
     try {
       res.set("Cache-Control", "no-store");

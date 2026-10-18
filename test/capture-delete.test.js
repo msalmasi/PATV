@@ -10,7 +10,7 @@ const path = require("path");
 
 process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), "capdel-test-")));
 const C = require(path.join(__dirname, "..", "stagecap"));
-C._setDeps({ isStaff: (u) => u.class === "Admin", canManage: async (u, room) => u.userId === "u-owner" && room === "PepeFrog.Room" });
+C._setDeps({ can: (u, key) => key === "pads.manage_any" && u.class === "Admin", canManage: async (u, room) => u.userId === "u-owner" && room === "PepeFrog.Room" });
 
 const cap = { id: "abcdef0123456789", source: null, room: "PepeFrog.Room", by_login: "ritchiecuh", subject_login: "alice" };
 const u = (id, cf, cls) => ({ userId: id, username: id, camfrogUsername: cf, class: cls || "pleb" });

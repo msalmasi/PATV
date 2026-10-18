@@ -6,6 +6,7 @@
 //   (1.99iz) create  user-made pads: on/off, who may (linked account, account age, level), how many, the fee
 //   (1.99iz) reclaim inactive empty pads go back to the pool after N days - OFF by default
 "use strict";
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 // key -> {type: int | bool | select, def, lo/hi (int), options (select)}
 const SPEC = Object.freeze({
@@ -82,14 +83,13 @@ const _reset = () => { CACHE = null; };
 /** GET/POST /api/pads/admin/config - site Admins (money settings live here). */
 function register(app, { addUser }) {
   const json = require("express").json({ limit: "8kb" });
-  const isAdmin = (u) => !!u && u.class === "Admin";
   app.get("/api/pads/admin/config", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (!require("./rooms").isStaff(req.user)) return res.status(403).json({ ok: false, error: "Staff only." });
+    if (!SP.can(req.user, "pads.config_view")) return res.status(403).json({ ok: false, error: "Staff only." });
     res.json({ ok: true, config: await get(), defaults: DEFAULTS, limits: LIMITS });
   });
   app.post("/api/pads/admin/config", addUser, json, async (req, res) => {
-    if (!isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Site admins only." });
+    if (!SP.can(req.user, "pads.config")) return res.status(403).json({ ok: false, error: "Site admins only." });
     if (!req.is("application/json")) return res.status(415).json({ ok: false, error: "JSON only." });
     try { res.json({ ok: true, config: await set(req.body || {}, req.user.username) }); }
     catch (e) { console.error("[padcfg]", e); res.status(500).json({ ok: false, error: "Something went wrong." }); }

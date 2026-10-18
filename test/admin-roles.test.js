@@ -90,7 +90,7 @@ test("who sees it: site Admins (page + JSON); Staff back to the Overview; member
   assert.match(html, /href="\/admin\/roles"/, "in the admin nav");
   for (const id of ["holders", "commands", "targets", "notes", "website", "chat"]) assert.match(html, new RegExp(`id="${id}"`), id);
   assert.match(html, /id="arNotSynced"/, "Pepe hasn't synced his permission table yet");
-  assert.match(html, /data-placeholder="release-2"/, "the website permissions placeholder");
+  assert.match(html, /data-site-perm="admin\.area"/, "the website permissions (1.99ack, release 2)");
   for (const c of ["!roles", "!role &lt;user&gt; &lt;owner|admin|staff|assistant|trusted|none&gt;", "!perm &lt;!cmd&gt; powers &lt;role|default&gt;",
                    "!perm &lt;!cmd&gt; use &lt;role|everyone|default&gt;", "!perm &lt;!cmd&gt; targets &lt;staff|assistant&gt;"]) {
     assert.ok(html.includes(c), "chat command listed: " + c);

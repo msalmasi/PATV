@@ -23,6 +23,7 @@
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
 const DAY_MS = 86400 * 1000;
@@ -115,7 +116,7 @@ async function adminView() {
 async function request(user, { amount, reason, nonce, password }, ip) {
   await ensure();
   const ctl = require("./pepecontrol");
-  if (!user || user.class !== "Admin") throw fail(403, "Admins only.");
+  if (!SP.can(user, "econ.burn")) throw fail(403, "Admins only.");
   if (!ctl.takeNonce(user, nonce)) throw fail(409, "That confirmation was already used or has expired - start again.");
   const who = String(user.username || "").toLowerCase();
   const wait = pwFails.blocked(who);
@@ -154,7 +155,7 @@ function register(app, { isBotToken, addUser }) {
   const bot = (req, res, next) => (isBotToken((req.body || {}).password) ? next() : res.status(403).json({ error: "unauthorized" }));
   const admin = (req, res, next) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in first." });
-    if (req.user.class !== "Admin") return res.status(403).json({ error: "Admins only." });
+    if (!SP.can(req.user, "econ.burn")) return res.status(403).json({ error: "Admins only." });
     next();
   };
   const csrf = (req, res, next) => {

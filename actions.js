@@ -23,6 +23,7 @@
 //   idem   (1.99bj) a one-time key per submission, added to every /act form by views/partials/actions.ejs;
 //          the same key twice is one submission (refused here, and Pepe journals it too)
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, username TEXT NOT NULL, camfrog TEXT,
@@ -84,7 +85,7 @@ async function queue(userId, { kind, args, tag, label, idem, dedupe }) {
   try {
     r = await runQuery(`INSERT INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-      [userId, u.username, u.camfrogUsername || null, u.class === "Admin" ? 1 : 0, kind, JSON.stringify(args),
+      [userId, u.username, u.camfrogUsername || null, SP.can(u, "escrow.override") ? 1 : 0, kind, JSON.stringify(args),
        tag || null, clean(label, 200) || null, Date.now(), Date.now(), key]);
   } catch (e) {
     if (key && /UNIQUE/i.test(String(e && e.message))) throw new Error("duplicate");   // lost a race with its twin

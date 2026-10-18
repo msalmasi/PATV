@@ -31,6 +31,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const KINDS = new Set(["sheet", "pvp", "lore"]);
 const KEY_RE = /^[A-Za-z0-9_.:@-]{6,160}$/;
@@ -425,7 +426,7 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/admin/gtf-backend", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(row, "econ.backend_cutover")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     await init();
     await setMeta("enabled", !!(req.body || {}).on);

@@ -10,6 +10,7 @@
 //   media_settings   key -> JSON value (only keys of DEFAULTS are read)
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 // The prod store's existing items (prizes.prizeId - public ids, like shop.js ROLE_PRIZES). Admin-editable.
 const DEFAULT_INVITE_ITEMS = {
@@ -155,10 +156,9 @@ async function set(patch, actor) {
   return { settings: get(), changed };
 }
 
-const isAdmin = (u) => !!u && u.class === "Admin";
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
-/** May this account use 📼 Play from library? (the setting + its class) */
-const libraryAllowed = (u) => (S.library_allow === "staff" ? isStaff(u) : isAdmin(u));
+/** May this account use 📼 Play from library? 1.99ack: media.library_free (siteperms.js), and the library_allow setting
+ *  ("staff") still widens it to every account at Staff and up - an audience a setting names, not a gate of its own. */
+const libraryAllowed = (u) => SP.can(u, "media.library_free") || (S.library_allow === "staff" && SP.atLeast(u, "staff"));
 const on = {
   library: () => !!S.library_enabled && keys().mediactl,
   requests: () => !!S.requests_enabled && keys().overseerr,
@@ -170,4 +170,4 @@ function errLine(e) {
   return String((e && (e.publicMessage || e.message)) || e || "error").replace(/https?:\/\/\S+/g, "<url>").replace(/[A-Za-z0-9]{24,}/g, "…").slice(0, 200);
 }
 
-module.exports = { init, get, set, keys, on, libraryAllowed, isAdmin, isStaff, errLine, DEFAULTS, DEFAULT_INVITE_ITEMS, DEFAULT_CREDIT_ITEMS, _S: S };
+module.exports = { init, get, set, keys, on, libraryAllowed, errLine, DEFAULTS, DEFAULT_INVITE_ITEMS, DEFAULT_CREDIT_ITEMS, _S: S };

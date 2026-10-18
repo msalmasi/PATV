@@ -4,6 +4,7 @@
 //   /api/media/admin/*            the page's JSON actions (site admins only; same-site POSTs)
 // The player itself is medialib.js (/api/medialib/*), requests mediarequests.js (/requests), invites mediainvites.js.
 "use strict";
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const conf = require("./mediaconf");
 const lib = require("./medialib");
 const reqs = require("./mediarequests");
@@ -53,14 +54,14 @@ function register(app, { addUser, noTimers } = {}) {
     res.status(500).json({ ok: false, error: "Something went wrong." });
   };
   const admin = (req, res, next) => {
-    if (!conf.isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "media.admin")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.method === "POST" && !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     next();
   };
   const J = (fn) => [addUser, admin, async (req, res) => { try { res.set("Cache-Control", "no-store"); res.json(await fn(req)); } catch (e) { fail(res, e); } }];
 
   app.get("/admin/media", addUser, async (req, res) => {
-    if (!conf.isAdmin(req.user)) return res.redirect("/login");
+    if (!SP.can(req.user, "media.admin")) return res.redirect("/login");
     try {
       await Promise.all([conf.init(), reqs.init(), inv.init(), lib.init()]);
       const pads = (await rooms.list()).map((r) => ({ id: r.id, title: r.title }));

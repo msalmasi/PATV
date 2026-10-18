@@ -110,7 +110,7 @@ function register(app, { isBotToken, addUser }) {
   app.get("/api/admin/econ/gscale", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in first." });
-    if (req.user.class !== "Admin") return res.status(403).json({ error: "Admins only." });
+    if (!require("../siteperms").can(req.user, "econ.telemetry_policy")) return res.status(403).json({ error: "Admins only." });
     try {
       res.json(Object.assign({ ok: true }, await view(require("./core").nowS())));
     } catch (e) {

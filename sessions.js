@@ -40,6 +40,7 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DAY = 86400000;
 const LOGIN_MS = 90 * DAY;                 // middleware/loginCookie.js LOGIN_DAYS
@@ -436,7 +437,7 @@ function register(app, { addUser }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (!post(req, res)) return;
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(row, "accounts.sessions_revoke")) return res.status(403).json({ ok: false, error: "Admins only." });
     const target = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(req.params.id)]))[0];
     if (!target) return res.status(404).json({ ok: false, error: "No such account." });
     // 1.99wl: a reason and the member's username typed as the confirmation (/admin/accounts); audited before it runs

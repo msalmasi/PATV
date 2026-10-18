@@ -7,8 +7,8 @@
 //                                 rooms: [{id, balance, days: {yyyy-mm-dd: {in, dep, mig, out, ovf}}, history: [...]}]}
 //     -> {ok, settings: {room id: {rate, changed_at, changed_by}}}   (the owner's payout rate, stored for E-4)
 //   GET  /api/rooms/:slug/vault       the pad page card's data (public)
-//   POST /api/rooms/:slug/vault/rate  {rate}  the pad's owner (or site staff): the daily payout rate, 2-15%,
-//                                     at most one change per 7 days (staff are not limited). STORED ONLY: Pepe's E-4
+//   POST /api/rooms/:slug/vault/rate  {rate}  the pad's owner (or a site admin - 1.99ack pads.vault_rate, was any site staff): the daily
+//                                     payout rate, 2-15%, at most one change per 7 days (pads.vault_rate holders are not limited). STORED ONLY: Pepe's E-4
 //                                     recipe will use it; nothing pays out yet.
 //   POST /api/rooms/:slug/vault/donate {amount, idem, anon}  1.99sn: the pad page's public "Donate to this pad's vault" -
 //                                     ANY signed-in account (not just the owner): the same keyed website action as the
@@ -46,6 +46,7 @@
 //   room_vault_rate_log  room_id, rate, prev, by (userId), at - the audit trail of rate changes
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const RATE = Object.freeze({ default: 10, min: 2, max: 15 });
 const RATE_EVERY_MS = 7 * 24 * 3600 * 1000;
@@ -203,7 +204,17 @@ async function settingsMap() {
   return out;
 }
 
-/** The pad page card. Days: Pepe's local days, the last 7 (today included). */
+/** 1.99ack: who sets a pad's vault payout rate (owner decision 2026-10-18): the pad's own owner (once a week), or a
+ *  pads.vault_rate holder (siteperms.js, locked: Admins; any pad, any time). Staff managing a pad (canManage) no longer do. */
+async function rateRights(R, user) {
+  if (!user || !user.userId) return { canSet: false, anyTime: false };
+  if (R && typeof R !== "object") R = await require("./rooms").get(String(R)).catch(() => null);
+  const admin = SP.can(user, "pads.vault_rate");
+  const owner = !!(R && R.owner && R.owner.userId === user.userId);
+  return { canSet: owner || admin, anyTime: admin };
+}
+
+/** The pad page card. Days: Pepe's local days, the last 7 (today included). opts.canManage: the viewer manages the pad. */
 async function card(roomId, user, opts = {}) {
   await init();
   const id = String(roomId || "");
@@ -223,8 +234,9 @@ async function card(roomId, user, opts = {}) {
   const t = now();
   const changedAt = set && set.changed_at ? Number(set.changed_at) : null;
   const nextChange = changedAt ? changedAt + RATE_EVERY_MS : null;
-  const canSet = !!opts.canManage;
-  const staff = !!opts.staff;
+  const rr = opts.canManage ? await rateRights(id, user) : { canSet: false, anyTime: false };
+  const canSet = rr.canSet;
+  const staff = rr.anyTime;
   const rmeta = meta.recipe || {};
   const epochs = (recipe && recipe.epochs) || [];
   // 1.99sn: the public card's "How it pays out" - the recipe's slices (Pepe's cfg, fractions; the E-4 defaults until synced)
@@ -267,17 +279,18 @@ function hasVault(roomId) {
   return rooms.platformOf(roomId) !== "profile" || profileVaultsOn();
 }
 
-/** The owner (or staff) sets the payout rate: 2-15%, whole or half percent, once per 7 days (staff: any time). */
+/** The owner (or a pads.vault_rate holder) sets the payout rate: 2-15%, whole or half percent, once per 7 days (pads.vault_rate: any time). */
 async function setRate(roomId, user, rate) {
   await init();
   const rooms = require("./rooms");
   const R = await rooms.get(String(roomId || ""));
   if (!R) throw new Refuse(404, "No such pad.");
   if (!hasVault(R.id)) throw new Refuse(400, "This pad has no vault yet.");
-  if (!(await rooms.canManage(user, R.id))) throw new Refuse(403, "Only the pad's owner can set its payout rate.");
+  const rr = await rateRights(R, user);
+  if (!rr.canSet) throw new Refuse(403, "Only the pad's owner can set its payout rate.");
   const r = Math.round(Number(rate) * 2) / 2;
   if (!Number.isFinite(r) || r < RATE.min || r > RATE.max) throw new Refuse(400, `Pick a rate between ${RATE.min}% and ${RATE.max}%.`);
-  const staff = rooms.isStaff(user);
+  const staff = rr.anyTime;
   const t = now();
   return require("./boosts").tx(async () => {
     const cur = (await getQuery("SELECT rate, changed_at FROM room_vault_settings WHERE room_id = ?", [R.id]))[0] || null;
@@ -368,13 +381,13 @@ function register(app, { addUser, isBotToken }) {
       if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
       const rooms = require("./rooms");
       const manage = await rooms.canManage(req.user, R.id);
-      res.json({ ok: true, vault: await card(R.id, req.user, { canManage: manage, staff: rooms.isStaff(req.user) }) });
+      res.json({ ok: true, vault: await card(R.id, req.user, { canManage: manage }) });
     } catch (e) { fail(res, e); }
   });
   // 2026-10-12: /admin/economy's 🎁 Activity -> pad vaults card (admin-activitypads.js) - Pepe's switches as he last synced them
   app.get("/api/admin/econ/activity-pads", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ error: "Admins only." });
+    if (!SP.can(req.user, "econ.telemetry_policy")) return res.status(403).json({ error: "Admins only." });
     try {
       const m = await metaGet();
       const r = m.recipe || {};
@@ -401,8 +414,7 @@ function register(app, { addUser, isBotToken }) {
       const R = await resolve(req.params.slug);
       if (!R) throw new Refuse(404, "No such pad.");
       const r = await setRate(R.id, req.user, (req.body || {}).rate);
-      const rooms = require("./rooms");
-      res.json({ ok: true, ...r, vault: await card(R.id, req.user, { canManage: true, staff: rooms.isStaff(req.user) }) });
+      res.json({ ok: true, ...r, vault: await card(R.id, req.user, { canManage: true }) });
     } catch (e) { fail(res, e); }
   });
 }

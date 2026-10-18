@@ -1,4 +1,5 @@
 <%- include('../partials/admin-open', { title, user, section: 'bridge', admIsAdmin: isAdmin }) %>
+<% const logOk = (locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals))('bridge.cmdlog'); -%>
 <div class="adm-head">
   <h1>Bridge</h1>
   <p>The Camfrog bridge: Pepe relays each Camfrog room he's in to its pad. Members with a linked Camfrog name can send chat and <code>!commands</code> from the pad page; every web command is logged here.</p>
@@ -7,7 +8,7 @@
 <section class="adm-card" id="cmdlog" aria-labelledby="cmdT">
   <h2 id="cmdT">Web command log <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Newest first. Filter by pad (Camfrog room id) and/or Camfrog name; up to 500 rows.</p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <% if (!logOk) { %><p class="adm-help">Admins only.</p><% } else { %>
   <form id="cmdForm" class="adm-form">
     <label>Room id<input type="text" name="room" placeholder="e.g. plant_based_chatting" autocomplete="off"></label>
     <label>Camfrog name<input type="text" name="camfrog" autocomplete="off"></label>
@@ -24,7 +25,7 @@
 <section class="adm-card" id="blocks" aria-labelledby="blkT">
   <h2 id="blkT">Web relay blocks <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Accounts blocked from talking into a Camfrog room from the website (relay lines, clips, <code>!commands</code>, the Pepe menu) - by a room's mods / the pad's owner (<code>!bridge block</code>, the owner page) or here. Leave the room empty to block in <b>every</b> room. A linked chat login keeps its normal Camfrog chat. Pepe enforces the same list.</p>
-  <% if (isAdmin) { %>
+  <% if (logOk) { %>
   <form id="blkForm" class="adm-form">
     <label>Who<input type="text" name="target" placeholder="🌐name, u:&lt;id&gt;, username or chat name" autocomplete="off" required></label>
     <label>Room id<input type="text" name="room" placeholder="empty = every room" autocomplete="off"></label>
@@ -45,7 +46,7 @@
 <section class="adm-card" id="modlog" aria-labelledby="mlT">
   <h2 id="mlT">Moderation history <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Pepe's mod log (kicks, bans, time-outs, mic blocks, roles, automod strikes / fines, topic) synced from Pepe, plus the site's web bridge blocks and live-cam ends - newest first. Each pad's owner sees their own room's on the pad's owner panel.</p>
-  <% if (isAdmin) { %>
+  <% if (logOk) { %>
   <form id="mlForm" class="adm-form">
     <label>Room id<input type="text" name="room" placeholder="empty = every room" autocomplete="off"></label>
     <label>Kind<select name="cat"><option value="">all</option><option>kick</option><option>ban</option><option>timeout</option><option>mic</option><option>roles</option><option>automod</option><option>bridge</option><option>room</option><option value="misc">other</option></select></label>
@@ -63,7 +64,7 @@
   <h2 id="bridgeMoreT">Per pad</h2>
   <p class="adm-help">Each pad's bridge settings and its room moderation are on the pad's own Manage page; the list of pads is on <a href="/pads/admin#owners">Pads › Pads &amp; owners</a>.</p>
 </section>
-<% if (isAdmin) { %>
+<% if (logOk) { %>
 <script>
 (function () {
   'use strict';

@@ -44,6 +44,7 @@
 // (code "moved"): the escrow is being / has been migrated into the vault, so paying from it could pay twice.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DEFAULTS = Object.freeze({
   on: true,             // switch: off = every payout answers "off" (the challenge runs for glory)
@@ -455,7 +456,7 @@ function register(app, { addUser, isBotToken }) {
   app.get("/api/challenge/admin", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      if (!require("./rooms").isStaff(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!SP.can(req.user, "econ.boost_challenge_cosmetic_cfg")) return res.status(403).json({ ok: false, error: "Admins only." });   // 1.99ack: Admins (was Staff)
       await init();
       res.json({ ok: true, config: config(), escrow: await require("./boosts").escrow() });
     } catch (e) { fail(res, e); }
@@ -463,7 +464,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/challenge/admin", addUser, async (req, res) => {
     try {
       if (!req.is("application/json")) return res.status(415).json({ ok: false, error: "JSON only." });
-      if (!require("./rooms").isStaff(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!SP.can(req.user, "econ.boost_challenge_cosmetic_cfg")) return res.status(403).json({ ok: false, error: "Admins only." });
       const c = await setConfig(req.body || {});
       try { await require("./rooms").event(null, "challenge-config", req.user.username, JSON.stringify(c)); } catch (e) { /* audit only */ }
       res.json({ ok: true, config: c });

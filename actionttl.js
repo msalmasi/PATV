@@ -17,6 +17,7 @@
 // journal), so a row he claimed before a crash isn't run hours late either.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const MIN = 60000;
 // minutes. Keys: "cmd:<command>" (kind cmd), "<kind>" (pepe_actions), "market:<kind>", "bounty:<kind>", "default".
@@ -207,7 +208,7 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(row, "ops.action_ttl")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.method === "POST" && (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch")) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     next();
   };

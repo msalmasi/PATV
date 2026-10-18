@@ -26,6 +26,7 @@
 //   shop_sub_ledger   one row per paid period (UNIQUE ref)
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DAY = 24 * 3600 * 1000;
 let clock = () => Date.now();
@@ -370,8 +371,7 @@ function register(app, { addUser, noTimers } = {}) {
   });
   // staff: the config (shop admin → Subscriptions)
   app.post("/shop/admin/subscriptions", addUser, async (req, res) => {
-    const isStaff = req.user && (req.user.class === "Admin" || req.user.class === "Staff");
-    if (!isStaff) return res.redirect("/login");
+    if (!SP.can(req.user, "shop.admin")) return res.redirect("/login");   // 1.99ack (siteperms.js)
     if (!guard.sameSite(req)) return res.status(403).send("cross-site request refused");
     try {
       const b = req.body || {};

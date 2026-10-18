@@ -26,6 +26,7 @@
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 
 const DAY = 24 * 3600e3;
@@ -72,7 +73,7 @@ async function eligibility(user, { now = NOW() } = {}) {
   if (!u || u.archived_at) { out.reasons.push("Your account isn't active."); return out; }
   out.balance = Number(u.points_balance) || 0;
   out.made = await madeCount(u.userId);
-  if (rooms.isStaff(u)) { out.ok = true; out.staff = true; out.fee = 0; return out; }
+  if (SP.can(u, "pads.create_free")) { out.ok = true; out.staff = true; out.fee = 0; return out; }
   if (!C.create_on) out.reasons.push("Creating pads is switched off right now.");
   if (C.create_link === "camfrog" && !u.camfrogUsername) out.reasons.push("Link your Camfrog name first (type !verify in a Camfrog room with Pepe).");
   else if (C.create_link === "any" && !linkedAny(u)) out.reasons.push("To create a pad, " + require("./verified").LINK_HINT + ".");

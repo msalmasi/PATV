@@ -78,6 +78,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 
 const CODE_TTL = 48 * 3600e3;
@@ -91,7 +92,10 @@ let NOW = () => Date.now();
 
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const isAdmin = (u) => !!u && u.class === "Admin";
+// 1.99ack (siteperms.js): the connection queue (view / approve / deny) = pads.connect_review (Assistants too, owner decision
+// 2026-10-18); sending Pepe to visit / join a room = pads.send_pepe (locked: Admins)
+const reviewer = (u) => SP.can(u, "pads.connect_review");
+const sendsPepe = (u) => SP.can(u, "pads.send_pepe");
 
 let ready = null;
 function init() {
@@ -197,7 +201,7 @@ async function state(R, viewer) {
   const tw = require("./twitchlogin").clean(own.twitchLogin);
   const cf = await current(R.id, "camfrog");
   return {
-    platform, staff: rooms.isStaff(viewer), admin: isAdmin(viewer), house: !!R.house, ownerIsViewer: !!(R.owner && viewer && R.owner.userId === viewer.userId),
+    platform, staff: reviewer(viewer), admin: sendsPepe(viewer), house: !!R.house, ownerIsViewer: !!(R.owner && viewer && R.owner.userId === viewer.userId),
     camfrog: cf, twitch: await current(R.id, "twitch"), discord: null,
     twitchLinked: !!own.twitchId, twitchLogin: tw, code_ttl_h: CODE_TTL / 3600e3,
     pepeIn: cf && cf.status === "verified" ? pepeIn(R.id) : null,
@@ -293,7 +297,7 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
     const c = (await getQuery("SELECT * FROM pad_connections WHERE id = ?", [connId]))[0];
     if (!c || !["pending", "review"].includes(c.status)) return { already: true, c };
     const R = await rooms.get(c.room_id);
-    if (!R || R.platform !== "site" || !R.owner || R.owner.userId !== c.requested_by && !(await isStaffId(c.requested_by))) {
+    if (!R || R.platform !== "site" || !R.owner || R.owner.userId !== c.requested_by && !(await managesAnyId(c.requested_by))) {
       await runQuery("UPDATE pad_connections SET status = 'cancelled', note = 'the pad changed', updated = ? WHERE id = ?", [NOW(), c.id]);
       throw new Refuse(409, "That pad changed since the request (owner or platform) - start again.");
     }
@@ -337,9 +341,10 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
   try { require("./achievements").poke(out.c.requested_by); } catch (e) { /* achievements never block */ }   // 1.99mt: 🌉 Bridge Builder
   return P;
 }
-async function isStaffId(userId) {
+/** Was the request made by someone who manages any pad (not only their own)? - then an owner change doesn't void it. */
+async function managesAnyId(userId) {
   const u = (await getQuery("SELECT class FROM users WHERE userId = ?", [userId || ""]))[0];
-  return rooms.isStaff(u);
+  return SP.can(u || null, "pads.manage_any");
 }
 
 /** Pepe's report: a code in a room's topic, or !verifypad typed in a room. -> {ok, message, status} */
@@ -513,7 +518,7 @@ async function queueList() {
 }
 async function adminOp(admin, id, op, { note } = {}) {
   await init();
-  if (!rooms.isStaff(admin)) throw new Refuse(403, "Site staff only.");
+  if (!reviewer(admin)) throw new Refuse(403, "Site staff only.");
   const c = await byId(id);
   if (!c) throw new Refuse(404, "No such request.");
   const t = NOW();
@@ -534,7 +539,7 @@ async function adminOp(admin, id, op, { note } = {}) {
     return { ok: true };
   }
   if (op === "visit" || op === "join") {
-    if (!isAdmin(admin)) throw new Refuse(403, "Only site Admins can send Pepe somewhere.");
+    if (!sendsPepe(admin)) throw new Refuse(403, "Only site Admins can send Pepe somewhere.");
     if (op === "join" && !(c.status === "verified" && c.join_opt_in)) throw new Refuse(409, "Pepe joins only a connected room whose owner asked for him.");
     if (op === "join" && plusEnforced() && !hasPlus(c.room_id)) throw new Refuse(409, "Pepe stays only in Prime Time Plus rooms - this pad doesn't have it.");   // 1.99qy
     if (op === "visit" && !["pending", "review"].includes(c.status)) throw new Refuse(409, "Visits are for requests that are waiting.");
@@ -614,7 +619,7 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   // admins
   app.get("/api/pads/connections", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (!rooms.isStaff(req.user)) return res.status(403).json({ ok: false, error: "Staff only." });
+    if (!reviewer(req.user)) return res.status(403).json({ ok: false, error: "Staff only." });
     try { res.json({ ok: true, items: await queueList() }); } catch (e) { fail(res, e); }
   });
   app.post("/api/pads/connections/:id/:op", addUser, needUser, json, sameSite, async (req, res) => {

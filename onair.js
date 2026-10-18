@@ -47,6 +47,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const STAGING = !!process.env.STAGING;
 const LOGIN_RE = /^[\w.\-$]{1,40}$/;
@@ -54,7 +55,7 @@ const OBS_NAME_RE = /^[^\u0000-\u001f"\\]{1,60}$/;
 const LIVE_GRACE_MS = 90 * 1000;        // a slot on air that isn't live this long is taken off
 const BOT_FRESH_MS = 30 * 1000;
 const AUDIT = "onair";
-const STAFF = new Set(["Admin", "Staff"]);             // 1.99aan: who may pick / cut (ghost.js's rule); settings: Admin
+// 1.99ack: who may pick / cut = onair.operate, the settings = onair.config (siteperms.js)
 const EMBED_GRACE_MS = 60 * 1000;       // an embed's start (player load, a pre-roll ad) before the stall clock runs
 const SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
 const SITE = () => String(process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
@@ -749,9 +750,9 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
   };
   const csrf = (req, res, next) => (guard.sameSite(req) && req.get("X-Requested-With") === "fetch" ? next()
     : res.status(403).json({ ok: false, error: "Security check failed - reload the page." }));
-  const needAdmin = (req, res, next) => (req.user && req.user.class === "Admin" ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
+  const needAdmin = (req, res, next) => (SP.can(req.user, "onair.config") ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
   // 1.99aan: site staff (Admin / Staff - the same rule as ghost mode) may pick / cut from the player bar too; the settings stay Admin-only
-  const needStaff = (req, res, next) => (req.user && STAFF.has(req.user.class) ? next() : res.status(403).json({ ok: false, error: "Site staff only." }));
+  const needStaff = (req, res, next) => (SP.can(req.user, "onair.operate") ? next() : res.status(403).json({ ok: false, error: "Site staff only." }));
   const actor = (req) => "web:" + ((req.user && req.user.username) || "?");
   const adm = (req) => ({ userId: req.user.userId, username: req.user.username });
 
@@ -796,7 +797,7 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
       }
       else if (b.action === "off") await clear("off", actor(req), { admin: adm(req) });
       else if (b.action === "config") {
-        if (req.user.class !== "Admin") throw new Refuse(403, "Admins only.", "admin_only");
+        if (!SP.can(req.user, "onair.config")) throw new Refuse(403, "Admins only.", "admin_only");
         await saveConfig(b.cfg || {}, actor(req), { admin: adm(req) });
       }
       else throw new Refuse(400, "Unknown action.", "bad");

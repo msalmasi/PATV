@@ -201,11 +201,12 @@ test("index.js: both routes are Admin only (Staff lost access); the cards say wh
   assert.doesNotMatch(idx, /postOrThrow\([^)]*"staff transfer"/, "no minting path");
   const at = idx.indexOf('"/api/admin/transfer/:username"');
   const grantRoute = idx.slice(at, at + 900);
-  assert.match(grantRoute, /if \(userType === "Admin"\) \{/);
-  assert.doesNotMatch(grantRoute, /userType === "Admin" \|\| userType === "Staff"/);
+  // 1.99ack: through the registry - econ.grant_pat (siteperms.js, locked: Admins)
+  assert.match(grantRoute, /if \(SP\.can\(req\.user, "econ\.grant_pat"\)\) \{/);
+  assert.doesNotMatch(grantRoute, /"Staff"/);
   const j = idx.indexOf('app.post("/api/g/wheel/jackpot"');
   const jp = idx.slice(j, j + 900);
-  assert.match(jp, /me\.class !== "Admin"/);
+  assert.match(jp, /!SP\.can\(me, "econ\.house_adjust"\)/);
   assert.doesNotMatch(jp, /"Staff"/);
   const v = fs.readFileSync(path.join(repo, "views/admin/economy.ejs"), "utf8");
   assert.match(v, /Paid from the incentive budget/);

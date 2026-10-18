@@ -92,6 +92,7 @@ const https = require("https");
 const net = require("net");
 const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const C = require("./webpushcrypto");
 
 const KINDS = Object.freeze(["dm", "mention", "keyword"]);   // what a member can turn on (reply is reserved for N-1)
@@ -346,8 +347,9 @@ async function accountOf(uid) {
 function audienceOk(acc, cfg) {
   if (!acc || acc.archived_at) return false;
   if (cfg.webpush_audience === "everyone") return true;
-  if (cfg.webpush_audience === "staff") return acc.class === "Admin" || acc.class === "Staff";
-  return acc.class === "Admin";
+  // 1.99ack: an audience the webpush_audience SETTING names (a rollout group, not a capability) - the class ladder (siteperms.atLeast)
+  if (cfg.webpush_audience === "staff") return SP.atLeast(acc, "staff");
+  return SP.atLeast(acc, "admin");
 }
 /** May this member see / use browser notifications right now? (switch on, keys loaded, in the audience) Never throws. */
 async function available(user) {
@@ -999,7 +1001,7 @@ function register(app, { addUser, noTimers = false } = {}) {
   const adminOf = async (req) => {
     if (!req.user || !req.user.userId) return null;
     const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    return u && u.class === "Admin" ? u : null;
+    return SP.can(u, "push.admin") ? u : null;
   };
   const adminApi = async (req, res, next) => {
     res.set("Cache-Control", "no-store");

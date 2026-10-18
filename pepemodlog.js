@@ -20,6 +20,7 @@
 "use strict";
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const KEEP_MS = 400 * 24 * 3600 * 1000;
 const BATCH_MAX = 500;
@@ -164,7 +165,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
     try {
       if (!req.user || !req.user.userId) return bad(res, 401, "Sign in first.");
       const me = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (!me || me.class !== "Admin") return bad(res, 403, "Admins only.");
+      if (!SP.can(me, "pepe.modlog")) return bad(res, 403, "Admins only.");
       const room = req.query.room ? clean(req.query.room, 128) : null;
       res.json({ ok: true, ...(await history({ room, cat: req.query.cat, q: req.query.q, page: req.query.page, limit: req.query.limit })) });
     } catch (e) { fail(res, e); }

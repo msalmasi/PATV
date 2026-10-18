@@ -37,6 +37,7 @@ const http = require("http");
 const https = require("https");
 const tls = require("tls");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const conf = require("./mediaconf");
 const stage = require("./mainstage");
 const rooms = require("./rooms");
@@ -210,7 +211,7 @@ async function access(user) {
   if (!user || !user.userId) return { ok: false, free: false, how: null, why: "signin", message: "Sign in first." };
   if (conf.libraryAllowed(user)) {
     if (!conf.on.library()) return { ok: false, free: true, how: "admin", why: "off", message: conf.keys().mediactl ? "Play from library is switched off (/admin/media)." : "The media-control service isn't configured yet." };
-    return { ok: true, free: true, how: user.class === "Admin" ? "admin" : "staff", until: null, why: null, message: null };
+    return { ok: true, free: true, how: SP.can(user, "media.library_free") ? "admin" : "staff", until: null, why: null, message: null };
   }
   if (!S.library_plex || !conf.on.library()) return { ok: false, free: false, how: null, why: "off", message: "Playing from Plex isn't open right now." };
   const p = await plexUser(user);

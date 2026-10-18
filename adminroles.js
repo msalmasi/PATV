@@ -6,14 +6,19 @@
 //   POST /api/admin/roles/perm  {cmd, kind, value, role?}        kind powers | use | targets (role staff | assistant);
 //                                                                value a role / floor, or "default" (!perm)
 //   POST /api/admin/roles/reset {cmd}                            the command's powers + use + floors back to Pepe's defaults
-// Who: viewing needs class Admin IN THE DATABASE (Staff get a flash + the Overview, others /login). Every change is decided
+//   POST /api/admin/roles/site  {key, value}                     1.99ack (release 2): a WEBSITE capability's minimum class
+//                                                                (admin | staff | assistant | default) - siteperms.js
+// Who: viewing needs roles.assign (siteperms.js, locked: class Admin) IN THE DATABASE (anyone else in the admin area gets a
+// flash + their admin home, others /login). Every change is decided
 // by the editor's PEPE role (pepe_roles, via their linked Camfrog login) with Pepe's own !role / !perm rules - owners
 // anything, admins within an admin's reach (pepeperms.permWhy / staffroles.setRole); others nothing. Changes need a
 // same-origin fetch with X-Requested-With: fetch, answer Cache-Control: no-store and are written to admin_audit.
-// Release 2 adds the website's own permissions to the page (the "Website permissions" section is a placeholder).
+// 1.99ack (release 2): the website's own permissions (siteperms.js) in the "Website permissions" section - the same editors
+// and rules (owners anything; admins never a row an owner set; locked rows never; nothing below Assistant), audited (site_perm).
 "use strict";
 const { getQuery } = require("./dbUtils");
 const P = require("./pepeperms");
+const SP = require("./siteperms");
 
 const safe = async (fn, d) => { try { return await fn(); } catch (e) { return d; } };
 const sameOriginStrict = (req) => {
@@ -27,6 +32,7 @@ async function meOf(req) {
 
 function register(app, { addUser }) {
   P.init().catch((e) => console.error("[adminroles] init:", e.message));
+  SP.init().catch((e) => console.error("[adminroles] siteperms:", e.message));
 
   app.get("/admin/roles", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent("/admin/roles"));
@@ -34,12 +40,12 @@ function register(app, { addUser }) {
       const me = await meOf(req);
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
-      if (!me || me.class !== "Admin") {
+      if (!SP.can(me, "roles.assign")) {
         if (typeof req.flash === "function") req.flash("error", "Roles & permissions are for site admins.");
-        return res.redirect(me && me.class === "Staff" ? "/admin" : "/login");
+        return res.redirect((me && SP.areaHome(me)) || "/login");
       }
       const ed = await P.editorOf(me.userId);
-      res.render("admin/roles", { title: "Admin · Roles & permissions", user: me.username, isAdmin: true, view: await P.view(ed) });
+      res.render("admin/roles", { title: "Admin · Roles & permissions", user: me.username, isAdmin: true, view: await P.view(ed), site: await SP.view(ed) });
     } catch (e) { console.error("[adminroles] page:", e); res.status(500).send("Couldn't load the admin page."); }
   });
 
@@ -47,8 +53,8 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "no-store");
     const me = await meOf(req);
     if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
-    if (me.class !== "Admin") return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
-    try { res.json({ ok: true, ...(await P.view(await P.editorOf(me.userId))) }); }
+    if (!SP.can(me, "roles.assign")) return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
+    try { const ed = await P.editorOf(me.userId); res.json({ ok: true, ...(await P.view(ed)), site: await SP.view(ed) }); }
     catch (e) { console.error("[adminroles] data:", e.message); res.status(500).json({ ok: false }); }
   });
 
@@ -57,7 +63,7 @@ function register(app, { addUser }) {
     if (req.get("X-Requested-With") !== "fetch" || !sameOriginStrict(req)) return res.status(403).json({ ok: false, code: "cross_site", error: "Security check failed - reload the page." });
     const me = await meOf(req);
     if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
-    if (me.class !== "Admin") return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
+    if (!SP.can(me, "roles.assign")) return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
     try {
       const ed = await P.editorOf(me.userId);
       res.json({ ok: true, ...(await fn(req.body || {}, ed)) });
@@ -70,6 +76,7 @@ function register(app, { addUser }) {
   change("/api/admin/roles/role", (b, ed) => P.setRole(ed, b.login, b.role));
   change("/api/admin/roles/perm", (b, ed) => P.setPerm(ed, { kind: b.kind, cmd: b.cmd, value: b.value, role: b.role }));
   change("/api/admin/roles/reset", (b, ed) => P.resetCmd(ed, b.cmd));
+  change("/api/admin/roles/site", (b, ed) => SP.setMin(ed, b.key, b.value));   // 1.99ack: a website capability
 }
 
 module.exports = { register };

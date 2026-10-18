@@ -29,6 +29,7 @@
 // the transaction commits and never fail an order.
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
 const inbox = require("./inbox");
 
@@ -1025,7 +1026,7 @@ async function sweep() {
 }
 
 // ── listings ──
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+const shopStaff = (u) => SP.can(u, "shop.admin");   // 1.99ack (siteperms.js): any listing / order, official items, /shop/admin
 const oneLine = (s, n) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
 const toInt = (v) => { const n = Math.floor(Number(String(v == null ? "" : v).replace(/[, _]/g, ""))); return isFinite(n) ? n : NaN; };
 
@@ -1072,7 +1073,7 @@ function validateListing(b) {
 
 async function createListing(me, b) {
   await ready;
-  const staff = isStaff(me);
+  const staff = shopStaff(me);
   const v = validateListing(b);
   const official = staff && (b.official === "1" || b.official === "on");
   if (!official) {
@@ -1102,7 +1103,7 @@ async function getListing(id) {
 async function editListing(me, id, b) {
   await ready;
   const p = await getListing(id);
-  const staff = isStaff(me);
+  const staff = shopStaff(me);
   if (!p || (!staff && p.seller_id !== me.userId)) throw new Refuse(404, "No such listing.");
   if (p.status === "removed" && !staff) throw new Refuse(400, "That listing was removed.");
   const v = validateListing(b);
@@ -1121,7 +1122,7 @@ async function editListing(me, id, b) {
 async function listingStatus(me, id, op, note) {
   await ready;
   const p = await getListing(id);
-  const staff = isStaff(me);
+  const staff = shopStaff(me);
   if (!p || (!staff && p.seller_id !== me.userId)) throw new Refuse(404, "No such listing.");
   const set = async (to, from, extra) => {
     const r = await runQuery(`UPDATE prizes SET status = ?, review_note = ?, updated = ? WHERE prizeId = ? AND status IN (${from.map(() => "?").join(",")})`,
@@ -1319,7 +1320,7 @@ function register(app, deps) {
     if (!req.user || !req.user.userId) return null;
     const u = (await getQuery("SELECT userId, username, displayname, class, level, points_balance, email, camfrogUsername FROM users WHERE userId = ?",
                               [req.user.userId]))[0];
-    return u ? { ...u, staff: isStaff(u) } : null;
+    return u ? { ...u, staff: shopStaff(u) } : null;
   }
   const base = (req, me, extra) => Object.assign({ user: me ? me.username : (req.user ? req.user.username : null), me, H,
     msg: msgOf(req), settings, categories: settings.categories,
@@ -1688,9 +1689,8 @@ function register(app, deps) {
 
   // Legacy official-item manager (kept; edits official items only)
   app.get("/admin/manage-prizes", addUser, (req, res) => {
-    const userType = req.user ? req.user.class : null;
     const username = req.user ? req.user.username : null;
-    if (userType === "Admin" || userType === "Staff") {
+    if (shopStaff(req.user)) {
       res.render("managePrizes", { user: username });
     } else {
       req.flash("error", "Access denied. You must be an admin or staff to access this page.");
@@ -1699,8 +1699,7 @@ function register(app, deps) {
   });
 
   app.post("/api/prizes/edit", addUser, async (req, res) => {
-    const userType = req.user ? req.user.class : null;
-    if (userType === "Admin" || userType === "Staff") {
+    if (shopStaff(req.user)) {
       const { action, prizeId } = req.body;
       // 1.99qh: the legacy editor's values are checked like a listing's (validateListing): a one-line name of 1-80
       // characters (stored as text and escaped wherever it is shown) and whole-number cost / quantity in range.

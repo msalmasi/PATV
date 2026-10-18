@@ -23,6 +23,7 @@
 // homepage's featured room is a site setting (rooms.js front room), decoupled from !activeroom.
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const cosmetics = require("./cosmetics");
 const relay = require("./bridge-relay");   // web -> room: chat relay, mic clips, cam snapshots (staging test)
 const RA = require("./roomactivity");      // 1.99cj: rolling per-room activity (people only) for the homepage pick
@@ -1147,7 +1148,7 @@ function register(app, { isBotToken, addUser }) {
     if (signedIn) {
       try { const ids = new Set(await require("./follows").followedPadIds(req.user.userId, 2000)); followRows = g.rows.filter((r) => ids.has(r.id)); } catch (e) { followRows = []; }
     }
-    res.render("rooms", { followRows, padBadge: require("./pads").padBadge, boostMark: require("./boostmark").boostMark, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
+    res.render("rooms", { followRows, padBadge: require("./pads").padBadge, boostMark: require("./boostmark").boostMark, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: SP.can(req.user, "pads.manage_any"), owned });
   });
 
   // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header
@@ -1225,7 +1226,7 @@ function register(app, { isBotToken, addUser }) {
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access,
-      onairAdmin: !!(req.user && (req.user.class === "Admin" || req.user.class === "Staff")),   // 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
+      onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
@@ -1243,7 +1244,7 @@ function register(app, { isBotToken, addUser }) {
       analytics: reg.hasRoute(app, "/p/:slug/analytics"),
       // economy v2 E-3: the pad vault card (About tab) - 1.99uu: every pad, connected or not (roomvaults.js)
       twitch: platform === "twitch" ? await twitchPlayer(R.id, req.hostname) : null,      // 1.99ja: a Twitch pad's login + its player
-      roomVault: !require("./roomvaults").hasVault(R.id) ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage, staff: reg.isStaff(req.user) })
+      roomVault: !require("./roomvaults").hasVault(R.id) ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage })
         .catch((e) => { console.error("[roomvaults] card:", e.message); return null; }),
       feed,
       padBets: await require("./padbets").forPad(R.id).catch((e) => { console.error("[padbets]", e.message); return null; }),   // 1.99ur

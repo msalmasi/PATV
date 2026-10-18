@@ -43,6 +43,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const BANNER_TZ = "America/New_York";
 const HEADLINE_MAX = 60, LINE_MAX = 120, ALT_MAX = 120, LINK_MAX = 300, REASON_MAX = 200;
@@ -92,8 +93,10 @@ let supportTerms = () => {
   if (P) return { rate: fmt(P.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)), promo_on: true, promo_cap: fmt(P.cap_usd), promo_mult: String(P.mult) };
   return { rate: fmt(T.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)) };
 };
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
-const isAdmin = (u) => !!u && u.class === "Admin";
+// 1.99ack: the review queue is banner.review (Assistants too since the owner's 2026-10-18 decision), settings + house
+// promos banner.config (siteperms.js)
+const canReview = (u) => SP.can(u, "banner.review");
+const canConfig = (u) => SP.can(u, "banner.config");
 
 class Refuse extends Error {
   constructor(status, message) { super(message); this.status = status; this.refuse = true; }
@@ -427,7 +430,7 @@ async function cancel(user, id) {
 }
 async function decide(staff, id, approve, reason) {
   await init();
-  if (!isStaff(staff)) throw new Refuse(403, "Staff only.");
+  if (!canReview(staff)) throw new Refuse(403, "Staff only.");
   const why = cleanLine(reason, REASON_MAX);
   const who = staff.username || staff.userId;
   if (!approve) {
@@ -458,7 +461,7 @@ async function decide(staff, id, approve, reason) {
 /** Staff take an approved booking down (a Terms breach): it stops showing, its remaining days free up, no refund. */
 async function takedown(staff, id, reason) {
   await init();
-  if (!isStaff(staff)) throw new Refuse(403, "Staff only.");
+  if (!canReview(staff)) throw new Refuse(403, "Staff only.");
   const why = cleanLine(reason, REASON_MAX);
   if (!why) throw new Refuse(400, "Say why it's taken down (the buyer sees it).");
   const r = await row(id);
@@ -691,7 +694,7 @@ async function adminData() {
 }
 async function savePromo(admin, b = {}) {
   await init();
-  if (!isAdmin(admin)) throw new Refuse(403, "Admins only.");
+  if (!canConfig(admin)) throw new Refuse(403, "Admins only.");
   let id = String(b.id || "").trim().toLowerCase();
   const exists = id ? (await getQuery("SELECT * FROM banner_promos WHERE id = ?", [id]))[0] : null;
   if (!exists) {
@@ -714,7 +717,7 @@ async function savePromo(admin, b = {}) {
 }
 async function deletePromo(admin, id) {
   await init();
-  if (!isAdmin(admin)) throw new Refuse(403, "Admins only.");
+  if (!canConfig(admin)) throw new Refuse(403, "Admins only.");
   const r = (await getQuery("SELECT kind FROM banner_promos WHERE id = ?", [String(id || "")]))[0];
   if (!r) throw new Refuse(404, "No such promo.");
   if (r.kind !== "custom") throw new Refuse(400, "Built-in promos can be switched off, not deleted.");
@@ -738,8 +741,8 @@ function register(app, { addUser, isBotToken = () => false, noTimers = false }) 
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     if (json && !req.is("application/json")) return res.status(415).json({ ok: false, error: "JSON only." });
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
-    if (who === "staff" && !isStaff(req.user)) return res.status(403).json({ ok: false, error: "Staff only." });
-    if (who === "admin" && !isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (who === "staff" && !canReview(req.user)) return res.status(403).json({ ok: false, error: "Staff only." });
+    if (who === "admin" && !canConfig(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
     next();
   };
   const paidOpen = (req, res, next) => (CONFIG.enabled && CONFIG.paid_enabled ? next() : res.status(423).json({ ok: false, error: "Banner bookings aren't open yet." }));
@@ -806,7 +809,7 @@ function register(app, { addUser, isBotToken = () => false, noTimers = false }) 
       const r = (await getQuery("SELECT user_id, status FROM banner_bookings WHERE image = ? ORDER BY created DESC LIMIT 1", [name]))[0];
       const mineUp = MINE.get(name);
       const pub = r && r.status === "approved";
-      const may = pub || (req.user && ((r && r.user_id === req.user.userId) || (mineUp && mineUp.userId === req.user.userId) || isStaff(req.user)));
+      const may = pub || (req.user && ((r && r.user_id === req.user.userId) || (mineUp && mineUp.userId === req.user.userId) || canReview(req.user)));
       if (!may || (!r && !mineUp)) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
       const H = { "Content-Type": "image/webp", "X-Content-Type-Options": "nosniff", "Cache-Control": pub ? "public, max-age=86400" : "private, no-store",
                   "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox", "Cross-Origin-Resource-Policy": "same-origin" };
@@ -815,13 +818,13 @@ function register(app, { addUser, isBotToken = () => false, noTimers = false }) 
     } catch (e) { console.error("[banner] file:", e.message); if (!res.headersSent) res.status(500).end(); }
   });
 
-  // admin: the moderation queue (staff), settings + house promos (admins)
+  // admin: the moderation queue (banner.review), settings + house promos (banner.config)
   app.get("/admin/banner", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent("/admin/banner"));
-    if (!isStaff(req.user)) return res.status(403).send("Staff only.");
+    if (!canReview(req.user)) return res.status(403).send("Staff only.");
     try {
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
-      res.render("admin/banner", { user: req.user.username, isAdmin: isAdmin(req.user), D: await adminData(), fmt });
+      res.render("admin/banner", { user: req.user.username, isAdmin: canConfig(req.user), D: await adminData(), fmt });
     } catch (e) { console.error("[banner] admin:", e); res.status(500).send("Couldn't load the banner admin."); }
   });
   app.post("/api/banner/admin/decide", addUser, api(true, "staff"), async (req, res) => {

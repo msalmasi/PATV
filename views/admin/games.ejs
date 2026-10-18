@@ -1,5 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: isAdmin }) %>
+<%# 1.99ack: each admin-only card asks its own capability (siteperms.js) %><% const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals); -%>
 <div class="adm-head">
   <h1>Games</h1>
   <p>The wheel and its jackpot, the casino front end, the GTF heist market and the duel / brawl rules. Hold'em, blackjack and the chat games run in Pepe; their settings are his.</p>
@@ -19,7 +20,7 @@
   <section class="adm-card" id="jackpot" aria-labelledby="jackpotT">
     <h2 id="jackpotT">House adjustment <span class="adm-pill admin">admins</span></h2>
     <p class="adm-help">Moves PAT between the Federal Reserve and the House (the casino jackpot pot) - never a free mint. A positive amount is paid by the Reserve (refused if it can't cover it); a negative one returns what the House holds to the Reserve. Needs a reason; every adjustment is in the admin log.</p>
-    <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <% if (!_can('econ.house_adjust')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <form id="jackpotForm" class="adm-form" action="/api/g/wheel/jackpot" method="POST">
       <label for="jackpotAmount">Amount (PAT)<input type="number" id="jackpotAmount" name="amount" step="1" required></label>
       <label for="jackpotReason">Reason<input type="text" id="jackpotReason" name="reason" minlength="8" maxlength="200" required placeholder="why the House needs this"></label>
@@ -34,7 +35,7 @@
 <section class="adm-card" id="casino-front" aria-labelledby="casinoFrontT">
   <h2 id="casinoFrontT"><%- t('casino.front.title') %> <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help"><%- t('casino.front.help', { patv: '<code>/casino/blackjack</code>, <code>/casino/holdem</code>', pepe: '<code>/blackjack</code>, <code>/poker</code>' }) %></p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!locals.casino) { %><p class="adm-help"><%- t('casino.front.failed') %></p><% } else { %>
+  <% if (!_can('casino.admin')) { %><p class="adm-help">Admins only.</p><% } else if (!locals.casino) { %><p class="adm-help"><%- t('casino.front.failed') %></p><% } else { %>
   <% const _cs = locals.casino;
      const _eff = (g) => { const f = g === 'holdem' ? _cs.hm_front : _cs.bj_front; if (f === 'patv' || f === 'pepe') return f; return (g === 'holdem' ? _cs.hm_enabled : _cs.bj_enabled) ? 'patv' : 'pepe'; };
      const _path = (g) => _eff(g) === 'patv' ? (g === 'holdem' ? '/casino/holdem' : '/casino/blackjack') : (g === 'holdem' ? '/poker' : '/blackjack'); %>
@@ -58,9 +59,9 @@
   <p class="adm-help">One flag blocks a member from all casino play (the web wheel and blackjack, the chat games, Discord). Pepe sets and lists it from his admin panel / chat; the site only enforces it.</p>
   <div class="adm-actions"><a class="adm-btn ghost" href="/casino">Casino lobby ›</a><a class="adm-btn ghost" href="/lotto">Lotto ›</a></div>
 </section>
-<%- include('../partials/admin-heistmarket', { t, isAdmin, hm: locals.hm }) %>
-<%- include('../partials/admin-pvpcfg', { isAdmin }) %>
-<%- include('../partials/admin-spincfg', { isAdmin }) %>
+<%- include('../partials/admin-heistmarket', { t, isAdmin: _can('games.config'), hm: locals.hm }) %>
+<%- include('../partials/admin-pvpcfg', { isAdmin: _can('games.config') }) %>
+<%- include('../partials/admin-spincfg', { isAdmin: _can('games.config') }) %>
 <script src="/public/js/admin-panel.js?v=5" defer></script>
 <%- include('../partials/admin-close') %>
 </body>

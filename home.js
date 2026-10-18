@@ -7,6 +7,7 @@
 //
 // Site-wide numbers are cheap queries cached for STATS_TTL; only the personal strip is per request.
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const bridge = require("./bridge");
 const staking = require("./staking");
 const cosmetics = require("./cosmetics");
@@ -251,9 +252,9 @@ function register(app, { addUser, xpForNextLevel }) {
       const nextUp = await nextSlot(front.id).catch(() => null);
       const onStage = rooms.find((r) => r.id === front.id) || null;
       const room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
-      const isStaff = !!(me && (me.class === "Admin" || me.class === "Staff"));
+      const isStaff = SP.can(me, "stage.admin");
       // 1.99xs: staff only get a link line now (the picker is on /pads/admin#front, Pepe's panel on /admin/pepe#control)
-      const stageAdmin = isStaff ? { front: reg.frontSetting(), admin: me.class === "Admin" } : null;
+      const stageAdmin = isStaff ? { front: reg.frontSetting(), admin: SP.can(me, "pepe.control") } : null;
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
       // 1.99fu: signed-out visitors too when the room's pad is Public (padaccess.full)

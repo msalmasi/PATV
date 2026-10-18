@@ -18,12 +18,13 @@
 // could see anyway: live posts in live placements, never an Approved pad they're outside of.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const MAX_TAGS = 5, TAG_MIN = 2, TAG_MAX = 24;
 let NOW = () => Date.now();
 
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+const removesAny = (u) => SP.can(u, "feed.tags_remove_any");   // 1.99ack (siteperms.js; was isStaff)
 
 let ready = null;
 function init() {
@@ -151,7 +152,7 @@ async function removeTag(user, postId, tagRaw, roomId = null) {
   for (const rid of roomId ? placed.filter((r) => r === String(roomId)) : placed) {
     if (await rooms.canManage(user, rid)) { acting = rid; break; }
   }
-  if (!acting && !isStaff(user)) throw new Refuse(403, "Only the mods of a pad this post is in can remove its tags.");
+  if (!acting && !removesAny(user)) throw new Refuse(403, "Only the mods of a pad this post is in can remove its tags.");
   const who = user.username || user.userId;
   await runQuery("UPDATE feed_post_tags SET removed_at = ?, removed_by = ?, removed_room = ? WHERE post_id = ? AND tag = ?", [NOW(), who, acting || "", p.id, tag]);
   if (acting) await rooms.event(acting, "feed-tag-remove", who, `#${tag} from post ${p.id}`).catch(() => {});

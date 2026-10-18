@@ -36,6 +36,7 @@
 "use strict";
 const express = require("express");
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const REASON_MAX = 120;
 const MAX_MS = 365 * 24 * 3600 * 1000;
@@ -369,7 +370,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
     if (write && (!req.is("application/json") || req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req))) { bad(res, 400, "Bad request."); return null; }
     if (!req.user || !req.user.userId) { bad(res, 401, "Sign in first."); return null; }
     const me = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    if (!me || me.class !== "Admin") { bad(res, 403, "Admins only."); return null; }
+    if (!SP.can(me, "bridge.blocks_global")) { bad(res, 403, "Admins only."); return null; }
     return me;
   }
   app.get("/api/admin/bridge/blocks", addUser, async (req, res) => {

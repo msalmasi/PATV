@@ -632,7 +632,9 @@ test("the /messages page: the ⚙ dialog's Browser notifications section + its s
 
 test("the admin nav: a Web Push section whose links are admin-only", () => {
   const nav = fs.readFileSync(path.join(repo, "views", "partials", "admin-nav.ejs"), "utf8");
-  assert.match(nav, /\['push', '\/admin\/push', '🔔', 'Web Push', \[\['#settings', 'Settings', 1\], \['#health', 'Delivery', 1\], \['#test', 'Test', 1\]\]\]/);
+  // 1.99ack: the page (and so its links) shows for push.admin holders only (siteperms.js)
+  assert.match(nav, /\['push', '\/admin\/push', '🔔', 'Web Push', \[\['#settings', 'Settings'\], \['#health', 'Delivery'\], \['#test', 'Test'\]\], \['push\.admin'\]\]/);
+  assert.equal(require(path.join(repo, "siteperms")).minClass("push.admin"), "admin");
 });
 
 test("GET /sw.js: the service worker at the root, JavaScript, revalidated every time", async () => {

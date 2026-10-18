@@ -21,6 +21,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
 const RAW_DAYS = 90, HASH_DAYS = 365, SAME_IP_DAYS = 90, VIEW_LOG_DAYS = 730;
@@ -125,7 +126,7 @@ async function sweep(now = NOW()) {
   return { rawNulled: a.changes || 0, deleted: b.changes || 0, viewsDeleted: c.changes || 0 };
 }
 
-const isAdmin = (u) => !!u && u.class === "Admin";
+const canDetails = (u) => SP.can(u, "feed.abuse_details");   // 1.99ack (siteperms.js, locked: Admins)
 const ageDays = (s) => (s == null ? null : Math.floor(Number(s) / 86400));
 
 /** Room owners: the account's age and linked identities - nothing about the network. */
@@ -143,7 +144,7 @@ async function ownerInfo(userId) {
  * Writes the view to content_audit_views FIRST (no log, no data). -> {subject, records, sameIp, sameDevice, history}
  */
 async function details(viewer, target, { reason = null } = {}) {
-  if (!isAdmin(viewer)) { const e = new Error("Admins only."); e.status = 403; throw e; }
+  if (!canDetails(viewer)) { const e = new Error("Admins only."); e.status = 403; throw e; }
   await init();
   let kind, tid, subjectId = null, postId = null;
   if (target.post) {
@@ -256,4 +257,4 @@ function start() {
   timer.unref();
 }
 
-module.exports = { init, record, fromRequest, sweep, details, ownerInfo, viewLog, start, isAdmin, netOf, RAW_DAYS, HASH_DAYS, SAME_IP_DAYS, _setClock };
+module.exports = { init, record, fromRequest, sweep, details, ownerInfo, viewLog, start, canDetails, netOf, RAW_DAYS, HASH_DAYS, SAME_IP_DAYS, _setClock };

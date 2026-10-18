@@ -682,8 +682,6 @@
   "admroles.notes.pad_owners": "Pad sahipleri kendi pad'lerinde kendi kurallarını uygulayabilir (kendi odalarındaki oda moderasyonu; Pepe'nin yöneticileri ya da sahipleri asla kapsam dışındadır). Bu sayfa bunları değiştirmez.",
   "admroles.notes.sync": "Burada yapılan değişiklikler Pepe'ye bir sonraki senkronizasyonunda ulaşır; sohbette yapılan değişiklikler de aynı şekilde burada görünür. İkisi de aynı ayarı değiştirirse, daha yeni değişiklik geçerli olur.",
   "admroles.website.h": "Web sitesi izinleri",
-  "admroles.website.pill": "Sürüm 2",
-  "admroles.website.placeholder": "Sürüm 2 ile geliyor: web sitesinin kendi izinleri burada düzenlenebilir olacak.",
   "admroles.chat.h": "Sohbetten izinleri değiştir",
   "admroles.chat.help": "Aynı ayarlar, Pepe'nin bulunduğu herhangi bir odadan. Bu sayfadakiyle aynı kurallar geçerli.",
   "admroles.chat.cmd": "Komut",

@@ -11,6 +11,7 @@
 // Pepe's /api/bounties/sync is ignored and /api/bounties/actions/claim hands out nothing (the queue is retired while the
 // switch is on - it stays for the local plugin path).
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS bounties (
@@ -169,10 +170,10 @@ function register(app, { isBotToken, addUser }) {
         ok = b.verify ? "Sent to Pepe: your claim. He'll check his logs and reply here."
                       : "Sent to Pepe: your claim. The poster picks who gets paid.";
       } else if (kind === "reject") {
-        if (!creator && u.class !== "Admin") return back(`Only ${b.creator} (or an admin) can reject a claim.`);
+        if (!creator && !SP.can(u, "escrow.override")) return back(`Only ${b.creator} (or an admin) can reject a claim.`);
         const c = (b.claims || []).find((x) => x.nick === String(body.hunter || ""));
         if (!c) return back("That person hasn't claimed it.");
-        if (c.disputed && u.class !== "Admin") return back("That claim is with the admins now.");
+        if (c.disputed && !SP.can(u, "escrow.override")) return back("That claim is with the admins now.");
         hunters = JSON.stringify([c.nick]);
         note = String(body.note || "").trim().slice(0, 160);
         ok = `Sent to Pepe: rejecting ${c.nick}'s claim.`;
@@ -184,7 +185,7 @@ function register(app, { isBotToken, addUser }) {
         note = String(body.note || "").trim().slice(0, 160);
         ok = "Sent to Pepe: your dispute goes to the admins.";
       } else {
-        if (!creator && u.class !== "Admin") return back(`Only ${b.creator} (or an admin) can do that.`);
+        if (!creator && !SP.can(u, "escrow.override")) return back(`Only ${b.creator} (or an admin) can do that.`);
         if (kind === "resolve") {
           const pick = [].concat(body.hunters || []).map((h) => String(h)).filter((h) => (b.claims || []).some((c) => c.nick === h));
           if (!pick.length) return back("Tick at least one hunter who claimed it.");
@@ -206,7 +207,7 @@ function register(app, { isBotToken, addUser }) {
         else if (kind === "reject") { args.hunter = JSON.parse(hunters)[0]; args.why = note; }
         else if (kind === "dispute") args.why = note;
         else if (kind === "resolve") args.hunters = JSON.parse(hunters);
-        const actor = { userId: req.user.userId, username: u.username, login: u.camfrogUsername || null, admin: u.class === "Admin", via: "web" };
+        const actor = { userId: req.user.userId, username: u.username, login: u.camfrogUsername || null, admin: SP.can(u, "escrow.override"), via: "web" };
         const idem = /^[A-Za-z0-9_-]{8,64}$/.test(String(body.idem || "")) ? `web-${req.user.userId}-${body.idem}` : null;
         const r = await games.act("bounties", { verb, actor, args, idem });
         return back(E.webReply(verb, r, args));
@@ -217,7 +218,7 @@ function register(app, { isBotToken, addUser }) {
       await runQuery(`INSERT INTO bounty_actions (bounty_id, user_id, username, camfrog, kind, amount, note, hunters, evidence, site_admin, status, created, updated)
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
         [id, req.user.userId, u.username, u.camfrogUsername || null, kind, amount, note, hunters, evidence,
-         u.class === "Admin" ? 1 : 0, Date.now(), Date.now()]);
+         SP.can(u, "escrow.override") ? 1 : 0, Date.now(), Date.now()]);
       back(ok);
     } catch (e) {
       console.error(`[bounties] ${kind}:`, e);
@@ -300,7 +301,7 @@ function register(app, { isBotToken, addUser }) {
       if (u) {
         me = [u.camfrogUsername, u.username];
         base.bal = Number(u.points_balance);
-        base.isAdmin = u.class === "Admin";
+        base.isAdmin = SP.can(u, "escrow.override");
       }
     }
     res.locals.og = require("./og").forBounty(req, JSON.parse(rows[0].data));

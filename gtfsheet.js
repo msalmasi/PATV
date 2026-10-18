@@ -19,6 +19,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const G = require("./gtfstore");
 
 const STATS = ["str", "dex", "con", "int", "wis", "cha"];
@@ -153,7 +154,7 @@ async function view(login, viewer) {
   if (!k || !LOGIN_RE.test(k)) return { missing: true, login: k };
   const [src, cat, u] = await Promise.all([source(k), catalog(), userFor(k)]);
   let isAdmin = false;
-  if (viewer) isAdmin = ((await getQuery("SELECT class FROM users WHERE userId = ?", [viewer]).catch(() => []))[0] || {}).class === "Admin";
+  if (viewer) isAdmin = SP.can((await getQuery("SELECT class FROM users WHERE userId = ?", [viewer]).catch(() => []))[0] || null, "profile.see_private");
   const owner = !!(u && viewer && u.userId === viewer);
   if (u) {
     const PL = require("./profilelayout");

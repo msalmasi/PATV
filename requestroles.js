@@ -28,6 +28,7 @@
 //   request_role_log   every grant / revoke / apply / undo / approve / decline, with who did it
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const conf = require("./mediaconf");
 
 class Refuse extends Error {
@@ -102,7 +103,7 @@ async function rolesOf(userId) {
 /** May manage every request / issue: an active curator, or a site admin. */
 async function canManage(user) {
   if (!user || !user.userId) return false;
-  if (conf.isAdmin(user)) return true;
+  if (SP.can(user, "media.manage_requests")) return true;
   return isActive(user.userId, "curator");
 }
 
@@ -448,7 +449,7 @@ function register(app, { addUser, discordBridge, noTimers } = {}) {
     timer.unref();
   }
   const admin = (req, res, next) => {
-    if (!conf.isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "media.admin")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.method === "POST" && !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     next();
   };
@@ -461,7 +462,7 @@ function register(app, { addUser, discordBridge, noTimers } = {}) {
     }
   }];
   app.get("/admin/media/roles", addUser, async (req, res) => {
-    if (!conf.isAdmin(req.user)) return res.redirect("/login");
+    if (!SP.can(req.user, "media.admin")) return res.redirect("/login");
     try { res.set("Cache-Control", "no-store"); res.render("requestRolesAdmin", { user: req.user.username, ...(await adminState()) }); }
     catch (e) { console.error("[request-roles] admin page:", conf.errLine(e)); res.status(500).send("Couldn't load the request roles."); }
   });

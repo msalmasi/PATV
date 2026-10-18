@@ -682,8 +682,6 @@
   "admroles.notes.pad_owners": "Pad-Besitzer haben eigene Regeln für ihr eigenes Pad (Raummoderation in ihrem eigenen Raum, nie bei Pepes Admins oder Ownern). Diese Seite ändert sie nicht.",
   "admroles.notes.sync": "Hier gemachte Änderungen erreichen Pepe bei seiner nächsten Synchronisierung, und Änderungen im Chat erscheinen hier genauso. Wenn beide dieselbe Einstellung ändern, gewinnt die neuere Änderung.",
   "admroles.website.h": "Website-Berechtigungen",
-  "admroles.website.pill": "Release 2",
-  "admroles.website.placeholder": "Kommt in Release 2: die eigenen Berechtigungen der Website, hier bearbeitbar.",
   "admroles.chat.h": "Berechtigungen per Chat ändern",
   "admroles.chat.help": "Dieselben Einstellungen, aus jedem Raum, in dem Pepe ist. Es gelten dieselben Regeln wie auf dieser Seite.",
   "admroles.chat.cmd": "Befehl",

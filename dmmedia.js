@@ -30,6 +30,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const media = require("./feedmedia");
 
 const MAX_PER_MESSAGE = 4;
@@ -88,7 +89,7 @@ function init() {
 }
 
 class MediaRefuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+const exempt = (u) => SP.can(u, "dm.limits_exempt");   // 1.99ack (siteperms.js): no picture rules / hourly cap
 const feedConfig = () => { try { return require("./feedstore").config(); } catch (e) { return { max_image_mb: 10, media_min_level: 2, global_quota_gb: 20, min_free_gb: 8 }; } };
 
 /** Why `u` (an account row) can't send pictures, or null. Same rule as feed uploads: 1.99ws - any proven identity
@@ -96,7 +97,7 @@ const feedConfig = () => { try { return require("./feedstore").config(); } catch
 async function pictureRefusal(u) {
   if (!u) return "Sign in first.";
   const V = require("./verified");
-  if (isStaff(u) || (await V.verify(u))) return null;
+  if (exempt(u) || (await V.verify(u))) return null;
   const min = Number(feedConfig().media_min_level) || 0;
   if ((Number(u.level) || 0) >= min) return null;
   return `Sending pictures needs level ${min}, or ${V.LINK_HINT}.`;
@@ -120,7 +121,7 @@ async function open(u, { size, nsfw = false } = {}) {
   if (!Number.isFinite(n) || n < 12) throw new MediaRefuse(400, "That file is empty.");
   if (n > C.max_image_mb * 1024 * 1024) throw new MediaRefuse(413, `Pictures can be up to ${C.max_image_mb} MB.`);
   const t = NOW();
-  if (!isStaff(u)) {
+  if (!exempt(u)) {
     const hr = await getQuery("SELECT COUNT(*) AS n FROM dm_media WHERE owner_id = ? AND created > ?", [u.userId, t - 3600e3]);
     if (hr[0].n >= LIMITS.uploads_per_hour) throw new MediaRefuse(429, "You've sent a lot of pictures this hour - try again later.");
     const day = await getQuery("SELECT COALESCE(SUM(size_declared), 0) AS b FROM dm_media WHERE owner_id = ? AND created > ?", [u.userId, t - 86400e3]);

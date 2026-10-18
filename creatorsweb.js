@@ -11,6 +11,7 @@
 "use strict";
 const CR = require("./creators");
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 function register(app, { addUser, isBotToken }) {
   CR.init().catch((e) => console.error("[creators] init:", e.message));
@@ -31,7 +32,8 @@ function register(app, { addUser, isBotToken }) {
     next();
   };
   const me = async (req) => (req.user && req.user.userId ? (await getQuery("SELECT userId, username, class, level FROM users WHERE userId = ?", [req.user.userId]))[0] || null : null);
-  const staff = (u) => !!(u && (u.class === "Admin" || u.class === "Staff"));
+  const staff = (u) => SP.can(u, "creators.admin");                       // 1.99ack (siteperms.js)
+  const explicitAdmin = (u) => SP.can(u, "creators.config_explicit");
   const post = (path, fn) => app.post(path, addUser, write, async (req, res) => {
     try { res.json({ ok: true, ...(await fn(await me(req), req.body || {}, req)) }); } catch (e) { fail(res, e); }
   });
@@ -109,18 +111,18 @@ function register(app, { addUser, isBotToken }) {
     const u = await me(req);
     if (!staff(u)) return res.redirect("/login");
     res.set("Cache-Control", "no-store"); res.set("X-Robots-Tag", "noindex");
-    try { res.render("admin/creators", { user: u.username, isAdmin: u.class === "Admin", A: await CR.adminView() }); }
+    try { res.render("admin/creators", { user: u.username, isAdmin: explicitAdmin(u), A: await CR.adminView() }); }
     catch (e) { console.error("[creators] admin:", e); res.status(500).send("Couldn't load the creators admin."); }
   });
   app.get("/admin/creators/explicit", addUser, async (req, res) => {
     const u = await me(req);
-    if (!u || u.class !== "Admin") return res.status(u ? 403 : 302).redirect(u ? "/admin" : "/login");
+    if (!explicitAdmin(u)) return res.status(u ? 403 : 302).redirect(u ? (SP.areaHome(u) || "/login") : "/login");
     res.set("Cache-Control", "no-store"); res.set("X-Robots-Tag", "noindex");
     res.render("admin/creatorsExplicit", { user: u.username, isAdmin: true, R: await CR.readiness(), STATUS: CR.GATE_STATUS });
   });
   const adminPost = (path, fn, adminOnly = false) => app.post(path, addUser, write, async (req, res) => {
     const u = await me(req);
-    if (!staff(u) || (adminOnly && u.class !== "Admin")) return res.status(403).json({ ok: false, error: adminOnly ? "Admins only." : "Staff only." });
+    if (!staff(u) || (adminOnly && !explicitAdmin(u))) return res.status(403).json({ ok: false, error: adminOnly ? "Admins only." : "Staff only." });
     try { res.json({ ok: true, ...(await fn(u, req.body || {}, req)) }); } catch (e) { fail(res, e); }
   });
   adminPost("/api/admin/creators/config", async (u, b) => ({ config: await CR.setConfig(b, u.username) }), true);

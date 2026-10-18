@@ -49,6 +49,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DIR = process.env.SB_DIR ? path.resolve(process.env.SB_DIR) : path.join(__dirname, "uploads", "soundboards");
 const CATALOG_FILE = path.join(__dirname, "soundboards.json");
@@ -625,7 +626,9 @@ function register(app, { addUser, isBotToken }) {
     if (!guard.sameSite(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return false; }
     return true;
   };
-  const staff = (u) => !!u && ["Admin", "Staff"].includes(u.class);
+  // 1.99ack (siteperms.js): moderating clips (hidden clips, reports, /admin/soundboards) = soundboards.moderate (Assistants too,
+  // owner decision 2026-10-18); the soundboard settings = soundboards.config (Admins)
+  const staff = (u) => SP.can(u, "soundboards.moderate");
   const padOf = async (slug) => {
     const rooms = require("./rooms");
     return (await rooms.bySlug(String(slug || "").toLowerCase())) || (await require("./roomsweb").resolveRoom(String(slug || "")).catch(() => null));
@@ -843,7 +846,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       const b = req.body || {};
       if (b.config) {
-        if (req.user.class !== "Admin") throw new Refuse(403, "Admins only.");
+        if (!SP.can(req.user, "soundboards.config")) throw new Refuse(403, "Admins only.");
         await setConfig(b.config, req.user.username);
       }
       if (b.clip && ["hide", "restore", "remove", "rerender"].includes(b.action)) {

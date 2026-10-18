@@ -1,4 +1,5 @@
 <%- include('../partials/admin-open', { title: 'Shop pictures', user, section: 'shopart', admIsAdmin: isAdmin }) %>
+<% const artAdmin = (locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals))('shopart.admin'); -%>
 <%#
   views/admin/shopart.ejs - 1.99xr: the shop's "🎨 Generate image" button (shopart.js): who may use it, the caps, the model, and
   the log of every generation (previews are visible to staff here; accepted ones are the public pictures). Admins change the
@@ -36,23 +37,23 @@
 <section class="adm-card" id="settings" aria-labelledby="setT">
   <h2 id="setT">Settings</h2>
   <% if (success && success.length) { %><p class="adm-msg ok" role="status"><%= success[0] %></p><% } %>
-  <% if (!isAdmin) { %><p class="adm-help">Only Admins can change these.</p><% } %>
+  <% if (!artAdmin) { %><p class="adm-help">Only Admins can change these.</p><% } %>
   <form class="adm-form" method="POST" action="/admin/shopart">
-    <label class="ck"><span>Admins + Staff (<code>staff_on</code>)</span><span><input type="checkbox" name="staff_on" value="1"<%= C.staff_on ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> can generate</span></label>
-    <label class="ck"><span>Members (<code>users_on</code>)</span><span><input type="checkbox" name="users_on" value="1"<%= C.users_on ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> can generate (signed in + the shop's level to sell)</span></label>
-    <label><span>Member: per hour</span><input type="number" name="user_per_hour" min="<%= LIMITS.user_per_hour[0] %>" max="<%= LIMITS.user_per_hour[1] %>" value="<%= C.user_per_hour %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label><span>Member: per day</span><input type="number" name="user_per_day" min="<%= LIMITS.user_per_day[0] %>" max="<%= LIMITS.user_per_day[1] %>" value="<%= C.user_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label><span>Staff: per hour</span><input type="number" name="staff_per_hour" min="<%= LIMITS.staff_per_hour[0] %>" max="<%= LIMITS.staff_per_hour[1] %>" value="<%= C.staff_per_hour %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label><span>Staff: per day</span><input type="number" name="staff_per_day" min="<%= LIMITS.staff_per_day[0] %>" max="<%= LIMITS.staff_per_day[1] %>" value="<%= C.staff_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label><span>Whole site: per day (cost guard)</span><input type="number" name="global_per_day" min="<%= LIMITS.global_per_day[0] %>" max="<%= LIMITS.global_per_day[1] %>" value="<%= C.global_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label><span>Engine</span><select name="engine"<%= isAdmin ? '' : ' disabled' %>><% ENGINES.forEach((m) => { %><option value="<%= m %>"<%= m === C.engine ? ' selected' : '' %>><%= { auto: 'auto (sprite, Gemini as fallback)', sprite: 'sprite (Claude)', paint: 'paint (Gemini)' }[m] %></option><% }) %></select></label>
-    <label><span>Sprite model (Claude)</span><select name="sprite_model"<%= isAdmin ? '' : ' disabled' %>><% SPRITE_MODELS.forEach((m) => { %><option<%= m === C.sprite_model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
-    <label><span>Sprite effort</span><select name="sprite_effort"<%= isAdmin ? '' : ' disabled' %>><% EFFORTS.forEach((m) => { %><option<%= m === C.sprite_effort ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
-    <label class="ck"><span>Sprite review (<code>sprite_review</code>)</span><span><input type="checkbox" name="sprite_review" value="1"<%= C.sprite_review ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> Claude looks at its render once and fixes it (about 2× the time and cost)</span></label>
-    <label><span>Paint model (Gemini)</span><select name="model"<%= isAdmin ? '' : ' disabled' %>><% MODELS.forEach((m) => { %><option<%= m === C.model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
+    <label class="ck"><span>Admins + Staff (<code>staff_on</code>)</span><span><input type="checkbox" name="staff_on" value="1"<%= C.staff_on ? ' checked' : '' %><%= artAdmin ? '' : ' disabled' %>> can generate</span></label>
+    <label class="ck"><span>Members (<code>users_on</code>)</span><span><input type="checkbox" name="users_on" value="1"<%= C.users_on ? ' checked' : '' %><%= artAdmin ? '' : ' disabled' %>> can generate (signed in + the shop's level to sell)</span></label>
+    <label><span>Member: per hour</span><input type="number" name="user_per_hour" min="<%= LIMITS.user_per_hour[0] %>" max="<%= LIMITS.user_per_hour[1] %>" value="<%= C.user_per_hour %>"<%= artAdmin ? '' : ' disabled' %>></label>
+    <label><span>Member: per day</span><input type="number" name="user_per_day" min="<%= LIMITS.user_per_day[0] %>" max="<%= LIMITS.user_per_day[1] %>" value="<%= C.user_per_day %>"<%= artAdmin ? '' : ' disabled' %>></label>
+    <label><span>Staff: per hour</span><input type="number" name="staff_per_hour" min="<%= LIMITS.staff_per_hour[0] %>" max="<%= LIMITS.staff_per_hour[1] %>" value="<%= C.staff_per_hour %>"<%= artAdmin ? '' : ' disabled' %>></label>
+    <label><span>Staff: per day</span><input type="number" name="staff_per_day" min="<%= LIMITS.staff_per_day[0] %>" max="<%= LIMITS.staff_per_day[1] %>" value="<%= C.staff_per_day %>"<%= artAdmin ? '' : ' disabled' %>></label>
+    <label><span>Whole site: per day (cost guard)</span><input type="number" name="global_per_day" min="<%= LIMITS.global_per_day[0] %>" max="<%= LIMITS.global_per_day[1] %>" value="<%= C.global_per_day %>"<%= artAdmin ? '' : ' disabled' %>></label>
+    <label><span>Engine</span><select name="engine"<%= artAdmin ? '' : ' disabled' %>><% ENGINES.forEach((m) => { %><option value="<%= m %>"<%= m === C.engine ? ' selected' : '' %>><%= { auto: 'auto (sprite, Gemini as fallback)', sprite: 'sprite (Claude)', paint: 'paint (Gemini)' }[m] %></option><% }) %></select></label>
+    <label><span>Sprite model (Claude)</span><select name="sprite_model"<%= artAdmin ? '' : ' disabled' %>><% SPRITE_MODELS.forEach((m) => { %><option<%= m === C.sprite_model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
+    <label><span>Sprite effort</span><select name="sprite_effort"<%= artAdmin ? '' : ' disabled' %>><% EFFORTS.forEach((m) => { %><option<%= m === C.sprite_effort ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
+    <label class="ck"><span>Sprite review (<code>sprite_review</code>)</span><span><input type="checkbox" name="sprite_review" value="1"<%= C.sprite_review ? ' checked' : '' %><%= artAdmin ? '' : ' disabled' %>> Claude looks at its render once and fixes it (about 2× the time and cost)</span></label>
+    <label><span>Paint model (Gemini)</span><select name="model"<%= artAdmin ? '' : ' disabled' %>><% MODELS.forEach((m) => { %><option<%= m === C.model ? ' selected' : '' %>><%= m %></option><% }) %></select></label>
     <p class="adm-help" style="grid-column:1/-1">Every try counts toward the caps (refused and failed ones too - each one is a model call). One picture at a time per account.
        Unused previews are deleted after a day.</p>
-    <% if (isAdmin) { %><div style="grid-column:1/-1"><button type="submit" class="adm-btn">Save</button></div><% } %>
+    <% if (artAdmin) { %><div style="grid-column:1/-1"><button type="submit" class="adm-btn">Save</button></div><% } %>
   </form>
 </section>
 

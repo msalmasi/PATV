@@ -35,6 +35,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const relay = require("./bridge-relay");
 
 const SECS = Object.freeze([10, 20, 30]);
@@ -75,7 +76,7 @@ const deps = {
  *  room-moderation caps on their linked login (the ⋯ menu's source). Pepe re-checks with chat !clip's admin rule. */
 function clipAdmin(R, u) {
   if (!u) return false;
-  if (u.class === "Admin") return true;
+  if (SP.can(u, "camclip.override")) return true;
   return !!(u.camfrogUsername && deps.modCaps(R, u.camfrogUsername));
 }
 function _setDeps(d) { Object.assign(deps, d || {}); }

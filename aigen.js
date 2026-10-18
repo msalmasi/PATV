@@ -58,6 +58,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const store = require("./feedstore");
 const media = require("./feedmedia");
 const rooms = require("./rooms");
@@ -306,7 +307,7 @@ async function create(user, b, { queue, audit } = {}) {
   if (open.length >= MAX_OPEN) throw new Refuse(429, `You have ${open.length} generations going - wait for one to finish.`);
   if (kind === "video" && open.filter((x) => x.kind === "video").length >= MAX_OPEN_VIDEO) throw new Refuse(429, "One video at a time - wait for the one that's generating.");
   const C = store.config();
-  if (!store.isStaff(u)) {
+  if (!SP.can(u, "feed.limits_exempt")) {
     if ((await store.usedBytes(u.userId)) + (kind === "video" ? 20 : 3) * 1024 * 1024 > C.user_quota_mb * 1024 * 1024) {
       throw new Refuse(413, `You're using your ${C.user_quota_mb} MB of space - delete some old posts to make room.`);
     }
@@ -498,7 +499,7 @@ async function result(b) {
   }
   const u = await store.account(j.user_id);
   const room = j.origin === "room";
-  if (!store.isStaff(u) && !(room && store.isPepe(u)) && (await store.usedBytes(j.user_id)) + size > C.user_quota_mb * 1024 * 1024) {
+  if (!SP.can(u, "feed.limits_exempt") && !(room && store.isPepe(u)) && (await store.usedBytes(j.user_id)) + size > C.user_quota_mb * 1024 * 1024) {
     await finish(j, "failed", { message: `you're using your ${C.user_quota_mb} MB of space` }, true);
     throw new Refuse(413, `You're using your ${C.user_quota_mb} MB of space`);
   }
@@ -604,7 +605,7 @@ async function roomStart(b) {
     if (why) return skip(why.message);
     const bud = await store.postBudget(linked);
     if (bud.left <= 0) return skip(bud.why || "post limit");
-    if (!store.isStaff(linked) && (await store.usedBytes(linked.userId)) + (kind === "video" ? 20 : 3) * 1024 * 1024 > C.user_quota_mb * 1024 * 1024) {
+    if (!SP.can(linked, "feed.limits_exempt") && (await store.usedBytes(linked.userId)) + (kind === "video" ? 20 : 3) * 1024 * 1024 > C.user_quota_mb * 1024 * 1024) {
       return skip("the member's storage is full");
     }
     byline = `✨ Made with ${what} in the Camfrog room.`;

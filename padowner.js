@@ -48,6 +48,7 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 
 // 1.99tf: every room-scoped Pepe setting the OWNER may change (camfrog-bot pepe_roomowner.OWNER_SPECS - Pepe re-checks each).
@@ -356,7 +357,7 @@ async function pageData(R, viewer) {
   const safe = async (fn, d = null) => { try { return await fn(); } catch (e) { console.error("[padowner]", e.message); return d; } };
   // 1.99uu: every pad has a vault (connected to a chat room or not) - the vault, top-up and payout cards show on any pad
   const vaultPad = require("./roomvaults").hasVault(R.id);
-  const vault = vaultPad ? await safe(() => require("./roomvaults").card(R.id, viewer, { canManage: true, staff: rooms.isStaff(viewer) })) : null;
+  const vault = vaultPad ? await safe(() => require("./roomvaults").card(R.id, viewer, { canManage: true })) : null;
   const roy = R.owner && R.owner.userId ? await safe(() => require("./royalties").status(R.id, R.owner.userId)) : null;
   // E-4: what the owner earned from the payout recipe's owner share (recipe.js credits)
   const share = R.owner && R.owner.userId ? await safe(() => require("./recipe").earned(R.id, R.owner.userId, "owner")) : null;
@@ -370,7 +371,7 @@ async function pageData(R, viewer) {
   const u = (await getQuery("SELECT camfrogUsername, points_balance FROM users WHERE userId = ?", [viewer.userId]))[0] || {};
   const recent = await safe(() => require("./actions").recentFor(viewer.userId, "owner", 6), []);
   return {
-    room: R, slug, camfrog, vaultPad, staff: rooms.isStaff(viewer), mine: !!(R.owner && R.owner.userId === viewer.userId),
+    room: R, slug, camfrog, vaultPad, staff: SP.can(viewer, "pads.manage_any"), mine: !!(R.owner && R.owner.userId === viewer.userId),
     vault, roy, share, prime: prem && prem.pad ? prem.pad : null, primePrice: prem && prem.prices ? prem.prices.prime_time : null,
     primePerks: prem ? prem.perks : null, stage, requested: ownerStage ? ownerStage.requested.length : 0,
     pepe, live, linked: u.camfrogUsername || null, balance: Number(u.points_balance) || 0, recent,
@@ -528,7 +529,7 @@ function register(app, { addUser }) {
       if (off) return bad(res, 409, "Switched off by PATV admins right now - your setting is kept for when it's back.");
     }
     // 1.99tn: a burst limit per account + pad (Pepe limits per room too); staff aren't limited
-    if (!rooms.isStaff(req.user)) {
+    if (!SP.can(req.user, "pads.manage_any")) {
       const rk = req.user.userId + "|" + R.id, t = Date.now();
       const hits = (SET_HITS.get(rk) || []).filter((x) => t - x < SET_WINDOW_MS);
       if (hits.length >= SET_MAX) {
@@ -555,7 +556,7 @@ function register(app, { addUser }) {
     const text = cleanTopic((req.body || {}).text);
     const why = topicProblem(text);
     if (why) return bad(res, 400, why);
-    if (!rooms.isStaff(req.user)) {
+    if (!SP.can(req.user, "pads.manage_any")) {
       const t = Date.now();
       const hits = (TOPIC_HITS.get(R.id) || []).filter((x) => t - x < 3600e3);
       if (hits.length >= TOPIC_MAX_HOUR) {
@@ -580,7 +581,7 @@ function register(app, { addUser }) {
     const R = await ownedPad(req, res); if (!R) return;
     const verb = String((req.body || {}).verb || "");
     if (!CTL_VERBS.has(verb)) return bad(res, 400, "Join, leave or rejoin.");
-    const staff = rooms.isStaff(req.user);
+    const staff = SP.can(req.user, "pads.manage_any");
     if (!staff && !require("./premium").isPrimePlus(R.id)) {
       return bad(res, 403, "Pepe sits in Camfrog rooms for 💎 Prime Time Plus pads - get Plus for this pad first.");
     }
@@ -628,7 +629,7 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "no-store");
     const R = await ownedVaultPad(req, res); if (!R) return;          // 1.99uu: any pad (the Pepe part: Camfrog pads)
     try {
-      const vault = await require("./roomvaults").card(R.id, req.user, { canManage: true, staff: rooms.isStaff(req.user) });
+      const vault = await require("./roomvaults").card(R.id, req.user, { canManage: true });
       const u = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [req.user.userId]))[0] || {};
       const pepe = rooms.platformOf(R.id) === "camfrog" ? await settingsFor(R.id) : null;
       res.json({ ok: true, vault, pepe, balance: Number(u.points_balance) || 0 });

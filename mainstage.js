@@ -58,6 +58,7 @@ const crypto = require("crypto");
 const childProcess = require("child_process");
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 const embeds = require("./stageembed");
 
@@ -577,7 +578,7 @@ async function book(user, opts = {}) {
   // the owner's slot price; 0 = free (the default). 1.99lw: a 📼 Plex slot has no slot fee (the title is paid as it plays)
   const price = library ? 0 : Math.min(C.price_per_min, RS.slot_price || 0);
   const hold = minutes * price;
-  const staffOrOwner = rooms.isStaff(user) || !!(RS.owner && RS.owner.userId === user.userId);
+  const staffOrOwner = SP.can(user, "stage.approval_bypass") || !!(RS.owner && RS.owner.userId === user.userId);
   const needsApproval = scheduled && !!RS.approval && !staffOrOwner;
   const key = mode === "stream" && !library ? newKey() : null;      // a 📼 slot gets its key when it starts (mediaqueue.js)
   const id = uuidv4();
@@ -1738,14 +1739,14 @@ function register(app, { addUser, isBotToken, noTimers }) {
   const express = require("express");
   if (!noTimers) start();
   require("./webrtc").register(app, { addUser, isBotToken, noTimers });   // 1.99et: WHIP auth hook, /api/turn, browser WHIP (flag webrtc_enabled); 1.99fd: Pepe's WHIP bearer (bot)
-  const isStaff = rooms.isStaff;
+  const stageStaff = (u) => SP.can(u, "stage.admin");   // 1.99ack (siteperms.js): /stage/admin and its APIs
   const fail = (res, e) => {
     if (e && (e.refuse || (e.status && e.status < 500 && e.message))) return res.status(e.status).json({ ok: false, error: e.message });
     console.error("[stage]", e);
     res.status(500).json({ ok: false, error: "Something went wrong - nothing was charged." });
   };
   const needUser = (req, res, next) => (req.user && req.user.userId ? next() : res.status(401).json({ ok: false, error: "Sign in first." }));
-  const needStaff = (req, res, next) => (isStaff(req.user) ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
+  const needStaff = (req, res, next) => (stageStaff(req.user) ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
   const actor = (req) => (req.user && req.user.username) || "?";
   // the slot's room: may this user run it (owner of that room, or staff)?
   const manages = async (req, s) => !!s && (await rooms.canManage(req.user, s.room_id || rooms.HOUSE_ROOM));
@@ -1790,7 +1791,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     if (me) { try { plex = await require("./medialib").goLiveInfo({ userId: me.userId, username: me.username, class: me.class }); } catch (e) { plex = null; } }
     res.locals.og = { title: "Go live on PATV", description: "Stream to a pad's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Slots are free on most pads.",
                       image: res.locals.ogBase + "/og/page.png?t=Go%20live%20on%20PATV", url: res.locals.ogBase + "/stage" };
-    res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: isStaff(req.user),
+    res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: stageStaff(req.user),
                               rooms: all.map((r) => ({ id: r.id, slug: r.slug, title: r.title, slot_count: r.slot_count, slot_price: r.slot_price, approval: r.approval, house: r.house,
                                                        max_min: maxMinutesFor(r), library_max: libraryMaxFor(r),   // 1.99lw
                                                         owner: r.owner ? r.owner.display || r.owner.username : null })),
@@ -1941,8 +1942,8 @@ function register(app, { addUser, isBotToken, noTimers }) {
 
   // ── admin ──
   app.get("/stage/admin", addUser, async (req, res) => {
-    if (!isStaff(req.user)) return res.redirect("/login");
-    res.render("stageAdmin", { user: req.user.username, isAdmin: req.user.class === "Admin", state: await adminState() });
+    if (!stageStaff(req.user)) return res.redirect("/login");
+    res.render("stageAdmin", { user: req.user.username, isAdmin: SP.can(req.user, "onair.config"), state: await adminState() });
   });
   app.get("/api/stage/admin/state", addUser, needStaff, async (req, res) => {
     try { res.set("Cache-Control", "no-store"); res.json({ ok: true, ...(await adminState()) }); } catch (e) { fail(res, e); }

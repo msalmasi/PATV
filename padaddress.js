@@ -27,6 +27,7 @@
 //   POST /api/rooms/:slug/address {slug}        rename (JSON + same-site) -> {ok, slug, href}
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 
 const MIN_LEN = 3;
@@ -104,7 +105,7 @@ async function check(raw, roomId) {
 async function nextRenameAt(user, R) {
   if (!R || R.profile || rooms.isProfile(R.id)) return null;
   if (!(await rooms.canManage(user, R.id))) return null;
-  if (rooms.isStaff(user)) return 0;
+  if (SP.can(user, "pads.manage_any")) return 0;
   const C = await require("./padcfg").get();
   const last = Number(R.slug_changed_at) || 0;
   return last ? last + C.rename_days * DAY : 0;
@@ -142,7 +143,7 @@ async function rename(user, roomId, raw, { now = Date.now() } = {}) {
     const fv = await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feed_view'");
     if (fv.length) await runQuery("UPDATE OR REPLACE feed_view SET scope = ? WHERE scope = ?", ["p/" + slug, "p/" + old]);
   });
-  await rooms.event(R.id, "pad-address", actor, `p/${old} -> p/${slug}${rooms.isStaff(user) && !(R.owner && user && R.owner.userId === user.userId) ? " (site staff)" : ""}`);
+  await rooms.event(R.id, "pad-address", actor, `p/${old} -> p/${slug}${SP.can(user, "pads.manage_any") && !(R.owner && user && R.owner.userId === user.userId) ? " (site staff)" : ""}`);
   await rooms.loadCache();
   // the bridge's live room shows the chosen slug from now on (bridge.roomFor reads slug_set)
   try { const B = require("./bridge")._rooms.get(R.id); if (B) B.slug = slug; } catch (e) { /* no bridge */ }

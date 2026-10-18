@@ -33,6 +33,7 @@
 "use strict";
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 const welcome = require("./welcome");
 
@@ -502,10 +503,10 @@ async function telemetry(nDays = 7) {
            layer_moves: layerMoves, recipe: RECIPE, notes: { burn_reserve: 0 } };
 }
 
-async function isAdmin(req) {
+async function policyAdmin(req) {
   if (!req.user || !req.user.userId) return false;
   const u = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
-  return !!(u && u.class === "Admin");
+  return SP.can(u || null, "econ.telemetry_policy");
 }
 
 function register(app, { isBotToken, addUser, resolveRoom } = {}) {
@@ -536,7 +537,7 @@ function register(app, { isBotToken, addUser, resolveRoom } = {}) {
   });
   app.get("/api/admin/econ/telemetry", addUser, async (req, res) => {
     try {
-      if (!(await isAdmin(req))) return res.status(403).json({ ok: false, error: "admins only" });
+      if (!(await policyAdmin(req))) return res.status(403).json({ ok: false, error: "admins only" });
       res.set("Cache-Control", "no-store");
       res.json(await telemetry(Math.max(1, Math.min(30, int(req.query.days, 7)))));
     } catch (e) { console.error("[econ] telemetry:", e); res.status(500).json({ ok: false, error: e.message }); }
@@ -544,7 +545,7 @@ function register(app, { isBotToken, addUser, resolveRoom } = {}) {
   app.post("/api/admin/econ/config", addUser, async (req, res) => {
     try {
       if (!guard.sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
-      if (!(await isAdmin(req))) return res.status(403).json({ ok: false, error: "admins only" });
+      if (!(await policyAdmin(req))) return res.status(403).json({ ok: false, error: "admins only" });
       res.json({ ok: true, config: await setConfig(req.body || {}) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });

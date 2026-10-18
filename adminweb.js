@@ -11,13 +11,15 @@
 //   /admin/system       site health: version, uptime, database, disk
 //   /feed/admin, /pads/admin, /stage/admin render in the same shell (their own routes and gates).
 //
-// Every page here has the gate the old /admin/panel had: a signed-in Admin or Staff (req.user.class), else a
-// flash + redirect to /login. Admin-only data (Pepe, Reserve, loans, stale cleanup, DM reports) is only read
-// for an account whose class in the DATABASE is Admin, like the APIs behind those cards check.
+// Every page here has the gate the old /admin/panel had: admin.area (siteperms.js - Admin / Staff by default), else a
+// flash + redirect to /login (1.99ack: an Assistant holding a page's own capability is sent to that page instead).
+// Admin-only data (Pepe, Reserve, loans, stale cleanup: admin.sensitive_overview; DM reports: dm.report_review) is
+// only read for an account whose class in the DATABASE holds it, like the APIs behind those cards check.
 // Old URLs: /admin/panel (and its #welcome-admin / #stale-admin anchors) -> /admin, which forwards the anchors.
 "use strict";
 const { execFileSync } = require("child_process");
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");
 
 const SECTION_VIEWS = {
   users: "Users & Accounts",
@@ -37,7 +39,6 @@ function sha() {
   return siteSha;
 }
 
-const isStaffClass = (c) => c === "Admin" || c === "Staff";
 const safe = async (fn, dflt = null) => { try { return await fn(); } catch (e) { return dflt; } };
 const parse = (s) => { try { return JSON.parse(s); } catch (e) { return null; } };
 
@@ -81,11 +82,11 @@ async function loanStatus() {
            reserveOpen: reserveOpen.length, book: d.reserve ? d.reserve.book : null, room: d.reserve ? d.reserve.room : null,
            enabled: d.reserve ? !!d.reserve.enabled : null, updated: r.updated };
 }
-async function reportStatus(isAdmin) {
+async function reportStatus(me) {
   const store = require("./feedstore");
   const posts = await store.reports();
   const users = await store.userReports();
-  const dms = isAdmin ? await safe(() => require("./messages").reportQueue(), []) : null;
+  const dms = SP.can(me, "dm.report_review") ? await safe(() => require("./messages").reportQueue(), []) : null;
   return { posts: posts.length, postsUrgent: posts.filter((x) => x.urgent).length, users: users.length, usersUrgent: users.filter((x) => x.urgent).length,
            dms: dms ? dms.length : null, dmsUrgent: dms ? dms.filter((x) => x.urgent).length : null };
 }
@@ -123,8 +124,8 @@ const daysUntil = (ymd) => {
 };
 
 async function overview(me) {
-  const isAdmin = !!me && me.class === "Admin";
-  const [reports, stage, shop] = await Promise.all([safe(() => reportStatus(isAdmin)), safe(stageStatus), safe(shopStatus)]);
+  const isAdmin = SP.can(me, "admin.sensitive_overview");
+  const [reports, stage, shop] = await Promise.all([safe(() => reportStatus(me)), safe(stageStatus), safe(shopStatus)]);
   const [pepe, reserve, loans, stale] = isAdmin
     ? await Promise.all([safe(pepeStatus), safe(reserveStatus), safe(loanStatus), safe(staleStatus)])
     : [null, null, null, null];
@@ -174,13 +175,8 @@ async function systemInfo() {
 }
 
 function register(app, { addUser }) {
-  // the old gate, unchanged (was the /admin/panel handler in index.js)
-  const gate = (req, res, next) => {
-    const userType = req.user ? req.user.class : null;
-    if (isStaffClass(userType)) return next();
-    if (typeof req.flash === "function") req.flash("error", "Access denied. You must be an admin or staff to access this page.");
-    return res.redirect("/login");
-  };
+  // the old gate (was the /admin/panel handler in index.js), now admin.area (1.99ack siteperms.js)
+  const gate = SP.gate();
   const flashes = (req) => ({
     errors: typeof req.flash === "function" ? req.flash("error") : [],
     success: typeof req.flash === "function" ? req.flash("success") : [],
@@ -190,7 +186,7 @@ function register(app, { addUser }) {
       const me = await freshMe(req);
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
-      res.render("admin/" + section, { user: req.user.username, title, section, me, isAdmin: !!me && me.class === "Admin",
+      res.render("admin/" + section, { user: req.user.username, title, section, me, isAdmin: SP.can(me, "admin.sensitive_overview"),
                                        ...flashes(req), ...(data ? await data(req, me) : {}) });
     } catch (e) {
       console.error("[admin] " + section + ":", e);
@@ -209,7 +205,7 @@ function register(app, { addUser }) {
   app.get("/admin", addUser, gate, page("overview", "Admin · Overview", async (req, me) => ({ ov: await overview(me) })));
   app.get("/admin/users", addUser, gate, page("users", "Admin · Users & Accounts"));
   app.get("/admin/economy", addUser, gate, page("economy", "Admin · Economy", async (req, me) => {
-    const isAdmin = !!me && me.class === "Admin";
+    const isAdmin = SP.can(me, "admin.sensitive_overview");
     const roy = await safe(() => require("./royalties").summary(), null);
     return { reserve: isAdmin ? await safe(reserveStatus) : null, loans: isAdmin ? await safe(loanStatus) : null, roy, shop: await safe(shopStatus),
              inc: isAdmin ? await safe(incentiveStatus) : null,
@@ -223,7 +219,7 @@ function register(app, { addUser }) {
   // 1.99ol: + the casino front-end switches (casino_settings bj_front / hm_front; saved through /api/casino/admin/settings)
   // 1.99xq: + the GTF heist market settings (heistmarket.adminView; was a card on /gtf/market), admins only
   app.get("/admin/games", addUser, gate, page("games", "Admin · Games", async (req, me) => ({ casino: await safe(() => require("./casino/service").loadSettings(true), null),
-    hm: me && me.class === "Admin" ? await safe(() => require("./heistmarket").adminView(), null) : null })));
+    hm: SP.can(me, "games.config") ? await safe(() => require("./heistmarket").adminView(), null) : null })));
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));
   app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge"));
   app.get("/admin/pepe", addUser, gate, page("pepe", "Admin · Pepe"));

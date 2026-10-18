@@ -3,10 +3,11 @@
 // existed. Now it does:
 //   POST /api/admin/update-level  {username, mode: "add" | "set_level", amount, reason?, confirm?}
 //        without confirm: a preview {before, after, xpDelta} and nothing changes; with confirm: true it applies.
-//        Admins only (class "Admin"), same-site, JSON. No level-up rewards (see user.controller.js adminAdjustXp).
+//        Admins only (1.99ack: users.xp, siteperms.js), same-site, JSON. No level-up rewards (see user.controller.js adminAdjustXp).
 //   GET  /api/admin/xp/recent   the last adjustments (admin_audit, action "xp")
 "use strict";
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 const audit = require("./adminaudit");
 const uc = require("./user.controller");
@@ -14,7 +15,7 @@ const uc = require("./user.controller");
 async function adminOf(req) {
   if (!req.user || !req.user.userId) return null;
   const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-  return u && u.class === "Admin" ? u : null;
+  return SP.can(u, "users.xp") ? u : null;
 }
 
 function register(app, { addUser }) {

@@ -20,6 +20,7 @@
 // whose master is off as "Switched off by PATV admins" (padowner.js masters_off) with the owner's own value kept.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
 const STATE_MAX = 512 * 1024;
@@ -131,7 +132,7 @@ async function requestTest(user, value) {
 /** An admin's change -> the queued action ids (one per CHUNK switches). */
 async function request(user, b = {}) {
   await init();
-  if (!user || user.class !== "Admin") throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "pepe.rooms_commands_audio")) throw new Refuse(403, "Admins only.");
   const field = String(b.field || "").toLowerCase();
   if (field !== "master" && field !== "default" && field !== "test") throw new Refuse(400, "Master or default?");
   const value = String(b.value || "").toLowerCase();
@@ -171,7 +172,7 @@ function register(app, { isBotToken, addUser }) {
   init().catch((e) => console.error("[cmdswitch] init:", e.message));
   const admin = (json) => (req, res, next) => {
     if (!req.user || !req.user.userId) return json ? res.status(401).json({ ok: false, error: "Sign in first." }) : res.redirect("/login?next=/admin/pepe/commands");
-    if (req.user.class !== "Admin") return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
+    if (!SP.can(req.user, "pepe.rooms_commands_audio")) return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
     next();
   };
   const fetchOnly = (req, res, next) => (guard.sameSite(req) && req.get("X-Requested-With") === "fetch"

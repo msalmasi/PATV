@@ -10,6 +10,7 @@
 //                                a read-only dry run
 // Rate limits: link start 10 / 15 min per account and 30 per IP; finish 20 / 15 min per account.
 "use strict";
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const CP = require("./cryptopay");
 const SPG = require("./supportpage");   // 1.99mn: /support extras (goal meter, total raised, recent supporters) - admin switches, off by default
 
@@ -37,7 +38,7 @@ function register(app, { addUser, noTimers } = {}) {
   const finishUser = guard.limiter({ max: 20, windowMs: 15 * 60 * 1000 });
   CP.init().then(() => { if (!noTimers) CP.start(); }).catch((e) => console.error("[crypto] setup:", e.message));
 
-  const isAdmin = (u) => !!u && u.class === "Admin";
+  const cryptoAdmin = (u) => SP.can(u, "crypto.admin");   // 1.99ack (siteperms.js, locked: Admins)
   const fail = (res, e) => {
     if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message });
     console.error("[crypto]", e && e.message);
@@ -47,7 +48,7 @@ function register(app, { addUser, noTimers } = {}) {
     res.set("Cache-Control", "no-store");
     if (req.method === "POST" && !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
-    if (admin && !isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (admin && !cryptoAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
     try { await CP.init(); res.json({ ok: true, ...(await fn(req, req.body || {})) }); } catch (e) { fail(res, e); }
   }];
   const stripeOn = () => { try { return require("./stripebilling").enabled(); } catch (e) { return false; } };
@@ -70,7 +71,7 @@ function register(app, { addUser, noTimers } = {}) {
   app.get("/support", addUser, async (req, res, next) => {
     try {
       await CP.init();
-      const admin = isAdmin(req.user);
+      const admin = cryptoAdmin(req.user);
       const cryptoOn = CP.enabled();
       if (!cryptoOn && !stripeOn() && !admin) return next("route");
       const me = req.user && req.user.userId ? req.user : null;
@@ -126,7 +127,7 @@ function register(app, { addUser, noTimers } = {}) {
 
   // ── admin ──
   app.get("/admin/crypto", addUser, async (req, res, next) => {
-    if (!isAdmin(req.user)) return res.redirect("/login");
+    if (!cryptoAdmin(req.user)) return res.redirect("/login");
     try {
       await CP.init();
       await SPG.init();

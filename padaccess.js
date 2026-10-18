@@ -35,6 +35,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 
 const LEVELS = Object.freeze(["public", "members", "approved"]);
@@ -52,7 +53,7 @@ const READ_IP_MS = 10 * 60e3;            // an IP that showed a good token may r
 const SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
 let NOW = () => Date.now();
 
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+const insideAll = (u) => SP.can(u, "pads.approved_inside");   // 1.99ack (siteperms.js): inside every Approved pad
 const cleanLevel = (v) => (LEVELS.includes(String(v || "").toLowerCase()) ? String(v).toLowerCase() : null);
 
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
@@ -107,7 +108,7 @@ const isMember = (userId, roomId) => !!userId && !!(MEMBERS.get(String(roomId ||
 /** Inside an Approved pad: its owner, site Admins / Staff, and the members the owner approved. */
 function inside(u, roomId) {
   if (!u || !u.userId) return false;
-  if (isStaff(u)) return true;
+  if (insideAll(u)) return true;
   const own = ownerIdOf(roomId);
   if (own && own === String(u.userId)) return true;
   return isMember(u.userId, roomId);
@@ -128,7 +129,7 @@ function full(u, roomId) {
 }
 /** The Approved pads `u` may NOT see (staff: none). The feed's queries leave their placements out. */
 function blockedFor(u) {
-  if (isStaff(u)) return [];
+  if (insideAll(u)) return [];
   const out = [];
   for (const [id, lv] of LEVEL) if (lv === "approved" && !inside(u, id)) out.push(id);
   return out;
@@ -151,7 +152,7 @@ async function state(u, roomId) {
   const r = signed ? await row(roomId, u.userId) : null;
   const own = signed && ownerIdOf(roomId) === String(u.userId);
   const retryAt = r && (r.status === "denied" || r.status === "removed") ? Number(r.decided_at || 0) + RETRY_MS : null;
-  return { level: lv, info: INFO[lv], see: canSee(u, roomId), full: full(u, roomId), inside: inside(u, roomId), owner: own, staff: isStaff(u),
+  return { level: lv, info: INFO[lv], see: canSee(u, roomId), full: full(u, roomId), inside: inside(u, roomId), owner: own, staff: insideAll(u),
            member: signed && isMember(u.userId, roomId), request: r ? r.status : null, retryAt: retryAt && retryAt > NOW() ? retryAt : null };
 }
 

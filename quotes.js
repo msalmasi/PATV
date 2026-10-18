@@ -31,6 +31,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const MAX_LINES = 20, SPAN_MAX = 40, LINE_MAX = 490, TITLE_MAX = 140, PHRASE_MAX = 60;   // 1.99acf: LINE_MAX 490 = the bridge's inbound cap (a quoted line stays whole)
 // 1.99acf: a quoted line is cut by code points, as bridge.js caps it (an emoji counts once; never half a surrogate pair)
@@ -200,7 +201,7 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
     }
   }
   const author = viaPepe ? null : (await getQuery("SELECT userId, class, points_balance FROM users WHERE userId = ?", [authorId]))[0];
-  const price = !author || author.class === "Admin" ? 0 : Math.max(0, Number(L.config().quote_price) || 0);
+  const price = !author || SP.can(author, "quotes.free") ? 0 : Math.max(0, Number(L.config().quote_price) || 0);
   if (price > 0 && Number(author.points_balance || 0) < price) {
     throw new Refuse(402, `A quote costs ${price.toLocaleString("en-US")} PAT - you have ${Number(author.points_balance || 0).toLocaleString("en-US")}.`);
   }

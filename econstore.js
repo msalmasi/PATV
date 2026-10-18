@@ -23,6 +23,7 @@
 // answer carries the new authoritative table, saved here (/api/econ/settings/put). Pepe down: the request waits (TTL).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DOCS = ["econ_layers", "econ_monetary", "econ_treasury", "econ_launchpad", "econ_rooms", "vault_marks", "route_keys", "stake_drained"];
 const MAX_DOC = 4 * 1024 * 1024;
@@ -232,7 +233,7 @@ async function requestEdit(user, body, ip) {
   const ctl = require("./pepecontrol");
   const bcrypt = require("bcrypt");
   const fail = (status, message) => Object.assign(new Error(message), { status });
-  if (!user || user.class !== "Admin") throw fail(403, "Admins only.");
+  if (!SP.can(user, "econ.pepe_econ_cmds")) throw fail(403, "Admins only.");
   if (!ctl.takeNonce(user, body.nonce)) throw fail(409, "That confirmation was already used or has expired - start again.");
   const row = (await getQuery("SELECT password FROM users WHERE userId = ?", [user.userId]))[0];
   const hash = row && typeof row.password === "string" && row.password.startsWith("$2") ? row.password : null;
@@ -281,7 +282,7 @@ function register(app, { isBotToken, addUser }) {
   const ctl = require("./pepecontrol");
   const admin = (req, res, next) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in first." });
-    if (req.user.class !== "Admin") return res.status(403).json({ error: "Admins only." });
+    if (!SP.can(req.user, "econ.pepe_econ_cmds")) return res.status(403).json({ error: "Admins only." });
     next();
   };
   const csrf = (req, res, next) => {

@@ -25,6 +25,7 @@
 //   comps_settings  key/value (plex_trial_days)
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DAY = 24 * 3600 * 1000;
 const DEFAULTS = { plex_trial_days: 7 };
@@ -317,10 +318,10 @@ async function adminState(t = clock()) {
 }
 
 // ── routes ──
-async function isAdminNow(req) {
+async function compsAdminNow(req) {
   if (!req.user || !req.user.userId) return null;
   const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-  return u && u.class === "Admin" ? { userId: u.userId, username: u.username } : null;
+  return SP.can(u, "comps.manage") ? { userId: u.userId, username: u.username } : null;
 }
 function register(app, { addUser }) {
   init().catch((e) => console.error("[comps] init:", e.message));
@@ -328,7 +329,7 @@ function register(app, { addUser }) {
   const api = (fn) => [addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      const me = await isAdminNow(req);
+      const me = await compsAdminNow(req);
       if (!me) return res.status(403).json({ ok: false, error: "Admins only." });
       if (req.method === "POST" && (!guard.sameSite(req) || !req.is("application/json"))) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
       res.json({ ok: true, ...(await fn(req.body || {}, me, req)) });
@@ -339,7 +340,7 @@ function register(app, { addUser }) {
     }
   }];
   app.get(["/admin/comps", "/admin/premium"], addUser, async (req, res) => {
-    const me = await isAdminNow(req).catch(() => null);
+    const me = await compsAdminNow(req).catch(() => null);
     if (!me) { if (typeof req.flash === "function") req.flash("error", "Admins only."); return res.redirect("/login"); }
     if (req.path === "/admin/premium") return res.redirect(302, "/admin/comps" + (req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : ""));
     try {

@@ -579,7 +579,7 @@ async function fromForm(userId, words) {
   const sub = C.low(w[0]);
   const u = (await require("../dbUtils").getQuery("SELECT userId, username, camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   if (!u) return "Couldn't find your account.";
-  const actor = { userId: u.userId, username: u.username, login: u.camfrogUsername || u.username, admin: u.class === "Admin", via: "web" };
+  const actor = { userId: u.userId, username: u.username, login: u.camfrogUsername || u.username, admin: require("../siteperms").can(u, "escrow.override"), via: "web" };
   const amt = (x) => require("../public/js/patamount").parse(x);
   let verb, args;
   if (["reserve", "fed", "bank"].includes(sub) && w.length > 1) { verb = "borrow"; args = { amount: amt(w[1]), term: w[2] || "7d" }; }

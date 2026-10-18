@@ -7,6 +7,7 @@
 // 1.99iv: a 📺 Prime Time pad may have more stage slots than the site cap (premium padPerks().extraSlots)
 const primeSlots = (roomId) => { try { return require("./premium").padPerks(roomId).extraSlots || 0; } catch (e) { return 0; } };
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 const stage = require("./mainstage");
 const royalties = require("./royalties");
@@ -101,7 +102,9 @@ function register(app, { addUser, isBotToken }) {
   };
   const jsonOnly = (req, res, next) => (req.is("application/json") ? next() : res.status(415).json({ ok: false, error: "JSON only." }));
   const needUser = (req, res, next) => (req.user && req.user.userId ? next() : res.status(401).json({ ok: false, error: "Sign in first." }));
-  const needStaff = (req, res, next) => (rooms.isStaff(req.user) ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
+  // 1.99ack (siteperms.js): /pads/admin and its APIs = pads.registry_admin; the owner royalties config = pads.royalties_config (Admins)
+  const needStaff = (req, res, next) => (SP.can(req.user, "pads.registry_admin") ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
+  const needRoyalty = (req, res, next) => (SP.can(req.user, "pads.royalties_config") ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
   const actor = (req) => (req.user && req.user.username) || "?";
   require("./boosts").register(app, { addUser, isBotToken });     // 1.99ee: 🚀 pad boosts (web + Pepe's !boost)
   require("./challengepay").register(app, { addUser, isBotToken });   // mic challenge prizes out of a pad's room-vault escrow
@@ -302,7 +305,12 @@ function register(app, { addUser, isBotToken }) {
 
   // ── admin ──
   app.get("/pads/admin", addUser, async (req, res) => {
-    if (!rooms.isStaff(req.user)) return res.redirect("/login");
+    if (!SP.can(req.user, "pads.registry_admin")) {
+      // 1.99ack: the connection requests only (pads.connect_review - Assistants, by default)
+      if (!SP.can(req.user, "pads.connect_review")) return res.redirect("/login");
+      res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
+      return res.render("roomsAdmin", { user: req.user.username, isAdmin: false, list: [], guide: [], front: null, fp: null, roy: {}, sum: null, padsCfg: null, overview: [] });
+    }
     const list = await rooms.list();
     const g = await guideRows(true, req.user);
     const ov = await royalties.overview();
@@ -315,7 +323,7 @@ function register(app, { addUser, isBotToken }) {
     }
     const sum = await royalties.summary();
     const fp = await rooms.frontStatus().catch(() => null);
-    res.render("roomsAdmin", { user: req.user.username, isAdmin: req.user.class === "Admin", list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
+    res.render("roomsAdmin", { user: req.user.username, isAdmin: SP.can(req.user, "admin.sensitive_overview"), list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
       sum, padsCfg: { config: await require("./padcfg").get(), fields: require("./padcfg").FIELDS, limits: require("./padcfg").LIMITS,   // 1.99iy
                       reclaimable: await require("./padcreate").reclaimCandidates().then((r) => r.length).catch(() => null) },          // 1.99iz
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
@@ -346,7 +354,7 @@ function register(app, { addUser, isBotToken }) {
   app.get("/api/rooms/admin/royalties/summary", addUser, needStaff, async (req, res) => {
     try { res.json({ ok: true, ...(await royalties.summary()) }); } catch (e) { fail(res, e); }
   });
-  app.post("/api/rooms/admin/royalties", addUser, needStaff, jsonOnly, async (req, res) => {
+  app.post("/api/rooms/admin/royalties", addUser, needRoyalty, jsonOnly, async (req, res) => {
     try { res.json({ ok: true, config: await royalties.setConfig(req.body || {}, actor(req)) }); } catch (e) { fail(res, e); }
   });
 }

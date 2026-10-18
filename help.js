@@ -31,6 +31,7 @@ const path = require("path");
 const crypto = require("crypto");
 const SHUTDOWN = require("./shutdown");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const HS = require("./public/js/helpsearch");
 
 const FALLBACK_FILE = path.join(__dirname, "data", "help-commands.json");
@@ -353,10 +354,10 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
     if (!src || !host) return true;
     try { return new URL(src).host === host; } catch (e) { return false; }
   };
-  const isAdmin = async (req) => {
+  const helpAdmin = async (req) => {
     if (!req.user || !req.user.userId) return null;
     const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    return u && u.class === "Admin" ? u : null;
+    return SP.can(u, "help.admin") ? u : null;
   };
 
   app.get("/help", addUser, async (req, res) => {
@@ -405,7 +406,7 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
   app.get("/admin/help", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.redirect("/login");
     try {
-      const a = await isAdmin(req);
+      const a = await helpAdmin(req);
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
       if (!a) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The help questions page is for site admins.", title: "Admins only" });
@@ -419,7 +420,7 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
   });
   const adminApi = async (req, res, next) => {
     if (!sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });
-    const a = await isAdmin(req).catch(() => null);
+    const a = await helpAdmin(req).catch(() => null);
     if (!a) return res.status(403).json({ ok: false, error: "Admins only." });
     next();
   };

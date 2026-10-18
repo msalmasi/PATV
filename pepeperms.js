@@ -247,7 +247,8 @@ async function editorOf(userId) {
   if (!me) return null;
   const login = low(me.camfrogUsername);
   const role = login ? await SR.roleOf(login) : null;
-  const level = me.class === "Admin" ? (LEVEL[role] || 0) : 0;     // an account that lost the Admin class edits nothing
+  // an account that lost the Admin class edits nothing (1.99ack: roles.assign - siteperms.js, locked: Admins)
+  const level = require("./siteperms").can(me, "roles.assign") ? (LEVEL[role] || 0) : 0;
   return { userId: me.userId, username: me.username, cls: me.class, login: login || null, role: role || null, level };
 }
 

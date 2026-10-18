@@ -45,6 +45,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const media = require("./media");
 const fm = require("./feedmedia");
 const rooms = require("./rooms");
@@ -84,7 +85,7 @@ function init() {
 }
 
 const store = () => require("./feedstore");
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+const managesAny = (u) => SP.can(u, "pads.manage_any");   // 1.99ack (siteperms.js; was isStaff)
 const lc = (s) => String(s || "").trim().toLowerCase();
 
 // ── pad mods: Camfrog mod powers in the pad's room, as Pepe reports them for watching linked logins (padmod.js) ──
@@ -199,7 +200,7 @@ function isCapturer(acct, row) {
 /** May `acct` post `row` to its pad? (permission only - privacy / gone are separate) */
 async function mayPost(acct, row) {
   if (!acct) return false;
-  if (isStaff(acct) || isCapturer(acct, row)) return true;
+  if (managesAny(acct) || isCapturer(acct, row)) return true;
   if (row.room && (await rooms.canManage(acct, row.room))) return true;
   return !!(row.room && modCheck(acct, row.room));
 }
@@ -287,7 +288,7 @@ async function postToPad(user, captureId, { caption = "", body = "" } = {}) {
     const what = row.source === "stage" ? (row.kind === "clip" ? "Stage clip" : "Stage snap") : KIND_NOUN[row.kind] || "Capture";
     const title = cap || `${what}${subj.name ? " of " + subj.name : ""} in ${R.title || R.id}`.slice(0, CAPTION_MAX);
     made = await S.create(authorId, { title, body: String(body || "").slice(0, 2000) || undefined, community: R.id, attachments: [att], nsfw: !!Number(row.nsfw), announce: [] },
-                          { free: true, onBehalf: authorId !== acct.userId || isStaff(acct) || (await rooms.canManage(acct, R.id)) });
+                          { free: true, onBehalf: authorId !== acct.userId || managesAny(acct) || (await rooms.canManage(acct, R.id)) });
     await runQuery(`UPDATE story_posts SET post_id = ?, author_id = ?, subject_user_id = ?, subject_login = ?, subject_name = ?, room_title = ? WHERE capture_id = ?`,
                    [made.id, authorId, subj.userId, subj.login, subj.name, R.title || R.id, row.id]);
     // the person on cam hears about it (with the way out) - unless they posted it themselves

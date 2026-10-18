@@ -45,6 +45,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
 const STAGING = !!process.env.STAGING;
@@ -161,7 +162,7 @@ function diff(a, b) { const out = {}; for (const k of Object.keys(FIELDS)) if (a
 const hits = guard.limiter({ max: 20, windowMs: 60 * 1000 });
 async function save(user, body = {}) {
   await init();
-  if (!user || user.class !== "Admin") throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "livecam.admin")) throw new Refuse(403, "Admins only.");
   const key = String(user.userId || user.username || "").toLowerCase();
   if (hits.blocked(key)) throw new Refuse(429, "Slow down - at most 20 changes a minute.");
   hits.hit(key);
@@ -361,7 +362,7 @@ const CODES = {
   slots_busy: [503, "All live cam slots are busy - try again in a bit."],
 };
 const refuse = (code, extra) => new Refuse(CODES[code][0], CODES[code][1], code, extra);
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+const endsAny = (u) => SP.can(u, "livecam.end_any");   // 1.99ack (siteperms.js): end any cam's relay
 const passOf = (userId) => { try { return !!require("./premium").hasPass(userId); } catch (e) { return false; } };
 const maxSlots = (userId) => (passOf(userId) ? cfg().viewers_sp : cfg().viewers_free);
 const botOk = (t = now()) => !!(BOT && t - BOT.at < BOT_FRESH_MS);
@@ -488,7 +489,7 @@ function stop(userId, roomId, login, t = now()) {
 /** May `u` end this cam's relay? Its owner (linked login), the room's mods (Pepe's caps), the pad owner, site staff. */
 function mayEnd(u, R, login) {
   if (!u) return false;
-  if (isStaff(u)) return true;
+  if (endsAny(u)) return true;
   if (u.camfrogUsername && String(u.camfrogUsername).toLowerCase() === login) return true;
   try { if (u.camfrogUsername && require("./padmod").capsFor(R, u.camfrogUsername)) return true; } catch (e) { /* none */ }
   const r = require("./rooms").getCached ? require("./rooms").getCached(String(R.id)) : null;
@@ -499,7 +500,7 @@ function endBy(u, R, login, t = now()) {
   const k = keyOf(R.id, login);
   const S = SESS.get(k);
   COOL.set(k, t + END_COOLDOWN_MS);
-  if (S) endSession(S, isStaff(u) && String(u.camfrogUsername || "").toLowerCase() !== login ? "ended_by_admin" : "ended_by", t);
+  if (S) endSession(S, endsAny(u) && String(u.camfrogUsername || "").toLowerCase() !== login ? "ended_by_admin" : "ended_by", t);
   console.log(`[livecam] ended room=${R.id} target=${login} by=${u.username || u.userId}`);
   return { ok: true };
 }
@@ -884,7 +885,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
   // /admin/pepe/livecams
   const admin = (json) => (req, res, next) => {
     if (!req.user || !req.user.userId) return json ? res.status(401).json({ ok: false, error: "Sign in first." }) : res.redirect("/login?next=/admin/pepe/livecams");
-    if (req.user.class !== "Admin") return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
+    if (!SP.can(req.user, "livecam.admin")) return json ? res.status(403).json({ ok: false, error: "Admins only." }) : res.status(403).send("Admins only.");
     next();
   };
   app.get("/admin/pepe/livecams", addUser, admin(false), async (req, res) => {

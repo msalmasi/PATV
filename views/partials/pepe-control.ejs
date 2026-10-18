@@ -2,7 +2,7 @@
   views/partials/pepe-control.ejs - admin-only Pepe control panel (pepecontrol.js), included on
   /admin/pepe#control (1.99xs: no longer on the homepage). Emits NOTHING unless the viewer's account (fresh from the DB) is Admin;
   the API checks the role again on every call.
-%><% if (typeof me !== 'undefined' && me && me.class === 'Admin' && typeof pepeCtlCsrf === 'function') { %>
+%><% if (typeof me !== 'undefined' && me && (locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals))('pepe.control', me) && typeof pepeCtlCsrf === 'function') { %>
 <style>
   .pc { --pc-bg: #0b0d0c; --pc-line: #232a26; --pc-muted: var(--ds-text-muted); --pc-ok: #4caf50; --pc-warn: #ffb74d; --pc-bad: #ef5350;
         background: var(--pc-bg); border: 1px solid var(--pc-line); border-radius: var(--ds-r-xl); color: var(--ds-text); font-family: var(--ds-font); min-width: 0; }

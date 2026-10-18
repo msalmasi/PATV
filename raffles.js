@@ -48,6 +48,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const FLOW = "raffle_fee";
 const KIND_TICKET = "RFT", KIND_PRIZE = "RFP", KIND_ITEM = "RFI";
@@ -210,7 +211,7 @@ async function userByLogin(login) {
   const r = (await getQuery(`SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) ORDER BY points_balance DESC LIMIT 1`, [k]))[0];
   return r ? userRow(r.userId) : null;
 }
-const isAdmin = (u) => !!u && u.class === "Admin";
+const rafflesAdmin = (u) => SP.can(u, "raffles.admin");   // 1.99ack (siteperms.js)
 async function isVerified(u) {
   if (!u) return false;
   try { return await require("./verified").verify(u); } catch (e) { return !!u.camfrogUsername; }
@@ -458,7 +459,7 @@ function parseWhen(v, tzOffsetMin) {
 /** Validate a create form / API body. -> the clean fields (no money moved). */
 async function validate(user, b) {
   const C = CONFIG;
-  const house = !!(b.house && b.house !== "0" && b.house !== "false") && isAdmin(user);
+  const house = !!(b.house && b.house !== "0" && b.house !== "false") && SP.can(user, "raffles.house");   // 1.99ack: the House pays its PAT prize (locked)
   const title = str(b.title, 90);
   if (title.length < 3) throw new Refuse(400, "Give it a title (3-90 characters).", "E_TITLE");
   const description = String(b.description || "").replace(/\r/g, "").trim().slice(0, 1500);
@@ -961,7 +962,7 @@ async function dispute(userId, id, note) {
 async function decide(adminId, id, decision, reason) {
   await init();
   const a = await userRow(adminId);
-  if (!isAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
+  if (!rafflesAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
   const r0 = await raffleRow(id);
   if (!r0) throw new Refuse(404, "No such raffle.", "E_NOT_FOUND");
   if (!["delivering", "disputed"].includes(r0.status)) throw new Refuse(409, `That raffle is ${r0.status}.`, "E_STATE");
@@ -999,7 +1000,7 @@ async function decide(adminId, id, decision, reason) {
 async function takedown(adminId, id, reason) {
   await init();
   const a = await userRow(adminId);
-  if (!isAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
+  if (!rafflesAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
   const r = await raffleRow(id);
   if (!r) throw new Refuse(404, "No such raffle.", "E_NOT_FOUND");
   const why = str(reason, 200);
@@ -1212,7 +1213,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
   app.post("/api/raffles/:id/decide", addUser, web((u, b, id) => decide(u, id, String(b.decision || ""), b.reason)));
   app.post("/api/admin/raffles", addUser, web(async (u, b) => {
     const a = await userRow(u);
-    if (!isAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
+    if (!rafflesAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
     if (b.enabled !== undefined) await setEnabled(!!b.enabled && b.enabled !== "0" && b.enabled !== "false", a);
     const cfg = b.config && typeof b.config === "object" ? await setConfig(b.config, a) : config();
     return { ok: true, enabled: await enabled(), config: cfg };
@@ -1225,7 +1226,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
       const me = await userRow(uid(req));
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
-      if (!isAdmin(me)) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The raffle settings are for site admins.", title: "Admins only" });
+      if (!rafflesAdmin(me)) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The raffle settings are for site admins.", title: "Admins only" });
       const padlinks = require("./padlinks");
       try { await padlinks.ready(); } catch (e) { /* no pads: site-wide only */ }
       res.render("admin/raffles", {
@@ -1268,7 +1269,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
       const filter = { pad: want, slug: want === "" ? "none" : pv ? pv.slug : "", padTitle: pv ? pv.title : null, padUrl: pv ? pv.url : null, pads };
       const verified = me ? await isVerified(me) : false;
       res.render("raffles", {
-        user: req.user ? req.user.username : null, me, L, status, filter, on: await enabled(), escrowLive: await escrowLive(), verified, admin: isAdmin(me),
+        user: req.user ? req.user.username : null, me, L, status, filter, on: await enabled(), escrowLive: await escrowLive(), verified, admin: rafflesAdmin(me),
         cfg: config(), items: me ? await eligibleItems() : [], pick: await padlinks.choicesFor(req.user || null, req.query.pad || ""),
         idem: crypto.randomBytes(9).toString("hex"), msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null,
       });
@@ -1285,7 +1286,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
         return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such raffle",
           message: "That raffle doesn't exist (or it's on a pad you can't see).", title: "Raffle not found" });
       }
-      res.render("raffle", { user: req.user ? req.user.username : null, me, v, admin: isAdmin(me), on: await enabled(), cfg: config(),
+      res.render("raffle", { user: req.user ? req.user.username : null, me, v, admin: rafflesAdmin(me), on: await enabled(), cfg: config(),
                              idem: crypto.randomBytes(9).toString("hex"), balance: me ? Number(me.points_balance) || 0 : null });
     } catch (e) { console.error("[raffles] detail:", e); res.status(500).send("Something went wrong."); }
   });

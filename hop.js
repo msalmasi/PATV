@@ -17,6 +17,7 @@
 // get them blurred behind a tap unless they chose "always show" (the feed's patvFeedNsfw setting).
 "use strict";
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 const store = require("./feedstore");
 const fm = require("./feedmedia");
@@ -103,7 +104,7 @@ function itemOf(p) {
 }
 function canSee(p, viewer) {
   if (!p || p.deleted) return false;
-  const staff = store.isStaff(viewer);
+  const staff = SP.can(viewer, "feed.see_hidden");
   if (p.hidden && !staff && !p.mine) return false;
   return staff || p.mine || p.roomsAll.some((r) => !r.removed && !r.pending && !r.hidden);
 }

@@ -1,4 +1,5 @@
 <%- include('../partials/admin-open', { title, user, section: 'users', admIsAdmin: isAdmin }) %>
+<% const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals); -%>
 <div class="adm-head">
   <h1>Users &amp; Accounts</h1>
   <p>Roles and classes, XP, the welcome bonus and the stale-account cleanup. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
@@ -61,7 +62,7 @@
   </section>
 
   <%# 1.99zf: one account's web bridge restrictions in EVERY room (bridgeblocks.js, global rows per feature; admin_audit bridge_block) %>
-  <% if (isAdmin) { %>
+  <% if (_can('bridge.blocks_global')) { %>
   <section class="adm-card" id="bridgebans" aria-labelledby="bridgebansT">
     <h2 id="bridgebansT"><span class="ds-ic" aria-hidden="true">🌐</span> Web bridge restrictions (one member) <span class="adm-pill admin">admins</span></h2>
     <p class="adm-help">Stop one account using parts of the web bridge in <b>every</b> room: tick what they can't use, pick how long and why, Save. Untick to lift. Enforced by the site on every bridge write path (and by Pepe's mirror); the member sees the reason when something is refused. Every change is in the admin audit (<code>bridge_block</code>). Rooms' own blocks (by their owner / mods) are listed under it; all blocks: <a href="/admin/bridge#blocks">Bridge › Web relay blocks</a>.</p>
@@ -126,7 +127,7 @@
   </table></div>
   <p id="stale-vias" class="adm-help" style="margin-top:8px"></p>
 </section>
-<% if (isAdmin) { %>
+<% if (_can('auth.signin_methods')) { %>
 <section class="adm-card" id="signin" aria-labelledby="signinT">
   <h2 id="signinT">Sign-in methods <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The single-sign-on buttons on <code>/login</code> and <code>/register</code>. A method shows only when it's switched on <b>and</b> its keys are in the server's <code>.env</code> (see <code>.env.example</code>). Only accounts explicitly linked to that provider sign in; nothing is ever matched by email or username. Switching one off doesn't unlink anybody.</p>

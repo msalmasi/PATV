@@ -63,6 +63,7 @@ const path = require("path");
 const crypto = require("crypto");
 const SHUTDOWN = require("./shutdown");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked", "shop"]);
 const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures", banner: "Homepage banner ads",
@@ -671,7 +672,7 @@ async function sweep(t = NOW()) {
 }
 
 // ── routes ──
-const isAdmin = (u) => !!u && u.class === "Admin";
+const safetyAdmin = (u) => SP.can(u, "imagesafety.admin");   // 1.99ack (siteperms.js, locked: Admins)
 function register(app, { addUser, isBotToken, noTimers = false }) {
   const express = require("express");
   const json = express.json({ limit: "64kb" });
@@ -693,7 +694,7 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   const admin = async (req) => {
     if (!req.user || !req.user.userId) return null;
     const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    return isAdmin(u) ? u : null;
+    return safetyAdmin(u) ? u : null;
   };
   const adminApi = async (req, res, next) => {
     if (!sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });

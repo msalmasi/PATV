@@ -1,5 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'economy', admIsAdmin: isAdmin }) %>
+<%# 1.99ack: every admin-only card asks its own capability (siteperms.js); the partials get theirs as isAdmin %><% const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals); const sensOk = _can('admin.sensitive_overview'); -%>
 <%
   const fmt = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
   const ago = (t) => { if (!t) return 'never'; const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 90 ? s + 's ago' : s < 5400 ? Math.round(s / 60) + 'm ago' : s < 172800 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
@@ -13,7 +14,7 @@
 <section class="adm-card" id="reserve" aria-labelledby="reserveT">
   <h2 id="reserveT">Federal Reserve &amp; today's flows <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The Reserve lives in Pepe; he syncs its balance here. Site payouts from it (level-ups, welcome and connect bonuses, codes…) are booked as claims that Pepe settles by draining his Reserve. If a vault can't cover a payout, it's skipped.</p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!R) { %><p class="adm-help">Couldn't read the Reserve numbers.</p><% } else { %>
+  <% if (!sensOk) { %><p class="adm-help">Admins only.</p><% } else if (!R) { %><p class="adm-help">Couldn't read the Reserve numbers.</p><% } else { %>
     <div class="adm-kv">
       <div><b>Balance (from Pepe)</b><span><%= R.balance === null ? 'never synced' : fmt(R.balance) + ' PAT' %></span></div>
       <div><b>Last sync</b><span><%= ago(R.syncedAt) %></span></div>
@@ -46,7 +47,7 @@
 <section class="adm-card" id="donations" aria-labelledby="donT">
   <h2 id="donT"><span class="ds-ic" aria-hidden="true">💖</span> Donations: promos <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The normal rate is Pepe's (<code>!econ set donation_rate</code> / <code>donation_bonus_pct</code>). A <b>promo</b> boosts it for a while: a promo rate (PAT per $1) or a multiplier, a per-donor cap in dollars (dollars above it earn the normal rate; a donation that straddles the cap is split), an optional budget (the most PAT credited at the promo rate across everyone; then the normal rate), and an end time (at most 7 days). Card and stablecoin donations both use it; a donation belongs to the promo live when it was <b>paid</b> (card: when the checkout opened). Once a promo has started, its rate, cap and start are locked (donations were priced with them) - you can still change the label, the end, the budget and the switch, or end it now. Promos can't overlap. Every change is audit-logged.</p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <% if (!_can('donations.admin')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="dpAdm">
       <div class="adm-kv" id="dpKv"><div><b>Status</b><span>loading…</span></div></div>
       <h3>New promo</h3>
@@ -125,7 +126,7 @@
 <section class="adm-card" id="supply-history" aria-labelledby="shT">
   <h2 id="shT"><span class="ds-ic" aria-hidden="true">📈</span> Supply history <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">One row per UTC day, written on every supply snapshot Pepe posts: total supply, the Federal Reserve against its band, and each day's mints (Pepe's mint journal, by source) against the PAT burned that day. Month-to-date mints by source are compared with Pepe's caps.</p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <% if (!_can('econ.telemetry_policy')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="shStatus" class="adm-help" aria-live="polite">Loading…</div>
     <figure class="sh-fig"><figcaption>Total supply (PAT)</figcaption><div id="shTotal" class="sh-chart"></div></figure>
     <figure class="sh-fig"><figcaption>Federal Reserve vs its band</figcaption><div id="shFed" class="sh-chart"></div></figure>
@@ -149,7 +150,7 @@
   <h2 id="incT"><span class="ds-ic" aria-hidden="true">🎁</span> Incentive budget &amp; grant queue <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Economy v2 E-2. While Pepe's treasury is on (<code>!econ treasury on</code>, with <code>!econ layers on</code>), the weekly surplus waterfall fills the incentive budget and the site pays welcome PAT, level-ups, achievements and connect bonuses from it, each group within its weekly budget. A grant that doesn't fit waits here (FIFO per group) and is paid when a sync shows room; Pepe only settles paid claims. Preview the week with <code>!econ waterfall preview</code>.</p>
   <% const I = typeof inc !== 'undefined' ? inc : null; %>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!I) { %><p class="adm-help">Couldn't read the queue.</p><% } else { %>
+  <% if (!sensOk) { %><p class="adm-help">Admins only.</p><% } else if (!I) { %><p class="adm-help">Couldn't read the queue.</p><% } else { %>
     <div class="adm-kv">
       <div><b>Status</b><span><%= I.live ? 'live (grants paid from the incentive budget)' : 'off: grants are paid from the Reserve' %></span></div>
       <% if (I.incentives) { %>
@@ -183,7 +184,7 @@
 <section class="adm-card" id="launchpad" aria-labelledby="lpT">
   <h2 id="lpT"><span class="ds-ic" aria-hidden="true">🚀</span> Pad launchpad <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">New pads build momentum (regulars: real, linked, aged accounts active on 2+ days, never the owner or alts) toward launch tiers. A tier that is reached waits here for review; once approved, Pepe pays <b>his</b> tier amount from the incentive budget's <code>launchpad</code> group into the pad's room vault (needs <code>!econ roomvaults on</code>). Newcomer welcomes, owner deposit matching and front-page boost credit come from the same group. Every number is a Pepe setting: <code>!econ launchpad</code> · <code>!econ launchpad set &lt;key&gt; &lt;value&gt;</code> · <code>!econ launchpad tier &lt;n&gt; &lt;regulars&gt; &lt;days&gt; &lt;grant&gt;</code> · <code>!econ launchpad on|off</code>.</p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <% if (!_can('launchpad.admin')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="lpAdmin" aria-live="polite"><p class="adm-help">Loading…</p></div>
     <form id="lpEnroll" class="adm-form" autocomplete="off">
       <label for="lpRoom">Pad (slug or room id)</label> <input id="lpRoom" name="room" required>
@@ -195,20 +196,20 @@
   <% } %>
 </section>
 
-<%- include('../partials/econ-activity-pads', { isAdmin, me }) %>
+<%- include('../partials/econ-activity-pads', { isAdmin: _can('econ.telemetry_policy'), me }) %>
 
-<%- include('../partials/econ-pools', { isAdmin, me }) %>
+<%- include('../partials/econ-pools', { isAdmin: _can('econ.backend_cutover'), me }) %>
 
-<%- include('../partials/econ-gscale', { isAdmin, me }) %>
+<%- include('../partials/econ-gscale', { isAdmin: _can('econ.telemetry_policy'), me }) %>
 
-<%- include('../partials/econ-policy', { isAdmin, me }) %>
+<%- include('../partials/econ-policy', { isAdmin: _can('econ.telemetry_policy'), me }) %>
 
-<%- include('../partials/econ-autoescrow', { isAdmin, me }) %>
+<%- include('../partials/econ-autoescrow', { isAdmin: _can('econ.backend_cutover'), me }) %>
 
 <section class="adm-card" id="burn" aria-labelledby="burnT">
   <h2 id="burnT"><span class="ds-ic" aria-hidden="true">🔥</span> Burn reserve <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The last step of the weekly surplus waterfall: once the incentive buffer and the Reserve's 25M target are full, the leftover moves into Pepe's burn reserve and is destroyed (total supply goes down). Nothing else feeds it and no other pool can be burned. In <b>accrual</b> mode Pepe burns it at his next burn tick; in <b>batch</b> mode it waits for a burn here (or <code>!burn</code> in chat). Mode and caps are on Pepe's admin panel. Public log: <a href="/economy#burned">/economy#burned</a>.</p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+  <% if (!_can('econ.burn')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="burnAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">
       <div class="adm-kv" id="burnKv"><div><b>Status</b><span>loading…</span></div></div>
       <form class="adm-form" id="burnForm" autocomplete="off">
@@ -235,7 +236,7 @@
 <section class="adm-card" id="loans" aria-labelledby="loansT">
   <h2 id="loansT">Loans &amp; credit <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Approve or decline Reserve loan requests here (each with the requester's live credit score), grant Reserve loans and see every stash. Pepe runs the loan commands and sends the loan book; rates and limits are his.</p>
-  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!L || !L.known) { %><p class="adm-help">No loan data from Pepe yet.</p><% } else { %>
+  <% if (!sensOk) { %><p class="adm-help">Admins only.</p><% } else if (!L || !L.known) { %><p class="adm-help">No loan data from Pepe yet.</p><% } else { %>
     <div class="adm-kv">
       <div><b>Pending requests</b><span><%= L.pending %><%= L.pending && isFinite(L.oldest) ? ' · oldest ' + ago(L.oldest * (L.oldest < 1e12 ? 1000 : 1)) : '' %></span></div>
       <div><b>Open Reserve loans</b><span><%= L.reserveOpen %></span></div>
@@ -246,14 +247,14 @@
     </div>
   <% } %>
   <%# 1.99xs: the Reserve desk (was the ADMIN sections of /wallet) %>
-  <% if (isAdmin) { %><%- include('../partials/admin-loans', { book: locals.book, acts: locals.acts, msg: locals.msg }) %><% } %>
+  <% if (sensOk) { %><%- include('../partials/admin-loans', { book: locals.book, acts: locals.acts, msg: locals.msg }) %><% } %>
 </section>
 
 <div class="adm-cols">
   <section class="adm-card" id="grants" aria-labelledby="grantsT">
     <h2 id="grantsT">PAT grant <span class="adm-pill admin">admins</span></h2>
     <p class="adm-help">Paid from the incentive budget: adds PAT to an account's balance as a "Staff transfer" in their history (the old "Points panel"). Refused if the incentive budget can't cover it, isn't synced yet, or this week's staff-grant cap (a Pepe setting) would be passed - never queued, never minted. A negative amount takes PAT back into the incentive budget. The Reserve only fills the protocol's pools, so it never pays a grant.</p>
-    <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <% if (!_can('econ.grant_pat')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <form id="pointsTransferForm" class="adm-form" action="/api/admin/transfer/username" method="POST">
       <label for="pointsUsername">Username<input type="text" id="pointsUsername" name="username" required autocomplete="off"></label>
       <label for="pointsAmount">Amount (PAT)<input type="number" id="pointsAmount" name="amount" required></label>

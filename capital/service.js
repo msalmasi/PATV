@@ -596,7 +596,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
   const admin = async (req, res) => {
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
     const row = (await require("../dbUtils").getQuery("SELECT class, username FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
+    if (!require("../siteperms").can(row, "econ.backend_cutover")) { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
     return row;
   };
   app.get("/api/admin/capital", addUser, async (req, res) => {

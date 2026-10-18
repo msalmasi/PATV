@@ -40,6 +40,7 @@ const {
   generateUniqueUsername
 } = require("./user.controller");
 const { createTables, runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const { goldDailyLimit, GOLD_BASE, GOLD_PER_LEVEL } = require("./goldwheel");   // 1.99fj: gold wheel limit = 100 + 25 x level + boosts
 const authenticateToken = require("./middleware/authenticateToken");
 const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCookie");
@@ -295,6 +296,7 @@ require("./adminxp").register(app, { addUser });
 // (huboutbox.js; nothing is sent while HUB_V1_URL is unset), bridge spans (bridgespans.js)
 botkeys.register(app);
 require("./adminkeys").register(app, { addUser });
+SP.register(app);   // 1.99ack: the website's capabilities (siteperms.js) - overrides loaded + kept fresh; res.locals.can in views
 require("./adminroles").register(app, { addUser });   // 1.99acj: /admin/roles - Pepe's roles & per-command permissions, edited with his !role / !perm rules (pepeperms.js)
 require("./chatticket").register(app, { addUser });
 require("./huboutbox").start();
@@ -306,7 +308,7 @@ eventsAuth.init().catch((e) => console.error("[eventsauth] init:", e.message));
 async function welcomeAdmin(req) {
   if (!req.user || !req.user.userId) return null;
   const u = (await getQuery("SELECT username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-  return u && u.class === "Admin" ? u : null;
+  return SP.can(u, "users.welcome_stale") ? u : null;
 }
 app.get("/api/admin/welcome", addUser, async (req, res) => {
   try {
@@ -1353,7 +1355,7 @@ app.get("/economy", addUser, async (req, res) => {
 const history = require("./history");
 app.get("/history", addUser, async (req, res) => {
   const me = req.user;
-  const canLookup = !!me && (me.class === "Admin" || me.class === "Staff");
+  const canLookup = SP.can(me, "history.lookup");
   const period = ["7d", "30d", "90d", "all"].includes(req.query.period) ? req.query.period : "30d";
   const cat = req.query.cat || null;
   const page = parseInt(req.query.page) || 1;
@@ -1575,7 +1577,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
       const user = results[0]; // Extract user data
       const badges = await getQuery('SELECT b.* FROM badges b JOIN user_badges ub ON b.badgeId = ub.badgeId WHERE ub.userId = ?', [user.userId]);
       const isOwner = !!req.user && req.user.username === user.username;
-      const isAdmin = !!req.user && req.user.class === "Admin";
+      const isAdmin = SP.can(req.user, "profile.see_private");
       // ?preview=visitor: the owner sees their page exactly as a signed-out visitor would
       const preview = isOwner && req.query.preview === "visitor";
       let layout = null;
@@ -1635,7 +1637,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
           return require("./padstreaks").topForUser(user.userId);
         })().catch(() => null),
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
-        canSeeHistory: !preview && !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
+        canSeeHistory: !preview && !!req.user && (req.user.username === user.username || SP.can(req.user, "history.lookup")),
         heistSheet: await gtf.sheetFor(user.camfrogUsername),
         gtf: gtf.LINKS,
         camfrog: user.camfrogUsername || null,
@@ -1664,7 +1666,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         previewVisitor: preview,
         profileVault,
         vaultView: vr.vault,      // 1.99vy: /u/<name>/vault - the header, the tab bar and the vault card, nothing else
-        viewerIsAdmin: isAdmin && !preview,      // 1.99ma: the ⋯ menu's "🎁 Comp…" (admins: /admin/comps?user=)
+        viewerIsAdmin: SP.can(req.user, "comps.manage") && !preview,      // 1.99ma: the ⋯ menu's "🎁 Comp…" (admins: /admin/comps?user=)
         // 1.99qp: ⭐ PATV Creators on the profile - the Creator chip + Subscribe (their creator page), the owner's dashboard /
         // "Become a creator" link; nothing while the feature is off
         creatorProfile: (() => { try { const CR = require("./creators"); const on = !!CR.config().enabled;
@@ -2839,7 +2841,7 @@ app.post("/api/g/wheel/jackpot", addUser, requireUser, async (req, res) => {
   try {
     // the class as the DATABASE has it now (the JWT's can be stale)
     const me = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    if (!me || me.class !== "Admin") return res.status(403).json({ message: "Admins only." });
+    if (!SP.can(me, "econ.house_adjust")) return res.status(403).json({ message: "Admins only." });
     const r = await require("./staffgrant").houseAdjust({ userId: me.userId, username: me.username }, (req.body || {}).amount, (req.body || {}).reason);
     res.status(r.status).json(r.body);
   } catch (error) {
@@ -2872,12 +2874,11 @@ app.post(
   authenticateToken,
   addUser,
   async (req, res) => {
-    const userType = req.user ? req.user.class : null;
 
     // 1.99jw: ADMIN ONLY (Staff lost access); paid by the INCENTIVE BUDGET (an incentives:staff_grant claim Pepe
     // settles), refused when it can't cover it or the weekly staff-grant cap is reached - never minted, never the Reserve
     // (staffgrant.js)
-    if (userType === "Admin") {
+    if (SP.can(req.user, "econ.grant_pat")) {
       try {
         const r = await require("./staffgrant").grant(req.params.username, req.body && req.body.amount, req.user.username);
         res.status(r.status).json(r.body);
@@ -2885,7 +2886,7 @@ app.post(
         console.error("[staffgrant]", error);
         res.status(500).json({ message: "Failed to transfer points." });
       }
-    } else if (userType === "Staff") {
+    } else if (SP.can(req.user, "admin.area")) {
       return res.status(403).json({ message: "PAT grants are for Admins only." });
     } else {
       req.flash(
@@ -2934,8 +2935,7 @@ app.post("/api/classes/edit", addUser, async (req, res) => {
 // HTTP POST endpoint to edit the list of redemption codes.
 app.post("/api/admin/redemption-codes", authenticateToken, addUser, async (req, res) => {
     const { code, points, uses_allowed, expiration_date } = req.body;
-    const userType = req.user ? req.user.class : null;
-    if (userType === "Admin") {   // 1.99abn: Admins only - a code pays out of a vault, so Staff could fund themselves
+    if (SP.can(req.user, "econ.codes_manage")) {   // 1.99abn: Admins only - a code pays out of a vault, so Staff could fund themselves
         try {
             const existingCode = await getQuery("SELECT code FROM redemption_codes WHERE code = ?", [code]);
             if (existingCode.length > 0) {
@@ -2961,8 +2961,7 @@ app.post("/api/admin/redemption-codes", authenticateToken, addUser, async (req, 
 
 // HTTP GET end to list redemption codes.
 app.get("/api/admin/redemption-codes", authenticateToken, addUser, async (req, res) => {
-    const userType = req.user ? req.user.class : null;
-    if (userType === "Admin" || userType === "Staff") {
+    if (SP.can(req.user, "econ.codes_view")) {
         try {
             const codes = await getQuery("SELECT code, points, uses_remaining FROM redemption_codes WHERE uses_remaining > 0 ORDER BY created_at DESC");
             res.json(codes);
@@ -2981,8 +2980,7 @@ app.get("/api/admin/redemption-codes", authenticateToken, addUser, async (req, r
 
 // HTTP DELETE endpoint for redemption code
 app.delete("/api/admin/redemption-codes/:code", authenticateToken, addUser, async (req, res) => {
-        const userType = req.user ? req.user.class : null;
-        if (userType === "Admin") {   // 1.99abn: Admins only (codes pay out of a vault)
+        if (SP.can(req.user, "econ.codes_manage")) {   // 1.99abn: Admins only (codes pay out of a vault)
         const { code } = req.params;
         try {
             await runQuery("DELETE FROM redemption_codes WHERE code = ?", [code]);
@@ -3003,8 +3001,7 @@ app.delete("/api/admin/redemption-codes/:code", authenticateToken, addUser, asyn
 // Get Users Who Redeemed a Code
 app.get("/api/admin/redemption-codes/:code/users", authenticateToken, addUser, async (req, res) => {
     const { code } = req.params;
-    const userType = req.user ? req.user.class : null;
-    if (userType === "Admin" || userType === "Staff") {
+    if (SP.can(req.user, "econ.codes_view")) {
         try {
             const users = await getQuery(
                 "SELECT u.username, u.userId FROM user_redemptions ur JOIN users u ON ur.userId = u.userId WHERE ur.code = ?",
@@ -3048,8 +3045,7 @@ app.get("/api/badges", async (req, res) => {
 app.post("/api/badges/add", upload.none(), authenticateToken, addUser, async (req, res) => {
     const { name, description, icon, points, requirement } = req.body;
     const badgeId = uuidv4();
-    const userType = req.user ? req.user.class : null;
-    if (userType === "Admin" || userType === "Staff") {
+    if (SP.can(req.user, "badges.manage")) {
     try {
       await runQuery("INSERT INTO badges (badgeId, name, description, icon, points, requirement) VALUES (?, ?, ?, ?, ?, ?)", [badgeId, name, description, icon, points, requirement]);
       res.json({ message: "Badge created successfully." });
@@ -3069,8 +3065,7 @@ app.post("/api/badges/add", upload.none(), authenticateToken, addUser, async (re
   // Delete a badge ADMIN
   app.delete("/api/badges/:badgeId", authenticateToken, addUser, async (req, res) => {
     const { badgeId } = req.params;
-    const userType = req.user ? req.user.class : null;
-    if (userType === "Admin" || userType === "Staff") {
+    if (SP.can(req.user, "badges.manage")) {
     try {
       await runQuery("DELETE FROM badges WHERE badgeId = ?", [badgeId]);
       res.send("Badge deleted successfully");

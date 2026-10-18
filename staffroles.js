@@ -10,6 +10,7 @@
 //     people below admin. Pepe always keeps an owner.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const LEVEL = { owner: 100, admin: 80, staff: 50, assistant: 35, trusted: 20 };
 const ROLES = Object.keys(LEVEL);
@@ -135,7 +136,7 @@ async function reconcile(logins) {
  *  Assistant go through Pepe's roles (setRole: his hierarchy, and the class follows); other classes are set directly. */
 async function classUpdate(actor, username, cls) {
   await init();
-  if (!actor || actor.class !== "Admin") throw new RoleError(403, "Only Admins change classes.");
+  if (!SP.can(actor, "roles.assign")) throw new RoleError(403, "Only Admins change classes.");   // 1.99ack: roles.assign (locked: Admins)
   cls = String(cls || "").trim();
   if (!cls || cls.length > 40) throw new RoleError(400, "Pick a class.");
   const known = new Set((await getQuery("SELECT class FROM classes").catch(() => [])).map((r) => r.class));
@@ -162,7 +163,7 @@ async function classUpdate(actor, username, cls) {
 /** Manage classes: Admins only; the classes Pepe's roles use (and pleb / Bot) can't be removed. */
 async function classesEdit(actor, action, className) {
   await init();
-  if (!actor || actor.class !== "Admin") throw new RoleError(403, "Only Admins edit the class list.");
+  if (!SP.can(actor, "roles.class_list")) throw new RoleError(403, "Only Admins edit the class list.");   // 1.99ack: roles.class_list (locked)
   const c = String(className || "").trim();
   if (!c || c.length > 40 || /[<>"'&]/.test(c)) throw new RoleError(400, "A class name, up to 40 characters.");
   if (action === "add") {

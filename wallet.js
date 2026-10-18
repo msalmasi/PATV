@@ -8,6 +8,7 @@
 // action queue (actions.js, POST /act): the site runs what it owns by account (escrow loans, the Federal Reserve,
 // stashes); the rest Pepe runs as the user (1.99wr: each section is shown where its service works for this account).
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const markets = require("./markets");
 const actions = require("./actions");
 const staking = require("./staking");
@@ -179,7 +180,7 @@ function register(app, { isBotToken, addUser }) {
       const gameOn = async (g) => { try { return !!(await require("./escrow/games").gameLive(g)); } catch (e) { return false; } };
       const loansOn = !!camfrog || await gameOn("loans");
       const reserveOn = !!camfrog || await require("./capital/core").live().then((x) => !!x).catch(() => false);
-      const isAdmin = u.class === "Admin";
+      const isAdmin = SP.can(u, "admin.sensitive_overview");
       // 1.99ne: the site's own stashes once they moved here (stashes.js), else Pepe's last snapshot
       const SS = require("./stashes");
       const siteStashes = await SS.live().catch(() => false);

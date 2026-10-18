@@ -45,6 +45,7 @@
 const fs = require("fs");
 const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
 
 const CATS = Object.freeze(["hate", "doxxing", "threats", "selfharm", "spam"]);
@@ -532,7 +533,7 @@ async function check(u, roomIds, { kind = "post", title = "", body = "", links =
   const t0 = process.hrtime.bigint();
   await init();
   const store = require("./feedstore");
-  if (!u || !u.userId || store.isPepe(u) || store.isStaff(u)) return null;
+  if (!u || !u.userId || store.isPepe(u) || SP.can(u, "feed.limits_exempt")) return null;
   const G = await globalSettings();
   if (!G.enabled) return null;
   let pick = null;                                             // the pad whose settings apply (the strictest, if several)
@@ -735,7 +736,7 @@ async function state(roomId) {
 // ── changing settings ────────────────────────────────────────────────────────────────────────────────────────────────
 const HITS = new Map();
 function limit(user, roomId) {
-  if (rooms.isStaff(user)) return null;
+  if (SP.can(user, "pads.manage_any")) return null;
   const k = user.userId + "|" + roomId, t = NOW();
   const hits = (HITS.get(k) || []).filter((x) => t - x < 3600e3);
   if (hits.filter((x) => t - x < 60e3).length >= 20) return "That's a lot of changes at once - try again in a minute.";
@@ -745,7 +746,9 @@ function limit(user, roomId) {
   if (HITS.size > 5000) HITS.clear();
   return null;
 }
-const isAdmin = (u) => !!u && u.class === "Admin";
+// 1.99ack (siteperms.js): the site-wide settings + word lists = feed.filter_admin; a pad's admin lock = feed.admin_lock (locked: Admins)
+const filterAdmin = (u) => SP.can(u, "feed.filter_admin");
+const lockOk = (u) => SP.can(u, "feed.admin_lock");
 /** One owner change: key "on" | "act_<cat>" | "admin_lock" (admins), value, or {reset: true}. -> state() */
 async function setScope(user, roomId, key, value, { reset = false } = {}) {
   await init();
@@ -755,7 +758,7 @@ async function setScope(user, roomId, key, value, { reset = false } = {}) {
   if (!(await rooms.get(id))) throw new store.Refuse(404, "No such pad.");
   if (!(await rooms.canManage(user, id))) throw new store.Refuse(403, "Only this pad's owner can do that.");
   const cur = await scopeSettings(id);
-  if (cur.admin_lock && !isAdmin(user) && key !== "admin_lock") throw new store.Refuse(403, "A site admin has locked the content filter settings for this pad.");
+  if (cur.admin_lock && !lockOk(user) && key !== "admin_lock") throw new store.Refuse(403, "A site admin has locked the content filter settings for this pad.");
   const next = { ...cur, actions: { ...cur.actions } };
   let note;
   if (key === "on") {
@@ -772,7 +775,7 @@ async function setScope(user, roomId, key, value, { reset = false } = {}) {
     else { if (!okAct(cat, value)) throw new store.Refuse(400, "Pick one of the choices."); next.actions[cat] = value; }
     note = reset ? `${cat} reset to default` : `${cat}=${value}`;
   } else if (key === "admin_lock") {
-    if (!isAdmin(user)) throw new store.Refuse(403, "Admins only.");
+    if (!lockOk(user)) throw new store.Refuse(403, "Admins only.");
     next.admin_lock = reset ? false : bool(value);
     note = `admin_lock=${next.admin_lock}`;
   } else throw new store.Refuse(400, "That isn't a setting you can change here.");
@@ -784,7 +787,7 @@ async function setScope(user, roomId, key, value, { reset = false } = {}) {
 }
 async function setGlobal(user, patch) {
   const store = require("./feedstore");
-  if (!isAdmin(user)) throw new store.Refuse(403, "Admins only.");
+  if (!filterAdmin(user)) throw new store.Refuse(403, "Admins only.");
   await init();
   const cur = await globalSettings();
   const p = patch || {};
@@ -799,7 +802,7 @@ async function setGlobal(user, patch) {
 /** The admins' list editor: {key: "line\nline"} for any of LIST_KEYS (keys left out keep their current lines). */
 async function setLists(user, patch) {
   const store = require("./feedstore");
-  if (!isAdmin(user)) throw new store.Refuse(403, "Admins only.");
+  if (!filterAdmin(user)) throw new store.Refuse(403, "Admins only.");
   await init();
   compiled();
   const merged = { ...LISTS.lists };
@@ -814,7 +817,7 @@ async function setLists(user, patch) {
 }
 async function resetLists(user) {
   const store = require("./feedstore");
-  if (!isAdmin(user)) throw new store.Refuse(403, "Admins only.");
+  if (!filterAdmin(user)) throw new store.Refuse(403, "Admins only.");
   await kvDel("filter:lists");
   LISTS = null;
   compiled();
@@ -861,7 +864,7 @@ function register(app, { addUser }) {
     try {
       if (!req.user || !req.user.userId) return bad(res, 401, "Sign in first.");
       const v = await acct(req);
-      if (!isAdmin(v)) return bad(res, 403, "Admins only.");
+      if (!filterAdmin(v)) return bad(res, 403, "Admins only.");
       const b = req.body || {}, out = { ok: true };
       if (b.global) out.global = await setGlobal(v, b.global);
       if (b.lists) out.lists = await setLists(v, b.lists);
@@ -879,7 +882,7 @@ function register(app, { addUser }) {
     try {
       if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl));
       const v = await acct(req);
-      if (!isAdmin(v)) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The content filter's settings and word lists are for site admins.", title: "Admins only" });
+      if (!filterAdmin(v)) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The content filter's settings and word lists are for site admins.", title: "Admins only" });
       await init();
       res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "no-store" });
       res.render("feedFilterAdmin", { user: v.username, G: await globalSettings(), CATS, ACTIONS, SELFHARM_ACTIONS, DEFAULT_ACTIONS, L: listsView(),

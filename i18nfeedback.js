@@ -17,6 +17,7 @@
 "use strict";
 const express = require("express");
 const { getQuery, runQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const i18n = require("./i18n");
 const C = require("./i18n-check");
 
@@ -266,10 +267,10 @@ function register(app, { addUser }) {
     if (!src || !host) return true;
     try { return new URL(src).host === host; } catch (e) { return false; }
   };
-  const isAdmin = async (req) => {
+  const i18nAdmin = async (req) => {
     if (!req.user || !req.user.userId) return null;
     const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    return u && u.class === "Admin" ? u : null;
+    return SP.can(u, "i18n.admin") ? u : null;
   };
   const safePage = (p) => { const s = String(p || ""); return /^\/(?![\/\\])[^\s]*$/.test(s) && s.length < 300 ? s : ""; };
 
@@ -323,7 +324,7 @@ function register(app, { addUser }) {
   app.get("/admin/translations", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.redirect("/login");
     try {
-      const a = await isAdmin(req);
+      const a = await i18nAdmin(req);
       res.set("Cache-Control", "no-store");
       res.set("X-Robots-Tag", "noindex");
       if (!a) return res.status(403).render("notFound", { user: req.user.username, heading: "Admins only", message: "The translation review page is for site admins.", title: "Admins only" });
@@ -335,7 +336,7 @@ function register(app, { addUser }) {
     } catch (e) { console.error("[i18nfeedback] admin:", e); res.status(500).send("Something went wrong."); }
   });
   app.get("/admin/translations/export.json", addUser, async (req, res) => {
-    const a = await isAdmin(req).catch(() => null);
+    const a = await i18nAdmin(req).catch(() => null);
     if (!a) return res.status(403).json({ ok: false, error: "Admins only." });
     try {
       res.set("Cache-Control", "no-store");
@@ -345,7 +346,7 @@ function register(app, { addUser }) {
   });
   const adminApi = async (req, res, next) => {
     if (!sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });
-    const a = await isAdmin(req).catch(() => null);
+    const a = await i18nAdmin(req).catch(() => null);
     if (!a) return res.status(403).json({ ok: false, error: "Admins only." });
     req.admin = a;
     next();

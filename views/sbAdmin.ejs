@@ -15,6 +15,8 @@
   #sbAdm section { margin-bottom: var(--ds-sp-4); }
   #sbAdm section[id] { scroll-margin-top: 72px; }
 </style>
+<%# 1.99ack: each part shows for its own capability (siteperms.js) - an Assistant moderating clips sees the clips only %>
+<% const _can = locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals); -%>
 <main id="sbAdm">
   <h1><span class="ds-ic" aria-hidden="true">🔊</span> Soundboards, voices &amp; likeness</h1>
   <p class="lede">Clips are rendered by Pepe (VoiceBox) and cached on both sides. A clip reported by <b><%= d.cfg.report_hide %></b> people is hidden until you
@@ -23,16 +25,17 @@
   <section class="ds-card" id="reports"><h2 class="ds-h2">🚩 Reported clips</h2><div class="sa-tbl" data-sa="reports">Loading…</div></section>
   <section class="ds-card" id="renders"><h2 class="ds-h2">🛠️ Renders waiting / failed</h2><div class="sa-tbl" data-sa="renders">Loading…</div>
     <h3 class="ds-h3">Sales</h3><div class="sa-tbl" data-sa="sales"></div><h3 class="ds-h3">Plays (7 days)</h3><div class="sa-tbl" data-sa="plays"></div></section>
-  <section class="ds-card" id="voices"><h2 class="ds-h2">🗣️ Voices</h2>
+  <% if (_can('voices.view')) { %><section class="ds-card" id="voices"><h2 class="ds-h2">🗣️ Voices</h2>
     <p class="ds-meta">Owner = a Camfrog login (blank: a stock voice). "Consent on file (manual)" marks a voice whose owner's consent is kept outside PATV
       (D10: the voices cloned before !clonemyvoice). Prices: per use 0-10,000; unlock 0 or 100,000-1,000,000 for owners (staff may go higher).</p>
-    <div class="sa-tbl" data-sa="voices">Loading…</div></section>
-  <section class="ds-card" id="clones"><h2 class="ds-h2">🎙️ Voice clones (!clonemyvoice)</h2><div class="sa-tbl" data-sa="clones">Loading…</div></section>
-  <section class="ds-card" id="likeness"><h2 class="ds-h2">🪞 Likeness royalties</h2><div data-sa="likeness">Loading…</div></section>
-  <section class="ds-card" id="settings"><h2 class="ds-h2">⚙️ Settings</h2>
-    <h3 class="ds-h3">Soundboards</h3><form data-sa-cfg="sb" class="sa-cfg"></form>
-    <h3 class="ds-h3">Likeness</h3><form data-sa-cfg="lk" class="sa-cfg"></form>
-    <h3 class="ds-h3">Voice clones</h3><form data-sa-cfg="vc" class="sa-cfg"></form></section>
+    <div class="sa-tbl" data-sa="voices">Loading…</div></section><% } %>
+  <% if (_can('voiceclone.view')) { %><section class="ds-card" id="clones"><h2 class="ds-h2">🎙️ Voice clones (!clonemyvoice)</h2><div class="sa-tbl" data-sa="clones">Loading…</div></section><% } %>
+  <% if (_can('likeness.view')) { %><section class="ds-card" id="likeness"><h2 class="ds-h2">🪞 Likeness royalties</h2><div data-sa="likeness">Loading…</div></section><% } %>
+  <% const sbCfg = _can('soundboards.config'), lkCfg = _can('likeness.view') && _can('likeness.manage'), vcCfg = _can('voiceclone.view') && _can('voiceclone.decide'); %>
+  <% if (sbCfg || lkCfg || vcCfg) { %><section class="ds-card" id="settings"><h2 class="ds-h2">⚙️ Settings</h2>
+    <% if (sbCfg) { %><h3 class="ds-h3">Soundboards</h3><form data-sa-cfg="sb" class="sa-cfg"></form><% } %>
+    <% if (lkCfg) { %><h3 class="ds-h3">Likeness</h3><form data-sa-cfg="lk" class="sa-cfg"></form><% } %>
+    <% if (vcCfg) { %><h3 class="ds-h3">Voice clones</h3><form data-sa-cfg="vc" class="sa-cfg"></form><% } %></section><% } %>
 </main>
-<script src="/public/js/sb-admin.js?v=1" defer></script>
+<script src="/public/js/sb-admin.js?v=2" defer></script>
 <%- include('partials/admin-close') %>

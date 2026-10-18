@@ -41,6 +41,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const REF_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const SLOT_KINDS = Object.freeze(["pad_frame", "pad_glow", "pad_badge", "pad_avatar"]);
@@ -429,7 +430,7 @@ function register(app, { addUser }) {
   app.get("/api/pad-cosmetics/admin", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only.");
+      if (!SP.can(req.user, "econ.boost_challenge_cosmetic_cfg")) throw new Refuse(403, "Admins only.");   // 1.99ack: Admins (was Staff)
       await init();
       const sums = await getQuery(`SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount, COALESCE(SUM(fortknox), 0) AS fortknox, COALESCE(SUM(room_vault), 0) AS room_vault
                                    FROM room_flow_ledger WHERE kind = 'pad_cosmetic'`);
@@ -438,7 +439,7 @@ function register(app, { addUser }) {
   });
   app.post("/api/pad-cosmetics/admin", addUser, write, async (req, res) => {
     try {
-      if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only.");
+      if (!SP.can(req.user, "econ.boost_challenge_cosmetic_cfg")) throw new Refuse(403, "Admins only.");
       res.json({ ok: true, ...(await setPay((req.body || {}).pay !== false && (req.body || {}).pay !== "false", req.user.username)) });
     } catch (e) { fail(res, e); }
   });

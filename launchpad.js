@@ -44,6 +44,7 @@
 // enroll|exclude|include} (admins) · POST /api/g/launchpad/pending + /api/g/launchpad/paid (Pepe, bot token).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 // What the site shows before Pepe has ever synced (the real numbers always come from Pepe's cfg).
 const DEFAULTS = Object.freeze({
@@ -487,7 +488,7 @@ async function padView(R, viewer, t = now()) {
   const pad = pads.find((p) => p.id === R.id);
   const rows = await grads(R.id);
   const isOwner = !!(viewer && R.owner && R.owner.userId === viewer.userId);
-  const staff = !!(viewer && (viewer.class === "Admin" || viewer.class === "Staff"));
+  const staff = SP.can(viewer, "launchpad.metrics");
   const base = { ok: true, on: !!s, live: isLive(), room_vaults: !!(s && s.room_vaults), launch: null };
   if (!s || !pad) return Object.assign(base, { eligible: false });
   const m = await metrics(pad, t);
@@ -630,7 +631,7 @@ function register(app, { addUser, isBotToken }) {
   const admin = async (req) => {
     if (!req.user || !req.user.userId) return false;
     const u = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    return !!(u && u.class === "Admin");
+    return SP.can(u || null, "launchpad.admin");
   };
   const same = (req) => { try { return require("./middleware/authGuard").sameSite(req); } catch (e) { return true; } };
   app.get("/api/rooms/:slug/launch", addUser, async (req, res) => {

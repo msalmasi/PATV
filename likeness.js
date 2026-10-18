@@ -40,6 +40,7 @@
 "use strict";
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const KINDS = Object.freeze(["clips", "snaps", "cam", "roast", "soundboard"]);
 const DEFAULT_PCT = Object.freeze({ clipmic: 40, quote: 40, clip: 40, snap: 40, look: 15, camroast: 15, roast: 10, imagine: 40, video: 40,
@@ -536,7 +537,9 @@ function register(app, { addUser, isBotToken }) {
     console.error("[likeness]", e);
     res.status(500).json({ ok: false, error: "Something went wrong." });
   };
-  const staff = (u) => !!u && ["Admin", "Moderator"].includes(u.class);
+  // 1.99ack (siteperms.js, owner decision 2026-10-18): the summary = likeness.view (Staff; was Admin + the long-gone "Moderator"
+  // class), changes = likeness.manage (Admins)
+  const staff = (u) => SP.can(u, "likeness.view");
 
   // Pepe: cuts in, opt-outs / blocks / % out
   app.post("/api/likeness/sync", json, async (req, res) => {
@@ -597,7 +600,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/likeness/admin", addUser, json, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
-    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "likeness.manage")) return res.status(403).json({ ok: false, error: "Admins only." });
     try {
       const b = req.body || {};
       if (b.config) await setConfig(b.config, req.user.username);

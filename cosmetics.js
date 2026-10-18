@@ -25,6 +25,7 @@
 const fs = require("fs");
 const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 // ── catalog ──
 const CATALOG_FILE = path.join(__dirname, "cosmetics.json");
@@ -802,7 +803,7 @@ function register(app, { isBotToken, addUser }) {
     const uid = req.user && req.user.userId;
     if (!uid) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
     const row = (await getQuery("SELECT class, username FROM users WHERE userId = ?", [uid]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
+    if (!SP.can(row, "econ.backend_cutover")) { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
     return row;
   };
   app.get("/api/admin/cosmetic-drops", addUser, async (req, res) => {

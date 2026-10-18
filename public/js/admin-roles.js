@@ -1,5 +1,5 @@
 // admin-roles.js - /admin/roles (adminroles.js, pepeperms.js, 1.99acj): role holders, per-command permissions (admin powers /
-// can use), moderation targets. Every change is a same-origin POST checked on the server with Pepe's own !role / !perm rules;
+// can use), moderation targets; 1.99ack: the website's permissions (siteperms.js - a capability's minimum class, reset). Every change is a same-origin POST checked on the server with Pepe's own !role / !perm rules;
 // the page reloads to show the result (the ladder, who set what). Messages go in with textContent only.
 (function () {
   'use strict';
@@ -35,6 +35,13 @@
         .then(function (j) { done(el, j, function () { el.value = was; }); });
       return;
     }
+    if (el.hasAttribute('data-site-perm')) {
+      var before = el.getAttribute('data-prev');
+      say(msgNear(el), _t('js.admroles.working', 'Saving…'));
+      post('/api/admin/roles/site', { key: el.getAttribute('data-site-perm'), value: el.value })
+        .then(function (j) { done(el, j, function () { if (before != null) el.value = before; }); });
+      return;
+    }
     if (el.hasAttribute('data-perm')) {
       var prev = el.getAttribute('data-prev');
       var body = { kind: el.getAttribute('data-perm'), cmd: el.getAttribute('data-cmd'), value: el.value };
@@ -44,11 +51,18 @@
     }
   });
   // remember each select's value so a refused change puts it back
-  Array.prototype.forEach.call(document.querySelectorAll('select[data-perm]'), function (s) { s.setAttribute('data-prev', s.value); });
+  Array.prototype.forEach.call(document.querySelectorAll('select[data-perm], select[data-site-perm]'), function (s) { s.setAttribute('data-prev', s.value); });
 
   document.addEventListener('click', function (e) {
-    var b = e.target && e.target.closest ? e.target.closest('button[data-remove-role], button[data-reset]') : null;
+    var b = e.target && e.target.closest ? e.target.closest('button[data-remove-role], button[data-reset], button[data-site-reset]') : null;
     if (!b) return;
+    if (b.hasAttribute('data-site-reset')) {
+      var key = b.getAttribute('data-site-reset');
+      if (!window.confirm(_t('js.admroles.confirm_site_reset', 'Put {key} back to its default?', { key: key }))) return;
+      say(msgNear(b), _t('js.admroles.working', 'Saving…'));
+      post('/api/admin/roles/site', { key: key, value: 'default' }).then(function (j) { done(b, j); });
+      return;
+    }
     if (b.hasAttribute('data-remove-role')) {
       var login = b.getAttribute('data-remove-role');
       if (!window.confirm(_t('js.admroles.confirm_remove', 'Remove the role of {login}?', { login: login }))) return;

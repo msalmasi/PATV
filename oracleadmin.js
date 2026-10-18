@@ -11,6 +11,7 @@
 // The page script (public/js/admin-oracle.js) runs the countdowns and the in-page confirm dialog.
 "use strict";
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const O = require("./oracle");
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -47,7 +48,7 @@ function evidenceHtml(ev, labels = {}) {
 async function adminNow(req) {
   if (!req.user || !req.user.userId) return null;
   const u = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
-  return u && u.class === "Admin" ? { userId: u.userId, username: u.username, camfrogUsername: u.camfrogUsername || null } : null;
+  return SP.can(u, "oracle.admin") ? { userId: u.userId, username: u.username, camfrogUsername: u.camfrogUsername || null } : null;
 }
 
 function register(app, { addUser }) {

@@ -445,7 +445,7 @@ function register(app, { isBotToken, addUser }) {
   const admin = async (req, res) => {
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
     const row = (await require("../dbUtils").getQuery("SELECT class, username, userId FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
+    if (!require("../siteperms").can(row, "econ.telemetry_policy")) { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
     return row;
   };
   app.get("/api/admin/policy", addUser, async (req, res) => {

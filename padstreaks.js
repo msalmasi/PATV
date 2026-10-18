@@ -28,6 +28,7 @@
 //   GET  /api/admin/padstreaks/config   POST {min_users}  site Admins (/pads/admin#padstreaks)
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const BACKFILL_FLAG = "padstreak_backfill_1";       // the history import
 const QUIET_FLAG = "padstreak_quiet_2";             // 1.99zx: the quiet badge pass - again for the 60-day tier (+ PAT from then on)
@@ -279,7 +280,7 @@ function register(app, { addUser }) {
   });
   const admin = (req, res, next) => {
     res.set("Cache-Control", "no-store");
-    if (!req.user || req.user.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "games.config")) return res.status(403).json({ ok: false, error: "Admins only." });
     next();
   };
   app.get("/api/admin/padstreaks/config", addUser, admin, async (req, res) => {

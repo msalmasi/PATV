@@ -1,4 +1,5 @@
 <%- include('../partials/admin-open', { title: 'Homepage banner', user, section: 'banner', admIsAdmin: isAdmin }) %>
+<% const cfgOk = (locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals))('banner.config'); -%>
 <%#
   views/admin/banner.ejs - the homepage banner slot (1.99kk, banner.js): the review queue (staff approve / reject / take down),
   the settings and the house promos (admins). Locals: user, isAdmin, D = banner.adminData(), fmt.
@@ -81,24 +82,24 @@
 </section>
 
 <section class="adm-card bna" id="settings" aria-labelledby="bnSetT">
-  <h2 id="bnSetT">Settings <% if (!isAdmin) { %><span class="adm-pill admin">admins only</span><% } %></h2>
+  <h2 id="bnSetT">Settings <% if (!cfgOk) { %><span class="adm-pill admin">admins only</span><% } %></h2>
   <form class="adm-form" id="bnSettings">
-    <label class="ck"><input type="checkbox" name="banner_enabled"<%= C.enabled ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> Show the banner slot on the homepage (<code>banner_enabled</code>)</label>
-    <label class="ck"><input type="checkbox" name="banner_paid_enabled"<%= C.paid_enabled ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> Members can book it with PAT (<code>banner_paid_enabled</code>)</label>
-    <label class="ck"><input type="checkbox" name="banner_chat_sponsor"<%= C.chat_sponsor ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> Enable for site banners: an approved booking's headline and link also run in Pepe's <code>!sponsor</code> rotation in the Camfrog rooms on its booked days - same slots and hourly cadence, nothing charged again (<code>banner_chat_sponsor</code>)</label>
-    <label class="ck"><input type="checkbox" name="banner_chat_sponsor_mic"<%= C.chat_sponsor_mic ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> ...and Pepe speaks it on the mic too, like <code>!sponsor -mic</code> (the music ducks under him) - only in rooms where his TTS is on; elsewhere it stays text (<code>banner_chat_sponsor_mic</code>)</label>
-    <label class="ck"><input type="checkbox" name="banner_chat_house_promos"<%= C.chat_house_promos ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> House promos fill the chat slot: on a day with no paid sponsor in chat, Pepe rotates the enabled house promos below (live jackpot / donation rate) in his <code>!sponsor</code> slot, tagged "From PATV" - one line an hour at most, only while nobody's <code>!sponsor</code> or booking is running, never in rooms that switched sponsor lines or house ads off (<code>banner_chat_house_promos</code>)</label>
-    <label class="ck"><input type="checkbox" name="banner_chat_house_promos_mic"<%= C.chat_house_promos_mic ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> ...and Pepe speaks the house promos on the mic too ("A word from PATV", music ducked, rooms with TTS on). Off by default: free house ads shouldn't talk over a room (<code>banner_chat_house_promos_mic</code>)</label>
-    <label>PAT per day (<code>banner_price_per_day</code>) <input type="number" name="banner_price_per_day" min="1000" step="1000" value="<%= C.price_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label>Max days per booking (<code>banner_max_days</code>) <input type="number" name="banner_max_days" min="1" max="31" value="<%= C.max_days %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label>Max open bookings per member (<code>banner_max_bookings</code>) <input type="number" name="banner_max_bookings" min="1" max="20" value="<%= C.max_bookings %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <label>How far ahead, days (<code>banner_lead_days</code>) <input type="number" name="banner_lead_days" min="2" max="365" value="<%= C.lead_days %>"<%= isAdmin ? '' : ' disabled' %>></label>
-    <% if (isAdmin) { %><div><button type="submit" class="adm-btn">Save settings</button> <span class="adm-msg" id="bnSetMsg" role="status"></span></div><% } %>
+    <label class="ck"><input type="checkbox" name="banner_enabled"<%= C.enabled ? ' checked' : '' %><%= cfgOk ? '' : ' disabled' %>> Show the banner slot on the homepage (<code>banner_enabled</code>)</label>
+    <label class="ck"><input type="checkbox" name="banner_paid_enabled"<%= C.paid_enabled ? ' checked' : '' %><%= cfgOk ? '' : ' disabled' %>> Members can book it with PAT (<code>banner_paid_enabled</code>)</label>
+    <label class="ck"><input type="checkbox" name="banner_chat_sponsor"<%= C.chat_sponsor ? ' checked' : '' %><%= cfgOk ? '' : ' disabled' %>> Enable for site banners: an approved booking's headline and link also run in Pepe's <code>!sponsor</code> rotation in the Camfrog rooms on its booked days - same slots and hourly cadence, nothing charged again (<code>banner_chat_sponsor</code>)</label>
+    <label class="ck"><input type="checkbox" name="banner_chat_sponsor_mic"<%= C.chat_sponsor_mic ? ' checked' : '' %><%= cfgOk ? '' : ' disabled' %>> ...and Pepe speaks it on the mic too, like <code>!sponsor -mic</code> (the music ducks under him) - only in rooms where his TTS is on; elsewhere it stays text (<code>banner_chat_sponsor_mic</code>)</label>
+    <label class="ck"><input type="checkbox" name="banner_chat_house_promos"<%= C.chat_house_promos ? ' checked' : '' %><%= cfgOk ? '' : ' disabled' %>> House promos fill the chat slot: on a day with no paid sponsor in chat, Pepe rotates the enabled house promos below (live jackpot / donation rate) in his <code>!sponsor</code> slot, tagged "From PATV" - one line an hour at most, only while nobody's <code>!sponsor</code> or booking is running, never in rooms that switched sponsor lines or house ads off (<code>banner_chat_house_promos</code>)</label>
+    <label class="ck"><input type="checkbox" name="banner_chat_house_promos_mic"<%= C.chat_house_promos_mic ? ' checked' : '' %><%= cfgOk ? '' : ' disabled' %>> ...and Pepe speaks the house promos on the mic too ("A word from PATV", music ducked, rooms with TTS on). Off by default: free house ads shouldn't talk over a room (<code>banner_chat_house_promos_mic</code>)</label>
+    <label>PAT per day (<code>banner_price_per_day</code>) <input type="number" name="banner_price_per_day" min="1000" step="1000" value="<%= C.price_per_day %>"<%= cfgOk ? '' : ' disabled' %>></label>
+    <label>Max days per booking (<code>banner_max_days</code>) <input type="number" name="banner_max_days" min="1" max="31" value="<%= C.max_days %>"<%= cfgOk ? '' : ' disabled' %>></label>
+    <label>Max open bookings per member (<code>banner_max_bookings</code>) <input type="number" name="banner_max_bookings" min="1" max="20" value="<%= C.max_bookings %>"<%= cfgOk ? '' : ' disabled' %>></label>
+    <label>How far ahead, days (<code>banner_lead_days</code>) <input type="number" name="banner_lead_days" min="2" max="365" value="<%= C.lead_days %>"<%= cfgOk ? '' : ' disabled' %>></label>
+    <% if (cfgOk) { %><div><button type="submit" class="adm-btn">Save settings</button> <span class="adm-msg" id="bnSetMsg" role="status"></span></div><% } %>
   </form>
 </section>
 
 <section class="adm-card bna" id="promos" aria-labelledby="bnPT">
-  <h2 id="bnPT">House promos <% if (!isAdmin) { %><span class="adm-pill admin">admins only</span><% } %></h2>
+  <h2 id="bnPT">House promos <% if (!cfgOk) { %><span class="adm-pill admin">admins only</span><% } %></h2>
   <p class="adm-help">They fill every day nobody booked, rotating per page view (a higher weight shows more often). Leave the headline empty to use the
      built-in text (translated). <code>{jackpot}</code> and <code>{draw}</code> work in any text (Pepeball's live jackpot and draw time); the
      Pepeball promo hides itself while the lotto has no jackpot or draw time.</p>
@@ -107,18 +108,18 @@
     <tbody>
     <% D.promos.forEach((p) => { %>
       <tr data-promo="<%= p.id %>" data-kind="<%= p.kind %>">
-        <td><input type="checkbox" name="enabled"<%= p.enabled ? ' checked' : '' %> aria-label="On"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><input type="checkbox" name="enabled"<%= p.enabled ? ' checked' : '' %> aria-label="On"<%= cfgOk ? '' : ' disabled' %>></td>
         <td><%= PROMO_LABEL[p.kind] || p.kind %><br><span class="adm-help"><%= p.id %></span></td>
-        <td><input type="text" name="headline" maxlength="60" value="<%= p.headline || '' %>" placeholder="<%= p.kind === 'custom' ? '' : '(built-in)' %>" aria-label="Headline"<%= isAdmin ? '' : ' disabled' %>></td>
-        <td><input type="text" name="line" maxlength="120" value="<%= p.line || '' %>" placeholder="<%= p.kind === 'custom' ? '' : '(built-in)' %>" aria-label="Line"<%= isAdmin ? '' : ' disabled' %>></td>
-        <td><input type="text" name="link" maxlength="300" value="<%= p.link || '' %>" aria-label="Link"<%= isAdmin ? '' : ' disabled' %>></td>
-        <td><input type="number" name="weight" min="1" max="10" value="<%= p.weight %>" aria-label="Weight"<%= isAdmin ? '' : ' disabled' %>></td>
-        <td><input type="number" name="sort" min="0" max="1000" value="<%= p.sort %>" aria-label="Order"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><input type="text" name="headline" maxlength="60" value="<%= p.headline || '' %>" placeholder="<%= p.kind === 'custom' ? '' : '(built-in)' %>" aria-label="Headline"<%= cfgOk ? '' : ' disabled' %>></td>
+        <td><input type="text" name="line" maxlength="120" value="<%= p.line || '' %>" placeholder="<%= p.kind === 'custom' ? '' : '(built-in)' %>" aria-label="Line"<%= cfgOk ? '' : ' disabled' %>></td>
+        <td><input type="text" name="link" maxlength="300" value="<%= p.link || '' %>" aria-label="Link"<%= cfgOk ? '' : ' disabled' %>></td>
+        <td><input type="number" name="weight" min="1" max="10" value="<%= p.weight %>" aria-label="Weight"<%= cfgOk ? '' : ' disabled' %>></td>
+        <td><input type="number" name="sort" min="0" max="1000" value="<%= p.sort %>" aria-label="Order"<%= cfgOk ? '' : ' disabled' %>></td>
         <td><%= STAT(p.stats) %></td>
-        <td><% if (isAdmin) { %><button type="button" class="adm-btn ghost" data-save>Save</button><% if (p.kind === 'custom') { %> <button type="button" class="adm-btn danger" data-del>Delete</button><% } %><% } %></td>
+        <td><% if (cfgOk) { %><button type="button" class="adm-btn ghost" data-save>Save</button><% if (p.kind === 'custom') { %> <button type="button" class="adm-btn danger" data-del>Delete</button><% } %><% } %></td>
       </tr>
     <% }) %>
-    <% if (isAdmin) { %>
+    <% if (cfgOk) { %>
       <tr data-promo="" data-kind="custom">
         <td><input type="checkbox" name="enabled" checked aria-label="On"></td>
         <td>✏️ New custom promo</td>

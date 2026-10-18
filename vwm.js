@@ -28,6 +28,7 @@
 // on each read.
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DAY_MS = 86400000;
 const GATES = Object.freeze({ min_age_days: 7, min_level: 2, cap_min: 120 });
@@ -194,7 +195,7 @@ function register(app, { isBotToken, addUser }) {
     app.get("/api/admin/econ/vwm", addUser, async (req, res) => {
       res.set("Cache-Control", "no-store");
       try {
-        if (!require("./rooms").isStaff(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+        if (!SP.can(req.user, "econ.vwm_view")) return res.status(403).json({ ok: false, error: "Admins only." });
         const d = DAY_RE.test(String(req.query.day || "")) ? String(req.query.day) : utcDay(clock());
         res.json(await daily(d));
       } catch (e) { console.error("[vwm]", e); res.status(500).json({ ok: false, error: "Something went wrong." }); }

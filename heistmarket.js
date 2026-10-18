@@ -33,6 +33,7 @@
 "use strict";
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const FLOW = "heist_market_fee";
 const PAWN_FLOW = "heist_pawn";
@@ -219,7 +220,7 @@ async function userByLogin(login) {
   return (await getQuery(`SELECT userId, username, displayname, camfrogUsername, class FROM users WHERE LOWER(camfrogUsername) = ?
                           ORDER BY CASE WHEN camfrogUsername = ? THEN 0 ELSE 1 END LIMIT 1`, [k, String(login)]))[0] || null;
 }
-const isAdmin = (u) => !!u && u.class === "Admin";
+const marketAdmin = (u) => SP.can(u, "games.config");   // 1.99ack (siteperms.js): the market's config + taking a listing down
 
 /** Pepe's heist-shop catalog (gtfsheet: he pushes it) + what the market makes of each item. */
 async function catalog() {
@@ -324,7 +325,7 @@ async function view(viewerId, { item = null, sort = "newest" } = {}) {
   return {
     listings: rows.map((r) => shape(r, cat, cfg, names)), mine: mine.map((r) => Object.assign(shape(r, cat, cfg, names), { mine: r.seller_id === viewerId, holder: r.holder_id === viewerId })),
     history: hist, items, sellable, linked: !!(me && me.camfrogUsername), login: me && me.camfrogUsername ? low(me.camfrogUsername) : null,
-    admin: isAdmin(me), config: { fee_pct: cfg.fee_pct, min_price: cfg.min_price, max_price: cfg.max_price, pawn_on: cfg.pawn_on, pawn_rate: cfg.pawn_rate,
+    admin: marketAdmin(me), config: { fee_pct: cfg.fee_pct, min_price: cfg.min_price, max_price: cfg.max_price, pawn_on: cfg.pawn_on, pawn_rate: cfg.pawn_rate,
                                    item_cap: cat.item_cap },
   };
 }
@@ -512,7 +513,7 @@ async function delist(userId, id, { admin = false, reason = null } = {}) {
   await init();
   const u = await userRow(userId);
   if (!u) throw new Refuse(401, "Sign in first.", "E_AUTH");
-  const asAdmin = admin && isAdmin(u);
+  const asAdmin = admin && marketAdmin(u);
   const out = await tx(async () => {
     const L = await listingRow(id);
     if (!L || L.kind !== "sale") throw new Refuse(404, "No such listing.", "E_NOT_FOUND");
@@ -849,7 +850,7 @@ function register(app, { isBotToken, addUser }) {
   // admins: the config (fee %, limits, the pawn shop) and taking a listing down
   const adminOnly = (fn) => web(async (u, b) => {
     const a = await userRow(u);
-    if (!isAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
+    if (!marketAdmin(a)) throw new Refuse(403, "Admins only.", "E_ADMIN");
     return fn(a, b);
   });
   app.post("/api/admin/heist-market", addUser, adminOnly(async (a, b) => ({ ok: true, config: await setConfig(b.config || {}, a), view: await adminView() })));

@@ -11,6 +11,7 @@
 const fs = require("fs");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const store = require("./feedstore");
 const media = require("./feedmedia");
 const lp = require("./linkpreview");
@@ -279,7 +280,7 @@ async function roomFeed(roomId, reqUser, query = {}) {
   const postRules = await PFm.postRules(roomId).catch(() => ({ required: false, flairs: [] }));
   const flairOn = query.flair ? postRules.flairs.find((f) => String(f.id) === String(query.flair)) || null : null;
   const L = await store.list({ room: roomId, sort, top, page, viewer, limit: 10, tag, flair: flairOn ? flairOn.id : null });
-  const mod = viewer ? { admin: store.isStaff(viewer), owner: await rooms.canManage(viewer, roomId) } : { admin: false, owner: false };
+  const mod = viewer ? { admin: SP.can(viewer, "feed.moderate"), owner: await rooms.canManage(viewer, roomId) } : { admin: false, owner: false };
   return {
     room: roomId, sort, top, page, posts: L.posts, more: L.more, viewer, mod, tag,
     popularTags: await TAGS.padBar(roomId, { viewer, limit: 10 }).catch(() => []),     // 1.99iq; 1.99wq: the pad's own tags first
@@ -488,7 +489,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       const viewer = await viewerOf(req);
       const p = await store.get(req.params.id, viewer, { detail: true });
-      const staff = store.isStaff(viewer);
+      const staff = SP.can(viewer, "feed.moderate");
       const modRooms = new Set();
       if (p && viewer) for (const r of p.roomsAll) if (await rooms.canManage(viewer, r.id)) modRooms.add(r.id);
       // only waiting for approval / hidden / taken out everywhere it was posted: its author, those rooms' owners and staff
@@ -518,17 +519,17 @@ function register(app, { addUser, isBotToken }) {
 
   app.get("/feed/admin", addUser, async (req, res) => {
     const viewer = await viewerOf(req);
-    if (!store.isStaff(viewer)) return res.status(403).render("notFound", { user: viewer ? viewer.username : null, heading: "Admins only", message: "This page is for site staff.", title: "Admins only" });
+    if (!SP.can(viewer, "feed.admin_page")) return res.status(403).render("notFound", { user: viewer ? viewer.username : null, heading: "Admins only", message: "This page is for site staff.", title: "Admins only" });
     await store.init();
     let used = 0, free = Infinity;
     try { used = await store.usedBytes(null); free = media.diskFreeBytes(); } catch (e) { /* shown as unknown */ }
     res.set("X-Robots-Tag", "noindex");
-    const isAdmin = audit.isAdmin(viewer);
+    const isAdmin = SP.can(viewer, "feed.abuse_details"), dmOk = SP.can(viewer, "dm.report_review");
     res.set("Cache-Control", "no-store");
     res.render("feedAdmin", { user: viewer.username, viewer, C: store.config(), D: store.DEFAULTS, reports: await store.reports(), bans: await store.bans(),
                               used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])),
                               userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [],
-                              dmReports: isAdmin ? await require("./messages").reportQueue().catch((e) => { console.error("[feed] dm reports:", e.message); return []; }) : [],
+                              dmReports: dmOk ? await require("./messages").reportQueue().catch((e) => { console.error("[feed] dm reports:", e.message); return []; }) : [],
                               termsPH: terms.placeholders(), termsLive: terms.enforced(),
                               pepe: await require("./pepefeed").adminView().catch((e) => { console.error("[feed] pepe admin view:", e.message); return null; }),
                               // 1.99dc: Pepe's automod - global caps, the All scope, recent calls everywhere
@@ -553,7 +554,7 @@ function register(app, { addUser, isBotToken }) {
                                  LEFT JOIN feed_posts p ON p.id = a.post_id WHERE (a.file = ? OR a.thumb = ? OR a.poster = ?) AND a.state = 'ready' LIMIT 1`, [name, name, name]))[0];
       if (!a) return res.status(404).end();
       const uid = req.user && req.user.userId;
-      const staff = store.isStaff(req.user);
+      const staff = SP.can(req.user, "feed.see_hidden");
       if (!a.post_id && !(uid && uid === a.owner_id) && !staff) return res.status(404).end();
       if (a.post_id && (a.deleted_at || a.hidden_at) && !staff && !(a.hidden_at && !a.deleted_at && uid === a.author_id)) return res.status(404).end();
       // 1.99fu: a post that lives only in Approved pads: its members (and its author / staff) only
@@ -613,7 +614,7 @@ function register(app, { addUser, isBotToken }) {
       const refusal = await store.postRefusal(u, [], { media: true });
       if (refusal) return res.status(refusal.status).json({ ok: false, error: refusal.message });
       const t = Date.now();
-      if (!store.isStaff(u)) {
+      if (!SP.can(u, "feed.limits_exempt")) {
         const recent = await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND created > ?", [u.userId, t - 3600e3]);
         if (recent[0].n >= C.uploads_per_hour) return res.status(429).json({ ok: false, error: "You've uploaded a lot this hour - try again later." });
         const day = await getQuery("SELECT COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND created > ?", [u.userId, t - 86400e3]);
@@ -936,7 +937,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/feed/admin/config", addUser, guard(false), async (req, res) => {
     try {
       const v = await viewerOf(req);
-      if (!v || v.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!SP.can(v, "feed.config")) return res.status(403).json({ ok: false, error: "Admins only." });
       res.json({ ok: true, config: await store.setConfig(req.body || {}, v.username) });
     } catch (e) { fail(res, e); }
   });
@@ -947,7 +948,7 @@ function register(app, { addUser, isBotToken }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     try {
       const v = await viewerOf(req);
-      if (!audit.isAdmin(v)) return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!SP.can(v, "feed.abuse_details")) return res.status(403).json({ ok: false, error: "Admins only." });
       const q = req.query || {};
       const target = q.post ? { post: String(q.post).slice(0, 32) } : q.comment ? { comment: String(q.comment).slice(0, 32) } : q.user ? { user: String(q.user).slice(0, 64) } : {};
       res.json({ ok: true, details: await audit.details(v, target, { reason: q.why }) });

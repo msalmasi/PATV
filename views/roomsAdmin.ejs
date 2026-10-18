@@ -3,11 +3,18 @@
      rates. Stage money settings stay on /stage/admin. -->
 <link rel="stylesheet" href="/public/css/stage.css?v=9">
 <% const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US'); %>
+<%# 1.99ack (siteperms.js): the page = pads.registry_admin; someone holding only pads.connect_review (Assistants, by default) sees
+    just the connection requests; owner royalties config = pads.royalties_config and the boosts switch =
+    econ.boost_challenge_cosmetic_cfg (both Admins, owner decision 2026-10-18). %>
+<% const _can = locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals);
+   const full = _can('pads.registry_admin'), royOk = _can('pads.royalties_config'), boostOk = _can('econ.boost_challenge_cosmetic_cfg'); -%>
 <main class="sb" id="ra">
   <div class="sb-head">
     <h1><span class="ds-ic" aria-hidden="true">🏠</span> Pads admin</h1>
-    <p class="lede">Who owns each pad, which pad the homepage features, pad vault fines &amp; transfers, and pad owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/p">Pads ›</a></p>
+    <% if (full) { %><p class="lede">Who owns each pad, which pad the homepage features, pad vault fines &amp; transfers, and pad owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/p">Pads ›</a></p>
+    <% } else { %><p class="lede">Pad connection requests. <a href="/p">Pads ›</a></p><% } %>
   </div>
+<% if (full) { %>
 
   <section class="sb-card" id="front" aria-labelledby="frontT">
     <h2 id="frontT">Front-page pad</h2>
@@ -44,13 +51,15 @@
     </div></details>
   </section>
 
-  <%# 1.99ee: boosts (boosts.js) - the money switch and what's been routed so far %>
+  <%# 1.99ee: boosts (boosts.js) - the money switch and what's been routed so far (1.99ack: Admins) %>
+  <% if (boostOk) { %>
   <section class="sb-card" id="boosts" aria-labelledby="boostT">
     <h2 id="boostT"><span class="ds-ic" aria-hidden="true">🚀</span> Boosts &amp; slot fees</h2>
     <p class="muted">Featuring is earned (the automatic pick above); people boost pads instead. Every boost and stage slot fee is a room flow: half goes to the Federal Reserve (Fort Knox's stand-in until economy v2 E-1), half is held in the pad's room-vault escrow (room_flow_ledger) until E-3 opens room vaults. An owner paying in their own pad: all of it to the Reserve.</p>
     <form id="boostCfg" class="row"><label class="chk"><input type="checkbox" name="pay" id="boostPay"> Boosting on (PAT moves)</label><button type="submit" class="btn primary">Save</button><span class="msg" id="boostMsg" role="status"></span></form>
     <p class="muted" id="boostSum">Loading…</p>
   </section>
+  <% } %>
 
   <section class="sb-card" id="owners" aria-labelledby="ownT">
     <h2 id="ownT">Pads &amp; owners</h2>
@@ -74,18 +83,20 @@
   </section>
 
   <%# 1.99yx: ⚖️ pad vault fines + admin transfers (padfines.js) %>
-  <%- include('partials/pads-admin-fines', { list, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
+  <%- include('partials/pads-admin-fines', { list, isAdmin: _can('econ.padvault_move') }) %>
 
   <%# 1.99zm: 🔥 pad streaks - the bar a pad's day has to clear (padstreaks.js) %>
-  <%- include('partials/pads-admin-streaks', { isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
+  <%- include('partials/pads-admin-streaks', { isAdmin: _can('games.config') }) %>
 
   <%# 1.99iy: pad addresses (+ 1.99iz creation, 1.99ja connections) - padcfg.js %>
-  <% if (typeof padsCfg !== 'undefined' && padsCfg) { %><%- include('partials/pads-admin-cfg', { padsCfg, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %><% } %>
-  <%- include('partials/pads-admin-conn') %>
+  <% if (typeof padsCfg !== 'undefined' && padsCfg) { %><%- include('partials/pads-admin-cfg', { padsCfg, isAdmin: _can('pads.config') }) %><% } %>
+<% } %>
+  <% if (_can('pads.connect_review')) { %><%- include('partials/pads-admin-conn') %><% } %>
+<% if (full) { %>
 
   <section class="sb-card" id="royalties" aria-labelledby="royT">
-    <h2 id="royT">Pad owner royalties</h2>
-    <form id="royForm" class="settings">
+    <h2 id="royT">Pad owner royalties<% if (!royOk) { %> <span class="adm-pill admin">admins change these</span><% } %></h2>
+    <form id="royForm" class="settings"><fieldset<%= royOk ? '' : ' disabled' %> style="display:contents;border:0;margin:0;padding:0">
       <label class="chk"><input type="checkbox" name="enabled" <%= roy.enabled ? 'checked' : '' %>> Royalties on</label>
       <label>% of paid stage time<input type="number" name="stage_pct" min="0" max="50" step="0.5" value="<%= roy.stage_pct %>"></label>
       <label>Payout period (days)<input type="number" name="period_days" min="1" max="31" value="<%= roy.period_days %>"></label>
@@ -94,8 +105,8 @@
       <label>…and peak people ≥<input type="number" name="active_peak" min="0" value="<%= roy.active_peak %>"></label>
       <label>Cap per payout (PAT)<input type="number" name="cap_per_period" min="0" value="<%= roy.cap_per_period %>"></label>
       <label>Expire unpaid after (periods)<input type="number" name="keep_periods" min="1" max="52" value="<%= roy.keep_periods %>"></label>
-      <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save royalties</button><span class="msg" id="royMsg" role="status"></span></div>
-    </form>
+      <% if (royOk) { %><div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save royalties</button><span class="msg" id="royMsg" role="status"></span></div><% } %>
+    </fieldset></form>
     <details class="adm-adv"><summary>How owner royalties are booked and paid</summary><div class="adm-adv-body">
     <p class="muted"><b>What owners earn on pad spending is set in one place: Pepe's PAT Routing table</b> (Pepe's admin panel). Every pad flow there (paid commands, song requests, per-use voices, DJ shout-outs, !sponsor) keeps its turf / Reserve shares and sends a <code>room_owner</code> share (default 10%, sponsor 0%) to the owner of the pad it was spent in. That share is deposited in the Federal Reserve and booked here; the weekly release above pays it back out of the Reserve (payout flow <code>room_owner</code>). A pad with no owner, a house pad, or the owner paying in their own pad: nothing is booked and the share stays in the Reserve. Website stage time is the one spend Pepe doesn't route - its share is the % above. A refunded charge voids its royalty. Changing the period length re-buckets future periods.</p>
     </div></details>
@@ -119,7 +130,9 @@
       <% rr.forEach((o) => { %><tr><td><%= o.title %></td><td><%= o.owner %></td><td class="num"><%= fmt(o.accrued_7d) %></td><td class="num"><%= fmt(o.accrued_30d) %></td><td class="num"><%= fmt(o.pending) %></td><td class="num"><%= fmt(o.paid) %></td><td class="num"><%= fmt(o.expired) %></td></tr><% }) %>
     </tbody></table></div>
   </section>
+<% } %>
 </main>
+<% if (full) { %>
 <script>
 (function () {
   'use strict';
@@ -132,15 +145,15 @@
     e.preventDefault();
     post('/api/rooms/front', formJson(e.target)).then(function (j) { document.getElementById('frontMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
   });
-  // 1.99ee: boosts
-  fetch('/api/boost/admin', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+  // 1.99ee: boosts (1.99ack: the card is there for Admins only)
+  if (document.getElementById('boostCfg')) fetch('/api/boost/admin', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
     if (!j.ok) { document.getElementById('boostSum').textContent = j.error || 'Not available.'; return; }
     document.getElementById('boostPay').checked = !!j.config.pay;
     var E = j.escrow, f = function (n) { return Math.round(Number(n) || 0).toLocaleString('en-US'); };
     document.getElementById('boostSum').textContent = 'Routed so far: ' + f(E.total) + ' PAT · to the Reserve (Fort Knox half): ' + f(E.fortknox) +
       ' · held for room vaults: ' + f(E.room_vault) + (E.rooms.length ? ' (' + E.rooms.filter(function (r) { return r.room_vault > 0; }).map(function (r) { return r.room_id + ' ' + f(r.room_vault); }).join(', ') + ')' : '');
   }).catch(function () { document.getElementById('boostSum').textContent = 'Could not load.'; });
-  document.getElementById('boostCfg').addEventListener('submit', function (e) {
+  if (document.getElementById('boostCfg')) document.getElementById('boostCfg').addEventListener('submit', function (e) {
     e.preventDefault();
     post('/api/boost/admin', { pay: document.getElementById('boostPay').checked }).then(function (j) { document.getElementById('boostMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
   });
@@ -160,10 +173,11 @@
   });
   document.getElementById('royForm').addEventListener('submit', function (e) {
     e.preventDefault();
-    post('/api/rooms/admin/royalties', formJson(e.target)).then(function (j) { document.getElementById('royMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+    post('/api/rooms/admin/royalties', formJson(e.target)).then(function (j) { var m = document.getElementById('royMsg'); if (m) m.textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
   });
 })();
 </script>
+<% } %>
 <%- include('partials/admin-close') %>
 </body>
 </html>

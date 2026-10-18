@@ -36,6 +36,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const KEY_RE = /^[A-Za-z0-9_.:@\-]{6,160}$/;
 // 2026-10-12: + profile pad vaults (room:user:<userId>, pepe_padtopup's profile vaults)
@@ -644,7 +645,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
   const admin = async (req, res) => {
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
     const row = (await getQuery("SELECT class, username FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
+    if (!SP.can(row, "econ.backend_cutover")) { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
     return row;
   };
   app.get("/api/admin/pools", addUser, async (req, res) => {

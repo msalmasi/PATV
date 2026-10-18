@@ -22,6 +22,7 @@
 // /api/tables/state hands a signed-in user ONLY their own entry. It is never written to the
 // database, never rendered into page HTML, and never included in anything another user can fetch.
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
 
 const STALE_MS = 45 * 1000;           // no sync for this long = Pepe is offline / restarting
@@ -311,7 +312,7 @@ function register(app, { isBotToken, addUser }) {
         if (u) {
           const acts = await actions.recentFor(req.user.userId, "casino", 6);
           out.me = {
-            username: u.username, camfrog: u.camfrogUsername || null, banned: !!u.casino_banned, admin: u.class === "Admin",
+            username: u.username, camfrog: u.camfrogUsername || null, banned: !!u.casino_banned, admin: SP.can(u, "casino.admin"),
             // 1.99wv: who the page plays as - the chat login, else the PATV account while Pepe acts for accounts
             playAs: u.camfrogUsername || (require("./actorcap").on() ? "🌐 " + u.username : null),
             seats: PRIV.get(String(u.username).toLowerCase()) || [],            // ONLY this user's own seats
@@ -333,7 +334,7 @@ function register(app, { isBotToken, addUser }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in to play." });
     const u = (await getQuery("SELECT camfrogUsername, casino_banned, class FROM users WHERE userId = ?", [req.user.userId]))[0];
     if (!u) return res.status(401).json({ ok: false, error: "Sign in to play." });
-    const isAdmin = u.class === "Admin";
+    const isAdmin = SP.can(u, "casino.admin");
     const adminAct = String((req.body || {}).game) === "admin";
     // 1.99wv (connections audit C): with no chat login the PATV account plays (Pepe seats "🌐 <name>", charged from the account)
     if (!adminAct && !u.camfrogUsername && !require("./actorcap").on()) return res.status(403).json({ ok: false, error: "Link a chat account first (Settings → Account → Connections; for Camfrog, type !verify in a room with Pepe) — you play as that name." });

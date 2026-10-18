@@ -20,6 +20,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("../dbUtils");
+const SP = require("../siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const L = require("./ledger");
 
 const ENGINES = {};
@@ -292,7 +293,7 @@ async function fromForm(userId, cmd, words, idem) {
   if (!e || !e.fromForm) return null;
   const u = (await getQuery("SELECT userId, username, camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   if (!u) return "Couldn't find your account.";
-  const actor = { userId: u.userId, username: u.username, login: u.camfrogUsername || null, admin: u.class === "Admin", via: "web" };
+  const actor = { userId: u.userId, username: u.username, login: u.camfrogUsername || null, admin: SP.can(u, "escrow.override"), via: "web" };
   const parsed = await e.fromForm(words, actor);                     // (an engine may look its record up: loans)
   if (parsed === null) return null;                                  // a verb only Pepe can do (falls back to the queue)
   if (typeof parsed === "string") return parsed;                     // a form error

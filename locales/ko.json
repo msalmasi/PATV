@@ -675,8 +675,6 @@
   "admroles.notes.pad_owners": "패드 소유자는 자기 패드에서 자체 규칙을 가져요(자기 방의 채팅 조정이며, Pepe의 관리자나 소유자에게는 적용되지 않아요). 이 페이지는 그 규칙을 바꾸지 않아요.",
   "admroles.notes.sync": "여기서 한 변경은 Pepe의 다음 동기화 때 반영되고, 채팅에서 한 변경도 같은 방식으로 여기에 나타나요. 두 곳에서 같은 설정을 바꾸면 더 최근 변경이 적용돼요.",
   "admroles.website.h": "웹사이트 권한",
-  "admroles.website.pill": "2차 릴리스",
-  "admroles.website.placeholder": "2차 릴리스에서 추가될 예정이에요: 웹사이트 자체 권한을 여기서 편집할 수 있어요.",
   "admroles.chat.h": "채팅에서 권한 변경",
   "admroles.chat.help": "같은 설정을 Pepe가 있는 모든 방에서 바꿀 수 있어요. 이 페이지와 같은 규칙이 적용돼요.",
   "admroles.chat.cmd": "명령어",

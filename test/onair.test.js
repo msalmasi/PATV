@@ -365,7 +365,7 @@ test("1.99aan: the player's ✂ Cut / 📺 Play bar - Admin + Staff only (endpoi
   assert.match(room, /if \(typeof onairAdmin !== 'undefined' && onairAdmin\) \{ %>[^%]*onair-bar\.js/);
   assert.equal((room.match(/onair-bar\.js/g) || []).length, 1);
   const bridgeSrc = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
-  assert.match(bridgeSrc, /onairAdmin: !!\(req\.user && \(req\.user\.class === "Admin" \|\| req\.user\.class === "Staff"\)\)/);
+  assert.match(bridgeSrc, /onairAdmin: SP\.can\(req\.user, "onair\.operate"\)/);   // 1.99ack: onair.operate (Staff and up by default)
 });
 
 test("1.99aao: a pasted YouTube / Twitch link goes on air straight from the player bar (rights tick, stall clock, no slot)", async () => {

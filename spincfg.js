@@ -15,6 +15,7 @@
 // The card is /admin/games#chatspin (views/partials/admin-spincfg.ejs) - never on a public page.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DEFAULTS = Object.freeze({ chat_private: true });
 
@@ -60,7 +61,7 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false }); return false; }
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return false; }
+    if (!SP.can(row, "games.config")) { res.status(403).json({ ok: false, error: "Admins only." }); return false; }
     return true;
   };
   app.get("/api/admin/spin-cfg", addUser, async (req, res) => {

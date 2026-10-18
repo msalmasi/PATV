@@ -60,6 +60,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const store = require("./feedstore");
 const rooms = require("./rooms");
 const audit = require("./contentaudit");
@@ -231,7 +232,9 @@ async function migrateRespondDefault() {
 }
 async function globalCaps() { await init(); return cleanGlobal(await readJson("pepe:global")); }
 
-const isAdmin = (u) => !!u && u.class === "Admin";
+// 1.99ack (siteperms.js): All + the global caps = feed.pepe_admin; a pad's admin lock (set it / change past it) = feed.admin_lock
+const pepeAdmin = (u) => SP.can(u, "feed.pepe_admin");
+const lockOk = (u) => SP.can(u, "feed.admin_lock");
 /**
  * Change one scope's settings. All (''): site Admins. A room: its owner (unless an admin locked it) or an
  * Admin; only an Admin can set admin_lock. -> the new settings
@@ -240,8 +243,8 @@ async function setScope(user, scope, patch) {
   await init();
   scope = String(scope || "");
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
-  const admin = isAdmin(user);
-  if (!scope) { if (!admin) throw new Refuse(403, "Only site admins set Pepe's settings for All."); }
+  const admin = lockOk(user);
+  if (!scope) { if (!pepeAdmin(user)) throw new Refuse(403, "Only site admins set Pepe's settings for All."); }
   else {
     if (!(await rooms.get(scope))) throw new Refuse(404, "No such pad.");
     if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this pad's owner can do that.");
@@ -269,7 +272,7 @@ async function resetScope(user, scope, fields) {
   await init();
   scope = String(scope || "");
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
-  const admin = isAdmin(user);
+  const admin = lockOk(user);
   if (!scope) throw new Refuse(400, "Pick a pad.");
   if (!(await rooms.get(scope))) throw new Refuse(404, "No such pad.");
   if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this pad's owner can do that.");
@@ -283,7 +286,7 @@ async function resetScope(user, scope, fields) {
   return scopeSettings(scope);
 }
 async function setGlobal(user, patch) {
-  if (!isAdmin(user)) throw new Refuse(403, "Admins only.");
+  if (!pepeAdmin(user)) throw new Refuse(403, "Admins only.");
   await init();
   const next = cleanGlobal({ ...(await globalCaps()), ...(patch || {}) });
   await store.kvSet("pepe:global", JSON.stringify(next));
@@ -395,7 +398,7 @@ async function setMute(user, postId, on) {
   const r = await store.getRow(postId);
   if (!r || r.deleted_at) throw new Refuse(404, "No such post.");
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
-  let ok = user.userId === r.author_id || store.isStaff(user);
+  let ok = user.userId === r.author_id || SP.can(user, "feed.moderate");
   if (!ok) for (const x of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [r.id])) {
     if (await rooms.canManage(user, x.room_id)) { ok = true; break; }
   }
@@ -908,7 +911,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/feed/admin/pepe", addUser, guard, async (req, res) => {
     try {
       const v = await viewer(req), b = req.body || {};
-      if (!isAdmin(v)) return res.status(403).json({ ok: false, error: "Admins only." });
+      if (!pepeAdmin(v)) return res.status(403).json({ ok: false, error: "Admins only." });
       const out = { ok: true };
       if (b.global) out.global = await setGlobal(v, b.global);
       if (b.main) out.main = await setScope(v, "", b.main);

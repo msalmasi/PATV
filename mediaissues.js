@@ -22,6 +22,7 @@
 //   media_issues   one row per report made from PATV
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const conf = require("./mediaconf");
 
 class Refuse extends Error {
@@ -216,7 +217,7 @@ async function comment(user, localOrSeerrId, message, { manager = false } = {}) 
 // ── managing (curators + admins) ──
 async function asActor(user) {
   // a curator acts as their own Seerr user once their Seerr permissions are in place; an admin (or not yet) = the API key
-  if (conf.isAdmin(user)) return null;
+  if (SP.can(user, "media.manage_requests")) return null;
   const row = (await getQuery("SELECT seerr_user, seerr_state FROM request_roles WHERE user_id = ? AND role = 'curator' AND status = 'active'", [user.userId]))[0];
   return row && row.seerr_state === "applied" && row.seerr_user ? row.seerr_user : null;
 }
@@ -315,7 +316,7 @@ function register(app, { addUser } = {}) {
     if (!req.user || !req.user.userId) return res.redirect("/login?next=%2Fplex%2Fmanage");
     if (!(await RR().canManage(req.user).catch(() => false))) return res.status(403).render("plexManage", { user: req.user.username, allowed: false, title: "Manage requests" });
     res.set("Cache-Control", "no-store");
-    res.render("plexManage", { user: req.user.username, allowed: true, title: "Manage requests", admin: conf.isAdmin(req.user), writable: RR().writable() });
+    res.render("plexManage", { user: req.user.username, allowed: true, title: "Manage requests", admin: SP.can(req.user, "media.manage_requests"), writable: RR().writable() });
   });
   app.get("/api/plex/manage/requests", addUser, needUser, manager, lim(ML), J(async (req) => ({ ok: true, ...(await manageRequests(req.query.filter, req.query.page)) })));
   app.post("/api/plex/manage/requests/:id/:verb", addUser, needUser, sameSite, manager, lim(ML), J(async (req) => decide(req.user, req.params.id, req.params.verb)));

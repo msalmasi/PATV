@@ -682,8 +682,6 @@
   "admroles.notes.pad_owners": "Padeigenaars hebben hun eigen regels op hun eigen pad (kamermoderatie in hun eigen kamer, nooit op Pepe’s admins of eigenaren). Deze pagina wijzigt ze niet.",
   "admroles.notes.sync": "Wijzigingen die je hier maakt, bereiken Pepe bij zijn volgende synchronisatie, en wijzigingen in de chat verschijnen hier op dezelfde manier. Als beide dezelfde instelling wijzigen, wint de nieuwste wijziging.",
   "admroles.website.h": "Websiterechten",
-  "admroles.website.pill": "Release 2",
-  "admroles.website.placeholder": "Komt in release 2: de eigen rechten van de website, hier te bewerken.",
   "admroles.chat.h": "Rechten wijzigen vanuit de chat",
   "admroles.chat.help": "Dezelfde instellingen, vanuit elke kamer waar Pepe is. Dezelfde regels gelden als op deze pagina.",
   "admroles.chat.cmd": "Opdracht",

@@ -50,6 +50,7 @@
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const VERIFIED = require("./verified");     // 1.99ws: the one "proven identity" test (connections audit B)
 const rooms = require("./rooms");
 const terms = require("./terms");
@@ -308,14 +309,14 @@ const TAGS = () => require("./feedtags");          // 1.99iq: content tags
 const CREATORS = () => require("./creators");      // 1.99pv: ⭐ PATV Creators - locked posts + 18+ communities
 const FILTER = () => require("./feedfilter");      // 1.99ux: the cheap content filter (opt-in per pad; before Pepe's automod)
 async function blockedFor(viewer) {
-  if (isStaff(viewer)) return [];
+  if (SP.can(viewer, "feed.see_hidden")) return [];
   try { await PADACCESS().init(); return PADACCESS().blockedFor(viewer); } catch (e) { console.error("[feed] pad access:", e.message); return []; }
 }
 /** 1.99fu: may `u` see post row `p` at all, by pad visibility? Staff and the author always; a post with no placement
  *  left goes by its author; else it needs one placement (not taken out) in a pad `u` can see. */
 async function postSeenBy(u, p) {
   if (!p) return false;
-  if (isStaff(u) || (u && u.userId && u.userId === p.author_id)) return true;
+  if (SP.can(u, "feed.see_hidden") || (u && u.userId && u.userId === p.author_id)) return true;
   const blocked = new Set(await blockedFor(u));
   if (!blocked.size) return true;
   const placed = await getQuery("SELECT room_id, removed_at FROM feed_post_rooms WHERE post_id = ?", [p.id]);
@@ -434,7 +435,7 @@ const CTRL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f‪-‮⁦-⁩]/g;
 const cleanLine = (s, n) => String(s == null ? "" : s).replace(CTRL, "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, n);
 const cleanText = (s, n) => String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(CTRL, "").replace(/\n{4,}/g, "\n\n\n").trim().slice(0, n);
 const newId = (n = 12) => crypto.randomBytes(16).toString("base64url").replace(/[-_]/g, "").slice(0, n).padEnd(n, "x");
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+// 1.99ack: was isStaff (Admin / Staff) - now feed.see_hidden / feed.limits_exempt / feed.moderate (siteperms.js) at each check
 // 1.99cg: Pepe's own site account (pepefeed.js creates it). His posts / comments go through the same create /
 // comment code as everyone's, but the per-user rate limits are replaced by his own caps (pepefeed.js, server side)
 // and he never gets the author's automatic upvote (his votes count for nothing in the rankings).
@@ -505,7 +506,7 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
   await init();
   const C = CONFIG;
   if (!u) return { status: 401, message: "Sign in to post." };
-  if (!C.enabled && !isStaff(u)) return { status: 403, message: "Posting is switched off right now." };
+  if (!C.enabled && !SP.can(u, "feed.limits_exempt")) return { status: 403, message: "Posting is switched off right now." };
   if (u.archived_at) return { status: 403, message: "This account is archived." };
   if (u.casino_banned) return { status: 403, message: "Your account is restricted." };       // = the relay's "restricted"
   const t = NOW();
@@ -532,10 +533,10 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
     }
   }
   // 1.99ws (connections audit B): any proven identity (verified.js), not only a Camfrog link
-  if (C.require_link_to_post && !VERIFIED.isVerified(u) && !isStaff(u) && !isPepe(u)) {
+  if (C.require_link_to_post && !VERIFIED.isVerified(u) && !SP.can(u, "feed.limits_exempt") && !isPepe(u)) {
     return { status: 403, message: "To post, " + VERIFIED.LINK_HINT + "." };
   }
-  if (media && !isStaff(u) && !isPepe(u) && !VERIFIED.isVerified(u) && (Number(u.level) || 0) < C.media_min_level) {
+  if (media && !SP.can(u, "feed.limits_exempt") && !isPepe(u) && !VERIFIED.isVerified(u) && (Number(u.level) || 0) < C.media_min_level) {
     return { status: 403, message: `Uploading pictures, audio and video needs level ${C.media_min_level}, or ${VERIFIED.LINK_HINT}.` };
   }
   return null;
@@ -555,7 +556,7 @@ function burst(key, ms) {
  *  binding limit's message, for when it's 0). Staff and Pepe: Infinity. The burst gap isn't counted here. */
 async function postBudget(u) {
   const C = CONFIG, t = NOW();
-  if (isStaff(u) || isPepe(u)) return { left: Infinity, why: null };   // Pepe: pepefeed.js's caps instead
+  if (SP.can(u, "feed.limits_exempt") || isPepe(u)) return { left: Infinity, why: null };   // Pepe: pepefeed.js's caps instead
   const n = async (ms) => (await getQuery("SELECT COUNT(*) AS n FROM feed_posts WHERE author_id = ? AND created > ?", [u.userId, t - ms]))[0].n;
   const day = await n(86400e3), hour = await n(3600e3);
   const caps = [];
@@ -570,7 +571,7 @@ async function postBudget(u) {
   return { left: Math.max(0, best[0]), why: best[1] };
 }
 async function postRate(u) {
-  if (isStaff(u) || isPepe(u)) return null;
+  if (SP.can(u, "feed.limits_exempt") || isPepe(u)) return null;
   const b = await postBudget(u);
   if (b.left <= 0) return b.why;
   const g = burst("post|" + u.userId, CONFIG.post_gap_secs * 1000);
@@ -600,7 +601,7 @@ async function authors(ids) {
   const m = new Map();
   for (const r of rows) {
     const bot = r.userId === PEPE_ID;
-    m.set(r.userId, { userId: r.userId, username: r.username, display: r.displayname || r.username, staff: r.class === "Admin" || r.class === "Staff",
+    m.set(r.userId, { userId: r.userId, username: r.username, display: r.displayname || r.username, staff: SP.atLeast(r, "staff"),
                       bot, avatar: bot ? null : UL.avatarOf(r.avatar), nameCss: bot ? "" : css[r.username] || "" });
   }
   return m;
@@ -629,7 +630,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
               WHERE x.crosspost_of IN (${q}) AND x.deleted_at IS NULL AND x.hidden_at IS NULL AND pr.removed_at IS NULL AND pr.pending = 0 AND pr.hidden_at IS NULL`, ids),
   ]);
   const origs = new Map((ORIG.length ? await decorate(ORIG, viewer, { detail, _inner: true, access }) : []).map((o) => [o.id, o]));
-  const staffV = isStaff(viewer);
+  const staffV = SP.can(viewer, "feed.see_hidden");
   const [A, PR, AT, MV, FW] = await Promise.all([
     authors(rows.map((r) => r.author_id)),
     getQuery(`SELECT post_id, room_id, removed_at, pinned_at, nsfw, hidden_at, pending FROM feed_post_rooms WHERE post_id IN (${q}) ORDER BY created, rowid`, ids),
@@ -638,7 +639,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     // 1.99bz: which of these authors the viewer follows (the author chip's Follow button)
     viewer && viewer.userId ? require("./follows").followedAmong(viewer.userId, "user", rows.map((r) => r.author_id)) : new Set(),
   ]);
-  const staff = isStaff(viewer);
+  const staff = SP.can(viewer, "feed.see_hidden");
   // 1.99eq: posts made from a story capture (storykeep.js): "📸 Captured from <room>", the subject's profile, "Remove me"
   let CAP = new Map();
   if (!_inner) { try { CAP = await require("./storykeep").forPosts(ids, viewer); } catch (e) { CAP = new Map(); } }
@@ -815,7 +816,7 @@ function rankSpec(sort, t = "all", now = NOW()) {
 async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false,
                       media = false, textOnly = false, offset = null, idsOnly = false, quotes = false, quotesToo = false, tag = null, ids = null, flair = null } = {}) {
   await init();
-  const staff = isStaff(viewer);
+  const staff = SP.can(viewer, "feed.see_hidden");
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
   const t = NOW();
   const R = rankSpec(sort, top, t);
@@ -950,7 +951,7 @@ async function postLink(id, hash = "") {
 // ── permissions on a post ──
 async function canModerate(user, post) {
   if (!user || !user.userId) return { admin: false, rooms: [] };
-  if (isStaff(user)) return { admin: true, rooms: post.roomsAll.map((r) => r.id) };
+  if (SP.can(user, "feed.moderate")) return { admin: true, rooms: post.roomsAll.map((r) => r.id) };
   const mine = [];
   for (const r of post.roomsAll) if (await rooms.canManage(user, r.id)) mine.push(r.id);
   return { admin: false, rooms: mine };
@@ -1152,11 +1153,11 @@ async function create(userId, input, deps = {}) {
 async function crosspostOriginal(u, origId) {
   let o = await getRow(origId);
   if (o && o.crosspost_of) o = await getRow(o.crosspost_of);
-  if (!o || o.deleted_at || (o.hidden_at && !isStaff(u))) throw new Refuse(404, "No such post.");
+  if (!o || o.deleted_at || (o.hidden_at && !SP.can(u, "feed.see_hidden"))) throw new Refuse(404, "No such post.");
   if (!(await postSeenBy(u, o))) throw new Refuse(404, "No such post.");             // 1.99fu: an Approved pad's post, to an outsider
   const v = visibleSql(NOW());
   const shown = (await getQuery(`SELECT 1 FROM feed_posts p WHERE p.id = ? AND ${v.sql}`, [o.id, ...v.args]))[0];
-  if (!shown && !isStaff(u)) throw new Refuse(409, "That post isn't visible in any pad, so it can't be crossposted.");
+  if (!shown && !SP.can(u, "feed.see_hidden")) throw new Refuse(409, "That post isn't visible in any pad, so it can't be crossposted.");
   // 1.99fu: a post that lives only in Approved (members-only) pads stays there - a crosspost would show it to everyone
   await PADACCESS().init();
   const live = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [o.id])).map((r) => r.room_id);
@@ -1246,7 +1247,7 @@ async function crosspostMany(userId, origId, input = {}) {
     else go.push([res, R]);
     results.push(res);
   }
-  if (go.length && !isStaff(u) && !isPepe(u)) {
+  if (go.length && !SP.can(u, "feed.limits_exempt") && !isPepe(u)) {
     // every crosspost is a post: the whole selection must fit what's left of the limits, or none is made
     const b = await postBudget(u);
     if (b.left <= 0) throw new Refuse(429, b.why);
@@ -1388,7 +1389,7 @@ async function remove(user, id, reason) {
   const r = await getRow(id);
   if (!r || r.deleted_at) throw new Refuse(404, "No such post.");
   const own = user && user.userId === r.author_id;
-  if (!own && !isStaff(user)) throw new Refuse(403, "Only the author or an admin can delete a post.");
+  if (!own && !SP.can(user, "feed.moderate")) throw new Refuse(403, "Only the author or an admin can delete a post.");
   await runQuery("UPDATE feed_posts SET deleted_at = ?, deleted_by = ?, delete_reason = ? WHERE id = ? AND deleted_at IS NULL",
                  [NOW(), own ? "author" : "admin:" + user.username, own ? null : cleanLine(reason, 200) || "removed by an admin", id]);
   await runQuery("UPDATE feed_reports SET resolved_at = ?, resolved_by = ?, action = 'deleted' WHERE post_id = ? AND resolved_at IS NULL", [NOW(), user.username, id]);
@@ -1423,7 +1424,7 @@ async function restoreToRoom(user, id, roomId) {
 
 /** Admin: force the NSFW flag (1/0) or give it back to the author (null). Also un-hides / hides. */
 async function adminSet(user, id, { nsfw, hidden, locked } = {}) {
-  if (!isStaff(user)) throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "feed.moderate")) throw new Refuse(403, "Admins only.");
   const r = await getRow(id);
   if (!r) throw new Refuse(404, "No such post.");
   // 1.99pv: locked content can never be explicit - marking it NSFW takes it down (and refunds its buyers) instead
@@ -1455,10 +1456,10 @@ function cleanDir(dir, on) {
   return null;
 }
 // 1.99ws: any proven identity (verified.js) - anti-brigade: a sock puppet has none
-const downCounts = (u, C = CONFIG) => !!u && (isStaff(u) || VERIFIED.isVerified(u) || (Number(u.level) || 0) >= C.downvote_min_level);
+const downCounts = (u, C = CONFIG) => !!u && (SP.can(u, "feed.limits_exempt") || VERIFIED.isVerified(u) || (Number(u.level) || 0) >= C.downvote_min_level);
 const voteLog = new Map();      // userId -> [timestamps] of recent vote changes (in memory; resets on restart)
 function voteRate(u) {
-  if (isStaff(u)) return null;
+  if (SP.can(u, "feed.limits_exempt")) return null;
   const t = NOW(), C = CONFIG;
   const arr = (voteLog.get(u.userId) || []).filter((x) => t - x < 3600e3);
   voteLog.set(u.userId, arr);
@@ -1555,7 +1556,7 @@ async function comments(postId, viewer, sort = "best") {
     ? new Map((await getQuery("SELECT comment_id, value FROM feed_comment_votes WHERE post_id = ? AND user_id = ?", [postId, viewer.userId])).map((v) => [v.comment_id, v.value > 0 ? 1 : -1]))
     : new Map();
   // 1.99cc: a comment hidden by an urgent report is gone for everyone but staff (it shows to them, tagged)
-  const staff = isStaff(viewer);
+  const staff = SP.can(viewer, "feed.see_hidden");
   const gone = (c) => !!c.deleted_at || (!!c.hidden_at && !staff);
   const all = rows.map((c) => ({ id: c.id, parent: c.parent_id, body: gone(c) ? "" : c.body, deleted: gone(c), hidden: !!c.hidden_at && staff, created: c.created, edited: c.edited,
     author: gone(c) ? null : A.get(c.author_id) || { username: "[gone]", display: "[deleted account]" },
@@ -1599,7 +1600,7 @@ async function comment(user, postId, { body, parent } = {}) {
   const text = cleanText(body, COMMENT_MAX);
   if (!text) throw new Refuse(400, "Write something first.");
   await stickerCheck(u.userId, text);
-  if (!isStaff(u) && !isPepe(u)) {
+  if (!SP.can(u, "feed.limits_exempt") && !isPepe(u)) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_comments WHERE author_id = ? AND created > ?", [u.userId, NOW() - 3600e3]))[0].n;
     if (n >= CONFIG.comments_per_hour) throw new Refuse(429, "You've commented a lot this hour - try again later.");
     if (isNewAccount(u) && n >= 10) throw new Refuse(429, "New accounts can comment 10 times an hour - to lift that, " + VERIFIED.LINK_HINT + ".");
@@ -1676,7 +1677,7 @@ async function editComment(user, id, body) {
 async function removeComment(user, id, reason) {
   const c = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [String(id)]))[0];
   if (!c || c.deleted_at) throw new Refuse(404, "No such comment.");
-  let ok = user && (user.userId === c.author_id || isStaff(user));
+  let ok = user && (user.userId === c.author_id || SP.can(user, "feed.moderate"));
   if (!ok && user) {
     for (const r of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [c.post_id])) {
       if (await rooms.canManage(user, r.room_id)) { ok = true; break; }
@@ -1691,7 +1692,7 @@ async function removeComment(user, id, reason) {
     const why = cleanLine(reason, 200);
     await notify(c.author_id, { title: "Your comment was removed", body: `"${cleanLine(c.body, 80)}" was removed by a moderator${why ? ": " + why : "."}`,
                                 link: await postLink(c.post_id), ref: "feed-crm:" + c.id });
-    if (!isStaff(user)) {
+    if (!SP.can(user, "feed.moderate")) {
       for (const r of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [c.post_id])) {
         if (await rooms.canManage(user, r.room_id)) await rooms.event(r.room_id, "feed-comment-remove", user.username, `${c.id} on ${c.post_id}${why ? ": " + why : ""}`);
       }
@@ -1744,7 +1745,7 @@ async function reportGate(user, reason) {
   if (u.archived_at) throw new Refuse(403, "This account is archived.");
   const g = burst("report|" + u.userId, 3000);
   if (g) throw new Refuse(429, `Slow down - try again in ${g}s.`);
-  if (isStaff(u)) return { u, trusted: true };
+  if (SP.can(u, "feed.limits_exempt")) return { u, trusted: true };
   const t = NOW(), C = CONFIG;
   const urgent = URGENT.includes(reason);
   const cnt = async (since, extra = "") => (await getQuery(`SELECT (SELECT COUNT(*) FROM feed_reports WHERE reporter_id = ?1 AND created > ?2 ${extra})
@@ -1879,7 +1880,7 @@ async function reports({ open = true } = {}) {
   }).sort((a, b) => (b.urgent - a.urgent));
 }
 async function resolveReports(user, postId, action) {
-  if (!isStaff(user)) throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "feed.moderate")) throw new Refuse(403, "Admins only.");
   await runQuery("UPDATE feed_reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE post_id = ? AND resolved_at IS NULL", [NOW(), user.username, cleanLine(action, 20) || "dismissed", postId]);
   return true;
 }
@@ -1905,7 +1906,7 @@ async function tellReporters(rows, what, outcome) {
  * tell (default true): each reporter gets an inbox notice of the outcome. -> {ok, resolved, notified}
  */
 async function reportAction(user, { post, comment = null, action, tell = true, days = 0, reason = "" } = {}) {
-  if (!isStaff(user)) throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "feed.moderate")) throw new Refuse(403, "Admins only.");
   if (!ACTIONS.includes(action)) throw new Refuse(400, "Unknown action.");
   const p = await getRow(post);
   if (!p) throw new Refuse(404, "No such post.");
@@ -1958,7 +1959,7 @@ async function userReports() {
 }
 /** Admin outcome on an account's open reports. action: dismiss | false | ban. */
 async function userReportAction(user, { userId, action, tell = true, days = 0, reason = "" } = {}) {
-  if (!isStaff(user)) throw new Refuse(403, "Admins only.");
+  if (!SP.can(user, "feed.moderate")) throw new Refuse(403, "Admins only.");
   if (!["dismiss", "false", "ban"].includes(action)) throw new Refuse(400, "Unknown action.");
   const T = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(userId || "")]))[0];
   if (!T) throw new Refuse(404, "No such user.");
@@ -1984,7 +1985,7 @@ async function userReportAction(user, { userId, action, tell = true, days = 0, r
 // ── feed bans (site staff: whole feed or a room; room owners: their room) ──
 async function ban(user, target, { room = "", reason = "", days = 0 } = {}) {
   const roomId = String(room || "");
-  if (roomId ? !(await rooms.canManage(user, roomId)) : !isStaff(user)) throw new Refuse(403, roomId ? "Only this pad's owner can do that." : "Admins only.");
+  if (roomId ? !(await rooms.canManage(user, roomId)) : !SP.can(user, "feed.moderate")) throw new Refuse(403, roomId ? "Only this pad's owner can do that." : "Admins only.");
   const u = await rooms.findUser(target);
   if (!u) throw new Refuse(404, `No single PATV account named "${String(target).slice(0, 40)}".`);
   if (roomId && rooms.isProfile(roomId) && u.userId === roomId.slice(rooms.PROFILE_PREFIX.length)) throw new Refuse(400, "That's you.");   // 1.99df
@@ -1998,7 +1999,7 @@ async function ban(user, target, { room = "", reason = "", days = 0 } = {}) {
 }
 async function unban(user, userId, room = "") {
   const roomId = String(room || "");
-  if (roomId ? !(await rooms.canManage(user, roomId)) : !isStaff(user)) throw new Refuse(403, "Not allowed.");
+  if (roomId ? !(await rooms.canManage(user, roomId)) : !SP.can(user, "feed.moderate")) throw new Refuse(403, "Not allowed.");
   await runQuery("DELETE FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]);
   return true;
 }
@@ -2084,7 +2085,7 @@ async function announceState(roomId, viewer = null) {
   if (plat === "profile") return { ok: false, code: "site", why: "A profile has no Camfrog room", manage: false };     // 1.99df
   if (plat !== "camfrog") return { ok: false, code: "site", why: `${PLAT_NAME[plat] || "Site"} pad, no Camfrog room`, manage: false };
   if (!(await mentionOn(id))) {
-    const manage = !!viewer && (isStaff(viewer) || !!(await rooms.canManage(viewer, id).catch(() => false)));
+    const manage = !!viewer && (SP.can(viewer, "feed.moderate") || !!(await rooms.canManage(viewer, id).catch(() => false)));
     return { ok: false, code: "off", why: "Announcements are off for this pad", manage };
   }
   if (pepeInFn(id) === false) return { ok: false, code: "away", why: "Pepe isn't in this room right now", manage: false };
@@ -2230,7 +2231,7 @@ async function roomPostRefusal(u, roomId) {
 /** Lock / unlock: staff anywhere; a room owner only if every community the post shows in is one they manage. */
 async function canLock(user, postId) {
   if (!user || !user.userId) return false;
-  if (isStaff(user)) return true;
+  if (SP.can(user, "feed.moderate")) return true;
   const p = await getRow(postId);
   if (!p) return false;
   const placed = await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [postId]);
@@ -2400,7 +2401,7 @@ module.exports = {
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,
   notify, urgentNotice, cleanLine,
-  setRestricted, mentionOn, setMention, migrateMentionDefault, announceState, _setPepeIn, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
+  setRestricted, mentionOn, setMention, migrateMentionDefault, announceState, _setPepeIn, takeMentions, sweep, hotScore, priceOf, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,
   blockedFor, postSeenBy,      // 1.99fu: pad visibility (padaccess.js)
 };

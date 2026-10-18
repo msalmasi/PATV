@@ -12,6 +12,7 @@
 // announce them in the room. `!poll backend off` detaches: the running poll goes back to Pepe and local polls run as
 // before. Site switch polls_meta.enabled: default ON on staging, OFF on prod (an admin turns it on).
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS polls (
@@ -217,7 +218,7 @@ async function fromForm(userId, kind, words, opts = {}) {
     return r.ok ? "🗳️ Poll started." : r.msg;
   }
   if (kind === "poll.end") {
-    const r = await act("end", { poll_id: words[0] || undefined, by: me.camfrogUsername || WEB + me.username, admin: me.class === "Admin" }, "web");
+    const r = await act("end", { poll_id: words[0] || undefined, by: me.camfrogUsername || WEB + me.username, admin: SP.can(me, "escrow.override") }, "web");
     return r.ok ? "🗳️ Poll ended." : r.msg;
   }
   return null;
@@ -279,7 +280,7 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/admin/polls-backend", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(row, "econ.backend_cutover")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     await setPmeta("enabled", !!(req.body || {}).on);
     res.json({ ok: true, enabled: await backendEnabled() });
@@ -355,7 +356,7 @@ function register(app, { isBotToken, addUser }) {
       const counts = new Map();
       for (const p of all) { const k = p.padv ? p.padv.slug : "none"; counts.set(k, { slug: k, title: p.padv ? p.padv.title : null, n: ((counts.get(k) || {}).n || 0) + 1 }); }
       if (want !== null) all = all.filter((p) => (p.padId || "") === want);
-      const isAdmin = !!(me && me.class === "Admin");
+      const isAdmin = SP.can(me, "escrow.override");
       const canEndOf = (p) => !!(p && p.status === "active" && me && (isAdmin || (me.camfrogUsername && same(me.camfrogUsername, p.creator))
                                                                      || same(WEB + me.username, p.creator)));
       const actives = all.filter((p) => p.status === "active");

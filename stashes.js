@@ -44,6 +44,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const MAX_OWNED = 3;
 const MAX_MEMBERS = 10;
@@ -867,7 +868,7 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/admin/stash-backend", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(row, "econ.backend_cutover")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     await init();
     if (await live()) return res.status(409).json({ ok: false, error: "Already imported - the site owns the stashes now." });

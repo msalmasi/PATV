@@ -6,6 +6,7 @@
 // start one) goes through the website action queue (actions.js, POST /act), which Pepe runs as the
 // user's linked Camfrog name — so every rule and fee is exactly the chat command's.
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const markets = require("./markets");
 const actions = require("./actions");
 
@@ -119,7 +120,7 @@ function register(app, { isBotToken, addUser }) {
           // an unlinked account is its username in the site's games - only while no other account has that name as a chat login
           me = await require("./accountkey").gameName({ userId: req.user.userId, username: u.username, camfrogUsername: camfrog });
           bal = Number(u.points_balance) || 0;
-          isAdmin = u.class === "Admin";
+          isAdmin = SP.can(u, "escrow.override");
         }
         acts = await actions.recentFor(req.user.userId, "wagers");
       }

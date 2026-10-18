@@ -42,6 +42,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const BUDGET = require("./public/js/donpromo-budget");   // 1.99vi: the budget arithmetic + wording, shared with the admin form
 
 const DAY = 86400000;
@@ -856,12 +857,12 @@ async function promoByDay(sinceMs) {
 function register(app, { addUser, noTimers } = {}) {
   const guard = require("./middleware/authGuard");
   init().then(() => { if (!noTimers) startTimer(); }).catch((e) => console.error("[donpromo] setup:", e.message));
-  const isAdmin = (u) => !!u && u.class === "Admin";
+  const promoAdmin = (u) => SP.can(u, "donations.admin");   // 1.99ack (siteperms.js, locked: Admins)
   const json = (fn, { admin = false, signed = admin } = {}) => [addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (req.method === "POST" && !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     if (signed && (!req.user || !req.user.userId)) return res.status(401).json({ ok: false, error: "Sign in first." });
-    if (admin && !isAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (admin && !promoAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
     try { res.json({ ok: true, ...(await fn(req, req.body || {})) }); } catch (e) {
       if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, ...(e.code ? { code: e.code, detail: e.detail } : {}) });
       console.error("[donpromo]", e && e.message);

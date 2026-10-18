@@ -21,6 +21,7 @@
   }
   function play(a) { return a ? '<audio controls preload="none" src="' + esc(a) + '" style="height:28px;max-width:180px"></audio>' : ''; }
   function cfgForm(form, cfg, skip) {
+    if (!form) return;   // 1.99ack: a part this viewer can't use isn't on the page
     form.innerHTML = Object.keys(cfg).filter(function (k) { return typeof cfg[k] !== 'object' && (!skip || skip.indexOf(k) < 0); }).map(function (k) {
       var v = cfg[k];
       if (typeof v === 'boolean') return '<label><span>' + esc(k) + '</span><select name="' + esc(k) + '"><option value="1"' + (v ? ' selected' : '') + '>on</option><option value="0"' + (!v ? ' selected' : '') + '>off</option></select></label>';
@@ -35,6 +36,7 @@
   }
 
   function loadSb() {
+    if (!box('reports')) return Promise.resolve();
     return get('/api/soundboards/admin').then(function (d) {
       if (!d.ok) { box('reports').textContent = 'Staff only.'; return; }
       box('reports').innerHTML = table(['Clip', 'Board', 'Status', { t: 'Reports', r: 1 }, 'Audio', ''], d.reported.map(function (c) {
@@ -51,6 +53,7 @@
     });
   }
   function loadVoices() {
+    if (!box('voices')) return Promise.resolve();
     return get('/api/voices/admin').then(function (d) {
       if (!d.ok) { box('voices').textContent = 'Staff only.'; return; }
       box('voices').innerHTML = table(['Voice', 'Owner', { t: 'Per use', r: 1 }, { t: 'Unlock', r: 1 }, { t: 'Cut %', r: 1 }, 'Flags', 'Status', ''], d.voices.map(function (v) {
@@ -66,6 +69,7 @@
     });
   }
   function loadLikeness() {
+    if (!box('likeness')) return Promise.resolve();
     return get('/api/likeness/admin').then(function (d) {
       if (!d.ok) { box('likeness').textContent = 'Staff only.'; return; }
       var tot = d.totals || {};
@@ -86,6 +90,7 @@
     });
   }
   function loadClones() {
+    if (!box('clones')) return Promise.resolve();
     return get('/api/voiceclone/admin').then(function (d) {
       if (!d || !d.ok) { box('clones').innerHTML = '<p class="ds-meta">Not available.</p>'; return; }
       box('clones').innerHTML = table(['Who', 'Status', 'Checks', 'Audio', 'Created', ''], d.rows.map(function (c) {

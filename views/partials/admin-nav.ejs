@@ -1,61 +1,67 @@
 <%#
   views/partials/admin-nav.ejs - the admin area's sections (1.99cv). Sidebar on desktop, a top bar on phones.
-  Params: section (the current key), admIsAdmin (bool: badges "admin only" pages for Staff; nothing is hidden).
+  Params: section (the current key), admIsAdmin (the page's "is an admin" flag - only the test fallback below uses it).
+  1.99ack: every entry and sub-link names the capabilities (siteperms.js) that open it, and the viewer sees only what
+  they can use (an Assistant: the pages of their own capabilities - banner / soundboard / pad connection review).
   Sub-links are anchors on that section's page; old anchors on /feed/admin (#urgent #users #dms #audit #pepe) are kept.
 %><%
+  const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals);
   const _sec = typeof section !== 'undefined' ? section : '';
-  const _adm = typeof admIsAdmin !== 'undefined' ? !!admIsAdmin : false;
+  const AREA = 'admin.area', SENS = 'admin.sensitive_overview';
+  // [key, href, icon, label, [sub-links: [href, label, capability?]], [capabilities that open the page]]
   const NAV = [
-    ['overview', '/admin', '🧭', 'Overview', []],
-    ['users', '/admin/users', '👥', 'Users & Accounts', [['#roles', 'Roles & classes'], ['#xp', 'XP'], ['#welcome-admin', 'Welcome bonus', 1], ['#stale-admin', 'Stale cleanup', 1], ['#merges', 'Merges']]],
-    ['accounts', '/admin/accounts', '🔐', 'Account security', [['#lookup', 'Look up a member', 1], ['#deletions', 'Deletions', 1], ['#events', 'Recent events', 1]]],   // 1.99wl: accountsadmin.js
-    ['economy', '/admin/economy', '🏦', 'Economy', [['#reserve', 'Reserve & flows', 1], ['#loans', 'Loans & credit', 1], ['#grants', 'PAT grants'], ['#codes', 'Redemption codes'], ['#royalties', 'Royalties'], ['#shop', 'Prize shop'], ['#oracle', 'AI judge rulings', 1], ['#elsewhere', "On Pepe's panel"]]],
-    ['markets', '/admin/markets', '🤖', 'Auto markets', [['#settings', 'Settings', 1], ['#generate', 'Generate / preview', 1], ['#review', 'Review', 1], ['#list', 'Auto-created', 1]]],   // 1.99th: automkt.js
-    ['raffles', '/admin/raffles', '🎫', 'Raffles', [['#settings', 'Settings', 1], ['#review', 'Review', 1], ['#open', 'Open raffles', 1], ['#house', 'House raffle', 1], ['#recent', 'Recent', 1]]],   // 1.99xq: raffles.js (was a card on /raffles)
-    ['oracle', '/admin/oracle', '⚖️', 'AI judge rulings', []],   // 1.99uc: oracleadmin.js - the AI judge's proposals and disputes
-    ['pads', '/pads/admin', '🏠', 'Pads', [['#front', 'Front-page pad'], ['#owners', 'Pads & owners'], ['#royalties', 'Owner royalties']]],
-    ['feed', '/feed/admin', '🛡️', 'Feed & Trust and Safety', [['#urgent', 'Reports'], ['#users', 'Reported users'], ['#dms', 'Reported DMs', 1], ['#audit', 'Access log', 1], ['#bans', 'Feed bans'], ['#settings', 'Settings & Terms'], ['#pepe', 'Pepe on the feed'], ['/feed/admin/filter', 'Content filter', 1]]],
-    ['imagesafety', '/admin/imagesafety', '🖼️', 'Image safety', [['#settings', 'Settings', 1], ['#review', 'Review', 1]]],
-    ['shopart', '/admin/shopart', '🎨', 'Shop pictures', [['#settings', 'Settings'], ['#log', 'Generations']]],   // 1.99xr: shopart.js - the shop's Generate image button
-    ['takedowns', '/admin/takedowns', '🚨', 'TAKE IT DOWN (48 h)', []],   // 1.99pv: takedown.js
-    ['creators', '/admin/creators', '⭐', 'PATV Creators', [['#apps', 'Creators'], ['#disputes', 'Disputes'], ['#ledger', 'Ledger'], ['#settings', 'Settings', 1], ['/admin/creators/explicit', 'Explicit tier checklist', 1]]],   // 1.99pv: creators.js
-    ['banner', '/admin/banner', '📣', 'Homepage banner', [['#queue', 'Review queue'], ['#booked', 'Booked'], ['#settings', 'Settings', 1], ['#promos', 'House promos', 1]]],   // 1.99kk: banner.js
-    ['stage', '/stage/admin', '📺', 'Stage & Stream', [['#open', 'On stage now'], ['#settings', 'Settings'], ['#bans', 'Booking bans'], ['#log', 'Booking log'], ['#events', 'Events']]],
-    ['media', '/admin/media', '🎬', 'Plex & media', [['#checks', 'Connections', 1], ['#library', 'Play from library', 1], ['#plays', 'Play log', 1], ['#settings', 'Settings', 1], ['#requests', 'Requests', 1], ['#invites', 'Invite queue', 1], ['/admin/comps#plex', '🎁 Comp Plex access', 1]]],
-    ['comps', '/admin/comps', '🎁', 'Comps & gifts', [['#plex', 'Plex', 1], ['#premium', 'Prime Time / Season Pass', 1], ['#items', 'Store items', 1], ['#active', 'Active comps', 1], ['#policy', 'Gift policy', 1], ['#log', 'Log', 1], ['#gifts', 'Gift log', 1]]],   // 1.99ma: comps.js
-    ['crypto', '/admin/crypto', '🪙', 'Crypto donations', [['#settings', 'Settings', 1], ['#health', 'Watcher', 1], ['#held', 'Held', 1], ['#unclaimed', 'Unclaimed', 1], ['#payments', 'All payments', 1], ['#dryrun', 'Dry run', 1]]],
-    ['push', '/admin/push', '🔔', 'Web Push', [['#settings', 'Settings', 1], ['#health', 'Delivery', 1], ['#test', 'Test', 1]]],   // 1.99acd: webpush.js
-    ['bridge', '/admin/bridge', '🌉', 'Bridge', [['#cmdlog', 'Web command log', 1]]],
-    ['soundboards', '/admin/soundboards', '🔊', 'Soundboards, voices & likeness', [['#reports', 'Reports'], ['#renders', 'Renders'], ['#voices', 'Voices', 1], ['#clones', 'Voice clones', 1], ['#likeness', 'Likeness royalties', 1], ['#settings', 'Settings', 1]]],   // 1.99rh: soundboards.js / voicestore.js / likeness.js
-    ['pepe', '/admin/pepe', '🐸', 'Pepe', [['#control', 'Control panel', 1], ['/admin/pepe/rooms', 'Rooms (join / leave)', 1], ['/admin/pepe/commands', 'Commands (on / off)', 1], ['/admin/pepe/audio#room-audio', 'Room audio', 1], ['/admin/pepe/livecams', 'Live cams', 1], ['#feed', 'Feed settings']]],
-    ['roles', '/admin/roles', '🎖️', 'Roles & permissions', [['#holders', 'Role holders', 1], ['#commands', 'Command permissions', 1], ['#targets', 'Moderation targets', 1], ['#notes', 'Notes', 1], ['#website', 'Website permissions', 1], ['#chat', 'Change from chat', 1]]],   // 1.99acj: adminroles.js / pepeperms.js
-    ['keys', '/admin/keys', '🔑', 'Bot keys & chat seam', [['#keys', 'Keys', 1], ['#scopes', 'Scopes', 1], ['#families', 'Route families', 1], ['#legacy', 'Legacy token use', 1], ['#routes', 'Route log', 1], ['#events', '/events', 1], ['#seam', 'Chat tickets & hub seam', 1]]],   // 1.99acf: adminkeys.js
-    ['help', '/admin/help', '📖', 'Help questions', [['#misses', 'Unanswered', 1]]],
-    ['translations', '/admin/translations', '🌐', 'Translations', [['#pending', 'Suggestions', 1], ['#overrides', 'Live overrides', 1], ['#export', 'Export', 1]]],
-    ['games', '/admin/games', '🎰', 'Games', [['#wheel', 'Wheel spin'], ['#jackpot', 'Jackpot'], ['#casino', 'Casino bans'], ['#heistmarket', 'Heist market', 1]]],
-    ['cosmetics', '/admin/cosmetics', '🏅', 'Cosmetics & Achievements', [['#badges', 'Badges'], ['#catalogs', 'Catalogs']]],
-    ['system', '/admin/system', '⚙️', 'System', [['#health', 'Health'], ['#storage', 'Storage']]],
-  ];
+    ['overview', '/admin', '🧭', 'Overview', [], [AREA]],
+    ['users', '/admin/users', '👥', 'Users & Accounts', [['#roles', 'Roles & classes'], ['#xp', 'XP', 'users.xp'], ['#welcome-admin', 'Welcome bonus', 'users.welcome_stale'], ['#stale-admin', 'Stale cleanup', 'users.welcome_stale'], ['#merges', 'Merges']], [AREA]],
+    ['accounts', '/admin/accounts', '🔐', 'Account security', [['#lookup', 'Look up a member'], ['#deletions', 'Deletions'], ['#events', 'Recent events']], ['accounts.security']],   // 1.99wl: accountsadmin.js
+    ['economy', '/admin/economy', '🏦', 'Economy', [['#reserve', 'Reserve & flows', SENS], ['#loans', 'Loans & credit', SENS], ['#grants', 'PAT grants'], ['#codes', 'Redemption codes'], ['#royalties', 'Royalties'], ['#shop', 'Prize shop'], ['#oracle', 'AI judge rulings', 'oracle.admin'], ['#elsewhere', "On Pepe's panel"]], [AREA]],
+    ['markets', '/admin/markets', '🤖', 'Auto markets', [['#settings', 'Settings'], ['#generate', 'Generate / preview'], ['#review', 'Review'], ['#list', 'Auto-created']], ['markets.auto']],   // 1.99th: automkt.js
+    ['raffles', '/admin/raffles', '🎫', 'Raffles', [['#settings', 'Settings'], ['#review', 'Review'], ['#open', 'Open raffles'], ['#house', 'House raffle'], ['#recent', 'Recent']], ['raffles.admin']],   // 1.99xq: raffles.js (was a card on /raffles)
+    ['oracle', '/admin/oracle', '⚖️', 'AI judge rulings', [], ['oracle.admin']],   // 1.99uc: oracleadmin.js - the AI judge's proposals and disputes
+    ['pads', '/pads/admin', '🏠', 'Pads', [['#front', 'Front-page pad', 'pads.registry_admin'], ['#owners', 'Pads & owners', 'pads.registry_admin'], ['#padconn', 'Connection requests', 'pads.connect_review'], ['#royalties', 'Owner royalties', 'pads.registry_admin']], ['pads.registry_admin', 'pads.connect_review']],
+    ['feed', '/feed/admin', '🛡️', 'Feed & Trust and Safety', [['#urgent', 'Reports'], ['#users', 'Reported users'], ['#dms', 'Reported DMs', 'dm.report_review'], ['#audit', 'Access log', 'feed.abuse_details'], ['#bans', 'Feed bans'], ['#settings', 'Settings & Terms'], ['#pepe', 'Pepe on the feed'], ['/feed/admin/filter', 'Content filter', 'feed.filter_admin']], ['feed.admin_page']],
+    ['imagesafety', '/admin/imagesafety', '🖼️', 'Image safety', [['#settings', 'Settings'], ['#review', 'Review']], ['imagesafety.admin']],
+    ['shopart', '/admin/shopart', '🎨', 'Shop pictures', [['#settings', 'Settings'], ['#log', 'Generations']], ['shopart.view']],   // 1.99xr: shopart.js - the shop's Generate image button
+    ['takedowns', '/admin/takedowns', '🚨', 'TAKE IT DOWN (48 h)', [], ['takedown.handle']],   // 1.99pv: takedown.js
+    ['creators', '/admin/creators', '⭐', 'PATV Creators', [['#apps', 'Creators'], ['#disputes', 'Disputes'], ['#ledger', 'Ledger'], ['#settings', 'Settings', 'creators.config_explicit'], ['/admin/creators/explicit', 'Explicit tier checklist', 'creators.config_explicit']], ['creators.admin']],   // 1.99pv: creators.js
+    ['banner', '/admin/banner', '📣', 'Homepage banner', [['#queue', 'Review queue'], ['#booked', 'Booked'], ['#settings', 'Settings', 'banner.config'], ['#promos', 'House promos', 'banner.config']], ['banner.review']],   // 1.99kk: banner.js
+    ['stage', '/stage/admin', '📺', 'Stage & Stream', [['#open', 'On stage now'], ['#settings', 'Settings'], ['#bans', 'Booking bans'], ['#log', 'Booking log'], ['#events', 'Events']], ['stage.admin']],
+    ['media', '/admin/media', '🎬', 'Plex & media', [['#checks', 'Connections'], ['#library', 'Play from library'], ['#plays', 'Play log'], ['#settings', 'Settings'], ['#requests', 'Requests'], ['#invites', 'Invite queue'], ['/admin/comps#plex', '🎁 Comp Plex access', 'comps.manage']], ['media.admin']],
+    ['comps', '/admin/comps', '🎁', 'Comps & gifts', [['#plex', 'Plex'], ['#premium', 'Prime Time / Season Pass'], ['#items', 'Store items'], ['#active', 'Active comps'], ['#policy', 'Gift policy'], ['#log', 'Log'], ['#gifts', 'Gift log']], ['comps.manage']],   // 1.99ma: comps.js
+    ['crypto', '/admin/crypto', '🪙', 'Crypto donations', [['#settings', 'Settings'], ['#health', 'Watcher'], ['#held', 'Held'], ['#unclaimed', 'Unclaimed'], ['#payments', 'All payments'], ['#dryrun', 'Dry run']], ['crypto.admin']],
+    ['push', '/admin/push', '🔔', 'Web Push', [['#settings', 'Settings'], ['#health', 'Delivery'], ['#test', 'Test']], ['push.admin']],   // 1.99acd: webpush.js
+    ['bridge', '/admin/bridge', '🌉', 'Bridge', [['#cmdlog', 'Web command log', 'bridge.cmdlog']], [AREA]],
+    ['soundboards', '/admin/soundboards', '🔊', 'Soundboards, voices & likeness', [['#reports', 'Reports', 'soundboards.moderate'], ['#renders', 'Renders', 'soundboards.moderate'], ['#voices', 'Voices', 'voices.view'], ['#clones', 'Voice clones', 'voiceclone.view'], ['#likeness', 'Likeness royalties', 'likeness.view'], ['#settings', 'Settings', 'soundboards.config']], ['soundboards.moderate']],   // 1.99rh: soundboards.js / voicestore.js / likeness.js
+    ['pepe', '/admin/pepe', '🐸', 'Pepe', [['#control', 'Control panel', 'pepe.control'], ['/admin/pepe/rooms', 'Rooms (join / leave)', 'pepe.rooms_commands_audio'], ['/admin/pepe/commands', 'Commands (on / off)', 'pepe.rooms_commands_audio'], ['/admin/pepe/audio#room-audio', 'Room audio', 'pepe.rooms_commands_audio'], ['/admin/pepe/livecams', 'Live cams', 'livecam.admin'], ['#feed', 'Feed settings']], [AREA]],
+    ['roles', '/admin/roles', '🎖️', 'Roles & permissions', [['#holders', 'Role holders'], ['#commands', 'Command permissions'], ['#targets', 'Moderation targets'], ['#notes', 'Notes'], ['#website', 'Website permissions'], ['#chat', 'Change from chat']], ['roles.assign']],   // 1.99acj: adminroles.js / pepeperms.js
+    ['keys', '/admin/keys', '🔑', 'Bot keys & chat seam', [['#keys', 'Keys'], ['#scopes', 'Scopes'], ['#families', 'Route families'], ['#legacy', 'Legacy token use'], ['#routes', 'Route log'], ['#events', '/events'], ['#seam', 'Chat tickets & hub seam']], ['keys.view']],   // 1.99acf: adminkeys.js
+    ['help', '/admin/help', '📖', 'Help questions', [['#misses', 'Unanswered']], ['help.admin']],
+    ['translations', '/admin/translations', '🌐', 'Translations', [['#pending', 'Suggestions'], ['#overrides', 'Live overrides'], ['#export', 'Export']], ['i18n.admin']],
+    ['games', '/admin/games', '🎰', 'Games', [['#wheel', 'Wheel spin'], ['#jackpot', 'Jackpot'], ['#casino', 'Casino bans'], ['#heistmarket', 'Heist market', 'games.config']], [AREA]],
+    ['cosmetics', '/admin/cosmetics', '🏅', 'Cosmetics & Achievements', [['#badges', 'Badges'], ['#catalogs', 'Catalogs']], [AREA]],
+    ['system', '/admin/system', '⚙️', 'System', [['#health', 'Health'], ['#storage', 'Storage']], [AREA]],
+  ].filter((n) => n[0] === _sec || n[5].some((k) => _can(k)));
+  const _subOk = (s) => !s[2] || _can(s[2]);
   const _cur = NAV.find((n) => n[0] === _sec);
+  const _role = _can(SENS) ? 'Admin' : _can(AREA) ? 'Staff' : 'Assistant';
 %>
 <nav class="adm-side" aria-label="Admin sections">
-  <div class="adm-brand"><a href="/admin">🛠️ Admin</a><span class="adm-role"><%= _adm ? 'Admin' : 'Staff' %></span></div>
+  <div class="adm-brand"><a href="<%= _can(AREA) || !NAV[0] ? '/admin' : NAV[0][1] %>">🛠️ Admin</a><span class="adm-role"><%= _role %></span></div>
   <ul class="adm-nav">
     <% NAV.forEach((n) => { const on = n[0] === _sec; %>
       <li class="<%= on ? 'on' : '' %>">
         <a href="<%= n[1] %>"<%- on ? ' aria-current="page"' : '' %>><span class="ic" aria-hidden="true"><%= n[2] %></span><span class="lb"><%= n[3] %></span></a>
         <% if (on && n[4].length) { %>
           <ul class="adm-sub">
-            <% n[4].forEach((s) => { if (s[2] && !_adm) return; %><li><a href="<%= s[0] %>"><%= s[1] %></a></li><% }) %>
+            <% n[4].forEach((s) => { if (!_subOk(s)) return; %><li><a href="<%= s[0] %>"><%= s[1] %></a></li><% }) %>
           </ul>
         <% } %>
       </li>
     <% }) %>
   </ul>
-  <div class="adm-side-foot"><a href="/shop/admin">Prize shop admin ›</a><a href="/">Back to the site ›</a></div>
+  <div class="adm-side-foot"><% if (_can('shop.admin')) { %><a href="/shop/admin">Prize shop admin ›</a><% } %><a href="/">Back to the site ›</a></div>
 </nav>
 <% if (_cur && _cur[4].length) { %>
 <nav class="adm-subbar" aria-label="<%= _cur[3] %> sections">
-  <% _cur[4].forEach((s) => { if (s[2] && !_adm) return; %><a href="<%= s[0] %>"><%= s[1] %></a><% }) %>
+  <% _cur[4].forEach((s) => { if (!_subOk(s)) return; %><a href="<%= s[0] %>"><%= s[1] %></a><% }) %>
 </nav>
 <% } %>

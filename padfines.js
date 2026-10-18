@@ -24,6 +24,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const OPS = new Set(["fine", "transfer"]);
 const KEY_RE = /^[A-Za-z0-9_-]{8,64}$/;
@@ -203,7 +204,7 @@ function register(app, { addUser, isBotToken }) {
   const admin = (req, res, next) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
-    if (req.user.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!SP.can(req.user, "econ.padvault_move")) return res.status(403).json({ ok: false, error: "Admins only." });
     next();
   };
   const csrf = (req, res, next) => {

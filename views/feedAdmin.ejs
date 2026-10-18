@@ -1,4 +1,6 @@
 <%- include('partials/admin-open', { title: 'Feed admin', user: user, section: 'feed', admIsAdmin: isAdmin }) %>
+<%# 1.99ack: each admin-only part asks its own capability (siteperms.js) %><% const _can = locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals);
+   const abuseOk = _can('feed.abuse_details'), acctOk = _can('accounts.security'), dmOk = _can('dm.report_review'), pepeOk = _can('feed.pepe_admin'), amOk = _can('feed.automod_global'); -%>
 <link rel="stylesheet" href="/public/css/feed.css?v=19">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
@@ -58,7 +60,7 @@
               <button type="button" class="bad" data-fa="r-remove">Remove <%= g.comment ? 'comment' : 'post' %></button>
               <button type="button" class="bad" data-fa="r-ban">Remove + ban author…</button>
               <% if (!g.comment) { %><button type="button" data-fa="nsfw"><%= p.nsfw ? 'Unmark NSFW' : 'Mark NSFW' %></button><% } %>
-              <% if (isAdmin) { %><button type="button" data-safety="details" <%- g.comment ? 'data-comment="' + g.commentId + '"' : 'data-post="' + p.id + '"' %>>🛡 View details</button><% } %>
+              <% if (abuseOk) { %><button type="button" data-safety="details" <%- g.comment ? 'data-comment="' + g.commentId + '"' : 'data-post="' + p.id + '"' %>>🛡 View details</button><% } %>
               <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporter<%= new Set(g.reports.map((r) => r.reporter_id)).size === 1 ? '' : 's' %> the outcome (inbox)</label>
             </div>
           </div>
@@ -80,7 +82,7 @@
           <button type="button" data-fa="u-dismiss">Dismiss</button>
           <button type="button" data-fa="u-false">Dismiss · bad faith</button>
           <button type="button" class="bad" data-fa="u-ban">Ban from the feed…</button>
-          <% if (isAdmin) { %><button type="button" data-safety="details" data-user-id="<%= g.userId %>">🛡 View details</button> <a href="/admin/accounts?u=<%= encodeURIComponent(g.username) %>">🔐 Account security</a><% } %>
+          <% if (abuseOk) { %><button type="button" data-safety="details" data-user-id="<%= g.userId %>">🛡 View details</button><% } %><% if (acctOk) { %> <a href="/admin/accounts?u=<%= encodeURIComponent(g.username) %>">🔐 Account security</a><% } %>
           <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporters the outcome</label>
         </div>
       </div>
@@ -89,7 +91,7 @@
 
   <%# 1.99cp: reported direct messages - site Admins only (never Staff, never pad owners). The text is NOT on this page:
       "Read the reported message" fetches that one message, and the read is logged (content_audit_views). %>
-  <% if (isAdmin) { const dmR = typeof dmReports !== 'undefined' ? dmReports : []; %>
+  <% if (dmOk) { const dmR = typeof dmReports !== 'undefined' ? dmReports : []; %>
   <section class="fa-card" id="dms">
     <h2>Reported messages (<%= dmR.length %>)<% const dmUrg = dmR.filter((x) => x.urgent).length; if (dmUrg) { %> <span class="tag nsfw">⚠ <%= dmUrg %> urgent</span><% } %></h2>
     <p class="mut">Direct messages people reported. Admins only. You can read a reported message (and only that one) - every read is logged below.</p>
@@ -115,7 +117,7 @@
   </section>
   <% } %>
 
-  <% if (isAdmin) { %>
+  <% if (abuseOk) { %>
   <section class="fa-card" id="audit">
     <h2>Details access log</h2>
     <p class="mut">Every time an admin opens the private details (IP, browser, shared accounts) of a post, comment or user, or reads a reported direct message. Kept 2 years.</p>
@@ -132,10 +134,10 @@
   <section class="fa-card pf-card" id="pepe">
     <h2><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe on the feed</h2>
     <p class="sub">Account <a href="/u/<%= encodeURIComponent(pepe.account.username) %>"><%= pepe.account.username %></a> · last 24 h: <b><%= U.posts %></b> posts, <b><%= U.comments %></b> comments, <b>$<%= Number(U.cost || 0).toFixed(4) %></b> of $<%= Number(G.llm_budget_usd).toFixed(2) %> LLM budget</p>
-    <% if (!isAdmin) { %><p class="mut">Only site Admins can change these.</p><% } %>
+    <% if (!pepeOk) { %><p class="mut">Only site Admins can change these.</p><% } %>
     <h3 class="pf-h">Site-wide caps (win over every pad)</h3>
     <form class="pf-form fa-cfg" data-url="/api/feed/admin/pepe" data-wrap="global">
-      <fieldset<%= isAdmin ? '' : ' disabled' %>>
+      <fieldset<%= pepeOk ? '' : ' disabled' %>>
         <label class="ck"><input type="checkbox" name="enabled"<%= G.enabled ? ' checked' : '' %>> Pepe is on (off = he never posts, comments or answers anywhere)</label>
         <label><span>His posts per day, all scopes</span><input type="number" name="posts_per_day" min="0" max="100" value="<%= G.posts_per_day %>"></label>
         <label><span>His comments per day, all scopes</span><input type="number" name="comments_per_day" min="0" max="1000" value="<%= G.comments_per_day %>"></label>
@@ -143,10 +145,10 @@
         <label><span>Seconds between two mention replies</span><input type="number" name="reply_gap_secs" min="0" max="3600" value="<%= G.reply_gap_secs %>"></label>
         <label><span>Hard cap: writes per minute</span><input type="number" name="writes_per_min" min="1" max="60" value="<%= G.writes_per_min %>"></label>
       </fieldset>
-      <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
+      <% if (pepeOk) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
     </form>
     <h3 class="pf-h">All (site-wide: Pepe's own pads and the Camfrog Lounge follow these unless they have their own)</h3>
-    <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'All', url: '/api/feed/admin/pepe', wrap: 'main', admin: isAdmin, roomScope: false }) %>
+    <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'All', url: '/api/feed/admin/pepe', wrap: 'main', admin: pepeOk, roomScope: false }) %>
     <h3 class="pf-h">Pads where he's on</h3>
     <% if (!pepe.rooms.length) { %><p class="mut">None yet - pad owners switch him on in their pad's settings (⚙ Pad settings › Pepe); admins can too, from any pad's settings, and can lock it.</p><% } else { %>
       <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Pad</th><th>Mentions</th><th>On his own</th><th>24 h</th><th></th></tr></thead><tbody>
@@ -174,25 +176,25 @@
   <section class="fa-card pf-card" id="automod">
     <h2><span class="ds-ic" aria-hidden="true">🛡️</span> Pepe automod</h2>
     <p class="sub">Pepe checks new posts and comments in pads that switch it on, against the pad's rules or <a href="/guidelines">Padiquette</a>. Last 24 h: <b><%= AU.count %></b> checks, <b>$<%= Number(AU.cost || 0).toFixed(4) %></b> of $<%= Number(AG.budget_usd).toFixed(2) %> (spend tag <code>feed_automod</code>). Pad owners set theirs in ⚙ Pad settings › Pepe; site staff get the same hub for any pad.</p>
-    <% if (!isAdmin) { %><p class="mut">Only site Admins can change these.</p><% } %>
+    <% if (!amOk) { %><p class="mut">Only site Admins can change these.</p><% } %>
     <h3 class="pf-h">Site-wide caps</h3>
     <form class="pf-form fa-cfg" data-url="/api/feed/admin/automod" data-wrap="global">
-      <fieldset<%= isAdmin ? '' : ' disabled' %>>
+      <fieldset<%= amOk ? '' : ' disabled' %>>
         <label class="ck"><input type="checkbox" name="enabled"<%= AG.enabled ? ' checked' : '' %>> Automod is allowed (off = no pad gets checked, whatever its setting)</label>
         <label><span>Model budget per day (USD)</span><input type="number" name="budget_usd" min="0" max="20" step="0.01" value="<%= AG.budget_usd %>"></label>
         <label><span>Checks per day, all pads</span><input type="number" name="per_day" min="0" max="5000" value="<%= AG.per_day %>"></label>
         <%# 1.99df: profiles have no automod settings of their own - one switch for all of them (the All severities below) %>
         <label class="ck"><input type="checkbox" name="profiles"<%= AG.profiles ? ' checked' : '' %>> Also check members' profiles (others' comments on profile posts, judged by Padiquette with the All settings below). Off by default.</label>
       </fieldset>
-      <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
+      <% if (amOk) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
     </form>
     <h3 class="pf-h">All (house pads without settings of their own follow this; owners' pads are opt-in)</h3>
     <form class="pf-form fa-cfg" data-url="/api/feed/admin/automod" data-wrap="main">
-      <fieldset<%= isAdmin ? '' : ' disabled' %>>
+      <fieldset<%= amOk ? '' : ' disabled' %>>
         <label class="ck"><input type="checkbox" name="on"<%= AMM.on ? ' checked' : '' %>> Automod on for All</label>
         <% ['minor', 'serious', 'severe'].forEach((k) => { %><label><span><%= k[0].toUpperCase() + k.slice(1) %></span><select name="<%= k %>"><% automod.AM.ACTIONS.forEach((a) => { %><option value="<%= a %>"<%= AMM[k] === a ? ' selected' : '' %>><%= amLabel[a] %></option><% }) %></select></label><% }) %>
       </fieldset>
-      <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save All</button></div><% } %>
+      <% if (amOk) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save All</button></div><% } %>
     </form>
     <h3 class="pf-h">Recent calls</h3>
     <% if (!automod.list.length) { %><p class="mut">None yet.</p><% } else { %>
@@ -260,7 +262,7 @@
 </main>
 <script src="/public/js/feed-safety.js?v=4" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
-<% if (isAdmin) { %><script src="/public/js/dm-admin.js?v=2" defer></script><% } %>
+<% if (dmOk) { %><script src="/public/js/dm-admin.js?v=2" defer></script><% } %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <%- include('partials/admin-close') %>
 </body>

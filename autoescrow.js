@@ -24,6 +24,7 @@
 // Admin: GET /api/admin/autoescrow, POST /api/admin/autoescrow/settings {enabled?, kinds?, note} (audit-logged).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const AA = require("./autoaccount");
 
 const FLOW = "auto_escrow_expired";             // the PAT Routing row for expired entries
@@ -575,7 +576,7 @@ function register(app, { isBotToken, addUser }) {
   const admin = async (req, res) => {
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
     const row = (await getQuery("SELECT class, username, userId FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
+    if (!SP.can(row, "econ.backend_cutover")) { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
     return row;
   };
   app.get("/api/admin/autoescrow", addUser, async (req, res) => {

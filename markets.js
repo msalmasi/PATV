@@ -6,6 +6,7 @@
 // and renders /markets and /markets/:id. Parimutuel maths mirrors pepe_market.py: winners split the
 // losing pool minus the fee, pro rata to their stake.
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
 const PATAmount = require("./public/js/patamount");     // 1.99nk: "1,000,000" / "5k" (Pepe's rules)
 
@@ -476,7 +477,7 @@ function register(app, { isBotToken, addUser }) {
       await runQuery(`INSERT INTO market_orders (market_id, user_id, username, camfrog, option, amount, kind, shares, outcome, site_admin, status, created, updated)
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
         [id, req.user.userId, u.username, u.camfrogUsername || null, fields.option || "", fields.amount || 0, fields.kind,
-         fields.shares || null, fields.outcome || null, u.class === "Admin" ? 1 : 0, Date.now(), Date.now()]);
+         fields.shares || null, fields.outcome || null, SP.can(u, "escrow.override") ? 1 : 0, Date.now(), Date.now()]);
       back(okMsg);
     } catch (e) {
       console.error(`[markets] ${fields.kind}:`, e);
@@ -572,7 +573,7 @@ function register(app, { isBotToken, addUser }) {
       if (u.length) {
         me = [u[0].camfrogUsername, u[0].username];
         const raw = JSON.parse(rows[0].data);
-        judgeMe = u[0].class === "Admin" || (!!u[0].camfrogUsername && String(raw.judge || "").toLowerCase() === u[0].camfrogUsername.toLowerCase());
+        judgeMe = SP.can(u[0], "escrow.override") || (!!u[0].camfrogUsername && String(raw.judge || "").toLowerCase() === u[0].camfrogUsername.toLowerCase());
         const cf = String(u[0].camfrogUsername || "").toLowerCase();
         inIt = !!cf && (Object.keys(raw.positions || {}).includes(cf) || (raw.bets || []).some((b) => String(b.nick).toLowerCase() === cf)
                         || String(raw.creator || "").toLowerCase() === cf);

@@ -24,6 +24,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DAY = 86400000;
 const GRACE_MS = 14 * DAY;
@@ -567,7 +568,7 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false, error: "Sign in first." }); return null; }
     const row = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
+    if (!SP.can(row, "accounts.delete_other")) { res.status(403).json({ ok: false, error: "Admins only." }); return null; }
     if (req.method === "POST" && (req.get("X-Requested-With") !== "fetch" || !sameOrigin(req))) { res.status(403).json({ ok: false, error: "cross-site" }); return null; }
     return row;
   };

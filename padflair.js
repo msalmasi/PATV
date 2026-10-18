@@ -47,7 +47,6 @@ const DEFAULT_COLOR = "#66bb6a";
 let NOW = () => Date.now();
 
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 const CTRL = /[\u0000-\u001f\u007f-\u009f​-‌‎-‏‪-‮⁦-⁩]/g;
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ESC[c]);

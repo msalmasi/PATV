@@ -1,4 +1,5 @@
 <%- include('../partials/admin-open', { title: 'PATV Creators', user, section: 'creators', admIsAdmin: isAdmin }) %>
+<% const explicitOk = (locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals))('creators.config_explicit'); -%>
 <%# views/admin/creators.ejs - 1.99pv: ⭐ PATV Creators admin (creatorsweb.js / creators.js): the switches, applications and creators
     (approve / pause / ban), disputes (refund / deny), the ledger (refund / clawback), totals. A = creators.adminView(). %>
 <%
@@ -81,7 +82,7 @@
     </tbody></table></div>
 </section>
 
-<% if (isAdmin) { %>
+<% if (explicitOk) { %>
 <section class="adm-card" id="settings" aria-labelledby="seT">
   <h2 id="seT">Settings</h2>
   <form class="adm-form" data-cr-form="/api/admin/creators/config" data-next="reload">

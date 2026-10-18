@@ -23,7 +23,8 @@
   const dt = (ms) => (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(ms, 'datetime');
   const whoLabel = { everyone: 'Everyone signed in', linked: 'Verified accounts (a verified email, a linked chat account, Discord, Twitch, Telegram, Google or Plex)', followers: 'Followers of the pad', approved: 'Approved posters only' };
   const href = '/p/' + encodeURIComponent(slug);
-  const isAdmin = viewer && viewer.class === 'Admin';
+  // 1.99ack: a pad's admin lock (set it / change past it) = feed.admin_lock (siteperms.js, locked: Admins)
+  const lockAdmin = (locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals))('feed.admin_lock', viewer || null);
   const tabs = [
     ['general', '🏷️', 'General'], ['stage', '📺', 'Stage'], ['feed', '📝', 'Feed'], ['pepe', '🐸', 'Pepe'],
     ['rules', '📜', 'Rules'], ['moderation', '🛡️', 'Moderation'], ['camfrog', '📡', 'Camfrog room'],
@@ -37,7 +38,7 @@
     serious: ['Serious', 'Targeted harassment campaigns, deceptive impersonation, malware, scams - or a serious break of your pad rules.'],
     severe: ['Severe', 'Illegal content, doxxing, credible threats, non-consensual intimate imagery, child sexual abuse material.'],
   };
-  const amLocked = am.admin_lock && !isAdmin;
+  const amLocked = am.admin_lock && !lockAdmin;
   const amState = (r) => r.state === 'reversed' ? 'reversed' : r.state === 'skipped' ? 'skipped' : r.action === 'none' ? 'clear' : r.action;
 %>
 <main class="ds-page wide flow sb fd fd-admin fd-rmod ps" id="rmg" data-slug="<%= slug %>" data-tab="<%= tab %>">
@@ -301,7 +302,7 @@
     <h2 class="ps-h"><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe</h2>
     <p class="ps-what">Pepe the bot on your pad's feed. The switch below turns him on or off here; underneath are what he does when he's on, and his automod (separate - it can run while he stays quiet).</p>
     <div class="fa-card ps-card ps-master<%= pepe.enabled === false ? ' is-off' : '' %>">
-      <% const pLocked = pepe.admin_lock && !isAdmin; %>
+      <% const pLocked = pepe.admin_lock && !lockAdmin; %>
       <label class="ps-switch big"><input type="checkbox" id="psPepeOn" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/feed/pepe"<%= pepe.enabled === false ? '' : ' checked' %><%= pLocked ? ' disabled' : '' %>><span class="ps-sw" aria-hidden="true"></span>
         <span><b>Pepe on this pad's feed</b> <span class="ps-state" data-on="ON" data-off="OFF"><%= pepe.enabled === false ? 'OFF' : 'ON' %></span>
           <small>On: he answers people who mention him here<%= pepe.auto ? ' and takes part on his own' : '' %>, within the limits below. Off: he stays out of this pad's feed completely.</small></span></label>
@@ -310,7 +311,7 @@
     </div>
     <div class="fa-card ps-card<%= pepe.enabled === false ? ' ps-dim' : '' %>">
       <h3>What Pepe does here</h3>
-      <%- include('partials/pepe-feed-settings', { s: pepe, where: 'this pad', url: '/api/rooms/' + encodeURIComponent(slug) + '/feed/pepe', wrap: 'settings', admin: isAdmin, roomScope: true }) %>
+      <%- include('partials/pepe-feed-settings', { s: pepe, where: 'this pad', url: '/api/rooms/' + encodeURIComponent(slug) + '/feed/pepe', wrap: 'settings', admin: lockAdmin, roomScope: true }) %>
     </div>
     <div class="fa-card ps-card ps-am" id="automod">
       <h3>🛡️ Automod</h3>
@@ -327,7 +328,7 @@
             <% }) %>
           </div>
           <p class="fc-note">Defaults: flag everything to your queue, and hide only the severe categories until you look. "Remove" is used only when Pepe calls it clear-cut - otherwise he hides. Child sexual abuse material is always hidden and sent straight to the site admins, whatever is set here.</p>
-          <% if (isAdmin) { %><label class="ck ps-ck"><input type="checkbox" name="admin_lock"<%= am.admin_lock ? ' checked' : '' %>> Admin lock (the owner can see these settings, not change them)</label><% } %>
+          <% if (lockAdmin) { %><label class="ck ps-ck"><input type="checkbox" name="admin_lock"<%= am.admin_lock ? ' checked' : '' %>> Admin lock (the owner can see these settings, not change them)</label><% } %>
         </fieldset>
         <div class="cm-row"><span class="mut ps-mini">Site-wide: <%= amGlobal.enabled ? 'up to ' + amGlobal.per_day + ' checks a day' : 'automod is switched off by a site admin' %>.</span><span class="fc-err" role="alert"></span><% if (!amLocked) { %><button type="submit" class="btn-s">Save automod</button><% } %></div>
       </form>

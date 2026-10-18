@@ -23,6 +23,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const SLA_MS = 48 * 3600 * 1000;
 const PER_IP_DAY = 5, PER_USER_DAY = 5;
@@ -157,7 +158,7 @@ async function blockedFiles(atts) {
 }
 
 async function mustStaff(actor) {
-  if (!actor || !(actor.class === "Admin" || actor.class === "Staff")) throw new Refuse(403, "Staff only.");
+  if (!SP.can(actor, "takedown.handle")) throw new Refuse(403, "Staff only.");   // 1.99ack: takedown.handle (locked: Staff and up)
 }
 /** Remove: delete every post of the case (and every post holding an exact copy of their files), block the hashes. */
 async function remove(actor, id, note) {
@@ -258,14 +259,14 @@ function register(app, { addUser }) {
   const staff = async (req) => {
     if (!req.user || !req.user.userId) return null;
     const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    return u && (u.class === "Admin" || u.class === "Staff") ? u : null;
+    return SP.can(u, "takedown.handle") ? u : null;
   };
   app.get("/admin/takedowns", addUser, async (req, res) => {
     const u = await staff(req);
     if (!u) return res.redirect("/login");
     res.set("Cache-Control", "no-store");
     res.set("X-Robots-Tag", "noindex");
-    res.render("admin/takedowns", { user: u.username, isAdmin: u.class === "Admin", cases: await queue(), now: now() });
+    res.render("admin/takedowns", { user: u.username, isAdmin: SP.can(u, "admin.sensitive_overview"), cases: await queue(), now: now() });
   });
   app.post("/api/admin/takedowns/:id/:act", addUser, async (req, res) => {
     const u = await staff(req);

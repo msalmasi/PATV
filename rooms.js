@@ -22,6 +22,7 @@
 // site-admin setting here and has NOTHING to do with Pepe's `!activeroom` (his Camfrog window/mic).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const STAGING = !!process.env.STAGING;
 const HOUSE_ROOM = process.env.STAGE_DEFAULT_ROOM || (STAGING ? "PepeBeta.Room" : "PepeFrog.Room");
@@ -84,7 +85,8 @@ const CTRL = /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g;
 const str = (v, n) => String(v == null ? "" : v).replace(CTRL, " ").replace(/\s+/g, " ").trim().slice(0, n);
 const slugify = (s) => String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "room";
 const ROOM_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:~\-]{0,127}$/;
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+// 1.99ack: managing ANY pad as if its owner = pads.manage_any (siteperms.js; was isStaff - Admin / Staff)
+const managesAny = (u) => SP.can(u, "pads.manage_any");
 
 let ready = null;
 function init() {
@@ -474,7 +476,7 @@ async function followName(roomId, name, opts = {}) {
 // ── permissions ──
 async function canManage(user, roomId) {
   if (!user || !user.userId) return false;
-  if (isStaff(user)) return true;
+  if (managesAny(user)) return true;
   const r = await get(roomId);
   return !!(r && r.owner && r.owner.userId === user.userId);
 }
@@ -810,7 +812,7 @@ module.exports = {
   init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
   setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, boostPats, rankLive, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, withSitePads, notify, followName, inheritableSlug, findUser, event,
-  hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
+  hasRoute, slugify, managesAny, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
   PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,
   aliasTarget,                                                        // 1.99iy: pad addresses (padaddress.js)

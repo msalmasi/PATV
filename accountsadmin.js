@@ -16,6 +16,7 @@
 // Admins only (class Admin in the database): IPs and sign-in history are not for Staff.
 "use strict";
 const { getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DAY = 86400000;
 const tableExists = async (t) => (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length > 0;
@@ -24,7 +25,7 @@ const safe = async (fn, d) => { try { return await fn(); } catch (e) { return d;
 async function adminOf(req) {
   if (!req.user || !req.user.userId) return null;
   const r = (await safe(() => getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]), []))[0];
-  return r && r.class === "Admin" ? r : null;
+  return SP.can(r, "accounts.security") ? r : null;
 }
 
 /** A member by username (any case), Camfrog login or id. */

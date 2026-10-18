@@ -696,8 +696,6 @@
   "admroles.notes.pad_owners": "Właściciele padów mają własne zasady na swoich padach (moderacja pokoju we własnym pokoju, nigdy wobec administratorów lub właścicieli Pepe). Ta strona ich nie zmienia.",
   "admroles.notes.sync": "Zmiany wprowadzone tutaj dotrą do Pepe przy jego następnej synchronizacji, a zmiany dokonane na czacie pojawią się tutaj w ten sam sposób. Gdy oba źródła zmienią to samo ustawienie, wygrywa nowsza zmiana.",
   "admroles.website.h": "Uprawnienia na stronie",
-  "admroles.website.pill": "Wydanie 2",
-  "admroles.website.placeholder": "Już wkrótce w wydaniu 2: uprawnienia strony internetowej, które będzie można tu edytować.",
   "admroles.chat.h": "Zmieniaj uprawnienia z czatu",
   "admroles.chat.help": "Te same ustawienia z dowolnego pokoju, w którym jest Pepe. Obowiązują te same zasady co na tej stronie.",
   "admroles.chat.cmd": "Polecenie",

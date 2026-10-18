@@ -688,8 +688,6 @@
   "admroles.notes.pad_owners": "Donos de pads têm suas próprias regras no próprio pad (moderação da sala deles, nunca sobre admins ou donos do Pepe). Esta página não muda essas regras.",
   "admroles.notes.sync": "Alterações feitas aqui chegam ao Pepe na próxima sincronização, e alterações feitas no chat aparecem aqui do mesmo jeito. Quando as duas mudam a mesma configuração, a mudança mais recente vale.",
   "admroles.website.h": "Permissões do site",
-  "admroles.website.pill": "Versão 2",
-  "admroles.website.placeholder": "Chega na versão 2: as permissões próprias do site, editáveis aqui.",
   "admroles.chat.h": "Mudar permissões pelo chat",
   "admroles.chat.help": "As mesmas configurações, em qualquer sala onde o Pepe esteja. Valem as mesmas regras desta página.",
   "admroles.chat.cmd": "Comando",

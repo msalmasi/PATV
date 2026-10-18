@@ -20,6 +20,7 @@
 // The card is on /admin/games#pvp (views/partials/admin-pvpcfg.ejs) - never on a public page.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DEFAULTS = { accept_quiet_secs: 15, replace_max: 3, replace_window_secs: 120 };
 const LIMITS = { accept_quiet_secs: [0, 300], replace_max: [1, 20], replace_window_secs: [30, 3600] };
@@ -71,7 +72,7 @@ function register(app, { isBotToken, addUser }) {
   const admin = async (req, res) => {
     if (!req.user || !req.user.userId) { res.status(401).json({ ok: false }); return false; }
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
-    if (!row || row.class !== "Admin") { res.status(403).json({ ok: false, error: "Admins only." }); return false; }
+    if (!SP.can(row, "games.config")) { res.status(403).json({ ok: false, error: "Admins only." }); return false; }
     return true;
   };
   app.get("/api/admin/pvp-cfg", addUser, async (req, res) => {

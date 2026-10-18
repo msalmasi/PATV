@@ -37,7 +37,6 @@ const LIMIT = 30, REBUILD_MS = 6 * 3600e3;
 let NOW = () => Date.now();
 
 const state = { posts: false, json: false, ready: null, lastCheck: 0 };
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 
 // ── the index ──
 async function userCols() { return new Set((await getQuery("PRAGMA table_info(users)").catch(() => [])).map((c) => c.name)); }

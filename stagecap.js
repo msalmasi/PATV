@@ -218,7 +218,7 @@ let deps = {
   pepeIn: (roomId) => require("./bridge").pepeIn(roomId),
   roomCmds: (roomId) => { try { const B = require("./bridge")._rooms.get(roomId); return (B && B.cmds) || {}; } catch (e) { return {}; } },
   canManage: (user, roomId) => require("./rooms").canManage(user, roomId),
-  isStaff: (u) => require("./rooms").isStaff(u),
+  can: (u, key) => require("./siteperms").can(u, key),   // 1.99ack: the website's capabilities (was isStaff)
   config: () => require("./mainstage").config(),
   snapSwitch: (roomId) => { try { return require("./bridge").snapSwitch(roomId); } catch (e) { return null; } },
   snapOffText: (roomId) => require("./bridge").snapOffText(roomId),
@@ -238,7 +238,7 @@ async function account(userId) {
  *  (verified.js - was a Camfrog link only) or level MIN_LEVEL: keeps harassment clips from throwaway accounts out. */
 function eligibility(u) {
   if (!u) return "Sign in first.";
-  if (deps.isStaff(u)) return null;
+  if (deps.can(u, "feed.limits_exempt")) return null;
   const V = require("./verified");
   if (V.isVerified(u)) return null;
   if ((Number(u.level) || 0) >= MIN_LEVEL) return null;
@@ -479,7 +479,7 @@ async function publish(id, username, { hours, byAnon, by } = {}) {
 // ── deleting a published stage capture ──
 async function canDelete(user, m) {
   if (!user || !user.userId || !m) return false;
-  if (deps.isStaff(user)) return true;
+  if (deps.can(user, "pads.manage_any")) return true;
   if (m.room && (await deps.canManage(user, m.room))) return true;
   // 1.99ez: a member's own story upload (userstories.js): the uploader, or a mod of the pad's Camfrog room
   if (m.source === "user") {

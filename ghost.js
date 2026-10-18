@@ -19,9 +19,11 @@
 // the owner's rules (camRefusal {strict}).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const guard = require("./middleware/authGuard");
 
-const STAFF = new Set(["Admin", "Staff"]);
+// 1.99ack: who may be a ghost = ghost.mode (siteperms.js, locked: Staff and up - it bypasses cam consent, every switch is audited)
+const canGhost = (u) => SP.can(u, "ghost.mode");
 const GHOST_KEEP_MS = 180 * 24 * 3600 * 1000;
 let clock = () => Date.now();
 const now = () => clock();
@@ -41,12 +43,11 @@ function init() {
 }
 async function load() {
   const rows = await getQuery(`SELECT g.user_id, u.username, u.class FROM staff_ghost g JOIN users u ON u.userId = g.user_id WHERE g.on_ = 1`);
-  ON = new Map(rows.filter((r) => STAFF.has(r.class)).map((r) => [String(r.user_id), { username: r.username || "", class: r.class }]));
+  ON = new Map(rows.filter((r) => canGhost(r)).map((r) => [String(r.user_id), { username: r.username || "", class: r.class }]));
 }
 
 /** Is this account a ghost right now? (sync; staff class re-checked on every load and switch) */
 const isGhost = (userId) => userId != null && ON.has(String(userId));
-const isStaff = (u) => !!u && STAFF.has(u.class);
 
 async function userOf(userId) {
   return (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [String(userId)]))[0] || null;
@@ -56,7 +57,7 @@ async function set(userId, on, { via = "web" } = {}) {
   await init();
   const u = await userOf(userId);
   if (!u) return { ok: false, status: 404, error: "No such account." };
-  if (on && !isStaff(u)) return { ok: false, status: 403, error: "Ghost mode is for site staff only." };
+  if (on && !canGhost(u)) return { ok: false, status: 403, error: "Ghost mode is for site staff only." };
   const t = now();
   await runQuery(`INSERT INTO staff_ghost (user_id, username, on_, updated, via) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(user_id) DO UPDATE SET username = excluded.username, on_ = excluded.on_, updated = excluded.updated, via = excluded.via`,
@@ -75,7 +76,7 @@ async function set(userId, on, { via = "web" } = {}) {
 async function state(userId) {
   await init();
   const u = await userOf(userId);
-  return { staff: isStaff(u), on: isGhost(userId) };
+  return { staff: canGhost(u), on: isGhost(userId) };
 }
 /** For /admin/pepe/livecams: who's a ghost now, recent switches, recent ghost cam views. */
 async function adminView(limit = 50) {
@@ -137,7 +138,7 @@ function register(app, { addUser, isBotToken }) {
 }
 
 module.exports = {
-  init, register, isGhost, isStaff, set, state, adminView, load, GHOST_KEEP_MS,
+  init, register, isGhost, canGhost, set, state, adminView, load, GHOST_KEEP_MS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reset: () => { ON = new Map(); ready = null; },
 };

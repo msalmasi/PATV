@@ -118,7 +118,7 @@ function frontPath(st, game) {
 async function isSiteAdmin(uid) {
   if (!uid) return false;
   const r = await getQuery("SELECT class FROM users WHERE userId = ?", [uid]).catch(() => []);
-  return !!(r[0] && r[0].class === "Admin");
+  return require("../siteperms").can(r[0] || null, "casino.admin");
 }
 async function loadSettings(force) {
   if (!force && clock() - S.settingsAt < 10000 && S.settings.bj_enabled !== null) return S.settings;
@@ -1101,7 +1101,7 @@ async function meView(T, uid) {
   if (!uid) return null;
   const u = await userRow(uid);
   if (!u) return null;
-  const base = { name: u.displayname || u.username, balance: Number(u.points_balance) || 0, banned: !!u.casino_banned, admin: u.class === "Admin" };
+  const base = { name: u.displayname || u.username, balance: Number(u.points_balance) || 0, banned: !!u.casino_banned, admin: require("../siteperms").can(u, "casino.admin") };
   if (T && T.game === "holdem") return Object.assign(base, await HM.meView(T, uid, u));
   const e = T ? T.eng : null;
   const cur = e ? E.currentHand(e) : null;

@@ -675,8 +675,6 @@
   "admroles.notes.pad_owners": "小站擁有者可以在自己的小站上制定自己的規則（在自己的房間管理聊天室，但不能針對 Pepe 的管理員或擁有者）。此頁面不會變更這些規則。",
   "admroles.notes.sync": "在此做出的變更會在 Pepe 下次同步時生效，而在聊天室中做出的變更也會以相同方式顯示在此。若兩邊同時變更同一項設定，以較新的變更為準。",
   "admroles.website.h": "網站權限",
-  "admroles.website.pill": "第 2 版",
-  "admroles.website.placeholder": "第 2 版將推出：網站本身的權限，可在此編輯。",
   "admroles.chat.h": "從聊天室變更權限",
   "admroles.chat.help": "相同的設定，可在 Pepe 所在的任何房間使用。適用與此頁面相同的規則。",
   "admroles.chat.cmd": "指令",

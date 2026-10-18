@@ -78,6 +78,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const DAY = 24 * 3600 * 1000;
 const MAX_AHEAD_DAYS = 400;
@@ -1178,7 +1179,8 @@ function register(app, { addUser }) {
       res.json({ ok: true, ...r, state: await state(req.user, TIERS[b.tier] && TIERS[b.tier].kind === "pad" ? b.pad : null) });
     } catch (e) { fail(res, e); }
   });
-  const staffOnly = (req) => { if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only."); };
+  // 1.99ack: premium admin (comp a tier, the config, a forced renewal tick) = premium.admin (siteperms.js, locked: Admins - was Staff)
+  const staffOnly = (req) => { if (!SP.can(req.user, "premium.admin")) throw new Refuse(403, "Admins only."); };
   async function adminView() {
     const subs = await getQuery("SELECT tier, target, comped, comp_by, comp_until, paid_through, stripe_through, renewer_id IS NOT NULL AS renewing, status FROM premium_subs ORDER BY tier, target");
     const totals = await getQuery("SELECT tier, kind, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount FROM premium_ledger GROUP BY tier, kind");

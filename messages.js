@@ -70,6 +70,7 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const dmmedia = require("./dmmedia");
 const dmembeds = require("./dmembeds");
 const userlook = require("./userlook");
@@ -102,8 +103,9 @@ const ALERT_MAX_AGE_MS = 24 * 3600e3;   // pending alerts older than this are dr
 const PREVIEW_CHARS = 60;
 const WHO = Object.freeze(["everyone", "following", "nobody"]);
 const PEPE_ID = "pepe-bot";
-const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
-const isAdmin = (u) => !!u && u.class === "Admin";
+// 1.99ack (siteperms.js): no DM limits / new-account rules = dm.limits_exempt; the DM report queue = dm.report_review (locked: Admins)
+const exempt = (u) => SP.can(u, "dm.limits_exempt");
+const reviewer = (u) => SP.can(u, "dm.report_review");
 
 let ready = null;
 function init() {
@@ -192,7 +194,7 @@ async function byUsername(name) {
 const display = (u) => (u ? u.displayname || u.username : "[gone]");
 /** level < 2 and nothing linked (Camfrog, Discord, Twitch). Staff never count as new. */
 function isNewAccount(u) {
-  if (!u || isStaff(u)) return false;
+  if (!u || exempt(u)) return false;
   if (u.camfrogUsername || u.discordId || u.twitchId) return false;
   return (Number(u.level) || 0) < LIMITS.level_ok;
 }
@@ -308,7 +310,7 @@ async function groupRefusal(sender, conv) {
 async function rateRefusal(sender, isNewConversation) {
   const wait = burst("send|" + sender.userId, LIMITS.gap_ms);
   if (wait) return new Refuse(429, "Slow down a little.", "rate");
-  if (isStaff(sender)) return null;
+  if (exempt(sender)) return null;
   const t = NOW();
   const n = async (ms) => (await getQuery("SELECT COUNT(*) AS n FROM messages WHERE sender_id = ? AND kind != 'system' AND created_at > ?", [sender.userId, t - ms]))[0].n;
   const fresh = isNewAccount(sender);
@@ -323,7 +325,7 @@ async function rateRefusal(sender, isNewConversation) {
 }
 /** Group limits: new groups per day, people added per hour (`adding` = how many this action adds). */
 async function groupRate(me, { newGroup = false, adding = 0 } = {}) {
-  if (isStaff(me)) return null;
+  if (exempt(me)) return null;
   const t = NOW(), fresh = isNewAccount(me);
   if (newGroup) {
     const cap = fresh ? LIMITS.new_groups_per_day : LIMITS.groups_per_day;
@@ -935,7 +937,7 @@ async function report(user, messageId, { reason, note } = {}) {
   const wait = burst("dmreport|" + user.userId, 3000);
   if (wait) throw new Refuse(429, `Slow down - try again in ${wait}s.`);
   const me = await account(user.userId);
-  if (!isStaff(me)) {
+  if (!exempt(me)) {
     const t = NOW();
     const n = async (ms) => (await getQuery("SELECT COUNT(*) AS n FROM dm_reports WHERE reporter_id = ? AND created > ?", [user.userId, t - ms]))[0].n;
     const perHour = isNewAccount(me) ? LIMITS.new_reports_per_hour : LIMITS.reports_per_hour;
@@ -982,7 +984,7 @@ async function reportQueue() {
  * Its pictures are listed as admin-only URLs (reportMedia), each view of which is logged too.
  */
 async function reportDetail(viewer, messageId, { reason = null } = {}) {
-  if (!isAdmin(viewer)) throw new Refuse(403, "Admins only.");
+  if (!reviewer(viewer)) throw new Refuse(403, "Admins only.");
   await init();
   const id = parseInt(messageId, 10) || 0;
   const reps = await getQuery("SELECT * FROM dm_reports WHERE message_id = ? ORDER BY id", [id]);
@@ -1003,7 +1005,7 @@ async function reportDetail(viewer, messageId, { reason = null } = {}) {
 }
 /** An admin views one picture of a reported message (logged). -> the dm_media row, or throws. */
 async function reportMedia(viewer, messageId, file) {
-  if (!isAdmin(viewer)) throw new Refuse(403, "Admins only.");
+  if (!reviewer(viewer)) throw new Refuse(403, "Admins only.");
   await init();
   const id = parseInt(messageId, 10) || 0;
   const rep = (await getQuery("SELECT sender_id FROM dm_reports WHERE message_id = ? LIMIT 1", [id]))[0];
@@ -1019,7 +1021,7 @@ async function reportMedia(viewer, messageId, file) {
 
 /** Admin outcome: dismiss | false (bad faith) | remove (delete the message) | ban (remove + feed-wide ban = no DMs either). */
 async function reportAction(viewer, { message, action, tell = true, days = 0, reason = "" } = {}) {
-  if (!isAdmin(viewer)) throw new Refuse(403, "Admins only.");
+  if (!reviewer(viewer)) throw new Refuse(403, "Admins only.");
   if (!["dismiss", "false", "remove", "ban"].includes(action)) throw new Refuse(400, "Unknown action.");
   await init();
   const id = parseInt(message, 10) || 0;
@@ -1199,7 +1201,7 @@ async function pepeClaim({ limit = 10, price = null } = {}) {
     out.push({
       conversation: c.conversation_id, upto,
       user: { username: u.username, display: display(u), camfrog: u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : null,
-              level: Number(u.level) || 0, staff: isStaff(u), admin: isAdmin(u) },
+              level: Number(u.level) || 0, staff: SP.atLeast(u, "staff"), admin: SP.atLeast(u, "admin") },   // who they are (for Pepe), not a permission
       messages: fresh.map((m) => ({ id: m.id, text: line(m), at: m.created_at })),
       history: msgs.reverse().map((m) => ({ from: m.sender_id === PEPE_ID ? "pepe" : "them", text: line(m), at: m.created_at })),
     });

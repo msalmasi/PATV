@@ -25,6 +25,7 @@
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const conf = require("./mediaconf");
 
 class Refuse extends Error {
@@ -409,7 +410,7 @@ function register(app, { addUser, noTimers } = {}) {
       const manage = me ? await RR.canManage(me).catch(() => false) : false;
       res.render("mediaRequests", { user: me ? me.username : null, on: conf.on.requests(), signedIn: !!me, roles, manage,
         credits: me ? await credits(me.userId) : { movie: 0, tv: 0 }, mine: me ? await mine(me.userId) : [],
-        price: { movie: S.request_price_movie, tv: S.request_price_tv }, perDay: S.requests_per_day, admin: conf.isStaff(req.user) });
+        price: { movie: S.request_price_movie, tv: S.request_price_tv }, perDay: S.requests_per_day, admin: SP.can(req.user, "media.admin") });
     } catch (e) {
       console.error("[requests] page:", conf.errLine(e));
       res.status(500).send("Couldn't load requests.");

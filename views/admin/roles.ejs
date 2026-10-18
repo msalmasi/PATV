@@ -1,8 +1,8 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'roles', admIsAdmin: isAdmin }) %>
 <%# views/admin/roles.ejs - 1.99acj /admin/roles (adminroles.js, pepeperms.js): Pepe's role holders, his per-command permissions
-    (admin powers / can use, the role ladder), the moderation targets of staff and assistants, notes, a placeholder for the
-    website's own permissions (release 2) and the chat commands that change the same things. Any site admin can look; changes
+    (admin powers / can use, the role ladder), the moderation targets of staff and assistants, notes, the website's own
+    permissions (1.99ack release 2, siteperms.js) and the chat commands that change the same things. Any site admin can look; changes
     follow Pepe's !role / !perm rules by the viewer's Pepe role (public/js/admin-roles.js). Every value from the database is
     escaped by EJS; the page script never builds HTML. %>
 <%
@@ -152,10 +152,41 @@
   </ul>
 </section>
 
-<section class="adm-card" id="website" aria-labelledby="arWebT" data-release="2">
-  <h2 id="arWebT"><%- t('admroles.website.h') %> <span class="adm-pill"><%- t('admroles.website.pill') %></span></h2>
-  <p class="adm-help"><%- t('admroles.website.placeholder') %></p>
-  <div id="arWebsitePerms" data-placeholder="release-2"></div>
+<%# 1.99ack (release 2): the website's own permissions (siteperms.js) - one row per capability, grouped; a minimum class
+    dropdown (Admin / Staff / Assistant), the ✅/❌ it gives each class, 🔒 locked rows with their reason, who changed it,
+    reset to default. Changes: POST /api/admin/roles/site (public/js/admin-roles.js), decided on the server by the editor's
+    Pepe role. %>
+<% const SV = locals.site || null; const WCLS = ['admin', 'staff', 'assistant']; %>
+<section class="adm-card" id="website" aria-labelledby="arWebT">
+  <h2 id="arWebT"><%- t('admroles.website.h') %></h2>
+  <p class="adm-help"><%- t('admroles.website.help') %></p>
+  <p class="adm-help"><%- t('admroles.website.legend') %></p>
+  <% if (SV && !SV.canEdit) { %><p class="adm-help" id="arWebReadOnly"><%- t('admroles.website.readonly') %></p><% } %>
+  <div id="arWebsitePerms">
+  <% (SV ? SV.groups : []).forEach((g) => { %>
+    <h3 id="arWebG-<%= g.group %>"><%- t(g.label) %></h3>
+    <div class="adm-tbl"><table class="ar-site" aria-labelledby="arWebG-<%= g.group %>">
+      <thead><tr><th><%- t('admroles.website.perm') %></th><th><%- t('admroles.website.min') %></th>
+        <% WCLS.forEach((c) => { %><th class="ar-lad"><%- t('admroles.website.cls.' + c) %></th><% }) %><th><%- t('admroles.website.changed') %></th><th></th></tr></thead>
+      <tbody>
+      <% g.rows.forEach((r) => { const off = !SV.canEdit || !!r.locked || !r.editable; %><tr data-site-key="<%= r.key %>">
+        <td><%- t(r.label) %><br><code class="adm-help"><%= r.key %></code>
+          <% if (r.locked) { %><br><span class="adm-help" data-site-locked="<%= r.locked %>">🔒 <%- t(r.lockLabel) %></span><% } %></td>
+        <td>
+          <label class="sr-only" for="arSite-<%= r.key %>"><%- t('admroles.website.min') %> <%= r.key %></label>
+          <select id="arSite-<%= r.key %>" data-site-perm="<%= r.key %>"<%= off ? ' disabled' : '' %>>
+            <% r.options.forEach((o) => { %><option value="<%= o.v %>"<%= o.v === r.eff ? ' selected' : '' %><%= o.ok || o.v === r.eff ? '' : ' disabled' %>><%- t(o.v === r.def ? 'admroles.default_opt' : 'admroles.website.cls.' + o.v, { v: t('admroles.website.cls.' + o.v) }) %></option><% }) %>
+          </select>
+          <% if (r.ownerSet && SV.canEdit && !SV.owner) { %><br><span class="adm-help">🔒 <%- t('admroles.locked_by_owner') %></span><% } %>
+        </td>
+        <% r.ladder.forEach((l) => { %><td class="ar-lad"><span aria-label="<%- t('admroles.website.cls.' + l.cls) %>: <%- t(l.has ? 'admroles.yes' : 'admroles.no') %>"><%= l.has ? '✅' : '❌' %></span></td><% }) %>
+        <td><% if (r.by) { %><%- t('admroles.set_by', { by: String(r.by).replace(/^web:/, '🌐 ') }) %><br><span class="adm-help"><%= r.ts > 1e12 ? when(r.ts) : '' %></span><% } else { %>–<% } %></td>
+        <td><% if (r.changed) { %><button type="button" class="ghost" data-site-reset="<%= r.key %>"<%= off ? ' disabled' : '' %>><%- t('admroles.reset') %></button><% } %> <span class="adm-msg" role="status"></span></td>
+      </tr><% }) %>
+      </tbody>
+    </table></div>
+  <% }) %>
+  </div>
 </section>
 
 <section class="adm-card" id="chat" aria-labelledby="arChatT">
@@ -179,9 +210,11 @@
   .ar-cmds .ar-lad { text-align: center; white-space: nowrap; }
   .ar-cmds .ar-cmd { white-space: nowrap; }
   .ar-cmds td.ar-lad span + span { margin-inline-start: 2px; }
-  .adm-main #commands select, .adm-main #targets select, .adm-main #holders select { max-width: 13rem; }
+  .adm-main #commands select, .adm-main #targets select, .adm-main #holders select, .adm-main #website select { max-width: 13rem; }
+  .ar-site .ar-lad { text-align: center; white-space: nowrap; }
+  #website h3 { margin-top: 1.2em; }
 </style>
-<script src="/public/js/admin-roles.js?v=1" defer></script>
+<script src="/public/js/admin-roles.js?v=2" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>
