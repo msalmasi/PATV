@@ -6,6 +6,11 @@
 // Same rules as a pasted link (onair.setEmbed): the rights tick at queue time (who + when kept on the row and in the
 // on-air log when it starts), the stall clock, the IRL feed wins. Staff only (the routes / Pepe's !onair check that).
 // Chat times are America/New_York (the site's clock - banner.js, lotto); the web sends an exact ms.
+// 1.99acw: 🖼 pictures / 🔗 link cards / 🌐 live pages too (kind "media", onairmedia.js): the row keeps the PREPARED pick (a
+// picture or card was fetched + safety-checked at queue time, so problems show up then; a direct picture's / live page's host
+// is re-checked when it plays). Each lives in its lane - "main" (full) or "corner" (the overlay): a booked one replaces what's in
+// its lane, a next-up one waits until its lane is free. Media rows wait while Pepe can't show pictures (an older Pepe, OBS not set
+// up); a booked one is missed after LATE_MS like any other. Old rows (kind NULL) are YouTube / Twitch links as before.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -28,6 +33,12 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS onair_queue (id TEXT PRIMARY KEY, at INTEGER, url TEXT NOT NULL, label TEXT, by TEXT,
                       created INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'waiting', done_at INTEGER, why TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS onair_queue_status ON onair_queue (status, at)");
+      // 1.99acw: media rows (kind NULL = an embed link, as before)
+      // 1.99acw review: + owner (who queued it: {via: web, userId} | {via: chat, login}) - a direct picture / live page is
+      // re-checked against that person when it plays (onair.queueTick)
+      for (const col of ["kind TEXT", "spec TEXT", "owner TEXT"]) {
+        try { await runQuery(`ALTER TABLE onair_queue ADD COLUMN ${col}`); } catch (e) { /* already there */ }
+      }
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -87,8 +98,31 @@ function fmt(ms, tz = TZ) {
 }
 
 // ── the queue ──
-const shape = (r) => ({ id: r.id, at: r.at == null ? null : Number(r.at), url: r.url, label: r.label, by: r.by, created: Number(r.created),
-                        status: r.status, done_at: r.done_at == null ? null : Number(r.done_at), why: r.why || null });
+function specOf(r) {
+  if (r.kind !== "media" || !r.spec) return null;
+  try { const s = typeof r.spec === "string" ? JSON.parse(r.spec) : r.spec; return s && typeof s === "object" ? s : null; } catch (e) { return null; }
+}
+function ownerOf(r) {
+  if (!r.owner) return null;
+  try { const o = typeof r.owner === "string" ? JSON.parse(r.owner) : r.owner; return o && typeof o === "object" ? o : null; } catch (e) { return null; }
+}
+const shape = (r) => {
+  const spec = specOf(r);
+  return { id: r.id, at: r.at == null ? null : Number(r.at), url: r.url, label: r.label, by: r.by, created: Number(r.created),
+           status: r.status, done_at: r.done_at == null ? null : Number(r.done_at), why: r.why || null,
+           kind: r.kind === "media" ? "media" : "embed", lane: spec && spec.lane === "corner" ? "corner" : "main", mode: spec ? spec.mode || null : null,
+           direct: !!(spec && spec.direct),
+           ...(r.kind === "media" ? { spec, owner: ownerOf(r) } : {}) };
+};
+/** 1.99acw: a time for the queue -> the ms (null = next up). Throws QueueError (passed / more than two weeks ahead). */
+function checkAt(at, t = now()) {
+  if (at == null || at === "") return null;
+  const n = Math.floor(Number(at));
+  if (!Number.isFinite(n)) throw new QueueError("That time isn't valid.", "when");
+  if (n < t + 30 * 1000) throw new QueueError("That time has already passed - pick a later one (or play it now).", "when");
+  if (n > t + MAX_AHEAD_MS) throw new QueueError("At most two weeks ahead.", "when");
+  return n;
+}
 /** Waiting rows: booked times first (by time), then next-up (oldest first). */
 async function list() {
   await init();
@@ -99,24 +133,33 @@ async function recent(n = 10) {
   await init();
   return (await getQuery("SELECT * FROM onair_queue WHERE status != 'waiting' ORDER BY COALESCE(done_at, created) DESC LIMIT ?", [n])).map(shape);
 }
-/** Queue a link: {url, at (ms | null), by} -> the row. Throws QueueError. The caller checked the rights tick. */
-async function add({ url, at = null, by }, t = now()) {
+/** Queue a link: {url, at (ms | null), by} -> the row. Throws QueueError. The caller checked the rights tick.
+ *  1.99acw: {kind: "media", spec (onairmedia.mediaOf - already prepared), label, at, by} queues a picture / card / live page. */
+async function add({ url, at = null, by, kind = "embed", spec = null, label = null, owner = null }, t = now()) {
   await init();
-  let e = null;
-  try { e = EMB().clean(EMB().parse(url)); } catch (err) { throw new QueueError((err && err.message) || "That isn't a YouTube or Twitch link we can play.", "embed_bad"); }
-  if (!e) throw new QueueError("That isn't a YouTube or Twitch link we can play.", "embed_bad");
-  if (at != null) {
-    at = Math.floor(Number(at));
-    if (!Number.isFinite(at)) throw new QueueError("That time isn't valid.", "when");
-    if (at < t + 30 * 1000) throw new QueueError("That time has already passed - pick a later one (or play it now).", "when");
-    if (at > t + MAX_AHEAD_MS) throw new QueueError("At most two weeks ahead.", "when");
+  let e = null, rowUrl, rowLabel;
+  if (kind === "media") {
+    if (!spec || typeof spec !== "object" || !["image", "card", "live"].includes(spec.mode)) throw new QueueError("That can't be queued.", "bad");
+    rowUrl = String(url || (spec.direct && spec.direct.url) || (spec.live && spec.live.url) || (spec.card && spec.card.url) || spec.src ||
+                    "upload:" + ((spec.asset && spec.asset.id) || "?")).slice(0, 2048);
+    rowLabel = String(label || "?").slice(0, 160);
+  } else {
+    try { e = EMB().clean(EMB().parse(url)); } catch (err) { throw new QueueError((err && err.message) || "That isn't a YouTube or Twitch link we can play.", "embed_bad"); }
+    if (!e) throw new QueueError("That isn't a YouTube or Twitch link we can play.", "embed_bad");
+    rowUrl = String(url).trim().slice(0, 500);
+    rowLabel = "🔗 " + EMB().label(e);
   }
+  at = checkAt(at, t);
   const n = (await getQuery("SELECT COUNT(*) AS n FROM onair_queue WHERE status = 'waiting'"))[0];
   if (n && Number(n.n) >= MAX_WAITING) throw new QueueError(`The on-air queue is full (${MAX_WAITING}) - cancel one first.`, "full");
-  const row = { id: crypto.randomBytes(3).toString("hex"), at, url: String(url).trim().slice(0, 500), label: "🔗 " + EMB().label(e),
-                by: String(by || "?").slice(0, 80), created: t, status: "waiting" };
-  await runQuery("INSERT INTO onair_queue (id, at, url, label, by, created, status) VALUES (?, ?, ?, ?, ?, ?, 'waiting')",
-    [row.id, row.at, row.url, row.label, row.by, row.created]);
+  const own = kind === "media" && owner && typeof owner === "object"
+    ? JSON.stringify({ via: owner.via === "web" ? "web" : "chat", ...(owner.userId ? { userId: String(owner.userId).slice(0, 80) } : {}),
+                       ...(owner.login ? { login: String(owner.login).toLowerCase().slice(0, 40) } : {}) }) : null;
+  const row = { id: crypto.randomBytes(3).toString("hex"), at, url: rowUrl, label: rowLabel,
+                by: String(by || "?").slice(0, 80), created: t, status: "waiting", kind: kind === "media" ? "media" : null,
+                spec: kind === "media" ? JSON.stringify(spec) : null, owner: own };
+  await runQuery("INSERT INTO onair_queue (id, at, url, label, by, created, status, kind, spec, owner) VALUES (?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)",
+    [row.id, row.at, row.url, row.label, row.by, row.created, row.kind, row.spec, row.owner]);
   return shape(row);
 }
 async function mark(id, status, why, t = now()) {
@@ -134,17 +177,27 @@ async function cancel(which, by, t = now()) {
   for (const r of hit) await mark(r.id, "cancelled", "by " + String(by || "?").slice(0, 60), t);
   return hit.length;
 }
-/** What should go on air now: a booked time that's due, else (idle) the oldest next-up; overdue bookings -> missed. */
-async function due({ idle, enabled }, t = now()) {
+/** What should go on air now: a booked time that's due, else (its lane idle) the oldest next-up; overdue bookings -> missed.
+ *  1.99acw: {idleMain (= the old `idle`), idleCorner, enabled, mediaOk, liveOk} - media rows wait while Pepe can't show them.
+ *  1.99acw review: + directOk (Pepe's "direct" cap) and liveMain / liveCorner (that lane shows a live page now): a live page
+ *  waits while the OTHER lane shows one (only one at a time - it used to be picked, refused "live_busy" and marked failed). */
+async function due({ idle, idleMain = idle, idleCorner = false, enabled, mediaOk = false, liveOk = false, directOk = false, liveMain = false, liveCorner = false }, t = now()) {
   const rows = await list();
+  const otherLive = (r) => (r.lane === "corner" ? liveMain : liveCorner);
+  const can = (r) => r.kind !== "media" || (mediaOk && (r.mode !== "live" || (liveOk && !otherLive(r))) && (!r.direct || directOk));
+  const whyNot = (r) => (!mediaOk ? "Pepe couldn't show pictures" : r.mode === "live" && !liveOk ? "Pepe couldn't show live pages"
+    : r.mode === "live" && otherLive(r) ? "a live page was on in the other spot" : r.direct && !directOk ? "Pepe couldn't show direct pictures" : "couldn't start in time");
   for (const r of rows) {
-    if (r.at != null && r.at <= t - LATE_MS) await mark(r.id, "missed", enabled ? "couldn't start in time" : "on-air was switched off", t);
+    if (r.at != null && r.at <= t - LATE_MS) {
+      await mark(r.id, "missed", !enabled ? "on-air was switched off" : !can(r) ? whyNot(r) : "couldn't start in time", t);
+    }
   }
   if (!enabled) return null;
-  const booked = rows.find((r) => r.at != null && r.at <= t && r.at > t - LATE_MS);
+  const open = rows.filter((r) => !(r.at != null && r.at <= t - LATE_MS));
+  const booked = open.find((r) => r.at != null && r.at <= t && can(r));
   if (booked) return booked;
-  return idle ? rows.find((r) => r.at == null) || null : null;
+  return open.find((r) => r.at == null && can(r) && (r.lane === "corner" ? idleCorner : idleMain)) || null;
 }
 
-module.exports = { init, add, list, recent, cancel, mark, due, parseWhen, fmt, wallMs, QueueError, TZ, LATE_MS, MAX_WAITING,
+module.exports = { init, add, list, recent, cancel, mark, due, checkAt, parseWhen, fmt, wallMs, QueueError, TZ, LATE_MS, MAX_WAITING,
   _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; } };

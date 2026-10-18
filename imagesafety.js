@@ -67,7 +67,12 @@ const SP = require("./siteperms");   // 1.99ack: the website's capabilities (sit
 
 const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked", "shop"]);
 const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures", banner: "Homepage banner ads",
-                                      locked: "Locked creator posts (PATV Creators)", shop: "Generated shop pictures" });
+                                      locked: "Locked creator posts (PATV Creators)", shop: "Generated shop pictures",
+                                      onair: "Pepe's broadcast (on-air pictures)" });
+// 1.99acw: "onair" = a picture going on Pepe's broadcast (onairmedia.js: his OBS -> the site's Pepe stream, his Camfrog cam and
+// the Twitch relay). Its own entry point checkBroadcast() - ALWAYS enforcing, fail-CLOSED, independent of the master switch,
+// shadow mode and the per-surface toggles (so "onair" is not one of SURFACES: there is nothing to switch off), with a policy
+// frozen in code (BROADCAST_POLICY, not admin-editable) and a "clearly safe" margin (broadcast_max_score).
 // 1.99kk: "banner" = a paid homepage banner (banner.js) - everyone sees it, so the strict profile policy (no NSFW at all)
 // 1.99pv: "locked" = the files of a PATV Creators locked post (subscriber-only / pay-per-view, creators.js). Paid content gets
 // fewer outside eyes, so it has its own switch (locked_enforce) that ALWAYS enforces and fails CLOSED, whatever the master
@@ -75,7 +80,12 @@ const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_p
 // passes, explicit nudity / sexual content never does). A locked post can never be NSFW, so "nsfw" / "nsfw_pad" mean refuse there.
 // 1.99xr: "shop" = a picture made by the shop's Generate image button (shopart.js) - shown on public shop pages, so the strict
 // profile policy (nothing NSFW)
-const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile", locked: "locked", shop: "profile" });
+const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile", locked: "locked", shop: "profile",
+                              onair: "broadcast" });
+// 1.99acw: the broadcast policy - frozen here, never part of the editable config.policy (admins can't loosen it; only the
+// broadcast_max_score margin is tunable, within [0.05, 0.5])
+const BROADCAST_POLICY = Object.freeze({ nudity_explicit: "refuse", sexual: "refuse", suggestive: "refuse", minor_risk: "refuse_flag", gore: "refuse",
+                                         hate_symbols: "refuse_flag", nsfw_level: "refuse" });
 const POLICY_GROUPS = Object.freeze(["profile", "media", "locked", "locked_r18"]);
 const CATEGORIES = Object.freeze(["nudity_explicit", "sexual", "suggestive", "minor_risk", "gore", "hate_symbols"]);
 const POLICY_KEYS = Object.freeze([...CATEGORIES, "nsfw_level"]);
@@ -92,6 +102,7 @@ const DEFAULTS = Object.freeze({
   // is switched by an admin (/admin/imagesafety) - until then creators.js refuses locked pictures / videos (text locks only).
   locked_enforce: !!process.env.STAGING,
   enabled: false, shadow: false, fail_mode: "open", timeout_secs: 20, video_frames: 3, notify_minor: true, retention_days: 30,
+  broadcast_max_score: 0.3,      // 1.99acw: on-air pictures are "clearly safe" only with EVERY category score below this
   surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true, locked: true, shop: true }),
   thresholds: Object.freeze({ nudity_explicit: 0.5, sexual: 0.5, suggestive: 0.5, minor_risk: 0.4, gore: 0.5, hate_symbols: 0.6 }),
   policy: DEFAULT_POLICY,
@@ -102,10 +113,33 @@ const SETTING_NAMES = Object.freeze({
   image_safety_timeout_secs: "timeout_secs", image_safety_surfaces: "surfaces", image_safety_video_frames: "video_frames",
   image_safety_thresholds: "thresholds", image_safety_policy: "policy", image_safety_notify_minor: "notify_minor",
   image_safety_retention_days: "retention_days", image_safety_locked_enforce: "locked_enforce",
+  image_safety_broadcast_max_score: "broadcast_max_score",
 });
+const BROADCAST_MAX_RANGE = Object.freeze([0.05, 0.5]);
 
 const FRAME_PX = 768;
 const THUMB_PX = 256;
+// 1.99acw review: on-air pictures are checked EXACTLY as they go on air. BROADCAST_BG = the show page's frame colour - a
+// transparent picture is flattened onto it before it's stored AND before it's classified (flattened onto white, a picture
+// whose content lives only in its alpha channel looked blank to the classifier and showed in full over the dark frame).
+const BROADCAST_BG = "#0b120c";
+// Every DISTINCT frame of an on-air animation is classified (never a sample by index). Two pages count once ONLY when they are
+// the same picture pixel by pixel: EVERY pixel within BSAME_PIXEL on EVERY channel (R, G and B apart, so detail that is colour
+// only, at even brightness, still counts), at the decoded size, with no slack - and a page is compared with the first page of
+// its look, so small changes can't add up over a run. (1.99acw review, round 2: a per-cell mean colour + luma-spread signature
+// merged a frame of crisp red line art on grey of the same brightness, shown 15 s, into a flat 24 px mosaic shown 100 ms - the
+// line art never reached the classifier.) A coarse per-cell mean (BCELL grid, within the same BSAME_PIXEL, so it never rejects
+// a pair the pixel rule would merge) only skips the pixel compare for pages that already differ. The stored file is lossy
+// WebP, so a repeated frame can come back a little different the first time round (a key frame vs the same frame coded as a
+// change) - that frame is simply classified as well. More than BROADCAST_FRAME_CAP distinct frames -> refused; the distinct
+// frames go to Pepe BROADCAST_BATCH at a time (his ISF_MAX_FRAMES), one job per batch, and the picture passes only if every
+// job does. The pages are decoded ONCE (decoding page N alone re-decodes 0..N-1), at a size that keeps the whole raw decode
+// under BROADCAST_DECODE_BYTES.
+const BROADCAST_FRAME_CAP = 36;
+const BROADCAST_BATCH = 6;
+const BROADCAST_DECODE_BYTES = 64 * 1024 * 1024;
+const BROADCAST_WAIT_MAX_S = 80;          // the jobs of one picture together wait at most this long (timeout_secs each)
+const BCELL = 32, BSAME_PIXEL = 12;
 const PULL_WAIT_MAX = 10e3;        // Pepe's long-poll (staging's router gives a POST 15 s)
 const PULL_MAX_JOBS = 4;
 const CLAIM_TTL = 90e3;            // a claimed job with no verdict is offered again after this
@@ -132,6 +166,8 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS image_safety_log_at ON image_safety_log (at)");
       await runQuery("CREATE INDEX IF NOT EXISTS image_safety_log_flag ON image_safety_log (flagged, at)");
       await runQuery("CREATE INDEX IF NOT EXISTS image_safety_log_hash ON image_safety_log (hash)");
+      // 1.99acw review: the source address of an on-air picture (the CSAM procedure needs who + where from, not just a ref)
+      try { await runQuery("ALTER TABLE image_safety_log ADD COLUMN src TEXT"); } catch (e) { /* already there */ }
     })().catch((e) => { console.error("[imagesafety] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -167,6 +203,8 @@ function cleanConfig(c, base = DEFAULTS) {
     video_frames: Math.round(num(src.video_frames, 1, 6, base.video_frames)),
     notify_minor: src.notify_minor != null ? bool(src.notify_minor) : !!base.notify_minor,
     retention_days: Math.round(num(src.retention_days, 1, 365, base.retention_days)),
+    broadcast_max_score: Math.round(num(src.broadcast_max_score, BROADCAST_MAX_RANGE[0], BROADCAST_MAX_RANGE[1],
+      num(base.broadcast_max_score, BROADCAST_MAX_RANGE[0], BROADCAST_MAX_RANGE[1], DEFAULTS.broadcast_max_score)) * 1000) / 1000,
     surfaces: {}, thresholds: {}, policy: { profile: {}, media: {}, locked: {}, locked_r18: {} },
   };
   const sIn = src.surfaces && typeof src.surfaces === "object" ? src.surfaces : {};
@@ -196,7 +234,7 @@ async function setConfig(patch, actor = "?") {
   await runQuery("INSERT INTO image_safety_kv (k, v) VALUES ('config', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", [JSON.stringify(next)]);
   CFG = next;
   const flip = (k) => (cur[k] !== next[k] ? ` ${k} ${cur[k]} -> ${next[k]}` : "");
-  console.log(`[imagesafety] settings saved by ${actor}:${flip("enabled")}${flip("shadow")}${flip("fail_mode")}${flip("timeout_secs")}${flip("locked_enforce")}`);
+  console.log(`[imagesafety] settings saved by ${actor}:${flip("enabled")}${flip("shadow")}${flip("fail_mode")}${flip("timeout_secs")}${flip("locked_enforce")}${flip("broadcast_max_score")}`);
   return next;
 }
 /** The config as the image_safety_* setting names (admin page / API). */
@@ -217,9 +255,11 @@ function cleanVerdict(v, thresholds = DEFAULTS.thresholds) {
   const sIn = v.scores && typeof v.scores === "object" ? v.scores : {};
   const listed = new Set(Array.isArray(v.categories) ? v.categories.map((x) => String(x).toLowerCase()) : []);
   let any = false;
+  const scored = [];                 // 1.99acw review: the categories the classifier actually gave a number for
   for (const k of CATEGORIES) {
-    let s = Number(sIn[k]);
-    if (!Number.isFinite(s)) s = listed.has(k) ? 1 : 0; else any = true;
+    const raw = sIn[k];
+    let s = raw === null || raw === "" || typeof raw === "boolean" ? NaN : Number(raw);
+    if (!Number.isFinite(s)) s = listed.has(k) ? 1 : 0; else { any = true; scored.push(k); }
     scores[k] = Math.round(Math.min(1, Math.max(0, s)) * 1000) / 1000;
   }
   if (!verdict && !any && !listed.size) return null;
@@ -228,7 +268,7 @@ function cleanVerdict(v, thresholds = DEFAULTS.thresholds) {
   let confidence = Number(v.confidence);
   if (!Number.isFinite(confidence)) confidence = categories.length ? Math.max(...categories.map((k) => scores[k])) : 1 - top;
   return {
-    verdict: verdict || (categories.length ? "nsfw" : "allow"), categories, scores,
+    verdict: verdict || (categories.length ? "nsfw" : "allow"), categories, scores, scored,
     confidence: Math.round(Math.min(1, Math.max(0, confidence)) * 1000) / 1000,
     reason: String(v.reason || "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, REASON_MAX),
   };
@@ -240,9 +280,11 @@ const RANK = { allow: 0, flag: 1, nsfw: 2, nsfw_pad: 3, refuse: 4, refuse_flag: 
  * Pure - the tests drive it with a stubbed classification.
  */
 function decide(surface, v, { padAllowsNsfw = true, policy = DEFAULT_POLICY, group: groupIn = null } = {}) {
-  const group = (groupIn && POLICY_GROUPS.includes(groupIn) ? groupIn : null) || GROUP[surface] || "media";
-  const strict = group === "profile" || group === "locked" || group === "locked_r18";      // never NSFW: "mark NSFW" = refuse
-  const P = (policy && policy[group]) || DEFAULT_POLICY[group];
+  // 1.99acw: "broadcast" (on-air pictures) always uses the frozen BROADCAST_POLICY - never the editable config
+  const broadcast = groupIn === "broadcast" || GROUP[surface] === "broadcast";
+  const group = broadcast ? "broadcast" : (groupIn && POLICY_GROUPS.includes(groupIn) ? groupIn : null) || GROUP[surface] || "media";
+  const strict = broadcast || group === "profile" || group === "locked" || group === "locked_r18";      // never NSFW: "mark NSFW" = refuse
+  const P = broadcast ? BROADCAST_POLICY : (policy && policy[group]) || DEFAULT_POLICY[group];
   const keys = [...(v.categories || [])];
   if (v.verdict === "nsfw" || v.verdict === "refuse") keys.push("nsfw_level");
   let flagged = v.verdict === "refuse";
@@ -260,7 +302,9 @@ function decide(surface, v, { padAllowsNsfw = true, policy = DEFAULT_POLICY, gro
   else if (worst === "nsfw") action = strict ? "refuse" : "nsfw";
   return { action, flagged, why, worst, message: action === "refuse" ? refusalMessage(surface, why, padAllowsNsfw, group) : "" };
 }
+const BROADCAST_REFUSED = "Not shown - that picture isn't clearly safe for Pepe's stream (it's relayed to Twitch).";
 function refusalMessage(surface, why, padAllowsNsfw, group) {
+  if (group === "broadcast") return BROADCAST_REFUSED;
   if (why.includes("minor_risk")) return "That picture can't be posted here (Terms: nothing sexual or suggestive involving anyone who may be under 18).";
   if (group === "locked") return "Locked posts must be safe for work: no nudity, sexual or suggestive content (Creator Terms). Suggestive content is allowed only on 18+ profiles and pads.";
   if (group === "locked_r18") return "Locked posts can be suggestive on an 18+ profile or pad, but never explicit: no nudity or sexual acts (Creator Terms).";
@@ -273,13 +317,88 @@ function refusalMessage(surface, why, padAllowsNsfw, group) {
 }
 
 // ── frames ──
-async function jpegFrame(input, page) {
+async function jpegFrame(input, page, background = "#ffffff") {
   const sharp = require("sharp");
   const opts = { limitInputPixels: 60e6 };
   if (page != null) opts.page = page;
-  return sharp(input, opts).rotate().resize(FRAME_PX, FRAME_PX, { fit: "inside", withoutEnlargement: true }).flatten({ background: "#ffffff" })
+  return sharp(input, opts).rotate().resize(FRAME_PX, FRAME_PX, { fit: "inside", withoutEnlargement: true }).flatten({ background })
     .jpeg({ quality: 80 }).toBuffer();
 }
+/** A page's coarse look - only a pre-filter for samePixels: per BCELL x BCELL cell, the mean of every channel. */
+function frameSig(data, off, w, h, ch) {
+  const n = BCELL * BCELL;
+  const sum = new Float64Array(n * ch), cnt = new Uint32Array(n);
+  for (let y = 0; y < h; y++) {
+    const cy = Math.min(BCELL - 1, Math.floor((y * BCELL) / h));
+    for (let x = 0; x < w; x++) {
+      const c = cy * BCELL + Math.min(BCELL - 1, Math.floor((x * BCELL) / w));
+      const p = off + (y * w + x) * ch;
+      for (let k = 0; k < ch; k++) sum[c * ch + k] += data[p + k];
+      cnt[c]++;
+    }
+  }
+  const mean = new Float32Array(n * ch);
+  for (let c = 0; c < n; c++) if (cnt[c]) for (let k = 0; k < ch; k++) mean[c * ch + k] = sum[c * ch + k] / cnt[c];
+  return { mean, cnt, ch };
+}
+/** Could the two pages be the same picture? Every pixel within BSAME_PIXEL -> every cell mean is too, so a cell mean further
+ *  apart than that means different (never a false "different"); "maybe" still needs samePixels. */
+function sameLook(a, b) {
+  for (let c = 0; c < a.cnt.length; c++) {
+    if (!a.cnt[c]) continue;
+    for (let k = 0; k < a.ch; k++) if (Math.abs(a.mean[c * a.ch + k] - b.mean[c * a.ch + k]) > BSAME_PIXEL) return false;
+  }
+  return true;
+}
+/** The same picture: EVERY byte (each channel of each pixel) of the two decoded pages within BSAME_PIXEL - no slack. */
+function samePixels(data, offA, offB, len) {
+  for (let i = 0; i < len; i++) {
+    const d = data[offA + i] - data[offB + i];
+    if (d > BSAME_PIXEL || d < -BSAME_PIXEL) return false;
+  }
+  return true;
+}
+/**
+ * 1.99acw review: the frames of an on-air picture, as it is shown (flattened onto `background`). A still -> one 768 px frame.
+ * An animation -> EVERY distinct page (a page is merged into an earlier kept page only when every pixel of every channel is
+ * within BSAME_PIXEL of it), never a sample by index - a long-held frame between sampled ones can't slip through, and neither
+ * can a frame that only looks like another one in coarse statistics.
+ * -> {frames: [jpeg], pages, distinct, kept: [page]} | {tooMany: true, pages, distinct}.
+ */
+async function broadcastFrames(input, { background = BROADCAST_BG, cap = BROADCAST_FRAME_CAP } = {}) {
+  const sharp = require("sharp");
+  const md = await sharp(input, { limitInputPixels: 60e6, animated: true }).metadata();
+  const pages = Math.max(1, Number(md.pages) || 1);
+  if (pages === 1) return { frames: [await jpegFrame(input, undefined, background)], pages: 1, distinct: 1 };
+  const w = Number(md.width) || 0;
+  const ph = Number(md.pageHeight) || Math.round((Number(md.height) || 0) / pages);
+  if (!w || !ph) throw new Error("unreadable animation");
+  const side = Math.max(64, Math.min(FRAME_PX, Math.floor(Math.sqrt(BROADCAST_DECODE_BYTES / 3 / pages))));
+  const scale = Math.min(1, side / Math.max(w, ph));
+  const fw = Math.max(1, Math.round(w * scale)), fh = Math.max(1, Math.round(ph * scale));
+  // one sequential decode of every page (each resized on its own), flattened onto the show page's colour
+  const { data, info } = await sharp(input, { limitInputPixels: 60e6, animated: true })
+    .resize(fw, fh, { fit: "fill" }).flatten({ background }).toColourspace("srgb").raw().toBuffer({ resolveWithObject: true });
+  const ch = info.channels, pw = info.width, phh = info.pageHeight || fh;
+  const n = Math.floor(info.height / phh);
+  const size = pw * phh * ch;
+  const kept = [];
+  for (let p = 0; p < n; p++) {
+    if (p && p % 8 === 0) await new Promise((r) => setImmediate(r));     // a long animation doesn't hold the event loop
+    const sig = frameSig(data, p * size, pw, phh, ch);
+    if (kept.some((k) => sameLook(k.sig, sig) && samePixels(data, k.page * size, p * size, size))) continue;
+    kept.push({ page: p, sig });
+    if (kept.length > cap) return { tooMany: true, pages: n, distinct: kept.length };
+  }
+  const frames = [];
+  for (const k of kept) {
+    frames.push(await sharp(data.subarray(k.page * size, (k.page + 1) * size), { raw: { width: pw, height: phh, channels: ch } })
+      .jpeg({ quality: 80 }).toBuffer());
+  }
+  return { frames, pages: n, distinct: kept.length, kept: kept.map((k) => k.page) };
+}
+/** The frames to classify on the upload surfaces: the first (and, for an animation, the middle). On-air pictures use
+ *  broadcastFrames (every distinct page) instead. */
 async function imageFrames(input) {
   const sharp = require("sharp");
   let pages = 1;
@@ -439,11 +558,11 @@ async function record(row, frames) {
   const keep = row.surface !== "dm" || !!(v && ((row.would && row.would !== "allow") || row.flagged));
   const thumb = keep ? await thumbFor(frames || [], minor) : null;
   const r = await runQuery(`INSERT INTO image_safety_log (at, surface, kind, user_id, room_id, ref, hash, mode, action, flagged, verdict, categories, scores,
-                            confidence, reason, model, cost, ms, would, thumb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            confidence, reason, model, cost, ms, would, thumb, src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [NOW(), row.surface, row.kind || null, row.userId || null, row.roomId || null, row.ref ? String(row.ref).slice(0, 80) : null, row.hash || null,
      row.mode, row.action, row.flagged ? 1 : 0, v ? v.verdict : null, v ? JSON.stringify(v.categories) : null, v ? JSON.stringify(v.scores) : null,
      v ? v.confidence : null, v ? v.reason : (row.reason || null), v ? v.model : null, v ? v.cost || 0 : 0, v ? v.ms || null : null,
-     row.would || null, thumb]);
+     row.would || null, thumb, row.src ? String(row.src).slice(0, 2048) : null]);
   const id = r && (r.id != null ? r.id : r.lastID);   // dbUtils.runQuery -> {id, changes}
   if (row.flagged && minor) await notifyAdmins(id, row);
   return id;
@@ -454,9 +573,11 @@ async function notifyAdmins(id, row) {
     if (!c.notify_minor) return;
     const admins = await getQuery("SELECT userId FROM users WHERE class = 'Admin'");
     const shadow = row.mode === "shadow" ? " (shadow mode: nothing was blocked)" : row.mode === "late" ? " (classified late - the upload went through)" : "";
+    // 1.99acw review: an on-air attempt names who sent it (the ref) - its source address is on the review page (check #id)
+    const who = row.surface === "onair" && row.ref ? ` from ${String(row.ref).slice(0, 80)} (refused - never shown; its source address is on check #${id})` : "";
     for (const a of admins) {
       await require("./inbox").addSafe(a.userId, { kind: "admin", title: "URGENT: image safety flagged a possible minor in sexual / suggestive content",
-        body: `A ${SURFACE_LABEL[row.surface] || row.surface} upload${shadow}. Review it on the image safety page. Don't download or share it; follow the CSAM procedure.`,
+        body: `A ${SURFACE_LABEL[row.surface] || row.surface} upload${shadow}${who}. Review it on the image safety page. Don't download or share it; follow the CSAM procedure.`,
         link: "/admin/imagesafety#flagged", ref: "imagesafety:" + id });
     }
   } catch (e) { console.error("[imagesafety] notify:", e.message); }
@@ -584,6 +705,89 @@ async function checkLocked(input = {}) {
   return { ok: true, mode: "enforce", logId: id, flagged: d.flagged };
 }
 
+/**
+ * 1.99acw: the check for a picture going on Pepe's BROADCAST (onairmedia.js). ALWAYS enforcing and fail-CLOSED, whatever the
+ * master switch, shadow mode and the surface toggles say (the stream is relayed to Twitch). A picture is shown only when it is
+ * CLEARLY safe - all of:
+ *   1. a classification arrived in time (a timeout, an error, no frames, Pepe not pulling = refused; no fail-open)
+ *   2. the model's own verdict is "allow"
+ *   3. no category at or over its threshold
+ *   4. the frozen BROADCAST_POLICY allows it without a flag
+ *   5. EVERY category score is below broadcast_max_score (default 0.30): suggestive 0.35 is under its 0.5 threshold, but it
+ *      isn't clearly safe
+ *   6. (1.99acw review) every category was actually SCORED in every answer - a reply that left one out (cut off, or the model
+ *      ignored the schema) fails closed ("unavailable"): a missing score is not a 0
+ * What is classified is what goes on air: the picture flattened onto the show page's frame colour (BROADCAST_BG), and for an
+ * animation EVERY distinct frame (broadcastFrames), in jobs of BROADCAST_BATCH frames - all of them must pass. More than
+ * BROADCAST_FRAME_CAP distinct frames -> refused (code "frames", not a safety verdict). One log row per picture (the worst
+ * answer, the scores' maximum; the thumbnail from the worst batch).
+ * input: {buf | file, userId, ref (who: "onair:<by>"), src (where from: the link / "upload:<id>"), background}
+ * -> {ok: true, logId} | {ok: false, reason, logId, flagged, minor, code: "unsafe" | "unavailable" | "frames"}
+ */
+const VRANK = { allow: 0, nsfw: 1, refuse: 2 };
+function mergeVerdicts(vs, thresholds = DEFAULTS.thresholds) {
+  const scores = {};
+  for (const k of CATEGORIES) scores[k] = Math.max(0, ...vs.map((v) => Number(v.scores && v.scores[k]) || 0));
+  const worst = vs.reduce((a, v) => (VRANK[v.verdict] > VRANK[a.verdict] ? v : a), vs[0]);
+  const categories = CATEGORIES.filter((k) => vs.some((v) => (v.categories || []).includes(k)) || scores[k] >= thresholds[k]);
+  return { verdict: worst.verdict, categories, scores, scored: CATEGORIES.filter((k) => vs.every((v) => (v.scored || []).includes(k))),
+           confidence: worst.confidence, reason: worst.reason, model: worst.model, cost: vs.reduce((a, v) => a + (Number(v.cost) || 0), 0),
+           ms: Math.max(0, ...vs.map((v) => Number(v.ms) || 0)) };
+}
+async function checkBroadcast(input = {}) {
+  const c = await config();
+  const base = { surface: "onair", kind: "image", userId: input.userId || null, roomId: null, ref: input.ref || null, src: input.src || null };
+  let frames = [];
+  const closed = async (why, hash) => {
+    const id = await record({ ...base, hash: hash || null, mode: "enforce", action: "failclosed", flagged: false, reason: why }, frames).catch(() => null);
+    console.log(`[imagesafety] onair: no classification (${why}) -> refused (fail-closed)`);
+    return { ok: false, code: "unavailable", reason: why === "pepe_offline" ? "The safety check isn't available right now (Pepe's vision) - nothing was shown."
+      : "The picture couldn't be safety-checked right now - nothing was shown. Try again in a minute.", mode: "failclosed", logId: id };
+  };
+  // Pepe hasn't pulled for a minute: the job would only sit until it times out - refuse at once (no stub in that case)
+  if (!CLASSIFIER && NOW() - LAST_PULL > 60e3) return closed("pepe_offline");
+  let fr = null;
+  try {
+    const src = Buffer.isBuffer(input.buf) ? input.buf : input.file && fs.existsSync(input.file) ? input.file : null;
+    if (src) fr = await broadcastFrames(src, { background: input.background || BROADCAST_BG });
+  } catch (e) { console.error("[imagesafety] onair frames:", e.message); fr = null; }
+  if (fr && fr.tooMany) {
+    console.log(`[imagesafety] onair: an animation with more than ${BROADCAST_FRAME_CAP} distinct frames (${fr.pages} pages) -> refused`);
+    return { ok: false, code: "frames", reason: `That animation has too many different frames to check (more than ${BROADCAST_FRAME_CAP}) - use a shorter or simpler one.` };
+  }
+  frames = (fr && fr.frames) || [];
+  if (!frames.length) return closed("no frames");
+  const batches = [];
+  for (let i = 0; i < frames.length; i += BROADCAST_BATCH) batches.push(frames.slice(i, i + BROADCAST_BATCH));
+  const jobs = batches.map((b) => classify(b, { surface: "onair", kind: "image" }));
+  const hash = jobs.length === 1 ? jobs[0].hash : crypto.createHash("sha256").update(jobs.map((j) => j.hash).join(",")).digest("hex");
+  let timer;
+  const wait = Math.min(BROADCAST_WAIT_MAX_S, c.timeout_secs * jobs.length) * 1000;
+  const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("timeout"), { code: "timeout" })), wait); });
+  let vs;
+  try { vs = await Promise.race([Promise.all(jobs.map((j) => j.promise)), timeout]); }
+  catch (e) { return closed(e.code || e.message || "error", hash); }
+  finally { clearTimeout(timer); }
+  if (vs.some((v) => !CATEGORIES.every((k) => (v.scored || []).includes(k)))) {
+    const miss = CATEGORIES.filter((k) => vs.some((v) => !(v.scored || []).includes(k)));
+    return closed("unscored: " + miss.join(","), hash);
+  }
+  const v = mergeVerdicts(vs, c.thresholds);
+  const worstAt = vs.reduce((a, x, i) => (VRANK[x.verdict] > VRANK[vs[a].verdict] || Math.max(...CATEGORIES.map((k) => x.scores[k])) >
+    Math.max(...CATEGORIES.map((k) => vs[a].scores[k])) ? i : a), 0);
+  const d = decide("onair", v, { group: "broadcast" });
+  const max = c.broadcast_max_score;
+  const scoreOk = CATEGORIES.every((k) => !(Number(v.scores[k]) >= max));
+  const safe = v.verdict === "allow" && !v.categories.length && d.action === "allow" && !d.flagged && scoreOk;
+  const id = await record({ ...base, hash, mode: "enforce", action: safe ? "allow" : "refuse", would: d.action, flagged: d.flagged, v }, batches[worstAt]);
+  if (!safe) {
+    const top = CATEGORIES.filter((k) => Number(v.scores[k]) >= max);
+    console.log(`[imagesafety] onair: ${v.verdict} [${v.categories.join(",") || "-"}] over ${max}: [${top.join(",") || "-"}] -> refused${d.flagged ? " +flag" : ""} (#${id}, ${frames.length} frame(s))`);
+    return { ok: false, code: "unsafe", reason: BROADCAST_REFUSED, mode: "enforce", logId: id, flagged: d.flagged, minor: v.categories.includes("minor_risk") };
+  }
+  return { ok: true, mode: "enforce", logId: id, flagged: false, frames: frames.length };
+}
+
 // ── the hooks the upload surfaces already have (1.99es / 1.99ez) + the new ones ──
 async function padAllowsNsfw(roomId) {
   if (!roomId) return true;
@@ -630,7 +834,7 @@ function rowView(r) {
   try { scores = JSON.parse(r.scores || "{}"); } catch (e) { scores = {}; }
   return { id: r.id, at: r.at, surface: r.surface, surfaceLabel: SURFACE_LABEL[r.surface] || r.surface, kind: r.kind, user: r.username || r.user_id || null,
            room: r.room_id, ref: r.ref, mode: r.mode, action: r.action, would: r.would, flagged: !!r.flagged, late: !!r.late, verdict: r.verdict,
-           categories: cats, scores, confidence: r.confidence, reason: r.reason, model: r.model, cost: r.cost, ms: r.ms,
+           categories: cats, scores, confidence: r.confidence, reason: r.reason, model: r.model, cost: r.cost, ms: r.ms, src: r.src || null,
            thumb: r.thumb ? "/admin/imagesafety/thumb/" + r.id : null, review: r.review, reviewedBy: r.reviewed_by, reviewedAt: r.reviewed_at };
 }
 async function recent({ filter = "all", limit = 100 } = {}) {
@@ -658,7 +862,14 @@ async function review(id, mark, actor, note) {
   const r = await runQuery("UPDATE image_safety_log SET review = ?, reviewed_by = ?, reviewed_at = ?, note = ? WHERE id = ?",
     [m, m ? String(actor || "?").slice(0, 60) : null, m ? NOW() : null, note ? String(note).slice(0, 300) : null, Number(id) || 0]);
   if (!r.changes) throw Object.assign(new Error("No such check."), { status: 404 });
-  return rowView((await getQuery("SELECT * FROM image_safety_log WHERE id = ?", [Number(id)]))[0]);
+  const row = (await getQuery("SELECT * FROM image_safety_log WHERE id = ?", [Number(id)]))[0];
+  // 1.99acw review: "fn" (it should have been refused) on an on-air picture's check = block that picture: off the stream at
+  // once, never served or reused again, its hash and link remembered (onair.blockFromSafetyLog; a lazy require - no cycle)
+  if (m === "fn" && row && row.surface === "onair") {
+    try { await require("./onair").blockFromSafetyLog(Number(id), "imagesafety:" + String(actor || "?").slice(0, 60)); }
+    catch (e) { console.error("[imagesafety] onair block:", e.message); }
+  }
+  return rowView(row);
 }
 async function sweep(t = NOW()) {
   await init();
@@ -673,6 +884,8 @@ async function sweep(t = NOW()) {
 
 // ── routes ──
 const safetyAdmin = (u) => SP.can(u, "imagesafety.admin");   // 1.99ack (siteperms.js, locked: Admins)
+// 1.99acw: on-air pictures need Pepe's vision - a lazy require (onair.js loads this module's neighbours, never a cycle at load)
+function onairMediaActive() { try { return !!require("./onair").mediaActive(); } catch (e) { return false; } }
 function register(app, { addUser, isBotToken, noTimers = false }) {
   const express = require("express");
   const json = express.json({ limit: "64kb" });
@@ -710,7 +923,8 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   app.post("/api/pepe/imagesafety/pull", json, bot, async (req, res) => {
     try {
       const c = await config();
-      const on = ((c.enabled || c.shadow) && SURFACES.some((s) => c.surfaces[s])) || !!c.locked_enforce;
+      // 1.99acw: on-air pictures (onair media switched on) are checked whatever the rest says - Pepe keeps pulling for them
+      const on = ((c.enabled || c.shadow) && SURFACES.some((s) => c.surfaces[s])) || !!c.locked_enforce || onairMediaActive();
       if (!on) { LAST_PULL = NOW(); return res.json({ ok: true, enabled: false, jobs: [], idle: 60 }); }
       const wait = Math.min(PULL_WAIT_MAX, Math.max(0, Number((req.body || {}).wait) * 1000 || 0));
       const jobs = await pull(wait);
@@ -770,9 +984,12 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
 }
 
 function _reset() { JOBS.clear(); CACHE.clear(); PULLERS.length = 0; CFG = null; CLASSIFIER = null; }
+function _setLastPull(t) { LAST_PULL = Number(t) || 0; }
 
 module.exports = {
-  init, register, install, check, checkLocked, lockedEnforcing, POLICY_GROUPS, prefetch, decide, cleanVerdict, cleanConfig, config, setConfig, settingsView, active, framesFor, hashFrames,
+  init, register, install, check, checkLocked, checkBroadcast, imageFrames, broadcastFrames, mergeVerdicts, BROADCAST_POLICY, BROADCAST_REFUSED,
+  BROADCAST_MAX_RANGE, BROADCAST_BG, BROADCAST_FRAME_CAP, BROADCAST_BATCH, BSAME_PIXEL, _setLastPull,
+  lockedEnforcing, POLICY_GROUPS, prefetch, decide, cleanVerdict, cleanConfig, config, setConfig, settingsView, active, framesFor, hashFrames,
   enqueue, pull, result, queueStats, setClassifier, recent, stats, review, sweep, padAllowsNsfw, thumbPath, dir, _setDir, _setClock, _reset,
   SURFACES, SURFACE_LABEL, GROUP, CATEGORIES, POLICY_KEYS, ACTIONS, DEFAULTS, DEFAULT_POLICY, SETTING_NAMES, PULL_WAIT_MAX, CLAIM_TTL, LATE_MS,
 };

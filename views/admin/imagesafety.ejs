@@ -51,6 +51,8 @@
     <label><span>Video frames to look at (<code>image_safety_video_frames</code>)</span><input type="number" name="image_safety_video_frames" min="1" max="6" value="<%= C.video_frames %>"></label>
     <label><span>Keep checks + thumbnails, days (<code>image_safety_retention_days</code>)</span><input type="number" name="image_safety_retention_days" min="1" max="365" value="<%= C.retention_days %>"></label>
     <label class="ck"><span>Admin alerts (<code>image_safety_notify_minor</code>)</span><span><input type="checkbox" name="image_safety_notify_minor"<%= C.notify_minor ? ' checked' : '' %>> inbox alert to every admin on a possible-minor flag</span></label>
+    <label style="grid-column:1/-1"><span>📺 On-air pictures: shown only when every score is below (<code>image_safety_broadcast_max_score</code>, 0.05-0.5)</span><input type="number" name="image_safety_broadcast_max_score" min="0.05" max="0.5" step="0.05" value="<%= C.broadcast_max_score %>">
+      <small class="adm-help">Pictures for Pepe's stream (on-air, relayed to Twitch) are always checked and fail closed, whatever the switches above say; their policy is fixed (nothing adult, suggestive, gory or hateful). This is only the "clearly safe" margin.</small></label>
 
     <fieldset class="isf-fs" style="grid-column:1/-1">
       <legend>Surfaces (<code>image_safety_surfaces</code>)</legend>
@@ -117,6 +119,7 @@
           </div>
           <% if (r.categories.length) { %><div class="isf-cats"><%= r.categories.map((k) => (KEY_LABEL[k] || k) + ' ' + pct(r.scores[k])).join(' · ') %></div><% } %>
           <% if (r.reason) { %><div class="adm-help isf-reason"><%= r.reason %></div><% } %>
+          <% if (r.surface === 'onair' && (r.ref || r.src)) { %><div class="adm-help isf-src" style="overflow-wrap:anywhere">sent by <%= String(r.ref || '?').replace(/^onair:/, '') %><%= r.src ? ' · source (not a link): ' + r.src : '' %> · "False negative" also blocks it on Pepe's stream</div><% } %>
           <div class="adm-help"><%= r.model ? r.model : '' %><%= r.ms != null ? ' · ' + (r.ms / 1000).toFixed(1) + ' s' : '' %></div>
           <div class="isf-rev" role="group" aria-label="Review check #<%= r.id %>">
             <% [['fp', 'False positive'], ['fn', 'False negative'], ['ok', 'Correct']].forEach((m) => { %>
@@ -154,7 +157,7 @@
   .isf-rev .adm-btn.on { border-color: var(--ds-green); background: var(--ds-green-bg); color: #fff !important; }
   @media (max-width: 520px) { .isf-row { grid-template-columns: 84px minmax(0, 1fr); } .isf-th img, .isf-none { width: 84px; height: 84px; } }
 </style>
-<script src="/public/js/imagesafety-admin.js?v=1" defer></script>
+<script src="/public/js/imagesafety-admin.js?v=2" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

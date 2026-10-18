@@ -33,9 +33,25 @@
     if (!s.source_ok) bits.push('<b>no on-air source in OBS - run !onair setup</b>');
     if (s.mic_audio) bits.push(s.mic_audio === 'on' ? 'sound to his mic' : s.mic_audio === 'setup' ? '<b>sound to his mic needs !onair setup audio</b>'
       : s.mic_audio === 'restart' ? '<b>sound to his mic: restart OBS once (or pick CABLE Input as OBS\'s monitoring device)</b>' : '');
+    // 1.99acw: pictures / links - his OBS sources (after !onair setup media) and his own refusals
+    var caps = P.caps || [];
+    if (caps.indexOf('media') < 0) bits.push('<b>pictures &amp; links need Pepe 1.99acv</b>');
+    else {
+      bits.push(s.media_ok ? 'pictures &amp; links ready' : '<b>pictures &amp; links: run !onair setup media</b>');
+      // 1.99acw review: live pages / direct pictures need Pepe's "live" / "direct" caps (his VM-local firewall attestation etc.)
+      bits.push(caps.indexOf('live') < 0 ? 'live pages off on Pepe\'s side' + (s.live_why ? ' (' + esc(s.live_why) + ')' : '')
+        : s.live_ok ? 'live pages ready' : 'live pages not ready (!onair setup media; OBS with page permissions)');
+      bits.push(caps.indexOf('direct') < 0 ? 'direct pictures off on Pepe\'s side' + (s.direct_why ? ' (' + esc(s.direct_why) + ')' : '') : 'direct pictures ready');
+      if (s.ov_shown) bits.push('showing the corner');
+      if (s.media_err) bits.push('<span class="rs-warn">⚠ ' + esc(s.media_err) + '</span>');
+    }
     if (s.err) bits.push('<span class="rs-warn">⚠ ' + esc(s.err) + '</span>');
     return ' <span class="muted">Pepe: ' + bits.join(' · ') + '.</span>';
   }
+  var MEDIA_BOOLS = ['media_enabled', 'live_pages', 'overlay_over_irl'];
+  var MEDIA_NUMS = ['media_secs', 'media_max_s', 'live_secs', 'live_max_s', 'direct_max_s', 'corner_pct', 'max_image_mb', 'media_per_10min'];
+  var MEDIA_TEXT = ['live_deny', 'top_scenes', 'top_scene', 'corner_source', 'live_source'];
+  var left = function (T, now) { return T && T.kind === 'media' && T.media && T.media.until ? ' · ' + Math.max(0, Math.ceil((T.media.until - now) / 1000)) + ' s left' : ''; };
   function render(j) {
     WHY = j.why || WHY;
     var C = j.cfg || {}, T = j.target;
@@ -43,9 +59,11 @@
       : T && (T.pending || []).length ? '⏳ Waiting for the owner\'s OK: <b>' + esc(T.label) + '</b> (asked by ' + esc(T.by) + ')' +
           (j.pending || []).map(function (c) { return ' · ' + esc(c.kind === 'pad' ? 'pad owner' : 'cam owner') + ' ' + esc(c.status) + (c.status === 'pending' ? ', expires ' + esc(when(c.expires)) : ''); }).join('') + '.'
       : T ? 'On Pepe\'s main stream: <b>' + esc(T.label) + '</b> since ' + esc(when(T.at)) + ' (by ' + esc(T.by) + ')' +
-          (T.kind === 'embed' ? ' · rights confirmed by ' + esc((T.rights || {}).by || '?') + (T.embed_state ? ' · player: ' + esc(T.embed_state) : '') : '') + '.'
-      : 'Nothing is on Pepe\'s main stream.') + pepeLine(j.pepe);
-    $('oaOff').disabled = !T;
+          (T.kind === 'embed' || T.kind === 'media' ? ' · rights confirmed by ' + esc((T.rights || {}).by || '?') + (T.embed_state ? ' · player: ' + esc(T.embed_state) : '') : '') +
+          esc(left(T, j.now)) + '.'
+      : 'Nothing is on Pepe\'s main stream.') +
+      (j.overlay ? ' ↗ Corner: <b>' + esc(j.overlay.label) + '</b> (by ' + esc(j.overlay.by) + esc(left(j.overlay, j.now)) + ').' : '') + pepeLine(j.pepe);
+    $('oaOff').disabled = !T && !j.overlay;
     var pick = function (attrs, why, onNow, ask, embedId) {
       if (onNow) return '<span class="muted">' + ((T.pending || []).length ? 'waiting for the OK' : 'on air') + '</span>';
       if (why) return '<span class="muted">' + esc(WHY[why] || why) + '</span>';
@@ -64,13 +82,26 @@
         '</td><td>' + pick('data-oa-room="' + esc(c.room) + '" data-oa-login="' + esc(c.login) + '"', c.why, on, c.ask) + '</td></tr>';
     }).join('') || '<tr><td colspan="3" class="muted">Nobody is on cam in a live bridged room.</td></tr>';
     $('oaLog').innerHTML = (j.log || []).map(function (r) {
-      return '<tr><td>' + esc(when(r.at)) + '</td><td>' + esc(r.what) + '</td><td>' + esc(r.by) + '</td><td>' + esc(r.label || r.ref || '') + '</td><td>' + esc(r.detail || '') + '</td></tr>';
-    }).join('') || '<tr><td colspan="5" class="muted">Nothing yet.</td></tr>';
+      // 1.99acw: the full address of a picture / card / live page (escaped; the cell shows 80 characters, the tooltip all of it)
+      var u = r.url ? String(r.url) : '';
+      return '<tr><td>' + esc(when(r.at)) + '</td><td>' + esc(r.what) + '</td><td>' + esc(r.by) + '</td><td>' + esc(r.label || r.ref || '') + '</td><td>' + esc(r.detail || '') +
+        '</td><td' + (u ? ' title="' + esc(u) + '"' : '') + '>' + esc(u.length > 80 ? u.slice(0, 79) + '…' : u) + '</td></tr>';
+    }).join('') || '<tr><td colspan="6" class="muted">Nothing yet.</td></tr>';
+    // 1.99acw review: people blocked from pictures & links (3 unsafe refusals in 24 h, or a possible-minor flag) - Lift
+    var bp = $('oaBlocked');
+    if (bp) {
+      var BP = (j.media && j.media.blocked_people) || [];
+      bp.innerHTML = BP.length ? '<b>Blocked from pictures &amp; links:</b><ul>' + BP.map(function (p) {
+        return '<li>' + esc(p.label || p.who) + ' <span class="muted">until ' + esc(when(p.until)) + ' - ' + esc(p.why || '') + '</span> ' +
+          '<button type="button" class="btn" data-oa-lift="' + esc(p.who) + '">Lift</button></li>';
+      }).join('') + '</ul>' : '';
+    }
     var f = $('oaCfg');
     if (f && !cfgFilled) {
       cfgFilled = true;
-      ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch', 'mic_audio'].forEach(function (k) { if (f[k]) f[k].checked = !!C[k]; });
-      ['scene', 'irl_scene', 'irl_source', 'source', 'web_source', 'cam_fps', 'cam_kbps', 'irl_from', 'embed_stall_s', 'consent_min'].forEach(function (k) { if (f[k]) f[k].value = C[k] == null ? '' : C[k]; });
+      ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch', 'mic_audio'].concat(MEDIA_BOOLS).forEach(function (k) { if (f[k]) f[k].checked = f[k].defaultChecked = !!C[k]; });
+      ['scene', 'irl_scene', 'irl_source', 'source', 'web_source', 'cam_fps', 'cam_kbps', 'irl_from', 'embed_stall_s', 'consent_min'].concat(MEDIA_NUMS, MEDIA_TEXT)
+        .forEach(function (k) { if (f[k]) f[k].value = C[k] == null ? '' : C[k]; });
     }
   }
   function act(body, msgEl) {
@@ -91,6 +122,10 @@
     var b = e.target.closest('button');
     if (!b || b.disabled) return;
     if (b.id === 'oaOff') return act({ action: 'off' });
+    if (b.hasAttribute('data-oa-lift')) {
+      if (!window.confirm('Let them put pictures and links on Pepe\'s stream again?')) return;
+      return act({ action: 'media_unblock_person', who: b.getAttribute('data-oa-lift') });
+    }
     var ask = b.getAttribute('data-oa-ask') === '1';
     if (b.hasAttribute('data-oa-slot')) { var id = b.getAttribute('data-oa-slot'); return act({ action: 'slot', slot_id: id, rights: !!RIGHTS[id], ask: ask }); }
     if (b.hasAttribute('data-oa-login')) return act({ action: 'cam', room: b.getAttribute('data-oa-room'), login: b.getAttribute('data-oa-login'), ask: ask });
@@ -98,9 +133,11 @@
   $('oaCfg').addEventListener('submit', function (e) {
     e.preventDefault();
     var f = e.target, cfg = {};
-    ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch', 'mic_audio'].forEach(function (k) { if (f[k]) cfg[k] = !!f[k].checked; });
-    ['scene', 'irl_scene', 'irl_source', 'source', 'web_source', 'irl_from'].forEach(function (k) { cfg[k] = f[k].value.trim(); });
-    ['cam_fps', 'cam_kbps', 'embed_stall_s', 'consent_min'].forEach(function (k) { cfg[k] = Number(f[k].value); });
+    ['enabled', 'cam_optin', 'allow_library', 'auto_scene', 'irl_switch', 'mic_audio'].concat(MEDIA_BOOLS).forEach(function (k) { if (f[k]) cfg[k] = !!f[k].checked; });
+    ['scene', 'irl_scene', 'irl_source', 'source', 'web_source', 'irl_from'].concat(MEDIA_TEXT).forEach(function (k) { if (f[k]) cfg[k] = f[k].value.trim(); });
+    ['cam_fps', 'cam_kbps', 'embed_stall_s', 'consent_min'].concat(MEDIA_NUMS).forEach(function (k) { if (f[k]) cfg[k] = Number(f[k].value); });
+    if (f.live_pages && f.live_pages.checked && !f.live_pages.defaultChecked &&
+        !window.confirm('Switch live pages ON? Pepe\'s OBS (his home VM) then loads the page a staff member picks. Pepe also refuses them until his VM firewall attestation, panel login and OBS websocket password are in place.')) return;
     act({ action: 'config', cfg: cfg }, 'oaCfgMsg');
   });
   load();

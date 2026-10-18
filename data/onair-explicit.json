@@ -1,0 +1,27 @@
+{
+ "_about": "Broadcast-only explicit terms for Pepe's stream (onairmedia.js: captions, link cards, hosts - on-air goes out on Twitch). base64-encoded JSON {words (\"x*\" = a prefix), phrases, domains, tlds} so the list is not plain text in this public repo. Decode: node -e \"console.log(Buffer.from(require('./data/onair-explicit.json').data.join(''),'base64').toString())\"",
+ "format": "base64-json",
+ "v": 1,
+ "data": [
+  "eyJ3b3JkcyI6WyJwb3JuKiIsInh4eCIsIm5zZncqIiwibnNmbCIsIm9ubHlmYW5zKiIsImZhbnNseSoiLCJoZW50YWkqIiwibWlsZioiLCJkaWxmKiIsImJk",
+  "c20iLCJibG93am9iKiIsImhhbmRqb2IqIiwicmltam9iKiIsImZvb3Rqb2IqIiwiY3Vtc2hvdCoiLCJjcmVhbXBpZSoiLCJnYW5nYmFuZyoiLCJidWtrYWtl",
+  "KiIsImRlZXB0aHJvYXQqIiwiZGlsZG8qIiwiYnV0dHBsdWcqIiwiZmxlc2hsaWdodCoiLCJudWRlIiwibnVkZXMiLCJudWRpdHkiLCJudWRpc3QqIiwibmFr",
+  "ZWQqIiwic2V4Iiwic2V4Y2FtKiIsInNleHRpbmciLCJzZXh0YXBlKiIsInh2aWRlbyoiLCJ4aGFtc3RlcioiLCJ4bnh4KiIsInJlZHR1YmUqIiwieW91cG9y",
+  "bioiLCJicmF6emVycyoiLCJjaGF0dXJiYXQqIiwic3RyaXBjaGF0KiIsImJvbmdhY2FtKiIsImxpdmVqYXNtaW4qIiwibXlmcmVlY2FtKiIsImNhbXNvZGEq",
+  "Iiwic3BhbmtiYW5nKiIsImVyb3RpYyoiLCJmZXRpc2gqIiwib3JnYXNtKiIsIm1hc3R1cmJhdCoiLCJmZWxsYXRpbyoiLCJjdW5uaWxpbmd1cyoiLCJwdXNz",
+  "eSIsInB1c3NpZXMiLCJ0aXRzIiwidGl0dGllcyIsInRpdHR5IiwiYm9vYnMiLCJib29iaWVzIiwiaG9ybnkiLCJzbHV0KiIsIndob3JlKiIsImNhbWdpcmwq",
+  "IiwiY2Ftd2hvcmUqIiwic3RyaXB0ZWFzZSoiLCJzdHJpcHBlcioiLCJ1cHNraXJ0KiIsImxld2QqIiwiZWNjaGkiLCJydWxlMzQiLCJyMzQiLCJmdXRhbmFy",
+  "aSoiLCJpbmNlc3QqIiwiYmVzdGlhbGl0eSoiLCJ6b29waGlsKiIsInBlZG8iLCJwZWRvcyIsInBhZWRvIiwicGFlZG9zIiwicGVkb3BoaWwqIiwicGFlZG9w",
+  "aGlsKiIsImFuYWwiLCJnZW5pdGFsKiIsInZhZ2luYSoiLCJuaXBwbGUqIiwidG9wbGVzcyIsImppenoqIiwic211dCoiLCJ0aHJlZXNvbWUqIiwib3JneSIs",
+  "Im9yZ2llcyIsImhhcmRjb3JlIiwic29mdGNvcmUiLCJzZXh1YWwqIiwic2V4eSIsInBlbmlzIiwicGVuaXNlcyJdLCJwaHJhc2VzIjpbImFkdWx0IGNvbnRl",
+  "bnQiLCJhZHVsdHMgb25seSIsInNleCB0b3kiLCJzZXggdG95cyIsImxpdmUgc2V4IiwieCByYXRlZCIsImFkdWx0IHZpZGVvcyIsImFkdWx0IHZpZGVvIiwi",
+  "Y2FtIGdpcmxzIiwiaG90IHNpbmdsZXMiLCIxOCBwbHVzIiwiZXhwbGljaXQgY29udGVudCJdLCJkb21haW5zIjpbInBvcm5odWIuY29tIiwieHZpZGVvcy5j",
+  "b20iLCJ4aGFtc3Rlci5jb20iLCJ4bnh4LmNvbSIsInJlZHR1YmUuY29tIiwieW91cG9ybi5jb20iLCJ0dWJlOC5jb20iLCJzcGFua2JhbmcuY29tIiwiZXBv",
+  "cm5lci5jb20iLCJiZWVnLmNvbSIsIm1vdGhlcmxlc3MuY29tIiwib25seWZhbnMuY29tIiwiZmFuc2x5LmNvbSIsIm1hbnl2aWRzLmNvbSIsImNsaXBzNHNh",
+  "bGUuY29tIiwiY2hhdHVyYmF0ZS5jb20iLCJzdHJpcGNoYXQuY29tIiwiYm9uZ2FjYW1zLmNvbSIsImxpdmVqYXNtaW4uY29tIiwiY2FtNC5jb20iLCJjYW1z",
+  "b2RhLmNvbSIsIm15ZnJlZWNhbXMuY29tIiwiYnJhenplcnMuY29tIiwibmhlbnRhaS5uZXQiLCJlLWhlbnRhaS5vcmciLCJleGhlbnRhaS5vcmciLCJydWxl",
+  "MzQueHh4IiwiaGFuaW1lLnR2IiwiZXJvbWUuY29tIiwiZmFwZWxsby5jb20iLCJwb3JudHJleC5jb20iLCJocXBvcm5lci5jb20iLCJ0eHh4LmNvbSIsInlv",
+  "dWppenouY29tIiwibGl0ZXJvdGljYS5jb20iLCJmOTV6b25lLnRvIiwiZ2VsYm9vcnUuY29tIiwiZTYyMS5uZXQiLCJpbWFnZWZhcC5jb20iLCJ0aG90aHVi",
+  "LnRvIl0sInRsZHMiOlsieHh4IiwicG9ybiIsImFkdWx0Iiwic2V4Iiwic2V4eSJdfQ=="
+ ]
+}

@@ -125,7 +125,7 @@ function checkUrl(input) {
 }
 
 // ── one guarded GET ──
-function getOnce(u, { maxBytes, accept, lookup, deadline }) {
+function getOnce(u, { maxBytes, accept, lookup, deadline, cut: cutOk = false }) {
   return new Promise((resolve, reject) => {
     const lib = u.protocol === "https:" ? https : http;
     const host = u.hostname.replace(/^\[|\]$/g, "");
@@ -170,7 +170,7 @@ function getOnce(u, { maxBytes, accept, lookup, deadline }) {
       const ct = String(res.headers["content-type"] || "").toLowerCase();
       const chunks = [];
       let got = 0, cut = false;
-      if (len && len > maxBytes && !/text\/html|xhtml/.test(ct)) {
+      if (len && len > maxBytes && !cutOk && !/text\/html|xhtml/.test(ct)) {
         res.destroy(); clearTimeout(timer);
         return reject(new PreviewError("That file is too big to preview.", "size"));
       }
@@ -193,14 +193,16 @@ function getOnce(u, { maxBytes, accept, lookup, deadline }) {
   });
 }
 
-/** GET with redirects, every hop checked. opts: {maxBytes, accept, lookup, timeoutMs} */
+/** GET with redirects, every hop checked. opts: {maxBytes, accept, lookup, timeoutMs, cut}. 1.99acw: `cut` = a body over
+ * maxBytes is cut off ({truncated: true}) even when its Content-Length says so up front (a type probe that only needs the
+ * first bytes); without it a declared non-HTML length over maxBytes is refused as before. */
 async function safeGet(input, opts = {}) {
   const deadline = Date.now() + (opts.timeoutMs || TIMEOUT_MS);
   let u = input instanceof URL ? input : checkUrl(input);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     await resolvePublic(u.hostname, opts.lookup);            // fail fast before opening a socket
     const r = await getOnce(u, { maxBytes: opts.maxBytes || HTML_MAX, accept: opts.accept || "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
-                                 lookup: opts.lookup, deadline });
+                                 lookup: opts.lookup, deadline, cut: !!opts.cut });
     if (!r.redirect) return r;
     let next;
     try { next = new URL(r.redirect, u); } catch (e) { throw new PreviewError("That link redirects somewhere odd.", "redirect"); }
@@ -246,7 +248,21 @@ function parseMeta(html, baseUrl) {
       if (iu.protocol === "https:" || iu.protocol === "http:") imageUrl = iu.toString().slice(0, MAX_URL);
     } catch (e) { imageUrl = null; }
   }
+  // 1.99acw: the page's icon (the first <link rel="icon" | "shortcut icon" | "apple-touch-icon" href>), http(s) only -
+  // the caller decides whether to fetch it (on-air cards: png / jpeg / gif / webp only, never ICO / SVG)
+  let iconUrl = null;
+  const links = head.match(/<link\b(?:[^>"']|"[^"]*"|'[^']*'){0,2000}>/gi) || [];
+  for (const t of links.slice(0, 200)) {
+    const rel = String(attr(t, "rel") || "").toLowerCase().split(/\s+/);
+    const href = attr(t, "href");
+    if (!href || !(rel.includes("icon") || rel.includes("apple-touch-icon"))) continue;
+    try {
+      const iu = new URL(decodeEntities(href).trim(), baseUrl);
+      if (iu.protocol === "https:" || iu.protocol === "http:") { iconUrl = iu.toString().slice(0, MAX_URL); break; }
+    } catch (e) { /* not a URL */ }
+  }
   return {
+    iconUrl,
     title: tidy(meta["og:title"] || meta["twitter:title"] || titleTag, 200),
     description: tidy(meta["og:description"] || meta["twitter:description"] || meta.description || "", 300),
     site: tidy(meta["og:site_name"] || "", 80),
@@ -263,7 +279,7 @@ const domainOf = (u) => { try { return new URL(u).hostname.replace(/^www\./i, ""
  */
 async function preview(input, opts = {}) {
   const u = checkUrl(input);
-  const out = { url: u.toString(), domain: domainOf(u.toString()), title: "", description: "", site: "", imageUrl: null, image: null, embed: null };
+  const out = { url: u.toString(), domain: domainOf(u.toString()), title: "", description: "", site: "", imageUrl: null, iconUrl: null, image: null, embed: null };
   try { out.embed = require("./stageembed").parse(u.toString()); } catch (e) { out.embed = null; }
   let r;
   try {
@@ -290,5 +306,5 @@ async function preview(input, opts = {}) {
   return out;
 }
 
-module.exports = { preview, safeGet, checkUrl, isPublicIp, resolvePublic, parseMeta, decodeEntities, domainOf, PreviewError,
-                   HTML_MAX, IMAGE_MAX, TIMEOUT_MS, _testAllow };
+module.exports = { preview, safeGet, checkUrl, isPublicIp, resolvePublic, parseMeta, decodeEntities, domainOf, tidy, PreviewError,
+                   HTML_MAX, IMAGE_MAX, TIMEOUT_MS, MAX_URL, _testAllow };

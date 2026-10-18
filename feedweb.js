@@ -608,7 +608,16 @@ function register(app, { addUser, isBotToken }) {
       if (story && kind === "audio") return res.status(400).json({ ok: false, error: "Stories are a picture or a short video." });
       const US = story ? require("./userstories") : null;
       if (US) await US.init();
-      const capMb = story ? Math.min(kind === "image" ? US.STORY_MAX_IMAGE_MB : US.STORY_MAX_VIDEO_MB, kind === "image" ? C.max_image_mb : C.max_video_mb)
+      // 1.99acw: a picture for Pepe's stream (onairmedia.ingestUpload consumes it): on-air operators only, pictures only, the
+      // on-air size cap; never attachable to a post (feedstore), never prefetched for the feed's image check (the broadcast check
+      // runs when it's used)
+      const onair = b.purpose === "onair";
+      if (onair && !SP.can(u, "onair.operate")) return res.status(403).json({ ok: false, error: "Site staff only." });
+      if (onair && kind !== "image") return res.status(400).json({ ok: false, error: "Only a picture can go on Pepe's stream." });
+      const OA = onair ? require("./onair") : null;
+      if (OA) { await OA.init(); await require("./userstories").init(); }      // (userstories adds feed_attachments.purpose)
+      const capMb = onair ? OA.config().max_image_mb
+        : story ? Math.min(kind === "image" ? US.STORY_MAX_IMAGE_MB : US.STORY_MAX_VIDEO_MB, kind === "image" ? C.max_image_mb : C.max_video_mb)
         : { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb }[kind] * spMult(u.userId);   // 1.99iv: a Season Pass multiplies it
       if (!Number.isFinite(size) || size < 12) return res.status(400).json({ ok: false, error: "That file is empty." });
       if (size > capMb * 1024 * 1024) return res.status(413).json({ ok: false, error: `${kind === "image" ? "Pictures" : kind === "audio" ? "Audio files" : "Videos"} can be up to ${capMb} MB.` });
@@ -631,9 +640,9 @@ function register(app, { addUser, isBotToken }) {
         return res.status(507).json({ ok: false, error: "The feed's storage is full right now - try again later." });
       }
       const id = require("crypto").randomBytes(12).toString("hex");
-      if (story) {
-        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received, purpose) VALUES (?, ?, ?, 'uploading', ?, ?, 0, 'story')`,
-                       [id, u.userId, kind, t, size]);
+      if (story || onair) {
+        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received, purpose) VALUES (?, ?, ?, 'uploading', ?, ?, 0, ?)`,
+                       [id, u.userId, kind, t, size, onair ? "onair" : "story"]);
       } else {
         await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received) VALUES (?, ?, ?, 'uploading', ?, ?, 0)`,
                        [id, u.userId, kind, t, size]);
@@ -714,7 +723,8 @@ function register(app, { addUser, isBotToken }) {
       await runQuery(`UPDATE feed_attachments SET state = 'ready', kind = ?, ct = ?, file = ?, thumb = ?, poster = ?, w = ?, h = ?, secs = ?, bytes = ?, error = NULL
                       WHERE id = ? AND state = 'processing'`, [out.kind, out.ct, out.file, out.thumb, out.poster, out.w, out.h, out.secs, out.bytes, a.id]);
       // 1.99fc: start the image safety classification now (only while it's switched on), so the post / story finds it ready
-      if (out.kind === "image" || out.kind === "video") {
+      // (1.99acw: not an on-air picture - its own broadcast check runs when it goes on air)
+      if ((out.kind === "image" || out.kind === "video") && a.purpose !== "onair") {
         require("./imagesafety").prefetch({ surface: a.purpose === "story" ? "story" : "feed", kind: out.kind, file: media.filePath(out.file),
                                             poster: out.poster ? media.filePath(out.poster) : null, secs: out.secs }).catch(() => {});
       }

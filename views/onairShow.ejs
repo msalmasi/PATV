@@ -1,0 +1,42 @@
+<!doctype html>
+<%# 1.99acw: 📺 a picture / link card on Pepe's OBS (onair.js showView). Loaded ONLY by his OBS browser sources "PATV OnAir Web"
+    (full) and "PATV OnAir Corner" (corner); the token is the pick's. No inline script or style (the CSP allows only our own
+    files); every text field goes through the escaping tag; no links; a picture comes only from /onair/m/FILE (proxied + checked) or
+    - a direct picture - its checked URL, which the CSP's img-src allows by origin. A stale / wrong token = an empty page. %>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PATV on air</title>
+<link rel="stylesheet" href="/public/css/onair-show.css?v=1">
+</head>
+<body class="oas">
+<% if (item) { %>
+<div id="oaShow" class="oas-box oas-<%= item.lane === 'corner' ? 'corner' : 'full' %> oas-k-<%= item.kind === 'card' ? 'card' : 'image' %><%= item.lane === 'corner' ? ' oas-c-' + item.corner : '' %>"
+     data-kind="<%= item.kind %>" data-lane="<%= item.lane %>" data-corner="<%= item.corner %>" data-pct="<%= item.pct %>"
+     data-until="<%= item.until %>" data-token="<%= token %>" data-direct="<%= item.direct ? '1' : '0' %>">
+  <% if (item.kind === 'card' && item.card) { %>
+  <div class="oas-card">
+    <% if (item.card.img) { %><div class="oas-card-pic"><img class="oas-pic" src="<%= item.card.img %>" alt="" referrerpolicy="no-referrer"></div><% } %>
+    <div class="oas-card-body">
+      <div class="oas-card-site">
+        <% if (item.card.icon) { %><img class="oas-icon" src="<%= item.card.icon %>" alt="" referrerpolicy="no-referrer"><% } else { %><span class="oas-letter"><%= item.card.letter %></span><% } %>
+        <span class="oas-site"><%= item.card.site || item.card.domain %></span>
+      </div>
+      <div class="oas-card-title"><%= item.card.title %></div>
+      <% if (item.card.description) { %><div class="oas-card-desc"><%= item.card.description %></div><% } %>
+      <div class="oas-card-domain"><%= item.card.domain %></div>
+    </div>
+  </div>
+  <% } else if (item.src) { %>
+  <div class="oas-frame"><img class="oas-main" src="<%= item.src %>" alt="" referrerpolicy="no-referrer"></div>
+  <% } %>
+  <% if (item.caption) { %><div class="oas-cap"><%= item.caption %></div><% } %>
+  <div class="oas-mark" aria-hidden="true">PATV</div>
+</div>
+<script src="/public/js/onair-show.js?v=1"></script>
+<% } %>
+</body>
+</html>

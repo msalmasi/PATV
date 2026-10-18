@@ -58,6 +58,7 @@
     <h2 id="oaT"><span class="ds-ic" aria-hidden="true">📺</span> On Pepe's OBS <small class="muted">(POC)</small></h2>
     <p id="oaNow" role="status">Loading…</p>
     <div class="row"><button type="button" class="btn danger" id="oaOff" disabled>⏹ Take it off Pepe's stream</button><span class="msg" id="oaMsg" role="status"></span></div>
+    <div id="oaBlocked" class="muted"></div>
     <h3>Live slots</h3>
     <div class="tblwrap"><table><thead><tr><th>Who</th><th>Pad</th><th></th></tr></thead><tbody id="oaSlots"></tbody></table></div>
     <h3>Cams</h3>
@@ -81,10 +82,30 @@
         <label>Cam fps<input type="number" name="cam_fps" min="5" max="30"></label>
         <label>Cam kbps<input type="number" name="cam_kbps" min="200" max="6000"></label>
       </div></details>
+      <!-- 1.99acw: 🖼 pictures / 🔗 cards / 🌐 live pages (onairmedia.js) -->
+      <fieldset class="adm-adv" style="grid-column: 1 / -1" id="oaMediaFs"><legend>🖼 Pictures &amp; links</legend><div class="settings">
+        <label class="chk" title="Staff can put pictures (safety-checked, served from publicaccess.tv), link cards and - with the switch below - live pages on Pepe's stream. Needs the kill switch on and !onair setup media once."><input type="checkbox" name="media_enabled"> 🖼 Pictures &amp; links on air <small>(onair_media)</small></label>
+        <label class="chk" title="A live page is the real page in Pepe's OBS - his VM loads it, so the site sees his home internet address. Off by default everywhere. Pepe also refuses live pages until his VM's firewall attestation (onair_live_firewall), his admin panel login and an OBS websocket password are in place - his own address check covers only the first hop (the page can redirect or frame anything after it), the VM firewall is what keeps it off the home network. Staff only (locked)."><input type="checkbox" name="live_pages"> 🌐 Live pages <small>(staff; Pepe's VM loads them; needs his VM firewall step)</small></label>
+        <label class="chk"><input type="checkbox" name="overlay_over_irl"> Corner items stay up over the IRL feed</label>
+        <label>Picture / card: default (s)<input type="number" name="media_secs" min="5" max="600"></label>
+        <label>Picture / card: at most (s)<input type="number" name="media_max_s" min="10" max="600"></label>
+        <label>Live page: default (s)<input type="number" name="live_secs" min="10" max="600"></label>
+        <label>Live page: at most (s)<input type="number" name="live_max_s" min="10" max="600"></label>
+        <label>Direct (unscanned) picture: at most (s)<input type="number" name="direct_max_s" min="10" max="300"></label>
+        <label>Corner box (% of the width)<input type="number" name="corner_pct" min="15" max="50"></label>
+        <label>Picture size cap (MB)<input type="number" name="max_image_mb" min="1" max="15"></label>
+        <label>Per person per 10 min<input type="number" name="media_per_10min" min="1" max="60"></label>
+        <label>Live pages may never open <small>(hosts, comma-separated; the site's own are always refused)</small><input type="text" name="live_deny" maxlength="600" spellcheck="false" placeholder="example.com, other.example"></label>
+        <label>Program scenes that get the corner scene<input type="text" name="top_scenes" maxlength="300" spellcheck="false"></label>
+        <label>Corner scene (nested)<input type="text" name="top_scene" maxlength="60" spellcheck="false"></label>
+        <label>Corner browser source<input type="text" name="corner_source" maxlength="60" spellcheck="false"></label>
+        <label>Live-page browser source<input type="text" name="live_source" maxlength="60" spellcheck="false"></label>
+      </div></fieldset>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn">Save</button><span class="msg" id="oaCfgMsg" role="status"></span></div>
     </form>
-    <details><summary class="muted">Log</summary><div class="tblwrap"><table><thead><tr><th>When</th><th>What</th><th>By</th><th>Target</th><th>Detail</th></tr></thead><tbody id="oaLog"></tbody></table></div></details>
-    <p class="muted">Pepe plays the pick in a media source under his IRL feed (OBS scene <i>IRL</i>, which sits in his program scenes under his avatar and overlay), so it goes out on his main stream, the Twitch relay and his Camfrog cam (the virtual camera shows the program scene). The operator's own IRL feed always wins: while it plays, the pick is hidden. YouTube / Twitch embeds play in a second (browser) source - tick “I have the rights to rebroadcast this” each time; one that stops playing (ad, unavailable, offline) is taken off. Approved-only pads and cams whose owner hasn't opted in need the owner's OK: “Ask the owner” sends them an instant request (inbox, Camfrog PM, a prompt on the pad) and it goes on air only after they allow it. Never NSFW slots. A slot's streamer is told and can take it off (<code>!onair off</code>); a cam needs its owner's opt-in (Settings → Privacy, or <code>!onair me on</code>) and Pepe tells them in Camfrog. It ends by itself when the slot ends or the cam goes. Camfrog: <code>!onair &lt;pad|user|slot id&gt;</code>, <code>!onair cam &lt;login&gt;</code>, <code>!onair off</code> (admins).</p>
+    <details><summary class="muted">Log</summary><div class="tblwrap"><table><thead><tr><th>When</th><th>What</th><th>By</th><th>Target</th><th>Detail</th><th>Address</th></tr></thead><tbody id="oaLog"></tbody></table></div></details>
+    <p class="muted">Pepe plays the pick in a media source under his IRL feed (OBS scene <i>IRL</i>, which sits in his program scenes under his avatar and overlay), so it goes out on his main stream, the Twitch relay and his Camfrog cam (the virtual camera shows the program scene). The operator's own IRL feed always wins: while it plays, the pick is hidden. YouTube / Twitch embeds play in a second (browser) source - tick “I have the rights to rebroadcast this” each time; one that stops playing (ad, unavailable, offline) is taken off. Approved-only pads and cams whose owner hasn't opted in need the owner's OK: “Ask the owner” sends them an instant request (inbox, Camfrog PM, a prompt on the pad) and it goes on air only after they allow it. Never NSFW slots. A slot's streamer is told and can take it off (<code>!onair off</code>); a cam needs its owner's opt-in (Settings → Privacy, or <code>!onair me on</code>) and Pepe tells them in Camfrog. It ends by itself when the slot ends or the cam goes. Camfrog: <code>!onair &lt;pad|user|slot id&gt;</code>, <code>!onair cam &lt;login&gt;</code>, <code>!onair off</code> (admins).
+      🖼 Pictures and 🔗 link cards (staff, the player bar's Image / Link tabs or <code>!onair image|link &lt;link&gt; … rights</code>) are fetched by the site, re-encoded and safety-checked (anything not clearly safe is refused), and shown from publicaccess.tv - full screen or in a corner, for a set time. Direct pictures (unscanned) and 🌐 live pages are Staff and up only (locked) and make Pepe's OBS load the address itself - Pepe offers them only after his VM firewall step (his own address check is a first-hop check only). <code>!onair off corner</code> clears only the corner; <code>!onair off [corner] block</code> or ⛔ on the player bar also blocks what was shown (deleted, never again). Three unsafe refusals in 24 h (or a possible-minor flag) block that person's pictures &amp; links - lift it above.</p>
   </section>
   <% } %>
 
@@ -166,7 +187,7 @@
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/stage-admin.js?v=5" defer></script>
 <script src="/public/js/restream.js?v=1" defer></script>
-<% if (oaCfg) { %><script src="/public/js/onair-admin.js?v=2" defer></script><% } %>
+<% if (oaCfg) { %><script src="/public/js/onair-admin.js?v=3" defer></script><% } %>
 <%- include('partials/admin-close') %>
 </body>
 </html>

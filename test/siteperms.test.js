@@ -58,6 +58,7 @@ const GOLDEN = {
   "shopart.view": ["staff", false], "shopart.admin": ["admin", false], "badges.manage": ["staff", false],
   "media.admin": ["admin", false], "media.manage_requests": ["admin", false], "media.library_free": ["admin", false],
   "stage.admin": ["staff", false], "stage.approval_bypass": ["staff", false], "onair.operate": ["staff", false], "onair.config": ["admin", false],
+  "onair.live_page": ["staff", true], "onair.direct_media": ["staff", true],   // 1.99acw: locked "exposure" (owner decision 2026-10-18)
   "restream.staff": ["staff", false], "restream.main": ["admin", true], "livecam.admin": ["admin", true], "livecam.end_any": ["staff", false],
   "camclip.override": ["admin", false], "ghost.mode": ["staff", true],
   "soundboards.moderate": ["assistant", false], "soundboards.config": ["admin", true], "voices.view": ["staff", false], "voices.manage": ["admin", true],
@@ -758,4 +759,28 @@ test("1.99acl: redemption codes are Admin-only on /admin/economy; Pepe in / out 
   assert.equal(SP.can(U.stf, "pads.pepe_ctl_any"), true, "Staff: unchanged");
   const r3 = await ctlCall(U.stf);
   assert.notEqual(r3.status, 403, "Staff: any pad, no Plus needed - " + JSON.stringify(r3.d));
+});
+
+test("1.99acw: direct pictures / live pages on Pepe's stream are locked at Staff (exposure) - never lowered, whatever moves onair.operate", async () => {
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"));
+  assert.ok(en["siteperm.lock.exposure"], "the lock reason has a label");
+  for (const k of ["onair.live_page", "onair.direct_media"]) {
+    assert.equal(SP.BY_KEY[k].locked, "exposure", k);
+    for (const v of ["assistant", "admin"]) {
+      await assert.rejects(SP.setMin(await owner(), k, v), (e) => e.code === "locked", k + " -> " + v);
+      const r = await site(U.own, k, v);
+      assert.equal(r.status, 403, k);
+      assert.equal(r.d.code, "locked", k);
+    }
+    assert.equal(SP.minClass(k), "staff", k + " unchanged");
+    assert.equal(SP.can(U.stf, k), true, "Staff hold " + k);
+    assert.equal(SP.can(U.own, k), true, "Admins too");
+    assert.equal(SP.can(U.ast, k), false, "never an Assistant");
+  }
+  // onair.operate lowered to Assistants: they reach the on-air panel, but the two locked ones don't follow
+  await withMin("onair.operate", "assistant", async () => {
+    assert.equal(SP.can(U.ast, "onair.operate"), true);
+    assert.equal(SP.can(U.ast, "onair.live_page"), false);
+    assert.equal(SP.can(U.ast, "onair.direct_media"), false);
+  });
 });

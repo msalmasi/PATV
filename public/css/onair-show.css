@@ -1,0 +1,56 @@
+/* onair-show.css — 📺 a picture / link card on Pepe's OBS (1.99acw, views/onairShow.ejs). The page is transparent: OBS composites
+   it over his program scene. Full = the picture letterboxed on a dark PATV frame; corner = the same content in a box
+   (data-pct % of the width, set by onair-show.js) at the given corner. Fonts: the system's (no web fonts - the CSP allows none). */
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+body.oas { font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; color: #f2f2f2; }
+.oas-box { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; }
+.oas-box.oas-gone { display: none; }
+
+/* full: the whole canvas, a dark frame, the picture letterboxed */
+.oas-full { inset: 0; background: radial-gradient(ellipse at center, #1a2a1d 0%, #0b120c 70%, #060906 100%); padding: 2.5vw 3vw 3vw; }
+.oas-full .oas-frame { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.oas-full .oas-main { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; border-radius: 0.6vw;
+                      filter: drop-shadow(0 0.6vw 1.6vw rgba(0, 0, 0, 0.6)); }
+.oas-full .oas-cap { margin-top: 1.4vw; align-self: center; max-width: 86%; padding: 0.7vw 1.6vw; border-radius: 999px; background: rgba(0, 0, 0, 0.72);
+                     border: 0.12vw solid rgba(118, 255, 3, 0.55); font-size: 2.2vw; font-weight: 600; line-height: 1.25; text-align: center;
+                     overflow-wrap: anywhere; }
+.oas-full .oas-mark { position: absolute; top: 1.2vw; right: 1.6vw; font-size: 1.6vw; font-weight: 800; letter-spacing: 0.25em; color: #76ff03;
+                      text-shadow: 0 0.15vw 0.6vw rgba(0, 0, 0, 0.8); opacity: 0.85; }
+
+/* corner: a box at one corner, 2vw from the edges */
+.oas-corner { width: 30vw; padding: 0.6vw; border-radius: 0.9vw; background: rgba(8, 14, 9, 0.88); border: 0.14vw solid rgba(118, 255, 3, 0.55);
+              box-shadow: 0 0.6vw 1.8vw rgba(0, 0, 0, 0.55); }
+.oas-c-tl { top: 2vw; left: 2vw; } .oas-c-tr { top: 2vw; right: 2vw; } .oas-c-bl { bottom: 2vw; left: 2vw; } .oas-c-br { bottom: 2vw; right: 2vw; }
+.oas-corner .oas-frame { display: flex; align-items: center; justify-content: center; max-height: 60vh; }
+.oas-corner .oas-main { max-width: 100%; max-height: 60vh; object-fit: contain; border-radius: 0.5vw; display: block; }
+.oas-corner .oas-cap { margin-top: 0.5vw; font-size: 1.2vw; font-weight: 600; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.oas-corner .oas-mark { position: absolute; top: -0.9vw; left: 1vw; padding: 0.1vw 0.6vw; border-radius: 0.4vw; background: #76ff03; color: #0b120c;
+                        font-size: 0.8vw; font-weight: 800; letter-spacing: 0.2em; }
+
+/* link cards */
+.oas-card { display: flex; gap: 2vw; align-items: stretch; background: rgba(14, 22, 15, 0.94); border: 0.14vw solid rgba(118, 255, 3, 0.4);
+            border-radius: 1.2vw; overflow: hidden; }
+.oas-full .oas-card { margin: auto; width: 72vw; max-height: 70vh; }
+.oas-card-pic { flex: 0 0 42%; background: #000; display: flex; align-items: center; justify-content: center; }
+.oas-card-pic .oas-pic { width: 100%; height: 100%; object-fit: cover; display: block; }
+.oas-card-body { flex: 1 1 auto; min-width: 0; padding: 2vw 2.2vw 2vw 0; display: flex; flex-direction: column; gap: 0.9vw; justify-content: center; }
+.oas-card-pic + .oas-card-body { padding-left: 0; }
+.oas-card:not(:has(.oas-card-pic)) .oas-card-body { padding-left: 2.2vw; }
+.oas-card-site { display: flex; align-items: center; gap: 0.7vw; color: #b9d8b4; font-size: 1.3vw; min-width: 0; }
+.oas-icon { width: 1.9vw; height: 1.9vw; border-radius: 0.3vw; object-fit: contain; flex: 0 0 auto; }
+.oas-letter { width: 1.9vw; height: 1.9vw; border-radius: 0.3vw; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+              background: #76ff03; color: #0b120c; font-weight: 800; font-size: 1.2vw; }
+.oas-site { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oas-card-title { font-size: 2.6vw; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3;
+                  -webkit-box-orient: vertical; overflow: hidden; }
+.oas-card-desc { font-size: 1.5vw; line-height: 1.35; color: #d6e4d3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+                 overflow: hidden; overflow-wrap: anywhere; }
+.oas-card-domain { font-size: 1.2vw; color: #8fb38a; }
+.oas-corner .oas-card { flex-direction: column; gap: 0; border: 0; border-radius: 0.5vw; }
+.oas-corner .oas-card-pic { flex: 0 0 auto; max-height: 16vw; }
+.oas-corner .oas-card-body, .oas-corner .oas-card-pic + .oas-card-body { padding: 0.7vw 0.8vw; gap: 0.35vw; }
+.oas-corner .oas-card-site { font-size: 0.85vw; gap: 0.4vw; }
+.oas-corner .oas-icon, .oas-corner .oas-letter { width: 1.1vw; height: 1.1vw; font-size: 0.7vw; }
+.oas-corner .oas-card-title { font-size: 1.25vw; -webkit-line-clamp: 2; }
+.oas-corner .oas-card-desc { font-size: 0.85vw; -webkit-line-clamp: 2; }
+.oas-corner .oas-card-domain { font-size: 0.75vw; }

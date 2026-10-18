@@ -488,3 +488,59 @@ test("the pad settings page has the Allow NSFW switch; the admin nav links the p
   assert.ok(uc.indexOf("surface: 'profile_photo'") < uc.indexOf("s3.upload("), "checked before the S3 upload");
   assert.equal(store.ROOM_DEFAULTS.allow_nsfw, true, "pads allow NSFW by default (as before)");
 });
+
+// ───────────────────────── 1.99acw: on-air pictures (checkBroadcast) ─────────────────────────
+// 1.99acw review: a broadcast answer must score EVERY category (a missing one fails closed) - the fixtures, fully scored
+const ALL0 = { nudity_explicit: 0, sexual: 0, suggestive: 0, minor_risk: 0, gore: 0, hate_symbols: 0 };
+const full = (v) => ({ ...v, scores: { ...ALL0, ...v.scores } });
+test("1.99acw checkBroadcast: always enforcing + fail-closed, whatever the master switch / shadow / surfaces say; never shadows", async () => {
+  for (const cfg of [{ enabled: false, shadow: false }, { enabled: false, shadow: true }, { enabled: true, shadow: true, surfaces: {} }]) {
+    await setCfg(cfg);
+    ANSWER = full(EXPLICIT); CALLS = 0;
+    let r = await ISF.checkBroadcast({ buf: await png(), userId: U.staff.userId, ref: "onair:t" });
+    assert.equal(r.ok, false, JSON.stringify(cfg));
+    assert.equal(r.code, "unsafe");
+    assert.match(r.reason, /isn't clearly safe for Pepe's stream/);
+    assert.equal(CALLS, 1);
+    const row = (await logRows()).pop();
+    assert.deepEqual([row.surface, row.mode, row.action], ["onair", "enforce", "refuse"], "recorded as enforced, never shadow");
+    ANSWER = full(CLEAN);
+    r = await ISF.checkBroadcast({ buf: await png(32, 32, { r: 1, g: 2, b: 3 }) });
+    assert.equal(r.ok, true);
+    ANSWER = CLEAN;                                         // (only nudity_explicit scored: not "clearly safe" - fails closed)
+    r = await ISF.checkBroadcast({ buf: await png(33, 32, { r: 1, g: 2, b: 3 }) });
+    assert.deepEqual([r.ok, r.code], [false, "unavailable"]);
+  }
+  // the policy is frozen: an admin loosening config.policy changes nothing for the broadcast
+  await setCfg({ policy: { profile: { suggestive: "allow", sexual: "allow" } } });
+  ANSWER = full(SUGGESTIVE_SFW);
+  const sug = await ISF.checkBroadcast({ buf: await png(20, 20) });
+  assert.deepEqual([sug.ok, sug.code], [false, "unsafe"], "suggestive (0.7) is never clearly safe");
+  assert.equal(ISF.decide("onair", { verdict: "allow", categories: ["suggestive"], scores: { suggestive: 0.7 } }, { policy: { broadcast: {} } }).action, "refuse");
+  assert.equal(ISF.decide("onair", { verdict: "allow", categories: ["minor_risk"], scores: {} }).flagged, true, "minor_risk: refuse + flag");
+  // fail-closed: no frames / a classifier error
+  await setCfg({});
+  assert.deepEqual([(await ISF.checkBroadcast({ file: "/no/such/file.webp" })).ok, (await logRows()).pop().action], [false, "failclosed"]);
+  ISF.setClassifier(async () => { throw new Error("vision down"); });
+  assert.equal((await ISF.checkBroadcast({ buf: await png(21, 21) })).code, "unavailable");
+  stub();
+  await setCfg({ enabled: false, shadow: false });
+});
+
+test("1.99acw broadcast_max_score: cleaned and bounded to [0.05, 0.5] (default 0.30), a setting name of its own, the existing surfaces unchanged", async () => {
+  assert.equal(ISF.DEFAULTS.broadcast_max_score, 0.3);
+  assert.equal(ISF.cleanConfig({}).broadcast_max_score, 0.3);
+  assert.equal(ISF.cleanConfig({ image_safety_broadcast_max_score: 0.9 }).broadcast_max_score, 0.5);
+  assert.equal(ISF.cleanConfig({ broadcast_max_score: 0.01 }).broadcast_max_score, 0.05);
+  assert.equal(ISF.cleanConfig({ broadcast_max_score: "nope" }).broadcast_max_score, 0.3);
+  assert.equal(ISF.settingsView(ISF.cleanConfig({ broadcast_max_score: 0.25 })).image_safety_broadcast_max_score, 0.25);
+  assert.equal(ISF.SURFACES.includes("onair"), false, "no toggle: the broadcast check can't be switched off");
+  assert.equal(ISF.SURFACE_LABEL.onair, "Pepe's broadcast (on-air pictures)");
+  assert.equal(ISF.GROUP.onair, "broadcast");
+  assert.equal(ISF.POLICY_GROUPS.includes("broadcast"), false, "not in the editable policy");
+  for (const s of ["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked", "shop"]) assert.ok(ISF.SURFACES.includes(s), s);
+  // the admin page shows the margin
+  await setCfg({});
+  const r = await call("GET", "/admin/imagesafety", U.admin);
+  assert.match(r.text, /name="image_safety_broadcast_max_score"/);
+});

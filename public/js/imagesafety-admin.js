@@ -26,7 +26,8 @@
         image_safety_video_frames: Number(E.image_safety_video_frames.value), image_safety_retention_days: Number(E.image_safety_retention_days.value),
         image_safety_notify_minor: E.image_safety_notify_minor.checked, image_safety_surfaces: surfaces,
         image_safety_thresholds: thresholds, image_safety_policy: policy,
-        image_safety_locked_enforce: E.image_safety_locked_enforce ? E.image_safety_locked_enforce.checked : undefined
+        image_safety_locked_enforce: E.image_safety_locked_enforce ? E.image_safety_locked_enforce.checked : undefined,
+        image_safety_broadcast_max_score: E.image_safety_broadcast_max_score ? Number(E.image_safety_broadcast_max_score.value) : undefined
       };
       if (E.image_safety_locked_enforce && E.image_safety_locked_enforce.checked && !E.image_safety_locked_enforce.defaultChecked &&
           !window.confirm('Enforce image safety (fail closed) on PATV Creators locked media? Locked pictures and videos are refused unless Pepe classifies them in time.')) return;

@@ -120,6 +120,13 @@ const RULES = {
   "site_perms.by": { deny: "1.99ack: who changed one of the website's permissions (web:<username>) - an actor label; the row is keyed by capability" },
   "site_perms.by_level": { deny: "1.99ack: the editor's Pepe role level when they changed it (100 owner / 80 admin) - not an account id" },
   "onair_queue.by": { deny: "1.99abj: who queued an on-air link (web:<username> / pepe:<login>) - an actor label like onair_log.by" },
+  "onair_media.by": { deny: "1.99acw: who fetched / uploaded an on-air picture (web:<username> / pepe:<login>) - an actor label like onair_log.by" },
+  // 1.99acw review: the per-person media attempts / blocks are keyed "u:<userId>" | "cf:<login>" (onairmedia.personKey) - short-lived
+  // (attempts 30 days, blocks 24 h / 30 days); "by" is an actor label. A merge doesn't fold them (an admin can lift a block).
+  "onair_attempts.who": { deny: "1.99acw: a person key (u:<userId> / cf:<login>) for the 10-minute rate limit + the 24 h unsafe-refusal count - short-lived, not a bare account id" },
+  "onair_attempts.by": { deny: "1.99acw: an actor label (web:<username> / pepe:<login>) of an on-air media attempt" },
+  "onair_person_blocks.who": { deny: "1.99acw: a person key (u:<userId> / cf:<login>) blocked from on-air media for a while - lifted on /stage/admin" },
+  "onair_person_blocks.by": { deny: "1.99acw: who / what set the block ('system') - an actor label" },
   // 1.99aag on-demand consent (onairconsent.js): who was asked moves with the account; "by" is an actor label
   "onair_consent.owner_id": M(), "onair_pad_allow.owner_id": M(),
   "onair_consent.by": { deny: "1.99aag: an actor label (web:<username> / pepe:<login>) of who asked" },

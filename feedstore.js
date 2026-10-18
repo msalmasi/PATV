@@ -1041,7 +1041,8 @@ async function create(userId, input, deps = {}) {
   let atts = [];
   if (attIds.length) {
     atts = await getQuery(`SELECT * FROM feed_attachments WHERE id IN (${attIds.map(() => "?").join(",")})`, attIds);
-    if (atts.length !== attIds.length || atts.some((a) => a.owner_id !== u.userId || a.post_id || a.kind === "preview")) {
+    // (1.99acw: an on-air upload - purpose "onair" - is for Pepe's stream only, never a post)
+    if (atts.length !== attIds.length || atts.some((a) => a.owner_id !== u.userId || a.post_id || a.kind === "preview" || a.purpose === "onair")) {
       throw new Refuse(400, "One of those files isn't yours or is already posted.");
     }
     if (atts.some((a) => a.state !== "ready")) throw new Refuse(409, "A file is still processing - wait for it to finish.");

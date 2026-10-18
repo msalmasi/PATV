@@ -20,7 +20,7 @@ var MIN_CLASSES = ["admin", "staff", "assistant"];
 var CLASS_RANK = { Assistant: 1, Staff: 2, Admin: 3 };
 var GROUPS = ["admin", "accounts", "economy", "games", "pads", "feed", "messages", "creators", "media", "stage", "sound", "pepe", "site"];
 // Lock reasons (i18n siteperm.lock.<reason>)
-var LOCKS = ["escalation", "credentials", "points", "privacy", "consent", "ops", "safety", "padlock"];
+var LOCKS = ["escalation", "credentials", "points", "privacy", "consent", "ops", "safety", "padlock", "exposure"];
 
 // [key, group, default minimum class, lock reason or null]
 var CAPS = [
@@ -118,6 +118,9 @@ var CAPS = [
   ["stage.approval_bypass", "stage", "staff", null],
   ["onair.operate", "stage", "staff", null],
   ["onair.config", "stage", "admin", null],
+  // 1.99acw: never below Staff (owner decision 2026-10-18) - both make Pepe's OBS (his home VM) load a third-party address
+  ["onair.live_page", "stage", "staff", "exposure"],            // LIVE pages: Pepe's OBS opens the page itself (his home IP)
+  ["onair.direct_media", "stage", "staff", "exposure"],         // direct pictures: no safety scan, loaded from the source host
   ["restream.staff", "stage", "staff", null],
   ["restream.main", "stage", "admin", "ops"],
   ["livecam.admin", "stage", "admin", "ops"],
