@@ -489,12 +489,13 @@ function register(app, { addUser, isBotToken }) {
     try {
       const viewer = await viewerOf(req);
       const p = await store.get(req.params.id, viewer, { detail: true });
-      const staff = SP.can(viewer, "feed.moderate");
+      const staff = SP.can(viewer, "feed.moderate");     // the action menu
+      const seeAll = SP.can(viewer, "feed.see_hidden");  // 1.99acl: who sees a hidden / deleted post (like the list / media / comment paths)
       const modRooms = new Set();
       if (p && viewer) for (const r of p.roomsAll) if (await rooms.canManage(viewer, r.id)) modRooms.add(r.id);
       // only waiting for approval / hidden / taken out everywhere it was posted: its author, those rooms' owners and staff
       const shownSomewhere = p && p.roomsAll.some((r) => !r.removed && !r.pending && !r.hidden);
-      if (!p || (p.deleted && !staff) || (p.hidden && !staff && !p.mine) || (!shownSomewhere && !staff && !p.mine && !modRooms.size)) {
+      if (!p || (p.deleted && !seeAll) || (p.hidden && !seeAll && !p.mine) || (!shownSomewhere && !seeAll && !p.mine && !modRooms.size)) {
         return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "Post not found",
           message: "It was deleted, or it never existed.", title: "Post not found" });
       }

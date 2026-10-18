@@ -1,4 +1,4 @@
-// siteperms.js — 1.99ack site: the website's own permissions (release 2 of /admin/roles; the registry is siteperms-core.js).
+// siteperms.js — 1.99ack / 1.99acl site: the website's own permissions (release 2 of /admin/roles; the registry is siteperms-core.js).
 //
 //   can(user, key)      sync: does this account (its users.class: Admin / Staff / Assistant) hold the capability?
 //   canId(userId, key)  the same for an account id (reads its class)
@@ -17,13 +17,16 @@
 //   the only values are admin / staff / assistant (nothing below Assistant). Every change is written to admin_audit.
 // * Views: res.locals.can(key[, user]) (installed on every render, see install()) - the request's user by default.
 "use strict";
-const { runQuery, getQuery } = require("./dbUtils");
+const db = require("./dbUtils");   // 1.99acl: through the module (the tests make a load fail)
+const runQuery = (...a) => db.runQuery(...a), getQuery = (...a) => db.getQuery(...a);
 const C = require("./siteperms-core");
 
 const OWNER = 100, ADMIN = 80;   // Pepe role levels (pepeperms.LEVEL)
 
-let OV = {};        // key -> {min, ts, by, lvl} (min null = a reset row)
-let MIN = {};       // key -> min (overrides in force)
+// 1.99acl: no prototype on either map (a key / value like "constructor" or "__proto__" is never found by accident)
+let OV = Object.create(null);    // key -> {min, ts, by, lvl} (min null = a reset row)
+let MIN = Object.create(null);   // key -> min (overrides in force)
+let SEEN = null;                 // the table's "max(ts) / count" at the last load (the 5 s poll)
 let clock = () => Date.now();
 const now = () => clock();
 
@@ -40,39 +43,49 @@ function init() {
   }
   return ready;
 }
+const stampOf = (r) => (r ? (Number(r.t) || 0) + "/" + (Number(r.n) || 0) : null);
 async function reload() {
+  const stamp = stampOf((await getQuery("SELECT MAX(ts) AS t, COUNT(*) AS n FROM site_perms"))[0]);
   const rows = await getQuery("SELECT key, min_class, ts, by, by_level FROM site_perms");
-  const ov = {}, min = {};
+  const ov = Object.create(null), min = Object.create(null);
   for (const r of rows) {
-    const cap = C.BY_KEY[r.key];
-    if (!cap) continue;                                    // a key the registry dropped
-    const m = r.min_class && C.RANK[r.min_class] ? r.min_class : null;
+    const cap = C.capOf(r.key);
+    if (!cap) continue;                                    // a key the registry dropped (or junk)
+    const m = C.isClass(r.min_class) ? r.min_class : null; // junk values ("pleb", "constructor", ...) count as no override
     ov[r.key] = { min: m, ts: Number(r.ts) || 0, by: r.by || null, lvl: r.by_level == null ? null : Number(r.by_level) };
     if (m && !cap.locked) min[r.key] = m;
   }
-  OV = ov; MIN = min;
+  OV = ov; MIN = min; SEEN = stamp;
   return Object.keys(min).length;
+}
+/** 1.99acl: another process's edit, picked up within seconds - reload only when the table's max(ts) / row count moved. */
+async function poll() {
+  if (!ready) return init();
+  await ready;
+  const stamp = stampOf((await getQuery("SELECT MAX(ts) AS t, COUNT(*) AS n FROM site_perms"))[0]);
+  if (stamp !== SEEN) await reload();
 }
 
 function can(user, key) { return C.check(MIN, user, key); }
 async function canId(userId, key) {
-  if (!C.BY_KEY[key]) return C.check(MIN, null, key);     // throws / denies like can()
+  if (!C.capOf(key)) return C.check(MIN, null, key);     // throws / denies like can()
   if (!userId) return false;
   const u = (await getQuery("SELECT class FROM users WHERE userId = ?", [String(userId)]).catch(() => []))[0];
   return can(u || null, key);
 }
 function minClass(key) {
-  if (!C.BY_KEY[key]) { C.check(MIN, null, key); return null; }
+  if (!C.capOf(key)) { C.check(MIN, null, key); return null; }
   return C.minOf(MIN, key);
 }
 /** Class ladder for an audience a setting names ("admin" / "staff" / "assistant"). */
-function atLeast(user, cls) { const r = C.RANK[cls]; return !!r && C.classRank(user) >= r; }
+function atLeast(user, cls) { const r = C.rankOf(cls); return r > 0 && C.classRank(user) >= r; }
 /** Any of these keys. */
 function canAny(user, keys) { return keys.some((k) => can(user, k)); }
 
 // ── the admin area: Admins / Staff (admin.area) everywhere; anyone else only on a page they hold a key for ──
 /** The admin pages with a gate of their own and the capability that opens each for someone without admin.area (Assistants,
- *  by default: the first three; the rest only when an override lowers them) - in the nav's order, the first one is their home. */
+ *  by default: banner review, soundboard moderation and pad connection requests - every other entry only when an override
+ *  lowers its key) - in the nav's order, the first one they hold is their home. */
 const AREA_PAGES = [
   ["/admin/markets", ["markets.auto"]],
   ["/admin/raffles", ["raffles.admin"]],
@@ -137,38 +150,50 @@ install();
 const audit = (ed, detail) => require("./adminaudit").record({ userId: ed.userId, username: ed.username }, "site_perm", null, detail);
 const LABEL_MIN = { admin: "Admin", staff: "Staff", assistant: "Assistant" };
 
-/** "" when an editor at Pepe level `lvl` may set key to val (null = default), else why not. */
-function editWhy(lvl, key, val) {
-  if (lvl < ADMIN) return "Only Pepe's admins and owners change the website's permissions.";
-  const cap = C.BY_KEY[key];
-  if (!cap) return "No such permission.";
+const NO_KEY = "No such permission.", BAD_VAL = "Pick Admin, Staff or Assistant (nothing goes below Assistant).";
+const OWNER_SET = "Only an owner can change that (an owner set it).";
+/** "" when an editor at Pepe level `lvl` may set key to val (null = default), else why not. `cur` = the key's current row
+ *  ({min, lvl}; the cache when not given - setMin passes the one it just read from the database).
+ *  1.99acl: keys and values only from the registry's own entries (never an inherited "constructor" / "__proto__"); a row an
+ *  owner wrote - a value OR a reset - is the owners' until an owner changes it. */
+function editWhy(lvl, key, val, cur) {
+  if (!(lvl >= ADMIN)) return "Only Pepe's admins and owners change the website's permissions.";
+  const cap = C.capOf(key);
+  if (!cap) return NO_KEY;
   if (cap.locked) return "That permission is locked - it can't be changed here.";
-  if (val != null && !C.RANK[val]) return "Pick Admin, Staff or Assistant (nothing goes below Assistant).";
-  const cur = OV[key];
-  if (lvl < OWNER && cur && cur.min != null && (cur.lvl || 0) >= OWNER) return OWNER_SET;
+  if (val != null && !C.isClass(val)) return BAD_VAL;
+  const c = cur !== undefined ? cur : (Object.prototype.hasOwnProperty.call(OV, key) ? OV[key] : null);
+  if (lvl < OWNER && c && (Number(c.lvl) || 0) >= OWNER) return OWNER_SET;
   return "";
 }
-const OWNER_SET = "Only an owner can change that (an owner set it).";
 
 /** A change made on /admin/roles: key's minimum class -> value ("admin" | "staff" | "assistant" | "default"). */
 async function setMin(ed, key, value) {
   await init();
   if (!ed) throw new PermError(401, "auth", "Sign in first.");
-  const k = String(key || "");
+  const k = typeof key === "string" ? key : "";
   const v = value == null || value === "default" || value === "" ? null : String(value).toLowerCase();
-  const why = editWhy(ed.level, k, v);
-  if (why) {
-    const code = ed.level < ADMIN ? "not_pepe_admin" : why === OWNER_SET ? "owner_only" : !C.BY_KEY[k] ? "invalid" : C.BY_KEY[k].locked ? "locked" : "invalid";
-    throw new PermError(code === "invalid" ? 400 : 403, code, why);
-  }
-  const cur = OV[k] || null;
+  const refuse = (why) => {
+    const code = !(ed.level >= ADMIN) ? "not_pepe_admin" : why === OWNER_SET ? "owner_only" : why === NO_KEY || why === BAD_VAL ? "invalid" : "locked";
+    return new PermError(code === "invalid" ? 400 : 403, code, why);
+  };
+  let why = editWhy(ed.level, k, v, null);
+  if (why) throw refuse(why);
+  // 1.99acl: the current row from the database, not the cache - another process may have written it since our last load
+  const row = (await getQuery("SELECT min_class, ts, by_level FROM site_perms WHERE key = ?", [k]))[0] || null;
+  const cur = row ? { min: C.isClass(row.min_class) ? row.min_class : null, ts: Number(row.ts) || 0, lvl: row.by_level == null ? null : Number(row.by_level) } : null;
+  why = editWhy(ed.level, k, v, cur);
+  if (why) throw refuse(why);
   const from = cur ? cur.min : null;
   if (from === v && (cur || v == null)) return { key: k, value: v, unchanged: true };
   const ts = Math.max(now(), cur ? cur.ts + 1 : 0);
   const by = "web:" + String(ed.username || "?");
-  await runQuery(`INSERT INTO site_perms (key, min_class, ts, by, by_level) VALUES (?, ?, ?, ?, ?)
-                  ON CONFLICT(key) DO UPDATE SET min_class = excluded.min_class, ts = excluded.ts, by = excluded.by, by_level = excluded.by_level`,
+  // ... and the write itself never replaces an owner's row unless the editor is an owner (a race between that read and here)
+  const r = await runQuery(`INSERT INTO site_perms (key, min_class, ts, by, by_level) VALUES (?, ?, ?, ?, ?)
+                  ON CONFLICT(key) DO UPDATE SET min_class = excluded.min_class, ts = excluded.ts, by = excluded.by, by_level = excluded.by_level
+                  WHERE COALESCE(site_perms.by_level, 0) < ${OWNER} OR excluded.by_level >= ${OWNER}`,
                  [k, v, ts, by.slice(0, 80), ed.level]);
+  if (r && r.changes === 0) { await reload(); throw refuse(OWNER_SET); }
   await reload();
   await audit(ed, { key: k, from, to: v, editor_role: ed.role });
   return { key: k, value: v };
@@ -184,12 +209,12 @@ async function view(ed) {
   for (const cap of C.CAPS.map((c) => C.BY_KEY[c[0]])) {
     const o = OV[cap.key] || null;
     const eff = C.minOf(MIN, cap.key);
-    const ownerSet = !!(o && o.min != null && (o.lvl || 0) >= OWNER);
+    const ownerSet = !!(o && (o.lvl || 0) >= OWNER);   // 1.99acl: an owner's reset too
     groups[gi[cap.group]].rows.push({
       key: cap.key, label: cap.label, def: cap.def, over: cap.locked ? null : (o ? o.min : null), eff,
       locked: cap.locked || null, lockLabel: cap.locked ? "siteperm.lock." + cap.locked : null,
       by: o ? o.by : null, ts: o ? o.ts : 0, ownerSet,
-      ladder: CLASS_COLS.map((c) => ({ cls: c, has: C.RANK[c] >= C.RANK[eff] })),
+      ladder: CLASS_COLS.map((c) => ({ cls: c, has: C.rankOf(c) >= C.rankOf(eff) })),
       options: CLASS_COLS.map((c) => ({ v: c, ok: !editWhy(lvl, cap.key, c) })),
       editable: !editWhy(lvl, cap.key, null),
       changed: !!(o && o.min != null && !cap.locked),
@@ -198,15 +223,23 @@ async function view(ed) {
   return { groups: groups.filter((g) => g.rows.length), canEdit: lvl >= ADMIN, owner: lvl >= OWNER, classes: CLASS_COLS };
 }
 
-let timer = null;
+let timer = null, pollTimer = null;
+/** The minute timer: a full reload, or - when the load at start failed - another try at it (1.99acl). */
+function tick() {
+  const what = ready ? "reload" : "init";
+  return (ready ? reload() : init()).catch((e) => console.error("[siteperms] " + what + ":", e.message));
+}
 function register(app, { noTimers } = {}) {
   init().catch((e) => console.error("[siteperms] init:", e.message));
   if (!noTimers && !timer) {
-    timer = setInterval(() => { if (ready) reload().catch((e) => console.error("[siteperms] reload:", e.message)); }, 60e3);
+    timer = setInterval(tick, 60e3);
     if (timer.unref) timer.unref();
+    // 1.99acl: other processes' edits within 5 s (one cheap max(ts) / count query; a reload only when it moved)
+    pollTimer = setInterval(() => { poll().catch((e) => console.error("[siteperms] poll:", e.message)); }, 5e3);
+    if (pollTimer.unref) pollTimer.unref();
   }
 }
 
-module.exports = { init, reload, register, can, canId, canAny, minClass, atLeast, gate, areaHome, AREA_PAGES, install, setMin, view, editWhy,
+module.exports = { init, reload, poll, tick, register, can, canId, canAny, minClass, atLeast, gate, areaHome, AREA_PAGES, install, setMin, view, editWhy,
   PermError, CAPS: C.CAPS, BY_KEY: C.BY_KEY, GROUPS: C.GROUPS, RANK: C.RANK, classRank: C.classRank, LABEL_MIN,
-  _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; OV = {}; MIN = {}; } };
+  _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; OV = Object.create(null); MIN = Object.create(null); SEEN = null; } };

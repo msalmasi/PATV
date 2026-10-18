@@ -31,38 +31,38 @@ require(path.join(repo, "terms"))._setRequired(false);
 
 // ── the audit table (2026-10-18) + the owner's decisions: key -> [default minimum class, locked?] ──
 const GOLDEN = {
-  "admin.area": ["staff", false], "admin.sensitive_overview": ["admin", false],
+  "admin.area": ["staff", false], "admin.sensitive_overview": ["admin", true],
   "roles.assign": ["admin", true], "roles.class_list": ["admin", true], "keys.view": ["admin", true], "keys.manage": ["admin", true],
   "users.xp": ["admin", false], "users.welcome_stale": ["admin", true],
   "accounts.security": ["admin", true], "accounts.delete_other": ["admin", true], "accounts.sessions_revoke": ["admin", true],
-  "auth.signin_methods": ["admin", true], "profile.see_private": ["admin", true], "history.lookup": ["staff", false],
-  "econ.grant_pat": ["admin", true], "econ.house_adjust": ["admin", true], "econ.codes_manage": ["admin", true], "econ.codes_view": ["staff", false],
+  "auth.signin_methods": ["admin", true], "profile.see_private": ["admin", true], "history.lookup": ["staff", true],
+  "econ.grant_pat": ["admin", true], "econ.house_adjust": ["admin", true], "econ.codes_manage": ["admin", true], "econ.codes_view": ["admin", true],
   "econ.pepe_econ_cmds": ["admin", true], "econ.burn": ["admin", true], "econ.padvault_move": ["admin", true],
   "econ.telemetry_policy": ["admin", true], "econ.vwm_view": ["staff", false], "econ.backend_cutover": ["admin", true],
   "econ.boost_challenge_cosmetic_cfg": ["admin", true], "premium.admin": ["admin", true], "comps.manage": ["admin", true],
   "crypto.admin": ["admin", true], "donations.admin": ["admin", true], "escrow.override": ["admin", true],
-  "games.config": ["admin", false], "markets.auto": ["admin", false], "raffles.admin": ["admin", false], "raffles.house": ["admin", true], "oracle.admin": ["admin", false],
+  "games.config": ["admin", true], "markets.auto": ["admin", false], "raffles.admin": ["admin", true], "raffles.house": ["admin", true], "oracle.admin": ["admin", true],
   "casino.admin": ["admin", true], "quotes.free": ["admin", false], "launchpad.admin": ["admin", false], "launchpad.metrics": ["staff", false],
-  "pads.manage_any": ["staff", false], "pads.registry_admin": ["staff", false], "pads.royalties_config": ["admin", true],
-  "pads.vault_rate": ["admin", true], "pads.config_view": ["staff", false], "pads.config": ["admin", false],
-  "pads.approved_inside": ["staff", false], "pads.create_free": ["staff", false], "pads.connect_review": ["assistant", false],
+  "pads.manage_any": ["staff", false], "pads.pepe_ctl_any": ["staff", true], "pads.registry_admin": ["staff", false], "pads.royalties_config": ["admin", true],
+  "pads.vault_rate": ["admin", true], "pads.config_view": ["staff", false], "pads.config": ["admin", true],
+  "pads.approved_inside": ["staff", true], "pads.create_free": ["staff", false], "pads.connect_review": ["assistant", false],
   "pads.send_pepe": ["admin", true], "bridge.blocks_global": ["admin", false], "bridge.cmdlog": ["admin", false],
-  "feed.admin_page": ["staff", false], "feed.moderate": ["staff", false], "feed.see_hidden": ["staff", false],
+  "feed.admin_page": ["staff", false], "feed.moderate": ["staff", false], "feed.see_hidden": ["staff", true],
   "feed.tags_remove_any": ["staff", false], "feed.limits_exempt": ["staff", false], "feed.config": ["admin", false],
   "feed.automod_global": ["admin", false], "feed.filter_admin": ["admin", false], "feed.pepe_admin": ["admin", false],
   "feed.admin_lock": ["admin", true], "feed.abuse_details": ["admin", true], "feed.automod_csam_reverse": ["staff", true],
   "takedown.handle": ["staff", true], "imagesafety.admin": ["admin", true],
   "dm.limits_exempt": ["staff", false], "dm.report_review": ["admin", true],
-  "creators.admin": ["staff", false], "creators.config_explicit": ["admin", false], "creators.pad_flags_any": ["staff", false],
-  "banner.review": ["assistant", false], "banner.config": ["admin", false], "shop.admin": ["staff", false],
+  "creators.admin": ["staff", true], "creators.config_explicit": ["admin", false], "creators.pad_flags_any": ["staff", false],
+  "banner.review": ["assistant", false], "banner.config": ["admin", true], "shop.admin": ["staff", true],
   "shopart.view": ["staff", false], "shopart.admin": ["admin", false], "badges.manage": ["staff", false],
   "media.admin": ["admin", false], "media.manage_requests": ["admin", false], "media.library_free": ["admin", false],
   "stage.admin": ["staff", false], "stage.approval_bypass": ["staff", false], "onair.operate": ["staff", false], "onair.config": ["admin", false],
   "restream.staff": ["staff", false], "restream.main": ["admin", true], "livecam.admin": ["admin", true], "livecam.end_any": ["staff", false],
   "camclip.override": ["admin", false], "ghost.mode": ["staff", true],
-  "soundboards.moderate": ["assistant", false], "soundboards.config": ["admin", false], "voices.view": ["staff", false], "voices.manage": ["admin", false],
-  "voiceclone.view": ["staff", false], "voiceclone.decide": ["admin", false], "likeness.view": ["staff", false], "likeness.manage": ["admin", false],
-  "pepe.control": ["admin", true], "pepe.rooms_commands_audio": ["admin", true], "pepe.modlog": ["admin", false], "ops.action_ttl": ["admin", false],
+  "soundboards.moderate": ["assistant", false], "soundboards.config": ["admin", true], "voices.view": ["staff", false], "voices.manage": ["admin", true],
+  "voiceclone.view": ["staff", true], "voiceclone.decide": ["admin", true], "likeness.view": ["staff", false], "likeness.manage": ["admin", true],
+  "pepe.control": ["admin", true], "pepe.rooms_commands_audio": ["admin", true], "pepe.modlog": ["admin", true], "ops.action_ttl": ["admin", true],
   "push.admin": ["admin", false], "help.admin": ["admin", false], "i18n.admin": ["admin", false],
 };
 
@@ -336,11 +336,12 @@ test("overrides move access, route by route (one per group)", async () => {
   await withMin("econ.vwm_view", "assistant", async () => {
     assert.notEqual((await call("GET", "/api/admin/econ/vwm", U.ast)).status, 403);
   });
-  // games: PvP knobs
+  // games: the PvP knobs are games.config - locked "points" (1.99acl), so no override moves them; quotes.free does move
   assert.equal((await call("GET", "/api/admin/pvp-cfg", U.stf)).status, 403);
-  await withMin("games.config", "staff", async () => {
-    assert.equal((await call("GET", "/api/admin/pvp-cfg", U.stf)).status, 200);
-  });
+  await assert.rejects(SP.setMin(await owner(), "games.config", "staff"), (e) => e.code === "locked");
+  assert.equal((await call("GET", "/api/admin/pvp-cfg", U.stf)).status, 403);
+  assert.equal(SP.can(U.stf, "quotes.free"), false);
+  await withMin("quotes.free", "staff", async () => { assert.equal(SP.can(U.stf, "quotes.free"), true); });
   // pads: the connection queue raised to Staff shuts Assistants out
   await withMin("pads.connect_review", "staff", async () => {
     assert.equal((await call("GET", "/api/pads/connections", U.ast)).status, 403);
@@ -357,10 +358,10 @@ test("overrides move access, route by route (one per group)", async () => {
   await withMin("dm.limits_exempt", "assistant", async () => {
     assert.equal(await DM.pictureRefusal({ ...U.ast2, level: 0 }), null);
   });
-  // creators / banner: the settings
-  assert.equal((await call("POST", "/api/banner/admin/config", U.stf, {})).status, 403);
-  await withMin("banner.config", "staff", async () => {
-    assert.notEqual((await call("POST", "/api/banner/admin/config", U.stf, {})).status, 403);
+  // creators / banner: the review queue raised to Staff shuts Assistants out (banner.config is locked "points" since 1.99acl)
+  assert.equal((await call("POST", "/api/banner/admin/decide", U.ast, { id: "nope", approve: true })).status, 404);
+  await withMin("banner.review", "staff", async () => {
+    assert.equal((await call("POST", "/api/banner/admin/decide", U.ast, { id: "nope", approve: true })).status, 403);
   });
   // media: play from library
   const MC = require(path.join(repo, "mediaconf"));
@@ -375,11 +376,10 @@ test("overrides move access, route by route (one per group)", async () => {
   await withMin("likeness.view", "admin", async () => {
     assert.equal((await call("GET", "/api/likeness/admin", U.stf)).status, 403);
   });
-  // pepe: the mod log
+  // pepe: every key is locked (1.99acl: the mod log "privacy") - Staff stay out whatever an owner tries
   assert.equal((await call("GET", "/api/admin/pepe/modlog", U.stf)).status, 403);
-  await withMin("pepe.modlog", "staff", async () => {
-    assert.notEqual((await call("GET", "/api/admin/pepe/modlog", U.stf)).status, 403);
-  });
+  await assert.rejects(SP.setMin(await owner(), "pepe.modlog", "staff"), (e) => e.code === "locked");
+  assert.equal((await call("GET", "/api/admin/pepe/modlog", U.stf)).status, 403);
   // site tools: help questions
   assert.equal((await call("GET", "/admin/help", U.stf)).status, 403);
   await withMin("help.admin", "staff", async () => {
@@ -437,9 +437,16 @@ test("edit rules: owners anything editable, admins never a row an owner set, loc
   r = await site(U.own, "i18n.admin", "default");
   assert.equal(r.status, 200);
   assert.equal(SP.minClass("i18n.admin"), "admin");
-  r = await site(U.adm, "i18n.admin", "staff");
-  assert.equal(r.status, 200, "an owner's RESET is not a value an owner set");
-  await site(U.own, "i18n.admin", "default");
+  // 1.99acl: an owner's RESET is the owners' too - an admin can't undo it straight away
+  for (const v of ["staff", "assistant", "admin"]) {
+    r = await site(U.adm, "i18n.admin", v);
+    assert.equal(r.status, 403, v);
+    assert.equal(r.d.code, "owner_only", v);
+  }
+  assert.equal(SP.minClass("i18n.admin"), "admin");
+  assert.equal((await getQuery("SELECT by_level FROM site_perms WHERE key = 'i18n.admin'"))[0].by_level, 100, "the owner's row is untouched");
+  page = await call("GET", "/admin/roles", U.adm);
+  assert.match(page.text, /<select id="arSite-i18n\.admin" data-site-perm="i18n\.admin" disabled>/, "greyed for the admin after an owner's reset");
   // locked rows never move, for anyone
   for (const k of ["premium.admin", "roles.assign", "ghost.mode", "takedown.handle", "feed.admin_lock"]) {
     r = await site(U.own, k, "assistant");
@@ -449,26 +456,26 @@ test("edit rules: owners anything editable, admins never a row an owner set, loc
   }
   // nothing below Assistant, junk refused
   for (const v of ["pleb", "member", "everyone", "nobody", "Admin ", 3]) {
-    r = await site(U.own, "games.config", v);
+    r = await site(U.own, "quotes.free", v);
     assert.equal(r.status, 400, String(v));
   }
   r = await site(U.own, "no.such.key", "staff");
   assert.equal(r.status, 400);
   // who may edit at all
-  r = await site(U.stf, "games.config", "staff");
+  r = await site(U.stf, "quotes.free", "staff");
   assert.equal(r.status, 403);
   assert.equal(r.d.code, "admin_only", "Staff: not even the page");
-  r = await site(U.nolink, "games.config", "staff");
+  r = await site(U.nolink, "quotes.free", "staff");
   assert.equal(r.d.code, "not_pepe_admin", "an Admin without a Pepe role");
-  assert.equal((await site(null, "games.config", "staff")).status, 401);
+  assert.equal((await site(null, "quotes.free", "staff")).status, 401);
   // an override of a locked key smuggled into the table never applies
   await runQuery("INSERT OR REPLACE INTO site_perms (key, min_class, ts, by, by_level) VALUES ('econ.grant_pat', 'assistant', 1, 'x', 100)");
   await runQuery("INSERT OR REPLACE INTO site_perms (key, min_class, ts, by, by_level) VALUES ('zz.gone', 'assistant', 1, 'x', 100)");
-  await runQuery("INSERT OR REPLACE INTO site_perms (key, min_class, ts, by, by_level) VALUES ('games.config', 'pleb', 1, 'x', 100)");
+  await runQuery("INSERT OR REPLACE INTO site_perms (key, min_class, ts, by, by_level) VALUES ('quotes.free', 'pleb', 1, 'x', 100)");
   await SP.reload();
   assert.equal(SP.can(U.ast, "econ.grant_pat"), false);
-  assert.equal(SP.minClass("games.config"), "admin", "a junk value is ignored");
-  await runQuery("DELETE FROM site_perms WHERE key IN ('econ.grant_pat', 'zz.gone', 'games.config')");
+  assert.equal(SP.minClass("quotes.free"), "admin", "a junk value is ignored");
+  await runQuery("DELETE FROM site_perms WHERE key IN ('econ.grant_pat', 'zz.gone', 'quotes.free')");
   await SP.reload();
   // reset: the row stays (who reset it), the default applies
   r = await site(U.own, "help.admin", "default");
@@ -484,15 +491,15 @@ test("edit rules: owners anything editable, admins never a row an owner set, loc
 });
 
 test("CSRF: a change needs X-Requested-With: fetch from this origin", async () => {
-  let r = await site(U.own, "games.config", "staff", { "x-requested-with": "" });
+  let r = await site(U.own, "quotes.free", "staff", { "x-requested-with": "" });
   assert.equal(r.status, 403);
   assert.equal(r.d.code, "cross_site");
-  r = await site(U.own, "games.config", "staff", { origin: "https://evil.example" });
+  r = await site(U.own, "quotes.free", "staff", { origin: "https://evil.example" });
   assert.equal(r.status, 403);
   r = await fetch(base + "/api/admin/roles/site", { method: "POST", headers: { "x-test-user": U.own.userId, "content-type": "application/json", "x-requested-with": "fetch" },
-                                                    body: JSON.stringify({ key: "games.config", value: "staff" }) });
+                                                    body: JSON.stringify({ key: "quotes.free", value: "staff" }) });
   assert.equal(r.status, 403, "no origin / referer");
-  assert.equal(SP.minClass("games.config"), "admin");
+  assert.equal(SP.minClass("quotes.free"), "admin");
 });
 
 test("the page script builds no HTML; the section prints raw only translated strings", () => {
@@ -506,4 +513,249 @@ test("the page script builds no HTML; the section prints raw only translated str
   assert.doesNotMatch(sec.replace(/<%-\s*t\(/g, ""), /<%-/, "raw output only for t()");
   const core = fs.readFileSync(path.join(repo, "siteperms-core.js"), "utf8");
   assert.doesNotMatch(core, /<%|%>/, "the core can be included by a view");
+});
+
+// ── 1.99acl: review fixes ──
+const PROTO = ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable",
+               "toLocaleString", "__defineGetter__", "__lookupGetter__", "prototype"];
+const dbu = require(path.join(repo, "dbUtils"));
+const quiet = async (fn) => { const err = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = err; } };
+
+test("1.99acl: locks - the owner's decisions (points Admin-only, security never lowerable) with their reasons", async () => {
+  const want = {
+    "history.lookup": ["staff", "privacy"], "feed.see_hidden": ["staff", "safety"], "pads.approved_inside": ["staff", "privacy"],
+    "econ.codes_view": ["admin", "points"], "creators.admin": ["staff", "points"], "raffles.admin": ["admin", "points"],
+    "oracle.admin": ["admin", "points"], "shop.admin": ["staff", "points"], "admin.sensitive_overview": ["admin", "privacy"],
+    "voiceclone.view": ["staff", "consent"], "voiceclone.decide": ["admin", "consent"], "ops.action_ttl": ["admin", "ops"],
+    "pepe.modlog": ["admin", "privacy"], "pads.config": ["admin", "points"], "games.config": ["admin", "points"],
+    "banner.config": ["admin", "points"], "voices.manage": ["admin", "points"], "likeness.manage": ["admin", "points"],
+    "soundboards.config": ["admin", "points"], "pads.pepe_ctl_any": ["staff", "ops"],
+  };
+  for (const [k, [def, why]] of Object.entries(want)) {
+    assert.equal(SP.BY_KEY[k].def, def, k);
+    assert.equal(SP.BY_KEY[k].locked, why, k);
+    const r = await site(U.own, k, def === "admin" ? "staff" : "assistant");
+    assert.equal(r.status, 403, k);
+    assert.equal(r.d.code, "locked", k);
+    assert.equal(SP.minClass(k), def, k + " unchanged");
+  }
+  assert.equal(SP.BY_KEY["pads.manage_any"].locked, null, "pads.manage_any stays editable");
+  assert.equal(SP.can(U.stf, "econ.codes_view"), false, "the one behaviour change: Staff no longer list redemption codes");
+  assert.equal(SP.can(U.own, "econ.codes_view"), true);
+  const page = await call("GET", "/admin/roles", U.own);
+  assert.match(page.text, /data-site-key="pads\.pepe_ctl_any"/);
+  assert.match(page.text, /data-site-locked="consent">🔒 Consent - a member's cam or their cloned voice/);
+});
+
+test("1.99acl: prototype names are never a class or a key - refused cleanly, never stored", async () => {
+  const before = (await getQuery("SELECT key, min_class, ts, by_level FROM site_perms ORDER BY key"));
+  for (const p of PROTO) {
+    for (const lvl of [100, 80]) {
+      assert.match(SP.editWhy(lvl, "quotes.free", p), /Pick Admin, Staff or Assistant/, p + " as a value");
+      assert.equal(SP.editWhy(lvl, p, "staff"), "No such permission.", p + " as a key");
+      assert.equal(SP.editWhy(lvl, p, null), "No such permission.", p + " as a key (reset)");
+    }
+    let r = await site(U.own, "quotes.free", p);
+    assert.equal(r.status, 400, p + " value: " + r.text);
+    assert.equal(r.d.code, "invalid");
+    r = await site(U.own, p, "staff");
+    assert.equal(r.status, 400, p + " key: " + r.text);
+    assert.equal(r.d.code, "invalid");
+    r = await site(U.adm, p, "default");
+    assert.equal(r.status, 400, p + " key, admin: " + r.text);
+    await assert.rejects(SP.setMin(await owner(), "admin.area", p), (e) => e.status === 400 && e.code === "invalid");
+    assert.throws(() => SP.can(U.own, p), /unknown capability/, p);
+    assert.throws(() => SP.minClass(p), /unknown capability/, p);
+    assert.equal(SP.atLeast(U.own, p), false, p);
+    assert.equal(CORE.capOf(p), null, p);
+    assert.equal(CORE.rankOf(p), 0, p);
+    assert.equal(CORE.minOf(JSON.parse(JSON.stringify({ "quotes.free": p })), "quotes.free"), "admin", p + " in an override map");
+  }
+  for (const body of [{ key: { a: 1 }, value: "staff" }, { key: ["quotes.free"], value: "staff" }, { key: "quotes.free", value: { a: 1 } }]) {
+    const r = await call("POST", "/api/admin/roles/site", U.own, body);
+    assert.equal(r.status, 400, JSON.stringify(body));
+  }
+  const own = JSON.parse('{"__proto__": "assistant", "constructor": "assistant"}');
+  assert.equal(CORE.check(own, { class: "Assistant" }, "users.xp"), false, "an own __proto__ key in an override map moves nothing");
+  assert.deepEqual(await getQuery("SELECT key, min_class, ts, by_level FROM site_perms ORDER BY key"), before, "nothing stored");
+  assert.equal(SP.can(U.own, "admin.area"), true, "Admins still in");
+});
+
+test("1.99acl: a bad row in the table (prototype value or key) is ignored on reload - nobody is locked out", async () => {
+  const rows = [["admin.area", "constructor"], ["markets.auto", "__proto__"], ["quotes.free", "toString"], ["users.xp", "valueOf"],
+                ["constructor", "staff"], ["__proto__", "assistant"], ["toString", "assistant"], ["hasOwnProperty", "staff"]];
+  try {
+    for (const [k, v] of rows) await runQuery("INSERT OR REPLACE INTO site_perms (key, min_class, ts, by, by_level) VALUES (?, ?, 1, 'x', 100)", [k, v]);
+    await SP.reload();
+    assert.equal(SP.can(U.own, "admin.area"), true, "Admins keep the admin area");
+    assert.equal(SP.can(U.stf, "admin.area"), true, "and Staff (the default)");
+    assert.equal(SP.minClass("admin.area"), "staff");
+    assert.equal(SP.minClass("markets.auto"), "admin");
+    assert.equal(SP.minClass("quotes.free"), "admin");
+    assert.equal(SP.can(U.own, "users.xp"), true);
+    const v = await SP.view(await owner());
+    assert.equal(v.groups.flatMap((g) => g.rows).length, SP.CAPS.length);
+    assert.equal((await call("GET", "/admin/roles", U.own)).status, 200);
+  } finally {
+    await runQuery(`DELETE FROM site_perms WHERE key IN (${rows.map(() => "?").join(",")})`, rows.map((r) => r[0]));
+    await SP.reload();
+  }
+});
+
+test("1.99acl: an owner's reset protects the row from admins (whatever its value), owners still change it", async () => {
+  let r = await site(U.own, "launchpad.admin", "staff");
+  assert.equal(r.status, 200);
+  r = await site(U.own, "launchpad.admin", "default");         // the owner's reset: the row stays (who reset it)
+  assert.equal(r.status, 200);
+  const row = (await getQuery("SELECT min_class, by_level FROM site_perms WHERE key = 'launchpad.admin'"))[0];
+  assert.deepEqual({ ...row }, { min_class: null, by_level: 100 });
+  r = await site(U.adm, "launchpad.admin", "staff");
+  assert.equal(r.status, 403);
+  assert.equal(r.d.code, "owner_only");
+  assert.equal(SP.minClass("launchpad.admin"), "admin");
+  const v = await SP.view(await require(path.join(repo, "pepeperms")).editorOf(U.adm.userId));
+  const vr = v.groups.flatMap((g) => g.rows).find((x) => x.key === "launchpad.admin");
+  assert.equal(vr.ownerSet, true);
+  assert.equal(vr.editable, false);
+  r = await site(U.own, "launchpad.admin", "staff");
+  assert.equal(r.status, 200, "an owner may");
+  r = await site(U.own, "launchpad.admin", "default");
+  assert.equal(r.status, 200);
+});
+
+test("1.99acl: another process's owner write - setMin reads the row from the database, and the write itself never replaces it", async () => {
+  // (1) the owner's row is in the table but not in this process's cache
+  await runQuery("DELETE FROM site_perms WHERE key = 'markets.auto'");
+  await SP.reload();
+  await runQuery("INSERT INTO site_perms (key, min_class, ts, by, by_level) VALUES ('markets.auto', 'staff', ?, 'web:boss', 100)", [Date.now()]);
+  let r = await site(U.adm, "markets.auto", "assistant");
+  assert.equal(r.status, 403, JSON.stringify(r.d));
+  assert.equal(r.d.code, "owner_only");
+  let row = (await getQuery("SELECT min_class, by_level FROM site_perms WHERE key = 'markets.auto'"))[0];
+  assert.deepEqual({ ...row }, { min_class: "staff", by_level: 100 }, "untouched");
+  // (2) the owner writes between setMin's read and its write: the conditional upsert refuses
+  await runQuery("DELETE FROM site_perms WHERE key = 'markets.auto'");
+  await SP.reload();
+  const orig = dbu.getQuery;
+  dbu.getQuery = async (sql, params) => {
+    if (/SELECT min_class, ts, by_level FROM site_perms WHERE key = \?/.test(sql)) {
+      const out = await orig(sql, params);   // read: no row yet ...
+      await orig("SELECT 1");
+      await runQuery("INSERT INTO site_perms (key, min_class, ts, by, by_level) VALUES ('markets.auto', 'staff', ?, 'web:boss', 100)", [Date.now()]);
+      return out;                            // ... and the owner's row lands right after it
+    }
+    return orig(sql, params);
+  };
+  try {
+    r = await site(U.adm, "markets.auto", "assistant");
+  } finally { dbu.getQuery = orig; }
+  assert.equal(r.status, 403, JSON.stringify(r.d));
+  assert.equal(r.d.code, "owner_only");
+  row = (await getQuery("SELECT min_class, by_level, by FROM site_perms WHERE key = 'markets.auto'"))[0];
+  assert.deepEqual({ ...row }, { min_class: "staff", by_level: 100, by: "web:boss" }, "the owner's row survived");
+  assert.equal(SP.minClass("markets.auto"), "staff", "and the cache has it");
+  // an owner's own write still replaces it
+  r = await site(U.own, "markets.auto", "default");
+  assert.equal(r.status, 200);
+  assert.equal(SP.minClass("markets.auto"), "admin");
+  assert.equal(await SP.view(null).then(() => true), true);
+});
+
+test("1.99acl: a failed load at start is retried by the minute timer; the 5 s poll picks up other processes' edits", async () => {
+  const orig = dbu.getQuery;
+  let fail = true, siteReads = 0;
+  dbu.getQuery = (sql, params) => {
+    if (/FROM site_perms/.test(sql)) { siteReads++; if (fail) return Promise.reject(new Error("SQLITE_BUSY: boom")); }
+    return orig(sql, params);
+  };
+  try {
+    await runQuery("INSERT OR REPLACE INTO site_perms (key, min_class, ts, by, by_level) VALUES ('quotes.free', 'staff', ?, 'web:boss', 100)", [Date.now()]);
+    SP._reset();
+    await quiet(() => SP.tick());                          // the boot load fails ...
+    assert.equal(SP.minClass("quotes.free"), "admin", "nothing loaded");
+    await quiet(() => SP.tick());                          // ... and fails again
+    fail = false;
+    await SP.tick();                                       // ... then works: init, not a reload that never comes
+    assert.equal(SP.minClass("quotes.free"), "staff", "loaded on the retry");
+    // the poll: a cheap query, a reload only when the table moved
+    siteReads = 0;
+    await SP.poll();
+    assert.equal(siteReads, 1, "nothing changed: one max(ts) query");
+    await runQuery("UPDATE site_perms SET min_class = 'assistant', ts = ts + 5 WHERE key = 'quotes.free'");
+    await SP.poll();
+    assert.equal(SP.minClass("quotes.free"), "assistant", "another process's edit, picked up");
+    await runQuery("DELETE FROM site_perms WHERE key = 'quotes.free'");
+    await SP.poll();
+    assert.equal(SP.minClass("quotes.free"), "admin", "a deleted row too (the count moved)");
+  } finally {
+    dbu.getQuery = orig;
+    await runQuery("DELETE FROM site_perms WHERE key = 'quotes.free'");
+    await SP.init();
+    await SP.reload();
+  }
+  const src = fs.readFileSync(path.join(repo, "siteperms.js"), "utf8");
+  assert.match(src, /setInterval\(tick, 60e3\)/);
+  assert.match(src, /\(ready \? reload\(\) : init\(\)\)\.catch/);
+});
+
+test("1.99acl: /admin/bridge - each section on its own key (command log, relay blocks, moderation history)", async () => {
+  const ids = (t) => ({ cmd: /id="cmdRows"/.test(t), blk: /id="blkRows"/.test(t), ml: /id="mlRows"/.test(t), script: /<script>\s*\(function/.test(t) });
+  let r = await call("GET", "/admin/bridge", U.own);
+  assert.equal(r.status, 200);
+  assert.deepEqual(ids(r.text), { cmd: true, blk: true, ml: true, script: true }, "an Admin: all three");
+  r = await call("GET", "/admin/bridge", U.stf);
+  assert.equal(r.status, 200);
+  assert.deepEqual(ids(r.text), { cmd: false, blk: false, ml: false, script: false }, "Staff by default: none");
+  await withMin("bridge.blocks_global", "staff", async () => {
+    assert.deepEqual(ids((await call("GET", "/admin/bridge", U.stf)).text), { cmd: false, blk: true, ml: false, script: true }, "blocks only");
+  });
+  await withMin("bridge.cmdlog", "staff", async () => {
+    assert.deepEqual(ids((await call("GET", "/admin/bridge", U.stf)).text), { cmd: true, blk: false, ml: false, script: true }, "the command log only");
+  });
+  const ejs = fs.readFileSync(path.join(repo, "views/admin/bridge.ejs"), "utf8");
+  assert.match(ejs, /blkOk = _can\('bridge\.blocks_global'\)/);
+  assert.match(ejs, /mlOk = _can\('pepe\.modlog'\)/);
+  assert.match(ejs, /getElementById\('cmdForm'\)[^\n]*\n\s*if \(!f\) return;/, "each script part runs only with its section");
+});
+
+test("1.99acl: a hidden post's own page follows feed.see_hidden (not feed.moderate)", async () => {
+  const store = require(path.join(repo, "feedstore"));
+  const p = await store.create(U.own.userId, { title: "Hidden for the test", body: "x", community: "u/" + U.own.username });
+  await store.adminSet(U.own, p.id, { hidden: true });
+  const open = async (u) => (await call("GET", "/feed/p/" + p.id, u)).status;
+  assert.equal(await open(U.mem), 404, "a member: not found");
+  assert.notEqual(await open(U.stf), 404, "Staff (feed.see_hidden)");
+  await withMin("feed.moderate", "admin", async () => {
+    assert.notEqual(await open(U.stf), 404, "still seen with the action menu raised to Admins");
+  });
+  await withMin("feed.moderate", "assistant", async () => {
+    assert.equal(await open(U.ast), 404, "moderating doesn't show hidden posts to Assistants");
+  });
+});
+
+test("1.99acl: redemption codes are Admin-only on /admin/economy; Pepe in / out of any pad's room is pads.pepe_ctl_any", async () => {
+  let r = await call("GET", "/admin/economy", U.stf);
+  assert.equal(r.status, 200);
+  assert.doesNotMatch(r.text, /id="redemptionCodesList"|id="redemption-codes"/, "Staff: no codes");
+  assert.doesNotMatch(r.text, /href="\/admin\/economy#codes"/, "nor the nav link");
+  r = await call("GET", "/admin/economy", U.own);
+  assert.match(r.text, /id="redemptionCodesList"/);
+  assert.match(r.text, /id="redemption-codes"/);
+  // the room control: its own key (locked "ops", Staff); lowering pads.manage_any doesn't hand it out
+  await rooms.addRoom("Ctl.Room", "Ctl Room", "test").catch(() => {});
+  const slug = (await rooms.get("Ctl.Room")).slug;
+  const src = fs.readFileSync(path.join(repo, "padowner.js"), "utf8");
+  const ctl = src.slice(src.indexOf('"/api/rooms/:slug/owner/pepe-room"'), src.indexOf('kind: "room.ctl"'));
+  assert.match(ctl, /SP\.can\(req\.user, "pads\.pepe_ctl_any"\)/);
+  assert.doesNotMatch(ctl, /can\(req\.user, "pads\.manage_any"\)/);
+  const ctlCall = (u) => call("POST", "/api/rooms/" + encodeURIComponent(slug) + "/owner/pepe-room", u, { verb: "join" });
+  await withMin("pads.manage_any", "assistant", async () => {
+    assert.equal(await rooms.canManage(U.ast, "Ctl.Room"), true, "an Assistant manages the pad now");
+    const r2 = await ctlCall(U.ast);
+    assert.equal(r2.status, 403, JSON.stringify(r2.d));
+    assert.match(r2.d.error, /Prime Time Plus/, "but moves Pepe only like an owner (a Plus pad)");
+  });
+  assert.equal(SP.can(U.stf, "pads.pepe_ctl_any"), true, "Staff: unchanged");
+  const r3 = await ctlCall(U.stf);
+  assert.notEqual(r3.status, 403, "Staff: any pad, no Plus needed - " + JSON.stringify(r3.d));
 });

@@ -13,7 +13,9 @@
 // A locked capability never changes (its reason is shown on /admin/roles); the others can be moved by Pepe's owners
 // and admins on /admin/roles (siteperms.js has the edit rules).
 "use strict";
-var RANK = { assistant: 1, staff: 2, admin: 3 };
+// 1.99acl: no prototype - "constructor", "__proto__", "toString" ... are never a class or a key (every lookup also goes
+// through rankOf / capOf, which ask hasOwnProperty).
+var RANK = Object.create(null); RANK.assistant = 1; RANK.staff = 2; RANK.admin = 3;
 var MIN_CLASSES = ["admin", "staff", "assistant"];
 var CLASS_RANK = { Assistant: 1, Staff: 2, Admin: 3 };
 var GROUPS = ["admin", "accounts", "economy", "games", "pads", "feed", "messages", "creators", "media", "stage", "sound", "pepe", "site"];
@@ -24,7 +26,7 @@ var LOCKS = ["escalation", "credentials", "points", "privacy", "consent", "ops",
 var CAPS = [
   // ── the admin area, roles ──
   ["admin.area", "admin", "staff", null],                       // /admin and every page in it (Assistants: only the pages they hold a capability for)
-  ["admin.sensitive_overview", "admin", "admin", null],         // Overview / Economy / Games: Pepe, Reserve, loans, stale cleanup, admin-only cards
+  ["admin.sensitive_overview", "admin", "admin", "privacy"],    // Overview / Economy / Games: Pepe, Reserve, loans, stale cleanup, admin-only cards
   ["roles.assign", "admin", "admin", "escalation"],             // Admin -> Users -> assign a class (+ Pepe's role ladder)
   ["roles.class_list", "admin", "admin", "escalation"],         // add / remove classes
   ["keys.view", "admin", "admin", "credentials"],               // /admin/keys
@@ -37,12 +39,12 @@ var CAPS = [
   ["accounts.sessions_revoke", "accounts", "admin", "privacy"],
   ["auth.signin_methods", "accounts", "admin", "privacy"],
   ["profile.see_private", "accounts", "admin", "privacy"],
-  ["history.lookup", "accounts", "staff", null],                // anyone's PAT history
+  ["history.lookup", "accounts", "staff", "privacy"],           // anyone's PAT history (1.99acl: locked)
   // ── economy ──
   ["econ.grant_pat", "economy", "admin", "points"],
   ["econ.house_adjust", "economy", "admin", "points"],
   ["econ.codes_manage", "economy", "admin", "points"],
-  ["econ.codes_view", "economy", "staff", null],
+  ["econ.codes_view", "economy", "admin", "points"],            // 1.99acl: was Staff - a live code is redeemable PAT (owner decision)
   ["econ.pepe_econ_cmds", "economy", "admin", "points"],
   ["econ.burn", "economy", "admin", "points"],
   ["econ.padvault_move", "economy", "admin", "points"],
@@ -56,23 +58,24 @@ var CAPS = [
   ["donations.admin", "economy", "admin", "points"],
   ["escrow.override", "economy", "admin", "points"],
   // ── games ──
-  ["games.config", "games", "admin", null],
+  ["games.config", "games", "admin", "points"],
   ["markets.auto", "games", "admin", null],
-  ["raffles.admin", "games", "admin", null],
+  ["raffles.admin", "games", "admin", "points"],
   ["raffles.house", "games", "admin", "points"],                // a House raffle: its PAT prize is paid by the House (1.99ack: split from raffles.admin)
-  ["oracle.admin", "games", "admin", null],
+  ["oracle.admin", "games", "admin", "points"],
   ["casino.admin", "games", "admin", "points"],
   ["quotes.free", "games", "admin", null],
   ["launchpad.admin", "games", "admin", null],
   ["launchpad.metrics", "games", "staff", null],
   // ── pads ──
   ["pads.manage_any", "pads", "staff", null],                   // manage any pad as if its owner (rooms.canManage)
+  ["pads.pepe_ctl_any", "pads", "staff", "ops"],                // 1.99acl: Pepe into / out of any pad's room without Prime Time Plus (split from pads.manage_any)
   ["pads.registry_admin", "pads", "staff", null],               // /pads/admin: owners, front pad, tuning
   ["pads.royalties_config", "pads", "admin", "points"],         // 1.99ack: owner royalties config (was Staff)
   ["pads.vault_rate", "pads", "admin", "points"],               // 1.99ack: any pad's vault payout rate (owners keep their own)
   ["pads.config_view", "pads", "staff", null],
-  ["pads.config", "pads", "admin", null],
-  ["pads.approved_inside", "pads", "staff", null],
+  ["pads.config", "pads", "admin", "points"],
+  ["pads.approved_inside", "pads", "staff", "privacy"],
   ["pads.create_free", "pads", "staff", null],
   ["pads.connect_review", "pads", "assistant", null],           // 1.99ack: was Staff (owner decision 2026-10-18)
   ["pads.send_pepe", "pads", "admin", "ops"],
@@ -81,7 +84,7 @@ var CAPS = [
   // ── feed, trust & safety ──
   ["feed.admin_page", "feed", "staff", null],
   ["feed.moderate", "feed", "staff", null],
-  ["feed.see_hidden", "feed", "staff", null],
+  ["feed.see_hidden", "feed", "staff", "safety"],               // 1.99acl: locked - automod-hidden posts (suspected CSAM too), past paywalls / 18+
   ["feed.tags_remove_any", "feed", "staff", null],
   ["feed.limits_exempt", "feed", "staff", null],
   ["feed.config", "feed", "admin", null],
@@ -97,12 +100,12 @@ var CAPS = [
   ["dm.limits_exempt", "messages", "staff", null],
   ["dm.report_review", "messages", "admin", "privacy"],
   // ── creators, banner, shop ──
-  ["creators.admin", "creators", "staff", null],
+  ["creators.admin", "creators", "staff", "points"],             // refunds / clawbacks
   ["creators.config_explicit", "creators", "admin", null],
   ["creators.pad_flags_any", "creators", "staff", null],
   ["banner.review", "creators", "assistant", null],             // 1.99ack: was Staff (owner decision 2026-10-18)
-  ["banner.config", "creators", "admin", null],
-  ["shop.admin", "creators", "staff", null],
+  ["banner.config", "creators", "admin", "points"],
+  ["shop.admin", "creators", "staff", "points"],                // orders, refunds, buyers' details
   ["shopart.view", "creators", "staff", null],
   ["shopart.admin", "creators", "admin", null],
   ["badges.manage", "creators", "staff", null],
@@ -123,34 +126,41 @@ var CAPS = [
   ["ghost.mode", "stage", "staff", "consent"],
   // ── soundboards, voices, likeness ──
   ["soundboards.moderate", "sound", "assistant", null],         // 1.99ack: was Staff (owner decision 2026-10-18)
-  ["soundboards.config", "sound", "admin", null],
+  ["soundboards.config", "sound", "admin", "points"],
   ["voices.view", "sound", "staff", null],
-  ["voices.manage", "sound", "admin", null],
-  ["voiceclone.view", "sound", "staff", null],
-  ["voiceclone.decide", "sound", "admin", null],
+  ["voices.manage", "sound", "admin", "points"],
+  ["voiceclone.view", "sound", "staff", "consent"],
+  ["voiceclone.decide", "sound", "admin", "consent"],
   ["likeness.view", "sound", "staff", null],                    // 1.99ack: was Admin + the old "Moderator" class (owner decision)
-  ["likeness.manage", "sound", "admin", null],
+  ["likeness.manage", "sound", "admin", "points"],
   // ── Pepe, operations ──
   ["pepe.control", "pepe", "admin", "ops"],
   ["pepe.rooms_commands_audio", "pepe", "admin", "ops"],
-  ["pepe.modlog", "pepe", "admin", null],
-  ["ops.action_ttl", "pepe", "admin", null],
+  ["pepe.modlog", "pepe", "admin", "privacy"],
+  ["ops.action_ttl", "pepe", "admin", "ops"],
   // ── site tools ──
   ["push.admin", "site", "admin", null],
   ["help.admin", "site", "admin", null],
   ["i18n.admin", "site", "admin", null],
 ];
 
-var BY_KEY = {};
+var BY_KEY = Object.create(null);
 for (var i = 0; i < CAPS.length; i++) {
   var c = CAPS[i];
   BY_KEY[c[0]] = { key: c[0], group: c[1], def: c[2], locked: c[3], label: "siteperm.k." + c[0] };
 }
 
+var own = function (o, k) { return o != null && typeof k === "string" && Object.prototype.hasOwnProperty.call(o, k); };
+/** The registry entry for key, or null - never an inherited property ("constructor", "__proto__", ...). */
+function capOf(key) { return own(BY_KEY, key) ? BY_KEY[key] : null; }
+/** One of the three class values ("admin" | "staff" | "assistant") -> its rank, anything else 0. */
+function rankOf(cls) { return own(RANK, cls) ? RANK[cls] : 0; }
+function isClass(cls) { return MIN_CLASSES.indexOf(cls) >= 0 && rankOf(cls) > 0; }
+
 function strict() {
   try { return !!(typeof process !== "undefined" && process.env && (process.env.NODE_TEST_CONTEXT || process.env.SITEPERMS_STRICT)); } catch (e) { return false; }
 }
-var warned = {};
+var warned = Object.create(null);
 /** An unknown key: a typo. Tests throw; production denies (and logs once). */
 function unknown(key) {
   if (strict()) throw new Error("siteperms: unknown capability " + JSON.stringify(key));
@@ -164,16 +174,16 @@ function classRank(u) {
 }
 /** The minimum class that holds key, with these overrides ({key: "admin"|"staff"|"assistant"}). */
 function minOf(overrides, key) {
-  var cap = BY_KEY[key];
+  var cap = capOf(key);
   if (!cap) return null;
   if (cap.locked) return cap.def;
-  var o = overrides && Object.prototype.hasOwnProperty.call(overrides, key) ? overrides[key] : null;
-  return o && RANK[o] ? o : cap.def;
+  var o = own(overrides, key) ? overrides[key] : null;
+  return isClass(o) ? o : cap.def;
 }
 function check(overrides, u, key) {
-  if (!BY_KEY[key]) return unknown(key);
+  if (!capOf(key)) return unknown(key);
   var r = classRank(u);
-  return r > 0 && r >= RANK[minOf(overrides, key)];
+  return r > 0 && r >= rankOf(minOf(overrides, key));
 }
 /** For views rendered without the site's middleware (tests): the defaults, for the subject given or the page's me / viewer. */
 function viewCan(locals) {
@@ -185,6 +195,6 @@ function viewCan(locals) {
 }
 
 var core = { RANK: RANK, MIN_CLASSES: MIN_CLASSES, CLASS_RANK: CLASS_RANK, GROUPS: GROUPS, LOCKS: LOCKS, CAPS: CAPS, BY_KEY: BY_KEY,
-             classRank: classRank, minOf: minOf, check: check, viewCan: viewCan, strict: strict };
+             classRank: classRank, capOf: capOf, rankOf: rankOf, isClass: isClass, minOf: minOf, check: check, viewCan: viewCan, strict: strict };
 if (typeof module !== "undefined" && module.exports) module.exports = core;
 return core;

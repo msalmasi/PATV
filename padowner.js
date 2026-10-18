@@ -371,7 +371,7 @@ async function pageData(R, viewer) {
   const u = (await getQuery("SELECT camfrogUsername, points_balance FROM users WHERE userId = ?", [viewer.userId]))[0] || {};
   const recent = await safe(() => require("./actions").recentFor(viewer.userId, "owner", 6), []);
   return {
-    room: R, slug, camfrog, vaultPad, staff: SP.can(viewer, "pads.manage_any"), mine: !!(R.owner && R.owner.userId === viewer.userId),
+    room: R, slug, camfrog, vaultPad, staff: SP.can(viewer, "pads.manage_any"), ctlAny: SP.can(viewer, "pads.pepe_ctl_any"), mine: !!(R.owner && R.owner.userId === viewer.userId),
     vault, roy, share, prime: prem && prem.pad ? prem.pad : null, primePrice: prem && prem.prices ? prem.prices.prime_time : null,
     primePerks: prem ? prem.perks : null, stage, requested: ownerStage ? ownerStage.requested.length : 0,
     pepe, live, linked: u.camfrogUsername || null, balance: Number(u.points_balance) || 0, recent,
@@ -581,7 +581,7 @@ function register(app, { addUser }) {
     const R = await ownedPad(req, res); if (!R) return;
     const verb = String((req.body || {}).verb || "");
     if (!CTL_VERBS.has(verb)) return bad(res, 400, "Join, leave or rejoin.");
-    const staff = SP.can(req.user, "pads.manage_any");
+    const staff = SP.can(req.user, "pads.pepe_ctl_any");   // 1.99acl: its own key (locked "ops"), split from pads.manage_any
     if (!staff && !require("./premium").isPrimePlus(R.id)) {
       return bad(res, 403, "Pepe sits in Camfrog rooms for 💎 Prime Time Plus pads - get Plus for this pad first.");
     }

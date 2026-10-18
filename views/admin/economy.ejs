@@ -264,8 +264,11 @@
   </section>
 
   <section class="adm-card" id="codes" aria-labelledby="codesT">
-    <h2 id="codesT">Redemption codes</h2>
+    <h2 id="codesT">Redemption codes <span class="adm-pill admin">admins</span></h2>
     <p class="adm-help">Codes members redeem for PAT (paid through the <code>redeem_codes</code> flow). Click a code to see who used it.</p>
+    <%# 1.99acl: a live code is redeemable PAT, so listing them is econ.codes_view (Admins, locked) and adding one econ.codes_manage %>
+    <% if (!_can('econ.codes_view')) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <% if (_can('econ.codes_manage')) { %>
     <form id="redemption-codes" class="adm-form" action="/api/admin/redemption-codes" method="post">
       <label for="code">Code<input type="text" id="code" name="code" required autocomplete="off"></label>
       <label for="points">PAT value<input type="number" id="points" name="points" required></label>
@@ -273,8 +276,10 @@
       <label for="expiration_date">Expires<input type="date" id="expiration_date" name="expiration_date"></label>
       <div class="adm-actions"><button type="submit">Save code</button><span id="codeStatus" class="adm-msg" role="status"></span></div>
     </form>
+    <% } %>
     <h3>Existing codes</h3>
     <div id="redemptionCodesList" class="adm-chips"></div>
+    <% } %>
   </section>
 </div>
 
