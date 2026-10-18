@@ -1353,7 +1353,7 @@ function register(app, deps) {
   // Discord bot purchase (discord-bot/commands/shop.js) - same response shape it always had.
   app.post("/chatshop", async (req, res) => {
     const { product, username, userId, password } = req.body;
-    if (password !== process.env.TWITCH_BOT_TOKEN) {
+    if (!require("./botkeys").isBotToken(password)) {   // 1.99acf: botkeys.js (a key caller, or the shared token - counted)
       return res.status(403).send("Access denied");
     }
     const r = await purchasePrize({ userId, username, prizeId: product, source: "discord" });

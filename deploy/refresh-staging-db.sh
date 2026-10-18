@@ -30,6 +30,17 @@ echo "prod copied: $(du -h "$S/myapp.db.new" | cut -f1), $(sqlite3 "$S/myapp.db.
 pm2 stop patv-staging >/dev/null
 # fold staging's own WAL into its file before it's kept as .previous (its -wal / -shm are deleted below)
 sqlite3 -cmd ".timeout 10000" "$S/myapp.db" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null || true
+# 1.99acf: the per-environment tables stay staging's own (keep-staging-tables.js has the list): bot keys + the key / seam
+# switches + their usage logs + bridge spans come back from staging's DB, prod's hub_outbox rows are dropped (staging's id
+# sequence carries on). Run only now, with staging stopped, so a key minted a moment ago isn't lost. If that can't be done
+# safely the copy is thrown away and staging keeps its old DB - prod's switches (a family's legacy-enforce, events = enforce)
+# would otherwise lock staging Pepe out.
+if ! node "$(dirname "$0")/keep-staging-tables.js" "$S/myapp.db" "$S/myapp.db.new"; then
+  echo "staging's own tables couldn't be kept - staging untouched"
+  rm -f "$S/myapp.db.new" "$S/myapp.db.new-wal" "$S/myapp.db.new-shm"
+  pm2 start patv-staging >/dev/null
+  exit 1
+fi
 mv -f "$S/myapp.db" "$S/myapp.db.previous"
 rm -f "$S/myapp.db-wal" "$S/myapp.db-shm" "$S/myapp.db.previous-wal" "$S/myapp.db.previous-shm"
 mv "$S/myapp.db.new" "$S/myapp.db"

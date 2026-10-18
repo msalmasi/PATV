@@ -5,7 +5,7 @@
 // vm/pepe-supervisor.ps1 + vm/control.py) polls this site over HTTPS, outbound only:
 //
 //   admin (/admin/pepe) --POST /api/pepe/control/command--> pepe_control_cmds (status "pending")
-//   VM poller        --GET  /api/pepe/control/pending--> claims it atomically (at most once)
+//   VM poller        --POST /api/pepe/control/pending--> claims it atomically (at most once)
 //   VM poller        --POST /api/pepe/control/ack-----> accepted / waiting / running / done / failed
 //   VM poller        --POST /api/pepe/control/heartbeat-> status shown in the panel
 //
@@ -14,6 +14,12 @@
 // within 2 minutes or it expires, 3 commands per 10 minutes (all admins together), and an audit
 // log (admin, salted IP hash, command, time, result) shown in the panel. Kinds and modes are a
 // fixed list; the VM runs nothing else.
+//
+// The claim is a POST (R-11 review, SEC-1): a GET on the site is the kind of request a chat name walked onto a bot-only
+// route with Pepe's key ("!tip ../../../pepe/control/pending" - fixed on his side too), and a GET claim swallowed the
+// owner's pending restart. The old GET stays for VM pollers that predate the POST (camfrog-bot vm/control.py before
+// 1.99abz review) until an owner sets "Claim over GET" to refuse on /admin/keys (botkeys setting control_get); the route
+// log there shows which method the VM still uses. Refused -> 405 {error:"method"}, nothing claimed.
 //
 // "Pepe's look" (1.99bv): costume / persona / persona voice / costume-persona link / reset. These
 // need Pepe RUNNING, so unlike restarts they go through his normal website-action queue
@@ -361,7 +367,12 @@ async function view() {
   };
 }
 
-function register(app, { isBotToken, addUser }) {
+/** May the VM still claim with the old GET? botkeys setting control_get (/admin/keys): allow (the default) | refuse. */
+function claimGetOk() {
+  try { return require("./botkeys").settings().control_get !== "refuse"; } catch (e) { return true; }
+}
+
+function register(app, { isBotToken, addUser, ...opts }) {
   ensure().catch((e) => console.error("[pepecontrol] init:", e.message));
   // the panel partial makes its CSRF token with this (views/partials/pepe-control.ejs)
   app.locals.pepeCtlCsrf = csrfToken;
@@ -405,9 +416,14 @@ function register(app, { isBotToken, addUser }) {
   });
 
   // ── the VM supervisor (bot token; it only ever calls out) ──
-  app.get("/api/pepe/control/pending", noStore, bot, async (req, res) => {
+  const claimRoute = async (req, res) => {
     try { res.json({ command: await claim() }); } catch (e) { console.error("[pepecontrol] claim:", e.message); send(res, e); }
-  });
+  };
+  // the old GET claim: allowed until an owner refuses it (botkeys control_get) - checked before anything is claimed
+  const getOk = typeof opts.claimGetOk === "function" ? opts.claimGetOk : claimGetOk;
+  const claimGet = (req, res, next) => (getOk() ? next() : res.status(405).set("Allow", "POST").json({ error: "method" }));
+  app.post("/api/pepe/control/pending", noStore, bot, claimRoute);
+  app.get("/api/pepe/control/pending", noStore, bot, claimGet, claimRoute);
   app.post("/api/pepe/control/ack", bot, async (req, res) => {
     const b = req.body || {};
     try { res.json(await ack({ id: b.id, nonce: b.nonce, status: b.status, detail: b.detail })); } catch (e) { send(res, e); }
@@ -417,5 +433,5 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, request, claim, ack, heartbeat, view, csrfToken, csrfOk, issueNonce, takeNonce, ipHash, init, expireStale,
+module.exports = { register, request, claim, ack, heartbeat, view, csrfToken, csrfOk, issueNonce, takeNonce, ipHash, init, expireStale, claimGetOk,
   lookRequest, lookResult, lookFrom, KINDS, MODES, LOOK_VERBS, PICKUP_MS, RATE_MAX, _setClock };

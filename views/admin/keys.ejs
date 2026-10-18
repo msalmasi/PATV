@@ -1,0 +1,197 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'keys', admIsAdmin: isAdmin }) %>
+<%# views/admin/keys.ejs - 1.99acf /admin/keys (adminkeys.js, botkeys.js): per-caller bot keys (mint / rotate / revoke, scopes,
+    observe -> enforce), route families and their legacy-enforce switches, legacy token use, the route log, /events auth, and the
+    chat tickets + hub seam switches. Admins see it; only owners change anything (public/js/admin-keys.js). %>
+<%
+  const V = view;
+  const fmtFn = (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt);
+  const when = (ms) => ms ? fmtFn(Number(ms), 'datetime') : '–';
+  const num = (n) => Number(n || 0).toLocaleString('en-US');
+  const live = V.keys.filter((k) => !k.revoked_at);
+  const seamS = (V.seam && V.seam.outbox && V.seam.outbox.settings) || {};
+  const tk = (V.seam && V.seam.tickets) || {};
+  const ob = (V.seam && V.seam.outbox) || {};
+  const sp = (V.seam && V.seam.spans) || {};
+  const dis = owner ? '' : ' disabled';
+  const retire = (z) => z == null ? t('admkeys.legacy.never') : z === 0 ? t('admkeys.legacy.today') : t('admkeys.legacy.days_ago', { count: z });
+%>
+<div class="adm-head">
+  <h1><%- t('admkeys.title') %></h1>
+  <p><%- t('admkeys.lede') %></p>
+  <% if (!owner) { %><p class="adm-help" id="akNotOwner"><%- t('admkeys.owner_note') %></p><% } %>
+</div>
+
+<section class="adm-card" id="keys" aria-labelledby="akKeysT" data-owner="<%= owner ? 1 : 0 %>">
+  <h2 id="akKeysT"><%- t('admkeys.keys.h') %>
+    <span class="adm-pill <%= V.settings.enabled ? 'ok' : 'bad' %>"><%- V.settings.enabled ? t('admkeys.keys.header_on') : t('admkeys.keys.header_off') %></span></h2>
+  <p class="adm-help"><%- t('admkeys.keys.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admkeys.col.caller') %></th><th><%- t('admkeys.col.mode') %></th><th><%- t('admkeys.keys.observed_days') %></th><th><%- t('admkeys.keys.last_used') %></th><th><%- t('admkeys.col.history') %></th><th><%- t('admkeys.col.label') %></th><th></th></tr></thead>
+    <tbody>
+      <% if (!V.keys.length) { %><tr><td class="empty" colspan="7"><%- t('admkeys.keys.none') %></td></tr><% } %>
+      <% V.keys.forEach((k) => { %><tr data-caller="<%= k.caller %>">
+        <td><code style="white-space:nowrap"><%= k.caller %></code></td>
+        <td><% if (k.revoked_at) { %><span class="adm-pill bad"><%- t('admkeys.keys.revoked') %></span><% } else { %><span class="adm-pill <%= k.mode === 'enforce' ? 'ok' : '' %>"><%- t('admkeys.keys.mode.' + k.mode) %></span><% } %></td>
+        <td><%= k.revoked_at ? '–' : k.observed_days %></td>
+        <td><%= when(k.last_used_at) %></td>
+        <td class="adm-help"><%- t('admkeys.keys.created', { when: when(k.created_at), by: k.created_by || '?' }) %><% if (k.rotated_at) { %><br><%- t('admkeys.keys.rotated', { when: when(k.rotated_at) }) %><% } %><% if (k.grace_until) { %><br><%- t('admkeys.keys.grace_until', { when: when(k.grace_until) }) %><% } %><% if (k.revoked_at) { %><br><%- t('admkeys.keys.revoked_on', { when: when(k.revoked_at), by: k.revoked_by || '?' }) %> <%= k.revoked_why || '' %><% } %></td>
+        <td><%= k.label || '' %></td>
+        <td>
+          <% if (!k.revoked_at) { %>
+          <div class="adm-inline">
+            <label class="sr-only" for="akGrace-<%= k.caller %>"><%- t('admkeys.keys.grace') %></label>
+            <select id="akGrace-<%= k.caller %>" data-grace="<%= k.caller %>"<%- dis %>>
+              <% [0, 1, 6, 24, 48, 72].forEach((h) => { %><option value="<%= h %>"<%= h === V.grace_default_h ? ' selected' : '' %>><%- t('admkeys.keys.grace_h', { n: h }) %></option><% }) %>
+            </select>
+            <button type="button" data-act="rotate" data-caller="<%= k.caller %>"<%- dis %>><%- t('admkeys.keys.rotate') %></button>
+          </div>
+          <div class="adm-inline">
+            <label class="sr-only" for="akWhy-<%= k.caller %>"><%- t('admkeys.keys.reason') %></label>
+            <input type="text" id="akWhy-<%= k.caller %>" data-why="<%= k.caller %>" maxlength="200" placeholder="<%- t('admkeys.keys.reason') %>"<%- dis %>>
+            <button type="button" class="danger" data-act="revoke" data-caller="<%= k.caller %>"<%- dis %>><%- t('admkeys.keys.revoke') %></button>
+          </div>
+          <% } %>
+        </td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+  <form class="adm-form" id="akMint" autocomplete="off">
+    <label for="akCaller"><%- t('admkeys.keys.caller') %><input type="text" id="akCaller" maxlength="32" pattern="[a-z][a-z0-9\-]{1,31}" placeholder="pepe" required<%- dis %>></label>
+    <label for="akLabel"><%- t('admkeys.col.label') %><input type="text" id="akLabel" maxlength="80"<%- dis %>></label>
+    <div class="adm-actions"><button type="submit"<%- dis %>><%- t('admkeys.keys.mint') %></button><span class="adm-msg" id="akMsg" role="status"></span></div>
+  </form>
+  <div id="akSecretBox" hidden><div class="ds-note warn" role="alert">
+    <span class="ds-ic" aria-hidden="true">🔑</span>
+    <div>
+      <p><b><%- t('admkeys.keys.secret_once') %></b></p>
+      <p><code id="akSecret" style="word-break:break-all"></code></p>
+      <div class="adm-actions"><button type="button" id="akCopy"><%- t('admkeys.keys.copy') %></button><button type="button" id="akDone"><%- t('admkeys.keys.done') %></button></div>
+    </div>
+  </div></div>
+  <h3><%- t('admkeys.set.h') %></h3>
+  <form class="adm-form" id="akSettings">
+    <label><input type="checkbox" id="akEnabled"<%= V.settings.enabled ? ' checked' : '' %><%- dis %>> <%- t('admkeys.set.enabled') %></label>
+    <label for="akBadKey"><%- t('admkeys.set.bad_key') %>
+      <select id="akBadKey"<%- dis %>>
+        <option value="fallback"<%= V.settings.bad_key === 'fallback' ? ' selected' : '' %>><%- t('admkeys.set.fallback') %></option>
+        <option value="refuse"<%= V.settings.bad_key === 'refuse' ? ' selected' : '' %>><%- t('admkeys.set.refuse') %></option>
+      </select></label>
+    <label for="akCtlGet"><%- t('admkeys.set.control_get') %>
+      <select id="akCtlGet"<%- dis %>>
+        <option value="allow"<%= V.settings.control_get !== 'refuse' ? ' selected' : '' %>><%- t('admkeys.set.control_get_allow') %></option>
+        <option value="refuse"<%= V.settings.control_get === 'refuse' ? ' selected' : '' %>><%- t('admkeys.set.control_get_refuse') %></option>
+      </select></label>
+    <p class="adm-help"><%- t('admkeys.set.control_get_help') %></p>
+    <div class="adm-actions"><button type="submit"<%- dis %>><%- t('admkeys.save') %></button><span class="adm-msg" id="akSetMsg" role="status"></span></div>
+  </form>
+</section>
+
+<section class="adm-card" id="scopes" aria-labelledby="akScT">
+  <h2 id="akScT"><%- t('admkeys.scopes.h') %></h2>
+  <p class="adm-help"><%- t('admkeys.scopes.help', { days: V.observe_days }) %></p>
+  <% if (!live.length) { %><p class="adm-help"><%- t('admkeys.keys.none') %></p><% } %>
+  <% live.forEach((k) => { const obs = V.observed[k.caller] || []; const fams = [...new Set(obs.map((o) => o.family).concat(k.scopes))].sort(); const young = k.observed_days < V.observe_days; %>
+  <form class="adm-form one" data-scopes="<%= k.caller %>">
+    <h3><code><%= k.caller %></code> <span class="adm-pill <%= k.mode === 'enforce' ? 'ok' : '' %>"><%- t('admkeys.keys.mode.' + k.mode) %></span></h3>
+    <% if (!fams.length) { %><p class="adm-help"><%- t('admkeys.scopes.nothing') %></p><% } %>
+    <ul class="adm-list">
+      <% fams.forEach((f) => { const o = obs.find((x) => x.family === f) || { n: 0, refused: 0 }; const inScope = k.mode === 'enforce' ? k.scopes.includes(f) : true; %>
+      <li><label><input type="checkbox" value="<%= f %>"<%= inScope ? ' checked' : '' %><%- dis %>> <code><%= f %></code></label>
+        <span class="adm-help"><%- t('admkeys.scopes.count', { n: num(o.n) }) %><% if (o.refused) { %> · <span class="adm-pill bad"><%- t('admkeys.scopes.refused', { n: num(o.refused) }) %></span><% } %></span>
+        <% if (o.refused && !k.scopes.includes(f)) { %><button type="button" class="adm-btn sm" data-act="grant" data-caller="<%= k.caller %>" data-family="<%= f %>"<%- dis %>><%- t('admkeys.scopes.grant') %></button><% } %>
+      </li><% }) %>
+    </ul>
+    <% if (young) { %><label><input type="checkbox" data-early<%- dis %>> <%- t('admkeys.scopes.early', { n: k.observed_days, days: V.observe_days }) %></label><% } %>
+    <div class="adm-actions">
+      <button type="button" data-act="enforce" data-caller="<%= k.caller %>" data-young="<%= young ? 1 : 0 %>"<%= young || !owner ? ' disabled' : '' %>><%- t('admkeys.scopes.save_enforce') %></button>
+      <% if (k.mode === 'enforce') { %><button type="button" class="ghost" data-act="observe" data-caller="<%= k.caller %>"<%- dis %>><%- t('admkeys.scopes.back_observe') %></button><% } %>
+      <span class="adm-msg" role="status"></span>
+    </div>
+  </form>
+  <% }) %>
+</section>
+
+<section class="adm-card" id="families" aria-labelledby="akFamT">
+  <h2 id="akFamT"><%- t('admkeys.fam.h') %></h2>
+  <p class="adm-help"><%- t('admkeys.fam.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admkeys.col.family') %></th><th><%- t('admkeys.fam.legacy14') %></th><th><%- t('admkeys.fam.last_legacy') %></th><th><%- t('admkeys.fam.key_requests') %></th><th><%- t('admkeys.fam.enforce') %></th></tr></thead>
+    <tbody>
+      <% if (!V.families.length) { %><tr><td class="empty" colspan="5"><%- t('admkeys.fam.none') %></td></tr><% } %>
+      <% V.families.forEach((f) => { %><tr>
+        <td><code><%= f.family %></code></td><td><%= num(f.legacy14) %></td><td><%= when(f.legacy_last) %></td><td><%= num(f.keys) %></td>
+        <td><button type="button" class="adm-btn sm<%= f.legacy_enforce ? '' : ' ghost' %>" data-act="family" data-family="<%= f.family %>" data-on="<%= f.legacy_enforce ? 0 : 1 %>" data-nonzero="<%= f.legacy14 > 0 ? 1 : 0 %>"<%- dis %>><%- f.legacy_enforce ? t('admkeys.fam.on') : t('admkeys.fam.off') %></button></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="legacy" aria-labelledby="akLegT">
+  <h2 id="akLegT"><%- t('admkeys.legacy.h') %></h2>
+  <div class="ds-note"><span class="ds-ic" aria-hidden="true">⏳</span><div>
+    <p><%- t('admkeys.legacy.banner', { when: retire(V.retire.shared.zero_days) }) %></p>
+    <p><%- t('admkeys.legacy.discord', { when: retire(V.retire.discord.zero_days) }) %></p>
+  </div></div>
+  <p class="adm-help"><%- t('admkeys.legacy.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admkeys.col.route') %></th><th><%- t('admkeys.col.hint') %></th><th><%- t('admkeys.col.token') %></th><th><%- t('admkeys.col.n') %></th><th><%- t('admkeys.col.refused') %></th><th><%- t('admkeys.col.last') %></th></tr></thead>
+    <tbody>
+      <% if (!V.legacy.length) { %><tr><td class="empty" colspan="6"><%- t('admkeys.legacy.none') %></td></tr><% } %>
+      <% V.legacy.forEach((r) => { %><tr><td><code><%= r.route %></code></td><td><%= r.caller_hint %></td><td><%= r.token %></td><td><%= num(r.n) %></td><td><%= num(r.refused) %></td><td><%= when(r.last_at) %></td></tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="routes" aria-labelledby="akRtT">
+  <h2 id="akRtT"><%- t('admkeys.routes.h') %></h2>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admkeys.col.caller') %></th><th><%- t('admkeys.col.method') %></th><th><%- t('admkeys.col.route') %></th><th><%- t('admkeys.col.family') %></th><th><%- t('admkeys.col.n') %></th><th><%- t('admkeys.col.refused') %></th><th><%- t('admkeys.col.last') %></th></tr></thead>
+    <tbody>
+      <% if (!V.routes.length) { %><tr><td class="empty" colspan="7"><%- t('admkeys.routes.none') %></td></tr><% } %>
+      <% V.routes.forEach((r) => { %><tr><td><code><%= r.caller %></code></td><td><%= r.method %></td><td><code><%= r.route %></code></td><td><code><%= r.family %></code></td><td><%= num(r.n) %></td><td><%= num(r.refused) %></td><td><%= when(r.last_at) %></td></tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="events" aria-labelledby="akEvT">
+  <h2 id="akEvT"><%- t('admkeys.events.h') %> <span class="adm-pill <%= V.settings.events === 'enforce' ? 'ok' : '' %>"><%- t('admkeys.events.' + V.settings.events) %></span></h2>
+  <p class="adm-help"><%- t('admkeys.events.help') %></p>
+  <form class="adm-form" id="akEvents">
+    <label for="akEvMode"><%- t('admkeys.col.mode') %>
+      <select id="akEvMode"<%- dis %>>
+        <option value="observe"<%= V.settings.events === 'observe' ? ' selected' : '' %>><%- t('admkeys.events.observe') %></option>
+        <option value="enforce"<%= V.settings.events === 'enforce' ? ' selected' : '' %>><%- t('admkeys.events.enforce') %></option>
+      </select></label>
+    <div class="adm-actions"><button type="submit"<%- dis %>><%- t('admkeys.save') %></button><span class="adm-msg" id="akEvMsg" role="status"></span></div>
+  </form>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admkeys.col.day') %></th><th><%- t('admkeys.col.type') %></th><th><%- t('admkeys.col.chan') %></th><th><%- t('admkeys.col.auth') %></th><th><%- t('admkeys.col.n') %></th></tr></thead>
+    <tbody>
+      <% if (!V.events_log.length) { %><tr><td class="empty" colspan="5"><%- t('admkeys.events.none') %></td></tr><% } %>
+      <% V.events_log.forEach((r) => { %><tr><td><%= r.day %></td><td><%= r.type %></td><td><%= r.chan %></td><td><span class="adm-pill <%= r.auth === 'key' || r.auth === 'session' ? 'ok' : r.auth === 'mismatch' ? 'bad' : '' %>"><%= r.auth %></span></td><td><%= num(r.n) %></td></tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="seam" aria-labelledby="akSeamT">
+  <h2 id="akSeamT"><%- t('admkeys.seam.h') %></h2>
+  <p class="adm-help"><%- t('admkeys.seam.help') %></p>
+  <div class="adm-kv">
+    <div><b><%- t('admkeys.seam.tickets') %></b><span><span class="adm-dot <%= tk.on && tk.key ? 'ok' : '' %>"></span> <%- tk.key ? t('admkeys.seam.key_ok', { kid: tk.kid || '?', prev: tk.prev_kid || '–' }) : t('admkeys.seam.key_missing') %> · <%- t('admkeys.seam.minted', { n: num(tk.minted_today) }) %></span></div>
+    <div><b><%- t('admkeys.seam.jwks') %></b><span><% if (tk.key) { %><a href="/.well-known/patv-jwks.json">/.well-known/patv-jwks.json</a><% } else { %>–<% } %></span></div>
+    <div><b><%- t('admkeys.seam.outbox') %></b><span><%- t('admkeys.seam.outbox_state', { pending: num(ob.pending), posted: num(ob.posted), oldest: when(ob.oldest_pending) }) %> · <%- ob.configured ? (ob.insecure ? '<span class="adm-pill bad">' + t('admkeys.seam.hub_insecure') + '</span>' : t('admkeys.seam.hub_on')) : t('admkeys.seam.hub_off') %><% Object.keys(ob.failing || {}).forEach((tp) => { const f = ob.failing[tp]; %> · <span class="adm-pill bad"><code><%= tp %></code> <%= f.status || f.error || '' %></span><% }) %></span></div>
+    <div><b><%- t('admkeys.seam.heartbeat') %></b><span><% if (ob.heartbeat) { %><span class="adm-dot <%= ob.heartbeat.ok ? 'ok' : 'bad' %>"></span> <%= when(ob.heartbeat.at) %> <%= ob.heartbeat.ok ? '' : (ob.heartbeat.error || ob.heartbeat.status || '') %><% } else { %><%- t('admkeys.seam.never') %><% } %></span></div>
+    <div><b><%- t('admkeys.seam.spans') %></b><span><%- t('admkeys.seam.spans_state', { open: num(sp.open), today: num(sp.today) }) %></span></div>
+  </div>
+  <form class="adm-form" id="akSeam">
+    <% ['tickets', 'heartbeat', 'sessions', 'privacy', 'econ', 'spans'].forEach((k) => { %>
+    <label><input type="checkbox" data-seam="<%= k %>"<%= seamS[k] ? ' checked' : '' %><%- dis %>> <%- t('admkeys.seam.switch.' + k) %></label>
+    <% }) %>
+    <div class="adm-actions"><button type="submit"<%- dis %>><%- t('admkeys.save') %></button><span class="adm-msg" id="akSeamMsg" role="status"></span></div>
+  </form>
+</section>
+<script src="/public/js/admin-keys.js?v=3" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

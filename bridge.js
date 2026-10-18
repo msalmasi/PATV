@@ -30,6 +30,9 @@ const RA = require("./roomactivity");      // 1.99cj: rolling per-room activity 
 const FEED_KEEP = 200;
 const STALE_MS = 90 * 1000;              // no sync for this long -> the room shows as offline
 const MAX_EVENTS = 500, MAX_ROOMS = 20, MAX_MEMBERS = 400;
+// 1.99acf: the inbound text cap - 490 characters on every Camfrog path (chat lines, transcripts, a web sender's words; was 400),
+// the same as Pepe's BRIDGE_MAX_TEXT (bot 1.99abz) and the chat hub's Camfrog limit (the chat design §10.7)
+const INBOUND_MAX = 490;
 const TRANSCRIPT = "x.pepe.transcript";      // Pepe's mic transcripts (a PCP extension event)
 const FEED_TYPES = new Set(["message", TRANSCRIPT, "member.join", "member.leave", "mic.grab", "mic.release", "room.update"]);
 // 1.99hq: a new listener is primed with only the last ~0.5 s (was the last 3 chunks = ~3 s of old audio); Pepe
@@ -47,6 +50,13 @@ const ready = (async () => {
 // ── sanitising (Pepe already cleans; this is the second line) ──
 const CTRL = /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g;
 const str = (v, n) => String(v == null ? "" : v).replace(CTRL, " ").replace(/\s+/g, " ").trim().slice(0, n);
+// 1.99acf: the INBOUND_MAX text paths cap by code points, like Pepe's len() - an emoji (two UTF-16 units) counts once, and a cut
+// never leaves half a surrogate pair (a 490-character line Pepe sends whole stays whole here; the chat design §10.7 parity)
+const cpStr = (v, n) => {
+  const s = String(v == null ? "" : v).replace(CTRL, " ").replace(/\s+/g, " ").trim();
+  if (s.length <= n) return s;                     // fewer UTF-16 units than n: fewer code points too
+  return Array.from(s).slice(0, n).join("").replace(/[\uD800-\uDBFF]$/, "");
+};
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:~\-]{0,127}$/;
 // a Camfrog display name as plain text: <b><n>lou</n></b> -> lou (Pepe strips it too; 1.99ea)
 const plain = (v, n) => str(String(v == null ? "" : v).replace(/<[^>]*>/g, ""), n);
@@ -185,7 +195,7 @@ function jobSender(J, raw) {
 const POSTED_RE = /^\u{1F310} .{1,80}? \((?:PATV )?web\): (.+)$/su;
 function postedWords(line) {
   const m = POSTED_RE.exec(String(line || ""));
-  return m ? str(m[1], 400) : "";
+  return m ? cpStr(m[1], INBOUND_MAX) : "";
 }
 
 /** One PCP event -> a feed item (or null). `roomId` = the room it came from (1.99acb: a relay echo's job must match it). */
@@ -210,7 +220,7 @@ function feedItem(ev, roomId = null) {
           return null;
         }
         const wu = cleanUser(w.user, true);
-        const wt = str(w.text, 400);
+        const wt = cpStr(w.text, INBOUND_MAX);
         const tag = jid ? { _job: jid } : {};
         if (wu && !wu.anon && !wu.self && wt) return Object.assign({ k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt }, tag);
         // 1.99acb: Pepe's sender ref didn't pass (a lost ref, a failed label lookup) but the job says who sent it: still THEIR
@@ -231,7 +241,7 @@ function feedItem(ev, roomId = null) {
         }
       }
       const u = cleanUser(d.user);
-      const text = str(d.text, 400);
+      const text = cpStr(d.text, INBOUND_MAX);
       if (!u || !text || u.anon) return null;          // Pepe never sends an opted-out user's line; belt and braces
       // 1.99xu: the caption of Pepe's own TTS mic-up ("🔊 <line>", tagged by the bot as the audio starts). The same mic-up
       // reaches the pad as its 🎙 transcript line, so ingest() drops this one while the room has transcripts on.
@@ -257,7 +267,7 @@ function feedItem(ev, roomId = null) {
     }
     case TRANSCRIPT: {
       const u = cleanUser(d.user);
-      const text = str(d.text, 400);
+      const text = cpStr(d.text, INBOUND_MAX);
       if (!u || !text || u.anon) return null;
       const id = /^tx-[0-9a-f]{8,32}$/.test(String(d.id || "")) ? String(d.id) : null;
       return id ? { k: "tx", ts, u, text, id } : { k: "tx", ts, u, text };
@@ -544,6 +554,8 @@ async function ingest(body) {
     summary(false).then((s) => require("./rooms").frontRoom(s)).catch((e) => console.error("[bridge] front room:", e.message));
   }
   for (const id of wake) wakeRoom(id);           // 1.99ye: the pad pages waiting on this room answer now
+  // 1.99acf: when each room was bridged (bridgespans.js, for the later VM-log import) - queued, never blocks or fails the sync
+  try { require("./bridgespans").note(body, now); } catch (e) { console.error("[bridge] spans:", e.message); }
   return { rooms: touched.size, items: newItems.length };
 }
 

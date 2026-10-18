@@ -42,7 +42,7 @@ module.exports = {
     } catch (error) {
       if (error.response && error.response.status === 400 && error.response.data === 'Insufficient balance') {
         // Fetch user's current balance and inform them of insufficient funds
-        const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
+        const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`);
         const balance = balanceResponse.data.balance;
         interaction.reply({ content: `${interaction.user} (PAT ${balance}), you don't have enough PAT to buy ${amount} poker chips.`, ephemeral: true });
       } else {

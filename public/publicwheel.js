@@ -354,9 +354,10 @@ function acknowledgeSpin(spinId) {
       console.log('Acknowledgment response:', data);
       if (data.success) {
           console.log("Spin command received:", data);
-          const parts = data.message.split(' '); // "public spinid <spinId> from <username>"
-          // the PATV display name (the username in the message is e.g. "CFxxxxxxxx" for Pepe's accounts)
-          const spinnerName = (data.spinner && data.spinner.display) || parts[4];
+          const parts = data.message.split(' '); // "public spinid <spinId> from <username>" (1.99acf: "... from someone" / no name)
+          // the PATV display name (the username in the message is e.g. "CFxxxxxxxx" for Pepe's accounts); 1.99acf: an
+          // incognito spinner comes as {anon: true} with no name - "someone" (this overlay is English, like NOW SPINNING)
+          const spinnerName = data.spinner && data.spinner.anon ? 'someone' : ((data.spinner && data.spinner.display) || parts[4] || '');
           window.spinnerCss = (data.spinner && data.spinner.nameCss) || '';
           const sId = parts[2];
           // targetIndex is the server-chosen winning slice — the wheel animates to it.

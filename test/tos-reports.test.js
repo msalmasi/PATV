@@ -381,6 +381,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.equal(terms.PRIVACY_UPDATED, "18 October 2026");     // 1.99acd: browser notifications (1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
   assert.match(p.text, /18 October 2026:<\/b> added <a href="#browser-notifications">/, "a dated change note for 1.99acd");
   assert.match(p.text, /id="browser-notifications"/);
+  assert.match(p.text, /A flag for the country you last signed in from/, "1.99abt's row is on the page");
   assert.match(p.text, /15 October 2026:<\/b> added <a href="#livecams">/, "a dated change note for 1.99aax");
   assert.match(p.text, /id="forget"/);
   assert.match(p.text, /ghost mode/);

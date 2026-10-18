@@ -10,8 +10,10 @@ const BACKEND = process.env.BACKEND_BASE_URL || 'https://publicaccess.tv';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 1.99fy: the PATV user lookups (/api/users/...) are bot-only now. This selfbot has no .env of its
-// own, so the token comes from the environment, else the Discord bot's .env next door, else the
-// site's .env (the same shared bot token). Sent as an X-Bot-Token header to BACKEND only; never logged.
+// own, so the token comes from the environment, else the Discord bot's .env next door. Sent as an
+// X-Bot-Token header to BACKEND only; never logged. 1.99acf (R-11, the per-caller key split): the
+// fallback to the site's own TWITCH_BOT_TOKEN is gone - the selfbot only drives the retired PokerNow
+// bridge, so it gets no key of its own and never borrows the site's token.
 function readEnvKey(file, key) {
   try {
     const re = new RegExp('^\\s*' + key + '\\s*=\\s*(.*?)\\s*$', 'm');
@@ -21,8 +23,7 @@ function readEnvKey(file, key) {
 }
 const path = require('path');
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
-  || readEnvKey(path.join(__dirname, '..', 'discord-bot', '.env'), 'DISCORD_BOT_TOKEN')
-  || readEnvKey(path.join(__dirname, '..', '.env'), 'TWITCH_BOT_TOKEN');
+  || readEnvKey(path.join(__dirname, '..', 'discord-bot', '.env'), 'DISCORD_BOT_TOKEN');
 if (!BOT_TOKEN) console.error('[discordself] no bot token found - PATV user lookups will be refused');
 
 // ── PokerNow new-game registration ─────────────────────────────────────────────

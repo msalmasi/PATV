@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const axios = require('axios');
 const { findOrCreateDiscordUser } = require('../userUtils');
 const EventSource = require('eventsource');
+const { sseHeaders } = require('../backendAuth');   // 1.99acf: X-PATV-Key on the /events streams when PATV_KEY is set
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -56,15 +57,14 @@ module.exports = {
 
 async function setupResultsListener(spinId, interaction, user) {
   
-  const eventSource1 = new EventSource(
-    process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${spinId}`
-  );  
+  const resultsUrl = process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${encodeURIComponent(spinId)}`;
+  const eventSource1 = new EventSource(resultsUrl, sseHeaders(resultsUrl));
 
   eventSource1.onmessage = async function (event) {
     const result = JSON.parse(event.data);
     console.log("Spin result received:", result);
 
-    const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
+    const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`);
     const spinnerBalance = spinnerBalanceResponse.data.balance;
 
     if (result.jackpot) {
@@ -95,9 +95,8 @@ async function setupResultsListener(spinId, interaction, user) {
 }
 
 async function setupWagerListener(spinId, interaction) {
-    const eventSource = new EventSource(
-        process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
-      );
+    const spinUrl = process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${encodeURIComponent(spinId)}`;
+    const eventSource = new EventSource(spinUrl, sseHeaders(spinUrl));
 
   eventSource.onmessage = async function (event) {
     const data = JSON.parse(event.data);
@@ -106,7 +105,7 @@ async function setupWagerListener(spinId, interaction) {
     if (data.message.includes("public spinid") && data.spinId) {
       var spinnerUsername = data.message.split(" ")[4];
       console.log (spinnerUsername);
-      const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
+      const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(spinnerUsername)}/balance`);
       const spinnerBalance = spinnerBalanceResponse.data.balance;
       await interaction.editReply(
         `${interaction.user} is spinning the wheel for PAT 5000, good luck! (New Balance: PAT ${spinnerBalance}).`

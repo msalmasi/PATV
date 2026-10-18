@@ -106,3 +106,54 @@ test("DRY_RUN logs instead of restarting", { skip: !hasBash }, () => {
   assert.match(run(T0 + 20, { DRY_RUN: "1" }), /\(dry run\) would restart relay pid 4242/);
   assert.deepEqual(lines("killed"), []);
 });
+
+// 1.99acf: with OPS_PATV_KEY in the site's .env the alert sends it as X-PATV-Key - from a pipe (curl -H @file), never on the
+// command line - and keeps the bot token in the body as the fallback. A fake curl first on PATH records what it was given.
+const hasPy = hasBash && spawnSync("bash", ["-c", "python3 -c 'print(1)'"], { stdio: "ignore", timeout: 20000 }).status === 0;
+test("1.99acf: the alert carries OPS_PATV_KEY as X-PATV-Key through a header file, never argv; the token stays in the body", { skip: !hasPy }, () => {
+  fs.mkdirSync(path.join(dir, "bin"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "bin", "curl"), [
+    "#!/usr/bin/env bash",
+    'out="$FAKE_CURL_LOG"',
+    "while [ $# -gt 0 ]; do",
+    '  case "$1" in',
+    '    -H) shift; if [ "${1#@}" != "$1" ]; then echo "HFILE:$(cat "${1#@}")" >> "$out"; else echo "H:$1" >> "$out"; fi ;;',
+    '    --data-binary) shift; echo "BODY:$(cat)" >> "$out" ;;',
+    "    -m) shift ;;",
+    "    -s) ;;",
+    '    *) echo "ARG:$1" >> "$out" ;;',
+    "  esac",
+    "  shift",
+    "done",
+    "echo '{\"ok\":true}'",
+    "",
+  ].join("\n"), { mode: 0o755 });
+  const envFile = P("site.env");
+  const log = P("curl.log");
+  const binPath = P("bin").replace(/^([A-Za-z]):/, (m, d) => "/" + d.toLowerCase());     // a Git Bash path on Windows
+  const go = (envText) => {
+    reset();
+    fs.rmSync(log, { force: true });
+    fs.writeFileSync(envFile, envText);
+    const sh = (now) => spawnSync("bash", ["-c", `export PATH="${binPath}:$PATH"; exec bash "$0"`, SCRIPT], {
+      env: { ...process.env, HLS: P("broadcast.m3u8"), NGINX_ERR: P("error.log"), STATE: P("state"), WD_PID: "4242", WD_UP: "3600",
+             WD_NOW: String(now), WD_KILL: P("killed"), WD_ALERT: "", SITE_ENV: envFile, SITE: "http://127.0.0.1:9", FAKE_CURL_LOG: log },
+      encoding: "utf8", input: "", timeout: 30000 });
+    scene({ bad: true, splits: 500, now: T0 });
+    sh(T0);
+    scene({ bad: true, splits: 500, now: T0 + 20 });
+    const r = sh(T0 + 20);
+    return { out: r.stdout + r.stderr, log: fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "" };
+  };
+  let r = go('TWITCH_BOT_TOKEN=tok-secret-1\nOPS_PATV_KEY="ops.KEYSECRETKEYSECRETKEYSECRETKEYSECRETKEYSEC"\n');
+  assert.match(r.out, /alert sent/, r.out);
+  assert.match(r.log, /^HFILE:X-PATV-Key: ops\.KEYSECRETKEYSECRETKEYSECRETKEYSECRETKEYSEC$/m, "the key, from a header file: " + r.log);
+  const args = r.log.split("\n").filter((l) => l.startsWith("ARG:") || l.startsWith("H:")).join("\n");
+  assert.ok(!args.includes("KEYSECRET") && !args.includes("tok-secret-1"), "neither secret on the command line: " + args);
+  assert.equal(JSON.parse(r.log.match(/^BODY:(.*)$/m)[1]).password, "tok-secret-1", "the token stays in the body (fallback)");
+  r = go("TWITCH_BOT_TOKEN=tok-secret-1\n");
+  assert.match(r.out, /alert sent/);
+  assert.ok(!/HFILE:/.test(r.log), "no key configured: no X-PATV-Key header");
+  r = go("SOMETHING_ELSE=1\n");
+  assert.match(r.out, /alert not sent: no bot token/);
+});

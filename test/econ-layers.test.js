@@ -167,9 +167,13 @@ test("econ.js: 'layer' rows are journaled (idempotent ref) but never revenue", a
   assert.equal(saved, 3, "the replayed ref is ignored");
   const layers = await getQuery("SELECT COUNT(*) AS n FROM econ_charges WHERE kind = 'layer'");
   assert.equal(layers[0].n, 2);
-  const rev = (await getQuery("SELECT COALESCE(SUM(amount), 0) AS a FROM econ_charges WHERE kind <> 'layer'"))[0].a;
+  // telemetry(7) reads the last 7 days on the real clock, and the boosts above were charged on the pinned 2026-10-07 clock -
+  // so count the same window (summing every row made this fail on its own once 2026-10-07 left the window, from 2026-10-14)
+  const from = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+  const rev = (await getQuery("SELECT COALESCE(SUM(amount), 0) AS a FROM econ_charges WHERE kind <> 'layer' AND day >= ?", [from]))[0].a;
+  assert.ok(rev >= 100, "the !ask charge is in the window");
   const t = await econ.telemetry(7);
-  assert.equal(t.totals.revenue, rev, "a policy mint / the migration is not revenue (only the real charges: the boosts above + !ask)");
+  assert.equal(t.totals.revenue, rev, "a policy mint / the migration is not revenue (only the real charges in the window: !ask, + the boosts above while 2026-10-07 is in it)");
   assert.deepEqual(t.layer_moves, { "fed_mint:loan": 250000, fortknox_migration: 6501 });
   assert.ok(!t.rooms.some((r) => r.room_id === "" && r.revenue.total > 0), "no 'no room' revenue row from layer moves");
 });

@@ -294,6 +294,9 @@ const RULES = {
   "raffles.target": { deny: "a ticket count (the draw target)" }, "raffles.creator_payout": { deny: "a PAT amount" },
   "raffle_tickets.user_id": M(),
   "action_ttl_config.actor": { deny: NAME },
+  // 1.99acf: botkeys.js / huboutbox.js - who minted / revoked a bot key or flipped a switch (admin usernames, audit labels)
+  "bot_keys.created_by": { deny: NAME }, "bot_keys.revoked_by": { deny: NAME }, "bot_key_families.actor": { deny: NAME },
+  "bot_keys_settings.actor": { deny: NAME }, "hubseam_settings.actor": { deny: NAME },
   // 1.99ou: escrow/ledger.js - an escrowed stake follows its account (a refund / payout also resolves merged ids)
   "escrow_holds.user_id": M(),
   // auto-account escrow (autoescrow.js): the held rewards follow the account; afterMerge releases them once the target is a real
@@ -655,7 +658,7 @@ async function moveUserRows(fromId, toId, opts = {}) {
   if (await tableExists("feed_comment_votes")) out.recount.comments = (await getQuery("SELECT DISTINCT comment_id AS id FROM feed_comment_votes WHERE user_id = ?", [fromId])).map((r) => r.id);
 
   // 1.99wj: the merged-away account's sign-ins end here (sessions.js) - never moved to the target
-  try { const n = await require("./sessions").revokeForMerge(fromId); if (n) out.folded["sessions (ended)"] = n; }
+  try { const n = await require("./sessions").revokeForMerge(fromId, toId); if (n) out.folded["sessions (ended)"] = n; }
   catch (e) { console.error("[MERGE] session revoke:", e.message); throw e; }
 
   await mergeConversations(fromId, toId, out);

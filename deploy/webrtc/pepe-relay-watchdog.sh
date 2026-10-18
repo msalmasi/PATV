@@ -17,7 +17,9 @@
 # (BACKOFF_MIN doubling to BACKOFF_MAX, reset after CALM_S without one). Every restart, and the first healthy check
 # after it, is a log line (journalctl -u pepe-relay-watchdog) and an ops alert: POST /api/ops/alert on the prod site
 # (loopback + the site's bot token, read from its .env, sent on stdin - never in argv or the log) -> every site admin's
-# inbox + Telegram (alerts outbox). The Twitch restream (patv-restream) restarts its own ffmpeg when the source's
+# inbox + Telegram (alerts outbox). 1.99acf: with OPS_PATV_KEY in that .env (the "ops" bot key from /admin/keys) the alert
+# also sends it as X-PATV-Key (curl reads the header from a pipe - never argv); the bot token stays as the fallback.
+# The Twitch restream (patv-restream) restarts its own ffmpeg when the source's
 # timestamps jump back (1.99gp), which a relay restart causes - nothing to do for it here.
 #
 # Settings (all optional) in /etc/default/pepe-relay-watchdog:
@@ -55,15 +57,27 @@ save() {
 }
 
 # ── the alert (best effort; never fails the run) ──
+env_value() {   # env_value <NAME>: one value from the site's .env (quotes and CR stripped), never printed
+  sed -n "s/^$1=//p" "$SITE_ENV" 2>/dev/null | head -1 | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+}
+payload() {     # payload <token> <ref> <title> <body>: the JSON body, built from the environment (never argv)
+  TOK="$1" REF="$2" TITLE="$3" BODY="$4" python3 -c 'import json,os; print(json.dumps({"password": os.environ["TOK"], "source": "pepe-relay", "ref": os.environ["REF"], "title": os.environ["TITLE"], "body": os.environ["BODY"]}))'
+}
 alert() {   # alert <ref> <title> <body>
   if [ -n "${WD_ALERT:-}" ]; then printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$WD_ALERT"; return 0; fi
   [ "$DRY_RUN" = 1 ] && { log "(dry run) alert: $2"; return 0; }
-  local tok
-  tok="$(sed -n 's/^TWITCH_BOT_TOKEN=//p' "$SITE_ENV" 2>/dev/null | head -1 | tr -d '\r' | sed -e 's/^["'\'']//' -e 's/["'\'']$//')"
-  [ -n "$tok" ] || { log "alert not sent: no bot token in $SITE_ENV"; return 0; }
+  local tok key
+  tok="$(env_value TWITCH_BOT_TOKEN)"
+  key="$(env_value OPS_PATV_KEY)"
+  [ -n "$tok$key" ] || { log "alert not sent: no bot token (or OPS_PATV_KEY) in $SITE_ENV"; return 0; }
   local out
-  out="$(TOK="$tok" REF="$1" TITLE="$2" BODY="$3" python3 -c 'import json,os; print(json.dumps({"password": os.environ["TOK"], "source": "pepe-relay", "ref": os.environ["REF"], "title": os.environ["TITLE"], "body": os.environ["BODY"]}))' \
-        | curl -s -m 10 -H 'Content-Type: application/json' --data-binary @- "$SITE/api/ops/alert" 2>&1)"
+  if [ -n "$key" ]; then
+    out="$(payload "$tok" "$1" "$2" "$3" \
+          | curl -s -m 10 -H 'Content-Type: application/json' -H @<(printf 'X-PATV-Key: %s\n' "$key") --data-binary @- "$SITE/api/ops/alert" 2>&1)"
+  else
+    out="$(payload "$tok" "$1" "$2" "$3" \
+          | curl -s -m 10 -H 'Content-Type: application/json' --data-binary @- "$SITE/api/ops/alert" 2>&1)"
+  fi
   case "$out" in *'"ok":true'*) log "alert sent ($1)" ;; *) log "alert failed ($1): $(echo "$out" | head -c 200)" ;; esac
 }
 

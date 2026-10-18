@@ -137,7 +137,7 @@ async function endRaffle(channelId, raffleDurationMinutes) {
   // Find the discordUsername of the winnerId from the backend
   try {
     const userResponse = await axios.get(
-      process.env.BACKEND_BASE_URL+`/api/users/discord/${winnerId}`
+      process.env.BACKEND_BASE_URL+`/api/users/discord/${encodeURIComponent(winnerId)}`
     );
     if (userResponse.data && userResponse.data.user) {
       discordUsername = userResponse.data.user.discordUsername;
@@ -286,9 +286,11 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
         console.log('ui '+userId);
         // Call API to add game
         try {
-            const response = await fetch(process.env.BACKEND_BASE_URL+`/api/pokernow/add`, {
+            const pokerUrl = process.env.BACKEND_BASE_URL+`/api/pokernow/add`;
+            const response = await fetch(pokerUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                // 1.99acf: fetch() skips the axios interceptor - our User-Agent + X-PATV-Key (backendAuth.siteHeaders)
+                headers: Object.assign({ "Content-Type": "application/json" }, require("./backendAuth").siteHeaders(pokerUrl)),
                 body: JSON.stringify({ pokerNowId, userId, url, blinds })
             });
             const data = await response.json();
@@ -435,7 +437,7 @@ async function addLevelUpBonus(levelBonus, winnerId, channel) {
   // Find the discordUsername of the winnerId from the backend
   try {
     const userResponse = await axios.get(
-      process.env.BACKEND_BASE_URL+`/api/users/discord/${winnerId}`
+      process.env.BACKEND_BASE_URL+`/api/users/discord/${encodeURIComponent(winnerId)}`
     );
     if (userResponse.data && userResponse.data.user) {
       discordUsername = userResponse.data.user.discordUsername;
@@ -477,7 +479,7 @@ async function addLevelUpXpBonus(levelXpBonus, winnerId, channel) {
   // Find the discordUsername of the winnerId from the backend
   try {
     const userResponse = await axios.get(
-      process.env.BACKEND_BASE_URL+`/api/users/discord/${winnerId}`
+      process.env.BACKEND_BASE_URL+`/api/users/discord/${encodeURIComponent(winnerId)}`
     );
     if (userResponse.data && userResponse.data.user) {
       discordUsername = userResponse.data.user.discordUsername;

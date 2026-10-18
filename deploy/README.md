@@ -87,7 +87,9 @@ nginx-rtmp (loopback) to Twitch. Staging's worker only accepts loopback targets 
 
 Staging, and staging Pepe (which writes to it), drift from prod over time. On the VPS,
 `bash /home/PATV/deploy/refresh-staging-db.sh` replaces staging's database with a fresh copy of
-prod's. It keeps the old copy as `myapp.db.previous`.
+prod's. It keeps the old copy as `myapp.db.previous`. The per-environment tables stay staging's own
+(`deploy/keep-staging-tables.js` lists them: bot keys and their switches and logs, the hub seam switches, bridge
+spans; prod's `hub_outbox` rows are dropped). If that can't be done, staging keeps its old database.
 
 ## The database is in WAL mode (1.99fb)
 

@@ -734,11 +734,12 @@
     // ── NOW SPINNING / LAST SPIN on the stage wheel, in the spinner's name colour ──
     function spinLine(sp) {
       var box = document.getElementById('stSpin');
-      if (!box || !sp || !(sp.display || sp.name)) return;
+      if (!box || !sp || !(sp.anon || sp.display || sp.name)) return;
       box.textContent = '';
       box.appendChild(document.createTextNode(sp.state === 'spinning' || sp.type === 'spinning' ? _t('js.home.spin.now', 'NOW SPINNING') + ' \u25B8 ' : _t('js.home.spin.last', 'LAST SPIN') + ' \u25B8 '));
-      var who = document.createElement('span'); who.className = 'who'; who.textContent = sp.display || sp.name;
-      if (sp.nameCss) who.style.cssText = sp.nameCss;
+      // 1.99acf: an incognito spinner comes as {anon: true} with no name or colour (eventsauth.watchLook)
+      var who = document.createElement('span'); who.className = 'who'; who.textContent = sp.anon ? _t('js.home.spin.someone', 'someone') : (sp.display || sp.name);
+      if (sp.nameCss && !sp.anon) who.style.cssText = sp.nameCss;
       box.appendChild(who);
       if (sp.result != null && sp.state !== 'spinning' && sp.type !== 'spinning') {
         var a = document.createElement('span'); a.className = 'amt';

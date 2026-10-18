@@ -155,6 +155,12 @@ async function overview(me) {
   if (push && push.vapidErrorAt && Date.now() - push.vapidErrorAt < 3600e3) alerts.push({ level: "warn", text: `A push service refused our VAPID signature (${push.vapidErrorStatus || 401}) in the last hour`, href: "/admin/push#health" });
   const pushFailed = push ? push.totals.failed || 0 : 0;
   if (push && pushFailed > Math.max(20, (push.totals.sent || 0) / 2)) alerts.push({ level: "warn", text: `${pushFailed} browser notifications failed in the last 24 h`, href: "/admin/push#health" });
+  // 1.99acf: a bot key in enforce refused in the last hour (botkeys.js) - a route its scopes miss
+  const refused = isAdmin ? await safe(() => require("./botkeys").recentRefusals(3600e3), []) : [];
+  if (refused && refused.length) {
+    const r = refused[0];
+    alerts.push({ level: "warn", text: `Bot key "${r.caller}" was refused on ${r.family} in the last hour${refused.length > 1 ? ` (+${refused.length - 1} more)` : ""}`, href: "/admin/keys#scopes" });
+  }
   return { isAdmin, pepe, reserve, loans, reports, stage, stale: stale ? { ...stale, daysLeft: stale.started ? daysUntil(stale.applyOn) : null } : null,
            shop, disk, terms, alerts };
 }

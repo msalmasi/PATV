@@ -4,19 +4,16 @@ const { runQuery, getQuery } = require("../dbUtils");
 const sqlite3 = require("sqlite3").verbose();
 const axios = require("axios");
 // 1.99fy: the PATV user lookups (/api/users/twitch/...) are bot-only now - send the bot token as an
-// X-Bot-Token header on calls to BACKEND_BASE_URL/api/users/ (and nowhere else). server.js uses this too.
-if (!axios.__patvBotAuth) {
-  axios.__patvBotAuth = true;
-  axios.interceptors.request.use((cfg) => {
-    const base = String(process.env.BACKEND_BASE_URL || "").replace(/\/+$/, "");
-    const t = process.env.TWITCH_BOT_TOKEN;
-    if (base && t && String(cfg.url || "").startsWith(base + "/api/users/")) {
-      if (cfg.headers && typeof cfg.headers.set === "function") cfg.headers.set("X-Bot-Token", t);
-      else cfg.headers = Object.assign({}, cfg.headers, { "X-Bot-Token": t });
-    }
-    return cfg;
-  });
-}
+// X-Bot-Token header on calls to BACKEND_BASE_URL/api/users/ (and nowhere else).
+// 1.99acf (R-11, the per-caller key split; botkeys.js on the site): with PATV_KEY set (this bot's key from
+// publicaccess.tv/admin/keys, "twitch.<secret>"), every request to BACKEND_BASE_URL's exact origin carries it as
+// X-PATV-Key - axios through the interceptor, the /events streams through patvSse, the !spin fetch through siteHeaders -
+// over https or loopback only, dropped on a redirect off the site, with User-Agent patv-twitch-bot/1 (patvAuth.js).
+// Path parameters are encodeURIComponent()ed (a chat-supplied !tip name can't walk to another route).
+// The body passwords and X-Bot-Token stay for now.
+const patvAuth = require("./patvAuth");
+patvAuth.install(axios);
+const { patvSse, siteHeaders } = patvAuth;
 const bcrypt = require("bcrypt");
 const EventSource = require("eventsource");
 const {
@@ -197,7 +194,7 @@ async function generateUniqueUsername(baseUsername) {
   while (!isUnique) {
     // Check if the username already exists in the database
     const existingUserResponse = await axios.get(
-      process.env.BACKEND_BASE_URL+`/api/users/username/${username}`
+      process.env.BACKEND_BASE_URL+`/api/users/username/${encodeURIComponent(username)}`
     );
     if (existingUserResponse.data && existingUserResponse.data.exists) {
       // Username exists, append a number and check again
@@ -216,7 +213,7 @@ async function generateUniqueUsername(baseUsername) {
 async function findOrCreateTwitchUser(twitchId, displayName, profileImage) {
   try {
     // Check if the user already exists in the backend
-    const userResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/users/twitch/${twitchId}`);
+    const userResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/users/twitch/${encodeURIComponent(twitchId)}`);
 
     if (userResponse.data && userResponse.data.user) {
       // User found, return the existing user data
@@ -249,14 +246,14 @@ async function findUserBalance(twitchId) {
   try {
     // Step 1: Check if the user already exists in the backend
     const userResponse = await axios.get(
-      process.env.BACKEND_BASE_URL+`/api/users/twitch/${twitchId}`
+      process.env.BACKEND_BASE_URL+`/api/users/twitch/${encodeURIComponent(twitchId)}`
     );
     if (userResponse.data && userResponse.data.user) {
       // User found, return the existing user data
       const currentUser = userResponse.data.user;
       console.log(`User ${currentUser.username} found.`);
       const userBalanceResponse = await axios.get(
-        process.env.BACKEND_BASE_URL+`/api/u/${currentUser.username}/balance`
+        process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(currentUser.username)}/balance`
       );
       const userBalance = userBalanceResponse.data.balance;
       return userBalance;
@@ -284,9 +281,10 @@ async function handleSpinCommand(channel, twitchId, displayName, profileImage) {
   const url = process.env.BACKEND_BASE_URL+`/api/g/wheel/chatspin`;
 
   fetch(url, {
-    headers: {
+    // 1.99acf: fetch() skips the axios interceptor - our User-Agent + X-PATV-Key (patvAuth.siteHeaders)
+    headers: Object.assign({
       "content-type": "application/json",
-    },
+    }, siteHeaders(url)),
     body: JSON.stringify({
       username: user.username,
       password: process.env.TWITCH_BOT_TOKEN,
@@ -329,9 +327,8 @@ async function handleSpinCommand(channel, twitchId, displayName, profileImage) {
 // EVENT LISTENERS
 
 async function setupResultsListener(spinId, channel, twitchId, displayName) {
-  const eventSource = new EventSource(
-    process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${spinId}`
-  );
+  const resultsUrl = process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${encodeURIComponent(spinId)}`;
+  const eventSource = new EventSource(resultsUrl, patvSse(resultsUrl));   // 1.99acf: + X-PATV-Key when set
 
   eventSource.onmessage = async function (event) {
     const result = JSON.parse(event.data);
@@ -369,9 +366,8 @@ async function setupResultsListener(spinId, channel, twitchId, displayName) {
 }
 
 async function setupWagerListener(spinId, channel, twitchId, displayName) {
-  const eventSource = new EventSource(
-    process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
-  );
+  const spinUrl = process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${encodeURIComponent(spinId)}`;
+  const eventSource = new EventSource(spinUrl, patvSse(spinUrl));   // 1.99acf: + X-PATV-Key when set
 
   eventSource.onmessage = async function (event) {
     const data = JSON.parse(event.data);
@@ -422,7 +418,7 @@ async function handleBalanceCommand(
 
     // Step 2: Fetch the user's balance using the API endpoint
     const balanceResponse = await axios.get(
-      process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`
+      process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`
     );
 
     if (
@@ -477,7 +473,7 @@ async function handleTipCommand(
     let recipient;
     try {
       const recipientResponse = await axios.get(
-        process.env.BACKEND_BASE_URL+`/api/users/twitch/displayname/${cleanRecipientDisplayName}`
+        process.env.BACKEND_BASE_URL+`/api/users/twitch/displayname/${encodeURIComponent(cleanRecipientDisplayName)}`
       );
       recipient = recipientResponse.data.user;
     } catch (error) {
@@ -503,7 +499,7 @@ async function handleTipCommand(
     // Step 4: Send tip using the existing /chattip endpoint
     try {
       const tipResponse = await axios.post(
-        process.env.BACKEND_BASE_URL+`/u/${recipient.username}/chattip`,
+        process.env.BACKEND_BASE_URL+`/u/${encodeURIComponent(recipient.username)}/chattip`,
         {
           amount: amount,
           sender: sender.username,
@@ -519,9 +515,9 @@ async function handleTipCommand(
         // Fetch updated balances for both sender and recipient
         const [senderBalanceResponse, recipientBalanceResponse] =
           await Promise.all([
-            axios.get(process.env.BACKEND_BASE_URL+`/api/u/${sender.username}/balance`),
+            axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(sender.username)}/balance`),
             axios.get(
-              process.env.BACKEND_BASE_URL+`/api/u/${recipient.username}/balance`
+              process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(recipient.username)}/balance`
             ),
           ]);
 
@@ -546,7 +542,7 @@ async function handleTipCommand(
       ) {
         // Handle insufficient balance error
         const senderBalanceResponse = await axios.get(
-          process.env.BACKEND_BASE_URL+`/api/u/${sender.username}/balance`
+          process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(sender.username)}/balance`
         );
         const senderBalance = senderBalanceResponse.data.balance;
         return client.say(
@@ -631,7 +627,7 @@ async function exchangeChannelPoints(points, twitchDisplayname) {
      const channel = 'publicaccess_ttv'
      try {
        const recipientResponse = await axios.get(
-         process.env.BACKEND_BASE_URL+`/api/users/twitch/displayname/${twitchDisplayname}`
+         process.env.BACKEND_BASE_URL+`/api/users/twitch/displayname/${encodeURIComponent(twitchDisplayname)}`
        );
        recipient = recipientResponse.data.user;
      } catch (error) {
@@ -688,7 +684,7 @@ async function endRaffle(channel, raffleDurationMinutes) {
 
   // Find the displayname of for the winnerId
   const userResponse = await axios.get(
-    process.env.BACKEND_BASE_URL+`/api/users/twitch/${winnerId}`
+    process.env.BACKEND_BASE_URL+`/api/users/twitch/${encodeURIComponent(winnerId)}`
   );
 
   if (userResponse.data && userResponse.data.user) {

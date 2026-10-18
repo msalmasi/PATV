@@ -692,7 +692,7 @@ async function updateCamfrogUsername(req, res) {
 // Verifies the chat author's username matches the pending link, then completes it.
 async function verifyCamfrogLink(req, res) {
   const { code, camfrogUsername, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
+  if (!require('./botkeys').isBotToken(password)) {   // 1.99acf: botkeys.js (a key caller, or the shared token - counted)
     return res.status(403).json({ error: 'Invalid bot token' });
   }
   if (!code || !camfrogUsername) {

@@ -82,7 +82,7 @@ module.exports = {
           const role = interaction.guild.roles.cache.find(r => r.name === roleName);
           if (role) await interaction.member.roles.add(role);
         }
-        const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
+        const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`);
         const balance = balanceResponse.data.balance;
         interaction.guild.channels.cache.get('1245478269294346320').send(`${interaction.user} bought ${selectedPrizeName.prizeName}`)
         await interaction.update({ content: `You successfully purchased ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost})! You have PAT ${balance}. Please wait up to 24 hours for activation.`, components: [], ephemeral: true });
@@ -94,7 +94,7 @@ module.exports = {
     } catch (error) {
       if (error.response && error.response.status === 400 && error.response.data.message === "Insufficient coins") {
         // Handle insufficient balance
-        const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
+        const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`);
         const balance = balanceResponse.data.balance;
         await interaction.update({ content: `You don't have enough PAT to buy ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost}). You have PAT ${balance}.`, components: [], ephemeral: true });
       } else if (error.response && error.response.data && error.response.data.message) {

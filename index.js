@@ -211,6 +211,12 @@ app.use(cors());
 // with its own larger limit in media.js.
 app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/automkt/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/pools/admin/import" || req.path === "/api/escrow/admin/import" || req.path === "/api/gangs/admin/import" || req.path === "/api/capital/admin/import" || req.path === "/api/econ/docs/put" || req.path === "/api/policy/bot/config" || req.path === "/api/policy/bot/report" || req.path === "/api/policy/admin/cutover" || req.path === "/api/fed/admin/import" || req.path === "/api/achievements/admin/import" || req.path === "/api/achievements/bot/events" || req.path === "/api/gtf/bot/put" || req.path === "/api/gtf/bot/sheet-mirror" || req.path === "/api/gtf/bot/overlay" || req.path === "/api/premium/stripe/webhook" || req.path === "/api/soundboards/bot/audio" || req.path === "/api/soundboards/bot/room-clip" || req.path === "/api/voices/bot/import" || req.path === "/api/likeness/sync" || req.path === "/api/voiceclone/bot/recorded" || req.path === "/api/bot/upload/chunk" ? next() : express.json()(req, res, next)));   // 1.99rh: the soundboard WAV uploads / imports parse their own (bigger) bodies
 app.use(express.urlencoded({ extended: true }));
+// 1.99acf: per-caller bot keys (botkeys.js, R-11): an X-PATV-Key header is resolved here (after the body parsers - the request
+// context lives in AsyncLocalStorage, which multer would lose; no bot route uses it) and isBotToken() / isPlatformBot() below
+// answer for the key's caller. Observe by default: the shared tokens still work and every use of them is counted.
+const botkeys = require("./botkeys");
+app.use(botkeys.middleware);
+botkeys.start();
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
 const userstats = require("./userstats");
@@ -284,6 +290,16 @@ require("./styleguide").register(app, { addUser });   // 1.99pj: /styleguide - t
 require("./adminweb").register(app, { addUser });
 // 1.99cy: the XP card's POST /api/admin/update-level (preview, then confirm; admins only; no level-up rewards; audited)
 require("./adminxp").register(app, { addUser });
+// 1.99acf: bot keys & the chat seam (R-11 + S0): GET /api/botkeys/whoami, /admin/keys (owners change keys / switches), v1 chat
+// tickets + the JWKS (chatticket.js; off until a key is configured and hubseam.tickets is on), the hub outbox + heartbeat
+// (huboutbox.js; nothing is sent while HUB_V1_URL is unset), bridge spans (bridgespans.js)
+botkeys.register(app);
+require("./adminkeys").register(app, { addUser });
+require("./chatticket").register(app, { addUser });
+require("./huboutbox").start();
+require("./bridgespans").start();
+const eventsAuth = require("./eventsauth");
+eventsAuth.init().catch((e) => console.error("[eventsauth] init:", e.message));
 
 // Welcome bonus admin (welcome.js, 1.99bg): settings, the last decisions, "pay anyway". Admins only.
 async function welcomeAdmin(req) {
@@ -975,7 +991,9 @@ app.get("/api/g/wheel/last.json", async (req, res) => {
   try {
     const r = (await getQuery("SELECT userId, result, payout, timestamp FROM wheel_spins WHERE type = 'public' AND result IN ('PENDING','SETTLED') ORDER BY timestamp DESC LIMIT 1"))[0];
     if (!r) return res.json({ spin: null });
-    res.json({ spin: Object.assign({ state: r.result === "PENDING" ? "spinning" : "done", result: r.result === "SETTLED" ? Number(r.payout) || 0 : null, at: r.timestamp }, await spinnerLook(r.userId)) });
+    // 1.99acf: an incognito spinner is "someone" here too ({anon: true}, eventsauth.watchLook) - the stage stream's first paint
+    res.json({ spin: Object.assign({ state: r.result === "PENDING" ? "spinning" : "done", result: r.result === "SETTLED" ? Number(r.payout) || 0 : null, at: r.timestamp },
+                                   await eventsAuth.watchLook(r.userId, await spinnerLook(r.userId))) });
   } catch (e) {
     res.json({ spin: null });
   }
@@ -1479,7 +1497,7 @@ app.get("/rankings", addUser, async (req, res) => {
 // ── Total PAT supply ── every PAT is in a wallet or a pool (supply.js, Phase 5: the site counts every pool it owns from its
 // own tables; Pepe posts a snapshot of only the rows he still holds every few minutes).
 app.post("/api/stats/supply", async (req, res) => {
-  if ((req.body || {}).password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false });
+  if (!isBotToken((req.body || {}).password)) return res.status(403).json({ ok: false });
   try {
     await require("./supply").putSnapshot(req.body.pools);
     // 1.99jw: today's row of the daily supply history (+ Pepe's mint journal / Fed band) - never fails the snapshot
@@ -1952,7 +1970,7 @@ const tipNoteReady = require("./tips").noteReady();
 
 // Tip another user through a chatbot
 app.post("/u/:username/chattip", async (req, res) => {
-  if (req.body.password !== process.env.TWITCH_BOT_TOKEN) {
+  if (!isBotToken(req.body.password)) {
     return res.status(403).send("Access denied");
   }
   try {
@@ -2052,8 +2070,9 @@ async function idemBegin(req, res, endpoint) {
   }
   return {
     replay: false,
-    done: (status, body) => runQuery("UPDATE idempotency_keys SET status = ?, body = ? WHERE key = ?",
-                                     [status, JSON.stringify(body || {}), key]).catch(() => {}),
+    // 1.99acf: huboutbox.idemDone - the same UPDATE; for a key in the chat hub's namespace ("ix:...") also the econ/committed
+    // callback row, in one transaction (switch hubseam.econ; no v1 path issues ix: keys yet)
+    done: (status, body) => require("./huboutbox").idemDone(key, endpoint, status, body),
     // a crash releases the key so a retry can run (nothing was committed)
     fail: () => runQuery("DELETE FROM idempotency_keys WHERE key = ? AND status IS NULL", [key]).catch(() => {}),
   };
@@ -2066,7 +2085,7 @@ app.post("/api/wager/charge", async (req, res) => {
   const { username, password } = req.body || {};
   const amount = Math.floor(Number(req.body && req.body.amount));
   const reason = ((req.body && req.body.reason) || "Wager").toString().slice(0, 40);
-  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  if (!isBotToken(password)) return res.status(403).json({ ok: false, error: "unauthorized" });
   const byId = req.body && req.body.userId ? String(req.body.userId) : null;     // 1.99tc: the stable id when Pepe has it
   if ((!username && !byId) || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
   const idem = await idemBegin(req, res, "wager/charge");
@@ -2116,7 +2135,7 @@ app.post("/api/wager/payout", async (req, res) => {
   const { username, password } = req.body || {};
   const amount = Math.floor(Number(req.body && req.body.amount));
   const reason = ((req.body && req.body.reason) || "Winnings").toString().slice(0, 40);
-  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  if (!isBotToken(password)) return res.status(403).json({ ok: false, error: "unauthorized" });
   const byId = req.body && req.body.userId ? String(req.body.userId) : null;     // 1.99tc: the stable id when Pepe has it
   if ((!username && !byId) || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
   const idem = await idemBegin(req, res, "wager/payout");
@@ -2158,7 +2177,7 @@ app.post("/api/wager/payout", async (req, res) => {
 // casino money endpoint checks it. Admin sets it via the bot token.
 app.post("/api/admin/casino-ban", async (req, res) => {
   const { username, banned, password } = req.body || {};
-  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  if (!isBotToken(password)) return res.status(403).json({ ok: false, error: "unauthorized" });
   if (!username) return res.status(400).json({ ok: false, error: "bad_request" });
   try {
     const r = await runQuery(
@@ -2178,7 +2197,7 @@ app.post("/api/admin/casino-ban", async (req, res) => {
 // isn't sitting in a URL/query string.
 app.post("/api/admin/casino-bans", async (req, res) => {
   const { password } = req.body || {};
-  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  if (!isBotToken(password)) return res.status(403).json({ ok: false, error: "unauthorized" });
   try {
     const rows = await getQuery(
       "SELECT username, camfrogUsername FROM users WHERE casino_banned = 1 ORDER BY LOWER(username)"
@@ -2494,15 +2513,14 @@ app.post("/api/g/reserve-claims/settle", async (req, res) => {
 });
 
 // The Discord/Twitch bots authenticate with their own shared token (same .env as this server).
+// 1.99acf: both are botkeys.js now (R-11) - true for the request's resolved X-PATV-Key caller, else the legacy compare
+// (TWITCH_BOT_TOKEN; isPlatformBot also DISCORD_BOT_TOKEN), and every legacy use is counted in legacy_token_use.
 function isPlatformBot(token) {
-  if (isBotToken(token)) return true;
-  const d = process.env.DISCORD_BOT_TOKEN;
-  return typeof d === "string" && d.length > 0 && token === d;
+  return botkeys.isPlatformBot(token);
 }
 
 function isBotToken(token) {
-  const expected = process.env.TWITCH_BOT_TOKEN;
-  return typeof expected === "string" && expected.length > 0 && token === expected;
+  return botkeys.isBotToken(token);
 }
 
 // Pepe registers new Camfrog users here. It can set a PAT balance, so it's bot-only.
@@ -3201,7 +3219,7 @@ app.post("/api/award-badge", async (req, res) => {
     const { userId, badgeId, password } = req.body;
   
     // Check for authentication
-    if (password !== process.env.TWITCH_BOT_TOKEN) {
+    if (!isBotToken(password)) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
   
@@ -3294,11 +3312,15 @@ app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
     );
 
     // Send the spin command to the client
-    sendEvent("spin", pageId, {
+    // 1.99acf: to the page id as before and to "<userId>:<pageId>" - the name a page registers under while /events is enforced
+    // (eventsauth.js); only one of the two has listeners
+    const goldMsg = {
       message: `Request: ${username}`,
       spinId: spinId, // Include the spin ID for tracking
       timestamp: new Date(),
-    });
+    };
+    sendEvent("spin", pageId, goldMsg);
+    sendEvent("spin", `${user[0].userId}:${pageId}`, goldMsg);
 
     res.json({ spinId });
   } catch (error) {
@@ -3450,7 +3472,7 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
     const pageId = req.body.pageId;
-    if (password !== process.env.TWITCH_BOT_TOKEN) {
+    if (!isBotToken(password)) {
         return res.status(403).send("Access denied");
     }
     
@@ -3564,6 +3586,11 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       return true;
     });
     if (!claimed) return res.status(404).send("Spin not found or already processed");
+    // 1.99acf: the public surfaces never name an incognito spinner ({anon: true}; the OBS wheel says "someone"), and while
+    // /events is enforced this open endpoint's answer carries no username at all (spinner.display names a visible spinner)
+    const look = await eventsAuth.watchLook(spinDetails[0].userId, await spinnerLook(spinDetails[0].userId));
+    const ackMessage = look.anon ? `public spinid ${spinId} from someone`
+      : eventsAuth.enforcing() ? `public spinid ${spinId}` : `public spinid ${spinId} from ${username}`;
     const spinData = {
       message: `public spinid ${spinId} from ${username}`,
       spinId: spinId, // Include the spin ID for tracking
@@ -3573,11 +3600,11 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
         sendEvent("spin", spinId, spinData);
     }, 500);
 
-    const look = await spinnerLook(spinDetails[0].userId);
-    sendEvent("spin", "watch", Object.assign({ type: "spinning", spinId }, look));   // homepage stage (not the OBS channel)
+    // homepage stage (not the OBS channel); 1.99acf: "someone" for an incognito spinner (look above)
+    sendEvent("spin", "watch", Object.assign({ type: "spinning", spinId }, look));
     res.json({
       success: true,
-      message: `public spinid ${spinId} from ${username}`,
+      message: ackMessage,
       spinner: look,
       targetIndex: outcome.segmentIndex,
       display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
@@ -3956,7 +3983,8 @@ async function settleSpin(spinId) {
   if (drop) out.cosmetic = drop;
   sendEvent("results", spinId, out);
   if (spin.type === "public") {
-    sendEvent("spin", "watch", Object.assign({ type: "result", spinId, result: payout, jackpot: isJackpot, grand }, await spinnerLook(spin.userId)));
+    sendEvent("spin", "watch", Object.assign({ type: "result", spinId, result: payout, jackpot: isJackpot, grand },
+                                             await eventsAuth.watchLook(spin.userId, await spinnerLook(spin.userId))));   // 1.99acf
   }
   return { ok: true, ...out };
 }
@@ -4041,7 +4069,7 @@ require("./chatsignin").register(app, { isBotToken, addUser });   // !signin: a 
 // updateLevel path as the wheel, so level-ups and their bonuses behave identically.
 app.post("/api/u/grant-xp", async (req, res) => {
   const { userId, xp, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
+  if (!isBotToken(password)) {
     return res.status(403).send("Access denied");
   }
   if (!userId || xp === undefined || xp === null || isNaN(Number(xp))) {
@@ -4066,28 +4094,34 @@ app.get("/api/g/wheel/listeners", (req, res) => {
   res.json({ listeners: list.length });
 });
 
-app.get("/events", (req, res) => {
+app.get("/events", async (req, res) => {
   const { type, identifier } = req.query; // 'type' could be 'spin' or 'results'
+  // 1.99acf: who may listen (eventsauth.js, R-11): observe (default) = as before + counted; enforce = a spin's owner or a bot
+  // key for spin / results channels, a session for a gold-wheel page (registered as <userId>:<pageId>), public / watch open
+  // but non-identifying. The old log lines that printed the identifier (it can be a spin id) are gone.
+  let d;
+  try { d = await eventsAuth.decide(req, type, identifier); }
+  catch (e) {
+    console.error("[events] auth:", e.message);
+    if (botkeys.settings().events === "enforce") return res.status(503).json({ ok: false, error: "unavailable" });
+    d = { ok: true, register: String(identifier == null ? "" : identifier) };
+  }
   // 1.99cp: type=dm is the signed-in user's own direct-message stream (messages.js) - never keyed by the URL
   if (type === "dm") return messages.sse(req, res);
-
-  console.log(`[${new Date().toISOString()}] HIT /events endpoint. Type: ${req.query.type}, Identifier: ${req.query.identifier}`);
+  if (!d.ok) { res.set("Cache-Control", "no-store"); return res.status(d.status || 403).json({ ok: false, error: d.error || "forbidden" }); }
+  const chan = d.register;
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader('X-Accel-Buffering', 'no');
-
-  console.log(`[${new Date().toISOString()}] HEADERS SET. X-Accel-Buffering is:`, res.getHeader('X-Accel-Buffering'));
-
   res.flushHeaders(); // Flush the headers to establish SSE connection
-  console.log(`[${new Date().toISOString()}] Headers flushed.`);
 
   // Register this connection to receive updates for the specified spinId
-  registerClient(type, identifier, res);
+  registerClient(type, chan, res);
 
   req.on("close", () => {
-    unregisterClient(type, identifier, res); // Clean up when the client disconnects
+    unregisterClient(type, chan, res); // Clean up when the client disconnects
     res.end();
   });
 });
@@ -4113,7 +4147,9 @@ function unregisterClient(type, identifier, res) {
 }
 
 // Function to send events to clients listening for them.
+// 1.99acf: the public OBS / homepage channels get eventsauth.publicView (enforce: no username, no spin id there)
 function sendEvent(type, identifier, message) {
+  if (type === "spin" && (identifier === "public" || identifier === "watch")) message = eventsAuth.publicView(identifier, message);
   const data = JSON.stringify(message);
   if (clients[type] && clients[type][identifier]) {
     clients[type][identifier].forEach((client) =>
@@ -4175,7 +4211,7 @@ app.get("/api/pokernow/games", async (req, res) => {
 // Manually remove a Poker Now game from the list (host-triggered via the Camfrog bot).
 app.post("/api/pokernow/remove", async (req, res) => {
   const { pokerNowId, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
+  if (!isBotToken(password)) {
     return res.status(403).json({ error: "Access denied" });
   }
   if (!pokerNowId) {

@@ -61,7 +61,7 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
   async function findOrCreateDiscordUser(discordId, discordUsername, avatarUrl) {
     try {
       // Check if the user already exists in your backend
-      const userResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/users/discord/${discordId}`);
+      const userResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/users/discord/${encodeURIComponent(discordId)}`);
       
       if (userResponse.data && userResponse.data.user) {
         // User found, return the existing user data
@@ -109,14 +109,14 @@ async function findUserBalance(discordId) {
     try {
       // Step 1: Check if the user already exists in the backend
       const userResponse = await axios.get(
-        process.env.BACKEND_BASE_URL+`/api/users/discord/${discordId}`
+        process.env.BACKEND_BASE_URL+`/api/users/discord/${encodeURIComponent(discordId)}`
       );
       if (userResponse.data && userResponse.data.user) {
         // User found, return the existing user data
         const currentUser = userResponse.data.user;
         console.log(`User ${currentUser.username} found.`);
         const userBalanceResponse = await axios.get(
-          process.env.BACKEND_BASE_URL+`/api/u/${currentUser.username}/balance`
+          process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(currentUser.username)}/balance`
         );
         const userBalance = userBalanceResponse.data.balance;
         return userBalance;

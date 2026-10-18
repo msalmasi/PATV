@@ -39,7 +39,7 @@
 "use strict";
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const DAY = 86400000;
 const LOGIN_MS = 90 * DAY;                 // middleware/loginCookie.js LOGIN_DAYS
@@ -156,10 +156,20 @@ async function create(req, userId, method, { at = now() } = {}) {
   return { sid, id, row };
 }
 
+// 1.99acf: every revocation runs in a dbUtils.tx, so the chat hub's outbox rows (huboutbox.js, topic sessions/revoked) commit
+// with it: one row per revoked session from the sessions trigger (any writer), plus - in code - an ACCOUNT cutoff when nothing
+// is excepted (sign out everywhere, admin, feed ban, password reset, deletion request: the hub closes every chat socket whose
+// credential predates it) and a merge row for an account merged away. "Sign out everywhere else" and a password change keep
+// this device, so they send only the per-session rows (a cutoff would close this device's chat too).
+// Units (docs/chat-tickets.md): `before` is epoch SECONDS, rounded up - the ticket's iat unit, so the hub compares iat < before
+// directly; `at` / `until` / created_at are epoch milliseconds. `account` / `into` are the hub's account_id (the ticket's sub:
+// chatticket.subjectOf, a legacy id -> its UUIDv5), the raw users.userId beside them as v1_user / v1_into.
+const hubSecs = (ms) => Math.ceil(Number(ms) / 1000);
+const hubAccount = (userId) => require("./huboutbox").accountOf(userId);
 async function revoke(userId, id, why = "signed out") {
   await init();
-  const r = await runQuery("UPDATE sessions SET revoked_at = ?, revoked_why = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
-                           [now(), str(why, 40), String(id), String(userId)]);
+  const r = await tx(() => runQuery("UPDATE sessions SET revoked_at = ?, revoked_why = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
+                                    [now(), str(why, 40), String(id), String(userId)]));
   cache.delete(String(id));
   return (r && r.changes) || 0;
 }
@@ -169,25 +179,40 @@ async function revokeAll(userId, { except = null, why = "signed out everywhere",
   if (!userId) return 0;
   await init();
   const t = now();
-  const r = except
-    ? await runQuery("UPDATE sessions SET revoked_at = ?, revoked_why = ? WHERE user_id = ? AND revoked_at IS NULL AND id != ?", [t, str(why, 40), String(userId), String(except)])
-    : await runQuery("UPDATE sessions SET revoked_at = ?, revoked_why = ? WHERE user_id = ? AND revoked_at IS NULL", [t, str(why, 40), String(userId)]);
-  if (cutoff) {
-    await runQuery(`INSERT INTO session_cutoffs (user_id, after, why) VALUES (?, ?, ?)
-                    ON CONFLICT(user_id) DO UPDATE SET after = MAX(after, excluded.after), why = excluded.why`, [String(userId), t, str(why, 40)]);
-  }
+  const r = await tx(async () => {
+    const out = except
+      ? await runQuery("UPDATE sessions SET revoked_at = ?, revoked_why = ? WHERE user_id = ? AND revoked_at IS NULL AND id != ?", [t, str(why, 40), String(userId), String(except)])
+      : await runQuery("UPDATE sessions SET revoked_at = ?, revoked_why = ? WHERE user_id = ? AND revoked_at IS NULL", [t, str(why, 40), String(userId)]);
+    if (cutoff) {
+      await runQuery(`INSERT INTO session_cutoffs (user_id, after, why) VALUES (?, ?, ?)
+                      ON CONFLICT(user_id) DO UPDATE SET after = MAX(after, excluded.after), why = excluded.why`, [String(userId), t, str(why, 40)]);
+    }
+    if (!except) {
+      await require("./huboutbox").emit("sessions/revoked", "acct:" + String(userId),
+        { kind: "account", account: hubAccount(userId), v1_user: String(userId), before: hubSecs(t), why: str(why, 40) });
+    }
+    return out;
+  });
   forgetUser(userId);
   return (r && r.changes) || 0;
 }
 
 /** accountMerge: the merged-away account's sessions end with the merge (inside the merge's transaction). They are deleted -
- *  an unknown sid is a signed-out request - and its old sid-less cookies can't be converted (the account row is gone). */
-async function revokeForMerge(fromId) {
+ *  an unknown sid is a signed-out request - and its old sid-less cookies can't be converted (the account row is gone).
+ *  1.99acf: intoId (the surviving account) rides the hub's merge row - its chat sockets close with 4005. */
+async function revokeForMerge(fromId, intoId = null) {
   if (!fromId) return 0;
   const t = (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sessions'"))[0];
   if (!t) return 0;
-  const r = await runQuery("DELETE FROM sessions WHERE user_id = ?", [String(fromId)]);
-  await runQuery("DELETE FROM session_cutoffs WHERE user_id = ?", [String(fromId)]).catch(() => {});
+  const at = now();
+  const r = await tx(async () => {
+    const out = await runQuery("DELETE FROM sessions WHERE user_id = ?", [String(fromId)]);
+    await runQuery("DELETE FROM session_cutoffs WHERE user_id = ?", [String(fromId)]).catch(() => {});
+    await require("./huboutbox").emit("sessions/revoked", "acct:" + String(fromId),
+      { kind: "merge", account: hubAccount(fromId), into: intoId == null ? null : hubAccount(intoId), v1_user: String(fromId),
+        v1_into: intoId == null ? null : String(intoId), before: hubSecs(at) });
+    return out;
+  });
   forgetUser(fromId);
   return (r && r.changes) || 0;
 }

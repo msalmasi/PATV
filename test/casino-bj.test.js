@@ -134,7 +134,9 @@ test("fairness: commitment, deterministic HMAC shuffle of a full 6-deck shoe, ve
   assert.equal(Object.keys(counts).length, 52);
   assert.ok(Object.values(counts).every((n) => n === 6));
   assert.ok(fair.verify({ commitment: c, server_seed: seed, client_seed: "abc", round: 7, num_decks: 6, shoe: s1 }).ok);
-  const bad = s1.slice(); [bad[0], bad[1]] = [bad[1], bad[0]];
+  // swap two DIFFERENT cards: with 6 decks the first two are the same card 5 times in 311, and swapping those changes nothing
+  // (the test then failed on a random seed, ~1.6% of runs)
+  const bad = s1.slice(); const j = bad.findIndex((x) => x !== bad[0]); [bad[0], bad[j]] = [bad[j], bad[0]];
   assert.equal(fair.verify({ commitment: c, server_seed: seed, client_seed: "abc", round: 7, num_decks: 6, shoe: bad }).ok, false);
   assert.equal(fair.verify({ commitment: "00", server_seed: seed, client_seed: "abc", round: 7, num_decks: 6 }).ok, false);
 });

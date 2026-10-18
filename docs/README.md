@@ -31,4 +31,11 @@ Pepe's character bible is brand.md §5.
 | [escrow-cutover-runbook.md](escrow-cutover-runbook.md), [gangs-cutover-runbook.md](gangs-cutover-runbook.md), [lotto-cutover-runbook.md](lotto-cutover-runbook.md), [pools-cutover-runbook.md](pools-cutover-runbook.md) | Cutover runbooks |
 | [webpush.md](webpush.md) | Browser notifications (Web Push, QW-1): VAPID keys, the switch and rollout, delivery health, the S5 hand-over to notify |
 
+## Bots and the chat seam
+
+| Doc | What it covers |
+|---|---|
+| [bot-keys.md](bot-keys.md) | Per-caller bot keys (`X-PATV-Key`): the callers, minting and rotating, observe then enforce, route-family switches, retiring the shared token, `/events` auth |
+| [chat-tickets.md](chat-tickets.md) | v1 chat tickets and the JWKS, and the hub seam contract: outbox topics, payloads, HMAC headers, heartbeat |
+
 Deploying is in `../deploy/README.md`.

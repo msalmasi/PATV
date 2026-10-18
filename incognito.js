@@ -26,8 +26,12 @@
 //   incognito_meta    key/value: last_full (when Pepe last sent the whole list)
 //   incognito_anon    login (lower, PK), since - 1.99wg: every login Pepe reports on, linked or not, only so public game boards
 //                     (gtfboards.js) show them as "someone"
+//
+// 1.99acf: the chat hub's privacy cache (huboutbox.js topic privacy/changed, switch hubseam.privacy): a web request writes a
+// "requested" row in the same transaction as the action (the hub hides at once on ON; it un-hides only on "confirmed"), and
+// every change Pepe reports writes a "confirmed" row - for unlinked logins too. Subject ids only, never any line text.
 "use strict";
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const RATE_MAX = 10;
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -149,16 +153,40 @@ async function request(userId, on, { ip } = {}) {
     await log({ userId, login, kind: "refused", on, via: "web", ip });
     throw new Refuse(429, "That's a lot of switching - try again in a while.", "rate");
   }
+  // 1.99acf: the action, its audit row and the chat hub's privacy/changed row (phase "requested" - the hub applies an ON at once,
+  // fail-closed, and an OFF only once Pepe confirms) go in ONE transaction, at request time, before Pepe answers (the chat design
+  // §9.2). A busy refusal writes none of them.
   let id;
   try {
-    id = await require("./actions").queue(String(userId), { kind: "privacy.incognito", args: [on ? "on" : "off"], tag: "privacy",
-                                                            label: `incognito ${on ? "on" : "off"}` });
+    id = await tx(async () => {
+      const aid = await require("./actions").queue(String(userId), { kind: "privacy.incognito", args: [on ? "on" : "off"], tag: "privacy",
+                                                                     label: `incognito ${on ? "on" : "off"}` });
+      const at = now();
+      await log({ userId, login, kind: "request", on, via: "web", ip, at });
+      await require("./huboutbox").emit("privacy/changed", entityOf(login),
+        { flag: "incognito", value: on, phase: "requested", via: "web", subject: subjectOf(login, String(userId)), at },
+        { dedupe: "incog-req:" + aid });
+      return aid;
+    });
   } catch (e) {
     if (e && e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment.", "busy");
     throw e;
   }
-  await log({ userId, login, kind: "request", on, via: "web", ip });
   return { id };
+}
+
+// 1.99acf: the chat hub's id for a chat key (camfrog:<login> | acct:<userId>) and its subject - never any line text. The
+// subject's acct is the hub's account_id (the ticket's sub: huboutbox.accountOf -> chatticket.subjectOf, a legacy id -> its
+// UUIDv5), the raw users.userId beside it as v1_user; the entity stays v1's own ordering key.
+function entityOf(login) {
+  const m = ACCT_RE.exec(String(login));
+  return m ? "acct:" + m[1] : "camfrog:" + low(login);
+}
+function subjectOf(login, acct) {
+  const m = ACCT_RE.exec(String(login));
+  const of = (id) => ({ acct: require("./huboutbox").accountOf(id), v1_user: String(id) });
+  if (m) return of(m[1]);
+  return acct ? { platform: "camfrog", login: low(login), ...of(acct) } : { platform: "camfrog", login: low(login) };
 }
 
 /** Pepe's report. -> {applied, ignored} */
@@ -171,18 +199,27 @@ async function sync(body) {
     const login = low(it && it.login);
     const ts = Math.floor(Number(it && it.ts) || 0);
     if (!login || !isKey(login) || !(ts > 0)) { ignored++; continue; }
-    if (it.on === true) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [login, t]);
-    else await runQuery("DELETE FROM incognito_anon WHERE login = ?", [login]);
     const u = await userByLogin(login);
-    if (!u) { ignored++; continue; }                       // only linked chat identities are kept
     const on = it.on === true;
     const via = it.via === "web" ? "web" : "chat";
-    const cur = (await getQuery(`SELECT "on" AS "on", updated FROM incognito_state WHERE login = ?`, [login]))[0];
-    if (cur && Number(cur.updated) > ts) { ignored++; continue; }   // an older report than what we have
-    await runQuery(`INSERT INTO incognito_state (login, "on", updated, reported, via) VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(login) DO UPDATE SET "on" = excluded."on", updated = excluded.updated, reported = excluded.reported, via = excluded.via`,
-                   [login, on ? 1 : 0, ts, t, via]);
-    await log({ userId: u.userId, login, kind: "applied", on, via, at: t });
+    const cur = u ? (await getQuery(`SELECT "on" AS "on", updated FROM incognito_state WHERE login = ?`, [login]))[0] : null;
+    const stale = !!(cur && Number(cur.updated) > ts);   // an older report than what we have
+    // 1.99acf: each report in one transaction with its chat-hub row (privacy/changed, phase "confirmed"; unlinked logins too)
+    await tx(async () => {
+      if (on) await runQuery("INSERT INTO incognito_anon (login, since) VALUES (?, ?) ON CONFLICT(login) DO NOTHING", [login, t]);
+      else await runQuery("DELETE FROM incognito_anon WHERE login = ?", [login]);
+      if (stale) return;
+      if (u) {
+        await runQuery(`INSERT INTO incognito_state (login, "on", updated, reported, via) VALUES (?, ?, ?, ?, ?)
+                        ON CONFLICT(login) DO UPDATE SET "on" = excluded."on", updated = excluded.updated, reported = excluded.reported, via = excluded.via`,
+                       [login, on ? 1 : 0, ts, t, via]);
+        await log({ userId: u.userId, login, kind: "applied", on, via, at: t });
+      }
+      await require("./huboutbox").emit("privacy/changed", entityOf(login),
+        { flag: "incognito", value: on, phase: "confirmed", via, subject: subjectOf(login, u && !ACCT_RE.test(login) ? u.userId : null), at: ts },
+        { dedupe: `incog:${login}:${ts}` });
+    });
+    if (!u || stale) { ignored++; continue; }              // only linked chat identities are kept
     applied++;
     if (it.changed !== false) {
       const where = via === "web" ? "from Settings → Privacy" : "with !incognito in chat";

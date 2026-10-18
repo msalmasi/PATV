@@ -1,6 +1,7 @@
 // Offline tests for the admin-only Pepe control panel (pepecontrol.js): role gating (page + API),
 // CSRF, step-up password, single-use nonce, 2-minute pickup expiry, 3-per-10-min rate limit, the
-// VM's atomic claim + idempotent ack, heartbeat status and the audit log.
+// VM's atomic claim + idempotent ack, heartbeat status and the audit log. R-11 review (SEC-1): the claim is a POST, the old
+// GET claim stays until botkeys' control_get switch refuses it (405, nothing claimed).
 //   node --test test/pepecontrol.test.js      (needs the repo's node_modules; uses a temp DB)
 "use strict";
 const test = require("node:test");
@@ -61,6 +62,7 @@ async function command(kind = "pepe", mode = "now", { u = "a1", name = "boss", p
   return call("/api/pepe/control/command", u, { kind, mode, nonce: n || (await nonce(u, name)), password: pw }, tok(name));
 }
 const pending = () => call("/api/pepe/control/pending", null, undefined, null, { "x-bot-token": "bot-token" });
+const pendingPost = () => call("/api/pepe/control/pending", null, {}, null, { "x-bot-token": "bot-token" });
 const ack = (body, token = "bot-token") => fetch(base + "/api/pepe/control/ack", { method: "POST", headers: { "content-type": "application/json", "x-bot-token": token }, body: JSON.stringify(body) })
   .then(async (r) => ({ status: r.status, body: await r.json() }));
 
@@ -233,4 +235,36 @@ test("heartbeat: status shows online, goes offline after 60 s, oversize refused"
   assert.equal(d.online, false);
   const big = { x: "y".repeat(20000) };
   assert.equal((await call("/api/pepe/control/heartbeat", null, { status: big }, null, { "x-bot-token": "bot-token" })).status, 413);
+});
+
+test("R-11 review: the claim is a POST; the old GET works until botkeys' control_get refuses it (405, nothing claimed)", async () => {
+  const bk = require(path.join(repo, "botkeys"));
+  const owner = { userId: "a1", username: "boss" };
+  assert.equal(bk.settings().control_get, "allow", "allowed by default (VM pollers older than the POST claim)");
+  assert.equal(P.claimGetOk(), true);
+  assert.equal((await call("/api/pepe/control/pending", null, {}, null, { "x-bot-token": "wrong" })).status, 403, "POST wants the bot token too");
+  assert.equal((await command("pepe", "now")).status, 200);
+  const c = (await pendingPost()).body.command;
+  assert.ok(c && c.kind === "pepe", "POST claims it");
+  assert.equal((await pendingPost()).body.command, null, "handed out once");
+  assert.equal((await pending()).body.command, null, "...and not again over GET");
+  adv(11 * 60 * 1000);
+  await ack({ id: c.id, nonce: c.nonce, status: "done", detail: "ok" });
+  assert.equal((await command("pepe", "games")).status, 200);
+  await bk.setSettings({ control_get: "refuse" }, owner);
+  try {
+    assert.equal(P.claimGetOk(), false);
+    const r = await fetch(base + "/api/pepe/control/pending", { headers: { "x-bot-token": "bot-token" } });
+    assert.equal(r.status, 405);
+    assert.equal(r.headers.get("allow"), "POST");
+    assert.deepEqual(await r.json(), { error: "method" });
+    const row = (await getQuery("SELECT status FROM pepe_control_cmds ORDER BY created_at DESC LIMIT 1"))[0];
+    assert.equal(row.status, "pending", "a refused GET claims nothing");
+    assert.equal((await call("/api/pepe/control/pending", "a1")).status, 403, "the bot check still comes first");
+    const c2 = (await pendingPost()).body.command;
+    assert.ok(c2 && c2.mode === "games", "POST still claims with GET refused");
+  } finally {
+    await bk.setSettings({ control_get: "allow" }, owner);
+  }
+  assert.equal(bk.settings().control_get, "allow");
 });

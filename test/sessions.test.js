@@ -267,6 +267,21 @@ test("1.99acd isLive(id, userId): a live session of that account (webpush.js bin
   assert.equal(await S.isLive(s.id, "ivy"), false, "revoked");
 });
 
+test("1.99acf: the revocations run in a transaction - standalone or inside a caller's (a savepoint), and roll back with it", async () => {
+  await user("kim");
+  const a = await signIn("kim"), b = await signIn("kim"), c = await signIn("kim");
+  const idOf = async (ck) => (await (await get("/whoami", ck)).json()).sid;
+  const [ia, ib] = [await idOf(a), await idOf(b)];
+  assert.equal(await tx(() => S.revoke("kim", ia, "inside")), 1, "revoke inside an outer transaction");
+  assert.equal(await who(a), null);
+  await assert.rejects(tx(async () => { await S.revokeAll("kim", { except: ib, why: "doomed" }); throw new Error("boom"); }), /boom/);
+  S._clearCache();
+  assert.equal(await who(c), "kim", "a rolled-back revokeAll revoked nothing");
+  assert.equal(await S.revokeAll("kim", { except: ib }), 1);
+  assert.equal(await who(c), null);
+  assert.equal(await who(b), "kim", "the excepted device stays");
+});
+
 test("coarse device names, never the raw user agent", () => {
   assert.equal(S.describe("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1"), "Safari on iOS");
   assert.equal(S.describe("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36"), "Chrome on Android");

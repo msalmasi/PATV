@@ -32,7 +32,9 @@ const crypto = require("crypto");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 
-const MAX_LINES = 20, SPAN_MAX = 40, LINE_MAX = 400, TITLE_MAX = 140, PHRASE_MAX = 60;
+const MAX_LINES = 20, SPAN_MAX = 40, LINE_MAX = 490, TITLE_MAX = 140, PHRASE_MAX = 60;   // 1.99acf: LINE_MAX 490 = the bridge's inbound cap (a quoted line stays whole)
+// 1.99acf: a quoted line is cut by code points, as bridge.js caps it (an emoji counts once; never half a surrogate pair)
+const cpCut = (s, n) => (s.length <= n ? s : Array.from(s).slice(0, n).join(""));
 const GAP = 20 * 1000, BURST = 5, WINDOW = 30 * 60 * 1000;
 const POST_RE = /^[A-Za-z0-9]{8,16}$/;
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
@@ -152,7 +154,7 @@ async function buildLines(items) {
     const hidden = isHidden(login);
     if (hidden) hiddenNames.push(login, it.u.display, u.display, u.cf);
     return { k: it.k === "tx" ? "tx" : "msg", login: hidden ? null : login, name: hidden ? "someone" : String(u.display || it.u.display || login).slice(0, 40),
-             text: String(it.text).slice(0, LINE_MAX), ts: Number(it.ts) || 0, ...(it.u.self ? { pepe: true } : {}) };
+             text: cpCut(String(it.text), LINE_MAX), ts: Number(it.ts) || 0, ...(it.u.self ? { pepe: true } : {}) };
   });
   const red = redactor(hiddenNames);
   for (const l of lines) l.text = red(l.text);
