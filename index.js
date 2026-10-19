@@ -1536,11 +1536,14 @@ function escHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function notFound(req, res, heading, message) {
+// 1.99add: `message` is plain text (the template escapes it); `messageHtml` is markup the caller built and escaped
+// itself (escHtml on every user-supplied part) - only the profile pages' "<code>name</code>" lines use it.
+function notFound(req, res, heading, message, messageHtml) {
   res.status(404).render("notFound", {
     user: req.user ? req.user.username : null,
     heading: heading || null,
     message: message || null,
+    messageHtml: messageHtml || null,
   });
 }
 
@@ -1686,7 +1689,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
       });
     } else {
       // A profile that doesn't exist is a 404 - it used to log the visitor out (clearLogin).
-      notFound(req, res, "No such profile",
+      notFound(req, res, "No such profile", null,
         "There's no PATV account called <code>" + escHtml(usernameProfile) + "</code>.");
     }
   } catch (error) {
@@ -1820,7 +1823,7 @@ app.get("/u/:username/tip", addUser, async (req, res) => {
       "SELECT userId, username, displayname, class, level, avatar, camfrogUsername FROM users WHERE username = ?",
       [req.params.username]);
     if (!rows.length) {
-      return notFound(req, res, "No such profile",
+      return notFound(req, res, "No such profile", null,
         "There's no PATV account called <code>" + escHtml(req.params.username) + "</code> to tip.");
     }
     const r = rows[0];

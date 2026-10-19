@@ -14,7 +14,9 @@
   <div class="ds-stack">
     <span class="ds-ic nf-frog" aria-hidden="true">🐸</span>
     <h1 class="ds-h1"><% if (heading) { %><%= heading %><% } else { %><%- t('err.notfound.heading') %><% } %></h1>
-    <p class="ds-lead"><%- message || t('err.notfound.message') %></p>
+    <%# 1.99add: `message` is TEXT and always escaped (/p/<slug> put the raw path in it: reflected XSS); markup the
+        caller built and escaped itself goes in `messageHtml` (index.js notFound(): the profile pages' <code>name</code>). %>
+    <p class="ds-lead"><% if (locals.messageHtml) { %><%- messageHtml %><% } else if (message) { %><%= message %><% } else { %><%- t('err.notfound.message') %><% } %></p>
     <div class="ds-actions">
       <a class="ds-btn" href="/"><%- t('err.notfound.home') %></a>
       <a class="ds-btn ghost" href="/markets"><%- t('nav.markets') %></a>
