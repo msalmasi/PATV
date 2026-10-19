@@ -16,6 +16,9 @@
 //   POST /streams/:stage/pause        stop ffmpeg, remember the position (pause-by-stop)
 //   POST /streams/:stage/resume       start again at the remembered position
 //   POST /streams/:stage/seek         {offset} restart at that position (seek-by-restart)
+//                                     1.6.0: seek / resume answer once the ffmpeg they replace has EXITED and the new one is
+//                                     launched (until it's gone its publish holds the stage's name on the ingest, and nginx-rtmp
+//                                     can refuse the new one - the cause of "seeking ends the stream", see NET_ERR)
 //   GET  /plex/shares                 1.2.0: who the server is shared with (plex.tv shared_servers: ids, usernames,
 //                                     emails for the site's server-side matching; never an access token)
 //                                     1.3.0: + `owner` {plex_id, username, title} - the account that OWNS the server (it is
@@ -24,6 +27,9 @@
 //   POST /plex/shares/:id/remove      1.2.0: {plex_id} remove ONE library share - the share must belong to that Plex
 //                                     user. The site only asks after an admin confirmed (or its auto-revoke is on).
 //                                     MEDIACTL_PLEX_REVOKE=0 refuses every removal here.
+//                                     1.6.0: every plex.tv call goes out AS the server (its machine identifier, "Plex Media
+//                                     Server", its real version from /identity) - with mediactl's own name + version on the
+//                                     server's token, plex.tv listed the 1.43 server as version 1.5.0 and Plex apps said "outdated".
 //
 // ONE stream per stage (a stage = a PATV pad id). ffmpeg reads the file in real time (-re) and pushes H.264 + AAC
 // as FLV to the stage's RTMP ingest with that slot's one-time key, so the site's stage, HLS, WHEP and the Twitch
@@ -45,7 +51,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -157,7 +163,10 @@ function request(urlStr, { method = "GET", headers = {}, body = null, timeout = 
   });
 }
 
-function makePlex(cfg, req = request) {
+// 1.6.0: plex.tv calls carry the server's own identity (see tvHeaders); its version is re-read this often
+const IDENT_TTL_MS = 10 * 60 * 1000;
+const PMS_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}[0-9A-Za-z.-]{0,40}$/;
+function makePlex(cfg, req = request, now = Date.now) {
   const headers = () => ({ Accept: "application/json", "X-Plex-Token": cfg.plexToken, "X-Plex-Client-Identifier": "patv-mediactl",
                            "X-Plex-Product": "PATV mediactl", "X-Plex-Version": VERSION });
   const insecure = /^https:\/\/(127\.|localhost|\[::1\])/.test(cfg.plexUrl);
@@ -180,20 +189,48 @@ function makePlex(cfg, req = request) {
     season_key: m.type === "episode" && m.parentRatingKey != null ? String(m.parentRatingKey) : null,
   });
   // 1.2.0: the server's machine identifier (local, cached) and plex.tv calls with the owner's token in a header
-  let mid = null;
-  async function machineId() {
-    if (mid) return mid;
-    if (!cfg.plexToken) { const e = new Error("PLEX_TOKEN is not set"); e.status = 503; throw e; }
+  // 1.6.0: + the server's real version, both from the local /identity, re-read every IDENT_TTL_MS (a Plex update shows up); a
+  // re-read that fails (Plex restarting for an update) keeps the last good one - the id never changes and an older real version
+  // is still a real one - and tries again on the next call
+  let ident = null;
+  async function readIdentity() {
     const r = await req(cfg.plexUrl + "/identity", { headers: headers(), insecure });
-    const id = (r.json && r.json.MediaContainer && r.json.MediaContainer.machineIdentifier) || (/machineIdentifier="([^"]+)"/.exec(r.text || "") || [])[1];
+    const mc = (r.json && r.json.MediaContainer) || null;
+    const id = (mc && mc.machineIdentifier) || (/machineIdentifier="([^"]+)"/.exec(r.text || "") || [])[1];
     if (!id || !/^[A-Za-z0-9]{8,64}$/.test(id)) { const e = new Error("Couldn't read the Plex server's identity"); e.status = 502; throw e; }
-    mid = id;
-    return mid;
+    // the XML fallback reads the MediaContainer's version="", never the <?xml version="1.0"?> declaration in front of it
+    const ver = String((mc && mc.version) || (/<MediaContainer\b[^>]*\sversion="([^"]+)"/.exec(r.text || "") || [])[1] || "");
+    return { mid: id, version: PMS_VERSION_RE.test(ver) ? ver : null, at: now() };
+  }
+  async function identity() {
+    if (ident && now() - ident.at < IDENT_TTL_MS) return ident;
+    if (!cfg.plexToken) { const e = new Error("PLEX_TOKEN is not set"); e.status = 503; throw e; }
+    try {
+      ident = await readIdentity();
+    } catch (e) {
+      if (!ident) throw e;
+    }
+    return ident;
+  }
+  async function machineId() { return (await identity()).mid; }
+  // 1.6.0: PLEX_TOKEN is the server's OWN token (install.sh copies Preferences.xml PlexOnlineToken), and plex.tv files a request
+  // under the device its token belongs to: the members-sync calls (shared_servers, api/v2/user) with the old "PATV mediactl" /
+  // VERSION headers re-stamped the SERVER's productVersion (seen 2026-10-19: api/v2/resources listed "Public Access TV" as Plex
+  // Media Server 1.5.0 - mediactl's own version - while the box ran 1.43.4; Plex's own servers.xml post put the real one back
+  // within ~15 min-1.6 h, so it flipped with every hourly sync). The new Plex apps want PMS 1.41.2 or newer and (as far as we can
+  // tell) read that field, so they kept calling the owner's up-to-date server outdated. So plex.tv calls now speak AS the
+  // server: its machine identifier, product and real version (local /identity). No readable version -> no plex.tv call at all
+  // (never stamp a guess). Calls to the local Plex keep the "PATV mediactl" headers: those never reach plex.tv.
+  async function tvHeaders() {
+    const id = await identity();
+    if (!id.version) { const e = new Error("Couldn't read the Plex server's version"); e.status = 502; throw e; }
+    return { Accept: "application/xml", "X-Plex-Token": cfg.plexToken, "X-Plex-Client-Identifier": id.mid,
+             "X-Plex-Product": "Plex Media Server", "X-Plex-Version": id.version };
   }
   async function tv(method, p) {
     if (!cfg.plexToken) { const e = new Error("PLEX_TOKEN is not set"); e.status = 503; throw e; }
     // raw: the whole XML body (request() keeps only 500 characters of a non-JSON answer)
-    const r = await req((cfg.plexTv || "https://plex.tv") + p, { method, headers: { ...headers(), Accept: "application/xml" }, raw: true });
+    const r = await req((cfg.plexTv || "https://plex.tv") + p, { method, headers: await tvHeaders(), raw: true });
     if (r.status === 401) { const e = new Error("plex.tv refused the token"); e.status = 502; throw e; }
     if (r.status >= 400 && method === "GET") { const e = new Error(`plex.tv answered ${r.status}`); e.status = 502; throw e; }
     return { status: r.status, text: r.body != null ? Buffer.from(r.body).toString("utf8") : String(r.text || "") };
@@ -440,8 +477,42 @@ function escFilter(p) {
 // ── the streams ──
 // a failure that isn't the filter graph's fault (the RTMP ingest refused / dropped us): don't try another mode for it
 const NET_ERR = /rtmp:\/\/|Connection (refused|reset|timed out)|Broken pipe|Server returned|Network is unreachable|No route to host/i;
+// 1.6.0 (site 1.99acx): the 📼 "seeking ends the stream" report (The Observance, 2026-10-18) - CONFIRMED on prod: both
+// seeks (21:51:18, 21:52:05 EDT) got nginx's "live: already publishing" that same second, and both plays ended "error" with
+// "Error opening output rtmp://… Operation not permitted" (media_plays 18 / 19); a seek on another title four minutes later
+// happened to win the race.
+// A seek is a restart on the SAME slot key, i.e. the same stream name on the ingest - and seek() spawned the new ffmpeg the moment
+// it had SIGTERMed the old one, which holds that name until it has really exited (its main loop looks at signals on the 0.5 s
+// stats tick, then it flushes and closes the publish; SIGKILL after 4 s), while the new one opens and seeks the file in ~0.2 s and
+// publishes a few ~10 ms round trips later. 1.5.0 then said "error" without a word in the journal: that tail has "rtmp://" in it
+// = NET_ERR, so no mode fallback, and it died within 5 s, so no blip restart - and the site's watcher ended the slot (a 📼 queue
+// skipped the title). Pause -> resume couldn't hit it (the old ffmpeg was long gone). So now whatever starts on a stage (seek,
+// resume, the next title of a queue after a stop) first waits for the ffmpeg killed there to exit (at most EXIT_WAIT_MS),
+// overlapping seeks collapse into the last one (a generation counter), a start the ingest still refuses is retried in a moment
+// (PUB_RETRIES x PUB_RETRY_MS - also covers a dropped connection nginx hasn't let go of yet, drop_idle_publisher 15 s), and
+// seeks, those retries and streams that die are logged ("seek to Ns (after the previous ffmpeg exited, X ms)" / "the ingest
+// still holds the previous publish - trying again" / "ffmpeg stopped - <its last words>").
+const EXIT_WAIT_MS = 5000;
+// the refusal as ffmpeg words it ("Server error: Already publishing", a few lines above the "Error opening output rtmp://…
+// Operation not permitted" it exits with - media_plays.error keeps only the last 3 lines, the tail here 12). Not the EPERM line
+// itself: the on_publish gate refusing a dead key ends that way too, and that one should stay an error at once.
+const PUB_BUSY = /already publishing|NetStream\.Publish\.BadName/i;
+const PUB_RETRIES = 8;
+const PUB_RETRY_MS = 2500;
 function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.now(), probe = (file) => probeFile(cfg, file)) {
   const streams = new Map();   // stage -> state
+  // 1.6.0: stage -> a promise that settles once the last ffmpeg killed on that stage has exited (or EXIT_WAIT_MS passed)
+  const exiting = new Map();
+  const exitWait = cfg.exitWaitMs || EXIT_WAIT_MS, pubRetryMs = cfg.pubRetryMs || PUB_RETRY_MS;   // (the tests shorten them)
+  const bump = (s) => (s.gen = (s.gen || 0) + 1);          // a seek / pause / resume / stop: older pending launches are void
+  /** 1.6.0: wait until the ffmpeg last killed on this stage is gone. -> the ms waited (0 = nothing was on its way out) */
+  async function vacated(stage) {
+    const w = exiting.get(stage);
+    if (!w) return 0;
+    const t0 = Date.now();
+    await w;
+    return Date.now() - t0 || 1;
+  }
   const view = (s) => ({
     stage: s.stage, state: s.state, ratingKey: s.ratingKey, title: s.title, quality: s.quality, audio: s.audio, sub: s.sub,
     offset: Math.round(s.offset), position: Math.round(position(s)), duration: s.duration, started: s.started, error: s.error || null,
@@ -480,7 +551,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       while ((i = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
         const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
-        if (m && s.proc === p) { s.played = Number(m[1]) / 1e6; if (s.played > 0) s.progressed = true; }
+        if (m && s.proc === p) { s.played = Number(m[1]) / 1e6; if (s.played > 0) { s.progressed = true; s.pubRetries = 0; } }
       }
     });
     p.stderr && p.stderr.on("data", (d) => {
@@ -493,25 +564,36 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       s.offset += s.played;
       s.played = 0;
       if (code === 0 || (s.duration && s.offset >= s.duration - 5)) { s.state = "ended"; return; }
-      // died before the first frame and not because of the network: the next, more conservative way (GPU -> CPU)
       const tailTxt = s.tail.join("\n");
+      // 1.6.0: still the publish before it on the ingest ("Already publishing"): neither the filter graph's fault nor a dead
+      // network - the same way again in a moment (checked first: that line alone doesn't say "rtmp://", so it would fall back)
+      const g = s.gen;
+      if (!s.progressed && PUB_BUSY.test(tailTxt) && (s.pubRetries || 0) < PUB_RETRIES) {
+        s.pubRetries = (s.pubRetries || 0) + 1;
+        console.warn(`[mediactl] ${s.stage}: the ingest still holds the previous publish - trying again (${s.pubRetries}/${PUB_RETRIES})`);
+        setTimeout(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s); }, pubRetryMs).unref();
+        return;
+      }
+      // died before the first frame and not because of the network: the next, more conservative way (GPU -> CPU)
       if (!s.progressed && s.modeIdx < s.modes.length - 1 && !NET_ERR.test(tailTxt)) {
         const failed = s.modes[s.modeIdx];
         s.fallbacks.push({ mode: failed, error: (s.tail.slice(-2).join(" | ") || `exit ${code}`).slice(0, 300) });
         s.modeIdx++;
         console.error(`[mediactl] ${s.stage}: ${failed} failed (${s.fallbacks[s.fallbacks.length - 1].error}) - trying ${s.modes[s.modeIdx]}`);
-        setImmediate(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc) launch(s); });
+        setImmediate(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s); });
         return;
       }
       // a network blip: start again where it was (a few times, not when it dies straight away)
       const ranFor = clock() - s.launchedAt;
       if (s.restarts < cfg.retries && ranFor > 5000) {
         s.restarts++;
-        setTimeout(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc) launch(s); }, 2000).unref();
+        setTimeout(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s); }, 2000).unref();
         return;
       }
       s.state = "error";
       s.error = (s.tail.slice(-3).join(" | ") || `ffmpeg exited with ${code}`).slice(0, 400);
+      // 1.6.0: say so - a stream that died used to leave nothing in the journal (the stream key is masked in the tail)
+      console.error(`[mediactl] ${s.stage}: ffmpeg stopped - ${s.error}`);
     });
   }
   function kill(s) {
@@ -520,6 +602,16 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
     s.offset += s.played;
     s.played = 0;
     s.proc = null;
+    // 1.6.0: until it has exited, its publish holds the stage's stream name on the ingest - the next start here waits for this
+    const gone = new Promise((resolve) => {
+      const done = () => { clearTimeout(cap); resolve(); };
+      const cap = setTimeout(done, exitWait);
+      if (cap.unref) cap.unref();
+      p.once("exit", done);
+      p.once("error", done);
+    });
+    exiting.set(s.stage, gone);
+    gone.then(() => { if (exiting.get(s.stage) === gone) exiting.delete(s.stage); });
     try { p.kill("SIGTERM"); } catch (e) { /* gone */ }
     const t = setTimeout(() => { try { p.kill("SIGKILL"); } catch (e) { /* gone */ } }, 4000);
     t.unref && t.unref();
@@ -554,7 +646,10 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       const modes = pickModes(cfg, info, { sub }, pr);
       const s = { stage, ratingKey, info: { ...info, file: real }, title: String(b.title || info.title || "").slice(0, 120), url: `${rtmp}/${key}`,
                   quality, audio, sub, offset: clampInt(b.offset, 0, Math.max(0, (info.duration || 0) - 1), 0), duration: info.duration || null,
-                  started: clock(), restarts: 0, played: 0, state: "starting", proc: null, probe: pr, modes, modeIdx: 0, fallbacks: [] };
+                  started: clock(), restarts: 0, played: 0, state: "starting", proc: null, probe: pr, modes, modeIdx: 0, fallbacks: [],
+                  gen: 0, pubRetries: 0 };
+      // 1.6.0: a 📼 queue's next / previous title comes right after a stop on this stage - its ffmpeg may still hold the name
+      await vacated(stage);
       // (again: the probe took a moment)
       if (streams.get(stage) && ["playing", "paused"].includes(streams.get(stage).state)) throw fail(409, "That stage is already playing something - stop it first.");
       if ([...streams.values()].filter((x) => x.state === "playing" && x.stage !== stage).length >= cfg.maxStreams) throw fail(429, "Too many streams running right now.");
@@ -565,6 +660,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
     stop(stage) {
       const s = streams.get(stage);
       if (!s) return null;
+      bump(s);
       kill(s);
       s.state = "stopped";
       streams.delete(stage);
@@ -573,24 +669,40 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
     pause(stage) {
       const s = streams.get(stage);
       if (!s || s.state !== "playing") throw fail(409, "Nothing is playing on that stage.");
+      bump(s);
       kill(s);
       s.state = "paused";
       return view(s);
     },
-    resume(stage) {
+    // 1.6.0: resume and seek answer once the new ffmpeg is launched - after the one it replaces has exited (vacated); while
+    // they wait the stream already reads "playing" at its new offset, and a pause / stop / another seek meanwhile wins
+    async resume(stage) {
       const s = streams.get(stage);
       if (!s || !["paused", "error"].includes(s.state)) throw fail(409, "Nothing is paused on that stage.");
       s.restarts = 0;
-      launch(s);
+      s.pubRetries = 0;
+      const g = bump(s);
+      s.state = "playing";
+      s.error = null;
+      await vacated(stage);
+      if (streams.get(stage) === s && s.gen === g && !s.proc) launch(s);
       return view(s);
     },
-    seek(stage, offset) {
+    async seek(stage, offset) {
       const s = streams.get(stage);
       if (!s || !["playing", "paused", "error", "ended"].includes(s.state)) throw fail(409, "Nothing is loaded on that stage.");
+      const g = bump(s);
       kill(s);
       s.offset = clampInt(offset, 0, Math.max(0, (s.duration || 0) - 1), 0);
       s.restarts = 0;
-      launch(s);
+      s.pubRetries = 0;
+      s.state = "playing";
+      s.error = null;
+      const waited = await vacated(stage);
+      if (streams.get(stage) === s && s.gen === g && !s.proc) {
+        console.log(`[mediactl] ${stage}: seek to ${Math.round(s.offset)}s${waited ? ` (after the previous ffmpeg exited, ${waited} ms)` : ""}`);
+        launch(s);
+      }
       return view(s);
     },
     stopAll() { for (const k of [...streams.keys()]) this.stop(k); },
@@ -663,8 +775,8 @@ function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
       if (req.method === "PUT" && !op) return send(res, 200, { ok: true, stream: await streams.start(stage, b) });
       if ((req.method === "DELETE" && !op) || (req.method === "POST" && op === "stop")) return send(res, 200, { ok: true, stream: streams.stop(stage) });
       if (req.method === "POST" && op === "pause") return send(res, 200, { ok: true, stream: streams.pause(stage) });
-      if (req.method === "POST" && op === "resume") return send(res, 200, { ok: true, stream: streams.resume(stage) });
-      if (req.method === "POST" && op === "seek") return send(res, 200, { ok: true, stream: streams.seek(stage, b.offset) });
+      if (req.method === "POST" && op === "resume") return send(res, 200, { ok: true, stream: await streams.resume(stage) });
+      if (req.method === "POST" && op === "seek") return send(res, 200, { ok: true, stream: await streams.seek(stage, b.offset) });
     }
     return send(res, 404, { ok: false, error: "not found" });
   }

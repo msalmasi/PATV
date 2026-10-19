@@ -472,6 +472,9 @@ function onWatch(s0, slot, m, live) {
     }
     if (m.state === "ended") { await advance(q, s, "finished", { pos: m.position }); return true; }
     if (m.state === "error") {
+      // 1.99acx: right after a seek / next / previous (the new encoder can collide with the one it replaced on the ingest -
+      // medialib.retryRestart): once more, not a skip
+      if (await I().retryRestart(s, m, live && live.look)) return true;
       if (!s.live) { await runQuery("UPDATE media_queues SET fails = fails + 1 WHERE id = ?", [q.id]); q.fails++; }
       console.warn(`[mediaqueue] queue #${q.id}: "${s.title}" failed (${m.error || "error"}) - skipping to the next`);
       await advance(q, s, "error", { pos: m.position, error: m.error });
@@ -729,6 +732,7 @@ async function step(user, room, dir) {
       const pos = await stopEncoder(R.id);
       r = await advance(q, s, dir > 0 ? "skipped" : "back", { pos: pos != null ? pos : s.position, by: user.username, to });
     } else r = await goTo(q, to);
+    if (r && r.ok) I().noteRestart(R.id, 0, r.play_id);        // 1.99acx: started right after a stop - medialib.retryRestart
     await I().logControl(user, R.id, dir > 0 ? "next" : "prev", q.items[to] ? fmtTitle(q.items[to]) : null, { queue_id: q.id });
     return { ok: true, ...r, pos: q.pos };
   });

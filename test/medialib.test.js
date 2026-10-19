@@ -199,6 +199,109 @@ test("stop: ends the slot and the encoder; resume after the slot ended (long pau
   await assert.rejects(L.stop(admin, ROOM), (e) => e.status === 404);
 });
 
+// 1.99acx: "clicking the middle of the timeline just ends the stream" (The Observance, 2026-10-18)
+test("1.99acx: a seek whose new encoder is refused at once (it collided with the ffmpeg it replaced) is started once more there - the slot lives on", async () => {
+  const r0 = await L.play(admin, { room: ROOM, key: "500" });
+  assert.equal((await pubLatest()).status, 302);
+  procs[procs.length - 1].stdout.write("out_time_us=600000000\n");
+  await tick();
+  const r = await L.seek(admin, ROOM, 3000);                                // the timeline clicked half-way
+  assert.equal(r.same_slot, true);
+  const enc = procs[procs.length - 1];
+  assert.ok(enc.args.join(" ").includes("-ss 3000.000"));
+  // what mediactl before 1.99acx ended up with here: the new ffmpeg refused by the ingest before its first frame -> "error"
+  const die = async (p) => {
+    p.stderr.write("[out#0/flv @ 0x1] Error opening output rtmp://stream.publicaccess.tv/stage/stage-0123456789abcdef?k=x: Operation not permitted\n");
+    await tick(); p.emit("exit", 1); await tick();
+  };
+  await die(enc);
+  assert.equal(mstreams.get(L.stageName(ROOM)).state, "error");
+  const before = procs.length;
+  await L.watch();
+  assert.equal(procs.length, before + 1, "started again");
+  assert.ok(procs[procs.length - 1].args.join(" ").includes("-ss 3000.000"), "where the seek put it");
+  assert.equal((await S.getSlot(r0.slot.id)).status, "active", "the slot wasn't ended");
+  const s = (await getQuery("SELECT * FROM media_sessions WHERE room_id = ?", [ROOM]))[0];
+  assert.deepEqual([s.state, s.position], ["playing", 3000]);
+  assert.equal(mstreams.get(L.stageName(ROOM)).state, "playing");
+  // another watcher's look from before that retry answered (still "error") leaves it alone
+  const doneLook = L._q._restarted.get(ROOM).done_look;
+  assert.ok(doneLook > 0);
+  assert.equal(await L._q.retryRestart(s, { state: "error", offset: 3000 }, doneLook), true);
+  assert.equal(await L._q.retryRestart(s, { state: "error", offset: 3000 }, doneLook - 1), true);
+  assert.equal(procs.length, before + 1, "and doesn't start it a third time");
+  // a stale "error" look after a NEWER control (the stream is already playing again): mediactl's resume says 409 - left alone
+  await L.seek(admin, ROOM, 3000);
+  const n409 = procs.length;
+  assert.equal(await L._q.retryRestart(s, { state: "error", offset: 3000 }, doneLook), true);
+  assert.equal(procs.length, n409, "nothing started");
+  assert.equal(mstreams.get(L.stageName(ROOM)).state, "playing");
+  assert.equal((await S.getSlot(r0.slot.id)).status, "active", "and nothing ended");
+  // once is all: failing again - seen by a look after the retry - ends it as before
+  await die(procs[procs.length - 1]);
+  await L.watch();
+  assert.equal((await S.getSlot(r0.slot.id)).end_reason, "library_error");
+  assert.equal((await getQuery("SELECT * FROM media_sessions WHERE room_id = ?", [ROOM])).length, 0);
+  // played on from the seek and THEN died: a real failure, no second go
+  const r1 = await L.play(admin, { room: ROOM, key: "500" });
+  await L.seek(admin, ROOM, 3000);
+  procs[procs.length - 1].stdout.write("out_time_us=90000000\n");
+  await tick();
+  await die(procs[procs.length - 1]);
+  const n0 = procs.length;
+  await L.watch();
+  assert.equal(procs.length, n0);
+  assert.equal((await S.getSlot(r1.slot.id)).end_reason, "library_error");
+  // a fresh play on the pad doesn't inherit an earlier seek's second go
+  const r2 = await L.play(admin, { room: ROOM, key: "500" });
+  await die(procs[procs.length - 1]);
+  await L.watch();
+  assert.equal((await S.getSlot(r2.slot.id)).end_reason, "library_error");
+});
+
+test("1.99acx: with the site's timers on (register) the watcher looks again 5 s after a seek - and 5 s after the second start", async (t) => {
+  const Q = require(path.join(repo, "mediaqueue"));
+  // wait for real I/O (the watcher's calls to mediactl) while setTimeout is mocked: bounded by the (real) clock
+  const until = async (pred) => { const end = Date.now() + 5000; while (Date.now() < end) { if (await pred()) return true; await tick(); } return false; };
+  // an early RTMP failure mediactl reports as `error` (the "Already publishing" line itself the new mediactl retries on its own)
+  const die = async (p) => {
+    p.stderr.write("[out#0/flv @ 0x1] Error opening output rtmp://stream.publicaccess.tv/stage/stage-0123456789abcdef?k=x: Operation not permitted\n");
+    await tick(); p.emit("exit", 1); await tick();
+  };
+  const r0 = await L.play(admin, { room: ROOM, key: "500" });
+  assert.equal((await pubLatest()).status, 302);
+  procs[procs.length - 1].stdout.write("out_time_us=600000000\n");
+  await tick();
+  // the timers register() starts, on mock clocks: the 10 s watcher interval never fires here, the quick looks are ticked by hand
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+  const noop = () => {};
+  L.register(new Proxy({}, { get: () => noop }), { addUser: noop });
+  try {
+    await L.seek(admin, ROOM, 3000);
+    await die(procs[procs.length - 1]);
+    assert.equal(mstreams.get(L.stageName(ROOM)).state, "error");
+    const before = procs.length;
+    t.mock.timers.tick(4999);
+    await tick(); await tick();
+    assert.equal(procs.length, before, "not before RECHECK_MS");
+    t.mock.timers.tick(1);                                                  // the quick look after the seek
+    assert.ok(await until(() => procs.length === before + 1), "started once more by the quick look, no 10 s tick needed");
+    assert.ok(procs[procs.length - 1].args.join(" ").includes("-ss 3000.000"));
+    assert.ok(await until(async () => (await getQuery("SELECT state FROM media_sessions WHERE room_id = ?", [ROOM]))[0].state === "playing"));
+    assert.equal((await S.getSlot(r0.slot.id)).status, "active");
+    // it dies again: the quick look after the SECOND start ends the slot (as before 1.99acx, just one start later)
+    await die(procs[procs.length - 1]);
+    t.mock.timers.tick(5000);
+    assert.ok(await until(async () => (await S.getSlot(r0.slot.id)).end_reason === "library_error"), "ended by the look after the second start");
+    assert.ok(await until(async () => !(await getQuery("SELECT * FROM media_sessions WHERE room_id = ?", [ROOM])).length), "and the session dropped");
+    assert.equal(procs.length, before + 1, "no third start");
+  } finally {
+    L._q._recheck(false);                                                    // the rest of this file runs without timers
+    Q._fast(false);
+    t.mock.timers.reset();
+  }
+});
+
 test("the encoder failing to start ends the slot it opened", async () => {
   const before = (await getQuery("SELECT COUNT(*) AS n FROM stage_slots WHERE status != 'ended'"))[0].n;
   mcfg.maxStreams = 0;                                         // mediactl refuses (429)

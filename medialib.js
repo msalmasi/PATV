@@ -371,12 +371,17 @@ async function startOn(user, R, it, o) {
 }
 
 // mediactl's streams right now (null = can't be reached) + its cap
+// 1.99acx: + `look`, numbered BEFORE the request - retryRestart tells a look taken before its second start answered (stale) from
+// one taken after it
+let looks = 0;
 async function streamsNow() {
+  const look = ++looks;
   try {
     const r = await call("GET", "/streams", null, { timeout: 6000 });
     if (r.status !== 200 || !r.json) return null;
     const list = r.json.streams || [];
     list.max = Number(r.json.max) || null;
+    list.look = look;
     return list;
   } catch (e) { return null; }
 }
@@ -562,6 +567,7 @@ async function restart(user, room, offset, how) {
   if (open) {
     try {
       const r = how === "resume" && offset == null ? await must("POST", `/streams/${name}/resume`, {}) : await must("POST", `/streams/${name}/seek`, { offset: pos });
+      noteRestart(R.id, r.stream ? r.stream.offset : pos, s.play_id);     // 1.99acx: the watcher gives it one more go if it doesn't come back
       if (s.duration) await stage.libraryExtend(s.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + (s.duration - pos)) / 60) + SLACK_MIN);
       await runQuery("UPDATE media_sessions SET state = 'playing', position = ?, updated = ? WHERE room_id = ?", [r.stream ? r.stream.offset : pos, Date.now(), R.id]);
       return { ok: true, position: pos, same_slot: true };
@@ -676,6 +682,62 @@ async function player(user, room) {
   return out;
 }
 
+// ── 1.99acx: a seek / resume / next title that doesn't come back ──
+// The 📼 "clicking the middle of the timeline just ends the stream" report (The Observance, 2026-10-18; confirmed on prod: nginx's
+// "live: already publishing" in the same second as both seeks, media_plays 18 / 19 ended `error`): a race in mediactl 1.5.0 - a
+// seek restarts the encoder on the SAME slot key, and the new ffmpeg was spawned while the one it replaced was still closing its
+// RTMP publish, so nginx-rtmp refused the new one (not every time: it depends on how quickly the old one lets go), mediactl said
+// `error`, and the watcher below ended the slot (a 📼 queue skipped the title). The real fix is in mediactl 1.6.0 (it waits for
+// the old ffmpeg - deploy/mediactl/mediactl.js); this is the site's half, so an older mediactl - or any start
+// that fails right after a control, whatever the reason - doesn't take the whole slot down: a stream in `error` within
+// RESTART_GRACE_MS of a seek / resume / next / previous that never got past where that control put it is started ONCE more
+// there (POST resume - an ffmpeg it collided with is gone by then) instead of ending the slot, and the watcher takes an extra
+// look RECHECK_MS after the control and after that second start, so viewers wait seconds, not a whole tick.
+// The price: a title that's really broken gets that one more start before it's ended / skipped - about RECHECK_MS more of an
+// empty stage than before (the second failure is seen by the look after the second start; a WATCH_MS tick without timers).
+const RESTART_GRACE_MS = 60 * 1000;
+const RECHECK_MS = 5000;               // past mediactl's SIGKILL (4 s): the ffmpeg it replaced is surely gone
+// room id -> {play_id, at, pos, tries, done_look}: the last control restart on that pad (memory only) - only THAT play gets the
+// second go (a later title the queue started by itself, or a fresh play, doesn't inherit it)
+const restarted = new Map();
+let recheckOn = false;
+function recheck(id) {
+  if (!recheckOn) return;
+  const h = setTimeout(() => watch(id).catch(() => {}), RECHECK_MS);
+  if (h.unref) h.unref();
+}
+function noteRestart(roomId, pos, playId) {
+  const id = String(roomId);
+  restarted.set(id, { play_id: Number(playId) || 0, at: Date.now(), pos: Math.max(0, Math.floor(Number(pos) || 0)), tries: 0, done_look: null });
+  recheck(id);
+}
+/** s = the media_sessions row, m = mediactl's view of its stream, look = the streamsNow look that view came from.
+ *  -> true = handled here (don't end / skip it) */
+async function retryRestart(s, m, look = 0) {
+  const r = restarted.get(String(s.room_id));
+  if (!r || r.play_id !== Number(s.play_id) || !m || m.state !== "error" || Date.now() - r.at > RESTART_GRACE_MS) return false;
+  // started once more already: a look taken before that start answered (two watchers overlap - the tick and the quick look) still
+  // shows the old failure - leave it; a look taken after it = it failed again: ended / skipped as before
+  if (r.tries >= 1) return !(r.done_look != null && Number(look) > r.done_look);
+  if (Number(m.offset) > r.pos + 5) return false;                     // it played on from there first: a real failure
+  r.tries++;
+  try {
+    const x = await must("POST", `/streams/${encodeURIComponent(stageName(s.room_id))}/resume`, {});
+    r.done_look = looks;
+    await runQuery("UPDATE media_sessions SET state = 'playing', position = ?, updated = ? WHERE room_id = ? AND play_id = ?",
+                   [x.stream ? x.stream.offset : r.pos, Date.now(), s.room_id, s.play_id]);
+    console.warn(`[medialib] ${s.room_id}: "${s.title}" didn't come back after a seek / skip (${String(m.error || "error").slice(0, 200)}) - started it again at ${clock(r.pos)}`);
+    recheck(String(s.room_id));
+    return true;
+  } catch (e) {
+    r.done_look = looks;
+    // 409: it isn't in `error` any more (a control started it again meanwhile, or mediactl forgot it) - the next look decides
+    if (e && e.status === 409) return true;
+    console.warn(`[medialib] ${s.room_id}: starting "${s.title}" again after a seek / skip failed: ${conf.errLine(e)}`);
+    return false;
+  }
+}
+
 // ── the watcher: keeps the slot and the stream together, and settles held charges ──
 async function watch(only = null) {
   await init();
@@ -707,6 +769,7 @@ async function watch(only = null) {
         await dropSession(s, "lost (media-control restarted?)", s.position);
         n++; continue;
       }
+      if (m.state === "error" && (await retryRestart(s, m, live.look))) { n++; continue; }   // 1.99acx: right after a seek - once more
       if (m.state === "ended" || m.state === "error") {
         await stage.end(s.slot_id, m.state === "ended" ? "library_done" : "library_error", "system").catch(() => {});
         try { await call("POST", `/streams/${encodeURIComponent(name)}/stop`, {}); } catch (e) { /* best effort */ }
@@ -730,6 +793,7 @@ function register(app, { addUser, noTimers } = {}) {
     timer = setInterval(() => watch().catch((e) => console.error("[medialib] watch:", conf.errLine(e))), WATCH_MS);
     timer.unref();
   }
+  if (!noTimers) recheckOn = true;                                     // 1.99acx: the quick look after a seek / next title
   const fail = (res, e) => {
     if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, ...(e.extra || {}) });
     console.error("[medialib]", conf.errLine(e));
@@ -780,5 +844,6 @@ module.exports = { init, register, play, stop, pause, resume, seek, search, item
                    // 1.99lr: for mediaqueue.js
                    player, mayControl, logControl,
                    _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat,
-                         mayControl, logControl, clock, CONTROL_DENIED },
+                         mayControl, logControl, clock, CONTROL_DENIED,
+                         noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; } },   // 1.99acx
                    stageName, call, signHeaders, fmtTitle, inviteItemLink, Refuse, _keys: keys };

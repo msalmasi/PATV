@@ -308,6 +308,29 @@ test("next / previous / edit what's left; the last title can't be skipped; other
   assert.equal(mstreams.list().length, 0);
 });
 
+// 1.99acx: the same collision as "a seek ends the stream": ⏭ stops the title and starts the next on the same stage key at once
+test("1.99acx: ⏭ next whose new title is refused at once (the stopped ffmpeg still held the stage) is started once more - not skipped", async () => {
+  procs.length = 0;
+  const r = await Q.start(admin, { room: ROOM, key: "911", scope: "season" });
+  await pub(keyOf(last()));
+  await playFor(60); await L.watch();
+  await Q.next(admin, ROOM);
+  assert.equal((await sessionRow()).rating_key, "912");
+  // what mediactl before 1.99acx ended up with: the new title's ffmpeg refused by the ingest before its first frame -> "error"
+  const p = last();
+  p.stderr.write("[out#0/flv @ 0x1] Error opening output rtmp://stream.publicaccess.tv/stage/stage-0123456789abcdef?k=x: Operation not permitted\n");
+  await tick(); p.emit("exit", 1); await tick();
+  assert.equal(mstreams.get(L.stageName(ROOM)).state, "error");
+  const n0 = procs.length;
+  await L.watch();
+  assert.equal((await sessionRow()).rating_key, "912", "the same title again - before 1.99acx it skipped to 913");
+  assert.equal(procs.length, n0 + 1);
+  assert.deepEqual([mstreams.get(L.stageName(ROOM)).state, mstreams.get(L.stageName(ROOM)).ratingKey], ["playing", "912"]);
+  assert.equal((await queueRow(r.queue_id)).fails, 0);
+  assert.equal((await queueRow(r.queue_id)).state, "active");
+  await L.stop(admin, ROOM);
+});
+
 test("a title that fails is logged and skipped; a paid title that never got going is refunded", async () => {
   procs.length = 0;
   const u = await mkUser("pleb", 1000000);

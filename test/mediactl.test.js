@@ -244,6 +244,182 @@ test("fallback ladder: a mode that dies before the first frame falls through to 
   probeAnswer = null;
 });
 
+// ── 1.99acx: "seeking just ends the stream" (The Observance, 2026-10-18) ──
+// an ffmpeg that only exits when the test says so (a real one takes a fraction of a second after SIGTERM - notice it on its 0.5 s
+// stats tick, flush, close the RTMP publish - and the SIGKILL comes at 4 s)
+function slowSpawnInto(list) {
+  return (cmd, args) => {
+    const p = new EventEmitter();
+    p.stdout = new PassThrough(); p.stderr = new PassThrough(); p.args = args; p.signals = [];
+    p.kill = (sig) => { p.signals.push(sig); };
+    list.push(p);
+    return p;
+  };
+}
+const nextTick = () => new Promise((r) => setImmediate(r));
+// what ffmpeg 7.1 prints when nginx-rtmp refuses a publish on a stream name that's still held ("Server error: <nginx's onStatus
+// description>", then EPERM = "Operation not permitted" - what prod's nginx did to stageaudio's repair, site 1.99abc)
+const ALREADY = "[rtmp @ 0x55d1c0a3e2c0] Server error: Already publishing\n" +
+                "[out#0/flv @ 0x55d1c0a3d140] Error opening output rtmp://stream.publicaccess.tv/stage/stage-0123456789abcdef?k=psABCDEFGHIJKLMNOP: Operation not permitted\n" +
+                "Error opening output file rtmp://stream.publicaccess.tv/stage/stage-0123456789abcdef?k=psABCDEFGHIJKLMNOP.\n";
+
+test("1.99acx: a seek launches the new ffmpeg only after the old one has EXITED; overlapping seeks collapse; a stop meanwhile wins", async () => {
+  const lp = [];
+  const st = M.makeStreams({ ...cfg, exitWaitMs: 3000 }, fakePlex, slowSpawnInto(lp), () => T, async () => null);
+  await st.start("sk.Room", START);
+  assert.equal(lp.length, 1);
+  lp[0].stdout.write("out_time_us=600000000\n");                 // 10 minutes in
+  await nextTick();
+  const sk = st.seek("sk.Room", 3000);                             // the timeline clicked half-way
+  await nextTick(); await nextTick();
+  assert.equal(lp.length, 1, "nothing new while the old ffmpeg still holds the stage's stream name");
+  assert.deepEqual(lp[0].signals, ["SIGTERM"]);
+  assert.equal(st.get("sk.Room").state, "playing", "it already reads playing at the new place");
+  assert.equal(st.get("sk.Room").offset, 3000);
+  const sk2 = st.seek("sk.Room", 4000);                            // clicked again before it came back
+  lp[0].emit("exit", 255);
+  const [, v2] = await Promise.all([sk, sk2]);
+  assert.equal(lp.length, 2, "one new ffmpeg, for the last seek");
+  assert.match(lp[1].args.join(" "), /-ss 4000\.000/);
+  assert.deepEqual([v2.state, v2.offset], ["playing", 4000]);
+  lp[1].stdout.write("out_time_us=5000000\n");
+  await nextTick();
+  assert.equal(st.get("sk.Room").position, 4005, "the old ffmpeg's exit didn't touch the new one");
+  // a stop while a seek waits: nothing starts
+  const sk3 = st.seek("sk.Room", 100);
+  st.stop("sk.Room");
+  lp[1].emit("exit", 255);
+  await sk3;
+  assert.equal(lp.length, 2);
+  assert.equal(st.get("sk.Room"), null);
+  // a 📼 queue's next title: the PUT right after a stop waits for the stopped ffmpeg too
+  await st.start("sk.Room", START);
+  assert.equal(lp.length, 3);
+  st.stop("sk.Room");
+  const nx = st.start("sk.Room", { ...START, offset: 60 });
+  await nextTick(); await nextTick();
+  assert.equal(lp.length, 3, "the next title waits");
+  lp[2].emit("exit", 255);
+  await nx;
+  assert.equal(lp.length, 4);
+  assert.match(lp[3].args.join(" "), /-ss 60\.000/);
+  // resume right after pause waits as well
+  st.pause("sk.Room");
+  const rs = st.resume("sk.Room");
+  await nextTick();
+  assert.equal(lp.length, 4);
+  lp[3].emit("exit", 255);
+  assert.equal((await rs).state, "playing");
+  assert.equal(lp.length, 5);
+  // an old ffmpeg that ignores SIGTERM: the wait is capped (the SIGKILL follows at 4 s anyway)
+  const lq = [];
+  const st2 = M.makeStreams({ ...cfg, exitWaitMs: 30 }, fakePlex, slowSpawnInto(lq), () => T, async () => null);
+  await st2.start("cap.Room", START);
+  await st2.seek("cap.Room", 200);
+  assert.equal(lq.length, 2, "launched after the cap");
+  st.stopAll(); st2.stopAll();
+  for (const p of [...lp, ...lq]) p.emit("exit", 255);
+});
+
+test("1.99acx: 'Already publishing' from the ingest is tried again in a moment - same mode, no fallback, not an error - then gives up", async () => {
+  const lp = [];
+  const sp = (c, a) => { const p = fakeSpawn(c, a); lp.push(p); return p; };
+  const st = M.makeStreams({ ...cfg, pubRetryMs: 5 }, fakePlex, sp, () => T, async () => null);
+  const refuse = async (p, text = ALREADY) => { p.stderr.write(text); await nextTick(); p.emit("exit", 1); await nextTick(); };
+  const wait = () => new Promise((r) => setTimeout(r, 25));
+  await st.start("pb.Room", START);
+  assert.equal(st.get("pb.Room").mode, "hw");
+  await refuse(lp[0]);
+  assert.equal(st.get("pb.Room").state, "playing", "waiting to try again, not an error");
+  await wait();
+  assert.equal(lp.length, 2, "tried again");
+  assert.equal(st.get("pb.Room").mode, "hw", "the same mode: the ingest's refusal isn't the GPU's fault");
+  assert.equal(st.get("pb.Room").fallbacks.length, 0);
+  // it gets going: the budget is whole again for the next time
+  lp[1].stdout.write("out_time_us=2000000\n");
+  await nextTick();
+  assert.equal(st.get("pb.Room").position, 2);
+  st.stopAll();
+  // still refused after PUB_RETRIES tries: an error (the key masked), as before
+  await st.start("pb.Room", START);
+  for (let i = 0; i < 9; i++) { await refuse(lp[lp.length - 1]); await wait(); }
+  const v = st.get("pb.Room");
+  assert.equal(v.state, "error");
+  assert.match(v.error, /Already publishing/);
+  assert.ok(!v.error.includes("psABCDEFGHIJKLMNOP"), "the stream key is not in the error");
+  st.stopAll();
+  // any other refusal before the first frame is still an error at once (a cut slot's key, a dead ingest)
+  await st.start("pb.Room", START);
+  const n = lp.length;
+  await refuse(lp[n - 1], "[out#0/flv @ 0x1] Error opening output rtmp://stream.publicaccess.tv/stage/psABCDEFGHIJKLMNOP: Input/output error\n");
+  await wait();
+  assert.equal(lp.length, n);
+  assert.equal(st.get("pb.Room").state, "error");
+  st.stopAll();
+});
+
+test("1.99acx: a pause / seek meanwhile voids a pending relaunch - the 'Already publishing' retry, the mode fallback, the blip restart", async (t) => {
+  const lp = [];
+  const sp = (c, a) => { const p = fakeSpawn(c, a); lp.push(p); return p; };
+  let clk = T;
+  const st = M.makeStreams({ ...cfg, pubRetryMs: 20 }, fakePlex, sp, () => clk, async () => null);
+  const wait = () => new Promise((r) => setTimeout(r, 60));
+  const refuse = async (p) => { p.stderr.write(ALREADY); await nextTick(); p.emit("exit", 1); await nextTick(); };
+  // the ingest refused it, a retry is pending: a pause meanwhile wins - nothing starts by itself
+  await st.start("v.Room", START);
+  await refuse(lp[0]);
+  st.pause("v.Room");
+  await wait();
+  assert.equal(lp.length, 1, "the pending retry started nothing");
+  assert.equal(st.get("v.Room").state, "paused");
+  // ...and a seek meanwhile: exactly one new ffmpeg, the seek's
+  await st.resume("v.Room");
+  assert.equal(lp.length, 2);
+  await refuse(lp[1]);
+  await st.seek("v.Room", 1234);
+  assert.equal(lp.length, 3);
+  await wait();
+  assert.equal(lp.length, 3, "the older retry is void");
+  assert.match(lp[2].args.join(" "), /-ss 1234\.000/);
+  st.stop("v.Room");
+  // a mode fallback pending (setImmediate) when a seek comes in: ONE launch - the fallback's mode, at the seek's place
+  await st.start("v.Room", START);
+  let n = lp.length;
+  assert.equal(st.get("v.Room").mode, "hw");
+  lp[n - 1].stderr.write("[vost#0:0/h264_vaapi @ 0x1] Task finished with error code: -22 (Invalid argument)\n");
+  await nextTick();
+  lp[n - 1].emit("exit", 234);                                    // hw failed -> hwdl next, on the next turn
+  await st.seek("v.Room", 2000);                                  // ...but the seek came first
+  await nextTick(); await nextTick();
+  assert.equal(lp.length, n + 1, "one new ffmpeg, not two");
+  assert.match(lp[n].args.join(" "), /-ss 2000\.000/);
+  assert.equal(st.get("v.Room").mode, "hwdl");
+  st.stop("v.Room");
+  // a blip restart pending (2 s) when a seek comes in: ONE launch
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    await st.start("v.Room", START);
+    n = lp.length;
+    lp[n - 1].stdout.write("out_time_us=60000000\n");
+    await nextTick();
+    clk += 60000;
+    lp[n - 1].stderr.write("[flv @ 0x1] Broken pipe\n");
+    await nextTick();
+    lp[n - 1].emit("exit", 1);                                    // it ran a minute: a network blip -> again in 2 s
+    await st.seek("v.Room", 3000);
+    assert.equal(lp.length, n + 1);
+    t.mock.timers.tick(2000);
+    await nextTick();
+    assert.equal(lp.length, n + 1, "the blip restart is void");
+    assert.equal(st.get("v.Room").state, "playing");
+    assert.match(lp[n].args.join(" "), /-ss 3000\.000/);
+  } finally {
+    st.stopAll();
+    t.mock.timers.reset();
+  }
+  for (const p of lp) p.emit("exit", 255);
+});
+
 test("probeFile runs ffprobe with mediactl's entries and survives it failing", async () => {
   const seen = [];
   const fx = (cmd, args, o, cb) => { seen.push([cmd, args]); cb(null, JSON.stringify(FIX("h264-sd"))); };
@@ -401,7 +577,7 @@ test("1.2.0: Plex shares from plex.tv (ids, names, no tokens) and removing one o
               '<SharedServer id="42" username="pend" email="" userID="77" accessToken="T2" acceptedAt="0" invitedAt="1700000000" allLibraries="0"/></MediaContainer>';
   const fake = async (url, o) => {
     seen.push({ url, method: o.method || "GET", token: o.headers["X-Plex-Token"] });
-    if (url.endsWith("/identity")) return { status: 200, json: { MediaContainer: { machineIdentifier: "abcdef0123456789" } } };
+    if (url.endsWith("/identity")) return { status: 200, json: { MediaContainer: { machineIdentifier: "abcdef0123456789", version: "1.43.4.10903-e5521bd8c" } } };
     if (/\/api\/servers\/abcdef0123456789\/shared_servers$/.test(url) && (o.method || "GET") === "GET") {
       // the real request() keeps only 500 characters of a non-JSON answer: the share list must be read raw
       const long = " ".repeat(2000) + xml;
@@ -428,6 +604,7 @@ test("1.2.0: Plex shares from plex.tv (ids, names, no tokens) and removing one o
 test("1.3.0: the server OWNER from plex.tv api/v2/user - id, username, title only (never its token or email), cached", async () => {
   const seen = [];
   const fake = async (url, o) => {
+    if (url.endsWith("/identity")) return { status: 200, json: { MediaContainer: { machineIdentifier: "abcdef0123456789", version: "1.43.4.10903-e5521bd8c" } } };
     seen.push(url);
     if (url === "https://plex.example/api/v2/user") {
       const xml = '<?xml version="1.0"?><user id="9000001" uuid="u1" username="plantbaked" title="Plant &amp; Baked" email="owner@x.test" authToken="OWNERSECRET">' +
@@ -443,6 +620,79 @@ test("1.3.0: the server OWNER from plex.tv api/v2/user - id, username, title onl
   await P.owner();
   assert.equal(seen.length, 1, "cached");
   const bad = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok", plexTv: "https://plex.example" },
-    async () => ({ status: 200, headers: {}, body: Buffer.from("<html>nope</html>") }));
-  await assert.rejects(bad.owner(), (e) => e.status === 502);
+    async (url, o) => (url.endsWith("/identity") ? fake(url, o) : { status: 200, headers: {}, body: Buffer.from("<html>nope</html>") }));
+  await assert.rejects(bad.owner(), (e) => e.status === 502 && /owner/.test(e.message));
+});
+
+test("1.6.0 (site 1.99acx): plex.tv calls go out AS the server (its machine id, product, real version) - never mediactl's own name/version on the server's token", async () => {
+  // plex.tv copies X-Plex-Version onto the device that owns the token; PLEX_TOKEN is the server's own, so "PATV mediactl" 1.5.0
+  // made plex.tv list the 1.43 server as Plex Media Server 1.5.0 and the Plex apps (1.41.2+) called it outdated
+  let t = 1_000_000, version = "1.43.4.10903-e5521bd8c", identityAsXml = false;
+  const seen = [];
+  const fake = async (url, o) => {
+    seen.push({ url, h: o.headers });
+    if (url.endsWith("/identity")) {
+      if (identityAsXml) {   // an XML answer: the version is the MediaContainer's, not the <?xml version="1.0"?> declaration's
+        const x = `<?xml version="1.0" encoding="UTF-8"?>\n<MediaContainer size="0" apiVersion="1.2.3" claimed="1" machineIdentifier="abcdef0123456789" version="${version}">\n</MediaContainer>`;
+        return { status: 200, json: null, text: x };
+      }
+      return { status: 200, json: { MediaContainer: { size: 0, apiVersion: "1.2.3", claimed: true, machineIdentifier: "abcdef0123456789", version } } };
+    }
+    if (url === "https://plex.example/api/v2/user") return { status: 200, headers: {}, body: Buffer.from('<user id="9000001" username="pb" title="pb" authToken="X"/>') };
+    if (/\/api\/servers\/abcdef0123456789\/shared_servers$/.test(url)) return { status: 200, headers: {}, body: Buffer.from("<MediaContainer/>") };
+    if (url.startsWith("http://127.0.0.1:32400/hubs/search")) return { status: 200, json: { MediaContainer: { Hub: [] } } };
+    return { status: 404, json: null, text: "" };
+  };
+  const P = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok", plexTv: "https://plex.example" }, fake, () => t);
+  await P.shares();
+  await P.owner();
+  await P.search("night");
+  const tvCalls = seen.filter((x) => x.url.startsWith("https://plex.example/"));
+  assert.equal(tvCalls.length, 2);
+  for (const c of tvCalls) {
+    assert.equal(c.h["X-Plex-Client-Identifier"], "abcdef0123456789", "the server's machine identifier");
+    assert.equal(c.h["X-Plex-Product"], "Plex Media Server");
+    assert.equal(c.h["X-Plex-Version"], "1.43.4.10903-e5521bd8c", "the server's REAL version");
+    assert.equal(c.h["X-Plex-Token"], "tok");
+    assert.ok(!/mediactl/i.test(JSON.stringify(c.h)) && c.h["X-Plex-Version"] !== M.VERSION, "never mediactl's own name or version");
+  }
+  // the local Plex still sees "PATV mediactl" (those requests never reach plex.tv)
+  const local = seen.find((x) => x.url.includes("/hubs/search"));
+  assert.equal(local.h["X-Plex-Product"], "PATV mediactl");
+  assert.equal(seen.filter((x) => x.url.endsWith("/identity")).length, 1, "the identity is cached");
+  // a Plex update while mediactl runs: the new version is used once the cache is older than 10 minutes
+  version = "1.43.5.11000-aaaaaaaaa";
+  t += 9 * 60 * 1000;
+  await P.shares();
+  assert.equal(seen[seen.length - 1].h["X-Plex-Version"], "1.43.4.10903-e5521bd8c", "still cached");
+  t += 2 * 60 * 1000;
+  identityAsXml = true;
+  await P.shares();
+  assert.equal(seen[seen.length - 1].h["X-Plex-Version"], "1.43.5.11000-aaaaaaaaa", "re-read after 10 minutes (XML answer read right)");
+  assert.equal(await P.machineId(), "abcdef0123456789");
+  // Plex restarting (an update) when the cache runs out: the last good identity carries on, and the next call reads it again
+  identityAsXml = false;
+  let plexDown = true;
+  const P2 = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok", plexTv: "https://plex.example" },
+    async (url, o) => { if (plexDown && url.endsWith("/identity")) throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }); return fake(url, o); }, () => t);
+  await assert.rejects(P2.shares(), /ECONNREFUSED/, "no identity ever read: nothing to fall back on");
+  plexDown = false;
+  await P2.shares();
+  t += 11 * 60 * 1000;
+  plexDown = true;
+  version = "1.43.6.12000-bbbbbbbbb";
+  await P2.shares();
+  assert.equal(seen[seen.length - 1].h["X-Plex-Version"], "1.43.5.11000-aaaaaaaaa", "Plex down: the last good identity is used");
+  plexDown = false;
+  await P2.shares();
+  assert.equal(seen[seen.length - 1].h["X-Plex-Version"], "1.43.6.12000-bbbbbbbbb", "Plex back: read again at once");
+  // no readable version -> nothing goes to plex.tv at all (never stamp a guess)
+  const noVer = async (url, o) => (url.endsWith("/identity") ? { status: 200, json: { MediaContainer: { machineIdentifier: "abcdef0123456789" } } } : fake(url, o));
+  const sent = [];
+  const Q = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok", plexTv: "https://plex.example" },
+    async (url, o) => { sent.push(url); return noVer(url, o); });
+  await assert.rejects(Q.owner(), (e) => e.status === 502 && /version/.test(e.message));
+  await assert.rejects(Q.shares(), (e) => e.status === 502);
+  assert.ok(!sent.some((u) => u.startsWith("https://plex.example/")), "plex.tv was never called");
+  assert.equal(await Q.machineId(), "abcdef0123456789", "the machine id alone still reads");
 });

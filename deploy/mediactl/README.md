@@ -17,6 +17,13 @@ site play a movie or an episode from the Plex library on a pad's stage.
 * The site opens a free **library slot** on the pad (one per pad) and hands mediactl that slot's one-time RTMP key.
   Everything after the RTMP ingest is the ordinary stage pipeline, so nothing else changes.
 * Stop / pause (stops ffmpeg, keeps the position) / seek (restarts ffmpeg at the new time) / status + progress.
+  1.6.0 (site 1.99acx): a seek / resume (and a 📼 queue's next title after a stop) starts the new ffmpeg only once the one
+  it replaces has **exited** (at most 5 s): it publishes with the same slot key, and while the old one still holds that stream
+  name nginx-rtmp refuses the new one ("live: already publishing") - 1.5.0 then reported `error` and the site ended the slot.
+  That was "seeking ends the stream" (confirmed on prod 2026-10-18: nginx's refusal in the same second as both seeks); it
+  depends on how quickly the old ffmpeg lets go, so some seeks got through. A start still refused that way is retried every
+  2.5 s (8 times). Seeks (with how long they waited for the old ffmpeg), those retries and a stream that dies (its last
+  words, key masked) are now logged in `journalctl -u mediactl`.
 * One stream per stage; at most `MEDIACTL_MAX_STREAMS` at once (default 2, the iGPU's budget next to Plex).
 * The Plex token never leaves the container. The site only ever sees titles, posters, tracks and play status.
 
@@ -55,6 +62,13 @@ the first frame (and not because of the RTMP ingest) falls through to the next o
 * `POST /plex/shares/:id/remove {plex_id}` removes ONE library share (not the friendship) - only when that share belongs to
   that Plex user. The site asks only after an admin confirmed on /admin/media (or with its `plex_auto_revoke` setting on).
   `MEDIACTL_PLEX_REVOKE=0` in `/etc/mediactl/mediactl.env` refuses every removal here.
+* 1.6.0 (site 1.99acx): plex.tv calls go out AS the server - its machine identifier, product `Plex Media Server` and its
+  real version (read from the local `/identity`, re-read every 10 minutes, the last good one kept if Plex is restarting); with
+  no readable version nothing is sent to plex.tv. The token here is the server's own, and the members-sync calls with the old
+  `PATV mediactl` / mediactl-version headers re-stamped the server's plex.tv entry: it read "1.5.0" after every hourly sync
+  until Plex's own check-in put 1.43 back - and the Plex apps (they want 1.41.2 or newer) called the server outdated. To check
+  after the update: look at the server's version in a Plex app or app.plex.tv **within a few seconds of Sync now** on
+  /admin/media (later proves nothing - Plex heals it either way). Calls to the local Plex still say `PATV mediactl`.
 
 ## Security
 
