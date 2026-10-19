@@ -1264,10 +1264,15 @@ async function pepeClaim({ limit = 10, price = null, vision = null } = {}) {
     const mem = await membership(c.conversation_id, c.user_id);
     const floor = mem ? mem.cleared_id || 0 : Infinity;
     const photos = (m) => (m.id > floor ? (media.get(m.id) || []).map((p) => ({ ref: p.id, w: p.w, h: p.h, nsfw: !!p.nsfw })) : []);
+    // adultgate site: the 18+ pads (their Camfrog room ids) whose live room this member may not get - Pepe leaves those rooms
+    // out of the live context he answers from (camfrog-bot pepe_dmctx). Only while the 18+ gate is on and stops them somewhere.
+    let gated = [];
+    try { gated = require("./adultgate").gatedRooms(u); } catch (e) { gated = []; }
     out.push({
       conversation: c.conversation_id, upto,
       user: { username: u.username, display: display(u), camfrog: u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : null,
-              level: Number(u.level) || 0, staff: SP.atLeast(u, "staff"), admin: SP.atLeast(u, "admin") },   // who they are (for Pepe), not a permission
+              level: Number(u.level) || 0, staff: SP.atLeast(u, "staff"), admin: SP.atLeast(u, "admin"),   // who they are (for Pepe), not a permission
+              ...(gated.length ? { rooms_gated: gated } : {}) },
       messages: fresh.map((m) => { const p = photos(m); return p.length ? { id: m.id, text: line(m), at: m.created_at, photos: p } : { id: m.id, text: line(m), at: m.created_at }; }),
       history: msgs.reverse().map((m) => ({ from: m.sender_id === PEPE_ID ? "pepe" : "them", text: line(m), at: m.created_at })),
     });

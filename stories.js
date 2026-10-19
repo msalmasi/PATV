@@ -178,6 +178,9 @@ async function forViewer(viewer, { room = null, people = null } = {}) {
   }
   const out = [];
   for (const [rid, list] of by) {
+    // adultgate site: an 18+ pad while the owner switch is on - no circle, count or picture for a viewer the 18+ gate
+    // stops (signed out / not age-confirmed); "ok" for everyone while it's off
+    if (PA.adultGate(viewer, rid) !== "ok") continue;
     list.sort((a, b) => a.created - b.created);
     const latest = list[list.length - 1].created;
     const upto = seen.get(rid) || 0;

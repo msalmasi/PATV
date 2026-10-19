@@ -287,8 +287,9 @@ async function postToPad(user, captureId, { caption = "", body = "" } = {}) {
     const cap = S.cleanLine(caption, CAPTION_MAX);
     const what = row.source === "stage" ? (row.kind === "clip" ? "Stage clip" : "Stage snap") : KIND_NOUN[row.kind] || "Capture";
     const title = cap || `${what}${subj.name ? " of " + subj.name : ""} in ${R.title || R.id}`.slice(0, CAPTION_MAX);
+    // adultgate site: liveRoom = the room it was captured in - the 18+ gate follows the post from its first notice on
     made = await S.create(authorId, { title, body: String(body || "").slice(0, 2000) || undefined, community: R.id, attachments: [att], nsfw: !!Number(row.nsfw), announce: [] },
-                          { free: true, onBehalf: authorId !== acct.userId || managesAny(acct) || (await rooms.canManage(acct, R.id)) });
+                          { free: true, onBehalf: authorId !== acct.userId || managesAny(acct) || (await rooms.canManage(acct, R.id)), liveRoom: R.id });
     await runQuery(`UPDATE story_posts SET post_id = ?, author_id = ?, subject_user_id = ?, subject_login = ?, subject_name = ?, room_title = ? WHERE capture_id = ?`,
                    [made.id, authorId, subj.userId, subj.login, subj.name, R.title || R.id, row.id]);
     // the person on cam hears about it (with the way out) - unless they posted it themselves

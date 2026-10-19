@@ -449,6 +449,13 @@ function register(app, { addUser, isBotToken }) {
       const key = String(req.params.slug || "").slice(0, 120);
       const R = (await rooms.bySlug(key).catch(() => null)) || (await rooms.get(key).catch(() => null));
       if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
+      // adultgate site: who was on the room's mic is its live room's - past the 18+ gate (switch on) nothing (the sign-in is
+      // only read when the gate applies here; off: as it always was)
+      const AG = require("./adultgate");
+      if (AG.applies(R.id)) {
+        if (req.user === undefined && typeof addUser === "function") await new Promise((r) => addUser(req, res, r));
+        if (AG.refuseJson(req, res, R.id, R.slug)) return;
+      }
       res.json(await listForRoom(R.id));
     } catch (e) { fail(res, e); }
   });

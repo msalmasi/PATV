@@ -1209,6 +1209,8 @@ app.get("/info", addUser, (req, res) => {
 require("./pads").register(app);
 // 1.99fu: who can see a pad (Public / Members / Approved) - its page + API gates run before every pad route below
 require("./padaccess").register(app, { addUser });
+// adultgate site: the 18+ pad gate's owner switch (/pads/admin#adult, off by default) + the one-time age confirmation (/confirm-age)
+require("./adultgate").register(app, { addUser });
 require("./feedweb").register(app, { isBotToken, addUser });
 require("./feedtags").register(app, { addUser });   // 1.99iq: content tags - a pad mod removes a tag, popular tags (/api/feed/tags)
 require("./padflair").register(app, { addUser });   // 1.99ir: user flair per pad (/api/pads/:slug/flair...)

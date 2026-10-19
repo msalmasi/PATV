@@ -423,6 +423,7 @@ const RULES = {
   "creator_pads.set_by": { deny: NAME },
   "creator_performers.creator_id": M(),
   "age_attest.user_id": M({ key: [] }),
+  "adult_gate_cfg.by": { deny: "adultgate site: who last flipped the 18+ pad gate (a site username) - an audit name; admin_audit has the id" },
   "explicit_readiness.owner": { deny: TEXT }, "explicit_readiness.updated_by": { deny: NAME },
   "takedown_cases.reporter_id": M(), "takedown_cases.resolved_by": { deny: NAME },
   // 1.99wj: sessions.js - the merged-away account's sign-ins END with the merge (sessions.revokeForMerge in moveUserRows deletes
@@ -743,6 +744,12 @@ async function carryUserFields(from, toId) {
     if (cols.has(b + "_at")) set[b + "_at"] = from[b + "_at"] || null;
   }
   if (cols.has("created_at") && from.created_at && (!to.created_at || String(from.created_at) < String(to.created_at))) set.created_at = from.created_at;
+  // adultgate site: the age confirmation (users.age_confirmed_at + the wording's version age_confirmed_v) - either account's
+  // counts; the earliest is kept, with its own version
+  if (cols.has("age_confirmed_at") && Number(from.age_confirmed_at) > 0 && (!(Number(to.age_confirmed_at) > 0) || Number(from.age_confirmed_at) < Number(to.age_confirmed_at))) {
+    set.age_confirmed_at = Number(from.age_confirmed_at);
+    if (cols.has("age_confirmed_v")) set.age_confirmed_v = from.age_confirmed_v || null;
+  }
   if (cols.has("avatar") && from.avatar && !DEFAULT_AVATAR.test(String(from.avatar)) && (!to.avatar || DEFAULT_AVATAR.test(String(to.avatar)))) set.avatar = from.avatar;
   for (const c of ["streamId", "streamKey"]) if (cols.has(c) && !to[c] && from[c]) set[c] = from[c];
   // a verified email the target lacks (users.email is UNIQUE: off the old row first). Never replaces a verified one.
@@ -811,6 +818,7 @@ async function afterMerge(toId, report = {}) {
   const loaded = (m) => Object.keys(require.cache).some((k) => k.endsWith(path.sep + m + ".js"));
   try { if (loaded("rooms")) await require("./rooms").loadCache(); } catch (e) { console.error("[MERGE] rooms cache:", e.message); }
   try { if (loaded("padaccess")) await require("./padaccess").load(); } catch (e) { console.error("[MERGE] pad cache:", e.message); }
+  try { if (loaded("adultgate")) await require("./adultgate").load(); } catch (e) { console.error("[MERGE] adult gate:", e.message); }   // adultgate site
   try {
     const owed = Number(report.welcomeOwed) || 0;
     if (owed > 0) {

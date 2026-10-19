@@ -1,0 +1,63 @@
+<%# adultgate site: /pads/admin "🔞 18+ pads" - the owner switch of the 18+ gate (adultgate.js). Locals: ag = adultgate.adminView
+    ({enabled, updated, by, can_edit, adult_pads, confirmed, log}) or null. Everyone with this page sees it; only an OWNER (Admin +
+    Pepe role "owner" on the linked chat login) can change it - the API re-checks. Every change: admin_audit "adult-gate". %>
+<% const ag_ = typeof ag !== 'undefined' && ag ? ag : null;
+   const when_ = (ms) => (ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : ''); %>
+<section class="sb-card" id="adult" aria-labelledby="adultT">
+  <h2 id="adultT"><span class="ds-ic" aria-hidden="true">🔞</span> 18+ pads<% if (ag_ && !ag_.can_edit) { %> <span class="adm-pill admin">owners change this</span><% } %></h2>
+  <p class="muted">Pads marked 18+ (by their owner in pad settings, or a site admin) show an 18+ badge either way. With the gate <b>on</b>, an 18+ pad's live room -
+    the chat, mic transcripts, who's in it and on the mic, the topic, the headcounts, room audio, cams (and a cam's name on the stage), captures and story
+    pictures, analytics, mic-challenge results, the homepage's live widget, 🎧 listen and now-playing for it, and the chat quotes, mic clips and captures
+    posted from it - is only for members who are signed in and have confirmed they're 18 or older (once per account, on <code>/confirm-age</code>; a PATV
+    Creators, creator 18+ or voice-clone 18+ confirmation counts). They're also the only ones who can talk into it from the site (chat, commands, voice clips,
+    the Pepe menu, the DJ panel). Signed-out visitors and unconfirmed members get a neutral "This pad is 18+" card - no lines, names or counts; listeners and
+    viewers already connected are cut off when it starts applying. The pad's owner and site staff are never stopped. The pad page, its other posts and its
+    stage stream stay as the pad's access level allows. <b>Off</b> (the default): nothing changes.</p>
+  <% if (!ag_) { %>
+    <p class="muted">Couldn't read the gate's state.</p>
+  <% } else { %>
+    <% if (!ag_.loaded) { %>
+      <%# adultgate site: the switch couldn't be read - the gate fails closed (18+ pads gated as if ON) and retries every 30 s %>
+      <p class="adm-warn" role="alert" id="agLoadErr"><b>Couldn't read the switch from the database<%= ag_.load_error ? ' (' + ag_.load_error.message + ')' : '' %>.</b>
+        Until it loads, 18+ pads are gated as if the switch were ON (it fails closed); it retries every 30 seconds. Changing it is off until then.</p>
+    <% } %>
+    <p id="agState">Now: <b id="agNow"><%= ag_.enabled ? 'ON' : 'OFF' %></b> · <%= ag_.adult_pads %> pad<%= ag_.adult_pads === 1 ? '' : 's' %> marked 18+ · <%= ag_.confirmed %> account<%= ag_.confirmed === 1 ? '' : 's' %> confirmed their age<% if (ag_.updated) { %> · last changed by <%= ag_.by || '?' %> on <%= when_(ag_.updated) %><% } %></p>
+    <form id="agForm" class="settings"><fieldset<%= ag_.can_edit ? '' : ' disabled' %> style="display:contents;border:0;margin:0;padding:0">
+      <label class="chk"><input type="checkbox" name="enabled"<%= ag_.enabled ? ' checked' : '' %>> Gate 18+ pads (sign in + age confirmation)</label>
+      <label class="fld">Why (kept in the log)<input type="text" name="reason" maxlength="200" autocomplete="off"></label>
+      <div class="row"><% if (ag_.can_edit) { %><button type="submit" class="btn primary">Save</button><% } else { %><span class="muted">Only an owner (Admin with Pepe's owner role) can change this.</span><% } %><span class="msg" id="agMsg" role="status" aria-live="polite"></span></div>
+    </fieldset></form>
+    <% if (ag_.log && ag_.log.length) { %>
+      <table class="mini" aria-label="18+ gate changes"><thead><tr><th>When</th><th>Who</th><th>Set to</th><th>Why</th></tr></thead><tbody>
+        <% ag_.log.forEach((r) => { %><tr><td><%= when_(r.at) %></td><td><%= r.admin || '?' %></td><td><%= r.to ? 'ON' : 'OFF' %></td><td><%= r.reason || '' %></td></tr><% }) %>
+      </tbody></table>
+    <% } else { %><p class="muted">Never changed - off since it shipped.</p><% } %>
+  <% } %>
+</section>
+<% if (ag_ && ag_.can_edit) { %>
+<script>
+(function () {
+  'use strict';
+  var f = document.getElementById('agForm');
+  if (!f) return;
+  var msg = document.getElementById('agMsg');
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var on = !!f.elements.enabled.checked;
+    if (on && !window.confirm('Turn the 18+ gate ON? Signed-out visitors and unconfirmed members lose the live room of every 18+ pad.')) return;
+    msg.textContent = 'Saving…';
+    fetch('/api/admin/adultgate', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ enabled: on, reason: f.elements.reason.value.trim() }) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); })
+      .then(function (j) {
+        if (!j.ok) { msg.textContent = j.error || 'Not saved.'; return; }
+        document.getElementById('agNow').textContent = j.enabled ? 'ON' : 'OFF';
+        f.elements.enabled.checked = !!j.enabled;
+        f.elements.reason.value = '';
+        msg.textContent = 'Saved - the gate is ' + (j.enabled ? 'on' : 'off') + '.';
+      })
+      .catch(function () { msg.textContent = 'Not saved - check your connection.'; });
+  });
+})();
+</script>
+<% } %>

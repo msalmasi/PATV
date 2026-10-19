@@ -309,6 +309,7 @@ const NAME_COLUMNS = [
   "story_saves.by_name", "translation_suggestions.username", "voice_consents.login", "voice_consents.typed_login", "voice_owned_logins.login",
   "voices.owner_login", "ach_events.login", "ach_metrics.login", "ach_progress.login", "stale_notice.login", "stale_notice.username",
   "inbox_pending.camfrog", "gang_rep_events.member_key", "gang_members.member_key",
+  "adult_gate_cfg.by",                 // adultgate site: who last flipped the 18+ pad gate (the /pads/admin card shows it)
 ];
 const DISPLAY_COLUMNS = [["stage_slots", "displayname", "userId"], ["stage_queue", "displayname", "userId"]];
 
@@ -449,7 +450,8 @@ async function execute(userId, { force = false } = {}) {
     const set = { username: pseudo, displayname: "Deleted user", email: null, password: randomHash, avatar: "/public/img/avatar.png", class: "pleb",
                   discordId: null, discordUsername: null, twitchId: null, twitchDisplayname: null, twitchLogin: null, camfrogUsername: null,
                   streamId: null, streamKey: null, emailVerificationToken: null, tokenExpires: null, isEmailVerified: 0, resetPasswordToken: null,
-                  resetPasswordExpires: null, archived_at: t, password_set: 0, displayname_auto: 0 };
+                  resetPasswordExpires: null, archived_at: t, password_set: 0, displayname_auto: 0,
+                  age_confirmed_at: null, age_confirmed_v: null };        // adultgate site: the age confirmation goes with the person
     const uc = await cols("users");
     const keys = Object.keys(set).filter((k) => uc.includes(k));
     await runQuery(`UPDATE users SET ${keys.map((k) => `"${k}" = ?`).join(", ")} WHERE userId = ?`, [...keys.map((k) => set[k]), uid]);
@@ -473,6 +475,12 @@ async function execute(userId, { force = false } = {}) {
   });
   try { await require("./accountexport").removeAll(uid); } catch (e) { /* none */ }
   try { require("./sessions")._clearCache(); } catch (e) { /* none */ }
+  // adultgate site: the 18+ gate forgets the account (and, when it was them, the switch card's "last changed by" reloads pseudonymised)
+  try {
+    const AG = require("./adultgate");
+    AG.drop(uid);
+    if (AG.isReady()) await AG.load().catch(() => {});
+  } catch (e) { /* no gate */ }
   console.log(`[acctdel] ${uid} deleted -> ${pseudo}${report.route ? ` (${report.route.amount} PAT -> ${report.route.legs.map(([d, a]) => `${d} ${a}`).join(", ")})` : ""}`);
   return { ok: true, state: "done", report };
 }

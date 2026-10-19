@@ -213,7 +213,7 @@
         <% trend_.forEach((r) => { %><li class="<%= r.trend.front ? 'front' : '' %>">
           <%# 1.99es: the 🚀 badge sits by the name, not among the stat tags %>
           <span class="tn"><a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a><%- BM(r.boost_pat, 'tg boost') %></span>
-          <span class="tags"><% if (r.trend.front) { %><span class="tg on"><%- t('rooms.on_front') %></span><% } else { %><span class="tg"><%- t('rooms.trending_n', { n: r.trend.rank - (trend_[0].trend.front ? 1 : 0) }) %></span><% } %><span class="tg">👥 <%= r.count %></span></span>
+          <span class="tags"><% if (r.trend.front) { %><span class="tg on"><%- t('rooms.on_front') %></span><% } else { %><span class="tg"><%- t('rooms.trending_n', { n: r.trend.rank - (trend_[0].trend.front ? 1 : 0) }) %></span><% } %><% if (r.count != null) { %><span class="tg">👥 <%= r.count %></span><% } %></span>
           <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="<%- t('rooms.boost_aria', { title: r.title }) %>"><%- IC_(t('rooms.boost')) %></a>
         </li><% }) %>
       </ol>

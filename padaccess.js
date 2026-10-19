@@ -16,6 +16,13 @@
 //
 // Pepe's Camfrog room itself is not affected: this only governs the website.
 //
+// adultgate site: the 18+ pad gate (adultgate.js - one owner switch on /pads/admin#adult, OFF by default). While it is on,
+// an 18+ pad's members-tier content (everything full() guards) also needs a signed-in viewer who confirmed they're 18 or
+// older (the pad's owner and site staff exempt) - full() includes it, adultGate() says why not ("signin" | "confirm"), and
+// register()'s second /api/rooms/:slug gate covers the live-room APIs (adultgate.LIVE_API, any letter case), which also
+// check the room they resolved themselves. adultSlots() blanks a stage cam slot's name, adultGateFor() is the async
+// per-account form (open streams re-check with it). Off: no change.
+//
 // Data (this module owns both tables; nothing is written unless an owner changes a setting or someone asks to join)
 //   pad_access   room_id PK, level ('public' | 'members' | 'approved'), updated, updated_by. No row = "members".
 //   pad_members  room_id + user_id PK, status ('pending' | 'approved' | 'denied' | 'removed'), note (the request's
@@ -37,6 +44,7 @@ const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const rooms = require("./rooms");
+const AG = require("./adultgate");   // adultgate site: the 18+ pad gate (off by default)
 
 const LEVELS = Object.freeze(["public", "members", "approved"]);
 const DEFAULT = "members";
@@ -72,6 +80,9 @@ function init() {
                       note TEXT, requested_at INTEGER, decided_at INTEGER, decided_by TEXT, PRIMARY KEY (room_id, user_id))`);
       await runQuery("CREATE INDEX IF NOT EXISTS pad_members_user ON pad_members (user_id)");
       await load();
+      // adultgate site: the 18+ gate's switch + confirmed accounts load with the levels. A failure doesn't stop the levels:
+      // the gate itself fails closed (18+ pads stay gated), retries and logs (adultgate.init)
+      try { await AG.init(); } catch (e) { /* adultgate logged it; 18+ pads stay gated until it loads */ }
     })().catch((e) => { console.error("[padaccess] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -118,10 +129,25 @@ function canSee(u, roomId) {
   return levelOf(roomId) !== "approved" || inside(u, roomId);
 }
 /**
+ * adultgate site: the 18+ rule alone (adultgate.gate) -> "ok" | "signin" | "confirm". "ok" for every pad while the switch
+ * is off; opts.always applies it anyway (features that gate 18+ pads on their own terms, e.g. CL3's chat history).
+ */
+function adultGate(u, roomId, opts) { return AG.gate(u || null, roomId, opts); }
+/**
+ * adultgate site: a stage's public slots for `viewer`: a 🎬 cam slot (someone's Camfrog cam, mainstage source 'cam') on an
+ * 18+ pad the gate stops them at carries no name or title (the cam itself needs a ticket - padFull - anyway). Off: as is.
+ */
+function adultSlots(slots, viewer) {
+  if (!Array.isArray(slots)) return slots;
+  return slots.map((s) => (s && s.cam && s.room_id && AG.gate(viewer || null, s.room_id) !== "ok" ? { ...s, display: "", title: null, adult: true } : s));
+}
+/**
  * May `u` see this pad's members-tier content - the live Camfrog room (chat, people, mic, audio), story pictures, the
- * room topic, analytics? Public: everyone. Members: signed in. Approved: inside.
+ * room topic, analytics? Public: everyone. Members: signed in. Approved: inside. adultgate site: with the 18+ switch on,
+ * an 18+ pad's also needs a signed-in, age-confirmed viewer (owner / staff exempt).
  */
 function full(u, roomId) {
+  if (AG.gate(u || null, roomId) !== "ok") return false;
   const lv = levelOf(roomId);
   if (lv === "public") return true;
   if (lv === "approved") return inside(u, roomId);
@@ -351,6 +377,13 @@ async function fullFor(userId, roomId) {
   const u = await accountLite(String(userId));
   return full(u || null, roomId);
 }
+/** adultgate site: the 18+ gate alone for an account id (null = signed out) - class from the same 60 s cache. */
+async function adultGateFor(userId, roomId) {
+  await init();
+  if (!userId) return AG.gate(null, roomId);
+  const u = await accountLite(String(userId));
+  return AG.gate(u || null, roomId);
+}
 /** 1.99gk: remember an IP that proved itself another way (a session cookie) for this stream's HLS parts. */
 function rememberIp(ip, stream) {
   if (!ip || !stream) return;
@@ -407,6 +440,23 @@ function register(app, { addUser }) {
       if (inside(u, R.id)) return next();
       res.set("Cache-Control", "no-store");
       return res.status(u && u.userId ? 403 : 401).json({ ok: false, locked: true, error: "This pad is for approved members." });
+    } catch (e) { next(e); }
+  });
+  // adultgate site: the 18+ gate (switch on) for the live-room APIs (adultgate.LIVE_API, matched in any letter case like the
+  // routes themselves) - the routes refuse on their own too (full() / adultgate.refuseJson on the room THEY resolved).
+  // Off: never in the way.
+  app.use("/api/rooms/:slug", async (req, res, next) => {
+    try {
+      if (RESERVED.has(String(req.params.slug || "").toLowerCase()) || !AG.LIVE_API.test(req.path || "")) return next();
+      await init();
+      if (!AG.enabled() && !AG.unknown()) return next();          // off: no lookup at all
+      const R = await resolveSlug(req.params.slug);
+      if (!R || !AG.applies(R.id)) return next();
+      const u = await withUser(req, res);
+      const g = AG.gate(u, R.id);
+      if (g === "ok") return next();
+      res.set("Cache-Control", "no-store");
+      return res.status(AG.statusOf(g)).json(AG.refusal(g, "/p/" + encodeURIComponent(require("./pads").padSlug(R)), req.t));
     } catch (e) { next(e); }
   });
 
@@ -475,7 +525,7 @@ function register(app, { addUser }) {
 }
 
 module.exports = {
-  init, load, register, LEVELS, DEFAULT, INFO, levelOf, isPublic, isApproved, anyApproved, inside, canSee, full, blockedFor, visibleRows,
+  init, load, register, LEVELS, DEFAULT, INFO, levelOf, isPublic, isApproved, anyApproved, inside, canSee, full, adultGate, adultSlots, adultGateFor, blockedFor, visibleRows,
   state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, userInside, fullFor, rememberIp, Refuse, NOTE_MAX, RETRY_MS,
   READ_IP_MS, isReady: () => loaded, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => { ready = null; loaded = false; LEVEL = new Map(); MEMBERS = new Map(); ipOk.clear(); classCache.clear(); },
 };

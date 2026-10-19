@@ -344,6 +344,33 @@ let kickImpl = (id) => {
   }
 };
 function kickReader(id) { try { kickImpl(id); } catch (e) { /* best effort */ } }
+/**
+ * adultgate site: the 18+ gate now applies to a room (the switch on, the pad marked 18+, or every TICK while on): drop the
+ * live-cam viewers (and stage-slot viewers of a room's cam) it stops - their WHEP reader is kicked, as when a viewer stops
+ * beating. -> how many were dropped
+ */
+async function recheck() {
+  const AG = require("./adultgate");
+  const PA = require("./padaccess");
+  let n = 0;
+  const t = now();
+  for (const S of SESS.values()) {
+    if (S.ended || !AG.applies(S.roomId)) continue;
+    for (const uid of [...S.viewers.keys()]) {
+      if ((await PA.adultGateFor(uid, S.roomId)) !== "ok") { if (dropViewer(S, uid, "pad_access", t)) n++; }
+    }
+    if (S.stageViewers) {
+      for (const [uid, v] of [...S.stageViewers.entries()]) {
+        if ((await PA.adultGateFor(uid, S.roomId)) === "ok") continue;
+        S.stageViewers.delete(uid);
+        for (const rid of v.readers || []) kickReader(rid);
+        n++;
+      }
+    }
+  }
+  if (n) console.log(`[livecam] 18+ gate: dropped ${n} live cam viewer(s)`);
+  return n;
+}
 
 // ── who may watch ──
 const CODES = {
@@ -746,6 +773,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
   init().catch((e) => console.error("[livecam] init:", e.message));
   const tm = setInterval(() => { try { sweep(); } catch (e) { /* next time */ } }, 5000);
   if (tm.unref) tm.unref();
+  require("./adultgate").onChange(() => recheck());     // adultgate site: viewers the 18+ gate now stops are dropped
   const fetchOnly = (req, res) => {
     if (req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req)) { res.status(403).json({ ok: false, error: "Security check failed - reload the page." }); return false; }
     return true;
@@ -916,6 +944,7 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
 module.exports = {
   register, init, normalize, save, current, viewerCap, pathFor, pubKey, readTicket, checkTicket, camForPath, start, beat, stop, endBy, mayEnd,
   forBot, noteSync, auth, hint, adminView, stageConsent, stageHold, stageRelease, stageState, stageWatch, setOptout, optoutState, optedOut, sweep, dropViewerOf, watchersOf,
+  kickReader, recheck,                // adultgate site: roomrtc ends WebRTC room listeners through kickReader too
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
   _sessions: SESS,

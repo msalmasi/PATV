@@ -103,6 +103,22 @@ test("the contents: the member's own data, by section", async () => {
   assert.deepEqual(d.notices.browser_notifications, [{ id: 1, push_service: "fcm.googleapis.com", kinds: ["dm", "mention"], browser: "Chrome on Windows", locale: "es", created: 1, last_ok: 2 }]);
 });
 
+test("adultgate site: the age confirmation (users.age_confirmed_at + its wording's version) and the Creators one are in the account section", async () => {
+  await runQuery("ALTER TABLE users ADD COLUMN age_confirmed_at INTEGER").catch(() => {});
+  await runQuery("ALTER TABLE users ADD COLUMN age_confirmed_v TEXT").catch(() => {});
+  let d = await X.collect("me");
+  assert.deepEqual(d.account.age_confirmation, { at: null, version: null, creators: null }, "never confirmed: listed as such");
+  await runQuery("UPDATE users SET age_confirmed_at = 1760000000000, age_confirmed_v = '2026-10-19' WHERE userId = 'me'");
+  await runQuery("INSERT INTO age_attest (user_id, version, at) VALUES ('me', '2026-10-11', 1760000000001)");
+  d = await X.collect("me");
+  assert.equal(d.account.age_confirmation.at, 1760000000000);
+  assert.equal(d.account.age_confirmation.version, "2026-10-19", "which wording they agreed to");
+  assert.deepEqual({ ...d.account.age_confirmation.creators }, { user_id: "me", version: "2026-10-11", at: 1760000000001 });
+  assert.equal(d.account.profile.age_confirmed_at, 1760000000000, "and on the profile row like every users column");
+  await runQuery("UPDATE users SET age_confirmed_at = NULL, age_confirmed_v = NULL WHERE userId = 'me'");
+  await runQuery("DELETE FROM age_attest WHERE user_id = 'me'");
+});
+
 test("never a secret, never someone else's private data", async () => {
   const s = JSON.stringify(await X.collect("me"));
   for (const v of SECRETS.concat(["PUSH-ENDPOINT-SECRET", "PUSH-P256DH-SECRET", "PUSH-AUTH-SECRET"])) assert.ok(!s.includes(v), "leaked: " + v);

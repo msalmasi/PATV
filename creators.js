@@ -395,6 +395,7 @@ async function apply(user, input = {}) {
   }
   await savePlans(user.userId, plans);
   await loadCaches();
+  if (attest) { try { require("./adultgate").note(user.userId); } catch (e) { /* adultgate site: its "adult" box counts for the 18+ pad gate */ } }
   if (!have) {
     console.log(`[creators] ${user.username} ${status === "pending" ? "applied" : "became a creator"} (${rating}, ${plans.length} tier(s))`);
     if (status === "pending") await notifyStaff({ title: `⭐ ${user.username} applied to ${NAME}`, body: "Review the application.", ref: "cr-apply:" + user.userId });
@@ -437,6 +438,8 @@ async function setPadFlags(user, roomId, { r18, allow_creators, attest } = {}) {
                   r18_attest = COALESCE(excluded.r18_attest, creator_pads.r18_attest), set_by = excluded.set_by, updated = excluded.updated`,
                  [R.id, wantR18 ? 1 : 0, wantAllow ? 1 : 0, a ? JSON.stringify(a) : null, user.username, now()]);
   await loadCaches();
+  // adultgate site: the pad owner's own 18+ attestation (its "adult" box) counts for the 18+ pad gate (adultgate.load reads it)
+  if (a && R.owner && R.owner.userId === user.userId) { try { require("./adultgate").note(user.userId); } catch (e) { /* no gate */ } }
   return { ok: true, r18: wantR18, allow_creators: wantAllow };
 }
 async function setPadAllowNsfwOff(roomId) {
@@ -593,6 +596,7 @@ async function attestAge(user, yes) {
   if (!(yes === true || yes === "1" || yes === "on")) throw new Refuse(400, "Tick the box to confirm you're 18 or older.");
   await runQuery("INSERT INTO age_attest (user_id, version, at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET version = excluded.version, at = excluded.at",
                  [user.userId, AGE_VERSION, now()]);
+  try { require("./adultgate").note(user.userId); } catch (e) { /* adultgate site: the 18+ pad gate counts it at once */ }
   return { ok: true };
 }
 /** The live subscriptions of a fan: Map(creator_id -> tier). Grace counts; comps count. */

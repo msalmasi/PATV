@@ -1570,7 +1570,8 @@ async function roomStage(roomId, viewer) {
   return {
     room: { id: roomId, slug: RS.slug, title: RS.title, slot_count: RS.slot_count, slot_price: RS.slot_price, approval: RS.approval },
     // 1.99fu: an Approved pad's HLS / WHEP URLs carry the viewer's read token (padaccess.tokenizeSlots; webrtc.js checks it)
-    slots: require("./padaccess").tokenizeSlots(live, viewer, roomId), open: open.length, free: Math.max(0, RS.slot_count - open.length),
+    // adultgate site: + a cam slot's name blanked for a viewer the 18+ gate stops (padaccess.adultSlots; off: as is)
+    slots: require("./padaccess").adultSlots(require("./padaccess").tokenizeSlots(live, viewer, roomId), viewer), open: open.length, free: Math.max(0, RS.slot_count - open.length),
     featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by } : null,
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
@@ -1625,6 +1626,7 @@ async function guide() {
   for (const s of open) {
     const e = embedOf(s);
     add(s.room_id).now.push({ id: s.id, display: s.displayname || s.username, username: s.username || null, live: isLive(s, t), featured: !!s.featured,
+      ...(s.source === "cam" ? { cam: true } : {}),     // adultgate site: a 🎬 cam slot (roomsweb.guideRows blanks its name past the 18+ gate)
       title: s.title || null, mode: s.mode || "stream", embed_label: e ? embeds.label(e) : null, since: s.went_live || null,
       ends_by: (s.went_live || startOf(s)) + s.max_minutes * 60000 });
   }

@@ -1,5 +1,5 @@
 <% const stage_ = !!(item && item.source === 'stage'); const user_ = !!(item && item.source === 'user'); const what_ = item ? (user_ ? 'Story' : stage_ ? (item.kind === 'clip' ? 'Stage clip' : 'Stage snap') : (item.kind === 'clip' ? 'Clip' : item.kind === 'audio' ? 'Audio' : 'Snap')) : ''; %>
-<%- include('layout', { title: item ? (user_ ? 'Story by ' + (item.by_user || 'someone') : what_ + ' of ' + (item.subject || 'someone')) : 'Expired', user: user}) %>
+<%- include('layout', { title: item ? (user_ ? 'Story by ' + (item.by_user || 'someone') : what_ + ' of ' + (item.subject || 'someone')) : (typeof adult !== 'undefined' && adult ? '18+' : 'Expired'), user: user}) %>
 <style>
   /* 1.99qd: .ds-page.mid (docs/design-system.md, "Area notes: feed, pads and social") */
   .md { text-align: center; gap: var(--ds-sp-3); }
@@ -22,7 +22,10 @@
   .md .stage .gate button:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
 </style>
 <main class="ds-page mid md">
-  <% if (!item) { %>
+  <% if (!item && typeof adult !== 'undefined' && (adult === 'signin' || adult === 'confirm')) { %>
+    <%# adultgate site: a capture of an 18+ pad, owner switch on - sign in / confirm your age (no picture, no names) %>
+    <%- include('partials/adult-gate', { gate: adult, next: typeof adultNext !== 'undefined' ? adultNext : '/', tag: 'section' }) %>
+  <% } else if (!item) { %>
     <h1 class="ds-h1"><%= gone === 410 ? 'This capture has expired' : 'Not found' %></h1>
     <p class="mut">Snaps and clips only live for a while. <a href="/feed">See what's on the feed</a>.</p>
   <% } else { const src = '/media/' + item.id + '/raw'; const nsfw_ = !!item.nsfw; %>

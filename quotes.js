@@ -205,8 +205,10 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
   if (price > 0 && Number(author.points_balance || 0) < price) {
     throw new Refuse(402, `A quote costs ${price.toLocaleString("en-US")} PAT - you have ${Number(author.points_balance || 0).toLocaleString("en-US")}.`);
   }
+  // adultgate site: liveRoom = the room these lines came from - the 18+ gate follows the post (feedstore.liveRoomOf), from its
+  // first notice on (the feed_quotes row below is written after the post)
   const made = await S.create(authorId, { title: S.cleanLine(title, TITLE_MAX), body: bodyOf(lines), community: roomId, announce: [] },
-                              viaPepe ? { roomGen: true } : {});
+                              viaPepe ? { roomGen: true, liveRoom: roomId } : { liveRoom: roomId });
   let charged = null;
   if (price > 0) {
     try {
@@ -348,6 +350,8 @@ function register(app, { addUser, isBotToken, bySlug }) {
       await (B.load ? B.load() : null);
       const R = bySlug(req.params.slug);
       if (!R) return res.status(404).json({ ok: false, error: "That Camfrog room isn't on PATV right now." });
+      // adultgate site: the 18+ gate on the room this resolved (before its lines are looked at - not even which cursors exist)
+      if (require("./adultgate").refuseJson(req, res, R.id)) return;
       const b = req.body || {};
       const got = pick(R.feed, { cs: Array.isArray(b.cs) ? b.cs.slice(0, MAX_LINES + 1) : [] });
       if (got.error) return res.status(400).json({ ok: false, error: got.error });

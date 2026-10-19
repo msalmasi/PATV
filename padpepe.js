@@ -78,6 +78,7 @@ function register(app, { addUser, bySlug, isLive }) {
     if (!u) return bad(res, 401, "Sign in first.");
     const R = bySlug(req.params.slug);
     if (!R || !isLive(R)) return bad(res, 404, "That Camfrog room isn't live right now.");
+    if (require("./adultgate").refuseJson(req, res, R.id)) return;            // adultgate site: the 18+ gate on this room
     if (!u.camfrogUsername) {
       // 1.99wv (connections audit C): a PATV account with no chat login runs the menu as itself (Pepe charges the account and
       // echoes "🌐 <PATV username> (PATV web)"); the same account rules as a relayed line (bridge-relay.accountRefusal)
@@ -108,6 +109,7 @@ function register(app, { addUser, bySlug, isLive }) {
     if (!req.user || !req.user.userId) return bad(res, 401, "Sign in first.");
     const j = relay._jobs.get(String(req.params.id || ""));
     if (!j || j.userId !== req.user.userId || !j.pepe) return bad(res, 404, "No such request (they expire after a few minutes).");
+    if (require("./adultgate").refuseJson(req, res, j.roomId)) return;        // adultgate site: Pepe's answer is about that room
     const r = j.result || {};
     res.json({ ok: true, state: j.state === "done" ? "done" : j.state === "claimed" ? "running" : "pending", done: j.state === "done",
       success: j.state === "done" ? !!r.ok : null, msg: r.msg || "", replies: r.replies || [], line: j.text });

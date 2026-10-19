@@ -606,6 +606,13 @@ async function _completeCamfrogLinkLocked(userId, camfrogUsername) {
     // active (the auto account had them from the quiet backfill).
     const autoRow = (await getQuery('SELECT * FROM users WHERE userId = ?', [auto.userId]))[0];
     const meRow = (await getQuery('SELECT userId, username FROM users WHERE userId = ?', [userId]))[0];
+    // adultgate site: an age confirmation the auto account had carries over (the earliest one is kept)
+    if (autoRow && Number(autoRow.age_confirmed_at) > 0) {
+      const vcol = 'age_confirmed_v' in autoRow;      // the wording's version moves with it (adultgate.js)
+      await runQuery(`UPDATE users SET age_confirmed_at = ?${vcol ? ', age_confirmed_v = ?' : ''} WHERE userId = ? AND (age_confirmed_at IS NULL OR age_confirmed_at > ?)`,
+                     vcol ? [Number(autoRow.age_confirmed_at), autoRow.age_confirmed_v || null, userId, Number(autoRow.age_confirmed_at)]
+                          : [Number(autoRow.age_confirmed_at), userId, Number(autoRow.age_confirmed_at)]);
+    }
     const report = await moveUserRows(auto.userId, userId);
     console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(report.moved)}${Object.keys(report.left).length ? ` LEFT ${JSON.stringify(report.left)}` : ""}`);
     try {

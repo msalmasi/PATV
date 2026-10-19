@@ -113,6 +113,11 @@ async function collect(userId, { at = now() } = {}) {
   await put("account", "time_zone", rows("user_timezone", "userId = ?", [uid]));
   await put("account", "profile_layout", rows("profile_layout", "user_id = ?", [uid]));
   await put("account", "terms", Promise.resolve({ version: u.terms_accepted_version || null, at: u.terms_accepted_at || null }));
+  // adultgate site: the one-time age confirmation (users.age_confirmed_at, ms + the wording's version) + the 18+ creator-content one
+  // (creators age_attest)
+  await put("account", "age_confirmation", (async () => ({ at: Number(u.age_confirmed_at) > 0 ? Number(u.age_confirmed_at) : null,
+    version: Number(u.age_confirmed_at) > 0 ? u.age_confirmed_v || null : null,
+    creators: ((await rows("age_attest", "user_id = ?", [uid]).catch(() => null)) || [])[0] || null }))());
   // connections (ids and names - never tokens)
   out.connections = { twitch: u.twitchId ? { id: u.twitchId, name: u.twitchDisplayname, login: u.twitchLogin || null } : null,
                       discord: u.discordId ? { id: u.discordId, name: u.discordUsername } : null, camfrog: login };

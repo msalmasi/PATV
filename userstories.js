@@ -209,7 +209,8 @@ async function people(viewer, uids, { seen = null } = {}) {
     // 1.99fu: a capture taken in an Approved pad stays inside it (not in the person's story for anyone outside)
     const PA = require("./padaccess");
     await PA.init();
-    const items = (await stories.clean(rows)).filter((c) => !c.room || PA.canSee(viewer, c.room));
+    // adultgate site: + a capture taken in an 18+ pad, for a viewer its 18+ gate stops (switch on; off: no difference)
+    const items = (await stories.clean(rows)).filter((c) => !c.room || (PA.canSee(viewer, c.room) && PA.adultGate(viewer, c.room) === "ok"));
     if (!items.length) continue;
     items.sort((a, b) => a.created - b.created);
     for (const c of items) {

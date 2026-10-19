@@ -500,6 +500,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!u) return res.status(401).json({ ok: false, code: "signin", error: "Sign in first." });
     const R = roomFor(req, res, "relay");
     if (!R) return;
+    // adultgate site: someone the 18+ gate keeps from reading the room doesn't talk into it either (lines and ! commands)
+    if (require("./adultgate").refuseJson(req, res, R.id)) return;
     const body = req.body || {};
     // 1.99ye: too long is refused (with the limit), never cut short silently - the composer counts down to SAY_MAX
     const text = clean(body.text, SAY_MAX + 1);
@@ -590,6 +592,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = roomFor(req, res, "micRelay");
     if (!R) return;
+    if (require("./adultgate").refuseJson(req, res, R.id)) return;          // adultgate site: no voice clips into it past the gate
     if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
     const blk = await blockedWhy(R, u, "voice");            // 1.99xa: !bridge block
     if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "voice" });

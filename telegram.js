@@ -257,8 +257,12 @@ async function whois({ tg_id, seen } = {}) {
   let disp = acc.displayname || "";
   try { disp = require("./displaynames").usable(acc.displayname) || ""; } catch (e) { /* plain */ }
   const cf = acc.camfrogUsername && !CF_AUTO.test(acc.username) ? String(acc.camfrogUsername).toLowerCase() : null;
+  // adultgate site: the 18+ pads (Camfrog room ids) whose live room this member may not get - Pepe's chat with them leaves
+  // those rooms out of its live context. Only while the 18+ gate is on and stops them somewhere.
+  let gated = [];
+  try { gated = require("./adultgate").gatedRooms(acc); } catch (e) { gated = []; }
   return { linked: true, tier, lang: langOf(acc.userId),
-           user: { username: acc.username, display: snip(disp || acc.username, 40), camfrog: cf, user_id: acc.userId } };   // 1.99wv
+           user: { username: acc.username, display: snip(disp || acc.username, 40), camfrog: cf, user_id: acc.userId, ...(gated.length ? { rooms_gated: gated } : {}) } };   // 1.99wv
 }
 
 // ── preferences ──

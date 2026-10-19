@@ -1,0 +1,27 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# adultgate site (adultgate.js): the 18+ gate's card - where an 18+ pad's live content would be, while the owner switch is
+    on and the viewer isn't signed in ("signin") or hasn't confirmed their age ("confirm"). Neutral on purpose: no line text,
+    names or counts. Locals: gate ("signin" | "confirm"), next (the local path to come back to), cls (extra classes, optional),
+    tag: 'section' (default: a card of its own - the pad page) | 'div' (compact, inside another card - the homepage widget). %>
+<% const g_ = typeof gate !== 'undefined' && gate === 'confirm' ? 'confirm' : 'signin';
+   const n_ = typeof next === 'string' && /^\/(?![\/\\])/.test(next) ? next : '/';
+   // signing in leads on to the confirmation (which goes straight back for an account that already confirmed)
+   const conf_ = '/confirm-age?next=' + encodeURIComponent(n_);
+   const href_ = g_ === 'confirm' ? conf_ : '/login?next=' + encodeURIComponent(conf_);
+   const div_ = typeof tag === 'string' && tag === 'div';
+   const cls_ = (div_ ? 'tease ag-card' : 'card tease ag-card') + (typeof cls === 'string' && cls ? ' ' + cls : ''); %>
+<% if (div_) { %>
+<div class="<%= cls_ %>" data-adult-gate="<%= g_ %>">
+  <b style="font-size:16px"><span aria-hidden="true">🔞</span> <%- t('adultgate.h') %></b>
+  <p class="muted" style="margin:0"><%- g_ === 'confirm' ? t('adultgate.confirm_p') : t('adultgate.signin_p') %></p>
+  <a class="btn primary" href="<%= href_ %>"><%- g_ === 'confirm' ? t('adultgate.confirm_btn') : t('adultgate.signin_btn') %></a>
+</div>
+<% } else { %>
+<section class="<%= cls_ %>" data-adult-gate="<%= g_ %>">
+  <div class="big" aria-hidden="true">🔞</div>
+  <h2 style="justify-content:center"><%- t('adultgate.h') %></h2>
+  <p class="muted"><%- g_ === 'confirm' ? t('adultgate.confirm_p') : t('adultgate.signin_p') %></p>
+  <a class="btn primary" href="<%= href_ %>"><%- g_ === 'confirm' ? t('adultgate.confirm_btn') : t('adultgate.signin_btn') %></a>
+  <% if (g_ === 'signin') { %><p class="muted"><%- t('adultgate.signin_more') %></p><% } %>
+</section>
+<% } %>

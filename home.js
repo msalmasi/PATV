@@ -232,7 +232,8 @@ function register(app, { addUser, xpForNextLevel }) {
         // 1.99xi: 🔥 the daily streak next to the level (streaks.js)
         if (me) me.streak = await require("./streaks").forUser(me.userId).catch(() => null);
       }
-      const [S, allRooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
+      // adultgate site: summary gets the viewer - an 18+ pad's mic names / topic follow the 18+ gate (off: no difference)
+      const [S, allRooms, top] = await Promise.all([stats(), bridge.summary(!!me, req.user && req.user.userId ? req.user : null), topFrogs()]);
       // 1.99fu: pad visibility (padaccess.js) - an Approved pad this viewer is outside of isn't on their homepage at all
       // (not the featured room, not Top Pads, not the room widget, not a story circle); the front pick itself is
       // computed from every pad (one site-wide ranking, which never auto-picks an Approved pad - rooms.frontRoom)
@@ -257,18 +258,22 @@ function register(app, { addUser, xpForNextLevel }) {
       const RL = await reg.rankLive(pads).catch((e) => { console.error("[home] top pads:", e.message); return { ranked: [], boosts: new Map() }; });
       const tops = topPads(pads, RL.ranked, RL.boosts, 5);
       // 1.99hm: 🎧 listen from the homepage - may this viewer hear the pad (padaccess.full, same as /p/<slug>/audio)?
-      for (const t of tops) t.listen = PA.full(viewer, t.id);
+      // adultgate site: t.gate = the 18+ gate for this viewer ("ok" | "signin" | "confirm"; "ok" while the switch is off)
+      for (const t of tops) { t.listen = PA.full(viewer, t.id); t.gate = PA.adultGate(viewer, t.id); }
       // 1.99kp: what's on in each Top Pad (refreshed by the page every 30 s: /api/home/nowplaying)
       const NP = await nowPlaying(pads.filter((r) => tops.some((t) => t.id === r.id))).catch(() => new Map());
-      for (const t of tops) t.np = NP.get(t.id) || null;
+      for (const t of tops) t.np = t.gate === "ok" ? NP.get(t.id) || null : null;     // adultgate site: no now-playing past the gate
+      // adultgate site: ...nor its headcount / mic count (the ranking above used them like everyone else's)
+      for (const t of tops) if (t.gate !== "ok") { t.count = null; t.micCount = null; }
       const frontInfo = frontReg ? { id: frontReg.id, slug: web.linkSlug(frontReg), title: frontReg.title, pinned: front.pinned,
                                      owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,
                                      boost: Math.round(RL.boosts.get(frontReg.id) || 0) } : null;
-      const slots = PA.tokenizeSlots(await require("./mainstage").publicSlots(front.id).catch(() => []), viewer, front.id);
+      // adultgate site: + a cam slot's name blanked past the 18+ gate (padaccess.adultSlots)
+      const slots = PA.adultSlots(PA.tokenizeSlots(await require("./mainstage").publicSlots(front.id).catch(() => []), viewer, front.id), viewer);
       // 1.99eo: the off-air slate's "Next up" - the front pad's next scheduled slot (public facts only)
       const nextUp = await nextSlot(front.id).catch(() => null);
       const onStage = rooms.find((r) => r.id === front.id) || null;
-      const room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
+      let room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
       const isStaff = SP.can(me, "stage.admin");
       // 1.99xs: staff only get a link line now (the picker is on /pads/admin#front, Pepe's panel on /admin/pepe#control)
       const stageAdmin = isStaff ? { front: reg.frontSetting(), admin: SP.can(me, "pepe.control") } : null;
@@ -276,6 +281,10 @@ function register(app, { addUser, xpForNextLevel }) {
       // the room widget renders with its first page of data (signed-in only), then polls
       // 1.99fu: signed-out visitors too when the room's pad is Public (padaccess.full)
       const roomLive = room && PA.full(viewer, room.id) ? await bridge.liveFor(room.slug) : null;
+      // adultgate site: the widget's 18+ gate - "signin" / "confirm" swap the widget for the 18+ card (no lines, names or counts)
+      const roomGate = room ? PA.adultGate(viewer, room.id) : "ok";
+      if (room && roomGate !== "ok") room = { ...room, count: null, micCount: null };     // no headcount on the page either
+      const roomOnStage_ = !!(onStage && room && room.id === onStage.id);
       // 1.99bz: the story strip (a circle per room with captures from the last 24 h); visitors get the circles only
       const storyRooms = await require("./stories").forViewer(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] stories:", e.message); return []; });
       // 1.99ci: "Hot on PATV" - the top 5 hot posts across every community (no NSFW for signed-out visitors)
@@ -285,9 +294,9 @@ function register(app, { addUser, xpForNextLevel }) {
       res.locals.og = { title: "Public Access TV", description: "Pads with live stages, feeds and chat rooms, Pepe the frog, PAT games, markets and more.",
                         image: res.locals.ogBase + require("./og").pageUrl("Public Access TV"), url: res.locals.ogBase + "/" };
       res.render("home", {
-        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top, tops, boostMark: require("./boostmark").boostMark,
+        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, roomGate, stage, top, tops, boostMark: require("./boostmark").boostMark,
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
-        roomOnStage: !!(onStage && room === onStage), stageAdmin, frontInfo, pepeHere,
+        roomOnStage: roomOnStage_, stageAdmin, frontInfo, pepeHere,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals
@@ -309,10 +318,10 @@ function register(app, { addUser, xpForNextLevel }) {
       const PA = require("./padaccess");
       await PA.init();
       const viewer = req.user && req.user.userId ? req.user : null;
-      const rows = PA.visibleRows(viewer, await bridge.summary(!!viewer)).filter((r) => want.has(r.id));
+      const rows = PA.visibleRows(viewer, await bridge.summary(!!viewer, viewer)).filter((r) => want.has(r.id));
       const NP = await nowPlaying(rows);
       const np = {};
-      for (const r of rows) np[r.id] = NP.get(r.id) || null;
+      for (const r of rows) np[r.id] = PA.adultGate(viewer, r.id) === "ok" ? NP.get(r.id) || null : null;     // adultgate site
       res.json({ ok: true, np });
     } catch (e) {
       console.error("[home] nowplaying:", e.message);
@@ -324,7 +333,7 @@ function register(app, { addUser, xpForNextLevel }) {
     const S = await stats();
     const PA = require("./padaccess");
     await PA.init();
-    const rooms = PA.visibleRows(req.user && req.user.userId ? req.user : null, await bridge.summary(false));    // 1.99fu
+    const rooms = PA.visibleRows(req.user && req.user.userId ? req.user : null, await bridge.summary(false, req.user && req.user.userId ? req.user : null));    // 1.99fu; adultgate site: + the viewer
     res.locals.og = { title: "About Public Access TV", description: "A community TV station: pads with their own stages and chat rooms, Pepe the frog, live events, PAT games and more.",
                       image: res.locals.ogBase + require("./og").pageUrl("About PATV"), url: res.locals.ogBase + "/about" };
     res.render("about", { user: req.user ? req.user.username : null, S, room: rooms.find((r) => r.live) || rooms[0] || null });

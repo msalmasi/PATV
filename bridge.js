@@ -423,6 +423,23 @@ function audioClose(id) {
 setInterval(() => {
   for (const [id, a] of audio) if (a.listeners.size && Date.now() - a.at > AUDIO_IDLE_MS && a.at) audioClose(id);
 }, 10 * 1000).unref();
+/** adultgate site: end the MP3 listeners the 18+ gate stops now (the switch turned on / the pad marked 18+ after they
+ *  started listening). Each listener's response carries the account that opened it (res.agViewer). -> how many ended */
+function audioRecheck() {
+  let n = 0;
+  const AG = require("./adultgate");
+  for (const [id, a] of audio) {
+    if (!a.listeners.size || !AG.applies(id)) continue;
+    for (const res of [...a.listeners]) {
+      if (AG.gate(res.agViewer || null, id) === "ok") continue;
+      a.listeners.delete(res);
+      try { res.end(); } catch (e) { /* gone */ }
+      n++;
+    }
+  }
+  if (n) console.log(`[bridge] 18+ gate: ended ${n} room audio listener(s)`);
+  return n;
+}
 
 let lastFrontTick = 0;
 async function ingest(body) {
@@ -691,11 +708,13 @@ const livecamHint = (R, userId) => { try { return require("./livecam").hint(R, u
 // 1.99bi: the room's PATV title (owner-editable, rooms.js) when it has one, else what Pepe calls it
 const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); return (r && r.title) || R.name; } catch (e) { return R.name; } };
 
-/** For the homepage / room list. `full` (signed-in) adds who's on the mic. 1.99fu: a Public pad's row always has them. */
-async function summary(full) {
+/** For the homepage / room list. `full` (signed-in) adds who's on the mic. 1.99fu: a Public pad's row always has them.
+ *  adultgate site: `viewer` (the account asking, null = signed out; left out = treated as signed out) - with the 18+
+ *  switch on, an 18+ pad's mic names + topic only for a viewer padaccess.adultGate lets in. Off: no difference. */
+async function summary(full, viewer) {
   await load();
   const PA = require("./padaccess");
-  const open = (R) => full || PA.isPublic(R.id);
+  const open = (R) => (full || PA.isPublic(R.id)) && PA.adultGate(viewer || null, R.id) === "ok";
   const C = await resolveNames([...rooms.values()].filter(open).flatMap((R) => R.mic));   // 1.99ea: names on the mic
   return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
     id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
@@ -932,6 +951,13 @@ function bySlug(slug) {
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   load();
+  // adultgate site: when the 18+ gate starts applying to a room (the switch on, a pad marked 18+), its open MP3 listeners and
+  // the pages waiting on a long-poll answer again under the gate (the waiting ones re-check after waitForChange)
+  require("./adultgate").onChange((why) => {
+    audioRecheck();
+    if (why !== "tick") wakeAll();
+    return require("./roomrtc").recheck(why);         // ...and the WebRTC room listeners (livecam re-checks its own viewers)
+  });
   app.post("/api/bridge/sync", express.json({ limit: "1mb" }), async (req, res) => {
     const body = req.body || {};
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
@@ -1003,7 +1029,13 @@ function register(app, { isBotToken, addUser }) {
     await load();
     const R = bySlug(req.params.slug);
     // 1.99fu: the room's audio is members-tier (padaccess.full): signed in, or anyone on a Public pad, inside an Approved one
-    if (R && !require("./padaccess").full(req.user, R.id)) return res.status(req.user && req.user.userId ? 403 : 401).send("Sign in to listen.");
+    // (adultgate site: full() includes the 18+ gate; a signed-in viewer it stops is told to confirm their age)
+    if (R) await require("./padaccess").init();
+    if (R && !require("./padaccess").full(req.user, R.id)) {
+      const ag = require("./padaccess").adultGate(req.user, R.id);
+      const AG = require("./adultgate");
+      return res.status(req.user && req.user.userId ? 403 : 401).send(ag === "confirm" ? AG.txt(req.t, "adultgate.audio_confirm") : ag === "signin" ? AG.txt(req.t, "adultgate.audio_signin") : "Sign in to listen.");
+    }
     if (!R && (!req.user || !req.user.userId)) return res.status(401).send("Sign in to listen.");
     if (!R || !R.audio || !isLiveShown(R)) return res.status(404).send("This room's audio isn't on.");
     const a = audioHub(R.id);
@@ -1012,6 +1044,7 @@ function register(app, { isBotToken, addUser }) {
     res.flushHeaders();
     try { req.socket.setNoDelay(true); } catch (e) { /* not a TCP socket */ }
     for (const r of a.recent) res.write(r.buf);
+    res.agViewer = req.user && req.user.userId ? req.user : null;     // adultgate site: audioRecheck asks the gate again for this account
     a.listeners.add(res);
     req.on("close", () => { a.listeners.delete(res); });
   });
@@ -1019,10 +1052,13 @@ function register(app, { isBotToken, addUser }) {
   app.get("/api/rooms/:slug/live", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     await load();
+    await require("./padaccess").init();            // adultgate site: the gate's switch is read before the first answer
     const R = bySlug(req.params.slug);
     // 1.99fu: the live room is members-tier (padaccess.full): signed in; anyone on a Public pad; inside an Approved one
     const signed = !!(req.user && req.user.userId);
     if (!R) return signed ? res.status(404).json({ error: "No such room." }) : res.status(401).json({ error: "Sign in to watch the room." });
+    // adultgate site: an 18+ pad with the switch on - the gate's own answer (no lines, names or counts); "ok" while it's off
+    if (require("./adultgate").refuseJson(req, res, R.id, R.slug)) return;
     if (!require("./padaccess").full(req.user, R.id)) return res.status(signed ? 403 : 401).json({ error: signed ? "This pad is for approved members." : "Sign in to watch the room." });
     if (!bridgeOk(R.id)) return res.status(403).json({ error: "This pad's live chat room comes with 💎 Prime Time Plus.", locked: "bridge" });   // 1.99qp
     const after = Math.max(0, Number(req.query.after) || 0);
@@ -1036,6 +1072,8 @@ function register(app, { isBotToken, addUser }) {
       const alive = await waitForChange(req, res, R, after, q("v"), q("mv"), signed ? req.user.userId : null);
       if (!alive) return;
       if (rooms.get(R.id) !== R) return res.json({ gone: true, lp: true });
+      // adultgate site: the gate again - the switch may have turned on (or the pad been marked 18+) while this one waited
+      if (require("./adultgate").refuseJson(req, res, R.id, R.slug)) return;
     }
     const aft = after > cursor ? 0 : after;
     const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1");
@@ -1122,7 +1160,9 @@ function register(app, { isBotToken, addUser }) {
         if (R) front = { id: R.id, slug: web.linkSlug(R), title: R.title, pinned: f.pinned };
       }
       // 1.99fu: on an Approved pad the HLS / WHEP URLs carry this viewer's read token (webrtc.js checks it)
-      if (R) { roomId = R.id; slots = PA.tokenizeSlots(await require("./mainstage").publicSlots(R.id), req.user, R.id); }
+      // adultgate site: a cam slot from an 18+ pad's room carries no name past the gate (adultSlots; reads the sign-in when it applies)
+      if (R && require("./adultgate").applies(R.id) && req.user === undefined) await new Promise((r) => addUser(req, res, r));
+      if (R) { roomId = R.id; slots = PA.adultSlots(PA.tokenizeSlots(await require("./mainstage").publicSlots(R.id), req.user, R.id), req.user); }
     } catch (e) { slots = []; }
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
     const here = roomId ? pepeIn(roomId) : null;
@@ -1202,8 +1242,11 @@ function register(app, { isBotToken, addUser }) {
     const PA = require("./padaccess");
     await PA.init();
     const liveOpen = PA.full(req.user, R.id);
+    // adultgate site: the 18+ gate (switch on, an 18+ pad): "signin" | "confirm" -> the live room is the 18+ card (no lines,
+    // names or counts); "ok" always while the switch is off
+    const adultGate = PA.adultGate(req.user, R.id);
     const access = { level: PA.levelOf(R.id), info: PA.INFO[PA.levelOf(R.id)] };
-    if (access.level === "approved") res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
+    if (access.level === "approved" || adultGate !== "ok") res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
     // the feed's sort / window / page: ?sort= &t= &p= (the feed's own names, so /feed links and old
     // /feed/c/<slug>?sort=... addresses carry over) or the older ?fsort= &ft= &fp=
     const q = req.query || {};
@@ -1224,13 +1267,15 @@ function register(app, { isBotToken, addUser }) {
       try { feedSeen = { scope: require("./feedseen").padScope(R.id), upto: await require("./feedseen").one(req.user.userId, require("./feedseen").padScope(R.id)) }; }
       catch (e) { feedSeen = undefined; }
     }
-    const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: R.count, members: initial ? initial.members : null,
+    // adultgate site: past the 18+ gate the Live tab's "active" dot doesn't say people are in the room (only the stage counts)
+    const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: adultGate === "ok" ? R.count : 0, members: initial ? initial.members : null,
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     res.render("room", {
-      user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access,
+      user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,
+      adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
-      room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
+      room: { id: R.id, name: title, slug, count: adultGate === "ok" ? R.count : null, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)),

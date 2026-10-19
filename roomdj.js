@@ -223,6 +223,7 @@ function register(app, { isBotToken, addUser, bySlug = defaultBySlug }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in to see the DJ." });
     const R = bySlug(req.params.slug);
     if (!R) return res.status(404).json({ error: "No such pad." });
+    if (require("./adultgate").refuseJson(req, res, R.id)) return;            // adultgate site: the 18+ gate on this room
     WATCH.set(R.id, Date.now());
     res.json(await panelFor(R, await viewer(req)));
   });
@@ -232,6 +233,7 @@ function register(app, { isBotToken, addUser, bySlug = defaultBySlug }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = bySlug(req.params.slug);
     if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
+    if (require("./adultgate").refuseJson(req, res, R.id)) return;            // adultgate site: the 18+ gate on this room
     const room = djRoom(R.id);
     if (!room) return res.status(409).json({ ok: false, error: "The music isn't on in this pad right now." });
     const me = await viewer(req);
@@ -259,6 +261,8 @@ function register(app, { isBotToken, addUser, bySlug = defaultBySlug }) {
   app.get("/api/rooms/:slug/dj/act/:id", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+    const R0 = bySlug(req.params.slug);
+    if (R0 && require("./adultgate").refuseJson(req, res, R0.id)) return;    // adultgate site: the 18+ gate on this room
     const id = parseInt(req.params.id, 10) || 0;
     const a = (await getQuery("SELECT id, status, message, label FROM pepe_actions WHERE id = ? AND user_id = ? AND kind = 'dj'", [id, req.user.userId]))[0];
     if (!a) return res.status(404).json({ ok: false, error: "No such action." });

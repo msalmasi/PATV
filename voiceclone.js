@@ -155,6 +155,7 @@ async function consent(user, b, req) {
                   attempts_day, ip_hash, ua_hash, created) VALUES (?, ?, 'phrase', ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                  [u.userId, login, TERMS_VERSION, String(b.typed_login).slice(0, 40), phrase, code, script, t, t + CONFIG.phrase_ttl_min * 60000, attempts, dayOf(t),
                   hash(req && (req.headers["x-forwarded-for"] || req.ip)), hash(req && req.get && req.get("user-agent")), t]);
+  try { require("./adultgate").note(u.userId); } catch (e) { /* adultgate site: the 18+ pad gate counts the 18+ box at once */ }
   return status(u.userId);
 }
 

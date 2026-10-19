@@ -313,9 +313,68 @@ async function blockedFor(viewer) {
   if (SP.can(viewer, "feed.see_hidden")) return [];
   try { await PADACCESS().init(); return PADACCESS().blockedFor(viewer); } catch (e) { console.error("[feed] pad access:", e.message); return []; }
 }
+
+// ── adultgate site: posts made FROM a pad's live room ──
+// A chat quote (feed_quotes), a mic clip (feed_voices) and a capture kept as a post (story_posts) carry their room's lines,
+// voices and cams word for word, so the room's 18+ gate (adultgate.js, switch on) follows them wherever they're shown -
+// every feed (All, the pad's, profiles, Following, /p/<pad>/quotes, search, Hop, the gallery, Hot), the post page, its
+// files, DM cards and notices - crossposts of them included. The author always sees their own. Off: nothing changes
+// (adultgate.gatedRooms is [] and no query runs).
+const LIVE_PENDING = new Map();     // post id -> room id: a live-room post still being made (its origin row comes after)
+let storyPostsSeen = false;
+async function hasStoryPosts() {
+  if (storyPostsSeen) return true;
+  storyPostsSeen = (await getQuery("SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = 'story_posts'").catch(() => [])).length > 0;
+  return storyPostsSeen;
+}
+const AGATE = () => require("./adultgate");
+/** The pad whose live room post row `p` (or the original it crossposts) was made from, or null. */
+async function liveRoomOf(p) {
+  if (!p || !p.id) return null;
+  const ids = [...new Set([p.crosspost_of, p.id].filter(Boolean).map(String))];
+  for (const id of ids) if (LIVE_PENDING.has(id)) return LIVE_PENDING.get(id);
+  const ph = ids.map(() => "?").join(",");
+  const q = [`SELECT room_id FROM feed_quotes WHERE post_id IN (${ph})`, `SELECT room_id FROM feed_voices WHERE post_id IN (${ph})`];
+  if (await hasStoryPosts()) q.push(`SELECT room_id FROM story_posts WHERE post_id IN (${ph})`);
+  const r = (await getQuery(q.join(" UNION ALL ") + " LIMIT 1", q.flatMap(() => ids)).catch(() => []))[0];
+  return r && r.room_id ? String(r.room_id) : null;
+}
+/** Is post row `p` a live-room post of an 18+ pad the gate stops `viewer` at? -> "signin" | "confirm" | null (= may see it). */
+async function adultLocked(viewer, p) {
+  if (!p) return null;
+  const gated = AGATE().gatedRooms(viewer || null);
+  if (!gated.length) return null;
+  if (viewer && viewer.userId && viewer.userId === p.author_id) return null;
+  const room = await liveRoomOf(p);
+  if (!room || !gated.includes(room)) return null;
+  return AGATE().gate(viewer || null, room) === "signin" ? "signin" : "confirm";
+}
+/** SQL (over `feed_posts p`): leave out the live-room posts of the 18+ pads in `gated` (the viewer's own stay). */
+async function adultLiveSql(viewer, gated) {
+  const ph = gated.map(() => "?").join(",");
+  const src = "COALESCE(p.crosspost_of, p.id)";
+  const parts = [`NOT EXISTS (SELECT 1 FROM feed_quotes aq WHERE aq.post_id = ${src} AND aq.room_id IN (${ph}))`,
+                 `NOT EXISTS (SELECT 1 FROM feed_voices av WHERE av.post_id = ${src} AND av.room_id IN (${ph}))`];
+  const args = [...gated, ...gated];
+  if (await hasStoryPosts()) { parts.push(`NOT EXISTS (SELECT 1 FROM story_posts asp WHERE asp.post_id = ${src} AND asp.room_id IN (${ph}))`); args.push(...gated); }
+  const pending = [...LIVE_PENDING.entries()].filter(([, room]) => gated.includes(room)).map(([id]) => id);
+  if (pending.length) { parts.push(`${src} NOT IN (${pending.map(() => "?").join(",")})`); args.push(...pending); }
+  const mine = viewer && viewer.userId ? String(viewer.userId) : null;
+  return { sql: mine ? `(p.author_id = ? OR (${parts.join(" AND ")}))` : `(${parts.join(" AND ")})`, args: mine ? [mine, ...args] : args };
+}
+
 /** 1.99fu: may `u` see post row `p` at all, by pad visibility? Staff and the author always; a post with no placement
- *  left goes by its author; else it needs one placement (not taken out) in a pad `u` can see. */
+ *  left goes by its author; else it needs one placement (not taken out) in a pad `u` can see.
+ *  adultgate site: and not a live-room post of an 18+ pad the gate stops `u` at (adultLocked). */
 async function postSeenBy(u, p) {
+  if (!p) return false;
+  if (SP.can(u, "feed.see_hidden") || (u && u.userId && u.userId === p.author_id)) return true;
+  if (!(await padSeenBy(u, p))) return false;
+  return !(await adultLocked(u, p));
+}
+/** postSeenBy's pad-visibility half alone (the Approved rule) - checked before the 18+ one, so an outsider of an Approved
+ *  pad learns nothing (not even that it is 18+). */
+async function padSeenBy(u, p) {
   if (!p) return false;
   if (SP.can(u, "feed.see_hidden") || (u && u.userId && u.userId === p.author_id)) return true;
   const blocked = new Set(await blockedFor(u));
@@ -886,6 +945,9 @@ async function list({ room = null, author = null, following = null, authors: aut
     visible();                          // All
     scope.push("p.in_all != 0");        // 1.99df: a profile post its owner kept out of All
   }
+  // adultgate site: the live-room posts (chat quotes, mic clips, captures) of the 18+ pads the gate stops this viewer at
+  const adultRooms = AGATE().gatedRooms(viewer);
+  if (adultRooms.length) { const a = await adultLiveSql(viewer, adultRooms); scope.push(a.sql); sargs.push(...a.args); }
   if (sfw) {
     // no NSFW anywhere: the author's / an admin's flag, any live community's mark, or (a crosspost) the original's
     const flag = (a) => `(CASE WHEN ${a}.nsfw_admin IN (0, 1) THEN ${a}.nsfw_admin ELSE ${a}.nsfw END) = 0`;
@@ -942,6 +1004,9 @@ async function getRow(id) {
 async function get(id, viewer, opts = {}) {
   const r = await getRow(id);
   if (!r) return null;
+  // adultgate site: a live-room post of an 18+ pad the gate stops this viewer at is "no such post" (DM cards, Hop, ...);
+  // internal callers (access: false / _inner) see it. The post page shows the 18+ card itself (feedweb).
+  if (opts.access !== false && !opts._inner && (await adultLocked(viewer, r))) return null;
   return (await decorate([r], viewer, opts))[0];
 }
 /** 1.99dv: a post's canonical path (pads.postHref) from its id; `hash` ("#c-<id>", "#comments") is appended. null: no such post. */
@@ -1124,6 +1189,13 @@ async function create(userId, input, deps = {}) {
   const aiNsfw = atts.some((a) => a.ai_nsfw) || safetyNsfw;
   const id = newId();
   const label = `feed post ${id}`;
+  // adultgate site: deps.liveRoom = the room a chat quote / mic clip / kept capture came from (its origin row is written by the
+  // caller after this returns): known from here on, so the 18+ gate already follows the post's notices (liveRoomOf)
+  if (deps.liveRoom) {
+    LIVE_PENDING.set(id, String(deps.liveRoom));
+    const tm = setTimeout(() => LIVE_PENDING.delete(id), 5 * 60e3);
+    if (tm.unref) tm.unref();
+  }
   // 1.99df: "Also show in All" - only a profile post can opt out (default: shown)
   const inAll = roomIds.some((rid) => rooms.isProfile(rid)) && offFlag(input.inAll) ? 0 : 1;
   await chargeFor(u, cost, label);
@@ -2448,4 +2520,5 @@ module.exports = {
   setRestricted, mentionOn, setMention, migrateMentionDefault, announceState, _setPepeIn, takeMentions, sweep, hotScore, priceOf, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,
   blockedFor, postSeenBy,      // 1.99fu: pad visibility (padaccess.js)
+  liveRoomOf, adultLocked, padSeenBy,     // adultgate site: live-room posts follow their pad's 18+ gate
 };

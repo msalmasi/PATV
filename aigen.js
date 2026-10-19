@@ -251,11 +251,17 @@ function camMember(R, login) {
   return (R && Array.isArray(R.members) ? R.members : []).find((m) => m && !m.anon && !m.self && m.login && String(m.login).toLowerCase() === low) || null;
 }
 /** The people on cam in the pad's Camfrog room -> {ok, slug, room, cams: [{login, display}], why}. */
+// adultgate site: who's on cam in an 18+ pad's room is its live room's - the 18+ gate on that pad (switch on); off: nothing
+function adultCheck(user, padId) {
+  const g = require("./padaccess").adultGate(user && user.userId ? user : null, padId);
+  if (g !== "ok") throw Object.assign(new Refuse(require("./adultgate").statusOf(g), require("./adultgate").refusal(g).error), { gate: g, room: padId });
+}
 async function camList(user, padId) {
   await init();
   const pad = await normPad(padId);
   const room = camfrogRoomOf(pad);
   if (!room) return { ok: true, cams: [], why: "Pick a Camfrog pad - the cams come from its Camfrog room." };
+  adultCheck(user, pad);
   const R = bridgeRoom(room);
   if (!R) return { ok: true, cams: [], why: "That pad's Camfrog room isn't live on the site right now." };
   if (!R.cams) return { ok: true, cams: [], why: "Cam snapshots aren't switched on in that Camfrog room." };
@@ -272,6 +278,7 @@ async function claimCamRef(user, b) {
   const pad = await normPad(b.pad);
   const room = camfrogRoomOf(pad);
   if (!room) throw new Refuse(400, "Cam snapshots come from a Camfrog pad's room.");
+  adultCheck(u, pad);                                     // adultgate site
   const why = await refusal(u, pad);
   if (why) throw new Refuse(why.status || 403, why.message);
   const R = bridgeRoom(room);
@@ -711,6 +718,13 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
     if (!(e && e.refuse)) console.error("[aigen]", e);
     res.status(st).json({ ok: false, error: e && e.refuse ? e.message : "Something went wrong." });
   };
+  // adultgate site: the 18+ gate's own answer (adultCheck) - no names, the sign-in / confirm link. -> true when it answered
+  const adultFail = (req, res, e) => {
+    if (!e || !e.gate) return false;
+    const AG = require("./adultgate");
+    res.status(AG.statusOf(e.gate)).json({ ...AG.refusal(e.gate, AG.padPath(e.room), req.t), cams: [] });
+    return true;
+  };
   const auditRec = (req) => (what) => {
     if (audit) return audit(req, what);
     try { const a = require("./contentaudit"); return a.record(a.fromRequest(req), what); } catch (e) { return Promise.resolve(); }
@@ -735,10 +749,10 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
   app.get("/api/feed/aigen/cams", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
-    try { res.json(await camList(req.user, req.query.pad)); } catch (e) { fail(res, e); }
+    try { res.json(await camList(req.user, req.query.pad)); } catch (e) { adultFail(req, res, e) || fail(res, e); }
   });
   app.post("/api/feed/aigen/camref", json, addUser, guard, async (req, res) => {
-    try { res.json(await claimCamRef(req.user, req.body || {})); } catch (e) { fail(res, e); }
+    try { res.json(await claimCamRef(req.user, req.body || {})); } catch (e) { adultFail(req, res, e) || fail(res, e); }
   });
   app.get("/api/feed/aigen/:id", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");

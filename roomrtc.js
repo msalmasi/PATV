@@ -99,11 +99,14 @@ function checkTicket(tok, p, t = now()) {
 }
 
 // ── per-room state ──
-const ST = new Map();                  // room id -> {wantUntil, readers, ready, seenAt}
+const ST = new Map();                  // room id -> {wantUntil, readers, ready, seenAt, readerIds}
 const pending = [];                    // times tickets were handed out (the cap counts them for PENDING_MS)
+// adultgate site: who each WebRTC reader session is (the auth hook's session id -> the account its ticket was for, null =
+// signed out), so recheck() can end the sessions the 18+ gate stops once it applies to their room
+const READERS = new Map();             // session id -> {uid, roomId, at}
 function st(id) {
   let s = ST.get(id);
-  if (!s) { s = { wantUntil: 0, readers: 0, ready: false, seenAt: 0 }; ST.set(id, s); }
+  if (!s) { s = { wantUntil: 0, readers: 0, ready: false, seenAt: 0, readerIds: [] }; ST.set(id, s); }
   return s;
 }
 function want(id, t = now()) { const s = st(id); s.wantUntil = Math.max(s.wantUntil, t + GRACE_MS); }
@@ -162,16 +165,48 @@ function noteSync(items, t = now()) {
     if (!R) continue;
     const s = st(R.id);
     s.ready = !!(p.ready || p.available);
-    s.readers = (Array.isArray(p.readers) ? p.readers : []).filter((r) => r && r.type === "webRTCSession").length;
+    const rd = (Array.isArray(p.readers) ? p.readers : []).filter((r) => r && r.type === "webRTCSession");
+    s.readers = rd.length;
+    s.readerIds = rd.map((r) => String(r.id || "")).filter((x) => /^[0-9a-f-]{36}$/i.test(x));     // adultgate site
     s.seenAt = t;
     if (s.readers > 0) want(R.id, t);
     seen.add(R.id);
   }
   for (const [id, s] of ST) {
     if (seen.has(id)) continue;
-    s.ready = false; s.readers = 0; s.seenAt = t;           // not on MediaMTX at all
+    s.ready = false; s.readers = 0; s.readerIds = []; s.seenAt = t;           // not on MediaMTX at all
     if (s.wantUntil < t - 10 * 60 * 1000) ST.delete(id);
   }
+  // adultgate site: forget sessions MediaMTX no longer lists
+  const live = new Set([...ST.values()].flatMap((s) => s.readerIds || []));
+  for (const [sid, r] of READERS) if (!live.has(sid) && t - r.at > 60 * 1000) READERS.delete(sid);
+}
+
+/**
+ * adultgate site: the 18+ gate now applies to a room (the switch on, the pad marked 18+, or every TICK while on): end the
+ * WebRTC reader sessions of a viewer it stops (their player falls back to the MP3 relay, which refuses them too). A
+ * session the auth hook never saw (a site restart since) is ended on a change, not on the periodic tick - its listener
+ * can ask for a new ticket. -> how many were ended
+ */
+async function recheck(why = "change") {
+  const AG = require("./adultgate");
+  const PA = require("./padaccess");
+  let n = 0;
+  for (const [roomId, s] of ST) {
+    if (!(s.readerIds || []).length || !AG.applies(roomId)) continue;
+    for (const sid of s.readerIds) {
+      const r = READERS.get(sid);
+      let stop;
+      if (!r) stop = why !== "tick";
+      else stop = (await PA.adultGateFor(r.uid, roomId)) !== "ok";
+      if (!stop) continue;
+      try { require("./livecam").kickReader(sid); } catch (e) { /* best effort */ }
+      READERS.delete(sid);
+      n++;
+    }
+  }
+  if (n) console.log(`[roomrtc] 18+ gate: ended ${n} WebRTC room listener(s)`);
+  return n;
 }
 
 const loopbackIp = (a) => /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.test(String(a || ""));
@@ -202,6 +237,11 @@ async function auth(b, action, proto) {
     if (!c) return loopbackIp(b.ip) ? 403 : 401;
     if (!(await require("./padaccess").fullFor(c.uid, R.id))) return 403;
     want(R.id);
+    // adultgate site: who this session is, for recheck() (MediaMTX passes the session id with the read)
+    if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) {
+      READERS.set(String(b.id), { uid: c.uid || null, roomId: R.id, at: now() });
+      if (READERS.size > 20000) READERS.delete(READERS.keys().next().value);
+    }
     return 200;
   }
   return 403;
@@ -214,8 +254,8 @@ function hint(R) { return eligible(R); }
 
 module.exports = {
   PREFIX, PATH_RE, MODES, GRACE_MS, TICKET_MS, PENDING_MS,
-  pathFor, roomForPath, pubKey, readTicket, checkTicket, isPrime, eligible, active, ticket, forBot, noteSync, noteCap, auth, hint, want,
-  _state: ST,
+  pathFor, roomForPath, pubKey, readTicket, checkTicket, isPrime, eligible, active, ticket, forBot, noteSync, noteCap, auth, hint, want, recheck,
+  _state: ST, _readers: READERS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
-  _reset: () => { ST.clear(); pending.length = 0; },
+  _reset: () => { ST.clear(); pending.length = 0; READERS.clear(); },
 };

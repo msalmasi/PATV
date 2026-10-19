@@ -248,13 +248,30 @@ function register(app, { isBotToken, addUser, noTimers }) {
 
   // 1.99fu: a capture taken in an Approved pad (padaccess.js) is only for the people inside it - the file, the poster
   // and the page all 404 for anyone else (the sign-in cookie is only read when it matters)
-  async function padGate(req, res, row) {
+  // adultgate site: a capture of an 18+ pad while the owner switch is on - "signin" | "confirm" for a viewer the 18+ gate
+  // stops (the cookie is only read then); "ok" otherwise, and always while the switch is off
+  async function adultState(req, res, row) {
+    if (!row || !row.room) return "ok";
+    const PA = require("./padaccess");
+    await PA.init();
+    const AG = require("./adultgate");
+    if (!AG.applies(row.room)) return "ok";
+    if (req.user === undefined && typeof addUser === "function") await new Promise((r) => addUser(req, res, r));
+    return PA.adultGate(req.user || null, row.room);
+  }
+  // the Approved rule alone (1.99fu)
+  async function approvedGate(req, res, row) {
     if (!row || !row.room) return true;
     const PA = require("./padaccess");
     await PA.init();
     if (!PA.isApproved(row.room)) return true;
     if (req.user === undefined && typeof addUser === "function") await new Promise((r) => addUser(req, res, r));
     return PA.canSee(req.user || null, row.room);
+  }
+  // adultgate site: the Approved rule FIRST (an outsider learns nothing - not even that the pad is 18+), then the 18+ gate
+  async function padGate(req, res, row) {
+    if (!(await approvedGate(req, res, row))) return false;
+    return (await adultState(req, res, row)) === "ok";
   }
 
   // The file itself — Range-aware (206), so phones can play clips
@@ -293,7 +310,17 @@ function register(app, { isBotToken, addUser, noTimers }) {
     const { row, gone } = await live(req.params.id);
     res.set("X-Robots-Tag", "noindex");
     if (gone) return res.status(gone).render("media", { user: req.user ? req.user.username : null, item: null, gone });
-    if (!(await padGate(req, res, row))) return res.status(404).render("media", { user: req.user ? req.user.username : null, item: null, gone: 404 });
+    // 1.99fu: an Approved pad's capture 404s for anyone outside it - checked FIRST (adultgate site review: the 18+ card
+    // must not tell an outsider the capture exists or that the pad is 18+)
+    if (!(await approvedGate(req, res, row))) return res.status(404).render("media", { user: req.user ? req.user.username : null, item: null, gone: 404 });
+    // adultgate site: a capture of an 18+ pad, switch on, viewer not signed in / not age-confirmed -> the 18+ card (no picture,
+    // no names); the file and poster 404 for them (padGate)
+    const ag = await adultState(req, res, row);
+    if (ag !== "ok") {
+      res.set("Cache-Control", "private, no-store");
+      return res.status(require("./adultgate").statusOf(ag)).render("media", { user: req.user ? req.user.username : null, item: null, gone: null,
+        adult: ag, adultNext: "/media/" + encodeURIComponent(row.id) });
+    }
     // 1.99cr: the pad it belongs to (a link, not the raw room id) and whether this viewer may delete it
     let pad = null, canDelete = false;
     try {

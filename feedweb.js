@@ -494,6 +494,16 @@ function register(app, { addUser, isBotToken }) {
     if (!/^[A-Za-z0-9]{8,16}$/.test(String(req.params.id || ""))) return next();
     try {
       const viewer = await viewerOf(req);
+      // adultgate site: a chat quote / mic clip / capture from an 18+ pad's live room, for a viewer the 18+ gate stops: the
+      // neutral 18+ card (no title, text, names or files; never indexed or cached) - before anything about the post is read
+      // (the Approved rule first: an outsider of an Approved pad gets the usual 404 below, never the 18+ card)
+      const row0 = await store.getRow(req.params.id);
+      const lk = row0 && !row0.deleted_at && !row0.hidden_at && (await store.padSeenBy(viewer, row0)) ? await store.adultLocked(viewer, row0) : null;
+      if (lk) {
+        res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
+        return res.status(require("./adultgate").statusOf(lk)).render("adultGate", { user: viewer ? viewer.username : null, gate: lk,
+          next: String(req.originalUrl || "/").split("#")[0].slice(0, 300) });
+      }
       const p = await store.get(req.params.id, viewer, { detail: true });
       const staff = SP.can(viewer, "feed.moderate");     // the action menu
       // 1.99acl: who sees a hidden / deleted post is feed.see_hidden (like the list / media / comment paths) - in pageVisible
@@ -578,6 +588,16 @@ function register(app, { addUser, isBotToken }) {
         const placed = await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [a.post_id]);
         locked = placed.some((r) => PA().isApproved(r.room_id));
         if (locked && !(await store.postSeenBy(req.user, { id: a.post_id, author_id: a.author_id }))) return res.status(404).end();
+      }
+      // adultgate site: a file of a live-room post (chat quote card, mic clip, kept capture) of an 18+ pad: past its 18+ gate it
+      // doesn't exist, and while the gate applies it's never cached in between (a CDN would hand it to anyone)
+      if (a.post_id) {
+        const AGx = require("./adultgate");
+        const lr = AGx.enabled() || AGx.unknown() ? await store.liveRoomOf({ id: a.post_id }) : null;
+        if (lr && AGx.applies(lr)) {
+          locked = true;
+          if (!(uid && uid === a.author_id) && AGx.gate(req.user && req.user.userId ? req.user : null, lr) !== "ok") return res.status(404).end();
+        }
       }
       const nsfw = a.nsfw_admin === 0 || a.nsfw_admin === 1 ? !!a.nsfw_admin : !!a.nsfw;
       if (nsfw && !uid) return res.status(403).end();

@@ -73,7 +73,7 @@ what has a safe existing rule is settled automatically.
 
 | Data | Policy |
 |---|---|
-| The account row | Kept as a **pseudonymous tombstone**: username `deleted-<10 hex>` (a hash of the id), display name "Deleted user", no email, no Twitch / Discord / Camfrog ids, no stream key or tokens, a random password nobody knows, archived (hidden from leaderboards and counts) and marked `DELETED` in `account_archive` (the stale cleanup never revives it). The ledger needs the id to exist (`transactions_user_must_exist`). |
+| The account row | Kept as a **pseudonymous tombstone**: username `deleted-<10 hex>` (a hash of the id), display name "Deleted user", no email, no Twitch / Discord / Camfrog ids, no stream key or tokens, no age confirmation (`age_confirmed_at`, `age_confirmed_v`), a random password nobody knows, archived (hidden from leaderboards and counts) and marked `DELETED` in `account_archive` (the stale cleanup never revives it). The ledger needs the id to exist (`transactions_user_must_exist`). |
 | Sessions, sign-in links (Google, Telegram), crypto wallets, chat sign-in tokens / log / switch, incognito log | Deleted |
 | Profile settings: language, time zone, layout, showcase, mention words, alerts, follows (both ways), notices (inbox), username and display-name history, likeness settings | Deleted (the old username is free again) |
 | Badges, cosmetics, sticker packs, soundboard items, owned voices, roles, pad memberships | Deleted (what they cost stays in the ledger) |
@@ -95,7 +95,8 @@ id; usernames / Camfrog logins written in them as text are replaced by the pseud
 - purchases and orders: `shop_orders`, `shop_order_events`, `premium_subs`, `shop_subs`, `creator_subs`;
 - donations with payment-processor ids: `donation_usd_log`, `donation_promo_credits`, `crypto_payments`, `stripe_events`;
 - moderation and safety: `admin_audit`, `content_audit` (+ views), `feed_automod`, `feed_filter`, `image_safety_log`,
-  `feed_reports`, `user_reports`, `dm_reports` (with the reported message's copy), `feed_bans`, `stage_bans`;
+  `feed_reports`, `user_reports`, `dm_reports` (with the reported message's copy), `feed_bans`, `stage_bans`,
+  `adult_gate_cfg` (who last flipped the 18+ pad gate);
 - **TAKE IT DOWN** reports (`takedown_cases`, `takedown_hashes`) and creator performer records (`creator_performers`);
 - consent records: `voice_consents` (proof of consent / revocation);
 - fraud: `welcome_keys` (hashes only), `welcome_bonus`;

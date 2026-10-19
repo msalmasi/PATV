@@ -220,6 +220,18 @@ async function notifyNewPost(post, authorName) {
                                    ${roomIds.length ? `OR (f.target_kind = 'room' AND f.target_id IN (${roomIds.map(() => "?").join(",")}))` : ""})
                                  LIMIT ?`, [post.author.userId, post.author.userId, ...roomIds, NOTIFY_MAX]);
     if (!rows.length) return 0;
+    // adultgate site: a chat quote / mic clip / capture from an 18+ pad's live room - no notice (with its text) for a follower
+    // the pad's 18+ gate stops (switch on; off: nobody is left out)
+    const store = require("./feedstore");
+    const AG = require("./adultgate");
+    const lr = AG.enabled() || AG.unknown() ? await store.liveRoomOf({ id: post.id, crosspost_of: post.crosspost_of || null }) : null;
+    let stopped = new Set();
+    if (lr && AG.applies(lr)) {
+      const ids = rows.map((r) => r.follower);
+      const acc = await getQuery(`SELECT userId, class FROM users WHERE userId IN (${ids.map(() => "?").join(",")})`, ids).catch(() => []);
+      const byId = new Map(acc.map((a) => [String(a.userId), a]));
+      stopped = new Set(ids.filter((id) => AG.gate(byId.get(String(id)) || { userId: id }, lr) !== "ok").map(String));
+    }
     const inbox = require("./inbox");
     const what = post.nsfw ? "an NSFW post" : require("./postlabel").postLabel({ ...post, author: post.author || { display: authorName } }).slice(0, 80);
     // 1.99df: a profile post reads "X posted on their profile"
@@ -227,6 +239,7 @@ async function notifyNewPost(post, authorName) {
       : (post.rooms || []).length ? " in " + post.rooms.map((r) => (r.slug ? "p/" + r.slug : r.title)).slice(0, 2).join(", ") : "";
     let n = 0;
     for (const r of rows) {
+      if (stopped.has(String(r.follower))) continue;
       const ok = await inbox.addSafe(r.follower, { kind: "follow", title: `${authorName} posted${where}`, body: post.nsfw ? what : `"${what}"`,
                                                    link: post.url || "/feed/p/" + post.id, ref: "follow-post:" + post.id });
       if (ok) n++;

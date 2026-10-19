@@ -24,6 +24,9 @@
    // 1.99fu: pad visibility (padaccess.js) - liveOpen = this viewer gets the members-tier content (the live room, story
    // pictures, analytics): signed in, or anyone on a Public pad; access.level = public | members | approved
    const liveOpen_ = typeof liveOpen !== 'undefined' ? !!liveOpen : (typeof signedIn !== 'undefined' && !!signedIn);
+   // adultgate site: the 18+ gate (adultgate.js; "ok" unless the owner switch is on and this is an 18+ pad)
+   const adultGate_ = typeof adultGate !== 'undefined' && (adultGate === 'signin' || adultGate === 'confirm') ? adultGate : 'ok';
+   const adultNext_ = typeof adultNext !== 'undefined' && adultNext ? adultNext : '/p/' + encodeURIComponent(room.slug);
    const access_ = typeof access !== 'undefined' && access ? access : { level: 'members' };
    const tabOn_ = (t) => PT_.initial === t;
    const liveLabel_ = PT_.camfrog ? t('pad.tab.live') : t('pad.tab.stage'); %>
@@ -615,7 +618,7 @@
   <% } %>
   <%# 1.99ef: the room's live status (was header chips): who's in the Camfrog room, Pepe is here %>
   <% if (!siteOnly_) { const cfName_ = room.camfrogName || room.name; %><p class="lstat" id="rmLiveStat"><span id="rmStDot" aria-hidden="true"><%= room.live ? '🟢' : '⚪' %></span>
-    <% if (bridged_) { %><span><%- t('pad.live.n_in', { n: '<b id="rmCount">' + t.esc(room.count) + '</b>', room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } else { %><span><%- t('pad.live.cf_room', { room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } %>
+    <% if (bridged_ && adultGate_ === 'ok') { %><span><%- t('pad.live.n_in', { n: '<b id="rmCount">' + t.esc(room.count) + '</b>', room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } else { %><span><%- t('pad.live.cf_room', { room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } %>
     <% if (pepeHere_ === true) { %><span class="ls-sep" aria-hidden="true">·</span><span title="<%- t('pad.live.pepe_here_tip') %>"><%- t('pad.live.pepe_here') %></span><% } %></p><% } %>
   <%# 1.99za: the "📡 Live from the pad's Camfrog room - read-only" note moved to the About card (it's reference, and it
       sat between the header and the chat on every visit) %>
@@ -743,6 +746,10 @@
     <p class="muted"><%- t('pad.plusroom.text', { max: sp_.max }) %></p>
     <a class="btn" href="/premium?pad=<%= encodeURIComponent(room.slug) %>#plus"><%- sp_.soldOut ? t('pad.plusroom.cta_full') : t('pad.plus.cta') %></a>
   </section>
+  <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
+<% } else if (adultGate_ !== 'ok') { %>
+  <%# adultgate site: an 18+ pad while the owner switch is on - sign in / confirm your age; no lines, names or counts %>
+  <%- include('partials/adult-gate', { gate: adultGate_, next: adultNext_, cls: '', tag: 'section' }) %>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else if (!liveOpen_) { %>
   <section class="card tease">
@@ -1400,7 +1407,8 @@
     <% if (!siteOnly_) { %><%- include('partials/pad-streak-card', { slug: room.slug }) %><% } %>
     <%# 1.99wu: 🎤 mic challenges (economy v2 E-8): the pad's latest judged performances + today's prize budget, filled by
         public/js/pad-challenges.js from GET /api/rooms/:slug/challenges (challengepay.js); stays hidden until there is one %>
-    <% if (!siteOnly_) { %><section class="card pc-card" id="challenges" aria-labelledby="pcH" data-slug="<%= room.slug %>" hidden>
+    <%# adultgate site: not past the 18+ gate - the results name who was on the room's mic (the API refuses them too) %>
+    <% if (!siteOnly_ && adultGate_ === 'ok') { %><section class="card pc-card" id="challenges" aria-labelledby="pcH" data-slug="<%= room.slug %>" hidden>
       <h2 id="pcH"><span><%- t('pad.chal.h') %></span></h2>
       <p class="muted pc-budget" data-pc="budget"></p>
       <ol class="pc-list" data-pc="list"></ol>
@@ -1457,7 +1465,7 @@
   <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=4" defer></script><% } %>
   <% if (typeof roomVault !== 'undefined' && roomVault) { %><script src="/public/js/pad-vault.js?v=2" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>
-  <% if (!siteOnly_) { %><script src="/public/js/pad-challenges.js?v=1" defer></script><% } %>
+  <% if (!siteOnly_ && adultGate_ === 'ok') { %><script src="/public/js/pad-challenges.js?v=1" defer></script><% } %>
   <script>
   // 1.99ef: the header's ⋯ menu - closes on an outside click / Esc / after a pick; "Copy link" copies the pad's address
   (function () {

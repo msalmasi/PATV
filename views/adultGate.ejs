@@ -1,0 +1,11 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('adultgate.h') + ' · Public Access TV', user: user }) %>
+<%# adultgate site (adultgate.js): a page whose content comes from an 18+ pad's live room (a chat quote, a mic clip, a capture kept
+    as a post) for a viewer the 18+ gate stops (the owner switch on): the neutral card only - no title, text, names or files.
+    Locals: user, gate ("signin" | "confirm"), next (a local path to come back to). %>
+<main class="ds-page mid" style="text-align:center">
+  <%- include('partials/adult-gate', { gate: typeof gate !== 'undefined' ? gate : 'signin', next: typeof next !== 'undefined' ? next : '/', tag: 'section' }) %>
+  <p class="muted"><a href="/feed"><%- t('adultgate.back_feed') %></a></p>
+</main>
+</body>
+</html>

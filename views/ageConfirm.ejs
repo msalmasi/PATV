@@ -1,0 +1,31 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('age.title') + ' · Public Access TV', user: user, ogPath: '/confirm-age' }) %>
+<%# adultgate site (adultgate.js): the one-time age confirmation. Signed in only (the route sends everyone else to sign in).
+    Confirming is a same-site JSON POST (/api/age/confirm, X-Requested-With: fetch) from public/js/age-confirm.js; the
+    account remembers it (users.age_confirmed_at), then the page goes back to `next` (a local path). Locals: user, next,
+    done (already confirmed - shown with ?stay=1), at (when, ms | null). %>
+<link rel="stylesheet" href="/public/css/pad-access.css?v=2">
+<main class="ds-page narrow flow pa-lock" id="ageBox" data-next="<%= next %>">
+  <section class="pa-card" aria-labelledby="ageH">
+    <div class="pa-ic" aria-hidden="true">🔞</div>
+    <% if (done) { %>
+      <h1 id="ageH"><%- t('age.done_h') %></h1>
+      <p class="pa-what"><%- t('age.done_p', { date: at ? new Date(at).toISOString().slice(0, 10) : '—' }) %></p>
+      <p><a class="pa-btn primary" href="<%= next %>"><%- t('age.continue') %></a></p>
+    <% } else { %>
+      <h1 id="ageH"><%- t('age.h') %></h1>
+      <p class="pa-what"><%- t('age.p') %></p>
+      <p class="pa-what"><%- t('age.p2') %></p>
+      <form class="pa-req" id="ageForm" autocomplete="off">
+        <label class="ds-check" for="ageCk"><input type="checkbox" id="ageCk" name="yes" required> <span><%- t('age.ck') %></span></label>
+        <button type="submit" class="pa-btn primary"><%- t('age.go') %></button>
+        <p class="pa-msg" id="ageMsg" role="status" aria-live="polite"></p>
+      </form>
+      <p class="pa-mut"><a href="<%= next %>"><%- t('age.cancel') %></a></p>
+    <% } %>
+    <p class="pa-mut"><%- t('age.terms', { terms: '<a href="/terms">' + t('foot.terms') + '</a>' }) %></p>
+  </section>
+</main>
+<% if (!done) { %><script src="/public/js/age-confirm.js?v=2" defer></script><% } %>
+</body>
+</html>

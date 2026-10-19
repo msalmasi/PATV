@@ -521,6 +521,8 @@ async function setPage(roomId, patch, actor) {
                  [title || null, description || null, banner || null, Date.now(), roomId]);
   await event(roomId, "page", actor, `title=${title}`);
   await loadCache();
+  // adultgate site: marked 18+ (or not any more) - streams already open on it re-check their viewers under the 18+ gate now
+  if (adult !== null && adult !== r.adult) { try { require("./adultgate").bump("pad"); } catch (e) { /* no gate */ } }
   return get(roomId);
 }
 /** Owner stage settings: slot_count (1..cap), approval, slot_price (0..featured price), 1.99lw slot_max_min (5..caps.maxMinutes; "" = the site default). */

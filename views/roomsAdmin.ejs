@@ -90,6 +90,9 @@
 
   <%# 1.99iy: pad addresses (+ 1.99iz creation, 1.99ja connections) - padcfg.js %>
   <% if (typeof padsCfg !== 'undefined' && padsCfg) { %><%- include('partials/pads-admin-cfg', { padsCfg, isAdmin: _can('pads.config') }) %><% } %>
+
+  <%# adultgate site: 🔞 18+ pads - the owner switch of the 18+ gate (adultgate.js) %>
+  <% if (typeof adultGate !== 'undefined') { %><%- include('partials/pads-admin-adult', { ag: adultGate }) %><% } %>
 <% } %>
   <% if (_can('pads.connect_review')) { %><%- include('partials/pads-admin-conn') %><% } %>
 <% if (full) { %>

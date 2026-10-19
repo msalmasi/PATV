@@ -45,7 +45,7 @@ async function guideRows(signedIn, viewer) {
   const PA = require("./padaccess");
   await PA.init();
   const B = bridge();
-  const summary = await B.summary(signedIn);
+  const summary = await B.summary(signedIn, viewer || null);     // adultgate site: + the viewer (an 18+ pad's topic / mic names)
   const reg = await rooms.list();
   const g = await stage.guide();
   const byId = new Map();
@@ -84,6 +84,14 @@ async function guideRows(signedIn, viewer) {
   }
   out.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.now.filter((s) => s.live).length - a.now.filter((s) => s.live).length)
     || b.count - a.count || a.title.localeCompare(b.title));
+  // adultgate site: an 18+ pad past the gate (switch on) shows no headcount / mic count and no cam slot's name on its card
+  // (the sort above still used them, like every other viewer's). Off: nothing changes.
+  for (const r of out) {
+    if (PA.adultGate(viewer || null, r.id) === "ok") continue;
+    r.count = null; r.micCount = null; r.adultGate = true;
+    r.now = r.now.map((s) => (s.cam ? { ...s, display: "", title: null } : s));
+    if (r.featured && r.featured.cam) r.featured = { ...r.featured, display: "", title: null };
+  }
   // 1.99ee: the automatic front-page ranking on each row (r.trend: {rank, front, score, boost}) - the guide's "Trending" strip
   try {
     const T = await rooms.trending(5);
@@ -324,7 +332,9 @@ function register(app, { addUser, isBotToken }) {
     }
     const sum = await royalties.summary();
     const fp = await rooms.frontStatus().catch(() => null);
-    res.render("roomsAdmin", { user: req.user.username, isAdmin: SP.can(req.user, "admin.sensitive_overview"), list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
+    // adultgate site: the 🔞 18+ pads card (the owner switch - adultgate.js; read-only for everyone but an owner)
+    const adultGate = await require("./adultgate").adminView(req.user).catch((e) => { console.error("[adultgate] admin view:", e.message); return null; });
+    res.render("roomsAdmin", { user: req.user.username, isAdmin: SP.can(req.user, "admin.sensitive_overview"), list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(), adultGate,
       sum, padsCfg: { config: await require("./padcfg").get(), fields: require("./padcfg").FIELDS, limits: require("./padcfg").LIMITS,   // 1.99iy
                       reclaimable: await require("./padcreate").reclaimCandidates().then((r) => r.length).catch(() => null) },          // 1.99iz
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });

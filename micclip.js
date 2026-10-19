@@ -171,6 +171,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const c = clips.get(String(req.params.id || ""));
     const R = bySlug(req.params.slug);
     if (!c || !R || c.roomId !== R.id || !req.user || c.userId !== req.user.userId) { res.status(404).json({ ok: false, error: "No such clip." }); return null; }
+    if (require("./adultgate").refuseJson(req, res, R.id)) return null;        // adultgate site: the 18+ gate on this room
     return { c, R };
   };
   const LINK = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
@@ -183,6 +184,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
       const R = bySlug(req.params.slug);
       if (!R || !isLive(R)) return res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." });
+      if (require("./adultgate").refuseJson(req, res, R.id)) return;          // adultgate site: the 18+ gate on this room
       if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: LINK });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
