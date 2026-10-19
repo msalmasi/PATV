@@ -527,3 +527,126 @@ test("the page: share boot data, the new dialogs and the picture button; can't-s
   const bad = await fetch(base + "/messages?share=../../x", { headers: { "x-test-user": U.ann.userId } });
   assert.equal(JSON.parse((await bad.text()).match(/id="dmBoot">([\s\S]*?)<\/script>/)[1]).share, null);
 });
+
+// ───────────────────────── 1.99ade: cards that said too much ─────────────────────────
+const bootOf = async (url, u) => JSON.parse((await (await fetch(base + url, { headers: { "x-test-user": u.userId } })).text())
+  .match(/<script type="application\/json" id="dmBoot">([\s\S]*?)<\/script>/)[1]);
+
+test("post cards: an 18+ or a creator-locked post is a neutral card (no title, no picture); an 18+ post's link has no title slug", async () => {
+  await require(path.join(repo, "creators")).init();
+  await mkPost("PostR18a", { title: "Very spicy title" });
+  await runQuery("UPDATE feed_posts SET lock_rating = 'r18' WHERE id = 'PostR18a'");
+  await mkPost("PostLck1", { title: "Members only clip" });
+  await runQuery("UPDATE feed_posts SET lock_kind = 'sub', lock_tier = 1 WHERE id = 'PostLck1'");
+  dmembeds._clear();
+  const [r18, lck, ok] = await dmembeds.forBody("https://publicaccess.tv/feed/p/PostR18a https://publicaccess.tv/feed/p/PostLck1 https://publicaccess.tv/feed/p/PostNsf1");
+  assert.equal(r18.unavailable, false);
+  assert.equal(r18.gate, "r18");
+  assert.equal(r18.title, "");
+  assert.equal(r18.thumb, null);
+  assert.equal(r18.href, "/p/room1/posts/PostR18a", "no title slug in the 18+ post's address");
+  assert.ok(!/spicy/i.test(JSON.stringify(r18)));
+  assert.equal(lck.gate, "locked");
+  assert.equal(lck.title, "");
+  assert.ok(!/Members only clip/.test(JSON.stringify(lck)));
+  assert.equal(ok.gate, undefined, "an ordinary post: as before");
+  assert.equal(ok.title, "spicy");
+  assert.equal(JSON.stringify(Object.keys(r18)).includes("authorIds"), false, "author ids never leave the server");
+  // the picture: an ordinary post's card has its thumbnail, a gated one never (every post given one here)
+  const FS = require(path.join(repo, "feedstore"));
+  await mkPost("PostThm1", { title: "Pictured" });
+  const realThumb = FS.thumbOf;
+  FS.thumbOf = () => "0123456789abcdef0123456789abcdef_t.webp";
+  try {
+    dmembeds._clear();
+    const [r2, l2, p2] = await dmembeds.forBody("https://publicaccess.tv/feed/p/PostR18a https://publicaccess.tv/feed/p/PostLck1 https://publicaccess.tv/feed/p/PostThm1");
+    assert.equal(p2.thumb, "/media/f/0123456789abcdef0123456789abcdef_t.webp", "an ordinary post: its picture");
+    assert.equal(r2.thumb, null, "18+: no picture");
+    assert.equal(l2.thumb, null, "locked: no picture");
+  } finally { FS.thumbOf = realThumb; dmembeds._clear(); }
+  // the page's labels for them (client strings, catalog defaults)
+  const js = fs.readFileSync(path.join(repo, "public", "js", "messages.js"), "utf8");
+  assert.match(js, /_t\('js\.msg\.post_r18', '18\+ post'\)/);
+  assert.match(js, /_t\('js\.msg\.post_locked', 'Locked post'\)/);
+});
+
+test("post cards: a post by someone you blocked, or who blocked you, is 'unavailable' for you (history, live answer); others still see it", async () => {
+  await mkPost("PostBlk1", { title: "Ann's clip" });
+  dmembeds._clear();
+  const g = await group(U.ben, ["cat", "dan"], "Block test");
+  const c = g.d.conversation.id;
+  assert.equal((await post("/api/messages/block", U.cat, { username: "ann", on: true })).status, 200);       // cat blocked the author
+  assert.equal((await post("/api/messages/block", U.ann, { username: "dan", on: true })).status, 200);       // the author blocked dan
+  const s = await sayIn(U.ben, c, "look https://publicaccess.tv/feed/p/PostBlk1");
+  assert.equal(s.status, 200, JSON.stringify(s.d));
+  assert.equal(s.d.message.embeds[0].title, "Ann's clip", "the sender (no block with ann) sees the card");
+  const seen = async (u) => (await get(`/api/messages/c/${c}`, u)).d.messages.find((m) => m.id === s.d.message.id).embeds[0];
+  assert.deepEqual(await seen(U.cat), { id: "PostBlk1", href: "/feed/p/PostBlk1", unavailable: true }, "the blocker: unavailable, nothing else");
+  assert.deepEqual(await seen(U.dan), { id: "PostBlk1", href: "/feed/p/PostBlk1", unavailable: true }, "the blocked: the same (it says nothing about who blocked whom)");
+  assert.equal((await seen(U.ben)).title, "Ann's clip");
+  await post("/api/messages/block", U.cat, { username: "ann", on: false });
+  await post("/api/messages/block", U.ann, { username: "dan", on: false });
+  assert.equal((await seen(U.cat)).title, "Ann's clip", "unblocked: the card is back");
+  assert.equal((await seen(U.dan)).title, "Ann's clip");
+  // the sender's own copy (the send's answer, and their live event) carries THEIR blocks too
+  assert.equal((await post("/api/messages/block", U.ben, { username: "ann", on: true })).status, 200);
+  const own = await sayIn(U.ben, c, "mine https://publicaccess.tv/feed/p/PostBlk1");
+  assert.equal(own.status, 200, JSON.stringify(own.d));
+  assert.deepEqual(own.d.message.embeds[0], { id: "PostBlk1", href: "/feed/p/PostBlk1", unavailable: true }, "the sender blocked the author");
+  await post("/api/messages/block", U.ben, { username: "ann", on: false });
+  // unit: applyBlocks only touches cards by the blocked ids
+  const cards = await dmembeds.forBody("https://publicaccess.tv/feed/p/PostBlk1");
+  assert.equal(dmembeds.applyBlocks(cards, new Set(["u_zed"]))[0].title, "Ann's clip");
+  assert.equal(dmembeds.applyBlocks(cards, new Set([U.ann.userId]))[0].unavailable, true);
+  assert.equal(dmembeds.applyBlocks(cards, null), cards);
+  // the live event each member gets is shaped for them too
+  dm._gaps.clear(); tick(2000);
+  const rb = await post("/api/messages/block", U.cat, { username: "ann", on: true });
+  assert.equal(rb.status, 200, JSON.stringify(rb.d));
+  const got = new Map();
+  const fake = (u) => ({ write: (line) => { const ev = JSON.parse(line.replace(/^data: /, "")); if (ev.t === "msg") got.set(u.username, ev.m); } });
+  for (const u of [U.cat, U.dan]) dm._streams.set(u.userId, new Set([fake(u)]));
+  try {
+    const s2 = await sayIn(U.ben, c, "again https://publicaccess.tv/feed/p/PostBlk1");
+    assert.equal(s2.status, 200);
+    assert.equal(got.get("cat").embeds[0].unavailable, true, "the blocker's live copy");
+    assert.equal(got.get("dan").embeds[0].title, "Ann's clip", "another member's live copy");
+  } finally {
+    for (const u of [U.cat, U.dan]) dm._streams.delete(u.userId);
+    dm._gaps.clear(); tick(2000);
+    await post("/api/messages/block", U.cat, { username: "ann", on: false });
+  }
+});
+
+test("share: /messages?share=<id> hands out only a post the member may open, at the address they get", async () => {
+  for (const id of ["PostDel1", "PostHid1", "PostRem1"]) {
+    assert.equal((await bootOf("/messages?share=" + id, U.ben)).share, null, id + ": deleted / hidden / removed everywhere -> nothing");
+  }
+  assert.equal((await bootOf("/messages?share=NoSuch99", U.ben)).share, null);
+  assert.deepEqual((await bootOf("/messages?share=PostR18a", U.ben)).share, { id: "PostR18a", url: "https://publicaccess.tv/p/room1/posts/PostR18a" },
+                   "an 18+ post: the address without its title");
+  assert.deepEqual((await bootOf("/messages?share=PostNsf1", U.ben)).share, { id: "PostNsf1", url: "https://publicaccess.tv/p/room1/posts/PostNsf1/spicy" },
+                   "a public post: as before");
+  // its author still shares a post that's hidden (the post page's rule: they can open it)
+  assert.deepEqual((await bootOf("/messages?share=PostHid1", U.ann)).share, { id: "PostHid1", url: "https://publicaccess.tv/p/room1/posts/PostHid1/a-post" });
+});
+
+test("post cards in Pepe's DM replies carry the member's blocks (pepeReply's live copy)", async () => {
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, password, class, camfrogUsername) VALUES ('pepe-bot', 'PepeFrog', 'Pepe', 'x', 'Bot', 'pepefrog')");
+  tick(1000);
+  const s = await post("/api/messages/send", U.eli, { to: "PepeFrog", body: "hi pepe" });
+  assert.equal(s.status, 200, JSON.stringify(s.d));
+  const conv = s.d.conversation.id;
+  assert.equal((await post("/api/messages/block", U.eli, { username: "ann", on: true })).status, 200);
+  const got = [];
+  dm._streams.set(U.eli.userId, new Set([{ write: (l) => { const ev = JSON.parse(l.replace(/^data: /, "")); if (ev.t === "msg") got.push(ev.m); } }]));
+  try {
+    const r = await post("/api/messages/pepe/reply", null, { password: "bot", conversation: conv, upto: s.d.message.id, text: "look https://publicaccess.tv/feed/p/PostBlk1" });
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.ok(got.length, "the live event");
+    assert.deepEqual(got[got.length - 1].embeds[0], { id: "PostBlk1", href: "/feed/p/PostBlk1", unavailable: true }, "eli blocked the author");
+  } finally {
+    dm._streams.delete(U.eli.userId);
+    await post("/api/messages/block", U.eli, { username: "ann", on: false });
+  }
+});

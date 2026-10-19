@@ -46,18 +46,35 @@ async function loadStats() {
   } catch (e) { out.vaults = null; }
   // live markets: the soonest to close, plus who has bets in them (for "your open bets")
   const now = Date.now() / 1000;
-  const mk = (await many("SELECT data FROM markets WHERE status = 'open'")).map((r) => parse(r.data)).filter(Boolean);
+  // 1.99ade: this cache is the same for every viewer (signed out included), so the "Now" box and its counts list only what a
+  // signed-out visitor may see - a market / pool or a bounty on an Approved pad (og.anonHidden) is left out, as on /markets
+  // and /bounties; so is a wager made in such a pad's room
+  const og = require("./og");
+  const mkRows = (await many("SELECT data, pad FROM markets WHERE status = 'open'")).map((r) => ({ r, d: parse(r.data) })).filter((x) => x.d);
+  const mkAll = mkRows.map((x) => x.d);
+  const mk = [];
+  for (const x of mkRows) if (!(await og.anonHidden(await og.marketPad(x.r, x.d)))) mk.push(x.d);
   out.markets = mk.length;
   out.closing = mk.filter((m) => m.id && m.question && m.closes > now).sort((a, b) => a.closes - b.closes).slice(0, 3)
     .map((m) => ({ id: m.id, q: String(m.question || "").slice(0, 120), closes: m.closes, pot: (m.bets || []).reduce((t, b) => t + (Number(b.amount) || 0), 0) }));
+  // "your open bets" (personal(): a member's own count) still counts every market they bet in
   out.betters = {};
-  for (const m of mk) for (const b of m.bets || []) { const k = String(b.nick || "").toLowerCase(); if (k) out.betters[k] = (out.betters[k] || 0) + 1; }
-  const bo = (await many("SELECT data FROM bounties WHERE status = 'open'")).map((r) => parse(r.data)).filter(Boolean);
+  for (const m of mkAll) for (const b of m.bets || []) { const k = String(b.nick || "").toLowerCase(); if (k) out.betters[k] = (out.betters[k] || 0) + 1; }
+  const bo = [];
+  for (const b of (await many("SELECT data FROM bounties WHERE status = 'open'")).map((r) => parse(r.data)).filter(Boolean)) {
+    if (!(await og.anonHidden(await og.bountyPad(b)))) bo.push(b);
+  }
   out.bounties = bo.length;
   out.topBounties = bo.filter((b) => b.id && b.task).map((b) => ({ id: b.id, task: String(b.task).slice(0, 120), pot: (b.pot || []).reduce((t, c) => t + (Number(c.amount) || 0), 0) }))
     .sort((a, b) => b.pot - a.pot).slice(0, 3);
-  const w = await one("SELECT COUNT(*) AS n FROM wagers WHERE status IN ('offered','accepting','active','settling','open','closed')");
-  out.wagers = w ? w.n : 0;
+  let wn = 0;
+  const padlinks = require("./padlinks");
+  try { await padlinks.ready(); } catch (e) { /* the registry cache: rooms resolve to no pad */ }
+  for (const r of await many("SELECT data FROM wagers WHERE status IN ('offered','accepting','active','settling','open','closed')")) {
+    const w = parse(r.data);
+    if (w && !(await og.anonHidden(padlinks.resolve({ pad: w.pad, room: w.room }) || null))) wn += 1;
+  }
+  out.wagers = wn;
   const tables = tablesState();
   out.tables = tables.map((t) => ({ id: t.id, game: t.game === "bj" ? "Blackjack" : "Hold'em", featured: !!t.featured, phase: t.phase || "",
     room: t.room_name || t.room || "", seats: (t.seats || []).filter((x) => x && x.name).map((x) => String(x.name)),
@@ -266,7 +283,7 @@ function register(app, { addUser, xpForNextLevel }) {
       // 1.99kk: the banner slot (banner.js) - a paid booking for today, else a house promo (Pepeball with its live jackpot, ...)
       const banner = await require("./banner").pick({ lotto: S.lotto, lang: res.locals.lang || "en" }).catch((e) => { console.error("[home] banner:", e.message); return null; });
       res.locals.og = { title: "Public Access TV", description: "Pads with live stages, feeds and chat rooms, Pepe the frog, PAT games, markets and more.",
-                        image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
+                        image: res.locals.ogBase + require("./og").pageUrl("Public Access TV"), url: res.locals.ogBase + "/" };
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top, tops, boostMark: require("./boostmark").boostMark,
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
@@ -309,7 +326,7 @@ function register(app, { addUser, xpForNextLevel }) {
     await PA.init();
     const rooms = PA.visibleRows(req.user && req.user.userId ? req.user : null, await bridge.summary(false));    // 1.99fu
     res.locals.og = { title: "About Public Access TV", description: "A community TV station: pads with their own stages and chat rooms, Pepe the frog, live events, PAT games and more.",
-                      image: res.locals.ogBase + "/og/page.png?t=About%20PATV", url: res.locals.ogBase + "/about" };
+                      image: res.locals.ogBase + require("./og").pageUrl("About PATV"), url: res.locals.ogBase + "/about" };
     res.render("about", { user: req.user ? req.user.username : null, S, room: rooms.find((r) => r.live) || rooms[0] || null });
   });
 }

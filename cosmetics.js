@@ -26,6 +26,7 @@ const fs = require("fs");
 const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
+const N = require("./notices");      // 1.99ade: the notice after a form post (?m=<id>, never ?msg=<text>)
 
 // ── catalog ──
 const CATALOG_FILE = path.join(__dirname, "cosmetics.json");
@@ -756,7 +757,7 @@ async function pageData(req) {
     now, tab, sort, kinds: CAT.kinds || {}, rarities: CAT.rarities || {}, tags: TAGS, byKind, seasonStateOf: seasonState, dayMs, seasons: Object.values(seasons).sort((a, b) => a.from - b.from),
     listings: await marketListings(sort), fee: MARKET_FEE_PCT, listMin: LIST_MIN, showcaseMax: SHOWCASE_MAX,
     user: req.user ? req.user.username : null, me: null, inv: null, badges: [], showcase: [], acts: [], seed: null,
-    msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, ACCOUNT_KINDS, GTF_KINDS, counts: {},
+    msg: require("./notices").read(req), ACCOUNT_KINDS, GTF_KINDS, counts: {},     // 1.99ade: ?m=<id> (notices.js), never ?msg= text
     myListings: new Set(), equippedR: {}, achName: ACH_NAME,
     padCat: [],                                  // 1.99ew: premium PAD cosmetics (padcosmetics.js) - the "Pad" group
   };
@@ -976,7 +977,8 @@ function register(app, { isBotToken, addUser }) {
   // Owner actions done on the site (no PAT involved)
   const owner = (fn) => async (req, res) => {
     const tab = String((req.body || {}).tab || "mine").replace(/[^a-z]/g, "") || "mine";
-    const back = (msg) => res.redirect(`/cosmetics?tab=${tab}&msg=${encodeURIComponent(msg)}#tabs`);
+    // 1.99ade: ?m=<id> (notices.js: a catalog key, or this account's held notice) - never ?msg=<text>
+    const back = (msg) => res.redirect(N.href(req, `/cosmetics?tab=${tab}#tabs`, msg));
     if (!req.user || !req.user.userId) return res.redirect("/login");
     if (!sameSite(req)) return res.status(403).send("Forbidden");
     try {
@@ -984,7 +986,7 @@ function register(app, { isBotToken, addUser }) {
       await fn(req.body || {}, req.user.userId, back);
     } catch (e) {
       console.error("[cosmetics] owner action:", e);
-      back("Something went wrong — nothing changed.");
+      back(N.K("err_changed"));
     }
   };
 
@@ -1067,12 +1069,12 @@ function register(app, { isBotToken, addUser }) {
   app.post("/cosmetics/act", addUser, async (req, res) => {
     const b = req.body || {};
     const tab = String(b.tab || "shop").replace(/[^a-z]/g, "") || "shop";
-    const back = (msg) => res.redirect(`/cosmetics?tab=${tab}&msg=${encodeURIComponent(msg)}#tabs`);
+    const back = (msg) => res.redirect(N.href(req, `/cosmetics?tab=${tab}#tabs`, msg));     // 1.99ade: ?m=<id> (notices.js)
     if (!req.user || !req.user.userId) return res.redirect("/login");
     if (!sameSite(req)) return res.status(403).send("Forbidden");
     try {
       const me = await resolveUser({ userId: req.user.userId });
-      if (!me) return back("Couldn't find your account.");
+      if (!me) return back(N.K("no_account"));
       // 1.99wv (connections audit C): with no chat login Pepe buys as the PATV account itself (u:<userId>; the items live here anyway)
       if (!me.camfrogUsername && !require("./actorcap").on()) return back("Link a chat account first (Settings → Account → Connections) — Pepe runs this as you.");
       const op = String(b.op || "");
@@ -1100,12 +1102,12 @@ function register(app, { isBotToken, addUser }) {
         if (Number(me.points_balance) < l.price) return back(`That costs ${Number(l.price).toLocaleString("en-US")} PAT — you have ${Number(me.points_balance).toLocaleString("en-US")}.`);
         args = ["cosmetic", "buylisting", String(l.id)];
       } else {
-        return back("That can't be done from the site.");
+        return back(N.K("act_cant"));
       }
       await require("./actions").queue(me.userId, { kind: "cmd", args, tag: "cosmetics", label: "!" + args.join(" ") });
-      back("Sent to Pepe — the result shows below in a few seconds.");
+      back(N.K("act_sent"));
     } catch (e) {
-      back(e.message === "busy" ? "You already have a few things waiting — give Pepe a moment." : "Something went wrong — nothing was sent.");
+      back(N.K(e.message === "busy" ? "act_busy" : "err_sent"));
     }
   });
 }

@@ -382,7 +382,7 @@ function register(app, { isBotToken, addUser }) {
       const titles = { holdem: "Texas Hold'em", bj: "Blackjack", lobby: "Casino tables" };
       res.locals.og = { title: `${titles[focus]} with Pepe — publicaccess.tv`,
                         description: "Play Pepe's No-Limit Hold'em and Blackjack tables from the web or from Camfrog chat — same table, same chips (PAT).",
-                        image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent(titles[focus]),
+                        image: res.locals.ogBase + require("./og").pageUrl(titles[focus]),
                         url: res.locals.ogBase + res.locals.ogPath };
       res.render("casino", { user: req.user ? req.user.username : null, me, focus, title: titles[focus], pokerNow, tableId });
     } catch (e) {

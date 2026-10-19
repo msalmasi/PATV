@@ -179,7 +179,7 @@ function register(app, { isBotToken, addUser }) {
       res.render("lotto", {
         user: req.user ? req.user.username : null, L, updated: row ? row.updated : null, me, mine, prizes, anyOdds,
         players, last, now: Math.floor(Date.now() / 1000), backend, commitment: L && L.commitment ? L.commitment : null,
-        acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
+        acts, msg: require("./notices").read(req),      // 1.99ade: ?m=<id> (notices.js), never ?msg= text
         dupAsk: me ? parseDupAsk(req.query) : null,
         rules: { WHITE_MAX, WHITE_PICK, BALL_MAX },
       });

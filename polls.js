@@ -336,7 +336,7 @@ function register(app, { isBotToken, addUser }) {
         acts = await actions.recentFor(req.user.userId, "polls");
         if (me) keys = [me.camfrogUsername, WEB + me.username].filter(Boolean);
       }
-      const want = padlinks.fromParam(req.query.pad);
+      const want = padlinks.fromParamFor(req.user || null, req.query.pad);     // 1.99ade: a pad they can't see = unknown
       const rows = await getQuery("SELECT data, pad FROM polls ORDER BY created DESC, updated DESC LIMIT 400");
       let all = rows.map((r) => {
         const d = JSON.parse(r.data);
@@ -371,7 +371,7 @@ function register(app, { isBotToken, addUser }) {
         user: req.user ? req.user.username : null, me, actives, active: actives[0] || null, past, focus, filter, maxOptions: MAX_OPTIONS,
         canCreate: !!(me && (me.camfrogUsername || await backendLive())),       // 1.99wr: the site runs polls by account
         canEnd: canEndOf(actives[0]), pick: await padlinks.choicesFor(req.user, req.query.pad || (focus && focus.padv ? focus.padv.slug : "")),
-        acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
+        acts, msg: require("./notices").read(req),      // 1.99ade: ?m=<id> (notices.js), never ?msg= text
       });
     } catch (e) {
       console.error("[polls] page:", e);

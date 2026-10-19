@@ -2,7 +2,7 @@
 <%# 1.99uj: /pads/owners - the pad owners guide (padguide.js): what a pad is for, how it earns PAT, Pepe as co-host, what
     Pepe can do per goal (linked to each connected chat service's command guide) and the pad tiers. Every number comes
     from padguide.facts() (F). The technical list is /pads/owner-guide ("Pad owner reference", padowner.js). %>
-<%- include('layout', { title: t('owners.title'), user: user, og: (typeof ogBase !== 'undefined' ? { title: t('owners.title'), description: t('owners.og'), image: ogBase + '/og/page.png?t=' + encodeURIComponent(t('owners.title')), url: ogBase + '/pads/owners' } : undefined) }) %>
+<%- include('layout', { title: t('owners.title'), user: user, og: (typeof ogBase !== 'undefined' ? { title: t('owners.title'), description: t('owners.og'), image: ogBase + (typeof ogPage === 'function' ? ogPage(t('owners.title')) : '/og/page.png'), url: ogBase + '/pads/owners' } : undefined) }) %>
 <%
   const num = (n) => (t.num ? t.num(Math.round(Number(n) || 0)) : Math.round(Number(n) || 0).toLocaleString('en-US'));
   const PAT = (n) => `<span class="ds-pat"><b>${num(n)}</b><small>PAT</small></span>`;

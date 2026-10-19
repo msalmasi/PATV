@@ -230,6 +230,19 @@ async function blocked(a, b) {
 async function blockSet(userId) {
   return new Set((await getQuery("SELECT blocked_id FROM dm_blocks WHERE blocker_id = ?", [userId])).map((r) => r.blocked_id));
 }
+/** 1.99ade: the ids blocked EITHER way with this user (they blocked them, or were blocked by them) - post cards for content
+ *  by any of them show as unavailable to this user (dmembeds.applyBlocks). */
+async function cardBlocks(userId) {
+  if (!userId) return new Set();
+  const rows = await getQuery("SELECT blocked_id AS id FROM dm_blocks WHERE blocker_id = ? UNION SELECT blocker_id AS id FROM dm_blocks WHERE blocked_id = ?", [userId, userId]);
+  return new Set(rows.map((r) => String(r.id)));
+}
+/** 1.99ade: a shaped message as one viewer gets it (their blocks applied to its post cards). */
+async function forViewer(msg, userId) {
+  if (!msg || !Array.isArray(msg.embeds) || !msg.embeds.length) return msg;
+  const set = await cardBlocks(userId);
+  return set.size ? { ...msg, embeds: dmembeds.applyBlocks(msg.embeds, set) } : msg;
+}
 function joinNames(a) {
   if (a.length <= 1) return a[0] || "someone";
   return a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
@@ -410,8 +423,10 @@ async function systemText(m) {
   }
 }
 /**
- * One message for a viewer. ctx: {media: Map from dmmedia.forMessages, blocks: Set of the viewer's blocked ids}.
- * A blocked sender's message is flagged `blocked` (the page collapses it); nothing else changes.
+ * One message for a viewer. ctx: {media: Map from dmmedia.forMessages, blocks: Set of the viewer's blocked ids,
+ * cardBlocks: Set of ids blocked either way with the viewer (1.99ade: their post cards show as unavailable)}.
+ * A blocked sender's message is flagged `blocked` (the page collapses it). Without cardBlocks (a live event shaped once),
+ * the sender calls forViewer() per recipient.
  */
 async function shape(m, ctx = {}) {
   const from = await who(m.sender_id);
@@ -420,7 +435,7 @@ async function shape(m, ctx = {}) {
                  deleted, byAdmin: deleted && String(m.deleted_by || "").startsWith("admin:") };
   if (m.kind === "system") return { ...base, system: await systemText(m), html: "", text: "", images: [], embeds: [], blocked: false };
   const images = deleted ? [] : (ctx.media ? ctx.media.get(m.id) || [] : (await dmmedia.forMessages([m.id])).get(m.id) || []);
-  const embeds = deleted ? [] : await dmembeds.forBody(m.body);
+  const embeds = deleted ? [] : dmembeds.applyBlocks(await dmembeds.forBody(m.body), ctx.cardBlocks);
   return { ...base, html: deleted ? "" : render(m.body), text: deleted ? "" : m.body || "", images, embeds,
            blocked: !!(ctx.blocks && ctx.blocks.has(m.sender_id)) };
 }
@@ -572,10 +587,12 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
       // 1.99acd: the browser notification (webpush.js: the member's per-browser switch, content-free, read-before-due cancels it)
       try { require("./webpush").onDm(r.user_id, { conversationId: conv.id, messageId: mid }); } catch (e) { /* never fails the send */ }
     }
-    emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...msg, blocked: true } : msg, conv: theirHead });
+    const theirs = await forViewer(msg, r.user_id);     // 1.99ade: their blocks on the post cards
+    emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...theirs, blocked: true } : theirs, conv: theirHead });
   }
-  emit(me.userId, { t: "msg", c: conv.id, m: msg, conv: head });
-  return { message: msg, conversation: head, created };
+  const mine = await forViewer(msg, me.userId);
+  emit(me.userId, { t: "msg", c: conv.id, m: mine, conv: head });
+  return { message: mine, conversation: head, created };
 }
 
 // ── groups ──
@@ -813,7 +830,7 @@ async function history(user, conversationId, { before = null, after = null, limi
     more = rows.length > n;
     rows = rows.slice(0, n).reverse();
   }
-  const ctx = { media: await dmmedia.forMessages(rows.map((r) => r.id)), blocks: await blockSet(user.userId) };
+  const ctx = { media: await dmmedia.forMessages(rows.map((r) => r.id)), blocks: await blockSet(user.userId), cardBlocks: await cardBlocks(user.userId) };
   const out = [];
   for (const r of rows) out.push(await shape(r, ctx));
   await dress({ msgs: out });
@@ -1278,7 +1295,7 @@ async function pepeReply({ conversation, upto, text } = {}) {
   const mid = await writeMessage(conv.id, PEPE_ID, body, "text", t);
   await runQuery("UPDATE conversation_members SET last_read_id = ? WHERE conversation_id = ? AND user_id = ?", [mid, conv.id, PEPE_ID]);
   await pepeDone(conv.id, up || mid);
-  const msg = await shape({ id: mid, conversation_id: conv.id, sender_id: PEPE_ID, body, kind: "text", created_at: t });
+  const msg = await shape({ id: mid, conversation_id: conv.id, sender_id: PEPE_ID, body, kind: "text", created_at: t }, { cardBlocks: await cardBlocks(u.userId) });
   const pepeAcc = await account(PEPE_ID);
   const head = headFor(conv, pepeAcc);
   await dress({ msgs: [msg], people: [head.with] });
@@ -1408,6 +1425,9 @@ function register(app, { isBotToken, addUser }) {
       const to = !notices && !open && req.query.to ? String(req.query.to).slice(0, 64) : null;
       // 1.99cz: "Share -> Send in a message" on a post: the post's link goes in the composer of the conversation picked
       const shareId = !notices && /^[A-Za-z0-9]{8,16}$/.test(String(req.query.share || "")) ? String(req.query.share) : null;
+      // 1.99ade: only a post this member may open (the post page's rule, feedstore.viewerPath), at the address THEY get (an 18+
+      // post's has no title slug until they confirm) - it used to hand out any id's real address (pad + title) to anyone
+      const sharePath = shareId ? await require("./feedstore").viewerPath(shareId, me).catch(() => null) : null;
       const unread = await unreadTotal(me.userId);
       // 1.99cu: the notices (inbox.js) are the pinned "🔔 Notices" item of this page; their first page comes with the boot data
       const nt = await inbox.feed(me.userId, notices ? { page: req.query.page, kind: String(req.query.kind || "") || null } : {});
@@ -1423,9 +1443,10 @@ function register(app, { isBotToken, addUser }) {
                 pepe: pepeAcc && !pepeAcc.archived_at ? { username: pepeAcc.username } : null,
                 maxLen: LIMITS.max_len, reasons: reasons().menu, levelOk: LIMITS.level_ok,
                 maxPics: dmmedia.MAX_PER_MESSAGE, groupMax: LIMITS.group_max, groupMin: LIMITS.group_min_others + 1, titleMax: LIMITS.title_max,
-                share: shareId ? { id: shareId, url: `https://${siteHost()}${await require("./feedstore").postLink(shareId)}` } : null,     // 1.99dv: its canonical address
+                share: sharePath ? { id: shareId, url: `https://${siteHost()}${sharePath}` } : null,     // 1.99dv: its canonical address
+                // 1.99ade: notices.js (?m=<catalog key | this member's held notice>) - never ?msg= text
                 notices: Object.assign(nt, { kinds: inbox.kindList(), pm: await inbox.prefs(me.userId),
-                                             msg: notices && req.query.msg ? String(req.query.msg).slice(0, 200) : null }) },
+                                             msg: notices ? require("./notices").read(req) : null }) },
       });
     } catch (e) {
       console.error("[dm] page:", e && e.message);

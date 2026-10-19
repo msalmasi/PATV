@@ -50,7 +50,8 @@ async function act(user, fields) {
     body: new URLSearchParams(fields).toString(),
   });
   const loc = r.headers.get("location") || "";
-  return decodeURIComponent((loc.split("msg=")[1] || "").replace(/\+/g, " "));
+  // 1.99ade: the notice is ?m=<id> (notices.js) - read it back as that user would see it
+  return require(path.join(repo, "notices")).textOf(loc, user);
 }
 const rows = (user) => getQuery("SELECT * FROM pepe_actions WHERE user_id = ? ORDER BY id", [user]);
 const claim = () => fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" },

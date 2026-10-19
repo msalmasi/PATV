@@ -78,7 +78,8 @@
     <% }) %>
   </div>
   <% if (acts.some((a) => a.status === 'pending' || a.status === 'claimed')) { %>
-    <script>setTimeout(() => location.replace(location.pathname + location.search.replace(/[?&]msg=[^&]*/, '')), 4000)</script>
+    <%# 1.99ade: the reload drops the one-off notice (?m=, notices.js; an old ?msg= too) and keeps the rest of the query %>
+    <script>setTimeout(() => { const q_ = new URLSearchParams(location.search); q_.delete('m'); q_.delete('msg'); const s_ = q_.toString(); location.replace(location.pathname + (s_ ? '?' + s_ : '') + location.hash); }, 4000)</script>
   <% } %>
 <% } %>
 <style>

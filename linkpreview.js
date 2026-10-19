@@ -223,7 +223,9 @@ function decodeEntities(s) {
     return Object.prototype.hasOwnProperty.call(ENT, k) ? ENT[k] : m;
   });
 }
-const tidy = (s, n) => decodeEntities(s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+// 1.99ade: + every other \p{Cf} (the Unicode TAG block among them) dropped - preview titles / descriptions reach Pepe's LLM
+// context (pepefeed.postView), and a third-party page writes them (textclean.js)
+const tidy = (s, n) => require("./textclean").stripFormat(decodeEntities(s).replace(/[\u0000-\u001f\u007f\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, " ")).replace(/\s+/g, " ").trim().slice(0, n);
 
 function attr(tag, name) {
   const m = tag.match(new RegExp(`\\s${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, "i"));

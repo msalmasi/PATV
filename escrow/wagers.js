@@ -77,7 +77,8 @@ async function create(actor, a, t) {
   const secs = Math.floor(Number(a.secs) || DEFAULT_SECS);
   if (secs > MAX_SECS) return fail("too_long", "The longest a wager can run is 30d.", { max: MAX_SECS });
   if (secs < 600) return fail("too_short", "Give the judge at least 10 minutes to decide.");
-  const terms = String(a.terms || "").replace(/\s+/g, " ").replace(/^(?:that|on)\s+/i, "").trim().replace(/^[ ,;:\-]+|[ ,;:\-]+$/g, "").slice(0, 200);
+  // 1.99ade: the terms are what Pepe's AI judge rules on - no invisible characters (textclean.js)
+  const terms = require("../textclean").stripFormat(a.terms).replace(/\s+/g, " ").replace(/^(?:that|on)\s+/i, "").trim().replace(/^[ ,;:\-]+|[ ,;:\-]+$/g, "").slice(0, 200);
   if (terms.length < 3) return fail("no_terms", "Say what you're betting on.");
   const account = await G().actorAccount(actor);
   if (!account) return fail("no_account", "Couldn't find a PAT account.");
@@ -210,7 +211,8 @@ async function act(verb, actor, a, t) {
   if (verb === "ai_request") {
     // the website's "ask Pepe now" / "dispute" on an AI-judged wager: Pepe's AI judge runs it (it still lives in Pepe)
     if (!w.ai_judge) return fail("no_ai", `${ref(w)} isn't judged by Pepe.`);
-    await emit("ai_request", w, { sub: String(a.sub || "ai").slice(0, 10), who: actor.login || actor.username, why: String(a.why || "").slice(0, 200),
+    // 1.99ade: the reason goes to Pepe's AI judge - one line, no invisible characters (textclean.js)
+    await emit("ai_request", w, { sub: String(a.sub || "ai").slice(0, 10), who: actor.login || actor.username, why: require("../textclean").oneLine(a.why, 200),
                                   admin: !!actor.admin });
     return { ok: true, ref: ref(w) };
   }

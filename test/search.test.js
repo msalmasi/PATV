@@ -272,3 +272,238 @@ test("the navbar: a search box (wide), a button (medium), the menus' search form
   assert.match(src, /\.nav-search \{ display: none;/);
   assert.match(src, /\.nav-psearch input \{[^}]*font: 16px/, "16px: no iOS zoom on focus");
 });
+
+// 1.99ade: /search?q=<any text> unfurled as "<text> — Search" on our own domain, with a page card of it (and once page cards
+// are signed, a signed one): the preview is fixed now; the tab title still says what was searched
+test("the search page's link preview never carries the query", async () => {
+  const q = "Your PATV account is locked verify now";
+  const r = await get("/search?q=" + encodeURIComponent(q));
+  assert.equal(r.status, 200);
+  const tags = (r.text.match(/<meta (property|name)="(og|twitter):[^"]+" content="[^"]*"|<meta name="description" content="[^"]*"/g) || []).join("\n");
+  assert.ok(tags.includes('property="og:title" content="Search · Public Access TV"'), tags);
+  assert.ok(!/locked|verify/i.test(tags), "the query is in no preview tag");
+  assert.match(tags, /og:image" content="http:\/\/test\/og\/page\.png\?t=Search&amp;e=\d+&amp;s=[A-Za-z0-9_-]{32}"/);
+  assert.match(tags, /og:url" content="http:\/\/test\/search"/);
+  assert.match(r.text, /<title>Your PATV account is locked verify now — Search<\/title>/, "the tab title is unchanged");
+});
+
+// 1.99ade (sweep): an 18+ post's canonical address carried its title (or its first words) in the slug - for crawlers and
+// visitors who only get the blurred 18+ card, in og:url and the 301s. Their address has no slug now; members who see it
+// (staff here) keep the full one; the public post's address is unchanged.
+test("an 18+ post: no title slug in the address a gated visitor gets (301s, og:url); any slug on the right id is left alone", async () => {
+  await require(path.join(repo, "creators")).init();
+  const p = await store.create(U.bob.userId, { community: ROOM_B, title: "Hot private title words", body: "18+ only" });
+  await runQuery("UPDATE feed_posts SET lock_rating = 'r18' WHERE id = ?", [p.id]);
+  const full = (await store.get(p.id, U.admin)).url;
+  assert.match(full, /\/posts\/[A-Za-z0-9]+\/hot-private-title-words$/, "staff: the full address");
+  const gated = (await store.get(p.id, null)).url;
+  assert.equal(gated, full.replace(/\/hot-private-title-words$/, ""), "a signed-out visitor: no slug");
+  assert.equal(await store.postPath(p.id), gated, "internal links (mentions, notices) use the safe one too");
+  const short = await get("/feed/p/" + p.id);
+  assert.equal(short.status, 301);
+  assert.ok(!/hot-private/.test(String(short.text)) && (await fetch(base + "/feed/p/" + p.id, { redirect: "manual" })).headers.get("location") === gated);
+  for (const url of [full, gated]) {
+    const r = await get(url);
+    assert.equal(r.status, 200, url + " answers the crawler without a redirect");
+    // (the sign-in / language links echo the address the visitor came in on - their own; nothing else may carry it)
+    const page = r.text.split("next=" + encodeURIComponent(url)).join("next=");
+    assert.ok(!/hot-private-title-words|Hot private title words/i.test(page), "the title is nowhere on the gated page: " + url);
+    assert.match(r.text, new RegExp(`<meta property="og:url" content="http://test${gated.replace(/\//g, "\\/")}">`));
+  }
+  const staff = await fetch(base + gated, { headers: { "x-test-user": U.admin.userId }, redirect: "manual" });
+  assert.equal(staff.status, 301);
+  assert.equal(staff.headers.get("location"), full, "who sees the post gets its full address");
+  // a public post is unchanged: its slug, and a wrong slug 301s to it
+  const pub = P["Monstera propagation guide"];
+  const pu = (await store.get(pub.id, null)).url;
+  assert.match(pu, /\/monstera-propagation-guide$/);
+  const wrong = await fetch(base + pu.replace(/monstera-propagation-guide$/, "nope"), { redirect: "manual" });
+  assert.equal(wrong.status, 301);
+  assert.equal(wrong.headers.get("location"), pu);
+});
+
+// 1.99ade (sweep): the index holds every post's title + body + link, so a word from a creator-locked post's paid body, or from an
+// 18+ post, listed that post (and counted it) for viewers who can't read that text - a yes/no oracle for it
+test("search: no matches on text the viewer can't read - a locked post's paid body (title still found), an 18+ post for the unconfirmed", async () => {
+  const CR = require(path.join(repo, "creators"));
+  await CR.init();
+  const lk = await store.create(U.bob.userId, { community: ROOM_B, title: "Greenhouse members diary", body: "the paid part says xylophonia" });
+  await runQuery("UPDATE feed_posts SET lock_kind = 'sub', lock_tier = 1 WHERE id = ?", [lk.id]);
+  const r18 = await store.create(U.bob.userId, { community: ROOM_B, title: "Steamy quasarine pics", body: "18+ body zephyrion" });
+  await runQuery("UPDATE feed_posts SET lock_rating = 'r18' WHERE id = ?", [r18.id]);
+  const ids = (R) => R.posts.map((p) => p.id);
+  const run = async (q, who) => { resetLimits(); return S.run(q, who, { kind: "posts" }); };
+  for (const who of [null, U.alice]) {
+    const w = who ? "a member" : "a visitor";
+    let R = await run("xylophonia", who);
+    assert.deepEqual(ids(R), [], w + ": the paid body never matches");
+    assert.equal(R.counts.posts, 0, w + ": nor counts");
+    R = await run("greenhouse diary", who);
+    assert.deepEqual(ids(R), [lk.id], w + ": a locked post is still found by its (public) title");
+    assert.equal(R.posts[0].snip.body, "", "without a body snippet");
+    R = await run("greenhouse xylophonia", who);
+    assert.deepEqual(ids(R), [], w + ": a title word plus a paid-body word: no");
+    for (const q of ["zephyrion", "quasarine"]) assert.deepEqual(ids(await run(q, who)), [], `${w}: an 18+ post (age not confirmed) never matches: ${q}`);
+  }
+  // whoever may read them: as before
+  for (const who of [U.bob, U.admin]) {
+    assert.deepEqual(ids(await run("xylophonia", who)), [lk.id], who.username);
+    assert.deepEqual(ids(await run("zephyrion", who)), [r18.id], who.username);
+  }
+  await CR.attestAge(U.alice, true);
+  assert.deepEqual(ids(await run("quasarine", U.alice)), [r18.id], "18+ confirmed: the 18+ post by its title");
+  assert.deepEqual(ids(await run("zephyrion", U.alice)), [r18.id], "and by its body");
+  assert.deepEqual(ids(await run("xylophonia", U.alice)), [], "the lock still applies to them");
+  // the LIKE fallback applies the same rule
+  S.state.posts = false;
+  try {
+    assert.deepEqual(ids(await run("xylophonia", null)), []);
+    assert.deepEqual(ids(await run("greenhouse diary", null)), [lk.id]);
+  } finally { S.state.posts = true; }
+});
+
+// 1.99ade (sweep): a post linking a market / pool / poll / bounty / raffle here stored a frozen copy of that page's preview (its
+// question and odds) and showed it to every viewer, also after the pad went members-only. 1.99ade: the frozen preview is
+// shown, searched and handed to Pepe only while a SIGNED-OUT visitor may see the item - a public one keeps it, as before
+test("first-party links: liveRef matches every address the site routes to the item", () => {
+  const EC = require(path.join(repo, "embedcards"));
+  for (const [u, ref] of [["https://publicaccess.tv/markets/5", "M5"], ["https://www.publicaccess.tv/bounties/BT7/", "BT7"],
+                          ["https://staging.publicaccess.tv/polls/poll_ab12", "P:poll_ab12"], ["https://publicaccess.tv/raffles/r3", "R3"],
+                          // the spellings Express / parseInt route to the same page (the review's bypasses)
+                          ["https://publicaccess.tv/markets/5abc", "M5"], ["https://publicaccess.tv/markets/%35", "M5"], ["https://publicaccess.tv/markets/m05", "M5"],
+                          ["https://publicaccess.tv./markets/5", "M5"], ["http://publicaccess.tv:443/markets/5", "M5"], ["https://PUBLICACCESS.TV/MARKETS/5/", "M5"],
+                          ["https://user:pw@publicaccess.tv/markets/5", "M5"], ["https://publicaccess.tv/bounties/bt%37x", "BT7"],
+                          ["https://publicaccess.tv/x/../markets/5", "M5"], ["https://publicaccess.tv/raffles/%23r3", "R3"], ["https://publicaccess.tv/polls/poll%5Fab", "P:poll_ab"]]) {
+    assert.equal(EC.liveRef(u), ref, u);
+  }
+  for (const u of ["https://publicaccess.tv/u/bob", "https://publicaccess.tv/p/plant", "https://example.com/markets/5", "https://publicaccess.tv.evil.example/markets/5",
+                   "https://publicaccess.tv/markets/5/bet", "https://publicaccess.tv/markets/0", "https://publicaccess.tv/markets/abc", "https://publicaccess.tv/polls/a%20b",
+                   "https://publicaccess.tv/markets/%E0%A4%A", "ftp://publicaccess.tv/markets/5", "nope"]) {
+    assert.equal(EC.liveRef(u), null, u);
+  }
+});
+
+test("first-party links: a frozen preview shows, is searched and reaches Pepe only while a signed-out visitor may see the item; public ones unchanged", async () => {
+  const EC = require(path.join(repo, "embedcards"));
+  const markets = require(path.join(repo, "markets"));
+  const pepefeed = require(path.join(repo, "pepefeed"));
+  const s0 = Math.floor(Date.now() / 1000);
+  const mkt = (id, extra) => markets.storeRow(markets.cleanMarket({ id, model: "lmsr", options: ["Yes", "No"], b: 1000, q: { Yes: 0, No: 0 }, volume: 10,
+    status: "open", creator: "x", judge: "y", created: s0 - 60, closes: s0 + 3600, room: "", positions: {}, trades: [], history: [], ...extra }));
+  await mkt(41, { question: "Quokkas outnumber wombats?" });                              // public
+  await mkt(42, { question: "Zanzibarian secret question?", pad: ROOM_S });               // an Approved pad's
+  assert.deepEqual([...(await EC.anonMissing(["M41", "M42", "M43"]))].sort(), ["M42", "M43"], "members-only and missing: the same answer");
+  const frozen = (url, id, q) => JSON.stringify({ url, domain: "publicaccess.tv", title: `M${id}: ${q}`, description: "Yes 50% · No 50% — volume 10 PAT.", site: "Public Access TV", embed: null });
+  const post = async (title, link) => {
+    const p = await store.create(U.alice.userId, { community: ROOM_B, title, body: "" });
+    await runQuery("UPDATE feed_posts SET link_json = ? WHERE id = ?", [link, p.id]);
+    return p.id;
+  };
+  const pub = await post("Odds talk", frozen("https://publicaccess.tv/markets/41", 41, "Quokkas outnumber wombats?"));
+  const hid = await post("Look at this one", frozen("https://PublicAccess.TV.:443/Markets/%34%32abc/", 42, "Zanzibarian secret question?"));   // a variant
+  const gone = await post("Old bet", frozen("https://publicaccess.tv/markets/43", 43, "Vanished question?"));
+  // shown: the public one as before; the others only their address - for everyone (the address never depends on who asks)
+  const P1 = await store.get(pub, null);
+  assert.equal(P1.link.title, "M41: Quokkas outnumber wombats?");
+  assert.match(P1.link.description, /volume 10 PAT/);
+  for (const who of [null, U.owner, U.alice]) {
+    for (const id of [hid, gone]) {
+      const p = await store.get(id, who);
+      assert.equal(p.link.title, "", `${id} as ${who ? who.username : "a visitor"}`);
+      assert.equal(p.link.description, "");
+      assert.equal(p.link.thumbFile, null);
+    }
+  }
+  const page = await get((await store.get(hid, null)).url);
+  assert.equal(page.status, 200);
+  assert.ok(!page.text.includes("Zanzibarian"), "nowhere on the post page");
+  // searched: the public preview's text still finds its post; a hidden one's frozen text finds nothing (no yes/no oracle)
+  const ids = async (q, who) => { resetLimits(); return (await S.run(q, who, { kind: "posts" })).posts.map((p) => p.id); };
+  for (const like of [false, true]) {
+    S.state.posts = !like;
+    try {
+      assert.deepEqual(await ids("quokkas", null), [pub], "a public market's preview text, as before" + (like ? " (LIKE)" : ""));
+      for (const who of [null, U.owner]) assert.deepEqual(await ids("zanzibarian", who), [], "the members-only market's question" + (like ? " (LIKE)" : ""));
+      assert.deepEqual(await ids("vanished", null), [], "a missing market's");
+      assert.deepEqual(await ids("look this one", null), [hid], "the post itself is still found by its own words");
+    } finally { S.state.posts = true; }
+  }
+  // Pepe's feed context
+  const row = async (id) => (await getQuery("SELECT * FROM feed_posts WHERE id = ?", [id]))[0];
+  assert.equal((await pepefeed.postView(await row(hid))).link.title, "");
+  assert.equal((await pepefeed.postView(await row(hid))).link.description, "");
+  assert.equal((await pepefeed.postView(await row(pub))).link.title, "M41: Quokkas outnumber wombats?");
+  // a third-party link's preview is untouched
+  const other = await post("Elsewhere", JSON.stringify({ url: "https://example.com/a", domain: "example.com", title: "Example article", description: "About plants", site: "Example", embed: null }));
+  assert.equal((await store.get(other, null)).link.title, "Example article");
+});
+
+test("first-party links: the composer fetches as before, and a link that lands on one of our hidden items (a redirect) is caught by where it landed", async () => {
+  const lp = require(path.join(repo, "linkpreview"));
+  const real = lp.preview;
+  const seen = [];
+  lp.preview = async (url) => {
+    seen.push(url);
+    const to = url === "https://short.example/hid" ? "https://publicaccess.tv/markets/42" : "https://publicaccess.tv/markets/41";
+    return { url: to, domain: "publicaccess.tv", title: to.endsWith("42") ? "M42: Zanzibarian secret question?" : "M41: Quokkas outnumber wombats?",
+             description: "odds", site: "Public Access TV", embed: null, image: null };
+  };
+  try {
+    const mk = async (link) => {
+      const r = await fetch(base + "/api/feed/posts", { method: "POST", headers: H(U.alice), body: JSON.stringify({ community: ROOM_B, title: "Linked " + link.length, link }) });
+      const d = await r.json();
+      assert.equal(r.status, 200, JSON.stringify(d));
+      return store.get(d.id, null);
+    };
+    const pub = await mk("https://publicaccess.tv/markets/41");
+    assert.equal(pub.link.title, "M41: Quokkas outnumber wombats?", "our public market: its preview, as before (fetched signed out)");
+    const hid = await mk("https://short.example/hid");
+    assert.equal(hid.link.url, "https://publicaccess.tv/markets/42", "stored at where it landed");
+    assert.equal(hid.link.title, "", "a members-only market reached through a redirect: just the address");
+    assert.deepEqual(seen, ["https://publicaccess.tv/markets/41", "https://short.example/hid"]);
+  } finally { lp.preview = real; }
+});
+
+test("a post's link preview image is its own card route, looked up on every draw (no signed address that outlives the post)", async () => {
+  const og = require(path.join(repo, "og"));
+  const app = express();
+  og.register(app);
+  const srv = app.listen(0);
+  const at = "http://127.0.0.1:" + srv.address().port;
+  const png = async (p) => { const r = await fetch(at + p); return { status: r.status, cc: r.headers.get("cache-control"), buf: Buffer.from(await r.arrayBuffer()) }; };
+  try {
+    const pubP = P["Monstera propagation guide"];
+    const page = await get((await store.get(pubP.id, null)).url);
+    const m = page.text.match(/<meta property="og:image" content="http:\/\/test(\/og\/post\/[^"?]+\.png\?v=[A-Za-z0-9_-]{8})">/);
+    assert.ok(m, "the post page points at /og/post/<id>.png");
+    const card = await png(m[1].replace(/&amp;/g, "&"));
+    assert.equal(card.status, 200);
+    assert.equal(card.cc, "public, max-age=300");
+    const plainCard = await png("/og/post/no_such_post.png");
+    assert.equal(plainCard.status, 200);
+    assert.ok(!card.buf.equals(plainCard.buf), "the title is drawn");
+    // members-only (an Approved pad), hidden, deleted, 18+ or missing: the plain "PATV feed" card - the same bytes as a missing id
+    og._clearCache();
+    const plain2 = (await png("/og/post/no_such_post.png")).buf;
+    for (const t of ["Secret monstera cutting swap", "Deleted monstera post"]) {
+      assert.ok((await png("/og/post/" + P[t].id + ".png")).buf.equals(plain2), t);
+    }
+    // the post deleted after its address went around: the card stops drawing its title (no TTL to wait out)
+    const p = await store.create(U.bob.userId, { community: ROOM_B, title: "Your PATV account is locked", body: "x" });
+    og._clearCache();
+    assert.ok(!(await png("/og/post/" + p.id + ".png")).buf.equals(plain2));
+    await store.remove(U.bob, p.id, "phishing");
+    og._clearCache();
+    assert.ok((await png("/og/post/" + p.id + ".png")).buf.equals(plain2), "deleted: the plain card");
+  } finally { srv.close(); }
+});
+
+test("the feed's ?tag= page: a fixed link preview (the tag is in the tab title, never in og tags)", async () => {
+  const r = await get("/feed?tag=propagation");
+  assert.equal(r.status, 200);
+  const tags = (r.text.match(/<meta (property|name)="(og|twitter):[^"]+" content="[^"]*"/g) || []).join("\n");
+  assert.ok(tags.includes('property="og:title" content="Tagged posts · Public Access TV"'), tags);
+  assert.ok(!/propagation/i.test(tags), "the tag is in no preview tag");
+  assert.match(tags, /og:image" content="http:\/\/test\/og\/page\.png\?t=Tagged%20posts&amp;e=\d+&amp;s=[A-Za-z0-9_-]{32}"/);
+  assert.match(r.text, /<title>#propagation — /, "the tab title is unchanged");
+});

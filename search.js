@@ -193,6 +193,82 @@ async function pads(p, viewer) {
 }
 
 /**
+ * The ids (of `ids`) where every term is in the given columns (["title"] or ["title", "body"]) - the index's own matching
+ * (prefix terms), those columns only; the LIKE fallback the same over feed_posts.
+ */
+async function columnHits(terms, ids, cols = ["title"]) {
+  if (!ids.length || !terms.length) return new Set();
+  const qs = ids.map(() => "?").join(",");
+  if (state.posts) {
+    const filter = cols.length === 1 ? cols[0] : "{" + cols.join(" ") + "}";
+    const q = terms.map((t) => filter + ' : "' + t.replace(/"/g, '""') + '"*').join(" ");
+    return new Set((await getQuery(`SELECT post_id FROM search_posts WHERE search_posts MATCH ? AND post_id IN (${qs})`, [q, ...ids])).map((r) => r.post_id));
+  }
+  const where = terms.map(() => "(" + cols.map((c) => `p.${c} LIKE ?`).join(" OR ") + ")").join(" AND ");
+  return new Set((await getQuery(`SELECT p.id FROM feed_posts p WHERE p.id IN (${qs}) AND ${where}`,
+                                 [...ids, ...terms.flatMap((t) => cols.map(() => likeTerm(t)))])).map((r) => r.id));
+}
+const titleHits = (terms, ids) => columnHits(terms, ids, ["title"]);
+
+/**
+ * 1.99ade: matching posts minus the ones whose match came from text this viewer can't read. The index holds the title, body
+ * and link of every post, so a word from the paid body of a creator-locked post, or from an 18+ post, listed that post
+ * (and counted it in the total) for anyone - a yes/no oracle for the hidden text. Now: an 18+ post a viewer only sees
+ * gated (age not confirmed: its title is hidden too) never matches; a locked post they aren't entitled to matches only
+ * when every term is in its title (public by design). base = posts()'s list options (the viewer). -> ids, order kept.
+ */
+async function dropHiddenMatches(ids, terms, base) {
+  if (!ids.length) return ids;
+  const CR = require("./creators");
+  const EC = require("./embedcards");
+  await CR.init();
+  const risky = [], linked = new Map();          // linked: post id -> the ref of the site item its link is about
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200), qs = chunk.map(() => "?").join(",");
+    const rows = await getQuery(`SELECT id, lock_kind, lock_rating, home_pad, link_json FROM feed_posts WHERE id IN (${qs})`, chunk);
+    const r18Rooms = new Set((await getQuery(`SELECT post_id, room_id FROM feed_post_rooms WHERE post_id IN (${qs}) AND removed_at IS NULL`, chunk))
+      .filter((r) => CR.isR18Room(r.room_id)).map((r) => r.post_id));
+    for (const r of rows) {
+      if (r.lock_kind || r.lock_rating === "r18" || CR.isR18Room(r.home_pad) || r18Rooms.has(r.id)) risky.push(r.id);
+      let l = null;
+      try { l = r.link_json ? JSON.parse(r.link_json) : null; } catch (e) { l = null; }
+      const ref = l && l.url ? EC.liveRef(l.url) : null;
+      if (ref) linked.set(r.id, ref);
+    }
+  }
+  // 1.99ade: a frozen preview of one of this site's items that a signed-out visitor can't see (feedstore.decorate shows
+  // only its address) is still in the index's link column - such a post matches only on its own title and body
+  const drop = new Set();
+  if (linked.size) {
+    const gone = await EC.anonMissing([...linked.values()]);
+    const viaLink = [...linked].filter(([, ref]) => gone.has(ref)).map(([id]) => id);
+    if (viaLink.length) {
+      const own = await columnHits(terms, viaLink, ["title", "body"]);
+      for (const id of viaLink) if (!own.has(id)) drop.add(id);
+    }
+  }
+  if (!risky.length) return drop.size ? ids.filter((id) => !drop.has(id)) : ids;
+  // how this viewer gets them (creators.applyLocks via the feed's own decorate)
+  const store = require("./feedstore");
+  const locked = [];
+  for (let i = 0; i < risky.length; i += 100) {
+    const chunk = risky.slice(i, i + 100);
+    const L = await store.list({ ...base, ids: chunk, sort: "new", top: "all", limit: chunk.length });
+    const byId = new Map(L.posts.map((x) => [x.id, x]));
+    for (const id of chunk) {
+      const c = (byId.get(id) || {}).creator;
+      if (!byId.has(id) || (c && c.r18Gate)) drop.add(id);         // gone in between / 18+ unconfirmed: never a match
+      else if (c && c.gated) locked.push(id);
+    }
+  }
+  if (locked.length) {
+    const inTitle = await titleHits(terms, locked);
+    for (const id of locked) if (!inTitle.has(id)) drop.add(id);
+  }
+  return drop.size ? ids.filter((id) => !drop.has(id)) : ids;
+}
+
+/**
  * Posts the viewer may see. sort: relevance (the index's rank) | new | top. A "#tag" query lists that tag's posts.
  * -> {posts (decorated, with .snip), total (visible matches, up to CANDIDATES), more, page}
  */
@@ -210,7 +286,7 @@ async function posts(p, viewer, { sort = "relevance", page = 1, limit = PAGE } =
   if (!H.ids.length) return { posts: [], total: 0, more: false, page };
   const order = sort === "new" ? "new" : sort === "top" ? "top" : "new";
   const vis = await store.list({ ...base, ids: H.ids, idsOnly: true, sort: order, top: "all", limit: CANDIDATES });
-  let ids = vis.ids;
+  let ids = await dropHiddenMatches(vis.ids, p.terms, base);      // 1.99ade: no matches on text this viewer can't read
   if (sort === "relevance") { const rank = new Map(H.ids.map((id, i) => [id, i])); ids = ids.slice().sort((a, b) => rank.get(a) - rank.get(b)); }
   const pageIds = ids.slice((page - 1) * limit, page * limit);
   const L = pageIds.length ? await store.list({ ...base, ids: pageIds, sort: "new", top: "all", limit: pageIds.length }) : { posts: [] };
@@ -322,6 +398,10 @@ function register(app, { addUser }) {
       const p = parse(a.raw);
       if (p.q) { wait = tooFast(req); if (!wait) R = await run(a.raw, viewer, a); }
       const popular = !p.q ? await require("./feedtags").popular(null, { viewer, limit: 12 }).catch(() => []) : [];
+      // 1.99ade: a fixed link preview - never the query (?q= is anyone's text: it made /search unfurl "<any text> — Search" on
+      // our own domain, with a signed card of it). The tab title still says what was searched.
+      res.locals.og = require("./og").forFixed(req, res, { title: ["og.search.title", "Search · Public Access TV"],
+        description: ["og.search.description", "Search PATV: posts, pads, people and tags."], heading: ["search.title", "Search"], path: "/search" });
       res.status(wait ? 429 : 200).render("search", {
         user: viewer ? viewer.username : null, viewer, fx, R, q: p.q, kind: KINDS.includes(a.kind) ? a.kind : "all", sort: SORTS.includes(a.sort) ? a.sort : "relevance",
         wait, popular, url: searchUrl, snippetHtml, highlight, terms: p.terms, signed: !!viewer, thumbOf: require("./feedstore").thumbOf,

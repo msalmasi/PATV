@@ -149,4 +149,49 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { register, build, parseRef, parseRefs, MAX_REFS };
+/**
+ * 1.99ade: the item a link to one of this site's own pages is about (public/js/embed-cards.js shows its live card) -> "M12" |
+ * "BT3" | "P:poll_ab" | "R7" | null. A preview of such a page frozen into a feed post (feedweb previewFor) is shown, indexed
+ * and handed to Pepe only while the item is one a signed-out visitor may see (anonMissing): a frozen copy kept a market's
+ * question and odds, or a bounty's task, for everyone after its pad went members-only.
+ * 1.99ade: matched the way the site routes the address, so no spelling of it slips past: the host in any case, with a
+ * trailing dot, any port or a user:password@ in front; the path in any case with one trailing slash; the id segment
+ * percent-decoded and parsed as each page parses it (parseInt after its prefix: /markets/5abc and /markets/%35 are M5).
+ */
+function liveRef(href) {
+  let u;
+  try { u = new URL(String(href || "").trim()); } catch (e) { return null; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  const hostOf = (h) => String(h || "").toLowerCase().replace(/:\d*$/, "").replace(/\.+$/, "");
+  const ours = new Set([...require("./dmembeds").siteHosts()].map(hostOf));
+  if (!ours.has(hostOf(u.hostname))) return null;
+  const m = /^\/(markets|bounties|polls|raffles)\/([^/]+)\/?$/i.exec(u.pathname);
+  if (!m) return null;
+  let seg;
+  try { seg = decodeURIComponent(m[2]); } catch (e) { return null; }
+  const kind = m[1].toLowerCase();
+  if (kind === "polls") return /^[A-Za-z0-9_-]{1,40}$/.test(seg) ? "P:" + seg : null;     // polls.js: an exact id
+  // markets.js / bounties.js / raffles.js raffleRow: the prefix off, then parseInt
+  const n = parseInt(seg.replace(kind === "markets" ? /^m/i : kind === "bounties" ? /^bt/i : /^#?r(?:f)?/i, ""), 10);
+  if (!(n > 0) || n > 999999999) return null;
+  return (kind === "markets" ? "M" : kind === "bounties" ? "BT" : "R") + n;
+}
+
+/**
+ * 1.99ade: of these refs (liveRef's "M12" / "BT3" / "P:x" / "R7"), the ones a SIGNED-OUT visitor can't see - missing, or on
+ * an Approved pad (build()'s rule, which answers both the same). -> Set of refs. Fails closed: an error = all of them.
+ */
+async function anonMissing(refs) {
+  const list = [...new Set((refs || []).filter(Boolean).map(String))];
+  if (!list.length) return new Set();
+  try {
+    const parsed = list.map(parseRef).filter(Boolean);
+    const cards = await build(parsed, null);
+    return new Set(list.filter((r) => { const p = parseRef(r); return !p || !cards[p.ref]; }));
+  } catch (e) {
+    console.error("[embeds] anonMissing:", e.message);
+    return new Set(list);
+  }
+}
+
+module.exports = { register, build, parseRef, parseRefs, liveRef, anonMissing, MAX_REFS };

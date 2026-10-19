@@ -529,11 +529,16 @@ test("one inbox: the 🔔 Notices item is pinned in /messages, /messages/notices
   assert.ok(n.B.notices.kinds.some((k) => k.key === "tip" && k.icon && k.label));
   assert.equal(n.B.notices.pm.tip.pm, true, "the PM switches for the ⚙ dialog");
   assert.deepEqual(n.B.notices.counts.find((c) => c.kind === "tip"), { kind: "tip", n: 2, unread: 2 });
-  // ?kind= / ?page= / ?msg= (what an old /inbox?... link 301s to) pick the filter
-  const f = await page("/messages/notices?kind=tip&msg=Saved");
+  // ?kind= / ?page= (what an old /inbox?... link 301s to) pick the filter; 1.99ade: the notice is ?m=<a notice held for this
+  // account> - free ?msg= text is ignored (it let anyone put words in the site's notice style), and so is a bare catalog key
+  const N = require(path.join(repo, "notices"));
+  const f = await page(N.href({ user: { userId: u.userId } }, "/messages/notices?kind=tip", N.K("inbox_saved")));
   assert.equal(f.B.notices.kind, "tip");
   assert.equal(f.B.notices.items.length, 2);
-  assert.equal(f.B.notices.msg, "Saved");
+  assert.equal(f.B.notices.msg, "Saved — Pepe will only PM you in Camfrog for the ticked categories.");
+  assert.equal((await page("/messages/notices?msg=Your%20account%20is%20locked")).B.notices.msg, null);
+  assert.equal((await page("/messages/notices?m=inbox_saved")).B.notices.msg, null, "a catalog key in the address: nothing");
+  assert.equal((await page("/messages/notices?m=no_such_key")).B.notices.msg, null);
   assert.equal((await page("/messages?kind=tip")).B.notices.kind, null, "only the notices view filters");
   // the conversations poll carries the pinned item's count
   assert.equal((await get("/api/messages/conversations", u)).d.notices.unread, 4);

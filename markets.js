@@ -9,6 +9,7 @@ const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
 const PATAmount = require("./public/js/patamount");     // 1.99nk: "1,000,000" / "5k" (Pepe's rules)
+const N = require("./notices");                         // 1.99ade: the notice after a form post (?m=<id>, never ?msg=<text>)
 
 // Pepe as judge (1.90): keep just the display fields of his ruling
 function cleanPrice(p) {
@@ -353,7 +354,8 @@ async function listRows(req, { keep = () => true, limit = 1000 } = {}) {
   await padlinks.ready();
   const PA = require("./padaccess");
   try { await PA.init(); } catch (e) { /* the gate's own problem */ }
-  const want = padlinks.fromParam(req.query.pad);              // null = every pad, "" = site-wide, else a pad id
+  // null = every pad, "" = site-wide, else a pad id; 1.99ade: a pad the viewer can't see counts as unknown (no title leak)
+  const want = padlinks.fromParamFor(req.user || null, req.query.pad);
   const showVoid = /^(1|true|yes|on)$/i.test(String(req.query.void || ""));
   let rows = (await getQuery("SELECT data, pad FROM markets ORDER BY id DESC LIMIT ?", [limit])).map((r) => {
     const d = JSON.parse(r.data);
@@ -373,6 +375,22 @@ async function listRows(req, { keep = () => true, limit = 1000 } = {}) {
   const pads = [...counts.values()].sort((a, b) => (a.slug === "none") - (b.slug === "none") || String(a.title).localeCompare(String(b.title)));
   return { rows, filter: { pad: want, slug: want === "" ? "none" : pv ? pv.slug : "", padTitle: pv ? pv.title : null, padUrl: pv ? pv.url : null,
                            pads, showVoid, voided } };
+}
+
+/** 1.99ade: a markets row's pad - the pad column, else resolved from its record (null = site-wide). */
+async function padOfRow(row) {
+  await padlinks.ready();
+  let rec = {};
+  try { rec = JSON.parse(row.data); } catch (e) { rec = {}; }
+  return (row && row.pad) || padlinks.resolve(rec) || null;
+}
+/** 1.99ade: may `user` (null = signed out) see this markets row? Its pad's access rule (padaccess.canSee; Approved = members). */
+async function visibleRow(user, row) {
+  const pad = await padOfRow(row);
+  if (!pad) return true;
+  const PA = require("./padaccess");
+  try { await PA.init(); } catch (e) { /* the gate's own problem */ }
+  return PA.canSee(user || null, pad);
 }
 
 function register(app, { isBotToken, addUser }) {
@@ -414,12 +432,13 @@ function register(app, { isBotToken, addUser }) {
   // A signed-in user bets from the market page
   app.post("/markets/:id/bet", addUser, async (req, res) => {
     const id = parseInt(String(req.params.id).replace(/^m/i, ""), 10);
-    const back = (msg) => res.redirect(`/markets/${id}?msg=${encodeURIComponent(msg)}`);
+    const back = (msg) => res.redirect(N.href(req, `/markets/${id}`, msg));     // 1.99ade: ?m=<id> (notices.js)
     if (!req.user || !req.user.userId) return res.redirect("/login");
     try {
       await ready; await ordersReady;
-      const rows = await getQuery("SELECT data FROM markets WHERE id = ?", [id]);
-      if (!rows.length) return back("That market doesn't exist.");
+      const rows = await getQuery("SELECT data, pad FROM markets WHERE id = ?", [id]);
+      // 1.99ade: a market on a pad this member can't see answers like a missing one
+      if (!rows.length || !(await visibleRow(req.user, rows[0]))) return back(N.K("mkt_missing"));
       const m = JSON.parse(rows[0].data);
       if (m.model === "lmsr" && (await capitalLive())) {
         // Phase 3: the share markets run on the site (capital/markets.js) - the buy happens now, nothing is queued for Pepe
@@ -432,32 +451,32 @@ function register(app, { isBotToken, addUser }) {
                                                                                       String((req.body || {}).amount || "")], null);
         if (msg) return back(msg);
       }
-      if (m.status !== "open" || m.closes * 1000 < Date.now()) return back("Betting on this market is closed.");
+      if (m.status !== "open" || m.closes * 1000 < Date.now()) return back(N.K("mkt_closed"));
       const option = String((req.body || {}).option || "");
-      if (!(m.options || []).includes(option)) return back("Pick one of the options.");
+      if (!(m.options || []).includes(option)) return back(N.K("mkt_pick"));
       const amount = PATAmount.parse((req.body || {}).amount) || 0;
       if (amount < MIN_BET) return back(`The minimum bet is ${MIN_BET.toLocaleString()} PAT.`);
       const u = (await getQuery("SELECT username, camfrogUsername, points_balance, casino_banned FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (!u) return back("Couldn't find your account.");
-      if (u.casino_banned) return back("You're banned from the casino, so no betting.");
+      if (!u) return back(N.K("no_account"));
+      if (u.casino_banned) return back(N.K("mkt_banned"));
       if (Number(u.points_balance) < amount) return back(`You only have ${Number(u.points_balance).toLocaleString()} PAT.`);
       const open = await getQuery("SELECT COUNT(*) AS n FROM market_orders WHERE user_id = ? AND status IN ('pending','claimed')", [req.user.userId]);
-      if (open[0].n >= 5) return back("You already have bets waiting to be placed — give Pepe a moment.");
+      if (open[0].n >= 5) return back(N.K("mkt_bets_waiting"));
       await runQuery(`INSERT INTO market_orders (market_id, user_id, username, camfrog, option, amount, status, created, updated)
                       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
         [id, req.user.userId, u.username, u.camfrogUsername || null, option, amount, Date.now(), Date.now()]);
       back(`Sent to Pepe: ${amount.toLocaleString()} PAT on ${option}. It's placed within a few seconds.`);
     } catch (e) {
       console.error("[markets] bet:", e);
-      back("Something went wrong — nothing was charged. Try again.");
+      back(N.K("err_charged"));
     }
   });
 
   async function queue(req, res, id, fields, okMsg) {
-    const back = (msg) => res.redirect(`/markets/${id}?msg=${encodeURIComponent(msg)}`);
+    const back = (msg) => res.redirect(N.href(req, `/markets/${id}`, msg));     // 1.99ade: ?m=<id> (notices.js)
     try {
-      const rows = await getQuery("SELECT data FROM markets WHERE id = ?", [id]);
-      if (!rows.length) return back("That market doesn't exist.");
+      const rows = await getQuery("SELECT data, pad FROM markets WHERE id = ?", [id]);
+      if (!rows.length || !(await visibleRow(req.user, rows[0]))) return back(N.K("mkt_missing"));
       const m = JSON.parse(rows[0].data);
       if (m.model === "lmsr" && (await capitalLive())) {
         // Phase 3: the share markets run on the site (capital/markets.js) - a sale / the judge's call happens now
@@ -468,12 +487,12 @@ function register(app, { isBotToken, addUser }) {
         const msg = await require("./escrow/games").fromForm(req.user.userId, "pool", ["settle", `M${id}`, ...String(fields.outcome || "").split(" ")], null);
         if (msg) return back(msg);
       }
-      if (fields.kind === "sell" && (m.model !== "lmsr" || m.status !== "open")) return back("Shares can only be sold while trading is open.");
-      if (fields.kind === "resolve" && !["open", "closed"].includes(m.status)) return back("This market is already resolved.");
+      if (fields.kind === "sell" && (m.model !== "lmsr" || m.status !== "open")) return back(N.K("mkt_sell_open"));
+      if (fields.kind === "resolve" && !["open", "closed"].includes(m.status)) return back(N.K("mkt_resolved"));
       const u = (await getQuery("SELECT username, camfrogUsername, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (!u) return back("Couldn't find your account.");
+      if (!u) return back(N.K("no_account"));
       const open = await getQuery("SELECT COUNT(*) AS n FROM market_orders WHERE user_id = ? AND status IN ('pending','claimed')", [req.user.userId]);
-      if (open[0].n >= 5) return back("You already have orders waiting — give Pepe a moment.");
+      if (open[0].n >= 5) return back(N.K("mkt_orders_waiting"));
       await runQuery(`INSERT INTO market_orders (market_id, user_id, username, camfrog, option, amount, kind, shares, outcome, site_admin, status, created, updated)
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
         [id, req.user.userId, u.username, u.camfrogUsername || null, fields.option || "", fields.amount || 0, fields.kind,
@@ -481,7 +500,7 @@ function register(app, { isBotToken, addUser }) {
       back(okMsg);
     } catch (e) {
       console.error(`[markets] ${fields.kind}:`, e);
-      back("Something went wrong — nothing changed. Try again.");
+      back(N.K("err_changed_retry"));
     }
   }
 
@@ -491,7 +510,7 @@ function register(app, { isBotToken, addUser }) {
     await ready; await ordersReady;
     const option = String((req.body || {}).option || "");
     const shares = String((req.body || {}).shares || "all").trim() || "all";
-    if (!/^(all|\d+(\.\d+)?)$/i.test(shares)) return res.redirect(`/markets/${id}?msg=${encodeURIComponent("Enter a number of shares, or all.")}`);
+    if (!/^(all|\d+(\.\d+)?)$/i.test(shares)) return res.redirect(N.href(req, `/markets/${id}`, N.K("mkt_shares_num")));
     queue(req, res, id, { kind: "sell", option, shares }, `Sent to Pepe: sell ${shares} ${option} shares.`);
   });
 
@@ -500,10 +519,11 @@ function register(app, { isBotToken, addUser }) {
     if (!req.user || !req.user.userId) return res.redirect("/login");
     await ready; await ordersReady;
     let outcome = String((req.body || {}).outcome || "");
-    if (!outcome) return res.redirect(`/markets/${id}?msg=${encodeURIComponent("Pick the winning option (or void).")}`);
+    if (!outcome) return res.redirect(N.href(req, `/markets/${id}`, N.K("mkt_pick_winner")));
     if (outcome === "void") {
-      const reason = String((req.body || {}).reason || "").replace(/\s+/g, " ").trim().slice(0, 160);
-      if (reason.length < 4) return res.redirect(`/markets/${id}?msg=${encodeURIComponent("Say why you're voiding it (holders and admins see the reason).")}`);
+      // 1.99ade: the reason reaches Pepe's AI judge / the admins - no invisible format characters (textclean.js)
+      const reason = require("./textclean").stripFormat(String((req.body || {}).reason || "")).replace(/\s+/g, " ").trim().slice(0, 160);
+      if (reason.length < 4) return res.redirect(N.href(req, `/markets/${id}`, N.K("mkt_void_why")));
       outcome = "void " + reason;
     }
     queue(req, res, id, { kind: "resolve", outcome }, `Sent to Pepe: resolve as ${outcome}. Payouts follow in a few seconds.`);
@@ -556,14 +576,26 @@ function register(app, { isBotToken, addUser }) {
     linked = linked || (!!(req.user && req.user.userId) && require("./actorcap").on());
     res.render("markets", { user: req.user ? req.user.username : null, live, done, now: Date.now() / 1000, linked, acts,
                             filter: L.filter, pick: await padlinks.choicesFor(req.user, req.query.pad), bounds: await require("./mktcfg").get(),
-                            msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null });
+                            msg: N.read(req) });      // 1.99ade: ?m=<catalog key | this account's held notice> (notices.js)
   });
 
   app.get("/markets/:id", addUser, async (req, res) => {
     await ready;
     const id = parseInt(String(req.params.id).replace(/^m/i, ""), 10);
     const rows = id ? await getQuery("SELECT data FROM markets WHERE id = ?", [id]) : [];
-    if (!rows.length) return res.status(404).render("market", { user: req.user ? req.user.username : null, m: null, now: Date.now() / 1000, orders: [], msg: null, bal: null });
+    // 1.99ade: missing, or on a pad this viewer can't see - the same 404, and the generic link preview only (res.locals.og is
+    // set further down, after this check: the hidden market's question and odds were in the 404's Open Graph tags)
+    const missing = () => res.status(404).render("market", { user: req.user ? req.user.username : null, m: null, now: Date.now() / 1000, orders: [], msg: null, bal: null });
+    if (!rows.length) return missing();
+    // 1.99ur: the pad it belongs to (the pad column, else resolved from its record)
+    await padlinks.ready();
+    const prow = (await getQuery("SELECT pad FROM markets WHERE id = ?", [id]))[0];
+    const padId = (prow && prow.pad) || padlinks.resolve(JSON.parse(rows[0].data)) || null;
+    const PA = require("./padaccess");
+    if (padId) {
+      try { await PA.init(); } catch (e) { /* the gate's own problem */ }
+      if (!PA.canSee(req.user || null, padId)) return missing();
+    }
     let orders = [], bal = null, me = null, judgeMe = false, acts = [], inIt = false;
     if (req.user && req.user.userId) {
       await ordersReady;
@@ -580,22 +612,16 @@ function register(app, { isBotToken, addUser }) {
       }
       acts = await actions.recentFor(req.user.userId, "market-" + id);
     }
-    res.locals.og = require("./og").forMarket(req, JSON.parse(rows[0].data));
+    res.locals.og = require("./og").forMarket(req, JSON.parse(rows[0].data));     // only after the pad check above (1.99ade)
     const v = view(JSON.parse(rows[0].data), me);
-    // 1.99ur: the pad it belongs to (the pad column, else resolved from its record)
-    await padlinks.ready();
-    const prow = (await getQuery("SELECT pad FROM markets WHERE id = ?", [id]))[0];
-    v.padId = (prow && prow.pad) || padlinks.resolve(v) || null;
+    v.padId = padId;
     v.padv = padlinks.view(v.padId);
-    if (v.padId) {
-      const PA = require("./padaccess");
-      try { await PA.init(); } catch (e) { /* the gate's own problem */ }
-      if (!PA.canSee(req.user || null, v.padId)) return res.status(404).render("market", { user: req.user ? req.user.username : null, m: null, now: Date.now() / 1000, orders: [], msg: null, bal: null });
-    }
+    // 1.99ade: an Approved pad's market (only its members get here) is never indexed or cached in between - like its posts
+    if (v.padId && PA.isApproved(v.padId)) res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
     acts = settledActs(acts, v);
     orders = orders.map((o) => ({ ...o, message: o.message ? fixOrderMessage(o.message) : o.message }));
     res.render("market", { user: req.user ? req.user.username : null, m: v, now: Date.now() / 1000, judgeMe, acts, inIt, fmtPrice,
-                           orders, msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, bal, minBet: MIN_BET });
+                           orders, msg: N.read(req), bal, minBet: MIN_BET });
   });
 }
 

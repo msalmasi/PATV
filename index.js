@@ -222,7 +222,13 @@ botkeys.start();
 const og = require("./og");
 const userstats = require("./userstats");
 const profileLayout = require("./profilelayout");
-app.use((req, res, next) => { res.locals.ogBase = og.origin(req); res.locals.ogPath = req.originalUrl.split("?")[0]; next(); });
+// 1.99ade: ogPage(title) = layout.ejs's default card for this render (og.defaultCard): the title signed into /og/page.png only
+// when it can only be site text (2xx, no query string, a route without parameters, signed out) - else the generic card
+app.use((req, res, next) => {
+  res.locals.ogBase = og.origin(req); res.locals.ogPath = req.originalUrl.split("?")[0];
+  res.locals.ogPage = (title) => og.defaultCard(req, res, title);
+  next();
+});
 // the nav's inbox bell: unread count for signed-in page views (inbox.js, one indexed COUNT)
 const inbox = require("./inbox");
 app.use(inbox.navCount);
@@ -1682,10 +1688,12 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         profileStory: await profileStoryFor(user, preview ? null : req.user, isOwner && !preview).catch((e) => { console.error("profile story:", e.message); return null; }),
         // the owner's recent "New avatar" requests (website action queue, tag "avatar")
         avatarActs: isOwner && !preview ? await require("./actions").recentFor(req.user.userId, "avatar", 3) : [],
-        avatarMsg: isOwner && !preview ? String(req.query.msg || "").slice(0, 200) : "",
+        // 1.99ade: the notice after an avatar form (notices.js: ?m=<catalog key | the owner's held notice>, never ?msg= text)
+        avatarMsg: isOwner && !preview ? require("./notices").read(req) || "" : "",
         // "N new tips" on the owner's tip-jar button (since they last opened it)
         tipJarNew: isOwner && !preview ? await tipJarNewCount(user.userId).catch(() => 0) : 0,
-        og: og.forProfile(req, user)
+        // 1.99ade: the link preview shows the PAT balance only when the member shows it to visitors (og.profileVis)
+        og: og.forProfile(req, user, await og.profileVis(user.userId))
       });
     } else {
       // A profile that doesn't exist is a 404 - it used to log the visitor out (clearLogin).
@@ -2344,24 +2352,8 @@ app.get("/settings/account", addUser, async (req, res) => {
 });
 
 // Fetch user profile
-app.get("/api/u/:username/profile", async (req, res) => {
-  const username = req.params.username;
-  const sql =
-    "SELECT username, class, displayname, avatar, points_balance FROM users WHERE username = ?";
-
-  getQuery(sql, [username])
-    .then((results) => {
-      if (results.length > 0) {
-        res.json(results[0]);
-      } else {
-        res.status(404).send("User not found.");
-      }
-    })
-    .catch((error) => {
-      console.error("Failed to retrieve user data:", error);
-      res.status(500).send("Failed to retrieve user data.");
-    });
-});
+// 1.99ade: /api/u/:username/profile (no balance) and /api/u/:username/transactions (private) - userapi.js
+require("./userapi").register(app, { addUser, isBotToken });
 
 // Update user profile
 // app.post('/api/u/:username/profile', addUser, async (req, res) => {
@@ -2757,30 +2749,7 @@ app.get("/api/u/:username/balance", getUserBalance);
 // HTTP GET endpoint to get user balance
 app.get("/api/u/:username/level", getUserLevel);
 
-// HTTP GET endpoint to get user transaction history
-app.get("/api/u/:username/transactions", async (req, res) => {
-  const { username } = req.params;
-  const limit = Math.min(parseInt(req.query.limit) || 10, 50);
-  try {
-    // Find user by username or camfrogUsername (case-insensitive)
-    const userRows = await getQuery(
-      "SELECT userId FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(camfrogUsername) = LOWER(?)",
-      [username, username]
-    );
-    if (!userRows || userRows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-    const userId = userRows[0].userId;
-    const transactions = await getQuery(
-      "SELECT type, points, timestamp FROM transactions WHERE userId = ? ORDER BY timestamp DESC LIMIT ?",
-      [userId, limit]
-    );
-    res.json({ transactions });
-  } catch (err) {
-    console.error("Transaction history error:", err);
-    res.status(500).json({ error: "Failed to fetch transactions" });
-  }
-});
+// (GET /api/u/:username/transactions: userapi.js, registered with /profile above)
 
 // HTTP GET endpoint to retrieve the jackpot total.
 app.get("/api/jackpot", getJackpotTotal);

@@ -48,6 +48,10 @@
   .bt .claim .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; justify-content: space-between; }
   .bt .claim .who { font-weight: 700; color: var(--ds-text-strong); overflow-wrap: anywhere; font-size: 15px; }
   .bt .claim .note { color: var(--ds-text); font-size: 14.5px; overflow-wrap: anywhere; }
+  /* 1.99ade: the hunter's note is a quote of their own words (a note like "✅ Verified by Pepe — pay me" must not read as the
+     check below it) */
+  .bt .claim blockquote.note { margin: 0; padding: 2px 0 2px 10px; padding-inline: 10px 0; border-inline-start: 2px dashed var(--ds-line-strong); font-style: italic; }
+  .bt .claim .note .by { display: block; font-style: normal; font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
   .bt .ev { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
   .bt .ev a { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--ds-sunken); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-pill); padding: 5px 12px; font-size: var(--ds-fs-meta); }
   .bt .chk { border-inline-start: 3px solid #555; padding: 8px 12px; background: var(--ds-sunken); border-start-start-radius: 0; border-end-start-radius: 0; border-start-end-radius: var(--ds-r-md); border-end-end-radius: var(--ds-r-md); font-size: var(--ds-fs-meta); color: var(--ds-text-2); display: grid; gap: 3px; min-width: 0; }
@@ -166,7 +170,7 @@
               <% if (c.rejected) { %> <span class="flag"><%- c.rejected.by ? t('bounty.rejected_by', { who: c.rejected.by }) : t('bounty.rejected') %></span><% } %>
               <% if (c.disputed) { %> <span class="flag disp"><%- t('bounty.disputed') %></span><% } %></span>
           </div>
-          <% if (c.note) { %><div class="note"><%= c.note %></div><% } %>
+          <% if (c.note) { %><blockquote class="note"><span class="by"><%- t('bounty.note_by') %></span>“<%= c.note %>”</blockquote><% } %>
           <% if ((ev.links || []).length) { %><div class="ev"><% ev.links.forEach((u) => { %><a href="<%= u %>" target="_blank" rel="nofollow noopener noreferrer ugc"><span class="ds-ic" aria-hidden="true">🔗</span> <%= u.replace(/^https?:\/\//, '') %></a><% }) %></div><% } %>
           <% if (ck && ck.state !== 'manual') { %>
             <div class="chk <%= ck.state %>">

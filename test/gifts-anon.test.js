@@ -232,7 +232,8 @@ test("cosmetics: gifting an owned copy anonymously (the recipient is now told - 
   const inv = (await getQuery("SELECT id FROM user_cosmetics WHERE user_id = ? AND item_id = ?", [U.secret.userId, item.id]))[0].id;
   const res = await req("POST", "/cosmetics/gift", { user: U.secret.userId, json: { inv_id: inv, to: "crush", anon: "1", tab: "mine" } });
   assert.equal(res.status, 302);
-  assert.match(decodeURIComponent(res.location || ""), /anonymously/);
+  // 1.99ade: the reply is a held notice (?m=n-..., notices.js) - only the giver reads it
+  assert.match(require(path.join(repo, "notices")).textOf(res.location, U.secret.userId), /anonymously/);
   assert.equal((await getQuery("SELECT user_id FROM user_cosmetics WHERE id = ?", [inv]))[0].user_id, U.crush.userId);
   const n = (await notices(U.crush)).filter((x) => x.title.includes(item.name));
   assert.ok(n.length, "the recipient hears about it");

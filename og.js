@@ -2,6 +2,21 @@
 // Twitter tags; the preview images are drawn here as SVG and turned into 1200x630 PNGs with sharp
 // (Discord, iMessage, X, Slack and Telegram don't render SVG previews). Images are cached for a
 // few minutes so a link pasted into a busy chat doesn't re-render for every unfurl.
+//
+// 1.99ade (privacy / phishing):
+//   * the images answer as a SIGNED-OUT visitor would see the thing: a market / pool or a bounty on an Approved pad gets
+//     exactly the answer of a missing id (404, no body, no cache header) - the ids are sequential, so a different answer
+//     would confirm what exists. The pages set their `og` only after their own access check.
+//   * a profile's card and description show the PAT balance only when the member shows it to visitors ("stats" +
+//     "stats_balance", views/profile.ejs's rule); the layout unreadable -> no balance. The level number and the Camfrog
+//     login are on every visitor's view of the profile (only the XP bar can be hidden), so they stay.
+//   * /og/page.png draws only text the site signed: pageUrl(t, d) adds e (the last day it's good for, 14 days on) and
+//     s = HMAC(key, len(t)|t|len(d)|d|e) with a key derived in-process from SECRET_KEY (label "og-page-v1", never stored).
+//     A missing / bad / expired signature gets the generic card (not an error - links unfurled before this keep an image),
+//     and drawing new cards is limited per client (an IPv6 one by its /64) and site-wide. Only site text is signed: the
+//     layout's default card (defaultCard) signs a page's title only for a 2xx, parameterless, query-free, signed-out
+//     render; a feed post's card is /og/post/<id>.png, which looks the post up on every draw.
+const crypto = require("crypto");
 const sharp = require("sharp");
 const { getQuery } = require("./dbUtils");
 
@@ -49,6 +64,7 @@ function title(lines, y = 160, size = 54) {
   return lines.map((l, i) => `<text x="64" y="${y + i * (size + 12)}" font-family="${FONT}" font-size="${size}" font-weight="bold" fill="#ffffff">${esc(l)}</text>`).join("");
 }
 
+const cachedPng = (key) => { const hit = cache.get(key); return !!(hit && Date.now() - hit.at < CACHE_MS); };
 async function png(key, makeSvg) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.png;
@@ -114,20 +130,171 @@ function lottoCard(d) {
   return frame("PAT LOTTO", "#ffd54f", body);
 }
 
-function profileCard(u) {
+/** u: the users row; vis: profileVis() - what the member shows visitors (1.99ade: a hidden balance never reaches the card). */
+function profileCard(u, vis) {
+  const v = vis || NONE;
   const t = wrap(u.displayname || u.username, 24, 1);
   const body = title(t, 240, 72)
     + `<text x="64" y="300" font-family="${FONT}" font-size="34" fill="#9a9a9a">@${esc(u.username)}${u.camfrogUsername ? " · " + esc(u.camfrogUsername) + " on Camfrog" : ""}</text>
     <text x="64" y="430" font-family="${FONT}" font-size="30" fill="#9a9a9a">LEVEL</text>
-    <text x="64" y="500" font-family="${FONT}" font-size="76" font-weight="bold" fill="#ffffff">${u.level || 0}</text>
-    <text x="360" y="430" font-family="${FONT}" font-size="30" fill="#9a9a9a">PAT</text>
-    <text x="360" y="500" font-family="${FONT}" font-size="76" font-weight="bold" fill="#ffd700">${fmt(u.points_balance)}</text>`;
+    <text x="64" y="500" font-family="${FONT}" font-size="76" font-weight="bold" fill="#ffffff">${u.level || 0}</text>`
+    + (v.balance ? `<text x="360" y="430" font-family="${FONT}" font-size="30" fill="#9a9a9a">PAT</text>
+    <text x="360" y="500" font-family="${FONT}" font-size="76" font-weight="bold" fill="#ffd700">${fmt(u.points_balance)}</text>` : "");
   return frame("PATV PROFILE", "#81c784", body);
 }
 
 function siteCard(heading, sub) {
   return frame("PUBLIC ACCESS TV", "#81c784", title(wrap(heading, 26, 2), 230, 72)
     + `<text x="64" y="${H - 60}" font-family="${FONT}" font-size="32" fill="#9a9a9a">${esc(sub)}</text>`);
+}
+
+// ── who may see what (1.99ade) ──
+const NONE = Object.freeze({ balance: false });
+
+/**
+ * What a profile's preview may show beyond what every visitor sees: {balance} - the PAT balance only when the member's
+ * layout shows it to a signed-out visitor ("stats" and "stats_balance", views/profile.ejs's rule). Unreadable -> NONE.
+ */
+async function profileVis(userId) {
+  try {
+    const PL = require("./profilelayout");
+    const L = PL.view(await PL.get(userId), {});
+    return { balance: !!(L.show("stats") && L.show("stats_balance")) };
+  } catch (e) {
+    console.error("[og] profile layout:", e && e.message);
+    return NONE;
+  }
+}
+const visTag = (v) => (v && v.balance ? 1 : 0);
+
+/** Is this pad's content hidden from a signed-out visitor (an Approved pad)? null pad = site-wide = no. Errors: hidden. */
+async function anonHidden(padId) {
+  if (!padId) return false;
+  try {
+    const PA = require("./padaccess");
+    await PA.init();
+    return !PA.canSee(null, padId);
+  } catch (e) { return true; }
+}
+/** A markets row's pad (the column, else resolved from its record - markets.js's rule) and a bounty's (its room). */
+async function marketPad(row, rec) {
+  const padlinks = require("./padlinks");
+  await padlinks.ready();
+  return (row && row.pad) || padlinks.resolve(rec || {}) || null;
+}
+async function bountyPad(rec) {
+  const padlinks = require("./padlinks");
+  await padlinks.ready();
+  return padlinks.resolve({ room: rec && rec.room }) || null;
+}
+
+// ── signed page cards (1.99ade) ──
+const PAGE_T_MAX = 80, PAGE_D_MAX = 120;
+const GENERIC = Object.freeze({ t: "Public Access TV", d: "" });
+const GENERIC_PATH = "/og/page.png";
+// 1.99ade: a signature expires PAGE_TTL_DAYS after the day it was made (e = that last day, in whole days since 1970, inside
+// the MAC). A page re-signs its card on every render, so a live page's card never runs out; an address copied from a page
+// whose text is gone (a deleted post, a renamed pad) draws the generic card within the TTL. One e per day keeps the
+// address stable for caches.
+const PAGE_TTL_DAYS = 14, DAY_MS = 86400e3;
+let NOW = () => Date.now();
+const today = () => Math.floor(NOW() / DAY_MS);
+let PAGE_KEY = null;
+/** The page-card key: HMAC(SECRET_KEY, "og-page-v1"), derived here and never written anywhere. No SECRET_KEY: random per process. */
+function pageKey() {
+  if (!PAGE_KEY) {
+    const base = process.env.SECRET_KEY;
+    PAGE_KEY = base ? crypto.createHmac("sha256", String(base)).update("og-page-v1").digest() : crypto.randomBytes(32);
+  }
+  return PAGE_KEY;
+}
+// lengths go first so the t / d / e split can't be moved
+const pageSig = (t, d, e) => crypto.createHmac("sha256", pageKey()).update(`${t.length}|${t}|${d.length}|${d}|${e}`).digest("base64url").slice(0, 32);
+function sigOk(t, d, e, s) {
+  if (!/^\d{1,7}$/.test(String(e || ""))) return false;
+  const day = Number(e), now = today();
+  if (day < now || day > now + PAGE_TTL_DAYS + 1) return false;          // expired, or not one this site would have made
+  const want = Buffer.from(pageSig(t, d, String(day)));
+  const got = Buffer.from(String(s || ""));
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+// cut to n UTF-16 units without leaving half an emoji (encodeURIComponent throws on a lone surrogate)
+const clip = (s, n) => String(s == null ? "" : s).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "")
+  .slice(0, n).replace(/[\uD800-\uDBFF]$/, "");
+/**
+ * The signed /og/page.png address for a heading (and an optional line under it). Text the SITE chose - catalog text, a
+ * fixed heading - never a query param, a path segment or member-written text (a post title, a gang or raffle name: those
+ * get the generic card, or a card route that re-checks the object, like /og/post/<id>.png).
+ */
+function pageUrl(heading, description) {
+  const t = clip(plain(heading) || GENERIC.t, PAGE_T_MAX), d = clip(plain(description), PAGE_D_MAX);
+  const e = String(today() + PAGE_TTL_DAYS);
+  return "/og/page.png?t=" + encodeURIComponent(t) + (d ? "&d=" + encodeURIComponent(d) : "") + "&e=" + e + "&s=" + pageSig(t, d, e);
+}
+
+/**
+ * 1.99ade: the layout's DEFAULT card (a page that sets no `og`): its title signed only when that title can only be site
+ * text - the page answered 2xx (a 404 / error page may echo the address: /gtf/sheet/<any text> rendered "<any text> · Heist
+ * sheet"), the address has no query string (tracking parameters aside: ?utm_*, ?fbclid ...), the route has no parameters (a /:param route's title is built from the address
+ * or from what members wrote there - a gang's name, a raffle's title, a GTF display name), and nobody is signed in (a signed-in
+ * page may carry the viewer's own display name; link unfurlers fetch signed out, so public previews are unchanged).
+ * Anything else: the plain generic card. index.js hands it to the views as ogPage(title).
+ */
+// campaign / click-tracking parameters a shared link picks up (?utm_source=..., ?fbclid=...) - no page reads them, so they
+// don't count as a query string here (a link shared with them keeps its titled card)
+const TRACKING_PARAM = /^(?:utm_[a-z_]{1,20}|fbclid|gclid|dclid|gbraid|wbraid|msclkid|igshid|twclid|ttclid|li_fat_id|mc_cid|mc_eid)$/i;
+function onlyTracking(url) {
+  const i = url.indexOf("?");
+  if (i < 0) return true;
+  const qs = url.slice(i + 1).split("#")[0];
+  return qs.split("&").every((kv) => !kv || TRACKING_PARAM.test(decodeSafe(kv.split("=")[0])));
+}
+const decodeSafe = (s) => { try { return decodeURIComponent(s); } catch (e) { return s; } };
+function defaultSignable(req, res) {
+  const st = Number(res && res.statusCode) || 200;
+  if (st < 200 || st >= 300) return false;
+  if (!onlyTracking(String((req && req.originalUrl) || ""))) return false;
+  const r = req && req.route;
+  if (!r) return false;
+  const paths = Array.isArray(r.path) ? r.path : [r.path];
+  if (!paths.length || !paths.every((p) => typeof p === "string")) return false;     // a RegExp route
+  // the matched path had parameters (an array route's other paths leave theirs undefined)
+  if (req.params && Object.values(req.params).some((v) => v !== undefined)) return false;
+  if ((req.user && req.user.userId) || (req.cookies && req.cookies.jwt)) return false;
+  return true;
+}
+function defaultCard(req, res, heading) {
+  return defaultSignable(req, res) ? pageUrl(heading) : GENERIC_PATH;
+}
+
+// new cards drawn (a cached card costs nothing and isn't counted): per client - an IPv6 client by its /64, which one
+// subscriber line usually has whole - and for the whole site
+const RENDER_MAX = 60, RENDER_GLOBAL_MAX = 600, RENDER_WINDOW_MS = 60e3;
+let renders = null, rendersAll = null;
+const AG = () => require("./middleware/authGuard");
+const limiter = () => (renders = renders || AG().limiter({ max: RENDER_MAX, windowMs: RENDER_WINDOW_MS }));
+const limiterAll = () => (rendersAll = rendersAll || AG().limiter({ max: RENDER_GLOBAL_MAX, windowMs: RENDER_WINDOW_MS }));
+function ipOf(req) {
+  try { return AG().clientIp(req); } catch (e) { return (req.socket && req.socket.remoteAddress) || "?"; }
+}
+/** The key a client is counted under: an IPv4 address as it is; an IPv6 address by its first 64 bits. */
+function clientKey(ip) {
+  let s = String(ip || "?").trim().toLowerCase().split("%")[0];
+  const v4 = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (v4) return v4[1];
+  if (!s.includes(":")) return s;
+  const dbl = s.indexOf("::");
+  const head = (dbl >= 0 ? s.slice(0, dbl) : s).split(":").filter((g) => g !== "");
+  const tail = dbl >= 0 ? s.slice(dbl + 2).split(":").filter((g) => g !== "") : [];
+  const groups = dbl >= 0 ? head.concat(Array(Math.max(0, 8 - head.length - tail.length)).fill("0"), tail) : head;
+  return "v6:" + groups.slice(0, 4).map((g) => (/^[0-9a-f]{1,4}$/.test(g) ? g.replace(/^0+(?=.)/, "") : "?")).join(":") + "::/64";
+}
+/** May this request draw a new card now? Counts it if so. false = over a budget (the caller serves the generic card). */
+function renderBudget(req) {
+  const L = limiter(), A = limiterAll(), k = clientKey(ipOf(req));
+  if (L.blocked(k) || A.blocked("*")) return false;
+  L.hit(k); A.hit("*");
+  return true;
 }
 
 // ── meta for pages ──
@@ -167,32 +334,61 @@ function forBounty(req, b) {
   return meta(req, { title: `Bounty BT${b.id}: ${b.task}`, description: `${fmt(pot)} PAT for whoever pulls it off. Posted by ${b.creator}. Chip in or claim it on PATV.`, image: `/og/bounty/${b.id}.png` });
 }
 
-function forProfile(req, u) {
-  return meta(req, { title: `${u.displayname || u.username} on Public Access`, description: `Level ${u.level || 0} · ${fmt(u.points_balance)} PAT`, image: `/og/profile/${encodeURIComponent(u.username)}.png` });
+/**
+ * A profile's preview. vis = await profileVis(u.userId) (1.99ade): a balance the member hides from visitors is in neither
+ * the description nor the image (whose ?v= changes with the switch, so unfurl caches fetch the image again).
+ */
+function forProfile(req, u, vis) {
+  const v = vis || NONE;
+  return meta(req, { title: `${u.displayname || u.username} on Public Access`,
+                     description: `Level ${u.level || 0}` + (v.balance ? ` · ${fmt(u.points_balance)} PAT` : ""),
+                     image: `/og/profile/${encodeURIComponent(u.username)}.png?v=${visTag(v)}` });
 }
 
 function forPage(req, heading, description) {
-  return meta(req, { title: heading, description, image: `/og/page.png?t=${encodeURIComponent(heading)}&d=${encodeURIComponent(description.slice(0, 120))}` });
+  return meta(req, { title: heading, description, image: pageUrl(heading, String(description || "").slice(0, PAGE_D_MAX)) });
+}
+
+/** Catalog text as plain text (the catalog is HTML-safe; the layout escapes the tags again). en = the fallback. */
+const tr = (req, key, en) => {
+  let s = "";
+  try { s = req && typeof req.t === "function" ? require("./notices").plain(req.t(key)) : ""; } catch (e) { s = ""; }
+  return s && s !== key ? s : en;
+};
+/**
+ * 1.99ade: a FIXED preview for a page whose title carries request text (/search?q=, /feed?tag=): catalog title and
+ * description, the signed card of a catalog heading, the page's own path. [key, en] pairs.
+ */
+function forFixed(req, res, { title, description, heading, path }) {
+  const base = (res && res.locals && res.locals.ogBase) || origin(req);
+  return { title: tr(req, title[0], title[1]), description: tr(req, description[0], description[1]),
+           image: base + pageUrl(tr(req, heading[0], heading[1])), url: base + path };
 }
 
 function register(app) {
   const send = (res, buf) => { res.set("Content-Type", "image/png"); res.set("Cache-Control", "public, max-age=300"); res.send(buf); };
   const fail = (res, e) => { console.error("[og]", e); res.status(500).end(); };
+  // 1.99ade: what a missing id gets - and, word for word, an item a signed-out visitor may not see
+  const missing = (res) => res.status(404).end();
 
   app.get("/og/market/:id.png", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
-      const rows = id ? await getQuery("SELECT data, updated FROM markets WHERE id = ?", [id]) : [];
-      if (!rows.length) return res.status(404).end();
-      send(res, await png(`m${id}:${rows[0].updated}`, () => marketCard(JSON.parse(rows[0].data))));
+      const rows = id ? await getQuery("SELECT data, updated, pad FROM markets WHERE id = ?", [id]) : [];
+      if (!rows.length) return missing(res);
+      const rec = JSON.parse(rows[0].data);
+      if (await anonHidden(await marketPad(rows[0], rec))) return missing(res);
+      send(res, await png(`m${id}:${rows[0].updated}`, () => marketCard(rec)));
     } catch (e) { fail(res, e); }
   });
   app.get("/og/bounty/:id.png", async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
       const rows = id ? await getQuery("SELECT data, updated FROM bounties WHERE id = ?", [id]) : [];
-      if (!rows.length) return res.status(404).end();
-      send(res, await png(`b${id}:${rows[0].updated}`, () => bountyCard(JSON.parse(rows[0].data))));
+      if (!rows.length) return missing(res);
+      const rec = JSON.parse(rows[0].data);
+      if (await anonHidden(await bountyPad(rec))) return missing(res);
+      send(res, await png(`b${id}:${rows[0].updated}`, () => bountyCard(rec)));
     } catch (e) { fail(res, e); }
   });
   app.get("/og/lotto.png", async (req, res) => {
@@ -204,18 +400,70 @@ function register(app) {
   });
   app.get("/og/profile/:username.png", async (req, res) => {
     try {
-      const rows = await getQuery("SELECT username, displayname, level, points_balance, camfrogUsername FROM users WHERE username = ?", [req.params.username]);
+      const rows = await getQuery("SELECT userId, username, displayname, level, points_balance, camfrogUsername FROM users WHERE username = ?", [req.params.username]);
       if (!rows.length) return res.status(404).end();
       const u = rows[0];
-      send(res, await png(`p:${u.username}:${u.level}:${Math.floor(u.points_balance)}`, () => profileCard(u)));
+      const vis = await profileVis(u.userId);          // 1.99ade: the ?v= in the address is never trusted - the layout decides
+      const key = `p:${u.username}:${u.level}:${vis.balance ? Math.floor(u.points_balance) : "-"}`;
+      send(res, await png(key, () => profileCard(u, vis)));
     } catch (e) { fail(res, e); }
   });
+  const generic = async () => png("s:generic", () => siteCard(GENERIC.t, GENERIC.d));
+  // a card not drawn yet, within the render budget (else the generic card, not cached in between: the same address draws
+  // properly later)
+  async function budgeted(req, res, key, makeSvg) {
+    if (!cachedPng(key) && !renderBudget(req)) {
+      res.set("Content-Type", "image/png");
+      res.set("Cache-Control", "no-store");
+      return res.send(await generic());
+    }
+    send(res, await png(key, makeSvg));
+  }
+  // 1.99ade: signed, unexpired text only (pageUrl); anything else - no signature, a bad or expired one, text over the limits -
+  // is the generic card
   app.get("/og/page.png", async (req, res) => {
     try {
-      const t = String(req.query.t || "Public Access TV").slice(0, 80), d = String(req.query.d || "").slice(0, 120);
-      send(res, await png(`s:${t}:${d}`, () => siteCard(t, d)));
+      const q = req.query || {};
+      const str = (v) => (typeof v === "string" ? v : "");
+      const t = str(q.t), d = str(q.d), e = str(q.e), s = str(q.s);
+      const signed = !!t && t.length <= PAGE_T_MAX && d.length <= PAGE_D_MAX && sigOk(t, d, e, s);
+      if (!signed) return send(res, await generic());
+      await budgeted(req, res, JSON.stringify(["s", t, d]), () => siteCard(t, d));
+    } catch (e) { fail(res, e); }
+  });
+  // 1.99ade: a feed post's card - its title as a SIGNED-OUT visitor sees it (feedstore.get + pageVisible, the post page's
+  // rule), looked up on every draw: a deleted, hidden, members-only or 18+ post - or no such post - is the plain
+  // "PATV feed" card, the same as an untitled post, so nothing about what exists can be read off it. (The page used to sign
+  // the title into an /og/page.png address, which stayed valid after the post was gone.)
+  app.get("/og/post/:id.png", async (req, res) => {
+    try {
+      const id = String(req.params.id || "");
+      let heading = "";
+      if (/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+        const store = require("./feedstore");
+        const p = await store.get(id, null).catch(() => null);
+        if (p && store.pageVisible(p, null, null)) heading = clip(plain(p.title || ""), 60);
+      }
+      heading = heading || POST_DEFAULT;
+      await budgeted(req, res, JSON.stringify(["p", heading]), () => siteCard(heading, ""));
     } catch (e) { fail(res, e); }
   });
 }
+const POST_DEFAULT = "PATV feed";
+/** 1.99ade: a post's card address (the ?v= changes with the title, so unfurl caches fetch the new one). */
+function postImage(p) {
+  const v = crypto.createHash("sha256").update(String((p && p.title) || "")).digest("base64url").slice(0, 8);
+  return "/og/post/" + encodeURIComponent(String((p && p.id) || "")) + ".png?v=" + v;
+}
 
-module.exports = { register, forMarket, forBounty, forProfile, forPage, origin };
+module.exports = { register, forMarket, forBounty, forProfile, forPage, forFixed, pageUrl, defaultCard, postImage, profileVis, anonHidden,
+                   marketPad, bountyPad, origin, clientKey,
+                   PAGE_T_MAX, PAGE_D_MAX, PAGE_TTL_DAYS, RENDER_MAX, RENDER_GLOBAL_MAX,
+                   // tests: the SVG builders, the render budgets (fresh limiters: per client `max`, site-wide `all`), the clock
+                   _svg: { profileCard, siteCard, marketCard, bountyCard },
+                   _setRenderLimit: (max, all) => {
+                     renders = AG().limiter({ max: max || RENDER_MAX, windowMs: RENDER_WINDOW_MS });
+                     rendersAll = AG().limiter({ max: all || RENDER_GLOBAL_MAX, windowMs: RENDER_WINDOW_MS });
+                   },
+                   _setClock: (fn) => { NOW = fn || (() => Date.now()); },
+                   _clearCache: () => cache.clear() };

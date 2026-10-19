@@ -196,7 +196,8 @@ test("the lists: pads on the cards, ?pad= filters, voided ones hidden unless ?vo
     const act = async (body) => {
       const r = await fetch(base + "/act", { method: "POST", redirect: "manual", headers: { "x-user": "u1", "content-type": "application/x-www-form-urlencoded" },
                                              body: new URLSearchParams(body).toString() });
-      return decodeURIComponent(String(r.headers.get("location") || ""));
+      // 1.99ade: the notice is ?m=<id> (notices.js) - read back as u1
+      return require(path.join(repo, "notices")).textOf(String(r.headers.get("location") || ""), "u1");
     };
     const until = now + 3 * 86400;
     let loc = await act({ kind: "cmd", cmd: "market", a0: "new", a1: "Will it snow?", a3: "judge @bob", a4: "closes 1d", pad: "patv:quiz",

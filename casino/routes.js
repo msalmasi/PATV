@@ -134,7 +134,7 @@ function register(app, { isBotToken, addUser }) {
     res.locals.og = { title: `${title} with Pepe — publicaccess.tv`,
                       description: game === "holdem" ? "No-Limit Hold'em on the web with your PAT — no Camfrog needed, or play the same table from a Camfrog room."
                                                      : "Pepe deals blackjack on the web: sit down with your PAT, no Camfrog needed — or play the same table from a Camfrog room.",
-                      image: (res.locals.ogBase || "") + "/og/page.png?t=" + encodeURIComponent(title), url: (res.locals.ogBase || "") + (res.locals.ogPath || "") };
+                      image: (res.locals.ogBase || "") + require("../og").pageUrl(title), url: (res.locals.ogBase || "") + (res.locals.ogPath || "") };
     res.render(game === "holdem" ? "casino-hm" : "casino-bj", { user: req.user ? req.user.username : null, signedIn: !!(req.user && req.user.userId),
                                                                 tableId: id, title, bjOn: !!st.bj_enabled, hmOn: !!st.hm_enabled });
   };

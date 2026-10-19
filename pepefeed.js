@@ -472,14 +472,22 @@ async function postView(p) {
   const att = await getQuery("SELECT kind, file, thumb, w, h FROM feed_attachments WHERE post_id = ? AND state = 'ready' ORDER BY sort", [src.id]);
   let link = null;
   try { link = src.link_json ? JSON.parse(src.link_json) : null; } catch (e) { link = null; }
+  // 1.99ade: a frozen preview of one of this site's items that a signed-out visitor can't see is only its address here too
+  // (feedstore.decorate's rule - Pepe answers in public rooms); and the text his LLM reads loses invisible characters
+  // (textclean.js: the TAG block, zero-width / bidi controls, variation-selector runs) - posts written before it included
+  if (link && link.url) {
+    const EC = require("./embedcards"), ref = EC.liveRef(link.url);
+    if (ref && (await EC.anonMissing([ref])).has(ref)) link = { url: link.url, domain: link.domain || "", title: "", description: "", site: "" };
+  }
+  const tc = require("./textclean").stripFormat;
   // 1.99cu: the pad the post lives in, and for a crosspost the original's own title + pad (Pepe's reply context);
   // source_id = the post whose content/pictures these are (his vision-description cache key)
   return {
-    id: p.id, url: SITE() + (await store.postLink(p.id)), title: p.title || src.title || "", body: String(src.body || p.body || "").slice(0, 2000), created: p.created,
+    id: p.id, url: SITE() + (await store.postLink(p.id)), title: tc(p.title || src.title || ""), body: tc(String(src.body || p.body || "")).slice(0, 2000), created: p.created,
     author: who(A, p.author_id), pad: await padOf(p.id), source_id: src.id,
-    crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id), id: src.id, title: src.title || "",
+    crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id), id: src.id, title: tc(src.title || ""),
                              pad: await padOf(src.id) } : null,
-    link: link && link.url ? { url: link.url, domain: link.domain || "", title: link.title || "", description: link.description || "", site: link.site || "" } : null,
+    link: link && link.url ? { url: link.url, domain: link.domain || "", title: tc(link.title || ""), description: tc(link.description || ""), site: tc(link.site || "") } : null,
     images: att.filter((a) => a.kind === "image").slice(0, 4).map((a) => ({ url: SITE() + "/media/f/" + (a.thumb || a.file), w: a.w, h: a.h })),
     media: { audio: att.filter((a) => a.kind === "audio").length, video: att.filter((a) => a.kind === "video").length },
     comments: p.comments || 0, score: p.score || 0,
@@ -512,7 +520,8 @@ async function conversation(postId, top, targetId = null) {
   const rows = await getQuery(`SELECT * FROM feed_comments WHERE post_id = ? AND (id = ? OR parent_id = ?) AND ${LIVE_COMMENT} ORDER BY created`, [postId, top, top]);
   const out = [];
   for (const c of rows.slice(-CONVO_MAX)) {
-    out.push({ id: c.id, parent: c.parent_id || null, author: who(await store.account(c.author_id), c.author_id), body: String(c.body).slice(0, 1500),
+    // 1.99ade: comment text his LLM reads loses invisible characters too (textclean.js)
+    out.push({ id: c.id, parent: c.parent_id || null, author: who(await store.account(c.author_id), c.author_id), body: require("./textclean").stripFormat(String(c.body)).slice(0, 1500),
                created: c.created, ...(c.id === targetId ? { target: true } : {}) });
   }
   return out;
@@ -524,7 +533,7 @@ async function otherComments(postId, excludeTop = null) {
                                  AND NOT EXISTS (SELECT 1 FROM feed_reports fr WHERE fr.comment_id = c.id AND fr.resolved_at IS NULL)
                                ORDER BY c.score DESC, c.created DESC LIMIT ?`, [postId, excludeTop, OTHERS_MAX]);
   const out = [];
-  for (const c of rows) out.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: String(c.body).slice(0, 500), created: c.created, replies: c.replies || 0 });
+  for (const c of rows) out.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: require("./textclean").stripFormat(String(c.body)).slice(0, 500), created: c.created, replies: c.replies || 0 });
   return out;
 }
 async function depthOf(postId, top) {

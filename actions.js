@@ -39,6 +39,7 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (
   .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN incident TEXT").catch(() => {}));
 const weberrors = require("./weberrors");
 const ttl = require("./actionttl");     // 1.99ne: queued actions expire
+const N = require("./notices");         // 1.99ade: the notice the page shows after a form (?m=<id>, never ?msg=<text>)
 const RECLAIM_MS = 2 * 60 * 1000;
 const KINDS = new Set(["cmd", "poll.vote", "poll.create", "poll.end"]);
 const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar", "sheet", "donate"]);   // 1.99rn: sheet = the web "Re-roll sheet" (regen only, Pepe refuses the rest)
@@ -96,14 +97,79 @@ async function queue(userId, { kind, args, tag, label, idem, dedupe }) {
   return r && (r.id || r.lastID);   // dbUtils.runQuery resolves {id, changes}
 }
 
+// ── 1.99ade: the item a form names, and whether this member may see it ──
+// The verbs whose next word is the item (the engines' fromForm and Pepe's commands); otherwise a lone first word is a read
+// ("pool M5", "bounty BT8", "wager W3") - pools / markets also take the item first for a bet ("M5 yes 1k").
+const REF_VERBS = {
+  m: new Set(["bet", "back", "buy", "sell", "settle", "resolve", "cancel", "void", "ai", "dispute", "judge", "close", "info", "show", "view", "odds", "status"]),
+  bt: new Set(["add", "chip", "contribute", "+", "claim", "done", "did", "resolve", "pay", "award", "cancel", "withdraw", "void", "reject", "deny",
+               "dispute", "appeal", "verify", "check", "spec", "info", "show", "view", "status"]),
+  w: new Set(["accept", "decline", "cancel", "settle", "resolve", "judge", "ai", "dispute", "info", "show", "view", "status"]),
+};
+const REF_RE = { m: /^#?m?(\d{1,9})$/i, bt: /^#?(?:bt)?(\d{1,9})$/i, w: /^#?w?(\d{1,9})$/i };
+const CMD_KIND = { pool: "m", market: "m", bounty: "bt", wager: "w" };
+/** The id of the item a form's words name (cmd: pool | market | bounty | wager), or null (a create / list / no item). */
+function refOf(cmd, words) {
+  const k = CMD_KIND[cmd];
+  if (!k) return null;
+  const w = words.map((x) => String(x || "").trim());
+  const first = w[0].toLowerCase();
+  let cand = null;
+  if (REF_VERBS[k].has(first)) cand = w[1];
+  else if (k === "m" ? !/^(new|create|list|ls|help|mine)$/.test(first) : w.length === 1) cand = w[0];
+  const m = cand ? REF_RE[k].exec(cand) : null;
+  return m ? { kind: k, id: parseInt(m[1], 10) } : null;
+}
+/**
+ * The notice key when the item a form names is missing or on a pad `user` can't see (market / pool and bounty: the pad rule
+ * of their pages; a wager: its room's pad, unless the member is one of its parties or its judge, /wagers' rule) - else null.
+ */
+async function refMissing(user, cmd, words) {
+  const r = refOf(cmd, words);
+  if (!r) return null;
+  const KEY = { m: "mkt_missing", bt: "bty_missing", w: "wgr_missing" }[r.kind];
+  const parse = (s) => { try { return JSON.parse(s); } catch (e) { return null; } };
+  const escrow = async (game) => { try { return await require("./escrow/games").load(game, r.id); } catch (e) { return null; } };
+  const padlinks = require("./padlinks"), PA = require("./padaccess");
+  try { await padlinks.ready(); await PA.init(); } catch (e) { return KEY; }          // can't tell: refuse
+  const sees = (pad) => { try { return !pad || PA.canSee(user || null, pad); } catch (e) { return false; } };
+  try {
+    if (r.kind === "m") {
+      const row = (await getQuery("SELECT data, pad FROM markets WHERE id = ?", [r.id]).catch(() => []))[0];
+      const rec = row ? parse(row.data) : await escrow("pools");
+      if (!rec) return KEY;
+      return sees((row && row.pad) || padlinks.resolve(rec) || null) ? null : KEY;
+    }
+    if (r.kind === "bt") {
+      const row = (await getQuery("SELECT data FROM bounties WHERE id = ?", [r.id]).catch(() => []))[0];
+      const rec = row ? parse(row.data) : await escrow("bounties");
+      if (!rec) return KEY;
+      return sees(padlinks.resolve({ room: rec.room }) || null) ? null : KEY;
+    }
+    const row = (await getQuery("SELECT data FROM wagers WHERE id = ?", [r.id]).catch(() => []))[0];
+    const rec = row ? parse(row.data) : await escrow("wagers");
+    if (!rec) return KEY;
+    if (sees(padlinks.resolve({ pad: rec.pad, room: rec.room }) || null)) return null;
+    const me = (await getQuery("SELECT username, camfrogUsername FROM users WHERE userId = ?", [user && user.userId]))[0] || {};
+    const same = require("./escrow/games").same;
+    const mine = [me.camfrogUsername, me.username].filter(Boolean);
+    return [rec.creator, rec.opponent, rec.ai_judge ? null : rec.judge].some((n) => mine.some((x) => same(x, n))) ? null : KEY;
+  } catch (e) {
+    console.error("[act] item check:", e.message);
+    return KEY;
+  }
+}
+
 function register(app, { isBotToken, addUser }) {
   app.post("/act", addUser, async (req, res) => {
     const b = req.body || {};
     const back = safeBack(b.back);
-    const go = (msg) => res.redirect(back + (back.includes("?") ? "&" : "?") + "msg=" + encodeURIComponent(msg));
+    // 1.99ade: back to the page with ?m=<id> (notices.js) - a catalog key (N.K) or an engine's reply held for this account;
+    // never ?msg=<text>, which let anyone link a site page "saying" anything
+    const go = (msg) => res.redirect(N.href(req, back, msg));
     if (!req.user || !req.user.userId) return res.redirect("/login");
     const kind = String(b.kind || "cmd");
-    if (!KINDS.has(kind)) return go("That can't be done from the site.");
+    if (!KINDS.has(kind)) return go(N.K("act_cant"));
     const words = [];
     for (let i = 0; i < 20; i++) {
       const v = clean(b["a" + i]);
@@ -112,8 +178,8 @@ function register(app, { isBotToken, addUser }) {
     let args;
     if (kind === "cmd") {
       const cmd = String(b.cmd || "");
-      if (!CMDS.has(cmd)) return go("That can't be done from the site.");
-      if (!words.length) return go("Fill in the form first.");
+      if (!CMDS.has(cmd)) return go(N.K("act_cant"));
+      if (!words.length) return go(N.K("act_fill"));
       args = [cmd, ...words];
     } else {
       args = words;
@@ -124,7 +190,7 @@ function register(app, { isBotToken, addUser }) {
     let padPick = null;
     if (creating && b.pad !== undefined) {
       padPick = await require("./padlinks").checkPick(req.user, b.pad);
-      if (padPick === null) return go("You can't post to that pad — pick another one.");
+      if (padPick === null) return go(N.K("act_pad"));
     }
     if (creating && kind === "cmd") {
       const until = Math.floor(Number(b.until) || 0);
@@ -140,6 +206,13 @@ function register(app, { isBotToken, addUser }) {
       }
       if (padPick !== null) args.push("pad:" + (padPick || "none"));
     }
+    // 1.99ade: a form naming a market / pool, a bounty or a wager this member may not see (an Approved pad's, padaccess) -
+    // or one that doesn't exist - answers "doesn't exist", the same both ways, before anything runs or is queued: the engines'
+    // replies ("M12 options are: ...", "the pot is PAT X now") and Pepe's read replies confirmed it and told what's in it
+    if (kind === "cmd" && !creating) {
+      const missing = await refMissing(req.user, args[0], args.slice(1));
+      if (missing) return go(N.K(missing));
+    }
     // 1.99ml: with the lotto backend on, a lotto form buys on the site directly - nothing is sent to Pepe
     if (kind === "cmd" && args[0] === "lotto") {
       try {
@@ -153,7 +226,7 @@ function register(app, { isBotToken, addUser }) {
         if (msg) return go(typeof msg === "object" ? msg.msg : msg);
       } catch (e) {
         console.error("[act] lotto backend:", e.message);
-        return go("Something went wrong — nothing was bought.");
+        return go(N.K("err_bought"));
       }
     }
     // 1.99ne: with the stashes on the site, a stash form (create / deposit / withdraw / members / rename / close) runs
@@ -164,7 +237,7 @@ function register(app, { isBotToken, addUser }) {
         if (msg) return go(msg);
       } catch (e) {
         console.error("[act] stash backend:", e.message);
-        return go("Something went wrong — nothing was moved.");
+        return go(N.K("err_moved"));
       }
     }
     // Phase 3: with the capital cluster on the site (capital/*), a vault stake / unstake and a Federal Reserve loan form run here
@@ -176,7 +249,7 @@ function register(app, { isBotToken, addUser }) {
         if (msg) return go(msg);
       } catch (e) {
         console.error(`[act] capital ${args[0]}:`, e.message);
-        return go("Something went wrong — nothing changed.");
+        return go(N.K("err_changed"));
       }
     }
     // 1.99ou Phase 2: with an escrow game on the site (escrow/games.js), its form runs here directly - nothing is sent to Pepe
@@ -186,7 +259,7 @@ function register(app, { isBotToken, addUser }) {
         if (msg) return go(msg);
       } catch (e) {
         console.error(`[act] escrow ${args[0]}:`, e.message);
-        return go("Something went wrong — nothing changed.");
+        return go(N.K("err_changed"));
       }
     }
     // 1.99ns: with the polls on the site (polls.js backend), a poll form is done here directly - nothing is sent to Pepe
@@ -196,18 +269,16 @@ function register(app, { isBotToken, addUser }) {
         if (msg) return go(msg);
       } catch (e) {
         console.error("[act] polls backend:", e.message);
-        return go("Something went wrong — nothing was changed.");
+        return go(N.K("err_changed"));
       }
     }
     const tag = clean(b.tag, 40) || back.split(/[/?]/)[1] || "home";
     const label = clean(b.label || (kind === "cmd" ? "!" + args.join(" ") : kind + " " + words.join(" ")), 200);
     try {
       await queue(req.user.userId, { kind, args, tag, label, idem: b.idem, dedupe: true });
-      go("Sent to Pepe — the result shows below in a few seconds.");
+      go(N.K("act_sent"));
     } catch (e) {
-      go(e.message === "duplicate" ? "Already sent — that one is with Pepe, so it wasn't sent twice. The result shows below."
-        : e.message === "busy" ? "You already have a few things waiting — give Pepe a moment."
-        : e.message === "no account" ? "Couldn't find your account." : "Something went wrong — nothing was sent.");
+      go(N.K(e.message === "duplicate" ? "act_dup" : e.message === "busy" ? "act_busy" : e.message === "no account" ? "no_account" : "err_sent"));
     }
   });
 

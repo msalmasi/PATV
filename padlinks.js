@@ -79,6 +79,20 @@ function fromParam(v) {
 }
 
 /**
+ * 1.99ade: fromParam for a viewer (call padaccess.init() first). A pad they may not see (an Approved pad they're outside of)
+ * is an unknown pad -> null (no filter), the same answer as a slug that doesn't exist: ?pad=<slug> on the list pages put a
+ * hidden pad's title and address in their "Showing ..." line, signed-out visitors included.
+ */
+function fromParamFor(viewer, v) {
+  const id = fromParam(v);
+  if (!id) return id;
+  try {
+    const PA = require("./padaccess");
+    return PA.canSee(viewer || null, id) ? id : null;
+  } catch (e) { return null; }
+}
+
+/**
  * The pads a user can pick on a create form, and the default:
  *   wanted (a ?pad= from the pad page's "Create" button) when they may see it -> their own pad -> site-wide ("").
  * -> {choices: [{id, title, mine}], def: padId | ""}
@@ -119,4 +133,4 @@ async function checkPick(user, v) {
   return p.id;
 }
 
-module.exports = { ready, resolve, resolveHow, view, fromParam, choicesFor, checkPick, lookup };
+module.exports = { ready, resolve, resolveHow, view, fromParam, fromParamFor, choicesFor, checkPick, lookup };

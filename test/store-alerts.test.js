@@ -54,7 +54,9 @@ const get = async (url, as) => {
 const post = async (url, as, form) => {
   const r = await fetch(base + url, { method: "POST", redirect: "manual",
     headers: { "x-test-user": as, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form).toString() });
-  return { status: r.status, location: decodeURIComponent(r.headers.get("location") || "") };
+  // 1.99ade: the notice is ?m=<id> (notices.js) - its text (as the poster sees it) first, then the address
+  const loc = r.headers.get("location") || "";
+  return { status: r.status, location: require(path.join(repo, "notices")).textOf(loc, as) + " " + decodeURIComponent(loc) };
 };
 const ADMIN = { userId: "u-boss", username: "boss" };
 

@@ -1135,7 +1135,7 @@ function register(app, { isBotToken, addUser }) {
     const reg = require("./rooms");
     const g = await require("./roomsweb").guideRows(signedIn, req.user);
     res.locals.og = { title: "Pads — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its chat room live on the web.",
-                      image: res.locals.ogBase + "/og/page.png?t=Pad%20Guide", url: res.locals.ogBase + "/p" };
+                      image: res.locals.ogBase + require("./og").pageUrl("Pad Guide"), url: res.locals.ogBase + "/p" };
     let owned = [];
     if (signedIn) { try { owned = await reg.ownedBy(req.user.userId); } catch (e) { owned = []; } }
     // 1.99x: ?platform=camfrog|site (|twitch|discord) narrows the list; the counts are for the filter chips
@@ -1188,7 +1188,7 @@ function register(app, { isBotToken, addUser }) {
     const slug = info ? pads.padSlug(info) : R.slug;
     const title = (info && info.title) || R.name;
     res.locals.og = { title: `p/${slug} — ${title} on PATV`, description: (info && info.description) || `${title}: a pad on Public Access TV.`,
-                      image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent(("p/" + slug).slice(0, 60)), url: res.locals.ogBase + "/p/" + encodeURIComponent(slug) };
+                      image: res.locals.ogBase + require("./og").pageUrl(("p/" + slug).slice(0, 60)), url: res.locals.ogBase + "/p/" + encodeURIComponent(slug) };
     const manage = await reg.canManage(req.user, R.id);
     // 1.99wk: the pad page's old "Owner" tab (1.99ti) is gone - the header's 👑 button is the one owner-panel link;
     // an old ?tab=owner link goes to the owner panel for whoever can manage the pad (anyone else: the pad page, no tab)

@@ -263,7 +263,9 @@
       var meta = el('div', { cls: 'cm' }, [e.pad ? el('span', { cls: 'pad', text: e.pad.label || ('p/' + e.pad.slug) }) : null,
         e.author ? el('span', null, [nameNode('u/' + e.author.username, e.author.nameCss)]) : null,
         el('span', { text: _t('js.msg.n_points', e.score === 1 ? '{count} point' : '{count} points', { count: e.score || 0 }) + ' · ' + _t('js.msg.n_comments', e.comments === 1 ? '{count} comment' : '{count} comments', { count: e.comments || 0 }) })]);
-      var tx = el('div', { cls: 'ct' }, [meta, el('div', { cls: 'tt' }, [e.nsfw ? el('span', { cls: 'tag', text: 'NSFW' }) : null, e.title || _t('js.msg.post', 'Post')])]);
+      // 1.99ade: an 18+ / creator-locked post comes without its title (e.gate) - a neutral label instead
+      var label = e.gate === 'r18' ? _t('js.msg.post_r18', '18+ post') : e.gate === 'locked' ? _t('js.msg.post_locked', 'Locked post') : (e.title || _t('js.msg.post', 'Post'));
+      var tx = el('div', { cls: 'ct' }, [meta, el('div', { cls: 'tt' }, [e.nsfw ? el('span', { cls: 'tag', text: 'NSFW' }) : null, label])]);
       var th = e.thumb ? el('span', { cls: 'th' + (e.nsfw ? ' nsfw' : '') }, [el('img', { src: e.thumb, alt: '', loading: 'lazy' })]) : el('span', { cls: 'th none', 'aria-hidden': 'true', text: '📰' });
       box.appendChild(el('a', { cls: 'dm-card', href: e.href, 'data-nsfw': e.nsfw ? '1' : '' }, [th, tx]));
     });

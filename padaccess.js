@@ -416,7 +416,7 @@ function register(app, { addUser }) {
     const st = await state(u, R.id);
     // no title, description, banner or owner: only the address the visitor already has
     res.locals.og = { title: `p/${slug} on PATV`, description: "A members-only pad on Public Access TV.",
-                      image: res.locals.ogBase ? res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent(("p/" + slug).slice(0, 60)) : "",
+                      image: res.locals.ogBase ? res.locals.ogBase + require("./og").pageUrl(("p/" + slug).slice(0, 60)) : "",
                       url: (res.locals.ogBase || "") + "/p/" + encodeURIComponent(slug) };
     res.status(u && u.userId ? 403 : 401).render("padLocked", { user: u ? u.username : null, slug, st, next: "/p/" + encodeURIComponent(slug), noteMax: NOTE_MAX });
   }

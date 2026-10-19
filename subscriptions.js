@@ -27,6 +27,7 @@
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
+const N = require("./notices");      // 1.99ade: the notice after a form post (?m=<id>, never ?msg=<text>)
 
 const DAY = 24 * 3600 * 1000;
 let clock = () => Date.now();
@@ -376,8 +377,9 @@ function register(app, { addUser, noTimers } = {}) {
     try {
       const b = req.body || {};
       await setConfig({ enabled: b.enabled === "1" || b.enabled === "on", grace_days: b.grace_days, items: b.items }, req.user.username);
-      res.redirect("/shop/admin?msg=" + encodeURIComponent("Subscription settings saved.") + "#subscriptions");
-    } catch (e) { res.redirect("/shop/admin?msg=" + encodeURIComponent(e.refuse ? e.message : "Couldn't save that.") + "#subscriptions"); }
+      // 1.99ade: ?m=<id> (notices.js: a catalog key, or the admin's own held notice) - never ?msg=<text>
+      res.redirect(N.href(req, "/shop/admin#subscriptions", N.K("subs_saved")));
+    } catch (e) { res.redirect(N.href(req, "/shop/admin#subscriptions", e.refuse ? e.message : N.K("save_failed_plain"))); }
   });
 }
 

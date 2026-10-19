@@ -1790,7 +1790,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     let plex = null;
     if (me) { try { plex = await require("./medialib").goLiveInfo({ userId: me.userId, username: me.username, class: me.class }); } catch (e) { plex = null; } }
     res.locals.og = { title: "Go live on PATV", description: "Stream to a pad's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Slots are free on most pads.",
-                      image: res.locals.ogBase + "/og/page.png?t=Go%20live%20on%20PATV", url: res.locals.ogBase + "/stage" };
+                      image: res.locals.ogBase + require("./og").pageUrl("Go live on PATV"), url: res.locals.ogBase + "/stage" };
     res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: stageStaff(req.user),
                               rooms: all.map((r) => ({ id: r.id, slug: r.slug, title: r.title, slot_count: r.slot_count, slot_price: r.slot_price, approval: r.approval, house: r.house,
                                                        max_min: maxMinutesFor(r), library_max: libraryMaxFor(r),   // 1.99lw

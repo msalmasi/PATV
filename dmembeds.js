@@ -11,6 +11,13 @@
 //   * a crosspost shows its original; if the original is gone, it's unavailable
 // The thumbnail is the post's public feed file (/media/f/..., was /feed/f/), which applies its own rules again. The card
 // links the post's canonical address; an unavailable one links the short /feed/p/<id> (no pad or title slug in it).
+// 1.99ade:
+//   * an 18+ post (pad or creator rating) or a creator-locked post a signed-out visitor only sees gated -> a neutral card:
+//     `gate` "r18" | "locked", no title, no thumbnail (the page labels it "18+ post" / "Locked post"); its href is the
+//     address a signed-out visitor gets (feedstore: no title slug for an 18+ post)
+//   * blocks: a card for a post by someone the viewer blocked, or who blocked the viewer (the post's author, and a
+//     crosspost's original author), is "unavailable" for that viewer - applyBlocks(), per viewer, in messages.shape(). The
+//     author ids ride on the cached card as a hidden (non-enumerable) field, so they never reach the page.
 "use strict";
 
 const MAX_PER_MESSAGE = 3;
@@ -63,15 +70,22 @@ async function card(id) {
     if (live(p) && !xGone) {
       const q = p.xpost ? p.xpost.post : p;
       const room = p.roomsAll.find((r) => !r.removed && !r.pending && !r.hidden);
-      const thumb = store.thumbOf ? store.thumbOf(p) : null;
+      // 1.99ade: gated for a signed-out visitor (creators.applyLocks) -> a neutral card, never the title or a picture
+      const cr = p.creator || null;
+      const gate = cr && cr.gated ? (cr.r18 ? "r18" : "locked") : null;
+      const thumb = !gate && store.thumbOf ? store.thumbOf(p) : null;
       v = {
         id, href: p.url || href, unavailable: false,
-        title: require("./postlabel").postLabel(p).slice(0, 140),          // 1.99ex: the shared label (never a "no title" placeholder)
+        title: gate ? "" : require("./postlabel").postLabel(p).slice(0, 140),          // 1.99ex: the shared label (never a "no title" placeholder)
+        ...(gate ? { gate } : {}),
         author: p.author ? { username: p.author.username, display: p.author.display, nameCss: p.author.nameCss || "" } : null,
         pad: room ? { title: room.title, slug: room.slug, label: room.label || "p/" + room.slug } : null,     // 1.99df: label = u/<name> on a profile
         score: p.score || 0, comments: p.comments || 0, nsfw: !!p.nsfw,
         thumb: thumb && /^[a-f0-9]{32}(?:_t|_p)?\.webp$/.test(thumb) ? "/media/f/" + thumb : null,
       };
+      // 1.99ade: whose content this card shows (the poster, and a crosspost's original author) - for applyBlocks(), never sent
+      const ids = [p.author && p.author.userId, q && q !== p && q.author && q.author.userId].filter(Boolean).map(String);
+      Object.defineProperty(v, "authorIds", { value: ids, enumerable: false });
     }
   } catch (e) { console.error("[dm] embed:", e && e.message); }
   cache.set(id, { at: NOW(), v });
@@ -87,4 +101,15 @@ async function forBody(body) {
   return out;
 }
 
-module.exports = { POST_PATH_RE, postIds, card, forBody, MAX_PER_MESSAGE, _setClock, _clear };
+/**
+ * 1.99ade: the cards as one viewer gets them. blocked = a Set of user ids blocked either way with that viewer
+ * (messages.cardBlocks): a card showing their content is "unavailable" - the same card as a removed post, so it says
+ * nothing about who blocked whom.
+ */
+function applyBlocks(cards, blocked) {
+  if (!Array.isArray(cards) || !cards.length || !blocked || !blocked.size) return cards;
+  return cards.map((c) => (c && !c.unavailable && (c.authorIds || []).some((id) => blocked.has(String(id)))
+    ? { id: c.id, href: "/feed/p/" + c.id, unavailable: true } : c));
+}
+
+module.exports = { POST_PATH_RE, postIds, card, forBody, applyBlocks, MAX_PER_MESSAGE, siteHosts: hosts, _setClock, _clear };

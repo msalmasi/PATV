@@ -125,7 +125,14 @@ function register(app, { isBotToken, addUser }) {
         acts = await actions.recentFor(req.user.userId, "wagers");
       }
       const now = Date.now() / 1000;
-      const ws = (await getQuery("SELECT data FROM wagers ORDER BY id DESC LIMIT 500")).map((r) => viewWager(JSON.parse(r.data), me));
+      // 1.99ade: a wager made in an Approved pad's room is listed only for that pad's members (and the wager's own parties /
+      // judge) - the bounty / feed-card rule (padaccess.canSee on the room's pad); the pools below already filter (listRows)
+      const padlinks = require("./padlinks"), PA = require("./padaccess");
+      await padlinks.ready();
+      try { await PA.init(); } catch (e) { /* the gate's own problem */ }
+      const seeRoom = (w) => { const pad = padlinks.resolve({ pad: w.pad, room: w.room }); return !pad || PA.canSee(req.user || null, pad); };
+      const ws = (await getQuery("SELECT data FROM wagers ORDER BY id DESC LIMIT 500")).map((r) => viewWager(JSON.parse(r.data), me))
+        .filter((w) => w.inIt || w.isJudge || seeRoom(w));
       const offers = ws.filter((w) => w.status === "offered" && w.isOpponent && w.offer_until > now);
       const live = ws.filter((w) => LIVE.has(w.status)).sort((a, b) => (b.inIt - a.inIt) || (a.deadline - b.deadline));
       const doneW = ws.filter((w) => !LIVE.has(w.status) && (w.status === "won" || w.status === "void"))
@@ -143,7 +150,7 @@ function register(app, { isBotToken, addUser }) {
         user: req.user ? req.user.username : null, signedIn: !!(req.user && req.user.userId),
         camfrog, me, bal, isAdmin, now, offers, live, doneW, pools, doneP, acts, wagersLive, poolsLive,
         filter: L.filter, pick: await require("./padlinks").choicesFor(req.user, req.query.pad),   // 1.99ur
-        msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null,
+        msg: require("./notices").read(req),          // 1.99ade: ?m=<id> (notices.js), never ?msg= text
         wagerMin: WAGER_MIN, poolMin: POOL_MIN, feePct: FEE_PCT,
       });
     } catch (e) {

@@ -111,7 +111,7 @@ function register(app, { addUser }) {
   // every page rendered after this: may it say "By posting / signing up you agree to the Terms"?
   app.use((req, res, next) => { res.locals.termsEnforced = enforced(); next(); });
   const page = (view, title, path, updated) => (req, res) => {
-    res.locals.og = { title: title + " — Public Access TV", description: title + " for publicaccess.tv.", image: (res.locals.ogBase || "") + "/og/page.png?t=" + encodeURIComponent(title),
+    res.locals.og = { title: title + " — Public Access TV", description: title + " for publicaccess.tv.", image: (res.locals.ogBase || "") + require("./og").pageUrl(title),
                       url: (res.locals.ogBase || "") + path };
     res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: updated, enforced: enforced() });
   };

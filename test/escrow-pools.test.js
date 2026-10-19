@@ -351,12 +351,17 @@ test("the website: /act pool forms and /markets/:id bet + resolve run on the eng
   // the market page's bet form (a JSON body here) -> the engine, then a redirect with the answer
   const r = await post(`/markets/${id}/bet`, { option: "yes", amount: "1.5k" }, { "x-user": "u2" });
   assert.equal(r.status, 302);
-  assert.match(decodeURIComponent(r.location), /you're in for PAT 1,500 on yes/);
+  // 1.99ade: the answer is a held notice (?m=n-..., notices.js) - only u2 sees it, nobody else
+  const N = require(path.join(repo, "notices"));
+  assert.match(N.textOf(r.location, "u2"), /you're in for PAT 1,500 on yes/);
+  assert.doesNotMatch(r.location, /1,500|msg=/, "no text in the address");
+  assert.equal(N.textOf(r.location, "u3"), "");
+  assert.equal(N.textOf(r.location, null), "");
   const q = await getQuery("SELECT COUNT(*) AS n FROM market_orders");
   assert.equal(q[0].n, 0);
   // the judge's form
   const rv = await post(`/markets/${id}/resolve`, { outcome: "maybe" }, { "x-user": "u3" });
-  assert.match(decodeURIComponent(rv.location), /maybe! 1 winner\(s\) split PAT 3,425/);       // 2,000 + 1,500 - 75
+  assert.match(N.textOf(rv.location, "u3"), /maybe! 1 winner\(s\) split PAT 3,425/);       // 2,000 + 1,500 - 75
   assert.equal(await bal("u5"), 7000 + 3425);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM market_orders"))[0].n, 0);
   // ai / dispute on an AI pool from the site -> an ai_request event for Pepe's judge

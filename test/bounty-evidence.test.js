@@ -64,10 +64,11 @@ async function sync(list, token = "bot-token") {
     body: JSON.stringify({ password: token, bounties: list }) });
   return r.status;
 }
-const form = (u, url, body) => fetch(base + url, { method: "POST", redirect: "manual",
+const form = async (u, url, body) => Object.assign(await fetch(base + url, { method: "POST", redirect: "manual",
   headers: Object.assign({ "content-type": "application/x-www-form-urlencoded" }, u ? { "x-test-user": u } : {}),
-  body: new URLSearchParams(body).toString() });
-const msgOf = (r) => decodeURIComponent((r.headers.get("location") || "").split("msg=")[1] || "");
+  body: new URLSearchParams(body).toString() }), { user: u });
+// 1.99ade: the notice is ?m=<id> (notices.js) - read back as the user who posted the form sees it
+const msgOf = (r) => require(path.join(repo, "notices")).textOf(r.headers.get("location"), r.user);
 const page = async (u, url) => (await fetch(base + url, { headers: u ? { "x-test-user": u } : {} })).text();
 
 test("sync keeps spec + evidence + check; drops non-http links; bot token required", async () => {

@@ -11,9 +11,11 @@
     <title><%= title %></title>
     <%
       // Link previews (og.js): a page can set `og`; everything else gets a generic card.
+      // 1.99ade: ogPage(title) = og.defaultCard - the title signed into the card only when it can only be site text (a 2xx render
+      // of a parameterless route, no query string, signed out); otherwise the generic card
       const _og = (typeof og !== 'undefined' && og) ? og : (typeof ogBase !== 'undefined' ? {
         title: title, description: 'Public Access TV — live streams, Pepe the frog, PAT games, markets and more.',
-        image: ogBase + '/og/page.png?t=' + encodeURIComponent(String(title).slice(0, 80)), url: ogBase + (typeof ogPath !== 'undefined' ? ogPath : '/') } : null);
+        image: ogBase + (typeof ogPage === 'function' ? ogPage(String(title)) : '/og/page.png'), url: ogBase + (typeof ogPath !== 'undefined' ? ogPath : '/') } : null);
     %>
     <% if (_og) { %>
     <meta property="og:site_name" content="Public Access TV">

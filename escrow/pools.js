@@ -166,7 +166,8 @@ async function create(actor, a, t) {
   }
   const secs = Math.floor(Number(a.secs) || DEFAULT_SECS);
   if (secs > MAX_SECS || secs < MIN_SECS) return fail("bad_secs", `Betting can stay open from 5 minutes to ${fmtSecs(MAX_SECS)}.`, { min: MIN_SECS, max: MAX_SECS });
-  const question = String(a.question || "").replace(/\s+/g, " ").trim().replace(/^[ ,;:\-]+|[ ,;:\-]+$/g, "").slice(0, 200);
+  // 1.99ade: the question reaches Pepe's AI judge - no invisible format characters (textclean.js)
+  const question = require("../textclean").stripFormat(a.question).replace(/\s+/g, " ").trim().replace(/^[ ,;:\-]+|[ ,;:\-]+$/g, "").slice(0, 200);
   if (question.length < 5) return fail("no_question", "What's the question? e.g. !market new Will it rain Saturday? judge @carol");
   const me = { login: nickOf(actor), user: account ? account.username : actor.username || null };
   if (!me.login) return fail("no_account", "Couldn't find your account.");
@@ -346,7 +347,8 @@ async function act(verb, actor, a, t) {
   if (verb === "ai_request") {
     // the website's "ask Pepe now" / "dispute" on an AI-judged pool: Pepe's AI judge runs it (it still lives in Pepe)
     if (!m.ai_judge) return fail("no_ai", `${ref(m)} isn't judged by Pepe.`);
-    await emit("ai_request", m, { sub: String(a.sub || "ai").slice(0, 10), who: nickOf(actor), why: String(a.why || "").slice(0, 200), admin: !!actor.admin });
+    // 1.99ade: the reason goes to Pepe's AI judge - one line, no invisible characters (textclean.js), whoever sent it
+    await emit("ai_request", m, { sub: String(a.sub || "ai").slice(0, 10), who: nickOf(actor), why: require("../textclean").oneLine(a.why, 200), admin: !!actor.admin });
     return { ok: true, ref: ref(m) };
   }
   return fail("bad_verb", "Unknown pool action.");
@@ -441,7 +443,7 @@ function fromForm(words, actor) {
     return { verb: "settle", args: { ref: w[1], outcome: w.slice(2).join(" ") } };
   }
   if (sub === "cancel") return { verb: "cancel", args: { ref: w[1] } };
-  if (sub === "ai" || sub === "dispute") return { verb: "ai_request", args: { ref: w[1], sub, why: w.slice(2).join(" ") } };
+  if (sub === "ai" || sub === "dispute") return { verb: "ai_request", args: { ref: w[1], sub, why: require("../textclean").stripFormat(w.slice(2).join(" ")) } };
   if (parseRef(w[0]) !== null && w.length >= 3) return { verb: "bet", args: { ref: w[0], option: w[1], amount: amountOf(w[2]) } };
   return null;                                                         // a read (!pool list / !pool M5): Pepe answers it
 }

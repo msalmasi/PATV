@@ -167,7 +167,9 @@ function register(app, { isBotToken, addUser }) {
   });
 
   app.get("/wallet", addUser, async (req, res) => {
-    const msg = req.query.msg ? String(req.query.msg).slice(0, 200) : null;
+    // 1.99ade: ?m=<catalog key | this account's held notice> (notices.js) - ?msg= text showed in the site's notice style,
+    // signed-out visitors included (a phishing page's favourite)
+    const msg = require("./notices").read(req);
     if (!req.user || !req.user.userId) return res.render("wallet", { user: null, signedIn: false, msg });
     try {
       const u = (await getQuery("SELECT username, camfrogUsername, class, points_balance, level, created_at FROM users WHERE userId = ?", [req.user.userId]))[0];

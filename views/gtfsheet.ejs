@@ -1,5 +1,7 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
-<%- include('layout', { title: v && v.display ? v.display + ' · ' + t('gtf.sheet.title') : t('gtf.sheet.title'), user: user }) %>
+<%# 1.99ade: a missing / private sheet (a 404) has the fixed title: its name came from the address (/gtf/sheet/<any text>), and the
+    title is the link preview's og:title -%>
+<%- include('layout', { title: v && v.display && !v.missing && !v.private ? v.display + ' · ' + t('gtf.sheet.title') : t('gtf.sheet.title'), user: user }) %>
 <%#
   views/gtfsheet.ejs - 1.99rn: a heist character sheet (gtfsheet.js view): avatar with equipped GTF cosmetics, class, the six
   stats with modifiers, heist record, heat, PvP, loadout (gear + items with art), rings. The owner can re-roll the sheet or

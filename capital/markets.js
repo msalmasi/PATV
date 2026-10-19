@@ -75,7 +75,8 @@ async function feeLegs(m, fee) {
 async function create(actor, a, t) {
   if (!actor.pepe) return fail("forbidden", "Markets are opened in a Camfrog room (!market new).");
   const c = await C.cfg();
-  const question = String(a.question || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  // 1.99ade: the question reaches Pepe's AI judge - no invisible format characters (textclean.js)
+  const question = require("../textclean").stripFormat(a.question).replace(/\s+/g, " ").trim().slice(0, 200);
   const options = (Array.isArray(a.options) ? a.options : []).map((o) => String(o).slice(0, 30)).filter(Boolean);
   if (question.length < 5) return fail("bad_question", "what's the question?");
   if (options.length < 2 || options.length > 6 || new Set(options.map((o) => o.toLowerCase())).size !== options.length) {

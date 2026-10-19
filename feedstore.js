@@ -308,6 +308,7 @@ const PADACCESS = () => require("./padaccess");
 const TAGS = () => require("./feedtags");          // 1.99iq: content tags
 const CREATORS = () => require("./creators");      // 1.99pv: ⭐ PATV Creators - locked posts + 18+ communities
 const FILTER = () => require("./feedfilter");      // 1.99ux: the cheap content filter (opt-in per pad; before Pepe's automod)
+const EC = () => require("./embedcards");          // 1.99ade: liveRef - a link the live cards show (no frozen preview of it)
 async function blockedFor(viewer) {
   if (SP.can(viewer, "feed.see_hidden")) return [];
   try { await PADACCESS().init(); return PADACCESS().blockedFor(viewer); } catch (e) { console.error("[feed] pad access:", e.message); return []; }
@@ -676,6 +677,16 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       }
     } catch (e) { /* flair is decoration */ }
   }
+  // 1.99ade: a link to one of this site's markets / pools / polls / bounties / raffles (embedcards.liveRef) keeps the preview
+  // frozen into the post only while a SIGNED-OUT visitor may see the item (the same for every viewer, so the post's address
+  // - its slug can come from the link's title - never depends on who asks). Missing, or on an Approved pad: just the address
+  // (the live card shows it to whoever may see it). Public items keep their previews as before.
+  let LIVE_GONE = new Set();
+  {
+    const refs = rows.map((r) => { const l = parseJson(r.link_json); return l && l.url ? EC().liveRef(l.url) : null; }).filter(Boolean);
+    if (refs.length) LIVE_GONE = await EC().anonMissing(refs);
+  }
+  const liveGone = (u) => { const ref = EC().liveRef(u); return !!ref && LIVE_GONE.has(ref); };
   const outs = rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id && (own(r) || !blocked.has(x.room_id))).map((x) => {
       const R = rooms.getCached(x.room_id);
@@ -731,7 +742,10 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       // 1.99ep: the fixed home pad (canonical URL); 1.99fu: not when it's an Approved pad this viewer is outside of
       roomsAll: roomsOf, homePad: r.home_pad && (own(r) || !blocked.has(r.home_pad)) ? r.home_pad : null,
       images: att.filter((a) => a.kind === "image"), audio: att.filter((a) => a.kind === "audio"), video: att.filter((a) => a.kind === "video"),
-      link: link && link.url ? { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null } : null,
+      // 1.99ade: a frozen preview of one of this site's items a signed-out visitor can't see (LIVE_GONE above) keeps only its
+      // address - a frozen copy kept a market's question / a bounty's task for everyone after its pad went members-only
+      link: link && link.url ? (liveGone(link.url) ? { url: link.url, domain: link.domain || "", title: "", description: "", site: "", embed: null, thumbFile: null }
+                                                   : { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null }) : null,
       xpost, crossposts, xcount: crossposts.length,
       ai: att.filter((a) => a.ai && a.kind !== "preview"),       // 1.99di: the post's AI-generated files (badge + prompt toggle)
       capture: CAP.get(r.id) || null,                            // 1.99eq: made from a story capture (storykeep.forPosts)
@@ -749,6 +763,9 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   // 1.99pv: ⭐ PATV Creators - locked posts the viewer isn't entitled to, and 18+ communities they haven't confirmed their age
   // for, lose their body / files / link here (out.creator says why); a locked post's address uses its title, never its body
   try { await CREATORS().applyLocks(outs, rows, viewer); } catch (e) { console.error("[feed] creators gate:", e.message); for (const o of outs) if (rows.find((r) => r.id === o.id && (r.lock_kind || r.lock_rating))) { o.body = ""; o.images = []; o.video = []; o.audio = []; o.link = null; o.creator = { gated: true, kind: "sub", teasers: [], counts: {} }; } }
+  // 1.99ade: a gated post's address is rebuilt from what this viewer may see - an 18+ post's title (or the first words of its
+  // body, or its link's title) was still in the slug of the address computed above; a locked post keeps its public title
+  for (const o of outs) if (o.creator && o.creator.gated) o.url = require("./pads").postHref(o);
   return outs;
 }
 
@@ -941,6 +958,32 @@ async function postLinks(ids) {
   const rows = await getQuery(`SELECT * FROM feed_posts WHERE id IN (${list.map(() => "?").join(",")})`, list);
   for (const p of await decorate(rows, null, { _inner: true, access: false })) out.set(p.id, p.url);
   return out;
+}
+/**
+ * 1.99ade: the post page's visibility rule (feedweb.js /p/<pad>/posts/<id>), shared: may `viewer` open this post? p = a post
+ * decorated FOR that viewer (get(id, viewer)); modRooms = its pads the viewer manages (needed only when it's live nowhere).
+ * Deleted: staff only; hidden: staff + its author; live in none of its pads (removed / pending / hidden there - or only on
+ * an Approved pad the viewer is outside of, which decorate leaves out): staff, its author, those pads' moderators.
+ */
+function pageVisible(p, viewer, modRooms) {
+  if (!p) return false;
+  const seeAll = SP.can(viewer, "feed.see_hidden");
+  const shownSomewhere = (p.roomsAll || []).some((r) => !r.removed && !r.pending && !r.hidden);
+  if (p.deleted && !seeAll) return false;
+  if (p.hidden && !seeAll && !p.mine) return false;
+  if (!shownSomewhere && !seeAll && !p.mine && !(modRooms && modRooms.size)) return false;
+  return true;
+}
+/** 1.99ade: a post's address as `viewer` may have it (the post page's rule, the 18+-safe address), or null - never the real
+ *  canonical address of a post they couldn't open (/messages?share=<id> handed that out for any id). */
+async function viewerPath(id, viewer) {
+  const p = await get(id, viewer || null);
+  if (!p) return null;
+  const mods = new Set();
+  if (viewer && viewer.userId && !p.mine && !(p.roomsAll || []).some((r) => !r.removed && !r.pending && !r.hidden)) {
+    for (const r of p.roomsAll || []) if (await rooms.canManage(viewer, r.id)) mods.add(r.id);
+  }
+  return pageVisible(p, viewer || null, mods) ? p.url : null;
 }
 /** postPath, never null (a gone post's link is the old short form, which 404s like the post would). */
 async function postLink(id, hash = "") {
@@ -2392,7 +2435,7 @@ async function roomAudit(roomId, limit = 100) {
 }
 
 module.exports = {
-  postPath, postLink, postLinks,
+  postPath, postLink, postLinks, pageVisible, viewerPath,
   roomMod, roomSettings, roomPostRefusal, setMediaSafetyCheck, roomReports, roomPending, roomMembers, roomAudit, canLock, setFollowerCheck, WHO, ROOM_DEFAULTS, MAX_PINS,
   init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, postBudget, account, isNewAccount, usedBytes,
   list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, crosspostMany, communities, hot, thumbOf, visibleSql, communityOf,

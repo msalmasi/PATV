@@ -14,6 +14,10 @@
 "use strict";
 const { runQuery, getQuery } = require("../dbUtils");
 const L = require("./ledger");
+// 1.99ade: task, claim notes / links, reject and dispute reasons lose \p{Cf} (tag characters included) where they come in -
+// Pepe's evidence check reads them with an LLM and can award on its own (fencing them as data in his prompt is the bot's side)
+// 1.99ade: notes and reasons are one line (oneLine: new lines / U+2028 folded - a model must not see a fresh "SYSTEM:" line)
+const { stripFormat, oneLine } = require("../textclean");
 
 const GAME = "bounties";
 const MIN = 1000;
@@ -58,7 +62,7 @@ const isCreator = (actor, b) => G().isWho(actor, { login: b.creator, user: (b.us
 // ── evidence (pepe_bountyverify._bv_evidence; a snap id is turned into its link by Pepe, who passes `evidence`) ──
 const URL_RE = /https?:\/\/[^\s<>"']{3,300}/ig;
 function evidenceOf(text) {
-  text = String(text || "").trim().slice(0, 300);
+  text = oneLine(text, 300);
   const links = [];
   for (const m of text.match(URL_RE) || []) {
     const u = m.replace(/[.,);\]]+$/, "").slice(0, 300);
@@ -69,7 +73,7 @@ function evidenceOf(text) {
 function cleanEvidence(ev) {
   if (!ev || typeof ev !== "object") return null;
   const links = [].concat(ev.links || []).map((u) => String(u).trim().slice(0, 300)).filter((u) => /^https?:\/\//i.test(u)).slice(0, 3);
-  return { text: String(ev.text || "").slice(0, 160), links };
+  return { text: oneLine(ev.text, 160), links };
 }
 function cleanCheck(ck) {
   if (!ck || typeof ck !== "object" || !CHECK_STATES.includes(ck.state)) return null;
@@ -169,7 +173,7 @@ async function create(actor, a, t) {
   const secs = Math.floor(Number(a.secs) || DEFAULT_SECS);
   if (secs > MAX_SECS) return fail("too_long", `The longest a bounty can run is ${fmtSecs(MAX_SECS)}.`, { max: MAX_SECS });
   const amount = Math.floor(Number(a.amount));
-  const task = String(a.task || "").replace(/\s+/g, " ").trim();
+  const task = stripFormat(a.task).replace(/\s+/g, " ").trim();     // 1.99ade: Pepe's LLM reads it into the checkable spec
   if (!(amount > 0)) return fail("usage", "Usage: !bounty <what has to happen> <amount> [by 2d] — e.g. !bounty kick plantbaked 1000");
   if (task.length < 3) return fail("no_task", "Say what has to happen, e.g. !bounty kick plantbaked 1000");
   if (amount < MIN) return fail("min", `A bounty starts at PAT ${fmt(MIN)}.`, { min: MIN });
@@ -221,9 +225,10 @@ async function claim(actor, b, a, t) {
   if (!me) return fail("no_account", "Couldn't find your account.");
   if (isCreator(actor, b) || G().same(me, b.creator)) return fail("own", "You can't claim your own bounty.");
   if (b.spec && b.spec.target && G().same(me, b.spec.target)) return fail("self_target", "You can't collect a bounty on yourself.");
-  let link = String(a.link || "").trim().slice(0, 300);
+  let link = stripFormat(a.link).trim().slice(0, 300);
   if (link && !/^https?:\/\//i.test(link)) link = "";
-  const text = (String(a.note || "").slice(0, 160) + " " + link).trim();
+  // 1.99ade: the note is what Pepe's evidence check (an LLM that can award the bounty) reads - no invisible format characters
+  const text = (oneLine(a.note, 160) + " " + link).trim();
   const ev = a.evidence !== undefined ? cleanEvidence(a.evidence) : evidenceOf(text);
   const web = actor.via === "web";
   const old = claimKey(b, me);
@@ -317,7 +322,7 @@ async function reject(actor, b, a, t) {
   const c = b.claims[k];
   if (c.disputed && !admin) return fail("disputed", `${k}'s claim on ${ref(b)} is with the admins now.`);
   const by = creator ? b.creator : nameOf(actor.login || actor.username);
-  const why = String(a.why || "").slice(0, 160);
+  const why = oneLine(a.why, 160);
   const final = !!(admin && c.disputed);
   c.rejected = { by, why, ts: t.nowS, admin: final };
   if (final && typeof c.disputed === "object") c.disputed.closed = t.nowS;
@@ -338,7 +343,7 @@ async function dispute(actor, b, a, t) {
   if (!c.rejected && waited < DISPUTE_AFTER) {
     return fail("too_soon", `Give ${b.creator} a chance first — you can dispute once they reject it, or ${Math.floor((DISPUTE_AFTER - waited) / 3600) + 1}h from now if they don't decide.`);
   }
-  const why = String(a.why || "").slice(0, 160);
+  const why = oneLine(a.why, 160);
   c.disputed = { why, ts: t.nowS };
   await put(b);
   await emit("disputed", b, { nick: k, why, waited, via: actor.via });

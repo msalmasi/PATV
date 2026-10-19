@@ -429,6 +429,12 @@ function register(app, { addUser, isBotToken }) {
         compose: !!viewer,                  // 1.99ez: "＋ Your story" (story-compose.js)
       };
       res.set("X-Robots-Tag", "noindex");
+      // 1.99ade: ?tag= is in the page title ("#tag — ...") - its link preview is a fixed one, never the request's text
+      if (tag) {
+        res.locals.og = require("./og").forFixed(req, res, { title: ["og.feed_tag.title", "Tagged posts · Public Access TV"],
+          description: ["og.feed_tag.description", "Posts by tag from the pads on Public Access TV."], heading: ["og.feed_tag.heading", "Tagged posts"],
+          path: res.locals.ogPath || "/feed" });
+      }
       res.render("feed", {
         user: viewer ? viewer.username : null, viewer, mode, tab: mode === "following" ? "following" : "posts", sort, top, page, room: R, header, author, story, follow, gallery,
         tag, popularTags: mode === "all" && !author ? await TAGS.popular(null, { viewer, limit: 12 }).catch(() => []) : [],     // 1.99iq
@@ -490,21 +496,28 @@ function register(app, { addUser, isBotToken }) {
       const viewer = await viewerOf(req);
       const p = await store.get(req.params.id, viewer, { detail: true });
       const staff = SP.can(viewer, "feed.moderate");     // the action menu
-      const seeAll = SP.can(viewer, "feed.see_hidden");  // 1.99acl: who sees a hidden / deleted post (like the list / media / comment paths)
+      // 1.99acl: who sees a hidden / deleted post is feed.see_hidden (like the list / media / comment paths) - in pageVisible
       const modRooms = new Set();
       if (p && viewer) for (const r of p.roomsAll) if (await rooms.canManage(viewer, r.id)) modRooms.add(r.id);
       // only waiting for approval / hidden / taken out everywhere it was posted: its author, those rooms' owners and staff
-      const shownSomewhere = p && p.roomsAll.some((r) => !r.removed && !r.pending && !r.hidden);
-      if (!p || (p.deleted && !seeAll) || (p.hidden && !seeAll && !p.mine) || (!shownSomewhere && !seeAll && !p.mine && !modRooms.size)) {
+      // 1.99ade: the rule lives in feedstore.pageVisible (/messages?share= uses it too)
+      if (!store.pageVisible(p, viewer, modRooms)) {
         return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "Post not found",
           message: "It was deleted, or it never existed.", title: "Post not found" });
       }
-      if ((req.baseUrl + req.path).replace(/\/+$/, "") !== p.url) return res.redirect(301, p.url + require("./pads").qsOf(req));
+      // 1.99ade: a post this viewer only sees gated (18+ unconfirmed, a creator lock) has an address without its title slug
+      // (feedstore.decorate) - any slug on the right pad + id is left alone for them: the slugged address of the full post
+      // must not 301 them somewhere else and back again once they confirm / subscribe
+      const here = (req.baseUrl + req.path).replace(/\/+$/, "");
+      const gatedHere = !!(p.creator && p.creator.gated) && here.startsWith(p.url + "/") && !here.slice(p.url.length + 1).includes("/");
+      if (here !== p.url && !gatedHere) return res.redirect(301, p.url + require("./pads").qsOf(req));
       const csort = store.cleanCSort(req.query.csort);
       const C = await store.comments(p.id, viewer, csort);
       const desc = (p.nsfw ? "NSFW post" : (p.body || (p.link && p.link.title) || "")).replace(/\s+/g, " ").slice(0, 180) || "A post on the PATV feed";
       res.locals.og = { title: (p.nsfw ? "[NSFW] " : "") + require("./postlabel").postLabel(p).slice(0, 90) + " — PATV feed",
-                        description: desc, image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent((p.title || "PATV feed").slice(0, 60)),
+                        // 1.99ade: the post's own card route (looks the post up on every draw; a signed /og/page.png
+                        // address of its title stayed valid after the post was deleted or hidden)
+                        description: desc, image: res.locals.ogBase + require("./og").postImage(p),
                         url: res.locals.ogBase + p.url };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
       // 1.99fu: a post in an Approved pad (only its members got this far): never indexed, never cached in between
@@ -764,6 +777,10 @@ function register(app, { addUser, isBotToken }) {
       const t = hit.v.thumb && (await getQuery("SELECT post_id FROM feed_attachments WHERE id = ?", [hit.v.thumb.id]))[0];
       if (!hit.v.thumb || (t && !t.post_id)) return hit.v;
     }
+    // (1.99ade: a link to one of this site's markets / pools / polls / bounties / raffles is fetched as before - signed out, so
+    // the preview only ever holds what a visitor could see then - and the post shows that frozen preview only while the item
+    // is still public: feedstore.decorate, embedcards.liveRef / anonMissing. pv.url is where the link landed, so a link that
+    // redirects to one of them is matched too.)
     const pv = await lp.preview(url);
     let thumb = null;
     if (pv.image) {

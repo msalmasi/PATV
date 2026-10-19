@@ -178,7 +178,8 @@ async function dispute(b) {
     if (!cur || cur.state !== "proposed") return { ok: false, code: "no_proposal", error: `there's no AI proposal on ${ref} to dispute.` };
     const ds = parse(cur.disputes, []);
     if (ds.some((d) => low(d.login) === login)) return { ok: false, code: "already", error: "you've already disputed it." };
-    ds.push({ login, why: String(b.why || "").slice(0, 160), ts: now() });
+    // 1.99ade: the reason goes back to Pepe's AI judge - no invisible format characters (textclean.js)
+    ds.push({ login, why: require("./textclean").oneLine(b.why, 160), ts: now() });
     const n = activeDisputes(ds);           // 1.99uc: a dispute an admin rejected doesn't count
     const escalate = n >= cur.need;
     await runQuery("UPDATE oracle_proposals SET disputes = ?, state = ? WHERE key = ?", [J(ds), escalate ? "disputed" : cur.state, cur.key]);

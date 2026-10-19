@@ -220,7 +220,7 @@ function register(app, { isBotToken, addUser }) {
   });
 
   app.get("/staking", addUser, async (req, res) => {
-    const msg = req.query.msg ? String(req.query.msg).slice(0, 200) : null;
+    const msg = require("./notices").read(req);       // 1.99ade: ?m=<id> (notices.js), never ?msg= text
     try {
       const snap = await latest();
       let camfrog = null, signedIn = false, acts = [], me = null;

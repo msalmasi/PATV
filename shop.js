@@ -1299,10 +1299,8 @@ const H = {
 };
 
 const safeBack = (b, dflt) => (/^\/shop[A-Za-z0-9/_?=&.%#-]*$/.test(String(b || "")) ? String(b) : dflt);
-const withMsg = (back, msg) => {
-  const [path, hash] = back.split("#");
-  return path + (path.includes("?") ? "&" : "?") + "msg=" + encodeURIComponent(msg) + (hash ? "#" + hash : "");
-};
+// 1.99ade: back to the page with ?m=<id> (notices.js: a catalog key, or the reply held for this account) - never ?msg=<text>
+const withMsg = (req, back, msg) => require("./notices").href(req, back, msg);
 
 // ── routes ──
 function register(app, deps) {
@@ -1315,7 +1313,7 @@ function register(app, deps) {
   if (timer.unref) timer.unref();
   ready.then(() => setTimeout(() => sweep().catch(() => {}), 30 * 1000).unref());
 
-  const msgOf = (req) => (req.query.msg ? String(req.query.msg).slice(0, 300) : null);
+  const msgOf = (req) => require("./notices").read(req);      // 1.99ade: ?m=<id> (notices.js), never ?msg= text
   async function meOf(req) {
     if (!req.user || !req.user.userId) return null;
     const u = (await getQuery("SELECT userId, username, displayname, class, level, points_balance, email, camfrogUsername FROM users WHERE userId = ?",
@@ -1334,10 +1332,12 @@ function register(app, deps) {
       const me = await meOf(req);
       if (!me) return res.redirect("/login");
       const r = await fn(req, me);
-      res.redirect(withMsg((r && r.back) || back, (r && r.message) || r || "Done."));
+      const N = require("./notices");
+      const text = (r && r.message) || (typeof r === "string" ? r : "");
+      res.redirect(withMsg(req, (r && r.back) || back, text || N.K("done")));
     } catch (e) {
       if (!e.refuse) console.error("[shop]", req.path, e);
-      res.redirect(withMsg(back, e.refuse ? e.message : "Something went wrong — nothing changed."));
+      res.redirect(withMsg(req, back, e.refuse ? e.message : require("./notices").K("err_changed")));
     }
   }];
 

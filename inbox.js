@@ -26,6 +26,7 @@
 // res.locals.inboxUnread (navCount middleware) feeds the 🔔 in the nav: one indexed COUNT per page view.
 const jwt = require("jsonwebtoken");
 const { runQuery, getQuery } = require("./dbUtils");
+const N = require("./notices");      // 1.99ade: the notice after a form post (?m=<key>)
 
 const KINDS = {
   staking:     { icon: "🏦", label: "Staking & vaults", link: "/staking" },
@@ -340,10 +341,11 @@ function register(app, { isBotToken, addUser }) {
       const pm = {};
       for (const k of Object.keys(KINDS)) pm[k] = !!b["pm_" + k];
       await setPrefs(req.user.userId, pm);
-      res.redirect(NOTICES + "?msg=" + encodeURIComponent("Saved — Pepe will only PM you in Camfrog for the ticked categories."));
+      // 1.99ade: catalog notices (notices.js), never ?msg= text
+      res.redirect(N.href(req, NOTICES, N.K("inbox_saved")));
     } catch (e) {
       console.error("[inbox] prefs:", e.message);
-      res.redirect(NOTICES + "?msg=" + encodeURIComponent("Couldn't save that — try again."));
+      res.redirect(N.href(req, NOTICES, N.K("save_failed")));
     }
   });
 

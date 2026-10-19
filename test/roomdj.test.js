@@ -152,7 +152,9 @@ test("the generic /act form can't queue a DJ action (CMDS / KINDS allow-lists)",
     const r = await fetch(base + "/act", { method: "POST", redirect: "manual",
       headers: { "content-type": "application/x-www-form-urlencoded", "x-test-user": "u1" }, body: new URLSearchParams(body).toString() });
     assert.equal(r.status, 302);
-    assert.match(decodeURIComponent(r.headers.get("location")), /can't be done from the site/);
+    // 1.99ade: the catalog notice, held for the poster (notices.js), never ?msg= text
+    assert.match(r.headers.get("location"), /[?&]m=n-[0-9a-f]{20}$/);
+    assert.equal(require(path.join(repo, "notices")).keyOf(r.headers.get("location")), "act_cant");
   }
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions"))[0].n, before);
 });

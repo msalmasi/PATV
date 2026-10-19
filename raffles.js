@@ -1261,7 +1261,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
       const me = await userRow(uid(req));
       const viewer = me ? { userId: me.userId, username: me.username } : null;
       const status = ["open", "drawn", "closed"].includes(String(req.query.status)) ? String(req.query.status) : "open";
-      const want = padlinks.fromParam(req.query.pad);
+      const want = padlinks.fromParamFor(req.user || null, req.query.pad);     // 1.99ade: a pad they can't see = unknown (no title leak)
       const L = await list({ viewer, pad: want, status });
       const pv = want ? padlinks.view(want) : null;
       const pads = await padCounts(viewer);
@@ -1271,7 +1271,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
       res.render("raffles", {
         user: req.user ? req.user.username : null, me, L, status, filter, on: await enabled(), escrowLive: await escrowLive(), verified, admin: rafflesAdmin(me),
         cfg: config(), items: me ? await eligibleItems() : [], pick: await padlinks.choicesFor(req.user || null, req.query.pad || ""),
-        idem: crypto.randomBytes(9).toString("hex"), msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null,
+        idem: crypto.randomBytes(9).toString("hex"), msg: require("./notices").read(req),     // 1.99ade: ?m=<id>, never ?msg= text
       });
     } catch (e) { console.error("[raffles] page:", e); res.status(500).send("Something went wrong."); }
   });

@@ -13,6 +13,9 @@
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const actions = require("./actions");
+const N = require("./notices");      // 1.99ade: the notice after a form post (?m=<id>, never ?msg=<text>)
+// 1.99ade: free text for Pepe's LLMs loses invisible format characters; (2) notes and reasons are one line (oneLine)
+const { stripFormat, oneLine } = require("./textclean");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS bounties (
   id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, deadline INTEGER, updated INTEGER)`).catch(() => {});
@@ -42,11 +45,11 @@ function cleanClaim(c) {
   const ev = c.evidence && typeof c.evidence === "object" ? c.evidence : null;
   const ck = c.check && typeof c.check === "object" ? c.check : null;
   return {
-    nick: String(c.nick || "").slice(0, 60), ts: Number(c.ts) || 0, note: String(c.note || "").slice(0, 160),
-    evidence: ev ? { text: String(ev.text || "").slice(0, 160), links: [].concat(ev.links || []).map(cleanLink).filter(Boolean).slice(0, 3) } : null,
+    nick: String(c.nick || "").slice(0, 60), ts: Number(c.ts) || 0, note: oneLine(c.note, 160),
+    evidence: ev ? { text: oneLine(ev.text, 160), links: [].concat(ev.links || []).map(cleanLink).filter(Boolean).slice(0, 3) } : null,
     check: ck && CHECK_STATES.includes(ck.state) ? { state: ck.state, how: ck.how === "semantic" ? "semantic" : (ck.how ? "exact" : null),
       lines: [].concat(ck.lines || []).slice(0, 4).map((l) => String(l).slice(0, 240)), why: String(ck.why || "").slice(0, 200) } : null,
-    rejected: c.rejected ? { by: String(c.rejected.by || "").slice(0, 60), why: String(c.rejected.why || "").slice(0, 160) } : null,
+    rejected: c.rejected ? { by: String(c.rejected.by || "").slice(0, 60), why: oneLine(c.rejected.why, 160) } : null,
     disputed: !!c.disputed,
   };
 }
@@ -56,7 +59,7 @@ function cleanSnap(b) {
   const id = parseInt(b && b.id, 10);
   if (!id) return null;
   return {
-    id, creator: String(b.creator || "").slice(0, 60), task: String(b.task || "").slice(0, 300),
+    id, creator: String(b.creator || "").slice(0, 60), task: stripFormat(b.task).slice(0, 300),
     room: String(b.room || "").slice(0, 80), status: String(b.status || "open").slice(0, 20),
     created: Number(b.created) || 0, deadline: Number(b.deadline) || 0,
     pot: (b.pot || []).slice(0, 500).map((c) => ({ nick: String(c.nick || "").slice(0, 60), amount: Math.floor(Number(c.amount) || 0) })),
@@ -102,6 +105,26 @@ function view(b, me) {
   };
 }
 
+/**
+ * 1.99ade: a bounty's pad - its room mapped to a pad (bounties have no pad column; embedcards.js's rule), null = site-wide -
+ * and whether `viewer` (null = signed out) may see it. A bounty on an Approved pad was hidden from the feed cards but listed
+ * on /bounties, shown on /bounties/<id> and drawn by /og/bounty/<id>.png; every one of them now applies the same rule.
+ */
+async function padOf(b) {
+  const padlinks = require("./padlinks");
+  await padlinks.ready();
+  return padlinks.resolve({ room: b && b.room }) || null;
+}
+async function gate() {
+  const PA = require("./padaccess");
+  try { await PA.init(); } catch (e) { /* the gate's own problem */ }
+  return PA;
+}
+async function visible(viewer, b) {
+  const pad = await padOf(b);
+  return !pad || (await gate()).canSee(viewer || null, pad);
+}
+
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   async function whoAmI(req) {
@@ -136,63 +159,65 @@ function register(app, { isBotToken, addUser }) {
   app.post("/bounties/:id/:kind", addUser, async (req, res) => {
     const id = parseInt(String(req.params.id).replace(/^bt/i, ""), 10);
     const kind = String(req.params.kind);
-    const back = (msg) => res.redirect(`/bounties/${id}?msg=${encodeURIComponent(msg)}`);
+    const back = (msg) => res.redirect(N.href(req, `/bounties/${id}`, msg));     // 1.99ade: ?m=<id> (notices.js)
     if (!["add", "claim", "resolve", "cancel", "reject", "dispute"].includes(kind)) return res.status(404).send("Not found");
     if (!req.user || !req.user.userId) return res.redirect("/login");
     try {
       await ready; await actionsReady;
       const rows = await getQuery("SELECT data FROM bounties WHERE id = ?", [id]);
-      if (!rows.length) return back("That bounty doesn't exist.");
+      if (!rows.length) return back(N.K("bty_missing"));
       const b = JSON.parse(rows[0].data);
+      if (!(await visible(req.user, b))) return back(N.K("bty_missing"));     // 1.99ade: an invisible pad's = a missing one
       if (b.status !== "open") return back(`That bounty is ${b.status}.`);
       const u = await whoAmI(req);
-      if (!u) return back("Couldn't find your account.");
+      if (!u) return back(N.K("no_account"));
       const me = [u.camfrogUsername, u.username];
       const creator = me.some((k) => same(k, b.creator));
       const body = req.body || {};
       let amount = null, note = null, hunters = null, evidence = null, ok = "";
       const myClaim = (b.claims || []).find((c) => me.some((k) => same(k, c.nick)));
+      // 1.99ade: notes reach Pepe's evidence check (an LLM that can award the bounty) - no invisible format characters
+      const noteOf = () => oneLine(body.note, 160);
       if (kind === "add") {
-        if (b.deadline * 1000 < Date.now()) return back("That bounty has expired.");
+        if (b.deadline * 1000 < Date.now()) return back(N.K("bty_expired"));
         amount = require("./public/js/patamount").parse(body.amount) || 0;    // 1.99nk: "1,000,000" / "5k" (Pepe's rules)
         if (amount < ADD_MIN) return back(`Chip in at least ${ADD_MIN.toLocaleString()} PAT.`);
         if (Number(u.points_balance) < amount) return back(`You only have ${Number(u.points_balance).toLocaleString()} PAT.`);
         ok = `Sent to Pepe: adding ${amount.toLocaleString()} PAT to the pot.`;
       } else if (kind === "claim") {
-        if (b.deadline * 1000 < Date.now()) return back("That bounty has expired.");
-        if (creator) return back("You can't claim your own bounty.");
-        note = String(body.note || "").trim().slice(0, 160);
+        if (b.deadline * 1000 < Date.now()) return back(N.K("bty_expired"));
+        if (creator) return back(N.K("bty_own"));
+        note = noteOf();
         const raw = String(body.evidence || "").trim();
         if (raw) {
           evidence = cleanLink(raw);
-          if (!evidence) return back("Evidence has to be a link (http:// or https://) — a clip, a snap, a screenshot.");
+          if (!evidence) return back(N.K("bty_evidence"));
         }
-        ok = b.verify ? "Sent to Pepe: your claim. He'll check his logs and reply here."
-                      : "Sent to Pepe: your claim. The poster picks who gets paid.";
+        ok = N.K(b.verify ? "bty_claim_check" : "bty_claim_poster");
       } else if (kind === "reject") {
         if (!creator && !SP.can(u, "escrow.override")) return back(`Only ${b.creator} (or an admin) can reject a claim.`);
         const c = (b.claims || []).find((x) => x.nick === String(body.hunter || ""));
-        if (!c) return back("That person hasn't claimed it.");
-        if (c.disputed && !SP.can(u, "escrow.override")) return back("That claim is with the admins now.");
+        if (!c) return back(N.K("bty_not_claimed"));
+        if (c.disputed && !SP.can(u, "escrow.override")) return back(N.K("bty_with_admins"));
         hunters = JSON.stringify([c.nick]);
-        note = String(body.note || "").trim().slice(0, 160);
+        note = noteOf();
         ok = `Sent to Pepe: rejecting ${c.nick}'s claim.`;
       } else if (kind === "dispute") {
-        if (!myClaim) return back("You haven't claimed it.");
-        if (myClaim.disputed) return back("Your claim is already with the admins.");
+        if (!myClaim) return back(N.K("bty_you_not_claimed"));
+        if (myClaim.disputed) return back(N.K("bty_already_disputed"));
         if (!myClaim.rejected && Date.now() / 1000 - (myClaim.ts || 0) < DISPUTE_AFTER_S)
           return back(`Give ${b.creator} a chance first — you can dispute once they reject it, or 12 hours after you claimed.`);
-        note = String(body.note || "").trim().slice(0, 160);
-        ok = "Sent to Pepe: your dispute goes to the admins.";
+        note = noteOf();
+        ok = N.K("bty_dispute_sent");
       } else {
         if (!creator && !SP.can(u, "escrow.override")) return back(`Only ${b.creator} (or an admin) can do that.`);
         if (kind === "resolve") {
           const pick = [].concat(body.hunters || []).map((h) => String(h)).filter((h) => (b.claims || []).some((c) => c.nick === h));
-          if (!pick.length) return back("Tick at least one hunter who claimed it.");
+          if (!pick.length) return back(N.K("bty_tick"));
           hunters = JSON.stringify(pick.slice(0, 20));
           ok = `Sent to Pepe: paying ${pick.join(", ")}.`;
         } else {
-          ok = "Sent to Pepe: cancelling — everyone who chipped in is refunded.";
+          ok = N.K("bty_cancel_sent");
         }
       }
       // 1.99ou Phase 2: while the site owns the bounties (escrow/bounties.js) the action runs here, now - nothing is queued for
@@ -213,7 +238,7 @@ function register(app, { isBotToken, addUser }) {
         return back(E.webReply(verb, r, args));
       }
       const open = await getQuery("SELECT COUNT(*) AS n FROM bounty_actions WHERE user_id = ? AND status IN ('pending','claimed')", [req.user.userId]);
-      if (open[0].n >= 5) return back("You already have actions waiting — give Pepe a moment.");
+      if (open[0].n >= 5) return back(N.K("bty_waiting"));
       await evidenceCol;
       await runQuery(`INSERT INTO bounty_actions (bounty_id, user_id, username, camfrog, kind, amount, note, hunters, evidence, site_admin, status, created, updated)
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
@@ -222,7 +247,7 @@ function register(app, { isBotToken, addUser }) {
       back(ok);
     } catch (e) {
       console.error(`[bounties] ${kind}:`, e);
-      back("Something went wrong — nothing changed. Try again.");
+      back(N.K("err_changed_retry"));
     }
   });
 
@@ -269,7 +294,10 @@ function register(app, { isBotToken, addUser }) {
 
   app.get("/bounties", addUser, async (req, res) => {
     await ready;
-    const rows = (await getQuery("SELECT data FROM bounties ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)));
+    // 1.99ade: bounties on a pad this viewer can't see (Approved pads) are left out, as on the feed cards
+    const all = (await getQuery("SELECT data FROM bounties ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)));
+    const rows = [];
+    for (const b of all) if (await visible(req.user, b)) rows.push(b);
     const now = Date.now() / 1000;
     const live = rows.filter((b) => b.status === "open").sort((a, b) => b.total - a.total);
     const done = rows.filter((b) => b.status !== "open").sort((a, b) => (b.resolved || b.deadline) - (a.resolved || a.deadline)).slice(0, 40);
@@ -283,7 +311,7 @@ function register(app, { isBotToken, addUser }) {
       canAct = linked || await require("./escrow/games").gameLive("bounties").then((x) => !!x).catch(() => false);
     }
     res.render("bounties", { user: req.user ? req.user.username : null, live, done, now, linked, canAct, acts,
-                             msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null });
+                             msg: N.read(req) });      // 1.99ade: ?m=<id> (notices.js), never ?msg= text
   });
 
   app.get("/bounties/:id", addUser, async (req, res) => {
@@ -291,8 +319,14 @@ function register(app, { isBotToken, addUser }) {
     const id = parseInt(String(req.params.id).replace(/^bt/i, ""), 10);
     const rows = id ? await getQuery("SELECT data FROM bounties WHERE id = ?", [id]) : [];
     const base = { user: req.user ? req.user.username : null, now: Date.now() / 1000, actions: [], bal: null, isAdmin: false,
-                   msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, addMin: ADD_MIN };
-    if (!rows.length) return res.status(404).render("bounty", { ...base, b: null });
+                   msg: N.read(req), addMin: ADD_MIN };
+    const missing = () => res.status(404).render("bounty", { ...base, b: null });
+    if (!rows.length) return missing();
+    // 1.99ade: on a pad this viewer can't see = missing (the same 404 - the generic link preview: og is set below, after this)
+    const rec = JSON.parse(rows[0].data);
+    if (!(await visible(req.user, rec))) return missing();
+    const padId = await padOf(rec);
+    if (padId && (await gate()).isApproved(padId)) res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
     let me = null;
     if (req.user && req.user.userId) {
       await actionsReady;
@@ -304,7 +338,7 @@ function register(app, { isBotToken, addUser }) {
         base.isAdmin = SP.can(u, "escrow.override");
       }
     }
-    res.locals.og = require("./og").forBounty(req, JSON.parse(rows[0].data));
+    res.locals.og = require("./og").forBounty(req, rec);     // only after the pad check above (1.99ade)
     const bv = view(JSON.parse(rows[0].data), me);
     const ctx = { creator: bv.mineCreator, admin: base.isAdmin, now: base.now };
     bv.claims = bv.claims.map((c) => ({ ...c, perms: claimPerms(bv, c, { ...ctx, mine: !!me && me.some((k) => same(k, c.nick)) }) }));

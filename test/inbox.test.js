@@ -208,7 +208,13 @@ test("opening a notice marks it read and follows its local link", async () => {
 test("prefs: unticked categories make the push answer pm:false", async () => {
   const r = await form("/inbox/prefs", "u2", { pm_staking: "1", pm_loan: "1" });          // everything else off
   assert.equal(r.status, 302);
-  assert.match(r.headers.get("location"), /^\/messages\/notices\?msg=Saved/);
+  // 1.99ade: a catalog notice held for the poster (notices.js), never ?msg= text
+  const loc = r.headers.get("location");
+  assert.match(loc, /^\/messages\/notices\?m=n-[0-9a-f]{20}$/);
+  const N = require(path.join(repo, "notices"));
+  assert.equal(N.keyOf(loc), "inbox_saved");
+  assert.equal(N.textOf(loc, "u2"), "Saved — Pepe will only PM you in Camfrog for the ticked categories.");
+  assert.equal(N.textOf(loc, "u1"), "", "only the poster reads it");
   assert.equal((await push({ camfrog: "bobcf", kind: "market", body: "x", ref: "p:1" })).d.pm, false);
   assert.equal((await push({ camfrog: "bobcf", kind: "loan", body: "x", ref: "p:2" })).d.pm, true);
   assert.equal(await inbox.pmAllowed("u2", "shop"), false);
