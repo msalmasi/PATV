@@ -94,7 +94,9 @@
   <h2 id="revT">Review recent checks</h2>
   <p class="adm-help">Mark each check: <b>false positive</b> (it acted or flagged, but the picture is fine), <b>false negative</b> (it let something through it
      shouldn't have) or <b>correct</b>. Thumbnails are admins-only; a possible-minor thumbnail is stored blurred, and DM pictures are only kept when the
-     check acted on them. Checks are deleted after <%= C.retention_days %> days.</p>
+     check acted on them. Checks are deleted after <%= C.retention_days %> days. Rows marked <b>Pepe's own check</b> come from Pepe looking at a photo a
+     member sent HIM in a DM (his local model, while the DM checks are on): it was already delivered and nothing was blocked; he didn't describe it,
+     and its thumbnail is always blurred.</p>
   <nav class="isf-filters" aria-label="Filter checks">
     <% [['all', 'All'], ['flagged', 'Flagged'], ['blocked', 'Refused / marked'], ['unchecked', 'Unchecked (Pepe timed out)'], ['shadow', 'Shadow'], ['unreviewed', 'Not reviewed']].forEach((f) => { %>
       <a href="/admin/imagesafety?f=<%= f[0] %>#review"<%- filter === f[0] ? ' aria-current="true" class="on"' : '' %>><%= f[1] %></a>
@@ -113,6 +115,7 @@
           <div>
             <span class="adm-pill <%= r.action === 'refuse' || r.action === 'failclosed' ? 'bad' : r.action === 'allow' ? 'ok' : 'admin' %>"><%= r.action %></span>
             <% if (r.mode === 'shadow') { %><span class="adm-pill">would: <%= r.would || '?' %></span><% } %>
+            <% if (r.mode === 'pepe_dm') { %><span class="adm-pill">Pepe's own check of a photo sent to him · would: <%= r.would || '?' %></span><% } %>
             <% if (r.flagged) { %><span class="adm-pill bad">flagged</span><% } %>
             <% if (r.late) { %><span class="adm-pill">late verdict<%= r.would ? ': would ' + r.would : '' %></span><% } %>
             <% if (r.verdict) { %><span class="adm-pill">model: <%= r.verdict %> (<%= pct(r.confidence) %>)</span><% } %>

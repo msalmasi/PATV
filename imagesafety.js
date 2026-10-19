@@ -56,6 +56,13 @@
 // folder next to the code tree) and served only to Admins (GET /admin/imagesafety/thumb/<id>: no-store, nosniff,
 // CORP same-origin). A thumbnail of a minor_risk check is stored BLURRED (never a clear copy). Rows + thumbnails are
 // deleted after retention_days (default 30).
+//
+// Pepe's OWN check of a photo a member sent HIM in a DM (messages.js pepeFlag -> recordPepeDm, mode "pepe_dm"): his look at
+// it (pepe_dmvision) runs this classifier first; when it flags a possible minor or answers "refuse" he sends that answer
+// here, and the DM-picture policy above decides - only while the checks are on for DMs (master switch or shadow mode, and
+// the dm surface; off = nothing recorded, he still doesn't describe it), only a check the policy FLAGS, one row per photo,
+// action "flag" (the photo was already delivered; nothing is blocked or marked), its thumbnail ALWAYS blurred (a "refuse"
+// verdict covers possible minors too), the URGENT admin notice under notify_minor exactly as for the site's own checks.
 "use strict";
 const fs = require("fs");
 const os = require("os");
@@ -556,7 +563,7 @@ async function record(row, frames) {
   const minor = !!(v && v.categories.includes("minor_risk"));
   // DM pictures are private: a thumbnail is kept only when the check acted (or would have, in shadow mode) or flagged it
   const keep = row.surface !== "dm" || !!(v && ((row.would && row.would !== "allow") || row.flagged));
-  const thumb = keep ? await thumbFor(frames || [], minor) : null;
+  const thumb = keep ? await thumbFor(frames || [], minor || !!row.blur) : null;   // row.blur: Pepe's DM check (always)
   const r = await runQuery(`INSERT INTO image_safety_log (at, surface, kind, user_id, room_id, ref, hash, mode, action, flagged, verdict, categories, scores,
                             confidence, reason, model, cost, ms, would, thumb, src) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [NOW(), row.surface, row.kind || null, row.userId || null, row.roomId || null, row.ref ? String(row.ref).slice(0, 80) : null, row.hash || null,
@@ -572,7 +579,8 @@ async function notifyAdmins(id, row) {
     const c = await config();
     if (!c.notify_minor) return;
     const admins = await getQuery("SELECT userId FROM users WHERE class = 'Admin'");
-    const shadow = row.mode === "shadow" ? " (shadow mode: nothing was blocked)" : row.mode === "late" ? " (classified late - the upload went through)" : "";
+    const shadow = row.mode === "shadow" ? " (shadow mode: nothing was blocked)" : row.mode === "late" ? " (classified late - the upload went through)"
+      : row.mode === "pepe_dm" ? " sent to Pepe (his own check while answering it, on his local model - unconfirmed; the photo was delivered and he didn't describe it)" : "";
     // 1.99acw review: an on-air attempt names who sent it (the ref) - its source address is on the review page (check #id)
     const who = row.surface === "onair" && row.ref ? ` from ${String(row.ref).slice(0, 80)} (refused - never shown; its source address is on check #${id})` : "";
     for (const a of admins) {
@@ -603,6 +611,32 @@ async function recordLate(id, v, surface, padAllowsNsfw, c) {
     }
     if (d.flagged && v.categories.includes("minor_risk")) await notifyAdmins(id, { surface, mode: "late" });
   } catch (e) { console.error("[imagesafety] late:", e.message); }
+}
+
+/**
+ * Pepe's own check of a photo a member sent HIM in a DM (messages.js pepeFlag; see the top): his classifier answer
+ * {verdict, scores, reason} -> the DM-picture policy. Recorded (action "flag", mode "pepe_dm", thumbnail always blurred)
+ * only while the checks are on for DMs and only when the policy flags it; once per photo (ref "dm:<media id>").
+ * input: {file, userId, ref, verdict, model} -> {recorded: true, logId, minor} | {recorded: false, off | already | allowed}
+ * | {bad: true} (no usable classification)
+ */
+async function recordPepeDm(input = {}) {
+  const c = await config();
+  if (!active(c, "dm")) return { recorded: false, off: true };
+  const v = cleanVerdict(input.verdict, c.thresholds);
+  if (!v) return { bad: true };
+  const d = decide("dm", v, { policy: c.policy });
+  if (!d.flagged) return { recorded: false, allowed: true, would: d.action };
+  const ref = String(input.ref || "").slice(0, 80);
+  await init();
+  const dup = (await getQuery("SELECT id FROM image_safety_log WHERE ref = ? AND mode = 'pepe_dm' LIMIT 1", [ref]))[0];
+  if (dup) return { recorded: false, already: true, logId: dup.id };
+  let frames = [];
+  try { if (input.file && fs.existsSync(input.file)) frames = await imageFrames(input.file); } catch (e) { frames = []; }
+  const id = await record({ surface: "dm", kind: "image", userId: input.userId || null, roomId: null, ref, mode: "pepe_dm", action: "flag",
+                            would: d.action, flagged: true, blur: true, v: { ...v, model: input.model ? String(input.model).slice(0, 80) : null } }, frames);
+  console.log(`[imagesafety] dm (Pepe's own check): ${v.verdict} [${v.categories.join(",") || "-"}] -> flagged for review (#${id})`);
+  return { recorded: true, logId: id, minor: v.categories.includes("minor_risk") };
 }
 
 // ── the check ──
@@ -987,7 +1021,7 @@ function _reset() { JOBS.clear(); CACHE.clear(); PULLERS.length = 0; CFG = null;
 function _setLastPull(t) { LAST_PULL = Number(t) || 0; }
 
 module.exports = {
-  init, register, install, check, checkLocked, checkBroadcast, imageFrames, broadcastFrames, mergeVerdicts, BROADCAST_POLICY, BROADCAST_REFUSED,
+  init, register, install, check, checkLocked, checkBroadcast, recordPepeDm, imageFrames, broadcastFrames, mergeVerdicts, BROADCAST_POLICY, BROADCAST_REFUSED,
   BROADCAST_MAX_RANGE, BROADCAST_BG, BROADCAST_FRAME_CAP, BROADCAST_BATCH, BSAME_PIXEL, _setLastPull,
   lockedEnforcing, POLICY_GROUPS, prefetch, decide, cleanVerdict, cleanConfig, config, setConfig, settingsView, active, framesFor, hashFrames,
   enqueue, pull, result, queueStats, setClassifier, recent, stats, review, sweep, padAllowsNsfw, thumbPath, dir, _setDir, _setClock, _reset,

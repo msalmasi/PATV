@@ -66,8 +66,24 @@
 // get a content-free Web Push - "New message" and a link to the conversation, never the text or who sent it - in the
 // browsers where they turned it on (the ⚙ dialog's "Browser notifications"). Reading it first cancels it; at most one
 // per conversation per webpush_dm_gap_s. Muting a conversation stops these too.
+//
+// Pepe looks at photos (pepeClaim / pepeMedia / pepeFlag): a member's photo in a 1:1 conversation with Pepe reaches
+// him as an OPAQUE reference in the claim (the dm_media id - never a file name or a URL) and its bytes only through the
+// bot-only POST /api/messages/bot/media (botkeys family /api/messages/bot), and only while that message's pepe_dm_jobs row
+// is CLAIMED (within PEPE_MEDIA_WINDOW_MS of the claim), the message is a live one after the member's clear-history point
+// and neither side blocked the other. NSFW-marked photos are never handed over; size and fetch counts are capped; nothing
+// about the file (name, path, bytes) is logged - ids only. While one of a conversation's photo jobs is claimed (and not yet
+// due again) none of its new messages are offered (pepeClaim), so a follow-up text never gets a blind answer next to the
+// look. When his own check of the photo flags a possible minor (or a "refuse" verdict), he sends the check's answer
+// (pepeFlag) and the SITE'S image-safety policy for DM pictures decides: while those checks are on for DMs (master switch or
+// shadow mode, and the dm surface) a flagged check is recorded for the admins' review with a BLURRED thumbnail only -
+// exactly like the site's own checks (imagesafety.recordPepeDm) - never a member-style DM report and never a clear copy.
+// It is accepted for a photo he was actually handed in the last PEPE_MEDIA_WINDOW_MS (a check that ends after his answer
+// still counts). The page tells members what happens to such photos (pepeNote().vision: the mode Pepe reports with each
+// claim - "local" model, "cloud" provider, or "off").
 "use strict";
 const crypto = require("crypto");
+const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
@@ -949,6 +965,12 @@ async function report(user, messageId, { reason, note } = {}) {
                            [m.id, m.conversation_id, m.sender_id, user.userId, why, cleanLine(note, 300) || null, m.body, m.created_at, NOW()]);
   if (!r.changes) return { ok: true, already: true };
   const rid = r.id || r.lastID || "?";
+  await reportNotice(rid, why);
+  return { ok: true, urgent: URGENT.includes(why) };
+}
+/** Every admin's inbox notice for a new DM report (URGENT for "csam": the CSAM procedure). */
+async function reportNotice(rid, why) {
+  const { REASONS, URGENT } = reasons();
   const urgent = URGENT.includes(why);
   for (const a of await admins()) {
     await notify(a.userId, urgent
@@ -957,7 +979,6 @@ async function report(user, messageId, { reason, note } = {}) {
       : { kind: "admin", title: "A direct message was reported", body: `${REASONS[why] || why}. Review it on the feed admin page (Reported messages).`, link: "/feed/admin#dms", ref: "dm-rep:" + rid });
   }
   if (urgent) console.error(`[dm] URGENT report #${rid} (${why})`);
-  return { ok: true, urgent };
 }
 
 /** The admin queue: open reports, one row per message, NO message text (that's behind reportDetail). */
@@ -1164,23 +1185,43 @@ async function fromCamfrog({ from, to, text } = {}) {
 // a claim he never answers is offered again after PEPE_RECLAIM_MS, at most twice. Pepe's answers raise no Camfrog
 // alert. Pepe reports his price with each claim; the conversation header shows it. ──
 const PEPE_HISTORY = 12, PEPE_JOB_MAX_MS = 15 * 60e3, PEPE_RECLAIM_MS = 120e3, PEPE_ONLINE_MS = 90e3;
-let PEPE_STATE = { price: null, at: 0 };
-/** What the conversation header says about Pepe (null for anyone else). */
+// Photos to Pepe. The bytes are his only while the message's job is claimed, for this long after the claim (his
+// answer ends it sooner; a re-offered job starts a new window); at most PEPE_MEDIA_MAX_BYTES a file, PEPE_MEDIA_FETCHES
+// fetches of one photo per claim. PEPE_VISION: how Pepe says he looks at them (the page's notice).
+const PEPE_MEDIA_WINDOW_MS = 5 * 60e3, PEPE_MEDIA_MAX_BYTES = 8 * 1024 * 1024, PEPE_MEDIA_FETCHES = 3;
+const PEPE_VISION = Object.freeze(["local", "cloud", "off"]);
+const MEDIA_REF_RE = /^[a-f0-9]{24}$/;                     // a dm_media id (dmmedia.js) - never a file name
+let PEPE_STATE = { price: null, at: 0, vision: null };
+const mediaFetches = new Map();                           // "<ref>|<claimed_at>" -> fetches (pepeMedia)
+const mediaHanded = new Map();                            // ref -> when Pepe last got its bytes (pepeFlag's window)
+/** What the conversation header says about Pepe (null for anyone else). vision: how he looks at photos sent to him, as he
+ *  last reported it ("local" | "cloud" | "off"; null = never said - an older Pepe that can't see them). */
 function pepeNote() {
   const online = NOW() - PEPE_STATE.at < PEPE_ONLINE_MS;
   const price = PEPE_STATE.price;
   const cost = price > 0 ? ` Each answer costs ${Number(price).toLocaleString("en-US")} PAT, like !ask in a room.` : price === 0 ? " Answers are free right now." : "";
-  return { online, price, note: "🐸 Pepe answers in character, like a PM in Camfrog." + cost + (online ? "" : " He's away right now - he'll answer when he's back (within 15 minutes, or not at all).") };
+  return { online, price, vision: PEPE_VISION.includes(PEPE_STATE.vision) ? PEPE_STATE.vision : null,
+           note: "🐸 Pepe answers in character, like a PM in Camfrog." + cost + (online ? "" : " He's away right now - he'll answer when he's back (within 15 minutes, or not at all).") };
 }
-async function pepeClaim({ limit = 10, price = null } = {}) {
+/** "[sent a photo]" / "[sent 3 photos]" - how a message's pictures read in Pepe's claim. */
+const photoTag = (n) => `[sent ${n === 1 ? "a photo" : n + " photos"}]`;
+async function pepeClaim({ limit = 10, price = null, vision = null } = {}) {
   await init();
   const t = NOW();
   if (price != null && Number.isFinite(Number(price))) PEPE_STATE.price = Math.max(0, Math.floor(Number(price)));
+  if (PEPE_VISION.includes(vision)) PEPE_STATE.vision = vision;
   PEPE_STATE.at = t;
   await runQuery("UPDATE pepe_dm_jobs SET state = 'expired' WHERE state IN ('pending', 'claimed') AND created < ?", [t - PEPE_JOB_MAX_MS]);
+  // DM-vision review: a conversation whose PHOTO job Pepe has claimed (and that isn't due again yet) is held - its new
+  // messages stay pending until he answers the photo (that answer closes the photo job) or the job is due again (then
+  // everything is offered together). Without this a follow-up text was answered at once, blind, and its pepeReply(upto)
+  // closed the photo's job under the look. Text-only conversations are never held.
   const convs = await getQuery(`SELECT conversation_id, user_id, MIN(created) AS first FROM pepe_dm_jobs
-                                WHERE state = 'pending' OR (state = 'claimed' AND claimed_at < ? AND tries < 2)
-                                GROUP BY conversation_id ORDER BY first LIMIT ?`, [t - PEPE_RECLAIM_MS, Math.max(1, Math.min(25, Number(limit) || 10))]);
+                                WHERE (state = 'pending' OR (state = 'claimed' AND claimed_at < ? AND tries < 2))
+                                  AND conversation_id NOT IN (SELECT j.conversation_id FROM pepe_dm_jobs j WHERE j.state = 'claimed' AND j.claimed_at >= ?
+                                                              AND EXISTS (SELECT 1 FROM dm_media d WHERE d.message_id = j.message_id AND d.state = 'ready'))
+                                GROUP BY conversation_id ORDER BY first LIMIT ?`,
+                               [t - PEPE_RECLAIM_MS, t - PEPE_RECLAIM_MS, Math.max(1, Math.min(25, Number(limit) || 10))]);
   const out = [];
   for (const c of convs) {
     const jobs = await getQuery(`SELECT message_id FROM pepe_dm_jobs WHERE conversation_id = ? AND (state = 'pending' OR (state = 'claimed' AND claimed_at < ? AND tries < 2))
@@ -1191,18 +1232,26 @@ async function pepeClaim({ limit = 10, price = null } = {}) {
     const u = await account(c.user_id);
     if (!u || u.archived_at || !(await membership(c.conversation_id, PEPE_ID))) { await pepeDone(c.conversation_id, Math.max(...ids), "dropped"); continue; }
     const upto = Math.max(...ids);
-    const msgs = await getQuery(`SELECT id, sender_id, body, created_at FROM messages WHERE conversation_id = ? AND id <= ? AND kind = 'text' AND deleted_at IS NULL
-                                 ORDER BY id DESC LIMIT ?`, [c.conversation_id, upto, PEPE_HISTORY]);
-    const pics = new Map();
-    for (const m of msgs) if (!m.body) pics.set(m.id, await dmmedia.countFor(m.id));
-    const line = (m) => m.body ? m.body.slice(0, LIMITS.max_len) : pics.get(m.id) ? `[sent ${pics.get(m.id) === 1 ? "a photo" : pics.get(m.id) + " photos"}]` : "";
+    // the history: up to the newest message he's asked about, plus his OWN answers written after it (a photo answer that
+    // went out after the member's follow-up was written - the follow-up is answered knowing what he said)
+    const msgs = await getQuery(`SELECT id, sender_id, body, created_at FROM messages WHERE conversation_id = ? AND (id <= ? OR sender_id = ?) AND kind = 'text'
+                                 AND deleted_at IS NULL ORDER BY id DESC LIMIT ?`, [c.conversation_id, upto, PEPE_ID, PEPE_HISTORY]);
+    const media = await dmmedia.forMessages(msgs.map((m) => m.id));            // ready pictures only
+    const npics = (m) => (media.get(m.id) || []).length;
+    // the text plus "[sent a photo]" for its pictures (a caption no longer hides that a photo came with it)
+    const line = (m) => { const b = m.body ? m.body.slice(0, LIMITS.max_len) : ""; return npics(m) ? (b ? b + " " : "") + photoTag(npics(m)) : b; };
     const fresh = msgs.filter((m) => ids.includes(m.id) && m.sender_id !== PEPE_ID).reverse();
     if (!fresh.length) { await pepeDone(c.conversation_id, upto, "dropped"); continue; }       // they deleted what they asked
+    // a new message's photos as opaque references (pepeMedia hands the bytes over) - only after the member's
+    // clear-history point; an NSFW-marked one is listed as such (Pepe doesn't ask for it)
+    const mem = await membership(c.conversation_id, c.user_id);
+    const floor = mem ? mem.cleared_id || 0 : Infinity;
+    const photos = (m) => (m.id > floor ? (media.get(m.id) || []).map((p) => ({ ref: p.id, w: p.w, h: p.h, nsfw: !!p.nsfw })) : []);
     out.push({
       conversation: c.conversation_id, upto,
       user: { username: u.username, display: display(u), camfrog: u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : null,
               level: Number(u.level) || 0, staff: SP.atLeast(u, "staff"), admin: SP.atLeast(u, "admin") },   // who they are (for Pepe), not a permission
-      messages: fresh.map((m) => ({ id: m.id, text: line(m), at: m.created_at })),
+      messages: fresh.map((m) => { const p = photos(m); return p.length ? { id: m.id, text: line(m), at: m.created_at, photos: p } : { id: m.id, text: line(m), at: m.created_at }; }),
       history: msgs.reverse().map((m) => ({ from: m.sender_id === PEPE_ID ? "pepe" : "them", text: line(m), at: m.created_at })),
     });
   }
@@ -1239,6 +1288,77 @@ async function pepeReply({ conversation, upto, text } = {}) {
   // 1.99acd: and a browser notification (webpush.js; a conversation muted by then is skipped when it's sent)
   try { require("./webpush").onDm(u.userId, { conversationId: conv.id, messageId: mid }); } catch (e) { /* never fails the reply */ }
   return { message: { id: mid } };
+}
+
+// ── Pepe looks at a photo sent to him (see the top). One gate for the bytes and for his flag. ──
+/**
+ * The photo behind `ref` if Pepe may have it right now, else a Refuse (404 for everything that isn't his to see, so an
+ * answer confirms nothing): a ready picture of a live text message from the member (not Pepe) in THEIR 1:1 conversation
+ * with Pepe, after the member's clear-history point, neither side blocking the other, the member's account not archived,
+ * and that message's pepe_dm_jobs row CLAIMED, at most PEPE_MEDIA_WINDOW_MS ago, and not stale. -> {a, m, job}
+ * {handed: true} (pepeFlag): instead of the claimed job, Pepe was handed this photo's bytes at most PEPE_MEDIA_WINDOW_MS
+ * ago - his check may end after his answer closed the job.
+ */
+async function pepeMediaRow(ref, { handed = false } = {}) {
+  await init();
+  const gone = () => new Refuse(404, "Not found.", "gone");
+  const id = String(ref == null ? "" : ref);
+  if (!MEDIA_REF_RE.test(id)) throw gone();
+  const a = (await getQuery("SELECT * FROM dm_media WHERE id = ? AND state = 'ready' AND message_id IS NOT NULL", [id]))[0];
+  if (!a || !a.file || !dmmedia.FILE_RE.test(a.file)) throw gone();
+  const m = (await getQuery("SELECT * FROM messages WHERE id = ?", [a.message_id]))[0];
+  if (!m || m.deleted_at || m.kind !== "text" || m.sender_id === PEPE_ID || m.sender_id !== a.owner_id || m.conversation_id !== a.conversation_id) throw gone();
+  const conv = await conversationRow(m.conversation_id);
+  if (!conv || conv.kind !== "dm" || conv.dm_key !== [PEPE_ID, m.sender_id].sort().join("|") || !(await membership(conv.id, PEPE_ID))) throw gone();
+  const mem = await membership(conv.id, m.sender_id);
+  if (!mem || !(m.id > (mem.cleared_id || 0))) throw gone();
+  const u = await account(m.sender_id);
+  if (!u || u.archived_at || (await blocked(PEPE_ID, u.userId)).length) throw gone();
+  const t = NOW();
+  if (handed) {
+    if (!(Number(mediaHanded.get(a.id)) >= t - PEPE_MEDIA_WINDOW_MS)) throw new Refuse(404, "Not found.", "window");
+    return { a, m, job: null };
+  }
+  const job = (await getQuery("SELECT * FROM pepe_dm_jobs WHERE message_id = ? AND conversation_id = ? AND user_id = ?", [m.id, conv.id, m.sender_id]))[0];
+  if (!job || job.state !== "claimed" || !(Number(job.claimed_at) >= t - PEPE_MEDIA_WINDOW_MS) || Number(job.created) < t - PEPE_JOB_MAX_MS) {
+    throw new Refuse(404, "Not found.", "window");
+  }
+  return { a, m, job };
+}
+/** The bytes Pepe may fetch: the gate above + not NSFW-marked + the size cap + PEPE_MEDIA_FETCHES per claim. -> {a, file, size} */
+async function pepeMedia(ref) {
+  const { a, job } = await pepeMediaRow(ref);
+  if (a.nsfw) throw new Refuse(409, "That picture is marked NSFW.", "nsfw");
+  const file = dmmedia.filePath(a.file);
+  let size = -1;
+  try { size = fs.statSync(file).size; } catch (e) { size = -1; }
+  if (size <= 0) throw new Refuse(404, "Not found.", "gone");
+  if (size > PEPE_MEDIA_MAX_BYTES) throw new Refuse(413, "That picture is too big.", "big");
+  const key = `${a.id}|${job.claimed_at}`;
+  const n = (mediaFetches.get(key) || 0) + 1;
+  if (n > PEPE_MEDIA_FETCHES) throw new Refuse(429, "That picture was already fetched.", "rate");
+  mediaFetches.set(key, n);
+  if (mediaFetches.size > 2000) for (const k of mediaFetches.keys()) { mediaFetches.delete(k); if (mediaFetches.size <= 1000) break; }
+  mediaHanded.delete(a.id);
+  mediaHanded.set(a.id, NOW());
+  if (mediaHanded.size > 2000) for (const k of mediaHanded.keys()) { mediaHanded.delete(k); if (mediaHanded.size <= 1000) break; }
+  return { a, file, size };
+}
+/**
+ * Pepe's own check of a photo sent to him flagged a possible minor (or gave a "refuse" verdict): his check's answer
+ * ({verdict, scores, reason}, the image-safety classifier's format) goes through the SITE'S image-safety policy for DM
+ * pictures (imagesafety.recordPepeDm) - recorded for the admins' review with a blurred thumbnail only while those checks
+ * are on for DMs, never a member-style DM report and never a clear copy. Only for a photo he was handed in the last
+ * PEPE_MEDIA_WINDOW_MS (the rest of the bytes' gate applies). -> {recorded, logId?, minor?} | {recorded: false, off|already}
+ */
+async function pepeFlag({ ref, verdict, model } = {}) {
+  if (!verdict || typeof verdict !== "object" || Array.isArray(verdict)) throw new Refuse(400, "No classification.", "verdict");
+  const { a, m } = await pepeMediaRow(ref, { handed: true });
+  const isf = require("./imagesafety");
+  const r = await isf.recordPepeDm({ file: dmmedia.filePath(a.file), userId: m.sender_id, ref: "dm:" + a.id, verdict,
+                                     model: typeof model === "string" ? model.slice(0, 80) : null });
+  if (r && r.bad) throw new Refuse(400, "No usable classification.", "verdict");
+  return r;
 }
 
 // ── nav count middleware (the 💬 next to the 🔔) ──
@@ -1418,7 +1538,31 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/messages/pepe/claim", async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
-    try { res.json({ ok: true, conversations: await pepeClaim({ limit: b.limit, price: b.price }) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: true, conversations: await pepeClaim({ limit: b.limit, price: b.price, vision: b.vision }) }); } catch (e) { fail(res, e); }
+  });
+  // a photo sent to Pepe ({password, ref} -> the webp bytes; pepeMedia decides) and his check's answer when it flagged
+  // ({password, ref, verdict, model}; pepeFlag). POST, so the reference never sits in a URL or an access log; errors log ids only.
+  const ref = (v) => (MEDIA_REF_RE.test(String(v || "")) ? String(v) : "?");
+  const quiet = (res, e, what, r) => {
+    const st = e && e.refuse && e.status < 500 ? e.status : 500;
+    if (st === 500) console.error(`[dm] pepe ${what} ${r}: ${(e && e.code) || "error"}`);   // never the message: an fs error carries the path
+    res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message, code: (e && e.code) || undefined });
+  };
+  app.post("/api/messages/bot/media", async (req, res) => {
+    const b = req.body || {};
+    res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try {
+      const r = await pepeMedia(b.ref);
+      res.sendFile(r.file, { etag: false, lastModified: false, cacheControl: false, headers: dmmedia.PRIVATE_HEADERS },
+                   (err) => { if (err && !res.headersSent) res.status(404).json({ ok: false, error: "Not found.", code: "gone" }); });
+    } catch (e) { quiet(res, e, "media", ref(b.ref)); }
+  });
+  app.post("/api/messages/bot/media/flag", async (req, res) => {
+    const b = req.body || {};
+    res.set("Cache-Control", "no-store");
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try { res.json({ ok: true, ...(await pepeFlag({ ref: b.ref, verdict: b.verdict, model: b.model })) }); } catch (e) { quiet(res, e, "flag", ref(b.ref)); }
   });
   app.post("/api/messages/pepe/reply", async (req, res) => {
     const b = req.body || {};
@@ -1434,6 +1578,7 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { init, register, sse, navCount, send, list, history, header, check, markRead, deleteMessage, clear, setBlock, blockList,
-                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, pepeClaim, pepeReply, pepeNote, PEPE_ID, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
+                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, pepeClaim, pepeReply, pepeNote, pepeMedia, pepeFlag, PEPE_ID,
+                   PEPE_MEDIA_WINDOW_MS, PEPE_MEDIA_MAX_BYTES, PEPE_MEDIA_FETCHES, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
                    createGroup, addMembers, leaveGroup, removeMember, renameGroup, setMute,
                    emit, Refuse, LIMITS, WHO, ALERT_GAP_MS, ALERT_GRACE_MS, _setClock, _gaps: gaps, _streams: streams, _pepeState: (v) => { if (v) PEPE_STATE = v; return PEPE_STATE; } };

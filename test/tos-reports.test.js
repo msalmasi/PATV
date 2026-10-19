@@ -378,7 +378,9 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(inc, /privacy@publicaccess\.tv/);
   assert.match(p.text, /href="#incognito"/);
   assert.match(p.text, /13 October 2026:<\/b> added <a href="#incognito">/, "a dated change note");
-  assert.equal(terms.PRIVACY_UPDATED, "18 October 2026");     // 1.99acd: browser notifications (1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
+  assert.equal(terms.PRIVACY_UPDATED, "19 October 2026");     // photos sent to Pepe (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
+  assert.match(p.text, /19 October 2026:<\/b> added <a href="#pepe-photos">/, "a dated change note for photos sent to Pepe");
+  assert.match(p.text, /id="pepe-photos"/);
   assert.match(p.text, /18 October 2026:<\/b> added <a href="#browser-notifications">/, "a dated change note for 1.99acd");
   assert.match(p.text, /id="browser-notifications"/);
   assert.match(p.text, /A flag for the country you last signed in from/, "1.99abt's row is on the page");

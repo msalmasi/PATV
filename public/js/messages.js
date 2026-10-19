@@ -34,6 +34,12 @@
   var KIND = {};
   (S.nt.kinds || []).forEach(function (k) { KIND[k.key] = k; });
   function kindOf(k) { return KIND[k] || KIND.system || { key: 'system', icon: '🐸', label: 'Pepe' }; }
+  // Photos sent to Pepe: how he looks at them, as he last told the site ("local" | "cloud"; anything else = he can't)
+  function pepePicsNote(v) {
+    if (v === 'local') return _t('js.msg.pepe_pics_local', "📷 Pepe can look at photos you send him here and answer about them. An AI on PATV's own hardware looks at the photo - the photo itself is never sent to an outside AI company. He checks it for adult content first and won't describe that. He doesn't keep the photo or remember what's in it, but his reply stays in this chat like any message, and his later answers here may come from an outside AI provider that reads the recent chat (including what he said about the photo).");
+    if (v === 'cloud') return _t('js.msg.pepe_pics_cloud', "📷 Pepe can look at photos you send him here and answer about them. To do that the photo is sent to an outside AI provider (see the Privacy Policy). He checks it for adult content first and won't describe that. He doesn't keep the photo or remember what's in it; his reply stays in this chat like any message.");
+    return _t('js.msg.pepe_pics_off', "📷 Pepe can't look at photos right now - he only sees that you sent one.");
+  }
 
   // ── helpers ──
   function api(url, body, method) {
@@ -220,6 +226,8 @@
     var pn = h ? h.pepe : (S.draft && S.draft.pepe);          // 1.99ik: talking to Pepe - his price / away note
     $('dmPepeNote').hidden = !(pn && pn.note);
     $('dmPepeNote').textContent = pn && pn.note ? pn.note : '';
+    var pics = $('dmPepePics'), pp = pn ? pepePicsNote(pn.vision) : '';   // what happens to a photo sent to Pepe
+    if (pics) { pics.hidden = !pp; pics.textContent = pp; }
     $('dmRefuse').hidden = !!can;
     $('dmRefuse').textContent = can ? '' : (why || _t('js.msg.cant_send', "You can't send messages here."));
     form.classList.toggle('off', !can);

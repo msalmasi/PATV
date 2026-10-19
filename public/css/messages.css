@@ -108,6 +108,7 @@ body.dm-page > .dm { flex: 1 1 0; height: auto; min-height: 0; }
 .dm-compose { padding: 0 14px 12px; }
 .dm-pepe { margin: 0 0 8px; padding: 8px 12px; border-radius: 10px; background: #0f1a10; border: 1px solid #2f6b3a; color: #c8f0d3; font-size: 13.5px; }   /* 1.99ik */
 .dm-pepe-btn { text-decoration: none; font-size: 17px; line-height: 1; }
+.dm-pepe-pics { font-size: 12.5px; color: #a9d8b5; background: transparent; border-style: dashed; }   /* photos sent to Pepe: what happens to them */
 .dm-refuse { margin: 0 0 8px; padding: 10px 12px; border-radius: 10px; background: #1f1814; border: 1px solid #4a3426; color: #ffcc80; font-size: 14px; }
 .dm-cbox { display: flex; align-items: flex-end; gap: 8px; background: #1a1a1f; border: 1px solid var(--ds-line-menu); border-radius: 12px; padding: 6px 6px 6px 12px; }
 .dm-cbox:focus-within { border-color: var(--ds-green); box-shadow: 0 0 0 1px var(--ds-green); }
