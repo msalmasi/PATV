@@ -92,8 +92,14 @@
   </section>
   <section class="ds-card lg" id="earn" aria-labelledby="poEarnH">
     <h2 class="ds-h2" id="poEarnH"><span class="dot"></span>👑 <%- t('owner.guide_earn_h') %></h2>
-    <p class="po-why"><%- t('owner.share_why', { rate: 10, pct: 15, days: 3, active: 3, cap: 25 }) %></p>
-    <p class="po-why"><%- t('owner.recipe_why', { owner: 15, gang: 15, streamers: 25, people: 35, games: 10, convoy: '25,000' }) %></p>
+    <%# 1.99ada: the live recipe (Pepe's last sync, roomvaults.overview().recipe.cfg via padowner.js) instead of hard-coded
+        15/15/25/35/10 - the percentages are editable on /admin/economy now, so the guide can't contradict them %>
+    <%# a value that isn't a finite 0..1 fraction (a bad chat override from a Pepe before 1.99adb's load check) shows the default,
+        never "500%" (roomvaults card() / padguide.js pct do the same) %>
+    <% const gCfg_ = locals.guideCfg || {}; const gPct_ = (k, d) => { const v = gCfg_[k] == null ? NaN : Number(gCfg_[k]); return Math.round(100 * (Number.isFinite(v) && v >= 0 && v <= 1 ? v : d)); }; %>
+    <p class="po-why"><%- t('owner.share_why', { rate: locals.guideRate || 10, pct: gPct_('owner_pct', 0.15), days: gCfg_.owner_days || 3, active: gCfg_.elig_days || 3, cap: gPct_('cap_i7', 0.25) }) %></p>
+    <p class="po-why"><%- t('owner.recipe_why', { owner: gPct_('owner_pct', 0.15), gang: gPct_('gang_pct', 0.15), streamers: gPct_('streamer_pct', 0.25), people: gPct_('people_pct', 0.35), games: gPct_('games_pct', 0.10), convoy: num(gCfg_.convoy_min || 25000) }) %></p>
+    <% if (gCfg_.games_unpaid === 1) { %><p class="po-why"><%- t('owner.recipe_games_unpaid') %></p><% } %>
     <p class="ds-meta"><%- t('owner.guide_earn_more') %></p>
   </section>
 <% } else { %>
@@ -519,7 +525,8 @@
     <%
       const rc = vault && vault.recipe ? vault.recipe : null;
       const rcCfg = (rc && rc.cfg) || {};
-      const pct = (k, d) => Math.round(100 * (rcCfg[k] != null ? Number(rcCfg[k]) : d));
+      // 1.99ada: only a finite 0..1 fraction counts (else the default), like card() / padguide.js - never "500%"
+      const pct = (k, d) => { const v = rcCfg[k] == null ? NaN : Number(rcCfg[k]); return Math.round(100 * (Number.isFinite(v) && v >= 0 && v <= 1 ? v : d)); };
       const eps = rc ? rc.epochs.slice().reverse() : [];
       const last = eps[0] || null;
       const house = room.owner_kind !== 'user';
@@ -565,9 +572,11 @@
   <section class="ds-card lg" id="recipe" aria-labelledby="poRcH">
     <h2 class="ds-h2" id="poRcH"><span class="dot"></span>💸 <%- t('owner.recipe_h') %></h2>
     <p class="po-why"><%- t('owner.recipe_why', { owner: pct('owner_pct', 0.15), gang: pct('gang_pct', 0.15), streamers: pct('streamer_pct', 0.25), people: pct('people_pct', 0.35), games: pct('games_pct', 0.10), convoy: num(rcCfg.convoy_min || 25000) }) %></p>
+    <%# 1.99ada (Pepe 1.99adb): unpaid owner / gang / streamer shares top up the day's room-games allowance (strict === 1: an older Pepe reports nothing) %>
+    <% if (rcCfg.games_unpaid === 1) { %><p class="po-why"><%- t('owner.recipe_games_unpaid') %></p><% } %>
     <% if (!eps.length) { %><p class="ds-meta"><%- t('owner.share_none_yet') %></p><% } else { %>
     <div class="ds-tbl dense"><table><thead><tr><th><%- t('owner.rc_day') %></th><th class="r"><%- t('owner.rc_budget') %></th><th class="r"><%- t('owner.rc_owner') %></th><th class="r"><%- t('owner.rc_gang') %></th><th class="r"><%- t('owner.rc_streamers') %></th><th class="r"><%- t('owner.rc_people') %></th><th class="r"><%- t('owner.rc_games') %></th><th class="r"><%- t('owner.rc_paid') %></th><th class="r"><%- t('owner.rc_stayed') %></th></tr></thead><tbody>
-      <% eps.forEach((e) => { %><tr><td><%= e.day %><br><small class="ds-fine"><%= e.rate %>% · <%= num(e.balance) %></small></td><td class="r"><%= num(e.B) %></td><td class="r"><%= num(e.owner) %></td><td class="r"><%= num(e.gang) %></td><td class="r"><%= num(e.streamers) %><% if (e.vwm) { %><br><small class="ds-fine"><%= e.vwm %> VWM</small><% } %></td><td class="r"><%= num(e.people) %><% if (e.people_n) { %><br><small class="ds-fine"><%- t('owner.rc_people_count', { count: e.people_n }) %></small><% } %></td><td class="r"><%= num(e.games_allow) %></td><td class="r"><b><%= num(e.paid) %></b><% if (e.topup) { %><br><small class="ds-fine"><%- t('owner.rc_topup', { n: num(e.topup) }) %></small><% } %></td><td class="r"><%= num(e.stays) %></td></tr><% }) %>
+      <% eps.forEach((e) => { %><tr><td><%= e.day %><br><small class="ds-fine"><%= e.rate %>% · <%= num(e.balance) %></small></td><td class="r"><%= num(e.B) %></td><td class="r"><%= num(e.owner) %></td><td class="r"><%= num(e.gang) %></td><td class="r"><%= num(e.streamers) %><% if (e.vwm) { %><br><small class="ds-fine"><%= e.vwm %> VWM</small><% } %></td><td class="r"><%= num(e.people) %><% if (e.people_n) { %><br><small class="ds-fine"><%- t('owner.rc_people_count', { count: e.people_n }) %></small><% } %></td><td class="r"><%= num(e.games_allow) %><% if (e.games_from_unpaid > 0) { %><br><small class="ds-fine"><%- t('owner.rc_games_unpaid', { n: num(e.games_from_unpaid) }) %></small><% } %></td><td class="r"><b><%= num(e.paid) %></b><% if (e.topup) { %><br><small class="ds-fine"><%- t('owner.rc_topup', { n: num(e.topup) }) %></small><% } %></td><td class="r"><%= num(e.stays) %></td></tr><% }) %>
     </tbody></table></div>
     <% if (rc && rc.games && rc.games.allow) { %><p class="ds-fine"><%- t('owner.rc_games_left', { left: num(Math.max(0, rc.games.allow - rc.games.used)), allow: num(rc.games.allow) }) %></p><% } %>
     <% } %>

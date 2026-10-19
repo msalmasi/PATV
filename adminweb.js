@@ -214,6 +214,8 @@ function register(app, { addUser }) {
              // 1.99xs: the Reserve desk (wallet.adminBook; was the ADMIN sections of /wallet) + the loan commands' results
              book: isAdmin ? await safe(() => require("./wallet").adminBook(), null) : null,
              acts: isAdmin ? await safe(() => require("./actions").recentFor(me.userId, "admin-loans"), []) : [],
+             // 1.99ada: the 💸 payout recipe card's form is live only for a Pepe owner (recipecfg.canEdit; the API re-checks)
+             rcfgEdit: await safe(() => require("./recipecfg").canEdit(me), false),
              msg: req.query.msg ? String(req.query.msg).slice(0, 300) : null };
   }));
   // 1.99ol: + the casino front-end switches (casino_settings bj_front / hm_front; saved through /api/casino/admin/settings)

@@ -112,6 +112,7 @@ function register(app, { addUser, isBotToken }) {
   require("./padfines").register(app, { addUser, isBotToken });      // 1.99yx: admin pad vault fines / transfers (/pads/admin#padfines)
   require("./padstreaks").register(app, { addUser });            // 1.99zm: 🔥 pad streaks + regular streaks (/api/rooms/:slug/streak)
   require("./recipe").register(app, { isBotToken });               // economy v2 E-4: the payout recipe's gates, watch-minutes, credits, royalty cutover
+  require("./recipecfg").register(app, { addUser, isBotToken });   // 1.99ada: the recipe's percentages, owned by the site (/admin/economy card, Pepe's chat write-through)
   require("./vwm").register(app, { isBotToken, addUser });          // economy v2 E-5: verified watch-minutes, the daily stage_watch rollup
   require("./padowner").register(app, { addUser });               // 1.99qr: the room owner's Pepe control panel (/p/<slug>/owner)
   require("./launchpad").register(app, { addUser, isBotToken });     // the pad launchpad: momentum, launch grants review, welcomes, boost credit     // economy v2 E-3: room vaults (Pepe's sync, the pad card, the owner's rate)

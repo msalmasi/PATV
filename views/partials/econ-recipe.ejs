@@ -1,0 +1,59 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99ada (the owner, 2026-10-19): the pad-vault PAYOUT RECIPE's percentages, owned by the website (recipecfg.js). Each pad's
+    day budget B (its payout rate x its balance, Pepe's pepe_recipe.py) is split into owner / gang / streamers / regulars /
+    room games; with "unpaid shares fund room games" on (Pepe 1.99adb), what the owner, gang and streamer slices didn't pay
+    that day tops up the room-games prize allowance until the next payout (capped at B - paid). Editable: the five % and the switch. Pepe's
+    other recipe rules are shown read-only (chat: !econ recipe cfg). Pepe picks a save up on his next room-vault sync and
+    applies it from his NEXT daily payout. Viewing: econ.telemetry_policy (isAdmin). Saving: a Pepe owner (canEdit =
+    econ.pepe_econ_cmds + Pepe role owner, re-checked by the API) through the /admin/economy step-up (CSRF token, single-use
+    nonce, account password). public/js/admin-recipe.js renders it from GET /api/admin/econ/recipe. %>
+<section class="adm-card" id="recipe-cfg" aria-labelledby="rcfgT">
+  <h2 id="rcfgT"><span class="ds-ic" aria-hidden="true">💸</span> <%= t('adm.rcfg.title') %> <span class="adm-pill admin"><%= t('adm.rcfg.admins') %></span></h2>
+  <p class="adm-help"><%- t('adm.rcfg.help') %></p>
+  <% if (!isAdmin) { %><p class="adm-help"><%= t('adm.rcfg.admins_only') %></p><% } else { const edit_ = locals.canEdit === true; const dis_ = edit_ ? '' : ' disabled'; %>
+    <div id="rcfgAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' && locals.me ? pepeCtlCsrf(me.username) : '' %>" data-edit="<%= edit_ ? '1' : '0' %>">
+      <div class="adm-kv" id="rcfgKv"><div><b><%= t('adm.rcfg.status') %></b><span><%= t('adm.rcfg.loading') %></span></div></div>
+      <% if (!edit_) { %><p class="adm-msg" id="rcfgNotOwner"><%= t('adm.rcfg.not_owner') %></p><% } %>
+      <form class="adm-form" id="rcfgForm" autocomplete="off">
+        <label for="rcfgOwner"><%= t('adm.rcfg.f_owner') %><input type="number" id="rcfgOwner" min="0" max="100" step="1" required<%- dis_ %>></label>
+        <label for="rcfgGang"><%= t('adm.rcfg.f_gang') %><input type="number" id="rcfgGang" min="0" max="100" step="1" required<%- dis_ %>></label>
+        <label for="rcfgStreamers"><%= t('adm.rcfg.f_streamers') %><input type="number" id="rcfgStreamers" min="0" max="100" step="1" required<%- dis_ %>></label>
+        <label for="rcfgPeople"><%= t('adm.rcfg.f_people') %><input type="number" id="rcfgPeople" min="0" max="100" step="1" required<%- dis_ %>></label>
+        <label for="rcfgGames"><%= t('adm.rcfg.f_games') %><input type="number" id="rcfgGames" min="0" max="100" step="1" required<%- dis_ %>></label>
+        <label class="rcfg-wide"><input type="checkbox" id="rcfgUnpaid"<%- dis_ %>> <%= t('adm.rcfg.f_unpaid') %></label>
+        <p class="adm-help rcfg-wide" id="rcfgSum" aria-live="polite"></p>
+        <label for="rcfgNote" class="rcfg-wide"><%= t('adm.rcfg.f_note') %><input type="text" id="rcfgNote" maxlength="200"<%- dis_ %>></label>
+        <div class="adm-actions"><button type="submit" id="rcfgSave"<%- dis_ %>><%= t('adm.rcfg.save') %></button><button type="button" class="adm-btn ghost" id="rcfgDefaults"<%- dis_ %>><%= t('adm.rcfg.defaults') %></button></div>
+      </form>
+      <div id="rcfgConfirm" class="rcfg-confirm" hidden>
+        <p class="adm-help" id="rcfgWhat"></p>
+        <label for="rcfgPw" class="adm-help"><%= t('adm.rcfg.confirm_pw') %></label>
+        <input type="password" id="rcfgPw" maxlength="200" autocomplete="current-password">
+        <div class="adm-actions"><button type="button" id="rcfgYes"><%= t('adm.rcfg.yes') %></button><button type="button" id="rcfgNo" class="adm-btn ghost"><%= t('adm.rcfg.no') %></button></div>
+      </div>
+      <p class="adm-msg rcfg-out" id="rcfgMsg" role="status" aria-live="polite"></p>
+      <details><summary><%= t('adm.rcfg.other_h') %></summary>
+        <div class="adm-kv" id="rcfgOther"></div>
+        <p class="adm-help"><%- t('adm.rcfg.other_help') %></p>
+      </details>
+      <h3><%= t('adm.rcfg.last_h') %></h3>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.rcfg.last_h') %>">
+        <thead><tr><th><%= t('adm.rcfg.col_pad') %></th><th><%= t('adm.rcfg.col_day') %></th><th class="num"><%= t('adm.rcfg.col_budget') %></th><th class="num"><%= t('adm.rcfg.col_base') %></th>
+          <th class="num"><%= t('adm.rcfg.col_unpaid') %></th><th class="num"><%= t('adm.rcfg.col_allow') %></th><th class="num"><%= t('adm.rcfg.col_used') %></th></tr></thead>
+        <tbody id="rcfgLast"><tr><td colspan="7" class="empty"><%= t('adm.rcfg.loading') %></td></tr></tbody>
+      </table></div>
+      <h3><%= t('adm.rcfg.log_h') %></h3>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.rcfg.log_h') %>">
+        <thead><tr><th><%= t('adm.rcfg.col_when') %></th><th><%= t('adm.rcfg.col_who') %></th><th><%= t('adm.rcfg.col_via') %></th><th><%= t('adm.rcfg.col_what') %></th><th><%= t('adm.rcfg.col_note') %></th></tr></thead>
+        <tbody id="rcfgLog"><tr><td colspan="5" class="empty"><%= t('adm.rcfg.loading') %></td></tr></tbody>
+      </table></div>
+    </div>
+    <style>
+      #recipe-cfg .rcfg-wide { grid-column: 1 / -1; }
+      #recipe-cfg .rcfg-out { white-space: pre-wrap; overflow-wrap: anywhere; }
+      #recipe-cfg .rcfg-confirm input { width: 100%; max-width: 320px; }
+      #recipe-cfg .rcfg-bad { color: var(--ds-danger, #ef5350); }
+    </style>
+    <script src="/public/js/admin-recipe.js?v=1" defer></script>
+  <% } %>
+</section>

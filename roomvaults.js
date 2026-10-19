@@ -6,6 +6,9 @@
 //   POST /api/g/roomvaults/sync  (bot token) {on, cap, deposit_min, rate: {default, min, max}, total,
 //                                 rooms: [{id, balance, days: {yyyy-mm-dd: {in, dep, mig, out, ovf}}, history: [...]}]}
 //     -> {ok, settings: {room id: {rate, changed_at, changed_by}}}   (the owner's payout rate, stored for E-4)
+//        1.99ada: + recipe_cfg {rev, cfg, at, by} | null - the payout recipe's six site-owned values saved on /admin/economy
+//        (recipecfg.js; omitted on a read error). Pepe reports what he applied in the body's recipe meta (cfg_rev, cfg_src,
+//        cfg_applied_at, cfg_error - cleanRecipeMeta).
 //   GET  /api/rooms/:slug/vault       the pad page card's data (public)
 //   POST /api/rooms/:slug/vault/rate  {rate}  the pad's owner (or a site admin - 1.99ack pads.vault_rate, was any site staff): the daily
 //                                     payout rate, 2-15%, at most one change per 7 days (pads.vault_rate holders are not limited). STORED ONLY: Pepe's E-4
@@ -121,8 +124,12 @@ function cleanDonors(d) {
 }
 
 // E-4: one payout day as Pepe reports it (numbers + short reasons only)
+// 1.99ada (Pepe 1.99adb): games_allow is the day's WHOLE room-games allowance = games_base (the games slice) +
+// games_from_unpaid (what the owner / gang / streamer slices didn't pay that day, while "unpaid shares fund room games" is
+// on), capped at B - paid. An older Pepe sends neither (both 0: games_allow was the slice).
 const EP_NUM = ["B", "balance", "owner", "gang", "streamers", "people", "people_n", "streamers_n", "games_allow", "games_used_prev",
-                "paid", "stays", "cap", "i7", "owner_present", "active_days", "convoy", "topup", "topup_pool", "engagement"];
+                "paid", "stays", "cap", "i7", "owner_present", "active_days", "convoy", "topup", "topup_pool", "engagement",
+                "games_base", "games_from_unpaid"];
 function cleanRecipe(r) {
   if (!r || typeof r !== "object") return null;
   const epochs = (Array.isArray(r.epochs) ? r.epochs : []).slice(-7).filter((e) => e && DAY_RE.test(String(e.day || ""))).map((e) => {
@@ -148,8 +155,17 @@ function cleanRecipeMeta(m) {
   // rewards off) and its last day's numbers, and whether profile pads have vaults
   const pool = m.pool && typeof m.pool === "object" ? { day: DAY_RE.test(String(m.pool.day || "")) ? m.pool.day : null, pool: Math.max(0, int(m.pool.pool)),
     paid: Math.max(0, int(m.pool.paid)), pads: Math.max(0, int(m.pool.pads)) } : null;
+  // 1.99ada (Pepe 1.99adb): which website recipe revision he applied (recipecfg.js) - the /admin/economy card's "applied /
+  // pending / refused". cfg_rev: the applied site rev (null = none yet), cfg_src "site" | "local", cfg_applied_at (unix s),
+  // cfg_error {rev, errors[<=5]} while he refuses a rev. An older Pepe sends none of them (all null: "old_pepe").
+  const isInt = (v) => typeof v === "number" && Number.isInteger(v);
+  const ce = m.cfg_error && typeof m.cfg_error === "object" && isInt(m.cfg_error.rev)
+    ? { rev: m.cfg_error.rev, errors: (Array.isArray(m.cfg_error.errors) ? m.cfg_error.errors : []).filter((s) => typeof s === "string").slice(0, 5)
+                                         .map((s) => s.replace(/[<>]/g, "").slice(0, 120)) } : null;
   return { on: m.on === true, topup: m.topup === true, frozen: m.frozen === true, cfg, activity_pads: m.activity_pads === true,
-           profile_vaults: m.profile_vaults === true, activity_rewards: m.activity_rewards === true, pool };
+           profile_vaults: m.profile_vaults === true, activity_rewards: m.activity_rewards === true, pool,
+           cfg_rev: isInt(m.cfg_rev) && m.cfg_rev >= 0 ? m.cfg_rev : null, cfg_src: m.cfg_src === "site" || m.cfg_src === "local" ? m.cfg_src : null,
+           cfg_applied_at: isInt(m.cfg_applied_at) ? m.cfg_applied_at : null, cfg_error: ce };
 }
 
 async function metaGet() {
@@ -192,7 +208,11 @@ async function sync(body) {
                       : b.recipe) });
     PROFILE_ON = b.profile_vaults === true;
   });
-  return { settings: await settingsMap() };
+  const out = { settings: await settingsMap() };
+  // 1.99ada: the website's payout recipe percentages (recipecfg.js) ride the same answer - null = never saved here (Pepe keeps
+  // his own values). A read error OMITS the field (never null), so Pepe changes nothing rather than thinking it was unset.
+  try { out.recipe_cfg = await require("./recipecfg").forPepe(); } catch (e) { console.error("[roomvaults] recipe cfg:", e.message); }
+  return out;
 }
 
 async function settingsMap() {
@@ -240,7 +260,8 @@ async function card(roomId, user, opts = {}) {
   const rmeta = meta.recipe || {};
   const epochs = (recipe && recipe.epochs) || [];
   // 1.99sn: the public card's "How it pays out" - the recipe's slices (Pepe's cfg, fractions; the E-4 defaults until synced)
-  const pct = (k, d) => { const v = Number((rmeta.cfg || {})[k]); return Math.round((Number.isFinite(v) && v > 0 && v <= 1 ? v : d) * 100); };
+  // 1.99ada: a 0 slice shows 0 (it showed the default) - the recipe is editable on /admin/economy now
+  const pct = (k, d) => { const r = (rmeta.cfg || {})[k]; const v = r == null ? NaN : Number(r); return Math.round((Number.isFinite(v) && v >= 0 && v <= 1 ? v : d) * 100); };
   const split = { owner: pct("owner_pct", 0.15), gang: pct("gang_pct", 0.15), streamers: pct("streamer_pct", 0.25),
                   people: pct("people_pct", 0.35), games: pct("games_pct", 0.10) };
   const wsum = (f) => epochs.reduce((s, e) => s + int(e[f]), 0);
@@ -421,4 +442,5 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   profileVaultsOn, hasVault, _setProfileVaults: (v) => { PROFILE_ON = !!v; }, init, sync, settingsMap, card, setRate, donate, overview, register, RATE, Refuse, cleanRecipe,
+  cleanRecipeMeta, metaGet,     // 1.99ada: recipecfg.js reads Pepe's reported recipe meta (and the tests the cleaner)
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };

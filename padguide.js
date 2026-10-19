@@ -4,7 +4,8 @@
 // the two link to each other. Everything this page says about numbers or switches is read from where it is enforced, never
 // written into copy:
 //   roomvaults.overview()   pad vaults on/off, the vault cap, the payout recipe's slices and rules (Pepe's last sync),
-//                           whether activity top-ups reach pad vaults (recipe.activity_pads)
+//                           whether activity top-ups reach pad vaults (recipe.activity_pads), whether unearned shares
+//                           top up the room-games prizes (recipe.cfg.games_unpaid, 1.99ada)
 //   roomvaults.RATE         the payout rate bounds the owner picks from
 //   funding.state.launchpad whether the pad launchpad (owner deposit matching, newcomer welcomes) is live
 //   roomvaults.profileVaultsOn()  whether profiles have vaults (Pepe's econ_profile_vaults, as he last synced it)
@@ -45,7 +46,8 @@ async function facts() {
   const ov = await safe(() => require("./roomvaults").overview(0), {});
   const rc = (ov && ov.recipe) || {};
   const cfg = rc.cfg || {};
-  const pct = (k, d) => { const v = Number(cfg[k]); return Math.round(100 * (Number.isFinite(v) && v > 0 && v <= 1 ? v : d)); };
+  // 1.99ada: a 0 slice shows 0 (it showed the default) - the recipe's percentages are editable on /admin/economy now
+  const pct = (k, d) => { const v = cfg[k] == null ? NaN : Number(cfg[k]); return Math.round(100 * (Number.isFinite(v) && v >= 0 && v <= 1 ? v : d)); };
   const rate = await safe(() => require("./roomvaults").RATE, { default: 10, min: 2, max: 15 });
   const rules = await safe(() => require("./padrules").MAX_RULES, 15);
   const P = require("./premium");
@@ -60,6 +62,7 @@ async function facts() {
     recipeLive: !!rc.on, activityPads: !!rc.activity_pads,
     owner: pct("owner_pct", 0.15), gang: pct("gang_pct", 0.15), streamers: pct("streamer_pct", 0.25), people: pct("people_pct", 0.35),
     games: pct("games_pct", 0.10), capPct: pct("cap_i7", 0.25), ownerDays: Number(cfg.owner_days) || 3, eligDays: Number(cfg.elig_days) || 3,
+    gamesUnpaid: cfg.games_unpaid === 1,      // 1.99ada (Pepe 1.99adb): unpaid owner / gang / streamer shares top up the room-games prizes
     rate,
     launchpad: !!(lp && lp.on && lp.live),
     sales: pc.sales !== false, primePrice: Number(pc.prime_price) || 0, plusPrice: Number(pc.plus_price) || 0, days: Number(pc.period_days) || 30,

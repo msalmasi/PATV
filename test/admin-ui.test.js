@@ -194,3 +194,28 @@ test("overview data: alerts, countdown, no crash on an empty database", async ()
   assert.ok([3, 4].includes(A.daysUntil(d)));
   assert.equal(A.daysUntil("nonsense"), null);
 });
+
+test("1.99ada: /admin/economy's 💸 payout recipe card - Admins see it after Activity -> pad vaults; the form is live only for a Pepe owner", async () => {
+  const SR = require(path.join(repo, "staffroles"));
+  await SR.init();
+  let h = (await page("/admin/economy", U.admin)).html;
+  assert.match(h, /id="recipe-cfg"/);
+  assert.ok(h.indexOf('id="activitypads"') < h.indexOf('id="recipe-cfg"') && h.indexOf('id="recipe-cfg"') < h.indexOf('id="pools"'), "right after the Activity -> pad vaults card");
+  assert.match(h, /id="rcfgNotOwner"/, "an Admin with no Pepe owner role: read-only");
+  assert.match(h, /id="rcfgSave" disabled/);
+  assert.match(h, /data-csrf="[^"]+"/, "the step-up's CSRF token");
+  await runQuery("UPDATE users SET camfrogUsername = 'BossFrog' WHERE userId = ?", [U.admin.userId]);
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('bossfrog', 'owner', 1)");
+  try {
+    h = (await page("/admin/economy", U.admin)).html;
+    assert.doesNotMatch(h, /id="rcfgNotOwner"/);
+    assert.match(h, /id="rcfgSave">/, "a Pepe owner gets the live form");
+    assert.match(h, /data-edit="1"/);
+  } finally {
+    await runQuery("DELETE FROM pepe_roles WHERE login = 'bossfrog'");
+    await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [U.admin.userId]);
+  }
+  h = (await page("/admin/economy", U.staff)).html;
+  assert.match(h, /id="recipe-cfg"/);
+  assert.doesNotMatch(h, /id="rcfgForm"/, "Staff: no form (econ.telemetry_policy is Admins')");
+});

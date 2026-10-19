@@ -322,6 +322,7 @@ const RULES = {
   "fed_journal.actor": { deny: NAME }, "pat_routes.by": { deny: NAME }, "pat_routes_log.by": { deny: NAME },
   "automkt_requests.by": { deny: NAME },      // 1.99th: an admin's auto-markets request (automkt.js) - an audit name, kept as written
   "econ_cfg.by": { deny: NAME }, "econ_cfg_log.by": { deny: NAME }, "turf_inbox.payer": { deny: NAME },
+  "recipe_cfg.by": { deny: NAME },            // 1.99ada: who saved the payout recipe (a site username or "chat:<login>") - an audit name; admin_audit has the id
   "lotto_settings.actor": { deny: NAME }, "lotto_draws.forced_by": { deny: NAME },
   // Phase 4: policy/core.js - who switched an engine's mode (an admin's username, "pepe", a cutover key) and the scheduler
   // process holding the lease (host:pid:nonce) - audit labels, kept as written

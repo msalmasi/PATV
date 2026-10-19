@@ -27,10 +27,8 @@ async function meOf(req) {
   return (await safe(() => getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]), []))[0] || null;
 }
 const canView = (me) => SP.can(me, "keys.view");
-async function isOwner(me) {
-  if (!SP.can(me, "keys.manage") || !me.camfrogUsername) return false;   // keys.manage (locked: Admin) + a Pepe owner
-  return (await safe(() => require("./staffroles").roleOf(me.camfrogUsername), null)) === "owner";
-}
+// keys.manage (locked: Admin) + a Pepe owner - 1.99ada: the shared staffroles.ownerHolds (the payout recipe card uses it too)
+const isOwner = (me) => require("./staffroles").ownerHolds(me, "keys.manage");
 const sameOriginStrict = (req) => {
   const src = req.get("origin") || req.get("referer");
   try { return !!src && new URL(src).host === req.get("host"); } catch (e) { return false; }

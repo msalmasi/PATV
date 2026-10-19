@@ -125,3 +125,29 @@ test("1.99xh: a new user's primer and a glossary; every glossary link lands; PAT
   const F = await PG.facts();
   assert.ok(text.includes(`streamers ${F.streamers}%`), "split numbers are live");
 });
+
+test("1.99ada: facts().gamesUnpaid follows Pepe's switch; the sentence (step 2 + the glossary's split) appears and disappears with it; a 0 slice reads 0", async () => {
+  const RV = require(path.join(repo, "roomvaults"));
+  const sentence = en["owners.earn.games_unpaid"];
+  const count = (t) => t.split(sentence).length - 1 + t.split(sentence.replace(/'/g, "&#39;")).length - 1;
+  const cfg = { owner_pct: 0.15, gang_pct: 0, streamer_pct: 0.25, people_pct: 0.35, games_pct: 0.25 };
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg: Object.assign({ games_unpaid: 1 }, cfg) }, rooms: [] });
+  let F = await PG.facts();
+  assert.equal(F.gamesUnpaid, true);
+  assert.equal(F.gang, 0, "a 0 slice is 0, not the default 15");
+  assert.equal(F.games, 25);
+  let r = await page("/pads/owners", null);
+  assert.equal(r.status, 200);
+  assert.equal(count(r.text), 2, "step 2 and the glossary's split entry");
+  const text = r.text.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ");
+  assert.ok(!/(money|currency|cash out|launchpad|recipe|slices?|top-?ups?)/i.test(text), "still no jargon with the sentence on");
+  assert.match(text, /that controls the room 0%/, "the 0% gang slice shows as 0%");
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg: Object.assign({ games_unpaid: 0 }, cfg) }, rooms: [] });
+  F = await PG.facts();
+  assert.equal(F.gamesUnpaid, false);
+  r = await page("/pads/owners", null);
+  assert.equal(count(r.text), 0, "off: gone");
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg }, rooms: [] });
+  assert.equal((await PG.facts()).gamesUnpaid, false, "an older Pepe that doesn't report it: off (strict === 1)");
+  await RV.sync({ on: true, cap: 50000000, rooms: [] });
+});

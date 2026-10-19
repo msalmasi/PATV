@@ -61,6 +61,15 @@ async function roleOf(login) {
 }
 const levelOf = (role) => LEVEL[role] || 0;
 
+/** 1.99ada: the user's 2026-10-16 owner rule in one place ("ops / economy is owner-only"): the account holds the site
+ *  capability `cap` (its class, siteperms.js) AND its linked chat login is a Pepe "owner" here. `me` needs class +
+ *  camfrogUsername read fresh from the database (adminkeys.meOf, recipecfg.meOf). Used by /admin/keys (keys.manage) and the
+ *  /admin/economy payout recipe card (econ.pepe_econ_cmds). A roles read that fails answers false. */
+async function ownerHolds(me, cap) {
+  if (!me || !me.camfrogUsername || !SP.can(me, cap)) return false;
+  try { return (await roleOf(me.camfrogUsername)) === "owner"; } catch (e) { return false; }
+}
+
 async function write(login, role, ts, by, via) {
   await runQuery(`INSERT INTO pepe_roles (login, role, ts, by, via) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(login) DO UPDATE SET role = excluded.role, ts = excluded.ts, by = excluded.by, via = excluded.via`,
@@ -204,5 +213,5 @@ function register(app, { isBotToken, noTimers } = {}) {
   });
 }
 
-module.exports = { init, map, roleOf, botSync, setRole, reconcile, register, classUpdate, classesEdit, RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS,
+module.exports = { init, map, roleOf, ownerHolds, botSync, setRole, reconcile, register, classUpdate, classesEdit, RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; } };

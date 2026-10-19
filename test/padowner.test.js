@@ -520,3 +520,51 @@ test("1.99tn: the report carries the voice + the starters; the page shows the ow
   assert.ok(t.includes(en["owner.convo_llm_off"].replace(/'/g, "&#39;")) || t.includes(en["owner.convo_llm_off"]), "explains the chat model is off");
   for (const k of ["room_voice", "convo", "convo_quiet", "captions", "alerts", "dj_talk"]) assert.ok(t.includes(`data-po-row="${k}"`), k);
 });
+
+test("1.99ada: unpaid shares fund room games - the owner panel says so only while Pepe reports it on, the games column shows the unpaid part; the owner guide uses the live recipe", async () => {
+  const has = (t, k) => t.includes(en[k]) || t.includes(en[k].replace(/'/g, "&#39;"));
+  const unpaid = (n) => en["owner.rc_games_unpaid"].replace("{n}", n);
+  const RV = require(path.join(repo, "roomvaults"));
+  const ep = (o) => Object.assign({ day: "2026-10-18", B: 1112080, owner: 0, gang: 0, streamers: 0, people: 389228, paid: 389228, stays: 722852, games_allow: 111208 }, o);
+  const cfg = { owner_pct: 0.15, gang_pct: 0.15, streamer_pct: 0.25, people_pct: 0.35, games_pct: 0.2, convoy_min: 25000, owner_days: 3, elig_days: 3, cap_i7: 0.25 };
+  // an older Pepe: no games_unpaid in his cfg, no split on the day
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg }, rooms: [{ id: PLANT, balance: 11120000, days: {}, history: [], recipe: { epochs: [ep()] } }] });
+  let t = (await page("/p/" + SLUG + "/owner", "owner")).text;
+  assert.ok(t.includes('id="recipe"'));
+  assert.ok(!has(t, "owner.recipe_games_unpaid"), "not reported: not mentioned");
+  assert.ok(!t.includes(unpaid("111,208")) && !/incl\. [\d,]+ unpaid shares/.test(t), "no unpaid line without games_from_unpaid");
+  // Pepe 1.99adb: on, and a day where unpaid shares topped up the games
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg: Object.assign({ games_unpaid: 1 }, cfg) },
+    rooms: [{ id: PLANT, balance: 11120000, days: {}, history: [], recipe: { epochs: [ep({ day: "2026-10-17", games_allow: 111208, games_base: 111208, games_from_unpaid: 0 }),
+      ep({ games_allow: 722852, games_base: 111208, games_from_unpaid: 611644 })] } }] });
+  t = (await page("/p/" + SLUG + "/owner", "owner")).text;
+  assert.ok(has(t, "owner.recipe_games_unpaid"), "on: the sentence");
+  assert.ok(t.includes(unpaid("611,644")), "the day's unpaid part under the allowance");
+  assert.equal((t.match(/incl\. [\d,]+ unpaid shares/g) || []).length, 1, "only the day that had one");
+  assert.ok(t.includes("room games 20%"), "the live games slice");
+  // off again
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg: Object.assign({ games_unpaid: 0 }, cfg) }, rooms: [{ id: PLANT, balance: 11120000, days: {}, history: [] }] });
+  assert.ok(!has((await page("/p/" + SLUG + "/owner", "owner")).text, "owner.recipe_games_unpaid"), "off: gone");
+  // the public owner guide: the live cfg, not 15/15/25/35/10
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg: Object.assign({ games_unpaid: 1 }, cfg, { owner_pct: 0.1, people_pct: 0.4 }) }, rooms: [] });
+  t = (await page("/pads/owner-guide", null)).text;
+  assert.ok(t.includes("room games 20%") && t.includes("owner 10%") && t.includes("regulars 40%"), "the guide reads the live recipe");
+  assert.ok(has(t, "owner.recipe_games_unpaid"), "and the unpaid-shares sentence while on");
+  await RV.sync({ on: true, cap: 50000000, rooms: [] });
+  t = (await page("/pads/owner-guide", null)).text;
+  assert.ok(t.includes("room games 10%") && t.includes("owner 15%"), "no recipe synced: the defaults");
+  assert.ok(!has(t, "owner.recipe_games_unpaid"));
+});
+
+test("1.99ada: a recipe value out of range (a bad chat override from a Pepe before 1.99adb's load check) shows the default on the guide and the owner panel, never 500%", async () => {
+  const RV = require(path.join(repo, "roomvaults"));
+  const cfg = { owner_pct: -0.1, gang_pct: "x", streamer_pct: 0.25, people_pct: 0, games_pct: 5, cap_i7: 2, convoy_min: 25000 };
+  await RV.sync({ on: true, cap: 50000000, recipe: { on: true, cfg }, rooms: [{ id: PLANT, balance: 11120000, days: {}, history: [] }] });
+  for (const p of ["/pads/owner-guide", "/p/" + SLUG + "/owner"]) {
+    const t = (await page(p, p.includes("/owner-guide") ? null : "owner")).text;
+    assert.ok(t.includes("room games 10%") && t.includes("owner 15%") && t.includes("gang 15%"), p + ": the defaults for junk");
+    assert.ok(t.includes("regulars 0%"), p + ": a real 0 slice shows 0");
+    assert.ok(!/500%|-10%|200%/.test(t), p + ": no out-of-range percent printed");
+  }
+  await RV.sync({ on: true, cap: 50000000, rooms: [] });
+});

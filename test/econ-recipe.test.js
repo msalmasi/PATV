@@ -6,6 +6,8 @@
 //   * royalties.cutover: dry run lists pending per owner; the run releases each ONCE (keyed), freezes the ledger, settles
 //     exactly (pending after = 0); a re-run answers the stored result; nothing accrues after; another key is refused
 //   * roomvaults: Pepe's recipe epochs are stored and shown on the card (no names)
+//   * 1.99ada: a payout day's games split (games_base + games_from_unpaid) and the recipe meta's applied website rev
+//     (cfg_rev / cfg_src / cfg_applied_at / cfg_error, junk dropped)
 //   NODE_PATH=G:/PATV/node_modules node --test test/econ-recipe.test.js
 "use strict";
 const test = require("node:test");
@@ -158,4 +160,30 @@ test("roomvaults: Pepe's recipe days are stored and shown on the card, never nam
   assert.equal(c.recipe.epochs[0].why.owner, "bx/b", "reasons are plain text");
   assert.deepEqual(c.recipe.games, { day: DAYSTR, allow: 10, used: 4 });
   assert.equal(c.days[0].top, 2); assert.equal(c.history[0].kind, "recipe");
+});
+
+test("1.99ada: a payout day keeps the games split (slice + unpaid shares); the recipe meta keeps the applied website rev, junk dropped", async () => {
+  await RV.sync({ on: true, cap: 50000000, total: 1000, recipe: { on: true, cfg: { games_pct: 0.1, games_unpaid: 1, hour: 5 } },
+    rooms: [{ id: PLANT, balance: 1000, days: {}, history: [],
+              recipe: { epochs: [{ day: DAYSTR, B: 1112080, games_allow: 722852, games_base: 111208, games_from_unpaid: 611644, games_from: { owner: 1 },
+                                   games_capped: true, paid: 0, stays: 1112080 }] } }] });
+  const e = (await RV.card(PLANT, null, {})).recipe.epochs[0];
+  assert.deepEqual([e.games_allow, e.games_base, e.games_from_unpaid], [722852, 111208, 611644]);
+  assert.equal(e.games_from, undefined, "the per-slice split stays Pepe's");
+  assert.equal(RV.cleanRecipe({ epochs: [{ day: DAYSTR, games_allow: 5 }] }).epochs[0].games_base, 0, "an older Pepe: 0");
+  const M = RV.cleanRecipeMeta;
+  const m = M({ on: true, cfg: { owner_pct: 0.15, games_unpaid: 1, hour: 5 }, cfg_rev: 8, cfg_src: "site", cfg_applied_at: 1760885040,
+                cfg_error: { rev: 9, errors: ["a", "b", "c", "d", "e", "sixth", "x"], extra: 1 } });
+  assert.equal(m.cfg.games_unpaid, 1); assert.equal(m.cfg.hour, 5);
+  assert.deepEqual([m.cfg_rev, m.cfg_src, m.cfg_applied_at], [8, "site", 1760885040]);
+  assert.deepEqual(m.cfg_error, { rev: 9, errors: ["a", "b", "c", "d", "e"] }, "at most 5 errors");
+  const long = M({ cfg_error: { rev: 1, errors: ["<b>" + "x".repeat(300), 7, null] } }).cfg_error;
+  assert.equal(long.errors.length, 1, "non-strings dropped");
+  assert.equal(long.errors[0], "b" + "x".repeat(119), "markup stripped, 120 characters");
+  const junk = M({ cfg_rev: 1.5, cfg_src: "chat", cfg_applied_at: "soon", cfg_error: { rev: "9", errors: ["x"] } });
+  assert.deepEqual([junk.cfg_rev, junk.cfg_src, junk.cfg_applied_at, junk.cfg_error], [null, null, null, null]);
+  assert.equal(M({ cfg_rev: -1 }).cfg_rev, null);
+  assert.equal(M({ cfg_rev: 0 }).cfg_rev, 0);
+  const old = M({ on: true, cfg: { owner_pct: 0.15 } });
+  assert.deepEqual([old.cfg_rev, old.cfg_src, old.cfg_applied_at, old.cfg_error], [null, null, null, null], "an older Pepe reports none of them");
 });

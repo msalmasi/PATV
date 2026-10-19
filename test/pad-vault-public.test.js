@@ -166,3 +166,13 @@ test("the card renders: Pad vault, coming soon / the week, anonymous donors, sig
   assert.doesNotMatch(html, /id="rvDonate"/);
   assert.match(html, /Donations open when pad vaults do/);
 });
+
+test("1.99ada: a 0 slice shows 0 on the card (it showed the default); junk still falls back", async () => {
+  await sync({ on: true, cap: 50000000, recipe: { on: true, cfg: { owner_pct: 0, gang_pct: 0.2, streamer_pct: 0.25, people_pct: 0.35, games_pct: 0.2, games_unpaid: 1 } },
+               rooms: [{ id: PLANT, balance: 210000, days: {}, history: [] }] });
+  const c = await RV.card(PLANT, fan, {});
+  assert.deepEqual(c.split, { owner: 0, gang: 20, streamers: 25, people: 35, games: 20 });
+  assert.equal(c.recipe.cfg.games_unpaid, 1, "the switch reaches the owner panel's cfg");
+  await sync({ on: true, cap: 50000000, recipe: { on: true, cfg: { owner_pct: 5, gang_pct: "x" } }, rooms: [{ id: PLANT, balance: 210000, days: {}, history: [] }] });
+  assert.deepEqual((await RV.card(PLANT, fan, {})).split, { owner: 15, gang: 15, streamers: 25, people: 35, games: 10 }, "out of range / not a number: the default");
+});

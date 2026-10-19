@@ -460,9 +460,15 @@ function register(app, { addUser }) {
   };
 
   // the public "What you can do with Pepe in your room" guide (the same list as the owner page's section)
+  // 1.99ada: + the live payout recipe (Pepe's last synced cfg - the percentages are edited on /admin/economy) and the default
+  // payout rate, so the guide's numbers can't contradict the recipe; a failed read falls back to the defaults
   app.get("/pads/owner-guide", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    res.render("padOwner", { user: req.user ? req.user.username : null, guide: true, caps: capabilities(), webCaps: WEB_CAPS, slug: null, room: null });
+    const RV = require("./roomvaults");
+    let guideCfg = {};
+    try { const ov = await RV.overview(0); guideCfg = (ov && ov.recipe && ov.recipe.cfg) || {}; } catch (e) { guideCfg = {}; }
+    res.render("padOwner", { user: req.user ? req.user.username : null, guide: true, caps: capabilities(), webCaps: WEB_CAPS, slug: null, room: null,
+                             guideCfg, guideRate: RV.RATE.default });
   });
 
   app.get("/p/:slug/owner", addUser, async (req, res) => {

@@ -229,18 +229,26 @@ async function adminView() {
 // 2026-10-12: + activitypads / profilevaults (the 🎁 Activity -> pad vaults card)
 const ECON_CMDS = new Set(["get", "set", "mint", "fund", "grant", "fedloan", "flash", "fedseed", "monetary", "mints", "check", "status",
                            "activitypads", "profilevaults"]);
-async function requestEdit(user, body, ip) {
+/** The /admin/economy step-up, shared by every card that changes something (1.99ada: factored out of requestEdit for the
+ *  payout recipe card, recipecfg.js): the single-use nonce from /api/admin/econ/edit/nonce (taken on the first try, whatever
+ *  happens next) + the account's own password. Throws an Error with .status (409 nonce, 403 password) and .code. */
+async function stepUp(user, body) {
   const ctl = require("./pepecontrol");
   const bcrypt = require("bcrypt");
-  const fail = (status, message) => Object.assign(new Error(message), { status });
-  if (!SP.can(user, "econ.pepe_econ_cmds")) throw fail(403, "Admins only.");
-  if (!ctl.takeNonce(user, body.nonce)) throw fail(409, "That confirmation was already used or has expired - start again.");
+  const fail = (status, code, message) => Object.assign(new Error(message), { status, code });
+  if (!ctl.takeNonce(user, body.nonce)) throw fail(409, "nonce", "That confirmation was already used or has expired - start again.");
   const row = (await getQuery("SELECT password FROM users WHERE userId = ?", [user.userId]))[0];
   const hash = row && typeof row.password === "string" && row.password.startsWith("$2") ? row.password : null;
-  if (!hash) throw fail(403, "Your account has no password to confirm with - set one (forgot password) first.");
+  if (!hash) throw fail(403, "no_password", "Your account has no password to confirm with - set one (forgot password) first.");
   if (typeof body.password !== "string" || !body.password || Buffer.byteLength(body.password, "utf8") > 200 || !(await bcrypt.compare(body.password, hash))) {
-    throw fail(403, "Wrong password.");
+    throw fail(403, "password", "Wrong password.");
   }
+}
+async function requestEdit(user, body, ip) {
+  const ctl = require("./pepecontrol");
+  const fail = (status, message) => Object.assign(new Error(message), { status });
+  if (!SP.can(user, "econ.pepe_econ_cmds")) throw fail(403, "Admins only.");
+  await stepUp(user, body);
   let kind, args, label;
   if (body.op === "routes") {
     const flow = String(body.flow || "");
@@ -311,4 +319,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { init, register, putDocs, getDocs, putSettings, getSettings, importInTx, exportAll, adminView, requestEdit, DOCS };
+module.exports = { init, register, putDocs, getDocs, putSettings, getSettings, importInTx, exportAll, adminView, requestEdit, stepUp, DOCS };

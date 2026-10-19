@@ -128,7 +128,7 @@
     <% if (!F.vaultLive) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">⏳</span><div><%- t('owners.earn.paused') %></div></div><% } %>
     <ol class="pg-steps">
       <li><b><%- t('owners.earn.s1_t') %></b><p><%- t('owners.earn.s1_d') %></p></li>
-      <li><b><%- t('owners.earn.s2_t') %></b><p><%- t('owners.earn.s2_d', { rate: F.rate.default, min: F.rate.min, max: F.rate.max, owner: F.owner, streamers: F.streamers, people: F.people, gang: F.gang, games: F.games }) %></p></li>
+      <li><b><%- t('owners.earn.s2_t') %></b><p><%- t('owners.earn.s2_d', { rate: F.rate.default, min: F.rate.min, max: F.rate.max, owner: F.owner, streamers: F.streamers, people: F.people, gang: F.gang, games: F.games }) %></p><% if (F.gamesUnpaid) { %><p><%- t('owners.earn.games_unpaid') %></p><% } %></li>
       <li><b><%- t('owners.earn.s3_t') %></b><p><%- t('owners.earn.s3_d', { owner: F.owner, days: F.ownerDays, active: F.eligDays, cap: F.capPct }) %></p></li>
     </ol>
     <div class="ds-card lg pg-card">
@@ -232,7 +232,7 @@
     <% const glv_ = { cap: num(F.cap), rate: F.rate.default, min: F.rate.min, max: F.rate.max, owner: F.owner, streamers: F.streamers, people: F.people, gang: F.gang, games: F.games }; %>
     <dl class="ds-card lg pg-gloss">
       <% ['pat', 'pad', 'vault', 'payout', 'split', 'boost', 'stage', 'flair', 'prime', 'plus', 'chat', 'room', 'pepe', 'gang', 'fortknox', 'padiquette'].forEach((k) => { %>
-      <div id="g-<%= k %>"><dt><%- t('owners.gl.' + k + '_t') %></dt><dd><%- t('owners.gl.' + k + '_d', glv_) %></dd></div><% }) %>
+      <div id="g-<%= k %>"><dt><%- t('owners.gl.' + k + '_t') %></dt><dd><%- t('owners.gl.' + k + '_d', glv_) %><% if (k === 'split' && F.gamesUnpaid) { %> <%- t('owners.earn.games_unpaid') %><% } %></dd></div><% }) %>
     </dl>
   </section>
 </main>
