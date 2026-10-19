@@ -376,6 +376,9 @@ const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,2000}/gi;
 const padText = (t) => { try { const P = require("./pads"); return stickerHtml(P.userRefs(P.padRefs(esc(t)))); } catch (e) { return esc(t); } };   // 1.99df: + u/<name>
 // 1.99iw: [sticker:<pack>/<id>] -> the sticker (stickers.js; the sender's ownership was checked when it was sent)
 const stickerHtml = (h) => { try { return require("./stickers").inline(h); } catch (e) { return h; } };
+// stkfix B2: the same text where no picture can go (the Camfrog alert's quote, the list's preview): "[sticker: Happy Pepe]";
+// t = the reader's translator (the sticker's name in their language), none = English
+const stickerText = (s, t = null) => { try { return require("./stickers").fallbackText(s, { t }); } catch (e) { return String(s == null ? "" : s); } };
 /** Escape, link bare http(s) URLs (nofollow ugc, new tab) and known p/<slug> pads, keep line breaks. */
 function render(text) {
   const s = String(text == null ? "" : text);
@@ -774,8 +777,9 @@ async function dress({ people = [], msgs = [] } = {}) {
 }
 const listPeople = (items) => items.flatMap((c) => [c.with, ...(c.members || [])]);
 
-/** The conversation list: newest activity first, with the other person (or the group), last message and unread count. */
-async function list(userId) {
+/** The conversation list: newest activity first, with the other person (or the group), last message and unread count.
+ *  opts.t = the viewer's translator (req.t): a sticker in the preview reads "[sticker: <name>]" in their language. */
+async function list(userId, opts = {}) {
   await init();
   const rows = await getQuery(`SELECT c.id, c.kind, c.title, c.last_msg_id, c.last_msg_at, c.created_at, cm.last_read_id, cm.cleared_id, cm.muted
                                FROM conversation_members cm JOIN conversations c ON c.id = cm.conversation_id
@@ -793,7 +797,8 @@ async function list(userId) {
       const pics = !sys && !last.deleted_at && !last.body ? await dmmedia.countFor(last.id) : 0;
       lastOut = { mine: last.sender_id === userId, deleted: !!last.deleted_at, system: sys,
                   blocked: blocks.has(last.sender_id) && !sys,
-                  text: last.deleted_at ? "" : sys ? await systemText(last) : last.body ? snippet(last.body, 90) : pics ? (pics === 1 ? "📷 Photo" : `📷 ${pics} photos`) : "",
+                  // stkfix B2: the preview is plain text (textContent) - a sticker reads "[sticker: Happy Pepe]", never the raw token
+                  text: last.deleted_at ? "" : sys ? await systemText(last) : last.body ? snippet(stickerText(last.body, opts.t), 90) : pics ? (pics === 1 ? "📷 Photo" : `📷 ${pics} photos`) : "",
                   from: r.kind === "group" && !sys && last.sender_id !== userId ? (await who(last.sender_id)).display : null };
     }
     const item = { id: r.id, kind: r.kind, at: r.last_msg_at || r.created_at, lastId: r.last_msg_id, unread, muted: !!r.muted, last: lastOut };
@@ -1143,7 +1148,8 @@ async function claimAlerts({ limit = 50 } = {}) {
     if (n === 1) head = pics ? `📷 ${display(sender)} sent ${pics === 1 ? "a photo" : pics + " photos"}${inG}` : `💬 New message from ${display(sender)}${inG}`;
     else head = group ? `💬 ${n} new messages in ${gname}` : `💬 ${n} new messages from ${display(sender)}`;
     const plain = head + ` on ${site}/messages`;
-    const quote = last.body ? snippet(last.body, PREVIEW_CHARS).replace(/"/g, "'") : "";
+    // stkfix B2: a sticker is "[sticker: Happy Pepe]" in Camfrog, never the raw [sticker:pack/id] token
+    const quote = last.body ? snippet(stickerText(last.body), PREVIEW_CHARS).replace(/"/g, "'") : "";
     const who_ = group && n > 1 ? display(sender) + ": " : "";
     out.push({ id: `${a.conversation_id}:${last.id}`, login: String(rcpt.camfrogUsername).toLowerCase(), user: rcpt.username,
                from: sender.username, from_login: sender.camfrogUsername ? String(sender.camfrogUsername).toLowerCase() : null, count: n,
@@ -1290,7 +1296,11 @@ async function pepeReply({ conversation, upto, text } = {}) {
   const other = (await otherMembers(conv.id, PEPE_ID))[0];
   const u = other ? await account(other.user_id) : null;
   const up = Math.max(0, parseInt(upto, 10) || 0);
-  const body = cleanBody(text).slice(0, LIMITS.max_len);
+  // stkfix B4: his model can write any [sticker:…] token, and rendering never checks ownership - only house packs listed
+  // right now stay stickers (stickers.forPepe); any other known token is stored as the text "[sticker: Name]"
+  let body = cleanBody(text);
+  try { body = require("./stickers").forPepe(body); } catch (e) { body = stickerText(body); }
+  body = body.slice(0, LIMITS.max_len);
   if (!u || u.archived_at || !body || (await blocked(PEPE_ID, u.userId)).length) {
     await pepeDone(conv.id, up || conv.last_msg_id, body ? "dropped" : "done");
     return { skipped: true };
@@ -1422,7 +1432,7 @@ function register(app, { isBotToken, addUser }) {
       if (!me) return res.redirect("/login");
       const inbox = require("./inbox");
       if (me.camfrogUsername) await inbox.attachPendingSafe(me.userId, me.camfrogUsername);   // notices Pepe filed before the link
-      const convs = await list(me.userId);
+      const convs = await list(me.userId, { t: req.t });
       const meLook = { username: me.username };
       await dress({ people: [meLook] });           // 1.99ex: my own photo + name style for my optimistic bubbles
       const notices = req.path === "/messages/notices";
@@ -1466,7 +1476,7 @@ function register(app, { isBotToken, addUser }) {
   app.get("/api/messages/conversations", addUser, guard(false), async (req, res) => {
     try {
       const inbox = require("./inbox");            // + the pinned 🔔 Notices item, so the page's poll keeps it fresh too
-      res.json({ ok: true, conversations: await list(req.user.userId), unread: await unreadTotal(req.user.userId),
+      res.json({ ok: true, conversations: await list(req.user.userId, { t: req.t }), unread: await unreadTotal(req.user.userId),
                  notices: { unread: await inbox.unreadCount(req.user.userId), latest: await inbox.latest(req.user.userId) } });
     } catch (e) { fail(res, e); }
   });

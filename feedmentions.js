@@ -135,6 +135,7 @@ async function accounts(list) {
 }
 
 const snip = (s, n) => { const x = String(s || "").replace(/\s+/g, " ").trim(); return x.length > n ? x.slice(0, n - 1).trimEnd() + "…" : x; };
+const stickerText = (s) => { try { return require("./stickers").fallbackText(s); } catch (e) { return String(s == null ? "" : s); } };
 
 /**
  * Tell the people newly @mentioned in a post or comment. opts: {author: {userId, username, displayname},
@@ -174,7 +175,8 @@ async function notify(opts = {}) {
       const where = opts.kind === "comment" ? "a comment" : "a post";
       const ref = `fmention:${opts.kind === "comment" ? "c" : "p"}:${opts.id}:${a.userId}`;
       const stored = await inbox.addSafe(a.userId, {
-        kind: "mention", title: `💬 ${who} mentioned you in ${where}`, body: snip(opts.text, 300), link: opts.link || "/feed", ref,
+        // stkfix B2: a sticker reads "[sticker: Happy Pepe]" in the notice (and its Telegram alert), never the raw token
+        kind: "mention", title: `💬 ${who} mentioned you in ${where}`, body: snip(stickerText(opts.text), 300), link: opts.link || "/feed", ref,
       });
       if (!stored) continue;
       // 1.99acd: the browser notification (webpush.js) - "You were mentioned in a post / comment", never the text or the author

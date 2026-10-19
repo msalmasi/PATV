@@ -1,9 +1,14 @@
 /* stickers.js — the 🧸 sticker picker (1.99iw, stickers.js on the server).
    Any <button data-sticker-picker="<textarea selector>"> opens a small panel of the stickers the signed-in account
    owns; picking one puts its [sticker:<pack>/<id>] token at the caret (an "input" event follows, so drafts and
-   auto-grow keep working). The server turns tokens into pictures when it renders messages and posts. */
+   auto-grow keep working). The server turns tokens into pictures when it renders messages and posts.
+   stkfix B5: the panel's words are __t (js.stk.*); pack and sticker names come from GET /api/stickers already in the page's
+   language (stickers.localize, the stk.* keys). Everything shown is plain text, escaped here. */
 (function () {
   'use strict';
+  if (window.patvStickerPicker) return;            // loaded twice on one page: one set of listeners (else a click opens and closes)
+  window.patvStickerPicker = true;
+  var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var data = null, loading = null, panel = null, owner = null;
   function css() {
     if (document.getElementById('stkCss')) return;
@@ -20,9 +25,15 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function load() {
     if (data) return Promise.resolve(data);
+    // only a good answer is kept: an error answer (a 500's {ok: false}), a network error or a non-JSON reply says "couldn't
+    // load" (never "Sign in" - a signed-out viewer gets ok: true, signed: false) and the next open asks again
     if (!loading) loading = fetch('/api/stickers', { credentials: 'same-origin' }).then(function (r) { return r.json(); })
-      .then(function (j) { data = j && j.ok ? j : { packs: [], signed: false }; return data; })
-      .catch(function () { loading = null; return { packs: [], signed: false, failed: true }; });
+      .then(function (j) {
+        if (j && j.ok) { data = j; return data; }
+        loading = null;
+        return { packs: [], failed: true };
+      })
+      .catch(function () { loading = null; return { packs: [], failed: true }; });
     return loading;
   }
   function close() { if (panel) { panel.remove(); panel = null; } if (owner) { owner.setAttribute('aria-expanded', 'false'); owner = null; } }
@@ -46,22 +57,30 @@
     panel = document.createElement('div');
     panel.className = 'stk-pop';
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'Stickers');
-    panel.innerHTML = '<p>Loading stickers…</p>';
+    panel.setAttribute('aria-label', _t('js.stk.label', 'Stickers'));
+    panel.innerHTML = '<p>' + esc(_t('js.stk.loading', 'Loading stickers…')) + '</p>';
     document.body.appendChild(panel);
     place(btn);
     load().then(function (d) {
       if (!panel) return;
       var mine = (d.packs || []).filter(function (p) { return p.owned; });
       var h = '';
-      if (!d.signed) h = '<p>Sign in to use stickers.</p>';
-      else if (!mine.length) h = '<p>No sticker packs yet. 🧸 <a href="/premium#stickers">Get one</a>' + (d.allowance && d.allowance.left ? ' - your 🎟️ Season Pass has a free one waiting.' : '.') + '</p>';
+      if (d.failed) h = '<p>' + esc(_t('js.stk.failed', 'Couldn’t load your stickers - try again.')) + '</p>';
+      else if (!d.signed) h = '<p>' + esc(_t('js.stk.signin', 'Sign in to use stickers.')) + '</p>';
+      else if (!mine.length) {
+        // one sentence per case, the link a {!link} placeholder (the words around it stay together for translators)
+        var get = '<a href="/premium#stickers">' + esc(_t('js.stk.get_one', 'Get one')) + '</a>';
+        var line = d.allowance && d.allowance.left
+          ? _t('js.stk.none_free', 'No sticker packs yet. 🧸 {!link} - your 🎟️ Season Pass has a free one waiting.')
+          : _t('js.stk.none', 'No sticker packs yet. 🧸 {!link}.');
+        h = '<p>' + esc(line).split('{!link}').join(get) + '</p>';
+      }
       mine.forEach(function (p) {
         h += '<h6>' + esc(p.emoji) + ' ' + esc(p.name) + '</h6><div class="stk-grid">' + p.stickers.map(function (s) {
           return '<button type="button" data-token="' + esc(s.token) + '" title="' + esc(s.name) + '"><img src="' + esc(s.url) + '" alt="' + esc(s.name) + '"></button>';
         }).join('') + '</div>';
       });
-      if (mine.length) h += '<p><a href="/premium#stickers">More packs…</a></p>';
+      if (mine.length) h += '<p><a href="/premium#stickers">' + esc(_t('js.stk.more', 'More packs…')) + '</a></p>';
       panel.innerHTML = h;
       place(btn);
       var first = panel.querySelector('button');

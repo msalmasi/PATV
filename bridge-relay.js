@@ -441,6 +441,26 @@ function mineFor(userId, roomId) {
   return out.slice(-12);
 }
 
+/**
+ * stkfix B3: why a relay line's stickers refuse it -> {status, body} | null. `raw` = the line as typed, `out` = as it goes out
+ * (stickers.fallbackText). Stickers only from packs this account owns, at most 12 - the rule for DMs, posts and comments
+ * (stickers.validate) - and the line with its stickers written out must still fit SAY_MAX: "[sticker: Who's talking?]" is
+ * longer than "[sticker:miclife/who]", and Pepe cuts a longer line short without a word (1.99ye: too long is refused, never
+ * cut short silently). A failed check (the database busy) is a 503 (the composer retries it), never a thrown error.
+ */
+async function stickerRefusal(u, raw, out) {
+  try { await require("./stickers").validate(u.userId, raw); } catch (e) {
+    if (e && e.refuse) return { status: e.status || 403, body: { ok: false, code: "sticker", error: e.message } };
+    console.error("[bridge-relay] sticker check:", e && e.message);
+    return { status: 503, body: { ok: false, code: "busy", error: "Couldn't check your stickers just now — try again in a moment." } };
+  }
+  if (String(out).length > SAY_MAX) {
+    return { status: 400, body: { ok: false, code: "too_long", max: SAY_MAX,
+             error: `That's too long once its stickers are written out for Camfrog ("[sticker: Name]") — ${SAY_MAX} characters at most.` } };
+  }
+  return null;
+}
+
 /** 1.99ye: one say line from member `u` (a users row: userId, username, displayname, camfrogUsername) into live room R.
  *  The /say route and the staging test route both come here. -> {status, body}. `cid` = the page's client id: the same
  *  one again answers with the job it already made (never a second post). */
@@ -454,10 +474,16 @@ async function sayLine(u, R, text, cid, opts = {}) {
   if (!text) return { status: 400, body: { ok: false, code: "empty", error: "Type something first." } };
   const blk = await blockedWhy(R, u, "chat");             // 1.99xa: !bridge block (bridgeblocks.js)
   if (blk) return { status: 403, body: { ok: false, code: "blocked", error: blk, blocked: true, feature: "chat" } };
+  // stkfix B2: Camfrog can't show PATV art - the line goes out with "[sticker: Happy Pepe]" for each sticker, never the raw
+  // token. That expanded line is what Pepe says, so the text filter (accountRefusal) and the length limit judge IT.
+  const out = require("./stickers").fallbackText(text);
   if (!u.camfrogUsername) {
-    const why = await accountRefusal(u, R, text);          // 1.99wv: a PATV account with no chat login (see the top)
+    const why = await accountRefusal(u, R, out);           // 1.99wv: a PATV account with no chat login (see the top)
     if (why) return { status: why.status, body: { ok: false, code: "account", error: why.error } };
   }
+  const st = await stickerRefusal(u, text, out);           // stkfix B3: packs this account owns; the expanded length
+  if (st) return st;
+  text = out;
   let open = 0;
   for (const j of jobs.values()) if (j.kind === "say" && j.userId === u.userId && j.roomId === R.id && j.state !== "done") open++;
   if (open >= SAY_QUEUE_MAX) {
@@ -563,6 +589,12 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
       return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
     }
+    // stkfix B3: a command line's stickers follow the say rule (packs this account owns, 12 at most, the length written out),
+    // and Camfrog gets "[sticker: Name]" (B2) - never a raw token, never one from a pack this account doesn't own
+    const out = require("./stickers").fallbackText(text);
+    const st = await stickerRefusal(u, text, out);
+    if (st) return res.status(st.status).json(st.body);
+    text = out;
     const lim = limited("cmd|" + u.userId, CMD_GAP, CMD_BURST, CMD_WINDOW);
     if (lim) return res.status(429).json({ ok: false, error: lim });
     const j = newJob({ kind: "cmd", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, text });

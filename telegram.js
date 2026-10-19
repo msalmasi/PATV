@@ -104,6 +104,7 @@ function init() {
 const sha = (s) => crypto.createHash("sha256").update(String(s)).digest("hex");
 const clean = (s, n) => String(s == null ? "" : s).replace(/[\u0000-\u0008\u000b-\u001f\u007f]+/g, " ").trim().slice(0, n);
 const snip = (s, n) => { const x = String(s || "").replace(/\s+/g, " ").trim(); return x.length > n ? x.slice(0, n - 1).trimEnd() + "…" : x; };
+const stickerText = (s, t = null) => { try { return require("./stickers").fallbackText(s, { t }); } catch (e) { return String(s == null ? "" : s); } };
 function newCode() {
   const b = crypto.randomBytes(CODE_LEN);
   let s = "";
@@ -352,7 +353,9 @@ function dmAlert(userId, m) {
     const who = snip(m.from || "someone", 40);
     const head = m.group ? t("tg.alert.dm_group", { who, group: snip(m.group, 40) }) : t("tg.alert.dm", { who });
     const lines = [`💬 ${head}`];
-    if (preview && m.text) lines.push(`“${snip(m.text, 300)}”`);
+    // stkfix B2: a sticker reads "[sticker: Happy Pepe]" here, never the raw [sticker:pack/id] token (stickers.fallbackText) -
+    // in the member's language, like the rest of this alert
+    if (preview && m.text) lines.push(`“${snip(stickerText(m.text, t), 300)}”`);
     else if (preview && m.pics) lines.push(t("tg.alert.dm_photo"));
     lines.push(`${site()}/messages`);
     const tNow = NOW();

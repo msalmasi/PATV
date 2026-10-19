@@ -66,8 +66,9 @@
   <% } %>
   <% if (!isReply && signed && !c.deleted) { %>
     <form class="cm-replyf composer hide" data-act="comment" data-post="<%= p.id %>" data-parent="<%= c.id %>">
-      <textarea name="body" maxlength="2000" rows="2" placeholder="<%- t('feed.c.reply_to', { name: c.author.display }) %>" aria-label="<%- t('feed.c.your_reply') %>"></textarea>
-      <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="reply"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.c.reply') %></button></div>
+      <textarea name="body" id="cmr-<%= c.id %>" maxlength="2000" rows="2" placeholder="<%- t('feed.c.reply_to', { name: c.author.display }) %>" aria-label="<%- t('feed.c.your_reply') %>"></textarea>
+      <%# stkfix B6: the 🧸 sticker picker (public/js/stickers.js, loaded by post.ejs) - this reply box's own textarea %>
+      <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g cm-stk" data-sticker-picker="#cmr-<%= c.id %>" aria-expanded="false" title="<%- t('feed.fc.sticker_add') %>" aria-label="<%- t('feed.fc.sticker_add') %>">🧸</button><button type="button" class="btn-g" data-act="reply"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.c.reply') %></button></div>
     </form>
   <% } %>
   <% if (c.replies && c.replies.length) { %>

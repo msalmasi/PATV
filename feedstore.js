@@ -101,6 +101,8 @@ class Refuse extends Error { constructor(status, msg) { super(msg); this.status 
 async function stickerCheck(userId, text) {
   try { await require("./stickers").validate(userId, text); } catch (e) { if (e.refuse) throw new Refuse(e.status, e.message); throw e; }
 }
+// stkfix B2: in a notice's text a sticker reads "[sticker: Happy Pepe]", never the raw [sticker:pack/id] token
+const stickerText = (s) => { try { return require("./stickers").fallbackText(s); } catch (e) { return String(s == null ? "" : s); } };
 
 let ready = null;
 let CONFIG = { ...DEFAULTS };
@@ -1747,16 +1749,17 @@ async function comment(user, postId, { body, parent } = {}) {
   if (filtHide) return { id, safety };                              // 1.99ux: hidden by the filter - no notices until it's released
   // notices: the post's author, and the person replied to (never yourself, never twice)
   const who = u.displayname || u.username;
-  const what = (p.title || p.body || "your post").replace(/\s+/g, " ").slice(0, 60);
+  const what = stickerText(p.title || p.body || "your post").replace(/\s+/g, " ").slice(0, 60);
+  const said = stickerText(text).slice(0, 200);                     // stkfix B2
   const link = await postLink(postId, "#c-" + id);
   const told = new Set([u.userId]);
   if (par && !told.has(par.author_id)) {
     told.add(par.author_id);
-    await notify(par.author_id, { title: `${who} replied to your comment`, body: `On "${what}": ${text.slice(0, 200)}`, link, ref: "feed-c:" + id + ":p" });
+    await notify(par.author_id, { title: `${who} replied to your comment`, body: `On "${what}": ${said}`, link, ref: "feed-c:" + id + ":p" });
   }
   if (!told.has(p.author_id)) {
     told.add(p.author_id);
-    await notify(p.author_id, { title: `${who} commented on your post`, body: `"${what}": ${text.slice(0, 200)}`, link, ref: "feed-c:" + id });
+    await notify(p.author_id, { title: `${who} commented on your post`, body: `"${what}": ${said}`, link, ref: "feed-c:" + id });
   }
   // 1.99kk: @mentions (feedmentions.js; never the people just told above)
   await require("./feedmentions").notify({ author: u, kind: "comment", id, postId, text, skip: [...told], link });
@@ -2239,7 +2242,8 @@ async function takeMentions(site) {
     const A = await account(first.author_id);
     const name = A ? (A.displayname || A.username) : "someone";
     const nsfw = effNsfw(first);
-    const what = nsfw ? "(NSFW)" : cleanLine(first.title || first.body || "", 70);
+    // stkfix B2: this line is said in the Camfrog room - a sticker in the post reads "[sticker: Happy Pepe]", never the raw token
+    const what = nsfw ? "(NSFW)" : cleanLine(stickerText(first.title || first.body || ""), 70);
     // 1.99cu: every line links the post itself (1.99dv: its canonical address, <site>/p/<pad>/posts/<id>/<slug>); several
     // posts folded into one line link each post when they fit in MENTION_LINE_MAX, else the newest post + the pad page
     const urls = await postLinks(live.map((m) => m.post_id));

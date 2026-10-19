@@ -28,7 +28,7 @@
     <% } else if (signed) { %>
       <form class="cm-new composer" data-act="comment" data-post="<%= p.id %>">
         <textarea name="body" maxlength="2000" rows="2" placeholder="<%- t('feed.post.add_comment') %>" aria-label="<%- t('feed.post.your_comment') %>" required></textarea>
-        <div class="cbar"><span class="hint mut"><%- t('feed.post.commenting_as', { name: viewer.display }) %><% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %> · <%- t('feed.post.agree', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('feed.post.terms') + '</a>' }) %><%- typeof termsNeeded !== 'undefined' && termsNeeded ? ' ' + t('feed.post.asked_once') : '' %><% } %></span><span class="fc-err" role="alert"></span><button type="submit" class="btn-s"><%- t('feed.post.comment_btn') %></button></div>
+        <div class="cbar"><span class="hint mut"><%- t('feed.post.commenting_as', { name: viewer.display }) %><% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %> · <%- t('feed.post.agree', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('feed.post.terms') + '</a>' }) %><%- typeof termsNeeded !== 'undefined' && termsNeeded ? ' ' + t('feed.post.asked_once') : '' %><% } %></span><span class="fc-err" role="alert"></span><button type="button" class="btn-g cm-stk" data-sticker-picker="form.cm-new textarea[name=body]" aria-expanded="false" title="<%- t('feed.fc.sticker_add') %>" aria-label="<%- t('feed.fc.sticker_add') %>">🧸</button><button type="submit" class="btn-s"><%- t('feed.post.comment_btn') %></button></div>
       </form>
     <% } else { %>
       <div class="cm-signin"><span><%- t('feed.post.join') %></span><a class="btn-s" href="/login?next=<%= encodeURIComponent(p.url + '#comments') %>"><%- t('feed.post.sign_in_comment') %></a></div>
@@ -41,5 +41,7 @@
 </main>
 <script type="application/json" id="fdReasons"><%- JSON.stringify(reasons).replace(/</g, '\\u003c') %></script>
 <%- include('partials/feed-js', { viewer }) %>
+<%# stkfix B6: the 🧸 sticker picker in the comment and reply boxes (public/js/stickers.js; comments already validate and render stickers) %>
+<% if (signed) { %><script src="/public/js/stickers.js?v=2" defer></script><% } %>
 </body>
 </html>

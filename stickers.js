@@ -25,7 +25,19 @@
 // A perk pack with a "season" window (MM-DD..MM-DD, UTC, every year: 🎃 Spooky Season, Oct 1 - Nov 7) is listed and
 // usable only inside it. Stickers already sent keep rendering (inline() never checks ownership).
 //
-// Routes: GET /api/stickers (catalog + mine + allowance), POST /api/stickers/buy {pack, ref, to?, allowance?}
+// stkfix (V0 of the stickers addendum):
+//   * inline() escapes every name it writes into the <img> (B1): names are plain text, and once members can name packs a
+//     name is untrusted input;
+//   * fallbackText() is the ONE readable stand-in where no picture can go - "[sticker: Happy Pepe]" in Camfrog and
+//     Telegram DM alerts (Telegram in the member's language), inbox notices (mentions, comments), the /messages list's
+//     preview, Pepe's "📌 New post" line and the web relay into Camfrog rooms - say lines and "!" commands, whose length
+//     limit and text filter judge the line as it goes out (B2);
+//   * forPepe(): Pepe owns no packs, so his DM answers render only house packs listed right now; other tokens become
+//     that text (B4);
+//   * the picker's API answers in the viewer's language (stk.* keys, B5); GET /stickers goes to the store (B7).
+//
+// Routes: GET /api/stickers (catalog + mine + allowance), POST /api/stickers/buy {pack, ref, to?, allowance?},
+// GET /stickers (-> the 🧸 tab of /cosmetics)
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -38,6 +50,9 @@ const MAX_PER_TEXT = 12;
 let clock = () => Date.now();
 const now = () => clock();
 const fmt = (n) => Number(n).toLocaleString("en-US");
+// stkfix B1: anything inline() writes into the HTML (names are plain text, never markup)
+const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESC[c]);
 
 function loadCatalog(file = path.join(__dirname, "stickers.json")) {
   let raw = {};
@@ -52,7 +67,8 @@ function loadCatalog(file = path.join(__dirname, "stickers.json")) {
       stickers.push(Object.freeze({ id: s.id, name: String(s.name || s.id).slice(0, 40), url: `/public/stickers/${p.id}/${s.id}.svg` }));
     }
     if (!stickers.length) continue;
-    packs.push(Object.freeze({ id: p.id, name: String(p.name || p.id).slice(0, 40), emoji: String(p.emoji || "🧸").slice(0, 8),
+    // house: a pack PATV made (everything in stickers.json). Pad / member packs (later) are not - Pepe uses house packs only (forPepe)
+    packs.push(Object.freeze({ id: p.id, house: true, name: String(p.name || p.id).slice(0, 40), emoji: String(p.emoji || "🧸").slice(0, 8),
       desc: String(p.desc || "").slice(0, 300), price: Number(p.price) > 0 ? Math.floor(Number(p.price)) : null, retired: !!p.retired,
       perk: PERKS.includes(p.perk) ? p.perk : null, season: cleanSeason(p.season),
       stickers: Object.freeze(stickers), byId: Object.freeze(Object.fromEntries(stickers.map((s) => [s.id, s]))) }));
@@ -86,7 +102,9 @@ const P = () => require("./premium");
 const priceOf = (pack) => pack.price || P().config().sticker_price;
 
 class Refuse extends Error {
-  constructor(status, message, code) { super(message); this.status = status; this.refuse = true; this.code = code || { 400: "E_BAD_ARGS", 401: "E_NO_PERMISSION", 402: "E_INSUFFICIENT_PAT", 403: "E_NO_PERMISSION", 404: "E_TARGET_NOT_FOUND", 409: "E_ALREADY", 423: "E_FEATURE_OFF" }[status] || "E_REFUSED"; }
+  // stkfix B8: 410 (a retired pack) was missing, so it fell through to E_REFUSED - it's "gone": E_TARGET_NOT_FOUND
+  // ("It may have ended or been removed - reload the page and pick it again", weberrors.js)
+  constructor(status, message, code) { super(message); this.status = status; this.refuse = true; this.code = code || { 400: "E_BAD_ARGS", 401: "E_NO_PERMISSION", 402: "E_INSUFFICIENT_PAT", 403: "E_NO_PERMISSION", 404: "E_TARGET_NOT_FOUND", 409: "E_ALREADY", 410: "E_TARGET_NOT_FOUND", 423: "E_FEATURE_OFF" }[status] || "E_REFUSED"; }
 }
 
 let ready = null;
@@ -228,8 +246,46 @@ function inline(html) {
   return s.replace(TOKEN_RE, (all, p, k) => {
     const pk = CAT.byId[p], st = pk && pk.byId[k];
     if (!st) return all;
-    return `<img class="stk${only ? " stk-l" : ""}" src="${st.url}" alt="${st.name}" title="${st.name} · ${pk.name}" width="${only ? 96 : 48}" height="${only ? 96 : 48}" style="image-rendering:pixelated;vertical-align:middle;max-width:100%;height:auto" loading="lazy" decoding="async">`;
+    // stkfix B1: every value is escaped - a name is plain text (stored XSS the day a member can name a pack)
+    return `<img class="stk${only ? " stk-l" : ""}" src="${esc(st.url)}" alt="${esc(st.name)}" title="${esc(st.name + " · " + pk.name)}" width="${only ? 96 : 48}" height="${only ? 96 : 48}" style="image-rendering:pixelated;vertical-align:middle;max-width:100%;height:auto" loading="lazy" decoding="async">`;
   });
+}
+// a name as one plain line inside "[sticker: …]": no control / bidi characters, no brackets. The zero-width joiner (U+200D) is
+// the one format character kept: it holds emoji sequences together (a family / a profession emoji in a name stays one emoji).
+const lineName = (s, dflt = "sticker") => String(s == null ? "" : s).replace(/(?:[\p{Cc}\p{Zl}\p{Zp}\[\]]|(?!\u200d)\p{Cf})+/gu, " ")
+  .replace(/\s+/g, " ").trim() || dflt;
+/**
+ * stkfix B2: the text with each known sticker token written as "[sticker: <name>]" - the readable stand-in wherever no picture
+ * can go (Camfrog / Telegram DM alerts, inbox notices, the DM list's preview, Pepe's post announcements, the web relay into
+ * Camfrog; v2's bridge fallback). Unknown tokens stay as typed (they never render anyway). The stand-in can't match TOKEN_RE
+ * (a space after the colon, no brackets in the name).
+ * opts (or a bare keep function, as forPepe passes):
+ *   keep(pack) true leaves that token as it is (forPepe);
+ *   t = a translator (i18n tFor(lang) / req.t): the reader's language - the sticker's name from stk.s.<pack>.<id> and the word
+ *       from stk.fallback_word, as plain text; English (stickers.json, "sticker") without one or when a key is missing.
+ */
+function fallbackText(text, opts = null) {
+  const s = String(text == null ? "" : text);
+  if (s.indexOf("[sticker:") < 0) return s;
+  const o = typeof opts === "function" ? { keep: opts } : opts || {};
+  const t = typeof o.t === "function" && typeof o.t.has === "function" ? o.t : null;
+  const L = (k, dflt) => { try { return t && t.has(k) ? plainOf(t(k)) : dflt; } catch (e) { return dflt; } };
+  const word = lineName(L("stk.fallback_word", "sticker"));
+  return s.replace(TOKEN_RE, (all, p, k) => {
+    const pk = CAT.byId[p], st = pk && pk.byId[k];
+    if (!st) return all;
+    if (o.keep && o.keep(pk)) return all;
+    return `[${word}: ${lineName(L(`stk.s.${p}.${k}`, st.name))}]`;
+  });
+}
+/**
+ * stkfix B4: Pepe's own text (messages.pepeReply). He owns no packs, so a token renders from him only when it names a HOUSE pack
+ * listed right now (not retired, in season), at most MAX_PER_TEXT of them; every other known token becomes "[sticker: Name]" -
+ * whatever his model writes, no art the house doesn't offer reaches a member's DMs.
+ */
+function forPepe(text, t = now()) {
+  let n = 0;
+  return fallbackText(text, { keep: (pk) => !!pk.house && !pk.retired && inSeason(pk, t) && ++n <= MAX_PER_TEXT });
 }
 
 // ── reads ──
@@ -249,14 +305,31 @@ async function pageData(user) {
   const mine = signed ? await ownedPacks(user.userId) : new Set();
   return { packs: catalog().map((p) => ({ ...p, owned: mine.has(p.id) })), signed, allowance: signed ? await allowance(user.userId) : null };
 }
+// the catalogs' text is HTML-safe; the API hands out plain text (the picker escapes what it shows)
+const UNESC = { amp: "&", lt: "<", gt: ">", quot: '"', "#34": '"', "#39": "'" };
+const plainOf = (s) => String(s).replace(/&(amp|lt|gt|quot|#34|#39);/g, (m, e) => UNESC[e]);
+/**
+ * stkfix B5: pageData's names in the viewer's language - pack name / desc and each sticker's name from the stk.* keys
+ * (locales/*.json: stk.pack.<pack>.name, stk.pack.<pack>.desc, stk.s.<pack>.<sticker>), English (stickers.json) when a key is
+ * missing. t = req.t (i18n.js); without one the data comes back as it is.
+ */
+function localize(d, t) {
+  if (!d || !Array.isArray(d.packs) || typeof t !== "function" || typeof t.has !== "function") return d;
+  const L = (k, dflt) => (t.has(k) ? plainOf(t(k)) : dflt);
+  return { ...d, packs: d.packs.map((p) => ({ ...p, name: L(`stk.pack.${p.id}.name`, p.name), desc: L(`stk.pack.${p.id}.desc`, p.desc),
+    stickers: (p.stickers || []).map((s) => ({ ...s, name: L(`stk.s.${p.id}.${s.id}`, s.name) })) })) };
+}
 
 function register(app, { addUser }) {
   init().catch((e) => console.error("[stickers] init:", e.message));
   if (app.locals) app.locals.stickerHtml = inline;
   const guard = require("./middleware/authGuard");
+  // stkfix B7: /stickers (Pepe's Pad links it - tools/setup-pepes-pad.js) was a 404. The sticker store is the 🧸 tab of
+  // /cosmetics for now; v2's store / pack pages take the path over, so the redirect is a temporary one (302).
+  app.get("/stickers", (req, res) => res.redirect(302, "/cosmetics?tab=stickers"));
   app.get("/api/stickers", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    try { res.json({ ok: true, ...(await pageData(req.user)) }); } catch (e) { const x = P().errBody(e); res.status(x.status).json(x.body); }
+    try { res.json({ ok: true, ...localize(await pageData(req.user), req.t) }); } catch (e) { const x = P().errBody(e); res.status(x.status).json(x.body); }
   });
   app.post("/api/stickers/buy", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -265,7 +338,7 @@ function register(app, { addUser }) {
     try {
       const b = req.body || {};
       const r = await buy(req.user, { pack: b.pack, ref: b.ref, to: b.to || null, allowance: b.allowance === true, anon: b.anon === true });
-      res.json({ ok: true, ...r, state: await pageData(req.user) });
+      res.json({ ok: true, ...r, state: localize(await pageData(req.user), req.t) });
     } catch (e) { const x = P().errBody(e); res.status(x.status).json(x.body); }
   });
 }
@@ -288,7 +361,9 @@ module.exports = {
   grantComp,
   inSeason, perkHas, perkPacks, PERKS,
   init, register, buy, ownedPacks, owns, allowance, tokens, validate, inline, catalog, pageData, loadCatalog, periodKey, Refuse, TOKEN_RE,
+  fallbackText, forPepe, localize, MAX_PER_TEXT,     // stkfix
   chat: { validate, inline, TOKEN_RE },          // the hook for native PATV chat (later)
   get CAT() { return CAT; },
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
+  _setCatalog: (c) => { CAT = c || loadCatalog(); },  // tests: a catalog from loadCatalog(<file>); no argument = stickers.json again
 };
