@@ -90,6 +90,18 @@
   --ds-r-common: #9aa4ad; --ds-r-uncommon: #5fd17a; --ds-r-rare: #b388ff; --ds-r-epic: #ff4fd8; --ds-r-legendary: #ffd740;
   /* platforms */
   --ds-twitch: #9146ff; --ds-discord: #5865f2; --ds-camfrog: #a5d6a7; --ds-plex: #e5a00d;
+  /* the pad chat's lines (public/css/chatlog.css, CL5): the exact shades the chat has always had. Moving the chat onto the
+     standard palette is the owner's call - re-point each one to the token in its comment, here and nowhere else */
+  --ds-chat-hover: #161616;     /* a line under the pointer                       (palette: var(--ds-surface-2)) */
+  --ds-chat-pepe-bg: #0f1a10;   /* Pepe's own lines                               (var(--ds-ok-bg)) */
+  --ds-chat-hl-bg: #2a2410;     /* the line a 📣 mention, a jump or a link opened (var(--ds-gold-bg)) */
+  --ds-chat-hl-bar: #e0b400;    /*   its bar at the inline start                  (var(--ds-gold)) */
+  --ds-chat-tx-bg: #0f141b;     /* 🎙 auto-transcribed lines                      (var(--ds-info-bg)) */
+  --ds-chat-tx-bar: #4f7fa8;    /*   their bar at the inline start                (var(--ds-info-fill)) */
+  --ds-chat-tx-ink: #c8d6e5;    /*   their text                                   (var(--ds-info-ink)) */
+  --ds-chat-topic: #c9b46a;     /* the 📌 topic line and the chat heading's topic (var(--ds-warn)) */
+  --ds-chat-av-ink: #0d0d0d;    /* the letter on a picture-less avatar            (var(--ds-on-ac)) */
+  --ds-chat-anon: #2a2a2a;      /* the "?" bubble of someone / a former member    (var(--ds-hover)) */
 
   /* type scale - size / line-height. Weights: 400 body, 500 emphasis, 700 headings + numbers. */
   --ds-fs-display: clamp(28px, 5vw, 40px);  --ds-lh-display: 1.1;    /* hero h1 */

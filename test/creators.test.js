@@ -133,6 +133,21 @@ test("eligibility (D6) and applying: terms, tiers in bounds and ascending, 18+ n
   assert.deepEqual((await CR.plansOf(U.maker.userId)).map((p) => [p.tier, p.price]), [[1, 20000], [2, 100000]]);
 });
 
+test("eligibility: an Apple private relay address (contact only), or one Apple stopped forwarding to, is not a verified email", async () => {
+  await require(path.join(repo, "ssolinks")).init();
+  const u = await mkUser("relayfan", { verified: 0 });
+  const check = async (k) => (await CR.eligibility(u.userId)).checks.find((c) => c.key === k).ok;
+  assert.equal(await check("email"), false);
+  await runQuery(`INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, linked_at, email_relay, email_off)
+                  VALUES ('apple', '000111.cr.0001', ?, 'self', 'oidc', 'x1@privaterelay.appleid.com', 1, 1, 0)`, [u.userId]);
+  assert.equal(await check("email"), false, "a relay address");
+  assert.equal(await check("identity"), true, "the Apple link still counts as an identity");
+  await runQuery("UPDATE sso_links SET email = 'rf@example.test', email_relay = 0, email_off = 1 WHERE subject = '000111.cr.0001'");
+  assert.equal(await check("email"), false, "forwarding off");
+  await runQuery("UPDATE sso_links SET email_off = 0 WHERE subject = '000111.cr.0001'");
+  assert.equal(await check("email"), true, "a real address Apple gave");
+});
+
 test("locked posts: refusals come before anything is charged; a text lock works; a non-creator can't lock", async () => {
   await assert.rejects(store.create(U.fan.userId, { title: "x", body: "y", community: prof(U.fan), lock: { kind: "sub" } }), (e) => e.code === "E_NOT_CREATOR");
   await assert.rejects(store.create(U.maker.userId, { title: "x", body: "y", nsfw: true, community: prof(U.maker), lock: { kind: "sub" } }), (e) => e.code === "E_LOCKED_NSFW");

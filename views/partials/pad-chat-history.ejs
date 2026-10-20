@@ -1,0 +1,100 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# CL8: the pad's 📜 Chat history card while its Camfrog room is offline - or, for the owner and staff, while the pad has no 💎
+    bridge perk (bridge.js /p/:slug -> chatloghist.offlineCard; chatlog.history on, a signed-in viewer who may scroll back here).
+    Read-only: the newest page first, older lines as you scroll up, 📅 jump to a date, a ?line= deep link around its line, the ⋯
+    line menu (chat-lines.js), CL9: 🔍 search (pad-search.js; a result opens the history around its line), CL10: ⋯ › ⬇ Download chat log
+    (pad-download.js). public/js/pad-history.js,
+    the one renderer (chatlog-core.js), chatlog.css.
+    Locals: chatHistory {history}, room, signedIn %>
+<section class="card rm-chat rm-hist" id="rmHistCard" aria-labelledby="histH">
+  <h2 id="histH"><span><%- t('pad.chat.history_h') %></span><button type="button" class="ds-btn ghost sm hist-jump" id="rmHistJump" hidden aria-label="<%- t('pad.chat.jump_date') %>" title="<%- t('pad.chat.jump_date') %>">📅</button><button type="button" class="ds-btn ghost sm hist-jump" id="rmSearchBtn" hidden aria-label="<%- t('pad.chat.search') %>" title="<%- t('pad.chat.search') %>">🔍</button><button type="button" class="ds-btn ghost sm hist-jump" id="rmMoreBtn" hidden aria-label="<%- t('pad.chat.more') %>" title="<%- t('pad.chat.more') %>" data-tz="<%= locals.tz || 'UTC' %>">⋯</button></h2>
+  <p class="muted hist-off"><%- t('pad.chat.history_offline') %></p>
+  <div class="feed" id="rmScroll" role="region" tabindex="0" aria-label="<%- t('pad.chat.history_aria') %>">
+    <div class="hist-top" id="rmHistTop"></div>
+    <div class="older" id="rmOlder"></div>
+    <div class="hist-bot" id="rmHistBot"></div>
+  </div>
+</section>
+<script src="/public/js/chatlog-core.js?v=4"></script>
+<script src="/public/js/pad-history.js?v=3"></script>
+<script src="/public/js/pad-search.js?v=2"></script>
+<script src="/public/js/pad-download.js?v=2"></script>
+<% if (signedIn) { %><script src="/public/js/chat-lines.js?v=2"></script><% } %>
+<script id="rmHistInit" type="application/json"><%- JSON.stringify(chatHistory).replace(/</g, '\\u003c') %></script>
+<script>
+(function () {
+  'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { if (d && typeof d === 'object') d = v && v.count === 1 ? d.one : d.other; return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+  var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
+  var data = JSON.parse(document.getElementById('rmHistInit').textContent);
+  var hist = data && data.history ? data.history : null;
+  var CLR = window.PATVChatlog, H = CLR.domH(document);
+  var rctx = { t: _t, lang: document.documentElement.lang || undefined };
+  var scrollEl = document.getElementById('rmScroll'), olderEl = document.getElementById('rmOlder');
+  var padHist = null, padSearch = null;
+  // CL9: the 🔍 search results get the ⋯ too (made here, before chat-lines.js starts)
+  var searchHits = document.createElement('div'); searchHits.className = 'srch-hits';
+  function hitCs() { var o = []; Array.prototype.forEach.call(searchHits.querySelectorAll('*'), function (n) { if (n._c) o.push(n._c); }); return o; }
+  var chatLines = window.PATVChatLines ? PATVChatLines.init({ feed: olderEl, more: [searchHits], scroller: scrollEl, slug: slug, jc: function () { return null; },
+                                                              onGone: function (c) { if (padHist) padHist.drop([c]); if (padSearch) padSearch.drop([c]); } }) : null;
+  var onActs = function (a) { if (chatLines) chatLines.update({ history: { acts: a } }); };
+  padHist = PATVPadHistory.init({
+    slug: slug, scroller: scrollEl, older: olderEl, top: document.getElementById('rmHistTop'), bot: document.getElementById('rmHistBot'), log: null,
+    render: function (it, ctx) { return CLR.renderItem(it, ctx, H); }, ctx: rctx, hist: function () { return hist; },
+    dateBtn: document.getElementById('rmHistJump'), dateHost: document.getElementById('rmHistCard'), onActs: onActs,
+    extra: hitCs, onChecked: function (r) { if (padSearch) padSearch.drop(r.gone.concat(r.redo)); } });   // CL8 fix-up: the 🔍 results too
+  // CL9: 🔍 search (pad-search.js) - a result opens the history around its line
+  padSearch = window.PATVPadSearch ? PATVPadSearch.init({
+    slug: slug, btn: document.getElementById('rmSearchBtn'), host: document.getElementById('rmHistCard'), before: scrollEl, results: searchHits,
+    render: function (it, ctx) { return CLR.renderItem(it, ctx, H); }, ctx: rctx, hist: function () { return hist; }, history: padHist, onActs: onActs,
+    names: function () { return PATVPadSearch.screenNames([olderEl]); } }) : null;
+  // CL10: ⋯ -> ⬇ Download chat log (pad-download.js) - while the history block offers it (hist.dl)
+  var dlBtn = document.getElementById('rmMoreBtn');
+  var padDl = window.PATVPadDownload && dlBtn ? PATVPadDownload.init({ slug: slug, btn: dlBtn, hist: function () { return hist; }, tz: dlBtn.getAttribute('data-tz') || '' }) : null;
+  // a 🔔 mention link (?line=): the history around that line - one message for every line this viewer can't see
+  var line = (/[?&]line=(\d{1,12})(?:&|$)/.exec(location.search) || [])[1];
+  if (line) {
+    padHist.around(line).then(function (ok) {
+      if (ok) return;
+      var p = padHist.latest();
+      (p && p.then ? p : Promise.resolve()).then(function () {
+        var n = document.createElement('div'); n.className = 'sys'; n.textContent = _t('js.pad.chat.line_unavailable', 'That line isn’t available.');
+        olderEl.appendChild(n);
+      });
+    });
+  } else padHist.latest();
+  // the Live tab was hidden while it loaded: land on the line it opened (or the newest one) when it shows
+  document.addEventListener('patv:padtab', function (e) {
+    if (!e.detail || e.detail.tab !== 'live' || padHist.reveal()) return;
+    if (!line) { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; }
+  });
+  // CL8 fix-up: no live poll here - the card asks for its digests every minute (GET /history/state): a narrower view (v) reloads
+  // it, a privacy change (pv: someone became hidden, a name is redacted now, a line was taken down) re-checks the lines it holds;
+  // losing access (signed out, blocked, the pad's access or age gate, history switched off) empties it
+  var polling = false, stopped = false;
+  function closeCard() { stopped = true; hist = { scroll: false }; padHist.update(); if (padSearch) { padSearch.reset(); padSearch.update(); } if (padDl) padDl.update(); }
+  function poll() {
+    if (polling || stopped || document.hidden) return;
+    polling = true;
+    fetch('/api/rooms/' + encodeURIComponent(slug) + '/history/state', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403 || r.status === 404) { closeCard(); return null; }
+        return r.ok ? r.json() : null;
+      })
+      .then(function (d) {
+        var h = d && d.ok && d.history;
+        if (!h) return;
+        var old = hist;
+        hist = h;
+        if (!h.scroll) { closeCard(); return; }
+        if (old && h.v !== old.v) { padHist.reset(); if (padSearch) padSearch.reset(); }
+        else if (old && h.pv !== old.pv) padHist.recheck();
+        padHist.update(); if (padSearch) padSearch.update(); if (padDl) padDl.update();
+        if (h.acts) onActs(h.acts);
+      }, function () { /* the next minute */ })
+      .then(function () { polling = false; });
+  }
+  setInterval(poll, 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+})();
+</script>

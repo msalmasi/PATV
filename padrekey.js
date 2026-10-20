@@ -31,6 +31,8 @@ const ROOM_BOUND = new Set([
   "pad_vault_rekeys",                                                   // 1.99rl: the re-key journal itself
   "media", "image_safety_log",
   "feed_aigen_jobs.room",                                               // the Camfrog room a room generation came from
+  // CL2: the pad chat archive stays with the Camfrog room, like bridge_feed (pad_chat_cfg - the PAD's settings - moves)
+  "chatlog_rooms", "chat_log", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views", "chatlog_exports",
 ]);
 // feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen)
 const FEED_KV_PREFIXES = ["room:", "rules:", "mention:", "mention_set:", "mention_at:", "automod:scope:", "pepe:scope:", "aigen_room:"];
@@ -121,6 +123,7 @@ async function reloadCaches() {
   try { await require("./padlook").loadCache(); } catch (e) { /* not loaded */ }
   try { require("./mainstage")._pubCache.clear(); } catch (e) { /* no stage */ }
   try { await require("./premium").loadCache(); } catch (e) { /* not loaded */ }      // 1.99qy: Plus / Prime Time moved with the pad
+  try { await require("./chatlog").loadPadCfg(); } catch (e) { /* not loaded */ }      // CL3: the pad's chat settings moved with it
 }
 
 module.exports = { vaultRekeysForPepe, vaultRekeysDone, rekey, padColumns, reloadCaches, ROOM_BOUND, ROOM_COLUMNS, FEED_KV_PREFIXES };

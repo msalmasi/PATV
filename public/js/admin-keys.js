@@ -15,7 +15,12 @@
     revoked: function () { return _t('js.admkeys.err.revoked', 'That caller has no live key.'); },
     too_early: function () { return _t('js.admkeys.err.too_early', 'Observe for 7 days first, or tick the box to enforce early.'); },
     reason: function () { return _t('js.admkeys.err.reason', 'Give a reason.'); },
-    tickets_need: function () { return _t('js.admkeys.err.tickets_need', 'Chat tickets need sign-outs to the hub and the heartbeat on (a signed-out session has to reach the hub). Turn those on first, or turn tickets off first.'); }
+    tickets_need: function () { return _t('js.admkeys.err.tickets_need', 'Chat tickets need sign-outs to the hub and the heartbeat on (a signed-out session has to reach the hub). Turn those on first, or turn tickets off first.'); },
+    bad_key: function () { return _t('js.admkeys.err.bad_key', 'Give a chat login, or # and a 20-character hash.'); },
+    bad_kind: function () { return _t('js.admkeys.err.bad_kind', 'Pick what to un-hide.'); },
+    not_found: function () { return _t('js.admkeys.err.held_gone', 'That held change is gone - reload the page.'); },
+    decided: function () { return _t('js.admkeys.err.held_decided', 'That was already decided - reload the page.'); },
+    not_ready: function () { return _t('js.admkeys.err.hidden_not_ready', 'The hidden set isn\'t loaded yet - try again in a minute.'); }
   };
   function errText(j) { return (j && j.code && ERR[j.code] ? ERR[j.code]() : (j && j.error)) || _t('js.admkeys.err.failed', 'That did not work - try again.'); }
   function say(el, msg, bad) { if (el) { el.textContent = msg || ''; el.className = 'adm-msg' + (bad ? ' err' : msg ? ' ok' : ''); } }
@@ -82,6 +87,83 @@
     post('/api/admin/hubseam/settings', body).then(function (j) {
       if (!j || !j.ok) return say($('akSeamMsg'), errText(j), true);
       say($('akSeamMsg'), _t('js.admkeys.saved', 'Saved.')); reloadSoon();
+    });
+  });
+  // 1.99add: un-hide one chat login in Pepe's sticky hidden set - or a hash, written "#<20 hex>" (a chat login can itself be 20
+  // hex characters: without the # it is always taken as a login)
+  // 1.99add refix 4: the set keeps why someone is hidden - one kind or all of them is un-hidden
+  var KIND_TEXT = {
+    bridge: function () { return _t('js.admkeys.kind.bridge', '!bridge hide (left out)'); },
+    incognito: function () { return _t('js.admkeys.kind.incognito', 'incognito (shown as “someone”)'); },
+    incognito_web: function () { return _t('js.admkeys.kind.incognito_web', 'a website Incognito ON Pepe hasn\'t applied yet (shown as “someone”)'); },
+    unknown: function () { return _t('js.admkeys.kind.unknown', 'an older Pepe\'s list (left out)'); }
+  };
+  function kindsText(list) {
+    return (list || []).map(function (k) {
+      var name = typeof k === 'string' ? k : (k && k.kind === 'incognito' && k.src === 'web' ? 'incognito_web' : k && k.kind);
+      return KIND_TEXT[name] ? KIND_TEXT[name]() : String(name || '');
+    }).join(', ');
+  }
+  if ($('akUnhide')) $('akUnhide').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var key = ($('akUnhideKey').value || '').trim(), why = ($('akUnhideWhy').value || '').trim();
+    var sel = $('akUnhideKind'), kind = sel ? sel.value : 'all';
+    if (why.length < 3) return say($('akUnhideMsg'), ERR.reason(), true);
+    if (!key || key === '#') return say($('akUnhideMsg'), ERR.bad_key(), true);
+    if (!/^(all|bridge|incognito|unknown)$/.test(kind)) return say($('akUnhideMsg'), ERR.bad_kind(), true);
+    var isHash = key.charAt(0) === '#';
+    if (isHash && !/^#[0-9a-f]{20}$/i.test(key)) return say($('akUnhideMsg'), ERR.bad_key(), true);
+    var kindLabel = sel && sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : kind;
+    if (!window.confirm(_t('js.admkeys.unhide_confirm', 'Un-hide {key} ({kind})? Their name shows again in quotes and on the chat hub unless something else still hides them.', { key: key, kind: kindLabel }))) return;
+    var body = isHash ? { h: key.slice(1).toLowerCase(), kind: kind, reason: why } : { login: key, kind: kind, reason: why };
+    post('/api/admin/hubseam/unhide', body).then(function (j) {
+      if (!j || !j.ok) return say($('akUnhideMsg'), errText(j), true);
+      if (!j.was_hidden) return say($('akUnhideMsg'), _t('js.admkeys.unhidden_none', 'They weren\'t hidden that way.'));
+      if (j.still && j.still.length) say($('akUnhideMsg'), _t('js.admkeys.unhidden_still', 'Un-hidden there - still hidden by: {kinds}.', { kinds: kindsText(j.still) }));
+      else say($('akUnhideMsg'), _t('js.admkeys.unhidden', 'Un-hidden.'));
+      reloadSoon();
+    });
+  });
+
+  // 1.99add refix 3: look the same key up first (changes nothing) - hidden or not, held in which batch above, an OFF waiting
+  if ($('akCheck')) $('akCheck').addEventListener('click', function () {
+    var key = ($('akUnhideKey').value || '').trim();
+    if (!key || key === '#') return say($('akUnhideMsg'), ERR.bad_key(), true);
+    var isHash = key.charAt(0) === '#';
+    if (isHash && !/^#[0-9a-f]{20}$/i.test(key)) return say($('akUnhideMsg'), ERR.bad_key(), true);
+    var body = isHash ? { h: key.slice(1).toLowerCase() } : { login: key };
+    say($('akUnhideMsg'), _t('js.admkeys.working', 'Working…'));
+    post('/api/admin/hubseam/check', body).then(function (j) {
+      if (!j || !j.ok) return say($('akUnhideMsg'), errText(j), true);
+      var v = { key: key, kinds: kindsText(j.kinds) };
+      if (!j.hidden) return say($('akUnhideMsg'), _t('js.admkeys.check_not', '{key} isn\'t hidden.', v));
+      if (j.held) {
+        v.at = new Date(Number(j.held.at) || 0).toLocaleString();
+        var li = document.querySelector('#akHeld [data-held="' + String(j.held.id).replace(/[^0-9a-f]/g, '') + '"]');
+        if (li) li.scrollIntoView({ block: 'center' });
+        return say($('akUnhideMsg'), _t('js.admkeys.check_held', '{key} is hidden by: {kinds} - held in the list above ({at}): un-hide them here, or decide that batch there.', v));
+      }
+      if (j.absent_once) return say($('akUnhideMsg'), _t('js.admkeys.check_absent', '{key} is hidden by: {kinds} - missing from one of Pepe\'s lists; a second list in a row without them un-hides them.', v));
+      say($('akUnhideMsg'), _t('js.admkeys.check_hidden', '{key} is hidden by: {kinds}.', v));
+    });
+  });
+
+  // 1.99add: a held batch of the hidden set - approve (un-hide them) or dismiss (they stay hidden); the page never knows who
+  Array.prototype.forEach.call(document.querySelectorAll('#akHeld [data-held-act]'), function (btn) {
+    btn.addEventListener('click', function () {
+      var li = btn.closest('[data-held]'), id = li ? li.getAttribute('data-held') : '';
+      var approve = btn.getAttribute('data-held-act') === 'approve';
+      var why = ($('akHeldWhy').value || '').trim();
+      if (why.length < 3) return say($('akHeldMsg'), ERR.reason(), true);
+      if (approve && !window.confirm(_t('js.admkeys.held_confirm', 'Un-hide these {n} people? Unless something else still hides them, their names show again in quotes, tips, mentions and on the chat hub - and nobody can tell you who they were.', { n: btn.getAttribute('data-held-n') || '?' }))) return;
+      say($('akHeldMsg'), _t('js.admkeys.working', 'Working…'));
+      post('/api/admin/hubseam/held', { id: id, approve: approve, reason: why }).then(function (j) {
+        if (!j || !j.ok) return say($('akHeldMsg'), errText(j), true);
+        if (!approve) say($('akHeldMsg'), _t('js.admkeys.held_dismissed', 'They stay hidden.'));
+        else if (j.still_hidden) say($('akHeldMsg'), _t('js.admkeys.held_approved_still', 'Un-hidden ({n}; {still} of them stay hidden another way).', { n: j.removed, still: j.still_hidden }));
+        else say($('akHeldMsg'), _t('js.admkeys.held_approved', 'Un-hidden ({n}).', { n: j.removed }));
+        reloadSoon();
+      });
     });
   });
 

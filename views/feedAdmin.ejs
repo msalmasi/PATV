@@ -117,6 +117,37 @@
   </section>
   <% } %>
 
+  <%# CL6: reported pad chat lines (chatlogmod.js) - staff holding chatlog.read_all. The line's text is NOT on this page: "Read the
+      line" fetches that one line, and the read is logged (chatlog_views). A "minor" report hid the line already; Dismiss shows it again. %>
+  <% const clR = typeof chatReports !== 'undefined' && Array.isArray(chatReports) ? chatReports : null;
+     const clState = { shown: 'shown on the pad', hidden: 'hidden by a moderator', hidden_report: 'hidden (minor report)', removed_self: 'removed by its author', purged: 'deleted', gone: 'no longer in the archive' }; %>
+  <% if (clR) { %>
+  <section class="fa-card" id="chatlines">
+    <h2>Reported chat lines (<%= clR.length %>)<% const clUrg = clR.filter((x) => x.urgent).length; if (clUrg) { %> <span class="tag nsfw">⚠ <%= clUrg %> urgent</span><% } %></h2>
+    <p class="mut">Pad chat lines people reported (personal info, harassment, sexual content, a minor, copyright). Read a line before you decide - every read is logged. A line with an open report keeps its text until you decide. Hide keeps the text 30 days for the pad's owner and staff (the owner sees the reason "after a report"; your note goes to the audit); Delete for good wipes it everywhere (quotes, mic clips, mention alerts, Pepe's !log). Holds and the per-login tool: <a href="/admin/bridge#takedowns">Admin › Bridge › Chat takedowns</a>.</p>
+    <% if (!clR.length) { %><p class="mut">No reported chat lines.</p><% } %>
+    <% clR.forEach((g) => { %>
+      <div class="fa-rep fa-cl<%= g.urgent ? ' urgent' : '' %>" data-cl="<%= g.c %>">
+        <div class="fa-rep-h"><% if (g.urgent) { %><span class="tag nsfw">URGENT</span> <% } %><span class="tag lock"><%= g.k === 'tx' ? 'Mic line' : 'Chat line' %></span>
+          on <% if (g.slug) { %><a href="/p/<%= encodeURIComponent(g.slug) %>"><b><%= g.pad %></b></a><% } else { %><b><%= g.pad || '?' %></b><% } %>
+          <span class="mut">#<%= g.c %><%= g.ts ? ' · said ' + fx.ago(g.ts) + ' ago' : '' %> · <%= clState[g.state] || g.state %><%= g.held ? ' · legal hold' : '' %> · <%= g.reports.length + (g.more || 0) %> report<%= g.reports.length + (g.more || 0) === 1 ? '' : 's' %><%= g.more ? ' (the newest ' + g.reports.length + ' listed)' : '' %></span></div>
+        <ul>
+          <% g.reports.forEach((r) => { %><li><% if (r.urgent) { %><span class="tag nsfw">urgent</span> <% } %><b><%= r.label %></b><%= r.adminOnly ? ' (admins only)' : '' %> from <%= r.reporter %><%= r.note ? ' — “' + r.note + '”' : '' %> <span class="mut"><%= fx.ago(r.created) %></span></li><% }) %>
+        </ul>
+        <div class="fa-cl-body" hidden></div>
+        <div class="fa-acts">
+          <button type="button" data-clfa="read">🔒 Read the line (logged)</button>
+          <button type="button" data-clfa="dismiss"><%= g.state === 'hidden_report' ? 'Dismiss · show it again' : 'Dismiss' %></button>
+          <button type="button" data-clfa="false">Dismiss · bad faith</button>
+          <% if (g.state === 'shown') { %><button type="button" class="bad" data-clfa="hide">Hide…</button><% } %>
+          <% if (g.state !== 'purged' && g.state !== 'gone') { %><button type="button" class="bad" data-clfa="purge">Delete for good…</button><% } %>
+          <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporter<%= new Set(g.reports.map((r) => r.reporter)).size === 1 ? '' : 's' %> the outcome</label>
+        </div>
+      </div>
+    <% }) %>
+  </section>
+  <% } %>
+
   <% if (abuseOk) { %>
   <section class="fa-card" id="audit">
     <h2>Details access log</h2>
@@ -274,6 +305,7 @@
 <script src="/public/js/feed-safety.js?v=4" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
 <% if (dmOk) { %><script src="/public/js/dm-admin.js?v=3" defer></script><% } %>
+<% if (typeof chatReports !== 'undefined' && Array.isArray(chatReports)) { %><script src="/public/js/chatlog-reports.js?v=1" defer></script><% } %><%# CL6 %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <%- include('partials/admin-close') %>
 </body>

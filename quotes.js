@@ -5,8 +5,15 @@
 // shows). So nothing the bridge doesn't already show publicly can be quoted: never PMs (the bridge drops them),
 // never a line of anyone who was !incognito / !bridge hide when they said it (Pepe never sends those), and anyone
 // who is private NOW shows as "someone" too: Pepe sends one-way hashes of the private logins with every sync
-// (hidden_h: sha256("pepe-hidden:<login>"), 20 hex - setHidden), checked when a quote is made AND when one is shown
-// (a quote whose speaker went private since is anonymised for good the first time it's rendered).
+// (hidden_h: sha256("pepe-hidden:<login>"), 20 hex - hubhidden.js keeps them, setHidden), checked when a quote is made AND when
+// one is shown (a quote whose speaker went private since is anonymised for good the first time it's rendered).
+// The owner's decision-9 change (2026-10-19, "incognito hides WHO, not WHAT" - 1.99add refix 4 and the chat-history owner change
+// alike): the sticky hidden sets say WHY - someone hidden only by INCOGNITO is "someone" with their words (the stored line keeps
+// `h`, their hash, so it can still be left out later; Pepe's anonymised lines - an incognito speaker's, `ah` - are quotable the
+// same way); someone LEFT OUT (!bridge hide, a kind Pepe never said, forget / delete / staff - and, fail closed, anyone Pepe's
+// raw list hides whose kind the set doesn't know yet, everyone while a set loads) isn't quoted at all: their lines are dropped
+// from a new quote and from an existing one's card and body (left_out counts them; they come back as "someone" if they show
+// themselves again). A 🔊 mic clip of anyone hidden is refused (a voice says who it is - micclip.js).
 //
 // Making one
 //   web   the Live tab's "✂️ Clip chat" (public/js/chat-clip.js): pick lines (tap, shift-click, long-press), preview,
@@ -39,6 +46,7 @@ const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const MAX_LINES = 20, SPAN_MAX = 40, LINE_MAX = 490, TITLE_MAX = 140, PHRASE_MAX = 60;   // 1.99acf: LINE_MAX 490 = the bridge's inbound cap (a quoted line stays whole)
+const NOT_QUOTABLE = "Those lines can't be quoted.";    // CL3: the one answer when a picked line is outside the quoter's view
 // 1.99acf: a quoted line is cut by code points, as bridge.js caps it (an emoji counts once; never half a surrogate pair)
 const cpCut = (s, n) => (s.length <= n ? s : Array.from(s).slice(0, n).join(""));
 const GAP = 20 * 1000, BURST = 5, WINDOW = 30 * 60 * 1000;
@@ -50,13 +58,59 @@ function _setClock(fn) { NOW = fn; }
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
 
 // ── who is private right now (Pepe's hidden_h) ──
+// 1.99add: the bridge no longer hands Pepe's raw list over here - hubhidden.js keeps the STICKY set (a short or empty list from
+// Pepe un-hides nobody; see hubhidden.js for what does) and calls setHidden with all of it on every change, and at start-up
+// (hubhidden.boot). isHidden also gates pad tips, boost / go-live names and @mention alerts.
+// 1.99add refix 4: setHidden(all, leftOut) - every hidden hash, and those whose lines are LEFT OUT (!bridge hide, or a kind the
+// site can't tell); a list without leftOut leaves them all out (fail closed). While hubhidden's start-up read hasn't worked
+// (loading) EVERYONE counts as hidden and left out - a failed read never names anyone (tips refused, no names, no mention
+// alerts, no new quotes; existing ones show no lines and nothing is stored meanwhile).
 let HIDDEN = new Set();
+let LEFT = new Set();
+const HASH_RE = /^[0-9a-f]{20}$/;
 const hiddenHash = (login) => crypto.createHash("sha256").update("pepe-hidden:" + String(login || "").trim().toLowerCase()).digest("hex").slice(0, 20);
-function setHidden(list) {
+function setHidden(list, leftOut) {
   if (!Array.isArray(list)) return;
-  HIDDEN = new Set(list.filter((x) => typeof x === "string" && /^[0-9a-f]{20}$/.test(x)).slice(0, 5000));
+  HIDDEN = new Set(list.filter((x) => typeof x === "string" && HASH_RE.test(x)).slice(0, 100000));   // hubhidden.SET_MAX
+  LEFT = Array.isArray(leftOut) ? new Set(leftOut.filter((x) => HIDDEN.has(x))) : new Set(HIDDEN);
 }
-const isHidden = (login) => !!login && HIDDEN.has(hiddenHash(login));
+// ONE rule from TWO sticky sets (cl-site's merge of hubhidden-site): hubhidden.js (the chat hub's hh: cache; it calls
+// setHidden(all, leftOut) on every change) and the pad chat archive's chatlog.js
+// (hiddenKind - the live chat, its history, search and downloads). Both take the same inputs (Pepe's hidden_h and kinded lists,
+// privacy.hidden / privacy.shown {scope}, his incognito reports, a website ON) and keep the same kinds; they differ only in what
+// may un-hide (hubhidden also reads an older Pepe's drop, chatlog only Pepe's privacy.shown or an operator) - so a quote takes the
+// STRICTER of the two: private if either hides them, left out if either leaves them out, nothing while either is loading.
+// train2 + cl-site merge: that stricter answer is the ONE reader rule for every "is this login hidden" outside the chat itself
+// too - isHidden is what pad tips, boost / go-live names, @mention alerts, mic clips and the 🎙 mic stage (micfollow) ask, and
+// it now says hidden when EITHER set hides them (either kind; fail closed while either loads), so nothing names or shows a
+// person whom the live chat, its history, search or downloads show as "someone" or leave out. (The two stores themselves stay
+// two until they are folded into one - chatlog.hubRows() is that map; docs/chat-tickets.md.)
+const hubLoading = () => { try { return require("./hubhidden").loading(); } catch (e) { return false; } };
+// the owner's decision-9 change: the archive set's kind (chatlog.hiddenKind: "out" | "anon" | null - "out" while it loads)
+const stickyKindH = (h) => { try { return require("./chatlog").hiddenKind(h); } catch (e) { return "out"; } };
+const isHidden = (login) => {
+  if (!login) return false;
+  const h = hiddenHash(login);
+  return hubLoading() || HIDDEN.has(h) || stickyKindH(h) != null;
+};
+/** Left out of quotes now (by hash): hubhidden's set leaves them out (LEFT: !bridge hide, or a kind it can't tell - an older
+ *  Pepe's mixed list; or it is loading), or the archive's set does ("out"; also until it is loaded). HIDDEN is hubhidden's KINDED
+ *  set now (never Pepe's raw list), so a hash it holds outside LEFT is incognito: "someone". */
+const leftOutH = (h) => hubLoading() || LEFT.has(h) || stickyKindH(h) === "out";
+/** Left out of quotes now (by login). */
+const isLeftOut = (login) => !!login && leftOutH(hiddenHash(login));
+/** Private now by any kind (incognito or left out) in either set - their name is never shown in a quote. (= isHidden since
+ *  the train2 merge; kept for its readers.) */
+const isPrivate = (login) => isHidden(login);
+/** A stored quote line is left out now: by its speaker's login, or (an anonymised line) by the hash kept for it - Train 3 review:
+ *  or by ANY of the speaker's other incognito hashes Pepe sent with the line (`hs`, data.anon.hs; server-only like `h`). */
+const lineHashes = (l) => [l.h, ...(Array.isArray(l.hs) ? l.hs : [])].filter((x) => typeof x === "string" && HASH_RE.test(x));
+const lineLeftOut = (l) => (l.login ? isLeftOut(l.login) : lineHashes(l).some(leftOutH));
+/** Either sticky set is still loading (a site start): nothing is quoted, existing quotes show no line and nothing is stored. */
+async function setLoading() {
+  if (hubLoading()) return true;
+  try { const CL = require("./chatlog"); await CL.init(); return CL.loading(); } catch (e) { return true; }
+}
 
 // ── rate limits (memory) ──
 const hits = new Map();
@@ -94,14 +148,16 @@ function revealLimited(key, login, now = NOW()) {
 }
 
 // ── picking lines out of the bridge feed ──
-const isLine = (it) => !!it && (it.k === "msg" || it.k === "tx") && !!it.u && !it.u.anon && !!it.u.login && typeof it.text === "string" && !!it.text.trim();
+// (the owner's decision-9 change: Pepe's anonymised line of an incognito speaker - `ah`, their hash - is a line too: "someone")
+const isLine = (it) => !!it && (it.k === "msg" || it.k === "tx") && !!it.u && (it.u.anon ? HASH_RE.test(String(it.ah || "")) : !!it.u.login) &&
+  typeof it.text === "string" && !!it.text.trim();
 const isCmd = (it) => it.k === "msg" && /^\s*[!/]/.test(it.text);
 // Pepe's own announcements of quotes / clips / captures aren't conversation
 const isPepeNoise = (it) => !!it.u.self && /^\s*(💬 quoted|🔊 |📹 |📸 |🎬 )/u.test(it.text);
 const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
 const nameMatches = (it, who) => {
   const w = low(who).replace(/^@/, "");
-  return !!w && (low(it.u.login) === w || low(it.u.display) === w || low(it.u.cf) === w);
+  return !!w && !it.u.anon && (low(it.u.login) === w || low(it.u.display) === w || low(it.u.cf) === w);   // "someone" is nobody's name
 };
 
 /**
@@ -115,15 +171,17 @@ const nameMatches = (it, who) => {
 function pick(feed, spec, before = null) {
   const F = Array.isArray(feed) ? feed : [];
   if (spec && Array.isArray(spec.cs)) {
+    // CL3 fix-up: each error carries a code - the web route answers the line-specific ones (missing, not_line) with ONE
+    // generic refusal, and picks only from the quoter's own view of the feed
     const want = [...new Set(spec.cs.map(Number).filter((c) => Number.isInteger(c) && c > 0))];
-    if (!want.length) return { error: "Pick the lines to quote." };
-    if (want.length > MAX_LINES) return { error: `A quote is at most ${MAX_LINES} lines.` };
+    if (!want.length) return { error: "Pick the lines to quote.", code: "empty" };
+    if (want.length > MAX_LINES) return { error: `A quote is at most ${MAX_LINES} lines.`, code: "count" };
     const idx = want.map((c) => F.findIndex((it) => it && it.c === c));
-    if (idx.some((i) => i < 0)) return { error: "Some of those lines aren't in the room's feed any more — pick again." };
+    if (idx.some((i) => i < 0)) return { error: "Some of those lines aren't in the room's feed any more — pick again.", code: "missing" };
     const items = idx.map((i) => F[i]);
-    if (items.some((it) => !isLine(it))) return { error: "Only chat and 🎙 mic lines can be quoted." };
+    if (items.some((it) => !isLine(it))) return { error: "Only chat and 🎙 mic lines can be quoted.", code: "not_line" };
     const span = Math.max(...idx) - Math.min(...idx) + 1;
-    if (span > SPAN_MAX) return { error: "Those lines are too far apart — pick lines close together." };
+    if (span > SPAN_MAX) return { error: "Those lines are too far apart — pick lines close together.", code: "span" };
     return { items: idx.map((i, k) => [i, items[k]]).sort((a, b) => a[0] - b[0]).map((x) => x[1]) };
   }
   const cut = Number(before) > 0 ? Number(before) : Infinity;
@@ -158,6 +216,15 @@ function pick(feed, spec, before = null) {
   return { error: "Pick the lines to quote." };
 }
 
+/** CL3 fix-up (Pepe's !quote): the lines of people the site's sticky hidden set leaves out (and the 🎙 lines of !transcripts off)
+ *  are left out of what a chat quote can pick - the live chat leaves them out for every viewer, so a quote post never republishes
+ *  them. The owner's decision-9 change: an incognito person's lines stay (buildLines makes them "someone"), exactly as /live shows
+ *  them (chatlogview.privacyOf). The set fails closed while it loads (nothing to quote then). */
+function shownFeed(feed) {
+  const CV = require("./chatlogview");
+  return (Array.isArray(feed) ? feed : []).filter((it) => !!it && CV.privacyOf(it) !== "out");
+}
+
 // ── building the stored lines (names as the bridge shows them; private people as "someone") ──
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 function redactor(names) {
@@ -174,24 +241,82 @@ async function namesFor(items) {
     return (u) => B.withPatv(u, L);
   } catch (e) { return (u) => u; }
 }
-/** feed items -> stored lines [{k, login, name, text, ts}] (+ the names to blank for anyone private). */
+/** feed items -> stored lines [{k, login, name, text, ts}] (+ the names to blank for anyone private).
+ *  CL3 fix-up: a quote republishes lines on the pad's feed, so it takes the live chat's own redaction - the names of everyone
+ *  in the site's sticky hidden set (chatlogview.redact: login + display names, the stop-list) become "someone" inside every
+ *  quoted line, exactly as /live shows them; a speaker in that set (a website Incognito Pepe hasn't confirmed yet) is
+ *  "someone" like one on Pepe's list. Fails closed: no quote while the hidden names can't be loaded. */
 async function buildLines(items) {
+  const CV = require("./chatlogview");
+  try { await CV.init(); } catch (e) { throw new Refuse(503, "Quotes can't be made right now - try again in a minute."); }
+  if (await setLoading()) throw new Refuse(503, "Quotes can't be made right now - try again in a minute.");
   const view = await namesFor(items);
   const hiddenNames = [];
-  const lines = items.map((it) => {
+  const lines = [];
+  for (const it of items) {
+    const anon = !!it.u.anon;
+    const login = anon ? "" : low(it.u.login);
+    // the owner's decision-9 change: someone LEFT OUT now isn't quoted at all (never stored); incognito only -> "someone" + h
+    const out = CV.privacyOf(it) === "out" || (!anon && isLeftOut(login));
     const u = view(it.u) || it.u;
-    const login = low(it.u.login);
-    const hidden = isHidden(login);
-    if (hidden) hiddenNames.push(login, it.u.display, u.display, u.cf);
-    return { k: it.k === "tx" ? "tx" : "msg", login: hidden ? null : login, name: hidden ? "someone" : String(u.display || it.u.display || login).slice(0, 40),
-             text: cpCut(String(it.text), LINE_MAX), ts: Number(it.ts) || 0, ...(it.u.self ? { pepe: true } : {}) };
-  });
-  // clipmodal: a private speaker's PATV username is blanked inside the lines too (their Camfrog names + display are above)
-  lines.forEach((l, i) => { const pu = !l.login && l.name === "someone" ? (view(items[i].u) || {}).patv : null; if (pu && pu.username) hiddenNames.push(pu.username); });
+    const hidden = anon || out || isPrivate(login) || CV.isHiddenLogin(login);
+    if (hidden && !anon) {
+      hiddenNames.push(login, it.u.display, u.display, u.cf);
+      // clipmodal: a private speaker's PATV username is blanked inside the lines too (their Camfrog names + display are above);
+      // train2 merge: taken before a left-out speaker's line is skipped, so their names are blanked inside the OTHER lines too
+      if (u.patv && u.patv.username) hiddenNames.push(u.patv.username);
+    }
+    if (out) continue;
+    const h = anon ? it.ah : hidden ? hiddenHash(login) : null;
+    // Train 3 review: the speaker's other incognito hashes (Pepe's data.anon.hs, `ahs`) stay with the line - left out once any is
+    const hs = anon && Array.isArray(it.ahs) ? [...new Set(it.ahs.filter((x) => typeof x === "string" && HASH_RE.test(x) && x !== h))].slice(0, 32) : [];
+    // CL6: c = the line's feed cursor, so a staff purge of that line reaches this copy (dropLines); never shown
+    lines.push({ k: it.k === "tx" ? "tx" : "msg", login: hidden ? null : login, ...(h ? { h } : {}), ...(hs.length ? { hs } : {}),
+                 name: hidden ? "someone" : String(u.display || it.u.display || login).slice(0, 40),
+                 text: cpCut(String(it.text), LINE_MAX), ts: Number(it.ts) || 0, ...(it.u.self && !hidden ? { pepe: true } : {}), ...(Number(it.c) > 0 ? { c: Number(it.c) } : {}) });
+  }
   const red = redactor(hiddenNames);
-  for (const l of lines) l.text = red(l.text);
+  for (const l of lines) l.text = CV.redact(red(l.text));
+  // review 2 fix-up: the same redaction for the quote's title (create) - never stored, so the stored lines stay plain JSON
+  // (the sticky set's names first: a hidden person's whole display name, before a shorter name of theirs could split it)
+  Object.defineProperty(lines, "redact", { value: (s) => red(CV.redact(String(s == null ? "" : s))), enumerable: false });
   return lines;
 }
+/**
+ * Review 2 fix-up (consent): the speakers of these stored lines who opted out of being quoted (!likeness clips off) and aren't the
+ * quoter - by the line's login, or (an incognito speaker's line: no login) by the one-way hash it keeps, matched against every
+ * opted-out account's chat login and account key (u:<id>). -> {named: [their shown names], logins: [the same speakers' logins],
+ * anon: n of hidden ones, hashes: [the matched hidden ones' hashes]}
+ */
+async function optedOut(lines, authorId) {
+  const L = require("./likeness");
+  await L.init();
+  const named = [], logins = [], hashes = [];
+  let anon = 0;
+  for (const lg of loginsOf(lines)) {
+    let su = null;
+    if (/^u:/.test(lg)) su = (await getQuery("SELECT userId FROM users WHERE lower(userId) = ? LIMIT 1", [lg.slice(2)]).catch(() => []))[0] || null;
+    else su = await L.userByLogin(lg);
+    if (su && su.userId !== authorId && !(await L.allows(su.userId, "clips"))) { named.push(lines.find((l) => l.login === lg).name); logins.push(lg); }
+  }
+  // (Train 3 review: every hash an anonymised line's speaker could be - an opted-out member among them refuses, fails closed)
+  const hs = new Set(lines.filter((l) => !l.login).flatMap(lineHashes));
+  if (hs.size) {
+    const rows = await getQuery(`SELECT p.user_id, u.camfrogUsername AS cf FROM likeness_prefs p LEFT JOIN users u ON u.userId = p.user_id
+                                 WHERE p.clips = 0`).catch(() => null);
+    // (a lookup that fails refuses: never quote someone who may have opted out)
+    if (!rows) return { named, logins, anon: hs.size, hashes: [...hs] };
+    for (const r of rows) {
+      if (String(r.user_id) === String(authorId)) continue;
+      const keys = ["u:" + String(r.user_id).toLowerCase(), r.cf ? low(r.cf) : null].filter(Boolean);
+      const hit = keys.map((k) => hiddenHash(k)).find((h) => hs.has(h));
+      if (hit) { anon++; hashes.push(hit); }
+    }
+  }
+  return { named, logins, anon, hashes };
+}
+/** The body a quote's lines give once the left-out ones are dropped. */
+const shownBody = (lines) => bodyOf(lines.filter((l) => !lineLeftOut(l)));
 const bodyOf = (lines) => lines.map((l) => `<${l.name}> ${l.k === "tx" ? "🎙 " : ""}${l.text}`).join("\n").slice(0, 5000);
 const loginsOf = (lines) => [...new Set(lines.map((l) => l.login).filter(Boolean))];
 
@@ -213,29 +338,47 @@ function parse(s, d) { try { const v = JSON.parse(s); return v == null ? d : v; 
 
 /**
  * What a quote of these feed items would be (create() and the web preview share it, so the preview shows exactly what Post
- * makes): {lines (stored form), speakers (logins), price, refuse: the Refuse Post would throw | null, why: that, for a preview}
+ * makes): {lines (stored form), speakers (logins), price, refuse: the Refuse Post would throw | null, why: that, for a preview,
+ *  leftOut: how many picked lines were dropped as left out (the owner's decision-9 change)}
  */
 async function terms({ authorId, items, viaPepe = false }) {
+  // 1.99add refix 4: who is private isn't known yet (the website is starting) - nothing is quoted until it is. train2 merge: a
+  // refusal here, so create() throws it and the clip card's preview says it - while EITHER sticky set loads (cl-site's setLoading)
+  if (await setLoading()) {
+    const msg = "The website is just starting up - try again in a moment.";
+    return { lines: [], speakers: [], price: 0, refuse: new Refuse(503, msg), why: msg, leftOut: 0 };
+  }
   const lines = await buildLines(items);
+  const leftOut = items.length - lines.length;
+  // the owner's decision-9 change: the lines of people left out were dropped - none left, nothing to quote (train2 merge: as
+  // terms' refuse, so the clip card's preview says why instead of offering Post)
+  if (!lines.length) {
+    const msg = "Those lines are private - they can't be quoted.";
+    return { lines, speakers: [], price: 0, refuse: new Refuse(400, msg), why: msg, leftOut };
+  }
   // 1.99qw (likeness royalties): a quote costs quote_price PAT (250; Pepe's own / site admins free); 40% of it goes to the
   // people quoted (held 24 h, likeness.js), and anyone quoted who opted out of clips (!likeness clips off) refuses it
   const L = require("./likeness");
   await L.init();
   const speakers = loginsOf(lines);
-  for (const lg of speakers) {
-    const su = await L.userByLogin(lg);
-    if (su && su.userId !== authorId && !(await L.allows(su.userId, "clips"))) {
-      const name = lines.find((l) => l.login === lg).name;
-      return { lines, speakers, price: 0, refuse: new Refuse(403, `${name} has opted out of being quoted - nothing was charged.`), why: `${name} has opted out of being quoted.`, optOut: lg };
-    }
+  // review 2 fix-up: incognito speakers' lines (no login - their hash) are checked too, and refused with an answer naming nobody.
+  // (rebase onto clipmodal: returned as terms' refuse, so the preview says it too; optOut keys the preview's reveal budget)
+  const opt = await optedOut(lines, authorId);
+  if (opt.named.length) {
+    const name = opt.named[0];
+    return { lines, speakers, price: 0, refuse: new Refuse(403, `${name} has opted out of being quoted - nothing was charged.`), why: `${name} has opted out of being quoted.`, optOut: opt.logins[0], leftOut };
+  }
+  if (opt.anon) {
+    return { lines, speakers, price: 0, refuse: new Refuse(403, "Someone in those lines has opted out of being quoted - nothing was charged."),
+             why: "Someone in those lines has opted out of being quoted.", optOut: "h:" + (opt.hashes[0] || ""), leftOut };
   }
   const author = viaPepe ? null : (await getQuery("SELECT userId, class, points_balance FROM users WHERE userId = ?", [authorId]))[0];
   const price = !author || SP.can(author, "quotes.free") ? 0 : Math.max(0, Number(L.config().quote_price) || 0);
   if (price > 0 && Number(author.points_balance || 0) < price) {
     const msg = `A quote costs ${price.toLocaleString("en-US")} PAT - you have ${Number(author.points_balance || 0).toLocaleString("en-US")}.`;
-    return { lines, speakers, price, refuse: new Refuse(402, msg), why: msg };
+    return { lines, speakers, price, refuse: new Refuse(402, msg), why: msg, leftOut };
   }
-  return { lines, speakers, price, refuse: null, why: null };
+  return { lines, speakers, price, refuse: null, why: null, leftOut };
 }
 
 /**
@@ -299,11 +442,14 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
   if (!items || !items.length) throw new Refuse(400, "Pick the lines to quote.");
   const T = await terms({ authorId, items, viaPepe });
   if (T.refuse) throw T.refuse;
-  const { lines, speakers, price } = T;
+  const { lines, speakers, price, leftOut } = T;
   const L = require("./likeness");
   // adultgate site: liveRoom = the room these lines came from - the 18+ gate follows the post (feedstore.liveRoomOf), from its
   // first notice on (the feed_quotes row below is written after the post)
-  const made = await S.create(authorId, { title: S.cleanLine(title, TITLE_MAX), body: bodyOf(lines), community: roomId, announce: [] },
+  // review 2 fix-up: the title takes the lines' redaction (a hidden speaker's names, everyone the sticky set hides) - it is shown
+  // with the lines and is in the post's address; it is redacted again whenever it is shown (forPosts: a later edit, a later hide)
+  const redTitle = typeof lines.redact === "function" ? lines.redact : (s) => s;
+  const made = await S.create(authorId, { title: S.cleanLine(redTitle(S.cleanLine(title, TITLE_MAX)), TITLE_MAX), body: bodyOf(lines), community: roomId, announce: [] },
                               viaPepe ? { roomGen: true, liveRoom: roomId } : { liveRoom: roomId });
   let charged = null;
   if (price > 0) {
@@ -335,10 +481,12 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
   console.log(`[quotes] ${made.id} in ${roomId} by ${authorId} (${source}): ${lines.length} lines, ${loginsOf(lines).length} speakers`);
   // clipmodal: the pad's approval queue holds it (the clip card then says so instead of "posted")
   const pending = !!(await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND pending != 0 LIMIT 1", [made.id]))[0];
-  return { post: { id: made.id, url: made.url }, lines: lines.length, profile: prof, price: charged ? charged.price : 0, cut: charged ? charged.cut : 0, pending };
+  return { post: { id: made.id, url: made.url }, lines: lines.length, left_out: leftOut, profile: prof, price: charged ? charged.price : 0, cut: charged ? charged.cut : 0, pending };
 }
 
-/** Blank `logins` out of a quote: their lines become "someone", their names inside the other lines too. -> changed? */
+/** Blank `logins` out of a quote: their lines become "someone", their names inside the other lines too. The owner's decision-9
+ *  change: such a line keeps the speaker's hash (`h`) - it is left out while they are left out - and the post's body leaves those
+ *  lines out. -> changed? */
 async function anonymise(row, logins, { names = [] } = {}) {
   const set = new Set(logins.map(low).filter(Boolean));
   if (!row || !set.size) return false;
@@ -346,7 +494,7 @@ async function anonymise(row, logins, { names = [] } = {}) {
   const blank = [...names];
   let changed = false;
   for (const l of lines) {
-    if (l.login && set.has(low(l.login))) { blank.push(l.login, l.name); l.login = null; l.name = "someone"; changed = true; }
+    if (l.login && set.has(low(l.login))) { blank.push(l.login, l.name); l.h = hiddenHash(l.login); l.login = null; l.name = "someone"; l.pepe = undefined; changed = true; }
   }
   for (const s of set) blank.push(s);
   const red = redactor(blank);
@@ -355,8 +503,18 @@ async function anonymise(row, logins, { names = [] } = {}) {
   const removed = parse(row.removed, []).concat([...set].map(hiddenHash));
   await runQuery("UPDATE feed_quotes SET lines = ?, logins = ?, removed = ? WHERE post_id = ?",
                  [JSON.stringify(lines), " " + loginsOf(lines).join(" ") + " ", JSON.stringify([...new Set(removed)]), row.post_id]);
-  await runQuery("UPDATE feed_posts SET body = ? WHERE id = ?", [bodyOf(lines), row.post_id]);
+  const body = shownBody(lines);
+  await runQuery("UPDATE feed_posts SET body = ? WHERE id = ?", [body, row.post_id]);
+  // review 2 fix-up: their names leave the quote's title too
+  const tr = (await getQuery("SELECT title FROM feed_posts WHERE id = ?", [row.post_id]))[0];
+  if (tr && tr.title) {
+    let t2 = tr.title;
+    try { t2 = require("./chatlogview").redact(t2); } catch (e) { /* the speakers' own names below */ }
+    t2 = red(t2);
+    if (t2 !== tr.title) await runQuery("UPDATE feed_posts SET title = ? WHERE id = ?", [t2, row.post_id]);
+  }
   row.lines = JSON.stringify(lines);
+  if (row.post_body !== undefined) row.post_body = body;
   return true;
 }
 
@@ -391,26 +549,104 @@ async function removeMe(user, postId) {
   return { removed: true, again: false };
 }
 
-/** decorate(): post id -> {lines: [{name, text, mic, pepe, ts, me}], speakers, canRemoveMe, removedMe, first, source}. */
+/**
+ * CL6: a staff purge (or the 30-day removal of a hidden line, chatlogmod.js) reaches the quotes that copied it: the line leaves
+ * every quote of that room made after it was said (by its cursor; a quote from before CL6 by its time + text + speaker), the
+ * post's text is rewritten, and a quote left with no line is removed. Runs inside the purge's transaction.
+ * lines: [{c, ts, login, text}] (the archived rows before they were blanked). -> quotes changed
+ */
+async function dropLines(roomId, lines, t = NOW()) {
+  if (!roomId || !Array.isArray(lines) || !lines.length) return 0;
+  const cs = new Set(lines.map((l) => Number(l.c)).filter((c) => c > 0));
+  const sig = new Set(lines.map((l) => `${Number(l.ts) || 0}|${cpCut(String(l.text == null ? "" : l.text), LINE_MAX)}`));
+  const logins = new Map(lines.map((l) => [`${Number(l.ts) || 0}|${cpCut(String(l.text == null ? "" : l.text), LINE_MAX)}`, low(l.login)]));
+  const since = Math.min(...lines.map((l) => Number(l.ts) || 0)) - 60e3;
+  const rows = await getQuery("SELECT * FROM feed_quotes WHERE room_id = ? AND created >= ?", [String(roomId), since]);
+  let n = 0;
+  for (const row of rows) {
+    const before = parse(row.lines, []);
+    const after = before.filter((l) => {
+      if (l.c != null) return !cs.has(Number(l.c));
+      const k = `${Number(l.ts) || 0}|${String(l.text == null ? "" : l.text)}`;
+      if (!sig.has(k)) return true;
+      return !!(l.login && logins.get(k) && low(l.login) !== logins.get(k));        // the same words and second from someone else
+    });
+    if (after.length === before.length) continue;
+    n++;
+    await runQuery("UPDATE feed_quotes SET lines = ?, logins = ? WHERE post_id = ?", [JSON.stringify(after), " " + loginsOf(after).join(" ") + " ", row.post_id]);
+    if (!after.length) {
+      await runQuery("UPDATE feed_posts SET deleted_at = ?, deleted_by = 'system', delete_reason = 'its chat line was removed', body = '' WHERE id = ? AND deleted_at IS NULL", [t, row.post_id]);
+    } else await runQuery("UPDATE feed_posts SET body = ? WHERE id = ?", [bodyOf(after), row.post_id]);
+  }
+  if (n) console.log(`[quotes] ${n} quote(s) in ${roomId} lost a removed chat line`);
+  return n;
+}
+
+/** decorate(): post id -> {lines: [{name, text, mic, pepe, ts, me}], speakers, canRemoveMe, removedMe, first, source, left_out,
+ *  body}. The owner's decision-9 change: lines of someone LEFT OUT now (!bridge hide, a kind Pepe never said, forget / delete /
+ *  staff) aren't shown (left_out counts them) and `body` - the post's text for search, previews and its address - leaves them out
+ *  too (stored when it differs: they come back, as "someone", once that person shows themselves again); an incognito speaker is
+ *  "someone". While the hidden set is still loading no line is shown and nothing is stored. */
+/**
+ * CL6 fix-up: the quoted lines (by their feed cursor `c`) the pad chat archive has taken down NOW - hidden by a moderator or staff,
+ * hidden by a "minor" report, removed by their author, purged. A quote leaves them out while they are down (left_out counts them;
+ * one shown again comes back). A quote from before CL6 carries no cursor (only a purge reaches it: dropLines). Fails closed: a read
+ * that fails leaves out every line with a cursor ("all"); no archive table = nothing was ever taken down. -> Set(c) | "all"
+ */
+async function takenDown(cs) {
+  const list = [...new Set(cs.map(Number).filter((c) => c > 0))];
+  if (!list.length) return new Set();
+  try {
+    const out = new Set();
+    for (let i = 0; i < list.length; i += 400) {
+      const part = list.slice(i, i + 400);
+      for (const r of await getQuery(`SELECT c FROM chat_log WHERE c IN (${part.map(() => "?").join(",")}) AND (rm_at IS NOT NULL OR purged IS NOT NULL)`, part)) out.add(Number(r.c));
+    }
+    return out;
+  } catch (e) {
+    if (/no such table/i.test(String(e && e.message))) return new Set();
+    console.error("[quotes] taken-down lines:", e && e.message);
+    return "all";
+  }
+}
 async function forPosts(ids, viewer) {
   const out = new Map();
   if (!ids || !ids.length) return out;
-  const rows = await getQuery(`SELECT * FROM feed_quotes WHERE post_id IN (${ids.map(() => "?").join(",")})`, ids);
+  const rows = await getQuery(`SELECT q.*, p.body AS post_body, p.title AS post_title FROM feed_quotes q LEFT JOIN feed_posts p ON p.id = q.post_id
+                               WHERE q.post_id IN (${ids.map(() => "?").join(",")})`, ids);
   if (!rows.length) return out;
   const me = await linkedLogin(viewer);
+  const wait = await setLoading();
+  try { await require("./chatlogview").init(); } catch (e) { /* the titles show as stored (redacted when made) */ }
+  const down = await takenDown(rows.flatMap((r) => parse(r.lines, []).map((l) => (l && l.c != null ? l.c : 0))));
+  const isDown = (l) => l && l.c != null && (down === "all" || down.has(Number(l.c)));
   for (const r of rows) {
-    // anyone private since the quote was made: anonymised for good, now
+    // anyone private since the quote was made: anonymised for good, now (not while the set loads: everyone looks private then)
     const lines0 = parse(r.lines, []);
-    const gone = loginsOf(lines0).filter(isHidden);
+    const gone = wait ? [] : loginsOf(lines0).filter(isPrivate);
     if (gone.length) { try { await anonymise(r, gone); } catch (e) { /* shown anonymised below anyway */ } }
-    const lines = parse(r.lines, []).map((l) => (l.login && isHidden(l.login) ? { ...l, login: null, name: "someone" } : l));
+    const all = parse(r.lines, []).map((l) => (l.login && isPrivate(l.login) ? { ...l, h: hiddenHash(l.login), login: null, name: "someone", pepe: undefined } : l));
+    const lines = wait ? [] : all.filter((l) => !lineLeftOut(l) && !isDown(l));
+    const body = bodyOf(lines);
+    if (!wait && r.post_body != null && body !== r.post_body) {
+      try { await runQuery("UPDATE feed_posts SET body = ? WHERE id = ?", [body, r.post_id]); } catch (e) { /* the card shows the right lines anyway */ }
+    }
     const removed = parse(r.removed, []);
+    // review 2 fix-up: the title as shown - the names of everyone the sticky set hides now redacted (a title edited later, or naming
+    // someone who went incognito since); stored redacted at creation and on "remove me", so while the set loads it shows as stored
+    let title;
+    if (typeof r.post_title === "string") {
+      title = r.post_title;
+      if (!wait) { try { title = require("./chatlogview").redact(title); } catch (e) { title = ""; } }
+    }
     out.set(r.post_id, {
+      ...(title !== undefined ? { title } : {}),
       lines: lines.map((l) => ({ name: l.name, text: l.text, mic: l.k === "tx", pepe: !!l.pepe, ts: l.ts, me: !!me && l.login === me })),
-      speakers: new Set(lines.map((l) => l.login || "someone:" + l.name)).size,
+      speakers: new Set(lines.map((l) => l.login || "someone:" + l.name)).size,       // ("someone"s are never told apart)
       canRemoveMe: !!me && lines.some((l) => l.login === me),
       removedMe: !!me && removed.includes(hiddenHash(me)),
       first: lines[0] ? lines[0].text : "", firstName: lines[0] ? lines[0].name : "", source: r.source,
+      left_out: all.length - lines.length, body,
     });
   }
   return out;
@@ -463,8 +699,17 @@ function register(app, { addUser, isBotToken, bySlug }) {
       // bridge perk) - before any line is looked at (Post's own rules stay as they are)
       if (req.body && req.body.preview === true && (await previewRefused(req, res, R))) return;
       const b = req.body || {};
-      const got = pick(R.feed, { cs: Array.isArray(b.cs) ? b.cs.slice(0, MAX_LINES + 1) : [] });
-      if (got.error) return res.status(400).json({ ok: false, error: got.error });
+      const cs = Array.isArray(b.cs) ? b.cs.slice(0, MAX_LINES + 1) : [];
+      // the selection's shape first - it says nothing about the room's feed
+      const shape = pick([], { cs });
+      if (shape.code === "empty" || shape.code === "count") return res.status(400).json({ ok: false, error: shape.error });
+      // CL3 (decision 13) + fix-up: the lines are picked from the quoter's OWN view of the pad - its access, the bridge perk, the
+      // public floors, the hidden set; nothing outside it is ever looked at, so one answer covers a line from another room, one
+      // that doesn't exist, one below the floor, a hidden person's, a presence line they can't see, and a pad they can't read
+      const vis = await require("./chatlogview").quotableFeed(req.user, R.id, R.feed);
+      const got = pick(vis, { cs });
+      if (got.error && got.code !== "span") return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_QUOTABLE });
+      if (got.error) return res.status(400).json({ ok: false, code: got.code, error: got.error });   // too far apart (in their own view)
       // clipmodal: {preview: true} = the clip card's preview, behind every check Post has; nothing is made, no quote slot is used
       if (b.preview === true) {
         const pl = peekLimited("web|" + req.user.userId);
@@ -493,12 +738,14 @@ function register(app, { addUser, isBotToken, bySlug }) {
       const s = b.spec && typeof b.spec === "object" ? b.spec : {};
       const spec = { mode: String(s.mode || ""), n: Number(s.n) || 0, login: LOGIN_RE.test(low(s.login)) ? low(s.login) : "",
                      user: String(s.user || "").slice(0, 40), from: String(s.from || "").slice(0, PHRASE_MAX), to: String(s.to || "").slice(0, PHRASE_MAX) };
-      if (spec.mode === "user" && (isHidden(spec.login) || isHidden(spec.user))) return res.status(400).json({ ok: false, error: "they're private" });
-      const got = pick(R.feed, spec, Number(b.before) || null);
+      const CV = require("./chatlogview");
+      if (spec.mode === "user" && (isHidden(spec.login) || isHidden(spec.user) || CV.isHiddenLogin(spec.login))) return res.status(400).json({ ok: false, error: "they're private" });
+      const got = pick(shownFeed(R.feed), spec, Number(b.before) || null);
       if (got.error) return res.status(400).json({ ok: false, error: got.error });
-      // credited to the requester's linked PATV account (never an archived one), else to Pepe
+      // credited to the requester's linked PATV account (never an archived one), else to Pepe (the owner's decision-9 change: and to
+      // Pepe when the requester is hidden by any kind - the post's author would name them)
       let author = null;
-      if (cf && LOGIN_RE.test(cf) && !isHidden(cf)) {
+      if (cf && LOGIN_RE.test(cf) && !isHidden(cf) && !CV.isHiddenLogin(cf)) {
         const C = (await getQuery("PRAGMA table_info(users)")).some((c) => c.name === "archived_at");
         author = (await getQuery(`SELECT userId FROM users WHERE lower(camfrogUsername) = ? ${C ? "AND archived_at IS NULL" : ""}
                                   ORDER BY CASE WHEN username LIKE 'CF%' THEN 1 ELSE 0 END LIMIT 1`, [cf]))[0] || null;
@@ -541,5 +788,8 @@ function register(app, { addUser, isBotToken, bySlug }) {
   });
 }
 
-module.exports = { register, pick, buildLines, bodyOf, create, removeMe, anonymise, forPosts, quoteOfDay, setHidden, isHidden, hiddenHash, limited,
+module.exports = { register, pick, shownFeed, buildLines, bodyOf, shownBody, create, removeMe, anonymise, dropLines, forPosts, quoteOfDay, setHidden, isHidden,
+  isLeftOut, isPrivate, lineLeftOut, hiddenHash, limited,
+  // tests (hubhidden's own rules): hubhidden.js's half of isHidden - what its setHidden handed over (or it is loading)
+  _hubHidden: (login) => !!login && (hubLoading() || HIDDEN.has(hiddenHash(login))),
   MAX_LINES, SPAN_MAX, Refuse, _setClock, _hits: hits };

@@ -11,6 +11,8 @@
 //   telegram  telegram_links         - "/start <code>" sent from the user's own Telegram (Telegram vouches for the sender
 //                                      id; a phone number behind it); tg_id UNIQUE
 //   google    sso_links (google)     - Sign in with Google (OIDC `sub`, link_source 'self'); (provider, subject) unique
+//   apple     sso_links (apple)      - Sign in with Apple (Apple's `sub`, link_source 'self'; an Apple Account has two-factor
+//                                      sign-in on a real device); (provider, subject) unique
 //   plex      plex_members           - a Plex account linked by a trusted source (plexsso.TRUSTED: self / admin / wizarr
 //                                      / overseerr); plex_id is the key, so one Plex account -> one PATV account
 //
@@ -71,6 +73,7 @@ async function tableProofs(userId, { fresh = false } = {}) {
   if ((await rows("SELECT 1 FROM users WHERE userId = ? AND isEmailVerified = 1 AND email LIKE '%@%' LIMIT 1", [id])).length) list.push("email");
   if ((await rows("SELECT 1 FROM telegram_links WHERE user_id = ? LIMIT 1", [id])).length) list.push("telegram");
   if ((await rows("SELECT 1 FROM sso_links WHERE provider = 'google' AND user_id = ? AND link_source = 'self' LIMIT 1", [id])).length) list.push("google");
+  if ((await rows("SELECT 1 FROM sso_links WHERE provider = 'apple' AND user_id = ? AND link_source = 'self' LIMIT 1", [id])).length) list.push("apple");
   let trusted = ["self", "admin", "wizarr", "overseerr"];
   try { trusted = require("./plexsso").TRUSTED || trusted; } catch (e) { /* keep the copy */ }
   if ((await rows(`SELECT 1 FROM plex_members WHERE user_id = ? AND link_source IN (${trusted.map(() => "?").join(",")}) LIMIT 1`,
@@ -126,6 +129,6 @@ async function verify(u) {
 function forget(userId) { cache.delete(String(userId || "")); }
 
 // The refusal copy every converted gate uses for "link something first".
-const LINK_HINT = "verify your email address, or link an account in Settings → Account → Connections (a chat account - for Camfrog, type !verify in a room with Pepe - or Discord, Twitch, Telegram, Google or Plex)";
+const LINK_HINT = "verify your email address, or link an account in Settings → Account → Connections (a chat account - for Camfrog, type !verify in a room with Pepe - or Discord, Twitch, Telegram, Google, Apple or Plex)";
 
 module.exports = { isVerified, verify, attach, tableProofs, tableProofsMany, columnProofs, forget, LINK_HINT, _cache: cache };

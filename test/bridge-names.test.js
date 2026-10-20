@@ -48,7 +48,7 @@ async function feedFor(events, rooms) {
   await bridge.ingest({ events, rooms: rooms || [] });
   const R = bridge.bySlug("names-room");
   assert.ok(R, "room exists");
-  return bridge.liveView(R, 0);
+  return bridge.liveView(R, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });   // CL3: a signed-in viewer (the route checks padaccess first)
 }
 
 test("PATV display name > Camfrog display name > login; resolved by login; tooltip data kept", async () => {
@@ -88,10 +88,9 @@ test("incognito / !bridge hide stays 'someone' and is never looked up or reveale
   bridge._nameCache.clear();
   const anon = { id: "anon-1a2b3c4d", display: "someone", anonymous: true };
   const v = await feedFor([ev("mic.grab", { user: anon })], [{ room: ROOM, members: [anon, { id: "foamy1111", login: "foamy1111", display: "plantbaked" }], mic: [anon], count: 2 }]);
-  const grab = v.feed.filter((x) => x.k === "mic").pop();
-  assert.equal(grab.u.anon, true);
-  assert.equal(grab.u.display, "someone");
-  assert.ok(!grab.u.login && !grab.u.patv, "no login / account on an anonymised user");
+  // CL3 fix-up: a hidden person's items are LEFT OUT of the chat, presence included - Pepe's stand-in's mic grab is never
+  // "someone grabbed the mic" (the roster below still counts them as someone: who's in the room now)
+  assert.ok(!v.feed.some((x) => x.k === "mic" && x.u && x.u.anon), "the stand-in's presence line is left out");
   const m = v.members.find((x) => x.anon);
   assert.deepEqual(m, { anon: true, display: "someone" });
   assert.ok(!JSON.stringify(v).includes("sam_hidden") && !JSON.stringify(v).includes("Secret Sam"));
@@ -123,8 +122,8 @@ test("Pepe keeps his own name; the lookup is cached per login", async () => {
   assert.equal(p.self, true);
   const before = UL.stats.lookups;
   const R = bridge.bySlug("names-room");
-  await bridge.liveView(R, 0);
-  await bridge.liveView(R, 0);
+  await bridge.liveView(R, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });
+  await bridge.liveView(R, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });
   assert.equal(UL.stats.lookups, before, "a poll within the TTL costs no query");
 });
 

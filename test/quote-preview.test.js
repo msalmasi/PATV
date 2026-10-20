@@ -61,6 +61,26 @@ const Q = `/api/rooms/${SLUG}/quote`;
 const peek = (x, cs) => post(Q, x, { cs, preview: true });
 const sync = (body) => post("/api/bridge/sync", null, Object.assign({ password: "bot" }, body));
 const hash = (login) => crypto.createHash("sha256").update("pepe-hidden:" + login).digest("hex").slice(0, 20);
+// CL3 + the chat-history owner change (decision 9, cl-site rebased onto clipmodal): the site's sticky hidden set knows WHY someone
+// is hidden - Pepe's typed privacy.hidden {scope} - and incognito hides WHO, not WHAT: an incognito speaker's lines are quotable
+// as "someone"; a !bridge hide speaker's are LEFT OUT (never quotable - the one not_quotable answer). The set is sticky: only
+// Pepe's privacy.shown un-hides (one event per sync, as Pepe sends them). His lists ride along like his real sync - the mixed
+// hidden_h, the kinded bridge_hidden_h / incog_hidden_h and tx_hidden_h (his CL1 marker) - so both sticky sets, hubhidden.js's
+// and the pad chat archive's chatlog.js, know the kind.
+const pev = (type, login, scope) => ({ op: "event", id: "p-" + (++seq), ts: new Date().toISOString(), type, data: { h: hash(login), scope } });
+const HIDDEN_NOW = new Map();                              // hash -> kind
+const lists = () => {
+  const all = [...HIDDEN_NOW.keys()];
+  return { hidden_h: all, bridge_hidden_h: all.filter((h) => HIDDEN_NOW.get(h) === "bridge"), incog_hidden_h: all.filter((h) => HIDDEN_NOW.get(h) === "incognito"), tx_hidden_h: [] };
+};
+async function hideAs(scope, logins) {
+  for (const l of logins) { HIDDEN_NOW.set(hash(l), scope); assert.equal((await sync({ events: [pev("privacy.hidden", l, scope)], rooms: [], ...lists() })).status, 200); }
+  await new Promise((r) => setTimeout(r, 60));
+}
+async function showAgain(scope, logins) {
+  for (const l of logins) { HIDDEN_NOW.delete(hash(l)); assert.equal((await sync({ events: [pev("privacy.shown", l, scope)], rooms: [], ...lists() })).status, 200); }
+  await new Promise((r) => setTimeout(r, 60));
+}
 const cOf = (text) => bridge.bySlug(SLUG).feed.find((it) => it.text === text).c;
 const counts = async () => ({
   posts: (await getQuery("SELECT COUNT(*) AS n FROM feed_posts"))[0].n,
@@ -125,8 +145,11 @@ test("preview: behind every check Post has (sign-in, same-site JSON, the room, t
   assert.equal((await post(Q, U.bob, { cs, preview: true }, { "content-type": "application/json", "x-test-user": U.bob.userId })).status, 400, "needs X-Requested-With");
   assert.equal((await post("/api/rooms/no-such-room/quote", U.bob, { cs, preview: true })).status, 404);
   let r = await peek(U.bob, [999999]);
-  assert.equal(r.status, 400);
-  assert.match(r.d.error, /aren't in the room's feed/);
+  // CL3 (decision 13): the one answer for a line outside the quoter's own view - it never tells a line that doesn't exist from
+  // one below the pad's floor or a left-out person's
+  assert.equal(r.status, 403);
+  assert.equal(r.d.code, "not_quotable");
+  assert.equal(r.d.lines, undefined);
   r = await peek(U.bob, Array.from({ length: 21 }, (_, i) => i + 1));
   assert.equal(r.status, 400);
   assert.match(r.d.error, /at most 20/);
@@ -165,7 +188,8 @@ test("preview shows exactly what Post makes: names as the quote card shows them,
 });
 
 test("privacy: anyone private shows as 'someone' (their name blanked inside other lines too), never a login, no avatar or look", async () => {
-  await sync({ events: [], rooms: [], hidden_h: [hash("shycf"), hash("bobcf")] });
+  await hideAs("incognito", ["shycf", "bobcf"]);
+  try {
   const pv = await peek(U.alice, [cOf("hey alice, how is it going"), cOf("shy says something about bobcf"), cOf("that was funny")]);
   assert.equal(pv.status, 200, JSON.stringify(pv.d));
   assert.deepEqual(pv.d.lines.map((l) => l.name), ["someone", "someone", "someone"]);
@@ -178,6 +202,25 @@ test("privacy: anyone private shows as 'someone' (their name blanked inside othe
   const made = await post(Q, U.alice, { cs: [cOf("hey alice, how is it going"), cOf("shy says something about bobcf"), cOf("that was funny")] });
   const row = (await getQuery("SELECT * FROM feed_quotes WHERE post_id = ?", [made.d.post.id]))[0];
   assert.deepEqual(JSON.parse(row.lines).map((l) => [l.name, l.text]), pv.d.lines.map((l) => [l.name, l.text]));
+  } finally { await showAgain("incognito", ["shycf", "bobcf"]); }
+  // !bridge hide: LEFT OUT - a selection with their line is refused (preview and Post alike, the one answer), and they aren't
+  // even "someone" in a line nobody hid
+  await hideAs("bridge", ["shycf"]);
+  try {
+    quotes._hits.clear();
+    for (const r of [await peek(U.alice, [cOf("hey alice, how is it going"), cOf("shy says something about bobcf")]),
+                     await post(Q, U.alice, { cs: [cOf("hey alice, how is it going"), cOf("shy says something about bobcf")] })]) {
+      assert.equal(r.status, 403, JSON.stringify(r.d));
+      assert.equal(r.d.code, "not_quotable");
+      assert.doesNotMatch(JSON.stringify(r.d), /shy says|someone/);
+    }
+    const ok = await peek(U.alice, [cOf("hey alice, how is it going"), cOf("that was funny")]);
+    assert.equal(ok.status, 200, JSON.stringify(ok.d));
+    assert.deepEqual(ok.d.lines.map((l) => l.name), ["bob", "bob"], "the people nobody hid keep their names");
+  } finally { await showAgain("bridge", ["shycf"]); }
+  const back = await peek(U.alice, [cOf("hey alice, how is it going"), cOf("shy says something about bobcf")]);
+  assert.equal(back.status, 200, "shown again (Pepe's privacy.shown): quotable again - " + JSON.stringify(back.d));
+  assert.deepEqual(back.d.lines.map((l) => l.name), ["bob", "shycf"]);
 });
 
 test("price and refusals: 250 PAT, free with quotes.free, an opt-out or a short balance says why (save: null)", async () => {
@@ -328,7 +371,8 @@ test("naming opt-outs keeps the quote limit's budget: at most 5 different people
 });
 
 test("privacy: a private speaker's PATV username and a 2-letter name are blanked inside the lines too (preview = what Post stores)", async () => {
-  await sync({ events: [], rooms: [], hidden_h: [hash("alicecf"), hash("jo")] });
+  await hideAs("incognito", ["alicecf", "jo"]);
+  try {
   const cs = [cOf("hello room"), cOf("jo was here"), cOf("welcome jo, and alice too")];
   const pv = await peek(U.bob, cs);
   assert.equal(pv.status, 200, JSON.stringify(pv.d));
@@ -340,4 +384,46 @@ test("privacy: a private speaker's PATV username and a 2-letter name are blanked
   const row = (await getQuery("SELECT * FROM feed_quotes WHERE post_id = ?", [made.d.post.id]))[0];
   assert.deepEqual(JSON.parse(row.lines).map((l) => [l.name, l.text]), pv.d.lines.map((l) => [l.name, l.text]));
   assert.doesNotMatch(row.lines, /alice|\bjo\b/i);
+  } finally { await showAgain("incognito", ["alicecf", "jo"]); }
+});
+
+// train2 merge: hubhidden.js's start-up state (a test stands in for its first read below)
+const HH = require(path.join(repo, "hubhidden"));
+
+test("privacy (train2 merge + CL3 decision 13): a LEFT-OUT speaker's line (an older Pepe's mixed list, !bridge hide) is outside the quoter's view - preview and Post give the one not_quotable answer and make nothing; the other lines are still postable (preview = what Post stores); start-up -> why", async (t) => {
+  // (an older Pepe's mixed list hides both kinds in both sticky sets: the cleanup shows both again)
+  t.after(async () => { await showAgain("bridge", ["carolcf"]); await showAgain("incognito", ["carolcf"]); });
+  await sync({ events: [], rooms: [], hidden_h: [hash("carolcf")] });   // an older Pepe's mixed list: left out (fail closed)
+  await new Promise((r) => setTimeout(r, 60));                           // (both sticky sets have taken it)
+  assert.deepEqual([quotes.isHidden("carolcf"), quotes.isLeftOut("carolcf")], [true, true]);
+  const before = await counts();
+  const cs = [cOf("hello room"), cOf("i am talking on the mic")];
+  const pv = await peek(U.bob, cs);
+  assert.equal(pv.status, 403, JSON.stringify(pv.d));
+  assert.equal(pv.d.code, "not_quotable", "her line isn't in bob's view: the one answer, never which line or why");
+  assert.doesNotMatch(JSON.stringify(pv.d), /carol|talking on the mic/);
+  const no = await post(Q, U.bob, { cs });
+  assert.equal(no.status, 403, JSON.stringify(no.d));
+  assert.equal(no.d.code, "not_quotable", "Post answers as the preview did");
+  const only = await peek(U.bob, [cOf("i am talking on the mic")]);
+  assert.deepEqual([only.status, only.d.code], [403, "not_quotable"]);
+  assert.deepEqual(await counts(), before, "nothing made or charged");
+  // the rest alone is postable, and the preview is what Post stores
+  const rest = [cOf("hello room")];
+  const pv2 = await peek(U.bob, rest);
+  assert.equal(pv2.status, 200, JSON.stringify(pv2.d));
+  assert.ok(pv2.d.save, JSON.stringify(pv2.d));
+  const made = await post(Q, U.bob, { cs: rest });
+  assert.equal(made.status, 200, JSON.stringify(made.d));
+  assert.deepEqual([made.d.lines, made.d.left_out], [1, 0]);
+  const row = (await getQuery("SELECT * FROM feed_quotes WHERE post_id = ?", [made.d.post.id]))[0];
+  assert.deepEqual(JSON.parse(row.lines).map((l) => [l.name, l.text]), pv2.d.lines.map((l) => [l.name, l.text]), "preview = what Post stores");
+  // while the website is still reading the hidden set at start-up: no lines, and the card says why
+  const loading = HH.loading;
+  HH.loading = () => true;
+  try {
+    const st = await peek(U.bob, [cOf("hello room")]);
+    assert.equal(st.status, 200, JSON.stringify(st.d));
+    assert.deepEqual([st.d.lines.length, st.d.save, st.d.why], [0, null, "The website is just starting up - try again in a moment."]);
+  } finally { HH.loading = loading; }
 });

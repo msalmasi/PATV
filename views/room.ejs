@@ -58,18 +58,7 @@
   .rm .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; min-width: 0; }
   .rm h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ds-gold); font-family: var(--ds-font-pixel); font-size: 10px; line-height: 1.6; display: flex; justify-content: space-between; gap: 8px; }
   .rm h2 small { font-family: var(--ds-font); letter-spacing: 0; text-transform: none; color: var(--ds-text-muted); font-size: 12px; }
-  .rm .feed { height: min(62vh, 640px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; padding-right: 4px; scroll-behavior: smooth; }
-  .rm .line { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 5px 6px; border-radius: 8px; align-items: start; }
-  .rm .line:hover { background: #161616; }
-  .rm .line .body { min-width: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
-  .rm .line .who { font-weight: bold; margin-right: 6px; }
-  .rm .line .when { color: var(--ds-text-faint); font-size: 11px; margin-left: 4px; white-space: nowrap; }
-  .rm .line.pepe { background: #0f1a10; }
-  .rm .line.hl { background: #2a2410; box-shadow: inset 3px 0 0 #e0b400; }   /* 1.99ii: the line a 📣 mention alert points at */
-  .rm .line.tx { border-left: 3px solid #4f7fa8; background: #0f141b; }
-  .rm .line.tx .body { font-style: italic; color: #c8d6e5; }
-  .rm .line.tx .who { font-style: normal; }
-  .rm .line.tx .who::before { content: "\1F399  "; }
+  /* CL5: the chat's lines (.feed, .line, .sys, .av) are in public/css/chatlog.css, linked right after this block */
   .rm .listen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .rm .listen .btn { padding: 7px 12px; font-size: 13px; background: #181818; border-color: #2b2b2b; cursor: pointer; font-family: inherit; }
   .rm .hide { display: none !important; }
@@ -117,10 +106,19 @@
   .rm .snap .lc-badge.on { background: #b3261e; color: #fff; font-weight: bold; letter-spacing: .04em; }
   .rm .snap .lc-x { position: absolute; right: 8px; top: 8px; min-width: 32px; min-height: 32px; background: rgba(0,0,0,.65); color: #fff; border-radius: 999px; }
   .rm .snap button.lc-audio { margin-top: 6px; }
-  .rm .sys { color: var(--ds-text-muted); font-size: 12.5px; padding: 3px 6px 3px 42px; overflow-wrap: anywhere; }
-  .rm .sys.topic { color: #c9b46a; }
-  .rm .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: bold; color: #0d0d0d; object-fit: cover; flex: none; overflow: hidden; }
-  .rm .av.anon { background: #2a2a2a !important; color: var(--ds-text-muted); }
+  /* CL3: the 📜 / 🔍 chip in the chat's heading */
+  .rm h2 .hist-chip { margin-inline-start: auto; font-family: var(--ds-font); letter-spacing: 0; text-transform: none; font-size: var(--ds-fs-xs);
+                      text-decoration: none; color: var(--ds-text-muted); white-space: nowrap; }
+  .rm h2 .hist-chip:hover { color: var(--ds-text); }
+  .rm h2 .hist-chip .off { text-decoration: line-through; opacity: .7; }
+  /* CL8: 📅 jump to a date (scrollback), next to the chip */
+  .rm h2 .hist-jump { min-height: 30px; min-width: 36px; padding: 0 8px; font-size: 15px; }
+  .rm h2 .hist-chip[hidden] + .hist-jump { margin-inline-start: auto; }
+  .rm h2 .hist-chip[hidden] + .hist-jump[hidden] + .hist-jump { margin-inline-start: auto; }   /* CL9: the 🔍 alone */
+  .rm h2 .hist-chip[hidden] + .hist-jump[hidden] + .hist-jump[hidden] + .hist-jump { margin-inline-start: auto; }   /* CL10: the ⋯ alone */
+  .rm h2 .hist-jump[aria-expanded="true"] { --b-line: var(--ds-ac); }
+  @media (max-width: 760px) { .rm h2 .hist-jump { min-height: 44px; min-width: 44px; } }
+  .rm .rm-hist .hist-off { margin: 0 0 8px; }
   .rm .people { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 46vh; overflow-y: auto; }
   .rm .people { overflow-x: hidden; }
   /* 1.99ex: avatar | name (shrinks, ellipsis) | controls (fixed width, never squeezed or pushed out of the card) */
@@ -408,12 +406,10 @@
   }
   @media (max-width: 860px) {
     .rm .grid { grid-template-columns: minmax(0, 1fr); }
-    .rm .feed { height: 58vh; }
     .rm .hero h1 { font-size: 22px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .rm .dot, .rm .eq i, .rm .ptab .pdot { animation: none; }
-    .rm .feed { scroll-behavior: auto; }
   }
 /* ── 1.99qc polish (docs/design-system.md, "Area notes: feed, pads and social"): ds-page, card/hero radii, pixel section heads, 36/44 controls, gold focus ── */
   .rm.ds-page { max-width: var(--ds-w-wide); padding: var(--ds-sp-4) var(--ds-gutter) var(--ds-sp-14); gap: var(--ds-sp-4); }
@@ -482,10 +478,9 @@
   .rm .sact .l-short { display: none; }
   .rm .rm-main { display: grid; gap: 14px; min-width: 0; align-content: start; }
   .rm .rm-chat > h2 { margin-bottom: 6px; }
-  .rm .rm-chat .topic { color: #c9b46a; font-size: 13px; line-height: 1.4; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rm .rm-chat .topic { color: var(--ds-chat-topic); font-size: 13px; line-height: 1.4; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .rm .rm-audio { margin: 0 0 8px; }
   .rm .rm-audio:empty { display: none; }
-  @media (max-width: 860px) { .rm .feed { height: 50vh; min-height: 260px; } }
   @media (max-width: 640px) {
     .rm .hero-c .hero-bn { height: 64px; }
     .rm .hero-c.has-bn .hd { margin-top: -26px; }
@@ -527,6 +522,9 @@
     #padPanel-live > .rm-live ~ * { order: 2; }
   }
 </style>
+<%# CL5: the chat's lines - right after the block they came from, so its rules keep their order in the cascade; <main> carries
+    .chatlog (the stylesheet's scope) next to .rm. CL5 fix-up: v=5 - the chat's own --ds-chat-* colours again, the RTL highlight %>
+<link rel="stylesheet" href="/public/css/chatlog.css?v=9">
 <%# 1.99es: the pad's look (padlook.js via app.locals): accent -> CSS custom properties on <main> (validated hex only),
     an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
     A pad with no look renders exactly as before (the old link banner above the header). %>
@@ -540,7 +538,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<main class="ds-page rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
+<main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
   <%# 1.99tc: the tier intro - 💎 Prime Time Plus gets its own title card, Prime Time the gold sweep (partials/pad-intro.ejs) %>
   <% const introTier_ = typeof premiumPadPerks === 'function' ? (premiumPadPerks(room.id).tier || null) : (primeOn_ ? 'prime_time' : null); %>
@@ -629,10 +627,11 @@
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
   <script src="/public/js/stage-player.js?v=9"></script>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
-  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=4">
+  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=5">
   <script src="/public/js/webrtc-client.js?v=5"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=11"></script>
+  <script src="/public/js/stage-mic.js?v=2"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC) %>
+  <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=14"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=2"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
@@ -716,8 +715,9 @@
     var padSlug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     // 1.99cr: Snap / Clip the stream that's showing (stage-capture.js; cut on the server, saved to this pad's story)
     var cap = PATVStage.capture({ host: document.getElementById('rmCap'), room: function () { return padSlug; } });
-    PATVStage.switcher({
-      tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'),
+    // micfollow: kept as window.PATVPadStage - the live long-poll below hands it the 🎙 mic stage (setMic)
+    window.PATVPadStage = PATVStage.switcher({
+      tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'), slug: padSlug,
       reconnect: document.getElementById('rmStReconnect'), unmute: document.getElementById('rmStUnmute'), embedHost: document.getElementById('rmEmbed'),
       api: '/api/stage?room=' + encodeURIComponent(padSlug), onShow: function (sel) { cap.update(sel); },
       slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= manage_ ? 'true' : 'false' %>,
@@ -732,6 +732,9 @@
 <% } %>
 <% if (!bridged_ && !siteOnly_) { %>
   <section class="card"><p class="muted" style="margin:0"><%- t('pad.live.not_bridged') %></p></section>
+  <%# CL8: the room is offline - its 📜 chat history stays readable (bridge.js chatHistory: chatlog.history on, a signed-in viewer
+      who may scroll back here, something archived) %>
+  <% if (typeof chatHistory !== 'undefined' && chatHistory && liveOpen_) { %><%- include('partials/pad-chat-history', { chatHistory, room, signedIn }) %><% } %>
 <% } %>
 
 <% if (!bridged_ || siteOnly_) { %>
@@ -746,6 +749,8 @@
     <p class="muted"><%- t('pad.plusroom.text', { max: sp_.max }) %></p>
     <a class="btn" href="/premium?pad=<%= encodeURIComponent(room.slug) %>#plus"><%- sp_.soldOut ? t('pad.plusroom.cta_full') : t('pad.plus.cta') %></a>
   </section>
+  <%# CL8: decision 24 - without the perk the pad's owner and staff still read its 📜 chat history %>
+  <% if (typeof chatHistory !== 'undefined' && chatHistory && liveOpen_) { %><%- include('partials/pad-chat-history', { chatHistory, room, signedIn }) %><% } %>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else if (adultGate_ !== 'ok') { %>
   <%# adultgate site: an 18+ pad while the owner switch is on - sign in / confirm your age; no lines, names or counts %>
@@ -771,12 +776,20 @@
   <div class="grid rm-live">
     <div class="rm-main">
     <section class="card rm-chat" id="rmChat" aria-labelledby="chatH">
-      <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small></h2>
+      <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small><a class="ds-chip plain hist-chip" id="rmHist" href="/privacy#rooms" hidden></a><button type="button" class="ds-btn ghost sm hist-jump" id="rmHistJump" hidden aria-label="<%- t('pad.chat.jump_date') %>" title="<%- t('pad.chat.jump_date') %>">📅</button><button type="button" class="ds-btn ghost sm hist-jump" id="rmSearchBtn" hidden aria-label="<%- t('pad.chat.search') %>" title="<%- t('pad.chat.search') %>">🔍</button><button type="button" class="ds-btn ghost sm hist-jump" id="rmMoreBtn" hidden aria-label="<%- t('pad.chat.more') %>" title="<%- t('pad.chat.more') %>" data-tz="<%= locals.tz || 'UTC' %>">⋯</button></h2>
       <%# the room's topic (was a header line; renderRoom keeps it current, hidden while it repeats the description) %>
       <div class="topic" id="rmTopic" data-desc="<%= desc_ %>"><%= topic_ && !sameTxt_(topic_, desc_) ? topic_ : '' %></div>
       <%# 🔊 room audio (PATVRoom.audio; 1.99yh live cams play their sound here too) - was under On the mic %>
       <div class="rm-audio" id="rmAudioBox"></div>
-      <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="<%- t('pad.chat.aria') %>"></div>
+      <%# CL8: the scroller - scrollback's top end (Load older / the end marker / the signed-out prompt), the OLDER lines (their own
+          container ABOVE the live role="log", so prepending never announces lines), the bottom end (a jump's Load newer), then the
+          live log (public/js/pad-history.js) %>
+      <div class="feed" id="rmScroll" role="region" tabindex="0" aria-label="<%- t('pad.chat.aria') %>">
+        <div class="hist-top" id="rmHistTop"></div>
+        <div class="older" id="rmOlder"></div>
+        <div class="hist-bot" id="rmHistBot"></div>
+        <div id="rmFeed" class="feed-log" role="log" aria-live="polite" aria-relevant="additions" aria-label="<%- t('pad.chat.aria') %>"></div>
+      </div>
       <button class="jump" id="rmJump" type="button"><%- t('pad.chat.new') %></button>
       <div id="rmClip"></div><%# 1.99fp: ✂️ Clip chat + 🔊 mic clips (public/js/chat-clip.js) %>
       <div class="compose hide" id="rmCompose">
@@ -812,17 +825,22 @@
       <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
+  <script src="/public/js/chatlog-core.js?v=4"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog) %>
+  <script src="/public/js/pad-history.js?v=3"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
+  <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
+  <script src="/public/js/pad-download.js?v=2"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
-  <script src="/public/js/room-bridge.js?v=15"></script>
+  <script src="/public/js/room-bridge.js?v=16"></script>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
-  <link rel="stylesheet" href="/public/css/quotes.css?v=4">
+  <link rel="stylesheet" href="/public/css/quotes.css?v=5">
   <script src="/public/js/clip-confirm.js?v=1"></script><%# clipmodal: the clip confirm card both clips use %>
   <script src="/public/js/chat-clip.js?v=4"></script>
+  <% if (signedIn) { %><script src="/public/js/chat-lines.js?v=2"></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete) %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
   <script src="/public/js/pad-pepe.js?v=1"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview) %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=1" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=1"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
-  <script src="/public/js/pad-livecam.js?v=4"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) %>
+  <script src="/public/js/pad-livecam.js?v=5"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) %>
   <script src="/public/js/room-mod.js?v=12"></script>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=4" defer></script>
@@ -830,10 +848,17 @@
   <script>
   (function () {
     'use strict';
-    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { if (d && typeof d === 'object') d = v && v.count === 1 ? d.one : d.other; return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     var data = JSON.parse(document.getElementById('rmInit').textContent);
+    // CL3: the page's signed join cursor (a reconnect under "Off" gets only lines said after this page loaded) + the pad's
+    // chat-history settings as this viewer gets them (the 📜 / 🔍 chip; an open page re-filters when they change)
+    var jcTok = data && data.jc ? data.jc : null, jcAt = jcTok ? Number(String(jcTok).split('.')[1]) || 0 : 0;
+    var hist = data && data.history ? data.history : null, resetNext = false;
+    // CL8: feedEl = the live log (role="log": its lines are its children, as chat-clip.js / chat-lines.js / the relay expect);
+    // scrollEl = the scroller around it and the older lines scrollback loads above it (pad-history.js)
     var feedEl = document.getElementById('rmFeed'), jump = document.getElementById('rmJump');
+    var scrollEl = document.getElementById('rmScroll'), olderEl = document.getElementById('rmOlder');
     var cursor = 0, timer = null, fails = 0, lastPeople = '', lastMic = '';
     // 1.99fu: signed = the light ⋯ menu (View profile / Open cam / 💸 Tip) for every signed-in viewer, not just mods
     var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %>, collapsible: true, signed: <%= signedIn ? 'true' : 'false' %>, me: <%- JSON.stringify(signedIn && user ? user : null).replace(/</g, '\\u003c') %> }) : null;
@@ -850,98 +875,66 @@
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    function hue(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
-    function avatar(u) {
-      if (u && u.patv && u.patv.avatar) { var im = el('img', 'av'); im.src = u.patv.avatar; im.alt = ''; im.loading = 'lazy'; return im; }
-      var d = el('span', 'av' + (!u || u.anon ? ' anon' : ''), !u || u.anon ? '?' : (u.display || u.login || '?').charAt(0).toUpperCase());
-      if (u && !u.anon) d.style.background = 'hsl(' + hue(u.login || '') + ',55%,62%)';
-      d.setAttribute('aria-hidden', 'true');
-      return d;
+    // CL5: every chat line - and the avatars / names of the mic and people lists - comes from the one renderer
+    // (public/js/chatlog-core.js, PATVChatlog), the one scrollback, search and the downloads use; this page hands it its
+    // translator and language, and DOM nodes as the h()
+    // CL5 fix-up: when that script didn't load (a blocked request, a 404 an edge cached around a deploy) the pad keeps working -
+    // the live chat, people, mic, polling and the composer - with plain lines ("name: text · 21:04", no pictures, styles or
+    // system lines) until a reload brings the renderer back. Names follow its rules: "someone", "former member", no account key.
+    // [CL5 renderer wiring - test/chatlog-page.test.js runs this block]
+    var CLR = window.PATVChatlog && typeof window.PATVChatlog.renderItem === 'function' ? window.PATVChatlog : null, H = CLR ? CLR.domH(document) : null;
+    var rctx = { t: _t, lang: document.documentElement.lang || undefined };
+    if (!CLR && window.console) console.error('[pad] chatlog-core.js did not load - plain chat lines until a reload');
+    function plainName(u) {
+      if (!u || u.anon) return _t('js.pad.someone', 'someone');
+      if (u.former) return _t('js.pad.chat.former', 'former member');
+      var n = String(u.display || u.login || '');
+      return /^u:/i.test(n) ? _t('js.pad.chat.member', 'a PATV member') : n;
     }
-    function name(u) {
-      if (!u || u.anon) return el('span', 'who', _t('js.pad.someone', 'someone'));
-      var n;
-      if (u.patv) { n = el('a', 'who'); n.href = '/u/' + encodeURIComponent(u.patv.username); n.textContent = u.display || u.login; }
-      else n = el('span', 'who', u.display || u.login);
-      if (u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
-      if (u.self) n.title = 'Pepe'; else if (u.display && u.login && !u.acct && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;
-      // 1.99xa: a line they sent from the website (Pepe relayed it) - their own chat, marked so the room can tell
-      if (u.web) {
-        var wrap = el('span', 'who-web'); wrap.appendChild(n);
-        var mk = el('span', 'web-mark', '\u00a0\ud83c\udf10'); mk.title = _t('js.pad.chat.web', 'Sent from the website'); wrap.appendChild(mk);
-        return wrap;
-      }
-      return n;
+    function plainTime(ts) { var d = new Date(Number(ts) || 0); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+    function plainItem(it) {      // chat and mic lines only - never a hidden one (the owner's / staff's copy needs "Hidden by …")
+      if (!it || it.removed || (it.k !== 'msg' && it.k !== 'tx')) return null;
+      var tx = it.text == null ? '' : String(it.text);
+      return el('div', 'sys', plainName(it.u) + ': ' + (it.k === 'tx' ? '\u201c' + tx + '\u201d' : tx) + ' · ' + plainTime(it.ts));
     }
-    // 1.99ir: their flair in this pad (padflair.js) - text only, colours must be strict hex
-    function flairEl(u) {
-      var f = u && !u.anon && u.patv && u.patv.flair;
-      if (!f || !f.name) return null;
-      var s = el('span', 'ufl');
-      s.title = _t('js.pad.flair', 'Pad flair: {name}', { name: f.name });
-      if (f.emoji) s.appendChild(el('span', 'ufl-e', f.emoji));
-      s.appendChild(el('span', 'ufl-n', f.name));     // 1.99xm: its own span so a long name ellipsizes
-      if (/^#[0-9a-f]{6}$/.test(f.color || '')) s.style.setProperty('--fl', f.color);
-      if (/^#[0-9a-f]{6}$/.test(f.ink || '')) s.style.setProperty('--fli', f.ink);
-      return s;
+    function avatar(u) { if (CLR) return CLR.avatarNode(u, rctx, H); var a = el('span', 'av anon', '?'); a.setAttribute('aria-hidden', 'true'); return a; }
+    function name(u) { return CLR ? CLR.nameNode(u, rctx, H) : el('span', 'who', plainName(u)); }
+    function label(u) { return CLR ? CLR.label(u, rctx) : plainName(u); }
+    function hhmm(ts) { return CLR ? CLR.fmtTime(ts, rctx) : plainTime(ts); }
+    function chipSpan(s) {        // CL3: the 📜 chip - "15 min", "24 h", "7 d" (without the renderer: hours or minutes)
+      if (CLR) return CLR.chipSpan(s, rctx);
+      return s % 3600 === 0 ? _t('js.pad.chat.chip_h', '{n} h', { n: s / 3600 }) : _t('js.pad.chat.chip_min', '{n} min', { n: Math.max(1, Math.round(s / 60)) });
     }
-    function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
-    function dur(ms) { var s = Math.round(ms / 1000); return s < 60 ? s + 's' : s < 3600 ? Math.round(s / 60) + 'm' : (s / 3600).toFixed(1) + 'h'; }
-    function label(u) { return !u || u.anon ? _t('js.pad.someone', 'someone') : (u.display || u.login); }
+    function item(it) { return CLR ? CLR.renderItem(it, rctx, H) : plainItem(it); }
+    function renderLine(it, ctx) { return CLR ? CLR.renderItem(it, ctx, H) : plainItem(it); }   // scrollback's and search's lines
+    // [end of the CL5 renderer wiring]
 
-    function item(it) {
-      if (it.k === 'msg' || it.k === 'tx') {
-        var row = el('div', 'line' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
-        if (it.k === 'tx') row.title = _t('js.pad.chat.tx', 'Said on the mic (auto-transcribed)');
-        // 1.99fp: what ✂️ Clip chat / 🔊 Clip read (public/js/chat-clip.js) - the server re-reads its own copy by id
-        if (it.c) row.setAttribute('data-c', it.c);
-        row.setAttribute('data-k', it.k); row.setAttribute('data-name', label(it.u)); row.setAttribute('data-text', it.text);
-        if (it.k === 'tx' && it.id) row.setAttribute('data-tx', it.id);
-        row.appendChild(avatar(it.u));
-        var b = el('div', 'body');
-        b.appendChild(name(it.u));
-        var fl_ = flairEl(it.u); if (fl_) { b.appendChild(fl_); b.appendChild(document.createTextNode(' ')); }
-        b.appendChild(document.createTextNode(it.k === 'tx' ? '\u201c' + it.text + '\u201d' : it.text));
-        var t = el('time', 'when', hhmm(it.ts)); t.dateTime = new Date(it.ts).toISOString();
-        b.appendChild(t);
-        row.appendChild(b);
-        return row;
-      }
-      if (it.k === 'live') {
-        // 1.99kp: 🎥 a stream started on this pad's stage (golive.js -> bridge.liveNotice)
-        var lv = el('div', 'sys live');
-        // 1.99lr: np = a 📼 queue's next title
-        var lt = it.np ? _t('js.pad.chat.np', '📼 Now playing on {pad}: {what}', { pad: it.pad, what: it.what })
-          : it.what ? _t('js.pad.chat.live_what', '🎥 {name} just went live on {pad} — {what}', { name: it.who, pad: it.pad, what: it.what })
-          : _t('js.pad.chat.live', '🎥 {name} just went live on {pad}', { name: it.who, pad: it.pad });
-        if (it.link) { var la = el('a', null, lt); la.href = it.link; lv.appendChild(la); } else lv.appendChild(document.createTextNode(lt));
-        lv.appendChild(document.createTextNode(' · ' + hhmm(it.ts)));
-        return lv;
-      }
-      var txt = it.k === 'join' ? _t('js.pad.chat.joined', '→ {name} joined', { name: label(it.u) })
-        : it.k === 'leave' ? _t('js.pad.chat.left', '← {name} left', { name: label(it.u) })
-        : it.k === 'mic' ? _t('js.pad.chat.mic', '🎙️ {name} grabbed the mic', { name: label(it.u) })
-        : it.k === 'unmic' ? (it.ms ? _t('js.pad.chat.unmic_after', '🎙️ {name} dropped the mic after {dur}', { name: label(it.u), dur: dur(it.ms) }) : _t('js.pad.chat.unmic', '🎙️ {name} dropped the mic', { name: label(it.u) }))
-        : it.k === 'topic' ? _t('js.pad.chat.topic', '📌 topic: {text}', { text: it.text }) : null;
-      if (!txt) return null;
-      return el('div', 'sys' + (it.k === 'topic' ? ' topic' : ''), txt + ' · ' + hhmm(it.ts));
-    }
-
-    function nearBottom() { return feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 80; }
+    function nearBottom() { return scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 80; }
+    function toBottom() { scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
     // 1.99ii: ?line=<cursor> (a 📣 mention alert, mentions.js) - that chat line, highlighted and scrolled to, while
-    // it is still in the live chat (the room keeps its last 200 items)
+    // it is still in the live chat (the room keeps its last 200 items). CL8: older than that, scrollback loads the history
+    // around it (pad-history.js -> /history?around=), at any age inside this viewer's view
     var wantLine = (function () { var m = /[?&]line=(\d{1,12})(?:&|$)/.exec(location.search); return m ? m[1] : null; })();
     function showLine() {
       if (!wantLine) return false;
       var n = feedEl.querySelector('.line[data-c="' + wantLine + '"]');
       if (!n) return false;
       n.classList.add('hl');
-      if (!feedEl.clientHeight) return true;            // the Live tab is hidden: scrolled when it shows (patv:padtab)
-      feedEl.style.scrollBehavior = 'auto';
-      feedEl.scrollTop += n.getBoundingClientRect().top - feedEl.getBoundingClientRect().top - feedEl.clientHeight / 3;
-      feedEl.style.scrollBehavior = '';
+      if (!scrollEl.clientHeight) return true;          // the Live tab is hidden: scrolled when it shows (patv:padtab)
+      scrollEl.style.scrollBehavior = 'auto';
+      scrollEl.scrollTop += n.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top - scrollEl.clientHeight / 3;
+      scrollEl.style.scrollBehavior = '';
       jump.style.display = 'block';
       return true;
+    }
+    // CL8: the deep link isn't in the live tail - the history around it (one message for every line this viewer can't see)
+    function lineFromHistory() {
+      var c = wantLine;
+      wantLine = null;
+      if (!padHist || !hist || !hist.scroll || hist.deep === false) { feedEl.appendChild(el('div', 'sys', _t('js.pad.chat.line_unavailable', 'That line isn’t available.'))); return; }
+      padHist.around(c).then(function (ok) {
+        if (!ok) feedEl.appendChild(el('div', 'sys', _t('js.pad.chat.line_unavailable', 'That line isn’t available.')));
+      });
     }
     // 1.99acb: the feed cursors already in the chat - a line is shown once even when an answer brings it again (the page polls
     // from just before a line it was told about but never given: room-bridge.js relay.refetch), and such a late line goes in
@@ -949,15 +942,27 @@
     var haveC = {}, haveList = [], maxC = 0;
     function addFeed(items, first) {
       items = (items || []).filter(function (it) { return !it.c || !haveC[it.c]; });
-      if (!items.length) { if (first && !feedEl.childNodes.length) feedEl.appendChild(el('p', 'muted', _t('js.pad.chat.empty', 'Nothing said yet — it shows up here the moment someone talks.'))); return; }
+      if (!items.length) {
+        if (first && !feedEl.childNodes.length) {
+          // CL3: a pad whose history is Off shows nothing earlier - new lines appear as they're said
+          var off = hist && hist.window_s === 0;
+          feedEl.appendChild(el('p', 'muted', off ? _t('js.pad.chat.off_empty', 'This pad doesn’t show earlier messages — new lines appear here as they’re said.')
+            : _t('js.pad.chat.empty', 'Nothing said yet — it shows up here the moment someone talks.')));
+        }
+        if (first && wantLine) lineFromHistory();
+        return;
+      }
       var stick = first || nearBottom();
+      // CL8: reading back (older lines above, or a jump / deep link) - see pad-history.js
+      var reading = !!(padHist && padHist.reading()), detached = !!(padHist && padHist.detached()), added = 0;
       if (feedEl.firstChild && feedEl.firstChild.tagName === 'P') feedEl.removeChild(feedEl.firstChild);
       var frag = document.createDocumentFragment();
       items.forEach(function (it) {
         var n = item(it);
         if (it.c) { haveC[it.c] = 1; haveList.push(it.c); }
         if (!n) return;
-        n._c = it.c || 0;
+        added++;
+        n._c = it.c || 0; n._ts = Number(it.ts) || 0; n._k = it.k;     // CL3: refilter() reads the time and kind
         if (it.c && it.c < maxC) {
           var after = null;
           for (var k = 0; k < feedEl.childNodes.length; k++) { var x = feedEl.childNodes[k]; if (x._c && x._c > it.c) { after = x; break; } }
@@ -970,21 +975,45 @@
       // 1.99ye: above your own lines that are still on their way (room-bridge.js relay outbox), like a native chat
       var anchor = roomRelay && roomRelay.anchor ? roomRelay.anchor() : null;
       if (anchor && anchor.parentNode === feedEl) feedEl.insertBefore(frag, anchor); else feedEl.appendChild(frag);
-      while (feedEl.childNodes.length > 300) feedEl.removeChild(feedEl.firstChild);
-      if (first && wantLine) {
-        if (showLine()) return;
-        feedEl.appendChild(el('div', 'sys', _t('js.pad.chat.mention_gone', 'The line you were mentioned in has scrolled out of the live chat.')));
-        wantLine = null;
+      if (detached) {
+        // CL8: a jump / deep link is on screen: the live log keeps updating out of sight (300, as always), counted on Back to live
+        trimLive();
+        padHist.liveAdded(added);
+        return;
       }
-      if (stick) { feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
-      else jump.style.display = 'block';
+      if (reading) {
+        // CL8: older lines above: new lines never move the reader (counted on Back to live, at most 3,000 nodes); back at the
+        // bottom the oldest nodes go again, older lines first (300, as always)
+        if (stick) padHist.trimTop(300);
+        else { padHist.cap(); padHist.liveAdded(added); }
+      }
+      if (!padHist || !padHist.reading()) { if (trimLive() && padHist) padHist.trimmed(); }
+      if (first && wantLine) {
+        // CL3: a deep link needs a viewer who may read back here (signed in; age-confirmed on an 18+ pad; not blocked) and a
+        // line inside their view - one message for every other case
+        if ((!hist || hist.deep !== false) && showLine()) return;
+        lineFromHistory();
+      }
+      if (stick) toBottom();
+      else if (!reading) jump.style.display = 'block';
     }
-    jump.addEventListener('click', function () { feedEl.scrollTop = feedEl.scrollHeight; jump.style.display = 'none'; });
-    feedEl.addEventListener('scroll', function () { if (nearBottom()) jump.style.display = 'none'; });
+    function trimLive() { var n = 0; while (feedEl.childNodes.length > 300) { feedEl.removeChild(feedEl.firstChild); n++; } return n > 0; }
+    jump.addEventListener('click', function () {
+      if (padHist && padHist.reading()) { padHist.backToLive(); return; }
+      scrollEl.scrollTop = scrollEl.scrollHeight; jump.style.display = 'none';
+    });
+    scrollEl.addEventListener('scroll', function () {
+      if (!nearBottom() || (padHist && padHist.detached())) return;
+      jump.style.display = 'none';
+      if (padHist) padHist.atBottom();
+    });
     // 1.99dx: the chat fills in while its tab is hidden (no height to scroll) - land on the newest line when it shows
+    // (CL8: or on the line a jump / deep link opened)
     document.addEventListener('patv:padtab', function (e) {
-      if (e.detail && e.detail.tab === 'live' && wantLine && feedEl.clientHeight) { if (showLine()) { wantLine = null; return; } }
-      if (e.detail && e.detail.tab === 'live') { feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
+      if (!e.detail || e.detail.tab !== 'live') return;
+      if (wantLine && scrollEl.clientHeight) { if (showLine()) { wantLine = null; return; } }
+      if (padHist && (padHist.reveal() || padHist.reading())) return;
+      toBottom();
     });
 
     function renderRoom(d) {
@@ -1070,9 +1099,34 @@
 
     var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug, { showOff: true });   // greyed while the relay is off
     var chatClip = window.PATVChatClip ? PATVChatClip.init({ feed: feedEl, host: document.getElementById('rmClip'), slug: slug, linked: <%= linked ? 'true' : 'false' %> }) : null;   // 1.99fp
+    // CL6: the ⋯ on each line (public/js/chat-lines.js -> chatlogmod.js) - what it offers comes with each answer (history.acts); a line
+    // taken down from here leaves this page at once
+    // (CL8: scrollback's older lines get the ⋯ too - they're the archive's; CL9: and the 🔍 search results, made here first)
+    var searchHits = el('div', 'srch-hits');
+    var chatLines = window.PATVChatLines ? PATVChatLines.init({ feed: feedEl, more: [olderEl, searchHits], scroller: scrollEl, slug: slug, jc: function () { return jcTok; },
+                                                                onGone: function (c) { dropRemoved([c]); } }) : null;
+    // CL8: scrollback - older lines above the live log, 📅 jump to a date, ?line= deep links past the live tail (pad-history.js ->
+    // GET /api/rooms/:slug/history); only while the history block says this viewer may scroll back (hist.scroll)
+    var padHist = window.PATVPadHistory ? PATVPadHistory.init({
+      slug: slug, scroller: scrollEl, older: olderEl, top: document.getElementById('rmHistTop'), bot: document.getElementById('rmHistBot'), log: feedEl,
+      render: renderLine, ctx: rctx, hist: function () { return hist; }, jump: jump,
+      dateBtn: document.getElementById('rmHistJump'), dateHost: document.getElementById('rmChat'), toBottom: toBottom,
+      extra: hitCs, onChecked: function (r) { if (padSearch) padSearch.drop(r.gone.concat(r.redo)); } }) : null;   // CL8 fix-up: the 🔍 results too
+    // CL9: 🔍 search the pad's chat (pad-search.js -> POST /api/rooms/:slug/search) - while the history block says this viewer may
+    // (hist.find); a result opens the history around its line (padHist.around). From's suggestions: the names already on the screen
+    var padSearch = window.PATVPadSearch ? PATVPadSearch.init({
+      slug: slug, btn: document.getElementById('rmSearchBtn'), host: document.getElementById('rmChat'), before: scrollEl, results: searchHits,
+      render: renderLine, ctx: rctx, hist: function () { return hist; }, history: padHist,
+      names: function () { return PATVPadSearch.screenNames([feedEl, olderEl]); } }) : null;
+    // CL10: the ⋯ in the chat heading -> ⬇ Download chat log (pad-download.js -> POST /api/rooms/:slug/chatlog/export) - while the
+    // history block says this viewer may ask for a file (hist.dl), or "Sign in to download" (hist.dl_signin)
+    var dlBtn = document.getElementById('rmMoreBtn');
+    var padDl = window.PATVPadDownload && dlBtn ? PATVPadDownload.init({ slug: slug, btn: dlBtn, hist: function () { return hist; },
+      tz: dlBtn.getAttribute('data-tz') || '', signin: '/login?next=' + encodeURIComponent('/p/' + slug) }) : null;
     // 1.99ye: your messages show in the chat at once (sending… / ✓ sent / not sent · Retry), built with this page's line style
+    // (CL8: sending one while reading back returns to the live chat)
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug, {
-      feed: feedEl, line: item, onBottom: function () { jump.style.display = 'none'; } }) : null;
+      feed: feedEl, line: item, scroller: scrollEl, onBottom: function () { if (padHist && padHist.reading()) padHist.backToLive(); jump.style.display = 'none'; } }) : null;
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
     var snapEl = null, snapTimer = null, snapWho = null;
     var liveCtl = null;       // 1.99yh: the popover's live cam (pad-livecam.js) - stopped whenever the popover changes
@@ -1317,18 +1371,96 @@
     }
     var livePepe = null;      // 1.99qr: room.pepe - the 🐸 Pepe submenu's prices / switches (padpepe.js)
     var liveCams = null;      // 1.99yh: room.livecams - may this viewer ask for cams live, and their slots (livecam.js)
+    // CL3: the 📜 / 🔍 chip - how far back visitors read this pad's chat, and whether it can be searched (links to the explainer)
+    var histKey = '';
+    function renderHist(h) {
+      var a = document.getElementById('rmHist');
+      if (!a || !h) return;
+      var key = [h.chat_s, h.search, h.explain].join('|');
+      if (key === histKey) return;
+      histKey = key;
+      var s = h.chat_s;
+      a.textContent = s == null ? _t('js.pad.chat.chip_all', '📜 All') : s === 0 ? _t('js.pad.chat.chip_off', '📜 Off') : _t('js.pad.chat.chip_window', '📜 {span}', { span: chipSpan(s) });
+      var q = el('span', h.search ? null : 'off', ' 🔍');
+      q.title = h.search ? _t('js.pad.chat.chip_search_on', 'This pad’s chat can be searched') : _t('js.pad.chat.chip_search_off', 'Search is off on this pad');
+      a.appendChild(q);
+      a.title = _t('js.pad.chat.chip_title', 'How far back visitors can read this pad’s chat — how it works');
+      if (/^\/privacy#[a-z-]+$/.test(h.explain || '')) a.href = h.explain;
+      a.hidden = false;
+    }
+    // CL3: the pad's settings changed while this page was open - what came with the page and is now below this viewer's floor
+    // goes (lines that arrived while it was open stay: they were seen as they were said)
+    function refilter(h) {
+      var f = h && h.floor;
+      if (!f) return;
+      Array.prototype.slice.call(feedEl.childNodes).forEach(function (n) {
+        if (!n._c || !n._ts || n._c > jcAt) return;
+        var floor = n._k === 'tx' ? f.tx : (n._k === 'join' || n._k === 'leave' || n._k === 'mic' || n._k === 'unmic') ? f.presence : f.chat;
+        if (n._ts < floor) feedEl.removeChild(n);
+      });
+    }
+    // CL3: lines this page holds whose speaker is hidden now (!incognito, !bridge hide, a website Incognito, !transcripts off).
+    // Review 2 fix-up: `redo` = the same answer's lines drawn again - scrollback keeps those for redoLines to redraw in place (they
+    // are "someone" now, not gone); the live log drops them first (an older page's way), the 🔍 results drop them (search again)
+    function dropRemoved(cs, redo) {
+      var gone = {}, again = {};
+      (cs || []).forEach(function (c) { gone[c] = 1; });
+      if (padHist && padHist.redraw) (redo || []).forEach(function (it) { if (it && it.c) again[it.c] = 1; });
+      Array.prototype.slice.call(feedEl.childNodes).forEach(function (n) { if (n._c && gone[n._c]) feedEl.removeChild(n); });
+      if (padHist) padHist.drop((cs || []).filter(function (c) { return !again[c]; }));   // CL8: scrollback's lines too
+      if (padSearch) padSearch.drop(cs);                                        // CL9: and the search results
+    }
+    // the owner's decision-9 change: lines whose LOOK moved (named -> "someone"; un-hidden), dressed again by the site - drawn in
+    // place of the page's copy (after `removed` took any line that must leave), only inside what the log still holds; scrollback
+    // draws them again too, a 🔍 result whose look changed just goes (search again for it)
+    function redoLines(items) {
+      var list = (items || []).filter(function (it) { return it && it.c; });
+      if (!list.length) return;
+      try {
+        if (padHist && padHist.redraw) padHist.redraw(list);
+      } catch (e) { if (padHist) padHist.drop(list.map(function (it) { return it.c; })); }   // never left with its old look
+      if (padSearch) padSearch.drop(list.map(function (it) { return it.c; }));
+      var first = null;
+      Array.prototype.forEach.call(feedEl.childNodes, function (n) { if (n._c && (first === null || n._c < first)) first = n._c; });
+      var keep = list.filter(function (it) { return first !== null && it.c >= first; });
+      if (!keep.length) return;
+      var cs = {};
+      keep.forEach(function (it) { cs[it.c] = 1; delete haveC[it.c]; });
+      Array.prototype.slice.call(feedEl.childNodes).forEach(function (n) { if (n._c && cs[n._c]) feedEl.removeChild(n); });
+      addFeed(keep, false);
+    }
+    // CL8 fix-up: scrollback's lines + the 🔍 results, checked again (pad-history.js recheck -> POST /history/check): gone ones leave,
+    // re-dressed ones are drawn again in scrollback (a search result whose look changed just goes - search again for it); a check
+    // that keeps failing drops them all (fail closed)
+    function recheckAll() { if (padHist) padHist.recheck(); }
+    function hitCs() { var o = []; Array.prototype.forEach.call(searchHits.querySelectorAll('*'), function (n) { if (n._c) o.push(n._c); }); return o; }
     function apply(d, first) {
       livePepe = d && d.room && d.room.pepe ? d.room.pepe : null;
       liveCams = d && d.room && d.room.livecams ? d.room.livecams : null;
       if (d.cursor < cursor) {                                                  // the site restarted
         feedEl.textContent = ''; cursor = 0; first = true; haveC = {}; haveList = []; maxC = 0;
         safe('compose-reset', function () { if (roomRelay && roomRelay.reset) roomRelay.reset(); });   // 1.99acb: before compose reads this answer
+        safe('hist-reset', function () { if (padHist) padHist.reset(); });       // CL8
       }
+      if (d.jc) { jcTok = d.jc; jcAt = Number(String(d.jc).split('.')[1]) || jcAt; }
+      if (d.history) {
+        // CL8: a narrower setting applies at once - what scrollback showed goes too (it reloads on demand)
+        if (hist && d.history.v !== hist.v) safe('refilter', function () { refilter(d.history); if (padHist) padHist.reset(); if (padSearch) padSearch.reset(); });
+        // CL8 fix-up: the privacy digest moved (someone became hidden, a name is redacted now, a line was taken down) - the lines
+        // scrollback holds and the 🔍 results are checked again (the live log's own lines leave through `removed`)
+        else if (hist && d.history.pv && d.history.pv !== hist.pv) safe('recheck', recheckAll);
+        hist = d.history;
+        safe('hist', function () { renderHist(hist); if (padHist) padHist.update(); if (padSearch) padSearch.update(); if (padDl) padDl.update(); });   // CL9: the 🔍, CL10: the ⋯
+      }
+      if (d.removed) safe('removed', function () { dropRemoved(d.removed, d.redo); });
+      if (d.redo) safe('redo', function () { redoLines(d.redo); });
+      safe('lines', function () { if (chatLines) chatLines.update(d); });       // CL6: before the new lines come in (they get their ⋯)
       safe('mod', function () { if (roomMod) roomMod.update(d); });          // before the people list: it adds the manage buttons
       safe('room', function () { renderRoom(d); });
       safe('compose', function () { renderCompose(d); });
       safe('audio', function () { roomAudio.update(d); });
       safe('strip', function () { if (window.PATVPadStrip) PATVPadStrip.update(liveCams); });   // 1.99zc
+      safe('stagemic', function () { if (window.PATVPadStage && PATVPadStage.setMic) PATVPadStage.setMic(d.stage_program || null); });   // micfollow: 🎙 On the mic
       safe('feed', function () { addFeed(d.feed, first); });
       safe('clip', function () { if (chatClip) chatClip.update(d); });
       cursor = Math.max(cursor, d.cursor);
@@ -1340,22 +1472,32 @@
     // 1.99ye: a long-poll (?wait=1): the site answers the moment something changes (a line, the people / mic, your
     // message's state) - or after 20 s with nothing - and the page asks again at once. A site that answers without
     // `lp` (older) is polled every 1.5 s as before. v / mv = the room's / your messages' versions the page has seen.
-    var lp = { ok: false, v: data && data.ver != null ? data.ver : null, mv: data && data.mver != null ? data.mver : null }, inflight = false;
+    var lp = { ok: false, v: data && data.ver != null ? data.ver : null, mv: data && data.mver != null ? data.mver : null,
+               rs: data && data.rs != null ? data.rs : null }, inflight = false;   // review 2 fix-up: rs = the removed / redo entries it got
     function poll() {
       timer = null;
       if (document.hidden || inflight) return;
       inflight = true;
-      var q = '?after=' + cursor + '&wait=1' + (lp.v != null ? '&v=' + lp.v : '') + (lp.mv != null ? '&mv=' + lp.mv : '') +
-        (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '');
+      var q = '?after=' + cursor + '&wait=1' + (lp.v != null ? '&v=' + lp.v : '') + (lp.mv != null ? '&mv=' + lp.mv : '') + (lp.rs != null ? '&rs=' + lp.rs : '') +
+        (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '') + (jcTok ? '&jc=' + encodeURIComponent(jcTok) : '');
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/live' + q, { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); } if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (d) {
           fails = 0; setStatus('');
+          // CL3: the join cursor ran out (24 h) - load the view again, like a fresh page (nothing earlier than its floors)
+          if (d.reinit) {
+            jcTok = null; cursor = 0; haveC = {}; haveList = []; maxC = 0; feedEl.textContent = ''; resetNext = true; lp.ok = true;
+            safe('compose-reset', function () { if (roomRelay && roomRelay.reset) roomRelay.reset(); });
+            safe('hist-reset', function () { if (padHist) padHist.reset(); });   // CL8
+            return;
+          }
           lp.ok = !!d.lp && !d.gone;
           if (d.gone) return;
           if (d.ver != null) lp.v = d.ver;
+          if (d.rs != null) lp.rs = d.rs;
           if (d.mver != null) lp.mv = d.mver;
-          apply(d, false);
+          apply(d, resetNext);
+          resetNext = false;
         })
         .catch(function () { fails++; lp.ok = false; setStatus(fails > 2 ? _t('js.pad.chat.reconnecting', 'reconnecting…') : '', fails > 2); })
         .then(function () { inflight = false; schedule(); });

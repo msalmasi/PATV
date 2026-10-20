@@ -43,11 +43,16 @@ test("chips: the name is its own span (server + both page-JS builders), escaped,
   assert.match(h, /^<span class="ufl" [^>]*title="Pad flair: Resident Frog Wrangler Extraordinaire"><span class="ufl-e" aria-hidden="true">🐸<\/span><span class="ufl-n">Resident Frog Wrangler Extraordinaire<\/span><\/span>$/);
   assert.match(PF.html({ ...LONG, name: "<b>", emoji: "" }), /<span class="ufl-n">&lt;b&gt;<\/span>/);
   assert.match(PF.postHtml(POSTF, "/p/x?flair=9#feed"), /^<a class="pfl-post" [^>]*title="Post flair: Hot takes from the mic"><span class="ufl-e" aria-hidden="true">🔥<\/span><span class="ufl-n">Hot takes from the mic<\/span><\/a>$/);
-  for (const f of [["views", "room.ejs"], ["public", "js", "pad-flair.js"]]) {
+  for (const f of [["public", "js", "pad-flair.js"]]) {
     const src = rd(...f);
     assert.match(src, /appendChild\(el\('span', 'ufl-n', f\.name\)\)/, f.join("/") + " builds the name span");
     assert.doesNotMatch(src, /el\('span', 'ufl', f\.name\)/, f.join("/") + " no bare text run");
   }
+  // CL5: the pad chat's chips come from the shared renderer (public/js/chatlog-core.js flairNode; room.ejs has no copy)
+  const core = rd("public", "js", "chatlog-core.js");
+  assert.match(core, /kids\.push\(h\('span', \{ 'class': 'ufl-n' \}, \[f\.name\]\)\);/, "chatlog-core.js builds the name span");
+  assert.doesNotMatch(core, /h\('span', \{ 'class': 'ufl'[^}]*\}, \[f\.name\]\)/, "chatlog-core.js: no bare text run");
+  assert.ok(!rd("views", "room.ejs").includes("'ufl-n'"), "room.ejs builds no chip of its own");
 });
 
 test("post header: the pad's name renders next to a long flair (post page, crosspost on a pad page)", async () => {

@@ -5,8 +5,9 @@
 //     * SQLite triggers on source tables write rows (so every writer is covered, CLI scripts included): sessions.revoked_at ->
 //       "sessions/revoked" "sid:<sessions.id>"; 1.99acm: profile_layout -> "privacy/changed" "pa:<user_id>" (private activity:
 //       the Analytics section or its Rooms panel hidden, stories.privateLogins' rule), hub_hidden_h (hubhidden.js, Pepe's
-//       hidden_h set) -> "privacy/changed" "hh:<h>". Trigger rows carry only (topic, entity); the poster reads the entity's
-//       CURRENT state when it posts.
+//       hidden_h set; 1.99add refix 4: also a change of its scope - "incognito" when only incognito hides the hash) ->
+//       "privacy/changed" "hh:<h>". Trigger rows carry only (topic, entity); the poster reads the entity's CURRENT state when it
+//       posts.
 //     * emit(topic, entity, payload, {dedupe}) for events that are not table writes (an account cutoff, a request-time incognito
 //       request, a committed engine move, 1.99acm: a completed account deletion, a "Make Pepe forget me"): ONLY inside the
 //       caller's dbUtils.tx, so the row commits or rolls back with the action. Deduped on dedupe_key.
@@ -114,6 +115,9 @@ function init() {
         await runQuery(`CREATE TRIGGER IF NOT EXISTS hub_outbox_hh_${ev.toLowerCase()} AFTER ${ev} ON hub_hidden_h WHEN ${gate("privacy")}
           BEGIN INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('privacy/changed', 'hh:' || ${ref}.h, ${ms}); END`);
       }
+      // 1.99add refix 4: a hash hidden only by incognito (scope "incognito": shown as "someone") or also left out (scope NULL)
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS hub_outbox_hh_update AFTER UPDATE OF scope ON hub_hidden_h WHEN OLD.scope IS NOT NEW.scope AND ${gate("privacy")}
+        BEGIN INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('privacy/changed', 'hh:' || NEW.h, ${ms}); END`);
       // 1.99adp: the S1 topics' source tables, indexes and triggers (each gated by its own switch, written whatever it says).
       // Never in the way of the S0 seam: a failure is logged, shown on /admin/keys#seam (status().s1.error) and keeps the
       // identity / looks switches from turning on; a database without a users table (a module's unit test) has no S1 topics.
@@ -211,7 +215,10 @@ async function privateActivity(userId) {
   return { value, at: (row && Number(row.updated)) || null };
 }
 const paRow = (userId, value, at) => ({ flag: "private_activity", value, subject: { acct: accountOf(userId), v1_user: String(userId) }, at });
-const hhRow = (h, value, at) => ({ flag: "hidden_h", h, value, at });
+// 1.99add refix 4: scope "incognito" = hidden ONLY by incognito (the owner's rule: shown as "someone", words kept); absent = left
+// out (!bridge hide, or an older Pepe's list that doesn't say which) - every row before refix 4 meant that. An optional field: the
+// hub (S0) reads h / value / at and ignores it, so it keeps leaving everyone out until it reads `scope` (fail closed)
+const hhRow = (h, value, at, scope = null) => ({ flag: "hidden_h", h, value, at, ...(value && scope === "incognito" ? { scope: "incognito" } : {}) });
 
 const readers = {
   "sessions/revoked": async (entity) => {
@@ -230,8 +237,8 @@ const readers = {
     }
     if (e.startsWith("hh:")) {
       const h = e.slice(3);
-      const r = (await getQuery("SELECT since FROM hub_hidden_h WHERE h = ?", [h]))[0];
-      return hhRow(h, !!r, r ? Number(r.since) : now());
+      const r = (await getQuery("SELECT since, scope FROM hub_hidden_h WHERE h = ?", [h]))[0];
+      return hhRow(h, !!r, r ? Number(r.since) : now(), r ? r.scope : null);
     }
     return null;
   },
@@ -586,8 +593,8 @@ const SOURCES = {
     hidden_h: async (k, limit) => {
       const b = bound("hh:", k);
       if (b == null) return [];
-      const rows = await getQuery("SELECT h, since FROM hub_hidden_h WHERE h > ? ORDER BY h LIMIT ?", [b, limit]);
-      return rows.map((r) => ({ entity: "hh:" + r.h, payload: hhRow(r.h, true, Number(r.since)) }));
+      const rows = await getQuery("SELECT h, since, scope FROM hub_hidden_h WHERE h > ? ORDER BY h LIMIT ?", [b, limit]);
+      return rows.map((r) => ({ entity: "hh:" + r.h, payload: hhRow(r.h, true, Number(r.since), r.scope) }));
     },
   },
   "privacy/account-deleted": {

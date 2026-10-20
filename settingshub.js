@@ -32,8 +32,9 @@ async function hub(user, ctx = {}) {
   const tg = await safe(() => require("./telegram").linkOf(uid));
   const plex = await safe(() => require("./plexmembers").mine(uid));
   const google = await safe(() => require("./ssolinks").linkOf("google", uid));
+  const apple = await safe(() => require("./ssolinks").linkOf("apple", uid));
   const devices = await safe(async () => (await require("./sessions").list(uid)).length);
-  const conns = [!!row.camfrogUsername, !!row.twitchDisplayname, !!row.discordUsername, !!(plex && plex.rows && plex.rows.length), !!tg, !!google];
+  const conns = [!!row.camfrogUsername, !!row.twitchDisplayname, !!row.discordUsername, !!(plex && plex.rows && plex.rows.length), !!tg, !!google, !!apple];
   const linked = conns.filter(Boolean).length;
   const account = [
     E("account", "👤", ACCT + "#account", st("handle", { name: "@" + (row.username || user.username) })),

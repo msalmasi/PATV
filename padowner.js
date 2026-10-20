@@ -164,6 +164,7 @@ const WEB_CAPS = Object.freeze([
   { id: "web_room_topic", area: "room", route: "POST /api/rooms/:slug/owner/topic", where: "/p/{slug}/owner#topic" },          // 1.99up
   { id: "web_pad_site", area: "feed", route: "POST /api/rooms/:slug/owner/site", where: "/p/{slug}/owner#site" },              // 1.99up
   { id: "web_pad_filter", area: "feed", route: "POST /api/rooms/:slug/owner/filter", where: "/p/{slug}/owner#safety" },        // 1.99ux: feedfilter.js
+  { id: "web_chat_history", area: "room", route: "POST /api/rooms/:slug/chat-settings", where: "/p/{slug}/settings?tab=chat" }, // CL3: padchat.js
 ]);
 // 1.99ti: Pepe in / out of the pad's Camfrog room (website action "room.ctl" from the owner; Pepe re-checks owner, Plus, his
 // 5-room cap, his home room and staging). One per CTL_GAP_MS per pad here too.
@@ -380,6 +381,8 @@ async function pageData(R, viewer) {
     CHOICES, GROUPS: OWNER_GROUPS, ICONS: OWNER_ICONS, readonly: pepe ? readonlyList(pepe) : null, VOICES: voices || [], CONVO_QUIET,
     plus: camfrog ? await safe(() => require("./premium").isPrimePlus(R.id), false) : false,
     site: await safe(() => require("./padsite").state(R.id)),          // 1.99up: Pepe on the pad's site side (any pad)
+    // CL3: the pad chat's history / search / downloads in one row - the settings live in Pad settings › 💬 Chat (one home)
+    chat: camfrog ? await safe(async () => { await require("./chatlog").init(); return require("./padchat").summary(R.id); }) : null,
     filter: await safe(() => require("./feedfilter").state(R.id)),     // 1.99ux: the cheap content filter (any pad)
     TOPIC_MAX,
   };

@@ -33,6 +33,11 @@
 // 1.99acm: a login reaches the hub only as its hidden hash (entity "cfh:<h>", subject login_h - seam plan D-6), and Pepe's
 // full list (`full`) heals in one transaction that also writes a "confirmed" row for every key it turns ON or OFF, so a login
 // that is ON only through the full list is hidden on the hub at once, not at the next snapshot.
+// 1.99add: Pepe's sticky hidden set (hubhidden.js) hears a website ON at once (provisional) and every report Pepe sends;
+// actionsSettled (actions.js's ack, actionttl.js's expiry sweep) and reconcileWeb (start-up) tell it what became of a website
+// ON - one Pepe never applied is undone there. 1.99add refix 4: all of that touches only the set's INCOGNITO kind (shown as
+// "someone", the words kept - the owner's rule of 2026-10-19); !bridge hide is its own kind (left out). Pepe's `full` list adds to
+// it (never removes).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 
@@ -191,7 +196,85 @@ async function request(userId, on, { ip } = {}) {
     if (e && e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment.", "busy");
     throw e;
   }
+  // CL2: an ON request hides the key's archived pad-chat lines at once, before Pepe confirms (the sticky hidden set, src web;
+  // chatlog.js). An OFF request changes nothing there: only Pepe's un-hide (privacy.shown) does. CL2 fix-up: a linked account's
+  // own web lines from before it linked (archived under u:<userId>) are its chat lines too - hidden with the login, and shown
+  // again with it (reason of:<login>)
+  // 1.99add (spec §3.1): an ON is applied to the sticky hidden set at once (src web), before Pepe confirms - quotes, tips,
+  // mentions, boost and go-live lines stop naming them now. If Pepe never applies it (the action fails or expires) it is
+  // undone (actionsSettled - run here too, in case Pepe already answered it in the moment since the transaction). An OFF waits
+  // for Pepe's report (hubhidden.offReported). (The chat archive's set keeps its own rule: only Pepe's privacy.shown un-hides.)
+  if (on) {
+    try {
+      const CL = require("./chatlog");
+      await CL.hideNow([login], "web");
+      if (!ACCT_RE.test(login)) await CL.hideNow(["u:" + String(userId)], "web", "incognito", { of: login });
+    } catch (e) { console.error("[incognito] archive hide:", e.message); }
+    await require("./hubhidden").hideNow(login, "web");
+    await actionsSettled([id]);
+  }
   return { id };
+}
+
+// 1.99add: what became of a website Incognito ON. hubhidden.hideNow hid them at once; the action's outcome tells whether Pepe
+// applied it: done -> he did (a "web" hash is now as sure as his own report); failed - he refused it, or it expired before he
+// claimed it (actionttl.js, 15 min) -> he never did, and a hash only that request put there is un-hidden again (their state in
+// Pepe and on Settings is OFF - they would otherwise stay "someone" for good). Decided once no other ON of theirs is still open
+// (that one decides). Called by actions.js (Pepe's ack) and actionttl.js (the expiry sweep); never rejects.
+const ON_ARGS = JSON.stringify(["on"]);
+function actionKey(a) {
+  const c = low(a && a.camfrog);
+  if (c) return LOGIN_RE.test(c) ? c : null;                // the login it was queued for (request() acted for it)
+  const k = "u:" + String(a && a.user_id);
+  return ACCT_RE.test(k) ? k : null;                        // 1.99xa: an account with no chat login
+}
+async function settleAction(a) {
+  if (!a || a.args !== ON_ARGS || (a.status !== "done" && a.status !== "failed")) return false;
+  const open = (await getQuery(`SELECT 1 AS x FROM pepe_actions WHERE user_id = ? AND kind = 'privacy.incognito' AND args = ? AND id <> ?
+                                AND status IN ('pending', 'claimed') LIMIT 1`, [String(a.user_id), ON_ARGS, a.id]))[0];
+  if (open) return false;
+  const key = actionKey(a);
+  if (!key) return false;
+  await require("./hubhidden").webSettled(key, a.status === "done");
+  return true;
+}
+/** Pepe answered these actions (ack) or they expired: the incognito ONs among them settle the sticky hidden set. -> how many */
+async function actionsSettled(ids) {
+  try {
+    const want = [...new Set((Array.isArray(ids) ? ids : [ids]).map((x) => parseInt(x, 10)).filter((x) => x > 0))].slice(0, 200);
+    if (!want.length) return 0;
+    const rows = await getQuery(`SELECT id, user_id, camfrog, args, status FROM pepe_actions WHERE kind = 'privacy.incognito'
+                                 AND id IN (${want.map(() => "?").join(",")})`, want);
+    let n = 0;
+    for (const a of rows) if (await settleAction(a)) n++;
+    return n;
+  } catch (e) {
+    console.error("[incognito] action outcome:", e.message);
+    return 0;
+  }
+}
+/** At start-up (once the hidden set is back): each member's newest website ON of the last 30 days that has an outcome settles
+ *  again - an outcome that came while the site was down, or just before a restart, still counts. -> how many keys */
+async function reconcileWeb() {
+  try {
+    const rows = await getQuery(`SELECT id, user_id, camfrog, args, status FROM pepe_actions WHERE kind = 'privacy.incognito' AND args = ?
+                                 AND created > ? ORDER BY id DESC LIMIT 5000`, [ON_ARGS, Date.now() - 30 * 86400000]);
+    const seen = new Set(), ok = [], bad = [];
+    for (const a of rows) {
+      if (seen.has(a.user_id)) continue;
+      seen.add(a.user_id);
+      if (a.status !== "done" && a.status !== "failed") continue;     // still open: its outcome will come
+      const k = actionKey(a);
+      if (k) (a.status === "done" ? ok : bad).push(k);
+    }
+    const H = require("./hubhidden");
+    if (ok.length) await H.webSettled(ok, true);
+    if (bad.length) await H.webSettled(bad, false);
+    return ok.length + bad.length;
+  } catch (e) {
+    console.error("[incognito] reconcile:", e.message);
+    return 0;
+  }
 }
 
 // 1.99acf: the chat hub's id for a chat key and its subject - never any line text. The subject's acct is the hub's account_id
@@ -248,6 +331,24 @@ async function sync(body) {
       }
       await emitConfirmed(login, on, via, u ? u.userId : null, ts, `incog:${login}:${ts}`);
     });
+    // CL2: the chat archive's sticky hidden set - ON hides any key Pepe reports (its incognito reason, at Pepe's time; a linked
+    // login's account key u:<userId> too - its web lines from before it linked). CL2 fix-up: OFF un-hides NOTHING here - only
+    // Pepe's explicit privacy.shown {scope: incognito} does (a report, or a list that no longer has them, can't tell whether
+    // !bridge hide still hides the person)
+    if (!stale && on) {
+      try {
+        const CL = require("./chatlog");
+        await CL.hideNow([login], "pepe", "incognito", { at: ts });
+        if (u && !ACCT_RE.test(login)) await CL.hideNow(["u:" + String(u.userId)], "pepe", "incognito", { of: login, at: ts });
+      } catch (e) { console.error("[incognito] archive hidden set:", e.message); }
+    }
+    // 1.99add: the sticky hidden set (hubhidden.js: quotes + the hub's hh: cache). 1.99add refix 4: it keeps WHY someone is hidden,
+    // and these reports touch only the INCOGNITO kind - !bridge hide (and an older Pepe's mixed list) is never undone here. Every
+    // report goes there, linked or not, also one this table calls stale: an ON always hides (a report that looks older than his
+    // last OFF means his clock went back - never leave anyone named for that); an OFF takes the incognito kind away unless it
+    // is older than an ON that arrived just now (hubhidden judges a late post). The `full` list below only adds there.
+    if (on) await require("./hubhidden").hiddenReported(login, ts);
+    else await require("./hubhidden").offReported(login, ts, { changed: it.changed !== false });
     if (!u || stale) { ignored++; continue; }              // only linked chat identities are kept
     applied++;
     if (it.changed !== false) {
@@ -289,12 +390,21 @@ async function sync(body) {
       for (const [l, on] of changed) await emitConfirmed(l, on, "chat", userOf(l), t, `incog-full:${l}:${t}`);
       await runQuery("INSERT INTO incognito_meta (key, value) VALUES ('last_full', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(t)]);
     });
+    // CL2: everyone on the full list is hidden in the chat archive too; a key missing from it is NEVER un-hidden (add-only). CL2
+    // fix-up: as their incognito reason, a list's say-so (added if missing, never moves its time - assert)
+    try { if (set.size) await require("./chatlog").hideNow([...set], "pepe", "incognito", { assert: true }); } catch (e) { console.error("[incognito] archive hidden set:", e.message); }
+    // 1.99add refix 4: Pepe's word on who is incognito now - the sticky hidden set's incognito kind gains them (adds only; absence
+    // un-hides nobody there). After a deploy it learns this way who has been incognito since long before (their older Pepe's
+    // list hides them as "unknown": if that list ever loses them, they still show as "someone", never by name)
+    await require("./hubhidden").fullReported([...set]);
   }
   return { applied, ignored };
 }
 
 function register(app, { addUser, isBotToken }) {
   init().catch((e) => console.error("[incognito] init:", e.message));
+  // 1.99add: website ONs Pepe answered (or that expired) while the site was down settle the sticky hidden set once it is back
+  require("./hubhidden").whenBooted(reconcileWeb);
   const guard = require("./middleware/authGuard");
   const fail = (res, e) => {
     if (e && e.refuse) return res.status(e.status).json({ ok: false, error: e.message, code: e.code });
@@ -333,7 +443,14 @@ function register(app, { addUser, isBotToken }) {
       // 1.99aat: 🧠 "Make Pepe forget me" (pepeforget.js) - when it was last asked
       let pf = null;
       try { pf = await require("./pepeforget").last(req.user.userId); } catch (e) { pf = null; }
-      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf });
+      // stagefix site: the 🎬 card names Camfrog's "!stage off me" only once Pepe forwards it (livecam.stageOffMeOk - a bot change)
+      let slChat = false, slOk = false;
+      try { slChat = require("./livecam").stageOffMeOk(); slOk = require("./livecam").stageOkOk(); } catch (e) { slChat = false; slOk = false; }
+      // stagefix final round: ...and "!stage ok / no" (the answers to stagepin.js's asks) once he forwards those (stageOkOk)
+      // micfollow: 🎙 "Pads may put my cam on their stage while I hold the mic" + the person's own mic stages (micfollow.js)
+      let mf = null;
+      try { mf = await require("./micfollow").privacyState(req.user.userId); } catch (e) { mf = null; }
+      res.render("privacy-settings", { user: req.user.username, st: await stateOf(req.user.userId), lc, oa, gh, pf, slChat, slOk, mf });
     } catch (e) { next(e); }
   });
 }
@@ -341,4 +458,4 @@ function register(app, { addUser, isBotToken }) {
 // 1.99acm: entityOf / subjectOf / userByLogin / loginOf are shared with huboutbox.js's privacy/changed snapshot (the same
 // entity and subject the feed rows carry).
 module.exports = { init, register, request, sync, stateOf, entityOf, subjectOf, userByLogin, usersByLogins, loginOf, isKey, ACCT_RE, RATE_MAX, RATE_WINDOW_MS,
-                   Refuse, _setClock: (f) => { clock = f; } };
+                   actionsSettled, reconcileWeb, Refuse, _setClock: (f) => { clock = f; } };

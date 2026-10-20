@@ -250,9 +250,22 @@ function cleanRetention(raw) {
 }
 let RETENTION = { ...RETENTION_DEFAULTS };
 const retention = () => ({ ...RETENTION });
+// CL7: when Pepe last reported his windows (ms, this process only - a restart forgets it): the chat archive's retention purge
+// (chatlogpurge.js) deletes nothing while his report is older than an hour, or hasn't come since the site started (his own
+// fail-safe: the windows the site holds may be out of date)
+let RETENTION_AT = null;
+const retentionAt = () => RETENTION_AT;
+// CL7 fix-up: the windows the purge deletes by - a report counts as fresh only when it names EVERY one of them with a value
+// cleanRetention keeps as sent (null = no limit, or a whole number of days 1..36500)
+const RETENTION_TIER_KEYS = Object.freeze(["chat_days", "chat_prime", "chat_plus", "rec_days", "rec_prime", "rec_plus"]);
+const retentionValue = (v) => v === null || (Number.isInteger(v) && v >= 1 && v <= 36500);
 /** Pepe's report -> RETENTION (stored only when it changed). */
 async function noteRetention(raw) {
   if (!raw || typeof raw !== "object") return false;
+  // (a report that leaves out a tier's window, or sends one cleanRetention would swap for the default, isn't Pepe's windows: the
+  // purge's fail-safe treats the report as stale at once - CL7 fix-up: an earlier fresh report no longer covers it)
+  const whole = RETENTION_TIER_KEYS.every((k) => Object.prototype.hasOwnProperty.call(raw, k) && retentionValue(raw[k]));
+  RETENTION_AT = whole ? Date.now() : null;
   const next = cleanRetention(raw);
   if (JSON.stringify(next) === JSON.stringify(RETENTION)) return false;
   RETENTION = next;
@@ -1228,6 +1241,8 @@ module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
   plusSpots, plusUsed, plusCapCheck, coveredUntil, cardStart, plusCardCover, CARD_MIN_DEFER_MS, plusWaitlist, plusWaitlistNotify, plusLeaveNotices,
   retention, noteRetention, cleanRetention, RETENTION_DEFAULTS,         // 1.99tc: Pepe's retention windows (the perk lists)
+  retentionAt,                                                           // CL7: when his last report came (the archive purge's fail-safe)
+  RETENTION_TIER_KEYS,                                                   // CL7 fix-up: the windows a fresh report must name, valid
   isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   subsFor,             // S1 Q5b: the chat hub's looks (Season Pass perk ends, Plus pads)
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,

@@ -11,8 +11,10 @@
 // string), then sorts each hit into:
 //   delete     rows that only describe the pad / its room: the registry row, its events, activity, room stats, Pepe's per-room
 //              settings, chat-economy telemetry (econ_participation, Pepe's own econ_watch rows), feed_seen pad:<id>, slug
-//              aliases, connections, rooms_kv seeded:<id>
-//   edit       JSON settings that carry the pad as a key (feed_kv aigen_prices rooms.<id>) - the key is removed
+//              aliases, connections, rooms_kv seeded:<id>; CL2: the room's chat archive (chat_log by its rk - never value-scanned -,
+//              chatlog_rooms, chatlog_open) and the pad's chat settings (pad_chat_cfg); a legal hold on the archive BLOCKS (the
+//              room's, or a person's whose lines are in it)
+//   edit      JSON settings that carry the pad as a key (feed_kv aigen_prices rooms.<id>) - the key is removed
 //   user       a real person's history ON the pad (stage slots / stage events / go-live log / their watch rows / follows):
 //              kept unless --with-user-history
 //   keep       history that must stay (pepe_actions = the website action audit, econ_docs = archived economy documents,
@@ -55,8 +57,15 @@ const PLAN = {
   pad_members: { as: "delete", where: "room_id = ?" },
   rooms_kv: { as: "delete", where: "key = 'seeded:' || ?" },
   bridge_rooms: { as: "delete", where: "id = ?" },
-  bridge_feed: { as: "delete", where: "room = ?" },
+  bridge_feed: { as: "delete", where: "room_id = ?" },                  // CL2: the column is room_id (`room` matched nothing, silently)
   bridge_cmd_log: { as: "delete", where: "room = ?" },
+  // CL2: the pad chat archive (chatlog.js). chat_log has no room column (rk -> chatlog_rooms), so its rows are planned
+  // explicitly (ALWAYS below) and deleted before chatlog_rooms; the FTS index follows by trigger. A legal hold blocks.
+  chat_log: { as: "delete", where: "rk IN (SELECT rk FROM chatlog_rooms WHERE room_id = ?)" },
+  chatlog_open: { as: "delete", where: "rk IN (SELECT rk FROM chatlog_rooms WHERE room_id = ?)" },
+  chatlog_rooms: { as: "delete", where: "room_id = ?" },
+  pad_chat_cfg: { as: "delete", where: "room_id = ?" },
+  chatlog_reports: { as: "keep" }, chatlog_views: { as: "keep" }, chatlog_exports: { as: "keep" },
   stage_slots: { as: "user", where: "room_id = ?" },
   stage_events: { as: "user", where: "room_id = ?" },
   golive_log: { as: "user", where: "room_id = ?" },
@@ -66,9 +75,15 @@ const PLAN = {
   feed_kv: { as: "edit" },
 };
 
+// CL2: planned even when the value scan doesn't see them (chat_log is never value-scanned: millions of rows, and its rows name
+// the room by rk). Deleted before chatlog_rooms, whose rk they use.
+const ALWAYS = ["chat_log", "chatlog_open"];
+const SCAN_SKIP = (name) => name === "chat_log" || name.startsWith("chat_log_fts");
+
 async function scan() {
   const hits = [];
   for (const { name } of await getQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")) {
+    if (SCAN_SKIP(name)) continue;
     for (const c of await getQuery(`PRAGMA table_info(${q(name)})`)) {
       const col = q(c.name);
       const r = await getQuery(`SELECT COUNT(*) AS n FROM ${q(name)} WHERE ${col} = ? OR ${col} = ? OR ${col} = ? OR ${col} = ? OR instr(${col}, ?) > 0`,
@@ -88,6 +103,28 @@ async function survey() {
                           ["room_vaults", "SELECT * FROM room_vaults WHERE room_id = ?"]]) {
     const rows = await getQuery(sql, [ID]).catch(() => []);
     if (rows.length) out.block.push({ table: t, why: "PAT held for this pad", rows });
+  }
+  // CL2: a legal hold on the room's chat archive (chatlog_holds 'room:<rk>') stops everything too
+  const holds = await getQuery("SELECT h.key FROM chatlog_holds h JOIN chatlog_rooms r ON h.key = 'room:' || r.rk WHERE r.room_id = ?", [ID]).catch(() => []);
+  if (holds.length) out.block.push({ table: "chatlog_holds", why: "a legal hold on this room's chat archive" });
+  // CL2 fix-up: ...and so does a per-person hold ("who:<login or u:id>", CL6) on anyone whose lines are in it - purged lines too
+  // (their speaker is "h:" + the login's hash)
+  const whoKeys = (await getQuery("SELECT key FROM chatlog_holds WHERE key LIKE 'who:%'").catch(() => [])).map((r) => String(r.key).slice(4).trim().toLowerCase()).filter(Boolean);
+  if (whoKeys.length) {
+    const hashOf = require(path.join(appDir, "chatlog")).hash;
+    const forms = [...new Set(whoKeys.reduce((a, k) => a.concat([k, "h:" + hashOf(k)]), []))];
+    let hit = 0;
+    for (let i = 0; i < forms.length && !hit; i += 400) {
+      const part = forms.slice(i, i + 400);
+      hit = Number((await getQuery(`SELECT COUNT(*) AS n FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE r.room_id = ? AND l.who IN (${part.map(() => "?").join(",")})`,
+                                   [ID, ...part]).catch(() => [{ n: 0 }]))[0].n) || 0;
+    }
+    if (hit) out.block.push({ table: "chatlog_holds", why: "a legal hold on a person whose lines are in this room's chat archive" });
+  }
+  for (const t of ALWAYS) {
+    if (tables.includes(t)) continue;
+    const n = (await getQuery(`SELECT COUNT(*) AS n FROM ${q(t)} WHERE ${PLAN[t].where}`, [ID]).catch(() => [{ n: 0 }]))[0].n;
+    if (n) out.delete.push({ table: t, where: PLAN[t].where, rows: n });
   }
   for (const t of tables) {
     const p = PLAN[t];
@@ -115,6 +152,9 @@ async function survey() {
   // the econ_watch rows of real viewers / stage slots on this pad are user history
   const slotWatch = await getQuery("SELECT COUNT(*) AS n FROM econ_watch WHERE room_id = ? AND stream != 'pepe:' || ?", [ID, ID]).catch(() => [{ n: 0 }]);
   if (slotWatch[0].n) out.user.push({ table: "econ_watch", where: "room_id = ? AND stream != 'pepe:' || ? (stage-slot watch rows)", rows: slotWatch[0].n, n2: true });
+  // CL2: rows found through chatlog_rooms go before chatlog_rooms itself
+  const viaRooms = (x) => /FROM chatlog_rooms/.test(x.where);
+  out.delete.sort((a, b) => Number(viaRooms(b)) - Number(viaRooms(a)));
   return out;
 }
 
@@ -127,6 +167,7 @@ async function backup(dir) {
 }
 
 (async () => {
+  try { await require(path.join(appDir, "chatlog")).attach(); } catch (e) { console.error("chat archive (CHATLOG_DB) not attached:", e.message); }   // CL2
   const s = await survey();
   const summary = { id: ID, delete: s.delete.map((x) => `${x.table}: ${x.rows}`), edit: s.edit.map((x) => `${x.table} ${x.key}: drop ${x.path}`),
                     user_history: s.user.map((x) => `${x.table}: ${x.rows}${args["with-user-history"] ? " (deleted: --with-user-history)" : " (kept)"}`),

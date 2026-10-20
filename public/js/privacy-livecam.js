@@ -25,6 +25,35 @@
       .catch(function () { box.disabled = false; box.checked = off; say(_t('js.lc.failed', 'Not saved - try again.'), 'bad'); });
   });
 })();
+// micfollow: 🎙 "Pads may put my cam on their stage while I hold the mic" (micfollow.js; default on). Off cuts a mic stage
+// showing your cam at once; ▶ Live is the switch above.
+(function () {
+  'use strict';
+  var box = document.getElementById('pvMfSw'), st = document.getElementById('pvMfSt');
+  if (!box || !st) return;
+  var _t = typeof window.__t === 'function' ? window.__t : function (k, d) { return d; };
+  function say(text, kind) { st.textContent = text || ''; st.className = 'pv-st' + (kind ? ' ' + kind : ''); }
+  function paint(auto) {
+    box.checked = !!auto;
+    say(auto ? _t('js.privacy.mf.st_on', 'On - while you hold the mic, a pad that uses mic follows may show your cam on its stage.')
+             : _t('js.privacy.mf.st_off', 'Off - pads never put your cam on their stage by themselves.'));
+  }
+  paint(box.checked);
+  box.addEventListener('change', function () {
+    var auto = box.checked;
+    box.disabled = true;
+    say(_t('js.lc.saving', 'Saving…'), 'wait');
+    fetch('/api/privacy/micfollow', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ auto: auto }) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+      .then(function (d) {
+        box.disabled = false;
+        if (!d || !d.ok) { box.checked = !auto; return say((d && d.error) || _t('js.lc.failed', 'Not saved - try again.'), 'bad'); }
+        paint(d.auto !== false);
+      })
+      .catch(function () { box.disabled = false; box.checked = !auto; say(_t('js.lc.failed', 'Not saved - try again.'), 'bad'); });
+  });
+})();
 // 1.99yt: 📺 "Allow my cam on Pepe's main stream" (onair.js; !onair me on|off in Camfrog writes to the same place)
 (function () {
   'use strict';

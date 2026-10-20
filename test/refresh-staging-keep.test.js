@@ -29,7 +29,12 @@ const SCHEMA = {
   legacy_token_daily: "CREATE TABLE legacy_token_daily (day TEXT NOT NULL, token TEXT NOT NULL, caller_hint TEXT NOT NULL, family TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL, PRIMARY KEY (day, token, caller_hint, family))",
   events_auth_log: "CREATE TABLE events_auth_log (day TEXT NOT NULL, type TEXT NOT NULL, chan TEXT NOT NULL, auth TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, type, chan, auth))",
   hub_outbox: "CREATE TABLE hub_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, entity TEXT NOT NULL, payload TEXT, created_at INTEGER NOT NULL, posted_at INTEGER, dedupe_key TEXT)",
-  hub_hidden_h: "CREATE TABLE hub_hidden_h (h TEXT PRIMARY KEY, since INTEGER NOT NULL)",
+  hub_hidden_h: "CREATE TABLE hub_hidden_h (h TEXT PRIMARY KEY, since INTEGER NOT NULL, scope TEXT)",
+  // 1.99add: the sticky hidden set (kept: prod's hidden people stay hidden on staging), the list compared with and held batches (emptied)
+  // (refix 4: one row per kind - bridge | incognito | unknown)
+  hub_hidden_set: "CREATE TABLE hub_hidden_set (h TEXT NOT NULL, kind TEXT NOT NULL, since INTEGER NOT NULL, src TEXT NOT NULL, PRIMARY KEY (h, kind))",
+  hub_hidden_meta: "CREATE TABLE hub_hidden_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER NOT NULL)",
+  hub_hidden_held: "CREATE TABLE hub_hidden_held (id TEXT PRIMARY KEY, kind TEXT NOT NULL, hs TEXT NOT NULL, at INTEGER NOT NULL, state TEXT NOT NULL, relisted INTEGER NOT NULL DEFAULT 0, decided_at INTEGER, manual INTEGER NOT NULL DEFAULT 0, prev_ts INTEGER, sent_ts INTEGER)",
 };
 
 async function makeProd(file, { withKeyTables = true } = {}) {
@@ -37,8 +42,12 @@ async function makeProd(file, { withKeyTables = true } = {}) {
   await run(d, "CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT)");
   await run(d, "INSERT INTO users VALUES ('u1', 'prod-user')");
   if (withKeyTables) {
-    for (const t of ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings", "legacy_token_daily", "events_auth_log", "hub_outbox", "hub_hidden_h"]) await run(d, SCHEMA[t]);
+    for (const t of ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings", "legacy_token_daily", "events_auth_log", "hub_outbox", "hub_hidden_h",
+                     "hub_hidden_set", "hub_hidden_meta", "hub_hidden_held"]) await run(d, SCHEMA[t]);
     await run(d, "INSERT INTO hub_hidden_h (h, since) VALUES ('0123456789abcdef0123', 1)");   // 1.99acm: prod's Pepe's hidden set
+    await run(d, "INSERT INTO hub_hidden_set (h, kind, since, src) VALUES ('0123456789abcdef0123', 'bridge', 1, 'pepe')");   // 1.99add: the sticky set
+    await run(d, "INSERT INTO hub_hidden_meta (key, value, updated) VALUES ('last', '{\"session\":\"prodsess\"}', 1)");
+    await run(d, "INSERT INTO hub_hidden_held (id, kind, hs, at, state) VALUES ('0123456789ab', 'restart', '[]', 1, 'pending')");
     await run(d, "INSERT INTO bot_keys (caller, hash, tag, created_at, observe_since) VALUES ('pepe', 'PROD-HASH', 'prodtag', 1, 1)");
     await run(d, "INSERT INTO bot_keys_settings (key, value) VALUES ('events', 'enforce'), ('bad_key', 'refuse')");
     await run(d, "INSERT INTO bot_key_families (family, legacy_enforce) VALUES ('/api/bridge', 1)");
@@ -79,6 +88,9 @@ test("staging keeps its own keys, switches and logs; prod's go; hub_outbox is em
     assert.deepEqual(await all(d, "SELECT * FROM events_auth_log"), [], "a log staging didn't have: prod's rows still go");
     assert.deepEqual(await all(d, "SELECT * FROM hub_outbox"), [], "prod's unposted rows never reach the staging hub");
     assert.deepEqual(await all(d, "SELECT * FROM hub_hidden_h"), [], "prod's hidden set goes (staging's Pepe repopulates it)");
+    assert.deepEqual(await all(d, "SELECT h, kind FROM hub_hidden_set"), [{ h: "0123456789abcdef0123", kind: "bridge" }], "1.99add: the sticky set stays prod's (hidden on prod = hidden on staging), with its kinds");
+    assert.deepEqual(await all(d, "SELECT * FROM hub_hidden_meta"), [], "prod's Pepe's last list goes (staging's Pepe is another run)");
+    assert.deepEqual(await all(d, "SELECT * FROM hub_hidden_held"), [], "prod's held batches go (prod's owner decides them)");
     await run(d, "INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('sessions/revoked', 'sid:new', 3)");
     const id = (await all(d, "SELECT id FROM hub_outbox"))[0].id;
     assert.ok(id > 40, `the next id (${id}) is above every id staging handed out (40)`);
@@ -119,8 +131,15 @@ test("when keeping fails, prod's per-environment rows are cleared instead (stagi
 test("the lists cover every per-environment table, and the script runs it with staging stopped (or keeps the old DB)", () => {
   assert.deepEqual([...K.KEEP].sort(), ["bot_key_families", "bot_keys", "bot_keys_settings", "bot_route_log", "bridge_spans", "events_auth_log",
                                          "hubseam_settings", "legacy_token_daily", "legacy_token_use",
+                                         // CL2: the pad chat archive (chatlog.js TABLES - test/chatlog-guards.test.js keeps the two in step)
+                                         "chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
+                                         "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views",
+                                         "chatlog_exports", "chatlog_meta",
+                                         // CL2 fix-up: the live feed's tables (the archive's seed reads bridge_feed)
+                                         "bridge_rooms", "bridge_feed",
                                          "pad_hub"].sort(), "S1-D1: staging keeps its own hub pad ids");
-  assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
+  assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed"]);
+  assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");
   const stop = sh.indexOf("pm2 stop patv-staging"), keep = sh.indexOf("keep-staging-tables.js"), swap = sh.indexOf('mv "$S/myapp.db.new" "$S/myapp.db"');
   assert.ok(stop > 0 && keep > stop && swap > keep, "stop -> keep -> swap");
@@ -167,4 +186,136 @@ test("1.99acm: prod's real hh trigger can't leak prod's hidden hashes into stagi
   assert.equal(r5.mode, "cleared");
   const d5 = db(path.join(dir, "copy5.db"));
   try { assert.deepEqual(await all(d5, "SELECT * FROM hub_outbox"), []); } finally { await close(d5); }
+});
+
+// CL2: the pad chat archive (chatlog.js) - the same statements chatlog.js makes (its table, the external-content FTS index and
+// the insert / delete triggers)
+const ARCHIVE = [
+  `CREATE TABLE chat_log (c INTEGER PRIMARY KEY, rk INTEGER NOT NULL, ts INTEGER NOT NULL, k TEXT NOT NULL, who TEXT, text TEXT,
+    rt TEXT NOT NULL, aud TEXT NOT NULL, d TEXT NOT NULL, mid TEXT, tx TEXT, eid TEXT, rm_at INTEGER, rm_by TEXT, rm_why TEXT, purged INTEGER)`,
+  "CREATE VIRTUAL TABLE chat_log_fts USING fts5(text, rt, content = 'chat_log', content_rowid = 'c', tokenize = 'unicode61 remove_diacritics 2')",
+  `CREATE TRIGGER chat_log_ai AFTER INSERT ON chat_log WHEN new.text IS NOT NULL AND new.k IN ('msg','tx','topic') AND new.rm_at IS NULL AND new.purged IS NULL BEGIN
+    INSERT INTO chat_log_fts (rowid, text, rt) VALUES (new.c, new.text, new.rt); END`,
+  `CREATE TRIGGER chat_log_ad AFTER DELETE ON chat_log WHEN old.text IS NOT NULL AND old.k IN ('msg','tx','topic') AND old.rm_at IS NULL AND old.purged IS NULL BEGIN
+    INSERT INTO chat_log_fts (chat_log_fts, rowid, text, rt) VALUES ('delete', old.c, old.text, old.rt); END`,
+  "CREATE TABLE chatlog_meta (key TEXT PRIMARY KEY, value TEXT)",
+  "CREATE TABLE chatlog_hidden (h TEXT PRIMARY KEY, since INTEGER NOT NULL, src TEXT NOT NULL)",
+];
+const words = (d, w) => all(d, "SELECT rowid FROM chat_log_fts WHERE chat_log_fts MATCH ? ORDER BY rowid", ['"' + w + '"']).then((r) => r.map((x) => x.rowid));
+
+test("CL2: staging keeps its own chat archive (rows, index, switches, hidden set) - prod's chat never lands on staging", async () => {
+  const prod = path.join(dir, "copy6.db"), stg = path.join(dir, "staging6.db");
+  await makeProd(prod); await makeStaging(stg);
+  const p = db(prod);
+  for (const s of ARCHIVE) await run(p, s);
+  for (let c = 1; c <= 3; c++) await run(p, "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (?, 1, ?, 'msg', 'produser', ?, 'r1', 'm', '{}')", [c, c, "prodsecret line " + c]);
+  await run(p, "INSERT INTO chatlog_meta (key, value) VALUES ('cfg', '{\"notice\":true,\"archive\":true}')");
+  await run(p, "INSERT INTO chatlog_hidden (h, since, src) VALUES ('aaaaaaaaaaaaaaaaaaaa', 1, 'pepe')");
+  await close(p);
+  const s = db(stg);
+  for (const x of ARCHIVE) await run(s, x);
+  await run(s, "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (50, 1, 50, 'msg', 'stguser', 'staging words here', 'r1', 'm', '{}')");
+  await run(s, "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d, rm_at) VALUES (51, 1, 51, 'msg', 'stguser', 'removed staging line', 'r1', 'm', '{}', 5)");
+  await run(s, "INSERT INTO chatlog_meta (key, value) VALUES ('cfg', '{\"notice\":false}')");
+  await close(s);
+  const r = await K.main(stg, prod, sqlite3);
+  assert.equal(r.mode, "kept");
+  assert.ok(r.tables.some((t) => t.table === "chat_log_fts" && t.reindexed === 1), JSON.stringify(r.tables));
+  const d = db(prod);
+  try {
+    assert.deepEqual((await all(d, "SELECT c, who FROM chat_log ORDER BY c")).map((x) => [x.c, x.who]), [[50, "stguser"], [51, "stguser"]]);
+    assert.deepEqual(await words(d, "prodsecret"), [], "prod's words aren't in staging's index");
+    assert.deepEqual(await words(d, "staging"), [50], "staging's indexable rows are (the removed one isn't)");
+    assert.deepEqual(await all(d, "SELECT value FROM chatlog_meta"), [{ value: '{"notice":false}' }], "staging's own switches");
+    assert.deepEqual(await all(d, "SELECT * FROM chatlog_hidden"), [], "staging's own hidden set");
+    assert.deepEqual(await all(d, "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'chat_log_%'"), [], "the site re-makes the triggers at start");
+  } finally { await close(d); }
+  // the fallback: prod's archive is cleared (no per-row index work), the index emptied
+  const p7 = path.join(dir, "copy7.db");
+  await makeProd(p7);
+  const d7 = db(p7);
+  for (const x of ARCHIVE) await run(d7, x);
+  await run(d7, "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (1, 1, 1, 'msg', 'produser', 'prodsecret', 'r1', 'm', '{}')");
+  await close(d7);
+  const r7 = await K.main(path.join(dir, "no-such-dir", "missing.db"), p7, sqlite3);
+  assert.equal(r7.mode, "cleared");
+  const e7 = db(p7);
+  try {
+    assert.deepEqual(await all(e7, "SELECT * FROM chat_log"), []);
+    assert.deepEqual(await words(e7, "prodsecret"), []);
+  } finally { await close(e7); }
+});
+
+test("Train 3 review: staging's archive in its own CHATLOG_DB - prod's chat_log / chat_log_fts are dropped from the copy, not left empty (no split at staging's next start)", async () => {
+  const prod = path.join(dir, "copy10.db"), stg = path.join(dir, "staging10.db");
+  await makeProd(prod); await makeStaging(stg);
+  const p = db(prod);
+  for (const s of ARCHIVE) await run(p, s);
+  await run(p, "CREATE INDEX chat_log_room ON chat_log (rk, c)");
+  for (let c = 1; c <= 5; c++) await run(p, "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (?, 1, ?, 'msg', 'produser', ?, 'r1', 'm', '{}')", [c, c, "prodsplitsecret " + c]);
+  await close(p);
+  // staging: the archive's small tables in myapp.db (counters, switches), chat_log itself in chatlog.db (not this file)
+  const s = db(stg);
+  for (const x of ARCHIVE.filter((x) => /chatlog_meta|chatlog_hidden/.test(x))) await run(s, x);
+  await run(s, "CREATE TABLE chatlog_rooms (rk INTEGER PRIMARY KEY, room_id TEXT NOT NULL UNIQUE, created INTEGER NOT NULL, \"rows\" INTEGER NOT NULL DEFAULT 0)");
+  await run(s, "INSERT INTO chatlog_rooms (rk, room_id, created, \"rows\") VALUES (1, 'PepeLab.Room', 1, 7)");
+  await run(s, "INSERT INTO chatlog_meta (key, value) VALUES ('cfg', '{\"notice\":true,\"archive\":true,\"started_at\":5}')");
+  await close(s);
+  const r = await K.main(stg, prod, sqlite3);
+  assert.equal(r.mode, "kept");
+  assert.ok(r.tables.some((t) => t.table === "chat_log" && t.dropped), JSON.stringify(r.tables));
+  assert.ok(r.tables.some((t) => t.table === "chat_log_fts" && t.dropped), JSON.stringify(r.tables));
+  const d = db(prod);
+  try {
+    assert.deepEqual(await all(d, "SELECT name FROM sqlite_master WHERE name GLOB 'chat_log*'"), [], "no chat_log, index, FTS (or its shadow tables) in the copy");
+    assert.deepEqual(await all(d, "SELECT room_id, \"rows\" AS n FROM chatlog_rooms"), [{ room_id: "PepeLab.Room", n: 7 }], "staging's own counters kept");
+  } finally { await close(d); }
+  const bytes = fs.readFileSync(prod).toString("latin1");
+  assert.ok(!bytes.includes("prodsplitsecret"), "prod's words are gone from the file");
+});
+
+// CL2 fix-up: prod's live feed (bridge_feed / bridge_rooms: the last 200 items of every prod room) never lands on staging either -
+// staging's first archive switch-on would seed it into staging's archive - and nothing of prod's chat stays behind in the copy's
+// free pages (secure_delete: deleted rows are overwritten)
+const FEED = [
+  "CREATE TABLE bridge_rooms (id TEXT PRIMARY KEY, slug TEXT, name TEXT, snap TEXT, updated INTEGER)",
+  "CREATE TABLE bridge_feed (c INTEGER PRIMARY KEY, room_id TEXT NOT NULL, ts INTEGER NOT NULL, data TEXT NOT NULL)",
+];
+test("CL2 fix-up: staging keeps its own live feed (bridge_feed, bridge_rooms), and prod's chat leaves no bytes in the copy", async () => {
+  const prod = path.join(dir, "copy8.db"), stg = path.join(dir, "staging8.db");
+  await makeProd(prod); await makeStaging(stg);
+  const p = db(prod);
+  for (const s of [...ARCHIVE, ...FEED]) await run(p, s);
+  const big = "prodfeedsecret ".repeat(400);                                   // spills onto overflow pages too
+  await run(p, "INSERT INTO bridge_rooms (id, slug, name, snap, updated) VALUES ('Prod.Room', 'prod-room', 'Prod Room', '{}', 1)");
+  for (let c = 1; c <= 50; c++) await run(p, "INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, 'Prod.Room', ?, ?)", [c, c, JSON.stringify({ k: "msg", text: "prodfeedsecret " + c })]);
+  await run(p, "INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (51, 'Prod.Room', 51, ?)", [JSON.stringify({ k: "msg", text: big })]);
+  for (let c = 1; c <= 20; c++) await run(p, "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (?, 1, ?, 'msg', 'produser', ?, 'r1', 'm', '{}')", [c, c, "prodarchivesecret " + c]);
+  await close(p);
+  const s = db(stg);
+  for (const x of [...ARCHIVE, ...FEED]) await run(s, x);
+  await run(s, "INSERT INTO bridge_rooms (id, slug, name, snap, updated) VALUES ('PepeLab.Room', 'pepelab', 'PepeLab', '{}', 2)");
+  await run(s, "INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (900, 'PepeLab.Room', 900, ?)", [JSON.stringify({ k: "msg", text: "staging line" })]);
+  await close(s);
+  const r = await K.main(stg, prod, sqlite3);
+  assert.equal(r.mode, "kept");
+  const d = db(prod);
+  try {
+    assert.deepEqual(await all(d, "SELECT id FROM bridge_rooms"), [{ id: "PepeLab.Room" }], "staging's own rooms");
+    assert.deepEqual((await all(d, "SELECT c, room_id FROM bridge_feed")).map((x) => [x.c, x.room_id]), [[900, "PepeLab.Room"]], "staging's own live tail");
+    assert.deepEqual(await all(d, "SELECT COUNT(*) AS n FROM chat_log"), [{ n: 0 }]);
+  } finally { await close(d); }
+  const bytes = fs.readFileSync(prod).toString("latin1");
+  for (const w of ["prodfeedsecret", "prodarchivesecret"]) assert.ok(!bytes.includes(w), w + " is gone from the file, free pages included");
+  // the fallback (staging's DB unreadable) clears them the same way
+  const p9 = path.join(dir, "copy9.db");
+  await makeProd(p9);
+  const d9 = db(p9);
+  for (const x of [...ARCHIVE, ...FEED]) await run(d9, x);
+  await run(d9, "INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (1, 'Prod.Room', 1, ?)", [JSON.stringify({ k: "msg", text: "prodfeedsecret" })]);
+  await run(d9, "INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (1, 1, 1, 'msg', 'produser', 'prodarchivesecret', 'r1', 'm', '{}')");
+  await close(d9);
+  assert.equal((await K.main(path.join(dir, "no-such-dir", "missing.db"), p9, sqlite3)).mode, "cleared");
+  const b9 = fs.readFileSync(p9).toString("latin1");
+  for (const w of ["prodfeedsecret", "prodarchivesecret"]) assert.ok(!b9.includes(w), w + " is gone (fallback)");
 });

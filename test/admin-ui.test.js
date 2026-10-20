@@ -151,6 +151,21 @@ test("overview: tiles by role - admin-only data never reaches Staff", async () =
   assert.doesNotMatch((await page("/admin/pepe", U.staff)).html, /id="pepeCtl"/);
   assert.match((await page("/admin/bridge", U.admin)).html, /id="cmdRows"/);
   assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="cmdRows"/);
+  // CL2: the chat archive card (chatlog.admin: admins, privacy-locked)
+  assert.match((await page("/admin/bridge", U.admin)).html, /id="clSwitches"/);
+  assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="clSwitches"/);
+  // CL7: deletion by tier (the retention purge's report) is on that card
+  assert.match((await page("/admin/bridge", U.admin)).html, /id="clPurgeRows"[\s\S]*\/api\/admin\/chatlog\/purge/);
+  assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="clPurgeRows"/);
+  // CL6: chat takedowns (chatlog.read_all: Staff and up) - the per-login tool, holds, the staff audit; the reported chat lines queue
+  for (const who of [U.staff, U.admin]) {
+    const b = (await page("/admin/bridge", who)).html;
+    for (const id of ["takedowns", "tdWho", "tdRoom", "tdHolds", "tdViews"]) assert.ok(b.includes('id="' + id + '"'), "takedowns #" + id);
+    const f = await page("/feed/admin", who);
+    assert.equal(f.status, 200);
+    assert.ok(f.html.includes('id="chatlines"'), "the reported chat lines queue");
+    assert.ok(f.html.includes("/public/js/chatlog-reports.js"));
+  }
 });
 
 test("control inventory: every control of the old /admin/panel is on its section page, same endpoints", async () => {

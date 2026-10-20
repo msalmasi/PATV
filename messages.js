@@ -25,6 +25,26 @@
 //   dm_reports            a reported message (+ a snapshot of its text, so deleting it doesn't destroy the
 //                         evidence), reporter, reason, outcome. ADMIN-ONLY queue (/feed/admin#dms), never pad owners.
 //   dm_media              pictures (dmmedia.js)
+//   messages.via          CL11: where a message came from - NULL = typed on the site, 'cf_message' = Camfrog `!message`
+//                         (fromCamfrog), 'cf_pm' = a copy of a Camfrog `!msg` PM Pepe sent for its author (relayCopy)
+//   dm_relays             CL11: one row per `!msg` copy - message_id, relay_key (UNIQUE: Pepe's key from the PM packet, so a
+//                         duplicate packet or a retry never makes a second copy), via, from_login / to_login (the Camfrog
+//                         logins), cf_room (the Camfrog room the PM went down - named so padrekey never moves it), cf_sent_at
+//                         (the Camfrog time, for the chip's tooltip), present (the target was on that room's fresh user list:
+//                         the copy was silent), created. Personal data: in the sender's export, deleted with the message.
+//                         CL13: kept - NULL = the copy is in the account-pair DM; 'no_account' | 'refused' = it is in the
+//                         sender's own Camfrog thread (below; present is then NULL - nobody is alerted, so it isn't kept).
+//                         CL11 fix-up: while a copy is being written, its row holds a NEGATIVE placeholder message_id (never
+//                         a real message's id - readers outside the transaction share the connection and see it), and a key
+//                         is only ever looked up inside a transaction (relaySeen), so nobody sees a half-written copy.
+//   dm_relay_gone         CL11 fix-up: key_hash (a one-way hash of a DELETED copy's relay key - never the key, logins, room or
+//                         text), kept, gone_at. Kept RELAY_GONE_MS (48 h; Pepe retries a copy for at most 24 h) so a late
+//                         retry of a copy its sender (or an admin) deleted answers "duplicate" instead of writing it again.
+//   conversations.kind   CL13: 'cfpm' = a sender-only "📨 Sent in Camfrog to <login>" thread: the `!msg` copies that couldn't
+//     'cfpm'              go to the target's PATV messages (the login has no real PATV account, or the target's DM rules refuse
+//                         the sender). dm_key = dmKey(senderId, 'cf:' + login) - the SAME sorted join as every 1:1 key, so
+//                         accountMerge.mergeConversations re-keys it like a DM. The sender is the only member; the page shows
+//                         no composer ("Reply in Camfrog: PM Pepe !msg <login> …") and never says whether <login> is on PATV.
 //
 // Rules (who may send what to whom: refusal()):
 //   * blocks stop 1:1 messages both ways; archived accounts, Pepe's account and people banned from the whole
@@ -81,6 +101,23 @@
 // It is accepted for a photo he was actually handed in the last PEPE_MEDIA_WINDOW_MS (a check that ends after his answer
 // still counts). The page tells members what happens to such photos (pepeNote().vision: the mode Pepe reports with each
 // claim - "local" model, "cloud" provider, or "off").
+//
+// CL11 `!msg` copies (relayCopy, POST /api/messages/relay-camfrog-pm, Pepe's bot token / caller key): when an admin PMs
+// Pepe `!msg bob <text>`, Pepe still sends the Camfrog PM as today and asks the site to copy the text into the account-pair
+// DM between the admin's and bob's REAL linked accounts (realLinked: never a PATV username, never an auto account), marked
+// "📨 Relayed from Camfrog". bob's DM rules decide (refusal(): blocks either way, "who can message me", the new-account
+// rule - all answered to Pepe as one code, `refused`). When bob is on that Camfrog room's fresh user list (`present`) he
+// already got the PM, so the copy is silent: no Camfrog alert, Telegram or browser notification, and it counts as read
+// when nothing else in the thread was unread. Otherwise it alerts like any DM (it is the real delivery).
+//
+// CL13 Camfrog threads (decision 22, CFPM.on): a copy whose target login has no real PATV account (`no_account`) or whose
+// target's DM rules refuse the sender (`refused`) is kept in the SENDER's own "📨 Sent in Camfrog to <login>" thread
+// instead of being dropped. The thread is neutral - its header makes no claim about whether <login> is on PATV, so it is
+// never a block oracle (Pepe's follow-up line to the sender does say which of the two it was - spec §2.7 - and the privacy
+// policy says so; the sender's export says only that a copy was kept). When <login> later belongs to a real account AND
+// a message from the sender would pass refusal(), the header offers "Open your DM with <them>" (naming their account,
+// without a new copy being sent) and new copies go to that DM; the old copies stay where they are. Pepe gets
+// {ok: false, code, kept: true} for such copies, so his follow-up line can say where the copy went.
 "use strict";
 const crypto = require("crypto");
 const fs = require("fs");
@@ -117,6 +154,18 @@ const ALERT_GAP_MS = 10 * 60e3;   // at most one Camfrog alert per conversation 
 const ALERT_GRACE_MS = 60e3;      // wait this long first: reading it on the site cancels the alert
 const ALERT_MAX_AGE_MS = 24 * 3600e3;   // pending alerts older than this are dropped (they're in /messages)
 const PREVIEW_CHARS = 60;
+// CL11: `!msg` copies per sender (any role - Pepe paces them too, 20 a minute / 200 a day on his side)
+const RELAY = { per_min: 30, per_day: 300 };
+// CL11 fix-up: how long a deleted copy's key (hashed) still answers "duplicate" - longer than Pepe's 24 h of retries
+const RELAY_GONE_MS = 48 * 3600e3;
+// CL13 (owner decision 22, default ON): keep `no_account` / `refused` copies in the sender's "📨 Sent in Camfrog to <login>"
+// thread. Off = CL11's behaviour (the copy is answered `no_account` / `refused` and not kept anywhere).
+// Rolling the site back BELOW CL13 (fix-up): an older list() shows these threads as "[gone]" DMs ("This account is gone.") and
+// an older accountdelete leaves their keys. Before such a rollback hide them -
+//   UPDATE conversation_members SET hidden = 1 WHERE conversation_id IN (SELECT id FROM conversations WHERE kind = 'cfpm')
+// - and after rolling forward again they come back with each one's next copy (or: SET hidden = 0 for the same rows).
+const CFPM = { on: true };
+const VIA = Object.freeze(["cf_message", "cf_pm"]);
 const WHO = Object.freeze(["everyone", "following", "nobody"]);
 const PEPE_ID = "pepe-bot";
 // 1.99ack (siteperms.js): no DM limits / new-account rules = dm.limits_exempt; the DM report queue = dm.report_review (locked: Admins)
@@ -145,6 +194,19 @@ function init() {
         created_at INTEGER NOT NULL, edited_at INTEGER, deleted_at INTEGER, deleted_by TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS messages_conv ON messages (conversation_id, id)");
       await runQuery("CREATE INDEX IF NOT EXISTS messages_sender ON messages (sender_id, created_at)");
+      // CL11: where a message came from (NULL = typed here; old rows stay NULL - no rewrite) + the `!msg` copies' side table
+      if (!(await getQuery("PRAGMA table_info(messages)")).some((c) => c.name === "via")) {
+        try { await runQuery("ALTER TABLE messages ADD COLUMN via TEXT"); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+      }
+      await runQuery(`CREATE TABLE IF NOT EXISTS dm_relays (message_id INTEGER PRIMARY KEY, relay_key TEXT NOT NULL UNIQUE, via TEXT NOT NULL,
+        from_login TEXT, to_login TEXT, cf_room TEXT, cf_sent_at INTEGER, present INTEGER, created INTEGER NOT NULL, kept TEXT)`);
+      // CL13: where a copy went (NULL = the pair DM; 'no_account' | 'refused' = the sender's Camfrog thread) - CL11 tables get the column
+      if (!(await getQuery("PRAGMA table_info(dm_relays)")).some((c) => c.name === "kept")) {
+        try { await runQuery("ALTER TABLE dm_relays ADD COLUMN kept TEXT"); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+      }
+      // CL11 fix-up: deleted copies' keys, hashed, for RELAY_GONE_MS (a late retry must not bring a deleted copy back).
+      // kept = where the copy had gone (NULL = the account-pair DM; the Camfrog threads slice sets it)
+      await runQuery("CREATE TABLE IF NOT EXISTS dm_relay_gone (key_hash TEXT PRIMARY KEY, kept TEXT, gone_at INTEGER NOT NULL)");
       await runQuery(`CREATE TABLE IF NOT EXISTS dm_member_adds (adder_id TEXT NOT NULL, conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, at INTEGER NOT NULL)`);
       await runQuery("CREATE INDEX IF NOT EXISTS dm_member_adds_adder ON dm_member_adds (adder_id, at)");
       await runQuery(`CREATE TABLE IF NOT EXISTS dm_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -299,9 +361,23 @@ async function otherMembers(conversationId, userId) {
 async function activeMembers(conversationId) {
   return getQuery("SELECT * FROM conversation_members WHERE conversation_id = ? AND left_at IS NULL ORDER BY joined_at, rowid", [conversationId]);
 }
+/** The key of a 1:1 conversation: the two ids, sorted, joined by "|". CL13: the ONE join for DMs and Camfrog threads alike -
+ *  create, look-up and accountMerge.mergeConversations (which re-sorts "<id>|<id>" the same way) must agree, or a merge
+ *  loses a Camfrog thread. */
+const dmKey = (a, b) => [String(a), String(b)].sort().join("|");
+// CL13: a Camfrog thread's other end is "cf:<login>" (a userId never contains ':' - they're UUIDs / "pepe-bot")
+const CF_PREFIX = "cf:";
+const cfKey = (userId, login) => dmKey(userId, CF_PREFIX + login);
+/** The Camfrog login of a 'cfpm' conversation (from its key), or null. */
+function cfLoginOf(conv) {
+  if (!conv || conv.kind !== "cfpm" || !conv.dm_key) return null;
+  const p = String(conv.dm_key).split("|").filter((x) => x.startsWith(CF_PREFIX));
+  return p.length === 1 ? p[0].slice(CF_PREFIX.length) : null;
+}
+/** Who a Camfrog thread is "with": a Camfrog login, never a PATV account (no username, so no profile link or look). */
+const cfWith = (login) => ({ username: null, display: login || "?", camfrog: login || null });
 async function dmBetween(a, b) {
-  const key = [a, b].sort().join("|");
-  return (await getQuery("SELECT * FROM conversations WHERE dm_key = ?", [key]))[0] || null;
+  return (await getQuery("SELECT * FROM conversations WHERE dm_key = ?", [dmKey(a, b)]))[0] || null;
 }
 /** Has `userId` written in this conversation (any time, deleted or not)? = consent to replies. */
 async function hasWritten(conversationId, userId) {
@@ -350,19 +426,23 @@ async function groupRefusal(sender, conv) {
   return null;
 }
 
-async function rateRefusal(sender, isNewConversation) {
-  const wait = burst("send|" + sender.userId, LIMITS.gap_ms);
-  if (wait) return new Refuse(429, "Slow down a little.", "rate");
+/** opts.burst = false (CL11 `!msg` copies): no 350 ms double-send gap - Pepe paces his copies, two quick `!msg`s aren't a double Enter. */
+// CL11 fix-up: a rate refusal carries retryAfter (seconds: the window it hit, an upper bound) - Pepe's relay route sends it
+// as Retry-After / retry_after, so a copy refused for the sender's pace can be tried again instead of being dropped
+function rateRefuse(msg, sec) { const e = new Refuse(429, msg, "rate"); e.retryAfter = sec; return e; }
+async function rateRefusal(sender, isNewConversation, { burst: gap = true } = {}) {
+  const wait = gap ? burst("send|" + sender.userId, LIMITS.gap_ms) : 0;
+  if (wait) return rateRefuse("Slow down a little.", 1);
   if (exempt(sender)) return null;
   const t = NOW();
   const n = async (ms) => (await getQuery("SELECT COUNT(*) AS n FROM messages WHERE sender_id = ? AND kind != 'system' AND created_at > ?", [sender.userId, t - ms]))[0].n;
   const fresh = isNewAccount(sender);
-  if ((await n(60e3)) >= (fresh ? LIMITS.new_per_min : LIMITS.per_min)) return new Refuse(429, "You're sending messages very fast - wait a minute.", "rate");
-  if ((await n(3600e3)) >= (fresh ? LIMITS.new_per_hour : LIMITS.per_hour)) return new Refuse(429, "You've sent a lot of messages this hour - try again later.", "rate");
+  if ((await n(60e3)) >= (fresh ? LIMITS.new_per_min : LIMITS.per_min)) return rateRefuse("You're sending messages very fast - wait a minute.", 60);
+  if ((await n(3600e3)) >= (fresh ? LIMITS.new_per_hour : LIMITS.per_hour)) return rateRefuse("You've sent a lot of messages this hour - try again later.", 3600);
   if (isNewConversation) {
     const c = (await getQuery("SELECT COUNT(*) AS n FROM conversations WHERE created_by = ? AND kind = 'dm' AND created_at > ?", [sender.userId, t - 86400e3]))[0].n;
     const cap = fresh ? LIMITS.new_convos_per_day : LIMITS.convos_per_day;
-    if (c >= cap) return new Refuse(429, `You can start ${cap} new conversations a day${fresh ? " while your account is new" : ""} - try again tomorrow.`, "rate");
+    if (c >= cap) return rateRefuse(`You can start ${cap} new conversations a day${fresh ? " while your account is new" : ""} - try again tomorrow.`, 86400);
   }
   return null;
 }
@@ -439,19 +519,35 @@ async function systemText(m) {
     default: return "";
   }
 }
+/** CL11: the Camfrog times of the `!msg` copies among these rows -> Map(message id -> cf_sent_at) (the chip's tooltip). */
+async function relayTimes(rows) {
+  const ids = rows.filter((r) => r && r.via === "cf_pm").map((r) => r.id);
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 200) {
+    const part = ids.slice(i, i + 200);
+    for (const r of await getQuery(`SELECT message_id, cf_sent_at FROM dm_relays WHERE message_id IN (${part.map(() => "?").join(",")})`, part)) {
+      out.set(r.message_id, r.cf_sent_at);
+    }
+  }
+  return out;
+}
 /**
  * One message for a viewer. ctx: {media: Map from dmmedia.forMessages, blocks: Set of the viewer's blocked ids,
- * cardBlocks: Set of ids blocked either way with the viewer (1.99ade: their post cards show as unavailable)}.
+ * cardBlocks: Set of ids blocked either way with the viewer (1.99ade: their post cards show as unavailable),
+ * relays: Map from relayTimes (CL11)}.
  * A blocked sender's message is flagged `blocked` (the page collapses it). Without cardBlocks (a live event shaped once),
  * the sender calls forViewer() per recipient.
  * storyreact site: ctx.storyCards (Map message id -> card, storyreact.cardsFor for this viewer) puts `story` on a story
  * reply - null when it's deleted or from someone the viewer blocked; messages without a story reference have no `story` key.
+ * CL11: `via` ('cf_message' | 'cf_pm' | null) and, for a `!msg` copy, `cfSentAt` (the Camfrog time) drive the chip.
  */
 async function shape(m, ctx = {}) {
   const from = await who(m.sender_id);
   const deleted = !!m.deleted_at;
+  const via = VIA.includes(m.via) ? m.via : null;
   const base = { id: m.id, c: m.conversation_id, from: from.username, fromDisplay: from.display, at: m.created_at, kind: m.kind || "text",
-                 deleted, byAdmin: deleted && String(m.deleted_by || "").startsWith("admin:") };
+                 deleted, byAdmin: deleted && String(m.deleted_by || "").startsWith("admin:"), via };
+  if (via === "cf_pm") base.cfSentAt = (ctx.relays && ctx.relays.get(m.id)) || m.cf_sent_at || null;
   if (m.kind === "system") return { ...base, system: await systemText(m), html: "", text: "", images: [], embeds: [], blocked: false };
   const images = deleted ? [] : (ctx.media ? ctx.media.get(m.id) || [] : (await dmmedia.forMessages([m.id])).get(m.id) || []);
   const embeds = deleted ? [] : dmembeds.applyBlocks(await dmembeds.forBody(m.body), ctx.cardBlocks);
@@ -464,6 +560,7 @@ async function shape(m, ctx = {}) {
 /** The conversation's head as one member sees it in a live event / the list. */
 function headFor(conv, other) {
   if (conv.kind === "group") return { id: conv.id, kind: "group", title: conv.title, with: { username: null, display: conv.title } };
+  if (conv.kind === "cfpm") return { id: conv.id, kind: "cfpm", with: cfWith(cfLoginOf(conv)) };          // CL13
   return { id: conv.id, kind: "dm", with: other ? { username: other.username, display: display(other) } : { username: null, display: "[gone]" } };
 }
 
@@ -519,9 +616,11 @@ async function queueAlert(userId, conversationId, t, mid) {
                   ON CONFLICT(user_id, conversation_id) DO UPDATE SET pending = pending + 1, first_at = COALESCE(first_at, excluded.first_at),
                   last_msg_id = excluded.last_msg_id`, [userId, conversationId, t, mid]);
 }
-/** Write a message row and move the conversation on. -> id */
-async function writeMessage(convId, senderId, body, kind, t) {
-  const ins = await runQuery("INSERT INTO messages (conversation_id, sender_id, body, kind, created_at) VALUES (?, ?, ?, ?, ?)", [convId, senderId, body, kind, t]);
+/** Write a message row and move the conversation on. via (CL11): 'cf_message' | 'cf_pm' | null (typed here). -> id */
+async function writeMessage(convId, senderId, body, kind, t, via = null) {
+  const ins = VIA.includes(via)
+    ? await runQuery("INSERT INTO messages (conversation_id, sender_id, body, kind, created_at, via) VALUES (?, ?, ?, ?, ?, ?)", [convId, senderId, body, kind, t, via])
+    : await runQuery("INSERT INTO messages (conversation_id, sender_id, body, kind, created_at) VALUES (?, ?, ?, ?, ?)", [convId, senderId, body, kind, t]);
   const mid = ins.id || ins.lastID || (await getQuery("SELECT MAX(id) AS id FROM messages WHERE conversation_id = ?", [convId]))[0].id;
   await runQuery("UPDATE conversations SET last_msg_id = ?, last_msg_at = ? WHERE id = ?", [mid, t, convId]);
   return mid;
@@ -544,9 +643,12 @@ async function systemLine(conv, actorId, data) {
  * below applies unchanged (refusalName only renames the recipient in the refusal texts); the story reference row is written
  * in the SAME transaction as the message (storyreact.insertRef) - alerts, events and the audit record stay outside it - and
  * each recipient's live event carries the card built for them (forViewer).
+ * CL11: ctx.msgVia = 'cf_message' marks a Camfrog `!message` (fromCamfrog) - server code only; 'cf_pm' copies go through
+ * relayCopy, never here.
  */
 async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx = null, extra = null) {
   await init();
+  const via = ctx && ctx.msgVia === "cf_message" ? "cf_message" : null;
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   const me = await account(user.userId);
   if (!me) throw new Refuse(401, "Sign in first.");
@@ -559,6 +661,8 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
   if (conversation) {
     if (!(await membership(conversation, me.userId))) throw new Refuse(404, "No such conversation.");
     conv = await conversationRow(conversation);
+    // CL13: a Camfrog thread has nobody on PATV to write to - the answer goes through Camfrog
+    if (conv.kind === "cfpm") throw new Refuse(403, `Reply in Camfrog: PM Pepe !msg ${cfLoginOf(conv) || "…"} …`, "cfpm");
     if (conv.kind !== "group") {
       const o = (await otherMembers(conv.id, me.userId))[0];
       other = o ? await account(o.user_id) : null;
@@ -580,8 +684,7 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
   const write = async () => {
     if (!conv) {
       const id = newId();
-      const key = [me.userId, other.userId].sort().join("|");
-      const r = await runQuery("INSERT OR IGNORE INTO conversations (id, kind, dm_key, created_by, created_at) VALUES (?, 'dm', ?, ?, ?)", [id, key, me.userId, t]);
+      const r = await runQuery("INSERT OR IGNORE INTO conversations (id, kind, dm_key, created_by, created_at) VALUES (?, 'dm', ?, ?, ?)", [id, dmKey(me.userId, other.userId), me.userId, t]);
       conv = await dmBetween(me.userId, other.userId);
       created = !!(r && r.changes);
       for (const uid of [me.userId, other.userId]) {
@@ -590,7 +693,7 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
     }
     // a 1:1: a member who "deleted" the conversation gets it back (as of now); a member who left rejoins
     if (!group) await runQuery("UPDATE conversation_members SET left_at = NULL WHERE conversation_id = ? AND user_id = ? AND left_at IS NOT NULL", [conv.id, other.userId]);
-    mid = await writeMessage(conv.id, me.userId, text, "text", t);
+    mid = await writeMessage(conv.id, me.userId, text, "text", t, via);
     if (story) storyRow = await require("./storyreact").insertRef(mid, conv.id, me.userId, story, { opened: created, t });
   };
   // storyreact site: a story reply's writes - a conversation it opens included - land with its story reference or not at
@@ -606,7 +709,7 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
   // Telegram's onDm didn't - a muted conversation still sent Telegram alerts)
   const recipients = group ? (await activeMembers(conv.id)).filter((m) => m.user_id !== me.userId)
     : [{ user_id: other.userId, muted: ((await getQuery("SELECT muted FROM conversation_members WHERE conversation_id = ? AND user_id = ?", [conv.id, other.userId]))[0] || {}).muted ? 1 : 0 }];
-  const msg = await shape({ id: mid, conversation_id: conv.id, sender_id: me.userId, body: text, kind: "text", created_at: t });
+  const msg = await shape({ id: mid, conversation_id: conv.id, sender_id: me.userId, body: text, kind: "text", created_at: t, via });
   // storyreact site: never serialised - forViewer builds each reader's card from it
   if (storyRow) Object.defineProperty(msg, "_storyRef", { value: storyRow, enumerable: false });
   const theirHead = headFor(conv, group ? null : me), head = headFor(conv, other);
@@ -819,7 +922,7 @@ const listPeople = (items) => items.flatMap((c) => [c.with, ...(c.members || [])
  *  opts.t = the viewer's translator (req.t): a sticker in the preview reads "[sticker: <name>]" in their language. */
 async function list(userId, opts = {}) {
   await init();
-  const rows = await getQuery(`SELECT c.id, c.kind, c.title, c.last_msg_id, c.last_msg_at, c.created_at, cm.last_read_id, cm.cleared_id, cm.muted
+  const rows = await getQuery(`SELECT c.id, c.kind, c.title, c.dm_key, c.last_msg_id, c.last_msg_at, c.created_at, cm.last_read_id, cm.cleared_id, cm.muted
                                FROM conversation_members cm JOIN conversations c ON c.id = cm.conversation_id
                                WHERE cm.user_id = ? AND cm.left_at IS NULL AND cm.hidden = 0 AND c.last_msg_id > cm.cleared_id
                                ORDER BY c.last_msg_at DESC LIMIT ?`, [userId, LIMITS.list_max]);
@@ -837,7 +940,8 @@ async function list(userId, opts = {}) {
                   blocked: blocks.has(last.sender_id) && !sys,
                   // stkfix B2: the preview is plain text (textContent) - a sticker reads "[sticker: Happy Pepe]", never the raw token
                   text: last.deleted_at ? "" : sys ? await systemText(last) : last.body ? snippet(stickerText(last.body, opts.t), 90) : pics ? (pics === 1 ? "📷 Photo" : `📷 ${pics} photos`) : "",
-                  from: r.kind === "group" && !sys && last.sender_id !== userId ? (await who(last.sender_id)).display : null };
+                  from: r.kind === "group" && !sys && last.sender_id !== userId ? (await who(last.sender_id)).display : null,
+                  via: !sys && !last.deleted_at && VIA.includes(last.via) ? last.via : null };          // CL11: the 📨 before the snippet
     }
     const item = { id: r.id, kind: r.kind, at: r.last_msg_at || r.created_at, lastId: r.last_msg_id, unread, muted: !!r.muted, last: lastOut };
     if (r.kind === "group") {
@@ -845,6 +949,8 @@ async function list(userId, opts = {}) {
       const ppl = [];
       for (const x of mem.slice(0, 3)) ppl.push(await who(x.user_id));
       Object.assign(item, { title: r.title, with: { username: null, display: r.title }, members: ppl, count: mem.length + 1, blocked: false });
+    } else if (r.kind === "cfpm") {
+      Object.assign(item, { with: cfWith(cfLoginOf(r)), blocked: false });           // CL13: "📨 Sent in Camfrog to <login>"
     } else {
       const o = (await otherMembers(r.id, userId))[0];
       Object.assign(item, { with: o ? await who(o.user_id) : { username: null, display: "[gone]" }, blocked: !!(o && blocks.has(o.user_id)) });
@@ -873,7 +979,8 @@ async function history(user, conversationId, { before = null, after = null, limi
     more = rows.length > n;
     rows = rows.slice(0, n).reverse();
   }
-  const ctx = { media: await dmmedia.forMessages(rows.map((r) => r.id)), blocks: await blockSet(user.userId), cardBlocks: await cardBlocks(user.userId) };
+  const ctx = { media: await dmmedia.forMessages(rows.map((r) => r.id)), blocks: await blockSet(user.userId), cardBlocks: await cardBlocks(user.userId),
+                relays: await relayTimes(rows) };
   // storyreact site: story replies' cards, built for THIS member now (visibility re-checked: gone = "Story no longer available")
   let refs = null;
   try {
@@ -909,6 +1016,12 @@ async function header(user, conversationId) {
     await dress({ people: members });
     return { id: conv.id, kind: "group", title: conv.title, with: { username: null, display: conv.title }, members, owner: m.role === "owner",
              muted: !!m.muted, max: LIMITS.group_max, youBlocked: false, canSend: !no, refusal: no ? no.message : null, refusalCode: no ? no.code || null : null };
+  }
+  if (conv.kind === "cfpm") {
+    // CL13: the same answer whether or not <login> is on PATV or refuses the sender - only a DM that would go through is offered
+    const login = cfLoginOf(conv);
+    return { id: conv.id, kind: "cfpm", with: cfWith(login), cfLogin: login, muted: !!m.muted, youBlocked: false, canSend: false, refusal: null,
+             refusalCode: "cfpm", linked: await cfHandOff(me, login) };
   }
   const o = (await otherMembers(conversationId, user.userId))[0];
   const other = o ? await account(o.user_id) : null;
@@ -961,6 +1074,7 @@ async function deleteMessage(user, messageId) {
     // storyreact site: a deleted story reply drops its story reference - unless it was reported (the admin's context); one
     // that opened a conversation with someone on cam keeps a story-less stub for the D-12 cap (storyreact.dropRef)
     await require("./storyreact").dropRef(m.id).catch((e) => console.error("[dm] story ref:", e.message));
+    await forgetRelay(m.id);      // CL11: a copy's key + logins go with it (fix-up: only a hash of the key stays, 48 h)
     for (const r of await getQuery("SELECT user_id FROM conversation_members WHERE conversation_id = ?", [m.conversation_id])) {
       emit(r.user_id, { t: "del", c: m.conversation_id, id: m.id });
     }
@@ -1132,6 +1246,7 @@ async function reportAction(viewer, { message, action, tell = true, days = 0, re
   const m = (await getQuery("SELECT * FROM messages WHERE id = ?", [id]))[0];
   if ((action === "remove" || action === "ban") && m && !m.deleted_at) {
     await runQuery("UPDATE messages SET body = NULL, deleted_at = ?, deleted_by = ? WHERE id = ?", [NOW(), "admin:" + viewer.username, id]);
+    await forgetRelay(id);        // CL11: deleted with the message (fix-up: only a hash of the key stays, 48 h)
     for (const r of await getQuery("SELECT user_id FROM conversation_members WHERE conversation_id = ?", [m.conversation_id])) emit(r.user_id, { t: "del", c: m.conversation_id, id });
   }
   if (action === "ban") {
@@ -1253,8 +1368,338 @@ async function fromCamfrog({ from, to, text } = {}) {
   }
   if (!target || target.archived_at) throw new Refuse(404, `There's no PATV account for ${cleanLine(raw, 40)}.`, "gone");
   if (target.userId === PEPE_ID) throw new Refuse(400, "That's Pepe - just talk to him in the room.", "bot");
-  const r = await send({ userId: sender.userId }, { to: target.username, body: text }, { ip: null, via: "pepe", ua: "Camfrog !message (Pepe)", bot: true });
+  // CL11: msgVia marks it "📨 Sent from Camfrog" (from now on; older ones stay unmarked)
+  const r = await send({ userId: sender.userId }, { to: target.username, body: text }, { ip: null, via: "pepe", ua: "Camfrog !message (Pepe)", bot: true, msgVia: "cf_message" });
   return { to: { username: target.username, display: display(target) }, from: { username: sender.username }, conversation: r.conversation.id, created: r.created };
+}
+
+// ── CL11: copies of Camfrog `!msg` PMs (relayCopy). Pepe calls this only for a `!msg` that came to him BY PM (the packet
+// carries the server-supplied login), with an exact, user-list-confirmed target login, from a sender whose copy switch is
+// on. He sends the Camfrog PM himself, exactly as before; this only writes the PATV copy. ──
+const RELAY_KEY_RE = /^[A-Za-z0-9._:-]{8,128}$/;
+/**
+ * The REAL account a Camfrog login is linked to: linkedAccount with autoaccount.isAutoAccount (nobody can sign in) as the
+ * auto test instead of the "CF…" username shape, so a claimed account that kept its CF… name counts. No PATV-username
+ * fallback, ever. -> account | {auto: true} (only an auto account) | null
+ */
+async function realLinked(login) {
+  const k = String(login || "").trim().replace(/^@/, "").toLowerCase();
+  if (!LOGIN_RE.test(k)) return null;
+  const AA = require("./autoaccount");
+  const rows = await getQuery("SELECT userId FROM users WHERE LOWER(TRIM(camfrogUsername)) = ?", [k]);
+  let auto = false;
+  for (const r of rows) {
+    const acc = await account(r.userId);
+    if (!acc || acc.archived_at) continue;
+    if (await AA.isAutoAccount(acc.userId)) { auto = true; continue; }
+    return acc;
+  }
+  return auto ? { auto: true } : null;
+}
+// refusal() codes -> what Pepe is told. Blocks either way, "who can message me" and the new-account rule are ONE code, so
+// neither his reply nor his logs can tell them apart (no block oracle); the sender's own block and a feed ban are theirs.
+const RELAY_CODE = { you_blocked: "you_blocked", banned: "banned", archived: "unlinked", self: "self", bot: "bot", gone: "no_account" };
+const relayCode = (c) => (Object.prototype.hasOwnProperty.call(RELAY_CODE, c) ? RELAY_CODE[c] : "refused");   // blocked | closed | following | new | ... -> refused
+function relayRefuse(code, msg) {
+  const st = { unlinked: 403, no_account: 404, bot: 400, self: 400, refused: 403, you_blocked: 403, banned: 403, long: 400, rate: 429, conflict: 409 }[code] || 400;
+  return new Refuse(st, msg, code);
+}
+// ── CL11 fix-up: one key = one copy, decided only on COMMITTED rows. Reads outside a transaction share the site's one
+// connection with whatever transaction is open, so they would see another call's half-written copy (and, before this
+// fix, a placeholder message_id that was some OTHER pair's message). relaySeen therefore always runs inside tx(). ──
+const relayGoneHash = (k) => crypto.createHash("sha256").update("dm_relay_gone|" + k).digest("hex");
+// a stored login still names the request's sender / target (a login pseudonymised by an account deletion matches anything)
+const sameRelayLogin = (stored, asked) => !stored || /^deleted-[0-9a-f]{10}$/.test(stored) || stored === asked;
+/**
+ * The answer for a key that was already copied (or whose copy was deleted since), else null. Inside a transaction only.
+ * A key whose copy names a different sender or target is a 409 `conflict` (a key reused by mistake must not silently drop a
+ * different copy, nor answer with someone else's conversation).
+ */
+async function relaySeen(k, fromLogin, toLogin, silent) {
+  const r = (await getQuery(`SELECT r.message_id, r.present, r.kept, r.from_login, r.to_login, m.conversation_id FROM dm_relays r
+                             JOIN messages m ON m.id = r.message_id WHERE r.relay_key = ? AND r.message_id > 0`, [k]))[0];
+  if (r) {
+    if (!sameRelayLogin(r.from_login, fromLogin) || !sameRelayLogin(r.to_login, toLogin)) throw relayRefuse("conflict", "That relay key belongs to another copy.");
+    return r.kept ? { conversation: r.conversation_id, message: r.message_id, silent: true, kept: r.kept, duplicate: true }
+                  : { conversation: r.conversation_id, message: r.message_id, silent: !!r.present, duplicate: true };
+  }
+  const g = (await getQuery("SELECT kept FROM dm_relay_gone WHERE key_hash = ? AND gone_at > ?", [relayGoneHash(k), NOW() - RELAY_GONE_MS]))[0];
+  if (g) return g.kept ? { conversation: null, message: null, silent: true, kept: g.kept, duplicate: true, deleted: true }
+                       : { conversation: null, message: null, silent, duplicate: true, deleted: true };
+  return null;
+}
+/**
+ * A copy's message was deleted (by its author or an admin): its relay row goes - the key, both logins, the room - and only a
+ * one-way hash of the key stays for RELAY_GONE_MS, so a late retry from Pepe can't write the deleted copy again.
+ * (Account deletion deletes the rows outright: a retry for a deleted sender is refused as `unlinked`.)
+ */
+async function forgetRelay(messageId) {
+  const r = (await getQuery("SELECT relay_key, kept FROM dm_relays WHERE message_id = ?", [messageId]))[0];
+  if (!r) return;
+  await runQuery("INSERT OR REPLACE INTO dm_relay_gone (key_hash, kept, gone_at) VALUES (?, ?, ?)", [relayGoneHash(r.relay_key), r.kept || null, NOW()]);
+  await runQuery("DELETE FROM dm_relays WHERE message_id = ?", [messageId]);
+}
+let relayGonePurged = 0;
+/** The copies' cap per sender (RELAY), counted inside relayCopy's transaction so parallel calls can't pass it. -> Refuse | null */
+async function relayCap(senderId, t) {
+  const copies = async (ms) => (await getQuery("SELECT COUNT(*) AS n FROM messages WHERE sender_id = ? AND via = 'cf_pm' AND created_at > ?", [senderId, t - ms]))[0].n;
+  if ((await copies(60e3)) >= RELAY.per_min) return relayRateRefuse("Too many Camfrog copies - try again in a minute.", 60);
+  if ((await copies(86400e3)) >= RELAY.per_day) return relayRateRefuse("Too many Camfrog copies today - try again later.", 86400);
+  return null;
+}
+function relayRateRefuse(msg, sec) { const e = relayRefuse("rate", msg); e.retryAfter = sec; return e; }
+// CL13: what Pepe is told for a copy kept in the sender's Camfrog thread ({ok: false, code, kept: true} - the status of the code).
+// Pepe (CL12) words his follow-up line from the code + `kept`, never from this text: "kept in your Camfrog log on PATV (<login>
+// isn't on PATV)" / "kept in your Camfrog log on PATV (they don't take messages from you there)". `refused` keeps ONE wording
+// for every refusal reason (blocks either way, "who can message me", the new-account rule); kept or not depends only on CFPM.on.
+const KEPT_MSG = {
+  no_account: "Kept in your Camfrog log on PATV: that Camfrog login has no PATV account.",
+  refused: "Kept in your Camfrog log on PATV: they don't take messages from you there.",
+};
+const normLogin = (s) => String(s == null ? "" : s).trim().replace(/^@/, "").toLowerCase();
+/**
+ * CL13: the sender's Camfrog thread with <login> (found by its sorted key, made if missing; the sender its only member).
+ * Inside relayCopy's transaction. -> {conv, created}
+ */
+async function cfThread(senderId, login, t) {
+  const key = cfKey(senderId, login);
+  let conv = (await getQuery("SELECT * FROM conversations WHERE dm_key = ?", [key]))[0] || null;
+  let created = false;
+  if (!conv) {
+    const r = await runQuery("INSERT OR IGNORE INTO conversations (id, kind, dm_key, created_by, created_at) VALUES (?, 'cfpm', ?, ?, ?)", [newId(), key, senderId, t]);
+    created = !!(r && r.changes);
+    conv = (await getQuery("SELECT * FROM conversations WHERE dm_key = ?", [key]))[0];
+  }
+  await runQuery("INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, joined_at) VALUES (?, ?, ?)", [conv.id, senderId, t]);
+  return { conv, created };
+}
+/**
+ * CL13: the "Open your DM with <them>" offer of a Camfrog thread - ONLY when <login> now belongs to a real account and a
+ * message from `me` to it would pass refusal() right now. Every other case (no account, auto only, a block either way,
+ * "who can message me", Pepe, yourself) is the same null, so the thread never tells a block from "not on PATV".
+ * -> {username, display, conversation (the existing DM's id, or null)} | null
+ */
+async function cfHandOff(me, login) {
+  if (!me || !login) return null;
+  const t = await realLinked(login);
+  if (!t || t.auto || t.userId === me.userId || t.userId === PEPE_ID) return null;
+  const pair = await dmBetween(me.userId, t.userId);
+  if (await refusal(me, t, pair)) return null;
+  const mine = pair ? await membership(pair.id, me.userId) : null;
+  return { username: t.username, display: display(t), conversation: mine ? pair.id : null };
+}
+/**
+ * Copy one Camfrog `!msg` into the account-pair DM. input: {from, to: Camfrog logins, text, key: Pepe's relay key,
+ * sentAt: the Camfrog time (ms), room: the Camfrog room, present: the target is on that room's fresh user list}.
+ * -> {conversation, message, silent, created, duplicate?, kept?} | throws a Refuse with code unlinked | no_account | bot |
+ * self | refused | you_blocked | banned | long | rate (| empty | sticker | bad_request).
+ * CL11 fix-up: `rate` carries retryAfter (seconds); a key already used for a copy naming another sender / target is a 409
+ * `conflict`; a retry of a copy deleted since (by its author or an admin) answers {duplicate: true, deleted: true,
+ * conversation: null, message: null} and writes nothing.
+ * CL13 (CFPM.on): a `no_account` or `refused` copy isn't thrown - it is written to the sender's Camfrog thread and the
+ * answer carries kept: 'no_account' | 'refused' (the route answers {ok: false, code, kept: true} with that code's status).
+ * Order: the key, the sender (and their own state), the text, the target, the rates - so the answer about the TEXT never
+ * depends on the target (CL13 fix-up: test/messages-cfpm.test.js checks it with CFPM off, where CL11's order differed).
+ * The rates do depend on it in one way: a copy that opens a NEW account-pair DM counts toward the new-conversations-per-day
+ * cap, and a kept copy opens no DM. So only a target who takes the sender's messages (and has no DM with them yet - which
+ * the sender can see in their own list) can draw `rate` from that cap; whether a target takes them is what every answer's
+ * code says anyway (ok / refused / no_account), so the cap tells nothing more.
+ */
+async function relayCopy({ from, to, text, key, sentAt, room, present } = {}) {
+  await init();
+  const k = String(key || "");
+  if (!RELAY_KEY_RE.test(k)) throw new Refuse(400, "A relay key is required.", "bad_request");
+  const silent = present === true || present === 1;
+  const fromLogin = normLogin(from), toLogin = normLogin(to);
+  if (NOW() - relayGonePurged > 3600e3) {       // deleted copies' key hashes: kept 48 h, swept at most once an hour
+    relayGonePurged = NOW();
+    await runQuery("DELETE FROM dm_relay_gone WHERE gone_at <= ?", [NOW() - RELAY_GONE_MS]);
+  }
+  // a retry / duplicate packet: the same answer, whatever changed since (fix-up: looked up inside a transaction, so a call
+  // that is still being written is waited for - never half-seen - and a call that rolled back is not a duplicate)
+  const dup = await tx(() => relaySeen(k, fromLogin, toLogin, silent));
+  if (dup) return dup;
+  // 1. the sender: a real linked account (no username fallback), allowed to send; Pepe is never a party
+  const sender = await realLinked(from);
+  if (!sender || sender.auto) throw relayRefuse("unlinked", "Link your Camfrog name to PATV first.");
+  if (sender.userId === PEPE_ID) throw relayRefuse("bot", "That's Pepe.");
+  if (await feedBanned(sender.userId)) throw relayRefuse("banned", "You can't send messages right now.");
+  // 2. the text, as on the site
+  const body = cleanBody(text);
+  if (!body) throw new Refuse(400, "Type a message first.", "empty");
+  if (body.length > LIMITS.max_len) throw relayRefuse("long", `Messages can be up to ${LIMITS.max_len} characters.`);
+  try { await require("./stickers").validate(sender.userId, body); } catch (e) { if (e.refuse) throw new Refuse(e.status, e.message, "sticker"); throw e; }
+  // 3. the target: a real linked account whose DM rules take the sender - else (CL13) the sender's Camfrog thread
+  const target = await realLinked(toLogin);
+  let conv = null, kept = null;
+  if (!target || target.auto) {
+    if (!CFPM.on || !LOGIN_RE.test(toLogin)) throw relayRefuse("no_account", "That Camfrog login has no PATV account.");
+    kept = "no_account";
+  } else {
+    if (target.userId === PEPE_ID) throw relayRefuse("bot", "That's Pepe.");
+    if (sender.userId === target.userId) throw relayRefuse("self", "You can't message yourself.");
+    conv = await dmBetween(sender.userId, target.userId);
+    const no = await refusal(sender, target, conv);           // the recipient's DM rules, unchanged
+    if (no) {
+      const code = relayCode(no.code);
+      if (!CFPM.on || (code !== "refused" && code !== "no_account")) {
+        throw relayRefuse(code, code === "refused" ? "They don't take messages from you on PATV." : code === "no_account" ? "That Camfrog login has no PATV account." : no.message);
+      }
+      kept = code;                                              // (an archived target's "gone" is no_account, like no account)
+      conv = null;
+    }
+  }
+  // 4. rates: the site's (without the double-Enter gap) + the copies' own cap (a Camfrog thread counts like any copy). The
+  //    new-conversations cap applies only to a copy that would open a new pair DM - see the note above relayCopy.
+  //    (fix-up: a rate refusal says when to try again - retryAfter -> Retry-After; the copies' cap is counted in the transaction)
+  const rate = await rateRefusal(sender, !kept && !conv, { burst: false });
+  if (rate) throw relayRateRefuse(rate.message, rate.retryAfter || 60);
+  const t = NOW();
+  const st = Number(sentAt);
+  const cfAt = Number.isFinite(st) && st > t - 7 * 86400e3 && st < t + 3600e3 ? Math.floor(st) : null;
+  const cfRoom = cleanLine(room, 80) || null;
+  // 5. one transaction, the relay row FIRST: a second call with the same key (parallel, or a duplicate packet) stops here
+  const w = await tx(async () => {
+    // fix-up: transactions run one at a time, so this sees every committed copy and nobody's half-written one
+    const again = await relaySeen(k, fromLogin, toLogin, silent);
+    if (again) return { dup: again };
+    const capped = await relayCap(sender.userId, t);
+    if (capped) throw capped;
+    // (a kept copy alerts nobody, so whether the target was in the room isn't kept: present = NULL)
+    // fix-up: the row's message_id is a NEGATIVE placeholder until the message exists - never a real message's id, so a
+    // reader outside this transaction (an export, the chip's lookup) can't join it to somebody else's message
+    const ins = await runQuery(`INSERT INTO dm_relays (message_id, relay_key, via, from_login, to_login, cf_room, cf_sent_at, present, created, kept)
+                                VALUES ((SELECT MIN(COALESCE(MIN(message_id), 0), 0) - 1 FROM dm_relays), ?, 'cf_pm', ?, ?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(relay_key) DO NOTHING`,
+                               [k, fromLogin, toLogin, cfRoom, cfAt, kept ? null : silent ? 1 : 0, t, kept]);
+    if (!ins || !ins.changes) return { dup: (await relaySeen(k, fromLogin, toLogin, silent)) || { duplicate: true, conversation: null, message: null, silent } };
+    if (kept) {
+      // CL13: the sender's own "📨 Sent in Camfrog to <login>" thread - nobody else is in it, nobody is alerted
+      const c = await cfThread(sender.userId, toLogin, t);
+      const mid = await writeMessage(c.conv.id, sender.userId, body, "text", t, "cf_pm");
+      await runQuery("UPDATE dm_relays SET message_id = ? WHERE relay_key = ?", [mid, k]);
+      await runQuery("UPDATE conversation_members SET hidden = 0, left_at = NULL, last_read_id = ? WHERE conversation_id = ? AND user_id = ?", [mid, c.conv.id, sender.userId]);
+      return { conv: c.conv, mid, created: c.created, preRead: false };
+    }
+    let created = false;
+    conv = await dmBetween(sender.userId, target.userId);
+    if (!conv) {
+      const r = await runQuery("INSERT OR IGNORE INTO conversations (id, kind, dm_key, created_by, created_at) VALUES (?, 'dm', ?, ?, ?)",
+                               [newId(), dmKey(sender.userId, target.userId), sender.userId, t]);
+      conv = await dmBetween(sender.userId, target.userId);
+      created = !!(r && r.changes);
+      for (const uid of [sender.userId, target.userId]) {
+        await runQuery("INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, joined_at) VALUES (?, ?, ?)", [conv.id, uid, t]);
+      }
+    }
+    // pre-read (silent copies only): nothing else of theirs in this thread is unread right now
+    const unreadBefore = (await getQuery(`SELECT COUNT(*) AS n FROM conversation_members cm JOIN messages m ON m.conversation_id = cm.conversation_id
+                                          WHERE cm.conversation_id = ? AND cm.user_id = ? AND ${UNREAD_SQL}`, [conv.id, target.userId]))[0].n;
+    await runQuery("UPDATE conversation_members SET left_at = NULL WHERE conversation_id = ? AND user_id = ? AND left_at IS NOT NULL", [conv.id, target.userId]);
+    const mid = await writeMessage(conv.id, sender.userId, body, "text", t, "cf_pm");      // created_at = now: last_msg_at never goes back
+    await runQuery("UPDATE dm_relays SET message_id = ? WHERE relay_key = ?", [mid, k]);
+    await runQuery("UPDATE conversation_members SET hidden = 0 WHERE conversation_id = ?", [conv.id]);
+    await runQuery("UPDATE conversation_members SET last_read_id = ? WHERE conversation_id = ? AND user_id = ?", [mid, conv.id, sender.userId]);
+    const preRead = silent && !unreadBefore;
+    if (preRead) await runQuery("UPDATE conversation_members SET last_read_id = ? WHERE conversation_id = ? AND user_id = ? AND last_read_id < ?", [mid, conv.id, target.userId, mid]);
+    return { conv, mid, created, preRead };
+  });
+  if (w.dup) return w.dup;
+  // 6. the admin-only abuse record (never fails the copy)
+  try { await require("./contentaudit").record({ ip: null, via: "pepe", ua: "Camfrog !msg (Pepe)", bot: true }, { kind: "message", id: w.mid, postId: w.conv.id, user: sender }); } catch (e) { /* logged there */ }
+  const row = { id: w.mid, conversation_id: w.conv.id, sender_id: sender.userId, body, kind: "text", created_at: t, via: "cf_pm", cf_sent_at: cfAt };
+  if (kept) {
+    // CL13: only the sender's own pages hear about it (no alert, Telegram or web push - there is no one else)
+    const msg = await shape(row, await relayViewerCtx(sender.userId));
+    await dress({ msgs: [msg] });
+    emit(sender.userId, { t: "msg", c: w.conv.id, m: msg, conv: headFor(w.conv) });
+    return { conversation: w.conv.id, message: w.mid, silent: true, created: w.created, kept };
+  }
+  // 7. fan-out: present -> silent (Camfrog already delivered it); otherwise the usual three alerts. Live updates to both.
+  const r = (await getQuery("SELECT muted FROM conversation_members WHERE conversation_id = ? AND user_id = ?", [w.conv.id, target.userId]))[0] || {};
+  if (!silent && !r.muted) {
+    if (target.camfrogUsername) await queueAlert(target.userId, w.conv.id, t, w.mid);
+    try { require("./telegram").onDm(target.userId, { conversationId: w.conv.id, messageId: w.mid, from: display(sender), text: body, pics: 0, group: null }); } catch (e) { /* never fails the copy */ }
+    try { require("./webpush").onDm(target.userId, { conversationId: w.conv.id, messageId: w.mid }); } catch (e) { /* never fails the copy */ }
+  }
+  // (CL13 fix-up: shaped once per viewer, so each live event's post cards follow that viewer's blocks - relayViewerCtx)
+  const theirs = await shape(row, await relayViewerCtx(target.userId)), mine = await shape(row, await relayViewerCtx(sender.userId));
+  const theirHead = headFor(w.conv, sender), head = headFor(w.conv, target);
+  await dress({ msgs: [theirs, mine], people: [theirHead.with, head.with] });
+  emit(target.userId, { t: "msg", c: w.conv.id, m: theirs, conv: theirHead });
+  if (w.preRead) emit(target.userId, { t: "read", c: w.conv.id, upTo: w.mid, unread: await unreadTotal(target.userId) });
+  emit(sender.userId, { t: "msg", c: w.conv.id, m: mine, conv: head });
+  return { conversation: w.conv.id, message: w.mid, silent, created: w.created };
+}
+/**
+ * CL13 fix-up - the shape() context for ONE viewer of a copy's live event: 1.99ade's cardBlocks(userId), so a post card
+ * by someone blocked either way with that viewer is "unavailable" live exactly as after a reload (shape's ctx.cardBlocks,
+ * like forViewer for send()). test/messages-cfpm.test.js checks every shape() in relayCopy goes through it;
+ * test/messages-relay.test.js checks the cards.
+ */
+async function relayViewerCtx(userId) {
+  return { cardBlocks: await cardBlocks(userId) };
+}
+
+// ── CL13: one Camfrog login across the `!msg` copies - for the per-login staff tool (CL6: privacy@ requests from people
+// without an account, minors found, legal orders) and account deletion. `to_login` is often a non-user's data. ──
+// CL13 fix-up: neither helper calls init() (no CREATE / ALTER - the staff tool may be pointed at any copy of the database);
+// a table or column that isn't there counts as empty.
+async function cfColumns(table) {
+  return new Set((await getQuery(`PRAGMA table_info(${table})`)).map((c) => c.name));
+}
+/** Where a login appears, as COUNTS only - never a message's text or who sent it (admins read DM text only through a
+ *  report). Read-only. -> {copies_to, copies_from, threads} | null (not a Camfrog login) */
+async function cfLoginSummary(login) {
+  const k = normLogin(login);
+  if (!LOGIN_RE.test(k)) return null;
+  const n = async (sql, p) => (await getQuery(sql, p))[0].n;
+  const tag = CF_PREFIX + k;
+  const rel = await cfColumns("dm_relays"), conv = await cfColumns("conversations");
+  const threads = conv.has("kind") && conv.has("dm_key")
+    ? (await getQuery("SELECT dm_key FROM conversations WHERE kind = 'cfpm' AND instr(dm_key, ?) > 0", [tag]))
+      .filter((r) => String(r.dm_key).split("|").includes(tag)).length : 0;
+  return { copies_to: rel.has("to_login") ? await n("SELECT COUNT(*) AS n FROM dm_relays WHERE to_login = ?", [k]) : 0,
+           copies_from: rel.has("from_login") ? await n("SELECT COUNT(*) AS n FROM dm_relays WHERE from_login = ?", [k]) : 0, threads };
+}
+/**
+ * Replace a Camfrog login with a pseudonym in the copies' records: dm_relays.from_login / to_login, and the Camfrog
+ * threads' keys (re-keyed with the same sorted join, so new copies to the pseudonym's login would land there; a thread the
+ * owner already has under the pseudonym absorbs it). The messages stay - they are their senders'. -> {relays, threads}
+ * CL13 fix-up: atomic on its own - one dbUtils.tx, which inside a caller's transaction (account deletion, the staff tool's
+ * dry run) is a savepoint of it. No init().
+ */
+async function cfLoginForget(login, pseudonym) {
+  const k = normLogin(login), p = normLogin(pseudonym);
+  const out = { relays: 0, threads: 0 };
+  if (!LOGIN_RE.test(k) || !LOGIN_RE.test(p) || k === p) return out;
+  return tx(async () => {
+    const rel = await cfColumns("dm_relays"), conv = await cfColumns("conversations");
+    for (const col of ["to_login", "from_login"]) {
+      if (!rel.has(col)) continue;
+      const r = await runQuery(`UPDATE dm_relays SET ${col} = ? WHERE ${col} = ?`, [p, k]);
+      out.relays += (r && r.changes) || 0;
+    }
+    if (!conv.has("kind") || !conv.has("dm_key")) return out;
+    const tag = CF_PREFIX + k;
+    for (const c of await getQuery("SELECT id, dm_key FROM conversations WHERE kind = 'cfpm' AND instr(dm_key, ?) > 0", [tag])) {
+      const parts = String(c.dm_key).split("|");
+      if (!parts.includes(tag)) continue;                       // instr() also finds cf:bobby for cf:bob
+      const owner = parts.find((x) => x !== tag);
+      const key = cfKey(owner, p);
+      const have = (await getQuery("SELECT id FROM conversations WHERE dm_key = ?", [key]))[0];
+      if (!have) await runQuery("UPDATE conversations SET dm_key = ? WHERE id = ?", [key, c.id]);
+      else {
+        await runQuery("UPDATE messages SET conversation_id = ? WHERE conversation_id = ?", [have.id, c.id]);
+        await runQuery("DELETE FROM conversation_members WHERE conversation_id = ?", [c.id]);
+        await runQuery("DELETE FROM conversations WHERE id = ?", [c.id]);
+        await runQuery(`UPDATE conversations SET last_msg_id = (SELECT COALESCE(MAX(id), 0) FROM messages WHERE conversation_id = ?),
+                        last_msg_at = (SELECT MAX(created_at) FROM messages WHERE conversation_id = ?) WHERE id = ?`, [have.id, have.id, have.id]);
+      }
+      out.threads++;
+    }
+    return out;
+  });
 }
 
 // ── 1.99ik: talking to Pepe here. A message to Pepe's account queues a pepe_dm_jobs row; Pepe claims due ones per
@@ -1289,6 +1734,8 @@ function pepeNote() {
 const photoTag = (n) => `[sent ${n === 1 ? "a photo" : n + " photos"}]`;
 async function pepeClaim({ limit = 10, price = null, vision = null } = {}) {
   await init();
+  const PA = require("./padaccess");
+  await PA.init();                                  // gatefix site: the pad levels (rooms_gated below) - unreadable: claim nothing
   const t = NOW();
   if (price != null && Number.isFinite(Number(price))) PEPE_STATE.price = Math.max(0, Math.floor(Number(price)));
   if (PEPE_VISION.includes(vision)) PEPE_STATE.vision = vision;
@@ -1341,6 +1788,9 @@ async function pepeClaim({ limit = 10, price = null, vision = null } = {}) {
       messages: fresh.map((m) => { const p = photos(m); return p.length ? { id: m.id, text: line(m), at: m.created_at, photos: p } : { id: m.id, text: line(m), at: m.created_at }; }),
       history: msgs.reverse().map((m) => ({ from: m.sender_id === PEPE_ID ? "pepe" : "them", text: line(m), at: m.created_at })),
     });
+    // gatefix site: + the Approved pads' rooms this member is outside of (user.rooms_gated) - Pepe's answer leaves who's
+    // around / on the mic / talking there out of its live context (camfrog-bot pepe_dmctx); never logged
+    await PA.gateLiveRooms(out[out.length - 1].user, u);
   }
   return out;
 }
@@ -1670,10 +2120,41 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     try { res.json({ ok: true, ...(await fromCamfrog({ from: b.from, to: b.to, text: b.text })) }); } catch (e) { fail(res, e); }
   });
+  // CL11: Pepe's copy of a Camfrog `!msg` sent to him by PM (bot token / his caller key, family /api/messages)
+  //   {password, from, to, text, key, sent_at, room, present} -> {ok, conversation, message, silent, duplicate?} | {ok: false, code, error}
+  // CL13: a copy kept in the sender's Camfrog thread answers {ok: false, code: 'no_account' | 'refused', error, kept: true,
+  //   conversation, message, silent: true, duplicate?, deleted?} with that code's status (404 / 403; a body `code` always, so
+  //   Pepe never reads it as an older site without the route). Pepe's follow-up line is "kept in your Camfrog log on PATV
+  //   (<login> isn't on PATV)" / "… (they don't take messages from you there)" - one wording for every refusal reason.
+  //   duplicate + deleted: the kept copy was made and its sender deleted it since (conversation / message null).
+  // Never logs the text (fail() logs only unexpected errors' messages).
+  app.post("/api/messages/relay-camfrog-pm", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try {
+      const r = await relayCopy({ from: b.from, to: b.to, text: b.text, key: b.key, sentAt: b.sent_at != null ? b.sent_at : b.sentAt,
+                                  room: b.room, present: b.present });
+      if (r.kept) {
+        return res.status(relayRefuse(r.kept, "").status).json({ ok: false, code: r.kept, error: KEPT_MSG[r.kept] || KEPT_MSG.refused, kept: true,
+                                                                 conversation: r.conversation, message: r.message, silent: true, duplicate: r.duplicate || undefined,
+                                                                 deleted: r.deleted || undefined });
+      }
+      res.json({ ok: true, ...r });
+    } catch (e) {
+      // CL11 fix-up: `rate` says when to try again (seconds; an upper bound) - Retry-After + retry_after
+      if (e && e.refuse && e.code === "rate" && e.retryAfter) {
+        res.set("Retry-After", String(e.retryAfter));
+        return res.status(429).json({ ok: false, code: "rate", error: e.message, retry_after: e.retryAfter });
+      }
+      fail(res, e);
+    }
+  });
 }
 
 module.exports = { init, register, sse, navCount, send, list, history, header, check, markRead, deleteMessage, clear, setBlock, blockList,
-                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, pepeClaim, pepeReply, pepeNote, pepeMedia, pepeFlag, PEPE_ID,
+                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, realLinked, relayCopy, RELAY, RELAY_GONE_MS, VIA, _relayCode: relayCode, _relayGoneHash: relayGoneHash,
+                   CFPM, dmKey, cfKey, cfLoginOf, cfLoginSummary, cfLoginForget, pepeClaim, pepeReply, pepeNote, pepeMedia, pepeFlag, PEPE_ID,
                    PEPE_MEDIA_WINDOW_MS, PEPE_MEDIA_MAX_BYTES, PEPE_MEDIA_FETCHES, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
                    createGroup, addMembers, leaveGroup, removeMember, renameGroup, setMute,
                    account, dmBetween, blocked, cardBlocks,       // storyreact site: a story reply is decided exactly like a DM

@@ -25,3 +25,97 @@
 .player .cam-stage .cam-tap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3; min-height: 44px; padding: 0 18px;
                               border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.7); color: #fff; font: bold 15px var(--ds-font); cursor: pointer; }
 .player .cam-stage .cam-tap.hide { display: none; }
+/* micfollow: 🎙 "On the mic" - the pad's mic-follows stage (stage-mic.js). It fills the 16:9 player box like .cam-stage, so
+   a layout change never moves the page. One tile per person; cams are 4:3 inside the cells and never cropped (contain).
+   single 1x1 · split 2 columns · grid4 2x2 · grid9 3x3 (empty cells stay black) · pip: the newest fills, the previous in
+   a corner inset. The newest speaker gets a green ring. Narrow boxes (< 480 px, .narrow) keep the same rows. */
+.player .mf-stage { position: absolute; inset: 0; z-index: 1; background: #000; font: 13px/1.3 var(--ds-font); color: #eee; }
+.player .mf-grid { position: absolute; inset: 0; display: grid; gap: 2px; grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.player .mf-stage[data-layout=split] .mf-grid { grid-template-columns: 1fr 1fr; }
+.player .mf-stage[data-layout=grid4] .mf-grid { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.player .mf-stage[data-layout=grid9] .mf-grid { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+.player .mf-tile, .player .mf-empty { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #000; }
+.player .mf-tile .rtc-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.player .mf-tile .mf-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+/* the newest speaker's ring is drawn ABOVE the tile's own video / still / card (an inset shadow on the tile itself sits
+   under them and never shows) */
+.player .mf-tile.newest { z-index: 2; }
+.player .mf-tile.newest::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
+                                 box-shadow: inset 0 0 0 3px var(--ds-green-2, #7bd88f); }
+.player .mf-tile .mf-label { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); display: inline-flex; gap: 4px; align-items: center;
+                             padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.65); z-index: 3; white-space: nowrap; overflow: hidden; }
+.player .mf-tile .mf-name { overflow: hidden; text-overflow: ellipsis; }
+.player .mf-tile .mf-tag:empty { display: none; }
+.player .mf-tile .mf-tag { color: #bbb; font-size: 12px; }
+.player .mf-tile .mf-card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+                            background: #111; text-align: center; padding: 8px 8px 30px; z-index: 1; }
+.player .mf-tile .mf-card[hidden], .player .mf-tile [hidden] { display: none !important; }
+.player .mf-tile .mf-av { width: 56px; height: 56px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: #2a2a2a;
+                          color: #fff; font-weight: bold; font-size: 20px; flex-shrink: 0; }
+.player .mf-tile .mf-av img { width: 100%; height: 100%; object-fit: cover; }
+.player .mf-tile .mf-why { color: #bbb; font-size: 12.5px; max-width: 90%; }
+.player .mf-tile .mf-x { position: absolute; top: 4px; right: 4px; z-index: 4; min-width: 44px; min-height: 44px; border-radius: 999px; cursor: pointer;
+                         border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.6); color: #fff; font: bold 15px var(--ds-font); }
+.player .mf-stage[data-layout=pip] .mf-grid { display: block; }
+.player .mf-stage[data-layout=pip] .mf-tile { position: absolute; inset: 0; }
+.player .mf-stage[data-layout=pip] .mf-tile:not(.newest) { inset: auto 8px 8px auto; width: 30%; height: 30%; z-index: 3; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; }
+.player .mf-stage[data-layout=pip] .mf-tile.newest { z-index: 1; }
+.player .mf-stage .mf-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 86%; text-align: center; z-index: 5;
+                             background: rgba(0,0,0,.75); padding: 8px 12px; border-radius: 10px; font-size: 14px; }
+.player .mf-stage .mf-note:empty, .player .mf-stage .mf-note[hidden] { display: none; }
+.player .mf-stage .mf-tapall { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; min-height: 44px; padding: 0 18px;
+                               border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.75); color: #fff; font: bold 15px var(--ds-font); cursor: pointer; }
+.player .mf-stage .mf-tapall[hidden] { display: none; }
+/* the bar ABOVE the tiles (spec §6.2): owners / staff always (⋯ Manage, 🧹 Clear the stage), viewers on narrow grids
+   (⚑ Report). The tiles move below it (.barred), so it never covers one - in every layout and width. */
+.player .mf-stage .mf-bar { position: absolute; top: 0; left: 0; right: 0; height: 48px; display: none; align-items: center; gap: 6px; padding: 0 6px;
+                            z-index: 7; background: rgba(10,10,10,.92); border-bottom: 1px solid rgba(255,255,255,.15); overflow: hidden; }
+.player .mf-stage.barred .mf-bar { display: flex; }
+.player .mf-stage.barred .mf-grid, .player .mf-stage.barred .mf-neutral { top: 48px; }
+.player .mf-stage .mf-mbtn { flex-shrink: 0; min-width: 44px; min-height: 44px; border-radius: 999px; cursor: pointer;
+                             border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.6); color: #fff; font: bold 18px var(--ds-font); }
+.player .mf-stage .mf-bbtn { flex-shrink: 0; min-height: 44px; padding: 0 14px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+                             border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.6); color: #fff; font: bold 14px var(--ds-font); }
+.player .mf-stage .mf-clear { border-color: var(--ds-danger, #e5534b); }
+.player .mf-stage .mf-bmsg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ccc; font-size: 12.5px; }
+.player .mf-stage .mf-mbtn[hidden], .player .mf-stage .mf-bbtn[hidden], .player .mf-stage .mf-panel[hidden], .player .mf-stage .mf-ask[hidden] { display: none; }
+/* the neutral card (DF-30 / DF-12): "Someone is speaking" / Pepe's card - no name, no face */
+.player .mf-stage .mf-neutral { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                                gap: 8px; background: #111; text-align: center; padding: 8px; }
+.player .mf-stage .mf-neutral[hidden] { display: none; }
+.player .mf-stage .mf-neutral .mf-av { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; background: #2a2a2a; font-size: 32px; }
+.player .mf-stage .mf-neutral .mf-why { color: #ddd; font-size: 15px; }
+/* ⚑ on a tile (viewers; owners have ✕ in the same corner) */
+.player .mf-stage .mf-tile .mf-rp { font-size: 16px; }
+.player .mf-stage .mf-tile .mf-x[hidden] { display: none; }
+.player .mf-stage .mf-panel { position: absolute; top: 54px; left: 6px; z-index: 8; max-width: min(320px, calc(100% - 12px)); max-height: calc(100% - 60px); overflow: auto;
+                              display: grid; gap: 6px; padding: 10px; border-radius: 10px; background: rgba(15,15,15,.94); border: 1px solid rgba(255,255,255,.2); }
+.player .mf-stage .mf-panel select, .player .mf-stage .mf-pbtn { min-height: 44px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: #222; color: #fff;
+                                                                 font: 14px var(--ds-font); padding: 0 10px; cursor: pointer; text-align: left; }
+.player .mf-stage .mf-pbtn.danger { border-color: var(--ds-danger, #e5534b); }
+.player .mf-stage .mf-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.player .mf-stage .mf-ask { display: grid; gap: 6px; }
+.player .mf-stage .mf-ask p, .player .mf-stage .mf-pmsg { margin: 0; }
+.player .mf-stage .mf-pmsg:empty { display: none; }
+.player .mf-stage .mf-tile .mf-x:focus-visible, .player .mf-stage .mf-mbtn:focus-visible, .player .mf-stage .mf-bbtn:focus-visible,
+.player .mf-stage .mf-pbtn:focus-visible { outline: 2px solid var(--ds-green-2, #7bd88f); outline-offset: 2px; }
+.mf-sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* narrow boxes: no new rows (the stage height never changes); grid9 names shorten (the full name stays in the label for
+   screen readers); the PiP inset grows; on grid4 / grid9 the per-tile ✕ moves into ⋯ Manage */
+.player .mf-stage.narrow .mf-tile .mf-label { left: 3px; bottom: 3px; padding: 1px 6px; font-size: 11.5px; }
+.player .mf-stage.narrow[data-layout=pip] .mf-tile:not(.newest) { width: 38%; height: 38%; }
+.player .mf-stage.narrow[data-layout=grid9] .mf-tile .mf-x { display: none; }
+.player .mf-stage[data-layout=grid9] .mf-tile .mf-av { width: 28px; height: 28px; font-size: 12px; }
+.player .mf-stage[data-layout=grid9] .mf-tile .mf-why { font-size: 11.5px; line-height: 1.2; }
+.player .mf-stage[data-layout=grid9] .mf-tile .mf-card { gap: 3px; }
+.player .mf-stage.narrow[data-layout=grid9] .mf-tile .mf-av { display: none; }
+.player .mf-stage.narrow[data-layout=grid9] .mf-tile .mf-why { font-size: 11px; }
+/* narrow grid4 (about 96 px rows on a phone): the avatar shrinks so the reason fits above the name label */
+.player .mf-stage.narrow[data-layout=grid4] .mf-tile .mf-av { width: 28px; height: 28px; font-size: 12px; }
+.player .mf-stage.narrow[data-layout=grid4] .mf-tile .mf-card { gap: 3px; padding: 4px 6px 24px; }
+.player .mf-stage.narrow[data-layout=grid4] .mf-tile .mf-why { font-size: 11px; line-height: 1.2; }
+/* narrow grids under the bar: rows are shorter still - the avatar goes, the reason stays */
+.player .mf-stage.barred.narrow[data-layout=grid4] .mf-tile .mf-av { display: none; }
+.player .mf-stage.narrow[data-layout=grid4] .mf-tile .mf-x { display: none; }       /* ✕ is in ⋯ Manage, ⚑ in the bar there (as on grid9) */
+@media (prefers-reduced-motion: no-preference) { .player .mf-tile.newest::after { transition: opacity .2s ease; } }
+@media (prefers-reduced-motion: reduce) { .player .mf-stage *, .player .mf-stage { transition: none !important; animation: none !important; } }

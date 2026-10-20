@@ -464,6 +464,24 @@ test("the last-method guard: an SSO-only account can't unlink its only way in un
   assert.match(fs.readFileSync(path.join(repo, "index.js"), "utf8"), /markPassword\(rows\[0\]\.userId, true\)/, "the reset sets it too");
 });
 
+test("the last-method guard holds under concurrent unlinks: Google + Telegram + Plex at once on a no-password account leave exactly one", async () => {
+  for (let round = 0; round < 3; round++) {
+    const u = await mkUser("trio" + round);
+    await SSO.markPassword(u.userId, false);
+    await SSO.addLink("google", u.userId, { subject: "g-trio-" + round, proof: "oidc" });
+    await runQuery("INSERT INTO telegram_links (user_id, tg_id, link_source, proof, linked_at) VALUES (?, ?, 'self', 'login_widget', ?)", [u.userId, String(7300 + round), T]);
+    await PM.linkSelf(u, { plex_id: String(8300 + round), username: "trioplex" + round });
+    assert.deepEqual((await SSO.methods(u.userId)).sort(), ["google", "plex", "telegram"]);
+    const b = browser("10.3.9." + (round + 1));
+    b.jar.set("jwt", jwt.sign({ userId: u.userId, username: u.username, class: "pleb" }, process.env.SECRET_KEY));
+    const calls = [() => b.api("/api/sso/google/unlink"), () => b.api("/api/telegram/unlink"), () => b.api("/api/plex/link/unlink", { plex_id: String(8300 + round) })];
+    for (let i = 0; i < round; i++) calls.push(calls.shift());          // a different order each round
+    const rs = await Promise.all(calls.map((f) => f()));
+    assert.deepEqual(rs.map((r) => r.status).sort(), [200, 200, 409], "two go, the last one is refused: " + rs.map((r) => r.status).join(" "));
+    assert.equal((await SSO.methods(u.userId)).length, 1, "the account keeps a way in");
+  }
+});
+
 test("rate limits: Telegram callbacks and Google starts per network", async () => {
   const b = browser("10.4.0.1");
   let last;

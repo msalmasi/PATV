@@ -130,9 +130,14 @@ test("topic proof (Pepe's report): the pad becomes the room's pad with its posts
   await PA.setLevel(U.owner, P, "public");
   const c = await CN.current(oldId, "camfrog");
   // Pepe sees the code in the topic of "Night Owls Lounge" (id Night.Room)
+  const T0 = Date.now();
   let r = await CN.verifyFromPepe({ via: "topic", room: "Night.Room", room_name: "Night Owls Lounge", code: c.code.toLowerCase(), topic: "welcome " + c.code });
   assert.equal(r.ok, true, r.message);
   assert.equal(r.status, "verified");
+  // CL3 fix-up: the connect hook started the Camfrog room's chat on a new public period at once - nothing viewed the pad
+  const W = (await getQuery("SELECT wm_chat, wm_tx, wm_search, aud_m, inputs FROM chatlog_rooms WHERE room_id = 'Night.Room'"))[0];
+  assert.ok(W && [W.wm_chat, W.wm_tx, W.wm_search, W.aud_m].every((v) => Number(v) >= T0), "watermarks moved by the hook: " + JSON.stringify(W));
+  assert.match(JSON.parse(W.inputs).pad, /^p\d+$/, "the new pad recorded");
   const R = await rooms.get("Night.Room");
   assert.deepEqual([R.slug, R.platform, R.title, R.owner.userId], ["night-owls", "camfrog", "Night Owls", U.owner.userId]);
   assert.equal(await rooms.get(oldId), null, "the patv: id is gone");
@@ -255,7 +260,11 @@ test("disconnect: back to its old site id with its feed AND its vault (1.99rl: t
   const conn = await CN.current("Lily.Room", "camfrog");
   const R = await rooms.get("Lily.Room");
   await assert.rejects(CN.disconnect(U.rando, R, "camfrog"), /Only this pad's owner/);
+  const T1 = Date.now();
   const P = await CN.disconnect(U.other, R, "camfrog");
+  // CL3 fix-up: the disconnect hook - the room's chat starts a new public period at once (whatever pad it gets next)
+  const W = (await getQuery("SELECT wm_chat, wm_tx, wm_search, aud_m FROM chatlog_rooms WHERE room_id = 'Lily.Room'"))[0];
+  assert.ok(W && [W.wm_chat, W.wm_tx, W.wm_search, W.aud_m].every((v) => Number(v) >= T1), "watermarks moved by the hook: " + JSON.stringify(W));
   assert.equal(P.id, conn.orig_id, "its old patv: id when it's free");
   assert.deepEqual([P.platform, P.slug, P.owner.username], ["site", "bridge-pad", "otherowner"]);
   assert.equal((await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [post.id]))[0].room_id, P.id, "the feed comes along");

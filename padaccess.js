@@ -22,6 +22,8 @@
 // register()'s second /api/rooms/:slug gate covers the live-room APIs (adultgate.LIVE_API, any letter case), which also
 // check the room they resolved themselves. adultSlots() blanks a stage cam slot's name, adultGateFor() is the async
 // per-account form (open streams re-check with it). Off: no change.
+// stagefix site: camVisible() / camSlotsFor() - a stage's 🎬 cam slots are listed only to signed-in viewers who may see the
+// pad's live room (full(), so the 18+ gate too); signed-out visitors never learn a cam is on a stage, Public pads included.
 //
 // Data (this module owns both tables; nothing is written unless an owner changes a setting or someone asks to join)
 //   pad_access   room_id PK, level ('public' | 'members' | 'approved'), updated, updated_by. No row = "members".
@@ -142,6 +144,20 @@ function adultSlots(slots, viewer) {
   return slots.map((s) => (s && s.cam && s.room_id && AG.gate(viewer || null, s.room_id) !== "ok" ? { ...s, display: "", title: null, adult: true } : s));
 }
 /**
+ * stagefix site: may `viewer` know a 🎬 cam slot (someone's Camfrog cam on the pad's stage, mainstage source 'cam') is there -
+ * its name, that it's on? Only a SIGNED-IN viewer (live cams are never for signed-out visitors, Public pads included) who
+ * may see the pad's live room: full() - inside an Approved pad, past the 18+ gate (adultGate). The picture is gated per
+ * viewer on top (livecam.stageViewerWhy).
+ */
+function camVisible(viewer, roomId) {
+  return !!(viewer && viewer.userId) && full(viewer, roomId);
+}
+/** stagefix site: a stage's slot list for `viewer` without the 🎬 cam slots they may not know about (camVisible). */
+function camSlotsFor(slots, viewer) {
+  if (!Array.isArray(slots)) return slots;
+  return slots.filter((s) => !(s && s.cam) || camVisible(viewer || null, s.room_id));
+}
+/**
  * May `u` see this pad's members-tier content - the live Camfrog room (chat, people, mic, audio), story pictures, the
  * room topic, analytics? Public: everyone. Members: signed in. Approved: inside. adultgate site: with the 18+ switch on,
  * an 18+ pad's also needs a signed-in, age-confirmed viewer (owner / staff exempt).
@@ -164,6 +180,27 @@ function blockedFor(u) {
 function visibleRows(u, list, key = "id") {
   const get = typeof key === "function" ? key : (r) => r && r[key];
   return (list || []).filter((r) => canSee(u, get(r)));
+}
+/**
+ * gatefix site: the Camfrog rooms (pad room ids) of the Approved pads `u` is outside of. Who's around in a pad's live
+ * room, who's on the mic and what's said there are its members-tier content, so Pepe's answers to this member - his
+ * site DMs (messages.pepeClaim) and his Telegram chat (telegram.whois) - leave those rooms out of the live context they
+ * are written from (camfrog-bot pepe_dmctx reads user.rooms_gated). Not tied to any switch; site-only pads have no room.
+ */
+function liveRoomsOutside(u) {
+  return blockedFor(u && u.userId ? u : null).filter((id) => !rooms.isCommunityOnly(id));
+}
+/**
+ * gatefix site: add liveRoomsOutside(u) to a "who they are" object for Pepe as user.rooms_gated - joined with whatever is
+ * there already (staging's 18+ gate fills the same field), each room once; nothing left out = no field (as before).
+ * Loads the levels first: if they can't be read it throws, and the caller answers nothing rather than everything.
+ */
+async function gateLiveRooms(who, u) {
+  await init();
+  const ids = new Set(Array.isArray(who.rooms_gated) ? who.rooms_gated : []);
+  for (const id of liveRoomsOutside(u)) ids.add(id);
+  if (ids.size) who.rooms_gated = [...ids];
+  return who;
 }
 
 // ── requests / members ──
@@ -246,6 +283,8 @@ async function setLevel(actor, R, level) {
   if (lv === DEFAULT) LEVEL.delete(R.id); else LEVEL.set(R.id, lv);
   await rooms.event(R.id, "access", actor.username || "?", `level=${lv}`);
   bump();
+  // CL3: the pad chat's watermarks move now - an Approved pad opening up never shows its Approved-era lines to non-members (aud_m)
+  try { await require("./chatlogview").reconcileNow(R.id); require("./bridge").refreshRoom(R.id); } catch (e) { console.error("[padaccess] chat watermarks:", e.message); }
   return listFor(R.id);
 }
 
@@ -526,6 +565,9 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, load, register, LEVELS, DEFAULT, INFO, levelOf, isPublic, isApproved, anyApproved, inside, canSee, full, adultGate, adultSlots, adultGateFor, blockedFor, visibleRows,
+  camVisible, camSlotsFor,                  // stagefix site
   state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, userInside, fullFor, rememberIp, Refuse, NOTE_MAX, RETRY_MS,
   READ_IP_MS, isReady: () => loaded, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => { ready = null; loaded = false; LEVEL = new Map(); MEMBERS = new Map(); ipOk.clear(); classCache.clear(); },
 };
+// gatefix site: what Pepe's DM / Telegram answers leave out (liveRoomsOutside, gateLiveRooms)
+Object.assign(module.exports, { liveRoomsOutside, gateLiveRooms });

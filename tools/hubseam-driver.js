@@ -18,7 +18,11 @@
 //   revoke {user, id, why} | revokeAll {user, why, except?} | merge {from, into}       sessions.js (+ the merge log row)
 //   incognito {user, on} | pepeSync {items}         incognito.request / incognito.sync
 //   privateActivity {user, on}                      the profile layout's Analytics section hidden / shown
-//   hiddenH {list}                                  hubhidden.note (Pepe's hidden_h)
+//   hiddenH {list, bridge?, incog?, events?, session?, sent?, explicit?}   hubhidden.noteSync (Pepe's hidden_h - sticky since
+//                                                   1.99add - his kinded lists bridge_hidden_h / incog_hidden_h (refix 4: an
+//                                                   incognito-only hash's hh: row carries scope "incognito"), his privacy.hidden /
+//                                                   privacy.shown {h, scope} events, and the bridge session / sent time an older
+//                                                   Pepe's same-run drop is read from)
 //   deleteAccount {user}        -> {request}        accountdelete.schedule + execute (forced)
 //   forget {user}               -> {ref}            pepeforget.request
 //   exportAccount {user}        -> {id, state, error, hub_jsonl}   accountexport (done | waiting | failed; the zip's chat-hub.jsonl)
@@ -243,7 +247,7 @@ const CMDS = {
   async incognito({ user, on }) { await boot(); return M.incognito.request(String(user), on === true); },
   async pepeSync({ items }) { await boot(); return M.incognito.sync({ items: items || [] }); },
   async privateActivity({ user, on }) { await boot(); await M.pl.save(String(user), { hidden: on ? ["analytics"] : [] }); return {}; },
-  async hiddenH({ list }) { await boot(); return M.hidden.note(list); },
+  async hiddenH({ list, bridge, incog, events, session, sent, explicit }) { await boot(); return M.hidden.noteSync({ list, bridge, incog, events, session, sent, explicit }); },
   async deleteAccount({ user }) {
     await boot();
     const u = (await M.db.getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(user)]))[0];

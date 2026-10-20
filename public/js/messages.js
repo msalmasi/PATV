@@ -87,7 +87,12 @@
     if (m.length === 1) a.classList.add('one');
     return a;
   }
-  function convAvatar(c, extra) { return c.kind === 'group' ? groupAvatar(c.members, extra) : avatar((c.with || {}).username, (c.with || {}).display, extra, (c.with || {}).avatar); }
+  function convAvatar(c, extra) {
+    if (c.kind === 'cfpm') return avatar('cf:' + ((c.with || {}).camfrog || ''), (c.with || {}).display, extra);     // CL13: a Camfrog login, no PATV look
+    return c.kind === 'group' ? groupAvatar(c.members, extra) : avatar((c.with || {}).username, (c.with || {}).display, extra, (c.with || {}).avatar);
+  }
+  // CL13: a "📨 Sent in Camfrog to <login>" thread - the sender's own log of `!msg` copies; it never says whether <login> is on PATV
+  function cfHead(login) { return _t('js.msg.cfpm_head', '📨 Sent in Camfrog to {login}', { login: login || '?' }); }
   // 1.99jx: the viewer's zone (saved choice or the browser's - public/js/localtime.js); clock times carry its label
   var TZ = (window.PATVTime && window.PATVTime.zone) || undefined;
   function tzo(x) { if (TZ) x.timeZone = TZ; return x; }
@@ -111,6 +116,7 @@
   function isPhone() { return window.matchMedia('(max-width: 760px)').matches; }
   function setView(v) { root.setAttribute('data-view', v); }
   function isGroup() { return !!(S.head && S.head.kind === 'group'); }
+  function isCf() { return !!(S.head && S.head.kind === 'cfpm'); }          // CL13: a Camfrog thread (no composer)
   function openDlg(d) { if (d.showModal) { if (!d.open) d.showModal(); } else d.setAttribute('open', ''); }
   function closeDlg(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
 
@@ -167,9 +173,10 @@
         if (c.last.deleted) sn.appendChild(el('i', { text: _t('js.msg.deleted', 'message deleted') }));
         else if (c.last.system) sn.appendChild(el('i', { text: c.last.text }));
         else if (c.last.blocked) sn.appendChild(el('i', { text: _t('js.msg.from_blocked', 'message from someone you blocked') }));
-        else sn.textContent = (c.last.mine ? _t('js.msg.you_prefix', 'You: ') : c.last.from ? c.last.from + ': ' : '') + c.last.text;
+        else sn.textContent = (c.last.via ? '📨 ' : '') + (c.last.mine ? _t('js.msg.you_prefix', 'You: ') : c.last.from ? c.last.from + ': ' : '') + c.last.text;   // CL11: 📨 = from Camfrog
       }
       var nm = el('span', { cls: 'nm' }, [c.kind === 'group' ? (c.title || w.display || _t('js.msg.group', 'Group')) : nameNode(w.display || '[gone]', w.nameCss)]);
+      if (c.kind === 'cfpm') nm.append(el('span', { cls: 'mu', title: cfHead(w.display), 'aria-hidden': 'true', text: ' 📨' }), el('span', { cls: 'vh', text: ' · ' + cfHead(w.display) }));
       if (c.muted) nm.appendChild(el('span', { cls: 'mu', title: _t('js.msg.muted', 'Muted'), text: ' 🔕' }));
       var a = el('a', { cls: 'dm-it' + (c.id === S.open ? ' on' : '') + (c.unread ? ' unread' : '') + (c.blocked ? ' blocked' : '') + (c.muted ? ' muted' : ''), href: '/messages/c/' + c.id, 'data-c': c.id },
         [convAvatar(c), nm, el('span', { cls: 'tm', text: shortWhen(c.at) }), sn,
@@ -200,16 +207,17 @@
     $('dmHead').hidden = !on; scrollEl.hidden = !on; form.hidden = !on;
   }
   function renderHead() {
-    var h = S.head, grp = isGroup(), w = h ? h.with : (S.draft || {});
+    var h = S.head, grp = isGroup(), cf = isCf(), w = h ? h.with : (S.draft || {});
     var av = $('dmHeadAv');
     av.textContent = ''; av.className = 'av av-l'; av.removeAttribute('style');
     if (grp) {
       var others = (h.members || []).filter(function (m) { return !m.you; });
       var g = groupAvatar(others, 'av-l'); av.className = g.className; while (g.firstChild) av.appendChild(g.firstChild); if (!others.length) av.textContent = '👥';
-    } else { av.textContent = initial(w.display || w.username); av.style.setProperty('--h', hue(w.username)); photoOn(av, w.avatar); }
-    var href = !grp && w.username ? '/u/' + encodeURIComponent(w.username) : '#';
+    } else if (cf) { av.textContent = initial(h.cfLogin); av.style.setProperty('--h', hue('cf:' + (h.cfLogin || ''))); }
+    else { av.textContent = initial(w.display || w.username); av.style.setProperty('--h', hue(w.username)); photoOn(av, w.avatar); }
+    var href = !grp && !cf && w.username ? '/u/' + encodeURIComponent(w.username) : '#';
     $('dmHeadName').textContent = '';
-    $('dmHeadName').appendChild(grp ? document.createTextNode(h.title) : nameNode(w.display || '[gone]', w.nameCss));
+    $('dmHeadName').appendChild(grp ? document.createTextNode(h.title) : cf ? document.createTextNode(cfHead(h.cfLogin)) : nameNode(w.display || '[gone]', w.nameCss));
     $('dmHeadName').href = href;
     $('dmMProfile').href = href;
     $('dmHeadHandle').textContent = grp ? _t('js.msg.n_members', '{n} members', { n: (h.members || []).length }) + (h.owner ? ' · ' + _t('js.msg.you_own_it', 'you own it') : '') : (w.username ? '@' + w.username : '');
@@ -217,19 +225,29 @@
     var blk = $('dmMBlock');
     blk.textContent = h && h.youBlocked ? _t('js.msg.unblock', 'Unblock') : _t('js.msg.block', 'Block');
     blk.setAttribute('data-on', h && h.youBlocked ? '0' : '1');
-    root.querySelectorAll('.dm-pop [data-for]').forEach(function (b) { b.hidden = b.getAttribute('data-for') === 'group' ? !grp : grp; });
-    blk.hidden = grp || !w.username;
-    var mute = $('dmMMute'); mute.hidden = !S.open; mute.textContent = h && h.muted ? _t('js.msg.unmute_long', 'Unmute (alerts back on)') : _t('js.msg.mute_long', 'Mute (no alerts)');
+    root.querySelectorAll('.dm-pop [data-for]').forEach(function (b) { b.hidden = cf || (b.getAttribute('data-for') === 'group' ? !grp : grp); });
+    blk.hidden = grp || cf || !w.username;
+    var mute = $('dmMMute'); mute.hidden = !S.open || cf; mute.textContent = h && h.muted ? _t('js.msg.unmute_long', 'Unmute (alerts back on)') : _t('js.msg.mute_long', 'Mute (no alerts)');
     root.querySelectorAll('[data-dm="clear"], [data-dm="hide"]').forEach(function (b) { b.hidden = !S.open; });
     var can = h ? h.canSend : (S.draft && S.draft.canSend);
     var why = h ? h.refusal : (S.draft && S.draft.refusal);
     var pn = h ? h.pepe : (S.draft && S.draft.pepe);          // 1.99ik: talking to Pepe - his price / away note
-    $('dmPepeNote').hidden = !(pn && pn.note);
-    $('dmPepeNote').textContent = pn && pn.note ? pn.note : '';
-    var pics = $('dmPepePics'), pp = pn ? pepePicsNote(pn.vision) : '';   // what happens to a photo sent to Pepe
+    // CL13: a Camfrog thread's "composer" is where to answer: in Camfrog, through Pepe - and, once <login> is a PATV account
+    // that would take your message, its DM (nothing otherwise: the thread never says "blocked" or "not on PATV")
+    var note = cf ? _t('js.msg.cfpm_composer', 'Reply in Camfrog: PM Pepe !msg {login} …', { login: h.cfLogin || '?' }) : (pn && pn.note ? pn.note : '');
+    var pnEl = $('dmPepeNote');
+    pnEl.hidden = !note;
+    pnEl.textContent = note;
+    pnEl.classList.toggle('cf', cf);
+    if (cf && h.linked) {
+      var to = h.linked;
+      pnEl.appendChild(el('a', { cls: 'dm-cfopen', 'data-cfopen': '1', href: to.conversation ? '/messages/c/' + to.conversation : '/messages?to=' + encodeURIComponent(to.username),
+                                 text: _t('js.msg.cfpm_linked', 'Open your DM with {name}', { name: to.display || ('@' + to.username) }) + ' →' }));
+    }
+    var pics = $('dmPepePics'), pp = pn && !cf ? pepePicsNote(pn.vision) : '';   // what happens to a photo sent to Pepe
     if (pics) { pics.hidden = !pp; pics.textContent = pp; }
-    $('dmRefuse').hidden = !!can;
-    $('dmRefuse').textContent = can ? '' : (why || _t('js.msg.cant_send', "You can't send messages here."));
+    $('dmRefuse').hidden = !!can || cf;
+    $('dmRefuse').textContent = can || cf ? '' : (why || _t('js.msg.cant_send', "You can't send messages here."));
     form.classList.toggle('off', !can);
     text.placeholder = grp ? _t('js.msg.message_to', 'Message {name}', { name: h.title }) : _t('js.msg.message_to', 'Message {name}', { name: '@' + (w.username || '') });
     var att = $('dmAttach');
@@ -339,6 +357,20 @@
       else showErr(e && e.message);
     }).then(function () { btn.removeAttribute('aria-busy'); });
   }
+  // CL11: where a message came from - a copy of a Camfrog `!msg` PM Pepe sent for its author, or a Camfrog `!message`
+  // (fix-up: it sits under the text - the row's own time is a hover-only gutter, hidden on phones; the Camfrog time carries
+  // its date when it isn't the message's day, and a tap / Enter shows it, since a title tooltip never shows on touch)
+  function viaNode(m) {
+    if (m.via === 'cf_pm') {
+      var at = m.cfSentAt || m.at;
+      var tip = _t('js.msg.via_cf_pm_tip', 'Sent as a Camfrog PM from Pepe at {time}', { time: dayKey(at) === dayKey(m.at) ? hm(at) : full(at) });
+      var label = _t('js.msg.via_cf_pm', '📨 Relayed from Camfrog');
+      return el('button', { type: 'button', cls: 'dm-via', 'data-mact': 'via', title: tip, 'aria-label': label + ' - ' + tip, 'aria-expanded': 'false',
+                            'data-label': label, 'data-tip': tip, text: label });
+    }
+    if (m.via === 'cf_message') return el('span', { cls: 'dm-via', text: _t('js.msg.via_cf_message', '📨 Sent from Camfrog') });
+    return null;
+  }
   function msgNode(m) {
     var mine = m.from === me.username;
     var t = el('div', { cls: 'dm-t' });
@@ -355,6 +387,7 @@
     var kids = [el('time', { cls: 'mt', datetime: new Date(m.at).toISOString(), text: hm(m.at) })];
     if (m.story && !m.deleted && !collapsed) kids.push(storyNode(m));      // storyreact site: the story card ABOVE the reply (IG-style)
     if (m.html || m.deleted || collapsed) kids.push(t);
+    if (!m.deleted && !collapsed) kids.push(viaNode(m));
     if (!m.deleted && !collapsed) { kids.push(picsNode(m)); kids.push(embedsNode(m)); }
     kids.push(acts);
     return el('div', { cls: 'dm-m' + (m.deleted ? ' del' : '') + (collapsed ? ' blk' : '') + (m.id < 0 ? ' pending' : ''), 'data-id': String(m.id), tabindex: '-1' }, kids);
@@ -389,6 +422,7 @@
     start.textContent = '';
     if (!S.more) {
       if (isGroup()) start.append(el('b', { text: S.head.title }), _t('js.msg.group_start', 'The start of this group (for you).'));
+      else if (isCf()) start.append(el('b', { text: cfHead(S.head.cfLogin) }), ' ' + _t('js.msg.cfpm_start', 'Copies of the Camfrog PMs you sent {login} with !msg through Pepe. Only you can see this thread.', { login: S.head.cfLogin || '?' }));
       else start.append(el('b', { text: w.display || '' }), _t('js.msg.dm_start', 'This is the start of your conversation with @{name}.', { name: w.username || '?' }));
     }
   }
@@ -776,7 +810,7 @@
     else if (head && head.with && head.with.username) c.with = head.with;
     c.at = m.at; c.lastId = m.id;
     c.last = { mine: !!mine, text: lastText(m), deleted: !!m.deleted, system: m.kind === 'system', blocked: !!m.blocked,
-               from: c.kind === 'group' && !mine && m.kind !== 'system' ? m.fromDisplay : null };
+               from: c.kind === 'group' && !mine && m.kind !== 'system' ? m.fromDisplay : null, via: m.deleted ? null : m.via || null };
     renderList();
     return c;
   }
@@ -859,7 +893,15 @@
   });
   $('dmBack').addEventListener('click', function () { closeChat(true); });
   window.addEventListener('popstate', route);
-  $('dmHeadName').addEventListener('click', function (e) { if (isGroup()) { e.preventDefault(); openMembers(); } });
+  $('dmHeadName').addEventListener('click', function (e) { if (isGroup()) { e.preventDefault(); openMembers(); } else if (isCf()) e.preventDefault(); });
+  // CL13: a Camfrog thread's "Open your DM with …" (the DM if it exists, else a new one)
+  $('dmPepeNote').addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-cfopen]');
+    if (!a || !isCf() || !S.head.linked || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
+    e.preventDefault();
+    var to = S.head.linked;
+    if (to.conversation) openConv(to.conversation, true); else openNew(to.username, true);
+  });
   msgsEl.addEventListener('click', function (e) {
     // storyreact site: a story card - an NSFW one is revealed by the first tap, opened by the next
     var sc = e.target.closest('.dm-story[data-story-m]');
@@ -888,6 +930,13 @@
     if (!b) { if (row && isPhone()) { msgsEl.querySelectorAll('.dm-m.act').forEach(function (x) { if (x !== row) x.classList.remove('act'); }); row.classList.toggle('act'); } return; }
     var id = parseInt(row.getAttribute('data-id'), 10);
     var act = b.getAttribute('data-mact');
+    if (act === 'via') {             // CL11 fix-up: the chip's Camfrog time, for touch screens (no hover tooltip there)
+      var open = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      b.classList.toggle('open', open);
+      b.textContent = open ? b.getAttribute('data-label') + ' · ' + b.getAttribute('data-tip') : b.getAttribute('data-label');
+      return;
+    }
     if (act === 'show') { S.shown[id] = true; renderMsgs(); return; }
     if (act === 'delete') {
       if (!window.confirm(_t('js.msg.confirm_delete', 'Delete this message for everyone? It will show as “message deleted” (pictures included).'))) return;
@@ -900,9 +949,11 @@
     $('dmMenu').removeAttribute('open');
     var act = b.getAttribute('data-dm');
     var w = S.head ? S.head.with : (S.draft || {});
-    var name = isGroup() ? S.head.title : '@' + w.username;
+    var name = isGroup() ? S.head.title : isCf() ? cfHead(S.head.cfLogin) : '@' + w.username;
     if (act === 'clear' && S.open) {
-      if (!window.confirm(isGroup() ? _t('js.msg.confirm_clear_group', 'Clear this conversation\'s history for you? Everyone else keeps theirs.') : _t('js.msg.confirm_clear_dm', 'Clear this conversation\'s history for you? @{name} keeps their copy.', { name: w.username }))) return;
+      if (!window.confirm(isGroup() ? _t('js.msg.confirm_clear_group', 'Clear this conversation\'s history for you? Everyone else keeps theirs.')
+                          : isCf() ? _t('js.msg.confirm_clear_cf', 'Clear this log? You won\'t see these copies here again.')
+                          : _t('js.msg.confirm_clear_dm', 'Clear this conversation\'s history for you? @{name} keeps their copy.', { name: w.username }))) return;
       api('/api/messages/c/' + S.open + '/clear', {}).then(function () { S.msgs = []; S.more = false; renderMsgs(); loadList(); }).catch(function (x) { showErr(x.message); });
     } else if (act === 'hide' && S.open) {
       if (!window.confirm(_t('js.msg.confirm_hide', 'Delete this conversation for you? It disappears from your list and its history is cleared for you. A new message in {name} brings it back.', { name: name }))) return;

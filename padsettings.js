@@ -23,7 +23,9 @@ const SP = require("./siteperms");   // 1.99ack: the website's capabilities (sit
 const rooms = require("./rooms");
 const store = require("./feedstore");
 
-const TABS = Object.freeze(["general", "stage", "feed", "pepe", "rules", "moderation", "camfrog", "flair", "address"]);      // 1.99ir: + flair; 1.99iy: + address (padaddress.js)
+// 1.99ir: + flair; 1.99iy: + address (padaddress.js); CL3: + chat (padchat.js - the pad chat's history window, search,
+// downloads, room mods; Camfrog-backed pads)
+const TABS = Object.freeze(["general", "stage", "feed", "pepe", "rules", "moderation", "camfrog", "chat", "flair", "address"]);
 
 async function pins(roomId) {
   const rows = await getQuery(`SELECT p.id, p.title, p.body, pr.pinned_at, pr.pinned_by FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
@@ -62,6 +64,8 @@ async function hubData(R, viewer, app) {
     // stage + page + royalties (was /manage)
     st: await stage.ownerState(R.id), C: stage.config(), roy: R.owner ? await royalties.status(R.id, R.owner.userId) : null,
     golive: R.profile ? null : await require("./golive").padAnnounce(R.id),      // 1.99kp: 🎥 announce stream starts in the pad
+    // micfollow: 🎙 Mic follows (Camfrog pads) - its switch, layout, exclusions and whether it can run (micfollow.js)
+    mf: camfrog ? await require("./micfollow").ownerState(R.id).then((s) => ({ ...s, room_name: B ? B.name : R.id })).catch((e) => { console.error("[padsettings] micfollow:", e.message); return null; }) : null,
     bridge: B ? { live: Date.now() - B.updated < 90000, relay: !!B.relay, mic: !!B.micRelay, cams: !!B.cams, audio: B.audioOn != null ? !!B.audioOn : !!B.audio,   // 1.99ia: the switch, not "streaming now"
               audioLive: !!B.audio, audioWhy: B.audioWhy || "", transcripts: B.transcripts !== false } : null,
     analytics: app ? rooms.hasRoute(app, "/p/:slug/analytics") : false,
@@ -87,6 +91,8 @@ async function hubData(R, viewer, app) {
     address: R.profile ? null : await addressData(R, viewer),
     // 1.99ja: platform connections (padconnect.js) - Camfrog / Twitch / Discord (later)
     connect: R.profile ? null : await require("./padconnect").state(R, viewer).catch((e) => { console.error("[padsettings] connect:", e.message); return null; }),
+    // CL3: 💬 Chat - how far back visitors read the pad's chat, search, downloads, room mods (padchat.js; Camfrog pads)
+    chat: camfrog && !R.profile ? await require("./padchat").state(R.id, viewer).catch((e) => { console.error("[padsettings] chat:", e.message); return null; }) : null,
   };
 }
 

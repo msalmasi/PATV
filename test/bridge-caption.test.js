@@ -37,7 +37,7 @@ async function feed(room, events, transcripts) {
   await bridge.ingest({ events, rooms: [snap(room, transcripts)] });
   const R = bridge.bySlug(bridge.slugify(room.name));
   assert.ok(R, "room exists");
-  return (await bridge.liveView(R, 0)).feed;
+  return (await bridge.liveView(R, 0, null, null, null, true, { viewer: { userId: "test-viewer" } })).feed;   // CL3: a signed-in viewer (the route checks padaccess first)
 }
 
 test("transcripts on: the tagged caption is dropped, the transcript line shows the mic-up once", async () => {

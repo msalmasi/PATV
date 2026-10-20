@@ -36,7 +36,7 @@ test.before(async () => {
 async function feed(events) {
   await bridge.ingest({ events, rooms: [{ room: ROOM, members: [PEPE, ALICE], mic: [], count: 2, transcripts: true }] });
   const R = bridge.bySlug(bridge.slugify(ROOM.name));
-  return (await bridge.liveView(R, 0)).feed;
+  return (await bridge.liveView(R, 0, null, null, null, true, { viewer: { userId: "test-viewer" } })).feed;   // CL3: a signed-in viewer (the route checks padaccess first)
 }
 
 test("490 characters stay whole on a chat line, a transcript and a web sender's words; 491 are cut to 490", async () => {

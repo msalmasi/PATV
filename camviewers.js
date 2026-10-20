@@ -242,12 +242,16 @@ async function usersById(ids) {
 }
 const person = (u, uid) => (u ? { username: u.username || "", display: displayOf(u), camfrog: u.camfrogUsername ? String(u.camfrogUsername) : "" }
   : { username: "", display: "", camfrog: "", id: uid });
-/** -> {live: [{username, display, camfrog, room, since}], recent: [{username, display, camfrog, kinds, at}]} */
+/** -> {live: [{username, display, camfrog, room, since}], recent: [{username, display, camfrog, kinds, at}], mic_stage_n}
+ *  micfollow (D-19): people who watch ONLY through a pad's 🎙 mic stage are counted (mic_stage_n), never named. */
 async function watching(owner, t = now()) {
   await init();
   const o = low(owner);
-  if (!LOGIN_RE.test(o)) return { live: [], recent: [] };
-  const live = (deps.liveWatchers(o) || []).filter((x) => x && x.userId && !x.ghost);          // 1.99aaf: ghosts aren't listed
+  if (!LOGIN_RE.test(o)) return { live: [], recent: [], mic_stage_n: 0 };
+  const all = (deps.liveWatchers(o) || []).filter((x) => x && x.userId && !x.ghost);           // 1.99aaf: ghosts aren't listed
+  const live = all.filter((x) => !x.mf);
+  const named = new Set(live.map((x) => String(x.userId)));
+  const micStage = new Set(all.filter((x) => x.mf && !named.has(String(x.userId))).map((x) => String(x.userId)));
   const rows = await getQuery(`SELECT user_id, kind, MAX(at) AS at FROM cam_views WHERE owner = ? AND at > ? AND ghost = 0 GROUP BY user_id, kind ORDER BY at DESC LIMIT 200`,
     [o, t - RECENT_MS]);
   const U = await usersById(live.map((x) => x.userId).concat(rows.map((r) => r.user_id)));
@@ -264,6 +268,7 @@ async function watching(owner, t = now()) {
   return {
     live: live.map((x) => ({ ...person(U.get(String(x.userId)), String(x.userId)), room: x.room || "", since: x.since || null })),
     recent: [...rec.values()].sort((a, b) => b.at - a.at).slice(0, 30),
+    mic_stage_n: micStage.size,
   };
 }
 

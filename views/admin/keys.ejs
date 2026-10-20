@@ -193,6 +193,10 @@
     <div><b><%- t('admkeys.seam.s1') %></b><span><% if (s1.error) { %><span class="adm-pill bad"><%- t('admkeys.seam.s1_error', { error: s1.error }) %></span><% } else { %><%- t('admkeys.seam.s1_state', { skipped: num(Object.values(s1i).reduce((a, b) => a + b, 0)), calls: num(s1l.calls || 0), items: num(s1l.items || 0), missing: num(s1l.missing || 0) }) %><% } %></span></div>
     <% const ew = ob.export_wait || {}; %>
     <div><b><%- t('admkeys.seam.export_wait') %></b><span><% if (ew.waiting) { %><span class="adm-pill <%= ew.overdue ? 'bad' : '' %>"><%- t('admkeys.seam.export_waiting', { n: num(ew.waiting), since: when(ew.oldest_since) }) %></span><% } else { %><%- t('admkeys.seam.export_none') %><% } %></span></div>
+    <%# 1.99add: Pepe's sticky hidden set (hubhidden.js) - sizes and held batch ids only, never a hash %>
+    <% const hs = (V.seam && V.seam.hidden) || {}; %>
+    <%# 1.99add refix 4: per kind - !bridge hide / unknown (left out), incognito only (shown as "someone") %>
+    <div><b><%- t('admkeys.seam.hidden') %></b><span><%- t('admkeys.seam.hidden_state', { n: num(hs.size), left: num(hs.left_out), anon: num(hs.anonymised) }) %> · <%- t('admkeys.seam.hidden_kinds', { bridge: num(hs.bridge), incognito: num(hs.incognito), unknown: num(hs.unknown) }) %><% if (hs.absent_once) { %> · <%- t('admkeys.seam.hidden_absent', { n: num(hs.absent_once) }) %><% } %><% if (hs.kept != null) { %> · <%- t('admkeys.seam.hidden_kept', { n: num(hs.kept) }) %><% } %><% if (hs.stored != null) { %> · <%- t('admkeys.seam.hidden_stored', { n: num(hs.stored) }) %><% } %><% if (hs.pepe === 'kinded') { %> · <%- t('admkeys.seam.hidden_pepe_kinded') %><% } else if (hs.pepe === 'explicit') { %> · <%- t('admkeys.seam.hidden_pepe_explicit') %><% } else if (hs.pepe === 'older') { %> · <%- t('admkeys.seam.hidden_pepe_older') %><% } %><% if (hs.held) { %> · <span class="adm-pill bad"><%- t('admkeys.seam.hidden_held', { n: num(hs.held) }) %></span><% } %><% if (hs.untimed) { %> · <span class="adm-pill"><%- t('admkeys.seam.hidden_untimed', { n: num(hs.untimed) }) %></span><% } %><% if (hs.back) { %> · <span class="adm-pill"><%- t('admkeys.seam.hidden_back', { n: num(hs.back) }) %></span><% } %><% if (hs.late) { %> · <span class="adm-pill"><%- t('admkeys.seam.hidden_late', { n: num(hs.late) }) %></span><% } %><% if (hs.clock_s != null && Math.abs(hs.clock_s) >= 60) { %> · <span class="adm-pill"><%- t(hs.clock_s > 0 ? 'admkeys.seam.hidden_clock_ahead' : 'admkeys.seam.hidden_clock_behind', { n: num(Math.abs(hs.clock_s)) }) %></span><% } %><% if (hs.full) { %> · <span class="adm-pill bad"><%- t('admkeys.seam.hidden_full') %></span><% } %></span></div>
   </div>
   <form class="adm-form" id="akSeam">
     <% ['tickets', 'heartbeat', 'sessions', 'privacy', 'erasure', 'export', 'econ', 'spans', 'identity', 'looks'].forEach((k) => { %>
@@ -200,8 +204,28 @@
     <% }) %>
     <div class="adm-actions"><button type="submit"<%- dis %>><%- t('admkeys.save') %></button><span class="adm-msg" id="akSeamMsg" role="status"></span></div>
   </form>
+  <% const hb = Array.isArray(hs.held_batches) ? hs.held_batches : []; %>
+  <% if (hb.length) { %>
+  <div class="adm-form" id="akHeld">
+    <p class="adm-help"><%- t('admkeys.seam.held_help') %></p>
+    <ul class="adm-list">
+      <% hb.forEach((b) => { %><li data-held="<%= b.id %>"><%- t(b.kind === 'restart' ? 'admkeys.seam.held_restart' : b.kind === 'legacy' ? 'admkeys.seam.held_legacy' : b.kind === 'order' ? 'admkeys.seam.held_order' : 'admkeys.seam.held_mass', { n: num(b.n), at: when(b.at) }) %><% if (b.other) { %> <%- t('admkeys.seam.held_other', { n: num(b.other) }) %><% } %>
+        <button type="button" data-held-act="approve" data-held-n="<%= Number(b.n) || 0 %>"<%- dis %>><%- t('admkeys.seam.held_approve') %></button>
+        <button type="button" data-held-act="dismiss"<%- dis %>><%- t('admkeys.seam.held_dismiss') %></button></li><% }) %>
+    </ul>
+    <label for="akHeldWhy"><%- t('admkeys.keys.reason') %><input type="text" id="akHeldWhy" maxlength="200"<%- dis %>></label>
+    <span class="adm-msg" id="akHeldMsg" role="status"></span>
+  </div>
+  <% } %>
+  <form class="adm-form" id="akUnhide" autocomplete="off">
+    <p class="adm-help"><%- t('admkeys.seam.unhide_help') %></p>
+    <label for="akUnhideKey"><%- t('admkeys.seam.unhide_key') %><input type="text" id="akUnhideKey" maxlength="64" spellcheck="false" required<%- dis %>></label>
+    <label for="akUnhideKind"><%- t('admkeys.seam.unhide_kind') %><select id="akUnhideKind"<%- dis %>><% ['all', 'bridge', 'incognito', 'unknown'].forEach((k) => { %><option value="<%= k %>"><%- t('admkeys.seam.kind_' + k) %></option><% }) %></select></label>
+    <label for="akUnhideWhy"><%- t('admkeys.keys.reason') %><input type="text" id="akUnhideWhy" maxlength="200" required<%- dis %>></label>
+    <div class="adm-actions"><button type="button" id="akCheck"<%- dis %>><%- t('admkeys.seam.check_btn') %></button><button type="submit"<%- dis %>><%- t('admkeys.seam.unhide_btn') %></button><span class="adm-msg" id="akUnhideMsg" role="status"></span></div>
+  </form>
 </section>
-<script src="/public/js/admin-keys.js?v=3" defer></script>
+<script src="/public/js/admin-keys.js?v=7" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

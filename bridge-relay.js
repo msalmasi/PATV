@@ -25,7 +25,7 @@
 // "🌐 <PATV username> (PATV web): ..." (camfrog-bot 1.99wt pepe_relay._relay_say_account): the username (unique on PATV),
 // never a free-text display name, and a label a chat login's relay never gets, so nobody passes for a Camfrog user. Only
 // while a Pepe that acts for accounts is running (actorcap.js), and only for an account that (accountRefusal):
-//   * has proven an identity (verified.js: a verified email, Discord, Twitch, Telegram, Google or Plex - the anti-throwaway rule)
+//   * has proven an identity (verified.js: a verified email, Discord, Twitch, Telegram, Google, Apple or Plex - the anti-throwaway rule)
 //   * isn't archived, casino-restricted, banned from the whole feed or from THIS pad's feed (the pad owner's ban)
 //   * whose username isn't another account's linked chat login (no "🌐 alice" next to the real alice)
 //   * says nothing the short-text guard catches (textguard.js: slurs, threats, doxxing, PAT scams, fake staff)
@@ -90,6 +90,18 @@ const SAVE_GAP = 20 * 1000, SAVE_BURST = 3, SAVE_WINDOW = 10 * 60 * 1000;  // = 
 
 const jobs = new Map();          // id -> {id, kind, roomId, userId, username, camfrog, text, data, mime, secs, target, state, at, claimed, tries, result}
 const snaps = new Map();         // `${roomId}|${login}` -> {sid, ts, ok, status, img: Buffer, viewers: Set(userId), rule, okFor: Map(userId -> price), cost, saves: Map(userId -> action id)}
+// micfollow: the 🎙 mic stage's stills, kept APART from viewers' snapshots: only frames of quiet mf jobs (Pepe opened the
+// cam by its EXACT name) - never a viewer's own snapshot (his usual, fuzzy targeting) - and never offered as a viewer's frame
+const mfSnaps = new Map();       // `${roomId}|${login}` -> {ts, ok, img: Buffer}
+const isMfSnap = (j) => !!(j && j.kind === "snap" && j.mf === true);
+// mic-stage snap job ids, kept past the job's own sweep: a late answer to one is still known as the mic stage's (never
+// stored as a viewer's snapshot); true = cancelled (the person was cut / the tile left: the frame is dropped)
+const mfIds = new Map();         // job id -> cancelled (bool)
+// ... and WHEN each was cancelled: Pepe gets the recent ones as `mf_cancel` (his live-cam poll and the relay pull) - a job he
+// had already claimed when a site-only cut landed (the mic-stage switch, an exclusion, cam access, private activity, a ban)
+// is dropped by him before he opens the cam, or before he sends its frame
+const mfCancelAt = new Map();    // job id -> when it was cancelled
+const MF_CANCEL_KEEP_MS = 2 * 60 * 1000;
 const frames = new Map();        // frame id -> {img, userId, username, roomId, login, ts}   (frames queued for a save)
 const hits = new Map();          // `${kind}|${userId}` -> [timestamps]
 
@@ -192,6 +204,7 @@ function sweep(now) {
     if (open ? now - j.at > (j.kind === "clip" || j.kind === "camclip" ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) jobs.delete(id);
   }
   for (const [k, s] of snaps) if (now - s.ts > SNAP_TTL) snaps.delete(k);
+  for (const [k, s] of mfSnaps) if (now - s.ts > SNAP_TTL) mfSnaps.delete(k);
   for (const [k, f] of frames) if (now - f.ts > FRAME_TTL) frames.delete(k);
   for (const [k, q] of hits) if (!q.length || now - q[q.length - 1] > 15 * 60 * 1000) hits.delete(k);
   for (const [k, id] of cids) if (!jobs.has(id)) cids.delete(k);
@@ -316,6 +329,9 @@ function takeJobs(liveRoomIds, via = "sync") {
     // 1.99ye: a say too - it carries a client id now, and "unconfirmed" (SAY_CLAIM_TTL) is safer than a double post
     const due = j.state === "pending" || (j.kind !== "say" && j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.kind !== "boostnote" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
+    // micfollow: a mic-stage still is offered only while the mic stage still wants it (Pepe knows nothing of the mic-stage
+    // switch, the pad's exclusions, stage bans, private activity or cam access - the site checks them here, last thing)
+    if (isMfSnap(j) && !mfStillWanted(j)) { cancelJob(j); continue; }
     j.state = "claimed"; j.claimed = now; j.tries++;
     if (j.kind === "say") j.via = via;
     notify(j);
@@ -332,7 +348,7 @@ function takeJobs(liveRoomIds, via = "sync") {
     if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
     // 1.99ea: the PATV display name for "🌐 <name> (web)" (Pepe falls back to the Camfrog display name, then the login)
     if ((j.kind === "say" || j.kind === "clip") && j.display) base.display = j.display;
-    if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
+    if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; if (j.mf) base.mf = true; }   // micfollow: a quiet mic-stage still (no viewer)
     if (j.kind === "camclip") { base.target = j.target; base.viewer = j.username; base.secs = j.secs; }
     // 1.99aaf: 👻 staff in ghost mode - Pepe keeps them out of the room's mod log (the site audits it: cam_views ghost = 1)
     if ((j.kind === "snap" || j.kind === "camclip") && j.ghost) base.ghost = true;
@@ -566,7 +582,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       out = draining ? [] : takeJobs(ids(), "pull");
       lastPull = Date.now();
     }
-    res.json({ ok: true, jobs: out, ...(draining && !out.length ? { retry: true, idle: 3 } : {}) });
+    const mfc = mfCancelled();                     // micfollow: claimed mic-stage stills to drop (see mfCancelled)
+    res.json({ ok: true, jobs: out, ...(mfc.length ? { mf_cancel: mfc } : {}), ...(draining && !out.length ? { retry: true, idle: 3 } : {}) });
   });
   app.post("/api/bridge/relay/ack", express.json({ limit: "256kb" }), (req, res) => {
     const b = req.body || {};
@@ -675,7 +692,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       return res.json({ ok: true, cached: true });
     }
     for (const j of jobs.values()) {
-      if (j.kind === "snap" && j.roomId === R.id && j.target === login && j.state !== "done") {
+      // (never a 🎙 mic-stage still's job: that frame is never a viewer's - no Save, no Generate, no clip)
+      if (j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id && j.target === login && j.state !== "done") {
         if (j.viewers) j.viewers.add(u.userId);
         return res.json({ ok: true, pending: true });
       }
@@ -705,6 +723,16 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const rule = ["on", "admins", "no"].includes(b.save) ? b.save : null;
     const cost = Math.max(0, parseInt(b.cost, 10) || 0);
     const okFor = new Map();
+    if (isMfSnap(j) || mfIds.has(String(b.id || ""))) {
+      // micfollow: a 🎙 mic-stage still - its own store (never a viewer's snapshot: no save rule, no viewers, no Generate).
+      // A cancelled one (the person was cut / the tile left while Pepe took it) is dropped unseen.
+      const cancelled = (j && j.cancelled) || mfIds.get(String(b.id || "")) === true;
+      if (j) { j.state = "done"; j.doneAt = Date.now(); j.result = { ok: !!img && !cancelled, msg: cancelled ? "cancelled" : clean(b.status, 120) }; }
+      if (cancelled) return res.json({ ok: true, cancelled: true });
+      mfSnaps.set(roomId + "|" + login, { ts: Date.now(), ok: !!img, img });
+      try { require("./micfollow").onStillResult(roomId, login, !!img); } catch (e) { /* no mic follows */ }
+      return res.json({ ok: true });
+    }
     if (img && j && rule && rule !== "no" && b.viewer_ok) okFor.set(j.userId, cost);
     snaps.set(roomId + "|" + login, { sid: "f" + crypto.randomBytes(9).toString("hex"), ts: Date.now(), ok: !!img, status: clean(b.status, 120), img,
       viewers: new Set(j && j.viewers ? j.viewers : []), rule, okFor, cost, saves: new Map() });
@@ -724,7 +752,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const ref = await CV().camRefusal(login, req.user.userId);         // 1.99yq: blocked / switched off since the frame was taken
     if (ref) return res.json({ state: "refused", status: ref.error });
     const s = snaps.get(R.id + "|" + login);
-    const pending = [...jobs.values()].some((j) => j.kind === "snap" && j.roomId === R.id && j.target === login && j.state !== "done");
+    const pending = [...jobs.values()].some((j) => j.kind === "snap" && !isMfSnap(j) && j.roomId === R.id && j.target === login && j.state !== "done");
     if (s && (!pending || Date.now() - s.ts < SNAP_TARGET_GAP)) {
       let save = null;
       if (s.ok && s.img && saveRight(s, req.user.userId) !== null) {
@@ -806,6 +834,64 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
 }
 
 /**
+ * micfollow: a still of `login`'s cam for the pad's 🎙 mic stage (the degrade tier between a live tile and a name card).
+ * Reuses only ITS OWN kind: a mic-stage frame younger than SNAP_TARGET_GAP or a mic-stage job already on its way - never a
+ * viewer's snapshot or a viewer's job (Pepe takes those with his usual targeting, which may pick the wrong "Bob"). Else it
+ * queues a quiet job with NO viewer (mf: true - Pepe opens it by its exact name, writes no save rule, logs it at most every
+ * 30 min). Nobody can save it or use it for an AI picture: it has no requesting viewer. -> {cached} | {pending} | {id}
+ */
+function mfSnap(roomId, login) {
+  const key = roomId + "|" + login;
+  const cached = mfSnaps.get(key);
+  if (cached && Date.now() - cached.ts < SNAP_TARGET_GAP) return { cached: true };
+  for (const j of jobs.values()) if (isMfSnap(j) && j.roomId === roomId && j.target === login && j.state !== "done") return { pending: true };
+  const j = newJob({ kind: "snap", roomId, userId: null, username: null, camfrog: "", target: login, viewers: new Set(), mf: true });
+  mfIds.set(j.id, false);
+  if (mfIds.size > 2000) mfIds.delete(mfIds.keys().next().value);
+  return { id: j.id };
+}
+/** A mic-stage still job that is no longer wanted: done, never offered (again), its answer dropped. */
+function cancelJob(j) {
+  j.state = "done"; j.doneAt = Date.now(); j.cancelled = true; j.result = { ok: false, msg: "cancelled" };
+  mfIds.set(j.id, true);
+  mfCancelAt.set(j.id, j.doneAt);
+  if (mfCancelAt.size > 500) mfCancelAt.delete(mfCancelAt.keys().next().value);
+}
+/** micfollow -> Pepe: the mic-stage still jobs cancelled in the last MF_CANCEL_KEEP_MS (ids). He drops any of them he
+ *  claimed: no cam open, no frame sent (older Pepes ignore the field - the site drops their late frame anyway). */
+function mfCancelled(now = Date.now()) {
+  const out = [];
+  for (const [id, at] of [...mfCancelAt]) {
+    if (now - at > MF_CANCEL_KEEP_MS) { mfCancelAt.delete(id); continue; }
+    out.push(id);
+  }
+  return out.slice(-200);
+}
+/** Is this mic-stage still job still wanted? (micfollow.stillWanted: a still tile, the person may still be shown) */
+function mfStillWanted(j) {
+  try { return require("./micfollow").stillWanted(j.roomId, j.target) === true; } catch (e) { return false; }
+}
+/** micfollow: the mic stage stopped `login`'s still (the tile went live / left / was cut): cancel the queued (or claimed)
+ *  job - Pepe is never handed it (again) and its frame is dropped - and forget the last frame. -> jobs cancelled */
+function mfSnapCancel(roomId, login) {
+  let n = 0;
+  const l = String(login || "").toLowerCase();
+  for (const j of jobs.values()) if (isMfSnap(j) && j.roomId === roomId && j.target === l && j.state !== "done") { cancelJob(j); n++; }
+  mfSnaps.delete(roomId + "|" + l);
+  return n;
+}
+/** micfollow: the mic stage's still of `login` (the route checked the viewer) - only an exact (mf) frame.
+ *  -> {state: ok | refused | pending | none, ts, img} */
+function mfFrame(roomId, login) {
+  const s = mfSnaps.get(roomId + "|" + login);
+  const pending = [...jobs.values()].some((j) => isMfSnap(j) && j.roomId === roomId && j.target === login && j.state !== "done");
+  if (s && (!pending || Date.now() - s.ts < SNAP_TARGET_GAP)) {
+    return s.ok && s.img ? { state: "ok", ts: s.ts, img: "data:image/jpeg;base64," + s.img.toString("base64") } : { state: "refused" };
+  }
+  return { state: pending ? "pending" : "none" };
+}
+
+/**
  * 1.99dr: a snapshot this viewer was shown, for use as an AI reference picture (aigen.js claimCamRef).
  * -> {login, img, ts} or {error, status}. Only the room's own frames, only fresh ones, only for an account that
  * asked for (or rode on) that frame - the same rule as Save snap's "a snapshot you asked for".
@@ -835,7 +921,8 @@ function saveRight(s, userId) {
 }
 
 module.exports = { padFull, PAD_DENIED, register, takeJobs, webName, accountRefusal, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
+  mfSnap, mfFrame, mfSnapCancel, mfCancelled, SNAP_TARGET_GAP,                             // micfollow
   sayLine, roomRefusal, noteEcho, echoJob, setNotify, latency, SAY_MAX, SAY_QUEUE_MAX, SAY_MINUTE_MAX, SAY_PENDING_TTL, SAY_PENDING_TTL_SYNC, SAY_CLAIM_TTL,   // 1.99ye
   _cids: cids, _pullers: pullers, _lastPull: () => lastPull,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
-  _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };
+  _sweep: sweep, _jobs: jobs, _snaps: snaps, _mfSnaps: mfSnaps, _mfIds: mfIds, _frames: frames, _hits: hits };

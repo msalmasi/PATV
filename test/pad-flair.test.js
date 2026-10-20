@@ -224,7 +224,9 @@ test("the live chat on the pad page carries the flair of linked logins", async (
   const other = r.d.feed.find((it) => it.text === "who dis");
   assert.ok(!(other.u.patv && other.u.patv.flair));
   const html = (await get("/p/" + slugB, U.bob)).text;
-  assert.match(html, /function flairEl\(u\)/, "the chat renderer draws it");
+  // CL5: the chat renderer is public/js/chatlog-core.js (the page loads it; flairNode draws the chip)
+  assert.match(html, /<script src="\/public\/js\/chatlog-core\.js\?v=\d+"><\/script>/, "the page loads the chat renderer");
+  assert.match(fs.readFileSync(path.join(repo, "public", "js", "chatlog-core.js"), "utf8"), /function flairNode\(u, ctx, h\)/, "the chat renderer draws it");
 });
 
 test("the settings hub has the Flair & tags tab; deleting a flair takes it off everyone; an Approved pad's flair stays inside", async () => {

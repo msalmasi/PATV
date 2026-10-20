@@ -62,7 +62,9 @@ async function guideRows(signedIn, viewer) {
   const out = [];
   for (const [id, x] of byId) {
     const r = x.reg, b = x.br;
-    const slots = g.get(id) || { now: [], next: [] };
+    const g0 = g.get(id) || { now: [], next: [] };
+    // stagefix site: a 🎬 cam slot (someone's Camfrog cam) is only on the card of a viewer who may see the pad's live room
+    const slots = { now: g0.now.filter((s) => !s.cam || PA.camVisible(viewer || null, id)), next: g0.next };
     out.push({
       id, slug: r ? linkSlug(r) : b.slug, title: (r && r.title) || (b && b.name) || id,
       owner: r && r.owner ? (r.owner.display || r.owner.username) : null, ownerUser: r && r.owner ? r.owner.username || null : null, house: !!(r && r.house),
@@ -164,7 +166,13 @@ function register(app, { addUser, isBotToken }) {
       // 1.99tn: the voices each pad's owner may make the room's default voice (Pepe re-checks an owner-picked voice with it)
       let ownerVoices = null;
       try { ownerVoices = await require("./padowner").ownerVoicesForPepe(); } catch (e) { console.error("[rooms] owner voices:", e.message); }
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify, ...(ownerVoices ? { owner_voices: ownerVoices } : {}) });
+      // CL2: each Camfrog pad's `chatlog` block {notice_at, archive, window_s, tx_s, search, wm_search, changed_at, removed} - Pepe
+      // (CL4) announces the archive with it and bounds !log / !search by it; an older Pepe ignores it
+      let ownerRooms = await rooms.ownersForPepe();
+      try { ownerRooms = await require("./chatlog").forOwnerSync(ownerRooms); } catch (e) { console.error("[rooms] chat archive block:", e.message); }
+      // Train 3 review: chatlog_known - this site HAS the chat archive, so rooms without a block mean a failing read (above), and
+      // Pepe keeps his last blocks for good instead of dropping them after 7 days (pepe_chatlog BLOCK_HOLD_S)
+      res.json({ ok: true, rooms: ownerRooms, chatlog_known: true, prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify, ...(ownerVoices ? { owner_voices: ownerVoices } : {}) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {
@@ -178,14 +186,39 @@ function register(app, { addUser, isBotToken }) {
     try { res.json({ ok: true, ...(await royalties.summary()) }); } catch (e) { fail(res, e); }
   });
   // An owner's (or a Pepe admin's) "!stage ..." in their room. Pepe says who typed it; we check that
-  // Camfrog name is this room's owner (or Pepe vouches they're one of his admins).
+  // Camfrog name is this room's owner (or Pepe vouches they're one of his admins). stagefix site: except "!stage off me",
+  // which is everyone's - the person whose cam it is takes it off this pad's Stage (stageleave.js).
   app.post("/api/rooms/stage/act", async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
     try {
       const R = await rooms.get(String(b.room || ""));
-      if (!R) return res.json({ ok: false, message: "this room has no pad on PATV yet" });
       const by = String(b.by || "").trim().toLowerCase();
+      // stagefix final round (D-17 / DF-45, stagepin.js): "!stage ok" / "!stage no" - ANYONE answers the ask out to them: "Keep
+      // going?" after 10 minutes on a pad's Stage (ok = keep going, no = take me off), or a pad asking to put their cam up (their
+      // level is "off": ok = allow, no = not now). Proven logins only, like "!stage off me"; works in a PM to Pepe (no room needed).
+      const v0 = String(b.verb || "").toLowerCase();
+      if ((v0 === "ok" || v0 === "no") && !String(b.arg || "").trim()) {
+        if (!/^[\w.\-$]{1,40}$/.test(by)) return res.json({ ok: false, message: "who's asking?" });
+        if (b.proven !== true) return res.json({ ok: false, code: "unproven", message: "I couldn't confirm that's your cam - answer on the website (Settings → Privacy)" });
+        return res.json(await require("./stagepin").answerChat(by, v0, R ? R.id : null));
+      }
+      if (!R) return res.json({ ok: false, message: "this room has no pad on PATV yet" });
+      // stagefix site: "!stage off me [hours]" - ANYONE takes their own cam off this pad's Stage (stageleave.js: at once, and it
+      // can't put them back for 1 h, doubling on repeats up to 24 h). `by` = the login Pepe says typed it, with `proven: true`
+      // (stagefix fix: his identity check on the sender, not a display name; the bot change sends it).
+      const m0 = /^me(?:\s+(\d{1,2})\s*h?)?$/i.exec(String(b.arg || "").trim());
+      if (String(b.verb || "").toLowerCase() === "off" && m0) {
+        if (!/^[\w.\-$]{1,40}$/.test(by)) return res.json({ ok: false, message: "who's asking?" });
+        // stagefix fix: only for a login Pepe has PROVEN typed it (his identity check on the sender - never a display name, which
+        // anyone can set to someone else's login to keep them off a pad's Stage); an older Pepe that doesn't say so changes nothing
+        if (b.proven !== true) return res.json({ ok: false, code: "unproven", message: "I couldn't confirm that's your cam - use Take me off this Stage on the website, or !livecam off" });
+        let userId = null;
+        try { const u = (await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ? LIMIT 1", [by]))[0]; userId = u ? u.userId : null; } catch (e) { userId = null; }
+        const r = await require("./stageleave").leave({ roomId: R.id, login: by, userId, via: "chat", hours: m0[1] ? Number(m0[1]) : null });
+        const hrs = Math.max(1, Math.round((r.until - r.at) / 3600000));
+        return res.json({ ok: true, ended: r.ended, until: r.until, message: (r.ended ? "you're off " : "you're kept off ") + `${R.title}'s stage on PATV - it can't put your cam back for ${hrs} hour${hrs === 1 ? "" : "s"}` });
+      }
       const owner = !!(R.owner && R.owner.camfrog && String(R.owner.camfrog).toLowerCase() === by);
       if (!owner && !b.admin) return res.json({ ok: false, message: "only this pad's owner (or an admin) can run its stage" });
       const who = "pepe:" + by.slice(0, 40);
@@ -231,7 +264,7 @@ function register(app, { addUser, isBotToken }) {
         const R2 = await rooms.setStage(R.id, { slot_count: n }, who, { maxSlots: stage.config().max_slots_per_room + primeSlots(R.id), maxPrice: stage.config().price_per_min, maxMinutes: stage.config().pad_max_minutes });
         return res.json({ ok: true, message: `${R.title} has ${R2.slot_count} stage slot${R2.slot_count === 1 ? "" : "s"} now` });
       }
-      res.json({ ok: false, message: "usage: !stage · !stage cut [#n|name|all] · !stage feature <#n|name> · !stage unfeature · !stage slots <n>" });
+      res.json({ ok: false, message: "usage: !stage · !stage cut [#n|name|all] · !stage feature <#n|name> · !stage unfeature · !stage slots <n> · !stage off me · !stage ok|no" });
     } catch (e) {
       res.json({ ok: false, message: e && e.refuse ? e.message : "the website couldn't do that right now" });
       if (!(e && e.refuse)) console.error("[rooms] stage act:", e);

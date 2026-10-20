@@ -159,6 +159,10 @@ test("cams: need the owner's opt-in (web or !onair me on), never Pepe himself or
   await OA.setOptin("alice", false, { ts: T + 2 });          // withdrawing the opt-in takes it off at once
   assert.equal(OA.view().target, null);
   await OA.saveConfig({ cam_optin: false }, "test");
+  // stagefix site (D-9): the admin's "no opt-in needed" covers only cams shown to everyone - bob's cam is a members cam
+  // (the default), so it still needs his OK (test/stagefix.test.js has the rest); as an `everyone` cam it needs none
+  await assert.rejects(OA.setCam(CAMROOM.id, "bob", "t"), (e) => e.code === "no_optin");
+  await require(path.join(repo, "camaccess")).setMode("bob", "everyone", { t: T });
   await OA.setCam(CAMROOM.id, "bob", "t");                   // opt-in not required (admin's choice)
   CAMROOM.members.find((m) => m.login === "bob").on_cam = false;
   await OA.check();

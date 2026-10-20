@@ -52,6 +52,20 @@
 //     and /start hands it to Pepe ONCE with ref_cam {room, login} - he re-checks the person's opt-out and the room's
 //     switches before charging. Same price as a reference picture = chat's -cam (+ camsurcharge). The frame is
 //     never written to disk or the database; only the generated result becomes an attachment (kept if attached).
+//
+// gatefix site
+//   * The "📷 From a cam in this room" list (GET /api/feed/aigen/cams) follows the pad's access level like the live room
+//     it comes from (livePad: padaccess's level rule). It had no pad check at all, so a signed-in outsider of an Approved
+//     pad could list the login and display name of everyone on cam there. An outsider now gets exactly the answer a pad
+//     that doesn't exist gets; Public and Members pads answer as before.
+//   * Claiming a snapshot (POST /api/feed/aigen/camref) takes the same livePad check first: an outsider gets the answer
+//     an unknown pad gets ("Cam snapshots come from a Camfrog pad's room."), before any other check that could say the
+//     pad is there or what kind it is (staging's 18+ gate answers after it, for the pad's own members).
+//   * The cams follow the Prime Time Plus bridge gate like every other web view of the room: bridgeRoom asks
+//     bridge.isLiveShown (a pad without the bridge perk while plus_bridge_gate is on is "not live on the site"), not
+//     the raw isLive.
+//   * GET /api/feed/aigen?pad= prices a pad the viewer may not see (an Approved pad's outsider) at the global prices:
+//     its own room's !imagine / !video / -cam prices are that pad's settings.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -107,8 +121,10 @@ const CAMREF_PER_USER = 3;
 const CAMREF_RE = /^c[a-f0-9]{20}$/;
 const camRefs = new Map();                                      // claim id -> {img, userId, room, login, display, ts}
 const camJobFrames = new Map();                                 // job id -> {img, ts}  (taken by /start, once)
+// gatefix site: isLiveShown = live AND the pad has the bridge (premium.bridgeAllowed: the Prime Time Plus gate) - what the
+// website shows of the room everywhere else (/live, /snap, room audio, clips, live cams); the raw isLive skipped the gate
 let bridgeRoom = (roomId) => {
-  try { const B = require("./bridge"); const R = B._rooms.get(roomId); return R && B.isLive(R) ? R : null; } catch (e) { return null; }
+  try { const B = require("./bridge"); const R = B._rooms.get(roomId); return R && B.isLiveShown(R) ? R : null; } catch (e) { return null; }
 };
 let snapForGen = (roomId, sid, userId) => require("./bridge-relay").snapForGen(roomId, sid, userId);
 function _setBridge(roomFn, snapFn) { if (roomFn) bridgeRoom = roomFn; if (snapFn) snapForGen = snapFn; }
@@ -193,6 +209,30 @@ async function normPad(p) {
   const R = await store.communityOf(s).catch(() => null);
   return R ? R.id : null;
 }
+/**
+ * gatefix site: normPad for the pad's LIVE ROOM - who's on cam there is the live room's own content, so it follows
+ * padaccess's level rule for it (full(): Public anyone, Members signed in, Approved only its owner, site staff and the
+ * members the owner approved). Anyone that rule keeps out gets null - exactly what a pad that doesn't exist gets, so the
+ * answer never says an Approved pad is there. Only the level rule: the 18+ pad gate (adultgate, staging) answers on its
+ * own after this, with its sign-in / confirm link, like everywhere else ("the Approved rule comes first").
+ */
+async function livePad(user, padId) {
+  const pad = await normPad(padId);
+  if (!pad) return null;
+  const PA = require("./padaccess");
+  await PA.init();                                              // the levels + approved members (cheap once loaded)
+  const u = user && user.userId ? user : null;
+  if (!PA.canSee(u, pad)) return null;                          // Approved: an outsider
+  return u || PA.isPublic(pad) ? pad : null;                    // Members: signed in (the route asks for that anyway)
+}
+/** gatefix site: a pad id (normPad's) as far as `user` may see the pad at all (padaccess.canSee): an Approved pad's
+ *  outsider -> null, so nothing of the pad's own (its room's prices) reaches them. "u/..." and no pad pass through. */
+async function seenPad(user, pad) {
+  if (!pad || /^u\//.test(String(pad))) return pad;
+  const PA = require("./padaccess");
+  await PA.init();
+  return PA.canSee(user && user.userId ? user : null, pad) ? pad : null;
+}
 
 // ── who may ──
 /** null if `u` may generate for a post in `padId`, else {status, message}. */
@@ -258,7 +298,7 @@ function adultCheck(user, padId) {
 }
 async function camList(user, padId) {
   await init();
-  const pad = await normPad(padId);
+  const pad = await livePad(user, padId);                       // gatefix site: an outsider = no such pad
   const room = camfrogRoomOf(pad);
   if (!room) return { ok: true, cams: [], why: "Pick a Camfrog pad - the cams come from its Camfrog room." };
   adultCheck(user, pad);
@@ -275,7 +315,7 @@ async function claimCamRef(user, b) {
   await init();
   const u = await store.account(user.userId);
   if (!u) throw new Refuse(401, "Sign in first.");
-  const pad = await normPad(b.pad);
+  const pad = await livePad(u, b.pad);                          // gatefix site: an outsider = no such pad, before anything else
   const room = camfrogRoomOf(pad);
   if (!room) throw new Refuse(400, "Cam snapshots come from a Camfrog pad's room.");
   adultCheck(u, pad);                                     // adultgate site
@@ -738,7 +778,8 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
       const u = await store.account(req.user.userId);
       const pad = await normPad(req.query.pad);
       const why = await refusal(u, pad);
-      res.json({ ok: true, eligible: !why, why: why ? why.message : null, prices: await pricesFor(pad), refPrice: await refPriceFor(pad), jobs: await mine(req.user.userId),
+      const priced = await seenPad(u, pad);                     // gatefix site: an outsider never gets the pad's own prices
+      res.json({ ok: true, eligible: !why, why: why ? why.message : null, prices: await pricesFor(priced), refPrice: await refPriceFor(priced), jobs: await mine(req.user.userId),
                  limits: { open: MAX_OPEN, openVideo: MAX_OPEN_VIDEO, promptMax: PROMPT_MAX }, eta: ETA });
     } catch (e) { fail(res, e); }
   });

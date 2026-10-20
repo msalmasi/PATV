@@ -81,6 +81,9 @@ var CAPS = [
   ["pads.send_pepe", "pads", "admin", "ops"],
   ["bridge.blocks_global", "pads", "admin", null],
   ["bridge.cmdlog", "pads", "admin", null],
+  ["chatlog.admin", "pads", "admin", "privacy"],                // CL2: the chat archive's switches, held un-hides, FTS repair (/admin/bridge)
+  ["chatlog.read_all", "pads", "staff", "privacy"],             // CL6: every pad's full chat history (every read past a pad's public window is logged),
+                                                                //      staff purge, the chat line report queue, the per-login tool, legal holds
   // ── feed, trust & safety ──
   ["feed.admin_page", "feed", "staff", null],
   ["feed.moderate", "feed", "staff", null],
@@ -127,6 +130,9 @@ var CAPS = [
   ["livecam.end_any", "stage", "staff", null],
   ["camclip.override", "stage", "admin", null],
   ["ghost.mode", "stage", "staff", "consent"],
+  // micfollow: 🎙 mic follows on pad stages (/stage/admin) - never below Staff (a cam shown without anyone choosing it)
+  ["micfollow.kill", "stage", "staff", "consent"],              // the kill switch + turning it off on one pad
+  ["micfollow.admin", "stage", "admin", "ops"],                 // its knobs + the appearance log
   // ── soundboards, voices, likeness ──
   ["soundboards.moderate", "sound", "assistant", null],         // 1.99ack: was Staff (owner decision 2026-10-18)
   ["soundboards.config", "sound", "admin", "points"],

@@ -1,6 +1,6 @@
-<%# views/ssoNew.ejs - 1.99lb: after Sign in with Telegram / Google, an identity no PATV account is linked to (ssolinks.js,
+<%# views/ssoNew.ejs - 1.99lb: after Sign in with Telegram / Google / Apple, an identity no PATV account is linked to (ssolinks.js,
     the same choice as views/plexSso.ejs): create a PATV account with it, or sign in to an existing one (which links it).
-    Never matched by email / name. Locals: sso {provider, label, icon, who, email, verified, readsEmail}, suggest, next. -%>
+    Never matched by email / name. Locals: sso {provider, label, icon, who, email, verified, readsEmail, relay, note}, suggest, next. -%>
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: t('auth.sso.page_title', { provider: sso.label }), user: user }) %>
 <%
@@ -28,7 +28,7 @@
         <div class="au-hint" id="username-hint"><%- t('auth.register.username_hint') %></div>
         <div class="au-err" id="username-err" aria-live="polite"></div>
       </div>
-      <p class="au-hint"><%- sso.email ? (sso.verified ? t('auth.sso.email_verified', { provider: sso.label }) : t('auth.sso.email_unverified', { provider: sso.label })) : t('auth.plex.email_none') %></p>
+      <p class="au-hint"><%- sso.relay ? t('auth.sso.email_relay') : sso.email ? (sso.verified ? t('auth.sso.email_verified', { provider: sso.label }) : t('auth.sso.email_unverified', { provider: sso.label })) : t('auth.plex.email_none') %></p>
       <% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %>
       <p class="au-terms"><%- t('auth.register.terms', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('auth.register.terms_link') + '</a>', privacy: '<a href="/privacy" target="_blank" rel="noopener">' + t('auth.register.privacy_link') + '</a>' }) %></p>
       <% } %>
@@ -42,7 +42,7 @@
     <form action="/auth/sso/cancel" method="POST" class="au-cancel">
       <button type="submit" class="au-linkbtn"><%- t('auth.plex.cancel') %></button>
     </form>
-    <p class="au-oauth-note"><%- sso.readsEmail ? t('auth.sso.note_google') : t('auth.sso.note_telegram') %></p>
+    <p class="au-oauth-note"><%- sso.note ? t(sso.note) : sso.readsEmail ? t('auth.sso.note_google') : t('auth.sso.note_telegram') %></p>
   </section>
 </main>
 <style>

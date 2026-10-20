@@ -79,6 +79,9 @@ test("before Pepe reports: state unknown; the page renders with the switch", asy
   assert.equal(page.status, 200);
   assert.match(page.text, /id="pvInc"/);
   assert.match(page.text, /alicecf/);
+  // CL6: "Make Pepe forget me" offers "Also hide my past public chat lines", unticked (privacy-forget.js sends hide_lines)
+  assert.match(page.text, /<input type="checkbox" id="pvPfLines" aria-describedby="pvPfLinesHint">/);
+  assert.match(page.text, /Also hide my past public chat lines/);
   assert.match(page.text, /href="\/settings\/likeness"/);
   assert.equal((await call("GET", "/settings/privacy", null)).status, 302, "signed out -> login");
 });

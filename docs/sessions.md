@@ -8,7 +8,7 @@ A login used to be a self-contained 90-day JWT in the `jwt` cookie; nothing on t
 sign-in is a row in `sessions` and the cookie's JWT carries its id (`sid`). The JWT still proves the cookie is ours; the
 row says whether it is still allowed.
 
-- **One place issues logins:** `sessions.signIn(req, res, user, method)` - password and sign-up, Google, Plex, Telegram,
+- **One place issues logins:** `sessions.signIn(req, res, user, method)` - password and sign-up, Google, Apple, Plex, Telegram,
   Discord, Twitch, the `!signin` chat link, and `!signup` claim links (a sign-in / sign-up that started from `/claim/...`).
   It creates the row, issues the cookie, cancels a pending account deletion and files the new-device notice.
 - **One place checks them:** `sessions.gate`, mounted right after cookie-parser in `index.js`. A JWT whose session is
@@ -51,7 +51,8 @@ Each live session: device, method, country / IP, last active, signed in, "This d
 |---|---|
 | Password change (Settings) | "Sign out my other devices" - ticked by default; this device stays signed in |
 | Password reset by email | Every session (and the cutoff) |
-| Removing a sign-in method (Google, Plex, Telegram...) | Nothing is signed out - the page says so and points at Your devices |
+| Removing a sign-in method (Google, Apple, Plex, Telegram...) | Nothing is signed out - the page says so and points at Your devices |
+| Apple says the member stopped using Sign in with Apple (`consent-revoked`), or deleted the Apple Account (`account-deleted`) - `/auth/apple/notifications`, applesso.js | The sessions signed in with Apple **before Apple's event time** (`sessions.revokeMethod(..., { before })`); the others stay, and so does an Apple sign-in made after it (a new authorization). Each notification is applied once (`apple_notices`) |
 | Site-wide ban by staff (feed ban with no pad) | Every session; a pad owner's ban doesn't |
 | Admin "sign out everywhere" | `POST /api/admin/users/:id/sessions/revoke` (Admin, audit-logged) |
 | Account merge | The merged-away account's sessions are revoked, never moved (`accountMerge.moveUserRows`; `sessions.user_id` is a `keep` rule) |

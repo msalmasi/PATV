@@ -10,7 +10,7 @@ it with ledger care, because it is supply.
    closed first, what is settled automatically, and a link to download your data first.
 2. **Re-authentication**, one of:
    - the account's password;
-   - a **fresh sign-in**: a session created in the last 10 minutes by any method - Google, Plex, Telegram, Twitch,
+   - a **fresh sign-in**: a session created in the last 10 minutes by any method - Google, Apple, Plex, Telegram, Twitch,
      Discord, the `!signin` chat link (that is the "chat-link confirmation") or the password. A converted
      pre-sessions cookie never counts as fresh.
 3. **Typed confirmation**: the username, exactly.
@@ -74,16 +74,17 @@ what has a safe existing rule is settled automatically.
 | Data | Policy |
 |---|---|
 | The account row | Kept as a **pseudonymous tombstone**: username `deleted-<10 hex>` (a hash of the id), display name "Deleted user", no email, no Twitch / Discord / Camfrog ids, no stream key or tokens, no age confirmation (`age_confirmed_at`, `age_confirmed_v`), a random password nobody knows, archived (hidden from leaderboards and counts) and marked `DELETED` in `account_archive` (the stale cleanup never revives it). The ledger needs the id to exist (`transactions_user_must_exist`). |
-| Sessions, sign-in links (Google, Telegram), crypto wallets, chat sign-in tokens / log / switch, incognito log | Deleted |
+| Sessions, sign-in links (Google, Apple, Telegram; Apple's authorization is also revoked at Apple), crypto wallets, chat sign-in tokens / log / switch, incognito log | Deleted |
 | Profile settings: language, time zone, layout, showcase, mention words, alerts, follows (both ways), notices (inbox), username and display-name history, likeness settings | Deleted (the old username is free again) |
 | Badges, cosmetics, sticker packs, soundboard items, owned voices, roles, pad memberships | Deleted (what they cost stays in the ledger) |
 | **Posts and comments** | **Anonymised where someone replied** (the text stays, shown as "Deleted user", so threads still make sense); **deleted otherwise** (text cleared at once, attachments purged by the feed's sweep). Stories by or of them are removed. |
-| **DMs** | The messages they **sent** are deleted (the other side sees "deleted"; their pictures are purged by the DM sweep); they leave every conversation. Messages other people sent stay theirs. |
+| **DMs** | The messages they **sent** are deleted (the other side sees "deleted"; their pictures are purged by the DM sweep); they leave every conversation. Messages other people sent stay theirs. A `!msg` copy's Camfrog record (`dm_relays`) goes with its message; their own "📨 Sent in Camfrog to …" threads (`conversations.kind = 'cfpm'`, only they were in them) are deleted entirely. Other people's Camfrog threads named after their login, and the copies' records naming it (`dm_relays.from_login` / `to_login`), get the pseudonym instead (`messages.cfLoginForget`) - for the current login and for earlier ones in the login history (`username_history` kind `camfrog`, `login_changes`) unless another account has linked that login since. `dm_relays` is matched by Camfrog login only, never by PATV username (a username can be someone else's Camfrog login). For someone without a PATV account, staff use the per-login tool on /admin/bridge (Chat takedowns: "Delete every line for good" also re-keys the login in these records - audited by the pseudonym; Look up / Export count them), or run `node tools/cflogin.js --login=<login> --admin=<staff username> --reason="<the request>" --forget --apply`. |
 | Clips they made or that are of them (`media`) | Files removed, rows flagged deleted |
 | Chat statistics for the login (`camfrog_userstats`) | Deleted |
 | Votes on posts | Kept, pseudonymous (removing them would change other people's scores) |
 | **Pepe's memory** | The website action **`privacy.forget`** (keyed per attempt, TTL 7 days, retried up to 10 times) asks Pepe to forget the login: `memory_store.delete_user` (profile, aliases, links) + the PM lines waiting to become memories. Once Pepe answers, the login is cleared from the action row too. |
 | The Camfrog login | Released: another account can link it; if the person chats again Pepe makes a new automatic account. |
+| **Pad chat history** (`chat_log`, CL2 / CL6) | The room's record stays: lines under the Camfrog login keep it, their website lines (`u:<id>`) show as a "former member". With **"Also hide my past public chat lines"** ticked (unticked by default, stored as `account_deletions.hide_lines`), the login and the account key join the archive's sticky hidden set when the deletion runs (`src = delete`, never removed by Pepe): their lines are left out of every pad's chat, history, search and downloads, and their names are redacted in other people's lines. Copies already downloaded or quoted aren't reached. |
 
 **Kept, pseudonymised** (needed for the ledger, legal, fraud or safety reasons). The rows keep pointing at the tombstone's
 id; usernames / Camfrog logins written in them as text are replaced by the pseudonym:
@@ -97,9 +98,12 @@ id; usernames / Camfrog logins written in them as text are replaced by the pseud
 - moderation and safety: `admin_audit`, `content_audit` (+ views), `feed_automod`, `feed_filter`, `image_safety_log`,
   `feed_reports`, `user_reports`, `dm_reports` (with the reported message's copy), `feed_bans`, `stage_bans`,
   `adult_gate_cfg` (who last flipped the 18+ pad gate);
+  the pad chat archive's staff audit `chatlog_views` (CL6 fix-up: a staff member's reads and takedowns stay their 2 years,
+  like `content_audit_views`; a row naming the deleted person as its subject - their login / `u:<id>` - gets the pseudonym),
+  `chatlog_reports.decided_by` and `chatlog_holds.by_user` (the staff member who decided / placed them: the tombstone's id);
 - **TAKE IT DOWN** reports (`takedown_cases`, `takedown_hashes`) and creator performer records (`creator_performers`);
 - consent records: `voice_consents` (proof of consent / revocation);
-- fraud: `welcome_keys` (hashes only), `welcome_bonus`;
+- fraud: `welcome_keys` (hashes only), `welcome_bonus`, `sso_rewarded` (a SHA-256 of a Google / Apple sign-in identity whose link achievement was earned - no account id; it stops one identity earning it again on a new account);
 - merges and archives: `account_merge_log`, `account_archive`, `login_changes`.
 
 Not rewritten: Pepe-owned game records stored as JSON blobs (finished markets, wagers, bounties, GTF records) - they

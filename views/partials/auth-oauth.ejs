@@ -18,6 +18,12 @@
     <span><%- verb === 'Sign up' ? t('auth.oauth.signup_google') : t('auth.oauth.signin_google') %></span>
   </a>
   <% } %>
+  <% if (locals.appleSso) { %><%# Sign in with Apple (applesso.js) - Apple's white button style for dark backgrounds: the Apple logo + "Sign in / Sign up with Apple" %>
+  <a class="au-oauth apple" href="/auth/apple<%= q %>">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="#000" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+    <span><%- verb === 'Sign up' ? t('auth.oauth.signup_apple') : t('auth.oauth.signin_apple') %></span>
+  </a>
+  <% } %>
   <% if (locals.tgSso && tgSso.botId) { %><%# 1.99lb: Sign in with Telegram (telegramsso.js - the official Login Widget's popup; public/js/tg-login.js) %>
   <button type="button" class="au-oauth telegram" data-tg-login data-bot="<%= tgSso.botId %>" data-next="<%= next || '' %>" data-lang="<%= locals.lang || 'en' %>">
     <svg viewBox="0 0 240 240" aria-hidden="true" focusable="false"><path fill="#fff" d="M54 117c35-15 58-25 70-30 33-14 40-16 45-16 1 0 3 0 5 2 1 1 1 2 2 4v6c-2 20-10 69-15 91-2 10-6 13-9 13-8 1-14-5-21-10-12-8-18-12-30-20-13-9-5-14 3-22 2-2 37-34 38-37 0-1 0-2-1-3h-3c-1 0-21 14-60 40-6 4-11 6-15 6-5 0-14-3-21-5-8-3-15-4-14-9 0-2 4-5 10-7z"/></svg>

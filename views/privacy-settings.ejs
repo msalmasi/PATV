@@ -49,8 +49,10 @@
     <p class="pv-why"><%- t('inc.what') %></p>
     <ul class="pv-list">
       <li><%- t('inc.what_memory') %></li>
-      <li><%- t('inc.what_web') %></li>
-      <li><%- t('inc.what_media') %></li>
+      <%# review 2 fix-up: new keys for the owner's decision-9 change (incognito hides WHO, not WHAT) - every other language falls
+          back to this English until it is translated, instead of keeping the old promise ("your chat lines aren't shown") -%>
+      <li><%- t(st.account ? 'inc.what_web_someone_acct' : 'inc.what_web_someone') %></li>
+      <li><%- t('inc.what_media_someone') %></li>
       <li><%- t('inc.what_stats') %></li>
     </ul>
     <p class="pv-why"><%- t('inc.what_not') %></p>
@@ -85,8 +87,13 @@
       <li><%- t('pf.what_mem') %></li>
       <li><%- t('pf.what_pm') %></li>
       <li><%- t('pf.what_not') %></li>
+      <%# CL13 fix-up: `!msg` copies (an admin's messages, not a conversation with Pepe) stay - spec §3.10 %>
+      <li><%- t('pf.what_msg') %></li>
       <li><%- t('pf.what_again') %></li>
     </ul>
+    <%# CL6 (decision 14): unticked by default - hides the past pad chat lines too (chatlog.js sticky hidden set, src forget) %>
+    <label class="pv-ca-ask"><input type="checkbox" id="pvPfLines" aria-describedby="pvPfLinesHint"> <%- t('pf.hide_lines') %></label>
+    <p class="ds-meta" id="pvPfLinesHint"><%- t('pf.hide_lines_meta') %></p>
     <form class="pv-ca-add" id="pvPf">
       <input type="text" name="confirm" maxlength="10" autocomplete="off" placeholder="<%- t('pf.type') %>" aria-label="<%- t('pf.type') %>">
       <button type="submit" class="ds-btn danger"><%- t('pf.go') %></button>
@@ -106,6 +113,7 @@
     </ul>
     <% if (!lc.linked) { %>
       <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('lc.unlinked') %></div></div>
+      <p class="ds-meta"><%- t('privacy.mf.unlinked') %></p><%# micfollow %>
     <% } else { %>
       <div class="pv-set" id="pvLcRow">
         <div><b><%- t('lc.switch') %></b><p class="ds-meta"><%- t('lc.identity', { login: lc.login }) %></p></div>
@@ -131,6 +139,22 @@
         <ul class="pv-log" id="pvCaAllow"></ul>
         <form id="pvCaAdd" class="pv-ca-add"><input type="text" name="target" maxlength="40" placeholder="<%- t('ca.allow_ph') %>" aria-label="<%- t('ca.allow_ph') %>" autocomplete="off"> <button type="submit" class="ds-btn"><%- t('ca.allow_add') %></button></form>
       </div>
+      <% if (locals.mf && mf.linked) { %>
+      <%# micfollow: 🎙 the mic stage switch (default on; off keeps ▶ Live but no mic stages) + this person's own mic stages.
+          Client: privacy-livecam.js (POST /api/privacy/micfollow {auto}). %>
+      <div class="pv-ca" id="pvMf">
+        <div class="pv-set">
+          <div><b><%- t('privacy.mf.label') %></b><p class="ds-meta"><%- t('privacy.mf.hint') %></p></div>
+          <label class="ds-switch"><input type="checkbox" id="pvMfSw" <%= mf.auto ? 'checked' : '' %> aria-label="<%- t('privacy.mf.label') %>"><span></span></label>
+        </div>
+        <p class="pv-st" id="pvMfSt" role="status" aria-live="polite"></p>
+        <h3 class="ds-h3"><%- t('privacy.mf.spans_title') %></h3>
+        <ul class="pv-log" id="pvMfSpans">
+          <% if (!mf.spans.length) { %><li><span><%- t('privacy.mf.spans_empty') %></span></li><% } %>
+          <% mf.spans.forEach((s_) => { %><li><span><%- t('privacy.mf.span', { pad: s_.pad, when: when(s_.started), secs: s_.secs }) %></span><span><%= s_.video_secs ? '📡 ' + s_.video_secs + ' s' : '' %></span></li><% }) %>
+        </ul>
+      </div>
+      <% } %>
     <% } %>
     <p class="ds-meta"><%- t('lc.chat') %></p>
   </section>
@@ -159,6 +183,40 @@
       </div>
     <% } %>
     <p class="ds-meta"><%- t('cv.chat') %></p>
+  </section>
+
+  <%# stagefix site (stageleave.js): 🎬 where your cam is on a pad's Stage now ("Take me off this Stage") and the pads that can't
+      put it back yet. Client: public/js/privacy-stage.js (GET /api/privacy/stage, POST /api/stage/leave). %>
+  <section class="ds-card lg" id="stage" aria-labelledby="pvSlH">
+    <h2 class="ds-h2" id="pvSlH"><span class="dot"></span>🎬 <%- t('sl.h2') %></h2>
+    <p class="pv-why"><%- t('sl.what') %></p>
+    <p class="pv-why"><%- t('sl.what_off') %></p>
+    <p class="pv-why"><%- t('sl.what_check') %></p>
+    <% if (!lc.linked) { %>
+      <div class="ds-note"><span class="ds-ic" aria-hidden="true">🔗</span><div><%- t('lc.unlinked') %></div></div>
+    <% } else { %>
+      <div id="pvSl">
+        <%# stagefix final round (stagepin.js, D-17): your level, the asks out to you now, the pads you said yes to %>
+        <div class="pv-set">
+          <div><b><%- t('sl.level') %></b><p class="ds-meta"><%- t('sl.level_meta') %></p></div>
+          <select id="pvSlLevel" aria-label="<%- t('sl.level') %>">
+            <option value="on"><%- t('sl.level_on') %></option>
+            <option value="off"><%- t('sl.level_off') %></option>
+            <option value="never"><%- t('sl.level_never') %></option>
+          </select>
+        </div>
+        <div id="pvSlAsks" hidden><h3 class="ds-h3"><%- t('sl.asks_h') %></h3><ul class="pv-log" id="pvSlAskList"></ul></div>
+        <h3 class="ds-h3"><%- t('sl.on_h') %></h3>
+        <ul class="pv-log" id="pvSlOn"><li><span><%- t('cv.loading') %></span></li></ul>
+        <h3 class="ds-h3"><%- t('sl.off_h') %></h3>
+        <ul class="pv-log" id="pvSlOff"></ul>
+        <h3 class="ds-h3"><%- t('sl.yes_h') %></h3>
+        <p class="ds-meta"><%- t('sl.yes_meta') %></p>
+        <ul class="pv-log" id="pvSlYes"></ul>
+        <p class="pv-st" id="pvSlSt" role="status" aria-live="polite"></p>
+      </div>
+    <% } %>
+    <p class="ds-meta"><%- locals.slChat ? t('sl.chat') : t('sl.chat_livecam') %><% if (locals.slOk) { %> <%- t('sl.chat_ok') %><% } %></p>
   </section>
   <% } %>
 
@@ -208,8 +266,9 @@
   </section>
 </main>
 <script src="/public/js/privacy-settings.js?v=1" defer></script>
-<script src="/public/js/privacy-livecam.js?v=4" defer></script>
+<script src="/public/js/privacy-livecam.js?v=5" defer></script>
 <script src="/public/js/privacy-camaccess.js?v=1" defer></script>
-<script src="/public/js/privacy-forget.js?v=1" defer></script>
-<script src="/public/js/privacy-camviewers.js?v=1" defer></script>
+<script src="/public/js/privacy-forget.js?v=2" defer></script>
+<script src="/public/js/privacy-camviewers.js?v=2" defer></script>
+<script src="/public/js/privacy-stage.js?v=2" defer></script>
 <script src="/public/js/privacy-ghost.js?v=1" defer></script>

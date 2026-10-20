@@ -73,6 +73,14 @@ test.before(async () => {
   // 1.99acd: a browser with notifications on (webpush.js) - the endpoint path and the keys are capabilities, never exported
   await runQuery(`INSERT INTO webpush_subs (endpoint, p256dh, auth, user_id, kinds, vapid_kid, ua, locale, created, updated, last_ok)
                   VALUES ('https://fcm.googleapis.com/fcm/send/PUSH-ENDPOINT-SECRET', 'PUSH-P256DH-SECRET', 'PUSH-AUTH-SECRET', 'me', 'dm,mention', 'k', 'Chrome on Windows', 'es', 1, 1, 2)`);
+  // CL2: the pad chat archive - their own lines (linked login + their web key), another person's line, their downloads + reports
+  await runQuery("INSERT INTO chatlog_rooms (rk, room_id, created) VALUES (1, 'Lab.Room', 1)");
+  await runQuery(`INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (11, 1, 1760000000000, 'msg', 'mecf', 'MY-ROOM-LINE', 'r1', 'a', '{}'),
+                  (12, 1, 1760000001000, 'tx', 'u:me', 'MY-WEB-MIC-LINE', 'r1', 'm', '{}'), (13, 1, 1760000002000, 'msg', 'someoneelse', 'OTHERS-ROOM-LINE', 'r1', 'm', '{}'),
+                  (14, 1, 1760000003000, 'msg', 'mecf', NULL, 'r1', 'm', '{}')`);
+  await runQuery("UPDATE chat_log SET purged = 1 WHERE c = 14");
+  await runQuery("INSERT INTO chatlog_exports (id, user_id, rk, fmt, sys, role, state, created) VALUES ('x1', 'me', 1, 'txt', 0, 'member', 'done', 1)");
+  await runQuery("INSERT INTO chatlog_reports (c, rk, reporter, reason, note, state, created, decided_by) VALUES (13, 1, 'me', 'info', 'MY-REPORT-NOTE', 'open', 1, 'staffer')");
   // the routes, with a header-picked user
   const express = require("express");
   const app = express();
@@ -101,6 +109,12 @@ test("the contents: the member's own data, by section", async () => {
   assert.equal(d.chat.statistics.data.lines, 99);
   assert.equal(d.subscriptions.season_pass_and_prime_time.length, 1);
   assert.deepEqual(d.notices.browser_notifications, [{ id: 1, push_service: "fcm.googleapis.com", kinds: ["dm", "mention"], browser: "Chrome on Windows", locale: "es", created: 1, last_ok: 2 }]);
+  // CL2: their own archived pad-chat lines (an Approved pad's too), never someone else's; a purged line has nothing left to give
+  assert.deepEqual(d.chat.pad_chat_lines, [{ room: "Lab.Room", ts: "2025-10-09T08:53:20.000Z", kind: "chat", text: "MY-ROOM-LINE" },
+                                           { room: "Lab.Room", ts: "2025-10-09T08:53:21.000Z", kind: "mic", text: "MY-WEB-MIC-LINE" }]);
+  assert.equal(d.chat.chat_log_downloads[0].fmt, "txt");
+  assert.equal(d.chat.chat_line_reports[0].note, "MY-REPORT-NOTE");
+  assert.equal(d.chat.chat_line_reports[0].decided_by, undefined, "not who handled it");
 });
 
 test("adultgate site: the age confirmation (users.age_confirmed_at + its wording's version) and the Creators one are in the account section", async () => {
@@ -123,7 +137,23 @@ test("never a secret, never someone else's private data", async () => {
   const s = JSON.stringify(await X.collect("me"));
   for (const v of SECRETS.concat(["PUSH-ENDPOINT-SECRET", "PUSH-P256DH-SECRET", "PUSH-AUTH-SECRET"])) assert.ok(!s.includes(v), "leaked: " + v);
   assert.ok(!s.includes("REPORT-ABOUT-ME"), "reports others filed about them are not theirs to read");
+  assert.ok(!s.includes("OTHERS-ROOM-LINE"), "CL2: other people's pad chat lines are theirs");
   assert.ok(!/"(password|resetPasswordToken|streamKey|emailVerificationToken|token_hash|code_hash|signature)"/.test(s), "no secret columns at all");
+});
+
+test("Sign in with Apple: the link is in the export (Apple's id, the relay + forwarding flags) but never Apple's refresh token, even encrypted", async () => {
+  await require(path.join(repo, "ssolinks")).init();        // the Apple columns
+  await runQuery(`INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, name, linked_at, refresh_token_enc, email_relay, email_off)
+                  VALUES ('apple', '001234.applesub.0001', 'me', 'self', 'oidc', 'q1@privaterelay.appleid.com', 'Ex', 1, 'v1.APPLE-REFRESH-SECRET.x.y', 1, 0)`);
+  try {
+    const d = await X.collect("me");
+    const a = d.connections.sign_in_links.find((l) => l.provider === "apple");
+    assert.deepEqual([a.subject, a.email, a.email_relay, a.email_off], ["001234.applesub.0001", "q1@privaterelay.appleid.com", 1, 0]);
+    assert.ok(!("refresh_token_enc" in a), "the column itself is left out");
+    assert.ok(!JSON.stringify(d).includes("APPLE-REFRESH-SECRET"));
+  } finally {
+    await runQuery("DELETE FROM sso_links WHERE provider = 'apple' AND user_id = 'me'");
+  }
 });
 
 test("the job: a zip with patv-data.json + README, a notice, the owner's download only; one a day; files expire", async () => {

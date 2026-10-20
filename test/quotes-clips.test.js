@@ -165,29 +165,118 @@ test("web: ✂️ Clip chat posts a quote card from the picked lines (signed in,
   assert.equal(p2.body, p.body, "a quote's words can't be rewritten");
 });
 
-test("private people are 'someone': at creation (hidden_h) and after the fact; their name is blanked inside other lines", async () => {
-  await sync({ events: [], rooms: [], hidden_h: [hash("shycf")] });
+test("private people (the owner's decision-9 change): incognito only = 'someone' with their words, !bridge hide or a list that doesn't say why = left out - at creation and after the fact; their name is blanked inside other lines", async () => {
+  // a line of bob's that names shy (said before shy hides)
+  await sync({ rooms: [], events: [ev("message", { user: u("bobcf"), text: "ask shycf about the vault" })] });
+  // (Pepe CL1: a !bridge hide is an event AND a list entry - CL2 fix-up: the event says which kind, so !bridge show un-hides it)
+  await sync({ events: [{ op: "event", id: "q-hidden-" + (++seq), ts: new Date().toISOString(), type: "privacy.hidden", data: { h: hash("shycf"), scope: "bridge" } }],
+               rooms: [], hidden_h: [hash("shycf")] });
   assert.equal(quotes.isHidden("shycf"), true);
+  const CV = require(path.join(repo, "chatlogview"));
+  const CL0 = require(path.join(repo, "chatlog"));
+  for (let i = 0; i < 50 && !CL0.isHiddenKey("shycf"); i++) await new Promise((res) => setTimeout(res, 20));   // the sync never waits for the set
+  await CV.scheduleNames();
+  // CL3: a hidden person's own line is out of every viewer's view (left out, never "someone") - the web route refuses to
+  // quote it, with the one answer it gives for any line outside the quoter's view
   const r = await post(`/api/rooms/${SLUG}/quote`, U.alice, { cs: [cOf("shy says something about bobcf"), cOf("that was funny")] });
-  assert.equal(r.status, 200, JSON.stringify(r.d));
-  const p = await store.get(r.d.post.id, U.alice);
-  assert.equal(p.quote.lines[0].name, "someone");
-  assert.doesNotMatch(p.body, /shycf/);
-  const row = (await getQuery("SELECT * FROM feed_quotes WHERE post_id = ?", [p.id]))[0];
-  assert.doesNotMatch(row.lines + row.logins, /shycf/, "never stored");
-  // bob goes private later: shown and stored as someone from then on, also inside other lines
+  assert.equal(r.status, 403, JSON.stringify(r.d));
+  assert.equal(r.d.code, "not_quotable");
+  // CL3 fix-up: a quote of someone ELSE's line takes the live chat's redaction - the hidden person's name inside it is "someone",
+  // in the stored lines and the post's text (it was republished as written while /live showed "someone")
+  quotes._hits.clear();
+  const rw = await post(`/api/rooms/${SLUG}/quote`, U.alice, { cs: [cOf("ask shycf about the vault")] });
+  assert.equal(rw.status, 200, JSON.stringify(rw.d));
+  const pw = await store.get(rw.d.post.id, U.alice);
+  assert.equal(pw.quote.lines[0].text, "ask someone about the vault");
+  const roww = (await getQuery("SELECT * FROM feed_quotes WHERE post_id = ?", [pw.id]))[0];
+  assert.doesNotMatch(roww.lines + roww.logins + (await store.getRow(pw.id)).body, /shycf/, "never stored");
+  // Pepe's own !quote: a hidden person's lines are left out of what it picks, and their name inside other lines is "someone"
+  const pq = await post("/api/bridge/quote", null, { password: "bot", room: ROOM.id, camfrog: "alicecf", spec: { mode: "last", n: 3 } });
+  assert.equal(pq.status, 200, JSON.stringify(pq.d));
+  const row = (await getQuery("SELECT * FROM feed_quotes ORDER BY rowid DESC LIMIT 1"))[0];
+  assert.doesNotMatch(row.lines + row.logins + (await store.getRow(row.post_id)).body, /shycf|shy says/, "never stored");
+  assert.match(row.lines, /ask someone about the vault/);
+  // shy shows again (Pepe's explicit un-hide - the sticky set never forgets on its own), then bob goes private later: shown
+  // and stored as someone from then on, also inside other lines
+  await sync({ events: [{ op: "event", id: "q-shown-" + (++seq), ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash("shycf"), scope: "bridge" } }],
+               rooms: [], hidden_h: [] });
+  const CL = require(path.join(repo, "chatlog"));
+  for (let i = 0; i < 50 && CL.isHiddenKey("shycf"); i++) await new Promise((res) => setTimeout(res, 20));   // the sync never waits for the set
+  assert.equal(CL.isHiddenKey("shycf"), false, "un-hidden by Pepe's explicit event");
   quotes.setHidden([]);
   quotes._hits.clear();
   const r2 = await post(`/api/rooms/${SLUG}/quote`, U.alice, { cs: [cOf("hey alice, how is it going"), cOf("shy says something about bobcf")] });
-  quotes.setHidden([hash("shycf"), hash("bobcf")]);
-  const p2 = await store.get(r2.d.post.id, U.alice);
+  // the owner's decision-9 change: they go INCOGNITO (Pepe's report - the sticky set says why): shown as someone, with their words
+  // (hubhidden's half: setHidden(all, leftOut) - none of them left out)
+  quotes.setHidden([hash("shycf"), hash("bobcf")], []);
+  await CL.hideNow(["shycf", "bobcf"], "pepe", "incognito");
+  await CV.scheduleNames();
+  let p2 = await store.get(r2.d.post.id, U.alice);
   assert.deepEqual(p2.quote.lines.map((l) => l.name), ["someone", "someone"]);
   assert.match(p2.quote.lines[1].text, /about someone/, "bob's login inside shy's line is blanked");
   const row2 = (await getQuery("SELECT * FROM feed_quotes WHERE post_id = ?", [p2.id]))[0];
   assert.doesNotMatch(row2.lines + row2.logins + (await store.getRow(p2.id)).body, /bobcf/, "anonymised for good");
-  // Pepe's !quote refuses a private target outright
+  assert.deepEqual(JSON.parse(row2.lines).map((l) => l.h), [hash("bobcf"), hash("shycf")], "the stored lines keep only the one-way hash");
+  // shy also types !bridge hide: her line is LEFT OUT - the card, the post's text (search, previews, the address) and the count
+  await CL.hideNow(["shycf"], "pepe", "bridge");
+  p2 = await store.get(r2.d.post.id, U.alice);
+  assert.deepEqual(p2.quote.lines.map((l) => [l.name, l.text]), [["someone", "hey alice, how is it going"]]);
+  assert.equal(p2.quote.left_out, 1);
+  assert.doesNotMatch(p2.body + (await store.getRow(p2.id)).body, /shy says/, "her words are gone from the stored text too");
+  // (hubhidden-site's card: the count says a line isn't shown - never whose or what)
+  let html = await (await fetch(base + p2.url, { headers: { "x-test-user": U.carol.userId } })).text();
+  assert.match(html, /1 line not shown \(private\)/);
+  assert.doesNotMatch(html, /shy says/);
+  // ...and !bridge show again (still incognito): her line is back, as "someone"
+  await sync({ events: [{ op: "event", id: "q-shown-" + (++seq), ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash("shycf"), scope: "bridge" } }], rooms: [] });
+  for (let i = 0; i < 50 && CL.hiddenKind(hash("shycf")) !== "anon"; i++) await new Promise((res) => setTimeout(res, 20));
+  p2 = await store.get(r2.d.post.id, U.alice);
+  assert.deepEqual([p2.quote.lines.length, p2.quote.left_out], [2, 0]);
+  assert.match((await store.getRow(p2.id)).body, /<someone> shy says something about someone/);
+  // an older Pepe's list alone (hidden_h; the sticky set doesn't know why yet): left out - fail closed
+  quotes.setHidden([hash("shycf"), hash("bobcf"), hash("carolcf")]);
+  assert.deepEqual([quotes.isHidden("carolcf"), quotes.isLeftOut("carolcf")], [true, true]);
+  quotes._hits.clear();
+  const r3 = await post(`/api/rooms/${SLUG}/quote`, U.alice, { cs: [cOf("hello room"), cOf("i am talking on the mic")] });
+  assert.equal(r3.status, 200, JSON.stringify(r3.d));
+  assert.deepEqual([r3.d.lines, r3.d.left_out], [1, 1], "carol's line is not quoted at all");
+  assert.doesNotMatch(JSON.stringify(await getQuery("SELECT lines, logins FROM feed_quotes WHERE post_id = ?", [r3.d.post.id])), /carol|talking on the mic/);
+  quotes._hits.clear();
+  const r4 = await post(`/api/rooms/${SLUG}/quote`, U.alice, { cs: [cOf("i am talking on the mic")] });
+  assert.equal(r4.status, 400, "only her lines: nothing to quote");
+  // (hubhidden-site's card) a quote whose every line is left out now shows a note - never the stored text
+  const p3 = await store.get(r3.d.post.id, U.carol);
+  quotes.setHidden([hash("shycf"), hash("bobcf"), hash("carolcf"), hash("alicecf")]);
+  const p5 = await store.get(r3.d.post.id, U.carol);
+  assert.equal(p3.quote.lines.length, 1);
+  assert.deepEqual([p5.quote.lines.length, p5.quote.left_out, p5.body], [0, 1, ""]);
+  html = await (await fetch(base + p5.url, { headers: { "x-test-user": U.carol.userId } })).text();
+  assert.match(html, /keep their lines private now/);
+  assert.doesNotMatch(html, /hello room/);
+  quotes.setHidden([hash("shycf"), hash("bobcf"), hash("carolcf")]);
+  // either sticky set still reading at start-up (here hubhidden's): no quote is made, a card shows no line and nothing is stored,
+  // and tips, mentions, boost and go-live (quotes.isHidden) hide everyone meanwhile
+  const HH = require(path.join(repo, "hubhidden"));
+  const hhLoading = HH.loading;
+  HH.loading = () => true;
+  try {
+    quotes._hits.clear();
+    assert.equal((await post(`/api/rooms/${SLUG}/quote`, U.bob, { cs: [cOf("that was funny")] })).status, 503);
+    const before = (await store.getRow(rw.d.post.id)).body;
+    const pl = await store.get(rw.d.post.id, U.alice);
+    assert.deepEqual([pl.quote.lines.length, (await store.getRow(rw.d.post.id)).body], [0, before], "nothing shown, nothing stored");
+    assert.equal(quotes.isHidden("anyonecf"), true);
+  } finally { HH.loading = hhLoading; }
+  // Pepe's !quote refuses a private target outright (any kind)
   const q = await post("/api/bridge/quote", null, { password: "bot", room: ROOM.id, camfrog: "alicecf", spec: { mode: "user", login: "bobcf", n: 2 } });
   assert.equal(q.status, 400);
+  // (the next tests quote and clip carol, bob and shy: they show themselves again)
+  quotes.setHidden([]);
+  for (const l of ["shycf", "bobcf"]) {             // (one sync each: two un-hides at once in a small set are held for an operator)
+    await sync({ events: [{ op: "event", id: "q-shown-" + (++seq), ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash(l), scope: "incognito" } }], rooms: [] });
+  }
+  for (let i = 0; i < 50 && (CL.isHiddenKey("shycf") || CL.isHiddenKey("bobcf")); i++) await new Promise((res) => setTimeout(res, 20));
+  assert.deepEqual([CL.hiddenKind(hash("shycf")), CL.hiddenKind(hash("bobcf"))], [null, null]);
 });
 
 test("Remove me: only someone quoted; anonymises just them; idempotent; the author is told", async () => {
@@ -275,8 +364,11 @@ test("🔊 Clip: the request's rules (signed in, linked, the line in the feed, t
   r = await post(`/api/rooms/${SLUG}/micclip`, U.admin, { tx: TX });
   assert.equal(r.status, 200, "a site admin is exempt (Pepe makes the final call)");
   await setClip(true);
-  assert.equal((await post(`/api/rooms/${SLUG}/micclip`, U.alice, { tx: "tx-" + "f".repeat(16) })).status, 404, "a line that isn't in the feed");
-  assert.equal((await post(`/api/rooms/${SLUG}/micclip`, U.alice, { tx: "nope" })).status, 404);
+  // CL3 fix-up: a line that isn't there gets the same one answer as one outside the clipper's view (no existence oracle)
+  for (const tx of ["tx-" + "f".repeat(16), "nope"]) {
+    const x = await post(`/api/rooms/${SLUG}/micclip`, U.alice, { tx });
+    assert.deepEqual([x.status, x.d.code, x.d.error], [403, "not_quotable", "That mic line can't be clipped."], "a line that isn't in the feed: " + tx);
+  }
   r = await post(`/api/rooms/${SLUG}/micclip`, U.alice, { tx: TX });
   assert.equal(r.status, 200);
   const again = await post(`/api/rooms/${SLUG}/micclip`, U.alice, { tx: TX });
@@ -470,4 +562,26 @@ test("🔊 Clip cap (1.99sh): a request Pepe never answers stops holding a slot 
     assert.equal((await post(`/api/rooms/${SLUG}/micclip/${d.d.id}/discard`, U.gus, {})).status, 200);
     assert.equal(relay._jobs.has(d.d.id), false, "Pepe never gets a discarded request");
   } finally { micclip._setClock(() => Date.now()); micclip._clips.clear(); }
+});
+
+test("CL3 fix-up: a mic clip's caption (the transcript, republished on the pad) takes the live chat's redaction of hidden names", async () => {
+  const CV = require(path.join(repo, "chatlogview"));
+  const CL = require(path.join(repo, "chatlog"));
+  await sync({ rooms: [], events: [ev("message", { user: u("zedcf", "Zed Z"), text: "zed was here" })] });
+  await sync({ events: [{ op: "event", id: "q-zh-" + (++seq), ts: new Date().toISOString(), type: "privacy.hidden", data: { h: hash("zedcf"), scope: "bridge" } }], rooms: [] });
+  for (let i = 0; i < 50 && !CL.isHiddenKey("zedcf"); i++) await new Promise((res) => setTimeout(res, 20));
+  await CV.scheduleNames();
+  const mid = "ef".repeat(8);
+  fs.writeFileSync(path.join(process.env.MEDIA_DIR, mid + ".m4a"), M4A);
+  const now = Date.now();
+  await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, subject_login)
+                  VALUES (?, 'audio', 'audio/mp4', ?, ?, 6, 'carolcf', 'bobcf', ?, ?, ?, 0, 0, NULL)`, [mid, mid + ".m4a", M4A.length, ROOM.id, now, now + 86400e3]);
+  micclip._setDeps({ makePoster: async () => true });
+  const r = await post("/api/bridge/micclip/post", null, { password: "bot", media: mid, by: "bobcf", user: "bob", speakers: ["carolcf"],
+    caption: "Zed Z and @zedcf owe me one", secs: 6 });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  const row = await store.getRow(r.d.id);
+  assert.doesNotMatch(String(row.title) + String(row.body), /zed/i, "the hidden person's names never reach the post");
+  assert.match(String(row.title), /someone and someone owe me one/);
+  await sync({ events: [{ op: "event", id: "q-zs-" + (++seq), ts: new Date().toISOString(), type: "privacy.shown", data: { h: hash("zedcf"), scope: "bridge" } }], rooms: [] });
 });

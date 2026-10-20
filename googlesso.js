@@ -229,8 +229,8 @@ function register(app, { addUser }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     try {
       if (!(await sso.linkOf("google", req.user.userId))) return res.json({ ok: true, removed: false });
-      await sso.guardUnlink(req.user.userId, "google");
-      res.json({ ok: true, removed: await sso.removeLink("google", req.user.userId) });
+      // (the guard and the delete in one transaction: an Apple / Telegram / Plex unlink at the same moment can't also pass it)
+      res.json({ ok: true, removed: await sso.unlinkGuarded(req.user.userId, "google", () => sso.removeLink("google", req.user.userId)) });
     } catch (e) {
       if (e && e.refuse) return res.status(e.status).json({ ok: false, error: e.message, code: e.code });
       console.error("[googlesso] unlink:", e && e.message);

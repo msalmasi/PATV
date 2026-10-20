@@ -20,6 +20,7 @@
       <li><%- t('acctdel.what.pat') %></li>
       <li><%- t('acctdel.what.camfrog') %></li>
       <li><%- t('acctdel.what.kept') %></li>
+      <li><%- t('acctdel.what.chat') %></li>
       <li><%- t('acctdel.what.grace', { days: graceDays }) %></li>
     </ul>
     <p class="hint"><%- t('acctdel.export_first', { link: '<a href="/settings/account#data">' + t('settings.data.download') + '</a>' }) %></p>
@@ -59,6 +60,9 @@
       <% } %>
       <div class="field"><label class="lbl" for="delConfirm"><%- t('acctdel.type', { name: '<code>' + username.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]) + '</code>' }) %></label>
         <input type="text" id="delConfirm" name="confirm" autocomplete="off" spellcheck="false" data-want="<%= username %>"></div>
+      <%# CL6 (decision 14): unticked by default (accountdelete.js hide_lines -> the pad chat archive's sticky hidden set) %>
+      <div class="field" style="grid-column:1/-1"><label class="acctdel-ck"><input type="checkbox" id="delHideLines" name="hide_lines" aria-describedby="delHideLinesHint"> <%- t('acctdel.hide_lines') %></label>
+        <span class="hint" id="delHideLinesHint"><%- t('acctdel.hide_lines_meta') %></span></div>
       <div style="grid-column:1/-1"><button class="btn" type="submit" id="delBtn" disabled><%- t('acctdel.button', { days: graceDays }) %></button></div>
     </form>
     <span class="status" id="delStatus" role="status" aria-live="polite"></span>
@@ -68,7 +72,9 @@
 <style>
   .pe .acctdel-list { margin: 0 0 var(--ds-sp-3); padding-left: 20px; display: grid; gap: 6px; color: var(--ds-text-2); line-height: 1.5; }
   .pe #delBtn:not(:disabled) { background: var(--ds-danger-fill); border-color: var(--ds-danger-line); color: var(--ds-danger-ink) !important; }
+  .pe .acctdel-ck { display: flex; gap: 8px; align-items: center; min-height: 44px; cursor: pointer; color: var(--ds-text); }
+  .pe .acctdel-ck input { width: auto; min-height: 0; margin: 0; }
 </style>
-<script src="/public/js/account-delete.js?v=1" defer></script>
+<script src="/public/js/account-delete.js?v=2" defer></script>
 </body>
 </html>

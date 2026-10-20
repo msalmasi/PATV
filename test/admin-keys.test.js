@@ -144,6 +144,105 @@ test("an owner mints, rotates, sets scopes / mode, grants, flips a family and th
   await post("/api/admin/keys/settings", "own", { bad_key: "fallback", events: "observe" });
 });
 
+test("1.99add: an owner un-hides one chat login in Pepe's sticky hidden set - audited with the hash only; everyone else is refused", async () => {
+  const HH = require(path.join(repo, "hubhidden"));
+  const sh = HH.hash("shycf");
+  await HH.note([sh]);
+  const j = await (await get("/api/admin/keys", "adm")).json();
+  assert.deepEqual(Object.keys(j.seam.hidden).sort(), ["absent_once", "anonymised", "back", "booted", "bridge", "clock_s", "dup", "full", "held", "held_batches", "incognito",
+                                                       "kept", "late", "left_out", "older_unhid", "pepe", "released", "resolved", "size", "stale", "stored", "unknown",
+                                                       "untimed", "web"],
+                   "sizes, counts per kind and held batch ids only, never a hash");
+  assert.ok(Object.entries(j.seam.hidden).every(([k, v]) => k === "held_batches" ? Array.isArray(v)
+    : v === null || typeof v === "number" || typeof v === "boolean" || v === "older" || v === "explicit" || v === "kinded"));
+  assert.deepEqual([j.seam.hidden.unknown, j.seam.hidden.left_out], [1, 1], "an older Pepe's list: kind not known - left out");
+  assert.ok(!JSON.stringify(j.seam.hidden).includes(sh));
+  assert.match(await (await get("/admin/keys", "adm")).text(), /id="akUnhide"/);
+  let r = await post("/api/admin/hubseam/unhide", "adm", { login: "shycf", reason: "testing" });
+  assert.equal(r.status, 403);
+  assert.equal((await r.json()).code, "owner_only", "an Admin without the owner role");
+  assert.equal((await post("/api/admin/hubseam/unhide", "own", { login: "shycf", reason: "testing" }, { origin: "https://evil.example" })).status, 403, "a foreign origin");
+  assert.equal((await (await post("/api/admin/hubseam/unhide", "own", { login: "shycf" })).json()).code, "reason");
+  assert.equal((await (await post("/api/admin/hubseam/unhide", "own", { h: "zz", reason: "testing" })).json()).code, "bad_key");
+  assert.equal(HH.isHiddenHash(sh), true, "nothing changed yet");
+  assert.equal((await audits("hubseam.unhide")).length, 0);
+  r = await post("/api/admin/hubseam/unhide", "own", { login: "ShyCF", reason: "!bridge show on an older Pepe" });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("cache-control"), "no-store");
+  const d = await r.json();
+  assert.deepEqual([d.ok, d.h, d.was_hidden, d.held], [true, sh, true, null]);
+  assert.equal(HH.isHiddenHash(sh), false);
+  const a = await audits("hubseam.unhide");
+  assert.equal(a.length, 1);
+  assert.equal(a[0].admin_name, "boss");
+  assert.deepEqual(JSON.parse(a[0].detail), { h: sh, kind: "all", was_hidden: true, kinds: ["unknown"] });
+  // refix 4: one kind at a time - incognito only leaves !bridge hide in place (and says so)
+  await HH.noteSync({ list: [sh], bridge: [sh], incog: [sh] });
+  assert.equal((await (await post("/api/admin/hubseam/unhide", "own", { login: "shycf", kind: "nope", reason: "testing" })).json()).code, "bad_kind");
+  const k = await (await post("/api/admin/hubseam/unhide", "own", { login: "shycf", kind: "incognito", reason: "she turned it off in chat" })).json();
+  assert.deepEqual([k.ok, k.kind, k.was_hidden, k.kinds, k.still], [true, "incognito", true, ["bridge", "incognito"], ["bridge"]]);
+  assert.deepEqual([HH.isHiddenHash(sh), HH.isLeftOutHash(sh)], [true, true], "still on !bridge hide: left out");
+});
+
+test("1.99add refix: an owner decides a held batch of the hidden set (approve = un-hide them) - listed on the page by id and count only, audited, everyone else refused", async () => {
+  const HH = require(path.join(repo, "hubhidden"));
+  const [x, y] = [HH.hash("xcf"), HH.hash("ycf")];
+  const t = Date.now() - 60000;
+  await HH.noteSync({ list: [x, y], session: "k1", sent: new Date(t).toISOString() });
+  await HH.noteSync({ list: [y], session: "k2", sent: new Date(t + 1500).toISOString() });   // an older Pepe restarted: x is missing
+  const j = await (await get("/api/admin/keys", "adm")).json();
+  assert.equal(j.seam.hidden.held_batches.length, 1);
+  const b = j.seam.hidden.held_batches[0];
+  assert.deepEqual([b.kind, b.n, Object.keys(b).sort()], ["restart", 1, ["at", "id", "kind", "n", "other"]]);
+  const html = await (await get("/admin/keys", "adm")).text();
+  assert.match(html, /id="akHeld"/);
+  assert.match(html, new RegExp(`data-held="${b.id}"`));
+  assert.ok(!html.includes(x) && !html.includes(y), "never a hash on the page");
+  let r = await post("/api/admin/hubseam/held", "adm", { id: b.id, approve: true, reason: "testing" });
+  assert.equal((await r.json()).code, "owner_only");
+  assert.equal((await post("/api/admin/hubseam/held", "own", { id: b.id, approve: true, reason: "testing" }, { origin: "https://evil.example" })).status, 403);
+  assert.equal((await (await post("/api/admin/hubseam/held", "own", { id: b.id, approve: true })).json()).code, "reason");
+  assert.equal((await (await post("/api/admin/hubseam/held", "own", { id: "zz", approve: true, reason: "testing" })).json()).code, "not_found");
+  assert.equal(HH.isHiddenHash(x), true, "nothing changed yet");
+  assert.equal((await audits("hubseam.held")).length, 0);
+  r = await post("/api/admin/hubseam/held", "own", { id: b.id, approve: true, reason: "x typed !bridge show before Pepe restarted" });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await r.json(), { ok: true, id: b.id, approved: true, removed: 1, still_hidden: 0 });
+  assert.equal(HH.isHiddenHash(x), false);
+  assert.equal(HH.isHiddenHash(y), true);
+  const a = await audits("hubseam.held");
+  assert.equal(a.length, 1);
+  assert.deepEqual(JSON.parse(a[0].detail), { id: b.id, kind: "restart", n: 1, approve: true });
+  assert.equal((await (await post("/api/admin/hubseam/held", "own", { id: b.id, approve: false, reason: "again" })).json()).code, "decided");
+});
+
+test("1.99add refix 3: an owner looks a chat login up in the hidden set (kinds, held in which batch, missing once) - changes nothing, audited with the hash only (refix 4), owner-only and same-origin", async () => {
+  const HH = require(path.join(repo, "hubhidden"));
+  const [x, y] = [HH.hash("chkxcf"), HH.hash("chkycf")];
+  const t = Date.now() - 30000;
+  await HH.noteSync({ list: [x, y], session: "c1", sent: new Date(t).toISOString() });
+  await HH.noteSync({ list: [y], session: "c2", sent: new Date(t + 1500).toISOString() });   // an older Pepe restarted: x is missing
+  const b = (await (await get("/api/admin/keys", "adm")).json()).seam.hidden.held_batches.find((z) => z.n === 1 && z.kind === "restart");
+  const n0 = (await audits("hubseam.check")).length + (await audits("hubseam.unhide")).length;
+  let r = await post("/api/admin/hubseam/check", "adm", { login: "chkxcf" });
+  assert.equal((await r.json()).code, "owner_only", "an Admin without the owner role");
+  assert.equal((await post("/api/admin/hubseam/check", "own", { login: "chkxcf" }, { origin: "https://evil.example" })).status, 403, "a foreign origin");
+  assert.equal((await (await post("/api/admin/hubseam/check", "own", { h: "zz" })).json()).code, "bad_key");
+  r = await post("/api/admin/hubseam/check", "own", { login: "ChkXCF" });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("cache-control"), "no-store");
+  const d = await r.json();
+  assert.deepEqual([d.ok, d.h, d.hidden, d.left_out, d.kinds, d.absent_once, d.held && d.held.kind, d.held && d.held.id],
+                   [true, x, true, true, [{ kind: "unknown", src: "pepe" }], false, "restart", b.id]);
+  assert.deepEqual((await (await post("/api/admin/hubseam/check", "own", { h: y })).json()).held, null);
+  assert.equal((await (await post("/api/admin/hubseam/check", "own", { login: "nobodyatall" })).json()).hidden, false);
+  const ck = await audits("hubseam.check");
+  assert.equal(ck.length + (await audits("hubseam.unhide")).length, n0 + 3, "every look-up leaves a trace (incognito hides WHO)");
+  assert.deepEqual(JSON.parse(ck[ck.length - 1].detail), { h: HH.hash("nobodyatall") }, "the hash only - never the login, nor the answer");
+  assert.equal(HH.isHiddenHash(x), true, "...and changes nothing");
+});
+
 test("the nav entry and the page's own script", () => {
   const nav = fs.readFileSync(path.join(repo, "views", "partials", "admin-nav.ejs"), "utf8");
   assert.match(nav, /\['keys', '\/admin\/keys', '🔑', 'Bot keys & chat seam'/);
@@ -153,4 +252,11 @@ test("the nav entry and the page's own script", () => {
   const js = fs.readFileSync(path.join(repo, "public", "js", "admin-keys.js"), "utf8");
   assert.ok(!/localStorage|sessionStorage|console\.log/.test(js), "a fresh key is never stored or logged by the page");
   assert.ok(view.includes('id="akCtlGet"') && js.includes("body.control_get = $('akCtlGet').value"), "the GET-claim switch is on the page and the script sends it");
+  assert.ok(view.includes('id="akUnhide"') && js.includes("post('/api/admin/hubseam/unhide', body)"), "1.99add: the un-hide form is on the page and the script sends it");
+  assert.ok(js.includes("var body = isHash ? { h: key.slice(1).toLowerCase(), kind: kind, reason: why } : { login: key, kind: kind, reason: why };"),
+            "1.99add refix: only '#<20 hex>' is sent as a hash - a 20-hex chat login is a login; refix 4: with the kind");
+  assert.ok(view.includes('id="akUnhideKind"') && view.includes("'admkeys.seam.held_legacy'"), "refix 4: the kind picker and the legacy batches");
+  assert.ok(view.includes('id="akHeld"') && js.includes("post('/api/admin/hubseam/held', { id: id, approve: approve, reason: why })"), "the held batches and their buttons");
+  assert.ok(view.includes('id="akCheck"') && js.includes("post('/api/admin/hubseam/check', body)") && view.includes("'admkeys.seam.held_order'"),
+            "1.99add refix 3: the Check button, and the out-of-order kind");
 });

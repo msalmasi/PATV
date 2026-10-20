@@ -133,6 +133,10 @@ test("a merge moves a row from EVERY user-linked table, folds collisions, and le
   for (const [c, s, b] of [["C_ot", OLD, "hi from old"], ["C_ot", THIRD, "hi old"], ["C_nt", NEW, "hi from new"], ["C_on", OLD, "note to self"]]) {
     await runQuery("INSERT INTO messages (conversation_id, sender_id, body, created_at) VALUES (?, ?, ?, 1)", [c, s, b]);
   }
+  // CL2: the pad chat archive - the old account's web lines ("u:<id>") and its place in the sticky hidden set
+  const CLh = require(path.join(repo, "chatlog")).hash;
+  await runQuery("INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (777001, 1, 1, 'msg', ?, 'said on the web', 'r1', 'm', '{}')", ["u:" + OLD]);
+  await runQuery("INSERT INTO chatlog_hidden (h, since, src) VALUES (?, 1, 'forget')", [CLh("u:" + OLD)]);
 
   // 3) the merge (the duplicate path - it shares every step with the Twitch / Discord merge)
   const r = await stale.mergeDuplicate(OLD, NEW);
@@ -186,6 +190,10 @@ test("a merge moves a row from EVERY user-linked table, folds collisions, and le
   assert.equal((await getQuery("SELECT body FROM messages WHERE conversation_id = 'C_on'"))[0].body, "note to self", "kept");
   const g = await getQuery("SELECT * FROM conversation_members WHERE conversation_id = 'C_g' AND user_id = ?", [NEW]);
   assert.equal(g.length, 1); assert.equal(g[0].role, "owner", "the old account's group ownership carried");
+  // CL2: the web lines follow the account; hidden "u:<old>" hides "u:<new>" too (same source: a forget-me stays protected)
+  assert.equal((await getQuery("SELECT who FROM chat_log WHERE c = 777001"))[0].who, "u:" + NEW);
+  assert.equal((await getQuery("SELECT src FROM chatlog_hidden WHERE h = ?", [CLh("u:" + NEW)]))[0].src, "forget");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM chatlog_private_ever WHERE h = ?", [CLh("u:" + NEW)]))[0].n, 1);
 
   // the record
   const a = (await getQuery("SELECT * FROM account_archive WHERE userId = ?", [OLD]))[0];
@@ -225,4 +233,73 @@ test("Twitch / Discord merge: posts, follows, DMs, stories and badges come along
   const log = (await getQuery("SELECT * FROM account_merge_log WHERE from_id = ?", [A]))[0];
   assert.ok(log && log.via === "twitch link" && log.pat === 700);
   assert.equal((await getQuery("SELECT tier FROM account_archive WHERE userId = ?", [A]))[0].tier, "MERGE");
+});
+
+test("Sign in with Apple: a merged-away Apple link moves with its token and relay flags; if the target has its own, it is folded away and revoked at Apple (queued)", async () => {
+  await ready;
+  process.env.SECRET_KEY = process.env.SECRET_KEY || "test-secret";    // applesso's token key derives from it
+  const { tx } = require(path.join(repo, "dbUtils"));
+  await require(path.join(repo, "ssolinks")).init();      // the Apple columns
+  const AS = require(path.join(repo, "applesso"));
+  const A1 = "u-apl-from-1", B1 = "u-apl-into-1", A2 = "u-apl-from-2", B2 = "u-apl-into-2";
+  for (const id of [A1, B1, A2, B2]) await user(id);
+  const ins = (uid, sub, tok) => runQuery(`INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, linked_at, refresh_token_enc, email_relay, email_off)
+                                           VALUES ('apple', ?, ?, 'self', 'oidc', 'r@privaterelay.appleid.com', 1, ?, 1, 1)`, [sub, uid, AS.encryptToken(tok, sub)]);
+  // 1) the target has no Apple link: it moves, columns and all, and nothing is revoked
+  await ins(A1, "000111.m.0001", "r-m-1");
+  await tx(() => AM.moveUserRows(A1, B1));
+  const moved = (await getQuery("SELECT * FROM sso_links WHERE provider = 'apple' AND subject = '000111.m.0001'"))[0];
+  assert.equal(moved.user_id, B1);
+  assert.deepStrictEqual([moved.email_relay, moved.email_off], [1, 1]);
+  assert.equal(AS.decryptToken(moved.refresh_token_enc, moved.subject), "r-m-1");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM apple_revokes WHERE apple_sub = '000111.m.0001'"))[0].n, 0);
+  // 2) both have one: the target keeps its own, the merged-away one goes - and its revocation is queued (due now)
+  await ins(A2, "000111.m.0002", "r-m-2");
+  await ins(B2, "000111.m.0003", "r-m-3");
+  const out = await tx(() => AM.moveUserRows(A2, B2));
+  assert.equal(out.folded["sso_links (apple, revocation queued)"], 1);
+  assert.deepStrictEqual((await getQuery("SELECT subject FROM sso_links WHERE provider = 'apple' AND user_id IN (?, ?)", [A2, B2])).map((r) => r.subject), ["000111.m.0003"]);
+  const q = (await getQuery("SELECT * FROM apple_revokes WHERE apple_sub = '000111.m.0002'"))[0];
+  assert.ok(q && q.next_at <= Date.now() + 1000, "queued, due at once");
+  assert.equal(AS.decryptToken(q.token_enc, q.apple_sub), "r-m-2");
+});
+
+test("CL13: a merge keeps Camfrog threads findable - re-keyed with the same sorted join as messages.cfKey; the target's own thread absorbs one", async () => {
+  await ready;
+  const M = require(path.join(repo, "messages"));
+  const A = "u-cfold-41", B = "u-cfnew-42";
+  await user(A, { username: "cfold" }); await user(B, { username: "cfnew" });
+  await runQuery("UPDATE users SET twitchId = 'T-4142' WHERE userId = ?", [A]);
+  const thread = async (id, owner, login, mid, body) => {
+    await runQuery("INSERT INTO conversations (id, kind, dm_key, created_by, created_at, last_msg_id, last_msg_at) VALUES (?, 'cfpm', ?, ?, 1, ?, ?)", [id, M.cfKey(owner, login), owner, mid, mid]);
+    await runQuery("INSERT INTO conversation_members (conversation_id, user_id, joined_at, last_read_id) VALUES (?, ?, 1, ?)", [id, owner, mid]);
+    await runQuery("INSERT INTO messages (id, conversation_id, sender_id, body, created_at, kind) VALUES (?, ?, ?, ?, ?, 'text')", [mid, id, owner, body, mid]);
+  };
+  await thread("CFX", A, "bob_cf", 9101, "old to bob");          // only the old account has one: re-keyed
+  await thread("CFY", A, "dan.cf", 9102, "old to dan");          // both have one: folded into the target's
+  await thread("CFZ", B, "dan.cf", 9103, "new to dan");
+  const L = { label: "Twitch", idCol: "twitchId", nameCol: "twitchDisplayname", otherIdCol: "discordId", otherNameCol: "discordUsername" };
+  const r = await PM.mergeProviderAccount({ provider: "twitch", L, fromId: A, toId: B, linkId: "T-4142", linkName: "CfProv" });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.deepStrictEqual(await referencesTo(A), []);
+  const x = (await getQuery("SELECT * FROM conversations WHERE id = 'CFX'"))[0];
+  assert.equal(x.dm_key, M.cfKey(B, "bob_cf"), "the key relayCopy looks up for the target's next copy to bob_cf");
+  assert.equal(x.kind, "cfpm"); assert.equal(M.cfLoginOf(x), "bob_cf");
+  assert.deepStrictEqual((await getQuery("SELECT user_id FROM conversation_members WHERE conversation_id = 'CFX'")).map((m) => m.user_id), [B]);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM conversations WHERE id = 'CFY'"))[0].n, 0, "folded");
+  const z = await getQuery("SELECT * FROM conversations WHERE dm_key = ?", [M.cfKey(B, "dan.cf")]);
+  assert.equal(z.length, 1); assert.equal(z[0].id, "CFZ");
+  assert.deepStrictEqual((await getQuery("SELECT body FROM messages WHERE conversation_id = 'CFZ' ORDER BY id")).map((m) => m.body), ["old to dan", "new to dan"]);
+  assert.deepStrictEqual((await getQuery("SELECT user_id FROM conversation_members WHERE conversation_id = 'CFZ'")).map((m) => m.user_id), [B]);
+  // CL13 fix-up: the other sort order too - a target id that sorts BEFORE "cf:" (above, both ids sort after it), so a
+  // change to either join (messages.dmKey / cfKey or accountMerge's) that puts one side first fails here
+  const A2 = "z-cfold-45", B2 = "a-cfnew-46";
+  await user(A2, { username: "cfold2" }); await user(B2, { username: "cfnew2" });
+  await runQuery("UPDATE users SET twitchId = 'T-4546' WHERE userId = ?", [A2]);
+  await thread("CFW", A2, "eve_cf", 9104, "old to eve");
+  assert.equal((await getQuery("SELECT dm_key FROM conversations WHERE id = 'CFW'"))[0].dm_key, "cf:eve_cf|z-cfold-45");
+  const r2 = await PM.mergeProviderAccount({ provider: "twitch", L, fromId: A2, toId: B2, linkId: "T-4546", linkName: "CfProv2" });
+  assert.ok(r2.ok, JSON.stringify(r2));
+  assert.equal((await getQuery("SELECT dm_key FROM conversations WHERE id = 'CFW'"))[0].dm_key, "a-cfnew-46|cf:eve_cf");
+  assert.equal(M.cfKey(B2, "eve_cf"), "a-cfnew-46|cf:eve_cf", "the key relayCopy looks up");
 });

@@ -68,7 +68,8 @@ test("privacy/changed pa: and hh: triggers write rows only while hubseam.privacy
   await PL.save("u1", { hidden: ["an_rooms"] });
   await PL.save("u2", { hidden: [] });
   await HH.note(["0123456789abcdef0123", "fedcba9876543210fedc"]);
-  await HH.note(["fedcba9876543210fedc"]);
+  // 1.99add: the set is sticky - a hash goes only on an explicit un-hide (Pepe's privacy.shown), never because a list lacks it
+  await HH.noteSync({ list: ["fedcba9876543210fedc"], events: [{ op: "event", type: "privacy.shown", data: { h: "0123456789abcdef0123", scope: "bridge" } }] });
   await PL.reset("u2");
   const r = await rows("privacy/changed");
   assert.deepEqual(r.map((x) => [x.entity, x.payload]), [["pa:u1", null], ["pa:u2", null], ["hh:0123456789abcdef0123", null], ["hh:fedcba9876543210fedc", null],
@@ -80,7 +81,7 @@ test("privacy/changed pa: and hh: triggers write rows only while hubseam.privacy
                    "the Rooms panel hidden is private activity (stories.privateLogins' rule)");
   assert.equal((await rd("pa:u2")).value, false, "no layout: public");
   assert.deepEqual({ ...(await rd("hh:fedcba9876543210fedc")), at: 0 }, { flag: "hidden_h", h: "fedcba9876543210fedc", value: true, at: 0 });
-  assert.equal((await rd("hh:0123456789abcdef0123")).value, false, "gone from Pepe's set");
+  assert.equal((await rd("hh:0123456789abcdef0123")).value, false, "explicitly un-hidden");
   await runQuery("UPDATE profile_layout SET layout = 'not json' WHERE user_id = 'u1'");
   assert.equal((await rd("pa:u1")).value, true, "an unreadable layout fails closed");
   // 1.99acm: switching privacy off empties the stored set without writing a row for it
@@ -254,6 +255,9 @@ test("snapshots: byte-ordered pages with ranges and an opaque cursor, the head, 
   // privacy: confirmed ON (linked + unlinked), a pending ON, private activity, hidden hashes; OFF / public are not listed
   await I.init();
   await runQuery("INSERT INTO users (userId, username, camfrogUsername) VALUES ('alice-id', 'alice', 'Alice'), ('bob-id', 'bob', 'bobcf'), ('acc-id', 'acc', NULL)");
+  // 1.99add: a fresh hidden set (the earlier tests' hashes stay sticky in this process - and, since the refix, on disk too)
+  HH._reset();
+  for (const t of ["hub_hidden_set", "hub_hidden_meta", "hub_hidden_held", "hub_hidden_h"]) await runQuery(`DELETE FROM ${t}`);
   await I.sync({ items: [{ login: "carol.x", on: true, ts: 1760727590000, via: "chat" }, { login: "bobcf", on: false, ts: 1760727590000, via: "chat" },
                          { login: "alice", on: false, ts: 1760727530000, via: "chat" }] });
   await require(path.join(repo, "actions")).queue("alice-id", { kind: "privacy.incognito", args: ["on"], tag: "privacy", label: "incognito on" });
@@ -263,7 +267,8 @@ test("snapshots: byte-ordered pages with ranges and an opaque cursor, the head, 
   const pv = await HO.snapshot("privacy/changed", null);
   const by = Object.fromEntries(pv.rows.map((r) => [r.entity, r.payload]));
   const cf = (l) => "cfh:" + HH.loginHash(l);                 // 1.99acm: a login leaves v1 only as its hash (seam plan D-6)
-  assert.deepEqual(Object.keys(by), [...[cf("alice"), cf("carol.x")].sort(), "hh:abcdefabcdefabcdef12", "pa:acc-id", "pa:u1"],
+  // 1.99add refix: Pepe's ON report for carol.x hid her hash at once (hubhidden.hiddenReported) - "hh:<her hash>" is listed too
+  assert.deepEqual(Object.keys(by), [...[cf("alice"), cf("carol.x")].sort(), ...["hh:abcdefabcdefabcdef12", "hh:" + HH.hash("carol.x")].sort(), "pa:acc-id", "pa:u1"],
                    "bob (confirmed OFF) and bob's public layout are not listed; u1's unreadable layout is (fail closed)");
   assert.doesNotMatch(JSON.stringify(pv), /alice"|carol|bobcf/, "no login in the page");
   assert.equal(by[cf("alice")].value, false);

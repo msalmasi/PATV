@@ -793,7 +793,12 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     const link = parseJson(r.link_json);
     const mv = MV.find((v) => v.post_id === r.id);
     const out = {
-      id: r.id, title: r.title || "", body: r.body || "", created: r.created, edited: r.edited, score: r.score, comments: r.comments,
+      // the chat-history owner change (decision 9, as hubhidden-site's 1.99add refix 4): a chat quote's text without the lines of
+      // anyone left out now (quotes.forPosts - !bridge hide)
+      // (review 2 fix-up: and its title with the names of hidden people redacted - quotes.forPosts)
+      id: r.id, title: QUO.has(r.id) && typeof QUO.get(r.id).title === "string" ? QUO.get(r.id).title : r.title || "",
+      body: QUO.has(r.id) && typeof QUO.get(r.id).body === "string" ? QUO.get(r.id).body : r.body || "",
+      created: r.created, edited: r.edited, score: r.score, comments: r.comments,
       ups: r.ups || 0, downs: r.downs || 0, myVote: mv ? (mv.value > 0 ? 1 : -1) : 0,
       nsfw, nsfwAuthor: !!r.nsfw, nsfwRoom: !!(ctx && ctx.nsfw), pinned: !!(ctx && ctx.pinned), roomHidden: !!(ctx && ctx.hidden), pending: !!(ctx && ctx.pending),
       locked: !!r.locked_at, lockedBy: r.locked_by || null, nsfwAdmin: r.nsfw_admin, global: !!r.global, cost: r.cost,
@@ -2119,6 +2124,8 @@ async function ban(user, target, { room = "", reason = "", days = 0 } = {}) {
   if (roomId) await rooms.event(roomId, "feed-ban", user.username, `${u.username}${until ? " until " + new Date(until).toISOString() : ""}`);
   // 1.99wj: a site-wide ban by staff also signs the account out everywhere (sessions.js); a pad owner's ban doesn't
   if (!roomId) { try { await require("./sessions").revokeAll(u.userId, { why: "ban" }); } catch (e) { console.error("[feed] ban sign-out:", e.message); } }
+  // micfollow: a site / pad ban of a linked account takes them off the 🎙 mic stage at once (never blocks the ban)
+  try { require("./micfollow").recheckUser(u.userId).catch((e) => console.error("[feed] micfollow:", e.message)); } catch (e) { /* no mic follows */ }
   return { userId: u.userId, username: u.username, until };
 }
 async function unban(user, userId, room = "") {

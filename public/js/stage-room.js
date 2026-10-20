@@ -29,6 +29,12 @@
 // 1.99zc: 🎬 a CAM slot (s.cam: someone's live Camfrog cam the pad's owner put on the stage - mainstage camOpen) has no
 // HLS: the page asks for its own WHEP ticket (POST /api/stage/slots/<id>/cam, signed in + the pad's rule), plays it
 // with PATVRtc.watch (muted: a cam has no sound) and beats every 15 s like a live cam (livecam.js stageWatch).
+// micfollow: 🎙 "On the mic" - the pad's mic-follows program (micfollow.js; the pad page's /live long-poll hands it over
+// with setMic(stage_program)) is a third view kind, 'mic', drawn by stage-mic.js (only on the page with WebRTC on;
+// without it setMic does nothing). Default view: a featured slot someone chose (owner / staff / booked) > the mic stage
+// (when someone on it has a picture, the pad shows it first, Pepe's stream isn't featured for an event) > an
+// auto-featured stream > Pepe's stream; the pad's default_view can put streams first or keep the mic stage a tab. A
+// viewer who picked a tab keeps it until it ends. No snaps / clips / watch-minutes of it (selection: capture false).
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -66,6 +72,18 @@
     // a slot published over WHIP carries s.whep. Without it everything below is the plain HLS player.
     if (PATVStage.rtcWrap) player = PATVStage.rtcWrap(player, { wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute });
     var embedFor = null, loaded = document.readyState === 'complete';
+    // ── micfollow: 🎙 the mic stage ──
+    var mic = null, micCtl = null;
+    var micSig = '', micTabSig = '';              // what setMic / renderTabs last drew (see setMic)
+    function micTabKey() { return micOn() ? (mic.signin ? 'in' : mic.count ? 'n' + mic.count : 's') : ''; }
+    var padSlug = o.slug || (function () { var m = /[?&]room=([^&]+)/.exec(o.api || ''); try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; } })();
+    function micStop() { if (micCtl) { micCtl.stop(); micCtl = null; } }
+    // (a program whose tiles gave way to the neutral "Someone is speaking" / Pepe card keeps its tab, but never as the
+    // default view - mic.active is false then: a stage of only cards is never the default, DF-15)
+    function micOn() { return !!(window.PATVStageMic && mic && (mic.count > 0 || mic.speaking === 'someone' || mic.speaking === 'pepe')); }
+    function micDefault() {
+      return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !(pepeSrc && pepeSrc.featured);
+    }
     // ── 1.99zc: 🎬 cam slots ──
     var camCtl = null;
     function camStop() { if (camCtl) { camCtl.stop(); camCtl = null; } }
@@ -122,7 +140,12 @@
     }
     function featured() { for (var i = 0; i < slots.length; i++) if (slots[i].featured) return slots[i]; return null; }
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
-    function pickDefault() { var f = featured(); view = f ? 'slot:' + f.id : 'pepe'; }
+    function pickDefault() {
+      var f = featured();
+      if (f && (f.feature_by !== 'auto' || (mic && mic.default === 'after_streams'))) view = 'slot:' + f.id;   // a feature someone chose wins
+      else if (micDefault()) view = 'mic';                                                                   // micfollow
+      else view = f ? 'slot:' + f.id : 'pepe';
+    }
     pickDefault();
     function setEmbed(e) {
       var url = embedUrl(e);
@@ -141,9 +164,17 @@
     // 1.99fv: the embed an admin put on Pepe's stage (null = his own stream). Re-checked like a slot's.
     function pepeEmbed() { return !ownPepe && pepeSrc && pepeSrc.mode === 'embed' && embedUrl(pepeSrc.embed) ? pepeSrc.embed : null; }
     function show() {
+      if (view === 'mic' && !micOn()) pickDefault();
       var s = cur();
+      if (view !== 'mic') micStop();
       if (!(s && s.cam)) camStop();
-      if (s && s.cam) {
+      if (view === 'mic') {                                     // micfollow: 🎙 On the mic (stage-mic.js)
+        player.stop(); setEmbed(null);
+        if (micCtl) micCtl.update(mic);
+        else micCtl = PATVStageMic.render(o.wrap, mic, { slug: padSlug, onChange: function () { /* the long-poll brings the new program */ } });
+        if (o.unmute) o.unmute.classList.add('hide');
+        o.onAir && o.onAir(true, '🎙 ' + (mic.count || ''));
+      } else if (s && s.cam) {
         player.stop(); setEmbed(null); camShow(s);
         o.onAir && o.onAir(true, s.title || null);
       } else if (s && s.embed) {
@@ -168,7 +199,7 @@
       }
       renderTabs();
       // 1.99aal: 🟣 admins - Pepe's Twitch relay switch on his stream's player (twitch-btn.js, only on admins' pages)
-      if (window.PATVTwitchBtn) window.PATVTwitchBtn.sync(o.wrap.parentNode || o.wrap, !s && pepeHere && pepeOn);
+      if (window.PATVTwitchBtn) window.PATVTwitchBtn.sync(o.wrap.parentNode || o.wrap, !s && view !== 'mic' && pepeHere && pepeOn);
       // 1.99aan: ✂ Cut / 📺 Play content here under the player (site staff; onair-bar.js)
       if (window.PATVOnAirBar && pepeHere) window.PATVOnAirBar.sync(o.wrap.parentNode || o.wrap);
       if (o.onShow) o.onShow(selection());
@@ -176,6 +207,7 @@
     // 1.99cr: what's on screen, for the Snap / Clip bar (stage-capture.js). Pepe's stream is captured from
     // his HLS on the server even while the page shows an admin-chosen embed, so it counts while HLS is on air.
     function selection() {
+      if (view === 'mic' && micOn()) return micCtl ? micCtl.selection() : { stream: 'mic', label: '🎙', embed: true, capture: false, nsfw: false };   // micfollow: never captured
       var s = cur();
       if (s && s.cam) return { stream: s.id, label: s.display, embed: true, capture: false, nsfw: !!s.nsfw };   // 1.99zc: no snaps / clips / watch-minutes of a cam
       if (s) return { stream: s.id, label: s.display, embed: !!s.embed, capture: !s.embed && s.capture !== false, nsfw: !!s.nsfw };
@@ -185,7 +217,7 @@
     // 1.99fv: next to Pepe's tab while he's on air and showing - subtle: "Pepe's own stream" when an admin embed
     // is up (this viewer only), "Watch on Twitch" while our relay to his Twitch runs (info + a link; nothing swaps)
     function pepeExtras() {
-      if (!pepeHere || !pepeOn || cur()) return '';
+      if (!pepeHere || !pepeOn || cur() || view === 'mic') return '';
       var h = '';
       if (pepeSrc && pepeSrc.mode === 'embed') {
         h += ownPepe ? '<button type="button" class="stx" data-pepe-src="embed">' + esc(_t('js.stage.room.back_to', 'Back to {name}', { name: pepeSrc.label || _t('js.stage.room.the_embed', 'the embed') })) + '</button>'
@@ -199,8 +231,9 @@
     }
     function renderTabs() {
       var box = o.tabs;
+      micTabSig = micTabKey();
       if (!box) return;
-      if (!slots.length) { box.innerHTML = pepeExtras(); return; }
+      if (!slots.length && !micOn()) { box.innerHTML = pepeExtras(); return; }
       var h = '';
       slots.forEach(function (s) {
         h += '<button type="button" class="stab' + (s.featured ? ' feat' : '') + '" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
@@ -211,11 +244,20 @@
              (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') +
              (s.cam ? '<span class="src">' + esc(_t('js.pad.strip.cam_src', '📷 cam')) + '</span>' : '') + '</button>';
       });
+      if (micOn()) {                                        // micfollow: 🎙 On the mic, before Pepe's tab
+        var ml = mic.signin ? _t('js.stage.mf.tab_signin', '🎙 On the mic: sign in to watch')
+          : mic.count ? _t('js.stage.mf.tab', '🎙 On the mic ({n})', { n: mic.count }) : _t('js.stage.mf.tab_speaking', '🎙 On the mic');
+        h += '<button type="button" class="stab mf-tab" role="tab" data-v="mic" aria-selected="' + (view === 'mic') + '"><span class="dot" aria-hidden="true"></span>' + esc(ml) + '</button>';
+      }
       var pOn = pepeOn;                                     // 1.99fv: his own stream only - Twitch never counts
       var pF = !!(pepeSrc && pepeSrc.featured);             // 1.99lm
       if (pepeHere) h += '<button type="button" class="stab' + (pOn ? '' : ' off') + (pF ? ' feat' : '') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
            '<span class="dot" aria-hidden="true"></span>' + (pF ? '<span class="star" aria-label="' + esc(_t('js.stage.room.featured', 'featured')) + '">★</span>' : '') + esc(pOn ? _t('js.stage.room.pepe_tab', '🐸 Pepe\'s stream') : _t('js.stage.room.pepe_tab_off', '🐸 Pepe\'s stream (off air)')) + '</button>';
       h += pepeExtras();
+      // stagefix site: 🙈 the viewer's OWN Camfrog cam is on this pad's Stage (s.mine, mainstage.slotsFor) - take it off
+      slots.forEach(function (x) {
+        if (x.cam && x.mine === true) h += '<button type="button" class="stx" data-act="leave" data-id="' + esc(x.id) + '" title="' + esc(_t('js.stage.room.leave_title', 'Your cam is on this pad\'s Stage - take it off (this pad can\'t put it back for an hour)')) + '">' + esc(_t('js.stage.room.leave', '🙈 Take me off this Stage')) + '</button>';
+      });
       var s = cur();
       if (o.manage && s) {
         h += '<span class="adm">' + (s.featured ? '<button type="button" data-act="unfeature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.unfeature', '☆ Unfeature')) + '</button>'
@@ -233,6 +275,7 @@
         if (b.hasAttribute('data-pepe-src')) { ownPepe = b.getAttribute('data-pepe-src') === 'own'; show(); return; }
         var act = b.getAttribute('data-act');
         if (!act) return;
+        if (act === 'leave') { leave(b); return; }        // stagefix site: 🙈 Take me off this Stage
         var ban = b.hasAttribute('data-ban');
         var q = act === 'cut' ? (ban ? _t('js.stage.room.q_cut_ban', 'Cut this slot AND ban them from this pad\'s stage?') : _t('js.stage.room.q_cut', 'Cut this slot? Unused PAT is refunded.'))
               : act === 'unfeature' ? _t('js.stage.room.q_unfeature', 'Stop featuring this slot? It stays on as an ordinary one.') : _t('js.stage.room.q_feature', 'Feature this slot? It becomes the pad\'s main stream.');
@@ -243,6 +286,22 @@
           .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) alert(j.error || _t('js.stage.room.e_do', 'Could not do that.')); poll(); })
           .catch(function () { alert(_t('js.stage.room.e_net', 'Could not reach the server.')); b.disabled = false; });
       });
+    }
+    // stagefix site: the person whose cam it is takes it off this pad's Stage (stageleave.js; this pad can't put it back for 1 h)
+    function leave(b) {
+      if (!confirm(_t('js.stage.room.q_leave', 'Take your cam off this pad\'s Stage? This pad can\'t put it back for an hour.'))) return;
+      b.disabled = true;
+      fetch('/api/stage/leave', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ slot: b.getAttribute('data-id') }) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (j) {
+          if (!j || !j.ok) { b.disabled = false; alert((j && j.error) || _t('js.stage.room.e_do', 'Could not do that.')); return; }
+          var until = '';
+          try { until = new Date(j.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { until = ''; }
+          alert(_t('js.stage.room.left', 'You\'re off this pad\'s Stage until {when}.', { when: until }));
+          poll();
+        })
+        .catch(function () { b.disabled = false; alert(_t('js.stage.room.e_net', 'Could not reach the server.')); });
     }
     function poll() {
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
@@ -290,7 +349,37 @@
       show();
     });
     if (loaded) show(); else renderTabs();
-    return { poll: poll, show: show, view: function () { return view; }, selection: selection };
+    /** micfollow: the pad page's live long-poll hands over its stage_program (null = mic follows off on this pad). */
+    // The live long-poll answers on every chat line / sync (several times a second in a busy room) and hands the program
+    // over each time: nothing is redrawn unless it moved - the tab bar (and the owner's ★ / ✂ buttons in it) only when the
+    // mic tab itself changes, so focus and clicks there are never lost (pads with mic follows off: never).
+    function sigOf(p) {
+      if (!p) return '';
+      var m = p.manage || null;
+      return JSON.stringify([p.v, p.count, p.signin, p.blocked, p.active, p.default, p.layout, p.frozen_until, p.speaking || null, !!p.report,
+        (Array.isArray(p.src) ? p.src : []).map(function (s) { return s ? [s.id, s.name, s.video, s.why, s.watch, s.newest, s.pos] : null; }),
+        m ? [m.excluded_n, m.unproven_n, m.frozen_until, m.layout_override] : null]);
+    }
+    function setMic(p) {
+      if (!window.PATVStageMic) return;                     // WebRTC off: no mic stage on this page
+      var wasDef = micDefault();
+      mic = p && typeof p === 'object' ? p : null;
+      var sig = sigOf(mic);
+      if (sig === micSig) return;                           // nothing moved (null -> null, the same program)
+      micSig = sig;
+      if (view === 'mic' && !micOn()) { pickDefault(); show(); return; }               // it went idle: back to the default
+      if (!chosen && micDefault() !== wasDef) {
+        var before = view;
+        pickDefault();
+        if (before !== view) { show(); return; }
+      }
+      if (view === 'mic' && micCtl) { micCtl.update(mic); o.onAir && o.onAir(true, '🎙 ' + (mic.count || '')); }
+      if (micTabKey() !== micTabSig) {                       // (renderTabs notes what it drew)
+        renderTabs();
+        if (o.onShow) o.onShow(selection());
+      }
+    }
+    return { poll: poll, show: show, view: function () { return view; }, selection: selection, setMic: setMic };
   }
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.switcher = switcher;

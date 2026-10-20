@@ -169,7 +169,7 @@ test("old addresses keep working", () => {
 
 // ── one home per setting: Edit profile = how others see you; Settings -> Account = the account side ──
 const view = (v) => fs.readFileSync(path.join(repo, "views", v + ".ejs"), "utf8");
-const ACCOUNT_IDS = ["usernameForm", "emailForm", "connections", "camfrogDiv", "plexDiv", "googleDiv", "telegramDiv", "cryptoDiv", "passwordForm", "security", "csToggle", "timezone", "tzSelect"];
+const ACCOUNT_IDS = ["usernameForm", "emailForm", "connections", "camfrogDiv", "plexDiv", "googleDiv", "appleDiv", "telegramDiv", "cryptoDiv", "passwordForm", "security", "csToggle", "timezone", "tzSelect"];
 const PROFILE_IDS = ["displaynameForm", "avatar", "uploadForm", "layout", "layoutForm"];
 
 test("each setting has exactly one home: no control lives on both Edit profile and Settings -> Account", () => {
@@ -191,7 +191,7 @@ test("each setting has exactly one home: no control lives on both Edit profile a
   assert.doesNotMatch(view("settingsHub"), /<form|<input|<select/);
   // Edit profile points to Settings for the rest, and forwards the moved #fragments there
   assert.match(ed, /id="elsewhere"[^]*?href="\/settings\/account"/);
-  assert.match(ed, /\^\(connections\|password\|security\|timezone\|camfrogDiv\|plexDiv\|googleDiv\|telegramDiv\|cryptoDiv\)\$[^]*?'\/settings\/account#' \+ h/);
+  assert.match(ed, /\^\(connections\|password\|security\|timezone\|camfrogDiv\|plexDiv\|googleDiv\|appleDiv\|telegramDiv\|cryptoDiv\)\$[^]*?'\/settings\/account#' \+ h/);
   // the profile's ⋯ menu: one Settings item instead of the settings shortcuts
   const pf = view("profile");
   assert.match(pf, /<a role="menuitem" href="\/settings">/);

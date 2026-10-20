@@ -135,6 +135,7 @@
     <label class="ck"><input type="checkbox" name="plex_sso"> 📼 Sign in with Plex <span class="adm-msg" data-st="plex"></span></label>
     <label class="ck"><input type="checkbox" name="telegram_sso"> ✈️ Sign in with Telegram (<code>TELEGRAM_BOT_TOKEN</code>; the bot's domain set in BotFather) <span class="adm-msg" data-st="telegram"></span></label>
     <label class="ck"><input type="checkbox" name="google_sso"> G Sign in with Google (<code>GOOGLE_CLIENT_ID</code> + <code>GOOGLE_CLIENT_SECRET</code>) <span class="adm-msg" data-st="google"></span></label>
+    <label class="ck"><input type="checkbox" name="apple_sso"> Sign in with Apple (<code>APPLE_SERVICES_ID</code> + <code>APPLE_TEAM_ID</code> + <code>APPLE_KEY_ID</code> + <code>APPLE_PRIVATE_KEY</code>; return URL <code>/auth/apple/callback</code>, notifications <code>/auth/apple/notifications</code>) <span class="adm-msg" data-st="apple"></span></label>
     <div class="adm-actions"><button type="button" id="signinSave">Save</button><span id="signinStatus" class="adm-msg" role="status"></span></div>
   </form>
 </section>
@@ -144,11 +145,19 @@
   var f = document.getElementById('signinForm'), msg = document.getElementById('signinStatus');
   if (!f) return;
   function paint(d) {
-    ['plex', 'telegram', 'google'].forEach(function (k) {
+    ['plex', 'telegram', 'google', 'apple'].forEach(function (k) {
       var s = d[k] || {};
       f.elements[k + '_sso'].checked = !!s['switch'];
       var el = f.querySelector('[data-st="' + k + '"]');
       el.textContent = s.on ? '- showing' : (!s.configured ? '- not configured (hidden)' : '- off');
+      // Apple's server-to-server notifications (consent revoked, account deleted, email forwarding): need APPLE_APP_ID
+      var n = k === 'apple' && s.notices;
+      if (n) {
+        var when = function (x) { return new Date(x.at).toLocaleString(); };
+        el.textContent += n.app_id ? '' : ' - notifications REFUSED until APPLE_APP_ID (the primary App ID) is set';
+        if (n.last_ok) el.textContent += ' - last notification ' + when(n.last_ok) + ' (' + n.last_ok.type + ')';
+        if (n.last_refused) el.textContent += ' - last refused ' + when(n.last_refused) + ' (' + n.last_refused.code + ')';
+      }
     });
   }
   function call(method, body) {
@@ -160,7 +169,7 @@
   call('GET').then(paint).catch(function (e) { msg.textContent = e.message; });
   document.getElementById('signinSave').addEventListener('click', function () {
     msg.textContent = 'Saving…';
-    call('POST', { plex_sso: f.elements.plex_sso.checked, telegram_sso: f.elements.telegram_sso.checked, google_sso: f.elements.google_sso.checked })
+    call('POST', { plex_sso: f.elements.plex_sso.checked, telegram_sso: f.elements.telegram_sso.checked, google_sso: f.elements.google_sso.checked, apple_sso: f.elements.apple_sso.checked })
       .then(function (d) { paint(d); msg.textContent = 'Saved.'; })
       .catch(function (e) { msg.textContent = e.message; });
   });

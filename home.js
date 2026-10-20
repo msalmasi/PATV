@@ -171,13 +171,16 @@ function topPads(rows, ranked, boosts, n = 5) {
  * and title, a 📼 Plex title (library slots), an embed's title; else a Twitch-connected pad's live stream (golive.js,
  * memory); else who's on the mic (the bridge summary row's names - only filled where this viewer may see the room).
  * rows = the summary rows (with .mic names + .micCount) -> Map(id -> {k, name?, title?, names?, n?} | null)
+ * stagefix site: viewer (null = signed out) - a 🎬 cam slot (someone's Camfrog cam) is "now playing" only for a signed-in viewer
+ * who may see that pad's live room (padaccess.camSlotsFor); for anyone else the pad's next line shows (a stream, the mic).
  */
-async function nowPlaying(rows) {
+async function nowPlaying(rows, viewer) {
   const out = new Map();
   const ids = new Set((rows || []).map((r) => r && r.id).filter(Boolean));
   if (!ids.size) return out;
   let slots = [];
   try { slots = await require("./mainstage").publicSlots(""); } catch (e) { slots = []; }
+  try { const PA = require("./padaccess"); await PA.init(); slots = PA.camSlotsFor(slots, viewer || null); } catch (e) { slots = slots.filter((s) => !(s && s.cam)); }
   const first = new Map();
   for (const s of slots) if (s && ids.has(s.room_id) && !first.has(s.room_id)) first.set(s.room_id, s);   // featured first, then earliest
   let twitchNow = () => null;
@@ -261,7 +264,7 @@ function register(app, { addUser, xpForNextLevel }) {
       // adultgate site: t.gate = the 18+ gate for this viewer ("ok" | "signin" | "confirm"; "ok" while the switch is off)
       for (const t of tops) { t.listen = PA.full(viewer, t.id); t.gate = PA.adultGate(viewer, t.id); }
       // 1.99kp: what's on in each Top Pad (refreshed by the page every 30 s: /api/home/nowplaying)
-      const NP = await nowPlaying(pads.filter((r) => tops.some((t) => t.id === r.id))).catch(() => new Map());
+      const NP = await nowPlaying(pads.filter((r) => tops.some((t) => t.id === r.id)), viewer).catch(() => new Map());
       for (const t of tops) t.np = t.gate === "ok" ? NP.get(t.id) || null : null;     // adultgate site: no now-playing past the gate
       // adultgate site: ...nor its headcount / mic count (the ranking above used them like everyone else's)
       for (const t of tops) if (t.gate !== "ok") { t.count = null; t.micCount = null; }
@@ -269,7 +272,9 @@ function register(app, { addUser, xpForNextLevel }) {
                                      owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,
                                      boost: Math.round(RL.boosts.get(frontReg.id) || 0) } : null;
       // adultgate site: + a cam slot's name blanked past the 18+ gate (padaccess.adultSlots)
-      const slots = PA.adultSlots(PA.tokenizeSlots(await require("./mainstage").publicSlots(front.id).catch(() => []), viewer, front.id), viewer);
+      // stagefix site: + cam slots only for viewers who may see the pad's live room, mine: true on their own (mainstage.slotsFor)
+      // stagefix fix: ...and never a cam slot here at all: a cam on a Stage plays only on its own pad page (D-21)
+      const slots = (await require("./mainstage").slotsFor(front.id, viewer).catch(() => [])).filter((s) => !(s && s.cam));
       // 1.99eo: the off-air slate's "Next up" - the front pad's next scheduled slot (public facts only)
       const nextUp = await nextSlot(front.id).catch(() => null);
       const onStage = rooms.find((r) => r.id === front.id) || null;
@@ -280,7 +285,8 @@ function register(app, { addUser, xpForNextLevel }) {
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
       // 1.99fu: signed-out visitors too when the room's pad is Public (padaccess.full)
-      const roomLive = room && PA.full(viewer, room.id) ? await bridge.liveFor(room.slug) : null;
+      // CL3: the viewer goes along - the pad's chat-history floors and each line's own access level apply (never exempt here)
+      const roomLive = room && PA.full(viewer, room.id) ? await bridge.liveFor(room.slug, viewer) : null;
       // adultgate site: the widget's 18+ gate - "signin" / "confirm" swap the widget for the 18+ card (no lines, names or counts)
       const roomGate = room ? PA.adultGate(viewer, room.id) : "ok";
       if (room && roomGate !== "ok") room = { ...room, count: null, micCount: null };     // no headcount on the page either
@@ -319,7 +325,7 @@ function register(app, { addUser, xpForNextLevel }) {
       await PA.init();
       const viewer = req.user && req.user.userId ? req.user : null;
       const rows = PA.visibleRows(viewer, await bridge.summary(!!viewer, viewer)).filter((r) => want.has(r.id));
-      const NP = await nowPlaying(rows);
+      const NP = await nowPlaying(rows, viewer);
       const np = {};
       for (const r of rows) np[r.id] = PA.adultGate(viewer, r.id) === "ok" ? NP.get(r.id) || null : null;     // adultgate site
       res.json({ ok: true, np });

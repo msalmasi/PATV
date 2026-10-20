@@ -274,6 +274,9 @@ async function seed() {
       await kvSet("seeded:" + s.room_id, u.userId);
       await event(s.room_id, "owner", "seed", `${s.owner.match} -> ${u.username}`);
       console.log(`[rooms] seeded ${s.room_id}: owner ${u.username} (matched "${s.owner.match}")`);
+      // CL3: the chat watermarks follow the new owner - once the registry is loaded (never inside this init)
+      const sid = s.room_id;
+      setImmediate(() => { (ready || Promise.resolve()).then(() => chatReconcile(sid)).catch(() => {}); });
     } else {
       console.log(`[rooms] seed ${s.room_id}: no single account named "${s.owner.match}" yet - set the owner on /rooms/admin`);
     }
@@ -571,7 +574,12 @@ async function setOwner(roomId, who, actor) {
   await kvSet("seeded:" + id, "admin");      // an admin decision is never overwritten by a seed
   await event(id, "owner", actor, w || "none");
   await loadCache();
+  await chatReconcile(id);                   // CL3: a new owner reads the pad's chat from now (owner_since), not the earlier era
   return get(id);
+}
+/** CL3: the pad chat's watermarks move at the moment an input changes (chatlogview.reconcile); never throws. */
+async function chatReconcile(id, opts) {
+  try { await require("./chatlogview").reconcileNow(id, opts); } catch (e) { console.error("[rooms] chat watermarks:", e.message); }
 }
 async function addRoom(roomId, title, actor) {
   await init();

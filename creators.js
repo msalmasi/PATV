@@ -319,7 +319,11 @@ async function eligibility(userId) {
   }
   if (C.elig_email) {
     let ver = Number(u.isEmailVerified) === 1;
-    if (!ver) ver = (await getQuery("SELECT 1 AS x FROM sso_links WHERE user_id = ? AND email IS NOT NULL LIMIT 1", [u.userId]).catch(() => [])).length > 0;
+    // a sign-in link's email counts - never an Apple private relay address (contact only) or one Apple stopped forwarding to
+    if (!ver) {
+      ver = (await getQuery("SELECT 1 AS x FROM sso_links WHERE user_id = ? AND email IS NOT NULL AND COALESCE(email_relay, 0) = 0 AND COALESCE(email_off, 0) = 0 LIMIT 1", [u.userId])
+        .catch(() => getQuery("SELECT 1 AS x FROM sso_links WHERE user_id = ? AND email IS NOT NULL LIMIT 1", [u.userId]).catch(() => []))).length > 0;
+    }
     checks.push({ key: "email", ok: ver });
   }
   const since = t - C.elig_strike_days * DAY;

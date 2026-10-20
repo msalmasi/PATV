@@ -83,7 +83,10 @@ test("slim Go live + hidden off-air Stage: CSS only, so the 30 s schedule refres
   assert.ok(html.includes(".rm .stage.is-off:not(:has(.stabs > *)) { display: none; }"));
   assert.match(html, /<span class="l-full">🎥 Go live here<\/span><span class="l-short">🎥 Go live<\/span>/);
   assert.match(html, /@media \(max-width: 520px\) \{[\s\S]*?\.sact \.l-short \{ display: inline; \}/);
-  assert.match(html, /@media \(max-width: 860px\) \{ \.rm \.feed \{ height: 50vh; min-height: 260px; \} \}/, "a shorter chat on phones so the compose box fits");
+  // CL5: the chat's lines and its scroll box live in public/css/chatlog.css (linked by the page, scoped to <main class="… chatlog">)
+  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/chatlog\.css\?v=\d+">/);
+  assert.match(fs.readFileSync(path.join(repo, "public", "css", "chatlog.css"), "utf8"),
+    /@media \(max-width: 860px\) \{ \.chatlog \.feed \{ height: 50vh; min-height: 260px; \} \}/, "a shorter chat on phones so the compose box fits");
 });
 
 test("follows.followedPadIds + the navPads middleware: newest follow first, signed-in page views only", async () => {

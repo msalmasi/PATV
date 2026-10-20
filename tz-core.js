@@ -8,6 +8,7 @@
 //                         fmt(ts, style) -> text }      ts = unix seconds, ms, a Date or an ISO string
 // styles: full (Sat, Oct 10, 1:52 PM EDT) · datetime (Oct 10, 1:52 PM EDT) · long (Oct 10, 2026, 1:52 PM EDT)
 //         · time (1:52 PM EDT) · date (Oct 10, 2026) · day (Sat, Oct 10, 2026 - a date heading, no clock)
+// makeTz.offset(zone, ts) -> minutes east of UTC there and then (CL10: the chat-log downloads' clock)
 "use strict";
 var TZ_STYLES = {
   full: { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" },
@@ -67,7 +68,33 @@ function makeTz(zone, lang) {
   }
   return { zone: zone, lang: lang, fmt: fmt, time: time };
 }
+// CL10: a zone's offset at a moment, from formatToParts' NUMBERS (never formatted text): the chat-log downloads build every date
+// and time from it plus their own i18n names, so a file is the same on Node 16 and 20 (different ICU builds word dates differently)
+var TZ_OFF = {};
+var TZ_OFF_N = 0;
+/** Minutes east of UTC in `zone` at `ts` (ms, s, a Date or an ISO string); 0 for UTC and for a zone this runtime doesn't know. */
+function tzOffset(zone, ts) {
+  if (!zone || /^(etc\/)?(utc|gmt|zulu|universal)$/i.test(String(zone))) return 0;
+  var ms = tzToMs(ts);
+  if (!isFinite(ms)) return 0;
+  var t = Math.floor(ms / 1000) * 1000, f = TZ_OFF[zone], parts, p = {}, i;
+  if (!f) {
+    try {
+      f = new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric",
+                                             hour: "numeric", minute: "numeric", second: "numeric" });
+    } catch (e) { return 0; }
+    if (++TZ_OFF_N > 500) { TZ_OFF = {}; TZ_OFF_N = 0; }
+    TZ_OFF[zone] = f;
+  }
+  try { parts = f.formatToParts(new Date(t)); } catch (e) { return 0; }
+  for (i = 0; i < parts.length; i++) p[parts[i].type] = parts[i].value;
+  var wall = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour) % 24, Number(p.minute), Number(p.second));
+  var off = Math.round((wall - t) / 60000);
+  return isFinite(off) ? off : 0;
+}
+
 makeTz.STYLES = TZ_STYLES;
 makeTz.toMs = tzToMs;
+makeTz.offset = tzOffset;
 if (typeof module !== "undefined" && module.exports) module.exports = makeTz;
 return makeTz;

@@ -4,7 +4,7 @@
     with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there.
     1.99cz: groups (the ✎ "New conversation" dialog, the members dialog), pictures (the 🖼 tray, the lightbox) and post cards. %>
 <%- include('layout', { title: title, user: user, inboxUnread: typeof inboxUnread !== 'undefined' ? inboxUnread : 0, dmUnread: dmUnread }) %>
-<link rel="stylesheet" href="/public/css/messages.css?v=10">
+<link rel="stylesheet" href="/public/css/messages.css?v=11">
 <% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
 <main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
   <aside class="dm-side" aria-label="<%- t('msg.conversations') %>">
@@ -209,7 +209,7 @@
 </main>
 <script>document.body.classList.add('dm-page');   /* messages.css: the page is one viewport-high app screen, no footer */</script>
 <script type="application/json" id="dmBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
-<script src="/public/js/messages.js?v=12" defer></script>
+<script src="/public/js/messages.js?v=13" defer></script>
 <% if (locals.push) { %><script src="/public/js/webpush.js?v=1" defer></script><% } %>
 <script src="/public/js/stickers.js?v=2" defer></script>
 </body>
