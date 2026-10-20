@@ -59,6 +59,29 @@ for (const kind of ["epoch", "daily", "monetary"]) {
   });
 }
 
+// D2's safeguard (camfrog-bot 31c65d0): the vectors pay vaults with NO weekly cap in force on wholly time-weighted weeks
+// (no cap), on weeks whose PAT-days began mid-way ("partial") and on weeks with none ("snapshot") - the last two under the 25%
+// reference cap. The plans above match Pepe's in all of them; this checks they are really there.
+test("epoch: the no-cap plans cover every weighting, the reference cap binding on the partial / snapshot weeks", () => {
+  const by = { pat_days: 0, partial: 0, snapshot: 0 }, bound = { pat_days: 0, partial: 0, snapshot: 0 };
+  for (const c of data.cases) {
+    if (c.kind !== "epoch") continue;
+    const cfg = E.C(c.inputs);
+    if (cfg.share("wf_staker_cap_pct", Number(cfg.k("VAULT_CEIL_APR"))) > 0) continue;
+    const lb = E.lastBoundaryOf(c.inputs, c.expected.epoch);
+    for (const [v, x] of Object.entries(c.expected.vaults)) {
+      if (!(x.stakers_share > 0)) continue;
+      const w = E.weightingFor(c.inputs.vaults[v], c.expected.boundary, lb, c.expected.days);
+      by[w]++;
+      if (x.apr_cap < x.stakers_share) bound[w]++;
+      if (w === "pat_days") assert.equal(x.apr_cap, x.stakers_share, "a wholly time-weighted week: no cap");
+      else assert.ok(Math.abs(x.apr_cap - Math.trunc(x.staked * 0.25 * c.expected.days / 365)) <= 1, `${w}: the 25% reference cap`);   // staked is the plan's int()
+    }
+  }
+  assert.ok(by.pat_days >= 5 && by.partial >= 5 && by.snapshot >= 5, JSON.stringify(by));
+  assert.ok(bound.partial + bound.snapshot >= 5, "the reference cap actually binds: " + JSON.stringify(bound));
+});
+
 // Q11 (ECONOMY-V3 23.2): the activity-scaled guarantee target - pepe_monetary.gscale on random weekly participant series
 // (pre-reference, clamps, smoothing, stale lists), the same numbers here
 test("gscale: every activity-scaled target equals Pepe's", () => {

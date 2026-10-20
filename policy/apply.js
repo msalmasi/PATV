@@ -21,6 +21,7 @@ const P = require("../pools");
 const C = require("./core");
 const E = require("./engines");
 const G = require("./gather");
+const { pyRoundN } = require("./pymath");
 
 const FED_MINT_TAG = "fed-mint";
 class Halt extends Error { constructor(msg, code) { super(msg); this.code = code || "E_HALT"; } }
@@ -53,8 +54,11 @@ async function houseLeg(key, amount, why) {
   await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [id, `policy:${String(why || "policy").slice(0, 60)}`, null, amount]);
   return "ok";
 }
+/** Staking fix plan P0.2: a staking payout into a stash counts as the stash's "earned" (Pepe's _vault_leg does the same). */
+const isStakingPay = (why, amount) => amount > 0 && (why === "waterfall stakers" || /^staking correction/.test(String(why || "")) || /^apr-bug correction/.test(String(why || "")));
 async function stashLeg(key, stashId, amount, why) {
-  const r = await require("../stashes").botMove({ stashId, amount, key, kind: "vault", why: why || "waterfall" });
+  const r = await require("../stashes").botMove({ stashId, amount, key, kind: "vault", why: why || "waterfall",
+                                                  earned: isStakingPay(why, amount) ? amount : 0 });
   if (!r || !r.ok) throw new Halt(`stash ${stashId} refused ${amount} (${(r && r.error) || "no answer"})`, "E_STASH");
   return r.dup ? "dup" : "ok";
 }
@@ -144,7 +148,7 @@ const summary = (plan, keys) => Object.fromEntries(keys.filter((k) => k in plan)
 
 // ── the weekly epoch ──
 async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } = {}) {
-  return tx(async () => {
+  const res = await tx(async () => {
     const done = await C.run("treasury", eid);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
     const inputs = await G.epoch(nowS, eid);
@@ -173,15 +177,79 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
     }
     const result = { boundary: plan.boundary, totals: plan.totals, release_per_day: plan.release_per_day, incentives_after: incAfter,
                      pools_before: before, pools_after: after, conserved: before === after, shares_redeemed: redeemed, done_legs: doneLegs, actor, via };
+    // the owner's D2 monitoring on the record, as Pepe's own records carry it (pepe_treasury._tr_track = engines.trackOf): what a
+    // 25% cap would have paid, how each vault was weighted, the cap the plan applied and whether it was D2's safeguard (fallback).
+    // Monitoring only: like Pepe (try / except around _tr_track, "[TREASURY] epoch <eid>: track: ..."), an error here is logged
+    // and the settlement goes on - the record then has no track and the payout notice reads the cap in force from the inputs
+    let track = null;
+    try {
+      track = E.trackOf(inputs, plan);
+    } catch (e) {
+      console.error(`[policy] epoch ${eid}: track: ${e && e.message}`);
+    }
+    const capIn = track ? null : (() => { try { return E.stakerCapOf(inputs); } catch (e) { return 0; } })();
     const rec = Object.assign(JSON.parse(JSON.stringify(plan)), { state: "done", actor, manual: false, done_legs: doneLegs, done: nowS, incentives_after: incAfter,
-                                          pools_before: before, pools_after: after, conserved: before === after, via: "site" });
+                                          pools_before: before, pools_after: after, conserved: before === after, via: "site" }, track ? { track } : {});
     for (const [v, sh] of Object.entries(redeemed)) if (rec.vaults[v]) rec.vaults[v].shares_redeemed = sh;
     await C.effect(`epoch_record:${eid}`, { engine: "treasury", period: eid, kind: "epoch_record", data: { eid, rec } });
     await C.putRun("treasury", eid, { state: "done", boundary: plan.boundary, via, inputs, plan, result });
     await require("../escrow/ledger").emitInTx("policy", "epoch_done", null, { eid, totals: plan.totals, release_per_day: plan.release_per_day,
                                                                               conserved: before === after });
-    return { ok: true, plan, result };
+    return { ok: true, plan, result, track, capIn };
   });
+  // staking fix plan P0.1 (Pepe's _tr_notify_stakers): one notice per paid stash, after the settlement committed
+  if (res && res.ok && !res.already && res.plan) await notifyStakers(eid, res.plan, res.track, res.capIn).catch((e) => console.error("[policy] payout notices:", e.message));
+  return res;
+}
+
+const VLABEL = { house: "🎰 House", bank: "🏦 Bank", mm: "📈 Market maker" };
+/** P0.1: "Staking payout: +n PAT" to each paid stash's owner (the sum over the vaults), ref "wf:<eid>:s<stash>" - the inbox keeps
+ *  one row per (account, ref), so Pepe's own notice for the same payout and a rerun add nothing. The words are Pepe's
+ *  (pepe_treasury._tr_notify_stakers, camfrog-bot 31c65d0), read from the record's track (engines.trackOf): "your part of" the
+ *  stakers' share of the protocol's own weekly earnings; "shared by how much you staked and for how long" only when every vault
+ *  that paid was split by PAT-days ("pat_days" or "partial"); the cap in force, else - D2's safeguard - the vaults paid under
+ *  the 25% reference cap because the week wasn't wholly time-weighted (fallback). With no track (trackOf failed: the record has
+ *  none, as Pepe's when his _tr_track raised) the cap is capIn, the cap in force from the settlement's inputs - Pepe's
+ *  _tr_staker_cap() - and no "how long" / safeguard clause. -> notices filed */
+async function notifyStakers(eid, plan, track, capIn = 0) {
+  const tr = track || {};
+  const cap = tr.cap_in_force_pct !== undefined && tr.cap_in_force_pct !== null ? (Number(tr.cap_in_force_pct) / 100 || 0) : (Number(capIn) || 0);
+  const paidV = Object.entries(tr.vaults || {}).filter(([, x]) => Math.trunc(Number(x.paid) || 0) > 0);
+  const by = new Map();
+  for (const l of plan.legs || []) {
+    if (l.why !== "waterfall stakers" || !String(l.dst || "").startsWith("stash:") || !(l.amt > 0)) continue;
+    const id = l.dst.slice(6);
+    const x = by.get(id) || { total: 0, parts: {} };
+    x.total += l.amt;
+    x.parts[l.vault] = (x.parts[l.vault] || 0) + l.amt;
+    by.set(id, x);
+  }
+  const S = require("../stashes");
+  const inbox = require("../inbox");
+  const fmt = (n) => Math.trunc(n).toLocaleString("en-US");
+  // Python's round(): half-even on the exact double (int(round(x * 100)): a 20.5% share reads 20%, 12.5% 12% - Math.round
+  // said 21% / 13%), and round(cap * 100, 2) for the cap (":g" of a value with at most 2 decimals = JS's String)
+  const share = Math.trunc(pyRoundN(Number(plan.staker_share || 0) * 100, 0)) || 0;
+  const fb = paidV.filter(([, x]) => x.fallback).map(([v]) => v);
+  let capTxt = ".";
+  if (cap > 0) capTxt = `, capped at ${pyRoundN(cap * 100, 2)}% a year on your stake.`;
+  else if (fb.length) {
+    // D2's safeguard: no weekly cap, but this week wasn't wholly time-weighted (the first week after the change)
+    const why = fb.every((v) => tr.vaults[v].weighting === "partial") ? "time-weighting started mid-week" : "this week couldn't be fully time-weighted";
+    capTxt = `; this week ${fb.map((v) => VLABEL[v] || v).join(" and ")} paid at most ${E.TR_FALLBACK_CAP * 100}% a year on your stake (${why}).`;
+  }
+  const how = paidV.length && paidV.every(([, x]) => x.weighting === "pat_days" || x.weighting === "partial") ? " - shared by how much you staked and for how long" : "";
+  let n = 0;
+  for (const [id, x] of by) {
+    const s = await S.get(id).catch(() => null);
+    if (!s || !s.owner_id) continue;
+    const parts = ["house", "bank", "mm"].filter((v) => x.parts[v] > 0).map((v) => `${VLABEL[v]} ${fmt(x.parts[v])}`).join(" · ");
+    // the copy the owner approved 2026-10-19 (fix plan §5.3 rewritten for that day's rule) - Pepe's sentence, word for word
+    const body = `🏦 ${s.owner_name || s.owner}/${s.name}: this week's staking payout is +${fmt(x.total)} PAT (${parts}), paid into the stash's balance. ` +
+                 `It's your part of ${share}% of the protocol's own weekly earnings in each vault${how}${capTxt}`;
+    if (await inbox.addSafe(s.owner_id, { kind: "staking", title: `Staking payout: +${fmt(x.total)} PAT`, body, link: "/staking", ref: `wf:${eid}:s${id}` })) n++;
+  }
+  return n;
 }
 
 // ── the daily release ──
@@ -333,4 +401,4 @@ async function runBurn(period, nowS, { actor = "accrual", via = "site", inflight
   });
 }
 
-module.exports = { runTreasuryEpoch, runTreasuryDaily, runMonetary, runBurn, transfer, protocolBook, fedMint, base, Halt };
+module.exports = { runTreasuryEpoch, runTreasuryDaily, runMonetary, runBurn, transfer, protocolBook, fedMint, base, Halt, notifyStakers, isStakingPay };

@@ -180,11 +180,21 @@ async function epoch(nowS, eid) {
     if (!st) continue;
     const x = { total: Number(st.total || 0), holders: Object.entries(st.holders || {}).map(([hk, sh]) => [hk, Number(sh)]) };
     if (st.basis !== undefined) x.basis = st.basis;
+    // P2.1: the PAT-days buckets the weekly split reads (policy/engines patDaysAvg), as pepe_policyinputs sends them - ordered
+    // lists [[boundary, [[stash id, PAT-days], ...]], ...] in the book's order (the average's float sums depend on it)
+    if (st.pat_days && typeof st.pat_days === "object" && !Array.isArray(st.pat_days)) {
+      x.pat_days = Object.entries(st.pat_days).filter(([, m]) => m && typeof m === "object" && !Array.isArray(m))
+        .map(([b, m]) => [String(b), Object.entries(m).map(([id, pd]) => [String(id), Number(pd)])]);
+    }
     book[v] = x;
   }
   const auto = { total: Number(d.auto.total || 0), holders: Object.entries(d.auto.holders || {}).map(([hk, sh]) => [hk, Number(sh)]) };
   const ids = new Set();
   for (const x of [...Object.values(book), auto]) for (const [hk] of x.holders) if (String(hk).startsWith("s")) ids.add(String(hk).slice(1));
+  // P2.1: a stash that held during the week and left before Monday is paid by its PAT-days - it needs its live flag too
+  for (const x of Object.values(book)) {
+    for (const [, rows] of x.pat_days || []) for (const [k] of rows) ids.add(/^s\d+$/.test(String(k)) ? String(k).slice(1) : String(k));
+  }
   const S = require("../stashes");
   const stashes = {};
   for (const id of [...ids].sort()) {

@@ -395,6 +395,7 @@ async function botMove({ stashId, amount = 0, stakedDelta = 0, earned = 0, key, 
     }
     await runQuery("UPDATE stashes SET balance = ?, staked = ?, earned = earned + ?, updated = ? WHERE id = ?", [bal, st, ea, now(), s.id]);
     const out = { ok: true, stash: String(s.id), balance: bal, staked: st };
+    if (ea) out.earned = ea;            // staking fix plan P0.2: the journal says it counted (tools/staking-backfill.js earned skips it)
     await record(key, { stash_id: s.id, kind: String(kind).slice(0, 20), amount: amt, staked_delta: sd, via: why ? String(why).slice(0, 60) : "pepe" }, out);
     await bumpRev();
     return out;

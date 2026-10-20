@@ -102,6 +102,11 @@ const DEFAULT_CFG = {
   vaults_enabled: 1, ceil_apr: 0.25, floor_apr: 0.0, topup: 0, topup_max_day: 25000, staker_max: 0.5, house_min_cash: 5000000,
   auto_bank_min: 0.40, auto_house_max: 0.35, auto_mm_max: 0.25, bank_default_days: 30, bank_insurance_cap: 50000000,
   min_move: 1000, epoch_hour: 4, dividend: 1, apr_min_cover: 0.9,
+  // staking fix plan P1.2 (2026-10-19): the protocol cushion under the APR ceiling - OFF until the owner turns on Pepe's
+  // vault_ceil_cushion (pushed as ceil_cushion); the window is the last ceil_cushion_days of skims
+  ceil_cushion: 0, ceil_cushion_days: 8,
+  // P2.2: Auto deposits (and the Auto rebalance) under the staker limit - OFF until Pepe's vault_auto_staker_cap is turned on
+  auto_staker_cap: 0,
   // policy state Pepe still owns (Phase 4): read at each use, refused / deferred when it's stale
   layers: false, tr_live: false, targets: null, flash: { bank: false, mm: false, room: 0 }, fl_room: 0, flows: null,
   credit: null,

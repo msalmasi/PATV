@@ -19,6 +19,7 @@ const M = require("./markets");
 const R = require("./reserve");
 const V = require("./vaults");
 const X = require("./lmsr");
+const W = require("./watch");
 
 const ENGINES = { markets: M, reserve: R, vaults: V };
 const IDEM_RE = /^[A-Za-z0-9_.:@\-]{6,120}$/;
@@ -103,15 +104,22 @@ async function tick() {
     for (const id of (await M.due(C.nowS())).slice(0, 50)) await run(`market-${id}`, (t) => M.expire(id, t));
     for (const id of (await R.due(C.nowS())).slice(0, 50)) await run(`collect-${id}`, (t) => R.collect(id, t));
     for (const x of (await R.defaults({ nowS: C.nowS() })).slice(0, 20)) await run(`default-${x.id}`, (t) => R.defaultOne(x.id, t));
-    const d = await V.load();
-    if (d.inited && Number((await C.cfg()).vaults_enabled) && C.nowS() >= Number(d.next_epoch || 0)) {
+    let d = await V.load();
+    const cfg0 = await C.cfg();
+    if (d.inited && Number(cfg0.vaults_enabled) && C.nowS() >= Number(d.next_epoch || 0)) {
       const r = await run("epoch", async (t) => {
         const e = await V.epoch(t);
         await C.emit("vault_epoch", null, { snap: e.snap, notes: e.notes });
         return Object.assign({ ok: true }, e);
       });
       if (r) console.log(`[capital] cut-off: prices ${JSON.stringify(r.snap.price)} nav ${JSON.stringify(r.snap.nav)} queue ${JSON.stringify(r.notes.queue)}`);
+      // staking fix plan §6: the cut-off's audit -> the admins (after it committed; never fails the tick)
+      if (r && r.ok) await W.afterEpoch(r).catch((e) => console.error("[capital] staking audit:", e.message));
+      d = await V.load();
     }
+    // §6 I8 (a late cut-off, a request stuck mid-move) and, from Monday 05:00 UTC, I6 (the weekly settlement cross-check)
+    await W.tick(d, cfg0).catch((e) => console.error("[capital] staking watch:", e.message));
+    await W.weekly(cfg0).catch((e) => console.error("[capital] staking weekly check:", e.message));
     if (Date.now() - lastPrune > 6 * 3600000) {
       lastPrune = Date.now();
       await run("prune", async (t) => ({ ok: (await R.prune(t)) > 0 }));
@@ -125,7 +133,7 @@ const CFG_NUM = ["min_trade", "settle_grace", "max_secs", "max_open", "loan_min"
                  "rloan_max_auto", "rloan_max_days", "rloan_book_share", "rloan_max_open", "penalty_pct", "penalty_cap_pct", "collect_every",
                  "loan_max_borrowed", "vaults_enabled", "ceil_apr", "floor_apr", "topup", "topup_max_day", "staker_max", "house_min_cash",
                  "auto_bank_min", "auto_house_max", "auto_mm_max", "bank_default_days", "bank_insurance_cap", "min_move", "epoch_hour", "dividend",
-                 "apr_min_cover", "fl_room", "lotto_pot"];
+                 "apr_min_cover", "fl_room", "lotto_pot", "ceil_cushion", "ceil_cushion_days", "auto_staker_cap", "wf_staker_cap_pct"];
 async function putConfig(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
   const out = { at: C.nowS() };
@@ -137,9 +145,39 @@ async function putConfig(raw) {
   for (const k of ["flows", "heist_log", "heist_settings"]) {
     if (c[k] !== undefined) { const s = JSON.stringify(c[k]); if (s.length < 200000) out[k] = c[k]; }
   }
+  // staking fix plan P0.3: Pepe's last 8 weekly settlements, per-vault totals only (no stash ids) - /staking's WEEKLY SETTLEMENT
+  if (Array.isArray(c.waterfall)) { const w = V.waterfallFrom({ waterfall: c.waterfall }); if (JSON.stringify(w).length < 200000) out.waterfall = w; }
+  // ...and every done record's boundary (+ when it was settled), a tagged re-run ("W...-r1", which waterfallFrom drops)
+  // included: Pepe's lb counts it (V.lastSettled - the partial-week check and /staking's "this week"), and it settles its
+  // boundary's PAT-days (V.lateMonday - the late-Monday check's "lost")
+  if (Array.isArray(c.waterfall)) out.wf_settled = V.settledFrom(c.waterfall);
   const prev = (await C.meta("cfg")) || {};
   await C.setMeta("cfg", Object.assign({}, prev, out));
+  await noteFix(c);
   return { ok: true, at: out.at };
+}
+
+/** A push from a Pepe with the staking fix (camfrog-bot d366b94+): his capital config carries ceil_cushion, and he passes
+ *  `earned` with every staking payout / correction he moves into a stash. */
+const pepeHasFix = (raw) => !!raw && typeof raw === "object" && raw.ceil_cushion !== undefined;
+/**
+ * staking fix plan P0.2 (tools/staking-backfill.js earned needs it): capital_meta "staking_fix" = {boot: when this site version
+ * first ran, first_push / first_push_new: when Pepe first pushed his config to it and whether that Pepe already had the fix,
+ * pepe_new_at: the first push from a fixed Pepe}. first_push_new true = Pepe went FIRST: the old site counted his payouts in
+ * stashes.earned without marking the move's journal, so the earned backfill must be told when he started (--before).
+ * Set once each; never throws.
+ */
+async function noteFix(raw) {
+  try {
+    const now = C.nowS();
+    const had = await C.meta("staking_fix");
+    const fx = had || { boot: now };
+    let ch = !had;
+    if (raw && (fx.first_push === undefined || fx.first_push === null)) { fx.first_push = now; fx.first_push_new = pepeHasFix(raw); ch = true; }
+    if (raw && pepeHasFix(raw) && !(Number(fx.pepe_new_at) > 0)) { fx.pepe_new_at = now; ch = true; }
+    if (ch) await C.setMeta("staking_fix", fx);
+    return fx;
+  } catch (e) { console.error("[capital] staking fix marker:", e.message); return null; }
 }
 
 // ── the cutover ──
@@ -531,7 +569,9 @@ function registerOracle() {
 function register(app, { isBotToken, addUser, patSupply }) {
   if (patSupply) supplyFn = patSupply;
   registerOracle();
-  C.init().then(() => {
+  W.register(app, { addUser });              // staking fix plan: /admin/economy's staking card (GET / POST /api/admin/econ/staking)
+  C.init().then(async () => {
+    await noteFix(null);                     // staking fix plan P0.2: when this site version first ran (the earned backfill's guard)
     const iv = setInterval(() => tick().catch((e) => console.error("[capital] tick:", e.message)), 15000);
     if (iv.unref) iv.unref();
   }).catch((e) => console.error("[capital] init:", e.message));
@@ -620,4 +660,4 @@ function register(app, { isBotToken, addUser, patSupply }) {
 }
 
 module.exports = { register, registerOracle, act, tick, putConfig, importFromPepe, exportState, rollbackToPepe, supplyRows, stashForm, botState, digestOf, totalsOf, factsOf,
-                   publishAll, _setSupplyFn: (f) => { supplyFn = f; } };
+                   publishAll, noteFix, pepeHasFix, _setSupplyFn: (f) => { supplyFn = f; } };

@@ -24,6 +24,8 @@ const VAULTS = ["bank", "house", "mm"];
 const ALL = ["bank", "house", "mm", "auto"];
 const ACCOUNTS = ["bank", "jackpot", "mm", "lotto"]; // flow accounts (jackpot = the House)
 const QKINDS = new Set(["deposit", "withdraw"]);
+// one vault's weekly settlement (Pepe's epoch record, per-vault totals only)
+const WF_FIELDS = ["surplus", "fed_loan_repaid", "stakers_share", "staked", "apr_cap", "stakers", "stakers_n", "fed", "incentives"];
 
 const str = (v, n) => String(v == null ? "" : v).slice(0, n);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -32,6 +34,15 @@ const low = (s) => String(s || "").toLowerCase();
 // Pepe sends unix seconds; accept milliseconds too
 const secs = (v) => { const n = num(v); return n > 1e12 ? Math.floor(n / 1000) : n; };
 const pick = (o, keys, f = num) => { const r = {}; for (const k of keys) r[k] = f((o || {})[k]); return r; };
+/** D2 on a weekly record's vault row (capital/vaults.js wfRowD2, the same rule): would_cap25 (what a 25% APR cap would have
+ *  paid), weighting ("pat_days" wholly time-weighted | "partial" PAT-days that began mid-week | "snapshot"), cap_pct (the cap
+ *  the plan applied, % APR; 0 = none) and fallback (D2's safeguard: no cap in force, the week not wholly time-weighted - the
+ *  25% reference cap) - camfrog-bot 31c65d0; cap_pct / fallback null from an older Pepe. */
+function wfD2(x) {
+  const cap = numOrNull(x.cap_pct);
+  return { would_cap25: numOrNull(x.would_cap25), weighting: ["pat_days", "partial", "snapshot"].includes(x.weighting) ? x.weighting : null,
+           cap_pct: cap, fallback: cap === null ? null : (x.fallback === true || x.fallback === 1) };
+}
 
 function cleanFlows(f) {
   const out = {};
@@ -68,13 +79,30 @@ function clean(body) {
       const h = (p.hold || {})[v];
       if (h && (num(h.shares) || num(h.value))) hold[v] = { shares: num(h.shares), value: num(h.value) };
     }
+    // staking fix plan P0.3: what the stash put in / took out per vault, and what staking paid it (weekly payouts + corrections)
+    // (partial: the stash held the vault before its cost history began - Staked and P/L are unknown until the backfill)
+    const cost = {};
+    for (const v of ALL) {
+      const c = (p.cost || {})[v];
+      if (c && (num(c.in) || num(c.out))) cost[v] = Object.assign({ in: num(c.in), out: num(c.out) }, c.partial ? { partial: 1 } : {});
+    }
+    const pd = p.paid && typeof p.paid === "object" ? p.paid : null;
+    // P2.1: the stash's PAT-days this week per vault (what next Monday's payout is shared by)
+    const pdw = {};
+    for (const v of VAULTS) { const x = num((p.pd || {})[v]); if (x > 0) pdw[v] = x; }
     positions[str(id, 40)] = {
       owner: str(p.owner, 60), name: str(p.name, 20),
       owner_id: p.owner_id ? str(p.owner_id, 64) : null, owner_name: p.owner_name ? str(p.owner_name, 60) : null,   // 1.99wy
       members: (Array.isArray(p.members) ? p.members : []).slice(0, 50).map((m) => str(m, 60)),
-      hold,
+      hold, cost, paid: pd ? { d7: num(pd.d7), all: num(pd.all), corr: num(pd.corr) } : null, pd: pdw,
     };
   });
+  const wf = (Array.isArray(body.waterfall) ? body.waterfall : []).slice(-8).filter((r) => r && /^W\d{4}-\d{2}-\d{2}$/.test(String(r.epoch || ""))).map((r) => ({
+    epoch: str(r.epoch, 12), boundary: secs(r.boundary) || null, days: numOrNull(r.days), done: secs(r.done) || null, state: str(r.state, 12),
+    staker_share: numOrNull(r.staker_share), staker_cap_pct: numOrNull(r.staker_cap_pct),
+    vaults: Object.fromEntries(VAULTS.filter((v) => r.vaults && r.vaults[v] && typeof r.vaults[v] === "object")
+      .map((v) => [v, Object.assign(pick(r.vaults[v], WF_FIELDS), wfD2(r.vaults[v]))])),
+  }));
   return {
     prices: pick(body.prices, ALL),
     nav: pick(body.nav, VAULTS),
@@ -95,10 +123,28 @@ function clean(body) {
     settings: {
       ceil: numOrNull(s.ceil), floor: numOrNull(s.floor), topup: typeof s.topup === "boolean" ? s.topup : numOrNull(s.topup),
       staker_max: numOrNull(s.staker_max), bank_min: numOrNull(s.bank_min), house_max: numOrNull(s.house_max), mm_max: numOrNull(s.mm_max),
+      // staking fix plan: the protocol cushion's switch + window, the weekly bonus cap (a fraction; 0 = no cap)
+      cushion: s.cushion === true || s.cushion === 1, cushion_days: numOrNull(s.cushion_days), bonus_cap: numOrNull(s.bonus_cap),
+      // P2.2 / P2.1 (2026-10-19): Auto deposits under the staker limit; the weekly payout shared by PAT-days
+      auto_staker_cap: s.auto_staker_cap === true || s.auto_staker_cap === 1, weighted: s.weighted === true || s.weighted === 1,
     },
     epochs: (Array.isArray(body.epochs) ? body.epochs : []).slice(-120).map((e) => ({
       ts: secs(e.ts), price: pick(e.price, ALL), nav: pick(e.nav, VAULTS), staked: pick(e.staked, VAULTS), flows: cleanFlows(e.flows),
+      staker_index: e.staker_index && typeof e.staker_index === "object" ? pick(e.staker_index, VAULTS, numOrNull) : null,
     })).filter((e) => e.ts).sort((a, b) => a.ts - b.ts),
+    // staking fix plan P0.3: the stakers' own index / APR next to the whole vault's, the weekly settlements, the cushion
+    staker_index: pick(body.staker_index, VAULTS, numOrNull),
+    staker_apr: Object.fromEntries(VAULTS.map((v) => { const a = (body.staker_apr || {})[v] || {}; return [v, { 7: numOrNull(a["7"]), 30: numOrNull(a["30"]) }]; })),
+    staker_so_far: Object.fromEntries(VAULTS.map((v) => {
+      const x = (body.staker_so_far || {})[v];
+      return [v, x && Number.isFinite(Number(x.r)) && Number.isFinite(Number(x.days)) ? { r: Number(x.r), days: Number(x.days) } : null];
+    })),
+    waterfall: wf,
+    cushion: Object.fromEntries(VAULTS.map((v) => { const x = (body.cushion || {})[v] || {}; return [v, { shares: num(x.shares), value: num(x.value) }]; })),
+    // P2.1: this week's PAT-days per vault (the bucket next Monday settles)
+    // (from: when the PAT-days began; partial: this week's bucket started after the week did - the first week after the deploy)
+    pd_week: { boundary: secs((body.pd_week || {}).boundary) || null, total: pick((body.pd_week || {}).total, VAULTS),
+               from: secs((body.pd_week || {}).from) || null, partial: (body.pd_week || {}).partial === true },
     positions,
     queue: (Array.isArray(body.queue) ? body.queue : []).slice(0, 2000).map((q) => ({
       id: q.id == null ? null : str(q.id, 40), stash: str(q.stash, 60), vault: ALL.includes(q.vault) ? q.vault : str(q.vault, 10),
@@ -132,6 +178,33 @@ function isMine(p, camfrog) {
 
 /** Total value of a position's holdings across vaults. */
 const holdValue = (p) => ALL.reduce((t, v) => t + ((p && p.hold && p.hold[v]) ? num(p.hold[v].value) : 0), 0);
+
+/**
+ * Staking fix plan P0.3: a stash's numbers per vault - in (what went in: deposit legs, refunds not counted), out (what came
+ * back: withdrawals), staked = in - out, value (now), P/L = value + out - in (the payouts are NOT in it: they land in the
+ * stash's balance, see `paid`). The cost history is only trusted when it's WHOLE: a vault the stash holds with no cost
+ * record, or with a partial one (the stash held it before its history began - capital/vaults.js addCost / backfillCost), has
+ * staked and pl null ("—", never a made-up 0 or a fake gain), and so has the total.
+ * -> {rows: {vault: {in, out, staked, value, pl, has, partial}}, total: {in, out, staked, value, pl}}
+ */
+function pnl(m) {
+  const rows = {};
+  const tot = { in: 0, out: 0, staked: 0, value: 0, pl: 0 };
+  let known = true;
+  for (const v of ALL) {
+    const h = (m && m.hold && m.hold[v]) || null, c = (m && m.cost && m.cost[v]) || null;
+    if (!h && !c) continue;
+    const value = h ? num(h.value) : 0;
+    const vin = c ? num(c.in) : 0, out = c ? num(c.out) : 0;
+    const whole = !!c && !c.partial;
+    const pl = whole ? value + out - vin : null;
+    if (!whole) known = false;
+    rows[v] = { in: vin, out, staked: whole ? vin - out : null, value, pl, has: !!h, partial: !!(c && c.partial) };
+    tot.in += vin; tot.out += out; tot.staked += whole ? vin - out : 0; tot.value += value; tot.pl += pl || 0;
+  }
+  if (!known) { tot.pl = null; tot.staked = null; }
+  return { rows, total: tot };
+}
 
 /** Find a stash's position by id, falling back to owner + name. */
 function positionFor(snap, stash) {
@@ -246,6 +319,7 @@ function register(app, { isBotToken, addUser }) {
           const ownerMe = SS.isOwner(s, me);
           const keys = new Set([String(s.id), low(s.name), low(s.owner + "/" + s.name), low(s.owner_name + "/" + s.name)]);
           mine.push({ id: s.id, owner: s.owner, owner_name: s.owner_name, name: s.name, members: s.member_names, hold: (p && p.hold) || {},
+                      cost: (p && p.cost) || {}, paid: (p && p.paid) || null, pd: (p && p.pd) || {},
                       total: holdValue(p), balance: s.balance, owner_me: ownerMe, ref: ownerMe ? s.name : `${s.owner_name}/${s.name}`,
                       pending: (snap.queue || []).filter((q) => keys.has(String(q.stash)) || keys.has(low(q.stash))) });
         }
@@ -256,7 +330,7 @@ function register(app, { isBotToken, addUser }) {
         Object.entries(snap.positions || {}).forEach(([id, p]) => {
           if (!isMine(p, camfrog)) return;
           seen.add(low(p.owner) + "/" + low(p.name));
-          mine.push({ id, owner: p.owner, name: p.name, members: p.members, hold: p.hold || {}, total: holdValue(p) });
+          mine.push({ id, owner: p.owner, name: p.name, members: p.members, hold: p.hold || {}, cost: p.cost || {}, paid: p.paid || null, pd: p.pd || {}, total: holdValue(p) });
         });
         try {
           const w = (await getQuery("SELECT data FROM wallet_snapshots WHERE key = 'stashes'"))[0];
@@ -272,8 +346,9 @@ function register(app, { isBotToken, addUser }) {
         }).sort((a, b) => (b.owner_me - a.owner_me) || (b.total - a.total));
       }
 
+      // the view gets only the viewer's own stashes (mine): every other stash's holdings, cost, payouts and PAT-days stay out
       res.render("staking", {
-        ...base, snap, mine,
+        ...base, snap: Object.assign({}, snap, { positions: {}, queue: [] }), mine, pnl,
         chart: chart(snap.epochs || []),
         rev: [revenue(snap.epochs || [], 7), revenue(snap.epochs || [], 30)].filter(Boolean),
         pending: (snap.queue || []).filter((q) => !/^(done|failed|cancel)/i.test(q.state || "")),
@@ -288,4 +363,4 @@ function register(app, { isBotToken, addUser }) {
 /** Phase 3: the site's own vault book (capital/vaults.js) writes staking_state itself - it hands the cache the new copy. */
 function setCache(data, updated) { cache = { data, updated }; }
 
-module.exports = { register, latest, clean, isMine, holdValue, positionFor, revenue, chart, setCache, ready, VAULTS: ALL };
+module.exports = { register, latest, clean, isMine, holdValue, pnl, positionFor, revenue, chart, setCache, ready, VAULTS: ALL };

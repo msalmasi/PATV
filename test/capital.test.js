@@ -435,6 +435,186 @@ test("vaults: one bad request never blocks the cut-off (its own savepoint, left 
   assert.equal(d1.v.bank.holders.s999, 100.0, "its shares weren't burnt (the step rolled back)");
 });
 
+test("staking fix plan 2026-10-19 at a real cut-off: ceil_apr 0 skims nothing, PAT-days use the pre-queue holdings, the cost history", async () => {
+  // D1: the daily ceiling OFF (Pepe pushes vault_ceil_apr 0). A big gain since the last snapshot would be skimmed with it on.
+  await SVC.putConfig({ ceil_apr: 0 });
+  assert.equal((await C.cfg()).ceil_apr, 0, "0 is kept (not dropped as falsy)");
+  const st = await op("vaults", "stake", ANN, { stash: "1", vault: "bank", amount: 30000 }, "stake-pd-001");
+  assert.equal(st.body.ok, true, JSON.stringify(st.body));
+  const d0 = await V.load();
+  const last = d0.epochs[d0.epochs.length - 1];
+  last.ts = C.nowS() - 86400;                                     // a full day since the last cut-off
+  const k0 = await V.ctx();
+  const p0 = V.prices(d0, k0);
+  last.price = Object.assign({}, last.price, { bank: p0.bank / 1.3, house: p0.house / 1.3, mm: p0.mm / 1.3, auto: p0.auto / 1.3 });   // +30% in a day
+  d0.next_epoch = C.nowS() - 1;
+  await V.store(d0);
+  const hold0 = JSON.parse(JSON.stringify(Object.fromEntries(V.VAULTS.map((v) => [v, d0.v[v].holders]))));
+  const peak0 = Object.fromEntries(V.VAULTS.map((v) => [v, d0.v[v].peak_price]));
+  const s1Bank0 = Number(d0.v.bank.holders.s1 || 0);
+  const lookBank0 = V.lookThrough(d0, "bank", p0.bank).get("1");
+  const cost0 = ((d0.cost || {})["1"] || {}).bank || { in: 0, out: 0 };
+  await SVC.tick();
+  const d1 = await V.load();
+  const q = d1.queue[st.body.item.id];
+  assert.equal(q.state, "done");
+  for (const v of ["house", "mm"]) {
+    assert.deepEqual(d1.v[v].holders, hold0[v], `${v}: no skim with the ceiling off`);
+    // ...but the high-water mark TRACKS the price (camfrog-bot 31c65d0, ceilingOffStep: max(max(pa, peak), pb))
+    const pk0 = peak0[v] === undefined ? last.price[v] : peak0[v];
+    const want = Math.max(Math.max(last.price[v], pk0), p0[v]);
+    assert.ok(Math.abs(d1.v[v].peak_price - want) <= 1e-9 * want, `${v}: the high-water mark tracks the price (${d1.v[v].peak_price} vs ${want})`);
+  }
+  // ...and the cut-off's notes (the vault_epoch event) record it per vault (ceilingDay's peak_off)
+  const ev = await getQuery("SELECT data FROM escrow_events WHERE game = 'capital' AND kind = 'vault_epoch' ORDER BY id DESC LIMIT 1");
+  assert.equal(ev.length, 1, "the cut-off's vault_epoch event");
+  const evNotes = JSON.parse(ev[0].data).notes || {};
+  assert.ok(evNotes.peak_off && typeof evNotes.peak_off === "object", "an off day: notes.peak_off");
+  for (const v of ["house", "mm"]) assert.ok(Math.abs(evNotes.peak_off[v] - d1.v[v].peak_price) <= 1e-9 * d1.v[v].peak_price, `${v}: peak_off = the tracked mark`);
+  assert.ok(Math.abs(d1.v.bank.holders.s1 - s1Bank0 - 30000 / q.prices.bank) < 1e-6, "the bank only moved by the stake");
+  const audit = (await C.meta("watch_last")) || {};
+  assert.ok(!(audit.findings || []).some((f) => f.code === "I2"), "with no ceiling the Auto fund still moves exactly with its vaults (I2 runs, clean)");
+  const lastSnap = d1.epochs[d1.epochs.length - 1];
+  assert.equal(lastSnap.staker_index.house / last.staker_index.house, lastSnap.price.house / last.price.house, "no ceiling: the stakers' index is the price");
+  // P2.1: the day just ended counted with the holdings BEFORE the queue - the 30,000 staked at this cut-off earns from now on
+  const B = String(require(path.join(repo, "policy", "engines")).weekStart(C.nowS() - 86400, 4) + 7 * 86400);
+  const pd = d1.v.bank.pat_days;
+  assert.ok(pd && typeof pd === "object", "the bank has PAT-days buckets");
+  const got = Object.values(pd).reduce((s, row) => s + Number(row["1"] || 0), 0);
+  assert.ok(Math.abs(got - lookBank0 * 1.0) < Math.max(1, lookBank0 * 1e-3), `stash 1's day = its look-through stake x 1 day (${got} vs ${lookBank0})`);
+  assert.ok(got < lookBank0 + 30000 * 0.5, "the new stake isn't in it");
+  assert.ok(Object.keys(pd).every((k) => /^\d+$/.test(k)), "buckets are keyed by the boundary (integer seconds)");
+  assert.ok(Object.keys(pd).includes(B), `the bucket of the Monday that settles the day (${B})`);
+  // P0.3: the cost history - the stake's legs in, once
+  const cost1 = d1.cost["1"].bank;
+  assert.equal(cost1.in - cost0.in, 30000);
+  assert.equal(q.costed, 1);
+  // the 2026-10-19 review: stash 1 held Bank shares from before the cost history (the export's book), so its Bank row is
+  // partial - /staking shows Staked / P/L as unknown, not a +gain of everything it held before
+  assert.equal(cost1.partial, 1, "a row the live path started on top of an older holding is partial");
+  assert.equal(V.backfillCost(JSON.parse(JSON.stringify(d1))).items, 0, "the backfill finds nothing the live path already counted");
+  // the snapshot records the rule it ran with (Pepe's pepe_stakingreplay reads it before his ceil_log); the PAT-days start
+  assert.equal(lastSnap.ceil_apr, 0, "ceiling off");
+  assert.equal(lastSnap.ceil_cushion, 0);
+  assert.equal(lastSnap.ceil_cushion_days, 8, "...and the cushion's window (camfrog-bot 31c65d0: rule_at reads it first)");
+  assert.equal(d1.epochs[0].ceil_apr, 0.25, "the earlier cut-offs ran with the default 25% ceiling");
+  assert.ok(Number(d1.pd_from) > 0 && Number(d1.pd_from) < lastSnap.ts, "d.pd_from: when the PAT-days began (the first accrual)");
+  await SVC.putConfig({ ceil_apr: 0.25 });
+});
+
+test("the cost backfill (tools/staking-backfill.js cost): dry run by default, a verified backup first, once per book (idempotent)", async () => {
+  const B = require(path.join(repo, "capital", "backfill"));
+  // the requests that ran before the cost history existed: done, never costed
+  const d = await V.load();
+  const done = Object.values(d.queue).filter((q) => q.state === "done" && Object.keys(q.legs || {}).length);
+  assert.ok(done.length >= 2, "the earlier tests left done requests");
+  for (const q of done) delete q.costed;
+  delete d.cost;
+  if (Math.abs(C.nowS() - Number(d.next_epoch || 0)) < 600) d.next_epoch = C.nowS() + 3600;
+  await V.store(d);
+  const want = {};
+  for (const q of done) {
+    const sum = Object.values(q.legs).reduce((s, a) => s + Math.trunc(a), 0);
+    const row = (want[q.stash] = want[q.stash] || {})[q.vault] = (want[q.stash] || {})[q.vault] || { in: 0, out: 0 };
+    if (q.kind === "deposit") row.in += sum; else row.out += sum;
+  }
+  // stash 1 came over in Pepe's export already holding Bank shares and Auto units no request explains: those rows stay
+  // partial (Staked / P/L "—"); its Market maker row is whole (every share there came from a request in the queue)
+  want["1"].bank.partial = 1;
+  want["1"].auto.partial = 1;
+  const dry = await B.cost({});
+  assert.equal(dry.apply, false);
+  assert.equal(dry.items, done.length);
+  assert.equal(dry.whole, true, "the queue still holds every request since the first cut-off");
+  assert.deepEqual(dry.partial.map((x) => x.join("/")).sort(), ["1/auto", "1/bank"]);
+  assert.deepEqual(dry.per_stash, want);
+  assert.equal((await V.load()).cost, undefined, "a dry run writes nothing");
+  await assert.rejects(B.cost({ apply: true }), /--key/, "an apply needs a key");
+  const r = await B.cost({ apply: true, key: "cost-backfill-test" });
+  assert.equal(r.items, done.length);
+  assert.ok(r.backup && fs.existsSync(r.backup), "a verified backup first: " + r.backup);
+  assert.deepEqual((await V.load()).cost, want);
+  const again = await B.cost({ apply: true, key: "cost-backfill-test-2" });
+  assert.equal(again.already, true, "a second apply changes nothing");
+  assert.deepEqual((await V.load()).cost, want);
+});
+
+test("the cushion backfill replays a snapshot with no recorded rule at 25% (pepe_stakingreplay.DEFAULT_CEIL), not today's ceiling", async () => {
+  const B = require(path.join(repo, "capital", "backfill"));
+  await SVC.putConfig({ ceil_apr: 0 });                                       // the ceiling off today
+  const orig = V.replayCeiling;
+  const seen = [];
+  V.replayCeiling = (eps, ceil) => { seen.push(ceil); return orig(eps, ceil); };
+  try {
+    const r = await B.cushion({});
+    assert.equal(r.apply, false, "a dry run");
+    assert.deepEqual(seen, [0.25], "the replay's fallback for unrecorded snapshots is 25%, not the 0 in force now");
+    assert.equal(r.ceil, V.REPLAY_CEIL);
+  } finally {
+    V.replayCeiling = orig;
+    await SVC.putConfig({ ceil_apr: 0.25 });
+  }
+});
+
+test("Pepe's config push keeps every done record's boundary (wf_settled): a tagged re-run counts in lastSettled as in his journal", async () => {
+  const prev = await C.meta("cfg");
+  const B = Date.UTC(2026, 9, 12, 4) / 1000;
+  try {
+    await SVC.putConfig({ waterfall: [{ epoch: "W2026-10-05", boundary: B - 7 * 86400, state: "done", vaults: {} },
+                                      { epoch: "W2026-10-12-r1", boundary: B, state: "done", done: B + 1800, vaults: {} },
+                                      { epoch: "W2026-10-12", boundary: B, state: "moving", vaults: {} }] });
+    const c = await C.cfg();
+    assert.deepEqual(c.waterfall.map((r) => r.epoch), ["W2026-10-05", "W2026-10-12"], "/staking's list: the plain ids");
+    assert.deepEqual(c.wf_settled, [{ epoch: "W2026-10-05", boundary: B - 7 * 86400, state: "done", done: null },
+                                    { epoch: "W2026-10-12-r1", boundary: B, state: "done", done: B + 1800 }]);
+    // the late-Monday check finds the re-run's settlement too (it settled the boundary's PAT-days before a 2 h late cut-off)
+    const lm = V.lateMonday(B - 86400 + 3, B + 2 * 3600, 4, c);
+    assert.deepEqual([lm.boundary, lm.settled, lm.lost], [B, B + 1800, true]);
+    assert.equal(V.lastSettled(c), B, "Pepe's _tr_last_boundary: the done re-run");
+    assert.equal(V.lastSettled(c, "W2026-10-12-r1"), B - 7 * 86400);
+    await SVC.putConfig({ layers: false });                                   // a push without the waterfall keeps the last one
+    assert.equal(V.lastSettled(await C.cfg()), B);
+  } finally {
+    await C.setMeta("cfg", prev);
+  }
+});
+
+test("the earned backfill: knows which went first; refuses an apply without --before when Pepe's fix ran before this site", async () => {
+  const B = require(path.join(repo, "capital", "backfill"));
+  const fx = await C.meta("staking_fix");
+  assert.ok(fx && fx.boot > 0, "this site version's first run is recorded (capital/service noteFix)");
+  assert.ok(fx.first_push > 0 && fx.first_push_new === false, "Pepe's first push to it came from a Pepe without the fix: " + JSON.stringify(fx));
+  assert.equal((await B.deployOrder()).order, "site_first");
+  await SVC.putConfig({ ceil_cushion: 0, ceil_cushion_days: 8 });              // a Pepe with the fix arrives later
+  const fx2 = await C.meta("staking_fix");
+  assert.ok(fx2.pepe_new_at > 0 && fx2.first_push === fx.first_push, "noted, the first push untouched");
+  // two payouts into stash 1: one through an older site path (earned not marked), one the new path marked as counted
+  const m1 = await S.botMove({ stashId: "1", amount: 500, key: "wf-Wtest-house-stk-1", kind: "vault", why: "waterfall stakers" });
+  const m2 = await S.botMove({ stashId: "1", amount: 300, earned: 300, key: "wf-Wtest-bank-stk-1", kind: "vault", why: "waterfall stakers" });
+  assert.ok(m1.ok && m2.ok && m2.earned === 300 && m1.earned === undefined);
+  const site = await B.earned({});
+  assert.equal(site.order, "site_first");
+  assert.equal(site.warning, undefined);
+  assert.equal(site.stashes["1"], 500, "the unmarked payout is counted; the marked one skipped");
+  assert.equal(site.skipped, 1);
+  // Pepe first: the old site counted his payouts without marking them - no apply without --before
+  await C.setMeta("staking_fix", Object.assign({}, fx2, { first_push_new: true }));
+  assert.equal((await B.deployOrder()).order, "pepe_first");
+  const dry = await B.earned({});
+  assert.match(dry.warning, /--before/);
+  await assert.rejects(B.earned({ apply: true, key: "earned-test" }), /--before/);
+  assert.equal(await C.meta("backfill:earned"), null, "nothing applied");
+  const e0 = Number((await S.get("1")).earned || 0);
+  const r = await B.earned({ apply: true, key: "earned-test", before: Date.now() + 1000 });
+  assert.equal(r.apply, true);
+  assert.equal(r.stashes["1"], 500);
+  assert.equal(Number((await S.get("1")).earned || 0), e0 + 500);
+  assert.equal((await B.earned({ apply: true, key: "earned-test-2", before: Date.now() })).already, true, "once");
+  // the two test payouts go back out (net zero for the later supply checks)
+  assert.ok((await S.botMove({ stashId: "1", amount: -800, key: "wf-Wtest-undo", kind: "vault", why: "test" })).ok);
+  await C.setMeta("staking_fix", fx2);
+});
+
 test("rollback: the pots go back to Pepe under one key, everything is handed back, the supply total doesn't move", async () => {
   const s0 = (await supply()).total;
   const potSum = Number((await getQuery("SELECT COALESCE(SUM(balance),0) AS t FROM pools WHERE key LIKE 'market:%'"))[0].t);

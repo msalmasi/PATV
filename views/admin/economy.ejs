@@ -201,6 +201,10 @@
 <%# 1.99ada: the pad-vault payout recipe's percentages + "unpaid shares fund room games" (recipecfg.js); saving is Pepe-owner only %>
 <%- include('../partials/econ-recipe', { isAdmin: _can('econ.telemetry_policy'), me, canEdit: locals.rcfgEdit === true }) %>
 
+<%# staking fix plan (2026-10-19): the daily APR ceiling, the protocol cushion (ships off) and the weekly payout cap, the cushion's
+    size and the staking audit (capital/watch.js); changing them is Pepe-owner only (!econ set, run by Pepe) %>
+<%- include('../partials/econ-staking', { isAdmin: _can('econ.telemetry_policy'), me, canEdit: locals.stkEdit === true }) %>
+
 <%- include('../partials/econ-pools', { isAdmin: _can('econ.backend_cutover'), me }) %>
 
 <%- include('../partials/econ-gscale', { isAdmin: _can('econ.telemetry_policy'), me }) %>

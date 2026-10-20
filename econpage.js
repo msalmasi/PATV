@@ -93,7 +93,29 @@ async function locals(req, { patSupply } = {}) {
   let L = null;
   try { L = await live({ patSupply }); } catch (e) { console.error("[econpage]", e.message); L = null; }
   return { user: req.user ? req.user.username : null, treasury: F.treasuryOn() ? F.state.incentives : null, roomVaults, live: L,
-           roomSplit: roomSplit(), launchpadOn: launchpadOn() };
+           roomSplit: roomSplit(), launchpadOn: launchpadOn(), staking: await stakingRules() };
 }
 
-module.exports = { locals, live, series, pools, roomSplit, launchpadOn, DAYS };
+/** The staking rules in force (the /staking snapshot's settings: the daily APR ceiling, the weekly payout cap, the cushion,
+ *  the time-weighting) - the page words its staking section from them (staking fix plan 2026-10-19). null = not reported. */
+async function stakingRules() {
+  try {
+    const snap = await require("./staking").latest();
+    const s = (snap && snap.settings) || null;
+    if (!s) return null;
+    const n = (x) => (x == null || !Number.isFinite(Number(x)) ? null : Number(x));
+    // what stakers own of each vault right now (the limit sentence says so while Auto deposits skip the limit)
+    const own = {};
+    for (const v of ["bank", "house", "mm"]) {
+      const nv = Number((snap.nav || {})[v]), sv = Number((snap.staked || {})[v]);
+      if (nv > 0 && Number.isFinite(sv)) own[v] = sv / nv;
+    }
+    const wf = Array.isArray(snap.waterfall) ? snap.waterfall : [];
+    const last = wf[wf.length - 1];
+    return { ceil: n(s.ceil), bonus_cap: n(s.bonus_cap), cushion: !!s.cushion, cushion_days: n(s.cushion_days), weighted: !!s.weighted,
+             staker_max: n(s.staker_max), auto_staker_cap: !!s.auto_staker_cap, own,
+             staker_share: last && n(last.staker_share) != null ? n(last.staker_share) : null };
+  } catch (e) { return null; }
+}
+
+module.exports = { locals, live, series, pools, roomSplit, launchpadOn, stakingRules, DAYS };

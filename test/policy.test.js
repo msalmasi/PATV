@@ -223,6 +223,8 @@ test("LIVE: the Monday epoch - shares redeemed on the capital book (Pepe's key),
   const reps = await effects("loan_repay");
   assert.deepEqual(reps.map((e) => e.data), [{ mark: "W2026-10-19-house", epoch: "W2026-10-19", vault: "house", amount: 300000 }]);
   assert.equal((await effects("epoch_record"))[0].data.rec.state, "done");
+  const tr = (await effects("epoch_record"))[0].data.rec.track;
+  assert.ok(tr && tr.vaults && tr.cap_in_force_pct !== undefined, "the record carries the D2 monitoring (engines.trackOf), as Pepe's");
   assert.equal((await effects("week_share"))[0].data.share, plan.totals.incentives);
   // the overlay: until Pepe's doc shows the repayment, the site sees the loan repaid
   const loans = await G.fedLoans((await G.docs()).econ_layers.doc);
@@ -296,8 +298,24 @@ test("the Monday guarantee waits for the epoch, then tops the incentive budget u
   const r0 = await SCH.pass(NEXT_MON, { only: ["monetary"] });
   assert.deepEqual(r0, [], "waits for the epoch");
   await runQuery("UPDATE policy_engines SET mode = 'live' WHERE engine = 'treasury'");
-  const ran = await SCH.pass(NEXT_MON);
+  // ...and this epoch's monitoring fails: like Pepe's try / except around _tr_track, the settlement still commits (all legs),
+  // the record has no track, the error is logged
+  const oTrack = E.trackOf, oErr = console.error;
+  const logged = [];
+  E.trackOf = () => { throw new Error("track boom"); };
+  console.error = (...a) => { logged.push(a.join(" ")); };
+  let ran;
+  try {
+    ran = await SCH.pass(NEXT_MON);
+  } finally { E.trackOf = oTrack; console.error = oErr; }
   assert.ok(ran.includes("treasury W2026-10-26") && ran.includes("monetary D2026-10-26"), JSON.stringify(ran));
+  const wrun = await C.run("treasury", "W2026-10-26");
+  assert.equal(wrun.state, "done", "a monitoring error doesn't roll the weekly payout back");
+  assert.equal(wrun.result.done_legs.length, wrun.plan.legs.length);
+  const wrec = (await effects("epoch_record")).find((e) => e.data.eid === "W2026-10-26").data.rec;
+  assert.equal(wrec.state, "done");
+  assert.equal("track" in wrec, false, "no track on the record, as Pepe's");
+  assert.ok(logged.some((l) => /\[policy\] epoch W2026-10-26: track: track boom/.test(l)), JSON.stringify(logged));
   const plan = (await C.run("monetary", "D2026-10-26")).plan;
   assert.equal(plan.guarantee, true);
   assert.equal(plan.guarantee_target, 25 * M);

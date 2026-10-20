@@ -1191,15 +1191,30 @@
       <figcaption>Who takes the risk, who gets the fee: each vault backs one thing, earns from it, and carries its risk.</figcaption>
     </figure>
 
+    <%# The copy the owner approved 2026-10-19 (staking fix plan §5, rewritten for that day's rule: no daily APR ceiling, no
+        weekly payout cap, a time-weighted weekly payout, stakers carry the House's swings incl. the Monday draws); the i18n
+        sync translates the economy.stk.* keys once they're pushed. It follows the LIVE staking settings
+        (econpage.stakingRules), so it never states a rule that isn't in force; a rule that isn't known (no staking snapshot)
+        gets no sentence (skKnown / skCapKnown) rather than a guess. %>
+    <% const SK = locals.staking || null;
+       const skKnown = !!SK && SK.ceil != null;
+       const skCeil = skKnown && SK.ceil > 0 ? Math.round(SK.ceil * 1000) / 10 : 0;
+       const skCapKnown = !!SK && SK.bonus_cap != null;
+       const skCap = skCapKnown ? Math.round(SK.bonus_cap * 1000) / 10 : null;
+       const skShare = SK && SK.staker_share != null ? Math.round(SK.staker_share * 1000) / 10 : 20;
+       const skCfg = '<span class="cfg">⚙</span>';
+       const skLbl = { bank: '🏦 Bank', house: '🎰 House', mm: '📈 Market maker' };
+       const skOwn = SK && SK.own ? ['bank', 'house', 'mm'].filter((v) => SK.own[v] != null).map((v) => skLbl[v] + ' ' + Math.round(SK.own[v] * 100) + '%').join(', ') : ''; %>
     <h3 class="h3s"><span class="ds-ic" aria-hidden="true">📊</span> Shares: how a stake grows</h3>
     <p class="lead">Staking buys <b>shares</b> of a vault at today's share price (the vault's value ÷ the number of shares).
       When the vault earns, the share price goes up; when it pays out a big loss, the price goes down.
-      Nothing is "paid out" to you and nothing piles up in a separate pool: your earnings compound automatically inside the price.
+      <%= !skKnown ? t('economy.stk.grow_any') : skCeil > 0 ? t('economy.stk.grow_ceil', { ceil: skCeil }) : t('economy.stk.grow_free') %>
+      <%= t('economy.stk.grow_payout') %>
       Your stake is worth <b>your shares × today's price</b>, and your wallet shows that value and your profit or loss.</p>
     <figure class="fig">
       <svg class="fig-desk" viewBox="0 0 480 250" role="img" aria-label="Sketch of a vault share price rising over time with one dip">
         <text x="60" y="38" font-size="14" font-weight="bold" fill="#ffd700">Earnings compound in the price.</text>
-        <text x="60" y="58" font-size="13" fill="#ccc">Nothing piles up or gets paid out separately.</text>
+        <text x="60" y="58" font-size="13" fill="#ccc"><%= t('economy.stk.fig_payout') %></text>
         <line x1="50" y1="70" x2="50" y2="220" stroke="#555" stroke-width="2"/>
         <line x1="50" y1="220" x2="470" y2="220" stroke="#555" stroke-width="2"/>
         <text transform="translate(34,150) rotate(-90)" font-size="12.5" fill="#ccc" text-anchor="middle">share price</text>
@@ -1216,7 +1231,7 @@
       </svg>
       <%# 1.99px: the phone version of the share-price sketch above - the same curve, redrawn 320 wide %>
       <div class="fm">
-        <p class="fm-lead"><b>Earnings compound in the price.</b> Nothing piles up or gets paid out separately.</p>
+        <p class="fm-lead"><b>Earnings compound in the price.</b> <%= t('economy.stk.fig_payout') %></p>
         <svg class="fm-svg" viewBox="0 0 320 214" aria-hidden="true">
           <line x1="24" y1="26" x2="24" y2="190" stroke="#555" stroke-width="2"/>
           <line x1="24" y1="190" x2="314" y2="190" stroke="#555" stroke-width="2"/>
@@ -1323,9 +1338,21 @@
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">📏</span> Limits</h3>
         <ul>
-          <li>Stakers can own at most <b>50%</b> of any vault, so the protocol always keeps skin in the game.</li>
-          <li><b>The weekly settlement:</b> every Monday a vault's profit above its target size (the House: 15M; the Bank: 2M or twice its busiest lending; the Market maker: 1M or 1.5× its market seeds) is shared out. It first repays any Fed loan, then stakers get <b>20%</b>, and the rest goes half to the Federal Reserve (while it's below its ceiling) and half to the <a href="#incentives">incentive budget</a>. Stakers' shares are never touched.</li>
-          <li><b>Ceiling:</b> stakers' share of a week is capped at 25% a year <span class="cfg">⚙</span>; anything above it rejoins the rest of the surplus.</li>
+          <% if (SK && SK.staker_max != null) { const skP = Math.round(SK.staker_max * 100) + '%'; %>
+          <li><%- SK.auto_staker_cap ? t('economy.stk.limit_all', { p: skP }) : t('economy.stk.limit_direct', { p: skP, own: skOwn ? t('economy.stk.own', { list: skOwn }) : '' }) %></li>
+          <% } %>
+          <li><%- t('economy.stk.weekly', { share: skShare, inc: '<a href="#incentives">' + t('economy.stk.inc_link') + '</a>' }) %>
+            <%- SK && SK.weighted ? t('economy.stk.weighted', { share: skShare }) : t('economy.stk.snapshot', { share: skShare }) %></li>
+          <% if (skKnown && skCeil > 0) { %>
+          <li><%- t('economy.stk.ceil_on', { ceil: skCeil, cfg: skCfg }) %><%- SK.cushion ? ' ' + t('economy.stk.ceil_cushion', { days: SK.cushion_days || 8 }) : '' %></li>
+          <% } else if (skKnown) { %>
+          <li><%- t('economy.stk.ceil_off', { cfg: skCfg }) %></li>
+          <% } %>
+          <% if (skCapKnown && skCap > 0) { %>
+          <li><%- t('economy.stk.cap_on', { cap: skCap, cfg: skCfg }) %></li>
+          <% } else if (skCapKnown) { %>
+          <li><%- t('economy.stk.cap_off', { share: skShare, cfg: skCfg }) %></li>
+          <% } %>
         </ul>
       </div>
     </div>
@@ -1701,7 +1728,7 @@
           <tr><td>Player loan</td><td class="n">10% of interest</td><td>To the Bank; principal never taxed</td></tr>
           <tr><td>Late loan</td><td class="n">+2% / day</td><td>On what's still owed, capped at +50% of the loan</td></tr>
           <tr><td>Duel / Brawl / Arena</td><td class="n">small cut <span class="cfg">⚙</span></td><td>Shared by the Federal Reserve and the Fight Club turf business (to Fort Knox once room turf wars arrive)</td></tr>
-          <tr><td>Staking yield cap</td><td class="n">above 25% APR <span class="cfg">⚙</span></td><td>Stakers' weekly share above the cap rejoins the rest of the surplus</td></tr>
+          <% if (skCap > 0) { %><tr><td>Staking yield cap</td><td class="n">above <%= skCap %>% APR <span class="cfg">⚙</span></td><td>Stakers' weekly share above the cap rejoins the rest of the surplus</td></tr><% } %>
           <tr><td>Fee splits</td><td class="n"><span class="cfg">⚙</span></td><td>Where each fee goes is set in the routing table</td></tr>
         </tbody>
       </table>

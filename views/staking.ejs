@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'Staking', user: user}) %>
 <% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
    const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
@@ -131,8 +132,22 @@
             <span>Value (NAV)</span><b><%= fmt(snap.nav[k]) %></b>
             <span>Stakers' share</span><b><%= pct(share(k)) %></b>
           <% } %>
-          <span>APR 7 days</span><b class="<%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= apr(a[7]) %></b>
-          <span>APR 30 days</span><b class="<%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= apr(a[30]) %></b>
+          <% if (k === 'auto') { %>
+            <span>APR 7 days</span><b class="<%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= apr(a[7]) %></b>
+            <span>APR 30 days</span><b class="<%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= apr(a[30]) %></b>
+          <% } else { /* staking fix plan P0.3: the whole vault's APR is not what a staker earns - the stakers' own APR next to it */
+               const sa = (snap.staker_apr || {})[k] || {}, ssf = (snap.staker_so_far || {})[k]; %>
+            <span><%= t('staking.card.vault_apr7') %></span><b class="<%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= apr(a[7]) %></b>
+            <span><%= t('staking.card.vault_apr30') %></span><b class="<%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= apr(a[30]) %></b>
+            <span><%= t('staking.card.staker_apr7') %></span>
+            <% if (sa[7] != null) { %><b class="<%= sa[7] >= 0 ? 'up' : 'down' %>"><%= apr(sa[7]) %></b>
+            <% } else if (ssf) { %><b class="<%= ssf.r >= 0 ? 'up' : 'down' %>"><%= (ssf.r >= 0 ? '+' : '') + pct(ssf.r, 2) %> <small><%= t('staking.card.staker_so_far', { days: ssf.days }) %></small></b>
+            <% } else { %><b>— <small><%= t('staking.card.staker_none') %></small></b><% } %>
+            <% if (sa[30] != null) { %><span><%= t('staking.card.staker_apr30') %></span><b class="<%= sa[30] >= 0 ? 'up' : 'down' %>"><%= apr(sa[30]) %></b><% } %>
+            <% const cu = (snap.cushion || {})[k]; if ((snap.settings || {}).cushion && cu) { %>
+              <span><%= t('staking.card.cushion', { days: (snap.settings || {}).cushion_days || 8 }) %></span><b><%= fmt(cu.value) %></b>
+            <% } %>
+          <% } %>
           <% const sf = (snap.so_far || {})[k]; if (a[7] == null && sf) { %>
             <span>Return so far</span><b class="<%= sf.r >= 0 ? 'up' : 'down' %>"><%= (sf.r >= 0 ? '+' : '') + pct(sf.r, 2) %> <small>in <%= sf.days %> d (APR once there's 7 days of history)</small></b>
           <% } %>
@@ -155,40 +170,93 @@
 
   <!-- ───────── The weekly settlement (Economy v3) + the older daily dividends ───────── -->
   <h2 class="ds-pixel-h">WEEKLY SETTLEMENT</h2>
-  <% const divs = snap.dividends || [];
+  <%# The copy the owner approved 2026-10-19 (staking fix plan §5.2 rewritten for that day's rule - no daily APR ceiling, no
+      weekly payout cap, a time-weighted weekly payout, stakers carry the House's swings incl. the Monday draws); the i18n sync
+      translates it once it's pushed. Every sentence follows the LIVE settings (s.ceil,
+      s.bonus_cap, s.cushion, s.weighted, s.auto_staker_cap), so the page never states a rule that isn't in force; a setting
+      that isn't known (no snapshot field) gets no sentence at all rather than a guess. %>
+  <% /* staking fix plan P0.3 / §5.2: the weekly payouts per vault (Pepe's epoch records), the CURRENT rule said plainly */
+     const divs = snap.dividends || [];
      const nowS = Date.now() / 1000;
      const sumSince = (k, days) => divs.filter((x) => x.vault === k && x.ts >= nowS - days * 86400).reduce((a, x) => a + x.amount, 0);
-     const tsz = snap.targets_size || {}; %>
-  <p class="info">Every Monday each vault settles its week. Its profit above its target size is the <b>surplus</b>: it first
-    repays anything the vault borrowed from the Federal Reserve, then <b>20%</b> goes to that vault's stakers (up to 25% APR),
-    and the protocol's part goes half to the Federal Reserve while it's below its ceiling and the rest to the incentive budget
-    that pays everyone's rewards. Stakers' shares are never touched. <a href="/economy#incentives">How it works</a></p>
-  <p class="info">The table below is the older daily protocol dividend, which paid the protocol's earnings straight to the
-    Federal Reserve before the weekly settlement replaced it.</p>
-  <div class="ds-tbl"><table>
-    <tr><th>Vault</th><th class="r">Value now</th><th class="r">Target</th><th class="r">Paid · 7 days</th><th class="r">Paid · 30 days</th><th class="r">Paid · all</th></tr>
-    <% ['bank', 'house', 'mm'].forEach((k) => { %>
-      <tr><td><%= V[k].icon %> <%= V[k].name %></td>
-          <td class="r"><%= fmt(snap.nav[k]) %></td>
-          <td class="r"><%= tsz[k] == null ? '—' : fmt(tsz[k]) %><%= tsz[k] != null && snap.nav[k] > tsz[k] ? ' ▲' : '' %></td>
-          <td class="r"><%= fmt(sumSince(k, 7)) %></td><td class="r"><%= fmt(sumSince(k, 30)) %></td>
-          <td class="r"><%= fmt(divs.filter((x) => x.vault === k).reduce((a, x) => a + x.amount, 0)) %></td></tr>
-    <% }) %>
-  </table></div>
-  <% if (divs.length) { %>
-    <details class="more"><summary class="info">Recent payouts (<%= divs.length %>)</summary>
+     const tsz = snap.targets_size || {};
+     const wfs = snap.waterfall || [];
+     const wl = wfs[wfs.length - 1] || null;
+     const pc1 = (f) => Math.round(Number(f) * 1000) / 10;
+     const bcap = s.bonus_cap == null ? null : s.bonus_cap;           // null = not reported: no cap sentence either way
+     const shr = wl && wl.staker_share != null ? pc1(wl.staker_share) : 20;
+     const wfSum = (r, f) => ['house', 'bank', 'mm'].reduce((a, v) => a + (((r.vaults || {})[v] || {})[f] || 0), 0);
+     const pdw0 = snap.pd_week || {}; %>
+  <p class="info"><%- t('staking.wf.how', { share: shr, cap: bcap > 0 ? t('staking.wf.cap', { cap: pc1(bcap) }) : '' }) %>
+    <%- s.weighted ? t('staking.wf.weighted') : t('staking.wf.snapshot') %>
+    <%# a partial week (Pepe's bucket rule): the "first week" sentence only when the PAT-days began inside the week this Monday
+        settles (pd_from in [boundary - 7 d, boundary): capital/vaults.pdFirstWeek, which the admin card uses); any other partial week (PAT-days that began in an earlier week of a
+        longer stretch, a pruned oldest week, or Pepe's local snapshot, which sends no pd_from) gets the plain one %>
+    <% const pdFirst = pdw0.partial && Number(pdw0.from) > 0 && Number(pdw0.boundary) > 0 && Number(pdw0.from) >= Number(pdw0.boundary) - 7 * 86400 && Number(pdw0.from) < Number(pdw0.boundary); %>
+    <%- s.weighted && pdw0.partial ? (pdFirst ? t('staking.wf.partial', { when: when(pdw0.from) }) : t('staking.wf.partial_gap')) : '' %>
+    <%# D2's safeguard (camfrog-bot 31c65d0): with no weekly cap set, a week that isn't wholly time-weighted settles under the
+        25% reference cap - said only when the cap is known to be off and this week is known to be partial %>
+    <%- bcap != null && !(bcap > 0) && pdw0.partial ? t('staking.wf.partial_cap', { cap: 25 }) : '' %></p>
+  <p class="info"><%- s.ceil == null ? '' : !(s.ceil > 0) ? t('staking.wf.ceiling_off') : s.cushion ? t('staking.wf.ceiling_cushion', { ceil: pc1(s.ceil), days: s.cushion_days || 8 }) : t('staking.wf.ceiling', { ceil: pc1(s.ceil) }) %>
+    <a href="/economy#incentives">How it works</a></p>
+  <% if (wl) { %>
+    <p class="info"><b><%= t('staking.wf.week', { week: wl.epoch.slice(1) }) %></b> · <%= wl.state === 'done' && wl.done ? t('staking.wf.settled', { when: when(wl.done) }) : t('staking.wf.not_done') %></p>
+    <div class="ds-tbl"><table>
+      <tr><th><%= t('staking.wf.col_vault') %></th><th class="r"><%= t('staking.wf.col_surplus') %></th><th class="r"><%= t('staking.wf.col_share', { share: shr }) %></th>
+        <th class="r"><%= bcap > 0 ? t('staking.wf.col_cap', { cap: pc1(bcap) }) : t('staking.wf.col_cap_none') %></th><th class="r"><%= t('staking.wf.col_paid') %></th>
+        <th class="r"><%= t('staking.wf.col_fed') %></th><th class="r"><%= t('staking.wf.col_inc') %></th></tr>
+      <% ['house', 'bank', 'mm'].filter((k) => (wl.vaults || {})[k]).forEach((k) => { const x = wl.vaults[k]; %>
+        <tr><td><%= V[k].icon %> <%= V[k].name %></td><td class="r"><%= fmt(x.surplus) %></td><td class="r"><%= fmt(x.stakers_share) %></td>
+          <td class="r"><%= x.stakers_share > 0 ? fmt(x.apr_cap) : '—' %><%= x.stakers_share > 0 && x.fallback ? ' †' : '' %></td><td class="r up"><%= fmt(x.stakers) %></td>
+          <td class="r"><%= fmt(x.fed + (x.fed_loan_repaid || 0)) %></td><td class="r"><%= fmt(x.incentives) %></td></tr>
+      <% }) %>
+      <tr class="tot"><td><%= t('staking.wf.total') %></td><td class="r"><%= fmt(wfSum(wl, 'surplus')) %></td><td class="r"><%= fmt(wfSum(wl, 'stakers_share')) %></td><td></td>
+        <td class="r up"><%= fmt(wfSum(wl, 'stakers')) %></td><td class="r"><%= fmt(wfSum(wl, 'fed') + wfSum(wl, 'fed_loan_repaid')) %></td><td class="r"><%= fmt(wfSum(wl, 'incentives')) %></td></tr>
+    </table></div>
+    <p class="info"><%- t('staking.wf.table_help') %></p>
+    <% if (['house', 'bank', 'mm'].some((k) => (wl.vaults || {})[k] && wl.vaults[k].stakers_share > 0 && wl.vaults[k].fallback)) { %>
+      <p class="info"><%- t('staking.wf.fallback', { cap: 25 }) %></p>
+    <% } %>
+    <% if (wfs.length > 1) { %>
+      <details class="more"><summary class="info"><%= t('staking.wf.earlier', { n: wfs.length - 1 }) %></summary>
+        <div class="ds-tbl"><table>
+          <tr><th><%= t('staking.wf.col_week') %></th><th class="r"><%= t('staking.wf.col_surplus') %></th><th class="r"><%= t('staking.wf.col_paid') %></th>
+            <th class="r"><%= t('staking.wf.col_fed') %></th><th class="r"><%= t('staking.wf.col_inc') %></th></tr>
+          <% wfs.slice(0, -1).reverse().forEach((r) => { %>
+            <tr><td><%= r.epoch.slice(1) %></td><td class="r"><%= fmt(wfSum(r, 'surplus')) %></td><td class="r up"><%= fmt(wfSum(r, 'stakers')) %></td>
+              <td class="r"><%= fmt(wfSum(r, 'fed') + wfSum(r, 'fed_loan_repaid')) %></td><td class="r"><%= fmt(wfSum(r, 'incentives')) %></td></tr>
+          <% }) %>
+        </table></div>
+      </details>
+    <% } %>
+  <% } else { %>
+    <p class="info"><%= t('staking.wf.none') %></p>
+  <% } %>
+  <details class="more"><summary class="info"><%= t('staking.div.title') %></summary>
+    <p class="info"><%= t('staking.div.help') %></p>
+    <div class="ds-tbl"><table>
+      <tr><th>Vault</th><th class="r">Value now</th><th class="r">Target</th><th class="r">Paid · 7 days</th><th class="r">Paid · 30 days</th><th class="r">Paid · all</th></tr>
+      <% ['bank', 'house', 'mm'].forEach((k) => { %>
+        <tr><td><%= V[k].icon %> <%= V[k].name %></td>
+            <td class="r"><%= fmt(snap.nav[k]) %></td>
+            <td class="r"><%= tsz[k] == null ? '—' : fmt(tsz[k]) %><%= tsz[k] != null && snap.nav[k] > tsz[k] ? ' ▲' : '' %></td>
+            <td class="r"><%= fmt(sumSince(k, 7)) %></td><td class="r"><%= fmt(sumSince(k, 30)) %></td>
+            <td class="r"><%= fmt(divs.filter((x) => x.vault === k).reduce((a, x) => a + x.amount, 0)) %></td></tr>
+      <% }) %>
+    </table></div>
+    <% if (divs.length) { %>
       <div class="ds-tbl"><table>
         <tr><th>When (UTC)</th><th>Vault</th><th class="r">PAT to the Reserve</th></tr>
         <% divs.slice().reverse().slice(0, 30).forEach((x) => { %>
           <tr><td><%= when(x.ts) %></td><td><%= V[x.vault].icon %> <%= V[x.vault].name %></td><td class="r"><%= fmt(x.amount) %></td></tr>
         <% }) %>
       </table></div>
-    </details>
-  <% } else { %>
-    <p class="info">No dividends yet — they start once a vault's value passes its target and the protocol has earnings in it.</p>
-  <% } %>
-  <p class="info">Settings: APR ceiling <b><%= amb(s.ceil) %></b> · floor <b><%= amb(s.floor) %></b> · Reserve top-up <b><%= amb(s.topup) %></b> ·
-    stakers can own up to <b><%= s.staker_max == null ? '—' : pct(s.staker_max, 0) %></b> of a vault ·
+    <% } %>
+  </details>
+  <p class="info">Settings: APR ceiling <b><%= s.ceil == null ? '—' : s.ceil > 0 ? amb(s.ceil) : t('staking.off') %></b> · <%- t('staking.settings.cushion', { state: s.cushion ? t('staking.on') : t('staking.off'), days: s.cushion_days || 8 }) %> ·
+    <%- t('staking.settings.bonus', { cap: bcap == null ? '—' : bcap > 0 ? t('staking.settings.cap_val', { cap: pc1(bcap) }) : t('staking.settings.no_cap') }) %> · floor <b><%= amb(s.floor) %></b> · Reserve top-up <b><%= amb(s.topup) %></b> ·
+    <%- t('staking.settings.weighted', { state: s.weighted ? t('staking.on') : t('staking.off') }) %> ·
+    <%- t(s.auto_staker_cap ? 'staking.settings.smax_all' : 'staking.settings.smax_direct', { p: s.staker_max == null ? '—' : pct(s.staker_max, 0) }) %> ·
     Auto bands: Bank ≥ <b><%= s.bank_min == null ? '—' : pct(s.bank_min, 0) %></b>, House ≤ <b><%= s.house_max == null ? '—' : pct(s.house_max, 0) %></b>, Market maker ≤ <b><%= s.mm_max == null ? '—' : pct(s.mm_max, 0) %></b>.
     <% if (snap.updated) { %>Updated <%= when(snap.updated / 1000) %> UTC.<% } %></p>
 
@@ -270,24 +338,54 @@
   <% } else if (!mine.length) { %>
     <p class="info">You don't own or share a stash yet. <a href="/wallet">Create one in your wallet ›</a></p>
   <% } else { %>
+    <% /* staking fix plan P0.3: what each stash put in, where it stands, and what staking paid it (into the stash's balance) */
+       const PNL = typeof pnl === 'function' ? pnl : null;
+       const sgn = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
+       const plCell = (pl) => pl == null ? '<td class="r mut" title="' + t('staking.mine.pl_none') + '">—</td>' : '<td class="r ' + (pl >= 0 ? 'up' : 'down') + '">' + sgn(pl) + '</td>';
+       let grand = 0, gStaked = 0, gStakedKnown = true, gPl = 0, gPlKnown = true, gP7 = 0, gPall = 0, gPaidKnown = true; %>
     <div class="ds-tbl"><table>
-      <tr><th>Stash</th><th>Vault</th><th class="r">Shares</th><th class="r">Price</th><th class="r">Value</th></tr>
-      <% let grand = 0; mine.forEach((m) => { const rows = KEYS.filter((k) => m.hold[k]); grand += m.total; %>
+      <tr><th><%= t('staking.mine.col_stash') %></th><th><%= t('staking.mine.col_vault') %></th><th class="r"><%= t('staking.mine.col_shares') %></th><th class="r"><%= t('staking.mine.col_price') %></th>
+        <th class="r"><%= t('staking.mine.col_staked') %></th><th class="r"><%= t('staking.mine.col_value') %></th><th class="r"><%= t('staking.mine.col_pl') %></th><th class="r"><%= t('staking.mine.col_paid') %></th></tr>
+      <% mine.forEach((m) => {
+           const P = PNL ? PNL(m) : { rows: Object.fromEntries(KEYS.filter((k) => m.hold[k]).map((k) => [k, { value: Number(m.hold[k].value) || 0, staked: null, pl: null, has: true }])), total: { pl: null, staked: null } };
+           const rows = KEYS.filter((k) => P.rows[k]);
+           const pd = m.paid || null;
+           grand += m.total;
+           if (P.total.staked == null) gStakedKnown = false; else gStaked += P.total.staked;
+           if (P.total.pl == null) gPlKnown = false; else gPl += P.total.pl;
+           if (pd) { gP7 += pd.d7 || 0; gPall += pd.all || 0; } else gPaidKnown = false;
+           const paidCell = pd ? '<td class="r' + (pd.all > 0 ? ' up' : '') + '">' + (pd.d7 > 0 ? '+' : '') + fmt(pd.d7) + ' / ' + (pd.all > 0 ? '+' : '') + fmt(pd.all) +
+             (pd.corr > 0 ? '<br><small class="mut">' + t('staking.mine.corr', { n: fmt(pd.corr) }) + '</small>' : '') + '</td>' : '<td class="r mut">—</td>'; %>
         <% if (!rows.length) { %>
-          <tr><td><%- UL(m.owner) %>/<%= m.name %></td><td colspan="4" class="mut">nothing staked</td></tr>
+          <tr><td><%- UL(m.owner) %>/<%= m.name %></td><td colspan="6" class="mut"><%= t('staking.mine.nothing') %></td><%- paidCell %></tr>
         <% } %>
-        <% rows.forEach((k, i) => { %>
+        <% rows.forEach((k, i) => { const r = P.rows[k], h = m.hold[k]; %>
           <tr><td><%- i === 0 ? UL(m.owner) + '/' + ULE(m.name) : '' %></td><td><%= V[k].icon %> <%= V[k].name %></td>
-            <td class="r"><%= (Number(m.hold[k].shares) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }) %></td>
-            <td class="r"><%= price(snap.prices[k]) %></td><td class="r"><%= fmt(m.hold[k].value) %></td></tr>
+            <td class="r"><%= h ? (Number(h.shares) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—' %></td>
+            <td class="r"><%= price(snap.prices[k]) %></td>
+            <td class="r"><%= r.staked == null ? '—' : fmt(r.staked) %></td>
+            <td class="r"><%= fmt(r.value) %></td><%- plCell(r.pl) %><%- i === 0 ? paidCell : '<td></td>' %></tr>
         <% }) %>
         <% m.pending.forEach((q) => { %>
-          <tr><td></td><td colspan="4" class="pend">⏳ <%= q.kind %> <%= q.amount ? fmt(q.amount) + ' PAT' : q.shares ? q.shares.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' shares' : '' %>
+          <tr><td></td><td colspan="7" class="pend">⏳ <%= q.kind %> <%= q.amount ? fmt(q.amount) + ' PAT' : q.shares ? q.shares.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' shares' : '' %>
             <%= q.kind === 'withdraw' ? 'from' : 'into' %> <%= (V[q.vault] || { name: q.vault }).name %> · <%= q.state || 'queued' %><%= q.ts ? ' · ' + when(q.ts) + ' UTC' : '' %></td></tr>
         <% }) %>
       <% }) %>
-      <tr class="tot"><td>Total</td><td></td><td></td><td></td><td class="r"><%= fmt(grand) %></td></tr>
+      <tr class="tot"><td><%= t('staking.mine.total') %></td><td></td><td></td><td></td><td class="r"><%= PNL && gStakedKnown ? fmt(gStaked) : '—' %></td><td class="r"><%= fmt(grand) %></td>
+        <%- plCell(PNL && gPlKnown ? gPl : null) %><td class="r"><%= gPaidKnown ? (gP7 > 0 ? '+' : '') + fmt(gP7) + ' / ' + (gPall > 0 ? '+' : '') + fmt(gPall) : '—' %></td></tr>
     </table></div>
+    <p class="info"><%- t('staking.mine.note') %></p>
+    <% /* P2.1: what each stash has earned toward next Monday's payout so far - its share of each vault's PAT-days this week */
+       const pdw = snap.pd_week || {}, pdt = pdw.total || {};
+       const wk = mine.map((m) => {
+         const parts = ['house', 'bank', 'mm'].filter((v) => (m.pd || {})[v] > 0 && pdt[v] > 0).map((v) => V[v].icon + ' ' + V[v].name + ' ' + pct(m.pd[v] / pdt[v], 1));
+         return parts.length ? [m, parts] : null;
+       }).filter(Boolean);
+       if (s.weighted && wk.length) { %>
+      <p class="info"><b><%= t('staking.mine.week_h', { when: pdw.boundary ? when(pdw.boundary) : '—' }) %></b>
+        <% wk.forEach(([m, parts], i) => { %><%- i ? ' · ' : '' %><%- UL(m.owner) %>/<%= m.name %>: <%= parts.join(', ') %><% }) %></p>
+      <p class="info"><%- t('staking.mine.week_help') %></p>
+    <% } %>
 
     <div class="forms">
       <form method="post" action="/act"><%- hidden('stash') %>

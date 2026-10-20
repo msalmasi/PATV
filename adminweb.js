@@ -216,6 +216,8 @@ function register(app, { addUser }) {
              acts: isAdmin ? await safe(() => require("./actions").recentFor(me.userId, "admin-loans"), []) : [],
              // 1.99ada: the 💸 payout recipe card's form is live only for a Pepe owner (recipecfg.canEdit; the API re-checks)
              rcfgEdit: await safe(() => require("./recipecfg").canEdit(me), false),
+             // staking fix plan: the 🏦 staking card's switches are live only for a Pepe owner (capital/watch.canEdit; the API re-checks)
+             stkEdit: await safe(() => require("./capital/watch").canEdit(me), false),
              msg: require("./notices").read(req) };        // 1.99ade: ?m=<id> (notices.js), never ?msg= text
   }));
   // 1.99ol: + the casino front-end switches (casino_settings bj_front / hm_front; saved through /api/casino/admin/settings)

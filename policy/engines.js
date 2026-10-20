@@ -39,12 +39,21 @@ const DEFAULTS = {
   incentive_guarantee_target: 0, issuance_to_guarantee: true, activity_rewards: false, issuance_mode: "off",
   issuance_pct_month: 1.0, issuance_fixed_month: 10000000, issuance_activity_scaling: true, mintcap_issuance: -1,
   mintcap_floor: 30000000, mintcap_loan: -1, mintcap_restore: -1, mintcap_total: -1, staker_share_pct: 20.0, fed_split_pct: 50.0,
+  // staking fix plan P1.1 (2026-10-19): the stakers' weekly bonus cap on its own knob (% APR on the staked value, 0 = no cap) -
+  // it was VAULT_CEIL_APR, the daily ceiling's knob; 25 = the same 25% as before. D2 (the owner, 2026-10-19): the cap goes -
+  // the operator sets it to 0 after the deploy (time-weighted payouts, P2.1, ship in the same release)
+  wf_staker_cap_pct: 25.0,
   // Q11 (ECONOMY-V3 23.2): the activity-scaled guarantee target - OFF by default (the fixed target holds)
   guarantee_scaled: false, guarantee_base: 25000000, guarantee_min: 15000000, guarantee_max: 40000000, guarantee_smooth_weeks: 3,
   guarantee_ref_weeks: 4,
 };
 const CONSTS = { VAULT_MIN_MOVE: 1000, VAULT_CEIL_APR: 0.25, VAULT_EPOCH_UTC_HOUR: 4, HOUSE_MIN_CASH: 5000000,
                  VAULT_MM_MIN_TARGET: 1000000, VAULT_TARGET_MULT: 1.5, HEIST_VAULT_MIN: 2000000, HEIST_VAULT_CAP: 10000000 };
+// D2 (the owner, 2026-10-19): what a 25% APR weekly cap WOULD have paid is tracked on every epoch record (pepe_treasury
+// TR_TRACK_CAP), and D2's safeguard pays a vault whose week isn't wholly time-weighted under that same reference cap while no
+// cap is in force (TR_FALLBACK_CAP = TR_TRACK_CAP; patDaysWhole)
+const TR_TRACK_CAP = 0.25;
+const TR_FALLBACK_CAP = TR_TRACK_CAP;
 const ACT_MIN_LINES = 10, ACT_MIN_MIC = 5, ACT_SCALE_MIN = 0.5, ACT_SCALE_MAX = 1.5, ACT_SCORE_CAP = 1000;
 const GUARANTEE_WAIT = 12 * 3600;
 
@@ -132,6 +141,10 @@ function C(inp) {
     hour: () => pyInt(k.VAULT_EPOCH_UTC_HOUR),
   };
 }
+/** P1.1: the stakers' weekly bonus cap, an APR fraction on the staked value (0 = no cap) - pepe_treasury._tr_staker_cap:
+ *  _share(self, "wf_staker_cap_pct", VAULT_CEIL_APR). stakerCapOf(inputs): the same from an engine's inputs. */
+const stakerCap = (c) => c.share("wf_staker_cap_pct", pyFloat(c.k("VAULT_CEIL_APR")));
+const stakerCapOf = (inp) => stakerCap(C(inp));
 const flag = (inp, f) => !!((inp.flags || {})[f]);
 const pool = (inp, k) => pyInt((inp.pools || {})[k]);
 
@@ -306,9 +319,79 @@ function holdersGet(list, k) {
   for (const [hk, sh] of list || []) if (hk === k) return Number(sh);
   return 0;
 }
-/** {stash id: staked value in vault v} (a Map in Python's insertion order), the Auto fund looked through. */
-function stakers(inp, v, prices) {
+/**
+ * P2.1 - pepe_vaults.pat_days_avg: {stash id: average staked value} = the PAT-days in the buckets (lastBoundary, boundary]
+ * / days, or null when the vault has no bucket for `boundary` (the caller then uses the snapshot). lastBoundary 0 = no
+ * earlier settled epoch: the boundary's own bucket only. st.pat_days is the inputs' ordered list
+ * [[boundary, [[stash id, PAT-days], ...]], ...] (pepe_policyinputs / policy/gather.js); buckets in ascending order, stashes
+ * in each bucket's order; an "s<digits>" key is read as the stash id <digits>.
+ */
+function patDaysAvg(st, boundary, lastBoundary, days) {
+  const pdl = st && Array.isArray(st.pat_days) ? st.pat_days : null;
+  if (!pdl || boundary === undefined || boundary === null) return null;
+  const bkey = String(Math.trunc(Number(boundary)));
+  if (!pdl.some((x) => Array.isArray(x) && String(x[0]) === bkey && Array.isArray(x[1]))) return null;
+  if (!days || !(Number(days) > 0)) return null;
+  const lb = Number(lastBoundary || 0);
+  const keys = pdl.filter((x) => Array.isArray(x) && Array.isArray(x[1])
+    && (String(x[0]) === bkey || (lb > 0 && lb < Number(x[0]) && Number(x[0]) < Number(boundary))));
+  keys.sort((a, b) => Number(a[0]) - Number(b[0]));
+  const out = new Map();
+  for (const [, rows] of keys) {
+    for (const [k, x] of rows) {
+      let sid = String(k);
+      if (/^s\d+$/.test(sid)) sid = sid.slice(1);
+      out.set(sid, (out.has(sid) ? out.get(sid) : 0.0) + Number(x));
+    }
+  }
+  const res = new Map();
+  for (const [sid, x] of out) res.set(sid, x / Number(days));
+  return res;
+}
+/**
+ * D2's safeguard (camfrog-bot 31c65d0, pepe_vaults.pat_days_whole): is the epoch that settles at `boundary` WHOLLY
+ * time-weighted? The bucket for `boundary` must exist AND some bucket must be older than the first one patDaysAvg sums
+ * ((lastBoundary, boundary], or the boundary's own) - a bucket only gets PAT-days from a cut-off inside its week, so an older
+ * one proves the PAT-days were accruing before the first of those weeks began. Without one the PAT-days began mid-way (the
+ * first week after the deploy) or a week of them is missing (pruned: PD_KEEP), so a stake made before they began weighs as if
+ * held from then: planEpoch then pays that vault under the reference cap (TR_FALLBACK_CAP) instead of no cap. st.pat_days is
+ * the inputs' list (patDaysAvg). Python's min() of nothing would raise; it can't happen for a whole-second boundary (the
+ * boundary's own bucket is always among those summed) - false (the cap) here. -> true / false
+ */
+function patDaysWhole(st, boundary, lastBoundary) {
+  const pdl = st && Array.isArray(st.pat_days) ? st.pat_days : null;
+  if (!pdl || boundary === undefined || boundary === null) return false;
+  const rows = pdl.filter((x) => Array.isArray(x) && Array.isArray(x[1]));
+  const bkey = String(Math.trunc(Number(boundary)));
+  if (!rows.some((x) => String(x[0]) === bkey)) return false;
+  const B = Number(boundary);
+  const lb = Number(lastBoundary || 0);
+  const keys = rows.map((x) => Number(x[0]));
+  const used = keys.filter((k) => k === B || (lb > 0 && lb < k && k < B));
+  if (!used.length) return false;
+  const first = Math.min(...used);
+  return keys.some((k) => k < first);
+}
+/**
+ * {stash id: staked value in vault v} (a Map in Python's insertion order) - pepe_treasury._tr_stakers.
+ * P2.1 (staking fix plan, required with D2 2026-10-19): with `boundary` and the vault holding a PAT-days bucket for it
+ * (capital/vaults.js accruePatDays on the site's cut-off, pepe_vaults.accrue_pat_days on Pepe's local one), each stash's
+ * value is its AVERAGE stake over the epoch (patDaysAvg): a stake made at the cut-off right before the payout counts 0, one
+ * held all week counts in full (even if it left before Monday). The cap (planEpoch) reads the same values. Without the bucket
+ * (a book from before P2.1): the holdings now, the Auto fund looked through (as before). Only stashes that still exist
+ * (inputs.stashes) get a share.
+ */
+function stakers(inp, v, prices, boundary, lastBoundary, days) {
   const st = (inp.vaults || {})[v] || {};
+  const live = inp.stashes || {};
+  if (boundary !== undefined && boundary !== null) {
+    const avg = patDaysAvg(st, boundary, lastBoundary, days);
+    if (avg) {
+      const res = new Map();
+      for (const [id, val] of avg) if (val > 0 && live[id]) res.set(id, val);
+      return res;
+    }
+  }
   const h = st.holders || [];
   const price = Number(prices[v] || 0);
   const out = new Map();
@@ -328,7 +411,6 @@ function stakers(inp, v, prices) {
       }
     }
   }
-  const live = inp.stashes || {};
   const res = new Map();
   for (const [id, val] of out) if (val > 0 && live[id]) res.set(id, val);
   return res;
@@ -347,7 +429,8 @@ function planEpoch(inp) {
   const fedTarget = c.int("fed_ceiling", 150000000);
   const plan = { epoch: eid, boundary, ts: now, days, fed_before: fed, fed_target: fedTarget, fed_cap: fedTarget, vaults: {}, legs: [], totals: {} };
   const minMove = pyInt(c.k("VAULT_MIN_MOVE"));
-  const ceil = pyFloat(c.k("VAULT_CEIL_APR"));
+  // P1.1: Pepe's _tr_staker_cap - the bonus cap's own knob (the daily ceiling keeps VAULT_CEIL_APR)
+  const ceil = stakerCap(c);
   const loans = loansByVault(inp);
   const stakerShare = c.share("staker_share_pct", 0.20);
   const fedSplit = c.share("fed_split_pct", 0.5);
@@ -370,10 +453,16 @@ function planEpoch(inp) {
     fedRun += repay;
     const afterRepay = surplus - repay;
     const poolShare = pyInt(afterRepay * stakerShare);
-    const stk = poolShare > 0 ? stakers(inp, v, prices) : new Map();
+    const stk = poolShare > 0 ? stakers(inp, v, prices, boundary, lb, days) : new Map();
     let staked = 0;
     for (const x of stk.values()) staked += x;
-    const cap = ceil > 0 ? pyInt(staked * ceil * days / 365) : poolShare;
+    // D2: wf_staker_cap_pct 0 = NO cap - the stakers get their full share (staker_share_pct of the surplus after any Fed loan),
+    // but only on a week that is WHOLLY time-weighted: otherwise (no PAT-days bucket, or PAT-days that began mid-week - the
+    // first week after the deploy) the vault is paid under the 25% reference cap (D2's safeguard, pepe_treasury._tr_plan:
+    // cap_v = TR_FALLBACK_CAP when cap_v <= 0 and pool > 0 and the week's weighting isn't "pat_days")
+    let capV = ceil;
+    if (capV <= 0 && poolShare > 0 && !patDaysWhole(st, boundary, lb)) capV = TR_FALLBACK_CAP;
+    const cap = capV > 0 ? pyInt(staked * capV * days / 365) : poolShare;
     const give = Math.min(poolShare, cap);
     const paid = [];
     if (give > 0 && staked > 0) {
@@ -405,6 +494,59 @@ function planEpoch(inp) {
   plan.fed_after = fedRun;
   plan.release_per_day = floorDiv(tot.incentives, 7);
   return plan;
+}
+
+/** The last settled boundary before `eid` (pepe_treasury._tr_last_boundary; planEpoch's lb): the newest done journal record of
+ *  another epoch, else 0. */
+function lastBoundaryOf(inp, eid) {
+  const prev = (inp.journal || []).filter((r) => r.state === "done" && r.eid !== eid).map((r) => Number(r.boundary || 0));
+  return prev.length ? Math.max(...prev) : 0.0;
+}
+/** How planEpoch split vault v's stakers' share - pepe_treasury._tr_weighting: "pat_days" (the week is WHOLLY time-weighted,
+ *  patDaysWhole), "partial" (the boundary's PAT-days bucket exists but the PAT-days began mid-way: split by them, the
+ *  reference cap applies while no cap is in force) or "snapshot" (no bucket: the holdings at the settlement, the reference cap
+ *  applies). */
+function weightingFor(st, boundary, lb, days) {
+  if (patDaysWhole(st, boundary, lb)) return "pat_days";
+  return patDaysAvg(st, boundary, lb, days) !== null ? "partial" : "snapshot";
+}
+/** {vault: weighting} for a plan (weightingFor, the same lastBoundary / days as planEpoch) - for the payout notice's words
+ *  (policy/apply.js notifyStakers); not part of the plan, which stays Pepe's _tr_plan to the PAT. */
+function weightingOf(inp, plan) {
+  const lb = lastBoundaryOf(inp, plan.epoch);
+  const out = {};
+  for (const v of Object.keys(plan.vaults || {})) out[v] = weightingFor((inp.vaults || {})[v] || {}, plan.boundary, lb, plan.days);
+  return out;
+}
+/**
+ * pepe_treasury._tr_track, kept on the epoch record next to the plan (never part of it): per vault the stakers' pool (their
+ * share of the surplus), what the plan pays them, what a TR_TRACK_CAP (25%) APR cap WOULD have paid - min(pool, int(staked x
+ * 25% x days / 365)) -, how the stakes were weighted (weightingFor), the cap the plan applied (cap_pct, % APR - D2's safeguard:
+ * the reference cap when no cap is in force and the week isn't wholly time-weighted: fallback) and the payout's own APR on the
+ * stakers' stake. -> {ref_cap_pct, cap_in_force_pct, vaults: {v: {pool, paid, cap25, would25, weighting, cap_pct, fallback,
+ * payout_apr?}}, pool, paid, would25, fallback: [vaults]}
+ */
+function trackOf(inp, plan) {
+  const c = C(inp);
+  const days = Number(plan.days || 7.0);
+  const lb = lastBoundaryOf(inp, plan.epoch);
+  const cin = stakerCap(c);
+  const out = { ref_cap_pct: pyRoundN(TR_TRACK_CAP * 100, 4), cap_in_force_pct: pyRoundN(cin * 100, 4), vaults: {}, pool: 0, paid: 0, would25: 0, fallback: [] };
+  for (const [v, x] of Object.entries(plan.vaults || {})) {
+    const pool = pyInt(x.stakers_share || 0), staked = pyInt(x.staked || 0), paid = pyInt(x.stakers || 0);
+    const c25 = pyInt(staked * TR_TRACK_CAP * days / 365);
+    const would = Math.min(pool, c25);
+    const w = weightingFor((inp.vaults || {})[v] || {}, plan.boundary || 0, lb, days);
+    const fb = cin <= 0 && pool > 0 && w !== "pat_days";
+    const row = { pool, paid, cap25: c25, would25: would, weighting: w, cap_pct: pyRoundN((fb ? TR_FALLBACK_CAP : cin) * 100, 4), fallback: fb };
+    if (paid > 0 && staked > 0) row.payout_apr = pyRoundN(paid / staked * 365 / days, 6);
+    out.vaults[v] = row;
+    if (fb) out.fallback.push(v);
+    out.pool += pool;
+    out.paid += paid;
+    out.would25 += would;
+  }
+  return out;
 }
 
 // ── the daily release ──
@@ -572,5 +714,5 @@ function planActivity(inp, localDay, amount) {
 
 module.exports = { planEpoch, planDaily, planMonetary, planActivity, weekStart, dayStart, epochId, dayId, monthOf, resolveWeek, budgetLeft,
                    capRoom, mintsMtd, weekIssuance, weekTarget, heistCap, guaranteeBase, gscale, gscaleOf, WEEK, budgetSum, loansByVault, poolOwed, target, stakers,
-                   activity, floorDiv, floorDivF, pyInt, fmt, pyFloatStr, cmpPy, C, BUDGETS, GROUPS, CAPPED, SOURCES, TREASURY, CASH, FED,
+                   activity, patDaysAvg, patDaysWhole, weightingFor, weightingOf, lastBoundaryOf, trackOf, stakerCapOf, TR_TRACK_CAP, TR_FALLBACK_CAP, floorDiv, floorDivF, pyInt, fmt, pyFloatStr, cmpPy, C, BUDGETS, GROUPS, CAPPED, SOURCES, TREASURY, CASH, FED,
                    INCENTIVES, FORTKNOX, CASINO, GUARANTEE_WAIT, DEFAULTS, CONSTS };

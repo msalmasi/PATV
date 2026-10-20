@@ -1,0 +1,73 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# Staking fix plan (2026-10-19) + the owner's decisions that day: the daily APR ceiling (D1: going off - 0 = no ceiling), the
+    protocol cushion (P1.2, built dark: ships OFF), the weekly payout cap (D2: going off - 0 = no cap; the 25%-cap tracker
+    shows what a cap would have paid), Auto under the staker limit (P2.2, ships OFF), the time-weighted payout (P2.1: this
+    week's PAT-days per vault), the cushion's size per vault, the stakers' index and the staking audit (§6). Viewing: econ.telemetry_policy (isAdmin).
+    Changing: the weekly payout cap only - a Pepe owner (canEdit, re-checked by the API) through the /admin/economy step-up
+    (CSRF token, single-use nonce, account password) - a website action Pepe runs as !econ set wf_staker_cap_pct <n>
+    (capital/watch.js). The ceiling, the cushion (+ window) and Auto's limit are Pepe's admin-panel knobs: shown, not sent
+    (his !econ set doesn't take them, and vault_ceil_apr is a fraction there). The values the cut-off uses are the ones Pepe
+    pushes back. The round trips around Monday's draw are listed (capital/watch.js roundTrips). public/js/admin-staking.js
+    renders it from GET /api/admin/econ/staking. %>
+<section class="adm-card" id="staking-ceiling" aria-labelledby="stkT">
+  <h2 id="stkT"><span class="ds-ic" aria-hidden="true">🏦</span> <%= t('adm.stk.title') %> <span class="adm-pill admin"><%= t('adm.stk.admins') %></span></h2>
+  <p class="adm-help"><%- t('adm.stk.help') %></p>
+  <% if (!isAdmin) { %><p class="adm-help"><%= t('adm.stk.admins_only') %></p><% } else { const edit_ = locals.canEdit === true; const dis_ = edit_ ? '' : ' disabled'; %>
+    <div id="stkAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' && locals.me ? pepeCtlCsrf(me.username) : '' %>" data-edit="<%= edit_ ? '1' : '0' %>">
+      <div class="adm-kv" id="stkKv"><div><b><%= t('adm.stk.status') %></b><span><%= t('adm.stk.loading') %></span></div></div>
+      <% if (!edit_) { %><p class="adm-msg"><%= t('adm.stk.not_owner') %></p><% } %>
+      <form class="adm-form" id="stkForm" autocomplete="off">
+        <label for="stkCap"><%= t('adm.stk.f_cap') %><input type="number" id="stkCap" min="0" max="100" step="0.5"<%- dis_ %>></label>
+        <div class="adm-actions">
+          <button type="button" id="stkSetCap"<%- dis_ %>><%= t('adm.stk.set_cap') %></button>
+        </div>
+      </form>
+      <p class="adm-help"><%- t('adm.stk.panel_note') %></p>
+      <div id="stkConfirm" class="stk-confirm" hidden>
+        <p class="adm-help" id="stkWhat"></p>
+        <label for="stkPw" class="adm-help"><%= t('adm.stk.confirm_pw') %></label>
+        <input type="password" id="stkPw" maxlength="200" autocomplete="current-password">
+        <div class="adm-actions"><button type="button" id="stkYes"><%= t('adm.stk.yes') %></button><button type="button" id="stkNo" class="adm-btn ghost"><%= t('adm.stk.no') %></button></div>
+      </div>
+      <p class="adm-msg stk-out" id="stkMsg" role="status" aria-live="polite"></p>
+      <h3><%= t('adm.stk.vaults_h') %></h3>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.stk.vaults_h') %>">
+        <thead><tr><th><%= t('adm.stk.col_vault') %></th><th class="num"><%= t('adm.stk.col_price') %></th><th class="num"><%= t('adm.stk.col_peak') %></th>
+          <th class="num"><%= t('adm.stk.col_cushion') %></th><th class="num"><%= t('adm.stk.col_protocol') %></th><th class="num"><%= t('adm.stk.col_stakers') %></th>
+          <th class="num"><%= t('adm.stk.col_pd') %></th><th class="num"><%= t('adm.stk.col_sapr') %></th><th class="num"><%= t('adm.stk.col_vapr') %></th></tr></thead>
+        <tbody id="stkVaults"><tr><td colspan="9" class="empty"><%= t('adm.stk.loading') %></td></tr></tbody>
+      </table></div>
+      <h3><%= t('adm.stk.track_h') %></h3>
+      <p class="adm-help"><%- t('adm.stk.track_help') %></p>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.stk.track_h') %>">
+        <thead><tr><th><%= t('adm.stk.col_week') %></th><th class="num"><%= t('adm.stk.col_pool') %></th><th class="num"><%= t('adm.stk.col_paid') %></th>
+          <th class="num"><%= t('adm.stk.col_cap25') %></th><th class="num"><%= t('adm.stk.col_over') %></th><th><%= t('adm.stk.col_split') %></th></tr></thead>
+        <tbody id="stkTrack"><tr><td colspan="6" class="empty"><%= t('adm.stk.loading') %></td></tr></tbody>
+      </table></div>
+      <h3><%= t('adm.stk.rt_h') %></h3>
+      <p class="adm-help"><%- t('adm.stk.rt_help') %></p>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.stk.rt_h') %>">
+        <thead><tr><th><%= t('adm.stk.col_week') %></th><th class="num"><%= t('adm.stk.col_rt_n') %></th><th><%= t('adm.stk.col_rt_stashes') %></th>
+          <th class="num"><%= t('adm.stk.col_rt_out') %></th><th class="num"><%= t('adm.stk.col_rt_in') %></th><th class="num"><%= t('adm.stk.col_rt_dodged') %></th></tr></thead>
+        <tbody id="stkRt"><tr><td colspan="6" class="empty"><%= t('adm.stk.loading') %></td></tr></tbody>
+      </table></div>
+      <h3><%= t('adm.stk.audit_h') %></h3>
+      <ul class="stk-audit" id="stkAudit"><li><%= t('adm.stk.loading') %></li></ul>
+      <h3><%= t('adm.stk.changes_h') %></h3>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.stk.changes_h') %>">
+        <thead><tr><th><%= t('adm.stk.col_when') %></th><th><%= t('adm.stk.col_who') %></th><th><%= t('adm.stk.col_what') %></th><th><%= t('adm.stk.col_result') %></th></tr></thead>
+        <tbody id="stkActs"><tr><td colspan="4" class="empty"><%= t('adm.stk.loading') %></td></tr></tbody>
+      </table></div>
+    </div>
+    <style>
+      #staking-ceiling .stk-out { white-space: pre-wrap; overflow-wrap: anywhere; }
+      #staking-ceiling .stk-confirm input { width: 100%; max-width: 320px; }
+      #staking-ceiling .stk-bad { color: var(--ds-danger, #ef5350); }
+      #staking-ceiling .stk-audit { margin: 0; padding-inline-start: 1.2em; font-size: var(--ds-fs-meta, 13px); }
+      #staking-ceiling .stk-audit li { margin: 2px 0; overflow-wrap: anywhere; }
+      #staking-ceiling .stk-audit .alert { color: var(--ds-danger, #ef5350); }
+      #staking-ceiling .stk-audit .warn { color: var(--ds-warn-ink, #ffb74d); }
+    </style>
+    <script src="/public/js/admin-staking.js?v=5" defer></script>
+  <% } %>
+</section>
