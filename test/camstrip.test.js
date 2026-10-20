@@ -47,8 +47,10 @@ const bot = () => LC.forBot({ cap: true });
 test.before(async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT, class TEXT DEFAULT 'pleb',
                   points_balance INTEGER DEFAULT 0, camfrogUsername TEXT, avatar TEXT, archived_at INTEGER, level INTEGER DEFAULT 0)`);
+  // stagefix site: a Stage viewer passes the cam's own access mode now (camaccess.gate; the default is members = verified
+  // members, and a linked Camfrog name verifies) - viewer1 is a verified member, viewer2 isn't (test/stagefix.test.js)
   for (const [id, name, cls, cf] of [["u_admin", "admin", "Admin", null], ["u_owner", "owner", "pleb", null], ["u_alice", "alice_patv", "pleb", "alice"],
-                                     ["u_v1", "viewer1", "pleb", null], ["u_v2", "viewer2", "pleb", null]]) {
+                                     ["u_v1", "viewer1", "pleb", "viewer1cf"], ["u_v2", "viewer2", "pleb", null]]) {
     await runQuery("INSERT INTO users (userId, username, displayname, password, class, camfrogUsername) VALUES (?, ?, ?, 'x', ?, ?)", [id, name, name, cls, cf]);
   }
   await require(path.join(repo, "inbox")).ready;

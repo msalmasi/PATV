@@ -61,10 +61,10 @@
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="/public/js/stage-player.js?v=9"></script>
 <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
-<% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=4">
+<% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=5">
 <script src="/public/js/webrtc-client.js?v=5"></script>
 <script src="/public/js/stage-lowlat.js?v=2"></script>
-<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=11"></script>
+<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=6"></script><% } %><script src="/public/js/stage-room.js?v=14"></script>
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
@@ -828,7 +828,7 @@
 
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
-<script src="/public/js/room-bridge.js?v=15"></script>
+<script src="/public/js/room-bridge.js?v=16"></script>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok') { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -840,21 +840,32 @@
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     var feed = document.getElementById('lrFeed'), cursor = 0, started = false, timer = null, fails = 0, lastP = '', lastM = '';
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    function label(u) { return !u || u.anon ? _t('js.home.room.someone', 'someone') : (u.display || u.login); }
+    function label(u) { return !u || u.anon ? _t('js.home.room.someone', 'someone') : u.former ? _t('js.pad.chat.former', 'former member') : (u.display || u.login); }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function nameEl(u) {
       // 1.99ea: the name is the PATV display name (server-resolved by login) linking to the profile,
       // else the Camfrog display name; the login is the tooltip
       var n;
-      if (u && !u.anon && u.patv && u.patv.username) { n = el('a', 'w', label(u)); n.href = '/u/' + encodeURIComponent(u.patv.username); }
+      if (u && !u.anon && !u.former && u.patv && u.patv.username) { n = el('a', 'w', label(u)); n.href = '/u/' + encodeURIComponent(u.patv.username); }
       else n = el('span', 'w', label(u));
       if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
-      if (u && !u.anon && !u.self && u.login && !u.acct) n.title = u.login;
+      if (u && !u.anon && !u.former && !u.self && u.login && !u.acct) n.title = u.login;
       // 1.99xa: a line sent from the website (Pepe relayed it) - their own chat, marked
       if (u && u.web) { n.appendChild(document.createTextNode('\u00a0\ud83c\udf10')); n.title = _t('js.pad.chat.web', 'Sent from the website'); }
       return n;
     }
     function chipTitle(c, u) { if (u && !u.anon && u.login && u.display && u.display.toLowerCase() !== u.login.toLowerCase()) c.title = u.login; return c; }
+    // CL3 fix-up: a 📜 window note's span (N minutes / hours / days - days from 2 days) and an opening's day, as the pad page says them
+    var SPAN_D = { one: '{count} day', other: '{count} days' }, SPAN_H = { one: '{count} hour', other: '{count} hours' }, SPAN_M = { one: '{count} minute', other: '{count} minutes' };
+    function plural(k, d, v) { return _t(k, typeof __t === 'function' ? d : (v.count === 1 ? d.one : d.other), v); }
+    function noteSpan(s) {
+      if (s % 86400 === 0 && s >= 172800) return plural('js.pad.chat.span_d', SPAN_D, { count: s / 86400 });
+      if (s % 3600 === 0) return plural('js.pad.chat.span_h', SPAN_H, { count: s / 3600 });
+      return plural('js.pad.chat.span_min', SPAN_M, { count: Math.max(1, Math.round(s / 60)) });
+    }
+    function noteDay(ms) {
+      try { return new Date(ms).toLocaleDateString(document.documentElement.lang || undefined, { day: 'numeric', month: 'long' }); } catch (e) { return new Date(ms).toDateString(); }
+    }
     function line(it) {
       if (it.k === 'msg' || it.k === 'tx') {
         var d = el('div', 'ln' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
@@ -872,6 +883,19 @@
         lv.appendChild(document.createTextNode(' · ' + hhmm(it.ts)));
         return lv;
       }
+      // CL3: 📜 a pad chat-history settings line - minimal here (the homepage keeps its own markup); CL3 fix-up: every kind
+      // (a window of N minutes / hours / days, an opening's date), the same words as the pad page
+      if (it.k === 'note') {
+        var nt = it.w === 'window' ? (it.s == null ? _t('js.pad.chat.note_all', '📜 Chat history on this pad: everything it keeps') : it.s === 0 ? _t('js.pad.chat.note_off', '📜 Chat history on this pad: off')
+            : _t('js.pad.chat.note_window', '📜 Chat history on this pad: last {span}', { span: noteSpan(it.s) }))
+          : it.w === 'search' ? (it.s ? _t('js.pad.chat.note_search_on', '📜 Search is on again on this pad, for lines said from now on') : _t('js.pad.chat.note_search_off', '📜 Search is now off on this pad'))
+          : it.w === 'open' ? _t('js.pad.chat.note_open', '📜 Earlier history opens on {date}', { date: noteDay(it.o) })
+          : it.w === 'open_done' ? _t('js.pad.chat.note_open_done', '📜 Earlier history is open on this pad now') : null;
+        if (!nt) return null;
+        var nl = el('div', 'ln sys', nt + ' · ' + hhmm(it.ts));
+        nl._k = 'note'; nl._ts = it.ts;
+        return nl;
+      }
       var who = { name: label(it.u) };
       var t = it.k === 'join' ? '→ ' + _t('js.home.room.joined', '{name} joined', who) : it.k === 'leave' ? '← ' + _t('js.home.room.left', '{name} left', who)
         : it.k === 'mic' ? '🎙️ ' + _t('js.home.room.grabbed_mic', '{name} grabbed the mic', who) : it.k === 'unmic' ? '🎙️ ' + _t('js.home.room.dropped_mic', '{name} dropped the mic', who)
@@ -888,9 +912,32 @@
     // just before a line it was told about but never given: room-bridge.js relay.refetch), and such a late line goes in its
     // place by cursor
     var haveC = {}, haveList = [], maxC = 0;
+    var jcTok = null;      // CL3: the widget's signed join cursor (bridge.js liveView: a reconnect gets only lines said after it loaded)
+    var jcAt = 0, histV = null;
+    // CL3 fix-up: the pad's settings narrowed while the widget was open - what came with the widget's first load and is now below
+    // this viewer's floor goes (as on the pad page; lines that arrived while it was open stay - they were seen as they were said)
+    function refilter(h) {
+      var f = h && h.floor;
+      if (!f) return;
+      Array.prototype.slice.call(feed.childNodes).forEach(function (n) {
+        if (!n._c || !n._ts || n._c > jcAt) return;
+        var floor = n._k === 'tx' ? f.tx : (n._k === 'join' || n._k === 'leave' || n._k === 'mic' || n._k === 'unmic') ? f.presence : f.chat;
+        if (n._ts < floor) feed.removeChild(n);
+      });
+    }
     function apply(d) {
       var near = !started || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
       if (started && d.cursor < cursor) { started = false; cursor = 0; }
+      if (d.jc) { jcTok = d.jc; jcAt = Number(String(d.jc).split('.')[1]) || jcAt; }
+      if (d.history) {
+        if (histV != null && d.history.v !== histV) refilter(d.history);
+        histV = d.history.v;
+      }
+      // CL3: lines this widget holds whose speaker is hidden now
+      if (d.removed && d.removed.length) {
+        var gone = {}; d.removed.forEach(function (c) { gone[c] = 1; });
+        Array.prototype.slice.call(feed.childNodes).forEach(function (x) { if (x._c && gone[x._c]) feed.removeChild(x); });
+      }
       if (!started) {
         feed.textContent = ''; haveC = {}; haveList = []; maxC = 0;
         if (roomRelay && roomRelay.reset) roomRelay.reset();
@@ -906,7 +953,7 @@
         if (it.c && haveC[it.c]) return;
         if (it.c) { haveC[it.c] = 1; haveList.push(it.c); }
         var n = line(it); if (!n) return;
-        n._c = it.c || 0;
+        n._c = it.c || 0; n._ts = it.ts || 0; n._k = it.k;      // CL3 fix-up: refilter() reads them
         if (it.c && it.c < maxC) {
           for (var k = 0; k < feed.childNodes.length; k++) { var x = feed.childNodes[k]; if (x._c && x._c > it.c) { feed.insertBefore(n, x); return; } }
         }
@@ -950,11 +997,13 @@
       if (document.hidden || inflight) return;
       inflight = true;
       var q = '?after=' + cursor + '&wait=1' + (lp.v != null ? '&v=' + lp.v : '') + (lp.mv != null ? '&mv=' + lp.mv : '') +
-        (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '');
+        (roomRelay && roomRelay.wantsMe && roomRelay.wantsMe() ? '&me=1' : '') + (jcTok ? '&jc=' + encodeURIComponent(jcTok) : '');
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/live' + q, { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (d) {
           fails = 0; lp.ok = !!d.lp && !d.gone;
+          // CL3: the join cursor ran out - start the widget over (a fresh view)
+          if (d.reinit) { jcTok = null; started = false; cursor = 0; lp.ok = true; return; }
           if (d.gone) return;
           if (d.ver != null) lp.v = d.ver;
           if (d.mver != null) lp.mv = d.mver;

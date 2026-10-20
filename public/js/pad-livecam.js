@@ -87,7 +87,9 @@
         sb.disabled = true;
         post('/api/rooms/' + encodeURIComponent(opts.stage.slug) + '/stage/cam', { login: who.login }).then(function (d) {
           sb.disabled = false;
-          say(d && d.ok ? _t('js.pad.strip.staged', 'On the stage now - it shows in the stage\'s tabs.') : why(d && d.code, d && d.error), d && d.ok ? 'ok' : 'bad');
+          // stagefix final round (stagepin.js): their level may turn the pin into an ask - it goes up once they say yes
+          say(d && d.ok ? (d.asked ? _t('js.pad.strip.stage_asked', 'Asked them - it goes on the stage once they say yes (they have 10 minutes).')
+                                   : _t('js.pad.strip.staged', 'On the stage now - it shows in the stage\'s tabs.')) : why(d && d.code, d && d.error), d && d.ok ? 'ok' : 'bad');
         }).catch(function () { sb.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
       });
       into.appendChild(sb);

@@ -123,6 +123,15 @@
     idle: _t('js.stage.r_idle', 'the stream was off air too long'), cut: _t('js.stage.r_cut', 'it was cut back to Pepe'), banned: _t('js.stage.r_banned', 'an admin or the pad owner cut it'), deadline: _t('js.stage.r_deadline', 'it reached its deadline'),
     restart: _t('js.stage.r_restart', 'it timed out while the site restarted'), cancelled: _t('js.stage.r_cancelled', 'you cancelled it'), denied: _t('js.stage.r_denied', 'the pad owner declined it'), not_approved: _t('js.stage.r_not_approved', 'it wasn\'t approved in time'),
     no_room: _t('js.stage.r_no_room', 'no slot was free at its start') };
+  // stagefix site: a 🎬 cam slot (someone's Camfrog cam you put on a pad's Stage) ends with "cam_<why>"; the person's own choices
+  // (private activity, Take me off this Stage, a block) are all "cam_unavailable" - never which
+  function reasonOf(r) {
+    if (REASONS[r]) return REASONS[r];
+    if (r === 'cam_left_cam') return _t('js.stage.r_cam_left_cam', 'they went off cam');
+    if (r === 'cam_opted_out') return _t('js.stage.r_cam_opted_out', 'they switched live video off');
+    if (/^cam_/.test(String(r || ''))) return _t('js.stage.r_cam', 'the cam isn\'t available any more');
+    return r || _t('js.stage.ended_word', 'ended');
+  }
   function render(d) {
     if (d.balance != null) $('bal').textContent = fmt(d.balance);
     roomState = d.room;
@@ -145,7 +154,7 @@
     var last = d.slot && d.slot.status === 'ended' ? d.slot : null;
     show('doneCard', !s && !!last && last.ended && Date.now() - last.ended < 30 * 60000);
     if (!s && last) {
-      $('doneTxt').innerHTML = esc(_t('js.stage.ended', 'Ended - {why}.', { why: REASONS[last.end_reason] || last.end_reason || _t('js.stage.ended_word', 'ended') })) + ' ' + esc(_t('js.stage.ended_stats', 'Live {live}, charged {charged} PAT, refunded {refunded} PAT.')).replace(/\{(\w+)\}/g, function (m, n) { return { live: '<b>' + mmss(last.live_seconds) + '</b>', charged: '<b>' + fmt(last.charged) + '</b>', refunded: '<b>' + fmt(last.refunded) + '</b>' }[n] || m; });
+      $('doneTxt').innerHTML = esc(_t('js.stage.ended', 'Ended - {why}.', { why: reasonOf(last.end_reason) })) + ' ' + esc(_t('js.stage.ended_stats', 'Live {live}, charged {charged} PAT, refunded {refunded} PAT.')).replace(/\{(\w+)\}/g, function (m, n) { return { live: '<b>' + mmss(last.live_seconds) + '</b>', charged: '<b>' + fmt(last.charged) + '</b>', refunded: '<b>' + fmt(last.refunded) + '</b>' }[n] || m; });
       if (slot && slot.id === last.id) { stopWeb(''); try { sessionStorage.removeItem(KEY_STORE + last.id); } catch (e) {} }
     }
     // upcoming + queue

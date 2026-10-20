@@ -43,8 +43,9 @@ const golden = (name) => { const r = G.rows.find((x) => x.name === name); assert
 const fakeReq = { get: (h) => (h === "user-agent" ? "golden" : "") };
 
 let runQuery, getQuery, HO, S, I, PL, HH, D, PF;
-const lastRow = async (topic) => {
-  const r = (await getQuery("SELECT * FROM hub_outbox WHERE topic = ? ORDER BY id DESC LIMIT 1", [topic]))[0];
+// keep(entity): the newest row of the topic whose entity it keeps (default: any)
+const lastRow = async (topic, keep = () => true) => {
+  const r = (await getQuery("SELECT * FROM hub_outbox WHERE topic = ? ORDER BY id DESC LIMIT 50", [topic])).find((x) => keep(x.entity));
   const payload = r.payload != null ? JSON.parse(r.payload) : await HO.readers[topic](r.entity);
   return swap({ topic: r.topic, entity: r.entity, payload });
 };
@@ -94,15 +95,22 @@ test("sessions/revoked: a revoked session (trigger + reader), one deleted before
 });
 
 test("privacy/changed: incognito requested (web) / confirmed (Pepe, linked + unlinked + account key), private activity, hidden_h", async () => {
+  // 1.99add refix: a website ON and Pepe's ON report also hide the key's hash in the sticky hidden set at once (hubhidden.js), so
+  // an "hh:" row follows those incognito rows - the golden rows are the incognito rows themselves
+  const incog = (e) => !e.startsWith("hh:");
+  const hh = async (key) => (await getQuery("SELECT COUNT(*) AS n FROM hub_outbox WHERE topic = 'privacy/changed' AND entity = ?", ["hh:" + HH.hash(key)]))[0].n;
+  HH._setClock(() => T0);
   I._setClock(() => T0);
   await I.request("1001", true);
-  same("privacy: incognito requested ON from the web (linked login)", await lastRow("privacy/changed"));
+  same("privacy: incognito requested ON from the web (linked login)", await lastRow("privacy/changed", incog));
+  assert.equal(await hh("alice"), 1, "the web ON hides alice's hash at once");
   await I.sync({ items: [{ login: "bob.smith", on: true, ts: T0, via: "chat" }] });
-  same("privacy: incognito confirmed ON by Pepe (unlinked login)", await lastRow("privacy/changed"));
+  same("privacy: incognito confirmed ON by Pepe (unlinked login)", await lastRow("privacy/changed", incog));
+  assert.equal(await hh("bob.smith"), 1, "Pepe's ON report hides the hash at once");
   await I.sync({ items: [{ login: "alice", on: false, ts: 1760727530000, via: "chat" }] });
-  same("privacy: incognito confirmed OFF (a newer pending ON stays)", await lastRow("privacy/changed"));
+  same("privacy: incognito confirmed OFF (a newer pending ON stays)", await lastRow("privacy/changed", incog));
   await I.sync({ items: [{ login: "u:acc1002", on: true, ts: T0, via: "web" }] });
-  same("privacy: incognito of an account with no chat login", await lastRow("privacy/changed"));
+  same("privacy: incognito of an account with no chat login", await lastRow("privacy/changed", incog));
   await PL.save("1001", { hidden: ["analytics"] });
   await runQuery("UPDATE profile_layout SET updated = ? WHERE user_id = '1001'", [T0]);
   same("privacy: private activity (profile layout hides analytics)", await lastRow("privacy/changed"));

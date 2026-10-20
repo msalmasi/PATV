@@ -46,7 +46,7 @@
 //   bot token (body.password):
 //   POST /api/telegram/hello           {bot_username}
 //   POST /api/telegram/link            {code, tg_id, handle} -> {ok, username, lang, tier} | {ok:false, code}
-//   POST /api/telegram/whois           {tg_id, seen} -> {linked, user:{username, display, camfrog}, tier, lang}
+//   POST /api/telegram/whois           {tg_id, seen} -> {linked, user:{username, display, camfrog, user_id, rooms_gated?}, tier, lang}
 //   POST /api/telegram/unlink-tg       {tg_id}   (the member typed /unlink in Telegram)
 //   POST /api/telegram/strings         {lang}    the "tg." strings in that language (English filled in)
 //   POST /api/telegram/outbox/claim    {limit} -> {alerts: [{id, chat_id, text}]}
@@ -233,19 +233,30 @@ async function linkProven(userId, { tg_id, handle } = {}) {
 
 async function unlink(userId, { force = false } = {}) {
   await init();
-  // 1.99lb: Telegram can be a sign-in method (telegramsso.js) - never unlink the last way into an account
-  if (!force && (await linkOf(userId))) await require("./ssolinks").guardUnlink(userId, "telegram");
-  const r = await runQuery("DELETE FROM telegram_links WHERE user_id = ?", [userId]);
-  await runQuery("DELETE FROM telegram_outbox WHERE user_id = ? AND sent_at IS NULL", [userId]);
-  return !!(r && r.changes);
+  const drop = async () => {
+    const r = await runQuery("DELETE FROM telegram_links WHERE user_id = ?", [userId]);
+    await runQuery("DELETE FROM telegram_outbox WHERE user_id = ? AND sent_at IS NULL", [userId]);
+    return !!(r && r.changes);
+  };
+  // 1.99lb: Telegram can be a sign-in method (telegramsso.js) - never unlink the last way into an account (the guard and the
+  // delete in one transaction: another unlink at the same moment can't also pass it)
+  if (!force && (await linkOf(userId))) return require("./ssolinks").unlinkGuarded(userId, "telegram", drop);
+  return drop();
 }
 async function unlinkTg(id) {
   const l = await linkByTg(id);
   return l ? unlink(l.user_id) : false;
 }
 
-/** Pepe: who is this Telegram user? Only what the bridge needs - never an email, never an IP. */
-async function whois({ tg_id, seen } = {}) {
+/** Pepe: who is this Telegram user? Only what the bridge needs - never an email, never an IP. gatefix site: + user.rooms_gated,
+ *  the Approved pads' rooms this member is outside of (padaccess.gateLiveRooms, class read fresh) - Pepe's Telegram chat
+ *  leaves who's around / on the mic / talking there out of its live context, like his DMs (camfrog-bot pepe_dmctx). */
+async function whois(b) {
+  const w = await whoisLink(b);
+  if (w && w.user && w.user.user_id) await require("./padaccess").gateLiveRooms(w.user, await account(w.user.user_id));
+  return w;
+}
+async function whoisLink({ tg_id, seen } = {}) {
   await init();
   const id = tgId(tg_id);
   if (!id) throw new Refuse(400, "bad telegram id", "E_BAD");

@@ -32,12 +32,41 @@
 // never stored anywhere (MediaMTX records nothing; the HLS remux of these paths is refused by the hook).
 //
 // 1.99zc: 🎬 STAGE CAMS (mainstage.js slot source 'cam'): a pad owner / admin puts someone's live cam on the pad's stage.
-// The slot HOLDS the session (S.stage = slot id): it stays wanted while the slot is open (never ended as "unwatched"), with
+// The slot HOLDS the session (S.holds has the slot id): it stays wanted while the slot is open (never ended as "unwatched"), with
 // the same consent rules as a viewer's ▶ Live (on cam, not opted out, not private, not ended by them, the room's switch).
 // Stage viewers ask for a ticket of their own (stageWatch: signed in + padaccess.full, inside the bandwidth budget) and beat
 // like a viewer; they are counted in the site-wide budget but never in anyone's personal live-cam slots. One publish by
 // Pepe serves the strip, the popover and the stage alike. When the session ends (opt-out, cam closed, ended by the owner /
 // a mod / staff) stageState says so and mainstage ends the slot.
+// stagefix site (V1-2 of the dynamic-stages design): the Stage follows the person on cam, not just the room.
+//   * putting someone up (stageConsent / stageHold, `actor` = who does it): also refused - with the neutral "unavailable",
+//     never the reason - when the pad has no 💎 bridge perk (room_off), when they took themselves off this pad's Stage
+//     (stageleave.js, "Take me off this Stage": 1 h, repeats up to 24 h), or when they and whoever puts them up - or the
+//     pad's owner, whose Stage it is - blocked one another (cam_blocks, or a DM block either way). Staff follow the same
+//     rules (DF-43). camBeat re-checks it all every tick (stageRecheck: + opt-out and private activity).
+//     stagefix fix: a block counts in both directions even when the person on cam IS the actor or the pad's owner (staff
+//     putting up the owner's cam, or their own on a pad whose owner blocked them); private activity, a take-off and a block
+//     are all the same "unavailable" (and the slot's end reason "cam_unavailable"), so the actor can't tell them apart.
+//     stagefix (final round): + a stage ban of an account linked to the cam's login (site-wide stage_bans, or this pad's
+//     stage_room_bans - bannedSet), on the put and every tick. The person's own say over pins (never / off / the per-pad yes /
+//     the 10-minute "Keep going?" check) is stagepin.js; Pepe's "!stage ok" capability is stageOkOk.
+//   * every Stage viewer (stageWatch, on the ticket AND every beat; the MediaMTX hook too): padFull (18+ gate included),
+//     the room's bridge perk, the room's live-cam block on them (bridgeblocks), the cam owner's block, the cam's own access
+//     mode (camaccess.gate - members / followers / request; no "Ask to watch" on a Stage) and a DM block either way. A
+//     refused viewer gets the neutral "unavailable" card. 👻 ghost mode never gets past a Stage tile (DF-43).
+//
+// micfollow: a session can have SEVERAL stage holders (S.holds, a Set): a cam slot's id and/or "mf:<room id>" - the pad's
+// 🎙 mic-follows stage (micfollow.js), so a manual cam slot and the mic stage share ONE Pepe publish. Two cam SLOTS still
+// can't hold the same cam (409 on_stage). Each stage viewer remembers which holder(s) they came through (v.via): letting
+// go of a holder kicks only the viewers who came through it alone. A session held by the mic stage is marked S.mf and
+// Pepe is asked to open it by its exact name (want[].mf); he reports live[].exact and advertises mf: 1 on his poll.
+// Viewers who watch ONLY through the mic stage are not noted to the cam's owner one by one (micfollow sends one stage
+// notice instead); watchersOf marks them `mf` and the owner's lists (!whowatching, the privacy card) COUNT them, never name
+// them (D-19, owner 2026-10-19; camaccess still sees them to drop the ones a mode change refuses). Such a viewer reads only a relay Pepe
+// reports exact, and never gets the 👻 ghost bypass. The mic stage's hold re-checks micfollow's own rules after its awaits
+// (opts.ok -> "gone"); its release (stageDrop) ends a relay nobody else holds or watches at once (no linger); a ▶ Live
+// start that finds max_live full asks micfollow.yieldRelay first. Hooks: onEnd(fn(S, why)) after a session ends,
+// onOptout(fn(login, off)) after an opt-out change (a throwing hook is logged and ignored).
 //
 // Path names share the room-audio family on MediaMTX (deploy/webrtc/mediamtx.yml "~^(room|stgr)-[0-9a-f]{16}$"), so no
 // MediaMTX change is needed: prod "room-<16 hex>", staging "stgr-<16 hex>", an HMAC of "live-cam-path:<room>|<login>"
@@ -95,6 +124,9 @@ const CV = () => require("./camviewers");     // 1.99yq: who's watching + blocks
 const isGhost = (uid) => { try { return require("./ghost").isGhost(uid); } catch (e) { return false; } };   // 1.99aaf: 👻 staff ghost mode
 /** 1.99aaf: the viewers anyone may be told about (a ghost is never counted where people see it; budgets still count them). */
 const shownCount = (list) => list.filter(([, v]) => !v.ghost).length;
+// stagefix: the 💎 bridge perk (premium.bridgeAllowed via bridge.js): a pad without it shows no live room on the site
+const bridgeOk = (roomId) => { try { return require("./bridge").bridgeOk(String(roomId)); } catch (e) { return true; } };
+const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
 
 class Refuse extends Error { constructor(status, msg, code, extra) { super(msg); this.status = status; this.refuse = true; this.code = code; this.extra = extra || null; } }
 
@@ -211,6 +243,7 @@ async function setOptout(login, off, { via = "web", userId = null, ts = now() } 
                  [l, off ? 1 : 0, ts, via === "chat" ? "chat" : "web", userId]);
   if (off) { OPTOUT.add(l); for (const S of [...SESS.values()]) if (S.login === l) ownerClosed(S, "opted_out"); }
   else OPTOUT.delete(l);
+  runHooks(OPTOUT_HOOKS, [l, !!off], "opt-out");      // micfollow: the mic stage drops them at once too
   return true;
 }
 async function optoutState(userId) {
@@ -259,6 +292,29 @@ const BY_PATH = new Map();     // path -> key
 const COOL = new Map();        // key -> until (ended by owner / mod / admin)
 let BOT = null;                // {at, pool, live, refused}
 const keyOf = (roomId, login) => String(roomId) + "|" + String(login).toLowerCase();
+/** micfollow: does any stage holder (a cam slot or the mic stage) hold this session? */
+const held = (S) => !!(S && S.holds && S.holds.size > 0);
+const MF_PREFIX = "mf:";
+const isMfHolder = (h) => String(h || "").startsWith(MF_PREFIX);
+/** micfollow: a stage viewer who came ONLY through the mic stage (no cam slot): no 👻 ghost bypass, exact relays only. */
+const mfOnlyVia = (v) => !!(v && v.via instanceof Set && v.via.size > 0 && [...v.via].every(isMfHolder));
+/** A new session object (one per room + cam). */
+function newSess(R, login, m, t) {
+  const p = pathFor(R.id, login);
+  const S = { key: keyOf(R.id, login), roomId: R.id, login, display: (m && m.display) || login, path: p, viewers: new Map(), createdAt: t,
+              wantUntil: t + cfg().linger_s * 1000, liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null,
+              ended: 0, endWhy: null, holds: new Set(), lastHolds: null, mf: false, stageViewers: new Map() };
+  SESS.set(S.key, S);
+  BY_PATH.set(p, S.key);
+  return S;
+}
+// ── hooks (micfollow.js) ──
+const END_HOOKS = [], OPTOUT_HOOKS = [];
+function runHooks(list, args, what) {
+  for (const fn of list) { try { fn(...args); } catch (e) { console.error(`[livecam] ${what} hook:`, e && e.message); } }
+}
+function onEnd(fn) { if (typeof fn === "function" && !END_HOOKS.includes(fn)) END_HOOKS.push(fn); }
+function onOptout(fn) { if (typeof fn === "function" && !OPTOUT_HOOKS.includes(fn)) OPTOUT_HOOKS.push(fn); }
 function camForPath(p) {
   if (!PATH_RE.test(String(p || "")) || !String(p).startsWith(PREFIX)) return null;
   const k = BY_PATH.get(p);
@@ -310,20 +366,23 @@ function endSession(S, why, t = now()) {
   if (!S || S.ended) return;
   S.ended = t;
   S.endWhy = why;
-  if (S.stage) S.lastStage = S.stage;      // 1.99zc: the stage slot reads why it ended (stageState)
+  if (held(S)) S.lastHolds = new Set(S.holds);      // 1.99zc: the stage slot reads why it ended (stageState)
   for (const uid of [...S.viewers.keys()]) dropViewer(S, uid, why, t);
   if (S.stageViewers) { for (const v of S.stageViewers.values()) for (const rid of v.readers || []) kickReader(rid); S.stageViewers.clear(); }
   S.wantUntil = 0;
   if (S.sourceId) kickReader(S.sourceId);
-  console.log(`[livecam] end room=${S.roomId} target=${S.login} why=${why}`);
+  // micfollow: a relay the mic stage ever held is logged without its login (spec §12 - mic stages relay people who never
+  // asked to be watched; the appearance log is their record)
+  console.log(`[livecam] end room=${S.roomId} target=${S.mfEver ? "-" : S.login} why=${why}`);
+  runHooks(END_HOOKS, [S, why], "end");               // micfollow: the mic stage's tile follows its relay
 }
 function sweep(t = now()) {
   for (const S of [...SESS.values()]) {
     if (!S.ended) {
       for (const [uid, v] of [...S.viewers.entries()]) if (t - v.beat > BEAT_MS) dropViewer(S, uid, "gone", t);
       if (S.stageViewers) for (const [uid, v] of [...S.stageViewers.entries()]) if (t - v.beat > BEAT_MS) { S.stageViewers.delete(uid); for (const rid of v.readers || []) kickReader(rid); }
-      if (S.stage) S.wantUntil = Math.max(S.wantUntil || 0, t + cfg().linger_s * 1000);   // 1.99zc: held by a stage slot
-      if (!S.viewers.size && !S.stage && S.wantUntil && S.wantUntil < t) endSession(S, "unwatched", t);
+      if (held(S)) S.wantUntil = Math.max(S.wantUntil || 0, t + cfg().linger_s * 1000);   // 1.99zc: held by a stage slot / the mic stage
+      if (!S.viewers.size && !held(S) && S.wantUntil && S.wantUntil < t) endSession(S, "unwatched", t);
       else if (!S.liveAt && t - S.createdAt > START_MS) endSession(S, S.botWhy || "start_timeout", t);
     }
     if (S.ended && t - S.ended > 60 * 1000) { SESS.delete(S.key); if (BY_PATH.get(S.path) === S.key) BY_PATH.delete(S.path); }
@@ -393,6 +452,13 @@ const endsAny = (u) => SP.can(u, "livecam.end_any");   // 1.99ack (siteperms.js)
 const passOf = (userId) => { try { return !!require("./premium").hasPass(userId); } catch (e) { return false; } };
 const maxSlots = (userId) => (passOf(userId) ? cfg().viewers_sp : cfg().viewers_free);
 const botOk = (t = now()) => !!(BOT && t - BOT.at < BOT_FRESH_MS);
+/** stagefix fix: does Pepe forward "!stage off me" (from everyone, to /api/rooms/stage/act)? His live-cam poll says so
+ *  (`stage_off_me: true`, a bot change). Until it does, nothing tells people to type it (mainstage camNotify, the privacy card). */
+const stageOffMeOk = () => !!(BOT && BOT.stageOffMe);
+/** stagefix (D-17 / DF-45): does Pepe forward "!stage ok" / "!stage no" (stagepin.js: answers to "keep going?" and to a pin ask)?
+ *  His live-cam poll says so (`stage_ok: true`, a bot change). Until it does, an unlinked cam can't answer, so stagepin asks no one
+ *  who has no PATV account. */
+const stageOkOk = () => !!(BOT && BOT.stageOk);
 
 /** The member R lists for `login` (on cam, a real login - never Pepe, never "someone"). */
 function memberOf(R, login) {
@@ -434,14 +500,15 @@ async function start(u, R, login, t = now()) {
   if (!mine || t - mine.beat > BEAT_MS) {
     if (used >= max) throw refuse("viewer_cap", { slots: { used, max } });
     if (!fitsBudget(S, t)) throw refuse("budget");
-    if (!S && liveCount() >= cfg().max_live) throw refuse("slots_busy");
+    if (!S && liveCount() >= cfg().max_live) {
+      // micfollow: a viewer's ▶ Live wins over the mic stage - it gives one relay it alone holds back (spec §7.1 / §7.4)
+      let freed = false;
+      try { freed = !!require("./micfollow").yieldRelay(t); } catch (e) { freed = false; }
+      if (!freed || liveCount() >= cfg().max_live) throw refuse("slots_busy");
+    }
   }
   if (!S) {
-    const p = pathFor(R.id, login);
-    S = { key: k, roomId: R.id, login, display: m.display || login, path: p, viewers: new Map(), createdAt: t, wantUntil: t + cfg().linger_s * 1000,
-          liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null, ended: 0, endWhy: null, stage: null, stageViewers: new Map() };
-    SESS.set(k, S);
-    BY_PATH.set(p, k);
+    S = newSess(R, login, m, t);
     console.log(`[livecam] start room=${R.id} target=${login} viewer=${u.username || uid}`);
   }
   let v = S.viewers.get(uid);
@@ -479,7 +546,7 @@ function beat(userId, roomId, login, t = now()) {
  *  ends - it's public); the session ends when nobody is left. -> true when it lives on (ghosts only). */
 function ownerClosed(S, why, t = now()) {
   if (!S || S.ended) return false;
-  if (S.stage) { endSession(S, why, t); return false; }
+  if (held(S)) { endSession(S, why, t); return false; }
   for (const [uid, v] of [...S.viewers.entries()]) if (!(v.ghost && isGhost(uid))) dropViewer(S, uid, why, t);
   if (!S.viewers.size) { endSession(S, why, t); return false; }
   return true;
@@ -488,12 +555,13 @@ function ownerClosed(S, why, t = now()) {
 function dropViewerOf(login, userId, why = "blocked", t = now()) {
   let n = 0;
   const l = String(login || "").toLowerCase();
-  if (isGhost(userId)) return 0;                       // 1.99aak: a block doesn't stop staff in 👻 ghost mode (audited)
-  for (const S of SESS.values()) {
+  const ghost = isGhost(userId);                       // 1.99aak: a block doesn't stop staff in 👻 ghost mode (audited) -
+  for (const S of SESS.values()) {                     // stagefix: on their personal ▶ Live only; a Stage tile never (DF-43)
     if (S.ended || S.login !== l) continue;
-    if (dropViewer(S, String(userId), why, t)) n++;
-    const sv = S.stageViewers ? S.stageViewers.get(String(userId)) : null;          // 1.99zc: a stage viewer of that cam, too
-    if (sv) { S.stageViewers.delete(String(userId)); for (const rid of sv.readers || []) kickReader(rid); n++; }
+    if (!ghost && dropViewer(S, String(userId), why, t)) n++;
+    // 1.99zc: a stage viewer of that cam, too - through a cam slot or the 🎙 mic stage alike (stagefix DF-43: no ghost on a
+    // Stage tile; micfollow §3.5: none on the mic stage either)
+    if (dropStageViewer(S, String(userId))) n++;
   }
   return n;
 }
@@ -503,7 +571,8 @@ function watchersOf(login, t = now()) {
   for (const S of SESS.values()) {
     if (S.ended || S.login !== l) continue;
     for (const [uid, v] of freshViewers(S, t)) out.push({ userId: uid, username: v.username, room: S.roomId, since: v.since, ghost: !!v.ghost });
-    for (const [uid, v] of freshStage(S, t)) out.push({ userId: uid, username: v.username || null, room: S.roomId, since: v.since, stage: true, ghost: !!v.ghost });   // 1.99zc
+    // 1.99zc; micfollow (D-19): `mf` = they watch ONLY through a pad's mic stage - counted for the cam's owner, never named
+    for (const [uid, v] of freshStage(S, t)) out.push({ userId: uid, username: v.username || null, room: S.roomId, since: v.since, stage: true, ghost: !!v.ghost, mf: mfOnlyVia(v) });
   }
   return out;
 }
@@ -533,96 +602,342 @@ function endBy(u, R, login, t = now()) {
 }
 
 // ── 1.99zc: 🎬 stage cams (see the header) ──
-/** May `login`'s cam in room R go on a stage right now? The same rules as a viewer's ▶ Live, minus the viewer's own. */
-async function stageConsent(R, login, t = now()) {
+// stagefix: blocks between the person on cam and whoever puts them up / owns the Stage, and the per-viewer gate.
+/** The pad's owner account (rooms registry), or null. */
+function padOwnerId(roomId) {
+  try { const r = require("./rooms").getCached(String(roomId || "")); return r && r.owner && r.owner.userId ? String(r.owner.userId) : null; } catch (e) { return null; }
+}
+const placeholders = (n) => new Array(n).fill("?").join(", ");
+/**
+ * stagefix (D-17; §12.9.5.1 row 8): which of `logins` may NOT be put on room `roomId`'s Stage by `actorId` because of a block -
+ * between the person on cam and whoever puts them up, or the pad's owner (it's their Stage): the cam's owner blocked them
+ * from the cam (cam_blocks), or a DM block either way (messages.js dm_blocks) between an account linked to the cam's login
+ * and theirs. Never bypassed (staff pins follow the subject's rules, DF-43). -> Set(login)
+ */
+async function directorBlockedSet(logins, roomId, actorId) {
+  return blockedSet(logins, [actorId, padOwnerId(roomId)]);
+}
+/** stagefix: the cam_blocks memory is camviewers.js's (its init loads it; the server runs it at start - tests and early calls too). */
+async function cvReady() { try { await CV().init(); } catch (e) { /* no camviewers: no cam blocks */ } }
+/**
+ * stagefix: which of `logins` have a block with any of the accounts `ids` (either way): the cam's owner blocked that account
+ * from the cam (cam_blocks), or a DM block either way between an account linked to the login and it. -> Set(login)
+ * Also onair.js: a cam an admin puts on Pepe's stream (D-17's "blocks against the director" for layer 3).
+ */
+async function blockedSet(logins, ids0) {
+  const out = new Set();
+  const list = [...new Set((logins || []).map(low).filter((l) => LOGIN_RE.test(l)))];
+  const ids = [...new Set((ids0 || []).filter(Boolean).map(String))];
+  if (!list.length || !ids.length) return out;
+  await cvReady();
+  for (const l of list) if (ids.some((id) => CV().blocked(l, id))) out.add(l);
+  for (const l of await dmBlockedSet(list, ids)) out.add(l);
+  return out;
+}
+/**
+ * The DM half of blockedSet (train2 merge: split out so micfollow can cache it - its eligOf reads the cam_blocks half live
+ * from camviewers' memory): which of `logins` have a DM block either way (messages.js dm_blocks) between an account linked to
+ * the login and one of the accounts `ids`. -> Set(login)
+ */
+async function dmBlockedSet(logins, ids0) {
+  const out = new Set();
+  const list = [...new Set((logins || []).map(low).filter((l) => LOGIN_RE.test(l)))];
+  const ids = [...new Set((ids0 || []).filter(Boolean).map(String))];
+  if (!list.length || !ids.length) return out;
+  let accts = [];
+  try { accts = await getQuery(`SELECT userId, lower(camfrogUsername) AS l FROM users WHERE lower(camfrogUsername) IN (${placeholders(list.length)})`, list); }
+  catch (e) { accts = []; }
+  const loginOfId = new Map(accts.map((r) => [String(r.userId), String(r.l)]));
+  if (!loginOfId.size) return out;
+  let rows = [];
+  try { rows = await getQuery(`SELECT blocker_id, blocked_id FROM dm_blocks WHERE blocker_id IN (${placeholders(ids.length)}) OR blocked_id IN (${placeholders(ids.length)})`, ids.concat(ids)); }
+  catch (e) { rows = []; }                          // no DMs here (no table): no DM blocks
+  // stagefix fix: each row both ways - one side one of `ids`, the other an account linked to the cam's login. A row between
+  // two of `ids` counts too when one of them IS the person on cam (the pad's owner on their own Stage, staff putting up their
+  // own cam): only a row between two accounts that aren't the person on cam is about someone else.
+  for (const r of rows) {
+    const a = String(r.blocker_id), b = String(r.blocked_id);
+    if (a === b) continue;
+    if (ids.includes(a) && loginOfId.has(b)) out.add(loginOfId.get(b));
+    if (ids.includes(b) && loginOfId.has(a)) out.add(loginOfId.get(a));
+  }
+  return out;
+}
+const directorBlocked = async (login, roomId, actorId) => (await directorBlockedSet([login], roomId, actorId)).has(low(login));
+const blockedWith = async (login, ids) => (await blockedSet([login], ids)).has(low(login));
+/**
+ * stagefix (§12.9.5.1 rows 9-10, "stage bans of the linked account"): which of `logins` have a linked PATV account banned from
+ * the stages - site-wide (mainstage stage_bans, staff) or from room `roomId`'s Stage (stage_room_bans, the pad's owner). A
+ * banned person can't be put on a Stage either (refused, and an open cam slot ends, with the neutral "unavailable"). -> Set(login)
+ */
+async function bannedSet(logins, roomId) {
+  const out = new Set();
+  const list = [...new Set((logins || []).map(low).filter((l) => LOGIN_RE.test(l)))];
+  if (!list.length) return out;
+  let accts = [];
+  try { accts = await getQuery(`SELECT userId, lower(camfrogUsername) AS l FROM users WHERE lower(camfrogUsername) IN (${placeholders(list.length)})`, list); }
+  catch (e) { accts = []; }
+  if (!accts.length) return out;
+  const loginOfId = new Map(accts.map((r) => [String(r.userId), String(r.l)]));
+  const ids = [...loginOfId.keys()];
+  let rows = [];
+  try { rows = rows.concat(await getQuery(`SELECT userId FROM stage_bans WHERE userId IN (${placeholders(ids.length)})`, ids)); } catch (e) { /* no stage yet */ }
+  if (roomId) {
+    try { rows = rows.concat(await getQuery(`SELECT userId FROM stage_room_bans WHERE room_id = ? AND userId IN (${placeholders(ids.length)})`, [String(roomId)].concat(ids))); }
+    catch (e) { /* no stage yet */ }
+  }
+  for (const r of rows) if (loginOfId.has(String(r.userId))) out.add(loginOfId.get(String(r.userId)));
+  return out;
+}
+const subjectBanned = async (roomId, login) => (await bannedSet([login], roomId)).has(low(login));
+/** stagefix: "Take me off this Stage" (stageleave.js) - they're keeping their cam off this pad's Stage right now. */
+async function stageLeft(roomId, login, t = now()) {
+  try { const SL = require("./stageleave"); await SL.init(); return SL.excludedUntil(roomId, login, t) > 0; } catch (e) { return false; }
+}
+/** A DM block either way between viewer `uid` and an account linked to `login` (not their own). */
+async function dmBlockedWith(login, uid) {
+  if (!uid) return false;
+  let rows = [];
+  try { rows = await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [low(login)]); } catch (e) { rows = []; }
+  const ids = rows.map((r) => String(r.userId)).filter((id) => id !== String(uid));
+  if (!ids.length) return false;
+  try {
+    return (await getQuery(`SELECT 1 AS x FROM dm_blocks WHERE (blocker_id = ? AND blocked_id IN (${placeholders(ids.length)}))
+                            OR (blocked_id = ? AND blocker_id IN (${placeholders(ids.length)})) LIMIT 1`, [String(uid)].concat(ids, [String(uid)], ids))).length > 0;
+  } catch (e) { return false; }
+}
+/**
+ * stagefix (§12.9.5.1, the per-viewer gate): may viewer `uid` - signed in and padFull, the caller's checks - get the picture of
+ * `login`'s cam on room `roomId`'s Stage? null = yes; "room_off" when the pad has no 💎 bridge perk; else the neutral
+ * "unavailable" for every reason about the viewer and the person on cam (never which): the cam owner blocked them, the room's
+ * live-cam block on them (bridgeblocks), the cam's own access mode (camaccess.gate: members / followers / request and the
+ * owner's "always" list - no "Ask to watch" on a Stage), a DM block either way. No 👻 ghost bypass here (DF-43).
+ */
+async function stageViewerWhy(login, roomId, uid) {
+  if (!bridgeOk(roomId)) return "room_off";
+  const u = String(uid);
+  await cvReady();
+  if (CV().blocked(login, u)) return "unavailable";
+  try { if (await require("./bridgeblocks").refusal(roomId, u, "livecams")) return "unavailable"; } catch (e) { /* no bridge blocks */ }
+  if (await require("./camaccess").gate(login, u)) return "unavailable";
+  if (await dmBlockedWith(login, u)) return "unavailable";
+  return null;
+}
+function dropStageViewer(S, uid) {
+  const v = S && S.stageViewers ? S.stageViewers.get(String(uid)) : null;
+  if (!v) return false;
+  S.stageViewers.delete(String(uid));
+  for (const rid of v.readers || []) kickReader(rid);
+  return true;
+}
+/**
+ * May `login`'s cam in room R go on a stage right now? The same rules as a viewer's ▶ Live, minus the viewer's own.
+ * stagefix: + the pad's bridge perk, "Take me off this Stage" and blocks with `actor` (who puts them up) or the pad's owner -
+ * refused with the neutral "unavailable" (the actor is never told why).
+ */
+async function stageConsent(R, login, t = now(), { actor = null } = {}) {
   if (!on()) throw refuse("off");
   if (!R || !R.cams) throw refuse("room_off");
   if (R.livecams === false) throw refuse("room_off");
+  if (!bridgeOk(R.id)) throw refuse("room_off");
   login = String(login || "").toLowerCase();
   const m = LOGIN_RE.test(login) ? memberOf(R, login) : null;
   if (!m || !m.on_cam) throw refuse("not_on_cam");
   if (optedOut(login)) throw refuse("opted_out");
-  try { if ((await require("./stories").privateLogins([login])).has(login)) throw refuse("opted_out"); } catch (e) { if (e.refuse) throw e; }
+  // stagefix fix: private activity, "Take me off this Stage" and a block are all the one neutral "unavailable" - whoever puts
+  // them up can't tell which (private used to say "opted_out", i.e. "switched live video off" - not even true)
+  try { if ((await require("./stories").privateLogins([login])).has(login)) throw refuse("unavailable"); } catch (e) { if (e.refuse) throw e; }
+  if (await stageLeft(R.id, login, t)) throw refuse("unavailable");
+  if (await directorBlocked(login, R.id, actor && actor.userId)) throw refuse("unavailable");
+  if (await subjectBanned(R.id, login)) throw refuse("unavailable");      // stagefix: a stage ban of their linked account (site / this pad)
   if ((COOL.get(keyOf(R.id, login)) || 0) > t) throw refuse("ended_by");
   if (!botOk(t)) throw refuse("nopepe");
   return m;
 }
-/** A stage slot (mainstage, source 'cam') takes hold of `login`'s live cam in room R. -> {display} | throws Refuse */
-async function stageHold(R, login, slotId, t = now()) {
+/**
+ * stagefix: mainstage camBeat's re-check of a cam its slot holds, every tick - what the person (or the pad) changed since it went
+ * up: the pad's bridge perk, the live-video opt-out, private activity, "Take me off this Stage", a block with whoever put them
+ * up (`actorId`) or the pad's owner. -> null | a reason (the slot ends with "cam_<reason>"). stagefix fix: private activity,
+ * "Take me off this Stage" and a block all come back as the one neutral "unavailable" (the slot's end reason, which whoever put
+ * the cam up sees on /stage and in the pad's log, never says which).
+ */
+async function stageRecheck(roomId, login, { actorId = null } = {}, t = now()) {
+  login = low(login);
+  if (!bridgeOk(roomId)) return "room_off";
+  if (optedOut(login)) return "opted_out";
+  try { if ((await require("./stories").privateLogins([login])).has(login)) return "unavailable"; } catch (e) { /* none */ }
+  if (await stageLeft(roomId, login, t)) return "unavailable";
+  if (await directorBlocked(login, roomId, actorId)) return "unavailable";
+  if (await subjectBanned(roomId, login)) return "unavailable";           // stagefix: banned from the stages since it went up
+  return null;
+}
+/** A stage holder takes hold of `login`'s live cam in room R: a cam slot (mainstage, source 'cam'; opts.actor = who puts it
+ *  there) or the pad's mic stage ("mf:<room id>", micfollow.js; opts.mf). Several holders may share the session; two cam SLOTS
+ *  may not (409 on_stage). -> {display} | throws Refuse */
+async function stageHold(R, login, holderId, t = now(), opts = {}) {
+  if (!opts || typeof opts !== "object") opts = {};
   await init();
   login = String(login || "").toLowerCase();
-  const m = await stageConsent(R, login, t);
+  const H = String(holderId);
+  // stagefix: stageConsent's person-on-cam rules (the bridge perk, "Take me off this Stage", blocks with the actor / the pad's
+  // owner, stage bans) hold for every holder - the mic stage has no actor, so its blocks are with the pad's owner
+  const m = await stageConsent(R, login, t, opts);
+  // micfollow: the mic stage re-checks ITS rules (the tile is still wanted; opt-outs, private activity, the pad's
+  // exclusions, stage bans, cam access) here, after the awaits and right before the hold: a cut that landed while this
+  // hold was on its way never leaves a relay behind - nothing is created, Pepe is never asked (spec §4.3)
+  if (typeof opts.ok === "function" && opts.ok() !== true) throw new Refuse(409, "That cam isn't wanted on the stage any more.", "gone");
   const k = keyOf(R.id, login);
   let S = SESS.get(k);
   if (S && S.ended) { SESS.delete(k); S = null; }
-  if (S && S.stage && S.stage !== String(slotId)) throw new Refuse(409, "That cam is already on the stage.", "on_stage");
-  if (!S && liveCount() >= cfg().max_live) throw refuse("slots_busy");
-  if (!S) {
-    const p = pathFor(R.id, login);
-    S = { key: k, roomId: R.id, login, display: m.display || login, path: p, viewers: new Map(), createdAt: t, wantUntil: t + cfg().linger_s * 1000,
-          liveAt: 0, ready: false, readers: 0, seenAt: 0, sourceId: null, botState: null, botWhy: null, ended: 0, endWhy: null, stage: null, stageViewers: new Map() };
-    SESS.set(k, S);
-    BY_PATH.set(p, k);
+  if (S && !isMfHolder(H)) {
+    for (const h of S.holds) if (h !== H && !isMfHolder(h)) throw new Refuse(409, "That cam is already on the stage.", "on_stage");
   }
+  if (!S && liveCount() >= cfg().max_live) throw refuse("slots_busy");
+  if (!S) S = newSess(R, login, m, t);
   if (!S.stageViewers) S.stageViewers = new Map();
-  S.stage = String(slotId);
+  if (!S.holds) S.holds = new Set();
+  const had = S.holds.has(H);
+  S.holds.add(H);
+  if (opts.mf === true || isMfHolder(H)) { S.mf = true; S.mfEver = true; }
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
-  console.log(`[livecam] stage hold room=${R.id} target=${login} slot=${slotId}`);
+  if (!had) console.log(`[livecam] stage hold room=${R.id} target=${isMfHolder(H) ? "-" : login} holder=${isMfHolder(H) ? "mf" : H}`);
   return { display: m.display || login };
 }
-const stageSess = (slotId) => { for (const S of SESS.values()) if (S.stage === String(slotId)) return S; return null; };
-/** The slot ended / was cut: let go of the cam (viewers of the strip / popover keep watching). */
-function stageRelease(slotId, t = now()) {
-  for (const S of SESS.values()) {
-    if (S.stage !== String(slotId)) continue;
-    S.stage = null;
-    for (const v of S.stageViewers.values()) for (const rid of v.readers || []) kickReader(rid);
-    S.stageViewers.clear();
-    if (!freshViewers(S, t).length) S.wantUntil = Math.min(S.wantUntil || Infinity, t + cfg().linger_s * 1000);
+/** The session a cam SLOT holds (an "mf:" holder may hold several - see mfState). */
+const stageSess = (slotId) => { for (const S of SESS.values()) if (S.holds && S.holds.has(String(slotId))) return S; return null; };
+/** Let go of one holder: stage viewers who came only through it are kicked; with no holder left the relay lingers for
+ *  the strip / popover viewers. key = only that session (keyOf(room, login)); null = every session it holds. */
+function releaseHolder(S, H, t) {
+  if (!S || !S.holds || !S.holds.has(H)) return false;
+  S.holds.delete(H);
+  if (S.stageViewers) {
+    for (const [uid, v] of [...S.stageViewers.entries()]) {
+      const via = v.via instanceof Set ? v.via : new Set();
+      via.delete(H);
+      if (!via.size) { S.stageViewers.delete(uid); for (const rid of v.readers || []) kickReader(rid); }
+    }
   }
+  if (![...S.holds].some(isMfHolder)) S.mf = false;
+  if (!held(S) && !freshViewers(S, t).length) S.wantUntil = Math.min(S.wantUntil || Infinity, t + cfg().linger_s * 1000);
+  return true;
+}
+function stageRelease(holderId, key = null, t = now()) {
+  if (typeof key === "number") { t = key; key = null; }      // 1.99zc callers: stageRelease(slotId[, t])
+  const H = String(holderId);
+  let n = 0;
+  if (key != null) { if (releaseHolder(SESS.get(String(key)), H, t)) n++; return n; }
+  for (const S of SESS.values()) if (releaseHolder(S, H, t)) n++;
+  return n;
+}
+/** micfollow: give the relay back (a manual cam slot needs it): let go, and end it when nobody else holds / watches it. */
+function stageYield(roomId, login, holderId, t = now()) {
+  const S = SESS.get(keyOf(roomId, login));
+  if (!S || S.ended) return false;
+  releaseHolder(S, String(holderId), t);
+  if (!held(S) && !freshViewers(S, t).length) endSession(S, "yielded", t);
+  return true;
+}
+/** micfollow: the mic stage lets go of `login`'s cam. A relay it held that nobody else holds or watches (no cam slot, no
+ *  fresh ▶ Live viewer) ends AT ONCE - it never lingers, so it can't keep counting against max_live where relays_max and
+ *  yieldRelay no longer see it. -> true when this holder held it */
+function stageDrop(roomId, login, holderId, t = now(), why = "released") {
+  const S = SESS.get(keyOf(roomId, String(login || "").toLowerCase()));
+  if (!S || S.ended) return false;
+  if (!releaseHolder(S, String(holderId), t)) return false;
+  if (!held(S) && !freshViewers(S, t).length) endSession(S, why, t);
+  return true;
 }
 /** -> {state: none | connecting | live | ended, why} for a stage slot's cam. */
 function stageState(slotId, t = now()) {
   const S = stageSess(slotId);
   if (!S) {
-    for (const X of SESS.values()) if (X.ended && X.lastStage === String(slotId)) return { state: "ended", why: X.endWhy || "ended" };
+    for (const X of SESS.values()) if (X.ended && X.lastHolds && X.lastHolds.has(String(slotId))) return { state: "ended", why: X.endWhy || "ended" };
     return { state: "none", why: null };
   }
   if (S.ended) return { state: "ended", why: S.endWhy || "ended" };
   return { state: stateOf(S, t), why: S.botWhy || null, viewers: shownCount(freshStage(S, t)) };
 }
-/** A stage viewer asks to watch the cam on slot `slotId` (or beats). -> {ok, whep, state, beat_ms} | throws Refuse */
-async function stageWatch(u, R, slotId, { beatOnly = false } = {}, t = now()) {
+/** micfollow: the relay of `login`'s cam in room `roomId` as the mic stage sees it.
+ *  -> {state: none | connecting | live | ended, why, exact (null until Pepe says), held (the mic stage holds it),
+ *      mfOnly (only mic-stage holders and no fresh ▶ Live viewers), viewers (fresh stage viewers)} */
+function mfState(roomId, login, t = now()) {
+  const S = SESS.get(keyOf(roomId, String(login || "").toLowerCase()));
+  if (!S) return { state: "none", why: null, exact: null, held: false, mfOnly: false, viewers: 0 };
+  const exact = S.botInfo && typeof S.botInfo.exact === "boolean" ? S.botInfo.exact : null;
+  if (S.ended) return { state: "ended", why: S.endWhy || "ended", exact, held: false, mfOnly: false, viewers: 0 };
+  const holds = S.holds ? [...S.holds] : [];
+  return { state: stateOf(S, t), why: S.botWhy || null, exact, held: holds.includes(MF_PREFIX + roomId),
+           mfOnly: holds.length > 0 && holds.every(isMfHolder) && !freshViewers(S, t).length, viewers: shownCount(freshStage(S, t)) };
+}
+/** micfollow: relays held only by the mic stage (none of them for a slot or a ▶ Live viewer), site-wide. */
+function mfOnlyCount(t = now()) {
+  let n = 0;
+  for (const S of SESS.values()) {
+    if (S.ended || !held(S)) continue;
+    if ([...S.holds].every(isMfHolder) && !freshViewers(S, t).length) n++;
+  }
+  return n;
+}
+/** A stage viewer asks to watch a held cam (or beats): a cam slot's (`holderId` = slot id) or the mic stage's
+ *  ("mf:<room id>" + opts.login). -> {ok, whep, state, expires} | {ok, state} | throws Refuse */
+async function stageWatch(u, R, holderId, { beatOnly = false, login = null } = {}, t = now()) {
   await init();
   if (!u || !u.userId) throw refuse("signin");
   if (!on()) throw refuse("off");
-  const S = stageSess(slotId);
+  const H = String(holderId);
+  let S;
+  if (isMfHolder(H)) {
+    S = SESS.get(keyOf(R.id, String(login || "").toLowerCase()));
+    if (S && !(S.holds && S.holds.has(H))) S = null;
+  } else S = stageSess(H);
   if (!S || S.ended || S.roomId !== R.id) throw new Refuse(404, "That cam isn't on the stage any more.", "gone");
-  if (!(await require("./bridge-relay").padFull(u.userId, R.id))) throw refuse("pad_access");
   const uid = String(u.userId);
-  if (CV().blocked(S.login, uid)) throw refuse("unavailable");          // 1.99yq rules: the owner blocked this viewer
+  // stagefix: the pad's rule (padFull: signed in, inside an Approved pad, past the 18+ gate - padaccess.adultGate) and the
+  // per-viewer gate (stageViewerWhy), on the ticket AND every beat - a block or a tighter cam mode ends their picture within a beat
+  let why = (await require("./bridge-relay").padFull(uid, R.id)) ? null : "pad_access";
+  if (!why) why = await stageViewerWhy(S.login, S.roomId, uid);
+  if (why) { dropStageViewer(S, uid); throw refuse(why); }
   let v = S.stageViewers.get(uid);
   if (!v || t - v.beat > BEAT_MS) {
     if (beatOnly) return { ok: true, state: "ended", why: "gone" };
     if (!fitsBudget(S, t)) throw refuse("budget");
-    v = { since: t, beat: t, username: u.username || null, readers: new Set(), ghost: isGhost(uid) };
+    // (👻 ghost mode is for ▶ Live and 1.99zc cam slots - never the mic stage, spec §3.5: an mf: viewer is never a ghost)
+    v = { since: t, beat: t, username: u.username || null, readers: new Set(), ghost: isMfHolder(H) ? false : isGhost(uid), via: new Set() };
     S.stageViewers.set(uid, v);
   }
+  if (!(v.via instanceof Set)) v.via = new Set();
+  v.via.add(H);
   v.beat = t;
   if (beatOnly) return { ok: true, state: stateOf(S, t) };
   return { ok: true, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t), expires: t + TICKET_MS };
 }
+/** micfollow: a viewer stops watching a held cam through `holderId` (their tile left the stage). */
+function stageUnwatch(userId, roomId, login, holderId, t = now()) {
+  const S = SESS.get(keyOf(roomId, String(login || "").toLowerCase()));
+  if (!S || !S.stageViewers) return false;
+  const v = S.stageViewers.get(String(userId));
+  if (!v) return false;
+  const via = v.via instanceof Set ? v.via : new Set();
+  via.delete(String(holderId));
+  if (!via.size) { S.stageViewers.delete(String(userId)); for (const rid of v.readers || []) kickReader(rid); }
+  return true;
+}
+/** micfollow: is `login`'s cam in this room in its ended-by cooldown (an owner / mod / admin ended its relay)? */
+const cooling = (roomId, login, t = now()) => (COOL.get(keyOf(roomId, String(login || "").toLowerCase())) || 0) > t;
 
 // ── Pepe ──
 const str = (v, n) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, n);
 const TERMINAL = new Set(["opted_out", "not_on_cam", "room_off", "slots_busy", "open_failed", "not_that_cam", "noswitch", "busy", "spawn_failed",
-  "failed", "cam_closed"]);
+  "failed", "cam_closed", "ambiguous"]);   // micfollow: "ambiguous" = an exact open found two people with that name
 /** Pepe's poll: his report in, the wanted cams + settings + opt-outs out. */
 async function forBot(body, t = now()) {
   await init();
   body = body || {};
   sweep(t);
-  BOT = { at: t, cap: body.cap === true, pool: body.pool && typeof body.pool === "object" ? body.pool : null, cfgFrom: str(body.cfg_from, 20) };
+  BOT = { at: t, cap: body.cap === true, pool: body.pool && typeof body.pool === "object" ? body.pool : null, cfgFrom: str(body.cfg_from, 20),
+          stageOffMe: body.stage_off_me === true,         // stagefix fix: he forwards "!stage off me" (stageOffMeOk)
+          stageOk: body.stage_ok === true,                // stagefix: ...and "!stage ok" / "!stage no" (stageOkOk, stagepin.js)
+          mf: Math.max(0, Math.min(99, Math.floor(Number(body.mf) || 0))) };   // micfollow: Pepe can do the mic stage (exact opens, proven holders)
   for (const e of (Array.isArray(body.optout_events) ? body.optout_events : []).slice(0, 100)) {
     if (!e || typeof e !== "object") continue;
     await setOptout(e.login, e.off === true, { via: "chat", ts: Math.floor(Number(e.ts) || t) });
@@ -634,22 +949,30 @@ async function forBot(body, t = now()) {
   }
   const live = Array.isArray(body.live) ? body.live.slice(0, 50) : [];
   const seen = new Set();
+  const exactMoved = [];          // micfollow: relays the mic stage holds whose exact flag changed (the pad steps at once)
   for (const x of live) {
     if (!x || typeof x !== "object") continue;
     const S = SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
     if (!S || S.ended) continue;
     seen.add(S.key);
     S.botState = str(x.state, 20);
+    const wasExact = S.botInfo ? S.botInfo.exact : null;
+    if (S.mf && wasExact !== (typeof x.exact === "boolean" ? x.exact : null)) exactMoved.push(S);
     S.botInfo = { grab_fps: Number(x.grab_fps) || null, grab_ms: Number(x.grab_ms) || null, size: Array.isArray(x.size) ? x.size.slice(0, 2) : null,
                   restarts: Number(x.restarts) || 0, up_s: Number(x.up_s) || 0, setup_ms: Number(x.setup_ms) || null,
                   source: x.source === "passthrough" ? "passthrough" : "reencode", fps: Number(x.fps) || null, fallback: str(x.fallback, 60) || null,
-                  kbps: Number.isFinite(Number(x.kbps)) && Number(x.kbps) >= 0 ? Math.min(100000, Number(x.kbps)) : null };
+                  kbps: Number.isFinite(Number(x.kbps)) && Number(x.kbps) >= 0 ? Math.min(100000, Number(x.kbps)) : null,
+                  exact: typeof x.exact === "boolean" ? x.exact : null };   // micfollow: opened / verified by its exact name
     if (S.botState === "live" && !S.liveAt) S.liveAt = t;
     if (S.botState === "ended" || S.botState === "stopped") {
       const why = str(x.why, 30);
       if (why === "opted_out") ownerClosed(S, why, t);                     // 1.99aak: a ghost keeps watching
       else if (TERMINAL.has(why)) endSession(S, why, t);
     }
+  }
+  for (const S of exactMoved) {
+    if (S.ended) continue;
+    try { require("./micfollow").onExact(S.roomId, S.login); } catch (e) { /* no mic follows */ }
   }
   for (const x of (Array.isArray(body.refused) ? body.refused.slice(0, 50) : [])) {
     const S = x && SESS.get(keyOf(str(x.room, 128), str(x.login, 40)));
@@ -671,7 +994,8 @@ async function forBot(body, t = now()) {
       // 1.99aaf: ghosts aren't counted; ghost_only = nobody but staff in ghost mode watches -> Pepe says nothing in the room
       const fv = freshViewers(S, t), shown = shownCount(fv);
       want.push({ room: S.roomId, login: S.login, url: W().whipUrl(S.path), token: key, path: S.path, viewers: Math.max(1, shown),
-                  ...(fv.length && !shown && !S.stage ? { ghost_only: true } : {}),
+                  ...(fv.length && !shown && !held(S) ? { ghost_only: true } : {}),
+                  ...(S.mf ? { mf: true } : {}),                                     // micfollow: open it by its exact name, never fuzzy
                   ...(optedOut(S.login) ? { bypass: true } : {}) });     // 1.99aak: Pepe publishes it for the ghost despite !livecam off
     }
   }
@@ -680,8 +1004,14 @@ async function forBot(body, t = now()) {
   try { cvNotify = CV().forBot(body, t); } catch (e) { cvNotify = []; }   // 1.99yq: "X opened your cam" notices for Pepe to PM
   let caAsks = [];
   try { caAsks = require("./camaccess").forBot(body, t); } catch (e) { caAsks = []; }   // 1.99aar: "X asks to watch your cam" for Pepe to PM
+  let mfRooms = [];
+  try { mfRooms = require("./micfollow").roomsOn(); } catch (e) { mfRooms = []; }   // micfollow: rooms with a running mic stage (early roster reads)
+  // micfollow: mic-stage still jobs the site cancelled lately (a cut / the tile left): Pepe drops any he already claimed -
+  // no cam open, no frame (the site-only cuts Pepe can't see himself: the mic-stage switch, exclusions, cam access, ...)
+  let mfCancel = [];
+  try { mfCancel = require("./bridge-relay").mfCancelled(); } catch (e) { mfCancel = []; }
   return { ok: true, v: CFG.v, cfg: Object.fromEntries(BOT_KEYS.map((k) => [k, c[k]])), want, optout: [...OPTOUT].slice(0, 5000), cv_notify: cvNotify,
-           ca_asks: caAsks };
+           ca_asks: caAsks, mf_rooms: mfRooms, mf_cancel: mfCancel };
 }
 
 // ── MediaMTX ──
@@ -720,15 +1050,27 @@ async function auth(b, action, proto) {
     try { tok = new URLSearchParams(String(b.query || "").replace(/^\?/, "")).get("pt"); } catch (e) { tok = null; }
     const c = checkTicket(tok, p);
     if (!c) return loopbackIp(b.ip) ? 403 : 401;
-    const v = S.viewers.get(String(c.uid)) || (S.stage && S.stageViewers ? S.stageViewers.get(String(c.uid)) : null);   // 1.99zc: or a stage viewer
-    if (!v || now() - v.beat > BEAT_MS) return 403;
-    const gh = !!v.ghost && isGhost(c.uid);                                // 1.99aak: 👻 staff in ghost mode get past these
+    const fresh = (x) => !!x && now() - x.beat <= BEAT_MS;
+    const lv = S.viewers.get(String(c.uid)) || null;
+    const sv = held(S) && S.stageViewers ? S.stageViewers.get(String(c.uid)) : null;   // 1.99zc: or a stage viewer (micfollow: any holder)
+    const v = fresh(lv) ? lv : fresh(sv) ? sv : null;
+    if (!v) return 403;
+    // micfollow: a viewer who watches ONLY through the mic stage: only a relay Pepe opened - or verified - by the EXACT name
+    // (never the wrong "Bob", §7.2 / S-19)
+    const mfVia = v === sv && mfOnlyVia(v);
+    if (mfVia && !(S.botInfo && S.botInfo.exact === true)) return 403;
+    // 1.99aak: 👻 staff in ghost mode get past these - stagefix: never on a Stage (DF-43), so never on the mic stage either (§3.5)
+    const gh = v === lv && !!v.ghost && isGhost(c.uid);
     if (optedOut(S.login) && !gh) return 403;
     if (CV().blocked(S.login, c.uid) && !gh) return 403;
     if (!(await require("./bridge-relay").padFull(c.uid, S.roomId))) return 403;
+    if (v === sv && (await stageViewerWhy(S.login, S.roomId, c.uid))) { dropStageViewer(S, c.uid); return 403; }   // stagefix: the per-viewer gate
     if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) v.readers.add(String(b.id));
     // 1.99yq: the video really reaches them now -> Pepe PMs the cam's owner who it is (camviewers.js rate-limits it)
-    if (!v.noted) { v.noted = true; CV().noteViewers("live", S.roomId, S.login, [String(c.uid)]); }
+    // micfollow: a viewer who watches ONLY through the mic stage isn't noted one by one (one stage notice instead, OD-3)
+    // (noted only when the note really went out: a viewer who later watches the same cam through a cam slot or ▶ Live
+    // is still noted then)
+    if (!v.noted && !mfVia) { v.noted = true; CV().noteViewers("live", S.roomId, S.login, [String(c.uid)]); }
     return 200;
   }
   return 403;
@@ -758,7 +1100,8 @@ async function adminView() {
     viewers: freshViewers(S, t).map(([uid, v]) => ({ userId: uid, username: v.username, since: v.since, ghost: !!v.ghost })), readers: S.readers, bot: S.botInfo || null,
     kbps: Math.round(rateOf(S, c)), measured: !!(S.botInfo && S.botInfo.source === "passthrough" && Number(S.botInfo.kbps) > 0),
     outKbps: Math.round(rateOf(S, c) * (freshViewers(S, t).length + freshStage(S, t).length)),
-    botState: S.botState, botWhy: S.botWhy, stage: S.stage || null, stageViewers: freshStage(S, t).length }));
+    botState: S.botState, botWhy: S.botWhy, stage: (S.holds ? [...S.holds].find((h) => !isMfHolder(h)) : null) || null, mf: !!S.mf,
+    stageViewers: freshStage(S, t).length }));
   const viewers = totalViewers(t);
   const recent = await getQuery(`SELECT room_id, target, viewer_name, started, ended, secs, end_reason, ghost FROM livecam_audit ORDER BY id DESC LIMIT 30`);
   return { now: t, v: CFG.v, cfg: { ...c }, defaults: { ...DEFAULTS }, fields: FIELDS, updated_at: CFG.at, updated_by: CFG.by, webrtc: W().enabled(),
@@ -945,6 +1288,11 @@ module.exports = {
   register, init, normalize, save, current, viewerCap, pathFor, pubKey, readTicket, checkTicket, camForPath, start, beat, stop, endBy, mayEnd,
   forBot, noteSync, auth, hint, adminView, stageConsent, stageHold, stageRelease, stageState, stageWatch, setOptout, optoutState, optedOut, sweep, dropViewerOf, watchersOf,
   kickReader, recheck,                // adultgate site: roomrtc ends WebRTC room listeners through kickReader too
+  stageRecheck, stageViewerWhy, directorBlocked, directorBlockedSet, blockedWith, blockedSet, stageOffMeOk,   // stagefix site
+  stageOkOk, bannedSet, subjectBanned,                                                                       // stagefix site (final round)
+  mfState, mfOnlyCount, stageUnwatch, stageYield, stageDrop, cooling, liveCount, fitsBudget, onEnd, onOptout, keyOf, held, botOk, MF_PREFIX,   // micfollow
+  dmBlockedSet,                                                                                              // train2 merge (micfollow's eligOf)
+  botMf: () => (BOT && BOT.mf) || 0, botPool: () => (BOT && BOT.pool) || null, enabled: () => cfg().enabled === true, cfg,
   PREFIX, PATH_RE, FIELDS, DEFAULTS, BEAT_MS, TICKET_MS,
   END_COOLDOWN_MS, START_MS,
   _sessions: SESS,

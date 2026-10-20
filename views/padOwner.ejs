@@ -311,6 +311,23 @@
   </section>
   <% } %>
 
+  <% if (locals.chat) { const ch_ = chat;
+       const span_ = (s) => (s % 86400 === 0 && s >= 172800 ? t('owner.chat_span_d', { count: s / 86400 }) : s % 3600 === 0 ? t('owner.chat_span_h', { count: s / 3600 }) : t('owner.chat_span_min', { count: Math.max(1, Math.round(s / 60)) }));
+       const win_ = ch_.chat_s == null ? t('owner.chat_all') : ch_.chat_s === 0 ? t('owner.chat_off') : span_(ch_.chat_s); %>
+  <%# CL3: the pad chat's history / search / downloads - one summary row; the settings' one home is Pad settings › 💬 Chat (padchat.js) %>
+  <section class="ds-card lg po-chat" id="chat" aria-labelledby="poChatH">
+    <h2 class="ds-h2" id="poChatH"><span class="dot"></span>💬 <%- t('owner.chat_h') %></h2>
+    <div class="po-sets">
+      <div class="po-set">
+        <div><b><%- t('owner.chat_row') %></b>
+          <p class="ds-meta"><%- t('owner.chat_summary', { window: win_, search: ch_.search ? t('owner.on') : t('owner.off'), downloads: ch_.downloads ? t('owner.on') : t('owner.off') }) %></p>
+          <% if (ch_.locked) { %><p class="ds-fine"><span class="po-admin"><%- t('owner.chat_locked') %></span></p><% } %></div>
+        <a class="ds-btn sm ghost" href="<%= href %>/settings?tab=chat#chat"><%- t('owner.chat_change') %></a>
+      </div>
+    </div>
+  </section>
+  <% } %>
+
   <% if (camfrog) { %>
   <%# 1.99ti: Camfrog user control in the owner's own room - the pad page's Manage panel (room-mod.js), fed by the live view %>
   <section class="ds-card lg" id="mod" aria-labelledby="poModH" data-slug="<%= slug %>">

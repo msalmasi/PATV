@@ -235,14 +235,20 @@ function matchLine(IDX, line, t) {
   const speaker = String(u.login).toLowerCase();
   let hidden = false;
   try { hidden = require("./quotes").isHidden(speaker); } catch (e) { hidden = false; }
+  // the owner's decision-9 change (the chat archive's sticky set, any kind - "doesn't turn up as mentions", privacy §10): an
+  // incognito speaker's line is "someone" on the pad but never a mention alert; a !bridge hide one's isn't shown at all
+  try { hidden = hidden || require("./chatlogview").isHiddenLogin(speaker); } catch (e) { hidden = true; }
   if (hidden) return [];
+  // hidden people's names are "someone" in the line (as the pad shows it): a custom alert word that is one of them never matches,
+  // and the notice quotes the redacted line (line.red - drain() redacts it; your OWN names still match the line as said)
+  const red = typeof line.red === "string" ? line.red : it.text;
   let PA = null;
   try { PA = require("./padaccess"); } catch (e) { PA = null; }
   const out = [];
   for (const U of IDX.users) {
     if (U.login && U.login === speaker) continue;                         // your own line
     if (speaker === "u:" + String(U.userId).toLowerCase()) continue;       // 1.99xa: your own web-relay line (no chat login)
-    const w = U.words.find((x) => (!x.room || x.room === line.roomId) && x.re.test(it.text));
+    const w = U.words.find((x) => (!x.room || x.room === line.roomId) && x.re.test(x.own ? it.text : red));
     if (!w) continue;
     if (PA && !PA.full({ userId: U.userId, class: U.class }, line.roomId)) continue;     // a pad they can't see
     if (U.mutedUntil > t) continue;
@@ -261,7 +267,8 @@ function noticeFor(line, word) {
   const room = snip(line.name || line.slug || "a room", 60);
   const title = word.own ? `💬 ${who} mentioned you in ${room}` : `💬 ${who} said “${snip(word.phrase, 40)}” in ${room}`;
   const link = line.slug ? `/p/${encodeURIComponent(line.slug)}?tab=live&line=${Number(it.c) || 0}` : "/p";
-  return { kind: "mention", title, body: `${who}: ${snip(it.text, 300)}`, link, ref: `mention:${line.roomId}:${Number(it.c) || it.ts || ""}` };
+  // the line as the pad shows it: hidden people's names are "someone" (line.red)
+  return { kind: "mention", title, body: `${who}: ${snip(typeof line.red === "string" ? line.red : it.text, 300)}`, link, ref: `mention:${line.roomId}:${Number(it.c) || it.ts || ""}` };
 }
 
 // ── the queue (bridge.js ingest -> here; never awaited by the sync) ──
@@ -282,6 +289,9 @@ async function drain() {
       if (!IDX.users.length) continue;
       const inbox = require("./inbox");
       for (const line of batch) {
+        // the owner's decision-9 change: hidden people's names redacted as the pad shows them (fails closed: "" - no match, no
+        // text - when the hidden names can't be loaded)
+        try { line.red = await require("./chatlogview").redactLoaded(String(line.it && line.it.text || "")); } catch (e) { line.red = ""; }
         for (const m of matchLine(IDX, line, NOW())) {
           const n = noticeFor(line, m.word);
           if (await inbox.addSafe(m.user.userId, n)) {

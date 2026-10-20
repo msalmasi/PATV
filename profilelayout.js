@@ -148,12 +148,18 @@ async function save(userId, layout) {
   await runQuery(`INSERT INTO profile_layout (user_id, layout, updated) VALUES (?, ?, ?)
                   ON CONFLICT(user_id) DO UPDATE SET layout = excluded.layout, updated = excluded.updated`,
     [String(userId), JSON.stringify(clean), Date.now()]);
+  await mfRecheck(userId);
   return clean;
 }
 
 async function reset(userId) {
   await ready;
   await runQuery("DELETE FROM profile_layout WHERE user_id = ?", [String(userId)]);
+  await mfRecheck(userId);
+}
+/** micfollow: "private activity" may have changed - the 🎙 mic stage re-reads it for the linked login now. Never throws. */
+async function mfRecheck(userId) {
+  try { await require("./micfollow").recheckUser(userId); } catch (e) { /* no mic follows */ }
 }
 
 /**

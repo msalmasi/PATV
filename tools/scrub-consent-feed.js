@@ -6,6 +6,7 @@
 //                                    [--codes=<code>,<code>]
 //                                    [--dir=<folder with myapp.db>] [--backup-dir=<dir>] [--apply]
 //
+// CL2: the same readings in the pad chat archive (chat_log) are blanked: text and speaker gone, purged = 1 (the FTS index follows).
 // What is removed: bridge_feed rows of the room that are a mic transcript ({k:"tx"}) said by --login whose text is a consent
 // READING (the same rule as Pepe's pepe_voiceclone.is_consent_reading): "I consent to ... voice", or one of --codes read out
 // (digits or words: "I am fond of code seven three nine three"). Talking ABOUT consent is not. Matched by content.
@@ -30,7 +31,9 @@ const SINCE = Date.parse(String(args.since || ""));
 const UNTIL = Date.parse(String(args.until || ""));
 if (!/^[\w.\-]{1,40}$/.test(LOGIN) || !ROOM) { console.error("--login=<camfrog login> and --room=<room id> are required"); process.exit(2); }
 const FEED_KEEP = 200;                                   // bridge.js: the items a running site holds per room
-const SKIP_TABLES = new Set(["voice_consents", "voiceclone_config", "voices", "voice_owned", "voice_owned_logins", "bridge_feed"]);
+// CL2: chat_log (the pad chat archive) is handled like bridge_feed, its FTS shadow tables are never scanned
+const SKIP_TABLES = new Set(["voice_consents", "voiceclone_config", "voices", "voice_owned", "voice_owned_logins", "bridge_feed", "chat_log"]);
+const skipTable = (name) => SKIP_TABLES.has(name) || name.startsWith("chat_log_fts");
 const appDir = path.resolve(__dirname, "..");
 if (args.dir) process.chdir(path.resolve(String(args.dir)));
 if (!fs.existsSync(path.join(process.cwd(), "myapp.db"))) { console.error(`no myapp.db in ${process.cwd()}`); process.exit(2); }
@@ -66,10 +69,22 @@ async function main() {
     }
     live = new Set((await getQuery("SELECT c FROM bridge_feed WHERE room_id = ? ORDER BY c DESC LIMIT ?", [ROOM, FEED_KEEP])).map((r) => r.c));
   }
+  // CL2: the pad chat archive (chatlog.js): the same readings there are BLANKED (text and speaker gone, purged = 1 - the row and
+  // its cursor stay, so nothing re-uses it; the FTS trigger drops it from the index)
+  const archive = [];
+  try { await require(path.join(appDir, "chatlog")).attach(); } catch (e) { console.error("chat archive (CHATLOG_DB) not attached:", e.message); }
+  const hasLog = (await getQuery("SELECT 1 FROM pragma_table_info('chat_log') LIMIT 1").catch(() => [])).length > 0 &&
+                 (await getQuery("SELECT 1 FROM pragma_table_info('chatlog_rooms') LIMIT 1").catch(() => [])).length > 0;
+  if (hasLog) {
+    const rows = await getQuery(`SELECT l.c, l.rk, l.k, l.ts, l.text, l.d, l.rm_at FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk
+                                 WHERE r.room_id = ? AND l.k = 'tx' AND l.who = ? AND l.ts >= ? AND l.ts < ? AND l.purged IS NULL AND l.text IS NOT NULL`,
+                                [ROOM, LOGIN, SINCE, UNTIL]);
+    for (const r of rows) if (isConsentReading(r.text)) archive.push({ c: r.c, rk: r.rk, k: r.k, rm_at: r.rm_at, ts: new Date(r.ts).toISOString(), text: String(r.text).slice(0, 60), full: r.text, d: r.d });
+  }
   // everything else: report only
   const other = [];
   for (const { name } of await getQuery("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")) {
-    if (SKIP_TABLES.has(name)) continue;
+    if (skipTable(name)) continue;
     for (const c of await getQuery(`PRAGMA table_info(${q(name)})`)) {
       if (c.type && !/TEXT|CHAR|CLOB|JSON/i.test(c.type)) continue;
       const rows = await getQuery(`SELECT rowid AS _rid, ${q(c.name)} AS v FROM ${q(name)} WHERE instr(lower(${q(c.name)}), 'consent to') > 0
@@ -82,23 +97,46 @@ async function main() {
   }
   console.log(`room ${ROOM}, login ${LOGIN}, ${new Date(SINCE).toISOString()} .. ${new Date(UNTIL).toISOString()}`);
   for (const f of feed) console.log(`  bridge_feed  delete  c=${f.c} ${f.ts}${live.has(f.c) ? " LIVE (in the running site's memory - restart the site after --apply)" : ""}: ${JSON.stringify(f.text)}`);
+  for (const a of archive) console.log(`  chat_log     blank   c=${a.c} ${a.ts}: ${JSON.stringify(a.text)}`);
   for (const o of other) console.log(`  REPORT ONLY  ${o.table}.${o.column} rowid=${o.rowid}: ${JSON.stringify(o.text)}`);
   if (!feed.length) console.log("  bridge_feed: nothing to remove");
+  if (hasLog && !archive.length) console.log("  chat_log: nothing to blank");
   if (!apply) { console.log("dry run - nothing written (add --apply)"); return; }
-  if (!feed.length) return;
+  if (!feed.length && !archive.length) return;
   const dir = path.resolve(String(args["backup-dir"] || "backups"));
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `myapp-pre-consent-scrub-${new Date().toISOString().replace(/[:.]/g, "-")}.db`);
   await require(path.join(appDir, "sqlitecfg")).backupTo(db, file);
   console.log(`backup: ${file}`);
-  let n = 0;
+  if (archive.length && process.env.CHATLOG_DB) console.log("(the attached chat archive, CHATLOG_DB, is not in this backup - it has its own)");
+  let n = 0, b = 0;
   await tx(async () => {
     for (const f of feed) {
       const r = await runQuery("DELETE FROM bridge_feed WHERE c = ? AND room_id = ?", [f.c, ROOM]);
       n += (r && r.changes) || 0;
     }
+    // CL2 fix-up: the room counters follow (chatlog_rooms idx_rows / bytes - what the admin card and search's room-token rule
+    // read), the way a staff purge lowers them (chatlogmod.purgeRows)
+    const per = new Map();
+    const bytes = (v) => (v == null ? 0 : Buffer.byteLength(String(v), "utf8"));
+    for (const a of archive) {
+      let d;
+      try { d = JSON.parse(a.d); } catch (e) { d = {}; }
+      if (!d || typeof d !== "object") d = {};
+      d.u = {};
+      const nd = JSON.stringify(d);
+      const r = await runQuery("UPDATE chat_log SET text = NULL, d = ?, purged = 1 WHERE c = ? AND purged IS NULL", [nd, a.c]);
+      if (!r || !r.changes) continue;
+      b += r.changes;
+      const p = per.get(a.rk) || { idx: 0, bytes: 0 };
+      if (a.rm_at == null && ["msg", "tx", "topic"].includes(a.k)) p.idx++;      // it was indexable (chatlog.INDEXABLE)
+      p.bytes += bytes(a.full) + Math.max(0, bytes(a.d) - bytes(nd));
+      per.set(a.rk, p);
+    }
+    for (const [rk, p] of per) await runQuery("UPDATE chatlog_rooms SET idx_rows = MAX(0, idx_rows - ?), bytes = MAX(0, bytes - ?) WHERE rk = ?", [p.idx, p.bytes, rk]);
   });
   console.log(`deleted ${n} bridge_feed row(s)`);
+  if (archive.length) console.log(`blanked ${b} chat_log row(s)`);
   if (feed.some((f) => live.has(f.c))) console.log("restart the site now: the running process still shows them (in memory) until it restarts");
 }
 

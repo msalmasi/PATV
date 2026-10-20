@@ -47,7 +47,9 @@ const poolsTotal = async () => { try { return (await P.total()).amount; } catch 
 const supply = async () => (await wallets()) + (await house()) + (await claims()) + (await poolsTotal());
 const reqOf = (uid, sid = null) => ({ user: { userId: uid }, loginSession: sid ? { id: sid, userId: uid } : null });
 
-test.before(async () => {
+// (CL11 fix-up: a memoized setup that each test awaits - Node 16's runner never runs a top-level test.before)
+let setupP = null;
+const setup = () => setupP || (setupP = (async () => {
   await built;
   ({ runQuery, getQuery, tx } = require(path.join(repo, "dbUtils")));
   D = require(path.join(repo, "accountdelete"));
@@ -59,9 +61,10 @@ test.before(async () => {
   await S.init();
   await require(path.join(repo, "ledger")).ensure();
   await require(path.join(repo, "staleaccounts")).ensure();
-});
+})());
 
 test("blockers: owed-to-others / in-flight things and owned pads block, with a list; renewals and the balance are settled", async () => {
+  await setup();
   await user("blk", { username: "blocky", cf: "blockycf", bal: 1000 });
   await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, owner_user_id) VALUES ('r1', 'blockpad', 'Block Pad', 'user', 'blk')");
   await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, owner_user_id) VALUES ('user:blk', 'blocky', 'profile', 'user', 'blk')");
@@ -85,6 +88,7 @@ test("blockers: owed-to-others / in-flight things and owned pads block, with a l
 });
 
 test("admins / staff / moderators can't delete themselves; another admin schedules it", async () => {
+  await setup();
   await user("adm", { class: "Admin", password: await bcrypt.hash("pw-12345678", 4) });
   await user("mod", { password: await bcrypt.hash("pw-12345678", 4) });
   await runQuery("INSERT INTO user_roles (userId, role) VALUES ('mod', 'Moderator')");
@@ -96,6 +100,7 @@ test("admins / staff / moderators can't delete themselves; another admin schedul
 });
 
 test("re-authentication: the password, or a fresh sign-in (not a converted old cookie); the username typed exactly", async () => {
+  await setup();
   await user("re", { username: "reauth", password: await bcrypt.hash("right-password", 4) });
   await assert.rejects(D.request(reqOf("re"), { password: "right-password", confirm: "Reauth" }), (e) => e.code === "E_CONFIRM");
   await assert.rejects(D.request(reqOf("re"), { password: "wrong-password", confirm: "reauth" }), (e) => e.code === "E_REAUTH");
@@ -109,6 +114,7 @@ test("re-authentication: the password, or a fresh sign-in (not a converted old c
 });
 
 test("the grace period: every device signed out; signing in cancels it (with a notice); the job waits for the date", async () => {
+  await setup();
   await user("gr", { username: "gracey", password: await bcrypt.hash("pw-12345678", 4), bal: 10 });
   const s1 = await S.create({ get: () => "" }, "gr", "password");
   const r = await D.request(reqOf("gr", s1.id), { password: "pw-12345678", confirm: "gracey" });
@@ -125,6 +131,7 @@ test("the grace period: every device signed out; signing in cancels it (with a n
 });
 
 test("the job: balance routed by the PAT Routing row (supply exact, keyed), posts / DMs / personal rows handled, records pseudonymised, Camfrog released, Pepe told", async () => {
+  await setup();
   await user("del", { username: "deleteme", cf: "DelCF", bal: 12345, twitch: "tw-999", password: await bcrypt.hash("pw-12345678", 4) });
   await user("oth", { username: "otherperson", cf: "othercf" });
   // posts: one someone replied to (anonymised), one nobody did (deleted)
@@ -135,6 +142,9 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
   await runQuery("INSERT INTO conversations (id, kind, dm_key, created_by, created_at) VALUES (301, 'dm', 'del|oth', 'del', 1)");
   await runQuery("INSERT INTO conversation_members (conversation_id, user_id, joined_at) VALUES (301, 'del', 1), (301, 'oth', 1)");
   await runQuery("INSERT INTO messages (id, conversation_id, sender_id, body, created_at) VALUES (401, 301, 'del', 'my private words', 1), (402, 301, 'oth', 'their words', 2)");
+  // CL11: `!msg` copies - theirs (goes with the message) and one the other person sent them (their login pseudonymised)
+  await runQuery(`INSERT INTO dm_relays (message_id, relay_key, via, from_login, to_login, cf_room, cf_sent_at, present, created)
+                  VALUES (401, 'key-del-401', 'cf_pm', 'delcf', 'othercf', 'PepeLab', 1, 1, 1), (402, 'key-oth-402', 'cf_pm', 'othercf', 'delcf', 'PepeLab', 2, 0, 2)`);
   // personal rows + kept records
   await runQuery("INSERT INTO inbox (user_id, kind, title, created) VALUES ('del', 'system', 'hello', 1)");
   await runQuery("INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, linked_at) VALUES ('google', 'g-1', 'del', 'self', 'oidc', 'me@gmail.test', 1)");
@@ -152,6 +162,19 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
   await runQuery("INSERT INTO adult_gate_cfg (key, value, updated, by) VALUES ('enabled', '0', 1, 'deleteme')");
   const AG = require(path.join(repo, "adultgate"));
   AG.note("del");
+  // CL2: the pad chat archive - their web line ("u:del"), their linked login's line, someone else's; their downloads log,
+  // a staff read audit of theirs, a report they filed, a pad setting they changed
+  await runQuery("INSERT INTO chatlog_rooms (rk, room_id, created) VALUES (1, 'Lab.Room', 1)");
+  await runQuery(`INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES
+                  (501, 1, 1, 'msg', 'u:del', 'typed on the web', 'r1', 'm', '{"u":{"display":"Delete Me","acct":true,"web":true}}'),
+                  (502, 1, 2, 'msg', 'delcf', 'said in the room', 'r1', 'm', '{"u":{"display":"DelCF"}}'),
+                  (503, 1, 3, 'msg', 'othercf', 'theirs', 'r1', 'm', '{"u":{"display":"Other"}}')`);
+  await runQuery("INSERT INTO chatlog_exports (id, user_id, rk, fmt, sys, role, state, created) VALUES ('dx', 'del', 1, 'html', 0, 'member', 'done', 1)");
+  await runQuery("INSERT INTO chatlog_views (user_id, rk, kind, at) VALUES ('del', 1, 'history', 1)");
+  // CL6 fix-up: a staff read audit row that names them as its SUBJECT (another staff member looked them up)
+  await runQuery("INSERT INTO chatlog_views (user_id, rk, who, kind, why, at) VALUES ('staffer', 1, 'delcf u:del', 'login_tool', 'look: a request', 2)");
+  await runQuery("INSERT INTO chatlog_reports (c, rk, reporter, reason, state, created) VALUES (503, 1, 'del', 'info', 'open', 1)");
+  await runQuery("INSERT INTO pad_chat_cfg (room_id, window_s, updated, by_user) VALUES ('Lab.Room', 3600, 1, 'del')");
   await S.create({ get: () => "" }, "del", "password");
   // the request, then the date
   const fresh = await S.create({ get: () => "" }, "del", "password");
@@ -201,11 +224,31 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
   assert.equal(ms[0].body, ""); assert.ok(ms[0].deleted_at);
   assert.equal(ms[1].body, "their words");
   assert.ok((await getQuery("SELECT left_at FROM conversation_members WHERE user_id = 'del'"))[0].left_at);
+  // CL11: their copy's relay row (key + logins) went with their message; the other person's keeps no trace of the login
+  const rel = await getQuery("SELECT message_id, from_login, to_login FROM dm_relays ORDER BY message_id");
+  assert.deepEqual(rel.map((r) => r.message_id), [402]);
+  assert.equal(rel[0].from_login, "othercf"); assert.equal(rel[0].to_login, u.username, "pseudonymised");
   // personal rows gone
   for (const [t, c] of [["inbox", "user_id"], ["sso_links", "user_id"], ["sessions", "user_id"], ["username_history", "userId"], ["webpush_subs", "user_id"], ["webpush_outbox", "user_id"]]) {
     assert.equal((await getQuery(`SELECT COUNT(*) AS n FROM ${t} WHERE ${c} = 'del'`))[0].n, 0, t);
   }
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM camfrog_userstats WHERE login = 'delcf'"))[0].n, 0, "chat statistics for the login");
+  // CL2: the archive - their web line keeps no name (a "former member" when shown), the room's record stays; their downloads
+  // log goes; their report and pad setting no longer name them. CL6 fix-up: a staff read audit THEY wrote stays (2 years, like the
+  // DM read audits - the users row is a pseudonymous tombstone); one that names them as its subject carries the pseudonym
+  const cl = await getQuery("SELECT c, who, text, d FROM chat_log ORDER BY c");
+  assert.deepEqual(JSON.parse(cl[0].d).u, { display: "", acct: true, web: true });
+  assert.equal(cl[0].text, "typed on the web");
+  assert.equal(JSON.parse(cl[1].d).u.display, "DelCF", "a room line under the released Camfrog login stays the room's record");
+  assert.equal(JSON.parse(cl[2].d).u.display, "Other");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM chatlog_exports WHERE user_id = 'del'"))[0].n, 0);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM chatlog_views WHERE user_id = 'del'"))[0].n, 1, "the read audit they wrote is kept");
+  const subj = (await getQuery("SELECT who FROM chatlog_views WHERE user_id = 'staffer'"))[0].who;
+  assert.doesNotMatch(subj, /delcf|u:del\b/, "the subject's login and account key are gone");
+  assert.match(subj, /^deleted-[0-9a-f]{10} deleted-[0-9a-f]{10}$/, subj);
+  assert.equal((await getQuery("SELECT reporter FROM chatlog_reports WHERE c = 503"))[0].reporter, null);
+  assert.equal((await getQuery("SELECT by_user FROM pad_chat_cfg WHERE room_id = 'Lab.Room'"))[0].by_user, null);
+  assert.ok(JSON.parse(row.report)["chatlog:chat_lines_unnamed"] === 1, "counted in the report");
   // kept records, pseudonymised
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM transactions WHERE userId = 'del'"))[0].n, 2, "the ledger stays");
   const h = (await getQuery("SELECT login, username FROM escrow_holds WHERE key = 'h-done'"))[0];
@@ -229,6 +272,7 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
 });
 
 test("a deleted account credited later is swept to the routing row too; the routing row decides (House + pools when the site owns them)", async () => {
+  await setup();
   const s0 = await supply();
   await require(path.join(repo, "ledger")).post("del", 77, "late refund");
   assert.equal(await supply(), s0 + 77);
@@ -250,6 +294,7 @@ test("a deleted account credited later is swept to the routing row too; the rout
 });
 
 test("a sole-owned stash (site-owned) is emptied into the routing; a shared one blocks", async () => {
+  await setup();
   const SS = require(path.join(repo, "stashes"));
   await SS.init();
   await runQuery("INSERT OR REPLACE INTO stash_meta (key, value) VALUES ('imported', '{\"at\":1}')");
@@ -274,6 +319,7 @@ test("a sole-owned stash (site-owned) is emptied into the routing; a shared one 
 });
 
 test("held: something new in flight at the date holds it (one notice); the doc and the routes exist", async () => {
+  await setup();
   await user("hd", { username: "holdy", bal: 5 });
   await D.schedule({ userId: "hd", username: "holdy" });
   await runQuery("INSERT INTO escrow_holds (key, ref, kind, login, username, user_id, amount, state, created) VALUES ('h-new', 'W2', 'wager', 'x', 'holdy', 'hd', 5, 'held', 1)");
@@ -290,6 +336,7 @@ test("held: something new in flight at the date holds it (one notice); the doc a
 });
 
 test("1.99acm: the chat hub's privacy/account-deleted row commits with the deletion (and rolls back with it); no login, no login hash", async () => {
+  await setup();
   const HO = require(path.join(repo, "huboutbox"));
   const H = require(path.join(repo, "hubhidden"));
   await HO.init();
@@ -321,4 +368,157 @@ test("1.99acm: the chat hub's privacy/account-deleted row commits with the delet
     delete process.env.CHAT_GENESIS_NS;
     await HO.setSettings({ erasure: false });
   }
+});
+
+test("Sign in with Apple: deleting the account revokes its Apple authorization at Apple (the stored refresh token); Apple down -> queued", async () => {
+  const crypto2 = require("crypto");
+  const k = crypto2.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const env = { APPLE_SERVICES_ID: "tv.publicaccess.test.signin", APPLE_TEAM_ID: "TEAM123456", APPLE_KEY_ID: "KEY1234567",
+                APPLE_PRIVATE_KEY: Buffer.from(k.privateKey.export({ type: "pkcs8", format: "pem" })).toString("base64") };
+  Object.assign(process.env, env);
+  const AS = require(path.join(repo, "applesso"));
+  await require(path.join(repo, "ssolinks")).init();     // the Apple columns
+  const calls = [];
+  let status = 200;
+  AS._setHttp({ async get() { return { status: 404, data: null, headers: {} }; },
+                async post(url, form) {
+                  // (the token is in the revocation queue before Apple is asked: queued inside the deletion's transaction)
+                  const queued = (await getQuery("SELECT COUNT(*) AS n FROM apple_revokes"))[0].n;
+                  calls.push({ url, form, queued });
+                  return { status, data: status === 200 ? "" : { error: "server_error" }, headers: {} };
+                } });
+  try {
+    for (const [id, sub, tok] of [["apl", "000111.del.0001", "r-del-1"], ["apl2", "000111.del.0002", "r-del-2"]]) {
+      await user(id, { username: id + "user" });
+      await runQuery(`INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, linked_at, refresh_token_enc, email_relay)
+                      VALUES ('apple', ?, ?, 'self', 'oidc', 'z@privaterelay.appleid.com', 1, ?, 1)`, [sub, id, AS.encryptToken(tok, sub)]);
+    }
+    await D.schedule({ userId: "apl", username: "apluser" });
+    let r = await D.execute("apl", { force: true });
+    assert.equal(r.state, "done");
+    assert.equal(r.report.apple_revoked, 1);
+    assert.deepEqual(calls.map((c) => [c.url, c.form.client_id, c.form.token, c.form.token_type_hint]),
+                     [["https://appleid.apple.com/auth/revoke", "tv.publicaccess.test.signin", "r-del-1", "refresh_token"]]);
+    assert.equal(calls[0].queued, 1, "queued in the deletion's transaction first (a restart can't lose it)");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM apple_revokes"))[0].n, 0, "revoked -> off the queue");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sso_links WHERE user_id = 'apl'"))[0].n, 0, "the link is gone");
+    // Apple down: the deletion still finishes; the revocation waits in the retry queue (encrypted)
+    status = 503;
+    await D.schedule({ userId: "apl2", username: "apl2user" });
+    r = await D.execute("apl2", { force: true });
+    assert.equal(r.state, "done");
+    assert.equal(r.report.apple_revoked, 0);
+    const q = await getQuery("SELECT apple_sub, token_enc FROM apple_revokes WHERE apple_sub = '000111.del.0002'");
+    assert.equal(q.length, 1);
+    assert.ok(!q[0].token_enc.includes("r-del-2"));
+    assert.equal(AS.decryptToken(q[0].token_enc, q[0].apple_sub), "r-del-2");
+  } finally {
+    for (const k2 of Object.keys(env)) delete process.env[k2];
+  }
+});
+
+test("CL6: 'Also hide my past public chat lines' - ticked, the login and the account key join the pad chat's hidden set (src delete) when the deletion runs; unticked, nothing", async () => {
+  const CL = require(path.join(repo, "chatlog"));
+  await CL.init();                                      // CL2 fix-up: until the set is loaded every key counts as hidden
+  await user("hl", { username: "hidelines", cf: "HideCF", password: await bcrypt.hash("pw-hide-1234", 4) });
+  await user("nh", { username: "nohide", cf: "KeepCF", password: await bcrypt.hash("pw-keep-1234", 4) });
+  const f1 = await S.create({ get: () => "" }, "hl", "password");
+  await D.request(reqOf("hl", f1.id), { password: "pw-hide-1234", confirm: "hidelines", hideLines: true });
+  const f2 = await S.create({ get: () => "" }, "nh", "password");
+  await D.request(reqOf("nh", f2.id), { password: "pw-keep-1234", confirm: "nohide" });
+  assert.equal((await D.pendingOf("hl")).hide_lines, 1, "the choice waits with the request");
+  assert.equal((await D.pendingOf("nh")).hide_lines, null);
+  assert.equal(CL.isHiddenKey("hidecf"), false, "nothing before the deletion runs (signing in during the grace cancels it)");
+  clockAt += 15 * DAY;
+  await D.tick();
+  assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = 'hl'"))[0].state, "done");
+  assert.equal(CL.isHiddenKey("hidecf"), true, "the login (captured before it was released)");
+  assert.equal(CL.isHiddenKey("u:hl"), true);
+  const srcs = await getQuery("SELECT src FROM chatlog_hidden WHERE h IN (?, ?)", [CL.hash("hidecf"), CL.hash("u:hl")]);
+  assert.deepEqual(srcs.map((x) => x.src), ["delete", "delete"]);
+  assert.equal(JSON.parse((await getQuery("SELECT report FROM account_deletions WHERE user_id = 'hl'"))[0].report).chat_lines_hidden, true);
+  assert.equal(CL.isHiddenKey("keepcf"), false);
+  assert.equal(CL.isHiddenKey("u:nh"), false);
+});
+
+test("CL13: their own Camfrog threads ('Sent in Camfrog to <login>') go entirely; other people's threads named after their login are renamed to the pseudonym", async () => {
+  await setup();
+  const M = require(path.join(repo, "messages"));
+  await user("cfdel", { username: "cfsender", cf: "CfSenderCF" });
+  await user("cfoth", { username: "cfother", cf: "cfothercf" });
+  // cfdel's own thread with a non-user ("strangercf") - kept copies
+  await runQuery("INSERT INTO conversations (id, kind, dm_key, created_by, created_at, last_msg_id) VALUES ('cf01', 'cfpm', ?, 'cfdel', 1, 501)", [M.cfKey("cfdel", "strangercf")]);
+  await runQuery("INSERT INTO conversation_members (conversation_id, user_id, joined_at) VALUES ('cf01', 'cfdel', 1)");
+  await runQuery("INSERT INTO messages (id, conversation_id, sender_id, body, created_at) VALUES (501, 'cf01', 'cfdel', 'to a stranger', 1)");
+  await runQuery(`INSERT INTO dm_relays (message_id, relay_key, via, from_login, to_login, cf_room, cf_sent_at, present, created, kept)
+                  VALUES (501, 'key-cf-501', 'cf_pm', 'cfsendercf', 'strangercf', 'PepeLab', 1, NULL, 1, 'no_account')`);
+  // cfoth's thread named after cfdel's login (copies kept while cfdel refused them)
+  await runQuery("INSERT INTO conversations (id, kind, dm_key, created_by, created_at, last_msg_id) VALUES ('cf02', 'cfpm', ?, 'cfoth', 1, 502)", [M.cfKey("cfoth", "cfsendercf")]);
+  await runQuery("INSERT INTO conversation_members (conversation_id, user_id, joined_at) VALUES ('cf02', 'cfoth', 1)");
+  await runQuery("INSERT INTO messages (id, conversation_id, sender_id, body, created_at) VALUES (502, 'cf02', 'cfoth', 'to cfsender', 2)");
+  await runQuery(`INSERT INTO dm_relays (message_id, relay_key, via, from_login, to_login, cf_room, cf_sent_at, present, created, kept)
+                  VALUES (502, 'key-cf-502', 'cf_pm', 'cfothercf', 'cfsendercf', 'PepeLab', 2, NULL, 2, 'refused')`);
+  await D.schedule({ userId: "cfdel", username: "cfsender" });
+  const r = await D.execute("cfdel", { force: true });
+  assert.equal(r.state, "done", JSON.stringify(r));
+  const pseudo = (await getQuery("SELECT username FROM users WHERE userId = 'cfdel'"))[0].username;
+  // theirs: the thread, its membership, its messages and the relay rows are gone (the key named a Camfrog login)
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM conversations WHERE id = 'cf01'"))[0].n, 0);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM conversation_members WHERE conversation_id = 'cf01'"))[0].n, 0);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM messages WHERE conversation_id = 'cf01'"))[0].n, 0);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM dm_relays WHERE message_id = 501"))[0].n, 0);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM conversations WHERE instr(dm_key, 'strangercf') > 0"))[0].n, 0);
+  // someone else's: kept (it's theirs), but no trace of the login - the key and the relay row carry the pseudonym
+  const c2 = (await getQuery("SELECT dm_key FROM conversations WHERE id = 'cf02'"))[0];
+  assert.equal(c2.dm_key, M.cfKey("cfoth", pseudo));
+  assert.equal(M.cfLoginOf({ kind: "cfpm", dm_key: c2.dm_key }), pseudo);
+  assert.equal((await getQuery("SELECT body FROM messages WHERE id = 502"))[0].body, "to cfsender");
+  const rel = (await getQuery("SELECT from_login, to_login FROM dm_relays WHERE message_id = 502"))[0];
+  assert.equal(rel.from_login, "cfothercf"); assert.equal(rel.to_login, pseudo);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM conversations WHERE instr(dm_key, 'cfsendercf') > 0"))[0].n, 0);
+  const doc = fs.readFileSync(path.join(repo, "docs", "account-deletion.md"), "utf8");
+  assert.ok(doc.includes("Sent in Camfrog") && doc.includes("cfLoginForget"), "the doc says so");
+});
+
+test("CL13 fix-up: deletion replaces the person's own Camfrog logins (current + earlier ones nobody else holds now) in others' !msg records - never another person's login that equals their PATV username", async () => {
+  await setup();
+  const M = require(path.join(repo, "messages"));
+  await M.init();
+  await user("cfadm", { username: "cfadmin", cf: "cfadmincf" });
+  await user("cfdel2", { username: "strangercf2", cf: "NowCF" });          // a PATV username equal to SOMEONE ELSE's Camfrog login
+  await user("cfnew", { username: "cfnewholder", cf: "takencf" });          // linked a login cfdel2 had before
+  // cfdel2's login history (usernames.recordLogin / loginrekey): oldcf -> takencf -> nowcf, and lcold in login_changes
+  await runQuery(`INSERT INTO username_history (userId, old_username, new_username, at, via, kind)
+                  VALUES ('cfdel2', 'oldcf', 'takencf', 1, 'camfrog:verify', 'camfrog'), ('cfdel2', 'takencf', 'nowcf', 2, 'camfrog:verify', 'camfrog')`);
+  await runQuery(`INSERT INTO login_changes (userId, old_login, new_login, old_key, new_key, at, via) VALUES ('cfdel2', 'lcold', NULL, 'lcold', 'u:cfdel2', 3, 'camfrog:unlink')`);
+  // the admin's kept copies ("Sent in Camfrog to <login>")
+  const kept = async (id, login, mid) => {
+    await runQuery("INSERT INTO conversations (id, kind, dm_key, created_by, created_at, last_msg_id, last_msg_at) VALUES (?, 'cfpm', ?, 'cfadm', ?, ?, ?)", [id, M.cfKey("cfadm", login), mid, mid, mid]);
+    await runQuery("INSERT INTO conversation_members (conversation_id, user_id, joined_at) VALUES (?, 'cfadm', 1)", [id]);
+    await runQuery("INSERT INTO messages (id, conversation_id, sender_id, body, created_at, via) VALUES (?, ?, 'cfadm', ?, ?, 'cf_pm')", [mid, id, "to " + login, mid]);
+    await runQuery(`INSERT INTO dm_relays (message_id, relay_key, via, from_login, to_login, cf_room, cf_sent_at, present, created, kept)
+                    VALUES (?, ?, 'cf_pm', 'cfadmincf', ?, 'PepeLab', 1, NULL, 1, 'no_account')`, [mid, "key-fx-" + mid, login]);
+  };
+  await kept("fx1", "strangercf2", 611);     // a Camfrog person with no account whose login equals the deleted USERNAME
+  await kept("fx2", "nowcf", 612);           // the deleted person's current login
+  await kept("fx3", "oldcf", 613);           // an earlier login nobody holds now
+  await kept("fx4", "takencf", 614);         // an earlier login another account holds now
+  await kept("fx5", "lcold", 615);           // an earlier login from login_changes
+  await D.schedule({ userId: "cfdel2", username: "strangercf2" });
+  const r = await D.execute("cfdel2", { force: true });
+  assert.equal(r.state, "done", JSON.stringify(r));
+  const pseudo = (await getQuery("SELECT username FROM users WHERE userId = 'cfdel2'"))[0].username;
+  const key = async (id) => ((await getQuery("SELECT dm_key FROM conversations WHERE id = ?", [id]))[0] || {}).dm_key || null;
+  const to = async (mid) => (await getQuery("SELECT to_login FROM dm_relays WHERE message_id = ?", [mid]))[0].to_login;
+  // someone else's login: untouched, and the per-login tool still finds it (the review's probe: it said 0 copies before)
+  assert.equal(await key("fx1"), M.cfKey("cfadm", "strangercf2")); assert.equal(await to(611), "strangercf2");
+  assert.deepEqual(await M.cfLoginSummary("strangercf2"), { copies_to: 1, copies_from: 0, threads: 1 });
+  // a login another account holds now: theirs, untouched
+  assert.equal(await key("fx4"), M.cfKey("cfadm", "takencf")); assert.equal(await to(614), "takencf");
+  // the person's own logins (current, earlier, login_changes): the pseudonym - one log, the others folded into it
+  for (const mid of [612, 613, 615]) assert.equal(await to(mid), pseudo, String(mid));
+  const logs = await getQuery("SELECT id FROM conversations WHERE dm_key = ?", [M.cfKey("cfadm", pseudo)]);
+  assert.equal(logs.length, 1);
+  assert.deepEqual((await getQuery("SELECT body FROM messages WHERE conversation_id = ? ORDER BY id", [logs[0].id])).map((m) => m.body), ["to nowcf", "to oldcf", "to lcold"]);
+  for (const l of ["nowcf", "oldcf", "lcold"]) assert.deepEqual(await M.cfLoginSummary(l), { copies_to: 0, copies_from: 0, threads: 0 }, l);
 });

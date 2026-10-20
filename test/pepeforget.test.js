@@ -137,3 +137,25 @@ test("1.99acm: a full Pepe queue never blocks the request - the DM wipe, the act
     await HO.setSettings({ erasure: false });
   }
 });
+
+test("CL6: 'Also hide my past public chat lines' - the linked login and the account key join the pad chat's sticky hidden set for good (src forget); unticked, nothing", async () => {
+  const CL = require(path.join(repo, "chatlog"));
+  await runQuery("INSERT INTO users (userId, username, camfrogUsername) VALUES ('u4', 'dora', 'DoraCF'), ('u5', 'eve', 'evecf')");
+  T += 30 * 24 * 3600 * 1000;
+  const r = await PF.request("u4", { hideLines: true });
+  assert.equal(r.ok, true);
+  assert.equal(r.lines_hidden, true);
+  assert.equal(CL.isHiddenKey("doracf"), true, "the linked login (lower-cased)");
+  assert.equal(CL.isHiddenKey("u:u4"), true, "the account key (the website lines)");
+  const rows = await getQuery("SELECT h, src FROM chatlog_hidden WHERE h IN (?, ?)", [CL.hash("doracf"), CL.hash("u:u4")]);
+  assert.deepEqual(rows.map((x) => x.src), ["forget", "forget"]);
+  assert.equal((await getQuery("SELECT hide_lines FROM pepe_forget_log WHERE id = ?", [r.ref]))[0].hide_lines, 1, "the record says so (no content)");
+  // Pepe can't undo it: privacy.shown (and a list without them) leave a forget row alone
+  await CL.noteSync({ list: [], events: [{ op: "event", type: "privacy.shown", data: { h: CL.hash("doracf"), scope: "bridge" } }] });
+  assert.equal(CL.isHiddenKey("doracf"), true);
+  // unticked: nothing hidden
+  const r2 = await PF.request("u5");
+  assert.equal(r2.lines_hidden, undefined);
+  assert.equal(CL.isHiddenKey("evecf"), false);
+  assert.equal(CL.isHiddenKey("u:u5"), false);
+});

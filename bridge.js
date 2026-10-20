@@ -13,6 +13,24 @@
 //
 // Kept: per room the latest snapshot + the last FEED_KEEP feed items (chat lines, joins/leaves, mic,
 // topic changes), in memory, mirrored to SQLite so a restart doesn't blank the page.
+// CL2: and, while its switch is on, every item for good in the chat archive (chatlog.js: written after bridge_feed in its own
+// transaction; dropRoom / the FEED_KEEP prune never touch it; the cursor `c` is permanent).
+// CL3: what a viewer gets of the feed goes through chatlogview.js - the pad's chat-history window (padchat.js settings), the
+// forward-only watermarks, retention, the 24 h presence cap, each line's own access level (`aud`, stamped here at ingest) and
+// the sticky hidden set (left out, names redacted) - plus the page's signed join cursor (`jc`) for the reconnect grace.
+// The owner's decision-9 change (2026-10-19, "incognito hides WHO, not WHAT"): an INCOGNITO person's chat / 🎙 lines are shown as
+// "someone" (Pepe sends them anonymised with data.anon {kind: "incognito", h}: kept as `ah`, server-only); !bridge hide people stay
+// left out. A speaker whose kind moves is drawn again on open pages (`redo`, after `removed`). Train 3 review: Pepe's data.anon.hs
+// (EVERY incognito name the speaker could be - the login, a display name a room line hid, incognito namesakes; h first) is kept
+// too, as `ahs` (the hashes besides h, server-only like `ah`): the line is left out once ANY of them is (chatlogview.privacyAt).
+// CL6: a line taken down (chatlogmod.js: reported for a minor, removed by its author, hidden by a moderator, purged by staff) leaves
+// R.feed and bridge_feed (takeDown; open pages drop it through `removed`); an un-hidden one comes back (restoreLine). /live tells
+// each viewer what the line menu offers (history.acts) and which lines are their own (own).
+// CL8: scrollback past these 200 lines reads the archive (chatloghist.js, GET /api/rooms/:slug/history, behind chatlog.history); the
+// pad page's offline branch shows a read-only 📜 Chat history card while the Camfrog room is gone.
+// CL9: the chat card's 🔍 searches the archive (chatlogsearch.js, POST /api/rooms/:slug/search, behind chatlog.search; history.find).
+// CL10: the chat card's ⋯ -> ⬇ Download chat log (chatlogexport.js, POST /api/rooms/:slug/chatlog/export + GET /p/:slug/chatlog/dl/
+// :token, behind chatlog.downloads; history.dl).
 // Pages (signed-in only — a room's chat is semi-private):
 //   GET /p                     the Pads (was /rooms; pads.js 301s the old addresses)
 //   GET /p/:slug               the pad page, with its Camfrog room live when one backs it
@@ -85,6 +103,20 @@ function cleanUser(u, allowAcct = false) {
   return out;
 }
 
+// micfollow: a mic holder also carries Pepe's `proven` (his identity resolver says this 0x16 name IS that login on the
+// room's socket list) and `since` (when the hold started, epoch s). Both are Pepe -> site only: liveView never sends them
+// to pages. A missing `proven` = false (an older Pepe: mic follows stays idle).
+const SINCE_PAST_MS = 6 * 3600 * 1000, SINCE_AHEAD_MS = 5 * 1000;
+function cleanMic(u, now = Date.now()) {
+  const out = cleanUser(u);
+  if (!out || out.anon) return out;
+  if (u.proven === true && !out.self) out.proven = true;
+  const s = Number(u.since);
+  if (Number.isFinite(s) && s > 0) out.since = Math.max(now - SINCE_PAST_MS, Math.min(now + SINCE_AHEAD_MS, Math.round(s * 1000)));
+  return out;
+}
+const pageMic = (u) => { if (!u || (u.proven === undefined && u.since === undefined)) return u; const { proven, since, ...rest } = u; void proven; void since; return rest; };
+
 function cleanRoomRef(r) {
   if (!r || typeof r !== "object") return null;
   const id = str(r.id, 128);
@@ -126,10 +158,16 @@ function roomFor(ref) {
   return R;
 }
 
+// CL3: the pad's access level when a line was said ("p" | "m" | "a") rides on every feed item (chatlogview.audOk: an Approved
+// pad's lines never reach a non-member, a Members pad's never a signed-out viewer - even after the pad opens up)
+const AUD = { public: "p", members: "m", approved: "a" };
+function audNow(roomId) { try { return AUD[require("./padaccess").levelOf(roomId)] || "m"; } catch (e) { return "m"; } }
+
 function load() {
   if (!loaded) {
     loaded = (async () => {
       await ready;
+      try { await require("./padaccess").init(); } catch (e) { console.error("[bridge] pad access:", e.message); }
       const rs = await getQuery("SELECT id, name, snap, updated FROM bridge_rooms");
       for (const r of rs) {
         const R = roomFor({ id: r.id, name: r.name });
@@ -138,13 +176,44 @@ function load() {
         R.updated = Number(r.updated) || 0;
         const feed = await getQuery("SELECT c, data FROM bridge_feed WHERE room_id = ? ORDER BY c DESC LIMIT ?", [r.id, FEED_KEEP]);
         R.feed = feed.reverse().map((f) => { try { return Object.assign(JSON.parse(f.data), { c: f.c }); } catch (e) { return null; } }).filter(Boolean);
+        // CL3: a line kept from before CL3 carries no aud - it gets the pad's level as it is when it is first seen here
+        const a = audNow(R.id);
+        for (const it of R.feed) if (!it.aud) it.aud = a;
+        noteWhoAll(R);
         replayActivity(R);
       }
+      // CL3: someone newly hidden (!incognito, !bridge hide, a website Incognito, !transcripts off) - open pages drop their lines
+      try { require("./chatlog").onHidden(markRemoved); } catch (e) { console.error("[bridge] hidden listener:", e.message); }
       const m = await getQuery("SELECT MAX(c) AS c FROM bridge_feed");
-      cursor = Math.max(cursor, Number(m[0] && m[0].c) || 0);
+      // CL2: the cursor is permanent - the archive's MAX(c) and the high-water mark (chatlog_meta.cursor_hw, written on every
+      // sync that wrote items) count too, so a c is never handed out twice after a dropRoom and a restart
+      let hw = 0;
+      try { hw = await require("./chatlog").bootCursor(); } catch (e) { console.error("[bridge] archive cursor:", e.message); }
+      cursor = Math.max(cursor, Number(m[0] && m[0].c) || 0, hw);
+      await dropTakenDown();
     })().catch((e) => { console.error("[bridge] load:", e); });
   }
   return loaded;
+}
+
+/** CL6 fix-up (at load): a line the archive took down (hidden, removed, purged - chatlogmod.js) never comes back from bridge_feed
+ *  at a start - a takedown deletes its bridge_feed row in its own transaction; this catches one left behind any other way (an older
+ *  build, a hand edit). -> lines dropped. Never throws. */
+async function dropTakenDown() {
+  let n = 0;
+  try {
+    for (const R of rooms.values()) {
+      const cs = (R.feed || []).map((it) => Number(it && it.c)).filter((c) => c > 0);
+      if (!cs.length) continue;
+      const gone = new Set((await getQuery(`SELECT c FROM chat_log WHERE c IN (${cs.map(() => "?").join(",")}) AND (rm_at IS NOT NULL OR purged IS NOT NULL)`, cs))
+        .map((r) => Number(r.c)));
+      if (!gone.size) continue;
+      R.feed = R.feed.filter((it) => !gone.has(Number(it.c)));
+      await runQuery(`DELETE FROM bridge_feed WHERE c IN (${[...gone].map(() => "?").join(",")})`, [...gone]);
+      n += gone.size;
+    }
+  } catch (e) { if (!/no such table/i.test(String(e && e.message))) console.error("[bridge] taken-down lines:", e.message); }
+  return n;
 }
 
 async function persistRoom(R) {
@@ -153,6 +222,17 @@ async function persistRoom(R) {
   await runQuery(`INSERT INTO bridge_rooms (id, slug, name, snap, updated) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, name = excluded.name, snap = excluded.snap, updated = excluded.updated`,
     [R.id, R.slug, R.name, JSON.stringify(snap), R.updated]);
+}
+
+// CL3 fix-up: the hidden-names job's login map (chatlogview.noteWho) learns everyone the room's live feed and rosters hold - at
+// boot from what was kept across the restart (bridge_feed, the roster snapshot), and from every roster Pepe sends. Pepe
+// anonymises a hidden person's NEW items, so a person hidden after a restart is otherwise never seen again, and their name
+// stays in other people's lines (the archive's chat_log covers them only once it writes).
+function noteWhoAll(R, items = R.feed) {
+  let CV;
+  try { CV = require("./chatlogview"); } catch (e) { return; }
+  for (const it of items || []) if (it && it.u && !it.u.anon && it.u.login) CV.noteWho(it.u.login, it.u.display);
+  for (const u of [...(R.members || []), ...(R.mic || [])]) if (u && !u.anon && u.login) CV.noteWho(u.login, u.display);
 }
 
 // 1.99cj: after a restart, the persisted feed refills the activity tally (roomactivity.js)
@@ -166,8 +246,130 @@ function replayActivity(R) {
   }
 }
 
+// CL3: the c's of lines that left the live view after an open page had them (their speaker became hidden) - the long-poll
+// answers carry them (`removed`) so the page drops the node. Last REMOVED_MAX per room, REMOVED_MS long. Only cursor numbers.
+// The owner's decision-9 change: a line whose LOOK moved (named -> "someone" as its speaker goes incognito; "someone" or left out ->
+// named as they un-hide) is also put in the `redo` ring - the long-poll answers carry those lines dressed again (`redo`: the viewer's
+// own projection) and the page draws them in place. A line that must leave never relies on it: the `removed` ring drops it first (an
+// older page - the homepage panel - that doesn't know `redo` just drops it). An un-hidden person's lines go in `redo` only (their
+// "someone" stays on an older page until it reloads).
+// Owner-change fix-up (review 2): ONLY a line whose look moves goes in a ring (chatlogview.lookMove) - never Pepe's anonymised
+// lines when their speaker goes incognito / un-hides (they are "someone" before and after: listing them beside the person's
+// named lines told every viewer which "someone" lines were theirs), only when they must leave. Each entry carries the ring
+// sequence it was put in at (`s`, rising, from the clock at boot so a restart never goes back); a page sends the last sequence
+// it got (`rs`) and is sent only what is newer - an entry goes to a page ONCE, not on every answer for an hour (a page that
+// sends none, or one this process never handed out, gets the whole hour as before). One entry per line (the newest).
+const REMOVED_MAX = 200, REMOVED_MS = 3600e3;
+let RING_SEQ = Date.now();
+const ringSeq = () => (RING_SEQ = Math.max(RING_SEQ + 1, Date.now()));
+/** Put the c's in R's ring `key` ("removed" | "redo") at time t (one entry per c, the newest; the hour / REMOVED_MAX kept). */
+function ringPut(R, key, cs, t) {
+  if (!cs.length) return;
+  const set = new Set(cs);
+  const s = ringSeq();
+  const ring = (R[key] || []).filter((x) => t - x.at < REMOVED_MS && !set.has(x.c));
+  for (const c of set) ring.push({ c, at: t, s });
+  R[key] = ring.slice(-REMOVED_MAX);
+}
+/** The ring entries a page at (after, rs) may still need: lines it may hold (c <= after), from the last hour, newer than rs. */
+function ringFor(ring, after, rs, t0) {
+  if (!(after > 0) || !Array.isArray(ring) || !ring.length) return [];
+  const from = rs != null && rs > 0 && rs <= RING_SEQ ? rs : 0;           // a sequence this process never handed out: everything
+  return ring.filter((x) => x.c <= after && t0 - x.at < REMOVED_MS && !(x.s > 0 && x.s <= from)).map((x) => x.c);
+}
+function markRemoved(ch) {
+  if (!ch || (!(ch.added || []).length && !(ch.addedTx || []).length && !(ch.removed || []).length && !(ch.removedTx || []).length &&
+              !(ch.kinds || []).length)) return 0;
+  const CV = require("./chatlogview");
+  const t = Date.now();
+  let n = 0;
+  for (const R of rooms.values()) {
+    const gone = [], redo = [], shown = [];
+    for (const it of R.feed) {
+      if (!it || !it.u) continue;
+      const m = CV.lookMove(it, ch);
+      if (m.gone) gone.push(it.c);
+      if (m.redo) redo.push(it.c);
+      // (a Pepe-anonymised line on pages again is "someone" on every page that holds it; a named line back BY NAME is redrawn)
+      if (!m.gone && (m.now === "named" || (m.now === "someone" && typeof it.ah === "string"))) shown.push(it.c);
+    }
+    // such a line loses its older `removed` entries: a page loaded since must never read, from the hour's ring, which "someone"
+    // lines left together with whose named ones. (A named line back only as "someone" keeps its entry: a page that missed every
+    // answer since may still show it by name - it must drop it.)
+    const back = new Set(shown);
+    const stale = back.size && (R.removed || []).some((x) => back.has(x.c));
+    if (stale) R.removed = R.removed.filter((x) => !back.has(x.c));
+    if (!gone.length && !redo.length) { if (stale) { R.ver = (R.ver || 0) + 1; wakeRoom(R.id); } continue; }
+    ringPut(R, "removed", gone, t);
+    ringPut(R, "redo", redo, t);
+    // a line that leaves now is never drawn again from an older entry
+    if (gone.length) { const g = new Set(gone.filter((c) => !redo.includes(c))); if (g.size) R.redo = (R.redo || []).filter((x) => !g.has(x.c)); }
+    n += gone.length;
+    R.ver = (R.ver || 0) + 1;
+    wakeRoom(R.id);
+  }
+  return n;
+}
+/** CL6: lines taken down (hidden, removed by their author, purged - chatlogmod.js) leave the live feed: R.feed, bridge_feed
+ *  (opts.db false = the caller already deleted those rows inside its own transaction), and open pages drop them (`removed`).
+ *  CL7 fix-up: opts.ring false (the retention purge's old lines) = R.feed only - never the `removed` ring, so a purge of hundreds
+ *  of old lines can't push a moderator's takedowns of the last hour out of it (those lines are below every viewer's floor
+ *  already; open pages re-check what they hold through the privacy digest - chatlogview.noteGone). */
+async function takeDown(roomId, cs, { db = true, ring: useRing = true } = {}) {
+  await load();
+  const set = new Set((Array.isArray(cs) ? cs : [cs]).map(Number).filter((c) => c > 0));
+  if (!set.size) return 0;
+  if (db) {
+    const list = [...set];
+    for (let i = 0; i < list.length; i += 400) {
+      const part = list.slice(i, i + 400);
+      await runQuery(`DELETE FROM bridge_feed WHERE c IN (${part.map(() => "?").join(",")})`, part);
+    }
+  }
+  const R = rooms.get(String(roomId || ""));
+  if (!R) return 0;
+  let n = 0;
+  for (let i = R.feed.length - 1; i >= 0; i--) if (set.has(Number(R.feed[i].c))) { R.feed.splice(i, 1); n++; }
+  if (!useRing) return n;
+  ringPut(R, "removed", [...set], Date.now());
+  if (R.redo) R.redo = R.redo.filter((x) => !set.has(x.c));
+  R.ver = (R.ver || 0) + 1;
+  wakeRoom(R.id);
+  return n;
+}
+/** CL6: an un-hidden line goes back into the live feed (and bridge_feed) when it is still inside the room's last FEED_KEEP
+ *  items. -> restored? */
+async function restoreLine(roomId, item) {
+  await load();
+  const R = rooms.get(String(roomId || ""));
+  const c = Number(item && item.c);
+  if (!R || !(c > 0) || R.feed.some((x) => Number(x.c) === c)) return false;
+  if (R.feed.length >= FEED_KEEP && R.feed[0] && c < Number(R.feed[0].c)) return false;     // older than what the live chat keeps
+  const it = Object.assign({}, item);
+  for (const k of ["rm_at", "rm_by", "rm_why", "purged"]) delete it[k];
+  let at = R.feed.length;
+  while (at > 0 && Number(R.feed[at - 1].c) > c) at--;
+  R.feed.splice(at, 0, it);
+  if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
+  const { c: _c, ...rest } = it;
+  await runQuery("INSERT OR IGNORE INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, R.id, it.ts, JSON.stringify(rest)]);
+  R.removed = (R.removed || []).filter((x) => x.c !== c);
+  R.ver = (R.ver || 0) + 1;
+  wakeRoom(R.id);
+  return true;
+}
+/** CL3: a pad's chat settings changed (padchat.js) - its open pages re-ask now and re-filter what they show. */
+function refreshRoom(id) {
+  const R = rooms.get(String(id || ""));
+  if (!R) return false;
+  R.ver = (R.ver || 0) + 1;
+  wakeRoom(R.id);
+  return true;
+}
+
 async function dropRoom(id) {
   rooms.delete(id);
+  try { require("./micfollow").onRoomGone(id); } catch (e) { console.error("[bridge] micfollow:", e.message); }   // its mic stage clears
   wakeRoom(id);                                   // 1.99ye: its waiting pages answer (room gone)
   RA.drop(id);
   await runQuery("DELETE FROM bridge_rooms WHERE id = ?", [id]);
@@ -197,6 +399,29 @@ const POSTED_RE = /^\u{1F310} .{1,80}? \((?:PATV )?web\): (.+)$/su;
 function postedWords(line) {
   const m = POSTED_RE.exec(String(line || ""));
   return m ? cpStr(m[1], INBOUND_MAX) : "";
+}
+
+/** The owner's decision-9 change: an anonymised line's data.anon {kind: "incognito", h: <its speaker's hidden-set hash>} -> h,
+ *  else null (any other kind: the line isn't shown). */
+function anonHash(d) {
+  const a = d && d.anon && typeof d.anon === "object" ? d.anon : null;
+  return a && a.kind === "incognito" && typeof a.h === "string" && /^[0-9a-f]{20}$/.test(a.h) ? a.h : null;
+}
+/** Train 3 review (the CL1 review-2 bot's data.anon.hs): the speaker's OTHER incognito hashes besides h (the login and a display
+ *  name a room line hid, or two members sharing a display name - the line may be any of theirs) -> [hash, ...] | null (none) |
+ *  false (more than ANON_HS_MAX: the line isn't shown - fails closed rather than drop a hash it would have to leave out on). Kept
+ *  server-only with the line (`ahs`; archived in its row's d, never on a page / in an API answer / a download). */
+const ANON_HS_MAX = 32;
+function anonMore(d, h) {
+  const a = d && d.anon && typeof d.anon === "object" ? d.anon : null;
+  if (!a || !Array.isArray(a.hs)) return null;
+  const out = [];
+  for (const x of a.hs) {
+    if (typeof x !== "string" || !/^[0-9a-f]{20}$/.test(x) || x === h || out.includes(x)) continue;
+    if (out.length >= ANON_HS_MAX) return false;
+    out.push(x);
+  }
+  return out.length ? out : null;
 }
 
 /** One PCP event -> a feed item (or null). `roomId` = the room it came from (1.99acb: a relay echo's job must match it). */
@@ -243,6 +468,18 @@ function feedItem(ev, roomId = null) {
       }
       const u = cleanUser(d.user);
       const text = cpStr(d.text, INBOUND_MAX);
+      // the owner's decision-9 change (Pepe CL1 fix-up): an INCOGNITO speaker's line comes anonymised ("someone": a fresh ref, no
+      // login) with data.anon {kind: "incognito", h} - kept as "someone", its hash server-only (`ah`: never in a page, an API
+      // answer or a download - chatlogview.dress drops it) so it is left out once that hash is (!bridge hide, forget-me). Any
+      // other anonymised line (an older Pepe never sends one) stays out
+      const ah = anonHash(d);
+      if (u && u.anon && text && ah) {
+        const more = anonMore(d, ah);                   // (Train 3 review: every hash the speaker could be - `ahs`)
+        if (more === false) return null;
+        const it = webJob ? { k: "msg", ts, u, text, ah, _job: webJob } : { k: "msg", ts, u, text, ah };
+        if (more) it.ahs = more;
+        return it;
+      }
       if (!u || !text || u.anon) return null;          // Pepe never sends an opted-out user's line; belt and braces
       // 1.99xu: the caption of Pepe's own TTS mic-up ("🔊 <line>", tagged by the bot as the audio starts). The same mic-up
       // reaches the pad as its 🎙 transcript line, so ingest() drops this one while the room has transcripts on.
@@ -269,9 +506,17 @@ function feedItem(ev, roomId = null) {
     case TRANSCRIPT: {
       const u = cleanUser(d.user);
       const text = cpStr(d.text, INBOUND_MAX);
-      if (!u || !text || u.anon) return null;
+      const ah = anonHash(d);                            // the owner's decision-9 change: an incognito speaker's 🎙 line (above)
+      if (!u || !text || (u.anon && !ah)) return null;
       const id = /^tx-[0-9a-f]{8,32}$/.test(String(d.id || "")) ? String(d.id) : null;
-      return id ? { k: "tx", ts, u, text, id } : { k: "tx", ts, u, text };
+      const it = id ? { k: "tx", ts, u, text, id } : { k: "tx", ts, u, text };
+      if (u.anon) {
+        const more = anonMore(d, ah);                   // (Train 3 review: `ahs`, as for a chat line)
+        if (more === false) return null;
+        it.ah = ah;
+        if (more) it.ahs = more;
+      }
+      return it;
     }
     case "room.update": {
       const t = d.changes && typeof d.changes === "object" ? str(d.changes.topic, 200) : "";
@@ -468,7 +713,7 @@ async function ingest(body) {
     if (!R) continue;
     R.topic = str(s.topic, 200);
     R.members = (Array.isArray(s.members) ? s.members : []).slice(0, MAX_MEMBERS).map(cleanUser).filter(Boolean);
-    R.mic = (Array.isArray(s.mic) ? s.mic : []).slice(0, 20).map(cleanUser).filter(Boolean);
+    R.mic = (Array.isArray(s.mic) ? s.mic : []).slice(0, 20).map((u) => cleanMic(u, now)).filter(Boolean);   // micfollow: + proven / since
     R.count = Math.max(R.members.length, Math.min(5000, Number(s.count) || 0));
     R.listAt = Number(s.list_at) ? Number(s.list_at) * 1000 : null;
     // how much the roster can be trusted: a fresh participant-list read, or (stale / never read)
@@ -492,6 +737,7 @@ async function ingest(body) {
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
     R.mod = require("./padmod").cleanModCaps(s.mod);   // 1.99co: Manage-panel caps per watching mod login ({} = none)
     R.pepe = require("./padpepe").cleanMenu(s.pepe);   // 1.99qr: the 🐸 Pepe submenu - {look|camroast|roast: {on, price, why}}
+    noteWhoAll(R, []);                         // CL3 fix-up: the roster's logins + display names (the hidden-names job)
     if (!R.audio) audioClose(R.id);
     RA.micSample(R.id, R.mic, now);
     R.updated = now;
@@ -500,7 +746,21 @@ async function ingest(body) {
     touched.add(R);
   }
   const newItems = [];
-  for (const ev of (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS)) {
+  const CL = require("./chatlog");
+  const CV = require("./chatlogview");
+  const archive = [];                      // CL2: [{roomId, it, eid, mid}] for the archive (chatlog.js), written after bridge_feed
+  const privacy = [];                      // CL2: privacy.hidden / privacy.shown events (the sticky hidden set)
+  const privacyIds = [];                   // ...and their event ids
+  const shownNow = new Set();              // review 2 fix-up: hashes this batch's privacy.shown events name (so far in its order)
+  const events = (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS);
+  // CL2: asked BEFORE any cursor is handed out - a transcript already archived (beyond the 200 in memory) and, for 10 minutes
+  // after a restart, an event already archived (Pepe re-sends a batch the old process took but never answered) are skipped
+  const dup = await CL.dupes({
+    eids: events.map((ev) => (ev && typeof ev.id === "string" ? ev.id.slice(0, 128) : "")).filter((id) => id && !SEEN_EVENTS.has(id)),
+    tx: events.filter((ev) => ev && ev.type === TRANSCRIPT && ev.data && typeof ev.data.id === "string")
+      .map((ev) => [(cleanRoomRef(ev.scope && ev.scope.room) || {}).id, ev.data.id]).filter(([r]) => r),
+  });
+  for (const ev of events) {
     if (!ev || typeof ev !== "object" || ev.op !== "event" || ev.type === "message.private") continue;
     // at-least-once delivery: a batch Pepe re-sends after a slow response must not double the feed
     const evId = typeof ev.id === "string" ? ev.id.slice(0, 128) : "";
@@ -508,6 +768,14 @@ async function ingest(body) {
       if (SEEN_EVENTS.has(evId)) continue;
       SEEN_EVENTS.set(evId, now);
       if (SEEN_EVENTS.size > 5000) SEEN_EVENTS.delete(SEEN_EVENTS.keys().next().value);
+      if (dup.eids.has(evId)) continue;                     // CL2: archived before a restart (chat_log.eid)
+    }
+    // CL2: Pepe's hidden-set changes (privacy.hidden / privacy.shown {h, scope}) - no room needed. CL2 fix-up: their ids leave
+    // SEEN_EVENTS again if they can't be applied (below), so Pepe's re-send of the batch applies them (at-least-once)
+    if (ev.type === "privacy.hidden" || ev.type === "privacy.shown") {
+      privacy.push(ev); if (evId) privacyIds.push(evId);
+      if (ev.type === "privacy.shown" && ev.data && typeof ev.data.h === "string") shownNow.add(ev.data.h);   // (review 2 fix-up, below)
+      continue;
     }
     const ref = cleanRoomRef(ev.scope && ev.scope.room);
     if (!ref) continue;
@@ -523,14 +791,30 @@ async function ingest(body) {
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = feedItem(ev, R.id);
     if (!it) continue;
+    // review 2 fix-up (LOW): a NAMED chat / 🎙 line of someone the site knows is incognito before Pepe does (a website Incognito
+    // ON he hasn't confirmed yet - chatlog.siteAnonSince), said after they switched it on, is kept anonymised for good - "someone",
+    // its hash server-only (`ah`, archived as who "h:<hash>"), exactly like Pepe's own anonymised lines - so `!incognito off` never
+    // puts a name on words said while they had asked to be incognito. Not when this batch un-hides them (Pepe knows better then).
+    if ((it.k === "msg" || it.k === "tx") && it.u && !it.u.anon && !it.u.self && it.u.login) {
+      const h = CV.hashOf(it.u.login);
+      const since = shownNow.has(h) ? null : CL.siteAnonSince(h);
+      if (since != null && Number(it.ts) >= since) { it.u = { anon: true, display: "someone" }; it.ah = h; }
+    }
+    // CL2: a command whose arguments are private (!msg, !verify <code>, !joinroom ... -p <password>: Pepe's catalog private_args)
+    // never reaches the pad chat - nor the archive. Pepe drops them first (CL1); this is the second net (his posted relay line too)
+    // (a web "!" line is a command job, never a say - bridge-relay.js - so no pending web line waits for one of these)
+    if (it.k === "msg" && (CL.isPrivateCmd(it.text) || CL.isPrivateCmd(postedWords(it.text)))) continue;
     // 1.99xu: Pepe's TTS mic-up caption - shown once, as the 🎙 transcript line that follows it (Camfrog's room chat keeps
     // the caption; a pad with transcripts off keeps it here too - there it's the only text of the mic-up)
     if (it.cap === "tts" && R.transcripts !== false) continue;
     delete it.cap;
     if (it.k === "tx" && it.id && R.feed.some((x) => x.k === "tx" && x.id === it.id)) continue;   // one line per mic-up
+    if (it.k === "tx" && it.id && dup.tx.has(R.id + "\t" + it.id)) continue;                     // CL2: ...already archived
     const echoOf = it._job || null;
     delete it._job;
     it.c = ++cursor;
+    it.aud = audNow(R.id);                                // CL3: the pad's access level when it was said (never widened)
+    if (it.u && !it.u.anon && it.u.login) CV.noteWho(it.u.login, it.u.display);   // CL3: the hidden-names job's login map
     wake.add(R.id);
     if (it.k === "msg" || it.k === "tx") lines.set(R.id, (lines.get(R.id) || 0) + 1);
     if (it.k === "msg") RA.line(R.id, it.u, now);
@@ -538,12 +822,24 @@ async function ingest(body) {
     R.feed.push(it);
     if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
     newItems.push([R.id, it]);
+    const mid = ev.data && typeof ev.data.message_id === "string" ? ev.data.message_id : null;   // CL2: Pepe's PCP message id
+    archive.push({ roomId: R.id, it, eid: evId || null, mid: it.k === "msg" ? mid : null });
     if (echoOf) relay.noteEcho(echoOf, it.c, R.id);    // 1.99ye: the sender's pending line becomes this one (1.99acb: same room only)
   }
   for (const [rid, it] of newItems) {
     const { c, ...rest } = it;
     await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, rid, it.ts, JSON.stringify(rest)]);
   }
+  // CL2: the cursor's high-water mark (archive on or off) - a c is never handed out twice, whatever restarts
+  if (newItems.length) { try { await CL.noteCursor(cursor); } catch (e) { console.error("[bridge] cursor mark:", e.message); } }
+  // CL2: Pepe's hidden set (hidden_h, add-only here; CL2 fix-up: tx_hidden_h too) + his privacy events -> the sticky set
+  // (serialised). Lists alone are never awaited; a batch WITH privacy events is, at the end (below)
+  // the owner's decision-9 change: Pepe's KINDED lists too (bridge_hidden_h / incog_hidden_h, each null when that state didn't load)
+  const hiddenDone = CL.noteSync({ list: body.hidden_h, txList: body.tx_hidden_h, events: privacy, bridge: body.bridge_hidden_h, incog: body.incog_hidden_h });
+  hiddenDone.catch((e) => {                       // (always handled: a sync that fails later for another reason never crashes on it)
+    for (const id of privacyIds) SEEN_EVENTS.delete(id);
+    console.error("[bridge] hidden set:", e.message);
+  });
   // 1.99ii: room mention alerts (mentions.js) - this batch's new chat lines, matched off the sync (queued, never awaited)
   const said = newItems.filter(([, it]) => it.k === "msg");
   if (said.length) {
@@ -571,9 +867,21 @@ async function ingest(body) {
     lastFrontTick = now;
     summary(false).then((s) => require("./rooms").frontRoom(s)).catch((e) => console.error("[bridge] front room:", e.message));
   }
+  // micfollow: each synced pad's 🎙 mic stage steps on Pepe's sync (synchronous; never awaits inside the sync)
+  for (const R of touched) {
+    if (rooms.get(R.id) !== R) continue;
+    try { require("./micfollow").onSync(R, now); } catch (e) { console.error("[bridge] micfollow:", e.message); }
+  }
   for (const id of wake) wakeRoom(id);           // 1.99ye: the pad pages waiting on this room answer now
   // 1.99acf: when each room was bridged (bridgespans.js, for the later VM-log import) - queued, never blocks or fails the sync
   try { require("./bridgespans").note(body, now); } catch (e) { console.error("[bridge] spans:", e.message); }
+  // CL2: the archive's own transaction, after the live feed is written and its pages woken (the live chat never waits on it or
+  // fails with it: archiveBatch never throws - it counts failures and trips its switch after 20 in a row), but before Pepe gets
+  // his answer: a crash before the answer means Pepe re-sends the batch, and the event ids dedupe it (dupes above)
+  if (archive.length) await CL.archiveBatch(archive);
+  // CL2 fix-up: privacy events are at-least-once - if they couldn't be written, they leave SEEN_EVENTS and the sync fails (500), so
+  // Pepe re-sends the batch: its lines are deduped (already in SEEN_EVENTS and the feed), its privacy events applied then
+  if (privacy.length) await hiddenDone;
   return { rooms: touched.size, items: newItems.length };
 }
 
@@ -592,6 +900,14 @@ function wakeRoom(id) {
   for (const f of [...s]) { try { f(); } catch (e) { /* one page can't break another */ } }
 }
 function wakeAll() { for (const id of [...roomWaiters.keys()]) wakeRoom(id); }
+/** micfollow: the pad's mic stage changed outside a sync - its pages' long-polls answer now. */
+function touch(id) {
+  const R = rooms.get(String(id));
+  if (!R) return false;
+  R.ver = (R.ver || 0) + 1;
+  wakeRoom(R.id);
+  return true;
+}
 relay.setNotify((roomId, userId) => {
   if (userId) {
     mineVer.set(userId, (mineVer.get(userId) || 0) + 1);
@@ -660,7 +976,9 @@ async function resolveNames(users) {
     const ids = [...missIds].slice(0, 400).map((k) => k.slice(2));
     try {
       const found = await UL.resolve({ ids });
-      for (const id of ids) { nameCache.delete("u:" + id); nameCache.set("u:" + id, { acc: found.ids.get(id) || null, at: now }); }
+      // CL3 fix-up: priv starts TRUE (private) until privateFlags below says otherwise - a concurrent resolveNames (another
+    // viewer's poll) that finds this fresh entry meanwhile must never show a private account's presence lines by name
+    for (const id of ids) { nameCache.delete("u:" + id); nameCache.set("u:" + id, { acc: found.ids.get(id) || null, at: now, priv: true }); }
     } catch (e) { console.error("[bridge] account names:", e.message); }
   }
   const keys = [...miss];
@@ -668,7 +986,17 @@ async function resolveNames(users) {
     const part = keys.slice(i, i + 400);
     let found;
     try { found = await UL.lookup(part, { linkedOnly: true }); } catch (e) { console.error("[bridge] names:", e.message); break; }
-    for (const k of part) { nameCache.delete(k); nameCache.set(k, { acc: found.get(k) || null, at: now }); }
+    for (const k of part) { nameCache.delete(k); nameCache.set(k, { acc: found.get(k) || null, at: now, priv: true }); }   // CL3 fix-up: private until known
+  }
+  // CL3: the private-activity flag rides in the same entry (chatlogview.privateFlags - the stories.privateLogins rule, fails
+  // closed): a private account's joins / leaves / mic lines show as "someone". Only for names this call (re)looked up.
+  const hitL = keys.filter((k) => { const c = nameCache.get(k); return c && c.at === now && c.acc; });
+  const hitI = [...missIds].filter((k) => { const c = nameCache.get(k); return c && c.at === now && c.acc; }).map((k) => k.slice(2));
+  if (hitL.length || hitI.length) {
+    let pv = null;
+    try { pv = await require("./chatlogview").privateFlags({ logins: hitL, ids: hitI }); } catch (e) { pv = null; }
+    for (const k of hitL) { const c = nameCache.get(k); if (c) c.priv = pv ? pv.logins.has(k) : true; }
+    for (const id of hitI) { const c = nameCache.get("u:" + id); if (c) c.priv = pv ? pv.ids.has(id) : true; }
   }
   while (nameCache.size > NAME_MAX) nameCache.delete(nameCache.keys().next().value);
   return nameCache;
@@ -680,7 +1008,7 @@ const safeImg = (u) => (typeof u === "string" && (/^https:\/\/[^\s"'<>]+$/.test(
  *  else the login. `login` stays (the tooltip); `cf` = the Camfrog display name when it isn't the
  *  login. Pepe himself keeps the name Pepe gave. Anonymised users pass through untouched. */
 function withPatv(u, C, F = null) {
-  if (!u || u.anon) return u;
+  if (!u || u.anon || u.former) return u;        // CL3: "former member" (a web member whose account is gone) carries no name
   const login = String(u.login || "");
   const cfName = plain(u.display, 40);
   const out = { ...u, display: cfName || login };
@@ -714,13 +1042,19 @@ const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); ret
 async function summary(full, viewer) {
   await load();
   const PA = require("./padaccess");
+  const CV = require("./chatlogview");
   const open = (R) => (full || PA.isPublic(R.id)) && PA.adultGate(viewer || null, R.id) === "ok";
-  const C = await resolveNames([...rooms.values()].filter(open).flatMap((R) => R.mic));   // 1.99ea: names on the mic
+  // CL3: hidden people (the sticky set) are "someone" here too (Train 3 review fix-up: incognito ones; a left-out one - !bridge
+  // hide - isn't on the mic list at all), and their names come out of the topic (CL3 fix-up: once their names are loaded - an empty
+  // topic until then, never the raw one)
+  let namesOk = true;
+  try { await CV.init(); } catch (e) { namesOk = false; }
+  const C = await resolveNames([...rooms.values()].filter(open).flatMap((R) => CV.roster(R.mic)));   // 1.99ea: names on the mic
   return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
     id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
     people: RA.people(R.count, R.members),
-    mic: open(R) ? R.mic.map((u) => (u.anon ? "someone" : withPatv(u, C).display)) : [],
-    topic: open(R) ? R.topic : "",
+    mic: open(R) ? CV.roster(R.mic).map((u) => (u.anon ? "someone" : withPatv(u, C).display)) : [],
+    topic: open(R) && namesOk ? CV.redact(R.topic) : "",
   }));
 }
 
@@ -812,11 +1146,44 @@ async function liveNotice(roomId, { who, pad, what, link, np = false } = {}) {
   if (np) it.np = 1;
   if (!it.who || (np && !it.what)) return false;
   it.c = ++cursor;
+  it.aud = audNow(R.id);                          // CL3
   R.feed.push(it);
   if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
   const { c, ...rest } = it;
   await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, R.id, it.ts, JSON.stringify(rest)]);
   wakeRoom(R.id);                                 // 1.99ye
+  // CL2: the site's own items go into the archive the same way (no event id: never re-sent), after the live feed has them
+  const CL = require("./chatlog");
+  try { await CL.noteCursor(cursor); } catch (e) { console.error("[bridge] cursor mark:", e.message); }
+  await CL.archiveBatch([{ roomId: R.id, it, eid: null, mid: null }]);
+  return true;
+}
+// CL3: a 📜 note line in the pad's chat (padchat.js / chatlogview.js: a history / search setting changed, an earlier-history
+// opening was scheduled or took effect) - {k: "note", w, s?, o?, sc?}; the page builds the text in the viewer's language.
+// The room in the live view: into its feed like liveNotice; the room offline: straight to the archive (while it's on).
+const NOTE_KINDS = new Set(["window", "search", "open", "open_done"]);
+async function noteItem(roomId, note = {}) {
+  await load();
+  const id = String(roomId || "");
+  if (!id || !note || !NOTE_KINDS.has(note.w)) return false;
+  const it = { k: "note", ts: Date.now(), w: note.w };
+  if (note.w === "window") it.s = note.s == null ? null : Math.max(0, Math.floor(Number(note.s) || 0));
+  if (note.w === "search") it.s = note.s ? 1 : 0;
+  if (note.w === "open") it.o = Math.max(0, Math.floor(Number(note.o) || 0));
+  if (note.w === "open" || note.w === "open_done") it.sc = ["window", "search", "both"].includes(note.sc) ? note.sc : "both";
+  it.c = ++cursor;
+  it.aud = audNow(id);
+  const R = rooms.get(id);
+  if (R) {
+    R.feed.push(it);
+    if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
+    const { c, ...rest } = it;
+    await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, id, it.ts, JSON.stringify(rest)]);
+    wakeRoom(id);
+  }
+  const CL = require("./chatlog");
+  try { await CL.noteCursor(cursor); } catch (e) { console.error("[bridge] cursor mark:", e.message); }
+  await CL.archiveBatch([{ roomId: id, it, eid: null, mid: null }]);
   return true;
 }
 async function liveAnnounce(roomId, { streamer, pad, what, link, camfrog, userId, np = false } = {}) {
@@ -870,35 +1237,87 @@ async function boostAnnounce({ roomId, userId, amount, pad, link } = {}) {
   }
 }
 
-async function liveView(R, after, userId, login, username = null, withMe = !after) {
+/**
+ * The live view of room R for one viewer. opts (CL3): {viewer: req.user-like | null, jc: the page's signed join cursor,
+ * nonExempt: the homepage panel (never the owner / staff / mod floors)}. Only what this viewer may see is serialised: the
+ * viewer's floors (the pad's chat-history window, the forward-only watermarks, retention, the 24 h presence cap), the line's
+ * own access level, the sticky hidden set (!bridge hide and the like left out; the owner's decision-9 change: an incognito
+ * person's line shown as "someone", with no name, look or id), the redaction of hidden names - chatlogview.js.
+ * After `after` > 0 an expired join cursor answers {reinit: true}: the page loads its view again.
+ */
+async function liveView(R, after, userId, login, username = null, withMe = !after, opts = {}) {
   // 1.99acb: ONE synchronous snapshot, before any await - the lines, the cursor, the viewer's jobs (`mine`, with the cursor
   // of each say's room line) and the versions. They used to be read on either side of the name / flair / account lookups
   // below, and a Pepe sync landing in between (ingest pushes a line and settles its job synchronously) answered with a
   // cursor - and the sender's mine[].c - PAST a line the answer didn't carry: the page dropped the pending line and its
   // next ?after= skipped the room line for good (the line "didn't show up" until a reload). Pepe's ack + the line's echo in
   // the same sync hit it every time the sender's page was waiting; a cold name cache let any line slip past any viewer.
-  const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
-  const at = { cursor, ver: R.ver || 0, mver: userId ? mineVer.get(userId) || 0 : 0, mine: userId ? relay.mineFor(userId, R.id) : [] };
-  const members = R.members, mic = R.mic;            // ingest replaces these arrays (never edits them): a snapshot too
-  const L = await resolveNames([...items.map((it) => it.u), ...members, ...mic]);
+  const raw = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
+  const at = { cursor, ver: R.ver || 0, mver: userId ? mineVer.get(userId) || 0 : 0, mine: userId ? relay.mineFor(userId, R.id) : [], rs: RING_SEQ };
+  // micfollow: the pad's 🎙 mic stage, a snapshot too (only the pad page's own /live asks: opts.program)
+  let prog = null;
+  if (opts && opts.program) { try { prog = require("./micfollow").snapshot(R.id); } catch (e) { prog = null; } }
+  const t0 = Date.now();
+  // (review 2 fix-up: only the entries newer than the page's last ring sequence `opts.rs` - each goes to a page once)
+  const rs = opts.rs != null && opts.rs !== "" && Number.isFinite(Number(opts.rs)) ? Number(opts.rs) : null;
+  const removedRing = ringFor(R.removed, after, rs, t0);
+  // the owner's decision-9 change: lines the page may hold whose LOOK moved - drawn again (`redo`, after `removed`). Only for a page
+  // that sends its ring sequence (the pad page, which draws them): the homepage panel / older pages just drop through `removed`, and
+  // aren't sent the same lines re-dressed on every answer
+  const redoSet = new Set(rs != null ? ringFor(R.redo, after, rs, t0) : []);
+  const redoRaw = redoSet.size ? R.feed.filter((it) => redoSet.has(it.c)) : [];
+  const CV = require("./chatlogview");
+  const viewer = opts.viewer || (userId ? { userId } : null);
+  // CL3: the viewer's floors; a failure shows nothing earlier than now (the projection fails closed)
+  let V;
+  try { V = await CV.view(R.id, viewer, { nonExempt: !!opts.nonExempt }); } catch (e) { console.error("[bridge] chat view:", e.message); V = CV.closedView(); }
+  // CL3 fix-up: the join cursor is the page's own (bound to the viewer) and only for its RECONNECTS - a fresh load (after=0)
+  // never takes one, so an old cursor can't replay the last 10 minutes of an "Off" pad on a new load
+  const jcWho = viewer && viewer.userId ? String(viewer.userId) : null;
+  const J = after > 0 ? CV.checkJc(opts.jc, R.id, V.now, jcWho) : { ok: false };
+  if (after > 0 && J.expired) return { reinit: true, cursor: at.cursor };
+  const F0 = CV.filter(raw, { view: V, jc: J.ok ? J.c : at.cursor, now: V.now });
+  const items = F0.items;
+  const redoItems = redoRaw.length ? CV.filter(redoRaw, { view: V, jc: J.ok ? J.c : at.cursor, now: V.now }).items : [];
+  const members = CV.roster(R.members), mic = CV.roster(R.mic);   // ingest replaces these arrays (never edits them): a snapshot too
+  const L = await resolveNames([...items.map((it) => it.u), ...redoItems.map((it) => it.u), ...members, ...mic,
+                                ...(prog ? prog.tiles.map((x) => ({ login: x.login })) : [])]);
+  const dressed = CV.dress(items, { view: V, lookup: (u) => L.get(nameKey(u.login)) });
+  const dressedRedo = redoItems.length ? CV.dress(redoItems, { view: V, lookup: (u) => L.get(nameKey(u.login)) }) : [];
+  if (V.audit) {
+    const below = dressed.filter((it) => it.ts < CV.pubFloor(V, it.k));     // CL8 fix-up: presence's public 24 h too
+    if (below.length) CV.auditRead(V, R.id, "history", below[0].ts, below[below.length - 1].ts).catch(() => {});
+  }
   const F = await require("./padflair").byUsername(R.id).catch(() => null);          // 1.99ir: pad flair on the chat
   // 1.99acb: the viewer's OWN relayed line names its say job (+ the page's client id) - the page swaps its pending line for
   // exactly this row, by the job, whatever its cursor says. Only the viewer's own jobs (mineFor is per account).
   const myC = new Map();
   for (const j of at.mine) if (j.kind === "say" && j.c) myC.set(j.c, j);
-  const feed = items.map((it) => {
+  // CL6: the line menu (⚑ Report, 🗑 Remove my line, 🙈 Hide, ⛔ Delete for good) - what this viewer may do here, and which lines
+  // are their own (their linked login, or their account's web lines)
+  let acts = null;
+  try { acts = require("./chatlogmod").actsFor(V, viewer); } catch (e) { acts = null; }
+  const own = new Set(acts && userId ? ["u:" + String(userId).toLowerCase(), login ? String(login).toLowerCase() : null].filter(Boolean) : []);
+  // the owner's decision-9 change: the viewer's own lines shown as "someone" (they are incognito) are still theirs to remove - by
+  // the speaker hash dress keeps off the wire (_sh)
+  const ownH = new Set([...own].map((k) => CV.hashOf(k)));
+  const shape = (it) => {
     if (!it.u) return it;
     const o = { ...it, u: withPatv(it.u, L, F) };
     const j = myC.get(it.c);
     if (j) { o.job = j.id; if (j.cid) o.cid = j.cid; }
+    if (own.size && (it.k === "msg" || it.k === "tx") &&
+        ((it.u.login && own.has(String(it.u.login).toLowerCase())) || (it._sh && ownH.has(it._sh)))) o.own = 1;
     return o;
-  });
+  };
+  const feed = dressed.map(shape);
+  const redo = dressedRedo.map(shape);
   // 1.99fu: 💸 Tip (signed-in viewers only)
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
   const withTip = (u) => { const x = withPatv(u, L, F); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
   return {
-    room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
+    room: { name: R.name, slug: R.slug, topic: CV.redact(R.topic), count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
             transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R),
             rtc: !!R.audio && isLive(R) && rtcHint(R),       // 1.99il: the player tries ⚡ WebRTC first (roomrtc.js)
@@ -918,16 +1337,31 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
     members: members.map(withTip),
-    mic: mic.map(withTip),
+    mic: mic.map((u) => withTip(pageMic(u))),          // micfollow: proven / since never reach pages
     feed, cursor: at.cursor,
+    ...(opts && opts.program ? { stage_program: await stageProgram(prog, R, userId, L, F) } : {}),
+    // CL3: the pad's chat-history settings as this viewer gets them (the 📜 / 🔍 chip, an open page re-filters on a change);
+    // a fresh view hands the page its signed join cursor; `removed` = lines the page may hold whose speaker is hidden now
+    history: acts ? Object.assign(CV.historyBlock(V), { acts }) : CV.historyBlock(V),
+    ...(after > 0 ? {} : { jc: CV.signJc(R.id, at.cursor, V.now, jcWho) }),
+    ...(removedRing.length ? { removed: removedRing } : {}),
+    ...(redo.length ? { redo } : {}),
+    rs: at.rs,                                  // review 2 fix-up: the ring sequence this answer covers (the page sends it back: ?rs=)
   };
 }
+/** micfollow: the pad's mic stage for this viewer (null = off on this pad); names like the "On the mic" card. */
+async function stageProgram(prog, R, userId, L, F) {
+  if (!prog) return null;
+  try { return await require("./micfollow").viewFor(prog, R, userId || null, (u) => withPatv(u, L, F)); }
+  catch (e) { console.error("[bridge] stage program:", e.message); return null; }
+}
 
-/** The live view of the busiest live room, for the homepage (signed-in callers only). */
-async function liveFor(slug) {
+/** The live view of the busiest live room, for the homepage. CL3: `viewer` = who's looking (the line's own access level,
+ *  the 24 h presence cap); never the owner / staff / mod floors here (nonExempt). */
+async function liveFor(slug, viewer = null) {
   await load();
   const R = bySlug(slug);
-  return R && bridgeOk(R.id) ? liveView(R, 0) : null;           // 1.99qp: not for a pad without the bridge perk
+  return R && bridgeOk(R.id) ? liveView(R, 0, null, null, null, true, { viewer, nonExempt: true }) : null;   // 1.99qp: not for a pad without the bridge perk
 }
 
 /** 1.99ja: recompute a live room's slug now (after its pad changed: connected / disconnected / renamed). */
@@ -951,6 +1385,11 @@ function bySlug(slug) {
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   load();
+  // 1.99add: Pepe's sticky hidden set comes back at start-up (hub_hidden_set, whatever the hub switches say, with the list his
+  // next one is compared with, the reports that explain drops and held batches) - quotes, tips, mentions, boost and go-live lines
+  // keep hiding them before Pepe's first sync (hubhidden.boot never rejects; a failed read is tried again). Until it has worked
+  // those readers hide EVERYONE (hubhidden.loading - refix 4: a failed read never names anyone)
+  require("./hubhidden").boot();
   // adultgate site: when the 18+ gate starts applying to a room (the switch on, a pad marked 18+), its open MP3 listeners and
   // the pages waiting on a long-poll answer again under the gate (the waiting ones re-check after waitForChange)
   require("./adultgate").onChange((why) => {
@@ -964,15 +1403,24 @@ function register(app, { isBotToken, addUser }) {
     try {
       relay.applyAcks(body.acks);
       require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
-      require("./quotes").setHidden(body.hidden_h);   // 1.99fp: who is private right now (hashes) - quotes never name them
-      // 1.99acm: ...and kept for the chat hub (hubhidden.js: only the difference is written; the sync never waits for it)
-      require("./hubhidden").note(body.hidden_h).catch((e) => console.error("[bridge] hidden_h:", e.message));
+      // 1.99fp: who is private right now (hashes) - quotes never name them; 1.99acm: kept for the chat hub too. 1.99add: STICKY
+      // (hubhidden.js) - an empty, short or truncated list (Pepe's state file failed to load, his 3,000 cut) un-hides nobody; his
+      // privacy.shown events, his incognito OFF reports, an older Pepe's drop within one bridge session (no tx_hidden_h: he sends
+      // no privacy.shown), an owner un-hide or an owner approving a held batch. The set and quotes change before this returns;
+      // the stored copies are written behind it - the sync never waits for that. 1.99add refix 4: a Pepe that knows WHY someone
+      // is hidden also sends bridge_hidden_h (!bridge hide: their lines left out) and incog_hidden_h (incognito: shown as
+      // "someone") - each null when that state failed to load; hidden_h alone (prod Pepe 1.99adc) is "unknown": left out.
+      require("./hubhidden").noteSync({ list: body.hidden_h, bridge: body.bridge_hidden_h, incog: body.incog_hidden_h, events: body.events,
+                                        session: body.session, sent: body.sent, explicit: Array.isArray(body.tx_hidden_h) })
+        .catch((e) => console.error("[bridge] hidden_h:", e.message));
       const r = await ingest(body);
       const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
       // 1.99co: the linked logins watching each pad -> Pepe sends their Manage-panel caps (padmod.js)
       // 1.99xa: Pepe's web-relay block mirror (bridgeblocks.js), only when his copy is older than ours
       const blocks = await require("./bridgeblocks").forSync(body);
-      res.json({ success: true, ...r, jobs: relay.takeJobs(liveIds), viewers: require("./padmod").viewersFor(liveIds), ...blocks });
+      const jobs = relay.takeJobs(liveIds);
+      const mfc = relay.mfCancelled();               // micfollow: claimed mic-stage stills Pepe must drop (bridge-relay.mfCancelled)
+      res.json({ success: true, ...r, jobs, viewers: require("./padmod").viewersFor(liveIds), ...blocks, ...(mfc.length ? { mf_cancel: mfc } : {}) });
     } catch (e) {
       console.error("[bridge] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
@@ -1076,7 +1524,13 @@ function register(app, { isBotToken, addUser }) {
       if (require("./adultgate").refuseJson(req, res, R.id, R.slug)) return;
     }
     const aft = after > cursor ? 0 : after;
-    const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1");
+    // CL3: the viewer (their floors on this pad) and the page's signed join cursor (?jc=; missing or forged = now)
+    const jc = typeof req.query.jc === "string" ? req.query.jc.slice(0, 80) : null;
+    // review 2 fix-up: the last ring sequence the page got (?rs=) - only newer `removed` / `redo` entries come back
+    const rs = typeof req.query.rs === "string" && /^\d{1,16}$/.test(req.query.rs) ? Number(req.query.rs) : null;
+    const out = await liveView(R, aft, signed ? req.user.userId : null, login, signed ? req.user.username : null, !aft || req.query.me === "1",
+                               { viewer: signed ? req.user : null, jc, rs, program: true });
+    res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     res.json(lp ? Object.assign(out, { lp: true }) : out);
   });
 
@@ -1113,8 +1567,10 @@ function register(app, { isBotToken, addUser }) {
         const alive = await waitForChange(req, res, R, after, num(b.v), num(b.mv), u ? u.userId : null);
         if (!alive) return;
       }
-      const out = await liveView(R, after > cursor ? 0 : after, u ? u.userId : null, u ? u.camfrogUsername : null, u ? u.username : null);
-      res.json({ feed: out.feed, cursor: out.cursor, mine: out.mine, ver: out.ver, mver: out.mver, now: Date.now() });
+      const out = await liveView(R, after > cursor ? 0 : after, u ? u.userId : null, u ? u.camfrogUsername : null, u ? u.username : null, undefined,
+                                 { viewer: u ? { userId: u.userId, username: u.username } : null, jc: typeof b.jc === "string" ? b.jc : null });
+      res.json({ feed: out.feed, cursor: out.cursor, mine: out.mine, ver: out.ver, mver: out.mver, now: Date.now(), history: out.history, jc: out.jc,
+                 ...(out.reinit ? { reinit: true } : {}) });
     });
     app.post("/api/bridge/test/latency", express.json({ limit: "8kb" }), (req, res) => {
       if (!isBotToken((req.body || {}).password)) return res.status(403).json({ ok: false });
@@ -1130,6 +1586,8 @@ function register(app, { isBotToken, addUser }) {
   require("./pepemodlog").register(app, { isBotToken, addUser, bySlug });        // 1.99zf: Pepe's mod log per room (owner panel moderation history)
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./livecam").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99yh: 📡 live cams (WHEP) from the cam popover
+  require("./stageleave").register(app, { addUser });   // stagefix site: 🎬 "Take me off this Stage" (+ the privacy card's list)
+  require("./micfollow").register(app, { addUser, bySlug, isLive: isLiveShown });   // micfollow: 🎙 whoever holds the mic, on the pad's own stage
   require("./camviewers").register(app, { isBotToken, addUser });
   require("./pepeforget").register(app, { isBotToken, addUser });       // 1.99aat: 🧠 make Pepe forget me (+ the DMs with him)
   require("./ghost").register(app, { isBotToken, addUser });   // 1.99aaf: 👻 staff ghost mode (cam views tell nobody; always audited)   // 1.99yq: 👁 who opened your cam (Pepe PMs you) + !blockviewer / the privacy card
@@ -1137,6 +1595,13 @@ function register(app, { isBotToken, addUser }) {
   require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive: isLiveShown });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
   require("./padmod").register(app, { addUser, bySlug, isLive: isLiveShown });     // 1.99co: the pad Manage panel
   require("./padpepe").register(app, { addUser, bySlug, isLive: isLiveShown });    // 1.99qr: the 🐸 Pepe submenu (look / camroast / roast)
+  require("./chatlog").register(app, { addUser });                               // CL2: the chat archive (dark) + its /admin/bridge card
+  require("./chatlogview").start();                                              // CL3: floors, watermarks, the hidden-names job
+  require("./padchat").register(app, { addUser });                               // CL3: the pad's 💬 Chat settings (window, search, downloads, mods)
+  require("./chatlogmod").register(app, { addUser });                            // CL6: ⚑ report / remove / hide / purge a line, the staff tools
+  require("./chatloghist").register(app, { addUser });                           // CL8: scrollback - GET /api/rooms/:slug/history (dark)
+  require("./chatlogsearch").register(app, { addUser });                         // CL9: 🔍 search - POST /api/rooms/:slug/search (dark)
+  require("./chatlogexport").register(app, { addUser });                         // CL10: ⬇ downloads - the export routes (dark)
 
   // The stage of one room (?room=<slug>), else the homepage's front room: Pepe's stream state + that
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.
@@ -1161,8 +1626,19 @@ function register(app, { isBotToken, addUser }) {
       }
       // 1.99fu: on an Approved pad the HLS / WHEP URLs carry this viewer's read token (webrtc.js checks it)
       // adultgate site: a cam slot from an 18+ pad's room carries no name past the gate (adultSlots; reads the sign-in when it applies)
+      // stagefix site: a 🎬 cam slot is listed only to signed-in viewers who may see the pad's live room (padaccess.camSlotsFor),
+      // and the viewer's own cam carries mine: true (mainstage.slotsFor) - the sign-in is read whenever a cam slot is up
       if (R && require("./adultgate").applies(R.id) && req.user === undefined) await new Promise((r) => addUser(req, res, r));
-      if (R) { roomId = R.id; slots = PA.adultSlots(PA.tokenizeSlots(await require("./mainstage").publicSlots(R.id), req.user, R.id), req.user); }
+      if (R) {
+        roomId = R.id;
+        const MS = require("./mainstage");
+        let list = await MS.publicSlots(R.id);
+        // stagefix fix: the homepage's front stage (no ?room=) never carries a cam slot - a cam on a Stage plays only on its own
+        // pad page (D-21), and a featured one would otherwise be every signed-in visitor's default view on the homepage
+        if (front) list = list.filter((s) => !(s && s.cam));
+        if (list.some((s) => s && s.cam) && req.user === undefined) await new Promise((r) => addUser(req, res, r));
+        slots = await MS.slotsFor(R.id, req.user || null, list);
+      }
     } catch (e) { slots = []; }
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
     const here = roomId ? pepeIn(roomId) : null;
@@ -1256,7 +1732,13 @@ function register(app, { isBotToken, addUser }) {
     // 1.99dx: the pad page's tabs (Live/Stage · Feed · About, public/js/pad-tabs.js) - which one opens first
     // 1.99qp: a Camfrog pad without the 💎 bridge perk shows an upsell where its live room would be
     const bridgeLocked = !R.offline && !siteOnly && !bridgeOk(R.id);
-    const initial = liveOpen && !R.offline && !bridgeLocked ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null) : null;
+    // CL3: the viewer's floors on this pad (#rmInit carries the page's signed join cursor, `jc`)
+    const initial = liveOpen && !R.offline && !bridgeLocked ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null, true,
+                                                                             { viewer: signedIn ? req.user : null, program: true }) : null;
+    // CL8: a Camfrog pad whose room is offline still shows its 📜 chat history (read-only, chatloghist.js) to signed-in viewers who
+    // may scroll back - and so does a pad without the 💎 bridge perk, for its owner and staff (decision 24). null while
+    // chatlog.history is off, for anyone else, or when the archive holds nothing of this room.
+    const chatHistory = signedIn && liveOpen && !siteOnly && (R.offline || bridgeLocked) ? await require("./chatloghist").offlineCard(R.id, req.user) : null;
     const roomStage = await require("./mainstage").roomStage(R.id, req.user);
     const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
     const here = pepeIn(R.id), st = stage();
@@ -1275,14 +1757,16 @@ function register(app, { isBotToken, addUser }) {
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
-      room: { id: R.id, name: title, slug, count: adultGate === "ok" ? R.count : null, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
+      // CL3 fix-up: the topic as /live and #rmInit show it - hidden people's names redacted (it was printed raw into #rmTopic,
+      // to every viewer and crawler); "" when the names can't be loaded (fails closed)
+      room: { id: R.id, name: title, slug, count: adultGate === "ok" ? R.count : null, live: !R.offline && isLive(R), topic: liveOpen && R.topic ? await require("./chatlogview").redactLoaded(R.topic) : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)),
               adult: !!(info && info.adult),                       // 1.99kz: the 18+ badge
               bridgeLocked,                                         // 1.99qp: no 💎 bridge perk -> the upsell card
               plusSpots: bridgeLocked ? (() => { try { return require("./premium").plusSpots(); } catch (e) { return null; } })() : null },   // 1.99qy
-      initial, padTabs, latest, feedSeen,
+      initial, padTabs, latest, feedSeen, chatHistory,
       dms: reg.hasRoute(app, "/messages"),          // 1.99co: the Manage panel's "Message" (DMs, when that page exists)
       pepeHere: here, stage: st,
       roomStage,
@@ -1342,4 +1826,6 @@ function padTabsFor(o) {
 }
 
 module.exports = { bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
-  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; } };
+  liveView, withPatv, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
+  noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
+  cursorNow: () => cursor };          // CL8: the newest feed cursor (the history answer's `cursor`)

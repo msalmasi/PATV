@@ -177,5 +177,7 @@ test("the page: a 🐸 Message Pepe button and the note box", async () => {
   assert.match(html, /id="dmPepeBtn" href="\/messages\?to=PepeFrog"/);
   assert.match(html, /id="dmPepeNote"/);
   const js = fs.readFileSync(path.join(repo, "public", "js", "messages.js"), "utf8");
-  assert.match(js, /\$\('dmPepeNote'\)\.textContent = pn && pn\.note/);
+  // (CL13: the same box carries a Camfrog thread's "Reply in Camfrog" line - still set as text)
+  assert.match(js, /var note = cf \? _t\('js\.msg\.cfpm_composer'[^\n]*: \(pn && pn\.note \? pn\.note : ''\);/);
+  assert.match(js, /var pnEl = \$\('dmPepeNote'\);[\s\S]{0,80}pnEl\.textContent = note;/);
 });

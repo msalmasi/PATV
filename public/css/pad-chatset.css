@@ -1,0 +1,17 @@
+/* CL3: the pad settings' 💬 Chat tab (views/padSettings.ejs #padChatSet, public/js/pad-chat-settings.js). Design-system tokens only. */
+.pcs { display: grid; gap: var(--ds-sp-3, 14px); }
+.pcs .pcs-win { max-width: 34rem; }
+.pcs .pcs-custom { margin-top: 6px; }
+.pcs .pcs-custom .ds-in { width: 7.5rem; flex: 0 0 auto; }
+.pcs .pcs-custom .ds-select { width: auto; flex: 0 1 10rem; }
+.pcs .pcs-row { padding-block: 8px; border-top: 1px solid var(--ds-line); align-items: flex-start; flex-wrap: nowrap; }
+.pcs .pcs-txt { min-width: 0; flex: 1 1 auto; }
+.pcs .pcs-txt .ds-meta { margin: 2px 0 0; }
+.pcs .pcs-note { margin: 0; }
+.pcs .pcs-open { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid var(--ds-line); }
+.pcs .pcs-open:empty { display: none; }
+.pcs .pcs-open .ds-row { gap: 8px; }
+.pcs .msg:empty { display: none; }
+@media (max-width: 760px) {
+  .pcs .pcs-custom .ds-in, .pcs .pcs-custom .ds-select, .pcs .ds-select { font-size: 16px; }
+}

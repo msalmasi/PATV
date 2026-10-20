@@ -90,7 +90,8 @@ Staging, and staging Pepe (which writes to it), drift from prod over time. On th
 prod's. It keeps the old copy as `myapp.db.previous`. The per-environment tables stay staging's own
 (`deploy/keep-staging-tables.js` lists them: bot keys and their switches and logs, the hub seam switches, bridge
 spans; prod's `hub_outbox` rows are dropped, and with them prod's `hub_hidden_h` set and inbound seam nonces - emptied
-before the outbox, because prod's triggers come along with the copy). 1.99acm: prod's unfinished "Download my data" jobs
+before the outbox, because prod's triggers come along with the copy; 1.99add: also `hub_hidden_meta` and `hub_hidden_held`,
+while `hub_hidden_set` keeps prod's rows, so people hidden on prod stay hidden on staging). 1.99acm: prod's unfinished "Download my data" jobs
 are marked expired in the copy, so staging never zips prod members' data. If that can't be done, staging keeps its old
 database.
 
@@ -167,6 +168,48 @@ Each run takes a verified copy (online backup API + `integrity_check`), gzips it
      (only with the site stopped - a leftover `-wal` from the old database must not be kept), or
    - let SQLite do it: `sqlite3 /home/PATV/myapp.db ".restore '/root/restore.db'"`.
 6. `pm2 start index`, check the site, then delete `/root/restore.db`.
+
+## The pad chat archive (chatlog.js, CL2)
+
+Every line a pad's live chat shows, kept by the pad's tier (`chat_log` + its FTS5 index `chat_log_fts`, and the small
+`chatlog_*` tables). It ships **dark**: the switches are on `/admin/bridge` → "Chat archive" (site admins), in the
+runbook's order - **notice** first (the privacy policy changes and Pepe announces it), **archive** at the earliest
+7 days later (the site refuses sooner).
+
+- **Where it lives** (decision 25 - record the VPS disk check first): by default inside `myapp.db`, so the nightly
+  backup above covers it. With `CHATLOG_DB=/home/PATV/chatlog.db` in the site's environment (set before the archive is
+  first switched on) `chat_log` and its index live in that attached file instead; the site refuses to split an archive
+  that already started in `myapp.db` (Train 3: the EMPTY archive tables every boot without `CHATLOG_DB` creates there -
+  no line, nothing counted, the archive never switched on - don't count: they are dropped from `myapp.db` at the first
+  boot with `CHATLOG_DB` set, so deploying before decision 25 is made decides nothing), and it never starts a new, empty file while `myapp.db`'s counters say the archive
+  holds lines (a mistyped or moved path): the archive then stops writing and `/admin/bridge` says why - fix the path
+  and restart. That file is **not** in the nightly backup: give it its own cadence before the
+  switch-on, e.g. `/usr/bin/node /home/PATV/backup-db.js --db=/home/PATV/chatlog.db --dir=/home/PATV/chatlog-backups`
+  (that keeps 14 dailies; a shorter cadence - 3 dailies + the monthly - isn't an option of `backup-db.js` yet).
+- **Staging refresh**: every `chatlog_*` table, `chat_log` and `pad_chat_cfg` are per-environment (`keep-staging-tables.js`
+  KEEP) - staging keeps its own archive, switches and hidden set; prod's chat never lands on staging. So are the live
+  feed's `bridge_feed` and `bridge_rooms` (the archive's switch-on seed reads `bridge_feed`), and the copy deletes with
+  `secure_delete` on, so prod's chat doesn't linger in its free pages. The archive's index triggers are dropped in the
+  copy (the site re-makes them at start) and the index is re-filled from staging's rows.
+- **Index health**: a drift check every 6 hours fixes holes by itself; `/admin/bridge` runs a full check or a repair.
+  Never `INSERT INTO chat_log_fts(chat_log_fts) VALUES('rebuild')` by hand - on an external-content index it would bring
+  removed lines back into search.
+- **At volume**: `node tools/chatlog-bench.js --rows=2000000` seeds synthetic rows into a temp database with the real DDL
+  and prints each read path's query plan and timings (it never touches a real database).
+- **Retention purge** (`chatlogpurge.js`, CL7; the **purge** switch, on by default): one pass a night (06:00-10:00 UTC, or
+  at any hour once the last one is 36 h old) first blanks hidden lines whose 30-day appeal copy is up, then deletes every
+  line past its pad's retention - chat by the tier's chat window, 🎙 transcripts by its recording window, every tier a pad
+  lost keeping its windows 30 more days from the day it was lost - in 1,000-row transactions, with their search entries,
+  their copies in the live feed and the live-feed lines the archive never kept (from before its seed), then runs a bounded
+  FTS5 merge. It deletes **nothing**, and moves no expiry watermark (`exp_*`), while Pepe's retention report (every owner
+  sync, ~2 min) is more than an hour old, hasn't come since the site started or didn't name every tier's window validly, a
+  pad's tier can't be read, or the server clock looks wrong (behind the last pass, or a step of more than an hour against the
+  monotonic clock in the last day); such a pass is retried at the next hourly check once it could delete. A legal hold or an
+  open report keeps its lines - read per batch, so one placed while a pass runs counts. With the switch off it only counts
+  (lines past retention stay out of view). It doesn't reach copies with their own life - quotes, chat clips and 🔊 mic clips
+  posted to the feed, 🔔 mention alerts (a staff "Delete for good" does) - nor backups until they expire, nor the database
+  file's free pages until SQLite reuses them (no `secure_delete`). `/admin/bridge` shows the last pass, why it deleted
+  nothing, and what each of the next 7 days would delete; "Run tonight's pass now" and "Recount" are there too.
 
 ## DNS
 

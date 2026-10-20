@@ -151,7 +151,7 @@ forgetting them. That cache is in memory - a fast path: 1.99acm, the inbound rou
 | `privacy/changed` | `incognito.request()` (web), in the action's transaction, before Pepe answers | `cfh:<login hash>` or `acct:<userId>` | `{flag:"incognito", value, phase:"requested", via:"web", subject, at}` |
 | `privacy/changed` | `incognito.sync()` (Pepe's report), linked and unlinked logins; 1.99acm: also every key Pepe's full list (`full`) turns ON or OFF, in one transaction with that heal | same | `{flag:"incognito", value, phase:"confirmed", via, subject, at}` |
 | `privacy/changed` | 1.99acm: trigger on `profile_layout` (any write) | `pa:<userId>` | read at post time: `{flag:"private_activity", value, subject:{acct, v1_user}, at}` - the Analytics section or its Rooms panel hidden (`stories.privateLogins`' rule; an unreadable layout counts as private) |
-| `privacy/changed` | 1.99acm: trigger on `hub_hidden_h` (`hubhidden.js`: Pepe's `hidden_h` from each bridge sync, only the difference written) | `hh:<h>` | read at post time: `{flag:"hidden_h", h, value, at}` (20-hex hashes only, never a login) |
+| `privacy/changed` | 1.99acm: trigger on `hub_hidden_h` (`hubhidden.js`: Pepe's `hidden_h` from each bridge sync, only the difference written; 1.99add: sticky - a row goes only on an explicit un-hide, never because a list lacks it; incognito ON reports and website ON requests add at once; refix 4: also a change of its `scope`) | `hh:<h>` | read at post time: `{flag:"hidden_h", h, value, at}` + `scope: "incognito"` when only incognito hides it (shown as "someone"; absent = left out) (20-hex hashes only, never a login) |
 | `privacy/account-deleted` | 1.99acm: `accountdelete.execute()`, in the deletion's transaction | `acct:<userId>` | `{acct, v1_user, pseudonym, remove_public:false, request:<account_deletions.id>, at}` |
 | `privacy/forget` | 1.99acm: `pepeforget.request()` / `fromBot()` (linked accounts only), in the request's transaction | `forget:<pepe_forget_log.id>` | `{subject_kind:"acct", acct, v1_user, scope:"bot", ref, at}` |
 | `econ/committed` | `idemBegin` `done()` for a key starting `ix:` | the key | `{key, tx, outcome:{status, ok, code}, endpoint, at}` (refusals with a stored status included). The hub has no intake for it before R-4 (404; the topic backs off on its own). |
@@ -296,8 +296,105 @@ file into the site's `.env` (0600).
 4. The switches, in the order under "Switches".
 
 A staging DB refresh (`deploy/keep-staging-tables.js`) keeps staging's own keys and switches, empties `hub_outbox` (its id
-sequence carries on) and, 1.99acm, `hub_hidden_h` and `hub_inbound_nonces` - those two first, the outbox last, since the
-copy carries prod's triggers - and marks prod's unfinished exports expired (`refresh-staging-db.sh`).
+sequence carries on) and, 1.99acm, `hub_hidden_h` and `hub_inbound_nonces` (1.99add: and `hub_hidden_meta`, `hub_hidden_held`) -
+those first, the outbox last, since the copy carries prod's triggers - and marks prod's unfinished exports expired
+(`refresh-staging-db.sh`).
 
-**Pepe's hidden set** (`hubhidden.js`, 1.99acm): stored only while the `privacy` switch is on; turning the switch off
-empties `hub_hidden_h` (without a row for the hub), and the first bridge sync after it turns on writes the whole set.
+**Pepe's hidden set** (`hubhidden.js`, 1.99acm): the hub's copy, `hub_hidden_h`, is stored only while the `privacy` switch
+is on; turning the switch off empties it (without a row for the hub), and the first write after it turns on writes the whole
+set. 1.99add: the set is **sticky** (the chat-history design's rule, spec §3.1): an empty, short or truncated list (Pepe's
+bridge state file failed to load, his 3,000 cut) un-hides nobody, and the set itself is kept in `hub_hidden_set` **whatever
+the switches say**.
+
+**Kinds** (1.99add refix 4, the owner's rule of 2026-10-19: incognito hides WHO, not WHAT). Each hash carries one row per
+reason it is hidden (`hub_hidden_set (h, kind, since, src)`):
+
+| kind | from | what readers do |
+|---|---|---|
+| `bridge` | `!bridge hide`: `privacy.hidden {scope: bridge}`, a `bridge_hidden_h` list | **left out** - quote lines dropped (also from the post's text), the hub leaves them out |
+| `incognito` | `!incognito` / Settings: Pepe's ON report, his full incognito list, `privacy.hidden {scope: incognito}`, an `incog_hidden_h` list, a website ON (`src` `web` until Pepe applies it) | **"someone"** - no name, the words stay; the hub row carries `scope: "incognito"` |
+| `unknown` | an older Pepe's mixed `hidden_h` (prod Pepe 1.99adc sends only that) | **left out** (fail closed): on 1.99adc incognito people are left out too, until Pepe sends the kinds |
+
+A hash is hidden while it has any kind; `quotes.isHidden` (any kind) drives pad tips (refused as private), boost and go-live
+lines (no name) and @mention alerts (none), and 🔊 mic clips are refused (a voice says who it is); `quotes.isLeftOut` picks the
+lines a quote drops. The hub's `hh:<h>` row gains `scope: "incognito"` when that is the only kind - an optional field the S0
+hub ignores (it keeps leaving everyone out until its consumer reads `scope`; the golden row, an older Pepe's hash, is
+unchanged); a change of scope is a row too (trigger `hub_outbox_hh_update`).
+
+**Wire** (what the site accepts; the bot half is CL1's): `hidden_h` (everyone hidden now, mixed), `bridge_hidden_h` and
+`incog_hidden_h` (a Pepe that knows why - each **left out (null)** when that state failed to load, so a list he sends is one he
+vouches for), `tx_hidden_h` (marks a CL1 Pepe that sends `privacy.shown`), events `privacy.hidden` / `privacy.shown
+{h, scope}` with their own `id` and `ts`. Pepe must send `privacy.shown` **per scope, every time** (a `!bridge show` while still
+incognito is `shown {scope: bridge}`), and his send-time redaction must send incognito people's lines anonymised, not drop them.
+
+**Removed** - each un-hide takes away only its own kind, and the hub hears `value:false` only when no kind is left:
+- `privacy.shown {h, scope}` → that kind; also the `unknown` row when no list of the same sync carries the hash. Not when the
+  same sync's list of that kind still carries it; not a resend (an event `id` already taken); not in a late post of an older
+  run; not one older (his clock) than a hide of that kind that arrived in the last `STALE_MS` (120 s - a late post; older than
+  that, his clock went back since and it counts);
+- Pepe's incognito OFF report (linked or not, changed or not - he has them off) → the `incognito` row, unless older than an ON
+  of theirs that arrived in the last `STALE_MS`. An ON report always hides (one that looks older than his last OFF means his
+  clock went back); his full list (every 10 min) only adds, skipping a login whose OFF arrived in the last `STALE_MS`;
+- `incognito.actionsSettled` / `reconcileWeb`: a website ON Pepe never applied → its `web` row;
+- an older Pepe (no `tx_hidden_h`): the `unknown` row of a hash his list had and **two** whole, in-order lists of the same
+  bridge `session` in a row lack (one short list - a read that failed once - un-hides nobody, and the hub hears nothing); at the
+  **first** such list when his own real OFF report dated after the list that still had them and no later than the first without
+  explains it. More than 5 unexplained in one list (or more than 10 % of the set, when 2+) are held (`mass`). The hashes absent
+  once are kept with `last` (a site restart in between changes nothing). Prod Pepe 1.99adc passes on a `!bridge show`, an
+  `!incognito off` and an admin-panel un-hide this way - **deploy this after the acl-nick bot fix** (`G:/wt/acl-nick-bot`): on
+  prod bot 5505fe1 a room-line impersonator can type `!bridge show` or `!incognito off` for someone else;
+- a Pepe that knows the kinds: an `unknown` row his vouched lists carry becomes those kinds (not an un-hide); one neither carries
+  (and his mixed list doesn't either) is held once per run (`legacy`);
+- an owner on `/admin/keys#seam`: `POST /api/admin/hubseam/unhide {login | h, kind, reason}` (one kind or `all`; the audit row -
+  hash, kind asked, kinds it had - and the stored rows in one transaction; a hash is written `#` + 20 hex - anything else is a
+  chat login), or approving a held batch (`POST /api/admin/hubseam/held {id, approve, reason}`: its `unknown` rows go - someone
+  also incognito stays "someone"; audited with id, kind and count, never a hash). `POST /api/admin/hubseam/check {login | h}`
+  answers the kinds, held batch and "absent once" and changes nothing - **audited** (`hubseam.check`, the hash only).
+
+A row Pepe hides again while an owner's un-hide or approval commits stays (it comes back with the next write).
+
+**Held** (`hub_hidden_held`): `unknown` rows that vanished in a way that can also be a lost state stay until an owner decides -
+`mass`, `restart` (what an older Pepe's last list had - or lacked once - and his first whole list after a restart lacks, unless
+his OFF report explains it: a `!bridge show` just before the restart looks exactly like a bridge file that failed to load) and
+`legacy`. A held hash Pepe lists again leaves its batch. A `mass` batch whose other hashes were all explained (Pepe's own word
+about a change between the list that had them and the first without, `prev_ts` < at <= `sent_ts`, his clock) releases its last
+one; an owner's un-hide or a merge makes it `manual`. The seam card lists every open batch by id, kind, count, time and how many
+of it stay hidden another way. **Approving a batch that really was Pepe losing track shows all of them by name again and nobody
+can say who they were** - the help text says so. A held member can fix it in a bridged room with `!bridge hide`, then `!bridge show`.
+
+**Order.** Lists of one run are taken in the order they arrive; his `sent` and his reports' `ts` are compared only with each
+other, never with the site's clock (the card shows the difference). A list whose `sent` is older than the one before it (his
+clock went back, or a late post) is compared with nothing, but the next is compared with it **and** with what the list before
+it had (nothing it lacked is skipped), and no window from it explains a drop. A list of an older run only adds; one without a
+`sent` only adds; an older Pepe's list of 3,000 or more proves nothing by what it lacks.
+
+**Start-up.** `hubhidden.boot()` (from `bridge.register`, first; a failed read is tried again after 5 s, 30 s, then every
+120 s) loads the set, the list compared with, the hashes absent once, the OFF reports that explain drops (`offs`) and the open
+held batches. **Until that read has worked every reader hides everyone** (`hubhidden.loading()`: quotes refuse, a quote card
+shows no line and nothing is stored, tips are refused, no names in boost / go-live lines, no mention alerts) - a failed read
+never names anyone - and a list only adds. A staging DB refresh keeps prod's `hub_hidden_set` (hidden on prod = hidden on
+staging) and empties `hub_hidden_meta` and `hub_hidden_held`.
+
+**What stays held for an owner on an older Pepe** (CL1's events with kinds make these explicit): a `!bridge show` just before he
+restarts, two or more people un-hiding in one tick when that is more than 10 % of a small set. **What can still un-hide wrongly**
+(accepted on an older Pepe; a kinded CL1 Pepe fixes it): someone on BOTH incognito and `!bridge hide` whose bridge file was lost
+at a restart, once they really turn incognito off; someone who typed `!bridge hide` while no room was
+bridged (an older Pepe sends nothing then) shows by name after their incognito OFF until his next list carries them again; a lasting in-run loss of up to 5 hashes (10 %) is taken as their `!bridge show` - someone Pepe has
+reported as incognito still shows as "someone" then, never by name. While no room is bridged an older Pepe sends no lists, so an
+`unknown` row waits for the next one (left out meanwhile).
+
+The chat archive's own switch-independent set is `chatlog_hidden` (CL2, `chatlog.js`): the same inputs and kinds (its reasons;
+`chatlog.kindsOf` / `hubRows()` map them onto this set's rows), but stickier - it un-hides only on Pepe's explicit `privacy.shown`
+{scope} or an operator's decision on `/admin/bridge` (never on an older Pepe's drop or an OFF report). **Train 2 (train2-site +
+cl-site): ONE reader rule** - `quotes.isHidden` (pad tips, boost / go-live names, @mention alerts, mic clips, the 🎙 mic stage) and
+the quote rules hide whom EITHER set hides (left out if either leaves them out; everyone while either loads), so nothing on the
+site names a person the live chat, its history, search or downloads show as "someone" or leave out. **Train 3 review: the chat's
+own readers too** - `chatlogview.kindNow` (privacyOf, the roster, isHiddenLogin, the hidden-names job) is the STRICTER of
+`chatlog.hiddenKind` and this set's kind (bridge / unknown -> left out, incognito -> "someone"; while this set's start-up read is
+still running the chat reads the archive's set alone - itself fail-closed while it loads - rather than blank every pad), so a
+person only this set holds (the first deploy: `chatlog_hidden` starts empty and is never seeded from here; a held
+older-Pepe drop) is not named in the chat either. A change here re-runs the hidden-names job and bumps open pages' privacy digest;
+it doesn't push `removed` / `redo` to open live pages (both stores take the same inputs, so the archive's own change does that).
+Still two stores: an un-hide now needs BOTH - an owner's un-hide here (`/admin/keys#seam`) names nobody while the archive's set
+still hides them (its own held / operator tools on `/admin/bridge` decide there), nor the other way round - and the hub's `hh:`
+cache reads this set alone. Folding the two into one table (one held table, one owner tool) is open.

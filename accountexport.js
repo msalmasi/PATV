@@ -12,7 +12,7 @@
 // (their side of each conversation they are in; which of them were story replies, as metadata), notices, achievements,
 // cosmetics, purchases and orders, subscriptions, likeness settings and earnings, their sign-in sessions, and the chat
 // data PATV keeps keyed to their account or Camfrog login (chat statistics, room participation, clips they made or that
-// are of them - as records; the clip files themselves are not in the zip).
+// are of them - as records; the clip files themselves are not in the zip; CL2: their own lines in the pad chat archive).
 //
 // What is never in it: secrets (OMIT: passwords, tokens, hashes, stream / restream keys, signatures, nonces, payment
 // processor customer / subscription ids) and other people's private data - the DMs other people sent, a buyer's
@@ -170,13 +170,29 @@ async function collect(userId, { at = now() } = {}) {
   const convs = await getQuery("SELECT conversation_id FROM conversation_members WHERE user_id = ?", [uid]).catch(() => []);
   if (convs.length !== undefined) {
     const list = [];
+    const via = (await colsOf("messages")).includes("via") ? ", via" : "";      // CL11: 'cf_message' / 'cf_pm' = sent from Camfrog
     for (const c of convs.slice(0, 5000)) {
-      const meta = (await getQuery("SELECT id, kind, title, created_at FROM conversations WHERE id = ?", [c.conversation_id]).catch(() => []))[0] || { id: c.conversation_id };
-      const sent = await getQuery("SELECT id, body, kind, created_at, edited_at, deleted_at FROM messages WHERE conversation_id = ? AND sender_id = ? ORDER BY id LIMIT ?",
+      const meta = (await getQuery("SELECT id, kind, title, created_at, dm_key FROM conversations WHERE id = ?", [c.conversation_id]).catch(() => []))[0] || { id: c.conversation_id };
+      // CL13: a "📨 Sent in Camfrog to <login>" thread names its Camfrog login (the key itself - internal ids - isn't exported)
+      if (meta.kind === "cfpm") { const p = String(meta.dm_key || "").split("|").filter((x) => x.startsWith("cf:")); if (p.length === 1) meta.camfrog_login = p[0].slice(3); }
+      delete meta.dm_key;
+      const sent = await getQuery(`SELECT id, body, kind, created_at, edited_at, deleted_at${via} FROM messages WHERE conversation_id = ? AND sender_id = ? ORDER BY id LIMIT ?`,
                                   [c.conversation_id, uid, MAX_ROWS]).catch(() => []);
       list.push({ conversation: meta, messages_you_sent: sent });
     }
     out.messages = { note: "The messages you sent, in each conversation you are part of. Messages other people sent are theirs and are not included.", conversations: list };
+  }
+  // CL11: the Camfrog side of the `!msg` copies they sent (relay key, Camfrog logins, room, Camfrog time). Fix-up: not
+  // `present` (whether the RECIPIENT was on the room's user list - a fact about them, not the sender), and only committed
+  // copies of the sender's own messages (a copy being written has a negative placeholder message_id)
+  if ((await colsOf("dm_relays")).length && (await colsOf("messages")).length) {
+    // CL13: kept = true when the copy went to your own "Sent in Camfrog to <login>" log. Fix-up: only that - never WHY
+    // (dm_relays.kept 'no_account' / 'refused' says whether the recipient has a PATV account or refuses you: a fact about them)
+    const kept = (await colsOf("dm_relays")).includes("kept") ? ", CASE WHEN r.kept IS NULL THEN 0 ELSE 1 END AS kept" : "";
+    await put("messages", "camfrog_copies", getQuery(`SELECT r.message_id, r.relay_key, r.via, r.from_login, r.to_login, r.cf_room, r.cf_sent_at, r.created${kept}
+                                                      FROM dm_relays r JOIN messages m ON m.id = r.message_id
+                                                      WHERE m.sender_id = ? AND r.message_id > 0 AND m.via = 'cf_pm' ORDER BY r.message_id LIMIT ${MAX_ROWS}`, [uid])
+      .then((rs) => (kept ? rs.map((r) => Object.assign({}, r, { kept: !!r.kept })) : rs)));
   }
   await put("messages", "settings", rows("dm_prefs", "user_id = ?", [uid]));
   await put("messages", "your_blocks", rows("dm_blocks", "blocker_id = ?", [uid]));
@@ -243,7 +259,25 @@ async function collect(userId, { at = now() } = {}) {
     await put("chat", "room_participation", rows("econ_participation", "login = ?", [login]));
     await put("chat", "clips_of_you", rows("media", "lower(subject_login) = ?", [login], { omit: ["file"] }));
     await put("chat", "incognito", rows("incognito_state", "login = ?", [login]));
+    await put("chat", "stage_leave", rows("stage_leave", "login = ?", [login]));     // stagefix site: the pads keeping your cam off their Stage
+    // stagefix final round (stagepin.js): your level for pads' Stages, the pads you said yes / no to, the asks sent to you
+    await put("chat", "stage_level", rows("stage_level", "login = ?", [login]));
+    await put("chat", "stage_pad_prefs", rows("stage_pad_prefs", "login = ?", [login]));
+    await put("chat", "stage_asks", rows("stage_asks", "login = ?", [login], { omit: ["actor_id"] }));
+    // micfollow: the 🎙 mic stage - when your cam showed on a pad's stage, your switch, pads that keep you off it (not who
+    // set it), the pads' notices to you, and reports on your tiles (not who made them)
+    await put("chat", "mic_stage_appearances", rows("micfollow_spans", "login = ?", [login], { order: "started" }));
+    await put("chat", "mic_stage_setting", rows("micfollow_optout", "login = ?", [login]));
+    await put("chat", "mic_stage_kept_off", rows("micfollow_excl", "login = ? OR user_id = ?", [login, uid], { omit: ["by"] }));
+    await put("chat", "mic_stage_notices", rows("micfollow_notices", "login = ?", [login]));
+    await put("chat", "mic_stage_reports_on_you", rows("micfollow_reports", "login = ?", [login], { omit: ["reporter_id", "resolved_by"], order: "at" }));
   }
+  await put("chat", "mic_stage_reports_you_made", rows("micfollow_reports", "reporter_id = ?", [uid], { omit: ["resolved_by"], order: "at" }));
+  // CL2: the pad chat archive (chatlog.js) - your own lines there (your linked Camfrog login or your account's web lines; Approved
+  // pads too), your chat-log downloads (metadata) and the reports you filed on chat lines
+  await put("chat", "pad_chat_lines", require("./chatlog").exportLines(uid, login, MAX_ROWS));
+  await put("chat", "chat_log_downloads", rows("chatlog_exports", "user_id = ?", [uid]));
+  await put("chat", "chat_line_reports", rows("chatlog_reports", "reporter = ?", [uid], { omit: ["decided_by"] }));
   await put("chat", "clips_you_made", rows("media", "by_user_id = ?", [uid], { omit: ["file"] }));
   await put("chat", "stage_captures", rows("stage_captures", "user_id = ?", [uid]));
   await put("chat", "commands_from_the_website", rows("bridge_cmd_log", "user_id = ?", [uid]));
@@ -293,6 +327,9 @@ patv-data.json is everything PATV keeps about your account, as of the time in "e
 - PAT is points, not money.
 - Ids (userId, post ids, conversation ids...) are PATV's internal ids.
 - "messages" has the messages YOU sent in each conversation you are part of. Other people's messages are theirs.
+  "messages.camfrog_copies" is the Camfrog side of the !msg messages you sent through Pepe (the Camfrog logins, room and time).
+  A conversation of kind "cfpm" is your own "Sent in Camfrog to <camfrog_login>" log: !msg copies that couldn't go to
+  that person's PATV messages ("kept": true in camfrog_copies).
 - Never included: your password, sign-in tokens, stream keys, payment processor ids, and other people's private data.
 - Clip files are not in the zip; their records are (chat.clips_you_made, chat.clips_of_you).
 

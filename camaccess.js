@@ -23,6 +23,10 @@
 //
 // camRefusal (camviewers.js) asks gate() after the owner's off switch, "private" and blocks; 👻 staff in ghost mode skip
 // it like the rest (but never for saving).
+// stagefix site: a pad's Stage asks gate() for every viewer of a cam put on it (livecam.stageViewerWhy - no asking there, and no
+// ghost bypass); Pepe's public stream follows the mode too (onair.js, D-9: followers / request never, members only by an on-air
+// OK given after modeSince() - when the owner last CHANGED it: cam_access.mode_at, which a save that keeps the mode - the
+// "others can ask" switch - doesn't move).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -66,12 +70,13 @@ let deps = {
 };
 
 // ── state ──
-let ACCESS = new Map();            // owner -> {mode, ask}
+let ACCESS = new Map();            // owner -> {mode, ask, modeAt}
 let ALLOW = new Map();             // owner -> Map(userId -> {username, created, via})
 const REQ = new Map();             // id -> {id, owner, userId, username, display, room, at, status, until, decided, by, sentAt, tries, acked}
 const ASKED = new Map();           // viewer userId -> [times]
 
 let ready = null;
+let LOADED = false;               // micfollow: ACCESS holds the real modes (until then accessOf answers the default)
 function init() {
   if (!ready) {
     ready = (async () => {
@@ -82,9 +87,16 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS cam_requests (id TEXT PRIMARY KEY, owner TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT,
                       room TEXT, at INTEGER NOT NULL, status TEXT NOT NULL, until INTEGER, decided INTEGER, by TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS cam_requests_owner ON cam_requests (owner, at)");
+      // stagefix fix: mode_at = when the MODE last changed (D-9 reads it; `updated` moves on every save, the ask switch too).
+      // Rows from before it existed start at `updated` - the latest the mode can have changed.
+      const ccols = (await getQuery("PRAGMA table_info(cam_access)")).map((c) => c.name);
+      if (!ccols.includes("mode_at")) {
+        await runQuery("ALTER TABLE cam_access ADD COLUMN mode_at INTEGER");
+        await runQuery("UPDATE cam_access SET mode_at = updated WHERE mode_at IS NULL");
+      }
       const a = new Map();
-      for (const r of await getQuery("SELECT owner, mode, ask FROM cam_access")) {
-        if (MODES.includes(r.mode)) a.set(low(r.owner), { mode: r.mode, ask: !!r.ask });
+      for (const r of await getQuery("SELECT owner, mode, ask, updated, mode_at FROM cam_access")) {
+        if (MODES.includes(r.mode)) a.set(low(r.owner), { mode: r.mode, ask: !!r.ask, modeAt: Number(r.mode_at != null ? r.mode_at : r.updated) || 0 });
       }
       ACCESS = a;
       const m = new Map();
@@ -94,6 +106,7 @@ function init() {
         m.get(o).set(String(r.user_id), { username: r.username || "", created: Number(r.created) || 0, via: r.via || "" });
       }
       ALLOW = m;
+      LOADED = true;
       // open requests and live grants survive a restart (their notices to Pepe start over)
       const t = now();
       for (const r of await getQuery("SELECT * FROM cam_requests WHERE (status = 'pending' AND at > ?) OR (status = 'ok' AND until > ?)", [t - REQ_TTL_MS, t])) {
@@ -110,6 +123,13 @@ function init() {
 function accessOf(owner) {
   const a = ACCESS.get(low(owner));
   return a ? { mode: a.mode, ask: a.ask } : { mode: DEFAULT_MODE, ask: true };
+}
+/** stagefix site (D-9): when the owner last CHANGED their mode (ms; 0 = never chose - the default applies). onair.js: a `members`
+ *  cam goes on Pepe's public stream only by an on-air OK given AFTER this. stagefix fix: a save that keeps the mode (the "others
+ *  can ask" switch, the same mode again) doesn't move it. Sync once init() ran. */
+function modeSince(owner) {
+  const a = ACCESS.get(low(owner));
+  return a ? a.modeAt || 0 : 0;
 }
 const allowed = (owner, userId) => { const m = ALLOW.get(low(owner)); return !!(m && m.has(String(userId))); };
 function openReq(owner, userId, t = now()) {
@@ -160,20 +180,30 @@ async function setMode(owner, mode, { ask, via = "web", userId = null, t = now()
   if (!LOGIN_RE.test(o)) return { ok: false, error: "That isn't a Camfrog name." };
   if (!MODES.includes(mode)) return { ok: false, error: "Pick everyone, members, followers or request." };
   const cur = accessOf(o);
-  const a = { mode, ask: typeof ask === "boolean" ? ask : cur.ask };
-  await runQuery(`INSERT INTO cam_access (owner, mode, ask, updated, via, user_id) VALUES (?, ?, ?, ?, ?, ?)
+  // stagefix fix: the mode's own clock moves only when the mode changes (no row yet = the default, members: choosing members
+  // keeps it at 0 - nothing changed)
+  const was = ACCESS.get(o);
+  const modeAt = mode !== cur.mode ? t : was ? was.modeAt || 0 : 0;
+  const a = { mode, ask: typeof ask === "boolean" ? ask : cur.ask, modeAt };
+  await runQuery(`INSERT INTO cam_access (owner, mode, ask, updated, via, user_id, mode_at) VALUES (?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(owner) DO UPDATE SET mode = excluded.mode, ask = excluded.ask, updated = excluded.updated, via = excluded.via,
-                  user_id = COALESCE(excluded.user_id, cam_access.user_id)`, [o, a.mode, a.ask ? 1 : 0, t, via === "chat" ? "chat" : "web", userId]);
+                  user_id = COALESCE(excluded.user_id, cam_access.user_id), mode_at = excluded.mode_at`,
+                 [o, a.mode, a.ask ? 1 : 0, t, via === "chat" ? "chat" : "web", userId, modeAt]);
   ACCESS.set(o, a);                          // 1.99aav: "everyone" is a choice now (the default is members), so it's kept too
   const ended = await recheck(o, t);
+  await mfRecheck(o);                        // micfollow: followers / on request -> off every pad's 🎙 mic stage at once
   console.log(`[camaccess] ${o}: ${a.mode}${a.mode !== "everyone" && a.mode !== "request" ? (a.ask ? " (others can ask)" : " (no asking)") : ""} via ${via}${ended ? `, ${ended} live viewer(s) ended` : ""}`);
-  return { ok: true, ...a, ended };
+  return { ok: true, mode: a.mode, ask: a.ask, ended };
+}
+/** micfollow: the mic stage re-checks this cam's owner (their mode) and forgets its cached viewer gates. Never throws. */
+async function mfRecheck(owner) {
+  try { await require("./micfollow").recheck(owner); } catch (e) { /* no mic follows */ }
 }
 /** End the live streams of viewers who no longer qualify (a tighter mode, someone taken off the list). */
 async function recheck(owner, t = now()) {
   let n = 0;
   for (const w of deps.liveWatchers(owner) || []) {
-    if (!w || !w.userId || w.ghost) continue;
+    if (!w || !w.userId || (w.ghost && !w.stage)) continue;     // stagefix site: 👻 never gets past a Stage tile (DF-43)
     if (await gate(owner, w.userId, t)) n += deps.dropViewer(owner, w.userId, "cam_access") || 0;
   }
   return n;
@@ -213,6 +243,7 @@ async function disallow(owner, target, { t = now() } = {}) {
   for (const r of REQ.values()) if (r.owner === o && r.userId === uid && r.status === "ok") { r.status = "ended"; r.until = t; }
   await runQuery("UPDATE cam_requests SET status = 'ended', until = ? WHERE owner = ? AND user_id = ? AND status = 'ok'", [t, o, uid]);
   const ended = await recheck(o, t);
+  await mfRecheck(o);
   return { ok: true, was: true, user: { username: b.username }, ended };
 }
 
@@ -340,9 +371,9 @@ function stats() {
 }
 
 module.exports = {
-  init, gate, accessOf, setMode, listAllow, allow, disallow, ask, askState, answer, pendingFor, forBot, prune, stats, recheck,
+  init, loaded: () => LOADED, gate, accessOf, modeSince, setMode, listAllow, allow, disallow, ask, askState, answer, pendingFor, forBot, prune, stats, recheck,
   MODES, DEFAULT_MODE, MSG, REQ_TTL_MS, GRANT_MS, REASK_MS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setDeps: (d) => { deps = Object.assign({}, deps, d || {}); },
-  _reset: () => { ACCESS = new Map(); ALLOW = new Map(); REQ.clear(); ASKED.clear(); ready = null; },
+  _reset: () => { ACCESS = new Map(); ALLOW = new Map(); REQ.clear(); ASKED.clear(); ready = null; LOADED = false; },
 };

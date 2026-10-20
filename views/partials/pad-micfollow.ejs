@@ -1,0 +1,46 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# micfollow: Pad settings → Stage → 🎙 Mic follows (micfollow.js ownerState). Locals: slug, room, mf. Client: public/js/pad-micfollow.js. %>
+<% if (typeof mf !== 'undefined' && mf) { %>
+<%# micfollow: 🎙 Mic follows (micfollow.js) - whoever holds the mic in the Camfrog room on this pad's stage. Off by default.
+    Client: public/js/pad-micfollow.js (POST /api/rooms/:slug/micfollow/settings + /exclude). %>
+<% const mfWhy_ = (w) => t('pad.settings.mf.why_off.' + w);
+   const mfStatus_ = !mf.site_on ? t('pad.settings.mf.status.cant', { why: mfWhy_('site_off') })
+     : mf.on && mf.running ? t('pad.settings.mf.status.running', { n: mf.tiles })
+     : mf.on && mf.why_off ? t('pad.settings.mf.status.cant', { why: mfWhy_(mf.why_off) })
+     : !mf.on && mf.can_run ? t('pad.settings.mf.status.ready')
+     : !mf.on && mf.run_why ? t('pad.settings.mf.status.cant', { why: mfWhy_(mf.run_why) }) : t('pad.settings.mf.status.off'); %>
+<div class="sb-card ps-card" id="micfollow">
+  <h3><%- t('pad.settings.mf.title') %></h3>
+  <p class="muted"><%- t('pad.settings.mf.what') %></p>
+  <p class="ps-mini" id="mfResponsible"><b><%- t('pad.settings.mf.responsible') %></b></p>
+  <form id="mfForm" class="settings ps-form" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/micfollow/settings">
+    <fieldset style="border:0;padding:0;margin:0;display:contents">
+      <legend class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"><%- t('pad.settings.mf.title') %></legend>
+      <label class="chk"><input type="checkbox" name="on"<%= mf.settings.on ? ' checked' : '' %>> <%- t('pad.settings.mf.on', { room: mf.room_name || room.title }) %></label>
+      <label><%- t('pad.settings.mf.layout') %><select name="layout">
+        <% mf.layouts.forEach((l_) => { %><option value="<%= l_ %>"<%= mf.settings.layout === l_ ? ' selected' : '' %>><%- t('pad.settings.mf.layout.' + l_) %></option><% }) %>
+      </select></label>
+      <label><%- t('pad.settings.mf.default') %><select name="default_view">
+        <% mf.default_views.forEach((d_) => { %><option value="<%= d_ %>"<%= mf.settings.default_view === d_ ? ' selected' : '' %>><%- t('pad.settings.mf.default.' + d_) %></option><% }) %>
+      </select></label>
+      <% const mfMaxP_ = mf.max_people_cap || 9; %><label><%- t('pad.settings.mf.max_people', { max: mfMaxP_ }) %><input type="number" name="max_people" min="1" max="<%= mfMaxP_ %>" value="<%= Math.min(mf.settings.max_people, mfMaxP_) %>"></label>
+      <label><%- t('pad.settings.mf.max_live', { max: mf.max_live_cap }) %><input type="number" name="max_live" min="1" max="<%= mf.max_live_cap %>" value="<%= Math.min(mf.settings.max_live, mf.max_live_cap) %>"></label>
+      <div class="row"><button type="submit" class="btn primary"><%- t('pad.settings.mf.save') %></button><span class="msg" id="mfMsg" role="status" aria-live="polite"></span></div>
+    </fieldset>
+  </form>
+  <p class="ps-mini" id="mfStatus" role="status"><%- mfStatus_ %><% if (mf.unproven_n > 0) { %> <%- t('pad.settings.mf.status.unproven', { n: mf.unproven_n }) %><% } %></p>
+  <h4><%- t('pad.settings.mf.excl.title') %></h4>
+  <div class="tblwrap"><table><thead><tr><th><%- t('pad.settings.mf.excl.who') %></th><th><%- t('pad.settings.mf.excl.until') %></th><th><%- t('pad.settings.mf.excl.why') %></th><th><%- t('pad.settings.mf.excl.by') %></th><th></th></tr></thead>
+    <tbody id="mfExRows" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/micfollow/exclude" data-list="<%= JSON.stringify(mf.excluded) %>"></tbody></table></div>
+  <form id="mfExForm" class="row" autocomplete="off">
+    <%# which kind of name: a PATV username and a Camfrog login can be the same text for two different people %>
+    <select name="kind" aria-label="<%- t('pad.settings.mf.excl.kind') %>"><option value="camfrog" selected><%- t('pad.settings.mf.excl.kind_camfrog') %></option><option value="patv"><%- t('pad.settings.mf.excl.kind_patv') %></option></select>
+    <input type="text" name="name" maxlength="60" required placeholder="<%- t('pad.settings.mf.excl.name') %>" aria-label="<%- t('pad.settings.mf.excl.name') %>">
+    <select name="hours" aria-label="<%- t('pad.settings.mf.excl.until') %>"><option value="1"><%- t('pad.settings.mf.excl.h1') %></option><option value="24" selected><%- t('pad.settings.mf.excl.h24') %></option><option value="0"><%- t('pad.settings.mf.excl.always') %></option></select>
+    <button type="submit" class="btn danger"><%- t('pad.settings.mf.excl.add') %></button>
+  </form>
+  <p class="msg" id="mfExMsg" role="status" aria-live="polite"></p>
+  <p class="muted"><%- t('pad.settings.mf.hint') %></p>
+</div>
+<script src="/public/js/pad-micfollow.js?v=3" defer></script>
+<% } %>

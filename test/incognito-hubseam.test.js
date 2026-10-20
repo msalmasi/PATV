@@ -21,7 +21,10 @@ const HO = require(path.join(repo, "huboutbox"));
 const HH = require(path.join(repo, "hubhidden"));
 const cf = (l) => "cfh:" + HH.loginHash(l);                 // 1.99acm: a chat login leaves v1 only as its hash (seam plan D-6)
 
-const outbox = () => getQuery("SELECT topic, entity, payload, dedupe_key FROM hub_outbox WHERE topic = 'privacy/changed' ORDER BY id");
+// the incognito rows (1.99add refix: a website ON and Pepe's ON report also hide the key's hash in the sticky hidden set at once -
+// hubhidden.js - and its "hh:" trigger row follows; hhRows() reads those)
+const outbox = () => getQuery("SELECT topic, entity, payload, dedupe_key FROM hub_outbox WHERE topic = 'privacy/changed' AND entity NOT LIKE 'hh:%' ORDER BY id");
+const hhRows = async () => (await getQuery("SELECT entity FROM hub_outbox WHERE topic = 'privacy/changed' AND entity LIKE 'hh:%' ORDER BY id")).map((r) => r.entity);
 const payloads = async () => (await outbox()).map((r) => ({ ...JSON.parse(r.payload), entity: r.entity, dedupe: r.dedupe_key }));
 
 test.before(async () => {
@@ -54,9 +57,11 @@ test("a web request: one 'requested' row in the action's transaction (ON and OFF
                    "a legacy id without CHAT_GENESIS_NS: no hub account id (acct null), the raw id as v1_user");
   assert.ok(!JSON.stringify(p).includes("203.0.113.9"), "no address");
   assert.ok(!/alicecf/i.test(JSON.stringify(p.map((x) => ({ ...x, dedupe: null })))), "no login in what the hub gets");
+  assert.deepEqual(await hhRows(), ["hh:" + HH.hash("alicecf")], "1.99add refix: the ON hides her hash at once (before Pepe answers)");
   const { id: id2 } = await I.request("u-alice", false);
   const q = await payloads();
   assert.equal(q.length, 2);
+  assert.equal((await hhRows()).length, 1, "an OFF un-hides nothing until Pepe confirms it");
   assert.equal(q[1].value, false);
   assert.equal(q[1].dedupe, "incog-req:" + id2);
   // an account with no chat login -> its account key u:<id>

@@ -21,7 +21,7 @@
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
   // 1.99jx: in the viewer's zone with its label (tz.js)
   const dt = (ms) => (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(ms, 'datetime');
-  const whoLabel = { everyone: 'Everyone signed in', linked: 'Verified accounts (a verified email, a linked chat account, Discord, Twitch, Telegram, Google or Plex)', followers: 'Followers of the pad', approved: 'Approved posters only' };
+  const whoLabel = { everyone: 'Everyone signed in', linked: 'Verified accounts (a verified email, a linked chat account, Discord, Twitch, Telegram, Google, Apple or Plex)', followers: 'Followers of the pad', approved: 'Approved posters only' };
   const href = '/p/' + encodeURIComponent(slug);
   // 1.99ack: a pad's admin lock (set it / change past it) = feed.admin_lock (siteperms.js, locked: Admins)
   const lockAdmin = (locals.can || new Function(include('../siteperms-core.js'))().viewCan(locals))('feed.admin_lock', viewer || null);
@@ -29,6 +29,8 @@
     ['general', '🏷️', 'General'], ['stage', '📺', 'Stage'], ['feed', '📝', 'Feed'], ['pepe', '🐸', 'Pepe'],
     ['rules', '📜', 'Rules'], ['moderation', '🛡️', 'Moderation'], ['camfrog', '📡', 'Camfrog room'],
   ].filter((t) => t[0] !== 'camfrog' || camfrog);
+  // CL3: 💬 Chat (padchat.js) - the pad chat's history window, search, downloads, room mods (Camfrog-backed pads)
+  if (typeof chat !== 'undefined' && chat) tabs.push(['chat', '💬', t('pad.settings.chat.tab')]);
   // 1.99ir: Flair & tags (padflair.js / feedtags.js) - its section is the last one on the page (not on profile pads)
   if (typeof flair !== 'undefined' && flair) tabs.push(['flair', '🎖️', 'Flair & tags']);
   if (typeof address !== 'undefined' && address) tabs.push(['address', '🔗', typeof connect !== 'undefined' && connect ? 'Address & platform' : 'Address']);   // 1.99iy: partials/pad-address.ejs
@@ -237,6 +239,7 @@
       </form>
       <p class="muted">Pepe's stream is always on every pad's stage. Slots are free unless you set a price; a slot fee goes half to this pad's vault (held for it until pad vaults open) and half to Fort Knox — your own bookings here go all to Fort Knox. Featuring can't be bought: you feature a slot for free, and the front page picks the liveliest pad (people can 🚀 boost a pad, split the same way). In chat, <code>!stage</code>, <code>!stage feature &lt;name&gt;</code>, <code>!stage cut</code> and <code>!stage slots &lt;n&gt;</code> work for you in this pad's Camfrog room.</p>
     </div>
+    <% if (typeof camfrog !== 'undefined' && camfrog && typeof mf !== 'undefined' && mf) { %><%- include('partials/pad-micfollow', { slug, room, mf }) %><% } %><%# micfollow: 🎙 Mic follows %>
     <div class="sb-card ps-card" id="stagebans">
       <h3>Banned from this pad's stage</h3>
       <form id="banForm" class="row"><input type="text" name="username" placeholder="PATV or Camfrog name" required aria-label="Name to ban">
@@ -492,6 +495,46 @@
   </section>
   <% } %>
 
+  <%# ─────────────── 💬 Chat (CL3, padchat.js; public/js/pad-chat-settings.js wires it) ─────────────── %>
+  <% if (typeof chat !== 'undefined' && chat) { const C_ = chat; const dis_ = C_.locked && !C_.can_unlock ? 'disabled' : '';
+       const presetSel_ = C_.window_s == null ? 'all' : C_.presets.includes(C_.window_s) ? String(C_.window_s) : 'custom'; %>
+  <section class="ps-sec" id="chat" role="tabpanel" aria-labelledby="tab-chat">
+    <h2 class="ps-h"><span class="ds-ic" aria-hidden="true">💬</span> <%- t('pad.settings.chat.h') %></h2>
+    <p class="ps-what"><%- t('pad.settings.chat.what') %></p>
+    <div class="sb-card ps-card pcs" id="padChatSet" data-slug="<%= slug %>">
+      <div class="ds-note warn pcs-lock" id="pcsLocked" <%= C_.locked ? '' : 'hidden' %>><span class="ds-ic" aria-hidden="true">🔒</span><div><%- t('pad.settings.chat.locked') %></div></div>
+      <div class="ds-field pcs-win">
+        <label for="pcsWin"><%- t('pad.settings.chat.window_label') %></label>
+        <select class="ds-select" id="pcsWin" <%= dis_ %>>
+          <option value="all" <%= presetSel_ === 'all' ? 'selected' : '' %>><%- t('pad.settings.chat.preset_all') %></option>
+          <% C_.presets.forEach((s) => { %><option value="<%= s %>" <%= presetSel_ === String(s) ? 'selected' : '' %>><%- t('pad.settings.chat.preset_' + s) %></option><% }) %>
+          <option value="custom" <%= presetSel_ === 'custom' ? 'selected' : '' %>><%- t('pad.settings.chat.preset_custom') %></option>
+        </select>
+        <div class="ds-row pcs-custom" id="pcsCustom" <%= presetSel_ === 'custom' ? '' : 'hidden' %>>
+          <input class="ds-in num" id="pcsNum" type="number" min="1" step="1" inputmode="numeric" aria-label="<%- t('pad.settings.chat.custom_n') %>" <%= dis_ %>>
+          <select class="ds-select" id="pcsUnit" aria-label="<%- t('pad.settings.chat.custom_unit') %>" <%= dis_ %>>
+            <option value="60"><%- t('pad.settings.chat.unit_min') %></option><option value="3600"><%- t('pad.settings.chat.unit_h') %></option><option value="86400"><%- t('pad.settings.chat.unit_d') %></option>
+          </select>
+          <button type="button" class="ds-btn sm" id="pcsCustomSave" <%= dis_ %>><%- t('pad.settings.chat.custom_save') %></button>
+        </div>
+        <p class="ds-hint" id="pcsCap" aria-live="polite"></p>
+      </div>
+      <% [['search', C_.search, 'search_label', 'search_hint'], ['downloads', C_.downloads, 'downloads_label', C_.downloads_default ? 'downloads_hint_on' : 'downloads_hint_off'],
+          ['mods_all', C_.mods_all, 'mods_all_label', 'mods_all_hint']].forEach(([k, v, lab, hint]) => { %>
+      <div class="ds-row between pcs-row">
+        <div class="pcs-txt"><b id="pcsL-<%= k %>"><%- t('pad.settings.chat.' + lab) %></b><p class="ds-meta"><%- t('pad.settings.chat.' + hint, { days: C_.mod_days }) %></p></div>
+        <label class="ds-switch"><input type="checkbox" data-pcs="<%= k %>" aria-labelledby="pcsL-<%= k %>" <%= v ? 'checked' : '' %> <%= dis_ %>><span></span></label>
+      </div>
+      <% }) %>
+      <p class="ds-meta pcs-note"><%- t('pad.settings.chat.exempt_note', { days: C_.mod_days }) %></p>
+      <p class="ds-meta pcs-note"><%- t('pad.settings.chat.forward_only') %></p>
+      <div class="pcs-open" id="pcsOpen"></div>
+      <p class="msg" id="pcsMsg" role="status" aria-live="polite"></p>
+    </div>
+    <script type="application/json" id="pcsState"><%- JSON.stringify(C_).replace(/</g, '\\u003c') %></script>
+  </section>
+  <% } %>
+
   <%# ─────────────── Flair & tags (1.99ir, padflair.js + feedtags.js; public/js/pad-flair.js draws it) ─────────────── %>
   <% if (typeof flair !== 'undefined' && flair) { %>
   <section class="ps-sec" id="flair" role="tabpanel" aria-labelledby="tab-flair">
@@ -560,7 +603,7 @@
   </div>
 </main>
 <script id="rmgState" type="application/json"><%- JSON.stringify(st).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/room-manage.js?v=3" defer></script>
+<script src="/public/js/room-manage.js?v=5" defer></script>
 <script src="/public/js/feed-roommod.js?v=4" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <% if (camfrog) { %><script src="/public/js/room-mod.js?v=12" defer></script><% } %>
@@ -570,5 +613,6 @@
 <script src="/public/js/pad-access.js?v=1" defer></script>
 <script src="/public/js/pad-cosmetics.js?v=4" defer></script>
 <% if (typeof flair !== 'undefined' && flair) { %><script src="/public/js/pad-flair.js?v=3" defer></script><% } %>
+<% if (typeof chat !== 'undefined' && chat) { %><link rel="stylesheet" href="/public/css/pad-chatset.css?v=1"><script src="/public/js/pad-chat-settings.js?v=1" defer></script><% } %>
 </body>
 </html>

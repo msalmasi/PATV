@@ -16,7 +16,7 @@
     catch (e) { return new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' '); }
   }
   var METHOD = {
-    password: _t('js.acct.m_password', 'Password'), google: 'Google', plex: 'Plex', telegram: 'Telegram', discord: 'Discord', twitch: 'Twitch',
+    password: _t('js.acct.m_password', 'Password'), google: 'Google', apple: 'Apple', plex: 'Plex', telegram: 'Telegram', discord: 'Discord', twitch: 'Twitch',
     chat: _t('js.acct.m_chat', 'Chat sign-in link'), claim: _t('js.acct.m_claim', 'Claim link'), legacy: _t('js.acct.m_legacy', 'Signed in before devices were listed')
   };
 
@@ -123,4 +123,48 @@
     }).catch(function () { eb.disabled = false; esay(_t('js.acct.failed', "Couldn't do that - try again."), true); });
   });
   exports_();
+
+  // ── CL10: your chat-log downloads (chatlogexport.js: GET /api/account/chatlog-downloads) - what you asked for in the last 90 days
+  // (the pad, the range, the format, how many lines, how it ended), never the files: PATV doesn't keep them. The card stays hidden
+  // until there is one, or downloads are on.
+  var cldl = document.getElementById('chatlogdl'), cldlList = document.getElementById('cldlList');
+  var tp = typeof window.__t === 'function' ? window.__t : function (k, d, v) {
+    if (d && typeof d === 'object') d = v && v.count === 1 ? d.one : d.other;
+    return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; });
+  };
+  var CLST = { streaming: _t('js.acct.cldl_streaming', 'being made'), failed: _t('js.acct.cldl_failed', 'didn’t finish'),
+               aborted: _t('js.acct.cldl_aborted', 'stopped'), unused: _t('js.acct.cldl_unused', 'link not used') };
+  var CLFMT = { html: 'HTML', txt: 'TXT', jsonl: 'JSONL' };
+  function day(ms) {
+    try { return new Date(Number(ms)).toLocaleDateString(document.documentElement.lang || undefined, { dateStyle: 'medium' }); }
+    catch (e) { return new Date(Number(ms)).toISOString().slice(0, 10); }
+  }
+  function cldls() {
+    if (!cldl || !cldlList) return;
+    fetch('/api/account/chatlog-downloads', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) return;
+      var rows = j.downloads || [];
+      if (!rows.length && !j.on) return;
+      cldl.hidden = false;
+      cldlList.textContent = '';
+      if (!rows.length) { cldlList.appendChild(document.createElement('li')).textContent = _t('js.acct.cldl_none', 'No chat-log downloads in the last 90 days.'); return; }
+      rows.forEach(function (x) {
+        var li = document.createElement('li');
+        li.appendChild(document.createTextNode(when(x.created) + ' · '));
+        if (x.pad && x.pad.slug) {
+          var a = document.createElement('a'); a.href = '/p/' + encodeURIComponent(x.pad.slug); a.textContent = x.pad.title || x.pad.slug;
+          li.appendChild(a);
+        } else li.appendChild(document.createTextNode(x.pad && x.pad.title ? x.pad.title : _t('js.acct.cldl_gone', 'a pad that’s gone')));
+        var bits = [];
+        if (x.from && x.to) bits.push(day(x.from) + ' → ' + day(Number(x.to) - 1));
+        bits.push(CLFMT[x.fmt] || String(x.fmt || '').toUpperCase());
+        if (x.items != null) bits.push(tp('js.acct.cldl_lines', { one: '{n} line', other: '{n} lines' }, { count: x.items, n: Number(x.items).toLocaleString(document.documentElement.lang || undefined) }));
+        if (x.sys) bits.push(_t('js.acct.cldl_sys', 'with joins, leaves and mic'));
+        if (CLST[x.state]) bits.push(CLST[x.state]);
+        li.appendChild(document.createTextNode(' · ' + bits.join(' · ')));
+        cldlList.appendChild(li);
+      });
+    }).catch(function () {});
+  }
+  cldls();
 })();

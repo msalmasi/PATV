@@ -248,6 +248,31 @@ test.before(async () => {
 });
 test.after(() => { if (server) server.close(); });
 
+// CL3 (cl-site, rebased onto the 18+ gate): /live's chat-history block carries the clock - `now` and the time floors (each
+// "now minus the pad's window") - and the signed join cursor `jc` its second, so two answers a moment apart differ there; which
+// floors it carries, and that a cursor is there, still count. Its capability flags (HIST_CAN) are the one deliberate difference:
+// chat history applies the 18+ rule WHATEVER the gate's switch says (adultgate.js's header; chatlog spec §3.2) - they are
+// compared on their own (histCan) by the OFF test below.
+const HIST_CAN = ["deep", "scroll", "search_ok", "find", "dl", "dl_full", "dl_signin", "signin"];
+function liveStable(d) {
+  if (!d || typeof d !== "object") return d;
+  const out = { ...d };
+  if (typeof out.jc === "string") out.jc = /^j1\./.test(out.jc) ? "j1" : out.jc;
+  if (!out.history || typeof out.history !== "object") return out;
+  const h = { ...out.history };
+  delete h.now;
+  if (h.floor && typeof h.floor === "object") h.floor = Object.keys(h.floor).sort();
+  for (const k of HIST_CAN) delete h[k];
+  out.history = h;
+  return out;
+}
+function histCan(d) {
+  if (!d || !d.history || typeof d.history !== "object") return null;
+  const o = {};
+  for (const k of HIST_CAN) if (k in d.history) o[k] = d.history[k];
+  return o;
+}
+
 // what the gated surfaces answer one viewer about one pad (the volatile bits left out)
 async function surfaces(k, u) {
   const P = PADS[k];
@@ -269,7 +294,7 @@ async function surfaces(k, u) {
   const card = (await require(path.join(repo, "roomsweb")).guideRows(!!u, u)).rows.find((x) => x.id === P.id);
   const listed = (await store.list({ author: U.alice.userId, viewer: u, limit: 100 })).posts.map((p) => p.title).filter((t) => t.endsWith("-" + k)).sort();
   require(path.join(repo, "dmembeds"))._clear();
-  return { live: { status: live.status, d: live.d }, np: np.d, sum: sum ? { mic: sum.mic, topic: sum.topic, count: sum.count, micCount: sum.micCount } : null,
+  return { live: { status: live.status, d: liveStable(live.d) }, histCan: histCan(live.d), np: np.d, sum: sum ? { mic: sum.mic, topic: sum.topic, count: sum.count, micCount: sum.micCount } : null,
            circle: circle ? JSON.parse(JSON.stringify(circle)) : null, media,
            audio: (await get("/p/" + P.slug + "/audio", u)).status, full: PA.full(u, P.id), gate: PA.adultGate(u, P.id),
            chal: { status: chal.status, d: chal.d }, cams: cams ? { status: cams.status, d: cams.d } : null, mixed,
@@ -302,7 +327,19 @@ test("OFF: marking a pad 18+ changes no byte of what its surfaces answer - every
     await rooms.setPage(PADS.pubx.id, { adult: false }, "test");
     let off18;
     try { off18 = await surfaces("pubx", who(v)); } finally { await rooms.setPage(PADS.pubx.id, { adult: true }, "test"); }
-    assert.deepEqual(on18, off18, v + ": identical with and without the 18+ flag while the switch is off");
+    const { histCan: canOn, ...restOn } = on18, { histCan: canOff, ...restOff } = off18;
+    assert.deepEqual(restOn, restOff, v + ": identical with and without the 18+ flag while the switch is off");
+    // CL3: chat history (deep links, scrollback, search, downloads) on an 18+ pad needs a signed-in, age-confirmed viewer even
+    // with the switch off (adultgate.confirmed - any mechanism); a viewer it lets in sees exactly what they see on a non-18+ pad
+    assert.ok(canOn && canOff, v + ": the live answer has the chat-history block");
+    const okAge = !!who(v) && (await AG.confirmed(who(v).userId));
+    if (okAge || !who(v)) assert.deepEqual(canOn, canOff, v + ": chat history the same with and without the flag");
+    else {
+      assert.equal(canOn.deep, false, v + ": no history on the 18+ pad without the age confirmation");
+      assert.equal(canOn.search_ok, false, v + ": no search either");
+      assert.equal(canOn.dl, false, v + ": no download either");
+      assert.equal(canOff.deep, true, v + ": the same pad without the flag: their history as before");
+    }
     assert.equal(on18.live.status, 200, v + ": the Public pad's live room is open, as today");
     assert.ok(on18.live.d.feed.some((x) => x.text === PADS.pubx.chat));
     assert.equal(on18.sum.mic.length, 1, v + ": mic names, as today");

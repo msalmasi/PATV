@@ -14,19 +14,41 @@
 //          its feed positions rely on monotonic ids; the hub heals from snapshots). 1.99acm: hub_hidden_h (Pepe's hidden_h
 //          set as prod's Pepe reported it - staging's Pepe repopulates it on his next sync) and hub_inbound_nonces, both
 //          BEFORE hub_outbox: prod's hh trigger fires on those deletes once staging's switches are back, and its rows must
-//          land in the outbox before the outbox is emptied, never after.
+//          land in the outbox before the outbox is emptied, never after. 1.99add: hub_hidden_meta (the list prod's Pepe sent
+//          last - staging's Pepe is another run) and hub_hidden_held (prod's batches waiting for prod's owner) go too.
+//          hub_hidden_set - the sticky hidden set - is NOT listed: the copy keeps prod's, so the people hidden on prod stay
+//          hidden in the prod chat lines staging now holds (staging's Pepe adds his own on his next sync).
 // If that fails, a second transaction only clears KEEP + EMPTY in the copy (staging starts with defaults: no keys, every
 // switch at its safe default). Exit 0 when either worked, 1 when the copy couldn't be made safe (the caller then keeps
 // staging's old DB). Prints table names and row counts only - never a row.
+// CL2: the pad chat archive (chatlog.js) is KEEP too - staging keeps its own archive, switches and hidden set, and prod's chat
+// never lands on staging. The archive's FTS triggers are dropped in the copy first (the site re-makes them at start), so
+// replacing chat_log costs no index work per row; the index is then emptied and re-filled from staging's rows (batches).
+// CL2 fix-up: so are the live feed's own tables (bridge_feed, bridge_rooms) - prod's rooms' live tails would otherwise sit in
+// staging's bridge_feed (nothing drops a room staging's Pepe never bridges) and staging's first archive switch-on would SEED
+// them into staging's archive. And every row the copy loses is overwritten with zeros (secure_delete): prod's chat text never
+// stays behind in the copy's free pages.
+// Train 3 review: when staging's archive lives in its own CHATLOG_DB (no chat_log in staging's myapp.db), the copy's chat_log and
+// chat_log_fts are DROPPED (after their rows go), not left empty - else staging's next start would find chat_log in myapp.db with
+// staging's own counters / started_at, keep the archive there and ignore staging's chatlog.db (a split).
 "use strict";
 const path = require("path");
 
+// CL2: chatlog.js TABLES (kept in step by test/refresh-staging-keep.test.js)
+const CHATLOG = ["chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
+                 "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views",
+                 "chatlog_exports", "chatlog_meta"];
+const CHATLOG_TRIGGERS = ["chat_log_ai", "chat_log_ad", "chat_log_au"];
+const INDEXABLE = "text IS NOT NULL AND k IN ('msg','tx','topic') AND rm_at IS NULL AND purged IS NULL";     // chatlog.INDEXABLE
+// CL2 fix-up: the pad chat's live feed (bridge.js) - the archive's seed reads bridge_feed, and its cursors must stay staging's own
+const LIVE_FEED = ["bridge_rooms", "bridge_feed"];
 const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings",          // keys + switches
-              "bot_route_log", "legacy_token_use", "legacy_token_daily", "events_auth_log", "bridge_spans"];   // logs
+              "bot_route_log", "legacy_token_use", "legacy_token_daily", "events_auth_log", "bridge_spans",   // logs
+              ...CHATLOG, ...LIVE_FEED];
 // hub_outbox LAST: the copy carries prod's triggers (huboutbox.init creates them on prod whatever the switches say), and with
 // staging's switches already restored a DELETE of a source table (hub_hidden_h's hh trigger) would write a row of prod's
 // data into the outbox just emptied - so every source table is emptied first, the outbox after them.
-const EMPTY = ["hub_hidden_h", "hub_inbound_nonces", "hub_outbox"];
+const EMPTY = ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"];
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
 
@@ -62,15 +84,51 @@ async function seqOf(db, schema, t) {
   catch (e) { return 0; }                                                    // no AUTOINCREMENT table there yet
 }
 
+/** CL2: the archive's FTS triggers out of the copy (chatlog.js re-makes them at start, after its FTS5 self-test). */
+async function dropChatlogTriggers(db) {
+  for (const t of CHATLOG_TRIGGERS) await run(db, `DROP TRIGGER IF EXISTS main.${q(t)}`);
+}
+/** CL2: the archive's FTS index of the copy emptied and re-filled from the chat_log rows it now has (staging's), in batches.
+ *  A copy without the index gets staging's own CREATE statement. -> {table, reindexed} | null (no index on either side) */
+async function reindexChatlog(db) {
+  const inCopy = await tableSql(db, "main", "chat_log_fts");
+  const inOld = await tableSql(db, "old", "chat_log_fts").catch(() => null);
+  if (!inCopy && !inOld) return null;
+  // Train 3 review: the copy's chat_log went (staging's archive lives in CHATLOG_DB, keep() below) - its index goes with it
+  if (inCopy && !(await tableSql(db, "main", "chat_log"))) {
+    await run(db, "INSERT INTO main.chat_log_fts (chat_log_fts) VALUES ('delete-all')");
+    await run(db, "DROP TABLE main.chat_log_fts");
+    return { table: "chat_log_fts", dropped: true };
+  }
+  if (!inCopy) await exec(db, inOld);                                       // unqualified CREATE VIRTUAL TABLE: lands in main
+  await run(db, "INSERT INTO main.chat_log_fts (chat_log_fts) VALUES ('delete-all')");
+  let n = 0;
+  if (await tableSql(db, "main", "chat_log")) {
+    for (let after = 0; ;) {
+      const rows = await all(db, `SELECT c, text, rt FROM main.chat_log WHERE c > ? AND ${INDEXABLE} ORDER BY c LIMIT 5000`, [after]);
+      if (!rows.length) break;
+      for (const r of rows) await run(db, "INSERT INTO main.chat_log_fts (rowid, text, rt) VALUES (?, ?, ?)", [r.c, r.text, r.rt]);
+      n += rows.length;
+      after = rows[rows.length - 1].c;
+    }
+  }
+  return { table: "chat_log_fts", reindexed: n };
+}
+
 /** Keep staging's own rows of the per-environment tables in the copy. -> [{table, kept | cleared}] */
 async function keep(db) {
   const out = [];
   await exec(db, "BEGIN IMMEDIATE");
   try {
+    await dropChatlogTriggers(db);                                           // CL2: before chat_log's rows are replaced
     for (const t of KEEP) {
       const inCopy = await tableSql(db, "main", t);
       const inOld = await tableSql(db, "old", t);
       if (inCopy) await run(db, `DELETE FROM main.${q(t)}`);
+      // Train 3 review: staging's chat archive lives in its CHATLOG_DB (no chat_log in its myapp.db) - prod's emptied chat_log must
+      // not stay in the copy: at staging's next start counters / started_at would say "the archive is in myapp.db" and staging's
+      // own chatlog.db would be ignored (a split). The copy mirrors staging's layout: the table goes (its indexes with it)
+      if (!inOld && inCopy && t === "chat_log") { await run(db, "DROP TABLE main.chat_log"); out.push({ table: t, kept: 0, dropped: true }); continue; }
       if (!inOld) { out.push({ table: t, kept: 0 }); continue; }
       if (!inCopy) await exec(db, inOld);                                    // unqualified CREATE: lands in main
       else await addMissingColumns(db, t);                                   // staging a release ahead: its newer columns too
@@ -81,6 +139,8 @@ async function keep(db) {
       const r = await run(db, `INSERT INTO main.${q(t)} (${cols}) SELECT ${cols} FROM old.${q(t)}`);
       out.push({ table: t, kept: r.changes || 0 });
     }
+    const fts = await reindexChatlog(db);                                    // CL2: the index follows staging's own rows
+    if (fts) out.push(fts);
     for (const t of EMPTY) {
       let inCopy = await tableSql(db, "main", t);
       const inOld = await tableSql(db, "old", t);
@@ -108,11 +168,13 @@ async function clearOnly(db) {
   const out = [];
   await exec(db, "BEGIN IMMEDIATE");
   try {
+    await dropChatlogTriggers(db);                                           // CL2: prod's chat_log goes without per-row index work
     for (const t of [...KEEP, ...EMPTY]) {
       if (!(await tableSql(db, "main", t))) continue;
       const r = await run(db, `DELETE FROM main.${q(t)}`);
       out.push({ table: t, cleared: r.changes || 0 });
     }
+    if (await tableSql(db, "main", "chat_log_fts")) await run(db, "INSERT INTO main.chat_log_fts (chat_log_fts) VALUES ('delete-all')");
     await exec(db, "COMMIT");
   } catch (e) {
     await exec(db, "ROLLBACK").catch(() => {});
@@ -126,6 +188,8 @@ async function main(oldFile, newFile, sqlite3 = require("sqlite3")) {
   const db = await open(sqlite3, newFile);
   try {
     await run(db, "PRAGMA busy_timeout = 10000");
+    // CL2 fix-up: what the copy deletes (prod's rows of KEEP / EMPTY, prod's FTS entries) is overwritten, not left in free pages
+    await all(db, "PRAGMA main.secure_delete = ON");
     let res;
     try {
       await run(db, "ATTACH DATABASE ? AS old", [oldFile]);
@@ -147,9 +211,9 @@ if (require.main === module) {
   const [oldFile, newFile] = process.argv.slice(2);
   if (!oldFile || !newFile) { console.error("usage: node keep-staging-tables.js <staging's current DB> <the fresh copy>"); process.exit(2); }
   main(path.resolve(oldFile), path.resolve(newFile)).then((r) => {
-    const parts = r.tables.map((x) => x.table + " " + (x.kept != null ? x.kept : "-" + x.cleared));
+    const parts = r.tables.map((x) => x.table + " " + (x.dropped ? "dropped" : x.kept != null ? x.kept : x.reindexed != null ? "reindexed " + x.reindexed : "-" + x.cleared));
     console.log((r.mode === "kept" ? "kept staging's own tables: " : "cleared prod's per-environment tables: ") + parts.join(", "));
   }, (e) => { console.error("the per-environment tables couldn't be made safe: " + e.message); process.exit(1); });
 }
 
-module.exports = { main, keep, clearOnly, KEEP, EMPTY };
+module.exports = { main, keep, clearOnly, KEEP, EMPTY, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };

@@ -5,6 +5,7 @@
   if (!f) return;
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d) { return d; };
   var c = document.getElementById('delConfirm'), pw = document.getElementById('delPw'), btn = document.getElementById('delBtn'), st = document.getElementById('delStatus');
+  var hl = document.getElementById('delHideLines');
   var want = c ? c.getAttribute('data-want') : '';
   function say(msg, bad) { st.textContent = msg || ''; st.className = 'status ' + (bad ? 'err' : 'ok'); }
   function check() { btn.disabled = !c || c.value.trim() !== want; }
@@ -17,7 +18,8 @@
     btn.disabled = true;
     say(_t('js.acctdel.working', 'Scheduling…'));
     fetch('/api/account/delete', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' },
-      body: JSON.stringify({ confirm: c.value.trim(), password: pw ? pw.value : '' }) })
+      // CL6: "Also hide my past public chat lines" (unticked by default)
+      body: JSON.stringify({ confirm: c.value.trim(), password: pw ? pw.value : '', hide_lines: !!(hl && hl.checked) }) })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (j) {
         if (j && j.ok) {

@@ -93,6 +93,15 @@ const feedReady = runQuery(`CREATE TABLE IF NOT EXISTS achievement_feed (
     id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT, badgeId TEXT, patPaid INTEGER DEFAULT 0,
     created DATETIME DEFAULT CURRENT_TIMESTAMP, announced INTEGER DEFAULT 0)`).catch((e) => console.error("[achievements] feed:", e));
 
+/** 🍀 / 🍏: this account has a Google / Apple link that was its identity's FIRST link to PATV (ssolinks sso_links.rewarded; NULL =
+ *  a link from before the column = first) - one Google / Apple account moved from account to account earns it once. 1 or 0. */
+async function ssoLinked(provider, userId) {
+  const r = await getQuery("SELECT COUNT(*) AS n FROM sso_links WHERE provider = ? AND user_id = ? AND COALESCE(rewarded, 1) = 1", [provider, userId])
+    // (an sso_links table without the column - ssolinks.init adds it at boot - counts every link)
+    .catch(() => getQuery("SELECT COUNT(*) AS n FROM sso_links WHERE provider = ? AND user_id = ?", [provider, userId]).catch(() => []));
+  return Math.min(1, Number(r[0] && r[0].n) || 0);
+}
+
 async function webMetrics(userId) {
   // a table this database doesn't have (a fresh install, a test) counts as 0 instead of failing the whole check
   const one = async (sql, p) => { const r = await getQuery(sql, p).catch(() => []); return (r[0] && Object.values(r[0])[0]) || 0; };
@@ -106,6 +115,8 @@ async function webMetrics(userId) {
   const voiceBackfilled = await voiceBackfill().then(() => true, () => false);
   // 1.99lu: 🍀 Google - linked from Edit profile or by Sign in with Google (ssolinks.js sso_links); same rule as Telegram
   const googleBackfilled = await googleBackfill().then(() => true, () => false);
+  // 🍏 Apple - linked from Settings -> Account or by Sign in with Apple (applesso.js, sso_links provider apple); same rule
+  const appleBackfilled = await appleBackfill().then(() => true, () => false);
   // 1.99mt: the feature achievements (gifts, Support PATV, Play from Plex, streams, clips, ...) - same rule, their own backfill
   const featBackfilled = await featureBackfill().then(() => true, () => false);
   // (skipped once the account holds every one of them - checkWeb runs on every spin)
@@ -151,7 +162,8 @@ async function webMetrics(userId) {
     plex_member: plex.plex_member || 0,
     plex_days: plex.plex_days || 0,
     telegram_linked: tgBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM telegram_links WHERE user_id = ?", [userId])) : 0,
-    google_linked: googleBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM sso_links WHERE provider = 'google' AND user_id = ?", [userId])) : 0,
+    google_linked: googleBackfilled ? await ssoLinked("google", userId) : 0,
+    apple_linked: appleBackfilled ? await ssoLinked("apple", userId) : 0,
     voice_cloned: voiceBackfilled ? await voiceCloned(userId) : 0,
     activity_streak: activityStreak,
     pad_streak: padSt.pad_streak || 0,
@@ -248,9 +260,9 @@ const webBackfill = (async () => {
   await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
   const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'web_backfill'");
   if (done.length) return;
-  // (the 📼 Plex, 📨 Telegram and 🍀 Google ones have their own quiet backfills, which also hand out their cosmetics)
+  // (the 📼 Plex, 📨 Telegram, 🍀 Google and 🍏 Apple ones have their own quiet backfills, which also hand out their cosmetics)
   const PLEX_METRICS_ = ["plex_linked", "plex_member", "plex_days"];
-  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...VOICE_METRICS, ...FEATURE_METRICS,
+  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", "apple_linked", ...VOICE_METRICS, ...FEATURE_METRICS,
                                                          ...require("./plexpad").METRICS, ...require("./achsocial").METRICS, "activity_streak", "pad_streak", "pad_regular_streak"].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
@@ -361,6 +373,38 @@ function googleBackfill() {
   return googleBackfilling;
 }
 
+// Once, quietly give 🍏 Core Member (cf_apple_linked) to the accounts that already have Apple linked (Settings -> Account ->
+// Connections, or Sign in with Apple) - badge + its cosmetic unlock only: no XP, PAT or announcement. Runs before any Apple
+// achievement check (ssolinks.js addLink, webMetrics), so only links made after it are announced. The same as Google's.
+const APPLE_METRICS = ["apple_linked"];
+let appleBackfilling = null;
+function appleBackfill() {
+  if (!appleBackfilling) {
+    appleBackfilling = (async () => {
+      await ready;
+      await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
+      const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'apple_backfill'");
+      if (done.length) return { done: true, already: true, given: 0 };
+      const al = catalog.filter((a) => a.side === "web" && APPLE_METRICS.includes(a.metric));
+      // no sso_links table (a fresh install / a test) = nobody linked yet
+      const users = await getQuery("SELECT DISTINCT user_id FROM sso_links WHERE provider = 'apple' AND user_id IS NOT NULL AND COALESCE(rewarded, 1) = 1")
+        .catch(() => getQuery("SELECT DISTINCT user_id FROM sso_links WHERE provider = 'apple' AND user_id IS NOT NULL").catch(() => []));
+      const given = [];
+      for (const u of users) {
+        for (const a of al) {
+          const r = await award({ userId: u.user_id }, a.id, null, { silent: true });
+          if (r.ok && r.awarded) given.push({ userId: u.user_id, badgeId: a.id });
+        }
+      }
+      await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES ('apple_backfill', ?)",
+                     [JSON.stringify({ at: new Date().toISOString(), users: users.length, given: given.length })]);
+      console.log(`[achievements] apple backfill: ${given.length} badge(s) given quietly to ${users.length} linked account(s)`);
+      return { done: true, given: given.length, users: users.length, list: given };
+    })().catch((e) => { appleBackfilling = null; throw e; });
+  }
+  return appleBackfilling;
+}
+
 // 1.99wn: 🦜 Voice of the Pond (cf_voice_clone) - cloned your own voice. Counts a !clonemyvoice consent whose VoiceBox profile
 // was made (voice_consents.voice_id is set only by voiceclone.created, when the consent goes active; review / denied / failed /
 // expired never set it, and a later revocation keeps it - achievements are for keeps), and a voice cloned before consent
@@ -457,8 +501,9 @@ async function featureMetrics(userId) {
                             WHERE q.user_id = ? AND json_array_length(q.items) >= 3 AND s.went_live IS NOT NULL`, [userId]),
     plex_requests: await one("SELECT COUNT(*) FROM media_requests WHERE user_id = ? AND status IN ('approved', 'partial', 'available')", [userId]),
     // 🎥 your own stream on a stage (RTMP / browser / WHIP), not an embed or a 📼 library play
+    // stagefix site: nor a 🎬 cam slot - someone else's Camfrog cam a pad's owner put up (its userId is whoever put it there)
     streams: await one(`SELECT COUNT(*) FROM stage_slots WHERE userId = ? AND went_live IS NOT NULL
-                        AND COALESCE(mode, 'stream') = 'stream' AND COALESCE(source, '') != 'library'`, [userId]),
+                        AND COALESCE(mode, 'stream') = 'stream' AND COALESCE(source, '') NOT IN ('library', 'cam')`, [userId]),
     stream_featured: Math.min(1, await one("SELECT COUNT(*) FROM ach_marks WHERE userId = ? AND mark = 'stream_featured'", [userId])),
     // 🎙 mic clips you saved (chat !clipmic or the website's 🔊 Clip both post through micclip.js)
     mic_clips: await one(`SELECT COUNT(*) FROM feed_voices v JOIN feed_posts p ON p.id = v.post_id
@@ -488,7 +533,7 @@ function featureBackfill() {
       // 🎥 featured slots that are still marked featured: auto-featured, or featured by someone other than the streamer
       await runQuery(`INSERT OR IGNORE INTO ach_marks (userId, mark, created)
                       SELECT s.userId, 'stream_featured', COALESCE(s.went_live, 0) FROM stage_slots s LEFT JOIN rooms_registry r ON r.room_id = s.room_id
-                      WHERE s.featured = 1 AND s.went_live IS NOT NULL AND COALESCE(s.mode, 'stream') = 'stream' AND COALESCE(s.source, '') != 'library'
+                      WHERE s.featured = 1 AND s.went_live IS NOT NULL AND COALESCE(s.mode, 'stream') = 'stream' AND COALESCE(s.source, '') NOT IN ('library', 'cam')
                         AND (s.feature_by = 'auto' OR (s.feature_by = 'owner' AND COALESCE(r.owner_user_id, '') != s.userId))`).catch(() => {});
       const ach = catalog.filter((a) => a.side === "web" && FEATURE_METRICS.includes(a.metric));
       const SRC = [
@@ -558,5 +603,6 @@ function awardLogin(login, badgeId, { silent = false } = {}) {
 }
 
 module.exports = { award, awardCount, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS, googleBackfill, GOOGLE_METRICS,
+                   appleBackfill, APPLE_METRICS,
                    voiceBackfill, voiceCloned, VOICE_METRICS,
                    featureBackfill, featureMetrics, FEATURE_METRICS, mark, poke, webMetrics, awardLogin };

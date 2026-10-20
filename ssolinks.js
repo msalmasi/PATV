@@ -1,5 +1,5 @@
-// ssolinks.js — what every single-sign-on method shares (1.99lb): Telegram (telegramsso.js) and Google (googlesso.js)
-// go through the SAME steps as Sign in with Plex (plexsso.js, 1.99jr), so the rules are identical:
+// ssolinks.js — what every single-sign-on method shares (1.99lb): Telegram (telegramsso.js), Google (googlesso.js) and
+// Apple (applesso.js) go through the SAME steps as Sign in with Plex (plexsso.js, 1.99jr), so the rules are identical:
 //
 //   1. the provider proves an identity (Telegram: the Login Widget's signed data; Google: an OpenID Connect ID token)
 //   2. LINKED (an explicit, proven link to a PATV account) -> signed in through user.controller finishLogin, the one
@@ -16,16 +16,28 @@
 //              link_source 'self', proof 'login_widget' (the bridge's own is proof 'start_code')
 //   google     sso_links (here): provider 'google', subject = the ID token's `sub` (never the email), link_source
 //              'self', proof 'oidc'. One Google account per PATV account and vice versa.
+//   apple      sso_links too (applesso.js): provider 'apple', subject = Apple's `sub` (stable per developer team - v2's
+//              identity service imports these rows by it), proof 'oidc'; refresh_token_enc = Apple's refresh token,
+//              AES-256-GCM encrypted (unlinking revokes it at Apple); email_relay = 1 for a privaterelay.appleid.com
+//              address (contact only); email_off = 1 while Apple says forwarding to it is off.
 //   plex       plex_members (plexmembers.js), unchanged
 //
 // The last-method guard: an account must keep a way to sign in. users.password_set = 0 marks an account whose password
 // is the random one an SSO sign-up gave it (set back to 1 when the member sets / resets a password; NULL = an older
-// account, treated as having one). Unlinking Plex / Telegram / Google is refused when it's the last method left.
+// account, treated as having one). Unlinking Plex / Telegram / Google / Apple is refused when it's the last method left - the
+// check and the unlink in one transaction (unlinkGuarded), so two unlinks at once can't both pass it.
 //
-//   sso_links   provider, subject, user_id, link_source, proof, email (display only), name, linked_at
+//   sso_links   provider, subject, user_id, link_source, proof, email (display only), name, linked_at,
+//               refresh_token_enc, token_at (when it was stored: Apple's notifications compare against it),
+//               email_relay, email_off, email_event_at (the newest email event applied) (Apple),
+//               rewarded (1 = this was the identity's FIRST link to any PATV account: only such a link counts for the
+//               link achievement - one Apple / Google account can't earn it again on account after account)
 //   sso_used    k PK, at          single-use keys (a Telegram widget hash) so a captured sign-in can't be replayed
+//   sso_rewarded k PK (SHA-256 of provider:subject), provider, at   - identities whose link achievement was already earned
+//               (kept when the link or the account goes, like welcome_bonus's identity keys - it's what stops the farming)
 "use strict";
-const { runQuery, getQuery } = require("./dbUtils");
+const crypto = require("crypto");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const TTL = 10 * 60 * 1000;
 let clock = () => Date.now();
@@ -40,7 +52,28 @@ function init() {
         link_source TEXT NOT NULL DEFAULT 'self', proof TEXT NOT NULL, email TEXT, name TEXT, linked_at INTEGER NOT NULL,
         PRIMARY KEY (provider, subject))`);
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS sso_links_user ON sso_links (provider, user_id)");
+      // Sign in with Apple (applesso.js): the encrypted refresh token (revoked at Apple on unlink) + the relay-address flags
+      const have = (await getQuery("SELECT name FROM pragma_table_info('sso_links')")).map((c) => c.name);
+      for (const [c, sql] of [["refresh_token_enc", "ALTER TABLE sso_links ADD COLUMN refresh_token_enc TEXT"],
+                              ["token_at", "ALTER TABLE sso_links ADD COLUMN token_at INTEGER"],
+                              ["email_relay", "ALTER TABLE sso_links ADD COLUMN email_relay INTEGER"],
+                              ["email_off", "ALTER TABLE sso_links ADD COLUMN email_off INTEGER"],
+                              ["email_event_at", "ALTER TABLE sso_links ADD COLUMN email_event_at INTEGER"],
+                              ["rewarded", "ALTER TABLE sso_links ADD COLUMN rewarded INTEGER"]]) {
+        if (have.includes(c)) continue;
+        try { await runQuery(sql); }
+        catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+      }
       await runQuery("CREATE TABLE IF NOT EXISTS sso_used (k TEXT PRIMARY KEY, at INTEGER NOT NULL)");
+      await runQuery("CREATE TABLE IF NOT EXISTS sso_rewarded (k TEXT PRIMARY KEY, provider TEXT NOT NULL, at INTEGER NOT NULL)");
+      if (!have.includes("rewarded")) {
+        // the links made before this column: each was its identity's first (one row per identity) - recorded, so a later link
+        // of the same identity to another account doesn't earn the link achievement again
+        for (const l of await getQuery("SELECT provider, subject FROM sso_links")) {
+          await runQuery("INSERT OR IGNORE INTO sso_rewarded (k, provider, at) VALUES (?, ?, ?)", [rewardKey(l.provider, l.subject), l.provider, clock()]);
+        }
+        await runQuery("UPDATE sso_links SET rewarded = 1 WHERE rewarded IS NULL");
+      }
       const cols = await getQuery("SELECT name FROM pragma_table_info('users')");
       if (cols.length && !cols.some((c) => c.name === "password_set")) {
         try { await runQuery("ALTER TABLE users ADD COLUMN password_set INTEGER"); }
@@ -76,24 +109,45 @@ async function linkedUser(provider, subject) {
   const l = await linkBySubject(provider, subject);
   return l && l.link_source === "self" ? account(l.user_id) : null;
 }
-/** Link (provider, subject) to userId. Refuses a subject linked elsewhere and a second one of the same provider. */
-async function addLink(provider, userId, { subject, proof, email, name } = {}) {
+// the link achievements' quiet backfills (achievements.js), per provider: 🍀 I'm Feeling Lucky (Google), 🍏 Core Member (Apple)
+const LINK_BACKFILL = { google: "googleBackfill", apple: "appleBackfill" };
+/** The sso_rewarded key of an identity (a hash: the table outlives the link and the account). */
+function rewardKey(provider, subject) { return crypto.createHash("sha256").update("sso-reward:" + provider + ":" + String(subject)).digest("hex"); }
+/**
+ * Link (provider, subject) to userId. Refuses a subject linked elsewhere and a second one of the same provider.
+ * email / name are display only (a re-link keeps the old ones when the provider sends none - Apple sends them once);
+ * secret = an encrypted provider token (Apple's refresh token, applesso.js; token_at = when it was stored), relay = the email
+ * is a private relay address.
+ */
+async function addLink(provider, userId, { subject, proof, email, name, secret, relay } = {}) {
   await init();
   const other = await linkBySubject(provider, subject);
   if (other && other.user_id !== userId) throw new Refuse(409, "That account is already linked to another PATV account - unlink it there first.", "E_TAKEN");
   const mine = await linkOf(provider, userId);
   if (mine && mine.subject !== String(subject)) throw new Refuse(409, "This PATV account already has one linked - unlink it first.", "E_HAS_OTHER");
+  const t = clock();
   if (mine) {
-    await runQuery("UPDATE sso_links SET email = ?, name = ? WHERE provider = ? AND subject = ?", [email || null, name || null, provider, String(subject)]);
+    await runQuery(`UPDATE sso_links SET email = COALESCE(?, email), name = COALESCE(?, name), refresh_token_enc = COALESCE(?, refresh_token_enc),
+                    token_at = CASE WHEN ? IS NULL THEN token_at ELSE ? END, email_relay = CASE WHEN ? IS NULL THEN email_relay ELSE ? END
+                    WHERE provider = ? AND subject = ?`,
+                   [email || null, name || null, secret || null, secret || null, t, email || null, relay ? 1 : 0, provider, String(subject)]);
     return { already: true };
   }
-  // 1.99lu: accounts linked before 🍀 I'm Feeling Lucky existed get it quietly first, so only this link is announced
-  if (provider === "google") await achievementsMod().googleBackfill().catch((e) => console.error("[sso] achievement backfill:", e.message));
-  await runQuery(`INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, name, linked_at) VALUES (?, ?, ?, 'self', ?, ?, ?, ?)`,
-    [provider, String(subject), userId, proof, email || null, name || null, clock()]);
-  // 1.99lu: 🍀 I'm Feeling Lucky (+ its cosmetic) - XP, PAT from the achievements flow, announced by Pepe; once per account.
-  // Every Google link comes through here: Edit profile -> Connections, "I already have an account", a new SSO account.
-  if (provider === "google") await achievementsMod().checkWeb(userId).catch(() => {});
+  // 1.99lu: accounts linked before 🍀 I'm Feeling Lucky existed get it quietly first, so only this link is announced (Apple: the same)
+  if (LINK_BACKFILL[provider]) await achievementsMod()[LINK_BACKFILL[provider]]().catch((e) => console.error("[sso] achievement backfill:", e.message));
+  // the identity's first link to PATV ever? Only that one counts for the link achievement (an Apple / Google account moved from
+  // account to account - unlink, link elsewhere; or sign up, set a password, unlink, sign up again - earns it once, not each time)
+  // (one transaction: a link that fails to insert - another tab won the race - doesn't use up the identity's achievement)
+  await tx(async () => {
+    const first = await runQuery("INSERT OR IGNORE INTO sso_rewarded (k, provider, at) VALUES (?, ?, ?)", [rewardKey(provider, subject), provider, t]);
+    await runQuery(`INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, name, linked_at, refresh_token_enc, token_at, email_relay, rewarded)
+                    VALUES (?, ?, ?, 'self', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [provider, String(subject), userId, proof, email || null, name || null, t, secret || null, secret ? t : null, relay ? 1 : null, first && first.changes ? 1 : 0]);
+  });
+  // 1.99lu: 🍀 I'm Feeling Lucky / 🍏 Core Member (+ its cosmetic) - XP, PAT from the achievements flow, announced by Pepe; once
+  // per account AND once per identity (sso_links.rewarded). Every Google / Apple link comes through here: Settings -> Account ->
+  // Connections, "I already have an account", a new SSO account.
+  if (LINK_BACKFILL[provider]) await achievementsMod().checkWeb(userId).catch(() => {});
   return { already: false };
 }
 async function removeLink(provider, userId) {
@@ -112,7 +166,7 @@ async function markPassword(userId, isSet) {
   try { await init(); await runQuery("UPDATE users SET password_set = ? WHERE userId = ?", [isSet ? 1 : 0, String(userId || "")]); }
   catch (e) { console.error("[sso] password_set:", e.message); }
 }
-/** The ways this account can sign in: password, twitch, discord, plex, telegram, google. */
+/** The ways this account can sign in: password, twitch, discord, plex, telegram, google, apple. */
 async function methods(userId) {
   await init();
   const conf = require("./ssoconf");
@@ -130,6 +184,7 @@ async function methods(userId) {
     try { if (await require("./telegram").linkOf(userId)) out.push("telegram"); } catch (e) { /* no table */ }
   }
   if (conf.googleConfigured() && (await linkOf("google", userId))) out.push("google");
+  if (conf.appleConfigured() && (await linkOf("apple", userId))) out.push("apple");
   return out;
 }
 /** Throws E_LAST_METHOD when unlinking `method` would leave the account with no way to sign in. */
@@ -138,6 +193,21 @@ async function guardUnlink(userId, method) {
   if (m.some((x) => x !== method)) return true;
   if (!m.includes(method)) return true;           // not a sign-in method here (e.g. Telegram without the widget set up)
   throw new Refuse(409, "That's the only way you can sign in. Set a password first (Edit profile, Password), then unlink it.", "E_LAST_METHOD");
+}
+/**
+ * Unlink `method` under the last-method guard: the guard's check and remove() (which does the unlinking, inside the
+ * transaction) run in ONE dbUtils.tx. Transactions run one at a time, so two unlinks at once (Apple + Google from two tabs, or
+ * Telegram's /unlink + Plex) can't both pass the guard on the same "two methods left" and leave the account with no way in:
+ * the second one checks after the first one's delete. -> remove()'s result. Throws E_LAST_METHOD (nothing removed).
+ * Every guarded unlink goes through here (Google, Apple, Telegram, Plex); Apple's consent-revoked notification makes the same
+ * check inside its own transaction (applesso.onNotification).
+ */
+async function unlinkGuarded(userId, method, remove) {
+  await init();
+  return tx(async () => {
+    await guardUnlink(userId, method);
+    return remove();
+  });
 }
 
 // ── the shared sign-in flow ──
@@ -204,8 +274,11 @@ async function notifyLinked(user, providerLabel, what) {
 }
 
 function register(app, { addUser, authView }) {
-  // 1.99lu: the one-off quiet 🍀 I'm Feeling Lucky backfill for accounts already linked to Google (a no-op once done)
-  init().then(() => achievementsMod().googleBackfill()).catch((e) => console.error("[sso] setup:", e.message));
+  // 1.99lu: the one-off quiet 🍀 I'm Feeling Lucky backfill for accounts already linked to Google (a no-op once done); the
+  // 🍏 Core Member one for Apple the same way
+  // (each on its own: one failing never skips the other)
+  const ready = init();
+  for (const fn of ["googleBackfill", "appleBackfill"]) ready.then(() => achievementsMod()[fn]()).catch((e) => console.error(`[sso] setup (${fn}):`, e.message));
   const guard = require("./middleware/authGuard");
   const UC = () => require("./user.controller");
   const createLimit = guard.limiter({ max: 10, windowMs: 15 * 60 * 1000 });
@@ -225,7 +298,7 @@ function register(app, { addUser, authView }) {
     try { suggest = await UC().generateUniqueUsername(p.username || p.name || ""); } catch (e) { suggest = ""; }
     const P = PROVIDERS[p.provider];
     res.render("ssoNew", view(req, { sso: { provider: p.provider, label: P.label, icon: P.icon, who: p.handle ? "@" + p.handle : (p.name || p.username || P.label),
-      email: !!p.email, verified: !!p.email_verified, readsEmail: !!P.readsEmail }, suggest, next: p.next || "" }));
+      email: !!p.email, verified: !!p.email_verified, readsEmail: !!P.readsEmail, relay: !!p.relay, note: P.note || null }, suggest, next: p.next || "" }));
   });
 
   app.post("/auth/sso/create", addUser, async (req, res) => {
@@ -269,6 +342,6 @@ function register(app, { addUser, authView }) {
 
 module.exports = {
   init, register, provider, PROVIDERS, pendingFor, setPending, signInOrPark, linkPendingTo, notifyLinked, useOnce,
-  linkOf, linkBySubject, linkedUser, addLink, removeLink, passwordSet, markPassword, methods, guardUnlink, Refuse, TTL,
+  linkOf, linkBySubject, linkedUser, addLink, removeLink, passwordSet, markPassword, methods, guardUnlink, unlinkGuarded, rewardKey, Refuse, TTL,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

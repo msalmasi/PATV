@@ -3,17 +3,19 @@
 //   Plex      plexsso.js     switch plex_sso (kept in mediaconf, where 1.99jr put it - plexhub.js reads it there)
 //   Telegram  telegramsso.js switch telegram_sso (here) + TELEGRAM_BOT_TOKEN in .env (the Login Widget's bot)
 //   Google    googlesso.js   switch google_sso (here) + GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in .env
+//   Apple     applesso.js    switch apple_sso (here) + APPLE_SERVICES_ID / APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY
+//                            (base64 of the .p8 PEM) in .env - all four, or the button stays hidden
 //
 // A switch is ON by default but a method only shows when its keys are configured too. The keys never leave the server:
 // not in a page, a log line or a response (status() reports configured yes/no only).
-// All three switches are on the admin card /admin/users#signin (GET/POST /api/admin/signin-methods, admins only).
+// All the switches are on the admin card /admin/users#signin (GET/POST /api/admin/signin-methods, admins only).
 //
 //   sso_settings   k -> JSON value (only keys of DEFAULTS are read)
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
-const DEFAULTS = { telegram_sso: true, google_sso: true };
+const DEFAULTS = { telegram_sso: true, google_sso: true, apple_sso: true };
 const S = { ...DEFAULTS };
 const TG_TOKEN_RE = /^(\d{3,15}):[A-Za-z0-9_-]{30,64}$/;
 
@@ -49,11 +51,44 @@ function googleClient() {
   return /^[A-Za-z0-9._-]{10,200}\.apps\.googleusercontent\.com$/.test(id) && secret.length >= 8 ? { id, secret } : null;
 }
 const googleConfigured = () => !!googleClient();
+
+// Sign in with Apple (applesso.js): the Services ID (the web client id, reverse-DNS), the Team ID and the Key ID (10 upper-case
+// letters / digits each, from developer.apple.com) and APPLE_PRIVATE_KEY = the downloaded AuthKey_<KeyID>.p8, base64-encoded
+// (a raw PEM with \n escapes works too). It must be an EC P-256 private key (it signs the ES256 client secret). Parsed once per
+// value; never logged and never sent anywhere - only signatures made with it leave the server.
+let appleKeyMemo = { raw: null, key: null, fp: "" };
+function appleKey(raw) {
+  if (appleKeyMemo.raw === raw) return appleKeyMemo;
+  const crypto = require("crypto");
+  let key = null;
+  try {
+    const pem = /-----BEGIN/.test(raw) ? raw.split("\\n").join("\n") : Buffer.from(raw.replace(/\s+/g, ""), "base64").toString("utf8");
+    if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(pem)) {
+      const k = crypto.createPrivateKey({ key: pem, format: "pem" });
+      const d = k.asymmetricKeyDetails || {};
+      if (k.asymmetricKeyType === "ec" && (!d.namedCurve || d.namedCurve === "prime256v1")) key = k;
+    }
+  } catch (e) { key = null; }
+  appleKeyMemo = { raw, key, fp: key ? crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16) : "" };
+  return appleKeyMemo;
+}
+/** {servicesId, teamId, keyId, key (KeyObject), fp} when all four APPLE_* values are set and valid, else null. */
+function appleClient() {
+  const servicesId = String(process.env.APPLE_SERVICES_ID || "").trim();
+  const teamId = String(process.env.APPLE_TEAM_ID || "").trim();
+  const keyId = String(process.env.APPLE_KEY_ID || "").trim();
+  const raw = String(process.env.APPLE_PRIVATE_KEY || "").trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]{2,199}$/.test(servicesId) || !/^[A-Z0-9]{10}$/.test(teamId) || !/^[A-Z0-9]{10}$/.test(keyId) || raw.length < 100) return null;
+  const k = appleKey(raw);
+  return k.key ? { servicesId, teamId, keyId, key: k.key, fp: k.fp } : null;
+}
+const appleConfigured = () => !!appleClient();
 function plexOn() { try { return require("./plexsso").enabled(); } catch (e) { return false; } }
 
 const on = {
   telegram: () => S.telegram_sso !== false && telegramConfigured(),
   google: () => S.google_sso !== false && googleConfigured(),
+  apple: () => S.apple_sso !== false && appleConfigured(),
   plex: plexOn,
 };
 
@@ -65,10 +100,11 @@ function status() {
     plex: { switch: plexSwitch, configured: true, on: plexOn() },
     telegram: { switch: S.telegram_sso !== false, configured: telegramConfigured(), on: on.telegram() },
     google: { switch: S.google_sso !== false, configured: googleConfigured(), on: on.google() },
+    apple: { switch: S.apple_sso !== false, configured: appleConfigured(), on: on.apple() },
   };
 }
 
-/** Save switches {telegram_sso, google_sso, plex_sso} (booleans; anything else ignored). -> status() */
+/** Save switches {telegram_sso, google_sso, apple_sso, plex_sso} (booleans; anything else ignored). -> status() */
 async function set(patch, actor) {
   await init();
   const p = patch || {};
@@ -100,13 +136,19 @@ function register(app, { addUser }) {
     if (req.method === "POST" && (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch")) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     next();
   };
+  // + Apple's notification health (applesso.noticeHealth: APPLE_APP_ID set? the newest accepted / refused one)
+  const withHealth = async (st) => {
+    if (st.apple && st.apple.configured) { try { st.apple.notices = await require("./applesso").noticeHealth(); } catch (e) { /* none */ } }
+    return st;
+  };
   app.get("/api/admin/signin-methods", addUser, admin, async (req, res) => {
-    try { await init(); res.json({ ok: true, ...status() }); } catch (e) { res.status(500).json({ ok: false, error: "Couldn't load the sign-in methods." }); }
+    try { await init(); res.json({ ok: true, ...(await withHealth(status())) }); } catch (e) { res.status(500).json({ ok: false, error: "Couldn't load the sign-in methods." }); }
   });
   app.post("/api/admin/signin-methods", addUser, admin, async (req, res) => {
-    try { res.json({ ok: true, ...(await set(req.body || {}, req.user.username)) }); }
+    try { res.json({ ok: true, ...(await withHealth(await set(req.body || {}, req.user.username))) }); }
     catch (e) { console.error("[ssoconf] save:", e.message); res.status(500).json({ ok: false, error: "Couldn't save." }); }
   });
 }
 
-module.exports = { init, get, set, status, on, register, telegramToken, telegramBotId, telegramConfigured, googleClient, googleConfigured, DEFAULTS };
+module.exports = { init, get, set, status, on, register, telegramToken, telegramBotId, telegramConfigured, googleClient, googleConfigured,
+                   appleClient, appleConfigured, DEFAULTS };

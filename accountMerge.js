@@ -89,6 +89,11 @@ const RULES = {
   // 1.99yq who's watching your cam (camviewers.js): a block on a viewer account and its view log move with that account
   "cam_blocks.user_id": M({ key: ["owner"], name: "username" }),
   "cam_blocks.owner": { deny: "1.99yq: the Camfrog login of the cam whose owner made the block, not a userId" },
+  // stagefix site: "Take me off this Stage" (stageleave.js) - keyed by (pad, Camfrog login); the linked account it came from moves
+  "stage_leave.user_id": M(),
+  // stagefix final round: the person's say over pins (stagepin.js) - keyed by Camfrog login (and pad); the linked account moves.
+  // An ask's actor_id = the pad's owner / staff who wanted the cam up: moves with that account.
+  "stage_level.user_id": M(), "stage_pad_prefs.user_id": M(), "stage_asks.user_id": M(), "stage_asks.actor_id": M(),
   "cam_views.user_id": M({ name: "username" }),
   "cam_views.owner": { deny: "1.99yq: the Camfrog login of the cam that was viewed, not a userId" },
   // 1.99aar who may watch (camaccess.js): an "always allowed" viewer and their requests move with that account
@@ -101,6 +106,15 @@ const RULES = {
   "cam_requests.user_id": M({ name: "username" }),
   "cam_requests.owner": { deny: "1.99aar: the Camfrog login of the cam asked about, not a userId" },
   "cam_requests.by": { deny: FLAG },
+  // micfollow 🎙 mic follows (micfollow.js): keyed by Camfrog login / pad; user_id = the linked account when it was set
+  "micfollow_optout.user_id": M(),
+  "micfollow_excl.user_id": M(),
+  "micfollow_excl.by": { deny: "micfollow: who kept someone off a pad's mic stage (a username / 'system') - an actor label; the row is keyed by pad + Camfrog login" },
+  "micfollow_pads.updated_by": { deny: "micfollow: the username who last saved a pad's mic-follows settings (label)" },
+  "micfollow_cfg.updated_by": { deny: "micfollow: the admin's username who last saved the mic-follows settings (audit label; admin_audit has the id)" },
+  // ⚑ reports on mic-stage tiles: the reporter's reports move with the account (rate limits + the 24 h void follow it)
+  "micfollow_reports.reporter_id": M(),
+  "micfollow_reports.resolved_by": { deny: "micfollow: the staff username who reviewed a mic-stage report (an audit label; admin_audit has the id)" },
   // 1.99aat 🧠 make Pepe forget me (pepeforget.js): the request log moves with the account
   "pepe_forget_log.user_id": M(),
   "pepe_forget_log.login": { deny: NAME },
@@ -407,6 +421,19 @@ const RULES = {
   // the pad launchpad (launchpad.js): one newcomer welcome per person (folded), visits per pad per day; admins by name
   "launchpad_welcomes.user_id": M({ key: [] }), "launchpad_visits.user_id": M({ key: ["room_id", "day"] }),
   "launchpad_pads.enrolled_by": { deny: NAME }, "launchpad_grads.decided_by": { deny: NAME },
+  // CL2 the pad chat archive (chatlog.js): who said a line is a chat key, not a userId column - a web member's "u:<id>" lines
+  // move by the special step; the user-id columns of the settings / reports / audits / downloads move with the account
+  "chat_log.who": { deny: "CL2: a chat key (a Camfrog login or 'u:<userId>'), never a bare userId - its 'u:<from>' rows move by the chatlog step (chatlog.mergeAccounts, with the sticky hidden set)" },
+  "chat_log.rm_by": { deny: "CL2: who removed a line - an actor label ('mod:<userId>', 'self', 'report:minor', 'staff:<userId>'), never a bare userId - CL6 fix-up: its 'mod:<from>' / 'staff:<from>' rows move by the chatlog step (chatlog.mergeAccounts), so that mod can still show the line again" },
+  "chatlog_rooms.owner_id": M(),                       // the pad owner the archive last saw (a merge isn't a new owner)
+  "chatlog_rooms.owner_since": { deny: "CL2: a time (ms) - when the owner's exemption starts" },
+  "chatlog_rooms.owner_grant": { deny: "CL2: a flag / time - staff let the owner read before owner_since" },
+  "chatlog_views.from_ts": { deny: "CL2: a time range of a staff read" }, "chatlog_views.to_ts": { deny: "CL2: a time range of a staff read" },
+  "chatlog_exports.from_ts": { deny: "CL2: a download's time range" }, "chatlog_exports.to_ts": { deny: "CL2: a download's time range" },
+  "pad_chat_cfg.by_user": M(), "chatlog_open.by_user": M(), "chatlog_holds.by_user": M(),
+  "chatlog_reports.reporter": M(), "chatlog_reports.decided_by": M(),
+  "chatlog_views.user_id": M(), "chatlog_views.who": { deny: "CL2: the Camfrog login / u:<id> key a staff read looked at (the audit's subject), not the reader" },
+  "chatlog_exports.user_id": M(),
   // direct messages
   "conversations.created_by": M(),
   "conversation_members.user_id": { special: "DM conversations and memberships are merged first (mergeConversations)" },
@@ -418,6 +445,8 @@ const RULES = {
   "dm_reports.sender_id": M(), "dm_reports.reporter_id": M({ key: ["message_id"] }), "dm_reports.resolved_by": M(),
   "dm_media.owner_id": M(),
   "pepe_dm_jobs.user_id": M(),               // 1.99ik: messages to Pepe waiting for his answer
+  // CL11: a `!msg` copy's Camfrog side follows its message (message_id); the logins are Camfrog names
+  "dm_relays.from_login": { deny: NAME }, "dm_relays.to_login": { deny: NAME },
   // 1.99pv creators.js / takedown.js: ⭐ PATV Creators follows the account - its creator row (the survivor's wins), tiers, subscriptions
   // and unlocks both ways, the earnings ledger, disputes, the 18+ confirmation; staff / free-text columns hold names
   "creators.user_id": M({ key: [] }), "creators.paused_by": { deny: NAME },
@@ -543,6 +572,8 @@ async function mergeConversations(fromId, toId, out) {
       bump(out, "conversations (DM between the merged accounts -> notes)", 1);
       continue;
     }
+    // the same sorted join as messages.dmKey - CL13: a Camfrog thread ("<id>|cf:<login>", other = "cf:<login>") is re-keyed
+    // here like a DM, so the target's next `!msg` copy to that login finds it (and the target's own thread absorbs it)
     const key = [toId, other].sort().join("|");
     const have = (await getQuery("SELECT id FROM conversations WHERE dm_key = ?", [key]))[0];
     if (!have) {
@@ -678,6 +709,10 @@ async function moveUserRows(fromId, toId, opts = {}) {
   // 1.99wj: the merged-away account's sign-ins end here (sessions.js) - never moved to the target
   try { const n = await require("./sessions").revokeForMerge(fromId, toId); if (n) out.folded["sessions (ended)"] = n; }
   catch (e) { console.error("[MERGE] session revoke:", e.message); throw e; }
+  // Sign in with Apple: a merged-away Apple link the target can't take (it has its own - sso_links folds it away below) ends at
+  // Apple too: its revocation is queued here, inside the transaction, and sent by applesso's revoke tick after the merge
+  try { const n = await require("./applesso").queueDroppedOnMerge(fromId, toId); if (n) out.folded["sso_links (apple, revocation queued)"] = n; }
+  catch (e) { console.error("[MERGE] apple revoke queue:", e.message); }
 
   await mergeConversations(fromId, toId, out);
   await mergeProfilePad(fromId, toId, out);
@@ -687,6 +722,13 @@ async function moveUserRows(fromId, toId, opts = {}) {
     const r = await require("./stashes").mergeAccounts(fromId, toId);
     if (r.owners) bump(out, "stashes.owner", r.owners);
     if (r.members) bump(out, "stash_members.login", r.members);
+  }
+  // CL2: a web member's archived pad-chat lines ("u:<id>") follow the account; a hidden "u:<from>" hides "u:<to>" too
+  {
+    const r = await require("./chatlog").mergeAccounts(fromId, toId);
+    if (r.who) bump(out, "chat_log.who", r.who);
+    if (r.rm_by) bump(out, "chat_log.rm_by", r.rm_by);                 // CL6 fix-up: the lines they hid as a mod / as staff
+    if (r.hidden) bump(out, "chatlog_hidden (u: key)", r.hidden);
   }
 
   for (const { table, column, rule } of await discover()) {

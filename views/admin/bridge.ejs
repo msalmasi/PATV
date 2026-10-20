@@ -1,7 +1,9 @@
 <%- include('../partials/admin-open', { title, user, section: 'bridge', admIsAdmin: isAdmin }) %>
 <% const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals);
    // 1.99acl: each section on its own capability (the command log, the relay blocks, the mod log)
-   const logOk = _can('bridge.cmdlog'), blkOk = _can('bridge.blocks_global'), mlOk = _can('pepe.modlog'); -%>
+   const logOk = _can('bridge.cmdlog'), blkOk = _can('bridge.blocks_global'), mlOk = _can('pepe.modlog');
+   const clOk = _can('chatlog.admin');   // CL2: the pad chat archive (chatlog.js)
+   const tdOk = _can('chatlog.read_all');   // CL6: takedowns + audit (chatlogmod.js) -%>
 <div class="adm-head">
   <h1>Bridge</h1>
   <p>The Camfrog bridge: Pepe relays each Camfrog room he's in to its pad. Members with a linked Camfrog name can send chat and <code>!commands</code> from the pad page; every web command is logged here.</p>
@@ -58,6 +60,111 @@
   <div class="adm-tbl"><table aria-label="Moderation history">
     <thead><tr><th>When (UTC)</th><th>Room</th><th>Kind</th><th>Type</th><th>By</th><th>Target</th><th>Details</th></tr></thead>
     <tbody id="mlRows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <% } %>
+</section>
+
+<%# CL2: the pad chat archive (chatlog.js) - its switches, write health, the held un-hides and the search index %>
+<section class="adm-card" id="chatarchive" aria-labelledby="clT">
+  <h2 id="clT">Chat archive <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Every line a pad's live chat shows, kept by the pad's tier once the archive is on (chat, mic transcripts, joins / leaves / mic, topic, site notices; never PMs or commands with private arguments). Turn on the <b>notice</b> first: the privacy policy changes at once and Pepe announces it in every bridged room; the <b>archive</b> can start 7 days later. History, search and downloads stay off until their releases are live and checked; deletion by tier (purge) is on by default.</p>
+  <% if (!clOk) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <p class="adm-help" id="clSummary" role="status">Loading…</p>
+  <div class="adm-tbl"><table aria-label="Chat archive switches">
+    <thead><tr><th>Switch</th><th>State</th><th>Notes</th><th></th></tr></thead>
+    <tbody id="clSwitches"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <p class="adm-help" id="clWrites"></p>
+  <h3>Held un-hides</h3>
+  <p class="adm-help" id="clHeldHelp">A batch that would un-hide many people at once - or move them from left out to shown as "someone" (Pepe lost his state?) - waits here. Approve only if Pepe really meant it; anyone who hid again since keeps that. <b>Incognito only</b>: people an older Pepe listed without saying why, whom he now reports as incognito and not on <code>!bridge hide</code> - approving shows their lines as "someone". <b>No longer listed</b>: people an older Pepe hid without saying why and lists no more - approving un-hides them (names them again), so only approve when that's right; rejecting keeps them left out until the site restarts.</p>
+  <div class="adm-tbl"><table aria-label="Held un-hides">
+    <thead><tr><th>When (UTC)</th><th>Kind</th><th>People</th><th></th></tr></thead>
+    <tbody id="clHeld"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <h3>Search index</h3>
+  <p class="adm-help" id="clFts"></p>
+  <div class="adm-actions"><button type="button" id="clFtsCheck" class="adm-btn ghost">Run a full check</button><button type="button" id="clFtsRepair" class="adm-btn ghost">Repair</button><span id="clMsg" class="adm-msg" role="status"></span></div>
+  <h3>Rooms</h3>
+  <div class="adm-tbl"><table aria-label="Archived rooms">
+    <thead><tr><th>Room</th><th>Pad</th><th>Lines</th><th>Indexed</th><th>Size</th><th>Since (UTC)</th></tr></thead>
+    <tbody id="clRooms"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <%# CL7: deletion by tier (chatlogpurge.js) - the last nightly pass, its fail-safes, what the next 7 days would delete %>
+  <h3>Deletion by tier</h3>
+  <p class="adm-help">Every night, lines past their pad's retention are deleted from the archive, its search index and the live chat: chat by the tier's chat window, 🎙 transcripts by its recording window, and each tier a pad loses keeps its windows 30 more days from the day it was lost. Nothing is deleted while Pepe's retention report is more than an hour old (or didn't name every tier's windows), a pad's tier can't be read, or the server clock looks wrong; such a pass is retried at the next hourly check. A legal hold or an open report keeps its lines, also one placed while a pass runs. With the purge switch off the pass only counts, and lines past retention stay out of view. Not reached by it: copies with a life of their own (quotes, chat clips and 🔊 mic clips posted to the feed, 🔔 mention alerts - a staff "Delete for good" reaches those), backups until they expire, and the database file's free pages until SQLite reuses them.</p>
+  <p class="adm-help" id="clPurge" role="status">Loading…</p>
+  <div class="adm-actions"><button type="button" id="clPurgeRun" class="adm-btn ghost">Run tonight's pass now…</button><button type="button" id="clPurgeCount" class="adm-btn ghost">Recount (deletes nothing)</button><span id="clPurgeMsg" class="adm-msg" role="status"></span></div>
+  <div class="adm-tbl"><table aria-label="Deletion by tier per room">
+    <thead><tr><th>Room</th><th>Tier</th><th>Deleted (last pass)</th><th>Past retention, not deleted</th><th>Next 7 days (per day)</th></tr></thead>
+    <tbody id="clPurgeRows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <%# CL3: each pad's 💬 Chat settings (padchat.js) - what visitors see, the forward-only watermarks, a lock %>
+  <h3>Pad chat settings</h3>
+  <p class="adm-help">What each pad's owner chose in Pad settings › 💬 Chat (pads with defaults aren't listed). <b>Lock</b> freezes a pad's settings for its owner and staff; only site admins can change them then. Watermarks: lines said before them stay out of public view (a wider setting never reopens the past; "open earlier history" does, 7 days after the owner asks).</p>
+  <div class="adm-tbl"><table aria-label="Pad chat settings">
+    <thead><tr><th>Pad</th><th>Visitors see</th><th>Search</th><th>Downloads</th><th>Mods</th><th>Watermarks (UTC)</th><th></th></tr></thead>
+    <tbody id="clPads"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <form class="adm-actions" id="clLockForm" autocomplete="off">
+    <label>Lock a pad's chat settings: <input type="text" name="room" maxlength="128" placeholder="pad address or room id" required></label>
+    <button type="submit" class="adm-btn ghost">Lock</button>
+  </form>
+  <p class="adm-help" id="clRedact"></p>
+  <p class="adm-help" id="clCmds"></p>
+  <%# CL10: chat-log downloads (chatlogexport.js) - metadata only, never content; kept 90 days %>
+  <h3>Downloads</h3>
+  <p class="adm-help" id="clDlSum">Who downloaded which pad's chat log (range, format, lines, how it ended) - never what was in it. Kept 90 days; each person sees their own in Settings › Account.</p>
+  <div class="adm-tbl"><table aria-label="Chat-log downloads">
+    <thead><tr><th>When (UTC)</th><th>Who</th><th>Pad</th><th>Range (UTC)</th><th>Format</th><th>As</th><th>Lines</th><th>Size</th><th>State</th></tr></thead>
+    <tbody id="clDl"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <% } %>
+</section>
+
+<%# CL6: takedowns and audit (chatlogmod.js) - the per-login tool, legal holds, the owner's earlier era, the staff audit %>
+<section class="adm-card" id="takedowns" aria-labelledby="tdT">
+  <h2 id="tdT">Chat takedowns <span class="adm-pill">staff</span></h2>
+  <p class="adm-help">Reported lines are decided on <a href="/feed/admin#chatlines">Feed › Reported chat lines</a>. Here: everything archived from one Camfrog login or account (privacy@ requests from people without an account, minors, deceased users, legal orders), legal holds, and letting a pad's owner read from before they became its owner. Every action here, and every staff read of a pad's history past its public window, is logged below (kept 2 years).</p>
+  <% if (!tdOk) { %><p class="adm-help">PATV staff only (chatlog.read_all).</p><% } else { %>
+  <p class="adm-help" id="tdSummary" role="status">Loading…</p>
+  <h3>One login or account</h3>
+  <form class="adm-form" id="tdWho" autocomplete="off">
+    <label>Who<input type="text" name="key" maxlength="70" placeholder="a Camfrog login, @username or u:&lt;account id&gt;" required></label>
+    <label>Reason (audited)<input type="text" name="why" maxlength="200" placeholder="e.g. privacy@ request #123"></label>
+    <div class="adm-actions">
+      <button type="submit" data-act="look" class="adm-btn ghost">Look up</button>
+      <button type="button" data-act="export" class="adm-btn ghost">Export (JSON)</button>
+      <button type="button" data-act="hide_all" class="adm-btn ghost">Hide every line</button>
+      <button type="button" data-act="unhide_all" class="adm-btn ghost">Undo "Hide every line"</button>
+      <button type="button" data-act="hold" class="adm-btn ghost">Legal hold</button>
+      <button type="button" data-act="unhold" class="adm-btn ghost">Release hold</button>
+      <button type="button" data-act="purge_all" class="adm-btn danger">Delete every line for good…</button>
+      <span id="tdMsg" class="adm-msg" role="status"></span>
+    </div>
+  </form>
+  <div id="tdResult" class="adm-help"></div>
+  <h3>A pad's archive</h3>
+  <form class="adm-form" id="tdRoom" autocomplete="off">
+    <label>Pad<input type="text" name="room" maxlength="128" placeholder="pad address or room id" required></label>
+    <label>Reason (audited)<input type="text" name="why" maxlength="200"></label>
+    <div class="adm-actions">
+      <button type="button" data-op="hold" class="adm-btn ghost">Legal hold</button>
+      <button type="button" data-op="unhold" class="adm-btn ghost">Release hold</button>
+      <button type="button" data-op="grant" class="adm-btn ghost">Let the owner read the earlier era</button>
+      <button type="button" data-op="ungrant" class="adm-btn ghost">Take that back</button>
+      <span id="tdRoomMsg" class="adm-msg" role="status"></span>
+    </div>
+  </form>
+  <h3>Legal holds</h3>
+  <p class="adm-help">A hold pauses the 30-day deletion of hidden lines, deletion by tier and staff deletions for its room or login, until it's released.</p>
+  <div class="adm-tbl"><table aria-label="Legal holds">
+    <thead><tr><th>On</th><th>Why</th><th>By</th><th>Since (UTC)</th></tr></thead>
+    <tbody id="tdHolds"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <h3>Staff reads and actions</h3>
+  <div class="adm-tbl"><table aria-label="Staff reads and actions">
+    <thead><tr><th>When (UTC)</th><th>Who</th><th>What</th><th>Room</th><th>Login</th><th>Why</th></tr></thead>
+    <tbody id="tdViews"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
   </table></div>
   <% } %>
 </section>
@@ -165,6 +272,308 @@
   f.addEventListener('submit', function (e) { e.preventDefault(); page = 0; load(false); });
   older.addEventListener('click', function () { page++; load(true); });
   load(false);
+})();
+</script>
+<% } %>
+<% if (clOk) { %>
+<script>
+// CL2: the chat archive card (chatlog.js: GET /api/admin/chatlog, POST /api/admin/chatlog/switch | held | fts)
+(function () {
+  'use strict';
+  var sum = document.getElementById('clSummary');
+  if (!sum) return;
+  var sw = document.getElementById('clSwitches'), held = document.getElementById('clHeld'), rooms = document.getElementById('clRooms');
+  var writes = document.getElementById('clWrites'), fts = document.getElementById('clFts'), cmds = document.getElementById('clCmds'), msg = document.getElementById('clMsg');
+  var LABEL = { notice: 'Notice (the policy text + Pepe announces)', archive: 'Archive (writing)', history: 'History (scrollback)', search: 'Search (answers only while History is on)',
+                downloads: 'Downloads', purge: 'Deletion by tier (purge)' };
+  var ASK = { notice: 'The privacy policy changes now and Pepe announces the archive in every bridged room. Turn the notice on?',
+              archive: 'The archive starts writing every bridged pad chat line now (and copies what the live chat shows). Turn it on?' };
+  function td(t) { var d = document.createElement('td'); d.textContent = t == null ? '' : String(t); return d; }
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') : ''; }
+  function size(b) { b = Number(b) || 0; return b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.round(b / 1e3) + ' kB'; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(url, data) {
+    return fetch(url, { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function emptyRow(body, cols, text) { var tr = document.createElement('tr'), c = td(text); c.colSpan = cols; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
+  function button(text, fn, disabled) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = text; b.disabled = !!disabled;
+    b.addEventListener('click', function () { b.disabled = true; fn().then(load).catch(function (e) { b.disabled = false; say(e.message, false); }); });
+    return b;
+  }
+  function render(d) {
+    var c = d.cfg || {}, now = Date.now();
+    sum.textContent = 'Stored in ' + d.location + ' · ' + (d.totals.rows || 0).toLocaleString('en-US') + ' lines in ' + d.totals.rooms + ' room(s), ' +
+      size(d.totals.bytes) + ' · cursor high-water ' + d.cursor_hw + (d.seed ? ' · seeded ' + when(d.seed.at) + ' (' + d.seed.rows + ' lines)' : '') +
+      ' · hidden: ' + d.hidden.hidden + (d.hidden.out != null ? ' (' + d.hidden.out + ' left out, ' + d.hidden.anon + ' incognito only)' : '') +
+      ' (+' + d.hidden.tx + ' transcripts off)' + (d.hidden.ready === false ? ' · NOT LOADED: every line counts as hidden' : '');
+    sw.textContent = '';
+    Object.keys(LABEL).forEach(function (k) {
+      var tr = document.createElement('tr'), note = '';
+      if (k === 'notice' && c.notice) note = 'on since ' + when(c.notice_at) + ' UTC; the archive can start from ' + when(d.opens_at) + ' UTC' +
+        (d.has_rows ? ' · stays on while the archive holds lines' : '');
+      if (k === 'archive') {
+        if (c.archive) note = 'writing since ' + when(c.archive_at) + ' UTC' + (c.started_at ? ' (first started ' + when(c.started_at) + ')' : '');
+        else if (c.tripped) note = 'TRIPPED ' + when(c.tripped.at) + ' UTC: ' + c.tripped.why;
+        else if (!c.notice) note = 'needs the notice first (' + d.notice_days + ' days ahead)';
+        else if (d.opens_at > now) note = 'can start from ' + when(d.opens_at) + ' UTC';
+        if (d.archive_error) note = 'CANNOT WRITE: ' + d.archive_error;
+      }
+      [LABEL[k], c[k] ? 'on' : 'off', note].forEach(function (v) { tr.appendChild(td(v)); });
+      var cell = document.createElement('td');
+      var blocked = (k === 'archive' && !c[k] && (!c.notice || d.opens_at > now || !!d.archive_error)) ||
+                    (k === 'notice' && c[k] && (c.archive || d.has_rows));
+      cell.appendChild(button(c[k] ? 'Turn off' : 'Turn on', function () {
+        if (!c[k] && ASK[k] && !window.confirm(ASK[k])) return Promise.resolve();
+        return req('/api/admin/chatlog/switch', { name: k, on: !c[k] }).then(function () { say(LABEL[k] + ' ' + (c[k] ? 'off' : 'on') + '.', true); });
+      }, blocked));
+      tr.appendChild(cell); sw.appendChild(tr);
+    });
+    var s = d.stats || {};
+    writes.textContent = 'Writes: ' + (s.written || 0).toLocaleString('en-US') + ' lines in ' + (s.batches || 0) + ' batch(es) since the site started · failures ' +
+      (s.failures || 0) + ' (' + (s.consecutive || 0) + ' in a row; the switch trips at ' + d.trip_after + ')' +
+      (s.lastError ? ' · last ' + when(s.lastErrorAt) + ' UTC: ' + s.lastError : '') + ' · duplicates skipped ' + (s.dupesSkipped || 0);
+    held.textContent = '';
+    (d.held || []).forEach(function (h) {
+      var tr = document.createElement('tr');
+      // owner change: "resolve" (an older Pepe's hide he now reports as incognito only) and "legacy" (one he no longer lists)
+      var kindText = { shown_tx: 'transcripts on', resolve: 'incognito only (shown as "someone")', legacy: 'no longer listed (un-hide)' };
+      [when(h.at), kindText[h.kind] || 'un-hide', h.n].forEach(function (v) { tr.appendChild(td(v)); });
+      var cell = document.createElement('td');
+      cell.appendChild(button('Approve', function () { return req('/api/admin/chatlog/held', { id: h.id, action: 'approve' }).then(function (r) {
+        var moved = Math.max(0, (r.weakened || 0) - (r.removed || 0));
+        say('Un-hid ' + (r.removed || 0) + (moved ? ' · now shown as "someone": ' + moved : '') + '.', true);
+      }); }));
+      // owner-change fix-up (review 2): rejecting a resolve / legacy batch is durable - those people stay left out and aren't held
+      // again after a restart (only Pepe's own un-hide of them, or the staff tool, changes it)
+      var keep = h.kind === 'resolve' || h.kind === 'legacy';
+      cell.appendChild(button(keep ? 'Keep left out' : 'Reject', function () { return req('/api/admin/chatlog/held', { id: h.id, action: 'reject' }).then(function () {
+        say(keep ? 'Kept left out - not asked again.' : 'Rejected - they stay hidden.', true);
+      }); }));
+      tr.appendChild(cell); held.appendChild(tr);
+    });
+    if (!(d.held || []).length) emptyRow(held, 4, 'Nothing held.');
+    var f = d.fts || {};
+    fts.textContent = !f.on ? 'FTS5 is unavailable here - search uses its fallback (' + (f.error || 'no detail') + ').' :
+      'Indexed up to ' + f.hw + (f.checkedAt ? ' · checked ' + when(f.checkedAt) + ' UTC' : ' · not checked yet') +
+      (f.drift ? ' · DRIFT in (' + f.drift.lo + ', ' + f.drift.hi + ']: ' + f.drift.rows + ' rows, ' + f.drift.indexed + ' indexed' : ' · no drift') +
+      (f.repairing ? ' · repairing (search answers partially)' : '') +
+      (f.lastRepair ? ' · last repair ' + when(f.lastRepair.at) + ' UTC (+' + f.lastRepair.added + ' / -' + f.lastRepair.removed + (f.lastRepair.full ? ', re-filled' : '') + ')' : '');
+    rooms.textContent = '';
+    (d.rooms || []).forEach(function (r) {
+      var tr = document.createElement('tr');
+      [r.room_id, r.title || '', (r.rows || 0).toLocaleString('en-US'), (r.indexed || 0).toLocaleString('en-US'), size(r.bytes), when(r.first_ts)].forEach(function (v) { tr.appendChild(td(v)); });
+      rooms.appendChild(tr);
+    });
+    if (!(d.rooms || []).length) emptyRow(rooms, 6, 'Nothing archived yet.');
+    cmds.textContent = 'Never archived (private arguments): ' + (d.private_cmds || []).join(' ');
+    // CL3: each pad's chat settings + a lock
+    var pads = document.getElementById('clPads');
+    pads.textContent = '';
+    function span(s) { return s == null ? 'everything kept' : s === 0 ? 'off' : s % 86400 === 0 ? (s / 86400) + ' d' : s % 3600 === 0 ? (s / 3600) + ' h' : Math.round(s / 60) + ' min'; }
+    (d.pads || []).forEach(function (p) {
+      var tr = document.createElement('tr');
+      var wm = p.wm ? ['chat ' + (when(p.wm.chat) || '-'), 'mic ' + (when(p.wm.tx) || '-'), 'search ' + (when(p.wm.search) || '-'), 'Approved-era ' + (when(p.wm.aud_m) || '-')].join(' · ') : '';
+      [(p.title || p.room_id) + (p.slug ? ' (p/' + p.slug + ')' : ''), span(p.chat_s) + (p.window_s !== p.chat_s ? ' (set: ' + span(p.window_s) + ')' : '') + (p.open ? ' · opens ' + when(p.open.effective) : ''),
+       p.search ? 'on' : 'off', p.downloads == null ? 'default' : p.downloads ? 'on' : 'off', p.mods_all ? 'all history' : '+7 d', wm].forEach(function (v) { tr.appendChild(td(v)); });
+      var cell = document.createElement('td');
+      cell.appendChild(button(p.locked ? 'Unlock' : 'Lock', function () { return req('/api/admin/chatlog/lock', { room: p.room_id, locked: !p.locked }).then(function (r) { say(r.locked ? 'Locked.' : 'Unlocked.', true); }); }));
+      tr.appendChild(cell); pads.appendChild(tr);
+    });
+    if (!(d.pads || []).length) emptyRow(pads, 7, 'Every pad uses the defaults.');
+    var rd = d.redact || {};
+    document.getElementById('clRedact').textContent = 'Hidden people whose names are redacted inside other lines: ' + (rd.named || 0) +
+      ' · names skipped as common words (never redacted): ' + (rd.collisions || 0) + ' · earlier-history openings pending: ' + (rd.opens || 0) +
+      // CL3 fix-up: hidden people past the redaction cap - their names are NOT redacted (said, never silent)
+      (rd.over ? ' · ⚠ ' + rd.over + ' hidden people past the ' + (rd.cap || 400) + '-person cap: their names are NOT redacted' : '');
+    // CL10: chat-log downloads (chatlogexport.adminRows: metadata only)
+    var dl = d.downloads || null, dlBody = document.getElementById('clDl'), dlSum = document.getElementById('clDlSum');
+    dlBody.textContent = '';
+    if (dl) {
+      dlSum.textContent = 'Downloads in the last 24 hours: ' + (dl.day || 0) + ' · being made now: ' + (dl.streaming || 0) +
+        ' · who downloaded which pad’s chat log (range, format, lines, how it ended) - never what was in it; kept ' + (dl.keep_days || 90) + ' days.';
+      (dl.rows || []).forEach(function (r) {
+        var tr = document.createElement('tr');
+        var pad = r.pad ? (r.pad.title || '') + (r.pad.slug ? ' (p/' + r.pad.slug + ')' : '') : 'a pad that’s gone';
+        [when(r.at), r.who ? '@' + r.who : '(deleted account)', pad, when(r.from) + ' → ' + when(r.to), String(r.fmt || '').toUpperCase() + (r.sys ? ' + joins / mic' : ''),
+         r.role || '', r.items == null ? '' : Number(r.items).toLocaleString('en-US'), r.bytes == null ? '' : size(r.bytes), r.state || ''].forEach(function (v) { tr.appendChild(td(v)); });
+        dlBody.appendChild(tr);
+      });
+    }
+    if (!dl || !(dl.rows || []).length) emptyRow(dlBody, 9, dl ? 'No downloads yet.' : 'Couldn’t read the downloads.');
+  }
+  document.getElementById('clLockForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var room = (e.target.room.value || '').trim().replace(/^.*\/p\//, '').replace(/[/?#].*$/, '');
+    if (!room) return;
+    req('/api/admin/chatlog/lock', { room: room, locked: true }).then(function () { say('Locked.', true); e.target.reset(); load(); }).catch(function (x) { say(x.message, false); });
+  });
+  // CL7: deletion by tier (chatlogpurge.js: GET /api/admin/chatlog/purge, POST {action: run | recount})
+  var purgeSum = document.getElementById('clPurge'), purgeRows = document.getElementById('clPurgeRows'), purgeMsg = document.getElementById('clPurgeMsg');
+  var purgeRun = document.getElementById('clPurgeRun'), purgeCount = document.getElementById('clPurgeCount');
+  // (CL7 fix-up: + the clock check; "no report" also covers one that didn't name every tier's window validly)
+  var PWHY = { switch_off: 'the purge switch is off: counting only', not_started: 'the archive has never been switched on: counting only (deletion starts with it - decision 15)', stale_report: 'no complete retention report from Pepe in the last hour: nothing deleted',
+               tier_unknown: 'pad tiers can’t be read: nothing deleted', archive_db: 'the archive can’t be read', dry: 'a recount: nothing deleted',
+               clock: 'the server clock stepped lately: nothing deleted for a day after it', clock_back: 'the server clock is behind the last pass: nothing deleted this time' };
+  var PTIER = { standard: 'no tier', prime: '📺 Prime Time', unlimited: '💎 Prime Time Plus' };
+  function n(x) { return (Number(x) || 0).toLocaleString('en-US'); }
+  function day(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 10) : ''; }
+  // CL7 fix-up: every lapsed tier keeps its own grace (highest tier first from the server) - the ones that matter, in order
+  function lapsedText(x) {
+    var list = Array.isArray(x.lapsed) ? x.lapsed : (x.grace_until ? [{ tier: x.del_tier, until: x.grace_until }] : []);
+    var shown = [], top = 0;
+    list.forEach(function (e) { if (Number(e.until) > top) { shown.push(e); top = Number(e.until); } });
+    if (!shown.length) return '';
+    return ' (lapsed: deletes like ' + shown.map(function (e) { return (PTIER[e.tier] || e.tier) + ' until ' + day(e.until); }).join(', then like ') + ')';
+  }
+  function renderPurge(d) {
+    var m = d.mode || {}, r = d.report, lp = d.last_pass || {};
+    var head = 'Now: ' + (m.mode === 'delete' ? 'deleting' : 'report-only (' + (PWHY[m.why] || m.why) + ')') +
+      (m.report_at ? ' · Pepe’s last retention report ' + when(m.report_at) + ' UTC' : ' · no complete retention report from Pepe since the site started') +
+      (m.clock_step ? ' · the clock stepped ' + Math.round(m.clock_step.ms / 60000) + ' min at ' + when(m.clock_step.at) + ' UTC' : '') +
+      (lp.retry ? ' · the last pass couldn’t delete: the next hourly check tries again' : '') +
+      (d.busy ? ' · a pass is running' : '');
+    purgeRun.disabled = purgeCount.disabled = !!d.busy;
+    purgeRows.textContent = '';
+    if (!r) { purgeSum.textContent = head + ' · no pass yet.'; emptyRow(purgeRows, 5, 'No pass yet.'); return; }
+    var ahead = (r.ahead || []).reduce(function (a, b) { return a + b; }, 0);
+    purgeSum.textContent = head + ' · last ' + (r.dry ? 'recount' : 'pass') + ' ' + when(r.at) + ' UTC' + (r.by ? ' (' + r.by + ')' : '') + ': ' +
+      (r.mode === 'delete' ? n(r.deleted) + ' line(s) deleted' + (r.feed_deleted ? ' (+' + n(r.feed_deleted) + ' live-chat line(s) never archived)' : '')
+                           : 'nothing deleted (' + (PWHY[r.why] || r.why || 'report-only') + '), ' + n(r.due) + ' past retention') +
+      (r.kept && (r.kept.held || r.kept.reported) ? ' · kept: ' + n(r.kept.held) + ' legal hold, ' + n(r.kept.reported) + ' open report' : '') +
+      (r.dry ? '' : ' · hidden lines blanked after 30 days: ' + n(r.blanked) + (r.blanked_held ? ' (' + n(r.blanked_held) + ' held)' : '') +
+        (r.blanked_reported ? ' (' + n(r.blanked_reported) + ' kept: an open report)' : '')) +
+      ' · the next 7 days: ' + n(ahead) + (r.unknown ? ' · ' + r.unknown + ' room(s) with an unknown tier (untouched)' : '') +
+      (r.partial ? ' · CUT SHORT: the next hourly check carries on' : '') + (r.error ? ' · ERROR: ' + r.error : '') + ' · ' + n(r.ms) + ' ms, ' + n(r.batches) + ' batch(es)';
+    (r.rooms || []).forEach(function (x) {
+      var tr = document.createElement('tr');
+      var tier = x.unknown ? 'unknown - untouched' : (PTIER[x.tier] || x.tier) + lapsedText(x) + (x.held_room ? ' · legal hold' : '');
+      var kept = x.kept && (x.kept.held || x.kept.reported) ? ' (kept: ' + n(x.kept.held) + ' hold, ' + n(x.kept.reported) + ' report)' : '';
+      [(x.title || x.room_id) + (x.slug ? ' (p/' + x.slug + ')' : ''), tier, x.unknown ? '' : n(x.deleted), x.unknown ? '' : n(x.due) + kept,
+       x.unknown ? '' : (x.ahead || []).map(n).join(' · ')].forEach(function (v) { tr.appendChild(td(v)); });
+      purgeRows.appendChild(tr);
+    });
+    if (!(r.rooms || []).length) emptyRow(purgeRows, 5, 'Nothing past retention, and nothing due in the next 7 days.');
+    else if (r.rooms_total > r.rooms.length) emptyRow(purgeRows, 5, (r.rooms_total - r.rooms.length) + ' more room(s) not listed.');
+  }
+  function loadPurge() { return req('/api/admin/chatlog/purge').then(renderPurge).catch(function (e) { purgeSum.textContent = e.message; }); }
+  function purgeAct(action) {
+    purgeRun.disabled = purgeCount.disabled = true;
+    req('/api/admin/chatlog/purge', { action: action }).then(function () {
+      purgeMsg.textContent = action === 'run' ? 'The pass started - the report updates when it ends.' : 'Recounting…'; purgeMsg.className = 'adm-msg ok';
+      setTimeout(loadPurge, 2500);
+    }).catch(function (e) { purgeMsg.textContent = e.message; purgeMsg.className = 'adm-msg err'; loadPurge(); });
+  }
+  purgeRun.addEventListener('click', function () {
+    if (!window.confirm('Delete every archived line past its pad’s retention now (what tonight’s pass would do)? This can’t be undone.')) return;
+    purgeAct('run');
+  });
+  purgeCount.addEventListener('click', function () { purgeAct('recount'); });
+  function load() { loadPurge(); return req('/api/admin/chatlog').then(render).catch(function (e) { sum.textContent = e.message; }); }
+  document.getElementById('clFtsCheck').addEventListener('click', function () {
+    say('Checking…', true);
+    req('/api/admin/chatlog/fts', { action: 'check' }).then(function (r) { say(r.check.ok ? 'The index matches the archive.' : 'Drift found - repairing.', r.check.ok); load(); })
+      .catch(function (e) { say(e.message, false); });
+  });
+  document.getElementById('clFtsRepair').addEventListener('click', function () {
+    req('/api/admin/chatlog/fts', { action: 'repair' }).then(function () { say('Repair started.', true); load(); }).catch(function (e) { say(e.message, false); });
+  });
+  load();
+})();
+</script>
+<% } %>
+<% if (tdOk) { %>
+<script>
+// CL6: the chat takedowns card (chatlogmod.js: GET /api/admin/chatlog/takedowns, POST /api/admin/chatlog/who {key, action, why} -
+// the key in the body keeps names out of URL logs - and POST /api/admin/chatlog/room/<pad>/hold | unhold | grant | ungrant)
+(function () {
+  'use strict';
+  var sum = document.getElementById('tdSummary');
+  if (!sum) return;
+  var who = document.getElementById('tdWho'), room = document.getElementById('tdRoom'), out = document.getElementById('tdResult');
+  var msg = document.getElementById('tdMsg'), rmsg = document.getElementById('tdRoomMsg');
+  function td(t) { var d = document.createElement('td'); d.textContent = t == null ? '' : String(t); return d; }
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') : ''; }
+  function say(el, t, ok) { el.textContent = t; el.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(url, data) {
+    return fetch(url, { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function emptyRow(body, cols, text) { var tr = document.createElement('tr'), c = td(text); c.colSpan = cols; c.className = 'empty'; tr.appendChild(c); body.appendChild(tr); }
+  function load() {
+    return req('/api/admin/chatlog/takedowns').then(function (d) {
+      sum.textContent = 'Open chat line reports: ' + d.reports.open + (d.reports.urgent ? ' (' + d.reports.urgent + ' urgent)' : '') +
+        ' · hidden and removed lines keep their text ' + d.keep_days + ' days for the owner and staff, then it is deleted (unless held).';
+      var hb = document.getElementById('tdHolds'); hb.textContent = '';
+      (d.holds || []).forEach(function (h) {
+        var tr = document.createElement('tr');
+        [h.kind === 'room' ? 'pad ' + (h.title || h.room_id || h.key) : 'login ' + h.who, h.why, h.by || '', when(h.at)].forEach(function (v) { tr.appendChild(td(v)); });
+        hb.appendChild(tr);
+      });
+      if (!(d.holds || []).length) emptyRow(hb, 4, 'No legal holds.');
+      var vb = document.getElementById('tdViews'); vb.textContent = '';
+      (d.views || []).forEach(function (v) {
+        var tr = document.createElement('tr');
+        [when(v.at), v.by || '', v.kind, v.room_id || '', v.who || '', v.why || ''].forEach(function (x) { tr.appendChild(td(x)); });
+        vb.appendChild(tr);
+      });
+      if (!(d.views || []).length) emptyRow(vb, 6, 'Nothing logged yet.');
+    }).catch(function (e) { sum.textContent = e.message; });
+  }
+  function showWho(r) {
+    out.textContent = '';
+    var s = r.summary || {};
+    var p = document.createElement('p');
+    p.textContent = (r.account ? '@' + r.account.username + ' · ' : '') + 'keys ' + r.keys.join(', ') + ' · ' + (s.lines || 0) + ' archived line(s) in ' + (s.rooms || []).length + ' room(s)' +
+      (s.hidden ? ' · hidden' : '') + (s.tx_hidden ? ' · transcripts off' : '') + ((s.held || []).length ? ' · legal hold' : '') +
+      (s.relays_to != null ? ' · !msg copies sent to them: ' + s.relays_to : '') +
+      (s.camfrog ? ' · their Camfrog login in !msg copy records: ' + (s.camfrog.copies_to + s.camfrog.copies_from) + ', admins’ Camfrog logs: ' + s.camfrog.threads : '') +
+      (r.camfrog_forgot ? ' · Camfrog login replaced by a pseudonym in ' + r.camfrog_forgot.relays + ' copy record(s) and ' + r.camfrog_forgot.threads + ' log(s)' : '') +
+      (r.audit_renamed ? ' · ' + r.audit_renamed + ' earlier audit row(s) now name the pseudonym' : '') +
+      (r.purged != null ? ' · deleted now: ' + r.purged + (r.skipped_held ? ' (' + r.skipped_held + ' kept: a room hold)' : '') : '') +
+      (r.unhidden != null ? ' · staff hide undone' + (r.still_hidden ? ' (still hidden for another reason: their own privacy setting, forget-me or deletion)' : '') : '');
+    out.appendChild(p);
+    if ((s.rooms || []).length) {
+      var ul = document.createElement('ul');
+      s.rooms.forEach(function (x) { var li = document.createElement('li'); li.textContent = (x.title || x.room_id) + ': ' + x.n + ' line(s)' + (x.removed ? ', ' + x.removed + ' taken down' : '') + ' · ' + when(x.first) + ' - ' + when(x.last) + ' UTC'; ul.appendChild(li); });
+      out.appendChild(ul);
+    }
+    if (r.export) {
+      var blob = new Blob([JSON.stringify(r.export, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'patv-chatlog-' + r.keys[0].replace(/[^\w.-]+/g, '_') + '.json';
+      a.textContent = 'Download the export (' + r.export.lines.length + ' line(s)' + (r.export.truncated ? ', cut at the cap' : '') + ')';
+      out.appendChild(a);
+    }
+  }
+  function runWho(act) {
+    var key = who.elements.key.value.trim(), why = who.elements.why.value.trim();
+    if (!key) return;
+    // (CL6 fix-up: a look too - it tells where and when someone spoke)
+    if (why.length < 3) { say(msg, 'Give the reason first - it is audited.', false); return; }
+    if (act === 'purge_all' && !window.confirm('Delete EVERY archived line of ' + key + ' for good - everywhere (quotes, mic clips, mention alerts, Pepe’s !log) - and replace their Camfrog login with a pseudonym in Pepe’s !msg copy records and the admins’ Camfrog logs? This can’t be undone.')) return;
+    if (act === 'hide_all' && !window.confirm('Hide every line of ' + key + ' on every pad, past and future (Undo "Hide every line" reverses only this)?')) return;
+    say(msg, 'Working…', true);
+    req('/api/admin/chatlog/who', { key: key, action: act, why: why }).then(function (r) { say(msg, 'Done.', true); showWho(r); load(); })
+      .catch(function (e) { say(msg, e.message, false); });
+  }
+  who.addEventListener('submit', function (e) { e.preventDefault(); runWho('look'); });
+  Array.prototype.forEach.call(who.querySelectorAll('button[type="button"][data-act]'), function (b) { b.addEventListener('click', function () { runWho(b.getAttribute('data-act')); }); });
+  Array.prototype.forEach.call(room.querySelectorAll('button[data-op]'), function (b) {
+    b.addEventListener('click', function () {
+      var r = room.elements.room.value.trim().replace(/^.*\/p\//, '').replace(/[/?#].*$/, ''), why = room.elements.why.value.trim();
+      if (!r) return;
+      if (why.length < 3) { say(rmsg, 'Give the reason first - it is audited.', false); return; }
+      say(rmsg, 'Working…', true);
+      req('/api/admin/chatlog/room/' + encodeURIComponent(r) + '/' + b.getAttribute('data-op'), { why: why }).then(function () { say(rmsg, 'Done.', true); load(); })
+        .catch(function (e) { say(rmsg, e.message, false); });
+    });
+  });
+  load();
 })();
 </script>
 <% } %>

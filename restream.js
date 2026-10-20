@@ -182,6 +182,8 @@ const slotTarget = (id) => "slot:" + id;
 /** Why a slot isn't relayed (or null when it can be): the UI shows it. */
 function slotBlock(s) {
   if (!s) return "no slot";
+  // stagefix site: a 🎬 cam slot is someone else's Camfrog cam (its "owner" is whoever put it on the stage) - never public egress
+  if (s.source === "cam") return "a cam on the stage is someone's Camfrog cam - it never goes to Twitch";
   if (s.mode === "embed") return "video-link slots aren't streams";
   if (s.via === "whip") return "WHIP streams can't be relayed yet - use OBS with RTMP or the browser";
   return null;
@@ -421,7 +423,7 @@ function register(app, { addUser, isBotToken }) {
 module.exports = {
   mainRelayLive,
   register, init, encrypt, decrypt, mask, cleanKey, cleanServer, saveDest, deleteDest, destRow, destView, toggleOf, setToggle,
-  noteMain, mainLive, desired, workerSync, statusOf, me, adminState, forMain, configured, Refuse, switchMain,
+  noteMain, mainLive, desired, workerSync, statusOf, me, adminState, forMain, configured, Refuse, switchMain, slotBlock,
   MAIN, MAIN_OWNER, DEFAULT_SERVER, TWITCH_MAX_KBPS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reset: () => { mainBeat = 0; STATUS = new Map(); workerAt = 0; workerInfo = null; },

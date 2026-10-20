@@ -104,6 +104,25 @@
           <span class="hint"><%- t('settings.connections.google_hint') %><% if (!gg_.linked) { %> <%- t('settings.connections.google_ach', { link: '<a href="/achievements">' + t('settings.connections.google_ach_link') + '</a>' }) %><% } %></span></div>
       </div>
       <% } %>
+      <%# Sign in with Apple (applesso.js - a proven link by Apple's account id, never by email). Shown when it's set up or linked.
+          A private relay address is never spelled out here ("Hidden email"). %>
+      <% const ap_ = locals.apple || { on: false, linked: false }; if (ap_.on || ap_.linked) {
+           const apLogo_ = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>'; %>
+      <div class="conn-row" id="appleDiv">
+        <span class="conn-ico" style="background:#000;color:#fff;border:1px solid #3a3a3c"><%- apLogo_ %></span>
+        <span class="conn-name">Apple<b><% if (ap_.linked) { %><span style="color:#e5e5ea"><%= ap_.name || ap_.email || (ap_.relay ? t('settings.connections.apple_relay') : t('settings.connections.apple_linked_short')) %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b>
+          <% const apSub_ = [ap_.relay && ap_.name ? t('settings.connections.apple_relay') : '', ap_.mailOff ? t('settings.connections.apple_mail_off') : ''].filter(Boolean);
+             if (ap_.linked && apSub_.length) { %><small class="px-st"><%- apSub_.join(' · ') %></small><% } %>
+        </span>
+        <% if (ap_.linked) { %>
+          <button type="button" class="btn" data-apple-unlink><%- t('settings.connections.apple_unlink') %></button>
+        <% } else { %>
+          <form class="conn-act" action="/auth/apple/link" method="POST" style="margin:0"><button type="submit" class="btn apple"><%- apLogo_ %><%- t('settings.connections.apple_link') %></button></form>
+        <% } %>
+        <div class="conn-cf"><span class="status" id="appleStatus" role="status" aria-live="polite"></span>
+          <span class="hint"><%- t('settings.connections.apple_hint') %><% if (!ap_.linked) { %> <%- t('settings.connections.apple_ach', { link: '<a href="/achievements">' + t('settings.connections.apple_ach_link') + '</a>' }) %><% } %></span></div>
+      </div>
+      <% } %>
       <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
       <% const tg_ = locals.telegram || { linked: false, handle: null }; %>
       <div class="conn-row" id="telegramDiv">
@@ -203,6 +222,14 @@
     <ul class="hint" id="expList"></ul>
   </section>
 
+  <%# CL10: your chat-log downloads (chatlogexport.js: GET /api/account/chatlog-downloads - what you asked for, never the files).
+      Shown once you have one, or once downloads are on (account-security.js) %>
+  <section class="card" id="chatlogdl" hidden>
+    <h2><%- t('settings.chatlog_dl') %></h2>
+    <p class="lede"><%- t('settings.chatlog_dl.lede') %></p>
+    <ul class="hint" id="cldlList"></ul>
+  </section>
+
   <%# 1.99wj: Delete account (accountdelete.js, docs/account-deletion.md) - the flow is its own page %>
   <section class="card" id="delete">
     <h2><%- t('settings.delete') %></h2>
@@ -215,7 +242,7 @@
     .pe .dev-row .conn-name small { display: block; color: var(--ds-text-muted); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
     .pe .dev-here { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-ac); color: var(--ds-ac); font-size: 11.5px; font-weight: 700; }
   </style>
-  <script src="/public/js/account-security.js?v=1" defer></script>
+  <script src="/public/js/account-security.js?v=3" defer></script>
 </main>
 
 <script>
@@ -271,6 +298,26 @@
       if (!window.confirm(_t('js.settings.google.unlink_q', "Unlink Google? You won't be able to sign in with it any more."))) return;
       b.disabled = true;
       fetch('/api/sso/google/unlink', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+        .then(function (d) {
+          if (d && d.ok) { window.location.reload(); return; }
+          b.disabled = false;
+          st.textContent = (d && d.code === 'E_LAST_METHOD') ? _t('js.settings.sso.last_method', "That's the only way you can sign in. Set a password first (below), then unlink it.") : ((d && d.error) || _t('js.settings.telegram.error', 'Something went wrong.'));
+        })
+        .catch(function () { b.disabled = false; st.textContent = _t('js.settings.telegram.error', 'Something went wrong.'); });
+    });
+  })();
+</script><% } %>
+<% if (locals.apple && apple.linked) { %><script>
+  // Connections -> Apple unlink (applesso.js: refused when it's the last way to sign in; PATV's authorization is revoked at Apple)
+  (function () {
+    var b = document.querySelector('[data-apple-unlink]'), st = document.getElementById('appleStatus');
+    if (!b) return;
+    var _t = typeof __t === 'function' ? __t : function (k, d) { return d; };
+    b.addEventListener('click', function () {
+      if (!window.confirm(_t('js.settings.apple.unlink_q', "Unlink Apple? You won't be able to sign in with it any more, and PATV stops using your Apple Account."))) return;
+      b.disabled = true;
+      fetch('/api/sso/apple/unlink', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
         .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
         .then(function (d) {
           if (d && d.ok) { window.location.reload(); return; }

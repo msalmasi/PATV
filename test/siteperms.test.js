@@ -47,6 +47,8 @@ const GOLDEN = {
   "pads.vault_rate": ["admin", true], "pads.config_view": ["staff", false], "pads.config": ["admin", true],
   "pads.approved_inside": ["staff", true], "pads.create_free": ["staff", false], "pads.connect_review": ["assistant", false],
   "pads.send_pepe": ["admin", true], "bridge.blocks_global": ["admin", false], "bridge.cmdlog": ["admin", false],
+  "chatlog.admin": ["admin", true],                                            // CL2: the chat archive's switches (privacy-locked)
+  "chatlog.read_all": ["staff", true],                                         // CL6: full chat history (audited), purge, the queue, holds
   "feed.admin_page": ["staff", false], "feed.moderate": ["staff", false], "feed.see_hidden": ["staff", true],
   "feed.tags_remove_any": ["staff", false], "feed.limits_exempt": ["staff", false], "feed.config": ["admin", false],
   "feed.automod_global": ["admin", false], "feed.filter_admin": ["admin", false], "feed.pepe_admin": ["admin", false],
@@ -61,6 +63,7 @@ const GOLDEN = {
   "onair.live_page": ["staff", true], "onair.direct_media": ["staff", true],   // 1.99acw: locked "exposure" (owner decision 2026-10-18)
   "restream.staff": ["staff", false], "restream.main": ["admin", true], "livecam.admin": ["admin", true], "livecam.end_any": ["staff", false],
   "camclip.override": ["admin", false], "ghost.mode": ["staff", true],
+  "micfollow.kill": ["staff", true], "micfollow.admin": ["admin", true],     // micfollow: 🎙 mic follows on pad stages
   "soundboards.moderate": ["assistant", false], "soundboards.config": ["admin", true], "voices.view": ["staff", false], "voices.manage": ["admin", true],
   "voiceclone.view": ["staff", true], "voiceclone.decide": ["admin", true], "likeness.view": ["staff", false], "likeness.manage": ["admin", true],
   "pepe.control": ["admin", true], "pepe.rooms_commands_audio": ["admin", true], "pepe.modlog": ["admin", true], "ops.action_ttl": ["admin", true],

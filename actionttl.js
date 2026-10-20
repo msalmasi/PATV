@@ -164,6 +164,8 @@ async function sweepTable(table, now = Date.now()) {
     out.push(row);
     const refund = (REFUNDS[table] || {})[row.kind];
     if (refund) await refund(row).catch((e) => console.error(`[actionttl] refund ${table} ${row.id}:`, e.message));
+    // 1.99add: a website Incognito ON Pepe never claimed - the sticky hidden set hid them at once; undone now (never rejects)
+    if (table === "pepe_actions" && row.kind === "privacy.incognito") await require("./incognito").actionsSettled([row.id]);
     const n = noticeFor(table, row, mins);
     if (n && row.user_id) await require("./inbox").addSafe(row.user_id, n);
   }

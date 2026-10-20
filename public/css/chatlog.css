@@ -1,0 +1,156 @@
+/* chatlog.css - CL5: the pad chat's lines (chat-history spec §3.7), moved out of views/room.ejs's own style block, with
+   the legacy hex values as ds tokens. One look for every place a line shows: the live chat (room.ejs links it right after
+   its style block, so the cascade is the one it had there), scrollback, search results and the HTML download (inlined,
+   with the token values written in). The markup comes from public/js/chatlog-core.js (renderItem).
+   Scope: .chatlog - the pad page's <main> (it also carries .rm; the mic and people lists use .av too), a download's body.
+   CL5 fix-up: the colours are the chat's own tokens (--ds-chat-*, public/css/ds.css), set to the exact shades room.ejs had - the
+   chat looks as it did; moving it onto the standard palette is one block in ds.css (an owner call). Logical properties: in an
+   RTL page (<html dir="rtl">) the 🎙 bar, the system lines' indent and the scroller's padding sit at the start (right) side, next
+   to the avatar, as they do on the left in LTR (before CL5 they stayed on the left, away from it); the highlight's bar (a
+   box-shadow, which has no logical form) flips with them. The name / time gaps are the one physical pair - see .who below. */
+.chatlog .feed { height: min(62vh, 640px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; padding-inline-end: 4px; scroll-behavior: smooth; }
+.chatlog .line { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 5px 6px; border-radius: 8px; align-items: start; }
+.chatlog .line:hover { background: var(--ds-chat-hover); }
+.chatlog .line .body { min-width: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+/* CL5 fix-up: the name / time gaps stay PHYSICAL, as room.ejs had them. They sit between inline runs, whose order follows the
+   CONTENT's direction, not the page's: in an RTL page, a Latin name + Latin text still run left to right, so a logical gap
+   (margin-inline-end = the left) landed outside the name and "Bob the newest line" read "Bobthe newest line" */
+.chatlog .line .who { font-weight: bold; margin-right: 6px; }
+.chatlog .line .when { color: var(--ds-text-faint); font-size: 11px; margin-left: 4px; white-space: nowrap; }
+.chatlog .line.pepe { background: var(--ds-chat-pepe-bg); }
+.chatlog .line.hl { background: var(--ds-chat-hl-bg); box-shadow: inset 3px 0 0 var(--ds-chat-hl-bar); }   /* 1.99ii: the line a 📣 mention alert points at */
+[dir="rtl"] .chatlog .line.hl { box-shadow: inset -3px 0 0 var(--ds-chat-hl-bar); }
+.chatlog .line.tx { border-inline-start: 3px solid var(--ds-chat-tx-bar); background: var(--ds-chat-tx-bg); }
+.chatlog .line.tx .body { font-style: italic; color: var(--ds-chat-tx-ink); }
+.chatlog .line.tx .who { font-style: normal; }
+.chatlog .line.tx .who::before { content: "\1F399  "; }
+.chatlog .sys { color: var(--ds-text-muted); font-size: 12.5px; padding-block: 3px; padding-inline: 42px 6px; overflow-wrap: anywhere; }
+.chatlog .sys.topic { color: var(--ds-chat-topic); }
+/* CL9 fix-up: a topic LINE isn't the chat card's topic header - room.ejs's `.rm .rm-chat .topic` (a 2-line clamp, overflow hidden) matched
+   it too, and an overflow-hidden item in a full flex column (the search results) shrank to its padding */
+.chatlog .sys.topic { display: block; overflow: visible; -webkit-line-clamp: none; margin: 0; font-size: 12.5px; line-height: inherit; }
+/* CL3: 📜 a chat-history settings line */
+.chatlog .sys.note { color: var(--ds-text-faint); font-style: italic; }
+.chatlog .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: bold; color: var(--ds-chat-av-ink); object-fit: cover; flex: none; overflow: hidden; }
+.chatlog .av.anon { background: var(--ds-chat-anon) !important; color: var(--ds-text-muted); }
+@media (max-width: 860px) { .chatlog .feed { height: 50vh; min-height: 260px; } }
+/* CL6: the ⋯ on a line (public/js/chat-lines.js: ⚑ Report, 🗑 Remove my line, 🙈 Hide, ⛔ Delete for good) - shown on hover /
+   keyboard focus; on touch screens it is always there, with room kept for it */
+.chatlog .line.la { position: relative; }
+.chatlog .line .la-btn { position: absolute; inset-block-start: 3px; inset-inline-end: 3px; min-width: 30px; height: 26px; padding: 0 6px;
+                         border-radius: var(--ds-r-sm); border: 1px solid var(--ds-line); background: var(--ds-surface-3); color: var(--ds-text-2);
+                         font: inherit; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; }
+.chatlog .line:hover .la-btn, .chatlog .line:focus-within .la-btn, .chatlog .line .la-btn[aria-expanded="true"] { opacity: 1; }
+.chatlog .line .la-btn:hover { color: var(--ds-text-strong); border-color: var(--ds-line-strong); }
+.chatlog .line .la-btn:focus-visible { opacity: 1; outline: none; box-shadow: var(--ds-focus-ring); }
+.chatlog .feed-log.cc-on .line .la-btn { display: none; }      /* ✂️ Clip chat is picking lines (CL8: the live log, inside the scroller) */
+@media (hover: none) {
+  .chatlog .line.la { padding-inline-end: 50px; }
+  .chatlog .line .la-btn { opacity: .75; min-width: 44px; height: 32px; }
+}
+/* CL6: a hidden line as the pad's owner and staff see it (its text for 30 days), and a purged one */
+.chatlog .line.rm { opacity: .66; }
+.chatlog .line.rm .rm-note { display: block; font-size: 12px; font-style: normal; color: var(--ds-text-muted); }
+.chatlog .sys.rm { font-style: italic; color: var(--ds-text-faint); }
+.chatlog .la-pop { min-width: 210px; }                         /* the menu and the dialogs: a .chatlog box of their own in <body> */
+.chatlog .la-reasons { display: grid; gap: var(--ds-sp-1h); margin: 0; padding: 0; border: 0; }
+.chatlog .la-reasons label { display: grid; grid-template-columns: auto 1fr; gap: var(--ds-sp-2); align-items: start; min-height: 32px; cursor: pointer; }
+.chatlog .la-reasons small { display: block; color: var(--ds-text-muted); }
+.chatlog .la-modal p { margin: 0; color: var(--ds-text-2); }
+.chatlog .la-modal .ds-textarea { min-height: 72px; }
+/* 16px fields under 760 px: no zoom-on-focus on phones */
+@media (max-width: 760px) { .chatlog .la-modal .ds-in, .chatlog .la-modal .ds-textarea { font-size: 16px; } }
+/* CL8: scrollback - the scroller (.feed) holds the top end (Load older / the end marker), the OLDER lines (above the live log, so
+   prepending never announces them), the bottom end (a jump's Load newer) and the live log (.feed-log, role="log");
+   public/js/pad-history.js. Empty ends take no room. */
+.chatlog .feed-log, .chatlog .older { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.chatlog .older:empty, .chatlog .hist-top:empty, .chatlog .hist-bot:empty, .chatlog .feed-log[hidden] { display: none; }
+.chatlog .hist-top, .chatlog .hist-bot { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--ds-sp-2);
+                                          padding-block: var(--ds-sp-1h); text-align: center; }
+.chatlog .hist-msg { margin: 0; font-size: 12.5px; color: var(--ds-text-muted); overflow-wrap: anywhere; }
+/* CL8 fix-up: the end marker is a quiet .ds-note (spec §3.14); loading is .ds-skel bars the size of a line or two */
+.chatlog .hist-end.ds-note { width: 100%; padding: var(--ds-sp-2) var(--ds-sp-3); font-size: 12.5px; color: var(--ds-text-muted); text-align: start; overflow-wrap: anywhere; }
+.chatlog .hist-skel { display: grid; gap: 6px; width: 100%; padding-block: 2px; }
+.chatlog .hist-skel .ds-skel { height: 14px; }
+.chatlog .hist-skel .ds-skel + .ds-skel { width: 60%; }
+.chatlog a.hist-msg { color: var(--ds-ac); text-decoration: underline; text-underline-offset: 2px; }   /* "Sign in to scroll back" */
+.chatlog .older > .hist-msg { padding-block: var(--ds-sp-3); text-align: center; }
+/* a day divider: "Today", "Yesterday", "Saturday 18 October" */
+.chatlog .daydiv { display: flex; align-items: center; gap: var(--ds-sp-2); margin-block: var(--ds-sp-1h) 2px; color: var(--ds-text-muted);
+                   font-size: 12px; font-weight: bold; }
+.chatlog .daydiv::before, .chatlog .daydiv::after { content: ""; flex: 1 1 auto; border-block-start: 1px solid var(--ds-line); }
+/* the line a jump or a ?line= link opened (a chat line already has .line.hl) */
+.chatlog .sys.hl { background: var(--ds-chat-hl-bg); box-shadow: inset 3px 0 0 var(--ds-chat-hl-bar); border-radius: 8px; }   /* CL5 fix-up: .line.hl's */
+[dir="rtl"] .chatlog .sys.hl { box-shadow: inset -3px 0 0 var(--ds-chat-hl-bar); }
+/* 📅 Jump to a date */
+.chatlog .hist-date { display: grid; gap: var(--ds-sp-1h); margin-block-end: var(--ds-sp-2); padding: var(--ds-sp-2h); border: 1px solid var(--ds-line);
+                      border-radius: var(--ds-r-sm); background: var(--ds-surface-2); }
+.chatlog .hist-date-row { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; }
+.chatlog .hist-date .ds-in { flex: 1 1 160px; min-width: 0; }
+@media (max-width: 760px) {
+  .chatlog .hist-top .ds-btn, .chatlog .hist-bot .ds-btn, .chatlog .hist-date .ds-btn { min-height: 44px; }
+  .chatlog .hist-date .ds-in { font-size: 16px; }
+}
+/* CL9: 🔍 search (public/js/pad-search.js) - a bar above the scroller: the words (.ds-in-group, a 🔍 inset in the field, Search as
+   its addon), Both / Chat / Mic (.ds-seg), Hide Pepe, From, Before; the results (the chat's own lines, the matched words in <mark>s,
+   each under its date - the date or the line opens the history around it) scroll inside the bar so the chat stays in reach. */
+.chatlog mark { background: var(--ds-green-deep); color: var(--ds-ok-ink); border-radius: 3px; padding-inline: 1px; }
+.chatlog .srch { display: grid; gap: var(--ds-sp-2); min-width: 0; margin-block-end: var(--ds-sp-2); padding: var(--ds-sp-2h); border: 1px solid var(--ds-line);
+                 border-radius: var(--ds-r-sm); background: var(--ds-surface-2); }
+.chatlog .srch-form { display: grid; gap: var(--ds-sp-2); min-width: 0; margin: 0; }
+.chatlog .srch-q { position: relative; }
+.chatlog .srch-q .srch-ic { position: absolute; inset-inline-start: 12px; inset-block-start: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; }
+.chatlog .srch-q .ds-in { padding-inline-start: 36px; }
+.chatlog .srch-q .srch-go { min-height: var(--ds-tap); cursor: pointer; font: inherit; font-size: var(--ds-fs-meta); font-weight: bold; color: var(--ds-text-strong); }
+.chatlog .srch-q .srch-go:hover { border-color: var(--ds-ac); }
+.chatlog .srch-q .srch-go:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.chatlog .srch-opts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; min-width: 0; }
+.chatlog .srch-chk { display: inline-flex; align-items: center; gap: var(--ds-sp-1h); min-height: 36px; font-size: 13px; color: var(--ds-text-2); cursor: pointer; }
+.chatlog .srch-chk input { width: 18px; height: 18px; margin: 0; accent-color: var(--ds-ac); }
+.chatlog .srch-f { display: flex; align-items: center; gap: var(--ds-sp-1h); flex: 1 1 150px; min-width: 0; font-size: 12.5px; color: var(--ds-text-muted); }
+.chatlog .srch-f > span { flex: none; white-space: nowrap; }
+.chatlog .srch-f .ds-in { flex: 1 1 auto; min-height: 36px; padding-block: 6px; }
+.chatlog .srch-note, .chatlog .srch-status { margin: 0; font-size: 12.5px; color: var(--ds-text-muted); }
+.chatlog .srch-status:empty, .chatlog .srch-more:empty { display: none; }
+.chatlog .srch-hits { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-height: min(50vh, 480px); overflow-y: auto; overscroll-behavior: contain; }
+.chatlog .srch-hits:empty { display: none; }
+.chatlog .srch-hits > * { flex-shrink: 0; }                    /* CL9 fix-up: the box scrolls; a result never shrinks to fit it */
+.chatlog .srch-hits .line, .chatlog .srch-hits .sys { cursor: pointer; }
+.chatlog .srch-hits .line:focus-visible, .chatlog .srch-hits .sys:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.chatlog .srch-when { align-self: flex-start; margin-block-start: var(--ds-sp-1h); padding: 2px var(--ds-sp-1h); border: 0; border-radius: var(--ds-r-xs);
+                      background: transparent; color: var(--ds-text-muted); font: inherit; font-size: 12px; font-weight: bold; text-align: start; cursor: pointer; }
+.chatlog .srch-when:hover { color: var(--ds-text-strong); }
+.chatlog .srch-when:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.chatlog .srch-more { display: flex; justify-content: center; }
+@media (max-width: 760px) {
+  .chatlog .srch .ds-in { font-size: 16px; }
+  .chatlog .srch-f .ds-in, .chatlog .srch-chk, .chatlog .srch-when, .chatlog .srch-more .ds-btn, .chatlog .srch .ds-seg > * { min-height: 44px; }
+  .chatlog .srch-f { flex-basis: 100%; }
+}
+/* CL10: ⬇ Download chat log (public/js/pad-download.js) - a .ds-modal like the line dialogs: the range (Custom adds two dates), the
+   format, "Include joins, leaves and mic", the copy notice */
+.chatlog .cldl .cldl-opts legend { margin-block-end: var(--ds-sp-1); padding: 0; }
+.chatlog .cldl-dates { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+.chatlog .cldl-dates[hidden] { display: none; }
+.chatlog .cldl .cldl-date { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-px); flex: 1 1 150px; min-width: 0; font-size: 12.5px;
+                            color: var(--ds-text-muted); cursor: default; }   /* label above its field (not .la-reasons' two columns) */
+.chatlog .cldl-date .ds-in { min-width: 0; }
+/* CL10 fix-up: each date has an optional time beside it (continuing a file cut inside a day) */
+.chatlog .cldl-dt { display: flex; gap: var(--ds-sp-1); min-width: 0; }
+.chatlog .cldl-dt .ds-in { flex: 1 1 auto; }
+.chatlog .cldl-dt .cldl-time { flex: 0 1 7.5em; }
+.chatlog .cldl-dates .cldl-hint { flex-basis: 100%; }
+.chatlog .cldl .cldl-hint { margin: 0; font-size: 12.5px; color: var(--ds-text-muted); }
+.chatlog .cldl-chk { display: grid; grid-template-columns: auto 1fr; gap: var(--ds-sp-2); align-items: start; min-height: 32px; cursor: pointer; }
+.chatlog .cldl-chk small { display: block; color: var(--ds-text-muted); }
+.chatlog .cldl .cldl-notice { display: block; margin: 0; font-size: 12.5px; }
+@media (max-width: 760px) {
+  .chatlog .cldl .ds-in { font-size: 16px; min-height: 44px; }
+  .chatlog .cldl-chk, .chatlog .cldl .la-reasons label { min-height: 44px; }
+}
+/* name styles (cosmetics.js nameStyle) can animate their gradient */
+@keyframes cx-shift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+@media (prefers-reduced-motion: reduce) {
+  .chatlog .feed { scroll-behavior: auto; }
+  .chatlog .cx-name { animation: none !important; }
+}

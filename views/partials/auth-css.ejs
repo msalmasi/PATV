@@ -55,6 +55,10 @@
   .au-oauth.twitch { background: var(--ds-twitch); }
   .au-oauth.google { background: #fff; color: #1f1f1f !important; border-color: #dadce0; }
   .au-oauth.google:hover { filter: none; background: #f1f3f4; }
+  /* Sign in with Apple: Apple's white style (on a dark page) - black logo + black title in the system font, same size as the others */
+  .au-oauth.apple { background: #fff; color: #000 !important; border-color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 600; }
+  .au-oauth.apple:hover { filter: none; background: #f2f2f2; }
+  .au-oauth.apple svg { width: 18px; height: 18px; margin-top: -2px; }
   .au-oauth.telegram { background: #1a7bb0; }   /* Telegram's #229ED9 is 3.0:1 with white - this shade is 4.7:1 */
   .au-oauth.telegram[disabled] { opacity: .6; cursor: progress; }
   .au-oauth.plex { grid-column: 1 / -1; background: var(--ds-plex); color: #1a1200 !important; }

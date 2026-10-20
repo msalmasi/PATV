@@ -61,10 +61,17 @@
         if (!j.livecams) { camBox.innerHTML = '<li class="muted">Live cams are off in this room (Pepe\'s <code>!bridge livecams</code> / <code>!bridge cams</code>).</li>'; return; }
         var c = j.cams || [];
         camBox.innerHTML = c.length ? c.map(function (x) {
-          return '<li><span><b>' + esc(x.display) + '</b>' + (x.display.toLowerCase() !== x.login ? ' <span class="muted">' + esc(x.login) + '</span>' : '') + '</span>' +
+          // stagefix site: blocked is "opted_out" (they switched live video off) or the neutral "unavailable" (never why);
+          // limited = their cam shows only to some people (followers / on request), so most of the pad won't see it on the Stage
+          // stagefix final round (stagepin.js): ask = their level says a pad must ask first (the button asks them); waiting = asked
+          return '<li><span><b>' + esc(x.display) + '</b>' + (x.display.toLowerCase() !== x.login ? ' <span class="muted">' + esc(x.login) + '</span>' : '') +
+            (x.limited && !x.blocked ? ' <span class="muted" title="Their live cam settings show it only to some people - most viewers will see a card instead.">🔒 only some viewers will see it</span>' : '') + '</span>' +
             (x.slot ? '<span class="tag gold">🎬 on the stage</span>'
-              : x.blocked ? '<span class="muted">switched live video off</span>'
-              : '<button type="button" class="btn primary" data-cam="' + esc(x.login) + '">🎬 Put on stage</button>') + '</li>';
+              : x.blocked === 'opted_out' ? '<span class="muted">switched live video off</span>'
+              : x.blocked ? '<span class="muted">unavailable right now</span>'
+              : x.waiting ? '<span class="muted">⏳ asked - waiting for their OK</span>'
+              : '<button type="button" class="btn primary" data-cam="' + esc(x.login) + '"' + (x.limited ? ' data-limited="1"' : '') + (x.ask ? ' data-ask="1"' : '') + '>' +
+                (x.ask ? '🎬 Ask to put on stage' : '🎬 Put on stage') + '</button>') + '</li>';
         }).join('') : '<li class="muted">Nobody is on cam in the room right now.</li>';
       }).catch(function () {});
   }
@@ -74,12 +81,20 @@
       var b = e.target.closest('button[data-cam]');
       if (!b) return;
       var login = b.getAttribute('data-cam');
-      if (!confirm('Put ' + login + '\'s live cam on the stage? It takes one of the pad\'s slots; they are told, and it ends when they leave cam or switch live video off.')) return;
+      var asks = b.hasAttribute('data-ask');
+      if (!confirm((asks ? 'Ask ' + login + ' to put their live cam on the stage? They have to say yes first (within 10 minutes); it goes up by itself when they do.'
+                         : 'Put ' + login + '\'s live cam on the stage? It takes one of the pad\'s slots; they are told, and it ends when they leave cam or switch live video off.') +
+                   (b.hasAttribute('data-limited') ? ' Their cam settings show it only to some people - most viewers (maybe you too) will see a card instead.' : ''))) return;
       b.disabled = true;
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/stage/cam', { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ login: login }) })
         .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); })
-        .then(function (j) { $('camMsg').textContent = j.ok ? 'On the stage - it shows in the pad\'s stage tabs as soon as Pepe has the cam live.' : (j.error || 'Could not do that.'); camLoad(); load(); })
+        .then(function (j) {
+          $('camMsg').textContent = !j.ok ? (j.error || 'Could not do that.')
+            : j.asked ? 'Asked ' + (j.display || login) + ' - it goes on the stage once they say yes (they have 10 minutes).'
+            : 'On the stage - it shows in the pad\'s stage tabs as soon as Pepe has the cam live.' + (j.limited ? ' Only some viewers will see it: their cam settings show it only to some people.' : '');
+          camLoad(); load();
+        })
         .catch(function () { b.disabled = false; $('camMsg').textContent = 'Couldn\'t reach the site.'; });
     });
   }

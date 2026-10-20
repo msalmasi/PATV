@@ -24,8 +24,10 @@
         <% ql_.forEach((l) => { %><p class="fq-l<%= l.mic ? ' mic' : '' %><%= l.name === 'someone' ? ' anon' : '' %><%= l.me ? ' me' : '' %>"><span class="fq-n">&lt;<%= l.name %>&gt;</span> <% if (l.mic) { %><span class="fq-mic" title="<%- t('feed.pc.said_on_mic') %>" aria-label="<%- t('feed.pc.on_mic') %>">🎙</span> <% } %><span class="fq-t"><%= l.text %></span><% if (detail_ && l.ts) { %> <%- (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(l.ts, 'time', 'fq-ts') %><% } %></p><% }) %>
         <% if (q.quote.lines.length > ql_.length) { %><p class="fq-more"><a href="<%= url_ %>">+ <%- t('feed.pc.more_lines', { count: q.quote.lines.length - ql_.length }) %></a></p><% } %>
       </blockquote>
-      <figcaption class="fq-cap">💬 <%- t('feed.pc.people', { count: q.quote.speakers }) %> · <%- t('feed.pc.lines', { count: q.quote.lines.length }) %><%- q.quote.source === 'chat' ? ' · ' + t('feed.pc.clipped') : '' %></figcaption>
+      <figcaption class="fq-cap">💬 <%- t('feed.pc.people', { count: q.quote.speakers }) %> · <%- t('feed.pc.lines', { count: q.quote.lines.length }) %><%- q.quote.left_out ? ' · ' + t('feed.pc.left_out', { count: q.quote.left_out }) : '' %><%- q.quote.source === 'chat' ? ' · ' + t('feed.pc.clipped') : '' %></figcaption>
     </figure>
+  <% } else if (q.quote) { %><%# 1.99add refix 4: every line is of someone who keeps them private now (!bridge hide) - never the stored text %>
+    <p class="fq-gone"><span aria-hidden="true">💬</span> <%- t('feed.pc.quote_private') %></p>
   <% } else if (q.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(q.body) %></div><% } %>
   <% if (q.images.length) { %>
     <div class="fp-imgs n<%= Math.min(q.images.length, 4) %>">

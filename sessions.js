@@ -10,8 +10,8 @@
 //                     the same sliding 90 days the cookie always had), ip (the last one seen), country (Cloudflare's
 //                     CF-IPCountry, only when the request really came through our proxy), device (coarse: "Chrome on
 //                     Windows" - never the raw user agent), device_key (a hash of the welcome.js browser id: is this a
-//                     browser the account used before?), method (password | google | plex | telegram | discord | twitch
-//                     | chat | claim | legacy), legacy_key (for a converted pre-sessions cookie), legacy_before,
+//                     browser the account used before?), method (password | google | apple | plex | telegram | discord |
+//                     twitch | chat | claim | legacy), legacy_key (for a converted pre-sessions cookie), legacy_before,
 //                     notified (a new-device notice went out), revoked_at, revoked_why
 //   session_cutoffs   user_id PK, after (ms): a pre-sessions cookie (no sid) issued before this can't be converted any
 //                     more - "sign out everywhere" also kills cookies that were never seen since the switch-over
@@ -49,7 +49,7 @@ const SEEN_EVERY_MS = 5 * 60000;           // last_seen / expires / ip writes, p
 const CACHE_MAX = 20000;
 const NOTICE_MAX_PER_HOUR = 3;             // new-device inbox notices per account per hour
 const FRESH_MS = 10 * 60000;               // a session this young counts as a fresh sign-in (re-authentication)
-const METHODS = ["password", "google", "plex", "telegram", "discord", "twitch", "chat", "claim", "legacy"];
+const METHODS = ["password", "google", "apple", "plex", "telegram", "discord", "twitch", "chat", "claim", "legacy"];
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -207,6 +207,22 @@ async function revokeAll(userId, { except = null, why = "signed out everywhere",
   return (r && r.changes) || 0;
 }
 
+/** Every live session of the account that was signed in with `method` (applesso.js: Apple says the member stopped using Sign
+ *  in with Apple, or deleted the Apple Account). The other sign-ins stay. Inside a dbUtils.tx (the hub's per-session rows come
+ *  from the sessions trigger). before (ms) = only the sessions created at or before then (Apple's event time: a sign-in made
+ *  after it is a new authorization and stays). -> how many. */
+async function revokeMethod(userId, method, why = "sign-in method removed", { before = null } = {}) {
+  if (!userId || !method) return 0;
+  await init();
+  const cut = before == null ? null : Number(before);
+  if (cut != null && !Number.isFinite(cut)) return 0;
+  const r = await tx(() => runQuery(`UPDATE sessions SET revoked_at = ?, revoked_why = ? WHERE user_id = ? AND method = ? AND revoked_at IS NULL
+                                     ${cut == null ? "" : "AND created <= ?"}`,
+                                    [now(), str(why, 40), String(userId), String(method), ...(cut == null ? [] : [cut])]));
+  forgetUser(userId);
+  return (r && r.changes) || 0;
+}
+
 /** accountMerge: the merged-away account's sessions end with the merge (inside the merge's transaction). They are deleted -
  *  an unknown sid is a signed-out request - and its old sid-less cookies can't be converted (the account row is gone).
  *  1.99acf: intoId (the surviving account) rides the hub's merge row - its chat sockets close with 4005. */
@@ -276,7 +292,7 @@ async function signIn(req, res, user, method, opts = {}) {
   return s.id;
 }
 
-const METHOD_LABEL = { password: "your password", google: "Google", plex: "Plex", telegram: "Telegram", discord: "Discord", twitch: "Twitch",
+const METHOD_LABEL = { password: "your password", google: "Google", apple: "Apple", plex: "Plex", telegram: "Telegram", discord: "Discord", twitch: "Twitch",
                        chat: "a chat sign-in link (!signin)", claim: "a !signup claim link", legacy: "an older sign-in" };
 async function notifyIfNew(userId, row) {
   const u = String(userId);
@@ -463,6 +479,6 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, gate, check, create, revoke, revokeAll, revokeForMerge, list, signIn, isFresh, isLive, userIdOfToken, describe,
+module.exports = { init, register, gate, check, create, revoke, revokeAll, revokeMethod, revokeForMerge, list, signIn, isFresh, isLive, userIdOfToken, describe,
                    notifyIfNew, cutoffOf, METHODS, LOGIN_MS, CACHE_MS, SEEN_EVERY_MS, FRESH_MS, sha,
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _clearCache: () => { cache.clear(); cutoffCache.clear(); } };

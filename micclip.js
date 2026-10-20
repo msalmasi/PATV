@@ -44,6 +44,7 @@ const ID_RE = /^w[a-f0-9]{16}$/;
 const TX_RE = /^tx-[0-9a-f]{8,32}$/;
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const POST_RE = /^[A-Za-z0-9]{8,16}$/;
+const NOT_CLIPPABLE = "That mic line can't be clipped.";   // CL3: the one answer for any 🎙 line outside the clipper's view
 // 1.99iu: names the Camfrog room and the chat switch (bridge.clipOffText)
 const CLIP_OFF = (roomId) => deps.clipOffText(roomId);
 const CODE_RE = /^E_[A-Z_]{2,30}$/;
@@ -189,10 +190,17 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
       const tx = String((req.body || {}).tx || "");
-      const it = TX_RE.test(tx) ? (R.feed || []).find((x) => x && x.k === "tx" && x.id === tx) : null;
-      if (!it) return res.status(404).json({ ok: false, error: "That mic line isn't in the room's feed any more." });
-      if (!it.u || it.u.anon || !LOGIN_RE.test(String(it.u.login || ""))) return res.status(403).json({ ok: false, error: "They're private." });
+      // CL3 (decision 13) + fix-up: the 🎙 line is looked up in the clipper's OWN view of the pad (access, the bridge perk, the
+      // public floors, the hidden set and !transcripts off) - nothing outside it is looked at, so ONE answer covers a line that
+      // isn't there, one below the floor, an anonymised or hidden speaker's and a pad they can't read
+      const vis = TX_RE.test(tx) ? await require("./chatlogview").quotableFeed(u, R.id, R.feed || []) : [];
+      const it = vis.find((x) => x && x.k === "tx" && x.id === tx) || null;
+      if (!it || !it.u || it.u.anon || !LOGIN_RE.test(String(it.u.login || ""))) return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_CLIPPABLE });
       const login = String(it.u.login).toLowerCase();
+      // the owner's decision-9 change: an incognito speaker's 🎙 line is shown (as "someone") and in the clipper's view - but a voice
+      // says who it is (incognito hides WHO), so anyone hidden by any kind (the sticky set, Pepe's list) can't be clipped: the same
+      // one answer
+      if (require("./chatlogview").isHiddenLogin(login) || require("./quotes").isHidden(login)) return res.status(403).json({ ok: false, code: "not_quotable", error: NOT_CLIPPABLE });
       // 1.99md: Pepe's own 🎙 lines (his TTS mic-ups - voice only, never music) are clippable like anyone's
       if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their voice can't be clipped." });
       const off = clipGate(R, u);
@@ -224,9 +232,11 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   });
 
   // 2. Pepe: the preview (or why not)
-  app.post("/api/bridge/micclip", express.json({ limit: "9mb" }), (req, res) => {
+  app.post("/api/bridge/micclip", express.json({ limit: "9mb" }), async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false });
+    // CL3 fix-up: the transcript (the clip's caption to be) takes the live chat's redaction of hidden people's names
+    const text = String(b.state || "") === "ok" ? await require("./chatlogview").redactLoaded(relay.clean(b.text, 2000)) : "";
     const c = clips.get(String(b.id || ""));
     if (!c) return res.status(404).json({ ok: false, error: "unknown clip" });
     const j = relay._jobs.get(c.id);
@@ -241,7 +251,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
         fs.mkdirSync(PENDING_DIR, { recursive: true });
         fs.writeFileSync(fileOf(c.id), m4a);
         c.secs = Math.max(1, Math.min(600, Number(b.secs) || 1));
-        c.text = relay.clean(b.text, 2000);
+        c.text = text;
         c.viewerOk = !!b.viewer_ok && b.save !== "no";
         c.cost = Math.max(0, parseInt(b.cost, 10) || 0);
         c.state = "ready"; c.status = "ok"; c.done = NOW();
@@ -359,7 +369,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!acct) return res.status(409).json({ ok: false, error: "no PATV account for the clipper" });
       try { await deps.makePoster(row); } catch (e) { /* the post just has no waveform card */ }
       const speakers = (Array.isArray(b.speakers) ? b.speakers : []).map((s) => String(s || "").toLowerCase()).filter((s) => LOGIN_RE.test(s)).slice(0, 5);
-      const cap = String(b.caption || "").replace(/\s+/g, " ").trim();
+      // CL3 fix-up: the caption (the transcript, republished on the pad's feed) takes the live chat's redaction of hidden names
+      const cap = await require("./chatlogview").redactLoaded(String(b.caption || "").replace(/\s+/g, " ").trim());
       const who = String(row.subject || "").slice(0, 60);
       const title = cap ? `🎙 ${who ? who + ": " : ""}“${cap.length > 100 ? cap.slice(0, 99) + "…" : cap}”` : `🎙 ${who || "Mic clip"}`;
       const r = await deps.postToPad({ userId: acct.userId }, row.id, { caption: title.slice(0, 140), body: cap.length > 100 ? cap : "" });

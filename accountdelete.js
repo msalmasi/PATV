@@ -2,7 +2,7 @@
 //
 // The flow:
 //   1. GET /settings/account/delete       what deletion does, what still has to be closed first (blockers()), the form
-//   2. POST /api/account/delete           {password?, confirm}: re-authentication (the password, or a FRESH sign-in - any method,
+//   2. POST /api/account/delete           {password?, confirm, hide_lines?}: re-authentication (the password, or a FRESH sign-in - any method,
 //                                         the chat link included - within sessions.FRESH_MS) + the username typed exactly. Refused
 //                                         for admins / staff / moderators (another admin schedules it: POST /api/admin/users/:id/delete)
 //                                         and while anything blocks. Schedules the deletion GRACE_MS (14 days) ahead, signs every
@@ -13,6 +13,8 @@
 //                                         balance routed by the PAT Routing row "account_deleted" (default: the Fed), the profile
 //                                         pseudonymised, personal rows deleted, posts / comments / DMs handled, the Camfrog login
 //                                         released, Pepe asked to forget the login (website action "privacy.forget").
+//                                         CL6: with hide_lines ("Also hide my past public chat lines", unticked by default) the
+//                                         login and the account key join the pad chat archive's sticky hidden set (src delete).
 //
 // PAT never vanishes: the wallet debit ("account-deleted") and its legs (pools when the site owns them, the House as jackpot rakes,
 // else a negative Reserve claim Pepe's funding tick credits) are one transaction, keyed (account_deletion_routes, key
@@ -54,6 +56,9 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS account_deletions_due ON account_deletions (state, execute_at)");
       await runQuery(`CREATE TABLE IF NOT EXISTS account_deletion_routes (
         key TEXT PRIMARY KEY, user_id TEXT NOT NULL, amount INTEGER NOT NULL, legs TEXT, txid TEXT, at INTEGER NOT NULL)`);
+      // CL6 (decision 14): the member ticked "Also hide my past public chat lines"
+      const c = (await getQuery("SELECT name FROM pragma_table_info('account_deletions')")).map((r) => r.name);
+      if (!c.includes("hide_lines")) await runQuery("ALTER TABLE account_deletions ADD COLUMN hide_lines INTEGER");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -194,7 +199,7 @@ async function verifyPassword(userId, password) {
  * The member's own request. -> {ok, execute_at}. Throws Refuse (status, message, code) - E_ELEVATED, E_BLOCKED (with .block),
  * E_REAUTH, E_CONFIRM, E_PENDING.
  */
-async function request(req, { password, confirm } = {}) {
+async function request(req, { password, confirm, hideLines = false } = {}) {
   await init();
   const uid = String(req.user.userId);
   const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [uid]))[0];
@@ -205,17 +210,18 @@ async function request(req, { password, confirm } = {}) {
   let reauth = null;
   if (password) { if (await verifyPassword(uid, password)) reauth = "password"; else throw new Refuse(403, "That password isn't right.", "E_REAUTH"); }
   else if (await require("./sessions").isFresh(req)) reauth = "fresh-sign-in";
-  if (!reauth) throw new Refuse(403, "Confirm it's you: enter your password, or sign out and sign back in (any way you like - Google, Plex, Telegram, Twitch, Discord or a !signin chat link) and delete within 10 minutes.", "E_REAUTH");
+  if (!reauth) throw new Refuse(403, "Confirm it's you: enter your password, or sign out and sign back in (any way you like - Google, Apple, Plex, Telegram, Twitch, Discord or a !signin chat link) and delete within 10 minutes.", "E_REAUTH");
   const b = await blockers(uid);
   if (b.block.length) throw new Refuse(409, "Some things have to be closed first.", "E_BLOCKED", { block: b.block });
-  return schedule(u, { by: "self", reauth });
+  return schedule(u, { by: "self", reauth, hideLines });
 }
 
-async function schedule(u, { by = "self", reauth = null, reason = null } = {}) {
+async function schedule(u, { by = "self", reauth = null, reason = null, hideLines = false } = {}) {
+  await init();
   const t = now();
   const at = t + GRACE_MS;
-  await runQuery(`INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth, reason) VALUES (?, 'scheduled', ?, ?, ?, ?, ?)`,
-                 [String(u.userId), t, at, String(by).slice(0, 80), reauth, reason ? String(reason).slice(0, 200) : null]);
+  await runQuery(`INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth, reason, hide_lines) VALUES (?, 'scheduled', ?, ?, ?, ?, ?, ?)`,
+                 [String(u.userId), t, at, String(by).slice(0, 80), reauth, reason ? String(reason).slice(0, 200) : null, hideLines ? 1 : null]);
   await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
   await require("./inbox").addSafe(u.userId, { kind: "system", title: "Your account is scheduled for deletion",
     body: `Your PATV account will be deleted on ${new Date(at).toISOString().slice(0, 10)}. Every device was signed out. Changed your mind? Just sign in again before then - that cancels it.`,
@@ -310,6 +316,9 @@ const NAME_COLUMNS = [
   "voices.owner_login", "ach_events.login", "ach_metrics.login", "ach_progress.login", "stale_notice.login", "stale_notice.username",
   "inbox_pending.camfrog", "gang_rep_events.member_key", "gang_members.member_key",
   "adult_gate_cfg.by",                 // adultgate site: who last flipped the 18+ pad gate (the /pads/admin card shows it)
+  // (CL13 fix-up: NOT dm_relays.from_login / to_login - they hold Camfrog logins only, never a PATV username, and matching
+  //  them by username rewrote ANOTHER person's login whenever it equalled the deleted username. The person's own Camfrog
+  //  logins - the current one and earlier ones - are replaced there by messages.cfLoginForget, step 6.)
 ];
 const DISPLAY_COLUMNS = [["stage_slots", "displayname", "userId"], ["stage_queue", "displayname", "userId"]];
 
@@ -339,6 +348,14 @@ const DELETE_ROWS = [
   // storyreact site (storyreact.js): their story votes and the story references of the replies they sent (those messages are
   // blanked in step 3); story_tips are kept like post_tips (ledger evidence, no names in them)
   ["story_votes", "user_id", "uid"], ["dm_story_refs", "sender_id", "uid"],
+  ["stage_leave", "user_id", "uid"], ["stage_leave", "login", "login"],      // stagefix site: "Take me off this Stage" (stageleave.js)
+  ["stage_level", "user_id", "uid"], ["stage_level", "login", "login"],      // stagefix final round: the person's say over pins (stagepin.js)
+  ["stage_pad_prefs", "user_id", "uid"], ["stage_pad_prefs", "login", "login"],
+  ["stage_asks", "user_id", "uid"], ["stage_asks", "login", "login"], ["stage_asks", "actor_id", "uid"],
+  // micfollow: the 🎙 mic stage - appearances, pads keeping them off it, the pads' notices, reports on them and by them
+  // (their "no" to the mic stage itself is kept as an unlinked suppression record - see execute(), like livecam_optout)
+  ["micfollow_spans", "login", "login"], ["micfollow_excl", "login", "login"], ["micfollow_excl", "user_id", "uid"],
+  ["micfollow_notices", "login", "login"], ["micfollow_reports", "login", "login"], ["micfollow_reports", "reporter_id", "uid"],
 ];
 
 /** Settlements that run before the main transaction (each one idempotent). */
@@ -365,6 +382,25 @@ async function settle(uid, login, report) {
     }
     await runQuery("UPDATE stashes SET closed = ?, updated = ? WHERE id = ? AND closed IS NULL AND balance = 0", [t / 1000, t, s.id]).catch(() => {});
   }
+}
+
+/**
+ * CL13 fix-up: the Camfrog logins that Pepe's `!msg` records (dm_relays, admins' "📨 Sent in Camfrog to <login>" logs) may
+ * name for this account - its current login, and the earlier ones in its login history (username_history kind 'camfrog',
+ * login_changes) that no other account has linked since (then the name is that account's now, and is left alone).
+ * Read inside the job's transaction BEFORE step 5 deletes the history. -> [login, ...] (lower case)
+ */
+async function cfLoginsOf(uid, login) {
+  const out = new Set(login ? [low(login)] : []);
+  const past = [];
+  for (const r of await q("username_history", ["userId", "old_username", "new_username", "kind"],
+                          "SELECT old_username AS a, new_username AS b FROM username_history WHERE userId = ? AND kind = 'camfrog'", [uid])) past.push(r.a, r.b);
+  for (const r of await q("login_changes", ["userId", "old_login", "new_login"], "SELECT old_login AS a, new_login AS b FROM login_changes WHERE userId = ?", [uid])) past.push(r.a, r.b);
+  for (const l of past.map(low)) {
+    if (!l || out.has(l)) continue;
+    if (!(await getQuery("SELECT 1 FROM users WHERE lower(camfrogUsername) = ? AND userId != ? LIMIT 1", [l, uid]))[0]) out.add(l);
+  }
+  return [...out];
 }
 
 /** Run a due deletion. -> {ok, state, report} */
@@ -397,11 +433,23 @@ async function execute(userId, { force = false } = {}) {
   const t = now();
   // the clip files (outside the transaction: files, then the rows are flagged inside)
   const mediaRows = await q("media", ["by_user_id", "subject_login"], "SELECT id, file FROM media WHERE (by_user_id = ? OR lower(subject_login) = ?) AND COALESCE(deleted,0) = 0", [uid, login || "\u0000"]);
+  // Sign in with Apple: the link's Apple token joins applesso's revocation queue INSIDE the transaction that deletes the link (a
+  // restart can't lose it) and is sent to Apple right after it (applesso.flushQueued; the queue retries what fails)
+  const appleSso = (await getQuery("SELECT name FROM pragma_table_info('sso_links')")).some((c) => c.name === "refresh_token_enc") ? require("./applesso") : null;
+  if (appleSso) await appleSso.init();
+  let appleKeys = [];
   try {
     const M = require("./media");
     const path = require("path"), fs = require("fs");
     for (const m of mediaRows) { if (m.file) { try { fs.unlinkSync(path.join(M.DIR, m.file)); } catch (e) { /* gone */ } } try { M.removePoster(m.id); } catch (e) { /* none */ } }
   } catch (e) { /* no media module */ }
+  // CL6 (decision 14): "Also hide my past public chat lines" - the login (while the row still knows it) and the account key join
+  // the pad chat archive's sticky hidden set for good (src delete). Never inside the transaction below (the hidden set serialises
+  // its own writes); a deletion that has to be retried leaves them hidden, which is what the member asked for.
+  if (Number(reqRow.hide_lines) === 1) {
+    await require("./chatlog").hideNow(["u:" + uid.toLowerCase(), login].filter(Boolean), "delete");
+    report.chat_lines_hidden = true;
+  }
   await tx(async () => {
     // 1. the balance -> the routing row (keyed)
     report.route = await routeBalanceInTx(uid, `acctdel-${uid}-0`);
@@ -421,21 +469,51 @@ async function execute(userId, { force = false } = {}) {
     }
     n("stories_removed", await run("story_posts", ["author_id", "removed_at"], "UPDATE story_posts SET removed_at = ?, removed_reason = 'account deleted' WHERE (author_id = ? OR subject_user_id = ? OR posted_by = ?) AND removed_at IS NULL", [t, uid, uid, uid]));
     // 3. DMs: the messages they sent are deleted (the other side sees "deleted"); they leave every conversation
+    //    (CL11: a `!msg` copy's relay row - its key and Camfrog logins - goes with the message)
+    n("dm_relays_deleted", await run("dm_relays", ["message_id"], "DELETE FROM dm_relays WHERE message_id IN (SELECT id FROM messages WHERE sender_id = ?)", [uid]));
     n("messages_deleted", await run("messages", ["sender_id"], "UPDATE messages SET body = '', deleted_at = COALESCE(deleted_at, ?), deleted_by = COALESCE(deleted_by, ?) WHERE sender_id = ?", [t, uid, uid]));
     n("conversations_left", await run("conversation_members", ["user_id", "left_at"], "UPDATE conversation_members SET left_at = COALESCE(left_at, ?), hidden = 1 WHERE user_id = ?", [t, uid]));
     // storyreact site: other people's replies to their stories keep the message, but the card about them becomes
     // "Story no longer available" (their media is deleted in step 4 anyway) and the name snapshot goes
     n("story_refs_unlinked", await run("dm_story_refs", ["author_id"], "UPDATE dm_story_refs SET author_id = NULL, author_name = NULL WHERE author_id = ?", [uid]));
+    //    CL13: their own "📨 Sent in Camfrog to <login>" threads go entirely (only they were in them; the key names a Camfrog login)
+    const cfIds = (await q("conversations", ["kind", "dm_key"], `SELECT c.id FROM conversations c JOIN conversation_members m ON m.conversation_id = c.id
+                                                                 WHERE c.kind = 'cfpm' AND m.user_id = ?`, [uid])).map((r) => r.id);
+    for (let i = 0; i < cfIds.length; i += 200) {
+      const part = cfIds.slice(i, i + 200), qs = part.map(() => "?").join(",");
+      n("camfrog_threads_messages", await run("messages", ["conversation_id"], `DELETE FROM messages WHERE conversation_id IN (${qs})`, part));
+      await run("conversation_members", ["conversation_id"], `DELETE FROM conversation_members WHERE conversation_id IN (${qs})`, part);
+      n("camfrog_threads_deleted", await run("conversations", ["id"], `DELETE FROM conversations WHERE id IN (${qs})`, part));
+    }
+    //    CL13 fix-up: every Camfrog login of theirs that other people's `!msg` records may name (read before step 5)
+    const cfLogins = await cfLoginsOf(uid, login);
     // (their DM pictures go with the deleted messages: dmmedia.sweep purges the files after its grace period)
     // 4. clips they made / of them
     n("clips_removed", await run("media", ["by_user_id", "deleted"], "UPDATE media SET deleted = 1 WHERE by_user_id = ? OR (? IS NOT NULL AND lower(subject_login) = ?)", [uid, login, login]));
-    // 5. personal rows
+    // 5. personal rows (Apple's tokens to the revocation queue first, in this transaction)
+    if (appleSso) {
+      const appleLinks = await getQuery("SELECT subject, refresh_token_enc FROM sso_links WHERE provider = 'apple' AND user_id = ?", [uid]);
+      appleKeys = await appleSso.queueRows(appleLinks, "account deleted");
+    }
     for (const [table, col, kind] of DELETE_ROWS) {
       const v = kind === "login" ? login : uid;
       if (!v) continue;
       n("deleted:" + table, await run(table, [col], `DELETE FROM "${table}" WHERE "${col}" = ?`, [v]));
     }
     n("deleted:follows(target)", await run("follows", ["target_id", "target_kind"], "DELETE FROM follows WHERE (target_kind = 'user' AND target_id = ?) OR (target_kind = 'room' AND target_id = ?)", [uid, "user:" + uid]));
+    // micfollow: the mic-stage switch - "on" (the default) is just deleted; "off" stays as a suppression record no longer tied
+    // to the account, so their cam is still never put on a pad's mic stage by itself (deleting it would undo their "no")
+    if (login) {
+      n("deleted:micfollow_optout", await run("micfollow_optout", ["login", "off"], "DELETE FROM micfollow_optout WHERE login = ? AND off = 0", [login]));
+      n("micfollow_optout_unlinked", await run("micfollow_optout", ["login", "user_id"], "UPDATE micfollow_optout SET user_id = NULL WHERE login = ?", [login]));
+    }
+    // CL2: the pad chat archive (chatlog.js) - their own web lines ("u:<id>") keep no name (a "former member" when shown), their
+    // chat-log downloads log goes, their reports and settings changes no longer name them. CL6 fix-up: a staff read audit they
+    // wrote stays (2 years, like content_audit_views: the users row is a tombstone); one that names them as its subject gets the
+    // pseudonym
+    for (const [k, v] of Object.entries(await require("./chatlog").deleteAccount(uid, { login, pseudo }))) n("chatlog:" + k, v);
+    // CL3 fix-up: ...and the pad owner the chat watermarks last saw (chatlog_rooms.owner_id / inputs.owner) isn't their id any more
+    n("chatlog:owner_ref", await require("./chatlogview").forgetOwner(uid));
     n("plex_unlinked", await run("plex_members", ["user_id"], "UPDATE plex_members SET user_id = NULL WHERE user_id = ?", [uid]));
     n("creator_profile", await run("creators", ["user_id", "bio"], "UPDATE creators SET bio = NULL, updated = ? WHERE user_id = ?", [t, uid]));
     // 6. names in kept records -> the pseudonym
@@ -446,6 +524,16 @@ async function execute(userId, { force = false } = {}) {
       n("pseudonymised", await run(table, [col], `UPDATE "${table}" SET "${col}" = ? WHERE lower(trim("${col}")) IN (${names.map(() => "?").join(",")})`, [pseudo, ...names]));
     }
     for (const [table, col, idCol] of DISPLAY_COLUMNS) n("pseudonymised", await run(table, [col, idCol], `UPDATE "${table}" SET "${col}" = 'Deleted user' WHERE "${idCol}" = ?`, [uid]));
+    //    CL13: other people's Camfrog threads named after their login ("📨 Sent in Camfrog to <login>") are re-keyed to the
+    //    pseudonym, and so are the copies' records naming it. Fix-up: for every login of theirs (current + earlier), and ONLY
+    //    by login - dm_relays is no longer matched by PATV username (NAME_COLUMNS)
+    if (cfLogins.length && ((await has("conversations", "kind", "dm_key")) || (await has("dm_relays", "to_login")))) {
+      const M = require("./messages");
+      for (const l of cfLogins) {
+        const f = await M.cfLoginForget(l, pseudo);
+        n("pseudonymised", f.relays); n("camfrog_threads_renamed", f.threads);
+      }
+    }
     // 7. Pepe forgets the Camfrog login (website action; queued while the row still knows the login)
     if (login && (await tableExists("pepe_actions"))) {
       await runQuery(`INSERT OR IGNORE INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
@@ -487,6 +575,11 @@ async function execute(userId, { force = false } = {}) {
     AG.drop(uid);
     if (AG.isReady()) await AG.load().catch(() => {});
   } catch (e) { /* no gate */ }
+  // Apple: the deleted account's authorization ends at Apple too (queued above; a failed call is retried by applesso's queue)
+  if (appleKeys.length) {
+    try { report.apple_revoked = await appleSso.flushQueued(appleKeys); }
+    catch (e) { console.error("[acctdel] apple revoke:", e.message); }
+  }
   console.log(`[acctdel] ${uid} deleted -> ${pseudo}${report.route ? ` (${report.route.amount} PAT -> ${report.route.legs.map(([d, a]) => `${d} ${a}`).join(", ")})` : ""}`);
   return { ok: true, state: "done", report };
 }
@@ -587,7 +680,7 @@ function register(app, { addUser }) {
     if (req.get("X-Requested-With") !== "fetch" || !sameOrigin(req)) return res.status(403).json({ ok: false, error: "cross-site" });
     try {
       const b = req.body || {};
-      const r = await request(req, { password: typeof b.password === "string" ? b.password : "", confirm: b.confirm });
+      const r = await request(req, { password: typeof b.password === "string" ? b.password : "", confirm: b.confirm, hideLines: b.hide_lines === true });
       require("./middleware/loginCookie").clearLogin(res);
       res.json(r);
     } catch (e) { fail(res, e); }

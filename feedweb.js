@@ -558,6 +558,8 @@ function register(app, { addUser, isBotToken }) {
                               used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])),
                               userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [],
                               dmReports: dmOk ? await require("./messages").reportQueue().catch((e) => { console.error("[feed] dm reports:", e.message); return []; }) : [],
+                              // CL6: reported pad chat lines (chatlogmod.js) - staff holding chatlog.read_all; the text only on "Read" (logged)
+                              chatReports: SP.can(viewer, "chatlog.read_all") ? await require("./chatlogmod").reportQueue().catch((e) => { console.error("[feed] chat reports:", e.message); return []; }) : null,
                               termsPH: terms.placeholders(), termsLive: terms.enforced(),
                               pepe: await require("./pepefeed").adminView().catch((e) => { console.error("[feed] pepe admin view:", e.message); return null; }),
                               // 1.99dc: Pepe's automod - global caps, the All scope, recent calls everywhere

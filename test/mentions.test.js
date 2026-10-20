@@ -240,7 +240,8 @@ test("wiring: the ðŸ”” category, the room page highlights ?line=, the messages â
   assert.ok(inbox.KINDS.mention, "inbox kind");
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
   assert.match(room, /\[\?&\]line=/);
-  assert.match(room, /\.line\.hl/);
+  assert.match(room, /classList\.add\('hl'\)/);
+  assert.match(fs.readFileSync(path.join(repo, "public", "css", "chatlog.css"), "utf8"), /\.line\.hl/, "CL5: the chat's line styles are in chatlog.css");
   assert.match(fs.readFileSync(path.join(repo, "views", "messages.ejs"), "utf8"), /href="\/settings\/mentions"/);
   assert.match(fs.readFileSync(path.join(repo, "public", "js", "messages.js"), "utf8"), /k\.key === 'mention'/, "no Camfrog-PM switch for mentions");
   assert.match(fs.readFileSync(path.join(repo, "index.js"), "utf8"), /require\("\.\/mentions"\)\.register\(app/);

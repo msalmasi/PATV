@@ -13,6 +13,11 @@
 //                                          /events mode, the VM's old GET claim of /api/pepe/control/pending (allow | refuse)
 //   POST /api/admin/hubseam/settings {tickets, heartbeat, sessions, privacy, erasure, export, econ, spans}   (1.99acm: + erasure, export;
 //                                          the page also shows the seam env, topic queues, the hub's calls in, exports waiting)
+//   POST /api/admin/hubseam/unhide {login | h, kind, reason}   1.99add: un-hide one chat login in Pepe's sticky hidden set
+//                                          (hubhidden.js) - refix 4: one kind (bridge | incognito | unknown) or all
+//   POST /api/admin/hubseam/check {login | h}             1.99add: look one up there (kinds, held, missing once) - changes nothing,
+//                                          audited with the hash only (refix 4)
+//   POST /api/admin/hubseam/held {id, approve, reason}    1.99add: decide a held batch of that set (approve = un-hide them)
 // Who: viewing needs class Admin IN THE DATABASE (Staff get a flash + the Overview); every change needs an OWNER - Admin plus
 // Pepe role "owner" on the linked chat login (the user's 2026-10-16 rule: ops is owner-only). Changes need a same-origin fetch
 // with X-Requested-With: fetch, are written to admin_audit and answer Cache-Control: no-store.
@@ -45,6 +50,7 @@ async function pageData() {
       tickets: await safe(async () => require("./chatticket").status(), null),
       outbox: await safe(() => require("./huboutbox").status(), null),
       spans: await safe(() => require("./bridgespans").stats(), null),
+      hidden: await safe(async () => require("./hubhidden").status(), null),     // 1.99add: the sticky hidden set (sizes + held batch ids)
     },
   };
 }
@@ -98,6 +104,17 @@ function register(app, { addUser }) {
   change("/api/admin/keys/family", (b, me) => bk.setFamily(b.family, b.legacy_enforce, me));
   change("/api/admin/keys/settings", async (b, me) => ({ settings: await bk.setSettings(b, me) }));
   change("/api/admin/hubseam/settings", async (b, me) => ({ settings: await require("./huboutbox").setSettings(b, me) }));
+  // 1.99add: Pepe's hidden set is sticky (hubhidden.js) - an owner can un-hide one chat login (or hash) that Pepe un-hid without
+  // telling the site (an older Pepe's !bridge show). Audited with the hash only; if Pepe still lists it, his next sync hides it again.
+  // 1.99add refix 4: one kind (bridge | incognito | unknown) or all of them (the default)
+  change("/api/admin/hubseam/unhide", (b, me) => require("./hubhidden").unhideByOwner({ login: b.login, h: b.h, kind: b.kind }, me, b.reason));
+  // 1.99add refix 3: look one chat login (or hash) up before deciding - hidden by which kinds, held in which batch, missing once from
+  // an older Pepe's list. Changes nothing (the same owner-only, same-origin gate); refix 4: audited ("hubseam.check", the hash only
+  // - incognito hides WHO, so a look-up leaves a trace)
+  change("/api/admin/hubseam/check", (b, me) => require("./hubhidden").checkByOwner({ login: b.login, h: b.h }, me));
+  // 1.99add: what vanished from Pepe's lists in a way that may be a lost state (too many at once, or across his restart) is held -
+  // they stay hidden until an owner approves (un-hides them) or dismisses it here (spec §3.1). Audited without any hash.
+  change("/api/admin/hubseam/held", (b, me) => require("./hubhidden").decideHeld(b.id, b.approve, me, b.reason));
 }
 
 module.exports = { register, isOwner, pageData };

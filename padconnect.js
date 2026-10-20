@@ -333,6 +333,8 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
   await require("./padrekey").reloadCaches();
   const P = await rooms.get(out.target);
   try { require("./bridge").reslug(out.target); } catch (e) { /* no bridge */ }
+  // CL3: the Camfrog room has a different pad now - its chat starts a new public period (forward-only; "open earlier" can follow)
+  try { await require("./chatlogview").reconcileNow(out.target, { newPad: true }); require("./bridge").refreshRoom(out.target); } catch (e) { console.error("[padconnect] chat watermarks:", e.message); }
   await rooms.event(out.target, "pad-connected", actor || "?", `Camfrog room ${out.target}${out.T ? " (merged its unowned pad p/" + out.T.slug + ")" : ""} via ${method}; was ${out.R.id}`);
   console.log(`[padconnect] ${out.R.id} -> ${out.target} (${method}) moved ${JSON.stringify(out.moved)}`);
   await rooms.notify(P.owner.userId, { kind: "stage", title: `p/${P.slug} is now the pad of Camfrog room ${out.target}`, pm: true,
@@ -450,6 +452,8 @@ async function disconnect(user, R, platform) {
       const B = require("./bridge")._rooms.get(from);
       if (B) { await rooms.noteBridged(from, B.name); require("./bridge").reslug(from); }
     } catch (e) { /* no bridge */ }
+    // CL3: the Camfrog room's chat is no longer this pad's - whatever pad it gets next starts a new public period
+    try { await require("./chatlogview").reconcileNow(from, { newPad: true }); require("./bridge").refreshRoom(from); } catch (e) { console.error("[padconnect] chat watermarks:", e.message); }
     await rooms.event(to, "pad-disconnected", user.username || "?", `from Camfrog room ${from}; now a site pad (${to})`);
     console.log(`[padconnect] ${from} -> ${to} (disconnect) moved ${JSON.stringify(res.moved)}`);
     return rooms.get(to);

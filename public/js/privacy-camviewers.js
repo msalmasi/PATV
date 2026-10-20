@@ -49,8 +49,11 @@
   }
   function paint(d) {
     liveEl.textContent = '';
-    if (!d.live || !d.live.length) empty(liveEl, _t('js.cv.nobody', 'Nobody right now.'));
-    else d.live.forEach(function (p) { liveEl.appendChild(row(who(p), p.since ? ago(p.since) : null, blockBtn(p))); });
+    var micN = Math.max(0, Number(d.mic_stage_n) || 0);
+    if ((!d.live || !d.live.length) && !micN) empty(liveEl, _t('js.cv.nobody', 'Nobody right now.'));
+    else (d.live || []).forEach(function (p) { liveEl.appendChild(row(who(p), p.since ? ago(p.since) : null, blockBtn(p))); });
+    // micfollow (D-19): people who see your cam only on a pad's 🎙 mic stage while you hold the mic - counted, never named
+    if (micN) liveEl.appendChild(row(_t('js.cv.mic_stage_n', 'On a pad\'s 🎙 mic stage: {n} watching (not named)', { n: micN })));
     recEl.textContent = '';
     if (!d.recent || !d.recent.length) empty(recEl, _t('js.cv.none_recent', 'Nobody in the last 30 minutes.'));
     else d.recent.forEach(function (p) { recEl.appendChild(row(who(p) + ' · ' + kindsOf(p), ago(p.at), blockBtn(p))); });

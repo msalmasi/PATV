@@ -602,10 +602,12 @@
     }
     function setOffline(on) { offBar.classList.toggle('hide', !on); }
     function waiting() { return outbox.filter(function (x) { return x.st === 'queue' || x.st === 'posting' || x.st === 'wait'; }).length; }
-    function nearBottom() { return !feedEl || feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 80; }
+    // CL8: opts.scroller = what scrolls (the pad's chat log sits inside a scroller with scrollback's older lines)
+    var scrollEl = opts.scroller || feedEl;
+    function nearBottom() { return !scrollEl || scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 80; }
     function toBottom() {
-      if (!feedEl) return;
-      feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = '';
+      if (!scrollEl) return;
+      scrollEl.style.scrollBehavior = 'auto'; scrollEl.scrollTop = scrollEl.scrollHeight; scrollEl.style.scrollBehavior = '';
       if (opts.onBottom) { try { opts.onBottom(); } catch (e) { /* the page's pill */ } }
     }
     function optNode(it) {

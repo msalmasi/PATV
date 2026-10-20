@@ -92,7 +92,7 @@ test("refused: nothing proven, a feed ban on this pad, another member's chat nam
   V.forget("u3");
   let r = await say("hi", "u3");
   assert.equal(r.status, 403);
-  assert.match(r.d.error, /Telegram, Google or Plex/);
+  assert.match(r.d.error, /Telegram, Google, Apple or Plex/);
   r = await say("hi", "u6");
   assert.equal(r.status, 403);
   assert.match(r.d.error, /can't talk in this pad/);

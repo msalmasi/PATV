@@ -304,7 +304,7 @@
   // 1.99vz: these cards moved - old links (#connections, #password, ...) forward to their one home
   (function () {
     var h = (location.hash || '').slice(1), to = null;
-    if (/^(connections|password|security|timezone|camfrogDiv|plexDiv|googleDiv|telegramDiv|cryptoDiv)$/.test(h)) to = '/settings/account#' + h;
+    if (/^(connections|password|security|timezone|camfrogDiv|plexDiv|googleDiv|appleDiv|telegramDiv|cryptoDiv)$/.test(h)) to = '/settings/account#' + h;
     else if (h === 'language') to = '/language?next=' + encodeURIComponent(location.pathname);
     else if (h === 'privacy') to = '/settings#privacy';
     if (to) location.replace(to);

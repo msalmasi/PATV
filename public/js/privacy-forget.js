@@ -1,5 +1,6 @@
 // /settings/privacy - 🧠 "Make Pepe forget me" (1.99aat, pepeforget.js): type FORGET, then the site deletes your DMs with
-// Pepe at once and asks Pepe to forget the rest (his memory of you, your PM logs, his chat history with you).
+// Pepe at once and asks Pepe to forget the rest (his memory of you, your PM logs, his chat history with you). CL6: the
+// "Also hide my past public chat lines" box (#pvPfLines) sends hide_lines.
 (function () {
   'use strict';
   var form = document.getElementById('pvPf'), st = document.getElementById('pvPfSt');
@@ -13,8 +14,10 @@
     var b = form.querySelector('button');
     b.disabled = true;
     say(_t('js.lc.saving', 'Saving…'), 'wait');
+    // CL6: "Also hide my past public chat lines" (unticked by default)
+    var lines = document.getElementById('pvPfLines');
     fetch('/api/privacy/pepe-forget', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
-      body: JSON.stringify({ confirm: v }) })
+      body: JSON.stringify({ confirm: v, hide_lines: !!(lines && lines.checked) }) })
       .then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
       .then(function (d) {
         b.disabled = false;

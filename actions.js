@@ -325,6 +325,9 @@ function register(app, { isBotToken, addUser }) {
     }
     // 1.99kp: a room.ctl join's password is blanked as soon as Pepe has answered (roomctl.js)
     if (((req.body || {}).results || []).length) require("./roomctl").scrubPasswords().catch(() => {});
+    // 1.99add: a website Incognito ON he answered settles the sticky hidden set (incognito.actionsSettled; never rejects)
+    const acked = ((req.body || {}).results || []).slice(0, 50).map((r) => r && r.id);
+    if (acked.length) await require("./incognito").actionsSettled(acked);
     res.json({ ok: true });
   });
 }

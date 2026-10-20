@@ -52,6 +52,7 @@ const ssoLinks = require("./ssolinks");              // 1.99lb: the shared SSO f
 const ssoConf = require("./ssoconf");                // 1.99lb: Sign-in methods switches (/admin/users#signin)
 const telegramSso = require("./telegramsso");        // 1.99lb: Sign in with Telegram (Login Widget)
 const googleSso = require("./googlesso");            // 1.99lb: Sign in with Google (OIDC + PKCE)
+const appleSso = require("./applesso");              // Sign in with Apple (OIDC code, form_post, ES256 client secret)
 const oauthLink = require("./oauthlink");              // 1.99gb: link rewards, provider email capture, Twitch headers
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
@@ -110,6 +111,10 @@ app.use(cookieParser(process.env.APP_SESSION_SECRET));
 // cookie-parser, before anything reads the login cookie.
 const loginSessions = require("./sessions");
 app.use(loginSessions.gate);
+// Sign in with Apple (applesso.js): the two routes Apple calls CROSS-SITE - the form_post callback and the server-to-server
+// notifications - go here, before the session middleware: that POST carries no SameSite=Lax cookie, so a session made for it
+// would overwrite the member's real one. They parse their own bodies.
+appleSso.registerEarly(app);
 
 app.use(
   session({
@@ -407,6 +412,7 @@ function authView(req, extra) {
     plexSso: plexSso.enabled(),          // 1.99jr: the "Plex" button (auth-oauth partial)
     tgSso: telegramSso.button(),         // 1.99lb: the "Telegram" button ({botId} or null)
     googleSso: googleSso.enabled(),      // 1.99lb: the "Google" button
+    appleSso: appleSso.enabled(),        // the "Apple" button (Sign in with Apple)
   }, extra || {});
 }
 
@@ -431,6 +437,7 @@ plexSso.register(app, { addUser, authView });
 ssoLinks.register(app, { addUser, authView });
 telegramSso.register(app, { addUser });
 googleSso.register(app, { addUser });
+appleSso.register(app, { addUser });   // /auth/apple, /auth/apple/link, /auth/apple/continue, /api/sso/apple/unlink (+ registerEarly above)
 ssoConf.register(app, { addUser });
 
 // ── OAuth (Twitch / Discord) sign-in ──
@@ -2333,6 +2340,13 @@ app.get("/settings/account", addUser, async (req, res) => {
     // 1.99lb: Connections -> Google (googlesso.js; ssolinks sso_links)
     let google = null;
     try { const gl = await ssoLinks.linkOf("google", user.userId); google = { on: googleSso.enabled(), linked: !!gl, email: gl ? gl.email || gl.name || "" : "" }; } catch (e) { console.error("settings account google:", e.message); }
+    // Connections -> Apple (applesso.js; ssolinks sso_links): a relay address is shown as "Hidden email", never spelled out
+    let apple = null;
+    try {
+      const al = await ssoLinks.linkOf("apple", user.userId);
+      apple = { on: appleSso.enabled(), linked: !!al, name: al ? al.name || "" : "", email: al && !al.email_relay ? al.email || "" : "",
+                relay: !!(al && al.email_relay), mailOff: !!(al && al.email_off) };
+    } catch (e) { console.error("settings account apple:", e.message); }
     // 1.99ks: Connections → 🪙 Crypto wallets (cryptopay.js: linked by signature only)
     let cryptoW = null;
     try { const CP = require("./cryptopay"); await CP.init(); const ws = await CP.wallets(user.userId); if (CP.enabled() || ws.length) cryptoW = { on: CP.enabled(), wallets: ws }; } catch (e) { console.error("settings account crypto:", e.message); }
@@ -2346,7 +2360,7 @@ app.get("/settings/account", addUser, async (req, res) => {
       email: user.email,
       errors: req.flash ? req.flash("error") : [],
       success: req.flash ? req.flash("success") : [],
-      plex, plexLink, telegram, google, cryptoW,
+      plex, plexLink, telegram, google, apple, cryptoW,
       plexPin: /^\d{1,15}$/.test(String(req.query.plex || "")) ? String(req.query.plex) : null,
     });
   } catch (error) {

@@ -225,7 +225,7 @@ async function sendVerificationEmail(email, username, token) {
 // 1.99wj: the login is a server-side session (sessions.js: "Your devices", sign out everywhere) - `via` names the method.
 function methodOf(via) {
   const v = String(via || "").toLowerCase();
-  for (const m of ["plex", "google", "telegram", "discord", "twitch", "claim"]) if (v.includes(m)) return m;
+  for (const m of ["plex", "google", "apple", "telegram", "discord", "twitch", "claim"]) if (v.includes(m)) return m;
   if (v.includes("chat")) return "chat";
   return "password";
 }

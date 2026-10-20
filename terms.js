@@ -23,7 +23,7 @@ const VERSION = "2026-10-11";   // 1.99nt: the user asked everyone to accept the
 // 1.99nn: the "Last updated" date is per page and moves without VERSION: an additive change (the §10 premium,
 // donations and prizes section) updates the date but asks nobody to accept again. Bump VERSION too to re-ask.
 const UPDATED = "11 October 2026";                 // /terms
-const PRIVACY_UPDATED = "19 October 2026";         // /privacy (photos sent to Pepe in DMs - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
+const PRIVACY_UPDATED = "19 October 2026";         // /privacy (photos sent to Pepe in DMs - additive, VERSION unchanged; the owner's rule of 2026-10-19 (1.99add refix 4 + the chat-history owner change): incognito hides who, not what - "someone"; !bridge hide left out - additive, VERSION unchanged; CL11 + CL13: messages from Camfrog, the admin's own Camfrog log - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
 
 let ready = null;
 function init() {
@@ -110,10 +110,15 @@ function register(app, { addUser }) {
   init().catch(() => {});
   // every page rendered after this: may it say "By posting / signing up you agree to the Terms"?
   app.use((req, res, next) => { res.locals.termsEnforced = enforced(); next(); });
-  const page = (view, title, path, updated) => (req, res) => {
+  const page = (view, title, path, updated) => async (req, res, next) => {
     res.locals.og = { title: title + " — Public Access TV", description: title + " for publicaccess.tv.", image: (res.locals.ogBase || "") + require("./og").pageUrl(title),
                       url: (res.locals.ogBase || "") + path };
-    res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: updated, enforced: enforced() });
+    // CL2: from the moment the chat archive's notice switch is on, /privacy states it (chatlog.policy: null while it's off) -
+    // its date becomes the page's "Last updated" when it is the newer one; additive, so VERSION (re-acceptance) doesn't move
+    let chatlog = null;
+    if (view === "privacy") { try { chatlog = await require("./chatlog").policy(); } catch (e) { chatlog = null; } }
+    const upd = chatlog && chatlog.notice_at > Date.parse(updated + " 23:59:59 UTC") ? chatlog.notice_day : updated;
+    try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));
   app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy", PRIVACY_UPDATED));

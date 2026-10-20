@@ -12,6 +12,12 @@
 //     `!forgetme confirm`, and Pepe calls POST /api/privacy/pepe-forget/bot so the website half happens too.
 // What it is NOT: public room chat, mic transcripts and captures are the room's record (and other people's); this
 // doesn't switch on incognito either - Pepe starts learning again if they keep talking to him (the page says so).
+// CL6: unless they tick "Also hide my past public chat lines" (decision 14, unticked by default): then their linked login and
+// their account key join the pad chat archive's sticky hidden set for good (hideLines; src forget - Pepe can't un-hide them).
+// CL13 fix-up: nor the copies of Camfrog PMs Pepe's admins sent them with `!msg` (dm_relays, the account-pair DM or the
+// admin's own "📨 Sent in Camfrog to <login>" log) - those are the admin's messages; they stay until the recipient clears
+// the conversation / the admin deletes them, and the login in them is replaced only by account deletion or, for someone
+// without an account, privacy@ (tools/cflogin.js). The settings page (pf.what_msg) and the privacy policy say so.
 // Every request is logged (pepe_forget_log: who, when, how, counts) - nothing about what was said.
 // 1.99acm: the chat hub's half (huboutbox topic privacy/forget, switch hubseam.erasure - the R-12 privacy seam, seam plan D-24):
 // for a PATV account (the web request, or Pepe's for a linked login / account key) the DM wipe, the log row and a
@@ -37,6 +43,9 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS pepe_forget_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, login TEXT, at INTEGER NOT NULL,
                       via TEXT NOT NULL, dms INTEGER NOT NULL DEFAULT 0, action_id TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS pepe_forget_log_user ON pepe_forget_log (user_id, at)");
+      // CL6: "Also hide my past public chat lines" was ticked (decision 14) - the record of it, no content
+      const cols = (await getQuery("SELECT name FROM pragma_table_info('pepe_forget_log')")).map((r) => r.name);
+      if (!cols.includes("hide_lines")) await runQuery("ALTER TABLE pepe_forget_log ADD COLUMN hide_lines INTEGER");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -65,13 +74,25 @@ const loginOf = async (userId) => {
   return LOGIN_RE.test(l) ? l : null;
 };
 
-/** The member asks from the website. -> {ok, dms, action} */
-async function request(userId, { t = now() } = {}) {
+/** CL6 (decision 14): "Also hide my past public chat lines" - the account's linked login and its u:<id> key join the pad chat
+ *  archive's sticky hidden set for good (src forget: Pepe can never un-hide them): their lines are left out of every pad's chat,
+ *  history, search and downloads, and their names are redacted in other people's lines. Outside any transaction (the hidden set
+ *  serialises its own writes). -> keys hidden */
+async function hideLines(userId, login) {
+  const keys = ["u:" + String(userId).toLowerCase(), login || null].filter(Boolean);
+  await require("./chatlog").hideNow(keys, "forget");
+  return keys.length;
+}
+
+/** The member asks from the website. opts.hideLines: also hide their past public chat lines (CL6). -> {ok, dms, action, lines_hidden?} */
+async function request(userId, { t = now(), hideLines: hide = false } = {}) {
   await init();
   const uid = String(userId);
   const recent = (await getQuery("SELECT COUNT(*) AS n FROM pepe_forget_log WHERE user_id = ? AND at > ?", [uid, t - RATE_WINDOW_MS]))[0].n;
   if (recent >= RATE_MAX) throw new Refuse(429, "You've asked a few times today already - try again tomorrow.", "rate");
   const login = await loginOf(uid);
+  // CL6: first, and never inside the transaction below - hiding is what they asked for even if the rest has to be retried
+  if (hide) await hideLines(uid, login);
   await require("./messages").init();                 // (table creation never inside the transaction below)
   let dms = 0, action = null, ref = null;
   try {
@@ -80,8 +101,8 @@ async function request(userId, { t = now() } = {}) {
     ({ dms, action, ref } = await tx(async () => {
       const n = await wipeDms(uid, t);
       const a = await require("./actions").queue(uid, { kind: "privacy.forgetme", args: [], tag: "privacy", label: "forget me" });
-      const r = await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms, action_id) VALUES (?, ?, ?, 'web', ?, ?)",
-                               [uid, login, t, n, a ? String(a) : null]);
+      const r = await runQuery("INSERT INTO pepe_forget_log (user_id, login, at, via, dms, action_id, hide_lines) VALUES (?, ?, ?, 'web', ?, ?, ?)",
+                               [uid, login, t, n, a ? String(a) : null, hide ? 1 : null]);
       const id = r && (r.id || r.lastID);
       await emitForget(id, uid, t);
       return { dms: n, action: a, ref: id };
@@ -90,8 +111,8 @@ async function request(userId, { t = now() } = {}) {
     if (e && e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment, then try again.", "busy");
     throw e;
   }
-  console.log(`[pepeforget] ${uid}${login ? " (" + login + ")" : ""}: ${dms} DM(s) with Pepe deleted, Pepe asked to forget (web)`);
-  return { ok: true, dms, action, ref };
+  console.log(`[pepeforget] ${uid}${login ? " (" + login + ")" : ""}: ${dms} DM(s) with Pepe deleted, Pepe asked to forget (web)${hide ? ", past chat lines hidden" : ""}`);
+  return { ok: true, dms, action, ref, ...(hide ? { lines_hidden: true } : {}) };
 }
 
 /** 1.99acm: a pepe_forget_log row of an account -> the chat hub's privacy/forget payload (the feed row and the snapshot's). */
@@ -146,7 +167,7 @@ function register(app, { addUser, isBotToken }) {
     if (req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (String((req.body || {}).confirm || "").trim().toLowerCase() !== "forget") return res.status(400).json({ ok: false, error: "Type FORGET to confirm." });
-    try { res.json(await request(req.user.userId)); } catch (e) { fail(res, e); }
+    try { res.json(await request(req.user.userId, { hideLines: (req.body || {}).hide_lines === true })); } catch (e) { fail(res, e); }
   });
   app.post("/api/privacy/pepe-forget/bot", async (req, res) => {
     const b = req.body || {};
@@ -155,5 +176,5 @@ function register(app, { addUser, isBotToken }) {
   });
 }
 
-module.exports = { init, register, request, fromBot, wipeDms, last, hubRow, Refuse, RATE_MAX, PEPE_ID,
+module.exports = { init, register, request, fromBot, wipeDms, hideLines, last, hubRow, Refuse, RATE_MAX, PEPE_ID,
   _setClock: (fn) => { clock = fn || (() => Date.now()); } };

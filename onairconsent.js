@@ -19,7 +19,10 @@ const now = () => clock();
 const OA = () => require("./onair");
 const rooms = () => require("./rooms");
 
-const SESSION = new Map();        // "pad:<id>" | "cam:<login>" -> until
+// stagefix final round (D-9 (a), accepted 2026-10-19: "a 6h grant covers its own pick's pad only"): a cam's "this session" OK
+// is kept per pad - "cam:<login>@<room>" - so it never carries over to a pick of the same cam from another pad's room
+const SESSION = new Map();        // "pad:<id>" | "cam:<login>@<room>" -> until
+const camKey = (login, room) => "cam:" + String(login || "").toLowerCase() + "@" + String(room || "");
 let ready = null;
 function init() {
   if (!ready) {
@@ -51,7 +54,17 @@ async function padAllowed(pad, t = now()) {
   if ((SESSION.get("pad:" + pad) || 0) > t) return "session";
   return (await getQuery("SELECT 1 AS x FROM onair_pad_allow WHERE pad = ?", [String(pad)])).length ? "always" : null;
 }
-function camAllowed(login, t = now()) { return (SESSION.get("cam:" + String(login).toLowerCase()) || 0) > t ? "session" : null; }
+/** A running "this session" OK for `login`'s cam picked from `room` (its pad) -> "session" | null. No room = none. */
+function camAllowed(login, room, t = now()) {
+  if (!room || typeof room !== "string") return null;
+  return (SESSION.get(camKey(login, room)) || 0) > t ? "session" : null;
+}
+/** stagefix site (D-9): when the cam owner's running "this session" OK for a pick from `room` was given (ms), or 0. */
+function camAllowedAt(login, room, t = now()) {
+  if (!room || typeof room !== "string") return 0;
+  const until = SESSION.get(camKey(login, room)) || 0;
+  return until > t ? until - SESSION_MS : 0;
+}
 async function padAllowState(pad) {
   await init();
   const r = (await getQuery("SELECT owner_id, at FROM onair_pad_allow WHERE pad = ?", [String(pad)]))[0];
@@ -123,7 +136,7 @@ async function decide(id, answer, who = {}, via = "web") {
   const status = answer === "deny" ? "denied" : "allowed";
   await runQuery("UPDATE onair_consent SET status = ?, scope = ?, decided_at = ?, decided_via = ? WHERE id = ? AND status = 'pending'",
     [status, answer === "deny" ? null : answer, now(), via, r.id]);
-  if (answer === "session") SESSION.set((r.kind === "pad" ? "pad:" + r.pad : "cam:" + r.login), now() + SESSION_MS);
+  if (answer === "session") SESSION.set((r.kind === "pad" ? "pad:" + r.pad : camKey(r.login, r.room)), now() + SESSION_MS);   // stagefix: per pad
   if (answer === "always") {
     if (r.kind === "pad") await runQuery("INSERT OR REPLACE INTO onair_pad_allow (pad, owner_id, at) VALUES (?, ?, ?)", [r.pad, r.owner_id || who.userId || null, now()]);
     else await OA().setOptin(r.login, true, { via: via === "chat" ? "chat" : "web", userId: who.userId || null });
@@ -197,7 +210,7 @@ function register(app, { addUser }) {
 }
 
 module.exports = {
-  register, init, ask, get, mine, camAsks, decide, sweep, cancel, padAllowed, camAllowed, padAllowState, setPadAllow, padOwnerId, userOfLogin,
+  register, init, ask, get, mine, camAsks, decide, sweep, cancel, padAllowed, camAllowed, camAllowedAt, padAllowState, setPadAllow, padOwnerId, userOfLogin,
   Refuse, SESSION_MS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reset: () => { SESSION.clear(); ready = null; },

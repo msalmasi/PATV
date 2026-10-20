@@ -273,7 +273,7 @@
   <% } %>
   <p class="muted center"><a href="/p"><%- t('stage.pads_link') %></a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
-<script src="/public/js/stage-book.js?v=11" defer></script>
+<script src="/public/js/stage-book.js?v=12" defer></script>
 <% if (me && px && px.show) { %><script src="/public/js/stage-plex.js?v=3" defer></script>
 <script>
   // 1.99kp: /stage?mode=plex (the /plex hub's "Play from Plex") picks the 📼 choice once the page's scripts are up
@@ -286,7 +286,7 @@
   });
 </script><% } %>
 <% if (me) { %><script src="/public/js/restream.js?v=1" defer></script><% } %>
-<% if (rtc) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=4">
+<% if (rtc) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=5">
 <script src="/public/js/webrtc-client.js?v=5" defer></script>
 <script src="/public/js/stage-golive-rtc.js?v=1" defer></script><% } %>
 </body>

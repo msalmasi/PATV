@@ -30,6 +30,16 @@
 //     The cam owner gets a Camfrog PM from Pepe when it starts.
 //   * never: NSFW slots, banned streamers; 📼 Plex library plays only with allow_library on (Pepe's main stream is
 //     relayed to Twitch - restream.js - so a movie there is a DMCA risk; default off).
+//   * stagefix site (V1-2 of the dynamic-stages design; Pepe's stream is public egress - the site, Twitch, his Camfrog cam,
+//     VOD): never a 🎬 CAM SLOT (someone's Camfrog cam a pad owner put on a pad's stage - "cam_slot": it skipped the cam's
+//     on-air opt-in; put the cam itself on, which asks its owner), never anything from an 18+ pad ("adult":
+//     rooms_registry.adult, whatever the 18+ gate switch says), and a cam's own access mode counts (camaccess.js, D-9):
+//     followers / request cams never ("cam_mode"); a members cam (the default) only with an on-air OK given AFTER its
+//     owner last set the mode, and always with one (cam_optin off doesn't excuse it); everyone cams as before.
+//     stagefix fix: "last set" = last CHANGED (camaccess mode_at: the ask switch or the same mode saved again doesn't void an
+//     OK); a block with the admin and private activity are the one neutral "unavailable" (refusal, onair_log, the admin's list).
+//     stagefix final round (D-9 (a)): a cam owner's "this session" OK covers picks from that pad's room only (onairconsent
+//     keys it "cam:<login>@<room>"); a cam target saved before actor_ids existed gets them from its `by` at the next check.
 //   * 1.99aag EMBEDS: a YouTube / Twitch embed slot goes on air in a second OBS source, a BROWSER source ("PATV OnAir Web",
 //     `!onair setup embed`), that loads this site's /onair/player page (a signed per-pick token, the official YouTube IFrame
 //     API / Twitch embed player, audio into the stream). The admin must tick "I have the rights to rebroadcast this" every
@@ -159,6 +169,11 @@ const WHY = {
   livecam_off: "They've switched off live video of their cam.",
   private: "They keep their room activity private.",
   no_optin: "They haven't allowed their cam on Pepe's main stream (Settings → Privacy, or !onair me on in Camfrog).",
+  // stagefix site
+  cam_slot: "That's someone's Camfrog cam on a pad's stage - put the cam itself on Pepe's stream (that asks its owner).",
+  adult: "That pad is 18+ - nothing from it goes on Pepe's public stream.",
+  cam_mode: "They only show their cam to some people (followers or on request) - it can't go on Pepe's public stream.",
+  unavailable: "That cam isn't available right now.",
   self: "That's Pepe's own cam.",
   off: "On-air is switched off (/stage/admin).",
   // 1.99acw: pictures / cards / live pages
@@ -309,10 +324,39 @@ async function optinState(userId) {
 }
 
 // ── eligibility ──
+// stagefix site: an 18+ pad (rooms_registry.adult) never reaches Pepe's public stream, whatever the 18+ gate switch says
+const adultPad = (roomId) => { try { return require("./adultgate").isAdultPad(String(roomId || "")); } catch (e) { return false; } };
+const CA = () => require("./camaccess");
+/** stagefix site: the cam's own access mode (camaccess.js) and when its owner last set it (0 = never chose). */
+function camModeOf(login) {
+  try { return { mode: CA().accessOf(login).mode, since: CA().modeSince(login) }; } catch (e) { return { mode: "members", since: 0 }; }
+}
+/**
+ * stagefix site: the on-air OK that lets `login`'s cam on Pepe's stream right now -> "optin" (their standing opt-in) | "session"
+ * (a running 6 h OK) | "once" (this pick's OK, T) | "off" (none needed: cam_optin off, an `everyone` cam) | null.
+ * D-9: a `members` cam needs an OK and counts it only when it was given AFTER the owner last set the mode - a later tightening
+ * is the more recent choice. followers / request cams never get this far (camWhyNot: "cam_mode").
+ */
+function camConsent(login, T = null, t = now(), room = null) {
+  login = String(login || "").toLowerCase();
+  const md = camModeOf(login);
+  const after = (at) => md.mode !== "members" || Number(at) > md.since;
+  const o = OPTIN.get(login);
+  if (o && o.on && after(o.updated)) return "optin";
+  // stagefix final round (D-9 (a)): a "this session" OK covers picks from its own pad's room only (onairconsent keys it per pad)
+  const sAt = C().camAllowedAt(login, String(room || (T && T.kind === "cam" && T.room) || ""), t);
+  if (sAt && after(sAt)) return "session";
+  const mine = !!(T && T.kind === "cam" && T.login === login);
+  if (mine && T.cam_ok === "once" && after(T.cam_ok_at || T.at || 0)) return "once";
+  if (md.mode === "everyone" && (!CFG.cam_optin || (mine && T.cam_ok === "off"))) return "off";
+  return null;
+}
 async function slotWhyNot(s, { needLive = true, padOk = false } = {}, t = now()) {
   if (!s) return "gone";
   if (s.settled || !["waiting", "active"].includes(s.status)) return "ended";
+  if (s.source === "cam") return "cam_slot";                     // stagefix site: a cam on a pad's stage, never as a slot
   if (s.nsfw) return "nsfw";
+  if (adultPad(s.room_id || rooms().HOUSE_ROOM)) return "adult";   // stagefix site
   if (s.source === "library" && !CFG.allow_library) return "library";
   await PA().init();
   if (!padOk && PA().isApproved(s.room_id || rooms().HOUSE_ROOM)) return "pad_private";   // needs the owner's OK
@@ -339,8 +383,14 @@ async function camWhyNot(room, login, { optinOk = false, padOk = false } = {}) {
   if (m && m.self) return "self";
   if (!m || !m.on_cam || m.bot) return "not_on_cam";
   try { if (LC().optedOut(login)) return "livecam_off"; } catch (e) { /* no live cams module */ }
-  try { if ((await require("./stories").privateLogins([login])).has(login)) return "private"; } catch (e) { /* none */ }
-  if (!optinOk && CFG.cam_optin && !optedIn(login) && !C().camAllowed(login)) return "no_optin";
+  // stagefix fix: private activity is the neutral "unavailable" - the same word as a block between the cam's owner and the admin
+  // (setCam / checkTarget / adminView), so neither the refusal nor onair_log says which
+  try { if ((await require("./stories").privateLogins([login])).has(login)) return "unavailable"; } catch (e) { /* none */ }
+  if (adultPad(R.id)) return "adult";                                    // stagefix site: an 18+ room's cam - never
+  try { await CA().init(); } catch (e) { /* the default mode (members) applies */ }
+  const md = camModeOf(login);
+  if (md.mode === "followers" || md.mode === "request") return "cam_mode";   // stagefix site (D-9): never public
+  if (!optinOk && !camConsent(login, null, now(), R.id)) return "no_optin";                  // (members: an OK given after the mode was set)
   await PA().init();
   if (!padOk && PA().isApproved(R.id)) return "pad_private";
   return null;
@@ -581,6 +631,19 @@ function tellLive(T) {
           "Type !onair off in Camfrog (from your linked name) to take it off, or end your slot.", link: "/stage", ref: "onair:" + T.slot_id })
     .catch(() => {});
 }
+/** stagefix site: the PATV account(s) behind whoever picks a cam - the signed-in admin, or the accounts linked to the Camfrog
+ *  login Pepe says typed !onair cam ("pepe:<login>"). [] = no account (nothing to check blocks against). */
+async function actorIdsOf(admin, by) {
+  if (admin && admin.userId) return [String(admin.userId)];
+  const m = /^pepe:([\w.\-$]{1,40})$/.exec(String(by || ""));
+  // stagefix final round: "web:<username>" (the /stage/admin card's `by`) too - for a target saved before actor_ids existed
+  const w = m ? null : /^web:(.{1,60})$/.exec(String(by || ""));
+  try {
+    if (m) return (await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [m[1].toLowerCase()])).map((r) => String(r.userId));
+    if (w) return (await getQuery("SELECT userId FROM users WHERE lower(username) = ?", [w[1].toLowerCase()])).map((r) => String(r.userId));
+  } catch (e) { return []; }
+  return [];
+}
 async function setCam(room, login, by, { admin, ask = false } = {}) {
   await init();
   if (!CFG.enabled) throw refuse("off");
@@ -588,8 +651,12 @@ async function setCam(room, login, by, { admin, ask = false } = {}) {
   if (!LOGIN_RE.test(login)) throw new Refuse(400, "Whose cam?", "bad");
   const why = await camWhyNot(room, login, { optinOk: true, padOk: true });
   if (why) throw refuse(why);
+  // stagefix site (D-17, blocks against the director): not when the cam's owner and whoever picks it blocked one another -
+  // the neutral "unavailable", never which of them (re-checked every tick while it's on: checkTarget)
+  const actorIds = await actorIdsOf(admin, by);
+  if (actorIds.length && (await LC().blockedWith(login, actorIds))) throw refuse("unavailable");
   const R = bridge()._rooms.get(String(room));
-  const camOk = !CFG.cam_optin ? "off" : optedIn(login) ? "optin" : C().camAllowed(login);
+  const camOk = camConsent(login, null, now(), R.id);   // stagefix site: D-9 - a members cam's OK must postdate its mode
   const padOk = await padConsent(R.id);
   if ((!camOk || !padOk) && !ask) throw refuse(!camOk ? "no_optin" : "pad_private");
   const m = camMember(R, login);
@@ -597,7 +664,7 @@ async function setCam(room, login, by, { admin, ask = false } = {}) {
   await dropPending(prev);
   TARGET = { id: "c:" + login + ":" + now().toString(36), kind: "cam", room: R.id, login, display: (m && m.display) || login, pad: R.id,
              label: `📷 ${(m && m.display) || login} (${R.name || R.id})`, by: String(by), at: now(), cam_ok: camOk || null, pad_ok: padOk || null,
-             pending: [] };
+             pending: [], actor_ids: actorIds };
   if (!camOk) TARGET.pending.push((await C().ask({ kind: "cam", login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min })).id);
   if (!padOk) TARGET.pending.push((await C().ask({ kind: "pad", pad: R.id, login, room: R.id, label: TARGET.label, by, minutes: CFG.consent_min })).id);
   await persist(by);
@@ -623,7 +690,7 @@ async function onConsentChange(ev) {
   if (r.status !== "allowed") return void (await clear(r.status === "denied" ? "denied" : "consent_expired", "owner"));
   TARGET.pending = TARGET.pending.filter((x) => x !== r.id);
   if (r.kind === "pad") TARGET.pad_ok = r.scope === "once" ? "once" : r.scope;
-  else TARGET.cam_ok = r.scope === "always" ? "optin" : r.scope;
+  else { TARGET.cam_ok = r.scope === "always" ? "optin" : r.scope; TARGET.cam_ok_at = now(); }   // stagefix site: when (D-9)
   await log("consent", "owner", TARGET, `${r.kind}: ${r.scope}`);
   if (!TARGET.pending.length) {
     TARGET.at = TARGET.live_at = now();
@@ -831,9 +898,16 @@ async function checkTarget(t) {
         if (t - last > CFG.embed_stall_s * 1000) return clear("embed_not_playing", "system");
       }
     } else {
-      const optinOk = pending || T.cam_ok === "once" || T.cam_ok === "off" || (T.cam_ok === "session" && !!C().camAllowed(T.login));
+      // stagefix site: the OK still counts (camConsent: a once / session OK, the standing opt-in, none needed - and for a
+      // members cam, given after its mode was last set: tightening it takes the cam off)
+      try { await CA().init(); } catch (e) { /* the default mode (members) applies */ }
+      const optinOk = pending || !!camConsent(T.login, T, t);
       const why = await camWhyNot(T.room, T.login, { optinOk, padOk: true });
       if (why) return clear(why, "system");
+      // stagefix site: a block between the cam's owner and whoever picked it, made while it's on, takes it off.
+      // stagefix final round: a cam put on air before actor_ids existed (saved by an older build) gets them from its `by` now
+      if (!Array.isArray(T.actor_ids)) T.actor_ids = await actorIdsOf(null, T.by);
+      if (T.actor_ids.length && (await LC().blockedWith(T.login, T.actor_ids))) return clear("unavailable", "system");
       if (!pending && (T.pad_ok === "session" || T.pad_ok === "always") && !(await padConsent(T.pad))) return clear("consent_revoked", "system");
     }
     return null;
@@ -1182,11 +1256,18 @@ async function adminView(user) {
       if (!m || m.anon || m.self || m.bot || !m.on_cam || !m.login) continue;
       const login = String(m.login).toLowerCase();
       const why = await camWhyNot(R.id, login, { optinOk: true, padOk: true });
-      const ask = !why && ((CFG.cam_optin && !optedIn(login) && !C().camAllowed(login)) || !(await padConsent(R.id)));
+      const ask = !why && (!camConsent(login, null, t, R.id) || !(await padConsent(R.id)));     // stagefix site: the same OK setCam needs (D-9)
       cams.push({ room: R.id, roomName: R.name || R.id, login, display: m.display || login, why, ask });
       if (cams.length >= 200) break;
     }
   }
+  // stagefix fix: a cam whose owner and this admin blocked one another is "unavailable" in the list too (setCam refuses it) - the
+  // same word as private activity, so the list and the refusal agree and neither says which
+  try {
+    const ids = await actorIdsOf(user, null);
+    const no = ids.length ? await LC().blockedSet(cams.filter((c) => !c.why).map((c) => c.login), ids) : new Set();
+    for (const c of cams) if (!c.why && no.has(c.login)) { c.why = "unavailable"; c.ask = false; }
+  } catch (e) { /* no blocks to show */ }
   const logRows = await getQuery("SELECT at, what, by, kind, ref, label, detail, url FROM onair_log ORDER BY id DESC LIMIT 40");
   const pending = [];
   for (const id of (TARGET && TARGET.pending) || []) { const c = await C().get(id); if (c) pending.push(c); }
