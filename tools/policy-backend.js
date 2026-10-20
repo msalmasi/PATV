@@ -16,11 +16,15 @@
 //                                             # site admin is told (opsalerts). A paused engine runs nothing (a live one's due
 //                                             # periods are recorded missed); resume lets only the current period run (late, D-18).
 //                                             # WRITES - on prod only with the owner's explicit go.
+//   node tools/policy-backend.js --actor=<who> pause|resume <cfg|budget|staking_ops|loans_desk|features> --note "why"
+//                                             # PO-2: the same for a FEATURE (policy_ownership.paused): a paused cfg refuses every
+//                                             # edit of the economy settings (423); the readers keep reading.
 //   --dir=<folder with myapp.db>              # run against that folder's database (default: the current directory)
 // PO-1 review: it never opens a database that isn't there - with no ./myapp.db (the wrong directory) every command stops
 // (exit 2) instead of creating an empty one, and pause / resume also refuse a database without the site's users and
 // policy_engines tables: the kill switch must never report PAUSED while prod keeps running.
-// Later slices add the config checks (PO-2: every SPEC key present).
+// PO-2: the config store - who owns each feature (pepe / cutting / site, paused), the rev, every SPEC key present (FAIL if not),
+// the mirror's daily diff counts (policy_meta cfg_mirror_days) and the dual read's last 7 days (policy_cfg_dualcheck / _dualread).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -121,6 +125,20 @@ async function gather() {
   const ccfg = await meta("capital_meta", "cfg");
   const wf = ccfg && Array.isArray(ccfg.waterfall) ? ccfg.waterfall.slice().sort((a, b) => Number(a.boundary || 0) - Number(b.boundary || 0)) : [];
   out.lastW = wf.length ? wf[wf.length - 1] : null;
+  // PO-2: the policy config store (cfgspec is a pure module - no database)
+  const SPEC = require(path.join(__dirname, "..", "policy", "cfgspec"));
+  out.features = {};
+  for (const f of ["cfg", "budget", "staking_ops", "loans_desk"]) out.features[f] = { owner: "pepe", paused: 0 };
+  for (const r of await q("SELECT feature, owner, paused, paused_by, paused_at, note, since, handover_key FROM policy_ownership", [], "policy_ownership")) out.features[r.feature] = r;
+  const rev = (await q("SELECT rev, sha, updated FROM policy_cfg_rev WHERE id = 1", [], "policy_cfg_rev"))[0] || null;
+  const have = new Set((await q("SELECT key FROM policy_cfg", [], "policy_cfg")).map((r) => r.key));
+  out.cfg = { rev: rev ? rev.rev : null, sha: rev ? rev.sha : null, updated: rev ? rev.updated : null, keys: have.size, store: await has("policy_cfg"),
+              missing: SPEC.KEYS.filter((k) => !have.has(k)) };
+  const days = (await meta("policy_meta", "cfg_mirror_days")) || {};
+  out.mirrorDays = Object.keys(days).sort().slice(-7).map((d) => Object.assign({ day: d }, days[d]));
+  const since = new Date(Date.now() - 6 * 86400e3).toISOString().slice(0, 10);
+  out.dualChecks = await q("SELECT day, consumer, checks, diffs FROM policy_cfg_dualcheck WHERE day >= ? ORDER BY day, consumer", [since], "policy_cfg_dualcheck");
+  out.dualDiffs = await q("SELECT day, consumer, key, push, site, n FROM policy_cfg_dualread WHERE day >= ? ORDER BY last_ts DESC LIMIT 20", [since], "policy_cfg_dualread");
   return out;
 }
 
@@ -147,6 +165,15 @@ function printStatus(s) {
   if (s.lastW) console.log(`last W   ${s.lastW.epoch} state=${s.lastW.state || "?"} done=${s.lastW.done ? new Date(Number(s.lastW.done) * 1000).toISOString().slice(0, 16) : "-"}`);
   console.log(`stashes  ${s.closedNoAccount.length} closed stash(es) with no account to pay${s.closedNoAccount.length ? ": " + s.closedNoAccount.map((x) => `${x.id} (${x.owner})`).join(", ") : ""}`);
   for (const r of s.refusedWf) console.log(`refused  ${r.key} (stash ${r.stash_id || "?"}, ${ago(r.ts)}): ${(parse(r.result, {}) || {}).code || (parse(r.result, {}) || {}).error || "?"}`);
+  for (const [f, r] of Object.entries(s.features)) {
+    console.log(`feature  ${f.padEnd(11)} ${String(r.owner).padEnd(7)}${r.since ? " since " + ago(r.since) : ""}${r.handover_key ? " (hand-over " + String(r.handover_key).slice(0, 12) + ")" : ""}` +
+                (Number(r.paused) ? `  PAUSED by ${r.paused_by || "?"} ${ago(r.paused_at)}${r.note ? " (" + r.note + ")" : ""}` : ""));
+  }
+  if (!s.cfg.store) console.log("config   the policy config store isn't there yet (a site before PO-2)");
+  else console.log(`config   rev ${s.cfg.rev ?? 0} · ${s.cfg.keys} key(s) · ${s.cfg.missing.length ? "MISSING " + s.cfg.missing.length + ": " + s.cfg.missing.slice(0, 10).join(", ") : "every SPEC key present"} · changed ${ago(s.cfg.updated)}`);
+  for (const d of s.mirrorDays) console.log(`mirror   ${d.day} ${d.pushes} push(es), ${d.changes} change(s), diff ${d.max ? JSON.stringify(d.max) : "not checked"}`);
+  for (const c of s.dualChecks) console.log(`dual     ${c.day} ${c.consumer.padEnd(16)} ${c.checks} check(s), ${c.diffs} difference(s)`);
+  for (const x of s.dualDiffs.slice(0, 8)) console.log(`dualdiff ${x.day} ${x.consumer} ${x.key}: push ${x.push} / site ${x.site} (x${x.n})`);
 }
 
 /** The site half of the plan §6.2 preflight. -> [{level: PASS|WARN|FAIL|INFO, check, detail}] */
@@ -185,7 +212,16 @@ function preflight(s) {
                      : `${s.shadow14.filter((x) => Number(x.reported)).length} compared, all clean`);
   add("INFO", "last W record", s.lastW ? `${s.lastW.epoch} ${s.lastW.state || "?"} (notified / audit / digest_sent: Pepe's half)` : "none pushed");
   add("INFO", "Pepe's half", "!econ policy status: pvault unsure/outbox, corrections unsure/paying, pools outbox/uncertain/inbox, policy outbox + dead letters, capital outbox, the last W record");
-  add("INFO", "config keys", "every SPEC key present - checked from PO-2 (policy_cfg)");
+  // PO-2: the config store
+  if (!s.cfg.store) add("FAIL", "config store", "policy_cfg isn't there - a site before PO-2");
+  else add(s.cfg.missing.length ? "FAIL" : "PASS", "every config key present (policy_cfg)", s.cfg.missing.length ? `${s.cfg.missing.length} missing: ${s.cfg.missing.join(", ")}` : `${s.cfg.keys} keys, rev ${s.cfg.rev}`);
+  const pausedF = Object.entries(s.features).filter(([, r]) => Number(r.paused));
+  add(pausedF.length ? "FAIL" : "PASS", "no feature paused", pausedF.map(([f, r]) => `${f} by ${r.paused_by || "?"}`).join(", ") || "none");
+  add("INFO", "feature owners", Object.entries(s.features).map(([f, r]) => `${f}=${r.owner}`).join(" "));
+  const dirty = s.mirrorDays.slice(-4).filter((d) => !d.max || Object.values(d.max).some((n) => Number(n) > 0));
+  add(dirty.length ? "WARN" : "PASS", "mirror diff empty (4 days)", dirty.map((d) => `${d.day}: ${d.max ? JSON.stringify(d.max) : "not checked"}`).join("; ") || `${s.mirrorDays.slice(-4).length} day(s) clean`);
+  const dd = s.dualChecks.filter((c) => Number(c.diffs) > 0);
+  add(dd.length ? "WARN" : "PASS", "dual read clean (7 days)", dd.length ? dd.map((c) => `${c.day} ${c.consumer}: ${c.diffs}`).join(", ") : `${s.dualChecks.reduce((t, c) => t + Number(c.checks), 0)} comparison(s), no difference`);
   return out;
 }
 
@@ -201,9 +237,19 @@ async function pauseCmd(cmd, target, argv) {
   const actor = (argv.find((a) => a.startsWith("--actor=")) || "").slice(8).trim();
   if (!actor) throw new Error("say who is doing it: --actor=<name>");
   const ENG = ["treasury", "monetary", "burn"];
-  if (!target || !(target === "all" || ENG.includes(target))) throw new Error(`usage: node tools/policy-backend.js --actor=<who> ${cmd} <treasury|monetary|burn|all> --note "why"`);
+  const FEAT = ["cfg", "budget", "staking_ops", "loans_desk"];
+  if (!target || !(target === "all" || target === "features" || ENG.includes(target) || FEAT.includes(target))) {
+    throw new Error(`usage: node tools/policy-backend.js --actor=<who> ${cmd} <treasury|monetary|burn|all | cfg|budget|staking_ops|loans_desk|features> --note "why"`);
+  }
   const note = String(noteArg(argv) || "").replace(/\s+/g, " ").trim().slice(0, 200);
   if (cmd === "pause" && note.length < 3) throw new Error('say why: --note "..." (every pause is logged and every admin is told)');
+  if (target === "features" || FEAT.includes(target)) {
+    // PO-2: a feature (policy_ownership.paused) - policy/config.setPause: one transaction, audited, admins alerted
+    const PCF = require(path.join(__dirname, "..", "policy", "config"));
+    const res = await PCF.setPause(target === "features" ? FEAT : [target], cmd === "pause", { by: `${actor} (cli)`.slice(0, 60), auditId: `cli:${actor}`.slice(0, 64), via: "cli", note: note || null });
+    for (const r of res) console.log(r.unchanged ? `${r.feature}: already ${r.paused ? "paused" : "running"} - nothing changed` : `${r.feature}: ${r.paused ? "PAUSED" : "resumed"} by ${actor}`);
+    return;
+  }
   const SCH = require(path.join(__dirname, "..", "policy", "scheduler"));
   const res = await SCH.setPause(target === "all" ? ENG : [target], cmd === "pause", { by: `${actor} (cli)`.slice(0, 60), auditId: `cli:${actor}`.slice(0, 64), via: "cli", note: note || null });
   for (const r of res) {
@@ -250,7 +296,7 @@ async function main() {
     printStatus(await gather());
     process.exit(0);
   }
-  if (!["status", "preflight"].includes(cmd)) throw new Error('usage: node tools/policy-backend.js [status|preflight]   (read-only) | --actor=<who> pause|resume <engine|all> --note "why"');
+  if (!["status", "preflight"].includes(cmd)) throw new Error('usage: node tools/policy-backend.js [status|preflight]   (read-only) | --actor=<who> pause|resume <engine|all|feature|features> --note "why"');
   const s = await gather();
   if (process.argv.includes("--json")) { console.log(JSON.stringify(cmd === "preflight" ? preflight(s) : s, null, 2)); process.exit(0); }
   if (cmd === "status") { printStatus(s); process.exit(0); }

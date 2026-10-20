@@ -112,11 +112,15 @@ const DEFAULT_CFG = {
   layers: false, tr_live: false, targets: null, flash: { bank: false, mm: false, room: 0 }, fl_room: 0, flows: null,
   credit: null,
 };
-async function cfg() {
+/** Pepe's constants + his policy state (DEFAULT_CFG under his last push). PO-2: the knob fields (the ceiling, cushion, Auto cap,
+ *  staker limit, House float, loan terms, fees, flash switches, flags) go through the policy config store - while Pepe owns the
+ *  config they are his push and `consumer` ("capital.cutoff" | "capital.reserve") compares them with policy_cfg (the dual read);
+ *  once the site owns it (H1) they ARE policy_cfg's (a missing key throws E_CFG_MISSING, never a default). */
+async function cfg({ consumer = null } = {}) {
   const c = (await meta("cfg")) || {};
   const out = Object.assign({}, DEFAULT_CFG, c);
   out.flash = Object.assign({}, DEFAULT_CFG.flash, c.flash || {});
-  return out;
+  return require("../policy/config").capitalCfg(out, consumer, { pushed: !!c.at });
 }
 /** Seconds since Pepe last pushed his policy state (targets, layers, flash room). */
 async function cfgAge() {

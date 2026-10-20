@@ -134,7 +134,12 @@ async function putSettings(b) {
   const by = str(b.actor, 60) || "pepe", via = str(b.via, 20) || "pepe";
   const t = Date.now();
   let rc = 0, cc = 0;
-  if (b.pat_routes && typeof b.pat_routes === "object") {
+  // PO-2 (D-19): PAT Routing is mirrored into the policy config store; once the site owns the config (H1) it is the writer and
+  // Pepe's pushed table is ignored (logged) - econstore's pat_routes is then a view of policy_cfg (getSettings)
+  const PC = require("./policy/config");
+  const siteOwned = b.pat_routes && typeof b.pat_routes === "object" && via !== "import" && (await PC.owner("cfg").catch(() => "pepe")) === "site";
+  if (siteOwned) console.log("[econstore] ignored pepe pat_routes (the site owns the economy settings)");
+  if (b.pat_routes && typeof b.pat_routes === "object" && !siteOwned) {
     const want = cleanRoutes(b.pat_routes);
     const have = {};
     for (const r of await getQuery("SELECT flow, shares FROM pat_routes")) have[r.flow] = r.shares;
@@ -181,6 +186,7 @@ async function putSettings(b) {
     const s = J(b.catalog);
     if (s.length < MAX_DOC) await runQuery("INSERT INTO econ_catalog (id, data, updated) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated = excluded.updated", [s, t]);
   }
+  if (b.pat_routes && typeof b.pat_routes === "object" && !siteOwned && via !== "import") await PC.mirror("econ", { pat_routes: cleanRoutes(b.pat_routes) });
   return { routes_changed: rc, cfg_changed: cc };
 }
 async function getSettings() {
@@ -188,6 +194,11 @@ async function getSettings() {
   const pat_routes = {}, econ_cfg = {};
   for (const r of await getQuery("SELECT flow, shares FROM pat_routes")) pat_routes[r.flow] = parse(r.shares, []);
   for (const r of await getQuery("SELECT key, value FROM econ_cfg")) econ_cfg[r.key] = parse(r.value, null);
+  // PO-2 (D-19): once the site owns the config, PAT Routing is the policy config store's
+  try {
+    const snap = await require("./policy/config").snapshot();
+    if (snap.own.cfg.owner === "site" && snap.cfg.pat_routes) return { pat_routes: JSON.parse(JSON.stringify(snap.cfg.pat_routes)), econ_cfg };
+  } catch (e) { /* the store isn't there (a bare test database): the table */ }
   return { pat_routes, econ_cfg };
 }
 
@@ -261,13 +272,26 @@ async function requestEdit(user, body, ip) {
   // PO-0b (D-6): changing the economy (econ.cmd / econ.routes) is a Pepe OWNER's - the class AND the owner role on the linked
   // chat login, read fresh (staffroles.ownerOf). The VPS CLIs stay the emergency path.
   const SR = require("./staffroles");
-  if (!(await SR.ownerOf(user, "econ.pepe_econ_cmds"))) throw fail(403, SR.OWNER_ONLY);
+  const owner = await SR.ownerOf(user, "econ.pepe_econ_cmds");
+  if (!owner) throw fail(403, SR.OWNER_ONLY);
   await stepUp(user, body);
   let kind, args, label;
   if (body.op === "routes") {
     const flow = String(body.flow || "");
     if (!/^[A-Za-z0-9_:.-]{1,64}$/.test(flow)) throw fail(400, "Pick a flow.");
     const shares = body.reset ? null : cleanRoutes({ [flow]: body.shares })[flow];
+    // PO-2 (D-19): once the site owns the config, PAT Routing is changed HERE (the policy config store: whole-config check,
+    // the run window, the change log, the admin audit) - not sent to Pepe
+    const PC = require("./policy/config");
+    if ((await PC.owner("cfg")) === "site") {
+      const snap = await PC.snapshot({ fresh: true });
+      const actor = owner.camfrogUsername ? `${owner.username} (${String(owner.camfrogUsername).trim().toLowerCase()})` : owner.username;
+      const r = await PC.edit({ changes: { pat_routes: { [flow]: shares === undefined ? null : shares } }, via: "web", actor, actorUserId: user.userId,
+                                baseRev: body.base_rev !== undefined && body.base_rev !== null ? body.base_rev : snap.rev,
+                                note: String(body.note || "PAT Routing card").slice(0, 300) });
+      console.log(`[econstore] ${user.username} changed PAT Routing ${flow} on the site (rev ${r.rev}, ip ${ctl.ipHash(ip)})`);
+      return { applied: true, rev: r.rev, msg: r.msg };
+    }
     kind = "econ.routes";
     args = [flow, shares === null ? "default" : JSON.stringify(shares)];
     label = `Routing ${flow} -> ${shares === null ? "default" : shares.map((s) => s[0] + " " + s[1] + "%").join(", ")}`;

@@ -276,3 +276,52 @@ The economy-policy-to-site plan (2026-10-20, slice PO-1) hardened the scheduler 
 - Every reader of Pepe's policy push (flags, the epoch hour, burn settings, his journals, the effective `econ_cfg`) reads it
   through `policy/source.js`; PO-2 / H1 switch that one module to the site's own config. `policy/core`'s reader is named
   `_pushForSource` (no `cfg()`): `test/policy.test.js` fails if any other file calls it.
+
+## 14. Phase 6 / PO-2: the policy config store (mirror + dual read)
+
+`policy/config.js` (the store), `policy/cfgspec.js` (the spec: Pepe's `pepe_econcfg` rules, ported - 112 keys: the 69 `econ_cfg`
+keys, the economy sink rates, `burn_cfg`, the flags, PAT Routing, the system constants, the read-only v1 knobs) and
+`policy/handover.js` (the hand-over). It ships in **MIRROR** mode: `policy_ownership.cfg = pepe`, Pepe is the writer.
+
+- **The mirror.** Every push Pepe makes is normalised into `policy_cfg` (by `pepe`, via `mirror`): his policy config (`econ_cfg`,
+  the economy `sink` rates (PO-2's bot change adds them to the push), consts, flags, burn_cfg, skip, tz), his capital config, PAT Routing
+  (`/api/econ/settings/put`) and the funding sync's `monetary` block. A key several pushes carry is written from its best source
+  (his stored value first, derived copies never) while that push is fresh (25 h); at start the stored copies are replayed. The
+  `[policycfg]` log names mirror errors - a push is never refused because of the mirror.
+- **The diff report** (/admin/economy → ⚙️ Policy settings → Mirror diff report; `node tools/policy-backend.js status`): keys
+  Pepe never pushed (`missing`), keys he has that the site doesn't (`unknown`), values the site's checks would refuse
+  (`invalid`, `whole`), two of his pushes disagreeing on a key for more than 10 minutes (`disagree`). The worst counts of each
+  UTC day are kept (`cfg_mirror_days`). **H1 gate 1: empty 10-30..11-02.**
+- **The dual read.** Each reader compares Pepe's value with the store's, logs every difference (`policy_cfg_dualread`: day,
+  reader, key, Pepe's value, the site's, how often) with a per-day check count (`policy_cfg_dualcheck`), and keeps USING PEPE'S:
+  `capital.cutoff` (the daily cut-off: ceiling, cushion, Auto cap, staker limit, House float, top-up, dividend),
+  `capital.reserve` (the loan terms), `fed.cfgNow` (a Fed op's numbers incl. his per-op `econ_cfg` - T2), `funding.monetary`,
+  `policy.source` (every engine reader). **H1 gate 2: no difference on the daily cut-offs 10-31..11-04 and the 11-02 epoch.**
+- **After H1 (dormant now):** the readers use `policy_cfg` (`policy/source.js` answers `from: "site"`; `capital/core.cfg()`,
+  funding's monetary block and econstore's PAT Routing overlay it); a Fed `mint` / `grant` / `loan_open` ignores the per-op
+  `econ_cfg` and must carry `cfg_rev` = the store's rev (else HTTP 409 `E_CFG_REV` with the values - checked inside the op's
+  transaction); `capital_ceil_log` gets a row per ceiling-key change; a missing key is never filled with a code default: the
+  reader throws `E_CFG_MISSING` (the engine defers that period) and the admins get an ops alert. A release that adds a SPEC key
+  ships a migration in `policy/config.js MIGRATIONS` (seeded once, `policy_cfg_seed` + the log via `migration`).
+- **Edits (site-owned only):** /admin/economy → ⚙️ Policy settings (a Pepe owner: the class + the owner role on the linked
+  login, the password step-up, CSRF, a note, the rev the page loaded - stale: 409 with the saved values) or Pepe's chat through
+  `POST /api/policy/bot/cfg/set` (a Pepe owner by role on the site; never Telegram). A fraction key is a percent: chat must
+  spell the `%`. Settings an engine reads are frozen from 03:40 UTC until that day's runs are done / handed / missed (423, the
+  runs it waits for are named); everything is 423 while frozen for a hand-over or paused. Every save: one rev, a log row each,
+  an `admin_audit` `policy.cfg` row.
+- **Pepe's read:** `GET /api/policy/bot/cfg?have=<rev>` (header `x-bot-token`, or POST with the token) → `{rev, sha, owner,
+  paused, spec_hash, cfg, log_tail}`, or `unchanged` at his rev (the card shows the rev he has).
+- **The hand-over (H1, driven by Pepe - PO-3):** `POST /api/policy/bot/handover/freeze` (pepe → cutting: the mirror stops,
+  edits 423) → `begin {feature, key = sha256 of the export, size, chunks}` → `chunk {key, idx, data = base64}` (its own 1 MB
+  body limit: index.js skips the path) → `commit` (sha checked, every key present and valid, ONE transaction, the money tables
+  counted before and after - zero rows or it rolls back, Pepe's change log with its original times and who, his ceiling log;
+  a rerun answers `dup`) → `verify` (per-key equality, the digests, `supply_history` gap-free) → `cutover {feature, key}`
+  (cutting → site, only if the store still equals that import) / `rollback` (site → pepe, refused while an engine is live or the
+  budget is the site's; answers the site's values + its log since the flip for Pepe to write back). Every step names an actor
+  with Pepe's owner role ON THE SITE.
+- **Pause a feature:** `node tools/policy-backend.js --actor=<you> pause cfg --note "why"` (or `resume`; `features` = all four)
+  or the card's "Pause a feature" (owner + step-up). One transaction, `admin_audit` `policy.feature_pause` / `_resume`, an ops
+  alert. A paused cfg refuses every edit (423); the readers keep reading.
+- `node tools/policy-backend.js preflight` FAILs on a missing key or a paused feature and WARNs on a mirror diff (4 days) or a
+  dual-read difference (7 days).
+- The engines card's anchor is now `/admin/economy#engines`; `#policy` is ⚙️ Policy settings.

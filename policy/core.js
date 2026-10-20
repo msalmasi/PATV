@@ -263,6 +263,8 @@ async function putCfg(c) {
   if (!c || typeof c !== "object") return null;
   const v = Object.assign({}, c, { at: Date.now() / 1000 });
   await setMeta("cfg", v);
+  // PO-2: the config store mirrors it (policy_cfg, while Pepe owns the config; never throws, never refuses the push)
+  await require("./config").mirror("policy", v);
   return v;
 }
 async function cfgAge() {

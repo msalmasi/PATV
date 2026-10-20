@@ -1080,7 +1080,7 @@ function audit(d, { last, snap, p, autoH0, F, steps, c, notes }) {
 /** The daily cut-off (pepe_vaults._vault_epoch minus the Casino-vault feed, which stays Pepe's policy). In ONE transaction;
  *  each top-up, dividend, queue item and rebalance move in its own savepoint (pepe_vaults ran them one by one too). */
 async function epoch(t) {
-  const c = await C.cfg();
+  const c = await C.cfg({ consumer: "capital.cutoff" });       // PO-2: the dual read of the cut-off's knobs
   const d = await load();
   const now = t.nowS;
   let k = await ctx();

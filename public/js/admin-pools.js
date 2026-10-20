@@ -97,6 +97,8 @@
     cancel();
     msg('Sending to Pepe…');
     api('/api/admin/econ/edit', body).then(function (j) {
+      // PO-2: once the site owns the economy settings a routing change is applied here at once (no Pepe round trip)
+      if (j.request && j.request.applied) { msg(j.request.msg || 'Saved.'); load(); return; }
       var id = j.request.id, tries = 0;
       (function poll() {
         api('/api/admin/econ/edit/' + id).then(function (a) {

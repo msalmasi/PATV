@@ -153,6 +153,8 @@ async function putConfig(raw) {
   if (Array.isArray(c.waterfall)) out.wf_settled = V.settledFrom(c.waterfall);
   const prev = (await C.meta("cfg")) || {};
   await C.setMeta("cfg", Object.assign({}, prev, out));
+  // PO-2: the policy config store mirrors the knobs this push carries (never throws, never refuses the push)
+  await require("../policy/config").mirror("capital", out);
   await noteFix(c);
   return { ok: true, at: out.at };
 }

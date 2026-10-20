@@ -151,10 +151,34 @@ async function layersDoc() {
 }
 
 // ── the numbers every op checks ──
+/** The numbers an op checks: the engines' config (policy/source.js) + Pepe's per-op econ_cfg. PO-2 (T2): while Pepe owns the
+ *  config his per-op econ_cfg wins (as before) and policy/config compares the result with the site's store (the dual read,
+ *  consumer fed.cfgNow); once the SITE owns it (H1) the per-op econ_cfg is IGNORED - the op must carry cfg_rev instead (op()). */
+let overrideNoted = 0;
 async function cfgNow(override) {
   const g = await G().config();
-  const cfg = Object.assign({}, E().DEFAULTS, g.cfg || {}, override && typeof override === "object" ? override : {});
+  const PC = require("../policy/config");
+  let ov = override && typeof override === "object" && !Array.isArray(override) ? override : {};
+  if (Object.keys(ov).length && (await PC.owner("cfg")) === "site") {
+    if (Date.now() - overrideNoted > 600000) { overrideNoted = Date.now(); console.log("[fed] ignored Pepe's per-op econ_cfg - the site owns the economy settings (cfg_rev decides)"); }
+    ov = {};
+  }
+  const cfg = Object.assign({}, E().DEFAULTS, g.cfg || {}, ov);
+  await PC.fedDual(cfg);
   return { cfg, consts: g.consts, flags: g.flags };
+}
+/** PO-2: once the site owns the economy settings, a Fed op carries the config rev Pepe previewed it on (cfg_rev); an op with
+ *  another rev (or none) is refused - 409 with the current values, and Pepe previews again. In the op's own transaction (an edit
+ *  can't land between the check and the op). Mirror mode: nothing to check. -> null | the refusal answer */
+const CFG_OPS = new Set(["mint", "grant", "loan_open"]);     // the ops that read the config (cfgNow); repayments don't
+async function cfgRevRefusal(b) {
+  const PC = require("../policy/config");
+  const snap = await PC.snapshot({ fresh: true });
+  if (snap.own.cfg.owner !== "site") return null;
+  const have = b.cfg_rev === undefined || b.cfg_rev === null || b.cfg_rev === "" ? null : Number(b.cfg_rev);
+  if (have === snap.rev) return null;
+  return { ok: false, code: "E_CFG_REV", status: 409, rev: snap.rev, sha: snap.sha, cfg: require("../policy/cfgspec").econView(snap.cfg),
+           error: have === null ? `the site owns the economy settings - send cfg_rev (now ${snap.rev})` : `the economy settings changed (rev ${have} -> ${snap.rev}) - preview again` };
 }
 async function mintList() {
   const rows = await getQuery("SELECT rec FROM fed_records WHERE kind = 'mint' AND ts >= ?", [nowS() - 40 * 86400]);
@@ -563,6 +587,8 @@ async function op(b) {
   let out;
   try {
     out = await tx(async () => {
+      const stale = CFG_OPS.has(name) ? await cfgRevRefusal(b) : null;
+      if (stale) throw Object.assign(new Refuse(409, stale.error, "E_CFG_REV"), { answer: stale });
       const r = await OPS[name](a, opKey);
       // a cap refusal moves nothing - the transaction rolls back (a loan's journal included) and the answer is kept
       if (r && r.ok === false) throw Object.assign(new Refuse(409, r.error || "refused", r.cap ? "E_CAP" : "E_REFUSED"), { answer: r });
@@ -740,7 +766,19 @@ function register(app, { isBotToken }) {
     }
   };
   app.post("/api/fed/bot/state", bot(() => botState()));
-  app.post("/api/fed/bot/op", bot((b) => op(b)));
+  // PO-2: a stale cfg_rev is HTTP 409 (with the current values); every other refusal stays a 200 answer
+  app.post("/api/fed/bot/op", async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try {
+      const r = await op(b);
+      res.status(r && r.code === "E_CFG_REV" ? 409 : 200).json(r);
+    } catch (e) {
+      if (e instanceof Refuse) return res.status(e.status && e.status < 500 ? 200 : 500).json({ ok: false, code: e.code, error: e.message });
+      console.error("[fed] bot:", e);
+      res.status(500).json({ ok: false, error: "server_error" });
+    }
+  });
   // the export can be big (every mint ever): its own body limit (index.js skips this path)
   app.post("/api/fed/admin/import", require("express").json({ limit: "32mb" }), bot((b) => importFromPepe(b)));
   app.post("/api/fed/admin/export", bot(() => exportState()));

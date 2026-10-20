@@ -3,8 +3,9 @@
     the last run, the next run and the last shadow diff. Admins switch off / dry / shadow here (audit-logged); live is only
     Pepe's cutover handshake (!econ engines cutover), the way back his rollback. PO-1: a Pepe owner pauses / resumes an engine
     here (the password step-up; tools/policy-backend.js pause|resume from the shell), the missed periods (D-18) and the
-    shadow comparison's whitelist are listed. public/js/admin-policy.js renders it from GET /api/admin/policy. %>
-<section class="adm-card" id="policy" aria-labelledby="policyT">
+    shadow comparison's whitelist are listed. public/js/admin-policy.js renders it from GET /api/admin/policy. PO-2: its anchor is
+    #engines (#policy is the ⚙️ Policy settings card, econ-policycfg.ejs - the link Pepe's panel gives after H1). %>
+<section class="adm-card" id="engines" aria-labelledby="policyT">
   <h2 id="policyT"><span class="ds-ic" aria-hidden="true">⏱️</span> <%= t('adm.policy.title') %> <span class="adm-pill admin"><%= t('adm.policy.admins') %></span></h2>
   <p class="adm-help"><%- t('adm.policy.help') %></p>
   <% if (!isAdmin) { %><p class="adm-help"><%= t('adm.policy.admins_only') %></p><% } else { %>

@@ -342,6 +342,13 @@ const RULES = {
   // process holding the lease (host:pid:nonce) - audit labels, kept as written
   "policy_audit.by": { deny: NAME }, "policy_engines.by": { deny: NAME }, "policy_lease.holder": { deny: FLAG },
   "policy_engines.paused_by": { deny: "PO-1: who paused an engine (a site username or '<actor> (cli)') - an audit label; admin_audit has the id" },
+  // PO-2: policy/config.js - the config store: who wrote a key / a log row (a site username, a Pepe login, "pepe", "migration <id>"),
+  // a feature's owner (pepe | cutting | site), who paused it / handed it over (labels); the editor's userId on a web edit follows
+  // the account ("chat:<login>" for a chat edit never matches one)
+  "policy_cfg.by": { deny: NAME }, "policy_cfg_log.actor": { deny: NAME }, "policy_cfg_log.actor_user_id": M(),
+  "policy_ownership.owner": { deny: "PO-2: who owns a policy feature - 'pepe' | 'cutting' | 'site', not a userId" },
+  "policy_ownership.paused_by": { deny: NAME }, "policy_ownership.by": { deny: NAME }, "policy_handovers.by": { deny: NAME },
+  "capital_ceil_log.by": { deny: NAME },
   "media.by_user_id": M(), "media.by_user": { deny: NAME }, "media.subject": { deny: NAME }, "media.subject_login": { deny: NAME }, "media.by_login": { deny: NAME },
   // follows
   "follows.follower": M({ key: ["target_kind", "target_id"], merge: { created_at: "MIN" } }),

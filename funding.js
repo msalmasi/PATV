@@ -134,6 +134,7 @@ async function restore() {
     else if (k === "syncedAt") state.syncedAt = Number(snap.syncedAt) || 0;
     else state[k] = snap[k] === undefined ? null : snap[k];
   }
+  if ("monetary" in snap) applyMonetary(state.monetary);
   state.restoredAt = Date.now();
   console.log(`[funding] restored Pepe's last sync (${new Date(state.syncedAt || row.updated).toISOString()}): fortknox ${state.fortknox !== null ? "live" : "off"}, ` +
               `room vaults ${state.room_vaults ? "live" : "off"}, flash.house ${state.monetary && state.monetary.flash ? state.monetary.flash.house : "-"}, ` +
@@ -565,6 +566,31 @@ function cleanIncentives(x) {
            release_per_day: typeof x.release_per_day === "number" ? Math.floor(x.release_per_day) : null };
 }
 
+// PO-2: the monetary block Pepe last synced (cleanMonetary) - the base the policy config store overlays once the site owns the
+// economy settings (policy/config.monetaryFor: the flash switches, the House hard floor, the donation terms, the staff-grant cap,
+// the band's floor / ceiling; the Fed loan room, the budget week and the Fed's balance stay Pepe's - derived state, PO-4)
+let lastMonetary;
+let mirrored = { at: 0, c: null };
+function applyMonetary(m, { mirror = false } = {}) {
+  lastMonetary = m;
+  let v = m;
+  try { v = require("./policy/config").monetaryFor(m); } catch (e) { v = m; }
+  state.monetary = v;
+  if (mirror) {
+    // the store mirrors it (the lowest-priority source of those keys): on a change, else every 5 min
+    const c = JSON.stringify(m);
+    if (c !== mirrored.c || Date.now() - mirrored.at > 300000) {
+      mirrored = { at: Date.now(), c };
+      if (m) Promise.resolve().then(() => require("./policy/config").mirror("funding", { monetary: m })).catch(() => {});
+    }
+  }
+}
+/** PO-2: the site's economy settings changed (an edit, the hand-over): the monetary block follows at once (no Pepe sync needed). */
+function reapplyPolicy() {
+  applyMonetary(lastMonetary !== undefined ? lastMonetary : state.monetary);
+  persist();
+}
+
 // 1.99jw: Pepe's monetary policy from the sync. Anything that isn't an object -> null; missing / bad fields -> defaults.
 function cleanMonetary(x) {
   if (!x || typeof x !== "object" || Array.isArray(x)) return null;
@@ -598,7 +624,9 @@ function sync(body) {
   // E-2: every sync sets it - a sync without it (an older Pepe, the treasury off) puts the grants back on the Reserve
   state.incentives = cleanIncentives(body.incentives);
   // 1.99jw: every sync sets it - a sync without it (an older Pepe) turns flash liquidity off and the defaults back on
-  state.monetary = cleanMonetary(body.monetary);
+  // PO-2: through the policy config store - mirrored, compared (the dual read) and, once the site owns the config, its config
+  // fields are the site's (Pepe's are ignored and logged)
+  applyMonetary(cleanMonetary(body.monetary), { mirror: true });
   // the pad launchpad (launchpad.js / Pepe's pepe_launchpad.py): every sync sets it - null = off (no welcomes, no
   // launch progress, no boost credit)
   try { state.launchpad = require("./launchpad").cleanState(body.launchpad); } catch (e) { state.launchpad = null; }
@@ -651,4 +679,6 @@ module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, s
                    // 1.99ne
                    persist, restore, _persisted: () => persistChain,
                    // 1.99ns
-                   reserveNow };
+                   reserveNow,
+                   // PO-2
+                   reapplyPolicy, applyMonetary };

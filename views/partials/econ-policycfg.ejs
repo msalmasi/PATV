@@ -1,0 +1,71 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# PO-2 (economy policy -> site plan, section 8): ⚙️ Policy settings - the site's policy config store (policy/config.js). Every
+    economy setting with its value, unit, bounds, when a change applies, whether an engine reads it and its last change. Until
+    the H1 hand-over it is READ-ONLY (the site mirrors Pepe's pushes): the mirror's diff report and the consumers' dual read are
+    shown. Once the site owns the config a Pepe owner edits it here (whole-config check, a note, the password step-up, the rev
+    he saw). public/js/admin-policycfg.js renders it from GET /api/admin/policy/cfg. %>
+<section class="adm-card" id="policy" aria-labelledby="pcfgT">
+  <h2 id="pcfgT"><span class="ds-ic" aria-hidden="true">⚙️</span> <%= t('adm.pcfg.title') %> <span class="adm-pill admin"><%= t('adm.policy.admins') %></span></h2>
+  <p class="adm-help"><%- t('adm.pcfg.help') %></p>
+  <% if (!isAdmin) { %><p class="adm-help"><%= t('adm.policy.admins_only') %></p><% } else { %>
+    <div id="pcfgAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' && locals.me ? pepeCtlCsrf(me.username) : '' %>">
+      <div class="adm-kv" id="pcfgKv"><div><b><%= t('adm.policy.status') %></b><span><%= t('adm.policy.loading') %></span></div></div>
+      <p class="adm-help" id="pcfgMode"></p>
+      <div id="pcfgSections"></div>
+      <div id="pcfgEdit" hidden>
+        <h3 id="pcfgEditT"><%= t('adm.pcfg.review') %></h3>
+        <div class="adm-tbl"><table aria-labelledby="pcfgEditT"><thead><tr><th><%= t('adm.pcfg.col_key') %></th><th><%= t('adm.pcfg.col_now') %></th>
+          <th><%= t('adm.pcfg.col_new') %></th><th><%= t('adm.pcfg.col_applies') %></th></tr></thead><tbody id="pcfgEditRows"></tbody></table></div>
+        <form class="adm-form" id="pcfgEditForm" autocomplete="off">
+          <label for="pcfgNote"><%= t('adm.policy.note') %><input type="text" id="pcfgNote" maxlength="300" required></label>
+          <label for="pcfgPw"><%= t('adm.policy.confirm_pw') %><input type="password" id="pcfgPw" maxlength="200" autocomplete="current-password"></label>
+          <div class="adm-actions"><button type="submit" id="pcfgSave"><%= t('adm.pcfg.save') %></button><button type="button" id="pcfgDiscard" class="adm-btn ghost"><%= t('adm.pcfg.discard') %></button></div>
+        </form>
+      </div>
+      <details id="pcfgDiffD"><summary><%= t('adm.pcfg.diff') %></summary>
+        <p class="adm-help"><%= t('adm.pcfg.diff_help') %></p>
+        <div class="adm-kv" id="pcfgDiffKv"></div>
+        <ul class="adm-help pcfg-list" id="pcfgDiff"></ul>
+      </details>
+      <details><summary><%= t('adm.pcfg.dual') %></summary>
+        <p class="adm-help"><%= t('adm.pcfg.dual_help') %></p>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.pcfg.dual') %>"><thead><tr><th><%= t('adm.pcfg.col_day') %></th><th><%= t('adm.pcfg.col_consumer') %></th>
+          <th class="num"><%= t('adm.pcfg.col_checks') %></th><th class="num"><%= t('adm.pcfg.col_diffs') %></th></tr></thead><tbody id="pcfgDual"></tbody></table></div>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.pcfg.dual_rows') %>"><thead><tr><th><%= t('adm.pcfg.col_day') %></th><th><%= t('adm.pcfg.col_consumer') %></th>
+          <th><%= t('adm.pcfg.col_key') %></th><th><%= t('adm.pcfg.col_push') %></th><th><%= t('adm.pcfg.col_site') %></th><th class="num"><%= t('adm.pcfg.col_n') %></th></tr></thead>
+          <tbody id="pcfgDualRows"></tbody></table></div>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.pcfg.mirror_days') %>"><thead><tr><th><%= t('adm.pcfg.col_day') %></th><th class="num"><%= t('adm.pcfg.col_pushes') %></th>
+          <th class="num"><%= t('adm.pcfg.col_changes') %></th><th><%= t('adm.pcfg.col_worst') %></th></tr></thead><tbody id="pcfgMirror"></tbody></table></div>
+      </details>
+      <details id="policy-log"><summary><%= t('adm.pcfg.log') %></summary>
+        <form class="adm-form" id="pcfgLogForm" autocomplete="off">
+          <label for="pcfgLogKey"><%= t('adm.pcfg.col_key') %><input type="text" id="pcfgLogKey" maxlength="64"></label>
+          <label for="pcfgLogActor"><%= t('adm.pcfg.col_who') %><input type="text" id="pcfgLogActor" maxlength="60"></label>
+          <label for="pcfgLogVia"><%= t('adm.pcfg.col_via') %><select id="pcfgLogVia"><option value=""><%= t('adm.pcfg.any') %></option><option>web</option><option>chat</option><option>mirror</option><option>import</option><option>migration</option></select></label>
+          <div class="adm-actions"><button type="submit"><%= t('adm.pcfg.filter') %></button></div>
+        </form>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.pcfg.log') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.pcfg.col_key') %></th>
+          <th><%= t('adm.pcfg.col_change') %></th><th><%= t('adm.pcfg.col_who') %></th><th><%= t('adm.policy.note') %></th></tr></thead><tbody id="pcfgLog"></tbody></table></div>
+      </details>
+      <details><summary><%= t('adm.pcfg.pause_title') %></summary>
+        <p class="adm-help"><%- t('adm.pcfg.pause_help') %></p>
+        <form class="adm-form" id="pcfgPauseForm" autocomplete="off">
+          <label for="pcfgPauseFeature"><%= t('adm.pcfg.feature') %><select id="pcfgPauseFeature"><option value="cfg">cfg</option><option value="budget">budget</option><option value="staking_ops">staking_ops</option><option value="loans_desk">loans_desk</option></select></label>
+          <label for="pcfgPauseNote"><%= t('adm.policy.note') %><input type="text" id="pcfgPauseNote" maxlength="200"></label>
+          <label for="pcfgPausePw"><%= t('adm.policy.confirm_pw') %><input type="password" id="pcfgPausePw" maxlength="200" autocomplete="current-password"></label>
+          <div class="adm-actions"><button type="button" id="pcfgPauseBtn"><%= t('adm.policy.pause') %></button><button type="button" id="pcfgResumeBtn" class="adm-btn ghost"><%= t('adm.policy.resume') %></button></div>
+        </form>
+      </details>
+      <p class="adm-msg" id="pcfgMsg" role="status" aria-live="polite"></p>
+    </div>
+    <style>
+      #pcfgSections h3 { margin: 14px 0 4px; font-size: 1rem; }
+      #pcfgSections td input, #pcfgSections td select { width: 100%; max-width: 160px; }
+      #pcfgSections .pcfg-ro { opacity: .75; }
+      #pcfgSections .pcfg-staged { outline: 2px solid var(--ds-accent, #4caf50); }
+      .pcfg-list { overflow-wrap: anywhere; }
+      #pcfgMsg { white-space: pre-wrap; overflow-wrap: anywhere; }
+    </style>
+    <script src="/public/js/admin-policycfg.js?v=1" defer></script>
+  <% } %>
+</section>

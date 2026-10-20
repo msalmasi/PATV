@@ -852,6 +852,8 @@ async function rollback(b) {
   const to = b.to === "off" ? "off" : "shadow";
   const engs = await C.engines();
   const { getQuery } = require("../dbUtils");
+  // PO-2 (plan 2.3): roll back in reverse order - the budget (H2b) before the engines (H2a)
+  if (engines.length && (await require("./config").owner("budget")) === "site") return { ok: false, code: "order", error: "roll the budget back first (H2b before H2a)" };
   for (const e of engines) {
     if (engs[e].mode !== "live") return { ok: false, code: "not_live", error: `${e} isn't live here` };
     const moving = (await getQuery("SELECT key FROM policy_runs WHERE engine = ? AND state = 'moving'", [e]))[0];
@@ -1066,13 +1068,22 @@ function register(app, { isBotToken, addUser }) {
     const SR = require("../staffroles");
     if (!(await SR.ownerOf(me, "econ.telemetry_policy"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
     const b = req.body || {};
+    // PO-2: a FEATURE (cfg | budget | staking_ops | loans_desk, policy_ownership.paused) pauses the same way - {feature} for {engine}
+    const PCF = require("./config");
+    const feature = b.feature === undefined || b.feature === null || b.feature === "" ? null : String(b.feature);
     const engine = String(b.engine || "");
-    const list = engine === "all" ? C.ENGINES.slice() : [engine];
-    if (!list.every((e) => C.ENGINES.includes(e))) return res.status(400).json({ ok: false, error: "Pick an engine (or all)." });
+    const list = feature ? (feature === "all" ? PCF.FEATURES.slice() : [feature]) : engine === "all" ? C.ENGINES.slice() : [engine];
+    if (feature ? !list.every((f) => PCF.FEATURES.includes(f)) : !list.every((e) => C.ENGINES.includes(e))) {
+      return res.status(400).json({ ok: false, error: feature ? "Pick a feature (cfg, budget, staking_ops, loans_desk or all)." : "Pick an engine (or all)." });
+    }
     if (typeof b.pause !== "boolean") return res.status(400).json({ ok: false, error: "Say pause or resume." });
     const note = String(b.note || "").replace(/\s+/g, " ").trim().slice(0, 200);
     if (b.pause && note.length < 3) return res.status(400).json({ ok: false, error: "Say why in the note - every pause is logged and every admin is told." });
     try { await require("../econstore").stepUp(me, b); } catch (e) { return res.status(e.status || 403).json({ ok: false, code: e.code || null, error: e.message }); }
+    if (feature) {
+      try { return res.json({ ok: true, features: await PCF.setPause(list, b.pause, { by: me.username, auditId: me.userId, via: "admin", note: note || null }) }); }
+      catch (e) { console.error("[policy] feature pause:", e); return res.status(e.status || 500).json({ ok: false, error: e.status ? e.message : "failed" }); }
+    }
     try {
       res.json({ ok: true, engines: await setPause(list, b.pause, { by: me.username, auditId: me.userId, via: "admin", note: note || null }) });
     } catch (e) { console.error("[policy] pause:", e); res.status(e.status || 500).json({ ok: false, error: e.status ? e.message : "failed" }); }

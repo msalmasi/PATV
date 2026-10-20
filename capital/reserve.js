@@ -134,7 +134,7 @@ async function book(loans) {
   return loans.filter((ln) => OPEN.includes(ln.status)).reduce((t, ln) => t + Math.max(0, Math.trunc(ln.principal) - Math.trunc(ln.paid || 0)), 0);
 }
 async function room(loans) {
-  const c = await C.cfg();
+  const c = await C.cfg({ consumer: "capital.reserve" });   // PO-2: the loan terms' dual read
   loans = loans || await C.list(KIND);
   if ((await source()) === "bank") {
     const bk = loans.filter((ln) => ln.funded_by === "bank" && OPEN.includes(ln.status))
@@ -150,7 +150,7 @@ async function room(loans) {
   return Math.max(0, Math.min(cap - bk, res));
 }
 async function calc(level, repaid, lates, rm) {
-  const c = await C.cfg();
+  const c = await C.cfg({ consumer: "capital.reserve" });   // PO-2: the loan terms' dual read
   const base = Math.trunc(Number(c.rloan_base)), bonus = Math.trunc(Number(c.rloan_per_level)) * Math.trunc(Number(level) || 0);
   const mult = Math.min(2.0, 1 + 0.25 * Math.trunc(Number(repaid) || 0));
   const penalty = 0.5 ** Math.trunc(Number(lates) || 0);
@@ -168,7 +168,7 @@ async function factors(acct, login, ctx) {
            open: past.filter((ln) => OPEN.includes(ln.status)).length, late };
 }
 async function reasonOf(f) {
-  const c = await C.cfg();
+  const c = await C.cfg({ consumer: "capital.reserve" });   // PO-2: the loan terms' dual read
   if (!Number(c.rloan_enabled)) return "Reserve loans are switched off right now";
   if (f.late) return "you're late on a loan — pay it off first";
   if (f.open >= Number(c.rloan_max_open)) return "you already have a Reserve loan open — repay it first";
@@ -185,7 +185,7 @@ function owedFor(principal, term, rateWeek) {
   return principal + Math.trunc(pyRound(principal * Number(rateWeek) * days / 7));
 }
 async function terms(a) {
-  const c = await C.cfg();
+  const c = await C.cfg({ consumer: "capital.reserve" });   // PO-2: the loan terms' dual read
   const principal = Math.trunc(Number(a.amount) || 0);
   if (!(principal >= Number(c.loan_min))) return fail("min", `Reserve loans start at PAT ${fmt(c.loan_min)}.`);
   const secs = parseTerm(a.term === undefined || a.term === null || a.term === "" ? "7d" : a.term);

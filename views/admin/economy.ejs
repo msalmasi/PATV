@@ -209,6 +209,10 @@
 
 <%- include('../partials/econ-gscale', { isAdmin: _can('econ.telemetry_policy'), me }) %>
 
+<%# PO-2: ⚙️ Policy settings - the site's policy config store (read-only while Pepe owns the config; the mirror's diff report and
+    the dual read); the engines card follows it (#engines) %>
+<%- include('../partials/econ-policycfg', { isAdmin: _can('econ.telemetry_policy'), me }) %>
+
 <%- include('../partials/econ-policy', { isAdmin: _can('econ.telemetry_policy'), me }) %>
 
 <%- include('../partials/econ-autoescrow', { isAdmin: _can('econ.backend_cutover'), me }) %>
