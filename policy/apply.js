@@ -152,7 +152,9 @@ async function bankSample(engine, period, inputsOrNull, nowS) {
 const summary = (plan, keys) => Object.fromEntries(keys.filter((k) => k in plan).map((k) => [k, plan[k]]));
 
 // ── the weekly epoch ──
-async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } = {}) {
+// PO-1 (D-18): `late` (the scheduler's lateOf: {why, boundary, late_s}) - a current period run late (the site was down at its
+// boundary, or a resume let it run) carries it on its result and its record (the audit / digest read it there)
+async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", late = null } = {}) {
   const res = await tx(async () => {
     const done = await C.run("treasury", eid);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
@@ -183,6 +185,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
     }
     const conserved = before === after + acc.to_wallet;
     const wal = acc.to_wallet ? { to_wallet: acc.to_wallet } : {};
+    if (late) wal.late = late;
     const result = Object.assign({ boundary: plan.boundary, totals: plan.totals, release_per_day: plan.release_per_day, incentives_after: incAfter,
                      pools_before: before, pools_after: after, conserved, shares_redeemed: redeemed, done_legs: doneLegs, actor, via }, wal);
     // the owner's D2 monitoring on the record, as Pepe's own records carry it (pepe_treasury._tr_track = engines.trackOf): what a
@@ -261,7 +264,7 @@ async function notifyStakers(eid, plan, track, capIn = 0) {
 }
 
 // ── the daily release ──
-async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site" } = {}) {
+async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site", late = null } = {}) {
   return tx(async () => {
     const done = await C.run("treasury", did);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
@@ -283,6 +286,7 @@ async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site" } 
     const after = await base();
     const conserved = before === after + acc.to_wallet;
     const wal = acc.to_wallet ? { to_wallet: acc.to_wallet } : {};
+    if (late) wal.late = late;
     const rec = Object.assign({}, plan, { state: "done", actor, ts: nowS, done_legs: doneLegs, pools_before: before, pools_after: after,
                                           conserved, via: "site" }, wal);
     await C.effect(`day_record:${did}`, { engine: "treasury", period: did, kind: "day_record", data: { did, rec } });
@@ -344,7 +348,7 @@ async function payActivity(did, inputs, plan, nowS) {
 }
 
 // ── the monetary day ──
-async function runMonetary(did, nowS, guarantee, { actor = "schedule", via = "site" } = {}) {
+async function runMonetary(did, nowS, guarantee, { actor = "schedule", via = "site", late = null } = {}) {
   return tx(async () => {
     const done = await C.run("monetary", did);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
@@ -373,11 +377,11 @@ async function runMonetary(did, nowS, guarantee, { actor = "schedule", via = "si
       doneLegs.push(lid);
     }
     const act = await payActivity(did, inputs, plan, nowS);
-    const rec = Object.assign({}, plan, { state: "done", actor, done_legs: doneLegs, skipped, notes, done: nowS, via: "site" });
+    const rec = Object.assign({}, plan, { state: "done", actor, done_legs: doneLegs, skipped, notes, done: nowS, via: "site" }, late ? { late } : {});
     await C.effect(`mo_day_record:${did}`, { engine: "monetary", period: did, kind: "mo_day_record", data: { did, rec } });
-    const result = { floor_mint: plan.floor_mint, issuance: plan.issuance.amount, guarantee_paid: plan.guarantee_paid, excess: plan.excess,
+    const result = Object.assign({ floor_mint: plan.floor_mint, issuance: plan.issuance.amount, guarantee_paid: plan.guarantee_paid, excess: plan.excess,
                      ceiling_action: plan.ceiling_action, activity_paid: act ? act.paid : 0, activity_people: act ? Object.values(act.state).filter((s) => s === "paid").length : 0,
-                     done_legs: doneLegs, skipped, notes, actor, via };
+                     done_legs: doneLegs, skipped, notes, actor, via }, late ? { late } : {});
     await C.putRun("monetary", did, { state: "done", boundary: E.dayStart(nowS), via, inputs, plan: planned, result });
     await require("../escrow/ledger").emitInTx("policy", "monetary_done", null, Object.assign({ did }, summary(result, ["floor_mint", "issuance", "guarantee_paid", "excess", "ceiling_action", "activity_paid", "activity_people"])));
     return { ok: true, plan, result };

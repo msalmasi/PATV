@@ -176,6 +176,11 @@ test("SHADOW: Pepe's report - the engine diff (the port), the inputs and the tot
   assert.deepEqual(r.body.engine_diff, []);
   assert.deepEqual(r.body.input_diff, []);
   assert.deepEqual(r.body.total_diff, []);
+  // PO-1 (D-15): no differences, but no boundary snapshot either (a Pepe before PO-0c): compared with the site's view at report
+  // time - which may already hold his legs - so the period is NOT clean (test/policy-boundary.test.js: with the handshake)
+  assert.equal(r.body.basis, "report");
+  assert.equal(r.body.clean, false);
+  assert.equal((await getQuery("SELECT ok FROM policy_sims WHERE key = ?", [`shadow:treasury:${eid}`]))[0].ok, 0);
   // a wrong plan from Pepe shows up in the engine diff
   const bad = JSON.parse(JSON.stringify(plan));
   bad.legs[0].amt += 1;
@@ -368,6 +373,179 @@ test("ROLLBACK: the periods this site ran + every effect Pepe hasn't applied; th
   await SCH.pass(MON_0405 + 11 * 86400);
   assert.equal(await supply(), s0);
   assert.equal((await post("/api/policy/admin/cutover", { key: "pc-cut-0004", engines: ["treasury", "monetary"], actor: "test" })).body.ok, true);
+});
+
+test("PO-1: the diff cap - 400 differences listed, all of them counted, the comparison marked truncated (and never clean)", async () => {
+  const many = {};
+  for (let i = 0; i < 500; i++) many[`k${i}`] = i;
+  const d = SCH.diffCapped(many, {});
+  assert.equal(d.list.length, SCH.DIFF_CAP);
+  assert.equal(SCH.DIFF_CAP, 400);
+  assert.equal(d.n, 500);
+  assert.equal(d.truncated, true);
+  assert.equal(SCH.diffCapped({ a: 1 }, { a: 2 }).truncated, false);
+  assert.equal(SCH.diff(many, {}).length, 400, "diff() = the capped list");
+  // a report whose plan differs everywhere: the engine diff stops at 400, the row says truncated
+  const inputs = await G.daily(MON_0405, "D2026-10-19-cap");
+  const plan = Object.assign({}, E.planDaily(inputs), many);
+  const r = await post("/api/policy/bot/report", { engine: "treasury", period: "D2026-10-19-cap", inputs, plan });
+  assert.equal(r.body.engine_diff.length, 400);
+  assert.equal(r.body.truncated.engine, true);
+  assert.equal(r.body.clean, false);
+  const row = (await getQuery("SELECT truncated, ok FROM policy_sims WHERE key = 'shadow:treasury:D2026-10-19-cap'"))[0];
+  assert.deepEqual([row.truncated, row.ok], [1, 0]);
+});
+
+test("PO-1 burn: a day summary of each closed policy day (even at zero); Pepe's daily burn report is compared with it", async () => {
+  // the burn engine is in shadow since the rollback; the burns of the real policy day (the pool history has real timestamps)
+  assert.equal((await C.engines()).burn.mode, "shadow");
+  const D = E.dayStart(Date.now() / 1000, 4);
+  const did = E.dayId(D, 4), next = E.dayId(D + 86400, 4);
+  const before = await G.burnDay(D + 86400, did, D, D + 86400);
+  await P.move({ key: "test-feed-burn-2", legs: [["reserve", -7000], ["burn", 7000]], why: "fed ceiling release" });
+  await P.move({ key: "pepe-burn-b1", legs: [["burn", -4000]], kind: "burn", why: "waterfall leftover (burned on accrual)" });
+  await P.move({ key: "pepe-burn-b2", legs: [["burn", -3000]], kind: "burn", why: "waterfall leftover (burned on accrual)" });
+  // the first pass after the day closed records it once (shadow:burn:D...), as that day's boundary snapshot too
+  const ran = await SCH.pass(D + 86400 + 300, { only: ["burn"] });
+  assert.deepEqual(ran, [`shadow burn ${did}`]);
+  assert.deepEqual(await SCH.pass(D + 86400 + 400, { only: ["burn"] }), [], "once");
+  const row = (await getQuery("SELECT site_plan, site_boundary_plan, boundary_ts FROM policy_sims WHERE key = ?", [`shadow:burn:${did}`]))[0];
+  const plan = JSON.parse(row.site_plan);
+  assert.deepEqual(plan, { day: did, from: D, to: D + 86400, mode: "accrual", burned: before.burned + 7000, burns: before.burns + 2 });
+  assert.equal(row.site_boundary_plan, row.site_plan);
+  assert.ok(row.boundary_ts > 0);
+  // a day with no burn is recorded too
+  assert.deepEqual(await SCH.pass(D + 2 * 86400 + 300, { only: ["burn"] }), [`shadow burn ${next}`]);
+  assert.equal(JSON.parse((await getQuery("SELECT site_plan FROM policy_sims WHERE key = ?", [`shadow:burn:${next}`]))[0].site_plan).burned, 0);
+  // Pepe's daily burn report (his burns.json for the same closed day): accepted (planOf("burn")), compared - clean
+  const pin = { kind: "burn", now: D + 86400 + 500, did, from: D, to: D + 86400, mode: "accrual", burned: plan.burned, burns: plan.burns, inflight: 0 };
+  const r = await post("/api/policy/bot/report", { engine: "burn", period: did, inputs: pin, plan: E.planBurn(pin) });
+  assert.equal(r.body.ok, true, JSON.stringify(r.body));
+  assert.deepEqual([r.body.engine_diff, r.body.total_diff, r.body.basis, r.body.clean], [[], [], "boundary", true]);
+  // his record of the zero day says he burned something: a real difference
+  const bad = { kind: "burn", now: D + 2 * 86400 + 500, did: next, from: D + 86400, to: D + 2 * 86400, mode: "accrual", burned: 1, burns: 1 };
+  const rb = await post("/api/policy/bot/report", { engine: "burn", period: next, inputs: bad, plan: E.planBurn(bad) });
+  assert.deepEqual(rb.body.total_diff, ["burned: site 0 / pepe 1", "burns: site 0 / pepe 1"]);
+  assert.equal(rb.body.clean, false);
+  // a report that arrives before the scheduler's summary takes the day's snapshot itself (the day is closed: same answer)
+  const d3 = E.dayId(D + 2 * 86400, 4);
+  const z = { kind: "burn", now: D + 3 * 86400 + 5, did: d3, from: D + 2 * 86400, to: D + 3 * 86400, mode: "accrual", burned: 0, burns: 0 };
+  const rz = await post("/api/policy/bot/report", { engine: "burn", period: d3, inputs: z, plan: E.planBurn(z) });
+  assert.deepEqual([rz.body.basis, rz.body.clean], ["boundary", true]);
+  // a burn report needs burn inputs
+  assert.equal((await post("/api/policy/bot/report", { engine: "burn", period: d3, inputs: { kind: "daily" }, plan: {} })).body.ok, false);
+});
+
+test("PO-1 pause: a paused live engine runs nothing (its due periods missed 'paused', the mode unchanged); a resume lets only the current period run, late", async () => {
+  const SAT = MON_0405 + 12 * 86400, SUN = SAT + 86400;          // 2026-10-31 / 2026-11-01 04:05
+  const engs0 = await C.engines();
+  assert.deepEqual([engs0.treasury.mode, engs0.monetary.mode], ["live", "live"]);
+  // the re-cutover above armed them at the real clock: arm them on the test's Friday instead (the periods below are due)
+  await runQuery("UPDATE policy_engines SET armed_at = ? WHERE engine IN ('treasury', 'monetary')", [MON_0405 + 11 * 86400]);
+  const res = await SCH.setPause(["treasury", "monetary"], true, { by: "boss", auditId: "ua", via: "admin", note: "checking the waterfall" });
+  assert.deepEqual(res.map((x) => [x.engine, x.paused, x.was]), [["treasury", true, false], ["monetary", true, false]]);
+  assert.deepEqual((await SCH.setPause(["treasury"], true, { by: "boss", auditId: "ua", via: "admin", note: "again" }))[0].unchanged, true, "idempotent");
+  const s0 = await supply();
+  assert.deepEqual(await SCH.pass(SAT, { only: ["treasury", "monetary"] }), [], "nothing runs");
+  assert.deepEqual(await SCH.pass(SUN, { only: ["treasury", "monetary"] }), []);
+  assert.equal(await supply(), s0, "nothing moved");
+  for (const [e, p] of [["treasury", "D2026-10-31"], ["monetary", "D2026-10-31"], ["treasury", "D2026-11-01"], ["monetary", "D2026-11-01"]]) {
+    const r = await C.run(e, p);
+    assert.equal(r.state, "missed", `${e} ${p}`);
+    assert.equal(r.result.missed, "paused");
+    assert.match(r.error, /^paused by boss \(checking the waterfall\)/);
+  }
+  const engs1 = await C.engines();
+  assert.deepEqual([engs1.treasury.mode, engs1.monetary.mode, engs1.treasury.paused, engs1.treasury.paused_by], ["live", "live", 1, "boss"], "the mode is unchanged");
+  assert.equal((await post("/api/policy/bot/state", {})).body.engines.treasury.paused, true, "Pepe sees it");
+  assert.ok((await getQuery("SELECT 1 FROM policy_audit WHERE engine = 'treasury' AND old = 'running' AND new = 'paused' AND by = 'boss'"))[0]);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'policy.pause' AND admin_id = 'ua'"))[0].n, 2);
+  // a paused engine isn't cut over (nothing would run it): the burn engine (shadow) paused -> refused; in shadow it plans nothing
+  await SCH.setPause(["burn"], true, { by: "boss", auditId: "ua", via: "admin", note: "rehearsal" });
+  assert.equal((await post("/api/policy/admin/cutover", { key: "pc-cut-0005", engines: ["burn"], actor: "test" })).body.code, "paused");
+  const sims0 = (await getQuery("SELECT COUNT(*) AS n FROM policy_sims WHERE engine = 'burn'"))[0].n;
+  assert.deepEqual(await SCH.pass(MON_0405 + 30 * 86400, { only: ["burn"], tag: "p1" }), []);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM policy_sims WHERE engine = 'burn'"))[0].n, sims0, "a paused shadow engine plans nothing");
+  await SCH.setPause(["burn"], false, { by: "boss", auditId: "ua", via: "admin" });
+  // RESUME on Sunday 05:05: only the CURRENT day may still run (late); Saturday stays missed (D-18)
+  C._setClock(() => (SUN + 3600) * 1000);
+  try {
+    const rs = await SCH.setPause(["treasury", "monetary"], false, { by: "boss", auditId: "ua", via: "admin" });
+    assert.deepEqual(rs.map((x) => [x.engine, x.released]), [["treasury", ["D2026-11-01"]], ["monetary", ["D2026-11-01"]]]);
+    const ran = await SCH.pass(SUN + 3600);
+    assert.ok(ran.includes("treasury D2026-11-01") && ran.includes("monetary D2026-11-01"), JSON.stringify(ran));
+  } finally { C._setClock(null); }
+  const t = await C.run("treasury", "D2026-11-01"), m = await C.run("monetary", "D2026-11-01");
+  assert.equal(t.state, "done");
+  assert.equal(t.result.late.why, "paused", "flagged late on the record");
+  assert.equal(t.result.late.late_s, 3900);
+  assert.equal(m.result.late.why, "paused");
+  assert.equal((await C.run("treasury", "D2026-10-31")).state, "missed", "the older day stays missed");
+  assert.equal((await C.run("monetary", "D2026-10-31")).state, "missed");
+  assert.ok((await effects("alert")).some((e) => e.key === "alert:late:treasury:D2026-11-01"), "the admins are told (Pepe's notice)");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM policy_meta WHERE key LIKE 'late:%'"))[0].n, 0, "the late marks are used up");
+  const v = await SCH.view();
+  assert.ok(v.missed.some((x) => x.key === "treasury:D2026-10-31"));
+  assert.deepEqual(v.whitelist.map((w) => w.field), ["release"]);
+  assert.equal(v.engines.find((e) => e.engine === "treasury").paused, false);
+});
+
+test("PO-1 / D-18: a Monday outage - the week's epoch still runs on Tuesday (the current week), flagged late; Monday's day stays missed", async () => {
+  // the scheduler last passed on Sunday 05:05; it comes back on Tuesday 06:05
+  const TUE = MON_0405 + 15 * 86400 + 3600;                       // 2026-11-03 06:05
+  const ran = await SCH.pass(TUE);
+  assert.ok(ran.includes("treasury W2026-11-02") && ran.includes("treasury D2026-11-03") && ran.includes("monetary D2026-11-03"), JSON.stringify(ran));
+  const w = await C.run("treasury", "W2026-11-02");
+  assert.equal(w.result.late.why, "site_down");
+  assert.ok(w.result.late.late_s > 86400);
+  assert.equal((await C.run("treasury", "D2026-11-03")).result.late.why, "site_down");
+  assert.equal((await C.run("treasury", "D2026-11-02")).state, "missed", "the outage's day: missed, never run late");
+  assert.equal((await C.run("monetary", "D2026-11-02")).state, "missed");
+  // on time: no flag
+  const WED = MON_0405 + 16 * 86400;
+  await SCH.pass(WED);
+  assert.equal((await C.run("treasury", "D2026-11-04")).result.late, undefined);
+});
+
+test("PO-1: every reader of Pepe's policy push goes through policy/source.js (T14) - today it answers the push", async () => {
+  const S = require(path.join(repo, "policy", "source"));
+  const snap = await S.read();
+  assert.equal(snap.from, "push");
+  assert.equal(snap.owner, "pepe");
+  assert.deepEqual(snap.flags, CFG.flags);
+  assert.equal(S.hourOf(snap.consts), 4);
+  assert.equal((await SCH.clockInfo(MON_0405)).hour, 4);
+  assert.deepEqual((await G.config()).cfg, CFG.econ_cfg, "the engines' config = Pepe's effective econ_cfg");
+  assert.deepEqual((await S.burn()).cfg, CFG.burn_cfg);
+  // the push changes -> every reader follows (one read source)
+  const push = Object.assign({}, CFG, { consts: Object.assign({}, CFG.consts, { VAULT_EPOCH_UTC_HOUR: 5 }), flags: { layers: true, tr_live: false } });
+  assert.equal((await post("/api/policy/bot/config", { cfg: push })).body.ok, true);
+  try {
+    assert.equal((await SCH.clockInfo(MON_0405)).hour, 5);
+    assert.equal((await SCH.clockInfo(MON_0405)).flags.tr_live, false);
+    assert.equal((await G.config()).consts.VAULT_EPOCH_UTC_HOUR, 5);
+  } finally { assert.equal((await post("/api/policy/bot/config", { cfg: CFG })).body.ok, true); }
+  // no other module opens the push: the site's JS outside policy/source.js (and policy/core.js, which stores it) never calls
+  // policy/core's cfg() nor reads policy_meta's "cfg" row (tools/policy-backend.js's read-only status aside)
+  const files = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (["node_modules", "test", "public", ".git", "locales", "views", "docs", "data"].includes(e.name)) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p); else if (e.name.endsWith(".js")) files.push(p);
+    }
+  };
+  walk(repo);
+  const bad = [];
+  for (const f of files) {
+    const rel = path.relative(repo, f).replace(/\\/g, "/");
+    if (rel === "policy/source.js" || rel === "policy/core.js" || rel === "tools/policy-backend.js") continue;
+    const src = fs.readFileSync(f, "utf8");
+    if (/policy\/core["']\)\.cfg\(/.test(src)) bad.push(`${rel}: require("../policy/core").cfg()`);
+    if (rel.startsWith("policy/") && /\bC\.cfg\(\)/.test(src)) bad.push(`${rel}: C.cfg()`);
+    if (/policy_meta[^\n]*['"]cfg['"]/.test(src)) bad.push(`${rel}: policy_meta cfg`);
+  }
+  assert.deepEqual(bad, []);
 });
 
 test("the test clock and the tagged rehearsal tick exist only on staging", async () => {

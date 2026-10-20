@@ -8,10 +8,16 @@
 // Each engine has a MODE here: off | dry (compute and record what WOULD move) | shadow (compute alongside Pepe and diff his
 // plan every period) | live (the site runs it; Pepe's switch for it is on and he doesn't). Every change is audit-logged.
 //
-//   policy_engines   engine PK, mode, armed_at (s: periods whose boundary is before it are never run), updated, by, note
+//   policy_engines   engine PK, mode, armed_at (s: periods whose boundary is before it are never run), updated, by, note;
+//                    PO-1: paused (0/1) - the owner's PAUSE (policy/scheduler.setPause): a paused engine runs nothing (a live
+//                    one's due periods are recorded missed "paused"), its mode unchanged; paused_by / paused_at (ms) /
+//                    pause_note: who last paused or resumed it, when, why (every change is in policy_audit + admin_audit)
 //   policy_runs      key PK "<engine>:<period>" - the DONE-KEY of a live run (one per period, ever): state moving|done|failed|
 //                    handed (a period Pepe ran, recorded at the cutover so the site never runs it again), inputs, plan, result
-//   policy_sims      key PK "<mode>:<engine>:<period>" - dry runs and shadow comparisons (site plan, Pepe's report, the diffs)
+//   policy_sims      key PK "<mode>:<engine>:<period>" - dry runs and shadow comparisons (site plan, Pepe's report, the diffs);
+//                    PO-1: site_boundary_inputs / site_boundary_plan / boundary_ts - the site's snapshot at the period's
+//                    BOUNDARY (POST /api/policy/bot/boundary, before Pepe moves a leg; written once, never overwritten), the
+//                    comparison's basis; truncated (a diff hit its cap); whitelisted (the informational diffs excused)
 //   policy_effects   key PK - what Pepe mirrors into his own books (a mint record, a loan repayment, a budget spend, the day /
 //                    epoch records, a burn, a cap notice); acked by him; the site never needs the ack to stay correct (it
 //                    overlays its own effects on Pepe's pushed docs by content, policy/gather.js)
@@ -67,9 +73,27 @@ function init() {
       await runQuery("CREATE TABLE IF NOT EXISTS policy_meta (key TEXT PRIMARY KEY, value TEXT)");
       await runQuery(`CREATE TABLE IF NOT EXISTS policy_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, by TEXT, via TEXT, engine TEXT,
         old TEXT, new TEXT, note TEXT)`);
+      // PO-1: the pause (policy_engines) and the boundary snapshot / diff cap (policy_sims) on tables that already exist on prod
+      // (literal statements: test/fixtures/schemascan.js reads every ADD COLUMN for the account-merge coverage check)
+      const pe = await columnsOf("policy_engines");
+      if (!pe.has("paused")) await runQuery("ALTER TABLE policy_engines ADD COLUMN paused INTEGER NOT NULL DEFAULT 0");
+      if (!pe.has("paused_by")) await runQuery("ALTER TABLE policy_engines ADD COLUMN paused_by TEXT");
+      if (!pe.has("paused_at")) await runQuery("ALTER TABLE policy_engines ADD COLUMN paused_at INTEGER");
+      if (!pe.has("pause_note")) await runQuery("ALTER TABLE policy_engines ADD COLUMN pause_note TEXT");
+      const ps = await columnsOf("policy_sims");
+      if (!ps.has("site_boundary_inputs")) await runQuery("ALTER TABLE policy_sims ADD COLUMN site_boundary_inputs TEXT");
+      if (!ps.has("site_boundary_plan")) await runQuery("ALTER TABLE policy_sims ADD COLUMN site_boundary_plan TEXT");
+      if (!ps.has("boundary_ts")) await runQuery("ALTER TABLE policy_sims ADD COLUMN boundary_ts REAL");
+      if (!ps.has("truncated")) await runQuery("ALTER TABLE policy_sims ADD COLUMN truncated INTEGER");
+      if (!ps.has("whitelisted")) await runQuery("ALTER TABLE policy_sims ADD COLUMN whitelisted TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
+}
+
+/** The column names a table has now. */
+async function columnsOf(table) {
+  return new Set((await getQuery(`PRAGMA table_info(${table})`)).map((c) => c.name));
 }
 
 // ── meta ──
@@ -108,9 +132,21 @@ async function engines() {
   await init();
   const rows = await getQuery("SELECT * FROM policy_engines");
   const out = {};
-  for (const e of ENGINES) out[e] = { engine: e, mode: "off", armed_at: null, updated: null, by: null, note: null };
-  for (const r of rows) if (out[r.engine]) out[r.engine] = r;
+  for (const e of ENGINES) out[e] = { engine: e, mode: "off", armed_at: null, updated: null, by: null, note: null, paused: 0, paused_by: null, paused_at: null, pause_note: null };
+  for (const r of rows) if (out[r.engine]) out[r.engine] = Object.assign(r, { paused: r.paused ? 1 : 0 });
   return out;
+}
+/** PO-1: the pause flag of one engine (in the caller's transaction; policy/scheduler.setPause audits and alerts). A row that
+ *  doesn't exist yet is created with mode "off" - the pause never changes the mode. */
+async function putPaused(engine, paused, { by = null, note = null } = {}) {
+  await init();
+  if (!ENGINES.includes(engine)) throw Object.assign(new Error("no such engine"), { status: 400 });
+  const t = Date.now();
+  await runQuery(`INSERT INTO policy_engines (engine, mode, armed_at, updated, by, note, paused, paused_by, paused_at, pause_note)
+                  VALUES (?, 'off', NULL, ?, NULL, NULL, ?, ?, ?, ?)
+                  ON CONFLICT(engine) DO UPDATE SET paused = excluded.paused, paused_by = excluded.paused_by, paused_at = excluded.paused_at,
+                    pause_note = excluded.pause_note`,
+                 [engine, t, paused ? 1 : 0, str(by, 60), t, str(note, 300)]);
 }
 async function mode(engine) { return ((await engines())[engine] || {}).mode || "off"; }
 async function setMode(engine, m, { by = "admin", byId = null, via = "admin", note = null, armedAt } = {}) {
@@ -218,6 +254,6 @@ async function cfgAge() {
   return c && c.at ? Date.now() / 1000 - Number(c.at) : Infinity;
 }
 
-module.exports = { init, meta, setMeta, nowMs, nowS, _setClock, loadTestClock, setTestClock, engines, mode, setMode, audit, acquireLease,
+module.exports = { init, meta, setMeta, nowMs, nowS, _setClock, loadTestClock, setTestClock, engines, mode, setMode, putPaused, audit, acquireLease,
                    releaseLease, leaseInfo, runKey, run, putRun, runs, effect, effectsOpen, effectsAll, ack, cfg, putCfg, cfgAge, ENGINES,
                    MODES, RETIRED, STAYS, HOLDER, J, parse, str, _testOffset: () => testOffsetMs };

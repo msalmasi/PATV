@@ -5,9 +5,9 @@
 //   pools, the House               pools.js (Phase 1), SUM(jackpot_rakes)
 //   prices, NAVs, the share book   capital/vaults.js (Phase 3: ctx / nav / prices, the "vaults" doc's holders IN ORDER)
 //   stashes (closed or not)        stashes.js
-//   econ_cfg (effective), consts,  Pepe's config push (/api/policy/bot/config, every few minutes; policy_meta.cfg) - the
-//   flags, the participation tz,   numbers his own engines use; econstore's econ_cfg overrides are laid over it
-//   bots to skip, his journals
+//   econ_cfg (effective), consts,  policy/source.js (PO-1: the one read source) - today Pepe's config push (/api/policy/bot/
+//   flags, the participation tz,   config, every few minutes; policy_meta.cfg), the numbers his own engines use; econstore's
+//   bots to skip, his journals     econ_cfg overrides only while he never pushed one
 //   Fed loans, mints, the week's   Pepe's econ docs (econstore econ_docs: econ_layers / econ_treasury, pushed on every change)
 //   budget record, bank samples    OVERLAID with what the site did itself and Pepe's doc doesn't show yet - by content, never
 //                                  by ack: a loan repayment whose mark isn't in fed_loan_repaid, a mint whose key isn't in
@@ -19,8 +19,8 @@
 const P = require("../pools");
 const C = require("./core");
 const E = require("./engines");
+const S = require("./source");
 
-const TZ_DEFAULT = "America/New_York";
 const BUDGET_KEYS = Object.keys(E.BUDGETS);
 
 async function docs() {
@@ -44,17 +44,9 @@ async function withGweeks(inp) {
   return inp;
 }
 
-/** Pepe's pushed config + the site's econ_cfg overrides. */
-async function config() {
-  const push = (await C.cfg()) || {};
-  let over = {};
-  try { over = (await require("../econstore").getSettings()).econ_cfg || {}; } catch (e) { over = {}; }
-  // Pepe's EFFECTIVE values are the truth his own engines use (every key, defaults included); the overrides table only stands
-  // in when he never pushed them
-  const cfg = push.econ_cfg && typeof push.econ_cfg === "object" && Object.keys(push.econ_cfg).length ? Object.assign({}, push.econ_cfg)
-    : Object.assign({}, E.DEFAULTS, over);
-  return { push, cfg, consts: push.consts || {}, flags: push.flags || {} };
-}
+/** The engines' config: {push (policy/source.js's snapshot: journal, days_done, skip, tz, ...), cfg, consts, flags} - PO-1: read
+ *  through policy/source.js, never Pepe's push directly. */
+const config = () => S.config();
 
 async function poolsNow() {
   const cap = require("../capital/core");
@@ -121,10 +113,10 @@ async function bankLent(treasury) {
   for (const e of await C.effectsAll(null, ["bank_lent"])) if (!have.has(Number(e.data.ts))) out.push([Number(e.data.ts), Math.trunc(Number(e.data.amount) || 0)]);
   return out.sort((a, b) => a[0] - b[0]);
 }
-/** The weekly epochs: the site's own runs + the ones Pepe ran (his config push). */
-async function journal(push) {
+/** The weekly epochs: the site's own runs + the ones Pepe ran (his journal: `src` = policy/source.js's snapshot). */
+async function journal(src) {
   const out = new Map();
-  for (const r of push.journal || []) if (r && r.eid) out.set(r.eid, { eid: r.eid, boundary: Number(r.boundary || 0), state: r.state, incentives_after: r.incentives_after ?? null });
+  for (const r of (src || {}).journal || []) if (r && r.eid) out.set(r.eid, { eid: r.eid, boundary: Number(r.boundary || 0), state: r.state, incentives_after: r.incentives_after ?? null });
   const { getQuery } = require("../dbUtils");
   await C.init();
   for (const r of await getQuery("SELECT period, state, boundary, result FROM policy_runs WHERE engine = 'treasury' AND period LIKE 'W%'")) {
@@ -137,15 +129,15 @@ async function journal(push) {
   }
   return [...out.values()];
 }
-/** Has the treasury's daily release for `did` run (here or in Pepe)? */
-async function dailyDone(push, did) {
+/** Has the treasury's daily release for `did` run (here or in Pepe: `src` = policy/source.js's snapshot)? */
+async function dailyDone(src, did) {
   const r = await C.run("treasury", did);
   if (r && (r.state === "done" || r.state === "handed")) return true;
-  return (push.days_done || []).includes(did);
+  return ((src || {}).days_done || []).includes(did);
 }
 
 // ── the local (participation) day: Pepe's time.localtime(ts - 6 h) in his time zone ──
-function localDay(ts, tz = TZ_DEFAULT) {
+function localDay(ts, tz = S.TZ_DEFAULT) {
   const f = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
   const p = {};
   for (const x of f.formatToParts(new Date((ts - 6 * 3600) * 1000))) p[x.type] = x.value;
@@ -217,7 +209,7 @@ async function daily(nowS, did) {
 async function monetary(nowS, did, guarantee) {
   const { push, cfg, consts, flags } = await config();
   const all = await docs();
-  const ld = localDay(nowS, push.tz || TZ_DEFAULT);
+  const ld = localDay(nowS, push.tz || S.TZ_DEFAULT);
   const c = Object.assign({}, E.DEFAULTS, cfg);
   const scaling = (c.issuance_mode === "pct" || c.issuance_mode === "fixed") && !!c.issuance_activity_scaling;
   const days = scaling ? prevDays(ld, 30) : [ld];
@@ -233,5 +225,26 @@ async function monetary(nowS, did, guarantee) {
                       local_day: ld, days, rows, skip, supply });
 }
 
-module.exports = { epoch, daily, monetary, withGweeks, config, poolsNow, journal, dailyDone, localDay, prevDays, partRows, fedLoans, mints, week, bankLent,
-                   docs, docOf, layersOf, BUDGET_KEYS };
+/**
+ * PO-1: the burn engine's DAY SUMMARY inputs (policy/engines.planBurn) - the burns of the policy day `did` = [from, to) (04:00
+ * UTC to 04:00 UTC, closed), read from the pool history: every "burn" move's leg out of the burn reserve (nothing else pays out
+ * of it but a pools rollback, which isn't a burn), how many, and what came in. Plus, for information only (not in the plan:
+ * they depend on the moment they are read), the reserve's balance now and the PAT Pepe is burning right now. The closed day
+ * reads the same whenever it is read - so the site's summary and Pepe's report of the same day compare without timing noise.
+ */
+async function burnDay(nowS, did, from, to) {
+  const { getQuery } = require("../dbUtils");
+  const b = await S.burn();
+  const r = (await getQuery(`SELECT COALESCE(SUM(CASE WHEN l.amount < 0 AND m.kind = 'burn' THEN -l.amount ELSE 0 END), 0) AS burned,
+                                    COALESCE(SUM(CASE WHEN l.amount < 0 AND m.kind = 'burn' THEN 1 ELSE 0 END), 0) AS n,
+                                    COALESCE(SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END), 0) AS inflow
+                             FROM pool_move_legs l LEFT JOIN pool_moves m ON m.key = l.move_key
+                             WHERE l.pool = 'burn' AND l.ts >= ? AND l.ts < ?`, [Math.round(Number(from) * 1000), Math.round(Number(to) * 1000)]))[0] || {};
+  const every = Math.trunc(Number(b.cfg.accrual_every_min));
+  return { kind: "burn", now: nowS, did, from: Math.trunc(Number(from)), to: Math.trunc(Number(to)), mode: String(b.cfg.mode || "accrual"),
+           accrual_every_min: Number.isFinite(every) && every > 0 ? every : 5, burned: Math.trunc(Number(r.burned) || 0), burns: Math.trunc(Number(r.n) || 0),
+           inflow: Math.trunc(Number(r.inflow) || 0), balance: await P.balance("burn"), inflight: b.inflight };
+}
+
+module.exports = { epoch, daily, monetary, burnDay, withGweeks, config, poolsNow, journal, dailyDone, localDay, prevDays, partRows, fedLoans, mints, week,
+                   bankLent, docs, docOf, layersOf, BUDGET_KEYS };

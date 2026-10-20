@@ -306,6 +306,32 @@ test("D2's safeguard in the waterfall: no cap in force + a week not wholly time-
   assert.equal(E.trackOf(none, np).vaults.house.fallback, false);
 });
 
+test("PO-1: the epoch waits for the Monday cut-off - it decides the week's path (uncapped / partial / snapshot) and who is paid", () => {
+  // the wait (pepe_treasury._tr_cutoff_pending, policy/engines.cutoffPending): the book's newest cut-off before the boundary,
+  // less than an hour past it -> wait; the Monday cut-off at 04:00:03 (or the hour up) -> run
+  const bookAt = (ts) => ({ inited: 1, epochs: [{ ts: B - DAY + 3 }, { ts }] });
+  assert.equal(E.TR_CUTOFF_WAIT, 3600);
+  assert.equal(E.cutoffPending(bookAt(B - DAY + 3), B, B + 8), true, "2026-10-19: the site planned at 04:00:08 - it should have waited");
+  assert.equal(E.cutoffPending(bookAt(B + 3), B, B + 8), false, "the cut-off ran at 04:00:03");
+  assert.equal(E.cutoffPending(bookAt(B - DAY + 3), B, B + 3600), false, "no cut-off: the hour is up, run on what there is");
+  // UNCAPPED path (a whole week, no cap): s1 held 5M all week; s2 staked 5M at Sunday's cut-off. Before Monday's cut-off the
+  // bucket has Tue..Sun only - s2's first day isn't in it yet: s2 would get nothing. After it: s2's day counts.
+  const older = [String(B - 7 * DAY), [["1", 1]]];
+  const early = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 0 }, patDays: [older, [String(B), [["1", 30e6]]]] }));
+  const waited = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 0 }, patDays: [older, [String(B), [["1", 35e6], ["2", 5e6]]]] }));
+  assert.deepEqual(paidTo(early), { 1: 2e6 }, "without the wait: s2's Sunday-to-Monday day is lost");
+  assert.deepEqual(paidTo(waited), { 1: Math.trunc(2e6 * 5e6 / (40e6 / 7)), 2: Math.trunc(2e6 * (5e6 / 7) / (40e6 / 7)) }, "with it: s2 gets its day");
+  assert.equal(waited.vaults.house.apr_cap, 2e6, "uncapped: the stakers' full 20%");
+  // PARTIAL path: the PAT-days began this week (no older bucket) - the bucket after the cut-off, under the 25% reference cap
+  const partial = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 0 }, patDays: [[String(B), [["1", 10e6], ["2", 5e6]]]] }));
+  assert.equal(E.weightingOf(inputs({ patDays: [[String(B), [["1", 10e6], ["2", 5e6]]]] }), partial).house, "partial");
+  assert.equal(partial.vaults.house.apr_cap, Math.trunc((10e6 / 7 + 5e6 / 7) * 0.25 * 7 / 365));
+  // SNAPSHOT path: no cut-off came within the hour (no bucket for the boundary) - the holdings now, the reference cap
+  const snap = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 0 }, patDays: [older] }));
+  assert.equal(snap.vaults.house.apr_cap, Math.trunc(10e6 * 0.25 * 7 / 365));
+  assert.deepEqual(paidTo(snap), { 1: Math.trunc(snap.vaults.house.apr_cap / 2), 2: Math.trunc(snap.vaults.house.apr_cap / 2) });
+});
+
 test("a Monday cut-off more than an hour late: flagged, and 'lost' when Pepe's settlement for that boundary was already done", () => {
   assert.equal(V.lateMonday(B - DAY + 3, B + 5, 4, {}), null, "on time");
   assert.equal(V.lateMonday(B - DAY + 3, B + 3000, 4, {}), null, "50 min late: Pepe still waits for it");

@@ -1284,8 +1284,7 @@ async function bonusCap(c) {
     return Math.max(0, Math.min(1, Number(c.wf_staker_cap_pct) / 100));
   }
   try {
-    const push = (await require("../policy/core").cfg()) || {};
-    const ec = push.econ_cfg && typeof push.econ_cfg === "object" && Object.keys(push.econ_cfg).length ? push.econ_cfg : null;
+    const ec = await require("../policy/source").econCfg();              // PO-1: Pepe's policy push, read through policy/source.js
     if (ec) v = ec.wf_staker_cap_pct;
     else v = ((await require("../econstore").getSettings()).econ_cfg || {}).wf_staker_cap_pct;
   } catch (e) { v = undefined; }

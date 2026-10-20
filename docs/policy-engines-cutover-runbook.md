@@ -211,3 +211,41 @@ suite (6 pre-existing failures: `@noble/curves` missing locally), `policy_client
   as it stands (those claims are still Pepe's, every ~30 s).
 - A shadow report is Pepe's state just before his legs; the site's own gather at the same moment can differ by a journal push
   (the inputs diff says so; Pepe pushes his config after every report).
+
+## 13. Phase 6 / PO-1: the cut-off wait, the boundary handshake, clean periods, the pause
+
+The economy-policy-to-site plan (2026-10-20, slice PO-1) hardened the scheduler before any engine goes live:
+
+- **The Monday cut-off wait.** The epoch (live, dry and shadow alike) waits up to `TR_CUTOFF_WAIT` = 1 h past Monday's boundary for
+  the capital cut-off that closes the week's PAT-days bucket (the share book's newest cut-off at or after the boundary) - Pepe's
+  `_tr_cutoff_pending`. The Monday daily waits with it (it runs after the epoch). A book with no cut-offs never waits; with no
+  cut-off within the hour the epoch runs on what there is. The log says `[policy] treasury W...: waiting for the Monday cut-off`
+  once. (On 2026-10-19 the site's sim was at 04:00:08 and the cut-off at 04:00:11.) On staging the capital cut-off runs on the real
+  clock, not the policy test clock: a test-clock Monday exercises the wait only when the book's last real cut-off is before it.
+- **The boundary handshake (T9).** `POST /api/policy/bot/boundary {engine, period, now, guarantee}` (bot token): before Pepe moves a
+  leg of an epoch, daily or monetary period he asks the site for its snapshot of that moment - inputs + plan in ONE `dbUtils.tx`,
+  stored once in `policy_sims` (`site_boundary_inputs`, `site_boundary_plan`, `boundary_ts`), never overwritten (a second call
+  answers `dup`). His report is then compared against it. Only while the engine is dry / shadow (`off` / `live` answer `skipped`).
+- **Clean (D-15).** `policy_sims.ok = 1` only when the engine diff is empty, a boundary snapshot exists and the boundary plan
+  differs from Pepe's on no field but the whitelist (`policy/scheduler.js WHITELIST`; today only the Monday daily's `release` in
+  shadow, proven post-move in `test/policy-boundary.test.js`). A report without a snapshot (a Pepe before PO-0c, a timed-out
+  handshake) is never clean. Diffs list at most 400 entries (`truncated = 1` when there were more).
+- **Burn.** Pepe's daily `burn` report (`inputs.kind = "burn"`: the closed policy day `[04:00, 04:00)` UTC - `from`, `to`, `mode`,
+  `burned`, `burns`) is planned by `engines.planBurn`; the scheduler records a day summary `<mode>:burn:D<date>` of every closed
+  day, even at zero (from the pool history: the `burn` moves out of the burn reserve) - it is also that day's boundary snapshot.
+- **Pause (T3).** The owner's kill switch, Pepe not needed:
+  ```
+  cd /home/PATV && node tools/policy-backend.js --actor=<you> pause <treasury|monetary|burn|all> --note "why"
+  cd /home/PATV && node tools/policy-backend.js --actor=<you> resume <treasury|monetary|burn|all>
+  ```
+  or /admin/economy → ⏱️ Policy scheduler → Pause an engine (a Pepe owner, password step-up). One transaction (the flag,
+  `policy_audit`, `admin_audit` `policy.pause` / `policy.resume`), then every site admin gets an ops alert (inbox + Telegram).
+  A paused engine runs nothing: a live one's due periods are recorded `missed` (`result.missed = "paused"`), nothing is handed
+  back, the mode stays. A paused engine can't be cut over. **A prod write: the user's go.**
+- **Missed periods (D-18).** Only the current period runs after an outage or a resume, flagged `late` on its result and record
+  (`{why: "site_down" | "paused", late_s}`) with an admin notice; older ones stay `missed` (the card's "Missed periods").
+  An owner's "Run now" for an older period comes with the web-approval flow (PO-7), not here.
+- `node tools/policy-backend.js preflight` FAILs while an engine is paused and WARNs on missed periods and on unclean shadow
+  periods of the last 14 days.
+- Every reader of Pepe's policy push (flags, the epoch hour, burn settings, his journals, the effective `econ_cfg`) reads it
+  through `policy/source.js`; PO-2 / H1 switch that one module to the site's own config.

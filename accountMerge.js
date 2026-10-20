@@ -341,6 +341,7 @@ const RULES = {
   // Phase 4: policy/core.js - who switched an engine's mode (an admin's username, "pepe", a cutover key) and the scheduler
   // process holding the lease (host:pid:nonce) - audit labels, kept as written
   "policy_audit.by": { deny: NAME }, "policy_engines.by": { deny: NAME }, "policy_lease.holder": { deny: FLAG },
+  "policy_engines.paused_by": { deny: "PO-1: who paused an engine (a site username or '<actor> (cli)') - an audit label; admin_audit has the id" },
   "media.by_user_id": M(), "media.by_user": { deny: NAME }, "media.subject": { deny: NAME }, "media.subject_login": { deny: NAME }, "media.by_login": { deny: NAME },
   // follows
   "follows.follower": M({ key: ["target_kind", "target_id"], merge: { created_at: "MIN" } }),

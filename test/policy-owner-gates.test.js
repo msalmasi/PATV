@@ -95,6 +95,7 @@ test("an Admin who isn't a Pepe owner gets 403 on every economy write; a Pepe ow
     // [path, body, what the OWNER gets next (the gate passed): a status]
     ["/api/admin/econ/edit", { op: "cmd", text: "set fed_floor 50m" }, 409],             // econstore.requestEdit -> the step-up (no nonce)
     ["/api/admin/policy/mode", { engine: "treasury", mode: "dry", note: "test" }, 200],
+    ["/api/admin/policy/pause", { engine: "treasury", pause: true, note: "test" }, 409],     // PO-1: -> the step-up (no nonce)
     ["/api/admin/burn", { amount: 5 }, 409],                                              // burns.request -> the nonce
     ["/api/admin/pools-backend", { on: true }, 200],
     ["/api/admin/capital-backend", { on: true }, 200],
@@ -128,6 +129,43 @@ test("the econ edit / burn step-ups still work for an owner; reading stays Admin
   assert.equal(r.status, 200);
   const pol = await fetch(base + "/api/admin/policy", { headers: { "x-test-user": U.admin } });
   assert.equal(pol.status, 200);
+});
+
+test("PO-1: pausing an engine on /admin/economy is a Pepe owner's with the password step-up; audited, and resumable", async () => {
+  const C = require(path.join(repo, "policy", "core"));
+  const nonce = async () => (await call("/api/admin/econ/edit/nonce", U.owner)).body.nonce;
+  // the note is required for a pause; engine and pause must be named
+  assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "treasury", pause: true, note: "", nonce: await nonce(), password: "pw-right" })).status, 400);
+  assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "nope", pause: true, note: "why not", nonce: await nonce(), password: "pw-right" })).status, 400);
+  assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "treasury", pause: "yes", note: "why not", nonce: await nonce(), password: "pw-right" })).status, 400);
+  // a wrong password: refused, nothing paused
+  const wrong = await call("/api/admin/policy/pause", U.owner, { engine: "treasury", pause: true, note: "a test pause", nonce: await nonce(), password: "pw-wrong" });
+  assert.equal(wrong.status, 403);
+  assert.equal((await C.engines()).treasury.paused, 0);
+  // an Admin who isn't an owner: refused before the step-up even with a nonce of his own
+  const an = (await call("/api/admin/econ/edit/nonce", U.admin)).body.nonce;
+  assert.equal((await call("/api/admin/policy/pause", U.admin, { engine: "treasury", pause: true, note: "a test pause", nonce: an, password: "pw-right" })).status, 403);
+  // the owner with the right password: paused, audited (policy_audit + admin_audit "policy.pause")
+  const ok = await call("/api/admin/policy/pause", U.owner, { engine: "all", pause: true, note: "a test pause", nonce: await nonce(), password: "pw-right" });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.deepEqual(ok.body.engines.map((x) => [x.engine, x.paused]), [["treasury", true], ["monetary", true], ["burn", true]]);
+  const e = await C.engines();
+  assert.deepEqual([e.treasury.paused, e.treasury.paused_by, e.treasury.pause_note, e.treasury.mode], [1, "own", "a test pause", "dry"], "the mode is unchanged");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'policy.pause' AND admin_id = ?", [U.owner]))[0].n, 3);
+  assert.ok((await getQuery("SELECT 1 FROM policy_audit WHERE engine = 'burn' AND old = 'running' AND new = 'paused' AND by = 'own'"))[0]);
+  // the nonce is single-use
+  const n1 = await nonce();
+  assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "burn", pause: false, nonce: n1, password: "pw-right" })).status, 200);
+  assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "burn", pause: false, nonce: n1, password: "pw-right" })).status, 409);
+  // resume (no note needed)
+  const back = await call("/api/admin/policy/pause", U.owner, { engine: "all", pause: false, nonce: await nonce(), password: "pw-right" });
+  assert.equal(back.status, 200);
+  assert.deepEqual(back.body.engines.map((x) => [x.engine, x.paused, !!x.unchanged]), [["treasury", false, false], ["monetary", false, false], ["burn", false, true]]);
+  assert.equal((await C.engines()).treasury.paused, 0);
+  // the card's view shows it (an Admin can read)
+  const v = await fetch(base + "/api/admin/policy", { headers: { "x-test-user": U.admin } }).then((r) => r.json());
+  assert.equal(v.engines.find((x) => x.engine === "treasury").paused, false);
+  assert.ok(Array.isArray(v.missed) && Array.isArray(v.whitelist));
 });
 
 test("econ.* website actions reach Pepe with the site-computed is_owner (never the Admin class) + the linked login", async () => {
@@ -234,6 +272,31 @@ test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backen
   const names = JSON.parse(tables.stdout.trim());
   assert.ok(!names.includes("policy_engines") && !names.includes("pepe_roles_pending"), "the policy CLI created nothing: " + names.join(","));
   assert.match(pol.stdout, /stashes {2}0 closed stash\(es\) with no account to pay/);
+  // PO-1 (T3): the shell's pause / resume - who and why required; one transaction (flag + policy_audit + admin_audit)
+  const noWho = run([path.join(repo, "tools", "policy-backend.js"), "pause", "treasury", "--note", "shell test"]);
+  assert.equal(noWho.status, 1);
+  assert.match(noWho.stderr, /--actor=/);
+  const noWhy = run([path.join(repo, "tools", "policy-backend.js"), "--actor=ops", "pause", "treasury"]);
+  assert.equal(noWhy.status, 1);
+  assert.match(noWhy.stderr, /say why/);
+  const badEng = run([path.join(repo, "tools", "policy-backend.js"), "--actor=ops", "pause", "everything", "--note", "x y z"]);
+  assert.equal(badEng.status, 1);
+  const pz = run([path.join(repo, "tools", "policy-backend.js"), "--actor=ops", "pause", "treasury", "--note", "site misbehaving at 04:00"]);
+  assert.equal(pz.status, 0, pz.stderr);
+  assert.match(pz.stdout, /treasury: PAUSED by ops/);
+  assert.match(pz.stdout, /engine {3}treasury +off +.*PAUSED by ops \(cli\).*\(site misbehaving at 04:00\)/);
+  const pre2 = run([path.join(repo, "tools", "policy-backend.js"), "preflight"]);
+  assert.match(pre2.stdout, /FAIL {2}no policy engine paused: treasury by ops \(cli\)/);
+  const rz = run([path.join(repo, "tools", "policy-backend.js"), "--actor=ops", "resume", "all"]);
+  assert.equal(rz.status, 0, rz.stderr);
+  assert.match(rz.stdout, /treasury: resumed by ops/);
+  assert.match(rz.stdout, /monetary: already running - nothing changed/);
+  const q = (sqlText) => JSON.parse(spawnSync(process.execPath, ["-e", `const s=require("sqlite3");const d=new s.Database("myapp.db");d.all(${JSON.stringify(sqlText)},(e,r)=>{console.log(JSON.stringify(e?String(e):r));d.close();});`],
+                                              { cwd: dir, env, encoding: "utf8" }).stdout.trim());
+  assert.deepEqual(q("SELECT by, via, old, new, note FROM policy_audit ORDER BY id"), [
+    { by: "ops (cli)", via: "cli", old: "running", new: "paused", note: "site misbehaving at 04:00" },
+    { by: "ops (cli)", via: "cli", old: "paused", new: "running", note: null }]);
+  assert.deepEqual(q("SELECT admin_id, action FROM admin_audit ORDER BY id"), [{ admin_id: "cli:ops", action: "policy.pause" }, { admin_id: "cli:ops", action: "policy.resume" }]);
   // the review of PO-0b: the pools / stashes / capital / gangs switches have a shell path too (tools/money-backend.js)
   const st0 = run([path.join(repo, "tools", "money-backend.js")]);
   assert.equal(st0.status, 0, st0.stderr);

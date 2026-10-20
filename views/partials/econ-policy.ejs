@@ -1,13 +1,14 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# Phase 4: the policy scheduler card (policy/scheduler.js). One row per engine: its mode (off / dry run / shadow / live),
     the last run, the next run and the last shadow diff. Admins switch off / dry / shadow here (audit-logged); live is only
-    Pepe's cutover handshake (!econ engines cutover), the way back his rollback. public/js/admin-policy.js renders it from
-    GET /api/admin/policy. %>
+    Pepe's cutover handshake (!econ engines cutover), the way back his rollback. PO-1: a Pepe owner pauses / resumes an engine
+    here (the password step-up; tools/policy-backend.js pause|resume from the shell), the missed periods (D-18) and the
+    shadow comparison's whitelist are listed. public/js/admin-policy.js renders it from GET /api/admin/policy. %>
 <section class="adm-card" id="policy" aria-labelledby="policyT">
   <h2 id="policyT"><span class="ds-ic" aria-hidden="true">⏱️</span> <%= t('adm.policy.title') %> <span class="adm-pill admin"><%= t('adm.policy.admins') %></span></h2>
   <p class="adm-help"><%- t('adm.policy.help') %></p>
   <% if (!isAdmin) { %><p class="adm-help"><%= t('adm.policy.admins_only') %></p><% } else { %>
-    <div id="policyAdm">
+    <div id="policyAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' && locals.me ? pepeCtlCsrf(me.username) : '' %>">
       <div class="adm-kv" id="policyKv"><div><b><%= t('adm.policy.status') %></b><span><%= t('adm.policy.loading') %></span></div></div>
       <div class="adm-tbl"><table aria-label="<%= t('adm.policy.engines') %>">
         <thead><tr><th><%= t('adm.policy.col_engine') %></th><th><%= t('adm.policy.col_mode') %></th><th><%= t('adm.policy.col_last') %></th>
@@ -21,15 +22,42 @@
         <div class="adm-actions"><button type="submit"><%= t('adm.policy.set') %></button></div>
       </form>
       <p class="adm-help" id="policyOwnerOnly"><%= t('adm.policy.owner_only') %></p>
+      <h3 id="policyPauseT"><%= t('adm.policy.pause_title') %></h3>
+      <p class="adm-help"><%- t('adm.policy.pause_help') %></p>
+      <form class="adm-form" id="policyPauseForm" autocomplete="off" aria-labelledby="policyPauseT">
+        <label for="policyPauseEngine"><%= t('adm.policy.col_engine') %><select id="policyPauseEngine"><option value="treasury">treasury</option><option value="monetary">monetary</option><option value="burn">burn</option><option value="all"><%= t('adm.policy.all') %></option></select></label>
+        <label for="policyPauseNote"><%= t('adm.policy.note') %><input type="text" id="policyPauseNote" maxlength="200"></label>
+        <div class="adm-actions"><button type="button" id="policyPauseBtn"><%= t('adm.policy.pause') %></button><button type="button" id="policyResumeBtn" class="adm-btn ghost"><%= t('adm.policy.resume') %></button></div>
+      </form>
+      <div id="policyConfirm" class="policy-confirm" hidden>
+        <p class="adm-help" id="policyWhat"></p>
+        <label for="policyPw" class="adm-help"><%= t('adm.policy.confirm_pw') %></label>
+        <input type="password" id="policyPw" maxlength="200" autocomplete="current-password">
+        <div class="adm-actions"><button type="button" id="policyYes"><%= t('adm.policy.yes') %></button><button type="button" id="policyNo" class="adm-btn ghost"><%= t('adm.policy.cancel') %></button></div>
+      </div>
       <details><summary><%= t('adm.policy.not_engines') %></summary><ul class="adm-help" id="policyRetired"></ul></details>
+      <details><summary><%= t('adm.policy.missed') %></summary>
+        <p class="adm-help"><%= t('adm.policy.missed_help') %></p>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.policy.missed') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.policy.col_engine') %></th>
+          <th><%= t('adm.policy.col_period') %></th><th><%= t('adm.policy.col_why') %></th></tr></thead><tbody id="policyMissed"></tbody></table></div>
+      </details>
+      <details><summary><%= t('adm.policy.whitelist') %></summary>
+        <p class="adm-help"><%= t('adm.policy.whitelist_help') %></p>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.policy.whitelist') %>"><thead><tr><th><%= t('adm.policy.col_engine') %></th><th><%= t('adm.policy.col_field') %></th>
+          <th><%= t('adm.policy.col_why') %></th><th><%= t('adm.policy.col_test') %></th></tr></thead><tbody id="policyWhite"></tbody></table></div>
+      </details>
       <details><summary><%= t('adm.policy.recent') %></summary>
         <div class="adm-tbl"><table aria-label="<%= t('adm.policy.recent') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.policy.col_engine') %></th>
           <th><%= t('adm.policy.col_period') %></th><th><%= t('adm.policy.col_state') %></th><th><%= t('adm.policy.col_via') %></th></tr></thead><tbody id="policyRuns"></tbody></table></div>
         <div class="adm-tbl"><table aria-label="<%= t('adm.policy.audit') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.policy.col_engine') %></th>
           <th><%= t('adm.policy.col_change') %></th><th><%= t('adm.policy.col_by') %></th><th><%= t('adm.policy.note') %></th></tr></thead><tbody id="policyAudit"></tbody></table></div>
       </details>
-      <p class="adm-msg" id="policyMsg" role="status"></p>
+      <p class="adm-msg" id="policyMsg" role="status" aria-live="polite"></p>
     </div>
-    <script src="/public/js/admin-policy.js?v=1" defer></script>
+    <style>
+      .policy-confirm input { width: 100%; max-width: 320px; }
+      #policyMsg { white-space: pre-wrap; overflow-wrap: anywhere; }
+    </style>
+    <script src="/public/js/admin-policy.js?v=2" defer></script>
   <% } %>
 </section>

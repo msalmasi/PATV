@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 // tools/policy-backend.js — PO-0b (economy policy -> site plan, "Phase 6"): what the site knows about the economy policy
-// hand-over, from the server's shell. READ-ONLY: it only SELECTs (no init(), no CREATE, no write) - safe on prod at any time.
-// Run in the site directory (it opens ./myapp.db). Modelled on tools/fed-backend.js.
-//   node tools/policy-backend.js [status]     # engines + modes, Pepe's policy push (age, bot_version, flags), recent runs,
-//                                             # the backends' live switches, owner changes waiting, website claims,
-//                                             # closed stashes with no account to pay + waterfall stash legs refused lately
+// hand-over, from the server's shell. status / preflight are READ-ONLY: they only SELECT (no init(), no CREATE, no write) -
+// safe on prod at any time. Run in the site directory (it opens ./myapp.db). Modelled on tools/fed-backend.js.
+//   node tools/policy-backend.js [status]     # engines + modes (+ paused), Pepe's policy push (age, bot_version, flags), recent
+//                                             # runs, missed periods, the shadow comparisons (clean / boundary), the backends'
+//                                             # live switches, owner changes waiting, website claims, closed stashes with no
+//                                             # account to pay + waterfall stash legs refused lately
 //   node tools/policy-backend.js preflight   # the site half of the hand-over preflight (plan §6.2): every check PASS / WARN /
 //                                             # FAIL, exit code 1 on any FAIL. Pepe's half (his outboxes, unsure lists, dead
 //                                             # letters, the last W record's notices / audit / digest) is `!econ policy status`.
-// Later slices add `pause|resume` (PO-1) and the config checks (PO-2: every SPEC key present).
+//   node tools/policy-backend.js --actor=<who> pause <treasury|monetary|burn|all> --note "why"
+//   node tools/policy-backend.js --actor=<who> resume <treasury|monetary|burn|all> [--note "..."]
+//                                             # PO-1 (T3): the owner's kill switch from the shell - no role sync, no Pepe needed.
+//                                             # ONE dbUtils.tx (the flag + policy_audit + admin_audit "cli:<who>"), then every
+//                                             # site admin is told (opsalerts). A paused engine runs nothing (a live one's due
+//                                             # periods are recorded missed); resume lets only the current period run (late, D-18).
+//                                             # WRITES - on prod only with the owner's explicit go.
+// Later slices add the config checks (PO-2: every SPEC key present).
 "use strict";
 const path = require("path");
 const { execFileSync } = require("child_process");
@@ -60,8 +68,16 @@ async function ownerHasAccount(owner) {
 async function gather() {
   const out = { site: siteVersion(), staging: !!process.env.STAGING };
   out.engines = {};
-  for (const e of ["treasury", "monetary", "burn"]) out.engines[e] = { mode: "off", armed_at: null, by: null, updated: null };
-  for (const r of await q("SELECT engine, mode, armed_at, by, updated, note FROM policy_engines", [], "policy_engines")) out.engines[r.engine] = r;
+  for (const e of ["treasury", "monetary", "burn"]) out.engines[e] = { mode: "off", armed_at: null, by: null, updated: null, paused: 0 };
+  // PO-1: the pause columns exist once a PO-1 site started (core.init adds them) - read them only then
+  const pcols = (await has("policy_engines")) ? new Set((await getQuery("PRAGMA table_info(policy_engines)")).map((c) => c.name)) : new Set();
+  const psel = pcols.has("paused") ? ", paused, paused_by, paused_at, pause_note" : "";
+  for (const r of await q(`SELECT engine, mode, armed_at, by, updated, note${psel} FROM policy_engines`, [], "policy_engines")) out.engines[r.engine] = r;
+  out.missed7 = await q("SELECT key, engine, period, error, created FROM policy_runs WHERE state = 'missed' AND created >= ? ORDER BY created", [Date.now() - 7 * 86400e3], "policy_runs");
+  // the shadow comparisons of the last 14 days: clean (ok = 1), compared against a boundary snapshot (PO-1) or not
+  const scols = (await has("policy_sims")) ? new Set((await getQuery("PRAGMA table_info(policy_sims)")).map((c) => c.name)) : new Set();
+  out.shadow14 = await q(`SELECT key, engine, period, ok, ${scols.has("boundary_ts") ? "boundary_ts" : "NULL AS boundary_ts"}, pepe_plan IS NOT NULL AS reported, updated
+                          FROM policy_sims WHERE mode = 'shadow' AND updated >= ? ORDER BY updated`, [Date.now() - 14 * 86400e3], "policy_sims");
   const push = await meta("policy_meta", "cfg");
   out.push = push ? { age_s: push.at ? Math.round(Date.now() / 1000 - Number(push.at)) : null, bot_version: push.bot_version || "",
                       flags: push.flags || {}, hour: (push.consts || {}).VAULT_EPOCH_UTC_HOUR } : null;
@@ -105,7 +121,15 @@ async function gather() {
 function printStatus(s) {
   console.log(`site     ${s.site.version || "?"} (${s.site.sha || "no git"})${s.staging ? " STAGING" : ""}`);
   for (const [e, r] of Object.entries(s.engines)) {
-    console.log(`engine   ${e.padEnd(9)} ${String(r.mode).padEnd(7)} armed ${r.armed_at ? new Date(Number(r.armed_at) * 1000).toISOString().slice(0, 16) : "-"}  by ${r.by || "-"} ${r.updated ? ago(r.updated) : ""}`);
+    console.log(`engine   ${e.padEnd(9)} ${String(r.mode).padEnd(7)} armed ${r.armed_at ? new Date(Number(r.armed_at) * 1000).toISOString().slice(0, 16) : "-"}  by ${r.by || "-"} ${r.updated ? ago(r.updated) : ""}` +
+                (Number(r.paused) ? `  PAUSED by ${r.paused_by || "?"} ${ago(r.paused_at)}${r.pause_note ? " (" + r.pause_note + ")" : ""}` : ""));
+  }
+  for (const m of s.missed7) console.log(`missed   ${m.engine}:${m.period} (${ago(m.created)}) - ${m.error || "?"}`);
+  const rep = s.shadow14.filter((x) => Number(x.reported));
+  if (rep.length) {
+    const bad = rep.filter((x) => !Number(x.ok));
+    console.log(`shadow   ${rep.length} period(s) compared in 14 days: ${rep.length - bad.length} clean, ${bad.length} not` +
+                (bad.length ? ` (${bad.slice(-8).map((x) => `${x.engine}:${x.period}${x.boundary_ts == null ? " no boundary" : ""}`).join(", ")})` : ""));
   }
   if (!s.push) console.log("push     Pepe's policy push: never received");
   else console.log(`push     Pepe's policy push ${s.push.age_s == null ? "?" : s.push.age_s + " s"} old · bot_version ${s.push.bot_version || "(empty)"} · flags ${JSON.stringify(s.push.flags)} · epoch hour ${s.push.hour ?? "?"}`);
@@ -145,15 +169,58 @@ function preflight(s) {
       s.closedNoAccount.length ? `${s.closedNoAccount.length}: ${s.closedNoAccount.slice(0, 12).map((x) => `${x.id} (${x.owner})`).join(", ")} - a credit to one is refused (409)` : "yes");
   for (const k of ["fed", "escrow", "gangs"]) add("INFO", `${k} live on the site`, String(s.backends[k].live));
   for (const e of ["treasury", "monetary", "burn"]) add("INFO", `engine ${e}`, s.engines[e].mode);
+  // PO-1: a paused engine is refused at the cutover; a missed period (D-18) and an unclean shadow period need reading first
+  const paused = Object.entries(s.engines).filter(([, r]) => Number(r.paused));
+  add(paused.length ? "FAIL" : "PASS", "no policy engine paused", paused.map(([e, r]) => `${e} by ${r.paused_by || "?"}${r.pause_note ? " (" + r.pause_note + ")" : ""}`).join(", ") || "none");
+  add(s.missed7.length ? "WARN" : "PASS", "no policy period missed in 7 days", s.missed7.map((m) => `${m.engine}:${m.period}`).join(", ") || "none");
+  const unclean = s.shadow14.filter((x) => Number(x.reported) && !Number(x.ok));
+  add(unclean.length ? "WARN" : "PASS", "shadow periods clean (14 days, D-15)",
+      unclean.length ? unclean.slice(-12).map((x) => `${x.engine}:${x.period}${x.boundary_ts == null ? " (no boundary snapshot)" : ""}`).join(", ")
+                     : `${s.shadow14.filter((x) => Number(x.reported)).length} compared, all clean`);
   add("INFO", "last W record", s.lastW ? `${s.lastW.epoch} ${s.lastW.state || "?"} (notified / audit / digest_sent: Pepe's half)` : "none pushed");
   add("INFO", "Pepe's half", "!econ policy status: pvault unsure/outbox, corrections unsure/paying, pools outbox/uncertain/inbox, policy outbox + dead letters, capital outbox, the last W record");
   add("INFO", "config keys", "every SPEC key present - checked from PO-2 (policy_cfg)");
   return out;
 }
 
+/** `--note "text"` or `--note=text` */
+function noteArg(argv) {
+  const eq = argv.find((a) => a.startsWith("--note="));
+  if (eq) return eq.slice(7);
+  const i = argv.indexOf("--note");
+  return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : "";
+}
+/** PO-1 (T3): pause / resume from the shell (writes; policy/scheduler.setPause - one transaction, audited, admins alerted). */
+async function pauseCmd(cmd, target, argv) {
+  const actor = (argv.find((a) => a.startsWith("--actor=")) || "").slice(8).trim();
+  if (!actor) throw new Error("say who is doing it: --actor=<name>");
+  const ENG = ["treasury", "monetary", "burn"];
+  if (!target || !(target === "all" || ENG.includes(target))) throw new Error(`usage: node tools/policy-backend.js --actor=<who> ${cmd} <treasury|monetary|burn|all> --note "why"`);
+  const note = String(noteArg(argv) || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (cmd === "pause" && note.length < 3) throw new Error('say why: --note "..." (every pause is logged and every admin is told)');
+  const SCH = require(path.join(__dirname, "..", "policy", "scheduler"));
+  const res = await SCH.setPause(target === "all" ? ENG : [target], cmd === "pause", { by: `${actor} (cli)`.slice(0, 60), auditId: `cli:${actor}`.slice(0, 64), via: "cli", note: note || null });
+  for (const r of res) {
+    if (r.unchanged) console.log(`${r.engine}: already ${r.paused ? "paused" : "running"} - nothing changed`);
+    else console.log(`${r.engine}: ${r.paused ? "PAUSED" : "resumed"} by ${actor}${r.released && r.released.length ? ` - may run late now: ${r.released.join(", ")}` : ""}`);
+  }
+}
+
 async function main() {
-  const [cmd = "status"] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  if (!["status", "preflight"].includes(cmd)) throw new Error("usage: node tools/policy-backend.js [status|preflight]   (read-only)");
+  const argv = process.argv.slice(2);
+  const words = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--note") { i++; continue; }
+    if (!argv[i].startsWith("--")) words.push(argv[i]);
+  }
+  const [cmd = "status", target] = words;
+  if (cmd === "pause" || cmd === "resume") {
+    await pauseCmd(cmd, target, argv);
+    tables = null;                                   // the pause created the policy tables if this site never had them
+    printStatus(await gather());
+    process.exit(0);
+  }
+  if (!["status", "preflight"].includes(cmd)) throw new Error('usage: node tools/policy-backend.js [status|preflight]   (read-only) | --actor=<who> pause|resume <engine|all> --note "why"');
   const s = await gather();
   if (process.argv.includes("--json")) { console.log(JSON.stringify(cmd === "preflight" ? preflight(s) : s, null, 2)); process.exit(0); }
   if (cmd === "status") { printStatus(s); process.exit(0); }

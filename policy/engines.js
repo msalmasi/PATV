@@ -592,6 +592,34 @@ function planDaily(inp) {
            grant_remaining: Object.fromEntries(GROUPS.map((g) => [g, budgetLeft(inp, c, g, now)])), legs };
 }
 
+// ── the burn engine's day (PO-1) ──
+/**
+ * The burn accrual burns whatever reaches the burn reserve at its next slot (pepe_burn._burn_tick: every accrual_every_min,
+ * the reserve less the PAT already being burned). Its shadow comparison is by DAY: the policy day `did` = [from, to) (04:00 UTC
+ * to 04:00 UTC), closed - what was burned from the reserve in it (PAT and how many burns) and the mode it ran in. The plan is
+ * a pure function of those inputs, so Pepe's report (his burns.json for the same window) and the site's summary (its pool
+ * history) compare exactly; the reserve's balance and the in-flight PAT stay in the inputs (they depend on the moment read).
+ * inputs {kind: "burn", now, did, from, to, mode, burned, burns, ...} -> {day, from, to, mode, burned, burns}
+ */
+function planBurn(inp) {
+  return { day: String(inp.did || ""), from: pyInt(inp.from), to: pyInt(inp.to), mode: String(inp.mode || "accrual"), burned: Math.max(0, pyInt(inp.burned)),
+           burns: Math.max(0, pyInt(inp.burns)) };
+}
+
+// ── the Monday cut-off the epoch waits for (PO-1) ──
+/** pepe_treasury.TR_CUTOFF_WAIT: the scheduled waterfall waits up to this long past Monday's boundary for the capital cut-off that
+ *  closes the week's PAT-days bucket (capital/vaults LATE_MONDAY is the same hour). */
+const TR_CUTOFF_WAIT = 3600;
+/** pepe_treasury._tr_cutoff_pending on the capital share book `book` (the "vaults" doc): true while its newest cut-off is still
+ *  before this week's boundary `eb` (the Monday cut-off hasn't run) and it is less than TR_CUTOFF_WAIT past the boundary. A book
+ *  with no cut-offs (not launched / none yet) never waits. */
+function cutoffPending(book, eb, now) {
+  if (Number(now) - Number(eb) >= TR_CUTOFF_WAIT) return false;
+  const d = book && typeof book === "object" ? book : {};
+  if (!d.inited || !Array.isArray(d.epochs) || !d.epochs.length) return false;
+  return Number((d.epochs[d.epochs.length - 1] || {}).ts || 0) < Number(eb);
+}
+
 // ── the monetary day ──
 /** {login: [lines, mic]} of the day's ACTIVE people (summed over rooms, in the rows' order; Pepe and bots left out). */
 function activity(inp, day) {
@@ -713,7 +741,7 @@ function planActivity(inp, localDay, amount) {
   return scores.sort((a, b) => cmpPy(a[0], b[0])).map(([lg, s]) => [lg, floorDiv(amount * s, tot)]).filter((x) => x[1] > 0);
 }
 
-module.exports = { planEpoch, planDaily, planMonetary, planActivity, weekStart, dayStart, epochId, dayId, monthOf, resolveWeek, budgetLeft,
+module.exports = { planEpoch, planDaily, planMonetary, planActivity, planBurn, cutoffPending, TR_CUTOFF_WAIT, weekStart, dayStart, epochId, dayId, monthOf, resolveWeek, budgetLeft,
                    capRoom, mintsMtd, weekIssuance, weekTarget, heistCap, guaranteeBase, gscale, gscaleOf, WEEK, budgetSum, loansByVault, poolOwed, target, stakers,
                    activity, patDaysAvg, patDaysWhole, weightingFor, weightingOf, lastBoundaryOf, trackOf, stakerCapOf, TR_TRACK_CAP, TR_FALLBACK_CAP, floorDiv, floorDivF, pyInt, fmt, pyFloatStr, cmpPy, C, BUDGETS, GROUPS, CAPPED, SOURCES, TREASURY, CASH, FED,
                    INCENTIVES, FORTKNOX, CASINO, GUARANTEE_WAIT, DEFAULTS, CONSTS };
