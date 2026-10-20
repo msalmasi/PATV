@@ -411,6 +411,20 @@ async function moveStatus(key) {
   try { return JSON.parse(r.result || "{}"); } catch (e) { return { ok: true }; }
 }
 
+/**
+ * 1.99adl: Pepe's move_status (op "move_status") - the same answer, read in a transaction of its own on the chain. A plain
+ * read is never held at the write gate and the connection is shared, so it could (a) say "not recorded" while the move
+ * Pepe gave up on is still queued behind the gate (it commits a moment later), and (b) see an OPEN transaction's
+ * uncommitted stash_moves row - "landed" - which a rollback (a COMMIT error, a restart mid-transaction) then takes back
+ * after Pepe already counted it as paid. Queued behind every transaction that was already waiting, it answers for the
+ * moves that reached the site before it, from committed rows only.
+ */
+async function settledMoveStatus(key) {
+  await init();
+  if (!KEY_RE.test(String(key || ""))) return null;
+  return tx(() => moveStatus(key));
+}
+
 // ── no money: create / members / rename / close ──
 /** The open stashes held under any of these keys (one account's: its "u:<id>" + a not-yet-re-keyed login). */
 async function ownedBy(keys) {
@@ -841,7 +855,7 @@ function register(app, { isBotToken, addUser }) {
     const op = String(b.op || "");
     const login = String(b.login || "").trim();
     if (op === "move") return botMove({ stashId: b.stash, amount: b.amount, stakedDelta: b.staked_delta, earned: b.earned, key: b.key, kind: b.kind, why: b.why });
-    if (op === "move_status") return { ok: true, result: await moveStatus(b.key) };
+    if (op === "move_status") return { ok: true, result: await settledMoveStatus(b.key) };   // 1.99adl: committed, in order
     // 1.99wy: a chat command acts as the ACCOUNT: the one Pepe resolved for the nick (user_id / userId / username - the
     // account he charges), else the account the login is linked to (resolveRecord through the link). Access is checked
     // here by account: owner for owner-only ops, owner or member for money moves.
@@ -878,7 +892,7 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { init, register, enabled, live, list, get, find, total, deposit, withdraw, botMove, moveStatus, create, setMembers,
+module.exports = { init, register, enabled, live, list, get, find, total, deposit, withdraw, botMove, moveStatus, settledMoveStatus, create, setMembers,
                    rename, close, importFromPepe, fromForm, parseAmount, canUse, isOwner, free, userIdFor, Refuse, MIN_MOVE, MAX_OWNED,
                    // 1.99wy: account keys
                    actorOf, holderInfo, holderFor, acctKey, uidOfKey, isAcctKey, targetKey, rekeyInTx, rekeyAll, moneyFacts, claimLogin,

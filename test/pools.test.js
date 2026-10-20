@@ -152,6 +152,56 @@ test("moves: keyed multi-leg, all or nothing; a refused debit is not recorded; t
   assert.equal((await post("/api/pools/move", { key: "badleg-1", legs: [["jackpot", 5]] })).status, 400);
 });
 
+test("1.99adl: /api/pools/move-status answers in order, from committed rows (a queued move isn't 'not recorded', an uncommitted one isn't 'landed')", async () => {
+  const { tx } = require(path.join(repo, "dbUtils"));
+  const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+  // (a) the debit Pepe gave up on is still queued behind an open transaction
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const blocker = tx(async () => { await held; });
+  const r0 = await P.balance("reserve");
+  const mv = P.move({ key: "adl-q1:out", legs: [["reserve", -300], ["incentives", 300]], why: "test" });
+  let st;
+  try {
+    await tick();
+    assert.equal(await P.moveStatus("adl-q1:out"), null, "the plain read says not recorded YET - the move is still queued");
+    let answered = false;
+    st = post("/api/pools/move-status", { key: "adl-q1:out" }).then((x) => { answered = true; return x; });
+    await tick();
+    assert.equal(answered, false, "Pepe's move-status waits behind the queued move");
+  } finally {
+    release();
+  }
+  await blocker;
+  assert.equal((await mv).ok, true);
+  const s = await st;
+  assert.equal(s.body.result && s.body.result.ok, true, "...and then reports it landed: " + JSON.stringify(s.body));
+  assert.equal(await P.balance("reserve"), r0 - 300, "applied once");
+  // (b) an OPEN transaction's pool_moves row that is then rolled back
+  let go, inserted;
+  const gate = new Promise((res) => { go = res; });
+  const ins = new Promise((res) => { inserted = res; });
+  const doomed = tx(async () => {
+    await runQuery("INSERT INTO pool_moves (key, kind, ts, net, legs, result) VALUES (?, 'move', ?, 0, '[]', ?)",
+                   ["adl-doomed:out", Date.now(), JSON.stringify({ ok: true, key: "adl-doomed:out", balances: {} })]);
+    inserted();
+    await gate;
+    throw new Error("COMMIT failed");
+  }).catch((e) => e.message);
+  await ins;
+  let st2;
+  try {
+    assert.equal(((await P.moveStatus("adl-doomed:out")) || {}).ok, true, "the plain read sees the uncommitted row (one shared connection)");
+    st2 = post("/api/pools/move-status", { key: "adl-doomed:out" });
+    await tick();
+  } finally {
+    go();
+  }
+  assert.equal(await doomed, "COMMIT failed");
+  assert.equal((await st2).body.result, null, "Pepe's move-status: not recorded - it never committed");
+  assert.equal(await P.settledMoveStatus("adl-doomed:out"), null);
+});
+
 test("/api/pat/charge: wallet debit + pool legs + House + turf inbox in one transaction, replayed by key", async () => {
   const h0 = await house(), r0 = await P.balance("reserve"), s0 = (await supply()).total;
   const body = { key: "rt-abc123", username: "ann", amount: 1000, reason: "command-ask", route: { flow: "ask", room: "R1", payer: "ann_cf" },

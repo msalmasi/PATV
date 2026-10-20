@@ -141,6 +141,57 @@ test("Pepe's bot moves: vault legs in/out of a stash, the stake lock, move_statu
   assert.equal((await post("/api/stash/bot/state", { password: "bot", since_rev: s.body.rev })).body.same, true);
 });
 
+test("1.99adl: Pepe's move_status answers in order, from committed rows (a queued move isn't 'not recorded', an uncommitted one isn't 'landed')", async () => {
+  const { tx } = require(path.join(repo, "dbUtils"));
+  const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+  // (a) the move Pepe gave up on is still queued behind an open transaction (his 12 s timeout fired)
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const blocker = tx(async () => { await held; });
+  const b0 = await sbal("1");
+  const mv = S.botMove({ stashId: "1", amount: 700, key: "adl-queued:in", kind: "vault" });
+  let st;
+  try {
+    await tick();
+    assert.equal(await S.moveStatus("adl-queued:in"), null, "the plain read says not recorded YET - the move is still queued");
+    let answered = false;
+    st = post("/api/stash/bot/act", { password: "bot", op: "move_status", key: "adl-queued:in" }).then((r) => { answered = true; return r; });
+    await tick();
+    assert.equal(answered, false, "Pepe's move_status waits behind the queued move");
+  } finally {
+    release();                       // never leave the chain blocked (the rest of the file needs it)
+  }
+  await blocker;
+  assert.equal((await mv).ok, true);
+  const r = await st;
+  assert.equal(r.body.result && r.body.result.ok, true, "...and then reports it landed: " + JSON.stringify(r.body));
+  assert.equal(await sbal("1"), b0 + 700, "applied once");
+  // (b) an OPEN transaction's stash_moves row that is then rolled back (a COMMIT error / a restart mid-transaction)
+  let go, inserted;
+  const gate = new Promise((res) => { go = res; });
+  const ins = new Promise((res) => { inserted = res; });
+  const doomed = tx(async () => {
+    await runQuery("INSERT INTO stash_moves (key, stash_id, kind, amount, ts, result) VALUES (?, '1', 'vault', 5, ?, ?)",
+                   ["adl-doomed:in", Date.now(), JSON.stringify({ ok: true, stash: "1", balance: 1 })]);
+    inserted();
+    await gate;
+    throw new Error("COMMIT failed");
+  }).catch((e) => e.message);
+  await ins;
+  let st2;
+  try {
+    assert.equal(((await S.moveStatus("adl-doomed:in")) || {}).ok, true, "the plain read sees the uncommitted row (one shared connection)");
+    st2 = S.settledMoveStatus("adl-doomed:in");
+    await tick();
+  } finally {
+    go();
+  }
+  assert.equal(await doomed, "COMMIT failed");
+  assert.equal(await st2, null, "Pepe's move_status: not recorded - it never committed");
+  assert.equal((await post("/api/stash/bot/act", { password: "bot", op: "move_status", key: "adl-doomed:in" })).body.result, null);
+  assert.equal(await S.settledMoveStatus("not a key!"), null);
+});
+
 test("the website form does it without Pepe: create, deposit, withdraw, grant, rename, close (stake stays Pepe's)", async () => {
   assert.equal(await S.fromForm("u1", ["stake", "x", "10"], "idem00001"), null, "vault staking is still queued for Pepe");
   assert.match(await S.fromForm("u1", ["create", "savings"], "idem00002"), /created/);

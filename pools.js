@@ -239,6 +239,19 @@ async function moveStatus(key) {
   try { return JSON.parse(r.result || "{}"); } catch (e) { return { ok: true }; }
 }
 
+/**
+ * 1.99adl: Pepe's /api/pools/move-status - the same answer, read in a transaction of its own on the chain. A plain read
+ * is never held at the write gate and the connection is shared, so it could say "not recorded" while the move Pepe gave
+ * up on is still queued (it commits a moment later), or see an OPEN transaction's uncommitted pool_moves row that a
+ * rollback then takes back. Queued behind every transaction already waiting, it answers for the moves that reached the
+ * site before it, from committed rows only. (The in-site pre-checks keep moveStatus: they re-check inside their tx.)
+ */
+async function settledMoveStatus(key) {
+  await init();
+  if (!validKey(key)) return null;
+  return tx(() => moveStatus(key));
+}
+
 // ── /api/pat/charge: the wallet debit and its routing, in ONE transaction ──
 // 1.99tc: an old (renamed / merged) username resolves through the username history (usernames.js), never a guess
 const userByName = async (username) => (await getQuery("SELECT userId, username FROM users WHERE username = ?", [String(username || "")]))[0]
@@ -629,7 +642,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
     return { ok: true, live: await live(), enabled: await enabled(), rev: r, pools: await balances(), inbox: await inboxOpen() };
   }));
   app.post("/api/pools/move", bot((b) => move({ key: b.key, legs: b.legs, flow: b.flow, why: b.why, kind: b.kind, via: "pepe" })));
-  app.post("/api/pools/move-status", bot(async (b) => ({ ok: true, result: await moveStatus(b.key) })));
+  app.post("/api/pools/move-status", bot(async (b) => ({ ok: true, result: await settledMoveStatus(b.key) })));   // 1.99adl
   app.post("/api/pat/charge", bot((b) => charge({ key: b.key, username: b.username, amount: b.amount, reason: b.reason,
                                                    counterparty: b.counterparty, route: b.route, legs: b.legs })));
   app.post("/api/pat/fund", bot((b) => fund({ key: b.key, pool: b.pool, userId: b.userId, username: b.username, amount: b.amount,
@@ -667,7 +680,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
   if (iv.unref) iv.unref();
 }
 
-module.exports = { init, register, enabled, live, rev, balances, balance, total, move, moveStatus, charge, fund, inboxPending, inboxAck,
+module.exports = { init, register, enabled, live, rev, balances, balance, total, move, moveStatus, settledMoveStatus, charge, fund, inboxPending, inboxAck,
                    inboxOpen, supplyRows, importFromPepe, exportState, rollbackToPepe, settleClaims, adminView, digestOf, isPool,
                    Refuse, LABELS, _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta,
                    // G1 (gangs.js books treasury legs in its own transactions with the same primitives)
