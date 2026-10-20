@@ -249,12 +249,65 @@ first), the member keeps seeing it as being prepared, and after 24 h a console e
 account without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset) exports without it, and the README says
 so.
 
+## S1: identity, looks, the looks call, text style (release L3, 1.99adp)
+
+S1 plan §2.4 Q5b; the hub repo's `docs/seam-plan.md` §12 is the spec (§12.14 records what this release changed in it).
+Built on two prerequisites in the same branch: **Q5a** (release L2, no behaviour change: `cosmeticstyle.js` - the ring,
+border and banner cosmetics are structured fields, golden-tested to render today's CSS, `test/cosmetics-structured.test.js`)
+and **`pad_hub`** (S1-D1, `padhub.js`: every pad's stable `hub_pad_id`, minted by an `AFTER INSERT` trigger on
+`rooms_registry` and a start-up backfill, moved by re-keys, kept on a staging refresh; Q4 owns the rest of the pad seam).
+
+| Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
+|---|---|---|---|
+| `identity/changed` (`hubidentity.js`) | `identity` | `acct:<userId>` | `{account, v1_user, status: active\|archived\|deleting\|deleted\|merged\|gone, status_at, merged_into, v1_into, merged_from[≤ 50], email_verified, level, created_at, links[{platform: camfrog\|discord\|twitch\|telegram, external_id, login, display}]}` - no username, no display name |
+| `looks/changed` (`hublooks.js`, built by `userlook.buildLooks`) | `looks` | `acct:<userId>` | the full structured look (avatar, name, text, badges, profile, gtf, `flairs {hub_pad_id: "f<id>"}`, `auto {supporter, plex, plus_pads}`, `valid_until`) + `h`; `{acct, v1_user, gone:true}` with no `users` row or a done deletion |
+
+- **Identity status:** a done deletion → `deleted` (`done_at`), an open one (`scheduled` / `held`) → `deleting`
+  (`requested_at`), `users.archived_at` → `archived`; no `users` row → `merged` (`account_merges`, `merged_at`) or `gone`.
+  Facts are null for merged, deleted and gone. `email_verified` is `verified.js`'s email proof. Links follow the hub's
+  platform rules (Camfrog `external_id` = SQLite's `lower(trim(login))`, 1-64 characters; numeric ids for the others); a
+  link that would fail is left out and counted (`/admin/keys#seam`), so v1 never posts what the hub quarantines.
+- **The look:** one builder for the topic, its snapshot and the call; every source read from the database (never a module
+  cache): equipped unlocked copies whose perk is live (Season Pass / Plex items), `cosmeticstyle.lookOf` for the
+  structured fields, the absolute https avatar (a site path gets `PUBLIC_BASE_URL` / `SITE_URL` / the prod or staging
+  origin; no https origin → no url), `hue` = the monogram hue of the username, `verified` = any `verified.js` proof, the
+  Supporter badge and up to three showcased achievement badges (`ach.<id>`, label `ach.n.<id>`), pad flair assignments
+  keyed by `hub_pad_id`, the auto-flair inputs and `valid_until` (the earliest end of an equipped perk item, the Plex auto
+  flair or an owned Plus pad). Bots (Pepe) get a bot badge and nothing else. `h` = sha256 of the canonical JSON (keys
+  sorted at every depth) without `h`, always over the card look.
+- **Text style:** `users.text_style` = JSON `{color, font}` (`textstyle.js`): a W1 palette colour (`chat-text-styles.json`,
+  rt-schema's `registry/text-styles.json` byte for byte, sha256 pinned in `test/huboutbox-s1.test.js`) and one of the six
+  fonts; the look carries `text {color?, font, scope:"all"}`. The picker is V3 (release L5); account deletion clears it,
+  "Download my data" includes it.
+- **Triggers** (all gated by the topic's switch, `(topic, entity)` only, never on points / xp): identity - `users`
+  insert / delete / the link, status and fact columns, `telegram_links`, `account_deletions`, `account_merges` (insert,
+  and the upsert / chain re-point's update); looks - `users` insert / delete / the look's and `verified.js`'s columns, a
+  deletion's state, equips and the equipped copies (transfer, market lock), Telegram and Google links, `premium_subs`
+  (the Season Pass holder; a Plus pad's owner), `plex_members`, donations, the badge showcase, `pad_user_flairs`, a pad's
+  owner change (both owners) and deletion. The trigger SQL names only `users` columns the database has; each start drops
+  and recreates the S1 triggers in one transaction. A setup failure is shown on `/admin/keys#seam` and keeps the two
+  switches from turning on.
+- **Snapshots:** `identity/changed` lists every account, every merged id and every deleted account; `looks/changed` the
+  accounts with a non-default look (the seam plan's default-look rule), found through candidate sources (avatars, text
+  styles, equips, flairs, showcases, donors - partial index `hub_s1_donors` - Plex members, Season Passes, Plus owners,
+  Pepe) and built 200 at a time.
+- **The looks call:** `POST /internal/v1/looks {ids: [hub account uuid] (1-450, lower case), card?}` →
+  `{v:1, items, missing}`, items in request order, duplicates ignored; an id resolves as the `users.userId` or through the
+  reverse map of `chatticket.subjectOf` (rebuilt on a miss, at most once a minute); purged, merged and deleted ids are
+  `missing`. 404 while `looks` is off, 400 a malformed body or id, 413 over 450 ids; the nonce is taken durably first.
+- **Heartbeat:** `switches` gains `identity` and `looks` (additive); `version` is `1.99adp`.
+- **Driver:** `link`, `unlink`, `moveLogin`, `merge` (now also `account_merges` and the row's removal), `cosmetic`,
+  `textStyle`, `looks` (`test/hubseam-driver-s1.test.js`).
+- **Turn-on (Q7, staging):** after release L1's topics: `identity` → `looks`, each once its hub topic is live and has
+  bootstrapped (`CHAT_HUB` needs both, with the rest of S1-D7's switches - Q4 / V1).
+
 ## Fixtures and the contract suite
 
 - `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo
   and pinned by sha256 in both (`test/hubsign.test.js`; `PATV_HUB_DIR=<hub checkout>` also compares the copies). The
-  golden rows are what each v1 builder must produce (`test/hubseam-golden.test.js`) and what the hub makes of them.
-  `.gitattributes` keeps them LF on every checkout.
+  golden rows are what each v1 builder must produce (`test/hubseam-golden.test.js`; 1.99adp: the S1 section `s1` -
+  `test/huboutbox-s1.test.js` for identity and looks) and what the hub makes of them. `.gitattributes` keeps them LF on
+  every checkout.
 - `tools/hubseam-driver.js` is v1's side of the hub's contract suite (`services/rooms/test/seam-contract.integration.test.ts`,
   run with `PATV_V1_DIR` pointing at this checkout): v1's real modules on a throwaway SQLite database in a fresh directory
   under the OS temp dir (it refuses any other), driven over JSON lines on stdin / stdout. It is outside `test/` on purpose
@@ -263,8 +316,8 @@ so.
 ## Switches (`/admin/keys#seam`)
 
 `hubseam_settings`: `tickets`, `heartbeat`, `sessions`, `privacy`, 1.99acm: `erasure` (`privacy/account-deleted` and
-`privacy/forget` - one fan-out, on together) and `export` (the hub part of "Download my data"), `econ` (all off) and
-`spans` (on). A topic whose switch is off writes nothing and serves no snapshot. `tickets` can only be on together with
+`privacy/forget` - one fan-out, on together) and `export` (the hub part of "Download my data"), `econ`, 1.99adp: `identity`
+and `looks` (the S1 topics above; `looks` also gates the hub's looks call) - all off - and `spans` (on). A topic whose switch is off writes nothing and serves no snapshot. `tickets` can only be on together with
 `sessions` and `heartbeat` (above). The turn-on order on staging: hub `SEAM_ENABLED` → `heartbeat` → `sessions` →
 `privacy` → (S1) `erasure`, `export`. `/admin/keys#seam` also shows the seam environment and any outbound refusal, the
 per-topic queues, the hub's last snapshot and rewind calls and refusals, and exports waiting for the hub.

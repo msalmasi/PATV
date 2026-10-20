@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "about": "Shared HMAC test vectors of the v1 seam (CHAT-ARCHITECTURE §16, seam plan §2.1, §5.1). Byte-identical in the hub (services/rooms/test/fixtures) and v1 (test/fixtures); both repos pin its sha256. Generated from v1's hubsign.js, the reference implementation. Keys are test values, never used anywhere else.",
+  "about": "Shared HMAC test vectors of the v1 seam (CHAT-ARCHITECTURE §16, seam plan §2.1, §5.1). Byte-identical in the hub (services/rooms/test/fixtures) and v1 (test/fixtures); both repos pin its sha256. Generated from v1's hubsign.js, the reference implementation. Keys are test values, never used anywhere else. S1 (seam plan §12.11): the last two positive vectors are hub -> v1 S1 calls; section identity holds the identity -> hub vectors of the refs page (computed by the hub, test/support/gen-vectors-s1.ts; v1 neither sends nor receives them). services/identity/test/fixtures holds a byte copy.",
   "algorithm": "X-PATV-Sig = v1=<hex HMAC-SHA256(utf8(key), key_id \\n METHOD \\n raw_target \\n ts \\n nonce \\n hex(sha256(body_bytes)))>; key_id = the X-PATV-Key-Id value as sent; ts unix seconds, ±60 s; nonce 16-64 hex, signed as sent; key ids v1-<env>-<n> (v1 -> hub) or hub-<env>-<n> (hub -> v1)",
   "refusal_order": [
     "missing",
@@ -20,7 +20,9 @@
     "v1-staging-1": "v1-staging-key-0123456789abcdef-not-real",
     "v1-test-2": "v1-test-key-0123456789abcdef-not-real",
     "v1-prod-2": "the-same-secret-reused-for-two-key-ids-not-real",
-    "v1-staging-2": "the-same-secret-reused-for-two-key-ids-not-real"
+    "v1-staging-2": "the-same-secret-reused-for-two-key-ids-not-real",
+    "identity-test-1": "identity-test-key-0123456789abcdef-not-real",
+    "identity-staging-1": "identity-staging-key-0123456789abcdef-not-real"
   },
   "positive": [
     {
@@ -161,6 +163,46 @@
         "X-PATV-Ts": "1760727600",
         "X-PATV-Nonce": "13579bdf13579bdf13579bdf13579bdf",
         "X-PATV-Sig": "v1=776ca86cd300f5b606b8e8864df8a200c5a1f9c3eee54cdc3493281a3cd95c27"
+      }
+    },
+    {
+      "name": "S1 looks call, hub -> v1 (POST with a JSON body)",
+      "direction": "hub->v1",
+      "receiver_env": "test",
+      "method": "POST",
+      "path": "/internal/v1/looks",
+      "body": "{\"ids\":[\"0192a5b4-1111-7c2d-8e3f-4a5b6c7d8e9f\",\"0192a5b4-5555-7c2d-8e3f-4a5b6c7d8e9f\",\"0192a5b4-ffff-7c2d-8e3f-4a5b6c7d8e9f\"],\"card\":true}",
+      "key_id": "hub-test-1",
+      "ts": 1760727600,
+      "nonce": "5b1c0e9d8a7f6e5d4c3b2a1908f7e6d5",
+      "now_s": 1760727605,
+      "body_sha256": "33f6a0cda3bbc4133848b15f74ef7848d1f4cb3103906d41bb581d3459601b33",
+      "base": "hub-test-1\nPOST\n/internal/v1/looks\n1760727600\n5b1c0e9d8a7f6e5d4c3b2a1908f7e6d5\n33f6a0cda3bbc4133848b15f74ef7848d1f4cb3103906d41bb581d3459601b33",
+      "headers": {
+        "X-PATV-Key-Id": "hub-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "5b1c0e9d8a7f6e5d4c3b2a1908f7e6d5",
+        "X-PATV-Sig": "v1=b61119bb15b4e11d440a015368a30846289124a22ff5dd4ff6f864a3b4a7ec35"
+      }
+    },
+    {
+      "name": "S1 snapshot GET of a new topic with a cursor (pads/changed)",
+      "direction": "hub->v1",
+      "receiver_env": "test",
+      "method": "GET",
+      "path": "/internal/v1/snapshot/pads/changed?cursor=eyJrIjoicGFkOjVjMGIyYTE5LTlmNmQtNGI0MC04YTFjLTJkM2U0ZjVhNmI3YyIsInMiOiJyZWdpc3RyeSJ9",
+      "body": "",
+      "key_id": "hub-test-1",
+      "ts": 1760727600,
+      "nonce": "6c2d1f0e9b8a7f6e5d4c3b2a1908f7e6",
+      "now_s": 1760727600,
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "base": "hub-test-1\nGET\n/internal/v1/snapshot/pads/changed?cursor=eyJrIjoicGFkOjVjMGIyYTE5LTlmNmQtNGI0MC04YTFjLTJkM2U0ZjVhNmI3YyIsInMiOiJyZWdpc3RyeSJ9\n1760727600\n6c2d1f0e9b8a7f6e5d4c3b2a1908f7e6\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "headers": {
+        "X-PATV-Key-Id": "hub-test-1",
+        "X-PATV-Ts": "1760727600",
+        "X-PATV-Nonce": "6c2d1f0e9b8a7f6e5d4c3b2a1908f7e6",
+        "X-PATV-Sig": "v1=fdcf87ac039c764a1e729f2125a6c778033bfc0f58b727e99551cccd43b676c4"
       }
     }
   ],
@@ -582,5 +624,79 @@
     "admin": "other",
     "": "other",
     "(merge rows)": "merged"
+  },
+  "identity": {
+    "about": "identity -> hub vectors (ADR 0006 D8, ADR 0007 D12): the refs page, POST /internal/v1/refs:page, signed with identity-<env>-<n>. Same formats as positive / negative; rooms verifies them as the receiver, identity signs them.",
+    "positive": [
+      {
+        "name": "refs page, identity -> hub (POST with a JSON body)",
+        "direction": "identity->hub",
+        "receiver_env": "test",
+        "method": "POST",
+        "path": "/internal/v1/refs:page",
+        "body": "{\"cursor\":null,\"limit\":1000}",
+        "key_id": "identity-test-1",
+        "ts": 1760727600,
+        "nonce": "7d3e2a1f0c9b8a7f6e5d4c3b2a1908f7",
+        "now_s": 1760727605,
+        "body_sha256": "002a214afb94c4eacde7ab987beef3983a8e3777cd922e2846c4b337bfca4843",
+        "base": "identity-test-1\nPOST\n/internal/v1/refs:page\n1760727600\n7d3e2a1f0c9b8a7f6e5d4c3b2a1908f7\n002a214afb94c4eacde7ab987beef3983a8e3777cd922e2846c4b337bfca4843",
+        "headers": {
+          "X-PATV-Key-Id": "identity-test-1",
+          "X-PATV-Ts": "1760727600",
+          "X-PATV-Nonce": "7d3e2a1f0c9b8a7f6e5d4c3b2a1908f7",
+          "X-PATV-Sig": "v1=57fb254aee7945afa05f377f07dd6bb9758b1764f7538eb4c7371a8b6caa51d7"
+        }
+      }
+    ],
+    "negative": [
+      {
+        "name": "refs page: an identity test key at a staging receiver",
+        "receiver_env": "staging",
+        "method": "POST",
+        "path": "/internal/v1/refs:page",
+        "body": "{\"cursor\":null,\"limit\":1000}",
+        "headers": {
+          "X-PATV-Key-Id": "identity-test-1",
+          "X-PATV-Ts": "1760727600",
+          "X-PATV-Nonce": "7d3e2a1f0c9b8a7f6e5d4c3b2a1908f7",
+          "X-PATV-Sig": "v1=57fb254aee7945afa05f377f07dd6bb9758b1764f7538eb4c7371a8b6caa51d7"
+        },
+        "now_s": 1760727600,
+        "receiver_keys": [
+          "identity-staging-1"
+        ],
+        "error": "wrong_env",
+        "signed_as": {
+          "key_id": "identity-test-1",
+          "ts": 1760727600,
+          "nonce": "7d3e2a1f0c9b8a7f6e5d4c3b2a1908f7"
+        }
+      },
+      {
+        "name": "refs page: the body changed after signing",
+        "receiver_env": "test",
+        "method": "POST",
+        "path": "/internal/v1/refs:page",
+        "body": "{\"cursor\":null,\"limit\":1}",
+        "headers": {
+          "X-PATV-Key-Id": "identity-test-1",
+          "X-PATV-Ts": "1760727600",
+          "X-PATV-Nonce": "7d3e2a1f0c9b8a7f6e5d4c3b2a1908f7",
+          "X-PATV-Sig": "v1=57fb254aee7945afa05f377f07dd6bb9758b1764f7538eb4c7371a8b6caa51d7"
+        },
+        "now_s": 1760727600,
+        "receiver_keys": [
+          "identity-test-1"
+        ],
+        "error": "bad_sig",
+        "signed_as": {
+          "key_id": "identity-test-1",
+          "ts": 1760727600,
+          "nonce": "7d3e2a1f0c9b8a7f6e5d4c3b2a1908f7",
+          "body": "{\"cursor\":null,\"limit\":1000}"
+        }
+      }
+    ]
   }
 }

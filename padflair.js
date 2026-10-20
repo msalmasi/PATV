@@ -191,6 +191,36 @@ async function byUsername(roomId) {
 }
 async function of(roomId, userId) { return (await forUsers(roomId, [userId])).get(String(userId)) || null; }
 
+// ── S1 Q5b: the chat hub's view (seam plan §12.4) - read from the database when the seam posts, never from the cache ──
+/** The pad's user-flair definitions as pads/changed carries them (Q4 puts them in the pad payload): [{id: "f<id>", name,
+ *  color: "#rrggbb" (cleanColor's, as v1 draws it), emoji | null, self_assign}] in the pad's order, at most MAX_FLAIRS_PLUS.
+ *  The hub derives the ink. */
+async function hubDefs(roomId) {
+  await init();
+  if (!flairable(roomId)) return [];
+  const rows = await getQuery("SELECT * FROM pad_flairs WHERE room_id = ? AND COALESCE(kind, 'user') = 'user' ORDER BY sort, id LIMIT ?",
+                              [String(roomId), MAX_FLAIRS_PLUS]);
+  return rows.map((r) => {
+    const f = shape(r);
+    return { id: "f" + f.id, name: f.name, color: f.color, emoji: f.emoji || null, self_assign: !!f.self };
+  });
+}
+/** Each account's user flair per pad, for the looks' flairs {hub_pad_id: "f<id>"}: rows {user_id, room_id, flair_id} of
+ *  assignments whose flair still exists as a user flair of that pad (profile pads have none). */
+async function hubAssignments(userIds) {
+  await init();
+  const ids = [...new Set([...(userIds || [])].filter(Boolean).map(String))];
+  const out = [];
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    out.push(...(await getQuery(`SELECT uf.user_id, uf.room_id, uf.flair_id FROM pad_user_flairs uf
+                                 JOIN pad_flairs f ON f.id = uf.flair_id AND f.room_id = uf.room_id AND COALESCE(f.kind, 'user') = 'user'
+                                 WHERE uf.user_id IN (${part.map(() => "?").join(",")}) ORDER BY uf.user_id, uf.room_id`, part))
+      .filter((r) => flairable(r.room_id)));
+  }
+  return out;
+}
+
 /** The chip (escaped; colour values are strict hex from cleanColor). */
 function html(f, { cls = "" } = {}) {
   if (!f || !f.name) return "";
@@ -538,4 +568,5 @@ function register(app, { addUser }) {
 module.exports = { postFlairs, postRules, findPostFlair, checkPostFlair, setPostFlair, postFlairsFor, filterSql, setRequired, postHtml, mayModFlair, maxPostFlairs,
                    MAX_POST_FLAIRS, MAX_POST_FLAIRS_PLUS,
                    init, register, list, forUsers, byUsername, of, html, plain, dropAll, plexFlair, save, remove, assign, pick, mine, manageView, cleanName, cleanEmoji, cleanColor,
+                   hubDefs, hubAssignments,
                    Refuse, MAX_FLAIRS, MAX_FLAIRS_PLUS, maxFlairs, plusFlair, NAME_MAX, _drop: drop, _clear: () => cache.clear(), _setClock: (fn) => { NOW = fn || (() => Date.now()); } };

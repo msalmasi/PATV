@@ -457,7 +457,8 @@ async function execute(userId, { force = false } = {}) {
                   discordId: null, discordUsername: null, twitchId: null, twitchDisplayname: null, twitchLogin: null, camfrogUsername: null,
                   streamId: null, streamKey: null, emailVerificationToken: null, tokenExpires: null, isEmailVerified: 0, resetPasswordToken: null,
                   resetPasswordExpires: null, archived_at: t, password_set: 0, displayname_auto: 0,
-                  age_confirmed_at: null, age_confirmed_v: null };        // adultgate site: the age confirmation goes with the person
+                  age_confirmed_at: null, age_confirmed_v: null,         // adultgate site: the age confirmation goes with the person
+                  text_style: null };                                    // S1 Q5b: the chat text style (textstyle.js) too
     const uc = await cols("users");
     const keys = Object.keys(set).filter((k) => uc.includes(k));
     await runQuery(`UPDATE users SET ${keys.map((k) => `"${k}" = ?`).join(", ")} WHERE userId = ?`, [...keys.map((k) => set[k]), uid]);

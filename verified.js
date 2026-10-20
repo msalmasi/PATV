@@ -80,6 +80,26 @@ async function tableProofs(userId, { fresh = false } = {}) {
   return list;
 }
 
+/** S1 Q5b: tableProofs for many accounts at once, uncached (the chat hub's looks: userlook.buildLooks reads them when it
+ *  posts). The same proofs as tableProofs. -> Map(userId -> [proof]) (every id present, [] when none) */
+async function tableProofsMany(userIds) {
+  const ids = [...new Set([...(userIds || [])].filter(Boolean).map(String))];
+  const out = new Map(ids.map((id) => [id, []]));
+  let trusted = ["self", "admin", "wizarr", "overseerr"];
+  try { trusted = require("./plexsso").TRUSTED || trusted; } catch (e) { /* keep the copy */ }
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    const qs = part.map(() => "?").join(",");
+    const add = (rows, key, proof) => { for (const r of rows) { const l = out.get(String(r[key])); if (l && !l.includes(proof)) l.push(proof); } };
+    add(await rows(`SELECT userId FROM users WHERE userId IN (${qs}) AND isEmailVerified = 1 AND email LIKE '%@%'`, part), "userId", "email");
+    add(await rows(`SELECT user_id FROM telegram_links WHERE user_id IN (${qs})`, part), "user_id", "telegram");
+    add(await rows(`SELECT user_id FROM sso_links WHERE provider = 'google' AND link_source = 'self' AND user_id IN (${qs})`, part), "user_id", "google");
+    add(await rows(`SELECT user_id FROM plex_members WHERE user_id IN (${qs}) AND link_source IN (${trusted.map(() => "?").join(",")})`,
+      [...part, ...trusted]), "user_id", "plex");
+  }
+  return out;
+}
+
 /** Attach `proofs` (every proven identity) to an account row and return it. Needs u.userId. */
 async function attach(u, opts) {
   if (!u) return u;
@@ -108,4 +128,4 @@ function forget(userId) { cache.delete(String(userId || "")); }
 // The refusal copy every converted gate uses for "link something first".
 const LINK_HINT = "verify your email address, or link an account in Settings → Account → Connections (a chat account - for Camfrog, type !verify in a room with Pepe - or Discord, Twitch, Telegram, Google or Plex)";
 
-module.exports = { isVerified, verify, attach, tableProofs, columnProofs, forget, LINK_HINT, _cache: cache };
+module.exports = { isVerified, verify, attach, tableProofs, tableProofsMany, columnProofs, forget, LINK_HINT, _cache: cache };

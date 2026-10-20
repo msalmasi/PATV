@@ -8,3 +8,5 @@ deploy/** text eol=lf
 
 # The seam fixtures shared byte-for-byte with the hub repo (their sha256 is pinned in both)
 test/fixtures/hubseam-*.json text eol=lf
+# S1 Q5b: rt-schema's registry/text-styles.json, byte for byte (sha256 pinned in test/huboutbox-s1.test.js)
+chat-text-styles.json text eol=lf

@@ -60,6 +60,19 @@ async function onDonation(userId) {
 function supporterSync(userId) { if (!loaded) init(); return userId ? BY_ID.get(String(userId)) || null : null; }
 function supporterByName(name) { if (!loaded) init(); return name ? BY_NAME.get(String(name).toLowerCase()) || null : null; }
 
+/** S1 Q5b: these accounts' tiers read from the database now - the chat hub's looks (userlook.buildLooks) are built when they
+ *  post, so never from the boot cache. -> Map(userId -> view) for the donors among them */
+async function tiersFor(userIds) {
+  const ids = [...new Set([...(userIds || [])].filter(Boolean).map(String))];
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    const rows = await getQuery(`${SQL} AND r.userId IN (${part.map(() => "?").join(",")}) GROUP BY r.userId`, part).catch(() => []);
+    for (const r of rows) out.set(String(r.userId), view(r));
+  }
+  return out;
+}
+
 /** The automatic flair for a tier (padflair.js shape; never stored, never assignable). */
 const FLAIRS = {};
 function flair(v) {
@@ -77,4 +90,4 @@ function perks() {
            cosmetics: ["nc_supporter", "ad_supporter"], achievements: ["cf_donor", "cf_donor_100"] };
 }
 
-module.exports = { init, reload, refresh, onDonation, supporterSync, supporterByName, flair, tierOf, perks, TIERS };
+module.exports = { init, reload, refresh, onDonation, supporterSync, supporterByName, flair, tierOf, perks, tiersFor, TIERS };
