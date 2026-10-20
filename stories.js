@@ -28,6 +28,11 @@
 // pad's id) is a member's profile uploads + the captures of them (unless they turned that off, went private or hid
 // one). The homepage / /feed strip gets a person circle for each member with a profile upload (and the viewer's own);
 // the Following tab's strip leads with the people the viewer follows (forViewer {people}).
+//
+// storyreact site (storyreact.js): ▲▼ votes, 💸 tips and ↩ replies (a DM) on each story - forViewer puts `react` on every
+// item (signed out, a Public pad's read-only counts) - and, while the feed config's story_block_hide is on, a signed-in
+// viewer no longer sees stories by or of someone blocked either way (storyreact.hideBlocked; storyreact.visibleTo is the
+// same rule for one story). Items carry their raw row as a non-enumerable `_row` (never serialised).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
@@ -92,7 +97,10 @@ async function clean(rows) {
     if (!n || anon || priv.has(n.toLowerCase())) return null;
     return n.slice(0, 60);
   };
-  return live.map((r) => ({
+  // storyreact site: each item carries its raw row, NON-enumerable (never serialised) - the block filter and the reactions
+  // (storyreact.js) read it without a second query
+  const withRow = (it, r) => Object.defineProperty(it, "_row", { value: r, enumerable: false, configurable: true, writable: true });
+  return live.map((r) => withRow({
     id: r.id, kind: r.kind === "clip" || r.kind === "audio" ? r.kind : "photo", src: "/media/" + encodeURIComponent(r.id) + "/raw",
     page: "/media/" + encodeURIComponent(r.id), subject: r.source === "user" ? null : name(r.subject, r.anon),
     by: r.source === "user" ? String(r.by_user || "").trim().slice(0, 60) || null : name(r.by_user, false),
@@ -102,7 +110,7 @@ async function clean(rows) {
     source: r.source === "stage" ? "stage" : r.source === "user" ? "user" : "cam", nsfw: !!Number(r.nsfw || 0),
     // 1.99dq: a clip's poster frame / an audio capture's waveform card (media.js) - null until it's made
     poster: media.hasPoster(r) ? "/media/" + encodeURIComponent(r.id) + "/poster" : null,
-  }));
+  }, r));
 }
 
 /** Live captures (newest first), optionally one room. Used by the room feed strip and /feed. */
@@ -116,7 +124,10 @@ async function captures(roomId, limit = 12, { windowMs = null, noProfiles = fals
     if (roomId) { where.push("room = ?"); args.push(roomId); }
     const opt = (c, d) => (C.has(c) ? c : `${d} AS ${c}`);
     if (noProfiles) where.push("room NOT LIKE 'user:%'");
-    const rows = await getQuery(`SELECT id, kind, file, subject, by_user, room, created, expires, secs, ${opt("anon", "0")}, ${opt("source", "NULL")}, ${opt("nsfw", "0")}
+    // storyreact site: + who's in it / who made it (by_user_id, subject_login, slot_id, by_login) for the block filter and the
+    // reactions' author (storyreact.js) - server-side only (clean() never puts them in an item)
+    const rows = await getQuery(`SELECT id, kind, ct, file, subject, by_user, room, created, expires, secs, ${opt("anon", "0")}, ${opt("source", "NULL")}, ${opt("nsfw", "0")},
+                                 ${opt("by_user_id", "NULL")}, ${opt("subject_login", "NULL")}, ${opt("slot_id", "NULL")}, ${opt("by_login", "NULL")}
                                  FROM media WHERE ${where.join(" AND ")} ORDER BY created DESC LIMIT ?`, [...args, Math.min(MAX_ITEMS, limit)]);
     return await clean(rows);
   } catch (e) {
@@ -164,13 +175,20 @@ async function forViewer(viewer, { room = null, people = null } = {}) {
   // 1.99fu: an Approved pad's story is for the people inside it only - no circle, no count, no title for anyone else
   const PA = require("./padaccess");
   await PA.init();
-  const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS, noProfiles: true })).filter((c) => c.room && (!room || c.room === room) && PA.canSee(viewer, c.room));
+  let items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS, noProfiles: true })).filter((c) => c.room && (!room || c.room === room) && PA.canSee(viewer, c.room));
   const signed = !!(viewer && viewer.userId);
+  const SR = require("./storyreact");
+  // storyreact site (D-3): nothing by / of someone blocked either way (an upload's uploader, a cam capture's subject or a cam
+  // owner's cam_blocks, a stage capture's streamer) - storyreact.visibleTo is the same rule for one story
+  if (signed) items = await SR.hideBlocked(viewer, items);
   const seen = signed ? await seenMap(viewer.userId) : new Map();
   // 1.99eq: what this viewer may do with each capture (📌 Post to pad / 🔖 Save - storykeep.js; the server re-checks)
   if (signed) { try { await require("./storykeep").annotate(viewer, items); } catch (e) { console.error("[stories] annotate:", e.message); } }
   // 1.99ez: 🗑 on members' own story uploads (the uploader, the pad's owner / mods, staff)
   if (signed) { try { await require("./userstories").annotate(viewer, items); } catch (e) { console.error("[stories] annotate (user):", e.message); } }
+  // storyreact site: ▲▼ / 💸 / ↩ on each story (it.react); signed out: a Public pad's read-only counts
+  if (signed) await SR.annotate(viewer, items);
+  else await SR.counts(items.filter((c) => PA.isPublic(c.room) && PA.adultGate(null, c.room) === "ok"));
   const by = new Map();
   for (const c of items) {
     if (!by.has(c.room)) by.set(c.room, []);

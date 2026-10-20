@@ -174,6 +174,30 @@ test("DM alerts: preview rule, one per conversation per gap, due after the grace
   assert.match(last.text, /New message from Bob/);
 });
 
+test("DM alerts: a conversation muted (or left) after its alert was queued is dropped at claim time, like web push", async () => {
+  // this file's conversation_members has no muted column; the real one does (messages.js)
+  const cols = (await getQuery("PRAGMA table_info(conversation_members)")).map((c) => c.name);
+  if (!cols.includes("muted")) await runQuery("ALTER TABLE conversation_members ADD COLUMN muted INTEGER NOT NULL DEFAULT 0");
+  await runQuery("INSERT OR IGNORE INTO conversation_members (conversation_id, user_id) VALUES ('c3', 'u_alice'), ('c4', 'u_alice'), ('c5', 'u_alice')");
+  await runQuery("DELETE FROM telegram_outbox");
+  T += 3600e3;
+  TG.onDm("u_alice", { conversationId: "c3", messageId: 30, from: "Bob", text: "muted soon" });
+  TG.onDm("u_alice", { conversationId: "c4", messageId: 40, from: "Bob", text: "still on" });
+  TG.onDm("u_alice", { conversationId: "c5", messageId: 50, from: "Bob", text: "left soon" });
+  let ob = [];
+  for (const end = Date.now() + 5000; Date.now() < end; await settle()) { ob = await outbox("u_alice"); if (ob.length >= 3) break; }
+  assert.equal(ob.length, 3);
+  await runQuery("UPDATE conversation_members SET muted = 1 WHERE conversation_id = 'c3' AND user_id = 'u_alice'");
+  await runQuery("UPDATE conversation_members SET left_at = 1 WHERE conversation_id = 'c5' AND user_id = 'u_alice'");
+  T += TG.DM_GRACE_MS + 1;
+  const ids = (await TG.claim({})).map((a) => a.id);
+  const by = (c) => ob.find((o) => o.ref.startsWith("dm:" + c + ":"));
+  assert.ok(ids.includes(by("c4").id), "the unmuted one goes");
+  assert.ok(!ids.includes(by("c3").id) && !ids.includes(by("c5").id), "muted / left: dropped");
+  const after = await outbox("u_alice");
+  assert.deepEqual(["c3", "c5"].map((c) => after.find((o) => o.id === by(c).id).error), ["muted", "muted"]);
+});
+
 test("claim / ack: once each, blocked pauses until they write, retries, hourly cap", async () => {
   await runQuery("DELETE FROM telegram_outbox");
   T += 3600e3;

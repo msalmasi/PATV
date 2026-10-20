@@ -248,6 +248,17 @@
           <p class="mut">No placeholders left: the switch can go on.</p>
         <% } %>
       </fieldset>
+      <%# storyreact site (storyreact.js): ▲▼ votes, 💸 tips and ↩ replies on stories %>
+      <fieldset class="fa-terms"><legend>Stories</legend>
+        <label class="ck"><input type="checkbox" name="story_votes"<%= C.story_votes !== false ? ' checked' : '' %>> Votes on stories (▲▼, the feed's vote rules; they don't count for activity rewards or achievements)</label>
+        <label class="ck"><input type="checkbox" name="story_tips"<%= C.story_tips !== false ? ' checked' : '' %>> Tips on stories (💸, the normal tip: the full amount to the person in it or who posted it)</label>
+        <label class="ck"><input type="checkbox" name="story_replies"<%= C.story_replies !== false ? ' checked' : '' %>> Replies to stories (a direct message under every DM rule)</label>
+        <label class="ck"><input type="checkbox" name="story_quick_reacts"<%= C.story_quick_reacts !== false ? ' checked' : '' %>> Quick emoji replies in the reply sheet</label>
+        <label class="ck"><input type="checkbox" name="story_block_hide"<%= C.story_block_hide !== false ? ' checked' : '' %>> Hide stories by or of people a member blocked (either way) from that member</label>
+        <label><span>Story tips per sender per hour (0 = no cap; staff exempt)</span><input type="number" name="story_tips_per_hour" value="<%= C.story_tips_per_hour %>" min="0" placeholder="<%= D.story_tips_per_hour %>"></label>
+        <label><span>Tips a day one member may send the same person on cam / on stage (0 = no cap; staff exempt)</span><input type="number" name="story_capture_tips_per_person_per_day" value="<%= C.story_capture_tips_per_person_per_day %>" min="0" placeholder="<%= D.story_capture_tips_per_person_per_day %>"></label>
+        <label><span>New conversations a day a member may start by replying to snaps / clips of people (0 = no cap; staff exempt)</span><input type="number" name="story_capture_new_convos_per_day" value="<%= C.story_capture_new_convos_per_day %>" min="0" placeholder="<%= D.story_capture_new_convos_per_day %>"></label>
+      </fieldset>
       <%# 1.99cv: the numeric groups fold away (one collapsible block each); the form still saves them all at once %>
       <% F.forEach(([h, rows]) => { %>
         <details class="adm-adv"><summary><%= h %> <span class="mut">(<%= rows.length %>)</span></summary><div class="adm-adv-body">
@@ -262,7 +273,7 @@
 </main>
 <script src="/public/js/feed-safety.js?v=4" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
-<% if (dmOk) { %><script src="/public/js/dm-admin.js?v=2" defer></script><% } %>
+<% if (dmOk) { %><script src="/public/js/dm-admin.js?v=3" defer></script><% } %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <%- include('partials/admin-close') %>
 </body>

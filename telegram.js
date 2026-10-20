@@ -364,13 +364,17 @@ function dmAlert(userId, m) {
   })().catch((e) => console.error("[telegram] dm:", e.message));
 }
 
-/** Read on the site since it was queued? (a DM alert's check_ref "dm:<conversation>:<message id>") */
+/** Read on the site since it was queued? (a DM alert's check_ref "dm:<conversation>:<message id>") -> why to drop it, or
+ *  false. storyreact site: + muted / left since it was queued (web push and the Camfrog claim re-check the same). */
 async function stale(userId, check) {
   const m = /^dm:(.+):(\d+)$/.exec(String(check || ""));
   if (!m) return false;
   try {
-    const r = (await getQuery("SELECT last_read_id FROM conversation_members WHERE conversation_id = ? AND user_id = ?", [m[1], userId]))[0];
-    return !!r && Number(r.last_read_id) >= Number(m[2]);
+    const r = (await getQuery("SELECT * FROM conversation_members WHERE conversation_id = ? AND user_id = ?", [m[1], userId]))[0];
+    if (!r) return false;
+    if (Number(r.last_read_id) >= Number(m[2])) return "read on the site";
+    if (Number(r.muted) || r.left_at) return "muted";
+    return false;
   } catch (e) { return false; }
 }
 
@@ -387,7 +391,8 @@ async function claim({ limit = CLAIM_MAX } = {}) {
     if (!r.tg_id) { await drop("unlinked"); continue; }
     if (r.paused) continue;                                   // waits until they talk to the bot again
     if (r.tries >= MAX_TRIES) { await drop("gave up"); continue; }
-    if (r.check_ref && (await stale(r.user_id, r.check_ref))) { await drop("read on the site"); continue; }
+    const why = r.check_ref ? await stale(r.user_id, r.check_ref) : false;
+    if (why) { await drop(why); continue; }
     if ((await tierOf(await account(r.user_id))) === "none") { await drop("no access"); continue; }
     const c = await runQuery("UPDATE telegram_outbox SET claimed_at = ?, tries = tries + 1 WHERE id = ? AND sent_at IS NULL AND (claimed_at IS NULL OR claimed_at < ?)",
       [t, r.id, t - RECLAIM_MS]);

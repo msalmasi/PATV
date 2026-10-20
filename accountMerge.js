@@ -337,7 +337,13 @@ const RULES = {
   // stories
   "story_posts.author_id": M(), "story_posts.posted_by": M(), "story_posts.subject_user_id": M(), "story_posts.removed_by": M(),
   "story_posts.subject_login": { deny: NAME }, "story_posts.subject_name": { deny: NAME },
-  "story_prefs.user_id": M({ key: [] }), "story_hides.user_id": M({ key: ["capture_id"] }),
+  // storyreact site: capture_reacts OFF (the private choice) wins a fold
+  "story_prefs.user_id": M({ key: [], merge: { capture_reacts: "MIN" } }), "story_hides.user_id": M({ key: ["capture_id"] }),
+  // 💬 story reactions (storyreact.js): one vote per account per story (folded), tips + DM story references follow the account
+  "story_votes.user_id": M({ key: ["story_id"] }),
+  "story_tips.sender_id": M(), "story_tips.recipient_id": M(),
+  "dm_story_refs.sender_id": M(), "dm_story_refs.author_id": M(),
+  "dm_story_refs.author_name": { deny: NAME },
   "story_saves.user_id": M({ key: ["capture_id"] }), "story_saves.subject": { deny: NAME }, "story_saves.by_name": { deny: NAME },
   "story_seen.user_id": M({ key: ["room_id"], merge: { upto: "MAX", updated: "MAX" } }),
   // stage / rooms / pads

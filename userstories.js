@@ -72,6 +72,9 @@ function init() {
       await store().init();
       await runQuery("CREATE TABLE IF NOT EXISTS story_prefs (user_id TEXT PRIMARY KEY, captures_of_me INTEGER NOT NULL DEFAULT 1, updated INTEGER)");
       await runQuery("CREATE TABLE IF NOT EXISTS story_hides (user_id TEXT NOT NULL, capture_id TEXT NOT NULL, created INTEGER, PRIMARY KEY (user_id, capture_id))");
+      // storyreact site: "Let people vote, tip and reply on snaps and clips of me" (storyreact.js, D-2; default on)
+      const pcols = new Set((await getQuery("PRAGMA table_info(story_prefs)")).map((c) => c.name));
+      if (!pcols.has("capture_reacts")) await runQuery("ALTER TABLE story_prefs ADD COLUMN capture_reacts INTEGER NOT NULL DEFAULT 1").catch(() => {});
       const cols = new Set((await getQuery("PRAGMA table_info(feed_attachments)")).map((c) => c.name));
       if (!cols.has("purpose")) await runQuery("ALTER TABLE feed_attachments ADD COLUMN purpose TEXT").catch(() => {});
       await runQuery("CREATE INDEX IF NOT EXISTS media_subject_login ON media (subject_login)").catch(() => {});
@@ -88,16 +91,22 @@ function setSafetyCheck(fn) { SAFETY = typeof fn === "function" ? fn : async () 
 // ── prefs + hides ──
 async function prefs(userId) {
   await init();
-  const r = (await getQuery("SELECT captures_of_me FROM story_prefs WHERE user_id = ?", [String(userId || "")]))[0];
-  return { capturesOfMe: r ? !!Number(r.captures_of_me) : true };
+  const r = (await getQuery("SELECT captures_of_me, capture_reacts FROM story_prefs WHERE user_id = ?", [String(userId || "")]))[0];
+  return { capturesOfMe: r ? !!Number(r.captures_of_me) : true,
+           captureReacts: r && r.capture_reacts != null ? !!Number(r.capture_reacts) : true };   // storyreact site (D-2)
 }
-async function setPrefs(user, { capturesOfMe }) {
+const offWord = (v) => v === false || v === 0 || v === "0" || v === "off" || v === "false";
+/** Change the story settings given (the others keep their value): capturesOfMe, captureReacts (storyreact site). */
+async function setPrefs(user, { capturesOfMe, captureReacts } = {}) {
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   await init();
-  const on = !(capturesOfMe === false || capturesOfMe === 0 || capturesOfMe === "0" || capturesOfMe === "off" || capturesOfMe === "false");
-  await runQuery(`INSERT INTO story_prefs (user_id, captures_of_me, updated) VALUES (?, ?, ?)
-                  ON CONFLICT(user_id) DO UPDATE SET captures_of_me = excluded.captures_of_me, updated = excluded.updated`, [user.userId, on ? 1 : 0, NOW()]);
-  return { capturesOfMe: on };
+  const cur = await prefs(user.userId);
+  const a = capturesOfMe === undefined ? cur.capturesOfMe : !offWord(capturesOfMe);
+  const b = captureReacts === undefined ? cur.captureReacts : !offWord(captureReacts);
+  await runQuery(`INSERT INTO story_prefs (user_id, captures_of_me, capture_reacts, updated) VALUES (?, ?, ?, ?)
+                  ON CONFLICT(user_id) DO UPDATE SET captures_of_me = excluded.captures_of_me, capture_reacts = excluded.capture_reacts,
+                  updated = excluded.updated`, [user.userId, a ? 1 : 0, b ? 1 : 0, NOW()]);
+  return { capturesOfMe: a, captureReacts: b };
 }
 /** The subject hides a capture of them from THEIR story (the capture itself stays in its pad's story). Idempotent. */
 async function hide(user, captureId) {
@@ -200,8 +209,18 @@ async function people(viewer, uids, { seen = null } = {}) {
   const stories = require("./stories");
   const signed = !!(viewer && viewer.userId);
   const S = seen || (signed ? await stories.seenMap(viewer.userId) : new Map());
-  const out = [];
+  const SR = require("./storyreact");
+  // storyreact site (D-3): the person circle of someone blocked either way isn't shown at all (feed config story_block_hide)
+  let blockedIds = new Set(), blocksDown = false;
+  if (signed && store().config().story_block_hide !== false) {
+    // (no dm_blocks yet: nobody) - a lookup that fails FAILS CLOSED: only the viewer's own circle this time
+    try { blockedIds = await SR.blockedWith(viewer.userId); }
+    catch (e) { blocksDown = true; console.error("[userstories] people: blocks (failing closed):", e.message); }
+  }
+  // pass 1: each person's items this viewer may see
+  const found = [];
   for (const uid of [...new Set(uids.filter((x) => x && UID_RE.test(String(x))))].slice(0, 200)) {
+    if ((blocksDown || blockedIds.has(String(uid))) && String(uid) !== String(viewer.userId)) continue;
     const info = await personInfo(uid);
     if (!info) continue;
     const rows = await personRows(uid);
@@ -210,7 +229,21 @@ async function people(viewer, uids, { seen = null } = {}) {
     const PA = require("./padaccess");
     await PA.init();
     // adultgate site: + a capture taken in an 18+ pad, for a viewer its 18+ gate stops (switch on; off: no difference)
-    const items = (await stories.clean(rows)).filter((c) => !c.room || (PA.canSee(viewer, c.room) && PA.adultGate(viewer, c.room) === "ok"));
+    // storyreact site: + the story placement rule (storyreact.placed: on a profile pad only its owner's own uploads are stories)
+    const items = (await stories.clean(rows)).filter((c) => SR.placed(c._row) && (!c.room || (PA.canSee(viewer, c.room) && PA.adultGate(viewer, c.room) === "ok")));
+    if (items.length) found.push({ uid, info, items });
+  }
+  // storyreact site, once for every circle: what blocks hide from this viewer (D-3, the same rule as the pad strips) and
+  // the reactions (it.react)
+  if (signed && found.length) {
+    const all = found.flatMap((f) => f.items);
+    const kept = new Set((await SR.hideBlocked(viewer, all)).map((c) => c.id));
+    for (const f of found) f.items = f.items.filter((c) => kept.has(c.id));
+    await SR.annotate(viewer, found.flatMap((f) => f.items));
+  }
+  // pass 2: the circles
+  const out = [];
+  for (const { uid, info, items } of found) {
     if (!items.length) continue;
     items.sort((a, b) => a.created - b.created);
     for (const c of items) {
@@ -363,6 +396,7 @@ async function create(user, { attachment, pad, nsfw } = {}) {
     console.error("[userstories] create:", e);
     throw new Refuse(500, "That story couldn't be saved - try again.");
   }
+  await require("./storyreact").selfUp(u.userId, id);   // storyreact site: only with POLICY.autoSelfUp (D-5 alternative; off)
   console.log(`[userstories] ${u.username} posted a ${video ? "video" : "picture"} story ${id} to ${rid}`);
   return { id, room: rid, href: rooms.isProfile(rid) ? "/u/" + encodeURIComponent(u.username) : require("./pads").padHref(R), expires: t + WINDOW_MS };
 }
@@ -399,7 +433,9 @@ function register(app, { addUser }) {
     try { res.json({ ok: true, ...(await unhide(req.user, req.params.id)) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/stories/prefs", addUser, json, async (req, res) => {
-    try { res.json({ ok: true, prefs: await setPrefs(req.user, { capturesOfMe: (req.body || {}).capturesOfMe }) }); } catch (e) { fail(res, e); }
+    // storyreact site: + captureReacts; a setting left out of the body keeps its value
+    const b = req.body || {};
+    try { res.json({ ok: true, prefs: await setPrefs(req.user, { capturesOfMe: b.capturesOfMe, captureReacts: b.captureReacts }) }); } catch (e) { fail(res, e); }
   });
   // one member's person story (the profile ring's data when the page didn't inline it)
   app.get("/api/stories/person/:username", addUser, async (req, res) => {
@@ -413,5 +449,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, create, targets, people, personStory, personRows, profileUploaders, prefs, setPrefs, hide, unhide, isSubject,
+module.exports = { init, register, create, targets, people, personStory, personRows, profileUploaders, prefs, setPrefs, hide, unhide, isSubject, isPrivate,
                    annotate, setSafetyCheck, Refuse, _setClock, STORY_MAX_SECS, STORY_MAX_IMAGE_MB, STORY_MAX_VIDEO_MB, STORY_PER_DAY, STORY_GAP_MS, WINDOW_MS };

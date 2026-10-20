@@ -8,7 +8,8 @@
 // What is in it (SECTIONS below - every table is optional, a missing one is skipped): the profile, connections (ids and
 // names, never a token or a signature), the wallet and its transactions, holdings (stashes the chat login owns or is a
 // member of, escrow holds, market orders, lotto tickets, waiting chat rewards, heist market listings), posts / comments /
-// votes / tips / stories, the DMs they SENT (their side of each conversation they are in), notices, achievements,
+// votes / tips / stories (+ story votes, story tips sent / received, story settings - storyreact site), the DMs they SENT
+// (their side of each conversation they are in; which of them were story replies, as metadata), notices, achievements,
 // cosmetics, purchases and orders, subscriptions, likeness settings and earnings, their sign-in sessions, and the chat
 // data PATV keeps keyed to their account or Camfrog login (chat statistics, room participation, clips they made or that
 // are of them - as records; the clip files themselves are not in the zip).
@@ -159,6 +160,11 @@ async function collect(userId, { at = now() } = {}) {
   await put("posts", "tips_sent", rows("post_tips", "sender_id = ?", [uid]));
   await put("posts", "tips_received", rows("post_tips", "recipient_id = ?", [uid], { omit: ["sender_id", "note"] }));
   await put("posts", "stories", rows("story_posts", "author_id = ? OR posted_by = ?", [uid, uid]));
+  // storyreact site: votes / tips on stories (received tips without who sent them or their note, like post tips), the story settings
+  await put("stories", "votes", rows("story_votes", "user_id = ?", [uid]));
+  await put("stories", "tips_sent", rows("story_tips", "sender_id = ?", [uid]));
+  await put("stories", "tips_received", rows("story_tips", "recipient_id = ?", [uid], { omit: ["sender_id", "note"] }));
+  await put("stories", "settings", rows("story_prefs", "user_id = ?", [uid]));
   await put("posts", "follows", rows("follows", "follower = ?", [uid]));
   // messages: their side only
   const convs = await getQuery("SELECT conversation_id FROM conversation_members WHERE user_id = ?", [uid]).catch(() => []);
@@ -174,6 +180,8 @@ async function collect(userId, { at = now() } = {}) {
   }
   await put("messages", "settings", rows("dm_prefs", "user_id = ?", [uid]));
   await put("messages", "your_blocks", rows("dm_blocks", "blocker_id = ?", [uid]));
+  // storyreact site: which of your messages were story replies - metadata only (never the story's id or whose it was)
+  await put("messages", "story_replies", rows("dm_story_refs", "sender_id = ?", [uid], { omit: ["story_id", "author_id", "author_name"] }));
   // notices + preferences
   await put("notices", "inbox", rows("inbox", "user_id = ?", [uid], { order: "created" }));
   await put("notices", "inbox_settings", rows("inbox_prefs", "user_id = ?", [uid]));

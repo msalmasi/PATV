@@ -189,7 +189,7 @@ test("the card: a Tip button for signed-in viewers on other people's posts, the 
   assert.match(card, /data-act="tip" data-to="alice" data-name="Alice ✨"/);
   assert.match(card, /class="fp-tips"[^>]*title="2 tips on this post, 3,500 PAT in all"/);
   assert.match(card, /2 tips · <\/span><b>3.5k<\/b> PAT/);
-  assert.match(asBob, /post-tip\.js\?v=2" data-me="bob"/);
+  assert.match(asBob, /post-tip\.js\?v=3" data-me="bob"/);      // storyreact site: v=3 (story tips: url / layer / onDone options)
   assert.match(asBob, /patamount\.js/);
   const asAlice = (await page("/feed?sort=new", U.alice)).html;
   const own = asAlice.slice(asAlice.indexOf(`id="p-${id}"`), asAlice.indexOf("</article>", asAlice.indexOf(`id="p-${id}"`)));

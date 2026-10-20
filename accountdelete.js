@@ -336,6 +336,9 @@ const DELETE_ROWS = [
   ["camfrog_userstats", "login", "login"], ["golive_log", "user_id", "uid"],
   ["help_misses", "user_id", "uid"], ["age_attest", "user_id", "uid"], ["plex_watch_stats", "user_id", "uid"],
   ["webpush_subs", "user_id", "uid"], ["webpush_outbox", "user_id", "uid"],   // 1.99acd: browser notifications (webpush.js)
+  // storyreact site (storyreact.js): their story votes and the story references of the replies they sent (those messages are
+  // blanked in step 3); story_tips are kept like post_tips (ledger evidence, no names in them)
+  ["story_votes", "user_id", "uid"], ["dm_story_refs", "sender_id", "uid"],
 ];
 
 /** Settlements that run before the main transaction (each one idempotent). */
@@ -420,6 +423,9 @@ async function execute(userId, { force = false } = {}) {
     // 3. DMs: the messages they sent are deleted (the other side sees "deleted"); they leave every conversation
     n("messages_deleted", await run("messages", ["sender_id"], "UPDATE messages SET body = '', deleted_at = COALESCE(deleted_at, ?), deleted_by = COALESCE(deleted_by, ?) WHERE sender_id = ?", [t, uid, uid]));
     n("conversations_left", await run("conversation_members", ["user_id", "left_at"], "UPDATE conversation_members SET left_at = COALESCE(left_at, ?), hidden = 1 WHERE user_id = ?", [t, uid]));
+    // storyreact site: other people's replies to their stories keep the message, but the card about them becomes
+    // "Story no longer available" (their media is deleted in step 4 anyway) and the name snapshot goes
+    n("story_refs_unlinked", await run("dm_story_refs", ["author_id"], "UPDATE dm_story_refs SET author_id = NULL, author_name = NULL WHERE author_id = ?", [uid]));
     // (their DM pictures go with the deleted messages: dmmedia.sweep purges the files after its grace period)
     // 4. clips they made / of them
     n("clips_removed", await run("media", ["by_user_id", "deleted"], "UPDATE media SET deleted = 1 WHERE by_user_id = ? OR (? IS NOT NULL AND lower(subject_login) = ?)", [uid, login, login]));

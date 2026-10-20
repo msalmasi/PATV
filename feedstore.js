@@ -81,8 +81,14 @@ const DEFAULTS = Object.freeze({
   // reports (1.99cc): per reporter, posts + comments + users together; bad-faith reports pause reporting
   reports_per_hour: 20, reports_per_day: 60, new_account_reports_per_hour: 5, false_reports_pause: 3,
   crosspost_max_pads: 5,              // 1.99ct: pads one Crosspost action may target (each one counts as a post)
+  // storyreact site (storyreact.js): ▲▼ votes, 💸 tips and ↩ replies on stories, the emoji quick replies, hiding blocked
+  // people's stories (D-3), the story-tip cap per sender per hour (0 = off), the new conversations a day a sender may
+  // start by replying to snaps / clips of people (0 = off) and the tips a day one sender may send one person on cam / stage
+  story_votes: true, story_tips: true, story_replies: true, story_quick_reacts: true, story_block_hide: true,
+  story_tips_per_hour: 30, story_capture_new_convos_per_day: 10, story_capture_tips_per_person_per_day: 10,
 });
 const INT_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "number");
+const BOOL_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "boolean");
 const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1, 500], max_audio_secs: [10, 3600], max_video_secs: [5, 1800],
   user_quota_mb: [10, 100000], global_quota_gb: [1, 1000], min_free_gb: [1, 500], media_min_level: [0, 100], new_account_hours: [0, 720],
   new_account_posts_per_day: [0, 100], posts_per_hour: [1, 1000], posts_per_day: [1, 5000], comments_per_hour: [1, 5000],
@@ -91,7 +97,7 @@ const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1
   post_gap_secs: [0, 3600], comment_gap_secs: [0, 600],
   hot_decay_secs: [3600, 1000000], downvote_min_level: [0, 100], votes_per_min: [1, 1000], votes_per_hour: [1, 20000],
   reports_per_hour: [1, 1000], reports_per_day: [1, 10000], new_account_reports_per_hour: [0, 1000], false_reports_pause: [1, 100],
-  crosspost_max_pads: [1, 25] };
+  crosspost_max_pads: [1, 25], story_tips_per_hour: [0, 1000], story_capture_new_convos_per_day: [0, 1000], story_capture_tips_per_person_per_day: [0, 1000] };
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
@@ -459,9 +465,8 @@ function cleanConfig(c) {
     }
   }
   const bool = (v, d) => (v == null ? d : v === true || v === 1 || v === "1" || v === "on" || v === "true");
-  out.enabled = bool(c && c.enabled, DEFAULTS.enabled);
-  out.require_link_to_post = bool(c && c.require_link_to_post, DEFAULTS.require_link_to_post);
-  out.terms_enforced = bool(c && c.terms_enforced, DEFAULTS.terms_enforced);
+  // enabled, require_link_to_post, terms_enforced + (storyreact site) the story_* switches
+  for (const k of BOOL_KEYS) out[k] = bool(c && c[k], DEFAULTS[k]);
   return out;
 }
 async function loadConfig() {
@@ -2518,6 +2523,7 @@ module.exports = {
   communitiesPlan, migrateCommunities, kvGet, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,
   hotRank, controversy, wilson, rankSpec, MEDIA_SQL, QUOTE_SQL, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
   downCounts, HOT_EPOCH, _votes: voteLog,
+  voter, voteRate, noteVote, cleanDir,      // storyreact site: story votes share the feed's vote rules + per-account budget
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,
   notify, urgentNotice, cleanLine,

@@ -85,7 +85,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const dmmedia = require("./dmmedia");
 const dmembeds = require("./dmembeds");
@@ -237,11 +237,22 @@ async function cardBlocks(userId) {
   const rows = await getQuery("SELECT blocked_id AS id FROM dm_blocks WHERE blocker_id = ? UNION SELECT blocker_id AS id FROM dm_blocks WHERE blocked_id = ?", [userId, userId]);
   return new Set(rows.map((r) => String(r.id)));
 }
-/** 1.99ade: a shaped message as one viewer gets it (their blocks applied to its post cards). */
+/** 1.99ade: a shaped message as one viewer gets it (their blocks applied to its post cards). storyreact site: + the story
+ *  card of a story reply, built for THIS viewer (the reference rides on the shaped message as a non-enumerable _storyRef). */
 async function forViewer(msg, userId) {
-  if (!msg || !Array.isArray(msg.embeds) || !msg.embeds.length) return msg;
-  const set = await cardBlocks(userId);
-  return set.size ? { ...msg, embeds: dmembeds.applyBlocks(msg.embeds, set) } : msg;
+  if (!msg) return msg;
+  let out = msg;
+  if (Array.isArray(msg.embeds) && msg.embeds.length) {
+    const set = await cardBlocks(userId);
+    if (set.size) out = { ...msg, embeds: dmembeds.applyBlocks(msg.embeds, set) };
+  }
+  if (msg._storyRef) {
+    let card = { gone: true };
+    try { card = (await require("./storyreact").cardsFor(await account(userId), [msg._storyRef])).get(Number(msg._storyRef.message_id)) || card; }
+    catch (e) { console.error("[dm] story card:", e.message); }
+    out = { ...out, story: msg.deleted ? null : card };
+  }
+  return out;
 }
 function joinNames(a) {
   if (a.length <= 1) return a[0] || "someone";
@@ -302,6 +313,8 @@ async function hasWritten(conversationId, userId) {
  * Why `sender` can't message `recipient` right now (a Refuse), or null. conv: their 1:1 conversation, if any.
  * Order: account states, blocks, then consent (they wrote to you) before the recipient's setting and the
  * new-account rule. Adding someone to a group goes through this too (with their 1:1 conversation, if any).
+ * opts.name (storyreact site): the name the texts use instead of the recipient's display name - a reply to a story says
+ * the name the story shows (a cam capture's Camfrog name), never their PATV name.
  */
 async function refusal(sender, recipient, conv = null, opts = {}) {
   if (!sender) return new Refuse(401, "Sign in first.");
@@ -311,15 +324,16 @@ async function refusal(sender, recipient, conv = null, opts = {}) {
   if (recipient.userId === PEPE_ID && opts.group) return new Refuse(400, "Pepe can't be added to groups - message him on his own.", "bot");
   if (sender.archived_at) return new Refuse(403, "This account is archived.", "archived");
   if (await feedBanned(sender.userId)) return new Refuse(403, "You can't send messages right now.", "banned");
+  const nm = opts && opts.name ? String(opts.name) : display(recipient);
   const b = await blocked(sender.userId, recipient.userId);
-  if (b.some((x) => x.blocker_id === sender.userId)) return new Refuse(403, `You've blocked ${display(recipient)}. Unblock them to send a message.`, "you_blocked");
-  if (b.length) return new Refuse(403, `You can't message ${display(recipient)}.`, "blocked");
+  if (b.some((x) => x.blocker_id === sender.userId)) return new Refuse(403, `You've blocked ${nm}. Unblock them to send a message.`, "you_blocked");
+  if (b.length) return new Refuse(403, `You can't message ${nm}.`, "blocked");
   if (recipient.userId === PEPE_ID) return null;          // no "who can message me" / new-account rule for the bot (his price + limits cover it)
   if (conv && await hasWritten(conv.id, recipient.userId)) return null;            // they wrote to you: replies are always fine
   const P = await prefs(recipient.userId);
-  if (P.who === "nobody") return new Refuse(403, `${display(recipient)} isn't taking new messages.`, "closed");
+  if (P.who === "nobody") return new Refuse(403, `${nm} isn't taking new messages.`, "closed");
   if (P.who === "following" && !(await follows(recipient.userId, sender.userId))) {
-    return new Refuse(403, `${display(recipient)} only takes messages from people they follow.`, "following");
+    return new Refuse(403, `${nm} only takes messages from people they follow.`, "following");
   }
   if (isNewAccount(sender) && !(await follows(recipient.userId, sender.userId))) {
     return new Refuse(403, `New accounts can only message people who follow them or who messaged them first. Link your Camfrog name (type !verify in a room with Pepe) or reach level ${LIMITS.level_ok} to message anyone.`, "new");
@@ -430,6 +444,8 @@ async function systemText(m) {
  * cardBlocks: Set of ids blocked either way with the viewer (1.99ade: their post cards show as unavailable)}.
  * A blocked sender's message is flagged `blocked` (the page collapses it). Without cardBlocks (a live event shaped once),
  * the sender calls forViewer() per recipient.
+ * storyreact site: ctx.storyCards (Map message id -> card, storyreact.cardsFor for this viewer) puts `story` on a story
+ * reply - null when it's deleted or from someone the viewer blocked; messages without a story reference have no `story` key.
  */
 async function shape(m, ctx = {}) {
   const from = await who(m.sender_id);
@@ -439,8 +455,11 @@ async function shape(m, ctx = {}) {
   if (m.kind === "system") return { ...base, system: await systemText(m), html: "", text: "", images: [], embeds: [], blocked: false };
   const images = deleted ? [] : (ctx.media ? ctx.media.get(m.id) || [] : (await dmmedia.forMessages([m.id])).get(m.id) || []);
   const embeds = deleted ? [] : dmembeds.applyBlocks(await dmembeds.forBody(m.body), ctx.cardBlocks);
-  return { ...base, html: deleted ? "" : render(m.body), text: deleted ? "" : m.body || "", images, embeds,
-           blocked: !!(ctx.blocks && ctx.blocks.has(m.sender_id)) };
+  const blockedFrom = !!(ctx.blocks && ctx.blocks.has(m.sender_id));
+  const out = { ...base, html: deleted ? "" : render(m.body), text: deleted ? "" : m.body || "", images, embeds, blocked: blockedFrom };
+  const card = ctx.storyCards ? ctx.storyCards.get(Number(m.id)) : undefined;
+  if (card !== undefined) out.story = deleted || blockedFrom ? null : card;
+  return out;
 }
 /** The conversation's head as one member sees it in a live event / the list. */
 function headFor(conv, other) {
@@ -521,8 +540,12 @@ async function systemLine(conv, actorId, data) {
 /**
  * Send a message. input: {to: username} (start or continue a DM) or {conversation: id}, body, pictures (upload ids,
  * up to 4), nsfw (the ids among them the sender marks NSFW). ctx: contentaudit.fromRequest(req). -> {message, conversation, created}
+ * extra (storyreact site, optional; nothing changes without it): {storyRef, refusalName} - a reply to a story. Every rule
+ * below applies unchanged (refusalName only renames the recipient in the refusal texts); the story reference row is written
+ * in the SAME transaction as the message (storyreact.insertRef) - alerts, events and the audit record stay outside it - and
+ * each recipient's live event carries the card built for them (forViewer).
  */
-async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx = null) {
+async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx = null, extra = null) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   const me = await account(user.userId);
@@ -546,33 +569,46 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
     conv = await dmBetween(me.userId, other.userId);
   }
   const group = !!conv && conv.kind === "group";
-  const no = group ? await groupRefusal(me, conv) : await refusal(me, other, conv);
+  const story = extra && extra.storyRef && !group ? extra.storyRef : null;
+  const no = group ? await groupRefusal(me, conv) : await refusal(me, other, conv, extra && extra.refusalName ? { name: extra.refusalName } : {});
   if (no) throw no;
   const picIds = await dmmedia.checkAttach(me, pics);
   const rate = await rateRefusal(me, !conv);
   if (rate) throw rate;
   const t = NOW();
-  let created = false;
-  if (!conv) {
-    const id = newId();
-    const key = [me.userId, other.userId].sort().join("|");
-    const r = await runQuery("INSERT OR IGNORE INTO conversations (id, kind, dm_key, created_by, created_at) VALUES (?, 'dm', ?, ?, ?)", [id, key, me.userId, t]);
-    conv = await dmBetween(me.userId, other.userId);
-    created = !!(r && r.changes);
-    for (const uid of [me.userId, other.userId]) {
-      await runQuery("INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, joined_at) VALUES (?, ?, ?)", [conv.id, uid, t]);
+  let created = false, mid, storyRow = null;
+  const write = async () => {
+    if (!conv) {
+      const id = newId();
+      const key = [me.userId, other.userId].sort().join("|");
+      const r = await runQuery("INSERT OR IGNORE INTO conversations (id, kind, dm_key, created_by, created_at) VALUES (?, 'dm', ?, ?, ?)", [id, key, me.userId, t]);
+      conv = await dmBetween(me.userId, other.userId);
+      created = !!(r && r.changes);
+      for (const uid of [me.userId, other.userId]) {
+        await runQuery("INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, joined_at) VALUES (?, ?, ?)", [conv.id, uid, t]);
+      }
     }
-  }
-  // a 1:1: a member who "deleted" the conversation gets it back (as of now); a member who left rejoins
-  if (!group) await runQuery("UPDATE conversation_members SET left_at = NULL WHERE conversation_id = ? AND user_id = ? AND left_at IS NOT NULL", [conv.id, other.userId]);
-  const mid = await writeMessage(conv.id, me.userId, text, "text", t);
+    // a 1:1: a member who "deleted" the conversation gets it back (as of now); a member who left rejoins
+    if (!group) await runQuery("UPDATE conversation_members SET left_at = NULL WHERE conversation_id = ? AND user_id = ? AND left_at IS NOT NULL", [conv.id, other.userId]);
+    mid = await writeMessage(conv.id, me.userId, text, "text", t);
+    if (story) storyRow = await require("./storyreact").insertRef(mid, conv.id, me.userId, story, { opened: created, t });
+  };
+  // storyreact site: a story reply's writes - a conversation it opens included - land with its story reference or not at
+  // all (no empty 1:1 left behind); every other message runs the same statements without a transaction, as before
+  if (story) await tx(write);
+  else await write();
   if (picIds.length) await dmmedia.attach(picIds, { conversationId: conv.id, messageId: mid, ownerId: me.userId, nsfwIds: nsfw });
   await runQuery("UPDATE conversation_members SET hidden = 0 WHERE conversation_id = ?", [conv.id]);
   await runQuery("UPDATE conversation_members SET last_read_id = ? WHERE conversation_id = ? AND user_id = ?", [mid, conv.id, me.userId]);
   // abuse metadata, admin-only (never fails the send)
   if (ctx) { try { await require("./contentaudit").record(ctx, { kind: "message", id: mid, postId: conv.id, user: me }); } catch (e) { /* logged there */ } }
-  const recipients = group ? (await activeMembers(conv.id)).filter((m) => m.user_id !== me.userId) : [{ user_id: other.userId, muted: 0 }];
+  // storyreact site: a 1:1's recipient carries their real mute (it was always 0: the Camfrog claim and web push re-checked it,
+  // Telegram's onDm didn't - a muted conversation still sent Telegram alerts)
+  const recipients = group ? (await activeMembers(conv.id)).filter((m) => m.user_id !== me.userId)
+    : [{ user_id: other.userId, muted: ((await getQuery("SELECT muted FROM conversation_members WHERE conversation_id = ? AND user_id = ?", [conv.id, other.userId]))[0] || {}).muted ? 1 : 0 }];
   const msg = await shape({ id: mid, conversation_id: conv.id, sender_id: me.userId, body: text, kind: "text", created_at: t });
+  // storyreact site: never serialised - forViewer builds each reader's card from it
+  if (storyRow) Object.defineProperty(msg, "_storyRef", { value: storyRow, enumerable: false });
   const theirHead = headFor(conv, group ? null : me), head = headFor(conv, other);
   await dress({ msgs: [msg], people: [theirHead.with, head.with] });          // 1.99ex: photos + name styles in the live event
   for (const r of recipients) {
@@ -591,7 +627,9 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
       try { require("./webpush").onDm(r.user_id, { conversationId: conv.id, messageId: mid }); } catch (e) { /* never fails the send */ }
     }
     const theirs = await forViewer(msg, r.user_id);     // 1.99ade: their blocks on the post cards
-    emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...theirs, blocked: true } : theirs, conv: theirHead });
+    const out = theyBlock ? { ...theirs, blocked: true } : theirs;
+    if (theyBlock && out.story !== undefined) out.story = null;          // storyreact site: no card on a collapsed message
+    emit(r.user_id, { t: "msg", c: conv.id, m: out, conv: theirHead });
   }
   const mine = await forViewer(msg, me.userId);
   emit(me.userId, { t: "msg", c: conv.id, m: mine, conv: head });
@@ -836,6 +874,17 @@ async function history(user, conversationId, { before = null, after = null, limi
     rows = rows.slice(0, n).reverse();
   }
   const ctx = { media: await dmmedia.forMessages(rows.map((r) => r.id)), blocks: await blockSet(user.userId), cardBlocks: await cardBlocks(user.userId) };
+  // storyreact site: story replies' cards, built for THIS member now (visibility re-checked: gone = "Story no longer available")
+  let refs = null;
+  try {
+    const SR = require("./storyreact");
+    refs = await SR.refsFor(rows.filter((r) => r.kind !== "system").map((r) => r.id));
+    if (refs.size) ctx.storyCards = await SR.cardsFor(await account(user.userId), [...refs.values()]);
+  } catch (e) {
+    // fail closed: a story reply whose card can't be checked right now reads "Story no longer available" (never a thumbnail)
+    console.error("[dm] story cards:", e.message);
+    if (refs && refs.size) ctx.storyCards = new Map([...refs.keys()].map((k) => [k, { gone: true }]));
+  }
   const out = [];
   for (const r of rows) out.push(await shape(r, ctx));
   await dress({ msgs: out });
@@ -909,6 +958,9 @@ async function deleteMessage(user, messageId) {
   if (m.sender_id !== user.userId || m.kind === "system") throw new Refuse(403, "You can only delete your own messages.");
   if (!m.deleted_at) {
     await runQuery("UPDATE messages SET body = NULL, deleted_at = ?, deleted_by = 'author' WHERE id = ?", [NOW(), m.id]);
+    // storyreact site: a deleted story reply drops its story reference - unless it was reported (the admin's context); one
+    // that opened a conversation with someone on cam keeps a story-less stub for the D-12 cap (storyreact.dropRef)
+    await require("./storyreact").dropRef(m.id).catch((e) => console.error("[dm] story ref:", e.message));
     for (const r of await getQuery("SELECT user_id FROM conversation_members WHERE conversation_id = ?", [m.conversation_id])) {
       emit(r.user_id, { t: "del", c: m.conversation_id, id: m.id });
     }
@@ -1038,11 +1090,18 @@ async function reportDetail(viewer, messageId, { reason = null } = {}) {
   const m = (await getQuery("SELECT * FROM messages WHERE id = ?", [id]))[0] || null;
   const from = await who(reps[0].sender_id);
   const pics = (await dmmedia.forMessages([id])).get(id) || [];
+  // storyreact site: a story reply's context - the snapshot taken when it was sent (never the media or a link to it)
+  let story;
+  try {
+    const ref = (await require("./storyreact").refsFor([id])).get(id);
+    if (ref) story = { kind: ref.story_kind || null, source: ref.story_source || null, padTitle: ref.room_title || null, author: ref.author_name || null, created: ref.story_created || null };
+  } catch (e) { story = undefined; }
   return {
     message: { id, from: from.username, fromDisplay: from.display, at: reps[0].msg_at, conversation: reps[0].conversation_id,
                text: m && !m.deleted_at ? m.body : reps[0].body, deleted: !m || !!m.deleted_at, deletedBy: m ? m.deleted_by : null,
                pictures: pics.map((p) => ({ id: p.id, nsfw: p.nsfw, url: `/api/messages/admin/report/${id}/media/${String(p.full).split("/").pop()}` })) },
-    context: { kind: group ? "group" : "dm", title: group ? conv.title : null, members: conv ? (await activeMembers(conv.id)).length : null },
+    context: Object.assign({ kind: group ? "group" : "dm", title: group ? conv.title : null, members: conv ? (await activeMembers(conv.id)).length : null },
+                           story ? { story } : {}),
     details,
   };
 }
@@ -1395,7 +1454,7 @@ async function pepeFlag({ ref, verdict, model } = {}) {
 
 // ── nav count middleware (the 💬 next to the 🔔) ──
 function navCount(req, res, next) {
-  if (req.method !== "GET" || /^\/(api|public|og|uploads|events)\b|^\/healthz|^\/messages\/media\//.test(req.path)) return next();
+  if (req.method !== "GET" || /^\/(api|public|og|uploads|events)\b|^\/healthz|^\/messages\/(media|story)\//.test(req.path)) return next();
   const uid = cookieUser(req);
   if (!uid) return next();
   unreadTotal(uid).then((n) => { res.locals.dmUnread = n; }, () => {}).then(() => next());
@@ -1617,4 +1676,5 @@ module.exports = { init, register, sse, navCount, send, list, history, header, c
                    prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, pepeClaim, pepeReply, pepeNote, pepeMedia, pepeFlag, PEPE_ID,
                    PEPE_MEDIA_WINDOW_MS, PEPE_MEDIA_MAX_BYTES, PEPE_MEDIA_FETCHES, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
                    createGroup, addMembers, leaveGroup, removeMember, renameGroup, setMute,
+                   account, dmBetween, blocked, cardBlocks,       // storyreact site: a story reply is decided exactly like a DM
                    emit, Refuse, LIMITS, WHO, ALERT_GAP_MS, ALERT_GRACE_MS, _setClock, _gaps: gaps, _streams: streams, _pepeState: (v) => { if (v) PEPE_STATE = v; return PEPE_STATE; } };

@@ -212,4 +212,56 @@ html.sv-open, html.sv-open body { overflow: hidden; }
 .pf-story .pf-story-set { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #bbb; margin-top: 8px; }
 .pf-story .pf-story-set input { accent-color: var(--ds-green); }
 .sv-where { color: var(--ds-green-2) !important; text-decoration: none; }
+/* storyreact site: the reaction row (Reply pill · ▲ score ▼ · 💸) at the bottom of a story; the foot, the 📌 🔖 actions and the hint
+   move up by its height. Mobile first: every control has a 44 px hit area, the safe area is respected. */
+/* the row is exactly --sv-react-h tall (44 px controls + 6 px above + max(6 px, the safe area) below = 56 px without a notch),
+   so the foot / actions / hint sit right on top of it */
+.sv { --sv-react-h: calc(50px + max(6px, env(safe-area-inset-bottom, 0px))); }
+.sv-react { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; align-items: center; gap: 8px;
+            height: var(--sv-react-h); padding: 6px 10px max(6px, env(safe-area-inset-bottom, 0px)); background: rgba(0,0,0,.72); }
+/* a clear keyboard focus ring on the new controls (the faint hover background alone was too weak) */
+.sv-reply:focus-visible, .sv-up:focus-visible, .sv-down:focus-visible, .sv-tipb:focus-visible, .sv-rqb:focus-visible { outline: 2px solid #fff !important; outline-offset: 2px; }
+.sv-frame.has-react .sv-foot { bottom: var(--sv-react-h); padding-bottom: 10px; }
+.sv-frame.has-react .sv-acts { bottom: calc(var(--sv-react-h) + 52px); }
+.sv-frame.has-react .sv-hint { bottom: calc(var(--sv-react-h) + 64px); }
+.sv-frame.has-react .sv-panel:not(.sv-rp) { bottom: calc(var(--sv-react-h) + 52px); }
+.sv.is-held .sv-react { opacity: 0; transition: opacity .15s; }
+.sv-reply { flex: 1; min-width: 0; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.45); background: transparent;
+            color: #eee; font: 15px var(--ds-font); text-align: start; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-reply:hover, .sv-reply:focus-visible { border-color: #fff; background: rgba(255,255,255,.08); outline: none; }
+.sv-rgap { flex: 1; }
+.sv-vote { flex: none; display: inline-flex; align-items: center; border-radius: 999px; background: rgba(255,255,255,.1); }
+.sv-up, .sv-down { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #ddd; cursor: pointer; padding: 0; }
+.sv-up:hover, .sv-down:hover, .sv-up:focus-visible, .sv-down:focus-visible { background: rgba(255,255,255,.14); color: #fff; outline: none; }
+.sv-up.on { color: var(--ds-green); }
+.sv-down.on { color: var(--ds-danger, #ef5350); }
+.sv-up.on svg, .sv-down.on svg { fill: currentColor; }
+.sv-up:disabled, .sv-down:disabled { opacity: .35; cursor: not-allowed; }
+.sv-vs { min-width: 2ch; text-align: center; font: 700 14px var(--ds-font); font-variant-numeric: tabular-nums; color: #fff; }
+.sv-tipb { flex: none; min-width: 44px; height: 44px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 999px;
+           border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font: 600 13px var(--ds-font); cursor: pointer; white-space: nowrap;
+           font-variant-numeric: tabular-nums; }
+.sv-tipb:hover, .sv-tipb:focus-visible { background: rgba(255,255,255,.2); outline: none; }
+.sv-tipb.ro { cursor: default; background: transparent; border-color: transparent; }
+.sv-tipi { font-size: 17px; line-height: 1; }
+.sv-tipn { color: var(--ds-gold-text, #e8c25a); }
+.sv-up.pop svg, .sv-down.pop svg { animation: svpop .22s ease-out; }
+@keyframes svpop { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
+/* the reply sheet: rides above a phone keyboard (--sv-kb, set from visualViewport while it's open) */
+.sv-panel.sv-rp { bottom: calc(var(--sv-kb, 0px) + max(12px, env(safe-area-inset-bottom))); gap: 8px; }
+.sv-rp-note { font-size: 12.5px !important; }
+/* two rows of four (IG's layout): eight 44 px targets don't fit one row on a 375 px phone, and 7 + 1 left one stranded */
+.sv-rq { display: grid; grid-template-columns: repeat(4, minmax(44px, 1fr)); gap: 2px; }
+.sv-rqb { width: 100%; min-width: 44px; height: 44px; border: 0; border-radius: 10px; background: transparent; font-size: 24px; line-height: 1; cursor: pointer; padding: 0; }
+.sv-rqb:hover, .sv-rqb:focus-visible { background: rgba(255,255,255,.1); outline: none; }
+.sv-rqb:disabled { opacity: .4; cursor: default; }
+.sv-rt { width: 100%; box-sizing: border-box; margin: 0; padding: 10px 12px; min-height: 44px; max-height: 96px; resize: none; overflow-y: auto; border-radius: 10px;
+         border: 1px solid var(--ds-line-strong); background: #0b0b0b; color: #fff; font: 16px/1.35 var(--ds-font); -webkit-user-select: text; user-select: text; touch-action: auto; }
+.sv-rt:focus { outline: 2px solid var(--ds-green); outline-offset: 0; }
+.sv-rt:disabled { opacity: .6; }
+.sv-rp-cnt { font-size: 12px !important; color: var(--ds-text-muted) !important; text-align: end; }
+.sv-rp-cnt:empty { display: none; }
+.sv-rp .sv-btn { min-height: 44px; }
+.sv-rp .sv-btn:disabled { opacity: .5; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .sv-up.pop svg, .sv-down.pop svg { animation: none; } }
 .fl-live:not(.on) { opacity: .45; }   /* 1.99kp: a follow with go-live alerts off */

@@ -25,7 +25,9 @@
   const padAvSrc_ = (id) => { try { const L = typeof padLook === 'function' ? padLook(id) : null; return L && L.avatar ? L.avatar : null; } catch (e) { return null; } };
 %>
 <% if (showRooms || showCaps || compose_) { %>
-<link rel="stylesheet" href="/public/css/stories.css?v=7">
+<%# storyreact site: the viewer's 💸 sheet reads the balance of the signed-in member (data-me on the script tag below) %>
+<% const me_ = S.signed ? ((typeof user === 'string' && user) || (typeof username === 'string' && username) || '') : ''; %>
+<link rel="stylesheet" href="/public/css/stories.css?v=8">
 <section class="ss" aria-label="<%- t('feed.story.strip_aria') %>" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>"<% if (scope_) { %> data-scope="<%= scope_ %>"<% } %>>
   <% if (ttlH_) { %><h2 class="ss-h"><%- ttlH_ %> <small><%- t('feed.story.last24') %></small></h2><% } else if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small><%- t('feed.story.last24') %></small></h2><% } %>
   <%# 1.99es: no native scrollbar - a fade at the edge that has more, and ‹ › buttons on hover-capable pointers (stories.js) %>
@@ -64,6 +66,6 @@
 <%# 1.99fu: signed out, a Public pad's story (r.open, padaccess.js) is inlined too, so its circle opens %>
 <% const inl_ = S.signed ? (S.rooms || []) : (S.rooms || []).filter((r) => r.open && Array.isArray(r.items)); %>
 <% if (showRooms && inl_.length) { %><script type="application/json" class="ss-data"><%- JSON.stringify(inl_).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=10" defer></script>
+<script src="/public/js/stories.js?v=11"<% if (me_) { %> data-me="<%= me_ %>"<% } %> defer></script>
 <% if (compose_) { %><script src="/public/js/story-compose.js?v=1" defer></script><% } %>
 <% } %>

@@ -179,7 +179,11 @@ const stories = require("./stories");
 const FG = require("./feedgallery");          // 1.99fn: the ☰ List / ▦ Gallery toggle + the gallery grid
 const follows = require("./follows");
 const PA = () => require("./padaccess");      // 1.99fu: pad visibility
-async function captures(roomId, limit = 12) { return stories.captures(roomId, limit, { windowMs: stories.WINDOW_MS }); }
+// storyreact site (D-3): minus what blocks hide from this viewer, so the pad's thumbnails match the viewer it opens
+async function captures(roomId, limit = 12, viewer = null) {
+  const list = await stories.captures(roomId, limit, { windowMs: stories.WINDOW_MS });
+  return viewer && viewer.userId ? require("./storyreact").hideBlocked(viewer, list) : list;
+}
 
 async function viewerOf(req) {
   if (!req.user || !req.user.userId) return null;
@@ -288,7 +292,7 @@ async function roomFeed(roomId, reqUser, query = {}) {
     // 1.99ir: "Your flair here" - the viewer's flair and the pad's self-assignable ones (padflair.js)
     flair: viewer ? await require("./padflair").mine(viewer, roomId).catch(() => null) : null,
     slug: (rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId),
-    caps: viewer && PA().full(viewer, roomId) ? await captures(roomId, 24) : [],
+    caps: viewer && PA().full(viewer, roomId) ? await captures(roomId, 24, viewer) : [],
     // 1.99bz: signed-out viewers get the room's story circle (sign-in prompt), never the pictures
     // 1.99fu: ...unless the pad is Public: then the circle carries its pictures and opens (stories.forViewer)
     storyRooms: viewer ? [] : await stories.forViewer(null, { room: roomId }),
@@ -421,7 +425,7 @@ function register(app, { addUser, isBotToken }) {
       // the story strip: one room's captures as thumbnails, or a circle per room with fresh ones
       const story = {
         room: R ? R.id : null,
-        caps: viewer && R ? await captures(R.id, 24) : [],
+        caps: viewer && R ? await captures(R.id, 24, viewer) : [],
         // 1.99ez: Following leads with the stories of the people the viewer follows (their uploads + captures of them)
         rooms: viewer && R ? [] : await stories.forViewer(viewer, { room: R ? R.id : null,
           people: mode === "following" && follow ? follow.people.map((p) => p.id) : null }),

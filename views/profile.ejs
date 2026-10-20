@@ -364,17 +364,21 @@
       <%- include('partials/story-strip', { story: { rooms: pst_.rooms, caps: [], room: null, signed: pst_.signed, compose: pst_.owner, pad: 'profile' }, heading: '📸 ' + t('profile.story.heading'), next: base }) %>
       <% if (pst_.owner && pst_.prefs) { %>
         <label class="ds-check pf-story-set"><input type="checkbox" data-story-pref="capturesOfMe"<%= pst_.prefs.capturesOfMe ? ' checked' : '' %>> <%- t('profile.story.captures_pref') %></label>
+        <%# storyreact site (storyreact.js, D-2): votes / tips / replies on snaps and clips of the owner - off = none of the three %>
+        <label class="ds-check pf-story-set"><input type="checkbox" data-story-pref="captureReacts"<%= pst_.prefs.captureReacts !== false ? ' checked' : '' %>> <%- t('profile.story.reacts_pref') %></label>
         <script>
           (function () {
             var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
-            var c = document.querySelector('[data-story-pref="capturesOfMe"]');
-            if (!c) return;
-            c.addEventListener('change', function () {
-              c.disabled = true;
-              fetch('/api/stories/prefs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
-                body: JSON.stringify({ capturesOfMe: c.checked }) }).then(function (r) { return r.json(); })
-                .then(function (d) { c.disabled = false; if (!d.ok) { c.checked = !c.checked; alert(d.error || _t('js.profile.not_saved', 'Not saved.')); } else location.reload(); })
-                .catch(function () { c.disabled = false; c.checked = !c.checked; });
+            Array.prototype.forEach.call(document.querySelectorAll('[data-story-pref]'), function (c) {
+              var key = c.getAttribute('data-story-pref');
+              c.addEventListener('change', function () {
+                c.disabled = true;
+                var body = {}; body[key] = c.checked;            // only this setting: the other one keeps its value
+                fetch('/api/stories/prefs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+                  body: JSON.stringify(body) }).then(function (r) { return r.json(); })
+                  .then(function (d) { c.disabled = false; if (!d.ok) { c.checked = !c.checked; alert(d.error || _t('js.profile.not_saved', 'Not saved.')); } else location.reload(); })
+                  .catch(function () { c.disabled = false; c.checked = !c.checked; });
+              });
             });
           })();
         </script>

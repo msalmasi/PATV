@@ -20,12 +20,24 @@
 // 1.99fn: a pad's capture strip (.ss[data-scope=<pad id>]) opens /api/stories?room=<pad id> - that pad's story alone -
 // instead of the site-wide list (which ran on from the pad into other pads and members' profile stories). Members' snap /
 // clip stories now show 🔖 Save too (can.save from the server).
+// storyreact site (storyreact.js): a reaction row at the bottom of each story, driven only by the item's `react` (none = no
+// row, today's layout): "Reply to {name}…" (a sheet: quick emoji + a text box; the reply is a direct message), ▲ score ▼
+// (optimistic, settled by the server; your own story can't be ▼'d) and 💸 (the post-tip sheet, opened above the viewer,
+// lazy-loaded when the page doesn't have it). Hidden while an NSFW story is still blurred and on a gone one. The story pauses
+// while a sheet is open; typing never drives the viewer; drafts live in memory only. data-me = the signed-in username.
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   function escH(s) { return String(s).replace(/[&<>"]/g, function (c) { return c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'; }); }
+  var ME = (document.currentScript && document.currentScript.getAttribute('data-me')) || '';
   if (window.__patvStories) return;
   window.__patvStories = true;
+  function meName() {
+    if (ME) return ME;
+    var s = document.querySelector('script[data-me]');
+    return s ? s.getAttribute('data-me') || '' : '';
+  }
+  var QUICK = ['😂', '😮', '😍', '😢', '👏', '🔥', '🎉', '💯'];   // storyreact.QUICK (the server checks)
 
   var PHOTO_MS = 5000, LS_KEY = 'patvStorySeen';
   var data = null;                            // the list the viewer is on: [{id, title, href, latest, seen, items: [...]}]
@@ -102,14 +114,15 @@
   }
 
   // ── the sign-in prompt (signed-out visitors) ──
-  function signInPrompt(next) {
+  // onClose (storyreact site): called when "Not now" / Esc / the backdrop closes it (the viewer resumes behind it)
+  function signInPrompt(next, onClose) {
     var box = document.createElement('div');
     box.className = 'sv-ask'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', _t('js.feed.sv.ask_aria', 'Sign in to see stories'));
     box.innerHTML = '<div class="sv-ask-card"><div class="sv-ask-ic" aria-hidden="true">📸</div><h2>' + escH(_t('js.feed.sv.ask_h', 'Stories are for PATV members')) + '</h2>' +
       '<p>' + escH(_t('js.feed.sv.ask_p', 'These are snaps and clips from the pads\' chat rooms and stages, so you need to be signed in to watch them.')) + '</p>' +
       '<div class="sv-ask-btns"><a class="sv-btn primary" href="#">' + escH(_t('js.feed.sv.sign_in', 'Sign in')) + '</a><a class="sv-btn" href="/register">' + escH(_t('js.feed.sv.join', 'Join PATV')) + '</a><button type="button" class="sv-btn ghost">' + escH(_t('js.feed.sv.not_now', 'Not now')) + '</button></div></div>';
     box.querySelector('a.primary').setAttribute('href', '/login?next=' + encodeURIComponent(next || (location.pathname + location.search)));
-    var close = function () { box.remove(); document.removeEventListener('keydown', onKey); };
+    var close = function () { box.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
     var onKey = function (e) { if (e.key === 'Escape') close(); };
     box.addEventListener('click', function (e) { if (e.target === box || e.target.closest('button.ghost')) close(); });
     document.addEventListener('keydown', onKey);
@@ -142,27 +155,37 @@
     var live = el('div', 'sv-live'); live.setAttribute('aria-live', 'polite'); live.className = 'sv-sr';
     var hint = el('div', 'sv-hint', _t('js.feed.sv.hint', 'Tap → next · tap ← back · hold to pause · swipe ↓ to close'));
     var acts = el('div', 'sv-acts');          // 1.99eq: 📌 Post to pad / 🔖 Save
-    frame.appendChild(bars); frame.appendChild(head); frame.appendChild(stage); frame.appendChild(foot); frame.appendChild(hint); frame.appendChild(acts);
+    // storyreact site: Reply / ▲▼ / 💸 (paintReact)
+    var react = el('div', 'sv-react hide'); react.setAttribute('role', 'group'); react.setAttribute('aria-label', _t('js.feed.sv.react_aria', 'React to this story'));
+    frame.appendChild(bars); frame.appendChild(head); frame.appendChild(stage); frame.appendChild(foot); frame.appendChild(hint); frame.appendChild(acts); frame.appendChild(react);
     var prevRoom = el('button', 'sv-side sv-prev'); prevRoom.type = 'button'; prevRoom.setAttribute('aria-label', _t('js.feed.sv.prev_pad', 'Previous pad')); prevRoom.textContent = '‹';
     var nextRoom = el('button', 'sv-side sv-next'); nextRoom.type = 'button'; nextRoom.setAttribute('aria-label', _t('js.feed.sv.next_pad', 'Next pad')); nextRoom.textContent = '›';
     root.appendChild(prevRoom); root.appendChild(frame); root.appendChild(nextRoom); root.appendChild(live);
     return { root: root, frame: frame, bars: bars, room: room, who: who, when: when, mute: mute, pause: pause, x: x, stage: stage, foot: foot,
-             live: live, hint: hint, prevRoom: prevRoom, nextRoom: nextRoom, acts: acts };
+             live: live, hint: hint, prevRoom: prevRoom, nextRoom: nextRoom, acts: acts, react: react, drafts: {} };
   }
 
-  function open(roomId, itemId, opener, scope) {
-    load(scope).then(function (rooms) {
-      if (V && V.root.parentNode) return;     // already open
+  // fresh (storyreact site: a DM's story card): load the scope again rather than use what this page cached earlier, and
+  // open THAT story or nothing - never another one of the pad's. -> a promise of true (opened / already open) | false
+  function open(roomId, itemId, opener, scope, fresh) {
+    if (fresh) { delete cache[scope || '']; loads[scope || ''] = null; }
+    return load(scope).then(function (rooms) {
+      if (V && V.root.parentNode) return true;     // already open
       data = rooms; paintRings();
       var ri = rooms.findIndex(function (r) { return r.id === roomId; });
-      if (ri < 0) { if (opener && opener.href) location.href = opener.href; return; }
+      if (ri < 0) { if (opener && opener.href) location.href = opener.href; return false; }
       var R = rooms[ri], ii = 0;
-      if (itemId) ii = Math.max(0, R.items.findIndex(function (c) { return c.id === itemId; }));
-      else { ii = R.items.findIndex(function (c) { return c.created > (R.seen || 0); }); if (ii < 0) ii = 0; }
+      if (itemId) {
+        ii = R.items.findIndex(function (c) { return c.id === itemId; });
+        if (ii < 0 && fresh) return false;
+        ii = Math.max(0, ii);
+      } else { ii = R.items.findIndex(function (c) { return c.created > (R.seen || 0); }); if (ii < 0) ii = 0; }
       start(ri, ii, opener);
+      return true;
     }).catch(function (e) {
-      if (e && e.signin) return signInPrompt();
+      if (e && e.signin) { signInPrompt(); return false; }
       if (opener && opener.href) location.href = opener.href;
+      return false;
     });
   }
 
@@ -182,6 +205,7 @@
 
   function close() {
     if (!V || !V.root.parentNode) return;
+    closePanel(true);                         // storyreact site: + the reply sheet's keyboard listener (its draft stays in memory)
     stopMedia();
     cancelAnimationFrame(V.raf);
     V.root.remove();
@@ -202,6 +226,7 @@
     if (ii < 0) ii = 0;
     if (ii >= R.items.length) return close();
     stopMedia();
+    var fsel = focusSel();                    // storyreact site: the keyboard focus survives the rebuild below (keepFocus)
     V.ri = ri; V.ii = ii; V.paused = false; V.held = false; V.elapsed = 0; V.dur = PHOTO_MS; V.last = performance.now(); V.waiting = true;
     var it = R.items[ii];
     // progress bars
@@ -245,24 +270,34 @@
     // 1.99cr: an NSFW stage capture waits, blurred, until the viewer chooses to see it (once per viewer session)
     V.gated = !!(it.nsfw && !V.nsfwOk);
     V.stage.classList.toggle('nsfw', V.gated);
+    paintReact(R, it);                        // storyreact site: hidden while gated (nobody votes on what they haven't chosen to see)
+    // storyreact site: a control that had the focus was just rebuilt (the reaction row, the foot, a panel): the same one again,
+    // else the viewer - never <body>, where Esc / the arrows / the Tab trap stop working
+    keepFocus(fsel);
     var spin = el('div', 'sv-spin'); spin.setAttribute('aria-hidden', 'true'); V.stage.appendChild(spin);
     if (V.gated) {
       var gate = el('div', 'sv-nsfw');
       gate.appendChild(el('span', null, it.source === 'user' ? _t('js.feed.sv.nsfw', '🔞 Marked NSFW') : _t('js.feed.sv.nsfw_streamer', '🔞 Marked NSFW by the streamer')));
       var show18 = el('button', 'sv-btn primary', _t('js.feed.sv.show18', 'Show it (18+)')); show18.type = 'button';
       show18.addEventListener('click', function () {
+        var fs = focusSel();
         V.nsfwOk = true; V.gated = false; V.stage.classList.remove('nsfw'); gate.remove();
         if (!V.media) { V.waiting = !!V.stage.querySelector('.sv-spin'); V.last = performance.now(); } else play();
+        paintReact(R, it);
+        keepFocus(fs);
       });
       gate.appendChild(show18);
       V.stage.appendChild(gate);
     }
     var failed = function () {
       if (V.ri !== ri || V.ii !== ii) return;
+      var fs = focusSel();
       V.stage.classList.add('gone');
       V.stage.innerHTML = '';
       V.stage.appendChild(el('div', 'sv-gone', _t('js.feed.sv.gone', 'This capture is gone.')));
       V.waiting = false; V.dur = 1500; V.elapsed = 0;
+      paintReact(R, it);                      // storyreact site: no reactions on a gone story
+      keepFocus(fs);
     };
     if (it.kind === 'photo') {
       var img = new Image();
@@ -407,9 +442,13 @@
   }
   function closePanel(silent) {
     if (!V || !V.panel) return;
+    var wasReply = V.panel.classList.contains('sv-rp');
     V.panel.remove(); V.panel = null;
+    kbOff();
     if (!silent && V.panelPaused) setPaused(false);
     V.panelPaused = false;
+    // storyreact site: the reply pill gets the focus back (not when show() closed it to move on)
+    if (!silent && wasReply) { var pill = V.react.querySelector('.sv-reply'); if (pill) { try { pill.focus(); } catch (e) { /* gone */ } } }
   }
   function openPanel(R, it) {
     closePanel(true);
@@ -443,6 +482,326 @@
     V.panel = p;
     V.frame.appendChild(p);
     cap.focus();
+  }
+
+  // ── storyreact site: ↩ Reply / ▲▼ / 💸 ──
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  function arrow(dir) {             // the feed's vote arrows (feedweb icon 'up' / 'down'), built without innerHTML
+    var s = document.createElementNS(SVG_NS, 'svg');
+    var a = { viewBox: '0 0 24 24', width: '20', height: '20', 'aria-hidden': 'true', focusable: 'false', fill: 'none', stroke: 'currentColor',
+              'stroke-width': '1.9', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
+    Object.keys(a).forEach(function (k) { s.setAttribute(k, a[k]); });
+    var p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', dir === 'up' ? 'M12 4 4.5 12.5H9V20h6v-7.5h4.5Z' : 'M12 20 4.5 11.5H9V4h6v7.5h4.5Z');
+    s.appendChild(p);
+    return s;
+  }
+  function fmtN(n) { return Number(n || 0).toLocaleString('en-US'); }
+  function shortN(n) {
+    var v = Number(n) || 0, a = Math.abs(v);
+    if (a < 1000) return String(v);
+    if (a < 10000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    if (a < 1e6) return Math.round(v / 1000) + 'k';
+    return (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'm';
+  }
+  function current(it) { return !!(V && V.root.parentNode && data && data[V.ri] && data[V.ri].items[V.ii] === it); }
+  function hasReact(it) {
+    var r = it && it.react;
+    if (!r) return false;
+    var can = r.can || {};
+    return !!(r.votes || can.tip || can.reply || (r.tips && r.tips.n));
+  }
+  function getJson(url) {
+    return fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }).then(function (d) { if (!r.ok || d.ok === false) throw Object.assign(new Error(d.error || ('HTTP ' + r.status)), { status: r.status }); return d; }); });
+  }
+  function nameOf(it) { return (it.react && it.react.to) || _t('js.feed.sv.someone', 'someone'); }
+  function paintReact(R, it) {
+    var box = V.react;
+    box.textContent = '';
+    var on = hasReact(it) && !V.gated && !V.stage.classList.contains('gone');
+    V.frame.classList.toggle('has-react', on);
+    box.classList.toggle('hide', !on);
+    if (!on) return;
+    var r = it.react, can = r.can || {}, name = nameOf(it);
+    if (can.reply) {
+      var rp = el('button', 'sv-reply', _t('js.feed.sv.reply_pill', 'Reply to {name}…', { name: name })); rp.type = 'button';
+      rp.setAttribute('aria-label', _t('js.feed.sv.reply_aria', 'Reply to {name} in a direct message', { name: name }));
+      rp.setAttribute('aria-haspopup', 'dialog');
+      rp.addEventListener('click', function () { openReply(R, it, rp); });
+      box.appendChild(rp);
+    } else box.appendChild(el('span', 'sv-rgap'));
+    if (r.votes) {
+      var vote = el('div', 'sv-vote');
+      var up = el('button', 'sv-up'); up.type = 'button'; up.appendChild(arrow('up'));
+      var vs = el('span', 'sv-vs');
+      var dn = el('button', 'sv-down'); dn.type = 'button'; dn.appendChild(arrow('down'));
+      vote.appendChild(up); vote.appendChild(vs); vote.appendChild(dn);
+      box.appendChild(vote);
+      paintVote(it, up, vs, dn);
+      up.addEventListener('click', function () { doVote(R, it, 1, up); });
+      dn.addEventListener('click', function () { doVote(R, it, -1, dn); });
+    }
+    var tally = r.tips && r.tips.n ? r.tips : null;
+    if (can.tip || tally) {
+      var tb = el(can.tip ? 'button' : 'span', 'sv-tipb' + (can.tip ? '' : ' ro'));
+      if (can.tip) tb.type = 'button';
+      tb.appendChild(el('span', 'sv-tipi', '💸')).setAttribute('aria-hidden', 'true');
+      var tt = tally ? (tally.n === 1 ? _t('js.feed.sv.tips_one', '1 tip · {total} PAT', { total: fmtN(tally.total) })
+                                      : _t('js.feed.sv.tips_n', '{n} tips · {total} PAT', { n: fmtN(tally.n), total: fmtN(tally.total) })) : '';
+      if (tally) { var tn = el('span', 'sv-tipn', fmtN(tally.n) + ' · ' + shortN(tally.total)); tn.setAttribute('aria-hidden', 'true'); tb.appendChild(tn); tb.title = tt; }
+      if (can.tip) {
+        tb.setAttribute('aria-label', _t('js.feed.sv.tip_aria', 'Tip {name}', { name: name }) + (tt ? ' (' + tt + ')' : ''));
+        tb.setAttribute('aria-haspopup', 'dialog');
+        tb.addEventListener('click', function () { openTip(R, it, tb); });
+      } else { tb.setAttribute('role', 'img'); tb.setAttribute('aria-label', tt); }   // read-only: a labelled image, so it's announced
+      box.appendChild(tb);
+    }
+  }
+  function paintVote(it, up, vs, dn) {
+    var r = it.react, my = r.my || 0;
+    var tt = _t('js.feed.sv.score_title', '{up} up · {down} down', { up: fmtN(r.ups), down: fmtN(r.downs) });
+    up.classList.toggle('on', my === 1); up.setAttribute('aria-pressed', my === 1 ? 'true' : 'false');
+    dn.classList.toggle('on', my === -1); dn.setAttribute('aria-pressed', my === -1 ? 'true' : 'false');
+    vs.textContent = fmtN(r.score); vs.title = tt;
+    up.setAttribute('aria-label', _t('js.feed.sv.upvote', 'Upvote') + ' (' + tt + ')');
+    dn.setAttribute('aria-label', _t('js.feed.sv.downvote', 'Downvote') + ' (' + tt + ')');
+    var can = r.can || {};
+    if (!r.signin && !can.vote) { up.disabled = true; dn.disabled = true; }
+    else if (!r.signin && !can.down) { dn.disabled = true; dn.setAttribute('aria-label', _t('js.feed.sv.no_downvote', "You can't downvote your own story")); dn.title = dn.getAttribute('aria-label'); }
+  }
+  function doVote(R, it, dir, btn) {
+    var r = it.react;
+    if (r.signin) {
+      // the story waits behind the prompt (it would run on - and close() would pull the focus out of the prompt)
+      var held = !V.paused;
+      if (held) setPaused(true);
+      return signInPrompt(location.pathname + location.search, function () {
+        if (!V || !V.root.parentNode) return;
+        if (held) setPaused(false);
+        keepFocus(selOf(btn));
+      });
+    }
+    var can = r.can || {};
+    if (!can.vote || it._voting) return;
+    var was = { my: r.my || 0, score: r.score || 0, ups: r.ups || 0, downs: r.downs || 0 };
+    var want = was.my === dir ? 0 : dir;
+    if (want === -1 && !can.down) return;
+    // optimistic: take the old vote out, put the new one in (the server's answer settles it)
+    if (was.my === 1) { r.ups--; r.score--; } else if (was.my === -1) { r.downs--; r.score++; }
+    if (want === 1) { r.ups++; r.score++; } else if (want === -1) { r.downs++; r.score--; }
+    r.my = want;
+    it._voting = true;
+    if (current(it)) {
+      repaint(R, it, btn);
+      var nb = V.react.querySelector(dir === 1 ? '.sv-up' : '.sv-down');
+      if (nb) nb.classList.add('pop');
+    }
+    api('/api/stories/' + encodeURIComponent(it.id) + '/vote', { dir: want }).then(function (d) {
+      r.my = d.vote || 0; r.score = d.score || 0; r.ups = d.ups || 0; r.downs = d.downs || 0;
+      if (current(it)) V.live.textContent = r.my === 1 ? _t('js.feed.sv.voted_up', 'Upvoted · score {n}', { n: fmtN(r.score) })
+        : r.my === -1 ? _t('js.feed.sv.voted_down', 'Downvoted · score {n}', { n: fmtN(r.score) }) : _t('js.feed.sv.vote_cleared', 'Vote removed');
+    }).catch(function (e) {
+      r.my = was.my; r.score = was.score; r.ups = was.ups; r.downs = was.downs;
+      if (current(it)) toast(e.message);
+    }).then(function () {
+      it._voting = false;
+      if (current(it)) repaint(R, it);
+    });
+  }
+  // the keyboard focus across a rebuild of the row: selOf = which reaction control an element is; focusSel = where the focus
+  // is now (null: not inside the frame - leave it alone; '': in the frame but not on a reaction control); keepFocus = after
+  // the rebuild, if the focus fell out of the viewer: the same control again, else the viewer itself (Esc / arrows / Tab work)
+  function selOf(a) {
+    if (!a || !a.classList) return '';
+    return a.classList.contains('sv-up') ? '.sv-up' : a.classList.contains('sv-down') ? '.sv-down' : a.classList.contains('sv-tipb') ? '.sv-tipb'
+      : a.classList.contains('sv-reply') ? '.sv-reply' : '';
+  }
+  function focusSel() {
+    var a = document.activeElement;
+    if (!V || !a || !V.frame.contains(a)) return null;
+    return V.react.contains(a) ? selOf(a) : '';
+  }
+  function keepFocus(sel) {
+    if (sel === null || sel === undefined || !V || !V.root.parentNode) return;
+    var a = document.activeElement;
+    if (a && a !== document.body && V.root.contains(a)) return;     // still on something that's there
+    var f = sel ? V.react.querySelector(sel) : null;
+    if (f && !f.disabled && f.focus) { try { f.focus(); return; } catch (e) { /* the viewer, then */ } }
+    try { V.root.focus(); } catch (e) { /* gone */ }
+  }
+  // repaint the row, keeping the keyboard focus on the same control (the row is rebuilt)
+  function repaint(R, it, was) {
+    var sel = was && V.react.contains(was) ? selOf(was) : focusSel();
+    paintReact(R, it);
+    keepFocus(sel);
+  }
+
+  // 💸: the post-tip sheet (post-tip.js), above the viewer; loaded once when this page doesn't have it
+  var tipP = null;
+  function addScript(src) {
+    return new Promise(function (ok, no) { var s = document.createElement('script'); s.src = src; s.async = false; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+  }
+  function addCss(href) {
+    var base = href.split('?')[0];
+    var have = Array.prototype.some.call(document.querySelectorAll('link[rel="stylesheet"]'), function (l) { return (l.getAttribute('href') || '').split('?')[0] === base; });
+    if (have) return Promise.resolve();
+    return new Promise(function (ok) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.onload = ok; l.onerror = ok; document.head.appendChild(l); });
+  }
+  function loadTip() {
+    if (window.PATVPostTip) return Promise.resolve();
+    if (!tipP) {
+      tipP = Promise.all([addCss('/public/css/posttips.css?v=3'), window.PATVAmount ? null : addScript('/public/js/patamount.js?v=1'), addScript('/public/js/post-tip.js?v=3')])
+        .catch(function (e) { tipP = null; throw e; });
+    }
+    return tipP;
+  }
+  function openTip(R, it, btn) {
+    var r = it.react, name = nameOf(it);
+    V.tipPaused = !V.paused;
+    if (!V.paused) setPaused(true);
+    var resume = function () {
+      if (!V) return;
+      if (V.tipPaused) setPaused(false);
+      V.tipPaused = false;
+      var b = V.react.querySelector('.sv-tipb');
+      if (b && b.focus) { try { b.focus(); } catch (e) { /* gone */ } }
+    };
+    loadTip().then(function () {
+      if (!window.PATVPostTip) throw new Error('no tip sheet');
+      window.PATVPostTip.open({
+        url: '/api/stories/' + encodeURIComponent(it.id) + '/tip', name: name, me: meName(), layer: 'top', from: btn,
+        lead: function (who) { return _t('js.feed.tip.lead_story', 'For this story. {name} gets the full amount.', { name: who }); },
+        sum: function (n, who) { return _t('js.feed.tip.sum_story', 'Send {n} PAT to {name} for this story?', { n: n, name: who }); },
+        onDone: function (d) { if (d && d.tips) { r.tips = d.tips; if (current(it)) repaint(R, it); } },
+        onClose: resume,
+      });
+    }).catch(function () { resume(); toast(_t('js.feed.sv.tip_unavailable', 'Tipping isn\'t available right now - try again.')); });
+  }
+
+  // ↩ the reply sheet (a .sv-panel, so typing in it never drives the viewer)
+  function kbOn() {
+    var vv = window.visualViewport;
+    if (!vv || V.kb) return;
+    var f = function () { if (!V) return; V.root.style.setProperty('--sv-kb', Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) + 'px'); };
+    vv.addEventListener('resize', f); vv.addEventListener('scroll', f);
+    V.kb = f; f();
+  }
+  function kbOff() {
+    if (!V || !V.kb) return;
+    var vv = window.visualViewport;
+    if (vv) { vv.removeEventListener('resize', V.kb); vv.removeEventListener('scroll', V.kb); }
+    V.kb = null;
+    V.root.style.removeProperty('--sv-kb');
+  }
+  function openReply(R, it, pill) {
+    closePanel(true);
+    V.panelPaused = !V.paused;
+    if (!V.paused) setPaused(true);
+    var name = nameOf(it), can = (it.react && it.react.can) || {};
+    var p = el('form', 'sv-panel sv-rp'); p.noValidate = true;
+    p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true'); p.setAttribute('aria-labelledby', 'svRpH');
+    var h = el('h3', null, _t('js.feed.sv.reply_h', 'Reply to {name}', { name: name })); h.id = 'svRpH';
+    var note = el('p', 'sv-rp-note', _t('js.feed.sv.reply_note', 'Your reply goes to {name} as a direct message.', { name: name })); note.id = 'svRpNote';
+    p.appendChild(h); p.appendChild(note);
+    var quick = null;
+    if (can.quick) {
+      quick = el('div', 'sv-rq'); quick.setAttribute('role', 'group'); quick.setAttribute('aria-label', _t('js.feed.sv.react_aria', 'React to this story'));
+      QUICK.forEach(function (e) {
+        var b = el('button', 'sv-rqb', e); b.type = 'button'; b.setAttribute('aria-label', _t('js.feed.sv.react_send', 'Send {emoji}', { emoji: e }));
+        b.addEventListener('click', function () { send(e, true, b); });
+        quick.appendChild(b);
+      });
+      p.appendChild(quick);
+    }
+    var ta = el('textarea', 'sv-rt'); ta.rows = 1; ta.maxLength = 2000; ta.autocomplete = 'off'; ta.setAttribute('enterkeyhint', 'send');
+    ta.setAttribute('aria-label', _t('js.feed.sv.reply_label', 'Your reply')); ta.setAttribute('aria-describedby', 'svRpNote svRpErr');
+    ta.value = V.drafts[it.id] || '';
+    p.appendChild(ta);
+    var cnt = el('p', 'sv-rp-cnt'); cnt.setAttribute('aria-live', 'polite'); p.appendChild(cnt);
+    var err = el('p', 'sv-err'); err.id = 'svRpErr'; err.setAttribute('role', 'alert'); p.appendChild(err);
+    var row = el('div', 'sv-ask-btns');
+    var go = el('button', 'sv-btn primary', _t('js.feed.sv.reply_send', 'Send')); go.type = 'submit';
+    var no = el('button', 'sv-btn ghost', _t('js.feed.sv.cancel', 'Cancel')); no.type = 'button';
+    no.addEventListener('click', function () { closePanel(false); });
+    row.appendChild(go); row.appendChild(no); p.appendChild(row);
+    var busy = false, refused = false;
+    function sync() {
+      var n = ta.value.length;
+      cnt.textContent = n >= 1800 ? _t('js.feed.sv.chars_left', '{n} characters left', { n: fmtN(2000 - n) }) : '';
+      go.disabled = busy || refused || !ta.value.trim();
+    }
+    function grow() { ta.style.height = 'auto'; ta.style.height = Math.min(96, ta.scrollHeight) + 'px'; }
+    function lock(on) {
+      // a control about to be disabled drops the focus to <body> (outside the viewer: Esc and the Tab trap stop working) -
+      // Cancel takes it first
+      var a = document.activeElement;
+      if (on && a && (a === ta || a === go || (quick && quick.contains(a)))) { try { no.focus(); } catch (e) { /* gone */ } }
+      ta.disabled = on;
+      if (quick) Array.prototype.forEach.call(quick.children, function (b) { b.disabled = on; });
+      sync();
+    }
+    function send(text, isQuick, qb) {
+      if (busy || refused) return;
+      var body = isQuick ? text : ta.value;
+      if (!String(body).trim()) return;
+      busy = true; err.textContent = ''; lock(true);
+      if (!isQuick) go.textContent = _t('js.feed.sv.reply_sending', 'Sending…');
+      api('/api/stories/' + encodeURIComponent(it.id) + '/reply', { body: body, quick: !!isQuick }).then(function (d) {
+        busy = false;
+        if (V.panel !== p) return;
+        if (isQuick) {
+          V.quickAt = Date.now();               // the quick row stays off for a second after a send (reopening included)
+          toast(_t('js.feed.sv.react_sent', 'Sent {emoji}', { emoji: text }));
+          closePanel(false);
+          return;
+        }
+        delete V.drafts[it.id];
+        p.textContent = '';
+        var dh = el('h3', null, _t('js.feed.sv.reply_sent', 'Sent to {name}', { name: name })); dh.id = 'svRpH'; p.appendChild(dh);
+        var row2 = el('div', 'sv-ask-btns');
+        var a = el('a', 'sv-btn primary', _t('js.feed.sv.reply_open', 'View in Messages ›')); a.href = '/messages/c/' + encodeURIComponent(String(d.conversation || ''));
+        var k = el('button', 'sv-btn ghost', _t('js.feed.sv.keep_watching', 'Keep watching')); k.type = 'button';
+        k.addEventListener('click', function () { closePanel(false); });
+        row2.appendChild(a); row2.appendChild(k); p.appendChild(row2);
+        kbOff();
+        a.focus();
+      }).catch(function (e) {
+        busy = false;
+        if (V.panel !== p) return;
+        go.textContent = _t('js.feed.sv.reply_send', 'Send');
+        err.textContent = (e && e.message && e.message.length < 300) ? e.message : _t('js.feed.sv.reply_failed', 'Your reply didn\'t send - try again.');
+        lock(false);
+        if (!isQuick) ta.focus();
+        else if (qb && !qb.disabled) qb.focus();   // back on the emoji that failed
+      });
+    }
+    ta.addEventListener('input', function () { V.drafts[it.id] = ta.value; grow(); sync(); });
+    ta.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;   // Shift+Enter = a new line; never mid-IME
+      e.preventDefault();
+      send(null, false);
+    });
+    p.addEventListener('submit', function (e) { e.preventDefault(); send(null, false); });
+    V.panel = p;
+    V.frame.appendChild(p);
+    kbOn();
+    grow(); sync();
+    ta.focus();                                // inside the tap, so phones open the keyboard
+    var wait = 1000 - (Date.now() - (V.quickAt || 0));
+    if (quick && wait > 0) {
+      Array.prototype.forEach.call(quick.children, function (b) { b.disabled = true; });
+      setTimeout(function () { if (V && V.panel === p && !busy && !refused) Array.prototype.forEach.call(quick.children, function (b) { b.disabled = false; }); }, wait);
+    }
+    getJson('/api/stories/' + encodeURIComponent(it.id) + '/reply').then(function (d) {
+      if (V.panel !== p || d.canSend) return;
+      refused = true; err.textContent = d.refusal || _t('js.feed.sv.reply_failed', 'Your reply didn\'t send - try again.');
+      lock(true);
+    }).catch(function (e) {
+      if (V.panel !== p) return;
+      refused = true; err.textContent = (e && e.message) || _t('js.feed.sv.reply_failed', 'Your reply didn\'t send - try again.');
+      lock(true);
+    });
   }
 
   function setPaused(p) {
@@ -485,7 +844,8 @@
     // pointer: tap / hold / swipe on the frame (not on its links and buttons)
     var P = null, holdT = null;
     V.frame.addEventListener('pointerdown', function (e) {
-      if (e.button !== 0 || e.target.closest('a, button, input, .sv-panel')) return;
+      // storyreact site: + the reaction row (its score isn't a button) and any text box
+      if (e.button !== 0 || e.target.closest('a, button, input, textarea, .sv-panel, .sv-react')) return;
       P = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId, held: false };
       clearTimeout(holdT);
       holdT = setTimeout(function () { if (P) { P.held = true; hold(true); } }, 200);
@@ -508,7 +868,20 @@
     V.frame.addEventListener('contextmenu', function (e) { if (!e.target.closest('a')) e.preventDefault(); });   // long-press menu on phones
     V.root.addEventListener('keydown', function (e) {
       // 1.99eq: typing a caption - Esc closes the panel, every other key is the input's
-      if (e.target.closest && e.target.closest('.sv-panel')) { if (e.key === 'Escape') { e.preventDefault(); closePanel(false); } return; }
+      // storyreact site: + Tab stays inside the panel (it's a dialog: the reply sheet, the 📌 panel)
+      var pnl = e.target.closest && e.target.closest('.sv-panel');
+      if (pnl) {
+        if (e.key === 'Escape') { e.preventDefault(); closePanel(false); }
+        else if (e.key === 'Tab') {
+          var pf = Array.prototype.slice.call(pnl.querySelectorAll('textarea:not([disabled]), input:not([disabled]), button:not([disabled]), a[href]')).filter(function (x) { return x.offsetParent !== null; });
+          if (pf.length) {
+            var pi = pf.indexOf(document.activeElement);
+            if (e.shiftKey && pi <= 0) { e.preventDefault(); pf[pf.length - 1].focus(); }
+            else if (!e.shiftKey && pi === pf.length - 1) { e.preventDefault(); pf[0].focus(); }
+          }
+        }
+        return;
+      }
       if (e.key === 'Escape') { e.preventDefault(); close(); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }

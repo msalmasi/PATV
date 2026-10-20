@@ -271,6 +271,74 @@
     });
     return box;
   }
+  // storyreact site: a story reply's card (m.story, built by the server for THIS reader). Gone (any reason) = one neutral text
+  // card; available = a button (no link, no address to leak) that opens the story in the viewer after the server checks again
+  function storyLabel(s, name) {
+    if (!s.mine) {
+      if (s.role === 'subject') return s.kind === 'clip' ? _t('js.msg.story_you_clip', 'Replied to a clip of you') : s.kind === 'audio' ? _t('js.msg.story_you_audio', 'Replied to a recording of you') : _t('js.msg.story_you_snap', 'Replied to a snap of you');
+      if (s.role === 'streamer') return s.kind === 'clip' ? _t('js.msg.story_you_stream_clip', 'Replied to a clip of your stream') : _t('js.msg.story_you_stream_snap', 'Replied to a snap of your stream');
+      return _t('js.msg.story_you', 'Replied to your story');
+    }
+    if (s.role === 'subject') return s.kind === 'clip' ? _t('js.msg.story_sent_clip', 'You replied to a clip of {name}', { name: name }) : s.kind === 'audio' ? _t('js.msg.story_sent_audio', 'You replied to a recording of {name}', { name: name }) : _t('js.msg.story_sent_snap', 'You replied to a snap of {name}', { name: name });
+    if (s.role === 'streamer') return s.kind === 'clip' ? _t('js.msg.story_sent_stream_clip', "You replied to a clip of {name}'s stream", { name: name }) : _t('js.msg.story_sent_stream_snap', "You replied to a snap of {name}'s stream", { name: name });
+    return _t('js.msg.story_sent', "You replied to {name}'s story", { name: name });
+  }
+  function storyGone() { return el('div', { cls: 'dm-card dm-story gone', text: _t('js.msg.story_gone', 'Story no longer available') }); }
+  function storyNode(m) {
+    var s = m.story;
+    if (!s) return null;
+    if (s.gone) return storyGone();
+    var label = storyLabel(s, s.name || _t('js.msg.story_someone', 'someone'));
+    var ic = s.source === 'user' ? '✨' : s.source === 'stage' ? '📺' : s.kind === 'clip' ? '📹' : s.kind === 'audio' ? '🔊' : '📸';
+    var meta = [];
+    if (s.pad && s.pad.title) meta.push(_t('js.msg.story_in', 'in {pad}', { pad: s.pad.title }));
+    if (s.left > 0) meta.push(_t('js.msg.story_left', '{n}h left', { n: Math.max(1, Math.ceil(s.left / 3600e3)) }));
+    var th;
+    if (s.thumb) {
+      var img = el('img', { src: s.thumb, alt: '', loading: 'lazy', decoding: 'async', width: '48', height: '64' });
+      th = el('span', { cls: 'th' + (s.nsfw ? ' nsfw' : '') }, [img]);
+      if (s.nsfw) th.appendChild(el('span', { cls: 'gate', text: _t('js.msg.story_nsfw', 'NSFW · tap to show') }));
+      img.addEventListener('error', function () { th.textContent = ''; th.className = 'th none'; th.setAttribute('aria-hidden', 'true'); th.textContent = ic; });   // expired meanwhile
+    } else th = el('span', { cls: 'th none', 'aria-hidden': 'true', text: ic });
+    var tx = el('span', { cls: 'ct' }, [el('span', { cls: 'tt', text: label }), meta.length ? el('span', { cls: 'cm', text: meta.join(' · ') }) : null]);
+    var view = _t('js.msg.story_view_aria', 'View the story: {label}', { label: label });
+    // a blurred NSFW card's first activation only reveals it: its name says so, then becomes "View the story: ..." (the
+    // click handler swaps it, so a screen reader hears what the next activation does)
+    var b = el('button', { type: 'button', cls: 'dm-card dm-story', 'data-story-m': String(m.id), 'data-view': view,
+                           'aria-label': s.thumb && s.nsfw ? _t('js.msg.story_nsfw', 'NSFW · tap to show') + ' · ' + label : view }, [th, tx]);
+    return b;
+  }
+  var viewerP = null;
+  function loadViewer() {               // the story viewer (stories.js + stories.css), once, on the first card opened
+    if (window.patvStories) return Promise.resolve();
+    if (!viewerP) {
+      viewerP = new Promise(function (ok, no) {
+        if (!document.querySelector('link[href^="/public/css/stories.css"]')) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/public/css/stories.css?v=8'; document.head.appendChild(l); }
+        var s = document.createElement('script'); s.src = '/public/js/stories.js?v=11'; s.setAttribute('data-me', me.username || '');
+        s.onload = function () { ok(); }; s.onerror = no; document.head.appendChild(s);
+      }).catch(function (e) { viewerP = null; throw e; });
+    }
+    return viewerP;
+  }
+  function openStory(btn) {
+    var id = btn.getAttribute('data-story-m');
+    if (btn.getAttribute('aria-busy') === 'true') return;
+    btn.setAttribute('aria-busy', 'true');
+    var gone = function () {
+      S.msgs.forEach(function (x) { if (String(x.id) === String(id)) x.story = { gone: true }; });
+      if (btn.parentNode) btn.parentNode.replaceChild(storyGone(), btn);
+    };
+    api('/api/messages/m/' + encodeURIComponent(id) + '/story').then(function (d) {
+      return loadViewer().then(function () {
+        if (!window.patvStories) return;
+        // the viewer opens THAT story or nothing (it left the pad's list meanwhile, or the pad isn't there): the gone card
+        return Promise.resolve(window.patvStories.open(d.room, d.item, btn, d.room, true)).then(function (ok) { if (ok === false) gone(); });
+      });
+    }).catch(function (e) {
+      if (e && e.status === 404) gone();
+      else showErr(e && e.message);
+    }).then(function () { btn.removeAttribute('aria-busy'); });
+  }
   function msgNode(m) {
     var mine = m.from === me.username;
     var t = el('div', { cls: 'dm-t' });
@@ -285,6 +353,7 @@
       else acts.appendChild(el('button', { type: 'button', 'data-mact': 'report', title: _t('js.msg.report_title', 'Report to the site admins'), 'aria-label': _t('js.msg.report_aria', 'Report message'), text: '⚑' }));
     }
     var kids = [el('time', { cls: 'mt', datetime: new Date(m.at).toISOString(), text: hm(m.at) })];
+    if (m.story && !m.deleted && !collapsed) kids.push(storyNode(m));      // storyreact site: the story card ABOVE the reply (IG-style)
     if (m.html || m.deleted || collapsed) kids.push(t);
     if (!m.deleted && !collapsed) { kids.push(picsNode(m)); kids.push(embedsNode(m)); }
     kids.push(acts);
@@ -727,7 +796,7 @@
         if (counts) { if (visible()) markRead(); else { c.unread = (c.unread || 0) + 1; renderList(); } }
       } else if (counts) { c.unread = (c.unread || 0) + 1; renderList(); }
     } else if (ev.t === 'del') {
-      if (ev.c === S.open) S.msgs.forEach(function (m) { if (m.id === ev.id) { m.deleted = true; m.html = ''; m.text = ''; m.images = []; m.embeds = []; } });
+      if (ev.c === S.open) S.msgs.forEach(function (m) { if (m.id === ev.id) { m.deleted = true; m.html = ''; m.text = ''; m.images = []; m.embeds = []; if (m.story) m.story = null; } });
       if (ev.c === S.open) renderMsgs();
       loadList();
     } else if (ev.t === 'read') {
@@ -792,6 +861,19 @@
   window.addEventListener('popstate', route);
   $('dmHeadName').addEventListener('click', function (e) { if (isGroup()) { e.preventDefault(); openMembers(); } });
   msgsEl.addEventListener('click', function (e) {
+    // storyreact site: a story card - an NSFW one is revealed by the first tap, opened by the next
+    var sc = e.target.closest('.dm-story[data-story-m]');
+    if (sc) {
+      e.preventDefault();
+      var nth = sc.querySelector('.th.nsfw');
+      if (nth) {
+        nth.classList.remove('nsfw'); var ng = nth.querySelector('.gate'); if (ng) ng.remove();
+        if (sc.getAttribute('data-view')) sc.setAttribute('aria-label', sc.getAttribute('data-view'));   // now it opens the story
+        return;
+      }
+      openStory(sc);
+      return;
+    }
     var pic = e.target.closest('[data-pic]');
     var row = e.target.closest('.dm-m');
     if (pic && row) {

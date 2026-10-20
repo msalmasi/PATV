@@ -1252,6 +1252,8 @@ require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as
 require("./feedseen").register(app, { addUser });  // 1.99ex: the feed's "N new" seen state per account (GET/POST /api/feed/seen)
 require("./storykeep").register(app, { addUser });   // 1.99eq: stories -> 📌 Post to pad / 🔖 Save (/u/<me>/saved), "Remove me"
 require("./userstories").register(app, { addUser });  // 1.99ez: your own story (pad / profile), captures of you in your story
+// storyreact site: ▲▼ votes, 💸 tips (the tip path, idempotent) and ↩ replies (a DM) on stories + the DM story card's routes
+require("./storyreact").register(app, { addUser, idemBegin });
 require("./hop").register(app, { addUser });   // 1.99eq: Hop - the full-screen media viewer (/hop, /p/<pad>/hop, /u/<user>/hop, /api/hop)
 require("./feedgallery").register(app, { addUser });   // 1.99fn: the feeds' Gallery view (/api/feed/gallery) + the per-account List / Gallery choice (/api/feed/view)
 require("./media").register(app, { isBotToken, addUser });

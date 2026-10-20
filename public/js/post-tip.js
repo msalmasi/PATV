@@ -5,8 +5,13 @@
 // network retry can't tip twice). On success the card's "💸 N tips · X PAT" tally updates in place.
 // Loaded by views/partials/feed-js.ejs for signed-in viewers: <script src=".../post-tip.js" data-me="<your username>">.
 // Everything user-visible goes in with textContent.
+// storyreact site: the story viewer (stories.js) opens the same sheet for 💸 on a story - window.PATVPostTip.open(o) with
+// o.url (the tip endpoint; default the post's), o.sum(n, name) / o.lead(name) (its lines), o.me (when this tag has no data-me),
+// o.layer 'top' (above the story viewer, which sits over the page's modal layer), o.onDone(d) and o.onClose(). Loading the file
+// twice is harmless (one listener, one sheet).
 (function () {
   'use strict';
+  if (window.PATVPostTip) return;
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var me = (document.currentScript && document.currentScript.getAttribute('data-me')) || '';
   var NOTE_MAX = 80;
@@ -56,13 +61,16 @@
     document.removeEventListener('keydown', c.onKey, true);
     c.scrim.remove();
     if (c.from && c.from.focus) c.from.focus();
+    if (typeof c.onClose === 'function') { try { c.onClose(); } catch (e) { /* the caller's */ } }
   }
 
   function sheet(o) {
     close();
     var who = o.name || o.to;
+    var meNow = me || o.me || '';
+    var url = o.url || ('/api/feed/posts/' + encodeURIComponent(o.id) + '/tip');
     var balance = null, pending = null;
-    var scrim = el('div', 'ds-scrim sheet ptip-scrim');
+    var scrim = el('div', 'ds-scrim sheet ptip-scrim' + (o.layer === 'top' ? ' ptip-top' : ''));
     var box = el('div', 'ds-modal ptip'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-labelledby', 'ptipH');
     var head = el('div', 'ds-modal-h');
     var h = el('h2', null, _t('js.feed.tip.title', '💸 Tip {name}', { name: who })); h.id = 'ptipH';
@@ -71,7 +79,7 @@
 
     // step 1: amount + message
     var form = el('form', 'ds-form ptip-f'); form.noValidate = true;
-    var lead = el('p', 'ds-sub', _t('js.feed.tip.lead', 'For this post. {name} gets the full amount.', { name: who }));
+    var lead = el('p', 'ds-sub', typeof o.lead === 'function' ? o.lead(who) : _t('js.feed.tip.lead', 'For this post. {name} gets the full amount.', { name: who }));
     var quick = el('div', 'ptip-quick'); quick.setAttribute('role', 'group'); quick.setAttribute('aria-label', _t('js.feed.tip.quick', 'Quick amounts'));
     var af = el('div', 'ds-field');
     var al = el('label', 'ds-label', _t('js.feed.tip.amount', 'Amount')); al.htmlFor = 'ptipAmt';
@@ -130,12 +138,12 @@
     }
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(scrim);
-    cur = { scrim: scrim, from: o.from, onKey: onKey };
+    cur = { scrim: scrim, from: o.from, onKey: onKey, onClose: o.onClose };
     amt.focus();
     hint.textContent = _t('js.feed.tip.bal_loading', 'Your balance: …');
 
-    if (me) {
-      fetch('/api/u/' + encodeURIComponent(me) + '/balance', { credentials: 'same-origin', cache: 'no-store' })
+    if (meNow) {
+      fetch('/api/u/' + encodeURIComponent(meNow) + '/balance', { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (j) { if (j && typeof j.balance === 'number') balance = Math.floor(j.balance); check(); })
         .catch(function () { check(); });
@@ -168,7 +176,7 @@
       if (n === null) { if (!amt.value.trim()) { hint.classList.add('ptip-bad'); hint.textContent = _t('js.feed.tip.enter', 'Enter an amount to tip.'); } amt.focus(); return; }
       var t = note.value.replace(/\s+/g, ' ').trim();
       pending = { amount: n, note: t, key: newKey() };       // one key per confirmed attempt
-      sum.textContent = _t('js.feed.tip.sum', 'Send {n} PAT to {name} for this post?', { n: fmt(n), name: who });
+      sum.textContent = typeof o.sum === 'function' ? o.sum(fmt(n), who) : _t('js.feed.tip.sum', 'Send {n} PAT to {name} for this post?', { n: fmt(n), name: who });
       cnote.textContent = t ? '“' + t + '”' : ''; cnote.hidden = !t;
       var big = balance != null && n >= balance * 0.5 && n >= 10000;
       warn.hidden = !big;
@@ -182,7 +190,7 @@
       if (!pending || send.disabled) return;
       send.disabled = true; send.setAttribute('aria-busy', 'true'); send.textContent = _t('js.feed.tip.sending', 'Sending…'); err.hidden = true;
       var p = pending;
-      fetch('/api/feed/posts/' + encodeURIComponent(o.id) + '/tip', {
+      fetch(url, {
         method: 'POST', credentials: 'same-origin',
         headers: { 'content-type': 'application/json', accept: 'application/json', 'x-requested-with': 'fetch' },
         body: JSON.stringify({ amount: p.amount, note: p.note, idempotency_key: p.key }),
@@ -194,6 +202,7 @@
           if (typeof res.d.balance === 'number') balance = res.d.balance;
           ok.textContent = _t('js.feed.tip.sent', '💸 Sent {n} PAT to {name}.', { n: fmt(p.amount), name: who }) + (balance != null ? ' ' + _t('js.feed.tip.sent_bal', 'Your balance: {n} PAT.', { n: fmt(balance) }) : '');
           setTally(o.card, res.d.tips);
+          if (typeof o.onDone === 'function') { try { o.onDone(res.d); } catch (e) { /* the caller's */ } }
           step('done'); dclose.focus();
           return;
         }

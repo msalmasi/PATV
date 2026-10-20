@@ -23,6 +23,13 @@
     // 1.99cz: minimal context only (DM or group, its name and size - never other messages)
     var C = d.context || {};
     box.appendChild(el('div', 'mut', C.kind === 'group' ? 'In a group: "' + (C.title || '') + '" (' + (C.members || '?') + ' members)' : 'In a direct message'));
+    // storyreact site: a reply to a story - the snapshot taken when it was sent (never the media or a link to it)
+    if (C.story) {
+      var st = C.story, what = st.source === 'user' ? 'a story upload' : st.source === 'stage' ? 'a stage ' + (st.kind === 'clip' ? 'clip' : 'snap')
+        : 'a cam ' + (st.kind === 'clip' ? 'clip' : st.kind === 'audio' ? 'audio capture' : 'snap');
+      box.appendChild(el('div', 'mut', 'A reply to ' + what + (st.author ? ' of / by ' + st.author : '') + (st.padTitle ? ' in ' + st.padTitle : '') +
+        (st.created ? ' (story from ' + when(st.created) + ')' : '')));
+    }
     box.appendChild(q);
     // its pictures: fetched one by one through the admin-only route (each view is logged server-side), only when clicked
     var P = m.pictures || [];

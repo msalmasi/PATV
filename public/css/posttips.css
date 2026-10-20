@@ -10,6 +10,8 @@
 }
 
 .ptip, .ptip * { box-sizing: border-box; }   /* .ds-modal is width:100% + padding; the feed pages have no global border-box */
+/* storyreact site: 💸 on a story - the sheet opens ABOVE the story viewer (stories.css .sv is z-index 10000; .ds-scrim is the page's modal layer) */
+.ds-scrim.ptip-top { z-index: 10050; }
 .ptip-quick { display: flex; flex-wrap: wrap; gap: 8px; }
 .ptip-quick .ds-quick[aria-pressed="true"] { border-color: var(--ds-ac); color: #fff; background: var(--ds-ac-bg, #1d2a22); }
 .ptip-quick .ds-quick:disabled { opacity: .45; cursor: not-allowed; }
