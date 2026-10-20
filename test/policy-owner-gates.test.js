@@ -57,6 +57,10 @@ test.before(async () => {
   require(path.join(repo, "escrow", "ledger")).register(app, deps);
   require(path.join(repo, "gangs")).register(app, deps);
   require(path.join(repo, "actions")).register(app, deps);
+  // the PAT grant and the House adjust: the handlers index.js mounts (staffgrant.grantRoute / houseAdjustRoute)
+  const SG = require(path.join(repo, "staffgrant"));
+  app.post("/api/g/wheel/jackpot", addUser, (req, res) => SG.houseAdjustRoute(req, res));
+  app.post("/api/admin/transfer/:username", addUser, (req, res) => SG.grantRoute(req, res));
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
   await new Promise((r) => setTimeout(r, 200));      // the modules create their tables on register
@@ -158,17 +162,52 @@ test("econ.* website actions reach Pepe with the site-computed is_owner (never t
   } finally {
     await runQuery("UPDATE users SET camfrogUsername = 'Owner_CF' WHERE userId = ?", [U.owner]);
   }
+  // the review of PO-0b: relinked from one OWNER login to ANOTHER owner login - still an owner's account, but not the login the
+  // action was queued as (Pepe would act as owner_cf): not an owner's action
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('owner2_cf', 'owner', 1)");
+  const idE = await A.queue(U.owner, { kind: "econ.cmd", args: ["status"], tag: "econ-admin", label: "relinked to another owner" });
+  await runQuery("UPDATE users SET camfrogUsername = 'owner2_cf' WHERE userId = ?", [U.owner]);
+  try {
+    assert.equal((await SR.ownerOf({ userId: U.owner }, "econ.pepe_econ_cmds")).userId, U.owner, "the account is still an owner (by its new login)");
+    const g3 = await fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) })
+      .then((r) => r.json());
+    const e = g3.actions.find((x) => x.id === idE);
+    assert.ok(e, "claimed");
+    assert.equal(String(e.camfrog).toLowerCase(), "owner_cf", "queued as owner_cf");
+    assert.equal(e.is_owner, false, "the login it was queued as isn't the account's login any more");
+    assert.equal(e.site_admin, false);
+  } finally {
+    await runQuery("UPDATE users SET camfrogUsername = 'Owner_CF' WHERE userId = ?", [U.owner]);
+    await runQuery("DELETE FROM pepe_roles WHERE login = 'owner2_cf'");
+  }
 });
 
-test("index.js: the PAT grant and the House adjust check ownerOf before staffgrant moves anything", () => {
-  const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
-  const jp = src.slice(src.indexOf('app.post("/api/g/wheel/jackpot"'), src.indexOf('app.post("/api/g/wheel/results"'));
-  assert.ok(jp.indexOf('SR.ownerOf(me, "econ.house_adjust")') > 0 && jp.indexOf('SR.ownerOf(me, "econ.house_adjust")') < jp.indexOf("houseAdjust("),
-            "house adjust: owner check first");
-  const tr = src.slice(src.indexOf('"/api/admin/transfer/:username"'), src.indexOf("// HTTP POST endpoint to update a user class."));
-  assert.ok(tr.indexOf('SR.ownerOf(req.user, "econ.grant_pat")') > 0 && tr.indexOf('SR.ownerOf(req.user, "econ.grant_pat")') < tr.indexOf(".grant("),
-            "PAT grant: owner check first");
-  assert.match(tr, /status\(403\)\.json\(\{ message: SR\.OWNER_ONLY \}\)/);
+test("the PAT grant and the House adjust: an Admin who isn't a Pepe owner gets 403 before anything moves; an owner passes", async () => {
+  // the routes index.js mounts (staffgrant.grantRoute / houseAdjustRoute), called over HTTP
+  const rakes = async () => (await getQuery("SELECT COUNT(*) AS n FROM jackpot_rakes"))[0].n;
+  const txs = async () => (await getQuery("SELECT COUNT(*) AS n FROM transactions"))[0].n;
+  const r0 = await rakes(), t0 = await txs();
+  for (const who of [U.admin, U.nolink]) {
+    const h = await call("/api/g/wheel/jackpot", who, { amount: 500, reason: "a reason long enough" });
+    assert.equal(h.status, 403, `house adjust as ${name[who]}: ${JSON.stringify(h.body)}`);
+    assert.match(h.body.message, OWNER_RE);
+    const g = await call("/api/admin/transfer/stf", who, { amount: 500 });
+    assert.equal(g.status, 403, `PAT grant as ${name[who]}: ${JSON.stringify(g.body)}`);
+    assert.match(g.body.message, OWNER_RE);
+  }
+  // Staff: not even the class (as before)
+  assert.equal((await call("/api/g/wheel/jackpot", U.staff, { amount: 500, reason: "a reason long enough" })).body.message, "Admins only.");
+  assert.equal(await rakes(), r0, "the House didn't move");
+  assert.equal(await txs(), t0, "nobody was paid");
+  // the owner passes the gate: the next answer is staffgrant's own input check (nothing moves on a bad amount)
+  const ho = await call("/api/g/wheel/jackpot", U.owner, { amount: "abc", reason: "a reason long enough" });
+  assert.equal(ho.status, 400, JSON.stringify(ho.body));
+  assert.match(ho.body.message, /whole number/);
+  const go = await call("/api/admin/transfer/stf", U.owner, { amount: "abc" });
+  assert.equal(go.status, 400, JSON.stringify(go.body));
+  assert.match(go.body.message, /whole number/);
+  // ...and a real one goes through to the move (an unknown account: 404 from staffgrant, not the gate)
+  assert.equal((await call("/api/admin/transfer/nobody_here", U.owner, { amount: 5 })).status, 404);
 });
 
 test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backend.js is read-only", () => {
@@ -194,4 +233,28 @@ test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backen
                            { cwd: dir, env, encoding: "utf8" });
   const names = JSON.parse(tables.stdout.trim());
   assert.ok(!names.includes("policy_engines") && !names.includes("pepe_roles_pending"), "the policy CLI created nothing: " + names.join(","));
+  assert.match(pol.stdout, /stashes {2}0 closed stash\(es\) with no account to pay/);
+  // the review of PO-0b: the pools / stashes / capital / gangs switches have a shell path too (tools/money-backend.js)
+  const st0 = run([path.join(repo, "tools", "money-backend.js")]);
+  assert.equal(st0.status, 0, st0.stderr);
+  assert.match(st0.stdout, /gangs {4}enabled=default \(off\) live=false/);
+  for (const f of ["pools", "stashes", "capital", "gangs"]) {
+    const on = run([path.join(repo, "tools", "money-backend.js"), "--actor=test", f, "on"]);
+    assert.equal(on.status, 0, f + ": " + on.stderr);
+    assert.match(on.stdout, new RegExp(`${f} backend enabled by test`));
+    assert.match(on.stdout, new RegExp(`${f.padEnd(8)} enabled=true live=false {2}last switched by test \\(cli\\)`));
+  }
+  const off = run([path.join(repo, "tools", "money-backend.js"), "--actor=test", "gangs", "off"]);
+  assert.equal(off.status, 0, off.stderr);
+  assert.match(off.stdout, /gangs {4}enabled=false/);
+  const anon = run([path.join(repo, "tools", "money-backend.js"), "gangs", "on"]);
+  assert.equal(anon.status, 1, "say who");
+  assert.match(anon.stderr, /--actor=/);
+  // once the site owns it, the shell refuses it like the web (the way back is the rollback from Pepe)
+  const sql = (q) => spawnSync(process.execPath, ["-e", `const s=require("sqlite3");const d=new s.Database("myapp.db");d.run(${JSON.stringify(q)},(e)=>{if(e)console.error(e.message);d.close();});`],
+                               { cwd: dir, env, encoding: "utf8" });
+  sql("INSERT INTO gangs_meta (key, value) VALUES ('live', 'true') ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+  const live = run([path.join(repo, "tools", "money-backend.js"), "--actor=test", "gangs", "off"]);
+  assert.equal(live.status, 1);
+  assert.match(live.stderr, /the site owns gangs now - roll back from Pepe/);
 });

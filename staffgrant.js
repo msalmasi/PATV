@@ -119,4 +119,45 @@ async function houseAdjust(admin, rawAmount, rawReason) {
   return { status: 200, body: { message: "Jackpot updated successfully.", jackpotTotal: out.after, direction: amount > 0 ? "fed_to_house" : "house_to_fed" } };
 }
 
-module.exports = { grant, houseAdjust, FLOW };
+// ── the two web routes (index.js mounts them; test/policy-owner-gates.test.js mounts the same functions) ──
+// PO-0b (D-6): both are a Pepe OWNER's - the capability's class AND the owner role on the linked chat login, read fresh
+// (staffroles.ownerOf). The owner check runs before anything moves.
+
+/** POST /api/g/wheel/jackpot (after addUser + requireUser). 1.99jw: Admins only (Staff lost it), a written reason, a Fed <->
+ *  House MOVE (houseAdjust). The class as the DATABASE has it now (the JWT's can be stale). */
+async function houseAdjustRoute(req, res) {
+  try {
+    const SP = require("./siteperms");
+    const me = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
+    if (!SP.can(me, "econ.house_adjust")) return res.status(403).json({ message: "Admins only." });
+    const SR = require("./staffroles");
+    if (!(await SR.ownerOf(me, "econ.house_adjust"))) return res.status(403).json({ message: SR.OWNER_ONLY });
+    const r = await houseAdjust({ userId: me.userId, username: me.username }, (req.body || {}).amount, (req.body || {}).reason);
+    res.status(r.status).json(r.body);
+  } catch (error) {
+    console.error("[house_adjust]", error);
+    res.status(500).json({ message: "Failed to update the jackpot." });
+  }
+}
+
+/** POST /api/admin/transfer/:username (after authenticateToken + addUser). 1.99jw: Admins only (Staff lost access), paid by
+ *  the incentive budget (grant). */
+async function grantRoute(req, res) {
+  const SP = require("./siteperms");
+  if (SP.can(req.user, "econ.grant_pat")) {
+    const SR = require("./staffroles");
+    if (!(await SR.ownerOf(req.user, "econ.grant_pat"))) return res.status(403).json({ message: SR.OWNER_ONLY });
+    try {
+      const r = await grant(req.params.username, req.body && req.body.amount, req.user.username);
+      return res.status(r.status).json(r.body);
+    } catch (error) {
+      console.error("[staffgrant]", error);
+      return res.status(500).json({ message: "Failed to transfer points." });
+    }
+  }
+  if (SP.can(req.user, "admin.area")) return res.status(403).json({ message: "PAT grants are for Admins only." });
+  if (typeof req.flash === "function") req.flash("error", "Access denied. You must be an admin or staff to access this page.");
+  return res.redirect("/login");
+}
+
+module.exports = { grant, houseAdjust, houseAdjustRoute, grantRoute, FLOW };

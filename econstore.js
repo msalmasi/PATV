@@ -231,18 +231,29 @@ const ECON_CMDS = new Set(["get", "set", "mint", "fund", "grant", "fedloan", "fl
                            "activitypads", "profilevaults"]);
 /** The /admin/economy step-up, shared by every card that changes something (1.99ada: factored out of requestEdit for the
  *  payout recipe card, recipecfg.js): the single-use nonce from /api/admin/econ/edit/nonce (taken on the first try, whatever
- *  happens next) + the account's own password. Throws an Error with .status (409 nonce, 403 password) and .code. */
+ *  happens next) + the account's own password. Throws an Error with .status (409 nonce, 403 password, 429 too many wrong
+ *  passwords) and .code.
+ *  The review of PO-0b: wrong passwords are throttled per account - 5 in 15 minutes, then 429 until the window ends (burns.js's
+ *  rule). A signed-in session gets nonces freely, so without it a stolen owner session could guess the password forever. */
+let pwFails = null;
+const stepUpFails = () => pwFails || (pwFails = require("./middleware/authGuard").limiter({ max: 5, windowMs: 15 * 60 * 1000 }));
 async function stepUp(user, body) {
   const ctl = require("./pepecontrol");
   const bcrypt = require("bcrypt");
+  const guard = require("./middleware/authGuard");
   const fail = (status, code, message) => Object.assign(new Error(message), { status, code });
   if (!ctl.takeNonce(user, body.nonce)) throw fail(409, "nonce", "That confirmation was already used or has expired - start again.");
+  const who = String(user.userId || "");
+  const wait = stepUpFails().blocked(who);
+  if (wait) throw fail(429, "too_many", "Too many wrong passwords. Try again in " + guard.waitText(wait) + ".");
   const row = (await getQuery("SELECT password FROM users WHERE userId = ?", [user.userId]))[0];
   const hash = row && typeof row.password === "string" && row.password.startsWith("$2") ? row.password : null;
   if (!hash) throw fail(403, "no_password", "Your account has no password to confirm with - set one (forgot password) first.");
   if (typeof body.password !== "string" || !body.password || Buffer.byteLength(body.password, "utf8") > 200 || !(await bcrypt.compare(body.password, hash))) {
+    stepUpFails().hit(who);
     throw fail(403, "password", "Wrong password.");
   }
+  stepUpFails().reset(who);
 }
 async function requestEdit(user, body, ip) {
   const ctl = require("./pepecontrol");

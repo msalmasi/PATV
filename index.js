@@ -2830,21 +2830,9 @@ app.get("/api/u/:username/wheel/spins-left", authenticateToken, async (req, res)
 // 1.99jw: ADMIN ONLY (Staff lost it), a written reason, and a Fed <-> House MOVE - never a free mint: + is paid by the
 // Federal Reserve (a house_adjust claim, refused when the Reserve can't cover it), - returns only what the House holds
 // to the Reserve. Audited (staffgrant.houseAdjust).
-app.post("/api/g/wheel/jackpot", addUser, requireUser, async (req, res) => {
-  try {
-    // the class as the DATABASE has it now (the JWT's can be stale)
-    const me = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    if (!SP.can(me, "econ.house_adjust")) return res.status(403).json({ message: "Admins only." });
-    // PO-0b (D-6): moving PAT between the Fed and the House is a Pepe OWNER's (class + the owner role on the linked chat login)
-    const SR = require("./staffroles");
-    if (!(await SR.ownerOf(me, "econ.house_adjust"))) return res.status(403).json({ message: SR.OWNER_ONLY });
-    const r = await require("./staffgrant").houseAdjust({ userId: me.userId, username: me.username }, (req.body || {}).amount, (req.body || {}).reason);
-    res.status(r.status).json(r.body);
-  } catch (error) {
-    console.error("[house_adjust]", error);
-    res.status(500).json({ message: "Failed to update the jackpot." });
-  }
-});
+// PO-0b (D-6): moving PAT between the Fed and the House is a Pepe OWNER's (class + the owner role on the linked chat login) -
+// the handler lives in staffgrant.js (houseAdjustRoute) so the test mounts the same code
+app.post("/api/g/wheel/jackpot", addUser, requireUser, (req, res) => require("./staffgrant").houseAdjustRoute(req, res));
 
 // HTTP Post Endpoint To Get Last 100 Spin Results
 app.post("/api/g/wheel/results", async (req, res) => {
@@ -2869,32 +2857,11 @@ app.post(
   "/api/admin/transfer/:username",
   authenticateToken,
   addUser,
-  async (req, res) => {
-
-    // 1.99jw: ADMIN ONLY (Staff lost access); paid by the INCENTIVE BUDGET (an incentives:staff_grant claim Pepe
-    // settles), refused when it can't cover it or the weekly staff-grant cap is reached - never minted, never the Reserve
-    // (staffgrant.js)
-    if (SP.can(req.user, "econ.grant_pat")) {
-      // PO-0b (D-6): a PAT grant is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh)
-      const SR = require("./staffroles");
-      if (!(await SR.ownerOf(req.user, "econ.grant_pat"))) return res.status(403).json({ message: SR.OWNER_ONLY });
-      try {
-        const r = await require("./staffgrant").grant(req.params.username, req.body && req.body.amount, req.user.username);
-        res.status(r.status).json(r.body);
-      } catch (error) {
-        console.error("[staffgrant]", error);
-        res.status(500).json({ message: "Failed to transfer points." });
-      }
-    } else if (SP.can(req.user, "admin.area")) {
-      return res.status(403).json({ message: "PAT grants are for Admins only." });
-    } else {
-      req.flash(
-        "error",
-        "Access denied. You must be an admin or staff to access this page."
-      );
-      return res.redirect("/login");
-    }
-  }
+  // 1.99jw: ADMIN ONLY (Staff lost access); paid by the INCENTIVE BUDGET (an incentives:staff_grant claim Pepe
+  // settles), refused when it can't cover it or the weekly staff-grant cap is reached - never minted, never the Reserve.
+  // PO-0b (D-6): a PAT grant is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh). The handler
+  // lives in staffgrant.js (grantRoute) so the test mounts the same code.
+  (req, res) => require("./staffgrant").grantRoute(req, res)
 );
 
 // HTTP POST endpoint to update a user class.

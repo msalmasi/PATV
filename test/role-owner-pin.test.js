@@ -121,6 +121,14 @@ test("only an existing owner confirms - with the password step-up; a Pepe admin 
   const xs = await fetch(base + "/api/admin/roles/pending", { method: "POST", headers: { "x-user": "own", "content-type": "application/json", origin: "https://evil.example" },
                                                              body: JSON.stringify({ login: "newowner", action: "confirm" }) });
   assert.equal(xs.status, 403);
+  // the same-origin check on its own (the review of PO-0b): the fetch header is there, the origin is foreign - still refused,
+  // for the decision and for the nonce
+  for (const p of ["/api/admin/roles/pending", "/api/admin/roles/nonce"]) {
+    const xo = await fetch(base + p, { method: "POST", headers: { "x-user": "own", "content-type": "application/json", "x-requested-with": "fetch", origin: "https://evil.example" },
+                                       body: JSON.stringify({ login: "newowner", action: "confirm", nonce: "x", password: "pw-ok" }) });
+    assert.equal(xo.status, 403, p);
+    assert.equal((await xo.json()).code, "cross_site", p);
+  }
   n = await nonce("own");
   T += 1000;
   const ok = await post("/api/admin/roles/pending", "own", { login: "newowner", action: "confirm", nonce: n, password: "pw-ok" });
@@ -142,6 +150,10 @@ test("reject keeps the site's role; a confirm that would leave no owner is refus
   assert.equal(rej.status, 200, JSON.stringify(rej.j));
   assert.equal(rej.j.rejected, true);
   assert.equal(await SR.roleOf("second_owner"), "owner");
+  const ra = await getQuery("SELECT admin_name, action, detail FROM admin_audit WHERE action = 'pepe_role_pending_reject'");
+  assert.equal(ra.length, 1, "a reject is audited too");
+  assert.equal(ra[0].admin_name, "boss");
+  assert.deepEqual(JSON.parse(ra[0].detail), { login: "second_owner", asked: "admin", was: "owner" });
   // the last-owner rule: with only bossfrog left as owner, confirming his removal is refused
   await runQuery("UPDATE pepe_roles SET role = 'admin' WHERE login IN ('second_owner', 'newowner')");
   n = await nonce("own");
@@ -173,4 +185,50 @@ test("/admin/roles shows what waits, with the buttons for an owner only", async 
   assert.doesNotMatch(adm, /data-pending-act=/, "...but no buttons");
   const api = await (await fetch(base + "/api/admin/roles", { headers: { "x-user": "adm3" } })).json();
   assert.deepEqual(api.pending.map((p) => p.login), ["bossfrog", "plainadmin"]);
+});
+
+test("a confirm is ONE transaction: a failure part-way leaves the role, the waiting row and the audit as they were (review of PO-0b)", async () => {
+  T += 1000;
+  await bot({ trig_owner: ["owner", T] });
+  assert.ok((await pending()).some((p) => p.login === "trig_owner"), "held");
+  // the DELETE of the waiting row fails AFTER the role was written (the step order in confirmPending)
+  await runQuery("CREATE TRIGGER pin_fail BEFORE DELETE ON pepe_roles_pending WHEN OLD.login = 'trig_owner' BEGIN SELECT RAISE(ABORT, 'disk said no'); END");
+  try {
+    const n = await nonce("own");
+    const r = await post("/api/admin/roles/pending", "own", { login: "trig_owner", action: "confirm", nonce: n, password: "pw-ok" });
+    assert.equal(r.status, 500, JSON.stringify(r.j));
+    assert.equal(await SR.roleOf("trig_owner"), null, "the role write rolled back with it");
+    assert.ok((await pending()).some((p) => p.login === "trig_owner"), "still waiting for an owner");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE detail LIKE '%trig_owner%'"))[0].n, 0, "nothing audited");
+  } finally {
+    await runQuery("DROP TRIGGER pin_fail");
+  }
+  const n = await nonce("own");
+  const ok = await post("/api/admin/roles/pending", "own", { login: "trig_owner", action: "reject", nonce: n, password: "pw-ok" });
+  assert.equal(ok.status, 200, JSON.stringify(ok.j));
+  assert.ok(!(await pending()).some((p) => p.login === "trig_owner"));
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'pepe_role_pending_reject' AND detail LIKE '%trig_owner%'"))[0].n, 1,
+               "audited once it committed");
+});
+
+test("the password step-up is throttled per account: 5 wrong in 15 minutes, then 429 even with the right one (review of PO-0b)", async () => {
+  assert.equal(await SR.roleOf("second_owner"), "owner");
+  const before = await SR.roleOf("plainadmin");
+  for (let i = 0; i < 5; i++) {
+    const n = await nonce("own2");
+    assert.ok(n, "a nonce for the second owner");
+    const r = await post("/api/admin/roles/pending", "own2", { login: "plainadmin", action: "confirm", nonce: n, password: "guess-" + i });
+    assert.equal(r.status, 403, `try ${i}: ${JSON.stringify(r.j)}`);
+    assert.equal(r.j.code, "password");
+  }
+  const n = await nonce("own2");
+  const r = await post("/api/admin/roles/pending", "own2", { login: "plainadmin", action: "confirm", nonce: n, password: "pw-ok" });
+  assert.equal(r.status, 429, JSON.stringify(r.j));
+  assert.equal(r.j.code, "too_many");
+  assert.equal(await SR.roleOf("plainadmin"), before, "nothing decided");
+  assert.ok((await pending()).some((p) => p.login === "plainadmin"), "still waiting");
+  // another owner isn't throttled by it
+  const m = await nonce("own");
+  const ok = await post("/api/admin/roles/pending", "own", { login: "plainadmin", action: "reject", nonce: m, password: "pw-ok" });
+  assert.equal(ok.status, 200, JSON.stringify(ok.j));
 });

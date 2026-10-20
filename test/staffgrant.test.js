@@ -196,16 +196,18 @@ test("House adjustment -: only what the House holds goes back to the Reserve (a 
 
 test("index.js: both routes are Admin only (Staff lost access); the cards say where the PAT comes from", () => {
   const idx = fs.readFileSync(path.join(repo, "index.js"), "utf8");
-  assert.match(idx, /require\("\.\/staffgrant"\)\.grant/);
-  assert.match(idx, /require\("\.\/staffgrant"\)\.houseAdjust/);
+  // PO-0b: index.js mounts the handlers that live in staffgrant.js (test/policy-owner-gates.test.js mounts and calls them)
+  assert.match(idx, /require\("\.\/staffgrant"\)\.grantRoute\(req, res\)/);
+  assert.match(idx, /require\("\.\/staffgrant"\)\.houseAdjustRoute\(req, res\)/);
   assert.doesNotMatch(idx, /postOrThrow\([^)]*"staff transfer"/, "no minting path");
-  const at = idx.indexOf('"/api/admin/transfer/:username"');
-  const grantRoute = idx.slice(at, at + 900);
+  const sg = fs.readFileSync(path.join(repo, "staffgrant.js"), "utf8");
+  const at = sg.indexOf("async function grantRoute(");
+  const grantRoute = sg.slice(at, at + 900);
   // 1.99ack: through the registry - econ.grant_pat (siteperms.js, locked: Admins)
   assert.match(grantRoute, /if \(SP\.can\(req\.user, "econ\.grant_pat"\)\) \{/);
   assert.doesNotMatch(grantRoute, /"Staff"/);
-  const j = idx.indexOf('app.post("/api/g/wheel/jackpot"');
-  const jp = idx.slice(j, j + 900);
+  const j = sg.indexOf("async function houseAdjustRoute(");
+  const jp = sg.slice(j, j + 900);
   assert.match(jp, /!SP\.can\(me, "econ\.house_adjust"\)/);
   assert.doesNotMatch(jp, /"Staff"/);
   const v = fs.readFileSync(path.join(repo, "views/admin/economy.ejs"), "utf8");

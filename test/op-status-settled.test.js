@@ -106,6 +106,40 @@ for (const [name, insert, plain, endpoint] of JOURNALS) {
   });
 }
 
+test("escrow games: a game rollback's \"already done?\" check never answers from an open transaction's row (review PO-0b)", async () => {
+  // Pepe retries a game rollback after a timeout while the first attempt's tx has written rollback:<game>:<key> but not
+  // committed. The retry must not take that row as a dup (and run the game locally) - it waits, sees nothing committed,
+  // and gets the real answer (here: the game isn't live on the site -> 409 E_NOT_LIVE, nothing handed back).
+  const GM = require(path.join(repo, "escrow", "games"));
+  const key = "gm-rollback-doomed-0001";
+  const mk = `rollback:wagers:${key}`;
+  let go, inserted;
+  const gate = new Promise((res) => { go = res; });
+  const ins = new Promise((res) => { inserted = res; });
+  const doomed = tx(async () => {
+    await runQuery("INSERT INTO escrow_moves (key, op, ts, amount, result) VALUES (?, 'rollback', ?, 0, ?)",
+                   [mk, Date.now(), JSON.stringify({ ok: true, game: "wagers", key, records: [], sum: 0, count: 0 })]);
+    inserted();
+    await gate;
+    throw new Error("COMMIT failed");
+  }).catch((e) => e.message);
+  await ins;
+  let r;
+  try {
+    assert.equal(((await L.status([mk]))[mk] || {}).ok, true, "the plain read sees the uncommitted row (one shared connection)");
+    r = GM.rollbackGame({ game: "wagers", key, actor: "pepe" }).then((x) => ({ ok: true, x }), (e) => ({ ok: false, e }));
+    await tick();
+  } finally {
+    go();
+  }
+  assert.equal(await doomed, "COMMIT failed");
+  const got = await r;
+  assert.equal(got.ok, false, "not a dup of a row that never committed: " + JSON.stringify(got.x));
+  assert.equal(got.e.code, "E_NOT_LIVE");
+  assert.equal(got.e.status, 409);
+  assert.equal((await L.status([mk]))[mk], null, "and nothing was recorded under the key");
+});
+
 test("the settled readers: a bad key is null; escrow's answers the holds asked about in the same read", async () => {
   assert.equal(await G.settledOpStatus("bad key!"), null);
   assert.equal(await C.settledOpStatus("x"), null);

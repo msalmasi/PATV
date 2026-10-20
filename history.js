@@ -55,6 +55,8 @@ const RULES = [
   [/^stash-deposit$/i, "admin", "🔐", () => `Moved PAT into a personal vault`],
   [/^stash-withdraw$/i, "admin", "🔐", () => `Took PAT out of a personal vault`],
   [/^stash-deposit-refund$/i, "admin", "↩️", () => `Vault deposit refunded`],
+  // PO-0b (a): a payout / refund for a personal vault its owner already closed is paid to the owner's wallet (stashes.closedCredit)
+  [/^stash-closed-credit$/i, "admin", "🔐", () => `Paid to your wallet - the personal vault it was for is closed`],
   [/^loan-received$/i, "casino", "💳", () => `Borrowed PAT`, "from"],
   [/^loan-repayment$/i, "casino", "💳", (a, m, r) => r.points < 0 ? `Repaid a loan` : `Loan repayment`, (r) => r.points < 0 ? "to" : "from"],
   [/^market-stake$/i, "casino", "🔮", () => `Bet on a prediction market`],

@@ -174,27 +174,33 @@ async function pendingList() {
  */
 async function confirmPending(me, login, action) {
   await init();
-  if (!(await ownerHolds(me, "roles.assign"))) throw new RoleError(403, "Only a Pepe owner confirms owner changes (your account needs a linked Camfrog login with the owner role).");
   const l = low(login);
-  const p = (await getQuery("SELECT login, role, ts, was FROM pepe_roles_pending WHERE login = ?", [l]))[0];
-  if (!p) throw new RoleError(404, "Nothing is waiting for that login.");
-  const audit = (what, detail) => require("./adminaudit").record({ userId: me.userId, username: me.username }, what, null, detail).catch(() => {});
-  if (action === "reject") {
+  // ONE transaction (the review of PO-0b): the role, the pending row and the site classes change together or not at all -
+  // a failure part-way never leaves an owner change applied with its row still waiting, or a class out of step with the
+  // role. The admin_audit row is written after the commit (adminaudit creates its table lazily: never inside a
+  // transaction that may roll back).
+  const out = await require("./dbUtils").tx(async () => {
+    if (!(await ownerHolds(me, "roles.assign"))) throw new RoleError(403, "Only a Pepe owner confirms owner changes (your account needs a linked Camfrog login with the owner role).");
+    const p = (await getQuery("SELECT login, role, ts, was FROM pepe_roles_pending WHERE login = ?", [l]))[0];
+    if (!p) throw new RoleError(404, "Nothing is waiting for that login.");
+    if (action === "reject") {
+      await runQuery("DELETE FROM pepe_roles_pending WHERE login = ?", [l]);
+      return { res: { login: l, rejected: true, role: await roleOf(l) }, audit: ["pepe_role_pending_reject", { login: l, asked: p.role, was: p.was }] };
+    }
+    if (action !== "confirm") throw new RoleError(400, "Confirm or reject.");
+    const m = await map();
+    const role = p.role || null;
+    const ts = Math.max(now(), Number(p.ts) + 1, ((m[l] && m[l].ts) || 0) + 1);
+    m[l] = { role, ts };
+    if (!Object.values(m).some((x) => x.role === "owner")) throw new RoleError(409, "Refusing - Pepe would have no owner.");
+    await write(l, role, ts, "web:" + String(me.username || "?"), "web");
     await runQuery("DELETE FROM pepe_roles_pending WHERE login = ?", [l]);
-    await audit("pepe_role_pending_reject", { login: l, asked: p.role, was: p.was });
-    return { login: l, rejected: true, role: await roleOf(l) };
-  }
-  if (action !== "confirm") throw new RoleError(400, "Confirm or reject.");
-  const m = await map();
-  const role = p.role || null;
-  const ts = Math.max(now(), Number(p.ts) + 1, ((m[l] && m[l].ts) || 0) + 1);
-  m[l] = { role, ts };
-  if (!Object.values(m).some((x) => x.role === "owner")) throw new RoleError(409, "Refusing - Pepe would have no owner.");
-  await write(l, role, ts, "web:" + String(me.username || "?"), "web");
-  await runQuery("DELETE FROM pepe_roles_pending WHERE login = ?", [l]);
-  await reconcile([l]);
-  await audit("pepe_role_pending_confirm", { login: l, from: p.was, to: role });
-  return { login: l, confirmed: true, role };
+    await reconcile([l]);
+    return { res: { login: l, confirmed: true, role }, audit: ["pepe_role_pending_confirm", { login: l, from: p.was, to: role }] };
+  });
+  await require("./adminaudit").record({ userId: me.userId, username: me.username }, out.audit[0], null, out.audit[1])
+    .catch((e) => console.error("[staffroles] audit:", e && e.message));
+  return out.res;
 }
 
 /** A change made on the website: actor (their linked login) sets target's role (null = none). Pepe's !role rules. */

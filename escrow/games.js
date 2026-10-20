@@ -261,7 +261,7 @@ async function rollbackGame({ game, key, actor }) {
   if (!e || !L.GAMES.includes(game)) throw new L.Refuse(404, "no such game", "E_NO_GAME");
   if (!IDEM_RE.test(String(key || ""))) throw new L.Refuse(400, "Bad request (key).", "E_BAD_KEY");
   const mk = `rollback:${game}:${key}`;
-  const prev = (await L.status([mk]))[mk];
+  const prev = (await L.settledStatus([mk])).results[mk];   // PO-0b (c): committed rows, in order (never an open tx's row)
   if (prev) return Object.assign({}, prev, { dup: true });
   if (!(await L.meta(`live:${game}`))) throw new L.Refuse(409, `${game} isn't live here`, "E_NOT_LIVE");
   const out = await L.tx(async () => {

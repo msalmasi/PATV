@@ -56,24 +56,29 @@ async function houseLeg(key, amount, why) {
 }
 /** Staking fix plan P0.2: a staking payout into a stash counts as the stash's "earned" (Pepe's _vault_leg does the same). */
 const isStakingPay = (why, amount) => amount > 0 && (why === "waterfall stakers" || /^staking correction/.test(String(why || "")) || /^apr-bug correction/.test(String(why || "")));
-async function stashLeg(key, stashId, amount, why) {
+/** PO-0b (a): a credit for a stash its owner already closed is paid to the owner's WALLET (stashes.closedCredit) - it leaves the
+ *  conservation base (pools + House + OPEN stashes) without being lost. `acc` (the run's tally) counts it, so the run's
+ *  `conserved` check reads before === after + to_wallet instead of flagging a legitimate payout as a leak. */
+async function stashLeg(key, stashId, amount, why, acc = null) {
   const r = await require("../stashes").botMove({ stashId, amount, key, kind: "vault", why: why || "waterfall",
                                                   earned: isStakingPay(why, amount) ? amount : 0 });
   if (!r || !r.ok) throw new Halt(`stash ${stashId} refused ${amount} (${(r && r.error) || "no answer"})`, "E_STASH");
+  if (acc && r.to_wallet && !r.dup) acc.to_wallet = (acc.to_wallet || 0) + Math.trunc(Number(r.amount) || amount);
   return r.dup ? "dup" : "ok";
 }
-async function side(key, where, amount, why) {
-  if (where.startsWith("stash:")) return stashLeg(key, where.slice(6), amount, why);
+async function side(key, where, amount, why, acc = null) {
+  if (where.startsWith("stash:")) return stashLeg(key, where.slice(6), amount, why, acc);
   if (where === "jackpot" || where === "house") return houseLeg(key, amount, why);
   return poolLeg(key, where, amount, why);
 }
-/** pepe_vaults._vault_transfer(tid, src, dst, amount): both legs, keyed "<tid>:out" / "<tid>:in". */
-async function transfer(tid, src, dst, amount, why) {
+/** pepe_vaults._vault_transfer(tid, src, dst, amount): both legs, keyed "<tid>:out" / "<tid>:in". `acc` (optional): the run's
+ *  tally - {to_wallet} grows by a stash credit that went to a closed stash's owner's wallet. */
+async function transfer(tid, src, dst, amount, why, acc = null) {
   amount = Math.trunc(amount);
   if (!amount) return "none";
   if (src === "burn") throw new Halt("nothing pays out of the burn reserve", "E_BURN_ONLY");
-  const out = await side(`${tid}:out`, src, -amount, why);
-  const inn = await side(`${tid}:in`, dst, amount, why);
+  const out = await side(`${tid}:out`, src, -amount, why, acc);
+  const inn = await side(`${tid}:in`, dst, amount, why, acc);
   return out === "dup" && inn === "dup" ? "dup" : "ok";
 }
 
@@ -154,6 +159,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
     const inputs = await G.epoch(nowS, eid);
     const plan = E.planEpoch(inputs);
     const before = await base();
+    const acc = { to_wallet: 0 };                                    // PO-0b (a): closed stashes' credits paid to wallets
     await bankSample("treasury", eid, inputs, nowS);
     const redeemed = {};
     for (const [v, x] of Object.entries(plan.vaults)) {
@@ -161,7 +167,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
     }
     const doneLegs = [];
     for (const leg of plan.legs) {
-      await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why);
+      await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why, acc);
       if (leg.tid.endsWith("-loan")) {
         await bookRepaid(eid, leg.vault, leg.amt);
         await C.effect(`loan_repay:${eid}-${leg.vault}`, { engine: "treasury", period: eid, kind: "loan_repay",
@@ -175,8 +181,10 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
       await C.effect(`week_share:${eid}`, { engine: "treasury", period: eid, kind: "week_share",
                                             data: { week: eid, share: plan.totals.incentives, release_per_day: plan.release_per_day } });
     }
-    const result = { boundary: plan.boundary, totals: plan.totals, release_per_day: plan.release_per_day, incentives_after: incAfter,
-                     pools_before: before, pools_after: after, conserved: before === after, shares_redeemed: redeemed, done_legs: doneLegs, actor, via };
+    const conserved = before === after + acc.to_wallet;
+    const wal = acc.to_wallet ? { to_wallet: acc.to_wallet } : {};
+    const result = Object.assign({ boundary: plan.boundary, totals: plan.totals, release_per_day: plan.release_per_day, incentives_after: incAfter,
+                     pools_before: before, pools_after: after, conserved, shares_redeemed: redeemed, done_legs: doneLegs, actor, via }, wal);
     // the owner's D2 monitoring on the record, as Pepe's own records carry it (pepe_treasury._tr_track = engines.trackOf): what a
     // 25% cap would have paid, how each vault was weighted, the cap the plan applied and whether it was D2's safeguard (fallback).
     // Monitoring only: like Pepe (try / except around _tr_track, "[TREASURY] epoch <eid>: track: ..."), an error here is logged
@@ -189,12 +197,12 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site" } 
     }
     const capIn = track ? null : (() => { try { return E.stakerCapOf(inputs); } catch (e) { return 0; } })();
     const rec = Object.assign(JSON.parse(JSON.stringify(plan)), { state: "done", actor, manual: false, done_legs: doneLegs, done: nowS, incentives_after: incAfter,
-                                          pools_before: before, pools_after: after, conserved: before === after, via: "site" }, track ? { track } : {});
+                                          pools_before: before, pools_after: after, conserved, via: "site" }, wal, track ? { track } : {});
     for (const [v, sh] of Object.entries(redeemed)) if (rec.vaults[v]) rec.vaults[v].shares_redeemed = sh;
     await C.effect(`epoch_record:${eid}`, { engine: "treasury", period: eid, kind: "epoch_record", data: { eid, rec } });
     await C.putRun("treasury", eid, { state: "done", boundary: plan.boundary, via, inputs, plan, result });
     await require("../escrow/ledger").emitInTx("policy", "epoch_done", null, { eid, totals: plan.totals, release_per_day: plan.release_per_day,
-                                                                              conserved: before === after });
+                                                                              conserved });
     return { ok: true, plan, result, track, capIn };
   });
   // staking fix plan P0.1 (Pepe's _tr_notify_stakers): one notice per paid stash, after the settlement committed
@@ -260,10 +268,11 @@ async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site" } 
     const inputs = await G.daily(nowS, did);
     const plan = E.planDaily(inputs);
     const before = await base();
+    const acc = { to_wallet: 0 };                                    // PO-0b (a): closed stashes' credits paid to wallets
     await bankSample("treasury", did, null, nowS);
     const doneLegs = [];
     for (const leg of plan.legs) {
-      await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why);
+      await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why, acc);
       if (leg.tid.endsWith("-loan") && leg.vault) {
         await bookRepaid(did, leg.vault, leg.amt);
         await C.effect(`loan_repay:${did}-${leg.vault}`, { engine: "treasury", period: did, kind: "loan_repay",
@@ -272,14 +281,16 @@ async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site" } 
       doneLegs.push(leg.tid);
     }
     const after = await base();
+    const conserved = before === after + acc.to_wallet;
+    const wal = acc.to_wallet ? { to_wallet: acc.to_wallet } : {};
     const rec = Object.assign({}, plan, { state: "done", actor, ts: nowS, done_legs: doneLegs, pools_before: before, pools_after: after,
-                                          conserved: before === after, via: "site" });
+                                          conserved, via: "site" }, wal);
     await C.effect(`day_record:${did}`, { engine: "treasury", period: did, kind: "day_record", data: { did, rec } });
-    const result = { totals: { overflow: plan.overflow, casino_overflow: plan.casino_overflow, floor_paid: plan.floor_paid, floor_short: plan.floor_short },
-                     pools_before: before, pools_after: after, conserved: before === after, done_legs: doneLegs, actor, via };
+    const result = Object.assign({ totals: { overflow: plan.overflow, casino_overflow: plan.casino_overflow, floor_paid: plan.floor_paid, floor_short: plan.floor_short },
+                     pools_before: before, pools_after: after, conserved, done_legs: doneLegs, actor, via }, wal);
     await C.putRun("treasury", did, { state: "done", boundary: E.dayStart(nowS), via, inputs, plan, result });
     await require("../escrow/ledger").emitInTx("policy", "release_done", null, { did, overflow: plan.overflow, casino_overflow: plan.casino_overflow,
-                                                                                floor_paid: plan.floor_paid, conserved: before === after });
+                                                                                floor_paid: plan.floor_paid, conserved });
     return { ok: true, plan, result };
   });
 }

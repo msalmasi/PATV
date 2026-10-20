@@ -3,8 +3,9 @@
 // hand-over, from the server's shell. READ-ONLY: it only SELECTs (no init(), no CREATE, no write) - safe on prod at any time.
 // Run in the site directory (it opens ./myapp.db). Modelled on tools/fed-backend.js.
 //   node tools/policy-backend.js [status]     # engines + modes, Pepe's policy push (age, bot_version, flags), recent runs,
-//                                             # the backends' live switches, owner changes waiting, website claims
-//   node tools/policy-backend.js preflight    # the site half of the hand-over preflight (plan §6.2): every check PASS / WARN /
+//                                             # the backends' live switches, owner changes waiting, website claims,
+//                                             # closed stashes with no account to pay + waterfall stash legs refused lately
+//   node tools/policy-backend.js preflight   # the site half of the hand-over preflight (plan §6.2): every check PASS / WARN /
 //                                             # FAIL, exit code 1 on any FAIL. Pepe's half (his outboxes, unsure lists, dead
 //                                             # letters, the last W record's notices / audit / digest) is `!econ policy status`.
 // Later slices add `pause|resume` (PO-1) and the config checks (PO-2: every SPEC key present).
@@ -35,6 +36,27 @@ function siteVersion() {
   return { sha: sha || null, version: m ? m[1] : null };
 }
 
+/** Does a stash owner key (a login, or "u:<userId>") have a PATV account to pay? stashes.holderInfo's rule, in SELECTs only:
+ *  an account key follows merges (account_merges, then account_merge_log - usernames.resolveUserId); a login needs exactly
+ *  one linked account. */
+async function ownerHasAccount(owner) {
+  const k = String(owner || "").trim();
+  const m = /^u:([A-Za-z0-9_-]{1,64})$/.exec(k);
+  if (!m) {
+    if (!k || !(await has("users"))) return false;
+    return (await getQuery("SELECT userId FROM users WHERE lower(trim(camfrogUsername)) = ? LIMIT 2", [k.toLowerCase()])).length === 1;
+  }
+  let cur = m[1];
+  for (let hop = 0; hop < 8; hop++) {
+    if ((await q("SELECT 1 FROM users WHERE userId = ?", [cur], "users")).length) return true;
+    let next = ((await q("SELECT new_id FROM account_merges WHERE old_id = ?", [cur], "account_merges"))[0] || {}).new_id || null;
+    if (!next) next = ((await q("SELECT to_id FROM account_merge_log WHERE from_id = ? ORDER BY at DESC LIMIT 1", [cur], "account_merge_log"))[0] || {}).to_id || null;
+    if (!next || next === cur) return false;
+    cur = next;
+  }
+  return false;
+}
+
 async function gather() {
   const out = { site: siteVersion(), staging: !!process.env.STAGING };
   out.engines = {};
@@ -63,6 +85,16 @@ async function gather() {
                           FROM reserve_claims WHERE settled = 0 AND COALESCE(queued, 0) = 0 GROUP BY kind ORDER BY kind`, [], "reserve_claims");
   out.claims = claims;
   out.turfInbox = (await q("SELECT COUNT(*) AS n FROM turf_inbox WHERE applied_at IS NULL", [], "turf_inbox"))[0] || { n: 0 };
+  // PO-0b (a) + its review: a credit that reaches a CLOSED stash is paid to its owner's wallet; with no PATV account to pay it
+  // is refused (409 E_STASH_CLOSED, recorded under its key). Until PO-0c, Pepe's _tr_finish resends a refused waterfall
+  // stash leg every tick (the week's record never finishes) - so: which closed stashes can't be paid, and which waterfall
+  // legs were refused lately
+  out.closedNoAccount = [];
+  for (const s of await q("SELECT id, name, owner FROM stashes WHERE closed IS NOT NULL ORDER BY id", [], "stashes")) {
+    if (!(await ownerHasAccount(s.owner))) out.closedNoAccount.push({ id: s.id, name: s.name, owner: s.owner });
+  }
+  out.refusedWf = await q("SELECT key, stash_id, ts, result FROM stash_moves WHERE kind = 'refused' AND key LIKE 'wf-%' AND ts >= ? ORDER BY ts",
+                          [Date.now() - 14 * 86400e3], "stash_moves");
   // the last weekly record Pepe pushed with his capital config (per-vault totals only)
   const ccfg = await meta("capital_meta", "cfg");
   const wf = ccfg && Array.isArray(ccfg.waterfall) ? ccfg.waterfall.slice().sort((a, b) => Number(a.boundary || 0) - Number(b.boundary || 0)) : [];
@@ -83,6 +115,8 @@ function printStatus(s) {
   for (const p of s.rolesPending) console.log(`pending  owner change ${p.login}: ${p.was || "none"} -> ${p.role || "none"} (${ago(p.updated)}) - confirm on /admin/roles#pending`);
   for (const c of s.claims) console.log(`claims   ${c.kind.padEnd(10)} ${c.n} unsettled, ${c.t} PAT, oldest ${c.oldest || "-"}`);
   if (s.lastW) console.log(`last W   ${s.lastW.epoch} state=${s.lastW.state || "?"} done=${s.lastW.done ? new Date(Number(s.lastW.done) * 1000).toISOString().slice(0, 16) : "-"}`);
+  console.log(`stashes  ${s.closedNoAccount.length} closed stash(es) with no account to pay${s.closedNoAccount.length ? ": " + s.closedNoAccount.map((x) => `${x.id} (${x.owner})`).join(", ") : ""}`);
+  for (const r of s.refusedWf) console.log(`refused  ${r.key} (stash ${r.stash_id || "?"}, ${ago(r.ts)}): ${(parse(r.result, {}) || {}).code || (parse(r.result, {}) || {}).error || "?"}`);
 }
 
 /** The site half of the plan §6.2 preflight. -> [{level: PASS|WARN|FAIL|INFO, check, detail}] */
@@ -104,6 +138,11 @@ function preflight(s) {
   const old = s.claims.filter((c) => c.oldest && Date.now() - Date.parse(String(c.oldest).replace(" ", "T") + (String(c.oldest).endsWith("Z") ? "" : "Z")) > 86400e3);
   add(old.length ? "WARN" : "PASS", "no website claim unsettled for a day", old.map((c) => `${c.kind}: ${c.n} (${c.t} PAT)`).join(", ") || "none");
   for (const k of ["pools", "stashes", "capital"]) add(s.backends[k].live ? "PASS" : "FAIL", `${k} live on the site`, s.backends[k].live ? "yes" : "no - the policy hand-over moves after the money");
+  // PO-0b's review: until PO-0c, a refused waterfall stash leg is resent by Pepe every tick (his week never finishes)
+  add(s.refusedWf.length ? "WARN" : "PASS", "no waterfall stash leg refused in 14 days",
+      s.refusedWf.map((r) => `${r.key} (${(parse(r.result, {}) || {}).code || "?"})`).join(", ") || "none");
+  add(s.closedNoAccount.length ? "WARN" : "PASS", "every closed stash has an account to pay",
+      s.closedNoAccount.length ? `${s.closedNoAccount.length}: ${s.closedNoAccount.slice(0, 12).map((x) => `${x.id} (${x.owner})`).join(", ")} - a credit to one is refused (409)` : "yes");
   for (const k of ["fed", "escrow", "gangs"]) add("INFO", `${k} live on the site`, String(s.backends[k].live));
   for (const e of ["treasury", "monetary", "burn"]) add("INFO", `engine ${e}`, s.engines[e].mode);
   add("INFO", "last W record", s.lastW ? `${s.lastW.epoch} ${s.lastW.state || "?"} (notified / audit / digest_sent: Pepe's half)` : "none pushed");

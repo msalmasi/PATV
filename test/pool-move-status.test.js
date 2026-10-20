@@ -144,7 +144,21 @@ test("in-site 'seen' means it MOVED: a recorded refusal never settles a website 
   assert.equal(await tx(() => P._seen("claim:c-ref-1")), null, "seen(): not a movement");
   assert.equal((await P.moveStatus("claim:c-ref-1")).ok, false, "moveStatus: the recorded refusal");
   const res0 = await bal("reserve");
-  await P.settleClaims();
+  // the guard is what refuses it (the review of PO-0b): one "holds a recorded refusal" line over two passes, never an error
+  // (without it the settle would hit the key's UNIQUE row and log an error on every pass)
+  const logs = [], errs = [];
+  const { log, error } = console;
+  console.log = (...a) => { logs.push(a.join(" ")); };
+  console.error = (...a) => { errs.push(a.join(" ")); };
+  try {
+    await P.settleClaims();
+    await P.settleClaims();
+  } finally {
+    console.log = log;
+    console.error = error;
+  }
+  assert.equal(logs.filter((l) => /c-ref-1/.test(l) && /holds a recorded refusal - left unsettled/.test(l)).length, 1, logs.join("\n"));
+  assert.deepEqual(errs.filter((l) => /c-ref-1/.test(l)), [], "no error about the claim");
   assert.equal((await getQuery("SELECT settled FROM reserve_claims WHERE claimId = 'c-ref-1'"))[0].settled, 0, "left unsettled (an owner decides)");
   assert.equal(await bal("reserve"), res0, "and nothing debited");
   // an ordinary claim next to it still settles

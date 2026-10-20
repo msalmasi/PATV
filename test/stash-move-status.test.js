@@ -140,6 +140,10 @@ test("(a) a credit for a stash its owner already closed goes to the owner's wall
   assert.equal(await sbal("5"), 0, "the closed stash holds nothing");
   const tx1 = await getQuery("SELECT type, points FROM transactions WHERE userId = 'u1' AND type = 'stash-closed-credit'");
   assert.deepEqual(tx1.map((t) => [t.type, t.points]), [["stash-closed-credit", 300]]);
+  // the member's history names it (not the fallback "Stash closed credit")
+  const h = require(path.join(repo, "history")).describe({ type: "stash-closed-credit", points: 300 });
+  assert.equal(h.icon, "🔐");
+  assert.match(h.text, /^Paid to your wallet - the personal vault it was for is closed$/);
   const dup = await move("5", 300, "wf-W2-bank-stk-5:in", { earned: 300, why: "waterfall stakers" });
   assert.equal(dup.body.dup, true);
   assert.equal(await wallet("u1"), w0 + 300, "once");
@@ -192,4 +196,29 @@ test("an in-site caller that throws on a refusal rolls the refusal back with it 
   await S.botMove({ stashId: "2", amount: 5, key: "topup-2-b", kind: "vault" });
   const ok = await S.botMove({ stashId: "2", amount: -(b0 + 1), key: "cap:q99-hold:out", kind: "vault" });
   assert.equal(ok.ok, true, "the next cut-off's same key lands");
+});
+
+test("(a) a site-run leg into a closed stash: the run's tally counts the wallet payout, so its conservation check still holds", async () => {
+  // policy/apply.base() sums pools + House + OPEN stashes; a credit paid to a closed stash's owner's wallet leaves that base
+  // without being lost - the run reads conserved as before === after + to_wallet (review of PO-0b)
+  const A = require(path.join(repo, "policy", "apply"));
+  const w0 = await wallet("u1");
+  const open0 = (await S.total()).amount;
+  const acc = { to_wallet: 0 };
+  assert.equal(await A.transfer("wf-W3-bank-stk-5", "stash:1", "stash:5", 40, "waterfall stakers", acc), "ok");
+  assert.equal(acc.to_wallet, 40, "the closed stash's credit went to the wallet - counted");
+  assert.equal(await wallet("u1"), w0 + 40);
+  const open1 = (await S.total()).amount;
+  assert.equal(open0, open1 + acc.to_wallet, "the base the run measures: before === after + to_wallet");
+  // a rerun of the same legs moves nothing and adds nothing to the tally (dup)
+  const acc2 = { to_wallet: 0 };
+  assert.equal(await A.transfer("wf-W3-bank-stk-5", "stash:1", "stash:5", 40, "waterfall stakers", acc2), "dup");
+  assert.equal(acc2.to_wallet, 0);
+  // an ordinary leg between open stashes: nothing to count
+  const acc3 = { to_wallet: 0 };
+  await A.transfer("wf-W3-bank-stk-2", "stash:1", "stash:2", 10, "waterfall stakers", acc3);
+  assert.equal(acc3.to_wallet, 0);
+  // and a no-account closed stash still refuses: the run halts (rolls back), never strands it
+  await assert.rejects(tx(() => A.transfer("wf-W3-bank-stk-6", "stash:1", "stash:6", 10, "waterfall stakers", { to_wallet: 0 })), /refused 10/);
+  assert.equal(await S.moveStatus("wf-W3-bank-stk-6:out"), null, "the out-leg rolled back with it");
 });

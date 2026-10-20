@@ -390,6 +390,11 @@ async function withdraw({ stashId, login, userId, amount, key, via = "web" }) {
  *   (a) the owner's 2026-10-20 rule: a CREDIT that reaches a stash its owner already closed goes to the owner's WALLET
  * (one ledger post in the same transaction, recorded under the key with to_wallet) - never stranded in a closed stash.
  * A closed stash whose owner has no PATV account refuses it (409, recorded) so Pepe's refund puts it back at its source.
+ * Until PO-0c Pepe has no refund for a refused WATERFALL stash leg (_tr_finish resends it every tick and his week never
+ * finishes) - the deploy gate: tools/policy-backend.js lists the closed stashes with no account to pay and the waterfall
+ * legs refused lately. In-site callers: a capital cut-off step fails alone (vaults.guarded: that queue item is left for the
+ * next cut-off, the rest commits); a site-run epoch never targets a closed stash (gather marks them, engines.stakers pays
+ * open ones only, and the run reads and moves in one transaction).
  *   (c) requireLive is checked INSIDE the transaction (after the dedup, which answers a recorded key whatever happens).
  */
 async function botMove({ stashId, amount = 0, stakedDelta = 0, earned = 0, key, kind = "vault", why = null }) {
