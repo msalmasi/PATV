@@ -1,0 +1,341 @@
+{
+ "post with a price, trim, done card, auto-close": [
+  {
+   "label": "decorated",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\" hidden></div>",
+   "reqs": []
+  },
+  {
+   "label": "the 🎙 line",
+   "dom": "<div class=\"line tx\" data-c=\"1\" data-k=\"tx\" data-name=\"carol\" data-text=\"hello there, this is the mic\" data-tx=\"tx-aaaaaaaaaaaaaaaa\"><span class=\"av\"></span><div class=\"body\"><b>carol</b>“hello there, this is the mic”<button class=\"mc-btn\" title=\"Clip the audio of this mic-up (free preview, you pay only to post)\" type=\"button\">🔊 Clip</button></div></div>",
+   "reqs": []
+  },
+  {
+   "label": "asking",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">🔊 Asking Pepe for that mic-up…</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}"
+   ]
+  },
+  {
+   "label": "asked",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">🔊 Asking Pepe for that mic-up…</div></div>",
+   "reqs": []
+  },
+  {
+   "label": "still pending",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">🔊 Asking Pepe for that mic-up…</div></div>",
+   "reqs": [
+    "GET /api/rooms/room-x/micclip/m1"
+   ]
+  },
+  {
+   "label": "ready",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" type=\"button\">Post to the pad — 500 PAT</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.</div></div>",
+   "reqs": [
+    "GET /api/rooms/room-x/micclip/m1"
+   ]
+  },
+  {
+   "label": "trimmed",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"3\"></input><output>0:03.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"4\"></input><output>0:04.0</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" type=\"button\">Post to the pad — 500 PAT</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.</div></div>",
+   "reqs": []
+  },
+  {
+   "label": "posting",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"3\"></input><output>0:03.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"4\"></input><output>0:04.0</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" disabled type=\"button\">Post to the pad — 500 PAT</button><button class=\"cc-btn\" disabled type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Posting… Pepe is cutting your clip.</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip/m1/save {\"start\":3000,\"end\":4000}"
+   ]
+  },
+  {
+   "label": "save pending",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"3\"></input><output>0:03.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"4\"></input><output>0:04.0</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" disabled type=\"button\">Post to the pad — 500 PAT</button><button class=\"cc-btn\" disabled type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Posting… Pepe is cutting your clip.</div></div>",
+   "reqs": [
+    "GET /api/rooms/room-x/micclip/m1/save"
+   ]
+  },
+  {
+   "label": "done",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-done mc-panel\"><div aria-live=\"polite\" class=\"mc-done-box\" role=\"status\"><div class=\"mc-done-h\">✅ Clip posted to the pad</div><div class=\"cc-row\"><a class=\"cc-btn primary\" href=\"/p/room-x/posts/abc12345\">View it →</a><button class=\"cc-btn\" type=\"button\">Close</button></div><div class=\"mc-done-bar\"><i .style=\"width:100%\"></i></div></div></div>",
+   "reqs": [
+    "GET /api/rooms/room-x/micclip/m1/save"
+   ]
+  },
+  {
+   "label": "done, half way",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-done mc-panel\"><div aria-live=\"polite\" class=\"mc-done-box\" role=\"status\"><div class=\"mc-done-h\">✅ Clip posted to the pad</div><div class=\"cc-row\"><a class=\"cc-btn primary\" href=\"/p/room-x/posts/abc12345\">View it →</a><button class=\"cc-btn\" type=\"button\">Close</button></div><div class=\"mc-done-bar\"><i .style=\"width:50%\"></i></div></div></div>",
+   "reqs": []
+  },
+  {
+   "label": "closed",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\" hidden></div>",
+   "reqs": []
+  }
+ ],
+ "free, then Discard": [
+  {
+   "label": "ready free, no transcript",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" type=\"button\">Post to the pad (free)</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m1"
+   ]
+  },
+  {
+   "label": "discarded",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\" hidden></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip/m1/discard {}"
+   ]
+  }
+ ],
+ "can't post here": [
+  {
+   "label": "ready, can't post",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" disabled type=\"button\">Can't post here</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">The room's !clip rules don't let you post clips here.</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m1"
+   ]
+  }
+ ],
+ "post refused, then Pepe fails the save, then retry": [
+  {
+   "label": "save refused",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" type=\"button\">Post to the pad — 1,500 PAT</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">You need 1,500 PAT.</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m1",
+    "POST /api/rooms/room-x/micclip/m1/save {\"start\":0,\"end\":6400}"
+   ]
+  },
+  {
+   "label": "save failed",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" type=\"button\">Post to the pad — 1,500 PAT</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">Pepe couldn't cut it.</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip/m1/save {\"start\":0,\"end\":6400}",
+    "GET /api/rooms/room-x/micclip/m1/save"
+   ]
+  }
+ ],
+ "Pepe is slow to cut it": [
+  {
+   "label": "taking a while",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" disabled type=\"button\">Post to the pad — 10 PAT</button><button class=\"cc-btn\" disabled type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Pepe is taking a while — check the pad's feed in a minute.</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m1",
+    "POST /api/rooms/room-x/micclip/m1/save {\"start\":0,\"end\":6400}",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save",
+    "GET /api/rooms/room-x/micclip/m1/save"
+   ]
+  },
+  {
+   "label": "still",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" disabled type=\"button\">Post to the pad — 10 PAT</button><button class=\"cc-btn\" disabled type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Pepe is taking a while — check the pad's feed in a minute.</div></div>",
+   "reqs": []
+  }
+ ],
+ "refused request, Close": [
+  {
+   "label": "refused",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">They're private.</div><button class=\"cc-btn\" type=\"button\">Close</button></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}"
+   ]
+  },
+  {
+   "label": "closed",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\" hidden></div>",
+   "reqs": []
+  }
+ ],
+ "two open previews: the list, discard both, asks again": [
+  {
+   "label": "open list",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">Post or discard the clips you have first.</div><div class=\"mc-open\"><div class=\"cc-row\"><span class=\"cc-hint\">🔊 unposted preview of bob · 4s · frees itself in 2 min</span><button class=\"cc-btn\" type=\"button\">Discard</button></div><div class=\"cc-row\"><span class=\"cc-hint\">⏳ still waiting on Pepe for a mic-up · frees itself in a minute</span><button class=\"cc-btn\" type=\"button\">Discard</button></div></div><button class=\"cc-btn\" type=\"button\">Close</button></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}"
+   ]
+  },
+  {
+   "label": "one discarded",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">Post or discard the clips you have first.</div><div class=\"mc-open\"><div class=\"cc-row\"><span class=\"cc-hint\">⏳ still waiting on Pepe for a mic-up · frees itself in a minute</span><button class=\"cc-btn\" type=\"button\">Discard</button></div></div><button class=\"cc-btn\" type=\"button\">Close</button></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip/o1/discard {}"
+   ]
+  },
+  {
+   "label": "asked again",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">🔊 Asking Pepe for that mic-up…</div></div>",
+   "reqs": [
+    "POST /api/rooms/other%20room/micclip/o2/discard {}",
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}"
+   ]
+  }
+ ],
+ "Pepe never answers": [
+  {
+   "label": "gave up",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">Pepe didn't answer — try again in a minute.</div><button class=\"cc-btn\" type=\"button\">Close</button></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "GET /api/rooms/room-x/micclip/m3",
+    "POST /api/rooms/room-x/micclip/m3/discard {}"
+   ]
+  }
+ ],
+ "Pepe couldn't clip / the poll fails": [
+  {
+   "label": "failed",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">Pepe couldn't clip that.</div><button class=\"cc-btn\" type=\"button\">Close</button></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m1"
+   ]
+  },
+  {
+   "label": "poll error",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"bad cc-msg\" role=\"status\">HTTP 500</div><button class=\"cc-btn\" type=\"button\">Close</button></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m2"
+   ]
+  }
+ ],
+ "a second 🔊 Clip replaces an open preview (and discards it)": [
+  {
+   "label": "first ready",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" type=\"button\">Post to the pad — 500 PAT</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-aaaaaaaaaaaaaaaa\"}",
+    "GET /api/rooms/room-x/micclip/m1"
+   ]
+  },
+  {
+   "label": "second asking",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">🔊 Asking Pepe for that mic-up…</div></div>",
+   "reqs": [
+    "POST /api/rooms/room-x/micclip/m1/discard {}",
+    "POST /api/rooms/room-x/micclip {\"tx\":\"tx-bbbbbbbbbbbbbbbb\"}"
+   ]
+  },
+  {
+   "label": "second ready",
+   "dom": "<div aria-label=\"Mic clip\" class=\"cc-panel mc-panel\"><div class=\"cc-row\"><b>🔊 Mic clip</b><span class=\"cc-hint\">a free preview, only for you · 6s</span></div><audio controls preload=\"auto\" src=\"/api/rooms/room-x/micclip/m1/audio\"></audio><div class=\"mc-text\">🎙 “hello there, this is the mic”</div><div class=\"mc-trim\"><label>Start</label><input aria-label=\"Start (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"0\"></input><output>0:00.0</output><label>End</label><input aria-label=\"End (seconds)\" max=\"6.4\" min=\"0\" step=\"0.1\" type=\"range\" .value=\"6.4\"></input><output>0:06.4</output></div><div class=\"cc-row\"><button class=\"cc-btn primary\" type=\"button\">Post to the pad — 500 PAT</button><button class=\"cc-btn\" type=\"button\">Discard</button></div><div aria-live=\"polite\" class=\"cc-msg\" role=\"status\">Trim it, then post it with the transcript as its caption. Whoever is heard in it can remove it.</div></div>",
+   "reqs": [
+    "GET /api/rooms/room-x/micclip/m2"
+   ]
+  }
+ ]
+}

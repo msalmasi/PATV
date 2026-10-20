@@ -11,6 +11,11 @@
 // Making one
 //   web   the Live tab's "✂️ Clip chat" (public/js/chat-clip.js): pick lines (tap, shift-click, long-press), preview,
 //         optional title, "also on my profile" -> POST /api/rooms/:slug/quote {cs: [feed cursor ids], title, profile}.
+//         clipmodal: the preview is the server's (the same POST with {preview: true}): only for someone who can see the
+//         Live tab (GET /live's gates: members-tier pad access, the 💎 bridge perk), then every check Post has - terms() (the
+//         lines as they'd be stored, the opt-outs, the price, the balance) and the pad's own post rules (postTerms(): who can
+//         post, bans, the post limits, a required flair, the approval queue) - plus where it goes and who can read it. Nothing
+//         made or charged, not counted as a quote; naming an opt-out costs the quote limit's budget (revealLimited()).
 //         The ids are looked up in the bridge feed here (never text from the browser); at most MAX_LINES lines spanning
 //         at most SPAN_MAX feed items. Credited to the signed-in account; the pad's posting rules apply (feedstore).
 //   chat  !quote last 5 · !quote @user 3 · !quote from <words> to <words> (pepe_quote.py) -> POST /api/bridge/quote
@@ -63,6 +68,29 @@ function limited(key, now = NOW()) {
   hits.set(key, q);
   if (hits.size > 5000) hits.delete(hits.keys().next().value);
   return null;
+}
+// clipmodal: the clip card's previews (they follow the picks while it's open) - their own light limit, never a quote slot
+const PEEK_MAX = 60, PEEK_WINDOW = 60 * 1000;
+const peeks = new Map();
+function peekLimited(key, now = NOW()) {
+  const q = (peeks.get(key) || []).filter((t) => now - t < PEEK_WINDOW);
+  if (q.length >= PEEK_MAX) return "Slow down — too many previews. Try again in a minute.";
+  q.push(now);
+  peeks.set(key, q);
+  if (peeks.size > 5000) peeks.delete(peeks.keys().next().value);
+  return null;
+}
+// clipmodal: a preview says who opted out of quotes (!likeness clips off) - Post did too, at most BURST times per WINDOW. The
+// preview keeps that budget: at most BURST different people's opt-outs per account per WINDOW (one already shown is free).
+const reveals = new Map();
+function revealLimited(key, login, now = NOW()) {
+  const m = reveals.get(key) || new Map();
+  for (const [k, t] of m) if (now - t >= WINDOW) m.delete(k);
+  if (!m.has(login) && m.size >= BURST) return true;
+  if (!m.has(login)) m.set(login, now);
+  reveals.set(key, m);
+  if (reveals.size > 5000) reveals.delete(reveals.keys().next().value);
+  return false;
 }
 
 // ── picking lines out of the bridge feed ──
@@ -133,7 +161,8 @@ function pick(feed, spec, before = null) {
 // ── building the stored lines (names as the bridge shows them; private people as "someone") ──
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 function redactor(names) {
-  const list = [...new Set(names.map((n) => String(n || "").trim()).filter((n) => n.length >= 3))].sort((a, b) => b.length - a.length).slice(0, 200);
+  // clipmodal: 2-letter names too (whole words only - see the pattern); a 1-letter one would blank every "a" / "I"
+  const list = [...new Set(names.map((n) => String(n || "").trim()).filter((n) => n.length >= 2))].sort((a, b) => b.length - a.length).slice(0, 200);
   if (!list.length) return (s) => s;
   const rx = new RegExp("(^|[^\\w])@?(?:" + list.map(esc).join("|") + ")(?![\\w])", "gi");
   return (s) => String(s).replace(rx, (m, pre) => pre + "someone");
@@ -157,6 +186,8 @@ async function buildLines(items) {
     return { k: it.k === "tx" ? "tx" : "msg", login: hidden ? null : login, name: hidden ? "someone" : String(u.display || it.u.display || login).slice(0, 40),
              text: cpCut(String(it.text), LINE_MAX), ts: Number(it.ts) || 0, ...(it.u.self ? { pepe: true } : {}) };
   });
+  // clipmodal: a private speaker's PATV username is blanked inside the lines too (their Camfrog names + display are above)
+  lines.forEach((l, i) => { const pu = !l.login && l.name === "someone" ? (view(items[i].u) || {}).patv : null; if (pu && pu.username) hiddenNames.push(pu.username); });
   const red = redactor(hiddenNames);
   for (const l of lines) l.text = red(l.text);
   return lines;
@@ -181,13 +212,10 @@ async function rowOf(postId) {
 function parse(s, d) { try { const v = JSON.parse(s); return v == null ? d : v; } catch (e) { return d; } }
 
 /**
- * Make the quote post. -> {post: {id, url}, lines: n, profile: crosspost result | null}
- * authorId: the account credited; roomId: the pad (registry id = the Camfrog room id); deps.viaPepe: Pepe's own account
+ * What a quote of these feed items would be (create() and the web preview share it, so the preview shows exactly what Post
+ * makes): {lines (stored form), speakers (logins), price, refuse: the Refuse Post would throw | null, why: that, for a preview}
  */
-async function create({ authorId, roomId, items, title = "", profile = false, source = "web", viaPepe = false }) {
-  await init();
-  const S = require("./feedstore");
-  if (!items || !items.length) throw new Refuse(400, "Pick the lines to quote.");
+async function terms({ authorId, items, viaPepe = false }) {
   const lines = await buildLines(items);
   // 1.99qw (likeness royalties): a quote costs quote_price PAT (250; Pepe's own / site admins free); 40% of it goes to the
   // people quoted (held 24 h, likeness.js), and anyone quoted who opted out of clips (!likeness clips off) refuses it
@@ -197,14 +225,82 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
   for (const lg of speakers) {
     const su = await L.userByLogin(lg);
     if (su && su.userId !== authorId && !(await L.allows(su.userId, "clips"))) {
-      throw new Refuse(403, `${lines.find((l) => l.login === lg).name} has opted out of being quoted - nothing was charged.`);
+      const name = lines.find((l) => l.login === lg).name;
+      return { lines, speakers, price: 0, refuse: new Refuse(403, `${name} has opted out of being quoted - nothing was charged.`), why: `${name} has opted out of being quoted.`, optOut: lg };
     }
   }
   const author = viaPepe ? null : (await getQuery("SELECT userId, class, points_balance FROM users WHERE userId = ?", [authorId]))[0];
   const price = !author || SP.can(author, "quotes.free") ? 0 : Math.max(0, Number(L.config().quote_price) || 0);
   if (price > 0 && Number(author.points_balance || 0) < price) {
-    throw new Refuse(402, `A quote costs ${price.toLocaleString("en-US")} PAT - you have ${Number(author.points_balance || 0).toLocaleString("en-US")}.`);
+    const msg = `A quote costs ${price.toLocaleString("en-US")} PAT - you have ${Number(author.points_balance || 0).toLocaleString("en-US")}.`;
+    return { lines, speakers, price, refuse: new Refuse(402, msg), why: msg };
   }
+  return { lines, speakers, price, refuse: null, why: null };
+}
+
+/**
+ * clipmodal: the ✂️ Clip chat card's preview - the lines as the quote card will show them (names, "someone" for anyone private,
+ * never a login), how many people, where it goes and who can see it (where: {pad, who, pending}), the price (save: {cost}) or
+ * why it can't be posted (save: null, why: an opt-out - at most BURST people named per WINDOW -, the balance, the pad's post
+ * rules). Stores and charges nothing.
+ */
+async function preview({ authorId, roomId, roomName = "", items, viewer }) {
+  await init();
+  if (!items || !items.length) throw new Refuse(400, "Pick the lines to quote.");
+  const T = await terms({ authorId, items });
+  const me = await linkedLogin(viewer);
+  const P = await postTerms(authorId, roomId, roomName);
+  let why = T.refuse ? T.why : P.why;
+  if (T.refuse && T.optOut && revealLimited("web|" + authorId, T.optOut)) why = `Slow down — ${BURST} quotes per ${Math.round(WINDOW / 60000)} min.`;
+  return {
+    lines: T.lines.map((l) => ({ name: l.name, text: l.text, mic: l.k === "tx", pepe: !!l.pepe, me: !!me && l.login === me })),
+    speakers: new Set(T.lines.map((l) => l.login || "someone:" + l.name)).size,
+    save: why ? null : { cost: T.price }, why: why || null,
+    where: { pad: P.pad, who: P.who, pending: !!P.pending },
+  };
+}
+
+/**
+ * clipmodal: the pad's own post rules for a preview - what feedstore.create would refuse before anything is stored, in its
+ * order (a required flair - a quote carries none -, the account-wide refusals and room bans, the post limits, who can post
+ * here), read-only: the short post gap and the content filter (it logs what it blocks) are left to Post itself. Plus where it
+ * goes: {why, pad (its title), who: all | approved | adult, pending (the pad's approval queue holds it)}.
+ */
+async function postTerms(authorId, roomId, roomName = "") {
+  const S = require("./feedstore");
+  const rooms = require("./rooms");
+  const PA = require("./padaccess");
+  const AG = require("./adultgate");
+  await S.init();
+  const R = rooms.getCached(roomId);
+  const out = { why: null, pad: String((R && R.title) || roomName || roomId), who: PA.isApproved(roomId) ? "approved" : AG.applies(roomId) ? "adult" : "all", pending: false };
+  const u = await S.account(authorId);
+  if (!u) return { ...out, why: "Sign in to post." };
+  try { await require("./padflair").checkPostFlair(u, roomId, null); } catch (e) { if (e && e.refuse) return { ...out, why: e.message }; throw e; }
+  const no = await S.postRefusal(u, [roomId]);
+  if (no) return { ...out, why: no.message };
+  if (!SP.can(u, "feed.limits_exempt") && !S.isPepe(u)) {
+    const b = await S.postBudget(u);
+    if (b.left <= 0) return { ...out, why: b.why };
+  }
+  const here = await S.roomPostRefusal(u, roomId);
+  if (here) return { ...out, why: here.message };
+  out.pending = !!(await S.roomSettings(roomId)).approval && !(await rooms.canManage(u, roomId));
+  return out;
+}
+
+/**
+ * Make the quote post. -> {post: {id, url}, lines: n, profile: crosspost result | null}
+ * authorId: the account credited; roomId: the pad (registry id = the Camfrog room id); deps.viaPepe: Pepe's own account
+ */
+async function create({ authorId, roomId, items, title = "", profile = false, source = "web", viaPepe = false }) {
+  await init();
+  const S = require("./feedstore");
+  if (!items || !items.length) throw new Refuse(400, "Pick the lines to quote.");
+  const T = await terms({ authorId, items, viaPepe });
+  if (T.refuse) throw T.refuse;
+  const { lines, speakers, price } = T;
+  const L = require("./likeness");
   // adultgate site: liveRoom = the room these lines came from - the 18+ gate follows the post (feedstore.liveRoomOf), from its
   // first notice on (the feed_quotes row below is written after the post)
   const made = await S.create(authorId, { title: S.cleanLine(title, TITLE_MAX), body: bodyOf(lines), community: roomId, announce: [] },
@@ -237,7 +333,9 @@ async function create({ authorId, roomId, items, title = "", profile = false, so
     try { prof = await S.crosspostMany(authorId, made.id, { pads: ["profile"] }); } catch (e) { prof = { error: e.message }; }
   }
   console.log(`[quotes] ${made.id} in ${roomId} by ${authorId} (${source}): ${lines.length} lines, ${loginsOf(lines).length} speakers`);
-  return { post: { id: made.id, url: made.url }, lines: lines.length, profile: prof, price: charged ? charged.price : 0, cut: charged ? charged.cut : 0 };
+  // clipmodal: the pad's approval queue holds it (the clip card then says so instead of "posted")
+  const pending = !!(await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND pending != 0 LIMIT 1", [made.id]))[0];
+  return { post: { id: made.id, url: made.url }, lines: lines.length, profile: prof, price: charged ? charged.price : 0, cut: charged ? charged.cut : 0, pending };
 }
 
 /** Blank `logins` out of a quote: their lines become "someone", their names inside the other lines too. -> changed? */
@@ -329,6 +427,15 @@ async function quoteOfDay(roomId, viewer) {
   return null;
 }
 
+/** clipmodal: the Live tab's own gates for a preview (bridge.js GET /live) -> answered (true) or not. */
+async function previewRefused(req, res, R) {
+  const PA = require("./padaccess");
+  await PA.init();
+  if (!PA.full(req.user, R.id)) { res.status(403).json({ ok: false, error: "This pad is for approved members." }); return true; }
+  if (!require("./bridge").bridgeOk(R.id)) { res.status(403).json({ ok: false, error: "This pad's live chat room comes with 💎 Prime Time Plus.", locked: "bridge" }); return true; }
+  return false;
+}
+
 function register(app, { addUser, isBotToken, bySlug }) {
   const json = express.json({ limit: "16kb" });
   const fail = (res, e) => {
@@ -352,9 +459,18 @@ function register(app, { addUser, isBotToken, bySlug }) {
       if (!R) return res.status(404).json({ ok: false, error: "That Camfrog room isn't on PATV right now." });
       // adultgate site: the 18+ gate on the room this resolved (before its lines are looked at - not even which cursors exist)
       if (require("./adultgate").refuseJson(req, res, R.id)) return;
+      // clipmodal: a preview answers only someone who can see the Live tab - GET /live's gates (members-tier pad access, the 💎
+      // bridge perk) - before any line is looked at (Post's own rules stay as they are)
+      if (req.body && req.body.preview === true && (await previewRefused(req, res, R))) return;
       const b = req.body || {};
       const got = pick(R.feed, { cs: Array.isArray(b.cs) ? b.cs.slice(0, MAX_LINES + 1) : [] });
       if (got.error) return res.status(400).json({ ok: false, error: got.error });
+      // clipmodal: {preview: true} = the clip card's preview, behind every check Post has; nothing is made, no quote slot is used
+      if (b.preview === true) {
+        const pl = peekLimited("web|" + req.user.userId);
+        if (pl) return res.status(429).json({ ok: false, error: pl });
+        return res.json({ ok: true, preview: true, ...(await preview({ authorId: req.user.userId, roomId: R.id, roomName: R.name, items: got.items, viewer: req.user })) });
+      }
       const lim = limited("web|" + req.user.userId);
       if (lim) return res.status(429).json({ ok: false, error: lim });
       const r = await create({ authorId: req.user.userId, roomId: R.id, items: got.items, title: b.title, profile: b.profile === true, source: "web" });
