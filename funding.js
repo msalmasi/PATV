@@ -570,11 +570,16 @@ function cleanIncentives(x) {
 // economy settings (policy/config.monetaryFor: the flash switches, the House hard floor, the donation terms, the staff-grant cap,
 // the band's floor / ceiling; the Fed loan room, the budget week and the Fed's balance stay Pepe's - derived state, PO-4)
 let lastMonetary;
+let syncedMonetary;        // review of PO-2: the block of Pepe's last LIVE sync (never the restored copy) - pushedMonetary()
 let mirrored = { at: 0, c: null };
 function applyMonetary(m, { mirror = false } = {}) {
   lastMonetary = m;
-  let v = m;
-  try { v = require("./policy/config").monetaryFor(m); } catch (e) { v = m; }
+  if (mirror) syncedMonetary = m;
+  let v;
+  // review of PO-2: monetaryFor never hands back Pepe's block once the site owns the settings (it keeps the site's last one);
+  // on an unexpected error the block in use stands - never Pepe's in its place
+  try { v = require("./policy/config").monetaryFor(m, state.monetary); }
+  catch (e) { console.error("[funding] monetary block:", e.message); v = state.monetary; }
   state.monetary = v;
   if (mirror) {
     // the store mirrors it (the lowest-priority source of those keys): on a change, else every 5 min
@@ -590,6 +595,9 @@ function reapplyPolicy() {
   applyMonetary(lastMonetary !== undefined ? lastMonetary : state.monetary);
   persist();
 }
+/** Review of PO-2: Pepe's block as his last live sync carried it (cleanMonetary; null = his layers off; undefined = no sync since
+ *  this process started) - the hand-over compares an import / the values handed back with what he sends. */
+const pushedMonetary = () => syncedMonetary;
 
 // 1.99jw: Pepe's monetary policy from the sync. Anything that isn't an object -> null; missing / bad fields -> defaults.
 function cleanMonetary(x) {
@@ -681,4 +689,4 @@ module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, s
                    // 1.99ns
                    reserveNow,
                    // PO-2
-                   reapplyPolicy, applyMonetary };
+                   reapplyPolicy, applyMonetary, pushedMonetary };

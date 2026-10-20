@@ -578,7 +578,11 @@ async function loop() {
     await pass(C.nowS());
   } catch (e) {
     console.error("[policy] pass:", e.message);
-  } finally { running = false; }
+  } finally {
+    running = false;
+    // review of PO-2: the pass's dual read (policy.source - the epoch's and the daily runs' inputs) is written at once
+    await require("./config").flushDual().catch(() => {});
+  }
 }
 
 // ── shadow: the boundary snapshot and Pepe's report ──

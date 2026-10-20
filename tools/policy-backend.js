@@ -6,7 +6,7 @@
 //                                             # runs, missed periods, the shadow comparisons (clean / boundary), the backends'
 //                                             # live switches, owner changes waiting, website claims, closed stashes with no
 //                                             # account to pay + waterfall stash legs refused lately
-//   node tools/policy-backend.js preflight   # the site half of the hand-over preflight (plan §6.2): every check PASS / WARN /
+//   node tools/policy-backend.js preflight [--since=YYYY-MM-DD]   # the site half of the hand-over preflight (plan §6.2): every check PASS / WARN /
 //                                             # FAIL, exit code 1 on any FAIL. Pepe's half (his outboxes, unsure lists, dead
 //                                             # letters, the last W record's notices / audit / digest) is `!econ policy status`.
 //   node tools/policy-backend.js --actor=<who> pause <treasury|monetary|burn|all> --note "why"
@@ -23,8 +23,13 @@
 // PO-1 review: it never opens a database that isn't there - with no ./myapp.db (the wrong directory) every command stops
 // (exit 2) instead of creating an empty one, and pause / resume also refuse a database without the site's users and
 // policy_engines tables: the kill switch must never report PAUSED while prod keeps running.
-// PO-2: the config store - who owns each feature (pepe / cutting / site, paused), the rev, every SPEC key present (FAIL if not),
-// the mirror's daily diff counts (policy_meta cfg_mirror_days) and the dual read's last 7 days (policy_cfg_dualcheck / _dualread).
+// PO-2: the config store - who owns each feature (pepe / cutting / site, paused, being handed back), the rev, every SPEC key present
+// (FAIL if not), the mirror's daily diff counts (policy_meta cfg_mirror_days) and the dual read's last 7 days (policy_cfg_dualcheck /
+// _dualread).
+// Review of PO-2: the H1 evidence gates FAIL without evidence - `preflight [--since=YYYY-MM-DD]` checks every complete UTC day from
+// --since (default: the last 4) to yesterday: the mirror diff CHECKED and empty that day (gate 1), and the dual read RECORDED for
+// every daily reader that day - capital.cutoff (capital live), policy.source (an engine on), funding.monetary (Pepe pushing) - with
+// no difference (gate 2). A difference today fails too. For H1: --since=2026-10-30.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -75,7 +80,19 @@ async function ownerHasAccount(owner) {
   return false;
 }
 
-async function gather() {
+const DAY_MS = 86400e3;
+const utcDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+/** The complete UTC days the evidence gates read: --since (YYYY-MM-DD) .. yesterday; by default the last 4. */
+function evidenceDays(since, now = Date.now()) {
+  const today = utcDay(now);
+  let from = since && /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : utcDay(now - 4 * DAY_MS);
+  if (from > today) from = today;
+  const days = [];
+  for (let t = Date.parse(from + "T00:00:00Z"); utcDay(t) < today && days.length < 60; t += DAY_MS) days.push(utcDay(t));
+  return { from, today, days };
+}
+
+async function gather(opts = {}) {
   const out = { site: siteVersion(), staging: !!process.env.STAGING };
   out.engines = {};
   for (const e of ["treasury", "monetary", "burn"]) out.engines[e] = { mode: "off", armed_at: null, by: null, updated: null, paused: 0 };
@@ -129,7 +146,9 @@ async function gather() {
   const SPEC = require(path.join(__dirname, "..", "policy", "cfgspec"));
   out.features = {};
   for (const f of ["cfg", "budget", "staking_ops", "loans_desk"]) out.features[f] = { owner: "pepe", paused: 0 };
-  for (const r of await q("SELECT feature, owner, paused, paused_by, paused_at, note, since, handover_key FROM policy_ownership", [], "policy_ownership")) out.features[r.feature] = r;
+  const ocols = (await has("policy_ownership")) ? new Set((await getQuery("PRAGMA table_info(policy_ownership)")).map((c) => c.name)) : new Set();
+  const osel = ocols.has("return_sha") ? ", return_sha, return_at" : "";
+  for (const r of await q(`SELECT feature, owner, paused, paused_by, paused_at, note, since, handover_key${osel} FROM policy_ownership`, [], "policy_ownership")) out.features[r.feature] = r;
   const rev = (await q("SELECT rev, sha, updated FROM policy_cfg_rev WHERE id = 1", [], "policy_cfg_rev"))[0] || null;
   const have = new Set((await q("SELECT key FROM policy_cfg", [], "policy_cfg")).map((r) => r.key));
   out.cfg = { rev: rev ? rev.rev : null, sha: rev ? rev.sha : null, updated: rev ? rev.updated : null, keys: have.size, store: await has("policy_cfg"),
@@ -139,6 +158,11 @@ async function gather() {
   const since = new Date(Date.now() - 6 * 86400e3).toISOString().slice(0, 10);
   out.dualChecks = await q("SELECT day, consumer, checks, diffs FROM policy_cfg_dualcheck WHERE day >= ? ORDER BY day, consumer", [since], "policy_cfg_dualcheck");
   out.dualDiffs = await q("SELECT day, consumer, key, push, site, n FROM policy_cfg_dualread WHERE day >= ? ORDER BY last_ts DESC LIMIT 20", [since], "policy_cfg_dualread");
+  // review of PO-2: the evidence window (every day in it must carry its evidence)
+  const ev = evidenceDays(opts.since);
+  out.evidence = { from: ev.from, today: ev.today, days: ev.days,
+                   mirror: Object.fromEntries([...ev.days, ev.today].map((d) => [d, days[d] || null])),
+                   dual: await q("SELECT day, consumer, checks, diffs FROM policy_cfg_dualcheck WHERE day >= ? ORDER BY day, consumer", [ev.from], "policy_cfg_dualcheck") };
   return out;
 }
 
@@ -167,6 +191,7 @@ function printStatus(s) {
   for (const r of s.refusedWf) console.log(`refused  ${r.key} (stash ${r.stash_id || "?"}, ${ago(r.ts)}): ${(parse(r.result, {}) || {}).code || (parse(r.result, {}) || {}).error || "?"}`);
   for (const [f, r] of Object.entries(s.features)) {
     console.log(`feature  ${f.padEnd(11)} ${String(r.owner).padEnd(7)}${r.since ? " since " + ago(r.since) : ""}${r.handover_key ? " (hand-over " + String(r.handover_key).slice(0, 12) + ")" : ""}` +
+                (r.return_sha ? `  BEING HANDED BACK (sha ${String(r.return_sha).slice(0, 12)}, ${ago(r.return_at)}) - edits refused until Pepe confirms` : "") +
                 (Number(r.paused) ? `  PAUSED by ${r.paused_by || "?"} ${ago(r.paused_at)}${r.note ? " (" + r.note + ")" : ""}` : ""));
   }
   if (!s.cfg.store) console.log("config   the policy config store isn't there yet (a site before PO-2)");
@@ -218,10 +243,43 @@ function preflight(s) {
   const pausedF = Object.entries(s.features).filter(([, r]) => Number(r.paused));
   add(pausedF.length ? "FAIL" : "PASS", "no feature paused", pausedF.map(([f, r]) => `${f} by ${r.paused_by || "?"}`).join(", ") || "none");
   add("INFO", "feature owners", Object.entries(s.features).map(([f, r]) => `${f}=${r.owner}`).join(" "));
-  const dirty = s.mirrorDays.slice(-4).filter((d) => !d.max || Object.values(d.max).some((n) => Number(n) > 0));
-  add(dirty.length ? "WARN" : "PASS", "mirror diff empty (4 days)", dirty.map((d) => `${d.day}: ${d.max ? JSON.stringify(d.max) : "not checked"}`).join("; ") || `${s.mirrorDays.slice(-4).length} day(s) clean`);
-  const dd = s.dualChecks.filter((c) => Number(c.diffs) > 0);
-  add(dd.length ? "WARN" : "PASS", "dual read clean (7 days)", dd.length ? dd.map((c) => `${c.day} ${c.consumer}: ${c.diffs}`).join(", ") : `${s.dualChecks.reduce((t, c) => t + Number(c.checks), 0)} comparison(s), no difference`);
+  const returning = Object.entries(s.features).filter(([, r]) => r.return_sha);
+  add(returning.length ? "FAIL" : "PASS", "no feature being handed back", returning.map(([f]) => f).join(", ") || "none");
+  for (const r of evidenceChecks(s)) add(r.level, r.check, r.detail);
+  return out;
+}
+/** Review of PO-2: the H1 evidence gates (plan section 4) - no evidence is a FAIL, never a PASS. -> [{level, check, detail}] */
+function evidenceChecks(s) {
+  const out = [];
+  const add = (level, check, detail) => out.push({ level, check, detail });
+  const ev = s.evidence;
+  const span = ev.days.length ? `${ev.days[0]}..${ev.days[ev.days.length - 1]}` : `(no complete day since ${ev.from})`;
+  const dirtyCounts = (x) => !!(x && x.max && Object.values(x.max).some((n) => Number(n) > 0));
+  // gate 1: the mirror diff - checked AND empty every day (and not dirty today)
+  const unchecked = ev.days.filter((d) => !ev.mirror[d] || !ev.mirror[d].max);
+  const dirty = [...ev.days, ev.today].filter((d) => dirtyCounts(ev.mirror[d]));
+  add(!ev.days.length || unchecked.length || dirty.length ? "FAIL" : "PASS", `mirror diff empty every day ${span}`,
+      !ev.days.length ? "no complete day in the window - no evidence"
+        : [unchecked.length ? `not checked: ${unchecked.join(", ")}` : "", dirty.map((d) => `${d}: ${JSON.stringify(ev.mirror[d].max)}`).join("; ")].filter(Boolean).join("; ")
+          || `${ev.days.length} day(s) checked, all empty`);
+  // gate 2: the dual read - every daily reader compared every day, and no difference
+  const need = [];
+  if (s.backends.capital.live) need.push("capital.cutoff");
+  if (Object.values(s.engines).some((e) => e.mode && e.mode !== "off")) need.push("policy.source");
+  if (s.push) need.push("funding.monetary");
+  const by = {};
+  for (const c of ev.dual) by[c.day + "|" + c.consumer] = c;
+  const missing = [];
+  for (const d of ev.days) for (const c of need) if (!(by[d + "|" + c] && Number(by[d + "|" + c].checks) > 0)) missing.push(`${d} ${c}`);
+  add(!ev.days.length || missing.length ? "FAIL" : "PASS", `dual read recorded every day ${span} (${need.join(", ") || "no daily reader expected"})`,
+      !ev.days.length ? "no complete day in the window - no evidence"
+        : missing.length ? `no comparison recorded: ${missing.slice(0, 20).join(", ")}${missing.length > 20 ? ` (+${missing.length - 20})` : ""}`
+        : `${ev.dual.filter((c) => ev.days.includes(c.day)).reduce((t, c) => t + Number(c.checks), 0)} comparison(s)`);
+  const diffs = ev.dual.filter((c) => Number(c.diffs) > 0);
+  add(diffs.length ? "FAIL" : "PASS", `dual read clean ${ev.from}..${ev.today} (today included)`,
+      diffs.length ? diffs.map((c) => `${c.day} ${c.consumer}: ${c.diffs}`).join(", ") + " - see policy_cfg_dualread / the card" : "no difference");
+  const other = ev.dual.filter((c) => !need.includes(c.consumer));
+  if (other.length) add("INFO", "dual read, other readers", other.map((c) => `${c.day} ${c.consumer}: ${c.checks} check(s)`).join(", "));
   return out;
 }
 
@@ -288,6 +346,7 @@ async function main() {
     if (!argv[i].startsWith("--")) words.push(argv[i]);
   }
   const [cmd = "status", target] = words;
+  const sinceArg = (argv.find((a) => a.startsWith("--since=")) || "").slice(8) || null;
   const db = siteDb(argv);
   if (cmd === "pause" || cmd === "resume") {
     await requireSiteTables(db);
@@ -297,7 +356,7 @@ async function main() {
     process.exit(0);
   }
   if (!["status", "preflight"].includes(cmd)) throw new Error('usage: node tools/policy-backend.js [status|preflight]   (read-only) | --actor=<who> pause|resume <engine|all|feature|features> --note "why"');
-  const s = await gather();
+  const s = await gather({ since: sinceArg });
   if (process.argv.includes("--json")) { console.log(JSON.stringify(cmd === "preflight" ? preflight(s) : s, null, 2)); process.exit(0); }
   if (cmd === "status") { printStatus(s); process.exit(0); }
   const res = preflight(s);
@@ -308,4 +367,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error(e.message); process.exit(1); });
-module.exports = { gather, preflight };
+module.exports = { gather, preflight, evidenceChecks, evidenceDays };

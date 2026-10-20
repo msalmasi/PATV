@@ -1,6 +1,7 @@
 // PO-2 (economy policy -> site plan, T2): once the SITE owns the economy settings, a Fed op ignores Pepe's per-op econ_cfg and
-// must carry cfg_rev (the rev he previewed on) - a missing or stale one is HTTP 409 with the current values, checked inside the
-// op's own transaction, nothing moves. While Pepe owns the config nothing changes (his per-op econ_cfg still wins - the dual
+// must carry cfg_rev AND cfg_sha (the rev and sha he previewed on - review of PO-2: a rev is never trusted alone) - a missing or
+// stale one is HTTP 409 with the current values, checked inside the op's own transaction (an edit queued between the check and the
+// op lands after the op), nothing moves. While Pepe owns the config nothing changes (his per-op econ_cfg still wins - the dual
 // read logs it). The plan's test: an op carrying mintcap_total=-1 while the site's cap is 100M is refused or ignored - never
 // obeyed. Repayments (which read no config) need no rev.
 //   NODE_PATH=G:/PATV/node_modules node --test test/fed-cfg-rev.test.js
@@ -67,7 +68,8 @@ test.before(async () => {
                                          totals: { sum: Object.values(POOLS).reduce((t, v) => t + v, 0), count: Object.keys(POOLS).length, per_pool: POOLS } })).ok, true);
   await CC.init();
   await CC.putDoc("vaults", { v: { house: { total: 10 * M, holders: { protocol: 10 * M }, basis: 8 * M }, bank: { total: 3 * M, holders: { protocol: 3 * M }, basis: 3 * M },
-                                   mm: { total: 1 * M, holders: { protocol: 1 * M }, basis: 1 * M } }, auto: { total: 0, holders: {} }, queue: {}, epochs: [], seq: 0, inited: 1, insured: [] });
+                                   mm: { total: 1 * M, holders: { protocol: 1 * M }, basis: 1 * M } }, auto: { total: 0, holders: {} }, queue: {}, epochs: [], seq: 0, inited: 1, insured: [],
+                                   next_epoch: Date.UTC(2026, 9, 21, 4) / 1000 });       // today's cut-off ran (the run window doesn't wait for it)
   await CC.setMeta("live", true);
   CC.forgetLive();
   const app = express();
@@ -113,14 +115,21 @@ test("site-owned: an op with no cfg_rev or a stale one is 409 with the current v
   assert.equal(r.body.rev, snap.rev);
   assert.equal(r.body.sha, snap.sha);
   assert.equal(r.body.cfg.mintcap_total, 100 * M, "the current values come back");
-  r = await op("mint", { amount: 1 * M, policy: "admin", reason: "admin mint with an old rev", key: "admin-oldrev" }, { cfg_rev: snap.rev - 1 });
+  r = await op("mint", { amount: 1 * M, policy: "admin", reason: "admin mint with an old rev", key: "admin-oldrev" }, { cfg_rev: snap.rev - 1, cfg_sha: snap.sha });
   assert.equal(r.status, 409);
   assert.match(r.body.error, /preview again/);
+  // review of PO-2: the right rev without its sha, or with another sha, is refused too
+  r = await op("mint", { amount: 1 * M, policy: "admin", reason: "admin mint with no sha", key: "admin-nosha" }, { cfg_rev: snap.rev });
+  assert.equal(r.status, 409);
+  assert.match(r.body.error, /send cfg_sha/);
+  r = await op("mint", { amount: 1 * M, policy: "admin", reason: "admin mint with another sha", key: "admin-othersha" }, { cfg_rev: snap.rev, cfg_sha: "0".repeat(64) });
+  assert.equal(r.status, 409);
+  assert.match(r.body.error, /sha differs/);
   assert.equal(await mints(), m0);
   assert.equal(await P.balance("reserve"), r0, "nothing moved");
   // a refused op isn't recorded under its key: the same key with the right rev passes the gate (and meets the site's cap -
   // 5M + the 120M mirror-mode mint already passed 100M this month)
-  r = await op("mint", { amount: 1 * M, policy: "admin", reason: "admin mint with an old rev", key: "admin-oldrev" }, { cfg_rev: snap.rev });
+  r = await op("mint", { amount: 1 * M, policy: "admin", reason: "admin mint with an old rev", key: "admin-oldrev" }, { cfg_rev: snap.rev, cfg_sha: snap.sha });
   assert.equal(r.status, 200);
   assert.equal(r.body.code, "E_CAP", JSON.stringify(r.body));
   assert.equal(await mints(), m0);
@@ -131,7 +140,7 @@ test("site-owned: an override with mintcap_total=-1 is ignored - the site's 100M
   const m0 = await mints();
   // this month: 5M (Pepe's) + 120M (the mirror-mode mint) + 1M already over 100M -> any capped mint is refused by the site's cap
   const r = await op("mint", { amount: 2 * M, policy: "admin", reason: "admin mint past the cap", key: "admin-pastcap" },
-                     { cfg_rev: snap.rev, econ_cfg: { mintcap_total: -1 } });
+                     { cfg_rev: snap.rev, cfg_sha: snap.sha, econ_cfg: { mintcap_total: -1 } });
   assert.equal(r.status, 200);
   assert.equal(r.body.ok, false, JSON.stringify(r.body));
   assert.equal(r.body.cap, true, "the monthly cap refused it");
@@ -145,10 +154,42 @@ test("an edit between Pepe's preview and the op: the op's own transaction sees t
   const e = await PC.edit({ changes: { mintcap_total: "unlimited" }, via: "chat", actor: "owner_cf_absent", baseRev: snap.rev }).catch((x) => x);
   // (no owner role is checked here - edit() is the store; the route checks the role) - the store takes it
   assert.equal(e.ok, true, JSON.stringify(e));
-  let r = await op("mint", { amount: 2 * M, policy: "admin", reason: "admin mint on the old preview", key: "admin-race" }, { cfg_rev: snap.rev });
+  let r = await op("mint", { amount: 2 * M, policy: "admin", reason: "admin mint on the old preview", key: "admin-race" }, { cfg_rev: snap.rev, cfg_sha: snap.sha });
   assert.equal(r.status, 409);
-  r = await op("mint", { amount: 2 * M, policy: "admin", reason: "admin mint on the old preview", key: "admin-race" }, { cfg_rev: e.rev });
+  r = await op("mint", { amount: 2 * M, policy: "admin", reason: "admin mint on the old preview", key: "admin-race" }, { cfg_rev: e.rev, cfg_sha: e.sha });
   assert.equal(r.body.ok, true, JSON.stringify(r.body));
+});
+
+test("an edit that arrives WHILE the op checks its rev lands after the op: the check and the op are one transaction", async () => {
+  // the op's rev check reads the store; at that very moment an owner's edit arrives (outside the op's transaction): it must queue
+  // behind the op - the op runs whole on the rev Pepe previewed, the edit applies after. Were the check outside the op's
+  // transaction, the edit would land between them and the op would run on settings nobody previewed.
+  const { AsyncResource } = require("async_hooks");
+  const outside = AsyncResource.bind((fn) => fn());           // runs fn outside any transaction (this test's root context)
+  const snap = await PC.snapshot({ fresh: true });
+  assert.equal(snap.cfg.mintcap_total, -1, "unlimited since the test above");
+  const m0 = await mints();
+  const realSnap = PC.snapshot;
+  let edit = null;
+  PC.snapshot = async (o) => {
+    const s = await realSnap(o);
+    if (o && o.fresh && !edit) {
+      // the cap goes to 1M: a 2M mint is refused under the new settings
+      edit = outside(() => PC.edit({ changes: { mintcap_total: "1m" }, via: "chat", actor: "owner_cf", baseRev: s.rev }));
+    }
+    return s;
+  };
+  let r;
+  try {
+    r = await op("mint", { amount: 2 * M, policy: "admin", reason: "admin mint racing an edit", key: "admin-race2" }, { cfg_rev: snap.rev, cfg_sha: snap.sha });
+  } finally { PC.snapshot = realSnap; }
+  const e = await edit;
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.ok, true, "the op ran on the rev it was previewed on: " + JSON.stringify(r.body));
+  assert.equal(await mints(), m0 + 1);
+  assert.equal(e.ok, true);
+  assert.equal(e.rev, snap.rev + 1, "the edit applied after the op");
+  assert.equal((await PC.snapshot({ fresh: true })).cfg.mintcap_total, 1 * M);
 });
 
 test("repayments read no config: they need no rev", async () => {

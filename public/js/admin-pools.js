@@ -77,12 +77,18 @@
     ev.preventDefault();
     var flow = $('routeFlow').value, raw = $('routeShares').value.trim();
     if (!flow) { msg('Pick a flow.', true); return; }
-    if (!raw) { ask('Put ' + flow + ' back to its default route.', { op: 'routes', flow: flow, reset: true }); return; }
+    // review of PO-2: once the site owns the economy settings a routing change carries the rev this card loaded (a stale one is
+    // refused - reload) and a note
+    var site = !!(view && view.cfg && view.cfg.owner === 'site');
+    var note = ($('routeNote') && $('routeNote').value || '').trim();
+    if (site && note.length < 3) { msg('Say why in the note - every change is logged with it.', true); return; }
+    var extra = site ? { base_rev: view.cfg.rev, note: note } : {};
+    if (!raw) { ask('Put ' + flow + ' back to its default route.', Object.assign({ op: 'routes', flow: flow, reset: true }, extra)); return; }
     var shares = [], bad = false;
     raw.split(',').forEach(function (part) { var m = /^\s*([a-z_:]+)\s+([0-9]+(?:\.[0-9]{1,2})?)\s*%?\s*$/i.exec(part); if (!m) bad = true; else shares.push([m[1], Number(m[2])]); });
     var tot = shares.reduce(function (t, s) { return t + s[1]; }, 0);
     if (bad || !shares.length || tot > 100) { msg('Shares look like "reserve 90, room_owner 10" (at most 100% in all).', true); return; }
-    ask('Route ' + flow + ': ' + shareText(shares) + (tot < 100 ? ' (the other ' + (100 - tot) + '% goes to the Federal Reserve)' : '') + '. Pepe checks it against the routing rules.', { op: 'routes', flow: flow, shares: shares });
+    ask('Route ' + flow + ': ' + shareText(shares) + (tot < 100 ? ' (the other ' + (100 - tot) + '% goes to the Federal Reserve)' : '') + '. Pepe checks it against the routing rules.', Object.assign({ op: 'routes', flow: flow, shares: shares }, extra));
   });
   $('econForm').addEventListener('submit', function (ev) {
     ev.preventDefault();
@@ -98,7 +104,7 @@
     msg('Sending to Pepe…');
     api('/api/admin/econ/edit', body).then(function (j) {
       // PO-2: once the site owns the economy settings a routing change is applied here at once (no Pepe round trip)
-      if (j.request && j.request.applied) { msg(j.request.msg || 'Saved.'); load(); return; }
+      if (j.request && j.request.applied) { msg(j.request.msg || 'Saved.'); if ($('routeNote')) $('routeNote').value = ''; load(); return; }
       var id = j.request.id, tries = 0;
       (function poll() {
         api('/api/admin/econ/edit/' + id).then(function (a) {

@@ -66,6 +66,8 @@
     kv(k, _t('js.adm.pcfg.rev', 'Revision'), String(v.rev) + (v.sha ? ' · ' + v.sha.slice(0, 12) : ''));
     kv(k, _t('js.adm.pcfg.pepe_rev', 'Rev Pepe has applied'), v.pepe_rev ? String(v.pepe_rev.rev) + ' · ' + when(v.pepe_rev.at) : '—');
     if (own.paused) kv(k, _t('js.adm.pcfg.paused', 'Paused'), _t('js.adm.pcfg.paused_by', 'by {by} at {when}', { by: own.paused_by || '?', when: when(own.paused_at) }) + (own.note ? ' (' + own.note + ')' : ''));
+    // review of PO-2: a rollback's first step - the site keeps the settings until Pepe confirms he wrote them back
+    if (own.return_sha) kv(k, _t('js.adm.pcfg.returning', 'Being handed back'), _t('js.adm.pcfg.returning_since', 'to Pepe since {when} (sha {sha}) - edits refused until he confirms', { when: when(own.return_at), sha: String(own.return_sha).slice(0, 12) }));
     var d = v.diff || { counts: {} };
     kv(k, _t('js.adm.pcfg.mirror_diff', 'Mirror diff'), d.empty ? _t('js.adm.pcfg.diff_empty', 'empty') : Object.keys(d.counts).filter(function (x) { return d.counts[x]; }).map(function (x) { return x + ' ' + d.counts[x]; }).join(' · '));
     var w = v.window || {};

@@ -25,9 +25,16 @@ const C = require("./core");
 const TZ_DEFAULT = "America/New_York";
 const EPOCH_HOUR_DEFAULT = 4;
 
-/** Who owns the policy config: "pepe" (his push; the site mirrors it) | "cutting" (frozen for the hand-over) | "site". */
+/** Who owns the policy config: "pepe" (his push; the site mirrors it) | "cutting" (frozen for the hand-over) | "site". Review of
+ *  PO-2: when the store can't be read the owner as last read stands only if it was Pepe's (or frozen) - otherwise this throws
+ *  (never a guessed "pepe" that would hand the readers his push while the site owns the config). */
 async function owner() {
-  try { return await require("./config").owner("cfg"); } catch (e) { return "pepe"; }
+  const PC = require("./config");
+  try { return await PC.owner("cfg"); } catch (e) {
+    const h = PC.ownerHint();
+    if (h === "pepe" || h === "cutting") return h;
+    throw e;
+  }
 }
 
 /** Pepe's last policy push as stored (or {}). Only this module (and core.js, which stores it) touches it: core's reader is
@@ -41,15 +48,19 @@ const intOr = (v, d) => { const n = Math.trunc(Number(v)); return Number.isFinit
 const objOr = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 const listOr = (v) => (Array.isArray(v) ? v : []);
 
-/** Everything at once (one read of the push, then the config store's view of it). */
-async function read() {
+/** Pepe's push as every reader saw it before the store (the `from: "push"` snapshot) - read() overlays the store's view on it;
+ *  the hand-over's checks compare an import with it (review of PO-2). */
+async function pushView() {
   const p = await push();
   const ec = p.econ_cfg && typeof p.econ_cfg === "object" && Object.keys(p.econ_cfg).length ? p.econ_cfg : null;
-  const s = { from: "push", owner: "pepe", at: p.at === undefined ? null : p.at, econ_cfg: ec, consts: objOr(p.consts), flags: objOr(p.flags),
-              burn_cfg: objOr(p.burn_cfg), burn_inflight: Math.max(0, intOr(p.burn_inflight, 0)), skip: listOr(p.skip), tz: p.tz || TZ_DEFAULT,
-              journal: listOr(p.journal), days_done: listOr(p.days_done), mo_days_done: listOr(p.mo_days_done),
-              local_check: Array.isArray(p.local_check) ? p.local_check : null, bot_version: p.bot_version || "" };
-  return require("./config").sourceView(s);
+  return { from: "push", owner: "pepe", at: p.at === undefined ? null : p.at, econ_cfg: ec, consts: objOr(p.consts), flags: objOr(p.flags),
+           burn_cfg: objOr(p.burn_cfg), burn_inflight: Math.max(0, intOr(p.burn_inflight, 0)), skip: listOr(p.skip), tz: p.tz || TZ_DEFAULT,
+           journal: listOr(p.journal), days_done: listOr(p.days_done), mo_days_done: listOr(p.mo_days_done),
+           local_check: Array.isArray(p.local_check) ? p.local_check : null, bot_version: p.bot_version || "" };
+}
+/** Everything at once (one read of the push, then the config store's view of it). */
+async function read() {
+  return require("./config").sourceView(await pushView());
 }
 
 /** The engines' config (the shape policy/gather.config() always had): {push: the snapshot, cfg, consts, flags}. Pepe's
@@ -81,4 +92,4 @@ async function econCfg() { return (await read()).econ_cfg; }
 async function burn() { const s = await read(); return { cfg: s.burn_cfg, inflight: s.burn_inflight }; }
 async function age() { return C.cfgAge(); }
 
-module.exports = { owner, read, rawPush, config, hour, hourOf, flags, econCfg, burn, age, TZ_DEFAULT, EPOCH_HOUR_DEFAULT };
+module.exports = { owner, read, pushView, rawPush, config, hour, hourOf, flags, econCfg, burn, age, TZ_DEFAULT, EPOCH_HOUR_DEFAULT };

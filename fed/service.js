@@ -159,7 +159,9 @@ async function cfgNow(override) {
   const g = await G().config();
   const PC = require("../policy/config");
   let ov = override && typeof override === "object" && !Array.isArray(override) ? override : {};
-  if (Object.keys(ov).length && (await PC.owner("cfg")) === "site") {
+  // review of PO-2: the owner through policy/source.js - read (an unreadable store while the site owns the config throws: the op
+  // fails, never Pepe's override), or Pepe's as last read while the push is the source
+  if (Object.keys(ov).length && (await require("../policy/source").owner()) === "site") {
     if (Date.now() - overrideNoted > 600000) { overrideNoted = Date.now(); console.log("[fed] ignored Pepe's per-op econ_cfg - the site owns the economy settings (cfg_rev decides)"); }
     ov = {};
   }
@@ -171,14 +173,20 @@ async function cfgNow(override) {
  *  another rev (or none) is refused - 409 with the current values, and Pepe previews again. In the op's own transaction (an edit
  *  can't land between the check and the op). Mirror mode: nothing to check. -> null | the refusal answer */
 const CFG_OPS = new Set(["mint", "grant", "loan_open"]);     // the ops that read the config (cfgNow); repayments don't
+// Review of PO-2: the op also carries the config's sha (cfg_sha, from the same pull): rev AND sha must be the current ones - a rev
+// alone is never trusted (the pull reads committed rows only, so a rolled-back rev is never handed out; the sha closes it anyway).
 async function cfgRevRefusal(b) {
   const PC = require("../policy/config");
   const snap = await PC.snapshot({ fresh: true });
   if (snap.own.cfg.owner !== "site") return null;
   const have = b.cfg_rev === undefined || b.cfg_rev === null || b.cfg_rev === "" ? null : Number(b.cfg_rev);
-  if (have === snap.rev) return null;
-  return { ok: false, code: "E_CFG_REV", status: 409, rev: snap.rev, sha: snap.sha, cfg: require("../policy/cfgspec").econView(snap.cfg),
-           error: have === null ? `the site owns the economy settings - send cfg_rev (now ${snap.rev})` : `the economy settings changed (rev ${have} -> ${snap.rev}) - preview again` };
+  const haveSha = typeof b.cfg_sha === "string" && b.cfg_sha ? b.cfg_sha : null;
+  if (have === snap.rev && haveSha === snap.sha) return null;
+  const why = have === null ? `the site owns the economy settings - send cfg_rev and cfg_sha (now rev ${snap.rev})`
+    : have !== snap.rev ? `the economy settings changed (rev ${have} -> ${snap.rev}) - preview again`
+    : haveSha === null ? `send cfg_sha with cfg_rev (rev ${snap.rev}) - preview again`
+    : `the economy settings at rev ${snap.rev} aren't the ones previewed (sha differs) - preview again`;
+  return { ok: false, code: "E_CFG_REV", status: 409, rev: snap.rev, sha: snap.sha, cfg: require("../policy/cfgspec").econView(snap.cfg), error: why };
 }
 async function mintList() {
   const rows = await getQuery("SELECT rec FROM fed_records WHERE kind = 'mint' AND ts >= ?", [nowS() - 40 * 86400]);

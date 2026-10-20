@@ -322,6 +322,43 @@ keys, the economy sink rates, `burn_cfg`, the flags, PAT Routing, the system con
 - **Pause a feature:** `node tools/policy-backend.js --actor=<you> pause cfg --note "why"` (or `resume`; `features` = all four)
   or the card's "Pause a feature" (owner + step-up). One transaction, `admin_audit` `policy.feature_pause` / `_resume`, an ops
   alert. A paused cfg refuses every edit (423); the readers keep reading.
-- `node tools/policy-backend.js preflight` FAILs on a missing key or a paused feature and WARNs on a mirror diff (4 days) or a
-  dual-read difference (7 days).
+- `node tools/policy-backend.js preflight` FAILs on a missing key, a paused feature, a feature being handed back and on the H1
+  evidence gates (14.1).
 - The engines card's anchor is now `/admin/economy#engines`; `#policy` is ⚙️ Policy settings.
+
+### 14.1 Review of PO-2 (before H1)
+
+- **Committed reads only.** Outside a transaction the store is read in a transaction of its own on the chain (the 1.99adl
+  `settledMoveStatus` rule): no reader - the cut-off, the engines, funding's monetary block, Pepe's pull - ever sees an open
+  edit's / mirror's / import's rows, nor a rev its rollback takes back. Pepe's pull answers `unchanged` only when BOTH the rev
+  and the sha he holds are current (`GET /api/policy/bot/cfg?have=<rev>&sha=<sha>`); a Fed `mint` / `grant` / `loan_open` must
+  carry `cfg_rev` AND `cfg_sha` (409 `E_CFG_REV` otherwise - not recorded under the op key: Pepe re-previews and retries the
+  same key; it is never a terminal refusal).
+- **No auto-fallback.** While the site owns the config (or its owner isn't known yet - just after a start, or while it is being
+  changed) an unreadable store fails every reader with `E_CFG_UNREADABLE` (503; the cut-off and the engines defer; an ops alert
+  "Economy settings unreadable") - never Pepe's push, never the pre-H1 `pat_routes` table, never a guessed "pepe". Funding's
+  monetary block keeps the site's last block (tagged `cfg_rev`) when a key is missing or the owner isn't known. While Pepe owns
+  the config his push stays the readers' source exactly as before.
+- **The run window** also waits for the site's own 04:00 capital cut-off whenever the vaults run on the site (the cut-off reads
+  the staking keys), with the engines' flags off too; an OVERDUE cut-off freezes the engine-input keys at any hour
+  (`capital:cutoff <day>` in the 423's waiting list).
+- **H1 verify / cutover.** `verify.ok` is true only when the store equals the import AND the import equals what every reader
+  uses: the values at the freeze (`changed_keys`; the freeze keeps them in `policy_meta.cfg_freeze`) and Pepe's pushes as each
+  consumer reads them (`readers`: policy.source, capital, funding.monetary, econstore's routing table). The cutover re-checks
+  the readers and is refused (409 `differs`, the keys listed) unless `force` names EXACTLY the keys that differ - the owner's
+  explicit go, audited (`forced`). Normal path: Pepe pushes, then exports - nothing differs.
+- **Rollback is two steps.** `rollback {feature, actor}` keeps the config on the site (its readers keep its values; every edit is
+  423 `returning`; the card shows "Being handed back") and answers its values + rev + sha + log. Pepe writes them back and pushes;
+  then `rollback {feature, actor, confirm_sha}` - refused (409 `push_behind`) until his policy push (and his capital push, if he
+  sends one) arrived after step 1 and every reader's push value equals the store (or `force` names exactly the keys) - flips to
+  Pepe, writes the routes handed back into econstore's table, re-applies funding's block. `rollback {..., cancel: true}` ends
+  step 1 with the site still the owner.
+- **Every hand-over step** names a Pepe owner and is a chat command: `via` telegram is 403, anything but chat 400; Pepe's
+  `cfg/set` is always `via chat` (web / cli refused). The import's money guard also sums the balances (users, pools, stashes,
+  escrow holds): a balance UPDATE writes no row. Each step's `admin_audit` row is written in the step's own transaction.
+- **PAT Routing from the pools card** (site-owned) sends the rev the card loaded and a note (both required; a stale rev is 409).
+- **Evidence.** The dual read's buffer is flushed right after the cut-off, after each scheduler pass and when the site starts to
+  stop; a failed flush keeps its rows for the next one. `node tools/policy-backend.js preflight --since=2026-10-30` FAILs when a
+  day in the window has no checked mirror record or a non-empty one, when a daily reader (capital.cutoff while capital is live,
+  policy.source while an engine is on, funding.monetary while Pepe pushes) has no comparison that day, or on any dual-read
+  difference (today included) - no evidence is never a PASS. Only the mirror's own change-log rows are pruned (20,000 kept).

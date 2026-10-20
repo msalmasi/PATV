@@ -137,7 +137,8 @@ async function putSettings(b) {
   // PO-2 (D-19): PAT Routing is mirrored into the policy config store; once the site owns the config (H1) it is the writer and
   // Pepe's pushed table is ignored (logged) - econstore's pat_routes is then a view of policy_cfg (getSettings)
   const PC = require("./policy/config");
-  const siteOwned = b.pat_routes && typeof b.pat_routes === "object" && via !== "import" && (await PC.owner("cfg").catch(() => "pepe")) === "site";
+  // review of PO-2: the owner is READ (an unreadable store fails the push - Pepe sends it again), never guessed as Pepe's
+  const siteOwned = b.pat_routes && typeof b.pat_routes === "object" && via !== "import" && (await require("./policy/source").owner()) === "site";
   if (siteOwned) console.log("[econstore] ignored pepe pat_routes (the site owns the economy settings)");
   if (b.pat_routes && typeof b.pat_routes === "object" && !siteOwned) {
     const want = cleanRoutes(b.pat_routes);
@@ -194,11 +195,13 @@ async function getSettings() {
   const pat_routes = {}, econ_cfg = {};
   for (const r of await getQuery("SELECT flow, shares FROM pat_routes")) pat_routes[r.flow] = parse(r.shares, []);
   for (const r of await getQuery("SELECT key, value FROM econ_cfg")) econ_cfg[r.key] = parse(r.value, null);
-  // PO-2 (D-19): once the site owns the config, PAT Routing is the policy config store's
-  try {
-    const snap = await require("./policy/config").snapshot();
-    if (snap.own.cfg.owner === "site" && snap.cfg.pat_routes) return { pat_routes: JSON.parse(JSON.stringify(snap.cfg.pat_routes)), econ_cfg };
-  } catch (e) { /* the store isn't there (a bare test database): the table */ }
+  // PO-2 (D-19): once the site owns the config, PAT Routing is the policy config store's. Review of PO-2: never the frozen pre-H1
+  // table while the site owns it - an unreadable store (with the site owning the config, or its owner unknown) throws.
+  const snap = await require("./policy/config").readerSnap("PAT Routing");
+  if (snap && snap.own.cfg.owner === "site") {
+    if (!snap.cfg.pat_routes) throw require("./policy/config").missingErr("PAT Routing", ["pat_routes"]);
+    return { pat_routes: JSON.parse(JSON.stringify(snap.cfg.pat_routes)), econ_cfg };
+  }
   return { pat_routes, econ_cfg };
 }
 
@@ -231,7 +234,9 @@ async function adminView() {
   const all = await exportAll();
   const docs = {};
   for (const [k, v] of Object.entries(all.docs)) docs[k] = { rev: v.rev, updated: v.updated, size: J(v.doc).length };
-  return { docs, pat_routes: all.pat_routes, econ_cfg: all.econ_cfg, fed_journal: all.fed_journal.slice(-50).reverse(),
+  // review of PO-2: the pools card sends the settings' rev it loaded with a routing change (stale: 409)
+  const snap = await require("./policy/config").snapshot();
+  return { cfg: { owner: snap.own.cfg.owner, rev: snap.rev }, docs, pat_routes: all.pat_routes, econ_cfg: all.econ_cfg, fed_journal: all.fed_journal.slice(-50).reverse(),
            incentive_groups: all.incentive_groups, routes_log: all.routes_log.slice(0, 40), econ_cfg_log: all.econ_cfg_log.slice(0, 40),
            catalog: all.catalog };
 }
@@ -284,11 +289,14 @@ async function requestEdit(user, body, ip) {
     // the run window, the change log, the admin audit) - not sent to Pepe
     const PC = require("./policy/config");
     if ((await PC.owner("cfg")) === "site") {
-      const snap = await PC.snapshot({ fresh: true });
+      // review of PO-2 (plan 2.2 / section 8): like every owner web edit - the rev the card loaded (stale: 409 with the saved
+      // routes, never last-writer-wins) and a note saying why
+      if (body.base_rev === undefined || body.base_rev === null || body.base_rev === "") throw fail(409, "Reload the card - the settings' rev is missing (nothing changed).");
+      const note = String(body.note || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      if (note.length < 3) throw fail(400, "Say why in the note - every change is logged with it.");
       const actor = owner.camfrogUsername ? `${owner.username} (${String(owner.camfrogUsername).trim().toLowerCase()})` : owner.username;
       const r = await PC.edit({ changes: { pat_routes: { [flow]: shares === undefined ? null : shares } }, via: "web", actor, actorUserId: user.userId,
-                                baseRev: body.base_rev !== undefined && body.base_rev !== null ? body.base_rev : snap.rev,
-                                note: String(body.note || "PAT Routing card").slice(0, 300) });
+                                baseRev: body.base_rev, note });
       console.log(`[econstore] ${user.username} changed PAT Routing ${flow} on the site (rev ${r.rev}, ip ${ctl.ipHash(ip)})`);
       return { applied: true, rev: r.rev, msg: r.msg };
     }

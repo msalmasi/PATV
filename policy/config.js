@@ -51,7 +51,8 @@ const SETTLE_MS = 10 * 60 * 1000;           // two sources disagree only once bo
 const WINDOW_LEAD_S = 20 * 60;              // engine-input keys freeze from 20 min before the epoch hour (03:40 UTC)
 const DUAL_FLUSH_MS = 15000;
 const MIRROR_DAYS_KEEP = 21;
-const LOG_KEEP = 20000;
+const LOG_KEEP = 20000;                     // the mirror's own log rows kept (a person's / import / migration rows are never pruned)
+let logKeep = LOG_KEEP;
 // A release that adds a SPEC key appends a migration that seeds a REVIEWED value (plan 2.2 "No silent defaults"): applied once
 // at start, only to keys policy_cfg doesn't have, logged (policy_cfg_seed + policy_cfg_log via "migration"). Preflight and the
 // boot check fail loudly on a key that is still missing.
@@ -80,13 +81,18 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS policy_cfg_log (id INTEGER PRIMARY KEY AUTOINCREMENT, rev INTEGER, ts INTEGER, actor_user_id TEXT, actor TEXT,
         via TEXT, key TEXT, old TEXT, new TEXT, note TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS policy_cfg_log_key ON policy_cfg_log (key, id)");
+      await runQuery("CREATE INDEX IF NOT EXISTS policy_cfg_log_via ON policy_cfg_log (via, id)");
       await runQuery("CREATE TABLE IF NOT EXISTS policy_cfg_seed (migration TEXT NOT NULL, key TEXT NOT NULL, value TEXT, ts INTEGER, PRIMARY KEY (migration, key))");
       await runQuery(`CREATE TABLE IF NOT EXISTS policy_cfg_dualread (day TEXT NOT NULL, consumer TEXT NOT NULL, key TEXT NOT NULL, push TEXT NOT NULL,
         site TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, first_ts INTEGER, last_ts INTEGER, PRIMARY KEY (day, consumer, key, push, site))`);
       await runQuery(`CREATE TABLE IF NOT EXISTS policy_cfg_dualcheck (day TEXT NOT NULL, consumer TEXT NOT NULL, checks INTEGER NOT NULL DEFAULT 0,
         diffs INTEGER NOT NULL DEFAULT 0, first_ts INTEGER, last_ts INTEGER, PRIMARY KEY (day, consumer))`);
       await runQuery(`CREATE TABLE IF NOT EXISTS policy_ownership (feature TEXT PRIMARY KEY, owner TEXT NOT NULL DEFAULT 'pepe', paused INTEGER NOT NULL DEFAULT 0,
-        paused_by TEXT, paused_at INTEGER, note TEXT, since INTEGER, handover_key TEXT, by TEXT)`);
+        paused_by TEXT, paused_at INTEGER, note TEXT, since INTEGER, handover_key TEXT, by TEXT, return_sha TEXT, return_at INTEGER)`);
+      // review of PO-2: a rollback is two steps (policy/handover.js) - `return_sha` = the sha handed back while Pepe writes it
+      const oc = new Set((await getQuery("PRAGMA table_info(policy_ownership)")).map((c) => c.name));
+      if (!oc.has("return_sha")) await runQuery("ALTER TABLE policy_ownership ADD COLUMN return_sha TEXT");
+      if (!oc.has("return_at")) await runQuery("ALTER TABLE policy_ownership ADD COLUMN return_at INTEGER");
       await runQuery(`CREATE TABLE IF NOT EXISTS policy_handovers (key TEXT PRIMARY KEY, feature TEXT NOT NULL, state TEXT NOT NULL, size INTEGER, chunks INTEGER,
         blob TEXT, imported_at INTEGER, verify TEXT, by TEXT, created INTEGER)`);
       await runQuery("CREATE TABLE IF NOT EXISTS policy_handover_chunks (key TEXT NOT NULL, idx INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (key, idx))");
@@ -101,19 +107,32 @@ function init() {
 async function ownership() {
   await init();
   const out = {};
-  for (const f of FEATURES) out[f] = { feature: f, owner: "pepe", paused: 0, paused_by: null, paused_at: null, note: null, since: null, handover_key: null, by: null };
+  for (const f of FEATURES) {
+    out[f] = { feature: f, owner: "pepe", paused: 0, paused_by: null, paused_at: null, note: null, since: null, handover_key: null, by: null, return_sha: null, return_at: null };
+  }
   for (const r of await getQuery("SELECT * FROM policy_ownership")) if (out[r.feature]) out[r.feature] = Object.assign(out[r.feature], r, { paused: r.paused ? 1 : 0 });
   return out;
 }
-/** In the caller's transaction: the feature's owner (pepe | cutting | site). */
+/** In the caller's transaction: the feature's owner (pepe | cutting | site). A change of owner clears a pending return. */
 async function putOwner(feature, owner, { by = null, handoverKey, note } = {}) {
   if (!FEATURES.includes(feature) || !OWNERS.includes(owner)) throw new Refuse(400, "bad_feature", "no such feature / owner");
   const t = nowMs();
+  ownerChanging = true;                    // until the next committed read: no reader may guess the owner from memory
   await runQuery(`INSERT INTO policy_ownership (feature, owner, since, handover_key, by, note) VALUES (?, ?, ?, ?, ?, ?)
                   ON CONFLICT(feature) DO UPDATE SET owner = excluded.owner, since = excluded.since,
                     handover_key = COALESCE(excluded.handover_key, policy_ownership.handover_key), by = excluded.by,
-                    note = COALESCE(excluded.note, policy_ownership.note)`,
+                    note = COALESCE(excluded.note, policy_ownership.note), return_sha = NULL, return_at = NULL`,
                  [feature, owner, t, handoverKey === undefined ? null : handoverKey, str(by, 60), note === undefined ? null : str(note, 300)]);
+  forget();
+}
+/** In the caller's transaction: a site-owned feature being handed back (the sha Pepe writes back) - or the return cancelled (null).
+ *  While it is set every edit is 423 and the readers keep the site's values (policy/handover.js rollback). */
+async function putReturning(feature, sha, { by = null, note } = {}) {
+  if (!FEATURES.includes(feature)) throw new Refuse(400, "bad_feature", "no such feature");
+  await runQuery(`INSERT INTO policy_ownership (feature, owner, return_sha, return_at, by, note) VALUES (?, 'pepe', ?, ?, ?, ?)
+                  ON CONFLICT(feature) DO UPDATE SET return_sha = excluded.return_sha, return_at = excluded.return_at, by = excluded.by,
+                    note = COALESCE(excluded.note, policy_ownership.note)`,
+                 [feature, sha || null, sha ? nowMs() : null, str(by, 60), note === undefined ? null : str(note, 300)]);
   forget();
 }
 async function owner(feature = "cfg") { return (await snapshot()).own[feature].owner; }
@@ -156,8 +175,17 @@ async function setPause(features, paused, { by, auditId = null, via = "admin", n
 }
 
 // ── the store: one snapshot, cached for 2 s outside transactions ──
-let cache = null;
-const forget = () => { cache = null; };
+// Review of PO-2: outside a transaction a snapshot is read IN ONE OF ITS OWN on the chain (dbUtils.tx), like the 1.99adl stash /
+// pool move_status (settledMoveStatus): queued behind every transaction already open or waiting, so it sees committed rows only.
+// A plain read on the shared connection could see an OPEN edit / mirror / import transaction's rows - and a rev that its
+// rollback then takes back and the next real write reuses with other values. Inside a transaction it is that transaction's view.
+let cache = null;          // the 2 s cache (dropped by forget())
+let lastSnap = null;       // the last COMMITTED snapshot read outside a transaction (never dropped: funding's sync reader)
+let gen = 0;               // bumped by forget(): a read that started before a change is returned but never cached
+let ownerChanging = true;  // true until the first committed read, and again from a putOwner() until the next one
+const forget = () => { cache = null; gen++; };
+/** The owner of the config as last READ (committed), or null when it isn't known: never read yet, or being changed (putOwner). */
+const ownerHint = () => (ownerChanging || !lastSnap ? null : lastSnap.own.cfg.owner);
 async function load() {
   try { return await loadOnce(); } catch (e) {
     // the tables were created inside a transaction that rolled back (a first use inside one): create them again
@@ -180,16 +208,34 @@ async function loadOnce() {
   return { at: nowMs(), rev: Number(r.rev) || 0, sha: r.sha || null, updated: r.updated || null, cfg, meta, own: await ownership() };
 }
 /** The whole store {rev, sha, cfg: {key: value}, meta: {key: {rev, updated, by, via, src}}, own: ownership()}. Inside a transaction
- *  it is always read fresh (it may be the edit's own transaction); outside, a 2 s cache. */
+ *  it is always read fresh (it may be the edit's own transaction); outside, committed rows in a transaction of its own, cached
+ *  for 2 s. */
 async function snapshot({ fresh = false } = {}) {
-  if (!fresh && cache && nowMs() - cache.at < CACHE_MS && !inTx()) return cache;
-  const s = await load();
-  if (!inTx()) cache = s;
+  if (inTx()) return load();
+  if (!fresh && cache && nowMs() - cache.at < CACHE_MS) return cache;
+  await init();                                       // the tables first, outside the read's transaction
+  const g = gen;
+  const s = await tx(() => load());
+  if (g === gen) {
+    cache = s;
+    lastSnap = s;
+    ownerChanging = false;
+  }
   return s;
 }
-/** The last snapshot this process loaded (sync callers: funding.js) - null before the first. */
-const cached = () => cache;
+/** The last committed snapshot this process read (sync callers: funding.js) - null before the first. */
+const cached = () => lastSnap;
 async function refresh() { forget(); return snapshot(); }
+/** A reader's snapshot (review of PO-2: never an auto-fallback). When the store can't be read: while the push is the config's
+ *  source (Pepe owns it or it is frozen for the hand-over - the owner as last read) -> null, the reader keeps the push; when the
+ *  site owns it or the owner isn't known -> throws E_CFG_UNREADABLE (the reader defers; the owners are alerted). */
+async function readerSnap(where) {
+  try { return await snapshot(); } catch (e) {
+    const h = ownerHint();
+    if (h === "pepe" || h === "cutting") return null;
+    throw unreadableErr(where, e);
+  }
+}
 
 /** In the caller's transaction: write the changed keys (one new rev), their log rows, the sha; the admin audit row; the ceiling log
  *  (site-owned only). diff = [[key, old, new]]. -> {rev, sha} */
@@ -219,7 +265,8 @@ async function writeChanges(diff, { by, actorUserId = null, via, note = null, sr
     await require("../adminaudit").record({ userId: String(actorUserId || `${via}:${by}`).slice(0, 64), username: by }, "policy.cfg", null,
                                           { rev, changes: diff.map(([k, o, n]) => ({ key: k, old: o === undefined ? null : o, new: n })), via }, note);
   }
-  await runQuery(`DELETE FROM policy_cfg_log WHERE id <= (SELECT id FROM policy_cfg_log ORDER BY id DESC LIMIT 1 OFFSET ${LOG_KEEP})`);
+  // only the mirror's own rows are pruned (review of PO-2): a person's edit, the imported history, a migration are kept for good
+  await runQuery(`DELETE FROM policy_cfg_log WHERE via = 'mirror' AND id <= (SELECT id FROM policy_cfg_log WHERE via = 'mirror' ORDER BY id DESC LIMIT 1 OFFSET ${logKeep})`);
   return { rev, sha };
 }
 
@@ -464,7 +511,7 @@ function noteDual(consumer, diffs) {
   const t = nowMs();
   const day = utcDay(t);
   const ck = day + "|" + consumer;
-  const c = checkBuf.get(ck) || { day, consumer, checks: 0, diffs: 0, first: t, last: t };
+  const c = checkBuf.get(ck) || { k: ck, day, consumer, checks: 0, diffs: 0, first: t, last: t };
   c.checks++;
   c.diffs += diffs.length;
   c.last = t;
@@ -472,7 +519,7 @@ function noteDual(consumer, diffs) {
   for (const d of diffs) {
     const push = S.canon(d.push), site = S.canon(d.site);
     const k = [day, consumer, d.field, push, site].join("|");
-    const x = dualBuf.get(k) || { day, consumer, key: d.field, push, site, n: 0, first: t, last: t };
+    const x = dualBuf.get(k) || { k, day, consumer, key: d.field, push, site, n: 0, first: t, last: t };
     x.n++;
     x.last = t;
     dualBuf.set(k, x);
@@ -484,6 +531,27 @@ function noteDual(consumer, diffs) {
 }
 const warned = new Set();
 let flushing = null;
+/** Put rows a failed flush took back into the buffers, merged with what arrived meanwhile (review of PO-2: the H1 gate 2 evidence
+ *  is never dropped on a failed write). */
+function restoreDual(rows, checks) {
+  for (const x of rows) {
+    const y = dualBuf.get(x.k);
+    if (!y) { dualBuf.set(x.k, x); continue; }
+    y.n += x.n;
+    y.first = Math.min(y.first, x.first);
+    y.last = Math.max(y.last, x.last);
+  }
+  for (const c of checks) {
+    const y = checkBuf.get(c.k);
+    if (!y) { checkBuf.set(c.k, c); continue; }
+    y.checks += c.checks;
+    y.diffs += c.diffs;
+    y.first = Math.min(y.first, c.first);
+    y.last = Math.max(y.last, c.last);
+  }
+}
+/** Write the buffered comparisons (every 15 s, right after the capital cut-off and each scheduler pass, and when the site starts
+ *  to stop). A failed write puts them back for the next flush. -> rows written */
 async function flushDual() {
   if (inTx()) return 0;
   if (flushing) return flushing;
@@ -507,7 +575,11 @@ async function flushDual() {
       }
     });
     return rows.length + checks.length;
-  })().catch((e) => { console.error("[policycfg] dual read flush:", e.message); return 0; }).finally(() => { flushing = null; });
+  })().catch((e) => {
+    console.error(`[policycfg] dual read flush (${rows.length + checks.length} row(s) kept for the next one):`, e.message);
+    restoreDual(rows, checks);
+    return 0;
+  }).finally(() => { flushing = null; });
   return flushing;
 }
 
@@ -529,13 +601,28 @@ function missingErr(where, keys) {
   return e;
 }
 const need = (cfg, keys) => keys.filter((k) => !(k in cfg));
+/** The store can't be read while the site owns the config (or the owner isn't known): the reader defers - never Pepe's push. */
+function unreadableErr(where, cause) {
+  const e = new Refuse(503, "E_CFG_UNREADABLE", `the economy settings can't be read (${String((cause && cause.message) || cause).slice(0, 160)}) - ${where} is deferred, Pepe's values are not used`);
+  const sig = "unreadable:" + where;
+  const last = alerted.get(sig) || 0;
+  if (nowMs() - last > 3600e3) {
+    alerted.set(sig, nowMs());
+    console.error(`[policycfg] ${e.message}`);
+    Promise.resolve().then(() => require("../opsalerts").alert({ source: "policy", ref: `cfg-unreadable:${where}`.slice(0, 80),
+      title: `Economy settings unreadable - ${where} deferred`,
+      body: `${e.message}. The site owns the economy settings (or their owner couldn't be read): nothing falls back to Pepe's push.` }))
+      .catch((x) => console.error("[policycfg] unreadable alert:", x.message));
+  }
+  return e;
+}
 
 // ── the consumers ──
 /** capital/core.cfg(): Pepe's pushed capital config `out` (DEFAULT_CFG + his push). Site-owned: its knob fields come from
  *  policy_cfg; mirror: the consumer's fields are compared (the push is used). */
 async function capitalCfg(out, consumer = null, { pushed = true } = {}) {
-  let snap;
-  try { snap = await snapshot(); } catch (e) { return out; }
+  const snap = await readerSnap("the capital settings");
+  if (!snap) return out;                              // Pepe's config (mirror / frozen) and the store unreadable: his push, unchanged
   if (snap.own.cfg.owner === "site") {
     const keys = [...new Set(Object.values(S.CAPITAL_MAP).flatMap(([n]) => n))];
     const miss = need(snap.cfg, keys);
@@ -567,8 +654,8 @@ function sourceSite(cfg) {
 /** policy/source.js's snapshot `s` (Pepe's push). Site-owned: econ_cfg / consts / flags / burn_cfg / skip / tz from policy_cfg
  *  (his journals, days_done, burn_inflight and bot_version stay his - they are not config); mirror: compared. */
 async function sourceView(s) {
-  let snap;
-  try { snap = await snapshot(); } catch (e) { return s; }
+  const snap = await readerSnap("the policy engines' settings");
+  if (!snap) return s;
   if (snap.own.cfg.owner === "site") {
     const miss = need(snap.cfg, SOURCE_KEYS);
     if (miss.length) throw missingErr("the policy engines' settings", miss);
@@ -585,37 +672,68 @@ async function sourceView(s) {
 /** fed/service.cfgNow's config (DEFAULTS + the engines' config + Pepe's per-op override): compared with the site's while Pepe owns
  *  it (T2: the per-op econ_cfg wins today - a difference here is exactly that). */
 async function fedDual(cfg) {
-  let snap;
-  try { snap = await snapshot(); } catch (e) { return; }
-  if (snap.own.cfg.owner === "site" || !Object.keys(snap.cfg).length) return;
+  const snap = await readerSnap("the Fed's settings");
+  if (!snap || snap.own.cfg.owner === "site" || !Object.keys(snap.cfg).length) return;
   const site = S.econView(snap.cfg);
   noteDual("fed.cfgNow", compareFields(cfg, site, S.ECON_KEYS.filter((k) => k in cfg || k in site)));
 }
 const MONETARY_FIELDS = ["flash.house", "flash.bank", "flash.mm", "house_hard_floor", "donation.rate", "donation.bonus_pct", "grant_weekly_cap", "band.floor", "band.ceiling"];
-/** funding.js's monetary block (sync: the last snapshot this process loaded). Site-owned: its config fields from policy_cfg (a
- *  missing key keeps Pepe's value and alerts); mirror: compared, Pepe's block used. m = funding.cleanMonetary(push) | null. */
-function monetaryFor(m) {
-  const snap = cache;
-  if (!snap) { refresh().catch(() => {}); return m; }
-  if (snap.own.cfg.owner === "site") {
-    const keys = ["layers", "flash_house", "flash_bank", "flash_mm", "house_hard_floor", "donation_rate", "donation_bonus_pct", "grant_weekly_cap", "fed_floor", "fed_ceiling"];
-    const miss = need(snap.cfg, keys);
-    if (miss.length) { missingErr("the funding monetary block", miss); return m; }
-    const v = S.monetaryView(snap.cfg);
-    if (v === null) return null;
-    const o = m ? JSON.parse(JSON.stringify(m)) : { flash: {}, fedloan_room: 0, house_hard_floor: 0, donation: {}, grant_weekly_cap: -1, week_start: 0, band: null };
-    if (!o.band) o.band = { fed: null, floor: null, ceiling: null };
-    const ignored = [];
-    for (const [f, x] of Object.entries(v)) {
-      if (m && !S.equalish(S.getPath(m, f), x)) ignored.push(`${f} ${S.canon(S.getPath(m, f))}`);
-      S.setPath(o, f, x);
+/** funding.js's monetary block (sync: the last committed snapshot this process read). m = funding.cleanMonetary(push) | null;
+ *  prev = the block funding uses now (restored from funding_state at start).
+ *  Mirror (Pepe owns the config, or it is frozen for the hand-over): Pepe's block is used, and compared.
+ *  Site-owned: its config fields from policy_cfg (tagged cfg_rev). Review of PO-2 - never Pepe's block once the site owns them: a
+ *  missing key keeps the last block the site computed (and alerts); while the owner isn't known (no committed read yet, or the
+ *  owner being changed) the last site block stands, else `prev` when the site built it, else Pepe's - and a refresh re-applies
+ *  the block the moment the owner turns out to be the site. */
+const MONETARY_KEYS = ["layers", "flash_house", "flash_bank", "flash_mm", "house_hard_floor", "donation_rate", "donation_bonus_pct", "grant_weekly_cap", "fed_floor", "fed_ceiling"];
+let lastSiteMonetary;      // {rev, block} - the last block the site computed while it owned the config (undefined: none)
+let monetaryKick = null;
+function monetaryFor(m, prev) {
+  const snap = lastSnap;
+  const own = ownerHint();
+  const siteOwnBlock = () => (lastSiteMonetary ? lastSiteMonetary.block : prev && typeof prev === "object" && prev.cfg_rev !== undefined ? prev : undefined);
+  if (!snap || own === null) {
+    // the owner isn't known: read it, and re-apply once it is the site's (no Pepe sync needed)
+    if (!monetaryKick) {
+      monetaryKick = refresh().then((s) => {
+        if (s.own.cfg.owner === "site") { try { require("../funding").reapplyPolicy(); } catch (e) { /* funding not loaded */ } }
+      }).catch(() => {}).finally(() => { monetaryKick = null; });
     }
-    if (ignored.length && !warned.has("funding-ignored:" + ignored.join(","))) {
-      warned.add("funding-ignored:" + ignored.join(","));
-      console.log(`[funding] ignored pepe ${ignored.join(", ")} (the site owns the economy settings, rev ${snap.rev})`);
-    }
-    return o;
+    const b = siteOwnBlock();
+    return b !== undefined ? b : m;
   }
+  if (own === "site") {
+    try {
+      const miss = need(snap.cfg, MONETARY_KEYS);
+      if (miss.length) {
+        missingErr("the funding monetary block", miss);
+        const b = siteOwnBlock();
+        if (b !== undefined) return b;
+        return null;                                // never computed by the site: no block (flash off) until the keys are back
+      }
+      const v = S.monetaryView(snap.cfg);
+      if (v === null) { lastSiteMonetary = { rev: snap.rev, block: null }; return null; }
+      const o = m ? JSON.parse(JSON.stringify(m)) : { flash: {}, fedloan_room: 0, house_hard_floor: 0, donation: {}, grant_weekly_cap: -1, week_start: 0, band: null };
+      if (!o.band) o.band = { fed: null, floor: null, ceiling: null };
+      const ignored = [];
+      for (const [f, x] of Object.entries(v)) {
+        if (m && !S.equalish(S.getPath(m, f), x)) ignored.push(`${f} ${S.canon(S.getPath(m, f))}`);
+        S.setPath(o, f, x);
+      }
+      o.cfg_rev = snap.rev;
+      if (ignored.length && !warned.has("funding-ignored:" + ignored.join(","))) {
+        warned.add("funding-ignored:" + ignored.join(","));
+        console.log(`[funding] ignored pepe ${ignored.join(", ")} (the site owns the economy settings, rev ${snap.rev})`);
+      }
+      lastSiteMonetary = { rev: snap.rev, block: o };
+      return o;
+    } catch (e) {
+      console.error("[policycfg] monetary block:", e.message);
+      const b = siteOwnBlock();
+      return b !== undefined ? b : null;
+    }
+  }
+  lastSiteMonetary = undefined;                       // Pepe's config again: a later site period starts from its own block
   if (Object.keys(snap.cfg).length && "layers" in snap.cfg) {
     const v = S.monetaryView(snap.cfg);
     const pushOn = !!m, siteOn = v !== null;
@@ -627,16 +745,92 @@ function monetaryFor(m) {
   return m;
 }
 
+// ── the hand-over's reader check (review of PO-2) ──
+const tableExists = async (t) => (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length > 0;
+const MONETARY_KEY_OF = { "flash.house": ["flash_house"], "flash.bank": ["flash_bank"], "flash.mm": ["flash_mm"], house_hard_floor: ["house_hard_floor"],
+                          "donation.rate": ["donation_rate"], "donation.bonus_pct": ["donation_bonus_pct"], grant_weekly_cap: ["grant_weekly_cap"],
+                          "band.floor": ["fed_floor"], "band.ceiling": ["fed_ceiling"], monetary: ["layers"] };
+function sourceKeysOf(field) {
+  const i = field.indexOf(".");
+  const blk = i < 0 ? field : field.slice(0, i), name = i < 0 ? null : field.slice(i + 1);
+  if (blk === "econ_cfg" || blk === "flags") return [name];
+  if (blk === "consts") return [S.CONST_MAP[name]];
+  if (blk === "burn_cfg") return [S.BURN_FIELDS[name]];
+  return [field];
+}
+/**
+ * A whole config `cfg` (an import, or the store being handed back) against what every READER uses today - Pepe's pushes, as the
+ * consumers' dual read compares them: policy.source (econ_cfg - the Fed's cfgNow reads the same -, consts, flags, burn_cfg, skip,
+ * tz), capital (capital/core.cfg(): the cut-off's and the loan desk's knobs, its defaults under his capital push), funding.monetary
+ * (his last sync's block) and - opts.routes - PAT Routing (econstore's table). The H1 cutover is refused on any difference unless
+ * the owner names the keys (policy/handover.js); a rollback is confirmed only once his pushes carry the values handed back.
+ * -> {diffs: [{consumer, field, push, site, keys: [the site keys it comes from]}], keys: [every such key, sorted], seen: {kind: ms}}
+ */
+async function pushCheck(cfg, { routes = true } = {}) {
+  const diffs = [];
+  const add = (consumer, list, keysOf) => { for (const d of list) diffs.push(Object.assign({ consumer }, d, { keys: (keysOf(d.field) || [d.field]).filter(Boolean) })); };
+  const s = await require("./source").pushView();
+  if (s.at !== null && s.at !== undefined) {
+    const push = Object.assign({}, s, { skip: Array.isArray(s.skip) ? s.skip.slice().sort() : s.skip });
+    const fields = SOURCE_FIELDS.filter((f) => !(f.startsWith("econ_cfg.") && !s.econ_cfg));
+    add("policy.source", compareFields(push, sourceSite(cfg), fields), sourceKeysOf);
+  }
+  // read raw (no module init: this runs inside the hand-over's transaction, where a first CREATE TABLE would roll back with it)
+  const capRow = (await tableExists("capital_meta")) ? (await getQuery("SELECT value FROM capital_meta WHERE key = 'cfg'"))[0] : null;
+  const c = (capRow && parse(capRow.value, null)) || {};
+  if (c.at) {
+    const D = require("../capital/core").DEFAULT_CFG;
+    const out = Object.assign({}, D, c);
+    out.flash = Object.assign({}, D.flash, c.flash || {});
+    const fields = Object.keys(S.CAPITAL_MAP);
+    add("capital", compareFields(out, S.capitalView(cfg, fields), fields), (f) => (S.CAPITAL_MAP[f] || [[f]])[0]);
+  }
+  // funding's last live sync - only if funding runs in this process (a sync needs it; loading it here would create its tables)
+  const fundMod = require.cache[require.resolve("../funding")];
+  const m = fundMod && fundMod.exports && typeof fundMod.exports.pushedMonetary === "function" ? fundMod.exports.pushedMonetary() : undefined;
+  if (m !== undefined) {
+    const v = S.monetaryView(cfg);
+    const siteOn = v !== null && v !== undefined;
+    if (!!m !== siteOn) add("funding.monetary", [{ field: "monetary", push: m ? "on" : null, site: siteOn ? "on" : null }], (f) => MONETARY_KEY_OF[f]);
+    else if (m) add("funding.monetary", compareFields(m, v, MONETARY_FIELDS), (f) => MONETARY_KEY_OF[f]);
+  }
+  if (routes) {
+    const table = {};
+    if (await tableExists("pat_routes")) for (const r of await getQuery("SELECT flow, shares FROM pat_routes")) table[r.flow] = parse(r.shares, []);
+    if (!S.equalish(table, cfg.pat_routes || {})) add("econstore.routes", [{ field: "pat_routes", push: table, site: cfg.pat_routes || {} }], () => ["pat_routes"]);
+  }
+  const src = Object.assign(emptySrc(), (await C.meta("cfg_src")) || {});
+  return { diffs, keys: [...new Set(diffs.flatMap((d) => d.keys))].sort(), seen: Object.assign({}, src.kinds) };
+}
+
 // ── the run window (T22): engine-input keys frozen from 03:40 UTC until that UTC day's runs settle ──
 const ymd = (s) => new Date(Math.floor(s) * 1000).toISOString().slice(0, 10);
 /** -> {open, from, boundary, waiting: ["treasury:D...", ...]} for `nowS` (the scheduler's clock). A run is settled when it is
- *  done / handed / missed here or Pepe's push lists it done; an engine whose flag is off expects no run. */
+ *  done / handed / missed here or Pepe's push lists it done; an engine whose flag is off expects no run.
+ *  Review of PO-2: the site's own daily CAPITAL CUT-OFF (capital/service.js, 04:00 UTC) reads the staking keys (the ceiling, the
+ *  cushion, the Auto cap, ...) - whenever the vaults run on the site, the window also waits for the cut-off of this boundary
+ *  (the vaults' next_epoch past it), and an OVERDUE cut-off (next_epoch already passed) freezes them at any hour. */
+async function capitalWait(nowS, boundary) {
+  try {
+    if (!(await tableExists("capital_meta"))) return null;         // capital never ran on this site (and no init inside an edit's tx)
+    const V = require("../capital/vaults");
+    if (!(await V.live())) return null;
+    const next = Number((await V.load()).next_epoch || 0);
+    if (next > boundary || (nowS < boundary - WINDOW_LEAD_S && next > nowS)) return null;
+    return `capital:cutoff ${ymd(next > 0 ? next : boundary)}`;
+  } catch (e) {
+    return "capital:cutoff (unreadable)";
+  }
+}
 async function runWindow(nowS, snap) {
   snap = snap || await snapshot();
   const hour = Number.isInteger(snap.cfg.epoch_hour) ? snap.cfg.epoch_hour : 4;
   const boundary = Math.floor(nowS / 86400) * 86400 + hour * 3600;
   const from = boundary - WINDOW_LEAD_S;
-  if (nowS < from) return { open: false, from, boundary, waiting: [] };
+  if (nowS < from) {
+    const cw = await capitalWait(nowS, boundary);
+    return { open: !!cw, from, boundary, waiting: cw ? [cw] : [] };
+  }
   let push = {};
   try { push = await require("./source").read(); } catch (e) { push = {}; }
   const flags = Object.assign({}, push.flags || {}, S.flagsView(snap.cfg));
@@ -654,6 +848,8 @@ async function runWindow(nowS, snap) {
     if (e === "monetary" && (push.mo_days_done || []).includes(p)) continue;
     waiting.push(`${e}:${p}`);
   }
+  const cw = await capitalWait(nowS, boundary);
+  if (cw) waiting.push(cw);
   return { open: waiting.length > 0, from, boundary, waiting };
 }
 
@@ -677,6 +873,7 @@ async function edit({ changes, via, actor, actorUserId = null, baseRev, note = n
     if (own.owner === "cutting") throw new Refuse(423, "frozen", "The economy settings are frozen for the hand-over - nothing changed.");
     if (own.owner !== "site") throw new Refuse(409, "mirror", "The economy settings are still Pepe's (the site mirrors them until the hand-over) - change them on Pepe. Nothing changed here.");
     if (own.paused) throw new Refuse(423, "paused", `The economy settings are paused${own.paused_by ? " by " + own.paused_by : ""}${own.note ? " (" + own.note + ")" : ""} - nothing changed.`);
+    if (own.return_sha) throw new Refuse(423, "returning", "The economy settings are being handed back to Pepe (he writes the site's values back) - nothing changed.");
     if (baseRev === undefined || baseRev === null || Number(baseRev) !== snap.rev) {
       const saved = {};
       for (const k of Object.keys(ch)) if (S.SPEC[k]) saved[k] = snap.cfg[k] === undefined ? null : snap.cfg[k];
@@ -744,16 +941,23 @@ async function bootCheck() {
 
 // ── views ──
 const specHash = () => sha256(S.canon(S.KEYS.map((k) => { const s = S.SPEC[k]; return [k, s.kind, s.unit, s.min, s.max, s.choices, s.readonly]; })));
-async function botCfg(have) {
-  const snap = await snapshot();
-  const out = { ok: true, owner: snap.own.cfg.owner, paused: !!snap.own.cfg.paused, rev: snap.rev, sha: snap.sha, spec_hash: specHash() };
-  if (have !== undefined && have !== null && have !== "") {
-    try { await C.setMeta("cfg_pepe_rev", { rev: Number(have), at: nowMs() }); } catch (e) { /* best effort */ }
-  }
-  if (Number(have) === snap.rev && have !== null && have !== undefined && have !== "") return Object.assign(out, { unchanged: true });
-  out.cfg = snap.cfg;
-  out.log_tail = await getQuery("SELECT rev, ts, actor, via, key, old, new, note FROM policy_cfg_log ORDER BY id DESC LIMIT 20");
-  return out;
+/** Pepe's pull (PO-3: every 60 s and at each engine tick). Review of PO-2: answered in ONE transaction of its own on the chain -
+ *  committed rows only, in order (queued behind every transaction that reached the site before it; settledMoveStatus' rule) -
+ *  and "unchanged" only when BOTH the rev and the sha Pepe holds are the current ones (have=<rev>&sha=<sha>): a rev is never
+ *  trusted alone. */
+async function botCfg(have, haveSha) {
+  await init();
+  const given = have !== undefined && have !== null && have !== "";
+  return tx(async () => {
+    const snap = await load();
+    const out = { ok: true, owner: snap.own.cfg.owner, paused: !!snap.own.cfg.paused, returning: snap.own.cfg.return_sha || null, rev: snap.rev, sha: snap.sha,
+                  spec_hash: specHash() };
+    if (given) await C.setMeta("cfg_pepe_rev", { rev: Number(have), sha: haveSha ? String(haveSha).slice(0, 64) : null, at: nowMs() });
+    if (given && Number(have) === snap.rev && typeof haveSha === "string" && haveSha && haveSha === snap.sha) return Object.assign(out, { unchanged: true });
+    out.cfg = snap.cfg;
+    out.log_tail = await getQuery("SELECT rev, ts, actor, via, key, old, new, note FROM policy_cfg_log ORDER BY id DESC LIMIT 20");
+    return out;
+  });
 }
 async function logRows({ key = null, actor = null, via = null, limit = 100 } = {}) {
   await init();
@@ -799,6 +1003,8 @@ function register(app, { isBotToken, addUser }) {
   }).catch((e) => console.error("[policycfg] init:", e.message));
   const iv = setInterval(() => { flushDual().catch(() => {}); refresh().catch(() => {}); checkMirrorDay().catch(() => {}); }, DUAL_FLUSH_MS);
   if (iv.unref) iv.unref();
+  // review of PO-2: a restart (a deploy) writes the buffered comparisons first - the drain gives them its grace before the DB closes
+  try { require("../shutdown").onDrain(() => { flushDual().catch(() => {}); }); } catch (e) { /* no shutdown module (a bare test) */ }
   const SR = () => require("../staffroles");
   const answer = (res, e) => {
     if (e instanceof Refuse || (e && e.status && e.code)) return res.status(e.status).json(Object.assign({ ok: false, code: e.code, error: e.message }, e.extra || {}));
@@ -809,20 +1015,24 @@ function register(app, { isBotToken, addUser }) {
   const botRead = async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!isBotToken(botTok(req))) return res.status(403).json({ ok: false, error: "unauthorized" });
-    try { res.json(await botCfg(req.method === "GET" ? req.query.have : (req.body || {}).have)); } catch (e) { answer(res, e); }
+    const q = req.method === "GET" ? req.query : (req.body || {});
+    try { res.json(await botCfg(q.have, typeof q.sha === "string" ? q.sha : undefined)); } catch (e) { answer(res, e); }
   };
   app.get("/api/policy/bot/cfg", botRead);
   app.post("/api/policy/bot/cfg", botRead);
   // Pepe's chat: !econ set (PO-3 writes through here once the site owns the config). A Pepe OWNER by role (pinned, PO-0b); never Telegram.
+  // Review of PO-2: this route IS the chat path - via is always "chat" (the D-7 "%" rule, the log, the audit); a caller naming
+  // anything else (web / cli: other rules, another trail) is refused, Telegram with 403.
   app.post("/api/policy/bot/cfg/set", async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     try {
-      const via = String(b.via || "chat");
+      const via = b.via === undefined || b.via === null || b.via === "" ? "chat" : String(b.via);
       if (via === "telegram") throw new Refuse(403, "telegram", "The economy settings are never changed from Telegram.");
+      if (via !== "chat") throw new Refuse(400, "bad_via", "Pepe's route changes the settings as chat only (via chat).");
       const actor = String(b.actor || "").trim().toLowerCase().slice(0, 60);
       if (!actor || (await SR().roleOf(actor)) !== "owner") throw new Refuse(403, "owner_only", "Only a Pepe owner changes the economy settings.");
-      res.json(await edit({ changes: b.changes, via, actor, actorUserId: `chat:${actor}`, baseRev: b.base_rev, note: b.note ? String(b.note).slice(0, 300) : null }));
+      res.json(await edit({ changes: b.changes, via: "chat", actor, actorUserId: `chat:${actor}`, baseRev: b.base_rev, note: b.note ? String(b.note).slice(0, 300) : null }));
     } catch (e) { answer(res, e); }
   });
 
@@ -838,7 +1048,7 @@ function register(app, { isBotToken, addUser }) {
     if (!me) return;
     try {
       const v = await adminView();
-      v.can_edit = v.owner === "site" && !!(await SR().ownerOf(me, "econ.telemetry_policy"));
+      v.can_edit = v.owner === "site" && !v.own.cfg.return_sha && !!(await SR().ownerOf(me, "econ.telemetry_policy"));
       res.json(v);
     } catch (e) { answer(res, e); }
   });
@@ -868,8 +1078,13 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { init, register, ownership, owner, putOwner, setPause, snapshot, cached, refresh, forget, load, writeChanges, mirror, backfill, extract, diffReport,
-                   checkMirrorDay, noteDual, flushDual, compareFields, capitalCfg, sourceView, fedDual, monetaryFor, runWindow, edit, applyMigrations, bootCheck,
-                   botCfg, logRows, dualSummary, adminView, routesCatalog, specHash, cfgSha, missingErr, Refuse, FEATURES, OWNERS, MIGRATIONS, SOURCES, BY_KEY,
-                   SRC_STALE_MS, SETTLE_MS, WINDOW_LEAD_S,
-                   _setClock: (fn) => { clock = fn || (() => Date.now()); }, _resetMemory: () => { dualBuf.clear(); checkBuf.clear(); warned.clear(); alerted.clear(); cache = null; } };
+module.exports = { init, register, ownership, owner, putOwner, putReturning, ownerHint, setPause, snapshot, readerSnap, cached, refresh, forget, load, writeChanges,
+                   mirror, backfill, extract, diffReport, checkMirrorDay, noteDual, flushDual, compareFields, capitalCfg, sourceView, fedDual, monetaryFor, pushCheck,
+                   runWindow, edit, applyMigrations, bootCheck, botCfg, logRows, dualSummary, adminView, routesCatalog, specHash, cfgSha, missingErr, unreadableErr,
+                   Refuse, FEATURES, OWNERS, MIGRATIONS, SOURCES, BY_KEY, SRC_STALE_MS, SETTLE_MS, WINDOW_LEAD_S, LOG_KEEP,
+                   _setClock: (fn) => { clock = fn || (() => Date.now()); },
+                   _setLogKeep: (n) => { logKeep = n === undefined ? LOG_KEEP : n; },
+                   _dualPending: () => ({ rows: dualBuf.size, checks: checkBuf.size }),
+                   // tests: what a restart forgets (the buffers, the warnings, every snapshot, the owner as last read, the site's last block)
+                   _resetMemory: () => { dualBuf.clear(); checkBuf.clear(); warned.clear(); alerted.clear(); cache = null; lastSnap = null; ownerChanging = true;
+                                         lastSiteMonetary = undefined; gen++; } };

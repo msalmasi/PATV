@@ -41,7 +41,7 @@
         <form class="adm-form" id="pcfgLogForm" autocomplete="off">
           <label for="pcfgLogKey"><%= t('adm.pcfg.col_key') %><input type="text" id="pcfgLogKey" maxlength="64"></label>
           <label for="pcfgLogActor"><%= t('adm.pcfg.col_who') %><input type="text" id="pcfgLogActor" maxlength="60"></label>
-          <label for="pcfgLogVia"><%= t('adm.pcfg.col_via') %><select id="pcfgLogVia"><option value=""><%= t('adm.pcfg.any') %></option><option>web</option><option>chat</option><option>mirror</option><option>import</option><option>migration</option></select></label>
+          <label for="pcfgLogVia"><%= t('adm.pcfg.col_via') %><select id="pcfgLogVia"><option value=""><%= t('adm.pcfg.any') %></option><option>web</option><option>chat</option><option>cli</option><option>mirror</option><option>import</option><option>migration</option></select></label>
           <div class="adm-actions"><button type="submit"><%= t('adm.pcfg.filter') %></button></div>
         </form>
         <div class="adm-tbl"><table aria-label="<%= t('adm.pcfg.log') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.pcfg.col_key') %></th>

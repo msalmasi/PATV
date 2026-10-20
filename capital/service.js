@@ -113,6 +113,8 @@ async function tick() {
         return Object.assign({ ok: true }, e);
       });
       if (r) console.log(`[capital] cut-off: prices ${JSON.stringify(r.snap.price)} nav ${JSON.stringify(r.snap.nav)} queue ${JSON.stringify(r.notes.queue)}`);
+      // review of PO-2: the cut-off's dual read (H1 gate 2 evidence) is written now - a restart within the 15 s flush can't drop it
+      await require("../policy/config").flushDual().catch((e) => console.error("[capital] dual read flush:", e.message));
       // staking fix plan §6: the cut-off's audit -> the admins (after it committed; never fails the tick)
       if (r && r.ok) await W.afterEpoch(r).catch((e) => console.error("[capital] staking audit:", e.message));
       d = await V.load();

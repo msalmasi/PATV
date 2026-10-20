@@ -9968,6 +9968,8 @@
   "js.adm.pcfg.owner_site": "the site's (edited here; Pepe reads it)",
   "js.adm.pcfg.paused": "Paused",
   "js.adm.pcfg.paused_by": "by {by} at {when}",
+  "js.adm.pcfg.returning": "Being handed back",
+  "js.adm.pcfg.returning_since": "to Pepe since {when} (sha {sha}) - edits refused until he confirms",
   "js.adm.pcfg.pepe_rev": "Rev Pepe has applied",
   "js.adm.pcfg.ph_new": "new value",
   "js.adm.pcfg.ph_pct": "new value, %",

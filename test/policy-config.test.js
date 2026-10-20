@@ -48,16 +48,16 @@ C._setClock(() => clockMs);
 const M = FX.M;
 
 let base, server;
-const U = { owner: "u_owner", admin: "u_admin" };
-const NAME = { [U.owner]: "own", [U.admin]: "adm" };
+const U = { owner: "u_owner", admin: "u_admin", pleb: "u_pleb" };
+const NAME = { [U.owner]: "own", [U.admin]: "adm", [U.pleb]: "plb" };
 test.before(async () => {
   await runQuery(`CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT, class TEXT DEFAULT 'pleb',
                   points_balance INTEGER DEFAULT 0, camfrogUsername TEXT, level INTEGER DEFAULT 0, created_at TEXT)`);
   await runQuery("CREATE TABLE transactions (transactionId TEXT PRIMARY KEY, userId TEXT, type TEXT, points INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, counterparty TEXT)");
   await runQuery("CREATE TABLE jackpot_rakes (jackpotId TEXT PRIMARY KEY, spinId TEXT, userId TEXT, amount INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
   const h = await bcrypt.hash("pw-right", 4);
-  await runQuery("INSERT INTO users (userId, username, password, class, camfrogUsername) VALUES (?, 'own', ?, 'Admin', 'Owner_CF'), (?, 'adm', ?, 'Admin', 'admin_cf')",
-                 [U.owner, h, U.admin, h]);
+  await runQuery("INSERT INTO users (userId, username, password, class, camfrogUsername) VALUES (?, 'own', ?, 'Admin', 'Owner_CF'), (?, 'adm', ?, 'Admin', 'admin_cf'), (?, 'plb', ?, 'pleb', 'pleb_cf')",
+                 [U.owner, h, U.admin, h, U.pleb, h]);
   await SR.init();
   await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('owner_cf', 'owner', 1), ('admin_cf', 'admin', 1)");
   await CTL.init();
@@ -389,23 +389,38 @@ test("post-H1 readers use the store - Pepe's pushed values are ignored; Fed ops 
 
 test("post-H1 PAT Routing (D-19): the pools card changes the store directly (checked against Pepe's catalog); his pushed table is ignored", async () => {
   const ES = require(path.join(repo, "econstore"));
-  let r = await web("/api/admin/econ/edit", U.owner, { op: "routes", flow: "raffle", shares: [["incentives", 60], ["reserve", 40]], nonce: await nonce(), password: "pw-right" });
+  // review of PO-2: the card's view carries the settings' rev; a routing edit must send it back (stale / missing: 409) with a note
+  const view = await fetch(base + "/api/admin/econ/store", { headers: { "x-test-user": U.owner } }).then((x) => x.json());
+  let snap = await PC.snapshot({ fresh: true });
+  assert.deepEqual(view.cfg, { owner: "site", rev: snap.rev });
+  const edit = async (o) => web("/api/admin/econ/edit", U.owner, Object.assign({ op: "routes", nonce: await nonce(), password: "pw-right" }, o));
+  let r = await edit({ flow: "raffle", shares: [["incentives", 60], ["reserve", 40]], note: "more to the budget" });
+  assert.equal(r.status, 409, "no base_rev: never last-writer-wins");
+  assert.match(r.body.error, /rev is missing/);
+  r = await edit({ flow: "raffle", shares: [["incentives", 60], ["reserve", 40]], base_rev: snap.rev - 1, note: "more to the budget" });
+  assert.equal(r.status, 409, "a stale rev");
+  assert.match(r.body.error, /changed since you loaded them/);
+  r = await edit({ flow: "raffle", shares: [["incentives", 60], ["reserve", 40]], base_rev: snap.rev, note: "" });
+  assert.equal(r.status, 400, "a note says why");
+  assert.equal((await PC.snapshot({ fresh: true })).rev, snap.rev, "nothing changed");
+  r = await edit({ flow: "raffle", shares: [["incentives", 60], ["reserve", 40]], base_rev: snap.rev, note: "more to the budget" });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.request.applied, true, "applied here, not queued for Pepe");
-  let snap = await PC.snapshot({ fresh: true });
+  snap = await PC.snapshot({ fresh: true });
   assert.deepEqual(snap.cfg.pat_routes.raffle, [["incentives", 60], ["reserve", 40]]);
   assert.deepEqual(snap.cfg.pat_routes.cmd_song, FX.routes().cmd_song, "the other flows keep their overrides");
   assert.equal(snap.meta.pat_routes.by, "own (owner_cf)");
+  assert.equal((await getQuery("SELECT note FROM policy_cfg_log WHERE key = 'pat_routes' ORDER BY id DESC LIMIT 1"))[0].note, "more to the budget");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'econ.routes'").catch(() => [{ n: 0 }]))[0].n, 0);
   // Pepe's routing rules (his catalog): a payout flow can't pay stakers; a read-only flow can't change
-  r = await web("/api/admin/econ/edit", U.owner, { op: "routes", flow: "raffle", shares: [["stakers", 100]], nonce: await nonce(), password: "pw-right" });
+  r = await edit({ flow: "raffle", shares: [["stakers", 100]], base_rev: snap.rev, note: "try stakers" });
   assert.equal(r.status, 400);
   assert.match(r.body.error, /raffle can't send 100% to stakers/);
-  r = await web("/api/admin/econ/edit", U.owner, { op: "routes", flow: "wheel", shares: [["reserve", 100]], nonce: await nonce(), password: "pw-right" });
+  r = await edit({ flow: "wheel", shares: [["reserve", 100]], base_rev: snap.rev, note: "try the wheel" });
   assert.equal(r.status, 400);
   assert.match(r.body.error, /wheel is read-only/);
   // a reset drops the override
-  r = await web("/api/admin/econ/edit", U.owner, { op: "routes", flow: "raffle", reset: true, nonce: await nonce(), password: "pw-right" });
+  r = await edit({ flow: "raffle", reset: true, base_rev: snap.rev, note: "back to the default" });
   assert.equal(r.status, 200);
   snap = await PC.snapshot({ fresh: true });
   assert.equal(snap.cfg.pat_routes.raffle, undefined);
@@ -447,19 +462,28 @@ test("a key missing once the site owns the config: the engines defer and the own
   await PC.applyMigrations([{ id: "tz-back", seeds: { tz: "America/New_York" } }]);
 });
 
-test("the bot's read: the whole config, or 'unchanged' at Pepe's rev; the token is required", async () => {
+test("the bot's read: the whole config, or 'unchanged' at Pepe's rev AND sha; the token is required", async () => {
   const snap = await PC.snapshot({ fresh: true });
   let r = await fetch(base + "/api/policy/bot/cfg", { headers: { "x-bot-token": "bot" } }).then((x) => x.json());
   assert.equal(r.ok, true);
   assert.equal(r.rev, snap.rev);
+  assert.equal(r.sha, snap.sha);
   assert.equal(r.owner, "site");
   assert.equal(r.cfg.fed_ceiling, 160 * M);
   assert.equal(r.spec_hash, PC.specHash());
   assert.ok(Array.isArray(r.log_tail) && r.log_tail.length);
-  r = await fetch(base + "/api/policy/bot/cfg?have=" + snap.rev, { headers: { "x-bot-token": "bot" } }).then((x) => x.json());
+  r = await fetch(base + `/api/policy/bot/cfg?have=${snap.rev}&sha=${snap.sha}`, { headers: { "x-bot-token": "bot" } }).then((x) => x.json());
   assert.equal(r.unchanged, true);
   assert.equal(r.cfg, undefined);
   assert.deepEqual((await C.meta("cfg_pepe_rev")).rev, snap.rev, "the rev Pepe has applied (shown on the card)");
+  assert.deepEqual((await C.meta("cfg_pepe_rev")).sha, snap.sha);
+  // review of PO-2: a rev alone is never trusted - the same rev with another sha (or none) gets the whole config
+  r = await fetch(base + "/api/policy/bot/cfg?have=" + snap.rev, { headers: { "x-bot-token": "bot" } }).then((x) => x.json());
+  assert.equal(r.unchanged, undefined);
+  assert.equal(r.cfg.fed_ceiling, 160 * M);
+  r = (await bot("/api/policy/bot/cfg", { have: snap.rev, sha: "0".repeat(64) })).body;
+  assert.equal(r.unchanged, undefined);
+  assert.ok(r.cfg);
   r = (await bot("/api/policy/bot/cfg", { have: snap.rev - 1 })).body;
   assert.ok(r.cfg);
   const no = await fetch(base + "/api/policy/bot/cfg");
@@ -520,4 +544,58 @@ test("feature pause from the admin card: a Pepe owner with the step-up and a not
   x = run("preflight");
   assert.match(x.stdout, /PASS {2}every config key present \(policy_cfg\): 112 keys/);
   assert.match(x.stdout, /PASS {2}no feature paused/);
+});
+
+test("review of PO-2: the admin reads are an Admin's; the web edit is same-site; a feature pause needs the step-up; Telegram never edits", async () => {
+  // a signed-in non-Admin reads neither the settings nor their log
+  assert.equal((await getJ("/api/admin/policy/cfg", U.pleb)).status, 403);
+  assert.equal((await getJ("/api/admin/policy/cfg/log", U.pleb)).status, 403);
+  // the web edit is a same-site fetch: the CSRF token alone isn't enough
+  const snap = await PC.snapshot({ fresh: true });
+  const raw = async (headers) => {
+    const body = { changes: { donation_rate: "610k" }, note: "same-site check", base_rev: snap.rev, nonce: await nonce(), password: "pw-right" };
+    const r = await fetch(base + "/api/admin/policy/cfg", { method: "POST", body: JSON.stringify(body),
+      headers: Object.assign({ "content-type": "application/json", "x-test-user": U.owner, "x-csrf-token": CTL.csrfToken("own") }, headers) });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  };
+  let r = await raw({ origin: base, host: new URL(base).host });
+  assert.equal(r.status, 403, "no X-Requested-With: fetch");
+  assert.equal(r.body.code, "cross_site");
+  r = await raw({ "X-Requested-With": "fetch", origin: "https://elsewhere.example", host: new URL(base).host });
+  assert.equal(r.status, 403, "another site's origin");
+  assert.equal(r.body.code, "cross_site");
+  assert.equal((await PC.snapshot({ fresh: true })).rev, snap.rev, "nothing changed");
+  // pausing a FEATURE takes the password step-up like an engine's
+  r = await web("/api/admin/policy/pause", U.owner, { feature: "cfg", pause: true, note: "a good reason" });
+  assert.equal(r.status, 409, "no nonce");
+  r = await web("/api/admin/policy/pause", U.owner, { feature: "cfg", pause: true, note: "a good reason", nonce: await nonce(), password: "pw-wrong" });
+  assert.equal(r.status, 403, "a wrong password");
+  assert.equal((await PC.ownership()).cfg.paused, 0);
+  // the store itself refuses Telegram (not only the route)
+  await assert.rejects(PC.edit({ changes: { donation_rate: "620k" }, via: "telegram", actor: "owner_cf", baseRev: snap.rev }), (e) => e.status === 403 && e.code === "telegram");
+  assert.equal((await PC.snapshot({ fresh: true })).rev, snap.rev);
+});
+
+test("review of PO-2: Pepe's route is the chat path - via is chat (the % rule, the log); naming web / cli is refused", async () => {
+  clockMs = Date.UTC(2026, 9, 22, 2, 0);                        // before the day's run window (the ceiling feeds the cut-off)
+  let snap = await PC.snapshot({ fresh: true });
+  let r = await bot("/api/policy/bot/cfg/set", { actor: "owner_cf", via: "web", base_rev: snap.rev, changes: { vault_ceil_apr: "30" } });
+  assert.equal(r.status, 400, JSON.stringify(r.body));
+  assert.equal(r.body.code, "bad_via");
+  r = await bot("/api/policy/bot/cfg/set", { actor: "owner_cf", via: "cli", base_rev: snap.rev, changes: { donation_rate: "630k" } });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, "bad_via");
+  assert.equal((await PC.snapshot({ fresh: true })).rev, snap.rev, "nothing changed");
+  // via left out = chat: a bare number for a fraction key is still refused, the % passes and is logged as chat
+  r = await bot("/api/policy/bot/cfg/set", { actor: "owner_cf", base_rev: snap.rev, changes: { vault_ceil_apr: "30" } });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /add %/);
+  r = await bot("/api/policy/bot/cfg/set", { actor: "owner_cf", via: "chat", base_rev: snap.rev, changes: { vault_ceil_apr: "30%" } });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  snap = await PC.snapshot({ fresh: true });
+  assert.equal(snap.meta.vault_ceil_apr.via, "chat");
+  const aud = (await getQuery("SELECT detail FROM admin_audit WHERE action = 'policy.cfg' ORDER BY id DESC LIMIT 1"))[0];
+  assert.equal(JSON.parse(aud.detail).via, "chat");
+  r = await bot("/api/policy/bot/cfg/set", { actor: "owner_cf", base_rev: snap.rev, changes: { vault_ceil_apr: "25%" } });
+  assert.equal(r.status, 200);
 });
