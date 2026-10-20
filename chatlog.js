@@ -267,7 +267,8 @@ const OPEN_FAIL = /^SQLITE_(CANTOPEN|NOTADB|PERM|READONLY|IOERR|CORRUPT|AUTH)/;
 /** CHATLOG_DB set: ATTACH it as "chatlog" on the shared connection (WAL, synchronous NORMAL). Idempotent. Tools call it too.
  *  Throws (code "archive_db") rather than start a NEW, empty archive file while myapp.db's counters say the archive holds
  *  lines (a mistyped or moved CHATLOG_DB): nothing is created, nothing is attached. Train 3 review fix-up: a file that can't be
- *  opened at all is code "archive_db" too (init() then keeps the live chat going and the admin page says why).
+ *  opened at all is code "archive_db" too (init() then keeps the live chat going and the admin page says why) - fix-up 2: and one
+ *  SQLite can open but not WRITE (read-only file or volume), asked before anything leaves myapp.db.
  *  opts.move (init() only): an EMPTY archive that a boot without CHATLOG_DB left in myapp.db moves to CHATLOG_DB. A tool never
  *  moves anything (remove-stray-pad's dry run writes nothing): it uses the archive where the running site has it. */
 async function attach(opts = {}) {
@@ -300,10 +301,40 @@ async function attach(opts = {}) {
                                   "restart; nothing is archived meanwhile" + (inMain ? " (the empty archive tables stay in myapp.db)" : "")),
                         { code: "archive_db" });
   }
+  // (counted > 0 never reaches the move below: mainArchiveEmpty() needs nothing counted. Asked before anything is written to the
+  // file - a wrong CHATLOG_DB is left exactly as it was)
+  if (counted > 0) {
+    let has = false;
+    try { has = (await getQuery("SELECT 1 FROM chatlog.chat_log LIMIT 1")).length > 0; } catch (e) { has = false; }
+    if (!has) { await detachArchive(file, true); throw wrong("holds no archived line"); }
+  }
+  // Train 3 review fix-up 2: the file must take WRITES before anything leaves myapp.db. SQLite opens a file it may not write (a
+  // read-only file, a read-only or remounted volume, an immutable file - root included) READ-ONLY without a word, so the ATTACH
+  // above succeeds; before this the empty tables were dropped, then journal_mode / the archive DDL threw SQLITE_READONLY - init()
+  // rejected on every call (not archive_db) and bridge.js closed every pad's live chat. A write that changes nothing (user_version
+  // set to itself; journal_mode alone passes on a file that is already WAL) answers here: code archive_db, myapp.db untouched.
+  // (The write is init()'s only - a tool's bare attach() writes nothing, as before.)
+  try {
+    await getQuery("PRAGMA chatlog.journal_mode = WAL");
+    await runQuery("PRAGMA chatlog.synchronous = NORMAL").catch(() => {});
+    if (move) {
+      const uv = Math.floor(Number(((await getQuery("PRAGMA chatlog.user_version"))[0] || {}).user_version)) || 0;
+      await runQuery(`PRAGMA chatlog.user_version = ${uv}`);
+    }
+  } catch (e) {
+    await detachArchive(file, existed);
+    throw Object.assign(new Error(`CHATLOG_DB (${file}) can't be written (${e.code || e.message}) - fix its permissions, its volume (read-only?) or ` +
+                                  "its free space and restart; nothing is archived meanwhile" + (inMain ? " (the empty archive tables stay in myapp.db)" : "")),
+                        { code: "archive_db" });
+  }
   if (inMain) {
     let moved = false;
     try {
       moved = await tx(async () => {
+        // Train 3 review fix-up 2: two starts racing (pm2 / a manual start / the updater) - the other one moved the tables after this
+        // one's first look: the archive lives in CHATLOG_DB now, so this start stays ATTACHED (detaching made init() create a NEW
+        // chat_log in myapp.db - a split archive that the next start then kept, ignoring the lines in CHATLOG_DB)
+        if (!(await getQuery("SELECT 1 FROM main.sqlite_master WHERE type = 'table' AND name = 'chat_log'")).length) return "gone";
         if (!(await mainArchiveEmpty())) return false;                     // a line landed meanwhile (another process): stays
         for (const [name] of TRIGGERS) await runQuery(`DROP TRIGGER IF EXISTS main.${name}`);
         await runQuery("DROP TABLE IF EXISTS main.chat_log_fts");
@@ -315,15 +346,9 @@ async function attach(opts = {}) {
       return keep(`the move failed (${e.message}) - keeping it there`);
     }
     if (!moved) { await detachArchive(file, existed); return keep("it holds a line now - keeping it there (move it by hand first)"); }
-    console.log("[chatlog] CHATLOG_DB is set: the empty archive tables left myapp.db - the archive lives in " + file);
+    console.log(moved === "gone" ? "[chatlog] CHATLOG_DB is set: another start of the site moved the empty archive tables already - the archive lives in " + file
+                                 : "[chatlog] CHATLOG_DB is set: the empty archive tables left myapp.db - the archive lives in " + file);
   }
-  if (counted > 0) {
-    let has = false;
-    try { has = (await getQuery("SELECT 1 FROM chatlog.chat_log LIMIT 1")).length > 0; } catch (e) { has = false; }
-    if (!has) { await detachArchive(file, true); throw wrong("holds no archived line"); }
-  }
-  await getQuery("PRAGMA chatlog.journal_mode = WAL");
-  await runQuery("PRAGMA chatlog.synchronous = NORMAL").catch(() => {});
   ATTACHED = true;
   return true;
 }

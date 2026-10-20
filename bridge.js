@@ -1050,12 +1050,17 @@ async function summary(full, viewer) {
   let namesOk = true;
   try { await CV.init(); } catch (e) { namesOk = false; }
   const C = await resolveNames([...rooms.values()].filter(open).flatMap((R) => CV.roster(R.mic)));   // 1.99ea: names on the mic
-  return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
-    id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
-    people: RA.people(R.count, R.members),
-    mic: open(R) ? CV.roster(R.mic).map((u) => (u.anon ? "someone" : withPatv(u, C).display)) : [],
-    topic: open(R) && namesOk ? CV.redact(R.topic) : "",
-  }));
+  // Train 3 review fix-up 2: micCount counts the same roster the names come from - a left-out mic holder isn't counted either (the
+  // raw R.mic.length put "🎙 1" on the Top Pads / /p cards beside "Mic is free": the count said who the names leave out is there)
+  return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => {
+    const mic = CV.roster(R.mic);
+    return {
+      id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: mic.length, audio: !!R.audio && isLive(R),
+      people: RA.people(R.count, R.members),
+      mic: open(R) ? mic.map((u) => (u.anon ? "someone" : withPatv(u, C).display)) : [],
+      topic: open(R) && namesOk ? CV.redact(R.topic) : "",
+    };
+  });
 }
 
 // ── 1.99fu: 💸 Tip from the pad's user lists ("In the Camfrog room" / "On the mic" ⋯ menus, public/js/room-mod.js) ──

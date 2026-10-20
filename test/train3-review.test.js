@@ -315,6 +315,14 @@ test("Train 3 review fix-up: a left-out person (!bridge hide) is not in the rost
   assert.ok(!names.includes("rosterout") && !r.text.includes("Gone Guy"), JSON.stringify(names));
   assert.deepEqual(names.filter((x) => x === "someone").length, 1, "only the incognito one is 'someone': " + JSON.stringify(names));
   assert.deepEqual(r.d.mic || [], [], "the left-out mic holder isn't on the mic card either");
+  // fix-up 2: nor in the mic COUNT (the Top Pads / /p cards' 🎙 n, the home "n on mic") - it counts the same roster as the names
+  const s = (await bridge.summary(true)).find((x) => x.id === ROOM.id);
+  assert.deepEqual([s.mic, s.micCount], [[], 0], "no '🎙 1' beside 'Mic is free'");
+  assert.equal((await bridge.summary(false)).find((x) => x.id === ROOM.id).micCount, 0, "(a card without the names: the count alone)");
+  await bridge.ingest({ rooms: [snap({ members: [ALICE, DAN, OUT, INC], mic: [OUT, INC, ALICE], count: 4 })], events: [] });
+  const s2 = (await bridge.summary(true)).find((x) => x.id === ROOM.id);
+  assert.deepEqual([s2.mic.length, s2.micCount], [2, 2], "incognito: counted (as 'someone'), left out: not: " + JSON.stringify(s2.mic));
+  assert.ok(s2.mic.includes("someone") && !JSON.stringify(s2.mic).includes("Gone Guy"), JSON.stringify(s2.mic));
   await bridge.ingest({ rooms: [snap()], events: [] });
 });
 

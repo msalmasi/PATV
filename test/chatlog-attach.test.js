@@ -219,3 +219,86 @@ CL.init().then(async () => { const out = await (${body})(CL, getQuery, runQuery)
   // back on the right path: everything is there
   assert.deepEqual(run({ CHATLOG_DB: good }, `async (CL, getQuery) => [CL.archiveError(), (await getQuery("SELECT c FROM chat_log")).map((x) => x.c)]`), [null, [7]]);
 });
+
+test("Train 3 review fix-up 2: a CHATLOG_DB SQLite can open but not WRITE (read-only file or volume) leaves myapp.db's empty archive tables alone - init() resolves (archive_db), the live chat goes on", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chatlog-attach-readonly-"));
+  const all = `async (CL, getQuery) => (await getQuery("SELECT name FROM main.sqlite_master WHERE name GLOB 'chat_log*' ORDER BY name")).map((x) => x.name)`;
+  const before = childRun(dir, { CHATLOG_DB: "" }, all).more;
+  assert.ok(before.length >= 10, before.join(","));
+  // (a) an empty file; (b) a WAL-mode SQLite file - journal_mode = WAL alone passes on that one, only a write answers
+  const empty = path.join(dir, "chatlog.db");
+  fs.writeFileSync(empty, "");
+  const sub = fs.mkdtempSync(path.join(os.tmpdir(), "chatlog-attach-readonly-wal-"));
+  const wal = path.join(sub, "other.db");
+  childRun(sub, { CHATLOG_DB: wal });
+  for (const x of [wal + "-wal", wal + "-shm"]) { try { fs.unlinkSync(x); } catch (e) { /* checkpointed */ } }
+  for (const f of [empty, wal]) fs.chmodSync(f, 0o444);
+  let writable = false;
+  try { fs.closeSync(fs.openSync(empty, "r+")); writable = true; } catch (e) { writable = false; }
+  if (writable) { for (const f of [empty, wal]) fs.chmodSync(f, 0o644); t.skip("chmod 0444 doesn't stop this user writing (root)"); return; }
+  const probe = `async (CL, getQuery) => ({ left: await (${all})(CL, getQuery), err: CL.archiveError(), ready: CL.hiddenReady(),
+    again: await CL.init().then(() => "ok", (e) => String(e.message)),
+    view: await require(${JSON.stringify(path.join(repo, "chatlogview"))}).init().then(() => "ok", (e) => String(e.message)) })`;
+  try {
+    for (const f of [empty, wal]) {
+      const r = childRun(dir, { CHATLOG_DB: f }, probe);
+      assert.equal(r.attached, null, f);
+      assert.deepEqual(r.more.left, before, "nothing dropped from myapp.db: " + f);
+      assert.match(String(r.more.err), /can't be written \(SQLITE_READONLY\).*the empty archive tables stay in myapp\.db/, "archiveError says why");
+      assert.equal(r.more.ready, true, "the hidden set loaded");
+      assert.equal(r.more.again, "ok", "init() resolves (code archive_db) - not SQLITE_READONLY on every call");
+      assert.equal(r.more.view, "ok", "chatlogview.init() too - bridge.js keeps every pad's live chat");
+    }
+    assert.equal(fs.statSync(empty).size, 0, "the read-only file is left as it was");
+    // a fresh install (no archive tables in myapp.db yet) on a read-only CHATLOG_DB: the same archive_db answer
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "chatlog-attach-readonly-fresh-"));
+    const r2 = childRun(dir2, { CHATLOG_DB: empty }, probe);
+    assert.match(String(r2.more.err), /can't be written \(SQLITE_READONLY\)/);
+    assert.deepEqual([r2.more.again, r2.more.view], ["ok", "ok"]);
+  } finally { for (const f of [empty, wal]) fs.chmodSync(f, 0o644); }
+  // writable again: the move happens at the next start
+  assert.deepEqual(childRun(dir, { CHATLOG_DB: empty }, "async (CL) => CL.archiveError()"), { main: 0, attached: path.resolve(empty) });
+});
+
+test("Train 3 review fix-up 2: two starts racing the move - the one that looked before the other's move committed stays ATTACHED (never a new chat_log in myapp.db: a split)", () => {
+  const { execFileSync } = require("child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chatlog-attach-race-"));
+  childRun(dir, { CHATLOG_DB: "" });                                   // the deploy before decision 25: empty tables in myapp.db
+  const file = path.join(dir, "chatlog.db");
+  // start A: a whole other start of the site - run while start B issues its ATTACH (B's first look found the empty tables there)
+  const startA = path.join(dir, "startA.js");
+  fs.writeFileSync(startA, `"use strict";
+process.chdir(${JSON.stringify(dir)});
+const CL = require(${JSON.stringify(path.join(repo, "chatlog"))});
+const { runQuery } = require(${JSON.stringify(path.join(repo, "dbUtils"))});
+CL.init().then(async () => {
+  await runQuery("INSERT INTO chatlog_rooms (rk, room_id, created, \\"rows\\") VALUES (1, 'A.Room', 1, 2)");
+  await runQuery("INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (7, 1, 1, 'msg', 'zed', 'start A', 'r1', 'm', '{}')");
+  process.exit(CL.archivePath() ? 0 : 3);
+}, (e) => { console.error(e); process.exit(1); });
+`);
+  const startB = path.join(dir, "startB.js");
+  fs.writeFileSync(startB, `"use strict";
+process.chdir(${JSON.stringify(dir)});
+const D = require(${JSON.stringify(path.join(repo, "dbUtils"))});
+const runQuery = D.runQuery;
+let fired = false;
+D.runQuery = (sql, p) => {
+  if (!fired && /^ATTACH DATABASE/.test(sql)) { fired = true; require("child_process").execFileSync(process.execPath, [${JSON.stringify(startA)}], { env: process.env }); }
+  return runQuery(sql, p);
+};
+const CL = require(${JSON.stringify(path.join(repo, "chatlog"))});
+CL.init().then(async () => {
+  const main = (await D.getQuery("SELECT 1 FROM main.sqlite_master WHERE name = 'chat_log'")).length;
+  await D.runQuery("INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (8, 1, 2, 'msg', 'zed', 'start B', 'r1', 'm', '{}')");
+  console.log("RESULT " + JSON.stringify({ fired, main, attached: CL.archivePath(), err: CL.archiveError() }));
+  process.exit(0);
+}, (e) => { console.error(e); process.exit(1); });
+`);
+  const out = execFileSync(process.execPath, [startB], { env: { ...process.env, CHATLOG_DB: file }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const b = JSON.parse(out.split("\n").find((l) => l.startsWith("RESULT ")).slice(7));
+  assert.deepEqual(b, { fired: true, main: 0, attached: path.resolve(file), err: null }, "start B stays attached - no chat_log made in myapp.db");
+  // the next start: one archive, in CHATLOG_DB, with both starts' lines
+  assert.deepEqual(childRun(dir, { CHATLOG_DB: file }, `async (CL, getQuery) => (await getQuery("SELECT c FROM chat_log ORDER BY c")).map((x) => x.c)`),
+                   { main: 0, attached: path.resolve(file), more: [7, 8] });
+});
