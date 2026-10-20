@@ -222,17 +222,34 @@ The economy-policy-to-site plan (2026-10-20, slice PO-1) hardened the scheduler 
   cut-off within the hour the epoch runs on what there is. The log says `[policy] treasury W...: waiting for the Monday cut-off`
   once. (On 2026-10-19 the site's sim was at 04:00:08 and the cut-off at 04:00:11.) On staging the capital cut-off runs on the real
   clock, not the policy test clock: a test-clock Monday exercises the wait only when the book's last real cut-off is before it.
+  **Past the hour (review fix):** while the site's OWN cut-off is overdue - capital live, vaults on, the capital clock at or past
+  the book's `next_epoch`, i.e. the capital tick (same process) runs it at its next pass - the epoch keeps waiting, however long:
+  after a site outage across Monday 04:00 the hour is long up when the site comes back, and settling first would pay the week
+  without its last day (the I8 late-monday case). Log: `the site's capital cut-off is OVERDUE` once; after 15 minutes an ops alert
+  + Pepe notice `... held - the capital cut-off is overdue`. If you get that alert, the capital tick isn't cutting
+  (`[capital] epoch:` errors, the staking watch's I8): fix the cut-off; the epoch runs at the first pass after it. Nothing moves
+  while it waits.
 - **The boundary handshake (T9).** `POST /api/policy/bot/boundary {engine, period, now, guarantee}` (bot token): before Pepe moves a
   leg of an epoch, daily or monetary period he asks the site for its snapshot of that moment - inputs + plan in ONE `dbUtils.tx`,
   stored once in `policy_sims` (`site_boundary_inputs`, `site_boundary_plan`, `boundary_ts`), never overwritten (a second call
   answers `dup`). His report is then compared against it. Only while the engine is dry / shadow (`off` / `live` answer `skipped`).
-- **Clean (D-15).** `policy_sims.ok = 1` only when the engine diff is empty, a boundary snapshot exists and the boundary plan
-  differs from Pepe's on no field but the whitelist (`policy/scheduler.js WHITELIST`; today only the Monday daily's `release` in
-  shadow, proven post-move in `test/policy-boundary.test.js`). A report without a snapshot (a Pepe before PO-0c, a timed-out
-  handshake) is never clean. Diffs list at most 400 entries (`truncated = 1` when there were more).
+  The snapshot also keeps the site's OWN decisions of that moment (`boundary_meta`: the monetary day's guarantee - the site's
+  decision, the gate, the epoch state it saw, and Pepe's flag); the plan itself is computed on Pepe's flag.
+- **Clean (D-15).** `policy_sims.ok = 1` only when the engine diff is empty, a boundary snapshot exists and nothing differs - in
+  the PLAN (boundary plan vs Pepe's), in the INPUTS, or in the site's own DECISIONS (the guarantee flag) - outside the whitelist
+  (`policy/scheduler.js WHITELIST`, each entry with a condition and a test in `test/policy-boundary.test.js`): the Monday daily's
+  `release` and the `week.*` inputs of the Monday daily / monetary day while the site still holds LAST week's record (post-move);
+  the Monday guarantee decision "site waits for the epoch / pepe true" (post-move: his epoch ran a moment earlier); the
+  participation rows (`rows` / `days` / `skip`) only while no rule reads them (no activity reward paid, issuance not scaled by
+  activity). Anything else - any other input, a decided guarantee mismatch, a site gather failure - keeps the period unclean.
+  `policy_sims.whitelisted` / `blocking` = `{plan, inputs, decision}`. A report without a snapshot (a Pepe before PO-0c, a
+  timed-out handshake) is never clean. Diffs list at most 400 entries (`truncated = 1` when there were more: never clean).
 - **Burn.** Pepe's daily `burn` report (`inputs.kind = "burn"`: the closed policy day `[04:00, 04:00)` UTC - `from`, `to`, `mode`,
   `burned`, `burns`) is planned by `engines.planBurn`; the scheduler records a day summary `<mode>:burn:D<date>` of every closed
   day, even at zero (from the pool history: the `burn` moves out of the burn reserve) - it is also that day's boundary snapshot.
+  Only a day that has CLOSED by the pool history's clock (real time + 60 s - never the staging test clock): a boundary call or a
+  report for an open day is refused and nothing is recorded. Days a pause or an outage skipped are summarized when the engine
+  runs again (7 days back, never before the engine was armed). A paused burn engine summarizes nothing until it is resumed.
 - **Pause (T3).** The owner's kill switch, Pepe not needed:
   ```
   cd /home/PATV && node tools/policy-backend.js --actor=<you> pause <treasury|monetary|burn|all> --note "why"
@@ -241,11 +258,21 @@ The economy-policy-to-site plan (2026-10-20, slice PO-1) hardened the scheduler 
   or /admin/economy → ⏱️ Policy scheduler → Pause an engine (a Pepe owner, password step-up). One transaction (the flag,
   `policy_audit`, `admin_audit` `policy.pause` / `policy.resume`), then every site admin gets an ops alert (inbox + Telegram).
   A paused engine runs nothing: a live one's due periods are recorded `missed` (`result.missed = "paused"`), nothing is handed
-  back, the mode stays. A paused engine can't be cut over. **A prod write: the user's go.**
+  back, the mode stays. A paused engine can't be cut over. **A prod write: the user's go.** Enforced at write time (review fix):
+  every live run re-reads the switch inside its own transaction, so a pause pressed while an earlier run holds the write gate
+  stops the rest of that pass; the "missed paused" record is written in a transaction that re-reads the flag (a resume is never
+  undone). The shell refuses to run without `./myapp.db` (exit 2, nothing created - run it in `/home/PATV` or pass
+  `--dir=/home/PATV`), and pause / resume refuse a database without the site's `users` and `policy_engines` tables.
 - **Missed periods (D-18).** Only the current period runs after an outage or a resume, flagged `late` on its result and record
-  (`{why: "site_down" | "paused", late_s}`) with an admin notice; older ones stay `missed` (the card's "Missed periods").
+  (`{why: "site_down" | "paused", late_s, seen_at}`) with an admin notice; older ones stay `missed` (the card's "Missed periods").
+  `late` is decided by when a scheduler FIRST SAW the period due (`policy_meta seen:<engine>:<period>`, any process): more than
+  15 minutes past its boundary = the site was down at it. A cut-off / guarantee wait, a failed run's retry or a lease takeover
+  doesn't change it. Every period an outage skipped is recorded `missed` (14 days / 4 weeks back, never before the engine was
+  armed), and so is a period whose run was still failing when it ended (`result.missed = "failed"`); one Pepe notice per sweep.
+  A missed MONDAY monetary day says the week's guarantee top-up rode on it and was not paid (`result.guarantee_unpaid`).
   An owner's "Run now" for an older period comes with the web-approval flow (PO-7), not here.
 - `node tools/policy-backend.js preflight` FAILs while an engine is paused and WARNs on missed periods and on unclean shadow
   periods of the last 14 days.
 - Every reader of Pepe's policy push (flags, the epoch hour, burn settings, his journals, the effective `econ_cfg`) reads it
-  through `policy/source.js`; PO-2 / H1 switch that one module to the site's own config.
+  through `policy/source.js`; PO-2 / H1 switch that one module to the site's own config. `policy/core`'s reader is named
+  `_pushForSource` (no `cfg()`): `test/policy.test.js` fails if any other file calls it.

@@ -5,8 +5,10 @@
 // or after the boundary - in dry, shadow and live - and the Monday daily release waits with it (it runs after the epoch).
 //   * cut-off at +3 s: the epoch waits, then plans with the boundary's PAT-days bucket (uncapped when the week is whole);
 //   * a week whose PAT-days began mid-week: the bucket, paid under the 25% reference cap (partial);
-//   * no cut-off at all: the epoch waits the full hour, then runs on the snapshot (the reference cap) - never later;
-//   * a live epoch waits the same way (nothing moves before the cut-off).
+//   * no cut-off at all, and none due on the site: the epoch waits the full hour, then runs on the snapshot (the reference cap);
+//   * a live epoch waits the same way (nothing moves before the cut-off);
+//   * PO-1 review: a site outage across Monday 04:00 - the hour is up when the site comes back, but its OWN cut-off is overdue
+//     (the capital tick runs it at its next pass): the epoch keeps waiting for it, then pays the closed bucket, flagged late.
 //   NODE_PATH=G:/PATV/node_modules node --test test/policy-scheduler-cutoff.test.js
 "use strict";
 const test = require("node:test");
@@ -30,6 +32,11 @@ const V = require(path.join(repo, "capital", "vaults"));
 const C = require(path.join(repo, "policy", "core"));
 const E = require(path.join(repo, "policy", "engines"));
 const SCH = require(path.join(repo, "policy", "scheduler"));
+// PO-1 review: past the hour the epoch keeps waiting only while the SITE's own capital cut-off is overdue - read on the CAPITAL
+// clock (capital/core.nowS: capital/service.tick's own). Pinned per test so nothing here depends on the real date.
+let capAt = null;
+const capNow0 = CC.nowS;
+CC.nowS = () => (capAt === null ? capNow0() : capAt);
 
 const M = 1000000;
 const DAY = 86400;
@@ -147,13 +154,18 @@ test("a week whose PAT-days began mid-week: the bucket after the cut-off, paid u
   assert.equal(E.trackOf(s.inputs, s.plan).vaults.house.fallback, true);
 });
 
-test("no cut-off at all: the epoch waits the whole hour, then runs on the snapshot (the reference cap) - not later", async () => {
+test("no cut-off at all, and none due on the site: the epoch waits the whole hour, then runs on the snapshot (the reference cap) - not later", async () => {
   await pushFor(B3);
-  // the cut-offs stopped after Sunday a week ago: no bucket for this boundary
+  // the cut-offs stopped after Sunday a week ago: no bucket for this boundary - and the site's capital clock hasn't reached the
+  // book's next cut-off (as on staging, whose test clock runs ahead of the real one): nothing of the site's own is overdue
   await book(B3 - 8 * DAY + 3, { [String(B3 - 7 * DAY)]: { 1: 3.5 * M, 2: 3.5 * M } });
-  assert.deepEqual(await SCH.pass(B3 + 1), []);
-  assert.deepEqual(await SCH.pass(B3 + E.TR_CUTOFF_WAIT - 1), [], "59:59 past the boundary: still waiting");
-  assert.deepEqual(await SCH.pass(B3 + E.TR_CUTOFF_WAIT), [`dry treasury ${wid(B3)}`, `dry treasury ${did(B3)}`], "at the hour it runs");
+  capAt = B3 - 8 * DAY + 60;
+  try {
+    assert.deepEqual(await SCH.pass(B3 + 1), []);
+    assert.deepEqual(await SCH.pass(B3 + E.TR_CUTOFF_WAIT - 1), [], "59:59 past the boundary: still waiting");
+    assert.equal(await SCH.cutoffWait(B3, B3 + E.TR_CUTOFF_WAIT), null, "the hour is up and no cut-off of the site's is due");
+    assert.deepEqual(await SCH.pass(B3 + E.TR_CUTOFF_WAIT), [`dry treasury ${wid(B3)}`, `dry treasury ${did(B3)}`], "at the hour it runs");
+  } finally { capAt = null; }
   const s = await sim(`dry:treasury:${wid(B3)}`);
   const h = s.plan.vaults.house;
   assert.equal(E.weightingOf(s.inputs, s.plan).house, "snapshot");
@@ -188,4 +200,76 @@ test("LIVE: the epoch waits too - nothing moves before the cut-off; after it the
   assert.equal(r.plan.vaults.house.apr_cap, r.plan.vaults.house.stakers_share, "uncapped (whole week)");
   assert.equal(r.result.late, undefined, "on time: not flagged late");
   assert.equal(house0 - (await CC.houseBalance()), r.plan.vaults.house.surplus);
+});
+
+test("PO-1 review: a site outage across Monday 04:00 (back at 06:00), LIVE - the epoch waits PAST the hour for the overdue cut-off, then pays the closed bucket, flagged late; the admins are told", async () => {
+  const B5 = B1 + 28 * DAY;                                       // Monday 2026-11-23
+  await pushFor(B5);
+  // a partial week (the PAT-days began on Saturday); Sunday's cut-off ran, Monday's (next_epoch = B5) didn't: the site was down
+  await book(B5 - DAY, { [String(B5)]: { 1: 0.5 * M, 2: 0.5 * M } });
+  const refill = HOUSE - (await CC.houseBalance());                 // the House back to 20M (the LIVE test above paid its surplus)
+  if (refill > 0) await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES ('refill-b5', 's', NULL, ?)", [refill]);
+  await C.setMode("treasury", "live", { by: "test", via: "cutover", armedAt: B5 - DAY });
+  SCH._resetPassClock();                                          // the process restarts with the site
+  const OA = require(path.join(repo, "opsalerts"));
+  const oAlert = OA.alert, alerts = [];
+  OA.alert = async (a) => { alerts.push(a); return { admins: 0 }; };
+  const back = B5 + 2 * 3600;
+  capAt = back;
+  try {
+    const house0 = await CC.houseBalance();
+    assert.equal(await SCH.cutoffWait(B5, back), "overdue", "the hour is up, but the site's own cut-off is due and hasn't run");
+    // what the epoch would pay on the bucket as it stands (the review's probe: half of it)
+    const early = E.planEpoch(await require(path.join(repo, "policy", "gather")).epoch(back, wid(B5)));
+    assert.deepEqual(await SCH.pass(back), [], "it waits - past the hour");
+    assert.equal(await C.run("treasury", wid(B5)), null, "nothing ran");
+    assert.equal(await CC.houseBalance(), house0, "nothing moved");
+    assert.equal(logs.filter((l) => l.includes(`treasury ${wid(B5)}: the site's capital cut-off is OVERDUE`)).length, 1, "logged once");
+    assert.deepEqual(await SCH.pass(back + SCH.OVERDUE_ALERT_S - 15), []);
+    assert.equal(alerts.length, 0, "no alert before OVERDUE_ALERT_S");
+    assert.deepEqual(await SCH.pass(back + SCH.OVERDUE_ALERT_S), [], "still waiting (never on an open bucket)");
+    assert.ok(alerts.some((a) => a.source === "policy" && a.title === `Policy engine treasury: ${wid(B5)} held - the capital cut-off is overdue`), JSON.stringify(alerts));
+    const eff = (await getQuery("SELECT data FROM policy_effects WHERE key = ?", [`alert:cutoff:${wid(B5)}`]))[0];
+    assert.ok(eff && /Nothing has moved/.test(JSON.parse(eff.data).text), "Pepe's notice too");
+    await SCH.pass(back + SCH.OVERDUE_ALERT_S + 15);
+    assert.equal(alerts.length, 1, "told once");
+    // the capital tick comes round: the cut-off closes the week's bucket (Sunday -> Monday 06:15 accrued)
+    await cutoff(back + 950);
+    assert.equal(await SCH.cutoffWait(B5, back + 960), null);
+    const ran = await SCH.pass(back + 960);
+    assert.ok(ran.includes(`treasury ${wid(B5)}`) && ran.includes(`treasury ${did(B5)}`), JSON.stringify(ran));
+    const r = await C.run("treasury", wid(B5));
+    assert.equal(r.state, "done");
+    const bucket = new Map(new Map(r.inputs.vaults.house.pat_days).get(String(B5)));
+    assert.ok(bucket.get("1") > 0.5 * M, `the cut-off's Sunday-to-Monday day is in the bucket: ${bucket.get("1")}`);
+    assert.equal(E.weightingOf(r.inputs, r.plan).house, "partial");
+    const h = r.plan.vaults.house;
+    assert.ok(h.stakers > early.vaults.house.stakers * 1.8, `the stakers get the whole bucket's pay: ${h.stakers} vs ${early.vaults.house.stakers} without the wait`);
+    assert.equal(house0 - (await CC.houseBalance()), h.surplus);
+    assert.equal(r.result.late.why, "site_down", "flagged late (D-18): the scheduler first saw the period at 06:00");
+    assert.equal(r.result.late.seen_at, back);
+  } finally { capAt = null; OA.alert = oAlert; }
+});
+
+test("PO-1 review: past the hour the epoch waits only for a cut-off that is the SITE's to run now - capital not live, vaults off or not due yet: Pepe's hour", async () => {
+  const B6 = B1 + 35 * DAY;
+  await book(B6 - DAY, { [String(B6)]: { 1: 0.5 * M, 2: 0.5 * M } });            // next_epoch = B6
+  capAt = B6 + 7200;
+  try {
+    assert.equal(await SCH.cutoffWait(B6, B6 + 60), "hour", "within the hour: Pepe's wait");
+    assert.equal(await SCH.cutoffWait(B6, B6 + 7200), "overdue");
+    assert.equal(await SCH.cutoffPending(B6, B6 + 7200), true);
+    const c0 = await CC.meta("cfg");
+    await CC.setMeta("cfg", Object.assign({}, c0 || {}, { vaults_enabled: 0 }));
+    try { assert.equal(await SCH.cutoffWait(B6, B6 + 7200), null, "vaults off: the capital tick runs no cut-off"); }
+    finally { await CC.setMeta("cfg", c0 || {}); }
+    await CC.setMeta("live", false); CC.forgetLive();
+    try { assert.equal(await SCH.cutoffWait(B6, B6 + 7200), null, "the share book isn't the site's"); }
+    finally { await CC.setMeta("live", true); CC.forgetLive(); }
+    capAt = B6 - 60;
+    assert.equal(await SCH.cutoffWait(B6, B6 + 7200), null, "not due on the capital clock (a staging test clock ahead of it)");
+    capAt = B6 + 7200;
+    await cutoff(B6 + 7000);
+    assert.equal(await SCH.cutoffWait(B6, B6 + 7200), null, "the bucket closed");
+  } finally { capAt = null; }
 });

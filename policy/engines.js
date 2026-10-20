@@ -615,6 +615,12 @@ const TR_CUTOFF_WAIT = 3600;
  *  with no cut-offs (not launched / none yet) never waits. */
 function cutoffPending(book, eb, now) {
   if (Number(now) - Number(eb) >= TR_CUTOFF_WAIT) return false;
+  return bucketOpen(book, eb);
+}
+/** The week's PAT-days bucket of boundary `eb` is still OPEN on the share book `book`: the book is launched, has cut-offs, and
+ *  its newest cut-off is before `eb` (the cut-off that closes the bucket hasn't run). No time limit (PO-1 review: the site's
+ *  scheduler waits past the hour while its own capital cut-off is overdue - policy/scheduler.cutoffWait). */
+function bucketOpen(book, eb) {
   const d = book && typeof book === "object" ? book : {};
   if (!d.inited || !Array.isArray(d.epochs) || !d.epochs.length) return false;
   return Number((d.epochs[d.epochs.length - 1] || {}).ts || 0) < Number(eb);
@@ -741,7 +747,7 @@ function planActivity(inp, localDay, amount) {
   return scores.sort((a, b) => cmpPy(a[0], b[0])).map(([lg, s]) => [lg, floorDiv(amount * s, tot)]).filter((x) => x[1] > 0);
 }
 
-module.exports = { planEpoch, planDaily, planMonetary, planActivity, planBurn, cutoffPending, TR_CUTOFF_WAIT, weekStart, dayStart, epochId, dayId, monthOf, resolveWeek, budgetLeft,
+module.exports = { planEpoch, planDaily, planMonetary, planActivity, planBurn, cutoffPending, bucketOpen, TR_CUTOFF_WAIT, weekStart, dayStart, epochId, dayId, monthOf, resolveWeek, budgetLeft,
                    capRoom, mintsMtd, weekIssuance, weekTarget, heistCap, guaranteeBase, gscale, gscaleOf, WEEK, budgetSum, loansByVault, poolOwed, target, stakers,
                    activity, patDaysAvg, patDaysWhole, weightingFor, weightingOf, lastBoundaryOf, trackOf, stakerCapOf, TR_TRACK_CAP, TR_FALLBACK_CAP, floorDiv, floorDivF, pyInt, fmt, pyFloatStr, cmpPy, C, BUDGETS, GROUPS, CAPPED, SOURCES, TREASURY, CASH, FED,
                    INCENTIVES, FORTKNOX, CASINO, GUARANTEE_WAIT, DEFAULTS, CONSTS };

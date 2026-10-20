@@ -17,7 +17,9 @@
 //   policy_sims      key PK "<mode>:<engine>:<period>" - dry runs and shadow comparisons (site plan, Pepe's report, the diffs);
 //                    PO-1: site_boundary_inputs / site_boundary_plan / boundary_ts - the site's snapshot at the period's
 //                    BOUNDARY (POST /api/policy/bot/boundary, before Pepe moves a leg; written once, never overwritten), the
-//                    comparison's basis; truncated (a diff hit its cap); whitelisted (the informational diffs excused)
+//                    comparison's basis; boundary_meta - the site's own decisions taken with it (the monetary day's guarantee);
+//                    truncated (a diff hit its cap); whitelisted / blocking ({plan, inputs, decision}: the differences the
+//                    D-15 whitelist excused / the ones that keep the period unclean)
 //   policy_effects   key PK - what Pepe mirrors into his own books (a mint record, a loan repayment, a budget spend, the day /
 //                    epoch records, a burn, a cap notice); acked by him; the site never needs the ack to stay correct (it
 //                    overlays its own effects on Pepe's pushed docs by content, policy/gather.js)
@@ -86,6 +88,9 @@ function init() {
       if (!ps.has("boundary_ts")) await runQuery("ALTER TABLE policy_sims ADD COLUMN boundary_ts REAL");
       if (!ps.has("truncated")) await runQuery("ALTER TABLE policy_sims ADD COLUMN truncated INTEGER");
       if (!ps.has("whitelisted")) await runQuery("ALTER TABLE policy_sims ADD COLUMN whitelisted TEXT");
+      // PO-1 review: the site's own decisions at the boundary (the monetary day's guarantee) and what kept a period unclean
+      if (!ps.has("boundary_meta")) await runQuery("ALTER TABLE policy_sims ADD COLUMN boundary_meta TEXT");
+      if (!ps.has("blocking")) await runQuery("ALTER TABLE policy_sims ADD COLUMN blocking TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -141,12 +146,21 @@ async function engines() {
 async function putPaused(engine, paused, { by = null, note = null } = {}) {
   await init();
   if (!ENGINES.includes(engine)) throw Object.assign(new Error("no such engine"), { status: 400 });
-  const t = Date.now();
+  // paused_at on the SCHEDULER's clock (PO-1 review): the resume compares it with the periods' boundaries - a staging
+  // rehearsal on the test clock must release the same periods prod would
+  const t = Math.round(nowMs());
   await runQuery(`INSERT INTO policy_engines (engine, mode, armed_at, updated, by, note, paused, paused_by, paused_at, pause_note)
                   VALUES (?, 'off', NULL, ?, NULL, NULL, ?, ?, ?, ?)
                   ON CONFLICT(engine) DO UPDATE SET paused = excluded.paused, paused_by = excluded.paused_by, paused_at = excluded.paused_at,
                     pause_note = excluded.pause_note`,
                  [engine, t, paused ? 1 : 0, str(by, 60), t, str(note, 300)]);
+}
+/** PO-1: why a paused engine's period didn't run (its missed record's error). */
+const pausedWhy = (eng) => `paused${eng.paused_by ? " by " + eng.paused_by : ""}${eng.pause_note ? " (" + eng.pause_note + ")" : ""} - not run (D-18)`;
+/** PO-1: record `period` missed because `eng` (its engine row, read in the caller's transaction) is paused. */
+async function missedPaused(engine, period, boundary, eng) {
+  await putRun(engine, period, { state: "missed", boundary, via: "site", error: pausedWhy(eng).slice(0, 400),
+                                 result: { missed: "paused", paused_at: eng.paused_at, paused_by: eng.paused_by } });
 }
 async function mode(engine) { return ((await engines())[engine] || {}).mode || "off"; }
 async function setMode(engine, m, { by = "admin", byId = null, via = "admin", note = null, armedAt } = {}) {
@@ -242,7 +256,9 @@ async function ack(keys) {
 }
 
 // ── Pepe's config push (his constants, effective econ_cfg, flags, journals of the periods he ran) ──
-async function cfg() { return (await meta("cfg")) || null; }
+// PO-1 (T14): policy/source.js is the ONE reader of the push - hence the name: anything else that calls _pushForSource is a
+// second reader (test/policy.test.js scans the tree for it; PO-10 may only drop a push field once no reader of it is left).
+async function _pushForSource() { return (await meta("cfg")) || null; }
 async function putCfg(c) {
   if (!c || typeof c !== "object") return null;
   const v = Object.assign({}, c, { at: Date.now() / 1000 });
@@ -250,10 +266,10 @@ async function putCfg(c) {
   return v;
 }
 async function cfgAge() {
-  const c = await cfg();
+  const c = await _pushForSource();
   return c && c.at ? Date.now() / 1000 - Number(c.at) : Infinity;
 }
 
-module.exports = { init, meta, setMeta, nowMs, nowS, _setClock, loadTestClock, setTestClock, engines, mode, setMode, putPaused, audit, acquireLease,
-                   releaseLease, leaseInfo, runKey, run, putRun, runs, effect, effectsOpen, effectsAll, ack, cfg, putCfg, cfgAge, ENGINES,
-                   MODES, RETIRED, STAYS, HOLDER, J, parse, str, _testOffset: () => testOffsetMs };
+module.exports = { init, meta, setMeta, nowMs, nowS, _setClock, loadTestClock, setTestClock, engines, mode, setMode, putPaused, pausedWhy, missedPaused,
+                   audit, acquireLease, releaseLease, leaseInfo, runKey, run, putRun, runs, effect, effectsOpen, effectsAll, ack, _pushForSource, putCfg,
+                   cfgAge, ENGINES, MODES, RETIRED, STAYS, HOLDER, J, parse, str, _testOffset: () => testOffsetMs };

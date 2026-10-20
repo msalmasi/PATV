@@ -32,12 +32,16 @@
                shadow: _t('js.adm.policy.mode_shadow', 'shadow (compared with Pepe every period)'), live: _t('js.adm.policy.mode_live', 'LIVE on the site') };
   function diffText(d) {
     if (!d) return '—';
-    var white = d.whitelisted || [];
-    var blocking = (d.total_diff || []).filter(function (x) { return white.indexOf(x) < 0; });
+    // PO-1 review: whitelisted / blocking are {plan, inputs, decision} (D-15 counts the inputs and the site's own decisions too)
+    var white = d.whitelisted || {}, bl = d.blocking || null;
+    var nWhite = (white.plan || []).length + (white.inputs || []).length + (white.decision || []).length;
+    var blocking = bl ? (bl.plan || []).concat((bl.inputs || []).map(function (x) { return _t('js.adm.policy.part_inputs', 'inputs') + ' · ' + x; }),
+                                               (bl.decision || []).map(function (x) { return _t('js.adm.policy.part_decision', 'decision') + ' · ' + x; }))
+                      : (d.total_diff || []).filter(function (x) { return (white.plan || []).indexOf(x) < 0; });
     var t;
     if (d.ok === true) {
-      t = white.length ? _t('js.adm.policy.diff_white', '{period}: clean ({n} whitelisted)', { period: d.period, n: white.length })
-                       : _t('js.adm.policy.diff_ok', '{period}: no differences', { period: d.period });
+      t = nWhite ? _t('js.adm.policy.diff_white', '{period}: clean ({n} whitelisted)', { period: d.period, n: nWhite })
+                 : _t('js.adm.policy.diff_ok', '{period}: no differences', { period: d.period });
     } else if (d.ok === false) {
       var n = (d.engine_diff || []).length + blocking.length;
       if (!n && !d.boundary) t = _t('js.adm.policy.diff_noboundary', '{period}: not clean - no boundary snapshot from Pepe', { period: d.period });
@@ -76,7 +80,10 @@
     var mi = $('policyMissed'); mi.textContent = '';
     (v.missed || []).forEach(function (x) { row(mi, [when(x.created), x.engine, x.period, x.error || '']); });
     var wl = $('policyWhite'); wl.textContent = '';
-    (v.whitelist || []).forEach(function (w) { row(wl, [w.engine + ' ' + w.kind + (w.monday ? ' (Monday)' : '') + (w.mode ? ' · ' + w.mode : ''), w.field, w.why, w.test]); });
+    (v.whitelist || []).forEach(function (w) {
+      var part = w.on === 'inputs' ? _t('js.adm.policy.part_inputs', 'inputs') + ' · ' : w.on === 'decision' ? _t('js.adm.policy.part_decision', 'decision') + ' · ' : '';
+      row(wl, [w.engine + ' ' + w.kind + (w.monday ? ' (Monday)' : '') + (w.mode ? ' · ' + w.mode : ''), part + w.field, w.why, w.test]);
+    });
     var r = $('policyRuns'); r.textContent = '';
     (v.runs || []).forEach(function (x) { row(r, [when(x.done || x.created), x.engine, x.period, x.state + (x.error ? ' (' + x.error + ')' : ''), x.via]); });
     var a = $('policyAudit'); a.textContent = '';

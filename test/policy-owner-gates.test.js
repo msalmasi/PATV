@@ -134,6 +134,26 @@ test("the econ edit / burn step-ups still work for an owner; reading stays Admin
 test("PO-1: pausing an engine on /admin/economy is a Pepe owner's with the password step-up; audited, and resumable", async () => {
   const C = require(path.join(repo, "policy", "core"));
   const nonce = async () => (await call("/api/admin/econ/edit/nonce", U.owner)).body.nonce;
+  // PO-1 review (plan §8: step-up + CSRF + same-site fetch): a request without the fetch header, from another site, or with a
+  // missing / forged / someone else's CSRF token is refused before anything else - nothing paused, the nonce not spent
+  const raw = (headers, body) => fetch(base + "/api/admin/policy/pause", { method: "POST", headers: Object.assign({ "content-type": "application/json", "x-test-user": U.owner }, headers),
+                                                                        body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+  const good = { "X-Requested-With": "fetch", "x-csrf-token": CTL.csrfToken("own"), origin: base, host: new URL(base).host };
+  const n0 = await nonce();
+  const body = { engine: "treasury", pause: true, note: "a forged pause", nonce: n0, password: "pw-right" };
+  for (const [why, h] of [["no X-Requested-With", Object.assign({}, good, { "X-Requested-With": "" })],
+                          ["cross-site origin", Object.assign({}, good, { origin: "https://evil.example" })],
+                          ["no CSRF token", Object.assign({}, good, { "x-csrf-token": "" })],
+                          ["a forged token", Object.assign({}, good, { "x-csrf-token": "lzz.forged" })],
+                          ["another user's token", Object.assign({}, good, { "x-csrf-token": CTL.csrfToken("adm") })]]) {
+    const r = await raw(h, body);
+    assert.equal(r.status, 403, `${why}: ${JSON.stringify(r.body)}`);
+    assert.equal((await C.engines()).treasury.paused, 0, why);
+  }
+  const used = await raw(good, Object.assign({}, body, { note: "the real one" }));
+  assert.equal(used.status, 200, "the refused requests didn't spend the nonce: " + JSON.stringify(used.body));
+  assert.equal((await C.engines()).treasury.paused, 1);
+  assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "treasury", pause: false, nonce: await nonce(), password: "pw-right" })).status, 200);
   // the note is required for a pause; engine and pause must be named
   assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "treasury", pause: true, note: "", nonce: await nonce(), password: "pw-right" })).status, 400);
   assert.equal((await call("/api/admin/policy/pause", U.owner, { engine: "nope", pause: true, note: "why not", nonce: await nonce(), password: "pw-right" })).status, 400);
@@ -151,7 +171,7 @@ test("PO-1: pausing an engine on /admin/economy is a Pepe owner's with the passw
   assert.deepEqual(ok.body.engines.map((x) => [x.engine, x.paused]), [["treasury", true], ["monetary", true], ["burn", true]]);
   const e = await C.engines();
   assert.deepEqual([e.treasury.paused, e.treasury.paused_by, e.treasury.pause_note, e.treasury.mode], [1, "own", "a test pause", "dry"], "the mode is unchanged");
-  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'policy.pause' AND admin_id = ?", [U.owner]))[0].n, 3);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'policy.pause' AND admin_id = ? AND reason = 'a test pause'", [U.owner]))[0].n, 3);
   assert.ok((await getQuery("SELECT 1 FROM policy_audit WHERE engine = 'burn' AND old = 'running' AND new = 'paused' AND by = 'own'"))[0]);
   // the nonce is single-use
   const n1 = await nonce();
@@ -272,6 +292,34 @@ test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backen
   const names = JSON.parse(tables.stdout.trim());
   assert.ok(!names.includes("policy_engines") && !names.includes("pepe_roles_pending"), "the policy CLI created nothing: " + names.join(","));
   assert.match(pol.stdout, /stashes {2}0 closed stash\(es\) with no account to pay/);
+  // PO-1 review: the kill switch never reports PAUSED while writing nowhere. From the WRONG directory (no myapp.db) every
+  // command stops with exit 2 and creates no database there; --dir points it at the site's folder
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "owner-gates-nodb-"));
+  const inEmpty = (args) => spawnSync(process.execPath, args, { cwd: empty, env, encoding: "utf8", timeout: 60000 });
+  for (const args of [["--actor=ops", "pause", "all", "--note", "probe wrong cwd"], ["--actor=ops", "resume", "all"], ["status"], ["preflight"]]) {
+    const r = inEmpty([path.join(repo, "tools", "policy-backend.js"), ...args]);
+    assert.equal(r.status, 2, `${args.join(" ")}: ${r.stdout} ${r.stderr}`);
+    assert.match(r.stderr, /no myapp\.db in .* - run it in the site directory/);
+    assert.doesNotMatch(r.stdout, /PAUSED/);
+  }
+  assert.deepEqual(fs.readdirSync(empty), [], "no database was created there");
+  const viaDir = inEmpty([path.join(repo, "tools", "policy-backend.js"), `--dir=${dir}`, "status"]);
+  assert.equal(viaDir.status, 0, viaDir.stderr);
+  assert.match(viaDir.stdout, /engine {3}treasury/);
+  // ...and a database that isn't the site's (no users / policy_engines table): pause / resume refuse it, nothing written
+  const notSite = run([path.join(repo, "tools", "policy-backend.js"), "--actor=ops", "pause", "treasury", "--note", "not the site db"]);
+  assert.equal(notSite.status, 2, notSite.stdout + notSite.stderr);
+  assert.match(notSite.stderr, /has no users \/ policy_engines table - is this the site's database\? Nothing was paused or resumed/);
+  const names2 = JSON.parse(spawnSync(process.execPath, ["-e", `const s=require("sqlite3");const d=new s.Database("myapp.db");d.all("SELECT name FROM sqlite_master WHERE type='table'",(e,r)=>{console.log(JSON.stringify(r.map(x=>x.name)));d.close();});`],
+                                      { cwd: dir, env, encoding: "utf8" }).stdout.trim());
+  assert.ok(!names2.includes("policy_engines"), "nothing created: " + names2.join(","));
+  // the site's database: its users (an Admin the alert goes to) and the policy tables (the site creates them at start)
+  const mk = spawnSync(process.execPath, ["-e", `const s=require("sqlite3");const d=new s.Database("myapp.db");d.run("CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT, class TEXT, camfrogUsername TEXT)",()=>{d.run("INSERT INTO users VALUES ('ua','boss','Admin','boss_cf')",()=>d.close());});`],
+                       { cwd: dir, env, encoding: "utf8" });
+  assert.equal(mk.status, 0, mk.stderr);
+  const init = spawnSync(process.execPath, ["-e", `require(${JSON.stringify(path.join(repo, "policy", "core"))}).init().then(()=>process.exit(0),(e)=>{console.error(e.message);process.exit(1);})`],
+                         { cwd: dir, env, encoding: "utf8" });
+  assert.equal(init.status, 0, init.stderr);
   // PO-1 (T3): the shell's pause / resume - who and why required; one transaction (flag + policy_audit + admin_audit)
   const noWho = run([path.join(repo, "tools", "policy-backend.js"), "pause", "treasury", "--note", "shell test"]);
   assert.equal(noWho.status, 1);

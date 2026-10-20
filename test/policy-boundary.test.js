@@ -158,13 +158,28 @@ test("whitelist: the Monday daily's release is post-move - excused only on the e
   const dIn = Object.assign({}, await G.daily(MON + 60, DID), { week: pepeWeek });
   const dPlan = E.planDaily(dIn);
   assert.equal(dPlan.release, R);
+  // a dry-mode comparison of the same Monday daily: the whitelist is shadow's only - the release blocks
+  await C.setMode("treasury", "dry", { by: "test" });
+  try {
+    const dry = await post("/api/policy/bot/report", { engine: "treasury", period: DID, inputs: dIn, plan: dPlan });
+    assert.deepEqual(dry.body.blocking, [`release: site null / pepe ${R}`], "dry: not excused");
+    assert.equal(dry.body.input_blocking.length, 3, "nor the week record");
+    assert.equal(dry.body.clean, false);
+  } finally { await C.setMode("treasury", "shadow", { by: "test" }); }
   const rep = await post("/api/policy/bot/report", { engine: "treasury", period: DID, inputs: dIn, plan: dPlan });
   assert.deepEqual(rep.body.engine_diff, []);
   assert.deepEqual(rep.body.total_diff, [`release: site null / pepe ${R}`], "the only difference: the release his epoch set");
   assert.deepEqual(rep.body.whitelisted, rep.body.total_diff);
   assert.deepEqual(rep.body.blocking, []);
+  // PO-1 review (D-15 counts the inputs): the week record itself differs too - the site still holds last week's (resolveWeek
+  // discards it, nothing reads it), Pepe's epoch opened this one: post-move, excused under the same condition
+  assert.deepEqual(rep.body.input_diff, [`week.id: site "W2026-10-12" / pepe "${EID}"`, `week.share: site null / pepe ${pepeWeek.share}`,
+                                         `week.release_per_day: site null / pepe ${R}`]);
+  assert.deepEqual(rep.body.input_whitelisted, rep.body.input_diff);
+  assert.deepEqual(rep.body.input_blocking, []);
   assert.equal(rep.body.clean, true, "whitelisted (Monday, shadow)");
-  assert.deepEqual(JSON.parse((await row(`shadow:treasury:${DID}`)).whitelisted), rep.body.total_diff);
+  assert.deepEqual(JSON.parse((await row(`shadow:treasury:${DID}`)).whitelisted), { plan: rep.body.total_diff, inputs: rep.body.input_diff, decision: [] });
+  assert.deepEqual(JSON.parse((await row(`shadow:treasury:${DID}`)).blocking), { plan: [], inputs: [], decision: [] });
   // POST-MOVE, proven: once his doc push lands, the site's own plan has the same release and nothing differs
   await ES.putDocs({ econ_treasury: { rev: 2, doc: { week: pepeWeek, bank_lent: [], days: {} } } });
   const after = SCH.planOf("treasury", await G.daily(MON + 60, DID));
@@ -178,29 +193,115 @@ test("whitelist: the Monday daily's release is post-move - excused only on the e
   assert.deepEqual(tRep.body.total_diff, [`release: site ${R} / pepe ${R + 1}`]);
   assert.deepEqual(tRep.body.whitelisted, []);
   assert.equal(tRep.body.clean, false, "not the epoch's day: it blocks");
+  assert.deepEqual(tRep.body.input_blocking, [`week.release_per_day: site ${R} / pepe ${R + 1}`], "...and so does the input");
   // ...and on the Monday a LEG difference is never excused
-  const wl = SCH.applyWhitelist(["legs[0].amt: site 1 / pepe 2", "release: site null / pepe 5"], { engine: "treasury", kind: "daily", mode: "shadow", monday: true });
+  const ctx = { engine: "treasury", kind: "daily", mode: "shadow", monday: true, eid: EID, site: { week: { id: "W2026-10-12" } }, pepe: { week: pepeWeek } };
+  const wl = SCH.applyWhitelist(["legs[0].amt: site 1 / pepe 2", "release: site null / pepe 5"], ctx);
   assert.deepEqual(wl, { excused: ["release: site null / pepe 5"], blocking: ["legs[0].amt: site 1 / pepe 2"] });
-  assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], { engine: "treasury", kind: "daily", mode: "dry", monday: true }).excused, [], "shadow only");
-  assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], { engine: "treasury", kind: "epoch", mode: "shadow", monday: true }).excused, [], "the daily only");
-  assert.equal(SCH.WHITELIST.length, 1, "today's whitelist is the Monday daily release only (plan §3 PO-1) - a new entry needs its own test");
+  assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { mode: "dry" })).excused, [], "shadow only");
+  assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { kind: "epoch" })).excused, [], "the daily only");
+  assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { monday: false })).excused, [], "the epoch's day only");
+  // PO-1 review (tightened): only the post-move shape - the site still holding LAST week's record ("site null"); a site that
+  // already has this week's record, or a different release on both sides, is a real difference
+  assert.deepEqual(SCH.applyWhitelist(["release: site 4 / pepe 5"], ctx).excused, [], "site X / pepe Y blocks");
+  assert.deepEqual(SCH.applyWhitelist(["release: site null / pepe 5"], Object.assign({}, ctx, { site: { week: { id: EID } } })).excused, [], "the site's week is current: blocks");
+  assert.deepEqual(SCH.applyWhitelist(["week.id: x"], ctx, "inputs").excused, ["week.id: x"], "the stale week's inputs");
+  assert.deepEqual(SCH.applyWhitelist(["week.id: x"], Object.assign({}, ctx, { pepe: { week: { id: "W2026-10-12" } } }), "inputs").excused, [], "not post-move");
+  assert.deepEqual(SCH.applyWhitelist(["fed_loans[0].outstanding: site 1 / pepe 0"], ctx, "inputs").blocking.length, 1, "any other input blocks");
+  // the whitelist's inventory: every entry names its proving test, and that test is in this file
+  const src = fs.readFileSync(__filename, "utf8");
+  for (const w of SCH.WHITELIST) {
+    const m = /^test\/policy-boundary\.test\.js: (.+)$/.exec(w.test);
+    assert.ok(m && src.includes(`test(${JSON.stringify(m[1])}`), `${w.on} ${w.engine} ${w.field}: ${w.test}`);
+    assert.ok(w.when, `${w.on} ${w.engine} ${w.field}: has a condition`);
+  }
+  assert.deepEqual(SCH.WHITELIST.map((w) => `${w.on}:${w.engine}:${w.kind}:${w.field}`),
+                   ["plan:treasury:daily:release", "inputs:treasury:daily:week.*", "inputs:monetary:monetary:week.*", "inputs:monetary:monetary:rows / days / skip",
+                    "decision:monetary:monetary:guarantee"], "a new entry needs its own test (D-15)");
 });
 
-test("the monetary day: the boundary carries Pepe's guarantee flag; a clean report", async () => {
-  const mIn = await G.monetary(MON + 120, DID, true);
-  const mPlan = SCH.planOf("monetary", mIn);
+test("the Monday monetary day: the guarantee decision and the week record are post-move; a mismatched decision blocks", async () => {
+  // the site's econ_treasury doc is back to LAST week's record (Pepe's push of the week his epoch opened hasn't landed), and
+  // his journal push doesn't show this week's epoch yet: the site's own guarantee decision is "wait for the epoch"
+  await ES.putDocs({ econ_treasury: { rev: 3, doc: { week: { id: "W2026-10-12", budgets: {}, spent: {} }, bank_lent: [], days: {} } } });
+  const pepeWeek = { id: EID, budgets: {}, spent: {}, share: pepePlan.totals.incentives, release_per_day: pepePlan.release_per_day };
   const b = await post("/api/policy/bot/boundary", { engine: "monetary", period: DID, now: MON + 120, guarantee: true });
   assert.equal(b.body.ok, true);
-  const snap = JSON.parse((await row(`shadow:monetary:${DID}`)).site_boundary_inputs);
-  assert.equal(snap.guarantee, true);
+  const r0 = await row(`shadow:monetary:${DID}`);
+  assert.equal(JSON.parse(r0.site_boundary_inputs).guarantee, true, "the plan uses Pepe's flag (the plans compare on the same flag)");
+  // PO-1 review: the site's OWN decision at the boundary is kept with the snapshot (and both flags)
+  assert.deepEqual(JSON.parse(r0.boundary_meta).guarantee, { site: null, wait: "the epoch", gate: true, epoch: null, pepe: true });
+  const mIn = Object.assign({}, await G.monetary(MON + 120, DID, true), { week: pepeWeek });       // Pepe's view: his new week
+  const mPlan = SCH.planOf("monetary", mIn);
   const rep = await post("/api/policy/bot/report", { engine: "monetary", period: DID, inputs: mIn, plan: mPlan });
   assert.deepEqual(rep.body.engine_diff, []);
   assert.deepEqual(rep.body.total_diff, []);
+  assert.deepEqual(rep.body.decision_diff, ["guarantee: site waits for the epoch / pepe true"]);
+  assert.deepEqual(rep.body.decision_whitelisted, rep.body.decision_diff, "post-move: his epoch ran a moment earlier");
+  assert.equal(rep.body.input_diff.length, 3);
+  assert.deepEqual(rep.body.input_whitelisted, rep.body.input_diff, "the stale week record: post-move");
   assert.equal(rep.body.clean, true);
+  // POST-MOVE, proven: once his journal push shows this week's epoch done, the site decides the same (and his week lands too)
+  const cfg0 = await C._pushForSource();
+  await C.putCfg(Object.assign({}, cfg0, { journal: cfg0.journal.concat([{ eid: EID, boundary: MON - 300, state: "done", incentives_after: 3 * M }]) }));
+  try {
+    const info = await SCH.clockInfo(MON + 120);
+    const g = await SCH.monetaryGuarantee(MON + 120, info, info.src);
+    assert.deepEqual([g.gate, g.guarantee, g.epoch], [true, true, "done"], "with his epoch's record in, the site pays the guarantee too");
+  } finally { await C.putCfg(cfg0); }
+  // the post-move excuse needs Pepe's TRUE: a site waiting for the epoch while Pepe ran WITHOUT the guarantee is a real difference
+  const mctx = { engine: "monetary", kind: "monetary", mode: "shadow", monday: true, eid: EID };
+  assert.deepEqual(SCH.applyWhitelist(["guarantee: site waits for the epoch / pepe false"], mctx, "decision").blocking.length, 1);
+  assert.deepEqual(SCH.applyWhitelist(["guarantee: site waits for the epoch / pepe true"], Object.assign({}, mctx, { mode: "dry" }), "decision").excused, [], "shadow only");
+  assert.deepEqual(SCH.decisionDiff({ guarantee: { site: false } }, { kind: "monetary", guarantee: true }), ["guarantee: site false / pepe true"]);
+  assert.deepEqual(SCH.decisionDiff({ guarantee: { site: true } }, { kind: "monetary", guarantee: true }), []);
+  assert.deepEqual(SCH.decisionDiff({}, { kind: "monetary", guarantee: false }), ["guarantee: site no decision recorded / pepe false"]);
+  // a DECIDED mismatch blocks: Tuesday (not the epoch's day) - the site's gate is off, Pepe says he pays the guarantee
+  const TUE = MON + 86400;
+  assert.equal((await post("/api/policy/bot/boundary", { engine: "monetary", period: "D2026-10-20", now: TUE + 120, guarantee: true })).body.ok, true);
+  const tIn = await G.monetary(TUE + 120, "D2026-10-20", true);
+  const tRep = await post("/api/policy/bot/report", { engine: "monetary", period: "D2026-10-20", inputs: tIn, plan: SCH.planOf("monetary", tIn) });
+  assert.deepEqual([tRep.body.engine_diff, tRep.body.total_diff], [[], []], "the plans agree (both on his flag)");
+  assert.deepEqual(tRep.body.decision_blocking, ["guarantee: site false / pepe true"]);
+  assert.equal(tRep.body.clean, false, "the site would not have paid it: not clean");
+  assert.deepEqual(JSON.parse((await row("shadow:monetary:D2026-10-20")).blocking).decision, ["guarantee: site false / pepe true"]);
   // a report whose inputs don't fit the engine is refused (nothing recorded)
   const wrong = await post("/api/policy/bot/report", { engine: "monetary", period: "D2026-10-21", inputs: pepeInputs, plan: pepePlan });
   assert.equal(wrong.body.ok, false);
   assert.equal(await row("shadow:monetary:D2026-10-21"), null);
+  await ES.putDocs({ econ_treasury: { rev: 4, doc: { week: pepeWeek, bank_lent: [], days: {} } } });
+});
+
+test("participation input diffs are tolerated only while no enabled rule reads them; any other input diff blocks", async () => {
+  // Wednesday's monetary day (no guarantee): participation lags on the site (his counters have a row the E-0 sync hasn't sent)
+  const WED = MON + 2 * 86400, did = "D2026-10-21";
+  assert.equal((await post("/api/policy/bot/boundary", { engine: "monetary", period: did, now: WED + 120, guarantee: false })).body.ok, true);
+  const site = await G.monetary(WED + 120, did, false);
+  const pIn = Object.assign({}, site, { rows: site.rows.concat([[site.local_day, "zed_cf", 50, 0]]) });
+  const pPlan = SCH.planOf("monetary", pIn);
+  assert.equal(pPlan.activity.amount, 0, "no activity reward is paid (activity_rewards off)");
+  const rep = await post("/api/policy/bot/report", { engine: "monetary", period: did, inputs: pIn, plan: pPlan });
+  assert.deepEqual(rep.body.input_diff, ["rows: 0 items / pepe 1"]);
+  assert.deepEqual(rep.body.input_whitelisted, rep.body.input_diff, "unread: tolerated");
+  assert.equal(rep.body.clean, true);
+  // the same difference once a rule reads the rows - activity rewards paid, or issuance scaled by activity - blocks
+  const ctx = { engine: "monetary", kind: "monetary", mode: "shadow", monday: false, eid: "W2026-10-19", site, pepe: pIn, sitePlan: pPlan, pepePlan: pPlan };
+  assert.deepEqual(SCH.applyWhitelist(["rows: 0 items / pepe 1"], ctx, "inputs").excused, ["rows: 0 items / pepe 1"]);
+  const paying = Object.assign({}, pPlan, { activity: Object.assign({}, pPlan.activity, { amount: 5000 }) });
+  assert.equal(SCH.applyWhitelist(["rows: 0 items / pepe 1"], Object.assign({}, ctx, { pepePlan: paying }), "inputs").blocking.length, 1, "activity rewards paid");
+  const scaled = Object.assign({}, pIn, { cfg: Object.assign({}, pIn.cfg, { issuance_mode: "fixed", issuance_activity_scaling: true }) });
+  assert.equal(SCH.applyWhitelist(["rows[0][2]: site 4 / pepe 5"], Object.assign({}, ctx, { pepe: scaled }), "inputs").blocking.length, 1, "issuance scaled by activity");
+  assert.equal(SCH.applyWhitelist(["local_day: site \"a\" / pepe \"b\""], ctx, "inputs").blocking.length, 1, "the day itself is no participation row");
+  // ANY other input difference blocks, even with identical plans (D-15) - the review's probe: an unread constant
+  const odd = Object.assign({}, pepeInputs, { consts: Object.assign({}, pepeInputs.consts, { PROBE_UNREAD: 1 }) });
+  const r2 = await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: odd, plan: pepePlan });
+  assert.deepEqual([r2.body.engine_diff, r2.body.total_diff], [[], []]);
+  assert.deepEqual(r2.body.input_blocking, ["consts.PROBE_UNREAD: site undefined / pepe 1"]);
+  assert.equal(r2.body.clean, false);
+  assert.equal((await row(`shadow:treasury:${EID}`)).ok, 0);
+  // a site-side gather failure blocks too (the review: it can't read as clean)
+  assert.equal(SCH.applyWhitelist(["site gather failed: boom"], ctx, "inputs").blocking.length, 1);
+  assert.equal((await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: pepeInputs, plan: pepePlan })).body.clean, true, "his real report: clean again");
 });
 
 test("the handshake only while the site compares: off and live answer skipped (nothing stored); bad requests are refused", async () => {

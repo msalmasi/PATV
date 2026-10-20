@@ -16,11 +16,17 @@
 //                                             # site admin is told (opsalerts). A paused engine runs nothing (a live one's due
 //                                             # periods are recorded missed); resume lets only the current period run (late, D-18).
 //                                             # WRITES - on prod only with the owner's explicit go.
+//   --dir=<folder with myapp.db>              # run against that folder's database (default: the current directory)
+// PO-1 review: it never opens a database that isn't there - with no ./myapp.db (the wrong directory) every command stops
+// (exit 2) instead of creating an empty one, and pause / resume also refuse a database without the site's users and
+// policy_engines tables: the kill switch must never report PAUSED while prod keeps running.
 // Later slices add the config checks (PO-2: every SPEC key present).
 "use strict";
+const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
-const { getQuery } = require(path.join(__dirname, "..", "dbUtils"));
+// dbUtils opens ./myapp.db (creating it) the moment it loads: loaded only after main() checked the directory
+const getQuery = (sql, params) => require(path.join(__dirname, "..", "dbUtils")).getQuery(sql, params);
 
 const parse = (s, d = null) => { if (s == null) return d; try { const v = JSON.parse(s); return v == null ? d : v; } catch (e) { return d; } };
 const ago = (ms) => { if (!ms) return "never"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 120 ? s + " s ago" : s < 7200 ? Math.round(s / 60) + " min ago" : s < 172800 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
@@ -206,6 +212,28 @@ async function pauseCmd(cmd, target, argv) {
   }
 }
 
+/** The site's database is here (PO-1 review): ./myapp.db exists - checked BEFORE dbUtils loads (it would create an empty one).
+ *  -> the absolute path; exits 2 when it isn't there. */
+function siteDb(argv) {
+  const dir = (argv.find((a) => a.startsWith("--dir=")) || "").slice(6);
+  if (dir) process.chdir(path.resolve(dir));
+  const db = path.join(process.cwd(), "myapp.db");
+  if (!fs.existsSync(db)) {
+    console.error(`no myapp.db in ${process.cwd()} - run it in the site directory (cd /home/PATV) or pass --dir=<folder with myapp.db>; nothing was done`);
+    process.exit(2);
+  }
+  return db;
+}
+/** pause / resume write: only into the site's own database (its users - the admins the alert goes to - and policy_engines). */
+async function requireSiteTables(db) {
+  const names = new Set((await getQuery("SELECT name FROM sqlite_master WHERE type = 'table'")).map((r) => r.name));
+  const missing = ["users", "policy_engines"].filter((t) => !names.has(t));
+  if (missing.length) {
+    console.error(`${db} has no ${missing.join(" / ")} table - is this the site's database? Nothing was paused or resumed.`);
+    process.exit(2);
+  }
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const words = [];
@@ -214,7 +242,9 @@ async function main() {
     if (!argv[i].startsWith("--")) words.push(argv[i]);
   }
   const [cmd = "status", target] = words;
+  const db = siteDb(argv);
   if (cmd === "pause" || cmd === "resume") {
+    await requireSiteTables(db);
     await pauseCmd(cmd, target, argv);
     tables = null;                                   // the pause created the policy tables if this site never had them
     printStatus(await gather());

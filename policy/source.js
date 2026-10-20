@@ -25,8 +25,9 @@ const EPOCH_HOUR_DEFAULT = 4;
 /** Who owns the policy config: "pepe" (his push) until policy_ownership.cfg exists (PO-2) and H1 hands it over. */
 async function owner() { return "pepe"; }
 
-/** Pepe's last policy push as stored (or {}). Only this module (and core.js, which stores it) touches it. */
-async function push() { return (await C.cfg()) || {}; }
+/** Pepe's last policy push as stored (or {}). Only this module (and core.js, which stores it) touches it: core's reader is
+ *  named _pushForSource, and test/policy.test.js fails if any other file calls it. */
+async function push() { return (await C._pushForSource()) || {}; }
 
 const intOr = (v, d) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? n : d; };
 const objOr = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});

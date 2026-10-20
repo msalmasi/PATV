@@ -10,7 +10,8 @@
 //   runBurn            pepe_burn's accrual: the burn reserve, burned (pool move kind "burn", a pat_burns row)
 // Every leg uses the key Pepe's own leg uses (pools.js "<tid>:out" / "<tid>:in", the stash move key, the mint's
 // "fedmint-<key>:in"): if Pepe ever ran the same period, the second one is a no-op leg by leg. The run's done-key
-// (policy_runs "<engine>:<period>") is checked and written in the same transaction, so a period never runs twice.
+// (policy_runs "<engine>:<period>") is checked and written in the same transaction, so a period never runs twice - and so is
+// the engine's switch (PO-1 review: still live and not paused, re-read inside the transaction - gate() below).
 // The whole run commits or none of it does (an unexpected refusal rolls it back; the scheduler retries the period).
 // What Pepe must mirror into his own books (the epoch / day records, Fed loan repayments, mint records, budget spends, the
 // bank-lent samples, cap notices, burns) is written as policy_effects in the same transaction.
@@ -151,6 +152,25 @@ async function bankSample(engine, period, inputsOrNull, nowS) {
 }
 const summary = (plan, keys) => Object.fromEntries(keys.filter((k) => k in plan).map((k) => [k, plan[k]]));
 
+/**
+ * PO-1 review (T3, the requireLive pattern of stashes.botMove): the engine's switch re-read INSIDE the run's transaction. The
+ * scheduler's pass reads the engines once; a pause (or a rollback) that committed after that read - it waited behind an
+ * earlier run's write gate - stops THIS run here: a paused engine's period is recorded missed "paused" (as the scheduler's
+ * paused pass does; burn slots carry no state), an engine that is no longer live runs nothing. `boundary` null = no record.
+ * -> null (run it) | {ok: true, skipped: "paused" | "not_live"}
+ */
+async function gate(engine, period, boundary) {
+  const eng = (await C.engines())[engine];
+  if (eng.mode !== "live") return { ok: true, skipped: "not_live", mode: eng.mode };
+  if (eng.paused) {
+    if (boundary !== null) await C.missedPaused(engine, period, boundary, eng);
+    console.log(`[policy] ${engine} ${period}: paused while it waited for its turn - not run${boundary !== null ? " (MISSED, paused)" : ""}`);
+    return { ok: true, skipped: "paused" };
+  }
+  return null;
+}
+const hourNow = async () => require("./source").hour();
+
 // ── the weekly epoch ──
 // PO-1 (D-18): `late` (the scheduler's lateOf: {why, boundary, late_s}) - a current period run late (the site was down at its
 // boundary, or a resume let it run) carries it on its result and its record (the audit / digest read it there)
@@ -158,6 +178,8 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
   const res = await tx(async () => {
     const done = await C.run("treasury", eid);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
+    const g = await gate("treasury", eid, E.weekStart(nowS, await hourNow()));
+    if (g) return g;
     const inputs = await G.epoch(nowS, eid);
     const plan = E.planEpoch(inputs);
     const before = await base();
@@ -268,6 +290,8 @@ async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site", l
   return tx(async () => {
     const done = await C.run("treasury", did);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
+    const g = await gate("treasury", did, E.dayStart(nowS, await hourNow()));
+    if (g) return g;
     const inputs = await G.daily(nowS, did);
     const plan = E.planDaily(inputs);
     const before = await base();
@@ -352,6 +376,8 @@ async function runMonetary(did, nowS, guarantee, { actor = "schedule", via = "si
   return tx(async () => {
     const done = await C.run("monetary", did);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true, state: done.state };
+    const g = await gate("monetary", did, E.dayStart(nowS, await hourNow()));
+    if (g) return g;
     const inputs = await G.monetary(nowS, did, guarantee);
     const plan = E.planMonetary(inputs);
     const planned = JSON.parse(JSON.stringify(plan));       // the plan as planned (the legs below get their amounts fixed)
@@ -393,6 +419,8 @@ async function runBurn(period, nowS, { actor = "accrual", via = "site", inflight
   return tx(async () => {
     const done = await C.run("burn", period);
     if (done && ["done", "handed"].includes(done.state)) return { ok: true, already: true };
+    const g = await gate("burn", period, null);                     // a burn slot carries no state: nothing recorded
+    if (g) return Object.assign({ amount: 0, id: null }, g);
     const bal = await P.balance("burn");
     const amt = Math.max(0, bal - Math.max(0, Math.trunc(Number(inflight) || 0)));
     let id = null;

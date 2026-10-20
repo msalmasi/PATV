@@ -397,15 +397,22 @@ test("PO-1: the diff cap - 400 differences listed, all of them counted, the comp
 });
 
 test("PO-1 burn: a day summary of each closed policy day (even at zero); Pepe's daily burn report is compared with it", async () => {
-  // the burn engine is in shadow since the rollback; the burns of the real policy day (the pool history has real timestamps)
+  // the burn engine is in shadow since the rollback. The pool history has REAL timestamps (pools.js: Date.now()), and a day
+  // is summarized / compared only once it has closed by that clock (PO-1 review) - so: real days, six to two days ago
   assert.equal((await C.engines()).burn.mode, "shadow");
-  const D = E.dayStart(Date.now() / 1000, 4);
-  const did = E.dayId(D, 4), next = E.dayId(D + 86400, 4);
+  const R = E.dayStart(Date.now() / 1000, 4);                     // the open day's start (the last 04:00 UTC)
+  const D = R - 6 * 86400;
+  const day = (i) => E.dayId(D + i * 86400, 4);
+  const did = day(0), next = day(1);
+  await runQuery("UPDATE policy_engines SET armed_at = ? WHERE engine = 'burn'", [D + 1]);      // armed during day 0
+  const at = async (keys, ts) => runQuery(`UPDATE pool_move_legs SET ts = ? WHERE move_key IN (${keys.map(() => "?").join(",")})`, [Math.round(ts * 1000), ...keys]);
   const before = await G.burnDay(D + 86400, did, D, D + 86400);
   await P.move({ key: "test-feed-burn-2", legs: [["reserve", -7000], ["burn", 7000]], why: "fed ceiling release" });
   await P.move({ key: "pepe-burn-b1", legs: [["burn", -4000]], kind: "burn", why: "waterfall leftover (burned on accrual)" });
   await P.move({ key: "pepe-burn-b2", legs: [["burn", -3000]], kind: "burn", why: "waterfall leftover (burned on accrual)" });
-  // the first pass after the day closed records it once (shadow:burn:D...), as that day's boundary snapshot too
+  await at(["test-feed-burn-2", "pepe-burn-b1", "pepe-burn-b2"], D + 3600);                    // they happened on day 0
+  // the first pass after the day closed records it once (shadow:burn:D...), as that day's boundary snapshot too - the
+  // armed day only (the days before the engine was armed aren't summarized)
   const ran = await SCH.pass(D + 86400 + 300, { only: ["burn"] });
   assert.deepEqual(ran, [`shadow burn ${did}`]);
   assert.deepEqual(await SCH.pass(D + 86400 + 400, { only: ["burn"] }), [], "once");
@@ -428,12 +435,41 @@ test("PO-1 burn: a day summary of each closed policy day (even at zero); Pepe's 
   assert.deepEqual(rb.body.total_diff, ["burned: site 0 / pepe 1", "burns: site 0 / pepe 1"]);
   assert.equal(rb.body.clean, false);
   // a report that arrives before the scheduler's summary takes the day's snapshot itself (the day is closed: same answer)
-  const d3 = E.dayId(D + 2 * 86400, 4);
+  const d3 = day(2);
   const z = { kind: "burn", now: D + 3 * 86400 + 5, did: d3, from: D + 2 * 86400, to: D + 3 * 86400, mode: "accrual", burned: 0, burns: 0 };
   const rz = await post("/api/policy/bot/report", { engine: "burn", period: d3, inputs: z, plan: E.planBurn(z) });
   assert.deepEqual([rz.body.basis, rz.body.clean], ["boundary", true]);
   // a burn report needs burn inputs
   assert.equal((await post("/api/policy/bot/report", { engine: "burn", period: d3, inputs: { kind: "daily" }, plan: {} })).body.ok, false);
+  // a comparison row that exists WITHOUT a snapshot (Pepe's report came first and its snapshot failed) gets the day's snapshot
+  // from the scheduler - his report stays
+  await runQuery(`INSERT INTO policy_sims (key, mode, engine, period, pepe_plan, ok, created, updated) VALUES (?, 'shadow', 'burn', ?, '{"burned":0}', 0, 1, 1)`,
+                 [`shadow:burn:${day(3)}`, day(3)]);
+  // PO-1 review: days a pause skipped are summarized once the engine runs again (BURN_BACKFILL_DAYS back)
+  await SCH.setPause(["burn"], true, { by: "boss", auditId: "ua", via: "admin", note: "burn check" });
+  assert.deepEqual(await SCH.pass(D + 5 * 86400 + 300, { only: ["burn"] }), [], "paused: nothing summarized");
+  await SCH.setPause(["burn"], false, { by: "boss", auditId: "ua", via: "admin" });
+  assert.deepEqual(await SCH.pass(D + 5 * 86400 + 400, { only: ["burn"] }), [`shadow burn ${day(3)}`, `shadow burn ${day(4)}`], "the skipped days, oldest first");
+  assert.equal(SCH.BURN_BACKFILL_DAYS, 7);
+  const filled = (await getQuery("SELECT boundary_ts, site_boundary_plan, pepe_plan FROM policy_sims WHERE key = ?", [`shadow:burn:${day(3)}`]))[0];
+  assert.ok(filled.boundary_ts > 0 && JSON.parse(filled.site_boundary_plan).day === day(3), "the snapshot-less row got its snapshot");
+  assert.equal(filled.pepe_plan, '{"burned":0}', "his report is kept");
+  // PO-1 review: a day that hasn't CLOSED (today's, by the pool history's clock) is never snapshotted - neither by a boundary
+  // call nor by an early report (refused, nothing recorded) - a burn later today still lands in its summary
+  const today = E.dayId(R, 4);
+  const ob = await post("/api/policy/bot/boundary", { engine: "burn", period: today, now: R + 60 });
+  assert.equal(ob.body.ok, false);
+  assert.match(ob.body.error, /hasn't closed yet/);
+  const oz = { kind: "burn", now: R + 60, did: today, from: R, to: R + 86400, mode: "accrual", burned: 0, burns: 0 };
+  const orp = await post("/api/policy/bot/report", { engine: "burn", period: today, inputs: oz, plan: E.planBurn(oz) });
+  assert.equal(orp.body.ok, false);
+  assert.match(orp.body.error, /hasn't closed yet/);
+  assert.equal(await getQuery("SELECT 1 FROM policy_sims WHERE period = ?", [today]).then((x) => x.length), 0, "nothing recorded for the open day");
+  assert.equal((await post("/api/policy/bot/boundary", { engine: "burn", period: E.dayId(R + 86400, 4), now: R })).body.ok, false, "a future day neither");
+  // ...and the scheduler doesn't summarize it either (a pass whose clock - a staging test clock - says it closed)
+  const ahead = await SCH.pass(R + 86400 + 300, { only: ["burn"] });
+  assert.ok(!ahead.some((y) => y.includes(today)), JSON.stringify(ahead));
+  assert.equal(await getQuery("SELECT 1 FROM policy_sims WHERE period = ?", [today]).then((x) => x.length), 0);
 });
 
 test("PO-1 pause: a paused live engine runs nothing (its due periods missed 'paused', the mode unchanged); a resume lets only the current period run, late", async () => {
@@ -459,7 +495,7 @@ test("PO-1 pause: a paused live engine runs nothing (its due periods missed 'pau
   assert.deepEqual([engs1.treasury.mode, engs1.monetary.mode, engs1.treasury.paused, engs1.treasury.paused_by], ["live", "live", 1, "boss"], "the mode is unchanged");
   assert.equal((await post("/api/policy/bot/state", {})).body.engines.treasury.paused, true, "Pepe sees it");
   assert.ok((await getQuery("SELECT 1 FROM policy_audit WHERE engine = 'treasury' AND old = 'running' AND new = 'paused' AND by = 'boss'"))[0]);
-  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'policy.pause' AND admin_id = 'ua'"))[0].n, 2);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'policy.pause' AND admin_id = 'ua' AND reason = 'checking the waterfall'"))[0].n, 2);
   // a paused engine isn't cut over (nothing would run it): the burn engine (shadow) paused -> refused; in shadow it plans nothing
   await SCH.setPause(["burn"], true, { by: "boss", auditId: "ua", via: "admin", note: "rehearsal" });
   assert.equal((await post("/api/policy/admin/cutover", { key: "pc-cut-0005", engines: ["burn"], actor: "test" })).body.code, "paused");
@@ -486,7 +522,9 @@ test("PO-1 pause: a paused live engine runs nothing (its due periods missed 'pau
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM policy_meta WHERE key LIKE 'late:%'"))[0].n, 0, "the late marks are used up");
   const v = await SCH.view();
   assert.ok(v.missed.some((x) => x.key === "treasury:D2026-10-31"));
-  assert.deepEqual(v.whitelist.map((w) => w.field), ["release"]);
+  assert.deepEqual(v.whitelist.map((w) => `${w.on} ${w.engine} ${w.field}`),
+                   ["plan treasury release", "inputs treasury week.*", "inputs monetary week.*", "inputs monetary rows / days / skip", "decision monetary guarantee"]);
+  assert.ok(v.whitelist.every((w) => /^test\/policy-boundary\.test\.js: /.test(w.test)), "each entry names its proving test");
   assert.equal(v.engines.find((e) => e.engine === "treasury").paused, false);
 });
 
@@ -505,6 +543,154 @@ test("PO-1 / D-18: a Monday outage - the week's epoch still runs on Tuesday (the
   const WED = MON_0405 + 16 * 86400;
   await SCH.pass(WED);
   assert.equal((await C.run("treasury", "D2026-11-04")).result.late, undefined);
+});
+
+test("PO-1 review: the pause is enforced at WRITE time - a pause during a pass stops its later runs, a resume during one is never undone, a failed period is released, an alert each time", async () => {
+  const B = Date.UTC(2026, 10, 9, 4) / 1000;                      // Monday 2026-11-09 04:00 UTC
+  const OA = require(path.join(repo, "opsalerts"));
+  const oAlert = OA.alert, alerts = [];
+  OA.alert = async (a) => { alerts.push(a); return oAlert(a); };
+  const both = { only: ["treasury", "monetary"] };
+  const by = { by: "boss", auditId: "ua", via: "admin" };
+  const atClock = async (s, fn) => { C._setClock(() => s * 1000); try { return await fn(); } finally { C._setClock(null); } };
+  try {
+    // (a) the owner presses Pause while the epoch's transaction holds the write gate: it commits right after the epoch - the
+    // daily of the SAME pass re-reads the switch inside its own transaction (apply.gate) and doesn't run: missed "paused"
+    const oEpoch = A.runTreasuryEpoch;
+    A.runTreasuryEpoch = async (...a) => { const r = await oEpoch(...a); await SCH.setPause(["treasury"], true, Object.assign({ note: "stop it" }, by)); return r; };
+    let ran;
+    try { ran = await SCH.pass(B + 60, both); } finally { A.runTreasuryEpoch = oEpoch; }
+    assert.ok(ran.includes("treasury W2026-11-09") && !ran.includes("treasury D2026-11-09"), JSON.stringify(ran));
+    const d0 = await C.run("treasury", "D2026-11-09");
+    assert.deepEqual([d0.state, d0.result.missed], ["missed", "paused"]);
+    assert.match(d0.error, /^paused by boss \(stop it\)/);
+    assert.equal((await C.run("monetary", "D2026-11-09")), null, "the Monday monetary day waits for the daily release");
+    assert.ok(alerts.some((a) => a.source === "policy" && /treasury PAUSED by boss/.test(a.title) && /Note: stop it/.test(a.body)), "every admin is told (opsalerts)");
+    // the outage before it (11-05..11-08, never run) was swept on that pass: recorded missed, one alert per sweep
+    for (const d of ["D2026-11-05", "D2026-11-06", "D2026-11-07", "D2026-11-08"]) assert.equal((await C.run("treasury", d)).state, "missed", d);
+    assert.ok((await effects("alert")).some((e) => e.key === "alert:missed:treasury:D2026-11-09" && /D2026-11-05 \(site_down\)/.test(e.data.text)));
+    const rs = await atClock(B + 120, () => SCH.setPause(["treasury"], false, by));
+    assert.deepEqual(rs[0].released, ["D2026-11-09"]);
+    assert.ok(alerts.some((a) => /treasury resumed by boss/.test(a.title)), "the resume is announced too");
+    ran = await SCH.pass(B + 180, both);
+    assert.ok(ran.includes("treasury D2026-11-09") && ran.includes("monetary D2026-11-09"), JSON.stringify(ran));
+    assert.equal((await C.run("treasury", "D2026-11-09")).result.late.why, "paused");
+    // (b) a RESUME that lands between the pass's read of the engines and its paused pass: the paused pass re-reads the flag in
+    // its own transaction - the current period is NOT recorded missed (it runs at the next pass, late: its boundary fell in the pause)
+    const TUE = B + 86400;
+    await atClock(TUE - 3600, () => SCH.setPause(["treasury"], true, Object.assign({ note: "night check" }, by)));
+    const oEng = C.engines;
+    let fire = true;
+    C.engines = async (...a) => {
+      const r = await oEng(...a);
+      if (fire) { fire = false; await atClock(TUE + 600, () => SCH.setPause(["treasury"], false, by)); }
+      return r;
+    };
+    try { ran = await SCH.pass(TUE + 600, both); } finally { C.engines = oEng; }
+    assert.ok(!ran.includes("treasury D2026-11-10"), "this pass read the engine as paused");
+    assert.equal(await C.run("treasury", "D2026-11-10"), null, "not recorded missed after the resume");
+    assert.equal((await C.engines()).treasury.paused, 0);
+    ran = await SCH.pass(TUE + 900, both);
+    assert.ok(ran.includes("treasury D2026-11-10"), JSON.stringify(ran));
+    assert.equal((await C.run("treasury", "D2026-11-10")).result.late.why, "paused");
+    // (c) a FAILED current period, then a pause: the paused pass records it missed "paused" - and the resume releases it
+    const WED2 = B + 2 * 86400;
+    await C.putRun("treasury", "D2026-11-11", { state: "failed", via: "site", error: "boom" });
+    await atClock(WED2 + 30, () => SCH.setPause(["treasury"], true, Object.assign({ note: "after a failure" }, by)));
+    await SCH.pass(WED2 + 60, both);
+    const f = await C.run("treasury", "D2026-11-11");
+    assert.deepEqual([f.state, f.result.missed], ["missed", "paused"], "the failed row is recorded missed (paused)");
+    assert.deepEqual((await atClock(WED2 + 120, () => SCH.setPause(["treasury"], false, by)))[0].released, ["D2026-11-11"]);
+    ran = await SCH.pass(WED2 + 180, both);
+    assert.ok(ran.includes("treasury D2026-11-11"), JSON.stringify(ran));
+    // (d) a pause across the boundary with NO pass during it (nothing recorded): the resume still releases the current period
+    // (its boundary fell inside the pause), flagged late
+    const THU = B + 3 * 86400;
+    await atClock(THU - 3600, () => SCH.setPause(["treasury"], true, Object.assign({ note: "quiet night" }, by)));
+    assert.deepEqual((await atClock(THU + 600, () => SCH.setPause(["treasury"], false, by)))[0].released, ["D2026-11-12"]);
+    ran = await SCH.pass(THU + 700, both);
+    assert.ok(ran.includes("treasury D2026-11-12"), JSON.stringify(ran));
+    assert.equal((await C.run("treasury", "D2026-11-12")).result.late.why, "paused");
+    // (e) a current period left "missed paused" while the engine runs (an older site's race): it heals - runs, late
+    const FRI = B + 4 * 86400;
+    await C.putRun("treasury", "D2026-11-13", { state: "missed", boundary: FRI, via: "site", error: "paused by old - not run (D-18)", result: { missed: "paused", paused_by: "old" } });
+    ran = await SCH.pass(FRI + 60, both);
+    assert.ok(ran.includes("treasury D2026-11-13"), JSON.stringify(ran));
+    const h = (await C.run("treasury", "D2026-11-13")).result.late;
+    assert.deepEqual([h.why, h.healed], ["paused", true]);
+    // (f) a pause that began AFTER the boundary (on the scheduler's clock - paused_at is on it too, so a staging rehearsal on the
+    // test clock releases what prod would) and no pass recorded anything: the resume releases nothing; it runs on time
+    const SAT = B + 5 * 86400;
+    await atClock(SAT + 300, () => SCH.setPause(["treasury"], true, Object.assign({ note: "after the boundary" }, by)));
+    assert.equal(Math.round((await C.engines()).treasury.paused_at / 1000), SAT + 300, "paused_at on the scheduler's clock");
+    assert.deepEqual((await atClock(SAT + 400, () => SCH.setPause(["treasury"], false, by)))[0].released, []);
+    ran = await SCH.pass(SAT + 500, both);
+    assert.ok(ran.includes("treasury D2026-11-14"), JSON.stringify(ran));
+    assert.equal((await C.run("treasury", "D2026-11-14")).result.late, undefined);
+    // (g) the same in-transaction re-read stops a run whose engine was handed back (a rollback committed after the pass read
+    // it): nothing runs, nothing is recorded
+    await runQuery("UPDATE policy_engines SET mode = 'shadow' WHERE engine = 'treasury'");
+    try {
+      const s0 = await supply();
+      assert.deepEqual(await A.runTreasuryDaily("D2026-11-15", B + 6 * 86400 + 60), { ok: true, skipped: "not_live", mode: "shadow" });
+      assert.equal(await C.run("treasury", "D2026-11-15"), null);
+      assert.equal(await supply(), s0);
+    } finally { await runQuery("UPDATE policy_engines SET mode = 'live' WHERE engine = 'treasury'"); }
+  } finally { OA.alert = oAlert; }
+});
+
+test("PO-1 review (D-18): a multi-day outage records every period it skipped (a Monday's guarantee named), a failed run is missed at the rollover, and 'late' survives a failed retry and a lease takeover", async () => {
+  const B = Date.UTC(2026, 10, 9, 4) / 1000;
+  const both = { only: ["treasury", "monetary"] };
+  // the scheduler last passed Saturday 11-14; it comes back Tuesday 11-17 06:05
+  const TUE = B + 8 * 86400 + 2 * 3600 + 300;
+  let ran = await SCH.pass(TUE, both);
+  assert.ok(ran.includes("treasury W2026-11-16") && ran.includes("treasury D2026-11-17") && ran.includes("monetary D2026-11-17"), JSON.stringify(ran));
+  for (const d of ["D2026-11-15", "D2026-11-16"]) {
+    for (const e of ["treasury", "monetary"]) assert.equal((await C.run(e, d)).state, "missed", `${e} ${d}`);
+  }
+  assert.equal((await C.run("treasury", "D2026-11-14")).state, "done", "the day it ran stays done");
+  const mon = await C.run("monetary", "D2026-11-16");
+  assert.equal(mon.result.guarantee_unpaid, true);
+  assert.match(mon.error, /Monday guarantee top-up rides on this day and was NOT paid/);
+  assert.equal((await C.run("monetary", "D2026-11-15")).result.guarantee_unpaid, undefined, "a Sunday carries no guarantee");
+  const al = (await effects("alert")).find((e) => e.key === "alert:missed:monetary:D2026-11-17");
+  assert.ok(al && /2 period\(s\) missed/.test(al.data.title) && /guarantee top-up of D2026-11-16 was NOT paid/.test(al.data.text), JSON.stringify(al));
+  assert.equal((await C.run("treasury", "W2026-11-16")).result.late.why, "site_down", "the current week's epoch runs late (D-18)");
+  // a run that FAILED and was still being retried when its day ended: recorded missed at the rollover, never run late
+  const WED = B + 9 * 86400 + 300;
+  const oDaily = A.runTreasuryDaily;
+  A.runTreasuryDaily = async () => { throw new Error("daily boom"); };
+  try { await SCH.pass(WED, both); } finally { A.runTreasuryDaily = oDaily; }
+  assert.equal((await C.run("treasury", "D2026-11-18")).state, "failed");
+  await SCH.pass(WED + 86400, both);
+  const fm = await C.run("treasury", "D2026-11-18");
+  assert.deepEqual([fm.state, fm.result.missed], ["missed", "failed"]);
+  assert.match(fm.error, /^failed \(daily boom\) and its period ended/);
+  // LATE survives a failed run: the site comes back at 04:20:15 on Monday 11-23 (down across the boundary), the epoch fails,
+  // its retry at 04:30 is still late (the scheduler FIRST SAW the period at 04:20:15 - not "its last pass was after the boundary")
+  const MON2 = B + 14 * 86400;
+  const oEpoch = A.runTreasuryEpoch;
+  A.runTreasuryEpoch = async () => { throw new Error("epoch boom"); };
+  try { await SCH.pass(MON2 + 20 * 60 + 15, both); } finally { A.runTreasuryEpoch = oEpoch; }
+  assert.equal((await C.run("treasury", "W2026-11-23")).state, "failed");
+  await runQuery("UPDATE policy_runs SET created = 0 WHERE key = 'treasury:W2026-11-23'");      // its retry is due
+  ran = await SCH.pass(MON2 + 30 * 60, both);
+  assert.ok(ran.includes("treasury W2026-11-23"), JSON.stringify(ran));
+  const wl = (await C.run("treasury", "W2026-11-23")).result.late;
+  assert.equal(wl.why, "site_down");
+  assert.equal(wl.seen_at, MON2 + 20 * 60 + 15);
+  // ...and a LEASE TAKEOVER is not late: the scheduler saw Tuesday's boundary at 04:00:10 (its daily failed), the process died,
+  // a new one (nothing in memory) runs it at 04:20 - the site was up at the boundary
+  const TUE2 = MON2 + 86400;
+  A.runTreasuryDaily = async () => { throw new Error("daily boom"); };
+  try { await SCH.pass(TUE2 + 10, both); } finally { A.runTreasuryDaily = oDaily; }
+  SCH._resetPassClock();
+  await runQuery("UPDATE policy_runs SET created = 0 WHERE key = 'treasury:D2026-11-24'");
+  ran = await SCH.pass(TUE2 + 20 * 60, both);
+  assert.ok(ran.includes("treasury D2026-11-24"), JSON.stringify(ran));
+  assert.equal((await C.run("treasury", "D2026-11-24")).result.late, undefined, "the site was up at the boundary");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM policy_meta WHERE key LIKE 'seen:treasury:%'"))[0].n, 2, "only the current periods' marks are kept");
 });
 
 test("PO-1: every reader of Pepe's policy push goes through policy/source.js (T14) - today it answers the push", async () => {
@@ -526,7 +712,11 @@ test("PO-1: every reader of Pepe's policy push goes through policy/source.js (T1
     assert.equal((await G.config()).consts.VAULT_EPOCH_UTC_HOUR, 5);
   } finally { assert.equal((await post("/api/policy/bot/config", { cfg: CFG })).body.ok, true); }
   // no other module opens the push: the site's JS outside policy/source.js (and policy/core.js, which stores it) never calls
-  // policy/core's cfg() nor reads policy_meta's "cfg" row (tools/policy-backend.js's read-only status aside)
+  // policy/core's push reader nor reads policy_meta's "cfg" row (tools/policy-backend.js's read-only status aside). PO-1
+  // review: the reader is named _pushForSource and core has no cfg() any more - a module that binds core under ANY name
+  // (const PCX = require("../policy/core"); PCX.cfg()) fails at once, and one that calls the new name is found here
+  assert.equal(C.cfg, undefined, "policy/core.cfg is gone (renamed _pushForSource)");
+  assert.equal(typeof C._pushForSource, "function");
   const files = [];
   const walk = (d) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -539,13 +729,15 @@ test("PO-1: every reader of Pepe's policy push goes through policy/source.js (T1
   const bad = [];
   for (const f of files) {
     const rel = path.relative(repo, f).replace(/\\/g, "/");
-    if (rel === "policy/source.js" || rel === "policy/core.js" || rel === "tools/policy-backend.js") continue;
+    if (rel === "policy/source.js" || rel === "policy/core.js") continue;
     const src = fs.readFileSync(f, "utf8");
-    if (/policy\/core["']\)\.cfg\(/.test(src)) bad.push(`${rel}: require("../policy/core").cfg()`);
-    if (rel.startsWith("policy/") && /\bC\.cfg\(\)/.test(src)) bad.push(`${rel}: C.cfg()`);
-    if (/policy_meta[^\n]*['"]cfg['"]/.test(src)) bad.push(`${rel}: policy_meta cfg`);
+    if (/_pushForSource\b/.test(src)) bad.push(`${rel}: _pushForSource`);
+    if (rel !== "tools/policy-backend.js" && /policy_meta[^\n]*['"]cfg['"]/.test(src)) bad.push(`${rel}: policy_meta cfg`);
   }
   assert.deepEqual(bad, []);
+  // the scan finds a second reader under any binding (the review's mutation: capital/vaults reading the push itself)
+  const probe = 'const PCX = require("../policy/core");\nasync function bonusCap() { return (await PCX._pushForSource()) || {}; }';
+  assert.ok(/_pushForSource\b/.test(probe));
 });
 
 test("the test clock and the tagged rehearsal tick exist only on staging", async () => {
