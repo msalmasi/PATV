@@ -1,0 +1,4160 @@
+{
+ "$comment": "S1 Q5a: every cosmetics.json item's render() at css_ref (the hand-written CSS) and its structured look today (cosmeticstyle.lookOf). Regenerate with tools/gen-cosmetics-golden.js; do not edit.",
+ "source": {
+  "repo": "v1 site",
+  "css_ref": "5d153c18",
+  "render": "cosmetics.js render()",
+  "look": "cosmeticstyle.js lookOf()"
+ },
+ "items": [
+  {
+   "id": "nc_mint",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_mint",
+    "kind": "name_color",
+    "name": "Mint Condition",
+    "rarity": "common",
+    "css": "color: #81c784;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_mint",
+     "kind": "solid",
+     "colors": [
+      "#81c784"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_bubblegum",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_bubblegum",
+    "kind": "name_color",
+    "name": "Bubblegum",
+    "rarity": "common",
+    "css": "color: #ff6ec7;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_bubblegum",
+     "kind": "solid",
+     "colors": [
+      "#ff6ec7"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_ice",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_ice",
+    "kind": "name_color",
+    "name": "Ice Cold",
+    "rarity": "common",
+    "css": "color: #7fdbff;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_ice",
+     "kind": "solid",
+     "colors": [
+      "#7fdbff"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_gold",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_gold",
+    "kind": "name_color",
+    "name": "Gold Digger",
+    "rarity": "uncommon",
+    "css": "color: #ffd700;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_gold",
+     "kind": "solid",
+     "colors": [
+      "#ffd700"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_blood",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_blood",
+    "kind": "name_color",
+    "name": "Blood Money",
+    "rarity": "uncommon",
+    "css": "color: #ef5350;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_blood",
+     "kind": "solid",
+     "colors": [
+      "#ef5350"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_sunset",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_sunset",
+    "kind": "name_color",
+    "name": "Sunset Strip",
+    "rarity": "rare",
+    "css": "background: linear-gradient(90deg, #ff7e5f, #feb47b, #ff6ec7); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_sunset",
+     "kind": "gradient",
+     "colors": [
+      "#ff7e5f",
+      "#feb47b",
+      "#ff6ec7"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_toxic",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_toxic",
+    "kind": "name_color",
+    "name": "Toxic Pond",
+    "rarity": "rare",
+    "css": "background: linear-gradient(90deg, #39ff14, #00e5ff); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_toxic",
+     "kind": "gradient",
+     "colors": [
+      "#39ff14",
+      "#00e5ff"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_frogbow",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_frogbow",
+    "kind": "name_color",
+    "name": "Frogbow",
+    "rarity": "epic",
+    "css": "background: linear-gradient(90deg, #ff5252, #ffd740, #69f0ae, #40c4ff, #e040fb, #ff5252); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_frogbow",
+     "kind": "gradient",
+     "colors": [
+      "#ff5252",
+      "#ffd740",
+      "#69f0ae",
+      "#40c4ff",
+      "#e040fb",
+      "#ff5252"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "nc_lava",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_lava",
+    "kind": "name_color",
+    "name": "Lava Lamp",
+    "rarity": "epic",
+    "css": "background: linear-gradient(90deg, #ff1744, #ff9100, #ffea00, #ff1744); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_lava",
+     "kind": "gradient",
+     "colors": [
+      "#ff1744",
+      "#ff9100",
+      "#ffea00",
+      "#ff1744"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "nc_loudmouth",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_loudmouth",
+    "kind": "name_color",
+    "name": "Loudmouth Red",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #ff5252, #ff8a80); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_loudmouth",
+     "kind": "gradient",
+     "colors": [
+      "#ff5252",
+      "#ff8a80"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_jackpot",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_jackpot",
+    "kind": "name_color",
+    "name": "Jackpot Glow",
+    "rarity": "rare",
+    "css": "background: linear-gradient(90deg, #ffd700, #fff59d, #ffb300, #ffd700); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_jackpot",
+     "kind": "gradient",
+     "colors": [
+      "#ffd700",
+      "#fff59d",
+      "#ffb300",
+      "#ffd700"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "nc_kingpin",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_kingpin",
+    "kind": "name_color",
+    "name": "Kingpin Velvet",
+    "rarity": "epic",
+    "css": "background: linear-gradient(90deg, #7c4dff, #e040fb, #ffd700); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_kingpin",
+     "kind": "gradient",
+     "colors": [
+      "#7c4dff",
+      "#e040fb",
+      "#ffd700"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "nc_double",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_double",
+    "kind": "name_color",
+    "name": "Double Digit Teal",
+    "rarity": "common",
+    "css": "color: #26c6da;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_double",
+     "kind": "solid",
+     "colors": [
+      "#26c6da"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_veteran",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_veteran",
+    "kind": "name_color",
+    "name": "Veteran Silver",
+    "rarity": "rare",
+    "css": "background: linear-gradient(90deg, #eceff1, #90a4ae, #eceff1); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_veteran",
+     "kind": "gradient",
+     "colors": [
+      "#eceff1",
+      "#90a4ae",
+      "#eceff1"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_elder",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_elder",
+    "kind": "name_color",
+    "name": "Elder Aurora",
+    "rarity": "legendary",
+    "css": "background: linear-gradient(90deg, #00e676, #1de9b6, #651fff, #00e676); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_elder",
+     "kind": "gradient",
+     "colors": [
+      "#00e676",
+      "#1de9b6",
+      "#651fff",
+      "#00e676"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "nc_pumpkin",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_pumpkin",
+    "kind": "name_color",
+    "name": "Pumpkin Spice",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #ff9100, #ffab40, #b388ff); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_pumpkin",
+     "kind": "gradient",
+     "colors": [
+      "#ff9100",
+      "#ffab40",
+      "#b388ff"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_candycane",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_candycane",
+    "kind": "name_color",
+    "name": "Candy Cane",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #ff1744, #ffffff, #ff1744, #ffffff); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_candycane",
+     "kind": "gradient",
+     "colors": [
+      "#ff1744",
+      "#ffffff",
+      "#ff1744",
+      "#ffffff"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_clean",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_clean",
+    "kind": "profile_border",
+    "name": "Clean Line",
+    "rarity": "common",
+    "css": "border: 2px solid #9e9e9e;",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#9e9e9e"
+     ],
+     "w": 2,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_neon",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_neon",
+    "kind": "profile_border",
+    "name": "Neon Sign",
+    "rarity": "uncommon",
+    "css": "border: 2px solid #ff4fd8; box-shadow: 0 0 12px rgba(255, 79, 216, .55), inset 0 0 10px rgba(255, 79, 216, .25);",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ff4fd8"
+     ],
+     "w": 2,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_gold",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_gold",
+    "kind": "profile_border",
+    "name": "Gold Leaf",
+    "rarity": "rare",
+    "css": "border: 3px solid #ffd700; box-shadow: 0 0 18px rgba(255, 215, 0, .35);",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ffd700"
+     ],
+     "w": 3,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_radioactive",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_radioactive",
+    "kind": "profile_border",
+    "name": "Radioactive",
+    "rarity": "rare",
+    "css": "border: 2px solid #76ff03; box-shadow: 0 0 16px rgba(118, 255, 3, .45);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#76ff03"
+     ],
+     "w": 2,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_diamond",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_diamond",
+    "kind": "profile_border",
+    "name": "Diamond Cut",
+    "rarity": "epic",
+    "css": "border: 3px solid #b3e5fc; box-shadow: 0 0 22px rgba(129, 212, 250, .55), inset 0 0 14px rgba(179, 229, 252, .25);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#b3e5fc"
+     ],
+     "w": 3,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_prism",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_prism",
+    "kind": "profile_border",
+    "name": "Prism",
+    "rarity": "legendary",
+    "css": "border: 3px solid #e040fb; box-shadow: 0 0 24px rgba(224, 64, 251, .55);",
+    "cls": "cx-frame-hue"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#e040fb"
+     ],
+     "w": 3,
+     "anim": "hue"
+    }
+   }
+  },
+  {
+   "id": "pb_tape",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_tape",
+    "kind": "profile_border",
+    "name": "Crime Scene Tape",
+    "rarity": "rare",
+    "css": "border: 4px solid transparent; border-image: repeating-linear-gradient(45deg, #ffd600 0 12px, #111 12px 24px) 4;",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ffd600",
+      "#111111"
+     ],
+     "w": 4,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_pipes",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_pipes",
+    "kind": "profile_border",
+    "name": "Golden Pipes Trim",
+    "rarity": "legendary",
+    "css": "border: 3px double #ffd700; box-shadow: 0 0 26px rgba(255, 193, 7, .5);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ffd700"
+     ],
+     "w": 3,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_haunted",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_haunted",
+    "kind": "profile_border",
+    "name": "Haunted",
+    "rarity": "rare",
+    "css": "border: 2px solid #ff9100; box-shadow: 0 0 18px rgba(124, 77, 255, .6);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ff9100"
+     ],
+     "w": 2,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_frostbite",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_frostbite",
+    "kind": "profile_border",
+    "name": "Frostbite",
+    "rarity": "rare",
+    "css": "border: 2px solid #e1f5fe; box-shadow: 0 0 18px rgba(179, 229, 252, .6), inset 0 0 12px rgba(225, 245, 254, .3);",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#e1f5fe"
+     ],
+     "w": 2,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "ad_lilypad",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_lilypad",
+    "kind": "avatar_decoration",
+    "name": "Lily Pad",
+    "rarity": "common",
+    "ring": "border-color: #66bb6a; box-shadow: 0 0 0 6px rgba(102, 187, 106, .35);",
+    "conic": "",
+    "spin": false,
+    "emoji": "🪷"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_lilypad",
+     "ring": {
+      "colors": [
+       "#66bb6a"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "🪷"
+    }
+   }
+  },
+  {
+   "id": "ad_halo",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_halo",
+    "kind": "avatar_decoration",
+    "name": "Halo",
+    "rarity": "uncommon",
+    "ring": "border-color: #fff59d; box-shadow: 0 0 0 5px rgba(255, 245, 157, .35), 0 0 22px rgba(255, 245, 157, .6);",
+    "conic": "",
+    "spin": false,
+    "emoji": "😇"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_halo",
+     "ring": {
+      "colors": [
+       "#fff59d"
+      ],
+      "w": 5,
+      "glow": 0.6,
+      "spin": false
+     },
+     "emoji": "😇"
+    }
+   }
+  },
+  {
+   "id": "ad_moneyring",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_moneyring",
+    "kind": "avatar_decoration",
+    "name": "Money Ring",
+    "rarity": "rare",
+    "ring": "",
+    "conic": "background: conic-gradient(#2e7d32, #ffd700, #2e7d32, #a5d6a7, #2e7d32);",
+    "spin": false,
+    "emoji": "💸"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_moneyring",
+     "ring": {
+      "colors": [
+       "#2e7d32",
+       "#ffd700",
+       "#a5d6a7"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "💸"
+    }
+   }
+  },
+  {
+   "id": "ad_onfire",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_onfire",
+    "kind": "avatar_decoration",
+    "name": "On Fire",
+    "rarity": "rare",
+    "ring": "",
+    "conic": "background: conic-gradient(#ff1744, #ff9100, #ffea00, #ff9100, #ff1744);",
+    "spin": true,
+    "emoji": "🔥"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_onfire",
+     "ring": {
+      "colors": [
+       "#ff1744",
+       "#ff9100",
+       "#ffea00"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": true
+     },
+     "emoji": "🔥"
+    }
+   }
+  },
+  {
+   "id": "ad_crowned",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_crowned",
+    "kind": "avatar_decoration",
+    "name": "Crowned",
+    "rarity": "epic",
+    "ring": "border-color: #ffd700; box-shadow: 0 0 0 6px rgba(255, 215, 0, .25), 0 0 26px rgba(255, 215, 0, .5);",
+    "conic": "",
+    "spin": false,
+    "emoji": "👑"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_crowned",
+     "ring": {
+      "colors": [
+       "#ffd700"
+      ],
+      "w": 6,
+      "glow": 0.5,
+      "spin": false
+     },
+     "emoji": "👑"
+    }
+   }
+  },
+  {
+   "id": "ad_vinyl",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_vinyl",
+    "kind": "avatar_decoration",
+    "name": "Vinyl Spin",
+    "rarity": "uncommon",
+    "ring": "",
+    "conic": "background: conic-gradient(#111, #444, #111, #444, #111);",
+    "spin": true,
+    "emoji": "💿"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_vinyl",
+     "ring": {
+      "colors": [
+       "#111111",
+       "#444444"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": true
+     },
+     "emoji": "💿"
+    }
+   }
+  },
+  {
+   "id": "ad_gladiator",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_gladiator",
+    "kind": "avatar_decoration",
+    "name": "Gladiator Ring",
+    "rarity": "rare",
+    "ring": "border-color: #b71c1c; box-shadow: 0 0 0 6px rgba(183, 28, 28, .35);",
+    "conic": "",
+    "spin": false,
+    "emoji": "⚔️"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_gladiator",
+     "ring": {
+      "colors": [
+       "#b71c1c"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "⚔️"
+    }
+   }
+  },
+  {
+   "id": "ad_laurels",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_laurels",
+    "kind": "avatar_decoration",
+    "name": "Veteran Laurels",
+    "rarity": "rare",
+    "ring": "border-color: #c0ca33; box-shadow: 0 0 0 6px rgba(192, 202, 51, .3);",
+    "conic": "",
+    "spin": false,
+    "emoji": "🏅"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_laurels",
+     "ring": {
+      "colors": [
+       "#c0ca33"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "🏅"
+    }
+   }
+  },
+  {
+   "id": "ad_jackoring",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_jackoring",
+    "kind": "avatar_decoration",
+    "name": "Jack-o'-Ring",
+    "rarity": "uncommon",
+    "ring": "",
+    "conic": "background: conic-gradient(#ff6d00, #212121, #ff6d00, #212121, #ff6d00);",
+    "spin": false,
+    "emoji": "🎃"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_jackoring",
+     "ring": {
+      "colors": [
+       "#ff6d00",
+       "#212121"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "🎃"
+    }
+   }
+  },
+  {
+   "id": "ad_snowglobe",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_snowglobe",
+    "kind": "avatar_decoration",
+    "name": "Snow Globe",
+    "rarity": "rare",
+    "ring": "border-color: #e1f5fe; box-shadow: 0 0 0 6px rgba(225, 245, 254, .3), 0 0 20px rgba(179, 229, 252, .6);",
+    "conic": "",
+    "spin": false,
+    "emoji": "❄️"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_snowglobe",
+     "ring": {
+      "colors": [
+       "#e1f5fe",
+       "#b3e5fc"
+      ],
+      "w": 6,
+      "glow": 0.6,
+      "spin": false
+     },
+     "emoji": "❄️"
+    }
+   }
+  },
+  {
+   "id": "bn_pond",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_pond",
+    "kind": "profile_banner",
+    "name": "Pond Life",
+    "rarity": "common",
+    "css": "background: linear-gradient(180deg, #1b5e20 0%, #0d3311 60%, #072109 100%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#1b5e20",
+      "#0d3311",
+      "#072109"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_lilystripes",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_lilystripes",
+    "kind": "profile_banner",
+    "name": "Lily Stripes",
+    "rarity": "common",
+    "css": "background: repeating-linear-gradient(135deg, #2e7d32 0 18px, #388e3c 18px 36px);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#2e7d32",
+      "#388e3c"
+     ],
+     "angle": 135
+    }
+   }
+  },
+  {
+   "id": "bn_nightcity",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_nightcity",
+    "kind": "profile_banner",
+    "name": "Night City",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(180deg, #0d1b3e 0%, #1a237e 55%, #ff6f00 140%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#0d1b3e",
+      "#1a237e",
+      "#ff6f00"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_vault",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_vault",
+    "kind": "profile_banner",
+    "name": "Vault Door",
+    "rarity": "rare",
+    "css": "background: radial-gradient(circle at 80% 50%, #9e9e9e 0 22px, #616161 23px 30px, transparent 31px), repeating-linear-gradient(90deg, #424242 0 2px, #303030 2px 28px);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#424242",
+      "#303030"
+     ],
+     "angle": 90
+    }
+   }
+  },
+  {
+   "id": "bn_felt",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_felt",
+    "kind": "profile_banner",
+    "name": "High Roller Felt",
+    "rarity": "rare",
+    "css": "background: radial-gradient(ellipse at 50% 120%, #2e7d32 0%, #1b5e20 50%, #0b2e0d 100%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#2e7d32",
+      "#1b5e20",
+      "#0b2e0d"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_matrix",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_matrix",
+    "kind": "profile_banner",
+    "name": "Green Code",
+    "rarity": "rare",
+    "css": "background: repeating-linear-gradient(90deg, rgba(0, 255, 65, .25) 0 2px, transparent 2px 14px), linear-gradient(180deg, #001a00, #003300);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#001a00",
+      "#003300"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_synthwave",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_synthwave",
+    "kind": "profile_banner",
+    "name": "Synthwave",
+    "rarity": "epic",
+    "css": "background: linear-gradient(180deg, #2b1055 0%, #d53369 65%, #ffcc70 100%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#2b1055",
+      "#d53369",
+      "#ffcc70"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_ancient",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_ancient",
+    "kind": "profile_banner",
+    "name": "Ancient Pond",
+    "rarity": "legendary",
+    "css": "background: radial-gradient(circle at 20% 30%, rgba(255, 215, 0, .35), transparent 40%), linear-gradient(135deg, #004d40, #1b5e20 50%, #3e2723);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#004d40",
+      "#1b5e20",
+      "#3e2723"
+     ],
+     "angle": 135
+    }
+   }
+  },
+  {
+   "id": "bn_graveyard",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_graveyard",
+    "kind": "profile_banner",
+    "name": "Graveyard Shift",
+    "rarity": "uncommon",
+    "css": "background: radial-gradient(circle at 82% 35%, #fff9c4 0 16px, rgba(255, 249, 196, .25) 17px 26px, transparent 27px), linear-gradient(180deg, #1a0033 0%, #4a148c 70%, #ff6d00 140%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#1a0033",
+      "#4a148c",
+      "#ff6d00"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_aurora",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_aurora",
+    "kind": "profile_banner",
+    "name": "Northern Lights",
+    "rarity": "epic",
+    "css": "background: linear-gradient(170deg, rgba(0, 230, 118, .55) 0%, transparent 45%), linear-gradient(190deg, rgba(124, 77, 255, .5) 10%, transparent 60%), linear-gradient(180deg, #020c1b, #0a2342);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#020c1b",
+      "#0a2342"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "fx_glitter",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_glitter",
+    "kind": "profile_effect",
+    "name": "Glitter Bomb",
+    "rarity": "rare",
+    "effect": "sparkle"
+   },
+   "look": {
+    "effect": "sparkle"
+   }
+  },
+  {
+   "id": "fx_party",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_party",
+    "kind": "profile_effect",
+    "name": "Party Time",
+    "rarity": "rare",
+    "effect": "confetti"
+   },
+   "look": {
+    "effect": "confetti"
+   }
+  },
+  {
+   "id": "fx_hotstreak",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_hotstreak",
+    "kind": "profile_effect",
+    "name": "Hot Streak",
+    "rarity": "epic",
+    "effect": "embers"
+   },
+   "look": {
+    "effect": "embers"
+   }
+  },
+  {
+   "id": "fx_wakeup",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_wakeup",
+    "kind": "profile_effect",
+    "name": "Wake Up, Frog",
+    "rarity": "epic",
+    "effect": "matrix"
+   },
+   "look": {
+    "effect": "matrix"
+   }
+  },
+  {
+   "id": "fx_luckyshower",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_luckyshower",
+    "kind": "profile_effect",
+    "name": "Lucky Shower",
+    "rarity": "legendary",
+    "effect": "confetti"
+   },
+   "look": {
+    "effect": "confetti"
+   }
+  },
+  {
+   "id": "fx_bonfire",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_bonfire",
+    "kind": "profile_effect",
+    "name": "Bonfire Night",
+    "rarity": "epic",
+    "effect": "embers"
+   },
+   "look": {
+    "effect": "embers"
+   }
+  },
+  {
+   "id": "fx_letitsnow",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_letitsnow",
+    "kind": "profile_effect",
+    "name": "Let It Snow",
+    "rarity": "rare",
+    "effect": "snow"
+   },
+   "look": {
+    "effect": "snow"
+   }
+  },
+  {
+   "id": "gh_beanie",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_beanie",
+    "kind": "gtf_hat",
+    "name": "Getaway Beanie",
+    "rarity": "common",
+    "layer": "beanie",
+    "opt": "hat",
+    "emoji": "🧢"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "beanie"
+    ]
+   }
+  },
+  {
+   "id": "gh_chef",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_chef",
+    "kind": "gtf_hat",
+    "name": "Cook's Toque",
+    "rarity": "common",
+    "layer": "chef",
+    "opt": "hat",
+    "emoji": "👨‍🍳"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "chef"
+    ]
+   }
+  },
+  {
+   "id": "gh_cowboy",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_cowboy",
+    "kind": "gtf_hat",
+    "name": "Outlaw Stetson",
+    "rarity": "uncommon",
+    "layer": "cowboy",
+    "opt": "hat",
+    "emoji": "🤠"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "cowboy"
+    ]
+   }
+  },
+  {
+   "id": "gh_pirate",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_pirate",
+    "kind": "gtf_hat",
+    "name": "Tricorn of Plunder",
+    "rarity": "uncommon",
+    "layer": "pirate",
+    "opt": "hat",
+    "emoji": "🏴‍☠️"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "pirate"
+    ]
+   }
+  },
+  {
+   "id": "gh_party",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_party",
+    "kind": "gtf_hat",
+    "name": "Party Cone",
+    "rarity": "common",
+    "layer": "party",
+    "opt": "hat",
+    "emoji": "🥳"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "party"
+    ]
+   }
+  },
+  {
+   "id": "gh_tophat",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_tophat",
+    "kind": "gtf_hat",
+    "name": "Gentleman Thief",
+    "rarity": "rare",
+    "layer": "tophat",
+    "opt": "hat",
+    "emoji": "🎩"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "tophat"
+    ]
+   }
+  },
+  {
+   "id": "gh_viking",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_viking",
+    "kind": "gtf_hat",
+    "name": "Raider Helm",
+    "rarity": "rare",
+    "layer": "viking",
+    "opt": "hat",
+    "emoji": "🪓"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "viking"
+    ]
+   }
+  },
+  {
+   "id": "gh_horns",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_horns",
+    "kind": "gtf_hat",
+    "name": "Devil Horns",
+    "rarity": "uncommon",
+    "layer": "horns",
+    "opt": "hat",
+    "emoji": "😈"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "horns"
+    ]
+   }
+  },
+  {
+   "id": "gh_halo",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_halo",
+    "kind": "gtf_hat",
+    "name": "Alibi Halo",
+    "rarity": "epic",
+    "layer": "halo",
+    "opt": "hat",
+    "emoji": "😇"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "halo"
+    ]
+   }
+  },
+  {
+   "id": "gh_crown",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_crown",
+    "kind": "gtf_hat",
+    "name": "Crown of the Underworld",
+    "rarity": "legendary",
+    "layer": "crown",
+    "opt": "hat",
+    "emoji": "👑"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "crown"
+    ]
+   }
+  },
+  {
+   "id": "gm_balaclava",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_balaclava",
+    "kind": "gtf_mask",
+    "name": "Ski Mask",
+    "rarity": "common",
+    "layer": "balaclava",
+    "opt": "mask",
+    "emoji": "🥷"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "balaclava"
+    ]
+   }
+  },
+  {
+   "id": "gm_bandana",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_bandana",
+    "kind": "gtf_mask",
+    "name": "Stagecoach Bandana",
+    "rarity": "common",
+    "layer": "bandana",
+    "opt": "mask",
+    "emoji": "🤠"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "bandana"
+    ]
+   }
+  },
+  {
+   "id": "gm_shades",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_shades",
+    "kind": "gtf_mask",
+    "name": "Lookout Shades",
+    "rarity": "common",
+    "layer": "sunglasses",
+    "opt": "mask",
+    "emoji": "🕶️"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "sunglasses"
+    ]
+   }
+  },
+  {
+   "id": "gm_domino",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_domino",
+    "kind": "gtf_mask",
+    "name": "Masquerade",
+    "rarity": "uncommon",
+    "layer": "domino",
+    "opt": "mask",
+    "emoji": "🎭"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "domino"
+    ]
+   }
+  },
+  {
+   "id": "gm_eyepatch",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_eyepatch",
+    "kind": "gtf_mask",
+    "name": "One-Eyed Jack",
+    "rarity": "uncommon",
+    "layer": "eyepatch",
+    "opt": "mask",
+    "emoji": "🏴‍☠️"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "eyepatch"
+    ]
+   }
+  },
+  {
+   "id": "gm_monocle",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_monocle",
+    "kind": "gtf_mask",
+    "name": "Appraiser's Monocle",
+    "rarity": "rare",
+    "layer": "monocle",
+    "opt": "mask",
+    "emoji": "🧐"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "monocle"
+    ]
+   }
+  },
+  {
+   "id": "go_hoodie",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_hoodie",
+    "kind": "gtf_outfit",
+    "name": "Lookout Hoodie",
+    "rarity": "common",
+    "layer": "hoodie",
+    "opt": "outfit",
+    "emoji": "🧥"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "hoodie"
+    ]
+   }
+  },
+  {
+   "id": "go_bandolier",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_bandolier",
+    "kind": "gtf_outfit",
+    "name": "Bandolier",
+    "rarity": "uncommon",
+    "layer": "bandolier",
+    "opt": "outfit",
+    "emoji": "🎖️"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "bandolier"
+    ]
+   }
+  },
+  {
+   "id": "go_prison",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_prison",
+    "kind": "gtf_outfit",
+    "name": "County Orange",
+    "rarity": "uncommon",
+    "layer": "prison",
+    "opt": "outfit",
+    "emoji": "🟧"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "prison"
+    ]
+   }
+  },
+  {
+   "id": "go_suit",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_suit",
+    "kind": "gtf_outfit",
+    "name": "Sharp Suit",
+    "rarity": "rare",
+    "layer": "suit",
+    "opt": "outfit",
+    "emoji": "🕴️"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "suit"
+    ]
+   }
+  },
+  {
+   "id": "go_goldchain",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_goldchain",
+    "kind": "gtf_outfit",
+    "name": "Fat Gold Chain",
+    "rarity": "rare",
+    "layer": "goldchain",
+    "opt": "outfit",
+    "emoji": "📿"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "goldchain"
+    ]
+   }
+  },
+  {
+   "id": "go_tuxedo",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_tuxedo",
+    "kind": "gtf_outfit",
+    "name": "Casino Tux",
+    "rarity": "epic",
+    "layer": "tuxedo",
+    "opt": "outfit",
+    "emoji": "🤵"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "tuxedo"
+    ]
+   }
+  },
+  {
+   "id": "gp_crowbar",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_crowbar",
+    "kind": "gtf_prop",
+    "name": "Trusty Crowbar",
+    "rarity": "common",
+    "layer": "crowbar",
+    "opt": "prop",
+    "emoji": "🔧"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "crowbar"
+    ]
+   }
+  },
+  {
+   "id": "gp_rose",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_rose",
+    "kind": "gtf_prop",
+    "name": "Calling-Card Rose",
+    "rarity": "common",
+    "layer": "rose",
+    "opt": "prop",
+    "emoji": "🌹"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "rose"
+    ]
+   }
+  },
+  {
+   "id": "gp_cigar",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_cigar",
+    "kind": "gtf_prop",
+    "name": "Victory Cigar",
+    "rarity": "uncommon",
+    "layer": "cigar",
+    "opt": "prop",
+    "emoji": "🚬"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "cigar"
+    ]
+   }
+  },
+  {
+   "id": "gp_briefcase",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_briefcase",
+    "kind": "gtf_prop",
+    "name": "Locked Briefcase",
+    "rarity": "uncommon",
+    "layer": "briefcase",
+    "opt": "prop",
+    "emoji": "💼"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "briefcase"
+    ]
+   }
+  },
+  {
+   "id": "gp_moneybag",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_moneybag",
+    "kind": "gtf_prop",
+    "name": "Bag of Loot",
+    "rarity": "rare",
+    "layer": "moneybag",
+    "opt": "prop",
+    "emoji": "💰"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "moneybag"
+    ]
+   }
+  },
+  {
+   "id": "gp_dice",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_dice",
+    "kind": "gtf_prop",
+    "name": "Loaded Dice",
+    "rarity": "legendary",
+    "layer": "dice",
+    "opt": "prop",
+    "emoji": "🎲"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "dice"
+    ]
+   }
+  },
+  {
+   "id": "gb_city",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_city",
+    "kind": "gtf_bg",
+    "name": "Downtown",
+    "rarity": "common",
+    "layer": "city",
+    "opt": "bg",
+    "emoji": "🏙️"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "city"
+    ]
+   }
+  },
+  {
+   "id": "gb_jail",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_jail",
+    "kind": "gtf_bg",
+    "name": "Holding Cell",
+    "rarity": "uncommon",
+    "layer": "jail",
+    "opt": "bg",
+    "emoji": "🚔"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "jail"
+    ]
+   }
+  },
+  {
+   "id": "gb_sunset",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_sunset",
+    "kind": "gtf_bg",
+    "name": "Getaway Sunset",
+    "rarity": "uncommon",
+    "layer": "sunset",
+    "opt": "bg",
+    "emoji": "🌅"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "sunset"
+    ]
+   }
+  },
+  {
+   "id": "gb_neon",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_neon",
+    "kind": "gtf_bg",
+    "name": "Neon Alley",
+    "rarity": "rare",
+    "layer": "neon",
+    "opt": "bg",
+    "emoji": "🌃"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "neon"
+    ]
+   }
+  },
+  {
+   "id": "gb_matrix",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_matrix",
+    "kind": "gtf_bg",
+    "name": "The Mainframe",
+    "rarity": "rare",
+    "layer": "matrix",
+    "opt": "bg",
+    "emoji": "💻"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "matrix"
+    ]
+   }
+  },
+  {
+   "id": "gb_vault",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_vault",
+    "kind": "gtf_bg",
+    "name": "Inside the Fed",
+    "rarity": "epic",
+    "layer": "vault",
+    "opt": "bg",
+    "emoji": "🏦"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "vault"
+    ]
+   }
+  },
+  {
+   "id": "gf_pixel",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_pixel",
+    "kind": "gtf_frame",
+    "name": "8-Bit Frame",
+    "rarity": "common",
+    "layer": "pixel",
+    "opt": "frame",
+    "emoji": "👾"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "pixel"
+    ]
+   }
+  },
+  {
+   "id": "gf_neon",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_neon",
+    "kind": "gtf_frame",
+    "name": "Neon Frame",
+    "rarity": "uncommon",
+    "layer": "neon",
+    "opt": "frame",
+    "emoji": "🌃"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "neon"
+    ]
+   }
+  },
+  {
+   "id": "gf_gold",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_gold",
+    "kind": "gtf_frame",
+    "name": "Gilded Frame",
+    "rarity": "rare",
+    "layer": "gold",
+    "opt": "frame",
+    "emoji": "🟨"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "gold"
+    ]
+   }
+  },
+  {
+   "id": "gf_flame",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_flame",
+    "kind": "gtf_frame",
+    "name": "Hellfire Frame",
+    "rarity": "epic",
+    "layer": "flame",
+    "opt": "frame",
+    "emoji": "🔥"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "flame"
+    ]
+   }
+  },
+  {
+   "id": "gf_diamond",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_diamond",
+    "kind": "gtf_frame",
+    "name": "Diamond Frame",
+    "rarity": "legendary",
+    "layer": "diamond",
+    "opt": "frame",
+    "emoji": "💎"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "diamond"
+    ]
+   }
+  },
+  {
+   "id": "nc_trans",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_trans",
+    "kind": "name_color",
+    "name": "Trans Pride",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #5bcefa, #f5a9b8, #ffffff, #f5a9b8, #5bcefa); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_trans",
+     "kind": "gradient",
+     "colors": [
+      "#5bcefa",
+      "#f5a9b8",
+      "#ffffff",
+      "#f5a9b8",
+      "#5bcefa"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_bi",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_bi",
+    "kind": "name_color",
+    "name": "Bi Pride",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #ff2e8c, #b06ad1, #4d7cff); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_bi",
+     "kind": "gradient",
+     "colors": [
+      "#ff2e8c",
+      "#b06ad1",
+      "#4d7cff"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_lesbian",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_lesbian",
+    "kind": "name_color",
+    "name": "Lesbian Pride",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #ff5a1f, #ff9a56, #ffffff, #d362a4, #c2187f); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_lesbian",
+     "kind": "gradient",
+     "colors": [
+      "#ff5a1f",
+      "#ff9a56",
+      "#ffffff",
+      "#d362a4",
+      "#c2187f"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_pan",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_pan",
+    "kind": "name_color",
+    "name": "Pan Pride",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #ff218c, #ffd800, #21b1ff); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_pan",
+     "kind": "gradient",
+     "colors": [
+      "#ff218c",
+      "#ffd800",
+      "#21b1ff"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_enby",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_enby",
+    "kind": "name_color",
+    "name": "Nonbinary Pride",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #fcf434, #ffffff, #b47ee5); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_enby",
+     "kind": "gradient",
+     "colors": [
+      "#fcf434",
+      "#ffffff",
+      "#b47ee5"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_holo",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_holo",
+    "kind": "name_color",
+    "name": "Holographic",
+    "rarity": "epic",
+    "css": "background: linear-gradient(90deg, #ffd1f7, #c2f0ff, #e0c3fc, #fff6b7, #ffd1f7); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_holo",
+     "kind": "gradient",
+     "colors": [
+      "#ffd1f7",
+      "#c2f0ff",
+      "#e0c3fc",
+      "#fff6b7",
+      "#ffd1f7"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "nc_lavender",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_lavender",
+    "kind": "name_color",
+    "name": "Lavender Haze",
+    "rarity": "common",
+    "css": "color: #c3a6ff;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_lavender",
+     "kind": "solid",
+     "colors": [
+      "#c3a6ff"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_peach",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_peach",
+    "kind": "name_color",
+    "name": "Peach Fuzz",
+    "rarity": "common",
+    "css": "color: #ffb38a;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_peach",
+     "kind": "solid",
+     "colors": [
+      "#ffb38a"
+     ]
+    }
+   }
+  },
+  {
+   "id": "nc_cottoncandy",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_cottoncandy",
+    "kind": "name_color",
+    "name": "Cotton Candy",
+    "rarity": "rare",
+    "css": "background: linear-gradient(90deg, #ffb3d9, #c9b3ff, #b3e5ff); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_cottoncandy",
+     "kind": "gradient",
+     "colors": [
+      "#ffb3d9",
+      "#c9b3ff",
+      "#b3e5ff"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_leather",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_leather",
+    "kind": "name_color",
+    "name": "Leather Pride",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #3d5afe, #ffffff, #ff1744); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_leather",
+     "kind": "gradient",
+     "colors": [
+      "#3d5afe",
+      "#ffffff",
+      "#ff1744"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_parade",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_parade",
+    "kind": "name_color",
+    "name": "Parade Day",
+    "rarity": "epic",
+    "css": "background: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #00a83a, #3d7bff, #a64dd9, #f5a9b8, #5bcefa, #e40303); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_parade",
+     "kind": "gradient",
+     "colors": [
+      "#e40303",
+      "#ffed00",
+      "#00a83a",
+      "#a64dd9",
+      "#f5a9b8",
+      "#e40303"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "pb_rainbow",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_rainbow",
+    "kind": "profile_border",
+    "name": "Over the Rainbow",
+    "rarity": "rare",
+    "css": "border: 3px solid transparent; border-image: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #008026, #004dff, #750787) 1;",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#e40303",
+      "#ffed00",
+      "#008026",
+      "#750787"
+     ],
+     "w": 3,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_leopard",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_leopard",
+    "kind": "profile_border",
+    "name": "Leopard Trim",
+    "rarity": "uncommon",
+    "css": "border: 4px solid transparent; border-image: repeating-radial-gradient(circle at 30% 40%, #3e2a14 0 2px, #a0662a 2px 3px, #d9a441 3px 7px) 4;",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#3e2a14",
+      "#a0662a",
+      "#d9a441"
+     ],
+     "w": 4,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_leather",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_leather",
+    "kind": "profile_border",
+    "name": "Leather & Studs",
+    "rarity": "rare",
+    "css": "border: 4px solid #1c1c1c; outline: 2px dotted #c0c4cc; outline-offset: -8px; box-shadow: 0 0 12px rgba(0, 0, 0, .75);",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#1c1c1c",
+      "#c0c4cc"
+     ],
+     "w": 4,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "pb_sweetheart",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_sweetheart",
+    "kind": "profile_border",
+    "name": "Sweetheart",
+    "rarity": "uncommon",
+    "css": "border: 2px solid #ff8fc8; outline: 2px dotted #ffd1e8; outline-offset: -6px; box-shadow: 0 0 14px rgba(255, 143, 200, .5);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ff8fc8",
+      "#ffd1e8"
+     ],
+     "w": 2,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "ad_pride",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_pride",
+    "kind": "avatar_decoration",
+    "name": "Pride Ring",
+    "rarity": "rare",
+    "ring": "",
+    "conic": "background: conic-gradient(#e40303, #ff8c00, #ffed00, #008026, #004dff, #750787, #e40303);",
+    "spin": true,
+    "emoji": "🏳️‍🌈"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_pride",
+     "ring": {
+      "colors": [
+       "#e40303",
+       "#ffed00",
+       "#008026",
+       "#750787"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": true
+     },
+     "emoji": "🏳️‍🌈"
+    }
+   }
+  },
+  {
+   "id": "ad_lovestruck",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_lovestruck",
+    "kind": "avatar_decoration",
+    "name": "Lovestruck",
+    "rarity": "uncommon",
+    "ring": "border-color: #ff8fc8; box-shadow: 0 0 0 5px rgba(255, 143, 200, .35), 0 0 18px rgba(255, 105, 180, .55);",
+    "conic": "",
+    "spin": false,
+    "emoji": "💕"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_lovestruck",
+     "ring": {
+      "colors": [
+       "#ff8fc8",
+       "#ff69b4"
+      ],
+      "w": 5,
+      "glow": 0.55,
+      "spin": false
+     },
+     "emoji": "💕"
+    }
+   }
+  },
+  {
+   "id": "ad_spotlight",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_spotlight",
+    "kind": "avatar_decoration",
+    "name": "Spotlight",
+    "rarity": "epic",
+    "ring": "",
+    "conic": "background: conic-gradient(#ffd700, #ff4fd8, #ffffff, #ff4fd8, #ffd700);",
+    "spin": true,
+    "emoji": "💄"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_spotlight",
+     "ring": {
+      "colors": [
+       "#ffd700",
+       "#ff4fd8",
+       "#ffffff"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": true
+     },
+     "emoji": "💄"
+    }
+   }
+  },
+  {
+   "id": "bn_pride",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_pride",
+    "kind": "profile_banner",
+    "name": "Pride Stripes",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(180deg, #e40303 0 16.66%, #ff8c00 16.66% 33.33%, #ffed00 33.33% 50%, #008026 50% 66.66%, #004dff 66.66% 83.33%, #750787 83.33%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#e40303",
+      "#ffed00",
+      "#008026",
+      "#750787"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_kawaii",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_kawaii",
+    "kind": "profile_banner",
+    "name": "Kawaii Clouds",
+    "rarity": "uncommon",
+    "css": "background: radial-gradient(circle at 14% 72%, #fff 0 14px, transparent 15px), radial-gradient(circle at 22% 62%, #fff 0 18px, transparent 19px), radial-gradient(circle at 30% 74%, #fff 0 12px, transparent 13px), radial-gradient(circle at 72% 40%, #fff 0 12px, transparent 13px), radial-gradient(circle at 79% 32%, #fff 0 16px, transparent 17px), radial-gradient(circle at 86% 42%, #fff 0 11px, transparent 12px), linear-gradient(180deg, #ffc1e3, #d7c4ff 60%, #b8e2ff);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#ffc1e3",
+      "#d7c4ff",
+      "#b8e2ff"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_sakura",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_sakura",
+    "kind": "profile_banner",
+    "name": "Sakura Season",
+    "rarity": "rare",
+    "css": "background: radial-gradient(circle at 8% 22%, #ff8fab 0 4px, #ffb7c5 5px 10px, transparent 11px), radial-gradient(circle at 18% 10%, #ffd1dc 0 8px, transparent 9px), radial-gradient(circle at 40% 70%, #ffb7c5 0 3px, transparent 4px), radial-gradient(circle at 62% 30%, #ffb7c5 0 3px, transparent 4px), radial-gradient(circle at 84% 18%, #ff8fab 0 4px, #ffb7c5 5px 11px, transparent 12px), radial-gradient(circle at 93% 36%, #ffd1dc 0 7px, transparent 8px), linear-gradient(180deg, #ffe4ef, #ffd1e3 55%, #c8e6ff);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#ffe4ef",
+      "#ffd1e3",
+      "#c8e6ff"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "bn_redroom",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_redroom",
+    "kind": "profile_banner",
+    "name": "Red Velvet",
+    "rarity": "rare",
+    "css": "background: radial-gradient(ellipse at 50% 0%, rgba(255, 40, 40, .55), transparent 60%), repeating-linear-gradient(90deg, #4a0b0e 0 14px, #2a0507 14px 18px);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#4a0b0e",
+      "#2a0507"
+     ],
+     "angle": 90
+    }
+   }
+  },
+  {
+   "id": "bn_float",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_float",
+    "kind": "profile_banner",
+    "name": "Parade Float",
+    "rarity": "epic",
+    "css": "background: radial-gradient(circle at 12% 30%, #fff 0 2px, transparent 3px), radial-gradient(circle at 34% 64%, #fff 0 2px, transparent 3px), radial-gradient(circle at 58% 22%, #fff 0 2px, transparent 3px), radial-gradient(circle at 82% 58%, #fff 0 2px, transparent 3px), linear-gradient(90deg, #ffffff 0 3%, #f5a9b8 3% 6%, #5bcefa 6% 9%, #613915 9% 12%, #000000 12% 15%, transparent 15%), repeating-linear-gradient(135deg, #e40303 0 14px, #ff8c00 14px 28px, #ffed00 28px 42px, #008026 42px 56px, #004dff 56px 70px, #750787 70px 84px);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#e40303",
+      "#ffed00",
+      "#008026",
+      "#750787"
+     ],
+     "angle": 135
+    }
+   }
+  },
+  {
+   "id": "fx_hearts",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_hearts",
+    "kind": "profile_effect",
+    "name": "Floating Hearts",
+    "rarity": "rare",
+    "effect": "hearts"
+   },
+   "look": {
+    "effect": "hearts"
+   }
+  },
+  {
+   "id": "fx_disco",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_disco",
+    "kind": "profile_effect",
+    "name": "Disco Fever",
+    "rarity": "epic",
+    "effect": "disco"
+   },
+   "look": {
+    "effect": "disco"
+   }
+  },
+  {
+   "id": "fx_pridefetti",
+   "kind": "profile_effect",
+   "render": {
+    "id": "fx_pridefetti",
+    "kind": "profile_effect",
+    "name": "Pride Confetti",
+    "rarity": "rare",
+    "effect": "pridefetti"
+   },
+   "look": {
+    "effect": "pridefetti"
+   }
+  },
+  {
+   "id": "gh_beehive",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_beehive",
+    "kind": "gtf_hat",
+    "name": "Beehive Wig",
+    "rarity": "rare",
+    "layer": "beehive",
+    "opt": "hat",
+    "emoji": "👱‍♀️"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "beehive"
+    ]
+   }
+  },
+  {
+   "id": "gh_tiara",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_tiara",
+    "kind": "gtf_hat",
+    "name": "Rhinestone Tiara",
+    "rarity": "epic",
+    "layer": "tiara",
+    "opt": "hat",
+    "emoji": "👸"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "tiara"
+    ]
+   }
+  },
+  {
+   "id": "gh_rainbowwig",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_rainbowwig",
+    "kind": "gtf_hat",
+    "name": "Rainbow Wig",
+    "rarity": "uncommon",
+    "layer": "rainbowwig",
+    "opt": "hat",
+    "emoji": "🌈"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "rainbowwig"
+    ]
+   }
+  },
+  {
+   "id": "gh_muir",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_muir",
+    "kind": "gtf_hat",
+    "name": "Leather Muir Cap",
+    "rarity": "rare",
+    "layer": "muir",
+    "opt": "hat",
+    "emoji": "🧢"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "muir"
+    ]
+   }
+  },
+  {
+   "id": "gh_bow",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_bow",
+    "kind": "gtf_hat",
+    "name": "Big Bow",
+    "rarity": "common",
+    "layer": "bow",
+    "opt": "hat",
+    "emoji": "🎀"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "bow"
+    ]
+   }
+  },
+  {
+   "id": "gh_catears",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_catears",
+    "kind": "gtf_hat",
+    "name": "Cat Ears",
+    "rarity": "uncommon",
+    "layer": "catears",
+    "opt": "hat",
+    "emoji": "🐱"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "catears"
+    ]
+   }
+  },
+  {
+   "id": "gh_bunny",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_bunny",
+    "kind": "gtf_hat",
+    "name": "Bunny Ears",
+    "rarity": "uncommon",
+    "layer": "bunny",
+    "opt": "hat",
+    "emoji": "🐰"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "bunny"
+    ]
+   }
+  },
+  {
+   "id": "gh_flowercrown",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_flowercrown",
+    "kind": "gtf_hat",
+    "name": "Flower Crown",
+    "rarity": "rare",
+    "layer": "flowercrown",
+    "opt": "hat",
+    "emoji": "🌸"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "flowercrown"
+    ]
+   }
+  },
+  {
+   "id": "gm_lashes",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_lashes",
+    "kind": "gtf_mask",
+    "name": "Full Beat",
+    "rarity": "uncommon",
+    "layer": "lashes",
+    "opt": "mask",
+    "emoji": "💄"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "lashes"
+    ]
+   }
+  },
+  {
+   "id": "gm_puphood",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_puphood",
+    "kind": "gtf_mask",
+    "name": "Pup Hood",
+    "rarity": "epic",
+    "layer": "puphood",
+    "opt": "mask",
+    "emoji": "🐶"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "puphood"
+    ]
+   }
+  },
+  {
+   "id": "gm_heartshades",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_heartshades",
+    "kind": "gtf_mask",
+    "name": "Heart Shades",
+    "rarity": "uncommon",
+    "layer": "heartshades",
+    "opt": "mask",
+    "emoji": "😍"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "heartshades"
+    ]
+   }
+  },
+  {
+   "id": "go_sequin",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_sequin",
+    "kind": "gtf_outfit",
+    "name": "Sequin Gown",
+    "rarity": "epic",
+    "layer": "sequin",
+    "opt": "outfit",
+    "emoji": "👗"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "sequin"
+    ]
+   }
+  },
+  {
+   "id": "go_boa",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_boa",
+    "kind": "gtf_outfit",
+    "name": "Feather Boa",
+    "rarity": "uncommon",
+    "layer": "boa",
+    "opt": "outfit",
+    "emoji": "🪶"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "boa"
+    ]
+   }
+  },
+  {
+   "id": "go_harness",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_harness",
+    "kind": "gtf_outfit",
+    "name": "Leather Harness",
+    "rarity": "rare",
+    "layer": "harness",
+    "opt": "outfit",
+    "emoji": "⛓️"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "harness"
+    ]
+   }
+  },
+  {
+   "id": "go_collar",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_collar",
+    "kind": "gtf_outfit",
+    "name": "Studded Collar",
+    "rarity": "uncommon",
+    "layer": "collar",
+    "opt": "outfit",
+    "emoji": "📿"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "collar"
+    ]
+   }
+  },
+  {
+   "id": "go_latex",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_latex",
+    "kind": "gtf_outfit",
+    "name": "Vinyl Catsuit",
+    "rarity": "epic",
+    "layer": "latex",
+    "opt": "outfit",
+    "emoji": "🖤"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "latex"
+    ]
+   }
+  },
+  {
+   "id": "go_sundress",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_sundress",
+    "kind": "gtf_outfit",
+    "name": "Sundress",
+    "rarity": "uncommon",
+    "layer": "sundress",
+    "opt": "outfit",
+    "emoji": "👗"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "sundress"
+    ]
+   }
+  },
+  {
+   "id": "go_cardigan",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_cardigan",
+    "kind": "gtf_outfit",
+    "name": "Cozy Cardigan",
+    "rarity": "common",
+    "layer": "cardigan",
+    "opt": "outfit",
+    "emoji": "🧶"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "cardigan"
+    ]
+   }
+  },
+  {
+   "id": "go_pridecape",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_pridecape",
+    "kind": "gtf_outfit",
+    "name": "Rainbow Cape",
+    "rarity": "uncommon",
+    "layer": "pridecape",
+    "opt": "outfit",
+    "emoji": "🏳️‍🌈"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "pridecape"
+    ]
+   }
+  },
+  {
+   "id": "gp_prideflag",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_prideflag",
+    "kind": "gtf_prop",
+    "name": "Rainbow Flag",
+    "rarity": "common",
+    "layer": "prideflag",
+    "opt": "prop",
+    "emoji": "🏳️‍🌈"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "prideflag"
+    ]
+   }
+  },
+  {
+   "id": "gp_discoball",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_discoball",
+    "kind": "gtf_prop",
+    "name": "Disco Ball",
+    "rarity": "rare",
+    "layer": "discoball",
+    "opt": "prop",
+    "emoji": "🪩"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "discoball"
+    ]
+   }
+  },
+  {
+   "id": "gp_flamingo",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_flamingo",
+    "kind": "gtf_prop",
+    "name": "Lawn Flamingo",
+    "rarity": "common",
+    "layer": "flamingo",
+    "opt": "prop",
+    "emoji": "🦩"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "flamingo"
+    ]
+   }
+  },
+  {
+   "id": "gp_fan",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_fan",
+    "kind": "gtf_prop",
+    "name": "Fan Clack",
+    "rarity": "uncommon",
+    "layer": "fan",
+    "opt": "prop",
+    "emoji": "🪭"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "fan"
+    ]
+   }
+  },
+  {
+   "id": "gp_cuffs",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_cuffs",
+    "kind": "gtf_prop",
+    "name": "Fuzzy Handcuffs",
+    "rarity": "uncommon",
+    "layer": "cuffs",
+    "opt": "prop",
+    "emoji": "🔗"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "cuffs"
+    ]
+   }
+  },
+  {
+   "id": "gp_crop",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_crop",
+    "kind": "gtf_prop",
+    "name": "Riding Crop",
+    "rarity": "rare",
+    "layer": "crop",
+    "opt": "prop",
+    "emoji": "🏇"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "crop"
+    ]
+   }
+  },
+  {
+   "id": "gp_boba",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_boba",
+    "kind": "gtf_prop",
+    "name": "Boba Tea",
+    "rarity": "common",
+    "layer": "boba",
+    "opt": "prop",
+    "emoji": "🧋"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "boba"
+    ]
+   }
+  },
+  {
+   "id": "gp_strawberry",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_strawberry",
+    "kind": "gtf_prop",
+    "name": "Strawberry",
+    "rarity": "common",
+    "layer": "strawberry",
+    "opt": "prop",
+    "emoji": "🍓"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "strawberry"
+    ]
+   }
+  },
+  {
+   "id": "gp_plushie",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_plushie",
+    "kind": "gtf_prop",
+    "name": "Bunny Plushie",
+    "rarity": "uncommon",
+    "layer": "plushie",
+    "opt": "prop",
+    "emoji": "🧸"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "plushie"
+    ]
+   }
+  },
+  {
+   "id": "gb_progress",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_progress",
+    "kind": "gtf_bg",
+    "name": "Progress Pride Flag",
+    "rarity": "common",
+    "layer": "progress",
+    "opt": "bg",
+    "emoji": "🏳️‍🌈"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "progress"
+    ]
+   }
+  },
+  {
+   "id": "gb_intersex",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_intersex",
+    "kind": "gtf_bg",
+    "name": "Intersex-Inclusive Pride Flag",
+    "rarity": "common",
+    "layer": "intersex",
+    "opt": "bg",
+    "emoji": "🏳️‍🌈"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "intersex"
+    ]
+   }
+  },
+  {
+   "id": "gb_trans",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_trans",
+    "kind": "gtf_bg",
+    "name": "Trans Flag",
+    "rarity": "common",
+    "layer": "trans",
+    "opt": "bg",
+    "emoji": "🏳️‍⚧️"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "trans"
+    ]
+   }
+  },
+  {
+   "id": "gb_bi",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_bi",
+    "kind": "gtf_bg",
+    "name": "Bi Flag",
+    "rarity": "common",
+    "layer": "bi",
+    "opt": "bg",
+    "emoji": "💗"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "bi"
+    ]
+   }
+  },
+  {
+   "id": "gb_lesbian",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_lesbian",
+    "kind": "gtf_bg",
+    "name": "Lesbian Flag",
+    "rarity": "common",
+    "layer": "lesbian",
+    "opt": "bg",
+    "emoji": "🧡"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "lesbian"
+    ]
+   }
+  },
+  {
+   "id": "gb_pan",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_pan",
+    "kind": "gtf_bg",
+    "name": "Pan Flag",
+    "rarity": "common",
+    "layer": "pan",
+    "opt": "bg",
+    "emoji": "💛"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "pan"
+    ]
+   }
+  },
+  {
+   "id": "gb_enby",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_enby",
+    "kind": "gtf_bg",
+    "name": "Nonbinary Flag",
+    "rarity": "common",
+    "layer": "enby",
+    "opt": "bg",
+    "emoji": "💜"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "enby"
+    ]
+   }
+  },
+  {
+   "id": "gb_ace",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_ace",
+    "kind": "gtf_bg",
+    "name": "Ace Flag",
+    "rarity": "common",
+    "layer": "ace",
+    "opt": "bg",
+    "emoji": "🖤"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "ace"
+    ]
+   }
+  },
+  {
+   "id": "gb_aro",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_aro",
+    "kind": "gtf_bg",
+    "name": "Aro Flag",
+    "rarity": "common",
+    "layer": "aro",
+    "opt": "bg",
+    "emoji": "💚"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "aro"
+    ]
+   }
+  },
+  {
+   "id": "gb_genderfluid",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_genderfluid",
+    "kind": "gtf_bg",
+    "name": "Genderfluid Flag",
+    "rarity": "common",
+    "layer": "genderfluid",
+    "opt": "bg",
+    "emoji": "🌊"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "genderfluid"
+    ]
+   }
+  },
+  {
+   "id": "gb_lavalamp",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_lavalamp",
+    "kind": "gtf_bg",
+    "name": "Groovy Lava",
+    "rarity": "rare",
+    "layer": "lavalamp",
+    "opt": "bg",
+    "emoji": "🫧"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "lavalamp"
+    ]
+   }
+  },
+  {
+   "id": "gb_leopard",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_leopard",
+    "kind": "gtf_bg",
+    "name": "Leopard Print",
+    "rarity": "uncommon",
+    "layer": "leopard",
+    "opt": "bg",
+    "emoji": "🐆"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "leopard"
+    ]
+   }
+  },
+  {
+   "id": "gb_redroom",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_redroom",
+    "kind": "gtf_bg",
+    "name": "The Red Room",
+    "rarity": "epic",
+    "layer": "redroom",
+    "opt": "bg",
+    "emoji": "🟥"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "redroom"
+    ]
+   }
+  },
+  {
+   "id": "gb_sakura",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_sakura",
+    "kind": "gtf_bg",
+    "name": "Cherry Blossom",
+    "rarity": "rare",
+    "layer": "sakura",
+    "opt": "bg",
+    "emoji": "🌸"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "sakura"
+    ]
+   }
+  },
+  {
+   "id": "gb_clouds",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_clouds",
+    "kind": "gtf_bg",
+    "name": "Cotton Candy Sky",
+    "rarity": "uncommon",
+    "layer": "clouds",
+    "opt": "bg",
+    "emoji": "☁️"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "clouds"
+    ]
+   }
+  },
+  {
+   "id": "gf_glitter",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_glitter",
+    "kind": "gtf_frame",
+    "name": "Glitter Frame",
+    "rarity": "rare",
+    "layer": "glitter",
+    "opt": "frame",
+    "emoji": "✨"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "glitter"
+    ]
+   }
+  },
+  {
+   "id": "gf_rainbow",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_rainbow",
+    "kind": "gtf_frame",
+    "name": "Rainbow Frame",
+    "rarity": "uncommon",
+    "layer": "rainbow",
+    "opt": "frame",
+    "emoji": "🌈"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "rainbow"
+    ]
+   }
+  },
+  {
+   "id": "gf_chain",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_chain",
+    "kind": "gtf_frame",
+    "name": "Chain & Studs Frame",
+    "rarity": "rare",
+    "layer": "chain",
+    "opt": "frame",
+    "emoji": "⛓️"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "chain"
+    ]
+   }
+  },
+  {
+   "id": "gf_hearts",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_hearts",
+    "kind": "gtf_frame",
+    "name": "Sweetheart Frame",
+    "rarity": "rare",
+    "layer": "hearts",
+    "opt": "frame",
+    "emoji": "💖"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "hearts"
+    ]
+   }
+  },
+  {
+   "id": "gb_wanted",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_wanted",
+    "kind": "gtf_bg",
+    "name": "Wanted Poster",
+    "rarity": "uncommon",
+    "layer": "wanted",
+    "opt": "bg",
+    "emoji": "📜"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "wanted"
+    ]
+   }
+  },
+  {
+   "id": "gf_rope",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_rope",
+    "kind": "gtf_frame",
+    "name": "Lasso Frame",
+    "rarity": "common",
+    "layer": "rope",
+    "opt": "frame",
+    "emoji": "🪢"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "rope"
+    ]
+   }
+  },
+  {
+   "id": "gp_sheriffstar",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_sheriffstar",
+    "kind": "gtf_prop",
+    "name": "Sheriff Star",
+    "rarity": "rare",
+    "layer": "sheriffstar",
+    "opt": "prop",
+    "emoji": "⭐"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "sheriffstar"
+    ]
+   }
+  },
+  {
+   "id": "gh_bountyhat",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_bountyhat",
+    "kind": "gtf_hat",
+    "name": "Bounty Hunter's Hat",
+    "rarity": "rare",
+    "layer": "bountyhat",
+    "opt": "hat",
+    "emoji": "🤠"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "bountyhat"
+    ]
+   }
+  },
+  {
+   "id": "ad_deadoralive",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_deadoralive",
+    "kind": "avatar_decoration",
+    "name": "Dead or Alive",
+    "rarity": "uncommon",
+    "ring": "border-color: #8d6e3f; box-shadow: 0 0 0 6px rgba(241, 223, 180, .45);",
+    "conic": "",
+    "spin": false,
+    "emoji": "📜"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_deadoralive",
+     "ring": {
+      "colors": [
+       "#8d6e3f",
+       "#f1dfb4"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "📜"
+    }
+   }
+  },
+  {
+   "id": "nc_mostwanted",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_mostwanted",
+    "kind": "name_color",
+    "name": "Most Wanted",
+    "rarity": "epic",
+    "css": "background: linear-gradient(90deg, #b71c1c, #ff5252, #ffd54f, #b71c1c); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_mostwanted",
+     "kind": "gradient",
+     "colors": [
+      "#b71c1c",
+      "#ff5252",
+      "#ffd54f",
+      "#b71c1c"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "nc_tadpole",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_tadpole",
+    "kind": "name_color",
+    "name": "Tadpole Lime",
+    "rarity": "common",
+    "css": "color: #9ccc65;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_tadpole",
+     "kind": "solid",
+     "colors": [
+      "#9ccc65"
+     ]
+    }
+   }
+  },
+  {
+   "id": "ad_ripple",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_ripple",
+    "kind": "avatar_decoration",
+    "name": "Pond Ripple",
+    "rarity": "uncommon",
+    "ring": "border-color: #4dd0e1; box-shadow: 0 0 0 4px rgba(77, 208, 225, .35), 0 0 0 10px rgba(77, 208, 225, .15);",
+    "conic": "",
+    "spin": false,
+    "emoji": "💧"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_ripple",
+     "ring": {
+      "colors": [
+       "#4dd0e1"
+      ],
+      "w": 4,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "💧"
+    }
+   }
+  },
+  {
+   "id": "gb_lilypond",
+   "kind": "gtf_bg",
+   "render": {
+    "id": "gb_lilypond",
+    "kind": "gtf_bg",
+    "name": "Moonlit Lily Pond",
+    "rarity": "uncommon",
+    "layer": "lilypond",
+    "opt": "bg",
+    "emoji": "🌙"
+   },
+   "look": {
+    "gtf": [
+     "bg",
+     "lilypond"
+    ]
+   }
+  },
+  {
+   "id": "pb_pearl",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_pearl",
+    "kind": "profile_border",
+    "name": "Pearl Rim",
+    "rarity": "rare",
+    "css": "border: 3px solid #f3e5f5; box-shadow: 0 0 16px rgba(225, 190, 231, .6), inset 0 0 10px rgba(255, 255, 255, .25);",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#f3e5f5"
+     ],
+     "w": 3,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "gf_laurel",
+   "kind": "gtf_frame",
+   "render": {
+    "id": "gf_laurel",
+    "kind": "gtf_frame",
+    "name": "Laurel Frame",
+    "rarity": "rare",
+    "layer": "laurel",
+    "opt": "frame",
+    "emoji": "🌿"
+   },
+   "look": {
+    "gtf": [
+     "frame",
+     "laurel"
+    ]
+   }
+  },
+  {
+   "id": "bn_sunken",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_sunken",
+    "kind": "profile_banner",
+    "name": "Sunken Treasure",
+    "rarity": "epic",
+    "css": "background: radial-gradient(circle at 82% 72%, rgba(255, 215, 0, .5), transparent 32%), radial-gradient(circle at 15% 20%, rgba(128, 222, 234, .35), transparent 40%), linear-gradient(180deg, #006064, #01303f 60%, #0b1a2a);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#006064",
+      "#01303f",
+      "#0b1a2a"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "gh_lotus",
+   "kind": "gtf_hat",
+   "render": {
+    "id": "gh_lotus",
+    "kind": "gtf_hat",
+    "name": "Lotus Crown",
+    "rarity": "epic",
+    "layer": "lotus",
+    "opt": "hat",
+    "emoji": "🪷"
+   },
+   "look": {
+    "gtf": [
+     "hat",
+     "lotus"
+    ]
+   }
+  },
+  {
+   "id": "gm_alien",
+   "kind": "gtf_mask",
+   "render": {
+    "id": "gm_alien",
+    "kind": "gtf_mask",
+    "name": "Little Green Visitor",
+    "rarity": "rare",
+    "layer": "alien",
+    "opt": "mask",
+    "emoji": "👽"
+   },
+   "look": {
+    "gtf": [
+     "mask",
+     "alien"
+    ]
+   }
+  },
+  {
+   "id": "go_reaper",
+   "kind": "gtf_outfit",
+   "render": {
+    "id": "go_reaper",
+    "kind": "gtf_outfit",
+    "name": "Reaper's Shroud",
+    "rarity": "epic",
+    "layer": "reaper",
+    "opt": "outfit",
+    "emoji": "💀"
+   },
+   "look": {
+    "gtf": [
+     "outfit",
+     "reaper"
+    ]
+   }
+  },
+  {
+   "id": "gp_scythe",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_scythe",
+    "kind": "gtf_prop",
+    "name": "Reaper's Scythe",
+    "rarity": "legendary",
+    "layer": "scythe",
+    "opt": "prop",
+    "emoji": "⚰️"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "scythe"
+    ]
+   }
+  },
+  {
+   "id": "gp_skateboard",
+   "kind": "gtf_prop",
+   "render": {
+    "id": "gp_skateboard",
+    "kind": "gtf_prop",
+    "name": "Getaway Deck",
+    "rarity": "uncommon",
+    "layer": "skateboard",
+    "opt": "prop",
+    "emoji": "🛹"
+   },
+   "look": {
+    "gtf": [
+     "prop",
+     "skateboard"
+    ]
+   }
+  },
+  {
+   "id": "pb_prestige60",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_prestige60",
+    "kind": "profile_border",
+    "name": "Prestige I: Emerald",
+    "rarity": "legendary",
+    "css": "border: 3px double #00e676; box-shadow: 0 0 22px rgba(0, 230, 118, .5);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#00e676"
+     ],
+     "w": 3,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_prestige70",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_prestige70",
+    "kind": "profile_border",
+    "name": "Prestige II: Sapphire",
+    "rarity": "legendary",
+    "css": "border: 3px double #448aff; box-shadow: 0 0 24px rgba(68, 138, 255, .55);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#448aff"
+     ],
+     "w": 3,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_prestige80",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_prestige80",
+    "kind": "profile_border",
+    "name": "Prestige III: Ruby",
+    "rarity": "legendary",
+    "css": "border: 3px double #ff1744; box-shadow: 0 0 26px rgba(255, 23, 68, .55);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ff1744"
+     ],
+     "w": 3,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_prestige90",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_prestige90",
+    "kind": "profile_border",
+    "name": "Prestige IV: Amethyst",
+    "rarity": "legendary",
+    "css": "border: 3px double #d500f9; box-shadow: 0 0 28px rgba(213, 0, 249, .55);",
+    "cls": "cx-frame-pulse"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#d500f9"
+     ],
+     "w": 3,
+     "anim": "pulse"
+    }
+   }
+  },
+  {
+   "id": "pb_prestige100",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_prestige100",
+    "kind": "profile_border",
+    "name": "Prestige V: Centurion",
+    "rarity": "legendary",
+    "css": "border: 4px double #ffd700; box-shadow: 0 0 30px rgba(255, 215, 0, .6);",
+    "cls": "cx-frame-hue"
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#ffd700"
+     ],
+     "w": 4,
+     "anim": "hue"
+    }
+   }
+  },
+  {
+   "id": "nc_seasonpass",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_seasonpass",
+    "kind": "name_color",
+    "name": "Season Pass",
+    "rarity": "legendary",
+    "css": "background: linear-gradient(90deg, #ffd23f, #ff6ad5, #9b5de5, #4cc9f0, #ffd23f); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_seasonpass",
+     "kind": "gradient",
+     "colors": [
+      "#ffd23f",
+      "#ff6ad5",
+      "#9b5de5",
+      "#4cc9f0",
+      "#ffd23f"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "ad_seasonpass",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_seasonpass",
+    "kind": "avatar_decoration",
+    "name": "Season Pass ring",
+    "rarity": "legendary",
+    "ring": "",
+    "conic": "background: conic-gradient(#ffd23f, #ff6ad5, #9b5de5, #4cc9f0, #ffd23f);",
+    "spin": true,
+    "emoji": "🎟️"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_seasonpass",
+     "ring": {
+      "colors": [
+       "#ffd23f",
+       "#ff6ad5",
+       "#9b5de5",
+       "#4cc9f0"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": true
+     },
+     "emoji": "🎟️"
+    }
+   }
+  },
+  {
+   "id": "bn_seasonpass",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_seasonpass",
+    "kind": "profile_banner",
+    "name": "Season Pass banner",
+    "rarity": "legendary",
+    "css": "background: linear-gradient(180deg, #120a2a 0%, #3a1c71 55%, #d76d77 85%, #ffaf7b 100%);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#120a2a",
+      "#3a1c71",
+      "#d76d77",
+      "#ffaf7b"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "pb_plex",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_plex",
+    "kind": "profile_border",
+    "name": "Plex Member",
+    "rarity": "epic",
+    "css": "border: 2px solid #e5a00d; box-shadow: 0 0 14px rgba(229, 160, 13, .45), inset 0 0 8px rgba(229, 160, 13, .2);",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#e5a00d"
+     ],
+     "w": 2,
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "nc_plex",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_plex",
+    "kind": "name_color",
+    "name": "Plex Gold",
+    "rarity": "epic",
+    "css": "background: linear-gradient(90deg, #f6c445, #e5a00d, #cc7b19); background-size: 100% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_plex",
+     "kind": "gradient",
+     "colors": [
+      "#f6c445",
+      "#e5a00d",
+      "#cc7b19"
+     ],
+     "anim": "none"
+    }
+   }
+  },
+  {
+   "id": "ad_vhs",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_vhs",
+    "kind": "avatar_decoration",
+    "name": "VHS Reels",
+    "rarity": "uncommon",
+    "ring": "",
+    "conic": "background: conic-gradient(#1b1b1b, #e5a00d, #1b1b1b, #4a4a4a, #1b1b1b);",
+    "spin": true,
+    "emoji": "📼"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_vhs",
+     "ring": {
+      "colors": [
+       "#1b1b1b",
+       "#e5a00d",
+       "#4a4a4a"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": true
+     },
+     "emoji": "📼"
+    }
+   }
+  },
+  {
+   "id": "bn_nowplaying",
+   "kind": "profile_banner",
+   "render": {
+    "id": "bn_nowplaying",
+    "kind": "profile_banner",
+    "name": "Now Playing",
+    "rarity": "rare",
+    "css": "background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .22) 0 2px, transparent 2px 5px), radial-gradient(ellipse at 50% 125%, rgba(229, 160, 13, .6), transparent 62%), linear-gradient(180deg, #120d06, #2a1d0b 60%, #3d2a0c);"
+   },
+   "look": {
+    "banner": {
+     "colors": [
+      "#120d06",
+      "#2a1d0b",
+      "#3d2a0c"
+     ],
+     "angle": 180
+    }
+   }
+  },
+  {
+   "id": "nc_airmail",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_airmail",
+    "kind": "name_color",
+    "name": "Air Mail",
+    "rarity": "uncommon",
+    "css": "background: linear-gradient(90deg, #229ed9, #7fd3ff, #2aabee, #229ed9); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_airmail",
+     "kind": "gradient",
+     "colors": [
+      "#229ed9",
+      "#7fd3ff",
+      "#2aabee",
+      "#229ed9"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "ad_searchparty",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_searchparty",
+    "kind": "avatar_decoration",
+    "name": "Search Party",
+    "rarity": "uncommon",
+    "ring": "",
+    "conic": "background: conic-gradient(from -45deg, #4285f4 0 25%, #ea4335 0 50%, #fbbc05 0 75%, #34a853 0 100%);",
+    "spin": false,
+    "emoji": "🔍"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_searchparty",
+     "ring": {
+      "colors": [
+       "#4285f4",
+       "#ea4335",
+       "#fbbc05",
+       "#34a853"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": false
+     },
+     "emoji": "🔍"
+    }
+   }
+  },
+  {
+   "id": "nc_supporter",
+   "kind": "name_color",
+   "render": {
+    "id": "nc_supporter",
+    "kind": "name_color",
+    "name": "Supporter Gold",
+    "rarity": "rare",
+    "css": "background: linear-gradient(90deg, #ffb300, #fff3b0, #ffd740, #66bb6a, #ffb300); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: cx-shift 6s linear infinite;"
+   },
+   "look": {
+    "name": {
+     "item": "nc_supporter",
+     "kind": "gradient",
+     "colors": [
+      "#ffb300",
+      "#fff3b0",
+      "#ffd740",
+      "#66bb6a",
+      "#ffb300"
+     ],
+     "anim": "shift",
+     "period_s": 6
+    }
+   }
+  },
+  {
+   "id": "ad_supporter",
+   "kind": "avatar_decoration",
+   "render": {
+    "id": "ad_supporter",
+    "kind": "avatar_decoration",
+    "name": "Supporter Halo",
+    "rarity": "rare",
+    "ring": "",
+    "conic": "background: conic-gradient(#ffd740, #66bb6a, #ffd740, #66bb6a, #ffd740);",
+    "spin": true,
+    "emoji": "💚"
+   },
+   "look": {
+    "deco": {
+     "item": "ad_supporter",
+     "ring": {
+      "colors": [
+       "#ffd740",
+       "#66bb6a"
+      ],
+      "w": 6,
+      "glow": 0,
+      "spin": true
+     },
+     "emoji": "💚"
+    }
+   }
+  }
+ ]
+}

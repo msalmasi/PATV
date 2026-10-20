@@ -45,20 +45,10 @@ const BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
 const KINDS = Object.keys(CAT.kinds || {});
 const ACCOUNT_KINDS = ["name_color", "profile_border", "avatar_decoration", "profile_banner", "profile_effect"];
 const GTF_KINDS = ["gtf_hat", "gtf_mask", "gtf_outfit", "gtf_prop", "gtf_bg", "gtf_frame"];
-const GTF_OPT = { gtf_hat: "hat", gtf_mask: "mask", gtf_outfit: "outfit", gtf_prop: "prop", gtf_bg: "bg", gtf_frame: "frame" };
-const GTF_LAYERS = {
-  gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate",
-            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat", "lotus"],
-  gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades", "alien"],
-  gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier",
-               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape", "reaper"],
-  gtf_prop: ["cigar", "moneybag", "crowbar", "briefcase", "rose", "dice",
-             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar", "scythe", "skateboard"],
-  gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix",
-           "progress", "intersex", "trans", "bi", "lesbian", "pan", "enby", "ace", "aro", "genderfluid",
-           "lavalamp", "leopard", "redroom", "sakura", "clouds", "wanted", "lilypond"],
-  gtf_frame: ["gold", "diamond", "flame", "neon", "pixel", "glitter", "rainbow", "chain", "hearts", "rope", "laurel"],
-};
+// S1 Q5a (1.99adp): the profile_effect and gtf_* enums live in cosmeticstyle.js (exported to the chat hub's looks too)
+const CSTYLE = require("./cosmeticstyle");
+const GTF_OPT = CSTYLE.GTF_OPT;
+const GTF_LAYERS = CSTYLE.GTF_LAYERS;
 const LAYER_EMOJI = {
   crown: "👑", tophat: "🎩", cowboy: "🤠", beanie: "🧢", halo: "😇", horns: "😈", party: "🥳", chef: "👨‍🍳", viking: "🪓", pirate: "🏴‍☠️",
   balaclava: "🥷", domino: "🎭", sunglasses: "🕶️", monocle: "🧐", eyepatch: "🏴‍☠️", bandana: "🤠",
@@ -77,13 +67,21 @@ const LAYER_EMOJI = {
   lotus: "🪷", lilypond: "🌙", laurel: "🌿",
   alien: "👽", reaper: "💀", scythe: "⚰️", skateboard: "🛹",
 };
-const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti"];
+const EFFECTS = CSTYLE.EFFECTS;
 const TAGS = CAT.tags || {};
 for (const it of ITEMS) {                                 // catch typos at boot, don't crash
   if (!KINDS.includes(it.kind)) console.error(`[cosmetics] ${it.id}: unknown kind ${it.kind}`);
   if (GTF_LAYERS[it.kind] && !GTF_LAYERS[it.kind].includes((it.style || {}).layer)) console.error(`[cosmetics] ${it.id}: bad layer`);
   if (it.unlock && it.unlock.achievement && Object.keys(ACH_NAME).length && !ACH_NAME[it.unlock.achievement]) console.error(`[cosmetics] ${it.id}: unknown achievement`);
   if (it.kind === "profile_effect" && !EFFECTS.includes((it.style || {}).effect)) console.error(`[cosmetics] ${it.id}: bad effect`);
+  // S1 Q5a: the structured ring / border / banner fields must write CSS and give the hub a look
+  const st = it.style || {};
+  try {
+    if (it.kind === "avatar_decoration" && st.ring) CSTYLE.ringCss(st.ring);
+    if (it.kind === "profile_border") CSTYLE.borderCss(st.border);
+    if (it.kind === "profile_banner") CSTYLE.bannerCss(st.banner);
+    if (["profile_border", "profile_banner"].includes(it.kind) && !CSTYLE.lookOf(it)) throw new Error("no look");
+  } catch (e) { console.error(`[cosmetics] ${it.id}: bad style fields (${e.message})`); }
   for (const t of it.tags || []) if (!TAGS[t]) console.error(`[cosmetics] ${it.id}: unknown tag ${t}`);
 }
 
@@ -136,7 +134,10 @@ function nameCss(item) {
   return s.color ? `color: ${cssSafe(s.color)};` : "";
 }
 
-/** Everything a template needs to draw one item. */
+/** Everything a template needs to draw one item. S1 Q5a (1.99adp): the ring, border and banner CSS is written from the
+ *  item's structured fields (cosmeticstyle.js) - the same strings as the hand-written CSS they replaced
+ *  (test/cosmetics-structured.test.js). A field that doesn't parse draws nothing (logged at boot). */
+const styleCss = (fn, v) => { try { return cssSafe(fn(v)); } catch (e) { return ""; } };
 function render(item) {
   if (!item) return null;
   const s = item.style || {};
@@ -144,16 +145,16 @@ function render(item) {
   switch (item.kind) {
     case "name_color": r.css = nameCss(item); break;
     case "profile_border":
-      r.css = cssSafe(s.css);
+      r.css = styleCss(CSTYLE.borderCss, s.border);
       r.cls = s.hue ? "cx-frame-hue" : s.animated ? "cx-frame-pulse" : "";
       break;
     case "avatar_decoration":
-      r.ring = cssSafe(s.ring || "");
+      r.ring = styleCss(CSTYLE.ringCss, s.ring);
       r.conic = Array.isArray(s.conic) ? `background: conic-gradient(${s.conic.map(cssSafe).join(", ")});` : "";
       r.spin = !!s.spin;
       r.emoji = s.emoji || "";
       break;
-    case "profile_banner": r.css = `background: ${cssSafe(s.background)};`; break;
+    case "profile_banner": r.css = `background: ${styleCss(CSTYLE.bannerCss, s.banner)};`; break;
     case "profile_effect": r.effect = EFFECTS.includes(s.effect) ? s.effect : "sparkle"; break;
     default:
       if (GTF_OPT[item.kind]) { r.layer = s.layer; r.opt = GTF_OPT[item.kind]; r.emoji = LAYER_EMOJI[s.layer] || "🐸"; }
