@@ -118,7 +118,8 @@ test("when keeping fails, prod's per-environment rows are cleared instead (stagi
 
 test("the lists cover every per-environment table, and the script runs it with staging stopped (or keeps the old DB)", () => {
   assert.deepEqual([...K.KEEP].sort(), ["bot_key_families", "bot_keys", "bot_keys_settings", "bot_route_log", "bridge_spans", "events_auth_log",
-                                         "hubseam_settings", "legacy_token_daily", "legacy_token_use"].sort());
+                                         "hubseam_settings", "legacy_token_daily", "legacy_token_use",
+                                         "pad_hub"].sort(), "S1-D1: staging keeps its own hub pad ids");
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");
   const stop = sh.indexOf("pm2 stop patv-staging"), keep = sh.indexOf("keep-staging-tables.js"), swap = sh.indexOf('mv "$S/myapp.db.new" "$S/myapp.db"');
