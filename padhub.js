@@ -7,10 +7,14 @@
 // Not a rooms_registry column: a staging DB refresh copies prod's registry, and deploy/keep-staging-tables.js keeps this
 // table instead (staging's hub knows staging's ids). Filled by an AFTER INSERT trigger on rooms_registry (every writer, CLI
 // scripts included) and by a start-up backfill for the rows that predate it; never recomputed. A re-key moves the row with
-// the pad (padrekey.js moves every room_id column; a merge's UPDATE OR REPLACE keeps the moving pad's id).
+// the pad (padrekey.js moves every room_id column; a merge's UPDATE OR REPLACE keeps the moving pad's id). A pad's deletion
+// (padcreate.removePad, accountMerge's profile-pad fold, padconnect's merge into a room's pad - any DELETE of its registry
+// row) drops its row through an AFTER DELETE trigger, in the same transaction (seam plan §12.3), so a pad re-created under
+// the same room_id gets a new id.
 //
 // Built by S1 Q5b (release L3) because the looks need it (Q4, release L1, owns the rest of the pad seam: the pads/changed
-// triggers on this table, chat_backend's writers, the displaced-row emit and pad deletion). This module is that piece only.
+// triggers on this table - its DELETE included, which tells the hub the pad is gone - chat_backend's writers and the
+// displaced-row emit). This module is that piece only.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -30,6 +34,10 @@ function init() {
                       chat_backend TEXT NOT NULL DEFAULT 'v1', updated INTEGER, updated_by TEXT)`);
       await runQuery(`CREATE TRIGGER IF NOT EXISTS pad_hub_mint AFTER INSERT ON rooms_registry
         BEGIN INSERT OR IGNORE INTO pad_hub (room_id, hub_pad_id, updated) VALUES (NEW.room_id, ${UUID_SQL}, ${MS_SQL}); END`);
+      // a deleted pad's hub id goes with it, in the deleting statement's own transaction (seam plan §12.3 "Pad deletion"):
+      // a pad created later under the same room_id (a Camfrog room's id) is a new pad to the hub, never the old one revived
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS pad_hub_drop AFTER DELETE ON rooms_registry
+        BEGIN DELETE FROM pad_hub WHERE room_id = OLD.room_id; END`);
       await backfill();
     })().catch((e) => { ready = null; throw e; });
   }

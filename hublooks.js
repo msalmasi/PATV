@@ -4,7 +4,8 @@
 //
 //   triggers   (topic, entity) rows, gated by the switch, on every source the look reads (§12.3): users (insert, delete, the
 //              look's columns and verified.js's proof columns), a deletion's state, equips and the equipped copies (a
-//              transfer, a market listing's lock), telegram_links and Google sso_links (verified), premium_subs (the Season
+//              transfer, a market listing's lock), telegram_links and the sso_links of verified.js's SSO_PROOF_PROVIDERS
+//              (verified), premium_subs (the Season
 //              Pass holder; a Plus pad's owner), plex_members, donations (reserve_claims mint:donation), the badge showcase,
 //              pad flair assignments, a pad's owner change (auto.plus_pads of both owners).
 //   snapshot   accounts with a non-default look (§12.4's rule) in acct:<userId> byte order; the hub re-fetches every held
@@ -12,9 +13,13 @@
 //   call       POST /internal/v1/looks {ids: [hub account uuid] (1..450), card?} -> {v: 1, items, missing}: every id in exactly
 //              one list, items in request order, duplicates ignored. An id resolves as users.userId (UUID ids) or through the
 //              reverse map of chatticket.subjectOf (legacy ids); an account with no cosmetics gets its default look, an id
-//              v1 doesn't have (purged, merged away, a done deletion) is missing.
+//              v1 doesn't have (purged, merged away, a done deletion) is missing. The whole answer is read in ONE
+//              transaction (dbUtils.tx): on the site's shared connection a read outside one would see another request's
+//              uncommitted write - a merge's DELETE of a users row that then rolls back would answer `missing` for a live
+//              account, and the hub tombstones a missing id's look. The reverse map is brought up to date inside it
+//              whenever an id doesn't resolve, so every users row committed before the call counts (§12.7).
 "use strict";
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const TOPIC = "looks/changed";
 const SWITCH = "looks";
@@ -56,10 +61,12 @@ function triggerSql(userCols = null) {
   add("tg_i", "AFTER INSERT ON telegram_links", row("NEW.user_id"));
   add("tg_d", "AFTER DELETE ON telegram_links", row("OLD.user_id"));
   add("tg_u", "AFTER UPDATE OF user_id ON telegram_links", both("user_id"), "OLD.user_id IS NOT NEW.user_id");
-  add("sso_i", "AFTER INSERT ON sso_links", row("NEW.user_id"), "NEW.provider = 'google'");
-  add("sso_d", "AFTER DELETE ON sso_links", row("OLD.user_id"), "OLD.provider = 'google'");
-  add("sso_u", "AFTER UPDATE OF user_id, link_source ON sso_links", both("user_id"),
-      "(OLD.provider = 'google' OR NEW.provider = 'google') AND (" + changed(["user_id", "link_source"]) + ")");
+  // the sign-in providers verified.js counts (its SSO_PROOF_PROVIDERS: the gates, tableProofsMany and these triggers agree)
+  const sso = (ref) => `${ref}.provider IN (${require("./verified").SSO_PROOF_PROVIDERS.map((p) => `'${String(p).replace(/[^a-z0-9_]/g, "")}'`).join(", ")})`;
+  add("sso_i", "AFTER INSERT ON sso_links", row("NEW.user_id"), sso("NEW"));
+  add("sso_d", "AFTER DELETE ON sso_links", row("OLD.user_id"), sso("OLD"));
+  add("sso_u", "AFTER UPDATE OF user_id, link_source, provider ON sso_links", both("user_id"),
+      `(${sso("OLD")} OR ${sso("NEW")}) AND (` + changed(["user_id", "link_source", "provider"]) + ")");
   add("prem_i", "AFTER INSERT ON premium_subs", seasonHolder("NEW") + " " + plusOwner("NEW"));
   add("prem_d", "AFTER DELETE ON premium_subs", seasonHolder("OLD") + " " + plusOwner("OLD"));
   add("prem_u", `AFTER UPDATE OF ${PREMIUM_COLS.join(", ")} ON premium_subs`,
@@ -99,7 +106,9 @@ async function init() {
 }
 
 // ── snapshot (§12.6): non-default looks in acct:<userId> byte order ──
-const byte = (a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+/** A read's error handler: "no such table" (a source this site doesn't have yet) is no rows; anything else is thrown. */
+const noTable = (e) => { if (/no such table/i.test(String(e && e.message))) return []; throw e; };
+const byte =(a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
 const CHUNK = 200;
 /** The accounts that MAY have a non-default look, after `after` (exclusive), at most `n`, in byte order. */
 async function candidates(after, n) {
@@ -116,8 +125,9 @@ async function candidates(after, n) {
     `SELECT DISTINCT r.owner_user_id AS id FROM rooms_registry r JOIN premium_subs p ON p.tier = 'prime_plus' AND p.target = r.room_id
      WHERE r.owner_kind = 'user' AND r.owner_user_id > ? ORDER BY r.owner_user_id LIMIT ?`,
   ]) {
-    // one source at a time (the page's transaction holds the connection); a table this site doesn't have yet lists nothing
-    lists.push(...(await getQuery(sql, [after, n]).catch(() => [])).map((r) => String(r.id)));
+    // one source at a time (the page's transaction holds the connection); a table this site doesn't have yet lists nothing,
+    // any other error fails the page (a page missing a source's accounts would make the hub reset their looks)
+    lists.push(...(await getQuery(sql, [after, n]).catch(noTable)).map((r) => String(r.id)));
   }
   return [...new Set(lists)].sort(byte).slice(0, n);
 }
@@ -143,26 +153,41 @@ async function snapshotSource(bound, limit, t = Date.now()) {
 }
 
 // ── the call: POST /internal/v1/looks ──
-// hub account id -> users.userId: a UUID userId is its own account id; a legacy id's account is chatticket.subjectOf (UUIDv5),
-// reversed through a map built from users (refreshed when an id misses, at most once a minute).
-let REV = new Map(), revAt = 0;
-const REV_MS = 60 * 1000;
-async function rebuildReverse() {
+// hub account id -> users.userId. A lower-case UUID userId is its own account id (the direct read). Any other userId - a
+// legacy id, whose account is chatticket.subjectOf's UUIDv5, or an upper-case UUID - resolves through REV, a map of every
+// such users row this process has seen (seam plan §12.7). It is brought up to date whenever a call has an id the direct
+// read and REV don't resolve: one read of the users ids that aren't lower-case UUIDs, inside the call's transaction, so
+// every row committed before the call counts (a legacy account resolves from the moment its users row commits), and only
+// the rows not seen before are hashed. A deleted row's entry stays: its id then resolves to a userId the builder answers
+// gone, so it is missing all the same.
+const H = "[0-9a-f]";
+const UUID_GLOB = `${H.repeat(8)}-${H.repeat(4)}-${H.repeat(4)}-${H.repeat(4)}-${H.repeat(12)}`;
+const REV = new Map();                     // hub account id -> users.userId
+const SEEN = new Set();                    // the userIds REV has considered
+const revStats = { scans: 0, hashed: 0 };
+/** REV catches up with the users table (rows not seen before). Inside the call's transaction. -> how many it hashed */
+async function refreshReverse() {
   const HO = require("./huboutbox");
-  const m = new Map();
-  for (const r of await getQuery("SELECT userId FROM users")) {
-    const a = HO.accountOf(r.userId);
-    if (a) m.set(a, String(r.userId));
+  let n = 0;
+  for (const r of await getQuery(`SELECT userId FROM users WHERE NOT (userId GLOB '${UUID_GLOB}')`)) {
+    const u = String(r.userId);
+    if (SEEN.has(u)) continue;
+    SEEN.add(u);
+    const a = HO.accountOf(u);
+    if (a) REV.set(a, u);
+    n++;
   }
-  REV = m; revAt = Date.now();
-  return m.size;
+  revStats.scans++; revStats.hashed += n;
+  return n;
 }
 async function resolve(ids) {
   const out = new Map();
-  const direct = await getQuery(`SELECT userId FROM users WHERE userId IN (${ids.map(() => "?").join(",")})`, ids).catch(() => []);
   const HO = require("./huboutbox");
-  for (const r of direct) { const a = HO.accountOf(r.userId); if (a && ids.includes(a)) out.set(a, String(r.userId)); }
-  if (ids.some((id) => !out.has(id) && !REV.has(id)) && Date.now() - revAt > REV_MS) await rebuildReverse();
+  for (const r of await getQuery(`SELECT userId FROM users WHERE userId IN (${ids.map(() => "?").join(",")})`, ids)) {
+    const a = HO.accountOf(r.userId);
+    if (a && ids.includes(a)) out.set(a, String(r.userId));
+  }
+  if (ids.some((id) => !out.has(id) && !REV.has(id))) await refreshReverse();
   for (const id of ids) if (!out.has(id) && REV.has(id)) out.set(id, REV.get(id));
   return out;
 }
@@ -177,8 +202,12 @@ async function call(body) {
   if (b.ids.length > MAX_IDS) return { status: 413, body: { ok: false, error: "too_many_ids" } };
   if (!b.ids.every((x) => typeof x === "string" && UUID_RE.test(x))) return { status: 400, body: { ok: false, error: "bad_id" } };
   const ids = [...new Set(b.ids)];
-  const byAcct = await resolve(ids);
-  const built = await require("./userlook").buildLooks([...new Set(byAcct.values())], { card: b.card === true, t: require("./huboutbox").clockNow() });
+  const t = require("./huboutbox").clockNow();
+  // one transaction for the whole answer: no other request's uncommitted write is visible on the shared connection
+  const { byAcct, built } = await tx(async () => {
+    const m = await resolve(ids);
+    return { byAcct: m, built: await require("./userlook").buildLooks([...new Set(m.values())], { card: b.card === true, t }) };
+  });
   const items = [], missing = [];
   for (const id of ids) {
     const p = byAcct.has(id) ? built.get(byAcct.get(id)) : null;
@@ -189,5 +218,6 @@ async function call(body) {
   return { status: 200, body: { v: 1, items, missing } };
 }
 
-module.exports = { TOPIC, SWITCH, init, triggerSql, snapshotSource, candidates, call, rebuildReverse, MAX_IDS, USER_COLS,
-                   status: () => ({ ...stats, reverse: REV.size }), _resetReverse: () => { REV = new Map(); revAt = 0; } };
+module.exports = { TOPIC, SWITCH, init, triggerSql, snapshotSource, candidates, call, refreshReverse, MAX_IDS, USER_COLS,
+                   status: () => ({ ...stats, reverse: REV.size, reverse_scans: revStats.scans }),
+                   _resetReverse: () => { REV.clear(); SEEN.clear(); } };

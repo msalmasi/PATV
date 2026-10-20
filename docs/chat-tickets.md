@@ -253,9 +253,13 @@ so.
 
 S1 plan §2.4 Q5b; the hub repo's `docs/seam-plan.md` §12 is the spec (§12.14 records what this release changed in it).
 Built on two prerequisites in the same branch: **Q5a** (release L2, no behaviour change: `cosmeticstyle.js` - the ring,
-border and banner cosmetics are structured fields, golden-tested to render today's CSS, `test/cosmetics-structured.test.js`)
-and **`pad_hub`** (S1-D1, `padhub.js`: every pad's stable `hub_pad_id`, minted by an `AFTER INSERT` trigger on
-`rooms_registry` and a start-up backfill, moved by re-keys, kept on a staging refresh; Q4 owns the rest of the pad seam).
+border and banner cosmetics are structured fields, golden-tested to render today's CSS, `test/cosmetics-structured.test.js`;
+each item's structured look travels whole - no colour list is cut, the caps being rt-schema's `look.schema.json`'s: name 12,
+ring / border / banner 8) and **`pad_hub`** (S1-D1, `padhub.js`: every pad's stable `hub_pad_id`, minted by an
+`AFTER INSERT` trigger on `rooms_registry` and a start-up backfill, moved by re-keys, dropped by an `AFTER DELETE` trigger
+in the deleting transaction - a pad re-created under the same room id is a new pad -, kept on a staging refresh; Q4 owns
+the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` for the flair definitions
+`padflair.hubDefs` reads).
 
 | Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
 |---|---|---|---|
@@ -265,7 +269,8 @@ and **`pad_hub`** (S1-D1, `padhub.js`: every pad's stable `hub_pad_id`, minted b
 - **Identity status:** a done deletion → `deleted` (`done_at`), an open one (`scheduled` / `held`) → `deleting`
   (`requested_at`), `users.archived_at` → `archived`; no `users` row → `merged` (`account_merges`, `merged_at`) or `gone`.
   Facts are null for merged, deleted and gone. `email_verified` is `verified.js`'s email proof. Links follow the hub's
-  platform rules (Camfrog `external_id` = SQLite's `lower(trim(login))`, 1-64 characters; numeric ids for the others); a
+  platform rules (Camfrog `external_id` = SQLite's `lower(trim(login))` - trim removes spaces only, lower maps A-Z only -
+  1-64 characters counted as code points: the golden `s1.link_rules` vectors; numeric ids for the others); a
   link that would fail is left out and counted (`/admin/keys#seam`), so v1 never posts what the hub quarantines.
 - **The look:** one builder for the topic, its snapshot and the call; every source read from the database (never a module
   cache): equipped unlocked copies whose perk is live (Season Pass / Plex items), `cosmeticstyle.lookOf` for the
@@ -282,7 +287,8 @@ and **`pad_hub`** (S1-D1, `padhub.js`: every pad's stable `hub_pad_id`, minted b
 - **Triggers** (all gated by the topic's switch, `(topic, entity)` only, never on points / xp): identity - `users`
   insert / delete / the link, status and fact columns, `telegram_links`, `account_deletions`, `account_merges` (insert,
   and the upsert / chain re-point's update); looks - `users` insert / delete / the look's and `verified.js`'s columns, a
-  deletion's state, equips and the equipped copies (transfer, market lock), Telegram and Google links, `premium_subs`
+  deletion's state, equips and the equipped copies (transfer, market lock), Telegram links and the sign-in links of
+  `verified.js`'s `SSO_PROOF_PROVIDERS` (the one list its gates and the look's `verified` read), `premium_subs`
   (the Season Pass holder; a Plus pad's owner), `plex_members`, donations, the badge showcase, `pad_user_flairs`, a pad's
   owner change (both owners) and deletion. The trigger SQL names only `users` columns the database has; each start drops
   and recreates the S1 triggers in one transaction. A setup failure is shown on `/admin/keys#seam` and keeps the two
@@ -293,8 +299,11 @@ and **`pad_hub`** (S1-D1, `padhub.js`: every pad's stable `hub_pad_id`, minted b
   Pepe) and built 200 at a time.
 - **The looks call:** `POST /internal/v1/looks {ids: [hub account uuid] (1-450, lower case), card?}` →
   `{v:1, items, missing}`, items in request order, duplicates ignored; an id resolves as the `users.userId` or through the
-  reverse map of `chatticket.subjectOf` (rebuilt on a miss, at most once a minute); purged, merged and deleted ids are
-  `missing`. 404 while `looks` is off, 400 a malformed body or id, 413 over 450 ids; the nonce is taken durably first.
+  reverse map of `chatticket.subjectOf`, which catches up with `users` whenever an id doesn't resolve (every row
+  committed before the call; only rows it hasn't seen are hashed); purged, merged and deleted ids are `missing`. The
+  whole answer is read in one transaction (`dbUtils.tx`), so no other request's uncommitted write - a merge's DELETE that
+  rolls back - can make a live account `missing`. 404 while `looks` is off, 400 a malformed body or id, 413 over 450
+  ids; the nonce is taken durably first.
 - **Heartbeat:** `switches` gains `identity` and `looks` (additive); `version` is `1.99adp`.
 - **Driver:** `link`, `unlink`, `moveLogin`, `merge` (now also `account_merges` and the row's removal), `cosmetic`,
   `textStyle`, `looks` (`test/hubseam-driver-s1.test.js`).

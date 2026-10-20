@@ -207,13 +207,15 @@ async function memberFor(userId, t = clock()) {
 }
 
 /** S1 Q5b: memberFor for many accounts at once, uncached (the chat hub's looks: userlook.buildLooks). The caller has run init().
- *  -> Map(userId -> {access, expires (ms | null = never)}) for the active members among them */
+ *  -> Map(userId -> {access, expires (ms | null = never)}) for the active members among them. A read error other than a
+ *  missing table is thrown (the looks' poster backs off rather than post a look without the Plex flair). */
+const noTable = (e) => { if (/no such table/i.test(String(e && e.message))) return []; throw e; };
 async function membersFor(userIds, t = clock()) {
   const ids = [...new Set([...(userIds || [])].filter(Boolean).map(String))];
   const out = new Map();
   for (let i = 0; i < ids.length; i += 400) {
     const part = ids.slice(i, i + 400);
-    const rows = await getQuery(`SELECT * FROM plex_members WHERE on_server = 1 AND user_id IN (${part.map(() => "?").join(",")})`, part).catch(() => []);
+    const rows = await getQuery(`SELECT * FROM plex_members WHERE on_server = 1 AND user_id IN (${part.map(() => "?").join(",")})`, part).catch(noTable);
     for (const r of rows) {
       if (!isActiveRow(r, t)) continue;
       const v = { access: r.access, expires: r.expires == null ? null : Number(r.expires) };

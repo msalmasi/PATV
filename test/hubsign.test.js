@@ -17,7 +17,7 @@ const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 // Update together with the hub's copy (services/rooms/test/fixtures/, its pins in test/seam-sign.test.ts).
 const PINS = {
   "hubseam-sign-vectors.json": "757649d1324767a9af6bbe22e0673bb3532883ac9dc1a8fa1301d2a8f5d6cd88",     // S1 (Q0 + Q5b, seam plan §12.11)
-  "hubseam-golden-rows.json": "f804507d34be712ec94e9e090cd2af7581fe8587302337bc2a29d7480cf9c1f5",
+  "hubseam-golden-rows.json": "229350db2d64ef24b20a678b85ca83720eaeca2cf4383a9fa622663cc0dfc93c",
 };
 const V = JSON.parse(fs.readFileSync(path.join(FIX, "hubseam-sign-vectors.json"), "utf8"));
 

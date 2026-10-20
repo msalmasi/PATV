@@ -285,13 +285,14 @@ test("looks triggers: only with the switch on, only for the look's sources and c
   await step("a copy transferred", "UPDATE user_cosmetics SET user_id = '1005', locked = 0 WHERE user_id = '1001' AND item_id = 'gh_crown'", [], ["acct:1005", "acct:1001"]);
   await step("a Telegram link", "INSERT INTO telegram_links (user_id, tg_id, handle, linked_at) VALUES ('1002', '400000000000000003', 'b', ?)", [AT], ["acct:1002"]);
   await step("a Google sign-in link", "INSERT INTO sso_links (provider, subject, user_id, link_source, proof, linked_at) VALUES ('google', 's1', '1002', 'self', 'x', ?)", [AT], ["acct:1002"]);
-  await step("another provider: not the look's", "INSERT INTO sso_links (provider, subject, user_id, link_source, proof, linked_at) VALUES ('apple', 's2', '1002', 'self', 'x', ?)", [AT], []);
+  await step("a provider verified.js doesn't count: not the look's", "INSERT INTO sso_links (provider, subject, user_id, link_source, proof, linked_at) VALUES ('example', 's2', '1002', 'self', 'x', ?)", [AT], []);
   await step("a Season Pass", "INSERT INTO premium_subs (tier, target, paid_through, status, started, updated) VALUES ('season_pass', '1002', ?, 'active', ?, ?)",
              [AT + DAY, AT, AT], ["acct:1002"]);
   await step("a Stripe renewal of the Plus pad (stripe_through only): its owner", "UPDATE premium_subs SET stripe_through = ? WHERE tier = 'prime_plus'",
              [AT + 50 * DAY], ["acct:1001", "acct:1001"]);
   await step("a Plex membership", "INSERT INTO plex_members (plex_id, username, user_id, on_server, pending, access, expires) VALUES ('p1', 'bob', '1002', 1, 0, 'monthly', ?)",
              [AT + DAY], ["acct:1002"]);
+  await step("a Plex renewal (expires only): valid_until moves", "UPDATE plex_members SET expires = ? WHERE user_id = '1002'", [AT + 30 * DAY], ["acct:1002"]);
   await step("a donation", "INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES ('don-2', 'mint:donation', '1002', 'mint', 5)", [], ["acct:1002"]);
   await step("another claim: not the look's", "INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES ('c-3', 'heist', '1002', 'x', 5)", [], []);
   await step("a badge showcase", "INSERT INTO user_badge_showcase (user_id, badges) VALUES ('1002', '[\"cf_linked\"]')", [], ["acct:1002"]);
@@ -488,4 +489,189 @@ test("padflair.hubDefs: the pad's user flairs as pads/changed carries them (the 
   const pad = S1.snapshots["pads/changed"].rows.find((r) => r.entity === "pad:" + FROGPOND).payload;
   assert.deepEqual(await PF.hubDefs("patv:frogpond"), pad.flairs);
   assert.deepEqual(await PF.hubDefs("user:someone"), [], "profile pads have none");
+});
+
+// ── the S1 Q5b review's additions ──
+const acctOf = (n) => `0192a5b4-${String(n).padStart(4, "0")}-7c2d-8e3f-4a5b6c7d8e9f`;
+
+test("identity: the Camfrog link rule's edge vectors (golden s1.link_rules): SQLite's trim and lower, 64 code points", async () => {
+  const L = S1.link_rules;
+  assert.ok(L && L.camfrog.length >= 8 && L.bad.length >= 3);
+  for (const v of L.camfrog) {
+    const want = v.link ? [{ platform: "camfrog", external_id: v.link.external_id, login: v.link.login, display: null }] : [];
+    assert.deepEqual(HI.linksOf({ camfrogUsername: v.raw }), want, v.name);
+    // the same key SQLite computes (identity's import: lower(trim(camfrogUsername)))
+    if (v.link) assert.equal((await getQuery("SELECT lower(trim(?)) AS k", [v.raw]))[0].k, v.link.external_id, v.name);
+  }
+  // v1 never produces a link the hub quarantines bad_link
+  const produced = new Set(L.camfrog.filter((v) => v.link).map((v) => JSON.stringify(v.link)));
+  for (const b of L.bad) assert.equal(produced.has(JSON.stringify(b.link)), false, b.name);
+});
+
+test("identity: a done deletion wins over a later open one; a held deletion is deleting", async () => {
+  ACCT[1014] = acctOf(1014); ACCT[1015] = acctOf(1015);
+  await addUser("1014", { username: "mia", displayname: "Mia", level: 3, created: AT - 60 * DAY });
+  await addUser("1015", { username: "ned", displayname: "Ned", level: 3, created: AT - 60 * DAY });
+  await runQuery(`INSERT INTO account_deletions (user_id, state, requested_at, execute_at, done_at, pseudonym) VALUES ('1014', 'done', ?, ?, ?, 'deleted-aa')`,
+                 [AT - 40 * DAY, AT - 10 * DAY, AT - 10 * DAY]);
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at) VALUES ('1014', 'scheduled', ?, ?)", [AT - DAY, AT + 29 * DAY]);
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at) VALUES ('1015', 'held', ?, ?)", [AT - 3 * DAY, AT + 27 * DAY]);
+  try {
+    const got = await HI.build(["1014", "1015"]);
+    assert.equal(got.get("1014").status, "deleted", "the done deletion, though a later request is open");
+    assert.equal(got.get("1014").status_at, AT - 10 * DAY);
+    assert.equal(got.get("1015").status, "deleting", "held is still a deletion in progress");
+    assert.equal(got.get("1015").status_at, AT - 3 * DAY);
+  } finally {
+    await runQuery("DELETE FROM account_deletions WHERE user_id IN ('1014', '1015')");
+    await runQuery("DELETE FROM users WHERE userId IN ('1014', '1015')");
+    await clearOutbox();
+  }
+});
+
+test("looks: a copy transferred away isn't drawn for the seller, whose equip still points at it", async () => {
+  const inv = (await getQuery("SELECT id FROM user_cosmetics WHERE user_id = '1001' AND item_id = 'nc_sunset'"))[0].id;
+  assert.ok((await getQuery("SELECT 1 FROM user_cosmetic_equips WHERE user_id = '1001' AND inv_id = ?", [inv])).length, "alice has it equipped");
+  await runQuery("UPDATE user_cosmetics SET user_id = '1005' WHERE id = ?", [inv]);
+  try {
+    const got = await UL.buildLooks(["1001", "1005"], { t: AT });
+    assert.deepEqual(got.get("1001").name, { kind: "solid" }, "not alice's any more");
+    assert.deepEqual(got.get("1005").name, { kind: "solid" }, "erin owns it but hasn't equipped it");
+  } finally {
+    await runQuery("UPDATE user_cosmetics SET user_id = '1001' WHERE id = ?", [inv]);
+  }
+  assert.equal((await UL.buildLooks(["1001"], { t: AT })).get("1001").name.item, "nc_sunset");
+});
+
+test("looks snapshot: an account whose only non-default part is a pad flair or the Plex auto flair is listed; plex_flair off unlists it", async () => {
+  const MC = require(path.join(repo, "mediaconf"));
+  await MC.init();
+  const was = MC.get().plex_flair;
+  await HO.setSettings({ looks: true });
+  try {
+    await MC.set({ plex_flair: true }, "test");
+    const base = (await HO.snapshot("looks/changed", null)).rows.map((r) => r.entity);
+    assert.deepEqual(base, ["acct:1001"], "the golden page");
+    await runQuery("INSERT INTO pad_user_flairs (room_id, user_id, flair_id, set_by, self, set_at) VALUES ('patv:frogpond', '1005', 17, 'erin', 1, ?)", [AT]);
+    await runQuery("INSERT INTO plex_members (plex_id, username, user_id, on_server, pending, access, expires) VALUES ('p9', 'bobplex', '1002', 1, 0, 'monthly', ?)",
+                   [AT + 9 * DAY]);
+    const page = await HO.snapshot("looks/changed", null);
+    assert.deepEqual(page.rows.map((r) => r.entity), ["acct:1001", "acct:1002", "acct:1005"], "a flair, a Plex membership: both listed");
+    const bob = page.rows.find((r) => r.entity === "acct:1002").payload;
+    assert.equal(bob.auto.plex, true);
+    assert.equal(bob.valid_until, AT + 9 * DAY, "the membership's end");
+    assert.deepEqual(page.rows.find((r) => r.entity === "acct:1005").payload.flairs, { [FROGPOND]: "f17" });
+    await MC.set({ plex_flair: false }, "test");
+    const off = await HO.snapshot("looks/changed", null);
+    assert.deepEqual(off.rows.map((r) => r.entity), ["acct:1001", "acct:1005"], "plex_flair off: no auto flair, bob's look is default");
+    const b2 = (await UL.buildLooks(["1002"], { t: AT })).get("1002");
+    assert.equal(b2.auto.plex, false);
+    assert.equal(b2.valid_until, null);
+  } finally {
+    await MC.set({ plex_flair: was }, "test");
+    await runQuery("DELETE FROM pad_user_flairs WHERE user_id = '1005'");
+    await runQuery("DELETE FROM plex_members WHERE user_id = '1002'");
+    await HO.setSettings({ looks: false });
+    await clearOutbox();
+  }
+});
+
+test("verified: the look's verified and its trigger rows follow verified.js for every sign-in provider", async () => {
+  const VF = require(path.join(repo, "verified"));
+  assert.ok(VF.SSO_PROOF_PROVIDERS.includes("google"));
+  ACCT[1016] = acctOf(1016);
+  await addUser("1016", { username: "olga", displayname: "Olga", level: 1, created: AT - DAY });
+  await HO.setSettings({ looks: true });
+  try {
+    for (const provider of ["google", "apple", "example"]) {
+      await clearOutbox();
+      await runQuery("INSERT INTO sso_links (provider, subject, user_id, link_source, proof, linked_at) VALUES (?, ?, '1016', 'self', 'x', ?)",
+                     [provider, "s-" + provider, AT]);
+      const rows = (await outbox("looks/changed")).map((r) => r.entity);
+      VF.forget("1016");
+      const v1 = await VF.verify((await getQuery("SELECT * FROM users WHERE userId = '1016'"))[0]);
+      assert.equal(v1, VF.SSO_PROOF_PROVIDERS.includes(provider), provider + ": verified.js's own answer");
+      const look = (await UL.buildLooks(["1016"], { t: AT })).get("1016");
+      assert.equal(look.verified, v1, provider + ": the hub's look agrees with v1");
+      assert.deepEqual(rows, v1 ? ["acct:1016"] : [], provider + ": linking it posts a looks row exactly when it is a proof");
+      await clearOutbox();
+      await runQuery("DELETE FROM sso_links WHERE user_id = '1016'");
+      assert.deepEqual((await outbox("looks/changed")).map((r) => r.entity), v1 ? ["acct:1016"] : [], provider + ": unlinking it too");
+    }
+  } finally {
+    await HO.setSettings({ looks: false });
+    await runQuery("DELETE FROM sso_links WHERE user_id = '1016'");
+    await runQuery("DELETE FROM users WHERE userId = '1016'");
+    await clearOutbox();
+  }
+});
+
+test("looks: a source that can't be read fails the build (the poster retries) - never a look without its part", async () => {
+  await runQuery("ALTER TABLE reserve_claims RENAME COLUMN amount TO amount_q5b");
+  try {
+    await assert.rejects(UL.buildLooks(["1001"], { t: AT }), /no such column/, "supporter.tiersFor");
+    await assert.rejects(HL.candidates("", 10), /no such column/, "the snapshot's candidate sources");
+  } finally {
+    await runQuery("ALTER TABLE reserve_claims RENAME COLUMN amount_q5b TO amount");
+  }
+  assert.equal((await UL.buildLooks(["1001"], { t: AT })).get("1001").badges[0].id, "supporter.gold");
+  await runQuery("ALTER TABLE plex_members RENAME COLUMN link_source TO link_source_q5b");
+  try {
+    await assert.rejects(UL.buildLooks(["1005"], { t: AT }), /no such column/, "verified.tableProofsMany (a look without a proof it has)");
+  } finally {
+    await runQuery("ALTER TABLE plex_members RENAME COLUMN link_source_q5b TO link_source");
+  }
+  assert.equal((await UL.buildLooks(["1005"], { t: AT })).get("1005").verified, true);
+});
+
+test("the looks call reads in one transaction: another request's uncommitted DELETE never makes a live account missing", async () => {
+  ACCT[1017] = acctOf(1017);
+  await addUser("1017", { username: "pia", displayname: "Pia", avatar: "/uploads/avatars/1017.webp", level: 2, created: AT - DAY });
+  const { tx } = require(path.join(repo, "dbUtils"));
+  try {
+    let release, entered;
+    const gate = new Promise((r) => { release = r; });
+    const inside = new Promise((r) => { entered = r; });
+    const merge = tx(async () => {
+      await runQuery("DELETE FROM users WHERE userId = '1017'");       // e.g. a merge's removal of the old row...
+      entered();
+      await gate;
+      throw new Error("...then a later step fails");                   // ...and the whole merge rolls back
+    }).catch((e) => e.message);
+    await inside;
+    const answer = HL.call({ ids: [ACCT[1017]], card: true });         // the hub's call arrives meanwhile
+    await new Promise((r) => setTimeout(r, 50));
+    release();
+    const a = await answer;
+    assert.equal(await merge, "...then a later step fails");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM users WHERE userId = '1017'"))[0].n, 1, "rolled back: the account is live");
+    assert.deepEqual(a.body.missing, [], "never missing");
+    assert.deepEqual(a.body.items.map((x) => x.acct), [ACCT[1017]]);
+  } finally {
+    await runQuery("DELETE FROM users WHERE userId = '1017'");
+    await clearOutbox();
+  }
+});
+
+test("the looks call: a legacy account resolves from the moment its users row commits (no rebuild window); a hit scans nothing", async () => {
+  const id = "rh-new-1";
+  ACCT[id] = acctOf(1018);
+  HL._resetReverse();
+  try {
+    let r = await HL.call({ ids: [ACCT[id]] });
+    assert.deepEqual(r.body.missing, [ACCT[id]], "no such account yet");
+    await addUser(id, { username: "rhnew", displayname: "RH New", level: 0, created: AT });
+    r = await HL.call({ ids: [ACCT[id]] });
+    assert.deepEqual(r.body.items.map((x) => x.v1_user), [id], "found at once (the map caught up with users inside the call)");
+    const scans = HL.status().reverse_scans;
+    r = await HL.call({ ids: [ACCT[id], ACCT[1001]] });
+    assert.equal(r.body.items.length, 2);
+    assert.equal(HL.status().reverse_scans, scans, "every id resolved: no scan of users");
+    await runQuery("DELETE FROM users WHERE userId = ?", [id]);
+    r = await HL.call({ ids: [ACCT[id]] });
+    assert.deepEqual(r.body.missing, [ACCT[id]], "deleted: missing again");
+  } finally {
+    await runQuery("DELETE FROM users WHERE userId = ?", [id]);
+    await clearOutbox();
+  }
 });

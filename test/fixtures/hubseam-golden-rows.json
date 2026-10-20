@@ -4456,6 +4456,119 @@
           }
         }
       ]
+    },
+    "link_rules": {
+      "about": "Camfrog links: external_id = lower(trim(login)) as SQLite computes it (trim: U+0020 only; lower: A-Z only), 1-64 code points. v1 posts camfrog[].link for camfrog[].raw (users.camfrogUsername; null: no link); the hub's check accepts each such link and quarantines every bad[].link bad_link",
+      "camfrog": [
+        {
+          "name": "spaces around the login are trimmed",
+          "raw": "  Alice  ",
+          "link": {
+            "external_id": "alice",
+            "login": "Alice"
+          }
+        },
+        {
+          "name": "a tab is not trimmed (SQLite trim removes U+0020 only)",
+          "raw": "\tBob",
+          "link": {
+            "external_id": "\tbob",
+            "login": "\tBob"
+          }
+        },
+        {
+          "name": "a no-break space is not trimmed",
+          "raw": " Cy ",
+          "link": {
+            "external_id": " cy ",
+            "login": " Cy "
+          }
+        },
+        {
+          "name": "letters outside A-Z keep their case (SQLite lower maps A-Z only)",
+          "raw": "ÉCOLE Ünd ß",
+          "link": {
+            "external_id": "École Ünd ß",
+            "login": "ÉCOLE Ünd ß"
+          }
+        },
+        {
+          "name": "64 characters fit",
+          "raw": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "link": {
+            "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "login": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        },
+        {
+          "name": "65 characters: no link",
+          "raw": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "link": null
+        },
+        {
+          "name": "64 code points fit, though they are 128 UTF-16 units",
+          "raw": "🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸",
+          "link": {
+            "external_id": "🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸",
+            "login": "🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸"
+          }
+        },
+        {
+          "name": "65 code points: no link",
+          "raw": "🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸",
+          "link": null
+        },
+        {
+          "name": "trimmed spaces do not count toward the 64",
+          "raw": "  BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB   ",
+          "link": {
+            "external_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "login": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+          }
+        },
+        {
+          "name": "spaces only: no link (an empty login is no link, not a bad one)",
+          "raw": "   ",
+          "link": null
+        }
+      ],
+      "bad": [
+        {
+          "name": "ASCII upper case in external_id",
+          "link": {
+            "external_id": "Alice",
+            "login": "Alice"
+          }
+        },
+        {
+          "name": "JavaScript's trim() is not SQLite's: a tab-led login",
+          "link": {
+            "external_id": "bob",
+            "login": "\tBob"
+          }
+        },
+        {
+          "name": "JavaScript's toLowerCase() is not SQLite's lower(): a capital outside A-Z",
+          "link": {
+            "external_id": "école",
+            "login": "ÉCOLE"
+          }
+        },
+        {
+          "name": "65 code points",
+          "link": {
+            "external_id": "🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸",
+            "login": "🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸🐸"
+          }
+        },
+        {
+          "name": "empty",
+          "link": {
+            "external_id": "",
+            "login": ""
+          }
+        }
+      ]
     }
   }
 }
