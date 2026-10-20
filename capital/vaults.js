@@ -698,6 +698,9 @@ async function rebalance(d, p, c) {
       s2.holders[AUTO] = Number(s2.holders[AUTO] || 0) + sh2;
       s2.total = Number(s2.total) + sh2;
       d.rebalances[tid].state = "done";
+      // 1.99adk: when it ran (seconds), like a queue item's q.done - Pepe's staking audit places a rebalance on its
+      // cut-off by this time first and uses ps / pd only to confirm (two cut-offs with equal prices can't place it)
+      d.rebalances[tid].done = C.nowS();
       moves.push([src, dst, amt]);
       extra -= amt;
       under[dst] = gap - amt;
