@@ -429,6 +429,19 @@ const grant = keyed("grant", async (b, key) => {
   return Object.assign(r, { ref: b.ref, amount: r.total });
 });
 
+/**
+ * PO-0b (the owner's 2026-10-20 finding (b)): Pepe's /api/escrow/bot/status - the same answers (+ the holds he asks about),
+ * read in a transaction of its own on the chain, like the 1.99adl stash / pool move_status (settledMoveStatus). A plain read
+ * is never held at the write gate and the connection is shared, so it could say "never happened" while the op Pepe gave
+ * up on is still queued (it commits a moment later), or see an OPEN transaction's uncommitted escrow_moves row that a
+ * rollback then takes back. Queued behind every transaction already waiting, it answers from committed rows only.
+ * Pepe's client reads null as "no record YET" (unknown) - never as a refusal.
+ */
+async function settledStatus(keys, hids) {
+  await init();
+  return tx(async () => ({ results: await status(keys), holds: await holdsByIds(hids) }));
+}
+
 /** The recorded answers for these keys (a lost answer is looked up here; null = never happened). */
 async function status(keys) {
   await init();
@@ -608,7 +621,7 @@ async function rollbackToPepe({ key, actor }) {
   await init();
   key = checkKey(key);
   const mk = "rollback:" + key;
-  const prev = (await status([mk]))[mk];
+  const prev = (await settledStatus([mk])).results[mk];   // PO-0b (c): committed rows, in order
   if (prev) return Object.assign({}, prev, { dup: true });
   if (!(await live())) throw new Refuse(409, "the escrow isn't live here", "E_NOT_LIVE");
   const g = await gamesState();
@@ -710,7 +723,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
   app.post("/api/escrow/bot/refund", bot((b) => refund(b)));
   app.post("/api/escrow/bot/settle", bot((b) => settle(b)));
   app.post("/api/escrow/bot/grant", bot((b) => grant(b)));
-  app.post("/api/escrow/bot/status", bot(async (b) => ({ ok: true, results: await status(b.keys), holds: await holdsByIds(b.hids) })));
+  app.post("/api/escrow/bot/status", bot(async (b) => Object.assign({ ok: true }, await settledStatus(b.keys, b.hids))));   // PO-0b: committed, in order
   // 1.99sy: the escrow export (escrow.json is ~1 MB on prod) is bigger than the global 100 KB JSON limit (index.js skips this path)
   app.post("/api/escrow/admin/import", require("express").json({ limit: "32mb" }), bot((b) => importFromPepe(b)));
   app.post("/api/escrow/admin/export", bot(() => exportState()));
@@ -732,6 +745,12 @@ function register(app, { isBotToken, addUser, patSupply }) {
     const me = await admin(req, res);
     if (!me) return;
     if (req.get("X-Requested-With") !== "fetch" || !require("../middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    // PO-0b (D-6): a backend switch is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh); the VPS CLI
+    // (tools/*-backend.js) stays the emergency path
+    {
+      const SR = require("../staffroles");
+      if (!(await SR.ownerOf(req.user, "econ.backend_cutover"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    }
     const b = req.body || {};
     const game = b.game ? String(b.game) : null;
     if (game && !GAMES.includes(game)) return res.status(400).json({ ok: false, error: "unknown game" });
@@ -745,6 +764,6 @@ function register(app, { isBotToken, addUser, patSupply }) {
 }
 
 module.exports = { init, register, enabled, live, rev, bumpRev, meta, setMeta, tx, seen, record, holdInTx, refundInTx, settleInTx, grantInTx,
-                   hold, refund, settle, grant, status, holdsHeld, holdsByIds, heldTotal, totalsByKind, digestOf, supplyRows, importFromPepe,
+                   hold, refund, settle, grant, status, settledStatus, holdsHeld, holdsByIds, heldTotal, totalsByKind, digestOf, supplyRows, importFromPepe,
                    exportState, rollbackToPepe, gamesState, SERVICE_KINDS, isServiceKind, emitInTx, wake, events, adminView, accountFor, accountResolve, kindOf, Refuse, isRefuse, GAMES,
                    _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive };

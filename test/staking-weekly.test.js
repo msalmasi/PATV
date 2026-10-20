@@ -33,8 +33,8 @@ function inputs({ cfg = {}, consts = {}, patDays = null, journal = [{ eid: "W" +
 }
 const paidTo = (plan) => Object.fromEntries(plan.legs.filter((l) => l.why === "waterfall stakers").map((l) => [l.dst.slice(6), l.amt]));
 
-test("D2: wf_staker_cap_pct 0 = no cap (the stakers' full 20%); the default 25 caps; the daily ceiling's knob no longer sets it", () => {
-  const capped = E.planEpoch(inputs());
+test("D2: wf_staker_cap_pct 0 = no cap (the stakers' full 20%); 25 caps; the daily ceiling's knob no longer sets it", () => {
+  const capped = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 25 } }));
   const h = capped.vaults.house;
   assert.equal(h.surplus, 10e6);
   assert.equal(h.stakers_share, 2e6);
@@ -50,10 +50,14 @@ test("D2: wf_staker_cap_pct 0 = no cap (the stakers' full 20%); the default 25 c
   const refc = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 0 } }));
   assert.equal(refc.vaults.house.apr_cap, h.apr_cap, "the snapshot week is held to 25% APR on the 10M staked");
   // the daily ceiling off (VAULT_CEIL_APR 0) leaves the weekly cap at its own 25%
-  const ceilOff = E.planEpoch(inputs({ consts: { VAULT_CEIL_APR: 0 } }));
+  const ceilOff = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 25 }, consts: { VAULT_CEIL_APR: 0 } }));
   assert.equal(ceilOff.vaults.house.apr_cap, h.apr_cap);
   assert.equal(E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 50 } })).vaults.house.apr_cap, Math.trunc(10e6 * 0.5 * 7 / 365));
-  assert.equal(E.DEFAULTS.wf_staker_cap_pct, 25, "the default stays 25 until the operator sets 0 (D2)");
+  // PO-0b (D-8): the code defaults are prod's values since the owner's 2026-10-19 decision - no weekly cap, no daily ceiling
+  assert.equal(E.DEFAULTS.wf_staker_cap_pct, 0, "the default is 0 = no cap (D-8)");
+  assert.equal(E.CONSTS.VAULT_CEIL_APR, 0, "VAULT_CEIL_APR's default is 0 (D-8)");
+  const dflt = E.planEpoch(inputs({ patDays: whole }));
+  assert.equal(dflt.vaults.house.stakers, 2e6, "with no value pushed, the code default pays the full share (no cap)");
 });
 
 test("P2.1: the split is by PAT-days - a stake at the boundary gets 0, a full week its full share, a mid-week leaver its days", () => {
@@ -68,7 +72,7 @@ test("P2.1: the split is by PAT-days - a stake at the boundary gets 0, a full we
   assert.equal(paid[1], Math.trunc(2e6 * 5e6 / (50e6 / 7)), "the full week: 70%");
   assert.equal(paid[3], Math.trunc(2e6 * (15e6 / 7) / (50e6 / 7)), "Mon-Thu: 30%, though it holds nothing now");
   // with a cap, the cap is 25% APR on the PAT-days (the average stake x days / 365)
-  const capped = E.planEpoch(inputs({ patDays: pd }));
+  const capped = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 25 }, patDays: pd }));
   assert.equal(capped.vaults.house.apr_cap, Math.trunc((50e6 / 7) * 0.25 * 7 / 365));
   // no bucket for this boundary -> the snapshot (s1 and s2 equally) - under the 25% reference cap (D2's safeguard)
   const snap = E.planEpoch(inputs({ cfg: { wf_staker_cap_pct: 0 }, patDays: [[String(B - 7 * DAY), [["1", 35e6]]]] }));

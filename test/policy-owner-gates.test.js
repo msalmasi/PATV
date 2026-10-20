@@ -1,0 +1,197 @@
+// PO-0b (economy policy -> site plan, D-6 "economy writes are owner-only"): an Admin who isn't a Pepe owner gets 403 on every
+// economy write - the !econ edit (econ.cmd / econ.routes), the policy engines' mode, a burn, the backend switches (pools,
+// capital, stashes, escrow, gangs), the PAT grant and the House adjust - while a Pepe owner (Admin class + the owner role on
+// the linked chat login) passes the gate. Reading stays Admins'. The VPS CLIs (tools/*-backend.js) still work (the emergency
+// path), and tools/policy-backend.js is read-only. Website actions of kind econ.* carry the site-computed is_owner (never
+// the Admin class) to Pepe.
+//   NODE_PATH=G:/PATV/node_modules node --test test/policy-owner-gates.test.js
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { spawnSync } = require("child_process");
+
+const repo = path.resolve(__dirname, "..");
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "owner-gates-test-"));
+process.chdir(tmp);
+delete process.env.STAGING;
+delete process.env.PEPE_CONTROL_SECRET;
+process.env.SECRET_KEY = "test-secret";
+const express = require("express");
+const bcrypt = require("bcrypt");
+const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
+const SR = require(path.join(repo, "staffroles"));
+const CTL = require(path.join(repo, "pepecontrol"));
+
+let base, server;
+const U = { owner: "u_owner", admin: "u_admin", nolink: "u_nolink", staff: "u_staff" };
+test.before(async () => {
+  await runQuery(`CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT, class TEXT DEFAULT 'pleb',
+                  points_balance INTEGER DEFAULT 0, camfrogUsername TEXT, level INTEGER DEFAULT 0, created_at TEXT)`);
+  await runQuery("CREATE TABLE transactions (transactionId TEXT PRIMARY KEY, userId TEXT, type TEXT, points INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, counterparty TEXT)");
+  await runQuery("CREATE TABLE jackpot_rakes (jackpotId TEXT PRIMARY KEY, spinId TEXT, userId TEXT, amount INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
+  const h = await bcrypt.hash("pw-right", 4);
+  for (const [id, name, cls, cf] of [[U.owner, "own", "Admin", "Owner_CF"], [U.admin, "adm", "Admin", "admin_cf"], [U.nolink, "nol", "Admin", null],
+                                     [U.staff, "stf", "Staff", "staff_cf"]]) {
+    await runQuery("INSERT INTO users (userId, username, password, class, camfrogUsername) VALUES (?, ?, ?, ?, ?)", [id, name, h, cls, cf]);
+  }
+  await SR.init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('owner_cf', 'owner', 1), ('admin_cf', 'admin', 1), ('staff_cf', 'staff', 1)");
+  await CTL.init();
+  const app = express();
+  app.use(express.json());
+  const addUser = async (req, res, next) => {
+    const u = req.get("x-test-user");
+    req.user = u ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [u]))[0] || null : null;
+    next();
+  };
+  const deps = { isBotToken: (t) => t === "bot", addUser };
+  require(path.join(repo, "econstore")).register(app, deps);
+  require(path.join(repo, "policy", "scheduler")).register(app, deps);
+  require(path.join(repo, "burns")).register(app, deps);
+  require(path.join(repo, "pools")).register(app, deps);
+  require(path.join(repo, "stashes")).register(app, deps);
+  require(path.join(repo, "capital", "service")).register(app, deps);
+  require(path.join(repo, "escrow", "ledger")).register(app, deps);
+  require(path.join(repo, "gangs")).register(app, deps);
+  require(path.join(repo, "actions")).register(app, deps);
+  server = app.listen(0);
+  base = "http://127.0.0.1:" + server.address().port;
+  await new Promise((r) => setTimeout(r, 200));      // the modules create their tables on register
+});
+test.after(() => server && server.close());
+
+const name = { [U.owner]: "own", [U.admin]: "adm", [U.nolink]: "nol", [U.staff]: "stf" };
+async function call(p, who, body = {}) {
+  const r = await fetch(base + p, { method: "POST", headers: { "content-type": "application/json", "x-test-user": who, "X-Requested-With": "fetch",
+                                                               "x-csrf-token": CTL.csrfToken(name[who]), origin: base, host: new URL(base).host },
+                                    body: JSON.stringify(body) });
+  let j = null;
+  try { j = await r.json(); } catch (e) { j = null; }
+  return { status: r.status, body: j };
+}
+const OWNER_RE = /owners only/;
+
+test("ownerOf: the class AND Pepe's owner role on the linked login, read fresh; anything else is null", async () => {
+  assert.equal((await SR.ownerOf({ userId: U.owner }, "econ.pepe_econ_cmds")).userId, U.owner, "an owner (login case doesn't matter)");
+  assert.equal(await SR.ownerOf({ userId: U.admin }, "econ.pepe_econ_cmds"), null, "a Pepe admin with the Admin class");
+  assert.equal(await SR.ownerOf({ userId: U.nolink }, "econ.pepe_econ_cmds"), null, "an Admin with no linked login");
+  assert.equal(await SR.ownerOf({ userId: U.staff }, "econ.pepe_econ_cmds"), null, "Staff");
+  assert.equal(await SR.ownerOf(null, "econ.pepe_econ_cmds"), null);
+  // read fresh: a stale session claiming Admin doesn't help, a lost role is lost at once
+  await runQuery("UPDATE pepe_roles SET role = 'admin' WHERE login = 'owner_cf'");
+  assert.equal(await SR.ownerOf({ userId: U.owner, class: "Admin" }, "econ.pepe_econ_cmds"), null);
+  await runQuery("UPDATE pepe_roles SET role = 'owner' WHERE login = 'owner_cf'");
+});
+
+test("an Admin who isn't a Pepe owner gets 403 on every economy write; a Pepe owner passes the gate", async () => {
+  const routes = [
+    // [path, body, what the OWNER gets next (the gate passed): a status]
+    ["/api/admin/econ/edit", { op: "cmd", text: "set fed_floor 50m" }, 409],             // econstore.requestEdit -> the step-up (no nonce)
+    ["/api/admin/policy/mode", { engine: "treasury", mode: "dry", note: "test" }, 200],
+    ["/api/admin/burn", { amount: 5 }, 409],                                              // burns.request -> the nonce
+    ["/api/admin/pools-backend", { on: true }, 200],
+    ["/api/admin/capital-backend", { on: true }, 200],
+    ["/api/admin/stash-backend", { on: true }, 200],
+    ["/api/admin/escrow-backend", { on: true }, 200],
+    ["/api/admin/gangs-backend", { on: true }, 200],
+  ];
+  for (const [p, body, next] of routes) {
+    for (const who of [U.admin, U.nolink]) {
+      const r = await call(p, who, body);
+      assert.equal(r.status, 403, `${p} as ${name[who]}: ${JSON.stringify(r.body)}`);
+      assert.match(JSON.stringify(r.body), OWNER_RE, `${p}: says it is an owner's`);
+    }
+    const o = await call(p, U.owner, body);
+    assert.equal(o.status, next, `${p} as the owner: ${JSON.stringify(o.body)}`);
+  }
+  // nothing changed for the refused Admin: the policy mode was set by the owner only
+  const audit = await getQuery("SELECT by FROM policy_audit");
+  assert.deepEqual(audit.map((r) => r.by), ["own"]);
+});
+
+test("the econ edit / burn step-ups still work for an owner; reading stays Admins'", async () => {
+  const n = (await call("/api/admin/econ/edit/nonce", U.owner)).body.nonce;
+  assert.ok(n, "an owner gets a nonce");
+  const ok = await call("/api/admin/econ/edit", U.owner, { op: "cmd", text: "set fed_floor 50m", nonce: n, password: "pw-right" });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const a = (await getQuery("SELECT kind, args FROM pepe_actions WHERE id = ?", [ok.body.request.id]))[0];
+  assert.equal(a.kind, "econ.cmd");
+  // an Admin may still read the cards
+  const r = await fetch(base + "/api/admin/econ/store", { headers: { "x-test-user": U.admin } });
+  assert.equal(r.status, 200);
+  const pol = await fetch(base + "/api/admin/policy", { headers: { "x-test-user": U.admin } });
+  assert.equal(pol.status, 200);
+});
+
+test("econ.* website actions reach Pepe with the site-computed is_owner (never the Admin class) + the linked login", async () => {
+  const A = require(path.join(repo, "actions"));
+  const idO = await A.queue(U.owner, { kind: "econ.cmd", args: ["get"], tag: "econ-admin", label: "owner" });
+  const idA = await A.queue(U.admin, { kind: "econ.cmd", args: ["get"], tag: "econ-admin", label: "admin" });
+  const idB = await A.queue(U.admin, { kind: "econ.burn", args: ["5", "x", "k0000000001"], tag: "econ-burn", label: "burn" });
+  const idC = await A.queue(U.admin, { kind: "cmd", args: ["wager", "x"], tag: "x", label: "not econ" });
+  // the site's escrow.override says "admin" for both Admins (that's what the row stores, as before)
+  assert.equal((await getQuery("SELECT site_admin FROM pepe_actions WHERE id = ?", [idA]))[0].site_admin, 1);
+  const got = await fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) })
+    .then((r) => r.json());
+  const by = Object.fromEntries(got.actions.map((x) => [x.id, x]));
+  assert.equal(by[idO].is_owner, true);
+  assert.equal(by[idO].site_admin, true, "an owner's econ action still runs on a Pepe before PO-0c");
+  assert.equal(by[idO].login, "owner_cf");
+  assert.equal(by[idA].is_owner, false);
+  assert.equal(by[idA].site_admin, false, "the Admin class no longer stands in for Pepe's owner check");
+  assert.equal(by[idA].login, "admin_cf");
+  assert.equal(by[idB].site_admin, false, "a burn too");
+  assert.equal(by[idC].site_admin, true, "other kinds keep site_admin (escrow.override) as before");
+  assert.equal(by[idC].is_owner, false);
+  // an owner whose link changed since the action was queued: not the login Pepe would act as -> not an owner's action
+  const idD = await A.queue(U.owner, { kind: "econ.cmd", args: ["status"], tag: "econ-admin", label: "relinked" });
+  await runQuery("UPDATE users SET camfrogUsername = 'someone_else' WHERE userId = ?", [U.owner]);
+  try {
+    const g2 = await fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) })
+      .then((r) => r.json());
+    const d = g2.actions.find((x) => x.id === idD);
+    assert.equal(d.is_owner, false);
+    assert.equal(d.site_admin, false);
+  } finally {
+    await runQuery("UPDATE users SET camfrogUsername = 'Owner_CF' WHERE userId = ?", [U.owner]);
+  }
+});
+
+test("index.js: the PAT grant and the House adjust check ownerOf before staffgrant moves anything", () => {
+  const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  const jp = src.slice(src.indexOf('app.post("/api/g/wheel/jackpot"'), src.indexOf('app.post("/api/g/wheel/results"'));
+  assert.ok(jp.indexOf('SR.ownerOf(me, "econ.house_adjust")') > 0 && jp.indexOf('SR.ownerOf(me, "econ.house_adjust")') < jp.indexOf("houseAdjust("),
+            "house adjust: owner check first");
+  const tr = src.slice(src.indexOf('"/api/admin/transfer/:username"'), src.indexOf("// HTTP POST endpoint to update a user class."));
+  assert.ok(tr.indexOf('SR.ownerOf(req.user, "econ.grant_pat")') > 0 && tr.indexOf('SR.ownerOf(req.user, "econ.grant_pat")') < tr.indexOf(".grant("),
+            "PAT grant: owner check first");
+  assert.match(tr, /status\(403\)\.json\(\{ message: SR\.OWNER_ONLY \}\)/);
+});
+
+test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backend.js is read-only", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "owner-gates-cli-"));
+  const env = Object.assign({}, process.env, { NODE_PATH: process.env.NODE_PATH || path.join(repo, "node_modules") });
+  delete env.STAGING;
+  const run = (args) => spawnSync(process.execPath, args, { cwd: dir, env, encoding: "utf8", timeout: 60000 });
+  const esc = run([path.join(repo, "tools", "escrow-backend.js"), "--actor=test", "on"]);
+  assert.equal(esc.status, 0, esc.stderr);
+  assert.match(esc.stdout, /escrow backend ledger enabled by test/);
+  const fed = run([path.join(repo, "tools", "fed-backend.js"), "--actor=test", "on"]);
+  assert.equal(fed.status, 0, fed.stderr);
+  assert.match(fed.stdout, /fed events backend enabled by test/);
+  const pol = run([path.join(repo, "tools", "policy-backend.js"), "status"]);
+  assert.equal(pol.status, 0, pol.stderr);
+  assert.match(pol.stdout, /engine {3}treasury/);
+  const pre = run([path.join(repo, "tools", "policy-backend.js"), "preflight"]);
+  assert.equal(pre.status, 1, "an empty site isn't ready: FAIL lines and exit 1");
+  assert.match(pre.stdout, /FAIL {2}Pepe's policy push: never received/);
+  assert.match(pre.stdout, /PASS {2}no policy run in 'moving'/);
+  // read-only: it created no table of its own (the escrow / fed CLIs made theirs above)
+  const tables = spawnSync(process.execPath, ["-e", `const s=require("sqlite3");const d=new s.Database("myapp.db");d.all("SELECT name FROM sqlite_master WHERE type='table'",(e,r)=>{console.log(JSON.stringify(r.map(x=>x.name)));d.close();});`],
+                           { cwd: dir, env, encoding: "utf8" });
+  const names = JSON.parse(tables.stdout.trim());
+  assert.ok(!names.includes("policy_engines") && !names.includes("pepe_roles_pending"), "the policy CLI created nothing: " + names.join(","));
+});

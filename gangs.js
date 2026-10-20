@@ -280,6 +280,17 @@ async function opStatus(key) {
   return r ? parse(r.result, { ok: true }) : null;
 }
 /**
+ * PO-0b (the owner's 2026-10-20 finding (b)): Pepe's /api/gangs/bot/op-status - the same answer, read in a transaction of
+ * its own on the chain, like the 1.99adl stash / pool move_status (settledMoveStatus): queued behind every transaction
+ * already waiting (an op Pepe gave up on that reached the site first is answered, not "not yet"), from committed rows
+ * only (never an OPEN transaction's gang_ops row that a rollback then takes back). Pepe reads null as "no record YET".
+ */
+async function settledOpStatus(key) {
+  await init();
+  if (!KEY_RE.test(String(key || ""))) return null;
+  return tx(() => opStatus(key));
+}
+/**
  * Run one keyed op in ONE transaction: a key seen before answers its first result (dup) and changes nothing. A refusal
  * (Refuse) rolls everything back and is NOT recorded, so a retry with the same key may still succeed (the pools' rule).
  */
@@ -1055,7 +1066,7 @@ async function rollbackToPepe({ key, actor }) {
   await init();
   key = checkKey(key);
   const mk = "rollback:gangs:" + key;
-  const prev = await P().moveStatus(mk);
+  const prev = await P().settledMoveStatus(mk);   // PO-0b (c): committed rows, in order
   if (prev) return Object.assign({}, prev, { dup: true });
   if (!(await live())) throw new Refuse(409, "the gangs aren't live here", "E_NOT_LIVE");
   const backup = await backupDb("pre-gangs-rollback");
@@ -1351,7 +1362,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
     if (!fn) throw new Refuse(400, "unknown op", "E_OP");
     return fn(b);
   }));
-  app.post("/api/gangs/bot/op-status", bot(async (b) => ({ ok: true, result: await opStatus(b.key) })));
+  app.post("/api/gangs/bot/op-status", bot(async (b) => ({ ok: true, result: await settledOpStatus(b.key) })));   // PO-0b: committed, in order
   app.post("/api/gangs/bot/rep", bot(async (b) => Object.assign({ ok: true }, await applyRep(b.events))));
   app.post("/api/gangs/bot/mirror", bot((b) => putMirror(b)));      // the pages' display copy while the gangs live in Pepe
   app.post("/api/gangs/bot/config", bot(async (b) => {
@@ -1415,6 +1426,12 @@ function register(app, { isBotToken, addUser, patSupply }) {
     const me = await admin(req, res);
     if (!me) return;
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    // PO-0b (D-6): a backend switch is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh); the VPS CLI
+    // (tools/*-backend.js) stays the emergency path
+    {
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf({ userId: uid(req) }, "econ.backend_cutover"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    }
     if (await live()) return res.status(409).json({ ok: false, error: "The site owns the gangs now - roll back from Pepe (docs/gangs-cutover-runbook.md)." });
     await setMeta("enabled", !!(req.body || {}).on);
     console.log(`[gangs] backend switch ${(req.body || {}).on ? "ON" : "OFF"} by ${me.username}`);
@@ -1424,5 +1441,5 @@ function register(app, { isBotToken, addUser, patSupply }) {
 
 module.exports = { init, register, enabled, live, rev, cfg, stateAll, totalsOf, digestOf, create, invite, accept, decline, leaveLike, kick, role,
                    setBoss, setTag, limits, deposit, withdraw, spend, move, disband, patch, applyRep, addRep, importFromPepe, exportState,
-                   rollbackToPepe, supplyRows, boardView, gangView, putMirror, webAct, opStatus, splitShares, Refuse, DEFAULT_CFG,
+                   rollbackToPepe, supplyRows, boardView, gangView, putMirror, webAct, opStatus, settledOpStatus, splitShares, Refuse, DEFAULT_CFG,
                    _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta };

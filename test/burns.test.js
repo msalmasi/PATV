@@ -25,7 +25,10 @@ const BOT = "bot-token";
 test.before(async () => {
   await runQuery("CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, password TEXT, class TEXT DEFAULT 'pleb', camfrogUsername TEXT, points_balance INTEGER DEFAULT 0)");
   const h = await bcrypt.hash("right-pass", 4);
-  await runQuery("INSERT INTO users (userId, username, password, class, points_balance) VALUES ('a1', 'boss', ?, 'Admin', 500), ('s1', 'staffer', ?, 'Staff', 700), ('p1', 'alice', ?, 'pleb', 1000)", [h, h, h]);
+  await runQuery("INSERT INTO users (userId, username, password, class, points_balance, camfrogUsername) VALUES ('a1', 'boss', ?, 'Admin', 500, 'boss_cf'), ('a2', 'adm', ?, 'Admin', 0, 'adm_cf'), ('s1', 'staffer', ?, 'Staff', 700, NULL), ('p1', 'alice', ?, 'pleb', 1000, NULL)", [h, h, h, h]);
+  // PO-0b (D-6): a burn is a Pepe OWNER's - boss holds the owner role on his linked login, adm is a Pepe admin
+  await require(path.join(repo, "staffroles")).init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('boss_cf', 'owner', 1), ('adm_cf', 'admin', 1)");
   await B.ensure();
   await P.init();
   const app = express();
@@ -102,6 +105,10 @@ test("admin burn: Admin + CSRF + single-use nonce + step-up password, queued for
   assert.equal((await call("/api/admin/burn", null, { amount: 5 })).status, 401);
   assert.equal((await call("/api/admin/burn", "s1", { amount: 5 }, P.csrfToken("staffer"))).status, 403);
   assert.equal((await call("/api/admin/burn", "p1", { amount: 5 }, P.csrfToken("alice"))).status, 403);
+  const an = (await call("/api/admin/burn/nonce", "a2", {}, P.csrfToken("adm"))).body.nonce;
+  const notOwner = await call("/api/admin/burn", "a2", { amount: 5, nonce: an, password: "right-pass" }, P.csrfToken("adm"));
+  assert.equal(notOwner.status, 403, "PO-0b: an Admin who isn't a Pepe owner can't burn");
+  assert.match(notOwner.body.error, /owners only/);
   assert.equal((await call("/api/admin/burn/nonce", "a1", {}, "bad")).status, 403, "CSRF");
   assert.equal((await call("/api/admin/burn", "a1", { amount: 5, password: "right-pass" }, tok)).status, 409, "no nonce");
   B.sync({ max_now: 1000, reserve: 1000, cfg: { mode: "batch" }, stats: { total: 11107 } });

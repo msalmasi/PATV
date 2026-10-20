@@ -27,6 +27,29 @@
   <% } else { %><div class="ds-note warn" id="arNotSynced" role="status"><span class="ds-ic" aria-hidden="true">⏳</span><div><p><%- t('admroles.sync_never') %></p></div></div><% } %>
 </div>
 
+<%# PO-0b (T23): owner grants / removals from Pepe's role sync wait for an existing owner (staffroles.confirmPending) %>
+<% const PEND = Array.isArray(locals.pending) ? locals.pending : []; if (PEND.length || ed.owner) { %>
+<section class="adm-card" id="pending" aria-labelledby="arPendT">
+  <h2 id="arPendT"><%- t('admroles.pending.h') %> <span class="adm-pill admin"><%- t('admroles.pending.pill') %></span></h2>
+  <p class="adm-help"><%- t('admroles.pending.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admroles.holders.login') %></th><th><%- t('admroles.pending.change') %></th><th><%- t('admroles.pending.asked') %></th><th></th></tr></thead>
+    <tbody>
+      <% if (!PEND.length) { %><tr><td class="empty" colspan="4"><%- t('admroles.pending.none') %></td></tr><% } %>
+      <% PEND.forEach((p) => { %><tr data-pending="<%= p.login %>">
+        <td><code><%= p.login %></code></td>
+        <td><%- RN(p.was) %> → <b><%- RN(p.role) %></b></td>
+        <td><%= when(p.updated) %></td>
+        <td><% if (ed.owner) { %><button type="button" data-pending-act="confirm" data-login="<%= p.login %>"><%- t('admroles.pending.confirm') %></button>
+            <button type="button" class="adm-btn ghost" data-pending-act="reject" data-login="<%= p.login %>"><%- t('admroles.pending.reject') %></button><% } else { %><span class="adm-help"><%- t('admroles.pending.owner_only') %></span><% } %>
+            <span class="adm-msg" role="status"></span></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+  <% if (ed.owner && PEND.length) { %><p class="adm-form"><label for="arPendPw"><%- t('admroles.pending.pw') %><input type="password" id="arPendPw" maxlength="200" autocomplete="current-password"></label></p><% } %>
+</section>
+<% } %>
+
 <section class="adm-card" id="holders" aria-labelledby="arHoldT">
   <h2 id="arHoldT"><%- t('admroles.holders.h') %></h2>
   <p class="adm-help"><%- t('admroles.holders.help') %></p>
@@ -214,7 +237,7 @@
   .ar-site .ar-lad { text-align: center; white-space: nowrap; }
   #website h3 { margin-top: 1.2em; }
 </style>
-<script src="/public/js/admin-roles.js?v=2" defer></script>
+<script src="/public/js/admin-roles.js?v=3" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

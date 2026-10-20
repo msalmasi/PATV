@@ -497,7 +497,7 @@ test("staking fix plan 2026-10-19 at a real cut-off: ceil_apr 0 skims nothing, P
   assert.equal(lastSnap.ceil_apr, 0, "ceiling off");
   assert.equal(lastSnap.ceil_cushion, 0);
   assert.equal(lastSnap.ceil_cushion_days, 8, "...and the cushion's window (camfrog-bot 31c65d0: rule_at reads it first)");
-  assert.equal(d1.epochs[0].ceil_apr, 0.25, "the earlier cut-offs ran with the default 25% ceiling");
+  assert.equal(d1.epochs[0].ceil_apr, 0, "the earlier cut-offs ran with the default ceiling - PO-0b (D-8): 0, as prod");
   assert.ok(Number(d1.pd_from) > 0 && Number(d1.pd_from) < lastSnap.ts, "d.pd_from: when the PAT-days began (the first accrual)");
   await SVC.putConfig({ ceil_apr: 0.25 });
 });

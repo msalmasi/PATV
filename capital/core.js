@@ -99,7 +99,8 @@ const DEFAULT_CFG = {
   rloan_max_days: 30, rloan_book_share: 0.25, rloan_max_open: 1, penalty_pct: 2, penalty_cap_pct: 50, collect_every: 600,
   loan_max_borrowed: 5,
   // vaults (pepe_vaults)
-  vaults_enabled: 1, ceil_apr: 0.25, floor_apr: 0.0, topup: 0, topup_max_day: 25000, staker_max: 0.5, house_min_cash: 5000000,
+  // PO-0b (D-8): ceil_apr defaults to 0 (no daily ceiling), as prod runs since the owner's 2026-10-19 decision
+  vaults_enabled: 1, ceil_apr: 0.0, floor_apr: 0.0, topup: 0, topup_max_day: 25000, staker_max: 0.5, house_min_cash: 5000000,
   auto_bank_min: 0.40, auto_house_max: 0.35, auto_mm_max: 0.25, bank_default_days: 30, bank_insurance_cap: 50000000,
   min_move: 1000, epoch_hour: 4, dividend: 1, apr_min_cover: 0.9,
   // staking fix plan P1.2 (2026-10-19): the protocol cushion under the APR ceiling - OFF until the owner turns on Pepe's
@@ -178,6 +179,15 @@ async function opStatus(key) {
   const r = (await getQuery("SELECT result FROM capital_ops WHERE key = ?", [String(key)]))[0];
   return r ? parse(r.result, { ok: true }) : null;
 }
+/** PO-0b (the owner's 2026-10-20 finding (b)): Pepe's /api/capital/bot/op-status - opStatus read in a transaction of its own
+ *  on the chain, like the 1.99adl stash / pool move_status: in order (an op that reached the site before it is answered,
+ *  not "not yet") and from committed rows only (never an OPEN transaction's capital_ops row a rollback then takes back).
+ *  Pepe reads null as "no record YET" (unknown). */
+async function settledOpStatus(key) {
+  await init();
+  if (!KEY_RE.test(String(key || ""))) return null;
+  return tx(() => opStatus(key));
+}
 
 // ── PAT legs (inside an open transaction) ──
 /** Pool legs [{pool, amount}] all-or-nothing through pools.js; the move recorded under mk. A House leg ("jackpot") is a
@@ -251,5 +261,5 @@ async function emit(kind, room, data) {
 const wake = () => { try { L().wake(); } catch (e) { /* no poll waiting */ } };
 
 module.exports = { init, meta, setMeta, enabled, live, forgetLive, rev, bumpRev, requireLive, checkKey, cfg, cfgAge, DEFAULT_CFG,
-                   load, list, save, remove, doc, putDoc, nextId, seen, record, opStatus, legs, wallet, houseBalance, poolBalance,
+                   load, list, save, remove, doc, putDoc, nextId, seen, record, opStatus, settledOpStatus, legs, wallet, houseBalance, poolBalance,
                    account, same, emit, wake, tx, Refuse, isRefuse, now, nowS, str, J, parse, low, fmt, KINDS, KEY_RE };

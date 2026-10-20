@@ -20,6 +20,7 @@
         <label for="policyNote"><%= t('adm.policy.note') %><input type="text" id="policyNote" maxlength="200"></label>
         <div class="adm-actions"><button type="submit"><%= t('adm.policy.set') %></button></div>
       </form>
+      <p class="adm-help" id="policyOwnerOnly"><%= t('adm.policy.owner_only') %></p>
       <details><summary><%= t('adm.policy.not_engines') %></summary><ul class="adm-help" id="policyRetired"></ul></details>
       <details><summary><%= t('adm.policy.recent') %></summary>
         <div class="adm-tbl"><table aria-label="<%= t('adm.policy.recent') %>"><thead><tr><th><%= t('adm.policy.col_when') %></th><th><%= t('adm.policy.col_engine') %></th>

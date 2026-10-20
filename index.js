@@ -2835,6 +2835,9 @@ app.post("/api/g/wheel/jackpot", addUser, requireUser, async (req, res) => {
     // the class as the DATABASE has it now (the JWT's can be stale)
     const me = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
     if (!SP.can(me, "econ.house_adjust")) return res.status(403).json({ message: "Admins only." });
+    // PO-0b (D-6): moving PAT between the Fed and the House is a Pepe OWNER's (class + the owner role on the linked chat login)
+    const SR = require("./staffroles");
+    if (!(await SR.ownerOf(me, "econ.house_adjust"))) return res.status(403).json({ message: SR.OWNER_ONLY });
     const r = await require("./staffgrant").houseAdjust({ userId: me.userId, username: me.username }, (req.body || {}).amount, (req.body || {}).reason);
     res.status(r.status).json(r.body);
   } catch (error) {
@@ -2872,6 +2875,9 @@ app.post(
     // settles), refused when it can't cover it or the weekly staff-grant cap is reached - never minted, never the Reserve
     // (staffgrant.js)
     if (SP.can(req.user, "econ.grant_pat")) {
+      // PO-0b (D-6): a PAT grant is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh)
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf(req.user, "econ.grant_pat"))) return res.status(403).json({ message: SR.OWNER_ONLY });
       try {
         const r = await require("./staffgrant").grant(req.params.username, req.body && req.body.amount, req.user.username);
         res.status(r.status).json(r.body);

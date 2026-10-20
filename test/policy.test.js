@@ -65,6 +65,9 @@ test.before(async () => {
   }
   await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES ('seed', 's', NULL, ?)", [HOUSE]);
   await runQuery("INSERT INTO supply_snapshot (id, pools) VALUES (1, '[]')");
+  // PO-0b (D-6): the policy mode is a Pepe OWNER's - boss (Admin) holds the owner role on his linked login
+  await require(path.join(repo, "staffroles")).init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts, by, via) VALUES ('boss_cf', 'owner', 1, 'test', 'web')");
   // Phase 1: the pools on the site
   await P.init();
   await require(path.join(repo, "funding")).init();

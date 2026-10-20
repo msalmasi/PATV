@@ -1277,7 +1277,7 @@ function waterfallFrom(c) {
 }
 /** P1.1 / D2: the weekly bonus cap (econ_cfg wf_staker_cap_pct, % APR on the staked value; 0 = NO cap) as a fraction -
  *  what Pepe pushed with his capital config (c.wf_staker_cap_pct), else his policy push's econ_cfg, else the site's
- *  override, else 25% (the knob's default = the old shared knob's value). */
+ *  override, else 0 = no cap (PO-0b, D-8: the code default matches prod; it was 25%, the old shared knob's value). */
 async function bonusCap(c) {
   let v;
   if (c && c.wf_staker_cap_pct !== undefined && c.wf_staker_cap_pct !== null && Number.isFinite(Number(c.wf_staker_cap_pct))) {
@@ -1290,7 +1290,7 @@ async function bonusCap(c) {
     else v = ((await require("../econstore").getSettings()).econ_cfg || {}).wf_staker_cap_pct;
   } catch (e) { v = undefined; }
   const n = Number(v);
-  return v !== undefined && v !== null && Number.isFinite(n) ? Math.max(0, Math.min(1, n / 100)) : 0.25;
+  return v !== undefined && v !== null && Number.isFinite(n) ? Math.max(0, Math.min(1, n / 100)) : 0;   // PO-0b (D-8): no value = no cap
 }
 const PAID_VIA = "(via = 'waterfall stakers' OR via LIKE 'staking correction%' OR via LIKE 'apr-bug correction%')";
 const CORR_VIA = "(via LIKE 'staking correction%' OR via LIKE 'apr-bug correction%')";

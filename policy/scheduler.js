@@ -457,6 +457,9 @@ function register(app, { isBotToken, addUser }) {
     const me = await admin(req, res);
     if (!me) return;
     if (req.get("X-Requested-With") !== "fetch" || !require("../middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    // PO-0b (D-6): an engine's mode is a Pepe OWNER's (class + the owner role on the linked chat login); reading stays Admins'
+    const SR = require("../staffroles");
+    if (!(await SR.ownerOf(me, "econ.telemetry_policy"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
     const b = req.body || {};
     const engine = String(b.engine || ""), m = String(b.mode || "");
     if (!C.ENGINES.includes(engine) || !["off", "dry", "shadow"].includes(m)) return res.status(400).json({ ok: false, error: "Pick an engine and off / dry / shadow (live is Pepe's cutover)." });

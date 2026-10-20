@@ -117,6 +117,9 @@ async function request(user, { amount, reason, nonce, password }, ip) {
   await ensure();
   const ctl = require("./pepecontrol");
   if (!SP.can(user, "econ.burn")) throw fail(403, "Admins only.");
+  // PO-0b (D-6): a burn is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh); before the nonce
+  const SR = require("./staffroles");
+  if (!(await SR.ownerOf(user, "econ.burn"))) throw fail(403, SR.OWNER_ONLY);
   if (!ctl.takeNonce(user, nonce)) throw fail(409, "That confirmation was already used or has expired - start again.");
   const who = String(user.username || "").toLowerCase();
   const wait = pwFails.blocked(who);

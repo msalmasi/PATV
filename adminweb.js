@@ -64,8 +64,11 @@ async function reserveStatus() {
   const uns = (await getQuery(`SELECT COALESCE(SUM(amount), 0) AS t FROM reserve_claims
                                WHERE settled = 0 AND COALESCE(queued, 0) = 0 AND flow NOT LIKE 'incentives:%' AND flow NOT LIKE 'mint:%'`))[0].t;   // 1.99jw: mints aren't the Reserve's
   const jp = await safe(async () => (await getQuery("SELECT COALESCE(SUM(amount), 0) AS t FROM jackpot_rakes"))[0].t, null);
-  return { balance: funding.state.reserve, syncedAt: funding.state.syncedAt || 0, today, todayTotal: today.reduce((a, r) => a + (r.t || 0), 0),
-           unsettled: uns, jackpot: jp };
+  // PO-0b: once the pools are cut over the Reserve is the site's own pool - its balance is read there (reserveNow), not
+  // from Pepe's last sync
+  const onSite = await safe(() => require("./pools").live(), false);
+  return { balance: onSite ? await safe(() => funding.reserveNow(), null) : funding.state.reserve, onSite, syncedAt: funding.state.syncedAt || 0,
+           today, todayTotal: today.reduce((a, r) => a + (r.t || 0), 0), unsettled: uns, jackpot: jp };
 }
 // economy v2 E-2: the incentive budget Pepe syncs + the website's queue of grants waiting for it
 async function incentiveStatus() {
@@ -218,6 +221,8 @@ function register(app, { addUser }) {
              rcfgEdit: await safe(() => require("./recipecfg").canEdit(me), false),
              // staking fix plan: the 🏦 staking card's switches are live only for a Pepe owner (capital/watch.canEdit; the API re-checks)
              stkEdit: await safe(() => require("./capital/watch").canEdit(me), false),
+             // PO-0b (D-6): the PAT grant and the burn are a Pepe owner's - the cards say so to an Admin who isn't one
+             econOwner: !!(await safe(() => require("./staffroles").ownerOf(me, "econ.grant_pat"), null)),
              msg: require("./notices").read(req) };        // 1.99ade: ?m=<id> (notices.js), never ?msg= text
   }));
   // 1.99ol: + the casino front-end switches (casino_settings bj_front / hm_front; saved through /api/casino/admin/settings)

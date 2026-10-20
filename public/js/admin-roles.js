@@ -76,6 +76,26 @@
     post('/api/admin/roles/reset', { cmd: cmd }).then(function (j) { done(b, j); });
   });
 
+  // PO-0b: an owner change from Pepe's sync - confirm / reject it with a single-use nonce + the account password (step-up)
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('button[data-pending-act]') : null;
+    if (!b) return;
+    var act = b.getAttribute('data-pending-act'), login = b.getAttribute('data-login');
+    var pw = $('arPendPw') ? $('arPendPw').value : '';
+    if (!pw) return say(msgNear(b), _t('js.admroles.pw_needed', 'Enter your account password first.'), true);
+    var q = act === 'confirm' ? _t('js.admroles.confirm_pending', 'Apply the owner change for {login}?', { login: login })
+      : _t('js.admroles.reject_pending', 'Reject the owner change for {login}?', { login: login });
+    if (!window.confirm(q)) return;
+    say(msgNear(b), _t('js.admroles.working', 'Saving…'));
+    post('/api/admin/roles/nonce', {}).then(function (n) {
+      if (!n || !n.ok || !n.nonce) return done(b, n);
+      post('/api/admin/roles/pending', { login: login, action: act, nonce: n.nonce, password: pw }).then(function (j) {
+        if ($('arPendPw')) $('arPendPw').value = '';
+        done(b, j);
+      });
+    });
+  });
+
   if ($('arAddRole')) $('arAddRole').addEventListener('submit', function (e) {
     e.preventDefault();
     var login = ($('arAddLogin').value || '').trim().replace(/^@/, '').toLowerCase();

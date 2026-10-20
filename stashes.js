@@ -9,7 +9,8 @@
 //                  created (s), closed (s), updated (ms)
 //   stash_members  (stash_id, login)          who else may use it (Camfrog logins, lower case)
 //   stash_moves    key PRIMARY KEY            every balance change, idempotent by key: a retry finds its key and
-//                                             returns the first answer instead of moving twice
+//                                             returns the first answer instead of moving twice. PO-0b: a refused bot
+//                                             move is recorded too (kind "refused", amount 0) - terminal for its key
 //   stash_meta     enabled / imported / seq / rev
 //
 // Every money move is ONE database transaction (mainstage's chain on the shared connection): the wallet row
@@ -378,29 +379,68 @@ async function withdraw({ stashId, login, userId, amount, key, via = "web" }) {
  * Pepe only: move PAT between a stash and one of HIS pools (vault staking legs, fee-share payouts, the stake lock).
  * amount > 0 = into the stash, < 0 = out of it (only unstaked PAT); staked_delta moves the stake lock
  * (0 <= staked <= balance afterwards). The other side of the move is Pepe's own pool, applied by him.
+ *
+ * PO-0b (economy policy plan §2.4, T6): EVERY answer is recorded under the key and is terminal for it - "paid", or
+ * "refused" with its reason: not enough unstaked PAT (HTTP 200 {ok:false, error:"insufficient"} as before), no such stash
+ * (404) or a closed stash's debit / stake change (409). A later attempt with the same key - the original Pepe gave up on,
+ * still in flight, arriving after his refund went out - gets that same answer and moves nothing: exactly one movement.
+ * A deliberate retry uses a NEW key. The refusal row is kind "refused", amount 0 (no reader of stash_moves counts it).
+ * The HTTP status codes are what they were (the bot route answers `status`). In-site callers (capital cut-off / requests,
+ * policy/apply) throw on a refusal, so their transaction - and the refusal row with it - rolls back as before.
+ *   (a) the owner's 2026-10-20 rule: a CREDIT that reaches a stash its owner already closed goes to the owner's WALLET
+ * (one ledger post in the same transaction, recorded under the key with to_wallet) - never stranded in a closed stash.
+ * A closed stash whose owner has no PATV account refuses it (409, recorded) so Pepe's refund puts it back at its source.
+ *   (c) requireLive is checked INSIDE the transaction (after the dedup, which answers a recorded key whatever happens).
  */
 async function botMove({ stashId, amount = 0, stakedDelta = 0, earned = 0, key, kind = "vault", why = null }) {
-  await requireLive();
+  await init();
   key = checkKey(key);
   const amt = Math.trunc(Number(amount) || 0), sd = Math.trunc(Number(stakedDelta) || 0), ea = Math.max(0, Math.trunc(Number(earned) || 0));
+  const via = why ? String(why).slice(0, 60) : "pepe";
   return tx(async () => {
     const dup = await seen(key);
     if (dup) return dup;
+    await requireLive();
+    const refuse = async (s, out) => {
+      await record(key, { stash_id: s ? s.id : (String(stashId == null ? "" : stashId).slice(0, 20) || null), kind: "refused", amount: 0, via }, out);
+      return out;
+    };
     const s = (await getQuery("SELECT * FROM stashes WHERE id = ?", [String(stashId)]))[0];
-    if (!s) throw new Refuse(404, "No such stash.", "E_TARGET_NOT_FOUND");
-    if (amt < 0 && s.closed) throw new Refuse(409, "That stash is closed.");
+    if (!s) return refuse(null, { ok: false, error: "No such stash.", code: "E_TARGET_NOT_FOUND", status: 404 });
+    if (s.closed && amt > 0 && sd === 0) return closedCredit(s, { amt, ea, key, kind, via, refuse });
+    if (s.closed && (amt !== 0 || sd !== 0)) return refuse(s, { ok: false, error: "That stash is closed.", code: "E_STASH_CLOSED", status: 409 });
     const bal = Number(s.balance) + amt, st = Number(s.staked) + sd;
     if (bal < 0 || st < 0 || st > bal || (amt < 0 && free(s) < -amt && sd >= 0)) {
-      return { ok: false, error: "insufficient", balance: Number(s.balance), staked: Number(s.staked) };   // nothing recorded: a retry may succeed later
+      return refuse(s, { ok: false, error: "insufficient", balance: Number(s.balance), staked: Number(s.staked) });
     }
     await runQuery("UPDATE stashes SET balance = ?, staked = ?, earned = earned + ?, updated = ? WHERE id = ?", [bal, st, ea, now(), s.id]);
     const out = { ok: true, stash: String(s.id), balance: bal, staked: st };
     if (ea) out.earned = ea;            // staking fix plan P0.2: the journal says it counted (tools/staking-backfill.js earned skips it)
-    await record(key, { stash_id: s.id, kind: String(kind).slice(0, 20), amount: amt, staked_delta: sd, via: why ? String(why).slice(0, 60) : "pepe" }, out);
+    await record(key, { stash_id: s.id, kind: String(kind).slice(0, 20), amount: amt, staked_delta: sd, via }, out);
     await bumpRev();
     return out;
   });
 }
+/** (a) In botMove's transaction: a credit for a CLOSED stash is paid to its owner's wallet (the closed row keeps balance 0;
+ *  `earned` still counts a staking payout, like an open stash's). No account to pay -> a recorded 409 (Pepe refunds it). */
+async function closedCredit(s, { amt, ea, key, kind, via, refuse }) {
+  const o = await holderInfo(s.owner);
+  const c = o.userId ? await require("./ledger").post(o.userId, amt, "stash-closed-credit", { resolveMerged: true, source: "stash-closed" }) : null;
+  if (!c || !c.ok) {
+    return refuse(s, { ok: false, error: "That stash is closed and its owner has no PATV account to pay.", code: "E_STASH_CLOSED", status: 409 });
+  }
+  if (ea) await runQuery("UPDATE stashes SET earned = earned + ?, updated = ? WHERE id = ?", [ea, now(), s.id]);
+  const out = { ok: true, stash: String(s.id), balance: Number(s.balance) || 0, staked: Number(s.staked) || 0, to_wallet: true, amount: amt, user_id: c.userId };
+  if (ea) out.earned = ea;
+  await record(key, { stash_id: s.id, kind: String(kind).slice(0, 20), amount: amt, staked_delta: 0, login: o.login, user_id: c.userId,
+                      txid: c.transactionId, via }, out);
+  await bumpRev();
+  console.log(`[stashes] ${key}: stash ${s.id} is closed - ${amt} PAT paid to its owner's wallet (${c.userId})`);
+  return out;
+}
+/** PO-0b: what a recorded answer stands for - "paid" (it moved), "refused" (answered and terminal for its key) or
+ *  "unknown" (nothing recorded under the key, yet: never a refusal - the original may still be on its way). */
+const stateOf = (r) => (!r ? "unknown" : r.ok === false ? "refused" : "paid");
 
 /** Has this move key been applied? (Pepe asks after a lost answer.) -> the recorded answer or null */
 async function moveStatus(key) {
@@ -826,7 +866,12 @@ function register(app, { isBotToken, addUser }) {
   const bot = (fn) => async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
-    try { res.json(await fn(b)); } catch (e) {
+    try {
+      const out = await fn(b);
+      // PO-0b: a refusal recorded under its key comes back as an answer (it must commit) - with the status code it always had
+      if (out && out.ok === false && Number.isInteger(out.status) && out.status >= 400 && out.status < 500) return res.status(out.status).json(out);
+      res.json(out);
+    } catch (e) {
       if (e instanceof Refuse) return res.status(e.status).json({ ok: false, error: e.message, code: e.code });
       console.error("[stashes] bot:", e);
       res.status(500).json({ ok: false, error: "server_error" });
@@ -855,7 +900,10 @@ function register(app, { isBotToken, addUser }) {
     const op = String(b.op || "");
     const login = String(b.login || "").trim();
     if (op === "move") return botMove({ stashId: b.stash, amount: b.amount, stakedDelta: b.staked_delta, earned: b.earned, key: b.key, kind: b.kind, why: b.why });
-    if (op === "move_status") return { ok: true, result: await settledMoveStatus(b.key) };   // 1.99adl: committed, in order
+    if (op === "move_status") {   // 1.99adl: committed, in order; PO-0b: + state paid | refused | unknown
+      const result = await settledMoveStatus(b.key);
+      return { ok: true, result, state: stateOf(result) };
+    }
     // 1.99wy: a chat command acts as the ACCOUNT: the one Pepe resolved for the nick (user_id / userId / username - the
     // account he charges), else the account the login is linked to (resolveRecord through the link). Access is checked
     // here by account: owner for owner-only ops, owner or member for money moves.
@@ -885,6 +933,12 @@ function register(app, { isBotToken, addUser }) {
     const row = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]).catch(() => []))[0];
     if (!SP.can(row, "econ.backend_cutover")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    // PO-0b (D-6): a backend switch is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh); the VPS CLI
+    // (tools/*-backend.js) stays the emergency path
+    {
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf(req.user, "econ.backend_cutover"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    }
     await init();
     if (await live()) return res.status(409).json({ ok: false, error: "Already imported - the site owns the stashes now." });
     await setMeta("enabled", !!(req.body || {}).on);
@@ -892,7 +946,7 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { init, register, enabled, live, list, get, find, total, deposit, withdraw, botMove, moveStatus, settledMoveStatus, create, setMembers,
+module.exports = { init, register, enabled, live, list, get, find, total, deposit, withdraw, botMove, moveStatus, settledMoveStatus, stateOf, create, setMembers,
                    rename, close, importFromPepe, fromForm, parseAmount, canUse, isOwner, free, userIdFor, Refuse, MIN_MOVE, MAX_OWNED,
                    // 1.99wy: account keys
                    actorOf, holderInfo, holderFor, acctKey, uidOfKey, isAcctKey, targetKey, rekeyInTx, rekeyAll, moneyFacts, claimLogin,

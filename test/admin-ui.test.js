@@ -43,6 +43,11 @@ test.before(async () => {
                   avatar TEXT, emailVerificationToken TEXT, tokenExpires DATETIME, isEmailVerified INTEGER DEFAULT 0)`);
   await runQuery("CREATE TABLE transactions (transactionId TEXT PRIMARY KEY, userId TEXT, type TEXT, points INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
   U.admin = await mkUser("boss", "Admin");
+  U.admin2 = await mkUser("second", "Admin");
+  // PO-0b (D-6): the PAT grant / burn are a Pepe owner's - boss holds the owner role on his linked login, second doesn't
+  await runQuery("UPDATE users SET camfrogUsername = 'boss_cf' WHERE userId = ?", [U.admin.userId]);
+  await require(path.join(repo, "staffroles")).init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('boss_cf', 'owner', 1)");
   U.staff = await mkUser("helper", "Staff");
   U.pleb = await mkUser("rando", "pleb");
   await rooms.init();
@@ -190,6 +195,9 @@ test("control inventory: every control of the old /admin/panel is on its section
   // the form actions the script rewrites, and every endpoint the old inline scripts called
   assert.ok(users.includes('action="/api/u/username/class/update"'));
   assert.ok((await page("/admin/economy", U.admin)).html.includes('action="/api/admin/transfer/username"'));
+  // PO-0b: an Admin who isn't a Pepe owner gets the note instead of the grant form
+  const notOwner = (await page("/admin/economy", U.admin2)).html;
+  assert.ok(!notOwner.includes('id="pointsTransferForm"') && notOwner.includes("Pepe owners only"), "the grant form is an owner's");
   const js = fs.readFileSync(path.join(repo, "public/js/admin-panel.js"), "utf8");
   for (const ep of ["/api/admin/welcome", "/api/admin/welcome/config", "/api/admin/welcome/pay", "/api/admin/stale", "/api/classes", "/api/classes/edit", "/api/admin/update-level",
                     "/api/admin/redemption-codes", "/api/badges", "/api/g/wheel/spin", "/api/g/wheel/jackpot"]) assert.ok(js.includes("'" + ep), "admin-panel.js calls " + ep);
@@ -213,22 +221,22 @@ test("overview data: alerts, countdown, no crash on an empty database", async ()
 test("1.99ada: /admin/economy's 💸 payout recipe card - Admins see it after Activity -> pad vaults; the form is live only for a Pepe owner", async () => {
   const SR = require(path.join(repo, "staffroles"));
   await SR.init();
-  let h = (await page("/admin/economy", U.admin)).html;
+  let h = (await page("/admin/economy", U.admin2)).html;
   assert.match(h, /id="recipe-cfg"/);
   assert.ok(h.indexOf('id="activitypads"') < h.indexOf('id="recipe-cfg"') && h.indexOf('id="recipe-cfg"') < h.indexOf('id="pools"'), "right after the Activity -> pad vaults card");
   assert.match(h, /id="rcfgNotOwner"/, "an Admin with no Pepe owner role: read-only");
   assert.match(h, /id="rcfgSave" disabled/);
   assert.match(h, /data-csrf="[^"]+"/, "the step-up's CSRF token");
-  await runQuery("UPDATE users SET camfrogUsername = 'BossFrog' WHERE userId = ?", [U.admin.userId]);
+  await runQuery("UPDATE users SET camfrogUsername = 'BossFrog' WHERE userId = ?", [U.admin2.userId]);
   await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('bossfrog', 'owner', 1)");
   try {
-    h = (await page("/admin/economy", U.admin)).html;
+    h = (await page("/admin/economy", U.admin2)).html;
     assert.doesNotMatch(h, /id="rcfgNotOwner"/);
     assert.match(h, /id="rcfgSave">/, "a Pepe owner gets the live form");
     assert.match(h, /data-edit="1"/);
   } finally {
     await runQuery("DELETE FROM pepe_roles WHERE login = 'bossfrog'");
-    await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [U.admin.userId]);
+    await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [U.admin2.userId]);
   }
   h = (await page("/admin/economy", U.staff)).html;
   assert.match(h, /id="recipe-cfg"/);

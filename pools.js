@@ -9,7 +9,8 @@
 //   pool_moves       key PRIMARY KEY (the caller's idempotency key), kind, flow, why, via, ts, net, legs (JSON), result (JSON)
 //                    ONE row per move; a move has 1..n legs and is applied all-or-nothing in one database transaction.
 //                    A key seen before answers its first result (dup) and moves nothing again. A refused move (a pool that
-//                    can't cover a debit) is NOT recorded, so a later retry with the same key may still succeed.
+//                    can't cover a debit) is NOT recorded, so a later retry with the same key may still succeed - unless the
+//                    caller asks for a terminal answer (PO-0b, `terminal`: the refusal is recorded, kind "refused", net 0).
 //   pool_move_legs   (move_key, i) the legs again, one row each (pool, amount, balance after) - per-pool history
 //   pools_meta       enabled / imported / live / rev / rollbacks
 //   turf_inbox       (interim, until E-4) a routed charge's legs that go to Pepe-only places (turf businesses, a
@@ -21,8 +22,8 @@
 //
 // Bot routes (bot token, POST - the staging router falls back to Pepe's sandbox):
 //   /api/pools/state      {since_rev?}                          -> {ok, enabled, live, rev, pools: {key: balance}}
-//   /api/pools/move       {key, legs: [[pool, amount], ...], flow, why, kind?}  one keyed multi-leg move
-//   /api/pools/move-status {key}                                -> the recorded result, or null
+//   /api/pools/move       {key, legs: [[pool, amount], ...], flow, why, kind?, terminal?}  one keyed multi-leg move
+//   /api/pools/move-status {key}                                -> the recorded result, or null; state paid | refused | unknown
 //   /api/pat/charge       {key, username, amount, reason, counterparty?, route: {flow, room, payer, item_sink}, legs}
 //                         the wallet debit + every pool leg (+ the House leg) + turf_inbox rows, ONE transaction
 //   /api/pat/fund         {key, pool, username|userId, amount, flow, type}   pool -> wallet, one transaction
@@ -169,11 +170,19 @@ function cleanLegs(raw) {
   });
 }
 
-/** In the open transaction: the first answer recorded under `key` (+ dup:true), or null. */
-async function seen(key) {
+/** In the open transaction: the first answer recorded under `key` (+ dup:true) - a refusal recorded by move() too - or null. */
+async function recorded(key) {
   const r = (await getQuery("SELECT result FROM pool_moves WHERE key = ?", [key]))[0];
   if (!r) return null;
   try { return Object.assign(JSON.parse(r.result || "{}"), { dup: true }); } catch (e) { return { ok: true, dup: true }; }
+}
+/** In the open transaction: the first answer under `key` (+ dup:true) when it MOVED, else null. Every in-site caller (the
+ *  claim settle, the policy engines, the escrow, gangs, capital, fed) reads "seen" as "it moved - skip it": a refusal
+ *  recorded under the key (PO-0b, move() with terminal) is not that, so it answers null here; such a caller then fails
+ *  loudly on the key's row (UNIQUE) instead of treating PAT that never moved as moved (e.g. a claim marked settled). */
+async function seen(key) {
+  const r = await recorded(key);
+  return r && r.ok === false ? null : r;
 }
 
 /**
@@ -213,23 +222,47 @@ async function requireLive() {
   if (!(await live())) throw new Refuse(409, "The pools still live in Pepe.", "E_NOT_LIVE");
 }
 
-/** One keyed move (1..n legs, all or nothing). -> {ok, key, balances} | dup | throws Refuse (E_INSUFFICIENT: not recorded). */
-async function move({ key, legs, flow, why, kind = "move", via = "pepe" }) {
+/**
+ * One keyed move (1..n legs, all or nothing). -> {ok, key, balances} | dup | throws Refuse (E_INSUFFICIENT: not recorded).
+ *
+ * PO-0b (economy policy plan §2.4, T6) - TERMINAL refusals, opt-in per call: with `terminal` (Pepe sends terminal:true) a
+ * debit the pool can't cover (E_INSUFFICIENT) or a burn-reserve payout (E_BURN_ONLY) is recorded under the key - kind
+ * "refused", net 0, no legs, so no reader counts it - and answered {ok:false, error, code, status:409, refused:true}
+ * (the status code it always had). Every later attempt with that key gets the same answer: the original Pepe gave up
+ * on, arriving after his refund, can't move a second time. Without the flag a refusal is still not recorded, because
+ * today's Pepe RETRIES the same key after E_INSUFFICIENT (the key-reuse audit, PO-0b): his outbox flush keeps a queued
+ * move at the head and resends it until it lands, _tr_settle_claim resends claim:<id> next tick, _tr_finish /
+ * turf-season / pad top-up legs resend <tid>:<leg>. Recording those would freeze the outbox and leave claims unpaid for
+ * good. Pepe turns `terminal` on (PO-0c) once those callers mint a new key for a deliberate retry.
+ */
+async function move({ key, legs, flow, why, kind = "move", via = "pepe", terminal = false }) {
   await requireLive();
   key = checkKey(key);
   const ls = cleanLegs(legs);
   const k = ["move", "burn", "settle", "grant", "admin", "rollback", "cutover"].includes(kind) ? kind : "move";
   if (ls.some((l) => l.pool === "lotto") && (await lottoIsService())) throw new Refuse(409, "The lotto pot is the lotto service's.", "E_LOTTO_POT");
   return tx(async () => {
-    const dup = await seen(key);
+    const dup = await recorded(key);          // a recorded refusal answers again, unchanged (terminal for its key)
     if (dup) return dup;
-    const a = await applyLegs(key, ls, { kind: k, flow, why, via });
+    let a;
+    try {
+      // its own savepoint: a refusal at leg n undoes legs 0..n-1 before the refusal row is written
+      a = await (terminal ? tx(() => applyLegs(key, ls, { kind: k, flow, why, via })) : applyLegs(key, ls, { kind: k, flow, why, via }));
+    } catch (e) {
+      if (!terminal || !(e instanceof Refuse) || !TERMINAL_CODES.has(e.code)) throw e;
+      const out = Object.assign({ ok: false, key, error: e.message, code: e.code, status: e.status, refused: true }, e.extra || {});
+      await recordMove(key, { kind: "refused", flow, why, via, legs: [], net: 0, ts: now(), result: out });
+      return out;
+    }
     const out = { ok: true, key, balances: a.after };
     await recordMove(key, { kind: k, flow, why, via, legs: ls, net: a.net, ts: a.ts, result: out });
     await bumpRev();
     return out;
   });
 }
+const TERMINAL_CODES = new Set(["E_INSUFFICIENT", "E_BURN_ONLY"]);
+/** PO-0b: what a recorded answer stands for - "paid", "refused" (terminal for its key) or "unknown" (nothing recorded yet). */
+const stateOf = (r) => (!r ? "unknown" : r.ok === false ? "refused" : "paid");
 
 async function moveStatus(key) {
   await init();
@@ -522,7 +555,7 @@ async function rollbackToPepe({ key, actor }) {
   await init();
   key = checkKey(key);
   const mk = "rollback:" + key;
-  const prev = await moveStatus(mk);
+  const prev = await settledMoveStatus(mk);   // PO-0b (c): committed rows, in order (a plain read could answer an open rollback's row)
   if (prev) return Object.assign({}, prev, { dup: true });
   if (!(await live())) throw new Refuse(409, "the pools aren't live here", "E_NOT_LIVE");
   // G1: gang treasury moves book their Fort Knox / Reserve legs here - the gangs go back to Pepe first
@@ -583,6 +616,9 @@ async function settleClaims() {
       const key = "claim:" + c.claimId;
       try {
         await tx(async () => {
+          // PO-0b: a refusal recorded under the claim's key (a Pepe move with terminal) never settles it - nothing moved
+          const rec = await recorded(key);
+          if (rec && rec.ok === false) throw new Refuse(409, "a refusal is recorded under the claim's key", "E_KEY_REFUSED");
           const dup = await seen(key);
           if (!dup && amt !== 0) {
             const legs = [{ pool, amount: -amt }];
@@ -595,10 +631,12 @@ async function settleClaims() {
         });
         n++;
       } catch (e) {
-        if (e instanceof Refuse && e.code === "E_INSUFFICIENT") {
+        if (e instanceof Refuse && (e.code === "E_INSUFFICIENT" || e.code === "E_KEY_REFUSED")) {
           if (!shortLogged.has(c.claimId)) {
             shortLogged.add(c.claimId);
-            console.log(`[pools] website claim ${c.claimId} (${c.flow} ${amt}) is more than ${pool} holds - left unsettled until it can cover it`);
+            console.log(e.code === "E_KEY_REFUSED"
+              ? `[pools] website claim ${c.claimId} (${c.flow} ${amt}): ${key} holds a recorded refusal - left unsettled (an owner decides)`
+              : `[pools] website claim ${c.claimId} (${c.flow} ${amt}) is more than ${pool} holds - left unsettled until it can cover it`);
           }
           continue;
         }
@@ -630,7 +668,12 @@ function register(app, { isBotToken, addUser, patSupply }) {
   const bot = (fn) => async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
-    try { res.json(await fn(b)); } catch (e) {
+    try {
+      const out = await fn(b);
+      // PO-0b: a refusal recorded under its key comes back as an answer (it must commit) - with the status code it always had
+      if (out && out.ok === false && Number.isInteger(out.status) && out.status >= 400 && out.status < 500) return res.status(out.status).json(out);
+      res.json(out);
+    } catch (e) {
       if (e instanceof Refuse) return res.status(e.status).json(Object.assign({ ok: false, error: e.message, code: e.code }, e.extra || {}));
       console.error("[pools] bot:", e);
       res.status(500).json({ ok: false, error: "server_error" });
@@ -641,8 +684,12 @@ function register(app, { isBotToken, addUser, patSupply }) {
     if (b.since_rev !== undefined && Number(b.since_rev) === r) return { ok: true, live: await live(), enabled: await enabled(), rev: r, same: true };
     return { ok: true, live: await live(), enabled: await enabled(), rev: r, pools: await balances(), inbox: await inboxOpen() };
   }));
-  app.post("/api/pools/move", bot((b) => move({ key: b.key, legs: b.legs, flow: b.flow, why: b.why, kind: b.kind, via: "pepe" })));
-  app.post("/api/pools/move-status", bot(async (b) => ({ ok: true, result: await settledMoveStatus(b.key) })));   // 1.99adl
+  // PO-0b: terminal:true = a refusal is recorded under the key (move() has why it is opt-in)
+  app.post("/api/pools/move", bot((b) => move({ key: b.key, legs: b.legs, flow: b.flow, why: b.why, kind: b.kind, via: "pepe", terminal: b.terminal === true })));
+  app.post("/api/pools/move-status", bot(async (b) => {   // 1.99adl: committed, in order; PO-0b: + state paid | refused | unknown
+    const result = await settledMoveStatus(b.key);
+    return { ok: true, result, state: stateOf(result) };
+  }));
   app.post("/api/pat/charge", bot((b) => charge({ key: b.key, username: b.username, amount: b.amount, reason: b.reason,
                                                    counterparty: b.counterparty, route: b.route, legs: b.legs })));
   app.post("/api/pat/fund", bot((b) => fund({ key: b.key, pool: b.pool, userId: b.userId, username: b.username, amount: b.amount,
@@ -670,6 +717,12 @@ function register(app, { isBotToken, addUser, patSupply }) {
     const me = await admin(req, res);
     if (!me) return;
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    // PO-0b (D-6): a backend switch is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh); the VPS CLI
+    // (tools/*-backend.js) stays the emergency path
+    {
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf(req.user, "econ.backend_cutover"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    }
     if (await live()) return res.status(409).json({ ok: false, error: "The site owns the pools now - roll back from Pepe (docs/pools-cutover-runbook.md)." });
     await setMeta("enabled", !!(req.body || {}).on);
     console.log(`[pools] backend switch ${(req.body || {}).on ? "ON" : "OFF"} by ${me.username}`);
@@ -680,7 +733,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
   if (iv.unref) iv.unref();
 }
 
-module.exports = { init, register, enabled, live, rev, balances, balance, total, move, moveStatus, settledMoveStatus, charge, fund, inboxPending, inboxAck,
+module.exports = { init, register, enabled, live, rev, balances, balance, total, move, moveStatus, settledMoveStatus, stateOf, charge, fund, inboxPending, inboxAck,
                    inboxOpen, supplyRows, importFromPepe, exportState, rollbackToPepe, settleClaims, adminView, digestOf, isPool,
                    Refuse, LABELS, _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta,
                    // G1 (gangs.js books treasury legs in its own transactions with the same primitives)

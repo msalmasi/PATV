@@ -40,14 +40,15 @@ const DEFAULTS = {
   issuance_pct_month: 1.0, issuance_fixed_month: 10000000, issuance_activity_scaling: true, mintcap_issuance: -1,
   mintcap_floor: 30000000, mintcap_loan: -1, mintcap_restore: -1, mintcap_total: -1, staker_share_pct: 20.0, fed_split_pct: 50.0,
   // staking fix plan P1.1 (2026-10-19): the stakers' weekly bonus cap on its own knob (% APR on the staked value, 0 = no cap) -
-  // it was VAULT_CEIL_APR, the daily ceiling's knob; 25 = the same 25% as before. D2 (the owner, 2026-10-19): the cap goes -
-  // the operator sets it to 0 after the deploy (time-weighted payouts, P2.1, ship in the same release)
-  wf_staker_cap_pct: 25.0,
+  // it was VAULT_CEIL_APR, the daily ceiling's knob. D2 (the owner, 2026-10-19): the cap goes - prod runs 0 since then.
+  // PO-0b (D-8): the code default is 0 too (no cap), matching prod; a push always carries the real value
+  wf_staker_cap_pct: 0.0,
   // Q11 (ECONOMY-V3 23.2): the activity-scaled guarantee target - OFF by default (the fixed target holds)
   guarantee_scaled: false, guarantee_base: 25000000, guarantee_min: 15000000, guarantee_max: 40000000, guarantee_smooth_weeks: 3,
   guarantee_ref_weeks: 4,
 };
-const CONSTS = { VAULT_MIN_MOVE: 1000, VAULT_CEIL_APR: 0.25, VAULT_EPOCH_UTC_HOUR: 4, HOUSE_MIN_CASH: 5000000,
+// PO-0b (D-8): VAULT_CEIL_APR's default is 0 (no ceiling / no cap), as prod runs since the owner's 2026-10-19 decision
+const CONSTS = { VAULT_MIN_MOVE: 1000, VAULT_CEIL_APR: 0.0, VAULT_EPOCH_UTC_HOUR: 4, HOUSE_MIN_CASH: 5000000,
                  VAULT_MM_MIN_TARGET: 1000000, VAULT_TARGET_MULT: 1.5, HEIST_VAULT_MIN: 2000000, HEIST_VAULT_CAP: 10000000 };
 // D2 (the owner, 2026-10-19): what a 25% APR weekly cap WOULD have paid is tracked on every epoch record (pepe_treasury
 // TR_TRACK_CAP), and D2's safeguard pays a vault whose week isn't wholly time-weighted under that same reference cap while no

@@ -247,7 +247,10 @@ async function stepUp(user, body) {
 async function requestEdit(user, body, ip) {
   const ctl = require("./pepecontrol");
   const fail = (status, message) => Object.assign(new Error(message), { status });
-  if (!SP.can(user, "econ.pepe_econ_cmds")) throw fail(403, "Admins only.");
+  // PO-0b (D-6): changing the economy (econ.cmd / econ.routes) is a Pepe OWNER's - the class AND the owner role on the linked
+  // chat login, read fresh (staffroles.ownerOf). The VPS CLIs stay the emergency path.
+  const SR = require("./staffroles");
+  if (!(await SR.ownerOf(user, "econ.pepe_econ_cmds"))) throw fail(403, SR.OWNER_ONLY);
   await stepUp(user, body);
   let kind, args, label;
   if (body.op === "routes") {

@@ -438,7 +438,7 @@ async function rollbackToPepe({ key, actor }) {
   await C.init();
   key = C.checkKey(key);
   const mk = "rollback:capital:" + key;
-  const prev = await require("../pools").moveStatus(mk);
+  const prev = await require("../pools").settledMoveStatus(mk);   // PO-0b (c): committed rows, in order
   if (prev) return Object.assign({}, prev, { dup: true });
   if (!(await C.live())) throw new C.Refuse(409, "the capital cluster isn't live here", "E_NOT_LIVE");
   const backup = await backupDb("pre-capital-rollback");
@@ -586,7 +586,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
   };
   app.post("/api/capital/bot/state", bot((b) => botState(b)));
   app.post("/api/capital/bot/op", bot((b) => act(String(b.engine || ""), b)));
-  app.post("/api/capital/bot/op-status", bot(async (b) => ({ ok: true, result: await C.opStatus(b.key) })));
+  app.post("/api/capital/bot/op-status", bot(async (b) => ({ ok: true, result: await C.settledOpStatus(b.key) })));   // PO-0b: committed, in order
   app.post("/api/capital/bot/config", bot((b) => putConfig(b.cfg)));
   // the cutover export (markets with their trades and price history, every Reserve loan, the vault book) is bigger than the
   // global 100 KB JSON limit - index.js skips this path for the big parser here (the pools 413, 1.99sy)
@@ -652,6 +652,12 @@ function register(app, { isBotToken, addUser, patSupply }) {
     const me = await admin(req, res);
     if (!me) return;
     if (req.get("X-Requested-With") !== "fetch" || !require("../middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    // PO-0b (D-6): a backend switch is a Pepe OWNER's (class + the owner role on the linked chat login, read fresh); the VPS CLI
+    // (tools/*-backend.js) stays the emergency path
+    {
+      const SR = require("../staffroles");
+      if (!(await SR.ownerOf(req.user, "econ.backend_cutover"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    }
     if (await C.live()) return res.status(409).json({ ok: false, error: "The site owns the markets, Reserve loans and vaults now - roll back from Pepe (docs/capital-cutover-runbook.md)." });
     await C.setMeta("enabled", !!(req.body || {}).on);
     console.log(`[capital] backend switch ${(req.body || {}).on ? "ON" : "OFF"} by ${me.username}`);

@@ -45,7 +45,8 @@ function register(app, { addUser }) {
         return res.redirect((me && SP.areaHome(me)) || "/login");
       }
       const ed = await P.editorOf(me.userId);
-      res.render("admin/roles", { title: "Admin · Roles & permissions", user: me.username, isAdmin: true, view: await P.view(ed), site: await SP.view(ed) });
+      res.render("admin/roles", { title: "Admin · Roles & permissions", user: me.username, isAdmin: true, view: await P.view(ed), site: await SP.view(ed),
+                                  pending: await safe(() => require("./staffroles").pendingList(), []) });   // PO-0b
     } catch (e) { console.error("[adminroles] page:", e); res.status(500).send("Couldn't load the admin page."); }
   });
 
@@ -54,7 +55,7 @@ function register(app, { addUser }) {
     const me = await meOf(req);
     if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
     if (!SP.can(me, "roles.assign")) return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
-    try { const ed = await P.editorOf(me.userId); res.json({ ok: true, ...(await P.view(ed)), site: await SP.view(ed) }); }
+    try { const ed = await P.editorOf(me.userId); res.json({ ok: true, ...(await P.view(ed)), site: await SP.view(ed), pending: await safe(() => require("./staffroles").pendingList(), []) }); }
     catch (e) { console.error("[adminroles] data:", e.message); res.status(500).json({ ok: false }); }
   });
 
@@ -77,6 +78,37 @@ function register(app, { addUser }) {
   change("/api/admin/roles/perm", (b, ed) => P.setPerm(ed, { kind: b.kind, cmd: b.cmd, value: b.value, role: b.role }));
   change("/api/admin/roles/reset", (b, ed) => P.resetCmd(ed, b.cmd));
   change("/api/admin/roles/site", (b, ed) => SP.setMin(ed, b.key, b.value));   // 1.99ack: a website capability
+
+  // PO-0b (T23): owner grants / removals that came by Pepe's sync wait here for an existing owner + the password step-up
+  const SR = require("./staffroles");
+  const strict = (req, res) => {
+    if (req.get("X-Requested-With") !== "fetch" || !sameOriginStrict(req)) { res.status(403).json({ ok: false, code: "cross_site", error: "Security check failed - reload the page." }); return false; }
+    return true;
+  };
+  app.post("/api/admin/roles/nonce", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!strict(req, res)) return;
+    const me = await meOf(req);
+    if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
+    if (!(await SR.ownerHolds(me, "roles.assign"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    res.json({ ok: true, nonce: require("./pepecontrol").issueNonce(me) });
+  });
+  app.post("/api/admin/roles/pending", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!strict(req, res)) return;
+    const me = await meOf(req);
+    if (!me) return res.status(401).json({ ok: false, code: "auth", error: "Sign in first." });
+    if (!(await SR.ownerHolds(me, "roles.assign"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    const b = req.body || {};
+    try {
+      await require("./econstore").stepUp(me, b);
+      res.json({ ok: true, ...(await SR.confirmPending(me, b.login, String(b.action || ""))) });
+    } catch (e) {
+      if (e && (e.refuse || e.status)) return res.status(e.status || 400).json({ ok: false, code: e.code || "refused", error: e.message });
+      console.error("[adminroles] pending:", e.message);
+      res.status(500).json({ ok: false, code: "internal", error: "Something went wrong." });
+    }
+  });
 }
 
 module.exports = { register };

@@ -160,6 +160,23 @@ async function refMissing(user, cmd, words) {
   }
 }
 
+// ── PO-0b (D-6): economy actions carry the owner check, never the Admin class ──
+const isEconKind = (k) => /^econ\./.test(String(k || ""));
+/** For an econ.* action: {is_owner, login} - the account's linked chat login NOW, and whether it is a Pepe owner with the
+ *  action's capability (staffroles.ownerOf). The login must still be the one the action was queued with (Pepe acts as it). */
+async function econOwner(a) {
+  try {
+    const SR = require("./staffroles");
+    const me = await SR.ownerOf({ userId: a.user_id }, a.kind === "econ.burn" ? "econ.burn" : "econ.pepe_econ_cmds");
+    const login = me && me.camfrogUsername ? String(me.camfrogUsername).trim().toLowerCase() : null;
+    const same = !!login && login === String(a.camfrog || "").trim().toLowerCase();
+    return { is_owner: !!me && same, login: login || (a.camfrog ? String(a.camfrog).trim().toLowerCase() : null) };
+  } catch (e) {
+    console.error("[actions] owner check:", e.message);
+    return { is_owner: false, login: null };
+  }
+}
+
 function register(app, { isBotToken, addUser }) {
   app.post("/act", addUser, async (req, res) => {
     const b = req.body || {};
@@ -301,11 +318,19 @@ function register(app, { isBotToken, addUser }) {
     }
     // tells Pepe to wake his table fast lane (tables.js) when no table is open yet, e.g. a web "start"
     const tp = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'table' AND status = 'pending'");
+    const owner = {};
+    for (const a of rows) if (isEconKind(a.kind)) owner[a.id] = await econOwner(a);
     res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
+      const econ = isEconKind(a.kind);
+      const o = econ ? owner[a.id] : null;
       // 1.99wv (connections audit C): the ACCOUNT is the actor - Pepe acts as its chat login, else as "u:<userId>"
-      return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin, idem: a.idem || null,
+      // PO-0b (D-6): an economy action (econ.*: !econ from /admin/economy, routing, a burn) no longer rides on the Admin
+      // class: site_admin is the site-computed is_owner (the class AND Pepe's owner role on the linked login, read now), so a
+      // Pepe before PO-0c still runs an owner's and refuses everyone else's; is_owner + login are sent for his own check
+      return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: econ ? !!(o && o.is_owner) : !!a.site_admin,
+               is_owner: !!(o && o.is_owner), login: econ ? (o && o.login) || null : a.camfrog || null, idem: a.idem || null,
                user_id: a.user_id, actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null },
                created: a.created || null, expires_at: ttl.expiresAt("pepe_actions", a) };   // 1.99ne: Pepe won't START it after this
     }) });

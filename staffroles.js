@@ -8,6 +8,10 @@
 //     without a linked login, or logins this list never had, are never touched (no surprise demotions).
 //   * who may change what (the same as Pepe's !role): owners anything; admins hand out staff / assistant / trusted to
 //     people below admin. Pepe always keeps an owner.
+//   * PO-0b (economy policy plan T23, D-5): the OWNER list is pinned on the site. Pepe's sync (bot token) can no longer
+//     grant or remove "owner": such a change is held in pepe_roles_pending (and the existing owners get a notice) until
+//     an existing owner confirms it on /admin/roles with the password step-up (or rejects it). Pepe's merged answer
+//     carries the site's role for that login, so his local change goes back too. Everything else syncs as before.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
@@ -30,6 +34,10 @@ function init() {
     ready = (async () => {
       await runQuery(`CREATE TABLE IF NOT EXISTS pepe_roles (login TEXT PRIMARY KEY, role TEXT, ts INTEGER NOT NULL DEFAULT 0,
                       by TEXT, via TEXT)`);
+      // PO-0b: an owner grant / removal that arrived by Pepe's sync, waiting for an existing owner (one row per login: the
+      // newest change Pepe sent for it; `was` = the role the site had then)
+      await runQuery(`CREATE TABLE IF NOT EXISTS pepe_roles_pending (login TEXT PRIMARY KEY, role TEXT, ts INTEGER NOT NULL, was TEXT,
+                      via TEXT, created INTEGER NOT NULL, updated INTEGER NOT NULL)`);
       // the class picker offers Assistant (Admin / Staff are there already on prod; added if missing)
       try {
         for (const c of ["Admin", "Staff", "Assistant"]) {
@@ -70,6 +78,16 @@ async function ownerHolds(me, cap) {
   try { return (await roleOf(me.camfrogUsername)) === "owner"; } catch (e) { return false; }
 }
 
+/** PO-0b (D-6, "economy writes are owner-only"): ownerHolds for a request's user, read fresh from the database (a JWT's
+ *  class / link can be stale). -> the users row {userId, username, class, camfrogUsername}, or null when it isn't an owner. */
+async function ownerOf(user, cap) {
+  if (!user || !user.userId) return null;
+  const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [user.userId]).catch(() => []))[0] || null;
+  return me && (await ownerHolds(me, cap)) ? me : null;
+}
+/** The words an owner-only refusal says (the API's 403). */
+const OWNER_ONLY = "Pepe owners only - your account needs the Admin class and a linked Camfrog login with Pepe's owner role.";
+
 async function write(login, role, ts, by, via) {
   await runQuery(`INSERT INTO pepe_roles (login, role, ts, by, via) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(login) DO UPDATE SET role = excluded.role, ts = excluded.ts, by = excluded.by, via = excluded.via`,
@@ -77,13 +95,18 @@ async function write(login, role, ts, by, via) {
 }
 
 /** Pepe's sync: {roles: {login: [role|null, ts]}} -> the merged map back (same shape). Newer wins per login; a merge
- *  that would leave nobody an owner keeps the owners it had. */
+ *  that would leave nobody an owner keeps the owners it had. PO-0b: a change that grants or removes "owner" is HELD
+ *  (pepe_roles_pending) instead - the answer keeps the site's role for that login, so Pepe's copy goes back too - until
+ *  an existing owner confirms it on /admin/roles (confirmPending). Only while the site has no owner at all (a fresh
+ *  database) does an owner arrive by sync, so there is someone to confirm the next one. */
 async function botSync(body = {}) {
   await init();
   const cur = await map();
   const inc = body && typeof body.roles === "object" && body.roles ? body.roles : {};
   const next = { ...cur };
   const changed = [];
+  const held = [];
+  const pinned = Object.values(cur).some((x) => x.role === "owner");
   for (const [k, v] of Object.entries(inc).slice(0, 500)) {
     const l = low(k);
     if (!LOGIN_RE.test(l) || !Array.isArray(v)) continue;
@@ -91,16 +114,87 @@ async function botSync(body = {}) {
     const ts = Math.floor(Number(v[1]) || 0);
     if (role !== null && !ROLES.includes(role)) continue;
     const c = cur[l];
-    if (!c || ts > c.ts) { next[l] = { role, ts }; changed.push(l); }
+    if (!c || ts > c.ts) {
+      const was = c ? c.role : null;
+      if (pinned && (role === "owner") !== (was === "owner")) { held.push({ login: l, role, ts, was }); continue; }
+      next[l] = { role, ts };
+      changed.push(l);
+    }
   }
   if (!Object.values(next).some((x) => x.role === "owner")) {
     for (const l of changed.slice()) if (cur[l] && cur[l].role === "owner") { next[l] = cur[l]; changed.splice(changed.indexOf(l), 1); }
   }
   for (const l of changed) await write(l, next[l].role, next[l].ts, "pepe", "chat");
   if (changed.length) await reconcile(changed);
+  const fresh = [];
+  for (const h of held) if (await hold(h)) fresh.push(h);
+  if (fresh.length) await notifyOwners(fresh);
   const out = {};
   for (const [l, x] of Object.entries(next)) out[l] = [x.role, x.ts];
-  return { ok: true, roles: out, changed: changed.length };
+  return { ok: true, roles: out, changed: changed.length, held: held.length };
+}
+
+// ── PO-0b: owner changes from Pepe's sync wait for an owner on the website ──
+/** Store (or refresh) a held owner change. -> true when it is new for this login (or a newer change than the one held). */
+async function hold({ login, role, ts, was }) {
+  const t = now();
+  const cur = (await getQuery("SELECT role, ts FROM pepe_roles_pending WHERE login = ?", [login]))[0];
+  if (cur && Number(cur.ts) >= ts) return false;
+  await runQuery(`INSERT INTO pepe_roles_pending (login, role, ts, was, via, created, updated) VALUES (?, ?, ?, ?, 'pepe', ?, ?)
+                  ON CONFLICT(login) DO UPDATE SET role = excluded.role, ts = excluded.ts, was = excluded.was, updated = excluded.updated`,
+                 [login, role, ts, was, t, t]);
+  console.log(`[staffroles] held Pepe's owner change for ${login}: ${was || "none"} -> ${role || "none"} (an owner confirms it on /admin/roles)`);
+  return true;
+}
+/** A notice to every account linked to an existing owner: what's waiting and where to confirm it. Never throws. */
+async function notifyOwners(list) {
+  try {
+    const owners = Object.entries(await map()).filter(([, x]) => x.role === "owner").map(([l]) => l);
+    const what = list.map((h) => `${h.login}: ${h.was || "no role"} -> ${h.role || "no role"}`).join(", ");
+    const inbox = require("./inbox");
+    for (const l of owners) {
+      for (const u of await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [l]).catch(() => [])) {
+        await inbox.addSafe(u.userId, { kind: "admin", title: "👑 Owner change from Pepe is waiting for you",
+                                        body: `Pepe's role sync asked for: ${what}. Owner changes from chat wait for an owner's confirmation on the website.`,
+                                        link: "/admin/roles#pending", ref: `roles-pending:${list.map((h) => h.login + "@" + h.ts).join(",")}`.slice(0, 190) });
+      }
+    }
+  } catch (e) { console.error("[staffroles] owner notice:", e.message); }
+}
+/** The owner changes waiting for confirmation (oldest first). */
+async function pendingList() {
+  await init();
+  return getQuery("SELECT login, role, ts, was, via, created, updated FROM pepe_roles_pending ORDER BY created, login");
+}
+/**
+ * An existing Pepe owner (`me`: a fresh users row - class + camfrogUsername) confirms or rejects a held owner change. The
+ * caller has done the password step-up (econstore.stepUp) and the same-site checks. Confirm = the change Pepe sent, stamped
+ * now (newer than both sides' copies, so it travels back to Pepe on his next sync); reject = the row goes, the site's role
+ * stands. Pepe always keeps an owner. Both are written to admin_audit.
+ */
+async function confirmPending(me, login, action) {
+  await init();
+  if (!(await ownerHolds(me, "roles.assign"))) throw new RoleError(403, "Only a Pepe owner confirms owner changes (your account needs a linked Camfrog login with the owner role).");
+  const l = low(login);
+  const p = (await getQuery("SELECT login, role, ts, was FROM pepe_roles_pending WHERE login = ?", [l]))[0];
+  if (!p) throw new RoleError(404, "Nothing is waiting for that login.");
+  const audit = (what, detail) => require("./adminaudit").record({ userId: me.userId, username: me.username }, what, null, detail).catch(() => {});
+  if (action === "reject") {
+    await runQuery("DELETE FROM pepe_roles_pending WHERE login = ?", [l]);
+    await audit("pepe_role_pending_reject", { login: l, asked: p.role, was: p.was });
+    return { login: l, rejected: true, role: await roleOf(l) };
+  }
+  if (action !== "confirm") throw new RoleError(400, "Confirm or reject.");
+  const m = await map();
+  const role = p.role || null;
+  const ts = Math.max(now(), Number(p.ts) + 1, ((m[l] && m[l].ts) || 0) + 1);
+  m[l] = { role, ts };
+  if (!Object.values(m).some((x) => x.role === "owner")) throw new RoleError(409, "Refusing - Pepe would have no owner.");
+  await write(l, role, ts, "web:" + String(me.username || "?"), "web");
+  await runQuery("DELETE FROM pepe_roles_pending WHERE login = ?", [l]);
+  await reconcile([l]);
+  await audit("pepe_role_pending_confirm", { login: l, from: p.was, to: role });
+  return { login: l, confirmed: true, role };
 }
 
 /** A change made on the website: actor (their linked login) sets target's role (null = none). Pepe's !role rules. */
@@ -118,6 +212,7 @@ async function setRole(actorLogin, targetLogin, role, by) {
   m[t] = { role, ts: now() };
   if (!Object.values(m).some((x) => x.role === "owner")) throw new RoleError(409, "Refusing - Pepe would have no owner.");
   await write(t, role, m[t].ts, by, "web");
+  await runQuery("DELETE FROM pepe_roles_pending WHERE login = ?", [t]);   // PO-0b: a web change decides that login - nothing waits any more
   await reconcile([t]);
   return { login: t, role };
 }
@@ -213,5 +308,6 @@ function register(app, { isBotToken, noTimers } = {}) {
   });
 }
 
-module.exports = { init, map, roleOf, ownerHolds, botSync, setRole, reconcile, register, classUpdate, classesEdit, RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS,
+module.exports = { init, map, roleOf, ownerHolds, ownerOf, OWNER_ONLY, botSync, setRole, reconcile, register, classUpdate, classesEdit, pendingList, confirmPending,
+  RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; } };
