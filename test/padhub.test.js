@@ -66,3 +66,28 @@ test("a re-key moves the pad's id with it; a merge keeps the moving pad's id", a
   assert.equal(await PH.of("roomB"), mine, "UPDATE OR REPLACE: the moving pad's id wins");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pad_hub WHERE hub_pad_id = ?", [theirs]))[0].n, 0, "the displaced id is gone (Q4 emits it)");
 });
+
+test("a pad's deletion drops its hub id in the same transaction; a pad re-created under the room id is a new pad", async () => {
+  const { tx } = require(path.join(repo, "dbUtils"));
+  await reg("roomC", "room-c");
+  const first = await PH.of("roomC");
+  assert.match(first, PH.UUID4_RE);
+  await require(path.join(repo, "padcreate")).removePad("roomC");
+  assert.equal(await PH.of("roomC"), null, "padcreate.removePad: the row went with the registry row");
+  await reg("roomC", "room-c");
+  const second = await PH.of("roomC");
+  assert.match(second, PH.UUID4_RE);
+  assert.notEqual(second, first, "a new pad to the hub, never the old one revived");
+  // padconnect's connect: the room's own pad is deleted, then the site pad is re-keyed onto the room's id
+  await reg("patv:site2", "site-two");
+  const site = await PH.of("patv:site2");
+  await runQuery("DELETE FROM rooms_registry WHERE room_id = 'roomC'");
+  await RK.rekey("patv:site2", "roomC");
+  assert.equal(await PH.of("roomC"), site, "the site pad keeps its id at the room's address");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pad_hub WHERE hub_pad_id = ?", [second]))[0].n, 0, "the room's own pad's id is gone");
+  // the same transaction as the DELETE: a deletion that rolls back keeps the id
+  await reg("roomD", "room-d");
+  const d = await PH.of("roomD");
+  await assert.rejects(tx(async () => { await runQuery("DELETE FROM rooms_registry WHERE room_id = 'roomD'"); throw new Error("a later step failed"); }));
+  assert.equal(await PH.of("roomD"), d, "rolled back with the registry row");
+});

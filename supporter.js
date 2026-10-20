@@ -60,6 +60,9 @@ async function onDonation(userId) {
 function supporterSync(userId) { if (!loaded) init(); return userId ? BY_ID.get(String(userId)) || null : null; }
 function supporterByName(name) { if (!loaded) init(); return name ? BY_NAME.get(String(name).toLowerCase()) || null : null; }
 
+/** A missing table (a site without donations yet) is no rows; any other read error is thrown - inside the looks' poster
+ *  that backs the pass off, where swallowing it would post a look without the Supporter badge (a new h for nothing). */
+const noTable = (e) => { if (/no such table/i.test(String(e && e.message))) return []; throw e; };
 /** S1 Q5b: these accounts' tiers read from the database now - the chat hub's looks (userlook.buildLooks) are built when they
  *  post, so never from the boot cache. -> Map(userId -> view) for the donors among them */
 async function tiersFor(userIds) {
@@ -67,7 +70,7 @@ async function tiersFor(userIds) {
   const out = new Map();
   for (let i = 0; i < ids.length; i += 400) {
     const part = ids.slice(i, i + 400);
-    const rows = await getQuery(`${SQL} AND r.userId IN (${part.map(() => "?").join(",")}) GROUP BY r.userId`, part).catch(() => []);
+    const rows = await getQuery(`${SQL} AND r.userId IN (${part.map(() => "?").join(",")}) GROUP BY r.userId`, part).catch(noTable);
     for (const r of rows) out.set(String(r.userId), view(r));
   }
   return out;

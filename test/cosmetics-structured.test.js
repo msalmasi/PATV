@@ -54,21 +54,21 @@ test("each item's structured look is pinned and fits look.schema.json (hex colou
     if (it.kind === "name_color") {
       assert.ok(L && L.name, it.id);
       assert.ok(["solid", "gradient"].includes(L.name.kind), it.id);
-      hexes(L.name.colors, 6, it.id);
+      hexes(L.name.colors, CS.MAX.name, it.id);
       if (L.name.kind === "gradient") assert.ok(["none", "shift"].includes(L.name.anim), it.id);
       assert.equal(L.name.solid, undefined, "solid is derived on the hub");
     } else if (it.kind === "avatar_decoration") {
       assert.equal(L.deco.item, it.id);
-      hexes(L.deco.ring.colors, 4, it.id);
+      hexes(L.deco.ring.colors, CS.MAX.ring, it.id);
       assert.ok(Number.isInteger(L.deco.ring.w) && L.deco.ring.w >= 0 && L.deco.ring.w <= 8, it.id);
       assert.ok(L.deco.ring.glow >= 0 && L.deco.ring.glow <= 1, it.id);
       assert.equal(typeof L.deco.ring.spin, "boolean", it.id);
     } else if (it.kind === "profile_border") {
-      hexes(L.border.colors, 4, it.id);
+      hexes(L.border.colors, CS.MAX.border, it.id);
       assert.ok(L.border.w >= 0 && L.border.w <= 8, it.id);
       assert.ok(["none", "pulse", "hue"].includes(L.border.anim), it.id);
     } else if (it.kind === "profile_banner") {
-      hexes(L.banner.colors, 4, it.id);
+      hexes(L.banner.colors, CS.MAX.banner, it.id);
       assert.ok(Number.isInteger(L.banner.angle) && L.banner.angle >= 0 && L.banner.angle <= 359, it.id);
     } else if (it.kind === "profile_effect") {
       assert.ok(CS.EFFECTS.includes(L.effect), it.id);
@@ -76,6 +76,34 @@ test("each item's structured look is pinned and fits look.schema.json (hex colou
       assert.ok(CS.GTF_LAYERS[it.kind].includes(L.gtf[1]) && L.gtf[0] === CS.GTF_OPT[it.kind], it.id);
       assert.match(L.gtf[1], /^[a-z][a-z0-9_]{0,31}$/, it.id);
     }
+  }
+});
+
+test("no catalog item loses a colour on the wire (ADR 0007 D13); the caps are the hub's look.schema.json's", () => {
+  // every item's look with no cap at all is its look: nothing is down-sampled (the pride items and nc_parade travel whole)
+  const caps = { ...CS.MAX };
+  let longest = { name: 0, ring: 0, border: 0, banner: 0 };
+  try {
+    Object.assign(CS.MAX, { name: 1e6, ring: 1e6, border: 1e6, banner: 1e6 });
+    const whole = new Map(CAT.items.map((it) => [it.id, CS.lookOf(it)]));
+    Object.assign(CS.MAX, caps);
+    for (const it of CAT.items) {
+      const L = CS.lookOf(it);
+      assert.deepEqual(L, whole.get(it.id), it.id + ": down-sampled");
+      const n = (k, list) => { if (list) longest[k] = Math.max(longest[k], list.length); };
+      n("name", L.name && L.name.colors); n("ring", L.deco && L.deco.ring && L.deco.ring.colors);
+      n("border", L.border && L.border.colors); n("banner", L.banner && L.banner.colors);
+    }
+  } finally { Object.assign(CS.MAX, caps); }
+  assert.deepEqual(longest, { name: 9, ring: 6, border: 6, banner: 6 }, "nc_parade's 9 stops, the pride ring / border / banner's 6");
+  assert.deepEqual(CS.MAX, { name: 12, ring: 8, border: 8, banner: 8, w: 8 });
+  const hub = process.env.PATV_HUB_DIR;
+  if (hub) {          // the platform's schema says the same caps
+    const S = JSON.parse(fs.readFileSync(path.join(hub, "packages", "rt-schema", "schemas", "hcp", "v1", "look.schema.json"), "utf8")).properties;
+    assert.equal(S.name.properties.colors.maxItems, CS.MAX.name);
+    assert.equal(S.avatar.properties.deco.properties.ring.properties.colors.maxItems, CS.MAX.ring);
+    assert.equal(S.profile.properties.border.properties.colors.maxItems, CS.MAX.border);
+    assert.equal(S.profile.properties.banner.properties.colors.maxItems, CS.MAX.banner);
   }
 });
 

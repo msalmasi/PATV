@@ -23,10 +23,11 @@
 //             stops: [Color | [Color, "<positions>"]]}
 //
 // The hub never gets CSS (CA §5.5: render hints only). lookOf(item) is the item's part of a structured look (rt-schema
-// look.schema.json): name {kind, colors ≤ 6, anim, period_s}, avatar.deco {ring {colors ≤ 4, w ≤ 8, glow, spin}, emoji},
-// profile.border {colors ≤ 4, w ≤ 8, anim: none|pulse|hue}, profile.banner {colors ≤ 4, angle}, profile.effect (EFFECTS)
-// and the six gtf layers (GTF_LAYERS). Colours are 6-digit lower-case hex; a list longer than the schema allows is
-// down-sampled evenly (first and last kept), so v1's 9-stop and 7-stop gradients fit.
+// look.schema.json): name {kind, colors ≤ 12, anim, period_s}, avatar.deco {ring {colors ≤ 8, w ≤ 8, glow, spin}, emoji},
+// profile.border {colors ≤ 8, w ≤ 8, anim: none|pulse|hue}, profile.banner {colors ≤ 8, angle}, profile.effect (EFFECTS)
+// and the six gtf layers (GTF_LAYERS). Colours are 6-digit lower-case hex. Every catalog item fits whole (the longest:
+// nc_parade's 9 stops, the pride ring / border / banner's 6); a list longer than the schema allows would be down-sampled
+// evenly (first and last kept) - a guard only: the test refuses it for any catalog item.
 "use strict";
 
 const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti"];
@@ -46,7 +47,9 @@ const GTF_LAYERS = {
 };
 const NAME_PERIOD_S = 6;                 // cosmetics.css cx-shift: 6s
 const CONIC_RING_W = 6;                  // .cx-av .cx-conic: the mask leaves a 6px ring
-const MAX = { name: 6, ring: 4, border: 4, banner: 4, w: 8 };
+// rt-schema look.schema.json's caps (raised by the S1 Q5b review to chat-core's render bounds, so every catalog item travels
+// whole - ADR 0007 D13; test/cosmetics-structured.test.js checks no item is cut, and the hub's schema with PATV_HUB_DIR)
+const MAX = { name: 12, ring: 8, border: 8, banner: 8, w: 8 };
 
 // ── CSS from the fields ──
 const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
