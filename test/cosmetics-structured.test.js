@@ -30,9 +30,10 @@ test("every catalog item is in the golden, and every golden item still renders e
 
 test("the ring (19), border (21) and banner (18) items carry fields, never CSS strings", () => {
   const of = (k) => CAT.items.filter((it) => it.kind === k);
-  assert.equal(of("avatar_decoration").length, 19);
-  assert.equal(of("profile_border").length, 21);
-  assert.equal(of("profile_banner").length, 18);
+  // the plan's counts at Q5a (19 / 21 / 18); a later item joins as fields (staging's 🍏 Brushed Metal border made it 22)
+  assert.ok(of("avatar_decoration").length >= 19);
+  assert.ok(of("profile_border").length >= 21);
+  assert.ok(of("profile_banner").length >= 18);
   for (const it of of("avatar_decoration")) {
     assert.ok((it.style.ring && typeof it.style.ring === "object") || Array.isArray(it.style.conic), it.id);
     assert.notEqual(typeof it.style.ring, "string", it.id);
@@ -83,6 +84,8 @@ test("the CSS writer: rgba from {hex, a}, v1's '.35' alphas, spread vs blur shad
   assert.equal(CS.color("#111"), "#111");
   assert.throws(() => CS.color("url(x)"));
   assert.throws(() => CS.color({ hex: "#zzzzzz", a: 0.5 }));
+  assert.equal(CS.shadow({ inset: true, y: 2, blur: 8, color: { hex: "#ffffff", a: 0.16 } }), "inset 0 2px 8px rgba(255, 255, 255, .16)");
+  assert.equal(CS.shadow({ spread: 1, color: "#48484a" }), "0 0 0 1px #48484a");
   assert.equal(CS.ringCss({ border: "#66bb6a", shadows: [{ spread: 6, color: { hex: "#66bb6a", a: 0.35 } }] }),
                "border-color: #66bb6a; box-shadow: 0 0 0 6px rgba(102, 187, 106, .35);");
   assert.equal(CS.borderCss({ w: 4, line: "solid", color: "#1c1c1c", outline: { w: 2, line: "dotted", color: "#c0c4cc", offset: -8 },

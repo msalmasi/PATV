@@ -18,7 +18,7 @@
 //   name_color, profile_effect, gtf_*: unchanged ({color} | {gradient, animate}; {effect}; {layer})
 //
 //   Color    "#rgb" | "#rrggbb" | "transparent" | {hex: "#rrggbb", a: 0..1}    ({hex, a} is written rgba(r, g, b, .a))
-//   Shadow   {inset?: true, blur?: px, spread?: px, color: Color}           -> "[inset ]0 0 <blur>[ <spread>] <color>"
+//   Shadow   {inset?: true, y?: px, blur?: px, spread?: px, color: Color}   -> "[inset ]0 <y> <blur>[ <spread>] <color>"
 //   Gradient {fn: linear | repeating-linear | radial | repeating-radial, angle (linear, deg) | shape + at: [x%, y%] (radial),
 //             stops: [Color | [Color, "<positions>"]]}
 //
@@ -73,7 +73,7 @@ function color(c) {
 }
 const px = (n) => (Number(n) ? `${num(n)}px` : "0");
 function shadow(s) {
-  return `${s.inset ? "inset " : ""}0 0 ${px(s.blur || 0)}${s.spread != null ? " " + px(s.spread) : ""} ${color(s.color)}`;
+  return `${s.inset ? "inset " : ""}0 ${px(s.y || 0)} ${px(s.blur || 0)}${s.spread != null ? " " + px(s.spread) : ""} ${color(s.color)}`;
 }
 const stop = (s) => (Array.isArray(s) ? `${color(s[0])} ${s[1]}` : color(s));
 function gradient(g) {

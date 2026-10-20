@@ -2,7 +2,8 @@
 // tools/gen-cosmetics-golden.js — S1 Q5a (1.99adp): regenerates test/fixtures/cosmetics-css-golden.json, the golden of the
 // structured cosmetics (ADR 0007 D13: "golden-tested to render today's CSS").
 //
-//   node tools/gen-cosmetics-golden.js [--css-ref <git ref>]      (default ref 5d153c18: the last catalog with hand-written CSS)
+//   node tools/gen-cosmetics-golden.js [--css-ref <git ref>]      (default ref 5662bc88: the last catalog with hand-written CSS -
+//                                                                 staging 1.99adn, with the 🍏 Brushed Metal border; main's was 5d153c18)
 //
 // For every catalog item it records
 //   render  what cosmetics.js render() drew at <css-ref> (that commit's cosmetics.js + cosmetics.json, run in a bare VM
@@ -21,7 +22,7 @@ const vm = require("vm");
 const repo = path.resolve(__dirname, "..");
 const OUT = path.join(repo, "test", "fixtures", "cosmetics-css-golden.json");
 const i = process.argv.indexOf("--css-ref");
-const ref = i > 0 ? process.argv[i + 1] : "5d153c18";
+const ref = i > 0 ? process.argv[i + 1] : "5662bc88";
 const show = (file) => execFileSync("git", ["-C", repo, "show", `${ref}:${file}`], { encoding: "utf8", maxBuffer: 64 << 20 }).replace(/\r\n/g, "\n");
 
 const src = show("cosmetics.js");

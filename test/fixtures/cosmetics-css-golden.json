@@ -2,7 +2,7 @@
  "$comment": "S1 Q5a: every cosmetics.json item's render() at css_ref (the hand-written CSS) and its structured look today (cosmeticstyle.lookOf). Regenerate with tools/gen-cosmetics-golden.js; do not edit.",
  "source": {
   "repo": "v1 site",
-  "css_ref": "5d153c18",
+  "css_ref": "5662bc88",
   "render": "cosmetics.js render()",
   "look": "cosmeticstyle.js lookOf()"
  },
@@ -4098,6 +4098,27 @@
       "spin": false
      },
      "emoji": "🔍"
+    }
+   }
+  },
+  {
+   "id": "pb_brushedmetal",
+   "kind": "profile_border",
+   "render": {
+    "id": "pb_brushedmetal",
+    "kind": "profile_border",
+    "name": "Brushed Metal",
+    "rarity": "uncommon",
+    "css": "border: 3px solid #c7c7cc; box-shadow: 0 0 0 1px #48484a, inset 0 0 0 1px rgba(255, 255, 255, .5), inset 0 2px 8px rgba(255, 255, 255, .16), 0 0 20px rgba(199, 199, 204, .3);",
+    "cls": ""
+   },
+   "look": {
+    "border": {
+     "colors": [
+      "#c7c7cc"
+     ],
+     "w": 3,
+     "anim": "none"
     }
    }
   },
