@@ -602,7 +602,7 @@ const SOURCES = {
       const b = bound("acct:", k);
       if (b == null) return [];
       const ad = require("./accountdelete");
-      const rows = await getQuery(`SELECT id, user_id, pseudonym, done_at FROM account_deletions d
+      const rows = await getQuery(`SELECT id, user_id, pseudonym, done_at, remove_public FROM account_deletions d
                                    WHERE user_id > ? AND state = 'done'
                                      AND id = (SELECT MAX(id) FROM account_deletions x WHERE x.user_id = d.user_id AND x.state = 'done')
                                    ORDER BY user_id LIMIT ?`, [b, limit]);

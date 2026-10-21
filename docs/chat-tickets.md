@@ -152,7 +152,7 @@ forgetting them. That cache is in memory - a fast path: 1.99acm, the inbound rou
 | `privacy/changed` | `incognito.sync()` (Pepe's report), linked and unlinked logins; 1.99acm: also every key Pepe's full list (`full`) turns ON or OFF, in one transaction with that heal | same | `{flag:"incognito", value, phase:"confirmed", via, subject, at}` |
 | `privacy/changed` | 1.99acm: trigger on `profile_layout` (any write) | `pa:<userId>` | read at post time: `{flag:"private_activity", value, subject:{acct, v1_user}, at}` - the Analytics section or its Rooms panel hidden (`stories.privateLogins`' rule; an unreadable layout counts as private) |
 | `privacy/changed` | 1.99acm: trigger on `hub_hidden_h` (`hubhidden.js`: Pepe's `hidden_h` from each bridge sync, only the difference written; 1.99add: sticky - a row goes only on an explicit un-hide, never because a list lacks it; incognito ON reports and website ON requests add at once; refix 4: also a change of its `scope`) | `hh:<h>` | read at post time: `{flag:"hidden_h", h, value, at}` + `scope: "incognito"` when only incognito hides it (shown as "someone"; absent = left out) (20-hex hashes only, never a login) |
-| `privacy/account-deleted` | 1.99acm: `accountdelete.execute()`, in the deletion's transaction | `acct:<userId>` | `{acct, v1_user, pseudonym, remove_public:false, request:<account_deletions.id>, at}` |
+| `privacy/account-deleted` | 1.99acm: `accountdelete.execute()`, in the deletion's transaction | `acct:<userId>` | `{acct, v1_user, pseudonym, remove_public, request:<account_deletions.id>, at}` (S1 V4: `remove_public` = the row's choice) |
 | `privacy/forget` | 1.99acm: `pepeforget.request()` / `fromBot()` (linked accounts only), in the request's transaction | `forget:<pepe_forget_log.id>` | `{subject_kind:"acct", acct, v1_user, scope:"bot", ref, at}` |
 | `econ/committed` | `idemBegin` `done()` for a key starting `ix:` | the key | `{key, tx, outcome:{status, ok, code}, endpoint, at}` (refusals with a stored status included). The hub has no intake for it before R-4 (404; the topic backs off on its own). |
 
@@ -174,7 +174,8 @@ heartbeat's `at`.
 An account deletion names the account only - 1.99acm: never the released chat login nor a hash of it (an unkeyed hash of a
 short public username is reversible by dictionary, and the hub's deletion journal is write-once under Object Lock; the
 hub's erasure works on the account's lines, and an identity-scoped erasure is S2's, with its own design).
-`remove_public` stays `false` until the "also remove my public messages" choice exists (S1). "Make Pepe forget me" is scope `bot` (DMs with Pepe and his memory, never public lines); a login with no linked
+`remove_public` is the member's "Also remove my public messages" (S1 V4, below; `false` without it, and on every deletion
+before it). "Make Pepe forget me" is scope `bot` (DMs with Pepe and his memory, never public lines); a login with no linked
 account sends nothing (identity-scoped requests are S2's `privacy/idn-request`).
 
 ### Heartbeat
@@ -360,6 +361,71 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
 - **i18n:** new keys only - `textstyle.*` (the palette's and the fonts' `label_key`s from the registry, the card's copy),
   `sethub.e/d.textstyle`, `sethub.st.ts*`, `js.textstyle.*`; the sync translates them after the staging push.
 
+## S1: the privacy UI - "Also remove my public messages" (release L4)
+
+S1 plan §2.5 V4 (ADR 0007 D16; OQ-20, answered 2026-10-19: the choice also hard-deletes the account's web lines in the pad
+chat archive, with the same exceptions, under one checkbox wording; CHAT-ARCHITECTURE rev 5.1 §9.4, seam plan D-23). Release
+L4 with V2; the letter is the staging merge's (ADR 0007 D19).
+
+- **Behind the `erasure` switch** (`accountdelete.removeOffered()` = `huboutbox.on("erasure")`; off by default, so nothing a
+  member sees changes before Q7 turns it on): while it is off the delete page has no box and no PATV chat copy, the privacy
+  page has no paragraph, and `POST /api/account/delete {remove_public: true}` is refused 409 `E_REMOVE_OFF` (nothing
+  scheduled). A request scheduled while it was on keeps its choice if the switch goes off before the deletion runs (the
+  switch gates the offer, not what a member already asked for).
+- **One checkbox, one wording, both stores:** "Also remove my public messages" on `/settings/account/delete`, unticked, under
+  CL6's "Also hide my past public chat lines" (independent of it; both can be ticked). Its hint names both stores (PATV chat
+  and pads' chat history), the exceptions, the once-a-day rule and what can't be reached (copies already sent to Camfrog or
+  downloaded). "What deleting does" gains one item for PATV chat (`acctdel.what.hub`). Admin-scheduled deletions
+  (`POST /api/admin/users/:id/delete`) never carry it: it is the member's own choice.
+- **At most once a day** (CA §9.4): a request carrying the choice is refused 429 `E_REMOVE_DAILY` (`retry_at`, ms) while
+  another request of the account carried it in the last 24 hours (`account_deletions.requested_at`) - one a sign-in
+  cancelled counts too. The page shows the box disabled with the time it opens again; the deletion itself can still be
+  asked for without it.
+- **Stored with the request:** `account_deletions.remove_public` (1 / NULL) and `public_done_at` (columns added by
+  `init()`). Signing in during the grace cancels the request and its choice together.
+- **The hub's part:** the `privacy/account-deleted` row (and its snapshot row: `huboutbox`'s reader selects the column)
+  carries `remove_public: true`; the hub then forgets the text of the account's public lines (`_erase_account`), a line
+  under a report kept as a former member's until its hold ends (D10) and forgotten then (`erasure_deferred`). The payload's
+  shape is unchanged (the field has existed since S0, seam plan D-23), so `huboutbox.VERSION` stays `1.99ads` and the shared
+  golden rows are unchanged.
+- **The pad chat archive's part** (`chatlogmod.removeAccountLines`, run by `execute()` **after** the deletion's commit, so a
+  deletion that rolls back - or that a sign-in then cancels - purges nothing): the account's own web lines (`u:<id>`, and
+  the lines it said while incognito, archived as `h:<hash of u:<id>>`) are purged at once by `purgeRows` as their author
+  (`rm_by` `self`): text, name and key (only the one-way hash stays), the search index, `bridge_feed`, quotes, mention
+  notices and alerts. **The same exceptions as the hub** - a line a legal hold covers (its room, or its speaker: the account
+  key) or an open report keeps (v1 has no bounty evidence on chat lines) - is taken down at once instead (`rm_by` `self`, like
+  Remove my line: out of every view, its copies with it) and CL6's nightly pass blanks it once neither keeps it. Pepe's
+  `!log` / `!search` skip every line of theirs up to then (`removed_who`, as "Delete every line"). Lines under the account's
+  former Camfrog login are the login's, not the account's: hiding those is "Also hide my past public chat lines".
+  `public_done_at` and the counts (`report.public_removed = {lines, held}`, no words or names) record it; a done row with
+  the choice and no `public_done_at` (a restart between the commit and the purge, an error) is run again by the tick
+  (`retryRemovePublic`). Logs carry counts only.
+- **Where v1's exceptions differ from the hub's bounds** (for the owner's review): the archive keeps a reported line's
+  text until the report is decided (CL6's rule for every takedown; no 90-day bound) and blanks it at the first nightly
+  pass after that, at the earliest 30 days after the removal (CL6's appeal window); the hub holds it until 30 days after
+  the decision, or 90 days undecided (D10). A held line is out of view in the archive at once; on the hub it stays a former
+  member's line until its hold ends.
+- **The privacy page** (`views/privacy.ejs`, `terms.js` passes `accountdelete.privacyCopy()`): one paragraph,
+  "Your chat lines when you delete your account" (`#delete-chat`, section 10, in the contents), covering PATV chat and the
+  pad chat archive together, only while `erasure` is on; with the `export` switch also on, one sentence says "Download my
+  data" includes what PATV chat keeps. Dated by the switch's own row (`hubseam_settings.updated`): a dated note in
+  "Changes", and "Last updated" when it is the newest change.
+- **Tests:** `test/account-delete-remove-public.test.js` (the offer and its refusal while off, the stored choice, once a day
+  with a cancelled request counting, the flag in the feed and snapshot rows, the cross-store rule - purged lines, held and
+  reported ones kept and taken down, other people's and Camfrog-login lines untouched, `removed_who`, the nightly pass once
+  the hold and the report end, a person hold (`who:`), no purge on a rolled-back deletion, the tick's retry - the routes
+  (GET's box, POST's strict `true`, 409 / 429), the delete page and the privacy page with the switches off and on);
+  `test/chatlog-attach.test.js` (an archive in the attached `chatlog.db`: `removeAccountLines` finds `chat_log` there);
+  `test/hubseam-driver-v4.test.js` (the driver's commands). The hub
+  half of the cross-store test is the contract suite's scenario **5c** (the hub repo,
+  `services/rooms/test/seam-contract.integration.test.ts`): one deletion with the choice, through the real seam, checked in
+  both stores.
+- **Driver:** `deleteAccount {user, remove_public?}`, `chatLines {user, lines, hold_rooms?}`, `chatLog {cs}`.
+- **i18n:** new keys only - `acctdel.what.hub`, `acctdel.remove_public`, `acctdel.remove_public_meta`,
+  `acctdel.remove_public_wait`; the sync translates them after the staging push. The privacy page is English, like the rest
+  of it.
+- **Turn-on (Q7):** nothing of its own - it appears with `erasure` (and its export sentence with `export`).
+
 ## Fixtures and the contract suite
 
 - `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo
@@ -381,7 +447,8 @@ and `looks` (the S1 topics above; `looks` also gates the hub's looks call) - all
 `privacy` → (S1) `erasure`, `export`. `/admin/keys#seam` also shows the seam environment and any outbound refusal, the
 per-topic queues, the hub's last snapshot and rewind calls and refusals, and exports waiting for the hub.
 
-When the privacy switches go on in S1, the privacy page names the chat hub in deletion and export.
+When the privacy switches go on in S1, the privacy page names the chat hub in deletion and export (S1 V4, above: the
+paragraph appears with `erasure`, its export sentence with `export`).
 
 ## Bridge spans (`bridgespans.js`)
 

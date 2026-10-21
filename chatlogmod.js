@@ -44,7 +44,8 @@
 //
 // Contracts for the later slices: actsFor(view, viewer) (what the line menu offers), removedFor(roomId) (the owner sync's list),
 // isHeld(rk, who) / heldRooms() / heldWho() (CL7's purge skips them), rmNames(items) -> Map(rm_by -> username) for
-// chatlogview.dress({rmNames}) (CL8's muted rows say who hid a line).
+// chatlogview.dress({rmNames}) (CL8's muted rows say who hid a line). S1 V4: removeAccountLines(userId) - account deletion's
+// "Also remove my public messages" in this archive (the account's web lines purged, the held ones taken down until they end).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");
@@ -380,7 +381,64 @@ async function purgeRows(rows, by, why, t = now()) {
   for (const [roomId, cs] of out.rooms) await liveDrop(roomId, cs, false);
   return out;
 }
-const CLIP_AFTER_MS = 24 * 3600e3;          // a 🔊 clip of a 🎙 line is posted within this long after it (Pepe keeps mic-ups 15 min)
+
+/**
+ * S1 V4 (ADR 0007 OQ-20; CHAT-ARCHITECTURE §9.4): account deletion's "Also remove my public messages" (accountdelete.js, after
+ * the deletion committed). The account's own web lines - its key "u:<id>", and the lines it said while incognito, archived as
+ * "h:<hash of that key>" - are purged now (purgeRows, as the author: text, name and every copy, at once), with the hub's
+ * exceptions: a line a legal hold covers (isHeld: its room or its speaker) or an open report keeps (the evidence, until the admins
+ * decide; v1 has no bounty evidence on chat lines) is taken down now instead (rm_by "self", as Remove my line: out of every view,
+ * its copies with it) and the nightly pass blanks it once neither keeps it (and its 30 days are up). Pepe's !log / !search skip
+ * every line of theirs up to now (removed_who, as "Delete every line"). A Camfrog line under their former login is the login's,
+ * not the account's: hiding those is "Also hide my past public chat lines". Logs counts only. -> {purged, held, reported}
+ */
+async function removeAccountLines(userId, { t = now() } = {}) {
+  await init();
+  const out = { purged: 0, held: 0, reported: 0 };
+  // (pragma_table_info searches every schema: chat_log may live in the ATTACHed chatlog.db - decision 25 - which sqlite_master
+  //  of main doesn't list)
+  const there = async (t) => (await getQuery("SELECT 1 FROM pragma_table_info(?) LIMIT 1", [t]).catch(() => [])).length > 0;
+  if (!(await there("chat_log")) || !(await there("chatlog_rooms"))) return out;
+  const key = "u:" + lower(userId);
+  const keys = [key, "h:" + CL.hash(key)];
+  const reports = await there("chatlog_reports");
+  const have = await copyTables();
+  let last = 0;
+  for (;;) {
+    const rows = await getQuery(`SELECT l.*, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE l.who IN (?, ?) AND l.purged IS NULL AND l.c > ?
+                                 ORDER BY l.c LIMIT ?`, [...keys, last, BATCH]);
+    if (!rows.length) break;
+    last = Number(rows[rows.length - 1].c);
+    const cs = rows.map((r) => Number(r.c));
+    const open = reports ? new Set((await getQuery(`SELECT DISTINCT c FROM chatlog_reports WHERE state = 'open' AND c IN (${cs.map(() => "?").join(",")})`, cs))
+      .map((r) => Number(r.c))) : new Set();
+    const go = [], keep = [];
+    for (const r of rows) {
+      if (isHeld(r.rk, r.who)) { out.held++; keep.push(r); }
+      else if (open.has(Number(r.c))) { out.reported++; keep.push(r); }
+      else go.push(r);
+    }
+    if (keep.length) {
+      const down = new Map();                                  // roomId -> [c] taken down now
+      await tx(async () => {
+        for (const r of keep) {
+          if (r.rm_at != null) continue;                       // already down (a mod, a "minor" report, Remove my line)
+          if (await setRm(r, "self", null, t, have)) { if (!down.has(r.room_id)) down.set(r.room_id, []); down.get(r.room_id).push(Number(r.c)); }
+        }
+      });
+      for (const [roomId, list] of down) await liveDrop(roomId, list, false);
+    }
+    out.purged += (await purgeRows(go, "self", null, t)).purged;
+    if (rows.length < BATCH) break;
+    await yieldNow();
+  }
+  if (out.purged || out.held || out.reported) {
+    await noteRmWho([key], t);
+    console.log(`[chatlogmod] account deletion: ${out.purged} web line(s) removed, ${out.held} under a legal hold and ${out.reported} with an open report taken down until they end`);
+  }
+  return out;
+}
+const CLIP_AFTER_MS = 24 * 3600e3;         // a 🔊 clip of a 🎙 line is posted within this long after it (Pepe keeps mic-ups 15 min)
 const CLIP_MATCH = 30;                      // the transcript's first characters a clip post's caption must hold
 /**
  * Inside the purge's transaction (CL6 fix-up): 🔊 mic clip posts (micclip.js) made of a purged 🎙 line - their caption IS its
@@ -1183,7 +1241,7 @@ function register(app, { addUser }) {
 }
 
 module.exports = {
-  init, register, start, actsFor, report, removeMine, hide, unhide, purge, purgeRows, removedFor, removedRead, removedWho, rmNames, reportQueue, reportRead, reportDecide,
+  init, register, start, actsFor, report, removeMine, hide, unhide, purge, purgeRows, removeAccountLines, removedFor, removedRead, removedWho, rmNames, reportQueue, reportRead, reportDecide,
   resolveKeys, whoAction, roomHold, ownerGrant, adminView, nightly, isHeld, heldRooms, heldWho, loadHolds, Refuse, reachable,
   KEEP_RM_MS, UNHIDE_MS, VIEWS_KEEP_MS, REPORTS_PER_HOUR, ACT_PER_MIN, READ_ALL, REASONS, ADMIN_ONLY, URGENT, LABELS, REMOVED_MAX, BATCH, EXPORT_MAX,
   NOTE_MAX, WHY_MAX, QUEUE_ACTIONS, WHO_ACTIONS, DUE_SQL, STAFF_ACTOR,
