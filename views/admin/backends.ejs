@@ -3,8 +3,10 @@
 <%# views/admin/backends.ejs - owner answers 2026-10-20 (2), backends.js: the hand-overs Pepe's panel used to flip, switched here
     (a Pepe owner's on the rows that hold members' PAT; audited), and the runbook cutovers as status only. The review of the owner
     answers: whether Pepe READS these switches (his last poll, the hand-overs he follows) is shown, and a hand-over he doesn't
-    follow names the chat command an owner runs instead - the page never says he will act on a switch he doesn't read. The page
-    script (public/js/admin-backends.js) posts one switch at a time; every value from the database is escaped by EJS. %>
+    follow names the chat command an owner runs instead - the page never says he will act on a switch he doesn't read. Owner
+    answer (6), 2026-10-21: the casino's per-room switch (rooms Pepe reported + the new-rooms default; a Pepe owner's) is here
+    too. The page script (public/js/admin-backends.js) posts one switch at a time; every value from the database (and every room
+    name Pepe reported) is escaped by EJS. %>
 <%
   const fmtFn = (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt);
   const when = (ms) => ms ? fmtFn(Number(ms), 'datetime') : '–';
@@ -12,6 +14,11 @@
   const wantText = (v) => v === true ? t('admbk.want.site') : v === false ? t('admbk.want.pepe') : t('admbk.want.none');
   const yn = (v) => v === true ? t('admbk.yes') : v === false ? t('admbk.no') : t('admbk.na');
   const R = V.reader || {};
+  // what Pepe reported for the current wish (the contract's results.state): done, a refusal he can't get past, or on its way
+  const said = (p) => p.state === 'done' || (p.ok && !p.state) ? '✅' : ['unacted', 'blocked', 'stuck'].includes(p.state) ? '⚠️' : '⏳';
+  const C = V.casino || { rooms: [], default: {} };
+  const plays = (v) => v === true ? t('admbk.casino.plays.site') : v === false ? t('admbk.casino.plays.pepe') : t('admbk.casino.plays.unknown');
+  const cwant = (v) => v === true ? t('admbk.casino.plays.site') : v === false ? t('admbk.casino.plays.pepe') : t('admbk.want.none');
 %>
 <div class="adm-head">
   <h1><%- t('admbk.title') %></h1>
@@ -35,7 +42,7 @@
         <td data-want="<%= r.want === null ? 'none' : r.want ? 'site' : 'pepe' %>"><%= wantText(r.want) %>
           <% if (r.waiting && r.follows && r.act) { %><br><span class="adm-help">⏳ <%- t('admbk.waiting') %></span><% } %>
           <% if (r.waiting && !(r.follows && r.act)) { %><br><span class="adm-help">⏳ <%- t('admbk.waiting_chat') %> <code><%= r.want ? r.chat_on : r.chat_off %></code></span><% } %>
-          <% if (r.pepe) { %><br><span class="adm-help"><%= r.pepe.ok ? '✅' : '❌' %> <%= t('admbk.pepe_said', { when: when(r.pepe.at), msg: r.pepe.msg || (r.pepe.ok ? t('admbk.yes') : t('admbk.no')) }) %></span><% } %></td>
+          <% if (r.pepe) { %><br><span class="adm-help"><%= said(r.pepe) %> <%= t('admbk.pepe_said', { when: when(r.pepe.at), msg: r.pepe.msg || (r.pepe.ok ? t('admbk.yes') : t('admbk.no')) }) %></span><% } %></td>
         <td><%= yn(r.site) %></td>
         <td><% if (r.at) { %><%= when(r.at) %><br><span class="adm-help"><%= r.by || '' %></span><% } else { %>–<% } %></td>
         <td><span class="adm-pill admin"><%- t(r.owner ? 'admbk.who.owners' : 'admbk.who.admins') %></span></td>
@@ -50,6 +57,37 @@
   </table></div>
   <p class="adm-help"><%- t('admbk.audit') %></p>
   <p class="adm-help"><%- t('admbk.casino') %></p>
+</section>
+
+<section class="adm-card" id="casino" aria-labelledby="bkCasT">
+  <h2 id="bkCasT"><%- t('admbk.casino.h') %></h2>
+  <p class="adm-help"><%- t('admbk.casino.help') %></p>
+  <p class="adm-help" id="bkCasReader"><% if (C.follows) { %>✅ <%- t('admbk.casino.follows') %><% } else { %>⚠️ <%- t('admbk.casino.not_following') %><% } %>
+    <% if (!C.reported) { %><br><%- t('admbk.casino.no_report') %><% } %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admbk.casino.col.room') %></th><th><%- t('admbk.casino.col.plays') %></th><th><%- t('admbk.col.switch') %></th>
+      <th><%- t('admbk.col.changed') %></th><th></th></tr></thead>
+    <tbody>
+      <% [Object.assign({ room: null, name: t('admbk.casino.default'), joined: true }, C.default)].concat(C.rooms).forEach((r) => { %><tr data-casino="<%= r.room === null ? '*default' : r.room %>">
+        <td><b><%= r.name %></b><% if (r.room !== null && r.name !== r.room) { %><br><span class="adm-help"><%= r.room %></span><% } %>
+          <% if (r.room !== null && r.joined === false) { %><br><span class="adm-help"><%- t('admbk.casino.not_joined') %></span><% } %></td>
+        <td><%= plays(r.live) %></td>
+        <td data-want="<%= r.want === null ? 'none' : r.want ? 'site' : 'pepe' %>"><%= cwant(r.want) %>
+          <% if (r.waiting) { %><br><span class="adm-help">⏳ <%- t('admbk.casino.waiting') %></span><% } %>
+          <% if (r.pepe) { %><br><span class="adm-help"><%= said(r.pepe) %> <%= t('admbk.pepe_said', { when: when(r.pepe.at), msg: r.pepe.msg || (r.pepe.ok ? t('admbk.yes') : t('admbk.no')) }) %></span><% } %></td>
+        <td><% if (r.at) { %><%= when(r.at) %><br><span class="adm-help"><%= r.by || '' %></span><% } else { %>–<% } %></td>
+        <td><% if (C.can && C.follows) { %>
+            <% if (r.want !== true) { %><button type="button" data-bkc="<%= r.room === null ? 'default' : 'room' %>" data-room="<%= r.room === null ? '' : r.room %>" data-on="1" data-name="<%= r.name %>"><%- t('admbk.casino.btn.on') %></button><% } %>
+            <% if (r.want !== false) { %><button type="button" class="adm-btn ghost" data-bkc="<%= r.room === null ? 'default' : 'room' %>" data-room="<%= r.room === null ? '' : r.room %>" data-on="0" data-name="<%= r.name %>"><%- t('admbk.casino.btn.off') %></button><% } %>
+          <% } else if (!C.can) { %><span class="adm-help"><%- t('admbk.owner_only') %></span><% } %>
+          <span class="adm-msg" role="status"></span></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+  <% if (C.can && C.follows && C.rooms.length) { %><p>
+    <button type="button" data-bkc="all" data-room="" data-on="1" data-name="*"><%- t('admbk.casino.all.on') %></button>
+    <button type="button" class="adm-btn ghost" data-bkc="all" data-room="" data-on="0" data-name="*"><%- t('admbk.casino.all.off') %></button>
+    <span class="adm-msg" role="status"></span></p><% } %>
 </section>
 
 <section class="adm-card" id="status" aria-labelledby="bkStatT">
@@ -67,7 +105,7 @@
     </tbody>
   </table></div>
 </section>
-<script src="/public/js/admin-backends.js?v=2" defer></script>
+<script src="/public/js/admin-backends.js?v=3" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

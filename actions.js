@@ -162,9 +162,10 @@ async function refMissing(user, cmd, words) {
 
 // ── PO-0b (D-6): economy actions carry the owner check, never the Admin class ──
 const isEconKind = (k) => /^econ\./.test(String(k || ""));
-// owner answers 2026-10-20 (1): every action that moves members' PAT is a Pepe owner's - + the pad-vault admin move (a fine /
-// a transfer out of a pad's vault, padfines.js). kind -> the capability of its owner check.
-const OWNER_KINDS = Object.freeze({ "roomvault.admin": "econ.padvault_move" });
+// owner answers 2026-10-20 (1): every action that moves members' PAT at an admin's discretion is a Pepe owner's. kind -> the
+// capability of its owner check. Owner answer (5), 2026-10-21: the pad-vault fines / transfers (roomvault.admin, padfines.js) are
+// MODERATION - they stay with site Admins (site_admin = the Admin class), like !fine / !padfine / !padmove in chat.
+const OWNER_KINDS = Object.freeze({});
 const isOwnerKind = (k) => isEconKind(k) || Object.prototype.hasOwnProperty.call(OWNER_KINDS, String(k || ""));
 // review of the owner answers 2026-10-20 (1): a website "cmd" whose ADMIN form moves PAT at the admin's discretion - a Federal
 // Reserve loan granted, approved or forgiven (!loan grant | approve | forgive, queued for Pepe while the capital cluster lives
@@ -352,7 +353,7 @@ function register(app, { isBotToken, addUser }) {
     res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
-      const econ = isOwnerKind(a.kind);   // owner answers 2026-10-20: + roomvault.admin (OWNER_KINDS)
+      const econ = isOwnerKind(a.kind);   // econ.* (+ OWNER_KINDS - none since owner answer (5): roomvault.admin is an Admin's again)
       const o = econ || cmdCap[a.id] ? owner[a.id] : null;
       if (cmdCap[a.id]) {
         // a Reserve loan's admin verb: site_admin is the owner check (a non-owner admin runs it as a member: Pepe refuses it)

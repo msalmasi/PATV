@@ -8,6 +8,8 @@ deploy/** text eol=lf
 
 # The seam fixtures shared byte-for-byte with the hub repo (their sha256 is pinned in both)
 test/fixtures/hubseam-*.json text eol=lf
+# The Admin › Backends contract fixture shared byte-for-byte with camfrog-bot (ci/fixtures/; sha256 pinned in both)
+test/fixtures/backends-contract.json text eol=lf
 
 # CL10: the chat-log download golden files ("PATV chat log v1": compared byte for byte - LF line ends, whatever the checkout)
 test/fixtures/chatlog/golden-* text eol=lf

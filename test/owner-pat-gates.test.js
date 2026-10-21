@@ -1,7 +1,7 @@
 // Owner answers 2026-10-20, (1) and (2): every switch / action that holds or moves members' PAT is a Pepe OWNER's (the Admin
 // class AND the owner role on the linked chat login, read fresh - staffroles.ownerOf), like the economy writes:
 //   * the auto-escrow switch (POST /api/admin/autoescrow/settings)
-//   * the pad-vault admin move (POST /api/admin/padvault/nonce + /move; the website action carries site_admin = is_owner)
+//   * (owner answer (5), 2026-10-21: the pad-vault fines / transfers are moderation - back with site Admins, the step-up kept)
 //   * donation promos (POST /api/admin/donpromo/create | settings | :id/edit | :id/end)
 //   * found: the lotto_backend switch from the web (POST /api/lotto/admin/settings), adding / changing a redemption code
 //     (POST /api/admin/redemption-codes), "pay anyway" for a welcome bonus (POST /api/admin/welcome/pay); approving a held
@@ -120,37 +120,29 @@ test("(1) the auto-escrow switch holds members' PAT: an Admin who isn't a Pepe o
   assert.equal((await fetch(base + "/api/admin/autoescrow", { headers: { "x-test-user": U.admin } })).status, 200);
 });
 
-test("(1) the pad-vault admin move: owner-only before a nonce is issued, the throttled step-up, and the action Pepe claims says is_owner", async () => {
-  const before = (await one("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'roomvault.admin'")).n;
-  for (const who of [U.admin, U.nolink]) {
-    const n = await call("/api/admin/padvault/nonce", who);
-    assert.equal(n.status, 403, `nonce as ${NAME[who]}: ${JSON.stringify(n.body)}`);
-    assert.match(n.body.error, OWNER_RE);
-    const m = await call("/api/admin/padvault/move", who, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: "x", password: "pw-right" });
-    assert.equal(m.status, 403);
-    assert.match(m.body.error, OWNER_RE);
-  }
-  assert.equal((await one("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'roomvault.admin'")).n, before, "nothing queued");
-  // the owner: a nonce, a wrong password (refused, nonce spent), then the real one
-  const nonce = async (who = U.owner) => (await call("/api/admin/padvault/nonce", who)).body.nonce;
+test("owner answer (5): the pad-vault fines / transfers are moderation - site Admins again (the throttled step-up kept); Pepe's action carries the Admin class", async () => {
+  // Staff / members: not even the class
+  assert.equal((await call("/api/admin/padvault/nonce", U.staff)).status, 403);
+  assert.equal((await call("/api/admin/padvault/nonce", U.mem)).status, 403);
+  // an Admin who isn't a Pepe owner: a nonce, a wrong password (refused, nonce spent), then the real one
+  const nonce = async (who = U.admin) => (await call("/api/admin/padvault/nonce", who)).body.nonce;
   const n1 = await nonce();
   assert.ok(n1);
-  const bad = await call("/api/admin/padvault/move", U.owner, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: n1, password: "nope" });
+  const bad = await call("/api/admin/padvault/move", U.admin, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: n1, password: "nope" });
   assert.equal(bad.status, 403);
   assert.match(bad.body.error, /Wrong password/);
-  assert.equal((await call("/api/admin/padvault/move", U.owner, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: n1, password: "pw-right" })).status, 409, "single use");
-  const ok = await call("/api/admin/padvault/move", U.owner, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: await nonce(), password: "pw-right" });
+  assert.equal((await call("/api/admin/padvault/move", U.admin, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: n1, password: "pw-right" })).status, 409, "single use");
+  const ok = await call("/api/admin/padvault/move", U.admin, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: await nonce(), password: "pw-right" });
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  // what Pepe claims: the owner's action says site_admin + is_owner; an Admin's (queued some other way) says neither
-  const A = require(path.join(repo, "actions"));
-  const idA = await A.queue(U.admin, { kind: "roomvault.admin", args: ["fine", PAD, "", "5", "k-admin-0001", "x"], tag: "padvault-admin", label: "admin" });
+  const own = await call("/api/admin/padvault/move", U.owner, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: await nonce(U.owner), password: "pw-right" });
+  assert.equal(own.status, 200, "an owner is an Admin too");
+  // what Pepe claims: site_admin = the Admin class (no owner check on a moderation fine)
   const got = await fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) }).then((r) => r.json());
   const by = Object.fromEntries(got.actions.map((x) => [x.id, x]));
   assert.equal(by[ok.body.id].kind, "roomvault.admin");
-  assert.equal(by[ok.body.id].site_admin, true);
-  assert.equal(by[ok.body.id].is_owner, true);
-  assert.equal(by[idA].site_admin, false, "the Admin class no longer stands in for the owner check");
-  assert.equal(by[idA].is_owner, false);
+  assert.equal(by[ok.body.id].site_admin, true, "the Admin class (owner answer 5)");
+  assert.equal(by[ok.body.id].is_owner, false);
+  assert.equal(by[own.body.id].site_admin, true);
   // the step-up is the shared, throttled one: 5 wrong passwords in 15 minutes, then 429 even for the right one (own2)
   for (let i = 0; i < 5; i++) {
     const w = await call("/api/admin/padvault/move", U.owner2, { op: "fine", from: PAD, amount: 5, reason: "probe fine", nonce: await nonce(U.owner2), password: "wrong" + i });
@@ -245,7 +237,7 @@ test("(2) /admin/backends: the lotto and stashes switches are a Pepe owner's; no
   assert.equal(await ST.enabled(), true, "the site takes the stashes' hand-over now (stash_meta.enabled)");
   assert.deepEqual([st.body.act, st.body.chat], [false, "!stash backend on"]);
   // Pepe's update reads them: he says which hand-overs he follows - from then on a switch is his to act on
-  assert.equal((await pepeRead({ follows: ["lotto", "stashes", "nope"], version: "1.99zz" })).ok, true);
+  assert.equal((await pepeRead({ contract: 1, follows: ["lotto", "stashes", "nope"], version: "1.99zz" })).ok, true);
   const lo = await call("/api/admin/backends/lotto", U.owner, { on: true });
   assert.equal(lo.status, 200, JSON.stringify(lo.body));
   assert.deepEqual([lo.body.want, lo.body.live, lo.body.pepe, lo.body.act, lo.body.chat], [true, false, true, true, null]);
@@ -307,7 +299,7 @@ test("(2) /admin/backends: GTF / polls / the drop table / the AI judge stay Admi
   assert.equal(cd0.status, 409, JSON.stringify(cd0.body));
   assert.equal(cd0.body.code, "pepe_not_following");
   assert.match(cd0.body.error, /!cosmetics backend off confirm/);
-  await pepeRead({ follows: ["lotto", "stashes", "cosdrops"], version: "1.99zz" });
+  await pepeRead({ contract: 1, follows: ["lotto", "stashes", "cosdrops"], version: "1.99zz" });
   const cd = await call("/api/admin/backends/cosdrops", U.admin, { on: false });
   assert.equal(cd.status, 200, JSON.stringify(cd.body));
   assert.deepEqual([cd.body.want, cd.body.live, cd.body.pepe, cd.body.act], [false, true, true, true]);
@@ -360,13 +352,15 @@ test("review of the owner answers: website forms never switch a hand-over; a Res
 
 test("(2) review of the owner answers: the page says whether Pepe reads the switches; his report is shown for the current wish only; a stale read = not following", async () => {
   const B = require(path.join(repo, "backends"));
-  await pepeRead({ follows: ["lotto", "stashes", "gtf"], version: "1.99zz", results: { lotto: { want: true, ok: false, msg: "within 10 minutes of the draw - waiting" },
-                                                                                       gtf: { want: false, ok: true, msg: "old wish" }, nope: { want: true, ok: true } } });
+  const W0 = await B.wants();
+  await pepeRead({ contract: 1, follows: ["lotto", "stashes", "gtf"], version: "1.99zz",
+                   results: { lotto: { want: true, at: W0.lotto.at, ok: false, state: "pending", msg: "within 10 minutes of the draw - waiting" },
+                              gtf: { want: false, at: W0.gtf.at, ok: true, state: "done", msg: "old wish" }, nope: { want: true, at: 1, ok: true } } });
   let v = await B.view((await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [U.owner]))[0]);
   assert.equal(v.reader.fresh, true);
   assert.deepEqual(v.reader.follows, ["lotto", "stashes", "gtf"]);
   const row = (k) => v.rows.find((r) => r.key === k);
-  assert.deepEqual(row("lotto").pepe && [row("lotto").pepe.ok, row("lotto").pepe.msg], [false, "within 10 minutes of the draw - waiting"]);
+  assert.deepEqual(row("lotto").pepe && [row("lotto").pepe.ok, row("lotto").pepe.state, row("lotto").pepe.msg], [false, "pending", "within 10 minutes of the draw - waiting"]);
   assert.equal(row("gtf").pepe, null, "a result for a wish that isn't the current one (gtf's is on the site now) is ignored");
   assert.deepEqual([row("lotto").follows, row("lotto").offer_off, row("polls").follows], [true, true, false]);
   // a new wish clears the old report

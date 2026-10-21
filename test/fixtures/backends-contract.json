@@ -1,0 +1,1058 @@
+{
+  "contract": 1,
+  "about": "The contract between Pepe (camfrog-bot pepe_backends.py) and publicaccess.tv (PATV backends.js) for POST /api/pepe/backends - docs/admin-backends.md 'The contract' in the PATV repo is the prose. This file is byte-identical in both repos (PATV test/fixtures/, camfrog-bot ci/fixtures/) and its sha256 is pinned in both tests (PATV test/backends-contract.test.js, camfrog-bot backends_contract_test.py): change it in one repo, copy it to the other, re-pin both. The bot test builds every 'this'-build request from its real state and feeds every response through the real follower; the site test feeds every request through the real route.",
+  "token": "<bot token>",
+  "pepe": {
+    "version": "1.99zz",
+    "rooms": {
+      "PepeLab": "Pepe Lab",
+      "DRAMA_CENTRAL": "DRAMA_CENTRAL"
+    },
+    "lotto_on": false,
+    "stash_handover_off": true,
+    "lotto_text": "DONE - the lotto runs on publicaccess.tv"
+  },
+  "site": {
+    "users": [
+      {
+        "username": "boss",
+        "class": "Admin",
+        "camfrog": "boss_cf",
+        "pepe_role": "owner"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "name": "old_pepe",
+      "about": "The bot before this contract (21e19a5) posted only the token: the site answers, but records no reader - the page never says that Pepe follows a switch he can't act on.",
+      "switches": [],
+      "clock": 1792000005000,
+      "pepe_build": "old",
+      "request": {
+        "password": "<bot token>"
+      },
+      "response": {
+        "ok": true,
+        "ts": 1792000005000,
+        "contract": 1,
+        "features": {
+          "lotto": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": null,
+            "by": null,
+            "at": null
+          },
+          "stashes": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "gtf": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "polls": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "cosdrops": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "aijudge": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          }
+        },
+        "casino": {
+          "default": {
+            "want": null,
+            "act": false,
+            "by": null,
+            "at": null
+          },
+          "rooms": {}
+        }
+      },
+      "pepe_runs": null,
+      "site_after": {
+        "reader": {
+          "at": null,
+          "version": null,
+          "follows": []
+        },
+        "results": {}
+      }
+    },
+    {
+      "name": "first_read",
+      "about": "This contract's first read: contract, version, what this build follows, no results yet, and the casino rooms. The stashes switch was made before Pepe followed it (act false): he never runs it and says so.",
+      "switches": [
+        {
+          "at": 1792000010000,
+          "by": "boss",
+          "feature": "stashes",
+          "on": true,
+          "expect": {
+            "status": 200,
+            "act": false,
+            "chat": "!stash backend on"
+          }
+        }
+      ],
+      "clock": 1792000060000,
+      "pepe_build": "this",
+      "request": {
+        "password": "<bot token>",
+        "contract": 1,
+        "version": "1.99zz",
+        "follows": [
+          "lotto",
+          "stashes",
+          "gtf",
+          "polls",
+          "cosdrops",
+          "aijudge",
+          "casino"
+        ],
+        "results": {},
+        "casino": {
+          "default": false,
+          "rooms": [
+            {
+              "room": "DRAMA_CENTRAL",
+              "name": "DRAMA_CENTRAL",
+              "joined": true,
+              "on": false
+            },
+            {
+              "room": "PepeLab",
+              "name": "Pepe Lab",
+              "joined": true,
+              "on": false
+            }
+          ]
+        }
+      },
+      "response": {
+        "ok": true,
+        "ts": 1792000060000,
+        "contract": 1,
+        "features": {
+          "lotto": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": null,
+            "by": null,
+            "at": null
+          },
+          "stashes": {
+            "want": true,
+            "act": false,
+            "live": false,
+            "site": true,
+            "by": "boss",
+            "at": 1792000010000
+          },
+          "gtf": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "polls": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "cosdrops": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "aijudge": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          }
+        },
+        "casino": {
+          "default": {
+            "want": null,
+            "act": false,
+            "by": null,
+            "at": null
+          },
+          "rooms": {}
+        }
+      },
+      "pepe_runs": [],
+      "site_after": {
+        "reader": {
+          "at": 1792000060000,
+          "version": "1.99zz",
+          "follows": [
+            "lotto",
+            "stashes",
+            "gtf",
+            "polls",
+            "cosdrops",
+            "aijudge",
+            "casino"
+          ]
+        },
+        "results": {}
+      }
+    },
+    {
+      "name": "second_read",
+      "about": "Switched while Pepe follows (act true): the lotto (an owner's), the casino in one room and the new-rooms default. He reports the act-false stashes wish; he runs the lotto hand-over (one per pass) and both casino switches (not hand-overs - nothing moves).",
+      "switches": [
+        {
+          "at": 1792000070000,
+          "by": "boss",
+          "feature": "lotto",
+          "on": true,
+          "expect": {
+            "status": 200,
+            "act": true,
+            "chat": null
+          }
+        },
+        {
+          "at": 1792000071000,
+          "by": "boss",
+          "feature": "casino",
+          "scope": "room",
+          "room": "PepeLab",
+          "on": true,
+          "expect": {
+            "status": 200,
+            "act": true
+          }
+        },
+        {
+          "at": 1792000072000,
+          "by": "boss",
+          "feature": "casino",
+          "scope": "default",
+          "on": true,
+          "expect": {
+            "status": 200,
+            "act": true
+          }
+        }
+      ],
+      "clock": 1792000120000,
+      "pepe_build": "this",
+      "request": {
+        "password": "<bot token>",
+        "contract": 1,
+        "version": "1.99zz",
+        "follows": [
+          "lotto",
+          "stashes",
+          "gtf",
+          "polls",
+          "cosdrops",
+          "aijudge",
+          "casino"
+        ],
+        "results": {
+          "stashes": {
+            "want": true,
+            "at": 1792000010000,
+            "ok": false,
+            "state": "unacted",
+            "msg": "switched before Pepe followed it - switch it again"
+          }
+        },
+        "casino": {
+          "default": false,
+          "rooms": [
+            {
+              "room": "DRAMA_CENTRAL",
+              "name": "DRAMA_CENTRAL",
+              "joined": true,
+              "on": false
+            },
+            {
+              "room": "PepeLab",
+              "name": "Pepe Lab",
+              "joined": true,
+              "on": false
+            }
+          ]
+        }
+      },
+      "response": {
+        "ok": true,
+        "ts": 1792000120000,
+        "contract": 1,
+        "features": {
+          "lotto": {
+            "want": true,
+            "act": true,
+            "live": false,
+            "site": null,
+            "by": "boss",
+            "at": 1792000070000
+          },
+          "stashes": {
+            "want": true,
+            "act": false,
+            "live": false,
+            "site": true,
+            "by": "boss",
+            "at": 1792000010000
+          },
+          "gtf": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "polls": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "cosdrops": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "aijudge": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          }
+        },
+        "casino": {
+          "default": {
+            "want": true,
+            "act": true,
+            "by": "boss",
+            "at": 1792000072000
+          },
+          "rooms": {
+            "PepeLab": {
+              "want": true,
+              "act": true,
+              "by": "boss",
+              "at": 1792000071000
+            }
+          }
+        }
+      },
+      "pepe_runs": [
+        [
+          "lotto",
+          true,
+          "site:boss"
+        ],
+        [
+          "casino",
+          "PepeLab",
+          true
+        ],
+        [
+          "casino",
+          null,
+          true
+        ]
+      ],
+      "site_after": {
+        "reader": {
+          "at": 1792000120000,
+          "version": "1.99zz",
+          "follows": [
+            "lotto",
+            "stashes",
+            "gtf",
+            "polls",
+            "cosdrops",
+            "aijudge",
+            "casino"
+          ]
+        },
+        "results": {
+          "stashes": {
+            "want": true,
+            "at": 1792000010000,
+            "ok": false,
+            "state": "unacted",
+            "msg": "switched before Pepe followed it - switch it again"
+          }
+        }
+      }
+    },
+    {
+      "name": "third_read",
+      "about": "He reports what he did for each CURRENT wish (want + at), and the rooms as they play now. Nothing left to run.",
+      "switches": [],
+      "clock": 1792000180000,
+      "pepe_build": "this",
+      "request": {
+        "password": "<bot token>",
+        "contract": 1,
+        "version": "1.99zz",
+        "follows": [
+          "lotto",
+          "stashes",
+          "gtf",
+          "polls",
+          "cosdrops",
+          "aijudge",
+          "casino"
+        ],
+        "results": {
+          "stashes": {
+            "want": true,
+            "at": 1792000010000,
+            "ok": false,
+            "state": "unacted",
+            "msg": "switched before Pepe followed it - switch it again"
+          },
+          "lotto": {
+            "want": true,
+            "at": 1792000070000,
+            "ok": true,
+            "state": "done",
+            "msg": "DONE - the lotto runs on publicaccess.tv"
+          },
+          "casino:PepeLab": {
+            "want": true,
+            "at": 1792000071000,
+            "ok": true,
+            "state": "done",
+            "msg": "on the publicaccess.tv casino backend"
+          },
+          "casino": {
+            "want": true,
+            "at": 1792000072000,
+            "ok": true,
+            "state": "done",
+            "msg": "rooms Pepe joins from now on play on the publicaccess.tv casino backend"
+          }
+        },
+        "casino": {
+          "default": true,
+          "rooms": [
+            {
+              "room": "DRAMA_CENTRAL",
+              "name": "DRAMA_CENTRAL",
+              "joined": true,
+              "on": false
+            },
+            {
+              "room": "PepeLab",
+              "name": "Pepe Lab",
+              "joined": true,
+              "on": true
+            }
+          ]
+        }
+      },
+      "response": {
+        "ok": true,
+        "ts": 1792000180000,
+        "contract": 1,
+        "features": {
+          "lotto": {
+            "want": true,
+            "act": true,
+            "live": false,
+            "site": null,
+            "by": "boss",
+            "at": 1792000070000
+          },
+          "stashes": {
+            "want": true,
+            "act": false,
+            "live": false,
+            "site": true,
+            "by": "boss",
+            "at": 1792000010000
+          },
+          "gtf": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "polls": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "cosdrops": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          },
+          "aijudge": {
+            "want": null,
+            "act": false,
+            "live": false,
+            "site": false,
+            "by": null,
+            "at": null
+          }
+        },
+        "casino": {
+          "default": {
+            "want": true,
+            "act": true,
+            "by": "boss",
+            "at": 1792000072000
+          },
+          "rooms": {
+            "PepeLab": {
+              "want": true,
+              "act": true,
+              "by": "boss",
+              "at": 1792000071000
+            }
+          }
+        }
+      },
+      "pepe_runs": [],
+      "site_after": {
+        "reader": {
+          "at": 1792000180000,
+          "version": "1.99zz",
+          "follows": [
+            "lotto",
+            "stashes",
+            "gtf",
+            "polls",
+            "cosdrops",
+            "aijudge",
+            "casino"
+          ]
+        },
+        "results": {
+          "stashes": {
+            "want": true,
+            "at": 1792000010000,
+            "ok": false,
+            "state": "unacted",
+            "msg": "switched before Pepe followed it - switch it again"
+          },
+          "lotto": {
+            "want": true,
+            "at": 1792000070000,
+            "ok": true,
+            "state": "done",
+            "msg": "DONE - the lotto runs on publicaccess.tv"
+          },
+          "casino:PepeLab": {
+            "want": true,
+            "at": 1792000071000,
+            "ok": true,
+            "state": "done",
+            "msg": "on the publicaccess.tv casino backend"
+          },
+          "casino": {
+            "want": true,
+            "at": 1792000072000,
+            "ok": true,
+            "state": "done",
+            "msg": "rooms Pepe joins from now on play on the publicaccess.tv casino backend"
+          }
+        }
+      }
+    }
+  ],
+  "probes": {
+    "requests": [
+      {
+        "name": "unknown_keys",
+        "about": "A key the site doesn't know is dropped (follows and results); a result for an older wish (another `at`) is ignored.",
+        "clock": 1792000240000,
+        "request": {
+          "password": "<bot token>",
+          "contract": 1,
+          "version": "1.99zz",
+          "follows": [
+            "lotto",
+            "warp",
+            "casino"
+          ],
+          "results": {
+            "warp": {
+              "want": true,
+              "at": 1792000000000,
+              "ok": true,
+              "state": "done",
+              "msg": "x"
+            },
+            "lotto": {
+              "want": true,
+              "at": 1792000000001,
+              "ok": false,
+              "state": "trying",
+              "msg": "an older wish"
+            }
+          },
+          "casino": {
+            "default": true,
+            "rooms": [
+              {
+                "room": "DRAMA_CENTRAL",
+                "name": "DRAMA_CENTRAL",
+                "joined": true,
+                "on": false
+              },
+              {
+                "room": "PepeLab",
+                "name": "Pepe Lab",
+                "joined": true,
+                "on": true
+              }
+            ]
+          }
+        },
+        "site_after": {
+          "reader": {
+            "at": 1792000240000,
+            "version": "1.99zz",
+            "follows": [
+              "lotto",
+              "casino"
+            ]
+          },
+          "results": {
+            "lotto": {
+              "want": true,
+              "at": 1792000070000,
+              "ok": true,
+              "state": "done",
+              "msg": "DONE - the lotto runs on publicaccess.tv"
+            }
+          }
+        }
+      },
+      {
+        "name": "stale_contract",
+        "about": "A read in another contract number is not recorded (no reader, no results): the page goes on saying when he last read in this one.",
+        "clock": 1792000300000,
+        "request": {
+          "password": "<bot token>",
+          "contract": 2,
+          "version": "2.50",
+          "follows": [
+            "lotto",
+            "stashes",
+            "gtf",
+            "polls",
+            "cosdrops",
+            "aijudge",
+            "casino"
+          ],
+          "results": {
+            "lotto": {
+              "want": true,
+              "at": 1792000070000,
+              "ok": false,
+              "state": "stuck",
+              "msg": "from contract 2"
+            }
+          },
+          "casino": {
+            "default": true,
+            "rooms": [
+              {
+                "room": "DRAMA_CENTRAL",
+                "name": "DRAMA_CENTRAL",
+                "joined": true,
+                "on": false
+              },
+              {
+                "room": "PepeLab",
+                "name": "Pepe Lab",
+                "joined": true,
+                "on": true
+              }
+            ]
+          }
+        },
+        "site_after": {
+          "reader": {
+            "at": 1792000180000,
+            "version": "1.99zz",
+            "follows": [
+              "lotto",
+              "stashes",
+              "gtf",
+              "polls",
+              "cosdrops",
+              "aijudge",
+              "casino"
+            ]
+          },
+          "results": {
+            "lotto": {
+              "want": true,
+              "at": 1792000070000,
+              "ok": true,
+              "state": "done",
+              "msg": "DONE - the lotto runs on publicaccess.tv"
+            }
+          }
+        }
+      }
+    ],
+    "responses": [
+      {
+        "name": "unknown_feature",
+        "about": "A newer site's feature Pepe doesn't know: ignored (never run, never recorded).",
+        "response": {
+          "ok": true,
+          "ts": 1792000000000,
+          "contract": 1,
+          "features": {
+            "lotto": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": null,
+              "by": null,
+              "at": null
+            },
+            "stashes": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "gtf": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "polls": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "cosdrops": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "aijudge": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "warp": {
+              "want": true,
+              "act": true,
+              "live": false,
+              "site": false,
+              "by": "boss",
+              "at": 1792000000000
+            }
+          },
+          "casino": {
+            "default": {
+              "want": null,
+              "act": false,
+              "by": null,
+              "at": null
+            },
+            "rooms": {}
+          }
+        },
+        "pepe_runs": []
+      },
+      {
+        "name": "stale_contract",
+        "about": "A site in another contract number: Pepe follows nothing (whatever the wishes say) and says so.",
+        "response": {
+          "ok": true,
+          "ts": 1792000000000,
+          "contract": 2,
+          "features": {
+            "lotto": {
+              "want": true,
+              "act": true,
+              "live": false,
+              "site": null,
+              "by": "boss",
+              "at": 1792000070000
+            },
+            "stashes": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "gtf": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "polls": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "cosdrops": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "aijudge": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            }
+          },
+          "casino": {
+            "default": {
+              "want": true,
+              "act": true,
+              "by": "boss",
+              "at": 1792000072000
+            },
+            "rooms": {
+              "PepeLab": {
+                "want": true,
+                "act": true,
+                "by": "boss",
+                "at": 1792000071000
+              }
+            }
+          }
+        },
+        "pepe_runs": []
+      },
+      {
+        "name": "act_false",
+        "about": "Wishes made before Pepe followed them (act false), a hand-over and a casino room: never run.",
+        "response": {
+          "ok": true,
+          "ts": 1792000000000,
+          "contract": 1,
+          "features": {
+            "lotto": {
+              "want": true,
+              "act": false,
+              "live": false,
+              "site": null,
+              "by": "boss",
+              "at": 1792000000000
+            },
+            "stashes": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "gtf": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "polls": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "cosdrops": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "aijudge": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            }
+          },
+          "casino": {
+            "default": {
+              "want": null,
+              "act": false,
+              "by": null,
+              "at": null
+            },
+            "rooms": {
+              "PepeLab": {
+                "want": true,
+                "act": false,
+                "by": "boss",
+                "at": 1792000000000
+              }
+            }
+          }
+        },
+        "pepe_runs": []
+      },
+      {
+        "name": "no_casino_block",
+        "about": "A site without the casino block (before owner answer 6): the hand-overs are followed, the casino left alone.",
+        "response": {
+          "ok": true,
+          "ts": 1792000000000,
+          "contract": 1,
+          "features": {
+            "lotto": {
+              "want": true,
+              "act": true,
+              "live": false,
+              "site": null,
+              "by": "boss",
+              "at": 1792000070000
+            },
+            "stashes": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "gtf": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "polls": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "cosdrops": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            },
+            "aijudge": {
+              "want": null,
+              "act": false,
+              "live": false,
+              "site": false,
+              "by": null,
+              "at": null
+            }
+          }
+        },
+        "pepe_runs": [
+          [
+            "lotto",
+            true,
+            "site:boss"
+          ]
+        ]
+      }
+    ]
+  }
+}

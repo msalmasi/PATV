@@ -1,11 +1,11 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
-<%# 1.99yx: ⚖️ pad vault FINES + admin TRANSFERS (padfines.js -> Pepe's pepe_padfine.py). A Pepe OWNER's since the owner answers of
-    2026-10-20 (the API refuses anyone else); nonce + password step-up like /admin/economy. public/js/admin-padfines.js runs it.
-    Locals: list (the pads), isAdmin. %>
+<%# 1.99yx: ⚖️ pad vault FINES + admin TRANSFERS (padfines.js -> Pepe's pepe_padfine.py). Site Admins (owner answer (5) of
+    2026-10-21: moderation fines - !fine, !padfine, !padmove and this form - stay with Admins/staff); nonce + password step-up
+    like /admin/economy (the shared, throttled one). public/js/admin-padfines.js runs it. Locals: list (the pads), isAdmin. %>
 <section class="sb-card" id="padfines" aria-labelledby="pfT">
-  <h2 id="pfT"><span class="ds-ic" aria-hidden="true">⚖️</span> Pad vault fines &amp; transfers <span class="adm-pill admin">owners</span></h2>
+  <h2 id="pfT"><span class="ds-ic" aria-hidden="true">⚖️</span> Pad vault fines &amp; transfers <span class="adm-pill admin">admins</span></h2>
   <% if (!isAdmin) { %><p class="muted">Admins only.</p><% } else { %>
-  <p class="muted"><%- t('admin.padvault.owner_only') %></p>
+  <p class="muted"><%- t('admin.padvault.admins') %></p>
   <p class="muted">A <b>fine</b> takes PAT out of a pad's vault and sends it where Pepe's PAT Routing row <code>fine_pad</code> says
     (<span id="pfRoute">the Federal Reserve by default, like every fine</span>; change it on <a href="/admin/economy">Economy › PAT Routing</a>).
     A <b>transfer</b> moves PAT from one pad vault into another (that vault's cap applies). Pepe moves the whole amount or nothing,
