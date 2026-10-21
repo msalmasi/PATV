@@ -112,7 +112,7 @@ test("signed in: every section, a row per page with title + description, and the
     assert.match(r.text, new RegExp('<section class="ds-card lg sh-sec" id="' + s + '"'), s);
     assert.match(r.text, new RegExp('<a class="ds-tab" href="#' + s + '">' + EN["sethub.sec." + s].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "</a>"), "jump to " + s);
   }
-  for (const k of ["account", "password", "chatsignin", "connections", "camfrog", "profile", "feed", "cosmetics", "stickers",
+  for (const k of ["account", "password", "chatsignin", "connections", "camfrog", "profile", "feed", "cosmetics", "textstyle", "stickers",
                    "messages", "mentions", "telegram", "likeness", "voice", "clone", "policy", "wallet", "subscriptions", "premium", "creators",
                    "support", "newpad", "ownerguide", "language", "timezone"]) {
     assert.match(r.text, new RegExp('data-entry="' + k + '"'), k + " row");
@@ -170,7 +170,7 @@ test("old addresses keep working", () => {
 // ── one home per setting: Edit profile = how others see you; Settings -> Account = the account side ──
 const view = (v) => fs.readFileSync(path.join(repo, "views", v + ".ejs"), "utf8");
 const ACCOUNT_IDS = ["usernameForm", "emailForm", "connections", "camfrogDiv", "plexDiv", "googleDiv", "appleDiv", "telegramDiv", "cryptoDiv", "passwordForm", "security", "csToggle", "timezone", "tzSelect"];
-const PROFILE_IDS = ["displaynameForm", "avatar", "uploadForm", "layout", "layoutForm"];
+const PROFILE_IDS = ["displaynameForm", "avatar", "uploadForm", "textstyle", "textStyleForm", "layout", "layoutForm"];   // S1 V3: + the chat text style
 
 test("each setting has exactly one home: no control lives on both Edit profile and Settings -> Account", () => {
   const ed = view("editProfile"), ac = view("settingsAccount");

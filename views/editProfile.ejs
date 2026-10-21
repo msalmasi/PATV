@@ -21,6 +21,15 @@
   // section / panel names and descriptions come from profilelayout.js; the catalog has them by id (HTML-safe, printed raw)
   const lbl_ = (o) => t.has('settings.layout.label.' + o.id) ? t('settings.layout.label.' + o.id) : t.esc(o.label);
   const desc_ = (o) => t.has('settings.layout.desc.' + o.id) ? t('settings.layout.desc.' + o.id) : t.esc(o.desc || '');
+  // S1 V3: the chat text-style picker (textstyle.js choices / pickerState): the palette only, what is saved checked
+  const ts = typeof textStyles !== 'undefined' && textStyles ? textStyles : { colors: [], fonts: [], theme: null };
+  const tsNow = typeof textStyle !== 'undefined' && textStyle ? textStyle : { color: null, font: 'sans' };
+  const tsColor = ts.colors.find((c) => c.key === tsNow.color) || null;
+  const tsFont = ts.fonts.find((f) => f.key === tsNow.font) || ts.fonts[0] || null;
+  const tsTheme = ts.theme || { dark: { bg: '#0f0f11', link: '#81c784' }, light: { bg: '#ffffff', link: '#276b2b' } };
+  const tsVars = (tsColor ? '--ts-msg-d: ' + tsColor.dark + '; --ts-msg-l: ' + tsColor.light + '; ' : '') +
+                 (tsFont ? '--ts-font: ' + tsFont.stack + '; --ts-scale: ' + tsFont.scale + '; ' : '') +
+                 '--ts-bg-d: ' + tsTheme.dark.bg + '; --ts-at-d: ' + tsTheme.dark.link + '; --ts-bg-l: ' + tsTheme.light.bg + '; --ts-at-l: ' + tsTheme.light.link;
 %>
 <%- include('partials/cosmetics-css') %>
 <%- include('partials/account-css') %>
@@ -60,7 +69,7 @@
   </section>
 
   <nav class="jump" aria-label="<%- t('settings.sections_aria') %>">
-    <a href="#account"><%- t('settings.name_h') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#elsewhere"><%- t('settings.elsewhere_h') %></a>
+    <a href="#account"><%- t('settings.name_h') %></a><a href="#avatar"><%- t('settings.avatar') %></a><% if (ts.colors.length) { %><a href="#textstyle"><%- t('textstyle.h') %></a><% } %><a href="#layout"><%- t('settings.layout') %></a><a href="#elsewhere"><%- t('settings.elsewhere_h') %></a>
   </nav>
 
   <section class="card" id="account">
@@ -88,6 +97,49 @@
       </div>
     </form>
   </section>
+
+  <%# S1 V3 (release L5): the chat text style - users.text_style (textstyle.js); this card is its one home (the /settings hub
+      links here). The palette and the fonts are rt-schema's registry (chat-text-styles.json); the preview draws both chat
+      themes with the palette's pair. Without JS the form posts and comes back here with a message. %>
+  <% if (ts.colors.length && tsFont) { %>
+  <% if (typeof textStyleFonts !== 'undefined' && textStyleFonts) { %><link rel="stylesheet" href="<%= textStyleFonts %>"><% } %>
+  <section class="card" id="textstyle">
+    <h2><%- t('textstyle.h') %></h2>
+    <p class="lede"><%- t('textstyle.lede') %></p>
+    <form id="textStyleForm" class="ts" action="/api/u/<%= encodeURIComponent(username) %>/update/textstyle" method="post">
+      <fieldset class="ts-set">
+        <legend class="lbl"><%- t('textstyle.color_legend') %></legend>
+        <div class="ts-colors">
+          <label class="ts-sw ts-sw-none"><input type="radio" name="color" value="none"<%= tsColor ? '' : ' checked' %>><span class="ts-chip" aria-hidden="true"></span><span class="ts-nm"><%- t('textstyle.color.none') %></span></label>
+          <% ts.colors.forEach((c) => { %>
+          <label class="ts-sw" style="--ts-d: <%= c.dark %>; --ts-l: <%= c.light %>"><input type="radio" name="color" value="<%= c.key %>" data-dark="<%= c.dark %>" data-light="<%= c.light %>"<%= tsColor && tsColor.key === c.key ? ' checked' : '' %>><span class="ts-chip" aria-hidden="true"></span><span class="ts-nm"><%- t(c.label_key) %></span></label>
+          <% }) %>
+        </div>
+      </fieldset>
+      <fieldset class="ts-set">
+        <legend class="lbl"><%- t('textstyle.font_legend') %></legend>
+        <div class="ts-fonts">
+          <% ts.fonts.forEach((f) => { %>
+          <label class="ts-font"><input type="radio" name="font" value="<%= f.key %>" data-stack="<%= f.stack %>" data-scale="<%= f.scale %>"<%= tsFont.key === f.key ? ' checked' : '' %>><span class="ts-aa" style="font-family: <%= f.stack %>; font-size: <%= 18 * f.scale %>px" aria-hidden="true">Aa</span><span class="ts-nm"><%- t(f.label_key) %></span></label>
+          <% }) %>
+        </div>
+      </fieldset>
+      <div class="ts-pv" id="tsPreview" role="group" aria-label="<%- t('textstyle.preview') %>" style="<%= tsVars %>">
+        <% ['dark', 'light'].forEach((th) => { %>
+        <div class="ts-pv-row ts-<%= th %>">
+          <span class="ts-pv-t"><%- t('textstyle.theme.' + th) %></span>
+          <p class="ts-line"><b class="ts-who"><%= displayname || username %></b><span class="ts-msg"><%- t('textstyle.sample') %> <span class="ts-at">@Pepe</span></span></p>
+        </div>
+        <% }) %>
+      </div>
+      <p class="hint"><%- t('textstyle.note') %></p>
+      <div class="ts-actions">
+        <button class="btn primary" type="submit" id="tsSave"><%- t('textstyle.save') %></button>
+        <span class="status" id="tsStatus" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+  <% } %>
 
   <section class="card" id="layout">
     <h2><%- t('settings.layout') %></h2>
@@ -298,6 +350,51 @@
       if (snapshot() !== initial) { e.preventDefault(); e.returnValue = ''; }
     });
     refresh();
+  })();
+</script>
+<script>
+  // S1 V3: the chat text-style picker - the preview follows the choice; Save posts it (JSON) and says what happened
+  (function () {
+    var form = document.getElementById('textStyleForm'), pv = document.getElementById('tsPreview');
+    if (!form || !pv || !window.fetch) return;
+    var _t = typeof __t === 'function' ? __t : function (k, d) { return d; };
+    var status = document.getElementById('tsStatus'), save = document.getElementById('tsSave');
+    function picked(name) { var r = form.querySelector('input[name="' + name + '"]:checked'); return r || null; }
+    function snapshot() { var c = picked('color'), f = picked('font'); return (c ? c.value : '') + '|' + (f ? f.value : ''); }
+    var saved = snapshot();
+    function say(msg, ok) { status.textContent = msg; status.className = 'status' + (msg ? (ok ? ' ok' : ' err') : ''); }
+    function paint() {
+      var c = picked('color'), f = picked('font');
+      if (c && c.getAttribute('data-dark')) { pv.style.setProperty('--ts-msg-d', c.getAttribute('data-dark')); pv.style.setProperty('--ts-msg-l', c.getAttribute('data-light')); }
+      else { pv.style.removeProperty('--ts-msg-d'); pv.style.removeProperty('--ts-msg-l'); }
+      if (f) { pv.style.setProperty('--ts-font', f.getAttribute('data-stack')); pv.style.setProperty('--ts-scale', f.getAttribute('data-scale') || '1'); }
+      var dirty = snapshot() !== saved;
+      form.classList.toggle('dirty', dirty);
+      if (dirty) say(_t('js.textstyle.unsaved', 'Not saved yet.'), true);
+      else if (status.textContent === _t('js.textstyle.unsaved', 'Not saved yet.')) say('', true);
+    }
+    form.addEventListener('change', paint);
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var body = new URLSearchParams(), c = picked('color'), f = picked('font');
+      body.set('color', c ? c.value : 'none');
+      body.set('font', f ? f.value : 'sans');
+      save.disabled = true; say(_t('js.textstyle.saving', 'Saving…'), true);
+      fetch(form.action, { method: 'POST', body: body, credentials: 'same-origin', headers: { Accept: 'application/json', 'X-Requested-With': 'fetch' } })
+        .then(function (r) { return r.json().catch(function () { return null; }).then(function (d) { if (!r.ok || !d || !d.ok) throw new Error((d && d.error) || 'error'); return d; }); })
+        .then(function (d) {
+          saved = snapshot(); form.classList.remove('dirty');
+          say(d.style && (d.style.color || d.style.font !== 'sans') ? _t('js.textstyle.saved', 'Chat text style saved.') : _t('js.textstyle.cleared', 'Chat text style reset to the default.'), true);
+        })
+        .catch(function (err) {
+          var why = err && err.message;
+          say(why === 'bad_text_style' ? _t('js.textstyle.bad', "That colour or font isn't in the palette - nothing changed.")
+            : why === 'slow' ? _t('js.textstyle.slow', 'Too many changes - try again in a few minutes.')
+            : _t('js.textstyle.failed', "Couldn't save your chat text style - nothing changed."), false);
+        })
+        .then(function () { save.disabled = false; });
+    });
+    window.addEventListener('beforeunload', function (e) { if (snapshot() !== saved) { e.preventDefault(); e.returnValue = ''; } });
   })();
 </script>
 <script>

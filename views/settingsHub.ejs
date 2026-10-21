@@ -2,6 +2,11 @@
 <%# /settings - 1.99vz (settingshub.js): the map of every account / preference page, grouped. Each row: an icon tile, a title,
     a one-line description and (where it was cheap to read) the current state. No JS: every row is a plain link. %>
 <%- include('layout', { title: t('sethub.title'), user: user }) %>
+<%
+  // S1 V3: a state's catalog-key values (state.vk, e.g. the text style's colour and font), translated - HTML-safe catalog
+  // text, so the state's string inserts them raw ({!color})
+  const vkOf = (st) => { const o = {}; if (st && st.vk) for (const k of Object.keys(st.vk)) o[k] = t(st.vk[k]); return o; };
+%>
 <style>
   .sh .sh-jump { margin-block-start: var(--ds-sp-1); }
   .sh .sh-sec { scroll-margin-block-start: 72px; }
@@ -50,7 +55,7 @@
         <a class="sh-row" href="<%= e.href %>">
           <span class="ds-ic tile" aria-hidden="true"><%= e.icon %></span>
           <span class="sh-txt"><b><% if (e.raw) { %><%= e.title %><% } else { %><%- t(e.title) %><% } %></b><span><%- t(e.desc) %></span></span>
-          <span class="sh-end"><% if (st) { %><span class="ds-tag<%= st.tone ? ' ' + st.tone : '' %>" data-state><%- t(st.k, Object.assign({}, st.v, st.v.n != null ? { n: t.num ? t.num(st.v.n) : String(st.v.n) } : {})) %></span><% } %><span class="sh-chev" aria-hidden="true">›</span></span>
+          <span class="sh-end"><% if (st) { %><span class="ds-tag<%= st.tone ? ' ' + st.tone : '' %>" data-state><%- t(st.k, Object.assign({}, st.v, st.v.n != null ? { n: t.num ? t.num(st.v.n) : String(st.v.n) } : {}, vkOf(st))) %></span><% } %><span class="sh-chev" aria-hidden="true">›</span></span>
         </a>
       </li>
       <% }) %>

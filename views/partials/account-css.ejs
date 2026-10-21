@@ -181,6 +181,39 @@
   .pe .lay-note { font-size: 12px; color: var(--ds-text-faint); margin-top: 10px; }
   .pe .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+  /* S1 V3: the chat text-style picker (#textstyle, textstyle.js). Swatches show the palette pair (dark | light) and the name in
+     its dark-theme colour; the preview draws one chat line on each chat theme's background (the registry's), mentions in the
+     chat's link colour */
+  .pe .ts { display: grid; gap: var(--ds-sp-4); }
+  .pe .ts-set { margin: 0; padding: 0; border: 0; min-width: 0; }
+  .pe .ts-set legend { padding: 0; margin-bottom: var(--ds-sp-2); }
+  .pe .ts-colors { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .pe .ts-fonts { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px; }
+  .pe .ts-sw, .pe .ts-font { position: relative; display: flex; align-items: center; gap: 8px; min-height: var(--ds-tap); box-sizing: border-box; padding: 6px 10px; margin: 0;
+                             border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-soft); background: var(--ds-sunken); cursor: pointer; user-select: none;
+                             font-size: 13px; color: var(--ds-text-2); transition: border-color var(--ds-dur-1), background var(--ds-dur-1); }
+  .pe .ts-sw input, .pe .ts-font input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+  .pe .ts-sw:hover, .pe .ts-font:hover { border-color: #3a3a3a; }
+  .pe .ts-sw:has(input:checked), .pe .ts-font:has(input:checked) { border-color: var(--ds-ac); background: #102012; color: var(--ds-text-strong); }
+  .pe .ts-sw:has(input:focus-visible), .pe .ts-font:has(input:focus-visible) { box-shadow: var(--ds-focus-ring); }
+  .pe .ts-chip { flex: none; width: 22px; height: 22px; border-radius: 50%; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, .2);
+                 background: linear-gradient(135deg, var(--ts-d) 0 50%, var(--ts-l) 50% 100%); }
+  .pe .ts-sw .ts-nm { color: var(--ts-d, var(--ds-text-2)); font-weight: 700; overflow-wrap: anywhere; }
+  .pe .ts-sw-none .ts-chip { background: repeating-linear-gradient(45deg, #2c2c2c 0 4px, #161616 4px 8px); }
+  .pe .ts-aa { flex: none; min-width: 30px; text-align: center; line-height: 1; color: var(--ds-text-strong); }
+  .pe .ts-pv { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+  .pe .ts-pv-row { border-radius: var(--ds-r-md); padding: 10px 14px; border: 1px solid var(--ds-line-soft); min-width: 0; }
+  .pe .ts-pv-row.ts-dark { background: var(--ts-bg-d, #0f0f11); --ts-ink: #e4e4e7; --ts-lbl: #a1a1aa; --ts-at: var(--ts-at-d, #81c784); --ts-msg: var(--ts-msg-d, var(--ts-ink)); }
+  .pe .ts-pv-row.ts-light { background: var(--ts-bg-l, #ffffff); border-color: #d4d4d8; --ts-ink: #27272a; --ts-lbl: #52525b; --ts-at: var(--ts-at-l, #276b2b); --ts-msg: var(--ts-msg-l, var(--ts-ink)); }
+  .pe .ts-pv-t { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ts-lbl); }
+  .pe .ts-line { margin: 0; color: var(--ts-ink); font: 400 15px/1.5 var(--ds-font); overflow-wrap: anywhere; }
+  .pe .ts-who { font-weight: 700; margin-inline-end: 8px; }
+  .pe .ts-msg { color: var(--ts-msg); font-family: var(--ts-font, inherit); font-size: calc(1em * var(--ts-scale, 1)); }
+  .pe .ts-at { color: var(--ts-at); font-weight: 700; }
+  .pe .ts .hint { margin: 0; }
+  .pe .ts-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  @media (prefers-reduced-motion: reduce) { .pe .ts-sw, .pe .ts-font { transition: none; } }
+
   /* verify box (kept from before) */
   .verify-box { background: linear-gradient(135deg, #1a2f1a, #0f1f0f); border: 1px solid var(--ds-green); border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); box-shadow: 0 0 24px rgba(76,175,80,0.3); animation: pulse-border 2s ease-in-out infinite; }
   @keyframes pulse-border { 0%, 100% { box-shadow: 0 0 24px rgba(76,175,80,0.3); } 50% { box-shadow: 0 0 36px rgba(76,175,80,0.6); } }

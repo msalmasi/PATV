@@ -282,7 +282,7 @@ the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` f
   sorted at every depth) without `h`, always over the card look.
 - **Text style:** `users.text_style` = JSON `{color, font}` (`textstyle.js`): a W1 palette colour (`chat-text-styles.json`,
   rt-schema's `registry/text-styles.json` byte for byte, sha256 pinned in `test/huboutbox-s1.test.js`) and one of the six
-  fonts; the look carries `text {color?, font, scope:"all"}`. The picker is V3 (release L5); account deletion clears it,
+  fonts; the look carries `text {color?, font, scope:"all"}`. The picker is V3 (release L5, below); account deletion clears it,
   "Download my data" includes it.
 - **Triggers** (all gated by the topic's switch, `(topic, entity)` only, never on points / xp): identity - `users`
   insert / delete / the link, status and fact columns, `telegram_links`, `account_deletions`, `account_merges` (insert,
@@ -311,6 +311,39 @@ the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` f
   `textStyle`, `looks` (`test/hubseam-driver-s1.test.js`).
 - **Turn-on (Q7, staging):** after release L1's topics: `identity` → `looks`, each once its hub topic is live and has
   bootstrapped (`CHAT_HUB` needs both, with the rest of S1-D7's switches - Q4 / V1).
+
+## S1: the chat text-style picker (release L5, 1.99adt)
+
+S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set from a picker on Edit profile).
+
+- **One home:** the "Chat text style" card on Edit profile (`views/editProfile.ejs` `#textstyle`, between Avatar and Profile
+  layout, in the jump links). The `/settings` hub's Profile section links to it (`settingshub.js` row `textstyle`, after
+  Cosmetics) with the saved style as its state ("Blue · Mono", "Pixel", "Default"; the colour and font names are catalog
+  keys the hub view translates, `state.vk`); no other page has the control or posts to its route.
+- **Palette only:** the card offers Default plus the 16 palette colours (each swatch shows the dark | light pair, the name
+  in its dark-theme colour) and the six fonts (each drawn in its face; the three webfonts load from Google Fonts on this
+  page), all from `chat-text-styles.json` (`textstyle.choices()`). The form posts a palette KEY and a font key;
+  `textstyle.fromForm` stores the key's **dark-theme** value (the site's own theme) and refuses anything else - a typed hex
+  (even a palette value), a key outside the palette, an inherited name (`__proto__`), an unknown font - with 400
+  `bad_text_style`, nothing written. Default colour + Sans clears the column (NULL). The hub turns a palette value of
+  either theme into that palette's pair (chat-core `validateTextColor`, S1 V3's platform part), so a style stored by Q5b's
+  driver with the light value (the shared golden's `#1d4ed8`) and one stored by the picker look the same.
+- **Preview:** one chat line (the member's display name, a sample sentence, an `@Pepe` mention in the chat's link colour) on
+  each chat theme's background - the registry's first background and link accent of each theme - with the chosen pair and
+  face (and the pixel face's size scale). Server-rendered from the saved style; the page script repaints it on every
+  change and says "Not saved yet." until Save.
+- **Save:** `POST /api/u/<me>/update/textstyle {color, font}` (`textstyle.register`): signed in, your own name, same site
+  (`authGuard.sameSite`), at most 30 saves per member per 10 minutes (each saved change is one `looks/changed` row while
+  the switch is on). The page script sends `Accept: application/json` and gets `{ok, style: {color: key | null, font}}`
+  (400 `bad_text_style`, 401 `signin`, 403 `not_yours` / `cross_site`, 429 `slow`); without JS the form posts and comes back to
+  `#textstyle` with a flash. The write is `textstyle.set` (`dbUtils.tx`), the one place the site writes the column; with
+  the `looks` switch on, its `users.text_style` trigger queues the member's `looks/changed` row.
+- **Tests:** `test/textstyle-picker.test.js` (choices = the registry, `fromForm` refusals and every key x font round trip, the
+  route's checks, its limit and both answers, the card rendered with and without a saved style, one home: the only poster and the
+  only writer, the hub row and its states); `test/settingshub.test.js` lists the row and the card's ids (one home per
+  setting).
+- **i18n:** new keys only - `textstyle.*` (the palette's and the fonts' `label_key`s from the registry, the card's copy),
+  `sethub.e/d.textstyle`, `sethub.st.ts*`, `js.textstyle.*`; the sync translates them after the staging push.
 
 ## Fixtures and the contract suite
 
