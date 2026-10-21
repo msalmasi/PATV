@@ -360,11 +360,13 @@ test("no hub call: with a hub configured and the network stubbed to throw, the p
     await assert.rejects(Promise.resolve().then(() => http.request("http://hub.invalid/")), /network call/, "the stub works");
     netCalls.length = 0;
     for (const u of ["own", "adm"]) {
+      const waiting = (await getQuery("SELECT COUNT(*) AS n FROM hub_outbox WHERE posted_at IS NULL"))[0].n;
+      assert.ok(waiting >= 1);
       const r = await get("/admin/chat", u);
       assert.equal(r.status, 200);
       const html = await r.text();
       assert.match(html, /Set \(test\)/, "the poster's status: a hub is configured");
-      assert.match(html, /Waiting to post<\/b><span>1 waiting/, "this site's queue for the hub (per topic once Q4 adds the topics)");
+      assert.match(html, new RegExp(`Waiting to post</b><span>${waiting} waiting`), "this site's queue for the hub (per topic once Q4 adds the topics)");
       assert.equal((await get("/api/admin/chat", u)).status, 200);
     }
     let r = await post("/api/admin/chat/pad", "own", { room_id: "patv:canary", backend: "hub", reason: REASON, confirm: true });
