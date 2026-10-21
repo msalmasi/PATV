@@ -640,17 +640,25 @@ test("the Phase 4b switches (D-1): shown read-only from Pepe's push - none pushe
     assert.equal(p4.pushed, false, "an older Pepe's push has no block");
     assert.deepEqual(p4.rows.map((r) => r.key), PC.PHASE4B.map((x) => x[0]));
     assert.ok(p4.rows.every((r) => r.on === null && r.live === null && r.present === false && /^!econ [a-z]+ on\|off$/.test(r.cmd)));
-    await C.setMeta("cfg", Object.assign({}, keep, { phase4b: { econ_room_vaults: { on: "yes", live: 1 }, econ_convoys: [true],
+    // reverify of 1.99adw (S2 / S4): `at` is the push's own time (seconds) in ms - a push stored 2 days ago reads 2 days ago
+    const pushAt = Math.floor(Date.now() / 1000) - 2 * 86400 + 0.4;
+    await C.setMeta("cfg", Object.assign({}, keep, { at: pushAt, phase4b: { econ_room_vaults: { on: "yes", live: 1 }, econ_convoys: [true],
                                                                 econ_vwm: { on: true, live: false }, econ_bogus: { on: true } } }));
     p4 = await view();
     const by = (k) => p4.rows.find((r) => r.key === k);
     assert.equal(p4.pushed, true);
+    assert.equal(p4.at, Math.round(pushAt * 1000), "as of his push, in ms (never the read's clock, never seconds)");
     assert.deepEqual([by("econ_room_vaults").present, by("econ_room_vaults").on, by("econ_room_vaults").live], [true, null, null], "not booleans: unknown");
     assert.deepEqual([by("econ_convoys").present, by("econ_convoys").on], [false, null], "a malformed entry: not there");
     assert.deepEqual([by("econ_vwm").on, by("econ_vwm").live], [true, false]);
     assert.equal(p4.rows.some((r) => r.key === "econ_bogus"), false, "only the known switches");
     await C.setMeta("cfg", Object.assign({}, keep, { phase4b: [1, 2] }));
     assert.equal((await view()).pushed, false, "an array is no block");
+    const noAt = Object.assign({}, keep, { phase4b: { econ_vwm: { on: true, live: true } } });
+    delete noAt.at;
+    await C.setMeta("cfg", noAt);
+    p4 = await view();
+    assert.deepEqual([p4.pushed, p4.at], [true, null], "a push without its time: shown, `at` unknown (null) - never now");
     const snap = await PC.snapshot({ fresh: true });
     assert.equal(Object.keys(snap.cfg).some((k) => /^econ_/.test(k)), false, "never in the config store");
   } finally {

@@ -492,11 +492,48 @@ What changed in Pepe's half, and what the H1 owner needs to know:
 - **The staging inject (`policy-inject.json {"action": "econ"}`) is narrower.**
   - It runs only `!econ policy ...`. Every other `!econ` command is refused and nothing runs.
   - It checks roles as a typed line does: `!econ` is an owner power, so an admin or staff login is refused.
-  - It runs one at a time. A second one sent while the first is still running is refused, and the first one's final result
-    lists it under `refused_while_running`.
+  - It runs one at a time, on Pepe's policy worker. Write the next inject only after `policy-inject.result.json` says
+    `final: true` for ITS args. One written earlier is not refused in the usual case: the heartbeat reads it while the first
+    one's hand-over step is running, it is queued behind that step, and it runs after the first one's final (serialized). Its
+    own result follows and overwrites the first one's final within milliseconds, so a script that polls slowly can miss that
+    final. Only one read while the first command is still being handled (before its steps are queued) is refused; nothing runs
+    for it, and the first one's final result lists it under `refused_while_running`. A script that expects a refusal and sends
+    the same step again would run that step twice.
   - Pepe's answers are collected only while that command and the items it queued are running. Another command's answer is
     posted to the room as usual.
   - Each hand-over step it runs sends `note: "rehearsal-inject (policy-inject.json): !econ policy ..."`. The site keeps that
     note on the ownership record (via stays `chat`), and Pepe's switch log names it too. A typed step sends no note.
 - **The pools command.** The status of the protocol pools is `!econ pools backend status` (14.4's line, and Pepe's own log
   and hints, said `!pools`, which lists the escrow betting pools).
+
+### 14.6 Loose ends of the 1.99adw staging rehearsal (2026-10-21)
+
+- **The participation skip list no longer depends on which account Pepe runs as.** Pepe's policy push carries `skip`, the
+  logins left out of participation. The site's mirror stores it, its engines read it and the H1 export carries it. Pepe used to
+  add his own login, read from his username, which says `pepefrog` until the room's join packet names the real account. So
+  every PepeBeta restart pushed a list with `pepefrog`, then about 5 minutes later one with `pepebeta`. On staging that made
+  mirror revs 4/5, 6/7, 8/9 and 14/15 (`by pepe via mirror`), and the 1.99adw restart left a `policy.source` dual-read
+  difference that failed the staging preflight's "dual read clean" for 2026-10-21.
+  - Now the list is the room's pseudo-senders, BOTH of Pepe's accounts (`pepefrog`, `pepebeta`) and the room bots (Pepe's
+    `room_bots` setting plus the ignored bots). It is the same on prod and staging, before and after the join packet, from
+    his first push on. Pepe's own activity day and his shadow reports' inputs read the same list
+    (`pepe_policyinputs.econ_skip`).
+  - Prod never flipped: its login is `pepefrog`, the same as the fallback (read-only check on 2026-10-21: prod's stored push
+    lists `pepefrog` only, and prod has no `policy_cfg_log` yet). At the 10-27 promote, the new bot's first push adds
+    `pepebeta` to prod's list. That is ONE expected mirror row on `skip` (`by pepe via mirror`) on 10-27, and at most one
+    `policy.source` dual-read difference that day. Both fall before the H1 evidence days (gate 1 from 10-30, gate 2 from 10-31).
+    After it there must be no further `skip` rows on a restart. Staging gets the same single row when 1.99adx deploys.
+  - A login that is neither of Pepe's accounts (a test account) is never added automatically, because that would make the list
+    depend on the login again. Pepe logs once that it belongs in `room_bots`.
+- **Who moved the treasury.** The flag log's `by` (at most 40 characters) cuts the site actor, never its ` via <via>` suffix.
+  Staging logged `... (stgcfownb4a79d08) via `, which lost the `web`.
+- **`capital_client.json` unreadable is never overwritten**, as 14.4 does for `pools_client.json`. Pepe counts the capital
+  cluster as on (unknown) in memory, never saves that stand-in over the file, and drops an old `unreadable` marker that an
+  older Pepe saved into a readable file, logging its switch. While the file is unreadable, `!capital backend cutover`,
+  `rollback` and `detach` are refused, because their result would live only in memory and the switch would read ON again at
+  the next start. `!capital backend status` says UNREADABLE. Fix the file and restart Pepe.
+- **Tests for the reverify gaps.** The panel's save arms the treasury before the switches are visible, now tested from an old
+  `armed_at` (mutant N1 is killed). The Phase 4b card's `at` must be the push's own time in ms, not the read's clock and not
+  seconds (S2 and S4 are killed).
+- **The shared contract fixture** `policycfg-contract.json` is regenerated (its pushes, rollback and export carry the new
+  `skip`) and re-pinned in both repos.
