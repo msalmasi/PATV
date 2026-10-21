@@ -45,6 +45,7 @@ const LIVE_FEED = ["bridge_rooms", "bridge_feed"];
 const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_settings",          // keys + switches
               "bot_route_log", "legacy_token_use", "legacy_token_daily", "events_auth_log", "bridge_spans",   // logs
               "pad_hub",         // S1-D1: the staging hub knows staging's hub pad ids (padhub.js mints the new pads' after the copy)
+              "chat_switches",   // S1 V1: staging's own CHAT_HUB (chatswitches.js) - never prod's kill-switch state
               ...CHATLOG, ...LIVE_FEED];
 // hub_outbox LAST: the copy carries prod's triggers (huboutbox.init creates them on prod whatever the switches say), and with
 // staging's switches already restored a DELETE of a source table (hub_hidden_h's hh trigger) would write a row of prod's

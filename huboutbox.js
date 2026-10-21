@@ -43,7 +43,8 @@
 // all off; spans (on: bridge spans only record, bridgespans.js). A topic whose switch is off writes nothing and serves no
 // snapshot. Nothing is sent while HUB_V1_URL is unset. Tickets can only be on together with `sessions` and `heartbeat` (a
 // revoked sign-in has to reach the hub, and the hub's 30-minute grace rides the heartbeat): setSettings refuses any other
-// combination, and chatticket.js won't mint without them.
+// combination, and chatticket.js won't mint without them. S1 V1 (/admin/chat, chatswitches.js): while the chat hub switch
+// CHAT_HUB is on, setSettings refuses to turn off any seam switch it needs (409 chat_hub_on - chatswitches.INTERLOCK).
 "use strict";
 const fs = require("fs");
 const http = require("http");
@@ -165,6 +166,8 @@ async function setSettings(patch, actor) {
                         { status: 409, code: "tickets_need", refuse: true });
   }
   await tx(async () => {
+    // S1 V1 (seam plan §12.10, S1-D7): while CHAT_HUB is on, none of the seam switches it needs may go off (409 chat_hub_on)
+    await require("./chatswitches").guardSeamOff(next);
     for (const [k, v] of Object.entries(next)) {
       await runQuery(`INSERT INTO hubseam_settings (key, value, updated, actor) VALUES (?, ?, ?, ?)
                       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated, actor = excluded.actor`,
