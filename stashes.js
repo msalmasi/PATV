@@ -947,6 +947,7 @@ function register(app, { isBotToken, addUser }) {
     await init();
     if (await live()) return res.status(409).json({ ok: false, error: "Already imported - the site owns the stashes now." });
     await setMeta("enabled", !!(req.body || {}).on);
+    await require("./backends").noteLegacy(req.user, "stashes", !!(req.body || {}).on);   // owner answers 2026-10-20: the wish + audit (backends.js)
     res.json({ ok: true, enabled: await enabled() });
   });
 }

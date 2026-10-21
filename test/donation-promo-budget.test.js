@@ -36,6 +36,11 @@ let server, base;
 test.before(async () => {
   await runQuery("CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT, class TEXT, points_balance INTEGER DEFAULT 0)");
   await runQuery("INSERT INTO users (userId, username, displayname, password, class) VALUES ('u-boss', 'boss', 'boss', 'x', 'Admin')");
+  // owner answers 2026-10-20 (1): donation promos are a Pepe owner's - boss's account is linked to an owner login
+  await runQuery("ALTER TABLE users ADD COLUMN camfrogUsername TEXT");
+  await runQuery("UPDATE users SET camfrogUsername = 'boss_cf' WHERE userId = 'u-boss'");
+  await require(path.join(repo, "staffroles")).init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('boss_cf', 'owner', 1)");
   await F.init();
   F.sync({ reserve: 1, monetary: { donation: { rate: 500000, bonus_pct: 20 } } });
   await DP.init();

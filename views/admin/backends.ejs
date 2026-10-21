@@ -1,0 +1,64 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'backends', admIsAdmin: isAdmin }) %>
+<%# views/admin/backends.ejs - owner answers 2026-10-20 (2), backends.js: the hand-overs Pepe's panel used to flip, switched here
+    (a Pepe owner's on the rows that hold members' PAT; audited), and the runbook cutovers as status only. The page script
+    (public/js/admin-backends.js) posts one switch at a time; every value from the database is escaped by EJS. %>
+<%
+  const fmtFn = (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt);
+  const when = (ms) => ms ? fmtFn(Number(ms), 'datetime') : '–';
+  const where = (v) => v === true ? t('admbk.where.site') : v === false ? t('admbk.where.pepe') : t('admbk.where.unknown');
+  const wantText = (v) => v === true ? t('admbk.want.site') : v === false ? t('admbk.want.pepe') : t('admbk.want.none');
+  const yn = (v) => v === true ? t('admbk.yes') : v === false ? t('admbk.no') : t('admbk.na');
+%>
+<div class="adm-head">
+  <h1><%- t('admbk.title') %></h1>
+  <p><%- t('admbk.lede') %></p>
+  <p class="adm-help" id="bkYou"><%- t(V.owner ? 'admbk.you_owner' : 'admbk.you_admin') %></p>
+</div>
+
+<section class="adm-card" id="handovers" aria-labelledby="bkHandT">
+  <h2 id="bkHandT"><%- t('admbk.handovers.h') %></h2>
+  <p class="adm-help"><%- t('admbk.handovers.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admbk.col.feature') %></th><th><%- t('admbk.col.lives') %></th><th><%- t('admbk.col.switch') %></th>
+      <th><%- t('admbk.col.site') %></th><th><%- t('admbk.col.changed') %></th><th><%- t('admbk.col.who') %></th><th></th></tr></thead>
+    <tbody>
+      <% V.rows.forEach((r) => { %><tr data-backend="<%= r.key %>">
+        <td><b><%- t('admbk.f.' + r.key) %></b><br><span class="adm-help"><%- t('admbk.d.' + r.key) %></span>
+          <% if (r.doc) { %><br><a class="adm-help" href="<%= r.doc %>" rel="noopener" target="_blank"><%- t('admbk.runbook') %></a><% } %></td>
+        <td><%= where(r.live) %><% if (r.error) { %><br><span class="adm-help"><%- t('admbk.error', { err: r.error }) %></span><% } %></td>
+        <td data-want="<%= r.want === null ? 'none' : r.want ? 'site' : 'pepe' %>"><%= wantText(r.want) %><% if (r.waiting) { %><br><span class="adm-help">⏳ <%- t('admbk.waiting') %></span><% } %></td>
+        <td><%= yn(r.site) %></td>
+        <td><% if (r.at) { %><%= when(r.at) %><br><span class="adm-help"><%= r.by || '' %></span><% } else { %>–<% } %></td>
+        <td><span class="adm-pill admin"><%- t(r.owner ? 'admbk.who.owners' : 'admbk.who.admins') %></span></td>
+        <td><% if (r.can) { %>
+            <% if (r.want !== true) { %><button type="button" data-bk="<%= r.key %>" data-on="1" data-name="<%= t('admbk.f.' + r.key) %>"><%- t('admbk.btn.on') %></button><% } %>
+            <% if (r.want !== false) { %><button type="button" class="adm-btn ghost" data-bk="<%= r.key %>" data-on="0" data-name="<%= t('admbk.f.' + r.key) %>"><%- t('admbk.btn.off') %></button><% } %>
+          <% } else { %><span class="adm-help"><%- t('admbk.owner_only') %></span><% } %>
+          <span class="adm-msg" role="status"></span></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+  <p class="adm-help"><%- t('admbk.audit') %></p>
+  <p class="adm-help"><%- t('admbk.casino') %></p>
+</section>
+
+<section class="adm-card" id="status" aria-labelledby="bkStatT">
+  <h2 id="bkStatT"><%- t('admbk.status.h') %></h2>
+  <p class="adm-help"><%- t('admbk.status.help') %></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th><%- t('admbk.col.feature') %></th><th><%- t('admbk.col.lives') %></th><th><%- t('admbk.col.site') %></th><th></th></tr></thead>
+    <tbody>
+      <% V.status.forEach((r) => { %><tr data-status="<%= r.key %>">
+        <td><b><%- t('admbk.s.' + r.key) %></b></td>
+        <td><%= where(r.live) %><% if (r.error) { %><br><span class="adm-help"><%- t('admbk.error', { err: r.error }) %></span><% } %></td>
+        <td><%= yn(r.site) %></td>
+        <td><a href="<%= r.doc %>" rel="noopener" target="_blank"><%- t('admbk.runbook') %></a></td>
+      </tr><% }) %>
+    </tbody>
+  </table></div>
+</section>
+<script src="/public/js/admin-backends.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

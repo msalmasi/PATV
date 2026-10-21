@@ -123,6 +123,11 @@ test.before(async () => {
     await runQuery("INSERT INTO users (userId, username, displayname, password, points_balance, class) VALUES (?, ?, ?, 'x', 0, ?)", ["u-" + n, n, n, n === "boss" ? "Admin" : "pleb"]);
     USERS[n] = { userId: "u-" + n, username: n, class: n === "boss" ? "Admin" : "pleb" };
   }
+  // owner answers 2026-10-20 (1): approving / re-verifying a held payment credits PAT - a Pepe owner's. boss's account is linked
+  // to an owner login
+  await runQuery("UPDATE users SET camfrogUsername = 'boss_cf' WHERE userId = 'u-boss'");
+  await require(path.join(repo, "staffroles")).init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('boss_cf', 'owner', 1)");
   await CP.init();
   CP._setFetch(mockFetch);
   const app = express();
@@ -367,6 +372,17 @@ test("over the per-transfer maximum -> held; an admin approves (credited) or rej
   assert.equal((await pay(idD)).status, "held");
   assert.equal(await bal("alice"), before);
   assert.equal((await raw("POST", "/api/crypto/admin/decide", { user: "alice", body: { id: idD, action: "approve" } })).status, 403);
+  // owner answers 2026-10-20 (1): an Admin whose login is a Pepe ADMIN (not an owner) can't approve - nothing is credited
+  await runQuery("UPDATE pepe_roles SET role = 'admin' WHERE login = 'boss_cf'");
+  try {
+    const no = await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id: idD, action: "approve", note: "checked" } });
+    assert.equal(no.status, 403, no.text);
+    assert.match(no.json.error, /owners only/);
+    assert.equal((await pay(idD)).status, "held");
+    assert.equal(await bal("alice"), before);
+  } finally {
+    await runQuery("UPDATE pepe_roles SET role = 'owner' WHERE login = 'boss_cf'");
+  }
   const a = await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id: idD, action: "approve", note: "checked" } });
   assert.equal(a.status, 200, a.text);
   assert.equal(a.json.status, "credited");

@@ -858,11 +858,18 @@ function register(app, { addUser, noTimers } = {}) {
   const guard = require("./middleware/authGuard");
   init().then(() => { if (!noTimers) startTimer(); }).catch((e) => console.error("[donpromo] setup:", e.message));
   const promoAdmin = (u) => SP.can(u, "donations.admin");   // 1.99ack (siteperms.js, locked: Admins)
-  const json = (fn, { admin = false, signed = admin } = {}) => [addUser, async (req, res) => {
+  // owner answers 2026-10-20 (1): a promo changes how much PAT a donation credits - creating, editing, ending one and the promo
+  // settings are a Pepe OWNER's (the class + the owner role on the linked chat login, read fresh: staffroles.ownerOf). Reading
+  // the card and one member's daily USD limit stay Admins'.
+  const json = (fn, { admin = false, owner = false, signed = admin || owner } = {}) => [addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (req.method === "POST" && !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
     if (signed && (!req.user || !req.user.userId)) return res.status(401).json({ ok: false, error: "Sign in first." });
-    if (admin && !promoAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if ((admin || owner) && !promoAdmin(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (owner) {
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf(req.user, "donations.admin"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    }
     try { res.json({ ok: true, ...(await fn(req, req.body || {})) }); } catch (e) {
       if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, ...(e.code ? { code: e.code, detail: e.detail } : {}) });
       console.error("[donpromo]", e && e.message);
@@ -889,10 +896,10 @@ function register(app, { addUser, noTimers } = {}) {
     if (!u) throw refuse("No such member.", 404);
     return { ...(await setOverride(req.user, u.userId, b.limit_usd, b.note)), username: u.username, today: await daily(u.userId) };
   }, { admin: true }));
-  app.post("/api/admin/donpromo/create", ...json(async (req, b) => ({ promo: await create(req.user, b) }), { admin: true }));
-  app.post("/api/admin/donpromo/settings", ...json(async (req, b) => setSettings(req.user, b), { admin: true }));
-  app.post("/api/admin/donpromo/:id/edit", ...json(async (req, b) => ({ promo: await edit(req.user, req.params.id, b) }), { admin: true }));
-  app.post("/api/admin/donpromo/:id/end", ...json(async (req) => ({ promo: await end(req.user, req.params.id) }), { admin: true }));
+  app.post("/api/admin/donpromo/create", ...json(async (req, b) => ({ promo: await create(req.user, b) }), { owner: true }));
+  app.post("/api/admin/donpromo/settings", ...json(async (req, b) => setSettings(req.user, b), { owner: true }));
+  app.post("/api/admin/donpromo/:id/edit", ...json(async (req, b) => ({ promo: await edit(req.user, req.params.id, b) }), { owner: true }));
+  app.post("/api/admin/donpromo/:id/end", ...json(async (req) => ({ promo: await end(req.user, req.params.id) }), { owner: true }));
 }
 
 module.exports = {

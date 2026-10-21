@@ -283,6 +283,7 @@ function register(app, { isBotToken, addUser }) {
     if (!SP.can(row, "econ.backend_cutover")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     await setPmeta("enabled", !!(req.body || {}).on);
+    await require("./backends").noteLegacy(req.user, "polls", !!(req.body || {}).on);   // owner answers 2026-10-20: the wish + audit (backends.js)
     res.json({ ok: true, enabled: await backendEnabled() });
   });   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   app.post("/api/polls/sync", async (req, res) => {

@@ -72,6 +72,8 @@
       </tr><% }) %>
     </tbody>
   </table></div>
+  <%# owner answers 2026-10-20: making or removing an owner needs the account password (the step-up, public/js/admin-roles.js) %>
+  <% if (ed.owner) { %><p class="adm-form"><label for="arOwnerPw"><%- t('admroles.holders.owner_pw') %><input type="password" id="arOwnerPw" maxlength="200" autocomplete="current-password"></label></p><% } %>
   <form class="adm-form" id="arAddRole" autocomplete="off">
     <h3><%- t('admroles.holders.add_h') %></h3>
     <label for="arAddLogin"><%- t('admroles.holders.login') %><input type="text" id="arAddLogin" maxlength="40" pattern="[A-Za-z0-9_.\-$@]{1,41}" required<%- dis %>></label>
@@ -237,7 +239,7 @@
   .ar-site .ar-lad { text-align: center; white-space: nowrap; }
   #website h3 { margin-top: 1.2em; }
 </style>
-<script src="/public/js/admin-roles.js?v=3" defer></script>
+<script src="/public/js/admin-roles.js?v=4" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

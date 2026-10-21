@@ -162,12 +162,18 @@ async function refMissing(user, cmd, words) {
 
 // ── PO-0b (D-6): economy actions carry the owner check, never the Admin class ──
 const isEconKind = (k) => /^econ\./.test(String(k || ""));
-/** For an econ.* action: {is_owner, login} - the account's linked chat login NOW, and whether it is a Pepe owner with the
- *  action's capability (staffroles.ownerOf). The login must still be the one the action was queued with (Pepe acts as it). */
+// owner answers 2026-10-20 (1): every action that moves members' PAT is a Pepe owner's - + the pad-vault admin move (a fine /
+// a transfer out of a pad's vault, padfines.js). kind -> the capability of its owner check.
+const OWNER_KINDS = Object.freeze({ "roomvault.admin": "econ.padvault_move" });
+const isOwnerKind = (k) => isEconKind(k) || Object.prototype.hasOwnProperty.call(OWNER_KINDS, String(k || ""));
+/** For an econ.* (or OWNER_KINDS) action: {is_owner, login} - the account's linked chat login NOW, and whether it is a Pepe
+ *  owner with the action's capability (staffroles.ownerOf). The login must still be the one the action was queued with
+ *  (Pepe acts as it). */
 async function econOwner(a) {
   try {
     const SR = require("./staffroles");
-    const me = await SR.ownerOf({ userId: a.user_id }, a.kind === "econ.burn" ? "econ.burn" : "econ.pepe_econ_cmds");
+    const cap = a.kind === "econ.burn" ? "econ.burn" : OWNER_KINDS[a.kind] || "econ.pepe_econ_cmds";
+    const me = await SR.ownerOf({ userId: a.user_id }, cap);
     const login = me && me.camfrogUsername ? String(me.camfrogUsername).trim().toLowerCase() : null;
     const same = !!login && login === String(a.camfrog || "").trim().toLowerCase();
     return { is_owner: !!me && same, login: login || (a.camfrog ? String(a.camfrog).trim().toLowerCase() : null) };
@@ -319,11 +325,11 @@ function register(app, { isBotToken, addUser }) {
     // tells Pepe to wake his table fast lane (tables.js) when no table is open yet, e.g. a web "start"
     const tp = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'table' AND status = 'pending'");
     const owner = {};
-    for (const a of rows) if (isEconKind(a.kind)) owner[a.id] = await econOwner(a);
+    for (const a of rows) if (isOwnerKind(a.kind)) owner[a.id] = await econOwner(a);
     res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
-      const econ = isEconKind(a.kind);
+      const econ = isOwnerKind(a.kind);   // owner answers 2026-10-20: + roomvault.admin (OWNER_KINDS)
       const o = econ ? owner[a.id] : null;
       // 1.99wv (connections audit C): the ACCOUNT is the actor - Pepe acts as its chat login, else as "u:<userId>"
       // PO-0b (D-6): an economy action (econ.*: !econ from /admin/economy, routing, a burn) no longer rides on the Admin

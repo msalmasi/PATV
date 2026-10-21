@@ -3,7 +3,8 @@
 // The vaults are pools (room:<pad id>) that Pepe moves (his journal + the vault history live with him); the site asks him and
 // records what he did:
 //
-//   POST /api/admin/padvault/move   site Admins, same-site fetch, nonce + account password step-up (like /admin/economy):
+//   POST /api/admin/padvault/move   a Pepe OWNER (owner answers 2026-10-20: the class + the owner role on the linked chat
+//                                   login), same-site fetch, nonce + account password step-up (econstore.stepUp, throttled):
 //                                   {op: fine|transfer, from, to?, amount, reason, nonce, password}
 //                                   -> a website action "roomvault.admin" [op, from, to, amount, key, reason] that Pepe runs
 //                                   with his own checks (the vault must hold the whole amount; a transfer respects the other
@@ -217,17 +218,20 @@ function register(app, { addUser, isBotToken }) {
     try { res.json(Object.assign({ ok: true }, await recent(25))); }
     catch (e) { console.error("[padfines] recent:", e); res.status(500).json({ ok: false, error: "Couldn't load." }); }
   });
-  app.post("/api/admin/padvault/nonce", addUser, admin, csrf, (req, res) => res.json({ ok: true, nonce: ctl.issueNonce(req.user) }));
-  app.post("/api/admin/padvault/move", addUser, admin, csrf, async (req, res) => {
+  // owner answers 2026-10-20 (1): moving PAT out of a pad vault (a fine or a transfer) is a Pepe OWNER's - the class AND the owner
+  // role on the linked chat login, read fresh (staffroles.ownerOf) - before a nonce is even issued. The website action Pepe runs
+  // carries the same owner check at claim time (actions.js: site_admin = is_owner for roomvault.admin).
+  const owner = async (req, res, next) => {
+    const SR = require("./staffroles");
+    if (!(await SR.ownerOf(req.user, "econ.padvault_move"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    next();
+  };
+  app.post("/api/admin/padvault/nonce", addUser, admin, csrf, owner, (req, res) => res.json({ ok: true, nonce: ctl.issueNonce(req.user) }));
+  app.post("/api/admin/padvault/move", addUser, admin, csrf, owner, async (req, res) => {
     const b = req.body || {};
     try {
-      if (!ctl.takeNonce(req.user, b.nonce)) throw Object.assign(new Error("That confirmation was already used or has expired - start again."), { status: 409 });
-      const row = (await getQuery("SELECT password FROM users WHERE userId = ?", [req.user.userId]))[0];
-      const hash = row && typeof row.password === "string" && row.password.startsWith("$2") ? row.password : null;
-      if (!hash) throw Object.assign(new Error("Your account has no password to confirm with - set one (forgot password) first."), { status: 403 });
-      if (typeof b.password !== "string" || !b.password || Buffer.byteLength(b.password, "utf8") > 200 || !(await require("bcrypt").compare(b.password, hash))) {
-        throw Object.assign(new Error("Wrong password."), { status: 403 });
-      }
+      // the shared, throttled step-up (econstore.stepUp: the single-use nonce + the password, 5 wrong in 15 min -> 429)
+      await require("./econstore").stepUp(req.user, b);
       res.json(Object.assign({ ok: true }, await request(req.user, { op: b.op, from: b.from, to: b.to, amount: b.amount, reason: b.reason, key: b.key })));
     } catch (e) {
       if (e && e.message === "busy") return res.status(429).json({ ok: false, error: "You already have a few things waiting for Pepe - give him a moment." });

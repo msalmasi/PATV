@@ -24,6 +24,26 @@
     return true;
   }
 
+  // owner answers 2026-10-20: making or removing an OWNER needs the password step-up - a single-use nonce from
+  // /api/admin/roles/nonce + the account password (the #arOwnerPw field, shown to owners); other role changes post as before
+  function heldRole(login) {
+    var s = document.querySelector('select[data-set-role="' + String(login).replace(/["\\]/g, '') + '"]');
+    return s ? s.getAttribute('data-was') : null;
+  }
+  function setRole(el, login, role, was, undo) {
+    var owner = role === 'owner' || was === 'owner';
+    if (!owner) return post('/api/admin/roles/role', { login: login, role: role }).then(function (j) { done(el, j, undo); });
+    var pw = $('arOwnerPw') ? $('arOwnerPw').value : '';
+    if (!pw) { say(msgNear(el), _t('js.admroles.owner_pw_needed', 'Owner changes need your account password - enter it above first.'), true); if (undo) undo(); return Promise.resolve(); }
+    return post('/api/admin/roles/nonce', {}).then(function (n) {
+      if (!n || !n.ok || !n.nonce) return done(el, n, undo);
+      return post('/api/admin/roles/role', { login: login, role: role, nonce: n.nonce, password: pw }).then(function (j) {
+        if ($('arOwnerPw')) $('arOwnerPw').value = '';
+        done(el, j, undo);
+      });
+    });
+  }
+
   // role holders
   document.addEventListener('change', function (e) {
     var el = e.target;
@@ -31,8 +51,7 @@
     if (el.hasAttribute('data-set-role')) {
       var was = el.getAttribute('data-was');
       say(msgNear(el), _t('js.admroles.working', 'Saving…'));
-      post('/api/admin/roles/role', { login: el.getAttribute('data-set-role'), role: el.value })
-        .then(function (j) { done(el, j, function () { el.value = was; }); });
+      setRole(el, el.getAttribute('data-set-role'), el.value, was, function () { el.value = was; });
       return;
     }
     if (el.hasAttribute('data-site-perm')) {
@@ -67,7 +86,7 @@
       var login = b.getAttribute('data-remove-role');
       if (!window.confirm(_t('js.admroles.confirm_remove', 'Remove the role of {login}?', { login: login }))) return;
       say(msgNear(b), _t('js.admroles.working', 'Saving…'));
-      post('/api/admin/roles/role', { login: login, role: 'none' }).then(function (j) { done(b, j); });
+      setRole(b, login, 'none', heldRole(login));
       return;
     }
     var cmd = b.getAttribute('data-reset');
@@ -101,7 +120,7 @@
     var login = ($('arAddLogin').value || '').trim().replace(/^@/, '').toLowerCase();
     if (!login) return say($('arAddMsg'), _t('js.admroles.need_login', 'Enter a Camfrog login.'), true);
     say($('arAddMsg'), _t('js.admroles.working', 'Saving…'));
-    post('/api/admin/roles/role', { login: login, role: $('arAddRoleSel').value }).then(function (j) { done($('arAddRole'), j); });
+    setRole($('arAddRole'), login, $('arAddRoleSel').value, heldRole(login));
   });
 
   if ($('arAddCmd')) $('arAddCmd').addEventListener('submit', function (e) {

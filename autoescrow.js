@@ -21,7 +21,8 @@
 //
 // Bot routes (bot token): POST /api/autoescrow/notice-logins {password} -> the logins Pepe should PM when he sees them;
 //                         POST /api/autoescrow/notified {password, login} -> he did.
-// Admin: GET /api/admin/autoescrow, POST /api/admin/autoescrow/settings {enabled?, kinds?, note} (audit-logged).
+// Admin: GET /api/admin/autoescrow, POST /api/admin/autoescrow/settings {enabled?, kinds?, note} (audit-logged; owner answers
+// 2026-10-20: saving is a Pepe owner's - staffroles.ownerOf).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
@@ -588,6 +589,12 @@ function register(app, { isBotToken, addUser }) {
     const me = await admin(req, res);
     if (!me) return;
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
+    // owner answers 2026-10-20 (1): the switch HOLDS members' PAT (new rewards wait here instead of landing in a wallet) - a
+    // Pepe owner's (class + the owner role on the linked chat login, read fresh), like the economy writes. Reading stays Admins'.
+    {
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf(req.user, "econ.backend_cutover"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    }
     try { res.json(Object.assign({ ok: true }, await setSettings(req.body || {}, me))); }
     catch (e) { res.status(e.status || 500).json({ ok: false, error: e.status ? e.message : "failed" }); }
   });

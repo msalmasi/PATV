@@ -6,7 +6,8 @@
 //                                         1.99nh: a hand pick already held this draw -> 409 {code: "dup", dups} unless confirm
 //   (the /lotto page's forms still post to /act - actions.js hands cmd=lotto straight to buyFromForm() while the backend is on)
 //   GET  /lotto/fair/:draw + /api/lotto/fair/:draw    the fairness proof of a draw (commitment, digest, tickets, seed)
-//   POST /api/lotto/admin/settings        {key, value}  lotto_backend / price / pot_share (site Admin, or the bot token)
+//   POST /api/lotto/admin/settings        {key, value}  lotto_backend / price / pot_share (site Admin, or the bot token;
+//                                         lotto_backend from the web: a Pepe owner - owner answers 2026-10-20)
 // Pepe (bot token in the body):
 //   POST /api/lotto/bot/poll              {after, wait}  events (sale / milestone / closing / closed / drawn / paid / open) + state
 //   POST /api/lotto/bot/act               {username, camfrog, name, verb, args, idem, admin, channel}
@@ -128,6 +129,13 @@ function register(app, { isBotToken, addUser, updateLevel }) {
     else if (isJsonFetch(req) && req.user && req.user.userId) {
       const u = (await getQuery("SELECT username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (SP.can(u, "casino.admin")) actor = u.username;
+      // owner answers 2026-10-20 (1): the lotto_backend switch decides where the pot (members' PAT) is held and sold from - a
+      // Pepe OWNER's from the web (the class + the owner role on the linked chat login, read fresh); price / pot_share stay
+      // Admins'. The bot token (Pepe's cutover) and the shell (tools/lotto-admin.js) are unchanged.
+      if (actor && String(b.key || "") === "lotto_backend") {
+        const SR = require("../staffroles");
+        if (!(await SR.ownerOf(req.user, "casino.admin"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+      }
     }
     if (!actor) return res.status(403).json({ ok: false, error: "unauthorized" });
     try { res.json({ ok: true, settings: await svc.setSetting(String(b.key || ""), b.value, actor) }); }

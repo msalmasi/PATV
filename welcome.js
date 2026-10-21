@@ -428,5 +428,23 @@ function start() {
   setTimeout(() => sweep(), 60000).unref();
 }
 
-module.exports = { start, enroll, touch, middleware, check, sweep, payout, connectBonus, backfill, adminView, status, progress,
+/** POST /api/admin/welcome/pay {userId} (after addUser; index.js mounts it): "pay anyway" - an admin pays a pending /
+ *  duplicate / expired welcome bonus. 1.99bg: Admins (users.welcome_stale). Owner answers 2026-10-20 (1): it moves PAT to a
+ *  member at an admin's say-so - a Pepe OWNER's (the class + the owner role on the linked chat login, read fresh); anyone
+ *  else gets 403 and nothing is paid. The settings and the decisions list stay Admins'. */
+async function payRoute(req, res) {
+  try {
+    if (!require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ error: "cross-site request refused" });
+    if (!req.user || !req.user.userId) return res.status(403).json({ error: "admins only" });
+    const a = (await getQuery("SELECT username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
+    if (!require("./siteperms").can(a, "users.welcome_stale")) return res.status(403).json({ error: "admins only" });
+    const SR = require("./staffroles");
+    if (!(await SR.ownerOf(req.user, "users.welcome_stale"))) return res.status(403).json({ ok: false, code: "owner_only", error: SR.OWNER_ONLY });
+    const r = await payout(String((req.body || {}).userId || ""), true);
+    console.log(`[welcome] ${a.username} paid ${(req.body || {}).userId} anyway: ${JSON.stringify(r)}`);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+module.exports = { start, enroll, touch, middleware, check, sweep, payout, payRoute, connectBonus, backfill, adminView, status, progress,
   setConfig, config, normEmail, normIp, hash, reqKeys, duplicateOf, ready, DEFAULTS, useConnectAward: (fn) => { connectAward = fn; }, _reset: () => { touched.clear(); cfg = Object.assign({}, DEFAULTS); } };

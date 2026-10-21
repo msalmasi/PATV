@@ -261,6 +261,11 @@ async function classUpdate(actor, username, cls) {
     const cur = await roleOf(tl);
     const role = MANAGED.has(cls) ? ROLE_OF_CLASS[cls] : null;
     if (!(cls === "Admin" && (cur === "owner" || cur === "admin")) && cur !== role) {
+      // owner answers 2026-10-20 (3): taking the owner role away needs the password step-up, which lives on /admin/roles -
+      // an owner can't do it from the class picker. (Anyone else is refused by setRole's rules, as before.)
+      if (cur === "owner" && me && (await roleOf(me.camfrogUsername)) === "owner") {
+        throw new RoleError(409, "That's a Pepe owner - owner changes are made on Admin › Roles, with your password.");
+      }
       await setRole(me && me.camfrogUsername, tl, role, "web:" + String(actor.username || "?"));
     }
     if (!MANAGED.has(cls)) await runQuery("UPDATE users SET class = ? WHERE userId = ?", [cls, t.userId]);

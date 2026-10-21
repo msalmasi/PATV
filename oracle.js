@@ -560,6 +560,7 @@ function register(app, { isBotToken, addUser }) {
     if (!SP.can(row, "econ.backend_cutover")) return res.status(403).json({ ok: false, error: "Admins only." });
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     await setMeta("enabled", !!(req.body || {}).on);
+    await require("./backends").noteLegacy(req.user, "aijudge", !!(req.body || {}).on);   // owner answers 2026-10-20: the wish + audit (backends.js)
     res.json({ ok: true, enabled: await enabled() });
   });
 }

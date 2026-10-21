@@ -30,6 +30,12 @@ test.before(async () => {
     await runQuery("INSERT INTO users (userId, username, displayname, password, class) VALUES (?, ?, ?, 'x', ?)", ["u-" + n, n, n, n === "boss" ? "Admin" : "pleb"]);
     USERS[n] = { userId: "u-" + n, username: n, class: n === "boss" ? "Admin" : "pleb" };
   }
+  // owner answers 2026-10-20 (1): donation promos (and approving a held crypto payment) are a Pepe owner's - boss's account is
+  // linked to an owner login
+  await runQuery("ALTER TABLE users ADD COLUMN camfrogUsername TEXT");
+  await runQuery("UPDATE users SET camfrogUsername = 'boss_cf' WHERE userId = 'u-boss'");
+  await require(path.join(repo, "staffroles")).init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('boss_cf', 'owner', 1)");
   await CP.init();
   await CP.set({ crypto_donations_enabled: true }, "test");
   await F.init();

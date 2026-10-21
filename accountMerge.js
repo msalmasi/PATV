@@ -348,6 +348,9 @@ const RULES = {
   "policy_cfg.by": { deny: NAME }, "policy_cfg_log.actor": { deny: NAME }, "policy_cfg_log.actor_user_id": M(),
   "policy_ownership.owner": { deny: "PO-2: who owns a policy feature - 'pepe' | 'cutting' | 'site', not a userId" },
   "policy_ownership.paused_by": { deny: NAME }, "policy_ownership.by": { deny: NAME }, "policy_handovers.by": { deny: NAME },
+  // owner answers 2026-10-20: backends.js - who last switched a hand-over (a site username - an audit label) and their userId
+  // (follows the account, like the config store's editor)
+  "backend_wants.by": { deny: NAME }, "backend_wants.by_user": M(),
   "capital_ceil_log.by": { deny: NAME },
   "media.by_user_id": M(), "media.by_user": { deny: NAME }, "media.subject": { deny: NAME }, "media.subject_login": { deny: NAME }, "media.by_login": { deny: NAME },
   // follows

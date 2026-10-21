@@ -139,7 +139,18 @@ function register(app, { addUser, noTimers } = {}) {
   });
   app.get("/api/crypto/admin/health", ...json(async () => ({ health: await CP.health(), totals: await CP.totals() }), { admin: true }));
   app.post("/api/crypto/admin/settings", ...json(async (req, b) => CP.set(b, req.user.username), { admin: true }));
-  app.post("/api/crypto/admin/decide", ...json(async (req, b) => CP.decide(String(b.id || ""), String(b.action || ""), req.user.username, b.note), { admin: true }));
+  // owner answers 2026-10-20 (1): approving a held payment (or re-verifying a suspect one, which credits it when it checks out)
+  // CREDITS the donor's PAT - a Pepe OWNER's (the class + the owner role on the linked chat login, read fresh). Reject /
+  // ignore / refunded move nothing and stay Admins'.
+  const CREDITING = new Set(["approve", "reverify"]);
+  app.post("/api/crypto/admin/decide", ...json(async (req, b) => {
+    const action = String(b.action || "");
+    if (CREDITING.has(action)) {
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf(req.user, "crypto.admin"))) throw Object.assign(new Error(SR.OWNER_ONLY), { status: 403, refuse: true });
+    }
+    return CP.decide(String(b.id || ""), action, req.user.username, b.note);
+  }, { admin: true }));
   app.post("/api/crypto/admin/poll", ...json(async () => ({ result: await CP.pollOnce({ force: true }) }), { admin: true }));
   app.post("/api/crypto/admin/dryrun", ...json(async (req, b) => ({ result: await CP.dryRun({ blocks: Math.max(10, Math.min(20000, Number(b.blocks) || 5000)),
     sigs: Math.max(1, Math.min(200, Number(b.sigs) || 50)) }) }), { admin: true }));

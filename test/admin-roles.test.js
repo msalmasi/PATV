@@ -55,6 +55,8 @@ test.before(async () => {
     await runQuery("INSERT INTO users (userId, username, password, class, camfrogUsername) VALUES (?, ?, 'x', ?, ?)", [id, name, cls, cf]);
   }
   await require(path.join(repo, "adminaudit")).init();
+  // owner answers 2026-10-20 (3): the owner's account password (owner changes need the step-up)
+  await runQuery("UPDATE users SET password = ? WHERE userId = 'own'", [await require("bcrypt").hash("pw-own", 4)]);
   const app = express();
   app.use(express.json());
   app.use((req, res, next) => { req.flash = () => []; next(); });
@@ -244,10 +246,16 @@ test("role holders: Pepe's !role rules on the website, audited", async () => {
   assert.equal(r.status, 200, "an owner changes an admin");
   r = await role("own", "plainadmin", "admin");
   assert.equal(r.status, 200);
-  r = await role("own", "second_owner", "none");
-  assert.equal(r.status, 200);
-  r = await role("own", "bossfrog", "none");
+  // owner answers 2026-10-20 (3): removing an owner needs the password step-up (test/owner-stepup.test.js covers the refusals)
+  const stepRole = async (u, login, rr) => {
+    const n = await pj("/api/admin/roles/nonce", u, {});
+    return pj("/api/admin/roles/role", u, { login, role: rr, nonce: n.j.nonce, password: "pw-own" });
+  };
+  r = await stepRole("own", "second_owner", "none");
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  r = await stepRole("own", "bossfrog", "none");
   assert.equal(r.status, 409, "Pepe always keeps an owner");
+  assert.match(r.j.error, /no owner/);
   r = await role("own", "bad login!", "staff");
   assert.equal(r.status, 400);
 });

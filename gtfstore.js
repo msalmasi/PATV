@@ -430,6 +430,7 @@ function register(app, { isBotToken, addUser }) {
     if (req.get("X-Requested-With") !== "fetch" || !require("./middleware/authGuard").sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     await init();
     await setMeta("enabled", !!(req.body || {}).on);
+    await require("./backends").noteLegacy(req.user, "gtf", !!(req.body || {}).on);   // owner answers 2026-10-20: the wish + audit (backends.js)
     res.json(await status());
   });
 }

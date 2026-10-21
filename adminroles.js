@@ -3,6 +3,8 @@
 //   GET  /admin/roles                       the page (views/admin/roles.ejs, public/js/admin-roles.js)
 //   GET  /api/admin/roles                   the same data as JSON
 //   POST /api/admin/roles/role  {login, role}                    owner | admin | staff | assistant | trusted | none (!role)
+//                                                                owner answers 2026-10-20: making or removing an OWNER also
+//                                                                needs {nonce, password} (the step-up, stepup.js)
 //   POST /api/admin/roles/perm  {cmd, kind, value, role?}        kind powers | use | targets (role staff | assistant);
 //                                                                value a role / floor, or "default" (!perm)
 //   POST /api/admin/roles/reset {cmd}                            the command's powers + use + floors back to Pepe's defaults
@@ -67,14 +69,25 @@ function register(app, { addUser }) {
     if (!SP.can(me, "roles.assign")) return res.status(403).json({ ok: false, code: "admin_only", error: "Admins only." });
     try {
       const ed = await P.editorOf(me.userId);
-      res.json({ ok: true, ...(await fn(req.body || {}, ed)) });
+      res.json({ ok: true, ...(await fn(req.body || {}, ed, req, me)) });
     } catch (e) {
       if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, code: e.code, error: e.message });
       console.error("[adminroles]", path, e.message);
       res.status(500).json({ ok: false, code: "internal", error: "Something went wrong." });
     }
   });
-  change("/api/admin/roles/role", (b, ed) => P.setRole(ed, b.login, b.role));
+  // Owner answers 2026-10-20 (3): a change that makes someone an OWNER or takes the owner role away needs the password
+  // step-up (stepup.js: a single-use nonce from /api/admin/roles/nonce + the account password, 5 wrong in 15 min -> 429),
+  // like confirming an owner change that came from Pepe's sync. Checked only for an editor who is an owner - anyone else is
+  // refused by Pepe's !role rules (P.setRole) as before, without being asked for a password.
+  const SRr = require("./staffroles");
+  const roleOrNull = (r) => (r == null || r === "" || r === "none" ? null : String(r).toLowerCase());
+  change("/api/admin/roles/role", async (b, ed, req, me) => {
+    const to = roleOrNull(b.role);
+    const from = await SRr.roleOf(String(b.login || "").trim().replace(/^@/, "").toLowerCase());
+    if (ed && ed.level >= SRr.LEVEL.owner && (to === "owner") !== (from === "owner")) await require("./stepup").check(req, me, b);
+    return P.setRole(ed, b.login, b.role);
+  });
   change("/api/admin/roles/perm", (b, ed) => P.setPerm(ed, { kind: b.kind, cmd: b.cmd, value: b.value, role: b.role }));
   change("/api/admin/roles/reset", (b, ed) => P.resetCmd(ed, b.cmd));
   change("/api/admin/roles/site", (b, ed) => SP.setMin(ed, b.key, b.value));   // 1.99ack: a website capability

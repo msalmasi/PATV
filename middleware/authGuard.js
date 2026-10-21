@@ -72,6 +72,14 @@ function sameSite(req) {
   return hostMatches(src, host);   // "Origin: null" (opaque) is refused here - JSON/fetch APIs stay strict
 }
 
+/** Owner answers 2026-10-20 (the owner step-up, stepup.js): a fetch from THIS site - X-Requested-With: fetch AND an Origin
+ *  (or Referer) naming this host. Unlike sameSite(), a request with neither header is refused too. */
+function sameOriginFetch(req) {
+  const host = req.get("host");
+  const src = req.get("origin") || req.get("referer");
+  return req.get("X-Requested-With") === "fetch" && !!src && !!host && hostMatches(src, host);
+}
+
 /**
  * 1.99zl: where an auth FORM post came from - "same", "foreign", or "opaque" (no usable source: Origin
  * absent or "null" and no Referer). Browsers send "Origin: null" on a POST from a page served with
@@ -248,6 +256,7 @@ module.exports = {
   safeNext,
   refererNext,
   sameSite,
+  sameOriginFetch,
   originState,
   authFormOk,
   formToken,

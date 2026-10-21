@@ -309,6 +309,10 @@ botkeys.register(app);
 require("./adminkeys").register(app, { addUser });
 SP.register(app);   // 1.99ack: the website's capabilities (siteperms.js) - overrides loaded + kept fresh; res.locals.can in views
 require("./adminroles").register(app, { addUser });   // 1.99acj: /admin/roles - Pepe's roles & per-command permissions, edited with his !role / !perm rules (pepeperms.js)
+// owner answers 2026-10-20 (2): 🔌 /admin/backends - the hand-overs Pepe's panel used to flip (lotto, stashes, GTF, polls, the
+// cosmetic drop table, the AI judge), switched from the site (a Pepe owner's for the lotto / stashes; audited) + Pepe's read of
+// the wishes, POST /api/pepe/backends (backends.js)
+require("./backends").register(app, { addUser, isBotToken });
 require("./chatticket").register(app, { addUser });
 require("./huboutbox").start();
 // 1.99acm: the hub's signed calls into v1 (R-14 S0): GET /internal/v1/snapshot/<topic>, POST /internal/v1/outbox/rewind
@@ -370,16 +374,9 @@ app.post("/api/stale/seen", async (req, res) => {
   if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
   try { res.json({ ok: true, cleared: await stale.seenLogin(b.login, "seen in Camfrog") }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.post("/api/admin/welcome/pay", addUser, async (req, res) => {
-  try {
-    if (!guard.sameSite(req)) return res.status(403).json({ error: "cross-site request refused" });
-    const a = await welcomeAdmin(req);
-    if (!a) return res.status(403).json({ error: "admins only" });
-    const r = await welcome.payout(String((req.body || {}).userId || ""), true);
-    console.log(`[welcome] ${a.username} paid ${(req.body || {}).userId} anyway: ${JSON.stringify(r)}`);
-    res.json(r);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// owner answers 2026-10-20 (1): "pay anyway" moves PAT to a member - a Pepe OWNER's; the handler lives in welcome.js
+// (payRoute) so the test mounts the same code
+app.post("/api/admin/welcome/pay", addUser, (req, res) => welcome.payRoute(req, res));
 
 // Just for fun
 app.get("/friendo", (req, res) => {
@@ -2837,6 +2834,9 @@ app.get("/api/u/:username/wheel/spins-left", authenticateToken, async (req, res)
 // PO-0b (D-6): moving PAT between the Fed and the House is a Pepe OWNER's (class + the owner role on the linked chat login) -
 // the handler lives in staffgrant.js (houseAdjustRoute) so the test mounts the same code
 app.post("/api/g/wheel/jackpot", addUser, requireUser, (req, res) => require("./staffgrant").houseAdjustRoute(req, res));
+// Owner answers 2026-10-20 (3): the PAT grant and the House adjust need the password step-up - a single-use nonce for a Pepe
+// owner of that action ({for: grant|house}; same-origin fetch only), then the account password with the request (stepup.js)
+app.post("/api/admin/stepup/nonce", addUser, (req, res) => require("./stepup").nonceRoute(req, res));
 
 // HTTP Post Endpoint To Get Last 100 Spin Results
 app.post("/api/g/wheel/results", async (req, res) => {
@@ -2903,31 +2903,9 @@ app.post("/api/classes/edit", addUser, async (req, res) => {
 });
 
 // HTTP POST endpoint to edit the list of redemption codes.
-app.post("/api/admin/redemption-codes", authenticateToken, addUser, async (req, res) => {
-    const { code, points, uses_allowed, expiration_date } = req.body;
-    if (SP.can(req.user, "econ.codes_manage")) {   // 1.99abn: Admins only - a code pays out of a vault, so Staff could fund themselves
-        try {
-            const existingCode = await getQuery("SELECT code FROM redemption_codes WHERE code = ?", [code]);
-            if (existingCode.length > 0) {
-                // Update existing code
-                await runQuery("UPDATE redemption_codes SET points = ?, uses_allowed = ?, uses_remaining = ?, expiration_date = ? WHERE code = ?", [points, uses_allowed, uses_allowed, expiration_date, code]);
-            } else {
-                // Insert new code
-                await runQuery("INSERT INTO redemption_codes (code, points, uses_allowed, uses_remaining, expiration_date) VALUES (?, ?, ?, ?, ?)", [code, points, uses_allowed, uses_allowed, expiration_date]);
-            }
-            res.json({ message: "Points transferred successfully." });
-        } catch (error) {
-            console.error("Failed to update redemption code:", error);
-            res.status(500).send("Failed to update redemption code");
-        }
-    } else {
-        req.flash(
-          "error",
-          "Access denied. You must be an admin or staff to access this page."
-        );
-        return res.redirect("/login");
-      }
-});
+// Owner answers 2026-10-20 (1): a code is PAT members redeem out of a vault - adding or changing one is a Pepe OWNER's. The
+// handler lives in staffgrant.js (codesRoute) so the test mounts the same code.
+app.post("/api/admin/redemption-codes", authenticateToken, addUser, (req, res) => require("./staffgrant").codesRoute(req, res));
 
 // HTTP GET end to list redemption codes.
 app.get("/api/admin/redemption-codes", authenticateToken, addUser, async (req, res) => {

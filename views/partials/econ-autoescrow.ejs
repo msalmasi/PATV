@@ -1,6 +1,7 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# Auto-account escrow (autoescrow.js, docs/auto-account-escrow.md): free rewards earned by Camfrog AUTO accounts wait here
     for six months. public/js/admin-autoescrow.js renders it from GET /api/admin/autoescrow and saves the switch / the kinds
-    through POST /api/admin/autoescrow/settings (audit-logged). %>
+    through POST /api/admin/autoescrow/settings (audit-logged; owner answers 2026-10-20: a Pepe owner's - it holds PAT). %>
 <section class="adm-card" id="autoescrow" aria-labelledby="autoescrowT">
   <h2 id="autoescrowT"><span class="ds-ic" aria-hidden="true">⏳</span> Chat-account escrow <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Free rewards (to start: achievements and level-ups) earned by Pepe's automatic Camfrog accounts wait here instead of
@@ -10,6 +11,7 @@
     <code>auto_escrow_expired</code> sends it (the incentive budget by default). Pepe reminds a held account at most once a week. Game
     winnings, tips, refunds and the welcome PAT are never held; balances from before the switch aren't touched. The switch only controls
     new holds - off, everything held is still claimable and still expires.</p>
+  <p class="adm-help"><%- t('admin.owner_switch') %></p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="aescAdm">
       <div class="adm-kv" id="aescKv"><div><b>Status</b><span>Loading…</span></div></div>

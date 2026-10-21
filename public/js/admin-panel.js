@@ -4,6 +4,9 @@
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
+  var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) {
+    return String(d).replace(/\{!?(\w+)\}/g, function (m, x) { return v && v[x] != null ? v[x] : m; });
+  };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var n = function (x) { return Number(x || 0).toLocaleString('en-US'); };
   var when = function (t) { return t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : ''; };
@@ -221,6 +224,25 @@
     }).catch(function () { $('econ-tel-status').textContent = 'Could not reach the server.'; });
   }
 
+  // owner answers 2026-10-20 (3): the PAT grant and the House adjust are a Pepe owner's with the password step-up - a
+  // single-use nonce (POST /api/admin/stepup/nonce {for}) and the account password go with the request (stepup.js)
+  var FETCH = { 'content-type': 'application/json', 'X-Requested-With': 'fetch' };
+  function stepUpPost(purpose, url, body, pwId) {
+    var pw = $(pwId) ? $(pwId).value : '';
+    if (!pw) return Promise.resolve({ ok: false, status: 0, d: { message: _t('js.admpanel.pw_needed', 'Enter your account password first.') } });
+    return fetch('/api/admin/stepup/nonce', { method: 'POST', credentials: 'same-origin', headers: FETCH, body: JSON.stringify({ for: purpose }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (n) {
+        if (!n || !n.ok || !n.nonce) return { ok: false, status: 0, d: { message: (n && n.error) || _t('js.admpanel.stepup_failed', 'Could not start the confirmation - reload the page.') } };
+        body.nonce = n.nonce;
+        body.password = pw;
+        return fetch(url, { method: 'POST', credentials: 'same-origin', headers: FETCH, body: JSON.stringify(body) }).then(function (r) {
+          if ($(pwId)) $(pwId).value = '';
+          return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, d: d }; });
+        });
+      });
+  }
+
   // ── Economy: PAT grants (the old "Points Panel") ──
   var grant = $('pointsTransferForm');
   if (grant) {
@@ -228,14 +250,11 @@
       e.preventDefault();
       var username = $('pointsUsername').value;
       // 1.99jw: paid by the incentive budget (Admins only) - a refusal (budget short / not synced, weekly cap, unknown user, bad amount) says why
-      fetch(grant.getAttribute('action').replace('username', encodeURIComponent(username)), {
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amount: $('pointsAmount').value }), method: 'POST',
-      }).then(function (r) {
-        return r.json().catch(function () { return {}; }).then(function (d) {
-          if (r.ok) say('transferStatus', true, 'PAT transferred from the incentive budget.');
-          else say('transferStatus', false, (d && d.message) || 'Transfer failed. Check the username.');
-        });
-      }).catch(function () { say('transferStatus', false, 'Could not reach the server.'); });
+      stepUpPost('grant', grant.getAttribute('action').replace('username', encodeURIComponent(username)), { amount: $('pointsAmount').value }, 'pointsPw')
+        .then(function (x) {
+          if (x.ok) say('transferStatus', true, 'PAT transferred from the incentive budget.');
+          else say('transferStatus', false, (x.d && x.d.message) || 'Transfer failed. Check the username.');
+        }).catch(function () { say('transferStatus', false, 'Could not reach the server.'); });
     });
   }
 
@@ -283,11 +302,10 @@
     jp.addEventListener('submit', function (e) {
       e.preventDefault();
       // 1.99jw: Admins only, with a written reason; + comes from the Federal Reserve, - goes back to it (a refusal says why)
-      postJson('/api/g/wheel/jackpot', { amount: $('jackpotAmount').value, reason: $('jackpotReason').value }).then(function (r) {
-        return r.json().catch(function () { return {}; }).then(function (d) {
-          if (r.ok) say('jackpotStatus', true, 'House updated: ' + n(d.jackpotTotal) + ' PAT now.');
-          else say('jackpotStatus', false, (d && d.message) || 'Failed to update the jackpot.');
-        });
+      // owner answers 2026-10-20: a Pepe owner's, with the password step-up (stepUpPost above)
+      stepUpPost('house', '/api/g/wheel/jackpot', { amount: $('jackpotAmount').value, reason: $('jackpotReason').value }, 'jackpotPw').then(function (x) {
+        if (x.ok) say('jackpotStatus', true, 'House updated: ' + n(x.d.jackpotTotal) + ' PAT now.');
+        else say('jackpotStatus', false, (x.d && x.d.message) || 'Failed to update the jackpot.');
       }).catch(function () { say('jackpotStatus', false, 'Could not reach the server.'); });
     });
   }

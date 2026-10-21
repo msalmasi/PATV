@@ -61,6 +61,8 @@ test.before(async () => {
   const SG = require(path.join(repo, "staffgrant"));
   app.post("/api/g/wheel/jackpot", addUser, (req, res) => SG.houseAdjustRoute(req, res));
   app.post("/api/admin/transfer/:username", addUser, (req, res) => SG.grantRoute(req, res));
+  // owner answers 2026-10-20 (3): their step-up nonce (index.js mounts the same handler)
+  app.post("/api/admin/stepup/nonce", addUser, (req, res) => require(path.join(repo, "stepup")).nonceRoute(req, res));
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
   await new Promise((r) => setTimeout(r, 200));      // the modules create their tables on register
@@ -257,15 +259,18 @@ test("the PAT grant and the House adjust: an Admin who isn't a Pepe owner gets 4
   assert.equal((await call("/api/g/wheel/jackpot", U.staff, { amount: 500, reason: "a reason long enough" })).body.message, "Admins only.");
   assert.equal(await rakes(), r0, "the House didn't move");
   assert.equal(await txs(), t0, "nobody was paid");
-  // the owner passes the gate: the next answer is staffgrant's own input check (nothing moves on a bad amount)
-  const ho = await call("/api/g/wheel/jackpot", U.owner, { amount: "abc", reason: "a reason long enough" });
+  // the owner passes the gate: the next answer is the password step-up (owner answers 2026-10-20), then staffgrant's own input
+  // check (nothing moves on a bad amount)
+  const nonce = async (purpose) => (await call("/api/admin/stepup/nonce", U.owner, { for: purpose })).body.nonce;
+  assert.equal((await call("/api/g/wheel/jackpot", U.owner, { amount: "abc", reason: "a reason long enough" })).status, 409, "no nonce: the step-up");
+  const ho = await call("/api/g/wheel/jackpot", U.owner, { amount: "abc", reason: "a reason long enough", nonce: await nonce("house"), password: "pw-right" });
   assert.equal(ho.status, 400, JSON.stringify(ho.body));
   assert.match(ho.body.message, /whole number/);
-  const go = await call("/api/admin/transfer/stf", U.owner, { amount: "abc" });
+  const go = await call("/api/admin/transfer/stf", U.owner, { amount: "abc", nonce: await nonce("grant"), password: "pw-right" });
   assert.equal(go.status, 400, JSON.stringify(go.body));
   assert.match(go.body.message, /whole number/);
   // ...and a real one goes through to the move (an unknown account: 404 from staffgrant, not the gate)
-  assert.equal((await call("/api/admin/transfer/nobody_here", U.owner, { amount: 5 })).status, 404);
+  assert.equal((await call("/api/admin/transfer/nobody_here", U.owner, { amount: 5, nonce: await nonce("grant"), password: "pw-right" })).status, 404);
 });
 
 test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backend.js is read-only", () => {

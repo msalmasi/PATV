@@ -122,6 +122,18 @@ async function houseAdjust(admin, rawAmount, rawReason) {
 // ── the two web routes (index.js mounts them; test/policy-owner-gates.test.js mounts the same functions) ──
 // PO-0b (D-6): both are a Pepe OWNER's - the capability's class AND the owner role on the linked chat login, read fresh
 // (staffroles.ownerOf). The owner check runs before anything moves.
+// Owner answers 2026-10-20 (3): + the password step-up (stepup.js: a same-origin fetch, a single-use nonce from
+// POST /api/admin/stepup/nonce {for: grant|house} and the account password, 5 wrong in 15 min -> 429) after the owner check
+// and before anything moves. A refusal answers {message, code}.
+async function stepUpOr(req, res, me) {
+  try {
+    await require("./stepup").check(req, me, req.body || {});
+    return true;
+  } catch (e) {
+    if (e && e.refuse) { res.status(e.status).json({ message: e.message, code: e.code }); return false; }
+    throw e;
+  }
+}
 
 /** POST /api/g/wheel/jackpot (after addUser + requireUser). 1.99jw: Admins only (Staff lost it), a written reason, a Fed <->
  *  House MOVE (houseAdjust). The class as the DATABASE has it now (the JWT's can be stale). */
@@ -132,6 +144,7 @@ async function houseAdjustRoute(req, res) {
     if (!SP.can(me, "econ.house_adjust")) return res.status(403).json({ message: "Admins only." });
     const SR = require("./staffroles");
     if (!(await SR.ownerOf(me, "econ.house_adjust"))) return res.status(403).json({ message: SR.OWNER_ONLY });
+    if (!(await stepUpOr(req, res, me))) return;
     const r = await houseAdjust({ userId: me.userId, username: me.username }, (req.body || {}).amount, (req.body || {}).reason);
     res.status(r.status).json(r.body);
   } catch (error) {
@@ -146,8 +159,10 @@ async function grantRoute(req, res) {
   const SP = require("./siteperms");
   if (SP.can(req.user, "econ.grant_pat")) {
     const SR = require("./staffroles");
-    if (!(await SR.ownerOf(req.user, "econ.grant_pat"))) return res.status(403).json({ message: SR.OWNER_ONLY });
+    const me = await SR.ownerOf(req.user, "econ.grant_pat");
+    if (!me) return res.status(403).json({ message: SR.OWNER_ONLY });
     try {
+      if (!(await stepUpOr(req, res, me))) return;
       const r = await grant(req.params.username, req.body && req.body.amount, req.user.username);
       return res.status(r.status).json(r.body);
     } catch (error) {
@@ -160,4 +175,31 @@ async function grantRoute(req, res) {
   return res.redirect("/login");
 }
 
-module.exports = { grant, houseAdjust, houseAdjustRoute, grantRoute, FLOW };
+/** POST /api/admin/redemption-codes (after authenticateToken + addUser): add or change a redemption code. 1.99abn: Admins only
+ *  (a code pays out of a vault). Owner answers 2026-10-20 (1): a Pepe OWNER's (the class + the owner role on the linked chat
+ *  login, read fresh) - an Admin who isn't one gets 403 and nothing is written. Deleting a code (index.js) stays Admins'. */
+async function codesRoute(req, res) {
+  const SP = require("./siteperms");
+  if (!SP.can(req.user, "econ.codes_manage")) {
+    if (typeof req.flash === "function") req.flash("error", "Access denied. You must be an admin or staff to access this page.");
+    return res.redirect("/login");
+  }
+  const SR = require("./staffroles");
+  if (!(await SR.ownerOf(req.user, "econ.codes_manage"))) return res.status(403).json({ message: SR.OWNER_ONLY });
+  const { code, points, uses_allowed, expiration_date } = req.body || {};
+  try {
+    const existingCode = await getQuery("SELECT code FROM redemption_codes WHERE code = ?", [code]);
+    if (existingCode.length > 0) {
+      await runQuery("UPDATE redemption_codes SET points = ?, uses_allowed = ?, uses_remaining = ?, expiration_date = ? WHERE code = ?", [points, uses_allowed, uses_allowed, expiration_date, code]);
+    } else {
+      await runQuery("INSERT INTO redemption_codes (code, points, uses_allowed, uses_remaining, expiration_date) VALUES (?, ?, ?, ?, ?)", [code, points, uses_allowed, uses_allowed, expiration_date]);
+    }
+    console.log(`[codes] ${req.user.username} saved a redemption code (${Number(points) || 0} PAT x ${Number(uses_allowed) || 0} uses)`);   // never the code itself
+    res.json({ message: "Points transferred successfully." });
+  } catch (error) {
+    console.error("Failed to update redemption code:", error);
+    res.status(500).send("Failed to update redemption code");
+  }
+}
+
+module.exports = { grant, houseAdjust, houseAdjustRoute, grantRoute, codesRoute, FLOW };

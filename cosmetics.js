@@ -821,6 +821,7 @@ function register(app, { isBotToken, addUser }) {
       if (b.switch !== undefined) {
         if (await dropLive()) return res.status(409).json({ ok: false, error: "The site owns the drop table - Pepe releases it (!cosmetics backend off confirm)." });
         await setDropMeta("enabled", !!b.switch);
+        await require("./backends").noteLegacy(req.user, "cosdrops", !!b.switch);   // owner answers 2026-10-20: the wish + audit (backends.js)
         return res.json({ ok: true, enabled: await dropEnabled() });
       }
       const r = await adminSetDrops(b.values, me.username);
