@@ -1,7 +1,8 @@
 // S1 V4: tools/hubseam-driver.js's commands for the contract suite's cross-store scenario (the hub repo's
-// seam-contract.integration.test.ts 5c, docs/seam-contract.md): chatLines seeds the account's web lines in the pad chat archive
-// (a reported one, one in a room under a legal hold, an incognito one), deleteAccount {remove_public} deletes the account with
-// "Also remove my public messages", chatLog reads the lines back - v1's real modules on a throwaway database, no hub.
+// seam-contract.integration.test.ts 5b, docs/seam-contract.md): chatLines seeds the account's lines in the pad chat archive as the
+// bridge archives them (web lines under the account key - or, linked, under the login with d.u.web -, a reported one, one in a
+// room under a legal hold, incognito ones, a Camfrog one), deleteAccount {remove_public} deletes the account with "Also remove my
+// public messages", chatLog reads the lines back - v1's real modules on a throwaway database, no hub.
 //   node --test test/hubseam-driver-v4.test.js
 "use strict";
 const test = require("node:test");
@@ -45,9 +46,10 @@ test("S1 V4 driver commands: chatLines / deleteAccount {remove_public} / chatLog
   const d = driver();
   try {
     await d.call("switches", { set: { erasure: true } });
-    await d.call("account", { user: "v4a", login: "VeeFour" });
+    // an account with NO chat login: its web lines are under u:<id>
+    await d.call("account", { user: "v4u" });
     await d.call("account", { user: "v4b" });
-    const { cs } = await d.call("chatLines", { user: "v4a", lines: [
+    const { cs } = await d.call("chatLines", { user: "v4u", lines: [
       { text: "plain words" }, { text: "reported words", report: true }, { text: "held words", room: "held" }, { text: "incognito words", incognito: true },
     ], hold_rooms: ["held"] });
     const { cs: other } = await d.call("chatLines", { user: "v4b", lines: [{ text: "someone else" }] });
@@ -57,7 +59,7 @@ test("S1 V4 driver commands: chatLines / deleteAccount {remove_public} / chatLog
                      [["plain words", "account", false, false], ["reported words", "account", false, false], ["held words", "account", false, false],
                       ["incognito words", "hash", false, false]]);
     assert.ok(before[0].display, "named before");
-    const { request } = await d.call("deleteAccount", { user: "v4a", remove_public: true });
+    const { request } = await d.call("deleteAccount", { user: "v4u", remove_public: true });
     assert.match(request, /^\d+$/);
     const [plain, reported, held, incog] = (await d.call("chatLog", { cs })).lines;
     for (const l of [plain, incog]) assert.deepEqual([l.text, l.purged, l.down, l.rm_by, l.who, l.display], [null, true, true, "self", "hash", null]);
@@ -65,6 +67,22 @@ test("S1 V4 driver commands: chatLines / deleteAccount {remove_public} / chatLog
     assert.equal(reported.text, "reported words");
     assert.equal(held.text, "held words");
     assert.deepEqual((await d.call("chatLog", { cs: other })).lines.map((l) => [l.text, l.down]), [["someone else", false]]);
+    // review fix: a LINKED account - its web lines are under its Camfrog login (bridge.js jobSender), and they go too; its
+    // Camfrog line and the one it said incognito (no web mark on an anonymised line) are the login's: untouched
+    await d.call("account", { user: "v4a", login: "VeeFour" });
+    const { cs: linked } = await d.call("chatLines", { user: "v4a", lines: [
+      { text: "linked web words" }, { text: "linked reported words", report: true }, { text: "linked camfrog words", camfrog: true },
+      { text: "linked incognito words", incognito: true },
+    ] });
+    const lb = (await d.call("chatLog", { cs: linked })).lines;
+    assert.deepEqual(lb.map((l) => [l.who, l.display]), [["login", "VeeFour"], ["login", "VeeFour"], ["login", "VeeFour"], ["hash", "someone"]]);
+    await assert.rejects(d.call("chatLines", { user: "v4b", lines: [{ text: "x", camfrog: true }] }), /linked login/);
+    await d.call("deleteAccount", { user: "v4a", remove_public: true });
+    const [lw, lr, lc, li] = (await d.call("chatLog", { cs: linked })).lines;
+    assert.deepEqual([lw.text, lw.purged, lw.rm_by, lw.who, lw.display], [null, true, "self", "hash", null]);
+    assert.deepEqual([lr.text, lr.purged, lr.down, lr.rm_by], ["linked reported words", false, true, "self"]);
+    assert.deepEqual([lc.text, lc.down, lc.who], ["linked camfrog words", false, "login"]);
+    assert.deepEqual([li.text, li.down, li.who], ["linked incognito words", false, "hash"]);
     // without the choice: the archive keeps the words (a former member's line)
     await d.call("account", { user: "v4c" });
     const { cs: keep } = await d.call("chatLines", { user: "v4c", lines: [{ text: "kept words" }] });

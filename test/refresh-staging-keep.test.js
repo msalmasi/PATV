@@ -134,7 +134,7 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          // CL2: the pad chat archive (chatlog.js TABLES - test/chatlog-guards.test.js keeps the two in step)
                                          "chatlog_rooms", "chat_log", "chatlog_hidden", "chatlog_tx_hidden", "chatlog_private_ever", "chatlog_hidden_held",
                                          "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views",
-                                         "chatlog_exports", "chatlog_meta",
+                                         "chatlog_exports", "chatlog_meta", "chatlog_erase_wait",
                                          // CL2 fix-up: the live feed's tables (the archive's seed reads bridge_feed)
                                          "bridge_rooms", "bridge_feed",
                                          "pad_hub"].sort(), "S1-D1: staging keeps its own hub pad ids");

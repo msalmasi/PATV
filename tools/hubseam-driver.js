@@ -46,9 +46,12 @@
 // S1 V4 (the privacy UI: "Also remove my public messages", ADR 0007 OQ-20 - the cross-store scenario of the contract suite):
 //   deleteAccount {user, remove_public?}   (above) remove_public: the member ticked "Also remove my public messages" - the hub's
 //                               row carries it and the pad chat archive's web lines of the account are purged after the commit
-//   chatLines {user, lines: [{text, room?, report?, incognito?}], hold_rooms?}   -> {cs}   the account's web lines in the pad
-//                               chat archive (chatlog.rowOf, as the bridge archives them; incognito: the "h:<hash>" form);
-//                               report: an open report on the line; hold_rooms: a legal hold on each of those rooms
+//   chatLines {user, lines: [{text, room?, report?, incognito?, camfrog?}], hold_rooms?}   -> {cs}   the account's lines in the
+//                               pad chat archive (chatlog.rowOf), as the bridge archives them: a web line under the account key
+//                               "u:<id>" - or, for an account with a linked Camfrog login, under that login with d.u.web (review
+//                               fix: the bridge's jobSender); incognito: the "h:<hash>" form of that key; camfrog: a line said in
+//                               Camfrog under the linked login (no web mark); report: an open report on the line; hold_rooms: a
+//                               legal hold on each of those rooms
 //   chatLog {cs}                -> {lines: [{c, text, purged, down, rm_by, who, display}]}   those lines now (who: "account" for
 //                               the u:<id> key, "hash" for an h:<hash>, "login"; display: the name on the row, or null)
 "use strict";
@@ -272,9 +275,11 @@ const CMDS = {
     const CL = require(path.join(repo, "chatlog")), CLM = require(path.join(repo, "chatlogmod"));
     await CL.init();
     await CLM.init();
-    const u = (await M.db.getQuery("SELECT userId, username, displayname FROM users WHERE userId = ?", [String(user)]))[0];
+    const u = (await M.db.getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [String(user)]))[0];
     if (!u) throw new Error("no such user");
-    const key = "u:" + String(u.userId).toLowerCase();
+    // (bridge.js jobSender: a linked member's web line is THEIR LOGIN's line, marked web; an unlinked account's is its u:<id>)
+    const login = u.camfrogUsername ? String(u.camfrogUsername).trim().toLowerCase() : null;
+    const key = login || "u:" + String(u.userId).toLowerCase();
     const rkOf = async (room) => {
       const roomId = "Drv." + String(room || "room");
       await M.db.runQuery("INSERT INTO chatlog_rooms (room_id, owner_since, created) VALUES (?, 0, ?) ON CONFLICT(room_id) DO NOTHING", [roomId, Date.now()]);
@@ -286,8 +291,10 @@ const CMDS = {
         const rk = await rkOf(l.room);
         const c = Number((await M.db.getQuery("SELECT COALESCE(MAX(c), 0) + 1 AS c FROM chat_log"))[0].c);
         const it = { c, ts: Date.now(), k: "msg", text: String(l.text || "") };
+        if (l.camfrog && !login) throw new Error("a Camfrog line needs a linked login");
         if (l.incognito) Object.assign(it, { u: { display: "someone", anon: true }, ah: CL.hash(key) });
-        else it.u = { login: key, display: u.displayname || u.username, web: true };
+        else if (l.camfrog) it.u = { login, display: u.camfrogUsername };
+        else it.u = { login: key, display: login ? u.camfrogUsername : u.displayname || u.username, web: true };
         const r = CL.rowOf({ it }, rk, "p");
         await M.db.runQuery("INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [r.c, r.rk, r.ts, r.k, r.who, r.text, r.rt, r.aud, r.d]);
         if (l.report) {
