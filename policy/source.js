@@ -58,6 +58,15 @@ async function pushView() {
            journal: listOr(p.journal), days_done: listOr(p.days_done), mo_days_done: listOr(p.mo_days_done),
            local_check: Array.isArray(p.local_check) ? p.local_check : null, bot_version: p.bot_version || "" };
 }
+/** The Phase 4b switches as Pepe's push last carried them (plan D-1 / T11: they stay his - never mirrored into policy_cfg,
+ *  never in an export, so this answers the push in every mode, site-owned included): {at, block}. block = his "phase4b"
+ *  object ({setting: {on, live}}; null: nothing pushed, or an older Pepe that never sends one); at = the push's time (s).
+ *  Review of the PO-3 follow-up: /admin/economy's read-only card read the push itself (a second reader, T14) - it reads here. */
+async function phase4b() {
+  const p = await rawPush();
+  const b = p ? p.phase4b : null;
+  return { at: p && Number(p.at) > 0 ? Number(p.at) : null, block: b && typeof b === "object" && !Array.isArray(b) ? b : null };
+}
 /** Everything at once (one read of the push, then the config store's view of it). */
 async function read() {
   return require("./config").sourceView(await pushView());
@@ -95,4 +104,4 @@ async function econCfg() { return (await read()).econ_cfg; }
 async function burn() { const s = await read(); return { cfg: s.burn_cfg, inflight: s.burn_inflight }; }
 async function age() { return C.cfgAge(); }
 
-module.exports = { owner, read, pushView, rawPush, config, hour, hourOf, flags, econCfg, burn, age, TZ_DEFAULT, EPOCH_HOUR_DEFAULT };
+module.exports = { owner, read, pushView, rawPush, phase4b, config, hour, hourOf, flags, econCfg, burn, age, TZ_DEFAULT, EPOCH_HOUR_DEFAULT };

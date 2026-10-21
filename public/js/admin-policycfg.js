@@ -101,6 +101,7 @@
       });
       tbl.appendChild(tb); wrap.appendChild(tbl); secs.appendChild(wrap);
     });
+    renderPhase4b(v.phase4b);
     // the diff report
     var dk = $('pcfgDiffKv'); dk.textContent = '';
     Object.keys(d.sources || {}).forEach(function (s) { var x = d.sources[s]; kv(dk, s, x.seen ? _t('js.adm.pcfg.src_age', '{n} s ago', { n: x.age_s }) + (x.stale ? ' · ' + _t('js.adm.pcfg.stale', 'stale') : '') : _t('js.adm.pcfg.never', 'never')); });
@@ -121,6 +122,34 @@
     Object.keys(v.mirror_days || {}).sort().reverse().forEach(function (day) { var x = v.mirror_days[day]; row(mi, [day, x.pushes, x.changes, x.max ? JSON.stringify(x.max) : '—']); });
     renderLog(v.log || []);
     renderEdit();
+  }
+  // plan D-1 / T11: the Phase 4b switches stay Pepe's (never handed over) - read-only here, as his policy push last carried them,
+  // naming who changes them (a Pepe admin or owner: the chat command, or Pepe's admin panel)
+  function renderPhase4b(pb) {
+    var box = $('pcfgP4b');
+    if (!box) return;
+    box.textContent = '';
+    pb = pb || { rows: [] };
+    var h = document.createElement('h3'); h.textContent = _t('js.adm.pcfg.p4b_title', 'Phase 4b switches (Pepe\'s - read-only here)'); box.appendChild(h);
+    var p = document.createElement('p'); p.className = 'adm-help';
+    p.textContent = _t('js.adm.pcfg.p4b_who', 'Owner: Pepe - they are not part of the hand-over. A Pepe admin or owner changes them: the chat command in each row, or Pepe\'s admin panel.')
+      + ' ' + (pb.pushed ? _t('js.adm.pcfg.p4b_at', 'As his policy push carried them at {when}.', { when: when(pb.at) })
+                         : _t('js.adm.pcfg.p4b_none', 'His policy push hasn\'t carried them yet (an older Pepe).'));
+    box.appendChild(p);
+    var wrap = document.createElement('div'); wrap.className = 'adm-tbl';
+    var tbl = document.createElement('table'); tbl.setAttribute('aria-label', _t('js.adm.pcfg.p4b_title', 'Phase 4b switches (Pepe\'s - read-only here)'));
+    var th = document.createElement('thead'), trh = document.createElement('tr');
+    [_t('js.adm.pcfg.p4b_col_switch', 'Switch'), _t('js.adm.pcfg.col_key', 'Setting'), _t('js.adm.pcfg.p4b_col_on', 'On'), _t('js.adm.pcfg.p4b_col_live', 'Live'),
+     _t('js.adm.pcfg.p4b_col_cmd', 'Changed in chat with')].forEach(function (t) { var c = document.createElement('th'); c.textContent = t; trh.appendChild(c); });
+    th.appendChild(trh); tbl.appendChild(th);
+    var tb = document.createElement('tbody');
+    var yn = function (x, yes, no) { return x === true ? yes : x === false ? no : '—'; };
+    (pb.rows || []).forEach(function (r) {
+      var tr = row(tb, [r.label, r.key, yn(r.on, _t('js.adm.pcfg.p4b_on', 'on'), _t('js.adm.pcfg.p4b_off', 'off')),
+                        yn(r.live, _t('js.adm.pcfg.p4b_yes', 'yes'), _t('js.adm.pcfg.p4b_no', 'no')), r.cmd]);
+      tr.className = 'pcfg-ro';
+    });
+    tbl.appendChild(tb); wrap.appendChild(tbl); box.appendChild(wrap);
   }
   function renderLog(rows) {
     var lg = $('pcfgLog'); lg.textContent = '';

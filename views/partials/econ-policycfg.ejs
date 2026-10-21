@@ -12,6 +12,7 @@
       <div class="adm-kv" id="pcfgKv"><div><b><%= t('adm.policy.status') %></b><span><%= t('adm.policy.loading') %></span></div></div>
       <p class="adm-help" id="pcfgMode"></p>
       <div id="pcfgSections"></div>
+      <div id="pcfgP4b"></div>
       <div id="pcfgEdit" hidden>
         <h3 id="pcfgEditT"><%= t('adm.pcfg.review') %></h3>
         <div class="adm-tbl"><table aria-labelledby="pcfgEditT"><thead><tr><th><%= t('adm.pcfg.col_key') %></th><th><%= t('adm.pcfg.col_now') %></th>
@@ -59,13 +60,13 @@
       <p class="adm-msg" id="pcfgMsg" role="status" aria-live="polite"></p>
     </div>
     <style>
-      #pcfgSections h3 { margin: 14px 0 4px; font-size: 1rem; }
+      #pcfgSections h3, #pcfgP4b h3 { margin: 14px 0 4px; font-size: 1rem; }
       #pcfgSections td input, #pcfgSections td select { width: 100%; max-width: 160px; }
-      #pcfgSections .pcfg-ro { opacity: .75; }
+      #pcfgSections .pcfg-ro, #pcfgP4b .pcfg-ro { opacity: .75; }
       #pcfgSections .pcfg-staged { outline: 2px solid var(--ds-accent, #4caf50); }
       .pcfg-list { overflow-wrap: anywhere; }
       #pcfgMsg { white-space: pre-wrap; overflow-wrap: anywhere; }
     </style>
-    <script src="/public/js/admin-policycfg.js?v=1" defer></script>
+    <script src="/public/js/admin-policycfg.js?v=2" defer></script>
   <% } %>
 </section>

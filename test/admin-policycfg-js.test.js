@@ -5,6 +5,8 @@
 //   * site-owned, a Pepe owner: a row's editor stages a change, the review lists it, the save needs a note, then asks a nonce and
 //     posts {changes, base_rev, note, nonce, password} - a fraction key's field is a percent number; read-only keys have no editor
 //   * a stale rev (409 stale_rev) says so and reloads
+//   * the Phase 4b switches (plan D-1): read-only rows from Pepe's push - who owns them and who changes them named, the chat
+//     command per row; an older Pepe's push without them says so
 //   NODE_PATH=G:/PATV/node_modules node --test test/admin-policycfg-js.test.js
 "use strict";
 const test = require("node:test");
@@ -30,7 +32,7 @@ function El(id, tag) {
   Object.defineProperty(e, "textContent", { get() { return own + e.children.map((c) => c.textContent).join(""); }, set(v) { own = String(v); e.children = []; } });
   return e;
 }
-const IDS = ["pcfgAdm", "pcfgKv", "pcfgMode", "pcfgSections", "pcfgEdit", "pcfgEditRows", "pcfgEditForm", "pcfgNote", "pcfgPw", "pcfgSave", "pcfgDiscard",
+const IDS = ["pcfgAdm", "pcfgKv", "pcfgMode", "pcfgSections", "pcfgP4b", "pcfgEdit", "pcfgEditRows", "pcfgEditForm", "pcfgNote", "pcfgPw", "pcfgSave", "pcfgDiscard",
              "pcfgDiffKv", "pcfgDiff", "pcfgDual", "pcfgDualRows", "pcfgMirror", "pcfgLog", "pcfgLogForm", "pcfgLogKey", "pcfgLogActor", "pcfgLogVia",
              "pcfgPauseForm", "pcfgPauseFeature", "pcfgPauseNote", "pcfgPausePw", "pcfgPauseBtn", "pcfgResumeBtn", "pcfgMsg"];
 const walk = (e, f, out = []) => { if (f(e)) out.push(e); for (const c of e.children || []) walk(c, f, out); return out; };
@@ -47,7 +49,11 @@ function viewOf(owner, canEdit) {
            diff: { empty: owner === "pepe", counts: { missing: 0, unknown: 0, invalid: 0, whole: 0, disagree: 0 }, missing: [], unknown: [], invalid: [], whole: [], disagree: [],
                    sources: { policy: { seen: 1, age_s: 30, stale: false } } },
            dual: { checks: [{ day: "2026-10-31", consumer: "capital.cutoff", checks: 1, diffs: 0 }], diffs: [] }, mirror_days: { "2026-10-31": { pushes: 288, changes: 0, max: { missing: 0 } } },
-           window: { open: false, waiting: [] }, pepe_rev: { rev: 7, at: 1792500000000 }, log: [], can_edit: canEdit };
+           window: { open: false, waiting: [] }, pepe_rev: { rev: 7, at: 1792500000000 }, log: [], can_edit: canEdit,
+           phase4b: { owner: "pepe", readonly: true, pushed: true, at: 1792500000000, rows: [
+             { key: "econ_room_vaults", label: "Room vaults (E-3)", cmd: "!econ roomvaults on|off", present: true, on: true, live: true },
+             { key: "econ_convoys", label: "Convoys (E-7)", cmd: "!econ convoys on|off", present: true, on: true, live: false },
+             { key: "econ_vwm", label: "Verified watch-minutes (E-5)", cmd: "!econ vwm on|off", present: true, on: false, live: null }] } };
 }
 function boot(view, answers = {}) {
   const els = {};
@@ -124,4 +130,31 @@ test("a stale rev says so (nothing changed) and reloads", async () => {
   els.pcfgEditForm.fire("submit");
   await tick();
   assert.match(els.pcfgMsg.textContent, /now rev 9/);
+});
+
+test("the Phase 4b switches: read-only rows from Pepe's push - the owner and who changes them named, the chat command per row", async () => {
+  for (const [owner, canEdit] of [["pepe", false], ["site", true]]) {
+    const { els } = boot(viewOf(owner, canEdit));
+    await tick();
+    const box = els.pcfgP4b;
+    assert.equal(walk(box, (e) => e.tag === "input" || e.tag === "select" || e.tag === "button").length, 0, owner + ": nothing to edit");
+    assert.match(box.textContent, /Phase 4b switches \(Pepe's - read-only here\)/);
+    assert.match(box.textContent, /Owner: Pepe - they are not part of the hand-over\. A Pepe admin or owner changes them: the chat command in each row, or Pepe's admin panel\./);
+    assert.match(box.textContent, /As his policy push carried them at 2026-/);
+    assert.match(box.textContent, /Room vaults \(E-3\)econ_room_vaultsonyes!econ roomvaults on\|off/);
+    assert.match(box.textContent, /Convoys \(E-7\)econ_convoysonno!econ convoys on\|off/, "on but not live");
+    assert.match(box.textContent, /econ_vwmoff—!econ vwm on\|off/, "no live reading: a dash");
+    const rows = walk(box, (e) => e.tag === "tr" && e.className === "pcfg-ro");
+    assert.equal(rows.length, 3, "every row read-only");
+  }
+  const old = viewOf("pepe", false);
+  old.phase4b = { owner: "pepe", readonly: true, pushed: false, at: null, rows: [{ key: "econ_vwm", label: "x", cmd: "!econ vwm on|off", present: false, on: null, live: null }] };
+  const { els } = boot(old);
+  await tick();
+  assert.match(els.pcfgP4b.textContent, /His policy push hasn't carried them yet \(an older Pepe\)\./);
+  assert.match(els.pcfgP4b.textContent, /econ_vwm——!econ vwm/, "unknown: dashes, never a guess");
+  delete old.phase4b;
+  const b2 = boot(old);
+  await tick();
+  assert.match(b2.els.pcfgP4b.textContent, /an older Pepe/, "a server without the block: the same");
 });

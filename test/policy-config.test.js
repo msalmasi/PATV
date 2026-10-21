@@ -626,3 +626,34 @@ test("review of the owner answers (CF9 / CF18): an edit without base_rev is refu
   }
   assert.equal((await CC.cfg({ consumer: "capital.cutoff" })).ceil_apr, snap.cfg.vault_ceil_apr, "back: the store's value");
 });
+
+test("the Phase 4b switches (D-1): shown read-only from Pepe's push - none pushed yet / a malformed block reads unknown, never a guess", async () => {
+  const keep = await C.meta("cfg");
+  const view = async () => (await getJ("/api/admin/policy/cfg", U.admin)).body.phase4b;
+  try {
+    const noBlock = Object.assign({}, keep);
+    delete noBlock.phase4b;
+    await C.setMeta("cfg", noBlock);
+    let p4 = await view();
+    assert.equal(p4.owner, "pepe");
+    assert.equal(p4.readonly, true);
+    assert.equal(p4.pushed, false, "an older Pepe's push has no block");
+    assert.deepEqual(p4.rows.map((r) => r.key), PC.PHASE4B.map((x) => x[0]));
+    assert.ok(p4.rows.every((r) => r.on === null && r.live === null && r.present === false && /^!econ [a-z]+ on\|off$/.test(r.cmd)));
+    await C.setMeta("cfg", Object.assign({}, keep, { phase4b: { econ_room_vaults: { on: "yes", live: 1 }, econ_convoys: [true],
+                                                                econ_vwm: { on: true, live: false }, econ_bogus: { on: true } } }));
+    p4 = await view();
+    const by = (k) => p4.rows.find((r) => r.key === k);
+    assert.equal(p4.pushed, true);
+    assert.deepEqual([by("econ_room_vaults").present, by("econ_room_vaults").on, by("econ_room_vaults").live], [true, null, null], "not booleans: unknown");
+    assert.deepEqual([by("econ_convoys").present, by("econ_convoys").on], [false, null], "a malformed entry: not there");
+    assert.deepEqual([by("econ_vwm").on, by("econ_vwm").live], [true, false]);
+    assert.equal(p4.rows.some((r) => r.key === "econ_bogus"), false, "only the known switches");
+    await C.setMeta("cfg", Object.assign({}, keep, { phase4b: [1, 2] }));
+    assert.equal((await view()).pushed, false, "an array is no block");
+    const snap = await PC.snapshot({ fresh: true });
+    assert.equal(Object.keys(snap.cfg).some((k) => /^econ_/.test(k)), false, "never in the config store");
+  } finally {
+    await C.setMeta("cfg", keep);
+  }
+});
