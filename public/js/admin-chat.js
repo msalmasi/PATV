@@ -26,9 +26,17 @@
       .catch(function () { return { ok: false }; })
       .then(function (j) { done(j || { ok: false }); });
   }
+  // a refusal in the reader's language: js.admchat.e.<code> when the page knows the code, else the server's own text
+  var CODES = ['cross_site', 'auth', 'admin_only', 'owner_only', 'reason_required', 'bad_request', 'bad_backend', 'hub_read_s2',
+               'no_pad', 'site_pads_only', 'chat_hub_needs', 'internal'];
+  function refusal(j) {
+    var plain = j.error || _t('js.admchat.failed', 'That did not work - try again.', {});
+    if (CODES.indexOf(j.code) < 0) return plain;
+    return _t('js.admchat.e.' + j.code, plain, { list: (j.missing || []).join(', ') });
+  }
   function finish(msg) {
     return function (j) {
-      if (!j.ok) return say(msg, j.error || _t('js.admchat.failed', 'That did not work - try again.', {}), true);
+      if (!j.ok) return say(msg, refusal(j), true);
       say(msg, j.changed === false ? _t('js.admchat.unchanged', 'Already like that - nothing changed.', {}) : _t('js.admchat.saved', 'Saved.', {}));
       setTimeout(function () { location.reload(); }, 600);
     };

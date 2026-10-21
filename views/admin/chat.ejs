@@ -46,15 +46,18 @@
 <section class="adm-card" id="pads" aria-labelledby="acPadsT">
   <h2 id="acPadsT"><%- t('admchat.pads.h') %></h2>
   <p class="adm-help"><%- t('admchat.pads.help') %></p>
+  <% if (!V.pads_ok) { %>
+    <p class="adm-help" id="acPadsDown"><span class="adm-pill bad"><%- t('admchat.pads.unreadable') %></span></p>
+  <% } %>
   <% if (!V.pads.length) { %>
-    <p class="adm-help" id="acPadsNone"><%- t('admchat.pads.none') %></p>
+    <% if (V.pads_ok) { %><p class="adm-help" id="acPadsNone"><%- t('admchat.pads.none') %></p><% } %>
   <% } else { %>
   <div class="adm-tbl"><table>
     <thead><tr><th><%- t('admchat.col.pad') %></th><th><%- t('admchat.col.platform') %></th><th><%- t('admchat.col.backend') %></th>
       <th><%- t('admchat.col.changed') %></th><th></th></tr></thead>
     <tbody>
       <% V.pads.forEach((p) => { %><tr data-pad="<%= p.room_id %>">
-        <td><b><% if (p.slug) { %><a href="/p/<%= encodeURIComponent(p.slug) %>"><%= padName(p) %></a><% } else { %><%= padName(p) %><% } %></b><br><span class="adm-help"><code><%= p.room_id %></code></span></td>
+        <td><b><% if (p.slug && !p.gone) { %><a href="/p/<%= encodeURIComponent(p.slug) %>"><%= padName(p) %></a><% } else { %><%= padName(p) %><% } %></b><br><span class="adm-help"><code><%= p.room_id %></code><% if (p.gone) { %> · <span data-gone="1"><%- t('admchat.pads.gone') %></span><% } %></span></td>
         <td><%= p.platform %></td>
         <td><% if (KNOWN.includes(p.backend)) { %><%- t('admchat.backend.' + p.backend) %><% } else { %><code><%= p.backend %></code><% } %></td>
         <td><%= when(p.updated) %><% if (p.updated_by) { %><br><span class="adm-help"><%= p.updated_by %></span><% } %></td>
@@ -63,6 +66,7 @@
       </tr><% }) %>
     </tbody>
   </table></div>
+  <% if (V.pads_more) { %><p class="adm-help" id="acPadsMore"><%- t('admchat.pads.more', { n: num(V.list_max) }) %></p><% } %>
   <% } %>
   <% if (V.owner) { %>
   <div class="adm-form" id="acMove">
@@ -72,6 +76,7 @@
         <% V.choices.forEach((p) => { %><option value="<%= p.room_id %>"><%= padName(p) %><% if (V.pilots.includes(p.room_id)) { %> · <%- t('admchat.pads.pilot') %><% } %> (<%= p.room_id %>)</option><% }) %>
       </select></label>
     <div class="adm-actions"><button type="button" id="acMoveBtn" data-pad-backend="hub"><%- t('admchat.pads.btn_hub') %></button><span class="adm-msg" role="status"></span></div>
+    <% if (V.choices_more) { %><p class="adm-help" id="acChoicesMore"><%- t('admchat.pads.choices_more', { n: num(V.list_max) }) %></p><% } %>
     <p class="adm-help"><%- t('admchat.pads.site_only') %></p>
   </div>
   <% } else { %>
@@ -125,7 +130,7 @@
   </table></div>
   <% } %>
 </section>
-<script src="/public/js/admin-chat.js?v=1" defer></script>
+<script src="/public/js/admin-chat.js?v=2" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

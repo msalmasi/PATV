@@ -8,6 +8,10 @@
 //     value writes nothing
 //   - the interlock: CHAT_HUB on needs the twelve seam switches (huboutbox.setSettings' other half is Q4's)
 //   - Camfrog (and every other non-site) pad can't pick hub; hub_read is S2's
+//   - after V1's review: a change and its audit row commit together (a row that can't be written rolls the change back);
+//     the confirm step is decided inside the writing transaction (a stale on-post can't undo an admin's off in between);
+//     turning off needs neither the pads nor padhub; a pad_hub row whose pad is gone can still go back to v1; the pad's
+//     room_events row names "PATV staff"; reasons lose zero-width / bidi / separator characters and need a letter or digit
 //   NODE_PATH=G:/PATV/node_modules node --test test/adminchat.test.js      (a temp DB)
 "use strict";
 const test = require("node:test");
@@ -19,6 +23,12 @@ const net = require("net");
 const tls = require("tls");
 const http = require("http");
 const https = require("https");
+const crypto = require("crypto");
+const { AsyncResource } = require("async_hooks");
+// runs fn in this file's top-level context: outside any transaction a server handler has open (dbUtils keeps the open
+// transaction in AsyncLocalStorage), so a request started from inside one is a separate request, as in production
+const outside = AsyncResource.bind((fn) => fn());
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const repo = path.resolve(__dirname, "..");
 process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), "adminchat-test-")));
@@ -155,6 +165,7 @@ test("who sees it: admins (page + JSON, no-store, in the nav's Chat group); Staf
   assert.match(await navOf("Admin"), /href="\/admin\/chat"/);
   for (const cls of ["Staff", "Assistant"]) assert.doesNotMatch(await navOf(cls), /href="\/admin\/chat"/, cls);
   // JSON
+  for (const u of ["", "stf", "adm"]) assert.equal((await get("/api/admin/chat", u)).headers.get("cache-control"), "no-store", "JSON no-store: " + u);
   assert.equal((await get("/api/admin/chat", "")).status, 401);
   assert.equal((await get("/api/admin/chat", "stf")).status, 403);
   assert.equal((await get("/api/admin/chat", "fake")).status, 403, "Pepe's owner role on a site Staff account: not an admin here");
@@ -163,12 +174,23 @@ test("who sees it: admins (page + JSON, no-store, in the nav's Chat group); Staf
   assert.equal(j.owner, false);
   assert.deepEqual(j.hub, { value: "off", updated: null, updated_by: null, default: "off" });
   assert.deepEqual(j.choices, [], "a plain admin gets no pads to move");
-  assert.equal((await (await get("/api/admin/chat", "own")).json()).owner, true);
+  assert.equal(j.pads_ok, true);
+  assert.deepEqual([j.pads_more, j.choices_more], [false, false]);
+  const jo = await (await get("/api/admin/chat", "own")).json();
+  assert.equal(jo.owner, true);
+  const ids = jo.choices.map((p) => p.room_id);
+  assert.deepEqual(ids.slice(0, 2), ["patv:staff", "patv:canary"], "the pilot pads first");
+  assert.ok(ids.includes("patv:makers") && !ids.includes("Frog.Pond") && !ids.includes("user:mem"), "site pads only: " + ids);
+  assert.ok(jo.choices.every((p) => p.platform === "site" && p.backend === "v1"));
+  const lastPilot = Math.max(...ids.map((id, i) => (AC.PILOT_PADS.includes(id) ? i : -1)));
+  assert.ok(ids.findIndex((id) => !AC.PILOT_PADS.includes(id)) > lastPilot, "every pilot pad before the rest");
+  assert.doesNotMatch(own, /id="acPadsMore"|id="acChoicesMore"|id="acPadsDown"/, "no truncation or unreadable note");
 });
 
 test("cross-site, header-less and signed-out POSTs are refused; nothing changes", async () => {
   const before = await nAudits();
-  for (const extra of [{ "x-requested-with": "" }, { origin: "https://evil.example" }, { origin: "" }]) {
+  const www = base.replace("//127.0.0.1", "//www.127.0.0.1");     // sameOriginFetch folds "www."; D15's sameOriginStrict doesn't
+  for (const extra of [{ "x-requested-with": "" }, { origin: "https://evil.example" }, { origin: "" }, { origin: www }, { origin: "", referer: www + "/admin/chat" }]) {
     for (const [p, b] of [["/api/admin/chat/hub", { on: false, reason: REASON }], ["/api/admin/chat/pad", { room_id: "patv:staff", backend: "v1", reason: REASON }]]) {
       const r = await post(p, "own", b, extra);
       assert.equal(r.status, 403, p + " " + JSON.stringify(extra));
@@ -184,10 +206,17 @@ test("cross-site, header-less and signed-out POSTs are refused; nothing changes"
   }
   assert.equal(await nAudits(), before, "no audit row");
   assert.equal(await hubValue(), null, "no switch row");
+  // the check itself: X-Requested-With: fetch and an Origin (else a Referer) whose host is exactly this Host
+  const req = (h) => ({ get: (k) => h[k.toLowerCase()] });
+  assert.equal(AC.sameOriginStrict(req({ host: "publicaccess.tv", origin: "https://publicaccess.tv", "x-requested-with": "fetch" })), true);
+  assert.equal(AC.sameOriginStrict(req({ host: "publicaccess.tv", referer: "https://publicaccess.tv/admin/chat", "x-requested-with": "fetch" })), true);
+  assert.equal(AC.sameOriginStrict(req({ host: "publicaccess.tv", origin: "https://www.publicaccess.tv", "x-requested-with": "fetch" })), false);
+  assert.equal(AC.sameOriginStrict(req({ host: "publicaccess.tv", origin: "https://publicaccess.tv" })), false);
+  assert.equal(AC.sameOriginStrict(req({ host: "publicaccess.tv", origin: "null", "x-requested-with": "fetch" })), false);
 });
 
 test("a reason is required for every change, on or off", async () => {
-  for (const reason of [undefined, "", "   ", "\u0000\u0001", 7]) {
+  for (const reason of [undefined, "", "   ", "\u0000\u0001", 7, "​​", "‮⁦﻿", "!!! -- ...", " \u0085"]) {
     let r = await post("/api/admin/chat/hub", "adm", { on: false, reason });
     assert.equal(r.status, 400, JSON.stringify(reason));
     assert.equal(r.j.code, "reason_required");
@@ -196,6 +225,19 @@ test("a reason is required for every change, on or off", async () => {
   }
   assert.equal(AC.cleanReason("  a\n\tb  " + "x".repeat(300)).length, AC.REASON_MAX);
   assert.equal(AC.cleanReason(" roll\u0007back  now "), "roll back now");
+  // after V1's review: format characters (zero-width, bidi controls, BOM) and lone surrogates out; C1 controls (NEL) and
+  // line / paragraph separators to a space; a letter or a digit required; cut by character, never inside an emoji
+  assert.equal(AC.cleanReason("‮roll​ back⁩"), "roll back");
+  assert.equal(AC.cleanReason("a b\u0085c d\u009be"), "a b c d e");
+  assert.equal(AC.cleanReason("ok \ud83d"), "ok", "a lone surrogate");
+  assert.equal(AC.cleanReason("42"), "42");
+  assert.equal(AC.cleanReason("🔥 rollback 🔥"), "🔥 rollback 🔥");
+  assert.equal(AC.cleanReason("x".repeat(199) + "😀"), "x".repeat(199), "an emoji that doesn't fit is left out whole");
+  assert.equal(AC.cleanReason("x".repeat(198) + "😀"), "x".repeat(198) + "😀");
+  for (const s of ["x".repeat(199) + "😀", "y".repeat(150) + "👍".repeat(40)]) {
+    const c = AC.cleanReason(s);
+    assert.ok(c.length <= AC.REASON_MAX && !/[\ud800-\udbff]$/.test(c) && !/(^|[^\ud800-\udbff])[\udc00-\udfff]/.test(c), "no half character: " + c.length);
+  }
   assert.equal(await hubValue(), null);
 });
 
@@ -341,7 +383,7 @@ test("a pad's chat: Camfrog and other non-site pads can't pick hub; hub_read is 
   assert.deepEqual([r.status, r.j.changed], [200, true]);
   // a hand-edited value the form doesn't know: listed (as written), and any admin puts it back to v1
   await runQuery("UPDATE pad_hub SET chat_backend = 'HUB' WHERE room_id = 'patv:makers'");
-  assert.ok((await AC.hubPads()).some((p) => p.room_id === "patv:makers" && p.backend === "HUB"), "listed among the pads not on v1");
+  assert.ok((await AC.hubPads()).pads.some((p) => p.room_id === "patv:makers" && p.backend === "HUB"), "listed among the pads not on v1");
   assert.match(await (await get("/admin/chat", adm)).text(), /<td><code>HUB<\/code><\/td>/);
   r = await post("/api/admin/chat/pad", adm, { room_id: "patv:makers", backend: "v1", reason: "cleanup" });
   assert.deepEqual([r.status, r.j.changed], [200, true]);
@@ -418,4 +460,188 @@ test("capabilities, the nav's group, the merge census and the logs", () => {
   // nothing logs a reason, a pad or a value
   const src = ["adminchat.js", "chatswitches.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join("\n");
   for (const m of src.matchAll(/console\.(?:log|error|warn)\(([^;]*)\);/g)) assert.doesNotMatch(m[1], /reason|room_id|value|\bb\.|detail/, m[0]);
+});
+
+// ── after V1's review ──
+
+test("a change and its audit row commit together: when the row can't be written, nothing changes (switch and pad)", async () => {
+  await seam(CS.INTERLOCK, true);
+  assert.equal(await hubValue(), "off");
+  const n0 = await nAudits();
+  const events = async () => (await getQuery("SELECT COUNT(*) AS n FROM room_events WHERE room_id = 'patv:canary' AND what = 'chat-backend'"))[0].n;
+  const ev0 = await events();
+  await runQuery("CREATE TRIGGER IF NOT EXISTS t_audit_down BEFORE INSERT ON admin_audit WHEN NEW.action LIKE 'chat.%' BEGIN SELECT RAISE(ABORT, 'audit down'); END");
+  try {
+    let r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true });
+    assert.deepEqual([r.status, r.j.code], [500, "internal"], JSON.stringify(r.j));
+    assert.match(r.j.error, /nothing changed/);
+    assert.equal(await hubValue(), "off", "the switch rolled back with its row");
+    assert.equal(CS.chatHubOn(), false, "the cache too");
+    await assert.rejects(CS.set("CHAT_HUB", "on", OWN, { reason: REASON }), /audit down/, "set() itself: a failed row is a failed change");
+    assert.equal(await hubValue(), "off");
+    r = await post("/api/admin/chat/pad", "own", { room_id: "patv:canary", backend: "hub", reason: REASON, confirm: true });
+    assert.deepEqual([r.status, r.j.code], [500, "internal"]);
+    assert.equal((await backendOf("patv:canary")).chat_backend, "v1", "the pad change rolled back with its row");
+    assert.equal(await events(), ev0, "and its room_events row");
+    assert.equal(await nAudits(), n0);
+    // an actor-less set() (a script) writes no audit row, so it isn't held up by one
+    assert.equal((await CS.set("CHAT_HUB", "off", null)).changed, false);
+  } finally {
+    await runQuery("DROP TRIGGER IF EXISTS t_audit_down");
+  }
+  // and with the log back: one row each
+  let r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true });
+  assert.deepEqual([r.status, r.j.value], [200, "on"]);
+  r = await post("/api/admin/chat/hub", "adm", { on: false, reason: "rollback" });
+  assert.deepEqual([r.status, r.j.value], [200, "off"]);
+  assert.equal(await nAudits(), n0 + 2);
+});
+
+test("the confirm step is decided inside the writing transaction: a stale on-post can't undo an admin's rollback in between", async (t) => {
+  t.after(() => AC._setReadHook(null));
+  await seam(CS.INTERLOCK, true);
+  // CHAT_HUB: on; an owner's tab still shows it on and posts on again without confirm while an admin turns it off
+  assert.equal((await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true })).j.value, "on");
+  const sw0 = (await audits("chat.switch")).length;
+  let adminOff = null;
+  AC._setReadHook(async (what) => {
+    if (what !== "hub" || adminOff) return;
+    adminOff = outside(() => post("/api/admin/chat/hub", "adm", { on: false, reason: "rollback mid-flight" }));
+    await sleep(150);                  // the admin's off queues behind this transaction (dbUtils.tx: one at a time)
+  });
+  let r = await post("/api/admin/chat/hub", "own", { on: true, reason: "stale tab" });
+  assert.ok(adminOff, "the hook ran");
+  const off = await adminOff;
+  AC._setReadHook(null);
+  assert.deepEqual([r.status, r.j.changed], [200, false], "read on, in its own transaction: nothing to change or confirm");
+  assert.deepEqual([off.status, off.j.changed, off.j.value], [200, true, "off"]);
+  assert.equal(await hubValue(), "off", "the admin's rollback stands");
+  assert.equal((await audits("chat.switch")).length, sw0 + 1, "one row: the admin's off");
+  r = await post("/api/admin/chat/hub", "own", { on: true, reason: "stale tab" });
+  assert.deepEqual([r.status, r.j.code], [409, "confirm"], "from off it's the confirm step again");
+  assert.equal(await hubValue(), "off");
+
+  // a pad: on the hub; an owner's stale post (hub, no confirm) meets an admin's move back to v1
+  assert.equal((await post("/api/admin/chat/pad", "own", { room_id: "patv:staff", backend: "hub", reason: REASON, confirm: true })).j.backend, "hub");
+  const pd0 = (await audits("chat.pad_backend")).length;
+  let adminBack = null;
+  AC._setReadHook(async (what) => {
+    if (what !== "pad" || adminBack) return;
+    adminBack = outside(() => post("/api/admin/chat/pad", "adm", { room_id: "patv:staff", backend: "v1", reason: "rollback mid-flight" }));
+    await sleep(150);
+  });
+  r = await post("/api/admin/chat/pad", "own", { room_id: "patv:staff", backend: "hub", reason: "stale tab" });
+  assert.ok(adminBack, "the hook ran");
+  const back = await adminBack;
+  AC._setReadHook(null);
+  assert.deepEqual([r.status, r.j.changed], [200, false], JSON.stringify(r.j));
+  assert.deepEqual([back.status, back.j.changed, back.j.backend], [200, true, "v1"]);
+  assert.equal((await backendOf("patv:staff")).chat_backend, "v1", "the admin's move back stands");
+  assert.equal((await audits("chat.pad_backend")).length, pd0 + 1);
+  r = await post("/api/admin/chat/pad", "own", { room_id: "patv:staff", backend: "hub", reason: "stale tab" });
+  assert.deepEqual([r.status, r.j.code], [409, "confirm"]);
+});
+
+test("the page: the switch read fresh, the change log newest first, pad titles escaped in the hub table", async () => {
+  // an out-of-band write (a script, the sqlite3 CLI): the cache doesn't know it, the page does
+  assert.equal(CS.chatHubOn(), false);
+  await runQuery("UPDATE chat_switches SET value = 'on' WHERE key = 'CHAT_HUB'");
+  assert.equal(CS.chatHubOn(), false, "the per-process cache (chatHubOn) is stale until a load");
+  assert.equal(await CS.chatHubOnNow(), true, "chatHubOnNow reads the row");
+  const j = await (await get("/api/admin/chat", "adm")).json();
+  assert.equal(j.hub.value, "on", "the page reloads the switch");
+  assert.equal(CS.chatHubOn(), true);
+  await runQuery("UPDATE chat_switches SET value = 'off' WHERE key = 'CHAT_HUB'");
+  assert.match(await (await get("/admin/chat", "adm")).text(), /data-hub="off"/);
+  // newest first
+  for (const why of ["older change", "newer change"]) {
+    await post("/api/admin/chat/hub", "own", { on: true, reason: why, confirm: true });
+    await post("/api/admin/chat/hub", "adm", { on: false, reason: why });
+  }
+  const log = (await (await get("/api/admin/chat", "adm")).json()).log;
+  assert.ok(log.length >= 4);
+  for (let i = 1; i < log.length; i++) assert.ok(log[i - 1].id > log[i].id, "newest first");
+  assert.equal(log[0].reason, "newer change");
+  let html = await (await get("/admin/chat", "adm")).text();
+  assert.ok(html.indexOf("newer change") < html.indexOf("older change"), "the table too");
+  // a title with markup, on the hub table (a plain admin's page: no owner <option> list to match instead)
+  assert.equal((await post("/api/admin/chat/pad", "own", { room_id: "patv:makers", backend: "hub", reason: REASON, confirm: true })).j.backend, "hub");
+  html = await (await get("/admin/chat", "adm")).text();
+  assert.match(html, /<tr data-pad="patv:makers">[\s\S]*?Makers &lt;b&gt;<\/a>/);
+  assert.match(html, /data-name="Makers &lt;b&gt;"/);
+  assert.doesNotMatch(html, /Makers <b>/);
+  assert.equal((await post("/api/admin/chat/pad", "adm", { room_id: "patv:makers", backend: "v1", reason: REASON })).j.backend, "v1");
+});
+
+test("a pad_hub row whose pad is gone is listed and goes back to v1; a pad's room_events row names PATV staff, never the admin", async () => {
+  await runQuery("INSERT INTO pad_hub (room_id, hub_pad_id, chat_backend, updated, updated_by) VALUES ('patv:gone', ?, 'hub', ?, 'boss')",
+                 [crypto.randomUUID(), Date.now()]);
+  const listed = (await AC.hubPads()).pads.find((p) => p.room_id === "patv:gone");
+  assert.ok(listed && listed.gone && listed.backend === "hub", "listed, marked gone");
+  const html = await (await get("/admin/chat", "adm")).text();
+  assert.match(html, /<tr data-pad="patv:gone">[\s\S]*?data-gone="1"[\s\S]*?data-pad-backend="v1" data-room="patv:gone"/, "with the one-click way back");
+  let r = await post("/api/admin/chat/pad", "own", { room_id: "patv:gone", backend: "hub", reason: REASON, confirm: true });
+  assert.deepEqual([r.status, r.j.code], [404, "no_pad"], "never to the hub");
+  r = await post("/api/admin/chat/pad", "adm", { room_id: "patv:gone", backend: "v1", reason: "cleanup" });
+  assert.deepEqual([r.status, r.j.changed, r.j.backend], [200, true, "v1"], JSON.stringify(r.j));
+  assert.equal((await backendOf("patv:gone")).chat_backend, "v1");
+  const d = JSON.parse((await audits("chat.pad_backend")).pop().detail);
+  assert.deepEqual([d.room_id, d.from, d.slug], ["patv:gone", "hub", null]);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM room_events WHERE room_id = 'patv:gone'"))[0].n, 0, "no pad, no pad event");
+  await runQuery("DELETE FROM pad_hub WHERE room_id = 'patv:gone'");
+  // the pad's owner reads room_events (/p/:slug/settings): staff show as PATV staff
+  const actors = (await getQuery("SELECT DISTINCT actor FROM room_events WHERE what = 'chat-backend'")).map((x) => x.actor);
+  assert.ok(actors.length >= 1);
+  assert.deepEqual(actors, [PH.STAFF_ACTOR]);
+  assert.equal(PH.STAFF_ACTOR, "PATV staff");
+});
+
+test("turning the chat hub off needs neither the pads nor padhub: with padhub down the page shows what it can and off works", async (t) => {
+  await seam(CS.INTERLOCK, true);
+  assert.equal((await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true })).j.value, "on");
+  const realInit = PH.init;
+  PH.init = () => Promise.reject(new Error("pads down"));
+  t.after(() => { PH.init = realInit; });
+  try {
+    const r = await get("/admin/chat", "adm");
+    assert.equal(r.status, 200);
+    const html = await r.text();
+    assert.match(html, /id="acPadsDown"/);
+    assert.match(html, /id="acHubOff" data-hub-on="0"/, "the off button is there");
+    assert.doesNotMatch(html, /id="acPadsNone"/, "never 'no pad is on the hub' when the pads can't be read");
+    const j = await (await get("/api/admin/chat", "own")).json();
+    assert.deepEqual([j.pads_ok, j.pads, j.choices, j.hub.value], [false, [], [], "on"]);
+    const off = await post("/api/admin/chat/hub", "adm", { on: false, reason: "pads are down" });
+    assert.deepEqual([off.status, off.j.changed, off.j.value], [200, true, "off"]);
+    assert.equal(await hubValue(), "off");
+  } finally { PH.init = realInit; }
+});
+
+test("the pad lists are bounded and say so (the site pads read in SQL, the pilot pads first)", async () => {
+  let c = await AC.sitePadChoices(2);
+  assert.deepEqual(c.pads.map((p) => p.room_id), ["patv:staff", "patv:canary"]);
+  assert.equal(c.more, true);
+  const all = (await AC.sitePadChoices()).pads.length;
+  assert.ok(all >= 3);
+  c = await AC.sitePadChoices(all);
+  assert.deepEqual([c.pads.length, c.more], [all, false]);
+  // more site pads than a list shows: the owner's page says so
+  const t0 = Date.now();
+  await require(path.join(repo, "dbUtils")).tx(async () => {
+    for (let i = 0; i < AC.PAD_LIST_MAX + 5; i++) {
+      await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES (?, ?, ?, 'none', 'site', ?, ?)",
+                     ["patv:bulk" + i, "bulk-" + i, "Bulk " + String(i).padStart(4, "0"), t0, t0]);
+    }
+  });
+  c = await AC.sitePadChoices();
+  assert.deepEqual([c.pads.length, c.more], [AC.PAD_LIST_MAX, true]);
+  assert.deepEqual(c.pads.slice(0, 2).map((p) => p.room_id), ["patv:staff", "patv:canary"], "the pilot pads first");
+  assert.match(await (await get("/admin/chat", "own")).text(), /id="acChoicesMore">Only the first 500 site pads are listed/);
+  await runQuery("UPDATE pad_hub SET chat_backend = 'hub' WHERE room_id LIKE 'patv:bulk%'");
+  const h = await AC.hubPads();
+  assert.deepEqual([h.pads.length, h.more], [AC.PAD_LIST_MAX, true]);
+  assert.match(await (await get("/admin/chat", "adm")).text(), /id="acPadsMore">Only the first 500 are listed/);
+  assert.equal((await AC.hubPads(1)).pads.length, 1);
+  await runQuery("DELETE FROM rooms_registry WHERE room_id LIKE 'patv:bulk%'");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pad_hub WHERE room_id LIKE 'patv:bulk%'"))[0].n, 0, "pad_hub rows dropped with their pads");
 });

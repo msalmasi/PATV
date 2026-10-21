@@ -74,10 +74,14 @@ async function of(roomId) { return (await ofRooms([roomId])).get(String(roomId))
 // (adminchat.js) through setBackend and mirrored to the hub by pads/changed (Q4's trigger). S1 allows `hub` only on a site pad
 // (no Camfrog room behind it: a Camfrog pad's chat is the bridge's), and `hub_read` is S2's (refused). setBackend checks the
 // value and the pad, nothing else: who may switch (an owner turns on, any admin turns off - D15) is adminchat's. Q4 builds the
-// same functions here in parallel (the same API and refusals): when the two branches meet, keep Q4's.
+// same functions here in parallel (the same API and refusals): when the two branches meet, keep Q4's file WITH V1's
+// setBackend (after V1's review: a pad_hub row whose registry row is gone - a staging refresh, a hand edit - can still go back
+// to v1, and the room_events row names "PATV staff", never the admin: the pad's owner reads room_events).
 const BACKENDS = Object.freeze(["v1", "hub_read", "hub"]);
+// how staff show in a pad's room_events (its owner reads them on /p/:slug/settings) - chatlogmod.js's STAFF_ACTOR
+const STAFF_ACTOR = "PATV staff";
 class Refuse extends Error { constructor(status, code, msg) { super(msg); this.status = status; this.code = code; this.refuse = true; } }
-/** rooms.js's rule for a registry row's platform (the column, else what the id implies). */
+/** rooms.js's rule for a registry row's platform (the column, else what the id implies; Q4 exports it as rooms.cleanPlatform). */
 function platformOf(r) {
   const rooms = require("./rooms");
   const p = String((r && r.platform) || "").toLowerCase();
@@ -92,9 +96,10 @@ async function backendOf(roomId) {
 }
 /**
  * Set a pad's chat backend - /admin/chat's writer (adminchat.js decides who may). `hub` only on a site pad, `hub_read` refused
- * until S2, a profile pad never. -> {room_id, hub_pad_id, chat_backend, changed}. updated_by gets the actor's username (an audit
- * label; accountMerge.js: deny). Refusals (err.refuse, .status, .code): 400 bad_backend, 404 no_pad, 409 hub_read_s2 |
- * site_pads_only. Runs inside the caller's dbUtils.tx when there is one (call init() first).
+ * until S2, a profile pad never; `v1` always (a pad_hub row whose registry row is gone included: going back is never refused).
+ * -> {room_id, hub_pad_id, chat_backend, changed}. updated_by gets the actor's username (an audit label; accountMerge.js: deny);
+ * the pad's room_events row names STAFF_ACTOR. Refusals (err.refuse, .status, .code): 400 bad_backend, 404 no_pad, 409
+ * hub_read_s2 | site_pads_only. Runs inside the caller's dbUtils.tx when there is one (call init() first).
  */
 async function setBackend(roomId, backend, actor = null) {
   await init();
@@ -103,20 +108,22 @@ async function setBackend(roomId, backend, actor = null) {
   if (!BACKENDS.includes(b)) throw new Refuse(400, "bad_backend", "A pad's chat backend is v1, hub_read or hub.");
   if (b === "hub_read") throw new Refuse(409, "hub_read_s2", "Read-only hub chat (hub_read) comes with S2.");
   const R = (await getQuery("SELECT room_id, platform FROM rooms_registry WHERE room_id = ?", [id]))[0];
-  if (!R) throw new Refuse(404, "no_pad", "No such pad.");
+  if (!R && b !== "v1") throw new Refuse(404, "no_pad", "No such pad.");
+  const rooms = require("./rooms");
   if (b === "hub" && platformOf(R) !== "site") {
     throw new Refuse(409, "site_pads_only", "Only a site pad can move its chat to the hub in S1 (a Camfrog pad's chat is its Camfrog room's).");
   }
-  if (!(await getQuery("SELECT 1 FROM pad_hub WHERE room_id = ?", [id])).length) await backfill();
+  if (R && !(await getQuery("SELECT 1 FROM pad_hub WHERE room_id = ?", [id])).length) await backfill();
   const cur = (await getQuery("SELECT hub_pad_id, chat_backend FROM pad_hub WHERE room_id = ?", [id]))[0];
   if (!cur) throw new Refuse(404, "no_pad", "No such pad.");
   const changed = cur.chat_backend !== b;
   if (changed) {
     const by = actor && (actor.username || actor.userId) ? String(actor.username || actor.userId).slice(0, 80) : null;
     await runQuery("UPDATE pad_hub SET chat_backend = ?, updated = ?, updated_by = ? WHERE room_id = ?", [b, clock(), by, id]);
-    await require("./rooms").event(id, "chat-backend", by || "?", `${cur.chat_backend || "v1"} -> ${b}`);
+    if (R) await rooms.event(id, "chat-backend", STAFF_ACTOR, `${cur.chat_backend || "v1"} -> ${b}`);
   }
   return { room_id: id, hub_pad_id: String(cur.hub_pad_id), chat_backend: b, changed };
 }
 
-module.exports = { init, backfill, ofRooms, of, backendOf, setBackend, BACKENDS, Refuse, UUID4_RE, _setClock: (f) => { clock = f || (() => Date.now()); } };
+module.exports = { init, backfill, ofRooms, of, backendOf, setBackend, BACKENDS, Refuse, UUID4_RE, STAFF_ACTOR,
+                   _setClock: (f) => { clock = f || (() => Date.now()); } };
