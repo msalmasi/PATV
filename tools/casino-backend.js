@@ -40,6 +40,7 @@ async function main() {
       const what = sw === "on" ? "the site's casino" : "Pepe's tables";
       console.log(scope === "room" ? `casino in ${r.room}: ${what} (wish recorded by ${actor}; Pepe follows it within a minute)`
                                    : `casino ${scope === "all" ? "in " + (r.rooms.length ? r.rooms.join(", ") + " and " : "") + "new rooms" : "in new rooms"}: ${what} (wish recorded by ${actor})`);
+      if (r.pruned && r.pruned.length) console.log(`(at most ${B.CASINO_MAX_ROOMS} room wishes are kept: dropped the oldest - ${r.pruned.join(", ")})`);
     } catch (e) {
       if (e && e.refuse) throw new Error(e.message);
       throw e;

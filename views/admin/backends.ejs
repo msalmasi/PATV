@@ -6,7 +6,9 @@
     follow names the chat command an owner runs instead - the page never says he will act on a switch he doesn't read. Owner
     answer (6), 2026-10-21: the casino's per-room switch (rooms Pepe reported + the new-rooms default; a Pepe owner's) is here
     too. The page script (public/js/admin-backends.js) posts one switch at a time; every value from the database (and every room
-    name Pepe reported) is escaped by EJS. %>
+    name Pepe reported) is escaped by EJS. The review of owner answer (6): a wish Pepe won't act on as it stands (made before he
+    followed it, given up, or done and changed another way since - backends.js againOf) gets a "switch again" button the same
+    way; a current Pepe whose read is only stale is told apart from an older build (no dead-end chat command). %>
 <%
   const fmtFn = (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt);
   const when = (ms) => ms ? fmtFn(Number(ms), 'datetime') : '–';
@@ -40,8 +42,9 @@
           <% if (r.doc) { %><br><a class="adm-help" href="<%= r.doc %>" rel="noopener" target="_blank"><%- t('admbk.runbook') %></a><% } %></td>
         <td><%= where(r.live) %><% if (r.error) { %><br><span class="adm-help"><%= t('admbk.error', { err: r.error }) %></span><% } %></td>
         <td data-want="<%= r.want === null ? 'none' : r.want ? 'site' : 'pepe' %>"><%= wantText(r.want) %>
-          <% if (r.waiting && r.follows && r.act) { %><br><span class="adm-help">⏳ <%- t('admbk.waiting') %></span><% } %>
-          <% if (r.waiting && !(r.follows && r.act)) { %><br><span class="adm-help">⏳ <%- t('admbk.waiting_chat') %> <code><%= r.want ? r.chat_on : r.chat_off %></code></span><% } %>
+          <% if (r.waiting && r.follows && r.act && !r.again) { %><br><span class="adm-help">⏳ <%- t('admbk.waiting') %></span><% } %>
+          <% if (r.waiting && !r.follows) { %><br><span class="adm-help">⏳ <%- t('admbk.waiting_chat') %> <code><%= r.want ? r.chat_on : r.chat_off %></code></span><% } %>
+          <% if (r.again) { %><br><span class="adm-help" data-again="<%= r.again %>">⚠️ <%- t('admbk.again.' + r.again) %></span><% } %>
           <% if (r.pepe) { %><br><span class="adm-help"><%= said(r.pepe) %> <%= t('admbk.pepe_said', { when: when(r.pepe.at), msg: r.pepe.msg || (r.pepe.ok ? t('admbk.yes') : t('admbk.no')) }) %></span><% } %></td>
         <td><%= yn(r.site) %></td>
         <td><% if (r.at) { %><%= when(r.at) %><br><span class="adm-help"><%= r.by || '' %></span><% } else { %>–<% } %></td>
@@ -49,6 +52,7 @@
         <td><% if (r.can) { %>
             <% if (r.want !== true && r.offer_on) { %><button type="button" data-bk="<%= r.key %>" data-on="1" data-name="<%= t('admbk.f.' + r.key) %>" data-follows="<%= r.follows ? '1' : '0' %>" data-cmd="<%= r.chat_on %>"><%- t('admbk.btn.on') %></button><% } %>
             <% if (r.want !== false && r.offer_off) { %><button type="button" class="adm-btn ghost" data-bk="<%= r.key %>" data-on="0" data-name="<%= t('admbk.f.' + r.key) %>" data-follows="<%= r.follows ? '1' : '0' %>" data-cmd="<%= r.chat_off %>"><%- t('admbk.btn.off') %></button><% } %>
+            <% if (r.again) { %><button type="button" data-bk="<%= r.key %>" data-on="<%= r.want ? '1' : '0' %>" data-again="1" data-name="<%= t('admbk.f.' + r.key) %>" data-follows="1" data-cmd="<%= r.want ? r.chat_on : r.chat_off %>"><%- t(r.want ? 'admbk.btn.again_on' : 'admbk.btn.again_off') %></button><% } %>
           <% } else { %><span class="adm-help"><%- t('admbk.owner_only') %></span><% } %>
           <% if (!r.follows) { %><br><span class="adm-help"><%- t('admbk.not_following') %> <code><%= r.live ? r.chat_off : r.chat_on %></code></span><% } %>
           <span class="adm-msg" role="status"></span></td>
@@ -62,7 +66,7 @@
 <section class="adm-card" id="casino" aria-labelledby="bkCasT">
   <h2 id="bkCasT"><%- t('admbk.casino.h') %></h2>
   <p class="adm-help"><%- t('admbk.casino.help') %></p>
-  <p class="adm-help" id="bkCasReader"><% if (C.follows) { %>✅ <%- t('admbk.casino.follows') %><% } else { %>⚠️ <%- t('admbk.casino.not_following') %><% } %>
+  <p class="adm-help" id="bkCasReader"><% if (C.follows) { %>✅ <%- t('admbk.casino.follows') %><% } else if (C.stale) { %>⚠️ <%= t('admbk.casino.stale', { when: when(R.at), version: R.version || '?' }) %> <code>!casino backend off</code><% } else { %>⚠️ <%- t('admbk.casino.not_following') %><% } %>
     <% if (!C.reported) { %><br><%- t('admbk.casino.no_report') %><% } %></p>
   <div class="adm-tbl"><table>
     <thead><tr><th><%- t('admbk.casino.col.room') %></th><th><%- t('admbk.casino.col.plays') %></th><th><%- t('admbk.col.switch') %></th>
@@ -73,12 +77,14 @@
           <% if (r.room !== null && r.joined === false) { %><br><span class="adm-help"><%- t('admbk.casino.not_joined') %></span><% } %></td>
         <td><%= plays(r.live) %></td>
         <td data-want="<%= r.want === null ? 'none' : r.want ? 'site' : 'pepe' %>"><%= cwant(r.want) %>
-          <% if (r.waiting) { %><br><span class="adm-help">⏳ <%- t('admbk.casino.waiting') %></span><% } %>
+          <% if (r.waiting && !r.again) { %><br><span class="adm-help">⏳ <%- t('admbk.casino.waiting') %></span><% } %>
+          <% if (r.again) { %><br><span class="adm-help" data-again="<%= r.again %>">⚠️ <%- t('admbk.again.' + r.again) %></span><% } %>
           <% if (r.pepe) { %><br><span class="adm-help"><%= said(r.pepe) %> <%= t('admbk.pepe_said', { when: when(r.pepe.at), msg: r.pepe.msg || (r.pepe.ok ? t('admbk.yes') : t('admbk.no')) }) %></span><% } %></td>
         <td><% if (r.at) { %><%= when(r.at) %><br><span class="adm-help"><%= r.by || '' %></span><% } else { %>–<% } %></td>
         <td><% if (C.can && C.follows) { %>
             <% if (r.want !== true) { %><button type="button" data-bkc="<%= r.room === null ? 'default' : 'room' %>" data-room="<%= r.room === null ? '' : r.room %>" data-on="1" data-name="<%= r.name %>"><%- t('admbk.casino.btn.on') %></button><% } %>
             <% if (r.want !== false) { %><button type="button" class="adm-btn ghost" data-bkc="<%= r.room === null ? 'default' : 'room' %>" data-room="<%= r.room === null ? '' : r.room %>" data-on="0" data-name="<%= r.name %>"><%- t('admbk.casino.btn.off') %></button><% } %>
+            <% if (r.again) { %><button type="button" data-bkc="<%= r.room === null ? 'default' : 'room' %>" data-room="<%= r.room === null ? '' : r.room %>" data-on="<%= r.want ? '1' : '0' %>" data-again="1" data-name="<%= r.name %>"><%- t(r.want ? 'admbk.casino.btn.again_on' : 'admbk.casino.btn.again_off') %></button><% } %>
           <% } else if (!C.can) { %><span class="adm-help"><%- t('admbk.owner_only') %></span><% } %>
           <span class="adm-msg" role="status"></span></td>
       </tr><% }) %>
@@ -105,7 +111,7 @@
     </tbody>
   </table></div>
 </section>
-<script src="/public/js/admin-backends.js?v=3" defer></script>
+<script src="/public/js/admin-backends.js?v=4" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

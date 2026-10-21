@@ -4,7 +4,8 @@
 // The review of the owner answers: the confirm says what really happens - Pepe moves it himself only when he follows the
 // switch (data-follows="1"); otherwise the switch sets the site's side and a Pepe owner runs the chat command (data-cmd).
 // Owner answer (6), 2026-10-21: the casino's per-room switch - POST /api/admin/backends/casino {on, scope: room|default|all,
-// room} (a Pepe owner's; offered only while Pepe follows it).
+// room} (a Pepe owner's; offered only while Pepe follows it). Its review: a "switch again" button (data-again="1") re-sends a
+// wish Pepe won't act on as it stands, the same way (backends.js againOf).
 (function () {
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) {
@@ -27,7 +28,9 @@
     if (c) {
       var scope = c.getAttribute('data-bkc'), room = c.getAttribute('data-room') || '', con = c.getAttribute('data-on') === '1';
       var cname = c.getAttribute('data-name') || room;
-      var cq = scope === 'all'
+      var cq = c.getAttribute('data-again') === '1'
+        ? _t('js.admbk.confirm_again', 'Switch {name} again, the same way? Pepe follows this switch: he runs it at his next quiet moment.', { name: cname })
+        : scope === 'all'
         ? (con ? _t('js.admbk.casino_all_on', "Play the casino on publicaccess.tv in every room Pepe listed, and in the rooms he joins later? He switches them within a minute.", {})
           : _t('js.admbk.casino_all_off', "Play the casino on Pepe's own tables in every room Pepe listed, and in the rooms he joins later? He switches them within a minute.", {}))
         : (con ? _t('js.admbk.casino_on', 'Play the casino on publicaccess.tv in {name}? Pepe switches it within a minute (a table still open on his old engine finishes first).', { name: cname })
@@ -46,7 +49,9 @@
     if (!b) return;
     var key = b.getAttribute('data-bk'), on = b.getAttribute('data-on') === '1', name = b.getAttribute('data-name') || key;
     var follows = b.getAttribute('data-follows') === '1', cmd = b.getAttribute('data-cmd') || '';
-    var q = follows
+    var q = b.getAttribute('data-again') === '1'
+      ? _t('js.admbk.confirm_again', 'Switch {name} again, the same way? Pepe follows this switch: he runs it at his next quiet moment.', { name: name })
+      : follows
       ? (on ? _t('js.admbk.confirm_on', 'Move {name} to publicaccess.tv? Pepe follows this switch: he runs the hand-over at his next quiet moment.', { name: name })
         : _t('js.admbk.confirm_off', 'Bring {name} back to Pepe? Pepe follows this switch: he runs the way back at his next quiet moment.', { name: name }))
       : (on ? _t('js.admbk.confirm_on_chat', "Set the site's side of {name} to take it over? Pepe doesn't follow this switch yet: nothing moves until a Pepe owner runs {cmd} in chat.", { name: name, cmd: cmd })

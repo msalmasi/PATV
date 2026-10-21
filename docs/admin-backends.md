@@ -14,8 +14,9 @@ Owner answers:
   Admins'.
 - **(6), 2026-10-21** - the **casino's per-room switch** (`!casino backend on|off`, `!backend all on|off`) moved here, as
   per-room switches plus the default for rooms Pepe joins later, **owner-only** (the casino holds PAT). Pepe follows them through
-  the same contract. In chat `!casino backend …` / `!backend all …` only show the status and point here - owners included. The
-  shell's emergency path is `tools/casino-backend.js`.
+  the same contract. In chat `!casino backend …` / `!backend all …` only show the status and point here - owners included - while
+  this switch works; the dual-path rule keeps an owner's chat switch on Pepe while the site can't switch it (see "The casino's
+  per-room switch"). The shell's emergency path is `tools/casino-backend.js`.
 - **(4), 2026-10-21** - **judging stays with Admins** (confirmed - see "Judging" at the end).
 - **(5), 2026-10-21** - Pepe-side owner-only: `!loan approve|grant` from the Bank's cash, and the panel's burn, Reserve fund and
   sink-rate edits; moderation fines (`!fine`, `!padfine`, `!padmove`) stay with Admins / staff - see "What else holds or moves
@@ -69,12 +70,17 @@ A switch only moves a feature once Pepe **reads** these switches and runs the ha
   | polls    | `!poll backend on` / `!poll backend off`                          |
   | cosdrops | `!cosmetics backend on confirm` / `!cosmetics backend off confirm` |
   | aijudge  | `!aijudge backend on confirm` / `!aijudge backend off confirm`    |
-  | casino   | (an older Pepe only) `!casino backend on\|off` in the room - read-only in chat since owner answer (6) |
+  | casino   | `!casino backend on\|off` in the room - on an older Pepe, or on this one while he follows nothing here (another contract, no casino block, an unreadable `backends_follow.json`); read-only in chat while he follows it |
 
 - A wish made while Pepe didn't follow that switch has `act: false`: **he never runs it**, so a switch flipped before his update
   (or while he was down) never starts a hand-over by surprise later. He reports it as "switched before Pepe followed it - switch
   it again" (state `unacted`) - or as done, if it is already there (an owner ran it in chat meanwhile). Switch it again once he
   follows it.
+- **Switch again** (the review of owner answer 6): while Pepe follows a switch, a row whose wish he won't act on as it stands gets
+  a "Switch again" button **in the same direction** (`backends.js againOf`): the wish has `act: false` / he reported `unacted`, he
+  gave up after a day (`stuck`), or he reached it once and it was changed another way since (`done`, but it isn't there now - he
+  never re-applies a reached wish). Only when the feature isn't where the wish says. It records a new wish (`act: true`, audited)
+  and he runs it - nothing has to be switched the other way and back. The casino's rows (and its new-rooms row) get the same.
 - His `results` (what he did for each CURRENT wish) are shown on the row; a new wish clears them; a result for an older wish is
   ignored.
 - Website forms can't switch a hand-over: `actions.js` refuses a `"<cmd> backend ..."` form and a poll form starting with
@@ -121,6 +127,8 @@ site keeps and what Pepe runs) plus probes - see "The shared fixture".
 - `casino`: his casino as it is now - the new-rooms `default` and every room he is in or keeps switched on (`room` id, its
   `name`, `joined`, `on` = plays on the site's casino). At most 50 rooms; the site keeps the last list (`backend_reader.casino`)
   for the page's rows - only a room in it (or one that already has a wish) can be switched.
+- A read that isn't in this contract (no `contract: 1` with a `follows` list - the old bot's `{}`, another number) is answered
+  with **no wish at all** (`want: null`, `act: false` everywhere, no casino rooms): a follower that ignores `act` can't run one.
 
 ### The site answers
 
@@ -137,7 +145,9 @@ site keeps and what Pepe runs) plus probes - see "The shared fixture".
 - `act`: follow the wish only when `true` (it was made while he followed that switch). **Pepe never runs a wish whose `act`
   isn't `true`.**
 - `live`: the site owns it now. `site`: the feature's own site switch (`null` = none: the lotto).
-- `casino.rooms`: only rooms with a wish; `casino.default` is always there (`want: null` = never switched here).
+- `casino.rooms`: only rooms with a wish - at most 50, the most recently switched (the site keeps no more: a switch that makes
+  a 51st drops the oldest, `pruned` in its audit row; Pepe forgets that wish and leaves the room as it plays). Pepe takes at most
+  50 too, the most recent by `at`. `casino.default` is always there (`want: null` = never switched here).
 - `contract`: Pepe follows nothing from an answer in another contract number (whatever its wishes say) and says so on his card
   and in `!backend status`.
 - When `want` differs from where Pepe has it and `act` is true, Pepe moves it: a hand-over at his next quiet moment (between
@@ -185,14 +195,25 @@ Pepe joins**, and "every room" buttons - offered to a Pepe owner while Pepe foll
   transaction (the old `!backend all`). Refused with 409 `pepe_not_following` while Pepe doesn't follow it (a stale read). The
   audit row: `backend_switch` `{feature: "casino", scope, room, rooms (all), want, was, via, pepe_follows}`.
 - Pepe follows each wish with pepe_casino's own switch (`_cbj_set_room` / `_cbj_set_default`): no quiet moment needed (nothing
-  moves), not counted as the pass's one hand-over; a room with a table still open on his old engine switches once it ends.
+  moves), not counted as the pass's one hand-over; a room with a table still open on his old engine switches once it ends. A room
+  counts as done only when it is switched **by name** the way the wish says: one that already plays there only through the
+  new-rooms default is pinned by name first (`_cbj_pin_room` - nothing changes for it), so a later default switch made while Pepe
+  is out of that room can't flip it against the wish when he rejoins.
 - Chat: `!casino backend [status]`, `!casino backend all status`, `!backend status` show it; `on|off`, `all on|off`,
-  `default on|off`, `!backend all on|off` only answer with where it is switched - owners included.
+  `default on|off`, `!backend all on|off` only answer with where it is switched - owners included - **while this switch works**.
+  The dual-path rule (moved features keep a local path; the review of owner answer 6) - Pepe's `_bk_casino_chat`:
+  - nothing here can switch it - this site has no Admin › Backends (its JSON 404: prod before it ships, or a site rolled back), it
+    answers in another contract or without the casino block, or Pepe's `backends_follow.json` is unreadable (he follows nothing):
+    a **Pepe owner** (by role) switches it in chat as before, both ways;
+  - the site isn't answering Pepe: an owner may hand rooms back to Pepe's own tables from chat (`off` only - `on` waits for it).
+  A room changed in chat that way keeps a wish here that Pepe reached before: the page shows it as changed since and offers
+  "Switch again".
 - **Emergency path** (the shell): `tools/casino-backend.js` - `[status]`, `--actor=<who> room <room id> on|off`,
   `--actor=<who> default on|off`, `--actor=<who> all on|off` (`--dir=<folder with myapp.db>`; no `./myapp.db` -> exit 2, nothing
   opened). It writes the same wish (`via: "cli"`) and audit row, and is refused the same way while Pepe doesn't follow the switch.
-  Note: when the site itself is down Pepe can't read any switch - a casino room on the backend then answers "the site isn't
-  answering" until it is back; the last resort is `casino_client.json` on Pepe's VM, edited with Pepe stopped.
+  It needs Pepe reading the site: while his read is stale (more than 15 minutes) the switch and the tool are refused (409) with
+  why - a current Pepe that can't reach the site is told apart from an older build (which has the chat command). When the site
+  itself is down for Pepe, an owner hands rooms back to his own tables in chat (`!casino backend off`, `!backend all off`).
 
 ## Routes
 
@@ -210,7 +231,8 @@ Pepe joins**, and "every room" buttons - offered to a Pepe owner while Pepe foll
   wish and how far Pepe got, and the casino's rooms with theirs.
 - `pepe_backends._bk_follow_tick` (heartbeat) reads the switches every minute on a pooled thread and follows them as above
   (`backends_follow.json` remembers each wish he reached; unreadable -> he follows nothing and says so).
-- A site without this route (its JSON 404) is asked again every 10 minutes; meanwhile the hand-overs are owners' chat commands.
+- A site without this route (its JSON 404) is asked again every 10 minutes; meanwhile the hand-overs and the casino are owners'
+  chat commands (the casino too while he follows nothing here; `off` only while the site isn't answering him).
 - The staging sandbox (`staging.py`) answers the route with "no answer" (Pepe follows nothing there).
 
 ## What else holds or moves PAT, and who may do it

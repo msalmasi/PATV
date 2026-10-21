@@ -256,7 +256,12 @@ test("(2) /admin/backends: the lotto and stashes switches are a Pepe owner's; no
   await runQuery("DELETE FROM stash_meta WHERE key = 'imported'");
   // Pepe reads the wishes (bot token)
   assert.equal((await fetch(base + "/api/pepe/backends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "no" }) })).status, 403);
-  const b = await pepeRead();
+  // a read that isn't in the contract (the old bot's body) is told no wish at all - a follower that ignores act can't run one
+  const old = await pepeRead();
+  assert.equal(old.ok, true);
+  assert.deepEqual([old.features.lotto.want, old.features.lotto.act, old.features.stashes.want, old.casino.default.want, Object.keys(old.casino.rooms).length],
+                   [null, false, null, null, 0]);
+  const b = await pepeRead({ contract: 1, follows: ["lotto", "stashes", "nope"], version: "1.99zz" });
   assert.equal(b.ok, true);
   assert.equal(b.contract, 1);
   assert.deepEqual(Object.keys(b.features).sort(), ["aijudge", "cosdrops", "gtf", "lotto", "polls", "stashes"]);

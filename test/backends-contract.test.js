@@ -8,6 +8,8 @@
 //   * the request probes: an unknown key is dropped, a result for an older wish ignored, another contract number not recorded
 //   * owner answer (6): the casino's per-room switch - owner-only, same-origin, audited, refused while Pepe doesn't follow it
 //     (a stale read), rooms Pepe didn't list refused, "all" = every listed room + the default; the page; the shell tool
+//   * its review: a read that isn't in the contract is told no wish; a stale current Pepe vs an older build (no dead-end chat
+//     command); "switch again" the same way (unacted / stuck / reached and moved since); at most 50 casino room wishes
 //   NODE_PATH=G:/PATV/node_modules node --test test/backends-contract.test.js
 "use strict";
 const test = require("node:test");
@@ -183,10 +185,13 @@ test("owner answer (6): the casino switch is a Pepe owner's, same-origin, audite
                    "a new wish clears Pepe's old report");
   const aa = JSON.parse((await getQuery("SELECT detail FROM admin_audit WHERE action = 'backend_switch' ORDER BY id DESC LIMIT 1"))[0].detail);
   assert.deepEqual([aa.scope, aa.rooms, aa.want], ["all", ["DRAMA_CENTRAL", "PepeLab"], false]);
-  // Pepe answers with them per room
-  const r = await pepe({ password: FX.token });
+  // Pepe answers with them per room (a read in this contract; the old body is told no wish at all - the hardening below)
+  const r = await pepe(last.request);
   assert.deepEqual(Object.keys(r.body.casino.rooms), ["DRAMA_CENTRAL", "PepeLab"]);
   assert.deepEqual([r.body.casino.default.want, r.body.casino.rooms.PepeLab.want], [false, false]);
+  const old = await pepe({ password: FX.token });
+  assert.deepEqual([old.body.casino.default.want, old.body.casino.rooms, old.body.features.lotto.want, old.body.features.lotto.act],
+                   [null, {}, null, false], "a read that isn't in this contract: no wish at all");
   // the page: the casino section, buttons for an owner while Pepe follows; an Admin sees the rows, no buttons
   const html = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": ID.boss } })).text();
   assert.match(html, /id="casino"/);
@@ -197,14 +202,28 @@ test("owner answer (6): the casino switch is a Pepe owner's, same-origin, audite
   const html2 = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": ID.adm } })).text();
   assert.match(html2, /data-casino="PepeLab"/);
   assert.doesNotMatch(html2, /data-bkc=/);
-  // Pepe stops reading: after 15 minutes the casino switch would change nothing - refused, nothing written
-  B._setClock(() => last.clock + B.READER_FRESH_MS + 1000);
+  // Pepe stops reading: after 15 minutes the casino switch would change nothing - refused, nothing written. He is a current Pepe
+  // whose read is only stale (down, or can't reach the site): told so - not the chat command an older build has (review of 6)
+  B._setClock(() => last.clock + 60000 + B.READER_FRESH_MS + 1000);
   const stale = await call("/api/admin/backends/casino", ID.boss, { on: true, scope: "default" });
   assert.deepEqual([stale.status, stale.body.code], [409, "pepe_not_following"]);
-  assert.match(stale.body.error, /!casino backend on\|off/);
+  assert.match(stale.body.error, /hasn't read these switches since .* UTC \(Pepe 1\.99zz\) - check that he is running/);
+  assert.match(stale.body.error, /!casino backend off/);
+  assert.doesNotMatch(stale.body.error, /!casino backend on\|off/);
   assert.equal((await B.wants()).casino.want, false);
   const html3 = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": ID.boss } })).text();
   assert.doesNotMatch(html3, /data-bkc=/, "no casino button while Pepe doesn't follow it");
+  assert.match(html3, /check that he is running and can reach publicaccess\.tv/);
+  assert.doesNotMatch(html3, /<code>!casino backend on\|off<\/code>/);
+  // an older build (it never read in this contract, or its read doesn't follow the casino): the chat command it has
+  const rd0 = (await getQuery("SELECT at, version, follows, casino FROM backend_reader WHERE id = 1"))[0];
+  await runQuery("UPDATE backend_reader SET follows = ? WHERE id = 1", [JSON.stringify(["lotto"])]);
+  const older = await call("/api/admin/backends/casino", ID.boss, { on: true, scope: "default" });
+  assert.equal(older.status, 409);
+  assert.match(older.body.error, /a Pepe owner runs !casino backend on\|off in that room/);
+  const html4 = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": ID.boss } })).text();
+  assert.match(html4, /<code>!casino backend on\|off<\/code>/);
+  await runQuery("UPDATE backend_reader SET follows = ? WHERE id = 1", [rd0.follows]);
 });
 
 test("the casino's emergency path from the shell (tools/casino-backend.js): status, a room / the default / all, audited as cli", async () => {
@@ -236,4 +255,97 @@ test("the casino's emergency path from the shell (tools/casino-backend.js): stat
   try { execFileSync(process.execPath, [tool, "--dir=" + empty], { encoding: "utf8", stdio: "pipe" }); } catch (e) { code = e.status; }
   assert.equal(code, 2);
   assert.equal(fs.existsSync(path.join(empty, "myapp.db")), false);
+});
+
+test("review of owner answer (6): a wish Pepe won't act on as it stands is offered again, the same way (hand-overs and the casino)", async () => {
+  const last = FX.steps[FX.steps.length - 1];
+  B._setClock(null);
+  await pepe(last.request);                                   // a fresh read of this build: he follows every switch
+  const boss = async () => B.view((await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [ID.boss]))[0]);
+  let v = await boss();
+  const row = (k) => v.rows.find((x) => x.key === k);
+  // the stashes' wish was made before Pepe followed it (act false): he leaves it alone - offered again, the same way
+  assert.deepEqual([row("stashes").want, row("stashes").act, row("stashes").live, row("stashes").again], [true, false, false, "unacted"]);
+  // the lotto: he reported it done, and it isn't on the site now (changed another way since): offered again
+  assert.deepEqual([row("lotto").pepe && row("lotto").pepe.state, row("lotto").live, row("lotto").again], ["done", false, "moved"]);
+  assert.equal(row("gtf").again, null, "never switched here: nothing to offer");
+  let html = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": ID.boss } })).text();
+  assert.match(html, /data-bk="stashes" data-on="1" data-again="1"/);
+  assert.match(html, /data-bk="lotto" data-on="1" data-again="1"/);
+  assert.match(html, /data-again="unacted"/);
+  assert.match(html, /data-again="moved"/);
+  assert.match(html, /Switch again: move to publicaccess\.tv/);
+  assert.doesNotMatch(html, /UTC UTC/, "a time names its zone once");
+  assert.match(html, /Pepe reads these switches \(last read [^)]*UTC, Pepe 1\.99zz\)/);
+  // an Admin who isn't a Pepe owner sees why, but gets no button on an owner row
+  const htmlA = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": ID.adm } })).text();
+  assert.match(htmlA, /data-again="unacted"/);
+  assert.doesNotMatch(htmlA, /data-bk="stashes"[^>]*data-again="1"/);
+  // the same-direction switch: a new wish (act: true now), audited; the offer is gone
+  const again = await call("/api/admin/backends/stashes", ID.boss, { on: true });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.deepEqual([again.body.want, again.body.act, again.body.chat], [true, true, null]);
+  const au = JSON.parse((await getQuery("SELECT detail FROM admin_audit WHERE action = 'backend_switch' ORDER BY id DESC LIMIT 1"))[0].detail);
+  assert.deepEqual([au.feature, au.want, au.was, au.pepe_follows], ["stashes", true, true, true]);
+  v = await boss();
+  assert.equal(row("stashes").again, null);
+  // given up after a day (stuck): offered again; on its way (trying): nothing to offer
+  const W = await B.wants();
+  await pepe(Object.assign({}, last.request, { results: { lotto: { want: true, at: W.lotto.at, ok: false, state: "stuck", msg: "not reached in 24 h" } } }));
+  v = await boss();
+  assert.equal(row("lotto").again, "stuck");
+  await pepe(Object.assign({}, last.request, { results: { lotto: { want: true, at: W.lotto.at, ok: false, state: "trying", msg: "too close to the draw" } } }));
+  v = await boss();
+  assert.equal(row("lotto").again, null);
+  // the casino: a room Pepe reached once that plays elsewhere now (e.g. an owner's chat switch while the site was down)
+  const Wc = (await B.wants())["casino:PepeLab"];
+  assert.equal(Wc.want, false);
+  await pepe(Object.assign({}, last.request, { results: { "casino:PepeLab": { want: false, at: Wc.at, ok: true, state: "done", msg: "on Pepe (the old engines)" } } }));
+  v = await boss();
+  const pl = v.casino.rooms.find((x) => x.room === "PepeLab");
+  assert.deepEqual([pl.want, pl.live, pl.again], [false, true, "moved"]);
+  html = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": ID.boss } })).text();
+  assert.match(html, /data-bkc="room" data-room="PepeLab" data-on="0" data-again="1"/);
+  assert.match(html, /Switch again: Pepe&#39;s tables|Switch again: Pepe's tables/);
+  const ca = await call("/api/admin/backends/casino", ID.boss, { on: false, scope: "room", room: "PepeLab" });
+  assert.deepEqual([ca.status, ca.body.want, ca.body.act], [200, false, true]);
+  v = await boss();
+  assert.equal(v.casino.rooms.find((x) => x.room === "PepeLab").again, null, "a new wish: his report for the old one is cleared");
+  // Pepe not following (a stale read): no offer anywhere - a new wish would be act: false again
+  await pepe(Object.assign({}, last.request, { results: { lotto: { want: true, at: W.lotto.at, ok: false, state: "stuck", msg: "x" } } }));
+  B._setClock(() => Date.now() + B.READER_FRESH_MS + 1000);
+  try {
+    v = await boss();
+    assert.ok(v.rows.every((x) => x.again === null) && v.casino.rooms.every((x) => x.again === null) && v.casino.default.again === null);
+  } finally { B._setClock(null); }
+  assert.equal(B.againOf({ want: true, act: true, pepe: { state: "blocked" } }, false, true), null, "blocked: switching again won't help");
+  assert.equal(B.againOf({ want: true, act: false, pepe: null }, true, true), null, "already there: nothing to offer");
+  assert.equal(B.againOf({ want: true, act: false, pepe: null }, null, true), null, "where it plays unknown: nothing to offer");
+});
+
+test("review of owner answer (6): at most 50 casino room wishes are kept - the oldest dropped (audited); Pepe is answered the 50 newest", async () => {
+  const last = FX.steps[FX.steps.length - 1];
+  B._setClock(null);
+  const rooms = Array.from({ length: 50 }, (_, i) => ({ room: "R" + String(i).padStart(2, "0"), name: "R" + i, joined: true, on: false }));
+  await pepe(Object.assign({}, last.request, { casino: { default: false, rooms } }));
+  const before = Object.keys(await B.wants()).filter((k) => k.startsWith("casino:")).map((k) => k.slice(7)).sort();
+  assert.deepEqual(before, ["DRAMA_CENTRAL", "PepeLab"]);
+  const all = await call("/api/admin/backends/casino", ID.boss, { on: true, scope: "all" });
+  assert.equal(all.status, 200, JSON.stringify(all.body));
+  assert.equal(all.body.rooms.length, 50);
+  assert.deepEqual([...all.body.pruned].sort(), before, "the two switched longest ago are dropped");
+  const keys = Object.keys(await B.wants()).filter((k) => k.startsWith("casino:"));
+  assert.equal(keys.length, B.CASINO_MAX_ROOMS);
+  const a = JSON.parse((await getQuery("SELECT detail FROM admin_audit WHERE action = 'backend_switch' ORDER BY id DESC LIMIT 1"))[0].detail);
+  assert.deepEqual([a.scope, a.rooms.length, [...a.pruned].sort()], ["all", 50, before]);
+  // a database from before the cap (55 room wishes): Pepe is answered the 50 most recently switched, by room id
+  for (let i = 0; i < 5; i++) {
+    await runQuery("INSERT INTO backend_wants (feature, want, by, via, at, act) VALUES (?, 1, 'old', 'web', ?, 1)", ["casino:OLD" + i, 1000 + i]);
+  }
+  const r = await pepe(Object.assign({}, last.request, { casino: { default: true, rooms } }));
+  const got = Object.keys(r.body.casino.rooms);
+  assert.equal(got.length, 50);
+  assert.ok(!got.some((k) => k.startsWith("OLD")), "the oldest are left out");
+  assert.deepEqual(got, [...got].sort(), "by room id");
+  for (let i = 0; i < 5; i++) await runQuery("DELETE FROM backend_wants WHERE feature = ?", ["casino:OLD" + i]);
 });

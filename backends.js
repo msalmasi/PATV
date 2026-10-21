@@ -37,6 +37,10 @@
 //   POST /api/pepe/backends             {password, contract, version, follows, results, casino} (bot token)
 //                                       -> {ok, ts, contract, features: {key: {want, act, live, site, by, at}},
 //                                           casino: {default: {want, act, by, at}, rooms: {room: {want, act, by, at}}}}
+//                                       (a read that isn't contract 1 is told want: null everywhere; at most CASINO_MAX_ROOMS rooms)
+// The review of owner answer (6): a wish Pepe won't act on as it stands (made before he followed the switch, given up, or reached
+// and changed another way since) is offered again the same way on the page (againOf); a stale read of a current Pepe is told
+// apart from an older build (staleReader); at most CASINO_MAX_ROOMS room wishes are kept (pruneCasino).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");
@@ -217,6 +221,25 @@ async function reader() {
 }
 /** Does Pepe follow `key`'s switch now (a fresh read that lists it)? */
 const followsNow = (rd, key) => !!(rd && rd.fresh && rd.follows.includes(key));
+/** A Pepe of this contract that followed `key` at his last read, but hasn't read for READER_FRESH_MS (he is down, or can't
+ *  reach the site) - not an older build (review of owner answer 6: the two are told apart, an older one has the chat command). */
+const staleReader = (rd, key) => !!(rd && rd.at && !rd.fresh && rd.follows.includes(key));
+const whenUtc = (ms) => new Date(Number(ms)).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+/**
+ * Review of owner answer (6): a wish Pepe won't act on as it stands, so the page offers to switch it AGAIN the same way (a new
+ * wish, act: true while he follows it - the API always took that; the buttons didn't offer it). -> "unacted" (made before he
+ * followed the switch - he never runs it), "stuck" (he gave up after a day), "moved" (he reached it once and it was changed
+ * another way since - he never re-applies a reached wish), or null. Only while he follows the switch (otherwise a new wish
+ * would be act: false again), and only when it isn't where the wish says (live known and different).
+ */
+function againOf(w, live, follows) {
+  if (!follows || !w || (w.want !== true && w.want !== false) || live === null || live === undefined || live === w.want) return null;
+  const st = w.pepe && w.pepe.state;
+  if (!w.act || st === "unacted") return "unacted";
+  if (st === "stuck") return "stuck";
+  if (st === "done") return "moved";
+  return null;
+}
 
 async function wants() {
   await init();
@@ -324,7 +347,11 @@ async function flipCasino(scope, room, on, me, { via = "web", auditAs = null } =
   const rd = await reader();
   const act = followsNow(rd, CASINO);
   if (!act) {
-    throw new Refuse(409, "pepe_not_following", "Pepe doesn't follow the casino's switches yet, so nothing would change - on his current build a Pepe owner runs !casino backend on|off in that room.");
+    // review of owner answer (6): a Pepe of this contract whose read is only stale (down, or can't reach the site) has no chat
+    // switch while the site has one - except handing rooms back while he can't reach it; an older build still has the command
+    throw new Refuse(409, "pepe_not_following", staleReader(rd, CASINO)
+      ? `Pepe hasn't read these switches since ${whenUtc(rd.at)} (Pepe ${rd.version || "?"}) - check that he is running and can reach publicaccess.tv; nothing would change until he reads them again (within a minute once he does). While he can't reach the site, a Pepe owner can hand a room back to his own tables in chat with !casino backend off.`
+      : "Pepe doesn't follow the casino's switches (his update isn't live, or he follows nothing right now), so nothing would change - a Pepe owner runs !casino backend on|off in that room instead.");
   }
   const W = await wants();
   const reported = ((rd.casino && rd.casino.rooms) || []).map((r) => r.room);
@@ -340,22 +367,47 @@ async function flipCasino(scope, room, on, me, { via = "web", auditAs = null } =
     targets = scope === "default" ? [null] : [...reported, null];
   }
   const was = scope === "all" ? null : W[casinoKey(targets[0])] ? W[casinoKey(targets[0])].want : null;
-  await tx(async () => { for (const t of targets) await putWant(casinoKey(t), on, me, via, act); });
+  let pruned = [];
+  await tx(async () => {
+    for (const t of targets) await putWant(casinoKey(t), on, me, via, act);
+    pruned = await pruneCasino();
+  });
   const rooms = targets.filter((t) => t !== null);
-  await audit(auditAs || me, Object.assign({ feature: CASINO, scope, room, want: on, was, via, pepe_follows: act }, scope === "all" ? { rooms } : {}));
-  console.log(`[backends] casino ${scope}${room ? " " + room : ""}: ${on ? "the site's casino" : "Pepe's tables"} by ${(me && me.username) || "?"} (${via})`);
-  return { feature: CASINO, scope, room, rooms, want: on, act };
+  await audit(auditAs || me, Object.assign({ feature: CASINO, scope, room, want: on, was, via, pepe_follows: act }, scope === "all" ? { rooms } : {},
+                                           pruned.length ? { pruned } : {}));
+  console.log(`[backends] casino ${scope}${room ? " " + room : ""}: ${on ? "the site's casino" : "Pepe's tables"} by ${(me && me.username) || "?"} (${via})`
+              + (pruned.length ? `; ${pruned.length} older room wish(es) dropped (at most ${CASINO_MAX_ROOMS})` : ""));
+  return { feature: CASINO, scope, room, rooms, want: on, act, pruned };
+}
+
+/** Review of owner answer (6): at most CASINO_MAX_ROOMS room wishes are kept - as many as Pepe follows (and keeps switched by
+ *  name) - so the ones switched longest ago beyond that are dropped, inside the caller's transaction. Pepe then forgets that
+ *  wish and the room stays as it plays (he never reverts a room he drops a wish for). -> [room ids dropped] */
+async function pruneCasino() {
+  const rows = await getQuery("SELECT feature FROM backend_wants WHERE feature LIKE 'casino:%' ORDER BY at DESC, feature ASC");
+  const drop = rows.slice(CASINO_MAX_ROOMS).map((r) => r.feature);
+  for (const f of drop) await runQuery("DELETE FROM backend_wants WHERE feature = ?", [f]);
+  return drop.map((f) => f.slice(CASINO.length + 1));
+}
+/** The room wishes Pepe is answered with: the CASINO_MAX_ROOMS most recently switched (pruneCasino keeps no more; this holds
+ *  for a database from before it), by room id. */
+function casinoRoomKeys(W) {
+  const at = (k) => Number((W[k] && W[k].at) || 0);
+  return Object.keys(W).filter((k) => k.startsWith(CASINO + ":"))
+    .sort((a, b) => at(b) - at(a) || (a < b ? -1 : a > b ? 1 : 0)).slice(0, CASINO_MAX_ROOMS)
+    .sort();
 }
 
 /** The casino rows for the page: Pepe's report (where each room plays now) + the wishes + his results. */
 function casinoView(rd, W, can) {
   const rep = rd.casino || null;
+  const follows = followsNow(rd, CASINO);
   const row = (room, base) => {
     const w = W[casinoKey(room)] || null;
     const live = base ? base.on : null;
     return Object.assign({ room, name: base ? base.name : room, joined: base ? base.joined : null, live },
                          { want: w ? w.want : null, act: w ? w.act : false, by: w ? w.by : null, via: w ? w.via : null, at: w ? w.at : null,
-                           pepe: w ? w.pepe : null, waiting: !!(w && live !== null && w.want !== live) });
+                           pepe: w ? w.pepe : null, waiting: !!(w && live !== null && w.want !== live), again: againOf(w, live, follows) });
   };
   const rooms = ((rep && rep.rooms) || []).map((r) => row(r.room, r));
   for (const k of Object.keys(W)) {
@@ -365,9 +417,10 @@ function casinoView(rd, W, can) {
   }
   const dw = W[CASINO] || null;
   const dlive = rep ? rep.default : null;
-  return { follows: followsNow(rd, CASINO), reported: !!rep, can: !!can, rooms,
+  return { follows, stale: staleReader(rd, CASINO), reported: !!rep, can: !!can, rooms,
            default: { live: dlive, want: dw ? dw.want : null, act: dw ? dw.act : false, by: dw ? dw.by : null, via: dw ? dw.via : null,
-                      at: dw ? dw.at : null, pepe: dw ? dw.pepe : null, waiting: !!(dw && dlive !== null && dw.want !== dlive) } };
+                      at: dw ? dw.at : null, pepe: dw ? dw.pepe : null, waiting: !!(dw && dlive !== null && dw.want !== dlive),
+                      again: againOf(dw, dlive, follows) } };
 }
 
 /** Every row: the hand-overs (switchable) and the status-only cutovers. `me` (optional) adds can / why per row. */
@@ -391,6 +444,8 @@ async function view(me) {
                 waiting: !!(w && live !== null && w.want !== live),
                 // Pepe's part: does he follow this switch, and the chat command an owner runs while he doesn't
                 follows, chat_on: f.chat[0], chat_off: f.chat[1],
+                // review of owner answer (6): a wish he won't act on as it stands is offered again, the same way
+                again: againOf(w, live, follows),
                 // a direction that would only record a wish is offered only while Pepe follows the switch
                 offer_on: follows || (live !== null && !f.wishOnly(true, live)), offer_off: follows || (live !== null && !f.wishOnly(false, live)) });
   }
@@ -406,31 +461,36 @@ async function view(me) {
 /** A wish as Pepe reads it: {want, act, by, at} (want null = never switched here). */
 const wishOut = (w) => ({ want: w ? w.want : null, act: !!(w && w.act), by: w ? w.by : null, at: w ? w.at : null });
 
+/** A read in THIS contract: `contract: 1` + a `follows` list. */
+const inContract = (b) => !!(b && typeof b === "object" && !Array.isArray(b) && b.contract === CONTRACT && Array.isArray(b.follows));
+
 /** Pepe's read (bot token) and his report - THE CONTRACT, docs/admin-backends.md (pinned by test/fixtures/backends-contract.json).
  *  A read in this contract (`contract: 1` + `follows`) is recorded (backend_reader: follows, version, his casino rooms) with his
- *  `results` for the CURRENT wishes; anything else (an older Pepe's body, another contract) only reads. -> the wish per
- *  hand-over + where it lives now, and the casino's wishes per room; act: false = a wish made while he didn't follow it (he
- *  leaves it alone). */
+ *  `results` for the CURRENT wishes; anything else (an older Pepe's body, another contract) only reads - and is told no wish at
+ *  all (want: null everywhere: an older follower that ignores `act` can't run one - review of owner answer 6, hardening). -> the
+ *  wish per hand-over + where it lives now, and the casino's wishes per room (the CASINO_MAX_ROOMS most recent); act: false = a
+ *  wish made while he didn't follow it (he leaves it alone). */
 async function botView(b = {}) {
   await init();
-  if (b && typeof b === "object" && !Array.isArray(b)) await noteReader(b);
+  const reading = inContract(b);
+  if (reading) await noteReader(b);
   const W = await wants();
   const features = {};
   for (const key of KEYS) {
     const f = FEATURES[key];
     let live = null, site = null;
     try { await f.prep(); live = !!(await f.live()); site = await f.site(); } catch (e) { live = null; }
-    const w = wishOut(W[key]);
+    const w = wishOut(reading ? W[key] : null);
     features[key] = { want: w.want, act: w.act, live, site: site === null || site === undefined ? null : !!site, by: w.by, at: w.at };
   }
   const rooms = {};
-  for (const k of Object.keys(W).sort()) if (k.startsWith(CASINO + ":")) rooms[k.slice(CASINO.length + 1)] = wishOut(W[k]);
-  return { ok: true, ts: clock(), contract: CONTRACT, features, casino: { default: wishOut(W[CASINO]), rooms } };
+  if (reading) for (const k of casinoRoomKeys(W)) rooms[k.slice(CASINO.length + 1)] = wishOut(W[k]);
+  return { ok: true, ts: clock(), contract: CONTRACT, features, casino: { default: wishOut(reading ? W[CASINO] : null), rooms } };
 }
 async function noteReader(b) {
   // only a read in THIS contract is a reader: an older Pepe ({} - he never acts on `act`) or another contract number would
   // otherwise make the page say he follows switches he doesn't understand (the 2026-10-20 stage review's mismatch)
-  if (b.contract !== CONTRACT || !Array.isArray(b.follows)) return;
+  if (!inContract(b)) return;
   const follows = [...new Set(b.follows.map(String).filter((k) => FOLLOWABLE.includes(k)))];
   const ver = b.version === undefined || b.version === null ? null : String(b.version).replace(/[\u0000-\u001f]/g, " ").slice(0, 40);
   const cas = cleanCasino(b.casino);
@@ -515,5 +575,5 @@ function register(app, { addUser, isBotToken }) {
 }
 
 module.exports = { init, register, view, botView, reader, flip, mayFlip, flipCasino, mayFlipCasino, noteLegacy, noteCli, wants, cleanCasino,
-                   FEATURES, STATUS_ONLY, KEYS, FOLLOWABLE, CASINO, CAP, CONTRACT, READER_FRESH_MS, Refuse,
+                   FEATURES, STATUS_ONLY, KEYS, FOLLOWABLE, CASINO, CASINO_MAX_ROOMS, CAP, CONTRACT, READER_FRESH_MS, Refuse, againOf,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); } };
