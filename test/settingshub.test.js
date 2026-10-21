@@ -49,6 +49,11 @@ test.before(async () => {
                   twitchId TEXT, discordId TEXT, email TEXT, avatar TEXT, password_set INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await runQuery("CREATE TABLE IF NOT EXISTS dm_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL)");
   await L.init();
+  // S1 V3: the chat text-style row is there only while the `looks` switch is on (textstyle.pickerOn; its off state is
+  // test/textstyle-picker.test.js's) - on here, so every row's link is checked
+  await runQuery("CREATE TABLE IF NOT EXISTS hubseam_settings (key TEXT PRIMARY KEY, value TEXT, updated INTEGER, actor TEXT)");
+  await runQuery("INSERT INTO hubseam_settings (key, value) VALUES ('looks', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'");
+  await require(path.join(repo, "huboutbox")).reloadSettings();
   U.fan = await mkUser("fan", { camfrog: "FanCF" });
   U.plain = await mkUser("plain", { bal: 0 });
   await L.setPrefs(U.fan.userId, { [L.KINDS[0]]: false });

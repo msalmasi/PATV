@@ -1365,7 +1365,7 @@ const bridge = require("./bridge");
 bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /p (Pads), /p/:slug (pad page), /api/bridge/sync
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
-require("./textstyle").register(app, { addUser });   // S1 V3: the chat text-style picker's save (Edit profile #textstyle)
+require("./textstyle").register(app, { addUser });   // S1 V3: the chat text-style picker's save (Edit profile #textstyle; looks switch)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
 app.get("/economy", addUser, async (req, res) => {
   // economy v2 E-2: the incentive budget + weekly waterfall section renders only while Pepe's treasury is live;
@@ -2294,10 +2294,9 @@ app.get(
           let pc = null, layout = profileLayout.sanitize(profileLayout.DEFAULT);
           try { pc = await cosmetics.profileData(user.username); } catch (e) { console.error("edit profile cosmetics:", e.message); }
           try { layout = await profileLayout.get(user.userId); } catch (e) { console.error("edit profile layout:", e.message); }
-          // S1 V3: the chat text-style picker - the palette's choices and what is saved (none when the read fails)
-          const TS = require("./textstyle");
-          let textStyle = TS.pickerState(null);
-          try { textStyle = TS.pickerState(await TS.get(user.userId)); } catch (e) { console.error("edit profile text style:", e.message); }
+          // S1 V3: the chat text-style picker - the palette's choices and what is saved (none when the read fails); no card
+          // while the `looks` switch is off (textstyle.editData)
+          const ts = await require("./textstyle").editData(user.userId);
           res.render("editProfile", {
             username: user.username,
             displayname: user.displayname,
@@ -2311,9 +2310,9 @@ app.get(
             sections: profileLayout.SECTIONS,
             subSections: profileLayout.SUBS,
             privPanels: profileLayout.PRIV,
-            textStyle,
-            textStyles: TS.choices(),
-            textStyleFonts: TS.webfontHref(),
+            textStyle: ts.textStyle,
+            textStyles: ts.textStyles,
+            textStyleFonts: ts.textStyleFonts,
             errors: errorMessages,
             success: successMessages,
           });

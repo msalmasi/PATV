@@ -51,16 +51,18 @@ async function hub(user, ctx = {}) {
 
   // ── Profile: how others see you (one home: Edit profile - linked, never copied here) ──
   // S1 V3: the chat text style (textstyle.js; its home is Edit profile #textstyle) - the state names the colour and the font,
-  // as catalog keys the view translates (`vk`, inserted raw: catalog text is HTML-safe)
+  // as catalog keys the view translates (`vk`, inserted raw: catalog text is HTML-safe). No row while the picker is off
+  // (the `looks` switch, textstyle.pickerOn).
   const TS = require("./textstyle");
-  const ts = await safe(async () => TS.pickerState(await TS.get(uid)));
+  const tsOn = TS.pickerOn();
+  const ts = tsOn ? await safe(async () => TS.pickerState(await TS.get(uid))) : null;
   const tsSt = !ts ? null : !ts.color && ts.font === "sans" ? st("ts_default")
     : Object.assign(ts.color ? st("ts") : st("ts_font"), { vk: Object.assign(ts.color ? { color: "textstyle.color." + ts.color } : {}, { font: "textstyle.font." + ts.font }) });
   const profile = [
     E("profile", "✏️", edit),
     E("feed", "📝", "/u/" + me + "/posts#profile-settings"),
     E("cosmetics", "🎨", "/cosmetics"),
-    E("textstyle", "🔤", edit + "#textstyle", tsSt),
+    ...(tsOn ? [E("textstyle", "🔤", edit + "#textstyle", tsSt)] : []),
     E("stickers", "🧸", "/cosmetics?tab=stickers"),
   ];
 

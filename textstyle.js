@@ -1,9 +1,9 @@
 // textstyle.js — S1 Q5b (ADR 0007 D13, CA §5.5 "Text style"): a member's chat text style, users.text_style - the colour
 // and face of their message body in the native chat. v1 owns it until looks move (P-4): it reaches the chat hub in the
 // looks (looks/changed, POST /internal/v1/looks) as text {color, font, scope: "all"}; the hub validates it again on apply
-// (contrast on both themes, distance from the reserved accents) and derives the theme pair. Written by the picker on Edit
+// (contrast on both themes, distance from the reserved accents) and derives the theme pair. Set by the picker on Edit
 // profile (S1 V3, release L5: the "Chat text style" card, /u/<me>/edit#textstyle - its one home; the /settings hub links
-// to it) through set(), and by the contract driver.
+// to it) through set(), and by the contract driver; account deletion's tombstone clears it (accountdelete.js step 8).
 //
 //   users.text_style   NULL (no style) | JSON {"color": "#rrggbb" | null, "font": "sans|serif|mono|rounded|comic|pixel"}
 //
@@ -11,6 +11,11 @@
 // value (the site's own theme); a hex, a key that isn't the palette's or an unknown font is refused. The hub turns a
 // palette value of either theme into that palette pair (chat-core validateTextColor), so the preview's two themes are
 // what the chat shows.
+//
+// The picker is behind the `looks` switch (hubseam.looks, /admin/keys#seam - the switch that sends text styles to the chat
+// hub; ADR 0007 D19: every S1 switch stays off until Q7, so nothing a member sees changes before then): while it is off the
+// card, the /settings row and the save route are not there (the route answers 404, nothing written). A style already
+// saved stays stored. When V2 (release L4) adds CHAT_HUB, pickerOn() can require it too.
 //
 // The palette and the fonts are chat-text-styles.json: rt-schema's registry/text-styles.json byte for byte (its sha256 is
 // pinned in test/huboutbox-s1.test.js; a palette change is an rt-schema PR first, then this copy). A colour must be one of
@@ -83,26 +88,35 @@ async function get(userId) {
 // ── S1 V3: the picker (Edit profile #textstyle) ──
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o || {}, k);
 const SAFE_STACK = /^[A-Za-z0-9 ,"'().\-]+$/;       // a font stack the view may print into a style attribute (the registry's are)
-const COLOR_KEYS = Object.keys(REG.palette || {});
+const SAFE_WEBFONT = /^[A-Za-z0-9 ]+$/;              // a webfont family the Google Fonts address may carry
 const SAVES_PER_WINDOW = 30;                         // the save route's limit per member per 10 minutes (register)
 
-/** The picker's choices, in registry order: the 16 palette colours (both themes' values) and the six fonts. */
-function choices() {
+/** Is the picker there? The `looks` switch (huboutbox; off - and so no picker - when the seam can't be read). */
+function pickerOn() {
+  try { return require("./huboutbox").on("looks") === true; } catch (e) { return false; }
+}
+
+/**
+ * The picker's choices, in registry order: the 16 palette colours (both themes' values) and the six fonts. `reg` is the
+ * registry (tests pass another): a colour without two hex values or a font whose stack could break out of the view's
+ * style attribute (anything but letters, digits, spaces and , " ' ( ) . -) is left out.
+ */
+function choices(reg = REG) {
   const colors = [];
-  for (const key of COLOR_KEYS) {
-    const p = REG.palette[key] || {};
+  for (const key of Object.keys(reg.palette || {})) {
+    const p = reg.palette[key] || {};
     const dark = String(p.dark || "").toLowerCase(), light = String(p.light || "").toLowerCase();
     if (HEX_RE.test(dark) && HEX_RE.test(light)) colors.push({ key, dark, light, label_key: String(p.label_key || "textstyle.color." + key) });
   }
   const fonts = [];
-  for (const key of FONTS) {
-    const f = REG.fonts[key] || {};
+  for (const key of Object.keys(reg.fonts || {})) {
+    const f = reg.fonts[key] || {};
     const scale = Number(f.size_scale) > 0 && Number(f.size_scale) <= 2 ? Number(f.size_scale) : 1;
     if (SAFE_STACK.test(String(f.stack || ""))) fonts.push({ key, stack: String(f.stack), scale, webfont: f.webfont ? String(f.webfont) : null, label_key: String(f.label_key || "textstyle.font." + key) });
   }
   // the preview's two themes: the chat's first background of each, and its link colour (mentions keep their own)
   const hex = (v, d) => (HEX_RE.test(String(v || "").toLowerCase()) ? String(v).toLowerCase() : d);
-  const bg = REG.backgrounds || {}, link = (REG.reserved_accents || {}).link || {};
+  const bg = reg.backgrounds || {}, link = (reg.reserved_accents || {}).link || {};
   const theme = {
     dark: { bg: hex((bg.dark || [])[0], "#0f0f11"), link: hex(link.dark, "#81c784") },
     light: { bg: hex((bg.light || [])[0], "#ffffff"), link: hex(link.light, "#276b2b") },
@@ -111,13 +125,24 @@ function choices() {
 }
 
 /** The Google Fonts stylesheet for the fonts that need a webfont (the preview draws each face), or null. */
-function webfontHref() {
+function webfontHref(reg = REG) {
   const fams = [];
-  for (const key of FONTS) {
-    const w = REG.fonts[key] && REG.fonts[key].webfont;
-    if (w && /^[A-Za-z0-9 ]+$/.test(String(w))) fams.push("family=" + String(w).trim().replace(/ /g, "+"));
+  for (const key of Object.keys(reg.fonts || {})) {
+    const w = reg.fonts[key] && reg.fonts[key].webfont;
+    if (w && SAFE_WEBFONT.test(String(w))) fams.push("family=" + String(w).trim().replace(/ /g, "+"));
   }
   return fams.length ? "https://fonts.googleapis.com/css2?" + fams.join("&") + "&display=swap" : null;
+}
+
+/**
+ * What Edit profile renders the card from: {textStyle, textStyles, textStyleFonts}. While the picker is off (pickerOn) all
+ * three are null and the view leaves the card and its jump link out; a failed read shows nothing saved.
+ */
+async function editData(userId) {
+  if (!pickerOn()) return { textStyle: null, textStyles: null, textStyleFonts: null };
+  let textStyle = pickerState(null);
+  try { textStyle = pickerState(await get(userId)); } catch (e) { console.error("edit profile text style:", e.message); }
+  return { textStyle, textStyles: choices(), textStyleFonts: webfontHref() };
 }
 
 /** A stored style -> what the picker shows checked: {color: palette key | null, font}. */
@@ -149,14 +174,17 @@ function fromForm(body) {
 /**
  * POST /api/u/<me>/update/textstyle {color, font} - the picker's save. A form post goes back to Edit profile #textstyle with
  * a flash; the page's script asks for JSON (Accept: application/json) and gets {ok, style: {color: key | null, font}}.
+ * 404 while the picker is off (pickerOn). Every request counts towards the member's limit, refused ones too. Logs carry
+ * no account, name or posted value.
  */
 function register(app, { addUser }) {
   const guard = require("./middleware/authGuard");
   // each saved change is one looks/changed row while the switch is on: 30 saves per member per 10 minutes is plenty for a picker
   const limit = guard.limiter({ max: SAVES_PER_WINDOW, windowMs: 10 * 60000 });
-  app.post("/api/u/:username/update/textstyle", addUser, async (req, res) => {
+  app.post("/api/u/:username/update/textstyle", addUser, async (req, res, next) => {
     const json = /application\/json/i.test(String(req.get("accept") || ""));
     res.set("Cache-Control", "private, no-store");
+    if (!pickerOn()) return json ? res.status(404).json({ ok: false, error: "not_found" }) : next();
     if (!req.user || !req.user.userId) return json ? res.status(401).json({ ok: false, error: "signin" }) : res.redirect("/login");
     const back = "/u/" + encodeURIComponent(req.user.username) + "/edit#textstyle";
     if (req.user.username !== req.params.username) return json ? res.status(403).json({ ok: false, error: "not_yours" }) : res.redirect(back);
@@ -188,4 +216,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, clean, parse, lookText, set, get, choices, webfontHref, pickerState, fromForm, register, SAVES_PER_WINDOW, FONTS, PALETTE, REG };
+module.exports = { init, clean, parse, lookText, set, get, pickerOn, choices, webfontHref, editData, pickerState, fromForm, register, SAVES_PER_WINDOW,
+                   SAFE_STACK, FONTS, PALETTE, REG };

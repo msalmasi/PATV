@@ -282,8 +282,8 @@ the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` f
   sorted at every depth) without `h`, always over the card look.
 - **Text style:** `users.text_style` = JSON `{color, font}` (`textstyle.js`): a W1 palette colour (`chat-text-styles.json`,
   rt-schema's `registry/text-styles.json` byte for byte, sha256 pinned in `test/huboutbox-s1.test.js`) and one of the six
-  fonts; the look carries `text {color?, font, scope:"all"}`. The picker is V3 (release L5, below); account deletion clears it,
-  "Download my data" includes it.
+  fonts; the look carries `text {color?, font, scope:"all"}`. The picker is V3 (release L5, below; behind the `looks` switch);
+  account deletion clears it, "Download my data" includes it.
 - **Triggers** (all gated by the topic's switch, `(topic, entity)` only, never on points / xp): identity - `users`
   insert / delete / the link, status and fact columns, `telegram_links`, `account_deletions`, `account_merges` (insert,
   and the upsert / chain re-point's update); looks - `users` insert / delete / the look's and `verified.js`'s columns, a
@@ -316,6 +316,12 @@ the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` f
 
 S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set from a picker on Edit profile).
 
+- **Behind the `looks` switch** (1.99adt fix-up; `textstyle.pickerOn()` = `huboutbox.on("looks")`, the switch that sends text
+  styles to the chat hub): while it is off - the default, and until Q7 turns S1's switches on (ADR 0007 D19: nothing a
+  member sees changes before then) - Edit profile has no card and no jump link and loads no webfonts
+  (`textstyle.editData` answers nulls), `/settings` has no row, and the save route answers 404 (`{ok:false,
+  error:"not_found"}` for the page script; the site's own 404 for a form post), nothing written. A style saved while it was
+  on stays stored and comes back with the card. When V2 (release L4) adds `CHAT_HUB`, `pickerOn()` can require it too.
 - **One home:** the "Chat text style" card on Edit profile (`views/editProfile.ejs` `#textstyle`, between Avatar and Profile
   layout, in the jump links). The `/settings` hub's Profile section links to it (`settingshub.js` row `textstyle`, after
   Cosmetics) with the saved style as its state ("Blue · Mono", "Pixel", "Default"; the colour and font names are catalog
@@ -333,15 +339,24 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
   face (and the pixel face's size scale). Server-rendered from the saved style; the page script repaints it on every
   change and says "Not saved yet." until Save.
 - **Save:** `POST /api/u/<me>/update/textstyle {color, font}` (`textstyle.register`): signed in, your own name, same site
-  (`authGuard.sameSite`), at most 30 saves per member per 10 minutes (each saved change is one `looks/changed` row while
-  the switch is on). The page script sends `Accept: application/json` and gets `{ok, style: {color: key | null, font}}`
-  (400 `bad_text_style`, 401 `signin`, 403 `not_yours` / `cross_site`, 429 `slow`); without JS the form posts and comes back to
-  `#textstyle` with a flash. The write is `textstyle.set` (`dbUtils.tx`), the one place the site writes the column; with
-  the `looks` switch on, its `users.text_style` trigger queues the member's `looks/changed` row.
-- **Tests:** `test/textstyle-picker.test.js` (choices = the registry, `fromForm` refusals and every key x font round trip, the
-  route's checks, its limit and both answers, the card rendered with and without a saved style, one home: the only poster and the
-  only writer, the hub row and its states); `test/settingshub.test.js` lists the row and the card's ids (one home per
-  setting).
+  (`authGuard.sameSite`), at most 30 posts per member per 10 minutes - refused ones count too, so probing the palette is
+  slowed like saving (each saved change is one `looks/changed` row while the switch is on). Every answer is
+  `Cache-Control: private, no-store`. The page script sends `Accept: application/json` and gets `{ok, style: {color: key |
+  null, font}}` (400 `bad_text_style`, 401 `signin`, 403 `not_yours` / `cross_site`, 404 `not_found` while the switch is off,
+  429 `slow`, 500 `error`); without JS the form posts and comes back to `#textstyle` with a flash. A failed save logs
+  `[textstyle] save: <error>` only - no account, name or posted value. Setting the column is `textstyle.set`
+  (`dbUtils.tx`), the one place the site sets it (the picker and the contract driver both go through it); account
+  deletion's tombstone clears it (`accountdelete.js` step 8, part of its column map). With the `looks` switch on, the
+  `users.text_style` trigger queues the member's `looks/changed` row either way.
+- **Font stacks:** the view prints a font's stack into a `style` attribute, so `choices()` keeps only stacks made of letters,
+  digits, spaces and `, " ' ( ) . -` (`textstyle.SAFE_STACK`; the registry's six are), and the Google Fonts address only
+  plain family names.
+- **Tests:** `test/textstyle-picker.test.js` (choices = the registry, the stack and webfont guards on a hostile registry,
+  `fromForm` refusals and every key x font round trip, the route's checks, `private, no-store` on every answer, its limit -
+  refused posts counted - and both answers, a failed save's answer and log, the card rendered with and without a saved
+  style, one home: the only poster, and every server file that names the column with what it does - `textstyle.js` sets,
+  `accountdelete.js` clears, `hublooks.js` / `userlook.js` read - the hub row and its states, and the `looks` switch off
+  and on); `test/settingshub.test.js` (looks on) lists the row and the card's ids (one home per setting).
 - **i18n:** new keys only - `textstyle.*` (the palette's and the fonts' `label_key`s from the registry, the card's copy),
   `sethub.e/d.textstyle`, `sethub.st.ts*`, `js.textstyle.*`; the sync translates them after the staging push.
 

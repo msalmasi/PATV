@@ -3,6 +3,8 @@
 //   - palette only: the picker offers exactly rt-schema's palette (chat-text-styles.json) and six fonts, and the route
 //     stores nothing else - a typed hex, a key outside the palette, an unknown font are refused and change nothing
 //   - one home: the control lives on Edit profile only; the /settings hub links to it and shows what is saved
+//   - the looks switch: while it is off the card, the /settings row and the route are not there (nothing a member sees
+//     changes before S1's switches turn on, ADR 0007 D19)
 //   NODE_PATH=G:/PATV/node_modules node --test test/textstyle-picker.test.js
 //   TEXTSTYLE_SHOTS=<dir> also writes the rendered Edit profile page there (for screenshots)
 "use strict";
@@ -23,6 +25,7 @@ const ejs = require("ejs");
 const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const TS = require(path.join(repo, "textstyle"));
 const HUB = require(path.join(repo, "settingshub"));
+const HO = require(path.join(repo, "huboutbox"));
 const EN = require(path.join(repo, "locales", "en.json"));
 const REG = JSON.parse(fs.readFileSync(path.join(repo, "chat-text-styles.json"), "utf8"));
 const KEYS = Object.keys(REG.palette);
@@ -41,8 +44,14 @@ async function mkUser(name) {
 const U = {};
 const stored = async (u) => (await getQuery("SELECT text_style FROM users WHERE userId = ?", [u.userId]))[0].text_style;
 const setRaw = (u, v) => runQuery("UPDATE users SET text_style = ? WHERE userId = ?", [v, u.userId]);
+/** The `looks` switch (hubseam_settings, as /admin/keys#seam stores it), re-read the way huboutbox does. */
+async function setLooks(on) {
+  await runQuery("CREATE TABLE IF NOT EXISTS hubseam_settings (key TEXT PRIMARY KEY, value TEXT, updated INTEGER, actor TEXT)");
+  await runQuery("INSERT INTO hubseam_settings (key, value) VALUES ('looks', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [on ? "true" : "false"]);
+  await HO.reloadSettings();
+}
 
-/** POST the picker's form: as the page script does (json) or as a plain form post. */
+/** POST the picker's form: as the page script does (json) or as a plain form post. Every answer is private, no-store. */
 async function post(u, fields, { json = true, name = null, origin = "same" } = {}) {
   const headers = { "content-type": "application/x-www-form-urlencoded" };
   if (u) headers["x-test-user"] = u.userId;
@@ -54,6 +63,7 @@ async function post(u, fields, { json = true, name = null, origin = "same" } = {
   const text = await r.text();
   let body = null;
   try { body = JSON.parse(text); } catch (e) { body = null; }
+  assert.equal(r.headers.get("cache-control"), "private, no-store", "a " + r.status + " answer is private, no-store");
   return { status: r.status, loc: r.headers.get("location"), body, text };
 }
 const takeFlash = (u) => { const f = flashes.get(u.userId) || {}; flashes.delete(u.userId); return f; };
@@ -64,6 +74,7 @@ test.before(async () => {
                   twitchId TEXT, discordId TEXT, email TEXT, avatar TEXT, password_set INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await runQuery("CREATE TABLE IF NOT EXISTS dm_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL)");
   await TS.init();
+  await setLooks(true);              // the picker is there only while the looks switch is on (its own test turns it off)
   U.fan = await mkUser("fan");
   U.other = await mkUser("other");
   U.plain = await mkUser("plain");
@@ -148,6 +159,34 @@ test("fromForm: a palette key and a font - nothing else; the stored colour is th
   assert.deepEqual(TS.pickerState('{"color":"#1d4ed8","font":"mono"}'), { color: "blue", font: "mono" });
   assert.deepEqual(TS.pickerState(null), { color: null, font: "sans" });
   assert.deepEqual(TS.pickerState('{"color":"#123456","font":"mono"}'), { color: null, font: "sans" }, "an invalid stored value is no style");
+});
+
+test("choices(): a font stack that could leave the view's style attribute is left out, and so is a webfont name that isn't plain", () => {
+  // the view prints a stack into style="font-family: ..." (HTML-escaped, so a quote can't end the attribute): a ; or : could
+  // add a property, < > { } \ / or a line break could do worse - only letters, digits, spaces and , " ' ( ) . - pass
+  const evil = {
+    semi: "Georgia; background: url(https://evil.example/x)", colon: "expression:alert(1)", angle: 'x"></span><script>alert(1)</script>',
+    brace: "a } body { display: none", slash: "a/**/b", backslash: "a\\3c b", newline: "Georgia\nserif", amp: "a &amp; b", star: "*", hash: "#x",
+  };
+  for (const [k, stack] of Object.entries(evil)) assert.equal(TS.SAFE_STACK.test(stack), false, k);
+  for (const k of FONT_KEYS) assert.equal(TS.SAFE_STACK.test(REG.fonts[k].stack), true, "the registry's " + k + " stack prints as is");
+  const reg = JSON.parse(JSON.stringify(REG));
+  for (const [k, stack] of Object.entries(evil)) reg.fonts["evil_" + k] = { label_key: "x", stack };
+  reg.fonts.fine = { label_key: "x", stack: '"Fine Face", Georgia, serif', webfont: "Fine&family=Evil" };
+  reg.fonts.blank = { label_key: "x" };
+  reg.palette.word = { dark: "red", light: "#ffffff", label_key: "x" };
+  reg.palette.half = { dark: "#123456", label_key: "x" };
+  const c = TS.choices(reg);
+  assert.deepEqual(c.fonts.map((f) => f.key), FONT_KEYS.concat(["fine"]), "only the registry's fonts and the plain one");
+  assert.deepEqual(c.colors.map((x) => x.key), KEYS, "a colour without two hex values is left out");
+  // the Google Fonts address names only plain family names (no & or = from a registry value)
+  assert.equal(TS.webfontHref(reg), TS.webfontHref());
+  assert.doesNotMatch(TS.webfontHref(reg), /Evil/);
+  // the registry passed in is the one read (not the module's own copy)
+  const two = { palette: { only: { dark: "#a1b2c3", light: "#123abc", label_key: "x" } }, fonts: { serif: REG.fonts.serif } };
+  assert.deepEqual(TS.choices(two).colors.map((x) => x.key), ["only"]);
+  assert.deepEqual(TS.choices(two).fonts.map((x) => x.key), ["serif"]);
+  assert.equal(TS.webfontHref(two), null);
 });
 
 // ── the save route ──
@@ -239,6 +278,46 @@ test("the save route is limited per member (each saved change is a looks row whi
   assert.equal(await stored(U.other), null);
 });
 
+test("the limit counts every post of the member's, refused ones too: probing the palette is slowed like saving", async () => {
+  const u = await mkUser("prober");
+  for (let i = 0; i < TS.SAVES_PER_WINDOW; i++) {
+    const r = await post(u, { color: "#ff00" + String(i).padStart(2, "0"), font: "mono" });
+    assert.equal(r.status, 400, "refused " + (i + 1));
+  }
+  const r = await post(u, { color: "blue", font: "mono" });
+  assert.equal(r.status, 429, "the next post, a good one, waits");
+  assert.deepEqual(r.body, { ok: false, error: "slow" });
+  assert.equal(await stored(u), null);
+});
+
+test("a failed save says so, writes nothing and logs no account, name or posted value", async () => {
+  const u = await mkUser("broken");
+  await runQuery(`CREATE TRIGGER ts_test_fail BEFORE UPDATE OF text_style ON users WHEN NEW.userId = '${u.userId}'
+                  BEGIN SELECT RAISE(ABORT, 'disk on fire'); END`);
+  const logged = [];
+  const orig = { error: console.error, warn: console.warn, log: console.log, info: console.info };
+  for (const k of Object.keys(orig)) console[k] = (...a) => logged.push(a.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" "));
+  let r, f;
+  try {
+    r = await post(u, { color: "violet", font: "comic" });
+    takeFlash(u);
+    f = await post(u, { color: "violet", font: "comic" }, { json: false });
+  } finally {
+    Object.assign(console, orig);
+    await runQuery("DROP TRIGGER IF EXISTS ts_test_fail");
+  }
+  assert.equal(r.status, 500);
+  assert.deepEqual(r.body, { ok: false, error: "error" });
+  assert.equal(f.status, 302);
+  assert.equal(f.loc, "/u/broken/edit#textstyle");
+  assert.deepEqual(takeFlash(u), { error: ["Couldn't save your chat text style - nothing changed."] });
+  assert.equal(await stored(u), null);
+  assert.equal(logged.filter((l) => l.startsWith("[textstyle] save:")).length, 2, "each failure is logged once");
+  for (const l of logged) {
+    for (const s of [u.userId, u.username, "violet", "comic", REG.palette.violet.dark, "color", "font"]) assert.ok(!l.includes(s), JSON.stringify(s) + " in the log: " + l);
+  }
+});
+
 // ── the Edit profile card ──
 const renderEdit = (style, extra = {}) => ejs.renderFile(path.join(repo, "views", "editProfile.ejs"), Object.assign({
   username: "fan", displayname: "Fan <b>", camfrogUsername: null, avatar: "", level: 3, classh: "pleb", profileCosmetics: null, layout: null,
@@ -302,8 +381,26 @@ test("one home: the control is on Edit profile only; the /settings hub links to 
   const walk = (d) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p); else if (/\.(ejs|js)$/.test(f.name)) views.push(p); } };
   walk(path.join(repo, "views")); walk(path.join(repo, "public", "js"));
   assert.deepEqual(views.filter((p) => fs.readFileSync(p, "utf8").includes("update/textstyle")).map((p) => path.relative(repo, p).replace(/\\/g, "/")), ["views/editProfile.ejs"]);
-  const writers = fs.readdirSync(repo).filter((f) => f.endsWith(".js") && /SET text_style\b/.test(fs.readFileSync(path.join(repo, f), "utf8")));
-  assert.deepEqual(writers, ["textstyle.js"]);
+  // every server file that names the column, and what it does with it: textstyle.js sets it (its one UPDATE, through set()),
+  // account deletion's tombstone clears it (a dynamic UPDATE of a column map, so a "SET text_style" scan can't see it), the
+  // looks builder and its triggers only read it. A new file naming the column fails here until it is placed in this list.
+  const src = [];
+  const walkSrc = (d) => {
+    for (const f of fs.readdirSync(d, { withFileTypes: true })) {
+      if (["node_modules", "test", "public", "views", "locales", "docs", "uploads", ".git", "data"].includes(f.name)) continue;
+      const p = path.join(d, f.name);
+      if (f.isDirectory()) walkSrc(p); else if (/\.(c|m)?js$/.test(f.name)) src.push(p);
+    }
+  };
+  walkSrc(repo);
+  const naming = src.filter((p) => /\btext_style\b/.test(fs.readFileSync(p, "utf8"))).map((p) => path.relative(repo, p).replace(/\\/g, "/")).sort();
+  assert.deepEqual(naming, ["accountdelete.js", "hublooks.js", "textstyle.js", "userlook.js"]);
+  const lines = (f) => fs.readFileSync(path.join(repo, f), "utf8").split("\n").filter((l) => /\btext_style\b/.test(l));
+  const WRITE = /\b(?:UPDATE|INSERT|REPLACE|DELETE|SET|ALTER)\b|\btext_style\b\s*(?::|=(?!=))/;
+  assert.deepEqual(lines("textstyle.js").filter((l) => WRITE.test(l)).map((l) => l.trim().replace(/^.*?(UPDATE users SET text_style = \?|ALTER TABLE users ADD COLUMN text_style TEXT).*$/, "$1")),
+                   ["ALTER TABLE users ADD COLUMN text_style TEXT", "UPDATE users SET text_style = ?"], "textstyle.js: the column and its one write");
+  assert.deepEqual(lines("accountdelete.js").map((l) => l.trim().replace(/\s*\/\/.*$/, "")), ["text_style: null };"], "account deletion only clears it");
+  for (const f of ["hublooks.js", "userlook.js"]) assert.deepEqual(lines(f).filter((l) => WRITE.test(l)), [], f + " only reads it");
 
   const hub = async (u) => {
     const r = await fetch(base + "/settings", { headers: { "x-test-user": u.userId }, redirect: "manual" });
@@ -326,6 +423,55 @@ test("one home: the control is on Edit profile only; the /settings hub links to 
   assert.match(h, /href="\/u\/plain\/edit#textstyle"/);
   assert.match(h, /data-state>Default</);
   // the hub row sits with the other "how others see you" rows, after Cosmetics
-  const ids = HUB.SECTIONS && (await HUB.hub(U.plain, {})).find((s) => s.id === "profile").entries.map((e) => e.id);
+  const ids = (await HUB.hub(U.plain, {})).find((s) => s.id === "profile").entries.map((e) => e.id);
   assert.deepEqual(ids, ["profile", "feed", "cosmetics", "textstyle", "stickers"]);
+});
+
+// ── the looks switch ──
+test("the looks switch: while it is off there is no card, no /settings row and no route - a saved style stays", async () => {
+  const u = await mkUser("gated");
+  await setRaw(u, '{"color":"#60a5fa","font":"mono"}');
+  const hubRow = async () => {
+    const r = await fetch(base + "/settings", { headers: { "x-test-user": u.userId }, redirect: "manual" });
+    assert.equal(r.status, 200);
+    return /data-entry="textstyle"/.test(await r.text());
+  };
+  const profileIds = async () => (await HUB.hub(u, {})).find((s) => s.id === "profile").entries.map((e) => e.id);
+  await setLooks(false);
+  try {
+    assert.equal(TS.pickerOn(), false);
+    // the route isn't there: 404 and nothing written - for the page script, a form post, a signed-out post
+    let r = await post(u, { color: "rose", font: "serif" });
+    assert.equal(r.status, 404);
+    assert.deepEqual(r.body, { ok: false, error: "not_found" });
+    r = await post(u, { color: "rose", font: "serif" }, { json: false });
+    assert.equal(r.status, 404);
+    r = await post(null, { color: "rose", font: "serif" }, { name: "gated" });
+    assert.equal(r.status, 404, "signed out: nothing says the route exists");
+    assert.equal(await stored(u), '{"color":"#60a5fa","font":"mono"}', "nothing written; the saved style stays");
+    // Edit profile: no card, no jump link, no webfonts
+    const ed = await TS.editData(u.userId);
+    assert.deepEqual(ed, { textStyle: null, textStyles: null, textStyleFonts: null });
+    const html = await renderEdit(null, ed);
+    assert.match(html, /id="displaynameForm"/);
+    assert.doesNotMatch(html, /id="textstyle"|id="textStyleForm"|href="#textstyle"/);
+    assert.ok(!html.includes('href="' + TS.webfontHref().replace(/&/g, "&amp;") + '"'), "the picker's webfonts don't load");
+    // /settings: no row
+    assert.equal(await hubRow(), false);
+    assert.deepEqual(await profileIds(), ["profile", "feed", "cosmetics", "stickers"]);
+  } finally {
+    await setLooks(true);
+  }
+  // on: the card (with what is saved), the row and the route are back
+  assert.equal(TS.pickerOn(), true);
+  const ed = await TS.editData(u.userId);
+  assert.deepEqual(ed, { textStyle: { color: "blue", font: "mono" }, textStyles: TS.choices(), textStyleFonts: TS.webfontHref() });
+  const html = await renderEdit(null, ed);
+  assert.match(html, /<section class="card" id="textstyle">/);
+  assert.deepEqual(radios(html, "color").filter((x) => x.checked).map((x) => x.v), ["blue"]);
+  assert.equal(await hubRow(), true);
+  assert.deepEqual(await profileIds(), ["profile", "feed", "cosmetics", "textstyle", "stickers"]);
+  const r = await post(u, { color: "rose", font: "serif" });
+  assert.equal(r.status, 200);
+  assert.equal(await stored(u), '{"color":"#fb7185","font":"serif"}');
 });
