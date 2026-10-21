@@ -146,3 +146,50 @@ test("the settled readers: a bad key is null; escrow's answers the holds asked a
   const s = await L.settledStatus(["not a key!"], ["nope"]);
   assert.deepEqual(s, { results: {}, holds: [] });
 });
+
+// Review of the owner answers (site-money lens, E2 / G2 / C2): the escrow ledger's, the gangs' and the capital cluster's
+// rollbackToPepe "already done?" pre-checks read COMMITTED rows too (PO-0b (c)) - a retry never takes the first attempt's
+// open, doomed rollback row as done (which would answer "rolled back" while the site still owns it).
+const ROLLBACKS = [
+  ["escrow ledger", (key) => "rollback:" + key, (mk) => runQuery("INSERT INTO escrow_moves (key, op, ts, amount, result) VALUES (?, 'rollback', ?, 0, ?)",
+                                                                  [mk, Date.now(), JSON.stringify({ ok: true, holds: [], sum: 0, count: 0 })]),
+   async (mk) => (await L.status([mk]))[mk], (key) => L.rollbackToPepe({ key, actor: "pepe" })],
+  ["gangs", (key) => "rollback:gangs:" + key, (mk) => runQuery(`INSERT INTO pool_moves (key, kind, flow, why, via, ts, net, legs, result)
+                                                                  VALUES (?, 'rollback', 'rollback', 'gangs back to Pepe', 'pepe', ?, 0, '[]', ?)`,
+                                                                 [mk, Date.now(), JSON.stringify({ ok: true, totals: {} })]),
+   (mk) => require(path.join(repo, "pools")).moveStatus(mk), (key) => G.rollbackToPepe({ key, actor: "pepe" })],
+  ["capital", (key) => "rollback:capital:" + key, (mk) => runQuery(`INSERT INTO pool_moves (key, kind, flow, why, via, ts, net, legs, result)
+                                                                     VALUES (?, 'rollback', 'rollback', 'market pots back to Pepe', 'pepe', ?, 0, '[]', ?)`,
+                                                                    [mk, Date.now(), JSON.stringify({ ok: true, sum: 0 })]),
+   (mk) => require(path.join(repo, "pools")).moveStatus(mk), (key) => require(path.join(repo, "capital", "service")).rollbackToPepe({ key, actor: "pepe" })],
+];
+for (const [name, mkOf, insert, plain, rollback] of ROLLBACKS) {
+  test(`${name}: a rollback retry never answers "done" from an open transaction's rollback row (committed rows only)`, async () => {
+    await require(path.join(repo, "pools")).init();
+    const key = "rb-doomed-" + name.replace(/\W/g, "").slice(0, 8);
+    const mk = mkOf(key);
+    let go, inserted;
+    const gate = new Promise((res) => { go = res; });
+    const ins = new Promise((res) => { inserted = res; });
+    const doomed = tx(async () => {
+      await insert(mk);
+      inserted();
+      await gate;
+      throw new Error("COMMIT failed");
+    }).catch((e) => e.message);
+    await ins;
+    let r;
+    try {
+      assert.equal(((await plain(mk)) || {}).ok, true, "the plain read sees the uncommitted row (one shared connection)");
+      r = rollback(key).then((x) => ({ ok: true, x }), (e) => ({ ok: false, e }));
+      await tick();
+    } finally {
+      go();
+    }
+    assert.equal(await doomed, "COMMIT failed");
+    const got = await r;
+    assert.equal(got.ok, false, "not a dup of a rollback that never committed: " + JSON.stringify(got.x));
+    assert.equal(got.e.code, "E_NOT_LIVE", "it waited, saw nothing committed and gave the real answer");
+    assert.equal(((await plain(mk)) || null), null, "nothing recorded under the key");
+  });
+}

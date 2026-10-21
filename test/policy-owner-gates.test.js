@@ -278,6 +278,22 @@ test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backen
   const env = Object.assign({}, process.env, { NODE_PATH: process.env.NODE_PATH || path.join(repo, "node_modules") });
   delete env.STAGING;
   const run = (args) => spawnSync(process.execPath, args, { cwd: dir, env, encoding: "utf8", timeout: 60000 });
+  // review of the owner answers: the money switches never create a database - from a directory without myapp.db each stops
+  // (exit 2) before anything is opened; the site directory has its database (an empty file is an empty SQLite database)
+  const wrong = fs.mkdtempSync(path.join(os.tmpdir(), "owner-gates-wrongdir-"));
+  for (const [tool, args] of [["money-backend.js", ["--actor=test", "gangs", "on"]], ["money-backend.js", []], ["escrow-backend.js", ["--actor=test", "on"]],
+                              ["fed-backend.js", ["--actor=test", "on"]]]) {
+    const r = spawnSync(process.execPath, [path.join(repo, "tools", tool), ...args], { cwd: wrong, env, encoding: "utf8", timeout: 60000 });
+    assert.equal(r.status, 2, `${tool} ${args.join(" ")}: ${r.stdout} ${r.stderr}`);
+    assert.match(r.stderr, /no myapp\.db in .* nothing was done/);
+    assert.doesNotMatch(r.stdout, /enabled by/);
+  }
+  assert.deepEqual(fs.readdirSync(wrong), [], "no myapp.db (or -wal / -shm) was created there");
+  fs.writeFileSync(path.join(dir, "myapp.db"), "");
+  // --dir=<folder> runs against that folder's database from anywhere
+  const moneyDir = spawnSync(process.execPath, [path.join(repo, "tools", "money-backend.js"), "--dir=" + dir], { cwd: wrong, env, encoding: "utf8", timeout: 60000 });
+  assert.equal(moneyDir.status, 0, moneyDir.stderr);
+  assert.match(moneyDir.stdout, /gangs {4}enabled=default/);
   const esc = run([path.join(repo, "tools", "escrow-backend.js"), "--actor=test", "on"]);
   assert.equal(esc.status, 0, esc.stderr);
   assert.match(esc.stdout, /escrow backend ledger enabled by test/);
@@ -349,7 +365,7 @@ test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backen
   assert.deepEqual(q("SELECT by, via, old, new, note FROM policy_audit ORDER BY id"), [
     { by: "ops (cli)", via: "cli", old: "running", new: "paused", note: "site misbehaving at 04:00" },
     { by: "ops (cli)", via: "cli", old: "paused", new: "running", note: null }]);
-  assert.deepEqual(q("SELECT admin_id, action FROM admin_audit ORDER BY id"), [{ admin_id: "cli:ops", action: "policy.pause" }, { admin_id: "cli:ops", action: "policy.resume" }]);
+  assert.deepEqual(q("SELECT admin_id, action FROM admin_audit WHERE action LIKE 'policy.%' ORDER BY id"), [{ admin_id: "cli:ops", action: "policy.pause" }, { admin_id: "cli:ops", action: "policy.resume" }]);
   // the review of PO-0b: the pools / stashes / capital / gangs switches have a shell path too (tools/money-backend.js)
   const st0 = run([path.join(repo, "tools", "money-backend.js")]);
   assert.equal(st0.status, 0, st0.stderr);
@@ -373,4 +389,10 @@ test("the VPS CLIs stay the emergency path (no role needed); tools/policy-backen
   const live = run([path.join(repo, "tools", "money-backend.js"), "--actor=test", "gangs", "off"]);
   assert.equal(live.status, 1);
   assert.match(live.stderr, /the site owns gangs now - roll back from Pepe/);
+  // every shell switch left the web's trail: an admin_audit row (via cli) and, for the stashes, the wish /admin/backends shows
+  const audits = q("SELECT admin_id, action, detail FROM admin_audit WHERE action = 'backend_switch' ORDER BY id").map((r) => [r.admin_id, JSON.parse(r.detail)]);
+  assert.deepEqual(audits.map(([a, d]) => `${a} ${d.via} ${d.feature} ${d.want}`),
+                   ["cli:test cli escrow true", "cli:test cli fed true", "cli:test cli pools true", "cli:test cli stashes true", "cli:test cli capital true",
+                    "cli:test cli gangs true", "cli:test cli gangs false"]);
+  assert.deepEqual(q("SELECT feature, want, by, via, act FROM backend_wants"), [{ feature: "stashes", want: 1, by: "test (cli)", via: "cli", act: 0 }]);
 });

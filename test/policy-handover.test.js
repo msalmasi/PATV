@@ -441,6 +441,19 @@ test("rollback, step 2: confirmed only with the sha handed back and once Pepe's 
   assert.equal((await PC.snapshot({ fresh: true })).cfg.donation_rate, 550000);
 });
 
+test("review of the owner answers (H13): an upload committed after the freeze was lifted is refused inside the import's transaction - nothing imported", async () => {
+  assert.equal((await post("/api/policy/bot/handover/freeze", { feature: "cfg", actor: "owner_cf", on: true })).body.owner, "cutting");
+  const x = await exportOf({ filler: "h13" });
+  assert.equal((await upload(x.buf, x.key, 2)).body.ok, true);
+  assert.equal((await post("/api/policy/bot/handover/freeze", { feature: "cfg", actor: "owner_cf", on: false })).body.owner, "pepe");
+  const rev0 = (await PC.snapshot({ fresh: true })).rev;
+  const r = await post("/api/policy/bot/handover/commit", { key: x.key, actor: "owner_cf" });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.code, "not_frozen");
+  assert.equal((await PC.snapshot({ fresh: true })).rev, rev0, "nothing imported");
+  assert.equal((await PC.ownership()).cfg.owner, "pepe");
+});
+
 test("a clean hand-over: an export equal to the freeze's values and Pepe's pushes is ok as is - the cutover needs no force (and refuses one)", async () => {
   // Pepe owns it again (the rollback above): freeze, export his values (the mirror's), import, cut over
   assert.equal((await post("/api/policy/bot/handover/freeze", { feature: "cfg", actor: "owner_cf", on: true })).body.owner, "cutting");

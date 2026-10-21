@@ -212,19 +212,11 @@ async function sweep({ now = Date.now() } = {}) {
 }
 
 // ── the expiry ──
-/** The routing row's shares: the admin's override, else Pepe's catalog default, else the Fed 100%. */
+/** The routing row's shares: the admin's override, else Pepe's catalog default, else the incentives 100% (the user
+ *  2026-10-12: unclaimed PAT refills the incentive budget it mostly came from). Throws E_CFG_UNREADABLE / E_CFG_MISSING while
+ *  the site owns the economy settings and can't read them: the expiry waits for the next sweep (econstore.routeShares). */
 async function shares() {
-  try {
-    const st = await require("./econstore").getSettings();
-    if (st && st.pat_routes && Array.isArray(st.pat_routes[FLOW])) return st.pat_routes[FLOW];
-  } catch (e) { /* no econ store yet */ }
-  try {
-    const row = (await getQuery("SELECT data FROM econ_catalog WHERE id = 1"))[0];
-    const d = J(row && row.data, null);
-    const def = d && d.routes && d.routes[FLOW] && d.routes[FLOW].default;
-    if (Array.isArray(def) && def.length) return def;
-  } catch (e) { /* no catalog yet */ }
-  return [["incentives", 100]];                 // the user (2026-10-12): unclaimed PAT refills the incentive budget it mostly came from
+  return require("./econstore").routeShares(FLOW, [["incentives", 100]]);
 }
 /** amount by shares -> [[dest, amount]], the rest to the Fed. A destination that isn't a pool or the House -> the Fed. */
 function split(sh, amount) {
@@ -496,7 +488,7 @@ async function adminView({ now = Date.now() } = {}) {
                                  LEFT JOIN users u ON u.userId = c.user_id ORDER BY c.at DESC LIMIT 15`);
   const autos = (await getQuery(`SELECT COUNT(*) AS n FROM users WHERE auto_source IS NOT NULL`).catch(() => [{ n: null }]))[0] || {};
   return { enabled: await enabled(), enabled_by: await meta("enabled_by", null), kinds: [...(await kinds())], default_kinds: DEFAULT_KINDS,
-           window_months: WINDOW_MONTHS, notice_gap_days: NOTICE_GAP_MS / 86400000, flow: FLOW, routing: await shares(),
+           window_months: WINDOW_MONTHS, notice_gap_days: NOTICE_GAP_MS / 86400000, flow: FLOW, routing: await shares().catch((x) => { if (require("./policy/config").isCfgErr(x)) return null; throw x; }),
            held, expiring_30d: { amount: Number(soon.t) || 0, entries: Number(soon.n) || 0, accounts: Number(soon.a) || 0 },
            top, by_kind: byKind, history: months, earned, claims, auto_accounts: autos.n };
 }

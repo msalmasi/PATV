@@ -205,6 +205,44 @@ async function getSettings() {
   return { pat_routes, econ_cfg };
 }
 
+// ── a PAT Routing row for a PAT move (the review of the owner answers 2026-10-20: "missing -> defer + alert, never a default") ──
+// Every reader that routes PAT by a flow's row (heist market fee, raffle fee, auto-account expiry, account deletion, the gang
+// withdrawal cut, the pad fine display) goes through here. While the site owns the economy settings, the settings being
+// unreadable or missing (E_CFG_UNREADABLE / E_CFG_MISSING, ops-alerted by policy/config.js) is THROWN: the move is refused or
+// deferred (its transaction rolls back, the sweep tries again) - never routed by the catalog's or the code's default. A
+// flow with no row is still the catalog default (that is the routing table's own meaning: a row is an override).
+/** The override [[dest, pct], ...] for `flow` (an empty one too - it means "all to the remainder"), or null when the table has
+ *  none. Throws E_CFG_UNREADABLE / E_CFG_MISSING as above. Any other read failure (the old "no econ store yet") is a default
+ *  only while Pepe owns the settings (his push, as before); once the site owns them it is E_CFG_UNREADABLE too. */
+async function routeOverride(flow) {
+  let st;
+  try { st = await getSettings(); } catch (e) {
+    const PC = require("./policy/config");
+    if (PC.isCfgErr(e)) throw e;
+    const snap = await PC.readerSnap("PAT Routing");          // throws E_CFG_UNREADABLE while the owner can't be known
+    if (snap && snap.own.cfg.owner === "site") throw PC.unreadableErr("PAT Routing", e);
+    return null;
+  }
+  const r = st && st.pat_routes ? st.pat_routes[flow] : undefined;
+  return Array.isArray(r) ? r : null;
+}
+/** Pepe's routing catalog default for `flow` (econ_catalog), or null. */
+async function catalogDefault(flow) {
+  try {
+    const row = (await getQuery("SELECT data FROM econ_catalog WHERE id = 1"))[0];
+    const d = parse(row && row.data, null);
+    const def = d && d.routes && d.routes[flow] && d.routes[flow].default;
+    return Array.isArray(def) && def.length ? def : null;
+  } catch (e) { return null; }                               // no catalog yet
+}
+/** The shares a PAT move routes `flow` by: the override, else the catalog default, else `def` (the flow's documented default).
+ *  Throws E_CFG_UNREADABLE / E_CFG_MISSING while the site owns the settings and can't read them (routeOverride). */
+async function routeShares(flow, def) {
+  const o = await routeOverride(flow);
+  if (o) return o;
+  return (await catalogDefault(flow)) || def;
+}
+
 /** The cutover (pools.importFromPepe, inside its transaction): the docs, routes and settings from Pepe's export. */
 async function importInTx(p, { key } = {}) {
   await init();
@@ -250,7 +288,9 @@ const ECON_CMDS = new Set(["get", "set", "mint", "fund", "grant", "fedloan", "fl
  *  happens next) + the account's own password. Throws an Error with .status (409 nonce, 403 password, 429 too many wrong
  *  passwords) and .code.
  *  The review of PO-0b: wrong passwords are throttled per account - 5 in 15 minutes, then 429 until the window ends (burns.js's
- *  rule). A signed-in session gets nonces freely, so without it a stolen owner session could guess the password forever. */
+ *  rule). A signed-in session gets nonces freely, so without it a stolen owner session could guess the password forever.
+ *  Review of the owner answers 2026-10-20: the attempt is COUNTED before the compare (limiter.attempt - check and count in one
+ *  tick), so a burst of parallel requests can't each pass the check before any wrong one is counted; a success resets it. */
 let pwFails = null;
 const stepUpFails = () => pwFails || (pwFails = require("./middleware/authGuard").limiter({ max: 5, windowMs: 15 * 60 * 1000 }));
 async function stepUp(user, body) {
@@ -265,8 +305,9 @@ async function stepUp(user, body) {
   const row = (await getQuery("SELECT password FROM users WHERE userId = ?", [user.userId]))[0];
   const hash = row && typeof row.password === "string" && row.password.startsWith("$2") ? row.password : null;
   if (!hash) throw fail(403, "no_password", "Your account has no password to confirm with - set one (forgot password) first.");
+  const late = stepUpFails().attempt(who);                     // counted now, before the compare (no await in between)
+  if (late) throw fail(429, "too_many", "Too many wrong passwords. Try again in " + guard.waitText(late) + ".");
   if (typeof body.password !== "string" || !body.password || Buffer.byteLength(body.password, "utf8") > 200 || !(await bcrypt.compare(body.password, hash))) {
-    stepUpFails().hit(who);
     throw fail(403, "password", "Wrong password.");
   }
   stepUpFails().reset(who);
@@ -365,4 +406,5 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { init, register, putDocs, getDocs, putSettings, getSettings, importInTx, exportAll, adminView, requestEdit, stepUp, DOCS };
+module.exports = { init, register, putDocs, getDocs, putSettings, getSettings, routeOverride, routeShares, catalogDefault, importInTx, exportAll,
+                   adminView, requestEdit, stepUp, DOCS };

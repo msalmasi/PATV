@@ -166,13 +166,24 @@ const isEconKind = (k) => /^econ\./.test(String(k || ""));
 // a transfer out of a pad's vault, padfines.js). kind -> the capability of its owner check.
 const OWNER_KINDS = Object.freeze({ "roomvault.admin": "econ.padvault_move" });
 const isOwnerKind = (k) => isEconKind(k) || Object.prototype.hasOwnProperty.call(OWNER_KINDS, String(k || ""));
+// review of the owner answers 2026-10-20 (1): a website "cmd" whose ADMIN form moves PAT at the admin's discretion - a Federal
+// Reserve loan granted, approved or forgiven (!loan grant | approve | forgive, queued for Pepe while the capital cluster lives
+// there) - carries site_admin = the owner check at claim time (like econ.* / OWNER_KINDS), never the Admin class alone.
+// cmd -> [its admin verbs, the capability of the owner check]. Every other cmd keeps site_admin = the Admin class (judging
+// a wager / market / bounty stays an Admin's, like the oracle).
+const OWNER_CMD_VERBS = Object.freeze({ loan: [new Set(["grant", "approve", "forgive"]), "escrow.override"] });
+function ownerCmdCap(a, args) {
+  if (String(a.kind) !== "cmd" || !Array.isArray(args)) return null;
+  const r = OWNER_CMD_VERBS[String(args[0] || "").toLowerCase()];
+  return r && r[0].has(String(args[1] || "").trim().split(/\s+/)[0].toLowerCase()) ? r[1] : null;
+}
 /** For an econ.* (or OWNER_KINDS) action: {is_owner, login} - the account's linked chat login NOW, and whether it is a Pepe
  *  owner with the action's capability (staffroles.ownerOf). The login must still be the one the action was queued with
  *  (Pepe acts as it). */
-async function econOwner(a) {
+async function econOwner(a, capOver = null) {
   try {
     const SR = require("./staffroles");
-    const cap = a.kind === "econ.burn" ? "econ.burn" : OWNER_KINDS[a.kind] || "econ.pepe_econ_cmds";
+    const cap = capOver || (a.kind === "econ.burn" ? "econ.burn" : OWNER_KINDS[a.kind] || "econ.pepe_econ_cmds");
     const me = await SR.ownerOf({ userId: a.user_id }, cap);
     const login = me && me.camfrogUsername ? String(me.camfrogUsername).trim().toLowerCase() : null;
     const same = !!login && login === String(a.camfrog || "").trim().toLowerCase();
@@ -207,6 +218,10 @@ function register(app, { isBotToken, addUser }) {
     } else {
       args = words;
     }
+    // review of the owner answers 2026-10-20 (2): a hand-over is switched on /admin/backends (or by a Pepe owner in chat) -
+    // never from a website form. "<cmd> backend ..." (!lotto / !stash / !loan backend ...) and a poll form whose first words are
+    // "backend ..." (Pepe's !poll backend) are refused here, before anything runs on the site or is queued for Pepe.
+    if (/^backend\b/i.test(String((kind === "cmd" ? args[1] : args[0]) || "").trim())) return go(N.K("act_cant"));
     // 1.99ur: the create forms' pad picker + a picked close date (markets / pools / polls)
     const creating = (kind === "cmd" && (args[0] === "market" || args[0] === "pool") && /^(new|create)$/i.test(String(args[1] || "")))
       || kind === "poll.create";
@@ -324,13 +339,28 @@ function register(app, { isBotToken, addUser }) {
     }
     // tells Pepe to wake his table fast lane (tables.js) when no table is open yet, e.g. a web "start"
     const tp = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'table' AND status = 'pending'");
-    const owner = {};
-    for (const a of rows) if (isOwnerKind(a.kind)) owner[a.id] = await econOwner(a);
+    const owner = {}, cmdCap = {};
+    for (const a of rows) {
+      if (isOwnerKind(a.kind)) owner[a.id] = await econOwner(a);
+      else {
+        let ar = [];
+        try { ar = JSON.parse(a.args); } catch (e) { ar = []; }
+        const cap = ownerCmdCap(a, ar);
+        if (cap) { cmdCap[a.id] = true; owner[a.id] = await econOwner(a, cap); }
+      }
+    }
     res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
       const econ = isOwnerKind(a.kind);   // owner answers 2026-10-20: + roomvault.admin (OWNER_KINDS)
-      const o = econ ? owner[a.id] : null;
+      const o = econ || cmdCap[a.id] ? owner[a.id] : null;
+      if (cmdCap[a.id]) {
+        // a Reserve loan's admin verb: site_admin is the owner check (a non-owner admin runs it as a member: Pepe refuses it)
+        return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!(o && o.is_owner), is_owner: !!(o && o.is_owner),
+                 login: a.camfrog || null, idem: a.idem || null, user_id: a.user_id,
+                 actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null },
+                 created: a.created || null, expires_at: ttl.expiresAt("pepe_actions", a) };
+      }
       // 1.99wv (connections audit C): the ACCOUNT is the actor - Pepe acts as its chat login, else as "u:<userId>"
       // PO-0b (D-6): an economy action (econ.*: !econ from /admin/economy, routing, a burn) no longer rides on the Admin
       // class: site_admin is the site-computed is_owner (the class AND Pepe's owner role on the linked login, read now), so a

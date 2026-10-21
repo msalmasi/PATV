@@ -257,19 +257,11 @@ function verify(rec) {
 }
 
 // ── the fee's routing (the PAT Routing table's row raffle_fee; source of truth /admin/economy) ──
-/** [[dest, pct], ...]: the admin's override of raffle_fee, else Pepe's routing catalog default, else the House 100%. */
+/** [[dest, pct], ...]: the admin's override of raffle_fee, else Pepe's routing catalog default, else the House 100%. Throws
+ *  E_CFG_UNREADABLE / E_CFG_MISSING while the site owns the economy settings and can't read them: the draw / release is
+ *  deferred (its transaction rolls back), never routed by a default (econstore.routeShares). */
 async function feeShares() {
-  try {
-    const st = await require("./econstore").getSettings();
-    if (st && st.pat_routes && Array.isArray(st.pat_routes[FLOW])) return st.pat_routes[FLOW];
-  } catch (e) { /* no econ store */ }
-  try {
-    const row = (await getQuery("SELECT data FROM econ_catalog WHERE id = 1"))[0];
-    const d = row && row.data ? JSON.parse(row.data) : null;
-    const def = d && d.routes && d.routes[FLOW] && d.routes[FLOW].default;
-    if (Array.isArray(def) && def.length) return def;
-  } catch (e) { /* no catalog */ }
-  return [["jackpot", 100]];
+  return require("./econstore").routeShares(FLOW, [["jackpot", 100]]);
 }
 /** The fee legs a settle books: [[dest, amount]] summing to `amount`. The House = "jackpot"; a pool leg only while the pools
  *  are live on the site; a room / room_owner share (no room context here) -> Fort Knox; whatever isn't routed -> the Reserve
@@ -469,6 +461,13 @@ async function validate(user, b) {
   if (!kind) throw new Refuse(400, "Pick a prize: PAT, a Prize Shop item or a custom prize.", "E_PRIZE");
   const out = { house, title, description, prize_kind: kind, prize_amount: 0, prize_item: null, prize_name: null, prize_cost: 0, prize_text: null };
   if (kind === "pat") {
+    // review of the owner answers 2026-10-20 (1): a House raffle's PAT prize is paid out of the House to the winner (up to
+    // prize_max) - like the House adjust, a Pepe OWNER's (the class + the owner role on the linked chat login, read fresh).
+    // An item or a custom House prize moves no House PAT and stays an Admin's.
+    if (house) {
+      const SR = require("./staffroles");
+      if (!(await SR.ownerOf(user, "raffles.house"))) throw new Refuse(403, "A House raffle with a PAT prize: " + SR.OWNER_ONLY, "owner_only");
+    }
     const a = pat(b.prize_amount);
     if (!(a >= C.prize_min && a <= C.prize_max)) throw new Refuse(400, `The PAT prize must be ${fmt(C.prize_min)}-${fmt(C.prize_max)} PAT.`, "E_PRIZE");
     out.prize_amount = a;

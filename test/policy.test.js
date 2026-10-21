@@ -745,3 +745,76 @@ test("the test clock and the tagged rehearsal tick exist only on staging", async
   assert.equal(r.status, 404);
   await assert.rejects(C.setTestClock(MON_0405), /only on staging/);
 });
+
+test("review of the owner answers (A4 / A6 / A7): the write-time gate holds on EVERY run - the weekly epoch, the monetary day and a burn slot skip a paused or handed-back engine (nothing moves)", async () => {
+  const rows = await getQuery("SELECT * FROM policy_engines WHERE engine IN ('treasury', 'monetary', 'burn')");
+  const B = Date.UTC(2026, 11, 7, 4) / 1000;                     // Monday 2026-12-07 04:00 UTC
+  await P.move({ key: "test-feed-burn-gate", legs: [["reserve", -777], ["burn", 777]], why: "gate test" });
+  const s0 = await supply();
+  const burn0 = await P.balance("burn");
+  assert.ok(burn0 >= 777);
+  try {
+    // paused after the scheduler read the engines (the pause committed while the run waited for the write gate)
+    await runQuery("UPDATE policy_engines SET mode = 'live', paused = 1, paused_by = 'boss', paused_at = ?, pause_note = 'gate test' WHERE engine IN ('treasury', 'monetary', 'burn')",
+                   [(B - 3600) * 1000]);
+    assert.deepEqual(await A.runTreasuryEpoch("W2026-12-07", B + 60), { ok: true, skipped: "paused" });
+    const w = await C.run("treasury", "W2026-12-07");
+    assert.deepEqual([w.state, w.result.missed], ["missed", "paused"], "the week is recorded missed (paused)");
+    assert.deepEqual(await A.runMonetary("D2026-12-07", B + 60, false), { ok: true, skipped: "paused" });
+    const m = await C.run("monetary", "D2026-12-07");
+    assert.deepEqual([m.state, m.result.missed], ["missed", "paused"]);
+    const b = await A.runBurn("A-gate-test-1", B + 60);
+    assert.deepEqual([b.ok, b.skipped, b.amount, b.id], [true, "paused", 0, null]);
+    assert.equal(await C.run("burn", "A-gate-test-1"), null, "a burn slot records nothing");
+    assert.equal(await P.balance("burn"), burn0, "nothing burned");
+    assert.equal(await supply(), s0, "nothing moved");
+    // handed back (no longer live) after the read: nothing runs, nothing is recorded
+    await runQuery("UPDATE policy_engines SET paused = 0, mode = 'shadow' WHERE engine IN ('treasury', 'monetary', 'burn')");
+    assert.equal((await A.runTreasuryEpoch("W2026-12-14", B + 7 * 86400 + 60)).skipped, "not_live");
+    assert.equal((await A.runMonetary("D2026-12-08", B + 86400 + 60, false)).skipped, "not_live");
+    assert.equal((await A.runBurn("A-gate-test-2", B + 60)).skipped, "not_live");
+    assert.equal(await C.run("treasury", "W2026-12-14"), null);
+    assert.equal(await C.run("monetary", "D2026-12-08"), null);
+    assert.equal(await P.balance("burn"), burn0);
+    assert.equal(await supply(), s0);
+  } finally {
+    for (const r of rows) {
+      await runQuery("UPDATE policy_engines SET mode = ?, paused = ?, paused_by = ?, paused_at = ?, pause_note = ? WHERE engine = ?",
+                     [r.mode, r.paused, r.paused_by, r.paused_at, r.pause_note, r.engine]);
+    }
+  }
+});
+
+test("review of the owner answers (SC40): the MONETARY day left 'missed paused' while its engine runs heals too - it runs, late (healed)", async () => {
+  const WED3 = Date.UTC(2026, 10, 25, 4) / 1000;                 // the day after the previous tests' last pass
+  const both = { only: ["treasury", "monetary"] };
+  assert.equal((await C.engines()).monetary.mode, "live");
+  await C.putRun("monetary", "D2026-11-25", { state: "missed", boundary: WED3, via: "site", error: "paused by old - not run (D-18)",
+                                             result: { missed: "paused", paused_by: "old" } });
+  const ran = await SCH.pass(WED3 + 60, both);
+  assert.ok(ran.includes("monetary D2026-11-25"), JSON.stringify(ran));
+  const r = await C.run("monetary", "D2026-11-25");
+  assert.equal(r.state, "done");
+  assert.deepEqual([r.result.late.why, r.result.late.healed], ["paused", true]);
+});
+
+test("review of the owner answers (SC8): the paused pass re-reads the run INSIDE its transaction - a period that settled since its first read is never overwritten 'missed'", async () => {
+  const THU3 = Date.UTC(2026, 10, 26, 4) / 1000;
+  const both = { only: ["treasury", "monetary"] };
+  const by = { by: "boss", auditId: "ua", via: "admin" };
+  C._setClock(() => (THU3 - 600) * 1000);
+  try { await SCH.setPause(["treasury"], true, Object.assign({ note: "sc8" }, by)); } finally { C._setClock(null); }
+  // the day ran (done) after the paused pass's first read of it - the read-before-the-transaction still says "nothing yet"
+  await C.putRun("treasury", "D2026-11-26", { state: "done", boundary: THU3, via: "site", result: { ok: true } });
+  const oRun = C.run;
+  let stale = true;
+  C.run = async (...a) => {
+    if (stale && a[0] === "treasury" && a[1] === "D2026-11-26") { stale = false; return null; }
+    return oRun(...a);
+  };
+  try { await SCH.pass(THU3 + 60, both); } finally { C.run = oRun; }
+  assert.equal(stale, false, "the stale first read happened");
+  assert.equal((await C.run("treasury", "D2026-11-26")).state, "done", "the done run stands - never recorded missed (paused)");
+  C._setClock(() => (THU3 + 120) * 1000);
+  try { await SCH.setPause(["treasury"], false, by); } finally { C._setClock(null); }
+});

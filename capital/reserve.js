@@ -589,6 +589,13 @@ async function fromForm(userId, words) {
     if (!(await C.load(KIND, n))) return null;                         // a P2P loan: escrow/loans.js
     verb = "repay"; args = { ref: w[1], amount: w[2] ? amt(w[2]) : undefined };
   } else if (["approve", "deny", "grant"].includes(sub)) {
+    // review of the owner answers 2026-10-20 (1): granting or approving a Reserve loan moves the Federal Reserve's PAT to a member
+    // at the admin's discretion - a Pepe OWNER's (the class + the owner role on the linked chat login, read fresh). Deny moves
+    // nothing (an Admin's, as before).
+    if (sub !== "deny") {
+      const SR = require("../staffroles");
+      if (!(await SR.ownerOf(u, "escrow.override"))) return SR.OWNER_ONLY;
+    }
     verb = sub;
     args = sub === "grant" ? { who: { login: w[1] }, amount: amt(w[2]), term: w[3], rate: w[4] } : { ref: w[1], amount: w[2] ? amt(w[2]) : undefined, term: w[3], rate: w[4], why: w.slice(2).join(" ") };
   } else return null;

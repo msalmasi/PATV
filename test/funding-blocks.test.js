@@ -126,3 +126,18 @@ test("site-owned: an edit reaches the block at once; the site's layers off means
   const saved = JSON.parse((await getQuery("SELECT value FROM funding_state WHERE key = 'last_sync'"))[0].value);
   assert.equal(saved.monetary, null);
 });
+
+test("review of the owner answers (FU2): a restart restores the saved block THROUGH the site's view - never Pepe's raw block while the site owns the settings", async () => {
+  const snap = await PC.snapshot({ fresh: true });
+  assert.equal((await PC.edit({ changes: { layers: "on" }, via: "chat", actor: "owner_cf", baseRev: snap.rev })).ok, true);   // the site's layers back on
+  await FUND._persisted();                                       // the edit's own save has landed (it would overwrite the row below)
+  // the saved state holds a block as Pepe sent it (a save from before the hand-over): his House floor 1M, his donation terms
+  const pepe = FX.monetary({ house_hard_floor: 1 * M, donation: { rate: 1, bonus_pct: 99 } });
+  await runQuery(`INSERT INTO funding_state (key, value, updated) VALUES ('last_sync', ?, ?)
+                  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`, [JSON.stringify({ syncedAt: 1, monetary: pepe }), Date.now()]);
+  FUND.state.syncedAt = 0;                                       // a restart: nothing from Pepe since
+  assert.equal(JSON.parse((await getQuery("SELECT value FROM funding_state WHERE key = 'last_sync'"))[0].value).monetary.house_hard_floor, 1 * M, "the saved block is Pepe's");
+  assert.equal(await FUND.restore(), true);
+  assert.equal(FUND.state.monetary.house_hard_floor, 5 * M, "the site's floor - not the saved 1M");
+  assert.deepEqual(FUND.donationTerms(), { rate: 750000, bonus_pct: 20 }, "the site's donation terms");
+});

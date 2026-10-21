@@ -350,8 +350,10 @@ function register(app, { addUser, bySlug, isLive }) {
     const hash = row && typeof row.password === "string" && row.password.startsWith("$2") ? row.password : null;
     if (!hash) { audit("denied", "no password on the account"); return bad(res, 403, "Your account has no password to confirm with - set one (forgot password) first."); }
     const pw = b.password;
+    // review of the owner answers: the attempt is counted BEFORE the compare (limiter.attempt) - parallel guesses can't all pass
+    const late = pwFails.attempt(who);
+    if (late) { audit("denied", "locked out after wrong passwords"); return bad(res, 429, "Too many wrong passwords. Try again in " + guard.waitText(late) + "."); }
     if (typeof pw !== "string" || !pw || Buffer.byteLength(pw, "utf8") > 200 || !(await bcrypt.compare(pw, hash))) {
-      pwFails.hit(who);
       audit("denied", "wrong password");
       return bad(res, 403, "Wrong password.");
     }

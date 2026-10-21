@@ -89,11 +89,18 @@ function csrfOk(username, token) {
   return safeEq(sig, hmac("pepectl-csrf|" + String(username).toLowerCase() + "|" + ts));
 }
 
+/** Review of the owner answers 2026-10-20: at most NONCE_OPEN_MAX open nonces per account - a new one retires that account's
+ *  oldest (a dialog opened long ago just asks again). Every step-up shares them. */
+const NONCE_OPEN_MAX = 5;
 function issueNonce(user) {
   const t = now();
   for (const [k, v] of nonces) if (v.exp <= t) nonces.delete(k);
+  const who = userKey(user);
+  const mine = [];
+  for (const [k, v] of nonces) if (v.user === who) mine.push(k);   // insertion order: oldest first
+  while (mine.length >= NONCE_OPEN_MAX) nonces.delete(mine.shift());
   const n = crypto.randomBytes(18).toString("base64url");
-  nonces.set(n, { user: userKey(user), exp: t + NONCE_TTL_MS });
+  nonces.set(n, { user: who, exp: t + NONCE_TTL_MS });
   return n;
 }
 /** Single use: removed on the first try, whatever happens next. */
@@ -171,8 +178,13 @@ async function request(user, { kind, mode, nonce, password }, ip) {
     await audit(user, ip, "denied", null, what + ": account has no password");
     throw fail(403, "Your account has no password to confirm with - set one (forgot password) first.");
   }
+  // review of the owner answers: the attempt is counted BEFORE the compare (limiter.attempt) - parallel guesses can't all pass
+  const late = pwFails.attempt(who);
+  if (late) {
+    await audit(user, ip, "denied", null, what + ": locked out after wrong passwords");
+    throw fail(429, "Too many wrong passwords. Try again in " + guard.waitText(late) + ".");
+  }
   if (typeof password !== "string" || !password || Buffer.byteLength(password, "utf8") > 200 || !(await bcrypt.compare(password, hash))) {
-    pwFails.hit(who);
     await audit(user, ip, "denied", null, what + ": wrong password");
     throw fail(403, "Wrong password.");
   }

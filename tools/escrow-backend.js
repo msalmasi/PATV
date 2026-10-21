@@ -6,9 +6,11 @@
 //   node tools/escrow-backend.js --actor=<who> off [game]         # refuse new imports (never takes anything away from a live site:
 //                                                                 #   the way back is `!escrow backend [game] rollback confirm` in Camfrog)
 //   games: wagers | bounties | pools | loans
-// Read-only by default; `on` / `off` write ONE escrow_meta row (on prod only with the user's explicit go).
+// Read-only by default; `on` / `off` write ONE escrow_meta row (on prod only with the user's explicit go) + an admin_audit row.
+// The review of the owner answers 2026-10-20: it never opens a database that isn't there (tools/sitedb.js; --dir=<folder>).
 "use strict";
 const path = require("path");
+require("./sitedb").siteDb();                                         // exits 2 (nothing opened) without ./myapp.db
 const L = require(path.join(__dirname, "..", "escrow", "ledger"));
 const { getQuery } = require(path.join(__dirname, "..", "dbUtils"));
 (async () => {
@@ -22,6 +24,7 @@ const { getQuery } = require(path.join(__dirname, "..", "dbUtils"));
     if (game ? await L.meta(`live:${game}`) : await L.live()) throw new Error("the site owns it now - roll back from Pepe instead");
     await L.setMeta(game ? `enabled:${game}` : "enabled", cmd === "on");
     await L.setMeta(game ? `enabled_by:${game}` : "enabled_by", { by: actor + " (cli)", at: Date.now(), on: cmd === "on" });
+    await require("./sitedb").cliAudit(actor, { feature: game ? `escrow:${game}` : "escrow", want: cmd === "on", live: false, tool: "escrow-backend" });
     console.log(`escrow backend ${game || "ledger"} ${cmd === "on" ? "enabled" : "disabled"} by ${actor}`);
   } else if (cmd) {
     throw new Error("usage: node tools/escrow-backend.js [--actor=<who> on|off [wagers|bounties|pools|loans]]");

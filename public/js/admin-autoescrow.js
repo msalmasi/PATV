@@ -23,7 +23,9 @@
     k.appendChild(kv('Waiting now', 'PAT ' + n(v.held.amount) + ' · ' + n(v.held.entries) + ' rewards · ' + n(v.held.accounts) + ' accounts'));
     k.appendChild(kv('Expiring in the next 30 days', 'PAT ' + n(v.expiring_30d.amount) + ' · ' + n(v.expiring_30d.accounts) + ' accounts'));
     k.appendChild(kv('Window', v.window_months + " months after the account's last activity · Pepe reminds at most every " + v.notice_gap_days + ' days'));
-    k.appendChild(kv('Unclaimed goes to (PAT Routing ' + v.flow + ')', (v.routing || []).map(function (s) { return s[0] + ' ' + s[1] + '%'; }).join(', ') || 'incentives 100%'));
+    // null: the site owns the economy settings and can't read them right now - never the default shown as the route
+    k.appendChild(kv('Unclaimed goes to (PAT Routing ' + v.flow + ')', v.routing === null ? 'unknown right now - the economy settings can\'t be read (expiries wait)'
+      : (v.routing || []).map(function (s) { return s[0] + ' ' + s[1] + '%'; }).join(', ') || 'incentives 100%'));
     if (v.auto_accounts != null) k.appendChild(kv('Auto accounts', n(v.auto_accounts)));
     if (!dirty) { $('aescOn').value = v.enabled ? 'true' : 'false'; $('aescKinds').value = (v.kinds || []).join(', '); }
     var t = $('aescTop'); t.textContent = '';

@@ -222,3 +222,83 @@ test("(a) a site-run leg into a closed stash: the run's tally counts the wallet 
   await assert.rejects(tx(() => A.transfer("wf-W3-bank-stk-6", "stash:1", "stash:6", 10, "waterfall stakers", { to_wallet: 0 })), /refused 10/);
   assert.equal(await S.moveStatus("wf-W3-bank-stk-6:out"), null, "the out-leg rolled back with it");
 });
+
+test("(a) review of the owner answers (A3 / A3b): a site-run daily release AND weekly epoch with a leg into a closed stash record conserved = true (before === after + to_wallet)", async () => {
+  const PCORE = require(path.join(repo, "policy", "core"));
+  const A = require(path.join(repo, "policy", "apply"));
+  const E = require(path.join(repo, "policy", "engines"));
+  const G = require(path.join(repo, "policy", "gather"));
+  const V = require(path.join(repo, "capital", "vaults"));
+  const CC = require(path.join(repo, "capital", "core"));
+  await PCORE.init();
+  await require(path.join(repo, "escrow", "ledger")).init();
+  await require(path.join(repo, "pools")).init();
+  await runQuery("INSERT INTO policy_engines (engine, mode, updated, by) VALUES ('treasury', 'live', 0, 'test') ON CONFLICT(engine) DO UPDATE SET mode = 'live', paused = 0");
+  // the run's plan is stubbed to ONE leg: open stash 1 -> closed stash 5 (its owner ann's wallet); everything else of the run is real
+  const saved = { daily: G.daily, epoch: G.epoch, planDaily: E.planDaily, planEpoch: E.planEpoch, epochId: E.epochId, trackOf: E.trackOf,
+                  ctx: V.ctx, nav: V.nav, house: CC.houseBalance };
+  const leg = (tid) => ({ tid, src: "stash:1", dst: "stash:5", amt: 25, why: "waterfall stakers" });
+  G.daily = async () => ({});
+  G.epoch = async () => ({ bank_nav: 0, pools: { bank: 0 } });
+  E.planDaily = () => ({ legs: [leg("rel-D2026-12-01-t")], overflow: 0, casino_overflow: 0, floor_paid: 0, floor_short: 0 });
+  E.planEpoch = () => ({ vaults: {}, legs: [leg("wf-W2026-11-30-t")], totals: { incentives: 0 }, release_per_day: 0, boundary: 0 });
+  E.epochId = () => "not-this-week";
+  E.trackOf = () => null;
+  V.ctx = async () => ({ cash: { bank: 0 } });
+  V.nav = () => 0;
+  CC.houseBalance = async () => 0;
+  const nowS = Date.UTC(2026, 11, 1, 4, 5) / 1000;
+  try {
+    const w0 = await wallet("u1");
+    const d = await A.runTreasuryDaily("D2026-12-01", nowS);
+    assert.equal(d.ok, true, JSON.stringify(d));
+    assert.equal(d.result.to_wallet, 25, "the closed stash's credit went to ann's wallet - counted");
+    assert.equal(d.result.pools_before, d.result.pools_after + 25);
+    assert.equal(d.result.conserved, true, "a legitimate wallet payout is not a leak");
+    const e = await A.runTreasuryEpoch("W2026-11-30", nowS);
+    assert.equal(e.ok, true, JSON.stringify(e));
+    assert.equal(e.result.to_wallet, 25);
+    assert.equal(e.result.conserved, true);
+    assert.equal(await wallet("u1"), w0 + 50);
+    assert.equal((await PCORE.run("treasury", "W2026-11-30")).result.conserved, true, "the record carries it");
+  } finally {
+    Object.assign(G, { daily: saved.daily, epoch: saved.epoch });
+    Object.assign(E, { planDaily: saved.planDaily, planEpoch: saved.planEpoch, epochId: saved.epochId, trackOf: saved.trackOf });
+    Object.assign(V, { ctx: saved.ctx, nav: saved.nav });
+    CC.houseBalance = saved.house;
+  }
+});
+
+test("(c) review of the owner answers (S13): the dedup comes BEFORE requireLive - a recorded key answers its recorded result even after a hand-back", async () => {
+  const k = "dedup-before-live:in";
+  const first = await move("1", 7, k);
+  assert.equal(first.body.ok, true);
+  const b0 = await sbal("1");
+  const was = (await getQuery("SELECT value FROM stash_meta WHERE key = 'imported'"))[0].value;
+  await runQuery("UPDATE stash_meta SET value = 'null' WHERE key = 'imported'");          // handed back to Pepe
+  try {
+    const again = await move("1", 7, k);
+    assert.equal(again.status, 200, JSON.stringify(again.body));
+    assert.equal(again.body.ok, true, "Pepe's retry of a move that landed gets its answer, not E_NOT_LIVE");
+    assert.equal(again.body.dup, true);
+    const fresh = await move("1", 7, "dedup-before-live-new:in");
+    assert.equal(fresh.status, 409);
+    assert.equal(fresh.body.code, "E_NOT_LIVE", "a new key is refused while the stashes aren't live");
+    assert.equal(await sbal("1"), b0, "nothing moved twice");
+  } finally {
+    await runQuery("UPDATE stash_meta SET value = ? WHERE key = 'imported'", [was]);
+  }
+});
+
+test("(a) review of the owner answers (S8): a closed stash's credit that the ledger refuses is a recorded refusal - nothing claims it was paid", async () => {
+  const LG = require(path.join(repo, "ledger"));
+  const oPost = LG.post;
+  LG.post = async () => ({ ok: false, code: "E_TARGET_NOT_FOUND" });           // the owner's account vanished under it
+  let r;
+  try { r = await move("5", 30, "closed-credit-refused:in"); } finally { LG.post = oPost; }
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.code, "E_STASH_CLOSED");
+  assert.equal(r.body.to_wallet, undefined);
+  const st = await status("closed-credit-refused:in");
+  assert.equal(st.body.state, "refused", "terminal for its key - never 'paid'");
+});

@@ -142,7 +142,8 @@ function register(app, { addUser, noTimers } = {}) {
   // owner answers 2026-10-20 (1): approving a held payment (or re-verifying a suspect one, which credits it when it checks out)
   // CREDITS the donor's PAT - a Pepe OWNER's (the class + the owner role on the linked chat login, read fresh). Reject /
   // ignore / refunded move nothing and stay Admins'.
-  const CREDITING = new Set(["approve", "reverify"]);
+  // review of the owner answers: + "unignore" - it re-settles the payment (settle()), which credits it when it classifies as a credit
+  const CREDITING = new Set(["approve", "reverify", "unignore"]);
   app.post("/api/crypto/admin/decide", ...json(async (req, b) => {
     const action = String(b.action || "");
     if (CREDITING.has(action)) {

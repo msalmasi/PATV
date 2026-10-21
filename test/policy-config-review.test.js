@@ -333,3 +333,45 @@ test("preflight (tools/policy-backend.js): the H1 evidence gates FAIL without ev
   assert.ok(l.some((s) => new RegExp(`^FAIL {2}mirror diff empty every day ${day(6)}\\.\\.${day(1)}.*not checked: ${day(6)}, ${day(5)}`).test(s)), l.join("\n"));
   await CC.setMeta("live", false);
 });
+
+test("review of the owner answers (CF20 / CF21 / CF22): the H1 check compares the import with EVERY reader's push - capital, PAT Routing, the funding block - not only policy.source", async () => {
+  let snap = await PC.snapshot({ fresh: true });
+  // funding's last sync as the earlier tests left it -> the store's values (a clean start: the store equals every push)
+  const fundOk = () => FX.monetary({ donation: { rate: snap.cfg.donation_rate, bonus_pct: snap.cfg.donation_bonus_pct } });
+  FUND.sync({ monetary: fundOk() });
+  snap = await PC.snapshot({ fresh: true });
+  const keysOf = async (cfg) => (await PC.pushCheck(cfg)).keys;
+  assert.deepEqual(await keysOf(snap.cfg), [], "the store equals every push");
+  try {
+    // the cut-off reads Pepe's CAPITAL push today: his capital ceil_apr 0.25 against an import of 0 (his policy push still says 0)
+    assert.equal((await bot("/api/capital/bot/config", { cfg: FX.capitalPush({ ceil_apr: 0.25 }) })).body.ok, true);
+    const c = await PC.pushCheck(snap.cfg);
+    assert.ok(c.keys.includes("vault_ceil_apr"), JSON.stringify(c.keys));
+    assert.ok(c.diffs.some((d) => d.consumer === "capital" && d.field === "ceil_apr"), JSON.stringify(c.diffs));
+  } finally { assert.equal((await bot("/api/capital/bot/config", { cfg: FX.capitalPush() })).body.ok, true); }
+  assert.deepEqual(await keysOf(snap.cfg), []);
+  // econstore's routing table (what the PAT moves read until H1) differs from the import's PAT Routing
+  const cfg2 = Object.assign({}, snap.cfg, { pat_routes: Object.assign({}, snap.cfg.pat_routes, { raffle: [["reserve", 100]] }) });
+  const r = await PC.pushCheck(cfg2);
+  assert.deepEqual(r.keys, ["pat_routes"]);
+  assert.ok(r.diffs.some((d) => d.consumer === "econstore.routes"));
+  // funding's last live sync (the monetary block the Fed / donations read): the donation rate differs
+  try {
+    FUND.sync({ monetary: FX.monetary({ donation: { rate: 400000, bonus_pct: 20.0 } }) });
+    const f = await PC.pushCheck(snap.cfg);
+    assert.ok(f.keys.includes("donation_rate"), JSON.stringify(f.keys));
+    assert.ok(f.diffs.some((d) => d.consumer === "funding.monetary" && d.field === "donation.rate"), JSON.stringify(f.diffs));
+  } finally { FUND.sync({ monetary: fundOk() }); }
+  assert.deepEqual(await keysOf(snap.cfg), []);
+});
+
+test("review of the owner answers (CF31): the mirror never takes an older copy of a push than one it already took", async () => {
+  await owner("pepe");
+  const s0 = await PC.snapshot({ fresh: true });
+  const ff = s0.cfg.fed_floor;
+  const r = await PC.mirror("policy", FX.policyPush({ econ_cfg: { fed_floor: ff + 1 } }), { at: Date.UTC(2026, 0, 1) });   // stamped long before
+  assert.deepEqual([r.mirrored, r.changed, r.stale], [false, 0, true]);
+  const s1 = await PC.snapshot({ fresh: true });
+  assert.equal(s1.rev, s0.rev, "no new rev");
+  assert.equal(s1.cfg.fed_floor, ff, "the newer copy's value stands");
+});

@@ -221,6 +221,13 @@ async function recordMove(moveKey, { kind, flow, why, via, legs, net, ts, result
 async function requireLive() {
   if (!(await live())) throw new Refuse(409, "The pools still live in Pepe.", "E_NOT_LIVE");
 }
+/** The review of the owner answers 2026-10-20 (the stashes' fix (c), now for the pools): INSIDE the move's transaction, after its
+ *  dedup (a recorded key answers its recorded result whatever happens), read fresh - never the 2 s cache. A move / charge / fund
+ *  that waited at the write gate behind rollbackToPepe used to pass the check made before it queued and land in drained pools
+ *  that are no longer live. */
+async function requireLiveInTx() {
+  if (!(await meta("live"))) throw new Refuse(409, "The pools still live in Pepe.", "E_NOT_LIVE");
+}
 
 /**
  * One keyed move (1..n legs, all or nothing). -> {ok, key, balances} | dup | throws Refuse (E_INSUFFICIENT: not recorded).
@@ -236,7 +243,7 @@ async function requireLive() {
  * good. Pepe turns `terminal` on (PO-0c) once those callers mint a new key for a deliberate retry.
  */
 async function move({ key, legs, flow, why, kind = "move", via = "pepe", terminal = false }) {
-  await requireLive();
+  await init();                               // the tables first (outside the transaction); the live check is inside it
   key = checkKey(key);
   const ls = cleanLegs(legs);
   const k = ["move", "burn", "settle", "grant", "admin", "rollback", "cutover"].includes(kind) ? kind : "move";
@@ -244,6 +251,7 @@ async function move({ key, legs, flow, why, kind = "move", via = "pepe", termina
   return tx(async () => {
     const dup = await recorded(key);          // a recorded refusal answers again, unchanged (terminal for its key)
     if (dup) return dup;
+    await requireLiveInTx();
     let a;
     try {
       // its own savepoint: a refusal at leg n undoes legs 0..n-1 before the refusal row is written
@@ -297,7 +305,7 @@ const userByName = async (username) => (await getQuery("SELECT userId, username 
  * answers the first result with replayed:true and moves nothing. -> {ok, route_key, transactionId, site_legs, inbox, balances}
  */
 async function charge({ key, username, amount, reason, counterparty, route, legs }) {
-  await requireLive();
+  await init();                               // the live check is inside the transaction (after the dedup)
   key = checkKey(key);
   const amt = Math.floor(Number(amount));
   if (!(amt > 0)) throw new Refuse(400, "Bad amount.", "E_BAD_AMOUNT");
@@ -317,6 +325,7 @@ async function charge({ key, username, amount, reason, counterparty, route, legs
     const mk = "charge:" + key;
     const dup = await seen(mk);
     if (dup) return Object.assign(dup, { replayed: true });
+    await requireLiveInTx();
     const d = await ledger.post(u.userId, -amt, String(reason || "command").slice(0, 40),
                                 { requireCover: true, counterparty: counterparty || undefined, source: "pat/charge" });
     if (!d.ok) {
@@ -352,7 +361,7 @@ async function charge({ key, username, amount, reason, counterparty, route, legs
 
 // ── /api/pat/fund: a reward paid out of a pool, in ONE transaction ──
 async function fund({ key, pool, userId, username, amount, flow, type, counterparty }) {
-  await requireLive();
+  await init();                               // the live check is inside the transaction (after the dedup)
   key = checkKey(key);
   const amt = Math.floor(Number(amount));
   if (!(amt > 0)) throw new Refuse(400, "Bad amount.", "E_BAD_AMOUNT");
@@ -365,6 +374,7 @@ async function fund({ key, pool, userId, username, amount, flow, type, counterpa
     const mk = "fund:" + key;
     const dup = await seen(mk);
     if (dup) return dup;
+    await requireLiveInTx();
     const legs = [{ pool: String(pool), amount: -amt }];
     const a = await applyLegs(mk, legs, { kind: "fund", flow, why: type, via: "pepe" });
     const c = await ledger.post(uid, amt, String(type || flow || "reward").slice(0, 40),

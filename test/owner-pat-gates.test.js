@@ -97,6 +97,8 @@ async function call(p, who, body = {}, extra = {}) {
   return { status: r.status, body: j };
 }
 const one = async (sql, args = []) => (await getQuery(sql, args))[0];
+const pepeRead = (body = {}) => fetch(base + "/api/pepe/backends", { method: "POST", headers: { "content-type": "application/json" },
+                                                                    body: JSON.stringify(Object.assign({ password: "bot" }, body)) }).then((r) => r.json());
 
 test("(1) the auto-escrow switch holds members' PAT: an Admin who isn't a Pepe owner gets 403, nothing changes; an owner saves it", async () => {
   const AE = require(path.join(repo, "autoescrow"));
@@ -229,17 +231,28 @@ test("(2) /admin/backends: the lotto and stashes switches are a Pepe owner's; no
   assert.equal((await one("SELECT COUNT(*) AS n FROM backend_wants")).n, 0, "no wish recorded");
   assert.equal((await one("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'backend_switch'")).n, 0);
   assert.equal(await ST.enabled(), false);
-  // the owner: the lotto's wish only (Pepe's cutover moves the pot - lotto_backend is untouched)
-  const lo = await call("/api/admin/backends/lotto", U.owner, { on: true });
-  assert.equal(lo.status, 200, JSON.stringify(lo.body));
-  assert.deepEqual([lo.body.want, lo.body.live, lo.body.pepe], [true, false, true]);
-  assert.equal((await svc.loadSettings(true)).lotto_backend, false, "nothing moved on the site");
+  // review of the owner answers (high): Pepe doesn't read these switches yet - the lotto's switch would only record a wish nobody
+  // follows, so it is refused (with the chat command an owner runs instead); nothing is recorded
+  const lo0 = await call("/api/admin/backends/lotto", U.owner, { on: true });
+  assert.equal(lo0.status, 409, JSON.stringify(lo0.body));
+  assert.equal(lo0.body.code, "pepe_not_following");
+  assert.match(lo0.body.error, /!lotto backend cutover confirm/);
+  assert.equal((await one("SELECT COUNT(*) AS n FROM backend_wants")).n, 0);
+  // the stashes' switch has a site side (the site takes the hand-over): it is saved, act false (made while Pepe didn't follow)
+  // and the answer names the chat command
   const st = await call("/api/admin/backends/stashes", U.owner, { on: true });
   assert.equal(st.status, 200, JSON.stringify(st.body));
   assert.equal(await ST.enabled(), true, "the site takes the stashes' hand-over now (stash_meta.enabled)");
+  assert.deepEqual([st.body.act, st.body.chat], [false, "!stash backend on"]);
+  // Pepe's update reads them: he says which hand-overs he follows - from then on a switch is his to act on
+  assert.equal((await pepeRead({ follows: ["lotto", "stashes", "nope"], version: "1.99zz" })).ok, true);
+  const lo = await call("/api/admin/backends/lotto", U.owner, { on: true });
+  assert.equal(lo.status, 200, JSON.stringify(lo.body));
+  assert.deepEqual([lo.body.want, lo.body.live, lo.body.pepe, lo.body.act, lo.body.chat], [true, false, true, true, null]);
+  assert.equal((await svc.loadSettings(true)).lotto_backend, false, "nothing moved on the site");
   const a = await getQuery("SELECT admin_id, detail FROM admin_audit WHERE action = 'backend_switch' ORDER BY id");
-  assert.deepEqual(a.map((r) => [r.admin_id, JSON.parse(r.detail).feature, JSON.parse(r.detail).want, JSON.parse(r.detail).was]),
-                   [[U.owner, "lotto", true, null], [U.owner, "stashes", true, null]]);
+  assert.deepEqual(a.map((r) => [r.admin_id, JSON.parse(r.detail).feature, JSON.parse(r.detail).want, JSON.parse(r.detail).was, JSON.parse(r.detail).pepe_follows]),
+                   [[U.owner, "stashes", true, null, false], [U.owner, "lotto", true, null, true]]);
   // once the site owns the stashes there is nothing to switch (the import is for good)
   await runQuery("INSERT INTO stash_meta (key, value) VALUES ('imported', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify({ at: 1 })]);
   assert.equal(await ST.live(), true);
@@ -251,10 +264,13 @@ test("(2) /admin/backends: the lotto and stashes switches are a Pepe owner's; no
   await runQuery("DELETE FROM stash_meta WHERE key = 'imported'");
   // Pepe reads the wishes (bot token)
   assert.equal((await fetch(base + "/api/pepe/backends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "no" }) })).status, 403);
-  const b = await fetch(base + "/api/pepe/backends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) }).then((r) => r.json());
+  const b = await pepeRead();
   assert.equal(b.ok, true);
+  assert.equal(b.contract, 1);
   assert.deepEqual(Object.keys(b.features).sort(), ["aijudge", "cosdrops", "gtf", "lotto", "polls", "stashes"]);
   assert.equal(b.features.lotto.want, true);
+  assert.equal(b.features.lotto.act, true, "made while Pepe followed it: his to act on");
+  assert.equal(b.features.stashes.act, false, "made before he followed it: he leaves it alone (no surprise hand-over later)");
   assert.equal(b.features.lotto.live, false);
   assert.equal(b.features.lotto.by, "own");
   assert.equal(b.features.gtf.want, null, "never switched here");
@@ -283,17 +299,23 @@ test("(2) /admin/backends: GTF / polls / the drop table / the AI judge stay Admi
     assert.equal(off.status, 200);
     assert.equal(await read(), false, key + " off again");
   }
-  // the drop table: while the site owns it only Pepe releases it - off records the wish, the site switch is untouched
+  // the drop table: while the site owns it only Pepe releases it - off records the wish, the site switch is untouched. While he
+  // doesn't follow that switch the wish alone would change nothing: refused, with the chat command
   await C.setDropMeta("enabled", true);
   await C.setDropMeta("live", true);
+  const cd0 = await call("/api/admin/backends/cosdrops", U.admin, { on: false });
+  assert.equal(cd0.status, 409, JSON.stringify(cd0.body));
+  assert.equal(cd0.body.code, "pepe_not_following");
+  assert.match(cd0.body.error, /!cosmetics backend off confirm/);
+  await pepeRead({ follows: ["lotto", "stashes", "cosdrops"], version: "1.99zz" });
   const cd = await call("/api/admin/backends/cosdrops", U.admin, { on: false });
   assert.equal(cd.status, 200, JSON.stringify(cd.body));
-  assert.deepEqual([cd.body.want, cd.body.live, cd.body.pepe], [false, true, true]);
+  assert.deepEqual([cd.body.want, cd.body.live, cd.body.pepe, cd.body.act], [false, true, true, true]);
   assert.equal(await C.dropEnabled(), true);
   await C.setDropMeta("live", false);
   const rows = await getQuery("SELECT admin_id, detail FROM admin_audit WHERE action = 'backend_switch' AND admin_id = ? ORDER BY id", [U.admin]);
   assert.equal(rows.length, 9);
-  assert.deepEqual(JSON.parse(rows[1].detail), { feature: "gtf", want: false, was: true, live: false, via: "web" });
+  assert.deepEqual(JSON.parse(rows[1].detail), { feature: "gtf", want: false, was: true, live: false, via: "web", pepe_follows: false });
   // the old per-feature route (unchanged rules: Admins) writes the same wish + audit row
   const legacy = await call("/api/admin/gtf-backend", U.admin, { on: true });
   assert.equal(legacy.status, 200, JSON.stringify(legacy.body));
@@ -303,12 +325,81 @@ test("(2) /admin/backends: GTF / polls / the drop table / the AI judge stay Admi
   assert.equal(JSON.parse(last.detail).via, "web-legacy");
 });
 
+test("review of the owner answers: website forms never switch a hand-over; a Reserve loan's admin verbs carry the owner check, judging stays an Admin's", async () => {
+  const A = require(path.join(repo, "actions"));
+  const n0 = (await one("SELECT COUNT(*) AS n FROM pepe_actions")).n;
+  // "<cmd> backend ..." from a form - even an owner's - is refused before anything runs or is queued (Pepe's !lotto / !stash /
+  // !loan backend, and a poll question that would read as !poll backend)
+  for (const body of [{ kind: "cmd", cmd: "lotto", a0: "backend", a1: "on" }, { kind: "cmd", cmd: "stash", a0: "backend", a1: "on" },
+                      { kind: "cmd", cmd: "loan", a0: "BACKEND on" }, { kind: "poll.create", a0: "backend on", a1: "yes", a2: "no" }]) {
+    const r = await call("/act", U.owner, Object.assign({ back: "/lotto", idem: "idem-" + Math.random().toString(36).slice(2, 12) }, body));
+    assert.equal(r.status, 302, JSON.stringify(body));
+  }
+  assert.equal((await one("SELECT COUNT(*) AS n FROM pepe_actions")).n, n0, "nothing queued for Pepe");
+  // a Federal Reserve loan granted / approved / forgiven from a form (queued for Pepe): site_admin is the owner check at claim time
+  const ids = {
+    adminGrant: await A.queue(U.admin, { kind: "cmd", args: ["loan", "grant", "@mem", "1000"], tag: "wallet", label: "g" }),
+    adminForgive: await A.queue(U.admin, { kind: "cmd", args: ["loan", "forgive", "L5"], tag: "wallet", label: "f" }),
+    ownerApprove: await A.queue(U.owner, { kind: "cmd", args: ["loan", "approve", "LR1"], tag: "wallet", label: "a" }),
+    adminRepay: await A.queue(U.admin, { kind: "cmd", args: ["loan", "repay", "L5"], tag: "wallet", label: "r" }),
+    adminJudge: await A.queue(U.admin, { kind: "cmd", args: ["wager", "settle", "W5", "yes"], tag: "wagers", label: "w" }),
+  };
+  const got = await fetch(base + "/api/actions/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "bot" }) }).then((r) => r.json());
+  const by = Object.fromEntries(got.actions.map((x) => [x.id, x]));
+  assert.deepEqual(Object.fromEntries(Object.entries(ids).map(([k, id]) => [k, by[id] && [by[id].site_admin, by[id].is_owner]])), {
+    adminGrant: [false, false], adminForgive: [false, false], ownerApprove: [true, true],
+    adminRepay: [true, false], adminJudge: [true, false] });
+  assert.deepEqual(by[ids.ownerApprove].args, ["loan", "approve", "LR1"]);
+  // the site's own Reserve form (capital live on the site): grant / approve are an owner's; deny stays an Admin's
+  const R = require(path.join(repo, "capital", "reserve"));
+  assert.match(await R.fromForm(U.admin, ["grant", "mem", "1000", "7d"]), OWNER_RE);
+  assert.match(await R.fromForm(U.admin, ["approve", "LR1"]), OWNER_RE);
+  assert.doesNotMatch(String(await R.fromForm(U.owner, ["grant", "mem", "1000", "7d"]).catch((e) => e.message)), OWNER_RE);
+  assert.doesNotMatch(String(await R.fromForm(U.admin, ["deny", "LR1"]).catch((e) => e.message)), OWNER_RE);
+});
+
+test("(2) review of the owner answers: the page says whether Pepe reads the switches; his report is shown for the current wish only; a stale read = not following", async () => {
+  const B = require(path.join(repo, "backends"));
+  await pepeRead({ follows: ["lotto", "stashes", "gtf"], version: "1.99zz", results: { lotto: { want: true, ok: false, msg: "within 10 minutes of the draw - waiting" },
+                                                                                       gtf: { want: false, ok: true, msg: "old wish" }, nope: { want: true, ok: true } } });
+  let v = await B.view((await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [U.owner]))[0]);
+  assert.equal(v.reader.fresh, true);
+  assert.deepEqual(v.reader.follows, ["lotto", "stashes", "gtf"]);
+  const row = (k) => v.rows.find((r) => r.key === k);
+  assert.deepEqual(row("lotto").pepe && [row("lotto").pepe.ok, row("lotto").pepe.msg], [false, "within 10 minutes of the draw - waiting"]);
+  assert.equal(row("gtf").pepe, null, "a result for a wish that isn't the current one (gtf's is on the site now) is ignored");
+  assert.deepEqual([row("lotto").follows, row("lotto").offer_off, row("polls").follows], [true, true, false]);
+  // a new wish clears the old report
+  assert.equal((await call("/api/admin/backends/lotto", U.owner, { on: false })).status, 200);
+  v = await B.view((await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [U.owner]))[0]);
+  assert.equal(row("lotto").pepe, null);
+  const html = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": U.owner } })).text();
+  assert.match(html, /Pepe reads these switches/);
+  assert.match(html, /data-bk="lotto"[^>]*data-follows="1"/);
+  assert.match(html, /<code>!poll backend on<\/code>/, "a hand-over Pepe doesn't follow names the owner's chat command");
+  // Pepe stops reading (an old Pepe, or he is down): after 15 minutes nothing is "followed" - the lotto's wish-only switch is gone
+  B._setClock(() => Date.now() + B.READER_FRESH_MS + 1000);
+  try {
+    v = await B.view((await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [U.owner]))[0]);
+    assert.equal(v.reader.fresh, false);
+    assert.deepEqual([row("lotto").follows, row("lotto").offer_on, row("lotto").offer_off], [false, false, false]);
+    assert.equal(row("stashes").offer_on, true, "a switch with a site side is still offered (the chat command does the move)");
+    const r = await call("/api/admin/backends/lotto", U.owner, { on: true });
+    assert.equal(r.body.code, "pepe_not_following");
+    const h2 = await (await fetch(base + "/admin/backends", { headers: { "x-test-user": U.owner } })).text();
+    assert.match(h2, /hasn(&#39;|')t read these switches since/);
+    assert.doesNotMatch(h2, /data-bk="lotto"/);
+  } finally { B._setClock(null); }
+  await call("/api/admin/backends/lotto", U.owner, { on: true });     // back to the wish the next test expects
+});
+
 test("(2) the /admin/backends page and its JSON: Admins see every row (owner rows locked for a non-owner); others are sent away", async () => {
   const j = await fetch(base + "/api/admin/backends", { headers: { "x-test-user": U.admin } }).then((r) => r.json());
   assert.equal(j.ok, true);
   assert.deepEqual(j.rows.map((r) => [r.key, r.owner, r.can]), [["lotto", true, false], ["stashes", true, false], ["gtf", false, true],
                                                                   ["polls", false, true], ["cosdrops", false, true], ["aijudge", false, true]]);
-  assert.deepEqual(j.status.map((r) => r.key), ["pools", "capital", "escrow", "gangs", "achievements"]);
+  assert.deepEqual(j.status.map((r) => r.key), ["pools", "capital", "escrow", "gangs", "achievements", "policy", "fed"]);
+  assert.ok(j.status.every((r) => !r.error), JSON.stringify(j.status.filter((r) => r.error)));
   const jo = await fetch(base + "/api/admin/backends", { headers: { "x-test-user": U.owner } }).then((r) => r.json());
   assert.ok(jo.owner && jo.rows.every((r) => r.can), "an owner can switch every row");
   assert.equal((await fetch(base + "/api/admin/backends", { headers: { "x-test-user": U.staff } })).status, 403);

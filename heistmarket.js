@@ -147,19 +147,11 @@ async function setConfig(patch, admin) {
 
 // ── the fee's routing (the PAT Routing table's row, source of truth: /admin/economy) ──
 /** [[dest, pct], ...] - the admin's override of `heist_market_fee` (even an empty one = all to the Reserve), else Pepe's
- *  default from his routing catalog, else Fort Knox 100%. */
+ *  default from his routing catalog, else Fort Knox 100%. The review of the owner answers: while the site owns the economy
+ *  settings and can't read them this THROWS (E_CFG_UNREADABLE / E_CFG_MISSING) - the sale's transaction rolls back, never a
+ *  default route (econstore.routeShares). */
 async function feeShares() {
-  try {
-    const st = await require("./econstore").getSettings();
-    if (st && st.pat_routes && Array.isArray(st.pat_routes[FLOW])) return st.pat_routes[FLOW];
-  } catch (e) { /* no econ store yet */ }
-  try {
-    const row = (await getQuery("SELECT data FROM econ_catalog WHERE id = 1"))[0];
-    const d = parse(row && row.data, null);
-    const def = d && d.routes && d.routes[FLOW] && d.routes[FLOW].default;
-    if (Array.isArray(def) && def.length) return def;
-  } catch (e) { /* no catalog yet */ }
-  return [["fortknox", 100]];
+  return require("./econstore").routeShares(FLOW, [["fortknox", 100]]);
 }
 /** amount by shares -> [[dest, amount]]; the rest to the Reserve (PAT is never burned). */
 function splitShares(shares, amount) {
@@ -802,7 +794,7 @@ async function adminView() {
   const fees = (await getQuery("SELECT COALESCE(SUM(fee), 0) AS f, COALESCE(SUM(price), 0) AS v, COUNT(*) AS n FROM heist_market_listings WHERE kind = 'sale' AND sold_at IS NOT NULL"))[0];
   const items = Object.keys(cat.shop).map((k) => itemInfo(cat, cfg, k)).filter((i) => i && (i.gear || i.kind === "item"));
   return { config: cfg, defaults: DEFAULTS, counts, open_ops: open.n, oldest_op: open.oldest, sales: { n: fees.n, volume: fees.v, fees: fees.f },
-           fee_shares: await feeShares(), items };
+           fee_shares: await feeShares().catch((x) => { if (require("./policy/config").isCfgErr(x)) return null; throw x; }), items };
 }
 
 // ── routes ──
@@ -811,6 +803,8 @@ function register(app, { isBotToken, addUser }) {
   const answer = (res, e, tag) => {
     if (e instanceof Refuse) return res.status(e.status).json({ ok: false, error: e.message, code: e.code });
     if (e && e.code === "E_INSUFFICIENT") return res.status(409).json({ ok: false, error: e.message, code: e.code });
+    // the fee's PAT Routing can't be read while the site owns the economy settings: refused (nothing charged), try again later
+    if (require("./policy/config").isCfgErr(e)) return res.status(503).json({ ok: false, error: "The economy settings can't be read right now - nothing was charged. Try again in a few minutes.", code: e.code });
     console.error(`[heistmarket] ${tag}:`, e);
     res.status(500).json({ ok: false, error: "Something went wrong - nothing was charged." });
   };

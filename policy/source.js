@@ -72,7 +72,10 @@ async function config() {
   if (s.econ_cfg) cfg = Object.assign({}, s.econ_cfg);
   else {
     let over = {};
-    try { over = (await require("../econstore").getSettings()).econ_cfg || {}; } catch (e) { over = {}; }
+    try { over = (await require("../econstore").getSettings()).econ_cfg || {}; } catch (e) {
+      if (require("./config").isCfgErr(e)) throw e;               // owner answers review: the engines defer, never the code defaults
+      over = {};
+    }
     cfg = Object.assign({}, require("./engines").DEFAULTS, over);
   }
   return { push: s, cfg, consts: s.consts, flags: s.flags };

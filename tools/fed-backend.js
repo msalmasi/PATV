@@ -5,9 +5,11 @@
 //   node tools/fed-backend.js --actor=<who> on         # allow Pepe to hand the Fed's books over (`!econ fed backend on`)
 //   node tools/fed-backend.js --actor=<who> off        # refuse new imports (never takes anything away from a live site:
 //                                                      #   the way back is `!econ fed backend off` in Camfrog)
-// Read-only by default; `on` / `off` write ONE fed_meta row (on prod only with the user's explicit go).
+// Read-only by default; `on` / `off` write ONE fed_meta row (on prod only with the user's explicit go) + an admin_audit row.
+// The review of the owner answers 2026-10-20: it never opens a database that isn't there (tools/sitedb.js; --dir=<folder>).
 "use strict";
 const path = require("path");
+require("./sitedb").siteDb();                                         // exits 2 (nothing opened) without ./myapp.db
 const F = require(path.join(__dirname, "..", "fed", "service"));
 (async () => {
   await F.init();
@@ -18,6 +20,7 @@ const F = require(path.join(__dirname, "..", "fed", "service"));
     if (await F.live()) throw new Error("the site owns the Fed's books now - roll back from Pepe instead");
     await F.setMeta("enabled", cmd === "on");
     await F.setMeta("enabled_by", { by: actor + " (cli)", at: Date.now(), on: cmd === "on" });
+    await require("./sitedb").cliAudit(actor, { feature: "fed", want: cmd === "on", live: false, tool: "fed-backend" });
     console.log(`fed events backend ${cmd === "on" ? "enabled" : "disabled"} by ${actor}`);
   } else if (cmd) {
     throw new Error("usage: node tools/fed-backend.js [--actor=<who> on|off]");

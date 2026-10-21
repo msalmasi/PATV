@@ -1287,7 +1287,10 @@ async function bonusCap(c) {
     const ec = await require("../policy/source").econCfg();              // PO-1: Pepe's policy push, read through policy/source.js
     if (ec) v = ec.wf_staker_cap_pct;
     else v = ((await require("../econstore").getSettings()).econ_cfg || {}).wf_staker_cap_pct;
-  } catch (e) { v = undefined; }
+  } catch (e) {
+    if (require("../policy/config").isCfgErr(e)) throw e;          // owner answers review: never "no cap" for an unreadable config
+    v = undefined;
+  }
   const n = Number(v);
   return v !== undefined && v !== null && Number.isFinite(n) ? Math.max(0, Math.min(1, n / 100)) : 0;   // PO-0b (D-8): no value = no cap
 }

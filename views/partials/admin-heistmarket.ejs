@@ -6,7 +6,7 @@
   <h2 id="hmAdmT"><%- t('hm.adm.title') %> <span class="adm-pill admin">admins</span></h2>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!locals.hm) { %><p class="adm-help"><%- t('hm.adm.failed') %></p><% } else { const adm = locals.hm; %>
   <p class="adm-help"><%- t('hm.adm_stats', { n: _hmFmt(adm.sales.n), volume: _hmFmt(adm.sales.volume), fees: _hmFmt(adm.sales.fees), ops: _hmFmt(adm.open_ops) }) %>
-    <%- t('hm.adm_route', { shares: adm.fee_shares.length ? adm.fee_shares.map((s) => s[0] + ' ' + s[1] + '%').join(', ') : 'reserve 100%', link: '<a href="/admin/economy">/admin/economy</a>' }) %></p>
+    <%- t('hm.adm_route', { shares: adm.fee_shares === null ? t('hm.adm_route_unknown') : adm.fee_shares.length ? adm.fee_shares.map((s) => s[0] + ' ' + s[1] + '%').join(', ') : 'reserve 100%', link: '<a href="/admin/economy">/admin/economy</a>' }) %></p>
   <form id="hmAdmF" class="adm-form" novalidate autocomplete="off" data-saved="<%= t('hm.adm_saved') %>" data-failed="<%- t('hm.fail') %>">
     <label for="aFee"><%- t('hm.adm_fee') %><input id="aFee" name="fee_pct" inputmode="decimal" value="<%= adm.config.fee_pct %>"></label>
     <label for="aMin"><%- t('hm.adm_min') %><input id="aMin" name="min_price" inputmode="numeric" value="<%= adm.config.min_price %>"></label>

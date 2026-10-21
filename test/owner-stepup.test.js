@@ -212,3 +212,30 @@ test("/admin/roles: making or removing an OWNER needs the step-up; other role ch
                        (e) => e.status === 409 && /Admin › Roles/.test(e.message));
   assert.equal(await roleOf("owner3_cf"), "owner");
 });
+
+test("review of the owner answers: parallel wrong passwords can't beat the throttle - each attempt is counted before the compare; at most 5 open nonces per account", async () => {
+  // a stolen session firing guesses in parallel: the nonce check is bypassed here (every nonce valid) to look at the throttle alone
+  const ES = require(path.join(repo, "econstore"));
+  const ctl = require(path.join(repo, "pepecontrol"));
+  const me = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", ["u_ann"]))[0];
+  const oTake = ctl.takeNonce;
+  ctl.takeNonce = () => true;
+  let out;
+  try {
+    out = await Promise.all(Array.from({ length: 20 }, (x, i) => ES.stepUp(me, { nonce: "n" + i, password: "guess-" + i }).then(() => "ok", (e) => `${e.status}:${e.code}`)));
+  } finally { ctl.takeNonce = oTake; }
+  const counts = {};
+  for (const c of out) counts[c] = (counts[c] || 0) + 1;
+  assert.deepEqual(counts, { "403:password": 5, "429:too_many": 15 }, "only 5 guesses ever reach bcrypt: " + JSON.stringify(counts));
+  // the right password now: still 429 until the window ends
+  ctl.takeNonce = () => true;
+  try { await assert.rejects(ES.stepUp(me, { nonce: "x", password: "pw-right" }), (e) => e.status === 429); } finally { ctl.takeNonce = oTake; }
+  // the nonce cap: a 6th open nonce retires the account's oldest; another account's are untouched
+  const who = { userId: U.owner3, username: NAME[U.owner3] };
+  const other = ctl.issueNonce({ userId: U.owner2, username: NAME[U.owner2] });
+  const ns = Array.from({ length: 7 }, () => ctl.issueNonce(who));
+  assert.equal(ctl.takeNonce(who, ns[0]), false, "the oldest was retired");
+  assert.equal(ctl.takeNonce(who, ns[1]), false);
+  for (const n of ns.slice(2)) assert.equal(ctl.takeNonce(who, n), true, "the newest five are open");
+  assert.equal(ctl.takeNonce({ userId: U.owner2, username: NAME[U.owner2] }, other), true, "per account");
+});

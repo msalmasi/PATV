@@ -111,6 +111,7 @@
 <section class="adm-card" id="house" aria-labelledby="rfHouseT">
   <h2 id="rfHouseT"><%- t('rf.adm.h_house') %></h2>
   <p class="adm-help"><%- t('rf.adm.house_help') %></p>
+  <p class="adm-help"><%- t('rf.adm.house_owner') %></p>
   <% if (!on) { %><p class="adm-help"><%- t('rf.adm.house_off') %></p><% } %>
   <% if (!escrowLive) { %><p class="adm-help"><%- t('rf.escrow_off') %></p><% } else { %>
     <%- include('../partials/rf-create', { t, cfg, items, pick, idem, house: true }) %>

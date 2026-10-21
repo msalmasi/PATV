@@ -87,6 +87,9 @@ test.before(async () => {
   await mkUser("unverified", { email: 0 });
   await mkUser("poor", { bal: 500 });
   await mkUser("boss", { cls: "Admin", camfrog: "bosscf" });
+  await mkUser("boss2", { cls: "Admin", camfrog: "boss2cf" });          // an Admin who isn't a Pepe owner
+  await require(path.join(repo, "staffroles")).init();
+  await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('bosscf', 'owner', 1), ('boss2cf', 'admin', 1)");
   await mkUser("pb", { bal: 0 });                        // the store owner
   await runQuery("INSERT INTO welcome_bonus (userId, dup_of) VALUES ('u_alt', 'u_maker')");
   await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES ('seed', 'seed', NULL, 50000000)");
@@ -330,6 +333,12 @@ test("a Prize Shop item: one reserved from stock + the creator's price escrowed;
 test("house raffles: admins only, first in the list, the pot to the House, a PAT prize paid by the House, announced everywhere", async () => {
   const notAdmin = await RF.create(U.ann.userId, PAT_RAFFLE({ house: true, target: 2 }));
   assert.equal((await raffle(notAdmin.id)).house, 0, "the house flag needs an admin");
+  // review of the owner answers 2026-10-20 (1): a House PAT prize moves the House's PAT to the winner - a Pepe OWNER's. An Admin
+  // who isn't one is refused (nothing created); a House raffle with a custom prize moves no House PAT and stays an Admin's
+  await assert.rejects(RF.create(U.boss2.userId, PAT_RAFFLE({ house: true, target: 2 })), refused("owner_only"));
+  const cu = await RF.create(U.boss2.userId, PAT_RAFFLE({ house: true, target: 2, prize_kind: "custom", prize_text: "A shout-out on stream" }));
+  assert.equal((await raffle(cu.id)).house, 1);
+  await RF.cancel(U.boss2.userId, cu.id);
   const h0 = await house();
   const r = await RF.create(U.boss.userId, PAT_RAFFLE({ house: true, target: 2, prize_amount: 50000, price: 2000 }));
   const row0 = await raffle(r.id);

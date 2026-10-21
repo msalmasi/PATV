@@ -191,3 +191,43 @@ test("(c) the rollback's pre-check reads committed rows in order: an OPEN transa
   assert.equal(out.ok, true, "the rollback really ran (every pool -> 0, live off)");
   assert.equal(await P.live(), false);
 });
+
+test("review of the owner answers: the pools' live check is inside the move's transaction, after its dedup - a hand-back committed ahead of a queued move refuses it; a recorded key still answers", async () => {
+  // the previous test handed the pools back (every pool 0, live off): live again, with PAT in the Reserve
+  await P._setMeta("live", true);
+  P._forgetLive();
+  await runQuery("UPDATE pools SET balance = 1000 WHERE key = 'reserve'");
+  const done = await move("pre-handback-0001", [["reserve", -5], ["fortknox", 5]]);
+  assert.equal(done.body.ok, true);
+  const r0 = await bal("reserve");
+  let release, opened;
+  const gate = new Promise((r) => { release = r; });
+  const isOpen = new Promise((r) => { opened = r; });
+  const blocker = tx(async () => {
+    opened();
+    await gate;
+    await P._setMeta("live", false);                       // the pools go back to Pepe while the moves wait at the write gate
+  });
+  await isOpen;
+  const mv = move("late-after-handback-0001", [["reserve", -7], ["fortknox", 7]]);
+  const ch = P.fund({ key: "late-fund-0001", pool: "reserve", username: "nobody_here", amount: 3, flow: "test", type: "test" }).then(() => "ran", (e) => e.code);
+  await new Promise((r) => setTimeout(r, 80));
+  release();
+  await blocker;
+  try {
+    const r = await mv;                                        // its check reads the row fresh (the 2 s cache still says live)
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.equal(r.body.code, "E_NOT_LIVE", "the check made before it queued is not enough");
+    assert.ok(["E_NOT_LIVE", "E_TARGET_NOT_FOUND"].includes(await ch));
+    assert.equal(await bal("reserve"), r0, "nothing moved into drained, non-live pools");
+    assert.equal((await rowsOf("late-after-handback-%")).length, 0, "not recorded");
+    // Pepe's retry of a move that DID land before the hand-back gets its recorded answer, not E_NOT_LIVE
+    const again = await move("pre-handback-0001", [["reserve", -5], ["fortknox", 5]]);
+    assert.equal(again.status, 200, JSON.stringify(again.body));
+    assert.equal(again.body.dup, true);
+  } finally {
+    await P._setMeta("live", true);
+    P._forgetLive();
+  }
+  assert.equal((await move("late-after-handback-0001", [["reserve", -7], ["fortknox", 7]])).body.ok, true, "the same key lands once live again");
+});

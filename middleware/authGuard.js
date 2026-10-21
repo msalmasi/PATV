@@ -201,6 +201,18 @@ function limiter({ max, windowMs }) {
     reset(key) {
       hits.delete(key);
     },
+    /** Review of the owner answers 2026-10-20 (the parallel-guess bypass): check AND count one attempt in the same tick, BEFORE
+     *  the slow check it guards (bcrypt). -> the wait in seconds when blocked (nothing counted), else 0 (counted). A burst of
+     *  parallel requests each passed blocked() before any of them was counted after its compare; now at most `max` attempts
+     *  per window ever reach the compare. A success calls reset() as before. */
+    attempt(key) {
+      const now = Date.now();
+      const cur = hits.get(key);
+      if (cur && cur.until > now && cur.n >= max) return Math.max(1, Math.ceil((cur.until - now) / 1000));
+      if (!cur || cur.until <= now) hits.set(key, { n: 1, until: now + windowMs });
+      else cur.n += 1;
+      return 0;
+    },
   };
 }
 

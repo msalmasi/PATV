@@ -246,18 +246,11 @@ async function cancelOnSignIn(userId, method) {
 }
 
 // ── the routing (PAT is points: it never vanishes from supply) ──
+/** The override, else Pepe's catalog default, else the Federal Reserve 100% (like the stale-account cleanup). Throws
+ *  E_CFG_UNREADABLE / E_CFG_MISSING while the site owns the economy settings and can't read them: the deletion's transaction
+ *  rolls back and is retried, never routed by a default (econstore.routeShares). */
 async function shares() {
-  try {
-    const st = await require("./econstore").getSettings();
-    if (st && st.pat_routes && Array.isArray(st.pat_routes[FLOW])) return st.pat_routes[FLOW];
-  } catch (e) { /* no econ store */ }
-  try {
-    const row = (await getQuery("SELECT data FROM econ_catalog WHERE id = 1"))[0];
-    const d = row && row.data ? JSON.parse(row.data) : null;
-    const def = d && d.routes && d.routes[FLOW] && d.routes[FLOW].default;
-    if (Array.isArray(def) && def.length) return def;
-  } catch (e) { /* no catalog */ }
-  return [["reserve", 100]];                    // the Federal Reserve, like the stale-account cleanup
+  return require("./econstore").routeShares(FLOW, [["reserve", 100]]);
 }
 
 /** INSIDE a transaction: move the account's whole-PAT balance out by the routing row, keyed. -> {amount, legs, key} | null */

@@ -32,6 +32,9 @@
       if (rt && j.route && j.route.shares) {
         rt.textContent = 'now: ' + j.route.shares.map(function (s) { return (LBL[s[0]] || s[0]) + ' ' + s[1] + '%'; }).join(', ') +
           (j.route.override ? ' (an admin override)' : ' (the default)') + '; the rest, if any, to the Federal Reserve';
+      } else if (rt && j.route && j.route.unavailable) {
+        // the site owns the economy settings and can't read them right now: never the default shown as the route
+        rt.textContent = 'now: unknown - the economy settings can\'t be read right now (a fine waits until they can)';
       }
       if (!j.moves.length) { log.innerHTML = '<tr><td colspan="6" class="muted">None yet.</td></tr>'; return; }
       log.innerHTML = j.moves.map(function (m) {

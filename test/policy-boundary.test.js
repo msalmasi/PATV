@@ -319,3 +319,24 @@ test("the handshake only while the site compares: off and live answer skipped (n
   const noTok = await fetch(base + "/api/policy/bot/boundary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ engine: "treasury", period: DID }) });
   assert.equal(noTok.status, 403);
 });
+
+test("review of the owner answers (SC28): a truncated INPUTS diff is never clean - even when every listed difference is tolerated", async () => {
+  // Thursday's monetary day: 410 logins took part on the site; Pepe's counters differ for every one of them (unread data: the
+  // participation rule tolerates each listed difference) - the diff stops at 400, so the comparison can't be clean
+  const THU = MON + 3 * 86400, did = "D2026-10-22";
+  const day0 = (await G.monetary(THU + 120, did, false)).local_day;
+  for (let i = 0; i < 410; i++) {
+    await runQuery("INSERT OR IGNORE INTO econ_participation (room_id, day, login, lines, mic_min) VALUES ('r1', ?, ?, 4, 0)", [day0, `p${String(i).padStart(3, "0")}_cf`]);
+  }
+  assert.equal((await post("/api/policy/bot/boundary", { engine: "monetary", period: did, now: THU + 120, guarantee: false })).body.ok, true);
+  const site = await G.monetary(THU + 120, did, false);
+  assert.ok(site.rows.length >= 410, String(site.rows.length));
+  const pIn = Object.assign({}, site, { rows: site.rows.map((r) => [r[0], r[1], Number(r[2]) + 1].concat(r.slice(3))) });
+  const pPlan = SCH.planOf("monetary", pIn);
+  const rep = await post("/api/policy/bot/report", { engine: "monetary", period: did, inputs: pIn, plan: pPlan });
+  assert.equal(rep.body.truncated.input, true, JSON.stringify(rep.body.truncated));
+  assert.equal(rep.body.input_diff.length, 400);
+  assert.deepEqual(rep.body.input_blocking || [], [], "every listed difference is tolerated");
+  assert.deepEqual(rep.body.total_diff, []);
+  assert.equal(rep.body.clean, false, "...but a truncated comparison is never clean");
+});

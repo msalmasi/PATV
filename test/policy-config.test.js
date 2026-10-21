@@ -599,3 +599,30 @@ test("review of PO-2: Pepe's route is the chat path - via is chat (the % rule, t
   r = await bot("/api/policy/bot/cfg/set", { actor: "owner_cf", base_rev: snap.rev, changes: { vault_ceil_apr: "25%" } });
   assert.equal(r.status, 200);
 });
+
+test("review of the owner answers (CF9 / CF18): an edit without base_rev is refused like a stale one; the capital reader throws E_CFG_MISSING for a missing knob (never DEFAULT_CFG)", async () => {
+  clockMs = Date.UTC(2026, 9, 22, 2, 0);                        // before the day's run window
+  await siteOwned(true);
+  const snap = await PC.snapshot({ fresh: true });
+  for (const baseRev of [undefined, null]) {
+    await assert.rejects(PC.edit({ changes: { donation_rate: "640k" }, via: "chat", actor: "owner_cf", baseRev }),
+                         (e) => e.status === 409 && e.code === "stale_rev" && e.extra && e.extra.rev === snap.rev, `base_rev ${baseRev}`);
+  }
+  const r = await bot("/api/policy/bot/cfg/set", { actor: "owner_cf", via: "chat", changes: { donation_rate: "640k" } });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.code, "stale_rev");
+  assert.equal((await PC.snapshot({ fresh: true })).rev, snap.rev, "nothing changed - never last-writer-wins");
+  // a capital knob missing from the store once the site owns it: the cut-off's reader defers, never DEFAULT_CFG's value
+  const row = (await getQuery("SELECT * FROM policy_cfg WHERE key = 'vault_ceil_apr'"))[0];
+  assert.ok(row);
+  await runQuery("DELETE FROM policy_cfg WHERE key = 'vault_ceil_apr'");
+  PC.forget();
+  try {
+    await assert.rejects(CC.cfg({ consumer: "capital.cutoff" }), (e) => e.code === "E_CFG_MISSING" && e.missing.includes("vault_ceil_apr"));
+  } finally {
+    await runQuery("INSERT INTO policy_cfg (key, value, rev, updated, by, via, src) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   [row.key, row.value, row.rev, row.updated, row.by, row.via, row.src]);
+    PC.forget();
+  }
+  assert.equal((await CC.cfg({ consumer: "capital.cutoff" })).ceil_apr, snap.cfg.vault_ceil_apr, "back: the store's value");
+});

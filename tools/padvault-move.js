@@ -45,14 +45,16 @@ async function bal(room) {
   const pads = await getQuery("SELECT room_id, title, owner_kind, owner_user_id FROM rooms_registry WHERE room_id IN (?, ?)", [from, to || from]);
   const P = (id) => pads.find((p) => p.room_id === id);
   const adm = (await getQuery("SELECT userId, username, class FROM users WHERE LOWER(username) = LOWER(?)", [adminName]))[0];
-  const route = (await getQuery("SELECT shares FROM pat_routes WHERE flow = 'fine_pad'").catch(() => []))[0];
+  // the route as the site reads it (padfines.fineRoute: the policy config store once the site owns the economy settings -
+  // never the frozen pre-H1 table; unreadable -> unknown, not the default)
+  const route = await require(path.join(ROOT, "padfines")).fineRoute();
   const before = { from: await bal(from), to: to ? await bal(to) : null };
   const key = arg("key") || ("ops-" + crypto.createHash("sha256").update(`${op}|${from}|${to || ""}|${amount}`).digest("hex").slice(0, 20));
   const report = {
     db: path.resolve("myapp.db"), pools_live: pools.live === "true", op, key,
     from: { id: from, pad: P(from) || null, vault: before.from }, to: to ? { id: to, pad: P(to) || null, vault: before.to } : null,
     amount, reason, admin: adm ? { username: adm.username, class: adm.class } : null,
-    fine_route: op === "fine" ? (route ? JSON.parse(route.shares) : [["reserve", 100]]) : undefined,
+    fine_route: op === "fine" ? (route.unavailable ? "unknown (the economy settings can't be read)" : route.shares) : undefined,
   };
   const problems = [];
   if (!report.pools_live) problems.push("the pools are not live on this site (Pepe moves them locally - run !padmove in chat instead)");

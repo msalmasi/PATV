@@ -127,8 +127,10 @@ async function request(user, { amount, reason, nonce, password }, ip) {
   const row = (await getQuery("SELECT password FROM users WHERE userId = ?", [user.userId]))[0];
   const hash = row && typeof row.password === "string" && row.password.startsWith("$2") ? row.password : null;
   if (!hash) throw fail(403, "Your account has no password to confirm with - set one (forgot password) first.");
+  // review of the owner answers: counted BEFORE the compare (limiter.attempt), so parallel guesses can't all pass the check
+  const late = pwFails.attempt(who);
+  if (late) throw fail(429, "Too many wrong passwords. Try again in " + guard.waitText(late) + ".");
   if (typeof password !== "string" || !password || Buffer.byteLength(password, "utf8") > 200 || !(await bcrypt.compare(password, hash))) {
-    pwFails.hit(who);
     throw fail(403, "Wrong password.");
   }
   pwFails.reset(who);

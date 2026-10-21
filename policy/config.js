@@ -617,6 +617,10 @@ function unreadableErr(where, cause) {
   return e;
 }
 
+/** E_CFG_UNREADABLE / E_CFG_MISSING: the economy settings can't be used - a reader that catches errors to fall back must rethrow
+ *  these (the PAT move defers; never a default). */
+const isCfgErr = (e) => !!(e && (e.code === "E_CFG_UNREADABLE" || e.code === "E_CFG_MISSING"));
+
 // ── the consumers ──
 /** capital/core.cfg(): Pepe's pushed capital config `out` (DEFAULT_CFG + his push). Site-owned: its knob fields come from
  *  policy_cfg; mirror: the consumer's fields are compared (the push is used). */
@@ -1080,7 +1084,7 @@ function register(app, { isBotToken, addUser }) {
 
 module.exports = { init, register, ownership, owner, putOwner, putReturning, ownerHint, setPause, snapshot, readerSnap, cached, refresh, forget, load, writeChanges,
                    mirror, backfill, extract, diffReport, checkMirrorDay, noteDual, flushDual, compareFields, capitalCfg, sourceView, fedDual, monetaryFor, pushCheck,
-                   runWindow, edit, applyMigrations, bootCheck, botCfg, logRows, dualSummary, adminView, routesCatalog, specHash, cfgSha, missingErr, unreadableErr,
+                   runWindow, edit, applyMigrations, bootCheck, botCfg, logRows, dualSummary, adminView, routesCatalog, specHash, cfgSha, missingErr, unreadableErr, isCfgErr,
                    Refuse, FEATURES, OWNERS, MIGRATIONS, SOURCES, BY_KEY, SRC_STALE_MS, SETTLE_MS, WINDOW_LEAD_S, LOG_KEEP,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); },
                    _setLogKeep: (n) => { logKeep = n === undefined ? LOG_KEEP : n; },

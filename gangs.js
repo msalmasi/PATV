@@ -343,11 +343,12 @@ function splitShares(shares, amount) {
   }
   return out;
 }
-/** The withdrawal cut's legs: the routing override for gang_withdraw_cut, else Pepe's pushed shares (Fort Knox 100%). */
+/** The withdrawal cut's legs: the routing override for gang_withdraw_cut, else Pepe's pushed shares (Fort Knox 100%). Throws
+ *  E_CFG_UNREADABLE / E_CFG_MISSING while the site owns the economy settings and can't read them: the withdrawal is refused
+ *  (503), never cut by a default route (econstore.routeOverride). */
 async function cutLegs(cut, c) {
   if (cut <= 0) return [];
-  let shares = null;
-  try { shares = (await require("./econstore").getSettings()).pat_routes.gang_withdraw_cut || null; } catch (e) { shares = null; }
+  let shares = await require("./econstore").routeOverride("gang_withdraw_cut");
   if (!Array.isArray(shares) || !shares.length) shares = c.cut_shares || [["fortknox", 100]];
   return splitShares(shares, cut).map(([d, a]) => [VAULT_DESTS.has(d) && d !== "jackpot" ? d : "reserve", a]);
 }
@@ -1336,6 +1337,8 @@ function register(app, { isBotToken, addUser, patSupply }) {
   const send = (res, e, tag) => {
     if (e instanceof Refuse) return res.status(e.status).json(Object.assign({ ok: false, error: e.message, code: e.code }, e.extra || {}));
     if (e instanceof P().Refuse) return res.status(e.status).json(Object.assign({ ok: false, error: e.message, code: e.code }, e.extra || {}));
+    // the withdrawal cut's PAT Routing can't be read while the site owns the economy settings: refused, nothing moved (503: retry)
+    if (require("./policy/config").isCfgErr(e)) return res.status(503).json({ ok: false, error: "the economy settings can't be read right now - nothing moved, try again later.", code: e.code });
     console.error(`[gangs] ${tag}:`, e);
     res.status(500).json({ ok: false, error: "server_error" });
   };
@@ -1441,5 +1444,5 @@ function register(app, { isBotToken, addUser, patSupply }) {
 
 module.exports = { init, register, enabled, live, rev, cfg, stateAll, totalsOf, digestOf, create, invite, accept, decline, leaveLike, kick, role,
                    setBoss, setTag, limits, deposit, withdraw, spend, move, disband, patch, applyRep, addRep, importFromPepe, exportState,
-                   rollbackToPepe, supplyRows, boardView, gangView, putMirror, webAct, opStatus, settledOpStatus, splitShares, Refuse, DEFAULT_CFG,
+                   rollbackToPepe, supplyRows, boardView, gangView, putMirror, webAct, opStatus, settledOpStatus, splitShares, cutLegs, Refuse, DEFAULT_CFG,
                    _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta };

@@ -378,6 +378,10 @@ test("over the per-transfer maximum -> held; an admin approves (credited) or rej
     const no = await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id: idD, action: "approve", note: "checked" } });
     assert.equal(no.status, 403, no.text);
     assert.match(no.json.error, /owners only/);
+    // review of the owner answers: un-ignoring re-settles the payment (it can credit) - an owner's too
+    const un = await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id: idD, action: "unignore" } });
+    assert.equal(un.status, 403, un.text);
+    assert.match(un.json.error, /owners only/);
     assert.equal((await pay(idD)).status, "held");
     assert.equal(await bal("alice"), before);
   } finally {

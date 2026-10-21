@@ -48,13 +48,17 @@ const clean = (s, n) => String(s == null ? "" : s).replace(/[\u0000-\u001f<>]/g,
 const int = (v) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? n : 0; };
 const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 
-/** Where fines go now: Pepe's routing override for fine_pad (pushed to the site), else his default (the Reserve). */
+/** Where fines go now: Pepe's routing override for fine_pad (pushed to the site), else his default (the Reserve). The review of
+ *  the owner answers: while the site owns the economy settings and can't read them -> {shares: null, unavailable: true} (the
+ *  page says it can't tell) - never the default shown as if it were the route. */
 async function fineRoute() {
-  try {
-    const s = await require("./econstore").getSettings();
-    const r = s.pat_routes && Array.isArray(s.pat_routes.fine_pad) && s.pat_routes.fine_pad.length ? s.pat_routes.fine_pad : null;
-    return { shares: r || [["reserve", 100]], override: !!r };
-  } catch (e) { return { shares: [["reserve", 100]], override: false }; }
+  let r;
+  try { r = await require("./econstore").routeOverride("fine_pad"); } catch (x) {
+    if (!require("./policy/config").isCfgErr(x)) throw x;
+    return { shares: null, override: false, unavailable: true };
+  }
+  r = Array.isArray(r) && r.length ? r : null;
+  return { shares: r || [["reserve", 100]], override: !!r };
 }
 
 /** Queue a fine / transfer for Pepe as `admin` ({userId, username}). Used by the admin route and tools/padvault-move.js. */
