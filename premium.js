@@ -436,6 +436,20 @@ function bridgeAllowed(roomId, t) {
   try { const R = require("./rooms").getCached(roomId); if (R && R.house) return true; } catch (e) { /* no registry: decide by the tier */ }
   return isPrimePlus(roomId, t);
 }
+/** S1 Q5b: the subscription rows of one tier for these targets, read from the database now (the chat hub's looks are built
+ *  when they post, never from the cache; endsAt() then answers the perk's end). The caller has run init().
+ *  -> Map(target -> premium_subs row) */
+async function subsFor(tier, targets) {
+  const ids = [...new Set([...(targets || [])].filter(Boolean).map(String))];
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    for (const r of await getQuery(`SELECT * FROM premium_subs WHERE tier = ? AND target IN (${part.map(() => "?").join(",")})`, [tier, ...part])) {
+      out.set(String(r.target), r);
+    }
+  }
+  return out;
+}
 /** Does this account have a Season Pass right now? (sync, cached) */
 const hasPass = (userId, t) => activeSync("season_pass", userId, t);
 /** 1.99nw: the Camfrog logins (lowercase) of every account with a Season Pass right now - Pepe keeps their PM logs
@@ -1230,6 +1244,7 @@ module.exports = {
   retentionAt,                                                           // CL7: when his last report came (the archive purge's fail-safe)
   RETENTION_TIER_KEYS,                                                   // CL7 fix-up: the windows a fresh report must name, valid
   isPrime, isPrimePlus, padTier, plusOwner, bridgeAllowed, upgradeCredit, upgradePreview, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
+  subsFor,             // S1 Q5b: the chat hub's looks (Season Pass perk ends, Plus pads)
   padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

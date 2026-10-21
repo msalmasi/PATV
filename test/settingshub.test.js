@@ -49,6 +49,11 @@ test.before(async () => {
                   twitchId TEXT, discordId TEXT, email TEXT, avatar TEXT, password_set INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   await runQuery("CREATE TABLE IF NOT EXISTS dm_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL)");
   await L.init();
+  // S1 V3: the chat text-style row is there only while the `looks` switch is on (textstyle.pickerOn; its off state is
+  // test/textstyle-picker.test.js's) - on here, so every row's link is checked
+  await runQuery("CREATE TABLE IF NOT EXISTS hubseam_settings (key TEXT PRIMARY KEY, value TEXT, updated INTEGER, actor TEXT)");
+  await runQuery("INSERT INTO hubseam_settings (key, value) VALUES ('looks', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'");
+  await require(path.join(repo, "huboutbox")).reloadSettings();
   U.fan = await mkUser("fan", { camfrog: "FanCF" });
   U.plain = await mkUser("plain", { bal: 0 });
   await L.setPrefs(U.fan.userId, { [L.KINDS[0]]: false });
@@ -112,7 +117,7 @@ test("signed in: every section, a row per page with title + description, and the
     assert.match(r.text, new RegExp('<section class="ds-card lg sh-sec" id="' + s + '"'), s);
     assert.match(r.text, new RegExp('<a class="ds-tab" href="#' + s + '">' + EN["sethub.sec." + s].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "</a>"), "jump to " + s);
   }
-  for (const k of ["account", "password", "chatsignin", "connections", "camfrog", "profile", "feed", "cosmetics", "stickers",
+  for (const k of ["account", "password", "chatsignin", "connections", "camfrog", "profile", "feed", "cosmetics", "textstyle", "stickers",
                    "messages", "mentions", "telegram", "likeness", "voice", "clone", "policy", "wallet", "subscriptions", "premium", "creators",
                    "support", "newpad", "ownerguide", "language", "timezone"]) {
     assert.match(r.text, new RegExp('data-entry="' + k + '"'), k + " row");
@@ -170,7 +175,7 @@ test("old addresses keep working", () => {
 // ── one home per setting: Edit profile = how others see you; Settings -> Account = the account side ──
 const view = (v) => fs.readFileSync(path.join(repo, "views", v + ".ejs"), "utf8");
 const ACCOUNT_IDS = ["usernameForm", "emailForm", "connections", "camfrogDiv", "plexDiv", "googleDiv", "appleDiv", "telegramDiv", "cryptoDiv", "passwordForm", "security", "csToggle", "timezone", "tzSelect"];
-const PROFILE_IDS = ["displaynameForm", "avatar", "uploadForm", "layout", "layoutForm"];
+const PROFILE_IDS = ["displaynameForm", "avatar", "uploadForm", "textstyle", "textStyleForm", "layout", "layoutForm"];   // S1 V3: + the chat text style
 
 test("each setting has exactly one home: no control lives on both Edit profile and Settings -> Account", () => {
   const ed = view("editProfile"), ac = view("settingsAccount");

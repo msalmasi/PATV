@@ -136,7 +136,8 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          "chatlog_hidden_names", "pad_chat_cfg", "chatlog_open", "chatlog_reports", "chatlog_holds", "chatlog_views",
                                          "chatlog_exports", "chatlog_meta",
                                          // CL2 fix-up: the live feed's tables (the archive's seed reads bridge_feed)
-                                         "bridge_rooms", "bridge_feed"].sort());
+                                         "bridge_rooms", "bridge_feed",
+                                         "pad_hub"].sort(), "S1-D1: staging keeps its own hub pad ids");
   assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");

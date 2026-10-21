@@ -32,6 +32,16 @@ document.querySelector('.wheel-container').appendChild(centerImage);
 // Set your custom image or GIF URL
 centerImage.src = '/public/img/star.gif';
 
+// The jackpot slice's glow pulse between spins (1.99ado). The canvas is drawn ONCE while idle: repainting the
+// 1000x1000 canvas with shadow blur ~16 times a second, forever, grew OBS's browser GPU process to ~7 GB over two
+// days until the overlay crashed "Out of Memory". The canvas keeps a steady base glow and this ray, laid over
+// the slice, pulses with a CSS opacity animation (obs-wheel.css) - composited, nothing is repainted.
+const jpGlow = document.createElement('div');
+jpGlow.id = 'jpGlow';
+jpGlow.setAttribute('aria-hidden', 'true');
+jpGlow.hidden = true;
+document.querySelector('.wheel-container').appendChild(jpGlow);
+
 const wheelRadius = LOGICAL / 2;
 const centerX = LOGICAL / 2;
 const centerY = LOGICAL / 2;
@@ -117,11 +127,15 @@ function drawWheel() {
 function drawJackpotGlow() {
   const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
   let a0 = currentAngle;
+  let glowAt = null;
   for (const seg of segments) {
     const a1 = a0 + (seg.size / totalSize) * 2 * Math.PI;
     if (seg.jackpot) {
       const mid = (a0 + a1) / 2;
-      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
+      if (glowAt === null) glowAt = mid;
+      // Spinning: the canvas pulses the glow itself (it is redrawn every frame anyway). Idle: a steady base
+      // glow - the pulse is #jpGlow's CSS animation, so the canvas is not repainted between spins.
+      const pulse = isSpinning ? 0.5 + 0.5 * Math.sin(Date.now() / 250) : 0;
       ctx.save();
       ctx.shadowColor = '#FFD700';
       ctx.shadowBlur = 12 + 14 * pulse;
@@ -141,9 +155,28 @@ function drawJackpotGlow() {
     }
     a0 = a1;
   }
+  placeJackpotGlow(glowAt);
 }
-// Keep the glow pulsing between spins (the spin animation redraws on its own).
-setInterval(() => { if (!isSpinning && segments.length) drawWheel(); }, 60);
+
+// Lays the CSS glow ray over the jackpot slice (mid: its angle on the canvas, null = no jackpot slice).
+// Hidden while spinning - the moving wheel draws its own pulse then.
+function placeJackpotGlow(mid) {
+  const show = !isSpinning && mid !== null;
+  if (show) jpGlow.style.transform = 'rotate(' + mid + 'rad)';
+  if (jpGlow.hidden === show) jpGlow.hidden = !show;
+}
+
+// Between spins the wheel is drawn once and redrawn only when something changes: the slice table
+// (loadWheelConfig), the 2D context coming back (contextrestored above), the source being resized or
+// shown again, the end of a spin. No timer and no animation-frame loop while idle (1.99ado).
+let redrawQueued = false;
+function redrawIdle() {
+  if (isSpinning || redrawQueued) return;
+  redrawQueued = true;
+  requestAnimationFrame(() => { redrawQueued = false; if (!isSpinning) drawWheel(); });
+}
+window.addEventListener('resize', redrawIdle);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) redrawIdle(); });
 
 // The server owns the slice table (/api/wheel/config) - the arrays here are only a fallback.
 function loadWheelConfig(level) {
@@ -216,6 +249,7 @@ function spinWheel(wheelSpinner, spinId, targetIndex) {
       drawWheel();
       setTimeout(() => {
         isSpinning = false;
+        drawWheel();   // back to idle: the steady base glow, and the CSS pulse over the slice where it landed
         setFrameState(null);
         settleAndReveal(spinId, wheelSpinner);
       }, 500);

@@ -120,14 +120,16 @@ test("the heartbeat: env (HUB_V1_ENV, else STAGING), the switches (not spans), p
   await S.revoke("hb1", s.id, "signed out");
   let b = await HO.heartbeatBody();
   assert.equal(b.env, "prod");
-  assert.deepEqual(Object.keys(b.switches).sort(), ["econ", "erasure", "export", "heartbeat", "privacy", "sessions", "tickets"]);
+  assert.deepEqual(Object.keys(b.switches).sort(), ["econ", "erasure", "export", "heartbeat", "identity", "looks", "privacy", "sessions", "tickets"],
+                   "1.99ads: S1's identity and looks switches join (seam plan §12.10: additive)");
   assert.equal(b.switches.sessions, true);
   const sr = b.topics["sessions/revoked"];
   assert.equal(sr.pending, 1);
   assert.equal(sr.head, (await getQuery("SELECT MAX(id) AS id FROM hub_outbox"))[0].id);
   assert.ok(sr.oldest_pending_at > 0);
   assert.equal(b.outbox_head, await HO.headId());
-  assert.equal(b.version, "1.99acm");
+  assert.equal(b.version, HO.VERSION);
+  assert.equal(HO.VERSION, "1.99ads", "the letter of the release that last changed the seam (ADR 0007 D19)");
   process.env.STAGING = "1";
   assert.equal((await HO.heartbeatBody()).env, "staging");
   process.env.HUB_V1_ENV = "test";

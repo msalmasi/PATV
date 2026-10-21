@@ -39,6 +39,7 @@
 //
 // Switches (hubseam_settings, /admin/keys#seam): tickets, heartbeat, sessions, privacy, econ, 1.99acm: erasure (the topics
 // privacy/account-deleted + privacy/forget: one fan-out, on together - D-3) and export (the hub part of "Download my data"),
+// 1.99ads: identity and looks (the S1 topics identity/changed, looks/changed; looks also gates the hub's looks call),
 // all off; spans (on: bridge spans only record, bridgespans.js). A topic whose switch is off writes nothing and serves no
 // snapshot. Nothing is sent while HUB_V1_URL is unset. Tickets can only be on together with `sessions` and `heartbeat` (a
 // revoked sign-in has to reach the hub, and the hub's 30-minute grace rides the heartbeat): setSettings refuses any other
@@ -49,7 +50,10 @@ const http = require("http");
 const https = require("https");
 const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 
-const VERSION = "1.99acm";
+// 1.99ads (S1 Q5b, release L3 - ADR 0007 D19: the letter of the release that changed the seam): the identity/changed and
+// looks/changed topics (hubidentity.js, hublooks.js + userlook.buildLooks), their switches, snapshots and batch readers, and
+// the hub's POST /internal/v1/looks (hubinbound.js). Q4 (release L1) adds pads/roles/bans/switches the same way.
+const VERSION = "1.99ads";
 const DAY = 86400000;
 const BATCH = 300;
 const POLL_MS = 1000;
@@ -59,10 +63,12 @@ const KEEP_MS = 7 * DAY;
 const PAGE = 500;                      // snapshot rows per page (seam plan §2.5)
 const PENDING_ON_MS = DAY;             // an unanswered incognito ON request counts as pending this long (D-7's backstop)
 const TOPICS = { "sessions/revoked": "sessions", "privacy/changed": "privacy", "privacy/account-deleted": "erasure", "privacy/forget": "erasure",
-                 "econ/committed": "econ" };
-const SNAPSHOT_TOPICS = ["sessions/revoked", "privacy/changed", "privacy/account-deleted", "privacy/forget"];
-const SWITCHES = ["tickets", "heartbeat", "sessions", "privacy", "erasure", "export", "econ", "spans"];
-const DEFAULTS = { tickets: false, heartbeat: false, sessions: false, privacy: false, erasure: false, export: false, econ: false, spans: true };
+                 "econ/committed": "econ",
+                 "identity/changed": "identity", "looks/changed": "looks" };                // 1.99ads: S1 (seam plan §12.2)
+const SNAPSHOT_TOPICS = ["sessions/revoked", "privacy/changed", "privacy/account-deleted", "privacy/forget", "identity/changed", "looks/changed"];
+const SWITCHES = ["tickets", "heartbeat", "sessions", "privacy", "erasure", "export", "econ", "spans", "identity", "looks"];
+const DEFAULTS = { tickets: false, heartbeat: false, sessions: false, privacy: false, erasure: false, export: false, econ: false, spans: true,
+                   identity: false, looks: false };
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -77,6 +83,7 @@ function hubEnv() {
 }
 
 let ready = null;
+let s1 = { ready: false, error: null };          // 1.99ads: the S1 topics' setup (hubidentity / hublooks init)
 function init() {
   if (!ready) {
     ready = (async () => {
@@ -111,6 +118,20 @@ function init() {
       // 1.99add refix 4: a hash hidden only by incognito (scope "incognito": shown as "someone") or also left out (scope NULL)
       await runQuery(`CREATE TRIGGER IF NOT EXISTS hub_outbox_hh_update AFTER UPDATE OF scope ON hub_hidden_h WHEN OLD.scope IS NOT NEW.scope AND ${gate("privacy")}
         BEGIN INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('privacy/changed', 'hh:' || NEW.h, ${ms}); END`);
+      // 1.99ads: the S1 topics' source tables, indexes and triggers (each gated by its own switch, written whatever it says).
+      // Never in the way of the S0 seam: a failure is logged, shown on /admin/keys#seam (status().s1.error) and keeps the
+      // identity / looks switches from turning on; a database without a users table (a module's unit test) has no S1 topics.
+      s1 = { ready: false, error: null };
+      if (await hasTable("users")) {
+        try {
+          await require("./hubidentity").init();
+          await require("./hublooks").init();
+          s1.ready = true;
+        } catch (e) {
+          s1.error = String(e.message || e).slice(0, 200);
+          console.error("[hub_outbox] S1 topics (identity, looks):", s1.error);
+        }
+      }
       await reloadSettings();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -135,6 +156,10 @@ async function setSettings(patch, actor) {
   for (const k of SWITCHES) if (patch && k in patch) next[k] = patch[k] === true || patch[k] === "true";
   if (!Object.keys(next).length) throw Object.assign(new Error("Nothing to change."), { status: 400, code: "nothing", refuse: true });
   const after = { ...(await reloadSettings()), ...next };
+  if ((next.identity === true || next.looks === true) && !s1.ready) {
+    throw Object.assign(new Error("The identity / looks topics couldn't be set up on this site (see the seam status) - they can't be turned on."),
+                        { status: 409, code: "s1_not_ready", refuse: true });
+  }
   if (after.tickets && !ticketsReady(after)) {
     throw Object.assign(new Error("Chat tickets need sign-outs to the hub (sessions) and the heartbeat on - turn those on first, or turn tickets off first."),
                         { status: 409, code: "tickets_need", refuse: true });
@@ -217,6 +242,17 @@ const readers = {
     }
     return null;
   },
+  // 1.99ads (S1): acct:<userId> -> the identity / the look, read now (the batch readers below serve the poster)
+  "identity/changed": async (entity) => (await readersMany["identity/changed"]([entity])).get(String(entity)) || null,
+  "looks/changed": async (entity) => (await readersMany["looks/changed"]([entity])).get(String(entity)) || null,
+};
+/** 1.99ads: topics whose rows the poster reads in ONE pass per batch (a batch of 300 looks is one set of queries, not 300).
+ *  entities -> Map(entity -> payload); an entity of another shape is left out (posted with payload null). */
+const acctIds = (entities) => entities.map(String).filter((e) => /^acct:./.test(e)).map((e) => e.slice(5));
+const byEntity = (m) => new Map([...m].map(([id, p]) => ["acct:" + id, p]));
+const readersMany = {
+  "identity/changed": async (entities) => byEntity(await require("./hubidentity").build(acctIds(entities))),
+  "looks/changed": async (entities) => byEntity(await require("./userlook").buildLooks(acctIds(entities), { card: true, t: now() })),
 };
 
 /** The hub's account_id for a users.userId: the ticket's `sub` (chatticket.subjectOf - a legacy id -> its UUIDv5 when
@@ -387,9 +423,12 @@ async function onePass() {
       const rows = await getQuery("SELECT id, topic, entity, payload, created_at FROM hub_outbox WHERE posted_at IS NULL AND topic = ? ORDER BY id LIMIT ?",
                                   [topic, BATCH]);
       const list = [];
+      // 1.99ads: a batch reader reads every trigger row's entity of the batch at once (the same current state per entity)
+      const many = readersMany[topic] ? await readersMany[topic]([...new Set(rows.filter((r) => r.payload == null).map((r) => r.entity))]) : null;
       for (const r of rows) {
         let payload = null;
         if (r.payload != null) { try { payload = JSON.parse(r.payload); } catch (e) { payload = null; } }
+        else if (many) payload = many.get(String(r.entity)) || null;
         else if (readers[topic]) payload = await readers[topic](r.entity);
         list.push({ id: r.id, topic: r.topic, entity: r.entity, payload, created_at: r.created_at });
       }
@@ -580,6 +619,13 @@ const SOURCES = {
       return rows.map((r) => ({ entity: "forget:" + r.id, payload: pf.hubRow(r) }));
     },
   },
+  // 1.99ads (S1, seam plan §12.6): every account, merged and deleted id; the non-default looks
+  "identity/changed": {
+    accounts: async (k, limit) => require("./hubidentity").snapshotSource(bound("acct:", k), limit),
+  },
+  "looks/changed": {
+    looks: async (k, limit, t) => require("./hublooks").snapshotSource(bound("acct:", k), limit, t),
+  },
 };
 
 /** privacy/changed incognito entities with non-default state: confirmed ON (Pepe's reports: incognito_state for linked keys,
@@ -752,7 +798,9 @@ async function status() {
   return { configured: !!hubUrl(), key: !!(k.id && k.key), key_id: k.id || null, env: hubEnv(), proxy: !!String(process.env.HUB_V1_PROXY || "").trim(),
            insecure: !!hubUrl() && insecureUrl(), refusal: hubUrl() ? refusal() : null, settings: settings(),
            pending: p.n || 0, oldest_pending: p.oldest || null, posted: q.n || 0, head: await headId(), topics: await topicStats(),
-           last_post: lastPost, heartbeat: lastBeat, retry_in_ms: wait, failing: topics, inbound, export_wait: exportWait };
+           last_post: lastPost, heartbeat: lastBeat, retry_in_ms: wait, failing: topics, inbound, export_wait: exportWait,
+           // 1.99ads: links left out of identity rows (they'd fail the hub's platform rule) and the looks call's counts
+           s1: { ready: s1.ready, error: s1.error, identity: require("./hubidentity").status(), looks: require("./hublooks").status() } };
 }
 
 // ── econ/committed (§13): idemBegin's done() for a key in the hub interaction namespace ──
@@ -794,8 +842,9 @@ function stop() { while (timers.length) clearInterval(timers.pop()); }
 module.exports = {
   init, start, stop, emit, settings, setSettings, reloadSettings, on, pumpOnce, pump, heartbeatOnce, heartbeatBody, cleanup, status, idemDone, request,
   postSigned, getSigned, insecureUrl, urlHasPath, refusal, hubEnv, headId, topicStats, snapshot, rewind, accountOf, ticketsReady, readers,
-  privateActivity, tailnetOrLoopback, TOPICS, SNAPSHOT_TOPICS, SWITCHES, DEFAULTS, VERSION, BATCH, PAGE, KEEP_MS,
+  privateActivity, tailnetOrLoopback, TOPICS, SNAPSHOT_TOPICS, SWITCHES, DEFAULTS, VERSION, BATCH, PAGE, KEEP_MS, readersMany,
   _scan: () => ({ ...scan }), _resetScan: () => { scan.resolved = 0; scan.parsed = 0; },
+  clockNow: () => now(),                       // 1.99ads: the seam's clock (the looks call reads perks at it; tests set it)
   _setClock: (f) => { clock = f || (() => Date.now()); },
   _setFault: (f) => { fault = f || null; },
   _setAccountOf: (f) => { accountOverride = f || null; },

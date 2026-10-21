@@ -249,12 +249,124 @@ first), the member keeps seeing it as being prepared, and after 24 h a console e
 account without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset) exports without it, and the README says
 so.
 
+## S1: identity, looks, the looks call, text style (release L3, 1.99ads)
+
+S1 plan §2.4 Q5b; the hub repo's `docs/seam-plan.md` §12 is the spec (§12.14 records what this release changed in it).
+Built on two prerequisites in the same branch: **Q5a** (release L2, no behaviour change: `cosmeticstyle.js` - the ring,
+border and banner cosmetics are structured fields, golden-tested to render today's CSS, `test/cosmetics-structured.test.js`;
+each item's structured look travels whole - no colour list is cut, the caps being rt-schema's `look.schema.json`'s: name 12,
+ring / border / banner 8) and **`pad_hub`** (S1-D1, `padhub.js`: every pad's stable `hub_pad_id`, minted by an
+`AFTER INSERT` trigger on `rooms_registry` and a start-up backfill, moved by re-keys, dropped by an `AFTER DELETE` trigger
+in the deleting transaction - a pad re-created under the same room id is a new pad -, kept on a staging refresh; Q4 owns
+the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` for the flair definitions
+`padflair.hubDefs` reads).
+
+| Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
+|---|---|---|---|
+| `identity/changed` (`hubidentity.js`) | `identity` | `acct:<userId>` | `{account, v1_user, status: active\|archived\|deleting\|deleted\|merged\|gone, status_at, merged_into, v1_into, merged_from[≤ 50], email_verified, level, created_at, links[{platform: camfrog\|discord\|twitch\|telegram, external_id, login, display}]}` - no username, no display name |
+| `looks/changed` (`hublooks.js`, built by `userlook.buildLooks`) | `looks` | `acct:<userId>` | the full structured look (avatar, name, text, badges, profile, gtf, `flairs {hub_pad_id: "f<id>"}`, `auto {supporter, plex, plus_pads}`, `valid_until`) + `h`; `{acct, v1_user, gone:true}` with no `users` row or a done deletion |
+
+- **Identity status:** a done deletion → `deleted` (`done_at`), an open one (`scheduled` / `held`) → `deleting`
+  (`requested_at`), `users.archived_at` → `archived`; no `users` row → `merged` (`account_merges`, `merged_at`) or `gone`.
+  Facts are null for merged, deleted and gone. `email_verified` is `verified.js`'s email proof. Links follow the hub's
+  platform rules (Camfrog `external_id` = SQLite's `lower(trim(login))` - trim removes spaces only, lower maps A-Z only -
+  1-64 characters counted as code points: the golden `s1.link_rules` vectors; numeric ids for the others); a
+  link that would fail is left out and counted (`/admin/keys#seam`), so v1 never posts what the hub quarantines.
+- **The look:** one builder for the topic, its snapshot and the call; every source read from the database (never a module
+  cache): equipped unlocked copies whose perk is live (Season Pass / Plex items), `cosmeticstyle.lookOf` for the
+  structured fields, the absolute https avatar (a site path gets `PUBLIC_BASE_URL` / `SITE_URL` / the prod or staging
+  origin; no https origin → no url), `hue` = the monogram hue of the username, `verified` = any `verified.js` proof, the
+  Supporter badge and up to three showcased achievement badges (`ach.<id>`, label `ach.n.<id>`), pad flair assignments
+  keyed by `hub_pad_id`, the auto-flair inputs and `valid_until` (the earliest end of an equipped perk item, the Plex auto
+  flair or an owned Plus pad). Bots (Pepe) get a bot badge and nothing else. `h` = sha256 of the canonical JSON (keys
+  sorted at every depth) without `h`, always over the card look.
+- **Text style:** `users.text_style` = JSON `{color, font}` (`textstyle.js`): a W1 palette colour (`chat-text-styles.json`,
+  rt-schema's `registry/text-styles.json` byte for byte, sha256 pinned in `test/huboutbox-s1.test.js`) and one of the six
+  fonts; the look carries `text {color?, font, scope:"all"}`. The picker is V3 (release L5, below; behind the `looks` switch);
+  account deletion clears it, "Download my data" includes it.
+- **Triggers** (all gated by the topic's switch, `(topic, entity)` only, never on points / xp): identity - `users`
+  insert / delete / the link, status and fact columns, `telegram_links`, `account_deletions`, `account_merges` (insert,
+  and the upsert / chain re-point's update); looks - `users` insert / delete / the look's and `verified.js`'s columns, a
+  deletion's state, equips and the equipped copies (transfer, market lock), Telegram links and the sign-in links of
+  `verified.js`'s `SSO_PROOF_PROVIDERS` (Google and Apple; the one list its gates and the look's `verified` read), `premium_subs`
+  (the Season Pass holder; a Plus pad's owner), `plex_members`, donations, the badge showcase, `pad_user_flairs`, a pad's
+  owner change (both owners) and deletion. The trigger SQL names only `users` columns the database has; each start drops
+  and recreates the S1 triggers in one transaction. A setup failure is shown on `/admin/keys#seam` and keeps the two
+  switches from turning on.
+- **Snapshots:** `identity/changed` lists every account, every merged id and every deleted account; `looks/changed` the
+  accounts with a non-default look (the seam plan's default-look rule), found through candidate sources (avatars, text
+  styles, equips, flairs, showcases, donors - partial index `hub_s1_donors` - Plex members, Season Passes, Plus owners,
+  Pepe) and built 200 at a time.
+- **The looks call:** `POST /internal/v1/looks {ids: [hub account uuid] (1-450, lower case), card?}` →
+  `{v:1, items, missing}`, items in request order, duplicates ignored; an id resolves as the `users.userId` or through the
+  reverse map of `chatticket.subjectOf`, which catches up with `users` whenever an id doesn't resolve (every row
+  committed before the call; only rows it hasn't seen are hashed); purged, merged and deleted ids are `missing`. The
+  whole answer is read in one transaction (`dbUtils.tx`), so no other request's uncommitted write - a merge's DELETE that
+  rolls back - can make a live account `missing`. 404 while `looks` is off, 400 a malformed body or id, 413 over 450
+  ids; the nonce is taken durably first.
+- **Heartbeat:** `switches` gains `identity` and `looks` (additive); `version` is `1.99ads`. The version is informational:
+  the shared golden's S1 heartbeat keeps the test letter it was recorded with (`1.99adp`, the letter this release was
+  built under before the release letter rule gave it to a bot release), and the tests only check that it names one.
+- **Driver:** `link`, `unlink`, `moveLogin`, `merge` (now also `account_merges` and the row's removal), `cosmetic`,
+  `textStyle`, `looks` (`test/hubseam-driver-s1.test.js`).
+- **Turn-on (Q7, staging):** after release L1's topics: `identity` → `looks`, each once its hub topic is live and has
+  bootstrapped (`CHAT_HUB` needs both, with the rest of S1-D7's switches - Q4 / V1).
+
+## S1: the chat text-style picker (release L5, 1.99adt)
+
+S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set from a picker on Edit profile).
+
+- **Behind the `looks` switch** (1.99adt fix-up; `textstyle.pickerOn()` = `huboutbox.on("looks")`, the switch that sends text
+  styles to the chat hub): while it is off - the default, and until Q7 turns S1's switches on (ADR 0007 D19: nothing a
+  member sees changes before then) - Edit profile has no card and no jump link and loads no webfonts
+  (`textstyle.editData` answers nulls), `/settings` has no row, and the save route answers 404 (`{ok:false,
+  error:"not_found"}` for the page script; the site's own 404 for a form post), nothing written. A style saved while it was
+  on stays stored and comes back with the card. When V2 (release L4) adds `CHAT_HUB`, `pickerOn()` can require it too.
+- **One home:** the "Chat text style" card on Edit profile (`views/editProfile.ejs` `#textstyle`, between Avatar and Profile
+  layout, in the jump links). The `/settings` hub's Profile section links to it (`settingshub.js` row `textstyle`, after
+  Cosmetics) with the saved style as its state ("Blue · Mono", "Pixel", "Default"; the colour and font names are catalog
+  keys the hub view translates, `state.vk`); no other page has the control or posts to its route.
+- **Palette only:** the card offers Default plus the 16 palette colours (each swatch shows the dark | light pair, the name
+  in its dark-theme colour) and the six fonts (each drawn in its face; the three webfonts load from Google Fonts on this
+  page), all from `chat-text-styles.json` (`textstyle.choices()`). The form posts a palette KEY and a font key;
+  `textstyle.fromForm` stores the key's **dark-theme** value (the site's own theme) and refuses anything else - a typed hex
+  (even a palette value), a key outside the palette, an inherited name (`__proto__`), an unknown font - with 400
+  `bad_text_style`, nothing written. Default colour + Sans clears the column (NULL). The hub turns a palette value of
+  either theme into that palette's pair (chat-core `validateTextColor`, S1 V3's platform part), so a style stored by Q5b's
+  driver with the light value (the shared golden's `#1d4ed8`) and one stored by the picker look the same.
+- **Preview:** one chat line (the member's display name, a sample sentence, an `@Pepe` mention in the chat's link colour) on
+  each chat theme's background - the registry's first background and link accent of each theme - with the chosen pair and
+  face (and the pixel face's size scale). Server-rendered from the saved style; the page script repaints it on every
+  change and says "Not saved yet." until Save.
+- **Save:** `POST /api/u/<me>/update/textstyle {color, font}` (`textstyle.register`): signed in, your own name, same site
+  (`authGuard.sameSite`), at most 30 posts per member per 10 minutes - refused ones count too, so probing the palette is
+  slowed like saving (each saved change is one `looks/changed` row while the switch is on). Every answer is
+  `Cache-Control: private, no-store`. The page script sends `Accept: application/json` and gets `{ok, style: {color: key |
+  null, font}}` (400 `bad_text_style`, 401 `signin`, 403 `not_yours` / `cross_site`, 404 `not_found` while the switch is off,
+  429 `slow`, 500 `error`); without JS the form posts and comes back to `#textstyle` with a flash. A failed save logs
+  `[textstyle] save: <error>` only - no account, name or posted value. Setting the column is `textstyle.set`
+  (`dbUtils.tx`), the one place the site sets it (the picker and the contract driver both go through it); account
+  deletion's tombstone clears it (`accountdelete.js` step 8, part of its column map). With the `looks` switch on, the
+  `users.text_style` trigger queues the member's `looks/changed` row either way.
+- **Font stacks:** the view prints a font's stack into a `style` attribute, so `choices()` keeps only stacks made of letters,
+  digits, spaces and `, " ' ( ) . -` (`textstyle.SAFE_STACK`; the registry's six are), and the Google Fonts address only
+  plain family names.
+- **Tests:** `test/textstyle-picker.test.js` (choices = the registry, the stack and webfont guards on a hostile registry,
+  `fromForm` refusals and every key x font round trip, the route's checks, `private, no-store` on every answer, its limit -
+  refused posts counted - and both answers, a failed save's answer and log, the card rendered with and without a saved
+  style, one home: the only poster, and every server file that names the column with what it does - `textstyle.js` sets,
+  `accountdelete.js` clears, `hublooks.js` / `userlook.js` read - the hub row and its states, and the `looks` switch off
+  and on); `test/settingshub.test.js` (looks on) lists the row and the card's ids (one home per setting).
+- **i18n:** new keys only - `textstyle.*` (the palette's and the fonts' `label_key`s from the registry, the card's copy),
+  `sethub.e/d.textstyle`, `sethub.st.ts*`, `js.textstyle.*`; the sync translates them after the staging push.
+
 ## Fixtures and the contract suite
 
 - `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo
   and pinned by sha256 in both (`test/hubsign.test.js`; `PATV_HUB_DIR=<hub checkout>` also compares the copies). The
-  golden rows are what each v1 builder must produce (`test/hubseam-golden.test.js`) and what the hub makes of them.
-  `.gitattributes` keeps them LF on every checkout.
+  golden rows are what each v1 builder must produce (`test/hubseam-golden.test.js`; 1.99ads: the S1 section `s1` -
+  `test/huboutbox-s1.test.js` for identity and looks) and what the hub makes of them. `.gitattributes` keeps them LF on
+  every checkout.
 - `tools/hubseam-driver.js` is v1's side of the hub's contract suite (`services/rooms/test/seam-contract.integration.test.ts`,
   run with `PATV_V1_DIR` pointing at this checkout): v1's real modules on a throwaway SQLite database in a fresh directory
   under the OS temp dir (it refuses any other), driven over JSON lines on stdin / stdout. It is outside `test/` on purpose
@@ -263,8 +375,8 @@ so.
 ## Switches (`/admin/keys#seam`)
 
 `hubseam_settings`: `tickets`, `heartbeat`, `sessions`, `privacy`, 1.99acm: `erasure` (`privacy/account-deleted` and
-`privacy/forget` - one fan-out, on together) and `export` (the hub part of "Download my data"), `econ` (all off) and
-`spans` (on). A topic whose switch is off writes nothing and serves no snapshot. `tickets` can only be on together with
+`privacy/forget` - one fan-out, on together) and `export` (the hub part of "Download my data"), `econ`, 1.99ads: `identity`
+and `looks` (the S1 topics above; `looks` also gates the hub's looks call) - all off - and `spans` (on). A topic whose switch is off writes nothing and serves no snapshot. `tickets` can only be on together with
 `sessions` and `heartbeat` (above). The turn-on order on staging: hub `SEAM_ENABLED` → `heartbeat` → `sessions` →
 `privacy` → (S1) `erasure`, `export`. `/admin/keys#seam` also shows the seam environment and any outbound refusal, the
 per-topic queues, the hub's last snapshot and rewind calls and refusals, and exports waiting for the hub.

@@ -10,6 +10,8 @@ deploy/** text eol=lf
 test/fixtures/hubseam-*.json text eol=lf
 # The Admin › Backends contract fixture shared byte-for-byte with camfrog-bot (ci/fixtures/; sha256 pinned in both)
 test/fixtures/backends-contract.json text eol=lf
+# S1 Q5b: rt-schema's registry/text-styles.json, byte for byte (sha256 pinned in test/huboutbox-s1.test.js)
+chat-text-styles.json text eol=lf
 
 # CL10: the chat-log download golden files ("PATV chat log v1": compared byte for byte - LF line ends, whatever the checkout)
 test/fixtures/chatlog/golden-* text eol=lf

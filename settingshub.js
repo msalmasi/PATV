@@ -7,9 +7,10 @@
 // ("Telegram: linked", "Likeness: 5 of 5 on"). Every state read is guarded: a module that fails leaves its row without a
 // state, never breaks the page.
 //
-// hub(user, ctx) -> [{ id, entries: [{ id, icon, href, title, desc, state: { k, v, tone } | null }] }]
+// hub(user, ctx) -> [{ id, entries: [{ id, icon, href, title, desc, state: { k, v, tone, vk? } | null }] }]
 //   title / desc / state.k are i18n keys under sethub.* (the view translates them); entries with a raw title (a pad name)
-//   carry `raw: true`. tests: test/settingshub.test.js (renders, redirects, and every link resolves to a real route).
+//   carry `raw: true`; state.vk = {var: catalog key} - values the view translates and inserts with a raw {!var} (S1 V3).
+//   tests: test/settingshub.test.js (renders, redirects, and every link resolves to a real route).
 
 const { getQuery } = require("./dbUtils");
 
@@ -49,10 +50,19 @@ async function hub(user, ctx = {}) {
   ];
 
   // ── Profile: how others see you (one home: Edit profile - linked, never copied here) ──
+  // S1 V3: the chat text style (textstyle.js; its home is Edit profile #textstyle) - the state names the colour and the font,
+  // as catalog keys the view translates (`vk`, inserted raw: catalog text is HTML-safe). No row while the picker is off
+  // (the `looks` switch, textstyle.pickerOn).
+  const TS = require("./textstyle");
+  const tsOn = TS.pickerOn();
+  const ts = tsOn ? await safe(async () => TS.pickerState(await TS.get(uid))) : null;
+  const tsSt = !ts ? null : !ts.color && ts.font === "sans" ? st("ts_default")
+    : Object.assign(ts.color ? st("ts") : st("ts_font"), { vk: Object.assign(ts.color ? { color: "textstyle.color." + ts.color } : {}, { font: "textstyle.font." + ts.font }) });
   const profile = [
     E("profile", "✏️", edit),
     E("feed", "📝", "/u/" + me + "/posts#profile-settings"),
     E("cosmetics", "🎨", "/cosmetics"),
+    ...(tsOn ? [E("textstyle", "🔤", edit + "#textstyle", tsSt)] : []),
     E("stickers", "🧸", "/cosmetics?tab=stickers"),
   ];
 

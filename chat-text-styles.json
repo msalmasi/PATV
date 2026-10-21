@@ -1,0 +1,148 @@
+{
+  "$comment": "PATV text styles (decision 51, §5.5, ADR 0004 rule 9; ADR 0007 D13): the free 16-colour palette, the reserved accents a style may not imitate, and the six fonts. A look's text.color is either one of these palette pairs or any colour a text_style item unlocks, and every colour must pass the same validation (contrast_min against every background of its theme, CIEDE2000 >= delta_e.min from every reserved accent of that theme). v1 owns users.text_style (picker on the Edit profile page) until P-4; the hub validates on apply (H9) and chat-core/looks re-checks before rendering. status stable: the owner confirmed the palette values and reserved accents (ADR 0007 OQ-10, answered 2026-10-19), so they freeze with S1; a later change bumps version.",
+  "version": 1,
+  "status": "stable",
+  "contrast_min": 4.5,
+  "delta_e": {
+    "formula": "ciede2000",
+    "min": 10
+  },
+  "backgrounds": {
+    "dark": ["#0f0f11", "#121212", "#18181b", "#1d1d22"],
+    "light": ["#ffffff", "#f4f4f5", "#ececef"]
+  },
+  "reserved_accents": {
+    "system": {
+      "dark": "#c9b46a",
+      "light": "#6b5a1c",
+      "use": "system lines (v1 .sys colour)"
+    },
+    "mod": {
+      "dark": "#ffcf40",
+      "light": "#8a6400",
+      "use": "mod, staff and admin marks (the PATV gold)"
+    },
+    "bot": {
+      "dark": "#9fb3c8",
+      "light": "#55606b",
+      "use": "bot names and badges"
+    },
+    "link": {
+      "dark": "#81c784",
+      "light": "#276b2b",
+      "use": "links and the PATV green accent"
+    }
+  },
+  "palette": {
+    "red": {
+      "dark": "#f87171",
+      "light": "#b91c1c",
+      "label_key": "textstyle.color.red"
+    },
+    "orange": {
+      "dark": "#fb923c",
+      "light": "#a33a0b",
+      "label_key": "textstyle.color.orange"
+    },
+    "amber": {
+      "dark": "#f59e0b",
+      "light": "#9a4a06",
+      "label_key": "textstyle.color.amber"
+    },
+    "lime": {
+      "dark": "#a3e635",
+      "light": "#55700a",
+      "label_key": "textstyle.color.lime"
+    },
+    "emerald": {
+      "dark": "#10b981",
+      "light": "#065f46",
+      "label_key": "textstyle.color.emerald"
+    },
+    "teal": {
+      "dark": "#2dd4bf",
+      "light": "#0f766e",
+      "label_key": "textstyle.color.teal"
+    },
+    "cyan": {
+      "dark": "#22d3ee",
+      "light": "#0e7490",
+      "label_key": "textstyle.color.cyan"
+    },
+    "sky": {
+      "dark": "#38bdf8",
+      "light": "#0369a1",
+      "label_key": "textstyle.color.sky"
+    },
+    "blue": {
+      "dark": "#60a5fa",
+      "light": "#1d4ed8",
+      "label_key": "textstyle.color.blue"
+    },
+    "indigo": {
+      "dark": "#818cf8",
+      "light": "#4338ca",
+      "label_key": "textstyle.color.indigo"
+    },
+    "violet": {
+      "dark": "#a78bfa",
+      "light": "#6d28d9",
+      "label_key": "textstyle.color.violet"
+    },
+    "purple": {
+      "dark": "#c084fc",
+      "light": "#7e22ce",
+      "label_key": "textstyle.color.purple"
+    },
+    "fuchsia": {
+      "dark": "#e879f9",
+      "light": "#a21caf",
+      "label_key": "textstyle.color.fuchsia"
+    },
+    "pink": {
+      "dark": "#f472b6",
+      "light": "#be185d",
+      "label_key": "textstyle.color.pink"
+    },
+    "rose": {
+      "dark": "#fb7185",
+      "light": "#be123c",
+      "label_key": "textstyle.color.rose"
+    },
+    "brown": {
+      "dark": "#d6a77a",
+      "light": "#7c4a1e",
+      "label_key": "textstyle.color.brown"
+    }
+  },
+  "fonts": {
+    "sans": {
+      "label_key": "textstyle.font.sans",
+      "stack": "var(--ds-font, Ubuntu, system-ui, sans-serif)"
+    },
+    "serif": {
+      "label_key": "textstyle.font.serif",
+      "stack": "Georgia, Cambria, \"Times New Roman\", serif"
+    },
+    "mono": {
+      "label_key": "textstyle.font.mono",
+      "stack": "ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", monospace"
+    },
+    "rounded": {
+      "label_key": "textstyle.font.rounded",
+      "stack": "\"Nunito\", ui-rounded, \"SF Pro Rounded\", system-ui, sans-serif",
+      "webfont": "Nunito"
+    },
+    "comic": {
+      "label_key": "textstyle.font.comic",
+      "stack": "\"Comic Neue\", \"Comic Sans MS\", \"Chalkboard SE\", cursive",
+      "webfont": "Comic Neue"
+    },
+    "pixel": {
+      "label_key": "textstyle.font.pixel",
+      "stack": "\"Press Start 2P\", ui-monospace, monospace",
+      "webfont": "Press Start 2P",
+      "size_scale": 0.75
+    }
+  }
+}

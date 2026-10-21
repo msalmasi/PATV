@@ -24,7 +24,7 @@ const built = (async () => {
   const run = (q) => new Promise((res, rej) => db.exec(q, (e) => (e ? rej(e) : res())));
   await run(schemaSql());
   for (const [, v] of scanSource(repo)) for (const sql of v.creates) await run(sql).catch(() => {});
-  for (const c of ["archived_at INTEGER", "password_set INTEGER", "twitchLogin TEXT", "auto_source TEXT", "displayname_auto INTEGER", "age_confirmed_at INTEGER", "age_confirmed_v TEXT"]) await run(`ALTER TABLE users ADD COLUMN ${c}`).catch(() => {});
+  for (const c of ["archived_at INTEGER", "password_set INTEGER", "twitchLogin TEXT", "auto_source TEXT", "displayname_auto INTEGER", "age_confirmed_at INTEGER", "age_confirmed_v TEXT", "text_style TEXT"]) await run(`ALTER TABLE users ADD COLUMN ${c}`).catch(() => {});
   await new Promise((r) => db.close(r));
 })();
 
@@ -157,6 +157,7 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
   await runQuery("INSERT INTO webpush_outbox (user_id, kind, src_key, url, tag, due_at, created) VALUES ('del', 'dm', 'dm:x:1', '/messages', 'dm:x', 1, 1)");
   // adultgate site: the age confirmation (users.age_confirmed_at) + the Creators one (age_attest); the 18+ gate knows them
   await runQuery("UPDATE users SET age_confirmed_at = 1760000000000, age_confirmed_v = '2026-10-19' WHERE userId = 'del'");
+  await runQuery(`UPDATE users SET text_style = '{"color":"#60a5fa","font":"mono"}' WHERE userId = 'del'`);   // S1 Q5b
   await runQuery("INSERT INTO age_attest (user_id, version, at) VALUES ('del', '2026-10-11', 1)");
   // ...and the 18+ gate's switch row names them as the owner who last flipped it (shown on /pads/admin#adult)
   await runQuery("INSERT INTO adult_gate_cfg (key, value, updated, by) VALUES ('enabled', '0', 1, 'deleteme')");
@@ -206,6 +207,7 @@ test("the job: balance routed by the PAT Routing row (supply exact, keyed), post
   assert.equal(await bcrypt.compare("pw-12345678", u.password), false, "nobody can sign in to it");
   assert.equal(u.age_confirmed_at, null, "adultgate site: the age confirmation goes with the person");
   assert.equal(u.age_confirmed_v, null, "with its wording's version");
+  assert.equal(u.text_style, null, "S1 Q5b: the chat text style goes with the person");
   assert.equal((await getQuery("SELECT by FROM adult_gate_cfg WHERE key = 'enabled'"))[0].by, u.username, "the switch's 'last changed by' is pseudonymised");
   assert.ok(D.NAME_COLUMNS.includes("adult_gate_cfg.by"));
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM age_attest WHERE user_id = 'del'"))[0].n, 0, "so does the Creators one");

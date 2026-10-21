@@ -45,6 +45,9 @@
 const { getQuery } = require("./dbUtils");
 
 const COLUMN_PROOFS = [["camfrog", "camfrogUsername"], ["discord", "discordId"], ["twitch", "twitchId"]];
+// The sign-in providers whose self-linked sso_links row is a proof. ONE list (S1 Q5b review): the gates (tableProofs), the
+// chat hub's looks (tableProofsMany) and the looks triggers on sso_links (hublooks.js) all read it, so they can't disagree.
+const SSO_PROOF_PROVIDERS = ["google", "apple"];        // staging 1.99adn: Sign in with Apple is a proof
 const CACHE_MS = 60 * 1000;
 const cache = new Map();          // userId -> {at, list}  (the table proofs only)
 
@@ -72,8 +75,9 @@ async function tableProofs(userId, { fresh = false } = {}) {
   const list = [];
   if ((await rows("SELECT 1 FROM users WHERE userId = ? AND isEmailVerified = 1 AND email LIKE '%@%' LIMIT 1", [id])).length) list.push("email");
   if ((await rows("SELECT 1 FROM telegram_links WHERE user_id = ? LIMIT 1", [id])).length) list.push("telegram");
-  if ((await rows("SELECT 1 FROM sso_links WHERE provider = 'google' AND user_id = ? AND link_source = 'self' LIMIT 1", [id])).length) list.push("google");
-  if ((await rows("SELECT 1 FROM sso_links WHERE provider = 'apple' AND user_id = ? AND link_source = 'self' LIMIT 1", [id])).length) list.push("apple");
+  for (const p of SSO_PROOF_PROVIDERS) {
+    if ((await rows("SELECT 1 FROM sso_links WHERE provider = ? AND user_id = ? AND link_source = 'self' LIMIT 1", [p, id])).length) list.push(p);
+  }
   let trusted = ["self", "admin", "wizarr", "overseerr"];
   try { trusted = require("./plexsso").TRUSTED || trusted; } catch (e) { /* keep the copy */ }
   if ((await rows(`SELECT 1 FROM plex_members WHERE user_id = ? AND link_source IN (${trusted.map(() => "?").join(",")}) LIMIT 1`,
@@ -81,6 +85,37 @@ async function tableProofs(userId, { fresh = false } = {}) {
   cache.set(id, { at: Date.now(), list });
   if (cache.size > 5000) for (const [k, v] of cache) if (Date.now() - v.at > CACHE_MS) cache.delete(k);
   return list;
+}
+
+/** A read for tableProofsMany: a table this site doesn't have yet has no rows; any other error is thrown (the looks' poster
+ *  then backs off and retries - a look posted without a proof it has would move the hub's v for nothing). */
+async function strictRows(sql, args) {
+  try { return await getQuery(sql, args); } catch (e) { if (/no such table/i.test(String(e && e.message))) return []; throw e; }
+}
+
+/** S1 Q5b: tableProofs for many accounts at once, uncached (the chat hub's looks: userlook.buildLooks reads them when it
+ *  posts). The same proofs as tableProofs (the same SSO_PROOF_PROVIDERS). -> Map(userId -> [proof]) (every id present,
+ *  [] when none). A failing read throws (strictRows). */
+async function tableProofsMany(userIds) {
+  const ids = [...new Set([...(userIds || [])].filter(Boolean).map(String))];
+  const out = new Map(ids.map((id) => [id, []]));
+  let trusted = ["self", "admin", "wizarr", "overseerr"];
+  try { trusted = require("./plexsso").TRUSTED || trusted; } catch (e) { /* keep the copy */ }
+  const sso = SSO_PROOF_PROVIDERS.map(() => "?").join(",");
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    const qs = part.map(() => "?").join(",");
+    const add = (rows, key, proof) => {
+      for (const r of rows) { const l = out.get(String(r[key])); const p = proof || String(r.provider); if (l && !l.includes(p)) l.push(p); }
+    };
+    add(await strictRows(`SELECT userId FROM users WHERE userId IN (${qs}) AND isEmailVerified = 1 AND email LIKE '%@%'`, part), "userId", "email");
+    add(await strictRows(`SELECT user_id FROM telegram_links WHERE user_id IN (${qs})`, part), "user_id", "telegram");
+    add(await strictRows(`SELECT user_id, provider FROM sso_links WHERE provider IN (${sso}) AND link_source = 'self' AND user_id IN (${qs})
+                          ORDER BY provider`, [...SSO_PROOF_PROVIDERS, ...part]), "user_id", null);
+    add(await strictRows(`SELECT user_id FROM plex_members WHERE user_id IN (${qs}) AND link_source IN (${trusted.map(() => "?").join(",")})`,
+      [...part, ...trusted]), "user_id", "plex");
+  }
+  return out;
 }
 
 /** Attach `proofs` (every proven identity) to an account row and return it. Needs u.userId. */
@@ -111,4 +146,4 @@ function forget(userId) { cache.delete(String(userId || "")); }
 // The refusal copy every converted gate uses for "link something first".
 const LINK_HINT = "verify your email address, or link an account in Settings → Account → Connections (a chat account - for Camfrog, type !verify in a room with Pepe - or Discord, Twitch, Telegram, Google, Apple or Plex)";
 
-module.exports = { isVerified, verify, attach, tableProofs, columnProofs, forget, LINK_HINT, _cache: cache };
+module.exports = { isVerified, verify, attach, tableProofs, tableProofsMany, columnProofs, forget, LINK_HINT, SSO_PROOF_PROVIDERS, _cache: cache };

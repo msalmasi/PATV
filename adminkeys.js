@@ -12,7 +12,8 @@
 //   POST /api/admin/keys/settings {enabled, bad_key, events, control_get}  the header kill switch, unresolvable keys, the
 //                                          /events mode, the VM's old GET claim of /api/pepe/control/pending (allow | refuse)
 //   POST /api/admin/hubseam/settings {tickets, heartbeat, sessions, privacy, erasure, export, econ, spans}   (1.99acm: + erasure, export;
-//                                          the page also shows the seam env, topic queues, the hub's calls in, exports waiting)
+//                                          the page also shows the seam env, topic queues, the hub's calls in, exports waiting;
+//                                          1.99ads: + identity, looks - the S1 topics, their setup and the hub's looks lookups)
 //   POST /api/admin/hubseam/unhide {login | h, kind, reason}   1.99add: un-hide one chat login in Pepe's sticky hidden set
 //                                          (hubhidden.js) - refix 4: one kind (bridge | incognito | unknown) or all
 //   POST /api/admin/hubseam/check {login | h}             1.99add: look one up there (kinds, held, missing once) - changes nothing,

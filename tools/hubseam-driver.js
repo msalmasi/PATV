@@ -33,7 +33,16 @@
 //   flush                       -> {posted, pending}    the poster until nothing is pending (or ~15 s)
 //   heartbeat                   -> {status}
 //   faultAfter2xx {on}          -> {}               exit(137) between the hub's 2xx and posted_at (huboutbox._setFault)
-// Never run it against anything but a test hub with test keys.
+// 1.99ads (S1 Q5b - seam-contract.md "Driver commands S1 adds", the identity and looks part; Q4 adds the pad / role / ban /
+// switch commands):
+//   merge {from, into}          (above) now also records account_merges (ledger.recordMerge) and removes the merged users row,
+//                               as accountMerge.js does - the identity/changed "merged" row and the looks' "gone"
+//   link {user, platform, id, login?, display?} | unlink {user, platform}   camfrog | discord | twitch (users columns),
+//                               telegram (telegram_links), google (sso_links, link_source self)
+//   moveLogin {login, from, to}                     a Camfrog login moved straight from one account to another (one tx)
+//   cosmetic {action: grant | equip | unequip, user, item}  -> {inv_id}   cosmetics.grant / cosmetics.equip
+//   textStyle {user, color?, font?} (null clears)   -> {style}   textstyle.set (W1 palette colours, the six fonts)
+//   looks {ids, card?}          -> {status, body}   the looks call's answer (hublooks.call - what POST /internal/v1/looks serves)
 "use strict";
 const crypto = require("crypto");
 const fs = require("fs");
@@ -171,9 +180,70 @@ const CMDS = {
     await M.db.tx(async () => {
       await M.sessions.revokeForMerge(String(from), String(into));
       await M.db.runQuery("INSERT INTO account_merge_log (at, via, from_id, to_id) VALUES (?, 'driver', ?, ?)", [Date.now(), String(from), String(into)]);
+      // 1.99ads: the S1 record of the merge (identity/changed "merged", looks "gone") - ledger.recordMerge + the row's removal
+      await require(path.join(repo, "ledger")).recordMerge(String(from), String(into), "hubseam-driver");
+      await M.db.runQuery("DELETE FROM users WHERE userId = ?", [String(from)]);
     });
     return {};
   },
+  // ── 1.99ads (S1 Q5b): identity and looks ──
+  async link({ user, platform, id, login, display }) {
+    await boot();
+    const u = String(user), x = String(id);
+    if (platform === "camfrog") await M.db.runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", [login || x, u]);
+    else if (platform === "discord") await M.db.runQuery("UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?", [x, login || null, u]);
+    else if (platform === "twitch") await M.db.runQuery("UPDATE users SET twitchId = ?, twitchLogin = ?, twitchDisplayname = ? WHERE userId = ?", [x, login || null, display || null, u]);
+    else if (platform === "telegram") {
+      await require(path.join(repo, "telegram")).init();
+      await M.db.runQuery(`INSERT INTO telegram_links (user_id, tg_id, handle, linked_at) VALUES (?, ?, ?, ?)
+                           ON CONFLICT(user_id) DO UPDATE SET tg_id = excluded.tg_id, handle = excluded.handle`, [u, x, login || null, Date.now()]);
+    } else if (platform === "google") {
+      await require(path.join(repo, "ssolinks")).init();
+      await M.db.runQuery(`INSERT OR REPLACE INTO sso_links (provider, subject, user_id, link_source, proof, linked_at) VALUES ('google', ?, ?, 'self', 'driver', ?)`,
+                          [x, u, Date.now()]);
+    } else throw new Error("unknown platform " + platform);
+    return {};
+  },
+  async unlink({ user, platform }) {
+    await boot();
+    const u = String(user);
+    const sql = { camfrog: "UPDATE users SET camfrogUsername = NULL WHERE userId = ?", discord: "UPDATE users SET discordId = NULL, discordUsername = NULL WHERE userId = ?",
+                  twitch: "UPDATE users SET twitchId = NULL, twitchLogin = NULL, twitchDisplayname = NULL WHERE userId = ?",
+                  telegram: "DELETE FROM telegram_links WHERE user_id = ?", google: "DELETE FROM sso_links WHERE provider = 'google' AND user_id = ?" }[platform];
+    if (!sql) throw new Error("unknown platform " + platform);
+    await M.db.runQuery(sql, [u]);
+    return {};
+  },
+  async moveLogin({ login, from, to }) {
+    await boot();
+    await M.db.tx(async () => {
+      await M.db.runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [String(from)]);
+      await M.db.runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", [String(login), String(to)]);
+    });
+    return {};
+  },
+  async cosmetic({ action, user, item }) {
+    await boot();
+    const C = require(path.join(repo, "cosmetics"));
+    await C.ready;
+    const u = String(user);
+    if (action === "grant") {
+      const r = await C.grant(u, String(item), "driver", `driver-${u}-${item}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`);
+      if (!r.ok) throw new Error(r.error);
+      return { inv_id: r.inv_id };
+    }
+    const c = (await M.db.getQuery("SELECT id FROM user_cosmetics WHERE user_id = ? AND item_id = ? ORDER BY id DESC LIMIT 1", [u, String(item)]))[0];
+    if (!c) throw new Error("not owned");
+    const r = await C.equip(u, c.id, action === "equip");
+    if (!r.ok) throw new Error(r.error);
+    return { inv_id: c.id };
+  },
+  async textStyle({ user, color, font }) {
+    await boot();
+    const style = color == null && font == null ? null : { color: color == null ? null : color, font: font == null ? null : font };
+    return { style: await require(path.join(repo, "textstyle")).set(String(user), style) };
+  },
+  async looks({ ids, card }) { await boot(); return require(path.join(repo, "hublooks")).call({ ids, ...(card === undefined ? {} : { card }) }); },
   async incognito({ user, on }) { await boot(); return M.incognito.request(String(user), on === true); },
   async pepeSync({ items }) { await boot(); return M.incognito.sync({ items: items || [] }); },
   async privateActivity({ user, on }) { await boot(); await M.pl.save(String(user), { hidden: on ? ["analytics"] : [] }); return {}; },

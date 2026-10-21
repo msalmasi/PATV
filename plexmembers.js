@@ -206,6 +206,26 @@ async function memberFor(userId, t = clock()) {
   return best ? { plex_id: best.plex_id, username: best.username, access: best.access, expires: best.expires == null ? null : Number(best.expires) } : null;
 }
 
+/** S1 Q5b: memberFor for many accounts at once, uncached (the chat hub's looks: userlook.buildLooks). The caller has run init().
+ *  -> Map(userId -> {access, expires (ms | null = never)}) for the active members among them. A read error other than a
+ *  missing table is thrown (the looks' poster backs off rather than post a look without the Plex flair). */
+const noTable = (e) => { if (/no such table/i.test(String(e && e.message))) return []; throw e; };
+async function membersFor(userIds, t = clock()) {
+  const ids = [...new Set([...(userIds || [])].filter(Boolean).map(String))];
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    const rows = await getQuery(`SELECT * FROM plex_members WHERE on_server = 1 AND user_id IN (${part.map(() => "?").join(",")})`, part).catch(noTable);
+    for (const r of rows) {
+      if (!isActiveRow(r, t)) continue;
+      const v = { access: r.access, expires: r.expires == null ? null : Number(r.expires) };
+      const cur = out.get(String(r.user_id));
+      if (!cur || (cur.expires != null && (v.expires == null || v.expires > cur.expires))) out.set(String(r.user_id), v);
+    }
+  }
+  return out;
+}
+
 // after the active set changed: Plex perk cosmetics for the new members, name styles / flair re-render
 async function afterChange(before, after) {
   const fresh = [...after.keys()].filter((u) => !before.has(u));
@@ -743,7 +763,7 @@ function register(app, { addUser, noTimers } = {}) {
 }
 
 module.exports = {
-  init, register, sync, refreshUser, achMetrics, achCheck, revoke, adminLink, adminPin, adminState, mine, memberFor, memberSync, memberByName, patvAccess, classify,
+  init, register, sync, refreshUser, achMetrics, achCheck, revoke, adminLink, adminPin, adminState, mine, memberFor, membersFor, memberSync, memberByName, patvAccess, classify,
   isActiveRow, isCandidate, isOwnerRow, OWNER, emailHash, linkStart, linkCheck, linkSelf, unlinkSelf, reload, row, Refuse, PATV_TYPES, KEEP_TYPES, LINK_SOURCES,
   // 1.99jr: Sign in with Plex (plexsso.js) shares the PATV client id + the plex.tv caller (tests swap it with _set)
   plexApi: (...a) => plexTv(...a), clientId: () => CLIENT_ID(), site: () => SITE(),

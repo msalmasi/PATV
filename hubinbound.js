@@ -5,6 +5,9 @@
 //                                                  bootstrap and 10-minute repair pull. 404 while the topic's switch is off.
 //   POST /internal/v1/outbox/rewind {topic, after_id}   kept hub_outbox rows of the topic above after_id are posted again
 //                                                  (huboutbox.rewind) - the promotion runbook (§15.4)
+//   POST /internal/v1/looks {ids, card?}           1.99ads (S1 Q5b, seam plan §12.7): the structured looks of up to 450 hub
+//                                                  account ids (hublooks.call -> {v, items, missing}); 404 while the looks
+//                                                  switch is off, 400 a malformed body or id, 413 over 450 ids
 //
 // Every request is HMAC-signed by the hub (hubsign.verifyFrom): key ids "hub-<env>-<n>" only (this site's env, HUB_V1_ENV),
 // the current key HUB_V1_IN_KEY_ID / HUB_V1_IN_KEY and, during a rotation, HUB_V1_IN_PREV_KEY_ID / HUB_V1_IN_PREV_KEY. The
@@ -31,7 +34,7 @@ const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const LIMIT = "64kb";
-const ROUTES = ["snapshot", "rewind"];
+const ROUTES = ["snapshot", "rewind", "looks"];
 const PREFIX = "/internal/v1/";
 const NONCE_KEEP_MS = 10 * 60 * 1000;
 const WARN_EVERY_MS = 60 * 1000;
@@ -122,7 +125,8 @@ function handler() {
                                                   headers: (n) => req.get(n), keys: keys(), now: now() });
       let u;
       try { u = new URL(req.originalUrl, "http://v1.invalid"); } catch (e) { u = null; }
-      const route = u && u.pathname.startsWith("/internal/v1/snapshot/") ? "snapshot" : u && u.pathname === "/internal/v1/outbox/rewind" ? "rewind" : null;
+      const route = u && u.pathname.startsWith("/internal/v1/snapshot/") ? "snapshot" : u && u.pathname === "/internal/v1/outbox/rewind" ? "rewind"
+        : u && u.pathname === "/internal/v1/looks" ? "looks" : null;
       if (!v.ok) {
         const status = STATUS[v.error] || 401;
         note(route, status, v.error);
@@ -166,6 +170,16 @@ async function serve(route, req, res, u, body, claim) {
     note(route, 200, null);
     console.log(`[hubinbound] rewind ${b.topic} after ${b.after_id}: ${r.reposted} row(s) to post again`);
     return res.json(r);
+  }
+  if (route === "looks" && req.method === "POST") {
+    if (!(await takeNonce(claim.keyId, claim.nonce, claim.ts))) throw replay();
+    if (!ho.on("looks")) { note(route, 404, "looks_off"); return res.status(404).json({ ok: false, error: "not_found" }); }   // like an unknown path
+    let b;
+    try { b = JSON.parse(body.toString("utf8")); } catch (e) { note(route, 400, "bad_body"); return res.status(400).json({ ok: false, error: "bad_body" }); }
+    const r = await require("./hublooks").call(b);
+    note(route, r.status, r.status === 200 ? null : r.body.error);
+    if (r.status === 200) console.log(`[hubinbound] looks: ${r.body.items.length} item(s), ${r.body.missing.length} missing`);
+    return res.status(r.status).json(r.body);
   }
   note(null, 404, "no_route");
   return res.status(404).json({ ok: false, error: "not_found" });

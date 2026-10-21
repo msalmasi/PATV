@@ -46,7 +46,8 @@ test("1.99re items: slots, prices, availability", () => {
 });
 
 test("cosmetics.js knows the new layers", () => {
-  const src = require("fs").readFileSync(path.join(repo, "cosmetics.js"), "utf8");
+  // S1 Q5a (1.99ads): the layer enums moved to cosmeticstyle.js (cosmetics.js imports them; the chat hub's looks use them too)
+  const src = ["cosmetics.js", "cosmeticstyle.js"].map((f) => require("fs").readFileSync(path.join(repo, f), "utf8")).join("\n");
   for (const l of ["alien", "reaper", "scythe", "skateboard"]) assert.match(src, new RegExp(`"${l}"`));
 });
 

@@ -76,6 +76,18 @@ body.ow-body { display: flex; align-items: center; justify-content: center; }
 .ow #centerImage { position: absolute; top: 50%; left: 50%; width: 21%; height: 21%; transform: translate(-50%, -50%);
                    object-fit: contain; z-index: 5; background: none; border: 0; box-shadow: none; pointer-events: none;
                    filter: drop-shadow(0 0 .8cqw rgba(0,0,0,.6)) drop-shadow(0 0 2cqw rgba(255,198,0,.45)); }
+/* The jackpot slice's glow pulse between spins (publicwheel.js #jpGlow, 1.99ado): a ray from the centre to the rim,
+   rotated onto the slice by the script, fading in and out on an opacity animation - composited, so the canvas is
+   drawn once while idle instead of repainted ~16 times a second (that leaked OBS's browser GPU memory until the
+   overlay crashed). Length = the canvas's drawing radius (its 1.1cqw border off the half). One cycle ~1.57 s,
+   the old sin(t / 250 ms) pulse. Hidden (the [hidden] attribute) while the wheel spins. */
+.ow #jpGlow { position: absolute; left: 50%; top: 50%; width: calc(50% - 1.1cqw); height: .6cqw; margin-top: -.3cqw;
+              transform-origin: 0 50%; border-radius: .3cqw; background: #fff3b0;
+              box-shadow: 0 0 1.2cqw .3cqw rgba(255,215,0,.9), 0 0 2.6cqw .6cqw rgba(255,215,0,.5);
+              opacity: 0; pointer-events: none; z-index: 4; will-change: opacity;
+              animation: ow-jpglow .785s ease-in-out infinite alternate; }
+.ow #jpGlow[hidden] { display: none; }
+@keyframes ow-jpglow { from { opacity: 0; } to { opacity: .9; } }
 
 /* ---------- Result / winner banner (cqw = the wheel) ---------- */
 .ow #resultContainer { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
@@ -123,4 +135,5 @@ body.ow-body { display: flex; align-items: center; justify-content: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .ow-neon .f-slow, .ow-neon .f-fast, .ow-tag, .ow-banner { animation: none !important; }
+  .ow #jpGlow { animation: none !important; opacity: .5; }
 }
