@@ -361,11 +361,12 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
 - **i18n:** new keys only - `textstyle.*` (the palette's and the fonts' `label_key`s from the registry, the card's copy),
   `sethub.e/d.textstyle`, `sethub.st.ts*`, `js.textstyle.*`; the sync translates them after the staging push.
 
-## S1: the privacy UI - "Also remove my public messages" (release L4)
+## S1: the privacy UI - "Also remove my public messages" (release L4's V4 part, 1.99ady)
 
 S1 plan §2.5 V4 (ADR 0007 D16; OQ-20, answered 2026-10-19: the choice also hard-deletes the account's web lines in the pad
 chat archive, with the same exceptions, under one checkbox wording; CHAT-ARCHITECTURE rev 5.1 §9.4, seam plan D-23). Release
-L4 with V2; the letter is the staging merge's (ADR 0007 D19).
+L4 is V2 + V4; V4 reached v1 staging first, on its own, as **1.99ady** (2026-10-21; the staging merge carries the letter,
+ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape change, so `huboutbox.VERSION` stays 1.99ads.
 
 - **Behind the `erasure` switch** (`accountdelete.removeOffered()` = `huboutbox.on("erasure")`; off by default, so nothing a
   member sees changes until `erasure` goes on): while it is off the delete page has no box and no PATV chat copy, the privacy
