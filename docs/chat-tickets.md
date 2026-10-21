@@ -363,57 +363,59 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
 ## S1: `/admin/chat`, the chat hub's break-glass (release L1, V1)
 
 S1 plan §2.5 V1; ADR 0007 D3 and D15, OQ-19; CHAT-ARCHITECTURE §8.5 (R-15, CF F4). Built beside Q4 (the rest of L1: the
-pads / roles / bans / switches topics, `listed`, the staff and canary pads); V1 changes no seam wire, so
-`huboutbox.VERSION` stays as it is.
+pads / roles / bans / switches topics, `listed`, the staff and canary pads) and in parallel with it; V1 changes no seam wire,
+so `huboutbox.VERSION` stays as it is.
 
-- **What it sets** (`chatswitches.js`, the only writer of both):
-  - `chat_switches(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)`: the global switches. One key
-    in S1, `CHAT_HUB` (`on` | `off`; no row reads as `off`). `rowOf(key)` / `all()` give the `switches/changed` payload
-    `{key, value, updated_at}` (every key, defaults included, for the snapshot); Q4's `AFTER INSERT / UPDATE OF value`
-    trigger on this table posts `sw:<key>` while the `switches` seam switch is on. `dm_backend` is S5's key and is refused
-    (`bad_key`) until then. `chatHubOn()` is the reader for V2's widget mount.
-  - `pad_hub.chat_backend` (S1-D1's table, `padhub.js`): `v1` | `hub`; `hub_read` is refused (`not_in_s1`, S2) and `hub`
-    only for a **site** pad (`site_only`: Camfrog, Twitch, Discord and profile pads keep their v1 chat in S1); a pad on any
-    backend can always go back to `v1`. `pad_hub.updated_by` gets the admin's **username** (an audit label: `accountMerge.js`
-    classifies it `deny`); `admin_audit` has the id. Q4's `pad_hub` trigger carries the change on `pads/changed`.
+- **What it sets** - the two v1-owned controls of ADR 0007 D3, set only here:
+  - `CHAT_HUB` in `chat_switches(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER, updated_by TEXT)`
+    (`chatswitches.js`: `on` | `off`, no row = `off`; `updated_by` is the admin's username, an audit label that
+    `accountMerge.js` classifies `deny`). `chatswitches.set(key, value, actor, {reason})` checks the key, the value and the
+    interlock in its transaction and writes the `chat.switch` audit row `{key, from, to}` after the commit; `dm_backend` is
+    S5's key and is refused (`bad_key`) until then. `chatHubOn()` is the reader for V2's widget mount.
+  - a pad's `pad_hub.chat_backend` (S1-D1's table): `padhub.setBackend(room_id, backend, actor)` - `v1` | `hub`; `hub_read`
+    is refused (409 `hub_read_s2`), `hub` only for a **site** pad (409 `site_pads_only`: Camfrog, Twitch, Discord and profile
+    pads keep their v1 chat in S1); any pad can always go back to `v1`. `updated_by` gets the admin's username; a
+    `room_events` row `chat-backend` too. `/admin/chat` runs it and its `chat.pad_backend` audit row
+    `{room_id, slug, hub_pad_id, from, to}` in one `dbUtils.tx`.
+  - `chatswitches.js` and `padhub.setBackend` are shared with Q4, which builds the same table, API and refusals in parallel
+    and adds the rest: the `switches/changed` topic on this table (triggers, payload `{key, value, updated_at}`, the
+    every-key snapshot), the `pads/changed` trigger that carries `chat_backend`, `huboutbox.setSettings`' half of the interlock
+    and `chat_switches` in the staging `KEEP`. When the two branches meet, Q4's versions of the shared code are kept.
 - **The page** (`adminchat.js`, `views/admin/chat.ejs`, `public/js/admin-chat.js`): `GET /admin/chat` and
-  `GET /api/admin/chat` (same data): `CHAT_HUB` with when it last changed, the pads on the hub (each with a one-click "Back to
-  v1 chat"), for owners the site pads still on v1 (the pilot pads `patv:staff`, `patv:canary`, `patv:lounge` first), the
-  interlock (the twelve seam switches, on / off, linking to `/admin/keys#seam`), the seam poster's status (this site's queue,
-  the `switches/changed` and `pads/changed` queues once Q4 adds the topics, the last post and heartbeat - `huboutbox.status()`,
-  local state only) and the change log (the newest 20 `chat.*` audit rows). **It makes no call to the chat hub**, so it works
-  while the hub is down (the test runs it with every connection, request and `fetch` stubbed to throw).
-- **Who:** seeing the page and turning **off** (`CHAT_HUB` off, a pad back to `v1`) need `chat.breakglass` (siteperms, locked
-  at Admin, lock reason `ops`): any admin, one click, never refused. Turning **on** (`CHAT_HUB` on, a pad to `hub`) is a Pepe
-  owner's: `staffroles.ownerHolds(me, "chat.breakglass")` (the Admin class and Pepe's owner role on the linked chat login,
-  read fresh), 403 `owner_only` otherwise.
+  `GET /api/admin/chat` (same data): `CHAT_HUB` with when and by whom it last changed, the pads not on `v1` (each with a
+  one-click "Back to v1 chat"; a value the form doesn't know is shown as written), for owners the site pads still on `v1`
+  (the pilot pads `patv:staff`, `patv:canary`, `patv:lounge` first), the interlock (the twelve seam switches, on / off,
+  linking to `/admin/keys#seam`), the seam poster's status (this site's queue, the `switches/changed` and `pads/changed`
+  queues once Q4 adds those topics, the last post and heartbeat - `huboutbox.status()`, local state only) and the change log
+  (the newest 20 `chat.*` audit rows). **It makes no call to the chat hub**, so it works while the hub is down (the test runs
+  it with every connection, request and `fetch` stubbed to throw).
+- **Who:** seeing the page and turning **off** (`CHAT_HUB` off, a pad back to `v1`) need `chat.breakglass` (siteperms,
+  locked at Admin, lock reason `ops`): any admin, one click, never refused. Turning **on** (`CHAT_HUB` on, a pad to `hub`) is
+  a Pepe owner's: `staffroles.ownerHolds(me, "chat.breakglass")` (the Admin class and Pepe's owner role on the linked chat
+  login, read fresh), 403 `owner_only` otherwise.
 - **The confirm step** (server-enforced): an owner's on-post without `confirm: true` answers 409 `confirm` with what would
   happen (`preview`: the pads on the hub for `CHAT_HUB`; the pad's title and whether `CHAT_HUB` is on for a pad) and writes
   nothing; the page asks with that text and only a yes posts again with `confirm: true`.
 - **Every change:** `POST /api/admin/chat/hub {on, reason, confirm?}` and `POST /api/admin/chat/pad {room_id, backend,
   reason, confirm?}` are same-origin fetches (`authGuard.sameOriginFetch`: `X-Requested-With: fetch` and an Origin / Referer
-  naming this host; else 403 `cross_site`), answer `Cache-Control: no-store`, need a reason (400 `reason_required`; trimmed,
-  control characters out, 200 characters kept) and write one `admin_audit` row in the switch's own `dbUtils.tx`:
-  `chat.switch` `{key, from, to}` or `chat.pad_backend` `{room_id, slug, hub_pad_id, from, to}`, with the reason. A post that
-  changes nothing (the value it already has) answers `changed: false` and writes no row.
+  naming this host; else 403 `cross_site`), answer `Cache-Control: no-store`, need a reason (400 `reason_required`;
+  control characters out, spaces folded, 200 characters kept) and write one `admin_audit` row with it. A post that changes
+  nothing (the value already there) answers `changed: false` and writes no row.
 - **The interlock** (S1-D7, seam plan §12.10): `CHAT_HUB` on is refused (409 `chat_hub_needs`, `missing` names the
   switches) unless `tickets`, `sessions`, `heartbeat`, `privacy`, `erasure`, `export`, `pads`, `roles`, `bans`, `identity`,
   `looks` and `switches` are all on - read from `hubseam_settings` inside the writing transaction; a switch huboutbox doesn't
-  have yet (Q4's four) reads as off. While `CHAT_HUB` is on, `huboutbox.setSettings` refuses to turn any of the twelve off
-  (409 `chat_hub_on`, "turn CHAT_HUB off first" - `chatswitches.guardSeamOff` in its transaction), so `/admin/keys#seam`
-  can't pull a topic out from under the live chat; other switches, and turning these on, are never refused.
+  have yet (Q4's four) reads as off. Turning `CHAT_HUB` off is never refused. The other half (no seam switch it needs goes
+  off while it is on, 409 `chat_hub_on`) is Q4's, in `huboutbox.setSettings`.
 - **The admin nav's Chat group** (`views/partials/admin-nav.ejs`): "💬 Chat hub" → `/admin/chat` with its sections, shown to
   `chat.breakglass` holders. The siteperms group `chat` also has `chat.mod_queue` (Assistant) and `chat.audit` (Admin) for
   V2's moderation screens (`adminchat.MOD_VIEWS`: `/admin/chat/{reports,held,modlog,bans}` and `{audit,switches}`), which
   V2 (release L4) hosts and adds to the group; until then nothing opens with them.
-- **Staging refresh:** `chat_switches` is in `deploy/keep-staging-tables.js` `KEEP` (staging keeps its own `CHAT_HUB`, as it
-  keeps `pad_hub`).
-- **Logs:** `[adminchat] <what>: <error>` only - never a reason, pad, account or value.
+- **Logs:** `[adminchat] <what>: <error>` and `[chatswitches] audit: <error>` only - never a reason, pad, account or value.
 - **Tests:** `test/adminchat.test.js` (no hub call; who sees it and the nav; cross-site, header-less and signed-out posts
-  refused; a reason on every change; the interlock both ways, through `/admin/keys#seam` too; an admin turns off but not on;
-  the owner turns on after the confirm step; one audit row per change and none for no change; Camfrog and profile pads
-  can't pick `hub`, `hub_read` refused, unknown pads 404; escaped titles and reasons), `test/siteperms.test.js` (the three
-  capabilities' classes and locks), `test/refresh-staging-keep.test.js` (`KEEP`).
+  refused; a reason on every change; the interlock; an admin turns off but not on; the owner turns on after the confirm
+  step; one audit row per change and none for no change; Camfrog and profile pads can't pick `hub`, `hub_read` refused,
+  unknown pads 404, a hand-edited value put back; escaped titles and reasons), `test/siteperms.test.js` (the three
+  capabilities' classes and locks).
 - **i18n:** new keys only - `admchat.*`, `js.admchat.*`, `siteperm.g.chat`, `siteperm.k.chat.*`.
 
 ## Fixtures and the contract suite
@@ -435,9 +437,7 @@ pads / roles / bans / switches topics, `listed`, the staff and canary pads); V1 
 and `looks` (the S1 topics above; `looks` also gates the hub's looks call) - all off - and `spans` (on). A topic whose switch is off writes nothing and serves no snapshot. `tickets` can only be on together with
 `sessions` and `heartbeat` (above). The turn-on order on staging: hub `SEAM_ENABLED` → `heartbeat` → `sessions` →
 `privacy` → (S1) `erasure`, `export`. `/admin/keys#seam` also shows the seam environment and any outbound refusal, the
-per-topic queues, the hub's last snapshot and rewind calls and refusals, and exports waiting for the hub. S1 V1: while the
-chat hub switch `CHAT_HUB` (`/admin/chat`, above) is on, none of the twelve seam switches it needs can be turned off here
-(409 `chat_hub_on`: turn `CHAT_HUB` off first).
+per-topic queues, the hub's last snapshot and rewind calls and refusals, and exports waiting for the hub.
 
 When the privacy switches go on in S1, the privacy page names the chat hub in deletion and export.
 

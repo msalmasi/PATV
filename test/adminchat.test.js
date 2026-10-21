@@ -1,12 +1,12 @@
 // S1 V1 (release L1; ADR 0007 D3, D15, OQ-19; seam plan §12.10): /admin/chat, the chat hub's break-glass form (adminchat.js,
-// chatswitches.js, views/admin/chat.ejs, the admin nav's Chat group, siteperms chat.*).
+// chatswitches.js, padhub.setBackend, views/admin/chat.ejs, the admin nav's Chat group, siteperms chat.*).
 //   - no hub call: with a hub configured and every outbound connection, request and fetch stubbed to throw, the page, the
 //     JSON and every change still work (the form works while the hub is down)
 //   - who: admins (chat.breakglass, locked at Admin) see it and turn things OFF in one click; turning ON (CHAT_HUB, a pad to
 //     hub) is a Pepe owner's, with a confirm step the server enforces; Staff / Assistants / members / visitors are sent away
-//   - every change: a same-origin fetch (a cross-site POST is refused), a reason, one admin_audit row in the same transaction;
-//     a change to the same value writes nothing
-//   - the interlock: CHAT_HUB on needs the twelve seam switches; while it is on none of them may go off (huboutbox.setSettings)
+//   - every change: a same-origin fetch (a cross-site POST is refused), a reason, one admin_audit row; a change to the same
+//     value writes nothing
+//   - the interlock: CHAT_HUB on needs the twelve seam switches (huboutbox.setSettings' other half is Q4's)
 //   - Camfrog (and every other non-site) pad can't pick hub; hub_read is S2's
 //   NODE_PATH=G:/PATV/node_modules node --test test/adminchat.test.js      (a temp DB)
 "use strict";
@@ -28,6 +28,8 @@ process.env.SECRET_KEY = "test-secret";
 const express = require("express");
 const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const CS = require(path.join(repo, "chatswitches"));
+const PH = require(path.join(repo, "padhub"));
+const AC = require(path.join(repo, "adminchat"));
 const HO = require(path.join(repo, "huboutbox"));
 const EN = require(path.join(repo, "locales", "en.json"));
 
@@ -45,6 +47,7 @@ const audits = (action) => getQuery("SELECT * FROM admin_audit WHERE action = ? 
 const nAudits = async () => (await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action LIKE 'chat.%'"))[0].n;
 const hubValue = async () => ((await getQuery("SELECT value FROM chat_switches WHERE key = 'CHAT_HUB'"))[0] || {}).value || null;
 const backendOf = async (roomId) => (await getQuery("SELECT chat_backend, updated_by FROM pad_hub WHERE room_id = ?", [roomId]))[0];
+const OWN = { userId: "own", username: "boss" };
 /** The seam switches as /admin/keys stores them (Q4's pads / roles / bans / switches written the same way). */
 async function seam(names, on) {
   for (const k of names) {
@@ -90,7 +93,7 @@ test.before(async () => {
   // boss: Admin + Pepe owner; admin2: Admin + Pepe admin; fakeowner: Pepe owner but only Staff on the site (never an owner here)
   await runQuery("INSERT INTO pepe_roles (login, role, ts) VALUES ('bossfrog', 'owner', 1), ('plainadmin', 'admin', 1), ('fakefrog', 'owner', 1)");
   await HO.init();
-  await CS.init();
+  await AC.init();
   // pads: the pilot site pads, a user's site pad, a Camfrog pad and a profile pad (pad_hub ids minted by padhub's trigger)
   const t = Date.now();
   for (const [id, slug, title, platform] of [["patv:staff", "staff", "Staff room", "site"], ["patv:canary", "canary", "Canary", "site"],
@@ -108,8 +111,7 @@ test.before(async () => {
     req.user = u ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [u]))[0] || null : null;
     next();
   };
-  require(path.join(repo, "adminchat")).register(app, { addUser });
-  require(path.join(repo, "adminkeys")).register(app, { addUser });
+  AC.register(app, { addUser });
   server = app.listen(0);
   port = server.address().port;
   base = `http://127.0.0.1:${port}`;
@@ -148,20 +150,20 @@ test("who sees it: admins (page + JSON, no-store, in the nav's Chat group); Staf
   assert.match(own, /Makers &lt;b&gt;/, "pad titles escaped");
   assert.doesNotMatch(own, /value="Frog\.Pond"|value="user:mem"/, "only site pads are offered");
   // the nav: only for chat.breakglass holders
-  const nav = require("ejs");
-  const navOf = async (cls) => nav.renderFile(path.join(repo, "views", "partials", "admin-nav.ejs"), { section: "overview", me: { class: cls } });
+  const ejs = require("ejs");
+  const navOf = async (cls) => ejs.renderFile(path.join(repo, "views", "partials", "admin-nav.ejs"), { section: "overview", me: { class: cls } });
   assert.match(await navOf("Admin"), /href="\/admin\/chat"/);
   for (const cls of ["Staff", "Assistant"]) assert.doesNotMatch(await navOf(cls), /href="\/admin\/chat"/, cls);
   // JSON
   assert.equal((await get("/api/admin/chat", "")).status, 401);
   assert.equal((await get("/api/admin/chat", "stf")).status, 403);
+  assert.equal((await get("/api/admin/chat", "fake")).status, 403, "Pepe's owner role on a site Staff account: not an admin here");
   const j = await (await get("/api/admin/chat", "adm")).json();
   assert.equal(j.ok, true);
   assert.equal(j.owner, false);
-  assert.deepEqual(j.hub, { key: "CHAT_HUB", value: "off", updated_at: null });
+  assert.deepEqual(j.hub, { value: "off", updated: null, updated_by: null, default: "off" });
   assert.deepEqual(j.choices, [], "a plain admin gets no pads to move");
   assert.equal((await (await get("/api/admin/chat", "own")).json()).owner, true);
-  assert.equal((await get("/api/admin/chat", "fake")).status, 403, "Pepe's owner role on a site Staff account: not an admin here");
 });
 
 test("cross-site, header-less and signed-out POSTs are refused; nothing changes", async () => {
@@ -192,27 +194,31 @@ test("a reason is required for every change, on or off", async () => {
     r = await post("/api/admin/chat/pad", "adm", { room_id: "patv:staff", backend: "v1", reason });
     assert.equal(r.j.code, "reason_required");
   }
-  assert.equal(CS.cleanReason("  a\n\tb  " + "x".repeat(300)).length, CS.REASON_MAX);
-  assert.equal(CS.cleanReason(" roll\u0007back  now "), "roll back now");
+  assert.equal(AC.cleanReason("  a\n\tb  " + "x".repeat(300)).length, AC.REASON_MAX);
+  assert.equal(AC.cleanReason(" roll\u0007back  now "), "roll back now");
+  assert.equal(await hubValue(), null);
 });
 
 test("the interlock: CHAT_HUB on is refused (409 chat_hub_needs) until all twelve seam switches are on - Q4's included", async () => {
-  assert.deepEqual(CS.INTERLOCK, ["tickets", "sessions", "heartbeat", "privacy", "erasure", "export", "pads", "roles", "bans", "identity", "looks", "switches"],
+  assert.deepEqual([...CS.INTERLOCK], ["tickets", "sessions", "heartbeat", "privacy", "erasure", "export", "pads", "roles", "bans", "identity", "looks", "switches"],
                    "seam plan S1-D7's twelve");
   let r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true });
   assert.equal(r.status, 409);
   assert.equal(r.j.code, "chat_hub_needs");
-  assert.deepEqual(r.j.missing, CS.INTERLOCK);
+  assert.deepEqual(r.j.missing, [...CS.INTERLOCK]);
   await seam(CS.INTERLOCK.filter((k) => k !== "switches"), true);
   r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true });
   assert.equal(r.j.code, "chat_hub_needs");
   assert.deepEqual(r.j.missing, ["switches"], "names exactly what is still off");
   // the module refuses too, whoever calls it (the check runs in the writing transaction)
-  await assert.rejects(CS.set("CHAT_HUB", "on", { userId: "own", username: "boss" }, REASON), (e) => e.code === "chat_hub_needs" && e.status === 409);
+  await assert.rejects(CS.set("CHAT_HUB", "on", OWN, { reason: REASON }), (e) => e.code === "chat_hub_needs" && e.status === 409 && e.needs.join() === "switches");
   assert.equal(await hubValue(), null);
   assert.equal((await audits("chat.switch")).length, 0);
+  // the page shows it
+  assert.match(await (await get("/admin/chat", "own")).text(), /id="acHubNeeds">It needs these seam switches on first: switches\./);
   await seam(["switches"], true);
-  assert.deepEqual((await CS.interlock()).missing, []);
+  assert.deepEqual(await CS.needsNow(), []);
+  assert.deepEqual((await AC.interlock()).missing, []);
 });
 
 test("an admin can turn CHAT_HUB off but not on; the owner turns it on after a confirm step; one audit row per change", async () => {
@@ -230,17 +236,18 @@ test("an admin can turn CHAT_HUB off but not on; the owner turns it on after a c
   assert.equal(r.cc, "no-store");
   assert.deepEqual([r.j.ok, r.j.changed, r.j.value], [true, true, "on"]);
   assert.equal(await hubValue(), "on");
-  assert.equal(await CS.chatHubOn(), true);
+  assert.equal(CS.chatHubOn(), true);
+  assert.equal(await CS.chatHubOnNow(), true);
   let a = await audits("chat.switch");
   assert.equal(a.length, 1);
   assert.equal(a[0].admin_id, "own");
   assert.equal(a[0].admin_name, "boss");
   assert.deepEqual(JSON.parse(a[0].detail), { key: "CHAT_HUB", from: "off", to: "on" });
   assert.equal(a[0].reason, "Staff dogfood day 1");
-  const row = await CS.rowOf("CHAT_HUB");
+  const row = CS.all().CHAT_HUB;
   assert.equal(row.value, "on");
-  assert.ok(row.updated_at > 0, "the switches/changed payload: {key, value, updated_at}");
-  assert.deepEqual(await CS.all(), [row], "every key, for the snapshot");
+  assert.equal(row.updated_by, "boss", "updated_by: the admin's username (an audit label)");
+  assert.ok(row.updated > 0);
   // on again: nothing changes, no row
   r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON });
   assert.deepEqual([r.status, r.j.changed], [200, false]);
@@ -258,50 +265,34 @@ test("an admin can turn CHAT_HUB off but not on; the owner turns it on after a c
   r = await post("/api/admin/chat/hub", "adm", { on: false, reason: "again" });
   assert.deepEqual([r.status, r.j.changed], [200, false], "off again changes nothing");
   assert.equal((await audits("chat.switch")).length, 2);
+  // off is never refused, whatever the seam switches say
+  await seam(["pads"], false);
+  r = await post("/api/admin/chat/hub", "adm", { on: false, reason: "belt and braces" });
+  assert.deepEqual([r.status, r.j.changed], [200, false]);
+  await seam(["pads"], true);
   // bad bodies
   assert.equal((await post("/api/admin/chat/hub", "adm", { on: "yes", reason: REASON })).j.code, "bad_request");
-  await assert.rejects(CS.set("dm_backend", "hub", { userId: "own", username: "boss" }, REASON), (e) => e.code === "bad_key", "dm_backend is S5's");
-  await assert.rejects(CS.set("CHAT_HUB", "maybe", { userId: "own", username: "boss" }, REASON), (e) => e.code === "bad_value");
-});
-
-test("the interlock's other half: while CHAT_HUB is on, no seam switch it needs may go off (huboutbox.setSettings, /admin/keys)", async () => {
-  await seam(CS.INTERLOCK, true);
-  const own = { userId: "own", username: "boss" };
-  await CS.set("CHAT_HUB", "on", own, REASON);
-  await assert.rejects(HO.setSettings({ identity: false }, own), (e) => e.code === "chat_hub_on" && e.status === 409 && e.refuse === true);
-  await assert.rejects(HO.setSettings({ privacy: false, econ: false }, own), (e) => e.code === "chat_hub_on");
-  assert.equal(HO.settings().identity, true, "nothing changed");
-  assert.equal(HO.settings().privacy, true);
-  // through /admin/keys#seam: the same refusal, its words name /admin/chat
-  const r = await post("/api/admin/hubseam/settings", "own", { looks: false });
-  assert.equal(r.status, 409);
-  assert.equal(r.j.code, "chat_hub_on");
-  assert.match(r.j.error, /CHAT_HUB off first/);
-  // switches it doesn't need, and turning them on, are never refused
-  await HO.setSettings({ econ: true }, own);
-  await HO.setSettings({ econ: false }, own);
-  await HO.setSettings({ identity: true }, own);
-  // CHAT_HUB off first, then they go off
-  await CS.set("CHAT_HUB", "off", own, REASON);
-  await HO.setSettings({ identity: false }, own);
-  assert.equal(HO.settings().identity, false);
-  await HO.setSettings({ identity: true }, own);
+  await assert.rejects(CS.set("dm_backend", "hub", OWN, { reason: REASON }), (e) => e.code === "bad_key", "dm_backend is S5's");
+  await assert.rejects(CS.set("CHAT_HUB", "maybe", OWN, { reason: REASON }), (e) => e.code === "bad_value");
 });
 
 test("a pad's chat: Camfrog and other non-site pads can't pick hub; hub_read is S2's; the owner moves a site pad after a confirm, any admin moves it back", async () => {
   const own = "own", adm = "adm";
   let r = await post("/api/admin/chat/pad", own, { room_id: "Frog.Pond", backend: "hub", reason: REASON, confirm: true });
   assert.equal(r.status, 409);
-  assert.equal(r.j.code, "site_only", "a Camfrog pad keeps its v1 chat");
+  assert.equal(r.j.code, "site_pads_only", "a Camfrog pad keeps its v1 chat");
   r = await post("/api/admin/chat/pad", own, { room_id: "user:mem", backend: "hub", reason: REASON, confirm: true });
-  assert.equal(r.j.code, "site_only", "a profile pad too");
-  await assert.rejects(CS.setPadBackend("Frog.Pond", "hub", { userId: "own", username: "boss" }, REASON), (e) => e.code === "site_only", "the module refuses too");
+  assert.equal(r.j.code, "site_pads_only", "a profile pad too");
+  await assert.rejects(PH.setBackend("Frog.Pond", "hub", OWN), (e) => e.code === "site_pads_only" && e.status === 409, "padhub refuses too");
+  await assert.rejects(PH.setBackend("patv:staff", "hub_read", OWN), (e) => e.code === "hub_read_s2");
   assert.equal((await backendOf("Frog.Pond")).chat_backend, "v1");
   r = await post("/api/admin/chat/pad", own, { room_id: "patv:staff", backend: "hub_read", reason: REASON, confirm: true });
-  assert.deepEqual([r.status, r.j.code], [400, "not_in_s1"]);
+  assert.deepEqual([r.status, r.j.code], [409, "hub_read_s2"]);
   r = await post("/api/admin/chat/pad", own, { room_id: "patv:staff", backend: "HUB", reason: REASON, confirm: true });
   assert.deepEqual([r.status, r.j.code], [400, "bad_backend"]);
   r = await post("/api/admin/chat/pad", own, { room_id: "patv:nowhere", backend: "hub", reason: REASON, confirm: true });
+  assert.deepEqual([r.status, r.j.code], [404, "no_pad"]);
+  r = await post("/api/admin/chat/pad", adm, { room_id: "patv:nowhere", backend: "v1", reason: REASON });
   assert.deepEqual([r.status, r.j.code], [404, "no_pad"]);
   r = await post("/api/admin/chat/pad", own, { room_id: ["patv:staff"], backend: "hub", reason: REASON, confirm: true });
   assert.deepEqual([r.status, r.j.code], [400, "bad_request"]);
@@ -316,6 +307,7 @@ test("a pad's chat: Camfrog and other non-site pads can't pick hub; hub_read is 
   assert.equal(r.status, 200, JSON.stringify(r.j));
   assert.deepEqual([r.j.changed, r.j.room_id, r.j.backend], [true, "patv:staff", "hub"]);
   assert.deepEqual(await backendOf("patv:staff"), { chat_backend: "hub", updated_by: "boss" }, "updated_by is the admin's username (an audit label)");
+  assert.equal(await PH.backendOf("patv:staff"), "hub");
   let a = await audits("chat.pad_backend");
   assert.equal(a.length, before + 1);
   const d = JSON.parse(a[a.length - 1].detail);
@@ -347,9 +339,10 @@ test("a pad's chat: Camfrog and other non-site pads can't pick hub; hub_read is 
   await runQuery("UPDATE pad_hub SET chat_backend = 'hub' WHERE room_id = 'Frog.Pond'");
   r = await post("/api/admin/chat/pad", adm, { room_id: "Frog.Pond", backend: "v1", reason: "cleanup" });
   assert.deepEqual([r.status, r.j.changed], [200, true]);
-  // a hand-edited value the form doesn't know: listed, and any admin puts it back to v1
+  // a hand-edited value the form doesn't know: listed (as written), and any admin puts it back to v1
   await runQuery("UPDATE pad_hub SET chat_backend = 'HUB' WHERE room_id = 'patv:makers'");
-  assert.ok((await CS.hubPads()).some((p) => p.room_id === "patv:makers"), "listed among the pads not on v1");
+  assert.ok((await AC.hubPads()).some((p) => p.room_id === "patv:makers" && p.backend === "HUB"), "listed among the pads not on v1");
+  assert.match(await (await get("/admin/chat", adm)).text(), /<td><code>HUB<\/code><\/td>/);
   r = await post("/api/admin/chat/pad", adm, { room_id: "patv:makers", backend: "v1", reason: "cleanup" });
   assert.deepEqual([r.status, r.j.changed], [200, true]);
   assert.equal((await backendOf("patv:makers")).chat_backend, "v1");
@@ -360,7 +353,7 @@ test("no hub call: with a hub configured and the network stubbed to throw, the p
   Object.assign(process.env, { HUB_V1_URL: "https://hub.invalid", HUB_V1_KEY_ID: "v1-test-1", HUB_V1_KEY: "k".repeat(43), HUB_V1_ENV: "test" });
   t.after(() => { for (const k of ["HUB_V1_URL", "HUB_V1_KEY_ID", "HUB_V1_KEY", "HUB_V1_ENV"]) delete process.env[k]; });
   await seam(CS.INTERLOCK, true);
-  // something queued for the hub, as Q4's triggers would write it
+  // something queued for the hub, as the seam's triggers would write it
   await runQuery("INSERT INTO hub_outbox (topic, entity, created_at) VALUES ('switches/changed', 'sw:CHAT_HUB', ?)", [Date.now() - 5000]);
   const restore = stubNetwork();
   try {
@@ -387,40 +380,40 @@ test("no hub call: with a hub configured and the network stubbed to throw, the p
 });
 
 test("the page shows the state, the interlock and an escaped change log", async () => {
-  await CS.set("CHAT_HUB", "on", { userId: "own", username: "boss" }, "<script>alert(1)</script>");
+  await seam(CS.INTERLOCK, true);
+  await CS.set("CHAT_HUB", "on", OWN, { reason: "<script>alert(1)</script>" });
   await seam(["bans"], false);         // a seam switch off under an on CHAT_HUB (a hand edit): shown as off
   const html = await (await get("/admin/chat", "adm")).text();
   assert.match(html, /data-hub="on"/);
+  assert.match(html, /Last changed .* by boss\./);
   assert.match(html, /id="acHubOff" data-hub-on="0"/, "any admin gets the off button");
   assert.match(html, /data-seam="bans"><b><code>bans<\/code><\/b><span><span class="adm-dot bad">/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, "reasons escaped");
   assert.doesNotMatch(html, /<script>alert/);
   assert.match(html, /CHAT_HUB: off → on/);
   assert.match(html, /Pad staff: hub → v1/);
-  await CS.set("CHAT_HUB", "off", { userId: "adm", username: "admin2" }, REASON);
+  await CS.set("CHAT_HUB", "off", { userId: "adm", username: "admin2" }, { reason: REASON });
   await seam(["bans"], true);
   // the owner's on button with every seam switch on
   assert.match(await (await get("/admin/chat", "own")).text(), /id="acHubOn" data-hub-on="1"/);
 });
 
-test("capabilities, the nav, the page script's strings and the staging keep list", () => {
+test("capabilities, the nav's group, the merge census and the logs", () => {
   const SP = require(path.join(repo, "siteperms"));
-  assert.equal(SP.BY_KEY["chat.breakglass"].locked, "ops", "locked: ops is owner-only to turn on, admin-only to see");
+  assert.equal(SP.BY_KEY["chat.breakglass"].locked, "ops", "locked: seen and turned off by Admins only");
   assert.equal(SP.can({ class: "Admin" }, "chat.breakglass"), true);
   assert.equal(SP.can({ class: "Staff" }, "chat.breakglass"), false);
   assert.equal(SP.can({ class: "Assistant" }, "chat.mod_queue"), true, "assistants reach the hub's queue (V2's hosts)");
   assert.equal(SP.can({ class: "Staff" }, "chat.audit"), false);
   for (const k of ["chat.breakglass", "chat.mod_queue", "chat.audit"]) assert.ok(EN["siteperm.k." + k], k);
   assert.ok(EN["siteperm.g.chat"]);
-  const AC = require(path.join(repo, "adminchat"));
   for (const [view, cap] of Object.entries(AC.MOD_VIEWS)) assert.ok(SP.BY_KEY[cap], view + " -> " + cap);
   for (const k of CS.INTERLOCK) assert.ok(EN["admchat.sw." + k], "label for " + k);
-  const K = require(path.join(repo, "deploy", "keep-staging-tables"));
-  assert.ok(K.KEEP.includes("chat_switches"), "a staging refresh keeps staging's own CHAT_HUB");
-  // the merge census: chat_switches has no user-id-looking column, and pad_hub.updated_by stays "not a user id"
+  // the merge census: chat_switches.updated_by is an audit label, never a user id; its other columns don't look like one
   const AM = require(path.join(repo, "accountMerge"));
-  for (const c of ["key", "value", "updated_at"]) assert.ok(!AM.CANDIDATE.some((re) => re.test(c)), c);
-  // nothing in the module logs a reason, a pad or a value
-  const src = fs.readFileSync(path.join(repo, "adminchat.js"), "utf8") + fs.readFileSync(path.join(repo, "chatswitches.js"), "utf8");
+  assert.ok(AM.RULES["chat_switches.updated_by"] && AM.RULES["chat_switches.updated_by"].deny);
+  for (const c of ["key", "value", "updated"]) assert.ok(!AM.CANDIDATE.some((re) => re.test(c)), c);
+  // nothing logs a reason, a pad or a value
+  const src = ["adminchat.js", "chatswitches.js"].map((f) => fs.readFileSync(path.join(repo, f), "utf8")).join("\n");
   for (const m of src.matchAll(/console\.(?:log|error|warn)\(([^;]*)\);/g)) assert.doesNotMatch(m[1], /reason|room_id|value|\bb\.|detail/, m[0]);
 });

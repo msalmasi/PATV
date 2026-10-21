@@ -13,7 +13,7 @@
   const L = V.interlock || { state: {}, missing: [] };
   const P = V.poster;
   const padName = (p) => p.title || p.slug || p.room_id;
-  const backend = (b) => t('admchat.backend.' + (['v1', 'hub_read', 'hub'].includes(b) ? b : 'v1'));
+  const KNOWN = ['v1', 'hub_read', 'hub'];
 %>
 <div class="adm-head">
   <h1><%- t('admchat.title') %></h1>
@@ -27,7 +27,7 @@
 <section class="adm-card" id="hub" aria-labelledby="acHubT" data-hub="<%= hubOn ? 'on' : 'off' %>">
   <h2 id="acHubT"><%- t('admchat.hub.h') %> <span class="adm-pill <%= hubOn ? 'ok' : '' %>" id="acHubState"><%- t(hubOn ? 'admchat.hub.on' : 'admchat.hub.off') %></span></h2>
   <p class="adm-help"><%- t('admchat.hub.help') %></p>
-  <p class="adm-help"><%- V.hub.updated_at ? t('admchat.hub.changed', { when: when(V.hub.updated_at) }) : t('admchat.hub.never') %></p>
+  <p class="adm-help"><%- V.hub.updated ? t('admchat.hub.changed', { when: when(V.hub.updated), who: V.hub.updated_by || '?' }) : t('admchat.hub.never') %></p>
   <div class="adm-actions">
     <% if (hubOn) { %>
       <button type="button" class="adm-btn" id="acHubOff" data-hub-on="0"><%- t('admchat.hub.btn_off') %></button>
@@ -56,7 +56,7 @@
       <% V.pads.forEach((p) => { %><tr data-pad="<%= p.room_id %>">
         <td><b><% if (p.slug) { %><a href="/p/<%= encodeURIComponent(p.slug) %>"><%= padName(p) %></a><% } else { %><%= padName(p) %><% } %></b><br><span class="adm-help"><code><%= p.room_id %></code></span></td>
         <td><%= p.platform %></td>
-        <td><%= backend(p.backend) %></td>
+        <td><% if (KNOWN.includes(p.backend)) { %><%- t('admchat.backend.' + p.backend) %><% } else { %><code><%= p.backend %></code><% } %></td>
         <td><%= when(p.updated) %><% if (p.updated_by) { %><br><span class="adm-help"><%= p.updated_by %></span><% } %></td>
         <td><button type="button" class="adm-btn ghost" data-pad-backend="v1" data-room="<%= p.room_id %>" data-name="<%= padName(p) %>"><%- t('admchat.pads.btn_v1') %></button>
           <span class="adm-msg" role="status"></span></td>

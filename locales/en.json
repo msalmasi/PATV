@@ -11305,7 +11305,7 @@
   "admchat.hub.on": "On",
   "admchat.hub.off": "Off",
   "admchat.hub.help": "On: the pads on the hub get the hub chat. Off: no hub chat anywhere - the hub refuses chat on hub pads and closes open chats, while the moderation screens, data export and account deletion keep working.",
-  "admchat.hub.changed": "Last changed {when}.",
+  "admchat.hub.changed": "Last changed {when} by {who}.",
   "admchat.hub.never": "Never changed (off by default).",
   "admchat.hub.btn_off": "Turn the chat hub off",
   "admchat.hub.btn_on": "Turn the chat hub on…",
