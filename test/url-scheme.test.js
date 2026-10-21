@@ -133,7 +133,7 @@ test("posts: the canonical address is 200; any other pad / slug / username and t
     [`/p/Plant-Based-Chatting/posts/${p.id}/monstera-update`, canon],
     [`/p/side-room/posts/${p.id}/monstera-update`, canon],
     [`/p/no-such-pad/posts/${p.id}`, canon],
-    [`/p/patv-lounge/posts/${p.id}/x`, canon],
+    [`/p/camfrog-lounge/posts/${p.id}/x`, canon],             // S1 Q4: the Lounge's retired address
     [`/u/alice/posts/${p.id}/monstera-update`, canon],
     [`/u/bob/posts/${p.id}`, canon],
   ]) {
@@ -238,9 +238,9 @@ test("redirect table (1.99dv): every old form -> its new canonical form in one h
     // the older pad aliases: straight to the current address
     ["/rooms/plant-based-chatting?fsort=top", "/p/plant-based-chatting?fsort=top"],
     ["/feed/c/plant-based-chatting?sort=new", "/p/plant-based-chatting?sort=new"],
-    ["/rooms/patv-lounge", "/p/camfrog-lounge"],
-    ["/feed/c/patv-lounge", "/p/camfrog-lounge"],
-    ["/p/patv-lounge/analytics?days=7", "/p/camfrog-lounge/analytics?days=7"],
+    ["/rooms/camfrog-lounge", "/p/patv-lounge"],             // S1 Q4: the PATV Lounge again; camfrog-lounge retired
+    ["/feed/c/camfrog-lounge", "/p/patv-lounge"],
+    ["/p/camfrog-lounge/analytics?days=7", "/p/patv-lounge/analytics?days=7"],
     ["/rooms", "/p"],
     ["/pads", "/p"],
     ["/feed?room=plant-based-chatting&sort=top", "/p/plant-based-chatting?sort=top"],
@@ -252,7 +252,7 @@ test("redirect table (1.99dv): every old form -> its new canonical form in one h
     assert.equal(r.location, to, from);
   }
   // every target is a page (or the file), not another redirect
-  for (const to of [`/p/plant-based-chatting/posts/${p.id}/table-post`, "/p/plant-based-chatting", "/p/camfrog-lounge", "/feed", "/feed/following"]) {
+  for (const to of [`/p/plant-based-chatting/posts/${p.id}/table-post`, "/p/plant-based-chatting", "/p/patv-lounge", "/feed", "/feed/following"]) {
     assert.equal((await get(to, U.bob)).status, 200, to);
   }
 });

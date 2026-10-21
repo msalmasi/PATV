@@ -186,7 +186,8 @@ test("the heartbeat: the golden body's shape, switches and topic stats", async (
   assert.match(String(g.version), /^\d+\.\d+[a-z]+$/, "the golden heartbeat names a site version");
   // 1.99ads: S1 adds switches (seam plan §12.10, additive): S0's keep the golden's values, the S1 ones are off here
   for (const k of Object.keys(g.switches)) assert.equal(b.switches[k], g.switches[k], k);
-  for (const k of Object.keys(b.switches)) if (!(k in g.switches)) assert.ok(["identity", "looks"].includes(k) && b.switches[k] === false, k);
+  // (S1 Q4: + pads, roles, bans, switches)
+  for (const k of Object.keys(b.switches)) if (!(k in g.switches)) assert.ok(["identity", "looks", "pads", "roles", "bans", "switches"].includes(k) && b.switches[k] === false, k);
   for (const t of Object.keys(g.topics)) assert.deepEqual(Object.keys(b.topics[t]).sort(), Object.keys(g.topics[t]).sort(), t);
   assert.ok(Array.isArray(b.jwks_kids));
   assert.equal(b.outbox_head, await HO.headId());

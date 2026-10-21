@@ -555,7 +555,7 @@ function register(app, { addUser, isBotToken }) {
     const isAdmin = SP.can(viewer, "feed.abuse_details"), dmOk = SP.can(viewer, "dm.report_review");
     res.set("Cache-Control", "no-store");
     res.render("feedAdmin", { user: viewer.username, viewer, C: store.config(), D: store.DEFAULTS, reports: await store.reports(), bans: await store.bans(),
-                              used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])),
+                              used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.listAll()).map((r) => [r.id, r])),
                               userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [],
                               dmReports: dmOk ? await require("./messages").reportQueue().catch((e) => { console.error("[feed] dm reports:", e.message); return []; }) : [],
                               // CL6: reported pad chat lines (chatlogmod.js) - staff holding chatlog.read_all; the text only on "Read" (logged)

@@ -14,10 +14,18 @@
 //
 // Built by S1 Q5b (release L3) because the looks need it (Q4, release L1, owns the rest of the pad seam: the pads/changed
 // triggers on this table - its DELETE included, which tells the hub the pad is gone - chat_backend's writers and the
-// displaced-row emit). This module is that piece only.
+// displaced-row emit: hubpads.js, padrekey.js).
+//
+// S1 Q4 (ADR 0007 D3): chat_backend - v1 | hub_read | hub, default v1 - is the pad's chat backend, set only on /admin/chat
+// (V1's adminchat.js, through setBackend below) and mirrored to the hub by pads/changed. S1 allows `hub` only on site pads
+// (no Camfrog room behind it: a Camfrog pad's chat is the bridge's), and `hub_read` is S2's (refused). setBackend checks the
+// value and the pad, nothing else: who may switch (the owner turns on, any admin turns off - D15) is adminchat's.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
+
+const BACKENDS = Object.freeze(["v1", "hub_read", "hub"]);
+class Refuse extends Error { constructor(status, code, msg) { super(msg); this.status = status; this.code = code; this.refuse = true; } }
 
 let clock = () => Date.now();
 const UUID_SQL = "lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || " +
@@ -70,4 +78,40 @@ async function ofRooms(roomIds) {
 }
 async function of(roomId) { return (await ofRooms([roomId])).get(String(roomId)) || null; }
 
-module.exports = { init, backfill, ofRooms, of, UUID4_RE, _setClock: (f) => { clock = f || (() => Date.now()); } };
+/** S1 Q4: a pad's chat backend (v1 | hub_read | hub; "v1" for a pad without a row or an unknown value). */
+async function backendOf(roomId) {
+  await init();
+  const r = (await getQuery("SELECT chat_backend FROM pad_hub WHERE room_id = ?", [String(roomId || "")]))[0];
+  return r && BACKENDS.includes(r.chat_backend) ? r.chat_backend : "v1";
+}
+/**
+ * S1 Q4 (ADR 0007 D3): set a pad's chat backend - /admin/chat's writer (adminchat.js decides who may). `hub` only on a site
+ * pad, `hub_read` refused until S2, a profile pad never. The pads/changed trigger on pad_hub carries the change to the hub (while
+ * the `pads` switch is on). -> {room_id, hub_pad_id, chat_backend, changed}
+ * Refusals (err.refuse, .status, .code): 400 bad_backend, 404 no_pad, 409 hub_read_s2 | site_pads_only.
+ */
+async function setBackend(roomId, backend, actor = null) {
+  await init();
+  const id = String(roomId || "");
+  const b = String(backend == null ? "" : backend);
+  if (!BACKENDS.includes(b)) throw new Refuse(400, "bad_backend", "A pad's chat backend is v1, hub_read or hub.");
+  if (b === "hub_read") throw new Refuse(409, "hub_read_s2", "Read-only hub chat (hub_read) comes with S2.");
+  const R = (await getQuery("SELECT room_id, platform FROM rooms_registry WHERE room_id = ?", [id]))[0];
+  if (!R) throw new Refuse(404, "no_pad", "No such pad.");
+  const rooms = require("./rooms");
+  if (b === "hub" && rooms.cleanPlatform(R.platform, R.room_id) !== "site") {
+    throw new Refuse(409, "site_pads_only", "Only a site pad can move its chat to the hub in S1 (a Camfrog pad's chat is its Camfrog room's).");
+  }
+  if (!(await getQuery("SELECT 1 FROM pad_hub WHERE room_id = ?", [id])).length) await backfill();
+  const cur = (await getQuery("SELECT hub_pad_id, chat_backend FROM pad_hub WHERE room_id = ?", [id]))[0];
+  if (!cur) throw new Refuse(404, "no_pad", "No such pad.");
+  const changed = cur.chat_backend !== b;
+  if (changed) {
+    const by = actor && (actor.username || actor.userId) ? String(actor.username || actor.userId).slice(0, 80) : null;
+    await runQuery("UPDATE pad_hub SET chat_backend = ?, updated = ?, updated_by = ? WHERE room_id = ?", [b, clock(), by, id]);
+    await rooms.event(id, "chat-backend", by || "?", `${cur.chat_backend || "v1"} -> ${b}`);
+  }
+  return { room_id: id, hub_pad_id: String(cur.hub_pad_id), chat_backend: b, changed };
+}
+
+module.exports = { init, backfill, ofRooms, of, backendOf, setBackend, BACKENDS, Refuse, UUID4_RE, _setClock: (f) => { clock = f || (() => Date.now()); } };

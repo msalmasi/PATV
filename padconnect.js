@@ -182,7 +182,7 @@ async function plusRoomsForPepe() {
   await init();
   const out = { enforced: plusEnforced(), max: 5, rooms: [], pending: [] };
   try { out.max = P().config().ptplus_max_rooms; } catch (e) { /* default */ }
-  for (const R of rooms.listCached()) {
+  for (const R of rooms.listAllCached()) {               // S1 Q4: unlisted pads too (an entitlement)
     if (!hasPlus(R.id) || (R.platform || rooms.platformOf(R.id)) !== "camfrog") continue;
     const c = (await getQuery("SELECT external_name FROM pad_connections WHERE room_id = ? AND platform = 'camfrog' AND status = 'verified' ORDER BY id DESC LIMIT 1", [R.id]))[0];
     out.rooms.push({ id: R.id, name: (c && c.external_name) || R.title || R.id, house: !!R.house });

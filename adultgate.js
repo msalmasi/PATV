@@ -200,7 +200,7 @@ function gate(viewer, roomId, opts) {
 function gatedRooms(viewer) {
   if (!ENABLED && !unknown()) return [];
   let list = [];
-  try { list = require("./rooms").listCached().filter((r) => r && r.adult); } catch (e) { list = []; }
+  try { list = require("./rooms").listAllCached().filter((r) => r && r.adult); } catch (e) { list = []; }   // S1 Q4: unlisted pads too (a gate, not a listing)
   return list.map((r) => r.id).filter((id) => gate(viewer || null, id) !== "ok");
 }
 /** Confirmed by any mechanism - read from the database (for code that may run before init or in another process). */
@@ -349,7 +349,7 @@ async function adminView(user) {
   let log = [];
   try { log = await require("./adminaudit").recent(AUDIT, 10); } catch (e) { log = []; }
   let pads = 0;
-  try { pads = require("./rooms").listCached().filter((r) => r && r.adult).length; } catch (e) { pads = 0; }
+  try { pads = require("./rooms").listAllCached().filter((r) => r && r.adult).length; } catch (e) { pads = 0; }
   return { enabled: ENABLED, loaded, load_error: lastError ? { at: lastError.at, message: lastError.message } : null, updated: META.updated, by: META.by, can_edit: loaded && (await canEdit(user)),
            adult_pads: pads, confirmed: CONFIRMED.size, version: AGE_VERSION,
            log: log.map((r) => ({ at: r.at, admin: r.admin, to: !!(r.detail && r.detail.to), reason: r.reason || null })) };

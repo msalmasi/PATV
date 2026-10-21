@@ -81,6 +81,7 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS pad_members (room_id TEXT NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL,
                       note TEXT, requested_at INTEGER, decided_at INTEGER, decided_by TEXT, PRIMARY KEY (room_id, user_id))`);
       await runQuery("CREATE INDEX IF NOT EXISTS pad_members_user ON pad_members (user_id)");
+      await seedLevels();
       await load();
       // adultgate site: the 18+ gate's switch + confirmed accounts load with the levels. A failure doesn't stop the levels:
       // the gate itself fails closed (18+ pads stay gated), retries and logs (adultgate.init)
@@ -88,6 +89,24 @@ function init() {
     })().catch((e) => { console.error("[padaccess] init:", e.message); ready = null; throw e; });
   }
   return ready;
+}
+/**
+ * S1 Q4 (ADR 0007 D1): a seeded pad's level (rooms.SEEDS `access`: the chat hub's staff and canary pads are Approved) - once
+ * per pad (rooms_kv seeded_access:<id>), only when its registry row exists and it has no level of its own yet, so an owner's
+ * or admin's later choice stays. Never in the way of the levels: a failure is logged and retried at the next start.
+ */
+async function seedLevels() {
+  try {
+    await rooms.init();
+    for (const s of rooms.SEEDS) {
+      const lv = cleanLevel(s.access);
+      if (!lv || (await rooms.kvGet("seeded_access:" + s.room_id))) continue;
+      if (!(await getQuery("SELECT 1 FROM rooms_registry WHERE room_id = ?", [s.room_id])).length) continue;
+      await runQuery("INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES (?, ?, ?, 'seed') ON CONFLICT(room_id) DO NOTHING",
+                     [s.room_id, lv, NOW()]);
+      await rooms.kvSet("seeded_access:" + s.room_id, lv);
+    }
+  } catch (e) { console.error("[padaccess] seed levels:", e.message); }
 }
 async function load() {
   const L = new Map(), M = new Map();

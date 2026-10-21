@@ -223,6 +223,40 @@ async function setRole(actorLogin, targetLogin, role, by) {
   return { login: t, role };
 }
 
+// ── S1 Q4 (seam plan §12.4 roles/changed; ADR 0007 D11: "the global role is the Pepe role of the account's linked Camfrog
+// login; users.class is display only"): readers only - no membership hook (the hub mirrors roles through the seam) ──
+/**
+ * The global role of these accounts: the pepe_roles row of each account's linked Camfrog login, keyed the way the seam keys
+ * it - SQLite's lower(trim(users.camfrogUsername)) (pepe_roles logins are ASCII, so JavaScript's low() agrees). -> Map(userId ->
+ * {login, role, role_at, cls}) for every account that has a users row (role: owner | admin | staff | assistant | trusted |
+ * null; role_at: the pepe_roles row's ts - a removal is a tombstone with its own ts - or null without a row; cls: users.class).
+ * An id without a users row is left out (the account is gone).
+ */
+async function globalRolesOf(userIds) {
+  await init();
+  const ids = [...new Set([...(userIds || [])].filter((x) => x != null && x !== "").map(String))];
+  const out = new Map();
+  const users = [];
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    users.push(...(await getQuery(`SELECT userId, class, lower(trim(camfrogUsername)) AS login FROM users WHERE userId IN (${part.map(() => "?").join(",")})`, part)));
+  }
+  const logins = [...new Set(users.map((u) => u.login).filter(Boolean))];
+  const roles = new Map();
+  for (let i = 0; i < logins.length; i += 400) {
+    const part = logins.slice(i, i + 400);
+    for (const r of await getQuery(`SELECT login, role, ts FROM pepe_roles WHERE login IN (${part.map(() => "?").join(",")})`, part)) roles.set(r.login, r);
+  }
+  for (const u of users) {
+    const r = u.login ? roles.get(u.login) : null;
+    out.set(String(u.userId), { login: u.login || null, role: r && ROLES.includes(r.role) ? r.role : null, role_at: r ? Number(r.ts) || null : null,
+                                cls: u.class == null || u.class === "" ? null : String(u.class) });
+  }
+  return out;
+}
+/** One account's global role (globalRolesOf) -> {login, role, role_at, cls}, or null when it has no users row. */
+async function globalRoleOf(userId) { return (await globalRolesOf([userId])).get(String(userId)) || null; }
+
 /** Site classes for linked accounts of these logins (all known logins when omitted). */
 async function reconcile(logins) {
   await init();
@@ -320,5 +354,6 @@ function register(app, { isBotToken, noTimers } = {}) {
 }
 
 module.exports = { init, map, roleOf, ownerHolds, ownerOf, OWNER_ONLY, botSync, setRole, reconcile, register, classUpdate, classesEdit, pendingList, confirmPending,
+  globalRoleOf, globalRolesOf,                       // S1 Q4: the seam's roles/changed reader
   RoleError, LEVEL, ROLES, CLASS_OF, MANAGED, ROLE_OF_CLASS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); }, _reset: () => { ready = null; } };
