@@ -26,7 +26,7 @@ const repo = path.resolve(__dirname, "..");
 const FIXTURE = path.join(__dirname, "fixtures", "policycfg-contract.json");
 // Update together with camfrog-bot's copy (ci/fixtures/policycfg-contract.json) and its pin (policycfg_contract_test.py PIN):
 // python tools/gen_policycfg_contract.py --site <this checkout> prints the new sha.
-const PIN = "e55b42f1dc8aea5254d64a5882b0465dce4f6807ef6feb8eafd5cecad7a1f5d9";
+const PIN = "b89e727be9c69fe6b2bbde2e9376e4b0aeaf57eabd1113c24c272bd8af486aa8";
 const RAW = fs.readFileSync(FIXTURE);
 const FX = JSON.parse(RAW.toString("utf8"));
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
@@ -116,7 +116,10 @@ test("the Phase 4b switches in his policy push: shown read-only on /admin (owner
   assert.equal(p4.owner, "pepe");
   assert.equal(p4.readonly, true);
   assert.equal(p4.pushed, true);
-  assert.ok(p4.at > 0, "as of his push");
+  // reverify of 1.99adw (S2 / S4 survived `p4.at > 0`): the time of HIS push, in ms - never the read's own clock, never seconds
+  const pushAt = (await C.meta("cfg")).at;
+  assert.ok(pushAt > 1.7e9 && pushAt < 1e10, "the stored push's at is in seconds");
+  assert.equal(p4.at, Math.round(pushAt * 1000), "as of his push (its at, in ms)");
   assert.deepEqual(p4.rows.map((r) => r.key), PC.PHASE4B.map((x) => x[0]), "every switch, in order");
   for (const r of p4.rows) {
     assert.deepEqual({ on: r.on, live: r.live }, pushed[r.key], r.key);
