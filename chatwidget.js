@@ -6,21 +6,29 @@
 //     `public, max-age=31536000, immutable`, manifest.json and releases.json `no-cache` (same name, new content each export),
 //     every file `X-Content-Type-Options: nosniff`. A SharedWorker must be same-origin, which is why v1 serves it.
 //   * manifest(): public/js/patv-chat/manifest.json, read ONCE per process (an export arrives with a deploy, which restarts the
-//     site): schema 1, the tab entry `entries.chat` and its SRI, checked against the file's bytes. Anything wrong = no widget
-//     (one log line, the reason only).
+//     site) - at start-up, when register() runs: schema 1, the tab entry `entries.chat` and its SRI, checked against the file's
+//     bytes. Anything wrong = no widget (one log line, the reason only, when the site starts).
 //   * The hub's addresses: HUB_RT_WS (wss://rt.publicaccess.tv) and HUB_RT_API (https://rt.publicaccess.tv) - ORIGINS, as
 //     the widget's page config takes them (ws: / http: only to loopback). Unset or unusable = no widget.
-//   * <patv-chat> (forPad -> res.locals.chatWidget): a pad at pad_hub.chat_backend = 'hub' (S1: never a Camfrog pad - ADR 0007
-//     D3), CHAT_HUB on (v1's kill switch: chat_switches key 'CHAT_HUB' = 'on'; the table is release L1's - missing or
-//     unreadable reads as off), a manifest and the addresses. Signed in with a hub account id -> the mount (pad = hub_pad_id,
-//     room = uuidv5(NS_PAD_MAIN, hub_pad_id), slug, mode full | compact, theme dark, locale, ?line= passed through); signed
-//     out -> the "Sign in to chat" teaser (S1 has no guest sockets, so no widget download either); signed in without a hub
-//     account id (a legacy id while CHAT_GENESIS_NS is unset) -> a short note. Anything else -> null: the page is as before.
+//   * <patv-chat> (forPad -> res.locals.chatWidget): a SITE pad (an allow-list - ADR 0007 D3: S1 allows the hub only on site
+//     pads; a pad that stops being one, e.g. padconnect's Twitch connect, which keeps the pad id and so its pad_hub row, loses
+//     the widget with it) at pad_hub.chat_backend = 'hub', CHAT_HUB on (v1's kill switch: chat_switches key 'CHAT_HUB', value
+//     exactly 'on' as release L1's chatswitches reads it; the table is L1's - missing or unreadable reads as off), a manifest
+//     and the addresses. Who sees the chat is padaccess's, read here (not taken from the caller): behind the 18+ gate -> its
+//     card; signed out -> the "Sign in to chat" teaser (S1 has no guest sockets, so no widget download either); outside the pad
+//     (padaccess.full) -> null; signed in with a hub account id -> the mount (pad = hub_pad_id, room = uuidv5(NS_PAD_MAIN,
+//     hub_pad_id), slug, mode full | compact, theme dark, locale, ?line= passed through - and on such a pad a ?line= link opens
+//     the Live tab, bridge.padTabsFor's lineLive); without one (a legacy id while CHAT_GENESIS_NS is unset) -> a short note.
+//     Anything else -> null: the page is as before.
 //   * <patv-modtools> (toolsFor): /p/<slug>/mod of a hub pad (padModPage), /admin/chat/<view> (register) and the /admin
 //     overview's chat reports card - REGARDLESS of CHAT_HUB (D3: mods keep working reports after a rollback); a manifest, the
 //     addresses and a signed-in hub account needed. Every permission is the hub's can() (a refusal renders "Nothing to show");
 //     v1 only keeps the admin pages to the capabilities D15 names (chat.mod_queue, chat.audit - release L1's keys; until they
 //     exist, their D15 default classes, canChat).
+//   * The admin nav's 💬 Chat group (views/partials/admin-nav.ejs): THIS slice owns its moderation links (release L1 made the
+//     group for /admin/chat, its break-glass form, and left these to V2): adminNavLinks(), handed to every view as
+//     app.locals.chatAdminNav, lists /admin/chat/<view> per registered capability; the nav adds them to L1's entry and opens
+//     the group to chat.mod_queue / chat.audit, and siteperms.AREA_PAGES gives a chat.mod_queue holder an admin home.
 //   * What the views print (res.locals.chatWidget): layout.ejs's head - the preconnect to the hub (D5) and the text styles'
 //     webfonts (D14: fonts in the page's head; the widget ships none) - and partials/chat-widget-boot.ejs: the page config
 //     (JSON escaped as v1 does: <, U+2028, U+2029; no ticket - the worker fetches POST /api/chat/ticket itself) and the one
@@ -50,6 +58,8 @@ const FONTS_HREF = "https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400
 const PAD_VIEWS = ["reports", "held", "modlog", "bans", "lockdown"];
 const ADMIN_VIEWS = { reports: "chat.mod_queue", held: "chat.mod_queue", modlog: "chat.mod_queue", bans: "chat.mod_queue",
                       audit: "chat.audit", switches: "chat.audit" };
+/** The admin views' names (the admin area is English): the admin nav's links and chatTools.ejs's own view links. */
+const ADMIN_LABELS = { reports: "Reports", held: "Held", modlog: "Mod log", bans: "Bans", audit: "Audit (admin reads)", switches: "Retention & switches" };
 /** D15's default class for each chat capability (siteperms-core CLASS_RANK names) - used only until release L1 registers the keys. */
 const CAP_DEFAULTS = { "chat.mod_queue": "Assistant", "chat.audit": "Admin" };
 
@@ -124,11 +134,13 @@ function rtConfig() {
 }
 
 // ── v1's switches and the pad's row ──
-/** CHAT_HUB (ADR 0007 D3): v1's own kill switch, set only on /admin/chat (release L1). Missing table / row / unreadable = off. */
+/** CHAT_HUB (ADR 0007 D3): v1's own kill switch, set only on /admin/chat (release L1). On = the value is exactly 'on', the way
+ *  L1's chatswitches.get('CHAT_HUB') === 'on' and the hub's mirror read it (never looser than they are); anything else - another
+ *  spelling, no row, no table, unreadable - is off. */
 async function hubOn() {
   try {
     const r = (await getQuery("SELECT value FROM chat_switches WHERE key = 'CHAT_HUB'"))[0];
-    return !!r && String(r.value).trim().toLowerCase() === "on";
+    return !!r && r.value === "on";
   } catch (e) {
     if (!/no such table/i.test(String(e && e.message))) logOnce("CHAT_HUB can't be read - treated as off");
     return false;
@@ -148,10 +160,20 @@ function padMainRoomId(hubPadId) {
   if (!UUID_RE.test(id)) throw new Error("padMainRoomId: not a uuid");
   return require("uuid").v5(id, NS_PAD_MAIN);
 }
-/** S1 allows the hub only on site pads (ADR 0007 D3): never a Camfrog pad (its chat is the bridge) or a profile pad. */
-function platformOk(platform) { return platform !== "camfrog" && platform !== "profile"; }
+/** S1 allows the hub only on SITE pads (ADR 0007 D3) - an allow-list, so everything else fails closed: a Camfrog pad (its chat
+ *  is the bridge), a profile pad, a Twitch or Discord pad (padconnect's connect turns a site pad into one and keeps its id, so
+ *  its pad_hub row - 'hub' included - follows it), an unknown value. */
+function platformOk(platform) { return platform === "site"; }
 function platformOf(roomId) {
   try { return require("./rooms").platformOf(roomId); } catch (e) { return "camfrog"; }
+}
+/** A site pad now: the registry says so (rooms.platformOf - its column, else what the id implies) and so does the caller, when it
+ *  names a platform. */
+function sitePad(roomId, platform) { return platformOk(platformOf(roomId)) && (platform == null || platformOk(platform)); }
+/** ?line=<seq> as the widget takes it (a positive safe integer, digits only), or null. */
+function lineOf(req) {
+  const v = req && req.query ? req.query.line : null;
+  return typeof v === "string" && /^[1-9]\d{0,15}$/.test(v) && Number.isSafeInteger(Number(v)) ? v : null;
 }
 
 // ── what the page prints ──
@@ -179,36 +201,40 @@ function pageBits(M, rt, acct) {
 
 /**
  * <patv-chat> on a pad's page (bridge.js /p/:slug, mode "full") or the homepage's room panel (home.js, mode "compact").
- * `gate` = padaccess.adultGate for this viewer ("ok" | "signin" | "confirm": the 18+ card instead of the chat), `open` =
- * padaccess.full (may this viewer see the pad's members-tier content). Sets res.locals.chatWidget and returns it (or null):
+ * Who may see the chat is padaccess's and is read HERE, never taken from the caller (one place to get it right): its 18+ gate
+ * (adultGate: "signin" | "confirm" -> the 18+ card instead of the chat) and the pad's level (full: an Approved pad's outsider
+ * gets nothing). Sets res.locals.chatWidget and returns it (or null):
  *   {state: "mount", head, boot, mount: {pad, room, slug, mode, theme, locale, line}} | {state: "gate", gate, next} |
- *   {state: "signin", next} | {state: "unavailable"} | null (not a hub pad, CHAT_HUB off, no widget: the page as before)
+ *   {state: "signin", next} | {state: "unavailable"} | null (not a hub site pad, CHAT_HUB off, no widget: the page as before)
+ * `next` (the sign-in / 18+ card's way back) keeps a valid ?line=.
  */
-async function forPad(req, res, { roomId, slug, platform, mode = "full", open = true, gate = "ok" } = {}) {
-  const out = await decide(req, res, { roomId, slug, platform, mode, open, gate }).catch((e) => {
+async function forPad(req, res, { roomId, slug, platform, mode = "full" } = {}) {
+  const out = await decide(req, res, { roomId, slug, platform, mode }).catch((e) => {
     logOnce("mount check failed: " + String((e && e.message) || e).slice(0, 80));
     return null;
   });
   if (res && res.locals && out) res.locals.chatWidget = out;
   return out;
 }
-async function decide(req, res, { roomId, slug, platform, mode, open, gate }) {
-  if (!roomId || !platformOk(platform || platformOf(roomId))) return null;
+async function decide(req, res, { roomId, slug, platform, mode }) {
+  if (!roomId || !sitePad(roomId, platform)) return null;
   const M = manifest(), rt = rtConfig();
   if (!M || !rt) return null;
   const row = await padRow(roomId);
   if (!row || row.backend !== "hub") return null;
   if (!(await hubOn())) return null;
+  const PA = require("./padaccess");
+  await PA.init();
+  const viewer = req && req.user && req.user.userId ? req.user : null;
   const s = String(slug || "").toLowerCase();
-  const next = "/p/" + encodeURIComponent(s);
-  if (gate === "signin" || gate === "confirm") return { state: "gate", gate, next };
-  const signedIn = !!(req && req.user && req.user.userId);
-  if (!signedIn) return { state: "signin", next };
-  if (!open) return null;
+  const line = lineOf(req);
+  const next = "/p/" + encodeURIComponent(s) + (line ? "?line=" + line : "");
+  const gate = PA.adultGate(viewer, roomId);
+  if (gate !== "ok") return { state: "gate", gate: gate === "signin" ? "signin" : "confirm", next };
+  if (!viewer) return { state: "signin", next };
+  if (!PA.full(viewer, roomId)) return null;
   const acct = acctOf(req);
   if (!acct) return { state: "unavailable" };
-  const q = (req && req.query) || {};
-  const line = typeof q.line === "string" && /^[1-9]\d{0,15}$/.test(q.line) && Number.isSafeInteger(Number(q.line)) ? q.line : null;
   return {
     state: "mount", ...pageBits(M, rt, acct),
     mount: { pad: row.hubPadId, room: padMainRoomId(row.hubPadId), slug: SLUG_RE.test(s) ? s : null, mode: mode === "compact" ? "compact" : "full",
@@ -257,7 +283,7 @@ function padModPage(fallback, addUser) {
     try {
       if (!manifest() || !rtConfig()) return fallback(req, res, next);
       const R = await require("./roomsweb").resolveRoom(String(req.params.slug || "").slice(0, 128)).catch(() => null);
-      if (!R || !platformOk(R.platform || platformOf(R.id))) return fallback(req, res, next);
+      if (!R || !sitePad(R.id, R.platform || null)) return fallback(req, res, next);
       const row = await padRow(R.id);
       if (!row || row.backend !== "hub") return fallback(req, res, next);
       const u = await withUser(req, res);
@@ -280,8 +306,22 @@ function padModPage(fallback, addUser) {
   };
 }
 
-/** /admin/chat/<view> (D15's admin shell; the Chat group and /admin/chat itself are release L1's). */
+/**
+ * The admin nav's chat moderation links (views/partials/admin-nav.ejs's 💬 Chat group; ADR 0007 D15 - this slice owns them,
+ * release L1 owns the group's /admin/chat entry): [href, label, capability] per /admin/chat/<view>, only for the capabilities
+ * siteperms has registered (release L1's chat.mod_queue / chat.audit: none until it lands), so the nav never asks siteperms
+ * about a key it doesn't know (a throw in tests, a denial and a log line in production).
+ */
+function adminNavLinks() {
+  const core = require("./siteperms-core");
+  return Object.keys(ADMIN_VIEWS).filter((v) => !!core.capOf(ADMIN_VIEWS[v])).map((v) => ["/admin/chat/" + v, ADMIN_LABELS[v], ADMIN_VIEWS[v]]);
+}
+
+/** /admin/chat/<view> (D15's admin shell; /admin/chat itself, the break-glass form, is release L1's), the admin nav's chat links
+ *  (app.locals.chatAdminNav) - and the manifest, read now so a bad export is logged when the site starts. */
 function register(app, { addUser }) {
+  manifest();
+  if (app.locals) app.locals.chatAdminNav = adminNavLinks;
   const noop = (req, res, next) => next();
   app.get("/admin/chat/:view", addUser || noop, async (req, res, next) => {
     const view = String(req.params.view || "");
@@ -297,7 +337,7 @@ function register(app, { addUser }) {
       res.set("X-Robots-Tag", "noindex");
       const views = Object.keys(ADMIN_VIEWS).filter((v) => canChat(me, ADMIN_VIEWS[v]));
       res.render("admin/chatTools", { user: me.username, title: "Admin · Chat", me, isAdmin: SP.can(me, "admin.sensitive_overview"),
-                                      view, views, tools,
+                                      view, views, labels: ADMIN_LABELS, tools, widget: status(),
                                       errors: typeof req.flash === "function" ? req.flash("error") : [],
                                       success: typeof req.flash === "function" ? req.flash("success") : [] });
     } catch (e) {
@@ -321,13 +361,14 @@ function overviewCard() {
   };
 }
 
-/** /admin/keys#seam-style status (no ids): the manifest's version or why there's none, whether the addresses are set. */
+/** The widget's install state (no ids) - /admin/chat/<view>'s footer line: the vendored version, or why there's none (a broken
+ *  manifest's reason), and whether the hub's addresses are set. */
 function status() {
   const M = manifest();
   return { version: M ? M.version : null, entry: M ? M.entry : null, why: M ? null : WHY, hub: !!rtConfig() };
 }
 
 module.exports = { manifest, staticFiles, rtConfig, hubOn, padRow, padMainRoomId, escJson, forPad, toolsFor, canChat, padModPage, register,
-                   overviewCard, status, platformOk, NS_PAD_MAIN, FONTS_HREF, PAD_VIEWS, ADMIN_VIEWS, URL_BASE,
+                   overviewCard, status, platformOk, lineOf, adminNavLinks, NS_PAD_MAIN, FONTS_HREF, PAD_VIEWS, ADMIN_VIEWS, ADMIN_LABELS, URL_BASE,
                    _setDir: (d) => { DIR = d || path.join(__dirname, "public", "js", "patv-chat"); MANIFEST = undefined; WHY = null; },
                    _reset: () => { MANIFEST = undefined; WHY = null; once.clear(); } };

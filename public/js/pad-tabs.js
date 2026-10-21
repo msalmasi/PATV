@@ -22,12 +22,16 @@
 // default tab, a click) the pill stays a few seconds, then fades, and those posts get a "new" edge - so the visitor
 // sees what was new instead of the badge vanishing before it's ever seen. #rules means About (the rules live there
 // since 1.99ec - the Feed tab is one column).
-// The pure helpers (pickTab, defaultTab, requestedTab, newCount) are exported for node tests.
+// S1 V2: a pad whose Live tab holds the chat hub's widget (init's o.lineLive; bridge.js padTabsFor's) opens Live for a ?line=
+// link without a ?tab= (lineRequested) - the widget's copy-link and mentions links are /p/<slug>?line=<seq>, the line it opens
+// is on Live (v1's own line links say ?tab=live&line=). On every other pad a ?line= changes nothing.
+// The pure helpers (pickTab, defaultTab, requestedTab, lineRequested, newCount) are exported for node tests.
 (function (root) {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var ALIAS = { live: 'live', stage: 'live', chat: 'live', feed: 'feed', posts: 'feed', rules: 'about', about: 'about', info: 'about', schedule: 'live' };
   var FEED_Q = /(?:^|[?&])(?:sort|fsort|t|ft|p|fp|tag)=/;      // 1.99iq: + ?tag= (a tag filter is the Feed's)
+  var LINE_Q = /(?:^|[?&])line=[1-9][0-9]{0,15}(?:[&#]|$)/;     // S1 V2: a chat line (?line=<seq>, as the widget takes it)
   var FIRST_LOOK_MS = 3 * 24 * 3600 * 1000;   // a first visit counts the last 3 days' posts as new
   var FEED_STICKY_MS = 30 * 60 * 1000;        // 1.99eb: a picked Feed beats Live-when-live for this long
   var REMEMBER = { live: true, feed: true };   // 1.99eb: About is never remembered
@@ -53,6 +57,9 @@
     if (FEED_Q.test(s)) return 'feed';
     return null;
   }
+
+  /** S1 V2: does the query name a chat line (?line=<seq>)? Only a pad whose Live tab holds the chat hub's widget asks for Live. */
+  function lineRequested(search) { return LINE_Q.test(String(search || '')); }
 
   /** The stored last pick ("feed@<ms>", "live@<ms>"; a pre-1.99eb bare "feed" / "live" has no time) ->
    *  {tab, at} or null. About (or anything else) is never a remembered tab. */
@@ -249,13 +256,13 @@
     // only drawn for whoever can manage the pad); anyone else just gets the pad page
     var po = ownerPanelFor(root.location.hash, doc);
     if (po) { root.location.replace(po); return null; }
-    var requested = requestedTab(root.location.search, root.location.hash);
+    var requested = requestedTab(root.location.search, root.location.hash) || (o.lineLive && lineRequested(root.location.search) ? 'live' : null);
     show(pickTab({ tabs: tabs, platform: o.platform, active: o.active, requested: requested, stored: store(keyTab) }), {});
     if (/^#(?:rules|vault(?:-donate)?)$/i.test(root.location.hash)) { var r = doc.getElementById(root.location.hash.slice(1)); if (r) { if (r.tagName === 'DETAILS') r.open = true; try { r.scrollIntoView({ block: 'start' }); } catch (x) { /* */ } } }
     return { show: show, current: function () { return current; } };
   }
 
-  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, ownerPanelFor: ownerPanelFor, newCount: newCount, newIds: newIds, badgeText: badgeText, mergeSeen: mergeSeen, needsPush: needsPush,
+  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, lineRequested: lineRequested, ownerPanelFor: ownerPanelFor, newCount: newCount, newIds: newIds, badgeText: badgeText, mergeSeen: mergeSeen, needsPush: needsPush,
               parseStored: parseStored, storedValue: storedValue, FEED_STICKY_MS: FEED_STICKY_MS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PATVPadTabs = api;

@@ -1754,12 +1754,15 @@ function register(app, { isBotToken, addUser }) {
       try { feedSeen = { scope: require("./feedseen").padScope(R.id), upto: await require("./feedseen").one(req.user.userId, require("./feedseen").padScope(R.id)) }; }
       catch (e) { feedSeen = undefined; }
     }
-    // adultgate site: past the 18+ gate the Live tab's "active" dot doesn't say people are in the room (only the stage counts)
-    const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: adultGate === "ok" ? R.count : 0, members: initial ? initial.members : null,
-      pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     // S1 V2 (release L4): a site pad at chat_backend = 'hub' while CHAT_HUB is on -> the chat hub's <patv-chat> on the Live tab
-    // (chatwidget.forPad sets res.locals.chatWidget for room.ejs and the layout's head; ?line= passes through); null otherwise
-    await require("./chatwidget").forPad(req, res, { roomId: R.id, slug, platform, mode: "full", open: liveOpen, gate: adultGate });
+    // (chatwidget.forPad sets res.locals.chatWidget for room.ejs and the layout's head; it reads padaccess's 18+ gate and the
+    // pad's level itself; ?line= passes through); null otherwise
+    const hubChat = await require("./chatwidget").forPad(req, res, { roomId: R.id, slug, platform, mode: "full" });
+    // adultgate site: past the 18+ gate the Live tab's "active" dot doesn't say people are in the room (only the stage counts)
+    // S1 V2: lineLive - the Live tab holds the chat hub's widget, so a ?line= link (the widget's copy link, its mentions) opens Live
+    const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: adultGate === "ok" ? R.count : 0, members: initial ? initial.members : null,
+      pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest,
+      lineLive: !!hubChat });
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,
       adultNext: "/p/" + encodeURIComponent(slug),
@@ -1818,7 +1821,8 @@ async function padLatest(roomId, user, feed) {
 }
 /** Which tabs a pad page has and which opens first (before the browser's own choice: its remembered tab,
  *  #hash). The Live tab is "Stage" on pads without a Camfrog room; the room is "active" when people are in
- *  it (not counting Pepe) or its stage is on air. */
+ *  it (not counting Pepe) or its stage is on air. S1 V2: o.lineLive (the Live tab holds the chat hub's widget) - a ?line=
+ *  without a ?tab= asks for Live (pad-tabs.js lineRequested; the browser does the same with init's lineLive). */
 function padTabsFor(o) {
   const T = require("./public/js/pad-tabs");
   const camfrog = o.platform === "camfrog";
@@ -1828,9 +1832,9 @@ function padTabsFor(o) {
   const stageOn = (o.pepeOn && o.pepeHere !== false) || (Array.isArray(o.slots) && o.slots.length > 0);
   const active = !!((camfrog && o.live && people > 0) || stageOn);
   const qs = String(o.query || "").includes("?") ? String(o.query).slice(String(o.query).indexOf("?")) : "";
-  const requested = T.requestedTab(qs, "");
+  const requested = T.requestedTab(qs, "") || (o.lineLive && T.lineRequested(qs) ? "live" : null);
   return { tabs, camfrog, active, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null }),
-           posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
+           posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })), lineLive: !!o.lineLive };
 }
 
 module.exports = { bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,

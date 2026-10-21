@@ -377,19 +377,32 @@ release L1 (Q4 + V1: the `chat_switches` table, `/admin/chat`) and Q7's turn-on,
   `Cache-Control: public, max-age=31536000, immutable`; `manifest.json`, `releases.json` and anything unhashed `no-cache`
   (revalidated); every file `X-Content-Type-Options: nosniff`. A SharedWorker script must be same-origin with the page, which
   is why v1 serves the widget at all; its socket and REST go cross-origin to the hub.
-- **The manifest** is read once per process (an export arrives with a deploy, which restarts the site): schema 1, the tab
-  entry `entries.chat` (a bare file name) and its `sri`, checked against the file's bytes at start-up. Anything wrong = no
-  widget and one log line with the reason (`[chatwidget] widget off: ...`); no manifest is silent.
+- **The manifest** is read once per process (an export arrives with a deploy, which restarts the site), at start-up
+  (`chatwidget.register`): schema 1, the tab entry `entries.chat` (a bare file name) and its `sri`, checked against the
+  file's bytes. Anything wrong = no widget and one log line with the reason when the site starts (`[chatwidget] widget off:
+  ...`); no manifest is silent. The `/admin/chat/<view>` pages' footer names the vendored version, or the reason a broken
+  export can't be used (`chatwidget.status`, no ids).
 - **`<patv-chat>`** (`chatwidget.forPad`, which sets `res.locals.chatWidget`): on a pad page (`bridge.js` `/p/:slug`, the Live
   tab's site-pad branch, `mode="full"`) and on the homepage's room panel (`home.js`, `mode="compact"` - it fires only when the
-  panel shows a hub pad; today it shows Camfrog rooms). Never on a Camfrog or profile pad (ADR 0007 D3: S1 allows the hub only
-  on site pads). `CHAT_HUB` is v1's `chat_switches` row `CHAT_HUB` = `on` (release L1's table; missing or unreadable = off,
-  fail closed). Signed in, the mount is `<patv-chat pad="<hub_pad_id>" room="<uuidv5(NS_PAD_MAIN, hub_pad_id)>" slug mode
+  panel shows a hub pad; today it shows Camfrog rooms). Only on a **site** pad (ADR 0007 D3: S1 allows the hub only on site
+  pads) - an allow-list on the registry's platform and the caller's, so a Camfrog, profile, Twitch or Discord pad never
+  mounts, and a hub site pad that padconnect's Twitch / Discord connect turns into one (it keeps the pad id, so its `pad_hub`
+  row) loses the widget and its `/p/<slug>/mod` page with it. `CHAT_HUB` is v1's `chat_switches` row `CHAT_HUB` with the value
+  exactly `on` - as release L1's `chatswitches.get('CHAT_HUB') === 'on'` and the hub's mirror read it; any other spelling, a
+  missing table or an unreadable one = off (fail closed). Who sees the chat is padaccess's, read inside `forPad` (the callers
+  pass no gate): its 18+ gate first, then the sign-in, then the pad's level (`padaccess.full`: an Approved pad's outsider gets
+  nothing). Signed in, the mount is `<patv-chat pad="<hub_pad_id>" room="<uuidv5(NS_PAD_MAIN, hub_pad_id)>" slug mode
   theme="dark" locale="<the page's language>" line="<?line=>">` (the main room id is rt-schema's `padMainRoomId`, pinned by its
   golden vectors in `test/chatwidget.test.js`; `?line=<seq>` is passed through and opened as `history around`). Signed out: a
-  "Sign in to chat" card and no widget download (S1 has no guest sockets). An 18+ pad behind the gate: the 18+ card. Signed in
-  without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset): a one-line note. While the hub pad's chat is
-  mounted, the homepage's v1 live-room poller doesn't run.
+  "Sign in to chat" card and no widget download (S1 has no guest sockets). An 18+ pad behind the gate: the 18+ card. Both
+  cards' way back keeps a valid `?line=`. Signed in without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset): a
+  one-line note. While the hub pad's chat is mounted, the homepage's v1 live-room poller doesn't run.
+- **`?line=` opens the Live tab** on a pad whose Live tab holds the hub's chat (any of the states above): the widget's own
+  links - its copy-link sheet and the mentions drawer - are `/p/<slug>?line=<seq>` with no `?tab=` (v1's own line links say
+  `?tab=live&line=`), and a site pad otherwise opens on its Feed, where the line can't be seen. `bridge.padTabsFor`'s
+  `lineLive` on the server and `PATVPadTabs.init`'s `lineLive` in the browser (`pad-tabs.js` `lineRequested`, `?v=8`): a
+  `?tab=` or `#hash` still wins, and on every other pad - every pad before the switches - a `?line=` changes nothing (the
+  page's init carries no `lineLive` then).
 - **`<patv-modtools>`** (`chatwidget.toolsFor`) mounts **whatever `CHAT_HUB` says** (D3: mods keep working reports after a
   rollback), with a manifest, the origins and a signed-in hub account:
   - `/p/<slug>/mod` of a pad at `chat_backend = 'hub'` (`chatwidget.padModPage` in `pads.js`): Reports, Held, Mod log, Bans,
@@ -399,7 +412,19 @@ release L1 (Q4 + V1: the `chat_switches` table, `/admin/chat`) and Q7's turn-on,
   - `/admin/chat/<reports|held|modlog|bans|audit|switches>` (`views/admin/chatTools.ejs`, the admin shell, section `chat`):
     the site-wide queues, no pad. Reports / held / mod log / bans need `chat.mod_queue`, audit / switches `chat.audit` - release
     L1's siteperms keys; until they exist, their ADR 0007 D15 default classes (Assistant, Admin: `chatwidget.canChat`), after
-    that siteperms with its overrides. `/admin/chat` itself (the break-glass form) is release L1's page.
+    that siteperms with its overrides; the class is the database's (a stale session's isn't trusted). `Cache-Control:
+    no-store`, `X-Robots-Tag: noindex`. `/admin/chat` itself (the break-glass form) is release L1's page.
+  - **The admin nav's 💬 Chat group** (`views/partials/admin-nav.ejs`): release L1 makes its entry (`/admin/chat`, behind
+    `chat.breakglass`); **this slice owns its moderation links** (V1's branch leaves them to V2, the later release).
+    `chatwidget.adminNavLinks()` - `[href, label, capability]` per `/admin/chat/<view>` whose capability siteperms has
+    registered, so the nav never asks about a key it doesn't know - reaches every view as `app.locals.chatAdminNav`
+    (`chatwidget.register`). The nav adds them to L1's entry (L1's anchors become `/admin/chat#...`, each behind L1's
+    capability, so they work from a view's page), opens the group to `chat.mod_queue` and `chat.audit`, and links it to the
+    first page the viewer may open (an Admin: `/admin/chat`; an Assistant: `/admin/chat/reports`); without L1's entry the
+    links make the group. `siteperms.AREA_PAGES` lists `/admin/chat/reports` for `chat.mod_queue` once the key is registered,
+    so an Assistant whose one admin capability is the queue gets an admin home (and the layout's 🛠️ Admin link) - `/admin`
+    itself, with the overview card, stays behind `admin.area`. When L1 merges first, `admin-nav.ejs` and `siteperms.js`
+    merge without a conflict (this slice's lines are elsewhere in both files).
   - the `/admin` overview's "💬 Chat reports" card (`chatwidget.overviewCard`): `<patv-modtools view="reports" mode="card">`
     for `chat.mod_queue` holders - open reports and the ones undecided for more than 14 days (ADR 0007 D10). The views,
     `mode="card"` included, are slice M2's; the C0 shell renders an empty frame until then.
@@ -415,12 +440,17 @@ release L1 (Q4 + V1: the `chat_switches` table, `/admin/chat`) and Q7's turn-on,
   fonts down with it.
 - **Logs** carry reasons only (no account, pad, ticket or key).
 - **Tests:** `test/chatwidget.test.js` - nothing without a manifest, with a broken one (schema, entry, SRI mismatch) or
-  without the origins; nothing with `CHAT_HUB` off or its table missing; mounts only for hub site pads (never Camfrog, never a
-  `v1` pad), the teaser signed out, the 18+ card, the `?line=` rules, the page config's escaping and no ticket; the cache
-  headers; `/p/<slug>/mod`: the 301 kept for v1 pads and without a widget, sign-in, the Approved pad's outsider, the views;
-  `/admin/chat/<view>`: who opens which, the off notes; the overview card; `padMainRoomId` against rt-schema's golden vectors;
-  `FONTS_HREF` covers every registry webfont the layout doesn't load; the walkers that scan `public/js` skip the vendored
-  directory.
+  without the origins, and the bad one logged at `register()`; nothing with `CHAT_HUB` off, its table missing or any value
+  but exactly `on`; mounts only for hub site pads (never Camfrog, profile, Twitch or Discord - a site pad connected to Twitch
+  or Discord included - never a `v1` pad), the teaser signed out, the 18+ card and the Approved pad's outsider from padaccess's
+  real state, the `?line=` rules and the way back; the pad page at route level (`bridge.js`: the mount on Live, `?line=` opens
+  Live there and nowhere else, the 18+ card instead of the chat); the page config's escaping and no ticket; the cache headers;
+  `/p/<slug>/mod`: the 301 kept for v1 pads and without a widget, sign-in, the Approved pad's outsider, the views;
+  `/admin/chat/<view>`: who opens which (the database's class), the off notes and the footer, `noindex`; the overview card;
+  the nav's Chat links and `AREA_PAGES` (the L1-entry case runs once L1's keys are registered, skipped before); `padMainRoomId`
+  against rt-schema's golden vectors; `FONTS_HREF` covers every registry webfont the layout doesn't load; the walkers that scan
+  `public/js` skip the vendored directory. `test/pad-tabs.test.js` / `test/feed-compose.test.js`: `lineRequested`, the
+  server's and the browser's `lineLive`.
 
 ## Fixtures and the contract suite
 

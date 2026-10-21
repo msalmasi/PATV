@@ -5,10 +5,12 @@
   Reports, held, mod log and bans for chat.mod_queue (Assistants up), audit and switches for chat.audit (Admins) - release
   L1's capabilities, their D15 defaults until it lands. Every permission is the hub's: a refusal renders "Nothing to show".
   The page makes no hub call (the widget's worker does, with the viewer's own ticket). /admin/chat (the break-glass form:
-  CHAT_HUB and each pad's chat backend) is release L1's page.
+  CHAT_HUB and each pad's chat backend) is release L1's page. The view names are chatwidget.ADMIN_LABELS (the admin nav's Chat
+  links use the same); the footer says which widget version is vendored, or why none is usable (chatwidget.status: no ids).
 %>
 <%
-  const LABEL = { reports: 'Reports', held: 'Held', modlog: 'Mod log', bans: 'Bans', audit: 'Audit (admin reads)', switches: 'Retention & switches' };
+  const LABEL = labels;
+  const W_ = typeof widget !== 'undefined' && widget ? widget : { version: null, why: null, hub: false };
   const HELP = {
     reports: 'Reports filed on the chat hub\'s pads, oldest first. Undecided for more than 14 days, a report is escalated; after 90 days its snapshot is released.',
     held: 'Held messages waiting for a decision (no S1 rule holds any yet).',
@@ -38,9 +40,10 @@
     <patv-modtools view="<%= view %>" locale="<%= T_.locale %>" theme="dark"></patv-modtools>
     <%- include('../partials/chat-widget-boot', { cw: T_ }) %>
   <% } else { %>
-    <p class="adm-help" data-chat-tools="<%= T_.why %>"><%= WHY[T_.why] || WHY.not_installed %></p>
+    <p class="adm-help" data-chat-tools="<%= T_.why %>"><% if (T_.why === 'not_installed' && W_.why && W_.why !== 'no manifest') { %>The chat widget's export in public/js/patv-chat/ can't be used (<%= W_.why %>), so the widget is off.<% } else { %><%= WHY[T_.why] || WHY.not_installed %><% } %></p>
   <% } %>
 </section>
+<% if (W_.version) { %><p class="adm-help" data-chat-widget="<%= W_.version %>">Chat widget <%= W_.version %> (vendored from the platform repo's export).</p><% } %>
 <% if (view === 'switches') { %><p class="adm-help">CHAT_HUB and each pad's chat backend are switched on <a href="/admin/chat">/admin/chat</a> (break-glass: owners turn them on, any admin turns them off).</p><% } %>
 <%- include('../partials/admin-close') %>
 </body>

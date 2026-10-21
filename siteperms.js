@@ -100,6 +100,10 @@ const AREA_PAGES = [
   ["/admin/push", ["push.admin"]],
   ["/admin/soundboards", ["soundboards.moderate"]],
   ["/pads/admin#padconn", ["pads.connect_review"]],
+  // S1 V2 (ADR 0007 D15): the chat hub's report queue (chatwidget.js) for chat.mod_queue - Assistants by default, so one whose
+  // only admin capability is the queue gets an admin home (and the layout's 🛠️ Admin link). The key is release L1's: no entry
+  // until siteperms registers it (a key it doesn't know throws in tests and is denied, with a log line, in production).
+  ...(C.capOf("chat.mod_queue") ? [["/admin/chat/reports", ["chat.mod_queue"]]] : []),
   ["/admin/help", ["help.admin"]],
   ["/admin/translations", ["i18n.admin"]],
   ["/shop/admin", ["shop.admin"]],

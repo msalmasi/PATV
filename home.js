@@ -290,9 +290,10 @@ function register(app, { addUser, xpForNextLevel }) {
       // adultgate site: the widget's 18+ gate - "signin" / "confirm" swap the widget for the 18+ card (no lines, names or counts)
       const roomGate = room ? PA.adultGate(viewer, room.id) : "ok";
       if (room && roomGate !== "ok") room = { ...room, count: null, micCount: null };     // no headcount on the page either
-      // S1 V2 (release L4): the panel's pad at chat_backend = 'hub' while CHAT_HUB is on -> the chat hub's compact <patv-chat>
-      // (chatwidget.forPad sets res.locals.chatWidget; null otherwise - and this panel shows Camfrog rooms, which never are)
-      if (room) await require("./chatwidget").forPad(req, res, { roomId: room.id, slug: room.slug, mode: "compact", open: PA.full(viewer, room.id), gate: roomGate });
+      // S1 V2 (release L4): the panel's pad, a site pad at chat_backend = 'hub' while CHAT_HUB is on -> the chat hub's compact
+      // <patv-chat> (chatwidget.forPad sets res.locals.chatWidget and reads padaccess's 18+ gate and the pad's level itself; null
+      // otherwise - and this panel shows the bridge's rooms, Camfrog rooms, which never are)
+      if (room) await require("./chatwidget").forPad(req, res, { roomId: room.id, slug: room.slug, mode: "compact" });
       const roomOnStage_ = !!(onStage && room && room.id === onStage.id);
       // 1.99bz: the story strip (a circle per room with captures from the last 24 h); visitors get the circles only
       const storyRooms = await require("./stories").forViewer(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] stories:", e.message); return []; });
