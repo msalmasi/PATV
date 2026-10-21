@@ -362,3 +362,32 @@ keys, the economy sink rates, `burn_cfg`, the flags, PAT Routing, the system con
   day in the window has no checked mirror record or a non-empty one, when a daily reader (capital.cutoff while capital is live,
   policy.source while an engine is on, funding.monetary while Pepe pushes) has no comparison that day, or on any dual-read
   difference (today included) - no evidence is never a PASS. Only the mirror's own change-log rows are pruned (20,000 kept).
+
+### 14.2 PO-3: Pepe's thin client for the settings (bot `pepe_policycfg.py`; dormant until H1)
+
+- **The switch** is Pepe's `policy_client.json` `features.cfg`: false (ships; nothing changes), "cutting" (frozen: he reads his
+  own values, every edit refused), true (he reads the site's: `policy_cfg_cache.json`, the site's last answer). Only the owner's
+  chat commands move it: `!econ policy freeze|unfreeze|export|cutover|rollback|detach cfg confirm` (owners by role; never from
+  Telegram; refused from 03:40 UTC until that day's runs are done). `!econ policy status` = his half of the preflight.
+- **The pull:** `POST /api/policy/bot/cfg {have, sha}` (the POST form of the GET - the token rides the body) every 60 s while the
+  site owns / takes the settings (10 min otherwise) and right before each engine period's plan; the shadow report names the
+  settings it was planned with (`cfg {rev, sha, src}` -> `policy_sims.pepe_cfg`).
+- **H1, as Pepe drives it:** freeze (Pepe first, then the site) -> `export cfg confirm` PUSHES first (policy, PAT Routing,
+  capital) and then writes `policy_export_cfg_<ts>.json` + sha256 and uploads it in 60 KB pieces -> verify -> `cutover cfg
+  confirm [force k1,k2]`: Pepe flips only after he pulled the site's values. Money still in flight on his side (pools outbox /
+  uncertain / inbox, policy outbox / dead letters, capital uncertain, Fed outbox, stash moves, corrections) blocks the cutover.
+- **While the site owns them:** `!econ set` / `!econ sink` / `!econ layers|treasury|activitypads on|off` / `!burn mode|set` write
+  through `cfg/set` (base_rev = a fresh pull's rev); Pepe's panel shows them read-only with a link to `#policy`; the site down ->
+  "the website is unreachable - nothing changed" and his cached copy stays in use. Fed `mint` / `grant` / `loan_open` carry
+  `cfg_rev` + `cfg_sha`; a 409 `E_CFG_REV` -> pull, re-preview (a grant that would now cross the Fed floor is refused), the same
+  `op_key` again (at most twice) - never terminal.
+- **Rollback / detach:** step 1 -> Pepe writes the values back (`_pcf_write_back`), keeps the site's log rows (`econ_cfg_log`,
+  via `site:<via>`), pushes, confirms (a `push_behind` with `behind` is pushed again once; a reader difference is shown - `force`
+  or `cancel`). Detach writes his cached copy back (refused while the site answers and owns them; `force` past a day old).
+- **The contract** is pinned by `test/fixtures/policycfg-contract.json`, byte-identical with the bot's
+  `ci/fixtures/policycfg-contract.json` (written by his real code, `tools/gen_policycfg_contract.py`; sha256 pinned in
+  `test/policycfg-contract.test.js` and the bot's `policycfg_contract_test.py`): his three pushes mirror to every key with an
+  empty diff report; his routing catalog gives checkRoutes the same answer as his `_clean_routes` for every flow x destination
+  (a room-vault share needs `rv` or a v2 room flow - `room` alone is not enough; an older catalog without `room_flow` keeps the
+  old reading); his export imports with verify ok and cuts over without force; his write-back pushes confirm a rollback without
+  force.

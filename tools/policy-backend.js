@@ -52,11 +52,25 @@ async function meta(table, key) {
   const r = (await q(`SELECT value FROM ${table} WHERE key = ?`, [key], table))[0];
   return r ? parse(r.value, r.value) : null;
 }
+// The i18n bot's commits ("i18n: translate new strings for <sha> [skip ci]") land on top of every release on staging / main: the
+// version is the newest commit subject that ISN'T one of them (its own release letter, e.g. "1.99adu site: ..."), never "?" because
+// the translations came last.
+const I18N_SUBJECT = /^i18n:/i;
+/** The release letter of the newest non-i18n commit subject among `subjects` (newest first: [{sha, subject}]). */
+function versionOf(subjects) {
+  const top = (subjects || []).find((s) => s && !I18N_SUBJECT.test(String(s.subject || "").trim()));
+  if (!top) return { version: null, version_sha: null, subject: null };
+  const m = /^(\d+\.\d+[a-z]*)\b/.exec(String(top.subject).trim());
+  return { version: m ? m[1] : null, version_sha: top.sha || null, subject: String(top.subject).slice(0, 120) };
+}
 function siteVersion() {
   const git = (args) => { try { return execFileSync("git", args, { cwd: path.join(__dirname, ".."), timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch (e) { return ""; } };
   const sha = git(["rev-parse", "--short", "HEAD"]);
-  const m = /^(\d+\.\d+[a-z]*)\b/.exec(git(["log", "-1", "--format=%s"]));
-  return { sha: sha || null, version: m ? m[1] : null };
+  const subjects = git(["log", "-n", "40", "--format=%h%x09%s"]).split("\n").filter(Boolean).map((l) => {
+    const i = l.indexOf("\t");
+    return { sha: i < 0 ? l : l.slice(0, i), subject: i < 0 ? "" : l.slice(i + 1) };
+  });
+  return Object.assign({ sha: sha || null }, versionOf(subjects));
 }
 
 /** Does a stash owner key (a login, or "u:<userId>") have a PATV account to pay? stashes.holderInfo's rule, in SELECTs only:
@@ -167,7 +181,8 @@ async function gather(opts = {}) {
 }
 
 function printStatus(s) {
-  console.log(`site     ${s.site.version || "?"} (${s.site.sha || "no git"})${s.staging ? " STAGING" : ""}`);
+  const vAt = s.site.version_sha && s.site.version_sha !== s.site.sha ? ` at ${s.site.version_sha}` : "";
+  console.log(`site     ${s.site.version || "?"}${vAt} (${s.site.sha || "no git"})${s.staging ? " STAGING" : ""}`);
   for (const [e, r] of Object.entries(s.engines)) {
     console.log(`engine   ${e.padEnd(9)} ${String(r.mode).padEnd(7)} armed ${r.armed_at ? new Date(Number(r.armed_at) * 1000).toISOString().slice(0, 16) : "-"}  by ${r.by || "-"} ${r.updated ? ago(r.updated) : ""}` +
                 (Number(r.paused) ? `  PAUSED by ${r.paused_by || "?"} ${ago(r.paused_at)}${r.pause_note ? " (" + r.pause_note + ")" : ""}` : ""));
@@ -205,7 +220,7 @@ function printStatus(s) {
 function preflight(s) {
   const out = [];
   const add = (level, check, detail) => out.push({ level, check, detail });
-  add(s.site.sha ? "PASS" : "WARN", "site version", `${s.site.version || "?"} (${s.site.sha || "no git checkout"})`);
+  add(s.site.sha ? "PASS" : "WARN", "site version", `${s.site.version || "?"}${s.site.version_sha && s.site.version_sha !== s.site.sha ? ` (release ${s.site.version_sha}, head ${s.site.sha})` : ` (${s.site.sha || "no git checkout"})`}`);
   if (!s.push) add("FAIL", "Pepe's policy push", "never received (/api/policy/bot/config)");
   else {
     add(s.push.age_s != null && s.push.age_s < 1800 ? "PASS" : "FAIL", "Pepe's policy push is fresh", `${s.push.age_s == null ? "?" : s.push.age_s + " s"} old (< 30 min)`);
@@ -367,4 +382,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error(e.message); process.exit(1); });
-module.exports = { gather, preflight, evidenceChecks, evidenceDays };
+module.exports = { gather, preflight, evidenceChecks, evidenceDays, versionOf, siteVersion };

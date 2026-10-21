@@ -91,6 +91,8 @@ function init() {
       // PO-1 review: the site's own decisions at the boundary (the monetary day's guarantee) and what kept a period unclean
       if (!ps.has("boundary_meta")) await runQuery("ALTER TABLE policy_sims ADD COLUMN boundary_meta TEXT");
       if (!ps.has("blocking")) await runQuery("ALTER TABLE policy_sims ADD COLUMN blocking TEXT");
+      // PO-3: the economy settings Pepe planned the period with ({rev, sha, src: site | local} - his config thin client)
+      if (!ps.has("pepe_cfg")) await runQuery("ALTER TABLE policy_sims ADD COLUMN pepe_cfg TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;

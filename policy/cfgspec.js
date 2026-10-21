@@ -370,9 +370,17 @@ const TREASURY_DESTS = ["mm", "bank"];
 const HOLD_FLOWS = ["room_owner_hold"];
 const INCENTIVE_INCOME_FLOWS = ["auto_escrow_expired"];
 const WEBSITE_INCENTIVE_FLOWS = ["levelup", "new_account", "connect_bonus", "redeem_codes", "platform_rewards", "achievements", "room_owner"];
-/** pepe_routes._clean_routes as far as Pepe's pushed catalog ({routes: {flow: {vault_only, readonly, payout, room, website?, rv?}},
- *  dests: [[dest, label]]}) tells: known flow, not read-only, at most 3 shares, 0 < pct <= 100 (two decimals), total <= 100,
- *  destinations the flow may use. -> [errors]. No catalog: the shape only. */
+/** May this flow send to the room's vault (`room`)? Pepe's rule (pepe_routes._clean_routes): only a v2 room flow (econ_kind
+ *  "room") or a flow flagged `rv` - a flow that merely carries `room` (the pad owner's cut, e.g. sponsor) may not. A catalog from
+ *  1.99adu on carries `room_flow` (and `rv`) on every row, so the rule is exact there; an older Pepe's catalog has neither flag, so
+ *  a row without `room_flow` keeps the old reading (room / rv / room_flow) rather than refuse every room route it holds. */
+function roomVaultOk(meta) {
+  if (Object.prototype.hasOwnProperty.call(meta, "room_flow")) return !!(meta.rv || meta.room_flow);
+  return !!(meta.room || meta.rv || meta.room_flow);
+}
+/** pepe_routes._clean_routes as far as Pepe's pushed catalog ({routes: {flow: {vault_only, readonly, payout, room, website?, rv?,
+ *  room_flow?}}, dests: [[dest, label]]}) tells: known flow, not read-only, at most 3 shares, 0 < pct <= 100 (two decimals),
+ *  total <= 100, destinations the flow may use. -> [errors]. No catalog: the shape only. */
 function checkRoutes(routes, catalog) {
   const errs = [];
   const flows = catalog && catalog.routes && typeof catalog.routes === "object" ? catalog.routes : null;
@@ -387,7 +395,7 @@ function checkRoutes(routes, catalog) {
       const pct = pyRoundN(pct0, 2);
       if (pct <= 0) continue;
       const vaultOnly = meta.vault_only || meta.payout;
-      const roomFlow = !!(meta.room || meta.rv || meta.room_flow);
+      const roomFlow = roomVaultOk(meta);
       const bad = (dests && !dests.has(dest)) || (vaultOnly && !VAULT_DESTS.includes(dest)) || (meta.payout && dest === "stakers")
         || (TREASURY_DESTS.includes(dest) && (meta.payout || HOLD_FLOWS.includes(flow))) || (dest === "room_owner" && !meta.room) || pct > 100
         || (dest === "room" && !roomFlow)
