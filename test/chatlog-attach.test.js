@@ -52,6 +52,19 @@ test("the archive tables live in the attached chatlog.db; the rest in myapp.db; 
   await runQuery("SELECT 1");
 });
 
+test("S1 V4: account deletion's \"Also remove my public messages\" reaches an archive in the attached chatlog.db (chatlogmod.removeAccountLines)", async () => {
+  await CL.init();
+  const CLM = require(path.join(repo, "chatlogmod"));
+  const rk = (await getQuery("SELECT rk FROM chatlog_rooms WHERE room_id = 'Att.Room'"))[0].rk;
+  const r = CL.rowOf({ it: { c: 42, ts: 6, k: "msg", text: "attached web words", u: { login: "u:attv4", display: "Webby", web: true } } }, rk, "p");
+  await runQuery("INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [r.c, r.rk, r.ts, r.k, r.who, r.text, r.rt, r.aud, r.d]);
+  assert.equal((await getQuery("SELECT 1 FROM main.sqlite_master WHERE name = 'chat_log'")).length, 0, "the archive is attached, not in myapp.db");
+  assert.deepEqual(await CLM.removeAccountLines("attv4"), { purged: 1, held: 0, reported: 0 });
+  const x = (await getQuery("SELECT text, purged, who FROM chat_log WHERE c = 42"))[0];
+  assert.deepEqual([x.text, x.purged, String(x.who).startsWith("h:")], [null, 1, true]);
+  assert.equal((await getQuery("SELECT text FROM chat_log WHERE c = 41"))[0].text, "attached words", "someone else's line stays");
+});
+
 /** A child process in `dir` (its own myapp.db): CL.init(), then `body` (an async (CL, getQuery, runQuery) => result source). */
 function childRun(dir, env, body = null) {
   const { execFileSync } = require("child_process");

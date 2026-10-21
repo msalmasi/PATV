@@ -21,6 +21,8 @@
       <li><%- t('acctdel.what.camfrog') %></li>
       <li><%- t('acctdel.what.kept') %></li>
       <li><%- t('acctdel.what.chat') %></li>
+      <%# S1 V4: PATV chat (the chat hub) - only while the hub's erasure switch is on (accountdelete.removeOffered) %>
+      <% if (locals.removePublic) { %><li><%- t('acctdel.what.hub') %></li><% } %>
       <li><%- t('acctdel.what.grace', { days: graceDays }) %></li>
     </ul>
     <p class="hint"><%- t('acctdel.export_first', { link: '<a href="/settings/account#data">' + t('settings.data.download') + '</a>' }) %></p>
@@ -63,6 +65,13 @@
       <%# CL6 (decision 14): unticked by default (accountdelete.js hide_lines -> the pad chat archive's sticky hidden set) %>
       <div class="field" style="grid-column:1/-1"><label class="acctdel-ck"><input type="checkbox" id="delHideLines" name="hide_lines" aria-describedby="delHideLinesHint"> <%- t('acctdel.hide_lines') %></label>
         <span class="hint" id="delHideLinesHint"><%- t('acctdel.hide_lines_meta') %></span></div>
+      <% if (locals.removePublic) { const rpWait = removePublic.wait; %>
+      <%# S1 V4 (ADR 0007 D16, OQ-20): ONE checkbox for both stores - the chat hub (privacy/account-deleted remove_public) and the pad
+          chat archive's web lines (chatlogmod.removeAccountLines); unticked by default; only while the hub's erasure switch is on;
+          at most once a day (accountdelete.js remove_public) %>
+      <div class="field" style="grid-column:1/-1"><label class="acctdel-ck"><input type="checkbox" id="delRemovePublic" name="remove_public" aria-describedby="delRemovePublicHint"<% if (rpWait) { %> disabled<% } %>> <%- t('acctdel.remove_public') %></label>
+        <span class="hint" id="delRemovePublicHint"><%- t('acctdel.remove_public_meta') %><% if (rpWait) { %> <%- t('acctdel.remove_public_wait', { when: t.date(rpWait, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) }) %><% } %></span></div>
+      <% } %>
       <div style="grid-column:1/-1"><button class="btn" type="submit" id="delBtn" disabled><%- t('acctdel.button', { days: graceDays }) %></button></div>
     </form>
     <span class="status" id="delStatus" role="status" aria-live="polite"></span>
@@ -75,6 +84,6 @@
   .pe .acctdel-ck { display: flex; gap: 8px; align-items: center; min-height: 44px; cursor: pointer; color: var(--ds-text); }
   .pe .acctdel-ck input { width: auto; min-height: 0; margin: 0; }
 </style>
-<script src="/public/js/account-delete.js?v=2" defer></script>
+<script src="/public/js/account-delete.js?v=3" defer></script>
 </body>
 </html>

@@ -166,8 +166,13 @@ async function setSettings(patch, actor) {
   }
   await tx(async () => {
     for (const [k, v] of Object.entries(next)) {
+      // S1 V4 fix-up (review): `updated` / `actor` = when and by whom the VALUE last changed - /admin/keys#seam posts every switch
+      // on each save, and the privacy page dates its erasure paragraph by this row (accountdelete.privacyCopy); every save is in
+      // the admin audit
       await runQuery(`INSERT INTO hubseam_settings (key, value, updated, actor) VALUES (?, ?, ?, ?)
-                      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated, actor = excluded.actor`,
+                      ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                        updated = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.updated ELSE excluded.updated END,
+                        actor = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.actor ELSE excluded.actor END`,
                      [k, v ? "true" : "false", now(), actor && actor.username ? String(actor.username).slice(0, 80) : null]);
     }
     if (actor && actor.userId) await require("./adminaudit").record(actor, "hubseam.settings", null, next, null);
@@ -602,7 +607,7 @@ const SOURCES = {
       const b = bound("acct:", k);
       if (b == null) return [];
       const ad = require("./accountdelete");
-      const rows = await getQuery(`SELECT id, user_id, pseudonym, done_at FROM account_deletions d
+      const rows = await getQuery(`SELECT id, user_id, pseudonym, done_at, remove_public FROM account_deletions d
                                    WHERE user_id > ? AND state = 'done'
                                      AND id = (SELECT MAX(id) FROM account_deletions x WHERE x.user_id = d.user_id AND x.state = 'done')
                                    ORDER BY user_id LIMIT ?`, [b, limit]);

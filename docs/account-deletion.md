@@ -84,7 +84,22 @@ what has a safe existing rule is settled automatically.
 | Votes on posts | Kept, pseudonymous (removing them would change other people's scores) |
 | **Pepe's memory** | The website action **`privacy.forget`** (keyed per attempt, TTL 7 days, retried up to 10 times) asks Pepe to forget the login: `memory_store.delete_user` (profile, aliases, links) + the PM lines waiting to become memories. Once Pepe answers, the login is cleared from the action row too. |
 | The Camfrog login | Released: another account can link it; if the person chats again Pepe makes a new automatic account. |
-| **Pad chat history** (`chat_log`, CL2 / CL6) | The room's record stays: lines under the Camfrog login keep it, their website lines (`u:<id>`) show as a "former member". With **"Also hide my past public chat lines"** ticked (unticked by default, stored as `account_deletions.hide_lines`), the login and the account key join the archive's sticky hidden set when the deletion runs (`src = delete`, never removed by Pepe): their lines are left out of every pad's chat, history, search and downloads, and their names are redacted in other people's lines. Copies already downloaded or quoted aren't reached. |
+| **Pad chat history** (`chat_log`, CL2 / CL6) | The room's record stays: lines under the Camfrog login keep it, their website lines (`u:<id>`) show as a "former member". With **"Also hide my past public chat lines"** ticked (unticked by default, stored as `account_deletions.hide_lines`), the login and the account key join the archive's sticky hidden set when the deletion runs (`src = delete`, never removed by Pepe): their lines are left out of every pad's chat, history, search and downloads, and their names are redacted in other people's lines. Copies already downloaded or quoted aren't reached. S1 V4: with **"Also remove my public messages"** (below) their web lines' words are deleted too. |
+| **PATV chat** (the chat hub, S1; `privacy/account-deleted`, docs/chat-tickets.md) | Their lines stay as a "former member's" (the hub pseudonymises them, revokes their chat credentials, takes them out of every room). With **"Also remove my public messages"** the hub deletes their public lines' words instead, except a line under a report (kept until its hold ends, then deleted). |
+
+**"Also remove my public messages"** (S1 V4; ADR 0007 OQ-20; offered, unticked, only while the chat hub's `erasure` switch is
+on; at most once a day - a request a sign-in cancelled counts; stored as `account_deletions.remove_public`). One checkbox for
+both stores: the hub row carries `remove_public: true`, and after the deletion commits the account's web lines in the pad
+chat archive are purged at once (`chatlogmod.removeAccountLines`: words, name, search index, live feed, quotes, mention
+notices) - `u:<id>`, its incognito `h:<hash>` lines and, for a linked member, the web lines the bridge archived under their
+Camfrog login (`d.u.web`, said up to the deletion) - with the hub's exceptions: a line under a legal hold or a report is taken
+down at once as the author's (also when it was already down - a dismissed report or an un-hide can't bring it back), listed
+in `chatlog_erase_wait`, and its words deleted by the nightly pass once the hold ends and ADR 0007 D10's report bounds are up
+(30 days after the decision, 90 days undecided). The login's Camfrog lines, and a linked member's incognito lines (no web
+mark: they can't be told from the Camfrog ones), aren't reached (that is "Also hide my past public chat lines").
+`public_done_at` records the archive part; the job runs it again (done rows only, with the released login the row keeps in
+`public_login` until then) if a restart came between the commit and the purge. Details: docs/chat-tickets.md "S1: the
+privacy UI".
 
 **Kept, pseudonymised** (needed for the ledger, legal, fraud or safety reasons). The rows keep pointing at the tombstone's
 id; usernames / Camfrog logins written in them as text are replaced by the pseudonym:
@@ -113,7 +128,9 @@ name the Camfrog login as Pepe keeps it, and Pepe's own data is his to forget (t
 
 - `account_deletions`: id, user_id, state `scheduled | held | cancelled | done`, requested_at, execute_at, requested_by
   (`self` / `admin:<id>`), reauth (`password` / `fresh-sign-in` / `admin`), reason, cancelled_at, cancel_via, held_reason,
-  held_at, done_at, pseudonym, report (JSON counts - no personal data).
+  held_at, done_at, pseudonym, report (JSON counts - no personal data), hide_lines (CL6), remove_public and public_done_at
+  (S1 V4: "Also remove my public messages", and when the pad chat archive's part of it ran), public_login (S1 V4: the
+  released Camfrog login, only between the deletion's commit and that part - NULL after it).
 - `account_deletion_routes`: key PK, user_id, amount, legs, txid, at.
 
 Both are classified for account merges (`keep`). The prod tables are created on boot (idempotent); nothing to migrate.
