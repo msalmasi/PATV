@@ -726,6 +726,40 @@ test("PO-1: every reader of Pepe's policy push goes through policy/source.js (T1
     }
   };
   walk(repo);
+  // review of the PO-3 follow-up: policy/config.js's phase4bView read the push with C.meta("cfg") - policy/core's generic meta
+  // reader on the push's row - and the scan above (only _pushForSource / SQL text) missed it. So a meta("cfg") call is a second
+  // reader too when its receiver is bound to policy/core (under any name, destructured, or chained on the require).
+  // capital/core.js and gangs.js have meta("cfg") readers of their OWN stores - a receiver bound to another module is not one.
+  const coreAbs = path.join(repo, "policy", "core.js");
+  const isPolicyCore = (fromAbs, spec) => {
+    if (!spec.startsWith(".")) return false;
+    let p = path.resolve(path.dirname(fromAbs), spec);
+    if (!p.endsWith(".js")) p += ".js";
+    return p === coreAbs;
+  };
+  const CFG_ARG = String.raw`\s*\(\s*['"\x60]cfg['"\x60]\s*\)`;
+  const esc = (s) => s.replace(/[$]/g, "\\$");
+  const coreMetaCfg = (fromAbs, src) => {
+    const hits = [];
+    const reqRe = /(?:(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*)?require\(\s*['"]([^'"]+)['"]\s*\)(\s*\.\s*meta\s*\(\s*['"\x60]cfg['"\x60]\s*\))?/g;
+    const names = new Set(), bare = new Set();
+    let m;
+    while ((m = reqRe.exec(src))) {
+      if (!isPolicyCore(fromAbs, m[2])) continue;
+      if (m[3]) hits.push(`require(${m[2]}).meta("cfg")`);
+      const b = m[1];
+      if (!b) continue;
+      if (b.startsWith("{")) {
+        for (const part of b.slice(1, -1).split(",")) {
+          const [k, v] = part.split(":").map((x) => x.trim());
+          if (k === "meta") bare.add(v || k);
+        }
+      } else names.add(b);
+    }
+    for (const n of names) if (new RegExp(String.raw`(^|[^\w$.])` + esc(n) + String.raw`\s*\.\s*meta` + CFG_ARG).test(src)) hits.push(`${n}.meta("cfg")`);
+    for (const n of bare) if (new RegExp(String.raw`(^|[^\w$.])` + esc(n) + CFG_ARG).test(src)) hits.push(`${n}("cfg")`);
+    return hits;
+  };
   const bad = [];
   for (const f of files) {
     const rel = path.relative(repo, f).replace(/\\/g, "/");
@@ -733,11 +767,24 @@ test("PO-1: every reader of Pepe's policy push goes through policy/source.js (T1
     const src = fs.readFileSync(f, "utf8");
     if (/_pushForSource\b/.test(src)) bad.push(`${rel}: _pushForSource`);
     if (rel !== "tools/policy-backend.js" && /policy_meta[^\n]*['"]cfg['"]/.test(src)) bad.push(`${rel}: policy_meta cfg`);
+    for (const h of coreMetaCfg(f, src)) bad.push(`${rel}: ${h}`);
   }
   assert.deepEqual(bad, []);
   // the scan finds a second reader under any binding (the review's mutation: capital/vaults reading the push itself)
   const probe = 'const PCX = require("../policy/core");\nasync function bonusCap() { return (await PCX._pushForSource()) || {}; }';
   assert.ok(/_pushForSource\b/.test(probe));
+  // ... and policy/core's meta("cfg") under any binding (the review's finding: config.js's phase4bView), never another store's
+  const inPolicy = path.join(repo, "policy", "x.js"), inCapital = path.join(repo, "capital", "x.js"), atRoot = path.join(repo, "x.js");
+  assert.deepEqual(coreMetaCfg(inPolicy, 'const C = require("./core");\nasync function v() { return C.meta("cfg").catch(() => null); }'), ['C.meta("cfg")']);
+  assert.deepEqual(coreMetaCfg(inPolicy, "const C = require('./core.js');\nconst p = await C . meta( 'cfg' );"), ['C.meta("cfg")']);
+  assert.deepEqual(coreMetaCfg(inCapital, 'const { meta: pm, setMeta } = require("../policy/core");\nconst p = await pm("cfg");'), ['pm("cfg")']);
+  assert.deepEqual(coreMetaCfg(atRoot, 'const { meta } = require("./policy/core");\nconst p = await meta("cfg");'), ['meta("cfg")']);
+  assert.deepEqual(coreMetaCfg(atRoot, 'const p = await require("./policy/core").meta("cfg");'), ['require(./policy/core).meta("cfg")']);
+  assert.deepEqual(coreMetaCfg(inPolicy, 'const C = require("./core");\nconst k = await require("../capital/core").meta("cfg");\nconst r = await C.meta("cfg_pepe_rev");'), []);
+  assert.deepEqual(coreMetaCfg(inCapital, 'const C = require("./core");\nconst c = await C.meta("cfg");'), [], "capital/core's own store");
+  assert.deepEqual(coreMetaCfg(atRoot, 'const { meta } = require("./gangs");\nconst c = await meta("cfg");'), []);
+  // the finding's very code, at its own path, is caught
+  assert.deepEqual(coreMetaCfg(path.join(repo, "policy", "config.js"), 'const C = require("./core");\nasync function phase4bView() {\n  const push = await C.meta("cfg").catch(() => null);\n}'), ['C.meta("cfg")']);
 });
 
 test("the test clock and the tagged rehearsal tick exist only on staging", async () => {

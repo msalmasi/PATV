@@ -994,15 +994,14 @@ const PHASE4B = [
 ];
 const PHASE4B_OWNER = "pepe";
 async function phase4bView() {
-  const push = await C.meta("cfg").catch(() => null);
-  const block = push && push.phase4b && typeof push.phase4b === "object" && !Array.isArray(push.phase4b) ? push.phase4b : null;
+  // T14: the push is read only through policy/source.js (review of the PO-3 follow-up - this read policy/core's cfg row itself)
+  const { at, block } = await require("./source").phase4b().catch(() => ({ at: null, block: null }));
   const flag = (x) => (typeof x === "boolean" ? x : null);
   const rows = PHASE4B.map(([key, label, cmd]) => {
     const x = block && block[key] && typeof block[key] === "object" && !Array.isArray(block[key]) ? block[key] : null;
     return { key, label, cmd, present: !!x, on: x ? flag(x.on) : null, live: x ? flag(x.live) : null };
   });
-  return { owner: PHASE4B_OWNER, readonly: true, pushed: !!block,
-           at: push && Number(push.at) > 0 ? Math.round(Number(push.at) * 1000) : null, rows };
+  return { owner: PHASE4B_OWNER, readonly: true, pushed: !!block, at: at ? Math.round(at * 1000) : null, rows };
 }
 async function adminView() {
   await init();

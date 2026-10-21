@@ -472,6 +472,31 @@ What changed in Pepe's half, and what the H1 owner needs to know:
 - **`pools_client.json` unreadable is never overwritten.** Pepe treats the pools as on (unknown) in memory, as before, but no
   longer saves that stand-in over the file (a transient Windows sharing violation at start left the pools switch on for good).
   A readable file that carries an old `unreadable` marker (saved by an older Pepe) is read with the marker dropped and a log
-  line naming its switch - check it with `!pools backend status`.
+  line naming its switch - check it with `!econ pools backend status` (not `!pools`, which lists the escrow betting pools).
 - **Test hygiene.** Every bot harness writes only into temp folders; `ci/harness_main.py` fails a harness that writes a JSON
   file into the bot's own folder (`test_hygiene_test.py`).
+
+### 14.5 Review of the PO-3 follow-up (2026-10-21)
+
+- **One reader of Pepe's push (T14).** The Phase 4b card on `/admin/economy` reads Pepe's push through `policy/source.js`
+  (`phase4b()`), like every other reader. The guard in `test/policy.test.js` now also fails on a `meta("cfg")` call made on a
+  binding of `policy/core` (any name, destructured, or chained on the `require`). `capital/core` and `gangs` have their own
+  `cfg` rows and are not caught.
+- **The treasury is armed when it goes live, not only when its switch turns on.** It runs only while its switch *and* the
+  layers are on. Pepe now arms the scheduler whenever that pair goes from not live to live, before any reader sees it:
+  - on the site, after H1: an edit of `layers` while `tr_live` is already on;
+  - on Pepe: `!econ layers on` while the treasury switch is on, and the panel's save of `econ_layers` / `econ_treasury`
+    (an echo save moves nothing; the file Pepe loads at start never arms).
+  Before, the treasury went live with an old `armed_at`, and the next tick ran this week's epoch late and today's release at once.
+  When it stops being live, the flag log gets a row `live: false` that names who moved it.
+- **The staging inject (`policy-inject.json {"action": "econ"}`) is narrower.**
+  - It runs only `!econ policy ...`. Every other `!econ` command is refused and nothing runs.
+  - It checks roles as a typed line does: `!econ` is an owner power, so an admin or staff login is refused.
+  - It runs one at a time. A second one sent while the first is still running is refused, and the first one's final result
+    lists it under `refused_while_running`.
+  - Pepe's answers are collected only while that command and the items it queued are running. Another command's answer is
+    posted to the room as usual.
+  - Each hand-over step it runs sends `note: "rehearsal-inject (policy-inject.json): !econ policy ..."`. The site keeps that
+    note on the ownership record (via stays `chat`), and Pepe's switch log names it too. A typed step sends no note.
+- **The pools command.** The status of the protocol pools is `!econ pools backend status` (14.4's line, and Pepe's own log
+  and hints, said `!pools`, which lists the escrow betting pools).
