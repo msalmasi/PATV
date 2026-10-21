@@ -116,25 +116,32 @@ test("the boundary snapshot is taken in ONE transaction before Pepe's legs; they
   // Pepe's legs land on the site (the house pays its surplus: the stakers' stashes, the Fed, the incentive budget)
   for (const l of pepePlan.legs) assert.notEqual(await tx(() => A.transfer(l.tid, l.src, l.dst, l.amt, l.why)), "none");
   // ...then his report: compared against the boundary snapshot - clean
-  const rep = await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: pepeInputs, plan: pepePlan });
+  // PO-3: his report names the economy settings he planned the period with ({rev, sha, src}) - kept with the comparison
+  const used = { rev: 12, sha: "a".repeat(64), src: "site" };
+  const rep = await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: pepeInputs, plan: pepePlan, cfg: used });
   assert.equal(rep.body.ok, true);
   assert.equal(rep.body.basis, "boundary");
   assert.deepEqual(rep.body.engine_diff, []);
   assert.deepEqual(rep.body.total_diff, [], "his legs don't show: the snapshot was before them");
   assert.equal(rep.body.clean, true);
   assert.equal((await row(`shadow:treasury:${EID}`)).ok, 1);
+  assert.deepEqual(JSON.parse((await row(`shadow:treasury:${EID}`)).pepe_cfg), used, "PO-3: the settings rev / sha he used are kept");
   // the same report with NO boundary snapshot (a Pepe before PO-0c): the site's view now already has his legs - not clean
-  const late = await post("/api/policy/bot/report", { engine: "treasury", period: `${EID}-x2`, inputs: pepeInputs, plan: pepePlan });
+  const late = await post("/api/policy/bot/report", { engine: "treasury", period: `${EID}-x2`, inputs: pepeInputs, plan: pepePlan,
+                                                      cfg: { rev: "12", sha: 5, src: "evil" } });
+  assert.deepEqual(JSON.parse((await row(`shadow:treasury:${EID}-x2`)).pepe_cfg), { rev: null, sha: null, src: null }, "PO-3: only well-formed fields are kept");
   assert.equal(late.body.basis, "report");
   assert.ok(late.body.total_diff.length > 0, "the T9 fragility: the second snapshot sees the first's legs");
   assert.equal(late.body.clean, false);
   // a re-report (a different plan) updates the comparison, never the boundary
   const bad = JSON.parse(JSON.stringify(pepePlan));
   bad.legs[0].amt += 1;
-  const again = await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: pepeInputs, plan: bad });
+  // (the mutation review of PO-3: a `cfg` that isn't an object - a list - keeps nothing; the re-report replaces the record's)
+  const again = await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: pepeInputs, plan: bad, cfg: [12, "a".repeat(64), "site"] });
   assert.ok(again.body.engine_diff.length >= 1);
   assert.equal(again.body.clean, false);
   const r1 = await row(`shadow:treasury:${EID}`);
+  assert.equal(r1.pepe_cfg, null, "PO-3: a cfg that is a list is no settings record");
   assert.equal(r1.site_boundary_plan, r0.site_boundary_plan, "the boundary plan is never overwritten");
   assert.equal(r1.site_boundary_inputs, r0.site_boundary_inputs);
   assert.equal(r1.boundary_ts, r0.boundary_ts);

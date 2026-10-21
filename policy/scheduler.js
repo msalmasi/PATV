@@ -779,15 +779,19 @@ async function report(b) {
   const whitelisted = { plan: pw.excused, inputs: iw.excused, decision: dw.excused };
   const blocking = { plan: pw.blocking, inputs: iw.blocking, decision: dw.blocking };
   const t = Date.now();
+  // PO-3: the economy settings Pepe planned this period with (his config thin client: {rev, sha, src}) - kept for the record
+  const pc = b.cfg && typeof b.cfg === "object" && !Array.isArray(b.cfg) ? b.cfg : null;
+  const pepeCfg = pc ? JSON.stringify({ rev: Number.isSafeInteger(pc.rev) ? pc.rev : null, sha: typeof pc.sha === "string" ? pc.sha.slice(0, 64) : null,
+                                        src: pc.src === "site" || pc.src === "local" ? pc.src : null }) : null;
   await runQuery(`INSERT INTO policy_sims (key, mode, engine, period, site_inputs, site_plan, pepe_inputs, pepe_plan, replay_plan, engine_diff, input_diff,
-                  total_diff, ok, truncated, whitelisted, blocking, created, updated) VALUES (?, 'shadow', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  total_diff, ok, truncated, whitelisted, blocking, pepe_cfg, created, updated) VALUES (?, 'shadow', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(key) DO UPDATE SET site_inputs = excluded.site_inputs, site_plan = excluded.site_plan, pepe_inputs = excluded.pepe_inputs,
                     pepe_plan = excluded.pepe_plan, replay_plan = excluded.replay_plan, engine_diff = excluded.engine_diff, input_diff = excluded.input_diff,
                     total_diff = excluded.total_diff, ok = excluded.ok, truncated = excluded.truncated, whitelisted = excluded.whitelisted,
-                    blocking = excluded.blocking, updated = excluded.updated`,
+                    blocking = excluded.blocking, pepe_cfg = excluded.pepe_cfg, updated = excluded.updated`,
                  [key, engine, period, JSON.stringify(siteInputs), JSON.stringify(sitePlan), JSON.stringify(inputs), JSON.stringify(plan), JSON.stringify(replay),
                   JSON.stringify(engineDiff.list), JSON.stringify(inDiff.list), JSON.stringify(totDiff.list), clean ? 1 : 0, truncated ? 1 : 0,
-                  JSON.stringify(whitelisted), JSON.stringify(blocking), t, t]);
+                  JSON.stringify(whitelisted), JSON.stringify(blocking), pepeCfg, t, t]);
   const nW = pw.excused.length + iw.excused.length + dw.excused.length;
   const msg = `shadow ${engine} ${period}: engine diff ${engineDiff.n}, inputs diff ${inDiff.n}, total diff ${totDiff.n}${dec.length ? `, decisions ${dec.length}` : ""}` +
               `${nW ? ` (${nW} whitelisted)` : ""}, ${hasBoundary ? "vs the boundary snapshot" : "NO boundary snapshot"} - ${clean ? "clean" : "not clean"}`;

@@ -1,0 +1,4292 @@
+{
+ "contract": "po3-1",
+ "about": "PO-3 economy settings thin client: Pepe's pushes, his routing verdicts, his H1 export, a chat write-through and a rollback write-back (camfrog-bot tools/gen_policycfg_contract.py; PATV test/policycfg-contract.test.js replays it)",
+ "token": "bot-token-po3",
+ "owner": "owner_cf",
+ "admin": "admin_cf",
+ "day": "2026-10-20",
+ "pushes": {
+  "policy": {
+   "econ_cfg": {
+    "house_target": 15000000,
+    "house_hard_floor": 5000000,
+    "bank_target": 2000000,
+    "bank_hard_floor": 1000000,
+    "bank_lent_mult_pct": 200,
+    "bank_peak_days": 30,
+    "mm_target": 1000000,
+    "mm_hard_floor": 500000,
+    "fedloan_cap": 10000000,
+    "fortknox_floor": 2000000,
+    "fortknox_cap": 15000000,
+    "casino_floor": 2000000,
+    "casino_cap": 10000000,
+    "heist_cap_mode": "fixed",
+    "fortknox_cap_pct": 60.0,
+    "casino_cap_pct": 40.0,
+    "budget_welcome": 1500000,
+    "pace_welcome": 0,
+    "budget_levelup": 1400000,
+    "pace_levelup": 0,
+    "budget_achievements": 2100000,
+    "pace_achievements": 0,
+    "budget_misc": 350000,
+    "pace_misc": 0,
+    "budget_royalties": 300000,
+    "pace_royalties": 0,
+    "budget_roomgames": 3500000,
+    "pace_roomgames": 7,
+    "budget_turf": 500000,
+    "pace_turf": 7,
+    "budget_season": 2000000,
+    "pace_season": 0,
+    "budget_launchpad": 1000000,
+    "pace_launchpad": 0,
+    "budget_activity": 0,
+    "pace_activity": 7,
+    "fed_floor": 50000000,
+    "fed_ceiling": 150000000,
+    "fed_floor_mint_daily": 5000000,
+    "fed_ceiling_action": "burn",
+    "incentive_guarantee": true,
+    "incentive_guarantee_target": 0,
+    "guarantee_scaled": false,
+    "guarantee_base": 25000000,
+    "guarantee_min": 15000000,
+    "guarantee_max": 40000000,
+    "guarantee_smooth_weeks": 3,
+    "guarantee_ref_weeks": 4,
+    "issuance_to_guarantee": true,
+    "activity_rewards": false,
+    "issuance_mode": "off",
+    "issuance_pct_month": 1.0,
+    "issuance_fixed_month": 10000000,
+    "issuance_activity_scaling": true,
+    "mintcap_issuance": -1,
+    "mintcap_floor": 30000000,
+    "mintcap_loan": -1,
+    "mintcap_restore": -1,
+    "mintcap_total": 100000000,
+    "flash_bank": true,
+    "flash_house": true,
+    "flash_mm": true,
+    "grant_weekly_cap": -1,
+    "donation_rate": 500000,
+    "donation_bonus_pct": 20.0,
+    "staker_share_pct": 20.0,
+    "fed_split_pct": 50.0,
+    "wf_staker_cap_pct": 0.0,
+    "room_vault_cap": 50000000
+   },
+   "consts": {
+    "VAULT_MIN_MOVE": 1000,
+    "VAULT_CEIL_APR": 0.0,
+    "VAULT_EPOCH_UTC_HOUR": 4,
+    "HOUSE_MIN_CASH": 5000000,
+    "VAULT_MM_MIN_TARGET": 1000000,
+    "VAULT_TARGET_MULT": 1.5,
+    "HEIST_VAULT_MIN": 2000000,
+    "HEIST_VAULT_CAP": 10000000
+   },
+   "flags": {
+    "layers": true,
+    "tr_live": true,
+    "ap_on": false
+   },
+   "tz": "America/New_York",
+   "sink": {
+    "vault_ceil_apr": 0.0,
+    "vault_ceil_cushion": 0.0,
+    "vault_ceil_cushion_days": 8.0,
+    "vault_auto_staker_cap": 0.0,
+    "vault_floor_apr": 0.0,
+    "vault_topup": 0.0,
+    "vault_topup_max": 25000.0,
+    "vault_staker_max": 0.5,
+    "vault_house_min": 5000000.0,
+    "auto_bank_min": 0.4,
+    "auto_house_max": 0.35,
+    "auto_mm_max": 0.25,
+    "vault_target_mult": 1.5,
+    "vault_mm_min_target": 1000000.0,
+    "bank_default_days": 30.0,
+    "bank_insurance": 10000000.0,
+    "rloan_enabled": 1.0,
+    "rloan_rate_week": 0.03,
+    "rloan_base": 10000.0,
+    "rloan_per_level": 2000.0,
+    "rloan_max_auto": 250000.0,
+    "rloan_max_days": 30.0,
+    "rloan_book": 0.25,
+    "fee_wager_pct": 5.0,
+    "fee_market_pct": 5.0,
+    "fee_loan_penalty_pct": 2.0,
+    "heist_vault_share": 0.15,
+    "heist_vault_cap": 10000000.0,
+    "heist_vault_min": 2000000.0,
+    "vault_dividend": 1.0,
+    "vault_house_target": 20000000.0,
+    "vault_bank_min_target": 5000000.0
+   },
+   "skip": [
+    "bot",
+    "drama1",
+    "mod",
+    "pepefrog",
+    "playersbot",
+    "room",
+    "server",
+    "someone",
+    "you"
+   ],
+   "journal": [],
+   "days_done": [
+    "D2026-10-20"
+   ],
+   "mo_days_done": [
+    "D2026-10-20"
+   ],
+   "armed": {
+    "treasury": 1790000000.0,
+    "monetary": 1790000000.0
+   },
+   "burn_cfg": {
+    "mode": "accrual",
+    "per_burn_max": 7000000,
+    "daily_max": 20000000,
+    "accrual_every_min": 5,
+    "announce": true,
+    "announce_gap_min": 15,
+    "announce_min": 1000
+   },
+   "burn_inflight": 0,
+   "bot_version": "test-po3"
+  },
+  "econ": {
+   "pat_routes": {
+    "fight_rake": [
+     [
+      "room",
+      60
+     ]
+    ],
+    "raffle": [
+     [
+      "incentives",
+      100
+     ]
+    ]
+   },
+   "econ_cfg": {
+    "heist_cap_mode": "fixed",
+    "fed_floor": 50000000,
+    "wf_staker_cap_pct": 0.0,
+    "mintcap_total": 100000000
+   },
+   "econ_cfg_log": [
+    {
+     "ts": 1792400000,
+     "by": "foamy1111",
+     "via": "chat",
+     "key": "wf_staker_cap_pct",
+     "old": 25.0,
+     "new": 0.0
+    },
+    {
+     "ts": 1792450000,
+     "by": "admin panel (#0a1b2c3d)",
+     "via": "panel-sink",
+     "key": "bank_insurance",
+     "old": 50000000.0,
+     "new": 10000000.0
+    }
+   ],
+   "catalog": {
+    "routes": {
+     "ask": {
+      "group": "Commands",
+      "label": "!ask",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "roast": {
+      "group": "Commands",
+      "label": "!roast / !camroast",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "look": {
+      "group": "Commands",
+      "label": "!look",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "imagine": {
+      "group": "Commands",
+      "label": "!imagine",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "chart": {
+      "group": "Commands",
+      "label": "!chart",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "video": {
+      "group": "Commands",
+      "label": "!video",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "clip": {
+      "group": "Commands",
+      "label": "!clip / !autoclip",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "snap": {
+      "group": "Commands",
+      "label": "!snap",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "topic": {
+      "group": "Commands",
+      "label": "!topic",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "remind": {
+      "group": "Commands",
+      "label": "!remind",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "relay": {
+      "group": "Commands",
+      "label": "!relay",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "shoutout": {
+      "group": "Commands",
+      "label": "!dj shoutout (taken when spoken)",
+      "default": [
+       [
+        "room",
+        20
+       ],
+       [
+        "reserve",
+        70
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "say": {
+      "group": "Commands",
+      "label": "!say",
+      "default": [
+       [
+        "room",
+        20
+       ],
+       [
+        "reserve",
+        70
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "camsurcharge": {
+      "group": "Commands",
+      "label": "-cam surcharge",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "micsurcharge": {
+      "group": "Commands",
+      "label": "-mic surcharge",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "queue": {
+      "group": "Purchases",
+      "label": "Music queue (!play)",
+      "default": [
+       [
+        "room",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "voice": {
+      "group": "Purchases",
+      "label": "Voices, per use (after the voice owner's royalty)",
+      "default": [
+       [
+        "room",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "voice_unlock": {
+      "group": "Purchases",
+      "label": "Voice unlocks (!buyvoice, after the voice owner's royalty)",
+      "default": [
+       [
+        "room",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "soundboard": {
+      "group": "Purchases",
+      "label": "Soundboard plays (global / packs / season board)",
+      "default": [
+       [
+        "room",
+        70
+       ],
+       [
+        "reserve",
+        20
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "soundboard_room": {
+      "group": "Purchases",
+      "label": "Soundboard plays of a pad's own clips",
+      "default": [
+       [
+        "room",
+        80
+       ],
+       [
+        "room_owner",
+        20
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "heist_gear": {
+      "group": "Purchases",
+      "label": "Heist shop gear (the rest goes to the Federal Reserve)",
+      "default": [
+       [
+        "room",
+        40
+       ],
+       [
+        "heist",
+        50
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "sponsor": {
+      "group": "Purchases",
+      "label": "!sponsor (rotates in every room)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "cosmetics": {
+      "group": "Purchases",
+      "label": "Cosmetics (shop buys + the 5% market fee; no room -> Fort Knox)",
+      "default": [
+       [
+        "room",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "sheetregen": {
+      "group": "Purchases",
+      "label": "Heist sheet re-roll",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "avatarregen": {
+      "group": "Purchases",
+      "label": "Avatar re-roll",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "gangcreate": {
+      "group": "Purchases",
+      "label": "Gang creation",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "blackjack_losses": {
+      "group": "Casino",
+      "label": "Blackjack: losing bets (wins are paid from the jackpot)",
+      "default": [
+       [
+        "jackpot",
+        98.8
+       ],
+       [
+        "room",
+        1.2
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": true,
+      "room_flow": false,
+      "website": false
+     },
+     "holdem_rake": {
+      "group": "Casino",
+      "label": "Hold'em rake",
+      "default": [
+       [
+        "jackpot",
+        80
+       ],
+       [
+        "room",
+        20
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": true,
+      "room_flow": false,
+      "website": false
+     },
+     "lotto_tickets": {
+      "group": "Casino",
+      "label": "Lotto tickets (40% lotto pot first; this row splits the other 60%)",
+      "default": [
+       [
+        "jackpot",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "bingo_house": {
+      "group": "Casino",
+      "label": "Bingo house cut (of card sales)",
+      "default": [
+       [
+        "jackpot",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "wager_fee": {
+      "group": "Casino",
+      "label": "Wager fee",
+      "default": [
+       [
+        "jackpot",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "market_fee": {
+      "group": "Casino",
+      "label": "Prediction-market fee",
+      "default": [
+       [
+        "mm",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "bounty_fee": {
+      "group": "Casino",
+      "label": "Bounty fee (5% of a paid bounty)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "heist_market_fee": {
+      "group": "Casino",
+      "label": "Heist market fee (5% of each player-to-player heist item sale)",
+      "default": [
+       [
+        "fortknox",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "raffle_fee": {
+      "group": "Casino",
+      "label": "Raffle fee (10% of a community raffle's ticket sales)",
+      "default": [
+       [
+        "jackpot",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "wheel": {
+      "group": "Casino",
+      "label": "Wheel spins (set on the website: 100% to the jackpot; the House keeps all of it - 1.99pk)",
+      "default": [
+       [
+        "jackpot",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": true,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "fight_rake": {
+      "group": "Games",
+      "label": "Duel / brawl / arena rake",
+      "default": [
+       [
+        "room",
+        60
+       ],
+       [
+        "reserve",
+        40
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": true,
+      "room_flow": false,
+      "website": false
+     },
+     "fine_admin": {
+      "group": "Fines & finance",
+      "label": "!fine (admin)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "fine_mod": {
+      "group": "Fines & finance",
+      "label": "Mod-abuse fines",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "fine_automod": {
+      "group": "Fines & finance",
+      "label": "Automod fines",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "fine_pad": {
+      "group": "Fines & finance",
+      "label": "Pad vault fines (admin, !padfine / Pads admin)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "loan_interest": {
+      "group": "Fines & finance",
+      "label": "Loan interest (the protocol's 10% cut of player-loan interest; the lender keeps 90%)",
+      "default": [
+       [
+        "bank",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "turf_buyins": {
+      "group": "Turf",
+      "label": "Claim / invasion buy-ins (when not refunded or won by defenders)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "turf_upgrades": {
+      "group": "Turf",
+      "label": "Stash & gang upgrades (from treasuries)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "turf_upkeep": {
+      "group": "Turf",
+      "label": "Daily borough upkeep (from treasuries)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "turf_fortify": {
+      "group": "Turf",
+      "label": "!fortify supplies (from treasuries)",
+      "default": [
+       [
+        "fortknox",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "gang_withdraw_cut": {
+      "group": "Turf",
+      "label": "Gang treasury withdrawal cut (5%)",
+      "default": [
+       [
+        "fortknox",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "dust": {
+      "group": "Fines & finance",
+      "label": "Split leftovers (pot / share rounding)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "auto_escrow_expired": {
+      "group": "Fines & finance",
+      "label": "Unclaimed chat-account escrow (auto accounts' free rewards, 6 months after their last activity; website)",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "levelup": {
+      "group": "Payouts (paid from)",
+      "label": "Level-up reward (website, 25k/level + 250k \u00d7 L/5 every 5th)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "new_account": {
+      "group": "Payouts (paid from)",
+      "label": "New-account welcome PAT (website)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "connect_bonus": {
+      "group": "Payouts (paid from)",
+      "label": "Twitch / Discord connect bonus (website)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "redeem_codes": {
+      "group": "Payouts (paid from)",
+      "label": "Redeem codes (website)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "platform_rewards": {
+      "group": "Payouts (paid from)",
+      "label": "Discord / Twitch raffles & rewards",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "wheel_shortfall": {
+      "group": "Payouts (paid from)",
+      "label": "Wheel prize the jackpot can't cover / reseed",
+      "default": [
+       [
+        "jackpot",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "achievements": {
+      "group": "Payouts (paid from)",
+      "label": "Achievement PAT bonuses (website)",
+      "default": [
+       [
+        "reserve",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "room_owner": {
+      "group": "Payouts (paid from)",
+      "label": "Pad owner royalties (website, weekly, if the pad was active)",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": true
+     },
+     "raffle": {
+      "group": "Payouts (paid from)",
+      "label": "Chat raffle",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "mic_hourly": {
+      "group": "Payouts (paid from)",
+      "label": "Top mic of the hour",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "beg": {
+      "group": "Payouts (paid from)",
+      "label": "!beg",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "pictionary": {
+      "group": "Payouts (paid from)",
+      "label": "Pictionary round win",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "turf_income": {
+      "group": "Payouts (paid from)",
+      "label": "Turf income top-up, tip tap, skim, interest & bonuses",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "turf_season": {
+      "group": "Payouts (paid from)",
+      "label": "Turf season prize match",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "store_heist": {
+      "group": "Payouts (paid from)",
+      "label": "Store heist loot & till",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": true,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "room_owner_hold": {
+      "group": "Pad owner share (held)",
+      "label": "Where the pad owner's share is held until the weekly royalty",
+      "default": [
+       [
+        "incentives",
+        100
+       ]
+      ],
+      "vault_only": true,
+      "readonly": false,
+      "payout": false,
+      "room": false,
+      "rv": false,
+      "room_flow": false,
+      "website": false
+     },
+     "music": {
+      "group": "Commands",
+      "label": "!music (AI generated)",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "epstein": {
+      "group": "Commands",
+      "label": "!epstein",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "web": {
+      "group": "Commands",
+      "label": "!web",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     },
+     "clipmic": {
+      "group": "Commands",
+      "label": "!clipmic / website \ud83d\udd0a Clip (mic clip)",
+      "default": [
+       [
+        "reserve",
+        90
+       ],
+       [
+        "room_owner",
+        10
+       ]
+      ],
+      "vault_only": false,
+      "readonly": false,
+      "payout": false,
+      "room": true,
+      "rv": false,
+      "room_flow": true,
+      "website": false
+     }
+    },
+    "dests": [
+     [
+      "jackpot",
+      "\ud83c\udfb0 Casino jackpot"
+     ],
+     [
+      "reserve",
+      "\ud83c\udfdb\ufe0f Federal Reserve (backstop)"
+     ],
+     [
+      "fortknox",
+      "\ud83e\ude99 Fort Knox (what bank heists rob)"
+     ],
+     [
+      "incentives",
+      "\ud83c\udf81 Incentive budget (payouts only; fills from the Treasury surplus)"
+     ],
+     [
+      "stakers",
+      "\ud83d\udcc8 Staked stashes (scaled by the staking dial)"
+     ],
+     [
+      "heist",
+      "\ud83d\udcb0 Casino vault (what casino heists rob)"
+     ],
+     [
+      "mm",
+      "\ud83d\udcc8 Market maker (Treasury vault; income only)"
+     ],
+     [
+      "bank",
+      "\ud83c\udfe6 Bank (Treasury vault; income only)"
+     ],
+     [
+      "room_owner",
+      "\ud83c\udfe0 Pad owner (weekly; held per the 'Pad owner share (held)' row)"
+     ],
+     [
+      "room",
+      "\ud83c\udfe6 Pad vault of the pad it was spent in (no room or no vault: Fort Knox)"
+     ]
+    ]
+   },
+   "actor": "pepe",
+   "via": "pepe"
+  },
+  "capital": {
+   "min_trade": 500,
+   "settle_grace": 604800,
+   "max_secs": 2592000,
+   "max_open": 5,
+   "loan_min": 1000,
+   "rloan_enabled": 1,
+   "rloan_rate_week": 0.03,
+   "rloan_base": 10000,
+   "rloan_per_level": 2000,
+   "rloan_max_auto": 250000,
+   "rloan_max_days": 30,
+   "rloan_book_share": 0.25,
+   "rloan_max_open": 1,
+   "penalty_pct": 2,
+   "penalty_cap_pct": 50,
+   "collect_every": 600,
+   "loan_max_borrowed": 5,
+   "vaults_enabled": 1,
+   "ceil_apr": 0.0,
+   "floor_apr": 0.0,
+   "topup": 0,
+   "topup_max_day": 25000,
+   "staker_max": 0.5,
+   "house_min_cash": 5000000,
+   "auto_bank_min": 0.4,
+   "auto_house_max": 0.35,
+   "auto_mm_max": 0.25,
+   "bank_default_days": 30,
+   "bank_insurance_cap": 10000000,
+   "min_move": 1000,
+   "epoch_hour": 4,
+   "dividend": 1,
+   "apr_min_cover": 0.9,
+   "ceil_cushion": 0,
+   "ceil_cushion_days": 8.0,
+   "auto_staker_cap": 0,
+   "layers": true,
+   "tr_live": true,
+   "targets": {
+    "bank": 2000000,
+    "house": 15000000,
+    "mm": 1000000
+   },
+   "flash": {
+    "bank": true,
+    "mm": true,
+    "room": 10000000
+   },
+   "fl_room": 10000000,
+   "credit": {
+    "base": 580,
+    "min": 300,
+    "max": 850,
+    "on_time": 20,
+    "on_time_cap": 160,
+    "late_repaid": -30,
+    "late_repaid_cap": -150,
+    "default": -120,
+    "default_cap": -240,
+    "late_now": -100,
+    "late_now_cap": -200,
+    "collection": -10,
+    "collection_cap": -50,
+    "per_level": 3,
+    "level_cap": 60,
+    "debt_none": 20,
+    "debt": [
+     [
+      0.5,
+      10
+     ],
+     [
+      1.0,
+      0
+     ],
+     [
+      2.0,
+      -30
+     ],
+     [
+      null,
+      -60
+     ]
+    ],
+    "age": [
+     [
+      7,
+      -20
+     ],
+     [
+      30,
+      0
+     ],
+     [
+      90,
+      10
+     ],
+     [
+      365,
+      25
+     ],
+     [
+      null,
+      40
+     ]
+    ],
+    "bands": [
+     [
+      800,
+      "Excellent"
+     ],
+     [
+      740,
+      "Very good"
+     ],
+     [
+      670,
+      "Good"
+     ],
+     [
+      580,
+      "Fair"
+     ],
+     [
+      0,
+      "Poor"
+     ]
+    ],
+    "capacity_base": 10000,
+    "capacity_per_level": 2000
+   },
+   "flows": {},
+   "heist_log": [],
+   "heist_settings": {
+    "share": 0.15,
+    "cap": 10000000,
+    "min": 2000000
+   },
+   "lotto_pot": 0,
+   "waterfall": [],
+   "wf_staker_cap_pct": 0.0
+  }
+ },
+ "routes": {
+  "dests": [
+   "jackpot",
+   "reserve",
+   "fortknox",
+   "incentives",
+   "stakers",
+   "heist",
+   "mm",
+   "bank",
+   "room_owner",
+   "room"
+  ],
+  "keep": {
+   "achievements": [
+    "jackpot",
+    "reserve",
+    "incentives",
+    "heist"
+   ],
+   "ask": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "auto_escrow_expired": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "avatarregen": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "beg": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "heist"
+   ],
+   "bingo_house": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "blackjack_losses": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "bounty_fee": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "camsurcharge": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "chart": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "clip": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "clipmic": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "connect_bonus": [
+    "jackpot",
+    "reserve",
+    "incentives",
+    "heist"
+   ],
+   "cosmetics": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "dust": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "epstein": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "fight_rake": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "fine_admin": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "fine_automod": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "fine_mod": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "fine_pad": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "gang_withdraw_cut": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "gangcreate": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "heist_gear": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "heist_market_fee": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "holdem_rake": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "imagine": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "levelup": [
+    "jackpot",
+    "reserve",
+    "incentives",
+    "heist"
+   ],
+   "loan_interest": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "look": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "lotto_tickets": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "market_fee": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "mic_hourly": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "heist"
+   ],
+   "micsurcharge": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "music": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "new_account": [
+    "jackpot",
+    "reserve",
+    "incentives",
+    "heist"
+   ],
+   "pictionary": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "heist"
+   ],
+   "platform_rewards": [
+    "jackpot",
+    "reserve",
+    "incentives",
+    "heist"
+   ],
+   "queue": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "raffle": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "heist"
+   ],
+   "raffle_fee": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "redeem_codes": [
+    "jackpot",
+    "reserve",
+    "incentives",
+    "heist"
+   ],
+   "relay": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "remind": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "roast": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "room_owner": [
+    "jackpot",
+    "reserve",
+    "incentives",
+    "heist"
+   ],
+   "room_owner_hold": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "stakers",
+    "heist"
+   ],
+   "say": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "sheetregen": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "shoutout": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "snap": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "soundboard": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "soundboard_room": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "sponsor": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner"
+   ],
+   "store_heist": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "heist"
+   ],
+   "topic": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "turf_buyins": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "turf_fortify": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "turf_income": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "heist"
+   ],
+   "turf_season": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "incentives",
+    "heist"
+   ],
+   "turf_upgrades": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "turf_upkeep": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "video": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "voice": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "voice_unlock": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room"
+   ],
+   "wager_fee": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank"
+   ],
+   "web": [
+    "jackpot",
+    "reserve",
+    "fortknox",
+    "stakers",
+    "heist",
+    "mm",
+    "bank",
+    "room_owner",
+    "room"
+   ],
+   "wheel_shortfall": [
+    "jackpot",
+    "reserve",
+    "heist"
+   ]
+  }
+ },
+ "export": {
+  "text": "{\"archive\":{\"automint\":{\"jackpot\":{\"per_day\":0,\"target\":6000000},\"reserve\":{\"per_day\":0,\"target\":10000000}},\"lotto_pot_share\":0.4,\"price_lotto_ticket\":1000.0,\"stake_apr_max\":0.25,\"stake_apr_min\":0.05,\"stake_topup\":0.0,\"stake_topup_max\":50000.0,\"vault_share_reserve\":0.45},\"at\":1792500000,\"bot_version\":\"test-po3\",\"by\":\"owner_cf\",\"ceil_log\":[{\"ceil_apr\":0.25,\"ceil_cushion\":0,\"ceil_cushion_days\":8.0,\"ts\":1792300000.0},{\"ceil_apr\":0.0,\"ceil_cushion\":0,\"ceil_cushion_days\":8.0,\"ts\":1792350000.0}],\"cfg\":{\"activity_rewards\":false,\"ap_on\":false,\"auto_bank_min\":0.4,\"auto_house_max\":0.35,\"auto_mm_max\":0.25,\"bank_default_days\":30.0,\"bank_hard_floor\":1000000,\"bank_insurance\":10000000.0,\"bank_lent_mult_pct\":200,\"bank_peak_days\":30,\"bank_target\":2000000,\"budget_achievements\":2100000,\"budget_activity\":0,\"budget_launchpad\":1000000,\"budget_levelup\":1400000,\"budget_misc\":350000,\"budget_roomgames\":3500000,\"budget_royalties\":300000,\"budget_season\":2000000,\"budget_turf\":500000,\"budget_welcome\":1500000,\"burn_accrual_every_min\":5,\"burn_announce\":true,\"burn_announce_gap_min\":15,\"burn_announce_min\":1000,\"burn_daily_max\":20000000,\"burn_mode\":\"accrual\",\"burn_per_burn_max\":7000000,\"casino_cap\":10000000,\"casino_cap_pct\":40.0,\"casino_floor\":2000000,\"donation_bonus_pct\":20.0,\"donation_rate\":500000,\"epoch_hour\":4,\"fed_ceiling\":150000000,\"fed_ceiling_action\":\"burn\",\"fed_floor\":50000000,\"fed_floor_mint_daily\":5000000,\"fed_split_pct\":50.0,\"fedloan_cap\":10000000,\"fee_loan_penalty_pct\":2.0,\"fee_market_pct\":5.0,\"fee_wager_pct\":5.0,\"flash_bank\":true,\"flash_house\":true,\"flash_mm\":true,\"fortknox_cap\":15000000,\"fortknox_cap_pct\":60.0,\"fortknox_floor\":2000000,\"grant_weekly_cap\":-1,\"guarantee_base\":25000000,\"guarantee_max\":40000000,\"guarantee_min\":15000000,\"guarantee_ref_weeks\":4,\"guarantee_scaled\":false,\"guarantee_smooth_weeks\":3,\"heist_cap_mode\":\"fixed\",\"heist_vault_share\":0.15,\"house_hard_floor\":5000000,\"house_target\":15000000,\"incentive_guarantee\":true,\"incentive_guarantee_target\":0,\"issuance_activity_scaling\":true,\"issuance_fixed_month\":10000000,\"issuance_mode\":\"off\",\"issuance_pct_month\":1.0,\"issuance_to_guarantee\":true,\"layers\":true,\"mintcap_floor\":30000000,\"mintcap_issuance\":-1,\"mintcap_loan\":-1,\"mintcap_restore\":-1,\"mintcap_total\":100000000,\"mm_hard_floor\":500000,\"mm_target\":1000000,\"pace_achievements\":0,\"pace_activity\":7,\"pace_launchpad\":0,\"pace_levelup\":0,\"pace_misc\":0,\"pace_roomgames\":7,\"pace_royalties\":0,\"pace_season\":0,\"pace_turf\":7,\"pace_welcome\":0,\"pat_routes\":{\"fight_rake\":[[\"room\",60]],\"raffle\":[[\"incentives\",100]]},\"rloan_base\":10000.0,\"rloan_book\":0.25,\"rloan_enabled\":1.0,\"rloan_max_auto\":250000.0,\"rloan_max_days\":30.0,\"rloan_per_level\":2000.0,\"rloan_rate_week\":0.03,\"room_vault_cap\":50000000,\"skip\":[\"bot\",\"drama1\",\"mod\",\"pepefrog\",\"playersbot\",\"room\",\"server\",\"someone\",\"you\"],\"staker_share_pct\":20.0,\"tr_live\":true,\"tz\":\"America/New_York\",\"vault_auto_staker_cap\":false,\"vault_bank_min_target\":5000000.0,\"vault_ceil_apr\":0.0,\"vault_ceil_cushion\":false,\"vault_ceil_cushion_days\":8.0,\"vault_dividend\":1.0,\"vault_floor_apr\":0.0,\"vault_house_target\":20000000.0,\"vault_min_move\":1000,\"vault_staker_max\":0.5,\"vault_target_mult\":1.5,\"vault_topup\":0.0,\"vault_topup_max\":25000.0,\"wf_staker_cap_pct\":0.0},\"feature\":\"cfg\",\"log\":[{\"by\":\"foamy1111\",\"key\":\"wf_staker_cap_pct\",\"new\":0.0,\"old\":25.0,\"ts\":1792400000,\"via\":\"chat\"},{\"by\":\"admin panel (#0a1b2c3d)\",\"key\":\"bank_insurance\",\"new\":10000000.0,\"old\":50000000.0,\"ts\":1792450000,\"via\":\"panel-sink\"}],\"v\":1}",
+  "key": "8cebac97fab4d2c5481893791489439ad3153ae1da7b48329a99dc422ea4e7eb",
+  "size": 3468
+ },
+ "chat_set": {
+  "request": {
+   "actor": "owner_cf",
+   "via": "chat",
+   "changes": {
+    "fed_floor": "40m",
+    "vault_ceil_apr": "10%",
+    "burn_mode": "batch",
+    "budget_misc": "400k"
+   },
+   "note": "!econ set by owner_cf"
+  },
+  "stored": {
+   "fed_floor": 40000000,
+   "vault_ceil_apr": 0.1,
+   "burn_mode": "batch",
+   "budget_misc": 400000
+  },
+  "web_edit": {
+   "changes": {
+    "pat_routes": {
+     "fight_rake": null
+    }
+   },
+   "note": "fight_rake back to its default"
+  }
+ },
+ "rollback": {
+  "cfg": {
+   "house_target": 15000000,
+   "house_hard_floor": 5000000,
+   "bank_target": 2000000,
+   "bank_hard_floor": 1000000,
+   "bank_lent_mult_pct": 200,
+   "bank_peak_days": 30,
+   "mm_target": 1000000,
+   "mm_hard_floor": 500000,
+   "fedloan_cap": 10000000,
+   "fortknox_floor": 2000000,
+   "fortknox_cap": 15000000,
+   "casino_floor": 2000000,
+   "casino_cap": 10000000,
+   "heist_cap_mode": "fixed",
+   "fortknox_cap_pct": 60.0,
+   "casino_cap_pct": 40.0,
+   "budget_welcome": 1500000,
+   "pace_welcome": 0,
+   "budget_levelup": 1400000,
+   "pace_levelup": 0,
+   "budget_achievements": 2100000,
+   "pace_achievements": 0,
+   "budget_misc": 400000,
+   "pace_misc": 0,
+   "budget_royalties": 300000,
+   "pace_royalties": 0,
+   "budget_roomgames": 3500000,
+   "pace_roomgames": 7,
+   "budget_turf": 500000,
+   "pace_turf": 7,
+   "budget_season": 2000000,
+   "pace_season": 0,
+   "budget_launchpad": 1000000,
+   "pace_launchpad": 0,
+   "budget_activity": 0,
+   "pace_activity": 7,
+   "fed_floor": 40000000,
+   "fed_ceiling": 150000000,
+   "fed_floor_mint_daily": 5000000,
+   "fed_ceiling_action": "burn",
+   "incentive_guarantee": true,
+   "incentive_guarantee_target": 0,
+   "guarantee_scaled": false,
+   "guarantee_base": 25000000,
+   "guarantee_min": 15000000,
+   "guarantee_max": 40000000,
+   "guarantee_smooth_weeks": 3,
+   "guarantee_ref_weeks": 4,
+   "issuance_to_guarantee": true,
+   "activity_rewards": false,
+   "issuance_mode": "off",
+   "issuance_pct_month": 1.0,
+   "issuance_fixed_month": 10000000,
+   "issuance_activity_scaling": true,
+   "mintcap_issuance": -1,
+   "mintcap_floor": 30000000,
+   "mintcap_loan": -1,
+   "mintcap_restore": -1,
+   "mintcap_total": 100000000,
+   "flash_bank": true,
+   "flash_house": true,
+   "flash_mm": true,
+   "grant_weekly_cap": -1,
+   "donation_rate": 500000,
+   "donation_bonus_pct": 20.0,
+   "staker_share_pct": 20.0,
+   "fed_split_pct": 50.0,
+   "wf_staker_cap_pct": 0.0,
+   "room_vault_cap": 50000000,
+   "vault_ceil_apr": 0.1,
+   "vault_ceil_cushion": false,
+   "vault_ceil_cushion_days": 8.0,
+   "vault_auto_staker_cap": false,
+   "vault_floor_apr": 0.0,
+   "vault_topup": 0.0,
+   "vault_topup_max": 25000.0,
+   "vault_staker_max": 0.5,
+   "auto_bank_min": 0.4,
+   "auto_house_max": 0.35,
+   "auto_mm_max": 0.25,
+   "vault_target_mult": 1.5,
+   "bank_default_days": 30.0,
+   "bank_insurance": 10000000.0,
+   "rloan_enabled": 1.0,
+   "rloan_rate_week": 0.03,
+   "rloan_base": 10000.0,
+   "rloan_per_level": 2000.0,
+   "rloan_max_auto": 250000.0,
+   "rloan_max_days": 30.0,
+   "rloan_book": 0.25,
+   "fee_wager_pct": 5.0,
+   "fee_market_pct": 5.0,
+   "fee_loan_penalty_pct": 2.0,
+   "heist_vault_share": 0.15,
+   "vault_dividend": 1.0,
+   "vault_house_target": 20000000.0,
+   "vault_bank_min_target": 5000000.0,
+   "layers": true,
+   "tr_live": true,
+   "ap_on": false,
+   "burn_mode": "batch",
+   "burn_per_burn_max": 7000000,
+   "burn_daily_max": 20000000,
+   "burn_accrual_every_min": 5,
+   "burn_announce": true,
+   "burn_announce_gap_min": 15,
+   "burn_announce_min": 1000,
+   "skip": [
+    "bot",
+    "drama1",
+    "mod",
+    "pepefrog",
+    "playersbot",
+    "room",
+    "server",
+    "someone",
+    "you"
+   ],
+   "tz": "America/New_York",
+   "epoch_hour": 4,
+   "vault_min_move": 1000,
+   "pat_routes": {
+    "raffle": [
+     [
+      "incentives",
+      100
+     ]
+    ]
+   }
+  },
+  "pushes": {
+   "policy": {
+    "econ_cfg": {
+     "house_target": 15000000,
+     "house_hard_floor": 5000000,
+     "bank_target": 2000000,
+     "bank_hard_floor": 1000000,
+     "bank_lent_mult_pct": 200,
+     "bank_peak_days": 30,
+     "mm_target": 1000000,
+     "mm_hard_floor": 500000,
+     "fedloan_cap": 10000000,
+     "fortknox_floor": 2000000,
+     "fortknox_cap": 15000000,
+     "casino_floor": 2000000,
+     "casino_cap": 10000000,
+     "heist_cap_mode": "fixed",
+     "fortknox_cap_pct": 60.0,
+     "casino_cap_pct": 40.0,
+     "budget_welcome": 1500000,
+     "pace_welcome": 0,
+     "budget_levelup": 1400000,
+     "pace_levelup": 0,
+     "budget_achievements": 2100000,
+     "pace_achievements": 0,
+     "budget_misc": 400000,
+     "pace_misc": 0,
+     "budget_royalties": 300000,
+     "pace_royalties": 0,
+     "budget_roomgames": 3500000,
+     "pace_roomgames": 7,
+     "budget_turf": 500000,
+     "pace_turf": 7,
+     "budget_season": 2000000,
+     "pace_season": 0,
+     "budget_launchpad": 1000000,
+     "pace_launchpad": 0,
+     "budget_activity": 0,
+     "pace_activity": 7,
+     "fed_floor": 40000000,
+     "fed_ceiling": 150000000,
+     "fed_floor_mint_daily": 5000000,
+     "fed_ceiling_action": "burn",
+     "incentive_guarantee": true,
+     "incentive_guarantee_target": 0,
+     "guarantee_scaled": false,
+     "guarantee_base": 25000000,
+     "guarantee_min": 15000000,
+     "guarantee_max": 40000000,
+     "guarantee_smooth_weeks": 3,
+     "guarantee_ref_weeks": 4,
+     "issuance_to_guarantee": true,
+     "activity_rewards": false,
+     "issuance_mode": "off",
+     "issuance_pct_month": 1.0,
+     "issuance_fixed_month": 10000000,
+     "issuance_activity_scaling": true,
+     "mintcap_issuance": -1,
+     "mintcap_floor": 30000000,
+     "mintcap_loan": -1,
+     "mintcap_restore": -1,
+     "mintcap_total": 100000000,
+     "flash_bank": true,
+     "flash_house": true,
+     "flash_mm": true,
+     "grant_weekly_cap": -1,
+     "donation_rate": 500000,
+     "donation_bonus_pct": 20.0,
+     "staker_share_pct": 20.0,
+     "fed_split_pct": 50.0,
+     "wf_staker_cap_pct": 0.0,
+     "room_vault_cap": 50000000
+    },
+    "consts": {
+     "VAULT_MIN_MOVE": 1000,
+     "VAULT_CEIL_APR": 0.1,
+     "VAULT_EPOCH_UTC_HOUR": 4,
+     "HOUSE_MIN_CASH": 5000000,
+     "VAULT_MM_MIN_TARGET": 1000000,
+     "VAULT_TARGET_MULT": 1.5,
+     "HEIST_VAULT_MIN": 2000000,
+     "HEIST_VAULT_CAP": 10000000
+    },
+    "flags": {
+     "layers": true,
+     "tr_live": true,
+     "ap_on": false
+    },
+    "tz": "America/New_York",
+    "sink": {
+     "vault_ceil_apr": 0.1,
+     "vault_ceil_cushion": 0.0,
+     "vault_ceil_cushion_days": 8.0,
+     "vault_auto_staker_cap": 0.0,
+     "vault_floor_apr": 0.0,
+     "vault_topup": 0.0,
+     "vault_topup_max": 25000.0,
+     "vault_staker_max": 0.5,
+     "vault_house_min": 5000000.0,
+     "auto_bank_min": 0.4,
+     "auto_house_max": 0.35,
+     "auto_mm_max": 0.25,
+     "vault_target_mult": 1.5,
+     "vault_mm_min_target": 1000000.0,
+     "bank_default_days": 30.0,
+     "bank_insurance": 10000000.0,
+     "rloan_enabled": 1.0,
+     "rloan_rate_week": 0.03,
+     "rloan_base": 10000.0,
+     "rloan_per_level": 2000.0,
+     "rloan_max_auto": 250000.0,
+     "rloan_max_days": 30.0,
+     "rloan_book": 0.25,
+     "fee_wager_pct": 5.0,
+     "fee_market_pct": 5.0,
+     "fee_loan_penalty_pct": 2.0,
+     "heist_vault_share": 0.15,
+     "heist_vault_cap": 10000000.0,
+     "heist_vault_min": 2000000.0,
+     "vault_dividend": 1.0,
+     "vault_house_target": 20000000.0,
+     "vault_bank_min_target": 5000000.0
+    },
+    "skip": [
+     "bot",
+     "drama1",
+     "mod",
+     "pepefrog",
+     "playersbot",
+     "room",
+     "server",
+     "someone",
+     "you"
+    ],
+    "journal": [],
+    "days_done": [
+     "D2026-10-20"
+    ],
+    "mo_days_done": [
+     "D2026-10-20"
+    ],
+    "armed": {
+     "treasury": 1790000000.0,
+     "monetary": 1790000000.0
+    },
+    "burn_cfg": {
+     "mode": "batch",
+     "per_burn_max": 7000000,
+     "daily_max": 20000000,
+     "accrual_every_min": 5,
+     "announce": true,
+     "announce_gap_min": 15,
+     "announce_min": 1000
+    },
+    "burn_inflight": 0,
+    "bot_version": "test-po3"
+   },
+   "econ": {
+    "pat_routes": {
+     "raffle": [
+      [
+       "incentives",
+       100
+      ]
+     ]
+    },
+    "econ_cfg": {
+     "heist_cap_mode": "fixed",
+     "budget_misc": 400000,
+     "fed_floor": 40000000,
+     "mintcap_total": 100000000,
+     "wf_staker_cap_pct": 0.0
+    },
+    "econ_cfg_log": [
+     {
+      "ts": 1792400000,
+      "by": "foamy1111",
+      "via": "chat",
+      "key": "wf_staker_cap_pct",
+      "old": 25.0,
+      "new": 0.0
+     },
+     {
+      "ts": 1792450000,
+      "by": "admin panel (#0a1b2c3d)",
+      "via": "panel-sink",
+      "key": "bank_insurance",
+      "old": 50000000.0,
+      "new": 10000000.0
+     }
+    ],
+    "catalog": {
+     "routes": {
+      "ask": {
+       "group": "Commands",
+       "label": "!ask",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "roast": {
+       "group": "Commands",
+       "label": "!roast / !camroast",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "look": {
+       "group": "Commands",
+       "label": "!look",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "imagine": {
+       "group": "Commands",
+       "label": "!imagine",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "chart": {
+       "group": "Commands",
+       "label": "!chart",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "video": {
+       "group": "Commands",
+       "label": "!video",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "clip": {
+       "group": "Commands",
+       "label": "!clip / !autoclip",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "snap": {
+       "group": "Commands",
+       "label": "!snap",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "topic": {
+       "group": "Commands",
+       "label": "!topic",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "remind": {
+       "group": "Commands",
+       "label": "!remind",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "relay": {
+       "group": "Commands",
+       "label": "!relay",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "shoutout": {
+       "group": "Commands",
+       "label": "!dj shoutout (taken when spoken)",
+       "default": [
+        [
+         "room",
+         20
+        ],
+        [
+         "reserve",
+         70
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "say": {
+       "group": "Commands",
+       "label": "!say",
+       "default": [
+        [
+         "room",
+         20
+        ],
+        [
+         "reserve",
+         70
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "camsurcharge": {
+       "group": "Commands",
+       "label": "-cam surcharge",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "micsurcharge": {
+       "group": "Commands",
+       "label": "-mic surcharge",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "queue": {
+       "group": "Purchases",
+       "label": "Music queue (!play)",
+       "default": [
+        [
+         "room",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "voice": {
+       "group": "Purchases",
+       "label": "Voices, per use (after the voice owner's royalty)",
+       "default": [
+        [
+         "room",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "voice_unlock": {
+       "group": "Purchases",
+       "label": "Voice unlocks (!buyvoice, after the voice owner's royalty)",
+       "default": [
+        [
+         "room",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "soundboard": {
+       "group": "Purchases",
+       "label": "Soundboard plays (global / packs / season board)",
+       "default": [
+        [
+         "room",
+         70
+        ],
+        [
+         "reserve",
+         20
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "soundboard_room": {
+       "group": "Purchases",
+       "label": "Soundboard plays of a pad's own clips",
+       "default": [
+        [
+         "room",
+         80
+        ],
+        [
+         "room_owner",
+         20
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "heist_gear": {
+       "group": "Purchases",
+       "label": "Heist shop gear (the rest goes to the Federal Reserve)",
+       "default": [
+        [
+         "room",
+         40
+        ],
+        [
+         "heist",
+         50
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "sponsor": {
+       "group": "Purchases",
+       "label": "!sponsor (rotates in every room)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "cosmetics": {
+       "group": "Purchases",
+       "label": "Cosmetics (shop buys + the 5% market fee; no room -> Fort Knox)",
+       "default": [
+        [
+         "room",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "sheetregen": {
+       "group": "Purchases",
+       "label": "Heist sheet re-roll",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "avatarregen": {
+       "group": "Purchases",
+       "label": "Avatar re-roll",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "gangcreate": {
+       "group": "Purchases",
+       "label": "Gang creation",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "blackjack_losses": {
+       "group": "Casino",
+       "label": "Blackjack: losing bets (wins are paid from the jackpot)",
+       "default": [
+        [
+         "jackpot",
+         98.8
+        ],
+        [
+         "room",
+         1.2
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": true,
+       "room_flow": false,
+       "website": false
+      },
+      "holdem_rake": {
+       "group": "Casino",
+       "label": "Hold'em rake",
+       "default": [
+        [
+         "jackpot",
+         80
+        ],
+        [
+         "room",
+         20
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": true,
+       "room_flow": false,
+       "website": false
+      },
+      "lotto_tickets": {
+       "group": "Casino",
+       "label": "Lotto tickets (40% lotto pot first; this row splits the other 60%)",
+       "default": [
+        [
+         "jackpot",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "bingo_house": {
+       "group": "Casino",
+       "label": "Bingo house cut (of card sales)",
+       "default": [
+        [
+         "jackpot",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "wager_fee": {
+       "group": "Casino",
+       "label": "Wager fee",
+       "default": [
+        [
+         "jackpot",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "market_fee": {
+       "group": "Casino",
+       "label": "Prediction-market fee",
+       "default": [
+        [
+         "mm",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "bounty_fee": {
+       "group": "Casino",
+       "label": "Bounty fee (5% of a paid bounty)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "heist_market_fee": {
+       "group": "Casino",
+       "label": "Heist market fee (5% of each player-to-player heist item sale)",
+       "default": [
+        [
+         "fortknox",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "raffle_fee": {
+       "group": "Casino",
+       "label": "Raffle fee (10% of a community raffle's ticket sales)",
+       "default": [
+        [
+         "jackpot",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "wheel": {
+       "group": "Casino",
+       "label": "Wheel spins (set on the website: 100% to the jackpot; the House keeps all of it - 1.99pk)",
+       "default": [
+        [
+         "jackpot",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": true,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "fight_rake": {
+       "group": "Games",
+       "label": "Duel / brawl / arena rake",
+       "default": [
+        [
+         "room",
+         60
+        ],
+        [
+         "reserve",
+         40
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": true,
+       "room_flow": false,
+       "website": false
+      },
+      "fine_admin": {
+       "group": "Fines & finance",
+       "label": "!fine (admin)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "fine_mod": {
+       "group": "Fines & finance",
+       "label": "Mod-abuse fines",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "fine_automod": {
+       "group": "Fines & finance",
+       "label": "Automod fines",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "fine_pad": {
+       "group": "Fines & finance",
+       "label": "Pad vault fines (admin, !padfine / Pads admin)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "loan_interest": {
+       "group": "Fines & finance",
+       "label": "Loan interest (the protocol's 10% cut of player-loan interest; the lender keeps 90%)",
+       "default": [
+        [
+         "bank",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "turf_buyins": {
+       "group": "Turf",
+       "label": "Claim / invasion buy-ins (when not refunded or won by defenders)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "turf_upgrades": {
+       "group": "Turf",
+       "label": "Stash & gang upgrades (from treasuries)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "turf_upkeep": {
+       "group": "Turf",
+       "label": "Daily borough upkeep (from treasuries)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "turf_fortify": {
+       "group": "Turf",
+       "label": "!fortify supplies (from treasuries)",
+       "default": [
+        [
+         "fortknox",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "gang_withdraw_cut": {
+       "group": "Turf",
+       "label": "Gang treasury withdrawal cut (5%)",
+       "default": [
+        [
+         "fortknox",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "dust": {
+       "group": "Fines & finance",
+       "label": "Split leftovers (pot / share rounding)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "auto_escrow_expired": {
+       "group": "Fines & finance",
+       "label": "Unclaimed chat-account escrow (auto accounts' free rewards, 6 months after their last activity; website)",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "levelup": {
+       "group": "Payouts (paid from)",
+       "label": "Level-up reward (website, 25k/level + 250k \u00d7 L/5 every 5th)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "new_account": {
+       "group": "Payouts (paid from)",
+       "label": "New-account welcome PAT (website)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "connect_bonus": {
+       "group": "Payouts (paid from)",
+       "label": "Twitch / Discord connect bonus (website)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "redeem_codes": {
+       "group": "Payouts (paid from)",
+       "label": "Redeem codes (website)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "platform_rewards": {
+       "group": "Payouts (paid from)",
+       "label": "Discord / Twitch raffles & rewards",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "wheel_shortfall": {
+       "group": "Payouts (paid from)",
+       "label": "Wheel prize the jackpot can't cover / reseed",
+       "default": [
+        [
+         "jackpot",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "achievements": {
+       "group": "Payouts (paid from)",
+       "label": "Achievement PAT bonuses (website)",
+       "default": [
+        [
+         "reserve",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "room_owner": {
+       "group": "Payouts (paid from)",
+       "label": "Pad owner royalties (website, weekly, if the pad was active)",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": true
+      },
+      "raffle": {
+       "group": "Payouts (paid from)",
+       "label": "Chat raffle",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "mic_hourly": {
+       "group": "Payouts (paid from)",
+       "label": "Top mic of the hour",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "beg": {
+       "group": "Payouts (paid from)",
+       "label": "!beg",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "pictionary": {
+       "group": "Payouts (paid from)",
+       "label": "Pictionary round win",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "turf_income": {
+       "group": "Payouts (paid from)",
+       "label": "Turf income top-up, tip tap, skim, interest & bonuses",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "turf_season": {
+       "group": "Payouts (paid from)",
+       "label": "Turf season prize match",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "store_heist": {
+       "group": "Payouts (paid from)",
+       "label": "Store heist loot & till",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": true,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "room_owner_hold": {
+       "group": "Pad owner share (held)",
+       "label": "Where the pad owner's share is held until the weekly royalty",
+       "default": [
+        [
+         "incentives",
+         100
+        ]
+       ],
+       "vault_only": true,
+       "readonly": false,
+       "payout": false,
+       "room": false,
+       "rv": false,
+       "room_flow": false,
+       "website": false
+      },
+      "music": {
+       "group": "Commands",
+       "label": "!music (AI generated)",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "epstein": {
+       "group": "Commands",
+       "label": "!epstein",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "web": {
+       "group": "Commands",
+       "label": "!web",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      },
+      "clipmic": {
+       "group": "Commands",
+       "label": "!clipmic / website \ud83d\udd0a Clip (mic clip)",
+       "default": [
+        [
+         "reserve",
+         90
+        ],
+        [
+         "room_owner",
+         10
+        ]
+       ],
+       "vault_only": false,
+       "readonly": false,
+       "payout": false,
+       "room": true,
+       "rv": false,
+       "room_flow": true,
+       "website": false
+      }
+     },
+     "dests": [
+      [
+       "jackpot",
+       "\ud83c\udfb0 Casino jackpot"
+      ],
+      [
+       "reserve",
+       "\ud83c\udfdb\ufe0f Federal Reserve (backstop)"
+      ],
+      [
+       "fortknox",
+       "\ud83e\ude99 Fort Knox (what bank heists rob)"
+      ],
+      [
+       "incentives",
+       "\ud83c\udf81 Incentive budget (payouts only; fills from the Treasury surplus)"
+      ],
+      [
+       "stakers",
+       "\ud83d\udcc8 Staked stashes (scaled by the staking dial)"
+      ],
+      [
+       "heist",
+       "\ud83d\udcb0 Casino vault (what casino heists rob)"
+      ],
+      [
+       "mm",
+       "\ud83d\udcc8 Market maker (Treasury vault; income only)"
+      ],
+      [
+       "bank",
+       "\ud83c\udfe6 Bank (Treasury vault; income only)"
+      ],
+      [
+       "room_owner",
+       "\ud83c\udfe0 Pad owner (weekly; held per the 'Pad owner share (held)' row)"
+      ],
+      [
+       "room",
+       "\ud83c\udfe6 Pad vault of the pad it was spent in (no room or no vault: Fort Knox)"
+      ]
+     ]
+    },
+    "actor": "pepe",
+    "via": "pepe"
+   },
+   "capital": {
+    "min_trade": 500,
+    "settle_grace": 604800,
+    "max_secs": 2592000,
+    "max_open": 5,
+    "loan_min": 1000,
+    "rloan_enabled": 1,
+    "rloan_rate_week": 0.03,
+    "rloan_base": 10000,
+    "rloan_per_level": 2000,
+    "rloan_max_auto": 250000,
+    "rloan_max_days": 30,
+    "rloan_book_share": 0.25,
+    "rloan_max_open": 1,
+    "penalty_pct": 2,
+    "penalty_cap_pct": 50,
+    "collect_every": 600,
+    "loan_max_borrowed": 5,
+    "vaults_enabled": 1,
+    "ceil_apr": 0.1,
+    "floor_apr": 0.0,
+    "topup": 0,
+    "topup_max_day": 25000,
+    "staker_max": 0.5,
+    "house_min_cash": 5000000,
+    "auto_bank_min": 0.4,
+    "auto_house_max": 0.35,
+    "auto_mm_max": 0.25,
+    "bank_default_days": 30,
+    "bank_insurance_cap": 10000000,
+    "min_move": 1000,
+    "epoch_hour": 4,
+    "dividend": 1,
+    "apr_min_cover": 0.9,
+    "ceil_cushion": 0,
+    "ceil_cushion_days": 8.0,
+    "auto_staker_cap": 0,
+    "layers": true,
+    "tr_live": true,
+    "targets": {
+     "bank": 2000000,
+     "house": 15000000,
+     "mm": 1000000
+    },
+    "flash": {
+     "bank": true,
+     "mm": true,
+     "room": 10000000
+    },
+    "fl_room": 10000000,
+    "credit": {
+     "base": 580,
+     "min": 300,
+     "max": 850,
+     "on_time": 20,
+     "on_time_cap": 160,
+     "late_repaid": -30,
+     "late_repaid_cap": -150,
+     "default": -120,
+     "default_cap": -240,
+     "late_now": -100,
+     "late_now_cap": -200,
+     "collection": -10,
+     "collection_cap": -50,
+     "per_level": 3,
+     "level_cap": 60,
+     "debt_none": 20,
+     "debt": [
+      [
+       0.5,
+       10
+      ],
+      [
+       1.0,
+       0
+      ],
+      [
+       2.0,
+       -30
+      ],
+      [
+       null,
+       -60
+      ]
+     ],
+     "age": [
+      [
+       7,
+       -20
+      ],
+      [
+       30,
+       0
+      ],
+      [
+       90,
+       10
+      ],
+      [
+       365,
+       25
+      ],
+      [
+       null,
+       40
+      ]
+     ],
+     "bands": [
+      [
+       800,
+       "Excellent"
+      ],
+      [
+       740,
+       "Very good"
+      ],
+      [
+       670,
+       "Good"
+      ],
+      [
+       580,
+       "Fair"
+      ],
+      [
+       0,
+       "Poor"
+      ]
+     ],
+     "capacity_base": 10000,
+     "capacity_per_level": 2000
+    },
+    "flows": {},
+    "heist_log": [],
+    "heist_settings": {
+     "share": 0.15,
+     "cap": 10000000,
+     "min": 2000000
+    },
+    "lotto_pot": 0,
+    "waterfall": [],
+    "wf_staker_cap_pct": 0.0
+   }
+  }
+ },
+ "site_keys": [
+  "activity_rewards",
+  "ap_on",
+  "auto_bank_min",
+  "auto_house_max",
+  "auto_mm_max",
+  "bank_default_days",
+  "bank_hard_floor",
+  "bank_insurance",
+  "bank_lent_mult_pct",
+  "bank_peak_days",
+  "bank_target",
+  "budget_achievements",
+  "budget_activity",
+  "budget_launchpad",
+  "budget_levelup",
+  "budget_misc",
+  "budget_roomgames",
+  "budget_royalties",
+  "budget_season",
+  "budget_turf",
+  "budget_welcome",
+  "burn_accrual_every_min",
+  "burn_announce",
+  "burn_announce_gap_min",
+  "burn_announce_min",
+  "burn_daily_max",
+  "burn_mode",
+  "burn_per_burn_max",
+  "casino_cap",
+  "casino_cap_pct",
+  "casino_floor",
+  "donation_bonus_pct",
+  "donation_rate",
+  "epoch_hour",
+  "fed_ceiling",
+  "fed_ceiling_action",
+  "fed_floor",
+  "fed_floor_mint_daily",
+  "fed_split_pct",
+  "fedloan_cap",
+  "fee_loan_penalty_pct",
+  "fee_market_pct",
+  "fee_wager_pct",
+  "flash_bank",
+  "flash_house",
+  "flash_mm",
+  "fortknox_cap",
+  "fortknox_cap_pct",
+  "fortknox_floor",
+  "grant_weekly_cap",
+  "guarantee_base",
+  "guarantee_max",
+  "guarantee_min",
+  "guarantee_ref_weeks",
+  "guarantee_scaled",
+  "guarantee_smooth_weeks",
+  "heist_cap_mode",
+  "heist_vault_share",
+  "house_hard_floor",
+  "house_target",
+  "incentive_guarantee",
+  "incentive_guarantee_target",
+  "issuance_activity_scaling",
+  "issuance_fixed_month",
+  "issuance_mode",
+  "issuance_pct_month",
+  "issuance_to_guarantee",
+  "layers",
+  "mintcap_floor",
+  "mintcap_issuance",
+  "mintcap_loan",
+  "mintcap_restore",
+  "mintcap_total",
+  "mm_hard_floor",
+  "mm_target",
+  "pace_achievements",
+  "pace_activity",
+  "pace_launchpad",
+  "pace_levelup",
+  "pace_misc",
+  "pace_roomgames",
+  "pace_royalties",
+  "pace_season",
+  "pace_turf",
+  "pace_welcome",
+  "pat_routes",
+  "rloan_base",
+  "rloan_book",
+  "rloan_enabled",
+  "rloan_max_auto",
+  "rloan_max_days",
+  "rloan_per_level",
+  "rloan_rate_week",
+  "room_vault_cap",
+  "skip",
+  "staker_share_pct",
+  "tr_live",
+  "tz",
+  "vault_auto_staker_cap",
+  "vault_bank_min_target",
+  "vault_ceil_apr",
+  "vault_ceil_cushion",
+  "vault_ceil_cushion_days",
+  "vault_dividend",
+  "vault_floor_apr",
+  "vault_house_target",
+  "vault_min_move",
+  "vault_staker_max",
+  "vault_target_mult",
+  "vault_topup",
+  "vault_topup_max",
+  "wf_staker_cap_pct"
+ ],
+ "export_chunk": 60000
+}
