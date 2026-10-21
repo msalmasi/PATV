@@ -26,7 +26,7 @@ const repo = path.resolve(__dirname, "..");
 const FIXTURE = path.join(__dirname, "fixtures", "policycfg-contract.json");
 // Update together with camfrog-bot's copy (ci/fixtures/policycfg-contract.json) and its pin (policycfg_contract_test.py PIN):
 // python tools/gen_policycfg_contract.py --site <this checkout> prints the new sha.
-const PIN = "4b8877a46bdbe4fc52155bcb0aeb94d72f1f3e7c589d890f522d8727edf5d693";
+const PIN = "e55b42f1dc8aea5254d64a5882b0465dce4f6807ef6feb8eafd5cecad7a1f5d9";
 const RAW = fs.readFileSync(FIXTURE);
 const FX = JSON.parse(RAW.toString("utf8"));
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
@@ -106,6 +106,27 @@ test("the mirror of Pepe's three pushes: every key, his export's keys are the si
   const d = await PC.diffReport();
   assert.deepEqual(d.counts, { missing: 0, unknown: 0, invalid: 0, whole: 0, disagree: 0 }, JSON.stringify({ whole: d.whole, invalid: d.invalid, unknown: d.unknown }));
   assert.deepEqual(d.whole, [], "his routing is valid with his own catalog (checkRoutes)");
+});
+
+test("the Phase 4b switches in his policy push: shown read-only on /admin (owner Pepe, the chat command named), never mirrored", async () => {
+  const pushed = FX.pushes.policy.phase4b;
+  assert.ok(pushed && Object.keys(pushed).length === PC.PHASE4B.length, "Pepe's push carries every Phase 4b switch");
+  const v = await PC.adminView();
+  const p4 = v.phase4b;
+  assert.equal(p4.owner, "pepe");
+  assert.equal(p4.readonly, true);
+  assert.equal(p4.pushed, true);
+  assert.ok(p4.at > 0, "as of his push");
+  assert.deepEqual(p4.rows.map((r) => r.key), PC.PHASE4B.map((x) => x[0]), "every switch, in order");
+  for (const r of p4.rows) {
+    assert.deepEqual({ on: r.on, live: r.live }, pushed[r.key], r.key);
+    assert.match(r.cmd, /^!econ [a-z]+ on\|off$/, r.key + ": the chat command that changes it");
+  }
+  assert.deepEqual(p4.rows.find((r) => r.key === "econ_vwm"), { key: "econ_vwm", label: "Verified watch-minutes (E-5)", cmd: "!econ vwm on|off", present: true, on: true, live: null });
+  const snap = await PC.snapshot({ fresh: true });
+  assert.deepEqual(Object.keys(snap.cfg).filter((k) => /^econ_/.test(k) || k in pushed), [], "none of them is in the config store (never handed over)");
+  assert.ok(!S.KEYS.some((k) => k in pushed), "nor a SPEC key");
+  assert.equal(v.diff.counts.unknown, 0, "the block isn't an unknown key of the mirror");
 });
 
 test("item 2: checkRoutes fed by Pepe's catalog answers like his _clean_routes for every flow x destination, both ways", () => {

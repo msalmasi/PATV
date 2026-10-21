@@ -93,6 +93,36 @@
     "tr_live": true,
     "ap_on": false
    },
+   "phase4b": {
+    "econ_room_vaults": {
+     "on": false,
+     "live": false
+    },
+    "econ_room_payouts": {
+     "on": false,
+     "live": false
+    },
+    "econ_profile_vaults": {
+     "on": false,
+     "live": false
+    },
+    "econ_convoys": {
+     "on": true,
+     "live": false
+    },
+    "econ_vwm": {
+     "on": true,
+     "live": null
+    },
+    "econ_challenges": {
+     "on": false,
+     "live": false
+    },
+    "econ_launchpad": {
+     "on": true,
+     "live": true
+    }
+   },
    "tz": "America/New_York",
    "sink": {
     "vault_ceil_apr": 0.0,
@@ -2583,6 +2613,36 @@
      "layers": true,
      "tr_live": true,
      "ap_on": false
+    },
+    "phase4b": {
+     "econ_room_vaults": {
+      "on": false,
+      "live": false
+     },
+     "econ_room_payouts": {
+      "on": false,
+      "live": false
+     },
+     "econ_profile_vaults": {
+      "on": false,
+      "live": false
+     },
+     "econ_convoys": {
+      "on": true,
+      "live": false
+     },
+     "econ_vwm": {
+      "on": true,
+      "live": null
+     },
+     "econ_challenges": {
+      "on": false,
+      "live": false
+     },
+     "econ_launchpad": {
+      "on": true,
+      "live": true
+     }
     },
     "tz": "America/New_York",
     "sink": {

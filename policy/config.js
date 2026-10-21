@@ -979,6 +979,31 @@ async function dualSummary(days = 7) {
   return { checks: await getQuery("SELECT day, consumer, checks, diffs, first_ts, last_ts FROM policy_cfg_dualcheck WHERE day >= ? ORDER BY day DESC, consumer", [since]),
            diffs: await getQuery("SELECT day, consumer, key, push, site, n, first_ts, last_ts FROM policy_cfg_dualread WHERE day >= ? ORDER BY last_ts DESC LIMIT 200", [since]) };
 }
+// The Phase 4b switches (plan D-1 / T11): NOT handed over at H1 - they stay Pepe's, and /admin/economy only SHOWS them,
+// read-only, as his policy push last carried them (its "phase4b" block: {setting: {on, live}} - never mirrored into policy_cfg,
+// never in an export). Who changes them is named: a Pepe admin (or owner) with the chat command, or Pepe's admin panel.
+// setting -> [label, the chat command]
+const PHASE4B = [
+  ["econ_room_vaults", "Room vaults (E-3)", "!econ roomvaults on|off"],
+  ["econ_room_payouts", "Room payouts, the recipe (E-4)", "!econ payouts on|off"],
+  ["econ_profile_vaults", "Profile vaults", "!econ profilevaults on|off"],
+  ["econ_convoys", "Convoys (E-7)", "!econ convoys on|off"],
+  ["econ_vwm", "Verified watch-minutes (E-5)", "!econ vwm on|off"],
+  ["econ_challenges", "Mic challenges (E-8)", "!econ challenges on|off"],
+  ["econ_launchpad", "Pad launchpad", "!econ launchpad on|off"],
+];
+const PHASE4B_OWNER = "pepe";
+async function phase4bView() {
+  const push = await C.meta("cfg").catch(() => null);
+  const block = push && push.phase4b && typeof push.phase4b === "object" && !Array.isArray(push.phase4b) ? push.phase4b : null;
+  const flag = (x) => (typeof x === "boolean" ? x : null);
+  const rows = PHASE4B.map(([key, label, cmd]) => {
+    const x = block && block[key] && typeof block[key] === "object" && !Array.isArray(block[key]) ? block[key] : null;
+    return { key, label, cmd, present: !!x, on: x ? flag(x.on) : null, live: x ? flag(x.live) : null };
+  });
+  return { owner: PHASE4B_OWNER, readonly: true, pushed: !!block,
+           at: push && Number(push.at) > 0 ? Math.round(Number(push.at) * 1000) : null, rows };
+}
 async function adminView() {
   await init();
   const snap = await snapshot({ fresh: true });
@@ -995,7 +1020,7 @@ async function adminView() {
   });
   return { ok: true, owner: snap.own.cfg.owner, own: snap.own, rev: snap.rev, sha: snap.sha, spec_hash: specHash(), sections: S.SECTIONS, keys, diff,
            dual: await dualSummary(7), mirror_days: (await C.meta("cfg_mirror_days")) || {}, window: await runWindow(C.nowS(), snap),
-           pepe_rev: await C.meta("cfg_pepe_rev"), log: await logRows({ limit: 40 }),
+           pepe_rev: await C.meta("cfg_pepe_rev"), log: await logRows({ limit: 40 }), phase4b: await phase4bView(),
            ceil_log: await getQuery("SELECT ts, rev, ceil_apr, ceil_cushion, ceil_cushion_days, by, via FROM capital_ceil_log ORDER BY id DESC LIMIT 10") };
 }
 
@@ -1084,8 +1109,8 @@ function register(app, { isBotToken, addUser }) {
 
 module.exports = { init, register, ownership, owner, putOwner, putReturning, ownerHint, setPause, snapshot, readerSnap, cached, refresh, forget, load, writeChanges,
                    mirror, backfill, extract, diffReport, checkMirrorDay, noteDual, flushDual, compareFields, capitalCfg, sourceView, fedDual, monetaryFor, pushCheck,
-                   runWindow, edit, applyMigrations, bootCheck, botCfg, logRows, dualSummary, adminView, routesCatalog, specHash, cfgSha, missingErr, unreadableErr, isCfgErr,
-                   Refuse, FEATURES, OWNERS, MIGRATIONS, SOURCES, BY_KEY, SRC_STALE_MS, SETTLE_MS, WINDOW_LEAD_S, LOG_KEEP,
+                   runWindow, edit, applyMigrations, bootCheck, botCfg, logRows, dualSummary, adminView, phase4bView, routesCatalog, specHash, cfgSha, missingErr, unreadableErr, isCfgErr,
+                   Refuse, FEATURES, OWNERS, MIGRATIONS, SOURCES, BY_KEY, SRC_STALE_MS, SETTLE_MS, WINDOW_LEAD_S, LOG_KEEP, PHASE4B,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); },
                    _setLogKeep: (n) => { logKeep = n === undefined ? LOG_KEEP : n; },
                    _dualPending: () => ({ rows: dualBuf.size, checks: checkBuf.size }),

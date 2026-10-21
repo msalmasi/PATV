@@ -446,3 +446,32 @@ What changed in Pepe's half, and what the H1 owner needs to know:
   - the PAT Routing card shows the site's routes, read-only;
   - a game row (rakes, prices, faucets) still saves. A save that echoes the economy rows is ignored for them (Pepe's own
     override is kept); a changed economy row is refused whole.
+
+### 14.4 PO-3 follow-up (2026-10-21, after the staging review of 1.99adv)
+
+- **Armed before the readers see it.** When a pull brings a copy that turns Pepe's treasury switch on, his treasury scheduler is
+  armed *before* the copy becomes the cache and his readers' view. The same holds when the switch itself moves (a cutover or a
+  re-attach). Before, a treasury tick on the GTF loop (another thread) could land in the ~1 ms window between the two, read the
+  switch on with the old `armed_at`, and run this week's epoch late and today's release at once. If the readers end up seeing
+  something else than expected, the arming follows what they see.
+- **An unreadable `policy_client.json`, the site's answer changing.** The settings follow the site's last answer (14.3); the pull
+  now rebuilds the readers' view when that answer moves who owns them, not only when the values change.
+- **The re-attach refuses a switch that is on but not live**, as the freeze, export and cutover do: with the site's `tr_live` and
+  layers both off there is no difference to name, so the re-attach would quietly turn Pepe's treasury switch off. Settle it
+  first (`!econ treasury off` or `!econ layers on`; `!econ activitypads off` or the room payouts on). A Pepe left frozen by the
+  old freeze goes back to writing his own settings so it can be settled, then re-attaches.
+- **Pepe's panel, unreadable file.** Its refusal says the file is unreadable (as chat does), no longer "frozen for their
+  hand-over" - no hand-over is running then.
+- **Pepe's links** to `/admin/economy#policy` use the public site (`staging.publicaccess.tv` on staging), never the staging
+  router's backend address.
+- **The Phase 4b switches on /admin/economy.** Room vaults, room payouts (the recipe), profile vaults, convoys, verified
+  watch-minutes, mic challenges and the pad launchpad stay Pepe's (D-1: never handed over, never in the H1 export or the config
+  store). Pepe's policy push now carries them (`phase4b`: `{setting: {on, live}}`) and the Policy settings card shows them
+  read-only: owner Pepe, changed by a Pepe admin or owner with the chat command in each row (`!econ roomvaults on|off`, ...) or
+  on Pepe's admin panel. A push from an older Pepe has no block: the card says so and shows nothing as on or off.
+- **`pools_client.json` unreadable is never overwritten.** Pepe treats the pools as on (unknown) in memory, as before, but no
+  longer saves that stand-in over the file (a transient Windows sharing violation at start left the pools switch on for good).
+  A readable file that carries an old `unreadable` marker (saved by an older Pepe) is read with the marker dropped and a log
+  line naming its switch - check it with `!pools backend status`.
+- **Test hygiene.** Every bot harness writes only into temp folders; `ci/harness_main.py` fails a harness that writes a JSON
+  file into the bot's own folder (`test_hygiene_test.py`).
