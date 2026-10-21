@@ -10,11 +10,14 @@ const fs = require("fs");
 const path = require("path");
 
 const repo = path.resolve(__dirname, "..");
+const VENDORED = path.join(repo, "public", "js", "patv-chat");
 function files() {
   const out = [];
   const walk = (dir, re) => {
     for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, f.name);
+      // S1 V2: public/js/patv-chat/ is the chat widget's vendored build (the platform repo's export; its copy is that repo's)
+      if (f.isDirectory() && p === VENDORED) continue;
       if (f.isDirectory()) walk(p, re);
       else if (re.test(f.name) && !/\.min\.js$/.test(f.name)) out.push(p);
     }

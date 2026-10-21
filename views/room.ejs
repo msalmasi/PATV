@@ -738,6 +738,10 @@
 <% } %>
 
 <% if (!bridged_ || siteOnly_) { %>
+  <%# S1 V2: a site pad at chat_backend = 'hub' while CHAT_HUB is on - the chat hub's <patv-chat> (or its sign-in teaser),
+      chatwidget.forPad via bridge.js; nothing otherwise (ADR 0007 D3: "off" is the pad's pre-S1 Live tab) %>
+  <% const hubChat_ = locals.chatWidget && /^(mount|gate|signin|unavailable)$/.test(locals.chatWidget.state) ? locals.chatWidget : null; %>
+  <% if (hubChat_) { %><%- include('partials/pad-hub-chat', { cw: hubChat_, tag: 'section' }) %><% } %>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else if (room.bridgeLocked) { %>
   <%# 1.99qp: the live Camfrog room is a 💎 Prime Time Plus perk (premium.bridgeAllowed) %>

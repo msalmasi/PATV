@@ -20,7 +20,10 @@
   const tpListen_ = tops_.some((r) => r.audio && r.listen);
   // adultgate site: the room widget's 18+ gate (home.js roomGate: "ok" unless the owner switch is on and the room is an 18+ pad)
   const roomGate_ = typeof roomGate !== 'undefined' && (roomGate === 'signin' || roomGate === 'confirm') ? roomGate : 'ok';
-  const rbJs_ = tpListen_ || (roomGate_ === 'ok' && ((typeof me !== 'undefined' && me) || (typeof roomLive !== 'undefined' && roomLive)) && (typeof room !== 'undefined' && room));
+  // S1 V2: the panel's pad is a site pad at chat_backend = 'hub' while CHAT_HUB is on (home.js chatwidget.forPad) - the chat
+  // hub's compact <patv-chat> (or its sign-in teaser) instead of the bridge's live room (no poller, no room-bridge.js for it)
+  const hubChat_ = locals.chatWidget && /^(mount|signin|unavailable)$/.test(locals.chatWidget.state) ? locals.chatWidget : null;
+  const rbJs_ = tpListen_ || (!hubChat_ && roomGate_ === 'ok' && ((typeof me !== 'undefined' && me) || (typeof roomLive !== 'undefined' && roomLive)) && (typeof room !== 'undefined' && room));
   // 1.99eo: the front pad's next scheduled slot ({display, title, start_at}) for the off-air slate, or null
   const nextUp_ = typeof nextUp !== 'undefined' && nextUp && Number(nextUp.start_at) > 0 ? nextUp : null;
   const BM = typeof boostMark === 'function' ? boostMark : () => '';
@@ -597,6 +600,8 @@
       <% if (roomGate_ !== 'ok') { %>
         <%# adultgate site: an 18+ pad while the owner switch is on - the 18+ card, no lines, names or counts %>
         <%- include('partials/adult-gate', { gate: roomGate_, next: '/p/' + encodeURIComponent(room.slug), cls: 'ag-home', tag: 'div' }) %>
+      <% } else if (hubChat_) { %>
+        <%- include('partials/pad-hub-chat', { cw: hubChat_, tag: 'div' }) %>
       <% } else if (me || roomLive) { %>
         <div class="lr">
           <div class="lr-log">
@@ -830,7 +835,7 @@
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=10">
 <script src="/public/js/room-bridge.js?v=16"></script>
 <% } %>
-<% if ((me || roomLive) && room && roomGate_ === 'ok') { %>
+<% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
 <script>
   // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).

@@ -1757,6 +1757,9 @@ function register(app, { isBotToken, addUser }) {
     // adultgate site: past the 18+ gate the Live tab's "active" dot doesn't say people are in the room (only the stage counts)
     const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: adultGate === "ok" ? R.count : 0, members: initial ? initial.members : null,
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
+    // S1 V2 (release L4): a site pad at chat_backend = 'hub' while CHAT_HUB is on -> the chat hub's <patv-chat> on the Live tab
+    // (chatwidget.forPad sets res.locals.chatWidget for room.ejs and the layout's head; ?line= passes through); null otherwise
+    await require("./chatwidget").forPad(req, res, { roomId: R.id, slug, platform, mode: "full", open: liveOpen, gate: adultGate });
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,
       adultNext: "/p/" + encodeURIComponent(slug),

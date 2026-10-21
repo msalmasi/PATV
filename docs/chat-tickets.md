@@ -321,7 +321,10 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
   member sees changes before then) - Edit profile has no card and no jump link and loads no webfonts
   (`textstyle.editData` answers nulls), `/settings` has no row, and the save route answers 404 (`{ok:false,
   error:"not_found"}` for the page script; the site's own 404 for a form post), nothing written. A style saved while it was
-  on stays stored and comes back with the card. When V2 (release L4) adds `CHAT_HUB`, `pickerOn()` can require it too.
+  on stays stored and comes back with the card. S1 V2 (release L4, below) brought `CHAT_HUB` to v1's pages; `pickerOn()`
+  stays on `looks` alone, the gate the owner accepted (ADR 0007 D13). `CHAT_HUB` can't be on without `looks` (the interlock), so
+  also requiring it would only hide the picker between Q7's `looks` step and `CHAT_HUB` on - the owner's call, a one-line
+  change (`textstyle.js` says where).
 - **One home:** the "Chat text style" card on Edit profile (`views/editProfile.ejs` `#textstyle`, between Avatar and Profile
   layout, in the jump links). The `/settings` hub's Profile section links to it (`settingshub.js` row `textstyle`, after
   Cosmetics) with the saved style as its state ("Blue · Mono", "Pixel", "Default"; the colour and font names are catalog
@@ -360,6 +363,65 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
 - **i18n:** new keys only - `textstyle.*` (the palette's and the fonts' `label_key`s from the registry, the card's copy),
   `sethub.e/d.textstyle`, `sethub.st.ts*`, `js.textstyle.*`; the sync translates them after the staging push.
 
+## S1: the widget host and the mod-screen hosts (release L4, `chatwidget.js`)
+
+S1 plan §2.5 V2 (ADR 0007 D3, D5, D14, D15; the host contract is the platform repo's `apps/chat-widget/README.md`). Nothing
+here shows until four things are true at once: the widget is vendored (`public/js/patv-chat/manifest.json`), the hub's
+public origins are set (`HUB_RT_WS`, `HUB_RT_API`), the pad is at `pad_hub.chat_backend = 'hub'` and `CHAT_HUB` is on. Before
+release L1 (Q4 + V1: the `chat_switches` table, `/admin/chat`) and Q7's turn-on, none of them is - every page is as before.
+
+- **Files:** the platform repo's `pnpm --filter @patv/chat-widget export --to <this checkout>/public/js/patv-chat` vendors a
+  built version (a v1 commit "chat widget X.Y.Z" per version; the export keeps the previous two, so a page rendered before a
+  deploy still finds its worker; no source maps - this repo is public). `index.js` mounts `chatwidget.staticFiles()` on
+  `/public/js/patv-chat/` before the general `/public`: content-hashed files (`patv-chat.<h>.js`, `i18n/<locale>.<h>.json`, ...)
+  `Cache-Control: public, max-age=31536000, immutable`; `manifest.json`, `releases.json` and anything unhashed `no-cache`
+  (revalidated); every file `X-Content-Type-Options: nosniff`. A SharedWorker script must be same-origin with the page, which
+  is why v1 serves the widget at all; its socket and REST go cross-origin to the hub.
+- **The manifest** is read once per process (an export arrives with a deploy, which restarts the site): schema 1, the tab
+  entry `entries.chat` (a bare file name) and its `sri`, checked against the file's bytes at start-up. Anything wrong = no
+  widget and one log line with the reason (`[chatwidget] widget off: ...`); no manifest is silent.
+- **`<patv-chat>`** (`chatwidget.forPad`, which sets `res.locals.chatWidget`): on a pad page (`bridge.js` `/p/:slug`, the Live
+  tab's site-pad branch, `mode="full"`) and on the homepage's room panel (`home.js`, `mode="compact"` - it fires only when the
+  panel shows a hub pad; today it shows Camfrog rooms). Never on a Camfrog or profile pad (ADR 0007 D3: S1 allows the hub only
+  on site pads). `CHAT_HUB` is v1's `chat_switches` row `CHAT_HUB` = `on` (release L1's table; missing or unreadable = off,
+  fail closed). Signed in, the mount is `<patv-chat pad="<hub_pad_id>" room="<uuidv5(NS_PAD_MAIN, hub_pad_id)>" slug mode
+  theme="dark" locale="<the page's language>" line="<?line=>">` (the main room id is rt-schema's `padMainRoomId`, pinned by its
+  golden vectors in `test/chatwidget.test.js`; `?line=<seq>` is passed through and opened as `history around`). Signed out: a
+  "Sign in to chat" card and no widget download (S1 has no guest sockets). An 18+ pad behind the gate: the 18+ card. Signed in
+  without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset): a one-line note. While the hub pad's chat is
+  mounted, the homepage's v1 live-room poller doesn't run.
+- **`<patv-modtools>`** (`chatwidget.toolsFor`) mounts **whatever `CHAT_HUB` says** (D3: mods keep working reports after a
+  rollback), with a manifest, the origins and a signed-in hub account:
+  - `/p/<slug>/mod` of a pad at `chat_backend = 'hub'` (`chatwidget.padModPage` in `pads.js`): Reports, Held, Mod log, Bans,
+    Lockdown as plain `?view=` links (no script needed), each `<patv-modtools view pad="<hub_pad_id>">`, and "Feed moderation
+    →" to the settings hub. Signed out: sign in first. An Approved pad's outsider, a pad on v1's chat, or no widget: today's
+    301 to `/p/<slug>/settings?tab=moderation`.
+  - `/admin/chat/<reports|held|modlog|bans|audit|switches>` (`views/admin/chatTools.ejs`, the admin shell, section `chat`):
+    the site-wide queues, no pad. Reports / held / mod log / bans need `chat.mod_queue`, audit / switches `chat.audit` - release
+    L1's siteperms keys; until they exist, their ADR 0007 D15 default classes (Assistant, Admin: `chatwidget.canChat`), after
+    that siteperms with its overrides. `/admin/chat` itself (the break-glass form) is release L1's page.
+  - the `/admin` overview's "💬 Chat reports" card (`chatwidget.overviewCard`): `<patv-modtools view="reports" mode="card">`
+    for `chat.mod_queue` holders - open reports and the ones undecided for more than 14 days (ADR 0007 D10). The views,
+    `mode="card"` included, are slice M2's; the C0 shell renders an empty frame until then.
+  Every permission is the hub's `can()` (a refusal renders "Nothing to show"); v1 makes no hub call for any of these pages.
+- **The page** (`views/partials/chat-widget-boot.ejs`, once per page): `<script type="application/json"
+  id="patv-chat-config">{"ws","api","assets":"/public/img/","acct"}</script>` - `acct` is `chatticket.subjectOf(userId)`, a hint
+  (the worker trusts only `POST /api/chat/ticket`); escaped with `<`, U+2028 and U+2029 as unicode escapes; **never a ticket** -
+  and `<script type="module" src="/public/js/patv-chat/<entries.chat>" integrity="<sri>">`. `layout.ejs` puts the head's part
+  on the same pages: `<link rel="preconnect" href="<HUB_RT_API>" crossorigin>` (plus the socket's host when it differs; D5)
+  and the text styles' webfonts in a link of their own (`chatwidget.FONTS_HREF`: Nunito and Comic Neue, 400 and 700 - the
+  layout's own link already has Press Start 2P; D14 puts fonts in the page's head and the widget ships none, so until this the
+  rounded and comic styles fell back to system faces). A link of its own, so a family Google refuses can't take the site's
+  fonts down with it.
+- **Logs** carry reasons only (no account, pad, ticket or key).
+- **Tests:** `test/chatwidget.test.js` - nothing without a manifest, with a broken one (schema, entry, SRI mismatch) or
+  without the origins; nothing with `CHAT_HUB` off or its table missing; mounts only for hub site pads (never Camfrog, never a
+  `v1` pad), the teaser signed out, the 18+ card, the `?line=` rules, the page config's escaping and no ticket; the cache
+  headers; `/p/<slug>/mod`: the 301 kept for v1 pads and without a widget, sign-in, the Approved pad's outsider, the views;
+  `/admin/chat/<view>`: who opens which, the off notes; the overview card; `padMainRoomId` against rt-schema's golden vectors;
+  `FONTS_HREF` covers every registry webfont the layout doesn't load; the walkers that scan `public/js` skip the vendored
+  directory.
+
 ## Fixtures and the contract suite
 
 - `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo
@@ -394,7 +456,8 @@ It only records and never affects the sync.
 
 `CHAT_TICKET_KEY`, `CHAT_TICKET_KID`, `CHAT_TICKET_PREV_PUB`, `CHAT_TICKET_PREV_KID`, `CHAT_GENESIS_NS`, `HUB_V1_URL`,
 `HUB_V1_KEY_ID`, `HUB_V1_KEY`, `HUB_V1_PROXY`, 1.99acm: `HUB_V1_ENV`, `HUB_V1_IN_KEY_ID`, `HUB_V1_IN_KEY`,
-`HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY` (names in `.env.example`, no values). Keys are per direction and per
+`HUB_V1_IN_PREV_KEY_ID`, `HUB_V1_IN_PREV_KEY`, S1 V2: `HUB_RT_WS`, `HUB_RT_API` (the hub's public origins, not secrets)
+(names in `.env.example`, no values). Keys are per direction and per
 environment (four in all: v1 → hub and hub → v1, prod and staging), each generated separately (never one secret for two
 key ids: `key_reuse`), at least 32 random characters, and never printed: the operator copies them from the hub's SOPS
 file into the site's `.env` (0600).

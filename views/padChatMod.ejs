@@ -1,0 +1,38 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: 'p/' + slug + ' · ' + t('chatw.mod.title'), user: user }) %>
+<%#
+  /p/<slug>/mod for a pad at chat_backend = 'hub' (S1 V2, chatwidget.padModPage; ADR 0007 D15): the pad's chat moderation -
+  Reports, Held, Mod log, Bans, Lockdown (level and expiry), each <patv-modtools view="..." pad="<hub_pad_id>"> (the views and
+  their room-settings header - slow mode, topic - are slice M2's). The tabs are plain links (?view=), so the page works without
+  script. Every permission is the hub's can(): a viewer it refuses sees "Nothing to show". Shown whatever CHAT_HUB says (D3:
+  mods keep working reports after a rollback). A pad on v1's chat keeps the 301 to /p/<slug>/settings?tab=moderation.
+%>
+<% const T_ = typeof tools !== 'undefined' && tools ? tools : { state: 'off', why: 'not_installed' };
+   const href_ = '/p/' + encodeURIComponent(slug); %>
+<main class="ds-page flow pcm" id="pcm" data-view="<%= view %>">
+  <nav class="crumb" aria-label="Breadcrumb"><a href="/p"><%- t('pad.crumb') %></a> › <a href="<%= href_ %>">p/<%= slug %></a> › <%- t('chatw.mod.crumb') %></nav>
+  <div class="pcm-head">
+    <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">🛡️</span> <%- t('chatw.mod.title') %></h1>
+    <p class="lede"><%- t('chatw.mod.lede', { pad: '<b>p/' + t.esc(slug) + '</b>' }) %></p>
+    <p class="pcm-links"><a href="<%= href_ %>"><%- t('chatw.mod.back') %></a> · <a href="<%= href_ %>/settings?tab=moderation"><%- t('chatw.mod.feed') %></a></p>
+  </div>
+  <nav class="pcm-tabs" aria-label="<%- t('chatw.mod.views') %>">
+    <% views.forEach((v) => { %><a class="ds-chip plain<%= v === view ? ' on' : '' %>" href="?view=<%= v %>"<%- v === view ? ' aria-current="page"' : '' %>><%- t('chatw.mod.v.' + v) %></a> <% }) %>
+  </nav>
+  <section class="card pcm-view" aria-label="<%- t('chatw.mod.v.' + view) %>">
+    <% if (T_.state === 'tools') { %>
+      <patv-modtools view="<%= view %>" pad="<%= hubPadId %>" locale="<%= T_.locale %>" theme="dark"></patv-modtools>
+      <%- include('partials/chat-widget-boot', { cw: T_ }) %>
+    <% } else { %>
+      <p class="muted" data-chat-tools="<%= T_.why %>" style="margin:0"><%- T_.why === 'no_account' ? t('chatw.mod.no_account') : t('chatw.mod.off') %></p>
+    <% } %>
+  </section>
+</main>
+<style>
+  .pcm .pcm-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .pcm .pcm-tabs .ds-chip.on { outline: 2px solid var(--ds-green, #4caf50); }
+  .pcm .pcm-links { margin: 6px 0 0; }
+  .pcm patv-modtools { display: block; min-height: 200px; }
+</style>
+</body>
+</html>
