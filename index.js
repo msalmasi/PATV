@@ -315,6 +315,9 @@ require("./adminroles").register(app, { addUser });   // 1.99acj: /admin/roles -
 require("./backends").register(app, { addUser, isBotToken });
 require("./chatticket").register(app, { addUser });
 require("./huboutbox").start();
+// S1 V1 (release L1, ADR 0007 D15): 💬 /admin/chat - the chat hub's break-glass form: CHAT_HUB and each pad's chat backend
+// (chatswitches.js; on = a Pepe owner's with a confirm step, off = any admin's, one click; audited; never calls the hub)
+require("./adminchat").register(app, { addUser });
 // 1.99acm: the hub's signed calls into v1 (R-14 S0): GET /internal/v1/snapshot/<topic>, POST /internal/v1/outbox/rewind
 // (hubinbound.js; 404 until HUB_V1_IN_KEY_ID / HUB_V1_IN_KEY are set; nginx denies /internal/ publicly)
 require("./hubinbound").register(app);

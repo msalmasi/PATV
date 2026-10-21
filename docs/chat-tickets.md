@@ -462,6 +462,103 @@ ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape ch
   of it.
 - **Turn-on (Q7):** nothing of its own - it appears with `erasure` (and its export sentence with `export`).
 
+## S1: `/admin/chat`, the chat hub's break-glass (release L1's V1 part, 1.99adz)
+
+S1 plan §2.5 V1; ADR 0007 D3 and D15, OQ-19; CHAT-ARCHITECTURE §8.5 (R-15, CF F4). Built beside Q4 (the rest of L1: the
+pads / roles / bans / switches topics, `listed`, the staff and canary pads) and in parallel with it; V1 changes no seam wire,
+so `huboutbox.VERSION` stays as it is. L1 is split, as L4 was: V1 reaches v1 staging on its own as 1.99adz, ahead of Q4,
+which takes the next free letter when it lands (see "Without Q4" below).
+
+- **What it sets** - the two v1-owned controls of ADR 0007 D3, set only here:
+  - `CHAT_HUB` in `chat_switches(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER, updated_by TEXT)`
+    (`chatswitches.js`: `on` | `off`, no row = `off`; `updated_by` is the admin's username, an audit label that
+    `accountMerge.js` classifies `deny`). `chatswitches.set(key, value, actor, {reason})` checks the key, the value and the
+    interlock in its transaction and writes the `chat.switch` audit row `{key, from, to}` **in the same transaction**: a row
+    that can't be written rolls the change back and `set()` rejects (an actor-less call - a script - writes no row).
+    `dm_backend` is S5's key and is refused (`bad_key`) until then. `chatHubOn()` reads a per-process cache that `set()`,
+    `load()` and `init()` refresh, so it misses an out-of-band write (a script, the sqlite3 CLI) until one of them runs (a
+    view of `/admin/chat` reloads it); **V2's widget mount reads `chatHubOnNow()`** (one row) or calls `load()` on a short
+    timer.
+  - a pad's `pad_hub.chat_backend` (S1-D1's table): `padhub.setBackend(room_id, backend, actor)` - `v1` | `hub`; `hub_read`
+    is refused (409 `hub_read_s2`), `hub` only for a **site** pad (409 `site_pads_only`: Camfrog, Twitch, Discord and profile
+    pads keep their v1 chat in S1); any pad can always go back to `v1`, a `pad_hub` row whose registry row is gone (a
+    staging refresh, a hand edit) included. `updated_by` gets the admin's username; the pad's `room_events` row
+    `chat-backend` names **`PATV staff`** (`padhub.STAFF_ACTOR`, as `chatlogmod.js` does), never the admin, since the pad's
+    owner reads `room_events` on `/p/:slug/settings`. `/admin/chat` runs it and its `chat.pad_backend` audit row
+    `{room_id, slug, hub_pad_id, from, to}` in one `dbUtils.tx`.
+  - `chatswitches.js` and `padhub.setBackend` are shared with Q4, which builds the same table, API and refusals and adds the
+    rest: the `switches/changed` topic on this table (triggers, payload `{key, value, updated_at}`, the every-key snapshot),
+    the `pads/changed` trigger that carries `chat_backend`, `huboutbox.setSettings`' half of the interlock and
+    `chat_switches` in the staging `KEEP`. **When the two branches meet (release L1), keep Q4's two files with V1's
+    `set()` and `setBackend()`** (V1's review fixes above: the audit row inside the transaction; `v1` for a row whose pad is
+    gone; `PATV staff`, plus the `STAFF_ACTOR` constant and its export; Q4's `rooms.cleanPlatform` for the platform), and
+    change Q4's `huboutbox-s1-l1` assertion on the `chat-backend` event's actor from `owner` to `PATV staff`.
+    `test/adminchat.test.js` fails on a merge that keeps Q4's unchanged functions. Q4's land merges v1 staging (with V1)
+    into its branch, so it meets these two conflicts there.
+  - **Without Q4** (1.99adz until Q4 lands) `chat_switches` isn't in the staging `KEEP` and the interlock's other half
+    (stated on the page) isn't there, and neither matters yet: `CHAT_HUB` can't go on, because Q4's four switches (`pads`,
+    `roles`, `bans`, `switches`) aren't in `huboutbox.SWITCHES`, so `setSettings` can't turn them on and `set()` refuses
+    with `chat_hub_needs`; a staging refresh that drops `chat_switches` leaves `CHAT_HUB` at its default, `off`; and nothing
+    reads `pad_hub.chat_backend` before V2 (a pad an owner moves to `hub` keeps its v1 chat; the hub learns the value
+    once Q4's `pads/changed` carries it).
+- **The page** (`adminchat.js`, `views/admin/chat.ejs`, `public/js/admin-chat.js`): `GET /admin/chat` and
+  `GET /api/admin/chat` (same data, both `no-store`): `CHAT_HUB` (re-read from the database on every view) with when and by
+  whom it last changed, the pads not on `v1` (read from `pad_hub`, the registry joined when it still has the pad; each with
+  a one-click "Back to v1 chat"; a value the form doesn't know is shown as written, a row whose pad is gone is marked so),
+  for owners the site pads still on `v1` (filtered in SQL; the pilot pads `patv:staff`, `patv:canary`, `patv:lounge`
+  first), each list at most 500 rows with a line saying when there are more, the interlock (the twelve seam switches,
+  on / off, linking to `/admin/keys#seam`), the seam poster's status (this site's queue, the `switches/changed` and
+  `pads/changed` queues once Q4 adds those topics, the last post and heartbeat - `huboutbox.status()`, local state only) and
+  the change log (the newest 20 `chat.*` audit rows, newest first). **It makes no call to the chat hub**, so it works while
+  the hub is down (the test runs it with every connection, request and `fetch` stubbed to throw). Turning `CHAT_HUB` off
+  needs only `chat_switches` and `admin_audit` (`adminchat.initCore`), never `padhub` or the registry; when the pads can't
+  be read the page says so and shows the rest.
+- **Who:** seeing the page and turning **off** (`CHAT_HUB` off, a pad back to `v1`) need `chat.breakglass` (siteperms,
+  locked at Admin, lock reason `ops`): any admin, one click, never refused. Turning **on** (`CHAT_HUB` on, a pad to `hub`) is
+  a Pepe owner's: `staffroles.ownerHolds(me, "chat.breakglass")` (the Admin class and Pepe's owner role on the linked chat
+  login, read fresh), 403 `owner_only` otherwise.
+- **The confirm step** (server-enforced): an owner's on-post without `confirm: true` answers 409 `confirm` with what would
+  happen (`preview`: the pads on the hub for `CHAT_HUB`; the pad's title and whether `CHAT_HUB` is on for a pad) and writes
+  nothing; the page asks with that text and only a yes posts again with `confirm: true`. The step is decided on the state
+  read **inside the writing transaction** (`CHAT_HUB`; the pad, its platform and its backend), so a stale page or a retry
+  can't undo, unconfirmed, an admin's off that landed in between (`dbUtils.tx` runs one transaction at a time).
+- **Every change:** `POST /api/admin/chat/hub {on, reason, confirm?}` and `POST /api/admin/chat/pad {room_id, backend,
+  reason, confirm?}` are same-origin fetches (ADR 0007 D15's `sameOriginStrict`, as `adminkeys.js`: `X-Requested-With:
+  fetch` and an Origin, else a Referer, whose host **is** this request's Host - no `www.` folding, stricter than
+  `authGuard.sameOriginFetch`; else 403 `cross_site`), answer `Cache-Control: no-store`, need a reason (400
+  `reason_required`: format characters - zero-width, bidi controls, BOM - and lone surrogates out; control characters, NEL
+  and line / paragraph separators to a space; spaces folded; at least one letter or digit; at most 200 UTF-16 units, cut
+  between characters) and write one `admin_audit` row with it, in the change's own transaction. A post that changes nothing
+  (the value already there) answers `changed: false` and writes no row. A change whose row can't be written answers 500
+  "nothing changed" - off included: D15's every-change-is-audited rule wins over "never refused" when the site's own
+  database refuses the row (the database that would hold the switch). The page shows refusals from `js.admchat.e.<code>`
+  (the server's text for a code it doesn't know).
+- **When the page itself can't be used** (the site is up but `/admin/chat` fails): an owner on the VM sets the row with the
+  sqlite3 CLI (`UPDATE chat_switches SET value = 'off', updated = <ms>, updated_by = '<name>' WHERE key = 'CHAT_HUB'`) and
+  records why in `admin_audit` by hand; the seam's trigger carries it to the hub, and readers that use `chatHubOnNow()` see
+  it at once (the cache: the next `/admin/chat` view or a restart).
+- **The interlock** (S1-D7, seam plan §12.10): `CHAT_HUB` on is refused (409 `chat_hub_needs`, `missing` names the
+  switches) unless `tickets`, `sessions`, `heartbeat`, `privacy`, `erasure`, `export`, `pads`, `roles`, `bans`, `identity`,
+  `looks` and `switches` are all on - read from `hubseam_settings` inside the writing transaction; a switch huboutbox doesn't
+  have yet (Q4's four) reads as off. Turning `CHAT_HUB` off is never refused. The other half (no seam switch it needs goes
+  off while it is on, 409 `chat_hub_on`) is Q4's, in `huboutbox.setSettings`.
+- **The admin nav's Chat group** (`views/partials/admin-nav.ejs`): "💬 Chat hub" → `/admin/chat` with its sections, shown to
+  `chat.breakglass` holders. The siteperms group `chat` also has `chat.mod_queue` (Assistant) and `chat.audit` (Admin) for
+  V2's moderation screens (`adminchat.MOD_VIEWS`: `/admin/chat/{reports,held,modlog,bans}` and `{audit,switches}`), which
+  V2 (release L4) hosts and adds to the group; until then nothing opens with them.
+- **Logs:** `[adminchat] <what>: <error>` and `[chatswitches] reload: <error>` only - never a reason, pad, account or value.
+- **Tests:** `test/adminchat.test.js` (no hub call; who sees it and the nav; cross-site, header-less, `www.`-folded and
+  signed-out posts refused; a reason on every change, the stricter cleaning; the interlock; an admin turns off but not on;
+  the owner turns on after the confirm step; one audit row per change and none for no change; a failing audit insert rolls
+  the switch and the pad back; the two races (a stale on-post during an admin's off, for `CHAT_HUB` and for a pad); Camfrog
+  and profile pads can't pick `hub`, `hub_read` refused, unknown pads 404, a hand-edited value and a row whose pad is gone
+  put back; `PATV staff` in `room_events`; `padhub` down; the 500-row bounds; the JSON `no-store`, the switch read fresh,
+  the log newest first; escaped titles and reasons), `test/admin-chat-js.test.js` (the page script in a vm: no `confirm` on
+  a first on-post, the question from the server's preview, a no posts nothing more, off is one post, the reason prompt, the
+  refusal texts), `test/siteperms.test.js` (the three capabilities' classes and locks).
+- **i18n:** new keys only - `admchat.*`, `js.admchat.*` (`js.admchat.e.*` the refusals), `siteperm.g.chat`,
+  `siteperm.k.chat.*`.
+
 ## Fixtures and the contract suite
 
 - `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo
