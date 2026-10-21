@@ -189,8 +189,7 @@ test("who sees it: admins (page + JSON, no-store, in the nav's Chat group); Staf
 
 test("cross-site, header-less and signed-out POSTs are refused; nothing changes", async () => {
   const before = await nAudits();
-  const www = base.replace("//127.0.0.1", "//www.127.0.0.1");     // sameOriginFetch folds "www."; D15's sameOriginStrict doesn't
-  for (const extra of [{ "x-requested-with": "" }, { origin: "https://evil.example" }, { origin: "" }, { origin: www }, { origin: "", referer: www + "/admin/chat" }]) {
+  for (const extra of [{ "x-requested-with": "" }, { origin: "https://evil.example" }, { origin: "" }]) {
     for (const [p, b] of [["/api/admin/chat/hub", { on: false, reason: REASON }], ["/api/admin/chat/pad", { room_id: "patv:staff", backend: "v1", reason: REASON }]]) {
       const r = await post(p, "own", b, extra);
       assert.equal(r.status, 403, p + " " + JSON.stringify(extra));
@@ -204,6 +203,18 @@ test("cross-site, header-less and signed-out POSTs are refused; nothing changes"
     assert.equal(r.status, 403, u);
     assert.equal(r.j.code, "admin_only", u);
   }
+  // "www." isn't folded (authGuard.sameOriginFetch folds it; D15's sameOriginStrict doesn't): a host name, as an IP can't take www.
+  const lh = `http://localhost:${port}`;
+  const viaLocalhost = (src) => realFetch(lh + "/api/admin/chat/pad", { method: "POST", redirect: "manual",
+    headers: Object.assign({ "x-user": "own", "x-requested-with": "fetch", "content-type": "application/json" }, src),
+    body: JSON.stringify({ room_id: "patv:staff", backend: "v1", reason: REASON }) });
+  for (const src of [{ origin: `http://www.localhost:${port}` }, { referer: `http://www.localhost:${port}/admin/chat` }]) {
+    const r = await viaLocalhost(src);
+    assert.equal(r.status, 403, JSON.stringify(src));
+    assert.equal((await r.json()).code, "cross_site");
+  }
+  const same = await viaLocalhost({ origin: lh });
+  assert.deepEqual([same.status, (await same.json()).changed], [200, false], "the same post from the host itself goes through (and changes nothing)");
   assert.equal(await nAudits(), before, "no audit row");
   assert.equal(await hubValue(), null, "no switch row");
   // the check itself: X-Requested-With: fetch and an Origin (else a Referer) whose host is exactly this Host
