@@ -47,3 +47,34 @@ test("siteVersion in a checkout whose HEAD is the i18n bot's commit: the release
   const v = require(path.join(dir, "tools", "policy-backend.js")).siteVersion();
   assert.deepEqual([v.version, v.version_sha, v.sha], ["1.99adu", rel, head]);
 });
+
+// The mutation review of PO-3: status and preflight name the release's commit next to HEAD's when the i18n bot's commit is on
+// top (and only then) - a minimal gathered state, no database.
+function bare(site) {
+  const eng = { mode: "off", paused: 0 };
+  return { site, staging: false, engines: { treasury: eng, monetary: eng, burn: eng }, missed7: [], shadow14: [], push: null, runs: [],
+           backends: Object.fromEntries(["pools", "stashes", "capital", "fed", "escrow", "gangs"].map((k) => [k, { enabled: null, live: false }])),
+           owners: [], rolesPending: [], claims: [], lastW: null, closedNoAccount: [], refusedWf: [], features: {}, cfg: { store: false },
+           mirrorDays: [], dualChecks: [], dualDiffs: [], moving: [], failed7: [], effectsOld: { n: 0 }, turfInbox: { n: 0 },
+           evidence: { from: "2026-10-21", today: "2026-10-21", days: [], mirror: {}, dual: [] } };
+}
+function statusLines(s) {
+  const out = [];
+  const log = console.log;
+  console.log = (...a) => out.push(a.join(" "));
+  try { PB.printStatus(s); } finally { console.log = log; }
+  return out;
+}
+test("status + preflight: the release's sha next to HEAD's when they differ, HEAD's alone otherwise", () => {
+  const split = bare({ version: "1.99adu", version_sha: "fb3cd91", sha: "7e49016" });
+  assert.equal(statusLines(split)[0], "site     1.99adu at fb3cd91 (7e49016)");
+  const v = PB.preflight(split).find((r) => r.check === "site version");
+  assert.deepEqual([v.level, v.detail], ["PASS", "1.99adu (release fb3cd91, head 7e49016)"]);
+  const same = bare({ version: "1.99adv", version_sha: "a1b2c3d", sha: "a1b2c3d" });
+  assert.equal(statusLines(same)[0], "site     1.99adv (a1b2c3d)");
+  assert.equal(PB.preflight(same).find((r) => r.check === "site version").detail, "1.99adv (a1b2c3d)");
+  const none = bare({ version: null, version_sha: null, sha: null });
+  assert.equal(statusLines(none)[0], "site     ? (no git)");
+  const w = PB.preflight(none).find((r) => r.check === "site version");
+  assert.deepEqual([w.level, w.detail], ["WARN", "? (no git checkout)"]);
+});

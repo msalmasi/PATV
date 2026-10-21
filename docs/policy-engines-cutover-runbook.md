@@ -391,3 +391,58 @@ keys, the economy sink rates, `burn_cfg`, the flags, PAT Routing, the system con
   (a room-vault share needs `rv` or a v2 room flow - `room` alone is not enough; an older catalog without `room_flow` keeps the
   old reading); his export imports with verify ok and cuts over without force; his write-back pushes confirm a rollback without
   force.
+
+### 14.3 Review of PO-3 (2026-10-21, before H1)
+
+What changed in Pepe's half, and what the H1 owner needs to know:
+
+- **The freeze pushes first.** `freeze cfg confirm` sets Pepe "cutting", sends his policy, PAT Routing, capital and funding
+  pushes, and only then asks the site to freeze. The site's freeze snapshot (`cfg_freeze`) is what its store holds at that
+  moment, so a change made in the last 5 minutes (before the periodic push) is in it. If a push fails, nothing is frozen and
+  Pepe writes as before. Two kinds of difference at the export or cutover:
+  - a key that differs from the **freeze snapshot** (`changed_keys`) can't be cleared by pushing, because pushes don't write the
+    store while it is frozen. Run `unfreeze`, then `freeze` and `export` again, or cut over naming exactly those keys (`force`);
+  - a key only the **readers** differ on is cleared by a push and a new export.
+- **Each export is its own.** Every export gets a later `at` than the last one, so it has its own sha (the key). A re-export in the
+  same second no longer gets the first import's verify back.
+- **A refused freeze changes nothing.** The site's own 403 refusals carry a `code` (`owner_only`: a Pepe owner by ACL who isn't
+  on the site's pinned owner list; `telegram`). Pepe now reads these as the site's answer, not as "no answer":
+  - a refused freeze puts Pepe back as he was;
+  - `!econ set` passes the refusal on, instead of saying "the website is unreachable".
+  The token check's 403 (no `code`), a 404 (an older site without these routes) and a 429 mean the site never ran the call: the
+  freeze is undone. An `unfreeze` that gets no answer, or is refused, asks the site's state. If the site isn't frozen (it says
+  Pepe owns the settings, or it has no policy routes), Pepe writes again.
+- **One live switch each.** The site keeps the treasury and the activity -> pads switches as one live switch each:
+  - `tr_live` = Pepe's treasury switch AND the layers;
+  - `ap_on` = his activity switch AND the room payouts recipe.
+  While one of Pepe's own switches is on but not live, `freeze`, `export` and `cutover` are refused (`!econ policy status` shows
+  "hand-over blocked"). Otherwise the hand-over would quietly turn that switch off on Pepe while verify said every value was
+  equal. Settle it first: `!econ treasury off` or `!econ layers on`; `!econ activitypads off` or turn the room payouts on.
+- **The treasury switch turned on on the site arms Pepe's scheduler from that moment.** This covers a web edit, the CLI or the
+  chat write-through, which Pepe learns of by the pull. Between H1 and H2a Pepe still runs the engines, and this is what his own
+  `!econ treasury on` does: the first run is the next boundary, never this week's epoch late or today's release at once. The
+  flag log records the site's actor (`via site`).
+- **After a detach, when the site comes back still owning the settings:**
+  - the CONFLICT log says DETACHED;
+  - Pepe stays the writer. A freeze refused `site_owned` no longer leaves him frozen;
+  - his Fed ops that need the settings are refused (E_CFG_REV, never recorded, the key free) and are never re-sent under the
+    site's rev.
+  The way out is **`!econ policy cutover cfg confirm`, which re-attaches Pepe.** Nothing is imported: he pulls the site's values
+  and reads them again. Every value of his that differs (changed here since the detach, or on the site meanwhile) is named, and
+  `force` must name exactly those keys; his values are dropped. Money in flight blocks it, as it blocks a cutover. To give the
+  settings back to Pepe instead: re-attach, then `rollback cfg confirm`, and re-apply anything changed while he was detached.
+- **An unreadable `policy_client.json`.** PO-0c's rule still counts every switch as on, but for the settings the site's last
+  answer decides:
+  - the site said it owns them: Pepe reads the site's values, as before;
+  - otherwise (mirror mode): Pepe reads his **own** values and refuses every edit until a human fixes the file. Before, he read
+    the site's cached mirror (up to 10 minutes old) and sent every `!econ set` to a site that refuses it in mirror mode.
+  `!econ policy status` says UNREADABLE, and every hand-over step is refused until the file is fixed.
+- **Rollback.** Pepe's pushes now include the funding sync (its `monetary` block: the Fed band, donations, the grant cap, the
+  House floor, flash). The confirm's reader check no longer fails with `differs` when a monetary key was edited on the site in
+  the ~90 s before the rollback. The values are written back before Pepe's switch moves, so no reader passes through his old
+  values.
+- **Pepe's panel while the site owns the settings:**
+  - the Sink rates card shows each economy row's value in force (the site's), read-only, with a link to `/admin/economy#policy`;
+  - the PAT Routing card shows the site's routes, read-only;
+  - a game row (rakes, prices, faucets) still saves. A save that echoes the economy rows is ignored for them (Pepe's own
+    override is kept); a changed economy row is refused whole.

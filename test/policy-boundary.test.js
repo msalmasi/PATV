@@ -136,10 +136,12 @@ test("the boundary snapshot is taken in ONE transaction before Pepe's legs; they
   // a re-report (a different plan) updates the comparison, never the boundary
   const bad = JSON.parse(JSON.stringify(pepePlan));
   bad.legs[0].amt += 1;
-  const again = await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: pepeInputs, plan: bad });
+  // (the mutation review of PO-3: a `cfg` that isn't an object - a list - keeps nothing; the re-report replaces the record's)
+  const again = await post("/api/policy/bot/report", { engine: "treasury", period: EID, inputs: pepeInputs, plan: bad, cfg: [12, "a".repeat(64), "site"] });
   assert.ok(again.body.engine_diff.length >= 1);
   assert.equal(again.body.clean, false);
   const r1 = await row(`shadow:treasury:${EID}`);
+  assert.equal(r1.pepe_cfg, null, "PO-3: a cfg that is a list is no settings record");
   assert.equal(r1.site_boundary_plan, r0.site_boundary_plan, "the boundary plan is never overwritten");
   assert.equal(r1.site_boundary_inputs, r0.site_boundary_inputs);
   assert.equal(r1.boundary_ts, r0.boundary_ts);
