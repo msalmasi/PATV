@@ -1,4 +1,4 @@
-// 1.99adp (S1 Q5b): tools/hubseam-driver.js's identity and looks commands (seam-contract.md "Driver commands S1 adds") drive
+// 1.99ads (S1 Q5b): tools/hubseam-driver.js's identity and looks commands (seam-contract.md "Driver commands S1 adds") drive
 // v1's real modules on a throwaway database: link / unlink / moveLogin / merge / cosmetic / textStyle write what the identity
 // and looks topics read, and `looks` answers like POST /internal/v1/looks.
 //   node --test test/hubseam-driver-s1.test.js

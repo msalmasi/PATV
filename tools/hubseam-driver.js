@@ -33,7 +33,7 @@
 //   flush                       -> {posted, pending}    the poster until nothing is pending (or ~15 s)
 //   heartbeat                   -> {status}
 //   faultAfter2xx {on}          -> {}               exit(137) between the hub's 2xx and posted_at (huboutbox._setFault)
-// 1.99adp (S1 Q5b - seam-contract.md "Driver commands S1 adds", the identity and looks part; Q4 adds the pad / role / ban /
+// 1.99ads (S1 Q5b - seam-contract.md "Driver commands S1 adds", the identity and looks part; Q4 adds the pad / role / ban /
 // switch commands):
 //   merge {from, into}          (above) now also records account_merges (ledger.recordMerge) and removes the merged users row,
 //                               as accountMerge.js does - the identity/changed "merged" row and the looks' "gone"
@@ -180,13 +180,13 @@ const CMDS = {
     await M.db.tx(async () => {
       await M.sessions.revokeForMerge(String(from), String(into));
       await M.db.runQuery("INSERT INTO account_merge_log (at, via, from_id, to_id) VALUES (?, 'driver', ?, ?)", [Date.now(), String(from), String(into)]);
-      // 1.99adp: the S1 record of the merge (identity/changed "merged", looks "gone") - ledger.recordMerge + the row's removal
+      // 1.99ads: the S1 record of the merge (identity/changed "merged", looks "gone") - ledger.recordMerge + the row's removal
       await require(path.join(repo, "ledger")).recordMerge(String(from), String(into), "hubseam-driver");
       await M.db.runQuery("DELETE FROM users WHERE userId = ?", [String(from)]);
     });
     return {};
   },
-  // ── 1.99adp (S1 Q5b): identity and looks ──
+  // ── 1.99ads (S1 Q5b): identity and looks ──
   async link({ user, platform, id, login, display }) {
     await boot();
     const u = String(user), x = String(id);

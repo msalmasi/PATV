@@ -128,7 +128,7 @@ const RULES = {
   "onair_optin.user_id": M(),
   "onair_state.target": { deny: "1.99yt: JSON of what's on Pepe's main stream right now (slot id / chat login), short-lived, not a userId column" },
   "onair_state.updated_by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) - admin_audit has the id" },
-  "pad_hub.updated_by": { deny: "1.99adp S1-D1 (padhub.js): who last set the pad's chat backend - an admin's username (audit label; admin_audit has the id)" },
+  "pad_hub.updated_by": { deny: "1.99ads S1-D1 (padhub.js): who last set the pad's chat backend - an admin's username (audit label; admin_audit has the id)" },
   "onair_log.by": { deny: "1.99yt: an actor label (web:<username> / pepe:<login> / system) in the on-air log" },
   "pepe_roles.by": { deny: "1.99abn: who changed a Pepe role (web:<username> / pepe) - an actor label; the row is keyed by Camfrog login" },
   "pepe_perms.by": { deny: "1.99acj: who changed one of Pepe's per-command permissions (web:<username> / pepe:<login>) - an actor label; the row is keyed by command" },

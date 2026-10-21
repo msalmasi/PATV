@@ -45,7 +45,7 @@ const BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
 const KINDS = Object.keys(CAT.kinds || {});
 const ACCOUNT_KINDS = ["name_color", "profile_border", "avatar_decoration", "profile_banner", "profile_effect"];
 const GTF_KINDS = ["gtf_hat", "gtf_mask", "gtf_outfit", "gtf_prop", "gtf_bg", "gtf_frame"];
-// S1 Q5a (1.99adp): the profile_effect and gtf_* enums live in cosmeticstyle.js (exported to the chat hub's looks too)
+// S1 Q5a (1.99ads): the profile_effect and gtf_* enums live in cosmeticstyle.js (exported to the chat hub's looks too)
 const CSTYLE = require("./cosmeticstyle");
 const GTF_OPT = CSTYLE.GTF_OPT;
 const GTF_LAYERS = CSTYLE.GTF_LAYERS;
@@ -134,7 +134,7 @@ function nameCss(item) {
   return s.color ? `color: ${cssSafe(s.color)};` : "";
 }
 
-/** Everything a template needs to draw one item. S1 Q5a (1.99adp): the ring, border and banner CSS is written from the
+/** Everything a template needs to draw one item. S1 Q5a (1.99ads): the ring, border and banner CSS is written from the
  *  item's structured fields (cosmeticstyle.js) - the same strings as the hand-written CSS they replaced
  *  (test/cosmetics-structured.test.js). A field that doesn't parse draws nothing (logged at boot). */
 const styleCss = (fn, v) => { try { return cssSafe(fn(v)); } catch (e) { return ""; } };

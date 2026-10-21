@@ -1,4 +1,4 @@
-// S1 Q5a (1.99adp, ADR 0007 D13): the account cosmetics' ring, border and banner CSS is written from structured fields
+// S1 Q5a (1.99ads, ADR 0007 D13): the account cosmetics' ring, border and banner CSS is written from structured fields
 // (cosmeticstyle.js), and every item still draws exactly what it drew from the hand-written CSS
 // (test/fixtures/cosmetics-css-golden.json: render() at the last catalog with CSS strings, tools/gen-cosmetics-golden.js);
 // each item's structured look (the chat hub's, Q5b) is pinned beside it and fits rt-schema's look.schema.json limits.

@@ -2,7 +2,7 @@
 // from them, and the structured look the chat hub gets (the looks/changed topic and POST /internal/v1/looks, Q5b).
 // Pure functions: no database, no require of the site's modules, so a test (or the hub repo) can load it alone.
 //
-// Until 1.99adp the ring, border and banner items of cosmetics.json carried hand-written CSS strings. They now carry fields,
+// Until 1.99ads the ring, border and banner items of cosmetics.json carried hand-written CSS strings. They now carry fields,
 // and this module writes the same CSS from them, character for character (test/cosmetics-structured.test.js compares every
 // item's render() with test/fixtures/cosmetics-css-golden.json, taken from the catalog before the change):
 //

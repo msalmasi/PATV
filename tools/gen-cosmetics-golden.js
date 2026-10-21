@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/gen-cosmetics-golden.js — S1 Q5a (1.99adp): regenerates test/fixtures/cosmetics-css-golden.json, the golden of the
+// tools/gen-cosmetics-golden.js — S1 Q5a (1.99ads): regenerates test/fixtures/cosmetics-css-golden.json, the golden of the
 // structured cosmetics (ADR 0007 D13: "golden-tested to render today's CSS").
 //
 //   node tools/gen-cosmetics-golden.js [--css-ref <git ref>]      (default ref 5662bc88: the last catalog with hand-written CSS -

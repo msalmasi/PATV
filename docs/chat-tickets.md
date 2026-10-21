@@ -249,7 +249,7 @@ first), the member keeps seeing it as being prepared, and after 24 h a console e
 account without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset) exports without it, and the README says
 so.
 
-## S1: identity, looks, the looks call, text style (release L3, 1.99adp)
+## S1: identity, looks, the looks call, text style (release L3, 1.99ads)
 
 S1 plan §2.4 Q5b; the hub repo's `docs/seam-plan.md` §12 is the spec (§12.14 records what this release changed in it).
 Built on two prerequisites in the same branch: **Q5a** (release L2, no behaviour change: `cosmeticstyle.js` - the ring,
@@ -304,7 +304,9 @@ the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` f
   whole answer is read in one transaction (`dbUtils.tx`), so no other request's uncommitted write - a merge's DELETE that
   rolls back - can make a live account `missing`. 404 while `looks` is off, 400 a malformed body or id, 413 over 450
   ids; the nonce is taken durably first.
-- **Heartbeat:** `switches` gains `identity` and `looks` (additive); `version` is `1.99adp`.
+- **Heartbeat:** `switches` gains `identity` and `looks` (additive); `version` is `1.99ads`. The version is informational:
+  the shared golden's S1 heartbeat keeps the test letter it was recorded with (`1.99adp`, the letter this release was
+  built under before the release letter rule gave it to a bot release), and the tests only check that it names one.
 - **Driver:** `link`, `unlink`, `moveLogin`, `merge` (now also `account_merges` and the row's removal), `cosmetic`,
   `textStyle`, `looks` (`test/hubseam-driver-s1.test.js`).
 - **Turn-on (Q7, staging):** after release L1's topics: `identity` → `looks`, each once its hub topic is live and has
@@ -314,7 +316,7 @@ the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` f
 
 - `test/fixtures/hubseam-sign-vectors.json` and `test/fixtures/hubseam-golden-rows.json` are byte-identical in the hub repo
   and pinned by sha256 in both (`test/hubsign.test.js`; `PATV_HUB_DIR=<hub checkout>` also compares the copies). The
-  golden rows are what each v1 builder must produce (`test/hubseam-golden.test.js`; 1.99adp: the S1 section `s1` -
+  golden rows are what each v1 builder must produce (`test/hubseam-golden.test.js`; 1.99ads: the S1 section `s1` -
   `test/huboutbox-s1.test.js` for identity and looks) and what the hub makes of them. `.gitattributes` keeps them LF on
   every checkout.
 - `tools/hubseam-driver.js` is v1's side of the hub's contract suite (`services/rooms/test/seam-contract.integration.test.ts`,
@@ -325,7 +327,7 @@ the rest of the pad seam: the `pads/changed` triggers, among them `pad_flairs` f
 ## Switches (`/admin/keys#seam`)
 
 `hubseam_settings`: `tickets`, `heartbeat`, `sessions`, `privacy`, 1.99acm: `erasure` (`privacy/account-deleted` and
-`privacy/forget` - one fan-out, on together) and `export` (the hub part of "Download my data"), `econ`, 1.99adp: `identity`
+`privacy/forget` - one fan-out, on together) and `export` (the hub part of "Download my data"), `econ`, 1.99ads: `identity`
 and `looks` (the S1 topics above; `looks` also gates the hub's looks call) - all off - and `spans` (on). A topic whose switch is off writes nothing and serves no snapshot. `tickets` can only be on together with
 `sessions` and `heartbeat` (above). The turn-on order on staging: hub `SEAM_ENABLED` → `heartbeat` → `sessions` →
 `privacy` → (S1) `erasure`, `export`. `/admin/keys#seam` also shows the seam environment and any outbound refusal, the

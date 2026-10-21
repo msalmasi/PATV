@@ -5,7 +5,7 @@
 //                                                  bootstrap and 10-minute repair pull. 404 while the topic's switch is off.
 //   POST /internal/v1/outbox/rewind {topic, after_id}   kept hub_outbox rows of the topic above after_id are posted again
 //                                                  (huboutbox.rewind) - the promotion runbook (§15.4)
-//   POST /internal/v1/looks {ids, card?}           1.99adp (S1 Q5b, seam plan §12.7): the structured looks of up to 450 hub
+//   POST /internal/v1/looks {ids, card?}           1.99ads (S1 Q5b, seam plan §12.7): the structured looks of up to 450 hub
 //                                                  account ids (hublooks.call -> {v, items, missing}); 404 while the looks
 //                                                  switch is off, 400 a malformed body or id, 413 over 450 ids
 //

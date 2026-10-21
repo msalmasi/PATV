@@ -1,4 +1,4 @@
-// 1.99adp (S1 Q5b, release L3) - the v1 seam's identity/changed and looks/changed topics, the looks call and text style
+// 1.99ads (S1 Q5b, release L3) - the v1 seam's identity/changed and looks/changed topics, the looks call and text style
 // (seam plan §12.2-§12.7, §12.10, §12.12 "Q4 / Q5b (v1)"; ADR 0007 D11, D13). Against the golden rows' `s1` section
 // (test/fixtures/hubseam-golden-rows.json, byte-identical in the hub repo):
 //   * every identity and looks builder produces its golden row's payload for its input, with the database seeded as the
@@ -458,11 +458,15 @@ test("the heartbeat carries the S1 switches (additive); the golden S1 heartbeat 
   assert.equal(b.switches.identity, true);
   assert.equal(b.switches.looks, false);
   assert.deepEqual(b.topics["identity/changed"], { head: 0, pending: 0, oldest_pending_at: null }, "a switched-on S1 topic is listed");
-  assert.equal(b.version, "1.99adp");
+  assert.equal(b.version, "1.99ads");
+  assert.equal(b.version, HO.VERSION);
   const g = S1.heartbeat;
   for (const k of Object.keys(b.switches)) assert.ok(k in g.switches, "the golden S1 heartbeat has " + k);
   for (const t of ["identity/changed", "looks/changed"]) assert.ok(t in g.topics, t);
-  assert.equal(g.version, HO.VERSION, "the golden S1 heartbeat names this release");
+  // the version is informational (as in hubseam-golden.test.js): the golden, byte-pinned in both repos, keeps the test
+  // letter it was recorded with (1.99adp, which the release letter rule later gave to a bot release); the live body
+  // names this release
+  assert.match(String(g.version), /^\d+\.\d+[a-z]+$/, "the golden S1 heartbeat names a site version");
   await HO.setSettings({ identity: false });
 });
 
