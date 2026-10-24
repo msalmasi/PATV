@@ -11351,6 +11351,7 @@
   "admchat.pads.owner_only": "只有 Pepe 擁有者可以將小站移至聊天中樞。",
   "admchat.pads.unreadable": "目前無法讀取小站。上方的聊天中樞開關仍可使用，關閉它即可涵蓋所有小站。",
   "admchat.pads.gone": "已不在小站登錄中",
+  "admchat.pads.not_site": "非本站小站：在 S1 中，它的聊天仍使用 v1 — 請將它移回",
   "admchat.pads.more": "只列出前 {n} 個。關閉聊天中樞會涵蓋全部小站。",
   "admchat.pads.choices_more": "只列出前 {n} 個本站小站（試行小站優先）。",
   "admchat.backend.v1": "v1 聊天",

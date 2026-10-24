@@ -11353,6 +11353,7 @@
   "admchat.pads.owner_only": "Hanya pemilik Pepe yang bisa memindahkan pad ke hub chat.",
   "admchat.pads.unreadable": "Pad tidak bisa dibaca sekarang. Sakelar hub chat di atas tetap berfungsi, dan mematikannya berlaku untuk semua pad.",
   "admchat.pads.gone": "tidak ada lagi di registri pad",
+  "admchat.pads.not_site": "bukan pad situs: di S1 chat-nya tetap di v1 - pindahkan kembali",
   "admchat.pads.more": "Hanya {n} pertama yang ditampilkan. Mematikan hub chat berlaku untuk semuanya.",
   "admchat.pads.choices_more": "Hanya {n} pad situs pertama yang ditampilkan (pad percobaan di urutan pertama).",
   "admchat.backend.v1": "chat v1",

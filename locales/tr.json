@@ -11502,6 +11502,7 @@
   "admchat.pads.owner_only": "Bir pad'i sohbet merkezine yalnızca bir Pepe sahibi taşıyabilir.",
   "admchat.pads.unreadable": "Pad'ler şu an okunamıyor. Yukarıdaki sohbet merkezi anahtarı yine çalışır ve onu kapatmak tüm pad'leri kapsar.",
   "admchat.pads.gone": "artık pad kaydında yok",
+  "admchat.pads.not_site": "site pad'i değil: S1'de sohbeti v1'de kalır - geri taşı",
   "admchat.pads.more": "Yalnızca ilk {n} tanesi listeleniyor. Sohbet merkezini kapatmak hepsini kapsar.",
   "admchat.pads.choices_more": "Yalnızca ilk {n} site pad'i listeleniyor (pilot pad'ler önce).",
   "admchat.backend.v1": "v1 sohbet",
