@@ -223,12 +223,17 @@ test("mounts only for a site pad at chat_backend = 'hub' (an allow-list): never 
   assert.equal(await at(P.cf, "site"), null, "the registry decides too: a caller calling a Camfrog pad a site pad changes nothing");
   assert.equal(await at(P.hub, "profile"), null, "a profile pad");
   for (const pl of ["twitch", "discord"]) assert.equal(await at(P.hub, pl), null, "a " + pl + " pad");
-  // padconnect's Twitch / Discord connect turns a SITE pad into one and keeps its id - and so its pad_hub row, 'hub' included
+  // padconnect's Twitch / Discord connect turns a SITE pad into one and keeps its id - and so its pad_hub row. Release L1's
+  // pad_hub_site_only trigger (S1 Q4, padhub.js) moves that row back to 'v1'; the allow-list must hold without it too, so the
+  // row is then forced back to 'hub' (as one written before the trigger existed would be)
   for (const pl of ["twitch", "discord"]) {
     await runQuery("UPDATE rooms_registry SET platform = ? WHERE room_id = ?", [pl, P.hub.id]);
     await rooms.loadCache();
     try {
       assert.equal(rooms.platformOf(P.hub.id), pl);
+      assert.equal((await getQuery("SELECT chat_backend FROM pad_hub WHERE room_id = ?", [P.hub.id]))[0].chat_backend, "v1",
+        "connected to " + pl + ": Q4's trigger moved the pad back to v1 chat");
+      await setBackend(P.hub.id, "hub");
       assert.equal(await at(P.hub), null, "connected to " + pl + ": no widget (by its registry row)");
       assert.equal(await at(P.hub, "site"), null, "...whatever the caller says");
       const mod = await get("/p/hub-pad/mod", U.fan);
@@ -237,9 +242,10 @@ test("mounts only for a site pad at chat_backend = 'hub' (an allow-list): never 
     } finally {
       await runQuery("UPDATE rooms_registry SET platform = NULL WHERE room_id = ?", [P.hub.id]);
       await rooms.loadCache();
+      await setBackend(P.hub.id, "hub");                // a site pad again; Q4's trigger had moved it to v1 (an admin moves it back)
     }
   }
-  assert.equal((await at(P.hub)).state, "mount", "a site pad again: the widget is back");
+  assert.equal((await at(P.hub)).state, "mount", "a site pad again, at hub: the widget is back");
   assert.equal(await at({ id: "patv:nowhere", slug: "nowhere" }, "site"), null, "no pad_hub row");
   await setBackend(P.v1.id, "hub_read");
   assert.equal(await at(P.v1, "site"), null, "hub_read (S2) isn't hub");

@@ -793,7 +793,8 @@ so every page is as before. V2 reached v1 staging as **1.99aeb** (2026-10-24; th
   tab's site-pad branch, `mode="full"`). Only on a **site** pad (ADR 0007 D3: S1 allows the hub only on site pads) - an
   allow-list on the registry's platform and the caller's, so a Camfrog, profile, Twitch or Discord pad never mounts, and a
   hub site pad that padconnect's Twitch / Discord connect turns into one (it keeps the pad id, so its `pad_hub` row) loses
-  the widget and its `/p/<slug>/mod` page with it. `CHAT_HUB` is read with release L1's own reader,
+  the widget and its `/p/<slug>/mod` page with it (since Q4, release L1's `pad_hub_site_only` trigger also moves that row
+  back to `v1`; the allow-list still holds for a row left at `hub` any other way, and the test forces one). `CHAT_HUB` is read with release L1's own reader,
   `chatswitches.chatHubOnNow()` (one row per page, no cache: an off is the next page load): the value exactly `on`; any
   other spelling, a missing table or an unreadable one = off (fail closed). Who sees the chat is padaccess's, read inside
   `forPad` (the callers pass no gate): its 18+ gate first, then the sign-in, then the pad's level (`padaccess.full`: an
