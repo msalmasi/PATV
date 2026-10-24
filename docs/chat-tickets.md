@@ -487,7 +487,9 @@ S1 plan §2.5 V3 (ADR 0007 D13: text style is v1-owned until looks move, set fro
 S1 plan §2.5 V4 (ADR 0007 D16; OQ-20, answered 2026-10-19: the choice also hard-deletes the account's web lines in the pad
 chat archive, with the same exceptions, under one checkbox wording; CHAT-ARCHITECTURE rev 5.1 §9.4, seam plan D-23). Release
 L4 is V2 + V4; V4 reached v1 staging first, on its own, as **1.99ady** (2026-10-21; the staging merge carries the letter,
-ADR 0007 D19), and V2 followed as **1.99aeb** (2026-10-24). No seam shape change, so `huboutbox.VERSION` stays 1.99ads.
+ADR 0007 D19), its second review's fix-up took **1.99aea** (2026-10-24), and V2 followed as **1.99aeb** (2026-10-24). The
+owner's acceptance of review 2's calls (below) reached staging as **1.99aed** (2026-10-24, this file only). No seam shape
+change, so `huboutbox.VERSION` stays 1.99ads.
 
 - **Behind the `erasure` switch** (`accountdelete.removeOffered()` = `huboutbox.on("erasure")`; off by default, so nothing a
   member sees changes until `erasure` goes on): while it is off the delete page has no box and no PATV chat copy, the privacy
@@ -583,10 +585,12 @@ ADR 0007 D19), and V2 followed as **1.99aeb** (2026-10-24). No seam shape change
   - **The privacy paragraph's date** is when `erasure` was FIRST turned on (`hubseam_settings.first_on`, set once by
     `setSettings`; a row on before the column is dated by its `updated` at boot): a break-glass off / on no longer re-dates
     the published paragraph, its "Changes" entry or "Last updated".
-- **Review 2's calls** (for the owner's review; default: as built): (1) the member's choice no longer reaches **another
-  account's** web lines under a login - an earlier or later holder's - wherever the login history shows who held it (the
-  first build, like CL6's Remove my line, deleted an earlier holder's web lines under the member's current login); with no
-  record (a login linked before 12 October 2026 and never changed since) it still reaches back to the start. (2) A kept line
+- **Review 2's calls** (accepted as built by the owner, 2026-10-24: "I agree with all open design calls"; ADR 0007 D16 and
+  "Owner answers during the build"; they came after the 37 compiled calls and are accepted the same way): (1) the member's
+  choice no longer reaches **another account's** web lines under a login - an earlier or later holder's - wherever the
+  login history shows who held it (the first build, like CL6's Remove my line, deleted an earlier holder's web lines under
+  the member's current login); with no record (a login linked before 12 October 2026 and never changed since) it still
+  reaches back to the start. (2) A kept line
   that a moderator, staff or a "minor" report had hidden becomes the author's removal (`rm_by` `self`, `rm_why` NULL): the
   hider's reason leaves the line (the pad's owner then sees "Removed by its author", with no words) and the report queue shows
   it as removed by its author instead of hidden; the report and its reasons, the `room_events` row with the hider's reason and
