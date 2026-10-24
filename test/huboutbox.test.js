@@ -309,7 +309,15 @@ test("1.99acm: an outbound key that equals an inbound key is never used (key_reu
     assert.equal(HO.refusal(), "key_reuse", "the previous inbound key counts too");
     delete process.env.HUB_V1_IN_PREV_KEY;
     assert.equal(HO.refusal(), null);
+    // S1 H9-15-edge-key: the looks-only inbound key (and its previous one) count too
+    for (const k of ["HUB_V1_IN_LOOKS_KEY", "HUB_V1_IN_LOOKS_PREV_KEY"]) {
+      process.env[k] = process.env.HUB_V1_KEY;
+      assert.equal(HO.refusal(), "key_reuse", k);
+      delete process.env[k];
+    }
+    assert.equal(HO.refusal(), null);
   } finally {
+    for (const k of ["HUB_V1_IN_LOOKS_KEY", "HUB_V1_IN_LOOKS_PREV_KEY"]) delete process.env[k];
     for (const [k, v] of [["HUB_V1_KEY", saved.k], ["HUB_V1_IN_KEY", saved.i], ["HUB_V1_IN_PREV_KEY", saved.p]]) {
       if (v == null) delete process.env[k]; else process.env[k] = v;
     }

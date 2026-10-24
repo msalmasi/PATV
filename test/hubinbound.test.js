@@ -225,3 +225,58 @@ test("index.js: the JSON parser skips /internal/ (the form parser reads form bod
   assert.match(src, /req\.path\.startsWith\("\/internal\/"\) \? next\(\) : express\.json\(\)\(req, res, next\)/);
   assert.match(src, /require\("\.\/hubinbound"\)\.register\(app\);/);
 });
+
+test("S1 H9-15-edge-key: a looks-only key signs POST /internal/v1/looks and nothing else (403 scope); it never stands in for the full key", async () => {
+  process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
+  process.env.HUB_V1_IN_KEY = V.keys["hub-test-1"];
+  const LK = "hub-test-looks-only-key-0123456789-not-real";
+  process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-looks1";
+  process.env.HUB_V1_IN_LOOKS_KEY = LK;
+  const asLooks = { keyId: "hub-test-looks1", key: LK };
+  IN._reset();
+  try {
+    await HO.setSettings({ sessions: true });
+    assert.deepEqual(Object.keys(IN.looksKeys()), ["hub-test-looks1"]);
+    assert.deepEqual(IN.status().looks_keys, ["hub-test-looks1"], "/admin/keys#seam can say which looks keys are in force");
+    // the snapshot pull and the rewind: refused before any nonce is taken, the code only
+    const snap = await call("GET", "/internal/v1/snapshot/sessions/revoked", asLooks);
+    assert.equal(snap.status, 403);
+    assert.deepEqual(snap.j, { ok: false, error: "scope" });
+    assert.equal(snap.cache, "no-store");
+    const rwBody = JSON.stringify({ topic: "sessions/revoked", after_id: 0 });
+    assert.equal((await call("POST", "/internal/v1/outbox/rewind", { ...asLooks, body: rwBody })).status, 403);
+    assert.equal((await call("GET", "/internal/v1/looks", asLooks)).status, 403, "the looks route by POST only");
+    assert.equal((await call("POST", "/internal/v1/nowhere", { ...asLooks, body: "{}" })).status, 403);
+    assert.equal(IN.status().refused.scope, 4);
+    // the full key still reaches everything
+    assert.equal((await call("GET", "/internal/v1/snapshot/sessions/revoked")).status, 200);
+    // the looks call: past the scope gate exactly as the full key (here the looks switch is off: 404 not_found for both)
+    const lb = JSON.stringify({ ids: [] });
+    const byLooks = await call("POST", "/internal/v1/looks", { ...asLooks, body: lb });
+    const byFull = await call("POST", "/internal/v1/looks", { body: lb });
+    assert.deepEqual([byLooks.status, byLooks.j], [byFull.status, byFull.j]);
+    assert.deepEqual(byLooks.j, { ok: false, error: "not_found" });
+    // a looks key that shares the full key's secret or id, or names another env or direction, is no key at all
+    process.env.HUB_V1_IN_LOOKS_KEY = V.keys["hub-test-1"];
+    assert.deepEqual(IN.looksKeys(), {});
+    process.env.HUB_V1_IN_LOOKS_KEY = LK;
+    for (const id of ["hub-test-1", "hub-staging-looks1", "v1-test-looks1"]) {
+      process.env.HUB_V1_IN_LOOKS_KEY_ID = id;
+      assert.deepEqual(IN.looksKeys(), {}, id);
+    }
+    process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-looks1";
+    // its rotation pair works like the full key's
+    process.env.HUB_V1_IN_LOOKS_PREV_KEY_ID = "hub-test-looks0";
+    process.env.HUB_V1_IN_LOOKS_PREV_KEY = "hub-test-looks-only-previous-0123456789-x";
+    assert.deepEqual(Object.keys(IN.looksKeys()).sort(), ["hub-test-looks0", "hub-test-looks1"]);
+    const prev = await call("GET", "/internal/v1/snapshot/sessions/revoked", { keyId: "hub-test-looks0", key: process.env.HUB_V1_IN_LOOKS_PREV_KEY });
+    assert.equal(prev.status, 403);
+    // without the full key the routes don't exist, for the looks key too
+    delete process.env.HUB_V1_IN_KEY_ID;
+    assert.equal((await call("POST", "/internal/v1/looks", { ...asLooks, body: lb })).status, 404);
+  } finally {
+    process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
+    for (const k of ["HUB_V1_IN_LOOKS_KEY_ID", "HUB_V1_IN_LOOKS_KEY", "HUB_V1_IN_LOOKS_PREV_KEY_ID", "HUB_V1_IN_LOOKS_PREV_KEY"]) delete process.env[k];
+    await HO.setSettings({ sessions: false });
+  }
+});
