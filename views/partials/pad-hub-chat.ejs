@@ -1,0 +1,31 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# S1 V2 (chatwidget.forPad, ADR 0007 D3 / D14): the chat hub's <patv-chat> where a hub pad's chat goes - the pad page's
+    Live tab (room.ejs, tag 'section': a card of its own, mode full) or the homepage's room panel (home.ejs, tag 'div', mode
+    compact). Only rendered for a site pad at chat_backend = 'hub' while CHAT_HUB is on and the widget is installed; else the
+    page is as before. States (cw.state): mount - the element + its boot (once per page); gate - the 18+ card; signin - the
+    "Sign in to chat" teaser (S1 has no guest sockets: no widget download); unavailable - signed in without a hub account id.
+    The element is reserved its height before the module upgrades it (no layout jump); the widget sets its own after. %>
+<% const cw_ = typeof cw !== 'undefined' && cw ? cw : null, div_ = typeof tag === 'string' && tag === 'div';
+   const next_ = cw_ && typeof cw_.next === 'string' && /^\/(?![\/\\])/.test(cw_.next) ? cw_.next : '/'; %>
+<% if (cw_ && cw_.state === 'mount' && cw_.mount) { const m_ = cw_.mount; %>
+<% if (!div_) { %><section class="card rm-hubchat" id="rmHubChat" aria-labelledby="rmHubChatH">
+  <h2 id="rmHubChatH"><%- t('chatw.h') %></h2><% } %>
+  <patv-chat pad="<%= m_.pad %>" room="<%= m_.room %>"<% if (m_.slug) { %> slug="<%= m_.slug %>"<% } %> mode="<%= m_.mode %>" theme="<%= m_.theme %>" locale="<%= m_.locale %>"<% if (m_.line) { %> line="<%= m_.line %>"<% } %> aria-label="<%- t('chatw.aria') %>" style="display:block;min-height:<%= m_.mode === 'compact' ? '360px' : '320px' %>"></patv-chat>
+  <%- include('chat-widget-boot', { cw: cw_ }) %>
+<% if (!div_) { %></section><% } %>
+<% } else if (cw_ && cw_.state === 'gate') { %>
+  <%- include('adult-gate', { gate: cw_.gate, next: next_, cls: div_ ? 'ag-home' : '', tag: div_ ? 'div' : 'section' }) %>
+<% } else if (cw_ && cw_.state === 'signin') { %>
+<% if (div_) { %><div class="tease" data-hub-chat="signin">
+  <b style="font-size:16px"><%- t('chatw.signin_h') %></b>
+  <p class="muted" style="margin:0"><%- t('chatw.signin_p') %></p>
+  <a class="btn primary" href="/login?next=<%= encodeURIComponent(next_) %>"><%- t('chatw.signin_btn') %></a>
+</div><% } else { %><section class="card tease" data-hub-chat="signin">
+  <div class="big" aria-hidden="true">💬</div>
+  <h2 style="justify-content:center"><%- t('chatw.signin_h') %></h2>
+  <p class="muted"><%- t('chatw.signin_p') %></p>
+  <a class="btn" href="/login?next=<%= encodeURIComponent(next_) %>"><%- t('chatw.signin_btn') %></a>
+</section><% } %>
+<% } else if (cw_ && cw_.state === 'unavailable') { %>
+<% if (div_) { %><p class="muted" data-hub-chat="unavailable"><%- t('chatw.unavailable') %></p><% } else { %><section class="card" data-hub-chat="unavailable"><p class="muted" style="margin:0"><%- t('chatw.unavailable') %></p></section><% } %>
+<% } %>

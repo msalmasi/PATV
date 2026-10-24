@@ -9,7 +9,7 @@
   const _sec = typeof section !== 'undefined' ? section : '';
   const AREA = 'admin.area', SENS = 'admin.sensitive_overview';
   // [key, href, icon, label, [sub-links: [href, label, capability?]], [capabilities that open the page]]
-  const NAV = [
+  const ALL_ = [
     ['overview', '/admin', '🧭', 'Overview', [], [AREA]],
     ['users', '/admin/users', '👥', 'Users & Accounts', [['#roles', 'Roles & classes'], ['#xp', 'XP', 'users.xp'], ['#welcome-admin', 'Welcome bonus', 'users.welcome_stale'], ['#stale-admin', 'Stale cleanup', 'users.welcome_stale'], ['#merges', 'Merges']], [AREA]],
     ['accounts', '/admin/accounts', '🔐', 'Account security', [['#lookup', 'Look up a member'], ['#deletions', 'Deletions'], ['#events', 'Recent events']], ['accounts.security']],   // 1.99wl: accountsadmin.js
@@ -35,16 +35,34 @@
     ['backends', '/admin/backends', '🔌', 'Backends', [['#handovers', 'Hand-overs'], ['#status', 'Cutovers (status)']], ['econ.backend_cutover']],   // owner answers 2026-10-20: backends.js (Pepe's panel card is read-only)
     ['roles', '/admin/roles', '🎖️', 'Roles & permissions', [['#holders', 'Role holders'], ['#commands', 'Command permissions'], ['#targets', 'Moderation targets'], ['#notes', 'Notes'], ['#website', 'Website permissions'], ['#chat', 'Change from chat']], ['roles.assign']],   // 1.99acj: adminroles.js / pepeperms.js
     ['keys', '/admin/keys', '🔑', 'Bot keys & chat seam', [['#keys', 'Keys'], ['#scopes', 'Scopes'], ['#families', 'Route families'], ['#legacy', 'Legacy token use'], ['#routes', 'Route log'], ['#events', '/events'], ['#seam', 'Chat tickets & hub seam']], ['keys.view']],   // 1.99acf: adminkeys.js
-    // S1 V1 (ADR 0007 D15): the Chat group - the chat hub's break-glass form (adminchat.js). V2 (release L4) adds the hub's
-    // moderation screens here as /admin/chat/{reports,held,modlog,bans,audit,switches} (adminchat.MOD_VIEWS: chat.mod_queue /
-    // chat.audit) and opens the group to those capabilities too.
+    // S1 V1 (ADR 0007 D15): the Chat group - the chat hub's break-glass form (adminchat.js). V2 (release L4, below) adds the
+    // hub's moderation screens to it as /admin/chat/{reports,held,modlog,bans,audit,switches} (adminchat.MOD_VIEWS:
+    // chat.mod_queue / chat.audit, locals.chatAdminNav) and opens the group to those capabilities too.
     ['chat', '/admin/chat', '💬', 'Chat hub', [['#hub', 'Chat hub switch'], ['#pads', 'Pads on the hub'], ['#interlock', 'Interlock'], ['#seam', 'Seam poster'], ['#log', 'Change log']], ['chat.breakglass']],
     ['help', '/admin/help', '📖', 'Help questions', [['#misses', 'Unanswered']], ['help.admin']],
     ['translations', '/admin/translations', '🌐', 'Translations', [['#pending', 'Suggestions'], ['#overrides', 'Live overrides'], ['#export', 'Export']], ['i18n.admin']],
     ['games', '/admin/games', '🎰', 'Games', [['#wheel', 'Wheel spin'], ['#jackpot', 'Jackpot'], ['#casino', 'Casino bans'], ['#heistmarket', 'Heist market', 'games.config']], [AREA]],
     ['cosmetics', '/admin/cosmetics', '🏅', 'Cosmetics & Achievements', [['#badges', 'Badges'], ['#catalogs', 'Catalogs']], [AREA]],
     ['system', '/admin/system', '⚙️', 'System', [['#health', 'Health'], ['#storage', 'Storage']], [AREA]],
-  ].filter((n) => n[0] === _sec || n[5].some((k) => _can(k)));
+  ];
+  // S1 (ADR 0007 D15): the 💬 Chat group. Release L1 makes its entry above (/admin/chat, the break-glass form, chat.breakglass);
+  // S1 V2 (release L4, chatwidget.js) owns the chat hub's moderation screens in it: locals.chatAdminNav (app.locals, set by
+  // chatwidget.register) lists [href, label, capability] per /admin/chat/<view> whose capability siteperms has registered
+  // (chat.mod_queue: reports / held / mod log / bans; chat.audit: audit / switches). They join L1's entry, whose anchors become
+  // /admin/chat#... (so they work from a view's page too) behind L1's capability; the group opens to their capabilities and
+  // links to the first page the viewer may use. Without L1's entry, the links make the group.
+  const _chatV = typeof locals.chatAdminNav === 'function' ? locals.chatAdminNav() : [];
+  if (_chatV.length) {
+    const _ci = ALL_.findIndex((n) => n[0] === 'chat');
+    const _g = _ci >= 0 ? ALL_[_ci] : ['chat', '', '💬', 'Chat', [], []];
+    const _gCap = _g[5][0] || null;
+    const _subs = _g[4].map((s) => [s[0].charAt(0) === '#' ? _g[1] + s[0] : s[0], s[1], s[2] || _gCap]).concat(_chatV);
+    const _caps = _g[5].concat(_chatV.map((s) => s[2])).filter((k, i, a) => a.indexOf(k) === i);
+    const _home = [[_g[1], _gCap]].concat(_chatV.map((s) => [s[0], s[2]])).find((p) => p[0] && p[1] && _can(p[1]));
+    const _entry = ['chat', _home ? _home[0] : _chatV[0][0], _g[2], _g[3], _subs, _caps];
+    if (_ci >= 0) ALL_[_ci] = _entry; else ALL_.splice(ALL_.findIndex((n) => n[0] === 'keys') + 1, 0, _entry);
+  }
+  const NAV = ALL_.filter((n) => n[0] === _sec || n[5].some((k) => _can(k)));
   const _subOk = (s) => !s[2] || _can(s[2]);
   const _cur = NAV.find((n) => n[0] === _sec);
   const _role = _can(SENS) ? 'Admin' : _can(AREA) ? 'Staff' : 'Assistant';

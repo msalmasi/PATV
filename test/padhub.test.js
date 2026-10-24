@@ -1,6 +1,7 @@
 // S1-D1 (ADR 0007 D2): padhub.js - every pad gets a random lower-case UUIDv4 hub pad id, from the rooms_registry insert
 // trigger (any writer) or the start-up backfill, never recomputed, and it moves with the pad on a re-key (padrekey.js's
-// generic room_id move; a merge keeps the moving pad's id).
+// generic room_id move; a merge keeps the moving pad's id). S1 Q4: the listing paths skip unlisted pads (rooms_registry.listed =
+// 0: the seeded staff and canary pads), which their address, their owner and the admin paths still find.
 //   node --test test/padhub.test.js      (uses a temp DB)
 "use strict";
 const test = require("node:test");
@@ -65,6 +66,78 @@ test("a re-key moves the pad's id with it; a merge keeps the moving pad's id", a
   await RK.rekey("patv:new1", "roomB");
   assert.equal(await PH.of("roomB"), mine, "UPDATE OR REPLACE: the moving pad's id wins");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pad_hub WHERE hub_pad_id = ?", [theirs]))[0].n, 0, "the displaced id is gone (Q4 emits it)");
+});
+
+test("S1 Q4 (ADR 0007 D1): listing paths skip unlisted pads - the seeded staff and canary pads; their address, owner and admin paths still find them", async () => {
+  await rooms.init();
+  const PA = require(path.join(repo, "padaccess"));
+  await PA.init();
+  const ids = (list) => list.map((r) => r.id);
+  for (const [id, slug, title] of [["patv:staff", "staff", "Staff room"], ["patv:canary", "canary", "Canary"]]) {
+    const R = await rooms.get(id);
+    assert.deepEqual([R.slug, R.title, R.platform, R.house, R.listed], [slug, title, "site", true, false], id + ": the seed");
+    assert.equal(PA.levelOf(id), "approved", id + ": Approved (padaccess seeds the level once)");
+    assert.match(await PH.of(id), PH.UUID4_RE, id + ": a hub pad id");
+    assert.equal((await rooms.bySlug(slug)).id, id, "its address works");
+    assert.equal(rooms.getCached(id).id, id);
+    assert.equal(rooms.isListed(id), false);
+    assert.ok(!ids(await rooms.list()).includes(id), "list(): the Pads page, the pickers");
+    assert.ok(!ids(rooms.listCached()).includes(id), "listCached()");
+    // Pepe's owner sync isn't a listing (Q4's review): the pad rides it, marked listed: false
+    assert.equal((await rooms.ownersForPepe()).find((r) => r.id === id).listed, false, "Pepe's owner sync: listed false");
+    assert.ok(ids(await rooms.listAll()).includes(id) && ids(rooms.listAllCached()).includes(id), "listAll(): admin pages, entitlements, links");
+  }
+  assert.equal(rooms.isListed("Never.Seen.Room"), true, "a bridged room the registry doesn't know yet is listed");
+  assert.equal(rooms.isListed("user:someone"), false, "a profile is never listed as a pad");
+  // Top Pads and the front pick: neither a site pad's activity row nor a bridged room's summary row of an unlisted pad
+  await runQuery("INSERT INTO rooms_registry (room_id, slug, title, platform, owner_kind, created, updated, listed) VALUES ('Hidden.Room', 'hidden-room', 'Hidden', 'camfrog', 'none', 1, 1, 0)");
+  await rooms.loadCache();
+  const merged = await rooms.withSitePads([{ id: "Hidden.Room", count: 5, live: true }, { id: "Shown.Room", count: 2, live: true }]);
+  assert.ok(!ids(merged).includes("Hidden.Room") && ids(merged).includes("Shown.Room"), "withSitePads (home.js Top Pads, rooms.evaluateAuto)");
+  assert.ok(!ids(merged).includes("patv:staff") && !ids(require(path.join(repo, "padsignals")).sitePads()).includes("patv:staff"), "padsignals: site pads that rank");
+  // an owner's own unlisted pad: theirs (ownedBy), but not listed
+  await runQuery("INSERT INTO users (userId, username, password, class) VALUES ('own1', 'owner1', 'x', 'pleb')");
+  await runQuery("UPDATE rooms_registry SET owner_kind = 'user', owner_user_id = 'own1' WHERE room_id = 'Hidden.Room'");
+  await rooms.loadCache();
+  assert.deepEqual(ids(await rooms.ownedBy("own1")), ["Hidden.Room"]);
+  // Pepe's owner sync keeps it (its owner's !stage commands, the 18+ vibe, Prime Time retention), marked unlisted
+  const own = (await rooms.ownersForPepe()).find((r) => r.id === "Hidden.Room");
+  assert.deepEqual([own.listed, own.owner.username, own.prime_time], [false, "owner1", false]);
+  // the 18+ gate is a gate, not a listing: an unlisted 18+ pad is gated like any other (adultgate.gatedRooms)
+  const AG = require(path.join(repo, "adultgate"));
+  await AG.init();
+  await runQuery("UPDATE rooms_registry SET adult = 1 WHERE room_id = 'Hidden.Room'");
+  await runQuery("INSERT INTO adult_gate_cfg (key, value, updated, by) VALUES ('enabled', '1', 1, 't') ON CONFLICT(key) DO UPDATE SET value = '1'");
+  await rooms.loadCache();
+  await AG.load();
+  try {
+    assert.ok(AG.gatedRooms(null).includes("Hidden.Room"), "a signed-out visitor is stopped at the unlisted 18+ pad");
+  } finally {
+    await runQuery("UPDATE adult_gate_cfg SET value = '0' WHERE key = 'enabled'");
+    await runQuery("UPDATE rooms_registry SET adult = 0 WHERE room_id = 'Hidden.Room'");
+    await rooms.loadCache();
+    await AG.load();
+  }
+  // a link to it: an id in any case resolves (padlinks.lookup), the pad form's ?pad= default stays (choicesFor), the pickers
+  // don't list it
+  const PL = require(path.join(repo, "padlinks"));
+  await runQuery("UPDATE rooms_registry SET slug = 'secret-place' WHERE room_id = 'Hidden.Room'");
+  await rooms.loadCache();
+  assert.equal(PL.lookup("hidden.room").id, "Hidden.Room");
+  const ch = await PL.choicesFor({ userId: "x1", username: "x1" }, "Hidden.Room");          // not its owner: the ?pad= path
+  assert.equal(ch.def, "Hidden.Room", "its own page's link keeps the pad as the form's default");
+  assert.ok(ch.choices.some((c) => c.id === "Hidden.Room"));
+  const ch2 = await PL.choicesFor({ userId: "x1", username: "x1" }, null);
+  assert.ok(!ch2.choices.some((c) => c.id === "Hidden.Room"), "the picker doesn't list it");
+  // an admin lists it (or unlists it again); a profile pad can't be listed
+  assert.equal((await rooms.setListed("Hidden.Room", true, "admin")).listed, true);
+  assert.ok(ids(await rooms.list()).includes("Hidden.Room"));
+  assert.equal((await rooms.setListed("Hidden.Room", false, "admin")).listed, false);
+  assert.ok(!ids(await rooms.list()).includes("Hidden.Room"));
+  await assert.rejects(rooms.setListed("Nope.Room", true, "admin"), (e) => e.status === 404);
+  await runQuery("DELETE FROM rooms_registry WHERE room_id = 'Hidden.Room'");
+  await runQuery("DELETE FROM users WHERE userId = 'own1'");
+  await rooms.loadCache();
 });
 
 test("a pad's deletion drops its hub id in the same transaction; a pad re-created under the room id is a new pad", async () => {

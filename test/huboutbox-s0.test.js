@@ -120,8 +120,9 @@ test("the heartbeat: env (HUB_V1_ENV, else STAGING), the switches (not spans), p
   await S.revoke("hb1", s.id, "signed out");
   let b = await HO.heartbeatBody();
   assert.equal(b.env, "prod");
-  assert.deepEqual(Object.keys(b.switches).sort(), ["econ", "erasure", "export", "heartbeat", "identity", "looks", "privacy", "sessions", "tickets"],
-                   "1.99ads: S1's identity and looks switches join (seam plan §12.10: additive)");
+  assert.deepEqual(Object.keys(b.switches).sort(), ["bans", "econ", "erasure", "export", "heartbeat", "identity", "looks", "pads", "privacy", "roles", "sessions",
+                                                    "switches", "tickets"],
+                   "1.99ads: S1's identity and looks switches join; S1 Q4: pads, roles, bans, switches (seam plan §12.10: additive)");
   assert.equal(b.switches.sessions, true);
   const sr = b.topics["sessions/revoked"];
   assert.equal(sr.pending, 1);
@@ -129,7 +130,7 @@ test("the heartbeat: env (HUB_V1_ENV, else STAGING), the switches (not spans), p
   assert.ok(sr.oldest_pending_at > 0);
   assert.equal(b.outbox_head, await HO.headId());
   assert.equal(b.version, HO.VERSION);
-  assert.equal(HO.VERSION, "1.99ads", "the letter of the release that last changed the seam (ADR 0007 D19)");
+  assert.equal(HO.VERSION, "1.99aec", "the letter of the release that last changed the seam (ADR 0007 D19; S1 Q4's)");
   process.env.STAGING = "1";
   assert.equal((await HO.heartbeatBody()).env, "staging");
   process.env.HUB_V1_ENV = "test";
@@ -372,6 +373,11 @@ test("1.99acm: snapshot pages are keyset reads - more than two pages, each sourc
 });
 
 test("rewind: kept rows of the topic above after_id are posted again; unknown topics and bad ids refused", async () => {
+  // (no hub while this runs, as in the fault-hook test below: emit() and rewind() wake the poster 50 ms later while a hub is
+  // configured, and that pass could post a re-queued row before the check; the pumpOnce waits out a pass already running)
+  const url = process.env.HUB_V1_URL;
+  delete process.env.HUB_V1_URL;
+  await HO.pumpOnce();
   await runQuery("DELETE FROM hub_outbox");
   await HO.setSettings({ erasure: true });
   for (let i = 0; i < 4; i++) await tx(() => HO.emit("privacy/forget", "forget:r" + i, { i }, { dedupe: "rw" + i }));
@@ -384,14 +390,18 @@ test("rewind: kept rows of the topic above after_id are posted again; unknown to
   await assert.rejects(HO.rewind("nope/topic", 0), (e) => e.status === 404);
   await assert.rejects(HO.rewind("privacy/forget", -1), (e) => e.status === 400);
   await runQuery("DELETE FROM hub_outbox");
+  if (url) process.env.HUB_V1_URL = url;
 });
 
 test("the fault hook runs between the hub's 2xx and posted_at (the contract suite kills v1 there)", async () => {
-  process.env.HUB_V1_URL = hubBase;
+  // (the hub URL is set after the emit: emit() wakes the poster 50 ms later while a hub is configured, and that pass would race
+  // the test's own two passes - S1 Q4's interlock read in setSettings made the window wide enough to lose it every time)
+  delete process.env.HUB_V1_URL;
   HO._resetPoster();
   await HO.setSettings({ erasure: true });
   await tx(() => HO.emit("privacy/forget", "forget:f1", { a: 1 }, { dedupe: "f1" }));
   await HO.setSettings({ erasure: false });
+  process.env.HUB_V1_URL = hubBase;
   let seen = null;
   HO._setFault(async (b) => { seen = { ...b, posted: (await rows("privacy/forget"))[0].posted_at }; throw new Error("killed"); });
   try { await HO.pumpOnce(); } catch (e) { assert.equal(e.message, "killed"); }

@@ -39,6 +39,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Ubuntu:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+    <%# S1 V2 (chatwidget.js): a page that loads the chat widget - the preconnect to the chat hub (ADR 0007 D5) and the text
+        styles' webfonts the line above doesn't load (Nunito, Comic Neue; D14: fonts in the page's head, the widget ships none) %>
+    <% const cwHead_ = locals.chatWidget && locals.chatWidget.head ? locals.chatWidget.head : null; if (cwHead_) { %>
+    <% (cwHead_.preconnect || []).forEach((o) => { %><link rel="preconnect" href="<%= o %>" crossorigin>
+    <% }) %><% if (cwHead_.fonts) { %><link href="<%= cwHead_.fonts %>" rel="stylesheet"><% } %>
+    <% } %>
     <link rel="stylesheet" href="/public/css/ds.css?v=3"><%# CL5 fix-up: v=3 - the pad chat's --ds-chat-* tokens (chatlog.css reads them) %>
     <link rel="stylesheet" href="/public/css/styles.css?v=6">
     <%# 1.99jo: page scripts translate with __t(key, englishDefault, vars), key = js.<area>.<name> - PATV_I18N holds the page language's

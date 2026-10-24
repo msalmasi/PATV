@@ -64,6 +64,19 @@
   <% if (!sensOk) { %><p class="adm-help" style="margin-top:10px">Pepe, the Reserve, loans and the stale-account cleanup are for site Admins and aren't shown to Staff.</p><% } %>
 </section>
 
+<%# S1 V2 (chatwidget.overviewCard, ADR 0007 D10 / D15): the chat hub's report queue - open reports and the ones undecided for
+    more than 14 days - drawn by <patv-modtools view="reports" mode="card"> (its views are slice M2's); only for chat.mod_queue
+    holders while the widget is installed. The hub decides what it shows; v1 makes no hub call. %>
+<% const cwTools_ = locals.chatWidget && locals.chatWidget.state === 'tools' ? locals.chatWidget : null; %>
+<% if (cwTools_) { %>
+<section class="adm-card" id="chatReports" aria-labelledby="chatReportsT">
+  <h2 id="chatReportsT">💬 Chat reports</h2>
+  <p class="adm-help">The chat hub's pads: open reports and those undecided for more than 14 days. <a href="/admin/chat/reports">Open the queue →</a></p>
+  <patv-modtools view="reports" mode="card" locale="<%= cwTools_.locale %>" theme="dark"></patv-modtools>
+  <%- include('../partials/chat-widget-boot', { cw: cwTools_ }) %>
+</section>
+<% } %>
+
 <section class="adm-card" aria-labelledby="whereT">
   <h2 id="whereT">Where things are</h2>
   <div class="adm-kv">

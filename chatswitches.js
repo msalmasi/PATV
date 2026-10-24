@@ -1,32 +1,32 @@
-// chatswitches.js — v1's chat-hub switches (S1, release L1; ADR 0007 D3, D15; seam plan §12.1 S1-D7, §12.4, §12.10). v1 owns
-// them; the hub mirrors them (switches/changed).
+// chatswitches.js — S1 Q4 (release L1): v1's chat-hub switches and the switches/changed topic of the v1 seam (ADR 0007 D3,
+// D15; seam plan §12.1 S1-D7, §12.4, §12.10). v1 owns them; the hub mirrors them.
 //
 //   chat_switches(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated INTEGER, updated_by TEXT)
 //     CHAT_HUB   on | off (default off) - the chat hub's global kill switch: v1 renders the hub's chat widget only while it is
 //                on (and the pad's pad_hub.chat_backend is hub, V2); the hub refuses r: channels of hub pads while it is off.
-//   (dm_backend v1 | shadow | hub is S5's: not a key here yet.)
-//   updated_by is the admin's username - an audit label (accountMerge.js classifies it "deny"); admin_audit has the id.
+//   (dm_backend v1 | shadow | hub is S5's: not a key here yet - the hub accepts and stores it, with no S1 effect.)
 //
-// Written ONLY by /admin/chat (adminchat.js, S1 V1) through set(): it checks the key, the value and the interlock, writes the row
-// and an admin_audit row ("chat.switch" {key, from, to}, with the reason) in ONE transaction; WHO may (a Pepe owner turns
-// CHAT_HUB on, any admin turns it off - D15, OQ-19) and the confirm step are adminchat's decisions, not this module's.
-// chatHubOn() reads a per-process cache (set() / load() / init() refresh it): a reader that must see an out-of-band write (a
-// script, the sqlite3 CLI) at once reads chatHubOnNow() or calls load() on a short timer.
+// Written ONLY by /admin/chat (V1's adminchat.js) through set(): it checks the key, the value and the interlock, writes the row
+// and an admin_audit row ("chat.switch" {key, from, to}, with the reason) in ONE transaction (V1's set(), after V1's review);
+// WHO may (a Pepe owner turns CHAT_HUB on, any admin turns it off - D15, OQ-19) and the confirm step are adminchat's
+// decisions, not this module's. chatHubOn() reads a per-process cache (set() / load() / init() refresh it): a reader that must
+// see an out-of-band write (a script, the sqlite3 CLI) at once reads chatHubOnNow() or calls load() on a short timer.
 //
 // The interlock (S1-D7, §12.10): CHAT_HUB = on is refused (409 chat_hub_needs, err.needs = the missing switches) unless the
-// twelve seam switches of INTERLOCK are on, read inside the writing transaction (dbUtils.tx serialises the process's
-// transactions). Turning CHAT_HUB off is never refused.
+// twelve seam switches of INTERLOCK are on; huboutbox.setSettings refuses turning one of them off while CHAT_HUB is on (409
+// chat_hub_on, "turn CHAT_HUB off first"). Turning CHAT_HUB off is never refused. Both checks read the database inside the
+// writing transaction (dbUtils.tx serialises every transaction of the process), so the two can't cross.
 //
-// Shared with S1 Q4, built in parallel: Q4's version of this module has the same table, API and rules and adds the rest - the
-// switches/changed topic (the triggers on this table, the payload builder, the snapshot) and huboutbox.setSettings' half of the
-// interlock (no seam switch CHAT_HUB needs goes off while it is on: 409 chat_hub_on). This file is V1's subset of it: when the
-// two branches meet, keep Q4's file WITH V1's set() (the audit row inside the transaction, after V1's review; Q4's draft
-// writes it after the commit and swallows a failure) - test/adminchat.test.js fails on a merge that keeps the old one.
+// The topic: switches/changed, entity sw:<key>, payload {key, value, updated_at: ms|null}; triggers (insert / update of value /
+// delete, gated by the hubseam `switches` switch) write (topic, entity) only; the snapshot lists every key (a key without a row
+// is its default, updated_at null) - v1 always lists every key.
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 
+const TOPIC = "switches/changed";
+const SWITCH = "switches";
 const KEYS = Object.freeze({ CHAT_HUB: Object.freeze({ values: Object.freeze(["on", "off"]), def: "off" }) });
-// S1-D7: what CHAT_HUB = on needs (the S0 seam, the privacy seam, and every S1 topic; pads / roles / bans / switches are Q4's)
+// S1-D7: what CHAT_HUB = on needs (the S0 seam, the privacy seam, and every S1 topic)
 const INTERLOCK = Object.freeze(["tickets", "sessions", "heartbeat", "privacy", "erasure", "export", "pads", "roles", "bans", "identity", "looks", "switches"]);
 
 class Refuse extends Error { constructor(status, code, msg, extra) { super(msg); this.status = status; this.code = code; this.refuse = true; Object.assign(this, extra || {}); } }
@@ -35,7 +35,7 @@ let clock = () => Date.now();
 let CACHE = new Map();                     // key -> {value, updated, updated_by}
 
 let ready = null;
-/** The table and the cache. */
+/** The table and the cache (the topic's triggers are installTriggers(), called by huboutbox.init() - the outbox must exist). */
 function init() {
   if (!ready) {
     ready = (async () => {
@@ -60,7 +60,7 @@ function get(key) {
   return r && k.values.includes(r.value) ? r.value : k.def;
 }
 const chatHubOn = () => get("CHAT_HUB") === "on";
-/** Every key: {key: {value, updated, updated_by, default}} (for /admin/chat). */
+/** Every key: {key: {value, updated, updated_by, default}} (for /admin/chat and /admin/keys#seam). */
 function all() {
   const out = {};
   for (const [key, k] of Object.entries(KEYS)) {
@@ -77,9 +77,19 @@ async function needsNow() {
   const on = new Set((await getQuery("SELECT key FROM hubseam_settings WHERE value = 'true'").catch(() => [])).map((r) => String(r.key)));
   return INTERLOCK.filter((k) => !on.has(k));
 }
-/** Is CHAT_HUB on - read from the database. */
-async function chatHubOnNow() {
-  const r = (await getQuery("SELECT value FROM chat_switches WHERE key = 'CHAT_HUB'").catch(() => []))[0];
+/**
+ * Is CHAT_HUB on - read from the database. A reader (V2's widget mount) fails closed: a read that fails is "off". opts.strict
+ * (huboutbox.setSettings' half of the interlock, inside its transaction) rethrows a failed read instead, so the guard can't
+ * fail open; only a missing table (no row was ever written: the default, off) is "off" there too.
+ */
+async function chatHubOnNow({ strict = false } = {}) {
+  let rows;
+  try { rows = await getQuery("SELECT value FROM chat_switches WHERE key = 'CHAT_HUB'"); }
+  catch (e) {
+    if (!strict || /no such table/i.test(String(e && e.message))) return false;
+    throw e;
+  }
+  const r = rows[0];
   return !!r && r.value === "on";
 }
 
@@ -130,5 +140,53 @@ async function set(key, value, actor = null, { reason = null } = {}) {
   return { key: res.key, value: res.value, changed: res.changed, updated: res.updated };
 }
 
-module.exports = { KEYS, INTERLOCK, Refuse, init, load, get, chatHubOn, all, needs, needsNow, chatHubOnNow, set,
-                   _setClock: (f) => { clock = f || (() => Date.now()); } };
+// ── the topic ──
+const MS_SQL = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
+const gate = () => `(SELECT value FROM hubseam_settings WHERE key = '${SWITCH}') = 'true'`;
+const row = (expr) => `INSERT INTO hub_outbox (topic, entity, created_at) SELECT '${TOPIC}', 'sw:' || ${expr}, ${MS_SQL} WHERE ${expr} IS NOT NULL;`;
+function triggerSql() {
+  const T = [];
+  const add = (name, on, body, when = "") => T.push([`hub_s1_sw_${name}_v1`, `CREATE TRIGGER IF NOT EXISTS hub_s1_sw_${name}_v1 ${on}
+    WHEN ${gate()}${when ? " AND (" + when + ")" : ""} BEGIN ${body} END`]);
+  add("i", "AFTER INSERT ON chat_switches", row("NEW.key"));
+  add("u", "AFTER UPDATE OF key, value ON chat_switches", row("NEW.key") + " " + row("(CASE WHEN OLD.key IS NOT NEW.key THEN OLD.key END)"),
+      "OLD.key IS NOT NEW.key OR OLD.value IS NOT NEW.value");
+  add("d", "AFTER DELETE ON chat_switches", row("OLD.key"));
+  return T;
+}
+async function installTriggers() {
+  await init();
+  await require("./hubpads").installTriggers(triggerSql());
+}
+
+/**
+ * sw:<key> payloads, read now. -> Map(entity -> {key, value, updated_at}). A key of KEYS posts what get() reads: a stored value
+ * KEYS doesn't allow (written past set(): the sqlite3 CLI, a hand edit) posts the key's default, so the hub never holds a value
+ * v1 itself doesn't act on (fail closed: CHAT_HUB reads off on both sides). A key of another name: its stored value.
+ */
+async function build(entities) {
+  const out = new Map();
+  const keys = [...new Set([...(entities || [])].map(String))].filter((e) => /^sw:[A-Za-z0-9_]{1,40}$/.test(e)).map((e) => e.slice(3));
+  if (!keys.length) return out;
+  const rows = new Map((await getQuery(`SELECT key, value, updated FROM chat_switches WHERE key IN (${keys.map(() => "?").join(",")})`, keys))
+    .map((r) => [String(r.key), r]));
+  for (const key of keys) {
+    const r = rows.get(key);
+    const k = KEYS[key];
+    if (!r && !k) continue;                                // never a switch here: nothing to say (posted with payload null)
+    const value = !r ? k.def : !k ? String(r.value) : k.values.includes(String(r.value)) ? String(r.value) : k.def;
+    out.set("sw:" + key, { key, value, updated_at: r && Number(r.updated) ? Number(r.updated) : null });
+  }
+  return out;
+}
+/** The snapshot: every key (§12.6: v1 always lists every key), in entity byte order after `k` (the cursor), at most `limit`. */
+async function snapshotSource(k, limit) {
+  const ents = Object.keys(KEYS).map((key) => "sw:" + key)
+    .filter((e) => k == null || Buffer.compare(Buffer.from(e, "utf8"), Buffer.from(k, "utf8")) > 0)
+    .sort((a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"))).slice(0, limit);
+  const built = await build(ents);
+  return ents.map((entity) => ({ entity, payload: built.get(entity) }));
+}
+
+module.exports = { TOPIC, SWITCH, KEYS, INTERLOCK, Refuse, init, load, get, chatHubOn, all, needs, needsNow, chatHubOnNow, set, triggerSql, installTriggers,
+                   build, snapshotSource, _setClock: (f) => { clock = f || (() => Date.now()); } };

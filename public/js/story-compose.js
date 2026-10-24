@@ -40,7 +40,7 @@
     dlg.addEventListener('click', function (e) { if (e.target === dlg) close(); });
     document.addEventListener('keydown', onKey);
     document.body.appendChild(dlg);
-    fetch('/api/stories/targets', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+    fetch('/api/stories/targets' + (pad && !/^user:|^profile$/i.test(String(pad)) ? '?pad=' + encodeURIComponent(String(pad)) : ''), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
       if (!dlg) return;
       if (!d.ok) { msg.className = 'sc-msg bad'; msg.textContent = d.error || _t('js.feed.sc.not_now', 'Not right now.'); return; }
       if (d.refusal || !d.pads || !d.pads.length) { msg.className = 'sc-msg bad'; msg.textContent = d.refusal || _t('js.feed.sc.nowhere', 'There\'s nowhere you can post a story right now.'); addClose(card); return; }

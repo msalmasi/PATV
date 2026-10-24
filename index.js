@@ -271,6 +271,9 @@ tz.ensure();                                         // the user_timezone table 
 
 let clients = []; // Keep track of connected clients for SSE
 
+// S1 V2 (release L4): the chat hub's vendored widget (public/js/patv-chat/, chatwidget.js) - its content-hashed files
+// `immutable`, manifest.json / releases.json revalidated, nosniff; mounted before the general /public so its headers win
+app.use("/public/js/patv-chat", require("./chatwidget").staticFiles());
 // Serve static files from the public directory
 app.use("/public", express.static("public"));
 // 1.99hl: the site icon - the pixel Pepe (public/favicon.ico 16/32/48 + PNGs). Browsers ask for /favicon.ico and
@@ -314,6 +317,9 @@ require("./adminroles").register(app, { addUser });   // 1.99acj: /admin/roles -
 // the wishes, POST /api/pepe/backends (backends.js)
 require("./backends").register(app, { addUser, isBotToken });
 require("./chatticket").register(app, { addUser });
+// S1 V2 (release L4): the chat widget's <patv-modtools> admin hosts, /admin/chat/<reports|held|modlog|bans|audit|switches>
+// (chatwidget.js; /admin/chat itself, the break-glass form, is release L1's)
+require("./chatwidget").register(app, { addUser });
 require("./huboutbox").start();
 // S1 V1 (release L1, ADR 0007 D15): 💬 /admin/chat - the chat hub's break-glass form: CHAT_HUB and each pad's chat backend
 // (chatswitches.js; on = a Pepe owner's with a confirm step, off = any admin's, one click; audited; never calls the hub)
@@ -1213,7 +1219,7 @@ app.get("/info", addUser, (req, res) => {
 // Clips & snaps (moved off Netlify) and prediction markets. The feed (1.99bv, feedweb.js) owns /feed:
 // user posts to the main feed and to rooms, plus these captures.
 // 1.99ck: "pads" (p/<slug>) - the 301s from the old /rooms/..., /feed/c/<slug> addresses come first
-require("./pads").register(app);
+require("./pads").register(app, { addUser });   // S1 V2: addUser for /p/<slug>/mod's chat moderation page (chatwidget.padModPage)
 // 1.99fu: who can see a pad (Public / Members / Approved) - its page + API gates run before every pad route below
 require("./padaccess").register(app, { addUser });
 // adultgate site: the 18+ pad gate's owner switch (/pads/admin#adult, off by default) + the one-time age confirmation (/confirm-age)

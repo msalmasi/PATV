@@ -40,10 +40,13 @@
 // Switches (hubseam_settings, /admin/keys#seam): tickets, heartbeat, sessions, privacy, econ, 1.99acm: erasure (the topics
 // privacy/account-deleted + privacy/forget: one fan-out, on together - D-3) and export (the hub part of "Download my data"),
 // 1.99ads: identity and looks (the S1 topics identity/changed, looks/changed; looks also gates the hub's looks call),
-// all off; spans (on: bridge spans only record, bridgespans.js). A topic whose switch is off writes nothing and serves no
-// snapshot. Nothing is sent while HUB_V1_URL is unset. Tickets can only be on together with `sessions` and `heartbeat` (a
-// revoked sign-in has to reach the hub, and the hub's 30-minute grace rides the heartbeat): setSettings refuses any other
-// combination, and chatticket.js won't mint without them.
+// S1 Q4 (release L1): pads, roles, bans and switches (pads/changed, roles/changed, bans/changed, switches/changed: hubpads.js,
+// hubroles.js, hubbans.js, chatswitches.js), all off; spans (on: bridge spans only record, bridgespans.js). A topic whose
+// switch is off writes nothing and serves no snapshot. Nothing is sent while HUB_V1_URL is unset. Tickets can only be on
+// together with `sessions` and `heartbeat` (a revoked sign-in has to reach the hub, and the hub's 30-minute grace rides the
+// heartbeat): setSettings refuses any other combination, and chatticket.js won't mint without them.
+// S1 Q4, the interlock (S1-D7, ADR 0007 D3; chatswitches.js): while CHAT_HUB is on, none of its twelve switches
+// (chatswitches.INTERLOCK) may be turned off here (409 chat_hub_on: turn CHAT_HUB off first, on /admin/chat).
 "use strict";
 const fs = require("fs");
 const http = require("http");
@@ -52,8 +55,11 @@ const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 
 // 1.99ads (S1 Q5b, release L3 - ADR 0007 D19: the letter of the release that changed the seam): the identity/changed and
 // looks/changed topics (hubidentity.js, hublooks.js + userlook.buildLooks), their switches, snapshots and batch readers, and
-// the hub's POST /internal/v1/looks (hubinbound.js). Q4 (release L1) adds pads/roles/bans/switches the same way.
-const VERSION = "1.99ads";
+// the hub's POST /internal/v1/looks (hubinbound.js).
+// 1.99aec (S1 Q4, release L1's second part; the next free letter when it reached staging, D19's merge-to-staging rule):
+// the pads/changed, roles/changed, bans/changed and switches/changed topics the same way, and the CHAT_HUB interlock.
+// (1.99ady and 1.99aea are V4's, 1.99adz V1's, 1.99aeb V2's: none changed the seam, so none was ever VERSION.)
+const VERSION = "1.99aec";
 const DAY = 86400000;
 const BATCH = 300;
 const POLL_MS = 1000;
@@ -64,11 +70,14 @@ const PAGE = 500;                      // snapshot rows per page (seam plan §2.
 const PENDING_ON_MS = DAY;             // an unanswered incognito ON request counts as pending this long (D-7's backstop)
 const TOPICS = { "sessions/revoked": "sessions", "privacy/changed": "privacy", "privacy/account-deleted": "erasure", "privacy/forget": "erasure",
                  "econ/committed": "econ",
-                 "identity/changed": "identity", "looks/changed": "looks" };                // 1.99ads: S1 (seam plan §12.2)
-const SNAPSHOT_TOPICS = ["sessions/revoked", "privacy/changed", "privacy/account-deleted", "privacy/forget", "identity/changed", "looks/changed"];
-const SWITCHES = ["tickets", "heartbeat", "sessions", "privacy", "erasure", "export", "econ", "spans", "identity", "looks"];
+                 "identity/changed": "identity", "looks/changed": "looks",                  // 1.99ads: S1 (seam plan §12.2)
+                 "pads/changed": "pads", "roles/changed": "roles", "bans/changed": "bans", "switches/changed": "switches" };   // S1 Q4
+const SNAPSHOT_TOPICS = ["sessions/revoked", "privacy/changed", "privacy/account-deleted", "privacy/forget", "identity/changed", "looks/changed",
+                         "pads/changed", "roles/changed", "bans/changed", "switches/changed"];
+const SWITCHES = ["tickets", "heartbeat", "sessions", "privacy", "erasure", "export", "econ", "spans", "identity", "looks", "pads", "roles", "bans", "switches"];
 const DEFAULTS = { tickets: false, heartbeat: false, sessions: false, privacy: false, erasure: false, export: false, econ: false, spans: true,
-                   identity: false, looks: false };
+                   identity: false, looks: false, pads: false, roles: false, bans: false, switches: false };
+const L1_SWITCHES = ["pads", "roles", "bans", "switches"];                                    // S1 Q4 (release L1)
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -84,6 +93,7 @@ function hubEnv() {
 
 let ready = null;
 let s1 = { ready: false, error: null };          // 1.99ads: the S1 topics' setup (hubidentity / hublooks init)
+let l1 = { ready: false, error: null };          // S1 Q4: release L1's topics (hubpads / hubroles / hubbans / chatswitches init)
 function init() {
   if (!ready) {
     ready = (async () => {
@@ -92,6 +102,12 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS hub_outbox_pending ON hub_outbox (posted_at, id)");
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS hub_outbox_dedupe ON hub_outbox (dedupe_key) WHERE dedupe_key IS NOT NULL");
       await runQuery("CREATE TABLE IF NOT EXISTS hubseam_settings (key TEXT PRIMARY KEY, value TEXT, updated INTEGER, actor TEXT)");
+      // S1 V4 review 2: first_on = when the switch was FIRST turned on (set once; the privacy page dates its erasure paragraph by
+      // it - a break-glass off / on doesn't re-date a published policy). A switch on before the column: its last change.
+      if (!(await getQuery("SELECT name FROM pragma_table_info('hubseam_settings')")).some((c) => c.name === "first_on")) {
+        await runQuery("ALTER TABLE hubseam_settings ADD COLUMN first_on INTEGER");
+      }
+      await runQuery("UPDATE hubseam_settings SET first_on = updated WHERE first_on IS NULL AND value = 'true' AND updated IS NOT NULL");
       const ms = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
       const gate = (sw) => `(SELECT value FROM hubseam_settings WHERE key = '${sw}') = 'true'`;
       // sessions/revoked: every revocation, whoever writes it (the site, an admin script), while the `sessions` switch is on
@@ -132,6 +148,21 @@ function init() {
           console.error("[hub_outbox] S1 topics (identity, looks):", s1.error);
         }
       }
+      // S1 Q4 (release L1): pads, roles, bans, switches - set up on their own (a failure here never takes identity / looks
+      // down), shown on /admin/keys#seam (status().l1) and keeping these four switches from turning on
+      l1 = { ready: false, error: null };
+      if (await hasTable("users")) {
+        try {
+          await require("./hubpads").init();
+          await require("./hubroles").init();
+          await require("./hubbans").init();
+          await require("./chatswitches").installTriggers();
+          l1.ready = true;
+        } catch (e) {
+          l1.error = String(e.message || e).slice(0, 200);
+          console.error("[hub_outbox] S1 topics (pads, roles, bans, switches):", l1.error);
+        }
+      }
       await reloadSettings();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -160,20 +191,36 @@ async function setSettings(patch, actor) {
     throw Object.assign(new Error("The identity / looks topics couldn't be set up on this site (see the seam status) - they can't be turned on."),
                         { status: 409, code: "s1_not_ready", refuse: true });
   }
+  if (L1_SWITCHES.some((k) => next[k] === true) && !l1.ready) {
+    throw Object.assign(new Error("The pads / roles / bans / switches topics couldn't be set up on this site (see the seam status) - they can't be turned on."),
+                        { status: 409, code: "l1_not_ready", refuse: true });
+  }
   if (after.tickets && !ticketsReady(after)) {
     throw Object.assign(new Error("Chat tickets need sign-outs to the hub (sessions) and the heartbeat on - turn those on first, or turn tickets off first."),
                         { status: 409, code: "tickets_need", refuse: true });
   }
+  const CS = require("./chatswitches");
   await tx(async () => {
+    // S1 Q4 (S1-D7): CHAT_HUB on needs every interlock switch - none that is on goes off under it (read here, in the writing
+    // transaction, so a concurrent CHAT_HUB change can't cross it)
+    const was = new Set((await getQuery("SELECT key FROM hubseam_settings WHERE value = 'true'")).map((r) => String(r.key)));
+    const offing = CS.INTERLOCK.filter((k) => next[k] === false && was.has(k));
+    // strict: a failed read refuses (rolls back) instead of reading "off" - this guard never fails open
+    if (offing.length && (await CS.chatHubOnNow({ strict: true }))) {
+      throw Object.assign(new Error(`CHAT_HUB is on and needs ${offing.join(", ")} - turn CHAT_HUB off first (Admin › Chat).`),
+                          { status: 409, code: "chat_hub_on", refuse: true, needs: offing });
+    }
     for (const [k, v] of Object.entries(next)) {
       // S1 V4 fix-up (review): `updated` / `actor` = when and by whom the VALUE last changed - /admin/keys#seam posts every switch
       // on each save, and the privacy page dates its erasure paragraph by this row (accountdelete.privacyCopy); every save is in
-      // the admin audit
-      await runQuery(`INSERT INTO hubseam_settings (key, value, updated, actor) VALUES (?, ?, ?, ?)
+      // the admin audit. Review 2: first_on - the first time it went on, kept for good
+      await runQuery(`INSERT INTO hubseam_settings (key, value, updated, actor, first_on) VALUES (?, ?, ?, ?, ?)
                       ON CONFLICT(key) DO UPDATE SET value = excluded.value,
                         updated = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.updated ELSE excluded.updated END,
-                        actor = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.actor ELSE excluded.actor END`,
-                     [k, v ? "true" : "false", now(), actor && actor.username ? String(actor.username).slice(0, 80) : null]);
+                        actor = CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.actor ELSE excluded.actor END,
+                        first_on = COALESCE(hubseam_settings.first_on,
+                                            CASE WHEN excluded.value = 'true' THEN COALESCE(CASE WHEN hubseam_settings.value IS excluded.value THEN hubseam_settings.updated END, excluded.updated) END)`,
+                     [k, v ? "true" : "false", now(), actor && actor.username ? String(actor.username).slice(0, 80) : null, v ? now() : null]);
     }
     if (actor && actor.userId) await require("./adminaudit").record(actor, "hubseam.settings", null, next, null);
     // 1.99acm: Pepe's hidden_h set is kept only while the privacy feed is on (hubhidden.js); with the switch already 'false'
@@ -250,6 +297,11 @@ const readers = {
   // 1.99ads (S1): acct:<userId> -> the identity / the look, read now (the batch readers below serve the poster)
   "identity/changed": async (entity) => (await readersMany["identity/changed"]([entity])).get(String(entity)) || null,
   "looks/changed": async (entity) => (await readersMany["looks/changed"]([entity])).get(String(entity)) || null,
+  // S1 Q4: pad: / pm: -> the pad / the membership; acct: -> the global role; fb: -> the feed ban; sw: -> the chat switch
+  "pads/changed": async (entity) => (await readersMany["pads/changed"]([entity])).get(String(entity)) || null,
+  "roles/changed": async (entity) => (await readersMany["roles/changed"]([entity])).get(String(entity)) || null,
+  "bans/changed": async (entity) => (await readersMany["bans/changed"]([entity])).get(String(entity)) || null,
+  "switches/changed": async (entity) => (await readersMany["switches/changed"]([entity])).get(String(entity)) || null,
 };
 /** 1.99ads: topics whose rows the poster reads in ONE pass per batch (a batch of 300 looks is one set of queries, not 300).
  *  entities -> Map(entity -> payload); an entity of another shape is left out (posted with payload null). */
@@ -258,6 +310,11 @@ const byEntity = (m) => new Map([...m].map(([id, p]) => ["acct:" + id, p]));
 const readersMany = {
   "identity/changed": async (entities) => byEntity(await require("./hubidentity").build(acctIds(entities))),
   "looks/changed": async (entities) => byEntity(await require("./userlook").buildLooks(acctIds(entities), { card: true, t: now() })),
+  // S1 Q4 (release L1): each reader already answers Map(entity -> payload)
+  "pads/changed": async (entities) => require("./hubpads").build(entities, now()),
+  "roles/changed": async (entities) => require("./hubroles").build(entities),
+  "bans/changed": async (entities) => require("./hubbans").build(entities, now()),
+  "switches/changed": async (entities) => require("./chatswitches").build(entities),
 };
 
 /** The hub's account_id for a users.userId: the ticket's `sub` (chatticket.subjectOf - a legacy id -> its UUIDv5 when
@@ -633,6 +690,21 @@ const SOURCES = {
   "looks/changed": {
     looks: async (k, limit, t) => require("./hublooks").snapshotSource(bound("acct:", k), limit, t),
   },
+  // S1 Q4 (release L1, seam plan §12.6): every registry row then every approved member; accounts with a role; live feed
+  // bans; every chat switch key
+  "pads/changed": {
+    pads: async (k, limit, t) => require("./hubpads").snapshotPads(bound("pad:", k), limit, t),
+    members: async (k, limit, t) => require("./hubpads").snapshotMembers(bound("pm:", k), limit, t),
+  },
+  "roles/changed": {
+    roles: async (k, limit) => require("./hubroles").snapshotSource(bound("acct:", k), limit),
+  },
+  "bans/changed": {
+    bans: async (k, limit, t) => require("./hubbans").snapshotSource(k, limit, t),
+  },
+  "switches/changed": {
+    switches: async (k, limit) => require("./chatswitches").snapshotSource(k, limit),
+  },
 };
 
 /** privacy/changed incognito entities with non-default state: confirmed ON (Pepe's reports: incognito_state for linked keys,
@@ -807,8 +879,11 @@ async function status() {
            pending: p.n || 0, oldest_pending: p.oldest || null, posted: q.n || 0, head: await headId(), topics: await topicStats(),
            last_post: lastPost, heartbeat: lastBeat, retry_in_ms: wait, failing: topics, inbound, export_wait: exportWait,
            // 1.99ads: links left out of identity rows (they'd fail the hub's platform rule) and the looks call's counts
-           s1: { ready: s1.ready, error: s1.error, identity: require("./hubidentity").status(), looks: require("./hublooks").status() } };
+           s1: { ready: s1.ready, error: s1.error, identity: require("./hubidentity").status(), looks: require("./hublooks").status() },
+           // S1 Q4: release L1's topics, the chat switches (CHAT_HUB is set on /admin/chat) and what CHAT_HUB still needs
+           l1: { ready: l1.ready, error: l1.error, chat: safeChat(), needs: require("./chatswitches").needs(settings()) } };
 }
+function safeChat() { try { return require("./chatswitches").all(); } catch (e) { return null; } }
 
 // ── econ/committed (§13): idemBegin's done() for a key in the hub interaction namespace ──
 /**
@@ -849,11 +924,13 @@ function stop() { while (timers.length) clearInterval(timers.pop()); }
 module.exports = {
   init, start, stop, emit, settings, setSettings, reloadSettings, on, pumpOnce, pump, heartbeatOnce, heartbeatBody, cleanup, status, idemDone, request,
   postSigned, getSigned, insecureUrl, urlHasPath, refusal, hubEnv, headId, topicStats, snapshot, rewind, accountOf, ticketsReady, readers,
-  privateActivity, tailnetOrLoopback, TOPICS, SNAPSHOT_TOPICS, SWITCHES, DEFAULTS, VERSION, BATCH, PAGE, KEEP_MS, readersMany,
+  privateActivity, tailnetOrLoopback, TOPICS, SNAPSHOT_TOPICS, SWITCHES, DEFAULTS, VERSION, BATCH, PAGE, KEEP_MS, readersMany, L1_SWITCHES,
   _scan: () => ({ ...scan }), _resetScan: () => { scan.resolved = 0; scan.parsed = 0; },
   clockNow: () => now(),                       // 1.99ads: the seam's clock (the looks call reads perks at it; tests set it)
   _setClock: (f) => { clock = f || (() => Date.now()); },
   _setFault: (f) => { fault = f || null; },
   _setAccountOf: (f) => { accountOverride = f || null; },
   _resetPoster: () => { backoffMs = 0; retryAt = 0; lastPost = null; lastBeat = null; topicFail.clear(); },
+  // tests: release L1's setup state (a failed setup keeps its four switches from turning on: l1_not_ready)
+  _l1: (st) => { if (st) l1 = { ready: !!st.ready, error: st.error == null ? null : String(st.error) }; return { ...l1 }; },
 };

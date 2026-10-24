@@ -1,9 +1,11 @@
-// Offline tests for 1.99x: "PATV Lounge" -> "Camfrog Lounge" and pad platforms.
-//   - the lounge_camfrog_v1 migration on a pre-1.99x registry: title / description / slug swapped only while
-//     they still hold the old seeded values, once (idempotent), admin edits never overwritten; id unchanged
+// Offline tests for pad platforms and the Lounge's name: 1.99x renamed "PATV Lounge" to "Camfrog Lounge"; S1 Q4 (ADR 0007 D1,
+// the owner's OQ-1 answer) renames it back to the "PATV Lounge" (slug patv-lounge), camfrog-lounge kept as a 301.
+//   - the lounge_patv_v1 migration on a 1.99x registry: title / description / slug swapped only while they still hold a seeded
+//     value, once (idempotent), admin edits never overwritten; the old slug becomes the pad's alias; id unchanged
 //   - the platform column: derived once for older rows (patv: -> site, else camfrog), twitch / discord valid
-//   - the retired slug: /p/patv-lounge[/<sub>] 301s to /p/camfrog-lounge with the query kept (also /rooms, /feed/c)
-//   - p/patv-lounge in old post text still autolinks (to the current address)
+//   - the retired slugs: /p/camfrog-lounge[/<sub>] (and the 1.99x one, /p/patv-lounge, when an admin moved the pad) 301 to the
+//     pad's current slug with the query kept (also /rooms, /feed/c)
+//   - p/camfrog-lounge in old post text still autolinks (to the current address)
 //   - the platform badge html
 //   NODE_PATH=G:/PATV/node_modules node --test test/pad-platform.test.js
 "use strict";
@@ -24,15 +26,16 @@ const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const rooms = require(path.join(repo, "rooms"));
 const pads = require(path.join(repo, "pads"));
 
-const OLD_DESC = "The general PATV pad: anything that isn't about one Camfrog room. Old main-feed posts live here.";
-const NEW_DESC = "The general Camfrog pad: hang out, share anything, talk about any room or none.";
+const CI_DESC = "The general PATV community: anything that isn't about one room. Old main-feed posts live here.";      // 1.99ci
+const CAMFROG_DESC = "The general Camfrog pad: hang out, share anything, talk about any room or none.";                   // 1.99x
+const NEW_DESC = "The general PATV pad: hang out, share anything, talk about any room or none.";                          // S1 Q4
 const row = async (id) => (await getQuery("SELECT * FROM rooms_registry WHERE room_id = ?", [id]))[0];
 let base, server;
 
 test.before(async () => {
   await runQuery(`CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT, class TEXT DEFAULT 'pleb',
                   camfrogUsername TEXT, discordUsername TEXT, twitchDisplayname TEXT)`);
-  // a pre-1.99x registry (no platform column), already seeded with the old Lounge
+  // a registry from before the platform column (1.99x added it), already holding the 1.99x Lounge (prod's state)
   await runQuery(`CREATE TABLE rooms_registry (
     room_id TEXT PRIMARY KEY, slug TEXT NOT NULL, title TEXT, description TEXT, banner TEXT,
     owner_kind TEXT NOT NULL DEFAULT 'none', owner_user_id TEXT,
@@ -41,11 +44,14 @@ test.before(async () => {
   await runQuery("CREATE TABLE rooms_kv (key TEXT PRIMARY KEY, value TEXT)");
   const ins = (id, slug, title, desc, kind) => runQuery("INSERT INTO rooms_registry (room_id, slug, title, description, owner_kind, created, updated) VALUES (?, ?, ?, ?, ?, 1, 1)",
                                                         [id, slug, title, desc, kind]);
-  await ins("patv:lounge", "patv-lounge", "PATV Lounge", OLD_DESC, "house");
+  await ins("patv:lounge", "camfrog-lounge", "Camfrog Lounge", CAMFROG_DESC, "house");
   await ins("PepeFrog.Room", "pepefrog-room", "Pepe's Pad", null, "house");
   await ins("Some.Room", "some-room", "Some Room", null, "none");
   await ins("discord:12345", "discord-12345", "A Discord server", null, "none");
-  for (const id of ["patv:lounge", "PepeFrog.Room", "PepeBeta.Room", "plant_based_chatting"]) await runQuery("INSERT INTO rooms_kv (key, value) VALUES (?, 'house')", ["seeded:" + id]);
+  for (const id of ["patv:lounge", "PepeFrog.Room", "PepeBeta.Room", "plant_based_chatting", "patv:staff", "patv:canary"]) {
+    await runQuery("INSERT INTO rooms_kv (key, value) VALUES (?, 'house')", ["seeded:" + id]);
+  }
+  await runQuery("INSERT INTO rooms_kv (key, value) VALUES ('lounge_camfrog_v1', '{\"at\":1,\"title\":true,\"description\":true,\"slug\":true}')");
   await rooms.init();
 
   const app = express();
@@ -63,15 +69,20 @@ const get = async (url, method = "GET") => {
   return { status: r.status, location: r.headers.get("location"), text: await r.text() };
 };
 
-test("migration: the old Lounge becomes the Camfrog Lounge (title, description, slug), id unchanged, marked done", async () => {
+test("migration: the Camfrog Lounge is the PATV Lounge again (title, description, slug; camfrog-lounge its alias), id unchanged, marked done", async () => {
   const L = await row("patv:lounge");
-  assert.deepEqual([L.room_id, L.title, L.description, L.slug], ["patv:lounge", "Camfrog Lounge", NEW_DESC, "camfrog-lounge"]);
-  assert.ok(!/main.feed/i.test(L.description), "no main-feed history in the new description");
-  const done = JSON.parse(await rooms.kvGet("lounge_camfrog_v1"));
+  assert.deepEqual([L.room_id, L.title, L.description, L.slug], ["patv:lounge", "PATV Lounge", NEW_DESC, "patv-lounge"]);
+  assert.ok(!/main.feed/i.test(L.description), "no main-feed history in the description");
+  const done = JSON.parse(await rooms.kvGet("lounge_patv_v1"));
   assert.deepEqual([done.title, done.description, done.slug], [true, true, true]);
+  assert.deepEqual(await getQuery("SELECT slug, room_id FROM pad_slug_aliases"), [{ slug: "camfrog-lounge", room_id: "patv:lounge" }],
+                   "the 1.99x address is the pad's alias (nobody else can take it)");
   const R = await rooms.get(rooms.LOUNGE_ID);
-  assert.equal(R.title, "Camfrog Lounge");
-  assert.equal(R.slug, "camfrog-lounge");
+  assert.equal(R.title, "PATV Lounge");
+  assert.equal(R.slug, "patv-lounge");
+  assert.equal(rooms.aliasTarget("camfrog-lounge"), "patv:lounge");
+  const ev = (await getQuery("SELECT what, actor, detail FROM room_events WHERE room_id = 'patv:lounge'"))[0];
+  assert.deepEqual(ev, { what: "page", actor: "migration", detail: "PATV Lounge rename (S1): title, description, slug" });
 });
 
 test("platform: derived once for older rows (patv: -> site, else camfrog); twitch / discord valid; Lounge is a SITE pad", async () => {
@@ -99,32 +110,32 @@ test("platform: derived once for older rows (patv: -> site, else camfrog); twitc
   assert.equal((await row("New.Room")).platform, "camfrog");
 });
 
-test("redirects: /p/patv-lounge (and its sub-pages, /rooms, /feed/c) 301 to /p/camfrog-lounge, query kept", async () => {
+test("redirects: /p/camfrog-lounge (and its sub-pages, /rooms, /feed/c) 301 to /p/patv-lounge, query kept", async () => {
   const cases = [
-    ["/p/patv-lounge", "/p/camfrog-lounge"],
-    ["/p/patv-lounge?sort=top&t=week", "/p/camfrog-lounge?sort=top&t=week"],
-    ["/p/PATV-Lounge?x=1", "/p/camfrog-lounge?x=1"],
-    ["/p/patv-lounge/manage?tab=page", "/p/camfrog-lounge/manage?tab=page"],
-    ["/p/patv-lounge/mod", "/p/camfrog-lounge/mod"],
-    ["/rooms/patv-lounge?sort=new", "/p/camfrog-lounge?sort=new"],
-    ["/rooms/patv-lounge/manage", "/p/camfrog-lounge/settings?tab=stage"],     // 1.99dc: straight to the settings hub, one hop
-    ["/feed/c/patv-lounge?sort=top", "/p/camfrog-lounge?sort=top"],
+    ["/p/camfrog-lounge", "/p/patv-lounge"],
+    ["/p/camfrog-lounge?sort=top&t=week", "/p/patv-lounge?sort=top&t=week"],
+    ["/p/Camfrog-Lounge?x=1", "/p/patv-lounge?x=1"],
+    ["/p/camfrog-lounge/manage?tab=page", "/p/patv-lounge/manage?tab=page"],
+    ["/p/camfrog-lounge/mod", "/p/patv-lounge/mod"],
+    ["/rooms/camfrog-lounge?sort=new", "/p/patv-lounge?sort=new"],
+    ["/rooms/camfrog-lounge/manage", "/p/patv-lounge/settings?tab=stage"],     // 1.99dc: straight to the settings hub, one hop
+    ["/feed/c/camfrog-lounge?sort=top", "/p/patv-lounge?sort=top"],
   ];
   for (const [from, to] of cases) {
     const r = await get(from);
     assert.equal(r.status, 301, from);
     assert.equal(r.location, to, from);
   }
-  const ok = await get("/p/camfrog-lounge");
-  assert.equal(ok.status, 200);
-  assert.equal(ok.text, "pad camfrog-lounge");
+  const ok = await get("/p/patv-lounge");
+  assert.equal(ok.status, 200, "the current address is not redirected (patv-lounge is the 1.99x retired slug no more)");
+  assert.equal(ok.text, "pad patv-lounge");
   assert.equal((await get("/p/some-room")).status, 200, "other pads are untouched");
-  assert.equal((await get("/p/patv-lounge", "POST")).status, 200, "only GET / HEAD redirect");
+  assert.equal((await get("/p/camfrog-lounge", "POST")).status, 200, "only GET / HEAD redirect");
 });
 
-test("autolink: p/patv-lounge in old post text still links (to the current address); p/camfrog-lounge links too", async () => {
-  assert.equal(pads.padRefs("old post: p/patv-lounge!"), 'old post: <a class="pad-ref" href="/p/camfrog-lounge">p/patv-lounge</a>!');
-  assert.equal(pads.padRefs("new: p/camfrog-lounge"), 'new: <a class="pad-ref" href="/p/camfrog-lounge">p/camfrog-lounge</a>');
+test("autolink: p/camfrog-lounge in old post text still links (to the current address); p/patv-lounge links too", async () => {
+  assert.equal(pads.padRefs("old post: p/camfrog-lounge!"), 'old post: <a class="pad-ref" href="/p/patv-lounge">p/camfrog-lounge</a>!');
+  assert.equal(pads.padRefs("new: p/patv-lounge"), 'new: <a class="pad-ref" href="/p/patv-lounge">p/patv-lounge</a>');
   assert.equal(pads.padRefs("p/no-such-pad"), "p/no-such-pad");
 });
 
@@ -135,37 +146,44 @@ test("badges: Camfrog / Site (Twitch / Discord ready), compact, by platform / pa
   assert.match(pads.padBadge("discord"), /pp-discord[^>]*>💬 Discord Pad</);
   assert.match(pads.padBadge("site", { compact: true }), /class="pad-plat pp-site sm" title="A Site Pad[^"]*">🌐<\/span>/);
   assert.match(pads.padBadge({ id: "patv:lounge" }), /Site Pad/);
-  assert.match(pads.padBadge({ slug: "camfrog-lounge" }), /Site Pad/, "the Camfrog Lounge is a site pad despite its name");
+  assert.match(pads.padBadge({ slug: "patv-lounge" }), /Site Pad/, "the PATV Lounge is a site pad");
   assert.match(pads.padBadge({ slug: "pepefrog-room" }), /Camfrog Pad/);
   assert.match(pads.padBadge("PepeFrog.Room"), /Camfrog Pad/);
   assert.match(pads.padBadge(null), /Camfrog Pad/);
   // Hot on PATV: a compact badge before p/<slug>
   const fx = { fileUrl: (x) => x, num: (n) => String(n), ago: () => "1m", padBadge: pads.padBadge };
-  const hot = { posts: [{ url: "/feed/p/x", title: "t", community: { slug: "camfrog-lounge", title: "Camfrog Lounge", platform: "site" }, score: 1, comments: 0, created: 0, kind: "text" }] };
+  const hot = { posts: [{ url: "/feed/p/x", title: "t", community: { slug: "patv-lounge", title: "PATV Lounge", platform: "site" }, score: 1, comments: 0, created: 0, kind: "text" }] };
   const html = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot, fx });
-  assert.match(html, /<span class="pad-plat pp-site sm"[^>]*>🌐<\/span> p\/camfrog-lounge/);
+  assert.match(html, /<span class="pad-plat pp-site sm"[^>]*>🌐<\/span> p\/patv-lounge/);
 });
 
-test("migration is idempotent and never overwrites an admin's edits", async () => {
+test("migration is idempotent and never overwrites an admin's edits; a pre-1.99x install keeps its PATV Lounge", async () => {
   // run again: the marker stops it
   assert.deepEqual(await rooms.migrateLounge(), { title: false, description: false, slug: false });
-  // an install whose admin edited the Lounge before 1.99x: nothing they changed is touched
-  await runQuery("DELETE FROM rooms_kv WHERE key = 'lounge_camfrog_v1'");
+  // an install whose admin edited the Lounge: nothing they changed is touched
+  await runQuery("DELETE FROM rooms_kv WHERE key = 'lounge_patv_v1'");
   await runQuery("UPDATE rooms_registry SET title = 'The Couch', description = 'Our own words.', slug = 'couch' WHERE room_id = 'patv:lounge'");
   assert.deepEqual(await rooms.migrateLounge(), { title: false, description: false, slug: false });
   let L = await row("patv:lounge");
   assert.deepEqual([L.title, L.description, L.slug], ["The Couch", "Our own words.", "couch"]);
-  // partly edited: only the still-seeded fields change (old title + 1.99ci text, custom slug kept)
-  await runQuery("DELETE FROM rooms_kv WHERE key = 'lounge_camfrog_v1'");
-  await runQuery("UPDATE rooms_registry SET title = 'PATV Lounge', description = ? WHERE room_id = 'patv:lounge'",
-                 ["The general PATV community: anything that isn't about one room. Old main-feed posts live here."]);
+  // partly edited: only the still-seeded fields change (the 1.99x title + the 1.99ci text, the custom slug kept)
+  await runQuery("DELETE FROM rooms_kv WHERE key = 'lounge_patv_v1'");
+  await runQuery("UPDATE rooms_registry SET title = 'Camfrog Lounge', description = ? WHERE room_id = 'patv:lounge'", [CI_DESC]);
   assert.deepEqual(await rooms.migrateLounge(), { title: true, description: true, slug: false });
   L = await row("patv:lounge");
-  assert.deepEqual([L.room_id, L.title, L.description, L.slug], ["patv:lounge", "Camfrog Lounge", NEW_DESC, "couch"]);
+  assert.deepEqual([L.room_id, L.title, L.description, L.slug], ["patv:lounge", "PATV Lounge", NEW_DESC, "couch"]);
   // and once more: a no-op
   assert.deepEqual(await rooms.migrateLounge(), { title: false, description: false, slug: false });
-  // a slug the admin changed means /p/patv-lounge follows the pad to its current slug
+  // a slug the admin changed means /p/camfrog-lounge (and the 1.99x /p/patv-lounge) follow the pad to its current slug
   await rooms.loadCache();
-  const r = await get("/p/patv-lounge?a=1");
-  assert.equal(r.location, "/p/couch?a=1");
+  assert.equal((await get("/p/camfrog-lounge?a=1")).location, "/p/couch?a=1");
+  assert.equal((await get("/p/patv-lounge?a=1")).location, "/p/couch?a=1");
+  // a pre-1.99x install (the PATV Lounge, never renamed: no marker at all): the name stays, the old seed text is replaced, and
+  // the 1.99x rename never runs again (its marker is set)
+  await runQuery("DELETE FROM rooms_kv WHERE key IN ('lounge_patv_v1', 'lounge_camfrog_v1')");
+  await runQuery("UPDATE rooms_registry SET title = 'PATV Lounge', slug = 'patv-lounge', description = ? WHERE room_id = 'patv:lounge'", [CI_DESC]);
+  assert.deepEqual(await rooms.migrateLounge(), { title: false, description: true, slug: false });
+  L = await row("patv:lounge");
+  assert.deepEqual([L.title, L.description, L.slug], ["PATV Lounge", NEW_DESC, "patv-lounge"]);
+  assert.ok(JSON.parse(await rooms.kvGet("lounge_camfrog_v1")).superseded, "the 1.99x rename is marked done");
 });

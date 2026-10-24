@@ -1,0 +1,7 @@
+<%# S1 V2 (chatwidget.js, ADR 0007 D14): the chat widget's page config and its one module script - once per page, from
+    res.locals.chatWidget (`cw`: its boot = {configJson, script, integrity}). The config holds the hub's origins, the image
+    base and the account hint only - never a ticket (the widget's worker fetches POST /api/chat/ticket itself); configJson is
+    escaped for an inline script (chatwidget.escJson: <, U+2028, U+2029). layout.ejs prints the head's part (preconnect,
+    webfonts). %>
+<% if (typeof cw !== 'undefined' && cw && cw.boot) { %><script type="application/json" id="patv-chat-config"><%- cw.boot.configJson %></script>
+<script type="module" src="<%= cw.boot.script %>" integrity="<%= cw.boot.integrity %>"></script><% } %>

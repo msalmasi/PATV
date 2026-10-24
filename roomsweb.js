@@ -51,6 +51,7 @@ async function guideRows(signedIn, viewer) {
   const byId = new Map();
   for (const r of reg) byId.set(r.id, { reg: r, br: null });
   for (const b of summary) {
+    if (!rooms.isListed(b.id)) continue;                // S1 Q4: a bridged room whose pad is unlisted isn't on the guide
     if (!byId.has(b.id)) byId.set(b.id, { reg: null, br: b });
     else byId.get(b.id).br = b;
   }
@@ -353,7 +354,7 @@ function register(app, { addUser, isBotToken }) {
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
       return res.render("roomsAdmin", { user: req.user.username, isAdmin: false, list: [], guide: [], front: null, fp: null, roy: {}, sum: null, padsCfg: null, overview: [] });
     }
-    const list = await rooms.list();
+    const list = await rooms.listAll();                 // S1 Q4: the admin page manages unlisted pads too
     const g = await guideRows(true, req.user);
     const ov = await royalties.overview();
     const names = new Map();

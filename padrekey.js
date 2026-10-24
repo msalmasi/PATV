@@ -61,6 +61,11 @@ async function rekey(from, to) {
   const moved = {};
   const note = (k, r) => { const n = (r && r.changes) || 0; if (n) moved[k] = (moved[k] || 0) + n; };
   const tables = new Set((await getQuery("SELECT name FROM sqlite_master WHERE type = 'table'")).map((r) => r.name));
+  // S1 Q4 (seam plan §12.3, the displaced-row emit): a pad_hub row already at `to` would be displaced by the moving pad's row
+  // below (UPDATE OR REPLACE fires no DELETE trigger) - it is deleted first, so the chat hub hears that pad is gone in this
+  // same transaction (pads/changed, while its switch is on). The moving pad keeps its hub id (S1-D1).
+  const HP = require("./hubpads");
+  if (tables.has("pad_hub")) { const d = await HP.rekeyBefore(from, to); if (d) moved["pad_hub.displaced"] = 1; }
   for (const [t, c] of await padColumns()) {
     if (t === "follows" && c !== "target_id") continue;
     note(`${t}.${c}`, await runQuery(`UPDATE OR REPLACE ${q(t)} SET ${q(c)} = ? WHERE ${q(c)} = ?`, [to, from]));
@@ -92,6 +97,9 @@ async function rekey(from, to) {
     }
     if (tables.has("premium_ledger")) note("premium_ledger.target", await runQuery("UPDATE premium_ledger SET target = ? WHERE target = ? AND tier IN ('prime_time','prime_plus')", [to, from]));
   }
+  // S1 Q4: what the move changed without changing a key (a merge's members and pad feed bans left at `to` belong to the moved
+  // pad now) reaches the chat hub too (pads/changed, bans/changed - each while its switch is on)
+  if (tables.has("pad_hub") && tables.has("hub_outbox")) await HP.rekeyAfter(to);
   return { moved };
 }
 

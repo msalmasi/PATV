@@ -352,7 +352,7 @@ function plusOwner(userId, t = now()) {
   if (!userId) return false;
   maybeRefresh();
   let rooms;
-  try { rooms = require("./rooms").listCached(); } catch (e) { return false; }
+  try { rooms = require("./rooms").listAllCached(); } catch (e) { return false; }      // S1 Q4: an unlisted pad counts (an entitlement)
   for (const R of rooms || []) if (R.owner && R.owner.userId === userId && isPrimePlus(R.id, t)) return true;
   return false;
 }
@@ -925,7 +925,7 @@ async function compAdmins() {
     const admins = await getQuery("SELECT userId FROM users WHERE class = 'Admin'");
     const rooms = require("./rooms");
     await rooms.init();
-    const all = rooms.listCached();
+    const all = rooms.listAllCached();                  // S1 Q4: unlisted pads too (an entitlement, not a listing)
     for (const a of admins) {
       want.add("season_pass:" + a.userId);
       for (const R of all) if (R.owner && R.owner.userId === a.userId) want.add("prime_time:" + R.id);

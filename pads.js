@@ -5,10 +5,11 @@
 // This module owns the pad URLs that aren't a page of their own:
 //   - the 301s from every old address (query string kept):
 //       /rooms -> /p · /pads -> /p · /rooms/admin -> /pads/admin · /rooms/<s> -> /p/<s>
-//       /rooms/<s>/manage + /p/<s>/manage -> /p/<s>/settings?tab=stage · /rooms/<s>/feed/mod + /p/<s>/mod -> /p/<s>/settings?tab=moderation (1.99dc)
+//       /rooms/<s>/manage + /p/<s>/manage -> /p/<s>/settings?tab=stage · /rooms/<s>/feed/mod + /p/<s>/mod -> /p/<s>/settings?tab=moderation (1.99dc;
+//       S1 V2: /p/<s>/mod of a pad at chat_backend = 'hub' is the chat moderation page instead - chatwidget.padModPage)
 //       /rooms/<s>/analytics -> /p/<s>/analytics · /rooms/<s>/audio -> /p/<s>/audio · /feed/c/<s> -> /p/<s>
 //     (/feed?room=<x> is redirected by feedweb.js's /feed handler, which knows the feed's other params.)
-//   - 1.99x: retired slugs (OLD_SLUGS, e.g. patv-lounge -> the Camfrog Lounge): /p/<old>[/<sub>] 301s to the
+//   - 1.99x: retired slugs (OLD_SLUGS; S1 Q4: camfrog-lounge -> the PATV Lounge again): /p/<old>[/<sub>] 301s to the
 //     pad's current slug, and the /rooms + /feed/c aliases above go straight there;
 //   - 1.99dv: a profile pad's address (/p/u-<name>[/...]) -> /u/<name>/posts in one hop, from /p, /rooms and /feed/c;
 //     /p/<anything>/posts/<id> passes through to the post page, which 301s to the post's canonical address;
@@ -20,8 +21,10 @@
 // The data layer keeps its old names (rooms.js, rooms_registry, /api/rooms/...): no churn there.
 "use strict";
 
-/** 1.99x: slugs a pad used to have -> its registry id (the pad's current slug is looked up, so a later rename still lands). */
-const OLD_SLUGS = { "patv-lounge": "patv:lounge" };
+/** 1.99x: slugs a pad used to have -> its registry id (the pad's current slug is looked up, so a later rename still lands).
+ *  S1 Q4: the Lounge is "PATV Lounge" (patv-lounge) again - camfrog-lounge, its 1.99x address, is the retired one now (a slug
+ *  that is a pad's current one simply isn't redirected, so patv-lounge stays harmless here). */
+const OLD_SLUGS = { "patv-lounge": "patv:lounge", "camfrog-lounge": "patv:lounge" };
 
 /** The slug a pad's links use: the bridge's (what Pepe posts) while it's bridged, else the registry's. */
 function padSlug(R) {
@@ -199,7 +202,7 @@ function padBadge(x, opts = {}) {
   return `<span class="pad-plat pp-${p}${opts.compact ? " sm" : ""}" title="${I.tip}">${I.icon}${opts.compact ? "" : " " + I.label}</span>`;
 }
 
-function register(app) {
+function register(app, { addUser } = {}) {
   if (app.locals) { app.locals.padBadge = padBadge; app.locals.PAD_PLATFORMS = PLATFORM_INFO; }
   const to = (path) => (req, res) => res.redirect(301, path(req) + qsOf(req));
   // a slug param, swapped for the pad's current slug when it's a retired one (one hop, not two)
@@ -250,7 +253,9 @@ function register(app) {
   app.get("/rooms/:slug/manage", hub("stage"));
   app.get("/rooms/:slug/feed/mod", hub("moderation"));
   app.get("/p/:slug/manage", hub("stage"));
-  app.get("/p/:slug/mod", hub("moderation"));
+  // S1 V2 (ADR 0007 D15): a pad at chat_backend = 'hub' gets the chat moderation page (<patv-modtools>, chatwidget.padModPage);
+  // every other pad - and every pad while the widget isn't installed - keeps the 301 to the settings hub's Moderation tab
+  app.get("/p/:slug/mod", require("./chatwidget").padModPage(hub("moderation"), addUser));
   app.get("/rooms/:slug/analytics", to((req) => (profilePad(req.params.slug) ? base(req) : "/p/" + enc(req) + "/analytics")));
   app.get("/rooms/:slug/audio", to((req) => (profilePad(req.params.slug) ? base(req) : "/p/" + enc(req) + "/audio")));
   app.get("/feed/c/:slug", to(base));

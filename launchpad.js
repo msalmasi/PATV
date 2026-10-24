@@ -233,7 +233,7 @@ async function launchPads(t = now()) {
   const created = new Map((await getQuery("SELECT room_id, created FROM rooms_registry")).map((r) => [r.room_id, Number(r.created) || 0]));
   const en = await enrollments();
   const out = [];
-  for (const R of await rooms.list()) {
+  for (const R of await rooms.listAll()) {               // S1 Q4: an entitlement - an unlisted pad keeps its launch-pad grant
     const e = en.get(R.id);
     if (e && e.excluded) continue;
     if (!PLATFORMS.has(R.platform) || R.house || R.owner_kind !== "user" || !R.owner) continue;

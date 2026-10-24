@@ -112,8 +112,9 @@ test("padowner.navPads: owned + followed once each, live first, then yours, then
     { id: "F.1", slug: "f-1", title: "Fol One", owner: { username: "x" } },
     { id: "F.2", slug: "f-2", title: "Fol Two", owner: { username: "x" } },
   ];
-  const keep = { list: rooms.listCached, get: rooms.getCached, live: bridge.isLiveShown };
+  const keep = { list: rooms.listCached, all: rooms.listAllCached, get: rooms.getCached, live: bridge.isLiveShown };
   rooms.listCached = () => reg;
+  rooms.listAllCached = () => reg;                     // S1 Q4: an owner's own pads come from listAllCached (unlisted ones too)
   rooms.getCached = (id) => reg.find((r) => r.id === id) || (id === "Prof" ? { id, slug: "prof", title: "P", profile: true } : null);
   bridge._rooms.set("F.2", { id: "F.2" });
   bridge.isLiveShown = (R) => R.id === "F.2";
@@ -128,7 +129,7 @@ test("padowner.navPads: owned + followed once each, live first, then yours, then
     assert.equal(capped.items.length, 2); assert.equal(capped.more, true); assert.equal(capped.total, 4);
     assert.deepEqual(padowner.navPads("", ["F.1"]).items, []);
   } finally {
-    rooms.listCached = keep.list; rooms.getCached = keep.get; bridge.isLiveShown = keep.live; bridge._rooms.delete("F.2");
+    rooms.listCached = keep.list; rooms.listAllCached = keep.all; rooms.getCached = keep.get; bridge.isLiveShown = keep.live; bridge._rooms.delete("F.2");
   }
 });
 

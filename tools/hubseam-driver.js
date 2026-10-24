@@ -43,6 +43,30 @@
 //   cosmetic {action: grant | equip | unequip, user, item}  -> {inv_id}   cosmetics.grant / cosmetics.equip
 //   textStyle {user, color?, font?} (null clears)   -> {style}   textstyle.set (W1 palette colours, the six fonts)
 //   looks {ids, card?}          -> {status, body}   the looks call's answer (hublooks.call - what POST /internal/v1/looks serves)
+// S1 Q4 (release L1 - "Driver commands S1 adds", the pad / role / ban / switch part). `pad` is the v1 room id (patv:<x> for a
+// site pad); users are driver accounts (`account` / `signup`: username = the user id):
+//   pad {action: create, pad, title?, slug?, owner?} -> {pad_id}     a registry row (its hub id from pad_hub's insert trigger)
+//   pad {action: delete | slug {slug} | access {level} | owner {owner: user | house | none} | nsfw {on} | listed {on} |
+//        backend {backend} | connect {room}, pad}  -> {pad_id}      padcreate.removePad, the registry slug, the pad_access level
+//                               (padaccess's table), rooms.setOwner (CL3's owner time follows), rooms.setPage adult,
+//                               rooms.setListed, padhub.setBackend, padconnect's re-key (the room's own pad deleted, the pad
+//                               moved onto the room id: padrekey.rekey, in one transaction)
+//   padMember {pad, user, status}   approved | pending | denied | removed, or gone (the row deleted)
+//   padLook {pad, frame?, glow?, badges?}   padlook.setCosmetics (given fields replace, the rest stay)
+//   padChat {pad, window_s?, search?, downloads?, mods_all?}   pad_chat_cfg (null = the default; omitted = unchanged)
+//   ownerGrant {pad, on}        chatlogview.setOwnerGrant (CL6: staff let the owner read from before owner_since)
+//   premiumComp {pad | user, tier, until}   a comp of prime_time | prime_plus (pad) or season_pass (user); until null = no
+//                               end, 0 = the subscription removed
+//   stripeRenew {pad, through}  a Stripe renewal: stripe_through only
+//   flair {action: define, pad, name, color?, emoji?, self?} -> {flair} | {action: assign, pad, user, flair}
+//   role {login, role}          a role set on the website (staffroles.setRole by the driver's own owner login; null removes)
+//   pepeRoles {map}             Pepe's sync (staffroles.botSync {roles: {login: [role | null, ts]}})
+//   signup {user, login?}       -> {acct}   a users row inserted with its Camfrog login (the roles trigger's sign-up path)
+//   feedBan {user, room?, days?} | feedUnban {user, room?} | feedSweep    feedstore.ban / unban (as a site admin), the sweep's
+//                               DELETE of expired rows
+//   chatSwitch {key, value}     -> {ok, value} | {ok: false, code, needs}   chatswitches.set, the interlock included (V1's
+//                               /admin/chat goes through the same call)
+//   beat {action: start | stop, every_ms?}   the heartbeat timer (30 s by default) on / off - the staleness scenario
 // S1 V4 (the privacy UI: "Also remove my public messages", ADR 0007 OQ-20 - the cross-store scenario of the contract suite):
 //   deleteAccount {user, remove_public?}   (above) remove_public: the member ticked "Also remove my public messages" - the hub's
 //                               row carries it and the pad chat archive's web lines of the account are purged after the commit
@@ -154,6 +178,56 @@ async function exportWait(id) {
   return { id, state: "done", error: null, hub_jsonl: hub ? hub.toString("utf8") : null };
 }
 
+// ── S1 Q4 helpers ──
+const mod = (n) => require(path.join(repo, n));
+// the site admin the driver acts as (feed bans, chat switches): never a users row - only its class is read (siteperms)
+const DRIVER_ADMIN = Object.freeze({ userId: "hubseam-driver", username: "hubseam-driver", class: "Admin" });
+let beatTimer = null;
+async function padCmd({ action, pad, title, slug, owner, level, on, backend, room }) {
+  const rooms = mod("rooms");
+  await rooms.init();
+  await mod("padhub").init();
+  const id = String(pad || "");
+  const hub = async (rid) => mod("padhub").of(rid);
+  switch (action) {
+    case "create": {
+      await rooms.addRoom(id, title || id, "driver");
+      if (slug) { await M.db.runQuery("UPDATE rooms_registry SET slug = ? WHERE room_id = ?", [String(slug), id]); await rooms.loadCache(); }
+      if (owner) await rooms.setOwner(id, String(owner), "driver");
+      break;
+    }
+    case "delete": { const h = await hub(id); await mod("padcreate").removePad(id); return { pad_id: h }; }
+    case "slug": await M.db.runQuery("UPDATE rooms_registry SET slug = ?, updated = ? WHERE room_id = ?", [String(slug), Date.now(), id]); await rooms.loadCache(); break;
+    case "access": {
+      const PA = mod("padaccess");
+      await PA.init();
+      if (!PA.LEVELS.includes(level)) throw new Error("level: public | members | approved");
+      await M.db.runQuery(`INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES (?, ?, ?, 'driver')
+                           ON CONFLICT(room_id) DO UPDATE SET level = excluded.level, updated = excluded.updated`, [id, level, Date.now()]);
+      await PA.load();
+      break;
+    }
+    case "owner": await rooms.setOwner(id, String(owner == null ? "none" : owner), "driver"); break;
+    case "nsfw": await rooms.setPage(id, { adult: on === true }, "driver"); break;
+    case "listed": await rooms.setListed(id, on === true, "driver"); break;
+    case "backend": await mod("padhub").setBackend(id, backend, { username: "driver" }); break;
+    case "connect": {
+      // padconnect's connect, its data part: the room's own pad goes, the pad takes the room's id (one transaction)
+      const to = String(room || "");
+      if (!to || to === id) throw new Error("connect needs another room id");
+      await M.db.tx(async () => {
+        await M.db.runQuery("DELETE FROM rooms_registry WHERE room_id = ?", [to]);
+        await mod("padrekey").rekey(id, to);
+        await M.db.runQuery("UPDATE rooms_registry SET room_id = ?, platform = 'camfrog', updated = ? WHERE room_id = ?", [to, Date.now(), id]);
+      });
+      await mod("padrekey").reloadCaches();
+      return { pad_id: await hub(to) };
+    }
+    default: throw new Error("pad action: create | delete | slug | access | owner | nsfw | listed | backend | connect");
+  }
+  return { pad_id: await hub(id) };
+}
+
 const CMDS = {
   async ready({ port } = {}) {
     await boot();
@@ -255,6 +329,133 @@ const CMDS = {
     return { style: await require(path.join(repo, "textstyle")).set(String(user), style) };
   },
   async looks({ ids, card }) { await boot(); return require(path.join(repo, "hublooks")).call({ ids, ...(card === undefined ? {} : { card }) }); },
+  // ── S1 Q4 (release L1): pads, roles, bans, switches ──
+  async pad(args) { await boot(); return padCmd(args || {}); },
+  async padMember({ pad, user, status }) {
+    await boot();
+    const PA = mod("padaccess");
+    await PA.init();
+    if (status === "gone") await M.db.runQuery("DELETE FROM pad_members WHERE room_id = ? AND user_id = ?", [String(pad), String(user)]);
+    else {
+      if (!["approved", "pending", "denied", "removed"].includes(status)) throw new Error("status: approved | pending | denied | removed | gone");
+      await M.db.runQuery(`INSERT INTO pad_members (room_id, user_id, status, requested_at, decided_at, decided_by) VALUES (?, ?, ?, ?, ?, 'driver')
+                           ON CONFLICT(room_id, user_id) DO UPDATE SET status = excluded.status, decided_at = excluded.decided_at`,
+                          [String(pad), String(user), status, Date.now(), status === "pending" ? null : Date.now()]);
+    }
+    await PA.load();
+    return {};
+  },
+  async padLook({ pad, frame, glow, badges }) {
+    await boot();
+    const PL = mod("padlook");
+    await PL.init();
+    const r = (await M.db.getQuery("SELECT cosmetics FROM pad_looks WHERE room_id = ?", [String(pad)]))[0];
+    const cur = PL.parseCosmetics(r && r.cosmetics);
+    if (frame !== undefined) cur.pad_frame = frame;
+    if (glow !== undefined) cur.pad_glow = glow;
+    if (badges !== undefined) cur.pad_badge = badges || [];
+    return { cosmetics: await PL.setCosmetics(String(pad), cur, "driver") };
+  },
+  async padChat(args) {
+    await boot();
+    const id = String(args.pad);
+    await mod("chatlog").init();
+    const r = (await M.db.getQuery("SELECT window_s, search, downloads, mods_all FROM pad_chat_cfg WHERE room_id = ?", [id]))[0] || {};
+    const b = (v) => (v == null ? null : v ? 1 : 0);
+    const row = { window_s: r.window_s == null ? null : Number(r.window_s), search: r.search == null ? null : Number(r.search),
+                  downloads: r.downloads == null ? null : Number(r.downloads), mods_all: r.mods_all == null ? null : Number(r.mods_all) };
+    if (args.window_s !== undefined) row.window_s = args.window_s;
+    for (const k of ["search", "downloads", "mods_all"]) if (args[k] !== undefined) row[k] = b(args[k]);
+    await M.db.runQuery(`INSERT INTO pad_chat_cfg (room_id, window_s, search, downloads, mods_all, locked, updated, by_user) VALUES (?, ?, ?, ?, ?, 0, ?, 'driver')
+                         ON CONFLICT(room_id) DO UPDATE SET window_s = excluded.window_s, search = excluded.search, downloads = excluded.downloads,
+                         mods_all = excluded.mods_all, updated = excluded.updated`, [id, row.window_s, row.search, row.downloads, row.mods_all, Date.now()]);
+    return { settings: row };
+  },
+  async ownerGrant({ pad, on }) { await boot(); return { changed: await mod("chatlogview").setOwnerGrant(String(pad), on === true) }; },
+  async premiumComp({ pad, user, tier, until }) {
+    await boot();
+    const P = mod("premium");
+    await P.init();
+    const target = String(pad != null ? pad : user);
+    const t = pad != null ? String(tier || "prime_plus") : "season_pass";
+    if (!["prime_time", "prime_plus", "season_pass"].includes(t)) throw new Error("tier: prime_time | prime_plus | season_pass");
+    if (until === 0) await M.db.runQuery("DELETE FROM premium_subs WHERE tier = ? AND target = ?", [t, target]);
+    else {
+      await M.db.runQuery(`INSERT INTO premium_subs (tier, target, comped, comp_until, comp_by, status, started, updated) VALUES (?, ?, 1, ?, 'driver', 'active', ?, ?)
+                           ON CONFLICT(tier, target) DO UPDATE SET comped = 1, comp_until = excluded.comp_until, updated = excluded.updated`,
+                          [t, target, until == null ? null : Number(until), Date.now(), Date.now()]);
+    }
+    await P.loadCache();
+    return {};
+  },
+  async stripeRenew({ pad, through }) {
+    await boot();
+    await M.db.runQuery("UPDATE premium_subs SET stripe_through = ?, stripe_sub = COALESCE(stripe_sub, 'sub_driver') WHERE target = ? AND tier IN ('prime_time', 'prime_plus')",
+                        [Number(through) || 0, String(pad)]);
+    await mod("premium").loadCache();
+    return {};
+  },
+  async flair({ action, pad, name, color, emoji, self, user, flair }) {
+    await boot();
+    await mod("padflair").init();
+    if (action === "define") {
+      const r = await M.db.runQuery("INSERT INTO pad_flairs (room_id, name, color, emoji, self_assign, sort, kind, created, created_by) VALUES (?, ?, ?, ?, ?, ?, 'user', ?, 'driver')",
+                                    [String(pad), String(name), color || "#66bb6a", emoji || null, self ? 1 : 0, Date.now() % 1000, Date.now()]);
+      return { flair: r.id };
+    }
+    if (action === "assign") {
+      await M.db.runQuery("INSERT OR REPLACE INTO pad_user_flairs (room_id, user_id, flair_id, set_by, self, set_at) VALUES (?, ?, ?, 'driver', 0, ?)",
+                          [String(pad), String(user), Number(flair), Date.now()]);
+      return {};
+    }
+    throw new Error("flair action: define | assign");
+  },
+  async role({ login, role }) {
+    await boot();
+    const SR = mod("staffroles");
+    const m = await SR.map();
+    if (!Object.values(m).some((x) => x.role === "owner")) await SR.botSync({ roles: { hubseam_driver: ["owner", Date.now()] } });
+    else if (!m.hubseam_driver || m.hubseam_driver.role !== "owner") throw new Error("the driver's owner login is missing");
+    return SR.setRole("hubseam_driver", String(login), role == null ? null : String(role), "driver");
+  },
+  async pepeRoles({ map }) { await boot(); return mod("staffroles").botSync({ roles: map || {} }); },
+  async signup({ user, login }) {
+    await boot();
+    await M.db.runQuery("INSERT INTO users (userId, username, displayname, password, class, camfrogUsername, points_balance) VALUES (?, ?, ?, 'x', 'pleb', ?, 0)",
+                        [String(user), String(user), String(user), login || null]);
+    return { acct: M.ct.subjectOf(String(user)) };
+  },
+  async feedBan({ user, room, days }) {
+    await boot();
+    const r = await mod("feedstore").ban(DRIVER_ADMIN, String(user), { room: room || "", reason: "driver", days: Number(days) || 0 });
+    return { until: r.until };
+  },
+  async feedUnban({ user, room }) { await boot(); await mod("feedstore").unban(DRIVER_ADMIN, String(user), room || ""); return {}; },
+  async feedSweep() {
+    await boot();
+    const r = await M.db.runQuery("DELETE FROM feed_bans WHERE until IS NOT NULL AND until < ?", [Date.now()]);     // feedstore.sweep's statement
+    return { swept: (r && r.changes) || 0 };
+  },
+  async chatSwitch({ key, value }) {
+    await boot();
+    try {
+      const r = await mod("chatswitches").set(String(key), value, DRIVER_ADMIN, { reason: "hubseam-driver" });
+      return { ok: true, value: r.value, changed: r.changed };
+    } catch (e) {
+      if (e && e.refuse) return { ok: false, code: e.code, needs: e.needs || null };
+      throw e;
+    }
+  },
+  async beat({ action, every_ms }) {
+    await boot();
+    if (beatTimer) { clearInterval(beatTimer); beatTimer = null; }
+    if (action === "start") {
+      const run = () => M.ho.heartbeatOnce().catch(() => {});
+      await run();
+      beatTimer = setInterval(run, Math.max(200, Number(every_ms) || 30000));
+    } else if (action !== "stop") throw new Error("beat action: start | stop");
+    return { beating: !!beatTimer };
+  },
   async incognito({ user, on }) { await boot(); return M.incognito.request(String(user), on === true); },
   async pepeSync({ items }) { await boot(); return M.incognito.sync({ items: items || [] }); },
   async privateActivity({ user, on }) { await boot(); await M.pl.save(String(user), { hidden: on ? ["analytics"] : [] }); return {}; },

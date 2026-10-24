@@ -186,7 +186,7 @@ async function padVoices(R) {
 /** 1.99tn: {room id: [voice ids]} for every Camfrog pad with a user owner - rides Pepe's owner sync (POST /api/rooms/owners
  *  answer `owner_voices`), so Pepe re-checks a room's owner-picked voice against the voice store at every line. */
 async function ownerVoicesForPepe() {
-  const list = rooms.listCached().filter((R) => R && R.owner && R.owner.userId && rooms.platformOf(R.id) === "camfrog");
+  const list = rooms.listAllCached().filter((R) => R && R.owner && R.owner.userId && rooms.platformOf(R.id) === "camfrog");
   const by = await require("./voicestore").roomVoices(list.map((R) => R.owner.userId));
   const out = {};
   for (const R of list) out[R.id] = (by[R.owner.userId] || []).map((v) => v.id).slice(0, 200);
@@ -394,7 +394,7 @@ function myPads(username) {
   if (!u) return [];
   try {
     const web = require("./roomsweb");
-    return rooms.listCached().filter((R) => R && R.owner && String(R.owner.username || "").toLowerCase() === u && !R.profile)
+    return rooms.listAllCached().filter((R) => R && R.owner && String(R.owner.username || "").toLowerCase() === u && !R.profile)   // S1 Q4: their unlisted pads too
       .sort((a, b) => String(a.title).localeCompare(String(b.title))).slice(0, 8)
       .map((R) => { const slug = web.linkSlug(R); return { slug, title: String(R.title || slug).slice(0, 40), href: "/p/" + encodeURIComponent(slug) + "/owner" }; });
   } catch (e) { return []; }
@@ -420,7 +420,7 @@ function navPads(username, followedIds, max = 6) {
       const slug = web.linkSlug(R), href = "/p/" + encodeURIComponent(slug);
       all.push({ slug, title: String(R.title || slug).slice(0, 40), href, owned, live: liveOf(R.id), owner: owned ? href + "/owner" : null, rank });
     };
-    rooms.listCached().filter((R) => R && R.owner && String(R.owner.username || "").toLowerCase() === u)
+    rooms.listAllCached().filter((R) => R && R.owner && String(R.owner.username || "").toLowerCase() === u)       // S1 Q4: their unlisted pads too
       .sort((a, b) => String(a.title).localeCompare(String(b.title))).forEach((R, i) => add(R, true, i));
     (Array.isArray(followedIds) ? followedIds : []).forEach((id, i) => add(rooms.getCached(id), false, 1000 + i));
     all.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || a.rank - b.rank);

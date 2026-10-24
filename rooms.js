@@ -6,8 +6,11 @@
 //                    slot_count (user stage slots, default 1), approval (scheduled bookings need the
 //                    owner's OK), slot_price (PAT / live minute for a NON-featured slot, default 0 =
 //                    free), platform ('camfrog' | 'site' | 'twitch' | 'discord': where the pad comes
-//                    from, 1.99x; derived from the id for older rows), created, updated
-//   rooms_kv         small settings: front_room ("auto" | room id), seeded:<room id>, lounge_camfrog_v1,
+//                    from, 1.99x; derived from the id for older rows), created, updated,
+//                    S1 Q4 (ADR 0007 D1, CF F10a): listed (1 = shown wherever pads are listed; 0 = UNLISTED - reached by
+//                    its address only: never on the Pads page, the pickers, Top Pads, the front pick; Pepe's owner sync
+//                    sends it with listed: false)
+//   rooms_kv         small settings: front_room ("auto" | room id), seeded:<room id>, lounge_camfrog_v1, lounge_patv_v1,
 //                    front_auto (the automatic pick + when it was made, JSON), front_cfg (its tunables, JSON)
 //   room_events      owner/admin actions per room (audit trail shown on the manage page)
 //   room_activity    room_id, day (UTC yyyy-mm-dd), minutes bridged live, peak people, chat lines -
@@ -33,19 +36,26 @@ const SEEDS = [
   { room_id: "PepeBeta.Room", title: "PepeLab", owner: "house" },
   { room_id: "plant_based_chatting", title: "Houseplants", owner: { match: "foamy1111" } },   // 1.99bn: his Camfrog LOGIN (account pb), not the display name "plantbaked"
   // 1.99ci: the site's own general pad (no Camfrog room behind it). Ids starting "patv:" are site pads.
-  // 1.99x: "Camfrog Lounge" (was "PATV Lounge", slug patv-lounge) - the id stays patv:lounge so its posts,
-  // settings and follows stay put. It's a SITE pad (the site made it) despite the name.
-  { room_id: "patv:lounge", title: "Camfrog Lounge", slug: "camfrog-lounge", owner: "house",
-    description: "The general Camfrog pad: hang out, share anything, talk about any room or none." },
+  // 1.99x: "Camfrog Lounge" (slug camfrog-lounge). S1 Q4 (ADR 0007 D1, the owner's OQ-1 answer of 2026-10-19): the chat
+  // pilot's pad is the "PATV Lounge" again (slug patv-lounge; camfrog-lounge stays as a 301) - the id stays patv:lounge so
+  // its posts, settings and follows stay put. A SITE pad (the site made it).
+  { room_id: "patv:lounge", title: "PATV Lounge", slug: "patv-lounge", owner: "house",
+    description: "The general PATV pad: hang out, share anything, talk about any room or none." },
+  // S1 Q4 (ADR 0007 D1): the chat hub's staff pad and canary pad - house site pads, Approved (padaccess.js seeds the level:
+  // staff and above are inside every Approved pad, plus its approved members) and UNLISTED (listed = 0). Seeded once; an
+  // admin's later change stays.
+  { room_id: "patv:staff", title: "Staff room", slug: "staff", owner: "house", access: "approved", listed: false },
+  { room_id: "patv:canary", title: "Canary", slug: "canary", owner: "house", access: "approved", listed: false },
 ];
 const LOUNGE_ID = "patv:lounge";
-// 1.99x: the Lounge's earlier seeded title / slug / descriptions - swapped at start (once, rooms_kv
-// lounge_camfrog_v1) only while a field still holds one of these, so an admin's edit is never overwritten
-const OLD_LOUNGE_TITLE = "PATV Lounge";
-const OLD_LOUNGE_SLUG = "patv-lounge";
+// the Lounge's earlier seeded titles / slugs / descriptions. S1 Q4: swapped back at start (once, rooms_kv lounge_patv_v1)
+// only while a field still holds one of these, so an admin's edit is never overwritten
+const OLD_LOUNGE_TITLE = "Camfrog Lounge";                 // 1.99x
+const OLD_LOUNGE_SLUG = "camfrog-lounge";                  // 1.99x (kept as a 301: pad_slug_aliases)
 const OLD_SEED_DESC = [
   "The general PATV community: anything that isn't about one room. Old main-feed posts live here.",     // 1.99ci
   "The general PATV pad: anything that isn't about one Camfrog room. Old main-feed posts live here.",   // 1.99ck
+  "The general Camfrog pad: hang out, share anything, talk about any room or none.",                    // 1.99x
 ];
 
 // ── platforms (1.99x): where a pad comes from. Camfrog pads are backed by a Camfrog room; site pads were
@@ -117,6 +127,9 @@ function init() {
       if (!cols.has("takeover")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN takeover TEXT");
       // 1.99lw: the pad's longest stage slot in minutes (mainstage.maxMinutesFor): NULL = the site's max_minutes
       if (!cols.has("slot_max_min")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN slot_max_min INTEGER");
+      // S1 Q4 (ADR 0007 D1): 0 = unlisted - every listing path leaves the pad out (list / listCached, Top Pads, the front pick);
+      // its address still works (and its own access level still decides who sees it)
+      if (!cols.has("listed")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN listed INTEGER NOT NULL DEFAULT 1");
       // every slug a pad gave up: /p/<old>[/...] 301s to the pad's current address, and nobody else can take it
       await runQuery("CREATE TABLE IF NOT EXISTS pad_slug_aliases (slug TEXT PRIMARY KEY, room_id TEXT NOT NULL, created INTEGER, by TEXT)");
       await runQuery("CREATE INDEX IF NOT EXISTS pad_slug_aliases_room ON pad_slug_aliases (room_id)");
@@ -210,7 +223,7 @@ async function findUser(name) {
   return kept.length === 1 ? kept[0] : null;
 }
 
-async function ensureRow(roomId, title, wantSlug = null, platform = null) {
+async function ensureRow(roomId, title, wantSlug = null, platform = null, { listed = true } = {}) {
   const id = str(roomId, 128);
   if (!ROOM_ID_RE.test(id)) return null;
   const have = (await getQuery("SELECT room_id FROM rooms_registry WHERE room_id = ?", [id]))[0];
@@ -219,19 +232,24 @@ async function ensureRow(roomId, title, wantSlug = null, platform = null) {
   let slug = base;
   for (let i = 2; (await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ?", [slug])).length; i++) slug = base + "-" + i;
   const t = Date.now();
-  await runQuery(`INSERT OR IGNORE INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES (?, ?, ?, 'none', ?, ?, ?)`,
-                 [id, slug, str(title, 60) || null, cleanPlatform(platform, id), t, t]);
+  // S1 Q4 (review): an unlisted seed is born unlisted (one statement: never listed for a moment, whatever fails after it)
+  await runQuery(`INSERT OR IGNORE INTO rooms_registry (room_id, slug, title, owner_kind, platform, listed, created, updated) VALUES (?, ?, ?, 'none', ?, ?, ?, ?)`,
+                 [id, slug, str(title, 60) || null, cleanPlatform(platform, id), listed === false ? 0 : 1, t, t]);
   return id;
 }
 
 /**
- * 1.99x: "PATV Lounge" -> "Camfrog Lounge" on installs seeded before the rename. Runs once (rooms_kv
- * lounge_camfrog_v1); each field changes only while it still holds the old seeded value, so an admin's
- * title, description or slug is left alone. The id (patv:lounge) never changes. -> {title, description, slug}
+ * S1 Q4 (ADR 0007 D1, OQ-1): the Lounge is the "PATV Lounge" again. 1.99x had renamed "PATV Lounge" -> "Camfrog Lounge"
+ * (rooms_kv lounge_camfrog_v1); this swaps it back once (rooms_kv lounge_patv_v1, and lounge_camfrog_v1 is marked done so
+ * the 1.99x rename never runs again). Each field changes only while it still holds a value a seed or a migration put there
+ * (OLD_LOUNGE_TITLE / OLD_LOUNGE_SLUG / OLD_SEED_DESC), so an admin's title, description or slug is left alone. The slug
+ * moves like a pad address change (padaddress.rename): camfrog-lounge becomes the pad's alias (/p/camfrog-lounge 301s),
+ * an alias of its own for patv-lounge is taken back, the per-account feed view moves. The id (patv:lounge) never changes.
+ * -> {title, description, slug}
  */
 async function migrateLounge() {
   const out = { title: false, description: false, slug: false };
-  if (await kvGet("lounge_camfrog_v1")) return out;
+  if (await kvGet("lounge_patv_v1")) return out;
   const s = SEEDS.find((x) => x.room_id === LOUNGE_ID);
   const row = (await getQuery("SELECT * FROM rooms_registry WHERE room_id = ?", [LOUNGE_ID]))[0];
   if (row && s) {
@@ -241,28 +259,40 @@ async function migrateLounge() {
     if (OLD_SEED_DESC.includes(row.description)) {
       await runQuery("UPDATE rooms_registry SET description = ? WHERE room_id = ?", [s.description, LOUNGE_ID]); out.description = true;
     }
-    if (row.slug === OLD_LOUNGE_SLUG && !(await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ?", [s.slug])).length) {
-      await runQuery("UPDATE rooms_registry SET slug = ? WHERE room_id = ?", [s.slug, LOUNGE_ID]); out.slug = true;
+    const taken = async (slug) => (await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ? AND room_id <> ?", [slug, LOUNGE_ID])).length > 0
+      || (await getQuery("SELECT 1 FROM pad_slug_aliases WHERE slug = ? AND room_id <> ?", [slug, LOUNGE_ID])).length > 0;
+    if (row.slug === OLD_LOUNGE_SLUG && !(await taken(s.slug))) {
+      const t = Date.now();
+      await runQuery("DELETE FROM pad_slug_aliases WHERE slug = ? AND room_id = ?", [s.slug, LOUNGE_ID]);         // its own old slug back
+      await runQuery("INSERT OR IGNORE INTO pad_slug_aliases (slug, room_id, created, by) VALUES (?, ?, ?, 'migration')", [row.slug, LOUNGE_ID, t]);
+      await runQuery("UPDATE rooms_registry SET slug = ? WHERE room_id = ?", [s.slug, LOUNGE_ID]);
+      const fv = await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feed_view'");
+      if (fv.length) await runQuery("UPDATE OR REPLACE feed_view SET scope = ? WHERE scope = ?", ["p/" + s.slug, "p/" + row.slug]);
+      out.slug = true;
     }
     if (out.title || out.description || out.slug) {
-      await event(LOUNGE_ID, "page", "migration", "Camfrog Lounge rename: " + Object.keys(out).filter((k) => out[k]).join(", "));
-      console.log("[rooms] lounge_camfrog_v1: " + JSON.stringify(out));
+      await event(LOUNGE_ID, "page", "migration", "PATV Lounge rename (S1): " + Object.keys(out).filter((k) => out[k]).join(", "));
+      console.log("[rooms] lounge_patv_v1: " + JSON.stringify(out));
     }
   }
-  await kvSet("lounge_camfrog_v1", JSON.stringify({ at: Date.now(), ...out }));
+  const at = Date.now();
+  if (!(await kvGet("lounge_camfrog_v1"))) await kvSet("lounge_camfrog_v1", JSON.stringify({ at, superseded: "lounge_patv_v1" }));
+  await kvSet("lounge_patv_v1", JSON.stringify({ at, ...out }));
   return out;
 }
 
 async function seed() {
   for (const s of SEEDS) {
     if (await kvGet("seeded:" + s.room_id)) continue;
-    await ensureRow(s.room_id, s.title, s.slug || null);
+    await ensureRow(s.room_id, s.title, s.slug || null, null, { listed: s.listed !== false });
     const row = (await getQuery("SELECT * FROM rooms_registry WHERE room_id = ?", [s.room_id]))[0];
     if (!row) continue;
     if (!row.title) await runQuery("UPDATE rooms_registry SET title = ? WHERE room_id = ?", [s.title, s.room_id]);
     if (s.description && !row.description) await runQuery("UPDATE rooms_registry SET description = ? WHERE room_id = ?", [s.description, s.room_id]);
     // 1.99ck: the Lounge's 1.99ci seed text said "community" - swap it for the pad wording (an edited description is left alone)
     else if (s.description && OLD_SEED_DESC.includes(row.description)) await runQuery("UPDATE rooms_registry SET description = ? WHERE room_id = ?", [s.description, s.room_id]);
+    // S1 Q4: an unlisted seed (the chat hub's staff and canary pads) - once, with the seed (an admin's later change stays)
+    if (s.listed === false) await runQuery("UPDATE rooms_registry SET listed = 0 WHERE room_id = ?", [s.room_id]);
     if (s.owner === "house") {
       await runQuery("UPDATE rooms_registry SET owner_kind = 'house', owner_user_id = NULL, title = COALESCE(title, ?) WHERE room_id = ?", [s.title, s.room_id]);
       await kvSet("seeded:" + s.room_id, "house");
@@ -304,8 +334,11 @@ function view(r) {
     adult: !!r.adult,                                                  // 1.99kz: 18+ pad
     takeover: r.takeover === "off" || r.takeover === "when_idle" ? r.takeover : null,   // 1.99lm: null = the site's takeover_mode
     slot_max_min: Number(r.slot_max_min) > 0 ? Number(r.slot_max_min) : null,           // 1.99lw: null = the site's max_minutes
+    listed: rowListed(r),                                              // S1 Q4: false = unlisted (reached by its address only)
   };
 }
+/** S1 Q4: a registry row is listed unless it says listed = 0 (profile pads are never listed either - they have their own rule). */
+const rowListed = (r) => !!r && Number(r.listed) !== 0 && cleanPlatform(r.platform, r.room_id) !== "profile";
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
 /** 1.99qp: {prime_plus, soundboard_slots, bridge} for Pepe's owner sync (premium.padPerks) */
 function plusOf(roomId) {
@@ -330,8 +363,43 @@ function rowBySlug(slug) {
 }
 async function bySlug(slug) { await init(); return view(rowBySlug(slug)); }
 // 1.99df: list() and listCached() never include profile pads (profilePads() does)
+// S1 Q4 (ADR 0007 D1): ...nor UNLISTED pads (listed = 0): they are the listing paths (the Pads page, the pickers, the stage and
+// bridge pickers, Top Pads and the front pick, Pepe's news routing). listAll() / listAllCached() are every non-profile pad,
+// unlisted ones included - for what isn't a listing: an owner's own pads, admin pages, entitlements, the automod, the 18+
+// gate, links, and Pepe's owner sync (ownersForPepe: each pad with its `listed` flag - Q4's review: it carries the owner,
+// the 18+ flag and Prime Time / Plus retention, so an unlisted pad left out would lose them). The page a member is on is not a
+// listing either: the composer and the story form on an unlisted pad's own page offer that pad (feedstore.communities' include).
 const notProfile = (r) => cleanPlatform(r.platform, r.room_id) !== "profile";
-async function list() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter(notProfile).map(view).sort((a, b) => a.title.localeCompare(b.title)); }
+async function list() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter(rowListed).map(view).sort((a, b) => a.title.localeCompare(b.title)); }
+async function listAll() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter(notProfile).map(view).sort((a, b) => a.title.localeCompare(b.title)); }
+/** S1 Q4 (review): a seeded pad's level (SEEDS `access`: the staff and canary pads are Approved), or null - what the pad reads as
+ *  while it has no pad_access row (padaccess.levelOf, the pads/changed builder), so a seed whose level row hasn't been written
+ *  yet (padaccess.seedLevels failed, or hasn't run) fails closed, never open to every member. */
+function seedAccess(roomId) {
+  const s = SEEDS.find((x) => x.room_id === String(roomId || ""));
+  return s && s.access ? String(s.access) : null;
+}
+/** S1 Q4: is this pad id listed? A registered unlisted pad (or a profile pad) -> false; anything else (a bridged room the registry
+ *  doesn't know yet) -> true. Sync, off the cache. */
+function isListed(roomId) {
+  const r = CACHE.byId.get(String(roomId || ""));
+  if (!r) return !isProfile(String(roomId || ""));
+  return rowListed(r);
+}
+/** S1 Q4: list or unlist a pad (an admin's choice; the chat hub's staff / canary pads are seeded unlisted). -> the pad view */
+async function setListed(roomId, listed, actor) {
+  await init();
+  const r = await get(roomId);
+  if (!r) throw Object.assign(new Error("No such pad."), { status: 404 });
+  if (r.platform === "profile") throw Object.assign(new Error("A profile is never listed as a pad."), { status: 400 });
+  const on = listed === true || listed === 1 || /^(1|true|on|yes)$/i.test(String(listed));
+  if (on !== r.listed) {
+    await runQuery("UPDATE rooms_registry SET listed = ? WHERE room_id = ?", [on ? 1 : 0, r.id]);
+    await event(r.id, "page", actor, on ? "listed" : "unlisted");
+    await loadCache();
+  }
+  return get(r.id);
+}
 function getCached(roomId) { return view(CACHE.byId.get(String(roomId || ""))); }
 /** 1.99ck: a pad by slug from the cache, synchronously (pads.js autolinks p/<slug> while rendering). */
 function bySlugCached(slug) { return view(rowBySlug(slug)); }
@@ -341,7 +409,9 @@ function aliasTarget(slug) {
   if (CACHE.bySlug.has(s)) return null;
   return (CACHE.aliases && CACHE.aliases.get(s)) || null;
 }
-function listCached() { return [...CACHE.byId.values()].filter(notProfile).map(view); }
+function listCached() { return [...CACHE.byId.values()].filter(rowListed).map(view); }
+/** S1 Q4: every non-profile pad from the cache, unlisted ones included (not a listing path - see list()). */
+function listAllCached() { return [...CACHE.byId.values()].filter(notProfile).map(view); }
 /** 1.99df: every profile pad (the automod's "profiles" switch). */
 async function profilePads() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter((r) => !notProfile(r)).map(view); }
 /** 1.99df: a user's profile pad from the cache, or null when they've never posted to their profile. */
@@ -483,9 +553,10 @@ async function canManage(user, roomId) {
   const r = await get(roomId);
   return !!(r && r.owner && r.owner.userId === user.userId);
 }
+/** The pads this account owns - S1 Q4: unlisted ones too (it's the owner's own list, not a listing). */
 async function ownedBy(userId) {
   await init();
-  return listCached().filter((r) => r.owner && r.owner.userId === userId);
+  return listAllCached().filter((r) => r.owner && r.owner.userId === userId);
 }
 
 // ── writes ──
@@ -743,7 +814,9 @@ async function boostPats(now = nowMs()) {
  *  (padsignals.js; the front pick's window). The homepage uses it for Top Pads; the automatic pick merges it itself. */
 async function withSitePads(summary, now = nowMs()) {
   const cfg = await frontCfg();
-  return require("./padsignals").merge(summary || [], cfg.window_min, now);
+  // S1 Q4: an unlisted pad is never a Top Pad or the front pick (padsignals lists only listed site pads; a bridged room's
+  // summary row of an unlisted pad goes here)
+  return require("./padsignals").merge((summary || []).filter((r) => !r || !r.id || isListed(r.id)), cfg.window_min, now);
 }
 /** 1.99ek: the LIVE pads ranked NOW by the front pick's own score (activity + boost points, frontroom.rank) -
  *  the homepage's "Top Pads". `summary` = bridge.summary() rows. -> {ranked: [{id, score, ...}], boosts: Map id -> active PAT} */
@@ -784,7 +857,9 @@ async function ownersForPepe() {
   await init();
   // 1.99iy: slug_set = links use this slug. 1.99oj: the registry slug is every pad's one address now (a Camfrog pad's
   // follows its display name - noteBridged), so it is always the link: Pepe's !bridge uses it instead of re-deriving one
-  return listCached().map((r) => ({ id: r.id, slug: r.slug, slug_set: true, title: r.title, owner_kind: r.owner_kind,
+  // S1 Q4 (review): every pad, unlisted ones too (listed: false) - the sync carries the owner, adult and retention, which an
+  // unlisted pad keeps (left out, Pepe would give an unlisted Prime Time room the free chat-log / recording window)
+  return listAllCached().map((r) => ({ id: r.id, slug: r.slug, slug_set: true, title: r.title, owner_kind: r.owner_kind, listed: r.listed !== false,
     owner: r.owner ? { username: r.owner.username, camfrog: r.owner.camfrog ? String(r.owner.camfrog).toLowerCase() : null } : null,
     slot_count: r.slot_count,
     description: String(r.description || "").slice(0, 300),   // 1.99ko: Pepe's room vibe learns from the pad's description
@@ -826,4 +901,5 @@ module.exports = {
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
   PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,
   aliasTarget,                                                        // 1.99iy: pad addresses (padaddress.js)
+  listAll, listAllCached, isListed, setListed, cleanPlatform, seedAccess,   // S1 Q4: unlisted pads (ADR 0007 D1)
 };

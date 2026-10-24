@@ -1,6 +1,8 @@
 // 1.99ads (S1 Q5b): tools/hubseam-driver.js's identity and looks commands (seam-contract.md "Driver commands S1 adds") drive
 // v1's real modules on a throwaway database: link / unlink / moveLogin / merge / cosmetic / textStyle write what the identity
-// and looks topics read, and `looks` answers like POST /internal/v1/looks.
+// and looks topics read, and `looks` answers like POST /internal/v1/looks. S1 Q4 (release L1): pad / padMember / padLook /
+// padChat / ownerGrant / premiumComp / stripeRenew / flair / role / pepeRoles / signup / feedBan / feedUnban / feedSweep /
+// chatSwitch / beat write what pads/changed, roles/changed, bans/changed and switches/changed read (the interlock included).
 //   node --test test/hubseam-driver-s1.test.js
 "use strict";
 const test = require("node:test");
@@ -37,7 +39,7 @@ function driver() {
     p.stdin.write(JSON.stringify({ id, cmd, args }) + "\n");
   });
   const close = () => new Promise((r) => { p.on("exit", r); p.stdin.end(); });
-  return { call, close };
+  return { call, close, dir };
 }
 
 test("the S1 identity / looks driver commands", { timeout: 120000 }, async () => {
@@ -67,6 +69,67 @@ test("the S1 identity / looks driver commands", { timeout: 120000 }, async () =>
     const after = await d.call("looks", { ids: [acct2] });
     assert.deepEqual(after.body, { v: 1, items: [], missing: [acct2] }, "the merged account is missing");
     assert.equal((await d.call("looks", { ids: ["x"] })).status, 400);
+  } finally {
+    await d.close();
+  }
+});
+
+// S1 Q4 (release L1): the pad / role / ban / switch commands write what pads/changed, roles/changed, bans/changed and
+// switches/changed read - the outbox rows are read back from the driver's own database
+test("the S1 L1 pad / role / ban / switch driver commands", { timeout: 180000 }, async () => {
+  const d = driver();
+  const sqlite3 = require("sqlite3");
+  const rows = (topic) => new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(path.join(d.dir, "myapp.db"), sqlite3.OPEN_READONLY);
+    db.all("SELECT entity FROM hub_outbox WHERE topic = ? ORDER BY id", [topic], (e, r) => { db.close(); if (e) reject(e); else resolve(r.map((x) => x.entity)); });
+  });
+  try {
+    await d.call("switches", { set: { pads: true, roles: true, bans: true, switches: true } });
+    await d.call("account", { user: "u1", login: "Uno" });
+    await d.call("account", { user: "u2" });
+    const { pad_id: pid } = await d.call("pad", { action: "create", pad: "patv:dpad", title: "Driver Pad", slug: "driver-pad", owner: "u1" });
+    assert.match(pid, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    for (const a of [{ action: "access", level: "approved" }, { action: "nsfw", on: true }, { action: "listed", on: false }, { action: "backend", backend: "hub" },
+                     { action: "slug", slug: "driver-pad-2" }]) {
+      assert.equal((await d.call("pad", { ...a, pad: "patv:dpad" })).pad_id, pid, a.action);
+    }
+    await assert.rejects(d.call("pad", { action: "backend", pad: "patv:dpad", backend: "hub_read" }), /S2/);
+    await d.call("padMember", { pad: "patv:dpad", user: "u2", status: "approved" });
+    await d.call("padLook", { pad: "patv:dpad", frame: "pp_frame", badges: ["pb_est2026"] });
+    assert.deepEqual((await d.call("padChat", { pad: "patv:dpad", window_s: 3600, downloads: false })).settings, { window_s: 3600, search: null, downloads: 0, mods_all: null });
+    await d.call("ownerGrant", { pad: "patv:dpad", on: true });
+    await d.call("premiumComp", { pad: "patv:dpad", tier: "prime_plus", until: Date.now() + 86400000 });
+    await d.call("stripeRenew", { pad: "patv:dpad", through: Date.now() + 2 * 86400000 });
+    const { flair } = await d.call("flair", { action: "define", pad: "patv:dpad", name: "Frogs", emoji: "🐸", self: true });
+    await d.call("flair", { action: "assign", pad: "patv:dpad", user: "u2", flair });
+    const pads = await rows("pads/changed");
+    assert.ok(pads.includes("pad:" + pid) && pads.includes(`pm:${pid}/u2`), JSON.stringify(pads));
+    // roles: a role set on the website, Pepe's tombstone, a sign-up with a linked login
+    await d.call("role", { login: "uno", role: "staff" });
+    await d.call("pepeRoles", { map: { uno: [null, Date.now() + 1000] } });
+    await d.call("signup", { user: "u3", login: "Tres" });
+    const roles = await rows("roles/changed");
+    assert.deepEqual(roles.filter((e) => e === "acct:u1").length >= 2 && roles.includes("acct:u3"), true, JSON.stringify(roles));
+    // bans: a pad ban, its unban, a site-wide one, the sweep
+    await d.call("feedBan", { user: "u2", room: "patv:dpad", days: 1 });
+    await d.call("feedUnban", { user: "u2", room: "patv:dpad" });
+    await d.call("feedBan", { user: "u2" });
+    assert.deepEqual((await d.call("feedSweep")).swept, 0);
+    assert.deepEqual(await rows("bans/changed"), ["fb:u2/patv:dpad", "fb:u2/patv:dpad", "fb:u2/*"]);
+    // switches: the interlock, then on and off
+    const no = await d.call("chatSwitch", { key: "CHAT_HUB", value: "on" });
+    assert.deepEqual([no.ok, no.code], [false, "chat_hub_needs"]);
+    assert.ok(no.needs.includes("identity") && !no.needs.includes("pads"));
+    await d.call("switches", { set: { tickets: true, sessions: true, heartbeat: true, privacy: true, erasure: true, export: true, identity: true, looks: true } });
+    assert.deepEqual(await d.call("chatSwitch", { key: "CHAT_HUB", value: "on" }), { ok: true, value: "on", changed: true });
+    await assert.rejects(d.call("switches", { set: { pads: false } }), /CHAT_HUB is on/);
+    assert.deepEqual((await d.call("chatSwitch", { key: "CHAT_HUB", value: "off" })).value, "off");
+    assert.deepEqual(await rows("switches/changed"), ["sw:CHAT_HUB", "sw:CHAT_HUB"]);
+    assert.deepEqual(await d.call("beat", { action: "start", every_ms: 60000 }), { beating: true });
+    assert.deepEqual(await d.call("beat", { action: "stop" }), { beating: false });
+    // a padconnect re-key keeps the pad's id; a deletion posts it gone
+    assert.equal((await d.call("pad", { action: "connect", pad: "patv:dpad", room: "Driver.Room" })).pad_id, pid);
+    assert.equal((await d.call("pad", { action: "delete", pad: "Driver.Room" })).pad_id, pid);
   } finally {
     await d.close();
   }

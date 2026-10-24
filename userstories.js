@@ -293,8 +293,9 @@ async function annotate(viewer, items) {
 }
 
 // ── posting a story ──
-/** Where `user` may post a story: "Your profile" first, then every pad they may post in (approval pads: managers only). */
-async function targets(user) {
+/** Where `user` may post a story: "Your profile" first, then every pad they may post in (approval pads: managers only).
+ *  S1 Q4 (review): opts.include - the pad the story form was opened on - is offered even when it's unlisted (its own page). */
+async function targets(user, { include = null } = {}) {
   await init();
   const S = store();
   const u = user && user.userId ? await S.account(user.userId) : null;
@@ -302,7 +303,7 @@ async function targets(user) {
   const base = await S.postRefusal(u, [], { media: true });
   if (base) return { refusal: base.message, pads: [] };
   const out = [{ id: "u/" + u.username, title: "Your profile", label: "u/" + u.username, profile: true }];
-  for (const c of await S.communities(u)) {
+  for (const c of await S.communities(u, { include })) {
     if (!c.canPost) continue;
     if ((await S.roomSettings(c.id)).approval && !(await rooms.canManage(u, c.id))) continue;
     out.push({ id: c.id, title: c.title, label: "p/" + c.slug, slug: c.slug });
@@ -418,7 +419,8 @@ function register(app, { addUser }) {
   app.get("/api/stories/targets", addUser, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
-    try { res.json({ ok: true, ...(await targets(req.user)), prefs: await prefs(req.user.userId) }); } catch (e) { fail(res, e); }
+    const pad = typeof req.query.pad === "string" ? req.query.pad.slice(0, 128) : null;     // the pad the form was opened on
+    try { res.json({ ok: true, ...(await targets(req.user, { include: pad })), prefs: await prefs(req.user.userId) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/stories/mine", addUser, json, async (req, res) => {
     try { res.json({ ok: true, story: await create(req.user, req.body || {}) }); } catch (e) { fail(res, e); }

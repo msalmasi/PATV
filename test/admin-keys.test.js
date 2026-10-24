@@ -68,6 +68,10 @@ test("who sees it: admins (the page + JSON); Staff back to the Overview; members
   assert.match(html, /Bot keys &amp; chat seam|Bot keys & chat seam/);
   assert.match(html, /href="\/admin\/keys"/, "in the admin nav");
   for (const id of ["keys", "scopes", "families", "legacy", "routes", "events", "seam"]) assert.match(html, new RegExp(`id="${id}"`), id);
+  // S1 Q4 (release L1): the four new seam switches, and CHAT_HUB read-only with what it still needs (it is set on /admin/chat)
+  for (const k of ["pads", "roles", "bans", "switches"]) assert.match(html, new RegExp(`data-seam="${k}"`), k);
+  assert.match(html, /CHAT_HUB is off/);
+  assert.match(html, /it needs these switches on before it can go on: tickets, sessions/);
   assert.match(html, /id="akNotOwner"/, "a plain admin is told only owners change things");
   assert.equal((await get("/api/admin/keys", "stf")).status, 403);
   assert.equal((await get("/api/admin/keys", "")).status, 401);
