@@ -960,3 +960,31 @@ test("the queue's Read names the speaker as every other read path does: someone 
   const aud = (await getQuery("SELECT who FROM chatlog_views WHERE user_id = ? AND why = ? ORDER BY id DESC LIMIT 1", [U.staff.userId, "report queue #" + c]))[0];
   assert.equal(aud.who, null, "the audit row doesn't name them either");
 });
+
+test("S1 V4 review 2: an un-hide whose checks ran before \"Also remove my public messages\" made a moderator's hide the author's removal doesn't show the line again", async () => {
+  await ready();
+  const c = await sayWeb("sierra tango web words of a deleted account", "id-v4race");
+  assert.equal((await act(c, "hide", U.mod, { why: "spam spam" })).status, 200);
+  // an open report keeps the line (ADR 0007 D10): the removal takes it down as the author's instead of purging it
+  await runQuery("INSERT INTO chatlog_reports (c, rk, reporter, reason, note, state, created) VALUES (?, ?, NULL, 'harassment', NULL, 'open', ?)",
+                 [c, (await row(c)).rk, Date.now() + offset]);
+  let release;
+  const blocker = tx(() => new Promise((r) => { release = r; }));           // an open transaction: the two below queue behind it
+  try {
+    const R = CLM.removeAccountLines("id-v4race");                           // its transaction queues first
+    await new Promise((r) => setTimeout(r, 100));
+    const un = act(c, "unhide", U.mod);                                        // the mod's un-hide: its checks pass now, its write waits
+    await new Promise((r) => setTimeout(r, 250));
+    release();
+    await blocker;
+    assert.equal((await R).reported, 1);
+    const res = await un;
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.d.restored, false, "nothing shown again (its write is for the moderator's hide it checked, which is gone)");
+  } finally { if (release) release(); }
+  const x = await row(c);
+  assert.deepEqual([x.rm_at != null, x.rm_by, !!x.text], [true, "self", true], "still down, the author's removal, kept for the report");
+  assert.equal(inFeed(c), false);
+  assert.equal(await ftsHas("sierra"), false);
+  assert.equal((await act(c, "unhide", U.mod)).status, 403, "and a fresh un-hide is refused");
+});

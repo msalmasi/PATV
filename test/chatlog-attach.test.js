@@ -125,6 +125,22 @@ test("Train 3 review: the EMPTY archive tables a boot without CHATLOG_DB made in
   assert.ok(fs.existsSync(file));
 });
 
+test("S1 V4 review 2: a CHATLOG_DB that can't be opened FAILS account deletion's removal (archive_db: the row waits, the tick retries) - never \"nothing to remove\" over myapp.db's empty tables or none", () => {
+  const probe = `async (CL) => {
+    const CLM = require(${JSON.stringify(path.join(repo, "chatlogmod"))});
+    const code = await CLM.removeAccountLines("down1", { windows: [{ login: "downcf", from: 0, to: 5 }] }).then(() => "resolved", (e) => e.code || e.message);
+    return { err: !!CL.archiveError(), code };
+  }`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chatlog-attach-v4down-"));
+  childRun(dir, { CHATLOG_DB: "" });                                        // a boot without CHATLOG_DB: empty archive tables in myapp.db
+  assert.deepEqual(childRun(dir, { CHATLOG_DB: path.join(dir, "no-such-dir", "chatlog.db") }, probe).more, { err: true, code: "archive_db" },
+                   "myapp.db's empty tables don't count as an archive with nothing to remove");
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "chatlog-attach-v4fresh-"));
+  assert.deepEqual(childRun(fresh, { CHATLOG_DB: path.join(fresh, "no-such-dir", "chatlog.db") }, probe).more, { err: true, code: "archive_db" },
+                   "a fresh install (no archive tables at all)");
+  assert.deepEqual(childRun(dir, { CHATLOG_DB: path.join(dir, "chatlog.db") }, probe).more, { err: false, code: "resolved" }, "the path fixed: it runs");
+});
+
 /** A child process in `dir` WITHOUT CL.init() (what tools/remove-stray-pad.js / scrub-consent-feed.js do): CL.attach(), then body. */
 function toolRun(dir, env, body) {
   const { execFileSync } = require("child_process");

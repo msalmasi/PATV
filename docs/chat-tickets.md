@@ -391,29 +391,39 @@ ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape ch
   cancelled counts too. The page shows the box disabled with the time it opens again; the deletion itself can still be
   asked for without it. Review fix: `schedule()` checks "already scheduled" and the day again inside the insert's own
   `dbUtils.tx` (one at a time), so two requests sent at once can't both be scheduled or both carry the choice.
-- **Stored with the request:** `account_deletions.remove_public` (1 / NULL), `public_done_at` and `public_login` (columns
-  added by `init()`). Signing in during the grace cancels the request and its choice together. `public_login` is the
-  released Camfrog login, written only on a done row with the choice and only until the archive's part has run (its web
-  lines are under it, below); `removePublicNow` NULLs it. Nothing reads it but the retry, and the hub row never names it.
+- **Stored with the request:** `account_deletions.remove_public` (1 / NULL), `public_done_at` and `public_windows` (review
+  2; `public_login` before it - columns added by `init()`). Signing in during the grace cancels the request and its choice
+  together. `public_windows` is JSON `[{login, from, to}]`: every Camfrog login linked to the account and the span it was
+  the account's (below), written only on a done row with the choice and only until the archive's part has run (their web
+  lines are under them); `removePublicNow` NULLs it. Nothing reads it but the retry, and the hub row never names a login.
+  (`public_login`, the single released login, is read only on a row written before review 2.)
 - **The hub's part:** the `privacy/account-deleted` row (and its snapshot row: `huboutbox`'s reader selects the column)
   carries `remove_public: true`; the hub then forgets the text of the account's public lines (`_erase_account`), a line
   under a report kept as a former member's until its hold ends (D10) and forgotten then (`erasure_deferred`). The payload's
   shape is unchanged (the field has existed since S0, seam plan D-23), so `huboutbox.VERSION` stays `1.99ads` and the shared
   golden rows are unchanged.
-- **The pad chat archive's part** (`chatlogmod.removeAccountLines(userId, {login, upto})`, run by `execute()` **after** the
-  deletion's commit, so a deletion that rolls back - or that a sign-in then cancels - purges nothing). Purged at once by
-  `purgeRows` as their author (`rm_by` `self`: text, name and key - only the one-way hash stays -, the search index,
-  `bridge_feed`, quotes, mention notices and alerts):
+- **The pad chat archive's part** (`chatlogmod.removeAccountLines(userId, {windows})`, run by `execute()` **after** the
+  deletion's commit, so a deletion that rolls back - or that a sign-in then cancels - purges nothing). Purged at once as
+  their author (`rm_by` `self`: text, name and key - only the one-way hash stays -, the search index, `bridge_feed`, quotes,
+  mention notices and alerts):
   - the account's own web lines: `u:<id>`, and the lines it said while incognito, archived as `h:<hash of u:<id>>`;
   - review fix: **a linked member's web lines**, which the bridge archives under the Camfrog **login** with `d.u.web`
-    (`bridge.js` `jobSender`), not under `u:<id>`: `execute()` reads the login before it releases it and passes it with
-    `upto` = the deletion's time (a released login is someone else's to link afterwards, and their web lines aren't this
-    member's). Like Remove my line (CL6 `isAuthor`: every line under a login is its current holder's), an earlier holder's
-    web lines under the same login go too.
-  - Not reached: the login's Camfrog lines (the login's, not the account's - "Also hide my past public chat lines" leaves
-    them out), and a linked member's lines said **while incognito** (`h:<hash of the login>`: Pepe sends an anonymised line
+    (`bridge.js` `jobSender`), not under `u:<id>`. Review 2: under **every** login linked to the account, each inside the
+    span it was the account's (`accountdelete.loginWindowsOf`, read in the deletion's transaction before step 5 deletes
+    `username_history` and step 6 pseudonymises `login_changes`): its login now up to the deletion (a released login is
+    someone else's to link afterwards), and each login it let go - an unlink, a relink, another account's `!verify` - up
+    to that change (`login_changes` since 1.99tl, `username_history` kind `camfrog` since 1.99tg, both 12 October 2026). A
+    span starts after the latest earlier record about that login, whoever's (its own link of it, another account's link,
+    release or trace), or at 0 when there is none (linked before the history began). A web line under a login is the line
+    of whoever held the login when it was sent, so **another account's web lines under the same login stay**, before or
+    after the member held it (until review 2 the current login reached back to 0 like CL6's Remove my line, deleting an
+    earlier holder's web lines; it still does when no record bounds it).
+  - Not reached: the logins' Camfrog lines (the login's, not the account's - "Also hide my past public chat lines" leaves
+    them out), a linked member's lines said **while incognito** (`h:<hash of the login>`: Pepe sends an anonymised line
     with no web mark, so the archive can't tell the ones sent from the website from the Camfrog ones; they name nobody, and
-    "Also hide my past public chat lines" leaves them out too). The checkbox hint and the privacy paragraph say so.
+    "Also hide my past public chat lines" leaves them out too), and (review 2) a login the account let go before the
+    history began (12 October 2026: no record of the span; the backfill's `seen` traces end nothing). The checkbox hint and
+    the privacy paragraph say so.
 - **The same exceptions as the hub, with D10's bounds** (review fix; ADR 0007 OQ-20 "yes, same exceptions", OQ-21 / D10;
   the hub's `rooms._report_hold_until`): a line a legal hold covers (its room, or its speaker) or a report holds is taken down
   at once instead (`rm_by` `self`, like Remove my line: out of every view, its copies with it, the live feed too) and listed in
@@ -431,8 +441,39 @@ ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape ch
   login's lines aren't the account's to hide from him (each purged one is in his per-line removed list).
   `public_done_at` and the counts (`report.public_removed = {lines, held}`, no words or names) record it; a **done** row with
   the choice and no `public_done_at` (a restart between the commit and the purge, an error) is run again by the tick
-  (`retryRemovePublic`, with the row's `public_login`); never a scheduled, held or cancelled one. Logs carry counts only.
-- **Where the two stores still differ** (V4's call, for the owner's review; default: as built): a held or reported line is
+  (`retryRemovePublic`, with the row's `public_windows` - their ends are the deletion's, never the retry's time); never a
+  scheduled, held or cancelled one. Logs carry counts only.
+- **Review 2** (the second review of V4, 2026-10-24; everything still behind `erasure`, off):
+  - **An archive that can't be reached fails the removal.** `removeAccountLines` throws (code `archive_db`) when
+    `chatlog.archiveError()` is set (a `CHATLOG_DB` that didn't open: `init()` resolves and leaves `chat_log` missing or as
+    empty tables in myapp.db) or the archive's tables are missing - before, it answered "nothing to remove", so the row was
+    recorded done and its login dropped, and the words stayed once the archive was fixed. Now `public_done_at` stays NULL,
+    `public_windows` stays on the row, and the tick runs it once the archive is back; an unreachable archive stops the
+    tick's round with one log line (no ids, no path).
+  - **Decided inside the writing transaction.** Each batch (200 lines) is read, decided and written in ONE `dbUtils.tx`:
+    the legal holds reloaded (`loadHolds`), the rows and their reports read inside it. A moderator's hide or un-hide, a new
+    hold or report waits for it (or lands before it and is seen), so a line can't end up shown with `rm_by` `self`, nor a
+    moderator's later hide stay undoable, nor a line be purged past a hold or report placed in between. The nightly
+    `eraseWaitPass` does the same. `purgeRows` is split into `purgeInTx` (the writes, inside the caller's transaction) and
+    the wrapper. `unhide`'s write now also requires the `rm_by` it checked (`rm_by IS ?`): an un-hide checked before the
+    removal relabelled a moderator's hide to `self` changes nothing (`restored: false`).
+  - **One run per request.** `removePublicNow` shares a run in progress (the step after the commit and the tick's retry),
+    answers from the row once `public_done_at` is set, and its `public_done_at IS NULL` write keeps the first finisher's
+    counts.
+  - **Earlier logins** (above): `public_windows` and `loginWindowsOf`; another account's web lines under a login are no
+    longer reached.
+  - **The privacy paragraph's date** is when `erasure` was FIRST turned on (`hubseam_settings.first_on`, set once by
+    `setSettings`; a row on before the column is dated by its `updated` at boot): a break-glass off / on no longer re-dates
+    the published paragraph, its "Changes" entry or "Last updated".
+- **Review 2's calls** (for the owner's review; default: as built): (1) the member's choice no longer reaches **another
+  account's** web lines under a login - an earlier or later holder's - wherever the login history shows who held it (the
+  first build, like CL6's Remove my line, deleted an earlier holder's web lines under the member's current login); with no
+  record (a login linked before 12 October 2026 and never changed since) it still reaches back to the start. (2) A kept line
+  that a moderator, staff or a "minor" report had hidden becomes the author's removal (`rm_by` `self`, `rm_why` NULL): the
+  hider's reason leaves the line (the pad's owner then sees "Removed by its author", with no words) and the report queue shows
+  it as removed by its author instead of hidden; the report and its reasons, the `room_events` row with the hider's reason and
+  the staff audit stay. Changing that would need another way to stop an un-hide or a dismissal bringing the words back.
+- **Where the two stores still differ** (V4's call, accepted as built by the owner, ADR 0007 D16): a held or reported line is
   out of view in v1's archive at once (taken down as the author's, its words kept for the hold), while on the hub it stays
   visible as a former member's line until its hold ends (`erasure_deferred`). What is kept, and for how long, is the same.
 - **The privacy page** (`views/privacy.ejs`, `terms.js` passes `accountdelete.privacyCopy()`): one paragraph,
@@ -440,7 +481,8 @@ ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape ch
   pad chat archive together, only while `erasure` is on; with the `export` switch also on, one sentence says "Download my
   data" includes what PATV chat keeps. It names what stays without the tick (a former member's lines - or, for a linked
   member's web lines, the Camfrog name), what the tick deletes, D10's bounds, and what it can't reach. Dated by the switch's
-  own row (`hubseam_settings.updated`): a dated note in "Changes", and "Last updated" when it is the newest change. Review
+  own row (review 2: `hubseam_settings.first_on`, the first time it went on): a dated note in "Changes", and "Last updated"
+  when it is the newest change. Review
   fix: `huboutbox.setSettings` now moves a switch's `updated` / `actor` only when its value changes (the `/admin/keys#seam`
   form posts every switch on each save, which moved the date before); every save is still in the admin audit. **Owner
   action O-20** ("one privacy paragraph", S1 plan) is this paragraph's wording: it is put to the owner (default: as
@@ -452,7 +494,13 @@ ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape ch
   nightly pass once the hold and the report end - D10's bounds (decided, undecided, decided late, a report filed after the
   removal), kept lines already down (a dismissed "minor" report), a person hold (`who:`), no purge on a rolled-back deletion,
   the tick's retry with the kept login and never for a scheduled or cancelled request - the routes (GET's box, POST's strict
-  `true`, 409 / 429), the delete page and the privacy page with the switches off and on and a save of every switch);
+  `true`, 409 / 429), the delete page and the privacy page with the switches off and on and a save of every switch; review
+  2: an unreachable archive (archiveError, missing tables) leaving the row waiting until the tick, the decision inside the
+  transaction against a moderator's un-hide / hide, a legal hold and a report queued in between - for the removal and the
+  nightly pass -, earlier logins' spans (another holder's lines before and after, an unlinked login, a `seen` trace), a
+  retry six hours after a crash keeping to the deletion's spans, one run per request, the first finisher's counts, and a
+  break-glass off / on keeping the paragraph's date); `test/chatlog-takedowns.test.js` (review 2: an un-hide checked before
+  the relabel changes nothing);
   `test/chatlog-attach.test.js` (an archive in the attached `chatlog.db`: `removeAccountLines` finds `chat_log` there);
   `test/hubseam-driver-v4.test.js` (the driver's commands, an unlinked and a linked account). The hub half of the
   cross-store test is the contract suite's scenario **5b** (the hub repo,
@@ -462,7 +510,8 @@ ADR 0007 D19), and V2 takes the next free letter when it lands. No seam shape ch
   under its login, as the bridge archives them; `camfrog: true` for a Camfrog line), `chatLog {cs}`.
 - **i18n:** new keys only - `acctdel.what.hub`, `acctdel.remove_public`, `acctdel.remove_public_meta`,
   `acctdel.remove_public_wait`; the sync translates them after the staging push. The privacy page is English, like the rest
-  of it.
+  of it. Review 2 changed `acctdel.remove_public_meta`'s English (earlier linked names, and a name let go before 12 October
+  2026 not reached); the sync re-translates a changed key by itself.
 - **Turn-on (Q7):** nothing of its own - it appears with `erasure` (and its export sentence with `export`).
 
 ## S1: `/admin/chat`, the chat hub's break-glass (release L1's V1 part, 1.99adz)
