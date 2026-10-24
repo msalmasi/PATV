@@ -6,6 +6,7 @@
   their room-settings header - slow mode, topic - are slice M2's). The tabs are plain links (?view=), so the page works without
   script. Every permission is the hub's can(): a viewer it refuses sees "Nothing to show". Shown whatever CHAT_HUB says (D3:
   mods keep working reports after a rollback). A pad on v1's chat keeps the 301 to /p/<slug>/settings?tab=moderation.
+  Behind padaccess's 18+ gate (tools.state 'gate'): the 18+ card instead of the tools.
 %>
 <% const T_ = typeof tools !== 'undefined' && tools ? tools : { state: 'off', why: 'not_installed' };
    const href_ = '/p/' + encodeURIComponent(slug); %>
@@ -23,6 +24,9 @@
     <% if (T_.state === 'tools') { %>
       <patv-modtools view="<%= view %>" pad="<%= hubPadId %>" locale="<%= T_.locale %>" theme="dark"></patv-modtools>
       <%- include('partials/chat-widget-boot', { cw: T_ }) %>
+    <% } else if (T_.state === 'gate') { %>
+      <%# padaccess's 18+ gate (an 18+ pad, the gate on, the viewer's age not confirmed): its card, no tools and no widget %>
+      <%- include('partials/adult-gate', { gate: T_.gate, next: T_.next, cls: '', tag: 'div' }) %>
     <% } else { %>
       <p class="muted" data-chat-tools="<%= T_.why %>" style="margin:0"><%- T_.why === 'no_account' ? t('chatw.mod.no_account') : t('chatw.mod.off') %></p>
     <% } %>

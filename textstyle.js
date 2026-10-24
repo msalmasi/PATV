@@ -15,10 +15,10 @@
 // The picker is behind the `looks` switch (hubseam.looks, /admin/keys#seam - the switch that sends text styles to the chat
 // hub; ADR 0007 D19: every S1 switch stays off until Q7, so nothing a member sees changes before then): while it is off the
 // card, the /settings row and the save route are not there (the route answers 404, nothing written). A style already
-// saved stays stored. S1 V2 (release L4) brought CHAT_HUB to v1's pages (chatwidget.hubOn); pickerOn() stays on `looks`
-// alone - the gate the owner accepted (ADR 0007 D13, 2026-10-21). CHAT_HUB can't be on without `looks` (the interlock,
-// S1-D7), so also requiring it would only hide the picker between Q7's `looks` step and CHAT_HUB on, the days staff set
-// their styles before the pilot opens; that is the owner's call (one line: `&& await chatwidget.hubOn()`, made async).
+// saved stays stored. S1 V2 (release L4) brought CHAT_HUB to v1's pages (chatwidget.hubOn = chatswitches.chatHubOnNow);
+// pickerOn() stays on `looks` alone - the gate the owner accepted (ADR 0007 D13, 2026-10-21) and V2's call he accepted
+// (2026-10-24): CHAT_HUB can't be on without `looks` (the interlock, S1-D7), so also requiring it would only hide the
+// picker between Q7's `looks` step and CHAT_HUB on, the days staff set their styles before the pilot opens.
 //
 // The palette and the fonts are chat-text-styles.json: rt-schema's registry/text-styles.json byte for byte (its sha256 is
 // pinned in test/huboutbox-s1.test.js; a palette change is an rt-schema PR first, then this copy). A colour must be one of

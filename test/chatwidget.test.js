@@ -6,6 +6,7 @@
 //     and webfonts only on widget pages
 //   - the vendored files' cache headers; /p/<slug>/mod (hub pads -> the chat moderation page, v1 pads keep the 301);
 //     /admin/chat/<view> and the /admin overview card (who sees what, whatever CHAT_HUB says)
+//   - a vendoring commit takes effect without a restart (manifest.json looked at again every RECHECK_MS)
 //   NODE_PATH=G:/PATV/node_modules node --test test/chatwidget.test.js
 "use strict";
 const test = require("node:test");
@@ -200,6 +201,7 @@ test("CHAT_HUB: a missing table, no row, 'off' or anything but exactly 'on' moun
     const got = await CW.forPad(reqAs(U.fan), resWith(), opts);
     assert.equal(got, null, "CHAT_HUB " + JSON.stringify(v));
     assert.equal(await CW.hubOn(), false, "hubOn " + JSON.stringify(v));
+    assert.equal(await require(path.join(repo, "chatswitches")).chatHubOnNow(), false, "release L1's reader agrees");
   }
   await setChatHub("on");
   assert.equal(await CW.hubOn(), true);
@@ -423,9 +425,21 @@ test("/p/<slug>/mod: a v1 pad, a Camfrog pad or no widget keeps the 301 to the s
   const out = await get("/p/hub-pad/mod");
   assert.equal(out.status, 302);
   assert.equal(out.loc, "/login?next=%2Fp%2Fhub-pad%2Fmod");
+  // signed out: sign in first for EVERY slug while the widget is installed - the answer never tells a visitor which pads are on
+  // the hub (the address comes back here after the sign-in, and routes by the pad then)
+  for (const sl of ["v1-pad", "frog-room", "apr-pad", "no-such-pad"]) {
+    const r = await get("/p/" + sl + "/mod");
+    assert.equal(r.status, 302, sl);
+    assert.equal(r.loc, "/login?next=" + encodeURIComponent("/p/" + sl + "/mod"), sl);
+  }
+  assert.equal((await get("/p/hub-pad/mod?view=bans")).loc, "/login?next=%2Fp%2Fhub-pad%2Fmod%3Fview%3Dbans", "a pad view kept");
+  assert.equal((await get("/p/hub-pad/mod?view=%22%3E%3Cx")).loc, "/login?next=%2Fp%2Fhub-pad%2Fmod", "...only a pad view");
+  assert.equal((await get("/p/a%22b%3C/mod")).loc, "/login?next=" + encodeURIComponent("/p/a%22b%3C/mod"), "the slug encoded");
   CW._setDir(widgetDir("nomanifest-mod", { manifest: null }));
-  try { assert.equal((await get("/p/hub-pad/mod", U.fan)).loc, "/p/hub-pad/settings?tab=moderation", "no widget: the 301"); }
-  finally { CW._setDir(GOOD); }
+  try {
+    assert.equal((await get("/p/hub-pad/mod", U.fan)).loc, "/p/hub-pad/settings?tab=moderation", "no widget: the 301");
+    assert.equal((await get("/p/hub-pad/mod")).status, 301, "no widget: the 301 signed out too, as before");
+  } finally { CW._setDir(GOOD); }
   process.env.HUB_RT_API = "";
   try { assert.equal((await get("/p/hub-pad/mod", U.fan)).status, 301, "no hub origins: the 301"); }
   finally { process.env.HUB_RT_API = API; }
@@ -454,6 +468,43 @@ test("/p/<slug>/mod of a hub pad: the chat moderation page - <patv-modtools> per
   assert.ok(!legacy.text.includes("<patv-modtools") && !legacy.text.includes("patv-chat-config"), "no hub account: no widget");
   assert.match(legacy.text, /data-chat-tools="no_account"/);
   assert.equal((await get("/p/apr-pad/mod", U.staff)).status, 200, "staff are inside every Approved pad");
+});
+
+test("/p/<slug>/mod of an 18+ hub pad: padaccess's 18+ gate - its card instead of the tools, for a viewer whose age isn't confirmed", async () => {
+  await setAdult(P.hub.id, true);
+  try {
+    const r = await get("/p/hub-pad/mod?view=bans", U.fan);
+    assert.equal(r.status, 200);
+    assert.equal(r.cc, "private, no-store");
+    assert.match(r.text, /data-adult-gate="confirm"/);
+    assert.match(r.text, /href="\/confirm-age\?next=%2Fp%2Fhub-pad%2Fmod%3Fview%3Dbans"/, "the way back is this view");
+    assert.ok(!r.text.includes("<patv-modtools") && !r.text.includes("patv-chat-config") && !r.text.includes("rt-staging"), "no tools, no config, no preconnect");
+    assert.match((await get("/p/hub-pad/mod", U.staff)).text, /<patv-modtools view="reports"/, "site staff are exempt from the 18+ gate");
+    await rooms.setPage(P.apr.id, { adult: true }, "test");
+    try { assert.equal((await get("/p/apr-pad/mod", U.fan)).status, 301, "an 18+ Approved pad's outsider: the 301, not the 18+ card"); }
+    finally { await rooms.setPage(P.apr.id, { adult: false }, "test"); }
+  } finally { await setAdult(P.hub.id, false); }
+  assert.match((await get("/p/hub-pad/mod", U.fan)).text, /<patv-modtools view="reports"/, "the gate off again: the tools");
+});
+
+test("a pad_hub row whose hub_pad_id isn't a uuid is no hub pad: no mount, nothing logged, /p/<slug>/mod keeps the 301", async () => {
+  const opts = { roomId: P.hub.id, slug: P.hub.slug, platform: "site" };
+  const errs = [];
+  const orig = console.error;
+  await runQuery("UPDATE pad_hub SET hub_pad_id = 'not-a-uuid' WHERE room_id = ?", [P.hub.id]);
+  console.error = (...a) => errs.push(a.join(" "));
+  try {
+    assert.equal(await CW.padRow(P.hub.id), null);
+    assert.equal(await CW.forPad(reqAs(U.fan), resWith(), opts), null);
+    const r = await get("/p/hub-pad/mod", U.fan);
+    assert.equal(r.status, 301, "the settings hub, not a page with an id the widget refuses");
+    assert.equal(r.loc, "/p/hub-pad/settings?tab=moderation");
+  } finally {
+    console.error = orig;
+    await runQuery("UPDATE pad_hub SET hub_pad_id = ? WHERE room_id = ?", [HUB_PAD, P.hub.id]);
+  }
+  assert.deepEqual(errs, [], "refused as no hub row, not as a failed mount check");
+  assert.equal((await CW.padRow(P.hub.id)).hubPadId, HUB_PAD);
 });
 
 // ── the admin shell ──
@@ -504,16 +555,26 @@ test("the admin views' X-Robots-Tag and the overview card read the database's cl
   for (const v of Object.keys(CW.ADMIN_VIEWS)) assert.equal((await get("/admin/chat/" + v, U.adm)).h.get("x-robots-tag"), "noindex", v);
 });
 
-test("chat capabilities: release L1's siteperms keys once they exist, their D15 defaults (Assistant / Admin) until then", () => {
-  const core = require(path.join(repo, "siteperms-core"));
+test("chat capabilities: release L1's siteperms keys (chat.mod_queue Assistant, chat.audit Admin) with their overrides; one view map", async () => {
+  const SP = require(path.join(repo, "siteperms"));
+  await SP.init();
+  assert.equal(CW.ADMIN_VIEWS, require(path.join(repo, "adminchat")).MOD_VIEWS, "the views' capabilities are release L1's map (one source)");
   for (const k of ["chat.mod_queue", "chat.audit"]) {
-    const registered = !!core.capOf(k);
     const want = k === "chat.audit" ? { pleb: false, Assistant: false, Staff: false, Admin: true } : { pleb: false, Assistant: true, Staff: true, Admin: true };
-    for (const [cls, ok] of Object.entries(want)) {
-      if (registered) assert.equal(CW.canChat({ class: cls }, k), require(path.join(repo, "siteperms")).can({ class: cls }, k), k + " follows siteperms");
-      else assert.equal(CW.canChat({ class: cls }, k), ok, `${k} ${cls}`);
-    }
+    for (const [cls, ok] of Object.entries(want)) assert.equal(CW.canChat({ class: cls }, k), ok, `${k} ${cls}`);
   }
+  // siteperms decides, overrides included: the queue raised to Staff
+  await runQuery("INSERT INTO site_perms (key, min_class, ts, by, by_level) VALUES ('chat.mod_queue', 'staff', ?, 'test', 100)", [Date.now()]);
+  await SP.reload();
+  try {
+    assert.equal(CW.canChat({ class: "Assistant" }, "chat.mod_queue"), false, "raised to Staff: an Assistant is out");
+    assert.equal(CW.canChat({ class: "Staff" }, "chat.mod_queue"), true);
+    assert.equal((await get("/admin/chat/reports", U.asst)).status, 403, "...of the page too");
+  } finally {
+    await runQuery("DELETE FROM site_perms WHERE key = 'chat.mod_queue'");
+    await SP.reload();
+  }
+  assert.equal(CW.canChat({ class: "Assistant" }, "chat.mod_queue"), true);
   assert.equal(CW.canChat({ class: "Admin" }, "chat.breakglass"), false, "only the two keys these pages use");
   assert.equal(CW.canChat({ class: "Admin" }, "__proto__"), false);
   assert.equal(CW.canChat(null, "chat.mod_queue"), false);
@@ -596,13 +657,13 @@ test("/p/<slug> of a hub 18+ pad: the 18+ card, never the chat, for a viewer the
 
 // ── the admin nav's Chat group (V2 owns its moderation links) and the admin home ──
 const navOf = (locals) => ejs.renderFile(path.join(repo, "views", "partials", "admin-nav.ejs"), { section: "overview", ...locals });
-const L1 = () => !!require(path.join(repo, "siteperms-core")).capOf("chat.mod_queue");
 
-test("adminNavLinks: /admin/chat/<view> per capability siteperms has registered (release L1's keys) - none before, every view after", () => {
+test("adminNavLinks: /admin/chat/<view> for every view, with release L1's capability (all registered)", () => {
   const core = require(path.join(repo, "siteperms-core"));
-  const want = Object.keys(CW.ADMIN_VIEWS).filter((v) => core.capOf(CW.ADMIN_VIEWS[v])).map((v) => ["/admin/chat/" + v, CW.ADMIN_LABELS[v], CW.ADMIN_VIEWS[v]]);
-  assert.deepEqual(CW.adminNavLinks(), want);
-  assert.equal(CW.adminNavLinks().length, L1() ? 6 : 0, L1() ? "L1 is here: all six" : "before L1: none (the nav never asks siteperms about an unknown key)");
+  assert.deepEqual(CW.adminNavLinks(), [["/admin/chat/reports", "Reports", "chat.mod_queue"], ["/admin/chat/held", "Held", "chat.mod_queue"],
+    ["/admin/chat/modlog", "Mod log", "chat.mod_queue"], ["/admin/chat/bans", "Bans", "chat.mod_queue"],
+    ["/admin/chat/audit", "Audit (admin reads)", "chat.audit"], ["/admin/chat/switches", "Retention & switches", "chat.audit"]]);
+  for (const [, , k] of CW.adminNavLinks()) assert.ok(core.capOf(k), "registered: " + k);
   const app = { locals: {}, get() {} };
   CW.register(app, {});
   assert.equal(app.locals.chatAdminNav, CW.adminNavLinks, "every view gets it through app.locals");
@@ -625,7 +686,7 @@ test("the admin nav: the chat links join the Chat group, open it to their capabi
   assert.doesNotMatch(onPage, /href="#/, "no bare anchors: they would resolve against /admin/chat/<view>");
 });
 
-test("with release L1 (its keys and its Chat entry): Assistants reach the queue from the nav and get an admin home; Admins keep /admin/chat", { skip: !L1() && "release L1's chat.mod_queue isn't registered on this branch (runs once L1 is merged)" }, async () => {
+test("with release L1 (its keys and its Chat entry): Assistants reach the queue from the nav and get an admin home; Admins keep /admin/chat", async () => {
   const SP = require(path.join(repo, "siteperms"));
   const nav = (cls, section = "overview") => navOf({ me: { class: cls }, section, chatAdminNav: CW.adminNavLinks });
   const group = (html) => { const i = html.indexOf("💬"); return i < 0 ? null : html.slice(html.lastIndexOf("<li", i), html.indexOf("</li>", i)); };
@@ -647,11 +708,11 @@ test("with release L1 (its keys and its Chat entry): Assistants reach the queue 
   assert.match(r.text, /class="adm-subbar"[\s\S]*href="\/admin\/chat\/held"/, "the page's own nav, through app.locals");
 });
 
-test("AREA_PAGES: the chat queue is an admin home only once siteperms registers chat.mod_queue (no unknown key, ever)", () => {
+test("AREA_PAGES: the chat queue is an admin home (release L1's chat.mod_queue; no unknown key, ever)", () => {
   const SP = require(path.join(repo, "siteperms"));
   const core = require(path.join(repo, "siteperms-core"));
   for (const [, keys] of SP.AREA_PAGES) for (const k of keys) assert.ok(core.capOf(k), "registered: " + k);
-  assert.equal(SP.AREA_PAGES.some((p) => p[0] === "/admin/chat/reports"), L1());
+  assert.ok(SP.AREA_PAGES.some((p) => p[0] === "/admin/chat/reports" && p[1].length === 1 && p[1][0] === "chat.mod_queue"));
 });
 
 test("register() reads the manifest at start-up: a bad export is logged when the site starts, not on a first page", () => {
@@ -664,6 +725,144 @@ test("register() reads the manifest at start-up: a bad export is logged when the
     CW.register({ locals: {}, get() {} }, {});
     assert.deepEqual(errs, ["[chatwidget] widget off: manifest.json isn't JSON"]);
   } finally { console.error = orig; CW._setDir(GOOD); CW._reset(); }
+});
+
+test("a vendoring commit takes effect without a restart: manifest.json is looked at again every RECHECK_MS (v1's updater restarts nothing for public/)", async () => {
+  let t = 1e12;
+  const d = path.join(dir, "live-export");
+  fs.mkdirSync(d, { recursive: true });
+  const logs = [], errs = [];
+  const ol = console.log, oe = console.error;
+  const write = (name, text) => fs.writeFileSync(path.join(d, name), text);
+  const man = (version, entry, src) => JSON.stringify({ schema: 1, version, entries: { chat: entry }, sri: { [entry]: sri(src) } });
+  const E1 = "patv-chat.Vv111111.js", S1 = "export const v = 1;\n", E2 = "patv-chat.Ww222222.js", S2 = "export const v = 2;\n";
+  const opts = { roomId: P.hub.id, slug: P.hub.slug, platform: "site" };
+  CW._setNow(() => t);
+  console.log = (...a) => logs.push(a.join(" "));
+  console.error = (...a) => errs.push(a.join(" "));
+  try {
+    CW._setDir(d);
+    assert.equal(CW.manifest(), null, "no export yet");
+    // the first vendoring commit, pulled: git writes manifest.json before the patv-chat.<h>.js it names (path order)
+    write("manifest.json", man("0.2.0", E1, S1));
+    assert.equal(CW.manifest(), null, "within RECHECK_MS: the cached answer");
+    t += CW.RECHECK_MS;
+    assert.equal(CW.manifest(), null, "the manifest is there, its entry not yet");
+    write(E1, S1);
+    t += CW.RECHECK_MS;
+    assert.equal(CW.manifest().script, CW.URL_BASE + E1, "the same manifest is verified again while it can't be used: on now");
+    assert.equal((await CW.forPad(reqAs(U.fan), resWith(), opts)).boot.integrity, sri(S1));
+    // the next export: a new entry and manifest (the export keeps the old files a while, then prunes them)
+    write(E2, S2);
+    write("manifest.json", man("0.3.0", E2, S2));
+    t += CW.RECHECK_MS - 1;
+    assert.equal(CW.manifest().entry, E1, "not before RECHECK_MS");
+    t += 1;
+    assert.equal(CW.manifest().entry, E2, "the new entry, no restart");
+    const m = await CW.forPad(reqAs(U.fan), resWith(), opts);
+    assert.equal(m.boot.script, CW.URL_BASE + E2);
+    assert.equal(m.boot.integrity, sri(S2), "...with its own SRI");
+    assert.equal(CW.status().version, "0.3.0");
+    fs.unlinkSync(path.join(d, E1));
+    t += CW.RECHECK_MS;
+    assert.equal(CW.manifest().entry, E2, "the old file pruned: nothing names it");
+    // a broken export turns the widget off (one line), a fixed one back on
+    write("manifest.json", JSON.stringify({ schema: 1, version: "0.3.1", entries: { chat: E2 }, sri: { [E2]: sri("other bytes") } }));
+    t += CW.RECHECK_MS;
+    assert.equal(CW.manifest(), null, "a manifest whose entry doesn't match its SRI: off");
+    assert.equal(await CW.forPad(reqAs(U.fan), resWith(), opts), null);
+    t += CW.RECHECK_MS;
+    assert.equal(CW.manifest(), null, "still off (said once)");
+    write("manifest.json", man("0.3.2", E2, S2));
+    t += CW.RECHECK_MS;
+    assert.equal(CW.manifest().version, "0.3.2");
+    // the widget taken out (the vendored directory emptied): off
+    fs.unlinkSync(path.join(d, "manifest.json"));
+    t += CW.RECHECK_MS;
+    assert.equal(CW.manifest(), null);
+    assert.equal(CW.toolsFor(reqAs(U.fan), resWith()).state, "off");
+  } finally {
+    console.log = ol; console.error = oe;
+    CW._setNow(null);
+    CW._setDir(GOOD);
+  }
+  assert.deepEqual(errs, ["[chatwidget] widget off: the tab entry named in the manifest is missing",
+                          "[chatwidget] widget off: the tab entry doesn't match its SRI", "[chatwidget] widget off: no manifest"], "a line per change, the reason only");
+  assert.deepEqual(logs, ["[chatwidget] widget 0.2.0 in use", "[chatwidget] widget 0.3.0 in use", "[chatwidget] widget 0.3.2 in use"]);
+});
+
+test("the manifest is cached between looks: one read of manifest.json per RECHECK_MS, the entry's bytes hashed only when it changed", () => {
+  let t = 2e12;
+  const reads = [];
+  const orig = fs.readFileSync;
+  CW._setNow(() => t);
+  CW._setDir(GOOD);
+  fs.readFileSync = function (p) { reads.push(path.basename(String(p))); return orig.apply(fs, arguments); };
+  try {
+    assert.ok(CW.manifest());
+    assert.deepEqual(reads, ["manifest.json", ENTRY], "the first look verifies the entry");
+    reads.length = 0;
+    for (let i = 0; i < 5; i++) CW.manifest();
+    assert.deepEqual(reads, [], "cached within RECHECK_MS");
+    t += CW.RECHECK_MS;
+    assert.ok(CW.manifest());
+    assert.deepEqual(reads, ["manifest.json"], "unchanged: the manifest read, the entry not hashed again");
+  } finally { fs.readFileSync = orig; CW._setNow(null); CW._setDir(GOOD); }
+});
+
+test("pad-hub-chat.ejs: the cards' way back is a local path only (anything else becomes /)", async () => {
+  const card = (cw, tag) => ejs.renderFile(path.join(repo, "views", "partials", "pad-hub-chat.ejs"), { cw, tag });
+  for (const tag of ["section", "div"]) {
+    assert.match(await card({ state: "signin", next: "/p/hub-pad?line=4" }, tag), /href="\/login\?next=%2Fp%2Fhub-pad%3Fline%3D4"/, tag);
+    for (const bad of ["//evil.example/x", "/\\evil.example", "https://evil.example/", "javascript:alert(1)", "p/hub-pad", "", null, 7]) {
+      assert.match(await card({ state: "signin", next: bad }, tag), /href="\/login\?next=%2F"/, tag + " " + JSON.stringify(bad));
+      assert.match(await card({ state: "gate", gate: "confirm", next: bad }, tag), /href="\/confirm-age\?next=%2F"/, tag + " gate " + JSON.stringify(bad));
+    }
+  }
+});
+
+test("home.js: the panel's pad gets forPad's compact mount - S1's panel (the bridge's Camfrog rooms) never does; a hub site pad there would", async () => {
+  const bridge = require(path.join(repo, "bridge"));
+  const app = express();
+  app.set("views", path.join(repo, "views"));
+  app.set("view engine", "ejs");
+  app.use((req, res, next) => { const h = req.get("x-test-user"); req.user = h ? users.get(h) || null : null; req.flash = () => []; res.locals.ogBase = "http://test"; next(); });
+  // what home.js hands home.ejs (the view itself needs the whole site's tables; test 'home.ejs: ...' renders it)
+  app.response.render = function (view, data) {
+    const cw = this.locals.chatWidget;
+    return this.json({ view, room: data.room ? data.room.id : null, cw: cw ? { state: cw.state, mode: cw.mount ? cw.mount.mode : null, pad: cw.mount ? cw.mount.pad : null } : null });
+  };
+  require(path.join(repo, "home")).register(app, { addUser: (req, res, next) => next(), xpForNextLevel: () => 100 });
+  const srv = app.listen(0);
+  const at = async (u) => (await fetch("http://127.0.0.1:" + srv.address().port + "/", { headers: u ? { "x-test-user": u.userId } : {} })).json();
+  const orig = bridge.summary;
+  const row = (p, name) => ({ id: p.id, slug: p.slug, name, title: name, live: true, count: 2, micCount: 0, topic: "" });
+  try {
+    bridge.summary = async () => [row(P.cf, "Frog Room")];
+    let r = await at(U.fan);
+    assert.equal(r.view, "home");
+    assert.equal(r.room, P.cf.id);
+    assert.equal(r.cw, null, "a Camfrog room - even one whose pad_hub row says 'hub' - never mounts (S1: site pads only)");
+    bridge.summary = async () => [row(P.hub, "Hub Pad")];
+    r = await at(U.fan);
+    assert.equal(r.room, P.hub.id);
+    assert.deepEqual(r.cw, { state: "mount", mode: "compact", pad: HUB_PAD }, "a hub site pad in the panel (D14's 'Lounge chat' card lever): the compact mount");
+    assert.deepEqual((await at(null)).cw, { state: "signin", mode: null, pad: null }, "signed out: the teaser");
+  } finally {
+    bridge.summary = orig;
+    await new Promise((res) => srv.close(res));
+  }
+});
+
+test("?line=: the browser's tab choice (pad-tabs.js lineRequested) and the server's mount (lineOf, Express's query parser) agree", () => {
+  const T = require(path.join(repo, "public", "js", "pad-tabs"));
+  const qs = require("qs");
+  for (const q of ["?line=42", "?x=1&line=9007199254740991", "?line=7#c", "?line=9007199254740992", "?line=9999999999999999", "?line=12345678901234567",
+                   "?line=1&line=2", "?line=1&line=", "?line", "?line=", "?line=0", "?line=-1", "?line=4x", "?line=%34%32", "?lin%65=5", "?line[]=4",
+                   "?line=+7", "?headline=4", "?line=%zz", ""]) {
+    const parsed = qs.parse(q.replace(/^\?/, "").replace(/#.*$/, ""));
+    assert.equal(T.lineRequested(q), CW.lineOf({ query: parsed }) !== null, "agree on " + JSON.stringify(q));
+  }
 });
 
 test("the walkers that scan public/js leave the vendored widget (the platform repo's build) alone", () => {

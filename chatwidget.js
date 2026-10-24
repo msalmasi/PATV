@@ -5,16 +5,19 @@
 //     staticFiles() serves that directory with the cache headers the widget's host contract asks for: content-hashed files
 //     `public, max-age=31536000, immutable`, manifest.json and releases.json `no-cache` (same name, new content each export),
 //     every file `X-Content-Type-Options: nosniff`. A SharedWorker must be same-origin, which is why v1 serves it.
-//   * manifest(): public/js/patv-chat/manifest.json, read ONCE per process (an export arrives with a deploy, which restarts the
-//     site) - at start-up, when register() runs: schema 1, the tab entry `entries.chat` and its SRI, checked against the file's
-//     bytes. Anything wrong = no widget (one log line, the reason only, when the site starts).
+//   * manifest(): public/js/patv-chat/manifest.json - schema 1, the tab entry `entries.chat` and its SRI, checked against the
+//     file's bytes. Read at start-up (register()) and LOOKED AT AGAIN at most every RECHECK_MS: v1's updater restarts nothing
+//     for a public/ change (deploy/patv-update.sh: static files are served live), so a vendoring commit ("chat widget X.Y.Z")
+//     arrives with a pull and no restart. manifest.json (a few hundred bytes) is read; its text changed -> verified again (the
+//     entry's SRI against its bytes); a manifest that couldn't be used is verified again every time (a pull writes
+//     manifest.json before the patv-chat.<h>.js it names). Pages rendered before keep loading their files: the export keeps
+//     the previous two versions. Anything wrong = no widget; a log line per change of state, the reason only.
 //   * The hub's addresses: HUB_RT_WS (wss://rt.publicaccess.tv) and HUB_RT_API (https://rt.publicaccess.tv) - ORIGINS, as
 //     the widget's page config takes them (ws: / http: only to loopback). Unset or unusable = no widget.
 //   * <patv-chat> (forPad -> res.locals.chatWidget): a SITE pad (an allow-list - ADR 0007 D3: S1 allows the hub only on site
 //     pads; a pad that stops being one, e.g. padconnect's Twitch connect, which keeps the pad id and so its pad_hub row, loses
-//     the widget with it) at pad_hub.chat_backend = 'hub', CHAT_HUB on (v1's kill switch: chat_switches key 'CHAT_HUB', value
-//     exactly 'on' as release L1's chatswitches reads it; the table is L1's - missing or unreadable reads as off), a manifest
-//     and the addresses. Who sees the chat is padaccess's, read here (not taken from the caller): behind the 18+ gate -> its
+//     the widget with it) at pad_hub.chat_backend = 'hub', CHAT_HUB on (v1's kill switch, read with release L1's
+//     chatswitches.chatHubOnNow(): value exactly 'on'; missing or unreadable reads as off), a manifest and the addresses. Who sees the chat is padaccess's, read here (not taken from the caller): behind the 18+ gate -> its
 //     card; signed out -> the "Sign in to chat" teaser (S1 has no guest sockets, so no widget download either); outside the pad
 //     (padaccess.full) -> null; signed in with a hub account id -> the mount (pad = hub_pad_id, room = uuidv5(NS_PAD_MAIN,
 //     hub_pad_id), slug, mode full | compact, theme dark, locale, ?line= passed through - and on such a pad a ?line= link opens
@@ -23,8 +26,8 @@
 //   * <patv-modtools> (toolsFor): /p/<slug>/mod of a hub pad (padModPage), /admin/chat/<view> (register) and the /admin
 //     overview's chat reports card - REGARDLESS of CHAT_HUB (D3: mods keep working reports after a rollback); a manifest, the
 //     addresses and a signed-in hub account needed. Every permission is the hub's can() (a refusal renders "Nothing to show");
-//     v1 only keeps the admin pages to the capabilities D15 names (chat.mod_queue, chat.audit - release L1's keys; until they
-//     exist, their D15 default classes, canChat).
+//     v1 only keeps the admin pages to the capabilities D15 names (release L1's siteperms keys chat.mod_queue and chat.audit,
+//     canChat) and /p/<slug>/mod to a signed-in viewer padaccess lets in, past its 18+ gate.
 //   * The admin nav's 💬 Chat group (views/partials/admin-nav.ejs): THIS slice owns its moderation links (release L1 made the
 //     group for /admin/chat, its break-glass form, and left these to V2): adminNavLinks(), handed to every view as
 //     app.locals.chatAdminNav, lists /admin/chat/<view> per registered capability; the nav adds them to L1's entry and opens
@@ -56,23 +59,29 @@ const LOCALE_RE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/;            // the wi
 const FONTS_HREF = "https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Nunito:wght@400;700&display=swap";
 /** <patv-modtools> views: the pad page (/p/<slug>/mod, D15) and the admin shell (/admin/chat/<view>), and who may open each. */
 const PAD_VIEWS = ["reports", "held", "modlog", "bans", "lockdown"];
-const ADMIN_VIEWS = { reports: "chat.mod_queue", held: "chat.mod_queue", modlog: "chat.mod_queue", bans: "chat.mod_queue",
-                      audit: "chat.audit", switches: "chat.audit" };
+/** /admin/chat/<view> -> its capability: release L1's map (adminchat.MOD_VIEWS, ADR 0007 D15), one source for both slices. */
+const ADMIN_VIEWS = require("./adminchat").MOD_VIEWS;
 /** The admin views' names (the admin area is English): the admin nav's links and chatTools.ejs's own view links. */
 const ADMIN_LABELS = { reports: "Reports", held: "Held", modlog: "Mod log", bans: "Bans", audit: "Audit (admin reads)", switches: "Retention & switches" };
-/** D15's default class for each chat capability (siteperms-core CLASS_RANK names) - used only until release L1 registers the keys. */
-const CAP_DEFAULTS = { "chat.mod_queue": "Assistant", "chat.audit": "Admin" };
+/** The chat capabilities these pages use (release L1's siteperms keys: chat.mod_queue Assistant, chat.audit Admin). */
+const CHAT_CAPS = new Set(Object.values(ADMIN_VIEWS));
+/** How often manifest() looks at manifest.json again (a vendoring commit lands without a restart). */
+const RECHECK_MS = 10 * 1000;
 
 const once = new Set();
 function logOnce(what) { if (!once.has(what)) { once.add(what); console.error("[chatwidget] " + what); } }
 
 // ── the vendored files ──
 let MANIFEST;                                   // undefined = not read yet; null = no usable manifest
-let WHY = null;
-function readManifest() {
-  const file = path.join(DIR, "manifest.json");
-  let raw;
-  try { raw = fs.readFileSync(file, "utf8"); } catch (e) { return { m: null, why: "no manifest" }; }
+let WHY = null;                                 // why there is none (the reason only)
+let RAW;                                        // manifest.json's text when MANIFEST was decided (null = no file)
+let CHECKED = 0;                                // when manifest() last looked
+let now = () => Date.now();
+function readRaw() {
+  try { return fs.readFileSync(path.join(DIR, "manifest.json"), "utf8"); } catch (e) { return null; }
+}
+function readManifest(raw) {
+  if (raw == null) return { m: null, why: "no manifest" };
   let j;
   try { j = JSON.parse(raw); } catch (e) { return { m: null, why: "manifest.json isn't JSON" }; }
   if (!j || typeof j !== "object" || j.schema !== 1) return { m: null, why: "manifest schema isn't 1" };
@@ -87,14 +96,23 @@ function readManifest() {
   const version = typeof j.version === "string" && /^[0-9A-Za-z.+-]{1,32}$/.test(j.version) ? j.version : null;
   return { m: { version, entry, script: URL_BASE + entry, integrity: sri }, why: null };
 }
-/** The widget's manifest ({version, entry, script, integrity}), or null (read once per process). */
+/** The widget's manifest ({version, entry, script, integrity}), or null. Cached; looked at again at most every RECHECK_MS -
+ *  verified again when manifest.json's text changed, or every time while there is no usable one. */
 function manifest() {
-  if (MANIFEST === undefined) {
-    const r = readManifest();
-    MANIFEST = r.m;
-    WHY = r.why;
-    if (!r.m && r.why !== "no manifest") logOnce("widget off: " + r.why);
+  const t = now();
+  if (MANIFEST !== undefined && t - CHECKED >= 0 && t - CHECKED < RECHECK_MS) return MANIFEST;
+  CHECKED = t;
+  const raw = readRaw();
+  if (MANIFEST !== undefined && raw === RAW && (MANIFEST || raw === null)) return MANIFEST;   // in use and unchanged; still none
+  const was = MANIFEST, r = readManifest(raw);
+  MANIFEST = r.m;
+  RAW = raw;
+  if (r.m) {
+    if (was === null || (was && was.entry !== r.m.entry)) console.log("[chatwidget] widget " + (r.m.version || "?") + " in use");
+  } else if (was || (r.why !== WHY && r.why !== "no manifest")) {
+    console.error("[chatwidget] widget off: " + r.why);
   }
+  WHY = r.why;
   return MANIFEST;
 }
 
@@ -134,18 +152,11 @@ function rtConfig() {
 }
 
 // ── v1's switches and the pad's row ──
-/** CHAT_HUB (ADR 0007 D3): v1's own kill switch, set only on /admin/chat (release L1). On = the value is exactly 'on', the way
- *  L1's chatswitches.get('CHAT_HUB') === 'on' and the hub's mirror read it (never looser than they are); anything else - another
- *  spelling, no row, no table, unreadable - is off. */
-async function hubOn() {
-  try {
-    const r = (await getQuery("SELECT value FROM chat_switches WHERE key = 'CHAT_HUB'"))[0];
-    return !!r && r.value === "on";
-  } catch (e) {
-    if (!/no such table/i.test(String(e && e.message))) logOnce("CHAT_HUB can't be read - treated as off");
-    return false;
-  }
-}
+/** CHAT_HUB (ADR 0007 D3): v1's own kill switch, set only on /admin/chat (release L1). Release L1's own reader,
+ *  chatswitches.chatHubOnNow(): one row read on every call (no cache, so an off - the page's or the sqlite3 CLI's - is the
+ *  next page load), on = the value exactly 'on' as the hub's mirror reads it; anything else - another spelling, no row, no
+ *  table, unreadable - is off. */
+function hubOn() { return require("./chatswitches").chatHubOnNow().catch(() => false); }
 /** The pad's hub row: {hubPadId, backend} or null (no pad_hub row / table). */
 async function padRow(roomId) {
   try {
@@ -200,7 +211,9 @@ function pageBits(M, rt, acct) {
 }
 
 /**
- * <patv-chat> on a pad's page (bridge.js /p/:slug, mode "full") or the homepage's room panel (home.js, mode "compact").
+ * <patv-chat> on a pad's page (bridge.js /p/:slug, mode "full") or the homepage's room panel (home.js, mode "compact" - that
+ * panel shows the bridge's rooms, which are Camfrog rooms, so in S1 it fires only if a hub site pad is ever put there: ADR
+ * 0007 D14's "Lounge chat" card lever, D17).
  * Who may see the chat is padaccess's and is read HERE, never taken from the caller (one place to get it right): its 18+ gate
  * (adultGate: "signin" | "confirm" -> the 18+ card instead of the chat) and the pad's level (full: an Approved pad's outsider
  * gets nothing). Sets res.locals.chatWidget and returns it (or null):
@@ -259,20 +272,20 @@ async function freshMe(req) {
   try { return (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [String(req.user.userId)]))[0] || null; }
   catch (e) { return null; }
 }
-/** A chat capability (D15: chat.mod_queue Assistant, chat.audit Admin): siteperms once release L1 registers the key (its
- *  overrides apply then), its D15 default class until then. Unknown keys are refused. */
+/** A chat capability these pages use (D15: chat.mod_queue - Assistant by default, chat.audit - Admin): release L1's siteperms
+ *  keys, with their overrides. Any other key is refused. */
 function canChat(me, key) {
-  if (!Object.prototype.hasOwnProperty.call(CAP_DEFAULTS, key)) return false;
-  const core = require("./siteperms-core");
-  if (core.capOf(key)) return require("./siteperms").can(me, key);
-  return core.classRank(me) >= core.CLASS_RANK[CAP_DEFAULTS[key]];
+  if (!me || !CHAT_CAPS.has(key)) return false;
+  return require("./siteperms").can(me, key);
 }
 
 /**
  * /p/<slug>/mod (pads.js): a pad at chat_backend = 'hub' gets the chat moderation page (D15: Reports, Held, Mod log, Bans,
  * Lockdown - the views and the room-settings header are <patv-modtools>'s); every other pad, and every pad while there is no
- * widget, keeps `fallback` (the 301 to the pad settings' Moderation tab). Signed out -> sign in first. An Approved pad's
- * outsider -> the fallback (padaccess decides there).
+ * widget, keeps `fallback` (the 301 to the pad settings' Moderation tab). While the widget is installed a signed-out visitor
+ * is sent to sign in first for EVERY slug, before the pad is looked up (so the answer never tells a visitor which pads are on
+ * the hub; the address comes back here and routes by the pad). An Approved pad's outsider -> the fallback (padaccess decides
+ * there). An 18+ pad's viewer padaccess's 18+ gate stops (age not confirmed, while the gate is on) -> its card, no tools.
  */
 function padModPage(fallback, addUser) {
   const withUser = (req, res) => new Promise((resolve) => {
@@ -282,18 +295,24 @@ function padModPage(fallback, addUser) {
   return async (req, res, next) => {
     try {
       if (!manifest() || !rtConfig()) return fallback(req, res, next);
-      const R = await require("./roomsweb").resolveRoom(String(req.params.slug || "").slice(0, 128)).catch(() => null);
+      const raw = String(req.params.slug || "").slice(0, 128);
+      const view = PAD_VIEWS.includes(String((req.query || {}).view || "")) ? String(req.query.view) : "reports";
+      const viewQ = view !== "reports" ? "?view=" + view : "";
+      const u = await withUser(req, res);
+      if (!u || !u.userId) return res.redirect(302, "/login?next=" + encodeURIComponent("/p/" + encodeURIComponent(raw) + "/mod" + viewQ));
+      const R = await require("./roomsweb").resolveRoom(raw).catch(() => null);
       if (!R || !sitePad(R.id, R.platform || null)) return fallback(req, res, next);
       const row = await padRow(R.id);
       if (!row || row.backend !== "hub") return fallback(req, res, next);
-      const u = await withUser(req, res);
       const slug = require("./pads").padSlug(R) || String(R.slug || "");
-      if (!u || !u.userId) return res.redirect(302, "/login?next=" + encodeURIComponent("/p/" + slug + "/mod"));
       const PA = require("./padaccess");
       await PA.init();
-      if (!PA.full(u, R.id)) return fallback(req, res, next);
-      const view = PAD_VIEWS.includes(String((req.query || {}).view || "")) ? String(req.query.view) : "reports";
-      const tools = toolsFor(req, res);
+      // padaccess.full is its 18+ gate + the pad level: past the gate, full() decides (an Approved pad's outsider -> the fallback);
+      // stopped by the gate, a viewer the level lets in gets the 18+ card (full() alone would send them to the settings hub)
+      const gate = PA.adultGate(u, R.id);
+      if (gate === "ok" ? !PA.full(u, R.id) : !PA.canSee(u, R.id)) return fallback(req, res, next);
+      const tools = gate !== "ok" ? { state: "gate", gate: gate === "signin" ? "signin" : "confirm", next: "/p/" + encodeURIComponent(slug) + "/mod" + viewQ }
+                                  : toolsFor(req, res);
       if (tools.state === "tools") res.locals.chatWidget = tools;
       res.set("Cache-Control", "private, no-store");
       res.set("X-Robots-Tag", "noindex");
@@ -308,13 +327,10 @@ function padModPage(fallback, addUser) {
 
 /**
  * The admin nav's chat moderation links (views/partials/admin-nav.ejs's 💬 Chat group; ADR 0007 D15 - this slice owns them,
- * release L1 owns the group's /admin/chat entry): [href, label, capability] per /admin/chat/<view>, only for the capabilities
- * siteperms has registered (release L1's chat.mod_queue / chat.audit: none until it lands), so the nav never asks siteperms
- * about a key it doesn't know (a throw in tests, a denial and a log line in production).
+ * release L1 owns the group's /admin/chat entry): [href, label, capability] per /admin/chat/<view> (release L1's keys).
  */
 function adminNavLinks() {
-  const core = require("./siteperms-core");
-  return Object.keys(ADMIN_VIEWS).filter((v) => !!core.capOf(ADMIN_VIEWS[v])).map((v) => ["/admin/chat/" + v, ADMIN_LABELS[v], ADMIN_VIEWS[v]]);
+  return Object.keys(ADMIN_VIEWS).map((v) => ["/admin/chat/" + v, ADMIN_LABELS[v], ADMIN_VIEWS[v]]);
 }
 
 /** /admin/chat/<view> (D15's admin shell; /admin/chat itself, the break-glass form, is release L1's), the admin nav's chat links
@@ -370,5 +386,7 @@ function status() {
 
 module.exports = { manifest, staticFiles, rtConfig, hubOn, padRow, padMainRoomId, escJson, forPad, toolsFor, canChat, padModPage, register,
                    overviewCard, status, platformOk, lineOf, adminNavLinks, NS_PAD_MAIN, FONTS_HREF, PAD_VIEWS, ADMIN_VIEWS, ADMIN_LABELS, URL_BASE,
-                   _setDir: (d) => { DIR = d || path.join(__dirname, "public", "js", "patv-chat"); MANIFEST = undefined; WHY = null; },
-                   _reset: () => { MANIFEST = undefined; WHY = null; once.clear(); } };
+                   RECHECK_MS,
+                   _setDir: (d) => { DIR = d || path.join(__dirname, "public", "js", "patv-chat"); MANIFEST = undefined; WHY = null; RAW = undefined; },
+                   _setNow: (fn) => { now = typeof fn === "function" ? fn : () => Date.now(); },
+                   _reset: () => { MANIFEST = undefined; WHY = null; RAW = undefined; once.clear(); } };

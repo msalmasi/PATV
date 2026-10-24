@@ -292,7 +292,8 @@ function register(app, { addUser, xpForNextLevel }) {
       if (room && roomGate !== "ok") room = { ...room, count: null, micCount: null };     // no headcount on the page either
       // S1 V2 (release L4): the panel's pad, a site pad at chat_backend = 'hub' while CHAT_HUB is on -> the chat hub's compact
       // <patv-chat> (chatwidget.forPad sets res.locals.chatWidget and reads padaccess's 18+ gate and the pad's level itself; null
-      // otherwise - and this panel shows the bridge's rooms, Camfrog rooms, which never are)
+      // otherwise). NOT REACHED IN S1: this panel shows the bridge's rooms, which are Camfrog rooms and never at 'hub' (S1 allows
+      // the hub on site pads only) - it fires only if a hub site pad is put here, ADR 0007 D14's "Lounge chat" card lever (D17).
       if (room) await require("./chatwidget").forPad(req, res, { roomId: room.id, slug: room.slug, mode: "compact" });
       const roomOnStage_ = !!(onStage && room && room.id === onStage.id);
       // 1.99bz: the story strip (a circle per room with captures from the last 24 h); visitors get the circles only

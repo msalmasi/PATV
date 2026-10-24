@@ -31,7 +31,7 @@
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var ALIAS = { live: 'live', stage: 'live', chat: 'live', feed: 'feed', posts: 'feed', rules: 'about', about: 'about', info: 'about', schedule: 'live' };
   var FEED_Q = /(?:^|[?&])(?:sort|fsort|t|ft|p|fp|tag)=/;      // 1.99iq: + ?tag= (a tag filter is the Feed's)
-  var LINE_Q = /(?:^|[?&])line=[1-9][0-9]{0,15}(?:[&#]|$)/;     // S1 V2: a chat line (?line=<seq>, as the widget takes it)
+  var LINE_V = /^[1-9][0-9]{0,15}$/;                            // S1 V2: a chat line's seq (?line=<seq>, as the widget takes it)
   var FIRST_LOOK_MS = 3 * 24 * 3600 * 1000;   // a first visit counts the last 3 days' posts as new
   var FEED_STICKY_MS = 30 * 60 * 1000;        // 1.99eb: a picked Feed beats Live-when-live for this long
   var REMEMBER = { live: true, feed: true };   // 1.99eb: About is never remembered
@@ -58,8 +58,23 @@
     return null;
   }
 
-  /** S1 V2: does the query name a chat line (?line=<seq>)? Only a pad whose Live tab holds the chat hub's widget asks for Live. */
-  function lineRequested(search) { return LINE_Q.test(String(search || '')); }
+  function decodeQ(x) { try { return decodeURIComponent(String(x).replace(/\+/g, ' ')); } catch (e) { return null; } }
+  /** S1 V2: does the query name a chat line (?line=<seq>)? Only a pad whose Live tab holds the chat hub's widget asks for Live.
+   *  The same rule as the server's mount (chatwidget.lineOf): exactly one line param, decoded, a positive safe integer - so the
+   *  Live tab opens only for a line the widget is handed. */
+  function lineRequested(search) {
+    var q = String(search || ''), h = q.indexOf('#'), n = 0, v = null;
+    if (h >= 0) q = q.slice(0, h);
+    if (q.charAt(0) === '?') q = q.slice(1);
+    var parts = q ? q.split('&') : [];
+    for (var i = 0; i < parts.length; i++) {
+      var eq = parts[i].indexOf('=');
+      if (decodeQ(eq < 0 ? parts[i] : parts[i].slice(0, eq)) !== 'line') continue;
+      n++;
+      v = eq < 0 ? '' : decodeQ(parts[i].slice(eq + 1));
+    }
+    return n === 1 && typeof v === 'string' && LINE_V.test(v) && Number(v) <= 9007199254740991;
+  }
 
   /** The stored last pick ("feed@<ms>", "live@<ms>"; a pre-1.99eb bare "feed" / "live" has no time) ->
    *  {tab, at} or null. About (or anything else) is never a remembered tab. */

@@ -167,7 +167,10 @@ test("padTabsFor (server): active = people in the room besides Pepe, or the stag
 test("S1 V2: ?line=<seq> opens Live only on a pad whose Live tab holds the chat hub's widget (lineLive); ?tab= / #hash still win", () => {
   for (const [q, ok] of [["?line=42", true], ["?x=1&line=9007199254740991", true], ["?line=7#c", true], ["?line=7&tab=feed", true],
                          ["?line=0", false], ["?line=-1", false], ["?line=abc", false], ["?line=4x", false], ["?line=", false],
-                         ["?headline=4", false], ["?online=4", false], ["", false], [null, false]]) {
+                         ["?headline=4", false], ["?online=4", false], ["", false], [null, false],
+                         // the server's rule (chatwidget.lineOf): one line param, decoded, a positive SAFE integer
+                         ["?line=9007199254740992", false], ["?line=9999999999999999", false], ["?line=1&line=2", false], ["?line=1&line=", false],
+                         ["?line", false], ["?line=%34%32", true], ["?lin%65=5", true], ["?line[]=4", false], ["?line=%zz", false]]) {
     assert.equal(T.lineRequested(q), ok, "lineRequested " + JSON.stringify(q));
   }
   assert.equal(T.requestedTab("?line=42", ""), null, "requestedTab itself is unchanged: a ?line= alone asks for nothing");
@@ -181,6 +184,8 @@ test("S1 V2: ?line=<seq> opens Live only on a pad whose Live tab holds the chat 
   assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x", lineLive: true })).initial, "feed", "no ?line=: the smart default");
   assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=42&tab=about", lineLive: true })).initial, "about", "?tab= wins");
   assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=nope", lineLive: true })).initial, "feed");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=9007199254740993", lineLive: true })).initial, "feed", "a line the widget isn't handed: as before");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=4&line=5", lineLive: true })).initial, "feed");
 });
 
 test("the Feed badge counts posts newer than the last look (first visit: the last 3 days)", () => {
