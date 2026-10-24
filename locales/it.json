@@ -11604,6 +11604,7 @@
   "admchat.pads.owner_only": "Solo un owner di Pepe sposta un Pad sull'hub chat.",
   "admchat.pads.unreadable": "Al momento non è possibile leggere i Pad. L'interruttore dell'hub chat qui sopra funziona comunque, e spegnerlo copre tutti i Pad.",
   "admchat.pads.gone": "non più nel registro dei Pad",
+  "admchat.pads.not_site": "non è un Pad del sito: in S1 la sua chat resta su v1 - riportala indietro",
   "admchat.pads.more": "Sono elencati solo i primi {n}. Spegnere l'hub chat li copre tutti.",
   "admchat.pads.choices_more": "Sono elencati solo i primi {n} Pad del sito (prima i Pad pilota).",
   "admchat.backend.v1": "chat v1",

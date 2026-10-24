@@ -11798,6 +11798,7 @@
   "admchat.pads.owner_only": "Tylko właściciel Pepe przenosi pad na hub czatu.",
   "admchat.pads.unreadable": "Pady nie mogą być teraz odczytane. Przełącznik huba czatu powyżej nadal działa, a jego wyłączenie obejmuje każdy pad.",
   "admchat.pads.gone": "nie ma już w rejestrze padów",
+  "admchat.pads.not_site": "nie jest padem serwisu: w S1 jego czat pozostaje na v1 - przenieś go z powrotem",
   "admchat.pads.more": "Wyświetlono tylko pierwsze {n}. Wyłączenie huba czatu obejmuje wszystkie.",
   "admchat.pads.choices_more": "Wyświetlono tylko pierwsze {n} padów serwisu (najpierw pady pilotażowe).",
   "admchat.backend.v1": "czat v1",

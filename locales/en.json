@@ -11346,6 +11346,7 @@
   "admchat.pads.owner_only": "Only a Pepe owner moves a pad to the chat hub.",
   "admchat.pads.unreadable": "The pads can't be read right now. The chat hub switch above still works, and turning it off covers every pad.",
   "admchat.pads.gone": "not in the pad registry any more",
+  "admchat.pads.not_site": "not a site pad: in S1 its chat stays on v1 - move it back",
   "admchat.pads.more": "Only the first {n} are listed. Turning the chat hub off covers them all.",
   "admchat.pads.choices_more": "Only the first {n} site pads are listed (the pilot pads first).",
   "admchat.backend.v1": "v1 chat",

@@ -11500,6 +11500,7 @@
   "admchat.pads.owner_only": "Nur ein Pepe-Owner verschiebt ein Pad an den Chat-Hub.",
   "admchat.pads.unreadable": "Die Pads können gerade nicht gelesen werden. Der Chat-Hub-Schalter oben funktioniert trotzdem, und wenn du ihn ausschaltest, gilt das für alle Pads.",
   "admchat.pads.gone": "nicht mehr in der Pad-Registrierung",
+  "admchat.pads.not_site": "kein Site-Pad: In S1 bleibt sein Chat auf v1 - verschieb es zurück",
   "admchat.pads.more": "Nur die ersten {n} werden angezeigt. Wenn du den Chat-Hub ausschaltest, gilt das für alle.",
   "admchat.pads.choices_more": "Nur die ersten {n} Site-Pads werden angezeigt (zuerst die Pilot-Pads).",
   "admchat.backend.v1": "v1-Chat",

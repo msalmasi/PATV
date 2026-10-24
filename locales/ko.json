@@ -11351,6 +11351,7 @@
   "admchat.pads.owner_only": "Pepe 소유자만 패드를 채팅 허브로 이동할 수 있어요.",
   "admchat.pads.unreadable": "지금은 패드를 불러올 수 없어요. 위의 채팅 허브 스위치는 계속 작동하며, 끄면 모든 패드에 적용돼요.",
   "admchat.pads.gone": "패드 레지스트리에 더 이상 없음",
+  "admchat.pads.not_site": "사이트 패드가 아니에요. S1에서는 채팅이 v1에 그대로 있으니 되돌려 주세요.",
   "admchat.pads.more": "처음 {n}개만 표시돼요. 채팅 허브를 끄면 전부 적용돼요.",
   "admchat.pads.choices_more": "사이트 패드는 처음 {n}개만 표시돼요 (시범 패드가 먼저 나와요).",
   "admchat.backend.v1": "v1 채팅",
