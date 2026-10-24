@@ -508,22 +508,31 @@ test("a change and its audit row commit together: when the row can't be written,
   assert.equal(await nAudits(), n0 + 2);
 });
 
-test("the confirm step is decided inside the writing transaction: a stale on-post can't undo an admin's rollback in between", async (t) => {
-  t.after(() => AC._setReadHook(null));
+test("the confirm step is decided on a read inside the writing transaction: a stale on-post can't undo an admin's rollback in between", async (t) => {
+  // The race is driven from the very read the confirm step rests on (V1's 2nd review: a hook placed after the read proved
+  // only where the hook sat). The read returns what it saw, but only after an admin's off has started and had its chance to
+  // land (up to 400 ms): inside the transaction the off queues behind it (dbUtils.tx runs one at a time), so what was read
+  // still holds when the write runs; a read moved out of the transaction lets the off land first, and the stale value
+  // would skip the confirm step and undo it; a read of the cache (chatHubOn) never reaches the stub at all.
+  const realNow = CS.chatHubOnNow;
+  t.after(() => { CS.chatHubOnNow = realNow; AC._setPadRead(null); });
   await seam(CS.INTERLOCK, true);
   // CHAT_HUB: on; an owner's tab still shows it on and posts on again without confirm while an admin turns it off
   assert.equal((await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true })).j.value, "on");
   const sw0 = (await audits("chat.switch")).length;
   let adminOff = null;
-  AC._setReadHook(async (what) => {
-    if (what !== "hub" || adminOff) return;
-    adminOff = outside(() => post("/api/admin/chat/hub", "adm", { on: false, reason: "rollback mid-flight" }));
-    await sleep(150);                  // the admin's off queues behind this transaction (dbUtils.tx: one at a time)
-  });
+  CS.chatHubOnNow = async function () {
+    const was = await realNow.apply(this, arguments);
+    if (!adminOff) {
+      adminOff = outside(() => post("/api/admin/chat/hub", "adm", { on: false, reason: "rollback mid-flight" }));
+      await Promise.race([adminOff, sleep(400)]);
+    }
+    return was;
+  };
   let r = await post("/api/admin/chat/hub", "own", { on: true, reason: "stale tab" });
-  assert.ok(adminOff, "the hook ran");
+  CS.chatHubOnNow = realNow;
+  assert.ok(adminOff, "the confirm step read CHAT_HUB's row (chatHubOnNow), not the per-process cache");
   const off = await adminOff;
-  AC._setReadHook(null);
   assert.deepEqual([r.status, r.j.changed], [200, false], "read on, in its own transaction: nothing to change or confirm");
   assert.deepEqual([off.status, off.j.changed, off.j.value], [200, true, "off"]);
   assert.equal(await hubValue(), "off", "the admin's rollback stands");
@@ -536,21 +545,39 @@ test("the confirm step is decided inside the writing transaction: a stale on-pos
   assert.equal((await post("/api/admin/chat/pad", "own", { room_id: "patv:staff", backend: "hub", reason: REASON, confirm: true })).j.backend, "hub");
   const pd0 = (await audits("chat.pad_backend")).length;
   let adminBack = null;
-  AC._setReadHook(async (what) => {
-    if (what !== "pad" || adminBack) return;
-    adminBack = outside(() => post("/api/admin/chat/pad", "adm", { room_id: "patv:staff", backend: "v1", reason: "rollback mid-flight" }));
-    await sleep(150);
+  AC._setPadRead(async (read) => {
+    const p = await read();
+    if (!adminBack) {                  // the owner's read (the admin's own setPad reads through here too, after)
+      adminBack = outside(() => post("/api/admin/chat/pad", "adm", { room_id: "patv:staff", backend: "v1", reason: "rollback mid-flight" }));
+      await Promise.race([adminBack, sleep(400)]);
+    }
+    return p;
   });
   r = await post("/api/admin/chat/pad", "own", { room_id: "patv:staff", backend: "hub", reason: "stale tab" });
-  assert.ok(adminBack, "the hook ran");
+  assert.ok(adminBack, "the read ran");
   const back = await adminBack;
-  AC._setReadHook(null);
+  AC._setPadRead(null);
   assert.deepEqual([r.status, r.j.changed], [200, false], JSON.stringify(r.j));
   assert.deepEqual([back.status, back.j.changed, back.j.backend], [200, true, "v1"]);
   assert.equal((await backendOf("patv:staff")).chat_backend, "v1", "the admin's move back stands");
   assert.equal((await audits("chat.pad_backend")).length, pd0 + 1);
   r = await post("/api/admin/chat/pad", "own", { room_id: "patv:staff", backend: "hub", reason: "stale tab" });
   assert.deepEqual([r.status, r.j.code], [409, "confirm"]);
+});
+
+test("the confirm step reads the row, not the cache: after an out-of-band off (the sqlite3 CLI fallback) an on-post without confirm is asked to confirm", async () => {
+  await seam(CS.INTERLOCK, true);
+  assert.equal((await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true })).j.value, "on");
+  assert.equal(CS.chatHubOn(), true);
+  // docs/chat-tickets.md's fallback when the page can't be used: the row set by hand, no load()
+  await runQuery("UPDATE chat_switches SET value = 'off', updated = ?, updated_by = 'cli' WHERE key = 'CHAT_HUB'", [Date.now()]);
+  assert.equal(CS.chatHubOn(), true, "the per-process cache still says on");
+  const n0 = (await audits("chat.switch")).length;
+  const r = await post("/api/admin/chat/hub", "own", { on: true, reason: "stale tab" });
+  assert.deepEqual([r.status, r.j.code], [409, "confirm"], "read off from the row: the confirm step, nothing written");
+  assert.equal(await hubValue(), "off", "the hand-set off stands");
+  assert.equal((await audits("chat.switch")).length, n0);
+  assert.equal(CS.chatHubOn(), false, "and the cache caught up");
 });
 
 test("the page: the switch read fresh, the change log newest first, pad titles escaped in the hub table", async () => {
@@ -655,4 +682,136 @@ test("the pad lists are bounded and say so (the site pads read in SQL, the pilot
   assert.equal((await AC.hubPads(1)).pads.length, 1);
   await runQuery("DELETE FROM rooms_registry WHERE room_id LIKE 'patv:bulk%'");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pad_hub WHERE room_id LIKE 'patv:bulk%'"))[0].n, 0, "pad_hub rows dropped with their pads");
+});
+
+// ── after V1's second review ──
+
+const hubRow = async () => (await getQuery("SELECT value, updated, updated_by FROM chat_switches WHERE key = 'CHAT_HUB'"))[0] || null;
+
+test("the interlock holds once CHAT_HUB has a row (S1-D7): an 'off' row and one seam switch off - refused by the route and by set()", async () => {
+  await seam(CS.INTERLOCK, true);
+  // a row exists: turned on and off once
+  if (await hubValue() !== "on") assert.equal((await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true })).j.value, "on");
+  assert.equal((await post("/api/admin/chat/hub", "adm", { on: false, reason: REASON })).j.value, "off");
+  const row = await hubRow();
+  assert.equal(row.value, "off");
+  await seam(["bans"], false);
+  const n0 = await nAudits();
+  try {
+    let r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true });
+    assert.deepEqual([r.status, r.j.code, r.j.missing], [409, "chat_hub_needs", ["bans"]]);
+    r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON });
+    assert.deepEqual([r.status, r.j.code], [409, "chat_hub_needs"], "the interlock before the confirm step");
+    await assert.rejects(CS.set("CHAT_HUB", "on", OWN, { reason: REASON }),
+                         (e) => e.code === "chat_hub_needs" && e.status === 409 && e.needs.join() === "bans", "set() itself, with a row there");
+    assert.deepEqual(await hubRow(), row, "nothing written");
+    // a stored value set() doesn't know (a hand edit) reads as off: the interlock holds for it too
+    await runQuery("UPDATE chat_switches SET value = 'ON' WHERE key = 'CHAT_HUB'");
+    r = await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true });
+    assert.deepEqual([r.status, r.j.code, r.j.missing], [409, "chat_hub_needs", ["bans"]]);
+    await assert.rejects(CS.set("CHAT_HUB", "on", OWN, { reason: REASON }), (e) => e.code === "chat_hub_needs");
+    assert.equal(await hubValue(), "ON");
+    assert.equal(await nAudits(), n0);
+  } finally {
+    await runQuery("UPDATE chat_switches SET value = ?, updated = ?, updated_by = ? WHERE key = 'CHAT_HUB'", [row.value, row.updated, row.updated_by]);
+    await CS.load();
+    await seam(["bans"], true);
+  }
+});
+
+test("a post that changes nothing writes nothing (the default with no row included); a stored value set() doesn't know is rewritten with its audit row", async (t) => {
+  // every write to chat_switches counted, as Q4's switches/changed triggers would queue one
+  await runQuery("CREATE TABLE IF NOT EXISTS t_sw_writes (n INTEGER)");
+  await runQuery("CREATE TRIGGER IF NOT EXISTS t_sw_i AFTER INSERT ON chat_switches BEGIN INSERT INTO t_sw_writes VALUES (1); END");
+  await runQuery("CREATE TRIGGER IF NOT EXISTS t_sw_u AFTER UPDATE ON chat_switches BEGIN INSERT INTO t_sw_writes VALUES (1); END");
+  t.after(async () => { for (const s of ["DROP TRIGGER IF EXISTS t_sw_i", "DROP TRIGGER IF EXISTS t_sw_u", "DROP TABLE IF EXISTS t_sw_writes"]) await runQuery(s); });
+  const writes = async () => (await getQuery("SELECT COUNT(*) AS n FROM t_sw_writes"))[0].n;
+  await seam(CS.INTERLOCK, true);
+  // no row (a fresh site, a staging refresh): CHAT_HUB is off, and turning it off changes nothing
+  await runQuery("DELETE FROM chat_switches WHERE key = 'CHAT_HUB'");
+  await CS.load();
+  let w = await writes(), n = await nAudits();
+  let r = await post("/api/admin/chat/hub", "adm", { on: false, reason: "belt and braces" });
+  assert.deepEqual([r.status, r.j.changed, r.j.value, r.j.at], [200, false, "off", null]);
+  assert.equal(await hubRow(), null, "no row written");
+  assert.equal(await writes(), w);
+  assert.equal(await nAudits(), n);
+  assert.deepEqual(CS.all().CHAT_HUB, { value: "off", updated: null, updated_by: null, default: "off" });
+  assert.match(await (await get("/admin/chat", "adm")).text(), /Never changed \(off by default\)\./, "no 'last changed by' without a change-log entry");
+  assert.equal((await CS.set("CHAT_HUB", "off", OWN, { reason: REASON })).changed, false, "set() itself");
+  assert.equal((await CS.set("CHAT_HUB", "off", null)).changed, false, "an actor-less set() too");
+  assert.equal(await hubRow(), null);
+  assert.equal(await writes(), w);
+  // with a row: off again leaves updated / updated_by as they were
+  assert.equal((await post("/api/admin/chat/hub", "own", { on: true, reason: REASON, confirm: true })).j.changed, true);
+  assert.equal((await post("/api/admin/chat/hub", "adm", { on: false, reason: REASON })).j.changed, true);
+  const row = await hubRow();
+  assert.deepEqual([row.value, row.updated_by], ["off", "admin2"]);
+  w = await writes();
+  n = await nAudits();
+  r = await post("/api/admin/chat/hub", "own", { on: false, reason: "again" });
+  assert.deepEqual([r.status, r.j.changed], [200, false]);
+  assert.deepEqual(await hubRow(), row, "updated / updated_by untouched");
+  assert.deepEqual([await writes(), await nAudits()], [w, n]);
+  // a stored value set() doesn't know (a hand edit): rewritten, and that write has its audit row (from = what was stored)
+  await runQuery("UPDATE chat_switches SET value = 'ON' WHERE key = 'CHAT_HUB'");
+  w = await writes();
+  r = await post("/api/admin/chat/hub", "own", { on: false, reason: "cleanup" });
+  assert.deepEqual([r.status, r.j.changed, r.j.value], [200, true, "off"]);
+  assert.ok(r.j.at > 0);
+  const now = await hubRow();
+  assert.deepEqual([now.value, now.updated_by], ["off", "boss"]);
+  assert.equal(await writes(), w + 1);
+  assert.equal(await nAudits(), n + 1);
+  const a = (await audits("chat.switch")).pop();
+  assert.deepEqual([JSON.parse(a.detail), a.admin_id, a.reason], [{ key: "CHAT_HUB", from: "ON", to: "off" }, "own", "cleanup"]);
+  assert.match(await (await get("/admin/chat", "adm")).text(), /CHAT_HUB: ON → off/);
+});
+
+test("room ids are escaped on the page; a pad's platform column wins over what its id implies; a non-site pad left on the hub is flagged", async () => {
+  const ODD = `Frog"<Pond>&'s`;              // a Camfrog room's id is its room name, chosen off-site
+  const SITE_ODD = `patv:x"<y>&'z`;
+  const t0 = Date.now();
+  const rows = [[ODD, "odd-frog", "Odd Frog", "camfrog"], [SITE_ODD, "odd-site", "Odd site", "site"],
+                ["patv:bridged", "bridged", "Bridged", "camfrog"], ["Lobby.Site", "lobby-site", "Lobby site", "site"]];
+  for (const [id, slug, title, platform] of rows) {
+    await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES (?, ?, ?, 'none', ?, ?, ?)",
+                   [id, slug, title, platform, t0, t0]);
+  }
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;").replace(/'/g, "&#39;");
+  const reOf = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  try {
+    // a Camfrog pad at hub (a re-key carried a site pad's row) and a site pad at hub: only the Camfrog one is flagged
+    await runQuery("UPDATE pad_hub SET chat_backend = 'hub' WHERE room_id IN (?, 'patv:canary')", [ODD]);
+    let html = await (await get("/admin/chat", "adm")).text();
+    for (const s of [`<tr data-pad="${esc(ODD)}">`, `<code>${esc(ODD)}</code>`, `data-pad-backend="v1" data-room="${esc(ODD)}"`]) assert.ok(html.includes(s), s);
+    assert.ok(!html.includes(ODD), "the id never raw");
+    const rowOf = (id) => (html.match(new RegExp(`<tr data-pad="${reOf(esc(id))}">((?:(?!</tr>)[\\s\\S])*)</tr>`)) || [])[1] || "";
+    assert.match(rowOf(ODD), /data-not-site="1">not a site pad/);
+    assert.ok(rowOf("patv:canary").includes("patv:canary"));
+    assert.doesNotMatch(rowOf("patv:canary"), /data-not-site/, "a site pad on the hub isn't flagged");
+    // the owner's picker: a site pad's id escaped in the option's value and its text
+    const own = await (await get("/admin/chat", "own")).text();
+    assert.ok(own.includes(`<option value="${esc(SITE_ODD)}">`) && own.includes(`(${esc(SITE_ODD)})</option>`));
+    assert.ok(!own.includes(SITE_ODD), "the id never raw");
+    // the platform column wins over the id's prefix (rooms.js's rule), in the picker and in both checks
+    assert.doesNotMatch(own, /value="patv:bridged"/, "a patv: id whose platform is camfrog isn't offered");
+    assert.match(own, /<option value="Lobby\.Site">/, "a site pad without the patv: prefix is");
+    let r = await post("/api/admin/chat/pad", "own", { room_id: "patv:bridged", backend: "hub", reason: REASON, confirm: true });
+    assert.deepEqual([r.status, r.j.code], [409, "site_pads_only"]);
+    await assert.rejects(PH.setBackend("patv:bridged", "hub", OWN), (e) => e.code === "site_pads_only", "padhub refuses too");
+    assert.equal((await backendOf("patv:bridged")).chat_backend, "v1");
+    r = await post("/api/admin/chat/pad", "own", { room_id: "Lobby.Site", backend: "hub", reason: REASON, confirm: true });
+    assert.deepEqual([r.status, r.j.changed, r.j.backend], [200, true, "hub"], JSON.stringify(r.j));
+    // every one goes back with one click, the odd id posted as written
+    for (const id of [ODD, "patv:canary", "Lobby.Site"]) {
+      r = await post("/api/admin/chat/pad", "adm", { room_id: id, backend: "v1", reason: "cleanup" });
+      assert.deepEqual([r.status, r.j.changed, r.j.backend], [200, true, "v1"], id);
+    }
+    html = await (await get("/admin/chat", "adm")).text();
+    assert.doesNotMatch(html, /data-not-site/);
+  } finally {
+    await runQuery(`DELETE FROM rooms_registry WHERE room_id IN (${rows.map(() => "?").join(",")})`, rows.map((x) => x[0]));
+    await runQuery("UPDATE pad_hub SET chat_backend = 'v1' WHERE room_id = 'patv:canary'");
+  }
 });
