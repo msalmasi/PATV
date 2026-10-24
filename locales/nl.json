@@ -11500,6 +11500,7 @@
   "admchat.pads.owner_only": "Alleen een Pepe-eigenaar verplaatst een pad naar de chathub.",
   "admchat.pads.unreadable": "De pads kunnen nu niet worden gelezen. De chathub-schakelaar hierboven werkt nog steeds, en uitzetten dekt elk pad.",
   "admchat.pads.gone": "niet meer in het padregister",
+  "admchat.pads.not_site": "geen sitepad: in S1 blijft de chat op v1 - zet het terug",
   "admchat.pads.more": "Alleen de eerste {n} worden getoond. De chathub uitzetten dekt ze allemaal.",
   "admchat.pads.choices_more": "Alleen de eerste {n} sitepads worden getoond (de proefpads eerst).",
   "admchat.backend.v1": "v1-chat",

@@ -11351,6 +11351,7 @@
   "admchat.pads.owner_only": "Chỉ chủ sở hữu Pepe mới chuyển được Pad sang trung tâm chat.",
   "admchat.pads.unreadable": "Hiện không đọc được các Pad. Công tắc trung tâm chat ở trên vẫn hoạt động, và tắt nó sẽ áp dụng cho mọi Pad.",
   "admchat.pads.gone": "không còn trong sổ đăng ký Pad nữa",
+  "admchat.pads.not_site": "Không phải Pad của site: ở S1 chat của nó vẫn giữ v1 - chuyển nó về lại",
   "admchat.pads.more": "Chỉ hiển thị {n} Pad đầu tiên. Tắt trung tâm chat sẽ áp dụng cho tất cả.",
   "admchat.pads.choices_more": "Chỉ hiển thị {n} Pad của site đầu tiên (Pad thử nghiệm được ưu tiên).",
   "admchat.backend.v1": "Chat v1",

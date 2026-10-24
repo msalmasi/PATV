@@ -11351,6 +11351,7 @@
   "admchat.pads.owner_only": "パッドをチャットハブに移動できるのは Pepe のオーナーだけです。",
   "admchat.pads.unreadable": "現在パッドを読み込めません。上のチャットハブのスイッチは引き続き使えて、オフにするとすべてのパッドに適用されます。",
   "admchat.pads.gone": "パッドの登録簿にもうありません",
+  "admchat.pads.not_site": "サイトのパッドではありません: S1 ではチャットが v1 のままなので、v1 チャットに戻してください",
   "admchat.pads.more": "最初の {n} 件のみ表示しています。チャットハブをオフにすると、すべてに適用されます。",
   "admchat.pads.choices_more": "サイトのパッドは最初の {n} 件のみ表示しています（パイロットパッドが先頭）。",
   "admchat.backend.v1": "v1 チャット",
