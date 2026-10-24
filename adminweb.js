@@ -1,7 +1,8 @@
 // adminweb.js — the admin area (1.99cv): /admin (Overview) + its section pages, all inside one shell
 // (views/partials/admin-open.ejs / admin-close.ejs, sidebar in views/partials/admin-nav.ejs).
 //
-//   /admin              Overview: Pepe, Reserve, reports, loan requests, stage, stale cleanup, alerts
+//   /admin              Overview: Pepe, Reserve, reports, loan requests, stage, stale cleanup, alerts; S1 V2: the chat hub's
+//                       reports card (open reports, > 14-day escalations - <patv-modtools>, chatwidget.overviewCard)
 //   /admin/users        roles + classes, XP, welcome bonus, stale-account cleanup
 //   /admin/economy      Reserve + today's flows, loans/credit, PAT grants, redemption codes, royalties, shop
 //   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq), duel / brawl knobs #pvp (1.99yc, pvpcfg.js)
@@ -205,7 +206,8 @@ function register(app, { addUser }) {
   app.get("/admin/stage", (req, res) => res.redirect(302, "/stage/admin"));
   app.get("/admin/shop", (req, res) => res.redirect(302, "/shop/admin"));
 
-  app.get("/admin", addUser, gate, page("overview", "Admin · Overview", async (req, me) => ({ ov: await overview(me) })));
+  // S1 V2: + the chat hub's reports card (<patv-modtools view="reports" mode="card">, chatwidget.overviewCard) for chat.mod_queue
+  app.get("/admin", addUser, gate, require("./chatwidget").overviewCard(), page("overview", "Admin · Overview", async (req, me) => ({ ov: await overview(me) })));
   app.get("/admin/users", addUser, gate, page("users", "Admin · Users & Accounts"));
   app.get("/admin/economy", addUser, gate, page("economy", "Admin · Economy", async (req, me) => {
     const isAdmin = SP.can(me, "admin.sensitive_overview");

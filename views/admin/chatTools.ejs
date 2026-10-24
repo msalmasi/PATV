@@ -1,0 +1,50 @@
+<%- include('../partials/admin-open', { title, user, section: 'chat', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/chatTools.ejs - S1 V2 (chatwidget.register, ADR 0007 D15): the admin shell's chat moderation views,
+  /admin/chat/<view>, each one <patv-modtools view="..."> with no pad (the site-wide queues; the views are slice M2's).
+  Reports, held, mod log and bans for chat.mod_queue (Assistants up), audit and switches for chat.audit (Admins) - release
+  L1's capabilities, their D15 defaults until it lands. Every permission is the hub's: a refusal renders "Nothing to show".
+  The page makes no hub call (the widget's worker does, with the viewer's own ticket). /admin/chat (the break-glass form:
+  CHAT_HUB and each pad's chat backend) is release L1's page. The view names are chatwidget.ADMIN_LABELS (the admin nav's Chat
+  links use the same); the footer says which widget version is vendored, or why none is usable (chatwidget.status: no ids).
+%>
+<%
+  const LABEL = labels;
+  const W_ = typeof widget !== 'undefined' && widget ? widget : { version: null, why: null, hub: false };
+  const HELP = {
+    reports: 'Reports filed on the chat hub\'s pads, oldest first. Undecided for more than 14 days, a report is escalated; after 90 days its snapshot is released.',
+    held: 'Held messages waiting for a decision (no S1 rule holds any yet).',
+    modlog: 'Every moderation action on the chat hub, with its reason; reversible ones can be undone here.',
+    bans: 'Pad bans and timeouts set on the chat hub. Bans set on the website are shown read-only - change them on Users & Accounts.',
+    audit: 'Who read reported or hidden chat content, and when (every such read is logged).',
+    switches: 'Retention per data class with dry-run counts, and the chat\'s switches as the hub sees them (read-only).',
+  };
+  const T_ = typeof tools !== 'undefined' && tools ? tools : { state: 'off', why: 'not_installed' };
+  const WHY = { not_installed: 'The chat widget isn\'t installed on this site yet (no public/js/patv-chat/manifest.json from the platform repo\'s export).',
+                no_hub: 'The chat hub\'s addresses aren\'t set (HUB_RT_WS / HUB_RT_API in the site\'s environment).',
+                no_account: 'Your account has no chat id yet (a legacy account id while CHAT_GENESIS_NS is unset), so the chat\'s tools can\'t sign you in.' };
+%>
+<div class="adm-head">
+  <h1>Chat · <%= LABEL[view] %></h1>
+  <p><%= HELP[view] %></p>
+</div>
+<% if (errors && errors.length) { %><div class="adm-flash err" role="alert"><%= errors %></div><% } %>
+<% if (success && success.length) { %><div class="adm-flash ok" role="status"><%= success %></div><% } %>
+
+<nav class="adm-help" aria-label="Chat moderation views" style="margin:0 0 12px">
+  <% views.forEach((v, i) => { %><%- i ? ' · ' : '' %><% if (v === view) { %><b aria-current="page"><%= LABEL[v] %></b><% } else { %><a href="/admin/chat/<%= v %>"><%= LABEL[v] %></a><% } %><% }) %>
+</nav>
+
+<section class="adm-card" id="chatTools" aria-label="<%= LABEL[view] %>">
+  <% if (T_.state === 'tools') { %>
+    <patv-modtools view="<%= view %>" locale="<%= T_.locale %>" theme="dark"></patv-modtools>
+    <%- include('../partials/chat-widget-boot', { cw: T_ }) %>
+  <% } else { %>
+    <p class="adm-help" data-chat-tools="<%= T_.why %>"><% if (T_.why === 'not_installed' && W_.why && W_.why !== 'no manifest') { %>The chat widget's export in public/js/patv-chat/ can't be used (<%= W_.why %>), so the widget is off.<% } else { %><%= WHY[T_.why] || WHY.not_installed %><% } %></p>
+  <% } %>
+</section>
+<% if (W_.version) { %><p class="adm-help" data-chat-widget="<%= W_.version %>">Chat widget <%= W_.version %> (vendored from the platform repo's export).</p><% } %>
+<% if (view === 'switches') { %><p class="adm-help">CHAT_HUB and each pad's chat backend are switched on <a href="/admin/chat">/admin/chat</a> (break-glass: owners turn them on, any admin turns them off).</p><% } %>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

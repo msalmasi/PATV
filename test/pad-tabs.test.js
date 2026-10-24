@@ -164,6 +164,30 @@ test("padTabsFor (server): active = people in the room besides Pepe, or the stag
   assert.deepEqual(t.tabs, ["live", "about"], "no feed tab without a feed");
 });
 
+test("S1 V2: ?line=<seq> opens Live only on a pad whose Live tab holds the chat hub's widget (lineLive); ?tab= / #hash still win", () => {
+  for (const [q, ok] of [["?line=42", true], ["?x=1&line=9007199254740991", true], ["?line=7#c", true], ["?line=7&tab=feed", true],
+                         ["?line=0", false], ["?line=-1", false], ["?line=abc", false], ["?line=4x", false], ["?line=", false],
+                         ["?headline=4", false], ["?online=4", false], ["", false], [null, false],
+                         // the server's rule (chatwidget.lineOf): one line param, decoded, a positive SAFE integer
+                         ["?line=9007199254740992", false], ["?line=9999999999999999", false], ["?line=1&line=2", false], ["?line=1&line=", false],
+                         ["?line", false], ["?line=%34%32", true], ["?lin%65=5", true], ["?line[]=4", false], ["?line=%zz", false]]) {
+    assert.equal(T.lineRequested(q), ok, "lineRequested " + JSON.stringify(q));
+  }
+  assert.equal(T.requestedTab("?line=42", ""), null, "requestedTab itself is unchanged: a ?line= alone asks for nothing");
+  const site = { platform: "site", live: false, feed: true, pepeHere: false, pepeOn: false, slots: [], members: [] };
+  let t = bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=42" }));
+  assert.equal(t.initial, "feed", "no widget on the Live tab: a ?line= changes nothing (every v1 pad)");
+  assert.equal(t.lineLive, false);
+  t = bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=42", lineLive: true }));
+  assert.equal(t.initial, "live", "the hub's widget on Live: the line's tab");
+  assert.equal(t.requested, "live"); assert.equal(t.lineLive, true);
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x", lineLive: true })).initial, "feed", "no ?line=: the smart default");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=42&tab=about", lineLive: true })).initial, "about", "?tab= wins");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=nope", lineLive: true })).initial, "feed");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=9007199254740993", lineLive: true })).initial, "feed", "a line the widget isn't handed: as before");
+  assert.equal(bridge.padTabsFor(Object.assign({}, site, { query: "/p/x?line=4&line=5", lineLive: true })).initial, "feed");
+});
+
 test("the Feed badge counts posts newer than the last look (first visit: the last 3 days)", () => {
   const now = Date.UTC(2026, 9, 7, 12);
   const posts = [{ created: now - 1000 }, { created: now - 3600e3 }, { created: now - 5 * 86400e3 }];
