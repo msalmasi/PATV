@@ -351,9 +351,9 @@ test("snapshots: the identity and looks pages are the golden pages; null (404) w
 
 // ── the looks call over the wire (hubinbound) ──
 let base, server;
-const signedCall = async (body, { raw = null } = {}) => {
+const signedCall = async (body, { raw = null, keyId = "hub-test-1", key = V.keys["hub-test-1"] } = {}) => {
   const b = raw != null ? raw : JSON.stringify(body);
-  const h = hubsign.sign({ method: "POST", path: "/internal/v1/looks", body: b, keyId: "hub-test-1", key: V.keys["hub-test-1"] });
+  const h = hubsign.sign({ method: "POST", path: "/internal/v1/looks", body: b, keyId, key });
   const r = await fetch(base + "/internal/v1/looks", { method: "POST", headers: { ...h, "content-type": "application/json" }, body: b });
   let j = null;
   try { j = await r.json(); } catch (e) { j = null; }
@@ -377,6 +377,20 @@ test("the looks call: the golden answer; 404 while looks is off; 400 / 413; card
     assert.equal(ok.status, 200);
     assert.equal(ok.cache, "no-store");
     assert.deepEqual(ok.j, g.answer, "the golden answer: items in request order, the unknown id missing");
+    // S1 H9-15-edge-key: the edges' looks-only key gets the same answer (v1's half of F9; refused off this route:
+    // hubinbound.test.js)
+    process.env.HUB_V1_IN_LOOKS_KEY_ID = "hub-test-looks1";
+    process.env.HUB_V1_IN_LOOKS_KEY = "hub-test-looks-only-key-0123456789-not-real";
+    try {
+      const byLooks = await signedCall(g.request, { keyId: "hub-test-looks1", key: process.env.HUB_V1_IN_LOOKS_KEY });
+      assert.equal(byLooks.status, 200);
+      assert.deepEqual(byLooks.j, g.answer, "the looks-only key: the golden answer too");
+      assert.equal((await signedCall(g.request, { keyId: "hub-test-looks1", key: "a-wrong-secret-0123456789-0123456789" })).status, 401);
+    } finally {
+      delete process.env.HUB_V1_IN_LOOKS_KEY_ID; delete process.env.HUB_V1_IN_LOOKS_KEY;
+    }
+    assert.equal((await signedCall(g.request, { keyId: "hub-test-looks1", key: "hub-test-looks-only-key-0123456789-not-real" })).status, 401,
+                 "unset again: no key at all");
     const dup = await signedCall({ ids: [ACCT[1005], ACCT[1005], ACCT[1007], ACCT[1009], ACCT[1004]] });
     assert.deepEqual(dup.j.items.map((x) => x.acct), [ACCT[1005]], "duplicates ignored");
     assert.deepEqual(dup.j.missing, [ACCT[1007], ACCT[1009], ACCT[1004]], "purged, merged away, a done deletion: missing");

@@ -226,7 +226,7 @@ test("index.js: the JSON parser skips /internal/ (the form parser reads form bod
   assert.match(src, /require\("\.\/hubinbound"\)\.register\(app\);/);
 });
 
-test("S1 H9-15-edge-key: a looks-only key signs POST /internal/v1/looks and nothing else (403 scope); it never stands in for the full key", async () => {
+test("S1 H9-15-edge-key: a looks-only key signs POST /internal/v1/looks and nothing else (403 wrong_caller); it never stands in for the full key", async () => {
   process.env.HUB_V1_IN_KEY_ID = "hub-test-1";
   process.env.HUB_V1_IN_KEY = V.keys["hub-test-1"];
   const LK = "hub-test-looks-only-key-0123456789-not-real";
@@ -238,24 +238,34 @@ test("S1 H9-15-edge-key: a looks-only key signs POST /internal/v1/looks and noth
     await HO.setSettings({ sessions: true });
     assert.deepEqual(Object.keys(IN.looksKeys()), ["hub-test-looks1"]);
     assert.deepEqual(IN.status().looks_keys, ["hub-test-looks1"], "/admin/keys#seam can say which looks keys are in force");
-    // the snapshot pull and the rewind: refused before any nonce is taken, the code only
-    const snap = await call("GET", "/internal/v1/snapshot/sessions/revoked", asLooks);
+    // the snapshot pull and the rewind: refused before any nonce is taken, with the hub's code for a key on a route its
+    // caller may not call (seam plan §2.1), the code only
+    const nonceRows = async (h) => (await getQuery("SELECT COUNT(*) AS n FROM hub_inbound_nonces WHERE nonce = ?", [h["X-PATV-Nonce"]]))[0].n;
+    const hs = signed("GET", "/internal/v1/snapshot/sessions/revoked", "", asLooks.keyId, asLooks.key);
+    const snap = await call("GET", "/internal/v1/snapshot/sessions/revoked", { headers: hs });
     assert.equal(snap.status, 403);
-    assert.deepEqual(snap.j, { ok: false, error: "scope" });
+    assert.deepEqual(snap.j, { ok: false, error: "wrong_caller" });
     assert.equal(snap.cache, "no-store");
+    assert.equal(await nonceRows(hs), 0, "a refused looks-only request takes no nonce");
     const rwBody = JSON.stringify({ topic: "sessions/revoked", after_id: 0 });
-    assert.equal((await call("POST", "/internal/v1/outbox/rewind", { ...asLooks, body: rwBody })).status, 403);
+    const hr = signed("POST", "/internal/v1/outbox/rewind", rwBody, asLooks.keyId, asLooks.key);
+    assert.equal((await call("POST", "/internal/v1/outbox/rewind", { headers: hr, body: rwBody })).status, 403);
+    assert.equal(await nonceRows(hr), 0);
     assert.equal((await call("GET", "/internal/v1/looks", asLooks)).status, 403, "the looks route by POST only");
     assert.equal((await call("POST", "/internal/v1/nowhere", { ...asLooks, body: "{}" })).status, 403);
-    assert.equal(IN.status().refused.scope, 4);
+    assert.equal(IN.status().refused.wrong_caller, 4);
+    assert.equal(IN.status().refused.scope, undefined);
     // the full key still reaches everything
     assert.equal((await call("GET", "/internal/v1/snapshot/sessions/revoked")).status, 200);
-    // the looks call: past the scope gate exactly as the full key (here the looks switch is off: 404 not_found for both)
+    // the looks call: past the gate exactly as the full key (here the looks switch is off: 404 not_found for both), its
+    // nonce taken under the looks key's id (the 200 answer: huboutbox-s1.test.js, the golden call)
     const lb = JSON.stringify({ ids: [] });
-    const byLooks = await call("POST", "/internal/v1/looks", { ...asLooks, body: lb });
+    const hl = signed("POST", "/internal/v1/looks", lb, asLooks.keyId, asLooks.key);
+    const byLooks = await call("POST", "/internal/v1/looks", { headers: hl, body: lb });
     const byFull = await call("POST", "/internal/v1/looks", { body: lb });
     assert.deepEqual([byLooks.status, byLooks.j], [byFull.status, byFull.j]);
     assert.deepEqual(byLooks.j, { ok: false, error: "not_found" });
+    assert.deepEqual(await getQuery("SELECT key_id FROM hub_inbound_nonces WHERE nonce = ?", [hl["X-PATV-Nonce"]]), [{ key_id: "hub-test-looks1" }]);
     // a looks key that shares the full key's secret or id, or names another env or direction, is no key at all
     process.env.HUB_V1_IN_LOOKS_KEY = V.keys["hub-test-1"];
     assert.deepEqual(IN.looksKeys(), {});

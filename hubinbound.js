@@ -14,7 +14,8 @@
 // S1 (the owner's answer to H9-15-edge-key, 2026-10-24, option 1): a LOOKS-ONLY key HUB_V1_IN_LOOKS_KEY_ID / HUB_V1_IN_LOOKS_KEY
 // (and HUB_V1_IN_LOOKS_PREV_KEY_ID / _KEY during its rotation), also "hub-<env>-<n>" with its own secret, is accepted on
 // POST /internal/v1/looks only - the hub's internet-facing edges sign their cache-miss looks call with it, so a compromised edge
-// can't pull v1's snapshots or rewind its outbox; on any other route it is refused (403 scope). It never stands in for the
+// can't pull v1's snapshots or rewind its outbox; on any other route it is refused 403 wrong_caller (the hub's own code for a
+// valid key on a route its caller may not call, seam plan §2.1), before any nonce is taken. It never stands in for the
 // full key: without HUB_V1_IN_KEY the routes stay 404, and an id or secret it shares with a full key makes it no key at all. The
 // signature covers the key id, the raw request target (req.originalUrl, path + query exactly as sent - seam plan D-16) and
 // the raw body (parsed here, never by the site's JSON parser: index.js leaves /internal/ alone). Without a valid inbound key
@@ -129,7 +130,7 @@ function warn(code, line) {
   console.warn(line);
 }
 
-const STATUS = { missing: 401, unknown_key: 401, wrong_env: 401, stale: 401, bad_sig: 401, replay: 409, busy: 503, scope: 403 };
+const STATUS = { missing: 401, unknown_key: 401, wrong_env: 401, stale: 401, bad_sig: 401, replay: 409, busy: 503 };
 const fromPublic = (req) => !!(req.get("cf-ray") || req.get("cf-connecting-ip"));
 
 function handler() {
@@ -161,11 +162,12 @@ function handler() {
         warn(v.error, `[hubinbound] ${req.method} ${route || "other"} refused: ${v.error} (at most one line per code per minute)`);
         return res.status(status).json({ ok: false, error: v.error });
       }
-      // a looks-only key signs the looks call and nothing else (H9-15-edge-key): checked before any nonce is taken
+      // a looks-only key signs the looks call and nothing else (H9-15-edge-key): checked before any nonce is taken, with the
+      // hub's code for a key on a route its caller may not call (wrong_caller, seam plan §2.1)
       if (Object.prototype.hasOwnProperty.call(looksOnly, v.keyId) && !(route && LOOKS_ONLY_ROUTES.has(route) && req.method === "POST")) {
-        note(route, 403, "scope");
-        warn("scope", `[hubinbound] ${req.method} ${route || "other"} refused: scope (a looks-only key; at most one line per code per minute)`);
-        return res.status(403).json({ ok: false, error: "scope" });
+        note(route, 403, "wrong_caller");
+        warn("wrong_caller", `[hubinbound] ${req.method} ${route || "other"} refused: wrong_caller (a looks-only key; at most one line per code per minute)`);
+        return res.status(403).json({ ok: false, error: "wrong_caller" });
       }
       const claim = { keyId: v.keyId, nonce: req.get("X-PATV-Nonce"), ts: req.get("X-PATV-Ts") };
       serve(route, req, res, u, body, claim).catch((e) => {
