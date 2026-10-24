@@ -539,7 +539,7 @@ test("the routes: GET renders the box only while erasure is on; POST {remove_pub
   }
 });
 
-test("the privacy page: one paragraph for PATV chat and the pad chat archive, only while erasure is on; dated; the export sentence with the export switch", async () => {
+test("the privacy page: one section for PATV chat and the pad chat archive, only while erasure is on; dated; how long each keeps the lines; the export clause with the export switch", async () => {
   await setup();
   const ejs = require("ejs");
   const render = (hubErasure, chatlog = null) => ejs.renderFile(path.join(repo, "views", "privacy.ejs"), { user: null, title: "Privacy Policy", VERSION: "v",
@@ -555,16 +555,20 @@ test("the privacy page: one paragraph for PATV chat and the pad chat archive, on
     assert.match(copy.on_day, /^\d{1,2} [A-Z][a-z]+ \d{4}$/);
     assert.equal(copy.export, false);
     const on = await render(copy);
-    assert.equal((on.match(/id="delete-chat"/g) || []).length, 1, "one paragraph");
+    assert.equal((on.match(/id="delete-chat"/g) || []).length, 1, "one section");
     assert.match(on, /<a href="#delete-chat">your chat lines when you delete your account<\/a>/, "in the contents");
     assert.match(on, /<b>PATV chat<\/b>/);
-    assert.match(on, /<i>Also remove my public messages<\/i>/);
+    assert.match(on, /<b>Also remove my public messages:<\/b>/);
     assert.match(on, /in PATV chat and in pads' chat history alike/, "both stores, one choice");
-    assert.match(on, /A message under a report is kept until 30 days after the report is decided \(90 days at most while it isn't\), and one under a legal hold until the hold ends/, "D10's bounds");
+    assert.match(on, /a message under a report is kept until 30 days after the report is decided \(90 days at most while it isn't\), and one under a legal hold until the hold ends/, "D10's bounds");
     assert.match(on, /or, if you had a linked Camfrog name, under that name/, "a linked member's web lines without the tick");
     assert.match(on, /also those under your linked Camfrog name/, "and with it");
     assert.match(on, /while incognito with a linked Camfrog name/, "what it can't reach");
-    assert.doesNotMatch(on, /Download my data<\/a> includes what PATV chat keeps/, "no export sentence while export is off");
+    // O-20's revision: how long each store keeps the lines (the hub's purge is report-only in S1), and the download
+    assert.match(on, /pads' chat history for the time in <a href="#retention">section 9<\/a>/, "the archive's time is section 9's");
+    assert.match(on, /PATV chat doesn't delete old messages automatically yet/, "PATV chat's: no automatic deletion yet");
+    assert.match(on, /Download my data<\/a> includes your lines in pads' chat history\./, "the archive's lines are in the download whatever the export switch");
+    assert.doesNotMatch(on, /what PATV chat keeps about you/, "no PATV chat clause while export is off");
     assert.ok(on.includes("<b>" + copy.on_day + ":</b> added <a href=\"#delete-chat\">"), "the dated change note");
     // review fix: the date is when erasure went ON - the /admin/keys#seam form posts EVERY switch on each save (admin-keys.js),
     // and a later save (another switch turned on, or nothing changed) must not move the paragraph's date or "Last updated"
@@ -577,7 +581,7 @@ test("the privacy page: one paragraph for PATV chat and the pad chat archive, on
     const later = await D.privacyCopy();
     assert.equal(later.on_at, onAt, "still the day erasure went on");
     assert.equal(later.export, true);
-    assert.match(await render(later), /Download my data<\/a> includes what PATV chat keeps about you/);
+    assert.match(await render(later), /Download my data<\/a> includes your lines in pads' chat history, and what PATV chat keeps about you/);
     const exp = (await getQuery("SELECT updated FROM hubseam_settings WHERE key = 'export'"))[0];
     assert.equal(Number(exp.updated), onAt + 15 * DAY, "a switch that did change is dated by its change");
   } finally {
