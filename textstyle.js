@@ -15,7 +15,8 @@
 // The picker is behind the `looks` switch (hubseam.looks, /admin/keys#seam - the switch that sends text styles to the chat
 // hub; ADR 0007 D19: every S1 switch stays off until Q7, so nothing a member sees changes before then): while it is off the
 // card, the /settings row and the save route are not there (the route answers 404, nothing written). A style already
-// saved stays stored. When V2 (release L4) adds CHAT_HUB, pickerOn() can require it too.
+// saved stays stored. CHAT_HUB came with V1 (1.99adz: chatswitches.chatHubOnNow()), not V2, and pickerOn() does not read
+// it: the picker stays gated on `looks` alone (ADR 0007's owner answers, "Default accepted"; closed 2026-10-24).
 //
 // The palette and the fonts are chat-text-styles.json: rt-schema's registry/text-styles.json byte for byte (its sha256 is
 // pinned in test/huboutbox-s1.test.js; a palette change is an rt-schema PR first, then this copy). A colour must be one of

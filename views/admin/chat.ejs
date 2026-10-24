@@ -57,7 +57,7 @@
       <th><%- t('admchat.col.changed') %></th><th></th></tr></thead>
     <tbody>
       <% V.pads.forEach((p) => { %><tr data-pad="<%= p.room_id %>">
-        <td><b><% if (p.slug && !p.gone) { %><a href="/p/<%= encodeURIComponent(p.slug) %>"><%= padName(p) %></a><% } else { %><%= padName(p) %><% } %></b><br><span class="adm-help"><code><%= p.room_id %></code><% if (p.gone) { %> · <span data-gone="1"><%- t('admchat.pads.gone') %></span><% } %></span></td>
+        <td><b><% if (p.slug && !p.gone) { %><a href="/p/<%= encodeURIComponent(p.slug) %>"><%= padName(p) %></a><% } else { %><%= padName(p) %><% } %></b><br><span class="adm-help"><code><%= p.room_id %></code><% if (p.gone) { %> · <span data-gone="1"><%- t('admchat.pads.gone') %></span><% } else if (p.platform !== 'site') { %> · <span class="adm-pill bad" data-not-site="1"><%- t('admchat.pads.not_site') %></span><% } %></span></td>
         <td><%= p.platform %></td>
         <td><% if (KNOWN.includes(p.backend)) { %><%- t('admchat.backend.' + p.backend) %><% } else { %><code><%= p.backend %></code><% } %></td>
         <td><%= when(p.updated) %><% if (p.updated_by) { %><br><span class="adm-help"><%= p.updated_by %></span><% } %></td>
