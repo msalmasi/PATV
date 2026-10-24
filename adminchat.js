@@ -22,7 +22,7 @@
 // whose host is this request's Host - sameOriginStrict below), a required reason (cleanReason), an admin_audit row in the
 // change's own transaction ("chat.switch" through chatswitches.set; "chat.pad_backend" {room_id, slug, hub_pad_id, from, to}
 // here) - a row that can't be written rolls the change back - and Cache-Control: no-store. A change to the value already there
-// writes nothing. CHAT_HUB on also needs the interlock (409 chat_hub_needs, `missing`); a pad moves to hub only when it is a
+// writes nothing (CHAT_HUB's default with no row included: chatswitches.set). CHAT_HUB on also needs the interlock (409 chat_hub_needs, `missing`); a pad moves to hub only when it is a
 // site pad (409 site_pads_only - Camfrog pads keep their v1 chat in S1; hub_read is S2's: 409 hub_read_s2).
 // Turning CHAT_HUB off needs only chat_switches and admin_audit (initCore): never the pads (padhub, rooms); the page shows
 // what it can read when the pads can't be read.
