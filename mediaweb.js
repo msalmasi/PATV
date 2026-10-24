@@ -64,7 +64,7 @@ function register(app, { addUser, noTimers } = {}) {
     if (!SP.can(req.user, "media.admin")) return res.redirect("/login");
     try {
       await Promise.all([conf.init(), reqs.init(), inv.init(), lib.init()]);
-      const pads = (await rooms.list()).map((r) => ({ id: r.id, title: r.title }));
+      const pads = (await rooms.listAll()).map((r) => ({ id: r.id, title: r.title }));     // S1 Q4: an admin page (unlisted pads too)
       res.render("mediaAdmin", { user: req.user.username, S: conf.get(), K: conf.keys(), pads, house: rooms.HOUSE_ROOM,
         requests: await reqs.adminState(), invites: await inv.adminState(), libraryOk: conf.libraryAllowed(req.user),
         plays: await require("./dbUtils").getQuery(`SELECT id, ts, username, room_id, title, quality, offset_start, ended_at, end_reason, error, price, charge, access

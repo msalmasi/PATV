@@ -77,9 +77,19 @@ async function needsNow() {
   const on = new Set((await getQuery("SELECT key FROM hubseam_settings WHERE value = 'true'").catch(() => [])).map((r) => String(r.key)));
   return INTERLOCK.filter((k) => !on.has(k));
 }
-/** Is CHAT_HUB on - read from the database (huboutbox.setSettings' interlock, inside its transaction). */
-async function chatHubOnNow() {
-  const r = (await getQuery("SELECT value FROM chat_switches WHERE key = 'CHAT_HUB'").catch(() => []))[0];
+/**
+ * Is CHAT_HUB on - read from the database. A reader (V2's widget mount) fails closed: a read that fails is "off". opts.strict
+ * (huboutbox.setSettings' half of the interlock, inside its transaction) rethrows a failed read instead, so the guard can't
+ * fail open; only a missing table (no row was ever written: the default, off) is "off" there too.
+ */
+async function chatHubOnNow({ strict = false } = {}) {
+  let rows;
+  try { rows = await getQuery("SELECT value FROM chat_switches WHERE key = 'CHAT_HUB'"); }
+  catch (e) {
+    if (!strict || /no such table/i.test(String(e && e.message))) return false;
+    throw e;
+  }
+  const r = rows[0];
   return !!r && r.value === "on";
 }
 
@@ -143,7 +153,11 @@ async function installTriggers() {
   await require("./hubpads").installTriggers(triggerSql());
 }
 
-/** sw:<key> payloads, read now. -> Map(entity -> {key, value, updated_at}) (a key of another name: its stored value). */
+/**
+ * sw:<key> payloads, read now. -> Map(entity -> {key, value, updated_at}). A key of KEYS posts what get() reads: a stored value
+ * KEYS doesn't allow (written past set(): the sqlite3 CLI, a hand edit) posts the key's default, so the hub never holds a value
+ * v1 itself doesn't act on (fail closed: CHAT_HUB reads off on both sides). A key of another name: its stored value.
+ */
 async function build(entities) {
   const out = new Map();
   const keys = [...new Set([...(entities || [])].map(String))].filter((e) => /^sw:[A-Za-z0-9_]{1,40}$/.test(e)).map((e) => e.slice(3));
@@ -154,7 +168,8 @@ async function build(entities) {
     const r = rows.get(key);
     const k = KEYS[key];
     if (!r && !k) continue;                                // never a switch here: nothing to say (posted with payload null)
-    out.set("sw:" + key, { key, value: r ? String(r.value) : k.def, updated_at: r && Number(r.updated) ? Number(r.updated) : null });
+    const value = !r ? k.def : !k ? String(r.value) : k.values.includes(String(r.value)) ? String(r.value) : k.def;
+    out.set("sw:" + key, { key, value, updated_at: r && Number(r.updated) ? Number(r.updated) : null });
   }
   return out;
 }

@@ -56,9 +56,10 @@ const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 // 1.99ads (S1 Q5b, release L3 - ADR 0007 D19: the letter of the release that changed the seam): the identity/changed and
 // looks/changed topics (hubidentity.js, hublooks.js + userlook.buildLooks), their switches, snapshots and batch readers, and
 // the hub's POST /internal/v1/looks (hubinbound.js).
-// 1.99ady (S1 Q4, release L1; the letter is tentative until the release reaches staging - D19's merge-to-staging rule): the
-// pads/changed, roles/changed, bans/changed and switches/changed topics the same way, and the CHAT_HUB interlock.
-const VERSION = "1.99ady";
+// 1.99aea (S1 Q4, release L1's second part; the next free letter after V1's 1.99adz - tentative until the release reaches
+// staging, D19's merge-to-staging rule): the pads/changed, roles/changed, bans/changed and switches/changed topics the same
+// way, and the CHAT_HUB interlock. (1.99ady is V4's and 1.99adz V1's: neither changed the seam, so neither was ever VERSION.)
+const VERSION = "1.99aea";
 const DAY = 86400000;
 const BATCH = 300;
 const POLL_MS = 1000;
@@ -198,7 +199,8 @@ async function setSettings(patch, actor) {
     // transaction, so a concurrent CHAT_HUB change can't cross it)
     const was = new Set((await getQuery("SELECT key FROM hubseam_settings WHERE value = 'true'")).map((r) => String(r.key)));
     const offing = CS.INTERLOCK.filter((k) => next[k] === false && was.has(k));
-    if (offing.length && (await CS.chatHubOnNow())) {
+    // strict: a failed read refuses (rolls back) instead of reading "off" - this guard never fails open
+    if (offing.length && (await CS.chatHubOnNow({ strict: true }))) {
       throw Object.assign(new Error(`CHAT_HUB is on and needs ${offing.join(", ")} - turn CHAT_HUB off first (Admin › Chat).`),
                           { status: 409, code: "chat_hub_on", refuse: true, needs: offing });
     }
@@ -919,4 +921,6 @@ module.exports = {
   _setFault: (f) => { fault = f || null; },
   _setAccountOf: (f) => { accountOverride = f || null; },
   _resetPoster: () => { backoffMs = 0; retryAt = 0; lastPost = null; lastBeat = null; topicFail.clear(); },
+  // tests: release L1's setup state (a failed setup keeps its four switches from turning on: l1_not_ready)
+  _l1: (st) => { if (st) l1 = { ready: !!st.ready, error: st.error == null ? null : String(st.error) }; return { ...l1 }; },
 };

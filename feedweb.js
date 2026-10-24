@@ -201,7 +201,8 @@ async function composerFor(viewer, roomId) {
   if (!viewer) return null;
   const C = store.config();
   // 1.99bz: announce = the room owner lets Pepe announce new posts there (the author then gets a per-post checkbox)
-  const list = await store.communities(viewer);
+  // S1 Q4 (review): the page's own pad even when it's unlisted (the composer on /p/staff posts into the Staff room)
+  const list = await store.communities(viewer, { include: roomId && roomId !== "profile" ? roomId : null });
   // 1.99cu: ann = store.announceState {ok, code, why, manage}: the checkbox is always shown for the picked pad,
   //         enabled + ticked when ok, greyed out with the reason otherwise
   const all = await Promise.all(list.filter((r) => r.canPost).map(async (r) => {
@@ -409,11 +410,13 @@ function register(app, { addUser, isBotToken }) {
       } else {
         L = await store.list({ room: R ? R.id : null, author: !R && author ? author.userId : null, sort, page, top, viewer, tag });
       }
-      // the community bar: All, Following, then every community (icon, followers, posts)
-      const comms = await store.communities(viewer);
+      // the community bar: All, Following, then every community (icon, followers, posts). S1 Q4 (review): an unlisted pad's
+      // own page reads its header counts from it too, but the bar stays a listing (the unlisted pad isn't added to it)
+      const commsHere = await store.communities(viewer, { include: R ? R.id : null });
+      const comms = commsHere.filter((c) => !R || c.id !== R.id || rooms.isListed(c.id));
       let header = null;
       if (R) {
-        const c = comms.find((x) => x.id === R.id) || { followers: 0, posts: 0 };
+        const c = commsHere.find((x) => x.id === R.id) || { followers: 0, posts: 0 };
         header = { id: R.id, slug: R.slug, title: R.title, description: R.description || "", house: !!R.house, community: !!R.community, platform: R.platform || rooms.platformOf(R.id),
                    owner: R.owner ? (R.owner.display || R.owner.username) : null, ownerUser: R.owner ? R.owner.username : null,
                    followers: c.followers, posts: c.posts, following: viewer ? await follows.isFollowing(viewer.userId, "room", R.id) : false,

@@ -110,9 +110,17 @@ async function seedLevels() {
 }
 async function load() {
   const L = new Map(), M = new Map();
+  const rowed = new Set();
   for (const r of await getQuery("SELECT room_id, level FROM pad_access")) {
+    rowed.add(String(r.room_id));
     const lv = cleanLevel(r.level);
     if (lv && lv !== DEFAULT) L.set(r.room_id, lv);
+  }
+  // S1 Q4 (review): a seeded pad without a level row yet (seedLevels failed or hasn't run) reads as its seed's level - the
+  // staff and canary pads are Approved from their first moment, never open to every member while the row is missing
+  for (const s of rooms.SEEDS) {
+    const lv = cleanLevel(s.access);
+    if (lv && lv !== DEFAULT && !rowed.has(s.room_id)) L.set(s.room_id, lv);
   }
   for (const r of await getQuery("SELECT room_id, user_id FROM pad_members WHERE status = 'approved'")) {
     if (!M.has(r.room_id)) M.set(r.room_id, new Set());

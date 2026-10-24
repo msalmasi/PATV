@@ -559,4 +559,5 @@ function register(app, { addUser, isBotToken }) {
 module.exports = {
   init, register, settings, setScope, globalCaps, setGlobal, parseVerdict, decide, rulesFor, work, apply, reverse, list, adminList, noticeFor, usage,
   cleanScope, cleanGlobal, DEFAULTS, GLOBAL_DEFAULTS, SEVERITIES, ACTIONS, WINDOW, BATCH, APPEAL, Refuse, _setClock, SEVERE_FLOOR, RANK,
+  activePads,                                          // S1 Q4 (review): the pads the automod works on, unlisted ones included (tests)
 };

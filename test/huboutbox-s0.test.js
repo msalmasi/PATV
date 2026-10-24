@@ -130,7 +130,7 @@ test("the heartbeat: env (HUB_V1_ENV, else STAGING), the switches (not spans), p
   assert.ok(sr.oldest_pending_at > 0);
   assert.equal(b.outbox_head, await HO.headId());
   assert.equal(b.version, HO.VERSION);
-  assert.equal(HO.VERSION, "1.99ady", "the letter of the release that last changed the seam (ADR 0007 D19; S1 Q4's, tentative until staging)");
+  assert.equal(HO.VERSION, "1.99aea", "the letter of the release that last changed the seam (ADR 0007 D19; S1 Q4's, tentative until staging)");
   process.env.STAGING = "1";
   assert.equal((await HO.heartbeatBody()).env, "staging");
   process.env.HUB_V1_ENV = "test";

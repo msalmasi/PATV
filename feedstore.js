@@ -1423,11 +1423,18 @@ async function crosspost(userId, origId, input = {}) {
  * (the account rules + the owner's who-can-post settings). -> [{id, slug, title, description, house,
  * community, followers, posts, canPost, refusal}], the Lounge first, then by followers and posts.
  */
-async function communities(viewer = null) {
+async function communities(viewer = null, { include = null } = {}) {
   await init();
   // 1.99fu: an Approved pad is listed (pickers, the /feed bar and its search) only for the people inside it
   const blocked = new Set(await blockedFor(viewer));
-  const list = (await rooms.list()).filter((R) => !blocked.has(R.id));
+  // S1 Q4 (review; ADR 0007 D1): unlisted pads aren't listed - except the pad(s) named in `include`: the page the member is on
+  // (its composer and story form offer it), never a listing. A profile pad never; an Approved one still only for those inside.
+  const reg = await rooms.list();
+  for (const id of [].concat(include || []).map(String).filter(Boolean)) {
+    const R = rooms.getCached(id);
+    if (R && R.listed === false && !rooms.isProfile(R.id) && !reg.some((x) => x.id === R.id)) reg.push(R);
+  }
+  const list = reg.filter((R) => !blocked.has(R.id));
   if (!list.length) return [];
   await require("./follows").init();
   const [F, P] = await Promise.all([

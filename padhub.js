@@ -24,7 +24,7 @@
 // v1, and the room_events row names "PATV staff", never the admin (the pad's owner reads room_events).
 "use strict";
 const crypto = require("crypto");
-const { runQuery, getQuery } = require("./dbUtils");
+const { runQuery, getQuery, tx } = require("./dbUtils");
 
 const BACKENDS = Object.freeze(["v1", "hub_read", "hub"]);
 // how staff show in a pad's room_events (its owner reads them on /p/:slug/settings) - chatlogmod.js's STAFF_ACTOR
@@ -36,6 +36,9 @@ const UUID_SQL = "lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) 
                  "substr('89ab', 1 + (abs(random()) % 4), 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))";
 const MS_SQL = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
 const UUID4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+// rooms.cleanPlatform's "is it a site pad" in SQL: the column when it holds a known platform, else what the id implies (patv:)
+const platformSql = (ref) => `(CASE WHEN lower(COALESCE(${ref}.platform, '')) IN ('camfrog', 'site', 'twitch', 'discord', 'profile')
+  THEN lower(${ref}.platform) WHEN ${ref}.room_id LIKE 'patv:%' THEN 'site' ELSE 'other' END)`;
 
 let ready = null;
 function init() {
@@ -50,6 +53,17 @@ function init() {
       // a pad created later under the same room_id (a Camfrog room's id) is a new pad to the hub, never the old one revived
       await runQuery(`CREATE TRIGGER IF NOT EXISTS pad_hub_drop AFTER DELETE ON rooms_registry
         BEGIN DELETE FROM pad_hub WHERE room_id = OLD.room_id; END`);
+      // S1 (ADR 0007 D3, Q4's review): only a SITE pad's chat may be off v1 in S1 - a pad that stops being one (padconnect
+      // re-keys it onto a Camfrog room, or connects a Twitch channel; any writer, CLI scripts included) goes back to v1 in
+      // the same statement's transaction, with a room_events row like setBackend's (pads/changed carries it to the hub)
+      await runQuery(`CREATE TRIGGER IF NOT EXISTS pad_hub_site_only AFTER UPDATE OF platform, room_id ON rooms_registry
+        WHEN ${platformSql("NEW")} <> 'site' AND EXISTS (SELECT 1 FROM pad_hub WHERE room_id = NEW.room_id AND chat_backend <> 'v1')
+        BEGIN
+          INSERT INTO room_events (room_id, ts, what, actor, detail)
+            SELECT NEW.room_id, ${MS_SQL}, 'chat-backend', '${STAFF_ACTOR}', chat_backend || ' -> v1 (not a site pad any more)'
+            FROM pad_hub WHERE room_id = NEW.room_id;
+          UPDATE pad_hub SET chat_backend = 'v1', updated = ${MS_SQL}, updated_by = 'platform' WHERE room_id = NEW.room_id;
+        END`);
       await backfill();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -93,7 +107,8 @@ async function backendOf(roomId) {
  * until S2, a profile pad never; `v1` always (a pad_hub row whose registry row is gone included: going back is never refused).
  * -> {room_id, hub_pad_id, chat_backend, changed}. updated_by gets the actor's username (an audit label; accountMerge.js: deny);
  * the pad's room_events row names STAFF_ACTOR. Refusals (err.refuse, .status, .code): 400 bad_backend, 404 no_pad, 409
- * hub_read_s2 | site_pads_only. Runs inside the caller's dbUtils.tx when there is one (call init() first).
+ * hub_read_s2 | site_pads_only. Its reads, the UPDATE and the room_events row are one dbUtils.tx (a savepoint of the
+ * caller's, /admin/chat's with its audit row, when there is one; call init() first).
  */
 async function setBackend(roomId, backend, actor = null) {
   await init();
@@ -101,22 +116,24 @@ async function setBackend(roomId, backend, actor = null) {
   const b = String(backend == null ? "" : backend);
   if (!BACKENDS.includes(b)) throw new Refuse(400, "bad_backend", "A pad's chat backend is v1, hub_read or hub.");
   if (b === "hub_read") throw new Refuse(409, "hub_read_s2", "Read-only hub chat (hub_read) comes with S2.");
-  const R = (await getQuery("SELECT room_id, platform FROM rooms_registry WHERE room_id = ?", [id]))[0];
-  if (!R && b !== "v1") throw new Refuse(404, "no_pad", "No such pad.");
   const rooms = require("./rooms");
-  if (b === "hub" && rooms.cleanPlatform(R.platform, R.room_id) !== "site") {
-    throw new Refuse(409, "site_pads_only", "Only a site pad can move its chat to the hub in S1 (a Camfrog pad's chat is its Camfrog room's).");
-  }
-  if (R && !(await getQuery("SELECT 1 FROM pad_hub WHERE room_id = ?", [id])).length) await backfill();
-  const cur = (await getQuery("SELECT hub_pad_id, chat_backend FROM pad_hub WHERE room_id = ?", [id]))[0];
-  if (!cur) throw new Refuse(404, "no_pad", "No such pad.");
-  const changed = cur.chat_backend !== b;
-  if (changed) {
-    const by = actor && (actor.username || actor.userId) ? String(actor.username || actor.userId).slice(0, 80) : null;
-    await runQuery("UPDATE pad_hub SET chat_backend = ?, updated = ?, updated_by = ? WHERE room_id = ?", [b, clock(), by, id]);
-    if (R) await rooms.event(id, "chat-backend", STAFF_ACTOR, `${cur.chat_backend || "v1"} -> ${b}`);
-  }
-  return { room_id: id, hub_pad_id: String(cur.hub_pad_id), chat_backend: b, changed };
+  return tx(async () => {
+    const R = (await getQuery("SELECT room_id, platform FROM rooms_registry WHERE room_id = ?", [id]))[0];
+    if (!R && b !== "v1") throw new Refuse(404, "no_pad", "No such pad.");
+    if (b === "hub" && rooms.cleanPlatform(R.platform, R.room_id) !== "site") {
+      throw new Refuse(409, "site_pads_only", "Only a site pad can move its chat to the hub in S1 (a Camfrog pad's chat is its Camfrog room's).");
+    }
+    if (R && !(await getQuery("SELECT 1 FROM pad_hub WHERE room_id = ?", [id])).length) await backfill();
+    const cur = (await getQuery("SELECT hub_pad_id, chat_backend FROM pad_hub WHERE room_id = ?", [id]))[0];
+    if (!cur) throw new Refuse(404, "no_pad", "No such pad.");
+    const changed = cur.chat_backend !== b;
+    if (changed) {
+      const by = actor && (actor.username || actor.userId) ? String(actor.username || actor.userId).slice(0, 80) : null;
+      await runQuery("UPDATE pad_hub SET chat_backend = ?, updated = ?, updated_by = ? WHERE room_id = ?", [b, clock(), by, id]);
+      if (R) await rooms.event(id, "chat-backend", STAFF_ACTOR, `${cur.chat_backend || "v1"} -> ${b}`);
+    }
+    return { room_id: id, hub_pad_id: String(cur.hub_pad_id), chat_backend: b, changed };
+  });
 }
 
 module.exports = { init, backfill, ofRooms, of, backendOf, setBackend, BACKENDS, Refuse, UUID4_RE, STAFF_ACTOR,

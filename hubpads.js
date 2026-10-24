@@ -241,13 +241,17 @@ async function build(entities, t = Date.now()) {
     const free = PC.MAX_BADGES;
     const extra = Math.max(0, Math.floor(Number((P.config() || {}).prime_extra_badges) || 0));
     const PF = require("./padflair");
+    const flairDefs = await PF.hubDefsMany(live);         // one query per 400 pads, not one per pad (we run inside the poster's tx)
+    const R = require("./rooms");
     for (const [e, hub] of pads) {
       const h = hubRows.get(hub);
       const r = h ? reg.get(String(h.room_id)) : null;
       if (!r) { out.set(e, { kind: "pad", pad_id: hub, gone: true }); continue; }
       const id = String(r.room_id);
       const platform = cleanPlatform(r.platform, id);
-      const lv = levels.get(id);
+      // no pad_access row: the seed's level for a seeded pad (rooms.seedAccess - the staff / canary pads are Approved before
+      // padaccess writes their row, as padaccess.levelOf reads them), else the default
+      const lv = levels.get(id) || (R.seedAccess(id) ? { level: R.seedAccess(id) } : null);
       const visibility = platform === "profile" ? "members" : lv && LEVELS.includes(String(lv.level || "").toLowerCase()) ? String(lv.level).toLowerCase() : "members";
       const userOwner = r.owner_kind === "user" && r.owner_user_id != null && r.owner_user_id !== "";
       const owner = r.owner_kind === "house" ? { kind: "house" }
@@ -256,7 +260,7 @@ async function build(entities, t = Date.now()) {
       const since = userOwner && tm && Number(tm.owner_since) > 0 ? Number(tm.owner_since) : null;
       const grant = userOwner && tm && Number(tm.owner_grant) > 0 ? Number(tm.owner_grant) : null;
       const cos = cosmeticsOf(looks.has(id) ? looks.get(id).cosmetics : null);
-      const flairs = platform === "profile" ? [] : (await PF.hubDefs(id)).slice(0, MAX_FLAIRS);
+      const flairs = platform === "profile" ? [] : (flairDefs.get(id) || []).slice(0, MAX_FLAIRS);
       out.set(e, {
         kind: "pad", pad_id: hub, v1_room_id: id, slug: String(r.slug), title: r.title == null || r.title === "" ? null : String(r.title),
         platform, visibility, nsfw: !!Number(r.adult), listed: platform !== "profile" && Number(r.listed) !== 0,

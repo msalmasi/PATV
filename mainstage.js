@@ -1946,8 +1946,12 @@ function register(app, { addUser, isBotToken, noTimers }) {
     // 1.99fu: an Approved pad (padaccess.js) is only offered to the people inside it
     const PA = require("./padaccess");
     await PA.init();
-    const all = PA.visibleRows(req.user || null, await rooms.list());
     const want = String(req.query.room || "");
+    // S1 Q4 (review): the stage picker is a listing (no unlisted pads) - but ?room= naming an unlisted pad (its own page's
+    // "Go live" link) offers that one pad, to the people who can see it
+    const named = want ? rooms.getCached(want) || rooms.bySlugCached(want) : null;
+    const listed = await rooms.list();
+    const all = PA.visibleRows(req.user || null, named && named.listed === false && !rooms.isProfile(named.id) ? [named, ...listed] : listed);
     const pick = all.find((r) => r.slug === want || r.id === want) || all.find((r) => r.id === rooms.HOUSE_ROOM) || all[0] || null;
     // 1.99jn: 📼 Play from Plex (medialib.js): shown to admins + Plex users, locked for the rest; never breaks the page
     let plex = null;

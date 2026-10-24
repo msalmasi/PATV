@@ -12,9 +12,19 @@
 //
 // Triggers (S1-D3; gated by the switch): feed_bans insert / delete (unbans; v1's sweep deletes the expired rows) / update of
 // user_id, room_id, until (a merge moves user_id, a re-key room_id) -> the OLD and the NEW entity. INSERT OR REPLACE (a re-ban)
-// fires the insert trigger. An expiry needs no row: the payload carries `until` and the hub applies it.
-// Snapshot (§12.6): the live feed bans (until NULL or in the future), entities in byte order (computed in SQL: the entity's
-// order isn't (user_id, room_id)'s).
+// fires the insert trigger. An expiry needs no row: the payload carries `until` and the hub applies it. A pad that gets a hub
+// id (pad_hub's insert: a new pad, a pad re-created under a room id whose v1 feed bans outlived the old pad, a bridged room
+// banned in before it was registered) posts the room's bans, so the hub holds them under the new pad at once (v1 enforces
+// feed bans by room id, whatever the pad).
+// Snapshot (§12.6): the live feed bans (until NULL or in the future) that the hub can hold - site-wide ones, and pad ones whose
+// room has a pad (a pad_hub row) - entities in byte order (computed in SQL: the entity's order isn't (user_id, room_id)'s).
+// A live pad ban on a room without a pad (a deleted pad's: v1 keeps feed_bans when a pad goes, padcreate.removePad; a room the
+// registry never knew) is left out: listed, the hub would file a no_pad quarantine row for it on every 10-minute pull, for
+// good (rooms 0002's seam_quarantine has no dedupe). Left out, it reads absent, so the hub revokes the ban it held for a
+// deleted pad (§12.6: absent -> revoked_at; seam plan §12.4's "a ban on a deleted pad" ends that way, the pad itself archived
+// by pads/changed at once). A feed row for such a ban (a ban or a change after the pad went) still posts it active with
+// pad_id null - the golden "room the registry does not know" row, quarantined once per change: v1 keeps no record of the
+// pads it deleted, so it can't tell the two apart.
 "use strict";
 const { getQuery } = require("./dbUtils");
 
@@ -36,6 +46,9 @@ function triggerSql() {
   add("u", "AFTER UPDATE OF user_id, room_id, until ON feed_bans",
       row("NEW") + " " + row("OLD", " AND (OLD.user_id IS NOT NEW.user_id OR OLD.room_id IS NOT NEW.room_id)"),
       "OLD.user_id IS NOT NEW.user_id OR OLD.room_id IS NOT NEW.room_id OR OLD.until IS NOT NEW.until");
+  // a pad's hub id minted (padhub.js's insert trigger or backfill): the room's pad bans, now holdable under that pad
+  add("pi", "AFTER INSERT ON pad_hub", `INSERT INTO hub_outbox (topic, entity, created_at) SELECT '${TOPIC}', ${ENT("b")}, ${MS_SQL}
+    FROM feed_bans b WHERE b.room_id = NEW.room_id AND b.room_id <> '' AND b.user_id IS NOT NULL AND b.user_id <> '';`);
   return T;
 }
 
@@ -45,6 +58,7 @@ async function init() {
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (
         user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER, until INTEGER,
         PRIMARY KEY (user_id, room_id))`);
+  await require("./padhub").init();                     // pad_hub: the snapshot's filter and the "pi" trigger's table
   await require("./hubpads").installTriggers(triggerSql());
 }
 
@@ -82,11 +96,16 @@ async function build(entities, t = Date.now()) {
   return out;
 }
 
-/** The snapshot: the live feed bans after the cursor `k` (the whole entity), at most `limit`, in entity byte order. */
+/**
+ * The snapshot: the live feed bans after the cursor `k` (the whole entity), at most `limit`, in entity byte order - site-wide
+ * ones and pad ones whose room has a pad (pad_hub), never a pad ban the hub can't hold (see the header).
+ */
 async function snapshotSource(k, limit, t = Date.now()) {
   const ent = ENT("b");
   const ids = (await getQuery(`SELECT ${ent} AS e FROM feed_bans b WHERE b.user_id IS NOT NULL AND b.user_id <> ''
-                               AND (b.until IS NULL OR b.until > ?) AND ${ent} > ? ORDER BY ${ent} LIMIT ?`,
+                               AND (b.until IS NULL OR b.until > ?)
+                               AND (b.room_id IS NULL OR b.room_id = '' OR EXISTS (SELECT 1 FROM pad_hub h WHERE h.room_id = b.room_id))
+                               AND ${ent} > ? ORDER BY ${ent} LIMIT ?`,
                               [t, k == null ? "" : String(k), limit])).map((r) => String(r.e));
   const built = await build(ids, t);
   return ids.filter((e) => built.has(e)).map((entity) => ({ entity, payload: built.get(entity) }));

@@ -237,6 +237,32 @@ test("posting: exactly one community, by id or slug; the composer's picker = the
   await mod(U.ownerB, slug(ROOM_B), { op: "settings", settings: { who: "everyone" } });
 });
 
+test("S1 Q4 (review): an unlisted pad's own page offers it in the composer and the story form; the pickers and the pad bar don't list it", async () => {
+  await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, listed, created, updated) VALUES ('patv:hush', 'hush', 'Hush', 'house', 'site', 0, 1, 1)");
+  await rooms.loadCache();
+  try {
+    const me = await store.account(U.alice.userId);
+    assert.ok(!(await store.communities(me)).some((c) => c.id === "patv:hush"), "not listed");
+    assert.ok((await store.communities(me, { include: "patv:hush" })).some((c) => c.id === "patv:hush"), "named: offered");
+    assert.ok(!(await web.composerFor(me, null)).rooms.some((x) => x.id === "patv:hush"), "the /feed composer's picker");
+    const C = await web.composerFor(me, "patv:hush");
+    assert.ok(C.rooms.some((x) => x.id === "patv:hush"), "on its own page the composer has it");
+    assert.equal(C.room, "patv:hush", "...picked");
+    const html = (await page("/p/hush", U.alice)).text;
+    assert.match(html, /value="patv:hush"[^>]*checked/, "the pad page's composer posts into it");
+    assert.ok(!(await page("/feed", U.alice)).text.includes('value="patv:hush"'), "the /feed composer doesn't offer it");
+    const ST = require(path.join(repo, "userstories"));
+    assert.ok(!(await ST.targets(me)).pads.some((p) => p.id === "patv:hush"), "the story form opened elsewhere");
+    assert.ok((await ST.targets(me, { include: "patv:hush" })).pads.some((p) => p.id === "patv:hush"), "the story form opened on it");
+    const prof = await rooms.ensureProfile(U.alice.userId);           // a real profile pad (unlisted by its own rule)
+    assert.ok(prof && rooms.getCached(prof.id), "the profile pad exists");
+    assert.ok(!(await store.communities(me, { include: prof.id })).some((c) => c.id === prof.id), "never a profile pad");
+  } finally {
+    await runQuery("DELETE FROM rooms_registry WHERE room_id = 'patv:hush'");
+    await rooms.loadCache();
+  }
+});
+
 // ───────────────────────────── crossposts ─────────────────────────────
 test("crosspost: a new post in the target linking the original; files referenced; votes + comments separate; counts", async () => {
   // the original: alice in B, with a picture

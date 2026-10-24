@@ -428,7 +428,9 @@ test("snapshots: the four golden pages; null (404) while the switch is off; byte
     await runQuery("UPDATE feed_bans SET until = ? WHERE user_id = '1005'", [AT - 1]);
     assert.deepEqual((await HO.snapshot("bans/changed", null)).rows.map((r) => r.entity), ["fb:1006/*"]);
     await runQuery("UPDATE feed_bans SET until = ? WHERE user_id = '1005'", [AT + 7 * DAY]);
-    // a bans cursor in byte order of the whole entity (not (user_id, room_id)'s: "fb:a/x" > "fb:a-b/y")
+    // a bans cursor in byte order of the whole entity (not (user_id, room_id)'s: "fb:a/x" > "fb:a-b/y") - rooms x and y are pads
+    // (the snapshot lists only the pad bans the hub can hold: a room with a pad_hub row)
+    await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES ('x', 'x', 'X', 'none', 'camfrog', 1, 1), ('y', 'y', 'Y', 'none', 'camfrog', 1, 1)");
     await runQuery("INSERT INTO feed_bans (user_id, room_id, username, at) VALUES ('a', 'x', 'a', 1), ('a-b', 'y', 'ab', 1)");
     const order = [];
     cursor = null;
@@ -442,6 +444,7 @@ test("snapshots: the four golden pages; null (404) while the switch is off; byte
     assert.deepEqual(order, [...order].sort(byte));
     assert.deepEqual(order, ["fb:1005/patv:frogpond", "fb:1006/*", "fb:a-b/y", "fb:a/x"]);
     await runQuery("DELETE FROM feed_bans WHERE user_id IN ('a', 'a-b')");
+    await runQuery("DELETE FROM rooms_registry WHERE room_id IN ('x', 'y')");
     // the staff pad is listed in the snapshot even though it's unlisted on the site (the hub mirrors every pad)
     assert.ok((await HO.snapshot("pads/changed", null)).rows.some((r) => r.entity === "pad:" + PAD.staff && r.payload.listed === false));
   } finally {
@@ -633,4 +636,230 @@ test("status: release L1's setup, the chat switches and what CHAT_HUB still need
   assert.deepEqual(st.l1.needs, CS.INTERLOCK.slice(), "every switch is off here");
   assert.deepEqual(HO.L1_SWITCHES, ["pads", "roles", "bans", "switches"]);
   for (const t of L1_TOPICS) assert.ok(HO.SNAPSHOT_TOPICS.includes(t) && HO.TOPICS[t], t);
+});
+
+// ── Q4's review fixes ──
+test("review: switches - a stored value v1 doesn't allow posts the default (fail closed); the same value again writes nothing", async () => {
+  await HO.setSettings({ switches: true });
+  const T = "switches/changed";
+  try {
+    // written past set() (the sqlite3 CLI): get() reads it as off, and so does the payload - the hub never holds a value v1 ignores
+    await runQuery(`INSERT INTO chat_switches (key, value, updated, updated_by) VALUES ('CHAT_HUB', 'ON ', ?, 'cli')
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`, [AT]);
+    await CS.load();
+    assert.equal(CS.get("CHAT_HUB"), "off");
+    assert.deepEqual((await CS.build(["sw:CHAT_HUB"])).get("sw:CHAT_HUB"), { key: "CHAT_HUB", value: "off", updated_at: AT });
+    await chatHub(false);
+    await step(T, "the same value again: nothing (the trigger's WHEN)", "UPDATE chat_switches SET value = value WHERE key = 'CHAT_HUB'", [], []);
+    await step(T, "...a real change: one row", "UPDATE chat_switches SET value = 'on' WHERE key = 'CHAT_HUB'", [], ["sw:CHAT_HUB"]);
+  } finally {
+    await chatHub(false);
+    await HO.setSettings({ switches: false });
+    await clearOutbox();
+  }
+});
+
+test("review: roles - Pepe's per-minute sync (staffroles.botSync: the same role, a newer ts) writes nothing; a real change one row", async () => {
+  const SR = require(path.join(repo, "staffroles"));
+  await HO.setSettings({ roles: true });
+  const T = "roles/changed";
+  const ts = goldenRow(T, "acct:1005").row.payload.role_at;
+  try {
+    await clearOutbox();
+    // botSync's upsert sets role = excluded.role on every write: only the trigger's WHEN keeps a same-role sync quiet
+    await SR.botSync({ roles: { erin: ["staff", ts + 60000] } });
+    assert.equal((await getQuery("SELECT ts FROM pepe_roles WHERE login = 'erin'"))[0].ts, ts + 60000, "the sync wrote its newer ts");
+    assert.deepEqual(await entitiesOf(T), [], "the same role: no row");
+    await SR.botSync({ roles: { erin: ["assistant", ts + 120000] } });
+    assert.ok((await entitiesOf(T)).includes("acct:1005"), "a changed role: its row");
+  } finally {
+    await runQuery("UPDATE pepe_roles SET role = 'staff', ts = ? WHERE login = 'erin'", [ts]);
+    await runQuery("UPDATE users SET class = 'Staff' WHERE userId = '1005'");
+    await HO.setSettings({ roles: false });
+    await clearOutbox();
+  }
+});
+
+test("review: bans - `until` equal to the clock is over; a pad ban on a room without a pad isn't in the snapshot; a pad minted later posts it", async () => {
+  // the boundary: a ban whose until is exactly now has ended (until > t is live)
+  assert.equal((await HB.build(["fb:1005/patv:frogpond"], AT + 7 * DAY)).get("fb:1005/patv:frogpond").active, false);
+  assert.equal((await HB.build(["fb:1005/patv:frogpond"], AT + 7 * DAY - 1)).get("fb:1005/patv:frogpond").active, true);
+  await HO.setSettings({ bans: true });
+  try {
+    // a live pad ban on a room the registry doesn't know (or a deleted pad's: v1 keeps feed_bans when a pad goes)
+    await runQuery("INSERT INTO feed_bans (user_id, room_id, username, at, until) VALUES ('1001', 'Gone.Room', 'alice', ?, NULL)", [AT]);
+    const ents = async () => (await HO.snapshot("bans/changed", null)).rows.map((r) => r.entity);
+    assert.deepEqual(await ents(), ["fb:1005/patv:frogpond", "fb:1006/*"], "never listed: the hub would quarantine it on every pull");
+    // its feed row still says what it is (the golden unknown-room row: active, pad_id null - quarantined once)
+    assert.deepEqual((await HB.build(["fb:1001/Gone.Room"], AT)).get("fb:1001/Gone.Room").pad_id, null);
+    // the room gets a pad (a re-created pad, a room registered after its bans): its bans post at once, under the new pad
+    await clearOutbox();
+    await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES ('Gone.Room', 'gone-room', 'Gone', 'none', 'camfrog', 1, 1)");
+    const h = await hubId("Gone.Room");
+    assert.deepEqual(await entitiesOf("bans/changed"), ["fb:1001/Gone.Room"], "pad_hub's insert posts the room's bans");
+    const p = (await HB.build(["fb:1001/Gone.Room"], AT)).get("fb:1001/Gone.Room");
+    assert.deepEqual([p.active, p.pad_id], [true, h]);
+    assert.ok((await ents()).includes("fb:1001/Gone.Room"), "...and the snapshot lists it now");
+    // the pad deleted again: out of the snapshot (the hub's absent reset revokes it)
+    await runQuery("DELETE FROM rooms_registry WHERE room_id = 'Gone.Room'");
+    assert.ok(!(await ents()).includes("fb:1001/Gone.Room"));
+    // switch off: the pad_hub trigger is gated like the rest
+    await HO.setSettings({ bans: false });
+    await clearOutbox();
+    await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES ('Gone.Room', 'gone-room', 'Gone', 'none', 'camfrog', 1, 1)");
+    assert.deepEqual(await entitiesOf("bans/changed"), []);
+  } finally {
+    await HO.setSettings({ bans: false });
+    await runQuery("DELETE FROM rooms_registry WHERE room_id = 'Gone.Room'");
+    await runQuery("DELETE FROM feed_bans WHERE room_id = 'Gone.Room'");
+    await clearOutbox();
+  }
+});
+
+test("review: pads - a member status v1 doesn't know grants nothing; a profile pad is never more than members; flairs in one batch", async () => {
+  await runQuery("INSERT INTO pad_members (room_id, user_id, status, requested_at) VALUES ('patv:staff', '1006', 'weird', ?)", [AT]);
+  try {
+    assert.deepEqual((await HP.build([`pm:${PAD.staff}/1006`], AT)).get(`pm:${PAD.staff}/1006`),
+                     { kind: "pm", pad_id: PAD.staff, account: ACCT[1006], v1_user: "1006", status: "removed" });
+  } finally { await runQuery("DELETE FROM pad_members WHERE user_id = '1006' AND room_id = 'patv:staff'"); }
+  await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, owner_user_id, platform, created, updated) VALUES ('user:1001', 'u-alice', 'u/alice', 'user', '1001', 'profile', 1, 1)");
+  await runQuery("INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES ('user:1001', 'public', 1, 'x')");
+  try {
+    const h = await hubId("user:1001");
+    const p = (await HP.build(["pad:" + h], AT)).get("pad:" + h);
+    assert.deepEqual([p.platform, p.visibility, p.listed, p.flairs], ["profile", "members", false, []], "a profile has its own privacy settings");
+  } finally {
+    await runQuery("DELETE FROM pad_access WHERE room_id = 'user:1001'");
+    await runQuery("DELETE FROM rooms_registry WHERE room_id = 'user:1001'");
+  }
+  const PF = require(path.join(repo, "padflair"));
+  const many = await PF.hubDefsMany(["patv:frogpond", "patv:staff", "user:1001", "patv:frogpond"]);
+  assert.deepEqual(many.get("patv:frogpond"), await PF.hubDefs("patv:frogpond"), "the same defs, in the pad's order");
+  assert.deepEqual([many.get("patv:staff"), many.get("user:1001"), many.size], [[], [], 3]);
+});
+
+test("review: the staff (and canary) pads fail closed - no level row yet reads Approved (v1 and the hub); born unlisted", async () => {
+  const lv = await getQuery("SELECT level, updated, updated_by FROM pad_access WHERE room_id = 'patv:staff'");
+  await runQuery("DELETE FROM pad_access WHERE room_id = 'patv:staff'");
+  try {
+    await PA.load();
+    assert.equal(PA.levelOf("patv:staff"), "approved", "padaccess: the seed's level while the row is missing");
+    const h = await hubId("patv:staff");
+    assert.equal((await HP.build(["pad:" + h], AT)).get("pad:" + h).visibility, "approved", "pads/changed says the same");
+    // an admin's own choice (a row) wins over the seed
+    await runQuery("INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES ('patv:staff', 'members', 1, 'admin')");
+    await PA.load();
+    assert.equal(PA.levelOf("patv:staff"), "members");
+    assert.equal((await HP.build(["pad:" + h], AT)).get("pad:" + h).visibility, "members");
+  } finally {
+    await runQuery("DELETE FROM pad_access WHERE room_id = 'patv:staff'");
+    for (const r of lv) await runQuery("INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES ('patv:staff', ?, ?, ?)", [r.level, r.updated, r.updated_by]);
+    await PA.load();
+  }
+  assert.equal(rooms.seedAccess("patv:staff"), "approved");
+  assert.equal(rooms.seedAccess("patv:lounge"), null);
+  // ensureRow writes an unlisted seed's row unlisted in its INSERT (never listed for a moment)
+  const src = fs.readFileSync(path.join(repo, "rooms.js"), "utf8");
+  assert.ok(src.includes("INSERT OR IGNORE INTO rooms_registry (room_id, slug, title, owner_kind, platform, listed, created, updated)"));
+});
+
+test("review: a pad that stops being a site pad goes back to v1 chat (the re-key onto a Camfrog room, a Twitch connect)", async () => {
+  await HO.setSettings({ pads: true });
+  try {
+    await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES ('patv:hubby', 'hubby', 'Hubby', 'none', 'site', 1, 1)");
+    const mine = await hubId("patv:hubby");
+    await PH.setBackend("patv:hubby", "hub", { username: "owner" });
+    await clearOutbox();
+    // padconnect.finishCamfrog's order: the re-key, then the registry row's id and platform (one transaction)
+    await tx(async () => {
+      await RK.rekey("patv:hubby", "Room.Hub");
+      await runQuery("UPDATE rooms_registry SET room_id = 'Room.Hub', platform = 'camfrog', updated = 2 WHERE room_id = 'patv:hubby'");
+    });
+    assert.equal(await PH.backendOf("Room.Hub"), "v1", "a Camfrog pad's chat is its room's");
+    assert.equal(await hubId("Room.Hub"), mine);
+    assert.ok((await entitiesOf("pads/changed")).includes("pad:" + mine), "pads/changed carries it");
+    const ev = (await getQuery("SELECT actor, detail FROM room_events WHERE room_id = 'Room.Hub' AND what = 'chat-backend' ORDER BY ts DESC LIMIT 1"))[0];
+    assert.deepEqual(ev, { actor: "PATV staff", detail: "hub -> v1 (not a site pad any more)" });
+    // a Twitch connect (padconnect: platform site -> twitch)
+    await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES ('patv:tw', 'tw', 'Tw', 'none', 'site', 1, 1)");
+    await PH.setBackend("patv:tw", "hub", null);
+    await runQuery("UPDATE rooms_registry SET platform = 'twitch' WHERE room_id = 'patv:tw'");
+    assert.equal(await PH.backendOf("patv:tw"), "v1");
+    // a site pad's other changes leave it alone
+    await runQuery("UPDATE rooms_registry SET platform = 'site' WHERE room_id = 'patv:tw'");
+    await PH.setBackend("patv:tw", "hub", null);
+    await runQuery("UPDATE rooms_registry SET platform = 'site', title = 'Tw2' WHERE room_id = 'patv:tw'");
+    assert.equal(await PH.backendOf("patv:tw"), "hub");
+  } finally {
+    await HO.setSettings({ pads: false });
+    for (const id of ["Room.Hub", "patv:hubby", "patv:tw"]) await runQuery("DELETE FROM rooms_registry WHERE room_id = ?", [id]);
+    await clearOutbox();
+  }
+});
+
+test("review: setBackend's change and its room_events row are one unit (a savepoint of the caller's transaction)", async () => {
+  const events = async () => (await getQuery("SELECT COUNT(*) AS n FROM room_events WHERE room_id = 'patv:frogpond' AND what = 'chat-backend'"))[0].n;
+  const before = await events();
+  await assert.rejects(tx(async () => { await PH.setBackend("patv:frogpond", "hub", { username: "owner" }); throw new Error("the audit row failed"); }));
+  assert.equal(await PH.backendOf("patv:frogpond"), "v1", "rolled back");
+  assert.equal(await events(), before, "...with its event");
+  // on its own (the driver, a script): two at once are serialised - the read and the write are one transaction, so the second
+  // sees the first's change (one change, one event), never two "v1 -> hub" rows from the same stale read
+  try {
+    const both = await Promise.all([PH.setBackend("patv:frogpond", "hub", null), PH.setBackend("patv:frogpond", "hub", null)]);
+    assert.deepEqual(both.map((r) => r.changed).sort(), [false, true]);
+    assert.equal(await events(), before + 1);
+  } finally { await PH.setBackend("patv:frogpond", "v1", null); }
+});
+
+test("review: the interlock's guard never fails open - a CHAT_HUB read that fails refuses the change; L1's setup failure keeps its switches off", async () => {
+  await HO.setSettings({ pads: true });
+  // CHAT_HUB unreadable (not missing: a read error) - the strict read in setSettings refuses, the reader's read says off
+  await runQuery("ALTER TABLE chat_switches RENAME TO chat_switches_x");
+  await runQuery("CREATE VIEW chat_switches AS SELECT 'CHAT_HUB' AS key, abs(-9223372036854775808) AS value");
+  try {
+    await assert.rejects(HO.setSettings({ pads: false }), (e) => /overflow/i.test(String(e && e.message)), "refused, not read as off");
+    assert.equal(HO.settings().pads, true, "nothing changed");
+    assert.equal(await CS.chatHubOnNow(), false, "a reader fails closed");
+    await assert.rejects(CS.chatHubOnNow({ strict: true }));
+  } finally {
+    await runQuery("DROP VIEW chat_switches");
+    await runQuery("ALTER TABLE chat_switches_x RENAME TO chat_switches");
+  }
+  assert.equal((await HO.setSettings({ pads: false })).pads, false);
+  // release L1's topics failed to set up: their four switches can't go on (l1_not_ready); the rest can
+  const was = HO._l1();
+  HO._l1({ ready: false, error: "test" });
+  try {
+    for (const k of HO.L1_SWITCHES) await assert.rejects(HO.setSettings({ [k]: true }), (e) => e.status === 409 && e.code === "l1_not_ready", k);
+    assert.equal((await HO.setSettings({ econ: false })).econ, false);
+  } finally { HO._l1(was); }
+  assert.equal(HO._l1().ready, true);
+});
+
+test("review: unlisted pads keep what isn't a listing - Pepe's owner sync (listed: false), Plus ownership, the automod, links", async () => {
+  await runQuery("UPDATE rooms_registry SET listed = 0 WHERE room_id = 'patv:frogpond'");
+  await rooms.loadCache();
+  try {
+    const own = (await rooms.ownersForPepe()).find((r) => r.id === "patv:frogpond");
+    assert.ok(own, "in Pepe's owner sync (its owner, 18+ and retention ride it)");
+    assert.equal(own.listed, false);
+    assert.equal(own.owner.username, "alice");
+    assert.equal((await rooms.ownersForPepe()).find((r) => r.id === "patv:lounge").listed, true);
+    assert.equal(require(path.join(repo, "premium")).plusOwner("1001", AT), true, "Prime Time Plus ownership counts an unlisted pad");
+    const PL = require(path.join(repo, "padlinks"));
+    await PL.ready();
+    assert.equal(PL.lookup("PATV:FROGPOND").id, "patv:frogpond", "an id lookup (any case) finds an unlisted pad");
+    // the automod on an unlisted pad is still on
+    const AM = require(path.join(repo, "feedautomod"));
+    await AM.init();
+    await runQuery(`INSERT INTO feed_kv (key, value) VALUES ('automod:scope:patv:frogpond', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+                   [JSON.stringify({ on: true })]);
+    try {
+      assert.ok((await AM.activePads()).some((x) => x.R.id === "patv:frogpond"), "feedautomod.activePads");
+    } finally { await runQuery("DELETE FROM feed_kv WHERE key = 'automod:scope:patv:frogpond'"); }
+  } finally {
+    await runQuery("UPDATE rooms_registry SET listed = 1 WHERE room_id = 'patv:frogpond'");
+    await rooms.loadCache();
+  }
 });

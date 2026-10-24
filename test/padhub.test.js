@@ -83,7 +83,8 @@ test("S1 Q4 (ADR 0007 D1): listing paths skip unlisted pads - the seeded staff a
     assert.equal(rooms.isListed(id), false);
     assert.ok(!ids(await rooms.list()).includes(id), "list(): the Pads page, the pickers");
     assert.ok(!ids(rooms.listCached()).includes(id), "listCached()");
-    assert.ok(!ids(await rooms.ownersForPepe()).includes(id), "Pepe's owner sync");
+    // Pepe's owner sync isn't a listing (Q4's review): the pad rides it, marked listed: false
+    assert.equal((await rooms.ownersForPepe()).find((r) => r.id === id).listed, false, "Pepe's owner sync: listed false");
     assert.ok(ids(await rooms.listAll()).includes(id) && ids(rooms.listAllCached()).includes(id), "listAll(): admin pages, entitlements, links");
   }
   assert.equal(rooms.isListed("Never.Seen.Room"), true, "a bridged room the registry doesn't know yet is listed");
@@ -99,7 +100,35 @@ test("S1 Q4 (ADR 0007 D1): listing paths skip unlisted pads - the seeded staff a
   await runQuery("UPDATE rooms_registry SET owner_kind = 'user', owner_user_id = 'own1' WHERE room_id = 'Hidden.Room'");
   await rooms.loadCache();
   assert.deepEqual(ids(await rooms.ownedBy("own1")), ["Hidden.Room"]);
-  assert.ok(!ids(await rooms.ownersForPepe()).includes("Hidden.Room"));
+  // Pepe's owner sync keeps it (its owner's !stage commands, the 18+ vibe, Prime Time retention), marked unlisted
+  const own = (await rooms.ownersForPepe()).find((r) => r.id === "Hidden.Room");
+  assert.deepEqual([own.listed, own.owner.username, own.prime_time], [false, "owner1", false]);
+  // the 18+ gate is a gate, not a listing: an unlisted 18+ pad is gated like any other (adultgate.gatedRooms)
+  const AG = require(path.join(repo, "adultgate"));
+  await AG.init();
+  await runQuery("UPDATE rooms_registry SET adult = 1 WHERE room_id = 'Hidden.Room'");
+  await runQuery("INSERT INTO adult_gate_cfg (key, value, updated, by) VALUES ('enabled', '1', 1, 't') ON CONFLICT(key) DO UPDATE SET value = '1'");
+  await rooms.loadCache();
+  await AG.load();
+  try {
+    assert.ok(AG.gatedRooms(null).includes("Hidden.Room"), "a signed-out visitor is stopped at the unlisted 18+ pad");
+  } finally {
+    await runQuery("UPDATE adult_gate_cfg SET value = '0' WHERE key = 'enabled'");
+    await runQuery("UPDATE rooms_registry SET adult = 0 WHERE room_id = 'Hidden.Room'");
+    await rooms.loadCache();
+    await AG.load();
+  }
+  // a link to it: an id in any case resolves (padlinks.lookup), the pad form's ?pad= default stays (choicesFor), the pickers
+  // don't list it
+  const PL = require(path.join(repo, "padlinks"));
+  await runQuery("UPDATE rooms_registry SET slug = 'secret-place' WHERE room_id = 'Hidden.Room'");
+  await rooms.loadCache();
+  assert.equal(PL.lookup("hidden.room").id, "Hidden.Room");
+  const ch = await PL.choicesFor({ userId: "x1", username: "x1" }, "Hidden.Room");          // not its owner: the ?pad= path
+  assert.equal(ch.def, "Hidden.Room", "its own page's link keeps the pad as the form's default");
+  assert.ok(ch.choices.some((c) => c.id === "Hidden.Room"));
+  const ch2 = await PL.choicesFor({ userId: "x1", username: "x1" }, null);
+  assert.ok(!ch2.choices.some((c) => c.id === "Hidden.Room"), "the picker doesn't list it");
   // an admin lists it (or unlists it again); a profile pad can't be listed
   assert.equal((await rooms.setListed("Hidden.Room", true, "admin")).listed, true);
   assert.ok(ids(await rooms.list()).includes("Hidden.Room"));
