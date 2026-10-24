@@ -250,11 +250,13 @@ first), the member keeps seeing it as being prepared, and after 24 h a console e
 account without a hub account id (a legacy id while `CHAT_GENESIS_NS` is unset) exports without it, and the README says
 so.
 
-## S1: pads, roles, bans, switches (release L1, 1.99ady - tentative until it reaches staging)
+## S1: pads, roles, bans, switches (release L1's Q4 part, 1.99aea - tentative until it reaches staging)
 
-S1 plan §2.4 Q4 (with V1's `/admin/chat` in the same release); the hub repo's `docs/seam-plan.md` §12 is the spec (§12.14
-"Q4" records what this release settled). Built on Q5b's `pad_hub` (`padhub.js`). Every switch is off: with them off nothing
-posts and nothing a member sees changes, except the two seeded pads and the Lounge's name (below).
+S1 plan §2.4 Q4; the hub repo's `docs/seam-plan.md` §12 is the spec (§12.14 "Q4" records what this release settled, and
+its review fixes). L1 is split: V1's `/admin/chat` (below) reached v1 staging first as 1.99adz; Q4 merges it and takes the
+next free letter, **1.99aea**, when it lands (ADR 0007 D19: `huboutbox.VERSION` names the release that changed the seam -
+neither V4's 1.99ady nor V1's 1.99adz did). Built on Q5b's `pad_hub` (`padhub.js`). Every switch is off: with them off
+nothing posts and nothing a member sees changes, except the two seeded pads and the Lounge's name (below).
 
 | Topic | Switch | Entity | Payload (read when the row posts; one read per batch) |
 |---|---|---|---|
@@ -264,64 +266,104 @@ posts and nothing a member sees changes, except the two seeded pads and the Loun
 | `switches/changed` (`chatswitches.js`) | `switches` | `sw:<key>` | `{key, value, updated_at}` - `CHAT_HUB` only in S1 |
 
 - **The pad:** every source read from the database (never a module cache): the registry row, `pad_hub` (`chat_backend`),
-  `pad_access` (no row = members; a profile pad is members), `premium_subs` (the tier and its end by `premium.endsAt` -
-  a comp, a renewing sub's grace, a Stripe renewal's `stripe_through`; `tier_until` null = no end), `pad_chat_cfg` (the
-  history keys; NULL = the defaults `null, true, null, false`), `chatlog_rooms` (CL3's `owner_since` / `owner_grant`, user
-  owners only), `padflair.hubDefs` (the user flairs), `pad_looks.cosmetics` through `padlook.parseCosmetics` and the
-  `padcosmetics` catalog (`fx {frame, glow}` and `badges`, each `{.., perk}`: the hub draws them by `padcosmetics.fx()`'s
-  rule) and `badge_max {free: 3, prime: 3 + prime_extra_badges}`. A tier lapsing or a config change needs no row (the payload
-  carries `tier_until`; the 10-minute snapshot carries the rest).
+  `pad_access` (no row = members, except a seeded pad, which reads its seed's level - `rooms.seedAccess`, as
+  `padaccess.levelOf` does; a profile pad is members), `premium_subs` (the tier and its end by `premium.endsAt` - a comp, a
+  renewing sub's grace, a Stripe renewal's `stripe_through`; `tier_until` null = no end), `pad_chat_cfg` (the history keys;
+  NULL = the defaults `null, true, null, false`), `chatlog_rooms` (CL3's `owner_since` / `owner_grant`, user owners only),
+  `padflair.hubDefsMany` (the user flairs: one query per 400 pads, since the builder runs inside the poster's and the
+  snapshot's transaction), `pad_looks.cosmetics` through `padlook.parseCosmetics` and the `padcosmetics` catalog
+  (`fx {frame, glow}` and `badges`, each `{.., perk}`: the hub draws them by `padcosmetics.fx()`'s rule) and
+  `badge_max {free: 3, prime: 3 + prime_extra_badges}`. A tier lapsing or a config change needs no row (the payload carries
+  `tier_until`; the 10-minute snapshot carries the rest). A member status v1 doesn't know posts `removed` (it grants nothing).
 - **Triggers** (all gated by the topic's switch, `(topic, entity)` only, an UPDATE only for its listed columns and only when
   one changed): pads - `rooms_registry` (insert; update of `room_id, slug, title, platform, owner_kind, owner_user_id,
   adult, listed` - never `updated`, `slot_*`, `banner`, `takeover`), `pad_hub` (insert, delete - a pad's deletion through
   `pad_hub_drop` -, update of `room_id, hub_pad_id, chat_backend`), `pad_access`, `premium_subs` (Prime Time / Plus rows,
   every column `endsAt` reads), `pad_chat_cfg`, `chatlog_rooms` (`room_id, owner_since, owner_grant` - never the archive's
   counters), `pad_flairs` (user flairs), `pad_looks` (`cosmetics`) and `pad_members` (`pm:`); a room id resolves through
-  `pad_hub` for OLD and NEW. Roles - `pepe_roles` (insert / delete / a change of `login` or `role`: one row per account whose
-  `lower(trim(camfrogUsername))` is the login, found through `accountMerge.js`'s unique `users_camfrog_login`) and `users` (a sign-up
-  with a linked login, a change of `camfrogUsername` / `class`, the deletion of a linked account; never points / xp /
-  level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -, delete - unbans and v1's sweep -, update of
-  `user_id, room_id, until`: OLD and NEW). Switches - `chat_switches` (insert, delete, update of `key, value`). Each start
-  drops and recreates the triggers in one transaction; a setup failure is shown on `/admin/keys#seam` and keeps the four
-  switches from turning on (it never takes identity / looks down).
+  `pad_hub` for OLD and NEW. Roles - `pepe_roles` (insert / delete / a change of `login` or `role` - the WHEN matters:
+  `staffroles.botSync`'s upsert sets `role` on every write, so Pepe's per-minute sync of the same role posts nothing; one row
+  per account whose `lower(trim(camfrogUsername))` is the login, found through `accountMerge.js`'s unique
+  `users_camfrog_login`) and `users` (a sign-up with a linked login, a change of `camfrogUsername` / `class`, the deletion
+  of a linked account; never points / xp / level). Bans - `feed_bans` (insert - a re-ban's `INSERT OR REPLACE` too -,
+  delete - unbans and v1's sweep -, update of `user_id, room_id, until`: OLD and NEW) and `pad_hub`'s insert (the room's pad
+  bans: a pad re-created under a room id whose feed bans outlived the old pad, a bridged room banned in before it was
+  registered - v1 enforces feed bans by room id, whatever the pad). Switches - `chat_switches` (insert, delete, update of
+  `key, value`). Each start drops and recreates the triggers in one transaction; a setup failure is shown on
+  `/admin/keys#seam` and keeps the four switches from turning on (409 `l1_not_ready`; it never takes identity / looks down).
 - **Re-keys** (`padrekey.js`): a `pad_hub` row the moving pad's row would displace (`UPDATE OR REPLACE` fires no DELETE
   trigger) is deleted first, so `pad_hub`'s DELETE trigger posts `pad:<displaced id>` in the re-key's transaction; after the
   move, the members and pad feed bans left at the new id (now the moved pad's) get a row each. The moving pad keeps its id.
 - **Snapshots:** `pads/changed` lists every registry row (`pad:`, by `hub_pad_id`) then every approved member (`pm:`);
-  `roles/changed` the accounts whose linked login has a role; `bans/changed` the live feed bans (entities ordered in SQL - the
-  entity's byte order isn't `(user_id, room_id)`'s); `switches/changed` every key (a key without a row is its default).
+  `roles/changed` the accounts whose linked login has a role; `bans/changed` the live feed bans the hub can hold - site-wide
+  ones and pad ones whose room has a pad (`pad_hub`) - entities ordered in SQL (the entity's byte order isn't
+  `(user_id, room_id)`'s); `switches/changed` every key (a key without a row is its default). A live pad ban on a room
+  without a pad (a deleted pad's - `padcreate.removePad` leaves `feed_bans` - or a room the registry never knew) is left out:
+  listed, the hub would quarantine it (`no_pad`) on every 10-minute pull; left out it reads absent, so the hub revokes the
+  ban it held for a deleted pad (the pad itself archived at once by `pads/changed`). A feed row for one (a ban or change
+  after the pad went) still posts it active with `pad_id` null - the golden unknown-room row, quarantined once per change:
+  v1 keeps no record of the pads it deleted, so it can't tell the two apart.
 - **`chat_switches`** (`chatswitches.js`; `CHAT_HUB` on | off, default off): written only through `chatswitches.set(key,
-  value, actor, {reason})` - V1's `/admin/chat` decides who may (the owner turns it on, any admin off); `set` checks the key
-  and value, writes the row and an `admin_audit` row (`chat.switch`). Staging keeps its own (`deploy/keep-staging-tables.js`
+  value, actor, {reason})` - V1's `set()` (`/admin/chat` decides who may: a Pepe owner turns it on, any admin off): it checks
+  the key, the value and the interlock and writes the row and its `admin_audit` row (`chat.switch`) **in one transaction** (a
+  row that can't be written rolls the change back). The payload of a stored value `KEYS` doesn't allow (the sqlite3 CLI) is
+  the key's default, as `get()` reads it - fail closed on both sides. Staging keeps its own (`deploy/keep-staging-tables.js`
   `KEEP`).
 - **The interlock (S1-D7):** `CHAT_HUB = on` is refused (409 `chat_hub_needs`, `err.needs`) unless `tickets`, `sessions`,
   `heartbeat`, `privacy`, `erasure`, `export`, `pads`, `roles`, `bans`, `identity`, `looks` and `switches` are on; while it is
   on, `/admin/keys#seam` refuses turning any of them off (409 `chat_hub_on`). Both checks read the database inside the
-  writing transaction. Turning `CHAT_HUB` off is never refused.
-- **`chat_backend`** (`padhub.setBackend(roomId, backend, actor)`; `padhub.backendOf`): `v1 | hub_read | hub`; `hub` only on a
-  site pad (409 `site_pads_only`), `hub_read` is S2's (409 `hub_read_s2`); a room event `chat-backend` and
-  `pad_hub.updated_by`. Who may is `/admin/chat`'s (V1).
-- **Unlisted pads (ADR 0007 D1):** `rooms_registry.listed` (default 1). `rooms.list()` / `listCached()` - the listing paths: the
-  Pads page and its guide, the pickers, the stage and bridge pickers, Pepe's owner sync (`ownersForPepe`), Top Pads and the
-  front pick (`withSitePads` drops a bridged room's row of an unlisted pad too) - leave unlisted pads out, like profile pads.
+  writing transaction; `huboutbox.setSettings` reads `CHAT_HUB` with `chatHubOnNow({strict: true})`, so a read that fails
+  refuses the save instead of reading "off" (a missing table is the default, off). Readers (`chatHubOnNow()`, V2's widget
+  mount) fail closed: a failed read is off. Turning `CHAT_HUB` off is never refused.
+- **`chat_backend`** (`padhub.setBackend(roomId, backend, actor)` - V1's -; `padhub.backendOf`): `v1 | hub_read | hub`; `hub`
+  only on a site pad (409 `site_pads_only`), `hub_read` is S2's (409 `hub_read_s2`), `v1` never refused (a `pad_hub` row
+  whose registry row is gone included); `pad_hub.updated_by` gets the admin, the pad's `room_events` row `chat-backend` names
+  **`PATV staff`** (`padhub.STAFF_ACTOR`; the owner reads `room_events`). Its reads, the UPDATE and the event are one
+  `dbUtils.tx` (a savepoint of `/admin/chat`'s, with its audit row). **A pad that stops being a site pad** (padconnect
+  re-keys it onto a Camfrog room or connects a Twitch channel; any writer) goes back to `v1` in the same statement's
+  transaction (`padhub`'s trigger `pad_hub_site_only`, with a `chat-backend` event `hub -> v1 (not a site pad any more)`).
+- **Unlisted pads (ADR 0007 D1):** `rooms_registry.listed` (default 1). `rooms.list()` / `listCached()` - the listing paths:
+  the Pads page and its guide, the pickers (the composer's and the crosspost dialog's, the story form's, the pad links form,
+  `/go-live`'s stage picker), Top Pads and the front pick (`withSitePads` drops a bridged room's row of an unlisted pad too),
+  Pepe's news routing (`pepetopics.route`), the pad search's suggestions - leave unlisted pads out, like profile pads. **The
+  page a member is on is not a listing:** on an unlisted pad's own page the composer offers (and picks) that pad, the story
+  form opened there offers it (`/api/stories/targets?pad=`), `/go-live?room=` offers it, the pad links form keeps it as its
+  default (`feedstore.communities(viewer, {include})` - still never a profile pad, an Approved one only for those inside).
   `rooms.listAll()` / `listAllCached()` are every non-profile pad for what isn't a listing: an owner's own pads (`ownedBy`,
-  the owner menu), admin pages (`/pads/admin`, the feed admin's names, Pepe's feed scopes), entitlements (Plus, admins' comps,
-  Pepe's Plus rooms and voices), the automod, the 18+ gate's pad list, `p/<slug>` resolution. `rooms.isListed(id)`,
+  the owner menu), admin pages (`/pads/admin`, `/admin/media`, the feed admin's names, Pepe's feed scopes), entitlements
+  (Plus ownership, admins' comps, Pepe's Plus rooms and voices, launch-pad grants), the automod, the 18+ gate's pad list,
+  `p/<slug>` and id resolution, and **Pepe's owner sync** (`ownersForPepe`: every pad with `listed: false|true` - it
+  carries the owner, the 18+ flag and Prime Time / Plus retention, so an unlisted pad left out would lose its owner's
+  `!stage` commands and get the free chat-log / recording window; Q4's review, against D1's letter). `rooms.isListed(id)`,
   `rooms.setListed(id, on, actor)` (no page sets it yet). PATV has no sitemap.
 - **Seeds:** `patv:staff` ("Staff room", slug `staff`) and `patv:canary` ("Canary", slug `canary`): house site pads, unlisted,
-  Approved (`padaccess.js` seeds the level once, `rooms_kv seeded_access:<id>`), so staff and above are inside and everyone
-  else gets the locked card. **The Lounge is the "PATV Lounge" again** (OQ-1: slug `patv-lounge`, the description "The general
-  PATV pad: …"; `rooms_kv lounge_patv_v1`, once, each field only while it still holds a seeded value - an admin's edit stays);
-  its 1.99x address `camfrog-lounge` is the pad's alias (301) and in `pads.OLD_SLUGS`.
-- **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99ady`
-  (tentative: the operator assigns the letter when the release reaches staging; the shared golden keeps its test letter).
+  Approved, so staff and above are inside and everyone else gets the locked card. They fail closed: the registry row is
+  inserted with `listed = 0` in its own INSERT (never listed for a moment), and until `padaccess.js` writes their level row
+  (once, `rooms_kv seeded_access:<id>`) both `padaccess.levelOf` and `pads/changed` read them as their seed's level
+  (`approved`), never the default `members`; a row an admin writes later wins. **The Lounge is the "PATV Lounge" again**
+  (OQ-1: slug `patv-lounge`, the description "The general PATV pad: …"; `rooms_kv lounge_patv_v1`, once, each field only
+  while it still holds a seeded value - an admin's edit stays); its 1.99x address `camfrog-lounge` is the pad's alias (301)
+  and in `pads.OLD_SLUGS`.
+- **Heartbeat:** `switches` gains `pads`, `roles`, `bans`, `switches`; `topics` the four topics; `version` is `1.99aea`
+  (tentative: the next free letter after V1's 1.99adz - the operator assigns the real one when the release reaches staging;
+  the shared golden keeps its test letter).
 - **Driver:** `pad`, `padMember`, `padLook`, `padChat`, `ownerGrant`, `premiumComp`, `stripeRenew`, `flair`, `role`,
   `pepeRoles`, `signup`, `feedBan`, `feedUnban`, `feedSweep`, `chatSwitch` (the interlock included), `beat`
   (`test/hubseam-driver-s1.test.js`).
 - **Tests:** `test/huboutbox-s1-l1.test.js` (every golden pads / roles / bans / switches row from its input, each trigger
   only with its switch on and only for its listed columns, OLD and NEW keys, the backfill, the displaced-row emit, the four
-  golden snapshot pages and their paging, the poster, the heartbeat, the interlock both ways, `setBackend`),
-  `test/padhub.test.js` (the listing paths skip unlisted pads), `test/pad-platform.test.js` (the Lounge's rename back).
+  golden snapshot pages and their paging, the poster, the heartbeat, the interlock both ways, `setBackend`; the review
+  fixes: a stored bad `CHAT_HUB` value posts off, Pepe's same-role sync and a same-value switch update post nothing, a ban
+  ends at `until`, a pad ban on a room without a pad stays out of the snapshot and posts when the room gets a pad, an unknown
+  member status grants nothing, a profile is never more than members, the seeds' fail-closed level, a pad that stops being a
+  site pad back at `v1`, `setBackend` rolled back with its caller, the strict interlock read, `l1_not_ready`, unlisted pads
+  in Pepe's sync / Plus ownership / the automod / id links), `test/padhub.test.js` (the listing paths skip unlisted pads;
+  Pepe's sync keeps them with `listed: false`; the 18+ gate stops visitors at an unlisted 18+ pad; links and the pad form's
+  default), `test/communities.test.js` (the composer and story form on an unlisted pad's page), `test/pad-platform.test.js`
+  (the Lounge's rename back), `test/adminchat.test.js` (V1's, with Q4's files).
+- **Before Q7:** count the live pad bans on rooms without a pad on staging (`SELECT COUNT(*) FROM feed_bans b WHERE b.room_id
+  <> '' AND (b.until IS NULL OR b.until > <now ms>) AND NOT EXISTS (SELECT 1 FROM pad_hub h WHERE h.room_id = b.room_id)`):
+  each one quarantines once (its next feed row) and never appears in a snapshot.
 - **Turn-on (Q7, staging):** hub → v1 direction wired → `JOURNAL_ENABLED` → `privacy` → `erasure`, `export` → `pads` →
   `roles` → `bans` → `identity` → `looks` → `switches`, each once its hub topic is live and has bootstrapped; then
   `CHAT_HUB` on at `/admin/chat` with only the staging canary / staff pads at `hub`.
@@ -570,7 +612,8 @@ which takes the next free letter when it lands (see "Without Q4" below).
     gone; `PATV staff`, plus the `STAFF_ACTOR` constant and its export; Q4's `rooms.cleanPlatform` for the platform), and
     change Q4's `huboutbox-s1-l1` assertion on the `chat-backend` event's actor from `owner` to `PATV staff`.
     `test/adminchat.test.js` fails on a merge that keeps Q4's unchanged functions. Q4's land merges v1 staging (with V1)
-    into its branch, so it meets these two conflicts there.
+    into its branch, so it meets these two conflicts there. (Done: Q4's branch merged v1 staging 8e143422 that way - and
+    the driver's notes, a third, comment-only conflict with V4's commands; Q4's section above is the result.)
   - **Without Q4** (1.99adz until Q4 lands) `chat_switches` isn't in the staging `KEEP` and the interlock's other half
     (stated on the page) isn't there, and neither matters yet: `CHAT_HUB` can't go on, because Q4's four switches (`pads`,
     `roles`, `bans`, `switches`) aren't in `huboutbox.SWITCHES`, so `setSettings` can't turn them on and `set()` refuses
