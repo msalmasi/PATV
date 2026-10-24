@@ -31,7 +31,10 @@
 //                            hide_lines (CL6), remove_public (S1 V4: the choice), public_done_at (S1 V4: when the archive's
 //                            part of it ran; NULL with remove_public = 1 on a done row -> the tick runs it again),
 //                            public_login (S1 V4 fix-up: the released Camfrog login, ONLY between the deletion's commit and
-//                            the archive's part - its web lines are under it; NULLed when that part has run)
+//                            the archive's part - its web lines are under it; NULLed when that part has run; review 2: read
+//                            only on a row written before public_windows), public_windows (S1 V4 review 2: JSON
+//                            [{login, from, to}] - each Camfrog login linked to the account and the span it was the account's,
+//                            loginWindowsOf; the same lifetime: NULLed when the archive's part has run)
 //   account_deletion_routes  key PK, user_id, amount, legs (JSON), txid, at
 "use strict";
 const crypto = require("crypto");
@@ -74,6 +77,8 @@ function init() {
       if (!c.includes("remove_public")) await runQuery("ALTER TABLE account_deletions ADD COLUMN remove_public INTEGER");
       if (!c.includes("public_done_at")) await runQuery("ALTER TABLE account_deletions ADD COLUMN public_done_at INTEGER");
       if (!c.includes("public_login")) await runQuery("ALTER TABLE account_deletions ADD COLUMN public_login TEXT");
+      // S1 V4 review 2: the spans each Camfrog login was the account's (JSON [{login, from, to}]), kept like public_login was
+      if (!c.includes("public_windows")) await runQuery("ALTER TABLE account_deletions ADD COLUMN public_windows TEXT");
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -227,15 +232,16 @@ async function removeWaitUntil(userId) {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const dayText = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 /** views/privacy.ejs (terms.js): null while the choice isn't offered; else {on_at, on_day, export} - when the `erasure` switch
- *  was last turned on (its hubseam_settings row: the date the paragraph about chat and deletion appeared), and whether the
- *  `export` switch puts the hub's part in "Download my data" too. Never throws. */
+ *  was FIRST turned on (its hubseam_settings row's first_on - review 2: the date the paragraph about chat and deletion was
+ *  published; turning the switch off and on again, a break-glass, doesn't re-date it; `updated` for a row from before first_on),
+ *  and whether the `export` switch puts the hub's part in "Download my data" too. Never throws. */
 async function privacyCopy() {
   if (!removeOffered()) return null;
   let exp = false;
   try { exp = require("./huboutbox").on("export"); } catch (e) { exp = false; }
   try {
-    const r = (await getQuery("SELECT updated FROM hubseam_settings WHERE key = 'erasure' AND value = 'true'"))[0];
-    const at = r && Number(r.updated) > 0 ? Number(r.updated) : null;
+    const r = (await getQuery("SELECT COALESCE(first_on, updated) AS at FROM hubseam_settings WHERE key = 'erasure' AND value = 'true'"))[0];
+    const at = r && Number(r.at) > 0 ? Number(r.at) : null;
     return { on_at: at, on_day: at ? dayText(at) : null, export: exp };
   } catch (e) { return { on_at: null, on_day: null, export: exp }; }
 }
@@ -460,6 +466,45 @@ async function cfLoginsOf(uid, login) {
   return [...out];
 }
 
+/**
+ * S1 V4 review 2: the spans in which each Camfrog login was THIS account's - "Also remove my public messages" reaches the web lines
+ * it sent under them (the bridge archives a linked member's web line under the login; it is the line of whoever held the login
+ * when it was sent). From the login history, read inside the job's transaction BEFORE step 5 deletes username_history and step 6
+ * pseudonymises login_changes:
+ *   - its login now: up to `upto` (the deletion - the login is released and may be someone else's afterwards);
+ *   - every login it let go - an unlink, a relink, another account's !verify (its own login_changes old_login since 1.99tl, its
+ *     username_history kind 'camfrog' rows since 1.99tg, 12 October 2026): up to that change;
+ *   - each span starts after the latest earlier record about that login, whoever's (its own link of it or earlier release,
+ *     another account's link, release or trace: the login wasn't this account's before then) - or at 0 with none (linked before
+ *     the history began: every earlier web line under it counts as its own, as CL6's Remove my line does).
+ * The backfill's 'seen' rows (the account was seen with a login it no longer has, release time unknown) end nothing - such a
+ * login was let go before the history began and isn't reached; another account's 'seen' row still bounds a start. Spans may
+ * overlap (two records of one change: removeAccountLines ORs them). -> [{login, from, to}] (ms, from exclusive, to inclusive)
+ */
+async function loginWindowsOf(uid, login, upto) {
+  const ends = new Map();                                   // login -> [end, ...]
+  const end = (l, at) => { l = low(l); at = Math.floor(Number(at)); if (!l || !(at > 0)) return; if (!ends.has(l)) ends.set(l, []); ends.get(l).push(at); };
+  if (login) end(login, upto);
+  const lc = await has("login_changes", "userId", "old_login", "new_login", "at");
+  const uh = await has("username_history", "userId", "old_username", "new_username", "kind", "at", "via");
+  if (lc) for (const r of await getQuery("SELECT old_login, at FROM login_changes WHERE userId = ? AND old_login IS NOT NULL", [uid])) end(r.old_login, r.at);
+  if (uh) for (const r of await getQuery("SELECT old_username, at FROM username_history WHERE userId = ? AND kind = 'camfrog' AND via <> 'seen'", [uid])) end(r.old_username, r.at);
+  const out = [];
+  for (const [l, list] of ends) {
+    const marks = [];                                       // every record about the login, whoever's (but this account's traces)
+    if (lc) for (const r of await getQuery("SELECT at FROM login_changes WHERE lower(old_login) = ? OR lower(new_login) = ?", [l, l])) marks.push(Number(r.at) || 0);
+    if (uh) {
+      for (const r of await getQuery(`SELECT at FROM username_history WHERE kind = 'camfrog' AND (lower(old_username) = ? OR lower(new_username) = ?)
+                                      AND NOT (userId = ? AND via = 'seen')`, [l, l, uid])) marks.push(Number(r.at) || 0);
+    }
+    for (const to of [...new Set(list)]) {
+      const from = marks.reduce((m, at) => (at < to && at > m ? at : m), 0);
+      out.push({ login: l, from, to });
+    }
+  }
+  return out;
+}
+
 /** Run a due deletion. -> {ok, state, report} */
 async function execute(userId, { force = false } = {}) {
   await init();
@@ -495,6 +540,7 @@ async function execute(userId, { force = false } = {}) {
   const appleSso = (await getQuery("SELECT name FROM pragma_table_info('sso_links')")).some((c) => c.name === "refresh_token_enc") ? require("./applesso") : null;
   if (appleSso) await appleSso.init();
   let appleKeys = [];
+  let pubWindows = null;                     // S1 V4 review 2: loginWindowsOf, read in the transaction below (step 3)
   try {
     const M = require("./media");
     const path = require("path"), fs = require("fs");
@@ -544,6 +590,8 @@ async function execute(userId, { force = false } = {}) {
     }
     //    CL13 fix-up: every Camfrog login of theirs that other people's `!msg` records may name (read before step 5)
     const cfLogins = await cfLoginsOf(uid, login);
+    //    S1 V4 review 2: with "Also remove my public messages", each Camfrog login's span as theirs (read before step 5 too)
+    if (Number(reqRow.remove_public) === 1) pubWindows = await loginWindowsOf(uid, login, t);
     // (their DM pictures go with the deleted messages: dmmedia.sweep purges the files after its grace period)
     // 4. clips they made / of them
     n("clips_removed", await run("media", ["by_user_id", "deleted"], "UPDATE media SET deleted = 1 WHERE by_user_id = ? OR (? IS NOT NULL AND lower(subject_login) = ?)", [uid, login, login]));
@@ -621,21 +669,24 @@ async function execute(userId, { force = false } = {}) {
     //     held ones (an open report) once their hold ends.
     //     The payload names the account only - never the released chat login, nor a hash of it (an unkeyed hash of a short
     //     public username is reversible, and the hub's deletion journal is write-once; identity-scoped erasure is S2's).
-    //     (S1 V4 fix-up: with the choice, the released login waits on the row - public_login - until the archive's part below has
-    //     run: a linked member's web lines are archived under it. NULLed by removePublicNow.)
+    //     (S1 V4 fix-up: with the choice, the account's Camfrog logins wait on the row until the archive's part below has run: a
+    //     linked member's web lines are archived under them. Review 2: every login it had linked, each with the span it was the
+    //     account's - public_windows (loginWindowsOf). NULLed by removePublicNow.)
     const rp = Number(reqRow.remove_public) === 1;
-    await runQuery("UPDATE account_deletions SET state = 'done', done_at = ?, pseudonym = ?, report = ?, held_reason = NULL, public_login = ? WHERE id = ?",
-                   [t, pseudo, JSON.stringify(report).slice(0, 20000), rp && login ? login : null, reqRow.id]);
+    await runQuery(`UPDATE account_deletions SET state = 'done', done_at = ?, pseudonym = ?, report = ?, held_reason = NULL, public_login = NULL,
+                    public_windows = ? WHERE id = ?`,
+                   [t, pseudo, JSON.stringify(report).slice(0, 20000), rp && pubWindows && pubWindows.length ? JSON.stringify(pubWindows) : null, reqRow.id]);
     await require("./huboutbox").emit("privacy/account-deleted", "acct:" + uid,
       hubRow({ id: reqRow.id, user_id: uid, pseudonym: pseudo, done_at: t, remove_public: reqRow.remove_public }), { dedupe: "acctdel:" + reqRow.id });
   });
   // 11. S1 V4: "Also remove my public messages" - the pad chat archive's part (ADR 0007 OQ-20: the same choice hard-deletes the
-  //     account's web lines there, with the hub's exceptions; a linked member's web lines are under the login read above, up to
-  //     now - the login is someone else's to link from here on). After the commit, so nothing is purged for a deletion that rolls
-  //     back (or that a sign-in then cancels); public_done_at records it, and the tick runs it again until it has (a restart
-  //     between the commit and here, a failure).
+  //     account's web lines there, with the hub's exceptions; a linked member's web lines are under its logins, each inside the
+  //     span it was theirs - review 2: loginWindowsOf, read above; the login released now is someone else's to link from here on).
+  //     After the commit, so nothing is purged for a deletion that rolls back (or that a sign-in then cancels); public_done_at
+  //     records it, and the tick runs it again until it has (a restart between the commit and here, a failure, an archive that
+  //     can't be reached - review 2: that throws, it never counts as done).
   if (Number(reqRow.remove_public) === 1) {
-    try { report.public_removed = await removePublicNow(uid, reqRow.id, { login, upto: t }); }
+    try { report.public_removed = await removePublicNow(uid, reqRow.id, { windows: pubWindows || [] }); }
     catch (e) { console.error("[acctdel] remove public lines:", e.message); }
   }
   try { await require("./accountexport").removeAll(uid); } catch (e) { /* none */ }
@@ -664,29 +715,54 @@ function hubRow(r) {
 }
 
 /** S1 V4: the pad chat archive's part of "Also remove my public messages" for a done deletion (chatlogmod.removeAccountLines:
- *  the account's web lines purged - with `login`, its web lines under the released Camfrog login said up to `upto` (the
- *  deletion's time) too -, a legal hold's or a report's taken down until they end), then public_done_at and the counts on the
- *  request's report, and the row forgets the login. -> {lines, held} */
-async function removePublicNow(userId, reqId, { login = null, upto = null } = {}) {
-  const r = await require("./chatlogmod").removeAccountLines(String(userId), { login, upto });
-  const counts = { lines: r.purged, held: r.held + r.reported };
-  const row = (await getQuery("SELECT report FROM account_deletions WHERE id = ?", [reqId]))[0];
-  let rep = {};
-  try { rep = JSON.parse((row && row.report) || "{}") || {}; } catch (e) { rep = {}; }
-  rep.public_removed = counts;
-  await runQuery("UPDATE account_deletions SET public_done_at = ?, report = ?, public_login = NULL WHERE id = ? AND public_done_at IS NULL",
-                 [now(), JSON.stringify(rep).slice(0, 20000), reqId]);
-  return counts;
+ *  the account's web lines purged - with `windows` (review 2: loginWindowsOf), its web lines under each Camfrog login inside the
+ *  span it was the account's too; `login` + `upto` for a row from before review 2 -, a legal hold's or a report's taken down until
+ *  they end), then public_done_at and the counts on the request's report, and the row forgets the logins. Review 2: one run per
+ *  request at a time (the step after the commit and the tick's retry share it), none once public_done_at is set (its counts
+ *  answer), and the first run to finish writes the counts (the UPDATE's public_done_at IS NULL). Throws when the archive can't
+ *  be reached (public_done_at stays NULL: retried). -> {lines, held} */
+const removing = new Map();                  // request id -> the run in progress
+function removePublicNow(userId, reqId, opts = {}) {
+  const id = Number(reqId);
+  if (removing.has(id)) return removing.get(id);
+  const run = (async () => {
+    const d = (await getQuery("SELECT public_done_at, report FROM account_deletions WHERE id = ?", [id]))[0];
+    if (d && d.public_done_at != null) {
+      let rep = {};
+      try { rep = JSON.parse(d.report || "{}") || {}; } catch (e) { rep = {}; }
+      return rep.public_removed || { lines: 0, held: 0 };
+    }
+    const { windows = null, login = null, upto = null } = opts;
+    const r = await require("./chatlogmod").removeAccountLines(String(userId), Array.isArray(windows) ? { windows } : { login, upto });
+    const counts = { lines: r.purged, held: r.held + r.reported };
+    const row = (await getQuery("SELECT report FROM account_deletions WHERE id = ?", [id]))[0];
+    let rep = {};
+    try { rep = JSON.parse((row && row.report) || "{}") || {}; } catch (e) { rep = {}; }
+    rep.public_removed = counts;
+    await runQuery("UPDATE account_deletions SET public_done_at = ?, report = ?, public_login = NULL, public_windows = NULL WHERE id = ? AND public_done_at IS NULL",
+                   [now(), JSON.stringify(rep).slice(0, 20000), id]);
+    return counts;
+  })().finally(() => { removing.delete(id); });
+  removing.set(id, run);
+  return run;
 }
-/** S1 V4: a DONE deletion whose archive part didn't run (a restart between its commit and the purge, a failure): run it now,
- *  with the login the row kept for it. Never a scheduled, held or cancelled request (a sign-in in the grace undoes those). */
+/** S1 V4: a DONE deletion whose archive part didn't run (a restart between its commit and the purge, a failure, review 2: an
+ *  archive that couldn't be reached): run it now, with the logins and spans the row kept for it. Never a scheduled, held or
+ *  cancelled request (a sign-in in the grace undoes those). An unreachable archive stops the round (one log line, not one per
+ *  request); the next tick tries again. */
 async function retryRemovePublic() {
   await init();
   let n = 0;
-  for (const d of await getQuery(`SELECT id, user_id, public_login, done_at FROM account_deletions
+  for (const d of await getQuery(`SELECT id, user_id, public_login, public_windows, done_at FROM account_deletions
                                   WHERE state = 'done' AND remove_public = 1 AND public_done_at IS NULL ORDER BY id LIMIT 20`)) {
-    try { await removePublicNow(d.user_id, d.id, { login: d.public_login || null, upto: Number(d.done_at) || null }); n++; }
-    catch (e) { console.error("[acctdel] remove public lines (retry):", e.message); }
+    let windows = null;
+    try { windows = d.public_windows ? JSON.parse(d.public_windows) : null; } catch (e) { windows = null; }
+    const opts = Array.isArray(windows) ? { windows } : { login: d.public_login || null, upto: Number(d.done_at) || null };   // (a pre-review-2 row)
+    try { await removePublicNow(d.user_id, d.id, opts); n++; }
+    catch (e) {
+      console.error("[acctdel] remove public lines (retry):", e.message);
+      if (e && e.code === "archive_db") break;
+    }
   }
   return n;
 }
@@ -845,4 +921,5 @@ function register(app, { addUser }) {
 module.exports = { hubRow, init, register, blockers, request, schedule, cancelOnSignIn, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
                    pendingOf, isDeleted, elevated, Refuse, FLOW, FORGET_KIND, GRACE_MS, NAME_COLUMNS, DELETE_ROWS,
                    removeOffered, removeWaitUntil, privacyCopy, retryRemovePublic, REMOVE_EVERY_MS,      // S1 V4
+                   loginWindowsOf,                                                                        // S1 V4 review 2
                    _setClock: (f) => { clock = f || (() => Date.now()); } };

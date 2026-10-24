@@ -44,10 +44,12 @@
 //
 // Contracts for the later slices: actsFor(view, viewer) (what the line menu offers), removedFor(roomId) (the owner sync's list),
 // isHeld(rk, who) / heldRooms() / heldWho() (CL7's purge skips them), rmNames(items) -> Map(rm_by -> username) for
-// chatlogview.dress({rmNames}) (CL8's muted rows say who hid a line). S1 V4: removeAccountLines(userId, {login, upto}) - account
-// deletion's "Also remove my public messages" in this archive (the account's web lines purged - its u:<id> lines and, linked, its
-// web lines under the login -, the held ones taken down as the author's and kept in chatlog_erase_wait until their holds end:
-// a legal hold, or a report within ADR 0007 D10's bounds; the nightly pass's eraseWaitPass deletes their words then).
+// chatlogview.dress({rmNames}) (CL8's muted rows say who hid a line). S1 V4: removeAccountLines(userId, {windows}) - account
+// deletion's "Also remove my public messages" in this archive (the account's web lines purged - its u:<id> lines and its web lines
+// under each Camfrog login while that login was linked to it (review 2: earlier logins too, never another holder's) -, the held
+// ones taken down as the author's and kept in chatlog_erase_wait until their holds end: a legal hold, or a report within ADR 0007
+// D10's bounds; the nightly pass's eraseWaitPass deletes their words then; review 2: decided inside the writing transaction, and
+// an unreachable archive throws so the deletion retries).
 "use strict";
 const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");
@@ -348,39 +350,44 @@ async function purgeRows(rows, by, why, t = now()) {
   const out = { purged: 0, rooms: new Map(), clips: 0 };
   if (!todo.length) return out;
   const have = await copyTables();
-  await tx(async () => {
-    const per = new Map();                  // rk -> {roomId, cs, idx, bytes, lines, mics}
-    for (const r of todo) {
-      let d;
-      try { d = JSON.parse(r.d); } catch (e) { d = {}; }
-      if (!d || typeof d !== "object") d = {};
-      if (d.u) d.u = {};
-      const nd = JSON.stringify(d);
-      const who = r.who && !String(r.who).startsWith("h:") ? "h:" + CL.hash(r.who) : r.who || null;
-      // (CL6 fix-up: the 🎙 id goes too - it is a hash of the login and the words, testable against a guess)
-      const u = await runQuery(`UPDATE chat_log SET text = NULL, d = ?, who = ?, tx = NULL, purged = 1, rm_at = COALESCE(rm_at, ?), rm_by = COALESCE(rm_by, ?),
-                                rm_why = COALESCE(rm_why, ?) WHERE c = ? AND purged IS NULL`, [nd, who, t, by, why || null, r.c]);
-      if (!u || !u.changes) continue;
-      let a = per.get(r.rk);
-      if (!a) { a = { roomId: r.room_id, cs: [], idx: 0, bytes: 0, lines: [], mics: [] }; per.set(r.rk, a); }
-      a.cs.push(Number(r.c));
-      if (indexable(r)) a.idx++;
-      a.bytes += byteLen(r.text) + byteLen(r.tx) + Math.max(0, byteLen(r.d) - byteLen(nd)) + Math.max(0, byteLen(r.who) - byteLen(who));
-      if (r.text != null && (r.k === "msg" || r.k === "tx")) a.lines.push({ c: Number(r.c), ts: Number(r.ts), login: r.who, text: r.text });
-      if (r.text != null && r.k === "tx" && r.who && !String(r.who).startsWith("h:")) a.mics.push({ ts: Number(r.ts), login: lower(r.who), text: r.text });
-      out.purged++;
-    }
-    for (const [rk, a] of per) {
-      await runQuery("UPDATE chatlog_rooms SET idx_rows = MAX(0, idx_rows - ?), bytes = MAX(0, bytes - ?) WHERE rk = ?", [a.idx, a.bytes, rk]);
-      // bridge_feed, the 🔔 mention notices that quoted the line (mentions.js ref mention:<room>:<c>: no text, no name left) and
-      // their Telegram alerts
-      await copiesInTx(a.roomId, a.cs, have, t);
-      if (have.quotes && a.lines.length) await require("./quotes").dropLines(a.roomId, a.lines, t);
-      if (have.voices && a.mics.length) out.clips += await dropClipPosts(a.roomId, a.mics, t, have);
-      out.rooms.set(a.roomId, a.cs);
-    }
-  });
+  await tx(() => purgeInTx(todo, by, why, t, have, out));
   for (const [roomId, cs] of out.rooms) await liveDrop(roomId, cs, false);
+  return out;
+}
+/** purgeRows' writes, inside the caller's transaction (S1 V4 review 2: removeAccountLines / eraseWaitPass decide and purge in ONE
+ *  transaction). `have` = copyTables(), asked before it. Adds to out {purged, rooms, clips}; the caller drops the live copies
+ *  (liveDrop(roomId, cs, false) per out.rooms) after the commit. */
+async function purgeInTx(todo, by, why, t, have, out) {
+  const per = new Map();                  // rk -> {roomId, cs, idx, bytes, lines, mics}
+  for (const r of todo) {
+    let d;
+    try { d = JSON.parse(r.d); } catch (e) { d = {}; }
+    if (!d || typeof d !== "object") d = {};
+    if (d.u) d.u = {};
+    const nd = JSON.stringify(d);
+    const who = r.who && !String(r.who).startsWith("h:") ? "h:" + CL.hash(r.who) : r.who || null;
+    // (CL6 fix-up: the 🎙 id goes too - it is a hash of the login and the words, testable against a guess)
+    const u = await runQuery(`UPDATE chat_log SET text = NULL, d = ?, who = ?, tx = NULL, purged = 1, rm_at = COALESCE(rm_at, ?), rm_by = COALESCE(rm_by, ?),
+                              rm_why = COALESCE(rm_why, ?) WHERE c = ? AND purged IS NULL`, [nd, who, t, by, why || null, r.c]);
+    if (!u || !u.changes) continue;
+    let a = per.get(r.rk);
+    if (!a) { a = { roomId: r.room_id, cs: [], idx: 0, bytes: 0, lines: [], mics: [] }; per.set(r.rk, a); }
+    a.cs.push(Number(r.c));
+    if (indexable(r)) a.idx++;
+    a.bytes += byteLen(r.text) + byteLen(r.tx) + Math.max(0, byteLen(r.d) - byteLen(nd)) + Math.max(0, byteLen(r.who) - byteLen(who));
+    if (r.text != null && (r.k === "msg" || r.k === "tx")) a.lines.push({ c: Number(r.c), ts: Number(r.ts), login: r.who, text: r.text });
+    if (r.text != null && r.k === "tx" && r.who && !String(r.who).startsWith("h:")) a.mics.push({ ts: Number(r.ts), login: lower(r.who), text: r.text });
+    out.purged++;
+  }
+  for (const [rk, a] of per) {
+    await runQuery("UPDATE chatlog_rooms SET idx_rows = MAX(0, idx_rows - ?), bytes = MAX(0, bytes - ?) WHERE rk = ?", [a.idx, a.bytes, rk]);
+    // bridge_feed, the 🔔 mention notices that quoted the line (mentions.js ref mention:<room>:<c>: no text, no name left) and
+    // their Telegram alerts
+    await copiesInTx(a.roomId, a.cs, have, t);
+    if (have.quotes && a.lines.length) await require("./quotes").dropLines(a.roomId, a.lines, t);
+    if (have.voices && a.mics.length) out.clips += await dropClipPosts(a.roomId, a.mics, t, have);
+    out.rooms.set(a.roomId, (out.rooms.get(a.roomId) || []).concat(a.cs));
+  }
   return out;
 }
 
@@ -411,72 +418,104 @@ const reportHeld = (list, t, upto = null) => (list || []).some((r) => (upto == n
 
 /**
  * S1 V4 (ADR 0007 OQ-20; CHAT-ARCHITECTURE §9.4): account deletion's "Also remove my public messages" (accountdelete.js, after
- * the deletion committed). The account's own web lines are purged now (purgeRows, as the author: text, name and every copy, at
- * once): its key "u:<id>" and the lines it said while incognito, archived as "h:<hash of that key>"; and - review fix - when the
- * account had a linked Camfrog login (`login`, read by the deletion before it released it), the lines it sent from the website
- * under that login (the bridge archives a linked member's web line under the login, d.u.web), said up to the deletion (`upto`: a
- * login released by the deletion may be someone else's afterwards). Like Remove my line, every line under the login is its
- * current holder's (CL6 isAuthor), so an earlier holder's web lines under it go too. Not reached: that login's Camfrog lines (the
- * login's, not the account's - "Also hide my past public chat lines" leaves them out), and a linked member's lines said while
- * incognito ("h:<hash of the login>": the bridge keeps no web mark on an anonymised line, so they can't be told from the login's
- * Camfrog lines; they name nobody).
+ * the deletion committed). The account's own web lines are purged now (as the author: text, name and every copy, at once): its
+ * key "u:<id>" and the lines it said while incognito, archived as "h:<hash of that key>"; and - review fix - the lines it sent
+ * from the website under a Camfrog login linked to it (the bridge archives a linked member's web line under the login, d.u.web).
+ * Review 2: `windows` [{login, from, to}] (ms, from exclusive, to inclusive) are the spans each login was the account's - its
+ * login at the deletion up to the deletion, and the logins it had linked EARLIER, each up to when it let it go (unlink, relink,
+ * another account's !verify): accountdelete.loginWindowsOf, from the login history. A web line under a login belongs to whoever
+ * held the login when it was sent, so another account's web lines under the same login - before or after the member held it -
+ * stay. (`login` + `upto`: a row from before review 2 - that login, up to `upto`.) A window without its end is left out: never
+ * "up to now", the login may be someone else's by then.
+ * Not reached: those logins' Camfrog lines (the login's, not the account's - "Also hide my past public chat lines" leaves them
+ * out), a linked member's lines said while incognito ("h:<hash of the login>": the bridge keeps no web mark on an anonymised line,
+ * so they can't be told from the login's Camfrog lines; they name nobody), and a login the history has no record of the account
+ * holding (unlinked before PATV kept one: 12 October 2026).
  * The hub's exceptions: a line a legal hold covers (isHeld: its room or its speaker) or a report holds (ADR 0007 D10's bounds:
  * until 30 days after its decision, 90 days while undecided - reportHoldUntil; v1 has no bounty evidence on chat lines) is taken
  * down now instead (rm_by "self", as Remove my line: out of every view, its copies with it) - review fix: also when it was down
  * already (a moderator's or staff hide, a "minor" report's), so neither an un-hide nor a dismissed report can bring it back - and
  * waits in chatlog_erase_wait until the nightly pass (eraseWaitPass) deletes its words, once no hold and no report filed before
- * now holds it. Pepe's !log / !search skip every line of the account key up to now (removed_who, as "Delete every line"; the
- * login's own lines aren't the account's to hide from him - each purged one is in his per-line removed list). Logs counts only.
+ * now holds it. Review 2: each batch is read, decided and written in ONE transaction - the holds reloaded, the rows and their
+ * reports read inside it - so a moderator's hide / un-hide, a new legal hold or a new report can't land between the decision and
+ * the write (they wait for it, and see its result).
+ * Review 2: the archive must be reachable - a CHATLOG_DB that didn't open (chatlog.archiveError) or missing archive tables THROW
+ * (code archive_db): the deletion's public_done_at stays NULL and its tick tries again once the archive is back (never "nothing
+ * to remove", which would record it done and forget the logins).
+ * Pepe's !log / !search skip every line of the account key up to now (removed_who, as "Delete every line"; the logins' own lines
+ * aren't the account's to hide from him - each purged one is in his per-line removed list). Logs counts only.
  * -> {purged, held, reported}
  */
-async function removeAccountLines(userId, { t = now(), login = null, upto = null } = {}) {
+const ERASE_BATCH = 200;                  // removeAccountLines / eraseWaitPass: lines decided and written per transaction (kept short)
+const WINDOWS_MAX = 64;                   // login spans one deletion reaches (a login history is a handful of rows)
+/** [{login, from, to}] (or the pre-review-2 {login, upto}) -> the valid spans: a Camfrog login, an end after the start. */
+function loginWindows(windows, login, upto) {
+  const src = Array.isArray(windows) ? windows : login ? [{ login, from: 0, to: upto }] : [];
+  const out = [];
+  for (const w of src.slice(0, WINDOWS_MAX)) {
+    const l = lower(w && w.login);
+    const a = Math.max(0, Math.floor(Number(w && w.from) || 0)), b = Math.floor(Number(w && w.to));
+    if (!l || !LOGIN_RE.test(l) || !(b > a)) continue;
+    out.push({ login: l, from: a, to: b });
+  }
+  return out;
+}
+const archiveDown = (why) => Object.assign(new Error(why), { code: "archive_db" });
+async function removeAccountLines(userId, { t = now(), login = null, upto = null, windows = null } = {}) {
   await init();
-  const out = { purged: 0, held: 0, reported: 0 };
+  if (CL.archiveError()) throw archiveDown("the pad chat archive can't be reached (CHATLOG_DB) - the removal waits for it");
   // (pragma_table_info searches every schema: chat_log may live in the ATTACHed chatlog.db - decision 25 - which sqlite_master
   //  of main doesn't list)
   const there = async (t) => (await getQuery("SELECT 1 FROM pragma_table_info(?) LIMIT 1", [t]).catch(() => [])).length > 0;
-  if (!(await there("chat_log")) || !(await there("chatlog_rooms"))) return out;
+  if (!(await there("chat_log")) || !(await there("chatlog_rooms"))) throw archiveDown("the pad chat archive's tables are missing - the removal waits for them");
+  const out = { purged: 0, held: 0, reported: 0 };
   const key = "u:" + lower(userId);
   const keys = [key, "h:" + CL.hash(key)];
-  const cf = lower(login);
-  const linked = !!cf && LOGIN_RE.test(cf) && !cf.startsWith("u:");
-  // the account key's lines, any time; the login's web lines up to the deletion (one IN over chat_log_who, like the per-login tool)
-  const where = linked ? "l.who IN (?, ?, ?) AND (l.who <> ? OR (l.ts <= ? AND json_extract(l.d, '$.u.web') = 1))" : "l.who IN (?, ?)";
-  const params = linked ? [...keys, cf, cf, Number(upto) || t] : keys;
+  const wins = loginWindows(windows, login, upto);
+  const logins = [...new Set(wins.map((w) => w.login))];
+  // the account key's lines, any time; each login's web lines inside its span (one IN over chat_log_who, like the per-login tool)
+  const where = wins.length
+    ? `l.who IN (${[...keys, ...logins].map(() => "?").join(", ")}) AND (l.who IN (?, ?) OR (json_extract(l.d, '$.u.web') = 1 AND (${
+        wins.map(() => "(l.who = ? AND l.ts > ? AND l.ts <= ?)").join(" OR ")})))`
+    : "l.who IN (?, ?)";
+  const params = wins.length ? [...keys, ...logins, ...keys, ...wins.flatMap((w) => [w.login, w.from, w.to])] : keys;
   const reports = await there("chatlog_reports");
   const have = await copyTables();
   let last = 0;
   for (;;) {
-    const rows = await getQuery(`SELECT l.*, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE ${where} AND l.purged IS NULL AND l.c > ?
-                                 ORDER BY l.c LIMIT ?`, [...params, last, BATCH]);
-    if (!rows.length) break;
-    last = Number(rows[rows.length - 1].c);
-    const reps = reports ? await reportsOf(rows.map((r) => Number(r.c))) : new Map();
-    const go = [], keep = [];
-    for (const r of rows) {
-      if (isHeld(r.rk, r.who)) { out.held++; keep.push(r); }
-      else if (reportHeld(reps.get(Number(r.c)), t)) { out.reported++; keep.push(r); }
-      else go.push(r);
-    }
-    if (keep.length) {
-      const down = new Map();                                  // roomId -> [c] taken down now
-      await tx(async () => {
-        for (const r of keep) {
-          if (r.rm_at == null) {
-            if (await setRm(r, "self", null, t, have)) { if (!down.has(r.room_id)) down.set(r.room_id, []); down.get(r.room_id).push(Number(r.c)); }
-          } else if (r.rm_by !== "self") {
-            // already down (a moderator's / staff hide, a "minor" report's): the author's removal now - unhide refuses a "self"
-            // line and reportDecide lifts only "report:minor", so the member's choice can't be undone (its copies went with the
-            // first takedown)
-            await runQuery("UPDATE chat_log SET rm_by = 'self', rm_why = NULL WHERE c = ? AND purged IS NULL", [r.c]);
-          }
-          await runQuery("INSERT INTO chatlog_erase_wait (c, at) VALUES (?, ?) ON CONFLICT(c) DO NOTHING", [r.c, t]);
+    const down = new Map();                                    // roomId -> [c] taken down now
+    const gone = { purged: 0, rooms: new Map(), clips: 0 };
+    let n = 0;
+    await tx(async () => {
+      await loadHolds();                                       // the holds as committed now (a hold's write waits for this one)
+      const rows = await getQuery(`SELECT l.*, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE ${where} AND l.purged IS NULL AND l.c > ?
+                                   ORDER BY l.c LIMIT ?`, [...params, last, ERASE_BATCH]);
+      n = rows.length;
+      if (!n) return;
+      last = Number(rows[n - 1].c);
+      const reps = reports ? await reportsOf(rows.map((r) => Number(r.c))) : new Map();
+      const go = [];
+      for (const r of rows) {
+        if (isHeld(r.rk, r.who)) out.held++;
+        else if (reportHeld(reps.get(Number(r.c)), t)) out.reported++;
+        else { go.push(r); continue; }
+        if (r.rm_at == null) {
+          if (await setRm(r, "self", null, t, have)) { if (!down.has(r.room_id)) down.set(r.room_id, []); down.get(r.room_id).push(Number(r.c)); }
+        } else if (r.rm_by !== "self") {
+          // already down (a moderator's / staff hide, a "minor" report's): the author's removal now - unhide refuses a "self"
+          // line and reportDecide lifts only "report:minor", so the member's choice can't be undone (its copies went with the
+          // first takedown)
+          await runQuery("UPDATE chat_log SET rm_by = 'self', rm_why = NULL WHERE c = ? AND rm_at IS NOT NULL AND purged IS NULL", [r.c]);
         }
-      });
-      for (const [roomId, list] of down) await liveDrop(roomId, list, false);
-    }
-    out.purged += (await purgeRows(go, "self", null, t)).purged;
-    if (rows.length < BATCH) break;
+        await runQuery("INSERT INTO chatlog_erase_wait (c, at) VALUES (?, ?) ON CONFLICT(c) DO NOTHING", [r.c, t]);
+      }
+      await purgeInTx(go, "self", null, t, have, gone);
+    });
+    if (!n) break;
+    out.purged += gone.purged;
+    for (const [roomId, list] of down) await liveDrop(roomId, list, false);
+    for (const [roomId, cs] of gone.rooms) await liveDrop(roomId, cs, false);
+    if (n < ERASE_BATCH) break;
     await yieldNow();
   }
   if (out.purged || out.held || out.reported) {
@@ -488,32 +527,43 @@ async function removeAccountLines(userId, { t = now(), login = null, upto = null
 
 /**
  * S1 V4 fix-up: the nightly pass's part for the lines "Also remove my public messages" met under a hold (chatlog_erase_wait):
- * their words are deleted (purgeRows, still as their author) once no legal hold covers them and no report filed before the removal
+ * their words are deleted (purged, still as their author) once no legal hold covers them and no report filed before the removal
  * holds them (reportHoldUntil - a report nobody decided stops holding 90 days after it was filed: it stays open, its line's words
- * gone). A line already purged (staff, the retention purge) or gone just leaves the list. -> {purged, waiting}
+ * gone). A line already purged (staff, the retention purge) or gone just leaves the list. Review 2: decided and written in one
+ * transaction per batch (the holds reloaded, the rows and reports read inside it), like removeAccountLines. -> {purged, waiting}
  */
 async function eraseWaitPass(t = now()) {
   const out = { purged: 0, waiting: 0 };
+  const have = await copyTables();
   let last = 0;
   for (;;) {
-    const ws = await getQuery("SELECT c, at FROM chatlog_erase_wait WHERE c > ? ORDER BY c LIMIT ?", [last, BATCH]);
-    if (!ws.length) break;
-    last = Number(ws[ws.length - 1].c);
-    const cs = ws.map((w) => Number(w.c)), q = cs.map(() => "?").join(",");
-    const lines = new Map((await getQuery(`SELECT l.*, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE l.c IN (${q})`, cs))
-      .map((r) => [Number(r.c), r]));
-    const reps = await reportsOf(cs);
-    const go = [], done = [];
-    for (const w of ws) {
-      const c = Number(w.c), r = lines.get(c);
-      if (!r || r.purged) { done.push(c); continue; }
-      if (isHeld(r.rk, r.who) || reportHeld(reps.get(c), t, Number(w.at))) { out.waiting++; continue; }
-      go.push(r);
-      done.push(c);
-    }
-    out.purged += (await purgeRows(go, "self", null, t)).purged;
-    if (done.length) await runQuery(`DELETE FROM chatlog_erase_wait WHERE c IN (${done.map(() => "?").join(",")})`, done);
-    if (ws.length < BATCH) break;
+    const gone = { purged: 0, rooms: new Map(), clips: 0 };
+    let n = 0;
+    await tx(async () => {
+      await loadHolds();
+      const ws = await getQuery("SELECT c, at FROM chatlog_erase_wait WHERE c > ? ORDER BY c LIMIT ?", [last, ERASE_BATCH]);
+      n = ws.length;
+      if (!n) return;
+      last = Number(ws[n - 1].c);
+      const cs = ws.map((w) => Number(w.c)), q = cs.map(() => "?").join(",");
+      const lines = new Map((await getQuery(`SELECT l.*, r.room_id FROM chat_log l JOIN chatlog_rooms r ON r.rk = l.rk WHERE l.c IN (${q})`, cs))
+        .map((r) => [Number(r.c), r]));
+      const reps = await reportsOf(cs);
+      const go = [], done = [];
+      for (const w of ws) {
+        const c = Number(w.c), r = lines.get(c);
+        if (!r || r.purged) { done.push(c); continue; }
+        if (isHeld(r.rk, r.who) || reportHeld(reps.get(c), t, Number(w.at))) { out.waiting++; continue; }
+        go.push(r);
+        done.push(c);
+      }
+      await purgeInTx(go, "self", null, t, have, gone);
+      if (done.length) await runQuery(`DELETE FROM chatlog_erase_wait WHERE c IN (${done.map(() => "?").join(",")})`, done);
+    });
+    if (!n) break;
+    out.purged += gone.purged;
+    for (const [roomId, cs] of gone.rooms) await liveDrop(roomId, cs, false);
+    if (n < ERASE_BATCH) break;
     await yieldNow();
   }
   return out;
@@ -711,7 +761,10 @@ async function unhide(user, slug, c) {
   if (lim) throw lim;
   let done = false;
   await tx(async () => {
-    const r = await runQuery("UPDATE chat_log SET rm_at = NULL, rm_by = NULL, rm_why = NULL WHERE c = ? AND rm_at IS NOT NULL AND purged IS NULL", [row.c]);
+    // (S1 V4 review 2: only the takedown that was checked above - a line that became its author's removal meanwhile, "Also remove
+    //  my public messages" relabelling a moderator's hide to "self", stays down)
+    const r = await runQuery("UPDATE chat_log SET rm_at = NULL, rm_by = NULL, rm_why = NULL WHERE c = ? AND rm_at IS NOT NULL AND rm_by IS ? AND purged IS NULL",
+                             [row.c, row.rm_by == null ? null : String(row.rm_by)]);
     done = !!(r && r.changes);
     if (done && row.text != null && INDEXABLE_KINDS.includes(row.k)) await runQuery("UPDATE chatlog_rooms SET idx_rows = idx_rows + 1 WHERE rk = ?", [row.rk]);
   });
